@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 
 /**
@@ -80,10 +81,36 @@ export function isJuliusSerializationFailure(error: unknown): boolean {
 }
 
 /**
+ * ONE JULIUS WRITER AT A TIME (row 13 (i) H3, founder ruling 2026-10-04).
+ *
+ * Narrow fixes removed each conflict the census measured (031's HOT updates,
+ * the task lookups by primary key, the idempotent insert), and each time the
+ * next pair of overlapping writers became the pivot: under SERIALIZABLE, many
+ * millisecond writers over a few small hot tables keep finding a cycle. So the
+ * writers do not overlap. Every attempt takes ONE session-level advisory lock
+ * BEFORE `BEGIN`: the transaction's snapshot is then taken after the previous
+ * holder committed, there is nothing concurrent left to form a cycle with, and
+ * a write waits ~1-5 ms in a queue instead of being cancelled and replayed. The
+ * retry stays, as the guarantee for anything the lock does not cover (a reader
+ * or writer outside this wrapper). SERIALIZABLE stays too: it is still what
+ * makes each body's checks sound.
+ *
+ * The key is one constant hashed by the server, so every process on one
+ * database queues on the same lock. A body that opens a nested
+ * `juliusSerializable` on another connection would wait on its own caller; the
+ * caller's lock is marked in the async context and the nested call does not
+ * take it again. An unlock that fails destroys the connection rather than
+ * returning it to the pool still holding the lock.
+ */
+export const JULIUS_WRITE_LOCK = "SELECT pg_advisory_lock(hashtext('relay_wonderland.julius_serializable.v1'))";
+export const JULIUS_WRITE_UNLOCK = "SELECT pg_advisory_unlock(hashtext('relay_wonderland.julius_serializable.v1'))";
+const writeLockHeld = new AsyncLocalStorage<true>();
+
+/**
  * Run `effect` in one SERIALIZABLE transaction under the plan pin, retrying a
  * serialization failure up to `attempts` times with a short jittered pause.
- * Every attempt gets its own connection and its own pin, rolls back on failure
- * and releases the connection.
+ * Every attempt gets its own connection, holds the Julius write lock around
+ * its own transaction and pin, rolls back on failure and releases the connection.
  */
 export async function juliusSerializable<T>(
   pool: Pick<Pool, 'connect'>,
@@ -92,19 +119,27 @@ export async function juliusSerializable<T>(
 ): Promise<T> {
   const attempts = Math.max(1, options.attempts ?? JULIUS_SERIALIZABLE_ATTEMPTS);
   const pause = options.pause ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const nested = writeLockHeld.getStore() === true;
   for (let attempt = 1; ; attempt += 1) {
     const client = await pool.connect();
+    let locked = false;
+    let destroy = false;
     try {
+      if (!nested) {
+        await client.query(JULIUS_WRITE_LOCK);
+        locked = true;
+      }
       await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
       await client.query(JULIUS_PLAN_PIN);
-      const value = await effect(client);
+      const value = await writeLockHeld.run(true, () => effect(client));
       await client.query('COMMIT');
       return value;
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
       if (!isJuliusSerializationFailure(error) || attempt >= attempts) throw error;
     } finally {
-      client.release();
+      if (locked) await client.query(JULIUS_WRITE_UNLOCK).catch(() => { destroy = true; });
+      client.release(destroy || undefined);
     }
     // Exponential and jittered, so two writers that conflicted once do not
     // collide again in step: up to 10, 20, 40, 80, 160 ms before attempts 2-6.

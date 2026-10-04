@@ -13,7 +13,7 @@ import type { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
 import type { ToolInvocationResult } from '../mission/julius';
 import { JuliusPostgresRepository } from './julius-postgres';
-import { JULIUS_SERIALIZABLE_ATTEMPTS } from './julius-serializable';
+import { JULIUS_SERIALIZABLE_ATTEMPTS, JULIUS_WRITE_LOCK, JULIUS_WRITE_UNLOCK } from './julius-serializable';
 import { JULIUS_ENCODED_TEXT_MARKER, decodePgJson, decodePgText, encodePgText } from './julius-storage-encoding';
 import { JuliusToolPostgresRepository } from './julius-tool-postgres';
 import { JuliusToolRecoveryPostgresRepository } from './julius-tool-recovery-postgres';
@@ -44,6 +44,7 @@ class BoundaryClient {
   readonly params: unknown[][] = [];
   constructor(private readonly answer: Answer = () => undefined) {}
   async query(sql: string, params: readonly unknown[] = []): Promise<{ rows: unknown[]; rowCount: number }> {
+    if (sql === JULIUS_WRITE_LOCK || sql === JULIUS_WRITE_UNLOCK) return { rows: [], rowCount: 1 }; // H3: the lock is not the transaction
     const jsonb = new Set([...sql.matchAll(/\$(\d+)::jsonb/gu)].map((match) => Number(match[1]) - 1));
     params.forEach((value, index) => {
       if (typeof value === 'string') {
