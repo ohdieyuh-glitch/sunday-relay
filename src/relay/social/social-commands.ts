@@ -589,10 +589,14 @@ function applyOne(
       // PLAYED TOGETHER (R16 rehearsal 10-04: two real players shared Golden Arrival and neither appeared in the other's Recent
       // Players, so a person met in the world could never be added -- only a party recorded anybody): everyone live in the
       // context they just joined, both ways, through the one rule (nothing across a block; not into anyone's list who opted out).
+      // EACH DIRECTION ONLY WHERE THE OWNER COULD SEE THEM ONLINE (Second's review of 7024e331): a player whose presence is hidden
+      // from strangers (presenceVisibility, or appearing offline) leaves no durable "met at T" in a stranger's list -- the row
+      // would prove they were online when their own setting says nobody may know. The presence authority decides.
       let met = located.value;
+      const seesOnline = (ownerId: SocialUserId, userId: SocialUserId) => (resolvePresenceFor(met, ownerId, userId)?.onlineState ?? 'OFFLINE') !== 'OFFLINE';
       for (const otherId of ctx.memberIds) {
         if (otherId === actorId) continue;
-        const recorded = recordPlayedTogether(met, actorId, otherId, 'SESSION', ctx.serverName.slice(0, 80), nowIso);
+        const recorded = recordPlayedTogether(met, actorId, otherId, 'SESSION', ctx.serverName.slice(0, 80), nowIso, seesOnline);
         if (recorded.ok) met = recorded.value;
       }
       return {

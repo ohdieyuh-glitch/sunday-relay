@@ -225,7 +225,9 @@ export const RECENT_PLAYERS_KEPT = 50;
 
 /**
  * RECORD THAT TWO PEOPLE PLAYED TOGETHER, for both of them. Each side's list is their own; somebody who has opted out of
- * appearing in others' lists is not recorded in theirs, and nothing is recorded across a block.
+ * appearing in others' lists is not recorded in theirs, and nothing is recorded across a block. `admits`, when given, is asked
+ * for each direction separately: (ownerId, userId) -> may userId land in ownerId's list (a world meeting asks the presence
+ * authority whether the owner could see them online at all).
  */
 export function recordPlayedTogether(
   state: SocialState,
@@ -234,12 +236,13 @@ export function recordPlayedTogether(
   context: RecentPlayerContext,
   contextLabel: string,
   atIso: string,
+  admits?: (ownerId: SocialUserId, userId: SocialUserId) => boolean,
 ): RelayResult<SocialState> {
   const exist = bothExist(state, a, b);
   if (!exist.ok) return fail(exist.error);
   if (blockedEitherWay(state, a, b)) return ok(state);
   const add = (list: readonly RecentPlayerEntry[], ownerId: SocialUserId, userId: SocialUserId): RecentPlayerEntry[] => {
-    if (!state.users[userId].privacy.appearInRecentPlayers) return [...list];
+    if (!state.users[userId].privacy.appearInRecentPlayers || (admits !== undefined && !admits(ownerId, userId))) return [...list];
     const others = list.filter((e) => !(e.ownerId === ownerId && e.userId === userId));
     const mine = [{ ownerId, userId, context, contextLabel, metAtIso: atIso }, ...others.filter((e) => e.ownerId === ownerId)].slice(0, RECENT_PLAYERS_KEPT);
     return [...others.filter((e) => e.ownerId !== ownerId), ...mine];
