@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { JULIUS_BOOTSTRAP_REQUEST_VERSION, type JuliusBootstrapRequest } from '../../src/relay/integration/julius/julius-port';
 import { sealJuliusResearchPolicy, type JuliusResearchPolicy } from '../../src/relay/mission/julius';
 import { JULIUS_MISSION_NAME } from '../../src/relay/mission/julius/julius-carry-archive';
+import { JULIUS_CHALLENGE_CATEGORIES, type JuliusChallengeCategory } from '../../src/relay/mission/julius/julius-continuous-lifecycle';
 
 /**
  * THE MISSION CONTRACT — its shape, its parser, its sealing, its compilation.
@@ -104,6 +105,20 @@ export interface LiveMissionContractFile {
    * the pairing is frozen with the arm, never chosen at dispatch.
    */
   readonly carryFrom?: string;
+  /**
+   * THE WARNINGS THIS MISSION TREATS AS BLOCKING, BY KIND. ABSENT MEANS NONE,
+   * which is every mission written before this field: a reviewer's warning is
+   * retained and never interrupts. A kind named here is promoted by Julius,
+   * never by the reviewer, to a blocking finding, and the work is repaired
+   * (`JuliusVerificationPolicy.promotedWarningCategories`).
+   *
+   * Decision C's option B is the use this field was added for: a WITHOUT arm
+   * whose reviewer only warns leaves no verified repair finding, so its WITH arm
+   * can learn nothing (`docs/JULIUS_DECISION_C_PAIR_VALIDITY.md`). It is opt-in
+   * per mission, and choosing it is the founder's and SECOND's. Part of the
+   * contract, so part of its digest.
+   */
+  readonly promotedWarningCategories?: readonly JuliusChallengeCategory[];
 }
 
 /**
@@ -218,6 +233,25 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
   if (value.carryArm !== undefined && value.carryArm !== 'WITHOUT' && value.carryArm !== 'WITH') {
     return { ok: false, problem: 'The contract field "carryArm" must be "WITHOUT" or "WITH" when present.' };
   }
+  /**
+   * A KIND JULIUS DOES NOT HAVE IS REFUSED, never dropped: a mission that asked
+   * for `contract-drift` and silently got no promotion would be a mission whose
+   * contract said one thing while its runs did another.
+   */
+  let promoted: readonly JuliusChallengeCategory[] | undefined;
+  if (value.promotedWarningCategories !== undefined) {
+    const raw = value.promotedWarningCategories;
+    const kinds = JULIUS_CHALLENGE_CATEGORIES as readonly string[];
+    if (!Array.isArray(raw) || raw.length === 0 || raw.length > kinds.length
+      || raw.some((kind) => typeof kind !== 'string' || !kinds.includes(kind)) || new Set(raw).size !== raw.length) {
+      return {
+        ok: false,
+        problem: `The contract field "promotedWarningCategories" must be a non-empty list of distinct review categories, each one of: ${kinds.join(', ')}.`,
+      };
+    }
+    promoted = Object.freeze([...raw] as JuliusChallengeCategory[]);
+  }
+
   if (value.carryFrom !== undefined) {
     if (value.carryArm !== 'WITH') {
       return { ok: false, problem: 'The contract field "carryFrom" names a WITH arm\'s paired WITHOUT mission, and this contract is not a WITH arm.' };
@@ -240,6 +274,7 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
       ...(research === undefined ? {} : { research }),
       ...(value.carryArm === undefined ? {} : { carryArm: value.carryArm as 'WITHOUT' | 'WITH' }),
       ...(value.carryFrom === undefined ? {} : { carryFrom: value.carryFrom as string }),
+      ...(promoted === undefined ? {} : { promotedWarningCategories: promoted }),
     },
   };
 }

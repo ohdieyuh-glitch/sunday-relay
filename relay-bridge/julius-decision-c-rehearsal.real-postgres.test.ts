@@ -55,6 +55,9 @@ import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 const databaseUrl = juliusTestDatabaseUrl();
 const suite = databaseUrl !== null ? describe : describe.todo;
 const EXPORT_SQL = readFileSync(join(__dirname, '..', '.github', 'julius-carry-export.sql'), 'utf8');
+/** The bundle's own `review-warnings.tsv` query, read from the dump script exactly as the paid job runs it. */
+const REVIEW_WARNINGS_SQL = (/^dump "(SELECT [^"]+)" review-warnings\.tsv$/mu
+  .exec(readFileSync(join(__dirname, '..', '.github', 'julius-live-evidence-dump.sh'), 'utf8'))?.[1]) ?? '';
 const CARD = 'card:c-rehearsal:1';
 const COMMIT = 'c'.repeat(40);
 const WORKFLOW_RUN = '37300000042';
@@ -68,6 +71,14 @@ const BUILD_OK: ScriptedOutcome = {
 const REVIEW_ACCEPT: ScriptedOutcome = { kind: 'succeed', evidence: [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 'Independent review approved the change.' }], usdMicros: null };
 const REVIEW_REJECT: ScriptedOutcome = { kind: 'succeed', evidence: [{ type: 'REVIEW_FINDING', status: 'FAILED', safeSummary: 'The save-file loader accepts a big-endian header it then mis-reads.' }], usdMicros: null };
 const REVIEW_ACCEPT_ANSWERING: ScriptedOutcome = { ...REVIEW_ACCEPT, answerFindings: 'RESOLVED' };
+/** A plan review that accepts with ONE concern of a named kind: what a real reviewer's minor finding becomes once it says its kind. */
+const PLAN_WARNED: ScriptedOutcome = {
+  ...REVIEW_ACCEPT,
+  reviewVerdict: {
+    verdict: 'WARNING', claim: 'The plan is acceptable with one concern.',
+    warnings: [{ category: 'contract_drift', claim: 'The test plan names ESM where the mission requires CommonJS.' }],
+  },
+};
 
 suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, across two databases', () => {
   const nonce = randomBytes(4).toString('hex');
@@ -105,6 +116,8 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     readonly knowledge: MissionKnowledgeStore;
     readonly reviews: readonly ScriptedOutcome[];
   }) => {
+    // As the live entrypoint composes it: the contract's promotion policy, when it declares one.
+    const promotion = input.contract.promotedWarningCategories === undefined ? {} : { promotedWarningCategories: input.contract.promotedWarningCategories };
     const runs = new JuliusPostgresRepository(input.pool);
     const contracts = new JuliusContractPostgresRepository(input.pool);
     const port = createLiveJuliusBootstrapPort({
@@ -132,13 +145,14 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
         { worker: reviewerWorker('hermes'), adapter: scriptedAdapter(reviewerWorker('hermes'), input.reviews, { packetFor }) },
       ],
       cardRevision: CARD, spendCeilingUsdMicros: 20_000_000, maxRepairRounds: 2, owner: `c-rehearsal-${input.contract.missionId}`,
+      ...promotion,
     });
     const outcome = await driveJuliusRunToTerminal({ loop: runtime.loop, store: handoffs.store, runId: submitted.runId, projectId, maxTicks: 40 });
     return { runId: submitted.runId, outcome };
   };
 
   /** The checkout: the pair's two contracts side by side, as `.github/julius-missions/` holds them. */
-  const checkout = (): { root: string; withoutPath: string; withPath: string } => {
+  const checkout = (withoutFields: Record<string, unknown> = {}): { root: string; withoutPath: string; withPath: string } => {
     const root = mkdtempSync(join(tmpdir(), 'c-rehearsal-'));
     roots.push(root);
     const write = (name: string, fields: Record<string, unknown>): string => {
@@ -156,7 +170,7 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     };
     return {
       root,
-      withoutPath: write('julius-c-without-1', { carryArm: 'WITHOUT' }),
+      withoutPath: write('julius-c-without-1', { carryArm: 'WITHOUT', ...withoutFields }),
       withPath: write('julius-c-with-1', { carryArm: 'WITH', carryFrom: 'julius-c-without-1' }),
     };
   };
@@ -164,6 +178,30 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     const parsed = parseLiveMissionContract(readFileSync(path, 'utf8'));
     if (!parsed.ok) throw new Error(parsed.problem);
     return parsed.contract;
+  };
+
+  /** The WITHOUT run's bundle, exactly what the paid job would carry: the export, a manifest naming it, and the run record. */
+  const bundleOf = async (without: Pool, withoutRunId: string, paths: { readonly root: string; readonly withoutPath: string }) => {
+    const exported = await without.query({
+      text: EXPORT_SQL.replace(":'run'", '$1'), values: [withoutRunId], types: { getTypeParser: () => (value: string) => value },
+    });
+    const exportText = `${String(Object.values(exported.rows[0] as Record<string, unknown>)[0])}\n`;
+    const bundle = join(paths.root, 'carry-source');
+    mkdirSync(bundle);
+    writeFileSync(join(bundle, 'carry-export.json'), exportText);
+    writeFileSync(join(bundle, 'bundle-manifest.txt'), `${[
+      'manifest_version=1', 'source=github-actions', `commit=${COMMIT}`, `tree=${'d'.repeat(40)}`, 'tracked_changes=0', 'mode=paid',
+      'mode_basis=dispatch_confirm_live', `julius_run_id=${withoutRunId}`, `workflow_run_id=${WORKFLOW_RUN}`, 'workflow_run_attempt=1',
+      'workflow_ref=o/r/.github/workflows/julius-first-live-mission.yml@refs/heads/main', 'event=workflow_dispatch', 'ref=refs/heads/main',
+      `github_sha=${COMMIT}`, 'mission=julius-c-without-1', `contract_sha256=${sha256(readFileSync(paths.withoutPath))}`,
+      'produced_at=2026-10-04T23:00:00Z', `carry_export_sha256=${sha256(exportText)}`,
+    ].join('\n')}\n`);
+    writeFileSync(join(bundle, 'source-run.json'), JSON.stringify({
+      id: WORKFLOW_RUN, path: '.github/workflows/julius-first-live-mission.yml', event: 'workflow_dispatch', headSha: COMMIT,
+      displayTitle: 'julius mission=julius-c-without-1 lane=lab mode=paid key=julius-c-without-1@cccccccccccc#lab#a1',
+      runAttempt: '1', artifactDigest: `sha256:${'e'.repeat(64)}`, archiveSha256: 'e'.repeat(64),
+    }));
+    return { bundle, exportText };
   };
 
   it('a reviewer\'s repaired, resolved finding in the WITHOUT run reaches the WITH run\'s planner, and every point is on a database', async () => {
@@ -194,25 +232,7 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     expect(withoutManifest.rows.map((row) => row.payload.facts)).toEqual([expect.objectContaining({ arm: 'WITHOUT', selected: 0, origin: 'STORE' })]);
 
     /* ------------------------------------------- the bundle, exactly what the paid job would carry */
-    const exported = await without.query({
-      text: EXPORT_SQL.replace(":'run'", '$1'), values: [withoutRun.runId], types: { getTypeParser: () => (value: string) => value },
-    });
-    const exportText = `${String(Object.values(exported.rows[0] as Record<string, unknown>)[0])}\n`;
-    const bundle = join(paths.root, 'carry-source');
-    mkdirSync(bundle);
-    writeFileSync(join(bundle, 'carry-export.json'), exportText);
-    writeFileSync(join(bundle, 'bundle-manifest.txt'), `${[
-      'manifest_version=1', 'source=github-actions', `commit=${COMMIT}`, `tree=${'d'.repeat(40)}`, 'tracked_changes=0', 'mode=paid',
-      'mode_basis=dispatch_confirm_live', `julius_run_id=${withoutRun.runId}`, `workflow_run_id=${WORKFLOW_RUN}`, 'workflow_run_attempt=1',
-      'workflow_ref=o/r/.github/workflows/julius-first-live-mission.yml@refs/heads/main', 'event=workflow_dispatch', 'ref=refs/heads/main',
-      `github_sha=${COMMIT}`, 'mission=julius-c-without-1', `contract_sha256=${sha256(readFileSync(paths.withoutPath))}`,
-      'produced_at=2026-10-04T23:00:00Z', `carry_export_sha256=${sha256(exportText)}`,
-    ].join('\n')}\n`);
-    writeFileSync(join(bundle, 'source-run.json'), JSON.stringify({
-      id: WORKFLOW_RUN, path: '.github/workflows/julius-first-live-mission.yml', event: 'workflow_dispatch', headSha: COMMIT,
-      displayTitle: 'julius mission=julius-c-without-1 lane=lab mode=paid key=julius-c-without-1@cccccccccccc#lab#a1',
-      runAttempt: '1', artifactDigest: `sha256:${'e'.repeat(64)}`, archiveSha256: 'e'.repeat(64),
-    }));
+    const { bundle, exportText } = await bundleOf(without, withoutRun.runId, paths);
     const withContract = parse(paths.withPath);
     const decision = decideJuliusCarrySource({
       contractPath: paths.withPath, contract: withContract, bundleDir: bundle, workflowRunId: WORKFLOW_RUN, commit: COMMIT, requireArchiveForWith: true,
@@ -263,5 +283,103 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     const received = String(compiled.at(-1)!.payload.facts.carriedReceivedIds ?? '').split(' ').filter((id) => id !== '');
     expect(Number(compiled.at(-1)!.payload.facts.carriedReceived)).toBeGreaterThan(0);
     expect(received).toContain(juliusCarryEntryId(withoutRun.runId, `finding:${resolved[0]!.findingId}`));
+  }, 120_000);
+
+  /**
+   * DECISION C, OPTION B: THE SAME KIND OF WITHOUT ARM M2 WAS, MADE TO TEACH.
+   *
+   * M2's reviewer accepted the plan with two warnings and nothing was repaired,
+   * so a WITH arm paired with it would have learned nothing. Here the WITHOUT
+   * contract names one kind of warning as blocking (`promotedWarningCategories`):
+   * the plan review's warning of that kind is promoted, the plan is repaired, the
+   * re-review resolves it, and the bundle carries it to a WITH arm whose planner
+   * receives it. The control is the same review under a contract that promotes
+   * nothing: the warning is retained, nothing is repaired, and the WITH arm is
+   * refused before a run exists. `review-warnings.tsv` says which was which.
+   */
+  const warningsOf = async (pool: Pool, runId: string) => (await pool.query<{ category: string | null; promoted_to_blocking: boolean | null; warning_index: string }>(
+    `SELECT * FROM (${REVIEW_WARNINGS_SQL}) w WHERE w.run_id = $1`, [runId])).rows
+    .map((row) => ({ index: Number(row.warning_index), category: row.category, promoted: row.promoted_to_blocking }));
+
+  it('option B: a WITHOUT arm whose contract promotes a kind of warning leaves a verified repair finding its WITH arm\'s planner receives', async () => {
+    expect(REVIEW_WARNINGS_SQL, 'the dump script\'s own query was found').toContain('julius.review.verdict.declared');
+    const without = await database('bwo');
+    const withDb = await database('bwi');
+    const paths = checkout({ promotedWarningCategories: ['contract_drift'] });
+    const withoutContract = parse(paths.withoutPath);
+    expect(withoutContract.promotedWarningCategories).toEqual(['contract_drift']);
+
+    // The plan review warns; the promoted warning sends the plan to repair; the re-review answers it; the build is accepted.
+    const withoutRun = await runMission({
+      pool: without, contract: withoutContract, knowledge: createPostgresMissionKnowledgeStore(without),
+      reviews: [PLAN_WARNED, REVIEW_ACCEPT_ANSWERING, REVIEW_ACCEPT],
+    });
+    expect(withoutRun.outcome, `halt: ${withoutRun.outcome.haltCause ?? 'none'}`).toMatchObject({ state: 'COMPLETED', stalled: false });
+
+    // POINT 1: the warning's life, as the runtime wrote it.
+    const source = (await new JuliusCarryPostgresRepository(without).carrySources({ projectId, excludeRunId: 'none' }))
+      .find((item) => item.runId === withoutRun.runId);
+    expect(source, 'the WITHOUT run holds reviewer findings').toBeDefined();
+    const promoted = source!.findings.find((finding) => finding.findingId.startsWith('finding:warning:'));
+    expect(promoted, JSON.stringify(source!.findings)).toMatchObject({ category: 'contract_drift', blocking: true });
+    const life = foldJuliusFindings(source!.findings, source!.ledger).find((item) => item.findingId === promoted!.findingId);
+    expect(life, JSON.stringify(life)).toMatchObject({ state: 'RESOLVED', lastMove: 'REVIEWER_RESOLVED' });
+    expect(life!.repairTaskIds.length).toBeGreaterThan(0);
+    // The bundle file says it was a warning of a named kind, and that Julius promoted it.
+    expect(await warningsOf(without, withoutRun.runId)).toEqual([{ index: 0, category: 'contract_drift', promoted: true }]);
+
+    // POINT 2: the bundle admits the pair, and selects exactly what the store selects.
+    const { bundle, exportText } = await bundleOf(without, withoutRun.runId, paths);
+    const withContract = parse(paths.withPath);
+    const decision = decideJuliusCarrySource({
+      contractPath: paths.withPath, contract: withContract, bundleDir: bundle, workflowRunId: WORKFLOW_RUN, commit: COMMIT, requireArchiveForWith: true,
+    });
+    expect(decision.kind, decision.lines.join('\n')).toBe('ARCHIVE');
+    if (decision.kind !== 'ARCHIVE') return;
+    const fromBundle = selectJuliusCarry({ targetRunId: 'run:not-yet', sources: [decision.verdict.source], claims: [] });
+    expect(fromBundle).toEqual(selectJuliusCarry({ targetRunId: 'run:not-yet', sources: [source!], claims: [] }));
+    expect(fromBundle.counts.VERIFIED_REPAIR_FINDING).toBe(1);
+    const carried = juliusCarryEntryId(withoutRun.runId, `finding:${promoted!.findingId}`);
+    expect(fromBundle.selected.map((item) => item.entryId)).toContain(carried);
+
+    // POINTS 3 and 4: the WITH arm, on a database that never held its pair, restores it and its planner receives it.
+    const withRun = await runMission({
+      pool: withDb, contract: withContract,
+      knowledge: createArchivedMissionKnowledgeStore({ pool: withDb, archive: { source: decision.verdict.source, origin: decision.verdict.origin } }),
+      reviews: [REVIEW_ACCEPT],
+    });
+    expect(withRun.outcome).toMatchObject({ state: 'COMPLETED', stalled: false });
+    const manifest = await withDb.query<{ payload: { facts: Record<string, unknown> } }>(
+      "SELECT payload FROM relay_wonderland.events WHERE stream_id = $1 AND event_type = 'julius.knowledge.carried'", [withRun.runId]);
+    expect(manifest.rows[0]!.payload.facts).toMatchObject({ arm: 'WITH', origin: 'ARCHIVE', sourceRunId: withoutRun.runId, sourceExportSha256: sha256(exportText) });
+    const restored = await withDb.query<{ entry_id: string }>(
+      "SELECT entry_id FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE 'carried:%'", [withRun.runId]);
+    expect(restored.rows.map((row) => row.entry_id)).toContain(carried);
+    const planTask = (await withDb.query<{ task_id: string }>(
+      "SELECT task_id FROM relay_wonderland.julius_tasks WHERE run_id = $1 AND task_type = 'plan'", [withRun.runId])).rows[0]!.task_id;
+    const compiled = (await withDb.query<{ payload: { taskId?: string; facts: Record<string, unknown> } }>(
+      "SELECT payload FROM relay_wonderland.events WHERE stream_id = $1 AND event_type = 'julius.context.compiled' ORDER BY sequence", [withRun.runId]))
+      .rows.filter((row) => row.payload.taskId === planTask);
+    expect(String(compiled.at(-1)!.payload.facts.carriedReceivedIds ?? '').split(' ')).toContain(carried);
+  }, 120_000);
+
+  it('option B\'s control: the same review under a contract that promotes nothing teaches nothing, and the WITH arm is refused for free', async () => {
+    const without = await database('cwo');
+    const paths = checkout();
+    const withoutContract = parse(paths.withoutPath);
+    expect(withoutContract.promotedWarningCategories).toBeUndefined();
+    const withoutRun = await runMission({
+      pool: without, contract: withoutContract, knowledge: createPostgresMissionKnowledgeStore(without),
+      reviews: [PLAN_WARNED, REVIEW_ACCEPT],
+    });
+    expect(withoutRun.outcome).toMatchObject({ state: 'COMPLETED', stalled: false });
+    // The warning is the same kind, retained and never blocking: M2's shape.
+    expect(await warningsOf(without, withoutRun.runId)).toEqual([{ index: 0, category: 'contract_drift', promoted: false }]);
+    const { bundle } = await bundleOf(without, withoutRun.runId, paths);
+    const decision = decideJuliusCarrySource({
+      contractPath: paths.withPath, contract: parse(paths.withPath), bundleDir: bundle, workflowRunId: WORKFLOW_RUN, commit: COMMIT, requireArchiveForWith: true,
+    });
+    expect(decision.kind).toBe('REFUSED');
+    expect(decision.kind === 'REFUSED' && decision.reasonCode).toBe('CARRY_SOURCE_NOT_A_VALID_PAIR');
   }, 120_000);
 });

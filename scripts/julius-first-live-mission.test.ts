@@ -1127,7 +1127,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'carry.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'carry.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'review-warnings.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -1499,7 +1499,14 @@ describe('the evidence dump names only tables and columns the migrations create'
     for (const text of ["'path'", "'paths'", "'own'", "'inherited'"]) {
       expect(scope.includes(text), `the scope dump must not export ${text}, which a coder's changes wrote`).toBe(false);
     }
-    for (const query of [lifecycle, line('finding-status.tsv'), scope]) {
+    // Each declared warning's kind, and whether Julius promoted it (Decision C, option B): tokens, never the claim.
+    const warnings = line('review-warnings.tsv');
+    expect(warnings).toContain("e.event_type='julius.review.verdict.declared'");
+    expect(warnings, 'the declared kind of each warning').toContain("w.warning->>'category' AS category");
+    expect(warnings, 'promotion read off the finding Julius recorded for that warning')
+      .toContain("f.finding_id='finding:warning:'||(e.payload->'facts'->>'reviewTaskId')||':'||(w.ordinality-1)::text");
+    expect(warnings.includes("'claim'"), 'a warning\'s claim is reviewer prose and never exported').toBe(false);
+    for (const query of [lifecycle, line('finding-status.tsv'), scope, warnings]) {
       expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
     }
   });
@@ -3279,7 +3286,7 @@ describe('the event dumps are ordered by the ledger position, not by the wall cl
   it('covers every chronological event dump, so a new one cannot arrive unordered', () => {
     expect(eventDumps().map(named).sort())
       .toEqual(['budget.tsv', 'carry.tsv', 'contract-events.tsv', 'effort.tsv', 'failures.tsv', 'finding-lifecycle.tsv',
-        'participation.tsv', 'research.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
+        'participation.tsv', 'research.tsv', 'review-warnings.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
   });
 
   it('carries the position the ledger allocated, and the stream it is a position within', () => {

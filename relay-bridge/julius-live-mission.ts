@@ -211,6 +211,22 @@ const registryBackends = (): ReadonlyMap<string, readonly LiveReachCapability[]>
  * attempt separate them; a process with neither is a local drill and says so.
  * Digits only, so nothing an environment carries can reach an id but a number.
  */
+/**
+ * WHAT THE MISSION'S CONTRACT SAYS ABOUT VERIFICATION, as the runtime is
+ * composed from it: the repair bound, and the warning kinds it promotes to
+ * blocking (Decision C, option B). One function, so the paid run and its tests
+ * read the contract the same way.
+ */
+export function liveVerificationOptions(contract: Pick<LiveMissionContractFile, 'limits' | 'promotedWarningCategories'>): {
+  readonly maxRepairRounds: number;
+  readonly promotedWarningCategories?: readonly string[];
+} {
+  return {
+    maxRepairRounds: contract.limits?.repairCycles ?? 1,
+    ...(contract.promotedWarningCategories === undefined ? {} : { promotedWarningCategories: contract.promotedWarningCategories }),
+  };
+}
+
 export function liveExecutionScope(env: Record<string, string | undefined>): string {
   const runId = env.GITHUB_RUN_ID ?? '';
   const attempt = env.GITHUB_RUN_ATTEMPT ?? '';
@@ -740,6 +756,10 @@ async function main(argv: readonly string[]): Promise<number> {
   out('JULIUS LIVE MISSION — preflight');
   out(`  mission: ${contract.missionId} (project ${contract.projectId})`);
   for (const line of carrySource.lines) out(line);
+  // Said before any spend, and only by a contract that changes the default: a reviewer's warning interrupts nothing.
+  if (contract.promotedWarningCategories !== undefined) {
+    out(`  review policy: warnings promoted to blocking by this contract: ${contract.promotedWarningCategories.join(', ')}`);
+  }
   out(`  requested models: architect=${preflight.requested.architectModel ?? 'MISSING'} coder=${preflight.requested.codingModel ?? 'MISSING'} reviewer=${preflight.requested.reviewerProvider ?? 'MISSING'}/${preflight.requested.reviewerModel ?? 'MISSING'}`);
   for (const row of presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', CLAUDE_SUBSCRIPTION_TOKEN_ENV, 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV])) out(row);
   out('  note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.');
@@ -1044,7 +1064,7 @@ async function main(argv: readonly string[]): Promise<number> {
       entries: resolution.entries,
       cardRevision,
       spendCeilingUsdMicros: Math.round((contract.limits?.spendUsd ?? 5) * 1_000_000),
-      maxRepairRounds: contract.limits?.repairCycles ?? 1,
+      ...liveVerificationOptions(contract),
       executionScope: liveExecutionScope(env),
       ...(researchClause === undefined ? {} : {
         researchPolicyFor: researchPolicyOf,

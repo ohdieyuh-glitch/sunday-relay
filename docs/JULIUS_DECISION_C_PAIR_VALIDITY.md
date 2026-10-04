@@ -48,10 +48,11 @@ A mission that real workers complete cleanly is a good mission and a useless WIT
    - So under the frozen order WITHOUT-1 → WITH-1 → WITHOUT-2 → WITH-2, the two WITHOUT runs share one run id, and so do the two WITH runs.
    - Their finding ids are derived from task ids, so they can match too.
    - This is why the carry records the **workflow run, commit and export digest** of the bundle it learned from: they are what distinguish WITHOUT-1's lesson from WITHOUT-2's (#326).
-2. **Warning promotion is not reachable from a contract.**
+2. **Warning promotion was unreachable, twice over** (both found 2026-10-04; option B's PR addresses both).
    - The verification policy has `promotedWarningCategories`: a reviewer warning in a named category becomes a blocking finding, and the work is repaired.
-   - The live composition (`relay-bridge/julius/live-composition.ts`) sets `reviewerRequired` and `maxRepairRounds` and never sets it.
-   - No contract field reaches it.
+   - **No contract field reached it.** The live composition set `reviewerRequired` and `maxRepairRounds` and never set it. A contract that wrote the key anyway was parsed without it, silently.
+   - **No real warning had a kind for it to name.** The reviewer's JSON schema never asked a finding for a `category`. A real reviewer's minor finding therefore reached Julius as a warning of no kind (`null`), which no policy can promote. Wiring the field alone would have been inert on every paid review.
+   - **So whether M2's two warnings would have been promoted is UNKNOWN.** Their findings record `review_warning`, the fallback for a warning of no kind, and the bundle kept no declared kinds.
 
 ## Options (for the founder and SECOND; none is chosen here)
 
@@ -59,10 +60,19 @@ A mission that real workers complete cleanly is a good mission and a useless WIT
   - The workspace seed holds a latent defect the change must touch.
   - An acceptance criterion makes a correct reviewer check exactly that.
   - Mission 5's "every seed must fail at start" guard is the existing pattern for a seed with a known starting defect.
-- **B. Make warnings repairable for the pair.**
-  - Wire `promotedWarningCategories` from the contract into the live composition. It is small, opt-in and absent by default; the WITHOUT arm (and only it) would declare it.
-  - M2's reviewer produced two plan warnings. Under promotion, those would have become a plan repair and a re-review.
-  - This changes what a paid mission does, so it needs its own reviewed change.
+- **B. Make warnings repairable for the pair.** Prepared on its own reviewed branch (`relay/julius-c-warning-promotion`, stacked on #326). Choosing it is still the founder's and SECOND's.
+  - **The reviewer is asked for each finding's kind**, from the closed list the escalation already uses (`juliusReviewFindingCategoryGuidance`). The reviewer is told what a kind is, never what Julius does with one.
+    - This changes the instruction text of **every** paid review.
+    - It changes no behavior unless a contract promotes something: a kind on a blocking finding names its repair and changes no route.
+  - **A contract may name the kinds it promotes** (`promotedWarningCategories`). The field is closed-list, refused rather than dropped when wrong, and part of the mission's identity.
+    - The live composition passes it to the verification policy.
+    - The run states it before any spend.
+    - No committed contract declares it. The four frozen missions' binding digests are pinned, and unchanged.
+  - **The bundle says what kind each warning was, and whether Julius promoted it** (`review-warnings.tsv`, tokens only). A WITHOUT arm's suitability is therefore readable from its own bundle before its WITH arm spends anything.
+  - **Rehearsed on real PostgreSQL**, both arms real runs:
+    - A WITHOUT arm whose contract promotes `contract_drift` turns the plan review's warning of that kind into a repair and a resolved re-review: one VERIFIED_REPAIR_FINDING. The bundle admits the pair, and the WITH planner receives it.
+    - The same review under a contract that promotes nothing is refused for free (`CARRY_SOURCE_NOT_A_VALID_PAIR`).
+  - **What it cannot promise:** that a real reviewer names a kind, or names one the contract promotes. That is the model's to do. The bundle will show it after each WITHOUT run, and `verify-carry` refuses a pair that taught nothing.
 - **C. Decide the protocol for an empty WITHOUT arm before any spend.** For example:
   - re-run the WITHOUT arm under a pre-registered limit; or
   - count the pair as failed.

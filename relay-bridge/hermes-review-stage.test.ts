@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildReviewPrompt, hermesReviewVerdict, validateHermesReview, type ReviewPacket } from './hermes-reviewer';
 import { juliusContractReviewCharge, lockJuliusTaskContract, reviewChargeFor, seedJuliusTaskContract } from '../src/relay/mission/julius';
+import { JULIUS_CHALLENGE_CATEGORIES } from '../src/relay/mission/julius/julius-continuous-lifecycle';
 
 /**
  * DEFECT 2 (paid run 34037313976): the plan review was handed the
@@ -213,5 +214,45 @@ describe('a REPAIR review can answer the findings it is charged with, and is tol
       findings: [{ findingId: 'f2', severity: 'blocking', requirement: 'AC-1', explanation: 'Still broken.', evidence: 'diff' }],
     }))!;
     expect(hermesReviewVerdict(repairing)).toMatchObject({ verdict: 'REPAIR_REQUIRED', resolutions });
+  });
+});
+
+/**
+ * DECISION C, OPTION B: EVERY FINDING SAYS WHAT KIND OF PROBLEM IT IS.
+ *
+ * The schema never asked, so a real reviewer's minor finding reached Julius as
+ * a warning of no kind, and a contract's `promotedWarningCategories` could never
+ * name one: the policy worked in the domain and was inert on every paid review.
+ */
+describe('every finding says what kind of problem it is, from Julius\'s own list', () => {
+  const prompt = buildReviewPrompt({ ...base, stage: 'build', charge: reviewChargeFor('build') });
+
+  it('the schema asks each finding for a category, and the guidance lists exactly Julius\'s kinds', () => {
+    expect(prompt).toContain('"findings":[{"findingId":string,"severity":"blocking"|"major"|"minor"|"informational","category":null|string,');
+    const guidance = prompt.split('\n').find((line) => line.startsWith('THE KIND OF EACH FINDING.')) ?? '';
+    expect(guidance).toContain(`one of ${JULIUS_CHALLENGE_CATEGORIES.join(', ')}, or null when none of them fits`);
+    expect(prompt.split('\n').filter((line) => line.startsWith('THE KIND OF EACH FINDING.')), 'said once').toHaveLength(1);
+  });
+
+  it('is a description and never a lever: the reviewer is not told what Julius does with a kind', () => {
+    expect(prompt).not.toMatch(/promot/iu);
+    expect(buildReviewPrompt({ ...base, stage: 'plan', charge: reviewChargeFor('plan') })).toContain('THE KIND OF EACH FINDING.');
+  });
+
+  it('a minor finding of a named kind is a warning of that kind; an unknown kind is dropped, never guessed', () => {
+    const review = (category: unknown) => validateHermesReview(JSON.stringify({
+      verdict: 'approved', summary: 'Accepted with a concern.', requirementsChecked: [],
+      findings: [{ findingId: 'f1', severity: 'minor', category, requirement: 'R6', explanation: 'The plan says ESM where the mission requires CommonJS.', evidence: 'plan' }],
+    }))!;
+    expect(hermesReviewVerdict(review('contract_drift'))).toMatchObject({ verdict: 'WARNING', warnings: [{ category: 'contract_drift' }] });
+    expect(hermesReviewVerdict(review(' Contract_Drift '))).toMatchObject({ warnings: [{ category: 'contract_drift' }] });
+    expect(hermesReviewVerdict(review('contract-drift'))).toMatchObject({ verdict: 'WARNING', warnings: [{ category: null }] });
+    expect(hermesReviewVerdict(review(null))).toMatchObject({ warnings: [{ category: null }] });
+    // A blocking finding's kind names the repair, and changes nothing about its route.
+    const blocking = validateHermesReview(JSON.stringify({
+      verdict: 'changes_required', summary: 'Broken.', requirementsChecked: [],
+      findings: [{ findingId: 'f2', severity: 'blocking', category: 'regression', requirement: 'AC-1', explanation: 'The old path no longer loads.', evidence: 'diff' }],
+    }))!;
+    expect(hermesReviewVerdict(blocking)).toMatchObject({ verdict: 'REPAIR_REQUIRED', category: 'regression' });
   });
 });

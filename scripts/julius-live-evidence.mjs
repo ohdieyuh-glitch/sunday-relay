@@ -79,6 +79,8 @@ const ALLOWED = [
   /^  carry source: ARCHIVE mission=[a-z][a-z0-9-]{1,63} julius_run=[A-Za-z0-9][A-Za-z0-9._:@#+\/=-]{0,255} workflow_run=\d{1,20} attempt=\d{1,4} commit=[0-9a-f]{40} contract_sha256=[0-9a-f]{64} export_sha256=[0-9a-f]{64} archive_sha256=[0-9a-f]{64}$/u,
   /^  carry preview: selected=\d+ verified_repair_findings=\d+ verified_findings=\d+ accepted_decisions=\d+ excluded=\d+ gate=(CARRY_PAIR_VALID|CARRY_NOT_A_WITH_ARM|CARRY_EMPTY|CARRY_DESIGN_ONLY|CARRY_UNKNOWN)$/u,
   /^  carry source: REFUSED CARRY_SOURCE_[A-Z_]+ — .+$/u,
+  // A contract that promotes warnings says so before any spend (Decision C option B); the kinds are a closed list.
+  /^  review policy: warnings promoted to blocking by this contract: [a-z_]+(, [a-z_]+){0,11}$/u,
   /^JULIUS LIVE PREFLIGHT — .+$/u,
   /^PREFLIGHT (OK|FAILED)(:.*)?$/u,
 ];

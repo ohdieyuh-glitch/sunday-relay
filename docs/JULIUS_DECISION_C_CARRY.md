@@ -82,6 +82,14 @@ These are implemented in `src/relay/mission/julius/julius-carry.ts`, which is pu
   two runs, never one resumed as the other.
 - An arm's second attempt (WITHOUT-2 after WITHOUT-1) is a rerun of the same
   contract, so it needs the paid workflow's rerun key, as every paid rerun does.
+- Any mission may declare `"promotedWarningCategories"`: the review kinds it treats as blocking (option B in
+  `JULIUS_DECISION_C_PAIR_VALIDITY.md`).
+  - Absent, which is every committed mission, a reviewer's warning is retained and interrupts nothing.
+  - A kind named here is promoted by Julius, never by the reviewer, so a WITHOUT arm whose reviewer only warns can
+    still leave a VERIFIED_REPAIR_FINDING.
+  - The field is closed-list (the kinds in `JULIUS_CHALLENGE_CATEGORIES`), and refused rather than dropped when wrong.
+  - It is part of the contract digest, and the run prints it before any spend.
+  - The bundle's `review-warnings.tsv` records each warning's declared kind and whether it was promoted.
 
 The frozen order is **WITHOUT-1 → WITH-1 → WITHOUT-2 → WITH-2**, with no early
 stop. **Not chosen here:** which mission the pair runs and its registration

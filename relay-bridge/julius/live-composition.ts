@@ -673,6 +673,11 @@ export function assembleLiveJuliusRuntime(options: {
   readonly cardRevision: string;
   readonly spendCeilingUsdMicros: number;
   readonly maxRepairRounds: number;
+  /**
+   * The warning kinds this mission treats as blocking (its contract's
+   * `promotedWarningCategories`). Absent or empty, no warning blocks.
+   */
+  readonly promotedWarningCategories?: readonly string[];
   readonly owner?: string;
   /**
    * THE EXECUTION ATTEMPT, for naming peer requests. A mission's run id repeats
@@ -761,6 +766,8 @@ export function assembleLiveJuliusRuntime(options: {
     revision: `verify:${options.cardRevision}`,
     reviewerRequired: true,
     maxRepairRounds: options.maxRepairRounds,
+    ...(options.promotedWarningCategories === undefined || options.promotedWarningCategories.length === 0
+      ? {} : { promotedWarningCategories: Object.freeze([...options.promotedWarningCategories]) }),
   };
 
   const deps: JuliusPipelineDependencies = {

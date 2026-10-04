@@ -31,7 +31,7 @@ import { dirname, join } from 'node:path';
 import { safeText } from './redact';
 import { RESEARCH_AUTHORITY_NOT_STATED, juliusResearchAskFieldGuidance } from '../src/relay/mission/julius/julius-research-protocol';
 import { JULIUS_CHALLENGE_CATEGORIES } from '../src/relay/mission/julius/julius-continuous-lifecycle';
-import { juliusReviewEscalationGuidance } from '../src/relay/mission/julius/julius-review-verdict';
+import { juliusReviewEscalationGuidance, juliusReviewFindingCategoryGuidance } from '../src/relay/mission/julius/julius-review-verdict';
 import type { JuliusReviewCharge, JuliusReviewStage } from '../src/relay/mission/julius/julius-review-stage';
 import type { JuliusContractReviewCharge } from '../src/relay/mission/julius/julius-task-contract';
 import { parseUsageFile, type HermesUsage } from './reviewer-harness/hermes/runner';
@@ -1206,7 +1206,7 @@ export function buildReviewPrompt(p: ReviewPacket): string {
     'You have NO tools in this review: no file access, no shell, no code execution and no web. Everything you may judge is in this packet. Do not attempt any tool call; if something you need is missing, say so in a finding or use researchAsks.',
     'Respond with ONE JSON object and nothing else:',
     '{"verdict":"approved"|"changes_required"|"unable_to_review","summary":string,',
-    '"findings":[{"findingId":string,"severity":"blocking"|"major"|"minor"|"informational",',
+    '"findings":[{"findingId":string,"severity":"blocking"|"major"|"minor"|"informational","category":null|string,',
     '"requirement":string,"file":string,"line":number,"explanation":string,"evidence":string,',
     '"recommendedAction":string}],',
     '"requirementsChecked":[{"requirement":string,"status":"passed"|"failed"|"uncertain","evidence":string}],',
@@ -1231,6 +1231,13 @@ export function buildReviewPrompt(p: ReviewPacket): string {
      * `changes_required` — a repair order for work that was not the problem.
      */
     juliusReviewEscalationGuidance(),
+    '',
+    /**
+     * EVERY FINDING SAYS WHAT KIND OF PROBLEM IT IS, from the list the escalation
+     * uses. Without it a minor finding reached Julius as a warning of no kind,
+     * which no mission's promotion policy could ever name.
+     */
+    juliusReviewFindingCategoryGuidance(),
     '',
     `MISSION: ${p.missionId}`,
     `MISSION REVISION: ${p.missionRevision ?? '(unversioned)'}`,
