@@ -223,9 +223,16 @@ suite('the Julius evidence chain: a real run, the shipping dump queries, the Bet
       `Run ${RUN_ID} accepted in state READY; driving the Julius run loop.\nRESULT: ${outcome.state} after ${outcome.ticks} ticks\n  run: ${RUN_ID}\n`);
     // And the manifest the dump writes first, bound to this checkout as a paid
     // mission would be, so what the gate measures below is the rows themselves.
-    const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    // FIELD FOR FIELD AS `write_manifest` IN julius-live-evidence-dump.sh WRITES IT: the commit and its tree, and
+    // `tracked_changes`, the checkout's real count (`git status --porcelain --untracked-files=no`), never a hard-coded 0.
+    // The Beta Gate binds a bundle only at tracked_changes=0 (#301); this case predated that rule, and its first Linux
+    // run (#317) showed the manifest without it.
+    const git = (args: readonly string[]) => execFileSync('git', [...args], { encoding: 'utf8' });
+    const head = git(['rev-parse', 'HEAD']).trim();
+    const tree = git(['rev-parse', 'HEAD^{tree}']).trim();
+    const tracked = git(['status', '--porcelain', '--untracked-files=no']).split('\n').filter((line) => line.trim() !== '').length;
     writeFileSync(join(bundle, 'bundle-manifest.txt'),
-      `manifest_version=1\nsource=local\ncommit=${head}\nmode=paid\nmode_basis=launcher_declared\njulius_run_id=${RUN_ID}\n`);
+      `manifest_version=1\nsource=local\ncommit=${head}\ntree=${tree}\ntracked_changes=${tracked}\nmode=paid\nmode_basis=launcher_declared\njulius_run_id=${RUN_ID}\n`);
 
     /* ------------------------------------------------------------------ the gate reads it */
     const report = evaluate(bundleRoot);
