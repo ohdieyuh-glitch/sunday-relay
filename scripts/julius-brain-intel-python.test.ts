@@ -34,7 +34,7 @@ import {
  */
 
 const PY_ROOT = resolve(__dirname, '..', 'python');
-const MIN_CASES = 94;
+const MIN_CASES = 121;
 const python = ['python3', 'python'].find((candidate) =>
   spawnSync(candidate, ['-c', 'import sys; assert sys.version_info >= (3, 10)'], { encoding: 'utf8' }).status === 0);
 const scratch = mkdtempSync(join(tmpdir(), 'julius-brain-intel-'));
