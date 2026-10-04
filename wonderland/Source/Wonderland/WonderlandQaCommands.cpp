@@ -6572,6 +6572,8 @@ namespace
 		float TipLowRun = 1.0e9f;
 		float TipLowSprint = 1.0e9f;
 		float TipWide = 0.0f;
+		float TipWideRun = 0.0f;
+		float TipWideSprint = 0.0f;
 		int32 TipSamplesRun = 0;
 		int32 TipSamplesSprint = 0;
 		float CamTrailPeak = 0.0f;
@@ -6920,6 +6922,7 @@ namespace
 				{
 					H.TipLowRun = FMath::Min(H.TipLowRun, TipLow);
 					H.TipWide = FMath::Max(H.TipWide, TipOut);
+					H.TipWideRun = FMath::Max(H.TipWideRun, TipOut);
 					++H.TipSamplesRun;
 				}
 			}
@@ -6957,6 +6960,7 @@ namespace
 				{
 					H.TipLowSprint = FMath::Min(H.TipLowSprint, TipLow);
 					H.TipWide = FMath::Max(H.TipWide, TipOut);
+					H.TipWideSprint = FMath::Max(H.TipWideSprint, TipOut);
 					++H.TipSamplesSprint;
 				}
 				// the sprint's window: well after the 0.35 s burst, W still held
@@ -7053,8 +7057,8 @@ namespace
 				H.Check(TEXT("S4"), H.TipSamplesRun >= 10 && H.TipSamplesSprint >= 10 && H.TipLowRun >= 2.0f && H.TipLowSprint >= 2.0f
 						&& H.TipWide <= 0.5f * BodyHigh,
 					FString::Printf(TEXT("the blades while the Dog MOVES: the lower tip at least %.1f uu over the ground in the handoff run (%d frames) and %.1f in the dash ")
-						TEXT("and sprint (%d frames) (want >= 2: never into the ground); the farther tip at most %.1f uu from the centre line (want <= %.1f: half the body)"),
-						H.TipLowRun, H.TipSamplesRun, H.TipLowSprint, H.TipSamplesSprint, H.TipWide, 0.5f * BodyHigh));
+						TEXT("and sprint (%d frames) (want >= 2: never into the ground); the farther tip at most %.1f uu from the centre line (the run %.1f, the dash %.1f; want <= %.1f: half the body)"),
+						H.TipLowRun, H.TipSamplesRun, H.TipLowSprint, H.TipSamplesSprint, H.TipWide, H.TipWideRun, H.TipWideSprint, 0.5f * BodyHigh));
 				// THE HOP (founder, 10-04): each leg swings once over TWO hops, so at the hop's 3-5.5 hops a second the canon hip cycles 1.5-2.75
 				// times; the ~10/s blur that read as a slide still fails, and so would a run cycle at a sprinter's 4+
 				float HopFast = 0.0f;
@@ -8190,6 +8194,8 @@ namespace
 		float SoleSide[2] = { 0.0f, 0.0f };
 		/** C11: the -Y hip ahead of the +Y hip, uu. C12: the hips' midpoint ahead of the soles'. C13: the head's facing above level, deg. */
 		float LeadAhead = 0.0f;
+		/** C11: the hips' line turned to lead with the -Y side, degrees (width-free). */
+		float LeadYawDeg = 0.0f;
 		/** The hips' midpoint's height in the world (the hop's rise and fall). */
 		float HipZ = 0.0f;
 		float HipsAhead = 0.0f;
@@ -8264,6 +8270,8 @@ namespace
 		R.BendDeg = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(FVector::DotProduct(ToHead, Fwd), ToHead.Z)));
 		R.HeadAhead = static_cast<float>(FVector::DotProduct(ToHead, Fwd));
 		R.LeadAhead = static_cast<float>(FVector::DotProduct(HipMinus - HipPlus, Fwd));
+		R.LeadYawDeg = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(FVector::DotProduct(HipMinus - HipPlus, Fwd),
+			FMath::Abs(FVector::DotProduct(HipMinus - HipPlus, Right)))));
 		R.HipZ = static_cast<float>(HipMid.Z);
 		R.HipsAhead = static_cast<float>(FVector::DotProduct(HipMid - SoleMid, Fwd));
 		R.SoleSide[0] = static_cast<float>(FVector::DotProduct(SolePlus - Dog->GetActorLocation(), Right));
@@ -8406,9 +8414,10 @@ namespace
 		V.bOk[8] = bBlades;
 		// C11-C13 (Second's review of 92f83bff), each against the same body unarmed
 		const float Lead = R.LeadAhead - U.LeadAhead;
-		V.bOk[11] = Lead >= 1.0f;
-		V.Line[11] = FString::Printf(TEXT("the front (-Y) side leading: its hip %+.1f uu ahead of the +Y hip, %+.1f over unarmed (want >= +1.0: the body turned into the run)"),
-			R.LeadAhead, Lead);
+		const float LeadYaw = R.LeadYawDeg - U.LeadYawDeg;
+		V.bOk[11] = LeadYaw >= 3.0f;
+		V.Line[11] = FString::Printf(TEXT("the front (-Y) side leading: the hips' line turned %+.1f deg, %+.1f over unarmed (want >= +3: the body turned a little; its -Y hip %+.1f uu ahead, %+.1f over unarmed)"),
+			R.LeadYawDeg, LeadYaw, R.LeadAhead, Lead);
 		const float HipsGo = R.HipsAhead - U.HipsAhead;
 		V.bOk[12] = FMath::Abs(R.HipsAhead) <= 2.5f;
 		V.Line[12] = FString::Printf(TEXT("the hips over the feet: %+.1f uu ahead of the soles' midpoint, %+.1f over unarmed (want within 2.5: balanced between them, never pushed back)"),
@@ -8479,6 +8488,11 @@ namespace
 		float C9StopBend = -1000.0f;
 		float C9StopStep = 0.0f;
 		float C9LastBend = -1000.0f;
+		// ST2C15: the blade tips while THIS body moves -- the lowest over the ground in the jog and in the hop, and the widest from its centre line
+		float C9TipLowJog = 1.0e9f;
+		float C9TipLowHop = 1.0e9f;
+		float C9TipWide = 0.0f;
+		int32 C9TipSamples = 0;
 		void Check(const FString& Id, bool bOk, const FString& Detail)
 		{
 			(bOk ? Pass : Fail) += 1;
@@ -9046,6 +9060,10 @@ namespace
 			S.C9StopBend = -1000.0f;
 			S.C9StopStep = 0.0f;
 			S.C9LastBend = -1000.0f;
+			S.C9TipLowJog = 1.0e9f;
+			S.C9TipLowHop = 1.0e9f;
+			S.C9TipWide = 0.0f;
+			S.C9TipSamples = 0;
 			S.bC9DashingLate = false;
 			for (int32 ArmSide = 0; ArmSide < 2; ++ArmSide)
 			{
@@ -9091,21 +9109,36 @@ namespace
 				S.C9Ground = static_cast<float>(FMath::Min(Standing.Sole[0].Z, Standing.Sole[1].Z));
 			}
 			// from a stand: W down, up, down -- the second press within the window -- and HELD
+			// W down -- the armed JOG, normal movement, 1.2 s (Second's review: the blades there, and on a worn skin, were never read) -- then
+			// up, down, up, down -- the second press of that pair within the window -- and HELD: the dash, the hop
 			if (S.Key == 0 && In >= 0.00f) { Dog->QaForwardKey(false, true); S.Key = 1; }
-			if (S.Key == 1 && In >= 0.04f) { Dog->QaForwardKey(false, false); S.Key = 2; }
-			if (S.Key == 2 && In >= 0.08f) { Dog->QaForwardKey(false, true); S.Key = 3; }
+			if (S.Key == 1 && In >= 1.20f) { Dog->QaForwardKey(false, false); S.Key = 2; }
+			if (S.Key == 2 && In >= 1.24f) { Dog->QaForwardKey(false, true); S.Key = 3; }
+			if (S.Key == 3 && In >= 1.28f) { Dog->QaForwardKey(false, false); S.Key = 4; }
+			if (S.Key == 4 && In >= 1.32f) { Dog->QaForwardKey(false, true); S.Key = 5; }
+			if (S.C9DashAt < 0.0f && In >= 0.5f && In < 1.2f)
+			{
+				float TipLow = 0.0f;
+				float TipOut = 0.0f;
+				if (QaHandTips(Dog, TipLow, TipOut))
+				{
+					S.C9TipLowJog = FMath::Min(S.C9TipLowJog, TipLow);
+					S.C9TipWide = FMath::Max(S.C9TipWide, TipOut);
+					++S.C9TipSamples;
+				}
+			}
 			if (S.C9DashAt < 0.0f && Dog->IsDashing())
 			{
 				S.C9DashAt = In;
 			}
 			if (S.C9DashAt < 0.0f)
 			{
-				if (In < 1.5f)
+				if (In < 2.8f)
 				{
 					return true;
 				}
 				S.Check(FString::Printf(TEXT("ST2C9.%d"), S.Moving + 1), false,
-					FString::Printf(TEXT("%s: no dash started from the charge (W down, up, down and held) within 1.5 s"), *Moving));
+					FString::Printf(TEXT("%s: no dash started from the jog (W down, up, down and held) within 2.8 s"), *Moving));
 			}
 			else
 			{
@@ -9117,6 +9150,14 @@ namespace
 				}
 				if (Since >= 0.25f && Since <= 1.25f)
 				{
+					float HopTipLow = 0.0f;
+					float HopTipOut = 0.0f;
+					if (QaHandTips(Dog, HopTipLow, HopTipOut))
+					{
+						S.C9TipLowHop = FMath::Min(S.C9TipLowHop, HopTipLow);
+						S.C9TipWide = FMath::Max(S.C9TipWide, HopTipOut);
+						++S.C9TipSamples;
+					}
 					const FQaChargeReading Now = QaReadCharge(Dog);
 					if (Now.bRead)
 					{
@@ -9182,6 +9223,13 @@ namespace
 							TEXT("range %.0f / %.0f deg (>= 25: pumping); the head %+.0f..%+.0f deg (within 15: on the way ahead)"),
 							*Moving, S.C9BendEarly, S.C9BendLate, S.bC9DashingLate ? TEXT("dashing") : TEXT("NOT dashing"), S.C9SpeedLate, 0.8f * Sprint,
 							AirShare * 100.0f, S.C9Frames, S.C9Landings, Rise, Swing[0], Swing[1], S.C9HeadLow, S.C9HeadHigh));
+					// ST2C15: the blades on THIS body while it moves (the jog and the hop): never into the ground, never a wide V
+					const float BodyHigh = FMath::Max(Dog->GetCanonBodyHeightUu(), 1.0f);
+					S.Check(FString::Printf(TEXT("ST2C15.%d"), S.Moving + 1), S.C9TipSamples >= 20 && S.C9TipLowJog >= 2.0f && S.C9TipLowHop >= 2.0f
+							&& S.C9TipWide <= 0.5f * BodyHigh,
+						FString::Printf(TEXT("%s, the blades MOVING: the lower tip at least %.1f uu over the ground in the jog and %.1f in the hop (want >= 2), the farther ")
+							TEXT("at most %.1f uu from the centre line (want <= %.1f: half the body), %d frames"),
+							*Moving, S.C9TipLowJog, S.C9TipLowHop, S.C9TipWide, 0.5f * BodyHigh, S.C9TipSamples));
 					// THE STOP: W up, the stick let go
 					Dog->QaForwardKey(false, false);
 					S.C9StopAt = In;
@@ -9837,11 +9885,12 @@ namespace
 						if (Shard < 32)
 						{
 							const uint32 Bit = 1u << Shard;
-							if (Across >= 0.5 && bOutside)
+							const bool bWasOut = (S.ShardOut[Side] & Bit) != 0u;
+							if (Across >= 0.5 && bOutside && FMath::PointDistToSegment(ShardAt, BladeFrom, BladeTip) >= 30.0)
 							{
 								S.ShardOut[Side] |= Bit;
 							}
-							if ((S.ShardOut[Side] & Bit) != 0u && Across >= 0.3)
+							if (bWasOut && Across >= 0.3)
 							{
 								if (FMath::PointDistToSegment(ShardAt, BladeFrom, BladeTip) <= 15.0)
 								{
@@ -10585,7 +10634,9 @@ namespace
 		// the camera's drop is the player's view, BEHIND: from IN FRONT a blade trailing ~115 uu back, away from a camera looking down, projects
 		// ABOVE its fist whatever its height (round 7a4 SC2: +10% on the screen with the tip 19 uu under the fist in the world) -- reported
 		// there, judged in the world
-		bOutV = bSeen && (bFromFront || (Rise[0] <= -0.05 && Rise[1] <= -0.05)) && Outside[0] >= 0.0 && Outside[1] >= 0.0 && Drop[0] >= 5.0 && Drop[1] >= 5.0
+		// (Second's review: from BEHIND too a tip level with its fist still projects ~7.6 deg under it -- the screen drop cannot fail from either side,
+		// so it is reported and the WORLD drop judges)
+		bOutV = bSeen && Outside[0] >= 0.0 && Outside[1] >= 0.0 && Drop[0] >= 5.0 && Drop[1] >= 5.0
 			&& Above[0] >= 2.0 && Above[1] >= 2.0 && Wide[0] <= 0.5 * BodyHeight && Wide[1] <= 0.5 * BodyHeight;
 		return FString::Printf(TEXT("%s: gold tip %+.0f%% of the body's height above its fist, %+.0f px outside the body's left edge; cyan %+.0f%%, %+.0f px outside its right edge; ")
 			TEXT("in the world the tips %.0f / %.0f uu below their fists (>= 5), %.0f / %.0f above the ground (>= 2), %.0f / %.0f from the centreline (<= %.0f: half the body)"),
