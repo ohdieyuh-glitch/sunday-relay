@@ -5,10 +5,13 @@
  *   node scripts/r16-local-bridge.mjs --db postgresql://postgres@127.0.0.1:<pg port>/sw_r16_<n> --port <p>
  *        ( --client-id-file <path>  |  --github-stub http://127.0.0.1:<port> )  [--tap <file>] [--no-build]
  *        [--eos-config <path to the founder's EOS .env>] [--room-salt-file <path outside the checkout>]
+ *        [--eos-game-config <path to the founder's eos-game.env>]
  *   The PostgreSQL port is R16_THROWAWAY_PG_PORT (default 54329), as the stub fence and the migrate helper read it.
  *   --eos-config is passed to the bridge as WONDERLAND_EOS_VOICE_CONFIG: only its existence is checked here, never its content,
  *   and a path under .iwonder-secrets is never printed. --room-salt-file is created once (32 random bytes, hex) if absent,
  *   never overwritten, refused inside this checkout, and passed as WONDERLAND_EOS_ROOM_SALT_FILE.
+ *   --eos-game-config is passed as WONDERLAND_EOS_GAME_CONFIG, checked the same way (existence only; a founder path is never
+ *   printed): the bridge hands the GAME client's five EOS values to signed-in clients (GET .../social/voice/eos-client-config).
  *
  * What it refuses, before anything runs:
  *   - any database but the portable test PostgreSQL's sw_r16_<n> on 127.0.0.1:54329 -- never Julius's live store;
@@ -56,7 +59,7 @@ export const R16_THROWAWAY_DATABASE = throwawayDatabase({});
 const STUB_URL = /^http:\/\/127\.0\.0\.1:(\d{4,5})\/?$/;
 
 export function parseArgs(argv, env = process.env) {
-  const out = { db: null, port: null, clientIdFile: null, githubStub: null, tap: null, build: true, eosConfig: null, roomSaltFile: null, pgPort: throwawayPgPort(env) };
+  const out = { db: null, port: null, clientIdFile: null, githubStub: null, tap: null, build: true, eosConfig: null, eosGameConfig: null, roomSaltFile: null, pgPort: throwawayPgPort(env) };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = () => {
@@ -72,6 +75,7 @@ export function parseArgs(argv, env = process.env) {
     else if (flag === '--tap') out.tap = value();
     else if (flag === '--no-build') out.build = false;
     else if (flag === '--eos-config') out.eosConfig = value();
+    else if (flag === '--eos-game-config') out.eosGameConfig = value();
     else if (flag === '--room-salt-file') out.roomSaltFile = value();
     else throw new Error(`unknown argument ${flag}`);
   }
@@ -116,9 +120,10 @@ export function childEnv(parent, settings) {
   });
   if (settings.githubStub) env.WONDERLAND_SOCIAL_GITHUB_STUB = settings.githubStub;
   if (settings.tap) env.WONDERLAND_SOCIAL_TAP = settings.tap;
-  // BY EXACT NAME, from the arguments only: the fences' port, and the two EOS PATHS (never an EOS value)
+  // BY EXACT NAME, from the arguments only: the fences' port, and the EOS PATHS (never an EOS value)
   env.R16_THROWAWAY_PG_PORT = String(settings.pgPort ?? 54329);
   if (settings.eosConfig) env.WONDERLAND_EOS_VOICE_CONFIG = settings.eosConfig;
+  if (settings.eosGameConfig) env.WONDERLAND_EOS_GAME_CONFIG = settings.eosGameConfig;
   if (settings.roomSaltFile) env.WONDERLAND_EOS_ROOM_SALT_FILE = settings.roomSaltFile;
   return env;
 }
@@ -129,10 +134,10 @@ const SECRETS_DIR = /[\\/]\.iwonder-secrets([\\/]|$)/i;
  * --eos-config: only that the file EXISTS is checked -- it is never opened, read or printed here (the bridge reads it). A path
  * under the founder's .iwonder-secrets folder is never printed either.
  */
-export function checkEosConfig(path, exists = existsSync) {
+export function checkEosConfig(path, exists = existsSync, what = 'EOS config') {
   const secret = SECRETS_DIR.test(path);
-  if (!exists(path)) throw new Error(secret ? 'the EOS config file is missing' : `the EOS config file is missing: ${path}`);
-  return secret ? "EOS config: the founder's file (path not printed)" : `EOS config: ${path}`;
+  if (!exists(path)) throw new Error(secret ? `the ${what} file is missing` : `the ${what} file is missing: ${path}`);
+  return secret ? `${what}: the founder's file (path not printed)` : `${what}: ${path}`;
 }
 
 /**
@@ -190,12 +195,17 @@ async function main() {
     console.log(`r16: ${checkEosConfig(args.eosConfig)}`);
     eosConfig = resolve(args.eosConfig);
   }
+  let eosGameConfig = null;
+  if (args.eosGameConfig !== null) {
+    console.log(`r16: ${checkEosConfig(args.eosGameConfig, existsSync, 'EOS game config')}`);
+    eosGameConfig = resolve(args.eosGameConfig);
+  }
   if (args.roomSaltFile !== null) {
     const salt = ensureRoomSaltFile(args.roomSaltFile);
     roomSaltFile = salt.path;
     console.log(`r16: room salt file ${salt.created ? 'created' : 'kept'}: ${salt.path}`);
   }
-  const env = childEnv(process.env, { db: args.db, port: args.port, clientId, githubStub: args.githubStub, tap: args.tap, dataDir: mkdtempSync(join(tmpdir(), 'r16-bridge-')), pgPort: args.pgPort, eosConfig, roomSaltFile });
+  const env = childEnv(process.env, { db: args.db, port: args.port, clientId, githubStub: args.githubStub, tap: args.tap, dataDir: mkdtempSync(join(tmpdir(), 'r16-bridge-')), pgPort: args.pgPort, eosConfig, eosGameConfig, roomSaltFile });
   await ensureDatabase(args.db, args.pgPort);
   if (args.build) {
     const esbuild = join('node_modules', 'esbuild', 'bin', 'esbuild');
@@ -203,7 +213,7 @@ async function main() {
     step('migrate helper build', process.execPath, [esbuild, 'scripts/r16-migrate-throwaway.ts', '--bundle', '--platform=node', '--format=cjs', '--outfile=dist-relay-bridge/r16-migrate-throwaway.cjs', '--external:pg', '--log-level=warning'], env);
   }
   step('migrate', process.execPath, ['dist-relay-bridge/r16-migrate-throwaway.cjs'], env);
-  console.log(`r16: MAIN-LINE BRIDGE on http://127.0.0.1:${args.port} | database ${args.db.slice(args.db.lastIndexOf('/') + 1)} (throwaway) | social ON | sign-in ${args.githubStub ? 'GITHUB STUB (identities NOT real)' : 'GitHub device flow'}${args.tap ? ' | tap ON' : ''} | EOS voice ${eosConfig !== null ? 'configured' : 'off (503)'}`);
+  console.log(`r16: MAIN-LINE BRIDGE on http://127.0.0.1:${args.port} | database ${args.db.slice(args.db.lastIndexOf('/') + 1)} (throwaway) | social ON | sign-in ${args.githubStub ? 'GITHUB STUB (identities NOT real)' : 'GitHub device flow'}${args.tap ? ' | tap ON' : ''} | EOS voice ${eosConfig !== null ? 'configured' : 'off (503)'} | EOS client config ${eosGameConfig !== null ? 'configured' : 'off (503)'}`);
   const bridge = spawn(process.execPath, ['dist-relay-bridge/server.cjs'], { stdio: 'inherit', env, cwd: process.cwd() });
   const stop = () => bridge.kill('SIGINT');
   process.on('SIGINT', stop);

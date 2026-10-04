@@ -7,6 +7,7 @@ import { createInMemorySocialStore, type SocialStore } from '../src/relay/social
 import { partyOf } from '../src/relay/social/social-state';
 import { createInMemoryVoiceBindings } from '../src/relay/social/voice-binding';
 import { EPIC, EosVoiceTokenMinter, createVoiceRemovals, eosVoiceFromEnv, hashId, hashPuid, loadEosVoiceConfig, type EosFetch, type EosVoiceConfig } from './eos-voice';
+import { EOS_GAME_CONFIG_ENV, loadEosGameClientConfig, type EosDeployment } from './eos-voice';
 
 /*
  * PARTY VOICE ON EOS, AGAINST A RECORDED EPIC FAKE (R16 EOS voice backend). Every request the bridge would send to
@@ -367,5 +368,103 @@ describe('logs carry hashed ids only', () => {
       expect(line, line).not.toMatch(/[0-9a-f]{32}/);
     }
     expect(log.length).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe("the GAME client's EOS config: EOS_GAME_* only, never the Trusted Server's (founder 10-04)", () => {
+  const PATH_SEEN = `C:/secret-place-${hex(4)}/eos-game.env`;
+  // the founder's file is CRLF with no BOM; a BOM is tolerated
+  const dotEnv = (pairs: Record<string, string>) => `\uFEFF${Object.entries(pairs).map(([k, v]) => `${k}=${v}`).join('\r\n')}\r\n`;
+  /** Planted values, made at run time: ids shaped like EOS's, secrets that say what they are. */
+  const fileOf = () => {
+    const ids = { EOS_PRODUCT_ID: hex(16), EOS_SANDBOX_ID: hex(16), EOS_DEPLOYMENT_ID: hex(16) };
+    const game = { EOS_GAME_CLIENT_ID: `xyza${hex(14)}`, EOS_GAME_CLIENT_SECRET: `planted-game-${hex(16)}` };
+    const server = { EOS_SERVER_CLIENT_ID: `xyzs${hex(14)}`, EOS_SERVER_CLIENT_SECRET: `planted-server-${hex(16)}` };
+    return { ids, game, server, values: [...Object.values(ids), ...Object.values(game), ...Object.values(server)] };
+  };
+  const load = (text: string | (() => string), deployment?: EosDeployment | null) => {
+    const log: string[] = [];
+    const config = loadEosGameClientConfig({ [EOS_GAME_CONFIG_ENV]: PATH_SEEN }, { readFile: typeof text === 'function' ? text : () => text, log: (l) => log.push(l), deployment });
+    return { config, log };
+  };
+  /** No value, no path, no length in any line. */
+  const clean = (lines: readonly string[], values: readonly string[]) => {
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      for (const v of values) expect(line).not.toContain(v);
+      expect(line).not.toContain('secret-place');
+      expect(line).not.toMatch(/\d+ (chars|characters|bytes)/);
+    }
+  };
+
+  it('loads the five values of the .env form and says only "loaded (5 keys)"', () => {
+    const f = fileOf();
+    const { config, log } = load(dotEnv({ ...f.ids, ...f.game }));
+    expect(config).toEqual({ productId: f.ids.EOS_PRODUCT_ID, sandboxId: f.ids.EOS_SANDBOX_ID, deploymentId: f.ids.EOS_DEPLOYMENT_ID, clientId: f.game.EOS_GAME_CLIENT_ID, clientSecret: f.game.EOS_GAME_CLIENT_SECRET });
+    expect(Object.isFrozen(config)).toBe(true);
+    expect(log).toEqual(['eos game config: loaded (5 keys)']);
+    clean(log, f.values);
+  });
+
+  it("a file holding BOTH pairs serves the GAME pair; a file holding only the Trusted Server's pair is refused, by key name", () => {
+    const f = fileOf();
+    const both = load(dotEnv({ ...f.ids, ...f.server, ...f.game }));
+    expect(both.config?.clientId).toBe(f.game.EOS_GAME_CLIENT_ID);
+    expect(both.config?.clientSecret).toBe(f.game.EOS_GAME_CLIENT_SECRET);
+    for (const v of Object.values(f.server)) expect(JSON.stringify(both.config)).not.toContain(v);
+    const serverOnly = load(dotEnv({ ...f.ids, ...f.server }));
+    expect(serverOnly.config).toBeNull();
+    expect(serverOnly.log).toEqual(['eos game config: the EOS game config file is missing EOS_GAME_CLIENT_ID, EOS_GAME_CLIENT_SECRET -- the client config route answers 503']);
+    clean([...both.log, ...serverOnly.log], f.values);
+  });
+
+  it('absent, unreadable, JSON, a missing key or a value out of shape: null, and the log names keys only', () => {
+    const f = fileOf();
+    const absent: string[] = [];
+    expect(loadEosGameClientConfig({}, { log: (l) => absent.push(l) })).toBeNull();
+    expect(absent).toEqual(['eos game config: absent']);
+    const cases: Array<[string | (() => string), string]> = [
+      [() => { throw new Error(`ENOENT ${PATH_SEEN} ${f.game.EOS_GAME_CLIENT_SECRET}`); }, 'the EOS game config file could not be read'],
+      [JSON.stringify({ productId: f.ids.EOS_PRODUCT_ID, clientSecret: f.game.EOS_GAME_CLIENT_SECRET }), 'the EOS game config file must be the .env form'],
+      [dotEnv({ ...f.ids, EOS_GAME_CLIENT_ID: f.game.EOS_GAME_CLIENT_ID }), 'the EOS game config file is missing EOS_GAME_CLIENT_SECRET'],
+      [dotEnv({ ...f.ids, ...f.game, EOS_SANDBOX_ID: `bad id ${hex(4)}` }), 'the EOS game config file has out of shape: EOS_SANDBOX_ID'],
+      [dotEnv({ ...f.ids, ...f.game, EOS_GAME_CLIENT_SECRET: `x${'y'.repeat(600)}` }), 'the EOS game config file has out of shape: EOS_GAME_CLIENT_SECRET'],
+    ];
+    const lines: string[] = [];
+    for (const [text, why] of cases) {
+      const { config, log } = load(text);
+      expect(config, why).toBeNull();
+      expect(log).toEqual([`eos game config: ${why} -- the client config route answers 503`]);
+      lines.push(...log);
+    }
+    clean(lines, f.values);
+  });
+
+  it("a game config naming another product, sandbox or deployment than the voice config is refused, by field name", () => {
+    const f = fileOf();
+    const text = dotEnv({ ...f.ids, ...f.game });
+    const same: EosDeployment = { productId: f.ids.EOS_PRODUCT_ID, sandboxId: f.ids.EOS_SANDBOX_ID, deploymentId: f.ids.EOS_DEPLOYMENT_ID };
+    expect(load(text, same).config?.deploymentId).toBe(f.ids.EOS_DEPLOYMENT_ID);
+    const elsewhere = hex(16);
+    const other = load(text, { ...same, deploymentId: elsewhere });
+    expect(other.config).toBeNull();
+    expect(other.log).toEqual(['eos game config: the EOS game config file names another deploymentId than the voice config -- the client config route answers 503']);
+    clean(other.log, [...f.values, elsewhere]);
+  });
+
+  it("eosVoiceFromEnv carries the voice config's ids -- and nothing secret -- for that check", () => {
+    const dir = mkdtempSync(join(tmpdir(), 'eos-deploy-'));
+    try {
+      const f = fileOf();
+      const envPath = join(dir, 'eos-server.env');
+      const saltPath = join(dir, 'salt.txt');
+      writeFileSync(envPath, dotEnv({ ...f.ids, ...f.server }));
+      writeFileSync(saltPath, `${hex(32)}\n`);
+      const voice = eosVoiceFromEnv({ WONDERLAND_EOS_VOICE_CONFIG: envPath, WONDERLAND_EOS_ROOM_SALT_FILE: saltPath }, { bindings: () => null });
+      expect(voice?.deployment).toEqual({ productId: f.ids.EOS_PRODUCT_ID, sandboxId: f.ids.EOS_SANDBOX_ID, deploymentId: f.ids.EOS_DEPLOYMENT_ID });
+      for (const v of Object.values(f.server)) expect(JSON.stringify(voice?.deployment)).not.toContain(v);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

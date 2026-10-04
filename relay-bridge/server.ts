@@ -81,13 +81,13 @@ import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute } from './wonderland-native-signin-routes';
-import { endSocialPresence, handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
+import { createSessionRateLimit, endSocialPresence, EOS_CLIENT_CONFIG_RATE, handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 import { GITHUB_STUB_BANNER, githubRootsForNativeSignIn } from './wonderland-github-stub-seam';
 import { openSocialPostgresStore } from '../src/relay/persistence/social-postgres';
 import { createPostgresVoiceBindings } from '../src/relay/persistence/voice-binding-postgres';
 import type { VoiceBindingStore } from '../src/relay/social/voice-binding';
-import { eosVoiceFromEnv } from './eos-voice';
+import { eosVoiceFromEnv, loadEosGameClientConfig } from './eos-voice';
 import type { SocialStore } from '../src/relay/social/social-store';
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -302,6 +302,15 @@ export function createBridgeServer(
     return voiceBindingsCache;
   };
   const eosVoice = socialEnabled ? eosVoiceFromEnv(process.env, { bindings: voiceBindings, log: (line) => console.warn(`[relay-bridge] ${line}`) }) : null;
+  /**
+   * THE GAME CLIENT'S EOS CONFIG (founder 10-04), behind WONDERLAND_EOS_GAME_CONFIG (the founder's eos-game.env, by path): read once
+   * here and held in memory only, for GET /wonderland/social/voice/eos-client-config; it must name the voice config's deployment.
+   * Never logged. The rate limit is built once: the route's deps are rebuilt per request.
+   */
+  const eosGameConfig = socialEnabled
+    ? loadEosGameClientConfig(process.env, { log: (line) => console.warn(`[relay-bridge] ${line}`), deployment: eosVoice?.deployment ?? null })
+    : null;
+  const eosClientConfigAllowed = createSessionRateLimit(EOS_CLIENT_CONFIG_RATE.limit, EOS_CLIENT_CONFIG_RATE.windowMs);
   let socialStoreReady: SocialStore | null = null;
   let socialStoreOpening: Promise<SocialStore | null> | null = null;
   const socialStore = async (): Promise<SocialStore | null> => {
@@ -737,9 +746,12 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             store: await socialStore(),
             voice: eosVoice?.minter ?? null,
             voiceBindings: eosVoice !== null ? voiceBindings() : null,
+            eosClientConfig: eosGameConfig,
+            eosClientConfigAllowed,
+            log: (line) => console.warn(`[relay-bridge] ${line}`),
             tap: socialTap,
           });
-          if (socialResult !== null) send(res, socialResult.status, socialResult.body, cors);
+          if (socialResult !== null) send(res, socialResult.status, socialResult.body, { ...cors, ...(socialResult.headers ?? {}) });
           return;
         }
 

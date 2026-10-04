@@ -25,14 +25,17 @@ export interface R16Args {
   readonly tap: string | null;
   readonly build: boolean;
   readonly eosConfig: string | null;
+  /** --eos-game-config: the founder's eos-game.env, passed to the bridge as WONDERLAND_EOS_GAME_CONFIG (a path, never a value). */
+  readonly eosGameConfig: string | null;
   readonly roomSaltFile: string | null;
   readonly pgPort: number;
 }
 
 export declare function parseArgs(argv: readonly string[], env?: Readonly<Record<string, string | undefined>>): R16Args;
 
-/** Existence only; never opens the file. A path under .iwonder-secrets is never printed. Returns the line to print. */
-export declare function checkEosConfig(path: string, exists?: (path: string) => boolean): string;
+/** Existence only; never opens the file. A path under .iwonder-secrets is never printed. Returns the line to print, named by `what`
+ *  (default 'EOS config'; 'EOS game config' for --eos-game-config). */
+export declare function checkEosConfig(path: string, exists?: (path: string) => boolean, what?: string): string;
 
 /** Created once (32 random bytes, hex), never overwritten, refused inside repoRoot. */
 export declare function ensureRoomSaltFile(path: string, repoRoot?: string): { readonly path: string; readonly created: boolean };
@@ -48,6 +51,7 @@ export declare function childEnv(
     readonly dataDir: string;
     readonly pgPort?: number;
     readonly eosConfig?: string | null;
+    readonly eosGameConfig?: string | null;
     readonly roomSaltFile?: string | null;
   },
 ): Record<string, string | undefined>;

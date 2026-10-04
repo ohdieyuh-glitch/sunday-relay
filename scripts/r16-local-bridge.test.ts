@@ -194,6 +194,23 @@ describe('the launcher: the throwaway port, the EOS paths, the room-salt file', 
     expect(printed).toEqual([]); // the helpers RETURN their one line; only main prints it
     rmSync(dir, { recursive: true, force: true });
   });
+
+  it('--eos-game-config: parsed, passed as WONDERLAND_EOS_GAME_CONFIG by exact name and never inherited; checked like --eos-config, under its own name', () => {
+    const planted = `planted-${randomBytes(12).toString('hex')}`;
+    const parsed = parseArgs(['--db', GOOD, '--port', '8797', '--github-stub', 'http://127.0.0.1:8899', '--eos-game-config', '/synthetic/eos-game.env'], {});
+    expect(parsed.eosGameConfig).toBe('/synthetic/eos-game.env');
+    expect(parseArgs(['--db', GOOD, '--port', '8797', '--github-stub', 'http://127.0.0.1:8899'], {}).eosGameConfig).toBeNull();
+    const parent = { PATH: '/bin', WONDERLAND_EOS_GAME_CONFIG: `/parent/${planted}.env`, EOS_GAME_CLIENT_SECRET: planted };
+    const base = { db: GOOD, port: 8797, clientId: 'Iv1.x', githubStub: null, tap: null, dataDir: '/tmp/r16' };
+    expect(childEnv(parent, { ...base, eosGameConfig: '/synthetic/eos-game.env' }).WONDERLAND_EOS_GAME_CONFIG).toBe('/synthetic/eos-game.env');
+    const without = childEnv(parent, base);
+    expect(without.WONDERLAND_EOS_GAME_CONFIG).toBeUndefined();
+    for (const [key, value] of Object.entries(without)) expect(value ?? '', key).not.toContain(planted);
+    const founderShaped = '/nowhere/.iwonder-secrets/eos-game.env';
+    expect(checkEosConfig(founderShaped, () => true, 'EOS game config')).toBe("EOS game config: the founder's file (path not printed)");
+    expect(() => checkEosConfig(founderShaped, () => false, 'EOS game config')).toThrow(/^the EOS game config file is missing$/);
+    expect(checkEosConfig('/synthetic/eos-game.env', () => true, 'EOS game config')).toBe('EOS game config: /synthetic/eos-game.env');
+  });
 });
 
 describe('the GitHub device stub, through the bridge\'s real sign-in', () => {

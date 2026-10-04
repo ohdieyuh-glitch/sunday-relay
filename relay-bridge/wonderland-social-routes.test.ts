@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { createInMemorySocialStore, type SocialStore } from '../src/relay/social/social-store';
-import { endSocialPresence, handleSocialRoute, type SocialRouteDeps, type SocialSessionFacts } from './wonderland-social-routes';
+import { randomBytes } from 'node:crypto';
+import { createInMemoryVoiceBindings } from '../src/relay/social/voice-binding';
+import { hashId } from './eos-voice';
+import {
+  createSessionRateLimit,
+  endSocialPresence,
+  EOS_CLIENT_CONFIG_RATE,
+  handleSocialRoute,
+  type SocialRouteDeps,
+  type SocialRouteResult,
+  type SocialSessionFacts,
+} from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 
 /*
@@ -202,3 +213,98 @@ async function friendsOn(store: SocialStore) {
   await w.nova.post(`/requests/${requestId}/accept`);
   return w;
 }
+
+describe("the GAME client's EOS config route (founder 10-04: from the backend, held in the client's memory only)", () => {
+  const PATH = '/wonderland/social/voice/eos-client-config';
+  const NO_STORE = { 'cache-control': 'no-store', pragma: 'no-cache' };
+  /** Planted at run time: values a log line or an error must never carry. */
+  const planted = () => ({
+    productId: `p${randomBytes(8).toString('hex')}`,
+    sandboxId: `s${randomBytes(8).toString('hex')}`,
+    deploymentId: `d${randomBytes(8).toString('hex')}`,
+    clientId: `c${randomBytes(8).toString('hex')}`,
+    clientSecret: `planted-${randomBytes(16).toString('hex')}`,
+  });
+  const stubVoice = { providerId: 'stub', mint: async (): Promise<never> => { throw new Error('nothing is minted here'); } };
+  const setup = (over: Partial<SocialRouteDeps> = {}) => {
+    const config = planted();
+    const log: string[] = [];
+    const deps: SocialRouteDeps = {
+      verifySession: (token) => SESSIONS[token] ?? null,
+      identify: async (participantId) => ({ userId: participantId, displayName: participantId, handle: `@${participantId}` }),
+      store: createInMemorySocialStore(),
+      voice: stubVoice,
+      voiceBindings: createInMemoryVoiceBindings(),
+      eosClientConfig: config,
+      eosClientConfigAllowed: createSessionRateLimit(EOS_CLIENT_CONFIG_RATE.limit, EOS_CLIENT_CONFIG_RATE.windowMs),
+      log: (line) => log.push(line),
+      ...over,
+    };
+    const get = async (token: string | null, at = T0, opts: { method?: string; origin?: string } = {}) => {
+      const result = await handleSocialRoute(
+        { method: opts.method ?? 'GET', path: PATH, authorization: token === null ? undefined : `Relay-Session ${token}`, origin: opts.origin, body: null, now: at },
+        deps,
+      );
+      if (result === null) throw new Error('not a social route');
+      return result as SocialRouteResult & { body: { data?: any; error?: { kind: string; message: string } } };
+    };
+    return { config, log, get, values: Object.values(config) };
+  };
+  const noValueIn = (what: unknown, values: readonly string[]) => {
+    const text = JSON.stringify(what);
+    for (const v of values) expect(text).not.toContain(v);
+  };
+
+  it('a signed-in player gets exactly the schema and the five values, no-store; the log says only whom, hashed', async () => {
+    const { config, log, get, values } = setup();
+    const r = await get('tok-kai');
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ data: { schema: 'wonderland-eos-client-config.v1', ...config } });
+    expect(Object.keys(r.body.data).sort()).toEqual(['clientId', 'clientSecret', 'deploymentId', 'productId', 'sandboxId', 'schema']);
+    expect(r.headers).toEqual(NO_STORE);
+    expect(log).toEqual([`eos client config served to ${hashId('usr_kai')}`]);
+    noValueIn(log, [...values, 'usr_kai']);
+  });
+
+  it('refuses before any value: no session or an unknown one 401, a web page 403, a session without `social` 403, another method 403; nothing logged', async () => {
+    const { log, get, values } = setup();
+    expect((await get(null)).status).toBe(401);
+    expect((await get('tok-nope')).status).toBe(401);
+    const page = await get('tok-kai', T0, { origin: 'https://evil.example' });
+    expect([page.status, page.body.error?.kind]).toEqual([403, 'desktop_only']);
+    const mira = await get('tok-mira');
+    expect([mira.status, mira.body.error?.kind]).toEqual([403, 'not_permitted']);
+    const posted = await get('tok-kai', T0, { method: 'POST' });
+    expect([posted.status, posted.body.error?.kind]).toEqual([403, 'not_permitted']);
+    for (const r of [page, mira, posted]) {
+      noValueIn(r, values);
+      expect(r.headers).toEqual(NO_STORE);
+    }
+    expect(log).toEqual([]);
+  });
+
+  it('503 voice-unavailable, no-store, without the game config, without a voice provider or bindings, and without the rate limit (never unlimited)', async () => {
+    const overs: Array<Partial<SocialRouteDeps>> = [{ eosClientConfig: null }, { voice: null }, { voiceBindings: null }, { eosClientConfigAllowed: null }];
+    for (const over of overs) {
+      const { log, get, values } = setup(over);
+      const r = await get('tok-kai');
+      expect([r.status, r.body.error?.kind], Object.keys(over).join()).toEqual([503, 'voice-unavailable']);
+      expect(r.headers).toEqual(NO_STORE);
+      noValueIn(r, values);
+      expect(log).toEqual([]);
+    }
+  });
+
+  it('at most 6 a minute per session: the 7th is 429 with no value; another session is not counted; a minute on, served again', async () => {
+    const { log, get, values } = setup();
+    for (let i = 0; i < 6; i += 1) expect((await get('tok-kai', T0 + i * 1000)).status).toBe(200);
+    const seventh = await get('tok-kai', T0 + 6000);
+    expect([seventh.status, seventh.body.error?.kind]).toEqual([429, 'rate_limited']);
+    expect(seventh.headers).toEqual(NO_STORE);
+    noValueIn(seventh, values);
+    expect((await get('tok-nova', T0 + 6000)).status).toBe(200);
+    expect((await get('tok-kai', T0 + 60_001)).status).toBe(200);
+    expect(log).toHaveLength(8);
+    noValueIn(log, values);
+  });
+});

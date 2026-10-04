@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -145,5 +146,71 @@ describe('the test instruments refuse production', () => {
   it('the GitHub stub refuses to start under NODE_ENV=production, and without the throwaway database', () => {
     expect(build({ WONDERLAND_SOCIAL_GITHUB_STUB: 'http://127.0.0.1:8899', NODE_ENV: 'production' })).toThrow(/production/);
     expect(build({ WONDERLAND_SOCIAL_GITHUB_STUB: 'http://127.0.0.1:8899', NODE_ENV: 'test' })).toThrow(/throwaway/);
+  });
+});
+
+describe('every social answer is never stored on the way (the bridge passes the route\'s headers on)', () => {
+  it('a refusal over real HTTP carries Cache-Control: no-store and Pragma: no-cache -- the EOS client config path and any other', async () => {
+    const base = await boot({ WONDERLAND_SOCIAL_ENABLED: '1', RELAY_GITHUB_APP_CLIENT_ID: 'Iv1.public' });
+    for (const path of ['/relay-api/wonderland/social/voice/eos-client-config', '/relay-api/wonderland/social/snapshot']) {
+      const response = await realFetch(`${base}${path}`, { headers: { authorization: 'Relay-Session not-a-session' } });
+      expect(response.status, path).toBe(401);
+      expect(response.headers.get('cache-control'), path).toBe('no-store');
+      expect(response.headers.get('pragma'), path).toBe('no-cache');
+      expect(response.headers.get('etag'), path).toBeNull();
+    }
+  });
+});
+
+describe("the GAME client's EOS config at the bridge (founder 10-04): read once at start, never printed", () => {
+  const ON = { WONDERLAND_SOCIAL_ENABLED: '1', RELAY_GITHUB_APP_CLIENT_ID: 'Iv1.public' };
+  const capture = () => {
+    const printed: string[] = [];
+    for (const level of ['log', 'info', 'warn', 'error'] as const) {
+      vi.spyOn(console, level).mockImplementation((...a: unknown[]) => {
+        printed.push(a.map(String).join(' '));
+      });
+    }
+    return printed;
+  };
+  const fileWith = (lines: string[]) => {
+    const dir = mkdtempSync(join(tmpdir(), 'relay-eos-game-'));
+    roots.push(dir);
+    const file = join(dir, 'eos-game.env');
+    writeFileSync(file, `${lines.join('\r\n')}\r\n`);
+    return { dir, file };
+  };
+
+  it('the start line says only "loaded (5 keys)"; the route is gated like every social route; no value or path is printed or answered', async () => {
+    const v = { id: `p${randomBytes(8).toString('hex')}`, client: `c${randomBytes(8).toString('hex')}`, secret: `planted-${randomBytes(16).toString('hex')}` };
+    const { dir, file } = fileWith([`EOS_PRODUCT_ID=${v.id}`, `EOS_SANDBOX_ID=${v.id}`, `EOS_DEPLOYMENT_ID=${v.id}`, `EOS_GAME_CLIENT_ID=${v.client}`, `EOS_GAME_CLIENT_SECRET=${v.secret}`]);
+    const printed = capture();
+    const base = await boot({ ...ON, WONDERLAND_EOS_GAME_CONFIG: file });
+    const route = '/relay-api/wonderland/social/voice/eos-client-config';
+    const answers = [await call(base, 'GET', route), await call(base, 'GET', route, { token: 'not-a-session' }), await call(base, 'GET', route, { token: 't', origin: ORIGIN })];
+    vi.restoreAllMocks();
+    expect(answers.map((a) => [a.status, a.body.error?.kind])).toEqual([[401, 'session_required'], [401, 'session_required'], [403, 'desktop_only']]);
+    expect(printed.filter((l) => l.includes('eos game config'))).toEqual(['[relay-bridge] eos game config: loaded (5 keys)']);
+    for (const line of [...printed, ...answers.map((a) => JSON.stringify(a))]) {
+      for (const value of Object.values(v)) expect(line).not.toContain(value);
+      expect(line).not.toContain(dir);
+    }
+  });
+
+  it("a file holding only the Trusted Server's pair is refused at start, by key name, and nothing of it is printed", async () => {
+    const id = `p${randomBytes(8).toString('hex')}`;
+    const secret = `planted-${randomBytes(16).toString('hex')}`;
+    const { dir, file } = fileWith([`EOS_PRODUCT_ID=${id}`, `EOS_SANDBOX_ID=${id}`, `EOS_DEPLOYMENT_ID=${id}`, `EOS_SERVER_CLIENT_ID=${id}`, `EOS_SERVER_CLIENT_SECRET=${secret}`]);
+    const printed = capture();
+    await boot({ ...ON, WONDERLAND_EOS_GAME_CONFIG: file });
+    vi.restoreAllMocks();
+    expect(printed.filter((l) => l.includes('eos game config'))).toEqual([
+      '[relay-bridge] eos game config: the EOS game config file is missing EOS_GAME_CLIENT_ID, EOS_GAME_CLIENT_SECRET -- the client config route answers 503',
+    ]);
+    for (const line of printed) {
+      expect(line).not.toContain(secret);
+      expect(line).not.toContain(id);
+      expect(line).not.toContain(dir);
+    }
   });
 });

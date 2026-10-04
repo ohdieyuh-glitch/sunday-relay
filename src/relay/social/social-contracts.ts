@@ -72,6 +72,7 @@ export type SocialOperationId =
   | 'parties.rules'
   | 'parties.self_mute'
   | 'parties.voice_join'
+  | 'voice.eos_client_config'
   | 'party_invites.list'
   | 'party_invites.accept'
   | 'party_invites.decline'

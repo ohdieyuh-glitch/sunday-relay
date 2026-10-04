@@ -182,6 +182,86 @@ function configFromDotEnv(text: string, env: NodeJS.ProcessEnv, read: (path: str
   return { productId: get('EOS_PRODUCT_ID'), sandboxId: get('EOS_SANDBOX_ID'), deploymentId: get('EOS_DEPLOYMENT_ID'), clientId: client.id, clientSecret: client.secret, roomSalt: salt, clientKind: kind };
 }
 
+/* ------------------------------------------------------------------------------------------------ the game client's config */
+
+/** The founder's eos-game.env, by path: the GAME client's EOS values, which the bridge hands to signed-in desktop clients. */
+export const EOS_GAME_CONFIG_ENV = 'WONDERLAND_EOS_GAME_CONFIG';
+/** The client config answer's schema tag; the client checks it before reading a value (CORE's ConfigFromServer). */
+export const EOS_CLIENT_CONFIG_SCHEMA = 'wonderland-eos-client-config.v1';
+
+/** What a desktop client's EOS platform starts with: the GAME client's values, never the Trusted Server's. */
+export interface EosGameClientConfig {
+  readonly productId: string;
+  readonly sandboxId: string;
+  readonly deploymentId: string;
+  readonly clientId: string;
+  readonly clientSecret: string;
+}
+
+/** The ids the game config must share with the voice config: a client started on another deployment never reaches its rooms. */
+export type EosDeployment = Pick<EosVoiceConfig, 'productId' | 'sandboxId' | 'deploymentId'>;
+
+const EOS_GAME_KEYS = ['EOS_PRODUCT_ID', 'EOS_SANDBOX_ID', 'EOS_DEPLOYMENT_ID', 'EOS_GAME_CLIENT_ID', 'EOS_GAME_CLIENT_SECRET'] as const;
+
+/**
+ * THE GAME CLIENT'S EOS CONFIG (founder, 10-04: the backend hands the EOS game-client config to the shipped client, which holds
+ * it in memory only; it is never in the package). Read ONCE, at start, from the founder's eos-game.env named by
+ * WONDERLAND_EOS_GAME_CONFIG: EOS_PRODUCT_ID, EOS_SANDBOX_ID, EOS_DEPLOYMENT_ID, EOS_GAME_CLIENT_ID, EOS_GAME_CLIENT_SECRET.
+ * ONLY the EOS_GAME_* pair is ever read. The Trusted Server's EOS_SERVER_* pair is never a client's: a file holding only that
+ * pair is refused, and a file holding both serves the game pair. Given `deployment` (the voice config's ids), a game config
+ * naming another product, sandbox or deployment is refused, since its clients could never join the rooms the bridge mints.
+ * Absent, unreadable, not the .env form, missing a key, out of shape or mismatched: null, and the route answers 503. The log
+ * says "eos game config: loaded (5 keys)", "absent", or why not by key or field NAME; never a value, a length or the path.
+ */
+export function loadEosGameClientConfig(
+  env: NodeJS.ProcessEnv,
+  deps: { readFile?: (path: string) => string; log?: (line: string) => void; deployment?: EosDeployment | null } = {},
+): EosGameClientConfig | null {
+  const log = deps.log ?? (() => undefined);
+  const read = deps.readFile ?? ((p: string) => readFileSync(p, 'utf8'));
+  const refuse = (why: string): null => {
+    log(`eos game config: ${why} -- the client config route answers 503`);
+    return null;
+  };
+  const path = env[EOS_GAME_CONFIG_ENV]?.trim() ?? '';
+  if (path === '') {
+    log('eos game config: absent');
+    return null;
+  }
+  let text: string;
+  try {
+    text = read(path);
+  } catch {
+    return refuse('the EOS game config file could not be read');
+  }
+  // trimStart drops a UTF-8 BOM too (U+FEFF is ECMAScript white space)
+  if (text.trimStart().startsWith('{')) return refuse('the EOS game config file must be the .env form');
+  const keys = parseDotEnv(text);
+  const get = (k: (typeof EOS_GAME_KEYS)[number]) => keys.get(k) ?? '';
+  const missing = EOS_GAME_KEYS.filter((k) => get(k) === '');
+  if (missing.length > 0) return refuse(`the EOS game config file is missing ${missing.join(', ')}`);
+  const secret = get('EOS_GAME_CLIENT_SECRET');
+  const shapeless = [
+    ...EOS_GAME_KEYS.filter((k) => k !== 'EOS_GAME_CLIENT_SECRET' && !ID.test(get(k))),
+    ...(secret.length <= 512 && !/\s/.test(secret) ? [] : ['EOS_GAME_CLIENT_SECRET']),
+  ];
+  if (shapeless.length > 0) return refuse(`the EOS game config file has out of shape: ${shapeless.join(', ')}`);
+  const config: EosGameClientConfig = Object.freeze({
+    productId: get('EOS_PRODUCT_ID'),
+    sandboxId: get('EOS_SANDBOX_ID'),
+    deploymentId: get('EOS_DEPLOYMENT_ID'),
+    clientId: get('EOS_GAME_CLIENT_ID'),
+    clientSecret: secret,
+  });
+  const expected = deps.deployment ?? null;
+  if (expected !== null) {
+    const differ = (['productId', 'sandboxId', 'deploymentId'] as const).filter((k) => config[k] !== expected[k]);
+    if (differ.length > 0) return refuse(`the EOS game config file names another ${differ.join(', ')} than the voice config`);
+  }
+  log('eos game config: loaded (5 keys)');
+  return config;
+}
+
 /* ------------------------------------------------------------------------------------------------ the minter */
 
 export type EosFetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
@@ -345,9 +425,14 @@ export function createVoiceRemovals(deps: {
 }
 
 /** The bridge's EOS voice, from its environment: the minter and its removal queue, or null (voice 503). */
-export function eosVoiceFromEnv(env: NodeJS.ProcessEnv, deps: EosVoiceDeps & { readonly bindings: () => VoiceBindingStore | null; readonly readFile?: (path: string) => string }): { minter: EosVoiceTokenMinter; removals: VoiceRemovals } | null {
+export function eosVoiceFromEnv(env: NodeJS.ProcessEnv, deps: EosVoiceDeps & { readonly bindings: () => VoiceBindingStore | null; readonly readFile?: (path: string) => string }): { minter: EosVoiceTokenMinter; removals: VoiceRemovals; deployment: EosDeployment } | null {
   const config = loadEosVoiceConfig(env, { readFile: deps.readFile, log: deps.log });
   if (config === null) return null;
   const minter = new EosVoiceTokenMinter(config, deps);
-  return { minter, removals: createVoiceRemovals({ target: minter, bindings: deps.bindings, log: deps.log }) };
+  return {
+    minter,
+    removals: createVoiceRemovals({ target: minter, bindings: deps.bindings, log: deps.log }),
+    // the ids only (no client, no secret): the game config handed to clients must name the same deployment
+    deployment: { productId: config.productId, sandboxId: config.sandboxId, deploymentId: config.deploymentId },
+  };
 }
