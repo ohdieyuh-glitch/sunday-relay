@@ -197,17 +197,23 @@ suite('the Julius evidence chain: a real run, the shipping dump queries, the Bet
     const bundle = join(bundleRoot, 'julius-live-evidence');
     mkdirSync(bundle);
     const url = new URL(databaseUrl!);
+    // THE PASSWORD TRAVELS WITH THE CONNECTION, AND psql NEVER PROMPTS (-w). Without both, a server that requires a
+    // password (every CI database: the executor's PostgreSQL is started with POSTGRES_PASSWORD) makes psql prompt,
+    // and with no terminal it reads the open stdin execFile leaves it, so the case hung until vitest's 120 s timeout
+    // instead of failing (first run on Linux, #316). A throwaway local server with password-less auth never showed it.
     const env = {
       ...process.env,
       PGHOST: url.searchParams.get('host') ?? url.hostname,
       PGPORT: url.port || '5432',
       PGUSER: decodeURIComponent(url.username),
       PGDATABASE: url.pathname.replace(/^\//u, ''),
+      ...(url.password === '' ? {} : { PGPASSWORD: decodeURIComponent(url.password) }),
     };
+    // The same output flags the script passes through `docker exec`, so the bytes the gate parses are the bytes a live
+    // run would upload; `-w` changes no output, it only refuses to prompt.
+    const psqlArgs = (sql: string) => ['-w', '-v', 'ON_ERROR_STOP=1', '-A', '-F', '\t', '-c', sql];
     for (const call of calls) {
-      // The same flags the script passes through `docker exec`, so the bytes
-      // the gate parses are the bytes a live run would upload.
-      const { stdout } = await run('psql', ['-v', 'ON_ERROR_STOP=1', '-A', '-F', '\t', '-c', call.sql], { env, maxBuffer: 32 * 1024 * 1024 });
+      const { stdout } = await run('psql', psqlArgs(call.sql), { env, maxBuffer: 32 * 1024 * 1024 });
       writeFileSync(join(bundle, call.file), stdout);
       expect(stdout.trim(), `${call.file} must not be the failure sentinel`).not.toBe('unavailable');
     }
@@ -266,7 +272,7 @@ suite('the Julius evidence chain: a real run, the shipping dump queries, the Bet
         WHERE event_type='julius.task.claimed' AND payload->>'taskId'=$1`,
       [BUILD],
     );
-    const { stdout: mutated } = await run('psql', ['-v', 'ON_ERROR_STOP=1', '-A', '-F', '\t', '-c', claimQuery.sql], { env, maxBuffer: 32 * 1024 * 1024 });
+    const { stdout: mutated } = await run('psql', psqlArgs(claimQuery.sql), { env, maxBuffer: 32 * 1024 * 1024 });
     writeFileSync(join(bundle, 'contract-events.tsv'), mutated);
     const refused = evaluate(bundleRoot).results.find((row) => row.id === 'TASK CONTRACT LOCK')!;
     expect(refused.verdict, refused.basis).toBe('FAIL');
