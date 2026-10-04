@@ -3,6 +3,7 @@
 #include "WonderlandCardDirector.h"
 
 #include "Framework/Application/SlateApplication.h"
+#include "HAL/IConsoleManager.h"
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Images/SImage.h"
@@ -1372,6 +1373,11 @@ void SWonderlandProjectBrainPanel::SetSkinsOpen(bool bOpen)
 	}
 }
 
+// QA ONLY (wl.Qa.WardrobeSwatches' control): 1 draws the colourway rows at their full width again, unscaled, so the Wardrobe's
+// card list covers the last swatches as it did before the rows were fitted to their column (Second, R7, 10-04). Never set in play.
+static TAutoConsoleVariable<int32> CVarWardrobeSwatchOverflowQa(TEXT("wl.Qa.WardrobeOverflow"), 0,
+	TEXT("QA only: 1 = the Wardrobe's colourway rows at full width, unscaled (re-creates the R7 overlap for wl.Qa.WardrobeSwatches' control)."));
+
 TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSwatchRow(int32 Which)
 {
 	using namespace WonderlandBrainLook;
@@ -1392,6 +1398,8 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSwatchRow(int32 Which)
 	];
 	// THE PRIMARY ROW OFFERS A TRUE WHITE AND BLACK after DEFAULT (founder, 2026-10-02), the Menu's MASCOT PRIMARY row the same.
 	// THE STRIPS ROW OFFERS THE SAME (white strips and black strips are both real choices, DEFAULT the designed ones).
+	// each swatch named for QA (wl.Qa.WardrobeSwatches hit-tests its centre against its own button): row word and colour
+	const TCHAR* const RowWord = bStrip ? TEXT("STRIPS") : bFlame ? TEXT("FLAME") : (bPrimary ? TEXT("PRIMARY") : TEXT("SECONDARY"));
 	for (const TPair<FName, FLinearColor>& Swatch : (bPrimary || bStrip) ? WonderlandMascotStyle::PrimaryPalette() : WonderlandMascotStyle::Palette())
 	{
 		const FLinearColor Colour = Swatch.Value;
@@ -1399,6 +1407,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSwatchRow(int32 Which)
 		Row->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
 		[
 			SNew(SButton)
+			.Tag(FName(*FString::Printf(TEXT("WardrobeSwatch.%s.%s"), RowWord, *Label.ToString())))
 			.ButtonStyle(&SwatchStyle)
 			.ToolTipText(FText::FromName(Label))
 			.OnClicked_Lambda([bPrimary, bFlame, bStrip, Colour, Label]()
@@ -1486,7 +1495,22 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeColourStrip()
 	// PRIMARY is the shell every skin shares; SECONDARY is the status eyes and a skin's secondary accents -- the
 	// surfaces its figure tags `secondary`, which on Jack Flame are the tie and the suit; FLAME, shown only on a skin
 	// with fire, is that fire on its own (founder, 2026-10-01). Halos, banners and the black visor are never reached.
+	//
+	// THE ROWS FIT THEIR OWN COLUMN (Second, R7, 10-04: with Shadow Flame worn, the PRIMARY row's JADE, ROSE, SLATE and OBSIDIAN and
+	// the SECONDARY row's last swatches ran past the preview column's right edge, under the skin-card list beside it, and a click there
+	// hit the card). A row of fifteen 18 uu swatches is ~430 uu wide; the column is ~325 at the founder's window. So the block is
+	// scaled DOWN -- uniformly, all rows alike, never up -- to the column's width: the same rows, colours, order and words, in place;
+	// at a window wide enough for them nothing changes. The note below stays outside and wraps as before.
 	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			SNew(SScaleBox)
+			.Stretch_Lambda([]() { return CVarWardrobeSwatchOverflowQa.GetValueOnGameThread() != 0 ? EStretch::None : EStretch::ScaleToFitX; })
+			.StretchDirection(EStretchDirection::DownOnly)
+			.HAlign(HAlign_Left)
+			.VAlign(VAlign_Top)
+			[
+		SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
 		[
 			SNew(STextBlock).Text(INVTEXT("COLOURWAY"))
@@ -1509,6 +1533,8 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeColourStrip()
 			.Visibility_Lambda([]() { return WonderlandMascotStyle::WornSkinHasStrips() ? EVisibility::Visible : EVisibility::Collapsed; })
 			[
 				MakeSwatchRow(3)
+			]
+		]
 			]
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)

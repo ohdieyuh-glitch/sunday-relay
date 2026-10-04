@@ -40,6 +40,10 @@
 #include "WonderlandSkinStage.h"
 #include "WonderlandUiSubsystem.h"
 #include "WonderlandUiTestLibrary.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Layout/WidgetPath.h"
+#include "Widgets/SWindow.h"
+#include "WonderlandRelaySkins.h"
 
 namespace WonderlandShadowColourQa
 {
@@ -968,5 +972,304 @@ namespace WonderlandShadowColourQa
 			GSc3Run->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLSHADOWCOLOR3"));
 			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&Sc3Tick), 0.0f);
 			UE_LOG(LogTemp, Display, TEXT("WLSC3 armed (%s)"), GSc3Run->bRestart ? TEXT("the restart boot: SC3.8-SC3.12") : TEXT("the first boot: SC3.0-SC3.7"));
+		}));
+
+	/* ================================================================ wl.Qa.WardrobeSwatches (Second, R7, 10-04)
+	 * EVERY WARDROBE SWATCH CAN BE CLICKED. Second's explore frame on 92f83bff showed the Wardrobe's skin-card list drawn OVER the colourway
+	 * rows with Shadow Flame worn: PRIMARY's JADE, ROSE, SLATE and OBSIDIAN and SECONDARY's last swatches hidden, a click there hitting the
+	 * card. With Project Brain's Wardrobe open and each skin worn in turn, every swatch the Wardrobe SHOWS has its centre hit-tested by
+	 * Slate itself (LocateWindowUnderMouse, the path a real click would take), and that path must run through THAT swatch's own button
+	 * (WardrobeSwatch.<ROW>.<COLOUR>, tagged in WonderlandProjectBrainPanel.cpp).
+	 *   WS1.<n>  skin n: every shown swatch hit by its own centre (and at least the PRIMARY and SECONDARY rows seen)
+	 *   WSX      the control: wl.Qa.WardrobeOverflow 1 (the rows unscaled, the R7 overlap back) on Shadow Flame -- a swatch must be MISSED
+	 *   WSXR     the knob put back: every swatch hit again
+	 * Lines WLWS; `quit` exits after.
+	 */
+	struct FWsRun
+	{
+		TWeakObjectPtr<UWorld> World;
+		int32 Phase = 0;
+		double At = 0.0;
+		int32 SkinIndex = 0;
+		TArray<FName> SkinIds;
+		FName WornBefore = NAME_None;
+		int32 Pass = 0;
+		int32 Fail = 0;
+		bool bQuit = false;
+	};
+	TSharedPtr<FWsRun> GWsRun;
+
+	struct FWsHits
+	{
+		int32 Seen = 0;
+		int32 Hit = 0;
+		int32 RowsSeen = 0;
+		FString Rows;
+		FString Misses;
+	};
+
+	void WsCollect(const TSharedRef<SWidget>& Widget, TArray<TSharedRef<SWidget>>& Out)
+	{
+		if (Widget->GetTag().ToString().StartsWith(TEXT("WardrobeSwatch.")))
+		{
+			Out.Add(Widget);
+		}
+		FChildren* Children = Widget->GetChildren();
+		for (int32 ChildIndex = 0; Children != nullptr && ChildIndex < Children->Num(); ++ChildIndex)
+		{
+			WsCollect(Children->GetChildAt(ChildIndex), Out);
+		}
+	}
+
+	/** Shown: neither the swatch nor anything above it is collapsed or hidden (a skin without fire collapses the FLAME row). */
+	bool WsShown(const TSharedRef<SWidget>& Widget)
+	{
+		for (TSharedPtr<SWidget> Up = Widget; Up.IsValid(); Up = Up->GetParentWidget())
+		{
+			const EVisibility Shown = Up->GetVisibility();
+			if (Shown == EVisibility::Collapsed || Shown == EVisibility::Hidden)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	FWsHits WsTest()
+	{
+		FWsHits Hits;
+		if (!FSlateApplication::IsInitialized())
+		{
+			return Hits;
+		}
+		FSlateApplication& SlateApp = FSlateApplication::Get();
+		const TArray<TSharedRef<SWindow>> TopWindows = SlateApp.GetInteractiveTopLevelWindows();
+		TArray<TSharedRef<SWidget>> Swatches;
+		for (const TSharedRef<SWindow>& Window : TopWindows)
+		{
+			WsCollect(Window, Swatches);
+		}
+		TMap<FString, FIntPoint> PerRow;   // X = shown, Y = hit by its own centre
+		for (const TSharedRef<SWidget>& Swatch : Swatches)
+		{
+			const FGeometry Placed = Swatch->GetTickSpaceGeometry();
+			if (!WsShown(Swatch) || Placed.GetLocalSize().X < 1.0f || Placed.GetLocalSize().Y < 1.0f)
+			{
+				continue;
+			}
+			const FVector2D Centre = Placed.GetAbsolutePositionAtCoordinates(FVector2D(0.5f, 0.5f));
+			const FWidgetPath Under = SlateApp.LocateWindowUnderMouse(Centre, TopWindows, true);
+			bool bOwn = false;
+			for (int32 Step = 0; Step < Under.Widgets.Num(); ++Step)
+			{
+				bOwn = bOwn || Under.Widgets[Step].Widget == Swatch;
+			}
+			FString RowWord;
+			FString ColourWord;
+			Swatch->GetTag().ToString().RightChop(15).Split(TEXT("."), &RowWord, &ColourWord);
+			FIntPoint& Count = PerRow.FindOrAdd(RowWord);
+			++Count.X;
+			++Hits.Seen;
+			if (bOwn)
+			{
+				++Count.Y;
+				++Hits.Hit;
+			}
+			else
+			{
+				Hits.Misses += FString::Printf(TEXT("%s%s %s at (%.0f, %.0f) -> %s"), Hits.Misses.IsEmpty() ? TEXT("") : TEXT("; "), *RowWord, *ColourWord,
+					Centre.X, Centre.Y, Under.Widgets.Num() > 0 ? *Under.Widgets.Last().Widget->GetTypeAsString() : TEXT("nothing"));
+			}
+		}
+		Hits.RowsSeen = PerRow.Num();
+		for (const TPair<FString, FIntPoint>& Row : PerRow)
+		{
+			Hits.Rows += FString::Printf(TEXT("%s%s %d/%d"), Hits.Rows.IsEmpty() ? TEXT("") : TEXT(", "), *Row.Key, Row.Value.Y, Row.Value.X);
+		}
+		return Hits;
+	}
+
+	void WsCheck(FWsRun& Run, const FString& Id, bool bOk, const FString& Detail)
+	{
+		(bOk ? Run.Pass : Run.Fail) += 1;
+		UE_LOG(LogTemp, Display, TEXT("WLWS %s %s | %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *Detail);
+	}
+
+	/** The skin the registry says is worn now (the WS lines name it beside the one asked for: a locked skin may refuse). */
+	FString WsWorn(const UWorld* World)
+	{
+		const UGameInstance* Game = World != nullptr ? World->GetGameInstance() : nullptr;
+		const UWonderlandRelaySkinSubsystem* Registry = Game != nullptr ? Game->GetSubsystem<UWonderlandRelaySkinSubsystem>() : nullptr;
+		return Registry != nullptr ? Registry->GetEquipped().SkinId.ToString() : FString(TEXT("(no registry)"));
+	}
+
+	UWonderlandUiSubsystem* WsUi(UWorld* World)
+	{
+		const APlayerController* Pc = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		const ULocalPlayer* Player = Pc != nullptr ? Pc->GetLocalPlayer() : nullptr;
+		return Player != nullptr ? Player->GetSubsystem<UWonderlandUiSubsystem>() : nullptr;
+	}
+
+	bool WsTick(float)
+	{
+		if (!GWsRun.IsValid())
+		{
+			return false;
+		}
+		FWsRun& Run = *GWsRun;
+		UWorld* World = Run.World.Get();
+		UWonderlandUiSubsystem* Ui = WsUi(World);
+		const double In = Sc3Now() - Run.At;
+		auto Next = [&Run](int32 To)
+		{
+			Run.Phase = To;
+			Run.At = Sc3Now();
+		};
+		auto Finish = [&Run, World, Ui](const TCHAR* Why)
+		{
+			if (World != nullptr)
+			{
+				GEngine->Exec(World, TEXT("wl.Qa.WardrobeOverflow 0"));
+				if (!Run.WornBefore.IsNone())
+				{
+					GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), *Run.WornBefore.ToString()));
+				}
+			}
+			if (Ui != nullptr && Ui->IsProjectBrainOpen())
+			{
+				Ui->SetBrainSkinsOpen(false);
+				Ui->ToggleProjectBrain();
+			}
+			UE_LOG(LogTemp, Display, TEXT("WLWS END pass=%d fail=%d (%s)"), Run.Pass, Run.Fail, Why);
+			const bool bQuit = Run.bQuit;
+			GWsRun.Reset();
+			if (bQuit)
+			{
+				FPlatformMisc::RequestExit(false);
+			}
+			return false;
+		};
+		if (World == nullptr || Ui == nullptr)
+		{
+			return In < 30.0 ? true : Finish(TEXT("no world or UI"));
+		}
+		switch (Run.Phase)
+		{
+		case 0:
+		{
+			if (In < 8.0)
+			{
+				return true;
+			}
+			Ui->DismissWelcome();
+			Ui->CloseOverlay();
+			const UGameInstance* Game = World->GetGameInstance();
+			const UWonderlandRelaySkinSubsystem* Registry = Game != nullptr ? Game->GetSubsystem<UWonderlandRelaySkinSubsystem>() : nullptr;
+			if (Registry == nullptr || Registry->GetSkins().Num() == 0)
+			{
+				return Finish(TEXT("no skin registry"));
+			}
+			for (const FWonderlandRelaySkin& Skin : Registry->GetSkins())
+			{
+				Run.SkinIds.Add(Skin.SkinId);
+			}
+			Run.WornBefore = Registry->GetEquipped().SkinId;
+			if (!Ui->IsProjectBrainOpen())
+			{
+				Ui->ToggleProjectBrain();
+			}
+			Ui->SetBrainSkinsOpen(true);
+			UE_LOG(LogTemp, Display, TEXT("WLWS the Wardrobe open: %d skins to wear in turn (worn now: %s)"), Run.SkinIds.Num(), *Run.WornBefore.ToString());
+			Next(1);
+			return true;
+		}
+		case 1:
+			// each skin in turn: worn, a moment to lay the rows out and paint, then every shown swatch hit-tested
+			if (Run.SkinIndex >= Run.SkinIds.Num())
+			{
+				GEngine->Exec(World, TEXT("wl.Skins.Wear shadow_flame"));
+				Next(3);
+				return true;
+			}
+			if (In < 0.2)
+			{
+				return true;
+			}
+			GEngine->Exec(World, *FString::Printf(TEXT("wl.Skins.Wear %s"), *Run.SkinIds[Run.SkinIndex].ToString()));
+			Next(2);
+			return true;
+		case 2:
+		{
+			if (In < 1.5)
+			{
+				return true;
+			}
+			const FWsHits Hits = WsTest();
+			WsCheck(Run, FString::Printf(TEXT("WS1.%d"), Run.SkinIndex + 1), Hits.Seen > 0 && Hits.Hit == Hits.Seen && Hits.RowsSeen >= 2,
+				FString::Printf(TEXT("%s (asked to wear %s): %d of %d shown swatches hit by their own centre over %d row(s) [%s]%s%s"),
+					*WsWorn(World), *Run.SkinIds[Run.SkinIndex].ToString(), Hits.Hit, Hits.Seen, Hits.RowsSeen, *Hits.Rows,
+					Hits.Misses.IsEmpty() ? TEXT("") : TEXT("; MISSED: "), *Hits.Misses));
+			++Run.SkinIndex;
+			Next(1);
+			return true;
+		}
+		case 3:
+			// THE CONTROL: Shadow Flame worn, the rows unscaled -- the R7 overlap back -- and a swatch MUST be missed
+			if (In < 1.0)
+			{
+				return true;
+			}
+			GEngine->Exec(World, TEXT("wl.Qa.WardrobeOverflow 1"));
+			Next(4);
+			return true;
+		case 4:
+		{
+			if (In < 1.5)
+			{
+				return true;
+			}
+			const FWsHits Hits = WsTest();
+			WsCheck(Run, TEXT("WSX"), Hits.Seen > 0 && Hits.Hit < Hits.Seen,
+				FString::Printf(TEXT("the control, wl.Qa.WardrobeOverflow 1 on %s: %d of %d shown swatches hit [%s] (want at least one MISSED: the check can fail)%s%s"),
+					*WsWorn(World), Hits.Hit, Hits.Seen, *Hits.Rows, Hits.Misses.IsEmpty() ? TEXT(" -- none missed: the rows fit this window unscaled, so the control cannot fail here") : TEXT("; missed: "),
+					*Hits.Misses));
+			GEngine->Exec(World, TEXT("wl.Qa.WardrobeOverflow 0"));
+			Next(5);
+			return true;
+		}
+		case 5:
+		{
+			if (In < 1.5)
+			{
+				return true;
+			}
+			const FWsHits Hits = WsTest();
+			WsCheck(Run, TEXT("WSXR"), Hits.Seen > 0 && Hits.Hit == Hits.Seen,
+				FString::Printf(TEXT("the knob put back on %s: %d of %d shown swatches hit [%s]%s%s"), *WsWorn(World), Hits.Hit, Hits.Seen, *Hits.Rows,
+					Hits.Misses.IsEmpty() ? TEXT("") : TEXT("; MISSED: "), *Hits.Misses));
+			return Finish(TEXT("done"));
+		}
+		default:
+			return Finish(TEXT("an unknown phase"));
+		}
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GWsCommand(
+		TEXT("wl.Qa.WardrobeSwatches"),
+		TEXT("Every Wardrobe colourway swatch can be clicked (Second, R7, 10-04): with Project Brain's Wardrobe open and each skin worn in turn, every ")
+		TEXT("shown swatch's centre hit-tested by Slate must reach that swatch's own button (WS1.<n>); the control wl.Qa.WardrobeOverflow 1 must make one ")
+		TEXT("miss (WSX); put back, all hit again (WSXR). Lines WLWS; `quit` exits after."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GWsRun.IsValid() || World == nullptr)
+			{
+				return;
+			}
+			GWsRun = MakeShared<FWsRun>();
+			GWsRun->World = World;
+			GWsRun->At = Sc3Now();
+			GWsRun->bQuit = Args.ContainsByPredicate([](const FString& Arg) { return Arg.Equals(TEXT("quit"), ESearchCase::IgnoreCase); });
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&WsTick), 0.0f);
+			UE_LOG(LogTemp, Display, TEXT("WLWS armed"));
 		}));
 }
