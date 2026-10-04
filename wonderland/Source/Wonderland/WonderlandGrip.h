@@ -46,7 +46,7 @@ namespace WonderlandGrip
 		float DashVForwardDeg = -72.0f;
 		/** THE CHARGING STANCE (founder, 10-04: "arms and swords low, naturally following the charging body"): standing, the blades
 		 *  low and trailing -- out and down by ChargeVDeg, back by ChargeVForwardDeg -- behind a body about to run. */
-		float ChargeVDeg = 120.0f;
+		float ChargeVDeg = 110.0f;
 		float ChargeVForwardDeg = -72.0f;
 	};
 

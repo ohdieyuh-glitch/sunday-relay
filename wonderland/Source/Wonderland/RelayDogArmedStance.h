@@ -68,7 +68,7 @@ namespace RelayDogArmedStance
 		float RearUU = 14.0f;
 		/** The ready arms, standing and walking: LOWERED, a little forward and away from the body, the elbows soft -- the blades low. */
 		float ReadyShoulderDeg = 4.0f;
-		float ReadyElbowDeg = 40.0f;
+		float ReadyElbowDeg = 55.0f;
 		float ReadyOutDeg = 6.0f;
 		/** How much of the walk's own arm swing stays with the blades in hand: they are carried, not flung. */
 		float SwingKeep = 0.3f;
