@@ -96,16 +96,24 @@ describe('social and the desktop sign-in: OFF by default', () => {
 describe('social and the desktop sign-in: ON', () => {
   const ON = { WONDERLAND_SOCIAL_ENABLED: '1', RELAY_GITHUB_APP_CLIENT_ID: 'Iv1.public' };
 
-  it('a sign-in starts through the bridge, and a verified player cannot be minted a session without a database to record them', async () => {
+  it('without a database (so without the social schema) sign-in answers 503 by its own name -- GitHub is never asked, nothing is minted', async () => {
+    // ef7e96bb's schema gate (socialReady): a bridge whose store cannot open answers before the device flow begins. This case
+    // used to expect a started sign-in (200) here and was left red by that commit.
     stubGitHubDeviceFlow();
+    const asked: string[] = [];
+    const stubbed = globalThis.fetch;
+    vi.stubGlobal('fetch', (async (url: string, init?: unknown) => {
+      if (String(url).startsWith('https://github.com') || String(url).startsWith('https://api.github.com')) asked.push(String(url));
+      return (stubbed as never as (u: string, i?: unknown) => Promise<unknown>)(url, init);
+    }) as never);
     const base = await boot(ON);
     const started = await call(base, 'POST', '/relay-api/wonderland/native/signin/start', { body: {} });
-    expect(started.status).toBe(200);
-    expect(started.body.data).toMatchObject({ userCode: 'ABCD-EFGH', verificationUri: 'https://github.com/login/device', interval: 5 });
-    const polled = await call(base, 'POST', '/relay-api/wonderland/native/signin/poll', { body: { handle: started.body.data.handle } });
+    expect(started).toEqual({ status: 503, body: { error: { kind: 'signin_unavailable', message: expect.any(String) } } });
+    const polled = await call(base, 'POST', '/relay-api/wonderland/native/signin/poll', { body: { handle: 'h'.repeat(43) } });
     expect(polled.status).toBe(503);
     expect(polled.body.error.kind).toBe('signin_unavailable');
     expect(JSON.stringify(polled.body)).not.toContain('token');
+    expect(asked).toEqual([]);
   });
 
   it('refuses a web page at the sign-in and at social', async () => {
