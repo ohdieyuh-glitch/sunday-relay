@@ -41,7 +41,7 @@ padded.
 | 12 | prior-learning case | DETERMINISTIC | `src/relay/mission/julius/julius-learning-loop.e2e.test.ts` | `promotes the artifact, and reports the WEAKEST improvement as its value` |
 | 13 | tool effects in a mission | DETERMINISTIC | `relay-bridge/julius/julius-live-composition.test.ts` | `Tool effects went through the executor port` |
 | 14 | provider refusal (of the REQUEST — content), re-planned | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `named, re-planned by the architect, and the mission is NOT collapsed` |
-| 18 | knowledge carried from one mission to the next, verified only | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what mission A VERIFIED is inherited by mission B` |
+| 18 | knowledge carried from one mission to the next, verified only | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what an independent reviewer RESOLVED in mission A is inherited by mission B` |
 | 15 | mission created over the bridge, then observed — one record, on a real PostgreSQL (gated) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what a client creates is what a client then watches, and both are what the database holds` |
 | 16 | the whole chain on a real PostgreSQL, repair round included, dumped and gated (gated) | DETERMINISTIC | `src/relay/persistence/julius-live-chain.e2e.test.ts` | `drives a mission with a repair round, dumps it, and the gate reads what the run actually did` |
 | 17 | a memory verified by a reviewer — durable standing with history, and a refusal by name | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `raises the architect` |
