@@ -446,8 +446,8 @@ function applyOne(
       // A BLOCK SEPARATES A PRIVATE SERVER'S OWNER FROM A MEMBER INSIDE IT, both ways (the founder, 10-04: P4 the owner blocks a
       // member -> the member is removed; P5 a member blocks the owner -> the blocker leaves; the mirror of the party rule). The
       // member is taken out at once, the owner stays, their location clears exactly as a leave clears it, and their own world
-      // reports are answered with a context-less view for a minute (world.state), which the client words "You can't stay in this
-      // server.". Re-entry is refused while the block stands (walledFromOwner). Nothing names the block.
+      // reports are answered with a context-less view for WORLD_REMOVAL_NOTICE_MS (world.state), which the client words
+      // "You can't stay in this server.". Re-entry is refused while the block stands (walledFromOwner). Nothing names the block.
       const memberOut = (ownerId: SocialUserId, memberId: SocialUserId): boolean => {
         const server = world.contexts[`priv_${ownerId}`];
         return server !== undefined && server.kind === 'PRIVATE_SERVER' && server.ownerId === ownerId && server.memberIds.includes(memberId);

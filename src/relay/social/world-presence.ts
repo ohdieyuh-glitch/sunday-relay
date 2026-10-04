@@ -84,8 +84,12 @@ export interface WorldState {
   readonly removals?: Readonly<Record<SocialUserId, number>>;
 }
 
-/** How long a removed player's reports are answered with a context-less view (their client's tick learns it well within it). */
-export const WORLD_REMOVAL_NOTICE_MS = 60_000;
+/**
+ * How long a removed player's reports are answered with a context-less view. Long enough for a client that slept or hitched to
+ * still learn it on its FIRST report back (Second's review of CORE aabfb10c, m5: at 60 s a late report read 404, the quiet
+ * rejoin was refused by the wall, and the notice was lost). Any join clears it, and the sweep drops it after.
+ */
+export const WORLD_REMOVAL_NOTICE_MS = 15 * 60_000;
 
 export function emptyWorldState(): WorldState {
   return { contexts: {}, avatars: {}, invites: [], nextSerial: 1 };

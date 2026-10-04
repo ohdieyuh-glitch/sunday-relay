@@ -532,3 +532,20 @@ describe("the presence control (founder 10-04, CORE's Hub): the player's own cho
     expect(toldOf({ activityDetail: 'to nobody' }, 600)).toEqual([U.KAI]);
   });
 });
+
+describe("the removal notice survives a sleeping client (Second's review of CORE aabfb10c, m5)", () => {
+  it('ten minutes after a block removed them, the first report back is still answered with no context; past the window, or after any join, the ordinary paths apply', () => {
+    let s = createSocialFixture();
+    let w = emptyWorldState();
+    ({ state: s, world: w } = run(s, w, U.KAI, 'world.join', { target: 'PRIVATE', name: "Kai's Workshop" }, 1000));
+    w = run(s, w, U.KAI, 'world.invite', { toUserId: U.NOVA }, 1100).world;
+    ({ state: s, world: w } = run(s, w, U.NOVA, 'world.join', { target: 'INVITE', inviteId: worldViewFor(w, s, U.NOVA, T0 + 1200).invites[0].inviteId }, 1300));
+    const blocked = run(s, w, U.KAI, 'blocks.add', { targetId: U.NOVA }, 2000);
+    const report = (ms: number) => applySocialOperation(blocked.state, 'world.state', U.NOVA, { ids: [], body: here, query: {} }, at(ms), blocked.world);
+    const late = report(2000 + 10 * 60_000); // the client slept ten minutes
+    expect(late.ok).toBe(true);
+    if (late.ok) expect((late.value.data as ReturnType<typeof worldViewFor>).context ?? null).toBeNull();
+    // past the window: the ordinary refusal (the entry is dropped by the sweep, too)
+    expect(report(2000 + 16 * 60_000).ok).toBe(false);
+  });
+});
