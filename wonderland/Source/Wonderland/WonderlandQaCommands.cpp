@@ -6562,6 +6562,13 @@ namespace
 		float CamJumpBefore = 0.0f;
 		float CamJumpMax = -1.0f;
 		int32 CamJumpTicksLeft = -1;
+		// ...and S3e MUST SEE THE LAG (round 7a3 read a 0.00 uu step, which a camera that never trailed would also give): the offset before
+		// the dash, how far the camera fell behind it in the dash (the Genshin pull-away), and how far behind it still was the tick before
+		// the lag went off -- the snap a switch-off would make
+		FVector CamOffRest = FVector::ZeroVector;
+		bool bCamRestSet = false;
+		float CamTrailPeak = 0.0f;
+		float CamGapAtOff = -1.0f;
 		TArray<FHandTest> Tests;
 		int32 TestIndex = 0;
 		int32 KeyIndex = 0;
@@ -6924,6 +6931,16 @@ namespace
 				{
 					const FVector CamOff = CamPc->PlayerCameraManager->GetCameraLocation() - Dog->GetActorLocation();
 					const float CamJump = H.bHaveCamOff ? static_cast<float>((CamOff - H.LastCamOff).Size()) : 0.0f;
+					if (!H.bCamRestSet && Dog->IsDashing() && H.bHaveCamOff)
+					{
+						H.CamOffRest = H.LastCamOff;   // the tick before the dash: the camera where it rides at the handoff run, no lag
+						H.bCamRestSet = true;
+					}
+					if (H.bCamRestSet && H.LagOffAt < 0.0f)
+					{
+						H.CamTrailPeak = FMath::Max(H.CamTrailPeak, static_cast<float>((CamOff - H.CamOffRest).Size()));
+						H.CamGapAtOff = static_cast<float>((CamOff - H.CamOffRest).Size());
+					}
 					H.LastCamOff = CamOff;
 					H.bHaveCamOff = true;
 					if (H.CamJumpTicksLeft > 0)
@@ -6986,11 +7003,15 @@ namespace
 			{
 				// S3e (CORE, 10-04, from Second's review #6: a lag switched off under a moving Dog snapped the camera ~70 uu in one frame):
 				// judged on the CAMERA -- its offset from the Dog may not jump more than 4 uu in one frame around the switch-off
-				H.Check(TEXT("S3e"), H.bLagSeenOn && H.LagOffAt >= 0.0f && H.CamJumpMax >= 0.0f && H.CamJumpMax <= 4.0f,
-					FString::Printf(TEXT("the camera's catch-up lag: on in the dash %s; off at %.2f s (%.2f s after the release) with the Dog at %.0f uu/s; ")
-						TEXT("the camera's largest one-frame step against the Dog around it %.2f uu (want <= 4: no snap); the product's |v| / catch-up then %.2f, reported only"),
-						H.bLagSeenOn ? TEXT("yes") : TEXT("NO"), H.LagOffAt, H.LagOffAt >= 0.0f ? H.LagOffAt - H.ReleasedAt : -1.0f, Ground, H.CamJumpMax,
-						H.LagOffRatio));
+				// three readings of the CAMERA: it trailed the sprinter (>= 30 uu: the lag is real and this instrument sees it -- a camera that
+				// never lags reads 0 and FAILS), it had closed to <= 4 uu the tick before the lag went off, and no one-frame step <= 4 uu around it
+				H.Check(TEXT("S3e"), H.bLagSeenOn && H.LagOffAt >= 0.0f && H.bCamRestSet && H.CamTrailPeak >= 30.0f && H.CamGapAtOff >= 0.0f
+						&& H.CamGapAtOff <= 4.0f && H.CamJumpMax >= 0.0f && H.CamJumpMax <= 4.0f,
+					FString::Printf(TEXT("the camera's catch-up lag: on in the dash %s; the camera trailed the sprinting Dog by up to %.1f uu (want >= 30: the pull-away, seen); ")
+						TEXT("off at %.2f s (%.2f s after the release) with the Dog at %.0f uu/s, the camera %.2f uu from its resting place the tick before (want <= 4), ")
+						TEXT("its largest one-frame step around it %.2f uu (want <= 4: no snap); the product's |v| / catch-up then %.2f, reported only"),
+						H.bLagSeenOn ? TEXT("yes") : TEXT("NO"), H.CamTrailPeak, H.LagOffAt, H.LagOffAt >= 0.0f ? H.LagOffAt - H.ReleasedAt : -1.0f, Ground,
+						H.CamGapAtOff, H.CamJumpMax, H.LagOffRatio));
 				QaHandRelease(Dog);
 				H.KeyIndex = 0;
 				H.Tests = QaHandTests();
