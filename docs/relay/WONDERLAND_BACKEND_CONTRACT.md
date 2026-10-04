@@ -26,6 +26,8 @@ Visibility is `OWNER`, `PARTICIPANTS`, or `PUBLIC`. `PARTICIPANTS` is battle mem
 | `POST` | `/relay-api/wonderland/native/pair` · `/session` · `/revoke` | pair a desktop client for one project from the signed-in website |
 | `POST` | `/relay-api/wonderland/social/commands` | one social command as the session's player — friends, blocks, parties, private servers, presence, messages; idempotent by `commandId` — see [WONDERLAND_SOCIAL.md](WONDERLAND_SOCIAL.md) |
 | `GET` | `/relay-api/wonderland/social/me` · `/roster` · `/instances` · `/presence/:id` · `/conversations/:id` · `/servers/:id` | the player's social world, every answer a privacy-wall projection (P1–P5, party, DM, no inference) |
+| `GET` | `/relay-api/wonderland/eos/client-config` | the game client's minimum EOS configuration, at runtime, `no-store`; never the trusted server's credentials — see [WONDERLAND_VOICE.md](WONDERLAND_VOICE.md) |
+| `POST` | `/relay-api/wonderland/voice/identity` · `/voice/join` | bind the EOS PUID the player proves (a verified Connect ID token); voice-room tokens for exactly the rooms the privacy wall's plan gives them |
 
 Every mutating request carries a globally unique `commandId`. Retrying the same command returns its first result and does not duplicate a Mission, battle, worker set, reward, or Avatar progression.
 

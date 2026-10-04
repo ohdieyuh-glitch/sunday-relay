@@ -24,7 +24,7 @@ import { createMissionRegistry, type MissionRegistry } from './mission';
 import {
   architectPreflight, loadArchitectConfig, verifyArchitectConnection,
 } from './openai-architect';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isLiveReachRoute, respondLiveReach } from './live-reach-route';
 import { composeLoopRuns, loopCompositionCode } from './loop-composition';
 import { createLiveReachService, type LiveReachService } from './live-reach-service';
@@ -62,7 +62,7 @@ import { missionDispatchProblems, resolveRoleSlotsFromEnv } from './role-slot-co
 import {
   createCronScheduler, cronSchedulerEnabled, schedulerIntervalSeconds,
 } from './cron-scheduler';
-import { createBrowserSessionStore } from './browser-session/grants';
+import { createBrowserSessionStore, type BrowserSessionStore } from './browser-session/grants';
 import {
   createInstallationGrants, createOAuthStateStore, createSignInClaimStore,
   handleGithubAuthRoute, isGithubAuthRoute,
@@ -80,6 +80,23 @@ import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePor
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
 import { handleWonderlandSocialRoute, isWonderlandSocialRoute } from './wonderland-social-routes';
+import {
+  handleWonderlandVoiceRoute,
+  isWonderlandVoiceRoute,
+  reconcileWonderlandVoice,
+  wonderlandVoiceAffected,
+  type WonderlandVoiceRoutePorts,
+} from './wonderland-voice-routes';
+import {
+  WONDERLAND_EOS_TRUSTED_ENV,
+  createWonderlandEosKeySet,
+  createWonderlandEosVoicePort,
+  readWonderlandEosClientConfig,
+  verifyWonderlandEosIdToken,
+  wonderlandEosExpectation,
+  type WonderlandFetch,
+} from './wonderland-voice/eos';
+import { WonderlandVoicePostgresStore } from '../src/relay/persistence/wonderland-voice-postgres';
 import { WonderlandSocialPostgresStore } from '../src/relay/persistence/wonderland-social-postgres';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 
@@ -338,6 +355,51 @@ const juliusPool = (): Pool | null => {
   juliusPoolCache?.on('error', (error) => console.warn(`[relay-bridge] julius pool: idle connection lost (${error.message})`));
   return juliusPoolCache;
 };
+
+/**
+ * WONDERLAND VOICE, COMPOSED — once per process, from the environment and the ledger.
+ *
+ * The identity store is offered only when migration 035 is in the ledger: 035 is
+ * staged behind 034, and a route that wrote to tables that do not exist would
+ * answer 500 where the truth is "not applied yet". The trusted voice port is
+ * offered only when the trusted credentials are present. Epic is reached through
+ * the platform fetch, and only by these ports.
+ */
+const wonderlandVoiceComposed = new WeakMap<BrowserSessionStore, Promise<WonderlandVoiceRoutePorts>>();
+const wonderlandEosFetch: WonderlandFetch = async (url, init) => {
+  const response = await fetch(url, init);
+  return { status: response.status, json: () => response.json() as Promise<unknown> };
+};
+function wonderlandVoicePorts(sessions: BrowserSessionStore): Promise<WonderlandVoiceRoutePorts> {
+  const cached = wonderlandVoiceComposed.get(sessions);
+  if (cached !== undefined) return cached;
+  const composed = (async (): Promise<WonderlandVoiceRoutePorts> => {
+    const pool = juliusPool();
+    const eos = readWonderlandEosClientConfig(process.env);
+    const voiceTables = pool === null ? false : await pool
+      .query("SELECT 1 FROM relay_wonderland.schema_migrations WHERE version = '035_wonderland_voice'")
+      .then((result) => (result.rowCount ?? 0) > 0, () => false);
+    const trustedId = process.env[WONDERLAND_EOS_TRUSTED_ENV.clientId]?.trim();
+    const trustedSecret = process.env[WONDERLAND_EOS_TRUSTED_ENV.clientSecret]?.trim();
+    const keys = createWonderlandEosKeySet(wonderlandEosFetch);
+    return {
+      sessions,
+      allowNative: false,
+      social: pool === null ? null : new WonderlandSocialPostgresStore(pool),
+      identities: pool !== null && voiceTables ? new WonderlandVoicePostgresStore(pool) : null,
+      eos,
+      verifyIdToken: eos.ok
+        ? (token: string) => verifyWonderlandEosIdToken({ token, expect: wonderlandEosExpectation(eos.config, process.env), nowSeconds: Math.floor(Date.now() / 1000), keys })
+        : null,
+      voice: eos.ok && trustedId && trustedSecret
+        ? createWonderlandEosVoicePort({ fetcher: wonderlandEosFetch, deploymentId: eos.config.deploymentId, trustedClientId: trustedId, trustedClientSecret: trustedSecret })
+        : null,
+      digest: (text: string) => createHash('sha256').update(text).digest('hex'),
+    };
+  })();
+  wonderlandVoiceComposed.set(sessions, composed);
+  return composed;
+}
 
 let juliusStateCache: ReturnType<typeof createJuliusStatePorts> | null = null;
 const juliusStatePorts = (): ReturnType<typeof createJuliusStatePorts> => {
@@ -644,8 +706,29 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
          * A paired NATIVE client does not reach it until a reviewed decision widens
          * `native_world` (allowNative: false).
          */
+        /**
+         * WONDERLAND EOS AND VOICE: the game client's runtime EOS configuration, the
+         * player's proven EOS identity, and voice-room tokens for exactly the rooms
+         * the privacy wall's plan gives them (wonderland-voice-routes.ts). Live only
+         * when EOS is configured AND migration 035 is applied; otherwise 503, naming why.
+         */
+        if (isWonderlandVoiceRoute(path.replace('/relay-api', ''))) {
+          const voiceResult = await handleWonderlandVoiceRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+            origin,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            now: Date.now(),
+          }, await wonderlandVoicePorts(browserSessions));
+          if (voiceResult !== null) send(res, voiceResult.status, voiceResult.body, { ...cors, ...(voiceResult.headers ?? {}) });
+          return;
+        }
+
         if (isWonderlandSocialRoute(path.replace('/relay-api', ''))) {
           const socialPool = juliusPool();
+          const voicePorts = await wonderlandVoicePorts(browserSessions);
+          const voiceLive = voicePorts.voice !== null && voicePorts.identities !== null;
           const socialResult = await handleWonderlandSocialRoute({
             method,
             path: path.replace('/relay-api', ''),
@@ -658,6 +741,12 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             store: socialPool === null ? null : new WonderlandSocialPostgresStore(socialPool),
             sessions: browserSessions,
             allowNative: false,
+            // When voice is live, every committed social change takes back the voice-room
+            // memberships the wall no longer allows (a block, a hide, a departure).
+            ...(voiceLive ? {
+              afterCommand: async ({ actorId, command, before, after, at }) =>
+                reconcileWonderlandVoice(voicePorts, wonderlandVoiceAffected(before, after, actorId, command), at),
+            } : {}),
           });
           if (socialResult !== null) send(res, socialResult.status, socialResult.body, cors);
           return;

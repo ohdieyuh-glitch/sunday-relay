@@ -17,6 +17,7 @@ import {
   projectWonderlandServers,
   wonderlandVisibilityOf,
   type WonderlandSocialCommand,
+  type WonderlandSocialState,
   type WonderlandSocialStore,
 } from '../src/relay/mission/wonderland-social';
 
@@ -67,6 +68,18 @@ export interface WonderlandSocialRoutePorts {
   readonly allowNative: boolean;
   /** The account's display name for a player, server-side. Null renders Unknown. */
   readonly displayNameFor?: (playerId: string) => Promise<string | null>;
+  /**
+   * After a command CHANGED something: what else must follow the wall (voice
+   * room memberships taken back on the trusted server). Its result is reported
+   * on the response, never swallowed; absent, nothing else runs.
+   */
+  readonly afterCommand?: (input: {
+    readonly actorId: string;
+    readonly command: WonderlandSocialCommand;
+    readonly before: WonderlandSocialState;
+    readonly after: WonderlandSocialState;
+    readonly at: string;
+  }) => Promise<{ readonly removed: readonly unknown[]; readonly failed: readonly unknown[] }>;
 }
 
 export const WONDERLAND_SOCIAL_PREFIX = '/wonderland/social/';
@@ -116,7 +129,10 @@ export function parseWonderlandSocialCommand(value: unknown): WonderlandSocialCo
  *   - an Origin: only a browser PLAYER session bound to that origin is accepted;
  *     a native credential presented from a web origin is refused.
  */
-async function playerOf(input: WonderlandSocialRouteRequest, ports: WonderlandSocialRoutePorts): Promise<string | Result> {
+export async function resolveWonderlandPlayer(
+  input: Pick<WonderlandSocialRouteRequest, 'authorization' | 'origin' | 'now'>,
+  ports: Pick<WonderlandSocialRoutePorts, 'sessions' | 'allowNative'>,
+): Promise<string | { readonly status: number; readonly body: unknown }> {
   const token = sessionTokenFrom(input.authorization);
   if (token === null) return error(401, 'player_session_required', 'A signed-in player session is required.');
   if (input.origin === undefined) {
@@ -142,7 +158,7 @@ export async function handleWonderlandSocialRoute(
 ): Promise<Result | null> {
   if (!isWonderlandSocialRoute(input.path)) return null;
   if (ports.store === null) return error(503, 'social_store_unavailable', 'No social database is configured; nothing was read or written.');
-  const player = await playerOf(input, ports);
+  const player = await resolveWonderlandPlayer(input, ports);
   if (typeof player !== 'string') return player;
   const store = ports.store;
   // A signed-in player EXISTS socially from their first request: others can find them, befriend them and block them.
@@ -161,10 +177,15 @@ export async function handleWonderlandSocialRoute(
     if (!isWonderlandEntityId(body?.commandId)) return error(400, 'command_id_required', 'Every social write carries a commandId.');
     const command = parseWonderlandSocialCommand(body?.command);
     if (command === null) return error(400, 'command_invalid', 'The command is not one this backend has, or carries a field it does not have.');
-    const outcome = await store.execute({ actorId: player, commandId: body!.commandId as string, command, at: new Date(input.now).toISOString() });
-    return outcome.ok
-      ? { status: 200, body: { data: outcome } }
-      : { status: REFUSAL_STATUS[outcome.code] ?? 409, body: { data: outcome } };
+    const at = new Date(input.now).toISOString();
+    const before = ports.afterCommand === undefined ? null : await store.stateFor({ viewerId: player });
+    const outcome = await store.execute({ actorId: player, commandId: body!.commandId as string, command, at });
+    if (!outcome.ok) return { status: REFUSAL_STATUS[outcome.code] ?? 409, body: { data: outcome } };
+    if (outcome.code !== 'DONE' || ports.afterCommand === undefined || before === null) return { status: 200, body: { data: outcome } };
+    // The write is committed; what follows it is reported, and a failure here never reads as success.
+    const followed = await ports.afterCommand({ actorId: player, command, before, after: await store.stateFor({ viewerId: player }), at })
+      .catch(() => ({ removed: [], failed: [{ reason: 'after_command_failed' }] }));
+    return { status: 200, body: { data: outcome, voice: { revoked: followed.removed.length, revocationFailures: followed.failed.length } } };
   }
   if (input.method !== 'GET') return error(405, 'method_not_allowed', 'Social reads are GET; writes are POST /wonderland/social/commands.');
 
