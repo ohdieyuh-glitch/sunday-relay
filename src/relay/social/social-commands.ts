@@ -596,7 +596,10 @@ function applyOne(
       const seesOnline = (ownerId: SocialUserId, userId: SocialUserId) => (resolvePresenceFor(met, ownerId, userId)?.onlineState ?? 'OFFLINE') !== 'OFFLINE';
       for (const otherId of ctx.memberIds) {
         if (otherId === actorId) continue;
-        const recorded = recordPlayedTogether(met, actorId, otherId, 'SESSION', ctx.serverName.slice(0, 80), nowIso, seesOnline);
+        // NO STORED LABEL NAMES A PERSON (social-contracts.ts; Second's R16 review, 10-04): a private server's name is its owner's
+        // text and travels with the owner's own sharing rules; the durable row keeps only that it was a private server.
+        const label = ctx.kind === 'PRIVATE_SERVER' ? 'Private server' : ctx.serverName.slice(0, 80);
+        const recorded = recordPlayedTogether(met, actorId, otherId, 'SESSION', label, nowIso, seesOnline);
         if (recorded.ok) met = recorded.value;
       }
       return {
@@ -636,7 +639,8 @@ function applyOne(
       if (!to.ok) return invalid(to.message);
       const invited = inviteToWorld(world, state, actorId, to.value as string, nowMs);
       if (!invited.ok) return worldFail(invited);
-      return { ok: true, value: { state, world: invited.value.world, data: { inviteId: invited.value.inviteId }, audience: [to.value as string] } };
+      // an invitation the owner's wall stops is answered alike but reaches nobody (world-presence.ts walledFromOwner)
+      return { ok: true, value: { state, world: invited.value.world, data: { inviteId: invited.value.inviteId }, audience: invited.value.delivered ? [to.value as string] : [] } };
     }
     case 'party_invites.decline': {
       const invite = state.partyInvites.find((i) => i.inviteId === id0);

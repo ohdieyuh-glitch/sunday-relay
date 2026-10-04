@@ -127,6 +127,11 @@ export function privateStrangerView(subjectId: SocialUserId): UserPresenceView {
   };
 }
 
+/** The owner of a private server context (world-presence.ts names it `priv_<ownerId>`), else null. */
+function privateServerOwnerOf(serverId: string): SocialUserId | null {
+  return serverId.startsWith('priv_') && serverId.length > 'priv_'.length ? serverId.slice('priv_'.length) : null;
+}
+
 /**
  * ONE PERSON AS ONE VIEWER MAY SEE THEM.
  *
@@ -199,7 +204,13 @@ export function resolvePresenceFor(state: SocialState, viewerId: SocialUserId, s
   const seesActivity = self || audienceAdmits(state, privacy.activityVisibility, viewerId, subjectId);
   const seesLocation = self || audienceAdmits(state, privacy.locationVisibility, viewerId, subjectId);
   const isPrivateServer = presence.location?.serverKind === 'PRIVATE_SERVER';
-  const seesPrivateServer = self || audienceAdmits(state, privacy.privateServerVisibility, viewerId, subjectId);
+  // THE SERVER'S OWNER BEHIND THE VIEWER'S WALL (Second's R16 review, 10-04): a friend in a private server carries that server's
+  // id (priv_<ownerId>) and name in their location, so a viewer walled from the OWNER would learn, through the friend, that the
+  // owner is online and with whom. The friend's sharing choice never opens a wall it is not part of (as a friend's party holding
+  // a walled member is hidden, below).
+  const privateOwner = isPrivateServer ? privateServerOwnerOf(presence.location?.serverId ?? '') : null;
+  const ownerWalled = privateOwner !== null && privateOwner !== viewerId && blockedEitherWay(state, viewerId, privateOwner);
+  const seesPrivateServer = self || (!ownerWalled && audienceAdmits(state, privacy.privateServerVisibility, viewerId, subjectId));
   const location: SocialLocation | null =
     presence.location !== null && seesLocation && (!isPrivateServer || seesPrivateServer) ? presence.location : null;
 

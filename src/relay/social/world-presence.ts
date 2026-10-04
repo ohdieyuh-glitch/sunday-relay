@@ -136,6 +136,29 @@ export type WorldJoinTarget =
 
 const SAFE_PLACE = /^[a-z0-9_]{1,40}$/;
 
+/** A public place's display name, derived from its safe id: golden_arrival -> "Golden Arrival". Never client text. */
+export function publicPlaceName(place: string): string {
+  return place
+    .split('_')
+    .filter((word) => word.length > 0)
+    .map((word) => word[0].toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+/**
+ * A PRIVATE SERVER AND ITS OWNER'S WALL (Second's R16 review, 10-04): nobody walled from the owner -- either way -- enters it by
+ * following a friend, by an invitation from someone inside, or with their party. A refusal reads like any other can't-join, and
+ * an invitation to it is quietly never delivered, so neither the walled player nor the inviter learns of the block.
+ */
+function walledFromOwner(social: SocialState, context: WorldContext, userId: SocialUserId): boolean {
+  return (
+    context.kind === 'PRIVATE_SERVER' &&
+    context.ownerId !== null &&
+    context.ownerId !== userId &&
+    (hasBlocked(social, context.ownerId, userId) || hasBlocked(social, userId, context.ownerId))
+  );
+}
+
 /**
  * JOIN (or move to) a world context. The decision about ANOTHER player's context is the presence authority's, never
  * this module's: following a friend needs `can.joinServer` as `resolvePresenceFor` computes it for this viewer.
@@ -146,7 +169,10 @@ export function joinWorld(world: WorldState, social: SocialState, actorId: Socia
   switch (target.kind) {
     case 'PUBLIC': {
       if (!SAFE_PLACE.test(target.place)) return fail('validation-failed', 'place must be a short lowercase id');
-      const name = target.placeName.trim().slice(0, 60) || target.place;
+      // THE SERVER NAMES A PUBLIC WORLD, from its safe id (Second's R16 review, 10-04): the first joiner's client-sent placeName
+      // used to become the shard's serverName for EVERY later joiner -- in their presence, their invites and the durable Recent
+      // Players label -- so any client could plant free text (a person's name, a link) in other players' lists. Ignored now.
+      const name = publicPlaceName(target.place);
       const shards = Object.values(swept.contexts)
         .filter((c) => c.ownerId === null && c.contextId.startsWith(`pub_${target.place}_`))
         .sort((a, b) => a.contextId.localeCompare(b.contextId, undefined, { numeric: true }));
@@ -171,7 +197,9 @@ export function joinWorld(world: WorldState, social: SocialState, actorId: Socia
       const context: WorldContext = existing ?? {
         contextId,
         kind: 'PRIVATE_SERVER',
-        serverName: target.name.trim().slice(0, 60) || `${social.users[actorId].profile.displayName}'s server`,
+        // the owner's own name for it, else a neutral one: never "<displayName>'s server", which named the owner wherever the
+        // location travelled (Second's R16 review, 10-04)
+        serverName: target.name.trim().slice(0, 60) || 'Private server',
         ownerId: actorId,
         capacity: WORLD_PRIVATE_CAPACITY,
         authority: 'CLIENT_REPORTED',
@@ -186,6 +214,7 @@ export function joinWorld(world: WorldState, social: SocialState, actorId: Socia
       // THE ONE RULE: their server-join policy and what this viewer may see, from the presence authority.
       if (theirs === undefined || view === null || !view.can.joinServer) return fail('permission-denied', 'You cannot join them there');
       if (hasBlocked(social, target.userId, actorId) || hasBlocked(social, actorId, target.userId)) return fail('permission-denied', 'You cannot join them there');
+      if (walledFromOwner(social, theirs, actorId)) return fail('permission-denied', 'You cannot join them there');
       if (liveMembers(swept, theirs, nowMs) >= theirs.capacity) return fail('full', 'That world is full');
       const next = withMember(swept, theirs, actorId);
       return { ok: true, value: { world: next, context: next.contexts[theirs.contextId] } };
@@ -193,7 +222,7 @@ export function joinWorld(world: WorldState, social: SocialState, actorId: Socia
     case 'INVITE': {
       const invite = swept.invites.find((i) => i.inviteId === target.inviteId && i.toUserId === actorId);
       const context = invite === undefined ? undefined : swept.contexts[invite.contextId];
-      if (invite === undefined || context === undefined) return fail('not-found', 'That invitation is no longer open');
+      if (invite === undefined || context === undefined || walledFromOwner(social, context, actorId)) return fail('not-found', 'That invitation is no longer open');
       if (liveMembers(swept, context, nowMs) >= context.capacity) return fail('full', 'That world is full');
       const next = withMember({ ...swept, invites: swept.invites.filter((i) => i !== invite) }, context, actorId);
       return { ok: true, value: { world: next, context: next.contexts[context.contextId] } };
@@ -202,6 +231,7 @@ export function joinWorld(world: WorldState, social: SocialState, actorId: Socia
       const party = partyOf(social, actorId);
       const leaderContext = party === undefined ? undefined : contextOf(swept, party.leaderId);
       if (party === undefined || leaderContext === undefined) return fail('not-found', 'Your party leader is not in a world');
+      if (walledFromOwner(social, leaderContext, actorId)) return fail('permission-denied', 'You cannot join them there');
       if (liveMembers(swept, leaderContext, nowMs) >= leaderContext.capacity && !leaderContext.memberIds.includes(actorId)) return fail('full', 'That world is full');
       const next = withMember(swept, leaderContext, actorId);
       return { ok: true, value: { world: next, context: next.contexts[leaderContext.contextId] } };
@@ -214,18 +244,21 @@ export function leaveWorld(world: WorldState, actorId: SocialUserId): WorldState
 }
 
 /** INVITE a friend into the actor's current context: the presence authority's `can.inviteToServer` decides. */
-export function inviteToWorld(world: WorldState, social: SocialState, actorId: SocialUserId, toUserId: SocialUserId, nowMs: number): WorldResult<{ world: WorldState; inviteId: string }> {
+export function inviteToWorld(world: WorldState, social: SocialState, actorId: SocialUserId, toUserId: SocialUserId, nowMs: number): WorldResult<{ world: WorldState; inviteId: string; delivered: boolean }> {
   const context = contextOf(world, actorId);
   if (context === undefined) return fail('not-found', 'You are not in a world');
   const view = resolvePresenceFor(social, actorId, toUserId);
   if (view === null || !view.can.inviteToServer) return fail('permission-denied', 'You cannot invite them');
   const inviteId = `winv_${world.nextSerial}`;
+  // walled from this private server's owner: answered like any sent invitation, never stored, never delivered
+  if (walledFromOwner(social, context, toUserId)) return { ok: true, value: { world: { ...world, nextSerial: world.nextSerial + 1 }, inviteId, delivered: false } };
   const invites = world.invites.filter((i) => !(i.toUserId === toUserId && i.contextId === context.contextId));
   return {
     ok: true,
     value: {
       world: { ...world, nextSerial: world.nextSerial + 1, invites: [...invites, { inviteId, contextId: context.contextId, fromUserId: actorId, toUserId, expiresAtMs: nowMs + WORLD_INVITE_TTL_MS }] },
       inviteId,
+      delivered: true,
     },
   };
 }
@@ -286,7 +319,7 @@ export function worldViewFor(world: WorldState, social: SocialState, viewerId: S
           .filter((a): a is AvatarState => a !== undefined && nowMs - a.reportedAtMs <= WORLD_AVATAR_STALE_MS && a.contextId === context.contextId)
           .map((a) => ({ ...a, displayName: social.users[a.userId]?.profile.displayName ?? 'Player', ageMs: nowMs - a.reportedAtMs }));
   const invites = world.invites
-    .filter((i) => i.toUserId === viewerId && i.expiresAtMs > nowMs && visible(i.fromUserId) && world.contexts[i.contextId] !== undefined)
+    .filter((i) => i.toUserId === viewerId && i.expiresAtMs > nowMs && visible(i.fromUserId) && world.contexts[i.contextId] !== undefined && !walledFromOwner(social, world.contexts[i.contextId], viewerId))
     .map((i) => ({
       inviteId: i.inviteId,
       fromUserId: i.fromUserId,

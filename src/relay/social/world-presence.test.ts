@@ -3,6 +3,7 @@ import { applySocialOperation, type SocialCommandOutcome } from './social-comman
 import { createSocialFixture, FIXTURE_USERS as U } from './social-fixtures';
 import { blockUser } from './social-friends';
 import { recentPlayersViewFor } from './social-parties';
+import { resolvePresenceFor } from './social-presence';
 import type { SocialState } from './social-state';
 import {
   WORLD_AVATAR_STALE_MS,
@@ -192,5 +193,130 @@ describe('played together respects presence: no durable trace where the owner co
     ({ state: s, world: w } = run(s, w, U.NOVA, 'world.join', { target: 'PUBLIC' }, 2000));
     ({ state: s, world: w } = run(s, w, U.NOVA, 'world.join', { target: 'PUBLIC' }, 5000));
     expect(recentPlayersViewFor(s, U.KAI).filter((e) => e.userId === U.NOVA).map((e) => e.metAtIso)).toEqual([at(5000)]);
+  });
+});
+
+describe('world names never carry a person, and a wall holds through a friend in a private server (Second, R16 review 10-04)', () => {
+  const sharePrivateServer = (s: SocialState, who: string): SocialState => ({
+    ...s,
+    users: { ...s.users, [who]: { ...s.users[who], privacy: { ...s.users[who].privacy, privateServerVisibility: 'FRIENDS' } } },
+  });
+
+  it('a public world is named by the server from its place id; a client-sent name reaches nobody', () => {
+    let s = createSocialFixture();
+    let w = emptyWorldState();
+    // the FIRST joiner of a new shard used to name it for everybody after
+    ({ state: s, world: w } = run(s, w, U.KAI, 'world.join', { target: 'PUBLIC', place: 'golden_arrival', placeName: 'Kai was here http://phish.invalid' }, 1000));
+    ({ state: s, world: w } = run(s, w, U.NOVA, 'world.join', { target: 'PUBLIC', place: 'golden_arrival', placeName: 'Golden Arrival' }, 2000));
+    expect(contextOf(w, U.KAI)?.serverName).toBe('Golden Arrival');
+    expect(s.users[U.NOVA].presence.location?.serverName).toBe('Golden Arrival');
+    expect([...recentPlayersViewFor(s, U.KAI), ...recentPlayersViewFor(s, U.NOVA)].filter((e) => e.context === 'SESSION' && e.metAtIso === at(2000)).map((e) => e.contextLabel)).toEqual([
+      'Golden Arrival',
+      'Golden Arrival',
+    ]);
+    expect(JSON.stringify({ s, w })).not.toContain('phish');
+    expect(JSON.stringify({ s, w })).not.toContain('Kai was here');
+  });
+
+  it("a private server's default name is neutral, and a Recent Players row from one never stores a name", () => {
+    let s = createSocialFixture();
+    let w = emptyWorldState();
+    ({ state: s, world: w } = run(s, w, U.KAI, 'world.join', { target: 'PRIVATE' }, 1000));
+    expect(contextOf(w, U.KAI)?.serverName).toBe('Private server');
+    // a server its owner named: the name travels with the owner's own sharing (invites), never into a durable label
+    let s2 = createSocialFixture();
+    let w2 = emptyWorldState();
+    ({ state: s2, world: w2 } = run(s2, w2, U.KAI, 'world.join', { target: 'PRIVATE', name: "Kai's Workshop" }, 1000));
+    const invited = run(s2, w2, U.KAI, 'world.invite', { toUserId: U.NOVA }, 1100);
+    w2 = invited.world;
+    const invite = worldViewFor(w2, s2, U.NOVA, T0 + 1200).invites[0];
+    expect(invite.serverName).toBe("Kai's Workshop");
+    ({ state: s2, world: w2 } = run(s2, w2, U.NOVA, 'world.join', { target: 'INVITE', inviteId: invite.inviteId }, 1300));
+    const labels = [...recentPlayersViewFor(s2, U.KAI), ...recentPlayersViewFor(s2, U.NOVA)].filter((e) => e.context === 'SESSION' && e.metAtIso === at(1300));
+    expect(labels.map((e) => e.contextLabel)).toEqual(['Private server', 'Private server']);
+  });
+
+  it("a viewer walled from a private server's OWNER learns nothing of it through a friend who is there; control: an unwalled friend still sees where the friend is", () => {
+    let s = createSocialFixture();
+    let w = emptyWorldState();
+    s = sharePrivateServer(s, U.KAI); // Kai shares their private-server whereabouts with friends (not the default)
+    const walled = blockUser(s, U.NOVA, U.ORION, at(0)); // Nova (the owner) and Orion (Kai's friend) are walled
+    if (!walled.ok) throw new Error('block refused');
+    s = walled.value;
+    ({ state: s, world: w } = run(s, w, U.NOVA, 'world.join', { target: 'PRIVATE', name: "Nova's Lab" }, 1000));
+    const invited = run(s, w, U.NOVA, 'world.invite', { toUserId: U.KAI }, 1100);
+    w = invited.world;
+    const invite = worldViewFor(w, s, U.KAI, T0 + 1200).invites[0];
+    ({ state: s, world: w } = run(s, w, U.KAI, 'world.join', { target: 'INVITE', inviteId: invite.inviteId }, 1300));
+    expect(contextOf(w, U.KAI)?.contextId).toBe(`priv_${U.NOVA}`);
+    const orionSees = resolvePresenceFor(s, U.ORION, U.KAI);
+    expect(orionSees).not.toBeNull();
+    expect(orionSees?.location).toBeNull();
+    expect(JSON.stringify(orionSees)).not.toContain(U.NOVA);
+    expect(JSON.stringify(orionSees)).not.toContain('Nova');
+    // the control: Lyra, Kai's friend and walled from nobody, is shown where Kai is -- the rule is the wall, not a blanket hide
+    const lyraSees = resolvePresenceFor(s, U.LYRA, U.KAI);
+    expect(lyraSees?.location?.serverId).toBe(`priv_${U.NOVA}`);
+  });
+
+  // the owner Nova and Orion are walled; Kai (both their friend) is inside Nova's private server
+  const novaHostsKaiInside = () => {
+    let s = sharePrivateServer(createSocialFixture(), U.KAI);
+    let w = emptyWorldState();
+    const walled = blockUser(s, U.NOVA, U.ORION, at(0));
+    if (!walled.ok) throw new Error('block refused');
+    s = walled.value;
+    ({ state: s, world: w } = run(s, w, U.NOVA, 'world.join', { target: 'PRIVATE', name: "Nova's Lab" }, 1000));
+    const invited = run(s, w, U.NOVA, 'world.invite', { toUserId: U.KAI }, 1100);
+    w = invited.world;
+    ({ state: s, world: w } = run(s, w, U.KAI, 'world.join', { target: 'INVITE', inviteId: worldViewFor(w, s, U.KAI, T0 + 1200).invites[0].inviteId }, 1300));
+    return { s, w };
+  };
+
+  it("nobody walled from a private server's owner FOLLOWS a friend into it; control: an unwalled friend does", () => {
+    const { s, w } = novaHostsKaiInside();
+    const orion = applySocialOperation(s, 'world.join', U.ORION, { ids: [], body: { target: 'FRIEND', userId: U.KAI }, query: {} }, at(2000), w);
+    expect(orion.ok).toBe(false);
+    if (!orion.ok) expect(orion.error.message).toBe('You cannot join them there'); // the ordinary can't-join, naming nobody
+    const lyra = applySocialOperation(s, 'world.join', U.LYRA, { ids: [], body: { target: 'FRIEND', userId: U.KAI }, query: {} }, at(2000), w);
+    expect(lyra.ok).toBe(true);
+  });
+
+  it("an invitation from inside to someone walled from the owner is answered alike and never delivered; control: an unwalled friend's arrives", () => {
+    const { s, w } = novaHostsKaiInside();
+    const toOrion = run(s, w, U.KAI, 'world.invite', { toUserId: U.ORION }, 2000);
+    expect(toOrion.audience).toEqual([]);
+    expect(worldViewFor(toOrion.world, s, U.ORION, T0 + 2100).invites).toEqual([]);
+    const toLyra = run(s, toOrion.world, U.KAI, 'world.invite', { toUserId: U.LYRA }, 2200);
+    expect(toLyra.audience).toEqual([U.LYRA]);
+    expect(worldViewFor(toLyra.world, s, U.LYRA, T0 + 2300).invites.map((i) => i.serverName)).toEqual(["Nova's Lab"]);
+    // an invitation that somehow exists still cannot carry the walled player in
+    const planted: WorldState = { ...toLyra.world, invites: [...toLyra.world.invites, { inviteId: 'winv_planted', contextId: `priv_${U.NOVA}`, fromUserId: U.KAI, toUserId: U.ORION, expiresAtMs: T0 + 60_000 }] };
+    expect(worldViewFor(planted, s, U.ORION, T0 + 2400).invites).toEqual([]);
+    const join = applySocialOperation(s, 'world.join', U.ORION, { ids: [], body: { target: 'INVITE', inviteId: 'winv_planted' }, query: {} }, at(2500), planted);
+    expect(join.ok).toBe(false);
+    if (!join.ok) expect(join.error.message).toBe('That invitation is no longer open');
+  });
+
+  it("a party member walled from the owner cannot follow the leader into a private server; control: without the wall they can", () => {
+    // the fixture's Arena Run party: Orion leads, Lyra is a member. Kai hosts; Orion joins Kai's server by invitation.
+    const setUp = (wall: boolean) => {
+      let s = createSocialFixture();
+      let w = emptyWorldState();
+      if (wall) {
+        const walled = blockUser(s, U.KAI, U.LYRA, at(0));
+        if (!walled.ok) throw new Error('block refused');
+        s = walled.value;
+      }
+      ({ state: s, world: w } = run(s, w, U.KAI, 'world.join', { target: 'PRIVATE', name: "Kai's Workshop" }, 1000));
+      const invited = run(s, w, U.KAI, 'world.invite', { toUserId: U.ORION }, 1100);
+      w = invited.world;
+      ({ state: s, world: w } = run(s, w, U.ORION, 'world.join', { target: 'INVITE', inviteId: worldViewFor(w, s, U.ORION, T0 + 1200).invites[0].inviteId }, 1300));
+      return applySocialOperation(s, 'world.join', U.LYRA, { ids: [], body: { target: 'PARTY' }, query: {} }, at(2000), w);
+    };
+    const walledJoin = setUp(true);
+    expect(walledJoin.ok).toBe(false);
+    if (!walledJoin.ok) expect(walledJoin.error.message).toBe('You cannot join them there');
+    expect(setUp(false).ok).toBe(true);
   });
 });
