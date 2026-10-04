@@ -48,6 +48,8 @@ export const hashId = (value: string): string => createHash('sha256').update(val
 /* ------------------------------------------------------------------------------------------------ config */
 
 export const EOS_VOICE_CONFIG_ENV = 'WONDERLAND_EOS_VOICE_CONFIG';
+/** The room-salt file (one line, >= 32 characters): NOT a founder credential -- the R16 runner generates it. */
+export const EOS_ROOM_SALT_FILE_ENV = 'WONDERLAND_EOS_ROOM_SALT_FILE';
 
 export interface EosVoiceConfig {
   readonly productId: string;
@@ -57,40 +59,110 @@ export interface EosVoiceConfig {
   readonly clientSecret: string;
   /** Per-deployment secret salt for the opaque room ids (HMAC). */
   readonly roomSalt: string;
+  /** Which EOS client the credentials are: the Trusted Server client (preferred) or the Game Client (fallback). */
+  readonly clientKind?: 'server' | 'game';
 }
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
+const MIN_ENV_SALT = 32;
 
 /**
- * The founder's EOS file, named by WONDERLAND_EOS_VOICE_CONFIG (a path outside every repo). Missing variable, unreadable file,
- * bad JSON or any field out of shape: null -- party voice stays 503, with no fallback. The log line never carries the file's
- * content or its path.
+ * A .env file's KEY=VALUE lines: CRLF or LF, an optional UTF-8 BOM, blank lines and '#' comments ignored, whitespace around '='
+ * trimmed, one pair of surrounding single or double quotes stripped. Every key is kept; the caller reads only the ones it knows.
+ */
+export function parseDotEnv(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const rawLine of text.replace(/^﻿/, '').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line === '' || line.startsWith('#')) continue;
+    const at = line.indexOf('=');
+    if (at <= 0) continue;
+    const key = line.slice(0, at).trim();
+    let value = line.slice(at + 1).trim();
+    if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) value = value.slice(1, -1);
+    out.set(key, value);
+  }
+  return out;
+}
+
+/**
+ * The EOS config, named by WONDERLAND_EOS_VOICE_CONFIG (a path outside every repo). TWO FORMATS, told apart by the first
+ * non-space character:
+ *   '{'  the JSON object {productId, sandboxId, deploymentId, clientId, clientSecret, roomSalt};
+ *   else the founder's .env: EOS_PRODUCT_ID, EOS_SANDBOX_ID, EOS_DEPLOYMENT_ID, and the client -- EOS_SERVER_CLIENT_ID +
+ *        EOS_SERVER_CLIENT_SECRET (the Trusted Server client) preferred, else EOS_GAME_CLIENT_ID + EOS_GAME_CLIENT_SECRET; the
+ *        room salt from the SEPARATE file named by WONDERLAND_EOS_ROOM_SALT_FILE (first line, >= 32 characters).
+ * Any missing key, unreadable file, field out of shape or short salt: null -- party voice stays 503, with no fallback. A log line
+ * names WHICH key or file is wanting (key names only); it never carries a value, and never a path ("the EOS config file", "the
+ * room salt file").
  */
 export function loadEosVoiceConfig(env: NodeJS.ProcessEnv, deps: { readFile?: (path: string) => string; log?: (line: string) => void } = {}): EosVoiceConfig | null {
   const log = deps.log ?? (() => undefined);
-  const path = env[EOS_VOICE_CONFIG_ENV]?.trim() ?? '';
-  if (path === '') {
-    log(`eos voice: ${EOS_VOICE_CONFIG_ENV} is not set -- party voice answers 503`);
+  const read = deps.readFile ?? ((p: string) => readFileSync(p, 'utf8'));
+  const refuse = (why: string): null => {
+    log(`eos voice: ${why} -- party voice answers 503`);
     return null;
+  };
+  const path = env[EOS_VOICE_CONFIG_ENV]?.trim() ?? '';
+  if (path === '') return refuse(`${EOS_VOICE_CONFIG_ENV} is not set`);
+  let text: string;
+  try {
+    text = read(path).replace(/^﻿/, '');
+  } catch {
+    return refuse('the EOS config file could not be read');
   }
+  return text.trimStart().startsWith('{') ? configFromJson(text, refuse, log) : configFromDotEnv(text, env, read, refuse, log);
+}
+
+function configFromJson(text: string, refuse: (why: string) => null, log: (line: string) => void): EosVoiceConfig | null {
   let raw: unknown;
   try {
-    raw = JSON.parse((deps.readFile ?? ((p) => readFileSync(p, 'utf8')))(path).replace(/^﻿/, ''));
+    raw = JSON.parse(text);
   } catch {
-    log('eos voice: the config file could not be read as JSON -- party voice answers 503');
-    return null;
+    return refuse('the EOS config file is not valid JSON');
   }
   const r = (raw !== null && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const str = (k: string) => (typeof r[k] === 'string' ? (r[k] as string).trim() : '');
   const config = { productId: str('productId'), sandboxId: str('sandboxId'), deploymentId: str('deploymentId'), clientId: str('clientId'), clientSecret: str('clientSecret'), roomSalt: str('roomSalt') };
-  const valid = [config.productId, config.sandboxId, config.deploymentId, config.clientId].every((v) => ID.test(v))
-    && config.clientSecret.length > 0 && config.clientSecret.length <= 512 && config.roomSalt.length >= 16 && config.roomSalt.length <= 512;
-  if (!valid) {
-    log('eos voice: the config file is missing a field or has one out of shape -- party voice answers 503');
-    return null;
-  }
-  log(`eos voice: configured (deployment ${hashId(config.deploymentId)})`);
+  const bad = [
+    ...(['productId', 'sandboxId', 'deploymentId', 'clientId'] as const).filter((k) => !ID.test(config[k])),
+    ...(config.clientSecret.length > 0 && config.clientSecret.length <= 512 ? [] : ['clientSecret']),
+    ...(config.roomSalt.length >= 16 && config.roomSalt.length <= 512 ? [] : ['roomSalt']),
+  ];
+  if (bad.length > 0) return refuse(`the EOS config file is missing or has out of shape: ${bad.join(', ')}`);
+  log('eos voice: configured (JSON)');
   return config;
+}
+
+function configFromDotEnv(text: string, env: NodeJS.ProcessEnv, read: (path: string) => string, refuse: (why: string) => null, log: (line: string) => void): EosVoiceConfig | null {
+  const keys = parseDotEnv(text);
+  const get = (k: string) => keys.get(k) ?? '';
+  const ids = ['EOS_PRODUCT_ID', 'EOS_SANDBOX_ID', 'EOS_DEPLOYMENT_ID'] as const;
+  const missingIds = ids.filter((k) => get(k) === '');
+  const shapelessIds = ids.filter((k) => get(k) !== '' && !ID.test(get(k)));
+  // THE CLIENT: the Trusted Server client when both its keys are there, else the Game Client when both of its are
+  const pair = (prefix: 'EOS_SERVER' | 'EOS_GAME') => ({ id: get(`${prefix}_CLIENT_ID`), secret: get(`${prefix}_CLIENT_SECRET`) });
+  const server = pair('EOS_SERVER');
+  const game = pair('EOS_GAME');
+  const kind = server.id !== '' && server.secret !== '' ? 'server' : game.id !== '' && game.secret !== '' ? 'game' : null;
+  const missing = [...missingIds, ...(kind === null ? ['EOS_SERVER_CLIENT_ID + EOS_SERVER_CLIENT_SECRET (or EOS_GAME_CLIENT_ID + EOS_GAME_CLIENT_SECRET)'] : [])];
+  if (missing.length > 0 || kind === null) return refuse(`the EOS config file is missing ${missing.join(', ')}`);
+  const client = kind === 'server' ? server : game;
+  const clientKeyPrefix = kind === 'server' ? 'EOS_SERVER' : 'EOS_GAME';
+  const shapeless = [...shapelessIds, ...(ID.test(client.id) ? [] : [`${clientKeyPrefix}_CLIENT_ID`]), ...(client.secret.length <= 512 ? [] : [`${clientKeyPrefix}_CLIENT_SECRET`])];
+  if (shapeless.length > 0) return refuse(`the EOS config file has out of shape: ${shapeless.join(', ')}`);
+  // THE ROOM SALT, from its own file (not a founder credential)
+  const saltPath = env[EOS_ROOM_SALT_FILE_ENV]?.trim() ?? '';
+  if (saltPath === '') return refuse(`${EOS_ROOM_SALT_FILE_ENV} is not set (the room salt file)`);
+  let salt: string;
+  try {
+    salt = (read(saltPath).replace(/^﻿/, '').split(/\r?\n/)[0] ?? '').trim();
+  } catch {
+    return refuse('the room salt file could not be read');
+  }
+  if (salt.length < MIN_ENV_SALT || salt.length > 512) return refuse(`the room salt file must hold one line of ${MIN_ENV_SALT} to 512 characters`);
+  log(kind === 'server' ? 'eos voice: client kind server' : 'eos voice: client kind game (fallback): room actions need a Trusted Server policy');
+  return { productId: get('EOS_PRODUCT_ID'), sandboxId: get('EOS_SANDBOX_ID'), deploymentId: get('EOS_DEPLOYMENT_ID'), clientId: client.id, clientSecret: client.secret, roomSalt: salt, clientKind: kind };
 }
 
 /* ------------------------------------------------------------------------------------------------ the minter */

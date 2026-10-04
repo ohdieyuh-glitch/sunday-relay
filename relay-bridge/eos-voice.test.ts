@@ -1,4 +1,7 @@
 import { createHmac, randomBytes } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createInMemorySocialStore, type SocialStore } from '../src/relay/social/social-store';
 import { partyOf } from '../src/relay/social/social-state';
@@ -74,8 +77,87 @@ describe('the EOS config file', () => {
     const loaded = loadEosVoiceConfig(env, { readFile: () => `\uFEFF${JSON.stringify(good)}`, log: (l) => log.push(l) });
     expect(loaded).toEqual(good);
     const all = log.join('\n');
-    for (const secret of [good.clientSecret, good.roomSalt, good.clientId, 'secret-place']) expect(all).not.toContain(secret);
-    expect(all).toContain(hashId(good.deploymentId));
+    for (const secret of [good.clientSecret, good.roomSalt, good.clientId, good.deploymentId, hashId(good.deploymentId), 'secret-place']) expect(all).not.toContain(secret);
+    expect(all).toContain('configured (JSON)');
+  });
+});
+
+/*
+ * THE FOUNDER'S .env (10-04): WONDERLAND_EOS_VOICE_CONFIG may name a KEY=VALUE file; the room salt is a SEPARATE file
+ * (WONDERLAND_EOS_ROOM_SALT_FILE). Every file here is SYNTHETIC, written to a fresh temp directory; values are made at run time.
+ */
+describe('the EOS config as a .env file and a room-salt file', () => {
+  function world(envText: string | ((v: Record<string, string>) => string), salt: string | null = hex(20)) {
+    const dir = mkdtempSync(join(tmpdir(), 'eos-voice-env-'));
+    const v = { product: `prod${hex(4)}`, sandbox: `sbx${hex(4)}`, deployment: `dep${hex(4)}`, serverId: `srv${hex(6)}`, serverSecret: hex(24), gameId: `gam${hex(6)}`, gameSecret: hex(24) };
+    const envPath = join(dir, 'eos.env');
+    writeFileSync(envPath, typeof envText === 'function' ? envText(v) : envText);
+    const saltPath = join(dir, 'room-salt.txt');
+    if (salt !== null) writeFileSync(saltPath, salt);
+    const log: string[] = [];
+    const load = (over: NodeJS.ProcessEnv = {}) => loadEosVoiceConfig({ WONDERLAND_EOS_VOICE_CONFIG: envPath, WONDERLAND_EOS_ROOM_SALT_FILE: saltPath, ...over }, { log: (l) => log.push(l) });
+    const values = () => [v.serverSecret, v.gameSecret, v.serverId, v.gameId, v.product, v.sandbox, v.deployment, ...(salt === null ? [] : [salt.trim()]), dir];
+    return { v, load, log, values, dir, done: () => rmSync(dir, { recursive: true, force: true }) };
+  }
+  const full = (v: Record<string, string>, opts: { server?: boolean; game?: boolean } = { server: true, game: true }) => [
+    ...(opts.server ? [`EOS_SERVER_CLIENT_ID=${v.serverId}`, `EOS_SERVER_CLIENT_SECRET=${v.serverSecret}`] : []),
+    ...(opts.game ? [`EOS_GAME_CLIENT_ID=${v.gameId}`, `EOS_GAME_CLIENT_SECRET=${v.gameSecret}`] : []),
+    `EOS_PRODUCT_ID=${v.product}`, `EOS_SANDBOX_ID=${v.sandbox}`, `EOS_DEPLOYMENT_ID=${v.deployment}`,
+  ];
+
+  it('parses CRLF with a BOM, comments, blank lines, quotes and spaces around "="; unknown keys ignored; the salt from its own file', () => {
+    const salt = `  ${hex(20)}  \r\nsecond line ignored`;
+    const w = world((v) => `\uFEFFEOS_PRODUCT_ID = "${v.product}"\r\n# the founder's EOS file\r\n\r\nEOS_SANDBOX_ID='${v.sandbox}'\r\n  EOS_DEPLOYMENT_ID=${v.deployment}  \r\nSOMETHING_ELSE=whatever\r\nEOS_SERVER_CLIENT_ID = ${v.serverId}\r\nEOS_SERVER_CLIENT_SECRET="${v.serverSecret}"\r\n`, salt);
+    const c = w.load();
+    expect(c).toEqual({ productId: w.v.product, sandboxId: w.v.sandbox, deploymentId: w.v.deployment, clientId: w.v.serverId, clientSecret: w.v.serverSecret, roomSalt: salt.split(/\r?\n/)[0].trim(), clientKind: 'server' });
+    // LF works the same
+    const lf = world((v) => full(v).join('\n'));
+    expect(lf.load()?.clientKind).toBe('server');
+    w.done();
+    lf.done();
+  });
+
+  it('prefers the Trusted Server client; falls back to the Game Client, saying so -- and only the KIND is logged', () => {
+    const both = world((v) => full(v).join('\n'));
+    expect(both.load()).toMatchObject({ clientId: both.v.serverId, clientSecret: both.v.serverSecret, clientKind: 'server' });
+    expect(both.log).toContain('eos voice: client kind server');
+    const gameOnly = world((v) => full(v, { game: true }).join('\n'));
+    expect(gameOnly.load()).toMatchObject({ clientId: gameOnly.v.gameId, clientSecret: gameOnly.v.gameSecret, clientKind: 'game' });
+    expect(gameOnly.log).toContain('eos voice: client kind game (fallback): room actions need a Trusted Server policy');
+    // a half server pair (id, no secret) is not a server client: the game pair is used
+    const half = world((v) => [...full(v, { game: true }), `EOS_SERVER_CLIENT_ID=${v.serverId}`].join('\n'));
+    expect(half.load()?.clientKind).toBe('game');
+    for (const w of [both, gameOnly, half]) {
+      const all = w.log.join('\n');
+      for (const value of w.values()) expect(all, 'a log line carries a config value or path').not.toContain(value);
+      w.done();
+    }
+  });
+
+  it('a missing key, a missing or short salt, or an unreadable file: no minter -- and the log names WHICH key or file, never a value', () => {
+    const cases: Array<[string, (v: Record<string, string>) => string, string | null, NodeJS.ProcessEnv, RegExp]> = [
+      ['no product', (v) => full(v).filter((l) => !l.startsWith('EOS_PRODUCT_ID')).join('\n'), hex(20), {}, /missing EOS_PRODUCT_ID/],
+      ['no sandbox', (v) => full(v).filter((l) => !l.startsWith('EOS_SANDBOX_ID')).join('\n'), hex(20), {}, /missing EOS_SANDBOX_ID/],
+      ['no deployment', (v) => full(v).filter((l) => !l.startsWith('EOS_DEPLOYMENT_ID')).join('\n'), hex(20), {}, /missing EOS_DEPLOYMENT_ID/],
+      ['no client pair at all', (v) => full(v, {}).join('\n'), hex(20), {}, /missing EOS_SERVER_CLIENT_ID \+ EOS_SERVER_CLIENT_SECRET \(or EOS_GAME_CLIENT_ID \+ EOS_GAME_CLIENT_SECRET\)/],
+      ['an empty quoted secret', (v) => [...full(v, {}), `EOS_SERVER_CLIENT_ID=${v.serverId}`, 'EOS_SERVER_CLIENT_SECRET=""'].join('\n'), hex(20), {}, /missing EOS_SERVER_CLIENT_ID/],
+      ['a deployment id out of shape', (v) => [...full(v).filter((l) => !l.startsWith('EOS_DEPLOYMENT_ID')), 'EOS_DEPLOYMENT_ID=a/b'].join('\n'), hex(20), {}, /out of shape: EOS_DEPLOYMENT_ID/],
+      ['a short salt (31 characters)', (v) => full(v).join('\n'), 'x'.repeat(31), {}, /room salt file must hold one line of 32/],
+      ['no salt file', (v) => full(v).join('\n'), null, {}, /room salt file could not be read/],
+      ['the salt variable unset', (v) => full(v).join('\n'), hex(20), { WONDERLAND_EOS_ROOM_SALT_FILE: '' }, /WONDERLAND_EOS_ROOM_SALT_FILE is not set/],
+    ];
+    for (const [label, text, salt, over, why] of cases) {
+      const w = world(text, salt);
+      expect(w.load(over), label).toBeNull();
+      expect(w.log.join('\n'), label).toMatch(why);
+      for (const value of w.values()) expect(w.log.join('\n'), `${label}: a value or path in the log`).not.toContain(value);
+      w.done();
+    }
+    const gone = world((v) => full(v).join('\n'));
+    expect(gone.load({ WONDERLAND_EOS_VOICE_CONFIG: join(gone.dir, 'nope.env') })).toBeNull();
+    expect(gone.log.join('\n')).toMatch(/the EOS config file could not be read/);
+    expect(gone.log.join('\n')).not.toContain(gone.dir);
+    gone.done();
   });
 });
 
