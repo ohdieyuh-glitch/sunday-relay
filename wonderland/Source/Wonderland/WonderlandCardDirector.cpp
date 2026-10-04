@@ -147,18 +147,22 @@ namespace
 		return A.bChosen == B.bChosen && (!A.bChosen || A.Colour.Equals(B.Colour, 0.0005f));
 	}
 
-	/** A channel as a person reads it: DEFAULT, a palette name when the colour is one, else r,g,b. */
+	/** A channel as a person reads it: DEFAULT, a palette name when the colour is one (the PRIMARY/STRIPS rows' palette, then the
+	 *  SECONDARY row's shared one), else r,g,b. */
 	FString CardColourWord(const FWonderlandCardColour& Channel)
 	{
 		if (!Channel.bChosen)
 		{
 			return TEXT("DEFAULT");
 		}
-		for (const TPair<FName, FLinearColor>& Swatch : WonderlandMascotStyle::PrimaryPalette())
+		for (const TArray<TPair<FName, FLinearColor>>* Swatches : { &WonderlandMascotStyle::PrimaryPalette(), &WonderlandMascotStyle::Palette() })
 		{
-			if (!Swatch.Key.ToString().Equals(TEXT("DEFAULT"), ESearchCase::IgnoreCase) && Swatch.Value.Equals(Channel.Colour, 0.0005f))
+			for (const TPair<FName, FLinearColor>& Swatch : *Swatches)
 			{
-				return Swatch.Key.ToString();
+				if (!Swatch.Key.ToString().Equals(TEXT("DEFAULT"), ESearchCase::IgnoreCase) && Swatch.Value.Equals(Channel.Colour, 0.0005f))
+				{
+					return Swatch.Key.ToString();
+				}
 			}
 		}
 		return FString::Printf(TEXT("%.2f,%.2f,%.2f"), Channel.Colour.R, Channel.Colour.G, Channel.Colour.B);
@@ -473,6 +477,15 @@ namespace WonderlandCardDirector
 			*OutWhat = FString::Join(What, TEXT("; "));
 		}
 		return What.Num() > 0;
+	}
+
+	FString DescribeColour(const FWonderlandCardColour& Channel)
+	{
+		if (!Channel.bRecorded)
+		{
+			return TEXT("NOT SAVED");
+		}
+		return Channel.bChosen ? CardColourWord(Channel).ToUpper() : FString(TEXT("AS DESIGNED"));
 	}
 
 	bool SaveLiveToActive(UWorld* World, FString& OutSaid)

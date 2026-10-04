@@ -43,6 +43,11 @@ struct FWonderlandCardView
 	/** The skin's display name, and the primary as the card holds it ("WHITE", or "AS DESIGNED"). */
 	FString Skin;
 	FString Primary;
+	/** COLOR 2 (accents, the status eyes, Shadow Flame's marbling), COLOR 3 (the strips) and the flame, as the card holds them:
+	 *  "NOT SAVED" (never recorded on this card), "AS DESIGNED", a palette name or r,g,b (WonderlandCardDirector::DescribeColour). */
+	FString Colour2;
+	FString Colour3;
+	FString Flame;
 	bool bModified = false;
 	FString ModifiedWhat;
 	/** The director's envelope: which companions wait, and why (a mission running, the runtime offline). */

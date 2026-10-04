@@ -3564,6 +3564,11 @@ namespace
 		FLinearColor Body, BodyRim, Deep, Strip, StripRim, Visor, Edge, Eye;
 		FString BodyRelief, StripRelief;
 		bool bRead = false;
+		/** COLOR 2 (10-04): the body's two-colour marble, read off the map it is wearing (QaReadMarble), if it wears one. */
+		bool bMarble = false;
+		FLinearColor MarbleCells, MarbleVeins, MarbleDrawnCells, MarbleDrawnVeins;
+		float MarblePeakDrawn = -1.0f;
+		float MarblePeakAsked = -1.0f;
 	};
 
 	struct FQaColorways
@@ -3603,7 +3608,31 @@ namespace
 			&& Costume->QaReadPaint(FName(TEXT("visor")), P.Visor, Unused, NoRelief)
 			&& Costume->QaReadPaint(FName(TEXT("voidedge")), P.Edge, Unused, NoRelief)
 			&& Costume->QaReadPaint(FName(TEXT("eye")), P.Eye, Unused, NoRelief);
+		P.bMarble = Costume->QaReadMarble(FName(TEXT("bone")), P.MarbleCells, P.MarbleVeins, P.MarbleDrawnCells, P.MarbleDrawnVeins,
+			P.MarblePeakDrawn, P.MarblePeakAsked);
 		return P;
+	}
+
+	/** COLOR 2 (10-04): the body wears the two-colour marble -- its map drawn for exactly these cells and veins, its pixels come out
+	 *  as them (within a byte at its peak), and BaseColor is that peak. */
+	bool QaCwMarbleIs(const FQaCwPaint& P, const FLinearColor& Cells, const FLinearColor& Veins)
+	{
+		const float Byte = FMath::Max(P.MarblePeakAsked, 1e-4f) / 255.0f;
+		auto Within = [](const FLinearColor& A, const FLinearColor& B, float Tolerance)
+		{
+			return FMath::Abs(A.R - B.R) <= Tolerance && FMath::Abs(A.G - B.G) <= Tolerance && FMath::Abs(A.B - B.B) <= Tolerance;
+		};
+		return P.bMarble && Within(P.MarbleCells, Cells, 0.0005f) && Within(P.MarbleVeins, Veins, 0.0005f)
+			&& Within(P.MarbleDrawnCells, Cells, Byte * 0.75f) && Within(P.MarbleDrawnVeins, Veins, Byte * 0.75f)
+			&& FMath::Abs(P.MarblePeakDrawn - P.MarblePeakAsked) <= 0.0005f;
+	}
+
+	FString QaCwMarbleText(const FQaCwPaint& P)
+	{
+		return P.bMarble
+			? FString::Printf(TEXT("marble cells %s veins %s (drawn %s / %s) at peak %.4f (asked %.4f)"), *QaRgb(P.MarbleCells), *QaRgb(P.MarbleVeins),
+				*QaRgb(P.MarbleDrawnCells), *QaRgb(P.MarbleDrawnVeins), P.MarblePeakDrawn, P.MarblePeakAsked)
+			: FString(TEXT("no marble"));
 	}
 
 	const TPair<FName, FLinearColor>* QaSharedSwatch(const TCHAR* Key)
@@ -3697,7 +3726,24 @@ namespace
 		const FLinearColor WantDeep = bBodyDefault ? DesignedDeep : PickBody * 0.62f;
 		const FLinearColor WantStrip = bStripDefault ? DesignedStrip
 			: (WonderlandMascotStyle::SmokeStripRelief() ? WonderlandMascotStyle::SmokeBaseFor(PickStrip, false) : PickStrip);
-		QaCwCheck(S, TEXT("K1"), QaExact(P.Body, WantBody), FString::Printf(TEXT("%s: the body painted %s, want %s exactly"), *Tag, *QaRgb(P.Body), *QaRgb(WantBody)));
+		// COLOR 2 (founder, 2026-10-04: "COLOR 2 = secondary/accent/marbling"): a step with a SECONDARY picked paints the body's VEINS
+		// with it over COLOR 1's own cells (the two-colour marble); every other step wears no marble and the body is the pick exactly
+		const TPair<FName, FLinearColor>* EyesSwatch = Step.Eyes != nullptr ? QaSharedSwatch(Step.Eyes) : nullptr;
+		const bool bSmokeBody = !bBodyDefault || WonderlandMascotStyle::SmokeOnDefault();
+		if (EyesSwatch != nullptr && bSmokeBody)
+		{
+			const FLinearColor WantCells = bBodyDefault ? WonderlandMascotStyle::SmokeMarbleCellsFor(DesignedBody, true)
+				: WonderlandMascotStyle::SmokeMarbleCellsFor(PickBody, false);
+			QaCwCheck(S, TEXT("K1"), QaCwMarbleIs(P, WantCells, EyesSwatch->Value),
+				FString::Printf(TEXT("%s: the body wears %s; want the marble cells %s (COLOR 1's own) and veins %s (COLOR 2) exactly"), *Tag,
+					*QaCwMarbleText(P), *QaRgb(WantCells), *QaRgb(EyesSwatch->Value)));
+		}
+		else
+		{
+			QaCwCheck(S, TEXT("K1"), QaExact(P.Body, WantBody) && !P.bMarble,
+				FString::Printf(TEXT("%s: the body painted %s, want %s exactly; %s (want none: no secondary picked)"), *Tag, *QaRgb(P.Body), *QaRgb(WantBody),
+					*QaCwMarbleText(P)));
+		}
 		QaCwCheck(S, TEXT("K2"), QaExact(P.Deep, FLinearColor(WantDeep.R, WantDeep.G, WantDeep.B)),
 			FString::Printf(TEXT("%s: the deep coat %s, want %s (the same pick, deeper)"), *Tag, *QaRgb(P.Deep), *QaRgb(WantDeep)));
 		QaCwCheck(S, TEXT("K3"), QaExact(P.Strip, WantStrip), FString::Printf(TEXT("%s: the strips painted %s, want %s exactly"), *Tag, *QaRgb(P.Strip), *QaRgb(WantStrip)));
@@ -3899,11 +3945,14 @@ namespace
 				const FString PrimaryOn = QaCwRings(false, PrimaryRings);
 				const FString StripOn = QaCwRings(true, StripRings);
 				const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+				// the crimson body's marble came back too: COLOR 1's cells, the obsidian secondary's veins (COLOR 2, 10-04)
+				const bool bBody = Crimson != nullptr && Obsidian != nullptr
+					&& QaCwMarbleIs(P, WonderlandMascotStyle::SmokeMarbleCellsFor(Crimson->Value, false), Obsidian->Value);
 				const bool bOk = P.bRead && D->GetWornSkinId() == FName(TEXT("shadow_flame")) && Crimson != nullptr && White != nullptr && Obsidian != nullptr
-					&& QaExact(P.Body, Crimson->Value) && QaExact(P.Strip, White->Value) && Style.Secondary.Equals(Obsidian->Value, 0.002f)
+					&& bBody && QaExact(P.Strip, White->Value) && Style.Secondary.Equals(Obsidian->Value, 0.002f)
 					&& PrimaryOn == TEXT("CRIMSON") && StripOn == TEXT("WHITE") && P.BodyRelief != TEXT("none");
-				QaCwCheck(S, TEXT("K9"), bOk, FString::Printf(TEXT("after a restart: wears '%s', body %s, strips %s, secondary %s, rings PRIMARY %s STRIPS %s, relief %s (want shadow_flame, crimson, white, obsidian)"),
-					*D->GetWornSkinId().ToString(), *QaRgb(P.Body), *QaRgb(P.Strip), *QaRgb(Style.Secondary), *PrimaryOn, *StripOn, *P.BodyRelief));
+				QaCwCheck(S, TEXT("K9"), bOk, FString::Printf(TEXT("after a restart: wears '%s', body %s, strips %s, secondary %s, rings PRIMARY %s STRIPS %s, relief %s (want shadow_flame, crimson marbled obsidian, white, obsidian)"),
+					*D->GetWornSkinId().ToString(), *QaCwMarbleText(P), *QaRgb(P.Strip), *QaRgb(Style.Secondary), *PrimaryOn, *StripOn, *P.BodyRelief));
 				QaShadowCamera(S.View, World, PC, D, 35.0, 230.0);
 				Next(51);
 			}

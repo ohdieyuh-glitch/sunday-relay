@@ -85,6 +85,7 @@ namespace WonderlandBrainLook
 	{
 		FString Out = Tab.ToString();
 		Out += View.ActiveId + TEXT("|") + View.HandoffState + TEXT("|") + View.Skin + TEXT("|") + View.Primary + TEXT("|") + View.ModifiedWhat + TEXT("|") + View.Waiting;
+		Out += TEXT("|") + View.Colour2 + TEXT("|") + View.Colour3 + TEXT("|") + View.Flame;
 		Out += View.bModified ? TEXT("|M") : TEXT("|-");
 		for (const TArray<FWonderlandCardViewRef>* Set : { &View.Companions, &View.Capabilities })
 		{
@@ -2193,6 +2194,10 @@ void SWonderlandProjectBrainPanel::RebuildCardPage()
 	{
 		Add(Line(FString::Printf(TEXT("SKIN  %s"), *V.Skin.ToUpper()), Font("Bold", 13, 80), BrainInk()), 16.0f);
 		Add(Line(FString::Printf(TEXT("PRIMARY  %s"), *V.Primary), Font("Bold", 13, 80), BrainInk()), 6.0f);
+		// COLOR 2 AND COLOR 3 AND THE FLAME, as this card holds them (founder, 2026-10-04: the three colours through the C.A.R.D.)
+		Add(Line(FString::Printf(TEXT("COLOR 2 · ACCENTS / MARBLING  %s"), *V.Colour2), Font("Bold", 10, 80), BrainInk(0.9f)), 6.0f);
+		Add(Line(FString::Printf(TEXT("COLOR 3 · STRIPS  %s"), *V.Colour3), Font("Bold", 10, 80), BrainInk(0.9f)), 4.0f);
+		Add(Line(FString::Printf(TEXT("FLAME  %s"), *V.Flame), Font("Bold", 10, 80), BrainInk(0.9f)), 4.0f);
 		Add(SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth()
 			[

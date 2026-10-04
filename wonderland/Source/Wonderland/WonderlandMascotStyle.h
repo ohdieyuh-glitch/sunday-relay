@@ -198,6 +198,8 @@ public:
  */
 enum class EWonderlandColorChannel : uint8 { None, Body, Eye };
 
+class UTexture;
+
 namespace WonderlandMascotStyle
 {
 	/** True when a part, material or component of this name is one of the Dog's eyes rather than its body. */
@@ -344,6 +346,26 @@ namespace WonderlandMascotStyle
 	 * marbled with darker shades of itself). Writes BaseColor, the tone map, the relief, the roughness and the glow.
 	 */
 	WONDERLAND_API void ApplySmokeLook(UMaterialInstanceDynamic* Instance, const FLinearColor& Pick, bool bDesignedBody);
+	/**
+	 * COLOR 2 ON THE SMOKE BODY: THE MARBLING (founder, 2026-10-04: "COLOR 1 = body/base, COLOR 2 = secondary/accent/marbling,
+	 * COLOR 3 = strips/ribbons/tendrils ... body white + marbling blue + strips red").
+	 *
+	 * ApplySmokeLook's marble is ONE colour at two depths: the cells are a shade of the veins. This is the same marble -- the same
+	 * field, the same profile's floor and power, so exactly the same cells for COLOR 1 -- with the VEINS painted the chosen
+	 * SECONDARY, exactly. M_WLMaster draws BaseColor x AlbedoTex, so the two colours ride in a map drawn at run time (linear,
+	 * divided by the brighter colour's peak so a dark pick keeps its precision) and BaseColor carries that peak back. The caller
+	 * paints only the BODY with it: the strips are COLOR 3's and never take COLOR 2.
+	 */
+	WONDERLAND_API void ApplySmokeMarble(UMaterialInstanceDynamic* Instance, const FLinearColor& Pick, bool bDesignedBody, const FLinearColor& Veins);
+	/** The cells ApplySmokeMarble paints for this COLOR 1 (the profile's base at its tone floor), for the QA's comparison. */
+	WONDERLAND_API FLinearColor SmokeMarbleCellsFor(const FLinearColor& Pick, bool bDesignedBody);
+	/**
+	 * What a two-colour marble map was drawn FOR (its cells and veins, and the peak BaseColor carries) and what its pixels actually
+	 * CAME OUT as (the deepest cell's and the brightest vein's texel, decoded at that peak), or false when the texture is no marble.
+	 * For the QA: a surface is read back by the map it is wearing, never by what was asked of it.
+	 */
+	WONDERLAND_API bool SmokeMarbleOf(const UTexture* Texture, FLinearColor& OutCells, FLinearColor& OutVeins, float& OutScale,
+		FLinearColor& OutDrawnCells, FLinearColor& OutDrawnVeins);
 	/** The base colour ApplySmokeLook paints for this pick: the pick itself, the designed body's vein blue, or a dark pick's grey. */
 	WONDERLAND_API FLinearColor SmokeBaseFor(const FLinearColor& Pick, bool bDesignedBody);
 	/** The profile ApplySmokeLook uses for this pick, by name (designed / light / dark / colour), for the QA's log. */

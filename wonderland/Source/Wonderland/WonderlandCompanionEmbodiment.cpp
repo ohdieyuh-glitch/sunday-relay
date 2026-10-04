@@ -1675,6 +1675,33 @@ bool AWonderlandCompanionEmbodiment::QaReadPaint(FName Name, FLinearColor& OutBa
 	return false;
 }
 
+bool AWonderlandCompanionEmbodiment::QaReadMarble(FName Name, FLinearColor& OutCells, FLinearColor& OutVeins, FLinearColor& OutDrawnCells,
+	FLinearColor& OutDrawnVeins, float& OutPeakDrawn, float& OutPeakAsked) const
+{
+	OutCells = OutVeins = OutDrawnCells = OutDrawnVeins = FLinearColor(-1.0f, -1.0f, -1.0f, 1.0f);
+	OutPeakDrawn = OutPeakAsked = -1.0f;
+	for (int32 Index = 0; Index < BuiltMaterials.Num(); ++Index)
+	{
+		if (BuiltMaterials[Index].Name != Name || !MaterialInstances.IsValidIndex(Index) || MaterialInstances[Index] == nullptr)
+		{
+			continue;
+		}
+		UMaterialInstanceDynamic* Instance = MaterialInstances[Index];
+		UTexture* Tone = nullptr;
+		if (!Instance->GetTextureParameterValue(FMaterialParameterInfo(TEXT("AlbedoTex")), Tone) || Tone == nullptr
+			|| !WonderlandMascotStyle::SmokeMarbleOf(Tone, OutCells, OutVeins, OutPeakAsked, OutDrawnCells, OutDrawnVeins))
+		{
+			return false;
+		}
+		// THE PEAK THE SURFACE IS ACTUALLY DRAWN AT: its own BaseColor (grey -- the colours ride in the map), read off the instance
+		FLinearColor Base = FLinearColor::Black;
+		Instance->GetVectorParameterValue(FMaterialParameterInfo(TEXT("BaseColor")), Base);
+		OutPeakDrawn = Base.R;
+		return true;
+	}
+	return false;
+}
+
 FString AWonderlandCompanionEmbodiment::DescribeFramingParts() const
 {
 	// WHICH PARTS THE FRAMING BOX IS ACTUALLY MADE OF, and where each one sits.
@@ -2202,7 +2229,17 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 				{
 					// the base by the colour's profile (the pick exactly, or the designed vein blue, or a dark pick's smoke grey),
 					// its tone map, the relief and a light pick's glow
-					WonderlandMascotStyle::ApplySmokeLook(Instance, Want, bDesignedBody);
+					// COLOR 2, THE MARBLING (founder, 2026-10-04: "COLOR 2 = secondary/accent/marbling"): a chosen SECONDARY paints the
+					// BODY's veins over COLOR 1's own cells -- never the strips, which are COLOR 3's alone, and only on a real choice
+					// (HasChosenSecondary), so DEFAULT keeps the profile's one-colour marble exactly as before
+					if (!bStrip && BodyRole == EWonderlandBodyRole::Mascot && Style.HasChosenSecondary())
+					{
+						WonderlandMascotStyle::ApplySmokeMarble(Instance, Want, bDesignedBody, Style.Secondary);
+					}
+					else
+					{
+						WonderlandMascotStyle::ApplySmokeLook(Instance, Want, bDesignedBody);
+					}
 				}
 				else
 				{

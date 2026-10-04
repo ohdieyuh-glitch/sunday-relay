@@ -63,6 +63,9 @@ namespace WonderlandCardView
 			}
 		}
 		View.Primary = Card.Primary.bChosen && !Card.Primary.Key.Equals(TEXT("DEFAULT"), ESearchCase::IgnoreCase) ? Card.Primary.Key.ToUpper() : FString(TEXT("AS DESIGNED"));
+		View.Colour2 = WonderlandCardDirector::DescribeColour(Card.Secondary);
+		View.Colour3 = WonderlandCardDirector::DescribeColour(Card.Strips);
+		View.Flame = WonderlandCardDirector::DescribeColour(Card.Flame);
 		View.bModified = WonderlandCardDirector::IsModified(World, &View.ModifiedWhat);
 		View.Waiting = WonderlandCardDirector::DescribeWaiting();
 
