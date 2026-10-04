@@ -63,6 +63,7 @@ namespace WonderlandSocialJson
 		}
 		Out.UserId = Str(J, TEXT("userId"));
 		Out.OnlineState = Str(J, TEXT("onlineState"));
+		Out.Availability = Str(J, TEXT("availability"));
 		Out.Headline = Str(J, TEXT("headline"));
 		Out.bHasActivity = J->TryGetStringField(TEXT("activityLabel"), Out.ActivityLabel);
 		const TSharedPtr<FJsonObject> Loc = Obj(J, TEXT("location"));

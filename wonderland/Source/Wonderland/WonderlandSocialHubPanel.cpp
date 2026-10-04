@@ -361,9 +361,10 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeRail()
 
 FString SWonderlandSocialHubPanel::OwnAvailability() const
 {
-	// the player's OWN presence as the server reads it back (snapshot.self): ONLINE is AVAILABLE; OFFLINE while signed in is APPEAR OFFLINE
-	const FString& State = Snapshot.Self.Presence.OnlineState;
-	return State == TEXT("ONLINE") ? FString(TEXT("AVAILABLE")) : State == TEXT("OFFLINE") ? FString(TEXT("APPEAR_OFFLINE")) : State;
+	// the player's OWN choice, exactly as the server keeps it (snapshot.self.presence.availability, the self view only). NOT onlineState:
+	// the server shows a player ONLINE to themselves even while they appear offline, and OFFLINE when not connected (Second's review of
+	// 9aab89c2) -- a map from it would show the wrong choice. Absent (an older backend): no button is selected.
+	return Snapshot.Self.Presence.Availability;
 }
 
 TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeTabButton(ETab Which, const FString& Label, const FString& Count)

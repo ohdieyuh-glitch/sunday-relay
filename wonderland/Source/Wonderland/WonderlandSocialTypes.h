@@ -46,6 +46,9 @@ struct FWonderlandSocialPresence
 	FString UserId;
 	/** ONLINE, AWAY, BUSY, OFFLINE */
 	FString OnlineState;
+	/** The player's OWN presence choice -- AVAILABLE, AWAY, BUSY, APPEAR_OFFLINE -- present ONLY in their own (self) view (Second's
+	 *  backend: every other viewer's presence of them has no such key). Empty = not told (an older backend): no choice is shown. */
+	FString Availability;
 	/** The founder's one-line headline: IN GVE, CREATING, WORKING WITH JULIUS, OFFLINE … */
 	FString Headline;
 	bool bHasActivity = false;
