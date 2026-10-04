@@ -238,6 +238,10 @@ public:
 		QaRuleCommonPw = 1u << 21,    // a common weak password after "is" at a clause's end ("the password is secret!"), weak
 		QaRuleParticle = 1u << 22,    // a label in another script with its particle, then a space, then the value
 		QaRuleNameWeak = 1u << 23,    // a NAME inside the noun phrase held, and taken weak (keep-able) only when no value follows
+		// r9 (Second's attack on r8, 10-04)
+		QaRuleMarkerAtomic = 1u << 24, // a redaction marker is never cut by a window boundary (off: r8, a split marker re-redacted, nested)
+		QaRuleCrossWindow = 1u << 25,  // a certain value found in one window redacted wherever it stands on a long line (off: r8, per window)
+		QaRuleHeredoc = 1u << 26,      // a heredoc / here-string feeding a password reader ("cat <<EOF | passwd --stdin", "passwd --stdin <<< X")
 	};
 	static uint32& QaRulesOff() { static uint32 Off = 0; return Off; }
 	/** A line as it may be SHOWN: every word that holds a secret replaced; a line whose secret no single word shows ("Bearer" and its

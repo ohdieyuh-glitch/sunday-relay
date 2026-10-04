@@ -15187,6 +15187,94 @@ namespace
 					bControlBack ? TEXT("yes") : TEXT("no"), bControlReadable ? TEXT("yes") : TEXT("no")));
 		}
 
+		// SI34-SI36 (r9): SECOND'S ATTACK ON r8 (card_second/r8_attack, 10-04) -- one check per r9 rule, each with its planted control. The lines
+		// join SI12's sweep below (screened twice equal screened once)
+		const FString R9Value = FString(TEXT("Hx7!q")) + TEXT("Pw2zL");
+		FString R9MarkerLine;
+		for (int32 R9Piece = 0; R9Piece < 814; ++R9Piece)
+		{
+			R9MarkerLine += TEXT("word ");
+		}
+		R9MarkerLine += FString(TEXT("the password is ")) + R9Value + TEXT(" ");
+		for (int32 R9Piece = 0; R9Piece < 40; ++R9Piece)
+		{
+			R9MarkerLine += TEXT("filler ");
+		}
+		FString R9CrossLine = FString(TEXT("password: ")) + R9Value + TEXT(" ");
+		for (int32 R9Piece = 0; R9Piece < 900; ++R9Piece)
+		{
+			R9CrossLine += TEXT("word ");
+		}
+		const int32 R9CrossGap = R9CrossLine.Len() - 10;
+		R9CrossLine += FString(TEXT("also ")) + R9Value;
+		const TArray<FString> R9HeredocLines = {
+			FString(TEXT("cat <<EOF | passwd --stdin\n")) + R9Value + TEXT("\nEOF"),
+			FString(TEXT("cat <<'EOF' | chpasswd\nbob:")) + R9Value + TEXT("\nEOF"),
+			FString(TEXT("passwd --stdin <<< ")) + R9Value,
+			FString(TEXT("docker login --password-stdin <<< ")) + R9Value };
+		const FString R9HeredocClean = TEXT("cat notes.txt | wc -l");
+
+		// SI34 (r9): A MARKER ON A WINDOW CUT STAYS WHOLE -- a line past 4,096 characters whose value, once redacted, puts the marker across the
+		// first window's cut: masked twice must equal masked once, with no marker nested in another (r8 cut the marker at its own spaces, and a
+		// second screen nested a new one in it, growing the line on every re-render). THE CONTROL: the atomic markers off, the line changes
+		{
+			const FString MaskOnce = FWonderlandCardStore::MaskForDisplay(R9MarkerLine);
+			const FString MaskTwice = FWonderlandCardStore::MaskForDisplay(MaskOnce);
+			const bool bStable = MaskOnce.Equals(MaskTwice, ESearchCase::CaseSensitive);
+			const bool bNoNest = !MaskTwice.Contains(TEXT("[a [a"), ESearchCase::CaseSensitive)
+				&& MaskTwice.Contains(Marker, ESearchCase::CaseSensitive) && !MaskTwice.Contains(R9Value, ESearchCase::CaseSensitive);
+			FWonderlandCardStore::QaRulesOff() = FWonderlandCardStore::QaRuleMarkerAtomic;
+			const FString ControlOnce = FWonderlandCardStore::MaskForDisplay(R9MarkerLine);
+			const FString ControlTwice = FWonderlandCardStore::MaskForDisplay(ControlOnce);
+			FWonderlandCardStore::QaRulesOff() = 0;
+			const bool bControl = !ControlOnce.Equals(ControlTwice, ESearchCase::CaseSensitive);
+			S.Check(TEXT("SI34"), bStable && bNoNest && bControl,
+				FString::Printf(TEXT("a line of %d characters with a marker on a window cut: masked twice equals masked once %s, no nested marker %s; the CONTROL (the atomic markers off): %s"),
+					R9MarkerLine.Len(), bStable ? TEXT("yes") : TEXT("NO"), bNoNest ? TEXT("yes") : TEXT("NO"),
+					bControl ? TEXT("not idempotent, as it must") : TEXT("stayed idempotent (BLIND control)")));
+		}
+
+		// SI35 (r9): A STRONG VALUE REPEATED PAST A WINDOW -- "password: X", ~4,500 characters of words, "also X": X redacted in BOTH places (r8's
+		// every-occurrence ran per window, so the second X stayed on screen). THE CONTROL: the cross-window hunt off, the second X shows
+		{
+			const FString Masked = FWonderlandCardStore::MaskForDisplay(R9CrossLine);
+			const bool bBoth = !Masked.Contains(R9Value, ESearchCase::CaseSensitive);
+			FWonderlandCardStore::QaRulesOff() = FWonderlandCardStore::QaRuleCrossWindow;
+			const FString ControlMasked = FWonderlandCardStore::MaskForDisplay(R9CrossLine);
+			FWonderlandCardStore::QaRulesOff() = 0;
+			const bool bControl = ControlMasked.Contains(R9Value, ESearchCase::CaseSensitive);
+			S.Check(TEXT("SI35"), bBoth && bControl,
+				FString::Printf(TEXT("a strong value repeated %d characters on: redacted in both places %s; the CONTROL (the cross-window hunt off): the second %s"),
+					R9CrossGap, bBoth ? TEXT("yes") : TEXT("NO"), bControl ? TEXT("shows, as it must") : TEXT("is still redacted (BLIND control)")));
+		}
+
+		// SI36 (r9): A HEREDOC OR HERE-STRING INTO A PASSWORD READER -- "cat <<EOF | passwd --stdin" + body, "cat <<'EOF' | chpasswd" + "bob:X",
+		// "passwd --stdin <<< X", "docker login --password-stdin <<< X": X redacted, the screen idempotent on each; "cat notes.txt | wc -l"
+		// untouched. THE CONTROL: the heredoc rule off, the forms leak
+		{
+			int32 FormsClean = 0;
+			int32 FormsLeakOff = 0;
+			for (const FString& Form : R9HeredocLines)
+			{
+				const FString MaskOnce = FWonderlandCardStore::MaskForDisplay(Form);
+				if (!MaskOnce.Contains(R9Value, ESearchCase::CaseSensitive) && MaskOnce.Equals(FWonderlandCardStore::MaskForDisplay(MaskOnce), ESearchCase::CaseSensitive))
+				{
+					++FormsClean;
+				}
+				FWonderlandCardStore::QaRulesOff() = FWonderlandCardStore::QaRuleHeredoc;
+				if (FWonderlandCardStore::MaskForDisplay(Form).Contains(R9Value, ESearchCase::CaseSensitive))
+				{
+					++FormsLeakOff;
+				}
+				FWonderlandCardStore::QaRulesOff() = 0;
+			}
+			const bool bCleanUntouched = FWonderlandCardStore::MaskForDisplay(R9HeredocClean).Equals(R9HeredocClean, ESearchCase::CaseSensitive);
+			S.Check(TEXT("SI36"), FormsClean == R9HeredocLines.Num() && bCleanUntouched && FormsLeakOff > 0,
+				FString::Printf(TEXT("a heredoc / here-string into a password reader: %d of %d forms redacted and idempotent, 'cat notes.txt | wc -l' untouched %s; the CONTROL (the heredoc rule off): %d of %d forms leak%s"),
+					FormsClean, R9HeredocLines.Num(), bCleanUntouched ? TEXT("yes") : TEXT("NO"), FormsLeakOff, R9HeredocLines.Num(),
+					FormsLeakOff > 0 ? TEXT(", as they must") : TEXT(" (BLIND control)")));
+		}
+
 		// SI26 (r8): THE SCREEN IS LINEAR (Second's r7 (A): a 2.8k-character line of backslash-wrapped words took ~3 s in its port, every value
 		// searched for in every word). The worst line -- "password:" and 1,500 wrapped words, ~6,000 characters -- and a line of 600 distinct
 		// values, each against a PLAIN line of the same length, through MaskForDisplay (the terminal's door), best of three. Within 60 ms and 4x
@@ -15380,6 +15468,11 @@ namespace
 			EveryLine.Add(Line);
 		}
 		EveryLine.Add(PemTyped);
+		// r9: the long lines and the heredocs of SI34-SI36
+		EveryLine.Add(R9MarkerLine);
+		EveryLine.Add(R9CrossLine);
+		EveryLine.Append(R9HeredocLines);
+		EveryLine.Add(R9HeredocClean);
 		int32 NotIdempotent = 0;
 		FString FirstNotIdempotent;
 		for (const FString& Line : EveryLine)
