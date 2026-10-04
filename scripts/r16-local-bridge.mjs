@@ -2,8 +2,13 @@
 /**
  * R16 LOCAL REHEARSAL: the MAIN-LINE bridge on loopback, on a THROWAWAY database, with Wonderland social switched on.
  *
- *   node scripts/r16-local-bridge.mjs --db postgresql://postgres@127.0.0.1:54329/sw_r16_<n> --port <p>
+ *   node scripts/r16-local-bridge.mjs --db postgresql://postgres@127.0.0.1:<pg port>/sw_r16_<n> --port <p>
  *        ( --client-id-file <path>  |  --github-stub http://127.0.0.1:<port> )  [--tap <file>] [--no-build]
+ *        [--eos-config <path to the founder's EOS .env>] [--room-salt-file <path outside the checkout>]
+ *   The PostgreSQL port is R16_THROWAWAY_PG_PORT (default 54329), as the stub fence and the migrate helper read it.
+ *   --eos-config is passed to the bridge as WONDERLAND_EOS_VOICE_CONFIG: only its existence is checked here, never its content,
+ *   and a path under .iwonder-secrets is never printed. --room-salt-file is created once (32 random bytes, hex) if absent,
+ *   never overwritten, refused inside this checkout, and passed as WONDERLAND_EOS_ROOM_SALT_FILE.
  *
  * What it refuses, before anything runs:
  *   - any database but the portable test PostgreSQL's sw_r16_<n> on 127.0.0.1:54329 -- never Julius's live store;
@@ -18,17 +23,40 @@
  * that database (scripts/r16-migrate-throwaway.ts) -> run the bridge in the foreground until Ctrl+C.
  */
 import { spawnSync, spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const R16_THROWAWAY_DATABASE = /^postgresql:\/\/postgres@127\.0\.0\.1:54329\/sw_r16_\d{1,6}$/;
+/** The checkout this launcher lives in: nothing it generates may be written inside it. */
+export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * The throwaway PostgreSQL port: R16_THROWAWAY_PG_PORT (unset or empty = 54329, CORE's default), the same rule as the stub
+ * fence (relay-bridge/wonderland-github-stub-seam.ts) and the migrate helper -- an unprivileged port, never 5432.
+ */
+export function throwawayPgPort(env = process.env) {
+  const raw = (env.R16_THROWAWAY_PG_PORT ?? '').trim();
+  if (raw === '') return 54329;
+  const port = /^\d{4,5}$/.test(raw) ? Number(raw) : Number.NaN;
+  if (!Number.isInteger(port) || port < 1024 || port > 65535 || port === 5432) {
+    throw new Error('R16_THROWAWAY_PG_PORT must be an unprivileged loopback port other than 5432');
+  }
+  return port;
+}
+
+/** The only database the rehearsal may use: 127.0.0.1 on the throwaway port, a database named sw_r16_<n>. */
+export function throwawayDatabase(env = process.env) {
+  return new RegExp(`^postgresql://postgres@127\\.0\\.0\\.1:${throwawayPgPort(env)}/sw_r16_\\d{1,6}$`);
+}
+
+/** CORE's default fence, unchanged: 127.0.0.1:54329, sw_r16_<n>. */
+export const R16_THROWAWAY_DATABASE = throwawayDatabase({});
 const STUB_URL = /^http:\/\/127\.0\.0\.1:(\d{4,5})\/?$/;
 
-export function parseArgs(argv) {
-  const out = { db: null, port: null, clientIdFile: null, githubStub: null, tap: null, build: true };
+export function parseArgs(argv, env = process.env) {
+  const out = { db: null, port: null, clientIdFile: null, githubStub: null, tap: null, build: true, eosConfig: null, roomSaltFile: null, pgPort: throwawayPgPort(env) };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = () => {
@@ -43,23 +71,35 @@ export function parseArgs(argv) {
     else if (flag === '--github-stub') out.githubStub = value();
     else if (flag === '--tap') out.tap = value();
     else if (flag === '--no-build') out.build = false;
+    else if (flag === '--eos-config') out.eosConfig = value();
+    else if (flag === '--room-salt-file') out.roomSaltFile = value();
     else throw new Error(`unknown argument ${flag}`);
   }
-  if (out.db === null || !R16_THROWAWAY_DATABASE.test(out.db)) {
-    throw new Error('--db must be postgresql://postgres@127.0.0.1:54329/sw_r16_<n> (the throwaway rehearsal database, nothing else)');
+  if (out.db === null || !throwawayDatabase(env).test(out.db)) {
+    throw new Error(`--db must be postgresql://postgres@127.0.0.1:${out.pgPort}/sw_r16_<n> (the throwaway rehearsal database, nothing else)`);
   }
-  if (!Number.isInteger(out.port) || out.port < 1024 || out.port > 65535 || out.port === 54329) throw new Error('--port must be 1024-65535 (not the database port)');
+  if (!Number.isInteger(out.port) || out.port < 1024 || out.port > 65535 || out.port === out.pgPort) throw new Error('--port must be 1024-65535 (not the database port)');
   if ((out.clientIdFile === null) === (out.githubStub === null)) throw new Error('give exactly one of --client-id-file or --github-stub');
   if (out.githubStub !== null && !STUB_URL.test(out.githubStub)) throw new Error('--github-stub must be http://127.0.0.1:<port>');
   return out;
 }
 
+/**
+ * Never inherited from the parent: anything database-, store- or credential-shaped -- every EOS_* variable (the founder's EOS
+ * values must reach the bridge only through the FILE it is pointed at), every secret, token, password or API key, the live
+ * Julius store, and the launcher's own path variables (set below by exact name from the arguments, never passed through).
+ */
+const NEVER_INHERITED = [
+  /DATABASE_URL/i, /STORE_URL/i, /^JULIUS_/i, /^PG[A-Z_]*$/i, /^EOS_/i, /SECRET/i, /TOKEN/i, /PASSWORD/i, /API_KEY/i,
+  /^ANTHROPIC/i, /^OPENAI/i, /^XAI/i, /^CLAUDE_CODE_OAUTH/i, /^WONDERLAND_EOS_/i, /^R16_THROWAWAY_PG_PORT$/i,
+];
+
 /** The child's environment: nothing database- or credential-shaped is inherited; the rehearsal's own values are set. */
 export function childEnv(parent, settings) {
   const env = {};
   for (const [key, value] of Object.entries(parent)) {
-    if (/DATABASE_URL/i.test(key) || /^PG[A-Z_]*$/.test(key)) continue;
-    if (key === 'RELAY_GITHUB_APP_CLIENT_SECRET' || key === 'RELAY_BRIDGE_API_TOKEN' || key === 'NODE_ENV') continue;
+    if (NEVER_INHERITED.some((re) => re.test(key))) continue;
+    if (key === 'NODE_ENV') continue;
     if (/^WONDERLAND_SOCIAL_/.test(key) || /^RELAY_(GITHUB_APP_CLIENT_ID|BRIDGE_HOST|BRIDGE_PORT|DATA_DIR|STATE_HOME)$/.test(key)) continue;
     env[key] = value;
   }
@@ -76,7 +116,37 @@ export function childEnv(parent, settings) {
   });
   if (settings.githubStub) env.WONDERLAND_SOCIAL_GITHUB_STUB = settings.githubStub;
   if (settings.tap) env.WONDERLAND_SOCIAL_TAP = settings.tap;
+  // BY EXACT NAME, from the arguments only: the fences' port, and the two EOS PATHS (never an EOS value)
+  env.R16_THROWAWAY_PG_PORT = String(settings.pgPort ?? 54329);
+  if (settings.eosConfig) env.WONDERLAND_EOS_VOICE_CONFIG = settings.eosConfig;
+  if (settings.roomSaltFile) env.WONDERLAND_EOS_ROOM_SALT_FILE = settings.roomSaltFile;
   return env;
+}
+
+const SECRETS_DIR = /[\\/]\.iwonder-secrets([\\/]|$)/i;
+
+/**
+ * --eos-config: only that the file EXISTS is checked -- it is never opened, read or printed here (the bridge reads it). A path
+ * under the founder's .iwonder-secrets folder is never printed either.
+ */
+export function checkEosConfig(path, exists = existsSync) {
+  const secret = SECRETS_DIR.test(path);
+  if (!exists(path)) throw new Error(secret ? 'the EOS config file is missing' : `the EOS config file is missing: ${path}`);
+  return secret ? "EOS config: the founder's file (path not printed)" : `EOS config: ${path}`;
+}
+
+/**
+ * --room-salt-file: created ONCE (32 random bytes as hex, mode 0o600 best effort) and never overwritten; refused inside this
+ * checkout. Not a founder credential; its content is never read or printed here.
+ */
+export function ensureRoomSaltFile(path, repoRoot = REPO_ROOT) {
+  const abs = resolve(path);
+  const rel = relative(resolve(repoRoot), abs);
+  if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) throw new Error('--room-salt-file must be outside the repository checkout');
+  if (existsSync(abs)) return { path: abs, created: false };
+  mkdirSync(dirname(abs), { recursive: true });
+  writeFileSync(abs, `${randomBytes(32).toString('hex')}\n`, { flag: 'wx', mode: 0o600 });
+  return { path: abs, created: true };
 }
 
 function readClientId(path) {
@@ -85,10 +155,15 @@ function readClientId(path) {
   return id;
 }
 
-async function ensureDatabase(db) {
+/** The admin connection that creates the rehearsal database: loopback, on the throwaway port only. */
+export function adminDatabaseUrl(pgPort) {
+  return `postgresql://postgres@127.0.0.1:${pgPort}/postgres`;
+}
+
+async function ensureDatabase(db, pgPort) {
   const name = db.slice(db.lastIndexOf('/') + 1);
   const { default: pg } = await import('pg');
-  const admin = new pg.Client({ connectionString: 'postgresql://postgres@127.0.0.1:54329/postgres' });
+  const admin = new pg.Client({ connectionString: adminDatabaseUrl(pgPort) });
   await admin.connect();
   try {
     const found = await admin.query('SELECT 1 FROM pg_database WHERE datname = $1', [name]);
@@ -109,15 +184,26 @@ function step(label, command, args, env) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const clientId = args.githubStub !== null ? 'stub-client-id' : readClientId(resolve(args.clientIdFile));
-  const env = childEnv(process.env, { db: args.db, port: args.port, clientId, githubStub: args.githubStub, tap: args.tap, dataDir: mkdtempSync(join(tmpdir(), 'r16-bridge-')) });
-  await ensureDatabase(args.db);
+  let eosConfig = null;
+  let roomSaltFile = null;
+  if (args.eosConfig !== null) {
+    console.log(`r16: ${checkEosConfig(args.eosConfig)}`);
+    eosConfig = resolve(args.eosConfig);
+  }
+  if (args.roomSaltFile !== null) {
+    const salt = ensureRoomSaltFile(args.roomSaltFile);
+    roomSaltFile = salt.path;
+    console.log(`r16: room salt file ${salt.created ? 'created' : 'kept'}: ${salt.path}`);
+  }
+  const env = childEnv(process.env, { db: args.db, port: args.port, clientId, githubStub: args.githubStub, tap: args.tap, dataDir: mkdtempSync(join(tmpdir(), 'r16-bridge-')), pgPort: args.pgPort, eosConfig, roomSaltFile });
+  await ensureDatabase(args.db, args.pgPort);
   if (args.build) {
     const esbuild = join('node_modules', 'esbuild', 'bin', 'esbuild');
     step('bridge build', process.execPath, [esbuild, 'relay-bridge/server.ts', '--bundle', '--platform=node', '--format=cjs', '--outfile=dist-relay-bridge/server.cjs', '--external:@anthropic-ai/claude-agent-sdk', '--external:pg', '--log-level=warning'], env);
     step('migrate helper build', process.execPath, [esbuild, 'scripts/r16-migrate-throwaway.ts', '--bundle', '--platform=node', '--format=cjs', '--outfile=dist-relay-bridge/r16-migrate-throwaway.cjs', '--external:pg', '--log-level=warning'], env);
   }
   step('migrate', process.execPath, ['dist-relay-bridge/r16-migrate-throwaway.cjs'], env);
-  console.log(`r16: MAIN-LINE BRIDGE on http://127.0.0.1:${args.port} | database ${args.db.slice(args.db.lastIndexOf('/') + 1)} (throwaway) | social ON | sign-in ${args.githubStub ? 'GITHUB STUB (identities NOT real)' : 'GitHub device flow'}${args.tap ? ' | tap ON' : ''}`);
+  console.log(`r16: MAIN-LINE BRIDGE on http://127.0.0.1:${args.port} | database ${args.db.slice(args.db.lastIndexOf('/') + 1)} (throwaway) | social ON | sign-in ${args.githubStub ? 'GITHUB STUB (identities NOT real)' : 'GitHub device flow'}${args.tap ? ' | tap ON' : ''} | EOS voice ${eosConfig !== null ? 'configured' : 'off (503)'}`);
   const bridge = spawn(process.execPath, ['dist-relay-bridge/server.cjs'], { stdio: 'inherit', env, cwd: process.cwd() });
   const stop = () => bridge.kill('SIGINT');
   process.on('SIGINT', stop);
