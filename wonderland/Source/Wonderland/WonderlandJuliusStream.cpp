@@ -140,29 +140,41 @@ namespace WonderlandJuliusStreamLogic
 		}
 		if (Url.StartsWith(TEXT("http://"), ESearchCase::IgnoreCase))
 		{
-			// THE HOST, up to a port or a path. "[::1]" keeps its brackets.
+			// THE WHOLE AUTHORITY, read exactly (CORE 10-04, the class Second found in the sign-in page check): it ends at the first
+			// '/', '?' or '#', and must BE 127.0.0.1, localhost or [::1], with at most a port of 1-5 digits. A host cut at the first ':'
+			// took "http://localhost:80@evil.example/" -- userinfo, then a remote host -- for this machine, and sent the session in clear.
 			const FString Rest = Url.Mid(7);
-			FString Host = Rest;
-			int32 Cut = INDEX_NONE;
-			if (Rest.StartsWith(TEXT("[")))
+			int32 End = Rest.Len();
+			for (int32 Index = 0; Index < Rest.Len(); ++Index)
 			{
-				Cut = Rest.Find(TEXT("]"));
-				Host = Cut == INDEX_NONE ? Rest : Rest.Left(Cut + 1);
-			}
-			else
-			{
-				for (int32 Index = 0; Index < Rest.Len(); ++Index)
+				if (Rest[Index] == TEXT('/') || Rest[Index] == TEXT('?') || Rest[Index] == TEXT('#'))
 				{
-					if (Rest[Index] == TEXT(':') || Rest[Index] == TEXT('/'))
-					{
-						Host = Rest.Left(Index);
-						break;
-					}
+					End = Index;
+					break;
 				}
 			}
-			if (Host.Equals(TEXT("127.0.0.1")) || Host.Equals(TEXT("localhost"), ESearchCase::IgnoreCase) || Host.Equals(TEXT("[::1]")))
+			const FString Authority = Rest.Left(End);
+			static const TCHAR* const LoopbackHosts[] = { TEXT("127.0.0.1"), TEXT("localhost"), TEXT("[::1]") };
+			for (const TCHAR* Host : LoopbackHosts)
 			{
-				return Url;
+				if (Authority.Equals(Host, ESearchCase::IgnoreCase))
+				{
+					return Url;
+				}
+				const FString WithPort = FString(Host) + TEXT(":");
+				if (Authority.StartsWith(WithPort, ESearchCase::IgnoreCase))
+				{
+					const FString Port = Authority.RightChop(WithPort.Len());
+					bool bDigits = Port.Len() >= 1 && Port.Len() <= 5;
+					for (const TCHAR Character : Port)
+					{
+						bDigits = bDigits && FChar::IsDigit(Character);
+					}
+					if (bDigits)
+					{
+						return Url;
+					}
+				}
 			}
 			OutProblem = FString::Printf(TEXT("Refusing %s: plain http to a bridge off this machine would send this client's session in the clear. Use https."), *Url);
 			return FString();
@@ -1262,5 +1274,65 @@ namespace WonderlandJuliusStreamConsole
 				return;
 			}
 			ForEachLive([&Args](UWonderlandJuliusStreamSubsystem& Stream) { Stream.ContractFollowOnly(Args[0], Args[1]); });
+		}));
+}
+
+namespace WonderlandJuliusStreamConsole
+{
+	/** BRIDGE URL QA (CORE 10-04, R16 hosted endpoint): which bridge URLs the client will talk to. https anywhere; plain http ONLY to
+	 *  this machine, read exactly (the whole authority), so a session token never crosses the network in clear. BU1-BU5 accepted, BU6+
+	 *  refused (userinfo, lookalike hosts, bad ports, other schemes); BUC1 proves the userinfo case is real: the old first-colon host
+	 *  cut read it as localhost. No network. WLQA BRIDGEURL lines. */
+	FAutoConsoleCommand CmdQaBridgeUrl(TEXT("wl.Qa.BridgeUrl"),
+		TEXT("QA: which bridge URLs the client accepts -- https anywhere, plain http only to this machine (read exactly). No network."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			int32 Passed = 0;
+			int32 Failed = 0;
+			auto Check = [&Passed, &Failed](const FString& Id, bool bOk, const FString& What)
+			{
+				(bOk ? Passed : Failed) += 1;
+				UE_LOG(LogTemp, Display, TEXT("WLQA BRIDGEURL %s %s -- %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *What);
+			};
+			auto Resolve = [](const FString& Url)
+			{
+				FString Problem;
+				return WonderlandJuliusStreamLogic::ResolveBridgeUrl(Url, FString(), Problem);
+			};
+			static const TCHAR* const Accepted[] = {
+				TEXT("https://relay.example.invalid"),
+				TEXT("https://relay.example.invalid/relay-api"),
+				TEXT("http://127.0.0.1:8799"),
+				TEXT("http://localhost:8799/"),
+				TEXT("http://[::1]:8799"),
+				TEXT("http://127.0.0.1") };
+			int32 Case = 1;
+			for (const TCHAR* Url : Accepted)
+			{
+				Check(FString::Printf(TEXT("BU%d"), Case++), !Resolve(Url).IsEmpty(), FString::Printf(TEXT("accepted: %s"), Url));
+			}
+			static const TCHAR* const Refused[] = {
+				TEXT("http://localhost:80@evil.example/"),       // userinfo, then a remote host
+				TEXT("http://127.0.0.1:8799@evil.example"),
+				TEXT("http://localhost@evil.example/"),
+				TEXT("http://127.0.0.1.evil.example/"),
+				TEXT("http://localhost.evil.example:8799/"),
+				TEXT("http://127.0.0.1:123456"),
+				TEXT("http://127.0.0.1:/"),
+				TEXT("http://[::1].evil.example/"),
+				TEXT("http://relay.example.invalid"),
+				TEXT("ftp://127.0.0.1/"),
+				TEXT("https://") };
+			for (const TCHAR* Url : Refused)
+			{
+				Check(FString::Printf(TEXT("BU%d"), Case++), Resolve(Url).IsEmpty(), FString::Printf(TEXT("refused: %s"), Url));
+			}
+			// THE CONTROL: the rule this replaced cut the host at the first ':' -- for the userinfo URL that host IS "localhost"
+			const FString Userinfo = TEXT("localhost:80@evil.example/");
+			int32 Colon = INDEX_NONE;
+			Userinfo.FindChar(TEXT(':'), Colon);
+			Check(TEXT("BUC1"), Colon != INDEX_NONE && Userinfo.Left(Colon).Equals(TEXT("localhost")) && Resolve(TEXT("http://") + Userinfo).IsEmpty(),
+				TEXT("control: the old first-colon cut reads the userinfo URL as localhost; the exact reading refuses it"));
+			UE_LOG(LogTemp, Display, TEXT("WLQA BRIDGEURL END pass=%d fail=%d"), Passed, Failed);
 		}));
 }
