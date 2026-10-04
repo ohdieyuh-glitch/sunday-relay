@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **215 production files** across 20/20 subsystems (2 roots, 186 traced, 8 not composed by the live root, 19 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **217 production files** across 20/20 subsystems (2 roots, 188 traced, 8 not composed by the live root, 19 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -48,7 +48,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 20 | 5 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 10 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 29 | 7 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 31 | 8 |
 | live composition (relay-bridge/julius/) | other | 6 | 4 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 17 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 2 | 0 |
@@ -354,6 +354,8 @@ Every authoritative transition has exactly one event type; the trajectory is the
 | --- | --- | --- |
 | `src/relay/mission/julius/julius-artifact-reference.ts` | traced | `src/relay/mission/julius/julius-execution-coordinator.ts` |
 | `src/relay/mission/julius/julius-events.ts` | traced | `src/relay/mission/julius/julius-recovery.ts` |
+| `src/relay/mission/julius/julius-learning-loop.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-learning-record.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-metrics.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-slot-report.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-trajectory.ts` | traced | `src/relay/mission/julius/index.ts` |
@@ -447,7 +449,6 @@ C.A.R.D. roles resolved to live adapters — fail closed, naming every missing v
 - **legacy local execution** — `src/relay/persistence/julius-event-append-conformance.ts`: the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root.
 - **legacy local execution** — `src/relay/persistence/julius-criteria-scope-conformance.ts`: the criteria-scope contract cases themselves: a criterion belongs to a RUN, not to the database. Written once and run by BOTH the in-memory store, which was always right, and real PostgreSQL, where a global primary key on criterion_id silently gave every rerun no criteria at all. Test support, imported by no root.
 - **legacy local execution** — `src/relay/persistence/julius-decision-write-conformance.ts`: the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root.
-- **legacy local execution** — `src/relay/mission/julius/julius-learning-loop.ts`: the Learning Loop’s measurement and promotion gate: it projects a mission’s outcome from the durable trajectory, compares a matched pair and answers whether an artifact may become trusted memory. It is an EVALUATION surface, read after a mission rather than during one, so no dispatch path reaches it — and it deliberately writes nothing: the promotion it authorises is performed by promoteJuliusMemoryClaim, which IS on the kernel path.
 - **legacy local execution** — `src/relay/workspace/julius-tools/node-tool-adapter.ts`: the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests.
 - **pre-Julius schema** — `001_wonderland_runtime.sql`, `002_wonderland_outbox.sql`, `003_wonderland_budget_reservations.sql`, `004_wonderland_ratings.sql`, `005_wonderland_inventory.sql`, `006_wonderland_eval_runtime.sql`, `007_wonderland_provider_operations.sql`, `008_wonderland_swarm_scheduler.sql`, `009_wonderland_gve_runs.sql`, `010_wonderland_hidden_fixtures.sql`, `017_gauntlet_command.sql` under `src/relay/persistence/wonderland-migrations/`: registered by the same migration runner and applied in order before the Julius migrations; Julius tables reference `relay_wonderland.projects`, `mission_contracts` and `budget_reservations` defined there, and 017 is the Gauntlet Loop's own storage, deliberately not Julius's.
 

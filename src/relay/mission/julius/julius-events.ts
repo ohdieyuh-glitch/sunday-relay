@@ -49,6 +49,11 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
  'evidence.recorded','review.started','finding.recorded','verification.decided','repair.scheduled',
  /* the claim ledger: a memory's standing rose on a reviewer's evidence, or the trust core refused to raise it */
  'claim.promoted','claim.promotion.refused',
+ /* THE LEARNING LOOP, ON THE RECORD (`julius-learning-record.ts`). One row per arm of a
+  * registered matched pair, at the arm's terminal state: its measurement off the durable
+  * trajectory and, on the WITH arm, the comparison and the gate's decision. A PROMOTE is
+  * written as a PROPOSAL: the claim ledger above stays the only writer of a memory's standing. */
+ 'learning.arm.recorded',
  /* a task's work was superseded rather than done: a declined request, re-planned into a continuation */
  'task.superseded',
  /* the task/sprint contract: what a worker was charged with, and when it stopped being arguable */

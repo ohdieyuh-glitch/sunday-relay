@@ -71,6 +71,15 @@ const ALLOWED = [
   /^  evidence [\w:.-]+ \[[A-Z_]+\/[A-Z_]+\] .*$/u,
   /^  finding [\w:.-]+ blocking=(true|false) status=[A-Z_]+ — .*$/u,
   /^  verification decisions: .*$/u,
+  // THE LEARNING LOOP'S RECORD OF A REGISTERED ARM (E9-a), exactly as `liveLearningLines` prints it: closed
+  // tokens, run ids, the lower-case registration digest and numbers. The failure line's tail is an error
+  // message, kept like `  cause:` and screened by the secret rejectors below like every other kept line.
+  /^LEARNING: arm=(WITHOUT|WITH) run=[\w:.-]+ registration=[0-9a-f]{64} state=[A-Z_]+ record=(RECORDED|DUPLICATE|NOT_TERMINAL)$/u,
+  /^LEARNING: metrics run=[\w:.-]+ trajectory_rows=\d+ dispatches=\d+ retries=\d+ repairs=\d+ recoveries=\d+ fallbacks=\d+ findings=\d+ verified_completions=\d+ known_usd_micros=\d+ cost_complete=(yes|no) average_duration_ms=(\d+(\.\d+)?|unknown) known_input_tokens=(\d+|unknown) known_output_tokens=(\d+|unknown) unknown_usage_components=\d+$/u,
+  /^LEARNING: comparison=(COMPARED|UNCOMPARABLE reason=[a-z_]+) without=[\w:.-]+ without_state=([A-Z_]+|unknown) without_trajectory_rows=(\d+|unknown)$/u,
+  /^LEARNING: delta dimension=[A-Za-z]+ verdict=(IMPROVED|NO_EFFECT|REGRESSED|UNMEASURABLE) without=(\d+(\.\d+)?|unknown) with=(\d+(\.\d+)?|unknown) bounded=(yes|no)$/u,
+  /^LEARNING: decision=(PROMOTE|REFUSE reason=[a-z_]+) improved=([A-Za-z]+(,[A-Za-z]+)*|none) regressed=([A-Za-z]+(,[A-Za-z]+)*|none) marginal_value=(\d+(\.\d+)?(e-\d+)?|none) proposal=(PROMOTION_PROPOSED|NONE)$/u,
+  /^LEARNING: NOT RECORDED — .+$/u,
   /^julius_exit=\d+$/u,
   /^JULIUS LIVE PREFLIGHT — .+$/u,
   /^PREFLIGHT (OK|FAILED)(:.*)?$/u,

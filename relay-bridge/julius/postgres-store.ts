@@ -13,7 +13,7 @@
  */
 
 import type { Pool } from 'pg';
-import type { JuliusApprovalStore, JuliusRecoveryDriver, JuliusRuntimeReader, JuliusRuntimeStore, JuliusTimelineReader } from '../../src/relay/mission/julius';
+import type { JuliusApprovalStore, JuliusRecoveryDriver, JuliusRuntimeReader, JuliusRuntimeStore, JuliusTimelineReader, JuliusTrajectoryReader } from '../../src/relay/mission/julius';
 import { JuliusPostgresRepository } from '../../src/relay/persistence/julius-postgres';
 import { JuliusRecoveryPostgresRepository } from '../../src/relay/persistence/julius-recovery-postgres';
 import { JuliusContextPostgresRepository } from '../../src/relay/persistence/julius-context-postgres';
@@ -51,10 +51,14 @@ import { ProjectBrainPostgresStore } from '../../src/relay/persistence/project-b
  * declaration and the barrel that exports it. Naming the capability in this
  * signature is what makes the next one impossible to drop silently: a structural
  * probe fails quietly, a missing declared method fails at the type.
+ *
+ * THE TRAJECTORY READER IS NAMED THE SAME WAY, for the same reason. Its one
+ * consumer is the Learning Loop's runtime caller (`recordJuliusLearningOutcome`),
+ * which measures a finished arm of a registered pair from the run's own rows.
  */
 export function createJuliusPostgresRuntimeStore(
   pool: Pool,
-): JuliusRuntimeStore & JuliusRecoveryDriver & JuliusTimelineReader
+): JuliusRuntimeStore & JuliusRecoveryDriver & JuliusTimelineReader & JuliusTrajectoryReader
   & Required<Pick<JuliusRuntimeReader, 'haltingFailureClasses'>>
   & Required<Pick<JuliusApprovalStore, 'pendingApprovals' | 'deniedApprovals' | 'requestApproval' | 'requestApprovalAndBlock' | 'loadApproval'>>
   & Required<Pick<JuliusRuntimeStore, 'appendHandoffEvent' | 'appendSettlementEvent'>> {
@@ -92,6 +96,8 @@ export function createJuliusPostgresRuntimeStore(
     // A RELEASE WRITTEN ONLY WHEN IT SAYS SOMETHING ((a2) step 3): decided against the reservation's settlements.
     appendSettlementEvent: (event) => events.appendSettlement(event),
     appendTrajectory: (event) => trajectories.append(event),
+    // ONE RUN'S ROWS BACK, EXACTLY: what the Learning Loop measures a finished arm from.
+    trajectoryForRun: (runId, projectId) => trajectories.forRun(runId, projectId),
     tasksForRun: reader.tasksForRun.bind(reader),
     evidenceForRun: reader.evidenceForRun.bind(reader),
     findingsForRun: reader.findingsForRun.bind(reader),

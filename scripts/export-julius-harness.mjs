@@ -132,7 +132,6 @@ const KERNEL_DEPENDANT_EXCLUSIONS = [
   { path: 'src/relay/persistence/julius-event-append-conformance.ts', reason: 'the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root' },
   { path: 'src/relay/persistence/julius-criteria-scope-conformance.ts', reason: 'the criteria-scope contract cases themselves: a criterion belongs to a RUN, not to the database. Written once and run by BOTH the in-memory store, which was always right, and real PostgreSQL, where a global primary key on criterion_id silently gave every rerun no criteria at all. Test support, imported by no root' },
   { path: 'src/relay/persistence/julius-decision-write-conformance.ts', reason: 'the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root' },
-  { path: 'src/relay/mission/julius/julius-learning-loop.ts', reason: 'the Learning Loop’s measurement and promotion gate: it projects a mission’s outcome from the durable trajectory, compares a matched pair and answers whether an artifact may become trusted memory. It is an EVALUATION surface, read after a mission rather than during one, so no dispatch path reaches it — and it deliberately writes nothing: the promotion it authorises is performed by promoteJuliusMemoryClaim, which IS on the kernel path' },
   { path: 'src/relay/workspace/julius-tools/node-tool-adapter.ts', reason: 'the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests' },
 ];
 
@@ -296,6 +295,14 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-work-artifact-memory.ts', 'ARTIFACTS / EVIDENCE'],
   ['src/relay/mission/julius/julius-trajectory.ts', 'EVENTS / TRAJECTORIES'],
   ['src/relay/mission/julius/julius-metrics.ts', 'EVENTS / TRAJECTORIES'],
+  // The Learning Loop: a mission's outcome projected from the durable trajectory, a matched pair
+  // compared and the promotion gate. It was excluded as an evaluation surface no dispatch path
+  // reached; since E9-a the live mission calls it at a registered arm's terminal state
+  // (`recordJuliusLearningOutcome`), so it is traced from the live root. It still writes nothing.
+  ['src/relay/mission/julius/julius-learning-loop.ts', 'EVENTS / TRAJECTORIES'],
+  // And what that call leaves on the ledger: one `learning.arm.recorded` event per arm, read back
+  // by arm WITH. A PROMOTE becomes a PROPOSAL; promotion stays `promoteJuliusMemoryClaim`'s.
+  ['src/relay/mission/julius/julius-learning-record.ts', 'EVENTS / TRAJECTORIES'],
   ['src/relay/mission/julius/julius-run-loop.ts', 'COMPLETION AUTHORITY'],
   ['src/relay/mission/julius/julius-runtime-api.ts', 'COMPLETION AUTHORITY'],
   // The bridge's read-only HTTP mount of that API, for Wonderland. Same subsystem
