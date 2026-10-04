@@ -9457,12 +9457,12 @@ namespace
 					const float RearLowShare = S.C9SteadyFrames > 0 ? static_cast<float>(S.C9RearLow) / S.C9SteadyFrames : 1.0f;
 					const bool bFootwork = Expect == 0 ? (FootLandings >= 2 && FrontShare >= 0.8f && RearLowShare <= 0.1f)
 						: (FootLandings >= 2 && FrontShare >= 0.3f && FrontShare <= 0.7f);
+					const bool bVoid = S.C9SteadySeconds < 0.7f;
 					// held in the world (<= 3 uu a plant: the hop skids 0.3-0.5 in game) and never into the floor (>= -3 uu)
 					const bool bPlanted = S.C9LowFrames >= 6 && S.C9SkidMax <= 3.0f && S.C9SoleLow >= -3.0f;
 					// a WINDOW THAT IS A HOP (the control's red must come from its knob, not a broken window -- round 8c's X1 read 0% flight and a
 					// sole 16 uu under its start-ground): in flight >= 25%, >= 2 landings, the front's share >= 80%, the lowest sole >= -3
 					const bool bHopWindow = !bVoid && AirShare >= 0.25f && FootLandings >= 2 && FrontShare >= 0.8f && S.C9SoleLow >= -3.0f;
-					const bool bVoid = S.C9SteadySeconds < 0.7f;
 					// THE FAST HOP (founder, 10-04 video): bent well forward, charging; in flight a real share of the time; landing and springing
 					// several times a second, on the skip's footwork; the body rising and falling with each hop; the arms pumping; the head on the
 					// way ahead; every plant held in the world
