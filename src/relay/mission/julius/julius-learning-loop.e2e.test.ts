@@ -535,6 +535,19 @@ describe('prior learning reaches the next mission without leaking the last one',
     expect(claim?.trust, 'the standing travelled with the fact').toBe('VERIFIED');
     expect(claim?.assertedBy, 'and so did its author, so a reviewer here cannot self-verify it').toBe('reviewer');
 
+    // POINT 4 OF DECISION C's PROOF, ON THE RECORD: the compile that built this
+    // packet names the inherited entry it holds, read off the snapshot's own
+    // source ids, beside the context id the dispatch was recorded against.
+    const compiled = withLearning.harness.store.events()
+      .filter((event) => event.type === 'context.compiled' && event.facts.contextId === snapshot.contextId);
+    expect(compiled.length, 'the compile behind this packet is on the ledger').toBeGreaterThan(0);
+    expect(compiled.at(-1)!.facts).toMatchObject({ carriedReceived: 1, carriedReceivedIds: inheritedId });
+    // And a mission that inherited nothing records that it received nothing.
+    const without = await runMission(false, 'run-a');
+    const plain = without.harness.store.events().filter((event) => event.type === 'context.compiled');
+    expect(plain.length).toBeGreaterThan(0);
+    expect(plain.every((event) => event.facts.carriedReceived === 0 && event.facts.carriedReceivedIds === null)).toBe(true);
+
     for (const leaked of ['run-b:prior-other-task', 'run-b:prior-reviewer-only', 'run-b:prior-secret']) {
       expect(snapshot.sourceEntryIds, `${leaked} leaked into the coder's packet`).not.toContain(leaked);
       expect(snapshot.integrityExcludedEntryIds, `${leaked} must be reported as excluded, not silently dropped`)

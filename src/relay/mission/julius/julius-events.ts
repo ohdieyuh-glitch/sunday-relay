@@ -49,6 +49,9 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
  'evidence.recorded','review.started','finding.recorded','verification.decided','repair.scheduled',
  /* the claim ledger: a memory's standing rose on a reviewer's evidence, or the trust core refused to raise it */
  'claim.promoted','claim.promotion.refused',
+ /* THE CORRECTED CARRY (julius-carry.v2): the one manifest of what an earlier mission handed this one — counts,
+  * the carried ids, and every candidate refused by code. Written once per run, at bootstrap. */
+ 'knowledge.carried',
  /* a task's work was superseded rather than done: a declined request, re-planned into a continuation */
  'task.superseded',
  /* the task/sprint contract: what a worker was charged with, and when it stopped being arguable */

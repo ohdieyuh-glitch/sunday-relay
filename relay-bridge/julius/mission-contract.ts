@@ -84,6 +84,15 @@ export interface LiveMissionContractFile {
    * asserting the one thing it is not in a position to know.
    */
   readonly research?: LiveMissionResearchClause;
+  /**
+   * THE LEARNING ARM, when this contract is one half of a Decision C matched
+   * pair. ABSENT MEANS AN ORDINARY MISSION. `WITHOUT` inherits nothing; `WITH`
+   * must inherit at least one finding an independent reviewer resolved after a
+   * repair, or the bootstrap refuses it (`carry_pair_invalid`) before a run
+   * exists. Part of the contract, so part of its digest: the two arms of a pair
+   * are two runs, never one resumed as the other.
+   */
+  readonly carryArm?: 'WITHOUT' | 'WITH';
 }
 
 /**
@@ -195,6 +204,10 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
     research = clause;
   }
 
+  if (value.carryArm !== undefined && value.carryArm !== 'WITHOUT' && value.carryArm !== 'WITH') {
+    return { ok: false, problem: 'The contract field "carryArm" must be "WITHOUT" or "WITH" when present.' };
+  }
+
   return {
     ok: true,
     contract: {
@@ -206,6 +219,7 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
       testCommand: value.testCommand as string, workspacePath: value.workspacePath as string,
       limits: typeof value.limits === 'object' && value.limits !== null ? value.limits as LiveMissionContractFile['limits'] : undefined,
       ...(research === undefined ? {} : { research }),
+      ...(value.carryArm === undefined ? {} : { carryArm: value.carryArm as 'WITHOUT' | 'WITH' }),
     },
   };
 }
@@ -256,5 +270,6 @@ export function compileBootstrapRequest(contract: LiveMissionContractFile, worke
     missionRevision: 1,
     missionBindingDigest: `sha256:${bindingDigest}`,
     compiledAt: new Date().toISOString(),
+    ...(contract.carryArm === undefined ? {} : { carryArm: contract.carryArm }),
   };
 }
