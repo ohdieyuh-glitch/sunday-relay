@@ -9464,6 +9464,12 @@ namespace
 		int32 ShardsMost[2] = { 0, 0 };
 		int32 BurstMost[2] = { 0, 0 };
 		int32 FlightMost[2] = { 0, 0 };
+		// THE TRIP, SHARD BY SHARD (round 7a4: the instant-count "flown" read cyan 0 because a shard ON the Dog's blade can sit inside Jhinn's
+		// large original box, and the shards finish their flights at staggered moments): a bit per shard -- out of its body at some moment,
+		// and LATER within 15 uu of its own blade; and the same shards against the OTHER side's blade, which they must not reach (the control)
+		uint32 ShardOut[2] = { 0u, 0u };
+		uint32 ShardHome[2] = { 0u, 0u };
+		uint32 ShardStray[2] = { 0u, 0u };
 		bool bBreakupJudged = false;
 		void Check(const FString& Id, bool bOk, const FString& Detail)
 		{
@@ -9671,6 +9677,9 @@ namespace
 				S.ShardsMost[Side] = 0;
 				S.BurstMost[Side] = 0;
 				S.FlightMost[Side] = 0;
+				S.ShardOut[Side] = 0u;
+				S.ShardHome[Side] = 0u;
+				S.ShardStray[Side] = 0u;
 			}
 			S.bBreakupJudged = false;
 			FString Said;
@@ -9709,6 +9718,10 @@ namespace
 					const FTransform SideSword = Swords.GetSwordWorld(Side == 0);
 					const FVector BladeFrom = SideSword.TransformPosition(FVector::ZeroVector);
 					const FVector BladeTo = SideSword.TransformPosition(FVector(0.0, 0.0, 100.0));
+					const FVector BladeTip = SideSword.TransformPosition(FVector(0.0, 0.0, WonderlandHandoffSwords::TipZ));
+					const FTransform OtherSword = Swords.GetSwordWorld(Side != 0);
+					const FVector OtherFrom = OtherSword.TransformPosition(FVector::ZeroVector);
+					const FVector OtherTip = OtherSword.TransformPosition(FVector(0.0, 0.0, WonderlandHandoffSwords::TipZ));
 					int32 Drawn = 0;
 					int32 Outside = 0;
 					int32 Flown = 0;
@@ -9726,6 +9739,25 @@ namespace
 						Outside += Across >= 0.5 && bOutside ? 1 : 0;
 						Flown += Across >= 0.3 && bOutside
 							&& FMath::PointDistToSegment(ShardAt, BladeFrom, BladeTo) < FMath::Sqrt(Original.ComputeSquaredDistanceToPoint(ShardAt)) ? 1 : 0;
+						if (Shard < 32)
+						{
+							const uint32 Bit = 1u << Shard;
+							if (Across >= 0.5 && bOutside)
+							{
+								S.ShardOut[Side] |= Bit;
+							}
+							if ((S.ShardOut[Side] & Bit) != 0u && Across >= 0.3)
+							{
+								if (FMath::PointDistToSegment(ShardAt, BladeFrom, BladeTip) <= 15.0)
+								{
+									S.ShardHome[Side] |= Bit;
+								}
+								if (FMath::PointDistToSegment(ShardAt, OtherFrom, OtherTip) <= 15.0)
+								{
+									S.ShardStray[Side] |= Bit;
+								}
+							}
+						}
 					}
 					S.ShardsMost[Side] = FMath::Max(S.ShardsMost[Side], Drawn);
 					S.BurstMost[Side] = FMath::Max(S.BurstMost[Side], Outside);
@@ -9736,12 +9768,23 @@ namespace
 			{
 				S.bBreakupJudged = true;
 				const int32 Want = WonderlandHandoffTransform::ShardsPerSide;
+				auto Bits = [](uint32 Mask) { int32 N = 0; for (; Mask != 0u; Mask &= Mask - 1u) { ++N; } return N; };
+				const int32 Trip[2] = { Bits(S.ShardHome[0]), Bits(S.ShardHome[1]) };
+				const int32 Stray[2] = { Bits(S.ShardStray[0]), Bits(S.ShardStray[1]) };
+				// the trip bar: 70% of each side's shards burst out of their companion AND later reach their own blade
+				const int32 TripWant = (Want * 7 + 9) / 10;
 				const bool bBrokeUp = S.ShardsMost[0] >= Want && S.ShardsMost[1] >= Want && S.BurstMost[0] >= 6 && S.BurstMost[1] >= 6
-					&& S.FlightMost[0] >= 10 && S.FlightMost[1] >= 10;
+					&& Trip[0] >= TripWant && Trip[1] >= TripWant;
 				S.Check(TEXT("SW1c"), bBrokeUp,
 					FString::Printf(TEXT("the breakup over the whole transformation, each side on its own, against each companion's ORIGINAL body: gold %d drawn ")
-						TEXT("at once (want %d), %d outside that body (the burst; want >= 6), %d flown, i.e. outside it and nearer its own blade than the body (want >= 10); ")
-						TEXT("cyan %d / %d / %d"), S.ShardsMost[0], Want, S.BurstMost[0], S.FlightMost[0], S.ShardsMost[1], S.BurstMost[1], S.FlightMost[1]));
+						TEXT("at once (want %d), %d outside that body (the burst; want >= 6), %d of %d made the TRIP -- out of the body, then within 15 uu of its own blade ")
+						TEXT("(want >= %d); cyan %d / %d / %d trips; the old instant 'flown' count %d / %d, reported only"),
+						S.ShardsMost[0], Want, S.BurstMost[0], Trip[0], Want, TripWant, S.ShardsMost[1], S.BurstMost[1], Trip[1], S.FlightMost[0], S.FlightMost[1]));
+				// SW1cX, THE CONTROL: the same shards against the OTHER side's blade must not have arrived there -- the trip measure tells a shard
+				// that reached ITS blade from one that merely passed near the Dog
+				S.Check(TEXT("SW1cX"), Trip[0] >= TripWant && Trip[1] >= TripWant && Stray[0] <= 3 && Stray[1] <= 3,
+					FString::Printf(TEXT("the trip measure tells its own blade from the other: gold shards reaching the CYAN blade %d, cyan reaching the GOLD %d ")
+						TEXT("(want <= 3 each, while each side's own trips are %d / %d)"), Stray[0], Stray[1], Trip[0], Trip[1]));
 			}
 			// SW1, HALF-WAY THROUGH THE TRANSFORMATION
 			if (!S.bMidChecked && State->GetState() == EWonderlandHandoffState::Transforming
