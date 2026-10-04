@@ -294,11 +294,14 @@ export function worldViewFor(world: WorldState, social: SocialState, viewerId: S
       serverName: world.contexts[i.contextId].serverName,
       expiresInMs: i.expiresAtMs - nowMs,
     }));
+  // THE COUNT IS A ROSTER TOO: only the viewer and the live members they may see. Counting a member behind the viewer's wall
+  // told them somebody hidden was there -- and that member leaving or arriving moved it (Second's R16 run, 10-04).
+  const population = context === undefined ? 0 : liveMembers(world, { ...context, memberIds: context.memberIds.filter((id) => id === viewerId || visible(id)) }, nowMs);
   return {
     context:
       context === undefined
         ? null
-        : { contextId: context.contextId, kind: context.kind, serverName: context.serverName, authority: context.authority, population: liveMembers(world, context, nowMs), capacity: context.capacity },
+        : { contextId: context.contextId, kind: context.kind, serverName: context.serverName, authority: context.authority, population, capacity: context.capacity },
     avatars,
     invites,
   };

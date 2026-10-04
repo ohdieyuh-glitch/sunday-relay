@@ -3,6 +3,7 @@ import { applySocialOperation, type SocialCommandOutcome } from './social-comman
 import { createSocialFixture, FIXTURE_USERS as U } from './social-fixtures';
 import { partyInvitesFor, recentPlayersViewFor } from './social-parties';
 import { conversationsFor } from './social-conversations';
+import { emptyWorldState, worldViewFor } from './world-presence';
 import { buildSocialView } from './social-preview';
 import { partyOf, type SocialState } from './social-state';
 import { ensureSocialUser } from './social-store';
@@ -260,5 +261,38 @@ describe('D2 / D3: a party name never carries a person, and a recent-player labe
     const s = createSocialFixture();
     const legacy = { ...s, recentPlayers: [{ ownerId: U.KAI, userId: U.SOL, context: 'PARTY' as const, contextLabel: "Mira's party", metAtIso: NOW }] };
     expect(recentPlayersViewFor(legacy, U.KAI)[0].contextLabel).toBe('Party');
+  });
+});
+
+describe('D5: the world population counts only who the viewer may see', () => {
+  const here = { x: 100, y: 200, z: 22, yaw: 0, speed: 0, motion: 'IDLE', skinId: 'relay_og' };
+  function worldOf(blocker: string | null) {
+    let s = createSocialFixture();
+    let w = emptyWorldState();
+    const step = (actor: string, name: Parameters<typeof applySocialOperation>[1], body: Record<string, unknown>) => {
+      const r = applySocialOperation(s, name, actor, { ids: [], body, query: {} }, NOW, w);
+      if (!r.ok) throw new Error(r.error.message);
+      s = r.value.state;
+      w = r.value.world ?? w;
+    };
+    for (const who of [U.KAI, U.NOVA, U.ORION]) step(who, 'world.join', { target: 'PUBLIC' });
+    for (const who of [U.KAI, U.NOVA, U.ORION]) step(who, 'world.state', here);
+    if (blocker !== null) s = must(s, blocker, 'blocks.add', { targetId: U.KAI }).state;
+    return { get s() { return s; }, get w() { return w; }, leave: (who: string) => step(who, 'world.leave', {}) };
+  }
+  const t = Date.parse(NOW) + 50;
+
+  it('Kai, walled from Nova in the same public world, counts himself and Orion -- and Nova leaving does not move it', () => {
+    const walled = worldOf(U.NOVA);
+    const seen = worldViewFor(walled.w, walled.s, U.KAI, t);
+    expect(seen.avatars.map((a) => a.userId)).toEqual([U.ORION]);
+    expect(seen.context?.population).toBe(seen.avatars.length + 1);
+    walled.leave(U.NOVA);
+    expect(worldViewFor(walled.w, walled.s, U.KAI, t).context?.population).toBe(2);
+    // control: without the wall Kai counts all three, and a leave moves the count
+    const open = worldOf(null);
+    expect(worldViewFor(open.w, open.s, U.KAI, t).context?.population).toBe(3);
+    open.leave(U.NOVA);
+    expect(worldViewFor(open.w, open.s, U.KAI, t).context?.population).toBe(2);
   });
 });
