@@ -62,10 +62,44 @@ namespace WonderlandEosVoice
 			OutWhy = TEXT("the EOS file named by -WLEosConfig cannot be read");
 			return false;
 		}
+		// THE FOUNDER'S FILE IS A .env (10-04: eos-game.env): KEY=VALUE lines, EOS_PRODUCT_ID, EOS_SANDBOX_ID, EOS_DEPLOYMENT_ID,
+		// EOS_GAME_CLIENT_ID, EOS_GAME_CLIENT_SECRET; '#' comments and quotes allowed. A JSON object with productId ... clientSecret is
+		// still read. Values are kept in memory only; a problem names the key, never its value.
+		TMap<FString, FString> Env;
+		TArray<FString> Lines;
+		Text.ParseIntoArrayLines(Lines);
+		for (const FString& Line : Lines)
+		{
+			const FString Trimmed = Line.TrimStartAndEnd();
+			FString Key;
+			FString Value;
+			if (Trimmed.IsEmpty() || Trimmed.StartsWith(TEXT("#")) || !Trimmed.Split(TEXT("="), &Key, &Value))
+			{
+				continue;
+			}
+			Env.Add(Key.TrimStartAndEnd(), Value.TrimStartAndEnd().TrimQuotes());
+		}
+		if (Env.Num() > 0)
+		{
+			static const TCHAR* const Keys[] = { TEXT("EOS_PRODUCT_ID"), TEXT("EOS_SANDBOX_ID"), TEXT("EOS_DEPLOYMENT_ID"), TEXT("EOS_GAME_CLIENT_ID"),
+				TEXT("EOS_GAME_CLIENT_SECRET") };
+			FString* const Fields[] = { &Out.ProductId, &Out.SandboxId, &Out.DeploymentId, &Out.ClientId, &Out.ClientSecret };
+			for (int32 Index = 0; Index < static_cast<int32>(UE_ARRAY_COUNT(Keys)); ++Index)
+			{
+				const FString* Found = Env.Find(Keys[Index]);
+				if (Found == nullptr || Found->IsEmpty())
+				{
+					OutWhy = FString::Printf(TEXT("the EOS file has no %s"), Keys[Index]);
+					return false;
+				}
+				*Fields[Index] = *Found;
+			}
+			return true;
+		}
 		TSharedPtr<FJsonObject> Root;
 		if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
 		{
-			OutWhy = TEXT("the EOS file is not a JSON object");
+			OutWhy = TEXT("the EOS file is neither KEY=VALUE lines nor a JSON object");
 			return false;
 		}
 		const bool bAll = Root->TryGetStringField(TEXT("productId"), Out.ProductId) && Root->TryGetStringField(TEXT("sandboxId"), Out.SandboxId)
