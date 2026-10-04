@@ -1133,6 +1133,9 @@ private:
 	/** Wonderland Social: the hub on screen, the tab it opens on, and whether the open profile was opened from it (Esc returns there). */
 	TSharedPtr<SWonderlandSocialHubPanel> SocialHubPanel;
 	FString PendingHubTab;
+	/** A server's notice for a player who had no social screen open (founder P4/P5: "You can't stay in this server."): shown on the hub's
+	 *  status line the next time it opens, once. */
+	FString PendingSocialNotice;
 	bool bProfileFromHub = false;
 	bool bSocialBound = false;
 	/** The wallet above the mini-map: the top-right column as one piece, so its size is known when it is placed. */

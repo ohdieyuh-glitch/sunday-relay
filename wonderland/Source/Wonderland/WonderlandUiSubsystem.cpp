@@ -5199,6 +5199,10 @@ void UWonderlandUiSubsystem::HandleSocialAnswered(const FString& OperationId, co
 	{
 		ProfilePanel->ShowActionResult(Line);
 	}
+	else if (OperationId == TEXT("world.removed"))
+	{
+		PendingSocialNotice = Line;   // no social screen is open: the hub says it when the player next opens it
+	}
 }
 
 void UWonderlandUiSubsystem::HandleVoiceCommand(const FString& Command, const FString& SubjectUserId)
@@ -5256,6 +5260,11 @@ bool UWonderlandUiSubsystem::OpenSocialHub(const FString& TabName)
 	PendingHubTab = TabName.IsEmpty() ? FString(TEXT("friends")) : TabName;
 	bProfileFromHub = false;
 	OpenOverlay(EOverlay::Social);
+	if (Open == EOverlay::Social && SocialHubPanel.IsValid() && !PendingSocialNotice.IsEmpty())
+	{
+		SocialHubPanel->ShowActionResult(PendingSocialNotice);
+		PendingSocialNotice.Reset();
+	}
 	return Open == EOverlay::Social;
 }
 
