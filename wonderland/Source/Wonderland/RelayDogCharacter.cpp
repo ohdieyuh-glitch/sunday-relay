@@ -2893,7 +2893,10 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		0.5125f * HeadWidthUU, ArmChainLeft.OutwardSign * ArmLeft.SideSign, ArmChainRight.OutwardSign * ArmRight.SideSign, HipPivotUU,
 		LegLeft.LateralUU, LegRight.LateralUU, ArmedShape);
 	StanceLegLeftOutDeg = Pose.Stance.LegLeftOutDeg;
-	StanceChargeWeight = ArmedStance.Armed.Value * (1.0f - FMath::Clamp(Pose.GaitWeight, 0.0f, 1.0f));
+	// THE LOW, TRAILING HOLD AT EVERY ARMED GAIT (Second's review of 92f83bff): fading it out as the gait came in put the walk back on
+	// the photo stance's V 122 / F +10 -- a 123 uu blade dropping 64 uu from a hand 36-52 uu up, the tips 24 uu INTO the ground -- and swept
+	// the tips through the floor as the Dog moved off. The charge's hold stays on while the swords are held; the sprint trails as far back.
+	StanceChargeWeight = FMath::Max(ArmedStance.Armed.Value, ArmedStance.Dash.Value);
 	StanceLegRightOutDeg = Pose.Stance.LegRightOutDeg;
 	StanceKneesOutDeg = RelayDogArmedStance::KneesOutDeg(Pose, ArmedStance.Armed.Value, ArmedShape);
 
@@ -4531,8 +4534,14 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 			(Pose.BobUU - Pose.PelvisDropUU) * (1.0f - Still) + O.LiftUU));
 		// the same terms as the stride's own write (ForwardIsForward, the armed stance's body), so nothing pops as an act comes in or out
 		const float ActAsWritten = CVarForwardIsForward.GetValueOnGameThread() != 0 ? -1.0f : 1.0f;
-		BodyRoot->SetRelativeRotation(FRotator(ActAsWritten * (Pose.LeanDeg + Pose.Body.PitchDeg) + Pose.Stance.PitchDeg + O.Fly * CVarFlyLean.GetValueOnGameThread(),
-			(Pose.BodyYawDeg + Pose.Stance.YawDeg) * (1.0f - Still), (Pose.Body.RollDeg + Pose.TurnRollDeg + Pose.Stance.RollDeg) * (1.0f - Still)));
+		// the armed stance's body as ONE piece -- its rotation AND the shift that turns it about the hips, damped alike (Second's review of
+		// 92f83bff: the rotation without its shift turned the body about the GROUND, the soles sliding 17 uu in one frame as an act came in)
+		const float StanceKeep = 1.0f - Still;
+		BodyRoot->SetRelativeLocation(BodyRoot->GetRelativeLocation()
+			+ FVector(Pose.Stance.ShiftX, Pose.Stance.ShiftY, Pose.Stance.ShiftZ) * StanceKeep);
+		BodyRoot->SetRelativeRotation(FRotator(ActAsWritten * (Pose.LeanDeg + Pose.Body.PitchDeg + O.Fly * CVarFlyLean.GetValueOnGameThread())
+				+ Pose.Stance.PitchDeg * StanceKeep,
+			(Pose.BodyYawDeg + Pose.Stance.YawDeg) * StanceKeep, (Pose.Body.RollDeg + Pose.TurnRollDeg + Pose.Stance.RollDeg) * StanceKeep));
 	}
 
 	const FTransform BodyXf = BodyRoot != nullptr ? BodyRoot->GetComponentTransform() : GetActorTransform();

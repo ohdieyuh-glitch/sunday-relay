@@ -6567,6 +6567,13 @@ namespace
 		// the lag went off -- the snap a switch-off would make
 		FVector CamOffRest = FVector::ZeroVector;
 		bool bCamRestSet = false;
+		// S4 (Second's review of 92f83bff: "no QA reads moving blades"): the held blades' tips while the Dog MOVES -- the lower tip's least
+		// height over the Dog's ground in the handoff run and in the dash, and the farther tip's greatest distance from its centre line
+		float TipLowRun = 1.0e9f;
+		float TipLowSprint = 1.0e9f;
+		float TipWide = 0.0f;
+		int32 TipSamplesRun = 0;
+		int32 TipSamplesSprint = 0;
 		float CamTrailPeak = 0.0f;
 		float CamGapAtOff = -1.0f;
 		TArray<FHandTest> Tests;
@@ -6692,6 +6699,28 @@ namespace
 			}
 		}
 		return static_cast<float>(Crossings * 0.5 / (At.Last() - At[0]));
+	}
+
+	/** S4: the held blades' tips now -- the lower tip's height above the Dog's ground (the capsule's foot) and the farther tip's distance from
+	 *  the Dog's centre line, uu. False while the swords are not fully in the hands. */
+	bool QaHandTips(const ARelayDogCharacter* Dog, float& OutLow, float& OutWide)
+	{
+		const WonderlandHandoffSwords::FPresentation& Swords = Dog->GetHandoffSwords();
+		if (Swords.GetPresence() < 0.99f)
+		{
+			return false;
+		}
+		const double Ground = Dog->GetActorLocation().Z - Dog->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+		const FVector Across = Dog->GetActorRightVector();
+		OutLow = 1.0e9f;
+		OutWide = 0.0f;
+		for (const bool bSlot : { true, false })
+		{
+			const FVector Tip = Swords.GetSwordWorld(bSlot).TransformPosition(FVector(0.0, 0.0, WonderlandHandoffSwords::TipZ));
+			OutLow = FMath::Min(OutLow, static_cast<float>(Tip.Z - Ground));
+			OutWide = FMath::Max(OutWide, static_cast<float>(FMath::Abs(FVector::DotProduct(Tip - Dog->GetActorLocation(), Across))));
+		}
+		return true;
 	}
 
 	void QaHandFinish(FQaHand& H, const TCHAR* Why)
@@ -6879,6 +6908,17 @@ namespace
 				H.SpeedSum += Ground;
 				++H.Samples;
 			}
+			if (In >= 0.6f)
+			{
+				float TipLow = 0.0f;
+				float TipOut = 0.0f;
+				if (QaHandTips(Dog, TipLow, TipOut))
+				{
+					H.TipLowRun = FMath::Min(H.TipLowRun, TipLow);
+					H.TipWide = FMath::Max(H.TipWide, TipOut);
+					++H.TipSamplesRun;
+				}
+			}
 			if (In >= 1.8f)
 			{
 				H.HandoffRun = H.Samples > 0 ? H.SpeedSum / H.Samples : 0.0f;
@@ -6907,6 +6947,14 @@ namespace
 			{
 				H.DashPeak = FMath::Max(H.DashPeak, Ground);
 				H.DashSeconds += Dt;
+				float TipLow = 0.0f;
+				float TipOut = 0.0f;
+				if (QaHandTips(Dog, TipLow, TipOut))
+				{
+					H.TipLowSprint = FMath::Min(H.TipLowSprint, TipLow);
+					H.TipWide = FMath::Max(H.TipWide, TipOut);
+					++H.TipSamplesSprint;
+				}
 				// the sprint's window: well after the 0.35 s burst, W still held
 				if (In >= 0.75f && In < 1.15f)
 				{
@@ -6994,6 +7042,12 @@ namespace
 						H.ReleasedAt, *EndReason, AfterRelease, Allowed, H.MaxTick, Dog->IsDashing() ? TEXT("STILL DASHING") : TEXT("not dashing"), H.DashSeconds));
 				const float Visible = QaVisibleCycles(H.HipPitch, H.HipAt);
 				const float Commanded = H.CadenceSamples > 0 ? H.CadenceSum / H.CadenceSamples : 0.0f;
+				const float BodyHigh = FMath::Max(Dog->GetCanonBodyHeightUu(), 1.0f);
+				H.Check(TEXT("S4"), H.TipSamplesRun >= 10 && H.TipSamplesSprint >= 10 && H.TipLowRun >= 2.0f && H.TipLowSprint >= 2.0f
+						&& H.TipWide <= 0.5f * BodyHigh,
+					FString::Printf(TEXT("the blades while the Dog MOVES: the lower tip at least %.1f uu over the ground in the handoff run (%d frames) and %.1f in the dash ")
+						TEXT("and sprint (%d frames) (want >= 2: never into the ground); the farther tip at most %.1f uu from the centre line (want <= %.1f: half the body)"),
+						H.TipLowRun, H.TipSamplesRun, H.TipLowSprint, H.TipSamplesSprint, H.TipWide, 0.5f * BodyHigh));
 				H.Check(TEXT("S3d"), Visible >= 3.0f && Visible <= 6.0f,
 					FString::Printf(TEXT("the sprint's legs AS SEEN: the canon hip swings %.2f times a second, %d frames over %.2f s (3-6: a sprinter's, ")
 						TEXT("never the ~10/s blur that read as a slide); the animator's own count %.2f, reported only"),
@@ -8286,8 +8340,10 @@ namespace
 		V.Line[5] = FString::Printf(TEXT("the -Y sole %+.1f uu ahead of the hips (want >= 5), the +Y sole %+.1f behind them (want >= 8); the soles %.1f apart sideways, ")
 			TEXT("%+.1f over the unarmed stand (want <= +6: close, sideways only); each sole %+.1f / %+.1f uu off the ground it stood on (+Y / -Y; within 1.5)"),
 			R.FrontAhead, R.RearBehind, R.SoleGap, GapGrowth, SinkPlus, SinkMinus);
-		V.bOk[6] = R.KneeDeg[0] >= 8.0f && R.KneeDeg[1] >= 8.0f && R.KneeDeg[0] - U.KneeDeg[0] >= 5.0f && R.KneeDeg[1] - U.KneeDeg[1] >= 5.0f;
-		V.Line[6] = FString::Printf(TEXT("knees bent %.1f / %.1f deg (+Y / -Y, from the drawn hip, knee and sole; want >= 8 and >= 5 more than the unarmed %.1f / %.1f)"),
+		// >= 30 (Second's review of 92f83bff: the two-bone solve's reach clamp leaves every solved knee >= ~12 deg, so ">= 8" passed a straight
+		// "loaded" leg; the model gives 44 / 64, and ST2CX6 -- the crouch taken away -- must turn this red)
+		V.bOk[6] = R.KneeDeg[0] >= 30.0f && R.KneeDeg[1] >= 30.0f && R.KneeDeg[0] - U.KneeDeg[0] >= 5.0f && R.KneeDeg[1] - U.KneeDeg[1] >= 5.0f;
+		V.Line[6] = FString::Printf(TEXT("knees bent %.1f / %.1f deg (+Y / -Y, from the drawn hip, knee and sole; want >= 30 and >= 5 more than the unarmed %.1f / %.1f)"),
 			R.KneeDeg[0], R.KneeDeg[1], U.KneeDeg[0], U.KneeDeg[1]);
 		V.bOk[7] = R.HeadAhead >= 0.12f * BodyH;
 		V.Line[7] = FString::Printf(TEXT("the head %+.1f uu ahead of the hips (want >= %.1f: 12%% of the body; unarmed %+.1f)"), R.HeadAhead, 0.12f * BodyH, U.HeadAhead);
@@ -9024,13 +9080,16 @@ namespace
 		case 30:
 		case 31:
 		case 32:
+		case 33:
 		{
 			// THE CONTROLS (control-must-be-able-to-fail), on Relay OG, armed: each sign flipped through its own knob -- the bend backward
 			// (Stance.Bend -24), the pelvis the other way (Stance.Tilt -5), the front foot behind (Stance.Front -12) -- must turn ITS check
 			// RED; each knob put back before the next, and ST2CXR then reads the stance green again
-			static const TCHAR* const ControlKnobs[] = { TEXT("wl.Handoff.Stance.Bend"), TEXT("wl.Handoff.Stance.Tilt"), TEXT("wl.Handoff.Stance.Front") };
-			static const TCHAR* const ControlFlips[] = { TEXT("-24"), TEXT("-5"), TEXT("-12") };
-			static const int32 ControlJudged[] = { 1, 4, 5 };
+			// ...and the knees: the crouch taken away (Stance.Crouch 0) must turn ST2C6 red (the model: both knees at the reach clamp, 11.9 deg)
+			static const TCHAR* const ControlKnobs[] = { TEXT("wl.Handoff.Stance.Bend"), TEXT("wl.Handoff.Stance.Tilt"), TEXT("wl.Handoff.Stance.Front"),
+				TEXT("wl.Handoff.Stance.Crouch") };
+			static const TCHAR* const ControlFlips[] = { TEXT("-24"), TEXT("-5"), TEXT("-12"), TEXT("0") };
+			static const int32 ControlJudged[] = { 1, 4, 5, 6 };
 			const int32 Which = S.Phase - 30;
 			const int32 Judged = ControlJudged[Which];
 			if (S.ControlKnob.IsEmpty())
@@ -9061,7 +9120,7 @@ namespace
 			Next(S.Phase + 1);
 			return true;
 		}
-		case 33:
+		case 34:
 		{
 			// every knob put back: the stance reads as it did
 			if (In < 1.2f)
@@ -9069,10 +9128,10 @@ namespace
 				return true;
 			}
 			const FQaChargeVerdict Verdict = QaJudgeCharge(QaReadCharge(Dog), S.ChargeUnarmed[0], FMath::Max(Dog->GetCanonBodyHeightUu(), 1.0f));
-			S.Check(TEXT("ST2CXR"), Verdict.bOk[1] && Verdict.bOk[4] && Verdict.bOk[5],
-				FString::Printf(TEXT("the knobs put back, the stance green again: ST2C1 %s (%s); ST2C4 %s (%s); ST2C5 %s (%s)"),
+			S.Check(TEXT("ST2CXR"), Verdict.bOk[1] && Verdict.bOk[4] && Verdict.bOk[5] && Verdict.bOk[6],
+				FString::Printf(TEXT("the knobs put back, the stance green again: ST2C1 %s (%s); ST2C4 %s (%s); ST2C5 %s (%s); ST2C6 %s (%s)"),
 					Verdict.bOk[1] ? TEXT("green") : TEXT("RED"), *Verdict.Line[1], Verdict.bOk[4] ? TEXT("green") : TEXT("RED"), *Verdict.Line[4],
-					Verdict.bOk[5] ? TEXT("green") : TEXT("RED"), *Verdict.Line[5]));
+					Verdict.bOk[5] ? TEXT("green") : TEXT("RED"), *Verdict.Line[5], Verdict.bOk[6] ? TEXT("green") : TEXT("RED"), *Verdict.Line[6]));
 			QaStanceBeginKnees(S, World);
 			Next(7);
 			return true;

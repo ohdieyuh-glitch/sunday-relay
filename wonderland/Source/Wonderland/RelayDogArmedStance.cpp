@@ -200,8 +200,12 @@ namespace RelayDogArmedStance
 				// THE ANIMATOR'S OWN SHARE IS ITS SOLVE x THE GAIT: standing it writes straight legs (0, 0), not the upright solve
 				// (which the 0.995 reach clamp leaves ~8 deg of hip and ~12 of knee off straight), so only the gait's share of that
 				// solve is taken back out -- or a standing Dog's knees came out ~12 deg short of the stance's (charge_model.py).
-				Leg.HipDeg += Bent.HipDeg - Base.HipDeg * Gait;
-				Leg.KneeDeg += Bent.KneeDeg - Base.KneeDeg * Gait;
+				// ...and as the stance's own weight comes in from 0 the subtraction blends FROM the whole upright solve (Second's review of
+				// 92f83bff: at weight 1e-6 the knees popped 7.7 / 12 deg on the first armed frame, and snapped straight a second after the
+				// swords went back): at weight 0 the difference is exactly 0, at weight 1 it is the solve less the gait's share
+				const float Upright = 1.0f - Cancel * (1.0f - Gait);
+				Leg.HipDeg += Bent.HipDeg - Base.HipDeg * Upright;
+				Leg.KneeDeg += Bent.KneeDeg - Base.KneeDeg * Upright;
 				// and the sideways part, as a sweep AWAY from the centre line (the writer turns it into the rig's measured roll)
 				return Lateral * Side;
 			};
