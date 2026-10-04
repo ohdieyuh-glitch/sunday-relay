@@ -5,7 +5,7 @@ import sys
 import tempfile
 import unittest
 
-from helpers import A1, A2, document, item
+from helpers import A1, A2, TempDirs, arm_bundle, document, item, julius
 
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -60,6 +60,43 @@ class CliTests(unittest.TestCase):
         result = cli("compare", A1, A2)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["kind"], "candidate_vs_baseline")
+
+    def test_a_registered_pair_is_validated_then_evaluated_from_four_arm_bundles(self):
+        # The C-4/C-5 sequence: the hash first, the arms' contracts carry it, then one bundle per arm and
+        # each WITH arm's start keyed by its workflow run (or its Julius run, here for the second).
+        tmp = TempDirs()
+        w1, w2, c1, c2 = julius(0xA1), julius(0xA2), julius(0xC1), julius(0xC2)
+        raw = {
+            "schemaVersion": "julius.learning-registration.v1", "registrationId": "learn-pair-001",
+            "registeredAt": "2026-10-04T09:00:00Z", "hypothesis": "Carried verified knowledge lowers repairs.",
+            "weakness": {"description": "the coder repeats a repair", "evidence": ["run 36915013287 tasks.tsv"]},
+            "adaptation": {"kind": "carried_knowledge", "description": "verified claims of the WITHOUT arm",
+                           "changeRef": "brain:claims"},
+            "baselineRuns": [w1, w2],
+            "metrics": [{"name": "mission.repair_rounds", "expectedDirection": "lower", "minEffect": 1, "primary": True}],
+            "minRunsPerSide": 2,
+        }
+        try:
+            path = os.path.join(tmp.bundle(A2), "registration.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(raw, handle)
+            validated = cli("learning-validate", path)
+            self.assertEqual(validated.returncode, 0, validated.stderr)
+            digest = json.loads(validated.stdout)["digest"].split(":", 1)[1]
+            arms = [arm_bundle(tmp, digest, w1, "41", repairs=2), arm_bundle(tmp, digest, w2, "42", repairs=3),
+                    arm_bundle(tmp, digest, c1, "43", without=w1, inherited_repairs=2),
+                    arm_bundle(tmp, digest, c2, "44", without=w2, inherited_repairs=3)]
+            result = cli("learning-evaluate", path, "--baseline", *arms[:2], "--candidate", *arms[2:],
+                         "--started", "43=2026-10-04T10:00:00Z", f"{c2}=2026-10-04T11:00:00Z")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            outcome = json.loads(result.stdout)
+            self.assertEqual(outcome["verdict"], "RETAIN", outcome["reasons"])
+            self.assertEqual([a["juliusRunId"] for a in outcome["arms"]], [w1, w2, c1, c2])
+            late = cli("learning-evaluate", path, "--baseline", *arms[:2], "--candidate", *arms[2:],
+                       "--started", "43=2026-10-04T10:00:00Z", "44=2026-10-04T08:59:59Z")
+            self.assertEqual(json.loads(late.stdout)["verdict"], "INVALID")
+        finally:
+            tmp.cleanup()
 
     def test_brain_check_refuses_with_exit_2(self):
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as handle:

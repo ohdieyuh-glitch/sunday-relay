@@ -5,9 +5,11 @@ baseline mission -> evidence -> weakness -> adaptation -> matched later mission 
 
 THE VERDICTS, in the order they are tested:
 
-  INVALID       the registration does not precede every candidate run, a baseline run is not
-                the one registered, or the runs are not matched on the registered keys. The
-                comparison measures nothing the registration promised.
+  INVALID       the registration does not precede every candidate run, one run is counted as
+                two arms, a baseline arm is not one registered, an arm's own learning record
+                belongs to another registration or arm, or the runs are not matched on the
+                registered keys (or carry none of a key's value, which no comparison can match).
+                The comparison measures nothing the registration promised.
   INCONCLUSIVE  the primary metric is Unknown on any run, or a declared confounder differs between
                 the arms (the change is not the only change).
   REJECT        the primary metric did not move by its minimum effect in the expected direction
@@ -21,6 +23,16 @@ THE VERDICTS, in the order they are tested:
 A SECOND SUCCESSFUL RUN IS NOT LEARNING. A binary metric that was already at its best on the
 baseline cannot improve, so the verdict for "it worked before and it worked again" is REJECT
 (no movement), never RETAIN.
+
+ONE ARM, ONE RUN, TWO NAMES (decision C, Option D). Each arm is one Julius run -- its own, through
+its contract's rerun key -- in one job of its own workflow run; arm WITH's job restored arm
+WITHOUT's store, and its bundle is read for its own run (``learning_arm.own_run``). An arm is named
+by either id: a registration names its baseline arms by workflow run id (a run that preceded it)
+or by Julius run id (an arm run after it: the id follows from the contract and the rerun key), and
+``candidate_started_at`` may key a candidate's start by either. Every start recorded for a
+candidate arm must follow the registration. When the arms recorded themselves (``learning.tsv``),
+every arm must have: under this registration's digest, baseline arms WITHOUT, candidate arms WITH,
+each WITH compared with a baseline arm of this evaluation.
 """
 
 from __future__ import annotations
@@ -54,11 +66,45 @@ def _key_values(analysis: Mapping[str, Any], keys: Sequence[str]) -> dict[str, A
     return out
 
 
+def _named(value: Any) -> str | None:
+    """An id as a bundle records it; the dump writes ``none`` for a run it could not name."""
+    text = "" if value is None else str(value).strip()
+    return None if text in ("", "none") else text
+
+
+def _identity(analysis: Mapping[str, Any]) -> dict[str, str | None]:
+    """The arm's two names: the run its bundle was read for, and its workflow run."""
+    binding = analysis.get("binding", {})
+    scope = analysis.get("runScope") or {}
+    return {"juliusRunId": _named(scope.get("run")) or _named(binding.get("juliusRunId")),
+            "workflowRunId": _named(binding.get("workflowRunId"))}
+
+
+def _label(identity: Mapping[str, str | None]) -> str:
+    names = [identity["juliusRunId"], f"workflow run {identity['workflowRunId']}" if identity["workflowRunId"] else None]
+    return " / ".join(name for name in names if name) or "an unnamed run"
+
+
+def _record(analysis: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """The arm's own learning record, as its analysis read it; None when it carries none."""
+    learning = analysis.get("learning")
+    return learning if isinstance(learning, dict) and "arm" in learning else None
+
+
+def _arm(side: str, analysis: Mapping[str, Any], identity: Mapping[str, str | None]) -> dict[str, Any]:
+    record = _record(analysis) or {}
+    return {"side": side, **identity, **{key: record.get(key) for key in (
+        "arm", "registrationDigest", "runState", "withoutRunId", "comparison", "decision", "proposal")}}
+
+
 def evaluate_learning(registration: Registration, baseline: Sequence[Mapping[str, Any]],
                       candidate: Sequence[Mapping[str, Any]], candidate_started_at: Mapping[str, str],
                       *, seed: int = 0) -> dict[str, Any]:
-    """``baseline``/``candidate``: ``julius.evidence-analysis.v1`` reports. ``candidate_started_at``:
-    workflow run id -> the run's created_at as GitHub records it (not the bundle's own clock)."""
+    """``baseline``/``candidate``: ``julius.evidence-analysis.v1`` reports, one per arm.
+    ``candidate_started_at``: a candidate arm's workflow run id (or its Julius run id) -> that arm's
+    workflow run created_at as GitHub records it (not the bundle's own clock)."""
+    base_ids = [_identity(b) for b in baseline]
+    cand_ids = [_identity(c) for c in candidate]
     outcome: dict[str, Any] = {
         "schemaVersion": LEARNING_OUTCOME_SCHEMA, "authority": NOT_READINESS_AUTHORITY,
         "registrationId": registration.registration_id, "registrationDigest": registration.digest(),
@@ -66,6 +112,8 @@ def evaluate_learning(registration: Registration, baseline: Sequence[Mapping[str
                                                                "changeRef": registration.change_ref},
         "baselineRuns": [b.get("binding", {}).get("workflowRunId") for b in baseline],
         "candidateRuns": [c.get("binding", {}).get("workflowRunId") for c in candidate],
+        "arms": [_arm("baseline", b, i) for b, i in zip(baseline, base_ids)]
+                + [_arm("candidate", c, i) for c, i in zip(candidate, cand_ids)],
         "reasons": [],
     }
 
@@ -76,25 +124,71 @@ def evaluate_learning(registration: Registration, baseline: Sequence[Mapping[str
 
     if not baseline or not candidate:
         return finish("INVALID", "each arm needs at least one run")
-    # 1. ORDER: the registration came first, or this is a story told after the fact.
+    # 1. ORDER: the registration came first, or this is a story told after the fact. Every start
+    #    recorded for a candidate arm, by its workflow run or its Julius run, must follow it.
     registered = _time(registration.registered_at)
-    for run in outcome["candidateRuns"]:
-        started = _time(candidate_started_at.get(str(run)))
-        if started is None:
-            return finish("INVALID", f"no recorded start for candidate run {run}: cannot prove the registration preceded it")
-        if registered is None or started <= registered:
-            return finish("INVALID", f"candidate run {run} started at {candidate_started_at.get(str(run))}, "
-                                     f"not after the registration ({registration.registered_at})")
-    if set(map(str, outcome["baselineRuns"])) != set(registration.baseline_runs):
-        return finish("INVALID", f"baseline runs {outcome['baselineRuns']} are not the registered {list(registration.baseline_runs)}")
-    # 2. MATCH on the registered keys.
+    for identity in cand_ids:
+        recorded = [(name, candidate_started_at[name]) for name in (identity["workflowRunId"], identity["juliusRunId"])
+                    if name is not None and name in candidate_started_at]
+        if not recorded:
+            return finish("INVALID", f"no recorded start for candidate run {_label(identity)}: "
+                                     "cannot prove the registration preceded it")
+        for name, text in recorded:
+            started = _time(text)
+            if started is None or registered is None or started <= registered:
+                return finish("INVALID", f"candidate run {_label(identity)} started at {text} ({name}), "
+                                         f"not after the registration ({registration.registered_at})")
+    # 2. IDENTITY: one run is one sample. The same run counted twice is a second reading, not a second arm.
+    for key in ("juliusRunId", "workflowRunId"):
+        names = [identity[key] for identity in base_ids + cand_ids if identity[key] is not None]
+        repeated = sorted({name for name in names if names.count(name) > 1})
+        if repeated:
+            return finish("INVALID", f"{key} {repeated} names more than one arm: one run is one sample, never two")
+    # 3. THE REGISTERED BASELINE: each registered run is exactly one baseline arm, and each baseline arm is registered.
+    registered_runs = list(registration.baseline_runs)
+    claimed: list[str] = []
+    for identity in base_ids:
+        hits = [run for run in registered_runs if run in (identity["juliusRunId"], identity["workflowRunId"])]
+        if len(hits) != 1:
+            return finish("INVALID", f"baseline runs {outcome['baselineRuns']} are not the registered {registered_runs}: "
+                                     f"{_label(identity)} is named {len(hits)} time(s)")
+        claimed.extend(hits)
+    if sorted(claimed) != sorted(registered_runs):
+        return finish("INVALID", f"baseline runs {outcome['baselineRuns']} are not the registered {registered_runs}: "
+                                 f"{sorted(set(registered_runs) - set(claimed))} has no arm")
+    # 4. THE ARMS' OWN RECORDS. Once one arm recorded itself, every arm must have, under THIS registration
+    #    and as the arm it is: an arm cannot leave the pair by losing its record.
+    records = [_record(run) for run in list(baseline) + list(candidate)]
+    if any(record is not None for record in records):
+        digest = registration.digest().split(":", 1)[-1]
+        sides = ["baseline"] * len(baseline) + ["candidate"] * len(candidate)
+        for side, identity, record in zip(sides, base_ids + cand_ids, records):
+            expected = "WITHOUT" if side == "baseline" else "WITH"
+            if record is None:
+                return finish("INVALID", f"{side} run {_label(identity)} carries no learning record while another arm does")
+            if record.get("registrationDigest") != digest:
+                return finish("INVALID", f"{side} run {_label(identity)} ran under registration "
+                                         f"{record.get('registrationDigest')}, not this one ({digest})")
+            if record.get("arm") != expected:
+                return finish("INVALID", f"{side} run {_label(identity)} is arm {record.get('arm')}, not {expected}")
+        baseline_runs = {identity["juliusRunId"] for identity in base_ids} - {None}
+        for identity, analysis in zip(cand_ids, candidate):
+            without = (_record(analysis) or {}).get("withoutRunId")
+            if without not in baseline_runs:
+                return finish("INVALID", f"candidate run {_label(identity)} was compared with {without}, "
+                                         "which is not a baseline arm here")
+    # 5. MATCH on the registered keys. A key no run carries is equal everywhere and proves nothing.
     reference = _key_values(baseline[0], registration.matched_on)
-    for run in list(baseline) + list(candidate):
+    absent = sorted(key for key, value in reference.items() if value in (None, "", {}, []))
+    if absent:
+        return finish("INVALID", f"run {_label(base_ids[0])} carries no {absent}: a match on a value nobody "
+                                 "recorded cannot be proven")
+    for run, identity in zip(list(baseline) + list(candidate), base_ids + cand_ids):
         values = _key_values(run, registration.matched_on)
         if values != reference:
             diff = {k: (reference[k], values[k]) for k in reference if reference[k] != values[k]}
-            return finish("INVALID", f"run {run.get('binding', {}).get('workflowRunId')} is not matched on {sorted(diff)}: {diff}")
-    # 3. CONFOUNDERS: any declared confounder that differs between the arms is reported, and blocks a conclusion.
+            return finish("INVALID", f"run {_label(identity)} is not matched on {sorted(diff)}: {diff}")
+    # 6. CONFOUNDERS: any declared confounder that differs between the arms is reported, and blocks a conclusion.
     confounded = []
     for key in registration.confounders:
         base_vals = {str(_key_values(b, [key])[key]) for b in baseline}
@@ -103,7 +197,7 @@ def evaluate_learning(registration: Registration, baseline: Sequence[Mapping[str
             confounded.append({"key": key, "baseline": sorted(base_vals), "candidate": sorted(cand_vals)})
     outcome["confounders"] = confounded
 
-    # 4. MEASURE the primary metric (secondary metrics are reported, never decisive).
+    # 7. MEASURE the primary metric (secondary metrics are reported, never decisive).
     spec = registration.primary
     measured: dict[str, Any] = {}
     for metric in registration.metrics:

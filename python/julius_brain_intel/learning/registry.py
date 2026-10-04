@@ -11,12 +11,18 @@ Required:
   weakness            what was wrong, with >= 1 evidence ref (a bundle anomaly, a finding, a run id)
   adaptation          what changes (kind, description, change_ref: a commit, a patch digest or a
                       Brain record) -- the ONE difference the comparison is about
-  baseline            the run(s) the weakness was seen in: workflow run ids
+  baseline            the baseline arm(s), each named once by its workflow run id or its Julius
+                      run id. An arm of a registered pair takes its Julius run id from its own
+                      rerun key (``run:`` + sha256(idempotencyKey:rerun:<key>)[:24]), so it can be
+                      named before it runs -- as it must be, since its contract carries this
+                      registration's digest
   metrics             >= 1, exactly one primary; each with expected direction (higher/lower) and a
                       minimum effect that counts
-  matched_on          keys the subsequent run must share with the baseline (default: contract,
-                      mode, requested models)
-  confounders         further keys to check and REPORT (e.g. provider latency regime, commit)
+  matched_on          keys every arm must share (default, MATCHED_PAIR_PREREG §3: the contract
+                      digest, mode, requested models, runtime version and the commit). Never a
+                      per-run identity: two arms are two runs, so a pair matched on one could
+                      never match, and the registration is refused
+  confounders         further keys to check and REPORT (e.g. provider latency regime, tree)
   failure_rule        the declared outcome that rejects the adaptation
   min_runs_per_side   below this an interval cannot be formed and RETAIN is impossible
 """
@@ -32,7 +38,9 @@ from typing import Any, Mapping
 from .. import LEARNING_REGISTRATION_SCHEMA
 
 DIRECTIONS = ("higher", "lower")
-DEFAULT_MATCHED_ON = ("juliusRunId", "mode", "requestedModels")
+DEFAULT_MATCHED_ON = ("contractDigest", "mode", "requestedModels", "runtimeVersion", "commit")
+#: One run's own identity. No two arms share one (MATCHED_PAIR_PREREG §6), so none can be matched on.
+PER_RUN_KEYS = ("juliusRunId", "workflowRunId", "workflowRunAttempt")
 
 
 class RegistrationError(ValueError):
@@ -129,12 +137,16 @@ def parse_registration(raw: Mapping[str, Any]) -> Registration:
         raise RegistrationError("minRunsPerSide must be a positive integer")
     registered_at = need("registeredAt")
     _parse_time(registered_at)
+    matched_on = tuple(raw.get("matchedOn") or DEFAULT_MATCHED_ON)
+    per_run = [key for key in matched_on if key in PER_RUN_KEYS]
+    if per_run:
+        raise RegistrationError(f"matchedOn names a per-run identity {per_run}: two arms are two runs and never share one")
     return Registration(
         registration_id=str(need("registrationId")), registered_at=registered_at, hypothesis=str(need("hypothesis")),
         weakness=str(weakness.get("description", "")), weakness_evidence=tuple(str(e) for e in weakness["evidence"]),
         adaptation_kind=str(adaptation["kind"]), adaptation_description=str(adaptation["description"]),
         change_ref=str(adaptation["changeRef"]), baseline_runs=tuple(str(r) for r in need("baselineRuns")),
-        metrics=tuple(metrics), matched_on=tuple(raw.get("matchedOn") or DEFAULT_MATCHED_ON),
+        metrics=tuple(metrics), matched_on=matched_on,
         confounders=tuple(raw.get("confounders") or ()), failure_rule=str(raw.get("failureRule") or Registration.failure_rule),
         min_runs_per_side=min_runs, supersedes=raw.get("supersedes"),
     )
