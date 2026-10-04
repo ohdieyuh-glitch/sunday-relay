@@ -698,6 +698,8 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             },
             // sign-out ends presence: friends see the player OFFLINE at once, and they leave their world context
             onSignOut: async (participantId, at) => endSocialPresence(socialEnabled ? await socialStore() : null, participantId, at),
+            // a failed device-code request: GitHub's HTTP status + error code only (never the client id or a code)
+            log: (line) => console.warn(`[relay-bridge] ${line}`),
             oauthRoot: socialGithub.oauthRoot,
             apiRoot: socialGithub.apiRoot,
           });

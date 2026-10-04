@@ -63,6 +63,60 @@ function bridge(gh: ReturnType<typeof github>, over: Partial<NativeSignInDeps> =
   return { deps, sessions, recorded, call };
 }
 
+/*
+ * 10-04: CORE's live bridge hit GitHub's HTTP 400 error=device_flow_disabled, which the silent 503 hid. A failed device-code
+ * request now writes ONE server-side WARN line naming GitHub's HTTP status and error CODE; the caller's answer is unchanged.
+ */
+describe('desktop sign-in: a failed device-code request is logged for the operator, never for the caller', () => {
+  const refusing = (status: number, body: unknown): SignInFetch => async (url) => (url.endsWith('/login/device/code')
+    ? { ok: status >= 200 && status < 300, status, json: async () => body }
+    : { ok: false, status: 404, json: async () => ({}) });
+
+  it("GitHub's 400 device_flow_disabled: the same 503, and exactly one WARN line with the code -- no client id, no code, no text", async () => {
+    const lines: string[] = [];
+    const clientId = `Iv1.${randomBytes(8).toString('hex')}`;
+    const fetchImpl = refusing(400, { error: 'device_flow_disabled', error_description: LEAK, user_code: 'WDJB-MJHT', device_code: DEVICE_CODE });
+    const b = bridge({ calls: [], fetchImpl }, { clientId, log: (l) => lines.push(l) });
+    const quiet = bridge({ calls: [], fetchImpl }, { clientId });
+    const answer = await b.call('start', {});
+    const unlogged = await quiet.call('start', {});
+    expect(answer.status).toBe(503);
+    expect(JSON.stringify(answer.body)).toBe(JSON.stringify(unlogged.body)); // nothing new for the caller
+    expect(JSON.stringify(answer.body)).toContain('signin_unavailable');
+    expect(JSON.stringify(answer.body)).toContain('Signing in from the desktop is not available on this server right now.');
+    expect(JSON.stringify(answer.body)).not.toMatch(/device_flow_disabled|HTTP 400|GitHub said/);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('device_flow_disabled');
+    expect(lines[0]).toContain('HTTP 400');
+    for (const secret of [clientId, DEVICE_CODE, 'WDJB-MJHT', LEAK]) expect(lines.join('\n')).not.toContain(secret);
+  });
+
+  it('other refusals: the GitHub code is sanitised to [a-z_]{1,64}; a network failure and a 200 error are logged the same way', async () => {
+    const cases: Array<[SignInFetch, RegExp]> = [
+      [refusing(200, { error: 'incorrect_client_credentials' }), /HTTP 200, error=incorrect_client_credentials\)/],
+      [refusing(400, { error: `unsupported_grant_type ${LEAK}` }), /HTTP 400, error=unrecognised\)/],
+      [refusing(401, { error: 'Bad-Code<script>' }), /HTTP 401, error=unrecognised\)/],
+      [refusing(500, null), /HTTP 500, error=unrecognised\)/],
+      [async () => { throw new Error(`connect failed ${DEVICE_CODE}`); }, /HTTP none, error=no_answer\)/],
+    ];
+    for (const [fetchImpl, want] of cases) {
+      const lines: string[] = [];
+      const b = bridge({ calls: [], fetchImpl }, { log: (l) => lines.push(l) });
+      expect((await b.call('start', {})).status).toBe(503);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatch(want);
+      for (const secret of ['Iv1.publicclientid', DEVICE_CODE, LEAK, '<script>']) expect(lines[0]).not.toContain(secret);
+    }
+  });
+
+  it('a successful start logs nothing', async () => {
+    const lines: string[] = [];
+    const b = bridge(github({}), { log: (l) => lines.push(l) });
+    expect((await b.call('start', {})).status).toBe(200);
+    expect(lines).toEqual([]);
+  });
+});
+
 describe('desktop sign-in: who may start it', () => {
   it('refuses a web Origin, and is 503 when the deployment has not enabled social or has no client id -- without asking GitHub', async () => {
     const gh = github({});

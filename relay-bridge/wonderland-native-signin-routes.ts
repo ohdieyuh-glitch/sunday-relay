@@ -129,6 +129,11 @@ export interface NativeSignInDeps {
    */
   readonly onSignOut?: (participantId: string, now: number) => Promise<void>;
   readonly fetchImpl?: SignInFetch;
+  /**
+   * The server's WARN log. Only a failed device-code request writes to it: GitHub's HTTP status and GitHub's `error` CODE
+   * (matched to [a-z_]{1,64}), never the client id, a device or user code, or any text of GitHub's answer.
+   */
+  readonly log?: (line: string) => void;
   readonly oauthRoot?: string;
   readonly apiRoot?: string;
 }
@@ -167,6 +172,31 @@ async function postJson(doFetch: SignInFetch, url: string, payload: Record<strin
     return null;
   }
 }
+
+/** The device-code request, with GitHub's HTTP status kept for the WARN line (null status: the request never got an answer). */
+async function postDeviceCode(doFetch: SignInFetch, url: string, payload: Record<string, string>): Promise<{ status: number | null; body: Record<string, unknown> | null }> {
+  let response: Awaited<ReturnType<SignInFetch>>;
+  try {
+    response = await doFetch(url, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'relay-github-app' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return { status: null, body: null }; // a thrown fetch can carry the request body in its message: say nothing of it
+  }
+  let body: Record<string, unknown> | null = null;
+  try {
+    body = asRecord(await response.json());
+  } catch {
+    body = null;
+  }
+  // GitHub answers the device-flow errors with HTTP 200 and an `error` field; a non-2xx (e.g. 400 device_flow_disabled) is a refusal too
+  return { status: response.status, body: response.ok ? body : { error: body?.error } };
+}
+
+/** GitHub's error CODE, safe for a log line: [a-z_]{1,64} or a fixed word -- never free text. */
+const githubErrorCode = (value: unknown): string => (typeof value === 'string' && /^[a-z_]{1,64}$/.test(value) ? value : 'unrecognised');
 
 export async function handleNativeSignInRoute(
   request: NativeSignInRequest,
@@ -207,16 +237,26 @@ export async function handleNativeSignInRoute(
 
   /* ---------------------------------------------------------------- start */
   if (path === '/wonderland/native/signin/start') {
-    const answer = await postJson(doFetch, `${oauthRoot}/login/device/code`, { client_id: clientId });
-    if (answer === null) return UNAVAILABLE();
+    const asked = await postDeviceCode(doFetch, `${oauthRoot}/login/device/code`, { client_id: clientId });
+    // ONE WARN line per failed request, for the operator (the caller's answer stays the same silent 503): GitHub's HTTP status
+    // and error CODE only -- never the client id, a code, or GitHub's text.
+    const refused = (why: string): NativeSignInResult => {
+      deps.log?.(`wonderland sign-in: GitHub refused the device-code request (HTTP ${asked.status ?? 'none'}, ${why}) -- answering 503 signin_unavailable`);
+      return UNAVAILABLE();
+    };
+    const answer = asked.body;
+    if (asked.status === null) return refused('error=no_answer');
+    if (answer === null) return refused('error=unreadable_answer');
     const deviceCode = typeof answer.device_code === 'string' ? answer.device_code : '';
     const userCode = typeof answer.user_code === 'string' ? answer.user_code : '';
     const verificationUri = typeof answer.verification_uri === 'string' ? answer.verification_uri : '';
     // device_flow_disabled, incorrect_client_credentials, unauthorized_client …: this deployment cannot sign anyone in.
-    if (typeof answer.error === 'string' || deviceCode === '' || deviceCode.length > 200) return UNAVAILABLE();
+    if (answer.error !== undefined && answer.error !== null) return refused(`error=${githubErrorCode(answer.error)}`);
+    if (asked.status < 200 || asked.status > 299) return refused('error=unrecognised');
+    if (deviceCode === '' || deviceCode.length > 200) return refused('error=no_device_code');
     // What the player is shown must be GitHub's own short code and GitHub's own page, nothing an answer could smuggle in.
-    if (!/^[A-Z0-9]{4}-?[A-Z0-9]{4}$/.test(userCode)) return UNAVAILABLE();
-    if (!verificationUri.startsWith(`${oauthRoot}/`) || verificationUri.length > 200) return UNAVAILABLE();
+    if (!/^[A-Z0-9]{4}-?[A-Z0-9]{4}$/.test(userCode)) return refused('error=malformed_user_code');
+    if (!verificationUri.startsWith(`${oauthRoot}/`) || verificationUri.length > 200) return refused('error=foreign_verification_uri');
     const expiresIn = typeof answer.expires_in === 'number' && answer.expires_in > 0 ? Math.min(answer.expires_in, MAX_DEVICE_TTL_S) : MAX_DEVICE_TTL_S;
     const interval = typeof answer.interval === 'number' && answer.interval >= MIN_INTERVAL_S ? answer.interval : MIN_INTERVAL_S;
     const expiresAt = now + expiresIn * 1000;
