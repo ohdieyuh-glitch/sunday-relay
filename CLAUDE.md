@@ -106,7 +106,259 @@ words from your own commit appear in the bundle; and `sk-` matches inside
 
 ---
 
-## State as of 2026-08-02 (end of session)
+## State as of 2026-10-04 (JUJU MAIN, cloud)
+
+**Read this first. Do not trust remembered readiness, PR numbers, migration
+numbers, scores or blockers from any earlier session.** Re-verify against live
+GitHub (`git fetch origin --prune`, open PRs, the Actions runs named below)
+before acting. Where a figure below says *founder canon*, the record behind it
+lives outside this repository (the local `landing/`, `row13i/`, `alpha_beta/`
+qualification records); it was NOT re-derived from repo evidence in this
+session.
+
+### Repository
+
+- `origin/main` = `0a2b4d162a09cbe772d5dc875eb274cf4b56c490` (#320, Julius
+  Missions 2, 3 and 5 frozen at their reviewed definitions), 2026-10-04.
+  - Relay CI on that push: run 37221190268, **success**.
+  - Julius accept-main: run 37221274276, **success**.
+- Nearly all work since August is **Julius** (multi-agent mission runner with
+  paid provider runs), plus Wonderland and Project Brain (#309). The newest
+  in-repo engineering handoff is `docs/handoffs/JULIUS_CURRENT.md` §000h
+  (2026-09-28); it predates everything in this section.
+- The only path that can spend provider money is
+  `.github/workflows/julius-first-live-mission.yml` behind the paid-slot queue
+  (`docs/JULIUS_PAID_RUN_QUEUE.md`).
+
+### Roles
+
+- **JUJU MAIN**: primary Julius implementation, integration and landing owner.
+  It runs routine accept-main, preflights, CI, paid dispatches and watchers
+  autonomously. The founder has standing authorization for every genuinely
+  required paid Julius run. Do not ask the founder to paste routine blocks.
+- **SECOND JUJU** / **SECOND Wonderland**: independent reads and verdicts. An
+  implementer session never self-awards evidence that requires independent
+  verification; it marks the work `AWAITING INDEPENDENT REVIEW` and prepares it
+  for a quick check.
+- Cloud sessions do repo implementation, worker PRs, tests, CI, migration
+  tooling, the C carry, Project Brain, the hosted Wonderland backend,
+  static/repo-native qualification and GitHub evidence review. **A qualification
+  frozen to a specific local venue is never substituted with a cloud run**: mark
+  it `READY FOR LOCAL QUALIFICATION` and continue non-conflicting work.
+
+### Julius readiness (founder canon, independently verified)
+
+| Item | Value |
+|---|---|
+| **Verified readiness** | **94.524%** |
+| Decision A | **EARNED**, +1.44 (93.084% → 94.524%) |
+| A's paid evidence | M2, run **37222057584** (`lane=regression mode=paid`, key `julius-live-mission-2@0a2b4d162a09#regression#a7`), **success**, on main `0a2b4d16`; preflight was run 37221610945, success (both re-checked on GitHub 2026-10-04) |
+| A's verdict | SECOND independently resolved M2's evidence off-machine under the preregistered strict procedure |
+| Alpha streak | **0/3**. M2 does **not** count toward it. The streak starts only after every planned material change has landed and main is frozen |
+| Row 13 (i) | Earned on judged candidate r5 `821b55ac` (zero 40001 in two 8-writer stress runs; census C7b 5/5; independently verified). **At risk**: see #321 below. A real failure of the frozen rerun moves **94.524% → 94.057%** (−0.467), not back to the pre-A number |
+| Decision C | Potential **+1.10 → 95.624%** if fully earned. Not started on paid runs |
+| Everything else | UNKNOWN until it actually qualifies. Never infer a score |
+
+### PR #321: the active front (draft, do not land yet)
+
+Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
+
+- Base `0a2b4d16`. Reviewed head **`aeba8b2c2abfb113ccd86be6d9ade5fb62550d30`**
+  (10 `julius-worker[bot]` commits), `mergeable_state: clean`.
+- **CI green** at that head: Verify Relay, real-infra-julius, sibling-control-plane,
+  and first-live-topology (host-visible and executor-private).
+- Folded migration 032, real PostgreSQL: **89/89 passing**. The three 032 mutants
+  each kill their intended cases.
+- 13 (i) product-byte precondition against candidate `821b55ac` **holds**: non-test
+  13 (i) product files are byte-identical. `wonderland-postgres.ts` differs only
+  by 032's chain registration. `821b55ac` is not on any branch on GitHub; it is
+  a local candidate.
+- The 13 (i) frozen-rerun addendum (ADDENDUM 3) is **approved**.
+- **Owed before landing, in order:**
+  1. The **unchanged frozen 13 (i) rerun** (stress plus census, the same bar) at
+     the integrated head. Founder ruling: if it FAILS, 13 (i) loses +0.467 and
+     #321 does not land.
+  2. The combined 031+032 apply procedure and its Docker rehearsal.
+  3. SECOND's verdicts, then the founder's merge authorization.
+
+  Venue of the frozen rerun: if it is frozen to a local machine, it is
+  `READY FOR LOCAL QUALIFICATION`, never a cloud substitute.
+
+### Migrations
+
+| No. | What | Where |
+|---|---|---|
+| 001–026, 028–030 | landed | `main` (`src/relay/persistence/wonderland-migrations/`) |
+| 027 | **reserved** for the integration lane (`project_execution_profiles`, `player_mission_contracts`) by agreement | not on any branch (see the code comment in `wonderland-postgres.ts`) |
+| 029 | Project Brain v1 (`029_julius_project_brain.sql`) | landed in #309 |
+| 030 | outbox stops re-reading its event (row 13 (i)) | landed in #313 |
+| **031** | Julius 13 (i): run transition is a HOT update, plus task-claim work | #321 |
+| **032** | repair of 030's orphan/outbox invariant (two orphan paths closed) | #321 |
+| **033** | Wonderland social | not yet on any branch |
+| **034** | Project Brain (the next Brain migration; 029 is already the first) | not yet on any branch |
+| **035** | voice | not yet on any branch |
+
+- **`DATABASE_URL` stays PARKED** unless an explicit, reviewed live-store
+  procedure says otherwise. No unlanded migration may touch the permanent store.
+  A landed migration reaches the live store only through its reviewed apply
+  procedure (`docs/julius-migrations/<nnn>/RUNBOOK.md`), never an ordinary
+  `migrate()` entry point.
+- **No migration gaps.** **OPEN QUESTION:** `main` already skips 027 (reserved,
+  unlanded). Settle with the founder whether 027 lands before 033, or the
+  reservation is released, before 033 takes its number.
+
+### Material pre-freeze order (founder canon)
+
+1. Decision A: **DONE**.
+2. **031/032 (#321)**: next.
+3. 033 social.
+4. 034 Project Brain.
+5. 035 voice.
+
+   Social and voice are MATERIAL to Julius: they touch the shared migration and
+   Julius surfaces.
+6. Decision C plus the corrected carry.
+7. **Freeze main.**
+8. Four paid C runs.
+9. The final consecutive Alpha qualification sequence (3/3 needed).
+10. Continue toward 97–98%, then 100% Beta readiness.
+
+### Decision C rules (binding)
+
+- The **corrected carry lands before any C paid run**. The carry defect is a
+  **Beta-blocking P2**.
+- Carry only **verified reviewer findings** and **explicitly accepted, in-force
+  decisions**. Never promote proposed or not-in-force architecture, rejected
+  findings, unverified observations, or task-scoped information into global
+  truth. Preserve the source run/task provenance and scope.
+- **Every valid WITH arm must carry at least one VERIFIED REPAIR FINDING.**
+  Design-only carry does not satisfy the pair. **Empty carry makes the pair
+  invalid before paid dispatch.**
+- Prove all four points:
+  1. what WITHOUT wrote;
+  2. what became carry-eligible;
+  3. what WITH restored;
+  4. what the WITH planner actually received.
+- All four paid arms run under the frozen registration, in order
+  **WITHOUT-1 → WITH-1 → WITHOUT-2 → WITH-2**, with no early-stop rule.
+- **13 (i) compatibility gate.** The corrected carry adds a database write on a
+  path relevant to 13 (i). Before C lands, the relevant unchanged concurrency test
+  must show **zero conflicts at C's final head**. This gate does not
+  retroactively change 13 (i)'s earned score.
+
+### Open PRs (live GitHub, 2026-10-04)
+
+- **#321**: above. The only active landing candidate.
+- **#298**: `[DO NOT MERGE]` stack rehearsal, CI only.
+- **#290–#297** (last touched 2026-09-29): Julius PRs for the readiness tenth
+  pass, paused-run lifecycle, NUL evidence, real-PG concurrency, coder served
+  model, tool failure path, and persistence truth (#297 is a draft). Several
+  probably overlap work landed in #310–#320. **Triage each against `main` before
+  reviving; do not merge on its old evidence.**
+- **#255** (brand docs, 2026-09-12), **#138–#144** (Coliseum, Wonderland domain,
+  mission ownership, error propagation, 2026-08), **#129** (docs): stale.
+- PR #6 from the August notes is no longer open.
+
+### Wonderland (founder canon plus repo evidence, 2026-10-04)
+
+**What is on GitHub (`main`):**
+- **Unreal project:** `wonderland/` (`Wonderland.uproject`, `Source/Wonderland/`
+  with the Dog pawn, hub game mode and world state).
+- **Hosted backend contract:** `docs/relay/WONDERLAND_BACKEND_CONTRACT.md`. It
+  covers the `/relay-api/wonderland/*` routes (session-authenticated SSE,
+  presence, challenges, battles, the Project Brain and native pairing) on the
+  Relay Bridge.
+- **Pure domain modules** under `src/relay/mission/`:
+  - `wonderland/`: battles, GVE, ratings, swarm, entities;
+  - `multiplayer/`: sessions of at most 8, join codes, a 120 s reconnect
+    window, participant views;
+  - `wonderland-account/`: GitHub identity, preferences, owned state;
+  - `wonder-web/`, `project-workspace/`, `wallet/`.
+
+  These came from #273 (2026-09-16) and the Wonderland store migrations 001–010.
+- **The internal landing branch** `landing/wonderland-internal-2026-09-23` is
+  799 commits off `main` and is mostly art and recovery evidence. It holds no
+  social or privacy code.
+
+**What is NOT on GitHub anywhere:**
+- the RC12/RC14 packages and their evidence;
+- R16 runs;
+- EOS voice integration;
+- any social layer: friends, block lists, parties, private servers, Recent
+  Players, DMs, or presence privacy.
+
+That is either local-only (the Unreal and EOS client) or not yet built (the
+hosted social backend). Treat any RC or R16 score as UNKNOWN until its package's
+evidence is produced.
+
+**Rules (binding):**
+- **Final readiness is ONE package.** Never combine RC12 evidence with RC14
+  evidence into a score. The final RC is one shippable package and re-earns
+  every required row.
+- **Final R16 requires all of these:**
+  - the backend landed on accepted `main`;
+  - a hosted HTTPS backend;
+  - the shipped final RC reaches it;
+  - actual EOS voice and real identities;
+  - restart/reconnect and durable state;
+  - the complete privacy wall.
+
+  The hosted final RC must not depend on the founder's laptop or on `127.0.0.1`.
+- **Ownership:**
+  - JUJU: migrations, the live store and deployment sequencing;
+  - SECOND Wonderland: backend and privacy correctness;
+  - CORE: the client endpoint, the RC and the final R16;
+  - Founder: only an unavoidable account, credential or billing step.
+- **Privacy wall (all hostile-tested):**
+  - **P1:** a user hidden from strangers shows no Dog, no name, and no
+    population count, and gives nothing from which presence, location or
+    activity can be inferred.
+  - **P2:** Recent Players is filtered at read time.
+  - **P3:** the dead "appear in Recent Players" switch is removed.
+  - **P4:** a server owner blocks a member → the member is removed and the
+    owner stays.
+  - **P5:** a member blocks the private-server owner → the blocker leaves and
+    the owner stays.
+  - **Party:** a leader who blocks a member removes them; a non-leader who
+    blocks leaves.
+  - **DMs:** blocked DMs are hidden from both sides while the block exists.
+  - **No inference:** no voice, roster, role, location, activity or party
+    inference about a blocked user.
+- **EOS:**
+  - the backend supplies the minimum game-client configuration at runtime,
+    with no persistence or package exposure;
+  - the trusted server secret stays backend-only;
+  - the second real client uses a second Windows account;
+  - the founder supplies the third real identity for the final three-party
+    proof.
+- **Migrations** share the Julius order: social is **033** and voice is **035**,
+  and neither may land before 031/032.
+
+**Local-only for Wonderland:**
+- Unreal packaged-client boots;
+- real keyboard/mouse qualification;
+- EOS Windows-account voice;
+- the actual 2- and 3-client R16;
+- laptop-tied performance and soak runs.
+
+Cloud does the hosted backend, the privacy semantics and their tests,
+migrations 033/035, endpoint/config delivery and the qualification harnesses.
+
+### Next score-bearing action
+
+The **frozen 13 (i) rerun at #321's head `aeba8b2c`**: +0.467 is at stake. After
+it, the apply rehearsal and SECOND's verdict, #321 lands, and C (+1.10) is the
+next score-bearing work, after 033–035.
+
+---
+
+## HISTORICAL: State as of 2026-08-02 (superseded; kept for context)
+
+> Superseded by the State section above. In particular, "provider calls made,
+> ever: zero" stopped being true in September: paid Julius runs go through
+> `julius-first-live-mission.yml`. The surfaces, security shape and "facts
+> worth not rediscovering" below are still useful; the commit, the open items
+> and PR #6 are not current.
 
 `origin/main` = `86c1e935a04e31c71b87a9e211676028106ce697`. Primary checkout
 clean on `main`. Suite 3,724 passing across 188 files, 0 failed, 0 skipped.
