@@ -47,6 +47,7 @@ import {
   declineFriendRequest,
   fileReport,
   pendingRequestsFor,
+  recordPlayedTogether,
   removeFriend,
   sendFriendRequest,
   setMute,
@@ -585,12 +586,21 @@ function applyOne(
         nowIso,
       );
       if (!located.ok) return located;
+      // PLAYED TOGETHER (R16 rehearsal 10-04: two real players shared Golden Arrival and neither appeared in the other's Recent
+      // Players, so a person met in the world could never be added -- only a party recorded anybody): everyone live in the
+      // context they just joined, both ways, through the one rule (nothing across a block; not into anyone's list who opted out).
+      let met = located.value;
+      for (const otherId of ctx.memberIds) {
+        if (otherId === actorId) continue;
+        const recorded = recordPlayedTogether(met, actorId, otherId, 'SESSION', ctx.serverName.slice(0, 80), nowIso);
+        if (recorded.ok) met = recorded.value;
+      }
       return {
         ok: true,
         value: {
-          state: located.value,
+          state: met,
           world: joined.value.world,
-          data: worldViewFor(joined.value.world, located.value, actorId, nowMs),
+          data: worldViewFor(joined.value.world, met, actorId, nowMs),
           audience: [actorId, ...friendIdsOf(state, actorId), ...ctx.memberIds],
         },
       };

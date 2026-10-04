@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { applySocialOperation, type SocialCommandOutcome } from './social-commands';
 import { createSocialFixture, FIXTURE_USERS as U } from './social-fixtures';
 import { blockUser } from './social-friends';
+import { recentPlayersViewFor } from './social-parties';
 import type { SocialState } from './social-state';
 import {
   WORLD_AVATAR_STALE_MS,
@@ -122,5 +123,39 @@ describe('the shared presence layer', () => {
     expect(reportAvatar(joined.value.world, U.KAI, { ...here, motion: 'IDLE', x: Number.NaN }, T0).ok).toBe(false);
     expect(reportAvatar(joined.value.world, U.KAI, { ...here, motion: 'IDLE', x: 1e12 }, T0).ok).toBe(false);
     expect(reportAvatar(joined.value.world, U.KAI, { ...here, motion: 'TELEPORT' as never }, T0).ok).toBe(false);
+  });
+});
+
+describe('played together: sharing a world records each in the other\'s Recent Players (R16 rehearsal 10-04)', () => {
+  const metIn = (s: SocialState, owner: string, other: string, iso: string) =>
+    recentPlayersViewFor(s, owner).filter((e) => e.userId === other && e.context === 'SESSION' && e.metAtIso === iso);
+
+  it('the second player into a public world is recorded for both, labelled with the world, newest first', () => {
+    let s = createSocialFixture();
+    let w = emptyWorldState();
+    ({ state: s, world: w } = run(s, w, U.KAI, 'world.join', { target: 'PUBLIC' }, 1000));
+    expect(metIn(s, U.KAI, U.NOVA, at(2000))).toHaveLength(0);
+    ({ state: s, world: w } = run(s, w, U.NOVA, 'world.join', { target: 'PUBLIC' }, 2000));
+    expect(metIn(s, U.KAI, U.NOVA, at(2000)).map((e) => e.contextLabel)).toEqual(['Golden Arrival']);
+    expect(metIn(s, U.NOVA, U.KAI, at(2000)).map((e) => e.contextLabel)).toEqual(['Golden Arrival']);
+    expect(recentPlayersViewFor(s, U.KAI)[0].userId).toBe(U.NOVA);
+  });
+
+  it('nobody is recorded across a block, nor into anyone\'s list who opted out of appearing; a different world records nothing', () => {
+    let s = createSocialFixture();
+    let w = emptyWorldState();
+    const blocked = blockUser(s, U.KAI, U.NOVA, at(0));
+    if (!blocked.ok) throw new Error('block refused');
+    s = blocked.value;
+    s = { ...s, users: { ...s.users, [U.LYRA]: { ...s.users[U.LYRA], privacy: { ...s.users[U.LYRA].privacy, appearInRecentPlayers: false } } } };
+    ({ state: s, world: w } = run(s, w, U.KAI, 'world.join', { target: 'PUBLIC' }, 1000));
+    ({ state: s, world: w } = run(s, w, U.NOVA, 'world.join', { target: 'PUBLIC' }, 2000));
+    ({ state: s, world: w } = run(s, w, U.LYRA, 'world.join', { target: 'PUBLIC' }, 3000));
+    ({ state: s, world: w } = run(s, w, U.ORION, 'world.join', { target: 'PUBLIC', place: 'tower_lane', placeName: 'Tower Lane' }, 4000));
+    expect(metIn(s, U.KAI, U.NOVA, at(2000))).toHaveLength(0);
+    expect(metIn(s, U.NOVA, U.KAI, at(2000))).toHaveLength(0);
+    expect(metIn(s, U.KAI, U.LYRA, at(3000))).toHaveLength(0);
+    expect(metIn(s, U.LYRA, U.KAI, at(3000))).toHaveLength(1);
+    expect(recentPlayersViewFor(s, U.ORION).filter((e) => e.metAtIso === at(4000))).toHaveLength(0);
   });
 });
