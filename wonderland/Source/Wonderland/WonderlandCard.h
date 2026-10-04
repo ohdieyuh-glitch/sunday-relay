@@ -160,10 +160,32 @@ public:
 	static void FindSecrets(const FString& Text, TArray<FSecretFind>& OutFinds);
 	/** The text with each find replaced by "[a key: never shown or stored]" -- every find, or only the CERTAIN ones (bKeepStatistical). */
 	static FString RedactSecrets(const FString& Text, const TArray<FSecretFind>& Finds, bool bKeepStatistical = false);
-	/** The text without invisible characters (zero-width, bidi, soft hyphen, BOM, tags) and with no length cap: what the screen reads. */
+	/** The text without invisible characters (zero-width, bidi, soft hyphen, BOM, tags) and with no length cap. */
 	static FString WithoutInvisibleText(const FString& Text);
-	/** Free text holds a secret: the screen finds something in it as written OR once its invisible characters are gone. */
+	/**
+	 * THE SCREEN AS EVERY REDACTING CALLER RUNS IT (r6, Second's round-5 review). OutScreened is the text with every space-like character
+	 * (TAB, the line breaks, VT/FF, NBSP, the Unicode spaces) a plain space -- never deleted, so cleaning cannot glue a label to its value
+	 * -- and every invisible character gone. OutFinds are over OutScreened: its own finds, plus the finds of the same text split AT its
+	 * invisibles (a zero-width space between a label and its value), each widened to its whole word there, never into a marker; overlaps
+	 * merged. Measured in Python first (CORE r6 model: Second's 66-case corpus 66/66, 0 of 18,000 fuzzed lines change on a second pass).
+	 */
+	static void ScreenText(const FString& Text, FString& OutScreened, TArray<FSecretFind>& OutFinds);
+	/** Free text holds a secret: ScreenText finds something in it, or the screen does in it exactly as written. */
 	static bool HoldsSecret(const FString& Text);
+
+	/** QA ONLY: rules wl.Qa.SecretInput's planted controls switch off for ONE call, to prove each case needs its rule (0 = every rule on). */
+	enum EQaScreenRule : uint32
+	{
+		QaRuleSpaces = 1u << 0,       // space-like characters kept as spaces (off: deleted as invisible, the d831cbd1 behaviour)
+		QaRuleBothViews = 1u << 1,    // the text split at its invisibles screened too
+		QaRuleMarkerSplit = 1u << 2,  // the redaction marker its own token; a value glued to it taken
+		QaRuleLabelWindow = 1u << 3,  // a label's value found past connectors and qualifiers
+		QaRuleLabelForms = 1u << 4,   // plural, possessive, env-style, pin, auth and short labels with a value-like word
+		QaRuleUrlPieces = 1u << 5,    // label=value read in every piece of a word (a URL's query), the userinfo up to the first '/'
+		QaRuleValueLike = 1u << 6,    // the value-likeness test (off: d831cbd1's 'password-like', which over-redacted)
+		QaRuleLoginPair = 1u << 7,    // "login name:value"
+	};
+	static uint32& QaRulesOff() { static uint32 Off = 0; return Off; }
 	/** A line as it may be SHOWN: every word that holds a secret replaced; a line whose secret no single word shows ("Bearer" and its
 	 *  token apart) replaced whole. What it returns never holds a secret. */
 	static FString MaskForDisplay(const FString& Line);

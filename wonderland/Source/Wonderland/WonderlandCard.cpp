@@ -747,6 +747,12 @@ namespace
 		return false;
 	}
 
+	/** QA ONLY: a rule wl.Qa.SecretInput's planted control switched off for one call (FWonderlandCardStore::QaRulesOff); every rule on in play. */
+	bool CardRuleOn(uint32 Rule)
+	{
+		return (FWonderlandCardStore::QaRulesOff() & Rule) == 0;
+	}
+
 	/** What a redaction leaves in a line: one spelling, so the screen can tell its own marker from a key. */
 	const TCHAR* CardRedactionMarker()
 	{
@@ -758,21 +764,6 @@ namespace
 	{
 		return Lower == TEXT("bearer") || Lower == TEXT("basic") || Lower == TEXT("digest") || Lower == TEXT("token") || Lower == TEXT("negotiate")
 			|| Lower == TEXT("ntlm");
-	}
-
-	/** A label that takes the word right after it when that word looks like a password (Second's real-input leak, 10-03): every credential
-	 *  label but the bare short ones -- "pass", "pw" and "creds" are ordinary words too ("pass 2026-10-03 to the build"). */
-	bool CardDirectLabel(const FString& Lower)
-	{
-		FString Bare;
-		for (const TCHAR Char : Lower)
-		{
-			if (CardAsciiLetter(Char) || CardAsciiDigit(Char))
-			{
-				Bare.AppendChar(FChar::ToLower(Char));
-			}
-		}
-		return CardCredentialLabel(Lower) && Bare != TEXT("pass") && Bare != TEXT("pw") && Bare != TEXT("creds");
 	}
 
 	/** A word a person would use as a password: 6+ characters holding a digit or a symbol, or random-looking. "reset", "manager" and
@@ -822,8 +813,11 @@ namespace
 		{
 			return false;
 		}
+		// r6: the authority runs to the first '/' -- a '#' or '?' typed INSIDE a password no longer hides the '@' (CORE's r6 measurement:
+		// 'scheme://app:<pw>@host' leaked whenever the password held a '#', 24% of Second's probes)
+		const TCHAR* const Stops = CardRuleOn(FWonderlandCardStore::QaRuleUrlPieces) ? TEXT("/") : TEXT("/?#");
 		int32 End = Scheme + 3;
-		while (End < Word.Len() && FCString::Strchr(TEXT("/?#"), Word[End]) == nullptr)
+		while (End < Word.Len() && FCString::Strchr(Stops, Word[End]) == nullptr)
 		{
 			++End;
 		}
@@ -854,12 +848,415 @@ namespace
 		}
 		return true;
 	}
+
+	/* ------------------------------------------------------------------ r6 (Second's round-5 review, 10-03): the label window
+	 * Measured in Python before this port (CORE r6 model, scratchpad r6secrets/screen_model.py): Second's 66-case corpus 66/66 (d831cbd1:
+	 * 41 fail); a label x connector x value fuzz 0 of 5,100 leak (d831cbd1: 62.6%); prose naming a credential 2 of 65 altered (d831cbd1:
+	 * 19); identifiers 23 of 31,974 and real objectives 2 of 23 as before; 0 of 18,000 fuzzed lines change on a second pass. */
+
+	/** A character that SEPARATES words however it was typed: TAB, the line breaks, VT/FF, the information separators, NEL, NBSP, the
+	 *  Unicode spaces. Mapped to a plain space before the screen reads a line, never deleted (Second's MAJOR 1: deleted as invisible, they
+	 *  glued "password<TAB>X" into one word that no rule saw). */
+	bool CardSpaceLike(uint32 Code)
+	{
+		return (Code >= 0x09 && Code <= 0x0D) || Code == 0x20 || (Code >= 0x1C && Code <= 0x1F) || Code == 0x85 || Code == 0xA0 || Code == 0x1680
+			|| Code == 0x180E || (Code >= 0x2000 && Code <= 0x200A) || Code == 0x2028 || Code == 0x2029 || Code == 0x202F || Code == 0x205F
+			|| Code == 0x3000;
+	}
+
+	bool CardSplitsWords(TCHAR Char)
+	{
+		return FChar::IsWhitespace(Char) || CardSpaceLike(static_cast<uint32>(Char));
+	}
+
+	/** The punctuation a word is trimmed of: ASCII, and the typographic quotes ("password “X”", "password «X»"). */
+	bool CardEdge(TCHAR Char)
+	{
+		return Char != 0 && FCString::Strchr(TEXT(".,;:!?()[]{}<>\"'`“”‘’«»„‚"), Char) != nullptr;
+	}
+
+	FString CardTrimEdges(const FString& Text)
+	{
+		int32 Start = 0;
+		int32 End = Text.Len();
+		while (Start < End && CardEdge(Text[Start]))
+		{
+			++Start;
+		}
+		while (End > Start && CardEdge(Text[End - 1]))
+		{
+			--End;
+		}
+		return Text.Mid(Start, End - Start);
+	}
+
+	template <SIZE_T N>
+	bool CardOneOf(const FString& Word, const TCHAR* const (&List)[N])
+	{
+		for (const TCHAR* Item : List)
+		{
+			if (Word.Equals(Item, ESearchCase::CaseSensitive))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** An ASSIGNMENT: the next word is the value whatever it looks like (a stopword excepted: "Secret: the launch ..." is prose). */
+	const TCHAR* const CardStrongConnectors[] = { TEXT(":"), TEXT("="), TEXT(":="), TEXT("=>"), TEXT("->"), TEXT("-"), TEXT("–"), TEXT("—") };
+	/** Connectors that lead to a value only when it LOOKS like one ("the password is <value>" yes; "my password is too short" no). */
+	const TCHAR* const CardWeakConnectors[] = { TEXT("is"), TEXT("was"), TEXT("were"), TEXT("are"), TEXT("equals"), TEXT("to"), TEXT("the"), TEXT("my"),
+		TEXT("our"), TEXT("your"), TEXT("a"), TEXT("an"), TEXT("for"), TEXT("of"), TEXT("now"), TEXT("still"), TEXT("be"), TEXT("will"), TEXT("new"),
+		TEXT("old") };
+	const TCHAR* const CardPrepositions[] = { TEXT("for"), TEXT("of"), TEXT("on"), TEXT("in"), TEXT("at"), TEXT("to") };
+	const TCHAR* const CardArticles[] = { TEXT("the"), TEXT("a"), TEXT("an"), TEXT("my"), TEXT("our"), TEXT("your") };
+	const TCHAR* const CardStopwords[] = { TEXT("the"), TEXT("a"), TEXT("an"), TEXT("to"), TEXT("we"), TEXT("i"), TEXT("you"), TEXT("it"), TEXT("is"),
+		TEXT("are"), TEXT("was"), TEXT("be"), TEXT("and"), TEXT("or"), TEXT("but"), TEXT("not"), TEXT("no"), TEXT("so"), TEXT("too"), TEXT("out"),
+		TEXT("in"), TEXT("on"), TEXT("at"), TEXT("of"), TEXT("for"), TEXT("with"), TEXT("by"), TEXT("as"), TEXT("if"), TEXT("then"), TEXT("this"),
+		TEXT("that"), TEXT("my"), TEXT("our"), TEXT("your"), TEXT("its"), TEXT("their"), TEXT("all"), TEXT("any"), TEXT("some") };
+	/** Days, months and relative days are when, never what ("rotate the api key Monday"). */
+	const TCHAR* const CardNotValues[] = { TEXT("monday"), TEXT("tuesday"), TEXT("wednesday"), TEXT("thursday"), TEXT("friday"), TEXT("saturday"),
+		TEXT("sunday"), TEXT("january"), TEXT("february"), TEXT("march"), TEXT("april"), TEXT("may"), TEXT("june"), TEXT("july"), TEXT("august"),
+		TEXT("september"), TEXT("october"), TEXT("november"), TEXT("december"), TEXT("today"), TEXT("tomorrow"), TEXT("tonight"), TEXT("yesterday") };
+	/** Common words the letter-pair test misreads (measured: "weekly", "input", "cookie", "flag" ...). */
+	const TCHAR* const CardCommonMisread[] = { TEXT("weekly"), TEXT("input"), TEXT("inputs"), TEXT("cookie"), TEXT("cookies"), TEXT("flag"),
+		TEXT("flags"), TEXT("okay"), TEXT("skew"), TEXT("knob"), TEXT("knobs"), TEXT("jwks"), TEXT("oauth"), TEXT("login"), TEXT("logins"), TEXT("signup"),
+		TEXT("webhook"), TEXT("webhooks"), TEXT("backup"), TEXT("backups") };
+	/** The word before a "name:value" login pair ("login admin:<value>"). */
+	const TCHAR* const CardLoginWords[] = { TEXT("login"), TEXT("log-in"), TEXT("logon"), TEXT("signin"), TEXT("sign-in"), TEXT("user"), TEXT("username"),
+		TEXT("creds"), TEXT("credentials"), TEXT("account"), TEXT("ssh"), TEXT("auth") };
+	/** The last underscore segment of an env-style label (DB_PASS, SMTP_PWD, GH_TOKEN, REDIS_AUTH, STRIPE_KEY). */
+	const TCHAR* const CardEnvSegments[] = { TEXT("pass"), TEXT("pw"), TEXT("pwd"), TEXT("passwd"), TEXT("password"), TEXT("secret"), TEXT("token"),
+		TEXT("key"), TEXT("apikey"), TEXT("pat"), TEXT("creds"), TEXT("credential"), TEXT("credentials"), TEXT("passphrase"), TEXT("passcode"),
+		TEXT("pin"), TEXT("auth") };
+	const TCHAR* const CardLabelEndings[] = { TEXT("password"), TEXT("passwd"), TEXT("passphrase"), TEXT("passcode"), TEXT("passkey"), TEXT("pwd"),
+		TEXT("secret"), TEXT("token"), TEXT("apikey"), TEXT("accesskey"), TEXT("privatekey"), TEXT("secretkey"), TEXT("clientsecret"),
+		TEXT("credential"), TEXT("credentials"), TEXT("authorization") };
+
+	FString CardBare(const FString& Text)
+	{
+		FString Bare;
+		for (const TCHAR Char : Text)
+		{
+			if (CardAsciiLetter(Char) || CardAsciiDigit(Char))
+			{
+				Bare.AppendChar(FChar::ToLower(Char));
+			}
+		}
+		return Bare;
+	}
+
+	/** What a label word is: Whole (a short word that is a label only with a value: pass, pw, creds, auth), Pin (pin/pincode: 4+ digits),
+	 *  Token (a number after it is a quantity: "set token 128000 as the limit"), EnvKey (*_KEY: its value must look like one, or
+	 *  "SORT_KEY=name" would go), Normal. */
+	enum class ECardLabelKind : uint8 { None, Whole, Pin, Token, EnvKey, Normal };
+
+	ECardLabelKind CardLabelKind(const FString& RawWord)
+	{
+		const FString Word = CardTrimEdges(RawWord);
+		if (!CardRuleOn(FWonderlandCardStore::QaRuleLabelForms))
+		{
+			// d831cbd1: the label list only
+			const FString Lower = Word.ToLower();
+			if (!CardCredentialLabel(Lower))
+			{
+				return ECardLabelKind::None;
+			}
+			const FString Bare = CardBare(Lower);
+			if (Bare == TEXT("pass") || Bare == TEXT("pw") || Bare == TEXT("creds"))
+			{
+				return ECardLabelKind::Whole;
+			}
+			return Bare.EndsWith(TEXT("token"), ESearchCase::CaseSensitive) ? ECardLabelKind::Token : ECardLabelKind::Normal;
+		}
+		FString Lower = Word.ToLower();
+		// "password's"
+		if (Lower.EndsWith(TEXT("'s"), ESearchCase::CaseSensitive) || Lower.EndsWith(TEXT("’s"), ESearchCase::CaseSensitive))
+		{
+			Lower.LeftChopInline(2);
+		}
+		// ENV-STYLE: the last underscore segment names the credential
+		int32 Under = INDEX_NONE;
+		if (Word.FindLastChar(TEXT('_'), Under))
+		{
+			const FString Segment = CardBare(Word.Mid(Under + 1));
+			if (CardOneOf(Segment, CardEnvSegments))
+			{
+				return Segment == TEXT("key") ? ECardLabelKind::EnvKey : Segment == TEXT("token") ? ECardLabelKind::Token : ECardLabelKind::Normal;
+			}
+		}
+		const FString Bare = CardBare(Lower);
+		if (Bare.IsEmpty())
+		{
+			return ECardLabelKind::None;
+		}
+		if (Bare == TEXT("pin") || Bare == TEXT("pincode"))
+		{
+			return ECardLabelKind::Pin;
+		}
+		if (Bare == TEXT("pass") || Bare == TEXT("pw") || Bare == TEXT("creds") || Bare == TEXT("auth"))
+		{
+			return ECardLabelKind::Whole;
+		}
+		for (const TCHAR* Ending : CardLabelEndings)
+		{
+			const bool bPlural = Bare.EndsWith(TEXT("s"), ESearchCase::CaseSensitive) && Bare.LeftChop(1).EndsWith(Ending, ESearchCase::CaseSensitive)
+				&& FCString::Strcmp(Ending, TEXT("credentials")) != 0;
+			if (Bare.EndsWith(Ending, ESearchCase::CaseSensitive) || bPlural)
+			{
+				return FCString::Strcmp(Ending, TEXT("token")) == 0 ? ECardLabelKind::Token : ECardLabelKind::Normal;
+			}
+		}
+		return ECardLabelKind::None;
+	}
+
+	/** A lowercase letters-only part reads as English: short, a common word the pair test misreads, or a vowel and >= 60% of its letter
+	 *  pairs among the 195 common ones. */
+	bool CardEnglishLike(const FString& Lower)
+	{
+		if (Lower.Len() <= 3 || CardOneOf(Lower, CardCommonMisread))
+		{
+			return true;
+		}
+		bool bVowel = false;
+		int32 Pairs = 0;
+		int32 Common = 0;
+		for (int32 At = 0; At < Lower.Len(); ++At)
+		{
+			bVowel |= FCString::Strchr(TEXT("aeiouy"), Lower[At]) != nullptr;
+			if (At + 1 < Lower.Len())
+			{
+				++Pairs;
+				Common += CardCommonPair(Lower[At], Lower[At + 1]) ? 1 : 0;
+			}
+		}
+		return bVowel && Common * 100 >= 60 * Pairs;
+	}
+
+	bool CardIsAlphaWord(const FString& Word)
+	{
+		if (Word.IsEmpty())
+		{
+			return false;
+		}
+		for (const TCHAR Char : Word)
+		{
+			if (!FChar::IsAlpha(Char))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool CardInnerUpper(const FString& Word)
+	{
+		for (int32 At = 1; At < Word.Len(); ++At)
+		{
+			if (FChar::IsUpper(Word[At]))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * A word that could be the credential a label names. NOT: a structure (date, version, UUID, e-mail), a day or month, a quantity after
+	 * "token", a word under 5 characters, ordinary words joined by - _ / . ' ("reset-flow", "refresh_handler", "level-2", "e-mail"), a
+	 * word in another script. YES: 4+ digits (after a pin or a password), a certain or random shape, mixed case, a capitalised word
+	 * right after a label ("the password Swordfish"), a word no English reads like, digits or symbols in a part, 4+ words joined (a
+	 * pass phrase).
+	 */
+	bool CardValueLike(const FString& Word, ECardLabelKind Kind)
+	{
+		if (!CardRuleOn(FWonderlandCardStore::QaRuleValueLike))
+		{
+			// d831cbd1's 'password-like' (6+ characters holding a non-letter, or random), the short labels never: the over-redacting rule
+			return Kind != ECardLabelKind::Whole && CardPasswordLike(Word);
+		}
+		if (Word.IsEmpty() || Word.Contains(CardRedactionMarker()))
+		{
+			return false;
+		}
+		if (CardWordIsStructure(Word) || CardOneOf(Word.ToLower(), CardNotValues))
+		{
+			return false;
+		}
+		if (CardAllOf(Word, 0, Word.Len(), &CardDigitChar))
+		{
+			return Kind == ECardLabelKind::Token ? false : Word.Len() >= 4;
+		}
+		if (Kind == ECardLabelKind::Pin || Word.Len() < 5)
+		{
+			return false;
+		}
+		if (CardWordIsCertain(Word) || CardPiecesLookRandom(Word))
+		{
+			return true;
+		}
+		if (CardIsAlphaWord(Word))
+		{
+			if (CardInnerUpper(Word))
+			{
+				return true;   // CamelCase or random case: a chosen string, not a word
+			}
+			if (!CardAllOf(Word, 0, Word.Len(), &CardAsciiLetter))
+			{
+				return false;  // a word in another script ("réunion"): prose
+			}
+			if (FChar::IsUpper(Word[0]))
+			{
+				return true;   // capitalised right after a label: a name chosen for it
+			}
+			return !CardEnglishLike(Word);
+		}
+		TArray<FString> Parts;
+		FString Part;
+		for (int32 At = 0; At <= Word.Len(); ++At)
+		{
+			const TCHAR Char = At < Word.Len() ? Word[At] : TEXT('-');
+			if (Char == TEXT('-') || Char == TEXT('_') || Char == TEXT('/') || Char == TEXT('.') || Char == TEXT('\''))
+			{
+				if (!Part.IsEmpty())
+				{
+					Parts.Add(Part);
+				}
+				Part.Reset();
+				continue;
+			}
+			Part.AppendChar(Char);
+		}
+		for (const FString& Piece : Parts)
+		{
+			if (CardAllOf(Piece, 0, Piece.Len(), &CardDigitChar) && Piece.Len() <= 3)
+			{
+				continue;
+			}
+			if (CardIsAlphaWord(Piece) && (Piece.Len() == 1 || !CardAllOf(Piece, 0, Piece.Len(), &CardAsciiLetter)
+				|| (!CardInnerUpper(Piece) && CardEnglishLike(Piece.ToLower()))))
+			{
+				continue;
+			}
+			return true;
+		}
+		return Parts.Num() >= 4;   // a pass phrase of four or more words
+	}
+
+	/** A label and its value in one word, read in EVERY piece of it -- split at ? & ; # -- so a URL's query is read pair by pair and the
+	 *  scheme's ':' is never taken as the cut ("https://h/login?pwd=X", "?api-key=X", "DB_PASS=X"). */
+	bool CardLabelWithValueR6(const FString& Word)
+	{
+		if (!CardRuleOn(FWonderlandCardStore::QaRuleUrlPieces))
+		{
+			return CardLabelWithValue(Word.ToLower());
+		}
+		int32 From = 0;
+		for (int32 At = 0; At <= Word.Len(); ++At)
+		{
+			if (At < Word.Len() && FCString::Strchr(TEXT("?&;#"), Word[At]) == nullptr)
+			{
+				continue;
+			}
+			FString Piece = Word.Mid(From, At - From);
+			From = At + 1;
+			int32 Lead = 0;
+			while (Lead < Piece.Len() && CardEdge(Piece[Lead]))
+			{
+				++Lead;
+			}
+			Piece.RightChopInline(Lead);
+			int32 Cut = INDEX_NONE;
+			for (int32 Find = 0; Find < Piece.Len(); ++Find)
+			{
+				if (Piece[Find] == TEXT(':') || Piece[Find] == TEXT('='))
+				{
+					Cut = Find;
+					break;
+				}
+			}
+			if (Cut <= 0 || Cut + 1 >= Piece.Len())
+			{
+				continue;
+			}
+			const ECardLabelKind Kind = CardLabelKind(Piece.Left(Cut));
+			if (Kind == ECardLabelKind::None)
+			{
+				continue;
+			}
+			FString Value = Piece.Mid(Cut + 1);
+			while (Value.Len() > 0 && (Value[0] == TEXT(':') || Value[0] == TEXT('=')))
+			{
+				Value.RightChopInline(1);
+			}
+			Value = CardTrimEdges(Value);
+			if (Kind == ECardLabelKind::EnvKey && !CardValueLike(Value, Kind))
+			{
+				continue;
+			}
+			if (!Value.IsEmpty())
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** The second word of a two-word label glued to its value: "api key:X", "client secret=X" (the word "key:X" / "secret=X"). */
+	bool CardGluedTwoWordValue(const FString& Lower)
+	{
+		static const TCHAR* const Heads[] = { TEXT("key"), TEXT("secret") };
+		for (const TCHAR* Head : Heads)
+		{
+			if (!Lower.StartsWith(Head, ESearchCase::CaseSensitive))
+			{
+				continue;
+			}
+			FString Rest = Lower.Mid(FCString::Strlen(Head));
+			if (Rest.IsEmpty() || (Rest[0] != TEXT(':') && Rest[0] != TEXT('=')))
+			{
+				continue;
+			}
+			while (Rest.Len() > 0 && (Rest[0] == TEXT(':') || Rest[0] == TEXT('=')))
+			{
+				Rest.RightChopInline(1);
+			}
+			if (!CardTrimEdges(Rest).IsEmpty())
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** A login pair without a URL, after a login word: "login admin:<value>" -- a plain name, then a value that looks like one. */
+	bool CardLoginPair(const FString& Word)
+	{
+		int32 Colon = INDEX_NONE;
+		if (!Word.FindChar(TEXT(':'), Colon) || Word.Find(TEXT(":"), ESearchCase::CaseSensitive, ESearchDir::FromEnd) != Colon)
+		{
+			return false;
+		}
+		const FString Name = Word.Left(Colon);
+		if (Name.IsEmpty() || Name.Len() > 40)
+		{
+			return false;
+		}
+		for (const TCHAR Char : Name)
+		{
+			if (!(CardAsciiLetter(Char) || CardAsciiDigit(Char) || Char == TEXT('.') || Char == TEXT('_') || Char == TEXT('@') || Char == TEXT('-')))
+			{
+				return false;
+			}
+		}
+		return CardValueLike(CardTrimEdges(Word.Mid(Colon + 1)), ECardLabelKind::Normal);
+	}
 }
 
 void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>& OutFinds)
 {
 	OutFinds.Reset();
-	static const TCHAR* const Edges = TEXT(".,;:!?()[]{}<>\"'`");
 	// THE WORDS FIRST, each as typed (Raw: a label's ':' or '=' is read from it) and trimmed (Word), so a label can reach its value
 	struct FSpan
 	{
@@ -871,63 +1268,94 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 		/** The word as typed, its edge punctuation included: a credential's VALUE is redacted whole ("hunter2!" keeps no "!"). */
 		int32 RawStart;
 		int32 RawEnd;
+		/** The redaction's own marker: never a find, never a value. */
+		bool bMarker;
+		/** Touching a marker with no space between (r6): a value glued to it is taken. */
+		bool bGlued;
 	};
 	TArray<FSpan> Spans;
 	const int32 Count = Text.Len();
-	int32 At = 0;
-	while (At < Count)
-	{
-		while (At < Count && FChar::IsWhitespace(Text[At]))
-		{
-			++At;
-		}
-		const int32 WordStart = At;
-		while (At < Count && !FChar::IsWhitespace(Text[At]))
-		{
-			++At;
-		}
-		if (At == WordStart)
-		{
-			continue;
-		}
-		int32 Start = WordStart;
-		int32 End = At;
-		while (Start < End && FCString::Strchr(Edges, Text[Start]) != nullptr)
-		{
-			++Start;
-		}
-		while (End > Start && FCString::Strchr(Edges, Text[End - 1]) != nullptr)
-		{
-			--End;
-		}
-		const FString Raw = Text.Mid(WordStart, At - WordStart);
-		const FString Word = Text.Mid(Start, FMath::Max(End - Start, 0));
-		Spans.Add({ Start, End, Raw, Word, Word.ToLower(), WordStart, At });
-	}
-	// THE REDACTION'S OWN MARKER IS NOT A KEY (round 4's SI3): a line drawn after redaction must not read as still holding one, and a
-	// label never takes the marker as its value -- that value is already gone
-	TArray<bool> InRedaction;
-	InRedaction.Init(false, Spans.Num());
+	// THE REDACTION'S OWN MARKER IS NOT A KEY (round 4's SI3), AND IT IS ITS OWN TOKEN (r6, Second's MAJOR 2): a word never crosses a
+	// marker's edge, so "[marker]<value>" or "<value>[marker]" is not exempt for overlapping it
 	const FString RedactionMark = CardRedactionMarker();
+	const bool bMarkerSplit = CardRuleOn(QaRuleMarkerSplit);
+	TArray<TPair<int32, int32>> Marks;
 	for (int32 MarkAt = Text.Find(RedactionMark, ESearchCase::CaseSensitive); MarkAt != INDEX_NONE;
 		MarkAt = Text.Find(RedactionMark, ESearchCase::CaseSensitive, ESearchDir::FromStart, MarkAt + RedactionMark.Len()))
 	{
-		for (int32 Index = 0; Index < Spans.Num(); ++Index)
+		Marks.Add(TPair<int32, int32>(MarkAt, MarkAt + RedactionMark.Len()));
+	}
+	auto AddWords = [&Text, &Spans, &Marks, bMarkerSplit](int32 From, int32 To)
+	{
+		int32 At = From;
+		while (At < To)
 		{
-			InRedaction[Index] |= Spans[Index].Start < MarkAt + RedactionMark.Len() && Spans[Index].End > MarkAt;
+			while (At < To && CardSplitsWords(Text[At]))
+			{
+				++At;
+			}
+			const int32 WordStart = At;
+			while (At < To && !CardSplitsWords(Text[At]))
+			{
+				++At;
+			}
+			if (At == WordStart)
+			{
+				continue;
+			}
+			int32 Start = WordStart;
+			int32 End = At;
+			while (Start < End && CardEdge(Text[Start]))
+			{
+				++Start;
+			}
+			while (End > Start && CardEdge(Text[End - 1]))
+			{
+				--End;
+			}
+			const int32 WordEnd = At;
+			const bool bGlued = bMarkerSplit
+				&& ((WordStart == From && Marks.ContainsByPredicate([From](const TPair<int32, int32>& Mark) { return Mark.Value == From; }))
+					|| (WordEnd == To && Marks.ContainsByPredicate([To](const TPair<int32, int32>& Mark) { return Mark.Key == To; })));
+			const FString Word = Text.Mid(Start, FMath::Max(End - Start, 0));
+			Spans.Add({ Start, End, Text.Mid(WordStart, At - WordStart), Word, Word.ToLower(), WordStart, At, false, bGlued });
+		}
+	};
+	if (bMarkerSplit)
+	{
+		int32 Previous = 0;
+		for (const TPair<int32, int32>& Mark : Marks)
+		{
+			AddWords(Previous, Mark.Key);
+			Spans.Add({ Mark.Key, Mark.Value, RedactionMark, RedactionMark, RedactionMark.ToLower(), Mark.Key, Mark.Value, true, false });
+			Previous = Mark.Value;
+		}
+		AddWords(Previous, Count);
+	}
+	else
+	{
+		// d831cbd1: a word OVERLAPPING a marker is the marker
+		AddWords(0, Count);
+		for (FSpan& Span : Spans)
+		{
+			for (const TPair<int32, int32>& Mark : Marks)
+			{
+				Span.bMarker |= Span.Start < Mark.Value && Span.End > Mark.Key;
+			}
 		}
 	}
+	const int32 NumSpans = Spans.Num();
 	TArray<bool> Certain;
-	Certain.Init(false, Spans.Num());
+	Certain.Init(false, NumSpans);
 	// A VALUE GIVEN BY A LABEL (or Bearer / Basic, pwd=..., a URL's user:pass@) is redacted as typed, edge punctuation and all: trimmed, a
 	// password ending in "!" or ")" kept that character on screen and on disk (round 5's rule check: "the secret hunter2! goes in")
 	TArray<bool> TakenWhole;
-	TakenWhole.Init(false, Spans.Num());
+	TakenWhole.Init(false, NumSpans);
 	bool bInPem = false;
-	for (int32 Index = 0; Index < Spans.Num(); ++Index)
+	for (int32 Index = 0; Index < NumSpans; ++Index)
 	{
 		const FSpan& Span = Spans[Index];
-		if (InRedaction[Index])
+		if (Span.bMarker)
 		{
 			continue;
 		}
@@ -943,7 +1371,19 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 			}
 			continue;
 		}
-		if (!Span.Word.IsEmpty() && (CardLabelWithValue(Span.Lower) || CardUrlUserinfoPassword(Span.Word)))
+		// A VALUE GLUED TO THE MARKER (r6) is screened as the credential it most likely is, whole
+		if (Span.bGlued && !Span.Word.IsEmpty())
+		{
+			Certain[Index] = true;
+			TakenWhole[Index] = true;
+		}
+		bool bLabelWithValue = CardLabelWithValueR6(Span.Word);
+		// a two-word label glued to its value: "api key:X", "client secret=X"
+		if (!bLabelWithValue && Index > 0 && CardRuleOn(QaRuleLabelForms) && CardLabelQualifier(Spans[Index - 1].Lower) && CardGluedTwoWordValue(Span.Lower))
+		{
+			bLabelWithValue = true;
+		}
+		if (!Span.Word.IsEmpty() && (bLabelWithValue || CardUrlUserinfoPassword(Span.Word)))
 		{
 			Certain[Index] = true;
 			TakenWhole[Index] = true;
@@ -953,7 +1393,7 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 			Certain[Index] = true;
 		}
 		// the word after "Bearer"; after "Basic" when it looks like base64
-		if (Index + 1 < Spans.Num())
+		if (Index + 1 < NumSpans && !Spans[Index + 1].bMarker)
 		{
 			if (Span.Lower == TEXT("bearer") || (Span.Lower == TEXT("basic") && CardBase64Word(Spans[Index + 1].Word)))
 			{
@@ -961,46 +1401,101 @@ void FWonderlandCardStore::FindSecrets(const FString& Text, TArray<FSecretFind>&
 				TakenWhole[Index + 1] = true;
 			}
 		}
-		// A CREDENTIAL LABEL takes its value with it: "password: X", "secret = X", "api key: X", "pwd is X"
-		const bool bLabel = CardCredentialLabel(Span.Lower)
-			|| (Index > 0 && CardLabelQualifier(Spans[Index - 1].Lower) && (Span.Lower == TEXT("key") || Span.Lower == TEXT("secret")));
-		if (bLabel && Span.Raw.Len() > 0)
+		// A LOGIN PAIR without a URL (r6): "login admin:<value>"
+		if (CardRuleOn(QaRuleLoginPair) && Index > 0 && CardOneOf(Spans[Index - 1].Lower, CardLoginWords) && CardLoginPair(Span.Word))
 		{
-			const TCHAR Last = Span.Raw[Span.Raw.Len() - 1];
-			int32 ValueAt = INDEX_NONE;
-			if ((Last == TEXT(':') || Last == TEXT('=')) && Index + 1 < Spans.Num())
+			Certain[Index] = true;
+			TakenWhole[Index] = true;
+		}
+		// A CREDENTIAL LABEL takes its value with it (r6, the LABEL WINDOW, Second's MAJOR 3): after an ASSIGNMENT (':' '=' ':=' '->' '-',
+		// on the label or a qualifier closing it -- "password for staging: X", "password (staging): X") the next word, a stopword excepted;
+		// otherwise, past the connectors ("was", "is", "for", "the") and a qualifier after a preposition ("for prod", "to the db"), the first
+		// word that LOOKS like a credential (CardValueLike). At most five words on.
+		ECardLabelKind Kind = CardLabelKind(Span.Word);
+		if (Kind == ECardLabelKind::None && Index > 0 && CardLabelQualifier(Spans[Index - 1].Lower) && (Span.Lower == TEXT("key") || Span.Lower == TEXT("secret")))
+		{
+			Kind = ECardLabelKind::Normal;
+		}
+		if (Kind == ECardLabelKind::None || Span.Raw.IsEmpty() || !CardRuleOn(QaRuleLabelWindow))
+		{
+			continue;
+		}
+		FString LabelRaw = Span.Raw;
+		while (LabelRaw.Len() > 0 && (LabelRaw[LabelRaw.Len() - 1] == TEXT('"') || LabelRaw[LabelRaw.Len() - 1] == TEXT('\'')))
+		{
+			LabelRaw.LeftChopInline(1);
+		}
+		bool bStrong = LabelRaw.EndsWith(TEXT(":"), ESearchCase::CaseSensitive) || LabelRaw.EndsWith(TEXT("="), ESearchCase::CaseSensitive);
+		bool bAfterQualifier = false;
+		int32 Next = Index + 1;
+		int32 Skips = 0;
+		while (Next < NumSpans && Skips <= 4)
+		{
+			const FSpan& Candidate = Spans[Next];
+			if (Candidate.bMarker)
 			{
-				ValueAt = Index + 1;
+				break;   // that value is already gone
 			}
-			else if (Index + 2 < Spans.Num() && (Spans[Index + 1].Raw == TEXT(":") || Spans[Index + 1].Raw == TEXT("=") || Spans[Index + 1].Lower == TEXT("is")))
+			const FString& Raw = Candidate.Raw;
+			if (CardOneOf(Raw, CardStrongConnectors))
 			{
-				ValueAt = Index + 2;
+				bStrong = true;
+				++Next;
+				++Skips;
+				continue;
 			}
-			// A LABEL DIRECTLY FOLLOWED BY A PASSWORD-LIKE WORD (Second's real-input leak, 10-03: "the passwd Tr0ub4dor&3x is on the card"
-			// was stored as typed, the value below every statistic): that word is the value
-			else if (Index + 1 < Spans.Num() && !InRedaction[Index + 1] && CardPasswordLike(Spans[Index + 1].Word)
-				&& (CardDirectLabel(Span.Lower) || !CardCredentialLabel(Span.Lower)))
+			if (!bStrong && (Raw.EndsWith(TEXT(":"), ESearchCase::CaseSensitive) || Raw.EndsWith(TEXT("="), ESearchCase::CaseSensitive))
+				&& Candidate.Word.Len() <= 24
+				&& (Next == Index + 1 || CardOneOf(Spans[Next - 1].Lower, CardPrepositions) || Raw.StartsWith(TEXT("("), ESearchCase::CaseSensitive)))
 			{
-				ValueAt = Index + 1;
+				bStrong = true;
+				++Next;
+				++Skips;
+				continue;
 			}
-			// AN AUTHORIZATION SCHEME IS NOT THE CREDENTIAL (Second, 10-03): "Authorization: Bearer X" keeps "Bearer" readable and takes X;
-			// a scheme with nothing after it is taken itself (fail-closed)
-			if (ValueAt != INDEX_NONE && ValueAt + 1 < Spans.Num() && Span.Lower.Contains(TEXT("authorization")) && CardAuthScheme(Spans[ValueAt].Lower))
+			if (!bStrong && CardOneOf(Candidate.Lower, CardWeakConnectors))
 			{
-				++ValueAt;
+				++Next;
+				++Skips;
+				continue;
 			}
-			if (ValueAt != INDEX_NONE)
+			if (!bStrong && Raw.StartsWith(TEXT("("), ESearchCase::CaseSensitive) && Raw.EndsWith(TEXT(")"), ESearchCase::CaseSensitive))
 			{
-				Certain[ValueAt] = true;
-				TakenWhole[ValueAt] = true;
+				++Next;
+				++Skips;
+				continue;
 			}
+			const FString Previous1 = Next - 1 > Index ? Spans[Next - 1].Lower : FString();
+			const FString Previous2 = Next - 2 > Index ? Spans[Next - 2].Lower : FString();
+			if (!bStrong && (CardOneOf(Previous1, CardPrepositions) || (CardOneOf(Previous1, CardArticles) && CardOneOf(Previous2, CardPrepositions)))
+				&& CardIsAlphaWord(Candidate.Word) && Candidate.Word.Len() <= 16 && !CardValueLike(Candidate.Word, Kind))
+			{
+				bAfterQualifier = true;
+				++Next;
+				++Skips;
+				continue;
+			}
+			// AN AUTHORIZATION SCHEME IS NOT THE CREDENTIAL (Second, 10-03): "Authorization: Bearer X" keeps "Bearer" readable and takes X
+			if (Span.Lower.Contains(TEXT("authorization")) && CardAuthScheme(Candidate.Lower) && Next + 1 < NumSpans)
+			{
+				++Next;
+				continue;
+			}
+			const bool bTake = (bStrong && !CardOneOf(Candidate.Lower, CardStopwords))
+				|| (CardValueLike(Candidate.Word, Kind) && !(bAfterQualifier && CardAllOf(Candidate.Word, 0, Candidate.Word.Len(), &CardDigitChar)));
+			if (bTake && !Candidate.Word.IsEmpty())
+			{
+				Certain[Next] = true;
+				TakenWhole[Next] = true;
+			}
+			break;
 		}
 	}
-	for (int32 Index = 0; Index < Spans.Num(); ++Index)
+	for (int32 Index = 0; Index < NumSpans; ++Index)
 	{
 		const FSpan& Span = Spans[Index];
 		// the marker is never a find, whatever rule pointed at it
-		if (Span.Word.IsEmpty() || InRedaction[Index])
+		if (Span.Word.IsEmpty() || Span.bMarker)
 		{
 			continue;
 		}
@@ -1054,25 +1549,135 @@ FString FWonderlandCardStore::WithoutInvisibleText(const FString& Text)
 	return WithoutInvisible(Text);
 }
 
+void FWonderlandCardStore::ScreenText(const FString& Text, FString& OutScreened, TArray<FSecretFind>& OutFinds)
+{
+	OutFinds.Reset();
+	const bool bSpaces = CardRuleOn(QaRuleSpaces);
+	// TWO VIEWS OF ONE LINE, character for character: JOINED (what is stored: spaces normalised, invisibles gone -- a key split by a
+	// zero-width space is whole again) and SPLIT (the invisibles as spaces too -- a label and its value split by one stay two words)
+	FString Joined;
+	FString Split;
+	TArray<int32> SplitToJoined;
+	Joined.Reserve(Text.Len());
+	Split.Reserve(Text.Len());
+	SplitToJoined.Reserve(Text.Len());
+	for (int32 Index = 0; Index < Text.Len(); ++Index)
+	{
+		const uint32 Code = static_cast<uint32>(Text[Index]);
+		// a TAG character (U+E0000-E007F, invisible ASCII look-alikes) is a surrogate pair in UTF-16: U+DB40, U+DC00-DC7F
+		if (Code == 0xDB40 && Index + 1 < Text.Len() && static_cast<uint32>(Text[Index + 1]) >= 0xDC00 && static_cast<uint32>(Text[Index + 1]) <= 0xDC7F)
+		{
+			Split.AppendChar(TEXT(' '));
+			Split.AppendChar(TEXT(' '));
+			SplitToJoined.Add(INDEX_NONE);
+			SplitToJoined.Add(INDEX_NONE);
+			++Index;
+			continue;
+		}
+		if (bSpaces && CardSpaceLike(Code))
+		{
+			SplitToJoined.Add(Joined.Len());
+			Joined.AppendChar(TEXT(' '));
+			Split.AppendChar(TEXT(' '));
+			continue;
+		}
+		if (IsInvisible(Code))
+		{
+			SplitToJoined.Add(INDEX_NONE);
+			Split.AppendChar(TEXT(' '));
+			continue;
+		}
+		SplitToJoined.Add(Joined.Len());
+		Joined.AppendChar(Text[Index]);
+		Split.AppendChar(Text[Index]);
+	}
+	FindSecrets(Joined, OutFinds);
+	if (CardRuleOn(QaRuleBothViews))
+	{
+		TArray<FSecretFind> SplitFinds;
+		FindSecrets(Split, SplitFinds);
+		// a split find lands on the joined text WIDENED to its whole word there, never into a marker: nothing of the word is left glued
+		// to the marker the redaction writes (so a second screen finds nothing new)
+		TArray<bool> InMark;
+		InMark.Init(false, Joined.Len());
+		const FString RedactionMark = CardRedactionMarker();
+		for (int32 MarkAt = Joined.Find(RedactionMark, ESearchCase::CaseSensitive); MarkAt != INDEX_NONE;
+			MarkAt = Joined.Find(RedactionMark, ESearchCase::CaseSensitive, ESearchDir::FromStart, MarkAt + RedactionMark.Len()))
+		{
+			for (int32 At = MarkAt; At < MarkAt + RedactionMark.Len(); ++At)
+			{
+				InMark[At] = true;
+			}
+		}
+		for (const FSecretFind& Find : SplitFinds)
+		{
+			int32 Low = INDEX_NONE;
+			int32 High = INDEX_NONE;
+			for (int32 At = Find.Start; At < Find.Start + Find.Length && At < SplitToJoined.Num(); ++At)
+			{
+				const int32 Joint = SplitToJoined[At];
+				if (Joint != INDEX_NONE)
+				{
+					Low = Low == INDEX_NONE ? Joint : FMath::Min(Low, Joint);
+					High = FMath::Max(High, Joint);
+				}
+			}
+			if (Low == INDEX_NONE)
+			{
+				continue;
+			}
+			int32 From = Low;
+			while (From > 0 && Joined[From - 1] != TEXT(' ') && !InMark[From - 1])
+			{
+				--From;
+			}
+			int32 To = High;
+			while (To < Joined.Len() && Joined[To] != TEXT(' ') && !InMark[To])
+			{
+				++To;
+			}
+			OutFinds.Add({ From, To - From, Find.bCertain });
+		}
+		// in order, overlaps merged (a merged find is certain if either was)
+		OutFinds.Sort([](const FSecretFind& A, const FSecretFind& B) { return A.Start < B.Start || (A.Start == B.Start && A.Length < B.Length); });
+		TArray<FSecretFind> Merged;
+		for (const FSecretFind& Find : OutFinds)
+		{
+			if (Merged.Num() > 0 && Find.Start < Merged.Last().Start + Merged.Last().Length)
+			{
+				FSecretFind& Last = Merged.Last();
+				const int32 End = FMath::Max(Last.Start + Last.Length, Find.Start + Find.Length);
+				Last.Length = End - Last.Start;
+				Last.bCertain |= Find.bCertain;
+				continue;
+			}
+			Merged.Add(Find);
+		}
+		OutFinds = MoveTemp(Merged);
+	}
+	OutScreened = MoveTemp(Joined);
+}
+
 bool FWonderlandCardStore::HoldsSecret(const FString& Text)
 {
+	FString Screened;
 	TArray<FSecretFind> Finds;
-	FindSecrets(Text, Finds);
+	ScreenText(Text, Screened, Finds);
 	if (Finds.Num() > 0)
 	{
 		return true;
 	}
-	FindSecrets(WithoutInvisible(Text), Finds);
+	FindSecrets(Text, Finds);
 	return Finds.Num() > 0;
 }
 
 FString FWonderlandCardStore::MaskForDisplay(const FString& Line)
 {
-	// what is shown is the line without its invisible characters, every find (certain and statistical) replaced
-	const FString Clean = WithoutInvisible(Line);
+	// what is shown is the screened line (spaces normalised, invisibles gone), every find (certain and statistical) replaced
+	FString Screened;
 	TArray<FSecretFind> Finds;
-	FindSecrets(Clean, Finds);
-	return Finds.Num() > 0 ? RedactSecrets(Clean, Finds) : Line;
+	ScreenText(Line, Screened, Finds);
+	return Finds.Num() > 0 ? RedactSecrets(Screened, Finds) : Line;
 }
 
 bool FWonderlandCardStore::LooksLikeSecret(const FString& Text)

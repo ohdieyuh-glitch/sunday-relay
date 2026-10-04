@@ -519,15 +519,16 @@ bool UWonderlandMissionTaskSubsystem::SubmitDraft(FGuid LocalId, const FString& 
 
 namespace
 {
-	/** The objective as the free-text screen lets it be kept: its invisible characters gone, every find redacted (the statistical
+	/** The objective as the free-text screen lets it be kept: screened as every redacting caller screens (ScreenText: space-like
+	 *  characters kept as spaces, invisibles gone, both views read -- Second's round-5 MAJORs 1-3), every find redacted (the statistical
 	 *  ones only without /keep). Counts what was removed. */
 	FString WonderlandScreenObjective(const FString& Typed, bool bKeepAsTyped, int32& OutCertain, int32& OutStatistical)
 	{
 		OutCertain = 0;
 		OutStatistical = 0;
-		const FString Clean = FWonderlandCardStore::WithoutInvisibleText(Typed);
+		FString Screened;
 		TArray<FWonderlandCardStore::FSecretFind> Finds;
-		FWonderlandCardStore::FindSecrets(Clean, Finds);
+		FWonderlandCardStore::ScreenText(Typed, Screened, Finds);
 		if (Finds.Num() == 0)
 		{
 			return Typed;
@@ -536,7 +537,7 @@ namespace
 		{
 			(Find.bCertain ? OutCertain : OutStatistical) += Find.bCertain || !bKeepAsTyped ? 1 : 0;
 		}
-		return FWonderlandCardStore::RedactSecrets(Clean, Finds, bKeepAsTyped);
+		return FWonderlandCardStore::RedactSecrets(Screened, Finds, bKeepAsTyped);
 	}
 
 	/** The lifecycle line /keep leaves: the objective is the player's own word, and a restart's restore must not take it back. */
