@@ -8,11 +8,16 @@ import { liveBillingPaths, liveExecutionScope, parseLiveMissionContract } from '
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/executor-effects';
 import { LIVE_EVIDENCE_SUPERSEDED_LABEL, liveEvidenceLines } from '../relay-bridge/julius/live-evidence-lines';
 import {
-  liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveOneLine, liveResearchLines, liveTickAccountLine, liveTickBudgetLine,
-  liveWorkersBlockedLines,
+  liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveLearningFailedLine, liveLearningLines, liveOneLine, liveResearchLines,
+  liveTickAccountLine, liveTickBudgetLine, liveWorkersBlockedLines,
 } from '../relay-bridge/julius/live-report-lines';
-import type { DriveTickAccount } from '../relay-bridge/julius/live-composition';
+import type { DriveTickAccount, JuliusLearningOutcome } from '../relay-bridge/julius/live-composition';
 import { planJuliusTickBudget } from '../src/relay/mission/julius/julius-tick-budget';
+import {
+  JULIUS_LEARNING_DIMENSIONS, JULIUS_LEARNING_LOOP_VERSION,
+  type JuliusLearningComparison, type JuliusLearningDecision, type JuliusLearningDelta, type JuliusLearningDimension,
+  type JuliusLearningMetrics,
+} from '../src/relay/mission/julius/julius-learning-loop';
 import { LIVE_REACH_READINESS } from '../src/relay/mission/live-reach';
 import {
   HOSTED_ALLOWED_TOOLS, HOSTED_CHILD_MODEL_PIN_KEYS, HOSTED_DISALLOWED_TOOLS, hostedChildEnv,
@@ -1024,7 +1029,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'learning.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -1340,7 +1345,7 @@ describe('the evidence dump names only tables and columns the migrations create'
       expect(dump.columns, `${dump.file} carries run_id`).toContain('run_id');
     }
     const script = read('.github/julius-live-evidence-dump.sh');
-    for (const file of ['failures.tsv', 'budget.tsv', 'settlement-integrity.tsv', 'worker-diagnostics.tsv', 'contract-events.tsv', 'effort.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'finding-lifecycle.tsv']) {
+    for (const file of ['failures.tsv', 'budget.tsv', 'settlement-integrity.tsv', 'worker-diagnostics.tsv', 'contract-events.tsv', 'effort.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'finding-lifecycle.tsv', 'learning.tsv']) {
       const query = script.split('\n').find((line) => line.startsWith('dump "SELECT') && line.endsWith(` ${file}`)) ?? '';
       expect(query, `${file} exports its stream as run_id`).toContain('e.stream_id AS run_id');
     }
@@ -1399,6 +1404,29 @@ describe('the evidence dump names only tables and columns the migrations create'
     for (const query of [lifecycle, line('finding-status.tsv'), scope]) {
       expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
     }
+  });
+
+  /**
+   * THE LEARNING LOOP'S CALLER REACHES THE BUNDLE (E9-a). The pre-registration credits the caller only when a
+   * paid run's job log AND bundle show its recorded comparison and decision, and the ledger dies with the
+   * runner. So the record is dumped: the event type the catalogue declares, the registration and pairing both
+   * arms are matched on, the measurement, and on arm WITH the comparison, the deltas, the decision and the
+   * proposal, with the WITHOUT arm's record cited by id.
+   */
+  it('exports each arm’s learning record, the comparison and the decision, tied by the cited record, and no payload', () => {
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const query = script.split('\n').find((entry) => entry.startsWith('dump "SELECT') && entry.endsWith(' learning.tsv')) ?? '';
+    expect(query, 'the learning dump must exist').not.toBe('');
+    expect(query).toContain("WHERE e.event_type='julius.learning.arm.recorded'");
+    expect(read('src/relay/mission/julius/julius-events.ts'), 'a real event type').toContain("'learning.arm.recorded'");
+    expect(query, 'the WITH row cites the WITHOUT record').toContain("e.payload->>'causationId' AS cites_event_id");
+    for (const key of ['registrationDigest', 'arm', 'runState', 'objectiveDigest', 'roles', 'runtimeVersion', 'policyDimensions',
+      'policyMinimumRelativeImprovement', 'policyMinimumImprovedDimensions', 'trajectoryRows', 'dispatches', 'repairs',
+      'verifiedCompletions', 'withoutRunId', 'comparison', 'comparisonReason', 'deltas', 'decision', 'decisionReason',
+      'improved', 'regressed', 'marginalValue', 'proposal']) {
+      expect(query, `the learning dump exports ${key}`).toContain(`e.payload->'facts'->>'${key}'`);
+    }
+    expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
   });
 });
 
@@ -1896,6 +1924,75 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     expect(buildEvidence(strays.join('\n'))).toContain(`# 0 line(s) kept; ${String(strays.length)} unrecognised`);
   });
 
+  /**
+   * THE LEARNING RECORD REACHES THE ARTIFACT, EXACTLY AS THE PRINTER WRITES IT (E9-a). R9-a is credited only when
+   * a paid run's job log shows the caller's comparison and decision, so every shape `liveLearningLines` prints is
+   * generated here and must be kept: every dimension name, every verdict, both decisions, a refusal, an unmeasured
+   * value, an exponent, a run that had not finished, and the failure line. A line with one token changed is not.
+   */
+  it('keeps the learning record’s lines exactly as the printer writes them, and nothing shaped otherwise', () => {
+    const digest = '3b1f'.repeat(16);
+    const withoutRunId = 'run:708cf1f9f852a15ee0a4c114';
+    const registration = (arm: 'WITHOUT' | 'WITH') => ({
+      registrationDigest: digest, arm,
+      policy: { dimensions: ['dispatches', 'repairs'] as JuliusLearningDimension[], minimumRelativeImprovement: 0.1, minimumImprovedDimensions: 1 },
+      ...(arm === 'WITH' ? { withoutRunId } : {}),
+    });
+    const metrics = (over: Partial<JuliusLearningMetrics> = {}): JuliusLearningMetrics => ({
+      runtimeVersion: 'julius-runtime.v1', runs: 1, dispatches: 5, retries: 1, repairs: 1, recoveries: 0, fallbacks: 0,
+      findings: 2, verifiedCompletions: 1, knownUsdMicros: 608861, costComplete: false, averageDurationMs: 41234.5,
+      knownInputTokens: null, knownOutputTokens: 1200, unknownUsageComponents: 3, ...over,
+    });
+    const verdicts = ['IMPROVED', 'NO_EFFECT', 'REGRESSED', 'UNMEASURABLE'] as const;
+    const deltas: JuliusLearningDelta[] = JULIUS_LEARNING_DIMENSIONS.map((dimension, index) => {
+      const verdict = verdicts[index % verdicts.length]!;
+      if (verdict === 'UNMEASURABLE') return { dimension, without: null, with: 4, delta: null, verdict, bounded: true };
+      const after = verdict === 'IMPROVED' ? 4 : verdict === 'REGRESSED' ? 6.5 : 5;
+      return { dimension, without: 5, with: after, delta: after - 5, verdict, bounded: false };
+    });
+    const compared: JuliusLearningComparison = { outcome: 'COMPARED', version: JULIUS_LEARNING_LOOP_VERSION, deltas, without: metrics(), with: metrics({ dispatches: 4 }) };
+    const pair = (comparison: JuliusLearningComparison, decision: JuliusLearningDecision) => ({
+      withoutRunId, comparison, decision,
+      withoutRunState: comparison.outcome === 'COMPARED' ? 'COMPLETED' : null,
+      withoutTrajectoryRows: comparison.outcome === 'COMPARED' ? 14 : null,
+      withoutEventId: null,
+    });
+    const arm = (over: Partial<Omit<JuliusLearningOutcome, 'lines'>>): Omit<JuliusLearningOutcome, 'lines'> => ({
+      record: 'RECORDED', runId: 'run:5c0ffee5c0ffee5c0ffee5c0', runState: 'COMPLETED', registration: registration('WITH'),
+      metrics: metrics({ dispatches: 4 }), trajectoryRows: 11, pair: null, event: null, ...over,
+    });
+    const unrecorded: JuliusLearningComparison = { outcome: 'UNCOMPARABLE', reasonCode: 'learning_pair_without_unrecorded' };
+    const outcomes = [
+      arm({ registration: registration('WITHOUT'), runId: withoutRunId, metrics: metrics(), trajectoryRows: 14 }),
+      arm({ pair: pair(compared, { outcome: 'PROMOTE', improved: ['dispatches', 'knownOutputTokens'], marginalValue: 0.2 }) }),
+      arm({ record: 'DUPLICATE', pair: pair(compared, { outcome: 'PROMOTE', improved: ['verifiedCompletions'], marginalValue: 0.0000005 }) }),
+      arm({ pair: pair(compared, { outcome: 'REFUSE', reasonCode: 'learning_regressed', regressed: ['retries', 'verifiedCompletions'] }) }),
+      arm({ pair: pair(unrecorded, { outcome: 'REFUSE', reasonCode: 'learning_pair_without_unrecorded', regressed: [] }) }),
+      arm({ record: 'NOT_TERMINAL', runState: 'VERIFYING', metrics: null, trajectoryRows: null }),
+    ];
+    const lines = [...outcomes.flatMap((outcome) => liveLearningLines(outcome)), liveLearningFailedLine(new Error('julius_event_id_conflict'))];
+    expect(lines.filter((line) => line.startsWith('LEARNING: delta ')), 'every dimension is printed').toHaveLength(3 * JULIUS_LEARNING_DIMENSIONS.length);
+    expect(lines.some((line) => line.includes('marginal_value=5e-7')), 'an exponent is printed').toBe(true);
+    const output = buildEvidence(lines.join('\n'));
+    for (const line of lines) expect(output, `withheld: ${line}`).toContain(`${line}\n`);
+    expect(output).toContain(`# ${String(lines.length)} line(s) kept; 0 unrecognised and 0 secret-shaped line(s) withheld.`);
+
+    const printed = liveLearningLines(outcomes[1]!);
+    const [armLine, metricsLine, comparisonLine] = printed;
+    const deltaLine = printed.find((line) => line.startsWith('LEARNING: delta ')) ?? '';
+    const decisionLine = printed[printed.length - 1]!;
+    const strays = [
+      armLine!.replace('record=RECORDED', 'record=PROMOTED'),
+      armLine!.replace(`registration=${digest}`, `registration=${digest.toUpperCase()}`),
+      metricsLine!.replace('cost_complete=no', 'cost_complete=maybe'),
+      comparisonLine!.replace('comparison=COMPARED', 'comparison=ASSUMED'),
+      deltaLine.replace('verdict=IMPROVED', 'verdict=BETTER'),
+      decisionLine.replace('proposal=PROMOTION_PROPOSED', 'proposal=PROMOTED'),
+      `${decisionLine} because the model said so`,
+    ];
+    expect(buildEvidence(strays.join('\n'))).toContain(`# 0 line(s) kept; ${String(strays.length)} unrecognised`);
+  });
+
   it('keeps the peer execution scope, the research lines and the refusals, exactly as the printers write them (P4)', () => {
     const refused = resolveClaudeAuthMode({ JULIUS_CLAUDE_AUTH: 'subscriptoin' });
     if (refused.ok) throw new Error('a misspelled mode must be refused');
@@ -1981,6 +2078,9 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
       'for (const line of liveResearchLines(researchClause === undefined ? null : { roles: [...researchClause.roles], allowances: researchClause.allowances.length, observedBackends: observed.probes.length, reach: researchReachSummary(researchClause, observed.probes), })) out(line);',
       'out(liveTickBudgetLine(tickBudget, tickOverride.override));',
       'if (outcome.tickAccount !== null) out(liveTickAccountLine(outcome.tickAccount));',
+      // The learning record's lines are the caller's own (`recordJuliusLearningOutcome` prints through `liveLearningLines`).
+      'for (const line of learning.lines) out(line);',
+      'out(liveLearningFailedLine(error));',
     ]) expect(entry.split(statement).length - 1, statement).toBe(1);
   });
 
@@ -3176,7 +3276,7 @@ describe('the event dumps are ordered by the ledger position, not by the wall cl
   it('covers every chronological event dump, so a new one cannot arrive unordered', () => {
     expect(eventDumps().map(named).sort())
       .toEqual(['budget.tsv', 'contract-events.tsv', 'effort.tsv', 'failures.tsv', 'finding-lifecycle.tsv',
-        'participation.tsv', 'research.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
+        'learning.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
   });
 
   it('carries the position the ledger allocated, and the stream it is a position within', () => {

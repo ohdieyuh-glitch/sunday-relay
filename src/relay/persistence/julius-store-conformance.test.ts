@@ -22,7 +22,7 @@ import type {
   JuliusApprovalStore, JuliusBrainWriter, JuliusFindingWriter, JuliusLifecycleStore,
   JuliusRecoveryDriver, JuliusTimelineReader,
   JuliusRuntimeStore, JuliusSubagentStore, JuliusTaskContractStore, JuliusTrajectoryWriter,
-  JuliusClaimStore,
+  JuliusClaimStore, JuliusTrajectoryReader,
 } from '../mission/julius';
 
 /**
@@ -133,13 +133,19 @@ const eventWriter: JuliusEventWriter & Required<Pick<JuliusEventWriter, 'appendH
   // A release decided against its reservation's settlements ((a2) step 3).
   appendSettlementEvent: (event) => new JuliusEventPostgresRepository(pool).appendSettlement(event),
 };
-const trajectoryWriter: JuliusTrajectoryWriter = {
+/**
+ * The trajectory ledger's adapter carries its READ too: the repository's `forRun` is the port's
+ * `trajectoryForRun`, for the same reason `append` is `appendTrajectory`. Still one adapter for
+ * one ledger, which is what the count below holds.
+ */
+const trajectoryLedger: JuliusTrajectoryWriter & JuliusTrajectoryReader = {
   appendTrajectory: (event) => new JuliusTrajectoryPostgresRepository(pool).append(event),
+  trajectoryForRun: (runId, projectId) => new JuliusTrajectoryPostgresRepository(pool).forRun(runId, projectId),
 };
 
 /** The whole runtime store, composed from the real repositories. */
 const composed: JuliusRuntimeStore & JuliusSubagentStore
-  & JuliusApprovalStore & JuliusLifecycleStore & JuliusRecoveryDriver = {
+  & JuliusApprovalStore & JuliusLifecycleStore & JuliusRecoveryDriver & JuliusTrajectoryReader = {
   loadRun: runWriter.loadRun.bind(runWriter),
   claimsForRun: claimStore.claimsForRun.bind(claimStore),
   recordClaimStanding: claimStore.recordClaimStanding.bind(claimStore),
@@ -157,7 +163,8 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore
   appendEvent: eventWriter.appendEvent.bind(eventWriter),
   appendHandoffEvent: eventWriter.appendHandoffEvent.bind(eventWriter),
   appendSettlementEvent: eventWriter.appendSettlementEvent.bind(eventWriter),
-  appendTrajectory: trajectoryWriter.appendTrajectory.bind(trajectoryWriter),
+  appendTrajectory: trajectoryLedger.appendTrajectory.bind(trajectoryLedger),
+  trajectoryForRun: trajectoryLedger.trajectoryForRun.bind(trajectoryLedger),
   tasksForRun: reader.tasksForRun.bind(reader),
   evidenceForRun: reader.evidenceForRun.bind(reader),
   findingsForRun: reader.findingsForRun.bind(reader),
@@ -271,7 +278,8 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     const direct = [runWriter, resultWriter, contextWriter, reader, subagents, lifecycle, timeline, findings, claimStore];
     expect(direct).toHaveLength(9);
     expect(typeof eventWriter.appendEvent).toBe('function');
-    expect(typeof trajectoryWriter.appendTrajectory).toBe('function');
+    expect(typeof trajectoryLedger.appendTrajectory).toBe('function');
+    expect(typeof trajectoryLedger.trajectoryForRun).toBe('function');
   });
 
   it('satisfies the recovery driver with no adapter', () => {
