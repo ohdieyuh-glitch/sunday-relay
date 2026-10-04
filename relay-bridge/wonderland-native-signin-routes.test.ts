@@ -205,4 +205,21 @@ describe('desktop sign-out', () => {
     expect((await b.call('revoke', null, T0 + 1, { authorization: `Relay-Session ${browser.session.token}` })).body.error?.kind).toBe('not_signed_in');
     expect(b.sessions.verifySession({ token: browser.session.token, origin: 'https://wonderland.example', now: T0 + 2 }).ok).toBe(true);
   });
+
+  it('ends the player\'s presence after the session is revoked -- once, for its own player only -- and a failure there never undoes the sign-out', async () => {
+    const ended: Array<{ participantId: string; now: number }> = [];
+    const b = bridge(github({}), { onSignOut: async (participantId, now) => { ended.push({ participantId, now }); } });
+    const minted = b.sessions.mintNativeSocialSession({ now: T0, participantId: 'ghu-4242' });
+    if (!minted.ok) throw new Error('mint');
+    await b.call('revoke', null, T0 + 1, { authorization: 'Relay-Session not-a-session' });
+    expect(ended).toEqual([]);
+    expect((await b.call('revoke', null, T0 + 1, { authorization: `Relay-Session ${minted.session.token}` })).body.data).toEqual({ revoked: true });
+    expect(ended).toEqual([{ participantId: 'ghu-4242', now: T0 + 1 }]);
+    const failing = bridge(github({}), { onSignOut: async () => { throw new Error('store down'); } });
+    const second = failing.sessions.mintNativeSocialSession({ now: T0, participantId: 'ghu-7' });
+    if (!second.ok) throw new Error('mint');
+    const answer = await failing.call('revoke', null, T0 + 1, { authorization: `Relay-Session ${second.session.token}` });
+    expect(answer.body.data).toEqual({ revoked: true });
+    expect(failing.sessions.verifyNativeSocialSession({ token: second.session.token, now: T0 + 2 }).ok).toBe(false);
+  });
 });

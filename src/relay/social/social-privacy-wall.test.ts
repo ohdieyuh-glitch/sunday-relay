@@ -344,3 +344,41 @@ describe('D6: a block that separates a party tells the member it happens to the 
     expect(await blockCase.opsAfter(U.LYRA, after)).toEqual([]);
   });
 });
+
+describe('D8: the events cursor is the viewer\'s own, never a global count', () => {
+  async function three() {
+    const store = createInMemorySocialStore();
+    for (const id of [U.KAI, U.NOVA, U.VEGA]) await store.ensureUser({ userId: id, displayName: id, handle: `@${id}` }, NOW);
+    const run = async (name: Parameters<typeof store.apply>[0], actor: string, ids: string[], body: Record<string, unknown>) => {
+      const r = await store.apply(name, actor, { ids, body, query: {} }, NOW);
+      if (!r.ok) throw new Error(`${name}: ${r.error.message}`);
+    };
+    await run('requests.send', U.KAI, [], { toUserId: U.NOVA });
+    await run('requests.accept', U.NOVA, [(await store.read()).requests[0].requestId], {});
+    return { store, run };
+  }
+
+  it('a stranger acting moves nothing in Nova\'s cursor; her friend acting moves it to exactly that event', async () => {
+    const { store, run } = await three();
+    const before = (await store.eventsFor(U.NOVA, 0, 100)).latest;
+    for (let i = 0; i < 4; i += 1) await run('presence.update_self', U.VEGA, [], { activityDetail: `vega ${i}` });
+    const quiet = await store.eventsFor(U.NOVA, before, 100);
+    expect(quiet.events).toEqual([]);
+    expect(quiet.latest).toBe(before); // was: the log's global newest, +4
+    await run('presence.update_self', U.KAI, [], { activityDetail: 'kai' });
+    const told = await store.eventsFor(U.NOVA, before, 100);
+    expect(told.events.map((e) => e.op)).toEqual(['presence.update_self']);
+    expect(told.latest).toBe(told.events[0].seq);
+  });
+
+  it('a page cut short ends the cursor at its last event, so nothing is skipped', async () => {
+    const { store, run } = await three();
+    const start = (await store.eventsFor(U.NOVA, 0, 100)).latest;
+    for (let i = 0; i < 3; i += 1) await run('presence.update_self', U.KAI, [], { activityDetail: `kai ${i}` });
+    const first = await store.eventsFor(U.NOVA, start, 2);
+    expect(first.events).toHaveLength(2);
+    expect(first.latest).toBe(first.events[1].seq);
+    const rest = await store.eventsFor(U.NOVA, first.latest, 2);
+    expect(rest.events).toHaveLength(1);
+  });
+});

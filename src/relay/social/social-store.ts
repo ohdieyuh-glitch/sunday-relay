@@ -37,10 +37,21 @@ export interface SocialEvent {
 
 export interface SocialEventPage {
   readonly events: readonly SocialEvent[];
-  /** The newest sequence number in the log; ask again with `after` = this. */
+  /**
+   * Where THIS viewer's cursor now stands; ask again with `after` = this. It is the viewer's own: the last event of a page cut
+   * short, else the newest event addressed to them -- never the log's global newest, which moved whenever ANYBODY acted and so
+   * told a walled player that the person behind the wall was busy (Second's R16 run, 10-04). Never below `after`, and never
+   * below the log's retention edge (oldest - 1), so a quiet viewer is not told to reset forever.
+   */
   readonly latest: number;
   /** True when events after `after` have already left the log: refresh the whole view. */
   readonly reset: boolean;
+}
+
+/** The viewer's cursor after a page (see SocialEventPage.latest). */
+export function viewerCursor(input: { after: number; page: readonly SocialEvent[]; truncated: boolean; viewerNewest: number | null; oldest: number | null }): number {
+  if (input.truncated && input.page.length > 0) return input.page[input.page.length - 1].seq;
+  return Math.max(input.after, input.viewerNewest ?? 0, input.oldest === null ? 0 : input.oldest - 1);
 }
 
 /** Who a signed-in player is, from the account they paired with: enough to make their social record on first contact. */
@@ -147,13 +158,14 @@ export function createInMemorySocialStore(initial: SocialState = emptySocialStat
       }),
     eventsFor: (userId, after, limit) =>
       serial((): SocialEventPage => {
-        const oldest = log.length > 0 ? log[0].seq : seq + 1;
-        const reset = after > 0 && after < oldest - 1;
-        const events = log
-          .filter((e) => e.seq > after && e.audience.has(userId))
-          .slice(0, Math.max(1, Math.min(limit, 500)))
-          .map(({ seq: s, op, atIso }) => ({ seq: s, op, atIso }));
-        return { events, latest: seq, reset };
+        const oldest = log.length > 0 ? log[0].seq : null;
+        const reset = after > 0 && oldest !== null && after < oldest - 1;
+        const mine = log.filter((e) => e.audience.has(userId));
+        const cap = Math.max(1, Math.min(limit, 500));
+        const pending = mine.filter((e) => e.seq > after);
+        const events = pending.slice(0, cap).map(({ seq: s, op, atIso }) => ({ seq: s, op, atIso }));
+        const latest = viewerCursor({ after, page: events, truncated: pending.length > cap, viewerNewest: mine.length > 0 ? mine[mine.length - 1].seq : null, oldest });
+        return { events, latest, reset };
       }),
   };
 }

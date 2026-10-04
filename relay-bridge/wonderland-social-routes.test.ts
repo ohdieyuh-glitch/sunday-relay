@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInMemorySocialStore, type SocialStore } from '../src/relay/social/social-store';
-import { handleSocialRoute, type SocialRouteDeps, type SocialSessionFacts } from './wonderland-social-routes';
+import { endSocialPresence, handleSocialRoute, type SocialRouteDeps, type SocialSessionFacts } from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 
 /*
@@ -166,6 +166,35 @@ describe('the social routes: two players, the launch loop', () => {
 /** Kai and Nova, friends. */
 async function friends() {
   const w = world();
+  await w.kai.get('/snapshot');
+  await w.nova.get('/snapshot');
+  await w.kai.post('/requests', { toUserId: 'usr_nova' });
+  const requestId = (await w.nova.get('/snapshot')).body.data.requests.incoming[0].requestId;
+  await w.nova.post(`/requests/${requestId}/accept`);
+  return w;
+}
+
+describe('sign-out ends presence (Second\'s R16 run, 10-04)', () => {
+  it('endSocialPresence: the friend is told, sees the player OFFLINE, and the player leaves the world', async () => {
+    const store = createInMemorySocialStore();
+    const w = await friendsOn(store);
+    await w.kai.post('/presence', { connected: true, availability: 'AVAILABLE' });
+    await w.kai.post('/world/join', { target: 'PUBLIC' });
+    expect((await w.nova.get('/snapshot')).body.data.friends[0].presence.onlineState).toBe('ONLINE');
+    const before = (await w.nova.get('/events')).body.data.latest;
+    await endSocialPresence(store, 'usr_kai', T0 + 60_000);
+    expect((await w.nova.get(`/events?after=${before}`)).body.data.events.map((e: any) => e.op)).toContain('presence.update_self');
+    expect((await w.nova.get('/snapshot')).body.data.friends[0].presence.onlineState).toBe('OFFLINE');
+    expect((await w.kai.get('/world')).body.data.context).toBeNull();
+    // no store, or no such player: nothing happens and nothing throws
+    await endSocialPresence(null, 'usr_kai', T0);
+    await endSocialPresence(store, 'usr_nobody', T0);
+  });
+});
+
+/** Kai and Nova, friends, on a given store. */
+async function friendsOn(store: SocialStore) {
+  const w = world(store);
   await w.kai.get('/snapshot');
   await w.nova.get('/snapshot');
   await w.kai.post('/requests', { toUserId: 'usr_nova' });

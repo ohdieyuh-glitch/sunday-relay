@@ -237,3 +237,16 @@ export async function handleSocialRoute(request: SocialRouteRequest, deps: Socia
 
 /** Every operation this module serves, for a reviewer: exactly the table's. */
 export const SOCIAL_ROUTE_OPERATIONS: readonly SocialOperationId[] = SOCIAL_OPERATIONS.map((o) => o.id);
+
+/**
+ * SIGN-OUT ENDS PRESENCE. A signed-out player is OFFLINE to everybody at once (their friends and party are told, through the one
+ * presence authority, exactly as if their client had reported it) and leaves their world context. Before this, `connected` was
+ * cleared only by the client or a bridge restart (Second's R16 run, 10-04: C saw A ONLINE after A signed out). A player with no
+ * social record is left alone.
+ */
+export async function endSocialPresence(store: SocialStore | null, participantId: string, now: number): Promise<void> {
+  if (store === null) return;
+  const nowIso = new Date(now).toISOString();
+  await store.apply('presence.update_self', participantId, { ids: [], body: { connected: false }, query: {} }, nowIso);
+  await store.apply('world.leave', participantId, { ids: [], body: {}, query: {} }, nowIso);
+}

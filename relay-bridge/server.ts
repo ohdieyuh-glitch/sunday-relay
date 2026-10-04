@@ -81,7 +81,7 @@ import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute } from './wonderland-native-signin-routes';
-import { handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
+import { endSocialPresence, handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 import { GITHUB_STUB_BANNER, githubRootsForNativeSignIn } from './wonderland-github-stub-seam';
 import { openSocialPostgresStore } from '../src/relay/persistence/social-postgres';
@@ -680,6 +680,8 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
               await pool.query('INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING', [participantId]);
               socialLogins.set(participantId, login);
             },
+            // sign-out ends presence: friends see the player OFFLINE at once, and they leave their world context
+            onSignOut: async (participantId, at) => endSocialPresence(socialEnabled ? await socialStore() : null, participantId, at),
             oauthRoot: socialGithub.oauthRoot,
             apiRoot: socialGithub.apiRoot,
           });

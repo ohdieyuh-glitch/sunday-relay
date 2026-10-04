@@ -122,6 +122,12 @@ export interface NativeSignInDeps {
    * players row is written. Absent: ready (the tests' default).
    */
   readonly socialReady?: () => Promise<boolean>;
+  /**
+   * SIGN-OUT ENDS PRESENCE (Second's R16 run, 10-04: A signed out and C still saw A ONLINE until the bridge restarted). Called
+   * after the session is revoked, with the player it belonged to; server.ts ends their social presence and world place
+   * (endSocialPresence). A failure here never undoes the sign-out.
+   */
+  readonly onSignOut?: (participantId: string, now: number) => Promise<void>;
   readonly fetchImpl?: SignInFetch;
   readonly oauthRoot?: string;
   readonly apiRoot?: string;
@@ -180,10 +186,18 @@ export async function handleNativeSignInRoute(
   /* ------------------------------------------------------------ sign out */
   if (path === '/wonderland/native/signin/revoke') {
     const token = sessionTokenFrom(request.authorization);
-    if (token === null || !deps.sessions.verifyNativeSocialSession({ token, now }).ok) {
+    const verified = token === null ? null : deps.sessions.verifyNativeSocialSession({ token, now });
+    if (token === null || verified === null || !verified.ok) {
       return err(401, 'not_signed_in', 'There is no desktop sign-in to end.');
     }
     deps.sessions.revokeSession({ token, now });
+    if (deps.onSignOut !== undefined) {
+      try {
+        await deps.onSignOut(verified.participantId, now);
+      } catch {
+        // the sign-out itself stands; presence is the social store's to settle
+      }
+    }
     return ok({ revoked: true });
   }
 

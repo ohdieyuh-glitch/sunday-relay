@@ -22,7 +22,7 @@ import {
 } from '../social/social-contracts';
 import { applySocialOperation, type SocialCommandInput } from '../social/social-commands';
 import { emptySocialState, type SocialState, type SocialUserRecord } from '../social/social-state';
-import { newSocialUser, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
+import { newSocialUser, viewerCursor, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
 import { emptyWorldState, type WorldState } from '../social/world-presence';
 
 /**
@@ -480,18 +480,24 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
         await pool.query(`DELETE FROM relay_wonderland.social_events WHERE at < $1`, [new Date(Date.now() - retentionMs).toISOString()]);
       }
       const capped = Math.max(1, Math.min(limit, 500));
+      // one row past the cap tells a page cut short from a complete one
       const rows = await pool.query<{ seq: string; op: SocialOperationId; at: Date }>(
         `SELECT seq, op, at FROM relay_wonderland.social_events WHERE seq > $1 AND audience @> ARRAY[$2]::text[] ORDER BY seq LIMIT $3`,
-        [after, userId, capped],
+        [after, userId, capped + 1],
       );
-      const bounds = await pool.query<{ latest: string | null; oldest: string | null }>(
-        `SELECT max(seq)::text AS latest, min(seq)::text AS oldest FROM relay_wonderland.social_events`,
+      // THE VIEWER'S OWN CURSOR (SocialEventPage.latest): their newest event, never the log's global newest; the global oldest
+      // only marks the retention edge (it moves with week-old pruning, not with anybody acting now).
+      const bounds = await pool.query<{ mine: string | null; oldest: string | null }>(
+        `SELECT (SELECT max(seq) FROM relay_wonderland.social_events WHERE audience @> ARRAY[$1]::text[])::text AS mine,
+                (SELECT min(seq) FROM relay_wonderland.social_events)::text AS oldest`,
+        [userId],
       );
-      const latest = Number(bounds.rows[0]?.latest ?? after);
+      const mine = bounds.rows[0]?.mine === null || bounds.rows[0]?.mine === undefined ? null : Number(bounds.rows[0].mine);
       const oldest = bounds.rows[0]?.oldest === null || bounds.rows[0]?.oldest === undefined ? null : Number(bounds.rows[0].oldest);
+      const events = rows.rows.slice(0, capped).map((r) => ({ seq: Number(r.seq), op: r.op, atIso: new Date(r.at).toISOString() }));
       return {
-        events: rows.rows.map((r) => ({ seq: Number(r.seq), op: r.op, atIso: new Date(r.at).toISOString() })),
-        latest: Math.max(latest, after),
+        events,
+        latest: viewerCursor({ after, page: events, truncated: rows.rows.length > capped, viewerNewest: mine, oldest }),
         reset: after > 0 && oldest !== null && after < oldest - 1,
       };
     },
