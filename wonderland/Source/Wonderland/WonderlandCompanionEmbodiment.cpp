@@ -3280,8 +3280,13 @@ bool AWonderlandCompanionEmbodiment::SolveLegToSole(int32 HipIndex, const FVecto
 	float LateralDeg = 0.0f;
 	for (int32 Pass = 0; Pass <= 4; ++Pass)
 	{
-		const float Forward = static_cast<float>(Aim.X);
-		const float Down = static_cast<float>(FMath::Sqrt(Aim.Y * Aim.Y + Aim.Z * Aim.Z));
+		// the writer's order: pitch, then a roll about the leg's own forward axis -- so the line is atan2(forward, down) at the whole reach
+		// and the sideways angle asin(across / reach); atan2(across, down) exploded as a leg swung forward (the hop's touchdown)
+		const float AimLength = static_cast<float>(Aim.Size());
+		const float AimInPlane = static_cast<float>(FMath::Sqrt(Aim.X * Aim.X + Aim.Z * Aim.Z));
+		const float AimStretch = AimInPlane > 0.01f ? AimLength / AimInPlane : 1.0f;
+		const float Forward = static_cast<float>(Aim.X) * AimStretch;
+		const float Down = static_cast<float>(-Aim.Z) * AimStretch;
 		const float Span = FMath::Clamp(FMath::Sqrt(Forward * Forward + Down * Down),
 			FMath::Abs(Thigh - Shin) + 0.01f, Thigh + Shin - 0.001f);
 		const float Bend = PI - FMath::Acos(FMath::Clamp((Thigh * Thigh + Shin * Shin - Span * Span) / (2.0f * Thigh * Shin), -1.0f, 1.0f));
@@ -3289,7 +3294,7 @@ bool AWonderlandCompanionEmbodiment::SolveLegToSole(int32 HipIndex, const FVecto
 		const float Toward = FMath::Atan2(Forward, Down);
 		PitchDeg = FMath::RadiansToDegrees(Toward + Lead);
 		BendDeg = FMath::RadiansToDegrees(Bend);
-		LateralDeg = FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(Aim.Y), static_cast<float>(-Aim.Z)));
+		LateralDeg = AimLength > 0.01f ? FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(static_cast<float>(Aim.Y) / AimLength, -1.0f, 1.0f))) : 0.0f;
 		if (Pass == 4 || Share <= 0.0f)
 		{
 			break;

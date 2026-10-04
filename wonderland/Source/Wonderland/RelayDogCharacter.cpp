@@ -75,17 +75,22 @@ namespace RelayDogHandoffTuning
 	// hips; the old Stance.Lean / RunLean / DashLean leaned this rig BACK (RelayDogStride::FDogPose::FStanceBody) and are gone.
 	TAutoConsoleVariable<float> CVarStanceBend(TEXT("wl.Handoff.Stance.Bend"), 3.0f, TEXT("Mission Handoff stance: the forward bend STANDING (the summon, ready, idle), about the hips, degrees (+ = chest forward): the photo, upright."));
 	TAutoConsoleVariable<float> CVarStanceRunBend(TEXT("wl.Handoff.Stance.RunBend"), 6.0f, TEXT("Mission Handoff stance: the forward bend walking and running armed, degrees."));
-	TAutoConsoleVariable<float> CVarStanceFastBend(TEXT("wl.Handoff.Stance.FastBend"), 38.0f, TEXT("Mission Handoff stance: the forward bend in FAST movement (the hop, the dash), degrees: the founder's video, charging."));
+	TAutoConsoleVariable<float> CVarStanceFastBend(TEXT("wl.Handoff.Stance.FastBend"), 42.0f, TEXT("Mission Handoff stance: the forward bend in FAST movement (the hop, the dash), degrees: the founder's video, charging."));
 	// THE FAST HOP (founder, 10-04: fast movement is skipping/hopping, not a run): when it comes in, and its rhythm and shape (RelayDogArmedStance::FShape)
 	TAutoConsoleVariable<float> CVarStanceFastFrom(TEXT("wl.Handoff.Stance.FastFrom"), 480.0f, TEXT("Mission Handoff stance: the ground speed the fast hop starts to come in at, uu/s."));
 	TAutoConsoleVariable<float> CVarStanceFastFull(TEXT("wl.Handoff.Stance.FastFull"), 700.0f, TEXT("Mission Handoff stance: the ground speed the fast hop is fully in at, uu/s (the armed run is 728)."));
-	TAutoConsoleVariable<float> CVarHopRateBase(TEXT("wl.Handoff.Hop.RateBase"), 2.2f, TEXT("Mission Handoff hop: hops a second = this + speed / RatePerUU."));
-	TAutoConsoleVariable<float> CVarHopRatePerUU(TEXT("wl.Handoff.Hop.RatePerUU"), 500.0f, TEXT("Mission Handoff hop: uu/s of speed per extra hop a second."));
-	TAutoConsoleVariable<float> CVarHopReach(TEXT("wl.Handoff.Hop.Reach"), 24.0f, TEXT("Mission Handoff hop: the planted foot's travel each side of the hip, uu (sets how short the contact is)."));
+	TAutoConsoleVariable<int32> CVarHopStyle(TEXT("wl.Handoff.Hop.Style"), 0,
+		TEXT("Mission Handoff hop: 0 = the founder's video, a lunge-skip (the rear leg stretched behind, the front foot tapping); 1 = an alternating bound."));
+	TAutoConsoleVariable<float> CVarHopRateBase(TEXT("wl.Handoff.Hop.RateBase"), 3.5f, TEXT("Mission Handoff hop: hops a second = this + speed / RatePerUU."));
+	TAutoConsoleVariable<float> CVarHopRatePerUU(TEXT("wl.Handoff.Hop.RatePerUU"), 800.0f, TEXT("Mission Handoff hop: uu/s of speed per extra hop a second."));
+	TAutoConsoleVariable<float> CVarHopCrouch(TEXT("wl.Handoff.Hop.Crouch"), 8.0f, TEXT("Mission Handoff hop: how much lower the body rides in the skip, uu."));
+	TAutoConsoleVariable<float> CVarHopTapLift(TEXT("wl.Handoff.Hop.TapLift"), 6.0f, TEXT("Mission Handoff hop: the tapping foot's lift between taps, uu."));
+	TAutoConsoleVariable<float> CVarHopSkim(TEXT("wl.Handoff.Hop.Skim"), 3.0f, TEXT("Mission Handoff hop: the trailing foot's height over the ground, uu."));
+	TAutoConsoleVariable<float> CVarHopReach(TEXT("wl.Handoff.Hop.Reach"), 28.0f, TEXT("Mission Handoff hop: the planted foot's travel each side of the hip, uu (sets how short the contact is)."));
 	TAutoConsoleVariable<float> CVarHopTrail(TEXT("wl.Handoff.Hop.Trail"), 40.0f, TEXT("Mission Handoff hop: how far the pushed leg trails behind the hip, uu."));
 	TAutoConsoleVariable<float> CVarHopTuck(TEXT("wl.Handoff.Hop.Tuck"), 18.0f, TEXT("Mission Handoff hop: how high the swinging foot tucks, uu."));
-	TAutoConsoleVariable<float> CVarHopApex(TEXT("wl.Handoff.Hop.Apex"), 9.0f, TEXT("Mission Handoff hop: how high the body rises through each flight, uu."));
-	TAutoConsoleVariable<float> CVarHopCompress(TEXT("wl.Handoff.Hop.Compress"), 3.0f, TEXT("Mission Handoff hop: how far the body presses into each landing, uu."));
+	TAutoConsoleVariable<float> CVarHopApex(TEXT("wl.Handoff.Hop.Apex"), 4.0f, TEXT("Mission Handoff hop: how high the body rises through each flight, uu."));
+	TAutoConsoleVariable<float> CVarHopCompress(TEXT("wl.Handoff.Hop.Compress"), 2.0f, TEXT("Mission Handoff hop: how far the body presses into each landing, uu."));
 	TAutoConsoleVariable<float> CVarStanceHipForward(TEXT("wl.Handoff.Stance.HipForward"), 0.5f, TEXT("Mission Handoff stance: the hips carried forward standing, uu."));
 	TAutoConsoleVariable<float> CVarStanceHipShift(TEXT("wl.Handoff.Stance.HipShift"), 3.0f, TEXT("Mission Handoff stance: the hips shifted toward the loaded (rear) leg standing, uu."));
 	TAutoConsoleVariable<float> CVarStanceTilt(TEXT("wl.Handoff.Stance.Tilt"), 4.0f, TEXT("Mission Handoff stance: the pelvis tilted, the free (front) hip lower, degrees."));
@@ -128,6 +133,10 @@ namespace RelayDogHandoffTuning
 		Shape.HopTuckUU = FMath::Clamp(CVarHopTuck.GetValueOnGameThread(), 0.0f, 40.0f);
 		Shape.HopApexUU = FMath::Clamp(CVarHopApex.GetValueOnGameThread(), -5.0f, 40.0f);
 		Shape.HopCompressUU = FMath::Clamp(CVarHopCompress.GetValueOnGameThread(), -5.0f, 20.0f);
+		Shape.HopStyle = FMath::Clamp(CVarHopStyle.GetValueOnGameThread(), 0, 1);
+		Shape.HopCrouchUU = FMath::Clamp(CVarHopCrouch.GetValueOnGameThread(), 0.0f, 20.0f);
+		Shape.HopTapLiftUU = FMath::Clamp(CVarHopTapLift.GetValueOnGameThread(), 0.0f, 30.0f);
+		Shape.HopSkimUU = FMath::Clamp(CVarHopSkim.GetValueOnGameThread(), 0.0f, 20.0f);
 		Shape.HipForwardUU = FMath::Clamp(CVarStanceHipForward.GetValueOnGameThread(), -15.0f, 15.0f);
 		Shape.HipShiftUU = FMath::Clamp(CVarStanceHipShift.GetValueOnGameThread(), -10.0f, 10.0f);
 		Shape.TiltDeg = FMath::Clamp(CVarStanceTilt.GetValueOnGameThread(), -15.0f, 15.0f);
@@ -2933,7 +2942,8 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	// where the rig has them (the bend turns about them; LegLeft's side, as measured, is the back foot's)
 	const float HipPivotUU = LegLeft.Hip != nullptr && LegRight.Hip != nullptr
 		? 0.5f * static_cast<float>(LegLeft.Hip->GetRelativeLocation().Z + LegRight.Hip->GetRelativeLocation().Z) : 0.8f * HeadWidthUU;
-	RelayDogArmedStance::Apply(Pose, ArmedStance.Armed.Value, ArmedStance.Dash.Value, ArmedStance.Fast.Value, ArmedStance.HopPhase, 0.8f * HeadWidthUU,
+	RelayDogArmedStance::Apply(Pose, ArmedStance.Armed.Value, ArmedStance.Dash.Value, ArmedStance.Fast.Value, ArmedStance.HopPhase, ArmedStance.HopRate,
+		ArmedStance.HopSpeed, 0.8f * HeadWidthUU,
 		(0.8f - 0.5125f) * HeadWidthUU,
 		0.5125f * HeadWidthUU, ArmChainLeft.OutwardSign * ArmLeft.SideSign, ArmChainRight.OutwardSign * ArmRight.SideSign, HipPivotUU,
 		LegLeft.LateralUU, LegRight.LateralUU, ArmedShape);

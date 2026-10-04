@@ -92,9 +92,14 @@ namespace RelayDogArmedStance
 		Settle(State.Fast, Fast);
 		// the hops: faster with the speed, counted only while the hop is on, and started on a landing each time it comes in
 		State.HopRate = StanceClamp(Shape.HopRateBase + SpeedUU / Max(Shape.HopRatePerUU, 1.0f), Shape.HopRateMin, Shape.HopRateMax);
+		State.HopSpeed = SpeedUU;
 		if (State.Fast.Value > 0.001f)
 		{
-			State.HopPhase += State.HopRate * (DeltaSeconds > 0.0f ? DeltaSeconds : 0.0f);
+			// only while the Dog really moves: at a stop the phase holds and the stride shrinks to nothing (no hopping in place)
+			if (SpeedUU > 0.5f * Shape.FastFromUU)
+			{
+				State.HopPhase += State.HopRate * (DeltaSeconds > 0.0f ? DeltaSeconds : 0.0f);
+			}
 		}
 		else
 		{
@@ -135,8 +140,8 @@ namespace RelayDogArmedStance
 		return Clamp01(ArmedWeight) * Shape.KneesOutDeg * (1.0f - Clamp01(Pose.Stride.ArmsBack));
 	}
 
-	void Apply(RelayDogStride::FDogPose& Pose, float ArmedWeight, float DashWeight, float FastWeight, float HopPhase, float LegLengthUU,
-		float ThighUU, float ShinUU, float LeftOutFactor, float RightOutFactor, float HipPivotUU, float HipYLeft, float HipYRight,
+	void Apply(RelayDogStride::FDogPose& Pose, float ArmedWeight, float DashWeight, float FastWeight, float HopPhase, float HopRate, float HopSpeedUU,
+		float LegLengthUU, float ThighUU, float ShinUU, float LeftOutFactor, float RightOutFactor, float HipPivotUU, float HipYLeft, float HipYRight,
 		const FShape& Shape)
 	{
 		const float W = Clamp01(ArmedWeight);
@@ -262,25 +267,57 @@ namespace RelayDogArmedStance
 
 			// ------------------------------------------------------------ THE FAST HOP (founder, 10-04: "NOT normal running")
 			//
-			// Bounding, foot to foot: each hop one foot is planted, briefly, ahead of the hip -- passed over by the body at the ground
-			// speed, so it never slides -- and pushes; the body springs up into a short low flight with that leg left stretched behind;
-			// the other foot swings through, knee tucked, and lands ahead; the body presses into the landing and springs straight on.
-			// The animator's own run is set aside by the hop's weight, legs and bob alike; its foot targets are solved by the same
-			// body-frame chain as the standing feet, with the body's arc in the hip's height.
+			// STYLE 0, THE VIDEO (the default -- the founder: "really inspect the LAST VIDEO... the video is the MOVEMENT reference"; studied at
+			// 30 fps, and Second read the same frames): a LUNGE-SKIP. The body low and bent; the REAR leg stretched far behind the whole time,
+			// skimming the ground; the FRONT foot tapping about every 0.2 s -- planted ahead of the hip for exactly as long as the body takes
+			// to pass over it (no slide), pushing, a short low lift, forward again. STYLE 1, the alternating bound (each foot in turn, the
+			// swing tucked through), is kept for the founder's side-by-side ruling.
+			// ONE speed drives it all -- the raw ground speed and the rate Step advanced the phase by (Second's review: the phase ran on the
+			// raw speed while the stride used the filtered one, and the planted feet skated through every change) -- and the stride, the
+			// trail and the lifts scale with the pace, so a stopping Dog's feet come home instead of hopping in place.
 			if (FastW > 0.001f)
 			{
-				const float Speed = Max(Pose.SpeedUU, 1.0f);
-				const float Rate = StanceClamp(Shape.HopRateBase + Speed / Max(Shape.HopRatePerUU, 1.0f), Shape.HopRateMin, Shape.HopRateMax);
-				const float HopLength = Speed / Rate;
-				const float Contact = StanceClamp(2.0f * Shape.HopReachUU / Max(HopLength, 1.0f), 0.12f, 0.4f);
+				const float Speed = Max(HopSpeedUU, 0.0f);
+				const float Rate = Max(HopRate, 0.5f);
+				const float Pace = StanceClamp(Speed / Max(Shape.FastFromUU, 1.0f), 0.0f, 1.0f);
+				const float HopLength = Max(Speed / Rate, 1.0f);
+				const float Contact = StanceClamp(2.0f * Shape.HopReachUU / HopLength, 0.15f, 0.5f);
 				const float Lead = 0.5f * HopLength * Contact;
 				const float InHop = StanceFrac(HopPhase);
-				const float Arc = InHop < Contact ? -Shape.HopCompressUU * std::sin(StancePi * InHop / Contact)
-					: Shape.HopApexUU * std::sin(StancePi * (InHop - Contact) / (1.0f - Contact));
-				// each foot over two hops: planted, pushed off and trailing, still trailing under the other's landing, swung through
-				auto HopFoot = [&](float Q, float& OutForward, float& OutLift)
+				const float Arc = Pace * (InHop < Contact ? -Shape.HopCompressUU * std::sin(StancePi * InHop / Contact)
+					: Shape.HopApexUU * std::sin(StancePi * (InHop - Contact) / (1.0f - Contact)));
+				const float Crouch = Shape.HopCrouchUU * Pace * FastW;
+				// THE SWING MEETS THE GROUND STANDING STILL: a planted foot moves back past the hip at the ground speed, so a swing that
+				// leaves and lands at that same speed (relative to the hip: -Speed, in S's units the flight's length) lifts off and touches
+				// down with no skid in the world (the hop harness: a smooth swing came down at the body's own speed, 6-10 uu a touchdown)
+				const float FlightSlope = -Speed * (1.0f - Contact) / Rate;
+				auto Swing = [](float P0, float M0, float P1, float M1, float S)
 				{
-					const float Tuck = Shape.HopTuckUU;
+					const float S2 = S * S;
+					const float S3 = S2 * S;
+					return (2.0f * S3 - 3.0f * S2 + 1.0f) * P0 + (S3 - 2.0f * S2 + S) * M0 + (-2.0f * S3 + 3.0f * S2) * P1 + (S3 - S2) * M1;
+				};
+				const float BobNow = Lerp(Pose.BobUU, Arc, FastW);
+				// the skip's front foot: planted, passed over, then a low quick step forward to the next tap
+				auto TapFoot = [&](float Q, float& OutForward, float& OutLift)
+				{
+					if (Q < Contact)
+					{
+						OutForward = Lead - 2.0f * Lead * (Q / Contact);
+						OutLift = 0.0f;
+					}
+					else
+					{
+						const float S = (Q - Contact) / (1.0f - Contact);
+						OutForward = Swing(-Lead, FlightSlope, Lead, FlightSlope, S);
+						OutLift = Shape.HopTapLiftUU * Pace * std::sin(StancePi * S);
+					}
+				};
+				// the alternating bound's foot over two hops (style 1): planted, pushed off and trailing, trailing under the other's landing, swung through
+				auto BoundFoot = [&](float Q, float& OutForward, float& OutLift)
+				{
+					const float Trail = Shape.HopTrailUU * Pace;
+					const float Tuck = Shape.HopTuckUU * Pace;
 					if (Q < Contact)
 					{
 						OutForward = Lead - 2.0f * Lead * (Q / Contact);
@@ -289,61 +326,75 @@ namespace RelayDogArmedStance
 					else if (Q < 1.0f)
 					{
 						const float S = (Q - Contact) / (1.0f - Contact);
-						OutForward = Lerp(-Lead, -Shape.HopTrailUU, StanceSmooth(S * 2.0f));
+						OutForward = Lerp(-Lead, -Trail, StanceSmooth(S * 2.0f));
 						OutLift = Tuck * (0.25f * std::sin(StancePi * S) + 0.1f * S);
 					}
 					else if (Q < 1.0f + Contact)
 					{
-						OutForward = -Shape.HopTrailUU;
+						OutForward = -Trail;
 						OutLift = Tuck * 0.1f;
 					}
 					else
 					{
 						const float S = (Q - 1.0f - Contact) / (1.0f - Contact);
-						OutForward = Lerp(-Shape.HopTrailUU, Lead, StanceSmooth(S));
+						OutForward = Swing(-Trail, 0.0f, Lead, FlightSlope, S);
 						OutLift = Tuck * (std::sin(StancePi * S) + 0.1f * (1.0f - S));
 					}
 				};
-				auto HopSolve = [&](RelayDogStride::FLegPose& Leg, float HipY, float Q) -> float
+				// each leg solved in the body's own frame onto its target, DIRECTLY: no fixed-point correction (Second's review: in a body bent
+				// 40+ deg it diverged at touchdown, flicking the sole sideways), the sideways part a plain angle, never more than 20 deg
+				auto HopSolve = [&](RelayDogStride::FLegPose& Leg, float HipY, float FootForward, float FootLift) -> float
 				{
 					const float Side = HipY < 0.0f ? -1.0f : 1.0f;
-					float FootForward = 0.0f;
-					float FootLift = 0.0f;
-					HopFoot(Q, FootForward, FootLift);
 					const FStanceVec Across = RigRotate(Axes, FStanceVec{ 0.0f, HipY, 0.0f });
-					const FStanceVec HipMoved = { Hips.X + Across.X, Hips.Y + Across.Y - HipY, -Lowered + Across.Z + Arc };
+					const FStanceVec HipMoved = { Hips.X + Across.X, Hips.Y + Across.Y - HipY, -Lowered - Crouch + Across.Z + BobNow };
 					const FStanceVec Foot3 = { FootForward, Side * HipNow * std::sin(FeetOut * StanceDegToRad), FootLift - HipNow };
 					const FStanceVec Reach = RigUnrotate(Axes, FStanceVec{ Foot3.X - HipMoved.X, Foot3.Y - HipMoved.Y, Foot3.Z - HipMoved.Z });
-					FStanceVec Aim = Reach;
+					// THE WRITER'S ORDER, EXACTLY: it pitches the leg, then rolls it about its own forward axis, so the sideways angle is
+					// asin(across / reach) and the pitch's line stays atan2(forward, down) at the whole reach. atan2(across, down) -- the
+					// standing solve's -- explodes as the leg swings forward and "down" goes to nothing (the hop harness: soles flicking
+					// 7-9 uu sideways a frame at a 42 deg bend, the touchdown divergence Second found)
+					const float ReachLength = std::sqrt(Reach.X * Reach.X + Reach.Y * Reach.Y + Reach.Z * Reach.Z);
+					const float InPlane = std::sqrt(Reach.X * Reach.X + Reach.Z * Reach.Z);
+					const float Stretch = InPlane > 0.01f ? ReachLength / InPlane : 1.0f;
+					const float LineForward = Reach.X * Stretch;
+					const float LineDown = -Reach.Z * Stretch;
+					const float Full = ThighUU + ShinUU;
+					const float Dist = StanceClamp(std::sqrt(LineForward * LineForward + LineDown * LineDown), 0.05f, Full * 0.995f);
+					const float KneeInterior = std::acos(StanceClamp((ThighUU * ThighUU + ShinUU * ShinUU - Dist * Dist) / (2.0f * ThighUU * ShinUU), -1.0f, 1.0f));
+					const float HipOffset = std::acos(StanceClamp((ThighUU * ThighUU + Dist * Dist - ShinUU * ShinUU) / (2.0f * ThighUU * Dist), -1.0f, 1.0f));
 					RelayDogStride::FLegPose Hop;
-					float Lateral = 0.0f;
-					for (int Pass = 0; Pass <= 4; ++Pass)
-					{
-						RelayDogStride::FFootPose To;
-						To.Forward = Aim.X;
-						To.Lift = 0.0f;
-						Hop = RelayDogStride::LegPose(To, ThighUU, ShinUU, std::sqrt(Aim.Y * Aim.Y + Aim.Z * Aim.Z));
-						Lateral = std::atan2(Aim.Y, -Aim.Z) / StanceDegToRad;
-						if (Pass == 4)
-						{
-							break;
-						}
-						const FStanceVec ShinInHip = RigRotate(RigAxes(-Hop.KneeDeg, 0.0f, 0.0f), FStanceVec{ 0.0f, 0.0f, -ShinUU });
-						const FStanceVec Chain = RigRotate(RigAxes(Hop.HipDeg, 0.0f, -Lateral), FStanceVec{ ShinInHip.X, ShinInHip.Y, ShinInHip.Z - ThighUU });
-						Aim = { Aim.X + Reach.X - Chain.X, Aim.Y + Reach.Y - Chain.Y, Aim.Z + Reach.Z - Chain.Z };
-					}
+					Hop.HipDeg = (std::atan2(LineForward, LineDown) + HipOffset) / StanceDegToRad;
+					Hop.KneeDeg = (StancePi - KneeInterior) / StanceDegToRad;
 					Leg.HipDeg = Lerp(Leg.HipDeg, Hop.HipDeg, FastW);
 					Leg.KneeDeg = Lerp(Leg.KneeDeg, Hop.KneeDeg, FastW);
-					return Lateral * Side;
+					const float SideShare = ReachLength > 0.01f ? StanceClamp(Reach.Y / ReachLength, -1.0f, 1.0f) : 0.0f;
+					return StanceClamp(std::asin(SideShare) / StanceDegToRad, -20.0f, 20.0f) * Side;
 				};
-				// the canon's LegLeft (+Y) lands on the even hops, LegRight (-Y) on the odd ones
-				const float HopLeftOut = HopSolve(Pose.LegLeft, HipYLeft, std::fmod(HopPhase, 2.0f));
-				const float HopRightOut = HopSolve(Pose.LegRight, HipYRight, std::fmod(HopPhase + 1.0f, 2.0f));
+				float LeftForward = 0.0f;
+				float LeftLift = 0.0f;
+				float RightForward = 0.0f;
+				float RightLift = 0.0f;
+				if (Shape.HopStyle == 0)
+				{
+					// the canon's LegRight hangs at -Y: the Dog's own LEFT, the stance's front foot -- it taps; LegLeft (+Y) trails, stretched, skimming
+					TapFoot(InHop, RightForward, RightLift);
+					LeftForward = -Shape.HopTrailUU * Pace;
+					LeftLift = Shape.HopSkimUU * Pace;
+				}
+				else
+				{
+					BoundFoot(std::fmod(HopPhase, 2.0f), LeftForward, LeftLift);
+					BoundFoot(std::fmod(HopPhase + 1.0f, 2.0f), RightForward, RightLift);
+				}
+				const float HopLeftOut = HopSolve(Pose.LegLeft, HipYLeft, LeftForward, LeftLift);
+				const float HopRightOut = HopSolve(Pose.LegRight, HipYRight, RightForward, RightLift);
 				Body.LegLeftOutDeg = Lerp(Body.LegLeftOutDeg, HopLeftOut, FastW);
 				Body.LegRightOutDeg = Lerp(Body.LegRightOutDeg, HopRightOut, FastW);
-				Pose.BobUU = Lerp(Pose.BobUU, Arc, FastW);
-				// THE HOP OWNS THE BODY: the run's own sway, counter-yaw, roll and pitch wobble move the hips under a planted foot (the hop harness:
-				// 3-9 uu of slide with them in), so they go as the hop comes in; the roll into a turn stays, it is steering
+				Pose.BobUU = BobNow;
+				Pose.PelvisDropUU += Crouch;
+				// THE HOP OWNS THE BODY: the run's own sway, counter-yaw, roll and pitch wobble move the hips under a planted foot, so they go as the
+				// hop comes in; the roll into a turn stays, it is steering
 				Pose.SwayUU *= 1.0f - FastW;
 				Pose.BodyYawDeg *= 1.0f - FastW;
 				Pose.Body.RollDeg *= 1.0f - FastW;

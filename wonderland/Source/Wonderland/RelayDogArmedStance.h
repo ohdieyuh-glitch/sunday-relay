@@ -42,7 +42,7 @@ namespace RelayDogArmedStance
 		/** Armed, moving at an ordinary pace: a little more. */
 		float RunBendDeg = 6.0f;
 		/** FAST (the hop and the dash): the video's charging bend. */
-		float FastBendDeg = 38.0f;
+		float FastBendDeg = 42.0f;
 		/** The hips across toward the loaded leg, and forward, uu (standing). */
 		float HipForwardUU = 0.5f;
 		float HipShiftUU = 3.0f;
@@ -64,15 +64,21 @@ namespace RelayDogArmedStance
 		float FastFromUU = 480.0f;
 		float FastFullUU = 700.0f;
 		float FastSmoothSeconds = 0.15f;
-		float HopRateBase = 2.2f;
-		float HopRatePerUU = 500.0f;
-		float HopRateMin = 3.0f;
-		float HopRateMax = 5.5f;
-		float HopReachUU = 24.0f;
+		/** 0 = THE VIDEO's lunge-skip (the rear leg stretched behind, the front foot tapping); 1 = the alternating bound. */
+		int HopStyle = 0;
+		float HopRateBase = 3.5f;
+		float HopRatePerUU = 800.0f;
+		float HopRateMin = 3.5f;
+		float HopRateMax = 6.0f;
+		float HopReachUU = 28.0f;
 		float HopTrailUU = 40.0f;
 		float HopTuckUU = 18.0f;
-		float HopApexUU = 9.0f;
-		float HopCompressUU = 3.0f;
+		float HopApexUU = 4.0f;
+		float HopCompressUU = 2.0f;
+		/** The skip: the body this much lower, the tapping foot's lift between taps, the trailing foot's skim over the ground, uu. */
+		float HopCrouchUU = 8.0f;
+		float HopTapLiftUU = 6.0f;
+		float HopSkimUU = 3.0f;
 		/** Each hip swept outward: a touch -- the feet stay about hip width apart (P2's 19 deg doubled the spacing). */
 		float FeetOutDeg = 2.0f;
 		/**
@@ -121,6 +127,8 @@ namespace RelayDogArmedStance
 		RelayDogStride::FSpring Fast;
 		float HopPhase = 0.0f;
 		float HopRate = 0.0f;
+		/** The ground speed the phase advanced by this frame: the stride is laid out from the same number (one speed). */
+		float HopSpeed = 0.0f;
 	};
 
 	/** Which of the founder's states the weights are in, for the log and the QA ("summon/ready", "moving", "fast hop", "dash"...). */
@@ -144,8 +152,8 @@ namespace RelayDogArmedStance
 	 *        hangs at +Y). The leg on HipYRight's side is the front one.
 	 * The body's part goes to Pose.Stance (in the rig's own signs), each leg's sweep to Pose.Stance.Leg*OutDeg.
 	 */
-	void Apply(RelayDogStride::FDogPose& Pose, float ArmedWeight, float DashWeight, float FastWeight, float HopPhase, float LegLengthUU,
-		float ThighUU, float ShinUU, float LeftOutFactor, float RightOutFactor, float HipPivotUU, float HipYLeft, float HipYRight,
+	void Apply(RelayDogStride::FDogPose& Pose, float ArmedWeight, float DashWeight, float FastWeight, float HopPhase, float HopRate, float HopSpeedUU,
+		float LegLengthUU, float ThighUU, float ShinUU, float LeftOutFactor, float RightOutFactor, float HipPivotUU, float HipYLeft, float HipYRight,
 		const FShape& Shape = FShape());
 
 	/** How far each hip is swept outward at these weights while moving (Apply folds it into each leg's own sweep). */

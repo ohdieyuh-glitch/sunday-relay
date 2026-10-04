@@ -6549,6 +6549,8 @@ namespace
 		// camera's catch-up lag (S3e): seen on in the dash, when it went off, |v| over its catch-up speed then, and that ratio's last value on
 		float MaxTick = 0.0f;
 		TArray<float> HipPitch;
+		/** ...and the -Y hip's: in the skip only the front (-Y) leg steps, the +Y one stays stretched behind */
+		TArray<float> HipPitchRight;
 		TArray<float> HipAt;
 		bool bS3Judged = false;
 		bool bLagSeenOn = false;
@@ -6976,6 +6978,7 @@ namespace
 				if (In >= 0.45f && In < 1.45f)
 				{
 					H.HipPitch.Add(QaCanonPivotPitch(Dog, TEXT("Pivot_legLeft")));
+					H.HipPitchRight.Add(QaCanonPivotPitch(Dog, TEXT("Pivot_legRight")));
 					H.HipAt.Add(In);
 				}
 			}
@@ -7051,7 +7054,9 @@ namespace
 					FString::Printf(TEXT("W released at %.2f s with the stick still forward: the sprint's own end reason '%s', %.3f s after the release ")
 						TEXT("(want 'released' within %.3f s: 0.05 and the longest frame, %.3f); %s now; %.2f s dashing in all"),
 						H.ReleasedAt, *EndReason, AfterRelease, Allowed, H.MaxTick, Dog->IsDashing() ? TEXT("STILL DASHING") : TEXT("not dashing"), H.DashSeconds));
-				const float Visible = QaVisibleCycles(H.HipPitch, H.HipAt);
+				// the leg that STEPS: the skip (the founder's video) taps the front foot once a hop and holds the other behind; the bound swings
+				// each leg once every two hops -- so the faster of the two hips
+				const float Visible = FMath::Max(QaVisibleCycles(H.HipPitch, H.HipAt), QaVisibleCycles(H.HipPitchRight, H.HipAt));
 				const float Commanded = H.CadenceSamples > 0 ? H.CadenceSum / H.CadenceSamples : 0.0f;
 				const float BodyHigh = FMath::Max(Dog->GetCanonBodyHeightUu(), 1.0f);
 				H.Check(TEXT("S4"), H.TipSamplesRun >= 10 && H.TipSamplesSprint >= 10 && H.TipLowRun >= 2.0f && H.TipLowSprint >= 2.0f
@@ -7065,9 +7070,9 @@ namespace
 				float HopPhaseNow = 0.0f;
 				float HopRateNow = 0.0f;
 				Dog->QaStanceState(HopFast, HopPhaseNow, HopRateNow);
-				H.Check(TEXT("S3d"), Visible >= 1.4f && Visible <= 3.5f,
-					FString::Printf(TEXT("the sprint's legs AS SEEN: the canon hip swings %.2f times a second, %d frames over %.2f s (1.4-3.5: each leg once ")
-						TEXT("every two hops -- the HOP, not a run cycle, never the ~10/s blur); the hop asked %.2f hops a second (fast %.2f); the animator's own count %.2f, reported only"),
+				H.Check(TEXT("S3d"), Visible >= 1.4f && Visible <= 7.0f,
+					FString::Printf(TEXT("the sprint's legs AS SEEN: the stepping canon hip swings %.2f times a second, %d frames over %.2f s (1.4-7: once a tap in ")
+						TEXT("the skip, once every two hops in the bound -- the HOP, never the ~10/s blur); the hop asked %.2f hops a second (fast %.2f); the animator's own count %.2f, reported only"),
 						Visible, H.HipPitch.Num(), H.HipAt.Num() > 1 ? H.HipAt.Last() - H.HipAt[0] : 0.0f, HopRateNow, HopFast, Commanded));
 			}
 			if (H.bS3Judged && ((H.LagOffAt >= 0.0f && H.CamJumpTicksLeft <= 0) || In >= 5.5f))
@@ -8488,6 +8493,15 @@ namespace
 		float C9StopBend = -1000.0f;
 		float C9StopStep = 0.0f;
 		float C9LastBend = -1000.0f;
+		float C9LastBendAt = -1.0f;
+		float C9StopRate = 0.0f;
+		// the ground read once, on the phase's first tick, whatever the frame rate (Second's review: "In < 0.02" missed it below 50 fps)
+		bool bC9GroundRead = false;
+		// THE PLANTED FOOT (Second's review: ST2C9 promised a slide measure it did not have): each drawn sole's world place while it is down in
+		// two frames running, and the largest frame-to-frame move of a sole that is down
+		FVector C9PrevSole[2] = { FVector::ZeroVector, FVector::ZeroVector };
+		bool bC9PrevDown[2] = { false, false };
+		float C9SlideMax = 0.0f;
 		// ST2C15: the blade tips while THIS body moves -- the lowest over the ground in the jog and in the hop, and the widest from its centre line
 		float C9TipLowJog = 1.0e9f;
 		float C9TipLowHop = 1.0e9f;
@@ -9063,6 +9077,12 @@ namespace
 			S.C9StopBend = -1000.0f;
 			S.C9StopStep = 0.0f;
 			S.C9LastBend = -1000.0f;
+			S.C9LastBendAt = -1.0f;
+			S.C9StopRate = 0.0f;
+			S.bC9GroundRead = false;
+			S.bC9PrevDown[0] = false;
+			S.bC9PrevDown[1] = false;
+			S.C9SlideMax = 0.0f;
 			S.C9TipLowJog = 1.0e9f;
 			S.C9TipLowHop = 1.0e9f;
 			S.C9TipWide = 0.0f;
@@ -9106,10 +9126,11 @@ namespace
 			}
 			QaStanceCamera(S, World, Dog, 90.0, 420.0, 30.0, 55.0f);
 			const float Ground = FVector(Dog->GetVelocity().X, Dog->GetVelocity().Y, 0.0f).Size();
-			if (In < 0.02f)
+			if (!S.bC9GroundRead)
 			{
 				const FQaChargeReading Standing = QaReadCharge(Dog);
 				S.C9Ground = static_cast<float>(FMath::Min(Standing.Sole[0].Z, Standing.Sole[1].Z));
+				S.bC9GroundRead = Standing.bRead;
 			}
 			// from a stand: W down, up, down -- the second press within the window -- and HELD
 			// W down -- the armed JOG, normal movement, 1.2 s (Second's review: the blades there, and on a worn skin, were never read) -- then
@@ -9175,6 +9196,16 @@ namespace
 					if (HopRead.bRead)
 					{
 						const bool bAir = HopRead.Sole[0].Z > S.C9Ground + 1.5 && HopRead.Sole[1].Z > S.C9Ground + 1.5;
+						for (int32 SoleSide = 0; SoleSide < 2; ++SoleSide)
+						{
+							const bool bDown = HopRead.Sole[SoleSide].Z <= S.C9Ground + 1.0;
+							if (bDown && S.bC9PrevDown[SoleSide])
+							{
+								S.C9SlideMax = FMath::Max(S.C9SlideMax, static_cast<float>(FVector::Dist2D(HopRead.Sole[SoleSide], S.C9PrevSole[SoleSide])));
+							}
+							S.bC9PrevDown[SoleSide] = bDown;
+							S.C9PrevSole[SoleSide] = HopRead.Sole[SoleSide];
+						}
 						++S.C9Frames;
 						S.C9Airborne += bAir ? 1 : 0;
 						S.C9Landings += (!bAir && S.bC9WasAir) ? 1 : 0;
@@ -9228,14 +9259,14 @@ namespace
 					// several times a second; the body rising and falling with each hop; the arms pumping; the head on the way ahead
 					const bool bHop = Zero.bRead && S.C9BendEarly >= 8.0f && S.C9BendLate >= 25.0f && S.C9BendLate <= 50.0f && S.bC9DashingLate
 						&& S.C9SpeedLate >= 0.8f * Sprint && AirShare >= 0.25f && LandingsPerSecond >= 2.5f && LandingsPerSecond <= 7.0f && Rise >= 4.0f
-						&& Swing[0] >= 25.0f && Swing[1] >= 25.0f && S.C9HeadLow >= -15.0f && S.C9HeadHigh <= 15.0f;
+						&& Swing[0] >= 25.0f && Swing[1] >= 25.0f && S.C9HeadLow >= -15.0f && S.C9HeadHigh <= 15.0f && S.C9SlideMax <= 4.0f;
 					S.Check(FString::Printf(TEXT("ST2C9.%d"), S.Moving + 1), bHop,
 						FString::Printf(TEXT("%s, the FAST HOP from the stance: the bend added %+.1f deg at +0.25 s (>= 8: coming in, no snap) and %+.1f at +1.0 s ")
 							TEXT("(25-50: charging); at +1.0 s %s at %.0f uu/s (>= %.0f); over +0.25..+1.25 s BOTH soles off the ground %.0f%% of %d frames (>= 25%%), ")
 							TEXT("%d landings (2.5-7 a second: hop, hop, hop), the hips' height range %.1f uu (>= 4: rising and falling each hop); the shoulders' ")
-							TEXT("range %.0f / %.0f deg (>= 25: pumping); the head %+.0f..%+.0f deg (within 15: on the way ahead)"),
+							TEXT("range %.0f / %.0f deg (>= 25: pumping); the head %+.0f..%+.0f deg (within 15: on the way ahead); a planted sole moved at most %.1f uu a frame (<= 4: no skating)"),
 							*Moving, S.C9BendEarly, S.C9BendLate, S.bC9DashingLate ? TEXT("dashing") : TEXT("NOT dashing"), S.C9SpeedLate, 0.8f * Sprint,
-							AirShare * 100.0f, S.C9Frames, S.C9Landings, Rise, Swing[0], Swing[1], S.C9HeadLow, S.C9HeadHigh));
+							AirShare * 100.0f, S.C9Frames, S.C9Landings, Rise, Swing[0], Swing[1], S.C9HeadLow, S.C9HeadHigh, S.C9SlideMax));
 					// ST2C15: the blades on THIS body while it moves (the jog and the hop): never into the ground, never a wide V
 					const float BodyHigh = FMath::Max(Dog->GetCanonBodyHeightUu(), 1.0f);
 					S.Check(FString::Printf(TEXT("ST2C15.%d"), S.Moving + 1), S.C9TipSamples >= 20 && S.C9TipLowJog >= 2.0f && S.C9TipLowHop >= 2.0f
@@ -9254,16 +9285,22 @@ namespace
 				if (S.C9LastBend > -900.0f)
 				{
 					S.C9StopStep = FMath::Max(S.C9StopStep, FMath::Abs(BendNow - S.C9LastBend));
+					// per SECOND, not per frame (Second's review: 2.65 a frame at 60 fps read 5.14 at 30 -- a frame-rate false fail)
+					if (In > S.C9LastBendAt + 0.001f)
+					{
+						S.C9StopRate = FMath::Max(S.C9StopRate, FMath::Abs(BendNow - S.C9LastBend) / (In - S.C9LastBendAt));
+					}
 				}
 				S.C9LastBend = BendNow;
+				S.C9LastBendAt = In;
 				if (In - S.C9StopAt < 1.5f)
 				{
 					return true;
 				}
-				S.Check(FString::Printf(TEXT("ST2C14.%d"), S.Moving + 1), BendNow <= 8.0f && BendNow >= -3.0f && S.C9StopStep <= 4.0f,
-					FString::Printf(TEXT("%s, the STOP: 1.5 s after W came up the bend added is %+.1f deg (want 0-8: back to the upright stance), its largest ")
-						TEXT("one-frame change through the stop %.2f deg (want <= 4: no snapping); now %.0f uu/s"),
-						*Moving, BendNow, S.C9StopStep, Ground));
+				S.Check(FString::Printf(TEXT("ST2C14.%d"), S.Moving + 1), BendNow <= 8.0f && BendNow >= -3.0f && S.C9StopRate <= 240.0f,
+					FString::Printf(TEXT("%s, the STOP: 1.5 s after W came up the bend added is %+.1f deg (want 0-8: back to the upright stance), its fastest ")
+						TEXT("change through the stop %.0f deg/s (want <= 240: no snapping; %.2f deg in one frame); now %.0f uu/s"),
+						*Moving, BendNow, S.C9StopRate, S.C9StopStep, Ground));
 			}
 			QaHandRelease(Dog);
 			QaStanceShow(S, World, Dog, false);
