@@ -197,6 +197,11 @@ public:
 	/** QA: what the material named Name is painted with right now -- BaseColor/RimColor on a rim, Color otherwise -- and,
 	 *  for a smoke surface, whether its relief texture is bound. False when the figure has no such material. */
 	bool QaReadPaint(FName Name, FLinearColor& OutBase, FLinearColor& OutRim, FString& OutRelief) const;
+	/** QA (COLOR 2, the marbling): the two-colour marble the material named Name is WEARING right now, read off its own bound
+	 *  AlbedoTex -- the cells and veins it was drawn for, what its pixels came out as, and the BaseColor peak it is drawn at
+	 *  (the colours on screen are the texel times that peak). False when that surface wears no marble. */
+	bool QaReadMarble(FName Name, FLinearColor& OutCells, FLinearColor& OutVeins, FLinearColor& OutDrawnCells, FLinearColor& OutDrawnVeins,
+		float& OutPeakDrawn, float& OutPeakAsked) const;
 	/** QA (round 6, the knees out): this figure's own leg on one side (+1 = the +Y leg), in WORLD space -- its hip joint, its
 	 *  knee joint, and its sole (the knee plus the shin along the knee's -Z, the length the leg solve uses). False if not found. */
 	bool QaLegAt(float SideSign, FVector& OutHip, FVector& OutKnee, FVector& OutSole) const;

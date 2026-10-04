@@ -802,6 +802,134 @@ namespace
 		return Made;
 	}
 
+	/** A two-colour marble map's record (COLOR 2, ApplySmokeMarble): what it was drawn for and what its bytes came out as. */
+	struct FSmokeMarbleRecord
+	{
+		FLinearColor Cells = FLinearColor::Black;
+		FLinearColor Veins = FLinearColor::Black;
+		float Scale = 1.0f;
+		FLinearColor DrawnCells = FLinearColor::Black;
+		FLinearColor DrawnVeins = FLinearColor::Black;
+	};
+	/** By the texture's name; let go with the maps whenever the field is redrawn (EnsureSmokeMaps). */
+	TMap<FString, FSmokeMarbleRecord> GSmokeMarbleRecords;
+
+	/** The marble's mips: each texel the cells' colour toward the veins' by the profile's own crease share (field^Power -- the
+	 *  share MakeToneMips lifts a one-colour map by), divided by Scale. The deepest cell and the brightest vein are read back
+	 *  off the bytes of the top mip, so the record says what was DRAWN. */
+	TArray<TArray<FColor>> MakeSmokeMarbleMips(const TArray<float>& Field01, const FLinearColor& Cells, const FLinearColor& Veins, float Power,
+		float Scale, FLinearColor& OutDrawnCells, FLinearColor& OutDrawnVeins)
+	{
+		TArray<float> Rgb;
+		Rgb.SetNumUninitialized(Field01.Num() * 3);
+		float LowShare = 2.0f;
+		float HighShare = -1.0f;
+		int32 LowAt = 0;
+		int32 HighAt = 0;
+		for (int32 K = 0; K < Field01.Num(); ++K)
+		{
+			const float Share = FMath::Pow(FMath::Clamp(Field01[K], 0.0f, 1.0f), Power);
+			Rgb[K * 3 + 0] = FMath::Lerp(Cells.R, Veins.R, Share) / Scale;
+			Rgb[K * 3 + 1] = FMath::Lerp(Cells.G, Veins.G, Share) / Scale;
+			Rgb[K * 3 + 2] = FMath::Lerp(Cells.B, Veins.B, Share) / Scale;
+			if (Share < LowShare)
+			{
+				LowShare = Share;
+				LowAt = K;
+			}
+			if (Share > HighShare)
+			{
+				HighShare = Share;
+				HighAt = K;
+			}
+		}
+		TArray<TArray<FColor>> Mips;
+		for (int32 Side = SmokeMapSize; Side >= 1; Side /= 2)
+		{
+			TArray<FColor>& Mip = Mips.AddDefaulted_GetRef();
+			Mip.SetNumUninitialized(Side * Side);
+			for (int32 K = 0; K < Side * Side; ++K)
+			{
+				Mip[K] = FColor(SmokeByte(Rgb[K * 3 + 0]), SmokeByte(Rgb[K * 3 + 1]), SmokeByte(Rgb[K * 3 + 2]), 255);
+			}
+			if (Mips.Num() == 1 && Mip.IsValidIndex(LowAt) && Mip.IsValidIndex(HighAt))
+			{
+				const FColor& Cell = Mip[LowAt];
+				const FColor& Vein = Mip[HighAt];
+				OutDrawnCells = FLinearColor(Cell.R / 255.0f * Scale, Cell.G / 255.0f * Scale, Cell.B / 255.0f * Scale, 1.0f);
+				OutDrawnVeins = FLinearColor(Vein.R / 255.0f * Scale, Vein.G / 255.0f * Scale, Vein.B / 255.0f * Scale, 1.0f);
+			}
+			if (Side > 1)
+			{
+				Rgb = SmokeHalve(Rgb, Side, 3);
+			}
+		}
+		return Mips;
+	}
+
+	void EnsureSmokeMaps();
+
+	/** A marble of the current field for these cells and veins, drawn once per pair and kept until the field is redrawn. */
+	UTexture2D* SmokeMarbleFor(const FLinearColor& Cells, const FLinearColor& Veins, float Power, float& OutScale)
+	{
+		OutScale = 1.0f;
+		EnsureSmokeMaps();
+		if (GSmokeMaps.ToneField.Num() != SmokeMapSize * SmokeMapSize)
+		{
+			return nullptr;
+		}
+		const float Peak = FMath::Max(FMath::Max3(Cells.R, Cells.G, Cells.B), FMath::Max3(Veins.R, Veins.G, Veins.B));
+		const float Scale = FMath::Max(Peak, 1.0f / 255.0f);
+		OutScale = Scale;
+		const FString Key = FString::Printf(TEXT("marble|%.4f %.4f %.4f|%.4f %.4f %.4f|%.2f"), Cells.R, Cells.G, Cells.B, Veins.R, Veins.G, Veins.B, Power);
+		if (const TWeakObjectPtr<UTexture2D>* Found = GSmokeMaps.Tones.Find(Key))
+		{
+			if (Found->IsValid())
+			{
+				return Found->Get();
+			}
+		}
+		// A BOUNDED SET: every pair a player tries draws one (256x256, ~350 KB with its mips); past a dozen they are all let go
+		// at once (an instance still wearing one keeps it alive until it is repainted)
+		int32 Marbles = 0;
+		for (const TPair<FString, TWeakObjectPtr<UTexture2D>>& Pair : GSmokeMaps.Tones)
+		{
+			Marbles += Pair.Key.StartsWith(TEXT("marble|")) ? 1 : 0;
+		}
+		if (Marbles >= 12)
+		{
+			for (auto It = GSmokeMaps.Tones.CreateIterator(); It; ++It)
+			{
+				if (!It.Key().StartsWith(TEXT("marble|")))
+				{
+					continue;
+				}
+				if (UTexture2D* Old = It.Value().Get())
+				{
+					GSmokeMarbleRecords.Remove(Old->GetName());
+					Old->RemoveFromRoot();
+				}
+				It.RemoveCurrent();
+			}
+		}
+		FSmokeMarbleRecord Record;
+		Record.Cells = Cells;
+		Record.Veins = Veins;
+		Record.Scale = Scale;
+		// named as a tone map ("WLSmokeTone..."): it IS the surface's tone, and the readers that name a worn tone see it as one
+		UTexture2D* Made = MakeSmokeTexture(TEXT("WLSmokeToneMarble"),
+			MakeSmokeMarbleMips(GSmokeMaps.ToneField, Cells, Veins, Power, Scale, Record.DrawnCells, Record.DrawnVeins));
+		GSmokeMaps.Tones.Add(Key, Made);
+		if (Made != nullptr)
+		{
+			GSmokeMarbleRecords.Add(Made->GetName(), Record);
+		}
+		UE_LOG(LogTemp, Display, TEXT("WLMASCOT smoke marble drawn: cells %s veins %s power %.2f peak %.4f -> %s (drawn cells %s veins %s)"),
+			*Cells.ToString(), *Veins.ToString(), Power, Scale, Made != nullptr ? *Made->GetName() : TEXT("FAILED"),
+			*Record.DrawnCells.ToString(), *Record.DrawnVeins.ToString());
+		return Made;
+	}
+
 	bool SmokeIsDrawn()
 	{
 		return CVarSmokeNormalTex.GetValueOnGameThread().TrimStartAndEnd().Equals(TEXT("smoke"), ESearchCase::IgnoreCase);
@@ -832,6 +960,7 @@ namespace
 			}
 		}
 		GSmokeMaps.Tones.Reset();
+		GSmokeMarbleRecords.Reset();
 		GSmokeMaps.Bump = MakeSmokeTexture(TEXT("WLSmokeBump"), BumpMips);
 		// the colour profile's map is drawn up front (the B65.1 tone): every other profile draws its own on first use
 		GSmokeMaps.Tone = SmokeToneFor(Settings.Dark, Settings.TonePower);
@@ -927,6 +1056,35 @@ namespace
 		return Vein;
 	}
 
+	/** The depth a profile's tone is drawn at -- its floor and power of the shared field -- for its one-colour map and for its
+	 *  two-colour marble alike, so COLOR 1's cells are the same whether or not COLOR 2 paints the veins. */
+	void SmokeToneDepthFor(ESmokeProfile Profile, float& OutFloor, float& OutPower)
+	{
+		switch (Profile)
+		{
+		case ESmokeProfile::Designed:
+			OutFloor = FMath::Clamp(CVarSmokeDefaultFloor.GetValueOnGameThread(), 0.0f, 1.0f);
+			OutPower = FMath::Clamp(CVarSmokeDefaultPower.GetValueOnGameThread(), 0.1f, 12.0f);
+			break;
+		case ESmokeProfile::Light:
+			OutFloor = FMath::Clamp(CVarSmokeLightFloor.GetValueOnGameThread(), 0.0f, 1.0f);
+			OutPower = FMath::Clamp(CVarSmokeLightPower.GetValueOnGameThread(), 0.1f, 12.0f);
+			break;
+		case ESmokeProfile::Dark:
+			OutFloor = FMath::Clamp(CVarSmokeDarkFloor.GetValueOnGameThread(), 0.0f, 1.0f);
+			OutPower = FMath::Clamp(CVarSmokeDarkPower.GetValueOnGameThread(), 0.1f, 12.0f);
+			break;
+		default:
+		{
+			// the colour profile's B65.1 tone, drawn up front by EnsureSmokeMaps at exactly this depth
+			const FSmokeSettings Settings = FSmokeSettings::Read();
+			OutFloor = Settings.Dark;
+			OutPower = Settings.TonePower;
+			break;
+		}
+		}
+	}
+
 	/** The tone map a profile wears: its own depth of the shared field. */
 	UTexture* SmokeToneForProfile(ESmokeProfile Profile)
 	{
@@ -935,17 +1093,14 @@ namespace
 			return nullptr;
 		}
 		EnsureSmokeMaps();
-		switch (Profile)
+		if (Profile == ESmokeProfile::Colour)
 		{
-		case ESmokeProfile::Designed:
-			return SmokeToneFor(FMath::Clamp(CVarSmokeDefaultFloor.GetValueOnGameThread(), 0.0f, 1.0f), FMath::Clamp(CVarSmokeDefaultPower.GetValueOnGameThread(), 0.1f, 12.0f));
-		case ESmokeProfile::Light:
-			return SmokeToneFor(FMath::Clamp(CVarSmokeLightFloor.GetValueOnGameThread(), 0.0f, 1.0f), FMath::Clamp(CVarSmokeLightPower.GetValueOnGameThread(), 0.1f, 12.0f));
-		case ESmokeProfile::Dark:
-			return SmokeToneFor(FMath::Clamp(CVarSmokeDarkFloor.GetValueOnGameThread(), 0.0f, 1.0f), FMath::Clamp(CVarSmokeDarkPower.GetValueOnGameThread(), 0.1f, 12.0f));
-		default:
 			return GSmokeMaps.Tone.Get();
 		}
+		float Floor = 0.0f;
+		float Power = 1.0f;
+		SmokeToneDepthFor(Profile, Floor, Power);
+		return SmokeToneFor(Floor, Power);
 	}
 
 	UTexture* SmokeTexture()
@@ -1342,6 +1497,59 @@ namespace WonderlandMascotStyle
 		{
 			RestoreParentGlow(Instance);
 		}
+	}
+
+	FLinearColor SmokeMarbleCellsFor(const FLinearColor& Pick, bool bDesignedBody)
+	{
+		float Floor = 0.0f;
+		float Power = 1.0f;
+		SmokeToneDepthFor(SmokeProfileFor(Pick, bDesignedBody), Floor, Power);
+		const FLinearColor Base = SmokeBaseFor(Pick, bDesignedBody);
+		return FLinearColor(FMath::Clamp(Base.R * Floor, 0.0f, 1.0f), FMath::Clamp(Base.G * Floor, 0.0f, 1.0f), FMath::Clamp(Base.B * Floor, 0.0f, 1.0f), 1.0f);
+	}
+
+	void ApplySmokeMarble(UMaterialInstanceDynamic* Instance, const FLinearColor& Pick, bool bDesignedBody, const FLinearColor& Veins)
+	{
+		if (Instance == nullptr)
+		{
+			return;
+		}
+		// EVERYTHING THE ONE-COLOUR LOOK WRITES FIRST -- the relief, the roughness, a light pick's glow -- so the marble changes the
+		// veins' colour and nothing else about the material
+		ApplySmokeLook(Instance, Pick, bDesignedBody);
+		// no drawn field (wl.Shadow.NormalTex not `smoke`) or no tone worn (wl.Shadow.Tone 0): there is no marble to paint, and the
+		// one-colour look stands
+		if (!SmokeIsDrawn() || CVarSmokeTone.GetValueOnGameThread() == 0)
+		{
+			return;
+		}
+		float Floor = 0.0f;
+		float Power = 1.0f;
+		SmokeToneDepthFor(SmokeProfileFor(Pick, bDesignedBody), Floor, Power);
+		const FLinearColor Cells = SmokeMarbleCellsFor(Pick, bDesignedBody);
+		const FLinearColor Vein(FMath::Clamp(Veins.R, 0.0f, 1.0f), FMath::Clamp(Veins.G, 0.0f, 1.0f), FMath::Clamp(Veins.B, 0.0f, 1.0f), 1.0f);
+		float Scale = 1.0f;
+		if (UTexture2D* Marble = SmokeMarbleFor(Cells, Vein, Power, Scale))
+		{
+			Instance->SetTextureParameterValue(TEXT("AlbedoTex"), Marble);
+			Instance->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(Scale, Scale, Scale, 1.0f));
+		}
+	}
+
+	bool SmokeMarbleOf(const UTexture* Texture, FLinearColor& OutCells, FLinearColor& OutVeins, float& OutScale,
+		FLinearColor& OutDrawnCells, FLinearColor& OutDrawnVeins)
+	{
+		const FSmokeMarbleRecord* Record = Texture != nullptr ? GSmokeMarbleRecords.Find(Texture->GetName()) : nullptr;
+		if (Record == nullptr)
+		{
+			return false;
+		}
+		OutCells = Record->Cells;
+		OutVeins = Record->Veins;
+		OutScale = Record->Scale;
+		OutDrawnCells = Record->DrawnCells;
+		OutDrawnVeins = Record->DrawnVeins;
+		return true;
 	}
 
 	float SmokeRimAmp()

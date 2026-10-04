@@ -68,6 +68,20 @@ struct FWonderlandCardPrimary
 	bool bChosen = false;
 };
 
+/**
+ * ONE MORE COLOUR CHANNEL OF THE LOOK, as a C.A.R.D. keeps it (founder, 10-04 ~01:45Z: "COLOR 1 = body/base, COLOR 2 =
+ * secondary/accent/marbling, COLOR 3 = strips/ribbons/tendrils ... through the REAL Project Brain/C.A.R.D. path"): DEFAULT (the
+ * skin's designed colour -- bChosen false) or one exact linear colour in 0..1. Written in Cards.sav as "DEFAULT" or "r g b".
+ */
+struct FWonderlandCardColour
+{
+	bool bChosen = false;
+	FLinearColor Colour = FLinearColor::Black;
+	/** True once a save wrote this channel. A card saved before the channel existed leaves the live channel as it is when selected
+	 *  (it never recorded one), instead of resetting it to DEFAULT behind the player's back. */
+	bool bRecorded = false;
+};
+
 struct FWonderlandCard
 {
 	FString Id;
@@ -77,7 +91,14 @@ struct FWonderlandCard
 	FString Skin = TEXT("relay_og");
 	/** Empty: the skin's own clothes. */
 	FString Outfit;
+	/** COLOR 1: the body/base. */
 	FWonderlandCardPrimary Primary;
+	/** COLOR 2: the secondary -- the accents (Jack Flame's tie and suit), the status eyes, and Shadow Flame's MARBLING. */
+	FWonderlandCardColour Secondary;
+	/** COLOR 3: the strips / ribbons / tendrils (Shadow Flame's `strip` surfaces), and nothing else. */
+	FWonderlandCardColour Strips;
+	/** The flame skins' fire (Jack Flame, Skeleton Flame, Baal): its own channel, DEFAULT = the designed fire. */
+	FWonderlandCardColour Flame;
 	TArray<FWonderlandCompanionRef> Companions;
 	TArray<FWonderlandCapabilityRef> Capabilities;
 	/** Fields a later build added, kept and written back (capped, secret-scanned, never logged). */
@@ -136,6 +157,11 @@ public:
 	/** Empty after a clean load; otherwise what the load set aside or dropped, for the C.A.R.D. section and the QA. */
 	const FString& GetLoadNote() const { return LoadNote; }
 	const FString& GetPath() const { return Path; }
+
+	/** A C.A.R.D. colour channel as Cards.sav writes it: "DEFAULT" or "r g b" (4 decimals, linear, 0..1). */
+	static FString ColourText(const FWonderlandCardColour& Channel);
+	/** "DEFAULT" or exactly three plain numbers in 0..1 -> a RECORDED channel; anything else is refused (false, Out untouched). */
+	static bool ParseColourText(const FString& Text, FWonderlandCardColour& Out);
 
 	/** The secret refusal every stored string passes: provider keys, private keys, tokens, credential references. */
 	static bool LooksLikeSecret(const FString& Text);

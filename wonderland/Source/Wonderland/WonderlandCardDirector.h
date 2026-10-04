@@ -9,7 +9,10 @@ class UWorld;
 /**
  * THE ONLY PATH THAT APPLIES A C.A.R.D. (M7b). A card is a reference; selecting it asks each real authority in turn:
  *   - the SKIN through the skin registry (UWonderlandRelaySkinSubsystem::EquipSkin), the one door the wardrobe uses;
- *   - the PRIMARY through WonderlandMascotStyle::PickMascotPrimary (a card that never chose one is the skin's design: DEFAULT);
+ *   - the PRIMARY (COLOR 1) through WonderlandMascotStyle::PickMascotPrimary (a card that never chose one is the skin's design: DEFAULT);
+ *   - COLOR 2 (the secondary: accents, status eyes, Shadow Flame's marbling), COLOR 3 (the strips) and the FLAME, each through
+ *     its own row's authority (the mascot settings' Secondary + SaveAndApply, PickMascotStrip, SetFlameColour) -- and only when
+ *     the card RECORDED that channel: a card saved before the channel existed leaves the live colour alone;
  *   - the COMPANIONS through the companion runtime (UWonderlandSidekickSubsystem::Connect), and ONLY between missions: a running
  *     mission keeps the companions it started with (the envelope), and a switch waits for it to end. With the runtime offline they
  *     wait for it too, rather than firing intents at nothing; the reason waiting is always said;
@@ -26,11 +29,14 @@ namespace WonderlandCardDirector
 	/** Make a card the active one and apply it (see above). By id, or by name ignoring case. */
 	WONDERLAND_API bool Select(UWorld* World, const FString& CardIdOrName, FString& OutSaid);
 
-	/** True when the live look differs from the active card's: a skin or a primary picked since. OutWhat says which. */
+	/** True when the live look differs from the active card's: a skin, a primary or a recorded colour channel picked since. OutWhat says which. */
 	WONDERLAND_API bool IsModified(const UWorld* World, FString* OutWhat = nullptr);
 
-	/** SAVE TO C.A.R.D.: the worn skin and the chosen primary written into the active card. */
+	/** SAVE TO C.A.R.D.: the worn skin, the chosen primary, COLOR 2, COLOR 3 and the flame written into the active card. */
 	WONDERLAND_API bool SaveLiveToActive(UWorld* World, FString& OutSaid);
+
+	/** One colour channel of a card as a person reads it: "NOT SAVED" (never recorded), "AS DESIGNED", a palette name, or r,g,b. */
+	WONDERLAND_API FString DescribeColour(const FWonderlandCardColour& Channel);
 
 	/** What is waiting to be applied and why (a mission running, the runtime offline), or empty when nothing waits. */
 	WONDERLAND_API FString DescribeWaiting();

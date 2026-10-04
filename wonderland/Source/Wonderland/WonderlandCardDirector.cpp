@@ -105,6 +105,124 @@ namespace
 		return false;
 	}
 
+	/*
+	 * COLOR 2, COLOR 3 AND THE FIRE ON A C.A.R.D. (founder, 10-04 ~01:45Z: "COLOR 1 = body/base, COLOR 2 = secondary/accent/marbling,
+	 * COLOR 3 = strips/ribbons/tendrils ... through the REAL Project Brain/C.A.R.D. path"). The live channel is read from, and written
+	 * through, the SAME authorities the Wardrobe and the Menu rows use (the mascot settings' Secondary, StripColour.txt, FlameColour.txt)
+	 * -- a card never paints a material itself, so nothing here can reach the eyes, swords, clothes or body by another road.
+	 */
+	FWonderlandCardColour CardLiveSecondary()
+	{
+		FWonderlandCardColour Out;
+		Out.bRecorded = true;
+		const UWonderlandMascotStyleSettings* Style = GetDefault<UWonderlandMascotStyleSettings>();
+		Out.bChosen = Style != nullptr && Style->HasChosenSecondary();
+		Out.Colour = Out.bChosen ? FLinearColor(Style->Secondary.R, Style->Secondary.G, Style->Secondary.B, 1.0f) : FLinearColor::Black;
+		return Out;
+	}
+
+	FWonderlandCardColour CardLiveStrips()
+	{
+		FWonderlandCardColour Out;
+		Out.bRecorded = true;
+		Out.bChosen = WonderlandMascotStyle::HasChosenStrip();
+		const FLinearColor Strip = WonderlandMascotStyle::StripColour();
+		Out.Colour = Out.bChosen ? FLinearColor(Strip.R, Strip.G, Strip.B, 1.0f) : FLinearColor::Black;
+		return Out;
+	}
+
+	FWonderlandCardColour CardLiveFlame()
+	{
+		FWonderlandCardColour Out;
+		Out.bRecorded = true;
+		Out.bChosen = WonderlandMascotStyle::HasChosenFlame();
+		const FLinearColor Fire = WonderlandMascotStyle::FlameColour();
+		Out.Colour = Out.bChosen ? FLinearColor(Fire.R, Fire.G, Fire.B, 1.0f) : FLinearColor::Black;
+		return Out;
+	}
+
+	/** The same choice: both DEFAULT, or both chosen with the same colour (to the file's 4 decimals). */
+	bool CardSameColour(const FWonderlandCardColour& A, const FWonderlandCardColour& B)
+	{
+		return A.bChosen == B.bChosen && (!A.bChosen || A.Colour.Equals(B.Colour, 0.0005f));
+	}
+
+	/** A channel as a person reads it: DEFAULT, a palette name when the colour is one (the PRIMARY/STRIPS rows' palette, then the
+	 *  SECONDARY row's shared one), else r,g,b. */
+	FString CardColourWord(const FWonderlandCardColour& Channel)
+	{
+		if (!Channel.bChosen)
+		{
+			return TEXT("DEFAULT");
+		}
+		for (const TArray<TPair<FName, FLinearColor>>* Swatches : { &WonderlandMascotStyle::PrimaryPalette(), &WonderlandMascotStyle::Palette() })
+		{
+			for (const TPair<FName, FLinearColor>& Swatch : *Swatches)
+			{
+				if (!Swatch.Key.ToString().Equals(TEXT("DEFAULT"), ESearchCase::IgnoreCase) && Swatch.Value.Equals(Channel.Colour, 0.0005f))
+				{
+					return Swatch.Key.ToString();
+				}
+			}
+		}
+		return FString::Printf(TEXT("%.2f,%.2f,%.2f"), Channel.Colour.R, Channel.Colour.G, Channel.Colour.B);
+	}
+
+	/** Puts a recorded channel on the Dog through its own authority; says what it did. An unrecorded channel is left alone. */
+	FString CardApplyColour(const TCHAR* What, const FWonderlandCardColour& Want, const FWonderlandCardColour& Live, TFunctionRef<void()> Apply)
+	{
+		if (!Want.bRecorded)
+		{
+			return FString::Printf(TEXT("%s not recorded on this card (kept %s)"), What, *CardColourWord(Live));
+		}
+		if (CardSameColour(Want, Live))
+		{
+			return FString::Printf(TEXT("%s %s (already)"), What, *CardColourWord(Want));
+		}
+		Apply();
+		return FString::Printf(TEXT("%s %s"), What, *CardColourWord(Want));
+	}
+
+	void CardPutSecondary(const FWonderlandCardColour& Want)
+	{
+		if (UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>())
+		{
+			// THE SECONDARY ROW'S OWN WRITE (the Project Brain wardrobe), and back to the designed value for DEFAULT
+			Style->Secondary = Want.bChosen ? Want.Colour : UWonderlandMascotStyleSettings::DefaultSecondary();
+			Style->bSecondaryChosen = Want.bChosen;
+			Style->bChosen |= Want.bChosen;
+			WonderlandMascotStyle::SaveAndApply();
+		}
+	}
+
+	void CardPutStrips(const FWonderlandCardColour& Want)
+	{
+		// THE STRIPS ROW'S OWN PICK: any key but DEFAULT means chosen (the palette name when the colour is one)
+		static const FName Default(TEXT("DEFAULT"));
+		static const FName Custom(TEXT("CARD"));
+		FName Key = Default;
+		if (Want.bChosen)
+		{
+			Key = Custom;
+			for (const TPair<FName, FLinearColor>& Swatch : WonderlandMascotStyle::PrimaryPalette())
+			{
+				if (Swatch.Key != Default && Swatch.Value.Equals(Want.Colour, 0.0005f))
+				{
+					Key = Swatch.Key;
+					break;
+				}
+			}
+		}
+		WonderlandMascotStyle::PickMascotStrip(Key, Want.bChosen ? Want.Colour : FLinearColor::Black);
+	}
+
+	void CardPutFlame(const FWonderlandCardColour& Want)
+	{
+		// THE FLAME ROW'S OWN WRITE; DEFAULT is the designed fire, which the file holds as white
+		WonderlandMascotStyle::SetFlameColour(Want.bChosen ? Want.Colour : FLinearColor::White);
+		WonderlandMascotStyle::SaveAndApply();
+	}
+
 	/** Why the companions cannot be put behind the slots now, or empty when they can. */
 	FString CardCompanionsBlocked(const UWorld* World)
 	{
@@ -305,6 +423,11 @@ namespace WonderlandCardDirector
 			Said.Add(FString::Printf(TEXT("primary %s is not in this build's palette; the primary is kept"), *Card.Primary.Key));
 		}
 
+		// COLOR 2, COLOR 3, THE FIRE: each through its own row's authority, each only if this card recorded it
+		Said.Add(CardApplyColour(TEXT("colour 2 (secondary)"), Card.Secondary, CardLiveSecondary(), [&Card]() { CardPutSecondary(Card.Secondary); }));
+		Said.Add(CardApplyColour(TEXT("colour 3 (strips)"), Card.Strips, CardLiveStrips(), [&Card]() { CardPutStrips(Card.Strips); }));
+		Said.Add(CardApplyColour(TEXT("flame"), Card.Flame, CardLiveFlame(), [&Card]() { CardPutFlame(Card.Flame); }));
+
 		// THE COMPANIONS: now between missions with the runtime there; otherwise they wait, and why is said
 		Said.Add(CardApplyOrWait(World, Card));
 
@@ -335,11 +458,34 @@ namespace WonderlandCardDirector
 		{
 			What.Add(FString::Printf(TEXT("the primary is not the card's %s"), *Key.ToString()));
 		}
+		// COLOR 2 / COLOR 3 / the fire, where the card recorded them
+		struct FChannelCheck { const TCHAR* What; const FWonderlandCardColour& Card; FWonderlandCardColour Live; };
+		const FChannelCheck Checks[] = {
+			{ TEXT("colour 2 (secondary)"), Card.Secondary, CardLiveSecondary() },
+			{ TEXT("colour 3 (strips)"), Card.Strips, CardLiveStrips() },
+			{ TEXT("the flame"), Card.Flame, CardLiveFlame() },
+		};
+		for (const FChannelCheck& Check : Checks)
+		{
+			if (Check.Card.bRecorded && !CardSameColour(Check.Card, Check.Live))
+			{
+				What.Add(FString::Printf(TEXT("%s is %s, the card says %s"), Check.What, *CardColourWord(Check.Live), *CardColourWord(Check.Card)));
+			}
+		}
 		if (OutWhat != nullptr)
 		{
 			*OutWhat = FString::Join(What, TEXT("; "));
 		}
 		return What.Num() > 0;
+	}
+
+	FString DescribeColour(const FWonderlandCardColour& Channel)
+	{
+		if (!Channel.bRecorded)
+		{
+			return TEXT("NOT SAVED");
+		}
+		return Channel.bChosen ? CardColourWord(Channel).ToUpper() : FString(TEXT("AS DESIGNED"));
 	}
 
 	bool SaveLiveToActive(UWorld* World, FString& OutSaid)
@@ -372,13 +518,18 @@ namespace WonderlandCardDirector
 				}
 			}
 		}
+		// COLOR 2, COLOR 3 AND THE FIRE AS THE DOG WEARS THEM NOW (recorded, so selecting this card restores exactly these)
+		Card.Secondary = CardLiveSecondary();
+		Card.Strips = CardLiveStrips();
+		Card.Flame = CardLiveFlame();
 		FString Why;
 		if (!Store.Update(Card, Why))
 		{
 			OutSaid = FString::Printf(TEXT("could not save to C.A.R.D. %s: %s"), *Card.Name, *Why);
 			return false;
 		}
-		OutSaid = FString::Printf(TEXT("saved to C.A.R.D. %s: skin %s, primary %s%s"), *Card.Name, *Card.Skin, *Card.Primary.Key,
+		OutSaid = FString::Printf(TEXT("saved to C.A.R.D. %s: skin %s, primary %s, colour 2 %s, colour 3 %s, flame %s%s"), *Card.Name, *Card.Skin,
+			*Card.Primary.Key, *CardColourWord(Card.Secondary), *CardColourWord(Card.Strips), *CardColourWord(Card.Flame),
 			bTyped ? TEXT(" (the primary on the Dog is a typed colour, which a C.A.R.D. cannot hold: palette keys only)") : TEXT(""));
 		CardSayWrite(Store, OutSaid);
 		UE_LOG(LogTemp, Display, TEXT("WLCARD %s"), *FWonderlandCardStore::MaskForDisplay(OutSaid));
