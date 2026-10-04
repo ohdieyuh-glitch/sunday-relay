@@ -396,7 +396,7 @@ describe("the founder's 10-04 rulings P1 / P2 / P4 / P5: hidden means hidden, an
     expect(worldViewFor(w, s, U.KAI, T0 + 1400).avatars.map((a) => a.userId)).toEqual([U.LYRA]);
   });
 
-  it("P4: the owner's block removes the blocked player from the owner's private server at once, clears their location, and their next report reads the generic \"You can't stay in this server.\"; the owner stays; re-entry is refused", () => {
+  it("P4: the owner's block removes the blocked player from the owner's private server at once, clears their location, and their next report is answered with no context (the client's \"You can't stay in this server.\"); the owner stays; re-entry is refused", () => {
     const { s, w } = kaiHostsNovaInside();
     expect(contextOf(w, U.NOVA)?.contextId).toBe(`priv_${U.KAI}`);
     const blocked = run(s, w, U.KAI, 'blocks.add', { targetId: U.NOVA }, 2000);
@@ -404,18 +404,21 @@ describe("the founder's 10-04 rulings P1 / P2 / P4 / P5: hidden means hidden, an
     expect(contextOf(blocked.world, U.NOVA)).toBeUndefined();
     expect(blocked.state.users[U.NOVA].presence.location).toBeNull();
     expect(contextOf(blocked.world, U.KAI)?.contextId).toBe(`priv_${U.KAI}`);
+    // the removed player's own tick is ANSWERED with no context (the client words it "You can't stay in this server.")
     const report = applySocialOperation(blocked.state, 'world.state', U.NOVA, { ids: [], body: here, query: {} }, at(2100), blocked.world);
-    expect(report.ok).toBe(false);
-    if (!report.ok) {
-      expect(report.error.message).toBe("You can't stay in this server.");
-      expect(report.error.message).not.toMatch(/block/i);
+    expect(report.ok).toBe(true);
+    if (report.ok) {
+      const view = report.value.data as ReturnType<typeof worldViewFor>;
+      expect(view.context ?? null).toBeNull();
+      expect(view.avatars).toEqual([]);
+      expect(JSON.stringify(view)).not.toMatch(/block/i);
     }
     // re-entry while the block stands: refused with the ordinary can't-join
     const back = applySocialOperation(blocked.state, 'world.join', U.NOVA, { ids: [], body: { target: 'FRIEND', userId: U.KAI }, query: {} }, at(2200), blocked.world);
     expect(back.ok).toBe(false);
   });
 
-  it("P5 (the founder's written correction, 10-04 ~17:35Z): a MEMBER blocking the OWNER inside the owner's server -- the blocker is out at once with the generic message, the owner stays, re-entry is refused while the block stands", () => {
+  it("P5 (the founder's written correction, 10-04 ~17:35Z): a MEMBER blocking the OWNER inside the owner's server -- the blocker is out at once (answered with no context), the owner stays, re-entry is refused while the block stands", () => {
     const { s, w } = kaiHostsNovaInside();
     const memberBlocks = run(s, w, U.NOVA, 'blocks.add', { targetId: U.KAI }, 2000);
     expect(memberBlocks.world).toBeDefined();
@@ -423,8 +426,11 @@ describe("the founder's 10-04 rulings P1 / P2 / P4 / P5: hidden means hidden, an
     expect(contextOf(memberBlocks.world, U.KAI)?.contextId).toBe(`priv_${U.KAI}`); // the owner stays
     expect(memberBlocks.state.users[U.NOVA].presence.location).toBeNull();
     const report = applySocialOperation(memberBlocks.state, 'world.state', U.NOVA, { ids: [], body: here, query: {} }, at(2100), memberBlocks.world);
-    expect(report.ok).toBe(false);
-    if (!report.ok) expect(report.error.message).toBe("You can't stay in this server.");
+    expect(report.ok).toBe(true);
+    if (report.ok) expect((report.value.data as ReturnType<typeof worldViewFor>).context ?? null).toBeNull();
+    // the control: someone who never joined is still refused ("Join a world first"), not answered
+    const stranger = applySocialOperation(memberBlocks.state, 'world.state', U.VEGA, { ids: [], body: here, query: {} }, at(2100), memberBlocks.world);
+    expect(stranger.ok).toBe(false);
     const reenter = applySocialOperation(memberBlocks.state, 'world.join', U.NOVA, { ids: [], body: { target: 'FRIEND', userId: U.KAI }, query: {} }, at(2200), memberBlocks.world);
     expect(reenter.ok).toBe(false);
     // after a new join anywhere the notice is gone: the player moved on

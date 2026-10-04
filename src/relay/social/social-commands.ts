@@ -82,6 +82,7 @@ import {
   inviteToWorld,
   joinWorld,
   leaveWorld,
+  recentlyRemoved,
   removeFromPrivateServer,
   reportAvatar,
   worldViewFor,
@@ -434,9 +435,9 @@ function applyOne(
       if (!blocked.ok) return blocked;
       // A BLOCK SEPARATES A PRIVATE SERVER'S OWNER FROM A MEMBER INSIDE IT, both ways (the founder, 10-04: P4 the owner blocks a
       // member -> the member is removed; P5 a member blocks the owner -> the blocker leaves; the mirror of the party rule). The
-      // member is taken out at once, the owner stays, their location clears exactly as a leave clears it, and their next world
-      // report reads the generic "You can't stay in this server." (WORLD_REMOVAL_MESSAGE). Re-entry is refused while the block
-      // stands (walledFromOwner). Nothing names the block.
+      // member is taken out at once, the owner stays, their location clears exactly as a leave clears it, and their own world
+      // reports are answered with a context-less view for a minute (world.state), which the client words "You can't stay in this
+      // server.". Re-entry is refused while the block stands (walledFromOwner). Nothing names the block.
       const memberOut = (ownerId: SocialUserId, memberId: SocialUserId): boolean => {
         const server = world.contexts[`priv_${ownerId}`];
         return server !== undefined && server.kind === 'PRIVATE_SERVER' && server.ownerId === ownerId && server.memberIds.includes(memberId);
@@ -643,6 +644,10 @@ function applyOne(
       const skin = str(body, 'skinId', 40);
       for (const c of [motion, skin]) if (!c.ok) return invalid(c.message);
       const num = (field: string) => (typeof body[field] === 'number' ? (body[field] as number) : Number.NaN);
+      // SEPARATED BY A BLOCK (P4/P5): the removed player's own tick is ANSWERED with a view that has no context -- the client's
+      // sign of a removal (CORE's client contract: it had a private server, now none, while it wanted to stay -> "You can't stay
+      // in this server." and back to the public world). An answer, never an error, and it names nothing.
+      if (recentlyRemoved(world, actorId, nowMs)) return { ok: true, value: { state, data: worldViewFor(world, state, actorId, nowMs), audience: [] } };
       const reported = reportAvatar(
         world,
         actorId,

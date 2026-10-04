@@ -77,15 +77,15 @@ export interface WorldState {
   readonly invites: readonly WorldInvite[];
   readonly nextSerial: number;
   /**
-   * Players an OWNER'S BLOCK just removed from that owner's private server (the founder, 10-04, P4), until when their next
-   * report is answered with the generic "You can't stay in this server." instead of "Join a world first". Never names a block.
+   * Players a block just separated from a private server's owner (the founder, 10-04, P4/P5), until when their own world report
+   * is ANSWERED with a view that has no context -- the client's sign of a removal, which it words "You can't stay in this
+   * server." -- instead of refused with "Join a world first". Never names a block.
    */
   readonly removals?: Readonly<Record<SocialUserId, number>>;
 }
 
-/** How long a removed player's next reports read "You can't stay in this server." (their client's tick learns it within it). */
+/** How long a removed player's reports are answered with a context-less view (their client's tick learns it well within it). */
 export const WORLD_REMOVAL_NOTICE_MS = 60_000;
-export const WORLD_REMOVAL_MESSAGE = "You can't stay in this server.";
 
 export function emptyWorldState(): WorldState {
   return { contexts: {}, avatars: {}, invites: [], nextSerial: 1 };
@@ -128,6 +128,11 @@ function liveMembers(world: WorldState, context: WorldContext, nowMs: number): n
 }
 
 /** Drop representations whose clients stopped reporting, and their memberships (they rejoin when they return). */
+/** Whether a player was just separated from a private server by a block and has not joined anywhere since. */
+export function recentlyRemoved(world: WorldState, userId: SocialUserId, nowMs: number): boolean {
+  return (world.removals?.[userId] ?? 0) > nowMs && contextOf(world, userId) === undefined;
+}
+
 export function sweepWorld(world: WorldState, nowMs: number): WorldState {
   let next = world;
   for (const a of Object.values(world.avatars)) {
@@ -256,8 +261,8 @@ export function leaveWorld(world: WorldState, actorId: SocialUserId): WorldState
   return withoutMember(world, actorId);
 }
 
-/** An OWNER'S BLOCK removes the blocked player from the owner's private server (the founder, 10-04, P4): out at once, and their
- *  next reports read the generic WORLD_REMOVAL_MESSAGE for WORLD_REMOVAL_NOTICE_MS. */
+/** A BLOCK separates a private server's owner from a member inside it (the founder, 10-04, P4/P5): the member is out at once, and
+ *  for WORLD_REMOVAL_NOTICE_MS their own reports are answered with a context-less view (see the world.state operation). */
 export function removeFromPrivateServer(world: WorldState, userId: SocialUserId, nowMs: number): WorldState {
   const out = withoutMember(world, userId);
   return { ...out, removals: { ...(out.removals ?? {}), [userId]: nowMs + WORLD_REMOVAL_NOTICE_MS } };
@@ -296,10 +301,7 @@ export interface AvatarReport {
 /** The actor's own representation, as their client reports it. Only ever their own; only inside their context. */
 export function reportAvatar(world: WorldState, actorId: SocialUserId, report: AvatarReport, nowMs: number): WorldResult<WorldState> {
   const context = contextOf(world, actorId);
-  if (context === undefined) {
-    if ((world.removals?.[actorId] ?? 0) > nowMs) return fail('permission-denied', WORLD_REMOVAL_MESSAGE);
-    return fail('not-found', 'Join a world first');
-  }
+  if (context === undefined) return fail('not-found', 'Join a world first');
   for (const n of [report.x, report.y, report.z, report.yaw, report.speed]) {
     if (!Number.isFinite(n) || Math.abs(n) > WORLD_COORD_LIMIT) return fail('validation-failed', 'position out of range');
   }
