@@ -18,13 +18,29 @@ import { isWonderlandVisibleTo, type WonderlandSocialState } from '../wonderland
  *       other, and once, never doubled;
  *   (c) a pair that is not mutually visible shares NO room — a blocked pair
  *       never, a hidden player and a stranger never.
+ *   (d) what a player's rooms are, and who is in them, never depends on anyone
+ *       that player cannot see (P1, no inference).
  * (c) has a consequence the wall requires: a player hidden from strangers can
  * neither be heard by them NOR hear them, because hearing them would put the
  * hidden player in a room the strangers can see.
  *
- * THE COMMON CASE IS ONE ROOM. When everyone in a channel may see everyone
- * (no hidden player among strangers, no block), the partition is the whole
- * channel in a single room. Rooms multiply only where the wall requires them.
+ * (d) IS WHY EVERY ROOM IS A PAIR. A room of three or more is a choice about
+ * which pair it covers, and that choice can always be forced by somebody one of
+ * its members cannot see. Two players who cannot see each other (a block), both
+ * seen by a and c: with only one of them present, the natural room for a, c and
+ * that one is a single room; with both present the pair a–c can be in only one
+ * room, so one of the two players' rooms must change with the arrival of
+ * someone they cannot see. A first greedy partition did exactly that: a hidden
+ * player's arrival split a stranger's room, the reconcile kicked the stranger
+ * from voice, and his client showed two rooms where there had been one (found by
+ * an adversarial review, 2026-10-05). A pair room depends on nothing but the
+ * pair: a player's rooms are exactly one per channel mate they can mutually
+ * see, whoever else is present. So does a block: it ends exactly one room.
+ *
+ * THE COST is rooms: a player holds one per mutually visible channel mate (a
+ * full party of four, three each). How many rooms an EOS client may hold, and
+ * so how large a voice channel can be, is the client's question (CORE); the
+ * wall does not bend to it.
  *
  * ROOM NAMES ARE OPAQUE AND DETERMINISTIC: a digest of the channel and the
  * room's members, so every player's plan names the same rooms without a
@@ -63,14 +79,10 @@ export interface WonderlandVoicePlan {
 export const isWonderlandMutuallyVisible = (state: WonderlandSocialState, a: string, b: string): boolean =>
   a !== b && isWonderlandVisibleTo(state, a, b) && isWonderlandVisibleTo(state, b, a);
 
-const pairKey = (a: string, b: string): string => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
-
 /**
- * PLAN THE ROOMS: a deterministic edge clique PARTITION of the channel's
- * mutual-visibility graph. Greedy, in player-id order: take the first edge no
- * room covers yet, and grow it with every player (in order) who is mutually
- * visible to all of the room's members AND shares no covered edge with any of
- * them, so no pair can end up in two rooms.
+ * PLAN THE ROOMS: one room for every mutually visible pair in the channel, and
+ * no other. Each room is the pair alone, so every invariant above holds by
+ * construction, (d) included: nothing about a pair's room depends on anyone else.
  */
 export function planWonderlandVoiceRooms(
   state: WonderlandSocialState,
@@ -78,27 +90,15 @@ export function planWonderlandVoiceRooms(
   digest: (text: string) => string,
 ): WonderlandVoicePlan {
   const players = [...new Set(channel.participantIds)].sort();
-  const covered = new Set<string>();
   const rooms: WonderlandVoiceRoom[] = [];
   for (let i = 0; i < players.length; i += 1) {
     for (let j = i + 1; j < players.length; j += 1) {
       const a = players[i]!;
       const b = players[j]!;
-      if (covered.has(pairKey(a, b)) || !isWonderlandMutuallyVisible(state, a, b)) continue;
-      const members = [a, b];
-      for (const candidate of players) {
-        if (members.includes(candidate)) continue;
-        if (members.every((member) => isWonderlandMutuallyVisible(state, member, candidate) && !covered.has(pairKey(member, candidate)))) {
-          members.push(candidate);
-        }
-      }
-      for (let x = 0; x < members.length; x += 1) {
-        for (let y = x + 1; y < members.length; y += 1) covered.add(pairKey(members[x]!, members[y]!));
-      }
-      const memberIds = [...members].sort();
+      if (!isWonderlandMutuallyVisible(state, a, b)) continue;
       rooms.push(Object.freeze({
-        roomId: `wl_${digest(`${channel.kind}\u0000${channel.scopeId}\u0000${memberIds.join('\u0000')}`).slice(0, 32)}`,
-        memberIds: Object.freeze(memberIds),
+        roomId: `wl_${digest(`${channel.kind}\u0000${channel.scopeId}\u0000${a}\u0000${b}`).slice(0, 32)}`,
+        memberIds: Object.freeze([a, b]),
       }));
     }
   }
