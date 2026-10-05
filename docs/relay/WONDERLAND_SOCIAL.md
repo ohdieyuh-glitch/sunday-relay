@@ -61,7 +61,11 @@ There is one relation, `wonderlandRelationOf`: `SELF`, `BLOCKED` (either directi
    - **What follows:**
      - an entry records no encounter with someone who has gone;
      - a heartbeat from an expired presence is refused `NOT_IN_INSTANCE` (409), never silently revived;
-     - the client then enters again.
+     - the client then enters again;
+     - **a member removed from a private server loses their stored presence row in its instance, lapsed or not, and a heartbeat re-checks membership** (`NOT_IN_INSTANCE` otherwise). Before this (review finding, 2026-10-05):
+       - a member removed a moment after their lease ran out kept the expired row;
+       - a heartbeat stamped just before the expiry, but decided after the removal, made it live again, so a non-member stood in the server.
+       - Proven in both stores, by the review's own out-of-order sequence. Two mutants are killed.
    - **Nothing is deleted.** The row stays until the player's next entry overwrites it. It simply stops counting, in both stores. The parity suite reads the row back from PostgreSQL, and both stores agree on every projection after an expiry.
    - **Voice.**
      - The room planned without the departed player has different members, so it is a different room.
@@ -113,7 +117,7 @@ There is one relation, `wonderlandRelationOf`: `SELF`, `BLOCKED` (either directi
 
 ## Not done here, and where it goes
 
-- **Voice (035):** EOS rooms and the trusted voice server enforce `wonderlandVoiceRouting` as per-listener hard mutes. The migration and the client-config endpoint belong to the voice lane.
+- **Voice (035):** EOS has no per-listener mute, so the wall is enforced by which rooms each player holds a token for. Every room is one mutually visible pair, so a player's rooms never depend on anyone they cannot see. See [WONDERLAND_VOICE.md](WONDERLAND_VOICE.md). `wonderlandVoiceRouting` and `projectWonderlandVoiceRoster` here state who may hear whom; the voice route plans its rooms with `planWonderlandVoiceRooms`, and that planner carries its own P1 and no-inference property tests.
 - **The client (CORE):**
   - The final RC calls these routes against the hosted HTTPS backend, not `127.0.0.1`.
   - While in an instance, it sends `UPDATE_PRESENCE` at least every 30 s, and answers `NOT_IN_INSTANCE` by entering again (decision 6).

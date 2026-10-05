@@ -85,7 +85,11 @@ export interface WonderlandSocialRoutePorts {
     readonly before: WonderlandSocialState;
     readonly after: WonderlandSocialState;
     readonly at: string;
-  }) => Promise<{ readonly removed: readonly unknown[]; readonly failed: readonly unknown[] }>;
+  }) => Promise<{
+    readonly removed: readonly { readonly playerId: string }[];
+    /** A failure with no player is the reconcile itself failing, so nobody's voice state is known. */
+    readonly failed: readonly { readonly playerId?: string }[];
+  }>;
 }
 
 export const WONDERLAND_SOCIAL_PREFIX = '/wonderland/social/';
@@ -209,8 +213,15 @@ export async function handleWonderlandSocialRoute(
     if (outcome.code !== 'DONE' || ports.afterCommand === undefined || before === null) return { status: 200, body: { data: outcome } };
     // The write is committed; what follows it is reported, and a failure here never reads as success.
     const followed = await ports.afterCommand({ actorId: player, command, before, after: await store.stateFor({ viewerId: player, now }), at })
-      .catch(() => ({ removed: [], failed: [{ reason: 'after_command_failed' }] }));
-    return { status: 200, body: { data: outcome, voice: { revoked: followed.removed.length, revocationFailures: followed.failed.length } } };
+      .catch(() => ({ removed: [], failed: [{}] }));
+    // Only the ACTOR's own memberships are counted. The reconcile also moves channel mates the actor may not be able
+    // to see (a hidden player, someone they blocked or who blocked them), and a count over them would tell the actor
+    // that someone is there (P1, no inference). Theirs are retried by their own next reconcile.
+    const own = (row: { readonly playerId?: string }): boolean => row.playerId === undefined || row.playerId === player;
+    return {
+      status: 200,
+      body: { data: outcome, voice: { revoked: followed.removed.filter(own).length, revocationFailures: followed.failed.filter(own).length } },
+    };
   }
   if (input.method !== 'GET') return error(405, 'method_not_allowed', 'Social reads are GET; writes are POST /wonderland/social/commands.');
 
