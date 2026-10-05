@@ -192,7 +192,7 @@ Every JUJU PR below is green. What moves the material order next is a decision, 
 |---|---|---|---|---|
 | 1 | The frozen 13 (i) rerun at #321's head | founder / SECOND (local) | #321 | **READY FOR LOCAL QUALIFICATION**; it gates everything after #321 |
 | 2 | Fold the 031 and 032 teardown fixes into #321 | founder | Findings below | yes: two one-line test fixes |
-| 3 | What 034 is | founder / SECOND | #337, #338 | option 4, a reserved stamp; #338 is ready |
+| 3 | What 034 is | founder / SECOND | #337, #338, #341 | option 4, a reserved stamp: #338 is ready, and #341 makes 031–035 one rehearsed window |
 | 4 | C pair validity: option A, B or C | founder / SECOND | #326, #331 | B is prepared in #331 |
 | 5 | `allowNative` (native social for the RC) | SECOND Wonderland / founder | #339 | its evidence holds; a one-line change. Players must OWN their client's project |
 | 6 | A rate limit on social commands | SECOND Wonderland / founder | #340 | adopt #340's budgets (60 commands then 1/s; 20 messages then 1 per 3 s; 10 invitations then 1 per 30 s) before any public hosted launch |
@@ -221,6 +221,7 @@ Every JUJU PR below is green. What moves the material order next is a decision, 
 | **#339** | Wonderland **R16 over native sessions** (the RC's session kind). The harness speaks as the native client (`--native`, no Origin, `pairR16NativeSessions`). In process with `allowNative` true only in the test: 24/24 plus the restart over native sessions, identical results and views to browser sessions, and the copy guard both ways. The real bridge refuses native social as shipped, and the harness reports it as the decision. **Found: today only a project OWNER can pair a desktop client** (MEMBER decided, not written) | on #336 | see the PR |
 | **#338** | **Option 4 PREPARED, not chosen**: `034_julius_project_brain_reserved` (stamp-only, guarded) and voice **035 in the chain** behind it. A hosted store left at 033 takes 034 and 035 as pending. Found and fixed: 033's DOWN case assumed 033 was last | on #336 | see the PR |
 | **#340** | Wonderland social **command budgets, PREPARED, not chosen**: per verified player, `all` 60 then 1/s, `message` 20 then 1 per 3 s, `invitation` 10 then 1 per 30 s. Past it, `429 rate_limited` with `Retry-After`; the command is not executed and takes nothing. Integer-ms GCRA (a fractional first version never returned a due token). The R16 scenario fits the budget with the clock frozen. 7 mutants killed | on #336 | see the PR |
+| **#341** | **Migration window through 035, PREPARED on option 4, not chosen.** 034 and 035 get pre-check, post-check and DOWN SQL. `window.sh --through 034\|035` reads their PASS conditions, lets 035 add only empty `voice_*` tables, and requires 034 to leave the catalog fingerprint IDENTICAL. Docker rehearsal of record: R1–R5 PASS, 71 conditions, every 2026-10-04 fingerprint reproduced, after-035 `9f65bb10`. Three mutant migrations each STOP the window | on #338 + #324 | see the PR |
 
 **Findings to act on:**
 - **Native social for the final RC (`allowNative`) stays SECOND's and the founder's decision**, and #339 is its evidence.
