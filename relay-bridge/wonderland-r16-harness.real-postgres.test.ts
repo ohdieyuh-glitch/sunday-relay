@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import {
-  R16_CHECKS, pairR16Sessions, r16Players, readR16Views, runR16Scenario, summarizeR16, verifyR16Restart,
+  R16_CHECKS, pairR16NativeSessions, pairR16Sessions, r16Players, readR16Views, runR16Scenario, summarizeR16, verifyR16Restart,
 } from '../scripts/wonderland-r16-harness.mjs';
 
 /**
@@ -222,4 +222,41 @@ suite('Wonderland R16, scripted, against the real bridge process', () => {
     expect(unconfigured.status).toBe(2);
     expect(unconfigured.stdout).toContain('R16 BLOCKED — set RELAY_BRIDGE_TOKEN (scripted players) or WONDERLAND_R16_SESSIONS (three real players).');
   }, 180_000);
+
+  it('native clients, paired through the real bridge the way the RC pairs them, are refused social as the bridge ships, and the CLI says it is a decision', async () => {
+    const players = r16Players(`n${nonce}`);
+    const projectId = `r16-world-${nonce}`;
+    // Each player belongs to the project their desktop client follows: membership is the bridge's own record.
+    await pool.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1) ON CONFLICT DO NOTHING', [projectId]);
+    for (const player of [players.a, players.b, players.c]) {
+      await pool.query('INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING', [player]);
+      await pool.query("INSERT INTO relay_wonderland.project_members(project_id, player_id, role) VALUES($1, $2, 'MEMBER')", [projectId, player]);
+    }
+    const pair = () => pairR16NativeSessions({ bridge, origin: ORIGIN, operatorToken: OPERATOR, playerIds: [players.a, players.b, players.c], projectId, fetch });
+    // TODAY ONLY AN OWNER PAIRS A CLIENT: MEMBER's capabilities are decided (founder decisions 4 and 5) but not yet written,
+    // so a MEMBER is refused as no member at all. Final R16's players must own the project their client follows.
+    expect(await pair()).toEqual({ ok: false, reason: 'native_pairing_refused_403' });
+    await pool.query("UPDATE relay_wonderland.project_members SET role = 'OWNER' WHERE project_id = $1", [projectId]);
+    const paired = await pair();
+    expect(paired.ok, JSON.stringify(paired)).toBe(true);
+    if (!paired.ok) return;
+    // The native session is real: the world stream's own check accepts it. Social, as shipped, answers only the decision.
+    const me = await fetch(`${bridge}/wonderland/social/me`, { headers: { authorization: `Relay-Session ${paired.sessions[players.a]!}` } });
+    expect(me.status).toBe(403);
+    expect(((await me.json()) as { error?: { kind?: string } }).error?.kind).toBe('native_social_not_enabled');
+    // The same token from a web page is not a native client at all.
+    const fromPage = await fetch(`${bridge}/wonderland/social/me`, { headers: { authorization: `Relay-Session ${paired.sessions[players.a]!}`, origin: ORIGIN } });
+    expect(fromPage.status).toBe(401);
+
+    const native = (env: Record<string, string>) => spawnSync(process.execPath, [
+      'scripts/wonderland-r16-harness.mjs', '--bridge', bridge, '--native', '--players', `${players.a},${players.b},${players.c}`,
+    ], { encoding: 'utf8', env: { PATH: process.env.PATH ?? '', ...env }, timeout: 60_000 });
+    const blocked = native({ WONDERLAND_R16_SESSIONS: JSON.stringify(paired.sessions), RELAY_BRIDGE_TOKEN: OPERATOR });
+    expect(blocked.stdout).toContain('R16 BLOCKED — this bridge does not let a native client reach social (native_social_not_enabled)');
+    expect(blocked.status).toBe(1);
+    expect(blocked.stdout + blocked.stderr, 'no native token is printed').not.toContain(paired.sessions[players.a]!);
+    const unpaired = native({ RELAY_BRIDGE_TOKEN: OPERATOR });
+    expect(unpaired.stdout).toContain('R16 BLOCKED — --native speaks as the RC\'s own clients');
+    expect(unpaired.status).toBe(2);
+  }, 120_000);
 });

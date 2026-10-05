@@ -73,6 +73,33 @@ The checks say whether a backend kept the privacy wall. They do not say whether 
 
 **Voice is reported, not checked.** The harness says whether the backend serves EOS client configuration (`CONFIGURED` / `NOT_CONFIGURED_<status>` / `NOT_MOUNTED`). Proving voice needs EOS identities on a configured EOS product, which is CORE's final step.
 
+## The native client: the session kind the shipped RC uses
+
+The shipped RC is a **native** client:
+- it sends no Origin;
+- its players' sessions are `native_world` sessions that each signed-in player paired for their own desktop client (`/wonderland/native/pair`, then `/session`).
+
+Every run above used browser sessions. And social does not admit native sessions today: `allowNative` is off by design, a reviewed decision for SECOND Wonderland and the founder.
+
+**The harness speaks as that client.**
+- `--native` sends no Origin, and takes the players' native tokens in `WONDERLAND_R16_SESSIONS`. A native client is paired by its player, never by the operator.
+- A bridge that does not admit native sessions is reported as **BLOCKED, `native_social_not_enabled`: a decision, not a broken wall.**
+
+**The evidence for the decision** (`relay-bridge/wonderland-r16-harness.test.ts`, with `allowNative: true` set only in the test, over native sessions minted the store's own way):
+- **All 24 checks pass,** and so does the restart check, after a restart longer than a lease.
+- **The wall does not depend on the kind of session.** The same scenario through browser and native sessions gives identical results, check for check, and identical views, path for path.
+- **The copy guard holds both ways:**
+  - a native token presented from a web page is refused (401);
+  - a browser token with no Origin, a browser session copied into a native client, is refused (401).
+- **With the switch off** (as shipped), every answer to a native client is `403 native_social_not_enabled`, and SESSIONS fails, so no run can pass.
+
+**On the real bridge** (`wonderland-r16-harness.real-postgres.test.ts`), native clients are paired exactly as the RC pairs them: membership, `pair` from the website, `session` with no Origin.
+- **Today only a project OWNER can pair a desktop client.** MEMBER's capabilities are decided (founder decisions 4 and 5, 2026-09-27) but not yet written, so a MEMBER is refused as no member at all (403).
+- An OWNER pairs, and the native session is real.
+- Social answers it `403 native_social_not_enabled`.
+- The same token from a web page is refused (401).
+- `--native` prints the BLOCKED decision line and exits 1.
+
 ## Running it
 
 ```sh
@@ -181,6 +208,8 @@ Each item names its owner.
 3. **EOS voice live.** This is CORE's, with the founder's EOS product, using `docs/relay/WONDERLAND_VOICE.md`.
 4. **The shipped final RC** reaching the hosted backend, not the founder's laptop or 127.0.0.1. This is CORE's.
 5. **Native social.** The final RC's native client needs `allowNative` for social. That is a reviewed decision for SECOND Wonderland and the founder, and costs one line.
+   - Its evidence is above: the wall holds identically over native sessions, and the copy guard holds both ways.
+   - **One prerequisite either way:** each real player must own the project their client follows, or MEMBER's decided capabilities must be written first. Today only an OWNER can pair a desktop client.
 6. **The run itself is judged HOSTED_FINAL** (`--expect-commit <accepted main sha> --final`, above).
    - It needs the operator token, to read the backend's report.
    - It needs a Railway deployment from GitHub, whose attested commit is the accepted one.

@@ -22,6 +22,13 @@
  *     them in order. This is the FINAL R16 form: three real identities. The
  *     harness changes their social state (friendship, blocks, a party, a server,
  *     messages); every block it makes it lifts again.
+ * NATIVE (`--native`): the shipped RC is a native client. It sends no Origin,
+ * and its players' sessions are `native_world` sessions their signed-in owners
+ * paired (`pairR16NativeSessions` does exactly that in tests). With `--native`
+ * the harness speaks as that client, with the native tokens given in
+ * `WONDERLAND_R16_SESSIONS`. A bridge whose social routes do not admit native
+ * sessions (`allowNative`, a reviewed decision) is reported as such, BLOCKED,
+ * never as a broken wall.
  * In either form, `RELAY_BRIDGE_TOKEN` is also what reads the backend's own
  * report (its commit, store and boot), so the restart check and a HOSTED_FINAL
  * venue need it even when the players are real.
@@ -124,7 +131,10 @@ export function r16Players(nonce) {
 
 const ok = (body) => (body !== null && typeof body === 'object' && 'data' in body ? body.data : body);
 
-/** One HTTP call as one player. A network failure is a result, never an exception the scenario cannot report. */
+/**
+ * One HTTP call as one player. A network failure is a result, never an exception the scenario cannot report.
+ * `origin: null` speaks as the NATIVE client does: it sends no Origin at all.
+ */
 function client({ bridge, origin, fetch }) {
   return async (token, method, path, body) => {
     try {
@@ -132,7 +142,7 @@ function client({ bridge, origin, fetch }) {
         method,
         headers: {
           authorization: `Relay-Session ${token}`,
-          origin,
+          ...(origin === null || origin === undefined ? {} : { origin }),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -183,6 +193,53 @@ export async function pairR16Sessions({ bridge, origin, operatorToken, playerIds
       return { ok: false, reason: `session_refused_${String(session.status)}` };
     }
     sessions[playerId] = session.body.sessionToken;
+  }
+  return { ok: true, sessions };
+}
+
+/**
+ * THREE NATIVE CLIENTS, paired exactly the way the shipped RC pairs: each player
+ * is signed in on the website (a control session, as above), mints a code for
+ * their own desktop client for a project they belong to
+ * (`/wonderland/native/pair`, from the allowed origin), and the client redeems
+ * it with no Origin at all (`/wonderland/native/session`). Returns the native
+ * sessions' tokens, which stay in memory. The players must already be members
+ * of `projectId`: membership is the bridge's to decide, never the harness's.
+ */
+export async function pairR16NativeSessions({ bridge, origin, operatorToken, playerIds, projectId, fetch }) {
+  const browser = await pairR16Sessions({ bridge, origin, operatorToken, playerIds, fetch });
+  if (!browser.ok) return browser;
+  const sessions = {};
+  for (const playerId of playerIds) {
+    let code;
+    try {
+      const response = await fetch(`${bridge}/wonderland/native/pair`, {
+        method: 'POST',
+        headers: { authorization: `Relay-Session ${browser.sessions[playerId]}`, origin, 'content-type': 'application/json' },
+        body: JSON.stringify({ projectId }),
+      });
+      code = { status: response.status, body: ok(await response.json().catch(() => null)) };
+    } catch {
+      return { ok: false, reason: 'native_pairing_unreachable' };
+    }
+    if (code.status !== 200 || typeof code.body?.code !== 'string' || code.body?.participantId !== playerId) {
+      return { ok: false, reason: `native_pairing_refused_${String(code.status)}` };
+    }
+    let session;
+    try {
+      const response = await fetch(`${bridge}/wonderland/native/session`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ code: code.body.code }),
+      });
+      session = { status: response.status, body: ok(await response.json().catch(() => null)) };
+    } catch {
+      return { ok: false, reason: 'native_session_unreachable' };
+    }
+    if (session.status !== 200 || typeof session.body?.token !== 'string' || session.body?.participantId !== playerId) {
+      return { ok: false, reason: `native_session_refused_${String(session.status)}` };
+    }
+    sessions[playerId] = session.body.token;
   }
   return { ok: true, sessions };
 }
@@ -749,10 +806,17 @@ async function main(argv, env) {
   const statePath = option(argv, 'state');
   const expectCommit = option(argv, 'expect-commit')?.trim().toLowerCase() ?? null;
   const final = argv.includes('--final');
+  // THE NATIVE CLIENT, as the shipped RC speaks: no Origin on any request, and native sessions only.
+  const native = argv.includes('--native');
+  const as = native ? null : origin;
   const out = (line) => process.stdout.write(`${line}\n`);
-  if (!bridge || !/^https?:\/\/[^\s]+$/u.test(bridge) || !origin || !['scenario', 'verify'].includes(phase) || (phase === 'verify' && !statePath)
+  if (!bridge || !/^https?:\/\/[^\s]+$/u.test(bridge) || (!native && !origin) || !['scenario', 'verify'].includes(phase) || (phase === 'verify' && !statePath)
     || (expectCommit !== null && !/^[0-9a-f]{40}$/u.test(expectCommit))) {
-    process.stderr.write('usage: wonderland-r16-harness.mjs --bridge <url> --origin <allowed origin> [--phase scenario|verify] [--state <file>] [--nonce <n>] [--players <a,b,c>] [--expect-commit <40-hex sha>] [--final]\n');
+    process.stderr.write('usage: wonderland-r16-harness.mjs --bridge <url> (--origin <allowed origin> | --native) [--phase scenario|verify] [--state <file>] [--nonce <n>] [--players <a,b,c>] [--expect-commit <40-hex sha>] [--final]\n');
+    return 2;
+  }
+  if (native && !env.WONDERLAND_R16_SESSIONS) {
+    out('R16 BLOCKED — --native speaks as the RC\'s own clients: give each player\'s NATIVE session token in WONDERLAND_R16_SESSIONS (a native client is paired by its signed-in player, never by the operator).');
     return 2;
   }
   const recorded = phase === 'verify' ? JSON.parse(readFileSync(statePath, 'utf8')) : null;
@@ -777,11 +841,16 @@ async function main(argv, env) {
     return 2;
   }
 
-  const probe = await client({ bridge, origin, fetch })(sessions[players.a], 'GET', '/wonderland/social/me');
+  const probe = await client({ bridge, origin: as, fetch })(sessions[players.a], 'GET', '/wonderland/social/me');
   if (probe.status === 503) { out('R16 BLOCKED — the backend has no social database (social_store_unavailable): migration 033 is not applied there.'); return 1; }
   if (probe.status === 0) { out('R16 BLOCKED — the backend could not be reached.'); return 1; }
+  if (probe.status === 403 && probe.body?.error?.kind === 'native_social_not_enabled') {
+    out('R16 BLOCKED — this bridge does not let a native client reach social (native_social_not_enabled). Widening the native scope is a reviewed decision for SECOND Wonderland and the founder, not a failure of the wall.');
+    return 1;
+  }
   out(`R16 ${R16_VERSION} phase=${phase} backend=${new URL(bridge).host} players=${players.a},${players.b},${players.c}`);
-  out(`R16 VOICE ${await probeR16Voice({ bridge, origin, token: sessions[players.a], fetch })} (reported, not checked: voice is CORE's live EOS step)`);
+  out(`R16 CLIENT ${native ? 'NATIVE (no Origin, native sessions)' : `BROWSER origin=${origin}`}`);
+  out(`R16 VOICE ${await probeR16Voice({ bridge, origin: as, token: sessions[players.a], fetch })} (reported, not checked: voice is CORE's live EOS step)`);
   const backend = await readR16Backend({ bridge, operatorToken: env.RELAY_BRIDGE_TOKEN, fetch });
   out(`R16 BACKEND ${describeBackend(backend)}`);
   const host = await inspectR16Host(bridge, resolveR16Host);
@@ -794,7 +863,7 @@ async function main(argv, env) {
 
   if (phase === 'verify') {
     const restart = r16RestartCheck(recorded?.backend, backend);
-    const verified = await verifyR16Restart({ bridge, origin, sessions, players, nonce, recorded, fetch });
+    const verified = await verifyR16Restart({ bridge, origin: as, sessions, players, nonce, recorded, fetch });
     out(`R16 RECONNECT ${[players.a, players.b, players.c].map((player) => `${player}=${verified.reconnect[player]}`).join(' ')}`);
     const results = [restart, ...verified.results];
     for (const row of results) out(`R16 ${row.result} ${row.name}${row.result === 'FAIL' ? ` — ${row.detail}` : ''}`);
@@ -805,15 +874,15 @@ async function main(argv, env) {
     return failed === 0 && (!final || venue.venue === 'HOSTED_FINAL') ? 0 : 1;
   }
 
-  const outcome = await runR16Scenario({ bridge, origin, sessions, players, nonce, fetch });
+  const outcome = await runR16Scenario({ bridge, origin: as, sessions, players, nonce, fetch });
   for (const row of outcome.results) out(`R16 ${row.result} ${row.name}${row.result === 'FAIL' ? ` — ${row.detail}` : ''}`);
   const summary = summarizeR16(outcome.results);
   for (const name of summary.missing) out(`R16 FAIL ${name} — not run`);
   const venue = judgeVenue(outcome.names);
   reportVenue(venue);
   if (statePath) {
-    const views = await readR16Views({ bridge, origin, sessions, players, nonce, fetch });
-    const record = { version: R16_VERSION, nonce, players, views, bridge: new URL(bridge).origin, backend, venue, identities: { source, names: outcome.names } };
+    const views = await readR16Views({ bridge, origin: as, sessions, players, nonce, fetch });
+    const record = { version: R16_VERSION, nonce, players, views, bridge: new URL(bridge).origin, backend, venue, identities: { source, names: outcome.names }, client: native ? 'NATIVE' : 'BROWSER' };
     writeFileSync(statePath, `${JSON.stringify(record, null, 2)}\n`);
     out(`R16 STATE recorded for the restart check: ${statePath}`);
   }

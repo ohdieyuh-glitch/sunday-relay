@@ -24,9 +24,23 @@ export declare function pairR16Sessions(input: {
   readonly fetch: Fetch;
 }): Promise<{ readonly ok: true; readonly sessions: Record<string, string> } | { readonly ok: false; readonly reason: string }>;
 
+/** Native clients paired as the RC pairs them: signed in on the website, a code for a project the player belongs to, redeemed with no Origin. */
+export declare function pairR16NativeSessions(input: {
+  readonly bridge: string;
+  /** The website's origin, from which each player pairs their client. */
+  readonly origin: string;
+  readonly operatorToken: string;
+  readonly playerIds: readonly string[];
+  readonly projectId: string;
+  readonly fetch: Fetch;
+}): Promise<{ readonly ok: true; readonly sessions: Record<string, string> } | { readonly ok: false; readonly reason: string }>;
+
+/** `null` speaks as the native client: no Origin on any request. */
+export type R16Origin = string | null;
+
 export declare function runR16Scenario(input: {
   readonly bridge: string;
-  readonly origin: string;
+  readonly origin: R16Origin;
   readonly sessions: Readonly<Record<string, string>>;
   readonly players: R16Players;
   readonly nonce: string;
@@ -43,7 +57,7 @@ export declare function runR16Scenario(input: {
 
 export declare function readR16Views(input: {
   readonly bridge: string;
-  readonly origin: string;
+  readonly origin: R16Origin;
   readonly sessions: Readonly<Record<string, string>>;
   readonly players: R16Players;
   readonly nonce: string;
@@ -59,7 +73,7 @@ export type R16Reconnect = string;
 
 export declare function reconnectR16Presence(input: {
   readonly bridge: string;
-  readonly origin: string;
+  readonly origin: R16Origin;
   readonly sessions: Readonly<Record<string, string>>;
   readonly players: R16Players;
   readonly nonce: string;
@@ -69,7 +83,7 @@ export declare function reconnectR16Presence(input: {
 
 export declare function verifyR16Restart(input: {
   readonly bridge: string;
-  readonly origin: string;
+  readonly origin: R16Origin;
   readonly sessions: Readonly<Record<string, string>>;
   readonly players: R16Players;
   readonly nonce: string;
@@ -79,7 +93,7 @@ export declare function verifyR16Restart(input: {
 
 export declare function probeR16Voice(input: {
   readonly bridge: string;
-  readonly origin: string;
+  readonly origin: R16Origin;
   readonly token: string;
   readonly fetch: Fetch;
 }): Promise<string>;
