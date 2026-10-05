@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# THE MIGRATION WINDOW, AS ONE PROCEDURE: 031 then 032 (then 033 when asked), exactly as their runbooks say, recorded.
+# THE MIGRATION WINDOW, AS ONE PROCEDURE: 031 then 032 (then 033, 034 and 035 when asked), exactly as their runbooks say, recorded.
 #
 # Each migration's RUNBOOK.md is the authority; this wrapper only runs its steps in order and refuses to continue past
 # any condition the runbook says to STOP on. For every migration M in the window:
@@ -7,8 +7,9 @@
 #   apply     the landed migration file, ON_ERROR_STOP    -> exit 0 required; its NOTICE lines kept
 #   postcheck docs/julius-migrations/M/postcheck.sql     -> its PASS conditions, plus the comparisons with the precheck
 #   ledger    the ledger's last stamp must be M's, and its count one more than before
-#   rows      R1 row counts (030/rowcounts-store.sql) unchanged by M, table for table (033 may only ADD empty tables)
-#   catalog   R1 fingerprint (030/fingerprint-store.sql) recorded after M, for Second's comparison with a reference
+#   rows      R1 row counts (030/rowcounts-store.sql) unchanged by M, table for table (033 and 035 may only ADD empty tables)
+#   catalog   R1 fingerprint (030/fingerprint-store.sql) recorded after M, for Second's comparison with a reference;
+#             034 (reserved: a ledger row and nothing else) must leave it IDENTICAL
 # Before the first migration: no other client session may be connected (the writers are stopped), and a verified
 # backup is taken (pg_dump -Fc, its TOC checked, restored into a scratch database and its row counts compared).
 #
@@ -18,7 +19,7 @@
 # and DATABASE_URL is never read, set or restored here (founder ruling R-6).
 #
 # Usage:
-#   window.sh --container NAME --through 032 --record DIR [--repo PATH] [--db julius] [--user julius] [--live PHRASE]
+#   window.sh --container NAME --through 032|033|034|035 --record DIR [--repo PATH] [--db julius] [--user julius] [--live PHRASE]
 # Exit: 0 PASS; 2 a STOP condition (the record says which); 1 usage or environment.
 set -euo pipefail
 
@@ -35,8 +36,14 @@ while [ $# -gt 0 ]; do
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
-[ -n "$CONTAINER" ] && [ -n "$THROUGH" ] && [ -n "$RECORD" ] || { echo "usage: window.sh --container NAME --through 032|033 --record DIR" >&2; exit 1; }
-case "$THROUGH" in 032) WINDOW=(031 032) ;; 033) WINDOW=(031 032 033) ;; *) echo "--through must be 032 or 033" >&2; exit 1 ;; esac
+[ -n "$CONTAINER" ] && [ -n "$THROUGH" ] && [ -n "$RECORD" ] || { echo "usage: window.sh --container NAME --through 032|033|034|035 --record DIR" >&2; exit 1; }
+case "$THROUGH" in
+  032) WINDOW=(031 032) ;;
+  033) WINDOW=(031 032 033) ;;
+  034) WINDOW=(031 032 033 034) ;;
+  035) WINDOW=(031 032 033 034 035) ;;
+  *) echo "--through must be 032, 033, 034 or 035" >&2; exit 1 ;;
+esac
 if [ "$CONTAINER" = "julius-postgres" ] && [ "$LIVE" != "APPLY THE WINDOW TO THE LIVE STORE" ]; then
   echo "REFUSED: julius-postgres is the live store; pass --live \"APPLY THE WINDOW TO THE LIVE STORE\" on a recorded decision" >&2; exit 1
 fi
@@ -46,25 +53,35 @@ declare -A STAMP=(
   [031]=031_julius_run_transition_hot
   [032]=032_julius_outbox_event_delete_forgets
   [033]=033_wonderland_social
+  [034]=034_julius_project_brain_reserved
+  [035]=035_wonderland_voice
 )
 declare -A FILE=(
   [031]=src/relay/persistence/wonderland-migrations/031_julius_run_transition_hot.sql
   [032]=src/relay/persistence/wonderland-migrations/032_julius_outbox_event_delete_forgets.sql
   [033]=src/relay/persistence/wonderland-migrations/033_wonderland_social.sql
+  [034]=src/relay/persistence/wonderland-migrations/034_julius_project_brain_reserved.sql
+  [035]=src/relay/persistence/wonderland-migrations/035_wonderland_voice.sql
 )
 # PASS conditions, transcribed from each RUNBOOK.md (step 2: precheck; step 4: postcheck). key=value, value may be empty.
 declare -A PRE=(
   [031]="old_index_matches=t new_name_free=t migration_030_applied=t migration_031_applied=f"
   [032]="delete_trigger_matches=t registry_triggers_match=t function_is_030=t function_has_forget=f remember_is_030=t remember_has_filter=f orphan_outbox_rows=0 migration_030_applied=t migration_031_applied=t migration_032_applied=f ledger_last=031_julius_run_transition_hot"
   [033]="migration_032_applied=t migration_033_applied=f social_tables_present=0 ledger_last=032_julius_outbox_event_delete_forgets"
+  [034]="migration_033_applied=t any_034_applied=f ledger_last=033_wonderland_social"
+  [035]="migration_033_applied=t migration_034_applied=t migration_035_applied=f voice_tables_present=0 ledger_last=034_julius_project_brain_reserved"
 )
 declare -A POST=(
   [031]="old_index_present=f new_index_matches=t update_columns_indexed= migration_031_applied=t"
   [032]="delete_trigger_matches=t registry_triggers_match=t function_is_030=f function_has_forget=t remember_is_030=f remember_has_filter=t orphan_outbox_rows=0 migration_032_applied=t ledger_last=032_julius_outbox_event_delete_forgets"
   [033]="migration_033_applied=t ledger_last=033_wonderland_social social_tables_present=15 social_rows=0 recent_players_columns=0"
+  [034]="migration_034_applied=t stamps_034=1 ledger_last=034_julius_project_brain_reserved"
+  [035]="migration_035_applied=t ledger_last=035_wonderland_voice voice_tables_present=3 voice_rows=0 token_columns=0"
 )
 # Values the postcheck must repeat from the precheck (RUNBOOK step 4: "equals step 2's").
-declare -A SAME=( [031]="runs_rows" [032]="events_rows outbox_rows" [033]="players_rows" )
+declare -A SAME=( [031]="runs_rows" [032]="events_rows outbox_rows" [033]="players_rows" [034]="relay_wonderland_tables players_rows" [035]="players_rows" )
+# The migrations that may ADD tables, all empty and all named with this prefix; every other migration changes no row count.
+declare -A ADDS=( [033]=social [035]=voice )
 
 mkdir -p "$RECORD"
 SUMMARY="$RECORD/SUMMARY.txt"
@@ -126,6 +143,7 @@ else
 fi
 sql_raw "$REPO/docs/julius-migrations/030/fingerprint-store.sql" > "$RECORD/pre-window.fingerprint"
 say "pre-window $(tail -1 "$RECORD/pre-window.fingerprint")"
+PREV_FP="$(tail -1 "$RECORD/pre-window.fingerprint")"
 
 for M in "${WINDOW[@]}"; do
   say "== $M (${STAMP[$M]})"
@@ -139,7 +157,8 @@ for M in "${WINDOW[@]}"; do
   APPLY_EXIT=$?
   set -e
   echo "exit $APPLY_EXIT" >> "$RECORD/apply-$M.txt"
-  say "  apply-$M exit=$APPLY_EXIT $(grep -o "migration_${M}_precheck[^\"]*" "$RECORD/apply-$M.txt" | head -1)"
+  notice="$(grep -o "migration_${M}_precheck[^\"]*" "$RECORD/apply-$M.txt" | head -1 || true)"
+  say "  apply-$M exit=$APPLY_EXIT${notice:+ $notice}"
   [ "$APPLY_EXIT" = "0" ] || stop "$M refused or failed and rolled back (RUNBOOK rollback (a)); see apply-$M.txt"
 
   sql_file "$REPO/docs/julius-migrations/$M/postcheck.sql" > "$RECORD/postcheck-$M.txt"
@@ -154,19 +173,27 @@ for M in "${WINDOW[@]}"; do
   say "  ledger: $LEDGER_BEFORE -> $LEDGER_AFTER, last=$LAST ok"
 
   sql_raw "$REPO/docs/julius-migrations/030/rowcounts-store.sql" > "$RECORD/rowcounts-after-$M.txt"
-  if [ "$M" = "033" ]; then
-    # 033 only ADDS tables, all empty: every earlier line is unchanged, and every new line is a social_* table at 0 rows.
+  if [ -n "${ADDS[$M]:-}" ]; then
+    # 033 and 035 only ADD tables, all empty: every earlier line is unchanged, and every new line is one of M's tables at 0 rows.
+    prefix="${ADDS[$M]}"
     removed="$(diff <(data_rows "$RECORD/rowcounts-before-$M.txt") <(data_rows "$RECORD/rowcounts-after-$M.txt") | grep '^<' || true)"
-    added_bad="$(diff <(data_rows "$RECORD/rowcounts-before-$M.txt") <(data_rows "$RECORD/rowcounts-after-$M.txt") | grep '^>' | grep -vE '^> rows relay_wonderland\.social_[a-z_]+ = 0$' || true)"
-    [ -z "$removed" ] && [ -z "$added_bad" ] || stop "033 changed existing rows, or added a non-empty or non-social table"
-    say "  rows: unchanged; 033 added only empty social_* tables ok"
+    added_bad="$(diff <(data_rows "$RECORD/rowcounts-before-$M.txt") <(data_rows "$RECORD/rowcounts-after-$M.txt") | grep '^>' | grep -vE "^> rows relay_wonderland\.${prefix}_[a-z_]+ = 0$" || true)"
+    [ -z "$removed" ] && [ -z "$added_bad" ] || stop "$M changed existing rows, or added a non-empty table or one not named ${prefix}_*"
+    say "  rows: unchanged; $M added only empty ${prefix}_* tables ok"
   else
     diff -q <(data_rows "$RECORD/rowcounts-before-$M.txt") <(data_rows "$RECORD/rowcounts-after-$M.txt") >/dev/null \
       || stop "$M changed row counts"
     say "  rows: every table's count unchanged (the ledger aside, +1 above) ok"
   fi
   sql_raw "$REPO/docs/julius-migrations/030/fingerprint-store.sql" > "$RECORD/fingerprint-after-$M.txt"
-  say "  catalog after $M: $(tail -1 "$RECORD/fingerprint-after-$M.txt")"
+  FP="$(tail -1 "$RECORD/fingerprint-after-$M.txt")"
+  say "  catalog after $M: $FP"
+  if [ "$M" = "034" ]; then
+    # The reserved 034 writes its ledger row and nothing else: the catalog is exactly what it was.
+    [ "$FP" = "$PREV_FP" ] || stop "034 changed the catalog ($PREV_FP -> $FP); the reserved 034 may write only its ledger row"
+    say "  catalog: identical before and after 034 ok"
+  fi
+  PREV_FP="$FP"
 done
 
 say "RESULT: PASS (window ${WINDOW[*]} applied; compare the fingerprints with a reference built independently from $HEAD)"

@@ -27,6 +27,15 @@ const databaseUrl = juliusTestDatabaseUrl();
 const suite = databaseUrl !== null ? describe : describe.todo;
 const DOCS = join(__dirname, '..', '..', '..', 'docs', 'julius-migrations', '035');
 const committed = (name: string): string => readFileSync(join(DOCS, name), 'utf8').replace(/^\\set ON_ERROR_STOP on\s*$/mu, '');
+/** 034's runbook SQL (pre-check, post-check, DOWN), as the migration window runs it. */
+const committed034 = (name: string): string =>
+  readFileSync(join(DOCS, '..', '034', name), 'utf8').replace(/^\\set ON_ERROR_STOP on\s*$/mu, '');
+/** The row a check script's facts query returns: the script's statements answer in order, and the facts are the last SELECT. */
+const factsOf = async (pool: Pool, sql: string): Promise<Record<string, unknown>> => {
+  const results = await pool.query(sql) as unknown as Array<{ command: string; rows: Array<Record<string, unknown>> }>;
+  const selects = results.filter((result) => result.command === 'SELECT');
+  return selects[selects.length - 1]!.rows[0]!;
+};
 /** The chain as it stood before 034: everything through social. */
 const THROUGH_033 = WONDERLAND_MIGRATIONS.slice(0, WONDERLAND_MIGRATIONS.indexOf(WONDERLAND_MIGRATION_033) + 1);
 const PUID = (c: string): string => c.repeat(32);
@@ -145,6 +154,43 @@ suite('Wonderland voice on real PostgreSQL (migration 035, after the reserved 03
     expect(columns.rows.map((row) => row.column_name)).toEqual(['player_id', 'room_id', 'product_user_id', 'issued_at', 'revoked_at']);
     expect(await refusalOf(pool, `INSERT INTO relay_wonderland.voice_issuances(player_id, room_id, product_user_id, issued_at) VALUES('ann', 'not-a-room', '${PUID('a')}', now())`)).toMatch(/check constraint/u);
     expect(await refusalOf(pool, `INSERT INTO relay_wonderland.voice_issuances(player_id, room_id, product_user_id, issued_at) VALUES('ann', '${`wl_${'c'.repeat(32)}`}', 'NOT-A-PUID', now())`)).toMatch(/check constraint/u);
+  });
+
+  it('034\'s runbook SQL: the pre-check and post-check read what the window checks, and DOWN takes back only the stamp, never under 035', async () => {
+    const pool = await create('o4sql', 'through-033');
+    const tables = await tablesOf(pool);
+    expect(await factsOf(pool, committed034('precheck.sql'))).toMatchObject({
+      migration_033_applied: true, any_034_applied: false, ledger_last: '033_wonderland_social', relay_wonderland_tables: String(tables.length),
+    });
+    await pool.query(WONDERLAND_MIGRATION_034);
+    expect(await factsOf(pool, committed034('postcheck.sql'))).toMatchObject({
+      migration_034_applied: true, stamps_034: '1', ledger_last: '034_julius_project_brain_reserved', relay_wonderland_tables: String(tables.length),
+    });
+    // 035 needs a 034: while 035 is applied, 034's DOWN refuses and changes nothing.
+    await pool.query(WONDERLAND_MIGRATION_035);
+    expect(await refusalOf(pool, committed034('down.sql'))).toBe('migration_034_down_refused');
+    expect((await pool.query("SELECT 1 FROM relay_wonderland.schema_migrations WHERE version='034_julius_project_brain_reserved'")).rowCount).toBe(1);
+    // Newest first: 035's DOWN, then 034's, returns the store to 033 exactly, and 034 applies again.
+    expect(await refusalOf(pool, committed('down.sql'))).toBeNull();
+    expect(await refusalOf(pool, committed034('down.sql'))).toBeNull();
+    expect(await tablesOf(pool)).toEqual(tables);
+    expect((await pool.query<{ v: string }>('SELECT version AS v FROM relay_wonderland.schema_migrations ORDER BY version DESC LIMIT 1')).rows[0]!.v)
+      .toBe('033_wonderland_social');
+    expect(await refusalOf(pool, committed034('down.sql')), 'and DOWN refuses where 034 is not applied').toBe('migration_034_down_refused');
+    expect(await refusalOf(pool, WONDERLAND_MIGRATION_034)).toBeNull();
+  });
+
+  it('035\'s pre-check and post-check read what the window checks', async () => {
+    const pool = await create('vsql', 'through-033');
+    await pool.query(WONDERLAND_MIGRATION_034);
+    expect(await factsOf(pool, committed('precheck.sql'))).toMatchObject({
+      migration_033_applied: true, migration_034_applied: true, migration_035_applied: false, voice_tables_present: '0',
+      ledger_last: '034_julius_project_brain_reserved',
+    });
+    await pool.query(WONDERLAND_MIGRATION_035);
+    expect(await factsOf(pool, committed('postcheck.sql'))).toMatchObject({
+      migration_035_applied: true, ledger_last: '035_wonderland_voice', voice_tables_present: '3', voice_rows: '0', token_columns: '0',
+    });
   });
 
   it('DOWN refuses to destroy voice data unless the loss is stated, then reverses cleanly', async () => {

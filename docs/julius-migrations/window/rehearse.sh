@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # THE WINDOW'S DOCKER REHEARSAL. A throwaway postgres:16 container stands in for julius-postgres; the store is brought
 # to 030 from this checkout's own migration files, seeded with the live store's shapes, and then:
-#   R1  NEGATIVE: 032 at 030 is refused, and the catalog and rows are unchanged.
+#   R1  NEGATIVE: 032 at 030 is refused (and, in a window through 034/035, 034 and 035 at 030 too), and the catalog and rows
+#       are unchanged.
 #   R2  THE WINDOW: window.sh, the very script the live window runs, end to end (backup, checks, applies, comparisons).
-#   R3  NEGATIVE: 031 applied a second time is refused, and nothing changes.
-#   R4  ROLLBACK: 032's DOWN, then 031's DOWN, return the catalog to the pre-window fingerprint and the rows to the
-#       pre-window counts, exactly.
+#   R3  NEGATIVE: 031 applied a second time is refused (and 034 and 035, when in the window), and nothing changes.
+#   R4  ROLLBACK: every DOWN in the window, newest first, returns the catalog to the pre-window fingerprint and the rows to
+#       the pre-window counts, exactly. With 034 reversed, 035 is refused at 033: the ledger never shows a gap.
 #   R5  DETERMINISM: the window applied again over the rolled-back store reaches the same catalog fingerprint as R2.
 # Never touches julius-postgres. Never reads or sets DATABASE_URL.
 #
-# Usage: rehearse.sh --through 032|033 --record DIR [--image postgres:16] [--keep]
+# Usage: rehearse.sh --through 032|033|034|035 --record DIR [--image postgres:16] [--keep]
 # Exit: 0 every rehearsal step passed; 2 a step failed (RESULT line says which); 1 usage or environment.
 set -euo pipefail
 THROUGH=""; RECORD=""; IMAGE="postgres:16"; KEEP=0
@@ -22,7 +23,9 @@ while [ $# -gt 0 ]; do
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
-[ -n "$THROUGH" ] && [ -n "$RECORD" ] || { echo "usage: rehearse.sh --through 032|033 --record DIR" >&2; exit 1; }
+[ -n "$THROUGH" ] && [ -n "$RECORD" ] || { echo "usage: rehearse.sh --through 032|033|034|035 --record DIR" >&2; exit 1; }
+case "$THROUGH" in 032|033|034|035) ;; *) echo "--through must be 032, 033, 034 or 035" >&2; exit 1 ;; esac
+past() { [ "$((10#$THROUGH))" -ge "$((10#$1))" ]; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 MIG="$REPO/src/relay/persistence/wonderland-migrations"
@@ -61,7 +64,16 @@ say "pre-window $PRE_FP"
 set +e; psql_in < "$MIG/032_julius_outbox_event_delete_forgets.sql" > "$RECORD/r1-032-at-030.txt" 2>&1; R1=$?; set -e
 grep -q "migration_032_refused" "$RECORD/r1-032-at-030.txt" || fail "R1: 032 at 030 did not raise migration_032_refused (exit $R1)"
 [ "$(fingerprint)" = "$PRE_FP" ] && diff -q <(rowcounts) "$RECORD/pre-window.rowcounts" >/dev/null || fail "R1: the refused 032 changed something"
-say "R1 PASS: 032 at 030 refused (exit $R1), catalog and rows unchanged"
+if past 034; then
+  set +e; psql_in < "$MIG/034_julius_project_brain_reserved.sql" > "$RECORD/r1-034-at-030.txt" 2>&1; R1b=$?; set -e
+  grep -q "migration_034_requires_033" "$RECORD/r1-034-at-030.txt" || fail "R1: 034 at 030 did not raise migration_034_requires_033 (exit $R1b)"
+fi
+if past 035; then
+  set +e; psql_in < "$MIG/035_wonderland_voice.sql" > "$RECORD/r1-035-at-030.txt" 2>&1; R1c=$?; set -e
+  grep -q "migration_035_requires_033" "$RECORD/r1-035-at-030.txt" || fail "R1: 035 at 030 did not raise migration_035_requires_033 (exit $R1c)"
+fi
+[ "$(fingerprint)" = "$PRE_FP" ] && diff -q <(rowcounts) "$RECORD/pre-window.rowcounts" >/dev/null || fail "R1: a refused migration changed something"
+say "R1 PASS: 032 at 030 refused (exit $R1)$(past 034 && echo ', 034 too')$(past 035 && echo ', 035 too'); catalog and rows unchanged"
 
 # R2: the window, by the script the live window runs.
 "$HERE/window.sh" --container "$NAME" --through "$THROUGH" --record "$RECORD/window" --repo "$REPO" || fail "R2: the window did not pass; see window/SUMMARY.txt"
@@ -72,10 +84,31 @@ say "R2 PASS: the window applied ($(grep -c ' ok$' "$RECORD/window/SUMMARY.txt")
 set +e; psql_in < "$MIG/031_julius_run_transition_hot.sql" > "$RECORD/r3-031-again.txt" 2>&1; R3=$?; set -e
 grep -q "migration_031_refused" "$RECORD/r3-031-again.txt" || fail "R3: 031 again did not raise migration_031_refused (exit $R3)"
 [ "$(fingerprint)" = "$POST_FP" ] || fail "R3: the refused 031 changed the catalog"
-say "R3 PASS: 031 again refused (exit $R3), catalog unchanged"
+if past 034; then
+  set +e; psql_in < "$MIG/034_julius_project_brain_reserved.sql" > "$RECORD/r3-034-again.txt" 2>&1; set -e
+  grep -q "migration_034_already_numbered" "$RECORD/r3-034-again.txt" || fail "R3: 034 again did not raise migration_034_already_numbered"
+fi
+if past 035; then
+  set +e; psql_in < "$MIG/035_wonderland_voice.sql" > "$RECORD/r3-035-again.txt" 2>&1; set -e
+  grep -q "migration_035_tables_exist" "$RECORD/r3-035-again.txt" || fail "R3: 035 again did not raise migration_035_tables_exist"
+fi
+[ "$(fingerprint)" = "$POST_FP" ] || fail "R3: a refused migration changed the catalog"
+say "R3 PASS: 031 again refused (exit $R3)$(past 034 && echo ', 034 again too')$(past 035 && echo ', 035 again too'); catalog unchanged"
 
 # R4: rollback, newest first, to the pre-window store exactly.
-if [ "$THROUGH" = "033" ]; then
+if past 035; then
+  committed "$REPO/docs/julius-migrations/035/down.sql" | psql_in > "$RECORD/r4-down-035.txt" 2>&1 || fail "R4: 035 DOWN failed"
+fi
+if past 034; then
+  committed "$REPO/docs/julius-migrations/034/down.sql" | psql_in > "$RECORD/r4-down-034.txt" 2>&1 || fail "R4: 034 DOWN failed"
+  # No gap: with 034 reversed, 035 is refused at 033, and changes nothing.
+  GAP_FP="$(fingerprint)"
+  set +e; psql_in < "$MIG/035_wonderland_voice.sql" > "$RECORD/r4-035-without-034.txt" 2>&1; set -e
+  grep -q "migration_035_requires_034" "$RECORD/r4-035-without-034.txt" || fail "R4: 035 without 034 did not raise migration_035_requires_034"
+  [ "$(fingerprint)" = "$GAP_FP" ] || fail "R4: the refused 035 changed the catalog"
+  say "R4 gap check: with 034 reversed, 035 is refused (migration_035_requires_034), catalog unchanged"
+fi
+if past 033; then
   committed "$REPO/docs/julius-migrations/033/down.sql" | psql_in > "$RECORD/r4-down-033.txt" 2>&1 || fail "R4: 033 DOWN failed"
 fi
 committed "$REPO/docs/julius-migrations/032/down.sql" | psql_in > "$RECORD/r4-down-032.txt" 2>&1 || fail "R4: 032 DOWN failed"

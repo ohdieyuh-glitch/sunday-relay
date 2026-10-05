@@ -1,4 +1,4 @@
-# The migration window: 031 then 032, as one recorded procedure
+# The migration window: 031 then 032 (then 033, 034 and 035), as one recorded procedure
 
 #321 owes two things before it lands: the combined 031+032 apply procedure, and its Docker rehearsal. This directory holds both.
 - **The procedure is `window.sh`.** It runs exactly the steps of `docs/julius-migrations/031/RUNBOOK.md` and then `032/RUNBOOK.md`, in one window, and stops on any condition those runbooks say to STOP on.
@@ -8,7 +8,7 @@ Status: **AWAITING INDEPENDENT REVIEW (SECOND JUJU).** The cloud rehearsal below
 
 ## What `window.sh` does, per migration
 
-For each migration M in the window (031, 032, and 033 with `--through 033`):
+For each migration M in the window (031 and 032; then 033, 034 and 035 with `--through 033`, `034` or `035`):
 
 | Runbook step | What the script does | STOP when |
 |---|---|---|
@@ -18,8 +18,8 @@ For each migration M in the window (031, 032, and 033 with `--through 033`):
 | 3 | The landed migration file, `ON_ERROR_STOP`, keeping its `NOTICE migration_M_precheck` line | the exit is not 0 (rollback (a)) |
 | 4 | `M/postcheck.sql`: every PASS condition, plus the values the runbook says equal step 2's | any condition fails, or a "same as step 2" value changed |
 | ledger | The count of `schema_migrations` | the count is not +1, or the last stamp is not M's |
-| rows | R1 row counts (`030/rowcounts-store.sql`), before and after, the ledger's own table aside | any table's count changed (033: anything but new empty `social_*` tables) |
-| catalog | The R1 fingerprint (`030/fingerprint-store.sql`) after M, recorded | (recorded for Second to compare with an independently built reference) |
+| rows | R1 row counts (`030/rowcounts-store.sql`), before and after, the ledger's own table aside | any table's count changed (033 and 035: anything but new empty `social_*` or `voice_*` tables) |
+| catalog | The R1 fingerprint (`030/fingerprint-store.sql`) after M, recorded | 034 only: the fingerprint is not IDENTICAL to the one before it (the reserved 034 writes its ledger row and nothing else). Otherwise recorded for Second to compare with an independently built reference |
 
 **Refusals:**
 - a checkout with tracked changes, or a migration file with CRLF line endings;
@@ -38,10 +38,17 @@ Then:
 - **Step 5 of each runbook:** rerun the evidence NOT on this database.
 - **Step 6, the writers:** restart them only after Second has verified the record, and only when `DATABASE_URL` is restored by the founder, as the explicit approved procedure says.
 
+**Through 035** (033 social, 034 reserved, 035 voice): only after 033 has landed, **and only if option 4 of `docs/JULIUS_MIGRATION_034_OPTIONS.md` is chosen** (#338, prepared, not chosen):
+```
+docs/julius-migrations/window/window.sh --container julius-postgres --through 035 \
+  --record <backup-dir>/window-031-035-<UTC> --live "APPLY THE WINDOW TO THE LIVE STORE"
+```
+A store already through 032 is not re-windowed: each migration's runbook applies the rest one at a time, in the same discipline.
+
 ## The rehearsal
 
 ```
-docs/julius-migrations/window/rehearse.sh --through 032 --record <dir>
+docs/julius-migrations/window/rehearse.sh --through 032|033|034|035 --record <dir>
 ```
 1. It builds the 030 store from this checkout's own migration files.
 2. It seeds the live store's shapes (`seed-at-030.sql`): 3 projects, 12 runs in six states, 36 tasks, 48 brain entries, and 300 events with their 300 outbox rows, each run's written in one transaction as 030 requires.
@@ -49,10 +56,10 @@ docs/julius-migrations/window/rehearse.sh --through 032 --record <dir>
 
 | Step | What it proves |
 |---|---|
-| R1 | 032 at 030 is refused (`migration_032_refused`); catalog and rows unchanged |
+| R1 | 032 at 030 is refused (`migration_032_refused`), and in a window through 034/035 so are 034 and 035 (`..._requires_033`); catalog and rows unchanged |
 | R2 | the window, by `window.sh` |
-| R3 | 031 a second time is refused (`migration_031_refused`); catalog unchanged |
-| R4 | 032's DOWN, then 031's DOWN, return the catalog fingerprint AND every row count to the pre-window store exactly |
+| R3 | 031 a second time is refused (`migration_031_refused`), and so are 034 (`already_numbered`) and 035 (`tables_exist`); catalog unchanged |
+| R4 | every DOWN in the window, newest first, returns the catalog fingerprint AND every row count to the pre-window store exactly. With 034 reversed, 035 is refused (`migration_035_requires_034`): the ledger never shows a gap |
 | R5 | the window applied again reaches the same catalog fingerprint as R2 (deterministic) |
 
 ### Cloud rehearsal of record: `rehearsals/2026-10-04-cloud-031-032/`

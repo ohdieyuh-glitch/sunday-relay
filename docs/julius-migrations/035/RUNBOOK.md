@@ -14,7 +14,7 @@ The founder's order is 031 → 032 → 033 social → **034 Project Brain** → 
 What the prepared change does, the "when 034 lands" list this runbook kept:
 1. **Done:** the file moved to `src/relay/persistence/wonderland-migrations/035_wonderland_voice.sql`.
 2. **Done:** it is registered in `WONDERLAND_MIGRATIONS` after 034.
-3. **Not done here:** add 034 and 035 to `docs/julius-migrations/window/window.sh`, with their PASS conditions. The window tooling is #324, on #321's branch, not in this stack. It is the one remaining step.
+3. **Done (the window branch, on #338 and #324):** 034 and 035 are in `docs/julius-migrations/window/window.sh`, with their PASS conditions read from `precheck.sql` and `postcheck.sql`, and rehearsed on Docker through 035 (R1–R5 PASS).
 4. **Done:** the test-only placeholder stamp is gone. The suite holds both guards against the real 034:
    - 035 refuses without 033 and without a 034;
    - 034 refuses without 033, and when any 034 is already in the ledger;
@@ -29,10 +29,12 @@ What the prepared change does, the "when 034 lands" list this runbook kept:
 
 0. Stop the writers.
 1. Take a verified backup.
-2. **Pre-check:**
-   - `033_wonderland_social` is applied;
-   - a `034_*` stamp is last in the ledger;
-   - no `voice_*` tables exist.
+2. **Pre-check** (`docs/julius-migrations/035/precheck.sql`; STOP unless):
+   - `migration_033_applied = t`;
+   - `migration_034_applied = t` (a 034 of any kind);
+   - `migration_035_applied = f`;
+   - `voice_tables_present = 0`;
+   - `ledger_last` is the 034 stamp that was applied.
 3. Apply explicitly:
    ```
    docker exec -i julius-postgres psql -U julius -d julius -v ON_ERROR_STOP=1 < src/relay/persistence/wonderland-migrations/035_wonderland_voice.sql
@@ -41,11 +43,11 @@ What the prepared change does, the "when 034 lands" list this runbook kept:
    - `migration_035_requires_033`;
    - `migration_035_requires_034`;
    - `migration_035_tables_exist`.
-4. **Post-check:**
-   - exactly 3 `voice_*` tables;
-   - no column named like a token or a secret;
-   - `035_wonderland_voice` is last in the ledger;
-   - every pre-existing table's row count is unchanged.
+4. **Post-check** (`docs/julius-migrations/035/postcheck.sql`; PASS only if):
+   - `migration_035_applied = t` and `ledger_last = 035_wonderland_voice`;
+   - `voice_tables_present = 3` and `voice_rows = 0`;
+   - `token_columns = 0`: no column named like a token or a secret;
+   - `players_rows` equals the pre-check's, and every pre-existing table's row count is unchanged (the window checks this for every table).
 5. Rerun the evidence, NOT on this database: `wonderland-voice.real-postgres`, `wonderland-social.real-postgres`, and the migration chain suites.
 6. Restart the writers. Only then configure `WONDERLAND_EOS_*` on the backend that should serve voice.
 
