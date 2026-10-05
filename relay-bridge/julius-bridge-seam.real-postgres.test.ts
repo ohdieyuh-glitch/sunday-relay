@@ -4,6 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { JuliusClaimPostgresRepository } from '../src/relay/persistence/julius-claim-postgres';
+import { JuliusEventPostgresRepository } from '../src/relay/persistence/julius-event-postgres';
+import { juliusFindingTransitionFacts } from '../src/relay/mission/julius/julius-finding-lifecycle';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { composeJuliusMissionBootstrap, handleJuliusMissionRoute } from './julius-mission-routes';
 import { composeJuliusStateApi, handleJuliusStateRoute, type JuliusStateRoutePorts } from './julius-state-routes';
@@ -290,63 +292,89 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
     expect(dataOf<{ runId: string }>(await create(body)).runId).toBe(runId);
   });
 
-  it('what mission A VERIFIED is inherited by mission B — and what A only asserted is not', async () => {
+  it('what an independent reviewer RESOLVED in mission A is inherited by mission B — and nothing else A held', async () => {
     // The founder's item: verified useful information from mission A must improve
-    // a later relevant mission. This is the durable half — that B's Project Brain
-    // really holds A's verified fact, with A's author and A's standing, and holds
-    // nothing A merely asserted. The packet half (that B's worker is HANDED it,
-    // and that unrelated residue is excluded) is `julius-learning-loop.e2e`.
+    // a later relevant mission. This is the durable half, under the corrected
+    // carry (julius-carry.v2, Decision C): B's Project Brain holds the finding A's
+    // reviewer raised, A's repair answered and A's re-review resolved — with the
+    // reviewer as its author and its whole provenance — and holds NOTHING A merely
+    // asserted, left open, or promoted only because a reviewed task wrote it. The
+    // packet half (that B's worker is HANDED it) is `julius-learning-loop.e2e`.
     const id = nonce();
     const missionA = contractFor(id);
     const runA = dataOf<{ runId: string }>(await create(JSON.stringify(missionA))).runId;
-
-    // MISSION A LEARNS TWO THINGS. One a reviewer verifies; one stays an
-    // assertion. Written the way the runtime writes them: a brain row authored
-    // by a worker, and a claim standing recorded for it.
-    const claims = new JuliusClaimPostgresRepository(pool);
-    const facts = [
-      { entryId: `${runA}:verified`, text: 'The save format must be written little-endian; the loader rejects big-endian.', trust: 'VERIFIED' as const },
-      { entryId: `${runA}:asserted`, text: 'The loader is probably fine with either byte order.', trust: 'UNVERIFIED' as const },
-    ];
-    for (const [index, fact] of facts.entries()) {
-      await pool.query(
-        `INSERT INTO relay_wonderland.julius_brain_entries
-           (entry_id,run_id,project_id,task_id,worker_id,entry_kind,safe_content,evidence_ids,revision,created_at)
-         VALUES($1,$2,$3,NULL,'coder','FINDING',$4,'["evidence:a-1"]',$5,now())`,
-        [fact.entryId, runA, missionA.projectId, fact.text, 50 + index],
-      );
-      await claims.recordClaimStanding({
-        runId: runA, projectId: missionA.projectId,
-        claim: {
-          claimId: `claim:${fact.entryId}`, entryId: fact.entryId, provenance: 'tool_observed',
-          trust: fact.trust, assertedBy: 'coder', assertedAt: '2026-09-27T09:00:00.000Z',
-          evidence: [{ kind: 'REVIEW', id: 'evidence:review-a' }], supersedes: null, contradicts: [],
-        },
-        reason: fact.trust === 'VERIFIED' ? 'REVIEW_ACCEPTED' : 'ADMITTED',
-        occurredAt: '2026-09-27T09:00:00.000Z',
+    const build = `${runA}:build`;
+    const events = new JuliusEventPostgresRepository(pool);
+    let sequence = 0;
+    const event = async (type: 'finding.recorded' | 'finding.transitioned', facts: Record<string, string | number | boolean | null>) => {
+      sequence += 1;
+      await events.append({
+        eventId: `seam:${id}:${String(sequence)}`, runId: runA, projectId: missionA.projectId, type, taskId: null, workerId: null,
+        correlationId: runA, causationId: null, occurredAt: `2026-09-27T09:0${String(sequence)}:00.000Z`, facts,
       });
-    }
+    };
+    const finding = async (findingId: string, claim: string) => pool.query(
+      `INSERT INTO relay_wonderland.julius_reviewer_findings(finding_id,run_id,task_id,reviewer_worker_id,severity,category,claim,criterion_id,evidence_ids,blocking,status,created_at,updated_at)
+       VALUES($1,$2,$3,'reviewer','HIGH','correctness',$4,NULL,'["evidence:review-a"]'::jsonb,true,'OPEN',now(),now())`,
+      [findingId, runA, build, claim]);
+
+    // MISSION A's REVIEWER RAISES TWO FINDINGS. One is repaired and resolved; one stays open.
+    await finding(`f-resolved-${id}`, 'The save format must be written little-endian; the loader rejects big-endian.');
+    await finding(`f-open-${id}`, 'The loader is probably fine with either byte order.');
+    for (const findingId of [`f-resolved-${id}`, `f-open-${id}`]) await event('finding.recorded', { findingId, reviewTaskId: `${runA}:review` });
+    await event('finding.transitioned', juliusFindingTransitionFacts({ findingId: `f-resolved-${id}`, move: 'REPAIR_SUCCEEDED', at: '2026-09-27T09:10:00.000Z', repairTaskId: `${runA}:repair-1` }));
+    await event('finding.transitioned', juliusFindingTransitionFacts({ findingId: `f-resolved-${id}`, move: 'REVIEWER_RESOLVED', at: '2026-09-27T09:11:00.000Z', reviewTaskId: `${runA}:review:repair-1` }));
+
+    // AND THE FIRST CARRY'S DEFECT CLASS: a coder-authored brain row promoted
+    // VERIFIED because a reviewed task wrote it. It must not travel.
+    const claims = new JuliusClaimPostgresRepository(pool);
+    await pool.query(
+      `INSERT INTO relay_wonderland.julius_brain_entries
+         (entry_id,run_id,project_id,task_id,worker_id,entry_kind,safe_content,evidence_ids,revision,created_at)
+       VALUES($1,$2,$3,$4,'coder','HANDOFF','I changed the writer in this task.','["evidence:a-1"]',50,now())`,
+      [`${runA}:handoff`, runA, missionA.projectId, build]);
+    await claims.recordClaimStanding({
+      runId: runA, projectId: missionA.projectId,
+      claim: {
+        claimId: `claim:${runA}:handoff`, entryId: `${runA}:handoff`, provenance: 'tool_observed',
+        trust: 'VERIFIED', assertedBy: 'coder', assertedAt: '2026-09-27T09:00:00.000Z',
+        evidence: [{ kind: 'REVIEW', id: 'evidence:review-a' }], supersedes: null, contradicts: [],
+      },
+      reason: 'REVIEW_ACCEPTED', occurredAt: '2026-09-27T09:00:00.000Z',
+    });
 
     // MISSION B, a different mission in the same project, created the ordinary way.
     const missionB = { ...contractFor(nonce()), projectId: missionA.projectId, tenantId: missionA.tenantId };
     const runB = dataOf<{ runId: string }>(await create(JSON.stringify(missionB))).runId;
 
-    const inherited = await pool.query<{ entry_id: string; safe_content: string; worker_id: string }>(
-      'SELECT entry_id, safe_content, worker_id FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE $2',
+    const inherited = await pool.query<{ entry_id: string; safe_content: string; worker_id: string; task_id: string | null }>(
+      'SELECT entry_id, safe_content, worker_id, task_id FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE $2',
       [runB, 'carried:%']);
-    expect(inherited.rows.map((row) => row.safe_content), 'the verified fact, and only it').toEqual([facts[0]!.text]);
-    // THE COPY KEEPS ITS AUTHOR: attributing it to the bootstrap would both
-    // slander the worker and let B's reviewer "verify" Julius's own words.
-    expect(inherited.rows[0]!.worker_id).toBe('coder');
-    expect(inherited.rows[0]!.entry_id).toBe(`carried:${runA}:${facts[0]!.entryId}`);
+    expect(inherited.rows.map((row) => row.entry_id), 'the resolved finding, and only it').toEqual([`carried:${runA}:finding:f-resolved-${id}`]);
+    const [row] = inherited.rows;
+    // A PRIOR lesson, labelled as another mission's, with its whole provenance.
+    expect(row!.safe_content).toMatch(/^PRIOR VERIFIED REPAIR FINDING \(an earlier mission of this project, not this one\)\./u);
+    expect(row!.safe_content).toContain(`run ${runA}, about task ${build}; raised by review ${runA}:review, repaired by ${runA}:repair-1; resolved by review ${runA}:review:repair-1.`);
+    expect(row!.safe_content).toContain('little-endian');
+    // THE COPY'S AUTHOR IS THE REVIEWER who raised it, so B's reviewer cannot "verify" it as its own.
+    expect(row!.worker_id).toBe('reviewer');
 
-    // AND THE STANDING TRAVELLED, so B ranks a verified fact as verified.
+    // AND THE STANDING TRAVELLED, on the resolving review.
     const carriedClaims = await claims.claimsForRun(runB, missionB.projectId);
     const carried = carriedClaims.find((claim) => claim.entryId.startsWith('carried:'));
     expect(carried?.trust).toBe('VERIFIED');
-    expect(carried?.assertedBy, 'A’s asserter, so B’s reviewer cannot self-verify it').toBe('coder');
+    expect(carried?.assertedBy).toBe('reviewer');
+    expect(carried?.evidence).toEqual([{ kind: 'REVIEW', id: `${runA}:review:repair-1` }, { kind: 'FINDING', id: `f-resolved-${id}` }]);
     const history = await claims.claimStandingHistory(carried!.claimId, missionB.projectId);
     expect(history, 'one standing, recorded once').toHaveLength(1);
+
+    // THE MANIFEST names the refusals, so "it was not carried" is a record, not an absence.
+    const manifest = await pool.query<{ payload: { facts: Record<string, unknown> } }>(
+      "SELECT payload FROM relay_wonderland.events WHERE stream_id = $1 AND event_type = 'julius.knowledge.carried'", [runB]);
+    expect(manifest.rows).toHaveLength(1);
+    expect(manifest.rows[0]!.payload.facts).toMatchObject({ selected: 1, verifiedRepairFindings: 1, arm: null });
+    expect(String(manifest.rows[0]!.payload.facts.excludedByCode)).toContain('FINDING_UNRESOLVED=1');
+    expect(String(manifest.rows[0]!.payload.facts.excludedByCode)).toContain('KIND_NOT_CARRYABLE=1');
 
     // A REPLAY INHERITS NOTHING TWICE.
     await create(JSON.stringify(missionB));

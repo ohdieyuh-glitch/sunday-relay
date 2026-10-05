@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 
 import { JULIUS_BOOTSTRAP_REQUEST_VERSION, type JuliusBootstrapRequest } from '../../src/relay/integration/julius/julius-port';
 import { sealJuliusResearchPolicy, type JuliusResearchPolicy } from '../../src/relay/mission/julius';
+import { JULIUS_MISSION_NAME } from '../../src/relay/mission/julius/julius-carry-archive';
+import { JULIUS_CHALLENGE_CATEGORIES, type JuliusChallengeCategory } from '../../src/relay/mission/julius/julius-continuous-lifecycle';
 
 /**
  * THE MISSION CONTRACT — its shape, its parser, its sealing, its compilation.
@@ -84,6 +86,39 @@ export interface LiveMissionContractFile {
    * asserting the one thing it is not in a position to know.
    */
   readonly research?: LiveMissionResearchClause;
+  /**
+   * THE LEARNING ARM, when this contract is one half of a Decision C matched
+   * pair. ABSENT MEANS AN ORDINARY MISSION. `WITHOUT` inherits nothing; `WITH`
+   * must inherit at least one finding an independent reviewer resolved after a
+   * repair, or the bootstrap refuses it (`carry_pair_invalid`) before a run
+   * exists. Part of the contract, so part of its digest: the two arms of a pair
+   * are two runs, never one resumed as the other.
+   */
+  readonly carryArm?: 'WITHOUT' | 'WITH';
+  /**
+   * THE PAIRED WITHOUT MISSION, named by a WITH arm only: its directory under
+   * `.github/julius-missions/`. On the paid venue every job's database is fresh,
+   * so a WITH arm learns from its pair's verified evidence bundle, and this is
+   * how the arm knows WHICH pair: the bundle must say it ran exactly this
+   * mission, at this checkout's commit, under this mission's contract digest
+   * (`julius-carry-archive.ts`). Part of the contract, so part of its digest:
+   * the pairing is frozen with the arm, never chosen at dispatch.
+   */
+  readonly carryFrom?: string;
+  /**
+   * THE WARNINGS THIS MISSION TREATS AS BLOCKING, BY KIND. ABSENT MEANS NONE,
+   * which is every mission written before this field: a reviewer's warning is
+   * retained and never interrupts. A kind named here is promoted by Julius,
+   * never by the reviewer, to a blocking finding, and the work is repaired
+   * (`JuliusVerificationPolicy.promotedWarningCategories`).
+   *
+   * Decision C's option B is the use this field was added for: a WITHOUT arm
+   * whose reviewer only warns leaves no verified repair finding, so its WITH arm
+   * can learn nothing (`docs/JULIUS_DECISION_C_PAIR_VALIDITY.md`). It is opt-in
+   * per mission, and choosing it is the founder's and SECOND's. Part of the
+   * contract, so part of its digest.
+   */
+  readonly promotedWarningCategories?: readonly JuliusChallengeCategory[];
 }
 
 /**
@@ -195,6 +230,37 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
     research = clause;
   }
 
+  if (value.carryArm !== undefined && value.carryArm !== 'WITHOUT' && value.carryArm !== 'WITH') {
+    return { ok: false, problem: 'The contract field "carryArm" must be "WITHOUT" or "WITH" when present.' };
+  }
+  /**
+   * A KIND JULIUS DOES NOT HAVE IS REFUSED, never dropped: a mission that asked
+   * for `contract-drift` and silently got no promotion would be a mission whose
+   * contract said one thing while its runs did another.
+   */
+  let promoted: readonly JuliusChallengeCategory[] | undefined;
+  if (value.promotedWarningCategories !== undefined) {
+    const raw = value.promotedWarningCategories;
+    const kinds = JULIUS_CHALLENGE_CATEGORIES as readonly string[];
+    if (!Array.isArray(raw) || raw.length === 0 || raw.length > kinds.length
+      || raw.some((kind) => typeof kind !== 'string' || !kinds.includes(kind)) || new Set(raw).size !== raw.length) {
+      return {
+        ok: false,
+        problem: `The contract field "promotedWarningCategories" must be a non-empty list of distinct review categories, each one of: ${kinds.join(', ')}.`,
+      };
+    }
+    promoted = Object.freeze([...raw] as JuliusChallengeCategory[]);
+  }
+
+  if (value.carryFrom !== undefined) {
+    if (value.carryArm !== 'WITH') {
+      return { ok: false, problem: 'The contract field "carryFrom" names a WITH arm\'s paired WITHOUT mission, and this contract is not a WITH arm.' };
+    }
+    if (typeof value.carryFrom !== 'string' || !JULIUS_MISSION_NAME.test(value.carryFrom)) {
+      return { ok: false, problem: 'The contract field "carryFrom" must be a mission directory name: 2-64 lower-case letters, digits or hyphens, starting with a letter.' };
+    }
+  }
+
   return {
     ok: true,
     contract: {
@@ -206,6 +272,9 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
       testCommand: value.testCommand as string, workspacePath: value.workspacePath as string,
       limits: typeof value.limits === 'object' && value.limits !== null ? value.limits as LiveMissionContractFile['limits'] : undefined,
       ...(research === undefined ? {} : { research }),
+      ...(value.carryArm === undefined ? {} : { carryArm: value.carryArm as 'WITHOUT' | 'WITH' }),
+      ...(value.carryFrom === undefined ? {} : { carryFrom: value.carryFrom as string }),
+      ...(promoted === undefined ? {} : { promotedWarningCategories: promoted }),
     },
   };
 }
@@ -256,5 +325,6 @@ export function compileBootstrapRequest(contract: LiveMissionContractFile, worke
     missionRevision: 1,
     missionBindingDigest: `sha256:${bindingDigest}`,
     compiledAt: new Date().toISOString(),
+    ...(contract.carryArm === undefined ? {} : { carryArm: contract.carryArm }),
   };
 }

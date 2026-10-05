@@ -63,7 +63,7 @@ afterwards. Volume is not claimed and would not help.
 | C3 | the same, on the LIVE path with no test command | DETERMINISTIC | `relay-bridge/julius/julius-live-composition.test.ts` | `runs nothing, records no TEST row, and still completes on the diff it produced` |
 | C4 | prior learning improves the next mission, leaking nothing | DETERMINISTIC | `src/relay/mission/julius/julius-learning-loop.e2e.test.ts` | `hands the coder the relevant finding and none of the residue` |
 | C5 | a memory's standing is durable, and a reviewer raises it | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `raises the architect` |
-| C6 | what mission A VERIFIED is inherited by mission B, and what A only asserted is not (gated on `JULIUS_TEST_DATABASE_URL`) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what mission A VERIFIED is inherited by mission B` |
+| C6 | what an independent reviewer RESOLVED in mission A is inherited by mission B, and nothing else A held (the corrected carry, `julius-carry.v2`; gated on `JULIUS_TEST_DATABASE_URL`) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what an independent reviewer RESOLVED in mission A is inherited by mission B` |
 | C7 | the inherited fact reaches the next mission's packet AS VERIFIED, with none of the residue | DETERMINISTIC | `src/relay/mission/julius/julius-learning-loop.e2e.test.ts` | `hands the coder the relevant finding and none of the residue` |
 
 ## Category E — useful everyday / basic-necessity work

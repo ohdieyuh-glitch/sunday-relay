@@ -1,102 +1,92 @@
 import type { Pool } from 'pg';
 
-import { juliusCarriedClaim, juliusCarriedEntryId, type JuliusCarriedKnowledge } from '../../src/relay/mission/julius/julius-claim-ledger';
-import { brainKindToStored } from '../../src/relay/persistence/julius-brain-kinds';
-import { JuliusClaimPostgresRepository } from '../../src/relay/persistence/julius-claim-postgres';
+import {
+  selectJuliusCarry,
+  type JuliusCarryArchiveOrigin, type JuliusCarryArm, type JuliusCarrySelection, type JuliusCarrySourceRun,
+} from '../../src/relay/mission/julius/julius-carry';
+import { JuliusCarryPostgresRepository } from '../../src/relay/persistence/julius-carry-postgres';
 
 /**
- * WHAT ONE MISSION VERIFIED, HANDED TO THE NEXT — the minimum that makes reuse
- * truthful, and nothing beyond it.
+ * WHAT ONE MISSION VERIFIED, HANDED TO THE NEXT — THE CORRECTED CARRY
+ * (`julius-carry.v2`, Decision C).
  *
- * THE GAP THIS CLOSES. A context packet is compiled from the brain entries of
- * ONE RUN, so everything a mission learned died with it: the matched-pair
- * learning proof had to SEED the prior fact itself, and the readiness page said
- * plainly that the improvement rested on the fixture's premise. Nothing in
- * production carried a verified fact from mission A into mission B.
+ * The rules live in `src/relay/mission/julius/julius-carry.ts`; read its header
+ * for the defect this replaces. In one paragraph: the first carry took every
+ * VERIFIED or APPROVED claim of any kind and made it run-wide in the next
+ * mission, which carried a reviewed task's own HANDOFF notes and a "NOT IN
+ * FORCE" architecture proposal, and could never carry the thing a learning pair
+ * exists to move, because reviewer findings are not brain entries. The carry
+ * now moves only an Independent Reviewer's findings that a reviewer resolved
+ * (after a repair, for the repair class) and adopted, run-wide decisions, keeps
+ * each one's source run, work, reviews and repairs, and writes one manifest of
+ * what it selected and what it refused, by code.
  *
- * WHAT IS CARRIED, AND WHAT IS NOT. Only claims a REVIEWER's evidence (or a
- * decision) put at VERIFIED or APPROVED — never an assertion, never a worker's
- * own note about itself, never a contradicted or superseded standing. Only from
- * the same project. Never from the run doing the carrying. Newest first, capped,
- * because a project's knowledge grows without bound and a packet does not.
+ * TWO STEPS, AND THE ORDER IS THE POINT. `select` only READS and runs before the
+ * bootstrap creates anything, so a WITH arm whose carry is empty, design-only or
+ * unreadable is refused before a run exists, and so before any paid dispatch.
+ * `restore` WRITES, once per run, after the seed.
  *
- * WHAT THE CARRY DOES NOT DECIDE. Relevance. It hands mission B a small set of
- * verified facts with their provenance intact; the context integrity layer
- * ranks them against B's own material, applies B's role and task scope, and
- * evicts what does not fit B's budget. That is deliberate: a carry that tried
- * to judge relevance would be a second, dumber ranker in front of the real one.
- *
- * WHY THE STANDING TRAVELS WITH IT. The copy's claim keeps A's trust, A's
- * asserter and the evidence it was verified on (see `juliusCarriedClaim`).
- * Re-deriving it would demote a reviewer-verified fact to an assertion, and B
- * would rank a fact as a guess. It is not a promotion: nobody verifies anything
- * here, and because `assertedBy` still names A's asserter, B's reviewer cannot
- * self-verify it either.
+ * WHAT THE CARRY DOES NOT DECIDE. Relevance. The context integrity layer ranks
+ * what arrives against the receiving mission's own material and budget.
  */
-
 export interface MissionKnowledgeStore {
-  /** What this project has verified, excluding the run that is about to carry it. */
-  verifiedProjectKnowledge(input: {
-    readonly projectId: string;
-    readonly excludeRunId: string;
-    readonly limit: number;
-  }): Promise<readonly JuliusCarriedKnowledge[]>;
+  /** What earlier missions of this project hold that may travel, and everything that may not, by code. */
+  select(input: { readonly projectId: string; readonly targetRunId: string }): Promise<JuliusCarrySelection>;
   /**
-   * Write the carried copies and their standings. Returns how many rows are new,
-   * so a replayed bootstrap reports 0 rather than pretending to have learned
-   * something twice.
+   * Write the selected copies and the manifest. Returns how many copies this
+   * call wrote, so a replayed bootstrap reports 0 rather than pretending to have
+   * learned something twice.
    */
-  carryKnowledge(input: {
+  restore(input: {
     readonly runId: string;
     readonly projectId: string;
-    readonly carried: readonly JuliusCarriedKnowledge[];
+    readonly arm: JuliusCarryArm | null;
+    readonly selection: JuliusCarrySelection;
     readonly firstRevision: number;
     readonly occurredAt: string;
   }): Promise<number>;
 }
 
-/** How many verified facts one mission may inherit. A packet, not an archive. */
-export const JULIUS_CARRIED_KNOWLEDGE_LIMIT = 12;
-
 export function createPostgresMissionKnowledgeStore(pool: Pool): MissionKnowledgeStore {
-  const claims = new JuliusClaimPostgresRepository(pool);
+  const carry = new JuliusCarryPostgresRepository(pool);
   return {
-    verifiedProjectKnowledge: (input) => claims.verifiedProjectKnowledge(input),
-    async carryKnowledge(input) {
-      let written = 0;
-      let revision = input.firstRevision;
-      for (const carried of input.carried) {
-        const entryId = juliusCarriedEntryId(carried.sourceRunId, carried.entry.entryId);
-        /**
-         * THE COPY KEEPS ITS AUTHOR. `worker_id` is A's asserter, not
-         * `relay-bootstrap`: the claim ledger reads authorship to refuse
-         * self-verification, and a carried fact attributed to the bootstrap
-         * would let any reviewer "verify" it in B while telling a reader that
-         * Julius asserted something a model did.
-         */
-        const inserted = await pool.query(
-          `INSERT INTO relay_wonderland.julius_brain_entries
-             (entry_id,run_id,project_id,task_id,worker_id,entry_kind,safe_content,evidence_ids,revision,created_at)
-           VALUES($1,$2,$3,NULL,$4,$5,$6,$7::jsonb,$8,$9) ON CONFLICT DO NOTHING`,
-          [
-            entryId, input.runId, input.projectId, carried.claim.assertedBy,
-            brainKindToStored(carried.entry.kind), carried.entry.text,
-            JSON.stringify(carried.entry.evidenceIds), revision, input.occurredAt,
-          ],
-        );
-        if ((inserted.rowCount ?? 0) === 0) continue;
-        revision += 1;
-        written += 1;
-        // The standing, about the copy, unchanged — and the reason names where
-        // it came from, so the history answers "why is this VERIFIED here".
-        await claims.recordClaimStanding({
-          runId: input.runId, projectId: input.projectId,
-          claim: juliusCarriedClaim(carried),
-          reason: `CARRIED_FROM:${carried.sourceRunId}`,
-          occurredAt: input.occurredAt,
-        });
-      }
-      return written;
+    async select(input) {
+      const [sources, claims] = await Promise.all([
+        carry.carrySources({ projectId: input.projectId, excludeRunId: input.targetRunId }),
+        carry.carryClaimCandidates({ projectId: input.projectId, excludeRunId: input.targetRunId }),
+      ]);
+      return selectJuliusCarry({ targetRunId: input.targetRunId, sources, claims });
     },
+    restore: (input) => carry.restore(input),
+  };
+}
+
+/**
+ * THE PAID VENUE'S CARRY: SOURCES FROM A PAIRED ARM'S VERIFIED BUNDLE.
+ *
+ * A paid job's database is fresh, so the paired WITHOUT arm's findings are not
+ * in it. They arrive as ONE source run read from that arm's evidence bundle and
+ * verified before this store exists (`readJuliusCarryArchive`). Selection reads
+ * that source and ONLY that source: a WITH arm learns from its pair, never from
+ * whatever else a database happens to hold, and the claims path stays empty
+ * because the bundle carries findings, not standings. Everything after
+ * selection is the store path's own: the same `selectJuliusCarry`, the same
+ * pair gate in the bootstrap, the same restore into this run, with the manifest
+ * naming the bundle it learned from.
+ */
+export function createArchivedMissionKnowledgeStore(input: {
+  readonly pool: Pool;
+  readonly archive: { readonly source: JuliusCarrySourceRun; readonly origin: JuliusCarryArchiveOrigin };
+}): MissionKnowledgeStore {
+  const carry = new JuliusCarryPostgresRepository(input.pool);
+  const { source, origin } = input.archive;
+  return {
+    async select(request) {
+      // Verified against the contract's project when the bundle was read; a
+      // store composed for one project must never answer for another.
+      if (request.projectId !== origin.sourceProjectId) throw new Error('carry_archive_project_mismatch');
+      return selectJuliusCarry({ targetRunId: request.targetRunId, sources: [source], claims: [] });
+    },
+    restore: (request) => carry.restore({ ...request, origin }),
   };
 }

@@ -66,7 +66,8 @@ import {
   type LiveMissionResearchClause,
 } from './julius/mission-contract';
 import { createLiveJuliusBootstrapPort } from './julius/bootstrap';
-import { createPostgresMissionKnowledgeStore } from './julius/mission-knowledge';
+import { createArchivedMissionKnowledgeStore, createPostgresMissionKnowledgeStore } from './julius/mission-knowledge';
+import { decideJuliusCarrySource } from './julius/carry-archive';
 import { createPostgresMissionSeedStore } from './julius/mission-seed';
 import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 import { createExecutorShellPort } from './julius/executor-effects';
@@ -210,6 +211,22 @@ const registryBackends = (): ReadonlyMap<string, readonly LiveReachCapability[]>
  * attempt separate them; a process with neither is a local drill and says so.
  * Digits only, so nothing an environment carries can reach an id but a number.
  */
+/**
+ * WHAT THE MISSION'S CONTRACT SAYS ABOUT VERIFICATION, as the runtime is
+ * composed from it: the repair bound, and the warning kinds it promotes to
+ * blocking (Decision C, option B). One function, so the paid run and its tests
+ * read the contract the same way.
+ */
+export function liveVerificationOptions(contract: Pick<LiveMissionContractFile, 'limits' | 'promotedWarningCategories'>): {
+  readonly maxRepairRounds: number;
+  readonly promotedWarningCategories?: readonly string[];
+} {
+  return {
+    maxRepairRounds: contract.limits?.repairCycles ?? 1,
+    ...(contract.promotedWarningCategories === undefined ? {} : { promotedWarningCategories: contract.promotedWarningCategories }),
+  };
+}
+
 export function liveExecutionScope(env: Record<string, string | undefined>): string {
   const runId = env.GITHUB_RUN_ID ?? '';
   const attempt = env.GITHUB_RUN_ATTEMPT ?? '';
@@ -577,6 +594,52 @@ export async function observeResearchCommand(input: {
   return 0;
 }
 
+/**
+ * DECISION C: IS THIS ARM'S CARRY SOURCE WHAT ITS CONTRACT SAYS, BEFORE ANYTHING SPENDS.
+ *
+ * The paid workflow runs this in its preflight, ahead of the attempt marker, so
+ * a WITH arm whose pair's bundle is missing, is not its pair's, or holds nothing
+ * a WITH arm may inherit is refused while refusing is still free. On that venue
+ * the database is fresh, so a WITH arm REQUIRES its pair's bundle. `run`
+ * re-checks the same bundle with the same code before it composes the carry.
+ *
+ * Exit: 0 verified (or not a WITH arm and no bundle), 1 refused, 2 usage / an
+ * unreadable or refused contract.
+ */
+export function verifyCarryCommand(input: {
+  readonly contractPath: string | null;
+  readonly bundleDir: string | null;
+  readonly workflowRunId: string | null;
+  readonly commit: string | null;
+  readonly out: (line: string) => void;
+  readonly readFile?: (path: string) => string;
+}): number {
+  const { out } = input;
+  if (input.contractPath === null) {
+    out('Usage: julius-live-mission verify-carry --contract <mission.json> [--carry-bundle <dir> --carry-source-run <id> --expect-commit <sha>]');
+    return 2;
+  }
+  let raw: string;
+  try {
+    raw = (input.readFile ?? ((path: string) => readFileSync(path, 'utf8')))(input.contractPath);
+  } catch {
+    out(`The contract file could not be read: ${input.contractPath}`);
+    return 2;
+  }
+  const parsed = parseLiveMissionContract(raw);
+  if (!parsed.ok) { out(`Mission Contract refused: ${parsed.problem}`); return 2; }
+  const decision = decideJuliusCarrySource({
+    contractPath: input.contractPath, contract: parsed.contract, bundleDir: input.bundleDir,
+    workflowRunId: input.workflowRunId, commit: input.commit, requireArchiveForWith: true,
+  });
+  for (const line of decision.lines) out(line);
+  if (decision.kind === 'REFUSED') {
+    out(`RESULT: BLOCKED at carry — ${decision.reasonCode}: nothing was submitted and no provider was contacted.`);
+    return 1;
+  }
+  return 0;
+}
+
 /* ------------------------------------------------------------------ main */
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -597,6 +660,12 @@ async function main(argv: readonly string[]): Promise<number> {
       contractPath: option('contract'),
       out,
       err: (line) => { process.stderr.write(`${liveOneLine(line)}\n`); },
+    });
+  }
+  if (argv[0] === 'verify-carry') {
+    return verifyCarryCommand({
+      contractPath: option('contract'), bundleDir: option('carry-bundle'),
+      workflowRunId: option('carry-source-run'), commit: option('expect-commit'), out,
     });
   }
   if (argv[0] !== 'run' || option('contract') === null) {
@@ -631,6 +700,23 @@ async function main(argv: readonly string[]): Promise<number> {
   if (!observed.ok) {
     out(`JULIUS_RESEARCH_OBSERVED_BACKENDS refused: ${observed.problem}`);
     out('RESULT: BLOCKED — nothing was submitted and no provider was contacted.');
+    return 2;
+  }
+
+  /**
+   * WHERE THIS MISSION'S CARRY COMES FROM (Decision C), decided while there is
+   * still no run. A bundle passed here is verified by the same code the
+   * preflight ran (`verifyCarryCommand`); without one, a WITH arm reads this
+   * database, which on a fresh one leaves the bootstrap's pair gate to refuse
+   * it as CARRY_EMPTY before a run exists.
+   */
+  const carrySource = decideJuliusCarrySource({
+    contractPath: option('contract') as string, contract, bundleDir: option('carry-bundle'),
+    workflowRunId: option('carry-source-run'), commit: option('expect-commit'), requireArchiveForWith: false,
+  });
+  if (carrySource.kind === 'REFUSED') {
+    for (const line of carrySource.lines) out(line);
+    out(`RESULT: BLOCKED at carry — ${carrySource.reasonCode}: nothing was submitted and no provider was contacted.`);
     return 2;
   }
 
@@ -669,6 +755,11 @@ async function main(argv: readonly string[]): Promise<number> {
 
   out('JULIUS LIVE MISSION — preflight');
   out(`  mission: ${contract.missionId} (project ${contract.projectId})`);
+  for (const line of carrySource.lines) out(line);
+  // Said before any spend, and only by a contract that changes the default: a reviewer's warning interrupts nothing.
+  if (contract.promotedWarningCategories !== undefined) {
+    out(`  review policy: warnings promoted to blocking by this contract: ${contract.promotedWarningCategories.join(', ')}`);
+  }
   out(`  requested models: architect=${preflight.requested.architectModel ?? 'MISSING'} coder=${preflight.requested.codingModel ?? 'MISSING'} reviewer=${preflight.requested.reviewerProvider ?? 'MISSING'}/${preflight.requested.reviewerModel ?? 'MISSING'}`);
   for (const row of presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', CLAUDE_SUBSCRIPTION_TOKEN_ENV, 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV])) out(row);
   out('  note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.');
@@ -941,8 +1032,12 @@ async function main(argv: readonly string[]): Promise<number> {
         putTaskContract: bootstrapContracts.putTaskContract.bind(bootstrapContracts),
       },
       seeds: createPostgresMissionSeedStore(pool),
-      // The project's verified knowledge, inherited by this mission.
-      knowledge: createPostgresMissionKnowledgeStore(pool),
+      // The project's verified knowledge, inherited by this mission: from this
+      // database, or for a WITH arm given its pair's verified bundle, from that
+      // bundle alone (Decision C on the paid venue's fresh database).
+      knowledge: carrySource.kind === 'ARCHIVE'
+        ? createArchivedMissionKnowledgeStore({ pool, archive: { source: carrySource.verdict.source, origin: carrySource.verdict.origin } })
+        : createPostgresMissionKnowledgeStore(pool),
       tenantId: contract.tenantId,
       executionId,
     });
@@ -969,7 +1064,7 @@ async function main(argv: readonly string[]): Promise<number> {
       entries: resolution.entries,
       cardRevision,
       spendCeilingUsdMicros: Math.round((contract.limits?.spendUsd ?? 5) * 1_000_000),
-      maxRepairRounds: contract.limits?.repairCycles ?? 1,
+      ...liveVerificationOptions(contract),
       executionScope: liveExecutionScope(env),
       ...(researchClause === undefined ? {} : {
         researchPolicyFor: researchPolicyOf,

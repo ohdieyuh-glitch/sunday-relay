@@ -90,15 +90,20 @@ export function latestPreflight(runs, { mission, mainSha }) {
 }
 
 /** The workflow inputs for one dispatch, as `gh workflow run -f` arguments. */
-export function dispatchArgs({ mission, lane, key, paid, acknowledgeRerun, maxTicks, hermesRef }) {
+export function dispatchArgs({ mission, lane, key, paid, acknowledgeRerun, maxTicks, hermesRef, carrySourceRun }) {
   const args = ['workflow', 'run', PAID_WORKFLOW_FILE, '--ref', 'main',
     '-f', `mission=${mission}`, '-f', `lane=${lane}`, '-f', `dispatch_key=${key}`];
   if (paid) args.push('-f', `confirm_live=${CONFIRM_LIVE_PHRASE}`);
   if (acknowledgeRerun) args.push('-f', 'acknowledge_rerun=RERUN PAID MISSION');
   if (maxTicks !== undefined) args.push('-f', `max_ticks=${maxTicks}`);
   if (hermesRef !== undefined) args.push('-f', `hermes_ref=${hermesRef}`);
+  // DECISION C: a WITH arm's preflight and its paid run both name the paired WITHOUT arm's run.
+  if (carrySourceRun !== undefined) args.push('-f', `carry_source_run=${carrySourceRun}`);
   return args;
 }
+
+/** A workflow run id, as the paid workflow's `carry_source_run` input accepts one. */
+export const CARRY_SOURCE_RUN_PATTERN = /^[0-9]{1,20}$/u;
 
 /* ----------------------------------------------------------------- effects --- */
 
@@ -191,19 +196,20 @@ async function awaitCompletion({ github, id, sleep, log, pollMs = 30_000, maxMs 
  * names its reason.
  */
 export async function runPaidDispatch(options, deps) {
-  const { mission, lane, attempt = 1, paid = false, acknowledgeRerun = false, maxTicks, hermesRef, dryPlan = false } = options;
+  const { mission, lane, attempt = 1, paid = false, acknowledgeRerun = false, maxTicks, hermesRef, dryPlan = false, carrySourceRun } = options;
   const { github, checkContract, sleep, log } = deps;
   const refuse = (reason, extra = {}) => ({ outcome: 'REFUSED', reason, ...extra });
 
   if (!MISSION.test(mission ?? '')) return refuse('mission_invalid');
   if (!PAID_LANES.includes(lane)) return refuse('lane_invalid');
+  if (carrySourceRun !== undefined && !CARRY_SOURCE_RUN_PATTERN.test(carrySourceRun)) return refuse('carry_source_run_invalid');
 
   const mainSha = github.mainSha();
   if (github.acceptedCheckpoints(mainSha) < 1) return refuse('main_not_accepted', { mainSha });
   const contract = checkContract({ mission, lane, mainSha });
   if (!contract.ok) return refuse('contract_refused', { mainSha, detail: contract.detail });
 
-  const common = { mission, lane, acknowledgeRerun, maxTicks, hermesRef };
+  const common = { mission, lane, acknowledgeRerun, maxTicks, hermesRef, carrySourceRun };
   const preflightKey = dispatchKey({ mission, mainSha, lane, attempt, paid: false });
   const paidKey = paid ? dispatchKey({ mission, mainSha, lane, attempt, paid: true }) : null;
 
@@ -294,7 +300,7 @@ async function main(argv) {
   const attempt = option(argv, 'attempt') === undefined ? 1 : Number(option(argv, 'attempt'));
   const repo = option(argv, 'repo') ?? 'ohdieyuh-glitch/sunday-relay';
   if (!MISSION.test(mission ?? '') || !PAID_LANES.includes(lane) || !Number.isSafeInteger(attempt)) {
-    process.stderr.write('usage: julius-paid-dispatch.mjs --mission <slug> --lane <qualification|qualification-repair|lab|regression> [--attempt N] [--paid] [--acknowledge-rerun] [--max-ticks N] [--hermes-ref SHA] [--dry-plan] [--repo owner/repo]\n');
+    process.stderr.write('usage: julius-paid-dispatch.mjs --mission <slug> --lane <qualification|qualification-repair|lab|regression> [--attempt N] [--paid] [--acknowledge-rerun] [--max-ticks N] [--hermes-ref SHA] [--carry-source-run RUN_ID] [--dry-plan] [--repo owner/repo]\n');
     return 2;
   }
   const log = (line) => process.stdout.write(`${line}\n`);
@@ -305,6 +311,7 @@ async function main(argv) {
       acknowledgeRerun: argv.includes('--acknowledge-rerun'),
       maxTicks: option(argv, 'max-ticks'),
       hermesRef: option(argv, 'hermes-ref'),
+      carrySourceRun: option(argv, 'carry-source-run'),
       dryPlan: argv.includes('--dry-plan'),
     }, {
       github: createGitHub({ gh: realGh, repo }),

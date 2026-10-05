@@ -51,6 +51,7 @@ import {
 } from './julius-lineage-asserter';
 import type { JuliusBrainAppend } from './julius-runtime-ports';
 import { juliusAdmittedClaimFor, juliusClaimPromotionsOnAccept, mergeJuliusDurableStanding } from './julius-claim-ledger';
+import { juliusCarriedIdsIn } from './julius-carry';
 import { JULIUS_DEFAULT_MAX_CODER_SEGMENTS, evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
 import { juliusWorkUnitRootOf, repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
@@ -1645,6 +1646,9 @@ export async function runClaimedTask(
         // And every (acceptance, finding) pair the run-wide check judged, compatible ones included: the record that the
         // founder's rule ran on the pairs this run had, not only that nothing fired.
         ...juliusAcceptanceJudgementFacts(lineageCheck.judgements),
+        // POINT 4 OF THE CARRY PROOF (Decision C): which inherited entries THIS packet actually holds, read off the
+        // snapshot's own source ids — what the worker was given, not what the bootstrap wrote.
+        ...juliusCarryReceivedFacts(snapshot.sourceEntryIds),
       },
     });
     /**
@@ -6975,6 +6979,20 @@ function repairContextFindings(
  * The refusals as one bounded fact. An event refuses anything shaped like a credential assignment, and these ids came
  * from stores, so a list that would trip that check is recorded by count only rather than failing the compile.
  */
+/**
+ * The carried entries a compiled packet holds, as two bounded facts: how many, and which. Ids only, never text; a
+ * list that would trip the event's credential check is recorded by count alone.
+ */
+const juliusCarryReceivedFacts = (sourceEntryIds: readonly string[]): Record<string, number | string | null> => {
+  const ids = juliusCarriedIdsIn(sourceEntryIds);
+  const text = ids.join(' ');
+  return {
+    carriedReceived: ids.length,
+    carriedReceivedIds: ids.length === 0 || text.length > 3_000
+      || /(?:api[_-]?key|authorization|token|secret|password)\s*[=:]/iu.test(text) ? null : text,
+  };
+};
+
 const lineageRefusalIdsOf = (refusals: readonly JuliusLineageRefusal[]): string | null => {
   if (refusals.length === 0) return null;
   const text = refusals.map((refusal) => `${refusal.code}:${refusal.subjectId}`).join(' ').slice(0, 1_500);

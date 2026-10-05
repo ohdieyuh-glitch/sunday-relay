@@ -267,6 +267,24 @@ export function juliusReviewRoute(input: {
   }
 }
 
+/**
+ * THE KIND OF A FINDING, asked of the reviewer from the one closed list the
+ * escalation and Julius's promotion policy also use.
+ *
+ * Before this was asked, a reviewer's minor finding reached Julius as a warning
+ * of no kind (`category: null`), so a policy naming a kind could never match a
+ * real review: `promotedWarningCategories` worked in the domain and was inert
+ * on every paid run. The reviewer is told what a category is and nothing about
+ * what Julius does with one, so naming a kind is a description and never a
+ * lever.
+ */
+export function juliusReviewFindingCategoryGuidance(): string {
+  return [
+    `THE KIND OF EACH FINDING. Every finding carries a "category": the kind of problem it is, one of ${JULIUS_CHALLENGE_CATEGORIES.join(', ')}, or null when none of them fits.`,
+    'Say what kind of problem it is, not how serious it is: "severity" says that. A category that is not on this list is dropped, and the finding is kept without one.',
+  ].join('\n');
+}
+
 /** Whether Julius's policy promotes a warning of this category to blocking. */
 export const juliusWarningIsPromoted = (
   warning: JuliusReviewWarning,

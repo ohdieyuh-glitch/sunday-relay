@@ -74,6 +74,10 @@ on:
         description: 'Idempotency key from scripts/julius-paid-dispatch.mjs ([A-Za-z0-9._@#-], 8-96). A second run carrying the same key refuses itself before it can spend.'
         required: false
         default: ''
+      carry_source_run:
+        description: 'Decision C WITH arm only: the workflow run id of its paired WITHOUT arm''s paid run. That run''s evidence bundle is fetched and verified before anything can spend. Leave empty otherwise.'
+        required: false
+        default: ''
 
 # READ-ONLY, and every entry is here because a gate needs it. No write scope of
 # any kind, no PAT, and never the coding worker's credential: the trust gates
@@ -427,8 +431,16 @@ jobs:
           MISSION: ${{ inputs.mission }}
           LANE: ${{ inputs.lane }}
           DISPATCH_KEY: ${{ inputs.dispatch_key }}
+          CARRY_SOURCE_RUN: ${{ inputs.carry_source_run }}
         run: |
           set -euo pipefail
+          # A WORKFLOW RUN ID OR NOTHING. It names the paired WITHOUT arm's run
+          # whose bundle a WITH arm learns from, and it reaches a URL path, so it
+          # is digits or it is refused, here, before anything is built.
+          CARRY_SOURCE_RUN="${CARRY_SOURCE_RUN:-}"
+          if [ -n "$CARRY_SOURCE_RUN" ] && ! printf '%s' "$CARRY_SOURCE_RUN" | grep -Eqx '[0-9]{1,20}'; then
+            echo "carry_source_run_malformed: '$CARRY_SOURCE_RUN' is not a workflow run id" >&2; exit 1
+          fi
           # THE QUEUE CLAIM, AGAIN. `paid-slot` already refused a malformed one,
           # but a dry run never runs `paid-slot`, and this gate must not depend on
           # another job having run. A paid run must claim a lane; a dry run may
@@ -855,6 +867,72 @@ jobs:
             exit 1
           fi
 
+      # DECISION C: THE PAIRED WITHOUT ARM'S BUNDLE, FETCHED BEFORE ANYTHING CAN SPEND.
+      #
+      # Every paid job's database is fresh and dies with the runner, so a WITH arm
+      # has nothing of its pair's in it. What outlives the WITHOUT arm is its
+      # evidence bundle, which carries `carry-export.json` and the manifest that
+      # recorded its digest. This step fetches that bundle by the source run's id
+      # with this job's own read-only token (`actions: read`, already granted for
+      # the markers), and writes GitHub's own record of the run beside it:
+      # workflow file, event, commit, title, attempt, and the archive's digest as
+      # GitHub recorded it next to the sha256 of what was actually downloaded. It
+      # judges nothing; the next step does, from these files alone.
+      - name: 'Decision C: fetch the paired WITHOUT arm''s evidence bundle'
+        if: inputs.carry_source_run != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CARRY_SOURCE_RUN: ${{ inputs.carry_source_run }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$CARRY_SOURCE_RUN" | grep -Eqx '[0-9]{1,20}' || { echo 'carry_source_run_malformed' >&2; exit 1; }
+          dir="$RUNNER_TEMP/julius-carry-source"
+          rm -rf "$dir"
+          mkdir -p "$dir"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CARRY_SOURCE_RUN}" \
+            --jq '{id: (.id|tostring), path: (.path // ""), event: (.event // ""), headSha: (.head_sha // ""), displayTitle: (.display_title // ""), runAttempt: (.run_attempt|tostring)}' \
+            > "$dir/run.json"
+          # EXACTLY ONE unexpired bundle, or none is chosen: two would make "which one taught this arm" a guess.
+          artifacts=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CARRY_SOURCE_RUN}/artifacts?name=julius-live-evidence&per_page=100" \
+            --jq '[.artifacts[] | select(.expired == false) | {id: (.id|tostring), digest: (.digest // "")}]')
+          count=$(printf '%s' "$artifacts" | jq 'length')
+          [ "$count" = 1 ] || { echo "carry_source_bundle_not_unique: run $CARRY_SOURCE_RUN holds $count unexpired julius-live-evidence bundle(s)" >&2; exit 1; }
+          artifact_id=$(printf '%s' "$artifacts" | jq -r '.[0].id')
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > "$dir/bundle.zip"
+          archive=$(sha256sum "$dir/bundle.zip" | cut -d' ' -f1)
+          jq --arg digest "$(printf '%s' "$artifacts" | jq -r '.[0].digest')" --arg archive "$archive" \
+            '. + {artifactDigest: $digest, archiveSha256: $archive}' "$dir/run.json" > "$dir/source-run.json"
+          rm -f "$dir/run.json"
+          # Only the two files the verifier reads leave the archive; nothing else in it is opened.
+          unzip -q -o "$dir/bundle.zip" bundle-manifest.txt carry-export.json -d "$dir"
+          rm -f "$dir/bundle.zip"
+          ls -l "$dir"
+
+      # DECISION C: IS IT THIS ARM'S PAIR, AND DOES IT HOLD ANYTHING TO LEARN.
+      #
+      # Runs on every dispatch, so a WITH arm whose pair's bundle is missing is
+      # refused here too. `verify-carry` checks GitHub's record, the manifest and
+      # the export against what THIS job knows for itself: its own commit (the
+      # arms of a pair run one frozen code), its contract's `carryFrom`, and that
+      # mission's contract digest at this checkout. It then applies the same
+      # selection and pair gate the bootstrap will, so a pair whose WITHOUT arm
+      # left no verified repair finding is refused while refusing is still free,
+      # ahead of the attempt marker. An arm that is not a WITH arm and was given
+      # no bundle prints `NONE` and passes.
+      - name: 'Preflight: verify the Decision C carry source'
+        env:
+          CARRY_SOURCE_RUN: ${{ inputs.carry_source_run }}
+        run: |
+          set -euo pipefail
+          test -f dist-relay-bridge/julius-live-mission.cjs || { echo 'entrypoint_not_built' >&2; exit 1; }
+          if [ -n "$CARRY_SOURCE_RUN" ]; then
+            node dist-relay-bridge/julius-live-mission.cjs verify-carry --contract "$CONTRACT" \
+              --carry-bundle "$RUNNER_TEMP/julius-carry-source" --carry-source-run "$CARRY_SOURCE_RUN" \
+              --expect-commit "$(git rev-parse HEAD)" | tee carry-verification.log
+          else
+            node dist-relay-bridge/julius-live-mission.cjs verify-carry --contract "$CONTRACT" | tee carry-verification.log
+          fi
+
       # EACH PROVIDER ACCEPTS ITS KEY AND SERVES THE PINNED MODEL — CHECKED FOR FREE.
       #
       # Before this, a revoked key, an unfunded account's auth refusal or a model
@@ -1103,14 +1181,21 @@ jobs:
           RELAY_HERMES_EXECUTABLE: /tmp/julius-hermes-bin/hermes
           MAX_TICKS: ${{ inputs.max_ticks }}
           JULIUS_JOB_STARTED_AT: ${{ steps.inputs_gate.outputs.job_started_at }}
+          CARRY_SOURCE_RUN: ${{ inputs.carry_source_run }}
         run: |
           set -uo pipefail
           # The bundle was built in an earlier step and is invoked directly,
           # so this step starts no build and depends on no package manager.
           test -f dist-relay-bridge/julius-live-mission.cjs || { echo 'entrypoint_not_built' >&2; exit 1; }
+          # A WITH arm is handed the pair's bundle the preflight verified, and
+          # `run` verifies it again with the same code before composing its carry.
+          carry=()
+          if [ -n "${CARRY_SOURCE_RUN:-}" ]; then
+            carry=(--carry-bundle "$RUNNER_TEMP/julius-carry-source" --carry-source-run "$CARRY_SOURCE_RUN" --expect-commit "$(git rev-parse HEAD)")
+          fi
           set +e
           node dist-relay-bridge/julius-live-mission.cjs \
-            run --contract "$CONTRACT" --confirm-live --max-ticks "$MAX_TICKS" | tee live-mission.log
+            run --contract "$CONTRACT" --confirm-live --max-ticks "$MAX_TICKS" "${carry[@]}" | tee live-mission.log
           status=${PIPESTATUS[0]}
           set -e
           echo "julius_exit=$status"
@@ -1182,11 +1267,21 @@ jobs:
           # The raw logs are NEVER copied. They are rebuilt line by line from an
           # allowlist of known shapes, so a future entrypoint change cannot put
           # something unexamined into an artifact that outlives this job.
-          for log in preflight-roles.log live-mission.log; do
+          for log in preflight-roles.log carry-verification.log live-mission.log; do
             if [ -f "$log" ]; then
               node scripts/julius-live-evidence.mjs "$log" > "julius-live-evidence/${log%.log}.evidence.txt" || true
             fi
           done
+          # DECISION C: WHAT THIS ARM LEARNED FROM, kept beside what it did. A WITH
+          # arm's bundle carries the pair's manifest and export it verified, and
+          # GitHub's record of the pair's run, so a reviewer can compare their
+          # digests with the WITHOUT arm's own bundle without trusting either arm.
+          if [ -d "$RUNNER_TEMP/julius-carry-source" ]; then
+            mkdir -p julius-live-evidence/carry-source
+            for file in bundle-manifest.txt carry-export.json source-run.json; do
+              cp "$RUNNER_TEMP/julius-carry-source/$file" "julius-live-evidence/carry-source/$file" 2>/dev/null || true
+            done
+          fi
           # WHAT RESEARCH WAS OBSERVED BEFORE THE RUN, by the same allowlist rule:
           # only the exact grammar `observe-research` prints — five closed fields
           # per probe, the summary, the claim, and its two fixed refusals — so a

@@ -50,7 +50,7 @@ dump() {
 # the gate reads as not paid.
 manifest_token() { printf '%s' "${1:-}" | tr -c 'A-Za-z0-9._:/@#+=-' '_' | cut -c1-200; }
 write_manifest() {
-  local commit tree tracked status mode mode_basis source run_id accepted count
+  local commit tree tracked status mode mode_basis source run_id accepted count mission contract_sha256
   commit=$(git rev-parse HEAD 2>/dev/null || echo unknown)
   tree=$(git rev-parse 'HEAD^{tree}' 2>/dev/null || echo unknown)
   if status=$(git status --porcelain --untracked-files=no 2>/dev/null); then
@@ -84,6 +84,19 @@ write_manifest() {
     count=$(printf '%s' "$accepted" | grep -c . || true)
     [ "$count" = 1 ] && run_id=$accepted
   fi
+  # WHICH MISSION, AND EXACTLY WHICH CONTRACT (Decision C). A WITH arm learns only from its paired WITHOUT arm's
+  # bundle, and checks both against the contract file at its own checkout. Read from the job's own `$CONTRACT`
+  # (`.github/julius-missions/<mission>/contract.json`); any other shape is `unknown`, never a guess.
+  mission=unknown
+  contract_sha256=unknown
+  case "${CONTRACT:-}" in
+    .github/julius-missions/*/contract.json)
+      mission=${CONTRACT#.github/julius-missions/}
+      mission=${mission%/contract.json}
+      contract_sha256=$(sha256sum "$CONTRACT" 2>/dev/null | cut -d' ' -f1 || true)
+      [ -n "$contract_sha256" ] || contract_sha256=unknown
+      ;;
+  esac
   {
     echo 'manifest_version=1'
     echo "source=$source"
@@ -99,6 +112,8 @@ write_manifest() {
     echo "event=$(manifest_token "${GITHUB_EVENT_NAME:-none}")"
     echo "ref=$(manifest_token "${GITHUB_REF:-none}")"
     echo "github_sha=$(manifest_token "${GITHUB_SHA:-none}")"
+    echo "mission=$(manifest_token "$mission")"
+    echo "contract_sha256=$(manifest_token "$contract_sha256")"
     echo "produced_at=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
   } > "$out/bundle-manifest.txt"
   echo "JULIUS_EVIDENCE_MANIFEST mode=$mode commit=$(manifest_token "$commit") julius_run_id=$(manifest_token "$run_id") workflow_run_id=$(manifest_token "${GITHUB_RUN_ID:-none}")"
@@ -339,6 +354,16 @@ dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,t.
 dump "SELECT entry_id,entry_kind,worker_id,task_id,revision,created_at,run_id FROM relay_wonderland.julius_brain_entries ORDER BY revision" project-brain.tsv
 dump "SELECT execution_id,mission_id,project_id,player_id,agent_id,state FROM relay_wonderland.execution_sessions ORDER BY execution_id" sessions.tsv
 
+# WHAT THE CARRY SELECTED AND WHAT THE PLANNER WAS HANDED (Decision C, points 2 and 4).
+#
+# `project-brain.tsv` above shows point 3, the restored `carried:<run>:finding:<id>` rows. Points 2
+# and 4 lived only on the ledger, which dies with this job: the one `knowledge.carried` manifest per
+# run (counts per class, the selected ids, every exclusion by code, and for a WITH arm the bundle it
+# learned from, by workflow run, commit and digests) and each `context.compiled` row's count and ids
+# of the carried entries its packet held. Named fact keys only, every value a token, a count, an id
+# or a digest: the manifest is scalar by construction and never quotes a claim.
+dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'version' AS version,e.payload->'facts'->>'arm' AS arm,e.payload->'facts'->>'origin' AS origin,e.payload->'facts'->>'selected' AS selected,e.payload->'facts'->>'verifiedRepairFindings' AS verified_repair_findings,e.payload->'facts'->>'verifiedFindings' AS verified_findings,e.payload->'facts'->>'acceptedDecisions' AS accepted_decisions,e.payload->'facts'->>'excluded' AS excluded,e.payload->'facts'->>'excludedByCode' AS excluded_by_code,e.payload->'facts'->>'written' AS written,e.payload->'facts'->>'selectedEntryIds' AS selected_entry_ids,e.payload->'facts'->>'selectedEntryIdsTruncated' AS selected_entry_ids_truncated,e.payload->'facts'->>'excludedRefs' AS excluded_refs,e.payload->'facts'->>'excludedRefsTruncated' AS excluded_refs_truncated,e.payload->'facts'->>'sourceRunId' AS source_run_id,e.payload->'facts'->>'sourceMission' AS source_mission,e.payload->'facts'->>'sourceWorkflowRunId' AS source_workflow_run_id,e.payload->'facts'->>'sourceWorkflowRunAttempt' AS source_workflow_run_attempt,e.payload->'facts'->>'sourceCommit' AS source_commit,e.payload->'facts'->>'sourceContractSha256' AS source_contract_sha256,e.payload->'facts'->>'sourceExportSha256' AS source_export_sha256,e.payload->'facts'->>'sourceArchiveSha256' AS source_archive_sha256,e.payload->'facts'->>'contextId' AS context_id,e.payload->'facts'->>'carriedReceived' AS carried_received,e.payload->'facts'->>'carriedReceivedIds' AS carried_received_ids,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.knowledge.carried','julius.context.compiled') ORDER BY e.stream_id,e.sequence" carry.tsv
+
 # WHAT THE CODER WAS CHARGED WITH, AND WHETHER IT WAS AGREED BEFORE IT RAN.
 #
 # A build may not be dispatched without a LOCKED task contract, so this table is what turns that
@@ -443,7 +468,35 @@ dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.
 # `resolutions` are reviewer prose and have no column.
 dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'findingId' AS finding_id,e.payload->'facts'->>'move' AS finding_move,e.payload->'facts'->>'to' AS to_status,e.payload->'facts'->>'reviewTaskId' AS review_task_id,e.payload->'facts'->>'repairTaskId' AS repair_task_id,e.payload->'facts'->>'supersededByFindingId' AS superseded_by_finding_id,e.payload->'facts'->>'blocking' AS blocking,e.payload->'facts'->>'category' AS category,e.payload->'facts'->>'evidenceId' AS evidence_id,e.payload->'facts'->>'reviewedTaskId' AS reviewed_task_id,e.payload->'facts'->>'verdict' AS verdict,e.payload->'facts'->>'declared' AS declared_verdict,e.payload->'facts'->>'derived' AS derived_verdict,e.payload->'facts'->>'source' AS verdict_source,e.payload->'facts'->>'route' AS verdict_route,e.payload->'facts'->>'target' AS verdict_target,e.payload->'facts'->>'warningCount' AS warning_count,e.payload->'facts'->>'resolutionCount' AS resolution_count,e.payload->'facts'->>'warningsRetained' AS warnings_retained,e.payload->'facts'->>'warningsPromoted' AS warnings_promoted,e.payload->'facts'->>'reasonCode' AS reason_code,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.finding.recorded','julius.finding.transitioned','julius.review.verdict.declared','julius.review.verdict.refused','julius.review.verdict.applied') ORDER BY e.stream_id,e.sequence" finding-lifecycle.tsv
 
+# WHAT KIND OF PROBLEM EACH WARNING WAS, AND WHETHER JULIUS PROMOTED IT (Decision C, option B). A
+# reviewer's warning is retained as a finding whose category falls back to `review_warning` when the
+# reviewer named no kind, and the declaration's `warnings` are reviewer prose, so before this file a
+# bundle could not say whether a warning had a kind a contract's `promotedWarningCategories` could
+# name: M2's two warnings left no trace of one. One row per declared warning, tokens only: the
+# review it came from, its position, its declared kind (empty when none), and whether the finding
+# Julius recorded for it is blocking. Never its claim.
+dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.payload->'facts'->>'reviewTaskId' AS review_task_id,(w.ordinality-1) AS warning_index,w.warning->>'category' AS category,f.blocking AS promoted_to_blocking,e.occurred_at FROM relay_wonderland.events e CROSS JOIN LATERAL jsonb_array_elements(COALESCE((e.payload->'facts'->>'warnings')::jsonb,'[]'::jsonb)) WITH ORDINALITY AS w(warning,ordinality) LEFT JOIN relay_wonderland.julius_reviewer_findings f ON f.run_id=e.stream_id AND f.finding_id='finding:warning:'||(e.payload->'facts'->>'reviewTaskId')||':'||(w.ordinality-1)::text WHERE e.event_type='julius.review.verdict.declared' ORDER BY e.stream_id,e.sequence,w.ordinality" review-warnings.tsv
+
 # AND EACH FINDING'S STATUS NOW: its last `finding.transitioned` move, or the recorded OPEN when it
 # never moved. Every transition the runtime writes was legal when written, so the last one is the
 # state the pipeline's own fold reached; `transitions` says how many moves it took.
 dump "SELECT f.run_id,f.finding_id,f.task_id,f.blocking,f.status AS recorded_status,COALESCE((SELECT t.payload->'facts'->>'to' FROM relay_wonderland.events t WHERE t.event_type='julius.finding.transitioned' AND t.stream_id=f.run_id AND t.payload->'facts'->>'findingId'=f.finding_id ORDER BY t.sequence DESC LIMIT 1),f.status) AS effective_status,(SELECT count(*) FROM relay_wonderland.events t WHERE t.event_type='julius.finding.transitioned' AND t.stream_id=f.run_id AND t.payload->'facts'->>'findingId'=f.finding_id)::text AS transitions FROM relay_wonderland.julius_reviewer_findings f ORDER BY f.run_id,f.created_at" finding-status.tsv
+
+# DECISION C: WHAT A PAIRED WITH ARM MAY LEARN FROM THIS RUN, AS ONE VERIFIABLE FILE.
+#
+# Every paid job's database is fresh and dies with the runner, so the next mission cannot read this one's findings
+# from a store. `carry-export.json` holds this run's reviewer findings and the `finding.*` ledger rows that give them
+# their lives, scoped to the ONE run the manifest names, under named fact keys only (`.github/julius-carry-export.sql`
+# says exactly which, and why its shape is the store reader's own). Its sha256 is appended to the manifest the moment
+# it is written, so the WITH arm that reads it later checks the bytes against what THIS job recorded
+# (`src/relay/mission/julius/julius-carry-archive.ts`). The query runs whether or not a run is named, so the
+# regression job proves it against a migrated schema; a run the manifest does not name exports `runId` null, which
+# the verifier refuses. A failed query writes `unavailable`, exactly as a table above would.
+carry_run=$(sed -n 's/^julius_run_id=//p' "$out/bundle-manifest.txt" 2>/dev/null | head -n 1 || true)
+if docker exec -i -e PGPASSWORD "$container" psql -X -q -t -A -v ON_ERROR_STOP=1 -v run="${carry_run:-none}" \
+    -U "$PGUSER" -d "$PGDATABASE" < .github/julius-carry-export.sql > "$out/carry-export.json" 2>/dev/null; then
+  carry_digest=$(sha256sum "$out/carry-export.json" 2>/dev/null | cut -d' ' -f1 || true)
+  if [ -n "$carry_digest" ]; then echo "carry_export_sha256=$carry_digest" >> "$out/bundle-manifest.txt"; fi
+else
+  echo 'unavailable' > "$out/carry-export.json"
+fi

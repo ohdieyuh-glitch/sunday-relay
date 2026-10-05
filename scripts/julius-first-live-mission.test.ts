@@ -1127,7 +1127,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'carry.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'review-warnings.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -1499,7 +1499,14 @@ describe('the evidence dump names only tables and columns the migrations create'
     for (const text of ["'path'", "'paths'", "'own'", "'inherited'"]) {
       expect(scope.includes(text), `the scope dump must not export ${text}, which a coder's changes wrote`).toBe(false);
     }
-    for (const query of [lifecycle, line('finding-status.tsv'), scope]) {
+    // Each declared warning's kind, and whether Julius promoted it (Decision C, option B): tokens, never the claim.
+    const warnings = line('review-warnings.tsv');
+    expect(warnings).toContain("e.event_type='julius.review.verdict.declared'");
+    expect(warnings, 'the declared kind of each warning').toContain("w.warning->>'category' AS category");
+    expect(warnings, 'promotion read off the finding Julius recorded for that warning')
+      .toContain("f.finding_id='finding:warning:'||(e.payload->'facts'->>'reviewTaskId')||':'||(w.ordinality-1)::text");
+    expect(warnings.includes("'claim'"), 'a warning\'s claim is reviewer prose and never exported').toBe(false);
+    for (const query of [lifecycle, line('finding-status.tsv'), scope, warnings]) {
       expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
     }
   });
@@ -3278,8 +3285,8 @@ describe('the event dumps are ordered by the ledger position, not by the wall cl
 
   it('covers every chronological event dump, so a new one cannot arrive unordered', () => {
     expect(eventDumps().map(named).sort())
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'effort.tsv', 'failures.tsv', 'finding-lifecycle.tsv',
-        'participation.tsv', 'research.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'carry.tsv', 'contract-events.tsv', 'effort.tsv', 'failures.tsv', 'finding-lifecycle.tsv',
+        'participation.tsv', 'research.tsv', 'review-warnings.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
   });
 
   it('carries the position the ledger allocated, and the stream it is a position within', () => {
@@ -3678,5 +3685,103 @@ describe('the research a contract grants is observed before the run, through Rel
     ]) {
       expect(kept.test(line), line).toBe(false);
     }
+  });
+});
+
+/**
+ * DECISION C ON THE PAID VENUE: A WITH ARM LEARNS FROM ITS PAIR'S BUNDLE, AND
+ * ONLY AFTER THE BUNDLE IS PROVEN TO BE ITS PAIR'S.
+ *
+ * Every paid job's database is fresh, so the WITHOUT arm's findings reach the
+ * WITH arm only through the WITHOUT arm's evidence bundle. These pins hold the
+ * transport to its shape: the export written beside the manifest that records
+ * its digest, the fetch made with the job's own read-only token and no new
+ * permission, the verification run before the attempt marker on every
+ * dispatch, the LIVE step handed the same bundle only when one was named, and
+ * the WITH arm's own bundle keeping what it learned from.
+ */
+describe('Decision C: a WITH arm and its pair\'s bundle, on the paid workflow', () => {
+  const stepNamed = (name: string): string => {
+    const start = workflow.indexOf(`- name: ${name}`);
+    expect(start, name).toBeGreaterThan(-1);
+    const rest = workflow.slice(start);
+    return rest.slice(0, rest.indexOf('\n      - ', 1));
+  };
+  const FETCH = "'Decision C: fetch the paired WITHOUT arm''s evidence bundle'";
+  const VERIFY = "'Preflight: verify the Decision C carry source'";
+
+  it('the source run is an input, empty by default, and the inputs gate takes digits or nothing', () => {
+    expect(workflow).toMatch(/\n {6}carry_source_run:\n {8}description: 'Decision C WITH arm only: [^\n]+'\n {8}required: false\n {8}default: ''\n/u);
+    const gate = stepNamed("'Gate: the dispatch inputs are well formed'");
+    expect(gate).toContain('CARRY_SOURCE_RUN: ${{ inputs.carry_source_run }}');
+    expect(gate).toContain("grep -Eqx '[0-9]{1,20}'");
+    expect(gate).toContain('carry_source_run_malformed');
+  });
+
+  it('the fetch runs only when a source run is named, with the job\'s own token, and the workflow gains no permission', () => {
+    const fetch = stepNamed(FETCH);
+    expect(fetch).toContain("if: inputs.carry_source_run != ''");
+    expect(fetch).toContain('GH_TOKEN: ${{ github.token }}');
+    expect(fetch, 'exactly one unexpired bundle, never a guess').toContain('carry_source_bundle_not_unique');
+    expect(fetch, 'GitHub\'s record is written beside the bundle').toContain('"$dir/source-run.json"');
+    expect(fetch, 'and the digest GitHub recorded beside the sha256 of what arrived').toContain('artifactDigest: $digest, archiveSha256: $archive');
+    expect(fetch, 'only the two files the verifier reads leave the archive').toContain('unzip -q -o "$dir/bundle.zip" bundle-manifest.txt carry-export.json -d "$dir"');
+    expect(fetch).not.toContain('secrets.');
+    const permissions = workflow.slice(workflow.indexOf('\npermissions:\n'), workflow.indexOf('\nconcurrency:\n'));
+    expect(permissions.match(/^ {2}[a-z-]+: [a-z]+$/gmu)).toEqual(['  contents: read', '  actions: read', '  pull-requests: read', '  issues: read', '  statuses: read']);
+  });
+
+  it('the verification runs on every dispatch, after the build and before the attempt marker, the smoke and LIVE', () => {
+    const verify = stepNamed(VERIFY);
+    expect(verify, 'no condition: a WITH arm with no bundle is refused here too').not.toMatch(/\n {8}if:/u);
+    expect(verify).toContain('verify-carry --contract "$CONTRACT" \\\n              --carry-bundle "$RUNNER_TEMP/julius-carry-source" --carry-source-run "$CARRY_SOURCE_RUN" \\\n              --expect-commit "$(git rev-parse HEAD)" | tee carry-verification.log');
+    expect(verify).toContain('verify-carry --contract "$CONTRACT" | tee carry-verification.log');
+    expect(verify, 'pipefail carries a refusal through tee').toContain('set -euo pipefail');
+    const at = (name: string): number => workflow.indexOf(`- name: ${name}`);
+    expect(at(FETCH)).toBeLessThan(at(VERIFY));
+    expect(at("'Preflight: observe the research the contract grants, through Relay''s own bounded fetch'")).toBeLessThan(at(FETCH));
+    expect(at(VERIFY)).toBeLessThan(at("'Record that a paid mission was attempted (before any provider can be reached)'"));
+    expect(at(VERIFY)).toBeLessThan(at("'LIVE: run the first real Julius mission'"));
+  });
+
+  it('LIVE is handed the bundle only when a source run was named, and the run\'s title grammar is untouched', () => {
+    const live = stepNamed("'LIVE: run the first real Julius mission'");
+    expect(live).toContain('CARRY_SOURCE_RUN: ${{ inputs.carry_source_run }}');
+    expect(live).toContain('carry=()\n          if [ -n "${CARRY_SOURCE_RUN:-}" ]; then\n            carry=(--carry-bundle "$RUNNER_TEMP/julius-carry-source" --carry-source-run "$CARRY_SOURCE_RUN" --expect-commit "$(git rev-parse HEAD)")\n          fi');
+    expect(live).toContain('run --contract "$CONTRACT" --confirm-live --max-ticks "$MAX_TICKS" "${carry[@]}" | tee live-mission.log');
+    expect(workflow, 'the paid-slot queue parses this whole string').toContain("run-name: \"julius mission=${{ inputs.mission }} lane=${{ inputs.lane != '' && inputs.lane || 'unspecified' }} mode=${{ inputs.confirm_live == 'RUN LIVE MISSION' && 'paid' || 'preflight' }} key=${{ inputs.dispatch_key != '' && inputs.dispatch_key || 'none' }}\"");
+  });
+
+  it('the WITH arm\'s own bundle keeps the verification, by allowlist, and the pair\'s files it learned from', () => {
+    const collect = stepNamed('Collect the redacted validation evidence');
+    expect(collect).toContain('for log in preflight-roles.log carry-verification.log live-mission.log; do');
+    expect(collect).toContain('for file in bundle-manifest.txt carry-export.json source-run.json; do');
+    expect(collect).toContain('"julius-live-evidence/carry-source/$file"');
+  });
+
+  it('every paid bundle names its mission and contract digest, and records its carry export\'s digest the moment it is written', () => {
+    const script = read('.github/julius-live-evidence-dump.sh');
+    expect(script).toContain('echo "mission=$(manifest_token "$mission")"');
+    expect(script).toContain('echo "contract_sha256=$(manifest_token "$contract_sha256")"');
+    expect(script).toContain('.github/julius-missions/*/contract.json)');
+    const exportAt = script.indexOf('< .github/julius-carry-export.sql > "$out/carry-export.json"');
+    expect(exportAt, 'the export runs the query file, under ON_ERROR_STOP, with its run bound').toBeGreaterThan(script.indexOf('write_manifest ||'));
+    expect(script).toContain('psql -X -q -t -A -v ON_ERROR_STOP=1 -v run="${carry_run:-none}"');
+    expect(script.indexOf('echo "carry_export_sha256=$carry_digest" >> "$out/bundle-manifest.txt"')).toBeGreaterThan(exportAt);
+    expect(script, 'a failed query is a placeholder, as for every table').toContain("echo 'unavailable' > \"$out/carry-export.json\"");
+    const sql = read('.github/julius-carry-export.sql');
+    expect(sql.match(/:'run'/gu), 'the run is bound in exactly one place').toHaveLength(1);
+    expect(sql, 'named fact keys only, never a payload whole').not.toMatch(/e\.payload(?!->(?:>'taskId'|'facts'->'[A-Za-z]+'))/u);
+    // The regression job proves the query against a migrated schema on every PR.
+    const regression = read('.github/workflows/julius-real-infra.yml');
+    expect(regression).toContain('/tmp/julius-evidence-check/*.tsv /tmp/julius-evidence-check/carry-export.json');
+    expect(regression).toContain("grep -Eq '^carry_export_sha256=[0-9a-f]{64}$' /tmp/julius-evidence-check/bundle-manifest.txt");
+  });
+
+  it('the title the verifier accepts is the one this workflow writes for a paid run', () => {
+    const title = 'julius mission=julius-c-without-1 lane=lab mode=paid key=julius-c-without-1@0a2b4d162a09#lab#a1';
+    expect(/^julius mission=([a-z0-9-]{1,64}) lane=([a-z-]{1,40}) mode=(paid|preflight) key=([A-Za-z0-9._@#-]{1,96})$/u.test(title)).toBe(true);
+    expect(read('src/relay/mission/julius/julius-carry-archive.ts'))
+      .toContain('const RUN_TITLE = /^julius mission=([a-z0-9-]{1,64}) lane=([a-z-]{1,40}) mode=(paid|preflight) key=([A-Za-z0-9._@#-]{1,96})$/u;');
   });
 });

@@ -719,6 +719,8 @@ async function driveLiveMission(
     readonly diffs?: readonly string[];
     readonly maxRepairRounds?: number;
     readonly testCommand?: string;
+    /** The mission contract's `promotedWarningCategories` (Decision C, option B). */
+    readonly promotedWarningCategories?: readonly string[];
   },
 ) {
   const memory = createJuliusMemoryStore();
@@ -738,6 +740,7 @@ async function driveLiveMission(
     store: handoffs.store, entries: fakes.resolution.entries,
     cardRevision: 'card-test-1', spendCeilingUsdMicros: 5_000_000,
     maxRepairRounds: options?.maxRepairRounds ?? 1,
+    ...(options?.promotedWarningCategories === undefined ? {} : { promotedWarningCategories: options.promotedWarningCategories }),
     budget,
   });
   const outcome = await driveJuliusRunToTerminal({
@@ -4553,4 +4556,73 @@ describe('a Prompt Architect answer Julius cannot store is its own failure, paid
     expect(refusal.diagnostics).toMatchObject({ runtimeStarted: true });
     expect(calls.count).toBe(1);
   });
+});
+
+/**
+ * DECISION C, OPTION B, THROUGH THE LIVE COMPOSITION: a contract that names a
+ * kind of warning gets that warning repaired, and nothing else changes.
+ *
+ * The reviewer's raw text goes through the real validator and the real verdict
+ * mapping, so this is the path a paid review takes: a MINOR finding that says
+ * what kind of problem it is (`contract_drift`) becomes a WARNING of that kind.
+ * Promoted by the contract, it is a blocking finding, the plan is repaired, and
+ * the re-review resolves it by its id: the life Decision C carries as a
+ * VERIFIED_REPAIR_FINDING. Not promoted, the same review is retained and the
+ * plan proceeds, which is every mission today.
+ */
+describe('Decision C option B: a warning of a kind the contract names is repaired, and only then', () => {
+  const PLAN_WARNED = JSON.stringify({
+    verdict: 'approved', summary: 'The plan is acceptable with one concern.',
+    findings: [{
+      findingId: 'F-1', severity: 'minor', category: 'contract_drift', requirement: 'R6',
+      explanation: 'The test plan says ESM where the mission requires CommonJS.', evidence: 'the plan, testPlan',
+    }],
+    requirementsChecked: [{ requirement: 'AC-1', status: 'passed', evidence: 'read the plan' }],
+  });
+  const PROMOTED = 'finding:warning:plan-1:review:0';
+  const RE_REVIEW_RESOLVES = JSON.stringify({
+    verdict: 'approved', summary: 'The repaired plan says CommonJS throughout.', findings: [],
+    requirementsChecked: [{ requirement: 'AC-1', status: 'passed', evidence: 'read the repaired plan' }],
+    resolutions: [{ findingId: PROMOTED, status: 'RESOLVED', claim: 'The test plan now names require and module.exports.' }],
+  });
+
+  it('promoted by the contract: a blocking finding of that kind, a plan repair, and a re-review that resolves it by id', async () => {
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, undefined, [PLAN_WARNED, RE_REVIEW_RESOLVES, APPROVING_REVIEW],
+      undefined, undefined, undefined, { promotedWarningCategories: ['contract_drift'] });
+    expect(outcome, `halt: ${outcome.haltCause ?? 'none'}`).toMatchObject({ state: 'COMPLETED', stalled: false });
+    const findings = await memory.findingsForRun('run-live', 'prj-live');
+    expect(findings.map((finding) => [finding.findingId, finding.category, finding.blocking]))
+      .toEqual([[PROMOTED, 'contract_drift', true]]);
+    const onPlan = (await memory.decisionsForRun('run-live', 'prj-live')).filter((decision) => decision.taskId === 'plan-1');
+    expect(onPlan[0]?.action, 'the promoted warning sends the plan to repair').toBe('REPAIR');
+    const applied = memory.events().filter((event) => event.type === 'review.verdict.applied' && event.taskId === 'plan-1')
+      .map((event) => event.facts as Record<string, unknown>);
+    expect(applied[0]).toMatchObject({ verdict: 'WARNING', warningsRetained: 1, warningsPromoted: 1 });
+    const moves = memory.events().filter((event) => event.type === 'finding.transitioned')
+      .map((event) => event.facts as Record<string, unknown>).filter((facts) => facts.findingId === PROMOTED).map((facts) => facts.move);
+    expect(moves, 'repaired, then resolved by the independent re-review').toEqual(expect.arrayContaining(['REPAIR_SUCCEEDED', 'REVIEWER_RESOLVED']));
+  }, 30_000);
+
+  it('not promoted (every mission today): the same review is retained, nothing is repaired, and the plan proceeds', async () => {
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, undefined, [PLAN_WARNED, APPROVING_REVIEW]);
+    expect(outcome).toMatchObject({ state: 'COMPLETED', stalled: false });
+    const findings = await memory.findingsForRun('run-live', 'prj-live');
+    expect(findings.map((finding) => [finding.findingId, finding.category, finding.blocking])).toEqual([[PROMOTED, 'contract_drift', false]]);
+    const onPlan = (await memory.decisionsForRun('run-live', 'prj-live')).filter((decision) => decision.taskId === 'plan-1');
+    expect(onPlan.map((decision) => decision.action)).toEqual(['ACCEPT']);
+    expect(memory.events().some((event) => event.type === 'finding.transitioned'), 'nothing was repaired or resolved').toBe(false);
+  }, 30_000);
+
+  it('a kind the contract does not name is retained, and a warning of no kind can never be promoted', async () => {
+    const unnamed = PLAN_WARNED.replace('"contract_drift"', 'null');
+    for (const [texts, promoted] of [[[PLAN_WARNED, APPROVING_REVIEW], ['regression']], [[unnamed, APPROVING_REVIEW], ['contract_drift']]] as const) {
+      const { memory, outcome } = await driveLiveMission(['approved'], undefined, undefined, texts, undefined, undefined, undefined,
+        { promotedWarningCategories: promoted });
+      expect(outcome).toMatchObject({ state: 'COMPLETED', stalled: false });
+      const findings = await memory.findingsForRun('run-live', 'prj-live');
+      expect(findings.every((finding) => !finding.blocking), JSON.stringify(findings)).toBe(true);
+      expect((await memory.decisionsForRun('run-live', 'prj-live')).filter((decision) => decision.taskId === 'plan-1').map((decision) => decision.action))
+        .toEqual(['ACCEPT']);
+    }
+  }, 30_000);
 });
