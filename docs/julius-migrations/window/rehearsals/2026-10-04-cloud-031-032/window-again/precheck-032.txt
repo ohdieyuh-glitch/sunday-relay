@@ -1,0 +1,82 @@
+checked_at|2026-10-04 20:24:20.470654+00
+database|julius
+checked_by|julius
+server|PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+on_table|events
+trigger_name|events_event_id_immutable
+enabled|O
+definition|CREATE TRIGGER events_event_id_immutable BEFORE UPDATE OF event_id ON relay_wonderland.events FOR EACH ROW EXECUTE FUNCTION relay_wonderland.event_id_immutable()
+
+on_table|events
+trigger_name|events_truncate_refused
+enabled|O
+definition|CREATE TRIGGER events_truncate_refused BEFORE TRUNCATE ON relay_wonderland.events FOR EACH STATEMENT EXECUTE FUNCTION relay_wonderland.events_truncate_refused()
+
+on_table|events
+trigger_name|events_written_remember
+enabled|O
+definition|CREATE TRIGGER events_written_remember AFTER INSERT ON relay_wonderland.events REFERENCING NEW TABLE AS written_events FOR EACH STATEMENT EXECUTE FUNCTION relay_wonderland.events_written_remember()
+
+on_table|events
+trigger_name|outbox_follows_event_delete
+enabled|O
+definition|CREATE TRIGGER outbox_follows_event_delete AFTER DELETE ON relay_wonderland.events FOR EACH ROW EXECUTE FUNCTION relay_wonderland.outbox_follows_event_delete()
+
+on_table|events
+trigger_name|project_brain_event_notify
+enabled|O
+definition|CREATE TRIGGER project_brain_event_notify AFTER INSERT ON relay_wonderland.events FOR EACH ROW WHEN (((new.visibility = 'PROJECT'::text) AND ((new.event_type ~~ 'julius.%'::text) OR (new.event_type ~~ 'project_brain.%'::text)))) EXECUTE FUNCTION relay_wonderland.project_brain_notify()
+
+on_table|outbox
+trigger_name|outbox_event_id_immutable
+enabled|O
+definition|CREATE TRIGGER outbox_event_id_immutable BEFORE UPDATE OF event_id ON relay_wonderland.outbox FOR EACH ROW EXECUTE FUNCTION relay_wonderland.event_id_immutable()
+
+on_table|outbox
+trigger_name|outbox_requires_event_written
+enabled|O
+definition|CREATE TRIGGER outbox_requires_event_written BEFORE INSERT ON relay_wonderland.outbox FOR EACH ROW EXECUTE FUNCTION relay_wonderland.outbox_requires_event_written()
+function_definition|CREATE OR REPLACE FUNCTION relay_wonderland.outbox_follows_event_delete()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  DELETE FROM relay_wonderland.outbox WHERE event_id = OLD.event_id;
+  RETURN NULL;
+END;
+$function$
+
+function_body_md5|ec497065cf389709fb68d917b7777b00
+function_owner|julius
+remember_definition|CREATE OR REPLACE FUNCTION relay_wonderland.events_written_remember()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+  written text;
+BEGIN
+  SELECT string_agg(event_id, chr(31)) INTO written FROM written_events;
+  IF written IS NOT NULL THEN
+    PERFORM set_config('relay_wonderland.events_written',
+      coalesce(current_setting('relay_wonderland.events_written', true), '') || chr(31) || written || chr(31), true);
+  END IF;
+  RETURN NULL;
+END;
+$function$
+
+remember_body_md5|e3d7f86d472300f52ed44e333f501a2b
+remember_owner|julius
+delete_trigger_matches|t
+registry_triggers_match|t
+function_is_030|t
+function_has_forget|f
+remember_is_030|t
+remember_has_filter|f
+events_rows|300
+outbox_rows|300
+orphan_outbox_rows|0
+migration_030_applied|t
+migration_031_applied|t
+migration_032_applied|f
+ledger_count|30
+ledger_last|031_julius_run_transition_hot
