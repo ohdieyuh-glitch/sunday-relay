@@ -222,4 +222,38 @@ suite('Wonderland R16, scripted, against the real bridge process', () => {
     expect(unconfigured.status).toBe(2);
     expect(unconfigured.stdout).toContain('R16 BLOCKED — set RELAY_BRIDGE_TOKEN (scripted players) or WONDERLAND_R16_SESSIONS (three real players).');
   }, 180_000);
+
+  it('the real bridge holds every player to a command budget: a flood of messages is refused past twenty, and nothing past it is stored', async () => {
+    const players = r16Players(`f${nonce}`);
+    const paired = await pairR16Sessions({ bridge, origin: ORIGIN, operatorToken: OPERATOR, playerIds: [players.a, players.b], fetch });
+    if (!paired.ok) throw new Error(paired.reason);
+    const as = (player: string) => async (method: string, path: string, body?: unknown) => {
+      const response = await fetch(`${bridge}${path}`, {
+        method,
+        headers: { authorization: `Relay-Session ${paired.sessions[player]!}`, origin: ORIGIN, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      return { status: response.status, retryAfter: response.headers.get('retry-after'), body: await response.json() as { data?: unknown; error?: { kind?: string } } };
+    };
+    const a = as(players.a);
+    const b = as(players.b);
+    await b('GET', '/wonderland/social/me');
+    let sequence = 0;
+    const send = (who: typeof a, command: unknown) => who('POST', '/wonderland/social/commands', { commandId: `flood-${nonce}-${String(++sequence)}`, command });
+    await send(a, { kind: 'FRIEND_REQUEST', toId: players.b });
+    await send(b, { kind: 'FRIEND_ACCEPT', fromId: players.a });
+    const statuses: number[] = [];
+    for (let index = 0; index < 24; index += 1) {
+      const result = await send(a, { kind: 'SEND_MESSAGE', messageId: `m-${nonce}-${String(index)}`, toId: players.b, body: `n${String(index)}` });
+      statuses.push(result.status);
+      if (result.status === 429) {
+        expect(result.body.error?.kind).toBe('rate_limited');
+        expect(result.retryAfter, 'the standard header says when, for any HTTP client').toBe('3');
+      }
+    }
+    expect(statuses.slice(0, 20).every((status) => status === 200)).toBe(true);
+    expect(statuses.slice(20).every((status) => status === 429), JSON.stringify(statuses)).toBe(true);
+    const conversation = await b('GET', `/wonderland/social/conversations/${players.a}`);
+    expect(conversation.body.data as unknown[]).toHaveLength(20);
+  }, 60_000);
 });

@@ -132,6 +132,7 @@ WONDERLAND_R16_SESSIONS='{"<idA>":"<new token>",…}' RELAY_BRIDGE_TOKEN=... nod
   - the split check passes all six results after every player re-enters (`REENTERED`).
 - **A restart inside the lease:** every refresh holds (`HELD`), and nothing is re-entered.
 - **Stored state that changed across the restart** (a server C never created) is a DURABLE failure for C alone.
+- **The scenario fits each player's command budget** ([WONDERLAND_SOCIAL.md](WONDERLAND_SOCIAL.md) decision 7) with no time passing at all. The backend's clock is frozen, so no token ever comes back, and all 24 checks pass. The real-bridge suite also floods one player's messages: twenty are stored, and every one after is answered 429.
 
 **Four harness mutants, each killed:**
 - the heartbeat never fires;

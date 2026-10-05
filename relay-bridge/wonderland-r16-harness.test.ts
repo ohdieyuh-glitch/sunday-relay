@@ -13,6 +13,7 @@ import {
   type R16Players,
 } from '../scripts/wonderland-r16-harness.mjs';
 import { createBrowserSessionStore } from './browser-session/grants';
+import { createWonderlandCommandLimiter, type WonderlandCommandLimiter } from './wonderland-social-rate-limit';
 import { handleWonderlandSocialRoute } from './wonderland-social-routes';
 
 /**
@@ -31,7 +32,7 @@ const T0 = Date.UTC(2026, 9, 4, 12, 0, 0);
 const TTL_MS = WONDERLAND_PRESENCE_TTL_SECONDS * 1000;
 
 /** The social routes in process, behind a fetch. Each request moves the backend's clock by `stepMs`. */
-function backend(stepMs: number) {
+function backend(stepMs: number, options: { readonly limiter?: WonderlandCommandLimiter } = {}) {
   const sessions = createBrowserSessionStore();
   const store = createMemoryWonderlandSocialStore();
   let now = T0;
@@ -47,7 +48,7 @@ function backend(stepMs: number) {
       authorization: headers.authorization,
       body: typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined,
       now,
-    }, { store, sessions, allowNative: false });
+    }, { store, sessions, allowNative: false, ...(options.limiter === undefined ? {} : { limiter: options.limiter }) });
     return new Response(JSON.stringify(result?.body ?? { error: { kind: 'not_found' } }), {
       status: result?.status ?? 404, headers: { 'content-type': 'application/json' },
     });
@@ -139,5 +140,16 @@ describe('the restart check judges what is stored as stored, and what the lease 
     const durable = verified.results.filter((row) => row.name.startsWith('DURABLE'));
     expect(durable.map((row) => row.result)).toEqual(['PASS', 'PASS', 'FAIL']);
     expect(durable[2]!.detail).toContain('/me/servers');
+  }, 30_000);
+});
+
+describe('a player\'s command budget, as the bridge composes it', () => {
+  it('the whole scenario fits inside it with no time passing at all, so no token ever comes back: all 24 checks pass', async () => {
+    const b = backend(0, { limiter: createWonderlandCommandLimiter() });
+    const players = r16Players('budget');
+    const sessions = b.signIn(players);
+    const outcome = await runR16Scenario({ bridge: ORIGIN, origin: ORIGIN, sessions, players, nonce: 'budget', fetch: b.fetch, clock: b.clock });
+    expect(outcome.results.filter((row) => row.result === 'FAIL'), 'no check failed').toEqual([]);
+    expect(b.clock(), 'the backend\'s clock never moved').toBe(T0);
   }, 30_000);
 });

@@ -20,6 +20,7 @@ import {
   type WonderlandSocialState,
   type WonderlandSocialStore,
 } from '../src/relay/mission/wonderland-social';
+import type { WonderlandCommandLimiter } from './wonderland-social-rate-limit';
 
 /**
  * THE HOSTED SOCIAL API — `/wonderland/social/*`.
@@ -66,6 +67,11 @@ export interface WonderlandSocialRoutePorts {
   readonly sessions: Pick<BrowserSessionStore, 'verifySession' | 'verifyNativeSession'>;
   /** Whether a paired native client may use social. Off unless a reviewed decision turns it on. */
   readonly allowNative: boolean;
+  /**
+   * Per-player command budgets (`wonderland-social-rate-limit.ts`). Absent, nothing is limited. A refused command
+   * is answered 429 and is not executed; a replay of one already executed answers its record once the budget allows.
+   */
+  readonly limiter?: WonderlandCommandLimiter;
   /** The account's display name for a player, server-side. Null renders Unknown. */
   readonly displayNameFor?: (playerId: string) => Promise<string | null>;
   /**
@@ -85,7 +91,7 @@ export interface WonderlandSocialRoutePorts {
 export const WONDERLAND_SOCIAL_PREFIX = '/wonderland/social/';
 export const isWonderlandSocialRoute = (path: string): boolean => path.startsWith(WONDERLAND_SOCIAL_PREFIX);
 
-type Result = { readonly status: number; readonly body: unknown };
+type Result = { readonly status: number; readonly body: unknown; readonly headers?: Readonly<Record<string, string>> };
 const error = (status: number, kind: string, message: string): Result => ({ status, body: { error: { kind, message } } });
 
 const KEYS: Readonly<Record<WonderlandSocialCommand['kind'], readonly string[]>> = {
@@ -181,6 +187,21 @@ export async function handleWonderlandSocialRoute(
     if (!isWonderlandEntityId(body?.commandId)) return error(400, 'command_id_required', 'Every social write carries a commandId.');
     const command = parseWonderlandSocialCommand(body?.command);
     if (command === null) return error(400, 'command_invalid', 'The command is not one this backend has, or carries a field it does not have.');
+    const budget = ports.limiter?.take(player, command.kind, input.now);
+    if (budget !== undefined && !budget.allowed) {
+      return {
+        status: 429,
+        body: {
+          error: {
+            kind: 'rate_limited',
+            message: `Too many social commands (${budget.bucket}): this command was not executed. Retry in ${String(budget.retryAfterSeconds)} s.`,
+            bucket: budget.bucket,
+            retryAfterSeconds: budget.retryAfterSeconds,
+          },
+        },
+        headers: { 'retry-after': String(budget.retryAfterSeconds) },
+      };
+    }
     const at = new Date(input.now).toISOString();
     const before = ports.afterCommand === undefined ? null : await store.stateFor({ viewerId: player, now });
     const outcome = await store.execute({ actorId: player, commandId: body!.commandId as string, command, at });

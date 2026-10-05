@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { WONDERLAND_PRESENCE_TTL_SECONDS, createMemoryWonderlandSocialStore } from '../src/relay/mission/wonderland-social';
 import { NATIVE_WORLD_AUDIENCE, createBrowserSessionStore } from './browser-session/grants';
+import { createWonderlandCommandLimiter } from './wonderland-social-rate-limit';
 import {
   handleWonderlandSocialRoute,
   isWonderlandSocialRoute,
@@ -223,5 +224,45 @@ describe('display names come from the account, and a request that knows none nev
     const { store, player, call } = stage();
     await call(player('cal'), 'GET', '/wonderland/social/me');
     expect(store.snapshot().profiles.cal).toEqual({ displayName: 'CAL' });
+  });
+});
+
+describe('a flood from one signed-in player', () => {
+  it('is refused at its budget with 429, executes nothing past it, and leaves every other player untouched', async () => {
+    const { player, command, call } = stage({ limiter: createWonderlandCommandLimiter() });
+    const ann = player('ann');
+    const ben = player('ben');
+    const cal = player('cal');
+    await call(ben, 'GET', '/wonderland/social/me');
+    await call(cal, 'GET', '/wonderland/social/me');
+    for (const [from, to] of [[ann, 'ben'], [ben, 'ann']] as const) await command(from, { kind: 'FRIEND_REQUEST', toId: to });
+    const sent = [];
+    for (let index = 0; index < 25; index += 1) {
+      sent.push(await command(ann, { kind: 'SEND_MESSAGE', messageId: `flood-${String(index)}`, toId: 'ben', body: `message ${String(index)}` }));
+    }
+    expect(sent.slice(0, 20).every((result) => result?.status === 200), 'twenty are a person\'s burst').toBe(true);
+    for (const refused of sent.slice(20)) {
+      expect(refused).toMatchObject({ status: 429, body: { error: { kind: 'rate_limited', bucket: 'message', retryAfterSeconds: 3 } }, headers: { 'retry-after': '3' } });
+      expect((refused?.body as { error: { message: string } }).error.message).toContain('this command was not executed');
+    }
+    const conversation = await call(ben, 'GET', '/wonderland/social/conversations/ann');
+    expect((conversation?.body as { data: unknown[] }).data, 'nothing past the budget was stored').toHaveLength(20);
+    // Everyone else is untouched, and ann may still do what is not a message.
+    expect((await command(cal, { kind: 'SEND_MESSAGE', messageId: 'cal-1', toId: 'ben', body: 'hi' }))?.status).toBe(200);
+    expect((await command(ben, { kind: 'SEND_MESSAGE', messageId: 'ben-1', toId: 'ann', body: 'slow down' }))?.status).toBe(200);
+    expect((await command(ann, { kind: 'BLOCK', targetId: 'cal' }))?.status, 'a block is never held behind a message budget').toBe(200);
+    // Three seconds later one more message is admitted.
+    expect((await command(ann, { kind: 'SEND_MESSAGE', messageId: 'later', toId: 'ben', body: 'later' }, NOW + 3_000))?.status).toBe(200);
+  });
+
+  it('without a limiter composed, nothing is limited, as before', async () => {
+    const { player, command, call } = stage();
+    const ann = player('ann');
+    const ben = player('ben');
+    await call(ben, 'GET', '/wonderland/social/me');
+    for (const [from, to] of [[ann, 'ben'], [ben, 'ann']] as const) await command(from, { kind: 'FRIEND_REQUEST', toId: to });
+    for (let index = 0; index < 30; index += 1) {
+      expect((await command(ann, { kind: 'SEND_MESSAGE', messageId: `free-${String(index)}`, toId: 'ben', body: 'x' }))?.status).toBe(200);
+    }
   });
 });

@@ -38,6 +38,14 @@ Visibility is `OWNER`, `PARTICIPANTS`, or `PUBLIC`. `PARTICIPANTS` is battle mem
 
 See [WONDERLAND_SOCIAL.md](WONDERLAND_SOCIAL.md) decision 6.
 
+**Social commands have a per-player budget.**
+- A burst of 60 commands, then one a second.
+- Within that: 20 messages, then one every 3 s; and 10 friend requests or invitations, then one every 30 s.
+- Past it, `/social/commands` answers `429 rate_limited` with `bucket`, `retryAfterSeconds` and a `Retry-After` header. **The command was not executed.** Send the same `commandId` again after the wait.
+- A refused command takes nothing from the budget.
+
+See [WONDERLAND_SOCIAL.md](WONDERLAND_SOCIAL.md) decision 7.
+
 Every mutating request carries a globally unique `commandId`. Retrying the same command returns its first result and does not duplicate a Mission, battle, worker set, reward, or Avatar progression.
 
 ## SSE, cursor, and reconnect

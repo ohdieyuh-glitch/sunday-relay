@@ -99,6 +99,7 @@ import {
 import { WonderlandVoicePostgresStore } from '../src/relay/persistence/wonderland-voice-postgres';
 import { handleWonderlandReadinessRoute, readWonderlandReadinessReport, WONDERLAND_READINESS_PATH } from './wonderland-store-readiness';
 import { createBridgeBoot } from './bridge-identity';
+import { createWonderlandCommandLimiter } from './wonderland-social-rate-limit';
 import { WonderlandSocialPostgresStore } from '../src/relay/persistence/wonderland-social-postgres';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 
@@ -440,6 +441,8 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
   const pspStore = config.stateRoot === null ? null : createPspConfigStore({ root: config.stateRoot });
   // This server's start, drawn once: the readiness route reports it, so a restart is a fact rather than a claim.
   const boot = createBridgeBoot();
+  // One budget per player for this server's life: a flood from one account is refused, everyone else is untouched.
+  const socialLimiter = createWonderlandCommandLimiter();
   return createServer((req, res) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
     const cors = corsHeaders(config, origin);
@@ -770,6 +773,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             store: socialPool === null ? null : new WonderlandSocialPostgresStore(socialPool),
             sessions: browserSessions,
             allowNative: false,
+            limiter: socialLimiter,
             // When voice is live, every committed social change takes back the voice-room
             // memberships the wall no longer allows (a block, a hide, a departure).
             ...(voiceLive ? {
@@ -777,7 +781,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
                 reconcileWonderlandVoice(voicePorts, wonderlandVoiceAffected(before, after, actorId, command), at),
             } : {}),
           });
-          if (socialResult !== null) send(res, socialResult.status, socialResult.body, cors);
+          if (socialResult !== null) send(res, socialResult.status, socialResult.body, { ...cors, ...(socialResult.headers ?? {}) });
           return;
         }
 

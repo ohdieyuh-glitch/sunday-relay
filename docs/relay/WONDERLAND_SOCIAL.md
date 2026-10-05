@@ -74,6 +74,42 @@ There is one relation, `wonderlandRelationOf`: `SELF`, `BLOCKED` (either directi
      - the real-PostgreSQL parity case.
 
      **Four mutants are killed:** liveness off, the decider ignoring it, the PostgreSQL read ignoring it, and the voice read ignoring it.
+7. **Each player's social commands have a budget** (`relay-bridge/wonderland-social-rate-limit.ts`). **PREPARED, NOT CHOSEN:** the limits are a product decision.
+   - **The problem.** A block ends a flood aimed at one victim. Nothing ended a flood aimed at everyone: one signed-in account could send friend requests, invitations and messages as fast as the bridge answers.
+   - **The key is the session's verified player**, never a header or an address a caller could rotate.
+   - **Three token buckets per player:**
+
+     | Bucket | Drawn by | Burst | Then |
+     |---|---|---|---|
+     | `all` | every command | 60 | one a second |
+     | `message` | `SEND_MESSAGE` | 20 | one every 3 s |
+     | `invitation` | `FRIEND_REQUEST`, `PARTY_INVITE`, `SERVER_INVITE` | 10 | one every 30 s |
+
+     A client's own heartbeat (`UPDATE_PRESENCE` every 30 s) is one token in thirty of what `all` returns. A block or an unblock draws only on `all`, so it is never held behind a message budget.
+   - **The answer.**
+     - A command is admitted only when every bucket it draws on holds a token, and then takes one from each.
+     - Otherwise it is answered `429 rate_limited`, with the `bucket`, `retryAfterSeconds` and a `Retry-After` header. **The command is not executed, and it takes nothing:** a caller who keeps knocking does not dig their own wait deeper.
+     - The budget is checked after the session is verified and the command is parsed, so a malformed or unauthenticated request draws nothing. The player's profile is still ensured first, as for every social request.
+     - A command the wall refuses (for example `NOT_IN_INSTANCE`) was admitted and decided, so it has drawn its token. So has the replay of a `commandId` already executed: it answers its first result once the budget allows.
+   - **What it is not:**
+     - Reads (`GET /social/*`) are not limited.
+     - The budget lives in the bridge process's memory. A restart forgets it, which gives every player a full bucket again. That is the safe direction, and a restart revokes every session anyway.
+     - Each bridge instance would hold its own budget. The hosted bridge is one instance.
+     - Memory is bounded at 10,000 players: past it, the player not seen longest is forgotten and starts full again.
+   - **The clock is integer milliseconds** (GCRA). A clock that steps backwards refills nothing and locks nobody out. A first version on fractional tokens never returned an invitation token at exactly 30 s: `29.999/30 + 0.001/30` is `0.9999999999999999`.
+   - **Proven by:**
+     - the unit suite (`wonderland-social-rate-limit.test.ts`): every boundary to the millisecond;
+     - the route suite: a flood refused at twenty, exactly twenty stored, everyone else untouched;
+     - the R16 suites: the whole scenario fits the budget with no time passing at all, and the real bridge process refuses a flood past twenty and stores nothing past it.
+
+     **Seven mutants are killed:**
+     - the limiter not composed in the bridge;
+     - the route ignoring a refusal;
+     - a refused command still taking its tokens;
+     - one budget shared by every player;
+     - a backwards clock read as it is;
+     - messages drawing only on `all`;
+     - the bridge dropping the `Retry-After` header.
 
 ## Not done here, and where it goes
 
