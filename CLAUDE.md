@@ -197,6 +197,7 @@ Every JUJU PR below is green. What moves the material order next is a decision, 
 | 5 | `allowNative` (native social for the RC) | SECOND Wonderland / founder | #339 | its evidence holds; a one-line change. Players must OWN their client's project |
 | 6 | A rate limit on social commands | SECOND Wonderland / founder | #340 | adopt #340's budgets (60 commands then 1/s; 20 messages then 1 per 3 s; 10 invitations then 1 per 30 s) before any public hosted launch |
 | 7 | Close the stale PRs #290, #291 and #293–#297 | founder | Findings below | close: folded into `main` |
+| 8 | Voice room count: pair rooms cost one EOS room per mutually visible channel mate. Is that within an EOS client's limit, or must instance voice be bounded? | CORE / founder | #325 | pair rooms are the only inference-free construction; bound the channel rather than the wall if EOS requires it |
 
 ### Work in flight from the JUJU MAIN cloud session (2026-10-04; all draft, AWAITING INDEPENDENT REVIEW)
 
@@ -230,7 +231,11 @@ Every JUJU PR below is green. What moves the material order next is a decision, 
     - **HIGH:** a copy's id (`carried:<source run>:<ref>`) is not scoped to the receiving run, and the insert is a bare `ON CONFLICT DO NOTHING`. On any long-lived store, the second run to inherit a fact gets nothing, its standing is deduplicated away, and a WITH arm is still accepted (`selected=1 written=0`). Each paid job's database is fresh, so the paid venue is not affected.
     - **MEDIUM:** a restore that failed halfway and is replayed drops copies and standings permanently (revisions advance only on inserts, and a `(run_id, revision)` collision is swallowed).
     - **LOW, latent:** eligibility never checks `blocking`, so a non-blocking warning resolved after a repair could count as a VERIFIED_REPAIR_FINDING. #331 records a promoted warning as `blocking: true`, so requiring it is compatible.
-  - **Wonderland wall (#323, #325, #330), being fixed next:**
+  - **Wonderland wall (#325, #330). FIXED 2026-10-05:**
+    - #325 `4ae3683b`: pair rooms, the actor's own counts, and re-bind. 8 mutants killed; full suite 13,902 passed.
+    - #330 `9586bf81`: the removal. 2 mutants killed; full suite 13,928 passed.
+    - Merged up through #328, #327, #332, #334 and #336 into #338, #339 and #340. Full suite on #336: 14,009 passed.
+    - Each defect was reproduced first. **Every voice room is now one mutually visible pair**: the only construction under which a player's rooms never depend on anyone they cannot see. The defects, for the record:
     - **HIGH (P1 / no inference), #325:** the voice room plan for players a viewer CAN see depends on players they CANNOT. A hidden player's arrival splits a stranger's room, and the reconcile kicks that stranger out of voice; the same holds for blocks. The P1 and no-inference "identical view" tests check `wonderlandVoiceRouting`, which nothing in production calls. **A shared-room clique partition cannot be inference-free in general**, so this is a design question for SECOND Wonderland and the founder.
     - **HIGH, #325:** `voice.revoked` on a command's answer counts revocations of players the actor cannot see.
     - **MEDIUM, #325:** a re-bind never removes the old PUID from its rooms. Later removals target the new PUID and are recorded as done.
