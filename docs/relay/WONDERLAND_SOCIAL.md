@@ -61,7 +61,11 @@ There is one relation, `wonderlandRelationOf`: `SELF`, `BLOCKED` (either directi
    - **What follows:**
      - an entry records no encounter with someone who has gone;
      - a heartbeat from an expired presence is refused `NOT_IN_INSTANCE` (409), never silently revived;
-     - the client then enters again.
+     - the client then enters again;
+     - **a member removed from a private server loses their stored presence row in its instance, lapsed or not, and a heartbeat re-checks membership** (`NOT_IN_INSTANCE` otherwise). Before this (review finding, 2026-10-05):
+       - a member removed a moment after their lease ran out kept the expired row;
+       - a heartbeat stamped just before the expiry, but decided after the removal, made it live again, so a non-member stood in the server.
+       - Proven in both stores, by the review's own out-of-order sequence. Two mutants are killed.
    - **Nothing is deleted.** The row stays until the player's next entry overwrites it. It simply stops counting, in both stores. The parity suite reads the row back from PostgreSQL, and both stores agree on every projection after an expiry.
    - **Voice.**
      - The room planned without the departed player has different members, so it is a different room.
