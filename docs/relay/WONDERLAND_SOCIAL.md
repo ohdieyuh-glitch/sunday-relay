@@ -77,7 +77,7 @@ There is one relation, `wonderlandRelationOf`: `SELF`, `BLOCKED` (either directi
 
 ## Not done here, and where it goes
 
-- **Voice (035):** EOS rooms and the trusted voice server enforce `wonderlandVoiceRouting` as per-listener hard mutes. The migration and the client-config endpoint belong to the voice lane.
+- **Voice (035):** EOS has no per-listener mute, so the wall is enforced by which rooms each player holds a token for. Every room is one mutually visible pair, so a player's rooms never depend on anyone they cannot see. See [WONDERLAND_VOICE.md](WONDERLAND_VOICE.md). `wonderlandVoiceRouting` and `projectWonderlandVoiceRoster` here state who may hear whom; the voice route plans its rooms with `planWonderlandVoiceRooms`, and that planner carries its own P1 and no-inference property tests.
 - **The client (CORE):**
   - The final RC calls these routes against the hosted HTTPS backend, not `127.0.0.1`.
   - While in an instance, it sends `UPDATE_PRESENCE` at least every 30 s, and answers `NOT_IN_INSTANCE` by entering again (decision 6).
