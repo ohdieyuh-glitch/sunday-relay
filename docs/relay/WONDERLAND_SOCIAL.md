@@ -57,6 +57,6 @@ There is one relation, `wonderlandRelationOf`: `SELF`, `BLOCKED` (either directi
 
 ## Not done here, and where it goes
 
-- **Voice (035):** EOS rooms and the trusted voice server enforce `wonderlandVoiceRouting` as per-listener hard mutes. The migration and the client-config endpoint belong to the voice lane.
+- **Voice (035):** EOS has no per-listener mute, so the wall is enforced by which rooms each player holds a token for. Every room is one mutually visible pair, so a player's rooms never depend on anyone they cannot see. See [WONDERLAND_VOICE.md](WONDERLAND_VOICE.md). `wonderlandVoiceRouting` and `projectWonderlandVoiceRoster` here state who may hear whom; the voice route plans its rooms with `planWonderlandVoiceRooms`, and that planner carries its own P1 and no-inference property tests.
 - **The client (CORE):** the final RC calls these routes against the hosted HTTPS backend, not `127.0.0.1`.
 - **The live store:** applying 033 is JUJU's sequenced local operation (`docs/julius-migrations/033/RUNBOOK.md`), after 031 and 032 are landed and applied. It is **READY FOR LOCAL QUALIFICATION** once the branch lands.

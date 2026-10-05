@@ -89,10 +89,13 @@ async function planFor(
 }
 
 /**
- * TAKE BACK WHAT THE WALL NO LONGER ALLOWS. For each player: the rooms their
- * open issuances name, minus the rooms their current plans give them, are
- * removed on the trusted server and recorded as revoked. Returns what it did;
- * throws nothing a caller could mistake for success.
+ * TAKE BACK WHAT THE WALL NO LONGER ALLOWS. For each player, an open issuance
+ * is removed on the trusted server and recorded as revoked when its room is not
+ * in the player's current plans, OR when the identity its token admits is not
+ * the one the player is bound to now (a re-bind). The identity removed is the
+ * one the token admitted, never the current one: removing the current identity
+ * from a room a former one holds removes nobody. Returns what it did; throws
+ * nothing a caller could mistake for success.
  */
 export async function reconcileWonderlandVoice(ports: WonderlandVoiceRoutePorts, playerIds: readonly string[], at: string): Promise<{
   readonly removed: readonly { readonly playerId: string; readonly roomId: string }[];
@@ -102,7 +105,7 @@ export async function reconcileWonderlandVoice(ports: WonderlandVoiceRoutePorts,
   const failed: { playerId: string; roomId: string }[] = [];
   if (ports.identities === null || ports.social === null || ports.voice === null) return { removed, failed };
   for (const playerId of [...new Set(playerIds)].sort()) {
-    const open = await ports.identities.openRoomsOf(playerId);
+    const open = await ports.identities.openIssuancesOf(playerId);
     if (open.length === 0) continue;
     const puid = await ports.identities.productUserIdOf(playerId);
     const state = await ports.social.stateFor({ viewerId: playerId });
@@ -113,10 +116,10 @@ export async function reconcileWonderlandVoice(ports: WonderlandVoiceRoutePorts,
       const { plan } = await planFor(ports, channel);
       for (const roomId of plan.joins[playerId] ?? []) allowed.add(roomId);
     }
-    for (const roomId of open) {
-      if (allowed.has(roomId)) continue;
+    for (const { roomId, productUserId } of open) {
+      if (allowed.has(roomId) && productUserId === puid) continue;
       try {
-        if (puid !== null) await ports.voice.removeParticipant({ roomId, productUserId: puid });
+        await ports.voice.removeParticipant({ roomId, productUserId });
         await ports.identities.recordRevocation({ playerId, roomId, at });
         removed.push({ playerId, roomId });
       } catch {
@@ -184,14 +187,19 @@ export async function handleWonderlandVoiceRoute(input: WonderlandVoiceRouteRequ
     const channel = channelOf(state, player, kind);
     if (channel === null) return error(409, kind === 'INSTANCE' ? 'not_in_instance' : 'not_in_party', `You are not in ${kind === 'INSTANCE' ? 'an instance' : 'a party'}.`);
     const { plan } = await planFor(ports, channel);
+    // First, what the player still holds from an earlier plan, or as a former identity, is taken back.
+    const reconciled = await reconcileWonderlandVoice(ports, [player], at);
+    // A room a former identity still holds (its removal failed) is not issued again until that identity is out.
+    const heldByAnother = new Set((await ports.identities.openIssuancesOf(player))
+      .filter((row) => row.productUserId !== puid).map((row) => row.roomId));
     const rooms: { roomId: string; token: string; clientBaseUrl: string }[] = [];
     for (const roomId of plan.joins[player] ?? []) {
+      if (heldByAnother.has(roomId)) continue;
+      // Recorded BEFORE the token exists, so every token Epic issues is on the record the reconciler reads.
+      await ports.identities.recordIssuance({ playerId: player, roomId, productUserId: puid, at });
       const issued = await ports.voice.roomToken({ roomId, productUserId: puid });
-      await ports.identities.recordIssuance({ playerId: player, roomId, at });
       rooms.push({ roomId, token: issued.token, clientBaseUrl: issued.clientBaseUrl });
     }
-    // Rooms the player still holds from an earlier plan of this channel are taken back now.
-    const reconciled = await reconcileWonderlandVoice(ports, [player], at);
     return {
       status: 200,
       body: { data: { channel: kind, rooms, revoked: reconciled.removed.length, revocationFailures: reconciled.failed.length } },
