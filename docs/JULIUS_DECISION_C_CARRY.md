@@ -29,8 +29,8 @@ These are implemented in `src/relay/mission/julius/julius-carry.ts`, which is pu
 
 | Class | Rule |
 |---|---|
-| `VERIFIED_REPAIR_FINDING` | An Independent Reviewer's finding. A review is on record as raising it (`finding.recorded`), at least one repair round claimed to address it, and its life ended `RESOLVED` by a reviewer's own declaration (`REVIEWER_RESOLVED` naming the resolving review). It has evidence and is not `DISMISSED`. |
-| `VERIFIED_FINDING` | The same, resolved by the reviewer with no repair round. It is verified, but it is **not** a repair finding. |
+| `VERIFIED_REPAIR_FINDING` | An Independent Reviewer's **blocking** finding. A review is on record as raising it (`finding.recorded`), at least one repair round claimed to address it, and its life ended `RESOLVED` by a reviewer's own declaration (`REVIEWER_RESOLVED` naming the resolving review). It has evidence and is not `DISMISSED`. A warning Julius promoted is recorded blocking, so it counts. |
+| `VERIFIED_FINDING` | The same, resolved by the reviewer with no repair round, or a **non-blocking** finding that a repair round only happened to address (a repair marks every open finding of its unit addressed). It is verified, but it is **not** a repair finding. |
 | `ACCEPTED_DECISION` | A run-wide (`task_id NULL`) `DECISION` entry whose current standing is `APPROVED` on `DECISION` evidence, so it was adopted and is in force. |
 
 **Everything else is excluded by name.** The 17 codes, with their tests, are:
@@ -51,6 +51,13 @@ These are implemented in `src/relay/mission/julius/julius-carry.ts`, which is pu
 - Its standing is `VERIFIED` on the resolving review, asserted by the reviewer.
   So no reviewer in the receiving run can "verify" it again.
 - A copy is never carried onward: a third run sees the original, not the copy.
+- **Every heir holds its own copy.** The copy's id names the run that receives
+  it (`carried:<receiving run>:<source run>:<ref>`), and its claim id is derived
+  from that. Entry ids are unique across the whole store, so with the source run
+  alone, the first run to inherit a fact owned its copy: on a long-lived store
+  every later heir was written nothing, its standing was deduplicated into the
+  first heir's, and a WITH arm was still accepted. Each paid job's database is
+  fresh, so the paid venue never met this.
 
 **The pair rule (`juliusCarryPairGate`).**
 - A `WITH` arm is valid only with at least one `VERIFIED_REPAIR_FINDING`.
@@ -59,6 +66,19 @@ These are implemented in `src/relay/mission/julius/julius-carry.ts`, which is pu
 - The bootstrap refuses an invalid `WITH` arm (`carry_pair_invalid`) **before it
   writes anything**: no run, no task, nothing a paid dispatch could pick up.
 - A `WITH` arm whose restore fails is refused too, as `bootstrap_persistence_failure`.
+- So is a `WITH` arm that holds **less than its carry selected**
+  (`carry_restore_incomplete`, retryable): the arm is judged on what it
+  received.
+
+**The restore converges.** The manifest is written last, only when every
+selected copy and its standing are in the store, and it records how many the run
+holds. A restore that failed partway left no manifest, so its replay finishes the
+carry:
+- each copy is written if it is not there yet, at the run's next revision, never
+  one an earlier attempt took;
+- each standing is recorded if it is not (the same standing is written once).
+
+A replay that finds the manifest writes nothing and reports the same count.
 - A `WITHOUT` arm inherits nothing, and its manifest records `arm=WITHOUT selected=0`.
 - An ordinary mission (no arm) is never refused for its carry.
 
@@ -68,7 +88,7 @@ These are implemented in `src/relay/mission/julius/julius-carry.ts`, which is pu
 |---|---|---|
 | 1. What WITHOUT wrote | `julius_reviewer_findings` rows and the `julius.finding.recorded` / `julius.finding.transitioned` events of the WITHOUT run | `julius-carry.real-postgres.test.ts` "point 1" |
 | 2. What became carry-eligible | One `julius.knowledge.carried` event per receiving run (id `julius:knowledge.carried:<run>`). It holds: version, arm, counts per class, `selectedEntryIds`, `excludedByCode`, and `excludedRefs` (`code:run:ref`) | `julius-carry.test.ts` and the real-PG test "point 2" |
-| 3. What WITH restored | `julius_brain_entries` rows `carried:<run>:finding:<id>` (kind `FINDING`, worker = the reviewer) and their `julius_claim_standings` (reason `CARRIED_FROM:<run>:<ref>`) | real-PG test "point 3", including replay writing nothing |
+| 3. What WITH restored | `julius_brain_entries` rows `carried:<receiving run>:<source run>:finding:<id>` (kind `FINDING`, worker = the reviewer) and their `julius_claim_standings` (reason `CARRIED_FROM:<source run>:<ref>`); the manifest's `written` is how many the run holds with their standing | real-PG test "point 3" (a replay writes nothing), "a second heir", "a squatted id" and "a restore that failed halfway" |
 | 4. What the WITH planner received | `julius.context.compiled` on each task: `carriedReceived` (count) and `carriedReceivedIds`, read off the compiled snapshot's own `sourceEntryIds` | `julius-learning-loop.e2e.test.ts` (real run loop) |
 
 ## Registration

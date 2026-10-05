@@ -34,11 +34,14 @@ import type { JuliusReviewerFinding } from './julius-verification-runtime';
  *
  * WHAT IS CARRIED NOW, and nothing else:
  *
- *   VERIFIED_REPAIR_FINDING  an Independent Reviewer's finding whose life ended
- *                            RESOLVED by a reviewer's own declaration, after at
- *                            least one repair round claimed to address it.
+ *   VERIFIED_REPAIR_FINDING  an Independent Reviewer's BLOCKING finding whose
+ *                            life ended RESOLVED by a reviewer's own declaration,
+ *                            after at least one repair round claimed to address
+ *                            it. (A warning Julius promoted is recorded blocking.)
  *   VERIFIED_FINDING         the same, resolved by the reviewer with no repair
- *                            round. It is verified, but it is not a repair.
+ *                            round, or a non-blocking finding a repair round only
+ *                            happened to address. It is verified, but it is not a
+ *                            repair.
  *   ACCEPTED_DECISION        a run-wide DECISION entry whose current standing is
  *                            APPROVED on DECISION evidence: adopted, in force.
  *
@@ -134,7 +137,10 @@ export interface JuliusCarryScope {
 export interface JuliusCarryItem {
   readonly carryClass: JuliusCarryClass;
   readonly scope: JuliusCarryScope;
-  /** The id the copy takes in the receiving run. Legible, and stable, so a replay writes nothing twice. */
+  /**
+   * The id the copy takes in the receiving run: legible, stable so a replay writes nothing twice, and the
+   * receiving run's OWN, so every run that inherits the same fact holds its own copy and claim.
+   */
   readonly entryId: string;
   /** The stored brain kind the copy is written as. */
   readonly storedKind: 'FINDING' | 'DECISION';
@@ -161,9 +167,15 @@ export interface JuliusCarrySelection {
   readonly counts: Readonly<Record<JuliusCarryClass, number>>;
 }
 
-/** The entry id a carried copy takes: its source run and what it was there. */
-export const juliusCarryEntryId = (sourceRunId: string, sourceRef: string): string =>
-  `carried:${sourceRunId}:${sourceRef}`;
+/**
+ * The entry id a carried copy takes: the run that RECEIVES it, its source run, and what it was there.
+ *
+ * Entry ids are unique across the whole store, so an id without the receiving run made a fact's copy the property of
+ * the first run to inherit it: on a long-lived store every later heir collided with that row, was written nothing, and
+ * its claim (derived from the id) was deduplicated into the first heir's.
+ */
+export const juliusCarryEntryId = (targetRunId: string, sourceRunId: string, sourceRef: string): string =>
+  `carried:${targetRunId}:${sourceRunId}:${sourceRef}`;
 
 export const isJuliusCarriedEntryId = (entryId: string): boolean => entryId.startsWith('carried:');
 
@@ -197,17 +209,20 @@ function findingVerdict(
   // its author cannot be shown to be the Independent Reviewer.
   if (life.originReviewTaskId === null) return 'FINDING_ORIGIN_UNKNOWN';
   if (finding.evidenceIds.length === 0) return 'FINDING_WITHOUT_EVIDENCE';
-  return life.repairTaskIds.length > 0 ? 'VERIFIED_REPAIR_FINDING' : 'VERIFIED_FINDING';
+  // A repair round marks every OPEN finding of its unit ADDRESSED, the non-blocking ones too, and a re-review may
+  // resolve any of them. Only a finding that blocked the work is one a repair had to answer.
+  return life.repairTaskIds.length > 0 && finding.blocking ? 'VERIFIED_REPAIR_FINDING' : 'VERIFIED_FINDING';
 }
 
 function findingItem(
+  targetRunId: string,
   sourceRunId: string,
   finding: JuliusReviewerFinding,
   life: JuliusFindingLife,
   carryClass: 'VERIFIED_REPAIR_FINDING' | 'VERIFIED_FINDING',
 ): JuliusCarryItem {
   const sourceRef = `finding:${finding.findingId}`;
-  const entryId = juliusCarryEntryId(sourceRunId, sourceRef);
+  const entryId = juliusCarryEntryId(targetRunId, sourceRunId, sourceRef);
   const origin = life.originReviewTaskId!;
   const resolution = life.resolutionReviewTaskId!;
   const label = carryClass === 'VERIFIED_REPAIR_FINDING' ? 'PRIOR VERIFIED REPAIR FINDING' : 'PRIOR VERIFIED FINDING';
@@ -275,9 +290,9 @@ function claimVerdict(candidate: JuliusCarryClaimCandidate): { code: JuliusCarry
   return null;
 }
 
-function decisionItem(candidate: JuliusCarryClaimCandidate): JuliusCarryItem {
+function decisionItem(targetRunId: string, candidate: JuliusCarryClaimCandidate): JuliusCarryItem {
   const sourceRef = candidate.entry.entryId;
-  const entryId = juliusCarryEntryId(candidate.sourceRunId, sourceRef);
+  const entryId = juliusCarryEntryId(targetRunId, candidate.sourceRunId, sourceRef);
   const what = isJuliusArchitectureEntryId(sourceRef) ? 'ACCEPTED ARCHITECTURE DECISION' : 'ACCEPTED DECISION';
   return Object.freeze({
     carryClass: 'ACCEPTED_DECISION' as const,
@@ -335,7 +350,7 @@ export function selectJuliusCarry(input: {
       const life = lives.get(finding.findingId);
       const verdict = findingVerdict(finding, life);
       if (verdict === 'VERIFIED_REPAIR_FINDING' || verdict === 'VERIFIED_FINDING') {
-        eligible.push(findingItem(source.runId, finding, life!, verdict));
+        eligible.push(findingItem(input.targetRunId, source.runId, finding, life!, verdict));
       } else {
         exclude(source.runId, sourceRef, verdict, life?.state ?? null);
       }
@@ -345,7 +360,7 @@ export function selectJuliusCarry(input: {
   for (const candidate of input.claims) {
     if (candidate.sourceRunId === input.targetRunId) { exclude(candidate.sourceRunId, candidate.entry.entryId, 'SAME_RUN'); continue; }
     const verdict = claimVerdict(candidate);
-    if (verdict === null) eligible.push(decisionItem(candidate));
+    if (verdict === null) eligible.push(decisionItem(input.targetRunId, candidate));
     else exclude(candidate.sourceRunId, candidate.entry.entryId, verdict.code, verdict.detail);
   }
 

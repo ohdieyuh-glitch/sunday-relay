@@ -33,9 +33,11 @@ export interface MissionKnowledgeStore {
   /** What earlier missions of this project hold that may travel, and everything that may not, by code. */
   select(input: { readonly projectId: string; readonly targetRunId: string }): Promise<JuliusCarrySelection>;
   /**
-   * Write the selected copies and the manifest. Returns how many copies this
-   * call wrote, so a replayed bootstrap reports 0 rather than pretending to have
-   * learned something twice.
+   * Write the selected copies, their standings and the manifest, once. Returns
+   * how many of the selected copies the run HOLDS with their standing, which is
+   * what the manifest records: a replay writes nothing and returns the same
+   * count, and an interrupted restore is finished by its replay, never taken
+   * for done.
    */
   restore(input: {
     readonly runId: string;
