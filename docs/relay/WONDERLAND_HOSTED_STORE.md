@@ -89,7 +89,7 @@ Each step names its owner.
 
    Scripted players make it a REHEARSAL by name (`SCRIPTED_PLAYERS`, `PLAYERS_NOT_VERIFIED`). Then CORE's run with three real identities, EOS and the shipped RC, on the same store, adds `--final`. That run must be judged HOSTED_FINAL.
 
-**Later, 035 (voice).** Once it lands behind 034, the same `bootstrap` sees a HOSTED_STORE and applies only what is pending.
+**035 (voice), behind 034.** With 034 reserved (prepared, not chosen: #337 option 4), the same `bootstrap` sees a store it left at 033 as a HOSTED_STORE. It applies exactly 034 and 035, keeps every row and its marker, and adds only the three voice tables. That is rehearsed below.
 
 ## Rollback
 
@@ -99,7 +99,7 @@ Each step names its owner.
 
 ## Proof (rehearsed, nothing hosted touched)
 
-**`relay-bridge/wonderland-hosted-store.real-postgres.test.ts` (4/4):**
+**`relay-bridge/wonderland-hosted-store.real-postgres.test.ts` (5/5):**
 1. **An EMPTY database:**
    - it is refused without the exact phrase, and with a dirty tree, writing nothing;
    - then it is marked, migrated through the shipped chain and fingerprinted. The fingerprint equals a reference built by applying the same SQL files directly to a database the tool never touched;
@@ -107,21 +107,26 @@ Each step names its owner.
 2. **Every database the tool must not touch is refused by name,** and its fingerprint and rows are unchanged:
    - the permanent store's case (migrated, a real row, no marker);
    - a marked store with a gap in its ledger, with a stamp from a later build, and with a foreign schema.
-3. **The real bridge PROCESS, from `server.ts`, run the way Railway runs it** (`RAILWAY_ENVIRONMENT`, `NODE_ENV=production`, an attested commit):
+3. **A store the tool left at 033 takes 034 and 035 as pending** (prepared on the reserved 034, #337 option 4):
+   - it is a HOSTED_STORE with exactly those two pending;
+   - the bootstrap applies them;
+   - voice is READY, every row and the marker are kept, and only the three voice tables are new;
+   - a second bootstrap changes nothing.
+4. **The real bridge PROCESS, from `server.ts`, run the way Railway runs it** (`RAILWAY_ENVIRONMENT`, `NODE_ENV=production`, an attested commit):
    - with no database, readiness is `NOT_CONFIGURED`, by variable name;
    - pointed at a closed port, it is `UNREACHABLE ECONNREFUSED`, with no host in the body;
    - on the bootstrapped store, readiness answers 401 to anyone but the operator, and `CONNECTED`, gap-free and social READY to the operator;
    - then the **whole R16 scenario passes (24/24)** under the production gates, the process restarts, and the restart check passes (7/7);
    - **the deploy check** passes every row but HOSTED, since loopback over HTTP is not a hosted bridge, and the store's fingerprint is the same after it as before;
    - before this rehearsal ran under the production gates, a bridge that refused pairing on the production branch alone passed every R16 test. It now fails this one.
-4. **The built CLI:**
+5. **The built CLI:**
    - `inspect` reads EMPTY;
    - `bootstrap` refuses a dirty tree and passes on a clean one;
    - the record names the commit and the fingerprint;
    - neither the URL nor its host appears in any output or the record;
    - an unset variable is `BLOCKED`, and no database is contacted.
 
-**`relay-bridge/wonderland-store-readiness.test.ts` (6/6):** the ledger judgement (gap, through, unknown, the staged voice stamp), failure codes that drop every driver message, and the route's operator-only, GET-only answer.
+**`relay-bridge/wonderland-store-readiness.test.ts`:** the ledger judgement (gap, through, unknown; nothing staged once voice is in the chain), failure codes that drop every driver message, and the route's operator-only, GET-only answer.
 
 **Five mutants, each killed:**
 

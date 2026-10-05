@@ -3,9 +3,8 @@ BEGIN;
 -- and the record of every voice-room token the trusted server issued and took back. NEVER A TOKEN: the issuance row
 -- says who was given a token for which room and when, and the post-check refuses any column that could hold one.
 --
--- STAGED, NOT IN THE CHAIN. By the founder's order 034 (Project Brain) comes first, and 034 does not exist yet. This file
--- moves to src/relay/persistence/wonderland-migrations/ and into WONDERLAND_MIGRATIONS only after 034 lands, so the
--- ledger never shows a gap; until then nothing applies it but its own tests (docs/julius-migrations/035/RUNBOOK.md).
+-- IN THE CHAIN AFTER 034, by the founder's order (034 Project Brain, then 035 voice). It was staged in
+-- docs/julius-migrations/035/ until a 034 existed; its runbook and DOWN stay there (docs/julius-migrations/035/).
 --
 -- ADDITIVE ONLY: three voice_* tables in relay_wonderland. Nothing existing changes.
 -- GATES: STOP, changing nothing, unless 033 is applied, a 034 stamp is in the ledger, and no voice_* table exists.

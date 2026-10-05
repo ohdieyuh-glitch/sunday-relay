@@ -5,6 +5,7 @@ import {
   judgeWonderlandLedger,
   readWonderlandReadinessReport,
   WONDERLAND_SHIPPED_CHAIN,
+  WONDERLAND_STAGED_STAMPS,
   wonderlandStoreFailureReason,
 } from './wonderland-store-readiness';
 
@@ -30,14 +31,15 @@ describe('the ledger, against the chain', () => {
     expect(judgeWonderlandLedger(new Set(['002_b']), CHAIN)).toMatchObject({ through: null, gapFree: false });
   });
 
-  it('a stamp this build neither ships nor stages is named, and the staged voice stamp is not', () => {
+  it('a stamp this build does not ship is named; nothing is staged once voice is in the chain', () => {
     expect(judgeWonderlandLedger(new Set([...CHAIN, '099_future']), CHAIN).unknown).toEqual(['099_future']);
-    expect(judgeWonderlandLedger(new Set([...CHAIN, '035_wonderland_voice']), CHAIN).unknown).toEqual([]);
+    expect(WONDERLAND_STAGED_STAMPS).toEqual([]);
+    expect(judgeWonderlandLedger(new Set(WONDERLAND_SHIPPED_CHAIN)).unknown).toEqual([]);
   });
 
-  it('the shipped chain is the migrate() order, through social', () => {
+  it('the shipped chain is the migrate() order: social, the reserved 034, then voice', () => {
     expect(WONDERLAND_SHIPPED_CHAIN[0]).toMatch(/^001_/u);
-    expect(WONDERLAND_SHIPPED_CHAIN.at(-1)).toBe('033_wonderland_social');
+    expect(WONDERLAND_SHIPPED_CHAIN.slice(-3)).toEqual(['033_wonderland_social', '034_julius_project_brain_reserved', '035_wonderland_voice']);
     expect(new Set(WONDERLAND_SHIPPED_CHAIN).size).toBe(WONDERLAND_SHIPPED_CHAIN.length);
   });
 });

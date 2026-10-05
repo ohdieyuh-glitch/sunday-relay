@@ -1,4 +1,4 @@
-# Migration 035 (Wonderland voice): runbook (STAGED, 2026-10-04)
+# Migration 035 (Wonderland voice): runbook (in the chain after the reserved 034: PREPARED, NOT CHOSEN, 2026-10-05)
 
 `035_wonderland_voice` creates three `relay_wonderland.voice_*` tables:
 - `voice_identities`: one row per player, holding the EOS ProductUserId that player PROVED with a verified Connect ID token. The PUID is `UNIQUE`.
@@ -7,20 +7,23 @@
 
 It is additive only.
 
-## STAGED: why it is not in the migration chain yet
+## In the chain, after the reserved 034 (PREPARED, NOT CHOSEN)
 
-The founder's order is 031 → 032 → 033 social → **034 Project Brain** → 035 voice. 034 does not exist yet. So:
-- **The file lives here**, at `docs/julius-migrations/035/035_wonderland_voice.sql`, not in `src/relay/persistence/wonderland-migrations/`, and it is **not** listed in `WONDERLAND_MIGRATIONS`. No `migrate()` entry point can apply it.
-- **Its guard refuses** unless 033 is applied AND a `034_*` stamp is in the ledger. Applying it early is impossible, not merely discouraged.
-- **Its tests** (`src/relay/persistence/wonderland-voice.real-postgres.test.ts`) apply it on a throwaway database after a TEST-ONLY stamp, `034_test_placeholder_not_a_migration`. They also prove the guard refuses without that stamp.
-- **When 034 lands:**
-  1. move the file into the chain directory;
-  2. register it after 034;
-  3. add `035` to `docs/julius-migrations/window/window.sh`, with its PASS conditions from this runbook;
-  4. remove the placeholder from the tests.
+The founder's order is 031 → 032 → 033 social → **034 Project Brain** → 035 voice, and 034's content is not specified. Option 4 of `docs/JULIUS_MIGRATION_034_OPTIONS.md` (#337) reserves the number: `034_julius_project_brain_reserved` writes only its own ledger row. **This change is prepared on that option and is not chosen.** If the founder chooses another 034, that 034 takes the reserved file's place, and everything below stands.
 
-  That is one reviewed change.
-- **Until then the voice routes answer 503** (`voice_store_unavailable`). The bridge offers the identity store only when `035_wonderland_voice` is in the ledger.
+What the prepared change does, the "when 034 lands" list this runbook kept:
+1. **Done:** the file moved to `src/relay/persistence/wonderland-migrations/035_wonderland_voice.sql`.
+2. **Done:** it is registered in `WONDERLAND_MIGRATIONS` after 034.
+3. **Not done here:** add 034 and 035 to `docs/julius-migrations/window/window.sh`, with their PASS conditions. The window tooling is #324, on #321's branch, not in this stack. It is the one remaining step.
+4. **Done:** the test-only placeholder stamp is gone. The suite holds both guards against the real 034:
+   - 035 refuses without 033 and without a 034;
+   - 034 refuses without 033, and when any 034 is already in the ledger;
+   - 034 changes no table.
+
+**Still true:**
+- **Its guard refuses** unless 033 is applied AND a `034_*` stamp is in the ledger.
+- **The voice routes answer 503** (`voice_store_unavailable`) on any store without `035_wonderland_voice` in its ledger.
+- **On the hosted store,** the bootstrap tool (#332) applies 034 and 035 as pending to a store it left at 033, and changes nothing else (`wonderland-hosted-store.real-postgres.test.ts`).
 
 ## Steps (after 034 is landed and applied, in the same discipline as 033)
 
@@ -32,7 +35,7 @@ The founder's order is 031 → 032 → 033 social → **034 Project Brain** → 
    - no `voice_*` tables exist.
 3. Apply explicitly:
    ```
-   docker exec -i julius-postgres psql -U julius -d julius -v ON_ERROR_STOP=1 < <the landed 035 file>
+   docker exec -i julius-postgres psql -U julius -d julius -v ON_ERROR_STOP=1 < src/relay/persistence/wonderland-migrations/035_wonderland_voice.sql
    ```
    It must exit 0. It raises one of these, changing nothing, when its guard fails:
    - `migration_035_requires_033`;

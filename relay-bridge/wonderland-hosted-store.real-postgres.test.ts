@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -8,15 +8,15 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
-import { WONDERLAND_MIGRATIONS } from '../src/relay/persistence/wonderland-postgres';
+import { WONDERLAND_MIGRATION_033, WONDERLAND_MIGRATIONS } from '../src/relay/persistence/wonderland-postgres';
 import {
   inspectR16Host, judgeR16Venue, pairR16Sessions, r16Players, r16RestartCheck, readR16Backend, readR16Views, R16_CHECKS, runR16Scenario,
   summarizeR16, verifyR16Restart,
 } from '../scripts/wonderland-r16-harness.mjs';
 import {
-  bootstrapWonderlandStore, classifyWonderlandStore, fingerprintWonderlandStore, WONDERLAND_STORE_BOOTSTRAP_PHRASE,
+  bootstrapWonderlandStore, classifyWonderlandStore, fingerprintWonderlandStore, WONDERLAND_STORE_BOOTSTRAP_PHRASE, WONDERLAND_STORE_MARKER_PREFIX,
 } from './wonderland-store';
-import { WONDERLAND_SHIPPED_CHAIN } from './wonderland-store-readiness';
+import { readWonderlandStoreReadiness, WONDERLAND_SHIPPED_CHAIN } from './wonderland-store-readiness';
 
 /**
  * THE HOSTED WONDERLAND STORE, REHEARSED FROM NOTHING ON REAL POSTGRESQL.
@@ -192,6 +192,42 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
     }
   }, 120_000);
 
+  it('a hosted store the previous build left at 033 takes the reserved 034 and voice (035) as pending, keeps every row, and adds only the voice tables', async () => {
+    const pool = await empty('upgrade');
+    // The store exactly as this tool left it while the shipped chain ended at 033: its marker, the chain through social,
+    // and a player's state that must survive.
+    const mark = `${WONDERLAND_STORE_MARKER_PREFIX}${randomUUID()}`;
+    await pool.query(`DO $mark$ BEGIN EXECUTE format('COMMENT ON DATABASE %I IS %L', current_database(), '${mark}'); END $mark$`);
+    for (const sql of WONDERLAND_MIGRATIONS.slice(0, WONDERLAND_MIGRATIONS.indexOf(WONDERLAND_MIGRATION_033) + 1)) await pool.query(sql);
+    await pool.query("INSERT INTO relay_wonderland.players(player_id) VALUES('a-real-player')");
+    const tables = async (): Promise<string[]> => (await pool.query<{ t: string }>(
+      "SELECT tablename AS t FROM pg_tables WHERE schemaname = 'relay_wonderland' ORDER BY 1")).rows.map((row) => row.t);
+
+    expect(await classifyWonderlandStore(pool)).toMatchObject({
+      kind: 'HOSTED_STORE', marker: mark,
+      ledger: { through: '033_wonderland_social', pending: ['034_julius_project_brain_reserved', '035_wonderland_voice'], gapFree: true, unknown: [] },
+    });
+    const before = await readWonderlandStoreReadiness({ pool, missingConfig: [], env: {} });
+    expect(before.surfaces).toMatchObject({ social: 'READY', voiceSchema: 'NOT_APPLIED' });
+    const tablesBefore = await tables();
+
+    const upgraded = await bootstrap(pool);
+    expect(upgraded.result, upgraded.lines.join('\n')).toBe('PASS');
+    const after = await readWonderlandStoreReadiness({ pool, missingConfig: [], env: {} });
+    expect(after.ledger).toMatchObject({ through: '035_wonderland_voice', pending: [], gapFree: true, unknown: [] });
+    expect(after.surfaces).toMatchObject({ social: 'READY', voiceSchema: 'READY' });
+    const tablesAfter = await tables();
+    expect(tablesAfter.filter((table) => !tablesBefore.includes(table)), 'only the voice tables are new').toEqual(['voice_identities', 'voice_identity_history', 'voice_issuances']);
+    expect(tablesBefore.filter((table) => !tablesAfter.includes(table)), 'nothing is gone').toEqual([]);
+    expect((await pool.query('SELECT player_id FROM relay_wonderland.players')).rows).toEqual([{ player_id: 'a-real-player' }]);
+    expect(await marker(pool), 'the marker is the store\'s own, unchanged').toBe(mark);
+
+    // A second bootstrap finds nothing pending and changes nothing.
+    const settled = await fingerprintWonderlandStore(pool, FINGERPRINT);
+    expect((await bootstrap(pool)).result).toBe('PASS');
+    expect(await fingerprintWonderlandStore(pool, FINGERPRINT)).toEqual(settled);
+  }, 120_000);
+
   it('the real bridge process on the bootstrapped store: ready to an operator only, then the whole R16 scenario, a restart and the split restart check, judged a REHEARSAL by name', async () => {
     const pool = await empty('live');
     expect((await bootstrap(pool)).result).toBe('PASS');
@@ -271,7 +307,7 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
       version: 'wonderland-store-readiness.v1',
       database: { state: 'CONNECTED' },
       ledger: { applied: WONDERLAND_SHIPPED_CHAIN.length, expected: WONDERLAND_SHIPPED_CHAIN.length, through: WONDERLAND_SHIPPED_CHAIN.at(-1), gapFree: true, pending: [], unknown: [] },
-      surfaces: { social: 'READY', voiceSchema: 'NOT_APPLIED', eosClientConfig: 'NOT_CONFIGURED', eosTrustedServer: 'NOT_CONFIGURED' },
+      surfaces: { social: 'READY', voiceSchema: 'READY', eosClientConfig: 'NOT_CONFIGURED', eosTrustedServer: 'NOT_CONFIGURED' },
       sessions: 'IN_MEMORY_REVOKED_ON_RESTART',
       bridge: { commit: COMMIT, attestedBy: 'RAILWAY_GIT_COMMIT_SHA', production: true, bootId: expect.stringMatching(/^[0-9a-f]{32}$/u) },
     });
@@ -284,7 +320,7 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
     const deployed = deployCheck(COMMIT);
     expect(failedChecks(deployed), deployed.stdout).toEqual(['HOSTED']);
     expect(deployed.stdout).toContain('DEPLOY SUMMARY passed=7 failed=1 of=8');
-    expect(deployed.stdout).toContain('DEPLOY REPORTED voice_schema=NOT_APPLIED eos_client_config=NOT_CONFIGURED eos_trusted_server=NOT_CONFIGURED boot=');
+    expect(deployed.stdout).toContain('DEPLOY REPORTED voice_schema=READY eos_client_config=NOT_CONFIGURED eos_trusted_server=NOT_CONFIGURED boot=');
     expect(deployed.status).toBe(1);
     expect(failedChecks(deployCheck('d'.repeat(40))), 'another commit is another build').toEqual(['HOSTED', 'BUILD']);
     expect(deployed.stdout + deployed.stderr).not.toContain(OPERATOR);

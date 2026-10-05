@@ -1,7 +1,7 @@
 # Wonderland voice and EOS: the room is the wall
 
 **Status:** implemented on `relay/wonderland-voice-eos`, a draft stacked on the social backend (#323), which is itself stacked on #321.
-- Migration 035 is **staged** behind 034.
+- Migration 035 is **in the chain after the reserved 034**, prepared and not chosen (#337 option 4). Without that, it is staged behind 034.
 - **AWAITING INDEPENDENT REVIEW (SECOND Wonderland).**
 - Live EOS is **READY FOR LOCAL QUALIFICATION**: the founder's EOS product, the second Windows account, and the third real identity for the three-party proof.
 
@@ -47,7 +47,7 @@ So a voice room is a disclosure, and **the only enforcement a trusted server has
 |---|---|
 | `wonderland-voice.test.ts` (21) | **300 seeded random social worlds** (hidden players, friendships, blocks, parties): invariants (a)–(c) every time, and determinism. The named cases are one room in the common case, the hidden player and the strangers, the blocked pair, the party, opaque names, and the plan diff. The EOS claim checks cover every refusal. One player, one PUID. **Two planner mutants are killed** (a clique checked against one member only; a doubled pair) |
 | `wonderland-voice-routes.test.ts` (20) | A real RSA key pair and real RS256 tokens: forged, `alg none`, unknown kid, another deployment, expired, garbage, and keys unavailable are all refused. Client config is `no-store` and never carries the trusted markers. Join issues tokens only for the plan. A hidden player is never issued the strangers' room. **A mid-session block removes all three from the shared room on the trusted server; a mid-session hide removes the hidden player.** A failed removal is reported, stays open, and is retried. **A player whose presence expired is planned into no room, and the next live heartbeat moves both live players out of the room they shared with them.** The port sends the trusted secret only in its Basic header to Epic's OAuth endpoint |
-| `wonderland-voice.real-postgres.test.ts` (6) | Staged 035: it refuses without 034, refuses before 033, refuses a second application, and has no token or secret column. **Three players race for one PUID, 10 rounds: exactly one binds each time.** Re-bind history; issuances open, revoke and re-open; DOWN is guarded |
+| `wonderland-voice.real-postgres.test.ts` (7) | 035 after the reserved 034: it refuses without 034, refuses before 033, refuses a second application, and has no token or secret column. 034 refuses without 033 and a second 034, and changes no table. `migrate()` applies both on a fresh database. **Three players race for one PUID, 10 rounds: exactly one binds each time.** Re-bind history; issuances open, revoke and re-open; DOWN is guarded |
 
 ## Not done here
 

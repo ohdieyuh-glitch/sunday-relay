@@ -28,8 +28,11 @@ import { migrationVersion, TransactionalWonderlandDatabase, WONDERLAND_MIGRATION
 export const WONDERLAND_STORE_READINESS_VERSION = 'wonderland-store-readiness.v1' as const;
 export const WONDERLAND_SOCIAL_STAMP = '033_wonderland_social';
 export const WONDERLAND_VOICE_STAMP = '035_wonderland_voice';
-/** Known to this build but not shipped in its chain: staged behind a migration that does not exist yet. */
-export const WONDERLAND_STAGED_STAMPS: readonly string[] = Object.freeze([WONDERLAND_VOICE_STAMP]);
+/**
+ * Known to this build but not shipped in its chain: staged behind a migration that does not exist yet. Empty since
+ * 035 joined the chain after 034; a migration staged the same way again is named here until it ships.
+ */
+export const WONDERLAND_STAGED_STAMPS: readonly string[] = Object.freeze([]);
 /** How long a readiness probe waits for the database before calling it unreachable. */
 export const WONDERLAND_STORE_PROBE_TIMEOUT_MS = 5_000;
 
@@ -82,7 +85,7 @@ export interface WonderlandStoreReadiness {
   readonly surfaces: {
     /** Friends, blocks, parties, servers, presence, Recent Players, messages (migration 033). */
     readonly social: 'READY' | 'NOT_APPLIED' | 'UNKNOWN';
-    /** EOS identities and voice issuances (migration 035, staged). */
+    /** EOS identities and voice issuances (migration 035). */
     readonly voiceSchema: 'READY' | 'NOT_APPLIED' | 'UNKNOWN';
     /** The game client's runtime EOS configuration: presence of every variable, never a value. */
     readonly eosClientConfig: 'CONFIGURED' | 'NOT_CONFIGURED';

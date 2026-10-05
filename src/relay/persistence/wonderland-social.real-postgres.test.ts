@@ -50,6 +50,8 @@ const suite = databaseUrl !== null ? describe : describe.todo;
 const DOCS = join(__dirname, '..', '..', '..', 'docs', 'julius-migrations', '033');
 const committed = (name: string): string => readFileSync(join(DOCS, name), 'utf8').replace(/^\\set ON_ERROR_STOP on\s*$/mu, '');
 const BEFORE_033 = WONDERLAND_MIGRATIONS.slice(0, WONDERLAND_MIGRATIONS.indexOf(WONDERLAND_MIGRATION_033));
+/** The chain through 033 and no further: a store where 033 is the last migration, as its DOWN requires. */
+const THROUGH_033 = WONDERLAND_MIGRATIONS.slice(0, WONDERLAND_MIGRATIONS.indexOf(WONDERLAND_MIGRATION_033) + 1);
 const BEFORE_032 = WONDERLAND_MIGRATIONS.slice(0, WONDERLAND_MIGRATIONS.indexOf(WONDERLAND_MIGRATION_032));
 const HUB = 'public:hub';
 const PLAZA = 'public:plaza';
@@ -68,13 +70,15 @@ suite('Wonderland social on real PostgreSQL (migration 033)', () => {
     for (const sql of migrations) await pool.query(sql);
     return pool;
   };
-  const refusalOf = async (pool: Pool, sql: string): Promise<string | null> => {
+  /** The whole message a refused statement raised (its code is the text before the first colon), or null. */
+  const refusalMessageOf = async (pool: Pool, sql: string): Promise<string | null> => {
     const client = await pool.connect();
     try { await client.query(sql); return null; } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
-      return (error as Error).message.split(':')[0]!;
+      return (error as Error).message;
     } finally { client.release(); }
   };
+  const refusalOf = async (pool: Pool, sql: string): Promise<string | null> => (await refusalMessageOf(pool, sql))?.split(':')[0] ?? null;
 
   beforeAll(async () => { admin = new Pool({ connectionString: databaseUrl!, max: 2 }); });
   afterAll(async () => {
@@ -115,8 +119,12 @@ suite('Wonderland social on real PostgreSQL (migration 033)', () => {
       expect(post[3]!.rows[0]).toMatchObject({ migration_033_applied: true, ledger_last: '033_wonderland_social', social_tables_present: '15', social_rows: '0', recent_players_columns: '0' });
     });
 
-    it('DOWN refuses to destroy social data unless the loss is stated, then reverses cleanly, and 033 applies again', async () => {
-      const pool = await create('down', WONDERLAND_MIGRATIONS);
+    it('DOWN refuses while a later migration is applied, refuses to destroy social data unless the loss is stated, then reverses cleanly, and 033 applies again', async () => {
+      // Every later migration (the reserved 034, voice 035) is reversed first: with them applied, 033's DOWN refuses and changes nothing.
+      const above = await create('downabove', WONDERLAND_MIGRATIONS);
+      expect(await refusalMessageOf(above, committed('down.sql'))).toMatch(/^migration_033_down_refused: a later migration is applied/u);
+      expect((await above.query("SELECT 1 FROM relay_wonderland.schema_migrations WHERE version='033_wonderland_social'")).rowCount).toBe(1);
+      const pool = await create('down', THROUGH_033);
       await new WonderlandSocialPostgresStore(pool).upsertProfile({ playerId: 'ann', displayName: 'Ann' });
       expect(await refusalOf(pool, committed('down.sql'))).toBe('migration_033_down_refused');
       expect((await pool.query('SELECT 1 FROM relay_wonderland.social_profiles')).rowCount, 'nothing was dropped').toBe(1);
