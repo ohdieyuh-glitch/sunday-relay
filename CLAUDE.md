@@ -184,6 +184,20 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
   Venue of the frozen rerun: if it is frozen to a local machine, it is
   `READY FOR LOCAL QUALIFICATION`, never a cloud substitute.
 
+### Decision queue: what gates progress now (2026-10-05)
+
+Every JUJU PR below is green. What moves the material order next is a decision, in this order:
+
+| # | Decision | Owner | Where | JUJU's recommendation |
+|---|---|---|---|---|
+| 1 | The frozen 13 (i) rerun at #321's head | founder / SECOND (local) | #321 | **READY FOR LOCAL QUALIFICATION**; it gates everything after #321 |
+| 2 | Fold the 031 and 032 teardown fixes into #321 | founder | Findings below | yes: two one-line test fixes |
+| 3 | What 034 is | founder / SECOND | #337, #338 | option 4, a reserved stamp; #338 is ready |
+| 4 | C pair validity: option A, B or C | founder / SECOND | #326, #331 | B is prepared in #331 |
+| 5 | `allowNative` (native social for the RC) | SECOND Wonderland / founder | #339 | its evidence holds; a one-line change. Players must OWN their client's project |
+| 6 | A rate limit on social commands | SECOND Wonderland / founder | #336 | a launch-hardening decision |
+| 7 | Close the stale PRs #290, #291 and #293–#297 | founder | Findings below | close: folded into `main` |
+
 ### Work in flight from the JUJU MAIN cloud session (2026-10-04; all draft, AWAITING INDEPENDENT REVIEW)
 
 | PR | What | Stack | CI (2026-10-04) |
