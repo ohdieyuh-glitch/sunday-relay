@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   handleWonderlandReadinessRoute,
   judgeWonderlandLedger,
-  readWonderlandStoreReadiness,
+  readWonderlandReadinessReport,
   WONDERLAND_SHIPPED_CHAIN,
   wonderlandStoreFailureReason,
 } from './wonderland-store-readiness';
@@ -53,7 +53,8 @@ describe('a failure is a code, never the driver\'s words', () => {
 });
 
 describe('the route', () => {
-  const read = async () => readWonderlandStoreReadiness({ pool: null, missingConfig: ['JULIUS_DATABASE_URL', 'DATABASE_URL'], env: {} });
+  const boot = { bootId: 'b0'.repeat(16), startedAt: '2026-10-04T12:00:00.000Z' };
+  const read = async () => readWonderlandReadinessReport({ pool: null, missingConfig: ['JULIUS_DATABASE_URL', 'DATABASE_URL'], env: {}, boot });
 
   it('answers the operator, and only the operator, and only GET', async () => {
     expect(await handleWonderlandReadinessRoute({ method: 'GET', path: '/wonderland/social/me', operator: true }, read)).toBeNull();
@@ -69,8 +70,18 @@ describe('the route', () => {
           ledger: null,
           surfaces: { social: 'UNKNOWN', voiceSchema: 'UNKNOWN', eosClientConfig: 'NOT_CONFIGURED', eosTrustedServer: 'NOT_CONFIGURED' },
           sessions: 'IN_MEMORY_REVOKED_ON_RESTART',
+          bridge: { commit: null, attestedBy: null, production: false, bootId: 'b0'.repeat(16), startedAt: '2026-10-04T12:00:00.000Z' },
         },
       },
     });
+  });
+
+  it('names the build its platform attests, whatever state the database is in', async () => {
+    const commit = 'A1B2C3'.padEnd(40, 'F');
+    const report = await readWonderlandReadinessReport({
+      pool: null, missingConfig: ['JULIUS_DATABASE_URL'], env: { RAILWAY_GIT_COMMIT_SHA: ` ${commit} `, RAILWAY_ENVIRONMENT: 'production' }, boot,
+    });
+    expect(report.database.state).toBe('NOT_CONFIGURED');
+    expect(report.bridge).toEqual({ commit: commit.toLowerCase(), attestedBy: 'RAILWAY_GIT_COMMIT_SHA', production: true, ...boot });
   });
 });

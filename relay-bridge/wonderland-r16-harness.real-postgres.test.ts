@@ -67,9 +67,9 @@ suite('Wonderland R16, scripted, against the real bridge process', () => {
   let bridge = '';
   let child: ChildProcess | null = null;
 
-  /** Start the shipped bridge as a process, and resolve once it says it is listening. */
-  const start = async (): Promise<void> => {
-    const port = await freePort();
+  /** Start the shipped bridge as a process, and resolve once it says it is listening. A restart keeps its address, as a hosted backend does. */
+  const start = async (reuse?: string): Promise<void> => {
+    const port = reuse === undefined ? await freePort() : Number(new URL(reuse).port);
     bridge = `http://127.0.0.1:${String(port)}`;
     const env = {
       PATH: process.env.PATH ?? '', NODE_PATH: resolve(process.cwd(), 'node_modules'),
@@ -193,7 +193,7 @@ suite('Wonderland R16, scripted, against the real bridge process', () => {
     expect(failed.every((name) => name.startsWith('P1') || name.startsWith('DM') || name.startsWith('NO INFERENCE') || name.startsWith('PARTY'))).toBe(true);
   }, 120_000);
 
-  it('the CLI runs the scenario and the restart check, prints no credential, and exits 0', () => {
+  it('the CLI runs the scenario, a real restart and the restart check, prints no credential, and exits 0', async () => {
     const state = join(root, 'r16-state.json');
     const cliNonce = randomBytes(4).toString('hex');
     const run = (args: readonly string[]) => spawnSync(process.execPath, ['scripts/wonderland-r16-harness.mjs', '--bridge', bridge, '--origin', ORIGIN, ...args], {
@@ -203,9 +203,14 @@ suite('Wonderland R16, scripted, against the real bridge process', () => {
     expect(scenario.status, scenario.stdout + scenario.stderr).toBe(0);
     expect(scenario.stdout).toContain(`R16 SUMMARY phase=scenario passed=${String(R16_CHECKS.length)} failed=0 of=${String(R16_CHECKS.length)}`);
     expect(scenario.stdout).toMatch(/^R16 VOICE (CONFIGURED|NOT_MOUNTED|NOT_CONFIGURED_\d+) /mu);
+    // The restart the verify phase is about. Without it, its RESTART check fails: the boot id would be the scenario's.
+    const address = bridge;
+    await stop();
+    await start(address);
     const verify = run(['--phase', 'verify', '--state', state]);
     expect(verify.status, verify.stdout + verify.stderr).toBe(0);
-    expect(verify.stdout).toContain('R16 SUMMARY phase=verify passed=6 failed=0 of=6');
+    expect(verify.stdout).toContain('R16 PASS RESTART');
+    expect(verify.stdout).toContain('R16 SUMMARY phase=verify passed=7 failed=0 of=7 venue=REHEARSAL');
     expect(verify.stdout).toMatch(/^R16 RECONNECT (\S+=(HELD|REENTERED) ?){3}$/mu);
     for (const output of [scenario.stdout + scenario.stderr, verify.stdout + verify.stderr, readFileSync(state, 'utf8')]) {
       expect(output, 'the operator token never appears').not.toContain(OPERATOR);

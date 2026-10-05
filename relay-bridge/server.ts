@@ -97,7 +97,8 @@ import {
   type WonderlandFetch,
 } from './wonderland-voice/eos';
 import { WonderlandVoicePostgresStore } from '../src/relay/persistence/wonderland-voice-postgres';
-import { handleWonderlandReadinessRoute, readWonderlandStoreReadiness, WONDERLAND_READINESS_PATH } from './wonderland-store-readiness';
+import { handleWonderlandReadinessRoute, readWonderlandReadinessReport, WONDERLAND_READINESS_PATH } from './wonderland-store-readiness';
+import { createBridgeBoot } from './bridge-identity';
 import { WonderlandSocialPostgresStore } from '../src/relay/persistence/wonderland-social-postgres';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 
@@ -437,6 +438,8 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
   (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined);
 
   const pspStore = config.stateRoot === null ? null : createPspConfigStore({ root: config.stateRoot });
+  // This server's start, drawn once: the readiness route reports it, so a restart is a fact rather than a claim.
+  const boot = createBridgeBoot();
   return createServer((req, res) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
     const cors = corsHeaders(config, origin);
@@ -730,8 +733,8 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
           const storePool = juliusPool();
           const readiness = await handleWonderlandReadinessRoute(
             { method, path: WONDERLAND_READINESS_PATH, operator: bearerMatches(readinessAuthz, process.env.RELAY_BRIDGE_API_TOKEN) },
-            () => readWonderlandStoreReadiness({
-              pool: storePool, missingConfig: storePool === null ? [...JULIUS_RUNTIME_DATABASE_ENV_NAMES] : [], env: process.env,
+            () => readWonderlandReadinessReport({
+              pool: storePool, missingConfig: storePool === null ? [...JULIUS_RUNTIME_DATABASE_ENV_NAMES] : [], env: process.env, boot,
             }),
           );
           if (readiness !== null) send(res, readiness.status, readiness.body, cors);

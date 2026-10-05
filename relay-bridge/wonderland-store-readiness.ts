@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 
+import { readBridgeIdentity, type BridgeBoot, type BridgeIdentity } from './bridge-identity';
 import { readWonderlandEosClientConfig, WONDERLAND_EOS_TRUSTED_ENV } from './wonderland-voice/eos';
 import { migrationVersion, TransactionalWonderlandDatabase, WONDERLAND_MIGRATIONS } from '../src/relay/persistence/wonderland-postgres';
 
@@ -16,7 +17,9 @@ import { migrationVersion, TransactionalWonderlandDatabase, WONDERLAND_MIGRATION
  *   - which of this build's migrations its ledger holds, whether they form a
  *     gap-free prefix of the chain this build ships, and any stamp this build
  *     does not know (a store ahead of the code);
- *   - which Wonderland surfaces that makes ready.
+ *   - which Wonderland surfaces that makes ready;
+ *   - which build is answering and which start of it (`bridge-identity.ts`):
+ *     the commit the platform attests, and a boot id that changes on restart.
  *
  * Operator only (the route): the schema state of a deployment is layout, and the
  * unauthenticated `/health` routes deliberately say nothing about it.
@@ -90,6 +93,11 @@ export interface WonderlandStoreReadiness {
   readonly sessions: 'IN_MEMORY_REVOKED_ON_RESTART';
 }
 
+/** What the route answers: the store as above, and which build, and which start of it, is answering. */
+export interface WonderlandReadinessReport extends WonderlandStoreReadiness {
+  readonly bridge: BridgeIdentity;
+}
+
 /** A driver failure as a code a reader can act on, never the driver's text (which can carry the host or user). */
 export function wonderlandStoreFailureReason(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
@@ -139,12 +147,24 @@ export async function readWonderlandStoreReadiness(input: {
   });
 }
 
+/**
+ * The route's report: the store, read now, and the server's own identity. The
+ * identity is read whatever state the database is in, so a bridge with no
+ * database still says which build and which start it is.
+ */
+export async function readWonderlandReadinessReport(input: Parameters<typeof readWonderlandStoreReadiness>[0] & {
+  /** This server's start: one per created server, so a restart reads a new one. */
+  readonly boot: BridgeBoot;
+}): Promise<WonderlandReadinessReport> {
+  return Object.freeze({ ...await readWonderlandStoreReadiness(input), bridge: readBridgeIdentity(input.env, input.boot) });
+}
+
 export const WONDERLAND_READINESS_PATH = '/wonderland/readiness';
 
 /** `GET /relay-api/wonderland/readiness`, operator only. Null when the path is not this route. */
 export async function handleWonderlandReadinessRoute(
   request: { readonly method: string; readonly path: string; readonly operator: boolean },
-  read: () => Promise<WonderlandStoreReadiness>,
+  read: () => Promise<WonderlandReadinessReport>,
 ): Promise<{ readonly status: number; readonly body: unknown } | null> {
   if (request.path !== WONDERLAND_READINESS_PATH) return null;
   if (request.method !== 'GET') {

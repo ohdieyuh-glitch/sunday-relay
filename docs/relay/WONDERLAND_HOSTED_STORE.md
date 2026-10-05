@@ -20,7 +20,7 @@ So the bridge needs a store, brought up by a procedure that can only do what it 
 | Piece | What it is |
 |---|---|
 | `relay-bridge/wonderland-store.ts` (`npm run relay:wonderland-store:build`, then `node dist-relay-bridge/wonderland-store.cjs`) | `inspect` and `bootstrap`. The URL comes from the variable `--database-env` names (default `JULIUS_DATABASE_URL`), and is never printed or recorded |
-| `GET /relay-api/wonderland/readiness` (operator `Bearer` only) | The bridge's own view of its store, as facts: the database `NOT_CONFIGURED` (by variable name), `UNREACHABLE` (a driver code, never its words) or `CONNECTED`; the ledger against the chain this build ships (`through`, `pending`, `gapFree`, `unknown`); social, the voice schema, and the EOS client and trusted-server configuration (presence only); sessions `IN_MEMORY_REVOKED_ON_RESTART` |
+| `GET /relay-api/wonderland/readiness` (operator `Bearer` only) | The bridge's own view of its store, as facts: the database `NOT_CONFIGURED` (by variable name), `UNREACHABLE` (a driver code, never its words) or `CONNECTED`; the ledger against the chain this build ships (`through`, `pending`, `gapFree`, `unknown`); social, the voice schema, and the EOS client and trusted-server configuration (presence only); sessions `IN_MEMORY_REVOKED_ON_RESTART`; and which build and start is answering (`bridge`: the commit Railway attests through `RAILWAY_GIT_COMMIT_SHA` or null, whether the gates take their production branch, a boot id drawn per start) |
 
 ## What the tool will touch, decided before anything is written
 
@@ -67,13 +67,14 @@ Each step names its owner.
    ```sh
    curl -s -H "Authorization: Bearer $RELAY_BRIDGE_TOKEN" https://<bridge>/relay-api/wonderland/readiness
    # expect: database CONNECTED · ledger gapFree, pending [] · surfaces.social READY
+   #         bridge.commit = main's reviewed tip, attestedBy RAILWAY_GIT_COMMIT_SHA · bridge.production true
    ```
-6. **The scripted R16 against the hosted bridge:**
-   - `scripts/wonderland-r16-harness.mjs --bridge https://<bridge> --state r16.json`;
-   - a Railway redeploy (the restart);
+6. **The scripted R16 against the hosted bridge** (`docs/relay/WONDERLAND_R16.md`):
+   - `scripts/wonderland-r16-harness.mjs --bridge https://<bridge> --origin <origin> --state r16.json --expect-commit <main sha>`;
+   - a Railway redeploy of the same commit (the restart: the boot id must change, the commit must not);
    - `--phase verify`.
 
-   Then CORE's real-identity, EOS and shipped-RC run, on the same store.
+   Scripted players make it a REHEARSAL by name (`SCRIPTED_PLAYERS`, `PLAYERS_NOT_VERIFIED`). Then CORE's run with three real identities, EOS and the shipped RC, on the same store, adds `--final`. That run must be judged HOSTED_FINAL.
 
 **Later, 035 (voice).** Once it lands behind 034, the same `bootstrap` sees a HOSTED_STORE and applies only what is pending.
 

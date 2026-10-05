@@ -10,8 +10,8 @@
  * This harness asks it, the same way against a local bridge, a CI bridge or the
  * hosted one:
  *
- *   node scripts/wonderland-r16-harness.mjs --bridge <url> --origin <allowed origin> [--state <file>]
- *   node scripts/wonderland-r16-harness.mjs --bridge <url> --origin <allowed origin> --phase verify --state <file>
+ *   node scripts/wonderland-r16-harness.mjs --bridge <url> --origin <allowed origin> [--state <file>] [--expect-commit <sha>] [--final]
+ *   node scripts/wonderland-r16-harness.mjs --bridge <url> --origin <allowed origin> --phase verify --state <file> [--expect-commit <sha>] [--final]
  *
  * WHO THE THREE PLAYERS ARE. Either
  *   - scripted: `RELAY_BRIDGE_TOKEN` (operator, from the environment only, never
@@ -22,6 +22,9 @@
  *     them in order. This is the FINAL R16 form: three real identities. The
  *     harness changes their social state (friendship, blocks, a party, a server,
  *     messages); every block it makes it lifts again.
+ * In either form, `RELAY_BRIDGE_TOKEN` is also what reads the backend's own
+ * report (its commit, store and boot), so the restart check and a HOSTED_FINAL
+ * venue need it even when the players are real.
  *
  * WHAT IT CHECKS, by name (`R16_CHECKS`), each PASS or FAIL with what it saw:
  * P1 (hidden from strangers: no Dog, name, population or lookup, and a
@@ -53,17 +56,32 @@
  *     NOT_IN_INSTANCE it enters again: REENTERED.
  *   - PRESENCE: what the lease derives is shown exactly as before: the roster,
  *     the population, every presence lookup, and a friend's or party-mate's presence.
+ * Before all three, RESTART: the backend's boot id (read from its own report,
+ * operator only) must differ from the one the scenario recorded. Otherwise a
+ * verify phase run against a backend that never restarted would read its own
+ * unchanged memory and pass for the wrong reason.
+ *
+ * THE VENUE, judged apart from the checks (`judgeR16Venue`): HOSTED_FINAL only
+ * when the bridge is HTTPS on a public host, three signed-in players are each
+ * named by a verified sign-in, the backend's own report shows a production
+ * process on a connected, fully migrated store, the commit its platform attests
+ * is `--expect-commit`, and (verify) the backend restarted on the same build
+ * against the same bridge as a HOSTED_FINAL scenario. Anything less is a
+ * REHEARSAL, every reason named; `--final` makes a REHEARSAL exit 1.
  *
  * WHAT IT DOES NOT DO: voice. Voice needs EOS identities on a configured EOS
  * product; the harness reports whether the backend serves voice configuration
  * and nothing more (CORE's final R16 step, with the founder's EOS product).
  *
- * Exit: 0 every check passed, 1 a check failed or the backend could not be
- * reached, 2 usage.
+ * Exit: 0 every check passed (and, with `--final`, the venue is HOSTED_FINAL);
+ * 1 a check failed, the backend could not be reached, or `--final` met a
+ * REHEARSAL; 2 usage.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { pathToFileURL } from 'node:url';
 import { realpathSync } from 'node:fs';
 
@@ -297,6 +315,8 @@ export async function runR16Scenario({ bridge, origin, sessions, players, nonce,
   // Everyone enters one public instance, visible by default.
   const entered = [await enter(a, dogs[a]), await enter(b, dogs[b]), await enter(c, dogs[c])];
   const cRoster = await roster(c);
+  // WHO THE BACKEND SAYS EACH PLAYER IS, while all three are visible to all: the name it recorded from a verified sign-in, or null. The venue judges it.
+  const names = Object.fromEntries([a, b, c].map((player) => [player, cRoster?.players?.find?.((entry) => entry.playerId === player)?.displayName ?? null]));
   const strangerA = cRoster?.players?.find?.((entry) => entry.playerId === a);
   const cListing = await listing(c);
   check(R16_CHECKS[4],
@@ -428,7 +448,7 @@ export async function runR16Scenario({ bridge, origin, sessions, players, nonce,
     lapsed.length === 0 && [a, b, c].every((player) => own[player]?.status === 'AVAILABLE' && own[player]?.instanceId === instance),
     `refreshes refused ${JSON.stringify(lapsed)}; each player's own presence ${JSON.stringify(own)}`);
 
-  return Object.freeze({ results: Object.freeze(results), commands, heartbeats });
+  return Object.freeze({ results: Object.freeze(results), commands, heartbeats, names: Object.freeze(names) });
 }
 
 /**
@@ -532,6 +552,189 @@ export function summarizeR16(results) {
   return Object.freeze({ passed: results.filter((row) => row.result === 'PASS').length, failed, missing, of: R16_CHECKS.length });
 }
 
+/* ------------------------------------------------------------------- VENUE --- */
+
+/**
+ * WHERE THE RUN HAPPENED, JUDGED APART FROM WHAT IT FOUND.
+ *
+ * The checks say whether a backend kept the privacy wall. They do not say
+ * whether it was the backend final R16 is about. A laptop, a CI bridge or a
+ * stale deployment can pass every check and prove nothing about the hosted
+ * backend players will meet. So every run is also judged for its VENUE, from
+ * facts the run reads for itself:
+ *   - the bridge's URL, and where its name resolves;
+ *   - who the backend says the players are (the name it recorded from a
+ *     verified sign-in), and whether they were signed in or paired by the
+ *     operator;
+ *   - the backend's own report (`GET /relay-api/wonderland/readiness`,
+ *     operator only): its store, the commit its platform attests, whether it
+ *     takes the production branch of its gates, and which start of it this is.
+ *
+ * HOSTED_FINAL needs every one of them. Anything less is a REHEARSAL, with every
+ * reason named. A rehearsal is evidence about the code, never about the
+ * deployment. With `--final`, a run that is not HOSTED_FINAL exits 1, whatever
+ * its checks found. HOSTED_FINAL is the backend's half of final R16: the
+ * shipped RC and EOS voice are CORE's half, on the same package.
+ */
+export const R16_VENUE_REASONS = Object.freeze({
+  NOT_HTTPS: 'the bridge is not reached over HTTPS',
+  HOST_NOT_PUBLIC: 'the bridge\'s host is a loopback, private, link-local or local name: a machine, not a hosted backend',
+  HOST_RESOLVES_PRIVATE: 'the bridge\'s name resolves to a loopback, private or link-local address',
+  HOST_UNRESOLVED: 'the bridge\'s name did not resolve here, so it is not shown to be public',
+  SCRIPTED_PLAYERS: 'the players were paired by the operator, not three signed-in accounts',
+  PLAYERS_NOT_VERIFIED: 'the backend knows a player by no verified sign-in, or two players by the same one',
+  READINESS_UNREAD: 'the backend\'s own report could not be read (it needs the operator token)',
+  NOT_PRODUCTION: 'the backend does not take the production branch of its gates',
+  STORE_NOT_CONNECTED: 'the backend\'s database is not connected',
+  STORE_NOT_CURRENT: 'the backend\'s ledger has a gap, a pending stamp, or a stamp this build does not know',
+  SOCIAL_NOT_READY: 'the backend\'s social store is not ready',
+  COMMIT_UNKNOWN: 'no platform attested the commit the backend runs',
+  NO_EXPECTED_COMMIT: 'no --expect-commit was given, so "on accepted main" was not checked',
+  COMMIT_NOT_EXPECTED: 'the commit the platform attests is not the --expect-commit given',
+  SCENARIO_NOT_FINAL: 'the scenario this verifies was not HOSTED_FINAL',
+  NOT_RESTARTED: 'the backend has the boot the scenario recorded: it did not restart',
+  RESTART_UNPROVEN: 'a boot id could not be read on one side, so the restart is not shown',
+  BUILD_CHANGED: 'the backend runs a different commit after the restart: two builds\' evidence in one package',
+  BACKEND_CHANGED: 'the verify phase ran against a different bridge than the scenario',
+});
+
+/** How a host NAMES itself, before any lookup. Only `NAME` needs resolving; only `PUBLIC_ADDRESS` and a publicly resolving `NAME` are hosted. */
+export function classifyR16Host(hostname) {
+  const host = String(hostname).toLowerCase().replace(/^\[(.*)\]$/u, '$1').replace(/\.$/u, '');
+  const family = isIP(host);
+  if (family === 4) {
+    const [a, b] = host.split('.').map(Number);
+    if (a === 127) return 'LOOPBACK';
+    if (a === 0) return 'UNSPECIFIED';
+    if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127)) return 'PRIVATE';
+    if (a === 169 && b === 254) return 'LINK_LOCAL';
+    return 'PUBLIC_ADDRESS';
+  }
+  if (family === 6) {
+    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/u.exec(host);
+    if (mapped) return classifyR16Host(mapped[1]);
+    if (host === '::1') return 'LOOPBACK';
+    if (host === '::') return 'UNSPECIFIED';
+    if (/^f[cd]/u.test(host)) return 'PRIVATE';
+    if (/^fe[89ab]/u.test(host)) return 'LINK_LOCAL';
+    return 'PUBLIC_ADDRESS';
+  }
+  if (host === 'localhost' || !host.includes('.') || /\.(localhost|local|internal|lan|home\.arpa|test|example|invalid)$/u.test(host)) return 'LOCAL_NAME';
+  return 'NAME';
+}
+
+/** The bridge URL's facts: scheme, how its host names itself, and where a name resolves (`resolve` is injected; the CLI uses DNS). */
+export async function inspectR16Host(bridge, resolve) {
+  const url = new URL(bridge);
+  const https = url.protocol === 'https:';
+  const kind = classifyR16Host(url.hostname);
+  if (kind !== 'NAME') return Object.freeze({ https, kind, resolves: kind === 'PUBLIC_ADDRESS' ? 'PUBLIC' : 'NOT_PUBLIC' });
+  let addresses;
+  try { addresses = await resolve(url.hostname); } catch { addresses = null; }
+  if (!Array.isArray(addresses) || addresses.length === 0) return Object.freeze({ https, kind, resolves: 'UNRESOLVED' });
+  return Object.freeze({ https, kind, resolves: addresses.every((address) => classifyR16Host(address) === 'PUBLIC_ADDRESS') ? 'PUBLIC' : 'NOT_PUBLIC' });
+}
+
+export const resolveR16Host = async (hostname) => (await lookup(hostname, { all: true })).map((row) => row.address);
+
+/**
+ * THE BACKEND'S OWN REPORT, as the operator reads it. Kept to what the venue
+ * judges; no driver text, no URL. Unreadable is a reason, never a guess.
+ */
+export async function readR16Backend({ bridge, operatorToken, fetch }) {
+  if (!operatorToken) return Object.freeze({ readable: false, reason: 'NO_OPERATOR_TOKEN' });
+  let response;
+  try {
+    response = await fetch(`${bridge}/wonderland/readiness`, { headers: { authorization: `Bearer ${operatorToken}` } });
+  } catch {
+    return Object.freeze({ readable: false, reason: 'UNREACHABLE' });
+  }
+  if (response.status !== 200) return Object.freeze({ readable: false, reason: `REFUSED_${String(response.status)}` });
+  const data = ok(await response.json().catch(() => null));
+  const identity = data?.bridge;
+  if (identity === null || typeof identity !== 'object' || typeof identity.bootId !== 'string') return Object.freeze({ readable: false, reason: 'NO_BRIDGE_IDENTITY' });
+  return Object.freeze({
+    readable: true,
+    commit: typeof identity.commit === 'string' ? identity.commit : null,
+    attestedBy: typeof identity.attestedBy === 'string' ? identity.attestedBy : null,
+    production: identity.production === true,
+    bootId: identity.bootId,
+    startedAt: typeof identity.startedAt === 'string' ? identity.startedAt : null,
+    database: typeof data?.database?.state === 'string' ? data.database.state : 'UNKNOWN',
+    ledger: data?.ledger === null || typeof data?.ledger !== 'object'
+      ? null
+      : { through: data.ledger.through ?? null, pending: [...(data.ledger.pending ?? [])], gapFree: data.ledger.gapFree === true, unknown: [...(data.ledger.unknown ?? [])] },
+    social: typeof data?.surfaces?.social === 'string' ? data.surfaces.social : 'UNKNOWN',
+  });
+}
+
+/**
+ * THE VENUE, JUDGED. Pure: every fact is an input, and every reason is named
+ * from the closed list above. The verify phase also judges the restart against
+ * what its scenario recorded, so the two phases are one package or not one.
+ */
+export function judgeR16Venue({ phase, bridge, host, identities, backend, expectCommit, recorded = null }) {
+  const reasons = [];
+  const add = (code) => {
+    if (!Object.prototype.hasOwnProperty.call(R16_VENUE_REASONS, code)) throw new Error(`r16_venue_reason_unregistered: ${code}`);
+    if (!reasons.includes(code)) reasons.push(code);
+  };
+  if (!host.https) add('NOT_HTTPS');
+  if (host.kind !== 'NAME' && host.kind !== 'PUBLIC_ADDRESS') add('HOST_NOT_PUBLIC');
+  else if (host.resolves === 'UNRESOLVED') add('HOST_UNRESOLVED');
+  else if (host.resolves !== 'PUBLIC') add('HOST_RESOLVES_PRIVATE');
+  if (identities.source !== 'SIGNED_IN') add('SCRIPTED_PLAYERS');
+  if (phase === 'scenario') {
+    const names = Object.values(identities.names ?? {});
+    const named = names.length === 3 && names.every((name) => typeof name === 'string' && name.trim() !== '');
+    if (!named || new Set(names).size !== 3) add('PLAYERS_NOT_VERIFIED');
+  }
+  if (!backend.readable) {
+    add('READINESS_UNREAD');
+  } else {
+    if (!backend.production) add('NOT_PRODUCTION');
+    if (backend.database !== 'CONNECTED') add('STORE_NOT_CONNECTED');
+    else if (backend.ledger === null || !backend.ledger.gapFree || backend.ledger.pending.length > 0 || backend.ledger.unknown.length > 0) add('STORE_NOT_CURRENT');
+    if (backend.social !== 'READY') add('SOCIAL_NOT_READY');
+    if (backend.commit === null) add('COMMIT_UNKNOWN');
+    else if (expectCommit && backend.commit !== expectCommit) add('COMMIT_NOT_EXPECTED');
+  }
+  if (!expectCommit) add('NO_EXPECTED_COMMIT');
+  if (phase === 'verify') {
+    if (recorded?.venue?.venue !== 'HOSTED_FINAL') add('SCENARIO_NOT_FINAL');
+    const before = recorded?.backend ?? null;
+    if (typeof before?.bootId !== 'string' || !backend.readable) add('RESTART_UNPROVEN');
+    else if (before.bootId === backend.bootId) add('NOT_RESTARTED');
+    if (backend.readable && typeof before?.commit === 'string' && backend.commit !== null && before.commit !== backend.commit) add('BUILD_CHANGED');
+    if (typeof recorded?.bridge !== 'string' || new URL(recorded.bridge).origin !== new URL(bridge).origin) add('BACKEND_CHANGED');
+  }
+  return Object.freeze({ venue: reasons.length === 0 ? 'HOSTED_FINAL' : 'REHEARSAL', reasons: Object.freeze(reasons) });
+}
+
+/**
+ * THE RESTART, AS A CHECK OF THE VERIFY PHASE. Without it, a verify phase run
+ * against a backend that never restarted reads its own unchanged memory and
+ * passes DURABLE and PRESENCE for the wrong reason. The boot id is drawn when
+ * the server is created, so a new id is a new start.
+ */
+export const R16_RESTART_CHECK = 'RESTART: the backend that answers is a new start, not the one the scenario ran against';
+
+export function r16RestartCheck(before, after) {
+  const was = typeof before?.bootId === 'string' ? before.bootId : null;
+  const now = after?.readable === true ? after.bootId : null;
+  if (was === null || now === null) {
+    return Object.freeze({ name: R16_RESTART_CHECK, result: 'FAIL', detail: `a boot id could not be read (${was === null ? 'the scenario recorded none' : `the backend's report: ${String(after?.reason ?? 'unreadable')}`}): the restart is not shown` });
+  }
+  return was === now
+    ? Object.freeze({ name: R16_RESTART_CHECK, result: 'FAIL', detail: `the boot id is still ${was.slice(0, 12)}: this backend did not restart` })
+    : Object.freeze({ name: R16_RESTART_CHECK, result: 'PASS', detail: '' });
+}
+
+const describeBackend = (backend) => (backend.readable
+  ? `commit=${backend.commit ?? 'UNKNOWN'} attested_by=${backend.attestedBy ?? 'none'} production=${String(backend.production)} boot=${backend.bootId.slice(0, 12)} `
+    + `store=${backend.database} through=${backend.ledger?.through ?? 'none'} pending=${String(backend.ledger?.pending.length ?? 'UNKNOWN')} social=${backend.social}`
+  : `UNREAD ${backend.reason}`);
+
 /* --------------------------------------------------------------------- CLI --- */
 
 const option = (argv, name) => {
@@ -544,9 +747,12 @@ async function main(argv, env) {
   const origin = option(argv, 'origin');
   const phase = option(argv, 'phase') ?? 'scenario';
   const statePath = option(argv, 'state');
+  const expectCommit = option(argv, 'expect-commit')?.trim().toLowerCase() ?? null;
+  const final = argv.includes('--final');
   const out = (line) => process.stdout.write(`${line}\n`);
-  if (!bridge || !/^https?:\/\/[^\s]+$/u.test(bridge) || !origin || !['scenario', 'verify'].includes(phase) || (phase === 'verify' && !statePath)) {
-    process.stderr.write('usage: wonderland-r16-harness.mjs --bridge <url> --origin <allowed origin> [--phase scenario|verify] [--state <file>] [--nonce <n>] [--players <a,b,c>]\n');
+  if (!bridge || !/^https?:\/\/[^\s]+$/u.test(bridge) || !origin || !['scenario', 'verify'].includes(phase) || (phase === 'verify' && !statePath)
+    || (expectCommit !== null && !/^[0-9a-f]{40}$/u.test(expectCommit))) {
+    process.stderr.write('usage: wonderland-r16-harness.mjs --bridge <url> --origin <allowed origin> [--phase scenario|verify] [--state <file>] [--nonce <n>] [--players <a,b,c>] [--expect-commit <40-hex sha>] [--final]\n');
     return 2;
   }
   const recorded = phase === 'verify' ? JSON.parse(readFileSync(statePath, 'utf8')) : null;
@@ -555,6 +761,7 @@ async function main(argv, env) {
   const players = recorded?.players ?? (named === null ? r16Players(nonce) : { a: named[0], b: named[1], c: named[2], nobody: `r16nobody${nonce}` });
 
   let sessions;
+  const source = env.WONDERLAND_R16_SESSIONS ? 'SIGNED_IN' : 'SCRIPTED';
   if (env.WONDERLAND_R16_SESSIONS) {
     try { sessions = JSON.parse(env.WONDERLAND_R16_SESSIONS); } catch { sessions = null; }
     if (sessions === null || [players.a, players.b, players.c].some((id) => typeof sessions[id] !== 'string')) {
@@ -575,27 +782,43 @@ async function main(argv, env) {
   if (probe.status === 0) { out('R16 BLOCKED — the backend could not be reached.'); return 1; }
   out(`R16 ${R16_VERSION} phase=${phase} backend=${new URL(bridge).host} players=${players.a},${players.b},${players.c}`);
   out(`R16 VOICE ${await probeR16Voice({ bridge, origin, token: sessions[players.a], fetch })} (reported, not checked: voice is CORE's live EOS step)`);
+  const backend = await readR16Backend({ bridge, operatorToken: env.RELAY_BRIDGE_TOKEN, fetch });
+  out(`R16 BACKEND ${describeBackend(backend)}`);
+  const host = await inspectR16Host(bridge, resolveR16Host);
+  const judgeVenue = (names) => judgeR16Venue({ phase, bridge, host, identities: { source, names }, backend, expectCommit, recorded });
+  const reportVenue = (venue) => {
+    out(`R16 VENUE ${venue.venue}${venue.reasons.length === 0 ? '' : ` reasons=${venue.reasons.join(',')}`}`);
+    for (const reason of venue.reasons) out(`R16 VENUE REASON ${reason} — ${R16_VENUE_REASONS[reason]}`);
+    if (final && venue.venue !== 'HOSTED_FINAL') out(`R16 FINAL REFUSED — --final was asked for, and this run is a ${venue.venue}`);
+  };
 
   if (phase === 'verify') {
+    const restart = r16RestartCheck(recorded?.backend, backend);
     const verified = await verifyR16Restart({ bridge, origin, sessions, players, nonce, recorded, fetch });
     out(`R16 RECONNECT ${[players.a, players.b, players.c].map((player) => `${player}=${verified.reconnect[player]}`).join(' ')}`);
-    for (const row of verified.results) out(`R16 ${row.result} ${row.name}${row.result === 'FAIL' ? ` — ${row.detail}` : ''}`);
-    const failed = verified.results.filter((row) => row.result === 'FAIL').length;
-    out(`R16 SUMMARY phase=verify passed=${String(verified.results.length - failed)} failed=${String(failed)} of=${String(verified.results.length)}`);
-    return failed === 0 ? 0 : 1;
+    const results = [restart, ...verified.results];
+    for (const row of results) out(`R16 ${row.result} ${row.name}${row.result === 'FAIL' ? ` — ${row.detail}` : ''}`);
+    const failed = results.filter((row) => row.result === 'FAIL').length;
+    const venue = judgeVenue(null);
+    reportVenue(venue);
+    out(`R16 SUMMARY phase=verify passed=${String(results.length - failed)} failed=${String(failed)} of=${String(results.length)} venue=${venue.venue}`);
+    return failed === 0 && (!final || venue.venue === 'HOSTED_FINAL') ? 0 : 1;
   }
 
   const outcome = await runR16Scenario({ bridge, origin, sessions, players, nonce, fetch });
   for (const row of outcome.results) out(`R16 ${row.result} ${row.name}${row.result === 'FAIL' ? ` — ${row.detail}` : ''}`);
   const summary = summarizeR16(outcome.results);
   for (const name of summary.missing) out(`R16 FAIL ${name} — not run`);
+  const venue = judgeVenue(outcome.names);
+  reportVenue(venue);
   if (statePath) {
     const views = await readR16Views({ bridge, origin, sessions, players, nonce, fetch });
-    writeFileSync(statePath, `${JSON.stringify({ version: R16_VERSION, nonce, players, views }, null, 2)}\n`);
+    const record = { version: R16_VERSION, nonce, players, views, bridge: new URL(bridge).origin, backend, venue, identities: { source, names: outcome.names } };
+    writeFileSync(statePath, `${JSON.stringify(record, null, 2)}\n`);
     out(`R16 STATE recorded for the restart check: ${statePath}`);
   }
-  out(`R16 SUMMARY phase=scenario passed=${String(summary.passed)} failed=${String(summary.failed)} of=${String(summary.of)}`);
-  return summary.failed === 0 ? 0 : 1;
+  out(`R16 SUMMARY phase=scenario passed=${String(summary.passed)} failed=${String(summary.failed)} of=${String(summary.of)} venue=${venue.venue}`);
+  return summary.failed === 0 && (!final || venue.venue === 'HOSTED_FINAL') ? 0 : 1;
 }
 
 const entry = (() => {

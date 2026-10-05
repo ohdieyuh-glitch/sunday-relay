@@ -10,7 +10,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { WONDERLAND_MIGRATIONS } from '../src/relay/persistence/wonderland-postgres';
 import {
-  pairR16Sessions, r16Players, readR16Views, R16_CHECKS, runR16Scenario, summarizeR16, verifyR16Restart,
+  inspectR16Host, judgeR16Venue, pairR16Sessions, r16Players, r16RestartCheck, readR16Backend, readR16Views, R16_CHECKS, runR16Scenario,
+  summarizeR16, verifyR16Restart,
 } from '../scripts/wonderland-r16-harness.mjs';
 import {
   bootstrapWonderlandStore, classifyWonderlandStore, fingerprintWonderlandStore, WONDERLAND_STORE_BOOTSTRAP_PHRASE,
@@ -30,8 +31,10 @@ import { WONDERLAND_SHIPPED_CHAIN } from './wonderland-store-readiness';
  *     permanent store's case (content, no marker), a gap in the ledger, a stamp
  *     ahead of this build, a foreign schema;
  *   - the real bridge PROCESS, pointed at the bootstrapped store, reports itself
- *     ready to an operator (and to nobody else), then serves the whole R16
- *     scenario, survives a restart, and passes the split restart check;
+ *     ready to an operator (and to nobody else), with the commit its platform
+ *     attests and a boot that changes on restart; then serves the whole R16
+ *     scenario, survives a restart, and passes the split restart check, while
+ *     the venue is judged a REHEARSAL for exactly what makes it one;
  *   - the built CLI does the same from the command line, and never prints or
  *     records the database URL.
  *
@@ -45,6 +48,8 @@ const ROOT = resolve(process.cwd());
 const FINGERPRINT = join(ROOT, 'docs', 'julius-migrations', '030', 'fingerprint-store.sql');
 const OPERATOR = `op-${randomBytes(16).toString('hex')}`;
 const ORIGIN = 'https://hosted-store.relay.test';
+/** The commit a platform would attest: Railway sets RAILWAY_GIT_COMMIT_SHA on a deployment it built. */
+const COMMIT = 'c0ffee'.padEnd(40, '0');
 
 async function freePort(): Promise<number> {
   return new Promise((done, fail) => {
@@ -187,14 +192,15 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
     }
   }, 120_000);
 
-  it('the real bridge process on the bootstrapped store: ready to an operator only, then the whole R16 scenario, a restart and the split restart check', async () => {
+  it('the real bridge process on the bootstrapped store: ready to an operator only, then the whole R16 scenario, a restart and the split restart check, judged a REHEARSAL by name', async () => {
     const pool = await empty('live');
     expect((await bootstrap(pool)).result).toBe('PASS');
 
     let bridge = '';
     let child: ChildProcess | null = null;
-    const start = async (env: Record<string, string>): Promise<void> => {
-      const port = await freePort();
+    const start = async (env: Record<string, string>, reuse?: string): Promise<void> => {
+      // A restart keeps its address, as a hosted backend does; a new start takes a free port.
+      const port = reuse === undefined ? await freePort() : Number(new URL(reuse).port);
       bridge = `http://127.0.0.1:${String(port)}`;
       const started = spawn(process.execPath, [bridgeBundle], {
         env: {
@@ -226,10 +232,11 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
       return { status: response.status, body: await response.json() as { data?: Record<string, unknown> } };
     };
 
-    // No database: a fact, by variable name.
+    // No database: a fact, by variable name. The bridge still says which build and which start it is: no platform attested this one.
     await start({});
     expect((await readiness(`Bearer ${OPERATOR}`)).body.data).toMatchObject({
       database: { state: 'NOT_CONFIGURED', missingConfig: ['JULIUS_DATABASE_URL', 'DATABASE_URL'] }, ledger: null, surfaces: { social: 'UNKNOWN' },
+      bridge: { commit: null, attestedBy: null, production: false, bootId: expect.stringMatching(/^[0-9a-f]{32}$/u) },
     });
     await stop();
 
@@ -242,8 +249,9 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
     expect(JSON.stringify(unreachable.body)).not.toContain(closed.hostname);
     await stop();
 
-    // The bootstrapped store.
-    await start({ JULIUS_DATABASE_URL: urls.get('live')! });
+    // The bootstrapped store, on a build its platform attests.
+    const live = { JULIUS_DATABASE_URL: urls.get('live')!, RAILWAY_GIT_COMMIT_SHA: COMMIT };
+    await start(live);
     expect((await readiness()).status, 'no credential: nothing').toBe(401);
     expect((await readiness('Bearer not-the-operator')).status).toBe(401);
     const ready = await readiness(`Bearer ${OPERATOR}`);
@@ -254,7 +262,9 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
       ledger: { applied: WONDERLAND_SHIPPED_CHAIN.length, expected: WONDERLAND_SHIPPED_CHAIN.length, through: WONDERLAND_SHIPPED_CHAIN.at(-1), gapFree: true, pending: [], unknown: [] },
       surfaces: { social: 'READY', voiceSchema: 'NOT_APPLIED', eosClientConfig: 'NOT_CONFIGURED', eosTrustedServer: 'NOT_CONFIGURED' },
       sessions: 'IN_MEMORY_REVOKED_ON_RESTART',
+      bridge: { commit: COMMIT, attestedBy: 'RAILWAY_GIT_COMMIT_SHA', production: false, bootId: expect.stringMatching(/^[0-9a-f]{32}$/u) },
     });
+    expect(Date.parse(String((ready.body.data!.bridge as { startedAt: string }).startedAt))).not.toBeNaN();
     expect(JSON.stringify(ready.body)).not.toContain(new URL(urls.get('live')!).password || 'no-password-in-url');
 
     // The whole R16 scenario on it, a restart, and the split restart check.
@@ -265,15 +275,65 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
     expect(outcome.results.filter((row) => row.result === 'FAIL')).toEqual([]);
     expect(summarizeR16(outcome.results)).toEqual({ passed: R16_CHECKS.length, failed: 0, missing: [], of: R16_CHECKS.length });
     const before = await readR16Views({ bridge, origin: ORIGIN, sessions: paired.sessions, players, nonce, fetch });
+
+    // THE VENUE. Every privacy check passed, and this is still a rehearsal, for exactly these reasons: the commit is attested and
+    // expected, and the store is connected, current and social-ready, so none of those is one. A loopback host is never looked up.
+    const neverLookedUp = async (): Promise<string[]> => { throw new Error('a loopback host is never looked up'); };
+    const host = await inspectR16Host(bridge, neverLookedUp);
+    const backendBefore = await readR16Backend({ bridge, operatorToken: OPERATOR, fetch });
+    expect(backendBefore).toMatchObject({ readable: true, commit: COMMIT, production: false, database: 'CONNECTED', social: 'READY' });
+    expect(outcome.names, 'paired players carry no verified sign-in').toEqual({ [players.a]: null, [players.b]: null, [players.c]: null });
+    const venue = judgeR16Venue({ phase: 'scenario', bridge, host, identities: { source: 'SCRIPTED', names: outcome.names }, backend: backendBefore, expectCommit: COMMIT });
+    expect(venue).toEqual({ venue: 'REHEARSAL', reasons: ['NOT_HTTPS', 'HOST_NOT_PUBLIC', 'SCRIPTED_PLAYERS', 'PLAYERS_NOT_VERIFIED', 'NOT_PRODUCTION'] });
+    // Not restarted: the same start answers, and the restart check says so.
+    expect(r16RestartCheck(backendBefore, await readR16Backend({ bridge, operatorToken: OPERATOR, fetch }))).toMatchObject({ result: 'FAIL' });
+
+    const address = bridge;
     await stop();
-    await start({ JULIUS_DATABASE_URL: urls.get('live')! });
+    await start(live, address);
+    expect(bridge, 'the restart kept its address').toBe(address);
+    const backendAfter = await readR16Backend({ bridge, operatorToken: OPERATOR, fetch });
+    expect(backendAfter).toMatchObject({ readable: true, commit: COMMIT });
+    expect(r16RestartCheck(backendBefore, backendAfter)).toEqual({ name: expect.any(String), result: 'PASS', detail: '' });
     const again = await pairR16Sessions({ bridge, origin: ORIGIN, operatorToken: OPERATOR, playerIds: [players.a, players.b, players.c], fetch });
     if (!again.ok) throw new Error(again.reason);
     const verified = await verifyR16Restart({ bridge, origin: ORIGIN, sessions: again.sessions, players, nonce, recorded: { views: before }, fetch });
     expect(verified.results.filter((row) => row.result === 'FAIL')).toEqual([]);
     expect(verified.results).toHaveLength(6);
+    // The verify phase's venue: restarted, same build, same bridge; a rehearsal because its scenario was one.
+    expect(judgeR16Venue({
+      phase: 'verify', bridge, host, identities: { source: 'SCRIPTED', names: null }, backend: backendAfter, expectCommit: COMMIT,
+      recorded: { bridge: new URL(address).origin, backend: backendBefore, venue },
+    })).toEqual({ venue: 'REHEARSAL', reasons: ['NOT_HTTPS', 'HOST_NOT_PUBLIC', 'SCRIPTED_PLAYERS', 'NOT_PRODUCTION', 'SCENARIO_NOT_FINAL'] });
+
+    // THE CLI, as an operator runs it. `--final` refuses a rehearsal however clean its checks; a verify phase with no restart fails
+    // its RESTART check; after a real restart it passes, 7 of 7.
+    const harness = (args: readonly string[]) => spawnSync(process.execPath, [join(ROOT, 'scripts', 'wonderland-r16-harness.mjs'), '--bridge', bridge, '--origin', ORIGIN, ...args], {
+      encoding: 'utf8', timeout: 120_000, env: { PATH: process.env.PATH ?? '', RELAY_BRIDGE_TOKEN: OPERATOR },
+    });
+    const state = join(root, `r16-cli-${nonce}.json`);
+    const scenario = harness(['--state', state, '--expect-commit', COMMIT, '--final']);
+    expect(scenario.stdout).toContain(`R16 SUMMARY phase=scenario passed=${String(R16_CHECKS.length)} failed=0 of=${String(R16_CHECKS.length)} venue=REHEARSAL`);
+    expect(scenario.stdout).toContain('R16 VENUE REHEARSAL reasons=NOT_HTTPS,HOST_NOT_PUBLIC,SCRIPTED_PLAYERS,PLAYERS_NOT_VERIFIED,NOT_PRODUCTION');
+    expect(scenario.stdout).toContain(`R16 BACKEND commit=${COMMIT} attested_by=RAILWAY_GIT_COMMIT_SHA production=false`);
+    expect(scenario.stdout).toContain('R16 FINAL REFUSED');
+    expect(scenario.status, '--final and a rehearsal: exit 1').toBe(1);
+    expect(scenario.stdout + scenario.stderr).not.toContain(OPERATOR);
+    const recorded = JSON.parse(readFileSync(state, 'utf8')) as { bridge: string; backend: { bootId: string; commit: string }; venue: { venue: string } };
+    expect(recorded).toMatchObject({ bridge: new URL(bridge).origin, backend: { commit: COMMIT }, venue: { venue: 'REHEARSAL' } });
+    const unrestarted = harness(['--phase', 'verify', '--state', state, '--expect-commit', COMMIT]);
+    expect(unrestarted.stdout).toContain('R16 FAIL RESTART');
+    expect(unrestarted.stdout).toContain('this backend did not restart');
+    expect(unrestarted.status).toBe(1);
     await stop();
-  }, 180_000);
+    await start(live, address);
+    const restarted = harness(['--phase', 'verify', '--state', state, '--expect-commit', COMMIT]);
+    expect(restarted.stdout).toContain('R16 PASS RESTART');
+    expect(restarted.stdout).toContain('R16 SUMMARY phase=verify passed=7 failed=0 of=7 venue=REHEARSAL');
+    expect(restarted.stdout).toContain('reasons=NOT_HTTPS,HOST_NOT_PUBLIC,SCRIPTED_PLAYERS,NOT_PRODUCTION,SCENARIO_NOT_FINAL');
+    expect(restarted.status, 'no --final: the checks decide').toBe(0);
+    await stop();
+  }, 300_000);
 
   it('the built CLI inspects and bootstraps from the command line, and never prints or records the database URL', async () => {
     await empty('cli');

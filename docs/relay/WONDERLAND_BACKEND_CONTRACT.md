@@ -28,7 +28,7 @@ Visibility is `OWNER`, `PARTICIPANTS`, or `PUBLIC`. `PARTICIPANTS` is battle mem
 | `GET` | `/relay-api/wonderland/social/me` · `/roster` · `/instances` · `/presence/:id` · `/conversations/:id` · `/servers/:id` | the player's social world, every answer a privacy-wall projection (P1–P5, party, DM, no inference) |
 | `GET` | `/relay-api/wonderland/eos/client-config` | the game client's minimum EOS configuration, at runtime, `no-store`; never the trusted server's credentials — see [WONDERLAND_VOICE.md](WONDERLAND_VOICE.md) |
 | `POST` | `/relay-api/wonderland/voice/identity` · `/voice/join` | bind the EOS PUID the player proves (a verified Connect ID token); voice-room tokens for exactly the rooms the privacy wall's plan gives them |
-| `GET` | `/relay-api/wonderland/readiness` | **operator `Bearer` only**: whether this bridge's store is configured, reachable and migrated through which stamp, and which surfaces that makes ready, as facts. Never a URL or a driver message — see [WONDERLAND_HOSTED_STORE.md](WONDERLAND_HOSTED_STORE.md) |
+| `GET` | `/relay-api/wonderland/readiness` | **operator `Bearer` only**: whether this bridge's store is configured, reachable and migrated through which stamp, and which surfaces that makes ready, as facts. Also which build and start is answering: the commit its platform attests (or null), whether its gates take the production branch, and a boot id that changes on every start. Never a URL or a driver message — see [WONDERLAND_HOSTED_STORE.md](WONDERLAND_HOSTED_STORE.md) |
 
 **Social presence is a lease.** It is separate from the world stream's `/presence/*` lease (45 s), and the client keeps both.
 - While the player stands in an instance, send `UPDATE_PRESENCE` through `/social/commands` at least every **30 s**.
