@@ -1,0 +1,17 @@
+checked_at|2026-10-04 20:24:13.446922+00
+database|julius
+index_name|julius_run_project_created
+definition|CREATE INDEX julius_run_project_created ON relay_wonderland.julius_runs USING btree (project_id, created_at)
+
+index_name|julius_runs_mission_id_run_id_key
+definition|CREATE UNIQUE INDEX julius_runs_mission_id_run_id_key ON relay_wonderland.julius_runs USING btree (mission_id, run_id)
+
+index_name|julius_runs_pkey
+definition|CREATE UNIQUE INDEX julius_runs_pkey ON relay_wonderland.julius_runs USING btree (run_id)
+old_index_present|f
+new_index_matches|t
+update_columns_indexed|
+runs_rows|12
+n_tup_upd|0
+n_tup_hot_upd|0
+migration_031_applied|t
