@@ -201,7 +201,9 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
 | **#333** | Julius **local qualification reliability**, three fixes. `migrate()` serialises itself under a session advisory lock (`WONDERLAND_MIGRATION_LOCK`): 7 of 8 concurrent migrators of an EMPTY store used to be refused. The login-probe test clears the probe's own override table (`CLAUDE_AUTH_PROVIDER_OVERRIDES`). The drill suite drops the two databases it used to leak every run. The full suite against ONE fresh database, every real-PG suite live: 13,783 passed, 0 failed | base `main` | green (6/6) at `62a78d5d` |
 | **#334** | Wonderland **R16 venue**. The bridge reports, operator-only, the commit its platform attests (`RAILWAY_GIT_COMMIT_SHA`, nothing else believed) and a boot id per start. Every R16 run is judged **HOSTED_FINAL** or **REHEARSAL** (19 named reasons) apart from its checks; `--final` refuses a rehearsal. The verify phase gains a **RESTART** check (boot id changed), which found that #327's own CLI test never restarted | on #332 | green (6/6) |
 | **#336** | Wonderland **deploy check** (`scripts/wonderland-deploy-check.mjs`): by reads alone, the hosted bridge is the expected build (attested commit), production-gated, ready (store, social) and closed (health says only ok, report operator-only, foreign origin refused). R16 is now rehearsed **under the production gates**: a bridge refusing pairing on the production branch only passed every R16 test before (7/7, measured) and fails now | on #334 | see the PR |
-| **#335** | **[DO NOT MERGE] landing rehearsal**: all thirteen open PRs merged in material order on one head. One conflict, the generated `JULIUS_HARNESS_MANIFEST.md`. Full suite on it: 742 files, 14,154 passed, 0 failed | base `main` | CI only; close once it has spoken |
+| **#335** | **[DO NOT MERGE] landing rehearsal**: all thirteen open PRs merged in material order on one head. One conflict, the generated `JULIUS_HARNESS_MANIFEST.md`. Full suite on it: 742 files, 14,154 passed, 0 failed | base `main` | **green (6/6), closed** as planned |
+| **#337** | **Migration 034 options** (`docs/JULIUS_MIGRATION_034_OPTIONS.md`), evidence for the founder and SECOND, nothing chosen. Five options; option 1 (project memory across missions) interacts with Decision C. JUJU recommends option 4 | base `main` | see the PR |
+| **#338** | **Option 4 PREPARED, not chosen**: `034_julius_project_brain_reserved` (stamp-only, guarded) and voice **035 in the chain** behind it. A hosted store left at 033 takes 034 and 035 as pending. Found and fixed: 033's DOWN case assumed 033 was last | on #336 | see the PR |
 
 **Findings to act on:**
 - **The social command route has no rate limit** (noted in #336). A signed-in player could flood friend requests or messages. What limits a hosted launch needs is a backend-correctness decision for SECOND Wonderland and the founder.
@@ -215,7 +217,9 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
 - **#321's migration-032 suite teardown can time out under CI load.** Its `afterAll` runs a plain `DROP DATABASE` per database, and each can wait up to about 5 s for terminated backends to exit, against the 10 s hook default.
   - Seen on #327's run 37237672139 with 219/219 tests passing.
   - Proposed one-line fix: give that `afterAll` an explicit timeout (e.g. `}, 90_000)`), next to the 031 fix above.
-- **034 (Project Brain) has no spec in the repo.** The founder and SECOND must define it. 035's guard requires a `034_%` stamp.
+- **034 (Project Brain) has no spec in the repo**, and it now gates both lanes: 035 (EOS voice for final R16) behind its guard, and C after 035 in the material order.
+  - The options are in #337. Option 4, a reserved stamp, is prepared in #338.
+  - **The founder and SECOND choose.** If option 1 (UNRESOLVED findings carried across missions) is wanted at all, settle its relation to Decision C before C's registration is frozen.
 - **Hosted R16 needs a hosted PostgreSQL** for the Railway bridge, because the bridge never migrates at boot.
   - Provisioning is the founder's.
   - The procedure is built and rehearsed (`docs/relay/WONDERLAND_HOSTED_STORE.md`, #332) and **AWAITING INDEPENDENT REVIEW**. It runs only after 031–033 land.
