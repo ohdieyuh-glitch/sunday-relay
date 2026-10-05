@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-import { createMemoryWonderlandSocialStore, type WonderlandSocialState } from '../wonderland-social';
+import { createMemoryWonderlandSocialStore, isWonderlandVisibleTo, type WonderlandSocialState } from '../wonderland-social';
 import {
   WONDERLAND_EOS_CLAIM_REFUSALS,
   checkWonderlandEosIdTokenClaims,
@@ -21,7 +21,8 @@ import {
  * thought to write down:
  *   (a) every room is a clique of mutual visibility (a room discloses its members);
  *   (b) every mutually visible pair shares exactly one room (heard, and once);
- *   (c) a pair that is not mutually visible shares no room.
+ *   (c) a pair that is not mutually visible shares no room;
+ *   (d) a player's rooms never depend on anyone that player cannot see.
  */
 
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
@@ -98,6 +99,49 @@ describe('the room plan keeps the wall, over random worlds', () => {
   }, 60_000);
 });
 
+/** A player's own view of a plan: the rooms they hold, by id and members. Nothing else reaches their client. */
+const roomsOf = (plan: WonderlandVoicePlan, viewer: string): string[] =>
+  plan.rooms.filter((room) => room.memberIds.includes(viewer)).map((room) => `${room.roomId}:${room.memberIds.join(',')}`).sort();
+
+describe('the room plan discloses nothing a player cannot see (P1, no inference)', () => {
+  it('300 seeded worlds: a player\'s rooms are the same whether or not anyone they cannot see is in the channel', async () => {
+    const channel = (participantIds: readonly string[]) => ({ kind: 'INSTANCE' as const, scopeId: 'public:hub', participantIds });
+    for (let seed = 1; seed <= 300; seed += 1) {
+      const size = 2 + (seed % 8);
+      const { state, players } = await randomWorld(seed, size);
+      const full = planWonderlandVoiceRooms(state, channel(players), sha);
+      for (const viewer of players) {
+        const unseen = players.filter((other) => other !== viewer && !isWonderlandVisibleTo(state, viewer, other));
+        if (unseen.length === 0) continue;
+        const withoutAll = planWonderlandVoiceRooms(state, channel(players.filter((player) => !unseen.includes(player))), sha);
+        expect(roomsOf(full, viewer), `seed ${String(seed)}: ${viewer}'s rooms change with players they cannot see (${unseen.join(', ')})`)
+          .toEqual(roomsOf(withoutAll, viewer));
+        for (const one of unseen) {
+          const withoutOne = planWonderlandVoiceRooms(state, channel(players.filter((player) => player !== one)), sha);
+          expect(roomsOf(full, viewer), `seed ${String(seed)}: ${viewer}'s rooms change with ${one}, whom they cannot see`).toEqual(roomsOf(withoutOne, viewer));
+        }
+      }
+    }
+  }, 60_000);
+
+  it('a hidden player\'s arrival does not split a stranger\'s room (the review\'s case)', async () => {
+    const { store, run } = await named(['amy', 'ben', 'cat', 'dan']);
+    await run('ben', { kind: 'SET_SETTINGS', settings: { visibility: 'HIDDEN_FROM_STRANGERS' } });
+    for (const friend of ['amy', 'cat']) { await run('ben', { kind: 'FRIEND_REQUEST', toId: friend }); await run(friend, { kind: 'FRIEND_ACCEPT', fromId: 'ben' }); }
+    const plan = (ids: string[]) => planWonderlandVoiceRooms(store.snapshot(), { kind: 'INSTANCE', scopeId: 'public:hub', participantIds: ids }, sha);
+    expect(roomsOf(plan(['amy', 'ben', 'cat', 'dan']), 'dan')).toEqual(roomsOf(plan(['amy', 'cat', 'dan']), 'dan'));
+  });
+
+  it('a player\'s rooms do not change when someone they blocked arrives (the review\'s case)', async () => {
+    const { store, run } = await named(['amy', 'bob', 'xan', 'yul']);
+    await run('bob', { kind: 'BLOCK', targetId: 'amy' });
+    const plan = (ids: string[]) => planWonderlandVoiceRooms(store.snapshot(), { kind: 'INSTANCE', scopeId: 'public:hub', participantIds: ids }, sha);
+    expect(roomsOf(plan(['amy', 'bob', 'xan', 'yul']), 'bob')).toEqual(roomsOf(plan(['bob', 'xan', 'yul']), 'bob'));
+    expect(roomsOf(plan(['amy', 'bob', 'xan', 'yul']), 'amy'), 'nor the blocked player\'s, when the blocker arrives')
+      .toEqual(roomsOf(plan(['amy', 'xan', 'yul']), 'amy'));
+  });
+});
+
 async function named(names: readonly string[]) {
   const store = createMemoryWonderlandSocialStore();
   for (const name of names) await store.upsertProfile({ playerId: name, displayName: name });
@@ -107,11 +151,13 @@ async function named(names: readonly string[]) {
 }
 
 describe('the cases a person would ask about', () => {
-  it('when everyone may see everyone, the channel is ONE room', async () => {
+  it('when everyone may see everyone, every pair has its own room, and each player hears every other once', async () => {
     const { store } = await named(['ann', 'ben', 'cal', 'dee']);
     const plan = planWonderlandVoiceRooms(store.snapshot(), { kind: 'INSTANCE', scopeId: 'public:hub', participantIds: ['ann', 'ben', 'cal', 'dee'] }, sha);
-    expect(plan.rooms).toHaveLength(1);
-    expect(plan.rooms[0]!.memberIds).toEqual(['ann', 'ben', 'cal', 'dee']);
+    expect(plan.rooms.map((room) => room.memberIds)).toEqual([
+      ['ann', 'ben'], ['ann', 'cal'], ['ann', 'dee'], ['ben', 'cal'], ['ben', 'dee'], ['cal', 'dee'],
+    ]);
+    for (const player of ['ann', 'ben', 'cal', 'dee']) expect(plan.joins[player], `${player} holds one room per channel mate`).toHaveLength(3);
   });
 
   it('a hidden player shares a room with her friend and with nobody else; the strangers keep theirs', async () => {
@@ -119,7 +165,7 @@ describe('the cases a person would ask about', () => {
     await run('hana', { kind: 'SET_SETTINGS', settings: { visibility: 'HIDDEN_FROM_STRANGERS' } });
     await run('hana', { kind: 'FRIEND_REQUEST', toId: 'fay' }); await run('fay', { kind: 'FRIEND_ACCEPT', fromId: 'hana' });
     const plan = planWonderlandVoiceRooms(store.snapshot(), { kind: 'INSTANCE', scopeId: 'public:hub', participantIds: ['hana', 'fay', 'sam', 'tom'] }, sha);
-    expect(plan.rooms.map((room) => room.memberIds)).toEqual([['fay', 'hana'], ['fay', 'sam', 'tom']]);
+    expect(plan.rooms.map((room) => room.memberIds)).toEqual([['fay', 'hana'], ['fay', 'sam'], ['fay', 'tom'], ['sam', 'tom']]);
     expect(plan.joins.sam, 'Sam holds no room with Hana in it').not.toContain(plan.rooms[0]!.roomId);
     expect(plan.joins.hana, 'and Hana cannot hear the strangers either: she would be in their room').toEqual([plan.rooms[0]!.roomId]);
   });
@@ -132,13 +178,13 @@ describe('the cases a person would ask about', () => {
     expect(plan.rooms.map((room) => room.memberIds)).toEqual([['ann', 'cal'], ['ben', 'cal']]);
   });
 
-  it('a party is one room: party-mates see each other, and a block cannot share a party', async () => {
+  it('a party is a room per pair of party-mates: they see each other, and a block cannot share a party', async () => {
     const { store, run } = await named(['lea', 'hana', 'mo']);
     await run('hana', { kind: 'SET_SETTINGS', settings: { visibility: 'HIDDEN_FROM_STRANGERS' } });
     await run('lea', { kind: 'PARTY_CREATE', partyId: 'party-1' });
     for (const member of ['hana', 'mo']) { await run('lea', { kind: 'PARTY_INVITE', inviteeId: member }); await run(member, { kind: 'PARTY_JOIN', partyId: 'party-1' }); }
     const plan = planWonderlandVoiceRooms(store.snapshot(), { kind: 'PARTY', scopeId: 'party-1', participantIds: ['lea', 'hana', 'mo'] }, sha);
-    expect(plan.rooms.map((room) => room.memberIds)).toEqual([['hana', 'lea', 'mo']]);
+    expect(plan.rooms.map((room) => room.memberIds)).toEqual([['hana', 'lea'], ['hana', 'mo'], ['lea', 'mo']]);
   });
 
   it('room names are opaque: no player id, no scope, in any room name', async () => {
@@ -150,16 +196,16 @@ describe('the cases a person would ask about', () => {
     }
   });
 
-  it('a block changes the plan, and the diff names every membership the trusted server must revoke', async () => {
+  it('a block ends exactly the blocked pair\'s room, and the diff names both memberships the trusted server must revoke', async () => {
     const { store, run } = await named(['ann', 'ben', 'cal']);
     const channel = { kind: 'INSTANCE' as const, scopeId: 'public:hub', participantIds: ['ann', 'ben', 'cal'] };
     const before = planWonderlandVoiceRooms(store.snapshot(), channel, sha);
     await run('ann', { kind: 'BLOCK', targetId: 'ben' });
     const after = planWonderlandVoiceRooms(store.snapshot(), channel, sha);
     const diff = diffWonderlandVoicePlans(before, after);
-    const shared = before.rooms[0]!.roomId;
-    expect(diff.removals).toEqual(['ann', 'ben', 'cal'].map((playerId) => ({ roomId: shared, playerId })));
-    expect(diff.additions.map((row) => row.playerId).sort()).toEqual(['ann', 'ben', 'cal', 'cal']);
+    const pair = before.rooms.find((room) => room.memberIds.join() === 'ann,ben')!.roomId;
+    expect(diff.removals).toEqual(['ann', 'ben'].map((playerId) => ({ roomId: pair, playerId })));
+    expect(diff.additions, 'nobody else\'s room changes: Cal keeps both of his').toEqual([]);
   });
 });
 

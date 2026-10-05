@@ -4,6 +4,7 @@ import {
   WONDERLAND_PRESENCE_HEARTBEAT_SECONDS,
   WONDERLAND_PRESENCE_TTL_SECONDS,
   createMemoryWonderlandSocialStore,
+  decideWonderlandSocialCommand,
   isWonderlandPresenceLive,
   projectWonderlandFriends,
   projectWonderlandInstanceListing,
@@ -124,5 +125,48 @@ describe('nobody reports a player who has gone', () => {
     expect(await run(store, 'ann', { kind: 'LEAVE_INSTANCE' }, TTL + 2)).toEqual({ ok: true, code: 'NO_CHANGE' });
     expect(await enter(store, 'ann', TTL + 3)).toEqual({ ok: true, code: 'DONE' });
     expect(rosterIds(await store.stateFor({ viewerId: 'ann', now: at(TTL + 3) }), 'ann')).toEqual(['ann']);
+  });
+});
+
+describe('a member removed from a private server stays out of it, whatever order the commands are decided in', () => {
+  const SERVER = 'server:srv';
+  const enterServer = (store: Store, playerId: string, seconds: number) =>
+    run(store, playerId, { kind: 'ENTER_INSTANCE', instanceId: SERVER, location: { zone: 'hall', x: 1, y: 1, z: 0 }, activity: 'EXPLORING', dogId: 'dog-corgi' }, seconds);
+  const serverWorld = async (): Promise<Store> => {
+    const store = await world(['owen', 'mia', 'max']);
+    await run(store, 'owen', { kind: 'SERVER_CREATE', serverId: 'srv', name: 'Owen' }, 0);
+    for (const member of ['mia', 'max']) {
+      await run(store, 'owen', { kind: 'SERVER_INVITE', serverId: 'srv', inviteeId: member }, 0);
+      await run(store, member, { kind: 'SERVER_JOIN', serverId: 'srv' }, 0);
+    }
+    await enterServer(store, 'mia', 0);
+    await enterServer(store, 'max', 0);
+    return store;
+  };
+
+  it('the review\'s case: removed just after her lease lapsed, her heartbeat stamped earlier but decided later does not bring her back', async () => {
+    const store = await serverWorld();
+    // Owen's block is stamped 50 ms after Mia's lease ran out, and is decided first: she is removed (P4).
+    expect(await run(store, 'owen', { kind: 'BLOCK', targetId: 'mia' }, TTL + 0.05)).toMatchObject({ ok: true, code: 'DONE' });
+    expect(store.snapshot().presence.mia, 'her stored presence goes with her membership, lapsed or not').toBeUndefined();
+    // Her heartbeat was stamped 10 ms before the lease ran out, and is decided second.
+    expect(await run(store, 'mia', { kind: 'UPDATE_PRESENCE', location: { zone: 'hall', x: 2, y: 1, z: 0 }, activity: 'IDLE' }, TTL - 0.01))
+      .toMatchObject({ ok: false, code: 'NOT_IN_INSTANCE' });
+    expect(store.snapshot().presence.mia).toBeUndefined();
+    // Max, still a member and still live, never sees her again.
+    await run(store, 'max', { kind: 'UPDATE_PRESENCE', location: { zone: 'hall', x: 3, y: 1, z: 0 }, activity: 'IDLE' }, TTL - 1);
+    const later = wonderlandLiveState(store.snapshot(), at(TTL + 30));
+    const view = projectWonderlandRoster(later, 'max', SERVER);
+    expect(view.available ? view.players.map((entry) => entry.playerId) : []).not.toContain('mia');
+  });
+
+  it('a heartbeat from a player who is no longer a member is refused, even where their presence row survived', async () => {
+    const store = await serverWorld();
+    const stored = store.snapshot();
+    // A row the removal did not clear (as an older store could hold): the membership is gone, the presence is not.
+    const orphaned = { ...stored, servers: { ...stored.servers, srv: { ...stored.servers.srv!, memberIds: stored.servers.srv!.memberIds.filter((id) => id !== 'mia') } } };
+    const decided = decideWonderlandSocialCommand(orphaned, 'mia', { kind: 'UPDATE_PRESENCE', location: { zone: 'hall', x: 2, y: 1, z: 0 }, activity: 'IDLE' }, at(10));
+    expect(decided.outcome).toMatchObject({ ok: false, code: 'NOT_IN_INSTANCE' });
+    expect(decided.mutations).toEqual([]);
   });
 });
