@@ -321,6 +321,38 @@ suite('Wonderland social on real PostgreSQL (migration 033)', () => {
       expect(met.rows.map((row) => row.pair)).toEqual(['ben>dee', 'cal>dee', 'dee>ben', 'dee>cal']);
     });
 
+    it('a member removed just after her lease lapsed stays out in both stores, even when her earlier-stamped heartbeat is decided later', async () => {
+      const pool = await create('removal', WONDERLAND_MIGRATIONS);
+      const stores: Record<'memory' | 'postgres', WonderlandSocialStore> = {
+        memory: createMemoryWonderlandSocialStore(),
+        postgres: new WonderlandSocialPostgresStore(pool),
+      };
+      const TTL = WONDERLAND_PRESENCE_TTL_SECONDS;
+      const t = (seconds: number): string => new Date(Date.UTC(2026, 9, 4, 15, 0, 0) + seconds * 1000).toISOString();
+      const enterServer: WonderlandSocialCommand = { kind: 'ENTER_INSTANCE', instanceId: 'server:srv', location: null, activity: 'IDLE', dogId: null };
+      const steps: Array<[string, WonderlandSocialCommand, number, string]> = [
+        ['owen', { kind: 'SERVER_CREATE', serverId: 'srv', name: 'Owen' }, 0, 'DONE'],
+        ['owen', { kind: 'SERVER_INVITE', serverId: 'srv', inviteeId: 'mia' }, 0, 'DONE'], ['mia', { kind: 'SERVER_JOIN', serverId: 'srv' }, 0, 'DONE'],
+        ['mia', enterServer, 0, 'DONE'],
+        // Decided first, stamped 50 ms after her lease ran out: Owen blocks Mia, and she is removed (P4).
+        ['owen', { kind: 'BLOCK', targetId: 'mia' }, TTL + 0.05, 'DONE'],
+        // Decided second, stamped 10 ms before it ran out: her heartbeat finds her nowhere.
+        ['mia', { kind: 'UPDATE_PRESENCE', location: null, activity: 'IDLE' }, TTL - 0.01, 'NOT_IN_INSTANCE'],
+      ];
+      for (const store of Object.values(stores)) {
+        for (const player of ['owen', 'mia']) await store.upsertProfile({ playerId: player, displayName: player.toUpperCase() });
+      }
+      for (const [index, [actorId, command, seconds, code]] of steps.entries()) {
+        const outcomes = await Promise.all(Object.values(stores).map((store) =>
+          store.execute({ actorId, commandId: `removal-${String(index)}`, command, at: t(seconds) })));
+        expect(outcomes[1], `step ${String(index)} ${command.kind} by ${actorId}`).toEqual(outcomes[0]);
+        expect(outcomes[0]!.code, `step ${String(index)} ${command.kind} by ${actorId}`).toBe(code);
+      }
+      // Read back from PostgreSQL itself: her row went with her membership, lapsed or not.
+      const rows = await pool.query<{ player_id: string }>('SELECT player_id FROM relay_wonderland.social_presence ORDER BY player_id');
+      expect(rows.rows.map((row) => row.player_id)).toEqual([]);
+    });
+
     it('a command id is one write: a replay returns its first outcome, and another actor cannot reuse it', async () => {
       const pool = await create('idem', WONDERLAND_MIGRATIONS);
       const store = new WonderlandSocialPostgresStore(pool);

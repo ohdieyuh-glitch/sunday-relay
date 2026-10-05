@@ -124,20 +124,27 @@ suite('Wonderland voice on real PostgreSQL (migration 035, after the reserved 03
     expect(history.rows.map((row) => row.product_user_id)).toEqual([PUID('1'), PUID('2')]);
   });
 
-  it('issuances: open on issue, closed on revocation, re-opened by a new issue — and never a token stored', async () => {
+  it('issuances: open on issue as the identity the token admits, closed on revocation, never issued over another identity — and never a token stored', async () => {
     const pool = await create('issuance');
     const store = new WonderlandVoicePostgresStore(pool);
     await store.bind({ playerId: 'ann', productUserId: PUID('a'), at: '2026-10-04T12:00:00.000Z' });
     const room = `wl_${'b'.repeat(32)}`;
-    await store.recordIssuance({ playerId: 'ann', roomId: room, at: '2026-10-04T12:00:00.000Z' });
+    await store.recordIssuance({ playerId: 'ann', roomId: room, productUserId: PUID('a'), at: '2026-10-04T12:00:00.000Z' });
     expect(await store.openRoomsOf('ann')).toEqual([room]);
+    expect(await store.openIssuancesOf('ann')).toEqual([{ roomId: room, productUserId: PUID('a') }]);
+    // Ann re-binds; while her former identity still holds the room, no token is recorded over it.
+    await store.bind({ playerId: 'ann', productUserId: PUID('d'), at: '2026-10-04T12:01:00.000Z' });
+    await expect(store.recordIssuance({ playerId: 'ann', roomId: room, productUserId: PUID('d'), at: '2026-10-04T12:02:00.000Z' }))
+      .rejects.toThrow('wonderland_voice_issuance_held');
+    expect(await store.openIssuancesOf('ann'), 'nothing changed').toEqual([{ roomId: room, productUserId: PUID('a') }]);
     await store.recordRevocation({ playerId: 'ann', roomId: room, at: '2026-10-04T12:05:00.000Z' });
     expect(await store.openRoomsOf('ann')).toEqual([]);
-    await store.recordIssuance({ playerId: 'ann', roomId: room, at: '2026-10-04T12:10:00.000Z' });
-    expect(await store.openRoomsOf('ann')).toEqual([room]);
+    await store.recordIssuance({ playerId: 'ann', roomId: room, productUserId: PUID('d'), at: '2026-10-04T12:10:00.000Z' });
+    expect(await store.openIssuancesOf('ann')).toEqual([{ roomId: room, productUserId: PUID('d') }]);
     const columns = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'voice_issuances' ORDER BY ordinal_position");
-    expect(columns.rows.map((row) => row.column_name)).toEqual(['player_id', 'room_id', 'issued_at', 'revoked_at']);
-    expect(await refusalOf(pool, "INSERT INTO relay_wonderland.voice_issuances(player_id, room_id, issued_at) VALUES('ann', 'not-a-room', now())")).toMatch(/check constraint/u);
+    expect(columns.rows.map((row) => row.column_name)).toEqual(['player_id', 'room_id', 'product_user_id', 'issued_at', 'revoked_at']);
+    expect(await refusalOf(pool, `INSERT INTO relay_wonderland.voice_issuances(player_id, room_id, product_user_id, issued_at) VALUES('ann', 'not-a-room', '${PUID('a')}', now())`)).toMatch(/check constraint/u);
+    expect(await refusalOf(pool, `INSERT INTO relay_wonderland.voice_issuances(player_id, room_id, product_user_id, issued_at) VALUES('ann', '${`wl_${'c'.repeat(32)}`}', 'NOT-A-PUID', now())`)).toMatch(/check constraint/u);
   });
 
   it('DOWN refuses to destroy voice data unless the loss is stated, then reverses cleanly', async () => {
