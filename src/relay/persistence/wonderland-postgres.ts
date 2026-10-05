@@ -265,9 +265,9 @@ export class TransactionalWonderlandDatabase {
   async migrate(): Promise<void> {
     if (WONDERLAND_MIGRATIONS.some(sql => sql === '')) throw new Error('wonderland_migration_not_packaged');
     /**
-     * ONE MIGRATOR AT A TIME, PER DATABASE. Two callers migrating one store at once both saw a table missing and both
-     * created it, and PostgreSQL refused the second at its catalog: seven of eight concurrent migrators of an empty
-     * store failed on `pg_namespace_nspname_index`. The real-PostgreSQL suites share one database in CI and were safe
+     * ONE MIGRATOR AT A TIME, PER DATABASE. Two callers migrating one EMPTY store at once both saw the schema missing
+     * and both ran 001's `CREATE SCHEMA IF NOT EXISTS`, which is not safe against a concurrent creator: PostgreSQL
+     * refused the second at its catalog, and seven of eight concurrent migrators failed on `pg_namespace_nspname_index`. The real-PostgreSQL suites share one database in CI and were safe
      * only because earlier single-suite steps had migrated it first. Every migrator now holds a session advisory
      * lock for the whole chain; a second one waits, reads the ledger after the first is done, and has nothing to do.
      *
