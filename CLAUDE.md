@@ -195,7 +195,7 @@ Every JUJU PR below is green. What moves the material order next is a decision, 
 | 3 | What 034 is | founder / SECOND | #337, #338 | option 4, a reserved stamp; #338 is ready |
 | 4 | C pair validity: option A, B or C | founder / SECOND | #326, #331 | B is prepared in #331 |
 | 5 | `allowNative` (native social for the RC) | SECOND Wonderland / founder | #339 | its evidence holds; a one-line change. Players must OWN their client's project |
-| 6 | A rate limit on social commands | SECOND Wonderland / founder | #336 | a launch-hardening decision |
+| 6 | A rate limit on social commands | SECOND Wonderland / founder | #340 | adopt #340's budgets (60 commands then 1/s; 20 messages then 1 per 3 s; 10 invitations then 1 per 30 s) before any public hosted launch |
 | 7 | Close the stale PRs #290, #291 and #293–#297 | founder | Findings below | close: folded into `main` |
 
 ### Work in flight from the JUJU MAIN cloud session (2026-10-04; all draft, AWAITING INDEPENDENT REVIEW)
@@ -219,11 +219,22 @@ Every JUJU PR below is green. What moves the material order next is a decision, 
 | **#337** | **Migration 034 options** (`docs/JULIUS_MIGRATION_034_OPTIONS.md`), evidence for the founder and SECOND, nothing chosen. Five options; option 1 (project memory across missions) interacts with Decision C. JUJU recommends option 4 | base `main` | see the PR |
 | **#339** | Wonderland **R16 over native sessions** (the RC's session kind). The harness speaks as the native client (`--native`, no Origin, `pairR16NativeSessions`). In process with `allowNative` true only in the test: 24/24 plus the restart over native sessions, identical results and views to browser sessions, and the copy guard both ways. The real bridge refuses native social as shipped, and the harness reports it as the decision. **Found: today only a project OWNER can pair a desktop client** (MEMBER decided, not written) | on #336 | see the PR |
 | **#338** | **Option 4 PREPARED, not chosen**: `034_julius_project_brain_reserved` (stamp-only, guarded) and voice **035 in the chain** behind it. A hosted store left at 033 takes 034 and 035 as pending. Found and fixed: 033's DOWN case assumed 033 was last | on #336 | see the PR |
+| **#340** | Wonderland social **command budgets, PREPARED, not chosen**: per verified player, `all` 60 then 1/s, `message` 20 then 1 per 3 s, `invitation` 10 then 1 per 30 s. Past it, `429 rate_limited` with `Retry-After`; the command is not executed and takes nothing. Integer-ms GCRA (a fractional first version never returned a due token). The R16 scenario fits the budget with the clock frozen. 7 mutants killed | on #336 | see the PR |
 
 **Findings to act on:**
 - **Native social for the final RC (`allowNative`) stays SECOND's and the founder's decision**, and #339 is its evidence.
   - **A prerequisite either way:** each real player must OWN the project their desktop client follows. MEMBER's capabilities (founder decisions 4 and 5) are not yet written, and a MEMBER cannot pair a native client today.
-- **The social command route has no rate limit** (noted in #336). A signed-in player could flood friend requests or messages. What limits a hosted launch needs is a backend-correctness decision for SECOND Wonderland and the founder.
+- **The social command route has no rate limit on the stack as it stands** (noted in #336). Budgets are prepared, not chosen, in #340 (decision 6 above).
+- **Adversarial reviews of JUJU's own stacks (2026-10-05) found seven defects.** Each was reproduced by the reviewing agent or confirmed by JUJU reading the code; none is on `main`. JUJU is fixing them in its own PRs; **do not land the affected PRs before those fixes:**
+  - **Decision C carry (#322, carried up through #326 and #331):**
+    - **HIGH:** a copy's id (`carried:<source run>:<ref>`) is not scoped to the receiving run, and the insert is a bare `ON CONFLICT DO NOTHING`. On any long-lived store, the second run to inherit a fact gets nothing, its standing is deduplicated away, and a WITH arm is still accepted (`selected=1 written=0`). Each paid job's database is fresh, so the paid venue is not affected.
+    - **MEDIUM:** a restore that failed halfway and is replayed drops copies and standings permanently (revisions advance only on inserts, and a `(run_id, revision)` collision is swallowed).
+    - **LOW, latent:** eligibility never checks `blocking`, so a non-blocking warning resolved after a repair could count as a VERIFIED_REPAIR_FINDING. #331 records a promoted warning as `blocking: true`, so requiring it is compatible.
+  - **Wonderland wall (#323, #325, #330):**
+    - **HIGH (P1 / no inference), #325:** the voice room plan for players a viewer CAN see depends on players they CANNOT. A hidden player's arrival splits a stranger's room, and the reconcile kicks that stranger out of voice; the same holds for blocks. The P1 and no-inference "identical view" tests check `wonderlandVoiceRouting`, which nothing in production calls. **A shared-room clique partition cannot be inference-free in general**, so this is a design question for SECOND Wonderland and the founder.
+    - **HIGH, #325:** `voice.revoked` on a command's answer counts revocations of players the actor cannot see.
+    - **MEDIUM, #325:** a re-bind never removes the old PUID from its rooms. Later removals target the new PUID and are recorded as done.
+    - **LOW, #323/#330:** a member removed while their lease had just lapsed can be made present again by a heartbeat stamped earlier and decided later. `UPDATE_PRESENCE` never re-checks membership.
 - **Landing order is clean (#335).** Every open PR composes on one head. Only two files are touched by more than one stack:
   - `JULIUS_HARNESS_MANIFEST.md` (Wonderland and C): **the second of those two stacks to land regenerates it** (`npm run julius:harness:export`);
   - `wonderland-postgres.ts` (Wonderland and #333): it auto-merges, and was read by hand.
