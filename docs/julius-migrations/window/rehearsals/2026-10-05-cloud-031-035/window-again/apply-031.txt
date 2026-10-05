@@ -1,0 +1,9 @@
+BEGIN
+NOTICE:  migration_031_precheck: julius_run_project_state verified; julius_run_project_created free; runs 12
+DO
+DROP INDEX
+CREATE INDEX
+DO
+INSERT 0 1
+COMMIT
+exit 0

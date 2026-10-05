@@ -1,0 +1,9 @@
+BEGIN
+DO
+NOTICE:  migration_032_precheck: 030 and 031 applied, 032 not; triggers and functions as 030 made them; orphan outbox rows 0; events 300; outbox 300
+CREATE FUNCTION
+CREATE FUNCTION
+DO
+INSERT 0 1
+COMMIT
+exit 0

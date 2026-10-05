@@ -1,0 +1,2 @@
+ERROR:  migration_034_already_numbered: a 034 is already in the ledger; nothing was changed
+CONTEXT:  PL/pgSQL function inline_code_block line 7 at RAISE

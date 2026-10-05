@@ -1,0 +1,98 @@
+WINDOW 031 032 033 034 035 on container=julius-window-rehearsal-1791167548 db=julius user=julius at 20261005T023245Z
+checkout: aef5c0f5c601f6658e28fd61da0d5180ae75ef45 tracked_changes=0
+file 031: src/relay/persistence/wonderland-migrations/031_julius_run_transition_hot.sql sha256=db5ced21dd49ede02923913e2630885306a31f17c5980c49be695a77fcf302ad
+file 032: src/relay/persistence/wonderland-migrations/032_julius_outbox_event_delete_forgets.sql sha256=12cf67261ce0486883fb54e498829fcc73d0bd631319f979206975771f84d362
+file 033: src/relay/persistence/wonderland-migrations/033_wonderland_social.sql sha256=37bfb053d451e7af84c0a108fc09252aa758554efa3dcc2b374f91a218461065
+file 034: src/relay/persistence/wonderland-migrations/034_julius_project_brain_reserved.sql sha256=019ed3ca56c7389705e233ff48787414995fdea724e4aa27213241cd3e906f9a
+file 035: src/relay/persistence/wonderland-migrations/035_wonderland_voice.sql sha256=42ace3d1ab3b260bdb9409aad2a90f8671f235402ab64c420672bc4872541cbb
+server: 16.15 (Debian 16.15-1.pgdg13+2)  image: postgres:16 sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
+step0 other_client_sessions=0
+step1 backup verified: restored row counts equal the store's (ROWCOUNTS tables=65)
+pre-window FINGERPRINT sha256=6040e517e49707aaf27b3451ec330cc079ed7ebb8972e8691cc477ab67658249 lines=1534
+== 031 (031_julius_run_transition_hot)
+  precheck-031: old_index_matches = 't' (want 't') ok
+  precheck-031: new_name_free = 't' (want 't') ok
+  precheck-031: migration_030_applied = 't' (want 't') ok
+  precheck-031: migration_031_applied = 'f' (want 'f') ok
+  apply-031 exit=0 migration_031_precheck: julius_run_project_state verified; julius_run_project_created free; runs 12
+  postcheck-031: old_index_present = 'f' (want 'f') ok
+  postcheck-031: new_index_matches = 't' (want 't') ok
+  postcheck-031: update_columns_indexed = '' (want '') ok
+  postcheck-031: migration_031_applied = 't' (want 't') ok
+  runs_rows: 12 = 12 ok
+  ledger: 29 -> 30, last=031_julius_run_transition_hot ok
+  rows: every table's count unchanged (the ledger aside, +1 above) ok
+  catalog after 031: FINGERPRINT sha256=a7fb4199ed9f2a980abf7d39fb54eb23b10b10b80f8a57a7566c6db3ced5284d lines=1534
+== 032 (032_julius_outbox_event_delete_forgets)
+  precheck-032: delete_trigger_matches = 't' (want 't') ok
+  precheck-032: registry_triggers_match = 't' (want 't') ok
+  precheck-032: function_is_030 = 't' (want 't') ok
+  precheck-032: function_has_forget = 'f' (want 'f') ok
+  precheck-032: remember_is_030 = 't' (want 't') ok
+  precheck-032: remember_has_filter = 'f' (want 'f') ok
+  precheck-032: orphan_outbox_rows = '0' (want '0') ok
+  precheck-032: migration_030_applied = 't' (want 't') ok
+  precheck-032: migration_031_applied = 't' (want 't') ok
+  precheck-032: migration_032_applied = 'f' (want 'f') ok
+  precheck-032: ledger_last = '031_julius_run_transition_hot' (want '031_julius_run_transition_hot') ok
+  apply-032 exit=0 migration_032_precheck: 030 and 031 applied, 032 not; triggers and functions as 030 made them; orphan outbox rows 0; events 300; outbox 300
+  postcheck-032: delete_trigger_matches = 't' (want 't') ok
+  postcheck-032: registry_triggers_match = 't' (want 't') ok
+  postcheck-032: function_is_030 = 'f' (want 'f') ok
+  postcheck-032: function_has_forget = 't' (want 't') ok
+  postcheck-032: remember_is_030 = 'f' (want 'f') ok
+  postcheck-032: remember_has_filter = 't' (want 't') ok
+  postcheck-032: orphan_outbox_rows = '0' (want '0') ok
+  postcheck-032: migration_032_applied = 't' (want 't') ok
+  postcheck-032: ledger_last = '032_julius_outbox_event_delete_forgets' (want '032_julius_outbox_event_delete_forgets') ok
+  events_rows: 300 = 300 ok
+  outbox_rows: 300 = 300 ok
+  ledger: 30 -> 31, last=032_julius_outbox_event_delete_forgets ok
+  rows: every table's count unchanged (the ledger aside, +1 above) ok
+  catalog after 032: FINGERPRINT sha256=6b59133dcf3dd60a9f444688aaeab5497be76a9f1fd085e46f1d8af04a5bb641 lines=1534
+== 033 (033_wonderland_social)
+  precheck-033: migration_032_applied = 't' (want 't') ok
+  precheck-033: migration_033_applied = 'f' (want 'f') ok
+  precheck-033: social_tables_present = '0' (want '0') ok
+  precheck-033: ledger_last = '032_julius_outbox_event_delete_forgets' (want '032_julius_outbox_event_delete_forgets') ok
+  apply-033 exit=0
+  postcheck-033: migration_033_applied = 't' (want 't') ok
+  postcheck-033: ledger_last = '033_wonderland_social' (want '033_wonderland_social') ok
+  postcheck-033: social_tables_present = '15' (want '15') ok
+  postcheck-033: social_rows = '0' (want '0') ok
+  postcheck-033: recent_players_columns = '0' (want '0') ok
+  players_rows: 0 = 0 ok
+  ledger: 31 -> 32, last=033_wonderland_social ok
+  rows: unchanged; 033 added only empty social_* tables ok
+  catalog after 033: FINGERPRINT sha256=ebd0261daa97bc87b3f7abeaafa98e92cf544a1d10f0c4cdf884e0428f69b4a9 lines=1718
+== 034 (034_julius_project_brain_reserved)
+  precheck-034: migration_033_applied = 't' (want 't') ok
+  precheck-034: any_034_applied = 'f' (want 'f') ok
+  precheck-034: ledger_last = '033_wonderland_social' (want '033_wonderland_social') ok
+  apply-034 exit=0
+  postcheck-034: migration_034_applied = 't' (want 't') ok
+  postcheck-034: stamps_034 = '1' (want '1') ok
+  postcheck-034: ledger_last = '034_julius_project_brain_reserved' (want '034_julius_project_brain_reserved') ok
+  relay_wonderland_tables: 80 = 80 ok
+  players_rows: 0 = 0 ok
+  ledger: 32 -> 33, last=034_julius_project_brain_reserved ok
+  rows: every table's count unchanged (the ledger aside, +1 above) ok
+  catalog after 034: FINGERPRINT sha256=ebd0261daa97bc87b3f7abeaafa98e92cf544a1d10f0c4cdf884e0428f69b4a9 lines=1718
+  catalog: identical before and after 034 ok
+== 035 (035_wonderland_voice)
+  precheck-035: migration_033_applied = 't' (want 't') ok
+  precheck-035: migration_034_applied = 't' (want 't') ok
+  precheck-035: migration_035_applied = 'f' (want 'f') ok
+  precheck-035: voice_tables_present = '0' (want '0') ok
+  precheck-035: ledger_last = '034_julius_project_brain_reserved' (want '034_julius_project_brain_reserved') ok
+  apply-035 exit=0
+  postcheck-035: migration_035_applied = 't' (want 't') ok
+  postcheck-035: ledger_last = '035_wonderland_voice' (want '035_wonderland_voice') ok
+  postcheck-035: voice_tables_present = '3' (want '3') ok
+  postcheck-035: voice_rows = '0' (want '0') ok
+  postcheck-035: token_columns = '0' (want '0') ok
+  players_rows: 0 = 0 ok
+  ledger: 33 -> 34, last=035_wonderland_voice ok
+  rows: unchanged; 035 added only empty voice_* tables ok
+  catalog after 035: FINGERPRINT sha256=9f65bb10c6f295cc090da3fea1a478ab7eb2e6fe0a94938f79235a055df3b922 lines=1759
+RESULT: PASS (window 031 032 033 034 035 applied; compare the fingerprints with a reference built independently from aef5c0f5c601f6658e28fd61da0d5180ae75ef45)

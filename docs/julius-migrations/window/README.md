@@ -81,6 +81,35 @@ Run on the cloud container's Docker, `postgres:16` = 16.15 (image `sha256:1a6ab3
 
 **The same rehearsal through 033** was also run, on a throwaway combination of this tooling with the social branch (#323). It passed R1–R5 with 47 conditions, post-window `FINGERPRINT sha256=ebd0261d…a4b9 lines=1718`. That proves 033's guard, post-check, runbook conditions and DOWN in the window. It is recorded on #323, not here, because 033 is not in #321.
 
+### Cloud rehearsal through 035: `rehearsals/2026-10-05-cloud-031-035/`
+
+**Prepared on option 4 (#338), not chosen.** The same tooling, through 033 social, the reserved 034 and 035 voice. Run on the cloud container's Docker, `postgres:16` = 16.15 (image `sha256:1a6ab3f5…`, the same image as above).
+
+| | |
+|---|---|
+| Checkout | `aef5c0f5`: #338 (with the 2026-10-05 wall fixes) plus #324's tooling and this extension |
+| 031, 032 file sha256 | identical to the record above |
+| 033 file sha256 | `37bfb053d451e7af84c0a108fc09252aa758554efa3dcc2b374f91a218461065` |
+| 034 file sha256 | `019ed3ca56c7389705e233ff48787414995fdea724e4aa27213241cd3e906f9a` |
+| 035 file sha256 | `42ace3d1ab3b260bdb9409aad2a90f8671f235402ab64c420672bc4872541cbb` |
+| Pre-window catalog | `6040e517…8249 lines=1534`: **identical** to the record above |
+| After 031, after 032 | `a7fb4199…284d`, `6b59133d…b641`: **identical** to the record above |
+| After 033 | `ebd0261d…a4b9 lines=1718`: **identical** to the 2026-10-04 run through 033 |
+| After 034 | `ebd0261d…a4b9 lines=1718`: **identical** to after 033, as the window requires |
+| After 035 | `9f65bb10…b922 lines=1759` |
+| Window conditions | 71, all ok |
+| Result | R1–R5 PASS: 034 and 035 refused at 030 and a second time, every DOWN back to the pre-window store exactly, 035 refused with 034 reversed, and the window deterministic |
+
+**The gates stop a wrong migration.** Three mutant migrations were each run through the same rehearsal, on a throwaway commit, and each window STOPped:
+
+| Mutant | STOP |
+|---|---|
+| 034 also creates a table | `034: relay_wonderland_tables changed (80 -> 81)` |
+| 034 also adds a column (no table or row changes) | `034 changed the catalog (… lines=1718 -> … lines=1719)`, the identical-catalog gate |
+| 035 also writes a row | `035: players_rows changed (0 -> 1)` |
+
+As above, the backup dumps are not committed, only their sha256. Every committed artifact is listed in `ARTIFACTS.sha256`.
+
 ### What this rehearsal is not
 
 - It is not the frozen 13 (i) rerun.

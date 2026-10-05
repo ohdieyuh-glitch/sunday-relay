@@ -1,0 +1,9 @@
+checked_at|2026-10-05 02:32:50.98022+00
+database|julius
+checked_by|julius
+server|PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+migration_033_applied|t
+any_034_applied|f
+relay_wonderland_tables|80
+players_rows|0
+ledger_last|033_wonderland_social

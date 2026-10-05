@@ -1,0 +1,9 @@
+checked_at|2026-10-05 02:32:39.742534+00
+database|julius
+checked_by|julius
+server|PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+migration_032_applied|t
+migration_033_applied|f
+social_tables_present|0
+players_rows|0
+ledger_last|032_julius_outbox_event_delete_forgets

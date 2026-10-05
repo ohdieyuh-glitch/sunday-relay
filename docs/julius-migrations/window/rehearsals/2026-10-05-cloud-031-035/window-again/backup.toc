@@ -1,0 +1,466 @@
+;
+; Archive created at 2026-10-05 02:32:45 UTC
+;     dbname: julius
+;     TOC Entries: 455
+;     Compression: gzip
+;     Dump Version: 1.15-0
+;     Format: CUSTOM
+;     Integer: 4 bytes
+;     Offset: 8 bytes
+;     Dumped from database version: 16.15 (Debian 16.15-1.pgdg13+2)
+;     Dumped by pg_dump version: 16.15 (Debian 16.15-1.pgdg13+2)
+;
+;
+; Selected TOC Entries:
+;
+6; 2615 16385 SCHEMA - relay_wonderland julius
+285; 1255 18035 FUNCTION relay_wonderland event_id_immutable() julius
+286; 1255 18040 FUNCTION relay_wonderland events_truncate_refused() julius
+288; 1255 18031 FUNCTION relay_wonderland events_written_remember() julius
+287; 1255 18038 FUNCTION relay_wonderland outbox_follows_event_delete() julius
+284; 1255 18033 FUNCTION relay_wonderland outbox_requires_event_written() julius
+283; 1255 18029 FUNCTION relay_wonderland project_brain_notify() julius
+282; 1255 18027 FUNCTION relay_wonderland project_brain_record_guard() julius
+281; 1255 18023 FUNCTION relay_wonderland project_brain_refuse_change() julius
+239; 1259 16860 TABLE relay_wonderland agent_ratings julius
+220; 1259 16433 TABLE relay_wonderland agents julius
+233; 1259 16724 TABLE relay_wonderland artifacts julius
+225; 1259 16534 TABLE relay_wonderland battle_participants julius
+224; 1259 16511 TABLE relay_wonderland battles julius
+238; 1259 16819 TABLE relay_wonderland budget_reservations julius
+221; 1259 16447 TABLE relay_wonderland card_versions julius
+223; 1259 16485 TABLE relay_wonderland challenges julius
+230; 1259 16657 TABLE relay_wonderland entity_records julius
+244; 1259 16955 TABLE relay_wonderland eval_effects julius
+243; 1259 16934 TABLE relay_wonderland eval_runtimes julius
+235; 1259 16762 TABLE relay_wonderland events julius
+226; 1259 16566 TABLE relay_wonderland execution_sessions julius
+228; 1259 16623 TABLE relay_wonderland execution_usage julius
+266; 1259 17559 TABLE relay_wonderland gauntlet_rounds julius
+265; 1259 17516 TABLE relay_wonderland gauntlet_runs julius
+248; 1259 17068 TABLE relay_wonderland gve_runs julius
+249; 1259 17110 TABLE relay_wonderland hidden_test_fixtures julius
+236; 1259 16784 TABLE relay_wonderland idempotency julius
+241; 1259 16903 TABLE relay_wonderland inventory_definitions julius
+242; 1259 16916 TABLE relay_wonderland inventory_equipment julius
+232; 1259 16704 TABLE relay_wonderland inventory_grants julius
+259; 1259 17346 TABLE relay_wonderland julius_acceptance_criteria julius
+267; 1259 17580 TABLE relay_wonderland julius_approvals julius
+270; 1259 17674 TABLE relay_wonderland julius_artifacts julius
+262; 1259 17412 TABLE relay_wonderland julius_brain_entries julius
+276; 1259 17887 TABLE relay_wonderland julius_claim_standings julius
+256; 1259 17265 TABLE relay_wonderland julius_context_snapshots julius
+260; 1259 17362 TABLE relay_wonderland julius_criterion_evidence julius
+254; 1259 17222 TABLE relay_wonderland julius_evidence julius
+258; 1259 17313 TABLE relay_wonderland julius_repair_cycles julius
+261; 1259 17379 TABLE relay_wonderland julius_reviewer_findings julius
+250; 1259 17127 TABLE relay_wonderland julius_runs julius
+271; 1259 17709 TABLE relay_wonderland julius_sandboxes julius
+264; 1259 17478 TABLE relay_wonderland julius_subagents julius
+274; 1259 17827 TABLE relay_wonderland julius_task_contracts julius
+252; 1259 17185 TABLE relay_wonderland julius_task_dependencies julius
+251; 1259 17154 TABLE relay_wonderland julius_tasks julius
+272; 1259 17747 TABLE relay_wonderland julius_tool_execution_receipts julius
+268; 1259 17609 TABLE relay_wonderland julius_tool_invocations julius
+269; 1259 17649 TABLE relay_wonderland julius_tool_outbox julius
+273; 1259 17781 TABLE relay_wonderland julius_tool_settlements julius
+263; 1259 17440 TABLE relay_wonderland julius_trajectory_events julius
+253; 1259 17206 TABLE relay_wonderland julius_transitions julius
+255; 1259 17243 TABLE relay_wonderland julius_verification_decisions julius
+275; 1259 17856 TABLE relay_wonderland julius_work_artifacts julius
+257; 1259 17286 TABLE relay_wonderland julius_worker_results julius
+222; 1259 16468 TABLE relay_wonderland mission_contracts julius
+237; 1259 16792 TABLE relay_wonderland outbox julius
+217; 1259 16394 TABLE relay_wonderland players julius
+229; 1259 16637 TABLE relay_wonderland presence julius
+280; 1259 17999 TABLE relay_wonderland project_brain_links julius
+278; 1259 17951 TABLE relay_wonderland project_brain_mutations julius
+279; 1259 17975 TABLE relay_wonderland project_brain_record_versions julius
+277; 1259 17922 TABLE relay_wonderland project_brain_records julius
+219; 1259 16416 TABLE relay_wonderland project_members julius
+218; 1259 16405 TABLE relay_wonderland projects julius
+245; 1259 16970 TABLE relay_wonderland provider_operations julius
+227; 1259 16608 TABLE relay_wonderland provider_receipts julius
+240; 1259 16883 TABLE relay_wonderland rating_history julius
+231; 1259 16684 TABLE relay_wonderland rewards julius
+216; 1259 16386 TABLE relay_wonderland schema_migrations julius
+234; 1259 16754 TABLE relay_wonderland stream_sequences julius
+246; 1259 16997 TABLE relay_wonderland swarm_runs julius
+247; 1259 17029 TABLE relay_wonderland swarm_workers julius
+4415; 0 16860 TABLE DATA relay_wonderland agent_ratings julius
+4396; 0 16433 TABLE DATA relay_wonderland agents julius
+4409; 0 16724 TABLE DATA relay_wonderland artifacts julius
+4401; 0 16534 TABLE DATA relay_wonderland battle_participants julius
+4400; 0 16511 TABLE DATA relay_wonderland battles julius
+4414; 0 16819 TABLE DATA relay_wonderland budget_reservations julius
+4397; 0 16447 TABLE DATA relay_wonderland card_versions julius
+4399; 0 16485 TABLE DATA relay_wonderland challenges julius
+4406; 0 16657 TABLE DATA relay_wonderland entity_records julius
+4420; 0 16955 TABLE DATA relay_wonderland eval_effects julius
+4419; 0 16934 TABLE DATA relay_wonderland eval_runtimes julius
+4411; 0 16762 TABLE DATA relay_wonderland events julius
+4402; 0 16566 TABLE DATA relay_wonderland execution_sessions julius
+4404; 0 16623 TABLE DATA relay_wonderland execution_usage julius
+4442; 0 17559 TABLE DATA relay_wonderland gauntlet_rounds julius
+4441; 0 17516 TABLE DATA relay_wonderland gauntlet_runs julius
+4424; 0 17068 TABLE DATA relay_wonderland gve_runs julius
+4425; 0 17110 TABLE DATA relay_wonderland hidden_test_fixtures julius
+4412; 0 16784 TABLE DATA relay_wonderland idempotency julius
+4417; 0 16903 TABLE DATA relay_wonderland inventory_definitions julius
+4418; 0 16916 TABLE DATA relay_wonderland inventory_equipment julius
+4408; 0 16704 TABLE DATA relay_wonderland inventory_grants julius
+4435; 0 17346 TABLE DATA relay_wonderland julius_acceptance_criteria julius
+4443; 0 17580 TABLE DATA relay_wonderland julius_approvals julius
+4446; 0 17674 TABLE DATA relay_wonderland julius_artifacts julius
+4438; 0 17412 TABLE DATA relay_wonderland julius_brain_entries julius
+4452; 0 17887 TABLE DATA relay_wonderland julius_claim_standings julius
+4432; 0 17265 TABLE DATA relay_wonderland julius_context_snapshots julius
+4436; 0 17362 TABLE DATA relay_wonderland julius_criterion_evidence julius
+4430; 0 17222 TABLE DATA relay_wonderland julius_evidence julius
+4434; 0 17313 TABLE DATA relay_wonderland julius_repair_cycles julius
+4437; 0 17379 TABLE DATA relay_wonderland julius_reviewer_findings julius
+4426; 0 17127 TABLE DATA relay_wonderland julius_runs julius
+4447; 0 17709 TABLE DATA relay_wonderland julius_sandboxes julius
+4440; 0 17478 TABLE DATA relay_wonderland julius_subagents julius
+4450; 0 17827 TABLE DATA relay_wonderland julius_task_contracts julius
+4428; 0 17185 TABLE DATA relay_wonderland julius_task_dependencies julius
+4427; 0 17154 TABLE DATA relay_wonderland julius_tasks julius
+4448; 0 17747 TABLE DATA relay_wonderland julius_tool_execution_receipts julius
+4444; 0 17609 TABLE DATA relay_wonderland julius_tool_invocations julius
+4445; 0 17649 TABLE DATA relay_wonderland julius_tool_outbox julius
+4449; 0 17781 TABLE DATA relay_wonderland julius_tool_settlements julius
+4439; 0 17440 TABLE DATA relay_wonderland julius_trajectory_events julius
+4429; 0 17206 TABLE DATA relay_wonderland julius_transitions julius
+4431; 0 17243 TABLE DATA relay_wonderland julius_verification_decisions julius
+4451; 0 17856 TABLE DATA relay_wonderland julius_work_artifacts julius
+4433; 0 17286 TABLE DATA relay_wonderland julius_worker_results julius
+4398; 0 16468 TABLE DATA relay_wonderland mission_contracts julius
+4413; 0 16792 TABLE DATA relay_wonderland outbox julius
+4393; 0 16394 TABLE DATA relay_wonderland players julius
+4405; 0 16637 TABLE DATA relay_wonderland presence julius
+4456; 0 17999 TABLE DATA relay_wonderland project_brain_links julius
+4454; 0 17951 TABLE DATA relay_wonderland project_brain_mutations julius
+4455; 0 17975 TABLE DATA relay_wonderland project_brain_record_versions julius
+4453; 0 17922 TABLE DATA relay_wonderland project_brain_records julius
+4395; 0 16416 TABLE DATA relay_wonderland project_members julius
+4394; 0 16405 TABLE DATA relay_wonderland projects julius
+4421; 0 16970 TABLE DATA relay_wonderland provider_operations julius
+4403; 0 16608 TABLE DATA relay_wonderland provider_receipts julius
+4416; 0 16883 TABLE DATA relay_wonderland rating_history julius
+4407; 0 16684 TABLE DATA relay_wonderland rewards julius
+4392; 0 16386 TABLE DATA relay_wonderland schema_migrations julius
+4410; 0 16754 TABLE DATA relay_wonderland stream_sequences julius
+4422; 0 16997 TABLE DATA relay_wonderland swarm_runs julius
+4423; 0 17029 TABLE DATA relay_wonderland swarm_workers julius
+3905; 2606 16872 CONSTRAINT relay_wonderland agent_ratings agent_ratings_pkey julius
+3837; 2606 16441 CONSTRAINT relay_wonderland agents agents_pkey julius
+3883; 2606 16732 CONSTRAINT relay_wonderland artifacts artifacts_pkey julius
+3853; 2606 16545 CONSTRAINT relay_wonderland battle_participants battle_participants_battle_id_agent_id_key julius
+3855; 2606 16543 CONSTRAINT relay_wonderland battle_participants battle_participants_battle_id_side_key julius
+3857; 2606 16541 CONSTRAINT relay_wonderland battle_participants battle_participants_pkey julius
+3849; 2606 16523 CONSTRAINT relay_wonderland battles battles_mission_id_key julius
+3851; 2606 16521 CONSTRAINT relay_wonderland battles battles_pkey julius
+3900; 2606 16848 CONSTRAINT relay_wonderland budget_reservations budget_reservations_execution_id_idempotency_key_key julius
+3902; 2606 16846 CONSTRAINT relay_wonderland budget_reservations budget_reservations_pkey julius
+3839; 2606 16457 CONSTRAINT relay_wonderland card_versions card_versions_agent_id_version_key julius
+3841; 2606 16455 CONSTRAINT relay_wonderland card_versions card_versions_pkey julius
+3847; 2606 16495 CONSTRAINT relay_wonderland challenges challenges_pkey julius
+3871; 2606 16667 CONSTRAINT relay_wonderland entity_records entity_records_pkey julius
+3917; 2606 16963 CONSTRAINT relay_wonderland eval_effects eval_effects_pkey julius
+3914; 2606 16944 CONSTRAINT relay_wonderland eval_runtimes eval_runtimes_pkey julius
+3888; 2606 16770 CONSTRAINT relay_wonderland events events_pkey julius
+3890; 2606 16772 CONSTRAINT relay_wonderland events events_stream_id_sequence_key julius
+3859; 2606 16576 CONSTRAINT relay_wonderland execution_sessions execution_sessions_pkey julius
+3866; 2606 16631 CONSTRAINT relay_wonderland execution_usage execution_usage_pkey julius
+4022; 2606 17571 CONSTRAINT relay_wonderland gauntlet_rounds gauntlet_rounds_pkey julius
+4024; 2606 17573 CONSTRAINT relay_wonderland gauntlet_rounds gauntlet_rounds_work_id_key julius
+4017; 2606 17540 CONSTRAINT relay_wonderland gauntlet_runs gauntlet_runs_pkey julius
+4019; 2606 17542 CONSTRAINT relay_wonderland gauntlet_runs gauntlet_runs_run_id_subject_task_id_key julius
+3932; 2606 17082 CONSTRAINT relay_wonderland gve_runs gve_runs_pkey julius
+3936; 2606 17120 CONSTRAINT relay_wonderland hidden_test_fixtures hidden_test_fixtures_mission_id_fixture_id_version_key julius
+3938; 2606 17118 CONSTRAINT relay_wonderland hidden_test_fixtures hidden_test_fixtures_pkey julius
+3893; 2606 16791 CONSTRAINT relay_wonderland idempotency idempotency_pkey julius
+3910; 2606 16913 CONSTRAINT relay_wonderland inventory_definitions inventory_definitions_pkey julius
+3912; 2606 16923 CONSTRAINT relay_wonderland inventory_equipment inventory_equipment_pkey julius
+3878; 2606 16713 CONSTRAINT relay_wonderland inventory_grants inventory_grants_grant_key_key julius
+3880; 2606 16711 CONSTRAINT relay_wonderland inventory_grants inventory_grants_pkey julius
+3988; 2606 17909 CONSTRAINT relay_wonderland julius_acceptance_criteria julius_acceptance_criteria_pkey julius
+3990; 2606 17356 CONSTRAINT relay_wonderland julius_acceptance_criteria julius_acceptance_criteria_run_id_ordinal_key julius
+4028; 2606 17589 CONSTRAINT relay_wonderland julius_approvals julius_approvals_pkey julius
+4030; 2606 17591 CONSTRAINT relay_wonderland julius_approvals julius_approvals_run_id_idempotency_key_key julius
+4044; 2606 17682 CONSTRAINT relay_wonderland julius_artifacts julius_artifacts_pkey julius
+4046; 2606 17684 CONSTRAINT relay_wonderland julius_artifacts julius_artifacts_tenant_id_project_id_artifact_id_key julius
+3998; 2606 17421 CONSTRAINT relay_wonderland julius_brain_entries julius_brain_entries_pkey julius
+4000; 2606 17423 CONSTRAINT relay_wonderland julius_brain_entries julius_brain_entries_run_id_revision_key julius
+4076; 2606 17896 CONSTRAINT relay_wonderland julius_claim_standings julius_claim_standings_pkey julius
+3970; 2606 17273 CONSTRAINT relay_wonderland julius_context_snapshots julius_context_snapshots_pkey julius
+3972; 2606 17275 CONSTRAINT relay_wonderland julius_context_snapshots julius_context_snapshots_task_id_worker_id_content_hash_key julius
+3992; 2606 17911 CONSTRAINT relay_wonderland julius_criterion_evidence julius_criterion_evidence_pkey julius
+3960; 2606 17229 CONSTRAINT relay_wonderland julius_evidence julius_evidence_pkey julius
+3962; 2606 17231 CONSTRAINT relay_wonderland julius_evidence julius_evidence_run_id_idempotency_key_key julius
+3981; 2606 17329 CONSTRAINT relay_wonderland julius_repair_cycles julius_repair_cycles_original_task_id_round_key julius
+3983; 2606 17325 CONSTRAINT relay_wonderland julius_repair_cycles julius_repair_cycles_pkey julius
+3985; 2606 17327 CONSTRAINT relay_wonderland julius_repair_cycles julius_repair_cycles_repair_task_id_key julius
+3995; 2606 17388 CONSTRAINT relay_wonderland julius_reviewer_findings julius_reviewer_findings_pkey julius
+3942; 2606 17142 CONSTRAINT relay_wonderland julius_runs julius_runs_mission_id_run_id_key julius
+3944; 2606 17140 CONSTRAINT relay_wonderland julius_runs julius_runs_pkey julius
+4049; 2606 17725 CONSTRAINT relay_wonderland julius_sandboxes julius_sandboxes_invocation_id_key julius
+4051; 2606 17719 CONSTRAINT relay_wonderland julius_sandboxes julius_sandboxes_pkey julius
+4053; 2606 17723 CONSTRAINT relay_wonderland julius_sandboxes julius_sandboxes_project_id_sandbox_id_invocation_id_key julius
+4055; 2606 17721 CONSTRAINT relay_wonderland julius_sandboxes julius_sandboxes_project_id_sandbox_id_key julius
+4010; 2606 17491 CONSTRAINT relay_wonderland julius_subagents julius_subagents_child_task_id_key julius
+4012; 2606 17489 CONSTRAINT relay_wonderland julius_subagents julius_subagents_pkey julius
+4014; 2606 17493 CONSTRAINT relay_wonderland julius_subagents julius_subagents_run_id_request_id_key julius
+4068; 2606 17837 CONSTRAINT relay_wonderland julius_task_contracts julius_task_contracts_pkey julius
+3953; 2606 17192 CONSTRAINT relay_wonderland julius_task_dependencies julius_task_dependencies_pkey julius
+3948; 2606 17172 CONSTRAINT relay_wonderland julius_tasks julius_tasks_pkey julius
+3950; 2606 17174 CONSTRAINT relay_wonderland julius_tasks julius_tasks_run_id_ordinal_task_id_key julius
+4057; 2606 17765 CONSTRAINT relay_wonderland julius_tool_execution_receipts julius_tool_execution_receipts_execution_token_hash_key julius
+4059; 2606 17763 CONSTRAINT relay_wonderland julius_tool_execution_receipts julius_tool_execution_receipts_pkey julius
+4032; 2606 17626 CONSTRAINT relay_wonderland julius_tool_invocations julius_tool_invocations_pkey julius
+4034; 2606 17630 CONSTRAINT relay_wonderland julius_tool_invocations julius_tool_invocations_project_id_invocation_id_key julius
+4036; 2606 17628 CONSTRAINT relay_wonderland julius_tool_invocations julius_tool_invocations_project_id_run_id_idempotency_key_key julius
+4038; 2606 17632 CONSTRAINT relay_wonderland julius_tool_invocations julius_tool_invocations_tenant_id_project_id_run_id_task_id_key julius
+4042; 2606 17662 CONSTRAINT relay_wonderland julius_tool_outbox julius_tool_outbox_pkey julius
+4061; 2606 17789 CONSTRAINT relay_wonderland julius_tool_settlements julius_tool_settlements_pkey julius
+4063; 2606 17820 CONSTRAINT relay_wonderland julius_tool_settlements julius_tool_settlements_settlement_id_key julius
+4003; 2606 17453 CONSTRAINT relay_wonderland julius_trajectory_events julius_trajectory_events_pkey julius
+4005; 2606 17455 CONSTRAINT relay_wonderland julius_trajectory_events julius_trajectory_events_run_id_idempotency_key_key julius
+3956; 2606 17213 CONSTRAINT relay_wonderland julius_transitions julius_transitions_pkey julius
+3958; 2606 17215 CONSTRAINT relay_wonderland julius_transitions julius_transitions_run_id_sequence_key julius
+3966; 2606 17251 CONSTRAINT relay_wonderland julius_verification_decisions julius_verification_decisions_pkey julius
+3968; 2606 17253 CONSTRAINT relay_wonderland julius_verification_decisions julius_verification_decisions_run_id_idempotency_key_key julius
+4072; 2606 17867 CONSTRAINT relay_wonderland julius_work_artifacts julius_work_artifacts_pkey julius
+4074; 2606 17869 CONSTRAINT relay_wonderland julius_work_artifacts julius_work_artifacts_run_id_task_id_lease_generation_kind_key julius
+3975; 2606 17297 CONSTRAINT relay_wonderland julius_worker_results julius_worker_results_pkey julius
+3977; 2606 17299 CONSTRAINT relay_wonderland julius_worker_results julius_worker_results_run_id_idempotency_key_key julius
+3979; 2606 17301 CONSTRAINT relay_wonderland julius_worker_results julius_worker_results_task_id_lease_generation_key julius
+3843; 2606 16477 CONSTRAINT relay_wonderland mission_contracts mission_contracts_pkey julius
+3845; 2606 16479 CONSTRAINT relay_wonderland mission_contracts mission_contracts_project_id_canonical_hash_key julius
+3895; 2606 16807 CONSTRAINT relay_wonderland outbox outbox_event_id_key julius
+3897; 2606 16805 CONSTRAINT relay_wonderland outbox outbox_pkey julius
+3831; 2606 16404 CONSTRAINT relay_wonderland players players_pkey julius
+3868; 2606 16645 CONSTRAINT relay_wonderland presence presence_pkey julius
+4090; 2606 18009 CONSTRAINT relay_wonderland project_brain_links project_brain_links_pkey julius
+4092; 2606 18011 CONSTRAINT relay_wonderland project_brain_links project_brain_links_project_id_from_ref_relation_to_ref_key julius
+4083; 2606 17961 CONSTRAINT relay_wonderland project_brain_mutations project_brain_mutations_pkey julius
+4085; 2606 17963 CONSTRAINT relay_wonderland project_brain_mutations project_brain_mutations_project_id_idempotency_key_key julius
+4088; 2606 17983 CONSTRAINT relay_wonderland project_brain_record_versions project_brain_record_versions_pkey julius
+4079; 2606 17938 CONSTRAINT relay_wonderland project_brain_records project_brain_records_pkey julius
+3835; 2606 16422 CONSTRAINT relay_wonderland project_members project_members_pkey julius
+3833; 2606 16415 CONSTRAINT relay_wonderland projects projects_pkey julius
+3919; 2606 16983 CONSTRAINT relay_wonderland provider_operations provider_operations_execution_id_idempotency_key_key julius
+3921; 2606 16981 CONSTRAINT relay_wonderland provider_operations provider_operations_pkey julius
+3923; 2606 16985 CONSTRAINT relay_wonderland provider_operations provider_operations_provider_provider_request_id_key julius
+3862; 2606 16617 CONSTRAINT relay_wonderland provider_receipts provider_receipts_execution_id_provider_request_id_key julius
+3864; 2606 16615 CONSTRAINT relay_wonderland provider_receipts provider_receipts_pkey julius
+3907; 2606 16891 CONSTRAINT relay_wonderland rating_history rating_history_pkey julius
+3874; 2606 16691 CONSTRAINT relay_wonderland rewards rewards_pkey julius
+3876; 2606 16693 CONSTRAINT relay_wonderland rewards rewards_reward_key_key julius
+3829; 2606 16393 CONSTRAINT relay_wonderland schema_migrations schema_migrations_pkey julius
+3886; 2606 16761 CONSTRAINT relay_wonderland stream_sequences stream_sequences_pkey julius
+3926; 2606 17008 CONSTRAINT relay_wonderland swarm_runs swarm_runs_pkey julius
+3929; 2606 17045 CONSTRAINT relay_wonderland swarm_workers swarm_workers_pkey julius
+4020; 1259 17579 INDEX relay_wonderland gauntlet_round_timeline julius
+4015; 1259 17558 INDEX relay_wonderland gauntlet_run_state julius
+4025; 1259 17608 INDEX relay_wonderland julius_approval_inbox julius
+4026; 1259 17607 INDEX relay_wonderland julius_approval_one_pending julius
+3996; 1259 17439 INDEX relay_wonderland julius_brain_context julius
+4077; 1259 17907 INDEX relay_wonderland julius_claim_standings_run_idx julius
+3964; 1259 17264 INDEX relay_wonderland julius_decision_task julius
+3951; 1259 17205 INDEX relay_wonderland julius_dependency_reverse julius
+3963; 1259 17242 INDEX relay_wonderland julius_evidence_task julius
+3993; 1259 17404 INDEX relay_wonderland julius_finding_gate julius
+3986; 1259 17345 INDEX relay_wonderland julius_repair_recovery julius
+3973; 1259 17312 INDEX relay_wonderland julius_result_run_timeline julius
+3940; 1259 19984 INDEX relay_wonderland julius_run_project_state julius
+4047; 1259 17746 INDEX relay_wonderland julius_sandbox_recovery julius
+4007; 1259 17514 INDEX relay_wonderland julius_subagent_parent julius
+4008; 1259 17515 INDEX relay_wonderland julius_subagent_run julius
+3945; 1259 17203 INDEX relay_wonderland julius_task_claim julius
+4064; 1259 17855 INDEX relay_wonderland julius_task_contract_by_run julius
+4065; 1259 17854 INDEX relay_wonderland julius_task_contract_one_per_task julius
+4066; 1259 17853 INDEX relay_wonderland julius_task_contract_single_lock julius
+3946; 1259 17204 INDEX relay_wonderland julius_task_run_state julius
+4040; 1259 17673 INDEX relay_wonderland julius_tool_outbox_claim julius
+4039; 1259 17648 INDEX relay_wonderland julius_tool_run julius
+4001; 1259 17477 INDEX relay_wonderland julius_trajectory_eval julius
+4006; 1259 17476 INDEX relay_wonderland julius_trajectory_run julius
+3954; 1259 17221 INDEX relay_wonderland julius_transition_timeline julius
+4069; 1259 17885 INDEX relay_wonderland julius_work_artifact_latest julius
+4070; 1259 17886 INDEX relay_wonderland julius_work_artifact_run julius
+4093; 1259 18022 INDEX relay_wonderland project_brain_links_to julius
+4086; 1259 17974 INDEX relay_wonderland project_brain_mutations_record julius
+4080; 1259 17949 INDEX relay_wonderland project_brain_records_project julius
+4081; 1259 17950 INDEX relay_wonderland project_brain_records_run julius
+3884; 1259 16753 INDEX relay_wonderland wonderland_artifact_scope julius
+3903; 1259 16859 INDEX relay_wonderland wonderland_budget_active julius
+3872; 1259 16683 INDEX relay_wonderland wonderland_entity_scope julius
+3915; 1259 16969 INDEX relay_wonderland wonderland_eval_runtime_state julius
+3891; 1259 16783 INDEX relay_wonderland wonderland_event_replay julius
+3860; 1259 16607 INDEX relay_wonderland wonderland_execution_battle_state julius
+3933; 1259 17109 INDEX relay_wonderland wonderland_gve_battle julius
+3934; 1259 17108 INDEX relay_wonderland wonderland_gve_recovery julius
+3939; 1259 17126 INDEX relay_wonderland wonderland_hidden_fixture_mission julius
+3881; 1259 16915 INDEX relay_wonderland wonderland_inventory_unique_active julius
+3898; 1259 16818 INDEX relay_wonderland wonderland_outbox_claim julius
+3869; 1259 16656 INDEX relay_wonderland wonderland_presence_expiry julius
+3924; 1259 16996 INDEX relay_wonderland wonderland_provider_operation_recovery julius
+3908; 1259 16902 INDEX relay_wonderland wonderland_rating_history_agent julius
+3927; 1259 17067 INDEX relay_wonderland wonderland_swarm_battle julius
+3930; 1259 17066 INDEX relay_wonderland wonderland_swarm_worker_claim julius
+4238; 2620 18036 TRIGGER relay_wonderland events events_event_id_immutable julius
+4239; 2620 18041 TRIGGER relay_wonderland events events_truncate_refused julius
+4240; 2620 18032 TRIGGER relay_wonderland events events_written_remember julius
+4243; 2620 18037 TRIGGER relay_wonderland outbox outbox_event_id_immutable julius
+4241; 2620 18039 TRIGGER relay_wonderland events outbox_follows_event_delete julius
+4244; 2620 18034 TRIGGER relay_wonderland outbox outbox_requires_event_written julius
+4242; 2620 18030 TRIGGER relay_wonderland events project_brain_event_notify julius
+4248; 2620 18026 TRIGGER relay_wonderland project_brain_links project_brain_links_immutable julius
+4246; 2620 18024 TRIGGER relay_wonderland project_brain_mutations project_brain_mutations_immutable julius
+4245; 2620 18028 TRIGGER relay_wonderland project_brain_records project_brain_records_guard julius
+4247; 2620 18025 TRIGGER relay_wonderland project_brain_record_versions project_brain_versions_immutable julius
+4135; 2606 16873 FK CONSTRAINT relay_wonderland agent_ratings agent_ratings_agent_id_fkey julius
+4136; 2606 16878 FK CONSTRAINT relay_wonderland agent_ratings agent_ratings_source_battle_id_fkey julius
+4096; 2606 16442 FK CONSTRAINT relay_wonderland agents agents_owner_id_fkey julius
+4126; 2606 16743 FK CONSTRAINT relay_wonderland artifacts artifacts_battle_id_fkey julius
+4127; 2606 16748 FK CONSTRAINT relay_wonderland artifacts artifacts_execution_id_fkey julius
+4128; 2606 16738 FK CONSTRAINT relay_wonderland artifacts artifacts_owner_id_fkey julius
+4129; 2606 16733 FK CONSTRAINT relay_wonderland artifacts artifacts_project_id_fkey julius
+4105; 2606 16556 FK CONSTRAINT relay_wonderland battle_participants battle_participants_agent_id_fkey julius
+4106; 2606 16546 FK CONSTRAINT relay_wonderland battle_participants battle_participants_battle_id_fkey julius
+4107; 2606 16561 FK CONSTRAINT relay_wonderland battle_participants battle_participants_card_version_id_fkey julius
+4108; 2606 16551 FK CONSTRAINT relay_wonderland battle_participants battle_participants_player_id_fkey julius
+4103; 2606 16529 FK CONSTRAINT relay_wonderland battles battles_mission_id_fkey julius
+4104; 2606 16524 FK CONSTRAINT relay_wonderland battles battles_project_id_fkey julius
+4133; 2606 16849 FK CONSTRAINT relay_wonderland budget_reservations budget_reservations_execution_id_fkey julius
+4134; 2606 16854 FK CONSTRAINT relay_wonderland budget_reservations budget_reservations_receipt_id_fkey julius
+4097; 2606 16458 FK CONSTRAINT relay_wonderland card_versions card_versions_agent_id_fkey julius
+4098; 2606 16463 FK CONSTRAINT relay_wonderland card_versions card_versions_owner_id_fkey julius
+4100; 2606 16506 FK CONSTRAINT relay_wonderland challenges challenges_challenged_id_fkey julius
+4101; 2606 16501 FK CONSTRAINT relay_wonderland challenges challenges_challenger_id_fkey julius
+4102; 2606 16496 FK CONSTRAINT relay_wonderland challenges challenges_project_id_fkey julius
+4119; 2606 16673 FK CONSTRAINT relay_wonderland entity_records entity_records_battle_id_fkey julius
+4120; 2606 16678 FK CONSTRAINT relay_wonderland entity_records entity_records_owner_id_fkey julius
+4121; 2606 16668 FK CONSTRAINT relay_wonderland entity_records entity_records_project_id_fkey julius
+4143; 2606 16964 FK CONSTRAINT relay_wonderland eval_effects eval_effects_battle_id_fkey julius
+4141; 2606 16945 FK CONSTRAINT relay_wonderland eval_runtimes eval_runtimes_battle_id_fkey julius
+4142; 2606 16950 FK CONSTRAINT relay_wonderland eval_runtimes eval_runtimes_project_id_fkey julius
+4130; 2606 16778 FK CONSTRAINT relay_wonderland events events_battle_id_fkey julius
+4131; 2606 16773 FK CONSTRAINT relay_wonderland events events_project_id_fkey julius
+4109; 2606 16597 FK CONSTRAINT relay_wonderland execution_sessions execution_sessions_agent_id_fkey julius
+4110; 2606 16577 FK CONSTRAINT relay_wonderland execution_sessions execution_sessions_battle_id_fkey julius
+4111; 2606 16602 FK CONSTRAINT relay_wonderland execution_sessions execution_sessions_card_version_id_fkey julius
+4112; 2606 16582 FK CONSTRAINT relay_wonderland execution_sessions execution_sessions_mission_id_fkey julius
+4113; 2606 16592 FK CONSTRAINT relay_wonderland execution_sessions execution_sessions_player_id_fkey julius
+4114; 2606 16587 FK CONSTRAINT relay_wonderland execution_sessions execution_sessions_project_id_fkey julius
+4116; 2606 16632 FK CONSTRAINT relay_wonderland execution_usage execution_usage_execution_id_fkey julius
+4198; 2606 17574 FK CONSTRAINT relay_wonderland gauntlet_rounds gauntlet_rounds_gauntlet_id_fkey julius
+4195; 2606 17548 FK CONSTRAINT relay_wonderland gauntlet_runs gauntlet_runs_project_id_fkey julius
+4196; 2606 17543 FK CONSTRAINT relay_wonderland gauntlet_runs gauntlet_runs_run_id_fkey julius
+4197; 2606 17553 FK CONSTRAINT relay_wonderland gauntlet_runs gauntlet_runs_subject_task_id_fkey julius
+4154; 2606 17103 FK CONSTRAINT relay_wonderland gve_runs gve_runs_agent_id_fkey julius
+4155; 2606 17093 FK CONSTRAINT relay_wonderland gve_runs gve_runs_battle_id_fkey julius
+4156; 2606 17098 FK CONSTRAINT relay_wonderland gve_runs gve_runs_execution_id_fkey julius
+4157; 2606 17088 FK CONSTRAINT relay_wonderland gve_runs gve_runs_mission_id_fkey julius
+4158; 2606 17083 FK CONSTRAINT relay_wonderland gve_runs gve_runs_project_id_fkey julius
+4159; 2606 17121 FK CONSTRAINT relay_wonderland hidden_test_fixtures hidden_test_fixtures_mission_id_fkey julius
+4139; 2606 16929 FK CONSTRAINT relay_wonderland inventory_equipment inventory_equipment_item_id_item_version_fkey julius
+4140; 2606 16924 FK CONSTRAINT relay_wonderland inventory_equipment inventory_equipment_player_id_fkey julius
+4124; 2606 16719 FK CONSTRAINT relay_wonderland inventory_grants inventory_grants_battle_id_fkey julius
+4125; 2606 16714 FK CONSTRAINT relay_wonderland inventory_grants inventory_grants_player_id_fkey julius
+4178; 2606 17357 FK CONSTRAINT relay_wonderland julius_acceptance_criteria julius_acceptance_criteria_run_id_fkey julius
+4199; 2606 17597 FK CONSTRAINT relay_wonderland julius_approvals julius_approvals_project_id_fkey julius
+4200; 2606 17592 FK CONSTRAINT relay_wonderland julius_approvals julius_approvals_run_id_fkey julius
+4201; 2606 17602 FK CONSTRAINT relay_wonderland julius_approvals julius_approvals_task_id_fkey julius
+4207; 2606 17685 FK CONSTRAINT relay_wonderland julius_artifacts julius_artifacts_project_id_fkey julius
+4208; 2606 17690 FK CONSTRAINT relay_wonderland julius_artifacts julius_artifacts_run_id_fkey julius
+4209; 2606 17695 FK CONSTRAINT relay_wonderland julius_artifacts julius_artifacts_task_id_fkey julius
+4210; 2606 17700 FK CONSTRAINT relay_wonderland julius_artifacts julius_artifacts_tenant_id_project_id_run_id_task_id_invoc_fkey julius
+4184; 2606 17429 FK CONSTRAINT relay_wonderland julius_brain_entries julius_brain_entries_project_id_fkey julius
+4185; 2606 17424 FK CONSTRAINT relay_wonderland julius_brain_entries julius_brain_entries_run_id_fkey julius
+4186; 2606 17434 FK CONSTRAINT relay_wonderland julius_brain_entries julius_brain_entries_task_id_fkey julius
+4227; 2606 17897 FK CONSTRAINT relay_wonderland julius_claim_standings julius_claim_standings_project_id_fkey julius
+4228; 2606 17902 FK CONSTRAINT relay_wonderland julius_claim_standings julius_claim_standings_run_id_fkey julius
+4171; 2606 17276 FK CONSTRAINT relay_wonderland julius_context_snapshots julius_context_snapshots_run_id_fkey julius
+4172; 2606 17281 FK CONSTRAINT relay_wonderland julius_context_snapshots julius_context_snapshots_task_id_fkey julius
+4179; 2606 17912 FK CONSTRAINT relay_wonderland julius_criterion_evidence julius_criterion_evidence_criterion_fkey julius
+4180; 2606 17374 FK CONSTRAINT relay_wonderland julius_criterion_evidence julius_criterion_evidence_evidence_id_fkey julius
+4167; 2606 17232 FK CONSTRAINT relay_wonderland julius_evidence julius_evidence_run_id_fkey julius
+4168; 2606 17237 FK CONSTRAINT relay_wonderland julius_evidence julius_evidence_task_id_fkey julius
+4175; 2606 17335 FK CONSTRAINT relay_wonderland julius_repair_cycles julius_repair_cycles_original_task_id_fkey julius
+4176; 2606 17340 FK CONSTRAINT relay_wonderland julius_repair_cycles julius_repair_cycles_repair_task_id_fkey julius
+4177; 2606 17330 FK CONSTRAINT relay_wonderland julius_repair_cycles julius_repair_cycles_run_id_fkey julius
+4181; 2606 17917 FK CONSTRAINT relay_wonderland julius_reviewer_findings julius_reviewer_findings_criterion_fkey julius
+4182; 2606 17389 FK CONSTRAINT relay_wonderland julius_reviewer_findings julius_reviewer_findings_run_id_fkey julius
+4183; 2606 17394 FK CONSTRAINT relay_wonderland julius_reviewer_findings julius_reviewer_findings_task_id_fkey julius
+4160; 2606 17143 FK CONSTRAINT relay_wonderland julius_runs julius_runs_mission_id_fkey julius
+4161; 2606 17148 FK CONSTRAINT relay_wonderland julius_runs julius_runs_project_id_fkey julius
+4211; 2606 17726 FK CONSTRAINT relay_wonderland julius_sandboxes julius_sandboxes_project_id_fkey julius
+4212; 2606 17731 FK CONSTRAINT relay_wonderland julius_sandboxes julius_sandboxes_run_id_fkey julius
+4213; 2606 17736 FK CONSTRAINT relay_wonderland julius_sandboxes julius_sandboxes_task_id_fkey julius
+4214; 2606 17741 FK CONSTRAINT relay_wonderland julius_sandboxes julius_sandboxes_tenant_id_project_id_run_id_task_id_invoc_fkey julius
+4191; 2606 17509 FK CONSTRAINT relay_wonderland julius_subagents julius_subagents_child_task_id_fkey julius
+4192; 2606 17504 FK CONSTRAINT relay_wonderland julius_subagents julius_subagents_parent_task_id_fkey julius
+4193; 2606 17499 FK CONSTRAINT relay_wonderland julius_subagents julius_subagents_project_id_fkey julius
+4194; 2606 17494 FK CONSTRAINT relay_wonderland julius_subagents julius_subagents_run_id_fkey julius
+4221; 2606 17843 FK CONSTRAINT relay_wonderland julius_task_contracts julius_task_contracts_project_id_fkey julius
+4222; 2606 17838 FK CONSTRAINT relay_wonderland julius_task_contracts julius_task_contracts_run_id_fkey julius
+4223; 2606 17848 FK CONSTRAINT relay_wonderland julius_task_contracts julius_task_contracts_task_id_fkey julius
+4164; 2606 17198 FK CONSTRAINT relay_wonderland julius_task_dependencies julius_task_dependencies_dependency_task_id_fkey julius
+4165; 2606 17193 FK CONSTRAINT relay_wonderland julius_task_dependencies julius_task_dependencies_task_id_fkey julius
+4162; 2606 17180 FK CONSTRAINT relay_wonderland julius_tasks julius_tasks_parent_task_id_fkey julius
+4163; 2606 17175 FK CONSTRAINT relay_wonderland julius_tasks julius_tasks_run_id_fkey julius
+4215; 2606 17776 FK CONSTRAINT relay_wonderland julius_tool_execution_receipts julius_tool_execution_receipt_project_id_sandbox_id_invoca_fkey julius
+4216; 2606 17766 FK CONSTRAINT relay_wonderland julius_tool_execution_receipts julius_tool_execution_receipts_project_id_fkey julius
+4217; 2606 17771 FK CONSTRAINT relay_wonderland julius_tool_execution_receipts julius_tool_execution_receipts_project_id_invocation_id_fkey julius
+4202; 2606 17633 FK CONSTRAINT relay_wonderland julius_tool_invocations julius_tool_invocations_project_id_fkey julius
+4203; 2606 17638 FK CONSTRAINT relay_wonderland julius_tool_invocations julius_tool_invocations_run_id_fkey julius
+4204; 2606 17643 FK CONSTRAINT relay_wonderland julius_tool_invocations julius_tool_invocations_task_id_fkey julius
+4205; 2606 17663 FK CONSTRAINT relay_wonderland julius_tool_outbox julius_tool_outbox_invocation_id_fkey julius
+4206; 2606 17668 FK CONSTRAINT relay_wonderland julius_tool_outbox julius_tool_outbox_project_id_fkey julius
+4218; 2606 17795 FK CONSTRAINT relay_wonderland julius_tool_settlements julius_tool_settlements_budget_reservation_id_fkey julius
+4219; 2606 17790 FK CONSTRAINT relay_wonderland julius_tool_settlements julius_tool_settlements_project_id_fkey julius
+4220; 2606 17800 FK CONSTRAINT relay_wonderland julius_tool_settlements julius_tool_settlements_project_id_invocation_id_fkey julius
+4187; 2606 17471 FK CONSTRAINT relay_wonderland julius_trajectory_events julius_trajectory_events_context_id_fkey julius
+4188; 2606 17461 FK CONSTRAINT relay_wonderland julius_trajectory_events julius_trajectory_events_project_id_fkey julius
+4189; 2606 17456 FK CONSTRAINT relay_wonderland julius_trajectory_events julius_trajectory_events_run_id_fkey julius
+4190; 2606 17466 FK CONSTRAINT relay_wonderland julius_trajectory_events julius_trajectory_events_task_id_fkey julius
+4166; 2606 17216 FK CONSTRAINT relay_wonderland julius_transitions julius_transitions_run_id_fkey julius
+4169; 2606 17254 FK CONSTRAINT relay_wonderland julius_verification_decisions julius_verification_decisions_run_id_fkey julius
+4170; 2606 17259 FK CONSTRAINT relay_wonderland julius_verification_decisions julius_verification_decisions_task_id_fkey julius
+4224; 2606 17870 FK CONSTRAINT relay_wonderland julius_work_artifacts julius_work_artifacts_project_id_fkey julius
+4225; 2606 17875 FK CONSTRAINT relay_wonderland julius_work_artifacts julius_work_artifacts_run_id_fkey julius
+4226; 2606 17880 FK CONSTRAINT relay_wonderland julius_work_artifacts julius_work_artifacts_task_id_fkey julius
+4173; 2606 17302 FK CONSTRAINT relay_wonderland julius_worker_results julius_worker_results_run_id_fkey julius
+4174; 2606 17307 FK CONSTRAINT relay_wonderland julius_worker_results julius_worker_results_task_id_fkey julius
+4099; 2606 16480 FK CONSTRAINT relay_wonderland mission_contracts mission_contracts_project_id_fkey julius
+4132; 2606 16813 FK CONSTRAINT relay_wonderland outbox outbox_project_id_fkey julius
+4117; 2606 16651 FK CONSTRAINT relay_wonderland presence presence_player_id_fkey julius
+4118; 2606 16646 FK CONSTRAINT relay_wonderland presence presence_project_id_fkey julius
+4236; 2606 18017 FK CONSTRAINT relay_wonderland project_brain_links project_brain_links_mutation_id_fkey julius
+4237; 2606 18012 FK CONSTRAINT relay_wonderland project_brain_links project_brain_links_project_id_fkey julius
+4231; 2606 17964 FK CONSTRAINT relay_wonderland project_brain_mutations project_brain_mutations_project_id_fkey julius
+4232; 2606 17969 FK CONSTRAINT relay_wonderland project_brain_mutations project_brain_mutations_run_id_fkey julius
+4233; 2606 17994 FK CONSTRAINT relay_wonderland project_brain_record_versions project_brain_record_versions_mutation_id_fkey julius
+4234; 2606 17989 FK CONSTRAINT relay_wonderland project_brain_record_versions project_brain_record_versions_project_id_fkey julius
+4235; 2606 17984 FK CONSTRAINT relay_wonderland project_brain_record_versions project_brain_record_versions_record_id_fkey julius
+4229; 2606 17939 FK CONSTRAINT relay_wonderland project_brain_records project_brain_records_project_id_fkey julius
+4230; 2606 17944 FK CONSTRAINT relay_wonderland project_brain_records project_brain_records_run_id_fkey julius
+4094; 2606 16428 FK CONSTRAINT relay_wonderland project_members project_members_player_id_fkey julius
+4095; 2606 16423 FK CONSTRAINT relay_wonderland project_members project_members_project_id_fkey julius
+4144; 2606 16986 FK CONSTRAINT relay_wonderland provider_operations provider_operations_execution_id_fkey julius
+4145; 2606 16991 FK CONSTRAINT relay_wonderland provider_operations provider_operations_reservation_id_fkey julius
+4115; 2606 16618 FK CONSTRAINT relay_wonderland provider_receipts provider_receipts_execution_id_fkey julius
+4137; 2606 16897 FK CONSTRAINT relay_wonderland rating_history rating_history_agent_id_fkey julius
+4138; 2606 16892 FK CONSTRAINT relay_wonderland rating_history rating_history_battle_id_fkey julius
+4122; 2606 16694 FK CONSTRAINT relay_wonderland rewards rewards_battle_id_fkey julius
+4123; 2606 16699 FK CONSTRAINT relay_wonderland rewards rewards_player_id_fkey julius
+4146; 2606 17009 FK CONSTRAINT relay_wonderland swarm_runs swarm_runs_battle_id_fkey julius
+4147; 2606 17024 FK CONSTRAINT relay_wonderland swarm_runs swarm_runs_card_version_id_fkey julius
+4148; 2606 17019 FK CONSTRAINT relay_wonderland swarm_runs swarm_runs_parent_agent_id_fkey julius
+4149; 2606 17014 FK CONSTRAINT relay_wonderland swarm_runs swarm_runs_parent_execution_id_fkey julius
+4150; 2606 17061 FK CONSTRAINT relay_wonderland swarm_workers swarm_workers_budget_reservation_id_fkey julius
+4151; 2606 17051 FK CONSTRAINT relay_wonderland swarm_workers swarm_workers_execution_id_fkey julius
+4152; 2606 17056 FK CONSTRAINT relay_wonderland swarm_workers swarm_workers_provider_operation_id_fkey julius
+4153; 2606 17046 FK CONSTRAINT relay_wonderland swarm_workers swarm_workers_swarm_id_fkey julius

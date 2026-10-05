@@ -1,0 +1,2 @@
+ERROR:  migration_035_tables_exist: a relay_wonderland.voice_* table already exists; nothing was changed
+CONTEXT:  PL/pgSQL function inline_code_block line 10 at RAISE

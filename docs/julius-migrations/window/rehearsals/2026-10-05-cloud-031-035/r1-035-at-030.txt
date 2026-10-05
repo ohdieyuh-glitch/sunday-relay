@@ -1,0 +1,2 @@
+ERROR:  migration_035_requires_033: voice binds players the social layer knows; apply 033 first
+CONTEXT:  PL/pgSQL function inline_code_block line 4 at RAISE

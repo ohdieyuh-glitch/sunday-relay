@@ -1,0 +1,2 @@
+ERROR:  migration_032_refused: 031 is not applied here; 032 comes after it on the chain (founder ruling 2026-10-04)
+CONTEXT:  PL/pgSQL function inline_code_block line 9 at RAISE

@@ -1,0 +1,2 @@
+ERROR:  migration_035_requires_034: 034 comes before 035, and the ledger never shows a gap
+CONTEXT:  PL/pgSQL function inline_code_block line 7 at RAISE

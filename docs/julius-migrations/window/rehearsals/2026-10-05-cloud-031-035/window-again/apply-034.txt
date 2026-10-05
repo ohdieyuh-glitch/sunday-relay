@@ -1,0 +1,5 @@
+BEGIN
+DO
+INSERT 0 1
+COMMIT
+exit 0

@@ -1,0 +1,19 @@
+checked_at|2026-10-05 02:32:37.325938+00
+database|julius
+checked_by|julius
+server|PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+index_name|julius_run_project_state
+definition|CREATE INDEX julius_run_project_state ON relay_wonderland.julius_runs USING btree (project_id, state, created_at)
+
+index_name|julius_runs_mission_id_run_id_key
+definition|CREATE UNIQUE INDEX julius_runs_mission_id_run_id_key ON relay_wonderland.julius_runs USING btree (mission_id, run_id)
+
+index_name|julius_runs_pkey
+definition|CREATE UNIQUE INDEX julius_runs_pkey ON relay_wonderland.julius_runs USING btree (run_id)
+old_index_matches|t
+new_name_free|t
+runs_rows|12
+n_tup_upd|0
+n_tup_hot_upd|0
+migration_030_applied|t
+migration_031_applied|f
