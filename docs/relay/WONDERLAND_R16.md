@@ -86,8 +86,9 @@ RELAY_BRIDGE_TOKEN=... node scripts/wonderland-r16-harness.mjs --bridge <url> --
 WONDERLAND_R16_SESSIONS='{"<idA>":"<token>","<idB>":"<token>","<idC>":"<token>"}' RELAY_BRIDGE_TOKEN=... \
   node scripts/wonderland-r16-harness.mjs --bridge https://<bridge> --origin <origin> --players <idA>,<idB>,<idC> \
   --state r16.json --expect-commit <main sha> --final
-# ... a Railway redeploy of the SAME commit (the restart) ...
-WONDERLAND_R16_SESSIONS='…' RELAY_BRIDGE_TOKEN=... node scripts/wonderland-r16-harness.mjs --bridge https://<bridge> --origin <origin> \
+# ... a Railway redeploy of the SAME commit (the restart). The restart revokes every session, by design, so each real player
+# signs in again, and the verify phase is given their NEW tokens ...
+WONDERLAND_R16_SESSIONS='{"<idA>":"<new token>",…}' RELAY_BRIDGE_TOKEN=... node scripts/wonderland-r16-harness.mjs --bridge https://<bridge> --origin <origin> \
   --players <idA>,<idB>,<idC> --phase verify --state r16.json --expect-commit <main sha> --final
 ```
 
@@ -138,13 +139,15 @@ WONDERLAND_R16_SESSIONS='…' RELAY_BRIDGE_TOKEN=... node scripts/wonderland-r16
 - the reconnect never enters again;
 - the LEASE check trusts the refreshes alone.
 
-**The venue** (`relay-bridge/wonderland-hosted-store.real-postgres.test.ts`, the real bridge process on a bootstrapped store, with a platform-attested commit):
-- **Every check passes, and the run is still a REHEARSAL for exactly** `NOT_HTTPS, HOST_NOT_PUBLIC, SCRIPTED_PLAYERS, PLAYERS_NOT_VERIFIED, NOT_PRODUCTION`. The commit is attested and expected, and the store is connected, current and social-ready, so none of those is a reason.
+**The venue** (`relay-bridge/wonderland-hosted-store.real-postgres.test.ts`, the real bridge process on a bootstrapped store, with a platform-attested commit, **under the production gates** as Railway runs it):
+- **Every check passes, and the run is still a REHEARSAL for exactly** `NOT_HTTPS, HOST_NOT_PUBLIC, SCRIPTED_PLAYERS, PLAYERS_NOT_VERIFIED`. The commit is attested and expected, the gates are production's, and the store is connected, current and social-ready, so none of those is a reason.
+- **Why the production gates:** a bridge that refused pairing on the production branch alone passed every R16 test while they ran on the development branch. It fails this one.
 - **With no restart,** the restart check fails on the same process. After a restart on the same address, the boot is new, the commit unchanged, and the check passes.
 - **The CLI:**
   - `--final` exits 1 with `R16 FINAL REFUSED`, though all 24 checks passed;
   - a verify phase with no restart fails RESTART;
   - after a real restart it passes 7/7, a REHEARSAL because its scenario was one.
+- **Before any player:** `scripts/wonderland-deploy-check.mjs` reads, and only reads, whether the hosted bridge is the expected build, production-gated, ready and closed. See [WONDERLAND_HOSTED_STORE.md](WONDERLAND_HOSTED_STORE.md) step 5.
 - `relay-bridge/wonderland-r16-venue.test.ts` holds the judge with a table: a HOSTED_FINAL baseline, then one fact changed per row, each producing exactly its own reason. Every one of the 19 reasons has a row.
 
 **Ten mutants of the venue and the bridge's identity, each killed:**

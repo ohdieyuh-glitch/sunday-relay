@@ -63,12 +63,25 @@ Each step names its owner.
 4. **The founder or JUJU attaches the store:**
    - set `JULIUS_DATABASE_URL` on the bridge service (a Railway reference to the new database's private URL);
    - redeploy.
-5. **Verify it, without a database client:**
+5. **Verify it, without a database client, with the deploy check** (`scripts/wonderland-deploy-check.mjs`). It only reads: the public liveness probe, the readiness report with and without the token, and the probe from a foreign origin and from the allowed one.
    ```sh
-   curl -s -H "Authorization: Bearer $RELAY_BRIDGE_TOKEN" https://<bridge>/relay-api/wonderland/readiness
-   # expect: database CONNECTED · ledger gapFree, pending [] · surfaces.social READY
-   #         bridge.commit = main's reviewed tip, attestedBy RAILWAY_GIT_COMMIT_SHA · bridge.production true
+   RELAY_BRIDGE_TOKEN=... node scripts/wonderland-deploy-check.mjs \
+     --bridge https://<bridge> --origin https://sunday-relay.vercel.app --expect-commit <main's reviewed tip>
+   # expect: DEPLOY SUMMARY passed=8 failed=0 of=8
    ```
+
+   | Check | Passes when |
+   |---|---|
+   | HEALTH | the public liveness probe answers `{"status":"ok"}` and nothing else |
+   | HOSTED | the bridge is HTTPS, and its name resolves only to public addresses |
+   | OPERATOR ONLY | the readiness report refuses a request without the token (401) |
+   | CORS | a foreign origin is refused (403) and gets no allow-origin; the allowed origin is echoed exactly |
+   | BUILD | the commit Railway attests (`RAILWAY_GIT_COMMIT_SHA`) is `--expect-commit` |
+   | PRODUCTION | the bridge takes the production branch of its gates |
+   | STORE | connected, gap-free, nothing pending, no stamp this build does not know |
+   | SOCIAL | the social store is ready |
+
+   The voice schema, the EOS configuration and the boot are reported, never judged. Run it after **every** deploy: Railway deploys `main` by itself, and this is how an operator learns which commit it deployed.
 6. **The scripted R16 against the hosted bridge** (`docs/relay/WONDERLAND_R16.md`):
    - `scripts/wonderland-r16-harness.mjs --bridge https://<bridge> --origin <origin> --state r16.json --expect-commit <main sha>`;
    - a Railway redeploy of the same commit (the restart: the boot id must change, the commit must not);
@@ -94,11 +107,13 @@ Each step names its owner.
 2. **Every database the tool must not touch is refused by name,** and its fingerprint and rows are unchanged:
    - the permanent store's case (migrated, a real row, no marker);
    - a marked store with a gap in its ledger, with a stamp from a later build, and with a foreign schema.
-3. **The real bridge PROCESS, from `server.ts`:**
+3. **The real bridge PROCESS, from `server.ts`, run the way Railway runs it** (`RAILWAY_ENVIRONMENT`, `NODE_ENV=production`, an attested commit):
    - with no database, readiness is `NOT_CONFIGURED`, by variable name;
    - pointed at a closed port, it is `UNREACHABLE ECONNREFUSED`, with no host in the body;
    - on the bootstrapped store, readiness answers 401 to anyone but the operator, and `CONNECTED`, gap-free and social READY to the operator;
-   - then the **whole R16 scenario passes (24/24)**, the process restarts, and the split restart check passes (6/6).
+   - then the **whole R16 scenario passes (24/24)** under the production gates, the process restarts, and the restart check passes (7/7);
+   - **the deploy check** passes every row but HOSTED, since loopback over HTTP is not a hosted bridge, and the store's fingerprint is the same after it as before;
+   - before this rehearsal ran under the production gates, a bridge that refused pairing on the production branch alone passed every R16 test. It now fails this one.
 4. **The built CLI:**
    - `inspect` reads EMPTY;
    - `bootstrap` refuses a dirty tree and passes on a clean one;

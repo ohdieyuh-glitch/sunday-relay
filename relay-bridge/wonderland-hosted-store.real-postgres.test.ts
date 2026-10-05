@@ -227,6 +227,12 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
         await new Promise<void>((done) => { running.once('exit', () => done()); running.kill('SIGTERM'); });
       }
     };
+    // The deploy check, as an operator runs it after a deploy: reads only. The rows it FAILED, by their check's name.
+    const deployCheck = (expectCommit: string) => spawnSync(process.execPath, [
+      join(ROOT, 'scripts', 'wonderland-deploy-check.mjs'), '--bridge', bridge, '--origin', ORIGIN, '--expect-commit', expectCommit,
+    ], { encoding: 'utf8', timeout: 60_000, env: { PATH: process.env.PATH ?? '', RELAY_BRIDGE_TOKEN: OPERATOR } });
+    const failedChecks = (run: { stdout: string }) => run.stdout.split('\n').filter((line) => line.startsWith('DEPLOY FAIL '))
+      .map((line) => line.slice('DEPLOY FAIL '.length).split(':')[0]);
     const readiness = async (authorization?: string) => {
       const response = await fetch(`${bridge}/relay-api/wonderland/readiness`, { headers: authorization === undefined ? {} : { authorization } });
       return { status: response.status, body: await response.json() as { data?: Record<string, unknown> } };
@@ -238,6 +244,10 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
       database: { state: 'NOT_CONFIGURED', missingConfig: ['JULIUS_DATABASE_URL', 'DATABASE_URL'] }, ledger: null, surfaces: { social: 'UNKNOWN' },
       bridge: { commit: null, attestedBy: null, production: false, bootId: expect.stringMatching(/^[0-9a-f]{32}$/u) },
     });
+    // A bridge with no store, no attested build and the development gates: the deploy check says exactly that.
+    const bare = deployCheck(COMMIT);
+    expect(failedChecks(bare)).toEqual(['HOSTED', 'BUILD', 'PRODUCTION', 'STORE', 'SOCIAL']);
+    expect(bare.status).toBe(1);
     await stop();
 
     // A database that does not answer: a code, never the driver's text.
@@ -249,8 +259,9 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
     expect(JSON.stringify(unreachable.body)).not.toContain(closed.hostname);
     await stop();
 
-    // The bootstrapped store, on a build its platform attests.
-    const live = { JULIUS_DATABASE_URL: urls.get('live')!, RAILWAY_GIT_COMMIT_SHA: COMMIT };
+    // The bootstrapped store, run the way Railway runs the bridge: a build its platform attests, and the production branch
+    // of every gate (Railway's own marker, and NODE_ENV=production, which also arms the boot refusals).
+    const live = { JULIUS_DATABASE_URL: urls.get('live')!, RAILWAY_GIT_COMMIT_SHA: COMMIT, RAILWAY_ENVIRONMENT: 'production', NODE_ENV: 'production' };
     await start(live);
     expect((await readiness()).status, 'no credential: nothing').toBe(401);
     expect((await readiness('Bearer not-the-operator')).status).toBe(401);
@@ -262,10 +273,22 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
       ledger: { applied: WONDERLAND_SHIPPED_CHAIN.length, expected: WONDERLAND_SHIPPED_CHAIN.length, through: WONDERLAND_SHIPPED_CHAIN.at(-1), gapFree: true, pending: [], unknown: [] },
       surfaces: { social: 'READY', voiceSchema: 'NOT_APPLIED', eosClientConfig: 'NOT_CONFIGURED', eosTrustedServer: 'NOT_CONFIGURED' },
       sessions: 'IN_MEMORY_REVOKED_ON_RESTART',
-      bridge: { commit: COMMIT, attestedBy: 'RAILWAY_GIT_COMMIT_SHA', production: false, bootId: expect.stringMatching(/^[0-9a-f]{32}$/u) },
+      bridge: { commit: COMMIT, attestedBy: 'RAILWAY_GIT_COMMIT_SHA', production: true, bootId: expect.stringMatching(/^[0-9a-f]{32}$/u) },
     });
     expect(Date.parse(String((ready.body.data!.bridge as { startedAt: string }).startedAt))).not.toBeNaN();
     expect(JSON.stringify(ready.body)).not.toContain(new URL(urls.get('live')!).password || 'no-password-in-url');
+
+    // THE DEPLOY CHECK on the bridge as Railway runs it. Only the address keeps it from passing whole: loopback over HTTP is not a
+    // hosted bridge. It writes nothing: the store's fingerprint is the same after it as before.
+    const unwritten = await fingerprintWonderlandStore(pool, FINGERPRINT);
+    const deployed = deployCheck(COMMIT);
+    expect(failedChecks(deployed), deployed.stdout).toEqual(['HOSTED']);
+    expect(deployed.stdout).toContain('DEPLOY SUMMARY passed=7 failed=1 of=8');
+    expect(deployed.stdout).toContain('DEPLOY REPORTED voice_schema=NOT_APPLIED eos_client_config=NOT_CONFIGURED eos_trusted_server=NOT_CONFIGURED boot=');
+    expect(deployed.status).toBe(1);
+    expect(failedChecks(deployCheck('d'.repeat(40))), 'another commit is another build').toEqual(['HOSTED', 'BUILD']);
+    expect(deployed.stdout + deployed.stderr).not.toContain(OPERATOR);
+    expect(await fingerprintWonderlandStore(pool, FINGERPRINT), 'the deploy check wrote nothing').toEqual(unwritten);
 
     // The whole R16 scenario on it, a restart, and the split restart check.
     const players = r16Players(nonce);
@@ -276,15 +299,16 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
     expect(summarizeR16(outcome.results)).toEqual({ passed: R16_CHECKS.length, failed: 0, missing: [], of: R16_CHECKS.length });
     const before = await readR16Views({ bridge, origin: ORIGIN, sessions: paired.sessions, players, nonce, fetch });
 
-    // THE VENUE. Every privacy check passed, and this is still a rehearsal, for exactly these reasons: the commit is attested and
-    // expected, and the store is connected, current and social-ready, so none of those is one. A loopback host is never looked up.
+    // THE VENUE. Every privacy check passed under the production gates, and this is still a rehearsal, for exactly these reasons:
+    // the commit is attested and expected, the gates are production's, and the store is connected, current and social-ready, so
+    // none of those is one. A loopback host is never looked up.
     const neverLookedUp = async (): Promise<string[]> => { throw new Error('a loopback host is never looked up'); };
     const host = await inspectR16Host(bridge, neverLookedUp);
     const backendBefore = await readR16Backend({ bridge, operatorToken: OPERATOR, fetch });
-    expect(backendBefore).toMatchObject({ readable: true, commit: COMMIT, production: false, database: 'CONNECTED', social: 'READY' });
+    expect(backendBefore).toMatchObject({ readable: true, commit: COMMIT, production: true, database: 'CONNECTED', social: 'READY' });
     expect(outcome.names, 'paired players carry no verified sign-in').toEqual({ [players.a]: null, [players.b]: null, [players.c]: null });
     const venue = judgeR16Venue({ phase: 'scenario', bridge, host, identities: { source: 'SCRIPTED', names: outcome.names }, backend: backendBefore, expectCommit: COMMIT });
-    expect(venue).toEqual({ venue: 'REHEARSAL', reasons: ['NOT_HTTPS', 'HOST_NOT_PUBLIC', 'SCRIPTED_PLAYERS', 'PLAYERS_NOT_VERIFIED', 'NOT_PRODUCTION'] });
+    expect(venue).toEqual({ venue: 'REHEARSAL', reasons: ['NOT_HTTPS', 'HOST_NOT_PUBLIC', 'SCRIPTED_PLAYERS', 'PLAYERS_NOT_VERIFIED'] });
     // Not restarted: the same start answers, and the restart check says so.
     expect(r16RestartCheck(backendBefore, await readR16Backend({ bridge, operatorToken: OPERATOR, fetch }))).toMatchObject({ result: 'FAIL' });
 
@@ -304,7 +328,7 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
     expect(judgeR16Venue({
       phase: 'verify', bridge, host, identities: { source: 'SCRIPTED', names: null }, backend: backendAfter, expectCommit: COMMIT,
       recorded: { bridge: new URL(address).origin, backend: backendBefore, venue },
-    })).toEqual({ venue: 'REHEARSAL', reasons: ['NOT_HTTPS', 'HOST_NOT_PUBLIC', 'SCRIPTED_PLAYERS', 'NOT_PRODUCTION', 'SCENARIO_NOT_FINAL'] });
+    })).toEqual({ venue: 'REHEARSAL', reasons: ['NOT_HTTPS', 'HOST_NOT_PUBLIC', 'SCRIPTED_PLAYERS', 'SCENARIO_NOT_FINAL'] });
 
     // THE CLI, as an operator runs it. `--final` refuses a rehearsal however clean its checks; a verify phase with no restart fails
     // its RESTART check; after a real restart it passes, 7 of 7.
@@ -314,8 +338,8 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
     const state = join(root, `r16-cli-${nonce}.json`);
     const scenario = harness(['--state', state, '--expect-commit', COMMIT, '--final']);
     expect(scenario.stdout).toContain(`R16 SUMMARY phase=scenario passed=${String(R16_CHECKS.length)} failed=0 of=${String(R16_CHECKS.length)} venue=REHEARSAL`);
-    expect(scenario.stdout).toContain('R16 VENUE REHEARSAL reasons=NOT_HTTPS,HOST_NOT_PUBLIC,SCRIPTED_PLAYERS,PLAYERS_NOT_VERIFIED,NOT_PRODUCTION');
-    expect(scenario.stdout).toContain(`R16 BACKEND commit=${COMMIT} attested_by=RAILWAY_GIT_COMMIT_SHA production=false`);
+    expect(scenario.stdout).toContain('R16 VENUE REHEARSAL reasons=NOT_HTTPS,HOST_NOT_PUBLIC,SCRIPTED_PLAYERS,PLAYERS_NOT_VERIFIED\n');
+    expect(scenario.stdout).toContain(`R16 BACKEND commit=${COMMIT} attested_by=RAILWAY_GIT_COMMIT_SHA production=true`);
     expect(scenario.stdout).toContain('R16 FINAL REFUSED');
     expect(scenario.status, '--final and a rehearsal: exit 1').toBe(1);
     expect(scenario.stdout + scenario.stderr).not.toContain(OPERATOR);
@@ -330,7 +354,7 @@ suite('the hosted Wonderland store, from nothing, on real PostgreSQL', () => {
     const restarted = harness(['--phase', 'verify', '--state', state, '--expect-commit', COMMIT]);
     expect(restarted.stdout).toContain('R16 PASS RESTART');
     expect(restarted.stdout).toContain('R16 SUMMARY phase=verify passed=7 failed=0 of=7 venue=REHEARSAL');
-    expect(restarted.stdout).toContain('reasons=NOT_HTTPS,HOST_NOT_PUBLIC,SCRIPTED_PLAYERS,NOT_PRODUCTION,SCENARIO_NOT_FINAL');
+    expect(restarted.stdout).toContain('reasons=NOT_HTTPS,HOST_NOT_PUBLIC,SCRIPTED_PLAYERS,SCENARIO_NOT_FINAL\n');
     expect(restarted.status, 'no --final: the checks decide').toBe(0);
     await stop();
   }, 300_000);
