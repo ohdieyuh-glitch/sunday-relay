@@ -210,7 +210,7 @@ suite('Decision C across two databases: a WITH arm learns from its pair\'s bundl
     if (decision.kind !== 'ARCHIVE') return;
     const fromBundle = selectJuliusCarry({ targetRunId: target, sources: [decision.verdict.source], claims: [] });
     expect(fromBundle, 'the archive is a transport, never a second policy').toEqual(fromStore);
-    expect(fromBundle.selected.map((item) => item.entryId)).toEqual([juliusCarryEntryId(withoutRun, `finding:${repaired}`)]);
+    expect(fromBundle.selected.map((item) => item.entryId)).toEqual([juliusCarryEntryId(target, withoutRun, `finding:${repaired}`)]);
     expect(fromBundle.excluded.map((item) => item.reasonCode).sort()).toEqual(['FINDING_ADDRESSED_NOT_VERIFIED', 'FINDING_UNRESOLVED']);
     // The claim's tab and line break survived the trip: the export is JSON, never a TSV row.
     expect(decision.verdict.source.findings.find((item) => item.findingId === repaired)!.claim).toContain('header.\tIt silently byte-swapped it,\nso');
@@ -253,7 +253,7 @@ suite('Decision C across two databases: a WITH arm learns from its pair\'s bundl
     expect((await withDb.query('SELECT 1 FROM relay_wonderland.julius_reviewer_findings WHERE run_id = $1', [withoutRun])).rowCount).toBe(0);
 
     // POINT 3: the carried row, authored by the reviewer who raised it, run-wide in the WITH run.
-    const carriedId = juliusCarryEntryId(withoutRun, `finding:${repaired}`);
+    const carriedId = juliusCarryEntryId(runId, withoutRun, `finding:${repaired}`);
     const rows = await withDb.query<{ entry_id: string; worker_id: string; task_id: string | null; safe_content: string }>(
       "SELECT entry_id, worker_id, task_id, safe_content FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE 'carried:%'", [runId]);
     expect(rows.rows.map((row) => row.entry_id)).toEqual([carriedId]);

@@ -157,7 +157,7 @@ suite('the corrected carry on real PostgreSQL', () => {
       claims: await carry.carryClaimCandidates({ projectId, excludeRunId: withRun }),
     });
     expect(selection.selected.map((item) => [item.carryClass, item.entryId])).toEqual([
-      ['VERIFIED_REPAIR_FINDING', juliusCarryEntryId(without, `finding:f-repaired-${id}`)],
+      ['VERIFIED_REPAIR_FINDING', juliusCarryEntryId(withRun, without, `finding:f-repaired-${id}`)],
     ]);
     const refused = Object.fromEntries(selection.excluded.map((item) => [item.sourceRef, item.reasonCode]));
     expect(refused).toEqual({
@@ -178,7 +178,7 @@ suite('the corrected carry on real PostgreSQL', () => {
     expect(await carry.manifestRecorded(withRun)).toBe(false);
     expect(await carry.restore({ runId: withRun, projectId, arm: 'WITH', selection, firstRevision: 5, occurredAt: at(50) })).toBe(1);
 
-    const carriedId = juliusCarryEntryId(without, `finding:f-repaired-${id}`);
+    const carriedId = juliusCarryEntryId(withRun, without, `finding:f-repaired-${id}`);
     const row = await pool.query('SELECT task_id,worker_id,entry_kind,safe_content,revision FROM relay_wonderland.julius_brain_entries WHERE entry_id=$1 AND run_id=$2', [carriedId, withRun]);
     expect(row.rows[0]).toMatchObject({ task_id: null, worker_id: 'reviewer-hermes', entry_kind: 'FINDING', revision: '5' });
     expect(String(row.rows[0].safe_content)).toMatch(/^PRIOR VERIFIED REPAIR FINDING \(an earlier mission of this project, not this one\)\./u);
@@ -205,8 +205,14 @@ suite('the corrected carry on real PostgreSQL', () => {
       selectedEntryIds: carriedId,
     });
 
-    // A replay inherits nothing twice and writes no second manifest.
-    expect(await carry.restore({ runId: withRun, projectId, arm: 'WITH', selection, firstRevision: 5, occurredAt: at(55) })).toBe(0);
+    // A replay inherits nothing twice and writes no second manifest: it reports what the run holds, and writes nothing.
+    const rowsOf = async () => (await pool.query(
+      'SELECT (SELECT count(*)::int FROM relay_wonderland.julius_brain_entries WHERE run_id=$1) AS entries, (SELECT count(*)::int FROM relay_wonderland.julius_claim_standings WHERE run_id=$1) AS standings',
+      [withRun],
+    )).rows[0];
+    const before = await rowsOf();
+    expect(await carry.restore({ runId: withRun, projectId, arm: 'WITH', selection, firstRevision: 5, occurredAt: at(55) })).toBe(1);
+    expect(await rowsOf()).toEqual(before);
     const again = await new JuliusTimelinePostgresRepository(pool).timeline({ runId: withRun, projectId, sinceSequence: 0, limit: 50 });
     expect(again.entries.filter((entry) => entry.type === 'knowledge.carried')).toHaveLength(1);
   });
@@ -221,5 +227,99 @@ suite('the corrected carry on real PostgreSQL', () => {
     });
     expect(selection.selected.map((item) => item.scope.sourceRunId)).toEqual([without]);
     expect(selection.excluded.filter((item) => item.reasonCode === 'CARRY_OF_CARRY').map((item) => item.sourceRunId)).toEqual([withRun]);
+  });
+
+  const manifestOf = async (runId: string, project: string) =>
+    (await new JuliusTimelinePostgresRepository(pool).timeline({ runId, projectId: project, sinceSequence: 0, limit: 50 }))
+      .entries.filter((entry) => entry.type === 'knowledge.carried');
+
+  it('every run that inherits a fact holds its OWN copy and standing: a second heir on the same store is not left with nothing', async () => {
+    // The first heir (point 3) holds its copy of f-repaired. On one long-lived store, a second run of the project
+    // inherits the same fact: its copy and its claim must be its own, not a collision with the first heir's.
+    const heir = `run:carry-second-heir-${id}`;
+    await insertRun(heir, projectId);
+    const selection = selectJuliusCarry({
+      targetRunId: heir,
+      sources: await carry.carrySources({ projectId, excludeRunId: heir }),
+      claims: await carry.carryClaimCandidates({ projectId, excludeRunId: heir }),
+    });
+    expect(juliusCarryPairGate('WITH', selection)).toEqual({ valid: true, reasonCode: 'CARRY_PAIR_VALID' });
+    const item = selection.selected[0]!;
+    expect(await carry.restore({ runId: heir, projectId, arm: 'WITH', selection, firstRevision: 5, occurredAt: at(56) })).toBe(1);
+    const copy = await pool.query('SELECT run_id FROM relay_wonderland.julius_brain_entries WHERE entry_id=$1', [item.entryId]);
+    expect(copy.rows, 'the copy is this run\'s own row').toEqual([{ run_id: heir }]);
+    const standing = await pool.query('SELECT reason FROM relay_wonderland.julius_claim_standings WHERE claim_id=$1 AND run_id=$2', [item.claim.claimId, heir]);
+    expect(standing.rows).toEqual([{ reason: `CARRIED_FROM:${without}:finding:f-repaired-${id}` }]);
+    expect((await manifestOf(heir, projectId))[0]!.facts).toMatchObject({ selected: 1, verifiedRepairFindings: 1, written: 1 });
+    const first = await pool.query("SELECT count(*)::int AS n FROM relay_wonderland.julius_brain_entries WHERE run_id=$1 AND entry_id LIKE 'carried:%'", [withRun]);
+    expect(first.rows[0].n, 'the first heir keeps exactly its own copy').toBe(1);
+  });
+
+  it('a copy id another run already holds is not counted as this run\'s: the manifest records what the run holds', async () => {
+    const heir = `run:carry-squatted-${id}`;
+    await insertRun(heir, projectId);
+    const selection = selectJuliusCarry({
+      targetRunId: heir,
+      sources: await carry.carrySources({ projectId, excludeRunId: heir }),
+      claims: await carry.carryClaimCandidates({ projectId, excludeRunId: heir }),
+    });
+    // A row already holding this heir's copy id, but in another run: never the heir's copy, whatever its id says.
+    await pool.query(
+      `INSERT INTO relay_wonderland.julius_brain_entries(entry_id,run_id,project_id,task_id,worker_id,entry_kind,safe_content,evidence_ids,revision,created_at)
+       VALUES($1,$2,$3,NULL,'someone','FINDING','not the carry','[]'::jsonb,900,$4)`,
+      [selection.selected[0]!.entryId, without, projectId, at(57)],
+    );
+    expect(await carry.restore({ runId: heir, projectId, arm: 'WITH', selection, firstRevision: 5, occurredAt: at(57) })).toBe(0);
+    expect((await manifestOf(heir, projectId))[0]!.facts).toMatchObject({ selected: 1, written: 0 });
+  });
+
+  it('a restore that failed halfway completes when it is replayed: every copy, every standing, and one manifest', async () => {
+    const project = `prj-carry-replay-${id}`;
+    const source = `run:carry-replay-without-${id}`;
+    const heir = `run:carry-replay-with-${id}`;
+    await insertRun(source, project);
+    await insertTask(source, `${source}:build`, 'CODING_AGENT', 'build', 0);
+    await insertTask(source, `${source}:review`, 'INDEPENDENT_REVIEWER', 'review:build', 1);
+    await insertTask(source, `${source}:repair-1`, 'CODING_AGENT', 'repair:build', 2);
+    await insertTask(source, `${source}:review:repair-1`, 'INDEPENDENT_REVIEWER', 'review:repair:build', 3);
+    for (const name of ['a', 'b']) {
+      const findingId = `f-${name}-${id}`;
+      await insertFinding(source, findingId, `${source}:build`);
+      await event(source, project, 'finding.recorded', { findingId, reviewTaskId: `${source}:review` });
+      await event(source, project, 'finding.transitioned', juliusFindingTransitionFacts({
+        findingId, move: 'REPAIR_SUCCEEDED', at: at(30), reviewTaskId: null, repairTaskId: `${source}:repair-1`, supersededByFindingId: null,
+      }));
+      await event(source, project, 'finding.transitioned', juliusFindingTransitionFacts({
+        findingId, move: 'REVIEWER_RESOLVED', at: at(31), reviewTaskId: `${source}:review:repair-1`, repairTaskId: null, supersededByFindingId: null,
+      }));
+    }
+    await insertRun(heir, project);
+    const selection = selectJuliusCarry({
+      targetRunId: heir,
+      sources: await carry.carrySources({ projectId: project, excludeRunId: heir }),
+      claims: await carry.carryClaimCandidates({ projectId: project, excludeRunId: heir }),
+    });
+    expect(selection.counts.VERIFIED_REPAIR_FINDING).toBe(2);
+
+    // The first attempt: the store goes away after the first copy is written, before its standing. A WITH arm is
+    // then refused as a persistence failure, and the operator retries the bootstrap.
+    const failing = new JuliusCarryPostgresRepository(pool);
+    (failing as unknown as { claims: { recordClaimStanding: () => Promise<boolean> } }).claims.recordClaimStanding =
+      () => Promise.reject(new Error('injected: the store went away'));
+    await expect(failing.restore({ runId: heir, projectId: project, arm: 'WITH', selection, firstRevision: 5, occurredAt: at(57) }))
+      .rejects.toThrow('injected');
+    expect(await carry.manifestRecorded(heir)).toBe(false);
+    const ids = selection.selected.map((item) => item.entryId);
+    expect(await carry.heldCopies(heir, ids), 'a copy written without its standing is not knowledge the run holds').toBe(0);
+
+    // The replay completes the carry: nothing half-written is taken for done.
+    expect(await carry.restore({ runId: heir, projectId: project, arm: 'WITH', selection, firstRevision: 5, occurredAt: at(58) })).toBe(2);
+    const copies = await pool.query("SELECT entry_id FROM relay_wonderland.julius_brain_entries WHERE run_id=$1 AND entry_id LIKE 'carried:%' ORDER BY entry_id", [heir]);
+    expect(copies.rows.map((row) => row.entry_id)).toEqual(selection.selected.map((item) => item.entryId).sort());
+    const standings = await pool.query('SELECT claim_id FROM relay_wonderland.julius_claim_standings WHERE run_id=$1 ORDER BY claim_id', [heir]);
+    expect(standings.rows.map((row) => row.claim_id)).toEqual(selection.selected.map((item) => item.claim.claimId).sort());
+    const manifest = await manifestOf(heir, project);
+    expect(manifest).toHaveLength(1);
+    expect(manifest[0]!.facts).toMatchObject({ selected: 2, verifiedRepairFindings: 2, written: 2 });
   });
 });

@@ -225,7 +225,10 @@ export function createLiveJuliusBootstrapPort(deps: {
          *
          * A WITH arm's restore failing is a refusal, never a silent empty carry:
          * the pair would otherwise run with nothing to learn from and read as a
-         * result. An ordinary mission tolerates it and starts with no carry.
+         * result. So is a restore that leaves the run holding LESS than its
+         * carry selected: the arm is judged on what it received, and a partial
+         * carry is not the carry the pair gate passed. An ordinary mission
+         * tolerates either and starts with what it holds.
          */
         if (deps.knowledge !== undefined && carrySelection !== null) {
           const restoring = deps.knowledge.restore({
@@ -234,8 +237,16 @@ export function createLiveJuliusBootstrapPort(deps: {
             firstRevision: 3 + request.requirements.length + request.constraints.length,
             occurredAt: now(),
           });
-          if (carryArm === 'WITH') await restoring;
-          else await restoring.catch(() => 0);
+          if (carryArm === 'WITH') {
+            const held = await restoring;
+            if (held < carrySelection.selected.length) {
+              return refuse('carry_restore_incomplete',
+                `This mission is the WITH arm of a learning pair, and it holds ${String(held)} of the ${String(carrySelection.selected.length)} `
+                + 'items its carry selected: it was not started, and nothing was dispatched. Submitting it again resumes the restore.', true);
+            }
+          } else {
+            await restoring.catch(() => 0);
+          }
         }
         await deps.runs.addTask({
           commandId: `bootstrap-task:${planTaskId(runId)}`, runId, projectId: request.projectId,

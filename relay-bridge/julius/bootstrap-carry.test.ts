@@ -134,6 +134,20 @@ describe('the WITH arm', () => {
     expect(writes).toEqual([]);
   });
 
+  it('whose restore leaves the run holding less than its carry selected: refused, never run on a partial carry', async () => {
+    const select = (target: string) => selectJuliusCarry({ targetRunId: target, sources: [repairedSource], claims: [] });
+    const store: MissionKnowledgeStore = { select: async (input) => select(input.targetRunId), restore: async () => 0 };
+    const { port, writes } = stage(store);
+    const outcome = await port.submit(request('WITH'));
+    expect(outcome).toMatchObject({ accepted: false, reasonCode: 'carry_restore_incomplete', retryable: true });
+    if (outcome.accepted) return;
+    expect(outcome.safeMessage).toContain('holds 0 of the 1 items its carry selected');
+    expect(writes, 'no task, and nothing a paid dispatch could pick up').not.toContain('addTask');
+    expect(writes).not.toContain('transition:READY');
+    // An ordinary mission starts with what it holds.
+    expect((await stage(store).port.submit(request())).accepted).toBe(true);
+  });
+
   it('whose restore fails: refused as a persistence failure, never run with nothing to learn from', async () => {
     const { store } = knowledgeOf((target) => selectJuliusCarry({ targetRunId: target, sources: [repairedSource], claims: [] }), true);
     const { port, writes } = stage(store);

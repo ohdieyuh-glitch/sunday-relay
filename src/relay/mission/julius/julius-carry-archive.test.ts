@@ -139,7 +139,7 @@ describe('a paired arm\'s bundle, verified', () => {
       exportSha256: sha256(`${JSON.stringify(exportDocument())}\n`), archiveSha256: 'd'.repeat(64),
     });
     const selection = selectJuliusCarry({ targetRunId: 'run:c-with-1', sources: [verdict.source], claims: [] });
-    expect(selection.selected.map((item) => item.entryId)).toEqual([juliusCarryEntryId(RUN, 'finding:f-repaired')]);
+    expect(selection.selected.map((item) => item.entryId)).toEqual([juliusCarryEntryId('run:c-with-1', RUN, 'finding:f-repaired')]);
     expect(selection.counts.VERIFIED_REPAIR_FINDING).toBe(1);
     expect(selection.excluded.map((item) => `${item.reasonCode}:${item.sourceRef}`).sort())
       .toEqual(['FINDING_ADDRESSED_NOT_VERIFIED:finding:f-addressed', 'FINDING_UNRESOLVED:finding:f-open']);

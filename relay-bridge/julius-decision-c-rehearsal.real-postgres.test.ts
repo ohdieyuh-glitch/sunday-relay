@@ -225,8 +225,8 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     const fromBundle = selectJuliusCarry({ targetRunId: 'run:not-yet', sources: [decision.verdict.source], claims: [] });
     expect(fromBundle).toEqual(fromStore);
     expect(fromBundle.counts.VERIFIED_REPAIR_FINDING).toBeGreaterThan(0);
-    const carriedIds = fromBundle.selected.map((item) => item.entryId);
-    expect(carriedIds).toContain(juliusCarryEntryId(withoutRun.runId, `finding:${resolved[0]!.findingId}`));
+    const previewIds = fromBundle.selected.map((item) => item.entryId);
+    expect(previewIds).toContain(juliusCarryEntryId('run:not-yet', withoutRun.runId, `finding:${resolved[0]!.findingId}`));
 
     /* ---------------------------- the WITH arm, a real run on a database that never held its pair */
     const withRun = await runMission({
@@ -236,6 +236,10 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     });
     expect(withRun.outcome, `the WITH arm completes (halt: ${withRun.outcome.haltCause ?? 'none'})`).toMatchObject({ state: 'COMPLETED', stalled: false });
     expect((await withDb.query('SELECT 1 FROM relay_wonderland.julius_runs WHERE run_id = $1', [withoutRun.runId])).rowCount).toBe(0);
+    // Each copy's id names the run that holds it: the same selection, made for the WITH run.
+    const carriedIds = selectJuliusCarry({ targetRunId: withRun.runId, sources: [decision.verdict.source], claims: [] })
+      .selected.map((item) => item.entryId);
+    expect(carriedIds).toHaveLength(previewIds.length);
 
     // POINT 2 on the WITH ledger, and POINT 3.
     const withManifest = await withDb.query<{ payload: { facts: Record<string, unknown> } }>(
@@ -262,6 +266,6 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     expect(compiled.length).toBeGreaterThan(0);
     const received = String(compiled.at(-1)!.payload.facts.carriedReceivedIds ?? '').split(' ').filter((id) => id !== '');
     expect(Number(compiled.at(-1)!.payload.facts.carriedReceived)).toBeGreaterThan(0);
-    expect(received).toContain(juliusCarryEntryId(withoutRun.runId, `finding:${resolved[0]!.findingId}`));
+    expect(received).toContain(juliusCarryEntryId(withRun.runId, withoutRun.runId, `finding:${resolved[0]!.findingId}`));
   }, 120_000);
 });
