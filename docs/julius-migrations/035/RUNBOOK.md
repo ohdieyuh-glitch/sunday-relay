@@ -3,7 +3,7 @@
 `035_wonderland_voice` creates three `relay_wonderland.voice_*` tables:
 - `voice_identities`: one row per player, holding the EOS ProductUserId that player PROVED with a verified Connect ID token. The PUID is `UNIQUE`.
 - `voice_identity_history`: every binding, kept.
-- `voice_issuances`: which player was given a voice-room token for which room and when, and when the trusted server took it back. **Never the token**: the post-check refuses any column named like a token or a secret.
+- `voice_issuances`: which player was given a voice-room token for which room, as which EOS identity (the one the token admits), and when, and when the trusted server took it back. **Never the token**: the post-check refuses any column named like a token or a secret.
 
 It is additive only.
 

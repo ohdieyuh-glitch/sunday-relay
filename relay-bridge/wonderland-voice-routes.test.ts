@@ -57,12 +57,15 @@ const PUID = (n: number): string => String(n).repeat(32).slice(0, 32).replace(/[
 function fakeEos() {
   const calls: Array<{ op: 'token' | 'remove'; roomId: string; productUserId: string }> = [];
   let failRemovals = false;
+  let failTokens = false;
   return {
     calls,
     failRemovals: (value: boolean) => { failRemovals = value; },
+    failTokens: (value: boolean) => { failTokens = value; },
     port: {
       async roomToken({ roomId, productUserId }: { roomId: string; productUserId: string }) {
         calls.push({ op: 'token', roomId, productUserId });
+        if (failTokens) throw new Error('epic unavailable');
         return { token: `token:${roomId}:${productUserId}`, clientBaseUrl: 'https://rtc.example' };
       },
       async removeParticipant({ roomId, productUserId }: { roomId: string; productUserId: string }) {
@@ -190,11 +193,11 @@ describe('joining voice', () => {
     expect((await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }))?.body).toMatchObject({ error: { kind: 'not_in_instance' } });
   });
 
-  it('everyone visible to everyone: one room, and tokens only for it', async () => {
+  it('everyone visible to everyone: a room for each pair, and tokens only for the joiner\'s own', async () => {
     const s = await hub(['ann', 'ben', 'cal']);
     const rooms = roomsOf(await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }));
-    expect(rooms).toHaveLength(1);
-    expect(s.eos.calls).toEqual([{ op: 'token', roomId: rooms[0]!.roomId, productUserId: PUID(1) }]);
+    expect(rooms, 'one per channel mate').toHaveLength(2);
+    expect(s.eos.calls).toEqual(rooms.map((room) => ({ op: 'token', roomId: room.roomId, productUserId: PUID(1) })));
   });
 
   it('a hidden player is never issued a token to the strangers\' room, nor they to hers', async () => {
@@ -221,34 +224,109 @@ describe('joining voice', () => {
 });
 
 describe('the wall moves, and the trusted server takes back what it no longer allows', () => {
-  it('a block mid-session removes both from the shared room on the trusted server', async () => {
+  it('a block mid-session ends the blocked pair\'s room on the trusted server, and nobody else\'s', async () => {
     const s = await hub(['ann', 'ben', 'cal']);
-    const shared = roomsOf(await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }))[0]!.roomId;
-    await s.voice('ben', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
+    const annBefore = roomsOf(await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' })).map((room) => room.roomId);
+    const benBefore = roomsOf(await s.voice('ben', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' })).map((room) => room.roomId);
     await s.voice('cal', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
+    const pair = annBefore.find((room) => benBefore.includes(room))!;
     s.eos.calls.length = 0;
     const blocked = await s.social$('ann', { kind: 'BLOCK', targetId: 'ben' });
-    expect((blocked?.body as { voice: unknown }).voice).toEqual({ revoked: 3, revocationFailures: 0 });
+    expect((blocked?.body as { voice: unknown }).voice, 'Ann is told about her own room').toEqual({ revoked: 1, revocationFailures: 0 });
     expect(s.eos.calls.filter((call) => call.op === 'remove').map((call) => [call.roomId, call.productUserId]).sort())
-      .toEqual([[shared, PUID(1)], [shared, PUID(2)], [shared, PUID(3)]].sort());
-    expect(await s.identities.openRoomsOf('ann')).toEqual([]);
+      .toEqual([[pair, PUID(1)], [pair, PUID(2)]].sort());
+    expect(await s.identities.openRoomsOf('ann'), 'Ann keeps her room with Cal').toEqual(annBefore.filter((room) => room !== pair));
     // Rejoining issues the new plan: Ann and Ben never share a room again.
     const annRooms = roomsOf(await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' })).map((room) => room.roomId);
     const benRooms = roomsOf(await s.voice('ben', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' })).map((room) => room.roomId);
     expect(annRooms.filter((room) => benRooms.includes(room))).toEqual([]);
   });
 
-  it('a removal Epic refuses is reported, the issuance stays open, and the next reconcile retries it', async () => {
+  it('a removal Epic refuses is reported to the player it concerns, the issuance stays open, and the next reconcile retries it', async () => {
     const s = await hub(['ann', 'ben']);
     await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
+    await s.voice('ben', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
     s.eos.failRemovals(true);
     const blocked = await s.social$('ben', { kind: 'BLOCK', targetId: 'ann' });
-    expect((blocked?.body as { voice: { revocationFailures: number } }).voice.revocationFailures).toBe(1);
+    expect((blocked?.body as { voice: unknown }).voice, 'Ben\'s own removal failed; Ann\'s is not his to be told').toEqual({ revoked: 0, revocationFailures: 1 });
     expect(await s.identities.openRoomsOf('ann'), 'still open: not pretended revoked').toHaveLength(1);
     s.eos.failRemovals(false);
     const retried = await reconcileWonderlandVoice(s.ports, ['ann'], '2026-10-04T12:05:00.000Z');
     expect(retried.removed).toHaveLength(1);
     expect(await s.identities.openRoomsOf('ann')).toEqual([]);
+  });
+
+  it('a command\'s answer counts only the actor\'s own rooms: removing a member whose hidden friend is present tells the owner nothing more (P1)', async () => {
+    const answerTo = async (withHidden: boolean) => {
+      const s = stage();
+      const names = withHidden ? ['owen', 'mia', 'hid'] : ['owen', 'mia'];
+      for (const [i, name] of names.entries()) {
+        await s.player(name);
+        await s.voice(name, 'POST', '/wonderland/voice/identity', { idToken: idToken(PUID(i + 1)) });
+      }
+      await s.social$('owen', { kind: 'SERVER_CREATE', serverId: 'srv', name: 'Owen' });
+      for (const member of names.slice(1)) {
+        await s.social$('owen', { kind: 'SERVER_INVITE', serverId: 'srv', inviteeId: member });
+        await s.social$(member, { kind: 'SERVER_JOIN', serverId: 'srv' });
+      }
+      if (withHidden) {
+        // Hid is hidden from strangers, the owner included, and is Mia's friend: they share a room Owen cannot see.
+        await s.social$('hid', { kind: 'SET_SETTINGS', settings: { visibility: 'HIDDEN_FROM_STRANGERS' } });
+        await s.social$('hid', { kind: 'FRIEND_REQUEST', toId: 'mia' });
+        await s.social$('mia', { kind: 'FRIEND_ACCEPT', fromId: 'hid' });
+      }
+      for (const name of names) await s.social$(name, { kind: 'ENTER_INSTANCE', instanceId: 'server:srv', location: null, activity: 'IDLE', dogId: null });
+      for (const name of names) await s.voice(name, 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
+      s.eos.calls.length = 0;
+      const removed = await s.social$('owen', { kind: 'SERVER_REMOVE_MEMBER', serverId: 'srv', memberId: 'mia' });
+      return { voice: (removed?.body as { voice: unknown }).voice, removals: s.eos.calls.filter((call) => call.op === 'remove').length };
+    };
+    const without = await answerTo(false);
+    const withHidden = await answerTo(true);
+    expect(withHidden.removals, 'the hidden friend\'s room with Mia is taken back too').toBeGreaterThan(without.removals);
+    expect(withHidden.voice, 'and Owen is told exactly what he is told without her').toEqual(without.voice);
+    expect(withHidden.voice).toEqual({ revoked: 1, revocationFailures: 0 });
+  });
+
+  it('a re-bind takes the former identity out of every room it held; later removals take out the identity each token admitted', async () => {
+    const s = await hub(['amy', 'xan']);
+    const room = roomsOf(await s.voice('amy', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }))[0]!.roomId;
+    await s.voice('xan', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
+    s.eos.calls.length = 0;
+    const rebound = await s.voice('amy', 'POST', '/wonderland/voice/identity', { idToken: idToken(PUID(9)) });
+    expect((rebound?.body as { data: { outcome: string } }).data.outcome).toBe('REBIND');
+    expect(s.eos.calls, 'the former identity is removed from the room it held').toEqual([{ op: 'remove', roomId: room, productUserId: PUID(1) }]);
+    expect(await s.identities.openRoomsOf('amy')).toEqual([]);
+    // Amy joins again as her new identity; when the wall moves, the identity her token admitted is the one removed.
+    await s.voice('amy', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
+    s.eos.calls.length = 0;
+    await s.social$('xan', { kind: 'BLOCK', targetId: 'amy' });
+    expect(s.eos.calls.filter((call) => call.op === 'remove').map((call) => call.productUserId).sort()).toEqual([PUID(2), PUID(9)].sort());
+  });
+
+  it('a former identity Epic would not remove stays on the record, is never overwritten by a new token, and is removed on the retry', async () => {
+    const s = await hub(['amy', 'xan']);
+    const room = roomsOf(await s.voice('amy', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }))[0]!.roomId;
+    s.eos.failRemovals(true);
+    await s.voice('amy', 'POST', '/wonderland/voice/identity', { idToken: idToken(PUID(9)) });
+    expect(await s.identities.openRoomsOf('amy'), 'not pretended removed').toEqual([room]);
+    const joined = roomsOf(await s.voice('amy', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }));
+    expect(joined, 'no token for a room the former identity still holds').toEqual([]);
+    s.eos.failRemovals(false);
+    s.eos.calls.length = 0;
+    const again = roomsOf(await s.voice('amy', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }));
+    expect(s.eos.calls[0], 'the former identity is removed first').toEqual({ op: 'remove', roomId: room, productUserId: PUID(1) });
+    expect(again.map((row) => row.roomId)).toEqual([room]);
+    expect(s.eos.calls.filter((call) => call.op === 'token')).toEqual([{ op: 'token', roomId: room, productUserId: PUID(9) }]);
+  });
+
+  it('an issuance is on the record before its token is asked for, so no token Epic issues is missing from it', async () => {
+    const s = await hub(['amy', 'xan']);
+    s.eos.failTokens(true);
+    await expect(s.voice('amy', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' })).rejects.toThrow('epic unavailable');
+    const asked = s.eos.calls.filter((call) => call.op === 'token').map((call) => call.roomId);
+    expect(asked).toHaveLength(1);
+    expect(await s.identities.openRoomsOf('amy'), 'the room Epic was asked about is on the record').toEqual(asked);
   });
 
   it('hiding mid-session takes the hidden player out of the strangers\' room', async () => {
@@ -258,12 +336,15 @@ describe('the wall moves, and the trusted server takes back what it no longer al
     await s.social$('hana', { kind: 'SET_SETTINGS', settings: { visibility: 'HIDDEN_FROM_STRANGERS' } });
     expect(s.eos.calls).toContainEqual({ op: 'remove', roomId: shared, productUserId: PUID(1) });
   });
-  it('a player who has gone without a word is left alone in their last room: the next heartbeat moves everyone live out of it', async () => {
+  it('a player who has gone without a word is left alone in her rooms: the next heartbeat moves everyone live out of them', async () => {
     const s = await hub(['ann', 'ben', 'cal']);
-    const shared = roomsOf(await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }))[0]!.roomId;
-    await s.voice('ben', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
-    await s.voice('cal', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
-    // Ann's client is gone. Ben and Cal keep their heartbeat; while Ann's presence lives, the room stands.
+    const annRooms = roomsOf(await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' })).map((room) => room.roomId);
+    const benRooms = roomsOf(await s.voice('ben', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' })).map((room) => room.roomId);
+    const calRooms = roomsOf(await s.voice('cal', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' })).map((room) => room.roomId);
+    const withBen = annRooms.find((room) => benRooms.includes(room))!;
+    const withCal = annRooms.find((room) => calRooms.includes(room))!;
+    const benCal = benRooms.find((room) => calRooms.includes(room))!;
+    // Ann's client is gone. Ben and Cal keep their heartbeat; while Ann's presence lives, her rooms stand.
     const beat = (k: number): number => NOW + k * WONDERLAND_PRESENCE_HEARTBEAT_SECONDS * 1000;
     for (const k of [1, 2, 3, 4]) {
       for (const id of ['ben', 'cal']) {
@@ -271,20 +352,20 @@ describe('the wall moves, and the trusted server takes back what it no longer al
       }
     }
     expect(s.eos.calls.filter((call) => call.op === 'remove')).toEqual([]);
-    // One second past her time to live, Ben's next heartbeat takes both live players out of the room she is in.
+    // One second past her time to live, Ben's next heartbeat takes both live players out of the rooms they shared with her.
     const gone = NOW + (WONDERLAND_PRESENCE_TTL_SECONDS + 1) * 1000;
     const moved = await s.social$('ben', HEARTBEAT, gone);
-    expect((moved?.body as { voice: unknown }).voice).toEqual({ revoked: 2, revocationFailures: 0 });
-    expect(s.eos.calls.filter((call) => call.op === 'remove').map((call) => [call.roomId, call.productUserId]))
-      .toEqual([[shared, PUID(2)], [shared, PUID(3)]]);
-    expect(await s.identities.openRoomsOf('ben')).toEqual([]);
-    expect(await s.identities.openRoomsOf('cal')).toEqual([]);
-    // Her own issuance is not pretended revoked — nobody took it back — but nobody live shares that room any more.
-    expect(await s.identities.openRoomsOf('ann')).toEqual([shared]);
+    expect((moved?.body as { voice: unknown }).voice, 'Ben is told about his own room').toEqual({ revoked: 1, revocationFailures: 0 });
+    expect(s.eos.calls.filter((call) => call.op === 'remove').map((call) => [call.roomId, call.productUserId]).sort())
+      .toEqual([[withBen, PUID(2)], [withCal, PUID(3)]].sort());
+    expect(await s.identities.openRoomsOf('ben')).toEqual([benCal]);
+    expect(await s.identities.openRoomsOf('cal')).toEqual([benCal]);
+    // Her own issuances are not pretended revoked (nobody took them back), but nobody live shares those rooms any more.
+    expect(await s.identities.openRoomsOf('ann')).toEqual([...annRooms].sort());
     // When she enters again she is reconciled like anyone who enters.
     await s.social$('ann', { kind: 'ENTER_INSTANCE', instanceId: 'public:hub', location: null, activity: 'IDLE', dogId: null }, gone);
     const back = roomsOf(await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }, gone));
-    expect(back.map((room) => room.roomId)).toEqual([shared]);
+    expect(back.map((room) => room.roomId).sort()).toEqual([...annRooms].sort());
   });
 });
 

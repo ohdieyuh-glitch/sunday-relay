@@ -37,6 +37,8 @@ CREATE INDEX voice_identity_history_player ON relay_wonderland.voice_identity_hi
 CREATE TABLE relay_wonderland.voice_issuances(
  player_id text NOT NULL REFERENCES relay_wonderland.players ON DELETE CASCADE,
  room_id text NOT NULL CHECK(room_id ~ '^wl_[0-9a-f]{32}$'),
+ -- The EOS identity the token ADMITS: a removal takes out this identity, whatever the player is bound to by then.
+ product_user_id text NOT NULL CHECK(product_user_id ~ '^[0-9a-f]{32}$'),
  issued_at timestamptz NOT NULL,
  revoked_at timestamptz,
  PRIMARY KEY(player_id, room_id),
