@@ -9,7 +9,7 @@ import { parseAgentExecutionReport } from './report-parser';
 import { createStreamParser, streamIsStructurallyValid } from './stream-parser';
 import { createSessionManager, type SessionAssociation } from './session-manager';
 import { assessProjectSettings } from './config';
-import { classifyClaudeAuth, resolveClaudeExecutable, PROBE_ENV_KEYS } from './capability-probe';
+import { CLAUDE_AUTH_PROVIDER_OVERRIDES, classifyClaudeAuth, resolveClaudeExecutable, PROBE_ENV_KEYS } from './capability-probe';
 import { runClaudeContractVerification } from './contract-verify';
 import type { AgentHandoffPackage } from '../../protocol/contracts';
 import type { ClaudeCodeCapabilityProfile } from './contracts';
@@ -299,21 +299,31 @@ describe('capability probe helpers', () => {
     // nothing on a host that already exports `ANTHROPIC_BASE_URL`. Some do:
     // Claude Code's own cloud container does, and this case failed there while
     // passing everywhere else, which is a test reporting the environment rather
-    // than the code. Each higher-precedence variable is cleared and restored.
-    const previous = {
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-      ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
-      CLAUDE_CODE_USE_BEDROCK: process.env.CLAUDE_CODE_USE_BEDROCK,
-      CLAUDE_CODE_USE_VERTEX: process.env.CLAUDE_CODE_USE_VERTEX,
-    };
-    delete process.env.ANTHROPIC_BASE_URL;
-    delete process.env.CLAUDE_CODE_USE_BEDROCK;
-    delete process.env.CLAUDE_CODE_USE_VERTEX;
+    // than the code. Every override in the probe's own table is cleared and restored.
+    const previous = Object.fromEntries(CLAUDE_AUTH_PROVIDER_OVERRIDES.map(([name]) => [name, process.env[name]]));
+    for (const [name] of CLAUDE_AUTH_PROVIDER_OVERRIDES) delete process.env[name];
     process.env.ANTHROPIC_API_KEY = 'sk-test';
     try {
       const auth = classifyClaudeAuth('t', '/fake/claude');
       expect(auth.sourceClass).toBe('api_key');
       expect(auth.approvedForLiveRun).toBe(false);
+    } finally {
+      for (const [name, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[name]; else process.env[name] = value;
+      }
+    }
+  });
+  it('the first override set decides the path, in the table\'s order, before any login is read', () => {
+    const previous = Object.fromEntries(CLAUDE_AUTH_PROVIDER_OVERRIDES.map(([name]) => [name, process.env[name]]));
+    try {
+      for (const [index, [name, sourceClass]] of CLAUDE_AUTH_PROVIDER_OVERRIDES.entries()) {
+        for (const [other] of CLAUDE_AUTH_PROVIDER_OVERRIDES) delete process.env[other];
+        // This override and every one after it: the earliest still wins.
+        for (const [later] of CLAUDE_AUTH_PROVIDER_OVERRIDES.slice(index)) process.env[later] = '1';
+        expect(classifyClaudeAuth('t', '/fake/claude'), name).toMatchObject({ sourceClass, approvedForLiveRun: false });
+      }
+      expect(CLAUDE_AUTH_PROVIDER_OVERRIDES.map(([name]) => name)).toEqual(
+        ['CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']);
     } finally {
       for (const [name, value] of Object.entries(previous)) {
         if (value === undefined) delete process.env[name]; else process.env[name] = value;
