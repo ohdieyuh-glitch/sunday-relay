@@ -64,10 +64,18 @@ function partyDeparture(party: WonderlandParty, playerId: string): WonderlandSoc
   return mutations;
 }
 
-/** Leaving or being removed from a private server ends presence in its instance. */
-function serverDeparture(state: WonderlandSocialState, server: WonderlandPrivateServer, playerId: string): WonderlandSocialMutation[] {
+/**
+ * Leaving or being removed from a private server ends presence in its instance. The STORED row is cleared, lapsed or
+ * not: a row left behind because its lease had just run out could be refreshed by a heartbeat stamped a moment
+ * earlier but decided later, and the removed member would stand in the server again (review finding, 2026-10-05).
+ */
+function serverDeparture(
+  storedPresence: WonderlandSocialState['presence'],
+  server: WonderlandPrivateServer,
+  playerId: string,
+): WonderlandSocialMutation[] {
   const mutations: WonderlandSocialMutation[] = [{ kind: 'SERVER_MEMBER_REMOVED', serverId: server.serverId, playerId }];
-  if (state.presence[playerId]?.instanceId === `server:${server.serverId}`) mutations.push({ kind: 'PRESENCE_CLEARED', playerId });
+  if (storedPresence[playerId]?.instanceId === `server:${server.serverId}`) mutations.push({ kind: 'PRESENCE_CLEARED', playerId });
   return mutations;
 }
 
@@ -110,7 +118,13 @@ function encountersOnEnter(state: WonderlandSocialState, actorId: string, instan
  * over the other, and the projection makes them invisible and inaudible to
  * each other while they share it.
  */
-function blockCascade(state: WonderlandSocialState, blockerId: string, blockedId: string, at: string): WonderlandSocialMutation[] {
+function blockCascade(
+  state: WonderlandSocialState,
+  storedPresence: WonderlandSocialState['presence'],
+  blockerId: string,
+  blockedId: string,
+  at: string,
+): WonderlandSocialMutation[] {
   const mutations: WonderlandSocialMutation[] = [{ kind: 'BLOCK_ADDED', blockerId, blockedId, at }];
   if (state.friendships.includes(wonderlandFriendKey(blockerId, blockedId))) {
     mutations.push({ kind: 'FRIENDSHIP_REMOVED', a: blockerId, b: blockedId });
@@ -132,8 +146,8 @@ function blockCascade(state: WonderlandSocialState, blockerId: string, blockedId
     mutations.push(...partyDeparture(party, party.leaderId === blockerId ? blockedId : blockerId));
   }
   for (const server of Object.values(state.servers)) {
-    if (server.ownerId === blockerId && server.memberIds.includes(blockedId)) mutations.push(...serverDeparture(state, server, blockedId)); // P4
-    if (server.ownerId === blockedId && server.memberIds.includes(blockerId)) mutations.push(...serverDeparture(state, server, blockerId)); // P5
+    if (server.ownerId === blockerId && server.memberIds.includes(blockedId)) mutations.push(...serverDeparture(storedPresence, server, blockedId)); // P4
+    if (server.ownerId === blockedId && server.memberIds.includes(blockerId)) mutations.push(...serverDeparture(storedPresence, server, blockerId)); // P5
     for (const invite of state.serverInvites) {
       if (invite.serverId !== server.serverId) continue;
       if ((server.ownerId === blockerId && invite.inviteeId === blockedId) || (server.ownerId === blockedId && invite.inviteeId === blockerId)) {
@@ -215,7 +229,7 @@ export function decideWonderlandSocialCommand(
       const bad = other(command.targetId); if (bad !== null) return refuse(bad);
       if (state.blocks.some((block) => block.blockerId === actorId && block.blockedId === command.targetId)) return done([]);
       if (unknown(command.targetId)) return refuse('UNAVAILABLE');
-      return done(blockCascade(state, actorId, command.targetId, at));
+      return done(blockCascade(state, stored.presence, actorId, command.targetId, at));
     }
 
     case 'UNBLOCK': {
@@ -319,7 +333,7 @@ export function decideWonderlandSocialCommand(
         // The owner cannot leave their own server; they would have to close it.
         return refuse(server?.ownerId === actorId ? 'NOT_PERMITTED' : 'NOT_A_MEMBER');
       }
-      return done(serverDeparture(state, server, actorId));
+      return done(serverDeparture(stored.presence, server, actorId));
     }
 
     case 'SERVER_REMOVE_MEMBER': {
@@ -328,7 +342,7 @@ export function decideWonderlandSocialCommand(
       const server = state.servers[command.serverId];
       if (server === undefined || server.ownerId !== actorId) return refuse('NOT_PERMITTED');
       if (!server.memberIds.includes(command.memberId)) return done([]);
-      return done(serverDeparture(state, server, command.memberId));
+      return done(serverDeparture(stored.presence, server, command.memberId));
     }
 
     case 'ENTER_INSTANCE': {
@@ -354,6 +368,13 @@ export function decideWonderlandSocialCommand(
       if (location === 'INVALID' || !isWonderlandActivity(command.activity)) return refuse('INVALID');
       const previous = state.presence[actorId];
       if (previous === undefined) return refuse('NOT_IN_INSTANCE');
+      // A heartbeat keeps a player where they stand only if they may still stand there: a private server's instance
+      // is its members', exactly as ENTER_INSTANCE requires.
+      const serverId = wonderlandServerIdOfInstance(previous.instanceId);
+      if (serverId !== null) {
+        const server = state.servers[serverId];
+        if (server === undefined || !wonderlandServerMembers(server).includes(actorId)) return refuse('NOT_IN_INSTANCE');
+      }
       return done([{ kind: 'PRESENCE_SET', presence: { ...previous, location, activity: command.activity, updatedAt: at } }]);
     }
 
