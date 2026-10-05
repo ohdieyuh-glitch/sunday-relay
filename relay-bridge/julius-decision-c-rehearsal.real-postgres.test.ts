@@ -245,8 +245,8 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     const fromBundle = selectJuliusCarry({ targetRunId: 'run:not-yet', sources: [decision.verdict.source], claims: [] });
     expect(fromBundle).toEqual(fromStore);
     expect(fromBundle.counts.VERIFIED_REPAIR_FINDING).toBeGreaterThan(0);
-    const carriedIds = fromBundle.selected.map((item) => item.entryId);
-    expect(carriedIds).toContain(juliusCarryEntryId(withoutRun.runId, `finding:${resolved[0]!.findingId}`));
+    const previewIds = fromBundle.selected.map((item) => item.entryId);
+    expect(previewIds).toContain(juliusCarryEntryId('run:not-yet', withoutRun.runId, `finding:${resolved[0]!.findingId}`));
 
     /* ---------------------------- the WITH arm, a real run on a database that never held its pair */
     const withRun = await runMission({
@@ -256,6 +256,10 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     });
     expect(withRun.outcome, `the WITH arm completes (halt: ${withRun.outcome.haltCause ?? 'none'})`).toMatchObject({ state: 'COMPLETED', stalled: false });
     expect((await withDb.query('SELECT 1 FROM relay_wonderland.julius_runs WHERE run_id = $1', [withoutRun.runId])).rowCount).toBe(0);
+    // Each copy's id names the run that holds it: the same selection, made for the WITH run.
+    const carriedIds = selectJuliusCarry({ targetRunId: withRun.runId, sources: [decision.verdict.source], claims: [] })
+      .selected.map((item) => item.entryId);
+    expect(carriedIds).toHaveLength(previewIds.length);
 
     // POINT 2 on the WITH ledger, and POINT 3.
     const withManifest = await withDb.query<{ payload: { facts: Record<string, unknown> } }>(
@@ -282,7 +286,7 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     expect(compiled.length).toBeGreaterThan(0);
     const received = String(compiled.at(-1)!.payload.facts.carriedReceivedIds ?? '').split(' ').filter((id) => id !== '');
     expect(Number(compiled.at(-1)!.payload.facts.carriedReceived)).toBeGreaterThan(0);
-    expect(received).toContain(juliusCarryEntryId(withoutRun.runId, `finding:${resolved[0]!.findingId}`));
+    expect(received).toContain(juliusCarryEntryId(withRun.runId, withoutRun.runId, `finding:${resolved[0]!.findingId}`));
   }, 120_000);
 
   /**
@@ -339,8 +343,7 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     const fromBundle = selectJuliusCarry({ targetRunId: 'run:not-yet', sources: [decision.verdict.source], claims: [] });
     expect(fromBundle).toEqual(selectJuliusCarry({ targetRunId: 'run:not-yet', sources: [source!], claims: [] }));
     expect(fromBundle.counts.VERIFIED_REPAIR_FINDING).toBe(1);
-    const carried = juliusCarryEntryId(withoutRun.runId, `finding:${promoted!.findingId}`);
-    expect(fromBundle.selected.map((item) => item.entryId)).toContain(carried);
+    expect(fromBundle.selected.map((item) => item.entryId)).toContain(juliusCarryEntryId('run:not-yet', withoutRun.runId, `finding:${promoted!.findingId}`));
 
     // POINTS 3 and 4: the WITH arm, on a database that never held its pair, restores it and its planner receives it.
     const withRun = await runMission({
@@ -349,6 +352,8 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
       reviews: [REVIEW_ACCEPT],
     });
     expect(withRun.outcome).toMatchObject({ state: 'COMPLETED', stalled: false });
+    // The copy's id names the run that holds it.
+    const carried = juliusCarryEntryId(withRun.runId, withoutRun.runId, `finding:${promoted!.findingId}`);
     const manifest = await withDb.query<{ payload: { facts: Record<string, unknown> } }>(
       "SELECT payload FROM relay_wonderland.events WHERE stream_id = $1 AND event_type = 'julius.knowledge.carried'", [withRun.runId]);
     expect(manifest.rows[0]!.payload.facts).toMatchObject({ arm: 'WITH', origin: 'ARCHIVE', sourceRunId: withoutRun.runId, sourceExportSha256: sha256(exportText) });

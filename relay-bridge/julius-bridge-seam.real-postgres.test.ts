@@ -350,7 +350,7 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
     const inherited = await pool.query<{ entry_id: string; safe_content: string; worker_id: string; task_id: string | null }>(
       'SELECT entry_id, safe_content, worker_id, task_id FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE $2',
       [runB, 'carried:%']);
-    expect(inherited.rows.map((row) => row.entry_id), 'the resolved finding, and only it').toEqual([`carried:${runA}:finding:f-resolved-${id}`]);
+    expect(inherited.rows.map((row) => row.entry_id), 'the resolved finding, and only it').toEqual([`carried:${runB}:${runA}:finding:f-resolved-${id}`]);
     const [row] = inherited.rows;
     // A PRIOR lesson, labelled as another mission's, with its whole provenance.
     expect(row!.safe_content).toMatch(/^PRIOR VERIFIED REPAIR FINDING \(an earlier mission of this project, not this one\)\./u);

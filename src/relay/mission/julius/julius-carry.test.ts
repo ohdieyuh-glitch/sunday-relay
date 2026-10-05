@@ -81,7 +81,7 @@ describe('what carries: verified reviewer findings', () => {
     expect(selection.selected).toHaveLength(1);
     const item = selection.selected[0]!;
     expect(item.carryClass).toBe('VERIFIED_REPAIR_FINDING');
-    expect(item.entryId).toBe(juliusCarryEntryId(SOURCE, 'finding:f-1'));
+    expect(item.entryId).toBe(juliusCarryEntryId(TARGET, SOURCE, 'finding:f-1'));
     expect(item.storedKind).toBe('FINDING');
     expect(selection.counts).toEqual({ VERIFIED_REPAIR_FINDING: 1, VERIFIED_FINDING: 0, ACCEPTED_DECISION: 0 });
   });
@@ -116,6 +116,19 @@ describe('what carries: verified reviewer findings', () => {
     expect(selection.selected[0]!.carryClass).toBe('VERIFIED_FINDING');
     expect(selection.selected[0]!.text).toMatch(/^PRIOR VERIFIED FINDING /u);
     expect(selection.counts.VERIFIED_REPAIR_FINDING).toBe(0);
+  });
+
+  it('only a BLOCKING finding is a repair finding: a warning a repair round happened to address is verified, not repaired', () => {
+    // A repair marks every OPEN finding of its unit ADDRESSED, the non-blocking ones too, and a re-review may resolve
+    // any of them. The pair rule is a blocking finding a repair answered; a warning nobody had to repair is not one.
+    const warning = finding({ findingId: 'f-warn', blocking: false, severity: 'MEDIUM', category: 'review_warning' });
+    const selection = selectJuliusCarry({ targetRunId: TARGET, sources: [source([warning], repairedLife('f-warn'))], claims: [] });
+    expect(selection.selected.map((item) => item.carryClass)).toEqual(['VERIFIED_FINDING']);
+    expect(juliusCarryPairGate('WITH', selection)).toEqual({ valid: false, reasonCode: 'CARRY_DESIGN_ONLY' });
+    // A warning Julius PROMOTED is recorded blocking (option B), and is a repair finding like any other.
+    const promoted = finding({ findingId: 'f-promoted', blocking: true, severity: 'HIGH', category: 'review_warning' });
+    const again = selectJuliusCarry({ targetRunId: TARGET, sources: [source([promoted], repairedLife('f-promoted'))], claims: [] });
+    expect(again.selected.map((item) => item.carryClass)).toEqual(['VERIFIED_REPAIR_FINDING']);
   });
 
   it('bounds a long reviewer claim and says it did', () => {
@@ -238,7 +251,7 @@ describe('what never carries: the defect class of the first carry', () => {
   it('a copy is never carried again: one source, one origin', () => {
     const selection = selectJuliusCarry({
       targetRunId: TARGET, sources: [],
-      claims: [candidate(juliusCarryEntryId('run:older', 'finding:f-0'), 'FINDING', null)],
+      claims: [candidate(juliusCarryEntryId(SOURCE, 'run:older', 'finding:f-0'), 'FINDING', null)],
     });
     expect(selection.excluded.map((item) => item.reasonCode)).toEqual(['CARRY_OF_CARRY']);
   });
@@ -257,7 +270,7 @@ describe('what carries: adopted, in-force, run-wide decisions', () => {
     expect(item.text).toMatch(/^PRIOR ACCEPTED ARCHITECTURE DECISION \(an earlier mission of this project, adopted there; not this mission's terms\)\./u);
     expect(item.claim.trust).toBe('APPROVED');
     expect(item.claim.assertedBy).toBe('founder');
-    expect(item.claim.entryId).toBe(juliusCarryEntryId(SOURCE, entryId));
+    expect(item.claim.entryId).toBe(juliusCarryEntryId(TARGET, SOURCE, entryId));
     expect(item.scope.sourceTaskId).toBeNull();
   });
 });
@@ -330,8 +343,8 @@ describe('the pair gate', () => {
 
 describe('point 4: what the planner received', () => {
   it('reads the carried ids off the packet, and names what was carried but not given', () => {
-    const a = juliusCarryEntryId(SOURCE, 'finding:f-1');
-    const b = juliusCarryEntryId(SOURCE, 'finding:f-2');
+    const a = juliusCarryEntryId(TARGET, SOURCE, 'finding:f-1');
+    const b = juliusCarryEntryId(TARGET, SOURCE, 'finding:f-2');
     const packet = ['run:with-1:objective', a, 'brain:architecture:run:with-1:r1'];
     expect(juliusCarriedIdsIn(packet)).toEqual([a]);
     expect(juliusCarryReceipt({ carriedEntryIds: [b, a], packetSourceEntryIds: packet })).toEqual({ received: [a], missing: [b] });
@@ -350,7 +363,7 @@ describe('the manifest as event facts', () => {
     expect(facts).toMatchObject({
       version: JULIUS_CARRY_VERSION, arm: 'WITH', selected: 1, verifiedRepairFindings: 1, verifiedFindings: 0,
       acceptedDecisions: 0, excluded: 2, excludedByCode: 'FINDING_UNRESOLVED=1 KIND_NOT_CARRYABLE=1', written: 1,
-      selectedEntryIds: juliusCarryEntryId(SOURCE, 'finding:f-1'), selectedEntryIdsTruncated: false,
+      selectedEntryIds: juliusCarryEntryId(TARGET, SOURCE, 'finding:f-1'), selectedEntryIdsTruncated: false,
     });
     expect(String(facts.excludedRefs)).toContain(`KIND_NOT_CARRYABLE:${SOURCE}:brain:handoff:build`);
     for (const value of Object.values(facts)) expect(value === null || ['string', 'number', 'boolean'].includes(typeof value)).toBe(true);

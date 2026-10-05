@@ -27,9 +27,13 @@ import { JuliusTimelinePostgresRepository } from './julius-timeline-postgres';
  * every exclusion by code. That event is point 2 of the four-point proof and the
  * entries are point 3; `context.compiled` on the planner's task is point 4.
  *
- * ONCE. The manifest's event id is the run's. A replayed bootstrap finds it and
- * writes nothing, so a replay can neither inherit twice nor inherit something
- * the first manifest does not list.
+ * ONCE, AND WHOLE. The manifest's event id is the run's, and it is written
+ * last, only when every selected copy and its standing are in the store. A
+ * replayed bootstrap that finds it writes nothing, so a replay can neither
+ * inherit twice nor inherit something the manifest does not list. A restore
+ * that failed partway left no manifest, so its replay finishes the carry: each
+ * copy is written if it is not there yet (at the run's next revision, never
+ * one an earlier attempt took), and each standing is recorded if it is not.
  *
  * NOTE FOR ROW 13 (i). The manifest append goes through
  * `JuliusEventPostgresRepository.append`, i.e. the serializable event path the
@@ -157,8 +161,24 @@ export class JuliusCarryPostgresRepository {
   }
 
   /**
-   * Points 2 and 3: write the selected copies and the manifest, once.
-   * Returns how many copies THIS call wrote; a replay returns 0 and writes nothing.
+   * How many of `entryIds` this run holds as copies WITH their standing: a copy whose standing was never
+   * recorded is not knowledge the run can be said to hold.
+   */
+  async heldCopies(runId: string, entryIds: readonly string[]): Promise<number> {
+    if (entryIds.length === 0) return 0;
+    const result = await this.pool.query<{ held: number }>(
+      `SELECT count(*)::int AS held FROM relay_wonderland.julius_brain_entries b
+        WHERE b.run_id=$1 AND b.entry_id = ANY($2::text[])
+          AND EXISTS (SELECT 1 FROM relay_wonderland.julius_claim_standings s WHERE s.run_id=$1 AND s.entry_id=b.entry_id)`,
+      [runId, entryIds],
+    );
+    return result.rows[0]?.held ?? 0;
+  }
+
+  /**
+   * Points 2 and 3: write the selected copies, their standings and the manifest, once.
+   * Returns how many selected copies the run holds with their standing. The manifest records the same number,
+   * so a carry that is less than its selection says so; a replay writes nothing and returns the same count.
    * `origin` names a paired arm's verified bundle when the sources were read
    * from one rather than from this database; absent, the manifest says STORE.
    */
@@ -171,28 +191,32 @@ export class JuliusCarryPostgresRepository {
     readonly occurredAt: string;
     readonly origin?: JuliusCarryArchiveOrigin | null;
   }): Promise<number> {
-    if (await this.manifestRecorded(input.runId)) return 0;
-    let written = 0;
-    let revision = input.firstRevision;
+    const entryIds = input.selection.selected.map((item) => item.entryId);
+    if (await this.manifestRecorded(input.runId)) return this.heldCopies(input.runId, entryIds);
     for (const item of input.selection.selected) {
-      const inserted = await this.pool.query(
+      // The id names this run, so a row already holding it is this carry's own, written by an attempt that did not
+      // finish. Any OTHER unique violation (a revision already taken) is an error, never a silent skip.
+      await this.pool.query(
         `INSERT INTO relay_wonderland.julius_brain_entries
            (entry_id,run_id,project_id,task_id,worker_id,entry_kind,safe_content,evidence_ids,revision,created_at)
-         VALUES($1,$2,$3,NULL,$4,$5,$6,$7::jsonb,$8,$9) ON CONFLICT DO NOTHING`,
+         SELECT $1,$2,$3,NULL,$4,$5,$6,$7::jsonb,
+                GREATEST($8::bigint, COALESCE((SELECT max(revision) FROM relay_wonderland.julius_brain_entries WHERE run_id=$2), 0) + 1),
+                $9
+         ON CONFLICT (entry_id) DO NOTHING`,
         [
           item.entryId, input.runId, input.projectId, item.claim.assertedBy, item.storedKind, item.text,
-          JSON.stringify(item.evidenceIds), revision, input.occurredAt,
+          JSON.stringify(item.evidenceIds), input.firstRevision, input.occurredAt,
         ],
       );
-      if ((inserted.rowCount ?? 0) === 0) continue;
-      revision += 1;
-      written += 1;
+      // Recorded whether or not this call wrote the copy: the same standing is written once (`recordClaimStanding`
+      // compares it with the latest), so a replay records exactly the standings an interrupted attempt did not.
       await this.claims.recordClaimStanding({
         runId: input.runId, projectId: input.projectId, claim: item.claim,
         reason: `CARRIED_FROM:${item.scope.sourceRunId}:${item.scope.sourceRef}`,
         occurredAt: input.occurredAt,
       });
     }
+    const written = await this.heldCopies(input.runId, entryIds);
     await this.events.append({
       eventId: juliusCarryManifestEventId(input.runId),
       runId: input.runId,
