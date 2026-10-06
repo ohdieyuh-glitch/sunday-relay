@@ -135,12 +135,18 @@ case "${1:-}" in
     [[ "$without" =~ $RUN_ID_SHAPE ]] || die "julius_store_run_invalid: '$without'"
     [[ "$registration" =~ $DIGEST_SHAPE ]] || die 'julius_store_registration_invalid'
     check_versions
+    q() { tool psql args_query "$1" | tail -n 1 | tr -d '\r'; }
+    # 0. THE TARGET IS EMPTY, by this script's own rule: arm WITH restores into a FRESH store. A target that already
+    #    holds the schema is refused by name, with the runs it holds, before pg_restore could touch it.
+    if [ "$(q "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'relay_wonderland'")" != 0 ]; then
+      held=$(q "SELECT coalesce(string_agg(run_id, ' ' ORDER BY run_id), '') FROM relay_wonderland.julius_runs" 2>/dev/null || true)
+      die "julius_store_target_not_empty: the target already holds relay_wonderland${held:+ (runs: $held)}"
+    fi
     digest=$(sha256sum < "$dump" | cut -d' ' -f1)
     echo "LEARNING_STORE_RESTORING dump_sha256=$digest"
     # 1. RESTORED in one transaction, stopping at the first error: whole, or nothing.
     tool pg_restore args_restore < "$dump"
     # 2. THE RESTORED STORE IS ARM WITHOUT, AND ONLY ARM WITHOUT. The values were shape-checked above.
-    q() { tool psql args_query "$1" | tail -n 1 | tr -d '\r'; }
     [ "$(q 'SELECT count(*) FROM relay_wonderland.julius_runs')" = 1 ] \
       || die 'learning_store_not_one_run: the WITHOUT store must hold its own run alone'
     [ "$(q "SELECT state FROM relay_wonderland.julius_runs WHERE run_id = '$without'")" = COMPLETED ] \
