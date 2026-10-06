@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { JULIUS_RUNTIME_VERSION, juliusLearningMetrics, scriptedAdapter, type ScriptedOutcome } from '../src/relay/mission/julius';
 import type { JuliusBootstrapRequest } from '../src/relay/integration/julius/julius-port';
 import { juliusArchitectureEntryId } from '../src/relay/mission/julius/julius-architecture-state';
+import { parseJuliusCarrySources, parseJuliusDumpTable, verifyJuliusCarryChain } from '../src/relay/mission/julius/julius-carry-verify';
 import { juliusCarriedCopyId } from '../src/relay/mission/julius/julius-claim-ledger';
 import { JuliusContractPostgresRepository } from '../src/relay/persistence/julius-contract-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
@@ -19,7 +20,7 @@ import {
   CODER_WORKER, architectWorker, assembleLiveJuliusRuntime, createContextAndClaimHandoffs, driveJuliusRunToTerminal, reviewerWorker,
 } from './julius/live-composition';
 import { compileBootstrapRequest, parseLiveMissionContract } from './julius/mission-contract';
-import { createPostgresMissionKnowledgeStore } from './julius/mission-knowledge';
+import { JULIUS_CARRIED_KNOWLEDGE_LIMIT, createPostgresMissionKnowledgeStore } from './julius/mission-knowledge';
 import { createPostgresMissionSeedStore } from './julius/mission-seed';
 import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 
@@ -331,6 +332,26 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     const withRows = bundle.filter((row) => row.run_id === withRun);
     expect(withRows.find((row) => row.event_type === 'julius.knowledge.carried')?.carried_entries).toContain(findingCopy);
     expect(withRows.find((row) => row.event_type === 'julius.knowledge.consumed')?.admitted_entry_ids).toContain(findingCopy);
+
+    /* C-7: THE CHAIN, PROVEN AS AN OFF-HOST REVIEWER PROVES IT: the bundle's own queries, then the pure verifier. */
+    const exportSql = readFileSync(join(__dirname, '..', '.github', 'julius-carry-sources.sql'), 'utf8');
+    expect(exportSql.split(":'run'").length - 1, 'one psql variable: the run the manifest names').toBe(1);
+    const exported = (await pool.query<{ json_build_object: unknown }>(exportSql.replace(":'run'", '$1'), [withoutRun])).rows[0]?.json_build_object;
+    const sources = parseJuliusCarrySources(JSON.stringify(exported));
+    if (!sources.ok) throw new Error(sources.problem);
+    const dumped = async (file: string) => {
+      const parsed = parseJuliusDumpTable(await psqlTable(dumpQuery(file)));
+      if (!parsed.ok) throw new Error(`${file}: ${parsed.problem}`);
+      return parsed.value;
+    };
+    const chain = verifyJuliusCarryChain({
+      sources: sources.value, withRunId: withRun,
+      knowledge: await dumped('knowledge-carry.tsv'), copies: await dumped('carry-copies.tsv'), tasks: await dumped('tasks.tsv'),
+      limit: JULIUS_CARRIED_KNOWLEDGE_LIMIT, sha256: (text) => createHash('sha256').update(text, 'utf8').digest('hex'),
+    });
+    expect(chain.checks.filter((item) => !item.ok), 'every point of the chain holds').toEqual([]);
+    expect(chain).toMatchObject({ verdict: 'PASS', withoutRunId: withoutRun, withRunId: withRun });
+    expect(chain.proven.map((item) => item.entryId), 'the one verified repair finding, proven at all four points').toEqual([findingCopy]);
   });
 
   it('CASE 2 — an arm WITH whose arm WITHOUT left a design but no verified repair finding is REFUSED before READY, with the reason on the record', async () => {

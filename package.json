@@ -36,6 +36,8 @@
     "julius:failure-recovery-drill": "npm run julius:failure-recovery-drill:build --silent && node dist-relay-bridge/julius-failure-recovery-drill.cjs",
     "julius:repair-loop-drill:build": "esbuild scripts/julius-repair-loop-drill-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-repair-loop-drill.cjs --external:pg --log-level=warning",
     "julius:repair-loop-drill": "npm run julius:repair-loop-drill:build --silent && node dist-relay-bridge/julius-repair-loop-drill.cjs",
+    "julius:carry-verify:build": "esbuild scripts/julius-carry-verify-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-carry-verify.cjs --external:pg --log-level=warning",
+    "julius:carry-verify": "npm run julius:carry-verify:build --silent && node dist-relay-bridge/julius-carry-verify.cjs",
     "relay:julius:preflight": "npm run relay:julius:preflight:build --silent && node dist-relay-bridge/julius-live-preflight.cjs",
     "julius:review-currency": "node scripts/julius-review-currency.mjs",
     "julius:main-provenance": "node scripts/julius-main-provenance.mjs",
