@@ -29,7 +29,7 @@ SELECT json_build_object(
   'missionId', r.mission_id,
   'state', r.state,
   'tasks', COALESCE((
-    SELECT json_agg(json_build_object('taskId', t.task_id, 'taskType', t.task_type, 'role', t.role, 'state', t.state) ORDER BY t.ordinal, t.task_id)
+    SELECT json_agg(json_build_object('taskId', t.task_id, 'runId', t.run_id, 'taskType', t.task_type, 'role', t.role, 'state', t.state) ORDER BY t.ordinal, t.task_id)
     FROM relay_wonderland.julius_tasks t
     WHERE t.run_id = r.run_id
   ), '[]'::json),
