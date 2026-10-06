@@ -1,10 +1,12 @@
+import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { scriptedAdapter, type ScriptedOutcome } from '../src/relay/mission/julius';
+import { JULIUS_RUNTIME_VERSION, juliusLearningMetrics, scriptedAdapter, type ScriptedOutcome } from '../src/relay/mission/julius';
 import type { JuliusBootstrapRequest } from '../src/relay/integration/julius/julius-port';
 import { juliusArchitectureEntryId } from '../src/relay/mission/julius/julius-architecture-state';
 import { juliusCarriedCopyId } from '../src/relay/mission/julius/julius-claim-ledger';
@@ -54,6 +56,10 @@ const enabled = databaseUrl !== null;
 const suite = enabled ? describe : describe.todo;
 const CARD = 'card:carry-planner:1';
 const nonce = () => randomBytes(4).toString('hex');
+const PY_ROOT = join(__dirname, '..', 'python');
+/** Found as `scripts/julius-brain-intel-python.test.ts` finds it: Windows' `python3` is a store alias, so the version check decides. */
+const PYTHON = ['python3', 'python'].find((candidate) =>
+  spawnSync(candidate, ['-c', 'import sys; assert sys.version_info >= (3, 10)'], { encoding: 'utf8' }).status === 0);
 
 const SENTINEL = 'CARRY-PLANNER-SENTINEL the plan deploys before the migration runs';
 const PLAN_EVIDENCE = [{ type: 'ARTIFACT', status: 'PASSED', safeSummary: 'Plan written.' }];
@@ -158,8 +164,42 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     return line.slice('dump "'.length, line.length - `" ${file}`.length);
   };
 
+  /** A dump table as `psql -A -F '\t'` writes it: the server's own text for every cell, NULL as empty, then the footer. */
+  const psqlTable = async (sql: string): Promise<string> => {
+    const result = await pool.query({ text: sql, rowMode: 'array', types: { getTypeParser: () => (value: string) => value } });
+    const rows = result.rows as (string | null)[][];
+    return `${[
+      result.fields.map((field) => field.name).join('\t'),
+      ...rows.map((row) => row.map((cell) => cell ?? '').join('\t')),
+      `(${String(rows.length)} row${rows.length === 1 ? '' : 's'})`,
+    ].join('\n')}\n`;
+  };
+
+  /**
+   * THE METRIC IDENTITY (C-8; SECOND's K8 / R-M). The TS policy compares `repairs` as
+   * `recordJuliusLearningOutcome` measures it, from the run's trajectory. The registration's primary metric is
+   * Python's `mission.repair_rounds`, from the bundle's tasks read for the bundle's own run. Both are read here
+   * from the SAME store: the trajectory through the runtime's reader, the bundle through the dump's own SQL and
+   * the analyzer's own CLI. Neither side is re-implemented, and no Python is a failure, never a skip.
+   */
+  const repairsBothWays = async (runId: string, projectId: string) => {
+    const ts = juliusLearningMetrics(await createJuliusPostgresRuntimeStore(pool).trajectoryForRun(runId, projectId), JULIUS_RUNTIME_VERSION).repairs;
+    expect(PYTHON, 'python3 or python >= 3.10 must be on PATH: the identity is checked, never skipped').toBeDefined();
+    const dir = mkdtempSync(join(tmpdir(), 'julius-c8-'));
+    try {
+      for (const file of ['runs.tsv', 'tasks.tsv']) writeFileSync(join(dir, file), await psqlTable(dumpQuery(file)));
+      writeFileSync(join(dir, 'bundle-manifest.txt'), `julius_run_id=${runId}\n`);
+      const analyzed = spawnSync(PYTHON!, ['-m', 'julius_brain_intel', 'analyze-bundle', dir], { cwd: PY_ROOT, encoding: 'utf8', timeout: 120_000 });
+      expect(analyzed.status, analyzed.stderr).toBe(0);
+      const report = JSON.parse(analyzed.stdout) as { readonly mission: { readonly repairRounds: unknown } };
+      return { ts, python: report.mission.repairRounds };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
   it('CASE 1 — arm WITHOUT’s resolved finding reaches arm WITH’s planner, structured, its design does not, and nothing reaches another worker', async () => {
-    const { digest, bootstrap } = pair();
+    const { digest, base, bootstrap } = pair();
 
     /* ---------------------------------------------------------------- arm WITHOUT */
     const withoutArm = await bootstrap({
@@ -188,6 +228,11 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     const findingId = findings.rows[0]!.finding_id;
     const moves = (await factsOf(withoutRun, 'finding.transitioned')).filter((row) => row.facts.findingId === findingId).map((row) => row.facts.move);
     expect(moves, 'a repair addressed it and the independent re-review resolved it').toEqual(['REPAIR_SUCCEEDED', 'REVIEWER_RESOLVED']);
+    // C-8: the repair was the PLAN's, and it counts in both measures of the arm.
+    const repairTasks = await pool.query<{ task_type: string }>(
+      `SELECT task_type FROM relay_wonderland.julius_tasks WHERE run_id = $1 AND task_type LIKE 'repair:%'`, [withoutRun]);
+    expect(repairTasks.rows.map((row) => row.task_type), 'the one repair is a plan repair').toEqual(['repair:plan']);
+    expect(await repairsBothWays(withoutRun, base.projectId), 'TS repairs == Python repair_rounds').toEqual({ ts: 1, python: { value: 1 } });
     const written = await pool.query<{ entry_id: string; entry_kind: string; task_id: string | null }>(
       'SELECT entry_id, entry_kind, task_id FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 ORDER BY revision', [withoutRun]);
     const writtenIds = written.rows.map((row) => row.entry_id);
@@ -240,6 +285,8 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     /* (4) THE PLANNER RECEIVED THEM: arm WITH's drive, then its plan's packet. */
     const withOutcome = await withArm.drive();
     expect(withOutcome.state, String(withOutcome.haltCause)).toBe('COMPLETED');
+    // C-8 on arm WITH, whose store also holds arm WITHOUT's run: each measure reads its own run, so a sum would show here.
+    expect(await repairsBothWays(withRun, base.projectId), 'arm WITH repaired nothing, by both measures').toEqual({ ts: 0, python: { value: 0 } });
     const snapshots = await snapshotsOf(withRun);
     const plans = snapshots.filter((snapshot) => snapshot.task_id === `${withRun}:plan`);
     expect(plans.length, 'the plan was compiled').toBeGreaterThan(0);
