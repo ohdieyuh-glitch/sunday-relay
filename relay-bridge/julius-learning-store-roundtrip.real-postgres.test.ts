@@ -465,7 +465,9 @@ suite('a learning pair across two databases: dumped and restored as Option D doe
     expect(existsSync(dumpFile), 'the main case wrote the dump this case restores').toBe(true);
     const result = store(['restore', dumpFile, `run:${'0'.repeat(24)}`, digest], occupied.name);
     expect(result.status).not.toBe(0);
-    expect(result.out, 'refused by pg_restore at the schema it would have created, not for anything else').toContain('schema "relay_wonderland" already exists');
+    // Refused by the script's OWN rule, naming what the target holds, before pg_restore ever ran (SECOND's 7a).
+    expect(result.out).toContain(`julius_store_target_not_empty: the target already holds relay_wonderland (runs: ${other.runId})`);
+    expect(result.out, 'pg_restore never ran against it').not.toContain('JULIUS_STORE_COMMAND host pg_restore --no-owner');
     expect(result.out).not.toContain('LEARNING_STORE_RESTORED');
     expect(await runsIn(), 'one transaction: the target is exactly as it was').toEqual([other.runId]);
   }, 300_000);
