@@ -111,11 +111,12 @@ function holdable(inner: WonderlandVoiceIdentityStore) {
   let hold: { at: 'productUserIdsOf' | 'openIssuancesOf'; gate: ReturnType<typeof gate> } | null = null;
   const calls: string[] = [];
   const wait = async (at: 'productUserIdsOf' | 'openIssuancesOf'): Promise<void> => {
-    if (hold?.at !== at) return;
-    const { gate: g } = hold;
-    hold = null;
-    g.reach();
-    await g.open;
+    if (hold?.at === at) {
+      const { gate: g } = hold;
+      hold = null;
+      g.reach();
+      await g.open;
+    }
   };
   const store: WonderlandVoiceIdentityStore = {
     bind: (input) => inner.bind(input),
