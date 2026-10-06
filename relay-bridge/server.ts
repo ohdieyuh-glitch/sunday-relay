@@ -83,7 +83,7 @@ import { handleWonderlandSocialRoute, isWonderlandSocialRoute } from './wonderla
 import {
   handleWonderlandVoiceRoute,
   isWonderlandVoiceRoute,
-  reconcileWonderlandVoice,
+  reconcileWonderlandVoiceAfterCommand,
   wonderlandVoiceAffected,
   type WonderlandVoiceRoutePorts,
 } from './wonderland-voice-routes';
@@ -774,7 +774,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             // memberships the wall no longer allows (a block, a hide, a departure).
             ...(voiceLive ? {
               afterCommand: async ({ actorId, command, before, after, at }) =>
-                reconcileWonderlandVoice(voicePorts, wonderlandVoiceAffected(before, after, actorId, command), at),
+                reconcileWonderlandVoiceAfterCommand(voicePorts, actorId, wonderlandVoiceAffected(before, after, actorId, command), at),
             } : {}),
           });
           if (socialResult !== null) send(res, socialResult.status, socialResult.body, cors);

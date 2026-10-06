@@ -2,7 +2,7 @@ import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import { WONDERLAND_PRESENCE_HEARTBEAT_SECONDS, WONDERLAND_PRESENCE_TTL_SECONDS, createMemoryWonderlandSocialStore } from '../src/relay/mission/wonderland-social';
-import { createMemoryWonderlandVoiceIdentityStore } from '../src/relay/mission/wonderland-voice';
+import { createMemoryWonderlandVoiceIdentityStore, type WonderlandVoiceIdentityStore } from '../src/relay/mission/wonderland-voice';
 import { createBrowserSessionStore } from './browser-session/grants';
 import {
   WONDERLAND_EOS_ENV,
@@ -18,6 +18,8 @@ import { handleWonderlandSocialRoute } from './wonderland-social-routes';
 import {
   handleWonderlandVoiceRoute,
   reconcileWonderlandVoice,
+  reconcileWonderlandVoiceAfterCommand,
+  settleWonderlandVoice,
   wonderlandVoiceAffected,
   type WonderlandVoiceRoutePorts,
 } from './wonderland-voice-routes';
@@ -54,24 +56,84 @@ function idToken(puid: string, over: Record<string, unknown> = {}, header: Recor
 }
 const PUID = (n: number): string => String(n).repeat(32).slice(0, 32).replace(/[^0-9a-f]/gu, 'a');
 
+/** A gate held open until released, and a promise for the moment it is reached. */
+function gate() {
+  let release!: () => void;
+  let reach!: () => void;
+  const open = new Promise<void>((resolve) => { release = resolve; });
+  const reached = new Promise<void>((resolve) => { reach = resolve; });
+  return { open, reached, release, reach };
+}
+
 function fakeEos() {
   const calls: Array<{ op: 'token' | 'remove'; roomId: string; productUserId: string }> = [];
+  /** Who each room admits now: a token admits its identity at once (its client connects), and a removal takes it out. */
+  const members = new Map<string, Set<string>>();
+  const held: Array<{ match: (roomId: string, productUserId: string) => boolean; gate: ReturnType<typeof gate> }> = [];
   let failRemovals = false;
   let failTokens = false;
   return {
     calls,
+    members,
     failRemovals: (value: boolean) => { failRemovals = value; },
     failTokens: (value: boolean) => { failTokens = value; },
+    /** Epic makes the next matching removal, and its answer comes back only on release. */
+    holdRemoval(match: (roomId: string, productUserId: string) => boolean) {
+      const g = gate();
+      held.push({ match, gate: g });
+      return { reached: g.reached, release: g.release };
+    },
     port: {
       async roomToken({ roomId, productUserId }: { roomId: string; productUserId: string }) {
         calls.push({ op: 'token', roomId, productUserId });
         if (failTokens) throw new Error('epic unavailable');
+        if (!members.has(roomId)) members.set(roomId, new Set());
+        members.get(roomId)!.add(productUserId);
         return { token: `token:${roomId}:${productUserId}`, clientBaseUrl: 'https://rtc.example' };
       },
       async removeParticipant({ roomId, productUserId }: { roomId: string; productUserId: string }) {
         calls.push({ op: 'remove', roomId, productUserId });
         if (failRemovals) throw new Error('epic unavailable');
+        members.get(roomId)?.delete(productUserId);
+        const at = held.findIndex((row) => row.match(roomId, productUserId));
+        if (at >= 0) {
+          const [row] = held.splice(at, 1);
+          row!.gate.reach();
+          await row!.gate.open;
+        }
       },
+    },
+  };
+}
+
+/** The identity store, with one read held open on request: to place another step exactly inside a join. */
+function holdable(inner: WonderlandVoiceIdentityStore) {
+  let hold: { at: 'productUserIdsOf' | 'openIssuancesOf'; gate: ReturnType<typeof gate> } | null = null;
+  const calls: string[] = [];
+  const wait = async (at: 'productUserIdsOf' | 'openIssuancesOf'): Promise<void> => {
+    if (hold?.at !== at) return;
+    const { gate: g } = hold;
+    hold = null;
+    g.reach();
+    await g.open;
+  };
+  const store: WonderlandVoiceIdentityStore = {
+    bind: (input) => inner.bind(input),
+    productUserIdOf: (playerId) => inner.productUserIdOf(playerId),
+    async productUserIdsOf(playerIds) { await wait('productUserIdsOf'); return inner.productUserIdsOf(playerIds); },
+    recordIssuance: (input) => inner.recordIssuance(input),
+    openRoomsOf: (playerId) => inner.openRoomsOf(playerId),
+    async openIssuancesOf(playerId) { calls.push(playerId); await wait('openIssuancesOf'); return inner.openIssuancesOf(playerId); },
+    recordRevocation: (input) => inner.recordRevocation(input),
+  };
+  return {
+    store,
+    /** Whose open issuances were read, in order: whose voice anything was reconciled for. */
+    calls,
+    hold(at: 'productUserIdsOf' | 'openIssuancesOf') {
+      const g = gate();
+      hold = { at, gate: g };
+      return { reached: g.reached, release: g.release };
     },
   };
 }
@@ -99,15 +161,25 @@ function stage(over: Partial<WonderlandVoiceRoutePorts> = {}) {
   const voice = (id: string, method: string, path: string, body?: unknown, now: number = NOW) =>
     handleWonderlandVoiceRoute({ method, path, origin: ORIGIN, body, now, authorization: `Relay-Session ${tokens.get(id)!}` }, ports);
   let n = 0;
-  const social$ = (id: string, command: unknown, now: number = NOW) => handleWonderlandSocialRoute({
+  /** Removals after a command that failed where nobody could be told: the bridge logs their count. */
+  const laterFailures: number[] = [];
+  /** A social command as the bridge composes it, answered: what it left for after its answer may still be running. */
+  const socialNow$ = (id: string, command: unknown, now: number = NOW) => handleWonderlandSocialRoute({
     method: 'POST', path: '/wonderland/social/commands', url: '/wonderland/social/commands', origin: ORIGIN, now,
     authorization: `Relay-Session ${tokens.get(id)!}`, body: { commandId: `c-${String(++n)}`, command },
   }, {
     store: social, sessions, allowNative: false,
-    afterCommand: async ({ actorId, command: done, before, after, at }) =>
-      reconcileWonderlandVoice(ports, wonderlandVoiceAffected(before, after, actorId, done), at),
+    afterCommand: async ({ actorId, command: done, before, after, at }) => reconcileWonderlandVoiceAfterCommand(
+      ports, actorId, wonderlandVoiceAffected(before, after, actorId, done), at, (failures) => { laterFailures.push(failures); }),
   });
-  return { ports, social, identities, eos, player, voice, social$ };
+  const settle = () => settleWonderlandVoice(ports);
+  /** The same command, and everything it left for after its answer, done. */
+  const social$ = async (id: string, command: unknown, now: number = NOW) => {
+    const answered = await socialNow$(id, command, now);
+    await settle();
+    return answered;
+  };
+  return { ports, social, identities, eos, player, voice, social$, socialNow$, settle, laterFailures };
 }
 
 describe('the client configuration', () => {
@@ -249,6 +321,7 @@ describe('the wall moves, and the trusted server takes back what it no longer al
     s.eos.failRemovals(true);
     const blocked = await s.social$('ben', { kind: 'BLOCK', targetId: 'ann' });
     expect((blocked?.body as { voice: unknown }).voice, 'Ben\'s own removal failed; Ann\'s is not his to be told').toEqual({ revoked: 0, revocationFailures: 1 });
+    expect(s.laterFailures, 'Ann\'s failed after the answer, and the bridge logged it').toEqual([1]);
     expect(await s.identities.openRoomsOf('ann'), 'still open: not pretended revoked').toHaveLength(1);
     s.eos.failRemovals(false);
     const retried = await reconcileWonderlandVoice(s.ports, ['ann'], '2026-10-04T12:05:00.000Z');
@@ -366,6 +439,142 @@ describe('the wall moves, and the trusted server takes back what it no longer al
     await s.social$('ann', { kind: 'ENTER_INSTANCE', instanceId: 'public:hub', location: null, activity: 'IDLE', dogId: null }, gone);
     const back = roomsOf(await s.voice('ann', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }, gone));
     expect(back.map((room) => room.roomId).sort()).toEqual([...annRooms].sort());
+  });
+});
+
+describe('one player\'s voice, one step at a time (review findings, 2026-10-05)', () => {
+  const HIDE = { kind: 'SET_SETTINGS', settings: { visibility: 'HIDDEN_FROM_STRANGERS' } } as const;
+  const SHOW = { kind: 'SET_SETTINGS', settings: { visibility: 'EVERYONE' } } as const;
+  /** Long enough for every step that is not waiting on another to run to its end (the stores answer at once). */
+  const moment = () => new Promise<void>((resolve) => { setTimeout(resolve, 25); });
+  /** Every admission Epic holds that the record does not show as open for that identity: what no reconcile would ever take back. */
+  const unrecorded = async (s: ReturnType<typeof stage>, players: Readonly<Record<string, string>>) => {
+    const hidden: string[] = [];
+    for (const [roomId, admitted] of s.eos.members) {
+      for (const productUserId of admitted) {
+        const playerId = Object.entries(players).find(([, puid]) => puid === productUserId)?.[0];
+        const open = playerId === undefined ? [] : await s.identities.openIssuancesOf(playerId);
+        if (!open.some((row) => row.roomId === roomId && row.productUserId === productUserId)) hidden.push(`${playerId ?? '?'} in ${roomId.slice(0, 9)}`);
+      }
+    }
+    return hidden;
+  };
+
+  it('a re-issue racing the removal before it never leaves a token the record calls revoked, so a later block still separates the pair', async () => {
+    const s = await hub(['amy', 'xan']);
+    const pair = roomsOf(await s.voice('amy', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' }))[0]!.roomId;
+    await s.voice('xan', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
+    // Amy hides; while Epic's answer to a removal is in flight, she shows herself again and the removed player rejoins. First her own, then Xan's.
+    for (const [rejoins, puid] of [['amy', PUID(1)], ['xan', PUID(2)]] as const) {
+      const held = s.eos.holdRemoval((roomId, productUserId) => roomId === pair && productUserId === puid);
+      const hide = s.socialNow$('amy', HIDE);
+      await held.reached;
+      const steps = [hide, s.socialNow$('amy', SHOW), s.voice(rejoins, 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' })];
+      // Whatever can run while Epic's answer is out, runs: unserialized, the rejoin is issued before the removal is recorded.
+      await moment();
+      held.release();
+      await Promise.all(steps);
+      await s.settle();
+      expect(await unrecorded(s, { amy: PUID(1), xan: PUID(2) }), `after ${rejoins}'s race: every admission is on the record`).toEqual([]);
+    }
+    await s.social$('xan', { kind: 'BLOCK', targetId: 'amy' });
+    expect([...(s.eos.members.get(pair) ?? [])], 'a blocked pair shares no room').toEqual([]);
+  });
+
+  it('a re-bind landing inside a join: once both are done, the former identity is in no room and holds no token', async () => {
+    const held = holdable(createMemoryWonderlandVoiceIdentityStore());
+    const s = stage({ identities: held.store });
+    for (const [i, name] of ['amy', 'xan'].entries()) {
+      await s.player(name);
+      await s.voice(name, 'POST', '/wonderland/voice/identity', { idToken: idToken(PUID(i + 1)) });
+      await s.social$(name, { kind: 'ENTER_INSTANCE', instanceId: 'public:hub', location: null, activity: 'IDLE', dogId: null });
+    }
+    // The join has read Amy's identity and is planning when her re-bind arrives.
+    const planning = held.hold('productUserIdsOf');
+    const join = s.voice('amy', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
+    await planning.reached;
+    const rebind = s.voice('amy', 'POST', '/wonderland/voice/identity', { idToken: idToken(PUID(9)) });
+    // Unserialized, the re-bind would finish here, before the join mints for the identity it read.
+    await moment();
+    planning.release();
+    const answers = await Promise.all([join, rebind]);
+    await s.settle();
+    expect(answers.map((answer) => answer?.status), 'both answered; neither threw').toEqual([200, 200]);
+    expect([...s.eos.members.values()].some((admitted) => admitted.has(PUID(1))), 'the former identity is in no room').toBe(false);
+    expect((await held.store.openIssuancesOf('amy')).filter((row) => row.productUserId === PUID(1))).toEqual([]);
+  });
+
+  it('a block committed inside a join: once the bridge settles, the joiner holds no room the block ended', async () => {
+    const held = holdable(createMemoryWonderlandVoiceIdentityStore());
+    const s = stage({ identities: held.store });
+    for (const [i, name] of ['amy', 'xan'].entries()) {
+      await s.player(name);
+      await s.voice(name, 'POST', '/wonderland/voice/identity', { idToken: idToken(PUID(i + 1)) });
+      await s.social$(name, { kind: 'ENTER_INSTANCE', instanceId: 'public:hub', location: null, activity: 'IDLE', dogId: null });
+    }
+    // The join has planned (Amy and Xan see each other) and is about to take back and issue when Xan blocks her.
+    const planned = held.hold('openIssuancesOf');
+    const join = s.voice('amy', 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
+    await planned.reached;
+    const block = s.socialNow$('xan', { kind: 'BLOCK', targetId: 'amy' });
+    // The block is answered, and its reconcile of Amy would run here, before the join issues from its older plan.
+    await block;
+    await moment();
+    planned.release();
+    await Promise.all([join, block]);
+    await s.settle();
+    expect(await held.store.openIssuancesOf('amy'), 'nothing the block ended stays open').toEqual([]);
+    expect([...s.eos.members.values()].some((admitted) => admitted.has(PUID(1))), 'Amy is in no room').toBe(false);
+  });
+
+  it('the actor\'s answer never waits for another player\'s removal: an owner is answered while the hidden friend\'s removal is still in flight (P1)', async () => {
+    const s = stage();
+    const names = ['owen', 'mia', 'hid'];
+    for (const [i, name] of names.entries()) {
+      await s.player(name);
+      await s.voice(name, 'POST', '/wonderland/voice/identity', { idToken: idToken(PUID(i + 1)) });
+    }
+    await s.social$('owen', { kind: 'SERVER_CREATE', serverId: 'srv', name: 'Owen' });
+    for (const member of ['mia', 'hid']) {
+      await s.social$('owen', { kind: 'SERVER_INVITE', serverId: 'srv', inviteeId: member });
+      await s.social$(member, { kind: 'SERVER_JOIN', serverId: 'srv' });
+    }
+    await s.social$('hid', HIDE);
+    await s.social$('hid', { kind: 'FRIEND_REQUEST', toId: 'mia' });
+    await s.social$('mia', { kind: 'FRIEND_ACCEPT', fromId: 'hid' });
+    for (const name of names) await s.social$(name, { kind: 'ENTER_INSTANCE', instanceId: 'server:srv', location: null, activity: 'IDLE', dogId: null });
+    for (const name of names) await s.voice(name, 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
+    // Epic makes the hidden friend's removal and does not answer it until released: an answer that waited for it would still be pending.
+    const inFlight = s.eos.holdRemoval((_roomId, productUserId) => productUserId === PUID(3));
+    let answered = false;
+    const removal = s.socialNow$('owen', { kind: 'SERVER_REMOVE_MEMBER', serverId: 'srv', memberId: 'mia' }).then((answer) => { answered = true; return answer; });
+    await inFlight.reached;
+    await new Promise<void>((resolve) => { setImmediate(resolve); });
+    expect(answered, 'Owen has his answer while Hid\'s removal is still in flight').toBe(true);
+    inFlight.release();
+    expect(((await removal)?.body as { voice: unknown }).voice).toEqual({ revoked: 1, revocationFailures: 0 });
+    await s.settle();
+    expect([...s.eos.members.values()].filter((admitted) => admitted.has(PUID(2)) && admitted.has(PUID(3))), 'the hidden friend\'s room with Mia is still taken back').toEqual([]);
+  });
+
+  it('a command by a player nobody else can see reconciles nobody else: the work would be the only trace that they acted', async () => {
+    const held = holdable(createMemoryWonderlandVoiceIdentityStore());
+    const s = stage({ identities: held.store });
+    for (const [i, name] of ['hana', 'sam', 'tom'].entries()) {
+      await s.player(name);
+      await s.voice(name, 'POST', '/wonderland/voice/identity', { idToken: idToken(PUID(i + 1)) });
+    }
+    await s.social$('hana', HIDE);
+    for (const name of ['sam', 'tom', 'hana']) await s.social$(name, { kind: 'ENTER_INSTANCE', instanceId: 'public:hub', location: null, activity: 'IDLE', dogId: null });
+    for (const name of ['sam', 'tom']) await s.voice(name, 'POST', '/wonderland/voice/join', { channel: 'INSTANCE' });
+    held.calls.length = 0;
+    await s.social$('hana', { kind: 'UPDATE_PRESENCE', location: null, activity: 'EXPLORING' });
+    await s.social$('hana', { kind: 'LEAVE_INSTANCE' });
+    expect(held.calls, 'only Hana\'s own voice was looked at').toEqual(['hana', 'hana']);
+    // A visible player's command does reach the strangers who can see them.
+    held.calls.length = 0;
+    await s.social$('sam', { kind: 'LEAVE_INSTANCE' });
+    expect([...new Set(held.calls)].sort()).toEqual(['sam', 'tom']);
   });
 });
 
