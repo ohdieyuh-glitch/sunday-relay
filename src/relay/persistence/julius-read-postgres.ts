@@ -188,16 +188,6 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
     }));
   }
 
-  async repairRoundsFor(taskId: string, projectId: string): Promise<number> {
-    const result = await this.pool.query<{ rounds: string }>(
-      `SELECT COALESCE(max(c.round),0)::text AS rounds FROM relay_wonderland.julius_repair_cycles c
-         JOIN relay_wonderland.julius_runs r ON r.run_id=c.run_id
-        WHERE c.original_task_id=$1 AND r.project_id=$2`,
-      [taskId, projectId],
-    );
-    return Number(result.rows[0]?.rounds ?? 0);
-  }
-
   async activeTaskCount(runId: string, projectId: string): Promise<number> {
     const result = await this.pool.query<{ active: string }>(
       `SELECT count(*)::text AS active FROM relay_wonderland.julius_tasks t

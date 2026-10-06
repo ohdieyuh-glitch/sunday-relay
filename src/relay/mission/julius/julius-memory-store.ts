@@ -181,7 +181,6 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
   const trajectoryKeys = new Set<string>();
   const contexts: JuliusContextSnapshot[] = [];
   const contextKeys = new Set<string>();
-  const repairRounds = new Map<string, number>();
   const subagents = new Map<string, JuliusSubagentRecord>();
   const approvals = new Map<string, JuliusApprovalRecord>();
   const lifecycle = new Map<string, { reason: string; actor: string; at: string }>();
@@ -369,9 +368,6 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         ...input.task, runId: input.runId, leaseOwner: null, leaseGeneration: 0,
         leaseExpiresAt: null, attempt: 0, recoveries: 0, nextAttemptAt: '1970-01-01T00:00:00.000Z', version: 1,
       });
-      if (input.task.taskType.startsWith('repair:') && input.task.parentTaskId !== null) {
-        repairRounds.set(input.task.parentTaskId, (repairRounds.get(input.task.parentTaskId) ?? 0) + 1);
-      }
       return true;
     },
 
@@ -892,11 +888,6 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     },
     claimStandingHistory(claimId) {
       return (claimStandings.get(claimId)?.history ?? []).map((claim) => ({ ...claim }));
-    },
-    async repairRoundsFor(taskId, projectId) {
-      const task = tasks.get(taskId);
-      if (task === undefined || !inProject(task.runId, projectId)) return 0;
-      return repairRounds.get(taskId) ?? 0;
     },
 
     /* --------------------------------------------------------- sub-agents */
