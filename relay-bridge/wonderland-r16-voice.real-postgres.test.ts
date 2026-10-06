@@ -8,7 +8,7 @@ import { WONDERLAND_PRESENCE_TTL_SECONDS } from '../src/relay/mission/wonderland
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { WONDERLAND_MIGRATIONS } from '../src/relay/persistence/wonderland-postgres';
 import { WonderlandSocialPostgresStore } from '../src/relay/persistence/wonderland-social-postgres';
-import { WonderlandVoicePostgresStore } from '../src/relay/persistence/wonderland-voice-postgres';
+import { WONDERLAND_VOICE_LOCK_SPACE, WonderlandVoicePostgresStore } from '../src/relay/persistence/wonderland-voice-postgres';
 import {
   R16_CHECKS, R16_VOICE_CHECKS, r16Players, r16VoiceRestartCheck, readR16VoiceRooms, readR16Views, runR16Scenario, summarizeR16,
   verifyR16Restart, verifyR16Voice,
@@ -73,9 +73,21 @@ suite('Wonderland R16 voice on PostgreSQL through 035', () => {
 
   it('every check and every voice check passes on the durable stores, and a restart keeps each identity and each player\'s rooms', async () => {
     let pool = open();
+    // The voice store as server.ts composes it: each player's voice step also holds that player's lock in the database,
+    // on a pool of its own. Counted, so the scenario is shown to have taken it, and read back, so none is left held.
+    let lockedSteps = 0;
+    const openLocks = (): Pool => {
+      const locks = open();
+      locks.on('acquire', () => { lockedSteps += 1; });
+      return locks;
+    };
+    let locks = openLocks();
+    const voiceLocksHeld = async (): Promise<number> => (await pool.query(
+      "SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND classid = $1::oid AND objsubid = 2"
+      + ' AND database = (SELECT oid FROM pg_database WHERE datname = current_database())', [WONDERLAND_VOICE_LOCK_SPACE])).rowCount ?? 0;
     const backend = createR16VoiceBackend({
       origin: ORIGIN, t0: T0, stepMs: 500,
-      stores: () => ({ social: new WonderlandSocialPostgresStore(pool), identities: new WonderlandVoicePostgresStore(pool) }),
+      stores: () => ({ social: new WonderlandSocialPostgresStore(pool), identities: new WonderlandVoicePostgresStore(pool, { locks }) }),
     });
     const players = r16Players('durable');
     const sessions = backend.signIn([players.a, players.b, players.c]);
@@ -92,6 +104,8 @@ suite('Wonderland R16 voice on PostgreSQL through 035', () => {
     expect(outcome.results.filter((row) => row.result === 'FAIL'), 'no check failed').toEqual([]);
     expect(summarizeR16(outcome.results, { voice: true })).toMatchObject({ failed: 0, of: R16_CHECKS.length + R16_VOICE_CHECKS.length });
     expect(breaches, 'the trusted server never admitted what the wall forbids').toEqual([]);
+    expect(lockedSteps, 'the voice steps held their players\' locks in the database').toBeGreaterThan(0);
+    expect(await voiceLocksHeld(), 'no voice lock outlives its step').toBe(0);
 
     // What the stores hold: three proven identities, and a record of every token issued. By the end of the scenario the wall
     // has moved past every room it gave, so every issuance is taken back.
@@ -114,8 +128,11 @@ suite('Wonderland R16 voice on PostgreSQL through 035', () => {
     // THE RESTART: longer than a lease, every session gone, the pool closed and a new one opened on the same database.
     backend.advance(WONDERLAND_PRESENCE_TTL_SECONDS * 1000 + 30_000);
     const old = pool;
+    const oldLocks = locks;
     pool = open();
+    locks = openLocks();
     await old.end();
+    await oldLocks.end();
     backend.restart();
     const again = backend.signIn([players.a, players.b, players.c]);
     const verified = await verifyR16Restart({ bridge: ORIGIN, origin: ORIGIN, sessions: again, players, nonce: 'durable', recorded, fetch: backend.fetch });
@@ -124,5 +141,6 @@ suite('Wonderland R16 voice on PostgreSQL through 035', () => {
     const heard = await verifyR16Voice({ bridge: ORIGIN, origin: ORIGIN, sessions: again, players, recorded, fetch: backend.fetch });
     expect(heard).toEqual([players.a, players.b, players.c].map((player) => ({ name: r16VoiceRestartCheck(player), result: 'PASS', detail: '' })));
     expect(await backend.wallBreaches()).toEqual([]);
+    expect(await voiceLocksHeld(), 'none after the restart either').toBe(0);
   }, 120_000);
 });

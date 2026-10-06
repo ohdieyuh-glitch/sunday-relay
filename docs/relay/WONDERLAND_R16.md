@@ -211,7 +211,7 @@ WONDERLAND_R16_SESSIONS='{"<idA>":"<new token>",…}' RELAY_BRIDGE_TOKEN=... nod
   - the reconcile after every committed command;
   - Epic's trusted server replaced by a fake that keeps who each room admits.
 - **All 24 + 8 checks pass**, and after every request, once the bridge has finished what it started, the trusted server admits nothing the wall forbids.
-- **On PostgreSQL through 035,** a restart (every session gone, the pool closed and reopened):
+- **On PostgreSQL through 035,** with the voice store composed as `server.ts` composes it (each player's voice lock held in the database, on its own pool; the scenario takes it, and no lock outlives its step), a restart (every session gone, the pools closed and reopened):
   - keeps every identity;
   - each reconnected player is given exactly the rooms they had;
   - the issuance record ends with exactly the one room the scenario leaves open.
