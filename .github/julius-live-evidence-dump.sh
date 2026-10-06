@@ -463,7 +463,8 @@ dump "SELECT b.run_id,b.entry_id,b.task_id,b.worker_id,b.entry_kind,encode(sha25
 carry_run=$(sed -n 's/^julius_run_id=//p' "$out/bundle-manifest.txt" 2>/dev/null | head -n 1 || true)
 if docker exec -i -e PGPASSWORD "$container" psql -X -q -t -A -v ON_ERROR_STOP=1 -v run="${carry_run:-none}" \
     -U "$PGUSER" -d "$PGDATABASE" < "$(dirname "$0")/julius-carry-sources.sql" > "$out/carry-sources.json" 2>/dev/null; then
-  carry_digest=$(sha256sum "$out/carry-sources.json" 2>/dev/null | cut -d' ' -f1 || true)
+  # From stdin: given a file NAME, sha256sum escapes one it dislikes (a backslash: `\<digest>`), and cut keeps the `\`.
+  carry_digest=$(sha256sum < "$out/carry-sources.json" 2>/dev/null | cut -d' ' -f1 || true)
   if [ -n "$carry_digest" ]; then echo "carry_sources_sha256=$carry_digest" >> "$out/bundle-manifest.txt"; fi
 else
   echo 'unavailable' > "$out/carry-sources.json"
