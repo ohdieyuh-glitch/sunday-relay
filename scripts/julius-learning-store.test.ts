@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createConnection } from 'node:net';
 import { join, resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -90,6 +91,22 @@ describe('the learning store script, without a database', () => {
     expect(refused.out.length).toBeGreaterThan(0);
     for (const run of [refused, dry]) expect(run.out.includes(password)).toBe(false);
   });
+
+  it('A5: the round trip, demanded against a server that cannot answer, FAILS by that cause and is never todo', async () => {
+    // The precondition, checked: nothing listens on the discard port, so the server cannot say its version.
+    const refused = await new Promise<string>((done) => {
+      const socket = createConnection({ host: '127.0.0.1', port: 9 });
+      socket.once('connect', () => { socket.destroy(); done('connected'); });
+      socket.once('error', (error: NodeJS.ErrnoException) => done(error.code ?? 'error'));
+    });
+    expect(refused, 'nothing answers on 127.0.0.1:9').not.toBe('connected');
+    const child = spawnSync(process.execPath, [join(ROOT, 'node_modules', 'vitest', 'vitest.mjs'), 'run', 'relay-bridge/julius-learning-store-roundtrip.real-postgres.test.ts'], {
+      cwd: ROOT, encoding: 'utf8', timeout: 300_000, maxBuffer: 16 * 1024 * 1024,
+      env: { ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('VITEST'))), JULIUS_REAL_POSTGRES: '1', JULIUS_TEST_DATABASE_URL: 'postgresql://jlrt@127.0.0.1:9/jlrt_none' },
+    });
+    expect(child.status).not.toBe(0);
+    expect(`${child.stdout}${child.stderr}`).toContain('julius_real_postgres_server_unreadable: JULIUS_REAL_POSTGRES=1 demands this suite');
+  }, 300_000);
 
   it('checks every value that reaches SQL for its shape before it connects anywhere', () => {
     const env = { PGUSER: 'u', PGDATABASE: 'd' };

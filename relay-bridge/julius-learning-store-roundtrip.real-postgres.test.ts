@@ -111,8 +111,14 @@ function clientDirFor(major: number): string | null {
 const databaseUrl = juliusTestDatabaseUrl();
 const serverMajor = databaseUrl === null ? null : serverMajorOf(databaseUrl);
 const clientDir = serverMajor === null ? null : clientDirFor(serverMajor);
-if (databaseUrl !== null && clientDir === null && process.env.JULIUS_REAL_POSTGRES === '1') {
-  throw new Error(`julius_real_postgres_without_pg_client: JULIUS_REAL_POSTGRES=1 demands this suite, and no pg_dump/pg_restore/psql of the server's major (${String(serverMajor)}) was found; set ${PG_BINDIR_ENV}`);
+// A DEMANDED SUITE THAT CANNOT RUN IS A FAILURE, by its cause, never a todo (A5).
+if (databaseUrl !== null && process.env.JULIUS_REAL_POSTGRES === '1') {
+  if (serverMajor === null) {
+    throw new Error('julius_real_postgres_server_unreadable: JULIUS_REAL_POSTGRES=1 demands this suite, and the server JULIUS_TEST_DATABASE_URL names did not say its version');
+  }
+  if (clientDir === null) {
+    throw new Error(`julius_real_postgres_without_pg_client: JULIUS_REAL_POSTGRES=1 demands this suite, and no pg_dump/pg_restore/psql of the server's major (${String(serverMajor)}) was found; set ${PG_BINDIR_ENV}`);
+  }
 }
 const suite = clientDir !== null ? describe : describe.todo;
 
@@ -340,9 +346,11 @@ suite('a learning pair across two databases: dumped and restored as Option D doe
     expect(cited.rowCount, 'the REJECT cites concrete evidence this run recorded').toBe(finding.evidence_ids.length);
 
     // 7b: a store dumped BEFORE its run's record is refused: the WITH arm would have no WITHOUT to meet.
+    expect(await factsOf(source.pool, withoutRun, 'learning.arm.recorded'), 'the precondition: no record yet').toEqual([]);
     const early = store(['dump', join(scratch, 'early'), withoutRun], source.name);
     expect(early.status).toBe(1);
-    expect(early.out).toContain('learning_store_without_record');
+    expect(early.out, 'the dump itself ran: the refusal is about the record, not a missing tool').toContain('JULIUS_STORE_COMMAND host pg_dump --format=custom');
+    expect(early.out).toContain('learning_store_without_record: the store does not hold the WITHOUT record of this run');
     expect((await without.record()).record, 'the record, as the live job writes it').toBe('RECORDED');
 
     const { direct, forged } = await controls(source.pool, { runId: withoutRun, projectId: base.projectId, taskId: `${withoutRun}:build` });
@@ -431,28 +439,56 @@ suite('a learning pair across two databases: dumped and restored as Option D doe
     const refusedRun = (await broken.pool.query<{ run_id: string; state: string }>(
       `SELECT run_id, state FROM relay_wonderland.julius_runs WHERE mission_id = $1 AND run_id <> $2`, [base.missionId, withoutRun])).rows;
     expect(refusedRun.map((row) => row.state), 'left CREATED: nothing contracted, nothing dispatched').toEqual(['CREATED']);
+    const [refusal] = await factsOf(broken.pool, refusedRun[0]!.run_id, 'knowledge.carried');
+    expect(refusal?.facts, 'the refused run\'s own record says why: nothing eligible').toMatchObject({ outcome: 'EMPTY', carried: 0 });
+    expect(String(refusal?.facts.excludedRefs), 'and names the finding whose repair did not finish').toContain(`finding_provenance_unverified:${withoutRun}:${finding.finding_id}`);
     expect(await factsOf(broken.pool, refusedRun[0]!.run_id, 'knowledge.consumed'), 'no planner receipt').toEqual([]);
     expect(refusedArm.entries.reduce((sum, entry) => sum + entry.adapter.dispatches.length, 0), 'no dispatch at all').toBe(0);
 
     expect(fetchCalls, 'zero spend: no provider was reached').toEqual([]);
   }, 600_000);
 
-  it('7a: a store that already holds a schema refuses the restore, whole, and is left as it was', async () => {
+  it('7a: a store that already holds another mission\'s run refuses the restore, whole, and is left as it was', async () => {
     const { digest } = pair();
     const occupied = await database('occupied');
     await new TransactionalWonderlandDatabase(occupied.pool).migrate();
-    const before = (await occupied.pool.query<{ count: string }>('SELECT count(*)::text AS count FROM relay_wonderland.schema_migrations')).rows[0]!.count;
+    // THE PRECONDITION, made and then read back: the target really holds a run of another mission.
+    const other = { projectId: `prj-occupied-${suffix}`, missionId: `mission:occupied-${suffix}`, runId: `run:${'a'.repeat(24)}` };
+    await occupied.pool.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1)', [other.projectId]);
+    await occupied.pool.query(`INSERT INTO relay_wonderland.mission_contracts(mission_id,project_id,stage,canonical_hash,snapshot) VALUES($1,$2,'READY',$1,'{}'::jsonb)`, [other.missionId, other.projectId]);
+    await occupied.pool.query(
+      `INSERT INTO relay_wonderland.julius_runs(run_id,mission_id,project_id,state,runtime_version,card_revision,mission_contract_revision,project_brain_revision,created_at)
+       VALUES($1,$2,$3,'COMPLETED','julius-runtime.v1','card',1,0,now())`, [other.runId, other.missionId, other.projectId]);
+    const runsIn = async () => (await occupied.pool.query<{ run_id: string }>('SELECT run_id FROM relay_wonderland.julius_runs')).rows.map((row) => row.run_id);
+    expect(await runsIn(), 'the target holds another mission\'s run before the restore').toEqual([other.runId]);
     const dumpFile = join(scratch, 'store', 'julius.pgdump');
     expect(existsSync(dumpFile), 'the main case wrote the dump this case restores').toBe(true);
     const result = store(['restore', dumpFile, `run:${'0'.repeat(24)}`, digest], occupied.name);
     expect(result.status).not.toBe(0);
-    expect(result.out).toContain('relay_wonderland');
-    expect((await occupied.pool.query<{ count: string }>('SELECT count(*)::text AS count FROM relay_wonderland.schema_migrations')).rows[0]!.count).toBe(before);
+    expect(result.out, 'refused by pg_restore at the schema it would have created, not for anything else').toContain('schema "relay_wonderland" already exists');
+    expect(result.out).not.toContain('LEARNING_STORE_RESTORED');
+    expect(await runsIn(), 'one transaction: the target is exactly as it was').toEqual([other.runId]);
+  }, 300_000);
+
+  it('A5: demanded, with the server answering and NO client of its major, this suite FAILS by name, never todo', () => {
+    // The precondition, made: a directory that holds no client at all, against a server that answers.
+    const empty = mkdtempSync(join(tmpdir(), 'jlrt-noclient-'));
+    expect(['pg_dump', 'pg_restore', 'psql'].some((tool) => existsSync(join(empty, `${tool}${EXE}`))), 'the stated directory holds no client').toBe(false);
+    expect(serverMajor, 'the server answered its version').not.toBeNull();
+    const child = spawnSync(process.execPath, [join(ROOT, 'node_modules', 'vitest', 'vitest.mjs'), 'run', 'relay-bridge/julius-learning-store-roundtrip.real-postgres.test.ts'], {
+      cwd: ROOT, encoding: 'utf8', timeout: 300_000, maxBuffer: 16 * 1024 * 1024,
+      env: { ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('VITEST'))), [PG_BINDIR_ENV]: empty, JULIUS_REAL_POSTGRES: '1', JULIUS_TEST_DATABASE_URL: databaseUrl! },
+    });
+    rmSync(empty, { recursive: true, force: true });
+    expect(child.status, 'the demanded suite failed').not.toBe(0);
+    expect(`${child.stdout}${child.stderr}`).toContain(`julius_real_postgres_without_pg_client: JULIUS_REAL_POSTGRES=1 demands this suite, and no pg_dump/pg_restore/psql of the server's major (${String(serverMajor)}) was found`);
   }, 300_000);
 
   it('7a(2): a store that cannot encode the mission\'s text refuses the restore, and nothing remains behind', async () => {
     const { digest } = pair();
     const latin1 = await database('latin1', 'LATIN1');
+    expect((await admin.query<{ encoding: string }>('SELECT pg_encoding_to_char(encoding) AS encoding FROM pg_database WHERE datname = $1', [latin1.name])).rows[0]?.encoding,
+      'the target really cannot hold UTF-8 text').toBe('LATIN1');
     const dumpFile = join(scratch, 'store', 'julius.pgdump');
     // A missing file would fail too, and prove nothing: the restore must fail on the TEXT, with the real dump in hand.
     expect(existsSync(dumpFile), 'the main case wrote the dump this case restores').toBe(true);
