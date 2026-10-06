@@ -179,6 +179,21 @@ describe('the off-host verifier: the four-point chain, re-derived from arm WITHO
     expect(failed(verdict)).toEqual(expect.arrayContaining(['record_carried', 'receipts_present', 'vrf_carried']));
   });
 
+  it('FAILS a chain whose arm WITH is its own arm WITHOUT, and a record scoped to anything but WITH\'s plan — each by name', () => {
+    const sources = parsed(sourcesDocument());
+    const self = verifyJuliusCarryChain({ sources, withRunId: WITHOUT, ...withSide(sources), limit: LIMIT, sha256 });
+    expect(self.verdict).toBe('FAIL');
+    expect(failed(self), 'an arm cannot inherit from itself').toContain('arms_distinct');
+    // The record names WITH's BUILD task as its scope, and WITH's own tasks say that task is a build: not the planner's.
+    const side = withSide(sources);
+    side.knowledge[0]!.scope_task_id = `${WITH}:build`;
+    side.tasks.push({ task_id: `${WITH}:build`, task_type: 'build', role: 'CODING_AGENT', state: 'COMPLETED', ordinal: '1', parent_task_id: PLAN, run_id: WITH });
+    const misScoped = verify(sources, side);
+    expect(misScoped.verdict).toBe('FAIL');
+    expect(failed(misScoped), 'a carry that reached another task than the plan').toContain('scope_plan');
+    expect(misScoped.proven).toEqual([]);
+  });
+
   it('refuses an export holding a task of another run: no other run\'s task may vouch for this run\'s finding', () => {
     const foreign = sourcesDocument();
     (foreign.tasks as Record<string, unknown>[])[1]!.runId = 'run:stranger';

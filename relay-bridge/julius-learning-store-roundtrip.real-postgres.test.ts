@@ -500,6 +500,62 @@ suite('a learning pair across two databases: dumped and restored as Option D doe
     expect(await runsIn(), 'one transaction: the target is exactly as it was').toEqual([other.runId]);
   }, 300_000);
 
+  it('the restore refuses a store that is not exactly ONE COMPLETED WITHOUT run recorded under THIS registration — each by name, after restoring it', async () => {
+    const restoredBy = (result: ReturnType<typeof store>) => {
+      expect(result.status).not.toBe(0);
+      expect(result.out, 'the archive was restored: the refusal is the check after it, not pg_restore').toContain('LEARNING_STORE_RESTORING dump_sha256=');
+      expect(result.out).not.toContain('LEARNING_STORE_RESTORED');
+    };
+
+    /* (a) ANOTHER REGISTRATION: the main case's own store, its own WITHOUT run, a registration it was never recorded under. */
+    const mainDump = join(scratch, 'store', 'julius.pgdump');
+    expect(existsSync(mainDump), 'the main case wrote the dump this case restores').toBe(true);
+    const mainRun = /^julius_run_id=(\S+)$/mu.exec(readFileSync(join(scratch, 'store', 'store-manifest.txt'), 'utf8'))?.[1] ?? '';
+    expect(mainRun).toMatch(/^run:[0-9a-f]{24}$/u);
+    const foreign = await database('foreignreg');
+    const refusedForeign = store(['restore', mainDump, mainRun, 'f'.repeat(64)], foreign.name);
+    restoredBy(refusedForeign);
+    expect(refusedForeign.out).toContain('learning_store_without_unrecorded: no WITHOUT record under this registration');
+
+    /* (b) A WITHOUT RUN THAT DID NOT COMPLETE, and (c) A STORE OF TWO RUNS: one source, made one step at a time. */
+    const { digest, base, arm } = pair();
+    const source = await database('notalone');
+    await new TransactionalWonderlandDatabase(source.pool).migrate();
+    const without = await arm(source.pool, {
+      clause: { registrationDigest: digest, arm: 'WITHOUT', rerunKey: `without-${nonce()}`, policy: POLICY },
+      scripts: { architect: [ARCHITECT], coder: [BUILD], reviewer: [PASS_AND_RESOLVE, PASS_AND_RESOLVE] },
+    });
+    if (!without.submitted.accepted) throw new Error(`${without.submitted.reasonCode}: ${without.submitted.safeMessage}`);
+    const runId = without.submitted.runId;
+    expect((await without.drive()).state).toBe('COMPLETED');
+    expect((await without.record()).record).toBe('RECORDED');
+    const runsOf = async () => (await source.pool.query<{ run_id: string; state: string }>('SELECT run_id, state FROM relay_wonderland.julius_runs ORDER BY run_id')).rows;
+
+    // (b) THE PRECONDITION, made and read back: the run is recorded, and its state is FAILED, not COMPLETED.
+    await source.pool.query(`UPDATE relay_wonderland.julius_runs SET state = 'FAILED' WHERE run_id = $1`, [runId]);
+    expect(await runsOf()).toEqual([{ run_id: runId, state: 'FAILED' }]);
+    const failedDump = store(['dump', join(scratch, 'not-completed'), runId], source.name);
+    expect(failedDump.status, failedDump.out).toBe(0);
+    const intoFailed = await database('notcompleted');
+    const refusedFailed = store(['restore', join(scratch, 'not-completed', 'julius.pgdump'), runId, digest], intoFailed.name);
+    restoredBy(refusedFailed);
+    expect(refusedFailed.out).toContain(`learning_store_without_not_completed: ${runId} is 'FAILED'`);
+
+    // (c) THE PRECONDITION, made and read back: a second run beside it, of another mission of this project.
+    const second = `run:${'b'.repeat(24)}`;
+    await source.pool.query(`INSERT INTO relay_wonderland.mission_contracts(mission_id,project_id,stage,canonical_hash,snapshot) VALUES($1,$2,'READY',$1,'{}'::jsonb)`, [`${base.missionId}:second`, base.projectId]);
+    await source.pool.query(
+      `INSERT INTO relay_wonderland.julius_runs(run_id,mission_id,project_id,state,runtime_version,card_revision,mission_contract_revision,project_brain_revision,created_at)
+       VALUES($1,$2,$3,'COMPLETED','julius-runtime.v1','card',1,0,now())`, [second, `${base.missionId}:second`, base.projectId]);
+    expect((await runsOf()).map((row) => row.run_id).sort()).toEqual([runId, second].sort());
+    const twoDump = store(['dump', join(scratch, 'two-runs'), runId], source.name);
+    expect(twoDump.status, twoDump.out).toBe(0);
+    const intoTwo = await database('tworuns');
+    const refusedTwo = store(['restore', join(scratch, 'two-runs', 'julius.pgdump'), runId, digest], intoTwo.name);
+    restoredBy(refusedTwo);
+    expect(refusedTwo.out).toContain('learning_store_not_one_run: the WITHOUT store must hold its own run alone (it holds 2)');
+  }, 300_000);
+
   it('A5: demanded, with the server answering and NO client of its major, this suite FAILS by name, never todo', () => {
     // The precondition, made: a directory that holds no client at all, against a server that answers.
     const empty = mkdtempSync(join(tmpdir(), 'jlrt-noclient-'));
