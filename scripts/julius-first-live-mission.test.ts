@@ -1132,7 +1132,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'knowledge-carry.tsv', 'learning.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'carry-copies.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'knowledge-carry.tsv', 'learning.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);

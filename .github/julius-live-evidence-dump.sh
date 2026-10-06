@@ -448,6 +448,27 @@ dump "SELECT e.stream_id AS run_id,e.sequence,e.event_id,e.payload->>'causationI
 # tokens, counts and digests only: no finding text, no packet text.
 dump "SELECT e.stream_id AS run_id,e.sequence,e.event_id,e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'carryVersion' AS carry_version,e.payload->'facts'->>'outcome' AS outcome,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'missionId' AS mission_id,e.payload->'facts'->>'scopeTaskId' AS scope_task_id,e.payload->'facts'->>'scopeTaskType' AS scope_task_type,e.payload->'facts'->>'scopeRole' AS scope_role,e.payload->'facts'->>'sourceRuns' AS source_runs,e.payload->'facts'->>'sourceRunIds' AS source_run_ids,e.payload->'facts'->>'candidates' AS candidates,e.payload->'facts'->>'candidatesTruncated' AS candidates_truncated,e.payload->'facts'->>'eligible' AS eligible,e.payload->'facts'->>'carried' AS carried,e.payload->'facts'->>'carriedFindings' AS carried_findings,e.payload->'facts'->>'carriedArchitecture' AS carried_architecture,e.payload->'facts'->>'carriedEntries' AS carried_entries,e.payload->'facts'->>'entriesTruncated' AS entries_truncated,e.payload->'facts'->>'excluded' AS excluded,e.payload->'facts'->>'excludedByReason' AS excluded_by_reason,e.payload->'facts'->>'excludedRefs' AS excluded_refs,e.payload->'facts'->>'excludedRefsTruncated' AS excluded_refs_truncated,e.payload->'facts'->>'contextId' AS context_id,e.payload->'facts'->>'attempt' AS attempt,e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'taskType' AS task_type,e.payload->'facts'->>'inScope' AS in_scope,e.payload->'facts'->>'admitted' AS admitted,e.payload->'facts'->>'admittedEntryIds' AS admitted_entry_ids,e.payload->'facts'->>'evicted' AS evicted,e.payload->'facts'->>'evictedEntryIds' AS evicted_entry_ids,e.payload->'facts'->>'excludedInScope' AS excluded_in_scope,e.payload->'facts'->>'missing' AS missing,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.knowledge.carried','julius.knowledge.consumed') ORDER BY e.stream_id,e.sequence" knowledge-carry.tsv
 
+# THE CARRIED COPIES, BY DIGEST (Decision C, C-7 point 3). project-brain.tsv names every brain row but not its
+# text, and the carry's own record binds each copy's text by its full sha256 (`carriedEntries`). So every
+# `carried:` row is dumped with the digest of the text the store holds, never the text: the off-host verifier
+# re-derives the text from the source run's carry-sources.json and needs only the store's digest of it.
+dump "SELECT b.run_id,b.entry_id,b.task_id,b.worker_id,b.entry_kind,encode(sha256(convert_to(b.safe_content,'UTF8')),'hex') AS content_sha256 FROM relay_wonderland.julius_brain_entries b WHERE b.entry_id LIKE 'carried:%' ORDER BY b.run_id,b.revision" carry-copies.tsv
+
+# AND WHAT A LATER RUN MAY CARRY FROM THIS ONE, AS ONE VERIFIABLE FILE (Decision C, C-7 point 1).
+# `carry-sources.json` holds the run the manifest names: its reviewer findings, the `finding.*` ledger rows that
+# give them their lives, and the run and task facts a carried finding's header renders
+# (`.github/julius-carry-sources.sql` says exactly which, and why each is the store reader's own shape). Its sha256
+# goes into the manifest the moment it is written, so whoever verifies the chain later checks these bytes against
+# what THIS job recorded. A failed query writes `unavailable`, exactly as a table above would.
+carry_run=$(sed -n 's/^julius_run_id=//p' "$out/bundle-manifest.txt" 2>/dev/null | head -n 1 || true)
+if docker exec -i -e PGPASSWORD "$container" psql -X -q -t -A -v ON_ERROR_STOP=1 -v run="${carry_run:-none}" \
+    -U "$PGUSER" -d "$PGDATABASE" < "$(dirname "$0")/julius-carry-sources.sql" > "$out/carry-sources.json" 2>/dev/null; then
+  carry_digest=$(sha256sum "$out/carry-sources.json" 2>/dev/null | cut -d' ' -f1 || true)
+  if [ -n "$carry_digest" ]; then echo "carry_sources_sha256=$carry_digest" >> "$out/bundle-manifest.txt"; fi
+else
+  echo 'unavailable' > "$out/carry-sources.json"
+fi
+
 # WHAT THE CODER CHANGED THAT ITS CONTRACT DID NOT ALLOW (B2). The Beta Gate's PERMISSIONS /
 # MISSION BOUNDARIES row judges BOUNDARIES — a scope violation, a denial, an effect left
 # unsettled — and never whether a test exited non-zero, which is the repair loop's business. The

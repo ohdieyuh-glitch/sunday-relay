@@ -133,6 +133,7 @@ const EXCLUDED_FILES = [
 
 /** Kernel dependants that are neither reached nor declared, and why they stay out. */
 const KERNEL_DEPENDANT_EXCLUSIONS = [
+  { path: 'src/relay/mission/julius/julius-carry-verify.ts', reason: 'the OFF-HOST verifier of Decision C’s four-point carry chain (C-7): it reads two arms’ evidence bundles and re-derives what arm WITH should have carried with the kernel’s own rule, fold, renderer and record. It runs on a reviewer’s machine after a paid pair, never inside a run, and no runtime path imports it' },
   { path: 'src/relay/persistence/julius-event-append-conformance.ts', reason: 'the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root' },
   { path: 'src/relay/persistence/julius-criteria-scope-conformance.ts', reason: 'the criteria-scope contract cases themselves: a criterion belongs to a RUN, not to the database. Written once and run by BOTH the in-memory store, which was always right, and real PostgreSQL, where a global primary key on criterion_id silently gave every rerun no criteria at all. Test support, imported by no root' },
   { path: 'src/relay/persistence/julius-decision-write-conformance.ts', reason: 'the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root' },
