@@ -211,6 +211,11 @@ suite('migration 032: deleting an event forgets it, so no outbox row can name it
   ];
 
   beforeAll(async () => { admin = new Pool({ connectionString: databaseUrl! }); }, 30_000);
+  // ITS OWN TIMEOUT. This suite makes about a dozen databases and drops them one at a time, and on PostgreSQL 15+ every
+  // DROP DATABASE requests an immediate checkpoint and waits for it (CREATE DATABASE does not; measured): a checkpoint
+  // of the whole cluster, costing whatever every suite running beside it has dirtied. With CI's real-PostgreSQL step
+  // run locally, one such checkpoint took 6.96 s (log_checkpoints). The default 10 s hook timeout failed this teardown
+  // on both CI runs of #336 (2026-10-05, 2026-10-06) while every one of its cases passed.
   afterAll(async () => {
     for (const { name, pool } of made) {
       // pool.end() resolves before its idle clients have closed (pg-pool 3.14's _remove() does not await client.end()),
@@ -222,7 +227,7 @@ suite('migration 032: deleting an event forgets it, so no outbox row can name it
       await admin.query(`DROP DATABASE IF EXISTS ${name}`).catch(() => undefined);
     }
     await admin?.end().catch(() => undefined);
-  });
+  }, 120_000);
 
   it('A: before 032 the delete path commits an orphan (the control) and 032 refuses that database; after 032 it is refused, and 032 changed exactly two function bodies, in place', async () => {
     const id = 'event:032:defect';
