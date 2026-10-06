@@ -16,9 +16,14 @@
 # ONE ARGUMENT LIST, TWO LAUNCHERS. Every pg_dump / pg_restore / psql argument list is built once (`args_*`). Only
 # the launcher differs: with JULIUS_PG_CONTAINER set, `docker exec -i` into that container (the paid job's
 # julius-postgres); otherwise the client tools in JULIUS_PG_BINDIR (a throwaway server, a developer's machine). The
-# connection is the PG* environment in both, never a URL, so no command line carries a password. Archives move over
-# stdin and stdout, so no path inside a container ever enters an argument list. JULIUS_STORE_DRY_RUN=1 prints both
-# launchers' commands for the given arguments and runs nothing.
+# connection is the PG* environment in both, never a URL, so no command line carries a password.
+# JULIUS_STORE_DRY_RUN=1 prints both launchers' commands for the given arguments and runs nothing.
+#
+# THE I/O IS ONE TOO. An archive written to a pipe has no data offsets, and one read from a pipe cannot be sought; a
+# file redirected straight onto a tool's stdout or stdin is seekable, so the two behave differently in pg_restore.
+# `docker exec` can only offer pipes, so BOTH modes go through them (`pg_dump | cat > file`, `cat file | pg_restore`):
+# the archive the test makes and restores is the kind the paid job makes and restores, and no path inside a container
+# ever enters an argument list.
 #
 # EVERY COMMAND IS PRINTED BEFORE IT RUNS, as `JULIUS_STORE_COMMAND <launcher> <tool> <args>`: names, flags and
 # files, never a value from the environment.
@@ -120,10 +125,10 @@ case "${1:-}" in
       rendering="$render/julius.sql"
     fi
     check_versions
-    # 1. THE STORE, restorable: custom format, uncompressed, over stdout.
-    tool pg_dump args_dump > "$out/julius.pgdump"
+    # 1. THE STORE, restorable: custom format, uncompressed, over a PIPE in both modes (see THE I/O above).
+    tool pg_dump args_dump | cat > "$out/julius.pgdump"
     # 2. ITS SQL RENDERING, read back from the archive itself (no server), to prove the record is IN the bytes.
-    tool pg_restore args_render < "$out/julius.pgdump" > "$rendering"
+    cat "$out/julius.pgdump" | tool pg_restore args_render > "$rendering"
     grep -qF "julius-learning-record.v1:$run_id:learning.arm.recorded" "$rendering" \
       || die 'learning_store_without_record: the store does not hold the WITHOUT record of this run'
     # 3. WHAT WAS DUMPED, said by digest and size (from stdin: sha256sum escapes a file name it dislikes).
@@ -146,24 +151,30 @@ case "${1:-}" in
     [[ "$without" =~ $RUN_ID_SHAPE ]] || die "julius_store_run_invalid: '$without'"
     [[ "$registration" =~ $DIGEST_SHAPE ]] || die 'julius_store_registration_invalid'
     check_versions
+    # Every answer is taken by ASSIGNMENT first: a psql that fails then stops the script with psql's own words, and is
+    # never compared as an empty string and misnamed as one of the refusals below.
     q() { tool psql args_query "$1" | tail -n 1 | tr -d '\r'; }
     # 0. THE TARGET IS EMPTY, by this script's own rule: arm WITH restores into a FRESH store. A target that already
     #    holds the schema is refused by name, with the runs it holds, before pg_restore could touch it.
-    if [ "$(q "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'relay_wonderland'")" != 0 ]; then
-      held=$(q "SELECT coalesce(string_agg(run_id, ' ' ORDER BY run_id), '') FROM relay_wonderland.julius_runs" 2>/dev/null || true)
-      die "julius_store_target_not_empty: the target already holds relay_wonderland${held:+ (runs: $held)}"
-    fi
+    schema=$(q "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'relay_wonderland'")
+    case "$schema" in
+      0) ;;
+      1)
+        held=$(q "SELECT coalesce(string_agg(run_id, ' ' ORDER BY run_id), '') FROM relay_wonderland.julius_runs" 2>/dev/null || true)
+        die "julius_store_target_not_empty: the target already holds relay_wonderland${held:+ (runs: $held)}" ;;
+      *) die "julius_store_query_unreadable: the schema count answered '$schema'" ;;
+    esac
     digest=$(sha256sum < "$dump" | cut -d' ' -f1)
     echo "LEARNING_STORE_RESTORING dump_sha256=$digest"
-    # 1. RESTORED in one transaction, stopping at the first error: whole, or nothing.
-    tool pg_restore args_restore < "$dump"
+    # 1. RESTORED in one transaction, stopping at the first error: whole, or nothing. Over a PIPE (see THE I/O above).
+    cat "$dump" | tool pg_restore args_restore
     # 2. THE RESTORED STORE IS ARM WITHOUT, AND ONLY ARM WITHOUT. The values were shape-checked above.
-    [ "$(q 'SELECT count(*) FROM relay_wonderland.julius_runs')" = 1 ] \
-      || die 'learning_store_not_one_run: the WITHOUT store must hold its own run alone'
-    [ "$(q "SELECT state FROM relay_wonderland.julius_runs WHERE run_id = '$without'")" = COMPLETED ] \
-      || die "learning_store_without_not_completed: $without"
-    [ "$(q "SELECT count(*) FROM relay_wonderland.events WHERE event_type = 'julius.learning.arm.recorded' AND stream_id = '$without' AND payload->'facts'->>'arm' = 'WITHOUT' AND payload->'facts'->>'registrationDigest' = '$registration'")" = 1 ] \
-      || die 'learning_store_without_unrecorded: no WITHOUT record under this registration'
+    runs=$(q 'SELECT count(*) FROM relay_wonderland.julius_runs')
+    [ "$runs" = 1 ] || die "learning_store_not_one_run: the WITHOUT store must hold its own run alone (it holds $runs)"
+    state=$(q "SELECT state FROM relay_wonderland.julius_runs WHERE run_id = '$without'")
+    [ "$state" = COMPLETED ] || die "learning_store_without_not_completed: $without is '$state'"
+    recorded=$(q "SELECT count(*) FROM relay_wonderland.events WHERE event_type = 'julius.learning.arm.recorded' AND stream_id = '$without' AND payload->'facts'->>'arm' = 'WITHOUT' AND payload->'facts'->>'registrationDigest' = '$registration'")
+    [ "$recorded" = 1 ] || die 'learning_store_without_unrecorded: no WITHOUT record under this registration'
     echo "LEARNING_STORE_RESTORED without_julius_run_id=$without dump_sha256=$digest"
     ;;
   *) usage ;;

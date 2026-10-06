@@ -1,6 +1,6 @@
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createConnection } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -75,6 +75,20 @@ describe('the learning store script, without a database', () => {
     expect(argsOf('args_render')).toBe('--file=- --no-password');
     expect(argsOf('args_restore')).toBe('--no-owner --no-privileges --single-transaction --exit-on-error --no-password --dbname=jlrt_db');
     expect(out, 'no connection URL and no password flag in any argument list').not.toMatch(/postgres(ql)?:\/\/|--password\b| -W\b/u);
+    // AND ONE I/O. `docker exec` offers only pipes: an archive written to one has no data offsets, and one read from
+    // one cannot be sought. Both modes go through pipes, so the tested path restores the kind of archive the paid one makes.
+    const source = readFileSync(SCRIPT, 'utf8');
+    expect(source).toContain('tool pg_dump args_dump | cat > "$out/julius.pgdump"');
+    expect(source).toContain('cat "$out/julius.pgdump" | tool pg_restore args_render > "$rendering"');
+    expect(source).toContain('cat "$dump" | tool pg_restore args_restore');
+    expect(source, 'no file is redirected straight onto a tool').not.toMatch(/tool pg_(dump|restore) args_\w+ *</u);
+    expect(source, 'the dump never lands on a seekable stdout').not.toMatch(/tool pg_dump args_dump *>/u);
+  });
+
+  it('is executable in git (100755): the runner calls it as ./.github/julius-learning-store.sh, and a 100644 file is "Permission denied" there', () => {
+    // Git Bash runs a shebang file whatever its mode, so only the index can show what a Linux runner will see.
+    const entry = execFileSync('git', ['-C', ROOT, 'ls-files', '-s', '.github/julius-learning-store.sh'], { encoding: 'utf8' }).trim();
+    expect(entry).toMatch(/^100755 [0-9a-f]{40} 0\t\.github\/julius-learning-store\.sh$/u);
   });
 
   it('says both versions, and REFUSES a client older than the server before anything is dumped (A2)', () => {
