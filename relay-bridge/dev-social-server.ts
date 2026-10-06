@@ -24,16 +24,25 @@ import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonder
 import { createInMemorySocialStore, type SocialStore } from '../src/relay/social/social-store';
 import { handleSocialRoute, type SocialSessionFacts } from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
+import { isThrowawayDatabaseUrl, THROWAWAY_PG_PORT_ENV } from './wonderland-github-stub-seam';
 
 const MAX_BODY = 64 * 1024;
 
 /**
  * A throwaway database, migrated by the chain (which carries 033_wonderland_social) and opened as the durable store.
- * Loopback URLs only. Run from the repository root: the chain's files are found from the working directory.
+ * THE THROWAWAY RULE (isThrowawayDatabaseUrl, shared with the GitHub stub's start): loopback, the throwaway port (never 5432, the live
+ * store's), a database not named `julius`. Before 10-06 any 127.0.0.1 URL passed, the live store's included -- and this function
+ * MIGRATES what it opens. Refused before any connection. Run from the repository root: the chain's files are found from there.
  */
-export async function openDevPostgresStore(url: string): Promise<{ store: SocialStore; pool: Pool }> {
-  if (!/^postgres(ql)?:\/\/[^@]*@127\.0\.0\.1:\d+\//.test(url)) throw new Error('the dev social server only uses a loopback throwaway database');
-  const pool = new Pool({ connectionString: url });
+export async function openDevPostgresStore(
+  url: string,
+  env: NodeJS.ProcessEnv = process.env,
+  createPool: (connectionString: string) => Pool = (connectionString) => new Pool({ connectionString }),
+): Promise<{ store: SocialStore; pool: Pool }> {
+  if (!isThrowawayDatabaseUrl(url, env)) {
+    throw new Error(`the dev social server only migrates the loopback THROWAWAY database (127.0.0.1, the ${THROWAWAY_PG_PORT_ENV} port, never 5432 or 'julius'): refused`);
+  }
+  const pool = createPool(url);
   await new TransactionalWonderlandDatabase(pool).migrate();
   return { store: await openSocialPostgresStore(pool), pool };
 }

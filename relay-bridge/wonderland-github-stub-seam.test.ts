@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { GITHUB_STUB_ENV, THROWAWAY_PG_PORT_ENV, githubRootsForNativeSignIn, throwawayPgPort } from './wonderland-github-stub-seam';
+import { GITHUB_STUB_ENV, THROWAWAY_PG_PORT_ENV, githubRootsForNativeSignIn, isThrowawayDatabaseUrl, throwawayPgPort } from './wonderland-github-stub-seam';
+import { openDevPostgresStore } from './dev-social-server';
 
 /*
  * THE DEVELOPMENT GITHUB STUB IS FENCED. Without the variable the sign-in always asks the real GitHub; with it, the bridge
@@ -52,5 +53,54 @@ describe('the GitHub roots for the desktop sign-in', () => {
       expect(() => githubRootsForNativeSignIn({ ...stub, [THROWAWAY_PG_PORT_ENV]: bad, JULIUS_DATABASE_URL: `postgresql://postgres@127.0.0.1:${bad}/sw_r16_1` } as NodeJS.ProcessEnv), bad).toThrow(/5432/);
     }
     expect(() => githubRootsForNativeSignIn({ ...stub, JULIUS_DATABASE_URL: 'postgresql://postgres@127.0.0.1:54329/julius' } as NodeJS.ProcessEnv)).toThrow(/throwaway/);
+  });
+});
+
+describe("one throwaway-database rule for every tool that migrates by itself (Second, 10-06: the dev server's --pg took the LIVE store)", () => {
+  const LIVE = 'postgresql://postgres@127.0.0.1:5432/julius';
+  it('the live store is never a throwaway: port 5432, the julius database, another host, another port, a path or a query -- all refused', () => {
+    const env = {} as NodeJS.ProcessEnv;   // the default throwaway port, 54329
+    expect(isThrowawayDatabaseUrl('postgresql://postgres@127.0.0.1:54329/sw_social_1', env)).toBe(true);   // the control: a throwaway passes
+    for (const bad of [
+      LIVE,
+      'postgresql://postgres@127.0.0.1:5432/sw_social_1',
+      'postgresql://postgres@127.0.0.1:54329/julius',
+      'postgresql://postgres@localhost:54329/sw_social_1',
+      'postgresql://postgres@10.0.0.5:54329/sw_social_1',
+      'postgresql://postgres@127.0.0.1:54339/sw_social_1',
+      'postgresql://postgres@127.0.0.1:54329/sw_social_1?host=10.0.0.5',
+      'postgresql://postgres@127.0.0.1:54329/sw/../julius',
+    ]) expect(isThrowawayDatabaseUrl(bad, env), bad).toBe(false);
+    // the port is the configured one: 54339 when R16_THROWAWAY_PG_PORT says so, and then 54329 is not
+    const second = { [THROWAWAY_PG_PORT_ENV]: '54339' } as NodeJS.ProcessEnv;
+    expect(isThrowawayDatabaseUrl('postgresql://postgres@127.0.0.1:54339/sw2_r16_1', second)).toBe(true);
+    expect(isThrowawayDatabaseUrl('postgresql://postgres@127.0.0.1:54329/sw2_r16_1', second)).toBe(false);
+    expect(() => isThrowawayDatabaseUrl('postgresql://postgres@127.0.0.1:5432/x', { [THROWAWAY_PG_PORT_ENV]: '5432' } as NodeJS.ProcessEnv)).toThrow(/5432/);
+  });
+
+  it('the dev social server refuses a non-throwaway database BEFORE connecting (it migrates what it opens)', async () => {
+    // PORT 9, NEVER THE LIVE URL, HERE: this call would CONNECT and MIGRATE if the guard ever regressed (or under the guard's own RED
+    // control), and the live store listens on 127.0.0.1:5432 on the machines that run this. On port 9 nothing listens: a broken guard
+    // fails this test with a connection error instead of touching anything. The live URL is refused above, by the pure predicate.
+    await expect(openDevPostgresStore('postgresql://postgres@127.0.0.1:9/julius', {} as NodeJS.ProcessEnv)).rejects.toThrow(/THROWAWAY/);
+    await expect(openDevPostgresStore('postgresql://postgres@127.0.0.1:9/sw_social_1', {} as NodeJS.ProcessEnv)).rejects.toThrow(/THROWAWAY/);
+  });
+
+  it("the live store's own URLs are refused before ANY pool exists: a FAKE pool factory records the attempt and can connect to nothing", async () => {
+    // MAIN's request (10-06): a regressed PORT check must fail a test too. The live URLs go in literally here because the pool is a
+    // stand-in -- were the guard to regress, the factory is called (attempt recorded, the test fails) and nothing is ever connected.
+    const attempts: string[] = [];
+    const fakePool = (connectionString: string) => {
+      attempts.push(connectionString);
+      const refuse = async () => { throw new Error('fake pool: no connection is ever made'); };
+      return { query: refuse, connect: refuse, end: async () => undefined } as never;
+    };
+    for (const url of [LIVE, 'postgresql://postgres@127.0.0.1:5432/anything', 'postgresql://postgres@127.0.0.1:5432/sw_social_1']) {
+      await expect(openDevPostgresStore(url, {} as NodeJS.ProcessEnv, fakePool), url).rejects.toThrow(/THROWAWAY/);
+    }
+    expect(attempts).toEqual([]);
+    // the control: a throwaway URL DOES reach the factory (so an empty `attempts` above is the guard's doing, not a dead factory)
+    await expect(openDevPostgresStore('postgresql://postgres@127.0.0.1:54329/sw_social_1', {} as NodeJS.ProcessEnv, fakePool)).rejects.toThrow(/fake pool/);
+    expect(attempts).toEqual(['postgresql://postgres@127.0.0.1:54329/sw_social_1']);
   });
 });

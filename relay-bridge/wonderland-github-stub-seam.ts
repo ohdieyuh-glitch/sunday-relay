@@ -43,6 +43,16 @@ export function throwawayPgPort(env: NodeJS.ProcessEnv): number {
 const REAL: GitHubRoots = Object.freeze({ oauthRoot: 'https://github.com', apiRoot: 'https://api.github.com', stub: false });
 const throwawayDb = (pgPort: number): RegExp => new RegExp(`^postgres(ql)?://[^@/]*@127\\.0\\.0\\.1:${pgPort}/(?!julius$)[A-Za-z0-9_]+$`);
 
+/**
+ * THE ONE THROWAWAY-DATABASE RULE for every development tool that migrates a database by itself (Second, 10-06: the dev social
+ * server's `--pg` took any 127.0.0.1 URL, so `postgresql://...@127.0.0.1:5432/julius` -- the LIVE store -- would have been migrated
+ * through 033 and 035). Loopback, the throwaway port (R16_THROWAWAY_PG_PORT, else 54329; never 5432), a plain database name that is
+ * not `julius`. A bad R16_THROWAWAY_PG_PORT throws, as at the GitHub stub's start.
+ */
+export function isThrowawayDatabaseUrl(url: string, env: NodeJS.ProcessEnv): boolean {
+  return throwawayDb(throwawayPgPort(env)).test(url.trim());
+}
+
 export function githubRootsForNativeSignIn(env: NodeJS.ProcessEnv): GitHubRoots {
   const raw = env[GITHUB_STUB_ENV];
   if (raw === undefined || raw.trim() === '') return REAL;
