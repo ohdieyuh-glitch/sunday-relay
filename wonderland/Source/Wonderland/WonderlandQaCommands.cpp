@@ -63,6 +63,7 @@
 #include "WonderlandPracticalLights.h"
 #include "WonderlandRelaySkins.h"
 #include "WonderlandSidekicks.h"
+#include "WonderlandSocialSubsystem.h"
 #include "WonderlandTerritory.h"
 #include "EngineUtils.h"
 #include "Engine/DirectionalLight.h"
@@ -4792,13 +4793,80 @@ namespace
 			ArmQaPerf(World, false, 0.0);
 		}));
 
+	/** wl.Qa.Soak N waitsignin (CORE 10-06; R11/R14 on the final package, SECOND's pre-registered "signed in, in a world"): nothing
+	 *  is driven until the player has signed in to Wonderland social through the hub by REAL input (the founder approves the device
+	 *  code in the browser), then a 20 s settle, then the soak exactly as without the word. No sign-in within 15 min: "WLSOAK VOID" and
+	 *  quit, never a soak that silently ran signed out. */
+	struct FQaSoakSignInWait
+	{
+		TWeakObjectPtr<UGameInstance> Instance;
+		double Minutes = 30.0;
+		double Since = 0.0;
+		double SignedAt = -1.0;
+	};
+	TSharedPtr<FQaSoakSignInWait> GQaSoakWait;
+
+	bool QaSoakWaitTick(float)
+	{
+		if (!GQaSoakWait.IsValid())
+		{
+			return false;
+		}
+		UGameInstance* Instance = GQaSoakWait->Instance.Get();
+		UWorld* World = Instance != nullptr ? Instance->GetWorld() : nullptr;
+		const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+		const bool bSignedIn = Social != nullptr && Social->GetSignInView().State == EWonderlandSignInState::SignedIn;
+		const double Now = QaNow();
+		if (bSignedIn && GQaSoakWait->SignedAt < 0.0)
+		{
+			GQaSoakWait->SignedAt = Now;
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSOAK signed in after %.0f s of waiting; the soak starts after a 20 s settle"), Now - GQaSoakWait->Since);
+		}
+		if (GQaSoakWait->SignedAt >= 0.0 && Now - GQaSoakWait->SignedAt >= 20.0 && World != nullptr)
+		{
+			const double Minutes = GQaSoakWait->Minutes;
+			GQaSoakWait.Reset();
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLSOAK signed in: starting the %.0f min soak"), Minutes);
+			ArmQaPerf(World, true, Minutes);
+			return false;
+		}
+		if (GQaSoakWait->SignedAt < 0.0 && Now - GQaSoakWait->Since > 15.0 * 60.0)
+		{
+			GQaSoakWait.Reset();
+			UE_LOG(LogWonderlandQa, Warning, TEXT("WLSOAK VOID: no sign-in within 15 min, so the soak never started; quitting"));
+			if (World != nullptr && GEngine != nullptr)
+			{
+				GEngine->Exec(World, TEXT("quit"));
+			}
+			return false;
+		}
+		return true;
+	}
+
 	FAutoConsoleCommandWithWorldAndArgs GQaSoakCommand(
 		TEXT("wl.Qa.Soak"),
 		TEXT("Soak this (packaged) build for N minutes (default 30): travel, skins, map, wardrobe, Mission Contracts and terminal ")
-		TEXT("contracts on repeat, with a WLSOAK memory / UObject / frame sample every minute and a growth verdict. Quits at the end."),
+		TEXT("contracts on repeat, with a WLSOAK memory / UObject / frame sample every minute and a growth verdict. Quits at the end. ")
+		TEXT("'wl.Qa.Soak N waitsignin' starts only after the player signs in to Wonderland social (by real input) and a 20 s settle."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
-			ArmQaPerf(World, true, Args.Num() > 0 ? FCString::Atod(*Args[0]) : 30.0);
+			const double Minutes = Args.Num() > 0 ? FCString::Atod(*Args[0]) : 30.0;
+			if (Args.Contains(TEXT("waitsignin")))
+			{
+				if (GQaSoakWait.IsValid() || GQaPerf.IsValid() || GQaRun.IsValid() || World == nullptr || World->GetGameInstance() == nullptr)
+				{
+					UE_LOG(LogWonderlandQa, Warning, TEXT("WLSOAK cannot wait for a sign-in: a QA run is already going, or there is no game instance"));
+					return;
+				}
+				GQaSoakWait = MakeShared<FQaSoakSignInWait>();
+				GQaSoakWait->Instance = World->GetGameInstance();
+				GQaSoakWait->Minutes = Minutes;
+				GQaSoakWait->Since = QaNow();
+				FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaSoakWaitTick), 0.5f);
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSOAK waiting for a sign-in to Wonderland social (by the player, through the hub); nothing is driven until then"));
+				return;
+			}
+			ArmQaPerf(World, true, Minutes);
 		}));
 
 	/* ================================================================ wl.Qa.Card: C.A.R.D. + Mission Handoff, M0 (the model)
