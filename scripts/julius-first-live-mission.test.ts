@@ -667,15 +667,73 @@ describe('every mission declares its own durable accounting namespace', () => {
     }
   });
 
+  type ParsedContract = Extract<ReturnType<typeof parseLiveMissionContract>, { ok: true }>['contract'];
+  /**
+   * WHO MAY SHARE AN IDENTITY: no two missions, except the arms of ONE registered learning pair (Decision C). Its arms
+   * are one mission by design (the carry crosses only within one project and mission), told apart by their clause:
+   * every directory sharing a value carries a `learningPair` with the same registrationDigest, and each its OWN rerunKey.
+   * The clause is outside the binding, so the rerunKey ALONE names an arm's run: two arms sharing one would be one run.
+   */
+  const sharedIdentityProblems = (contracts: readonly { readonly dir: string; readonly contract: ParsedContract | null }[]): string[] => {
+    const problems: string[] = [];
+    for (const field of ['markerNamespace', 'missionId', 'projectId'] as const) {
+      const groups = new Map<string, (typeof contracts)[number][]>();
+      // An unparsed contract shares nothing: its directory name stands in for the value.
+      for (const entry of contracts) {
+        const value = entry.contract === null ? `unparsed:${entry.dir}` : entry.contract[field];
+        groups.set(value, [...(groups.get(value) ?? []), entry]);
+      }
+      for (const [value, group] of groups) {
+        if (group.length < 2) continue;
+        // Every directory of the group must be an arm: as many clauses as directories, one registration, one rerunKey each.
+        const clauses = group.flatMap((entry) => entry.contract?.learningPair ?? []);
+        const onePair = clauses.length === group.length
+          && new Set(clauses.map((clause) => clause.registrationDigest)).size === 1
+          && new Set(clauses.map((clause) => clause.rerunKey)).size === group.length;
+        if (!onePair) problems.push(`${field} ${value} is shared by ${group.map((entry) => entry.dir).join(', ')}`);
+      }
+    }
+    return problems;
+  };
+
   it('no two missions share a namespace, a mission id or a project id', () => {
     // A collision here is one contract's paid history answering for another's.
-    for (const field of ['markerNamespace', 'missionId', 'projectId'] as const) {
-      const values = MISSIONS.map((mission) => {
-        const parsedMission = parseLiveMissionContract(read(`${MISSIONS_DIR}/${mission}/contract.json`));
-        return parsedMission.ok ? parsedMission.contract[field] : mission;
-      });
-      expect(new Set(values).size, `${field} must be unique across missions`).toBe(values.length);
+    const contracts = MISSIONS.map((mission) => {
+      const parsedMission = parseLiveMissionContract(read(`${MISSIONS_DIR}/${mission}/contract.json`));
+      return { dir: mission, contract: parsedMission.ok ? parsedMission.contract : null };
+    });
+    expect(sharedIdentityProblems(contracts), 'namespace, mission id and project id must be unique across missions').toEqual([]);
+  });
+
+  it('only the arms of one registered learning pair may share them, each on its own rerunKey', () => {
+    const base = JSON.parse(read(`${MISSIONS_DIR}/julius-live-mission-5/contract.json`)) as Record<string, unknown>;
+    const digest = 'c4'.repeat(32);
+    const policy = { dimensions: ['repairs'], minimumRelativeImprovement: 0.5, minimumImprovedDimensions: 1 };
+    const arm = (dir: string, clause: Record<string, unknown> | null, identity: Record<string, unknown> = {}) => {
+      const parsed = parseLiveMissionContract(JSON.stringify({
+        ...base, markerNamespace: 'julius-learning-pair-x', missionId: 'mission:julius-learning-pair-x', projectId: 'prj-julius-learning-pair-x',
+        ...identity, ...(clause === null ? {} : { learningPair: { registrationDigest: digest, policy, ...clause } }),
+      }));
+      expect(parsed.ok ? 'accepted' : parsed.problem, dir).toBe('accepted');
+      return { dir, contract: parsed.ok ? parsed.contract : null };
+    };
+    const without = (key: string) => ({ arm: 'WITHOUT', rerunKey: key });
+    const withArm = (key: string) => ({ arm: 'WITH', rerunKey: key, withoutRunId: `run:${'a1'.repeat(12)}` });
+    const four = [arm('w1', without('jlpx-without-1')), arm('h1', withArm('jlpx-with-1')), arm('w2', without('jlpx-without-2')), arm('h2', withArm('jlpx-with-2'))];
+    expect(sharedIdentityProblems(four), 'four arms of one registration, four rerunKeys').toEqual([]);
+    // Each of these is a real collision, refused for all three fields at once.
+    const refusals: [string, ReturnType<typeof arm>[]][] = [
+      ['an arm on another arm\'s rerunKey: one run, whatever the arm says', [arm('w1', without('jlpx-1')), arm('h1', withArm('jlpx-1'))]],
+      ['two registrations', [arm('w1', without('jlpx-without-1')), arm('h1', { ...withArm('jlpx-with-1'), registrationDigest: 'd5'.repeat(32) })]],
+      ['a plain mission beside an arm', [arm('w1', without('jlpx-without-1')), arm('plain', null)]],
+      ['two plain missions', [arm('a', null), arm('b', null)]],
+    ];
+    for (const [label, contracts] of refusals) {
+      expect(sharedIdentityProblems(contracts).map((problem) => problem.split(' ')[0]), label).toEqual(['markerNamespace', 'missionId', 'projectId']);
     }
+    // And sharing ONE field is refused just the same: the exemption is the pair's, not a field's.
+    expect(sharedIdentityProblems([arm('a', null), arm('b', null, { missionId: 'mission:other', projectId: 'prj-other' })]))
+      .toEqual(['markerNamespace julius-learning-pair-x is shared by a, b']);
   });
 
   it('the first mission keeps the namespace its completed history is filed under', () => {
