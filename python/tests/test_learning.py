@@ -315,6 +315,23 @@ class MatchedPairTests(unittest.TestCase):
             ("baseline", self.W1, "41", "WITHOUT"), ("baseline", self.W2, "42", "WITHOUT"),
             ("candidate", self.C1, "43", "WITH"), ("candidate", self.C2, "44", "WITH")])
 
+    def test_a_reduced_candidate_set_still_reads_as_a_verdict_which_only_the_registration_can_refuse(self):
+        # THE INSTRUMENT, PINNED AS IT IS (Decision C registration V5 / E1(d)). The baselines are held to the
+        # registered list; the candidates to none. So when WITH-1 was never dispatched (its WITHOUT left no verified
+        # repair finding), WITH-2 alone still yields PROVISIONAL, a verdict PREREG §3 counts as valid. The evaluator is
+        # PREREG-frozen and stays as it is: the registration refuses this set by rule (all four run ids registered, the
+        # four bundles evaluated together, primary.n 2/2 or no credit). Here n is 2/1, the mark that rule reads.
+        reg = self.reg()
+        _, base, cand = self.pair(reg)
+        out = evaluate_learning(reg, base, cand[1:], {"44": AFTER})
+        self.assertEqual(out["verdict"], "PROVISIONAL", out["reasons"])
+        self.assertEqual(out["primary"]["n"], {"baseline": 2, "candidate": 1})
+        self.assertIn("cannot form an interval", out["reasons"][-1])
+        # And with no movement, the same reduced set is a REJECT: also a "valid" verdict, also refused by the rule.
+        _, base, cand = self.pair(reg, with_repairs=(2, 3))
+        out = evaluate_learning(reg, base, cand[1:], {"44": AFTER})
+        self.assertEqual((out["verdict"], out["primary"]["n"]), ("REJECT", {"baseline": 2, "candidate": 1}), out["reasons"])
+
     def test_no_movement_on_a_valid_pair_is_reject(self):
         # REJECT is a VALID pair's verdict (MATCHED_PAIR_PREREG §3): the gate refusing is the capability working.
         reg = self.reg()
