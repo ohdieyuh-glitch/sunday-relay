@@ -9,7 +9,7 @@ import {
   type JuliusLearningPairing,
   type JuliusLearningPolicy,
 } from './julius-learning-loop';
-import { juliusCarriedEntryId, juliusClaimIdFor } from './julius-claim-ledger';
+import { planJuliusKnowledgeCarry, type JuliusCarryItem } from './julius-claim-ledger';
 import { promoteJuliusMemoryClaim, admitJuliusMemoryCandidate, type JuliusMemoryClaim } from './julius-memory-trust';
 import {
   cardPolicy, createJuliusHarness, seedTaskContractInto, task, verificationPolicy, worker,
@@ -32,11 +32,14 @@ import type { JuliusRunRow } from './julius-runtime-ports';
  * WHAT IS PREMISED, and stated rather than hidden:
  *
  *   That a worker which lacks a needed fact does worse than one which has it.
- *   The scripted Coding Agent below reads its own context packet and fails its
- *   first attempt when the packet does not contain the constraint it needs. That
- *   is the fixture's premise, not a finding — a real model's version of it is
- *   noisier and is what a paid run would measure. Everything BETWEEN that premise
- *   and the verdict is Julius's own machinery, and that is what is under test.
+ *   The corrected carry hands an earlier run's lesson to the new run's PLANNER
+ *   and to nobody else, so the premise has two scripted steps: the Prompt
+ *   Architect reads its packet and writes the deploy order into the design only
+ *   when the lesson is there, and the Coding Agent reads its own packet and fails
+ *   its first attempt when the design it was handed lacks that order. That is the
+ *   fixture's premise, not a finding — a real model's version of it is noisier and
+ *   is what a paid run would measure. Everything BETWEEN that premise and the
+ *   verdict is Julius's own machinery, and that is what is under test.
  *
  * WHY THAT PREMISE IS LEGITIMATE. The alternative is to stipulate the metrics and
  * compare two numbers nobody produced, which proves the arithmetic of
@@ -70,13 +73,69 @@ const OBJECTIVE = 'Add the deploy step to the release script.';
  * coder ships a deploy that runs before the migration and the build fails.
  */
 const LEARNED = 'The migration must run before the deploy, or the deploy fails.';
+/** What a worker's packet must say for the deploy order to be known. */
+const LESSON = 'migration must run before the deploy';
 
-/** The mission that learned it. Its id is part of every carried entry's own id. */
+/** The mission that learned it, and the finding its reviewer raised there. Both are part of the copy's own id. */
 const PRIOR_RUN_ID = 'run:prior-mission';
+const PRIOR_FINDING_ID = `finding:${PRIOR_RUN_ID}:deploy-order`;
 
 const ALL_ROLES: JuliusBrainEntry['allowedRoles'] = ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'];
 
+/**
+ * WHAT THE CARRY HANDS MISSION B, MADE BY THE CARRY ITSELF (C-13; SECOND's K5:
+ * no fake parity). `planJuliusKnowledgeCarry` is the rule the bootstrap runs. The
+ * prior mission's reviewer finding was blocking, cited, repaired and RESOLVED by
+ * an independent re-review, so it becomes ONE row of the new run's brain: scoped
+ * to its PLAN task, under the copy id, header and standing that
+ * `carryProjectKnowledge` writes. Nothing here builds that shape by hand.
+ */
+function carriedLesson(runId: string): JuliusCarryItem {
+  const plan = planJuliusKnowledgeCarry({
+    runId, projectId: 'prj-1', missionId: 'msn-1',
+    scope: { taskId: `${runId}-plan`, taskType: 'plan', role: 'PROMPT_ARCHITECT' },
+    sourceRuns: [{ runId: PRIOR_RUN_ID, state: 'COMPLETED' }],
+    findings: [{
+      runId: PRIOR_RUN_ID,
+      finding: {
+        findingId: PRIOR_FINDING_ID, taskId: `${PRIOR_RUN_ID}-build`, reviewerWorkerId: 'reviewer', severity: 'HIGH',
+        category: 'release', claim: LEARNED, criterionId: null, evidenceIds: ['evidence:prior-mission-failure'],
+        blocking: true, status: 'OPEN', createdAt: '2026-09-10T02:00:00.000Z',
+      },
+      life: {
+        originReviewTaskId: `review:${PRIOR_RUN_ID}-build`, state: 'RESOLVED', lastMove: 'REVIEWER_RESOLVED',
+        repairTaskIds: [`repair:${PRIOR_RUN_ID}-build:1:task`], resolutionReviewTaskId: `review:repair:${PRIOR_RUN_ID}-build:1:task`,
+      },
+      task: { taskType: 'build', role: 'CODING_AGENT' },
+    }],
+    architectures: [], brain: [], limit: 12,
+  });
+  expect(plan.carried, 'the prior finding qualifies under the corrected rule').toHaveLength(1);
+  return plan.carried[0]!;
+}
+
 const PLAN_OK = { kind: 'succeed' as const, evidence: [{ type: 'ARTIFACT', status: 'PASSED', safeSummary: 'Plan written.' }] };
+
+/**
+ * THE PLANNER IS WHERE THE LESSON IS APPLIED. The carried row reaches the Prompt
+ * Architect alone; what it adopts reaches the coder through the plan's own
+ * design, never as the carried row. The same script runs in both missions: the
+ * architect reads its packet and writes the deploy order into the design only
+ * when the lesson is there.
+ */
+const DESIGN = (knowsTheOrder: boolean) => ({
+  components: [{ name: 'release-script', responsibility: 'Runs the release steps in order.' }],
+  decisions: [knowsTheOrder
+    ? { decisionId: 'D1', decision: 'The migration must run before the deploy.', reason: 'An earlier run of this mission failed when it did not.' }
+    : { decisionId: 'D1', decision: 'Add the deploy step to the release script.', reason: 'The objective asks for it.' }],
+});
+const ALIGNED = { assessment: 'ALIGNED', claim: 'The release script matches the recorded design.' };
+const ARCHITECT_APPLIES_THE_LESSON = {
+  kind: 'readsPacket' as const,
+  decide: (packet: string | null) => ({
+    ...PLAN_OK, architecture: DESIGN(packet !== null && packet.includes(LESSON)), consistency: ALIGNED,
+  }),
+};
 const REVIEW_ACCEPT = { kind: 'succeed' as const, evidence: [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 'No blocking findings.' }] };
 
 /**
@@ -90,7 +149,7 @@ const BUILD_AFTER_LEARNING = {
 
 const CODER_NEEDS_THE_FACT = {
   kind: 'readsPacket' as const,
-  decide: (packet: string | null) => (packet !== null && packet.includes('migration must run before the deploy')
+  decide: (packet: string | null) => (packet !== null && packet.includes(LESSON)
     ? { kind: 'succeed' as const, evidence: [{ type: 'TEST', status: 'PASSED', safeSummary: 'Suite green.' }] }
     : { kind: 'succeed' as const, evidence: [{ type: 'TEST', status: 'FAILED', safeSummary: 'Deploy ran before the migration.' }] }),
 };
@@ -101,20 +160,23 @@ interface MissionOutcome {
 }
 
 /**
- * ONE MISSION. `learned` seeds the artifact a previous mission would have left
- * behind; everything else about the two missions is identical by construction —
- * same objective entry, same tasks, same workers, same policies, same budget.
+ * ONE MISSION. `learned` seeds the one row the carry would have handed it;
+ * everything else about the two missions is identical by construction — same
+ * objective entry, same other brain material, same tasks, same workers, same
+ * policies, same budget.
  */
 /**
- * WHAT ELSE A PREVIOUS MISSION LEAVES IN THE BRAIN.
+ * WHAT ELSE THE BRAIN HOLDS, IN BOTH MISSIONS.
  *
- * A real Project Brain does not contain one tidy finding. It contains everything
- * the last mission concluded, most of which is about work this mission is not
- * doing — and the founder's requirement is explicit: prior durable findings must
- * improve the later mission WITHOUT leaking irrelevant task context.
+ * Under the corrected carry a previous mission's other conclusions do not travel
+ * at all: everything but the verified repair finding stays behind, by name
+ * (`planJuliusKnowledgeCarry`). What the context compiler still has to keep out
+ * of the coder's packet is material in the run's own brain that is not the
+ * coder's — and the founder's requirement is explicit: prior durable findings
+ * must improve the later mission WITHOUT leaking irrelevant task context.
  *
- * So `learned` seeds three pieces of genuine prior-mission residue beside the one
- * relevant finding, each irrelevant for a different structural reason:
+ * So both missions hold three such entries beside the objective, each irrelevant
+ * to the build for a different structural reason:
  *
  *   - scoped to a task that does not exist in this mission (another task's work);
  *   - readable only by the Independent Reviewer (another role's material);
@@ -123,27 +185,27 @@ interface MissionOutcome {
  * All three are plausible, all three mention the deploy, and a compiler that
  * retrieved on relevance would hand every one of them to the coder.
  */
-const PRIOR_RESIDUE = (runId: string) => [
+const RESIDUE = (runId: string) => [
   {
-    entryId: `${runId}:prior-other-task`, kind: 'FINDING' as const,
+    entryId: `${runId}:other-task`, kind: 'FINDING' as const,
     text: 'The deploy step in the OTHER task must retry three times before failing.',
-    taskIds: ['prior-mission-task-9'], allowedRoles: ALL_ROLES, sensitivity: 'INTERNAL' as const,
+    taskIds: ['other-mission-task-9'], allowedRoles: ALL_ROLES, sensitivity: 'INTERNAL' as const,
     provenance: {
       workerId: 'reviewer', recordedAt: '2026-09-10T02:00:00.000Z',
-      evidenceIds: ['evidence:prior-other-task'],
+      evidenceIds: ['evidence:other-task'],
     },
   },
   {
-    entryId: `${runId}:prior-reviewer-only`, kind: 'FINDING' as const,
+    entryId: `${runId}:reviewer-only`, kind: 'FINDING' as const,
     text: 'Reviewer rubric for deploy changes: reject any unproven retry claim.',
     taskIds: [], allowedRoles: ['INDEPENDENT_REVIEWER'] as const, sensitivity: 'INTERNAL' as const,
     provenance: {
       workerId: 'reviewer', recordedAt: '2026-09-10T02:00:00.000Z',
-      evidenceIds: ['evidence:prior-rubric'],
+      evidenceIds: ['evidence:rubric'],
     },
   },
   {
-    entryId: `${runId}:prior-secret`, kind: 'ARTIFACT' as const,
+    entryId: `${runId}:secret`, kind: 'ARTIFACT' as const,
     text: 'deploy token: hunter2',
     taskIds: [], allowedRoles: ALL_ROLES, sensitivity: 'SECRET' as const,
     provenance: { workerId: 'julius', recordedAt: '2026-09-10T02:00:00.000Z', evidenceIds: [] },
@@ -153,9 +215,10 @@ const PRIOR_RESIDUE = (runId: string) => [
 async function runMission(learned: boolean, runId: string, priceless = false): Promise<MissionOutcome> {
   const priced = <T extends { kind: 'succeed' }>(step: T) =>
     (priceless ? { ...step, usdMicros: null } : step);
+  const lesson = learned ? carriedLesson(runId) : null;
   const harness = createJuliusHarness({
     workers: [
-      { worker: ARCHITECT, script: [priced(PLAN_OK), priced(PLAN_OK)] },
+      { worker: ARCHITECT, script: [{ kind: 'readsPacket' as const, decide: (packet: string | null) => priced(ARCHITECT_APPLIES_THE_LESSON.decide(packet)) }] },
       /**
        * THE SAME SCRIPT IN BOTH MISSIONS, and this is the load-bearing detail.
        * The first attempt reads its packet; the attempts after it succeed,
@@ -197,46 +260,31 @@ async function runMission(learned: boolean, runId: string, priceless = false): P
       provenance: { workerId: 'founder', recordedAt: '2026-09-10T01:00:00.000Z', evidenceIds: [] },
     },
     /**
-     * THE ONLY DIFFERENCE BETWEEN THE TWO MISSIONS — written as production writes
-     * it.
-     *
-     * `juliusCarriedEntryId` is the id the BOOTSTRAP gives an inherited fact
-     * (`relay-bridge/julius/mission-knowledge.ts`), and the claim standing below
-     * is the one it records for it. This matters for the honesty of the whole
-     * proof: before the carry existed, this seed was the fixture asserting that a
-     * prior mission's fact would somehow be present, and the readiness page said
-     * so. Now the shape here IS the shape a real mission B inherits, and the
-     * real-PostgreSQL seam suite proves the bootstrap produces it.
+     * THE ONLY DIFFERENCE BETWEEN THE TWO MISSIONS — the row the carry writes,
+     * as the store reads it back (`JuliusReadPostgresRepository`: its task id,
+     * the three permanent roles, INTERNAL). Its id, text, scope and author come
+     * from the carry rule itself (`carriedLesson`), so the shape here IS the shape
+     * a real mission B inherits, and the real-PostgreSQL suites prove the
+     * bootstrap writes it. It is scoped to this run's PLAN task: the coder never
+     * reads it, and learns the deploy order only if the plan teaches it.
      */
-    ...(learned ? [{
-      entryId: juliusCarriedEntryId(PRIOR_RUN_ID, 'prior:learned'), kind: 'FINDING' as const, text: LEARNED,
-      taskIds: [], allowedRoles: ALL_ROLES, sensitivity: 'INTERNAL' as const,
-      provenance: {
-        workerId: 'reviewer', recordedAt: '2026-09-10T02:00:00.000Z',
-        evidenceIds: ['evidence:prior-mission-failure'],
-      },
-    }] : []),
-    // The residue travels with the learning, because a mission that inherits a
-    // finding inherits the brain it was written into.
-    ...(learned ? PRIOR_RESIDUE(runId) : []),
+    ...(lesson === null ? [] : [{
+      entryId: lesson.entryId, kind: lesson.kind, text: lesson.text,
+      taskIds: [lesson.scope.taskId], allowedRoles: ALL_ROLES, sensitivity: 'INTERNAL' as const,
+      provenance: { workerId: lesson.workerId, recordedAt: '2026-09-10T02:00:00.000Z', evidenceIds: [...lesson.evidenceIds] },
+    }]),
+    ...RESIDUE(runId),
   ]);
   /**
-   * AND THE STANDING THE CARRY RECORDS, so the packet ranks a reviewer-verified
-   * fact as VERIFIED rather than re-deriving it as an assertion. Recorded before
-   * the run ticks, because that is when the bootstrap records it.
+   * AND THE STANDING THE CARRY RECORDS (`carryProjectKnowledge`), so the packet
+   * ranks a reviewer-verified fact as VERIFIED rather than re-deriving it as an
+   * assertion. Recorded before the run ticks, because that is when the bootstrap
+   * records it.
    */
-  if (learned) {
+  if (lesson !== null) {
     await harness.store.recordClaimStanding({
-      runId, projectId: 'prj-1',
-      claim: {
-        claimId: juliusClaimIdFor(juliusCarriedEntryId(PRIOR_RUN_ID, 'prior:learned')),
-        entryId: juliusCarriedEntryId(PRIOR_RUN_ID, 'prior:learned'),
-        provenance: 'reviewer_verified', trust: 'VERIFIED', assertedBy: 'reviewer',
-        assertedAt: '2026-09-10T02:00:00.000Z',
-        evidence: [{ kind: 'REVIEW', id: 'evidence:prior-mission-failure' }],
-        supersedes: null, contradicts: [],
-      },
-      reason: `CARRIED_FROM:${PRIOR_RUN_ID}`, occurredAt: '2026-09-10T02:00:00.000Z',
+      runId, projectId: 'prj-1', claim: lesson.claim,
+      reason: `CARRIED_FROM:${lesson.sourceRunId}`, occurredAt: '2026-09-10T02:00:00.000Z',
     });
   }
   for (let tick = 0; tick < 24; tick += 1) {
@@ -493,49 +541,59 @@ describe('the Julius Learning Loop, measured rather than asserted', () => {
 });
 
 /**
- * THE LEARNING ARRIVES AND THE REST OF THE PRIOR MISSION DOES NOT.
+ * THE LESSON REACHES THE PLANNER, AND THE CODER ONLY THROUGH THE PLAN.
  *
  * The matched pair above proves the improvement is real and measured. This proves
  * the other half of the founder's requirement, which a matched pair alone cannot:
- * that what improved the mission was the RELEVANT finding, and that the rest of
- * the previous mission's brain — another task's finding, another role's rubric, a
- * secret — never reached the worker.
+ * that what improved the mission was the RELEVANT finding, handed where the
+ * corrected carry scopes it — the plan — and that nothing else reached the coder:
+ * not the carried row itself, not another task's finding, not another role's
+ * rubric, not a secret.
  *
- * It reads the packet out of the durable snapshot the coder's dispatch was
- * recorded against, so it is asserting what the worker was actually handed rather
- * than what the store contained.
+ * It reads each packet out of the durable snapshot the dispatch was recorded
+ * against, so it is asserting what the worker was actually handed rather than
+ * what the store contained.
  */
 describe('prior learning reaches the next mission without leaking the last one', () => {
-  const coderSnapshot = (outcome: MissionOutcome) => {
-    const dispatch = outcome.harness.adapters.get('coder-adapter')!.dispatches.at(0);
-    expect(dispatch, 'the Coding Agent must have been dispatched').toBeTruthy();
+  const snapshotOf = (outcome: MissionOutcome, adapterId: string) => {
+    const dispatch = outcome.harness.adapters.get(adapterId)!.dispatches.at(0);
+    expect(dispatch, `${adapterId} must have been dispatched`).toBeTruthy();
     const snapshot = outcome.harness.store.contexts()
       .filter((item) => item.contextId === dispatch!.contextId && item.taskId === dispatch!.taskId).at(-1);
     expect(snapshot, 'every dispatch records a durable context snapshot').toBeTruthy();
     return snapshot!;
   };
+  const textOf = (snapshot: ReturnType<typeof snapshotOf>) => snapshot.packet.blocks.map((block) => block.text).join('\n');
 
-  it('hands the coder the relevant finding and none of the residue', async () => {
+  it('hands the planner the carried finding, and the coder only the plan it shaped — never the carried row, never the residue', async () => {
     const withLearning = await runMission(true, 'run-b');
-    const snapshot = coderSnapshot(withLearning);
-    const text = snapshot.packet.blocks.map((block) => block.text).join('\n');
+    const lesson = carriedLesson('run-b');
 
-    // THE INHERITED ENTRY ID IS THE CARRY'S OWN, so this case also pins that the
-    // packet carries what the bootstrap actually writes — `carried:<run>:<entry>`
-    // — rather than an id only this fixture would produce.
-    const inheritedId = juliusCarriedEntryId(PRIOR_RUN_ID, 'prior:learned');
-    expect(snapshot.sourceEntryIds, 'the finding the task needs arrived').toContain(inheritedId);
-    expect(text).toContain('migration must run before the deploy');
+    // THE PLANNER WAS HANDED THE CARRY'S OWN ROW: the id, header and claim the
+    // bootstrap writes (`carried:<source run>:<finding>:into:<this run>`), not an
+    // id only this fixture would produce.
+    const plan = snapshotOf(withLearning, 'architect-adapter');
+    expect(plan.sourceEntryIds, 'the lesson arrived where the carry scopes it').toContain(lesson.entryId);
+    expect(textOf(plan)).toContain('CARRIED FROM AN EARLIER RUN: VERIFIED REVIEWER FINDING.');
+    expect(textOf(plan)).toContain(LEARNED);
 
     // AND IT ARRIVED AS VERIFIED, from the recorded standing the carry wrote —
     // not re-derived from its kind, which would have ranked a reviewer-verified
     // fact as an assertion in every later mission.
     const claim = (await withLearning.harness.store.claimsForRun('run-b', 'prj-1'))
-      .find((row) => row.entryId === inheritedId);
+      .find((row) => row.entryId === lesson.entryId);
     expect(claim?.trust, 'the standing travelled with the fact').toBe('VERIFIED');
     expect(claim?.assertedBy, 'and so did its author, so a reviewer here cannot self-verify it').toBe('reviewer');
 
-    for (const leaked of ['run-b:prior-other-task', 'run-b:prior-reviewer-only', 'run-b:prior-secret']) {
+    // THE CODER WAS HANDED THE PLAN, NOT THE ROW: the deploy order reaches it in
+    // the design the architect recorded, and the carried row is the planner's alone.
+    const snapshot = snapshotOf(withLearning, 'coder-adapter');
+    const text = textOf(snapshot);
+    expect(snapshot.sourceEntryIds, 'the carried row never reaches the coder').not.toContain(lesson.entryId);
+    expect(text).not.toContain('CARRIED FROM AN EARLIER RUN');
+    expect(text, 'the lesson, as the plan applied it').toContain(LESSON);
+
+    for (const leaked of ['run-b:other-task', 'run-b:reviewer-only', 'run-b:secret']) {
       expect(snapshot.sourceEntryIds, `${leaked} leaked into the coder's packet`).not.toContain(leaked);
       expect(snapshot.integrityExcludedEntryIds, `${leaked} must be reported as excluded, not silently dropped`)
         .toContain(leaked);
@@ -572,8 +630,8 @@ describe('prior learning reaches the next mission without leaking the last one',
     expect(dispatch, 'the reviewer must have been dispatched').toBeTruthy();
     const snapshot = withLearning.harness.store.contexts()
       .filter((item) => item.contextId === dispatch!.contextId).at(-1)!;
-    expect(snapshot.sourceEntryIds).toContain('run-b:prior-reviewer-only');
+    expect(snapshot.sourceEntryIds).toContain('run-b:reviewer-only');
     expect(snapshot.integrityExcludedEntryIds, 'and the secret is still nobody\u2019s')
-      .toContain('run-b:prior-secret');
+      .toContain('run-b:secret');
   });
 });
