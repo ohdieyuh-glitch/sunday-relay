@@ -107,7 +107,8 @@ suite('Wonderland R16 voice on PostgreSQL through 035', () => {
       voice: { rooms: await readR16VoiceRooms({ bridge: ORIGIN, origin: ORIGIN, sessions, players, fetch: backend.fetch }) },
     };
     // Reading the plans IS joining: B and C, the one mutually visible pair the scenario ends with, now hold their room, and A none.
-    const room = (recorded.voice.rooms[players.b] as { INSTANCE: { rooms: string[] } }).INSTANCE.rooms;
+    const given = recorded.voice.rooms[players.b]!.INSTANCE;
+    const room = 'rooms' in given ? given.rooms : [];
     expect(room).toHaveLength(1);
     expect(await openIssuances()).toEqual([{ player_id: players.b, room_id: room[0] }, { player_id: players.c, room_id: room[0] }]);
     // THE RESTART: longer than a lease, every session gone, the pool closed and a new one opened on the same database.
