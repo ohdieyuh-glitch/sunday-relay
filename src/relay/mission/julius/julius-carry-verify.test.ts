@@ -42,10 +42,10 @@ function sourcesDocument(): Record<string, unknown> {
     format: JULIUS_CARRY_SOURCES_FORMAT, runId: WITHOUT, projectId: 'prj-1', missionId: 'mission-1', state: 'COMPLETED',
     // The run's own tasks, the review, the repair and the re-review the resolved finding's life names among them.
     tasks: [
-      { taskId: `${WITHOUT}:plan`, taskType: 'plan', role: 'PROMPT_ARCHITECT', state: 'SUCCEEDED' },
-      { taskId: `review:${WITHOUT}:plan`, taskType: 'review:plan', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED' },
-      { taskId: `repair:${WITHOUT}:plan:1:task`, taskType: 'repair:plan', role: 'PROMPT_ARCHITECT', state: 'SUCCEEDED' },
-      { taskId: `review:repair:${WITHOUT}:plan:1:task`, taskType: 'review:repair:plan', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED' },
+      { taskId: `${WITHOUT}:plan`, runId: WITHOUT, taskType: 'plan', role: 'PROMPT_ARCHITECT', state: 'SUCCEEDED' },
+      { taskId: `review:${WITHOUT}:plan`, runId: WITHOUT, taskType: 'review:plan', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED' },
+      { taskId: `repair:${WITHOUT}:plan:1:task`, runId: WITHOUT, taskType: 'repair:plan', role: 'PROMPT_ARCHITECT', state: 'SUCCEEDED' },
+      { taskId: `review:repair:${WITHOUT}:plan:1:task`, runId: WITHOUT, taskType: 'review:repair:plan', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED' },
     ],
     findings: [finding('finding:resolved'), finding('finding:open')],
     ledger: [
@@ -176,6 +176,12 @@ describe('the off-host verifier: the four-point chain, re-derived from arm WITHO
     const verdict = verify(empty, withSide(empty));
     expect(verdict.verdict).toBe('FAIL');
     expect(failed(verdict)).toEqual(expect.arrayContaining(['record_carried', 'receipts_present', 'vrf_carried']));
+  });
+
+  it('refuses an export holding a task of another run: no other run\'s task may vouch for this run\'s finding', () => {
+    const foreign = sourcesDocument();
+    (foreign.tasks as Record<string, unknown>[])[1]!.runId = 'run:stranger';
+    expect(parseJuliusCarrySources(JSON.stringify(foreign))).toEqual({ ok: false, problem: expect.stringContaining('$.tasks[1].runId') });
   });
 
   it('refuses an export that names no run, is not this format, or is out of ledger order', () => {

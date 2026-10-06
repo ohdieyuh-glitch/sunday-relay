@@ -322,6 +322,7 @@ describe('the corrected carry: verified reviewer findings', () => {
         candidateOf(),
         forged('finding:origin-not-a-task', { ...LIVED, origin: null }),
         forged('finding:origin-not-a-review', { ...LIVED, origin: { taskType: 'plan', state: 'SUCCEEDED' } }),
+        forged('finding:origin-failed', { ...LIVED, origin: { taskType: 'review:plan', state: 'FAILED' } }),
         forged('finding:repair-not-a-task', { ...LIVED, repairs: [null] }),
         forged('finding:repair-failed', { ...LIVED, repairs: [{ taskType: 'repair:plan', state: 'FAILED' }] }),
         forged('finding:one-repair-not-a-task', { ...LIVED, repairs: [LIVED.repairs[0]!, null] }),
@@ -331,7 +332,7 @@ describe('the corrected carry: verified reviewer findings', () => {
       ],
     });
     expect(result.carried.map((item) => item.sourceRef), 'only the finding whose life the runtime lived').toEqual(['finding:evidence:1']);
-    expect(result.excluded).toHaveLength(8);
+    expect(result.excluded).toHaveLength(9);
     expect(new Set(result.excluded.map((item) => item.reason))).toEqual(new Set(['finding_provenance_unverified']));
   });
 

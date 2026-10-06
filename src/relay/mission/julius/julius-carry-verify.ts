@@ -108,6 +108,8 @@ export function parseJuliusCarrySources(text: string): JuliusCarryParsed<JuliusC
   const state = string(document, 'state', '$');
   const tasks = objects(document, 'tasks', '$').map((task, index) => {
     const path = `$.tasks[${String(index)}]`;
+    // OF THIS RUN: a task of another run can never vouch for this run's finding (P2b's run check, off-host).
+    need(task.runId === runId, `${path}.runId`, `${String(task.runId)} is not the exported run ${runId}`);
     return { taskId: string(task, 'taskId', path), taskType: string(task, 'taskType', path), role: string(task, 'role', path), state: string(task, 'state', path) };
   });
   const findings = objects(document, 'findings', '$').map((row, index): JuliusReviewerFinding => {
