@@ -30,6 +30,10 @@ import type { JuliusReviewerFinding } from './julius-verification-runtime';
  * result. A tampered digest, a field the export lacks or altered, a copy whose
  * text differs, a receipt that missed a row: each FAILS a named check.
  *
+ * BEFORE WITH RUNS, the same derivation previews what it will carry
+ * (`previewJuliusCarry`): the procedure gate that keeps a WITHOUT with no
+ * verified repair finding from ever having its WITH dispatched.
+ *
  * PURE. No file system, no clock, no hashing: the caller reads the bundles and
  * passes `sha256` (hex of the UTF-8 text).
  */
@@ -170,6 +174,81 @@ export function parseJuliusDumpTable(text: string): JuliusCarryParsed<readonly R
   return { ok: true, value: data.map((cells) => Object.freeze(Object.fromEntries(header.map((name, index) => [name, cells[index]!])))) };
 }
 
+/**
+ * WHAT ARM WITH CARRIES, RE-DERIVED from WITHOUT's exported rows alone, by the production rule. ONE derivation for
+ * the chain verifier and the preview, so what the preview promises before WITH runs is what the verifier holds WITH to.
+ */
+function rederive(input: {
+  readonly sources: JuliusCarrySources;
+  readonly withRunId: string;
+  readonly scope: JuliusCarryScope;
+  readonly limit: number;
+  readonly sha256: (text: string) => string;
+}) {
+  const { sources } = input;
+  const lives = new Map(foldJuliusFindings(sources.findings, sources.ledger).map((life) => [life.findingId, life] as const));
+  const taskOf = new Map(sources.tasks.map((task) => [task.taskId, task] as const));
+  const plan = planJuliusKnowledgeCarry({
+    runId: input.withRunId, projectId: sources.projectId, missionId: sources.missionId, scope: input.scope,
+    sourceRuns: [{ runId: sources.runId, state: sources.state }],
+    // The store's own builder: the same life, the same judged work, the same tasks the life names (P2b's provenance).
+    findings: sources.findings.map((finding) =>
+      juliusCarryFindingCandidate({ runId: sources.runId, finding, life: lives.get(finding.findingId), taskOf: (taskId) => taskOf.get(taskId) })),
+    architectures: [], brain: [], limit: input.limit,
+  });
+  const digestOf = new Map(plan.carried.map((item) => [item.entryId, input.sha256(item.text)] as const));
+  const expected = juliusKnowledgeCarryFacts(plan, Object.fromEntries([...digestOf].map(([entryId, hex]) => [entryId, `sha256:${hex}`])));
+  return { plan, digestOf, expected };
+}
+
+/** The carried items that count for Decision C: verified repair findings of arm WITHOUT itself. */
+const verifiedRepairFindingsOf = (plan: ReturnType<typeof rederive>['plan'], withoutRunId: string) =>
+  plan.carried.filter((item) => item.source === 'VERIFIED_REPAIR_FINDING' && item.sourceRunId === withoutRunId);
+
+export interface JuliusCarryPreview {
+  /** CARRIES: arm WITH will inherit >= 1 verified repair finding of this WITHOUT. EMPTY: it will inherit none. */
+  readonly verdict: 'CARRIES' | 'EMPTY';
+  readonly withoutRunId: string;
+  readonly withRunId: string;
+  readonly scopeTaskId: string;
+  readonly eligible: number;
+  /** The carriedEntries WITH's `knowledge.carried` record must hold: what the chain verifier will re-derive. */
+  readonly carriedEntries: string;
+  /** Each verified repair finding WITH will carry, with the full digest of the exact text its copy must hold. */
+  readonly carries: readonly { readonly entryId: string; readonly findingId: string; readonly digest: string }[];
+  /** Every finding of WITHOUT the rule leaves behind, with the rule's reason. */
+  readonly excluded: readonly { readonly findingId: string; readonly reason: string }[];
+}
+
+/**
+ * THE PROCEDURE GATE, BEFORE ARM WITH IS DISPATCHED (SECOND's ruling (a)). From arm WITHOUT's bundle alone and the
+ * WITH run id the registration fixes before any run, it says what WITH's bootstrap will carry: each verified repair
+ * finding, its copy's entry id and the digest of its exact text. EMPTY means the pair is INVALID and WITH is never
+ * dispatched. After WITH runs, the chain verifier must prove these same entries made the whole trip.
+ */
+export function previewJuliusCarry(input: {
+  readonly sources: JuliusCarrySources;
+  readonly withRunId: string;
+  /** WITH's plan task: the bootstrap scopes every copy to it (`planTaskId` in relay-bridge/julius/bootstrap.ts). */
+  readonly scopeTaskId: string;
+  readonly limit: number;
+  readonly sha256: (text: string) => string;
+}): JuliusCarryPreview {
+  const scope: JuliusCarryScope = { taskId: input.scopeTaskId, taskType: 'plan', role: 'PROMPT_ARCHITECT' };
+  const { plan, digestOf, expected } = rederive({ sources: input.sources, withRunId: input.withRunId, scope, limit: input.limit, sha256: input.sha256 });
+  const vrfs = verifiedRepairFindingsOf(plan, input.sources.runId);
+  return {
+    verdict: vrfs.length >= 1 ? 'CARRIES' : 'EMPTY',
+    withoutRunId: input.sources.runId,
+    withRunId: input.withRunId,
+    scopeTaskId: input.scopeTaskId,
+    eligible: plan.eligible,
+    carriedEntries: String(expected.carriedEntries ?? ''),
+    carries: vrfs.map((item) => ({ entryId: item.entryId, findingId: item.sourceRef, digest: `sha256:${digestOf.get(item.entryId)!}` })),
+    excluded: plan.excluded.map((item) => ({ findingId: item.sourceRef, reason: item.reason })),
+  };
+}
+
 /** Which carried tokens differ, and how, without printing a whole record twice. */
 function entriesDiff(recorded: string, expected: string): string {
   const got = recorded === '' ? [] : recorded.split(';');
@@ -217,18 +296,7 @@ export function verifyJuliusCarryChain(input: {
   const scope: JuliusCarryScope = { taskId: scopeTaskId, taskType: 'plan', role: 'PROMPT_ARCHITECT' };
 
   // (1) -> (2), RE-DERIVED: what WITH should have carried, from WITHOUT's exported rows alone, by the production rule.
-  const lives = new Map(foldJuliusFindings(sources.findings, sources.ledger).map((life) => [life.findingId, life] as const));
-  const taskOf = new Map(sources.tasks.map((task) => [task.taskId, task] as const));
-  const plan = planJuliusKnowledgeCarry({
-    runId: withRunId, projectId: sources.projectId, missionId: sources.missionId, scope,
-    sourceRuns: [{ runId: sources.runId, state: sources.state }],
-    // The store's own builder: the same life, the same judged work, the same tasks the life names (P2b's provenance).
-    findings: sources.findings.map((finding) =>
-      juliusCarryFindingCandidate({ runId: sources.runId, finding, life: lives.get(finding.findingId), taskOf: (taskId) => taskOf.get(taskId) })),
-    architectures: [], brain: [], limit: input.limit,
-  });
-  const digestOf = new Map(plan.carried.map((item) => [item.entryId, input.sha256(item.text)] as const));
-  const expected = juliusKnowledgeCarryFacts(plan, Object.fromEntries([...digestOf].map(([entryId, hex]) => [entryId, `sha256:${hex}`])));
+  const { plan, digestOf, expected } = rederive({ sources, withRunId, scope, limit: input.limit, sha256: input.sha256 });
   check('record_eligible', record.eligible === String(expected.eligible), `recorded ${record.eligible ?? 'absent'}, re-derived ${String(expected.eligible)}`);
   const entries = String(expected.carriedEntries ?? '');
   check('record_entries', (record.carried_entries ?? '') === entries, entriesDiff(record.carried_entries ?? '', entries));
@@ -253,7 +321,7 @@ export function verifyJuliusCarryChain(input: {
   }
 
   // THE POINT OF IT: at least one verified repair finding of arm WITHOUT made the whole trip.
-  const vrfs = plan.carried.filter((item) => item.source === 'VERIFIED_REPAIR_FINDING' && item.sourceRunId === sources.runId);
+  const vrfs = verifiedRepairFindingsOf(plan, sources.runId);
   check('vrf_carried', vrfs.length >= 1, `${String(vrfs.length)} verified repair finding(s) of ${sources.runId}`);
   const pass = checks.every((item) => item.ok);
   return {

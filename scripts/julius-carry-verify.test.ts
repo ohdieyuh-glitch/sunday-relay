@@ -9,7 +9,8 @@ import {
 } from '../src/relay/mission/julius/julius-claim-ledger';
 import { JULIUS_CARRY_SOURCES_FORMAT, parseJuliusCarrySources } from '../src/relay/mission/julius/julius-carry-verify';
 import { foldJuliusFindings } from '../src/relay/mission/julius/julius-finding-lifecycle';
-import { runJuliusCarryVerify } from './julius-carry-verify';
+import { planTaskId } from '../relay-bridge/julius/bootstrap';
+import { juliusCarryScopeTaskId, juliusCarryVerifyCommandOf, runJuliusCarryPreview, runJuliusCarryVerify } from './julius-carry-verify';
 
 /**
  * THE OFF-HOST VERIFIER'S CLI, OVER TWO BUNDLE DIRECTORIES (Decision C, C-7).
@@ -117,5 +118,66 @@ describe('the off-host verifier CLI, over two bundle directories', () => {
     const result = runJuliusCarryVerify(dirs);
     expect(result.code).toBe(1);
     expect(result.output).toMatchObject({ verdict: 'FAIL', proven: [] });
+  });
+});
+
+describe('the preview CLI: the procedure gate, over arm WITHOUT\'s bundle and the WITH run id the registration fixes', () => {
+  // Real-shaped run ids, as the registration computes them before any run.
+  const WITHOUT_RUN = `run:${'a1'.repeat(12)}`;
+  const WITH_RUN = `run:${'b2'.repeat(12)}`;
+
+  /** Arm WITHOUT's bundle for `runId`: the export (optionally edited first) and the manifest its job writes. */
+  function withoutBundle(label: string, runId: string, edit: (document: ReturnType<typeof sourcesDocument>) => void = () => undefined) {
+    const document = JSON.parse(JSON.stringify(sourcesDocument()).replaceAll(WITHOUT, runId)) as ReturnType<typeof sourcesDocument>;
+    edit(document);
+    const text = `${JSON.stringify(document)}\n`;
+    const dir = join(scratch, `preview-${label}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'carry-sources.json'), text);
+    writeFileSync(join(dir, 'bundle-manifest.txt'), `julius_run_id=${runId}\ncarry_sources_sha256=${sha256(Buffer.from(text, 'utf8'))}\n`);
+    return dir;
+  }
+
+  it('scopes the copies to WITH\'s plan task as the bootstrap names it', () => {
+    expect(juliusCarryScopeTaskId(WITH_RUN)).toBe(planTaskId(WITH_RUN));
+  });
+
+  it('CARRIES, exit 0: names each verified repair finding WITH will inherit, its copy and the digest of its exact text', () => {
+    const result = runJuliusCarryPreview({ withoutDir: withoutBundle('carries', WITHOUT_RUN), withRunId: WITH_RUN, limit: 12 });
+    expect(result.code).toBe(0);
+    expect(result.output).toMatchObject({
+      verdict: 'CARRIES', withoutRunId: WITHOUT_RUN, withRunId: WITH_RUN, scopeTaskId: `${WITH_RUN}:plan`, eligible: 1,
+      carries: [{ findingId: 'finding:resolved', entryId: `carried:${WITHOUT_RUN}:finding:resolved:into:${WITH_RUN}` }],
+    });
+    if (result.code !== 0) throw new Error('unreachable');
+    expect(result.output.carries[0]!.digest).toMatch(/^sha256:[0-9a-f]{64}$/u);
+    expect(result.output.carriedEntries).toContain(result.output.carries[0]!.digest);
+  });
+
+  it('is EMPTY, exit 1, when arm WITHOUT holds no verified repair finding: WITH is not dispatched', () => {
+    const unresolved = withoutBundle('empty', WITHOUT_RUN, (document) => { document.ledger.pop(); });
+    const result = runJuliusCarryPreview({ withoutDir: unresolved, withRunId: WITH_RUN, limit: 12 });
+    expect(result.code).toBe(1);
+    expect(result.output).toMatchObject({ verdict: 'EMPTY', carries: [], excluded: [{ findingId: 'finding:resolved', reason: 'finding_unresolved' }] });
+  });
+
+  it('REFUSES, exit 2, a WITH run id that is not one, an arm inheriting from itself, and an export its job did not record', () => {
+    const dir = withoutBundle('refusals', WITHOUT_RUN);
+    expect(runJuliusCarryPreview({ withoutDir: dir, withRunId: 'run:b2b2', limit: 12 }))
+      .toEqual({ code: 2, output: { verdict: 'REFUSED', problem: "with_run_invalid: 'run:b2b2' is not a Julius run id" } });
+    expect(runJuliusCarryPreview({ withoutDir: dir, withRunId: WITHOUT_RUN, limit: 12 }))
+      .toEqual({ code: 2, output: { verdict: 'REFUSED', problem: 'with_run_is_without: an arm cannot inherit from itself' } });
+    const edited = join(dir, 'carry-sources.json');
+    writeFileSync(edited, readFileSync(edited, 'utf8').replace('CLI-SENTINEL', 'CLI-SENTINEL '));
+    expect(runJuliusCarryPreview({ withoutDir: dir, withRunId: WITH_RUN, limit: 12 }))
+      .toEqual({ code: 2, output: { verdict: 'REFUSED', problem: 'without_sources_digest_mismatch' } });
+  });
+
+  it('runs on exactly its arguments: anything else is a usage refusal, never a guess', () => {
+    expect(juliusCarryVerifyCommandOf(['w', 'x'])).toEqual({ mode: 'chain', withoutDir: 'w', withDir: 'x' });
+    expect(juliusCarryVerifyCommandOf(['--preview', 'w', WITH_RUN])).toEqual({ mode: 'preview', withoutDir: 'w', withRunId: WITH_RUN });
+    for (const args of [[], ['w'], ['w', 'x', 'y'], ['--preview', 'w'], ['--preview', 'w', WITH_RUN, 'y'], ['w', '--preview'], ['--check', 'w'], ['--previw', 'w', WITH_RUN]]) {
+      expect(juliusCarryVerifyCommandOf(args), JSON.stringify(args)).toBeNull();
+    }
   });
 });

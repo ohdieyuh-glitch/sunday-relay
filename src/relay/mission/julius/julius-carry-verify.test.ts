@@ -5,6 +5,7 @@ import {
   JULIUS_CARRY_SOURCES_FORMAT,
   parseJuliusCarrySources,
   parseJuliusDumpTable,
+  previewJuliusCarry,
   verifyJuliusCarryChain,
   type JuliusCarrySources,
 } from './julius-carry-verify';
@@ -191,6 +192,42 @@ describe('the off-host verifier: the four-point chain, re-derived from arm WITHO
     shuffled.ledger = [...(shuffled.ledger as unknown[])].reverse();
     expect(parseJuliusCarrySources(JSON.stringify(shuffled))).toMatchObject({ ok: false, problem: expect.stringContaining('sequence') });
     expect(parseJuliusCarrySources('not json')).toEqual({ ok: false, problem: 'sources_not_json' });
+  });
+});
+
+describe('the preview: what arm WITH will carry, said from arm WITHOUT\'s export before WITH is dispatched', () => {
+  const preview = (sources: JuliusCarrySources) => previewJuliusCarry({ sources, withRunId: WITH, scopeTaskId: PLAN, limit: LIMIT, sha256 });
+
+  it('CARRIES exactly the entries, findings and digests the chain verifier later proves, and names what it leaves behind', () => {
+    const sources = parsed(sourcesDocument());
+    const promised = preview(sources);
+    const side = withSide(sources);
+    const proven = verify(sources, side);
+    expect(proven.verdict).toBe('PASS');
+    expect(promised.verdict).toBe('CARRIES');
+    expect(promised.carries, 'the gate promises what C-7 proves, digest for digest').toEqual(proven.proven);
+    expect(promised.carriedEntries, 'and the record WITH must hold').toBe(side.knowledge[0]!.carried_entries);
+    expect(promised).toMatchObject({ withoutRunId: WITHOUT, withRunId: WITH, scopeTaskId: PLAN, eligible: 1 });
+    expect(promised.excluded).toEqual([{ findingId: 'finding:open', reason: 'finding_unresolved' }]);
+  });
+
+  it('is EMPTY when no finding was resolved by the independent re-review: the pair is INVALID, and nothing is promised', () => {
+    const unresolved = sourcesDocument();
+    unresolved.ledger = (unresolved.ledger as unknown[]).filter((row) => (row as { sequence: number }).sequence !== 4);
+    const promised = preview(parsed(unresolved));
+    expect(promised).toMatchObject({ verdict: 'EMPTY', eligible: 0, carriedEntries: '', carries: [] });
+    expect(promised.excluded).toEqual([
+      { findingId: 'finding:resolved', reason: 'finding_unresolved' },
+      { findingId: 'finding:open', reason: 'finding_unresolved' },
+    ]);
+  });
+
+  it('is EMPTY when the resolved finding\'s repair did not succeed: the provenance rule decides the gate too (P2b)', () => {
+    const forged = sourcesDocument();
+    (forged.tasks as Record<string, unknown>[])[2]!.state = 'FAILED';
+    const promised = preview(parsed(forged));
+    expect(promised.verdict).toBe('EMPTY');
+    expect(promised.excluded).toContainEqual({ findingId: 'finding:resolved', reason: 'finding_provenance_unverified' });
   });
 });
 
