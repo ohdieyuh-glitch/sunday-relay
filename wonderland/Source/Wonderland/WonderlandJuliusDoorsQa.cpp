@@ -35,8 +35,10 @@
 #include "WonderlandBeta.h"
 #include "WonderlandJuliusStream.h"
 #include "WonderlandMissionTasks.h"
+#include "Misc/Paths.h"
 #include "WonderlandSocialSubsystem.h"
 #include "WonderlandUiSubsystem.h"
+#include "WonderlandUiTestLibrary.h"
 
 namespace WonderlandJuliusDoorsQa
 {
@@ -60,6 +62,15 @@ namespace WonderlandJuliusDoorsQa
 		{
 			(bOk ? Pass : Fail) += 1;
 			UE_LOG(LogTemp, Display, TEXT("WLQA JDOORS %s %s -- %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *What);
+		}
+		/** WHAT THE PLAYER SEES at that moment (the founder: no broken user-facing path), to Saved/Screenshots/WLJDOORS. */
+		void Frame(const FString& Name)
+		{
+			int32 Width = 0;
+			int32 Height = 0;
+			const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLJDOORS") / (Name + TEXT(".png")));
+			const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
+			UE_LOG(LogTemp, Display, TEXT("WLQA JDOORS frame %s %s %dx%d"), *Path, bOk ? TEXT("saved") : TEXT("FAILED"), Width, Height);
 		}
 	};
 	TSharedPtr<FRun> GRun;
@@ -190,6 +201,11 @@ namespace WonderlandJuliusDoorsQa
 				Run.Check(TEXT("JD2"), Offered != nullptr && !Offered->GetBool(),
 					FString::Printf(TEXT("wl.Brain.PairingOffered %s (OFF: /brain offers no pairing); bridge %s"),
 						Offered == nullptr ? TEXT("MISSING") : Offered->GetBool() ? TEXT("ON") : TEXT("off"), *Field(Stream->Describe(), TEXT("bridge"))));
+				// the terminal ON SCREEN, as a player who pressed Ctrl+T has it, so the frames show what the answers look like
+				if (!Ui->IsLiveTerminalOpen())
+				{
+					Ui->ToggleLiveTerminal();
+				}
 				Next();
 				return true;
 			}
@@ -219,6 +235,7 @@ namespace WonderlandJuliusDoorsQa
 					FString::Printf(TEXT("%d of %d /brain lines answered '%s...'; the stream paired=%s%s"), Run.NotConnectedAnswers,
 						static_cast<int32>(UE_ARRAY_COUNT(BrainLines)), NotConnected, *Field(Stream->Describe(), TEXT("paired")),
 						Run.FirstOtherAnswer.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; another answer: '%s'"), *Run.FirstOtherAnswer)));
+				Run.Frame(TEXT("jd3_terminal_brain_answers"));
 				Next();
 				return true;
 			case 2:
@@ -243,6 +260,7 @@ namespace WonderlandJuliusDoorsQa
 				{
 					return true;
 				}
+				Run.Frame(TEXT("jd4_terminal_task_queued"));
 				Next();
 				return true;
 			}
@@ -250,6 +268,8 @@ namespace WonderlandJuliusDoorsQa
 				// SIGN IN, the Social Hub's own call: the client reaches its bridge (the recorder), which knows no social route
 				if (Run.Step == 0)
 				{
+					// the hub open on screen (as /social opens it), then its SIGN IN
+					Ui->OpenSocialHub(TEXT("friends"));
 					Social->StartSignIn();
 					Run.Step = 1;
 					Run.PhaseAt = Now;
@@ -264,6 +284,7 @@ namespace WonderlandJuliusDoorsQa
 					Run.Check(TEXT("JD5"), !SignIn.Contains(TEXT("SIGNED_IN")),
 						FString::Printf(TEXT("SIGN IN pressed: the client asked its bridge (the recorder logs the request) and is not signed in: '%s'"), *SignIn.Left(200)));
 				}
+				Run.Frame(TEXT("jd5_after_sign_in_press"));
 				Next();
 				return true;
 			case 4:
@@ -304,10 +325,15 @@ namespace WonderlandJuliusDoorsQa
 			}
 			Run.bOldOffered = Offered->GetBool();
 			Offered->Set(true, ECVF_SetByCode);
+			if (!Ui->IsLiveTerminalOpen())
+			{
+				Ui->ToggleLiveTerminal();
+			}
 			Ui->SubmitTerminalLine(TEXT("/brain pair QAJDCONTROL1"));
 			const FString Row = Ui->GetTerminalLatestRowForQa();
 			Run.Check(TEXT("JC1"), Row.Contains(TEXT("Pairing with the bridge")),
 				FString::Printf(TEXT("CONTROL: the door forced open (PairingOffered ON), /brain pair through the terminal: '%s'"), *Row.Left(200)));
+			Run.Frame(TEXT("jc1_terminal_pairing_forced"));
 			Next();
 			return true;
 		}
