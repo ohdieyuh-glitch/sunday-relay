@@ -16206,7 +16206,7 @@ namespace
 		{
 			Target = GEngine->GameViewport->GetGameViewportWidget();
 		}
-		FIntVector Size;
+		FIntVector Size(0, 0, 0);   // initialised: MSVC C4701 cannot see that it is read only after TakeScreenshot filled it
 		if (!Target.IsValid() || !FSlateApplication::Get().TakeScreenshot(Target.ToSharedRef(), OutPixels, Size) || Size.X <= 0 || Size.Y <= 0
 			|| OutPixels.Num() != Size.X * Size.Y)
 		{
