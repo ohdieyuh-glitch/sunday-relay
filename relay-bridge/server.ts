@@ -81,7 +81,7 @@ import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute } from './wonderland-native-signin-routes';
-import { createSessionRateLimit, endSocialPresence, EOS_CLIENT_CONFIG_RATE, handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
+import { createCommandBudgets, createPresenceLease, createSessionRateLimit, endSocialPresence, EOS_CLIENT_CONFIG_RATE, handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 import { GITHUB_STUB_BANNER, githubRootsForNativeSignIn } from './wonderland-github-stub-seam';
 import { openSocialPostgresStore } from '../src/relay/persistence/social-postgres';
@@ -311,6 +311,10 @@ export function createBridgeServer(
     ? loadEosGameClientConfig(process.env, { log: (line) => console.warn(`[relay-bridge] ${line}`), deployment: eosVoice?.deployment ?? null })
     : null;
   const eosClientConfigAllowed = createSessionRateLimit(EOS_CLIENT_CONFIG_RATE.limit, EOS_CLIENT_CONFIG_RATE.windowMs);
+  // PRESENCE IS A LEASE and EVERY PLAYER HAS A BUDGET (Second's R16 review, 10-06): both live in THIS process, built once here --
+  // the route's deps are rebuilt per request. One bridge instance holds them, as it holds who is signed in.
+  const socialPresenceLease = createPresenceLease();
+  const socialCommandBudgets = createCommandBudgets();
   let socialStoreReady: SocialStore | null = null;
   let socialStoreOpening: Promise<SocialStore | null> | null = null;
   const socialStore = async (): Promise<SocialStore | null> => {
@@ -706,7 +710,10 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
               socialLogins.set(participantId, login);
             },
             // sign-out ends presence: friends see the player OFFLINE at once, and they leave their world context
-            onSignOut: async (participantId, at) => endSocialPresence(socialEnabled ? await socialStore() : null, participantId, at),
+            onSignOut: async (participantId, at) => {
+              socialPresenceLease.forget(participantId);   // ended here; the lease neither ends nor restores it again
+              await endSocialPresence(socialEnabled ? await socialStore() : null, participantId, at);
+            },
             // a failed device-code request: GitHub's HTTP status + error code only (never the client id or a code)
             log: (line) => console.warn(`[relay-bridge] ${line}`),
             oauthRoot: socialGithub.oauthRoot,
@@ -750,6 +757,8 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             voiceBindings: eosVoice !== null ? voiceBindings() : null,
             eosClientConfig: eosGameConfig,
             eosClientConfigAllowed,
+            presenceLease: socialPresenceLease,
+            commandBudgets: socialCommandBudgets,
             log: (line) => console.warn(`[relay-bridge] ${line}`),
             tap: socialTap,
           });

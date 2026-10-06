@@ -4,10 +4,15 @@ import { randomBytes } from 'node:crypto';
 import { createInMemoryVoiceBindings } from '../src/relay/social/voice-binding';
 import { hashId } from './eos-voice';
 import {
+  budgetClassesOf,
+  createCommandBudgets,
+  createPresenceLease,
   createSessionRateLimit,
   endSocialPresence,
   EOS_CLIENT_CONFIG_RATE,
   handleSocialRoute,
+  PRESENCE_LEASE_MS,
+  SOCIAL_BUDGETS,
   type SocialRouteDeps,
   type SocialRouteResult,
   type SocialSessionFacts,
@@ -331,5 +336,225 @@ describe("the store opens only after the session gate (JUJU MAIN's hosted plan r
     expect(await call('tok-kai')).toBe(200);
     expect(opened).toBe(1);
     expect(await call('tok-kai', undefined, { store: async () => null })).toBe(503);
+  });
+});
+
+/*
+ * PRESENCE IS A LEASE, AND EVERY PLAYER HAS A BUDGET (Second's R16 review, 10-06). The clock is the test's own here: time passes
+ * only when a test says so, and a player "is talking" only when they call.
+ */
+function clocked(opts: { lease?: boolean; budgets?: boolean } = {}) {
+  let clock = T0;
+  const store = createInMemorySocialStore();
+  const deps: SocialRouteDeps = {
+    verifySession: (token) => SESSIONS[token] ?? null,
+    identify: async (participantId) => ({ userId: participantId, displayName: participantId.replace('usr_', ''), handle: `@${participantId.replace('usr_', '')}` }),
+    store,
+    presenceLease: opts.lease === false ? null : createPresenceLease(),
+    commandBudgets: opts.budgets === true ? createCommandBudgets() : null,
+  };
+  const call = async (token: string, method: string, path: string, body: unknown = null) => {
+    const result = await handleSocialRoute({ method, path, authorization: `Relay-Session ${token}`, origin: undefined, body, now: clock }, deps);
+    if (result === null) throw new Error(`not a social route: ${path}`);
+    return result as { status: number; headers?: Record<string, string>; body: { data?: any; error?: { kind: string; message: string } } };
+  };
+  const as = (token: string) => ({
+    get: (path: string) => call(token, 'GET', `/wonderland/social${path}`),
+    post: (path: string, body: unknown = {}) => call(token, 'POST', `/wonderland/social${path}`, body),
+  });
+  return { store, advance: (ms: number) => { clock += ms; }, kai: as('tok-kai'), nova: as('tok-nova'), vega: as('tok-vega') };
+}
+
+async function clockedFriends(opts: { lease?: boolean; budgets?: boolean } = {}) {
+  const w = clocked(opts);
+  await w.kai.get('/snapshot');
+  await w.nova.get('/snapshot');
+  await w.kai.post('/requests', { toUserId: 'usr_nova' });
+  const requestId = (await w.nova.get('/snapshot')).body.data.requests.incoming[0].requestId;
+  await w.nova.post(`/requests/${requestId}/accept`);
+  return w;
+}
+
+const kaiAsNovaSees = async (w: Awaited<ReturnType<typeof clockedFriends>>) =>
+  (await w.nova.get('/snapshot')).body.data.friends.find((f: any) => f.userId === 'usr_kai')?.presence.onlineState;
+
+describe("presence is a lease (Second's R16 review, 10-06: a crashed client stayed ONLINE to its friends)", () => {
+  it('a player whose client keeps talking stays ONLINE past the lease; one that goes silent is OFFLINE after it, and the friend is told', async () => {
+    const w = await clockedFriends();
+    await w.kai.post('/presence', { connected: true, availability: 'AVAILABLE' });
+    expect(await kaiAsNovaSees(w)).toBe('ONLINE');
+    // two and a half minutes of a live client: its events poll every 5 s
+    for (let i = 0; i < 30; i += 1) {
+      w.advance(5_000);
+      await w.kai.get('/events');
+      await w.nova.get('/events');
+    }
+    expect(await kaiAsNovaSees(w)).toBe('ONLINE');
+    const before = (await w.nova.get('/events')).body.data.latest;
+    // Kai's client dies: only Nova keeps talking, for longer than the lease
+    for (let i = 0; i < Math.ceil(PRESENCE_LEASE_MS / 5_000) + 2; i += 1) {
+      w.advance(5_000);
+      await w.nova.get('/events');
+    }
+    expect((await w.nova.get(`/events?after=${before}`)).body.data.events.map((e: any) => e.op)).toContain('presence.update_self');
+    expect(await kaiAsNovaSees(w)).toBe('OFFLINE');
+  });
+
+  it("the lapsed player's next call restores them, and their friend is told", async () => {
+    const w = await clockedFriends();
+    await w.kai.post('/presence', { connected: true, availability: 'AVAILABLE' });
+    w.advance(PRESENCE_LEASE_MS + 5_000);
+    await w.nova.get('/events');
+    expect(await kaiAsNovaSees(w)).toBe('OFFLINE');
+    const before = (await w.nova.get('/events')).body.data.latest;
+    w.advance(1_000);
+    await w.kai.get('/events');   // the client was alive after all: a hitch, a sleep
+    expect((await w.nova.get(`/events?after=${before}`)).body.data.events.map((e: any) => e.op)).toContain('presence.update_self');
+    expect(await kaiAsNovaSees(w)).toBe('ONLINE');
+  });
+
+  it('a player who said goodbye is never resurrected: silent past the lease, then a stray call, they stay OFFLINE', async () => {
+    const w = await clockedFriends();
+    await w.kai.post('/presence', { connected: true, availability: 'AVAILABLE' });
+    await w.kai.post('/presence', { connected: false });
+    w.advance(PRESENCE_LEASE_MS + 5_000);
+    await w.nova.get('/events');   // the sweep runs: Kai is silent, but already gone by their own word
+    w.advance(1_000);
+    await w.kai.get('/events');
+    expect(await kaiAsNovaSees(w)).toBe('OFFLINE');
+  });
+
+  it("a lapsed player's own goodbye restores nothing: their friend is told the goodbye once, never an ONLINE-then-OFFLINE pair", async () => {
+    const w = await clockedFriends();
+    await w.kai.post('/presence', { connected: true, availability: 'AVAILABLE' });
+    w.advance(PRESENCE_LEASE_MS + 5_000);
+    await w.nova.get('/events');
+    expect(await kaiAsNovaSees(w)).toBe('OFFLINE');
+    const before = (await w.nova.get('/events')).body.data.latest;
+    w.advance(1_000);
+    expect((await w.kai.post('/presence', { connected: false })).status).toBe(200);   // the client's goodbye, its first call back
+    // ONE event: the goodbye itself, told -- as every presence change is (d1e824a9) -- to whoever may see Kai's presence. A restore
+    // before it would make TWO (ONLINE, then OFFLINE): the blip the goodbye guard exists to prevent.
+    expect((await w.nova.get(`/events?after=${before}`)).body.data.events.map((e: any) => e.op)).toEqual(['presence.update_self']);
+    expect(await kaiAsNovaSees(w)).toBe('OFFLINE');
+  });
+
+  it('P1: a player who appears offline lapses and returns with nothing told to anyone', async () => {
+    const w = await clockedFriends();
+    await w.kai.post('/presence', { connected: true, availability: 'APPEAR_OFFLINE' });
+    const before = (await w.nova.get('/events')).body.data.latest;
+    w.advance(PRESENCE_LEASE_MS + 5_000);
+    await w.nova.get('/events');
+    w.advance(1_000);
+    await w.kai.get('/events');
+    expect((await w.nova.get(`/events?after=${before}`)).body.data.events).toEqual([]);
+    expect(await kaiAsNovaSees(w)).toBe('OFFLINE');
+  });
+
+  it('without a lease (a bridge that gives none) nothing lapses -- the behaviour the lease exists to end', async () => {
+    const w = await clockedFriends({ lease: false });
+    await w.kai.post('/presence', { connected: true, availability: 'AVAILABLE' });
+    w.advance(10 * PRESENCE_LEASE_MS);
+    await w.nova.get('/events');
+    expect(await kaiAsNovaSees(w)).toBe('ONLINE');
+  });
+
+  it('the lease itself: each silent player is returned once; a sweep at most once a second; forget ends both the lapse and the restore', () => {
+    const lease = createPresenceLease(10_000);
+    expect(lease.touch('a', 0)).toBe(false);
+    lease.touch('b', 0);
+    expect(lease.lapsed(5_000)).toEqual([]);
+    expect(lease.lapsed(10_001)).toEqual(['a', 'b']);
+    expect(lease.lapsed(20_000)).toEqual([]);
+    lease.markTakenOffline('a');
+    expect(lease.touch('a', 20_500)).toBe(true);   // restored once
+    expect(lease.touch('a', 20_600)).toBe(false);
+    lease.markTakenOffline('b');
+    lease.forget('b');
+    expect(lease.touch('b', 21_000)).toBe(false);
+    lease.touch('c', 30_000);
+    expect(lease.lapsed(40_001)).toEqual(['a', 'b', 'c']);   // each silent > 10 s, in the order they last called
+    // at most one sweep a second: a player already past the lease waits for the next allowed sweep
+    const once = createPresenceLease(1_000);
+    once.touch('x', 0);
+    expect(once.lapsed(500)).toEqual([]);        // swept at 500: x is 0.5 s silent
+    expect(once.lapsed(1_200)).toEqual([]);      // x is 1.2 s silent, but 0.7 s after the last sweep: no sweep at all
+    expect(once.lapsed(1_500)).toEqual(['x']);   // a full second after it: swept, x returned
+  });
+});
+
+describe("every player has a budget (Second's R16 review, 10-06: before, a signed-in account could flood without limit)", () => {
+  it('the classes: the world report alone; any other read; a write, plus message / invitation for those', () => {
+    expect(budgetClassesOf({ id: 'world.state', writes: true })).toEqual(['report']);
+    expect(budgetClassesOf({ id: 'snapshot.read', writes: false })).toEqual(['read']);
+    expect(budgetClassesOf({ id: 'events.stream', writes: false })).toEqual(['read']);
+    expect(budgetClassesOf({ id: 'blocks.add', writes: true })).toEqual(['write']);
+    expect(budgetClassesOf({ id: 'messages.send', writes: true })).toEqual(['write', 'message']);
+    for (const id of ['requests.send', 'parties.invite', 'world.invite']) expect(budgetClassesOf({ id, writes: true })).toEqual(['write', 'invitation']);
+  });
+
+  it('the write after the burst is 429 rate_limited with Retry-After, no-store, and is NOT executed; another player is not charged', async () => {
+    const w = clocked({ budgets: true });
+    await w.kai.get('/snapshot');
+    const availability = async () => (await w.kai.get('/snapshot')).body.data.self.presence.availability;
+    for (let i = 0; i < SOCIAL_BUDGETS.write.burst; i += 1) {
+      expect((await w.kai.post('/presence', { connected: true, availability: i % 2 === 0 ? 'AWAY' : 'AVAILABLE' })).status).toBe(200);
+      if (i === 0) expect(await availability()).toBe('AWAY');   // the observable moves with an admitted write (the control)
+    }
+    expect(await availability()).toBe('AVAILABLE');
+    const over = await w.kai.post('/presence', { connected: true, availability: 'BUSY' });
+    expect(over.status).toBe(429);
+    expect(over.body.error?.kind).toBe('rate_limited');
+    expect(over.headers?.['retry-after']).toBe('1');
+    expect(over.headers?.['cache-control']).toBe('no-store');
+    expect(await availability()).toBe('AVAILABLE');   // the refused write did not run
+    await w.nova.get('/snapshot');
+    expect((await w.nova.post('/presence', { connected: true })).status).toBe(200);
+    // one write-interval later, one more is admitted -- and a refused call charged nothing
+    w.advance(SOCIAL_BUDGETS.write.everyMs);
+    expect((await w.kai.post('/presence', { connected: true })).status).toBe(200);
+    expect((await w.kai.post('/presence', { connected: true })).status).toBe(429);
+  });
+
+  it('messages: twenty at once, the twenty-first is 429 (three seconds); a message refused for its budget is never delivered', async () => {
+    const w = await clockedFriends({ budgets: true });
+    const opened = (await w.kai.post('/conversations', { otherUserId: 'usr_nova' })).body.data;
+    for (let i = 0; i < SOCIAL_BUDGETS.message.burst; i += 1) {
+      expect((await w.kai.post(`/conversations/${opened.conversationId}/messages`, { body: `hello ${i}` })).status).toBe(200);
+    }
+    const over = await w.kai.post(`/conversations/${opened.conversationId}/messages`, { body: 'one too many' });
+    expect([over.status, over.headers?.['retry-after']]).toEqual([429, '3']);
+    const history = (await w.nova.get(`/conversations/${opened.conversationId}/messages`)).body.data;
+    expect(history.length).toBe(SOCIAL_BUDGETS.message.burst);
+    expect(JSON.stringify(history)).not.toContain('one too many');
+  });
+
+  it('invitations: ten at once, the eleventh is 429 (thirty seconds) -- refused targets are charged too, so a flood cannot probe for free', async () => {
+    const w = clocked({ budgets: true });
+    await w.kai.get('/snapshot');
+    for (let i = 0; i < SOCIAL_BUDGETS.invitation.burst; i += 1) {
+      expect((await w.kai.post('/requests', { toUserId: `usr_ghost_${i}` })).status).not.toBe(429);
+    }
+    const over = await w.kai.post('/requests', { toUserId: 'usr_nova' });
+    expect([over.status, over.headers?.['retry-after']]).toEqual([429, '30']);
+    await w.nova.get('/snapshot');
+    expect((await w.nova.get('/snapshot')).body.data.requests.incoming).toEqual([]);
+  });
+
+  it("the live client's own rhythm never meets a budget: a 5 Hz world report, a 2 s events poll and a snapshot per action, for two minutes", async () => {
+    const w = clocked({ budgets: true });
+    await w.kai.get('/snapshot');
+    expect((await w.kai.post('/world/join', { target: 'PUBLIC' })).status).toBe(200);
+    const statuses = new Set<number>();
+    for (let tick = 0; tick < 600; tick += 1) {
+      w.advance(200);
+      statuses.add((await w.kai.post('/world/state', { x: tick, y: 0, z: 0, yaw: 0, speed: 0, motion: 'IDLE', skinId: 'relay_og' })).status);
+      if (tick % 10 === 0) statuses.add((await w.kai.get('/events')).status);
+      if (tick % 50 === 0) {
+        statuses.add((await w.kai.post('/presence', { connected: true, activityDetail: `tick ${tick}` })).status);
+        statuses.add((await w.kai.get('/snapshot')).status);
+      }
+    }
+    expect([...statuses]).toEqual([200]);
   });
 });
