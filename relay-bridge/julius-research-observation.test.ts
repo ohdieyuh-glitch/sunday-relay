@@ -377,6 +377,15 @@ describe('the bundled entrypoint routes observe-research, and leaves run as it w
     expect(result.stdout).toContain('observe-research --contract');
   }, 30_000);
 
+  it('routes verify-carry (Decision C) exactly, and an ordinary mission passes it with nothing to verify', () => {
+    expect(spawn(['verify-carry'])).toEqual({
+      code: 2,
+      stdout: 'Usage: julius-live-mission verify-carry --contract <mission.json> [--carry-bundle <dir> --carry-source-run <id> --expect-commit <sha>]\n',
+    });
+    expect(spawn(['verify-carry', '--contract', resolve(process.cwd(), '.github/julius-missions/julius-first-live/contract.json')]))
+      .toEqual({ code: 0, stdout: '  carry source: NONE arm=none\n' });
+  }, 30_000);
+
   it('run, and anything that is not a command, still gets the original usage line byte for byte', () => {
     for (const args of [['run'], ['observe'], [], ['run-observe-research', '--contract', 'x']]) {
       const result = spawn(args);

@@ -39,7 +39,8 @@ import {
 import { createHash } from 'node:crypto';
 import { parseJuliusMissionActiveError } from '../../src/relay/persistence/julius-postgres';
 import { seedJuliusTaskContract, type JuliusMissionState, type JuliusTask, type JuliusTaskContract } from '../../src/relay/mission/julius';
-import { JULIUS_CARRIED_KNOWLEDGE_LIMIT, type MissionKnowledgeStore } from './mission-knowledge';
+import { juliusCarryPairGate, selectJuliusCarry, type JuliusCarrySelection } from '../../src/relay/mission/julius/julius-carry';
+import type { MissionKnowledgeStore } from './mission-knowledge';
 import type { MissionSeedStore } from './mission-seed';
 
 /** The store methods bootstrap needs — `JuliusPostgresRepository` satisfies this directly. */
@@ -136,6 +137,30 @@ export function createLiveJuliusBootstrapPort(deps: {
         : createHash('sha256').update(`${request.idempotencyKey}:rerun:${(request.rerunKey ?? '').trim()}`).digest('hex').slice(0, 24);
       const runId = `run:${identity}`;
       const projectBrainRevision = Number.parseInt(request.projectBrain.revision, 10);
+      /**
+       * THE CARRY IS CHOSEN BEFORE ANYTHING EXISTS (Decision C).
+       *
+       * Selecting only reads, so it runs here, ahead of the first write: a WITH
+       * arm whose carry is empty, design-only or unreadable is refused while
+       * there is still no run, no task and nothing a paid dispatch could pick
+       * up. A WITHOUT arm inherits nothing by registration and is not asked.
+       * An ordinary mission (no arm) is never refused for its carry, and an
+       * unreadable store leaves it with none and NO manifest — the absence of
+       * the manifest is the record that nobody could look, which is not the
+       * same record as "nothing was eligible".
+       */
+      const carryArm = request.carryArm ?? null;
+      const carrySelection: JuliusCarrySelection | null = carryArm === 'WITHOUT'
+        ? selectJuliusCarry({ targetRunId: runId, sources: [], claims: [] })
+        : deps.knowledge === undefined
+          ? null
+          : await deps.knowledge.select({ projectId: request.projectId, targetRunId: runId }).catch(() => null);
+      const carryGate = juliusCarryPairGate(carryArm, carrySelection);
+      if (!carryGate.valid) {
+        return refuse('carry_pair_invalid',
+          `This mission is registered as the WITH arm of a learning pair, and its carry is not valid (${carryGate.reasonCode}): `
+          + 'a WITH arm must inherit at least one finding an independent reviewer resolved after a repair. Nothing was created or dispatched.');
+      }
       try {
         await deps.seeds.ensureBase({
           tenantId: deps.tenantId,
@@ -189,34 +214,38 @@ export function createLiveJuliusBootstrapPort(deps: {
           },
         ]);
         /**
-         * WHAT EARLIER MISSIONS VERIFIED, HANDED TO THIS ONE.
+         * WHAT EARLIER MISSIONS VERIFIED, HANDED TO THIS ONE — written once,
+         * after the seed, from the selection made above.
          *
-         * A context packet is compiled from ONE run's brain entries, so until
-         * this everything a mission learned died with it and the matched-pair
-         * learning proof had to seed the prior fact itself. Only VERIFIED and
-         * APPROVED claims travel, only from this project, never from this run,
-         * newest first and capped — and each copy keeps its author, its
-         * evidence and its standing, so mission B ranks a reviewer-verified fact
-         * as verified and still cannot self-verify it. Relevance is not decided
-         * here: the context integrity layer ranks and scopes what arrives.
+         * Only an Independent Reviewer's resolved findings and adopted,
+         * run-wide decisions travel, each labelled as a PRIOR lesson with its
+         * source run, work, reviews and repairs; the manifest event lists what
+         * was carried and every candidate refused, by code. See
+         * `src/relay/mission/julius/julius-carry.ts`.
          *
-         * OPTIONAL PORT, SILENT WHEN ABSENT: a deployment or a test that binds
-         * no knowledge store bootstraps exactly as it did before, and an
-         * unreachable one must not stop a mission starting — a mission with no
-         * inherited knowledge is a mission that has to work it out again, which
-         * is the state every mission was in until now.
+         * A WITH arm's restore failing is a refusal, never a silent empty carry:
+         * the pair would otherwise run with nothing to learn from and read as a
+         * result. So is a restore that leaves the run holding LESS than its
+         * carry selected: the arm is judged on what it received, and a partial
+         * carry is not the carry the pair gate passed. An ordinary mission
+         * tolerates either and starts with what it holds.
          */
-        if (deps.knowledge !== undefined) {
-          const carried = await deps.knowledge.verifiedProjectKnowledge({
-            projectId: request.projectId, excludeRunId: runId, limit: JULIUS_CARRIED_KNOWLEDGE_LIMIT,
-          }).catch(() => []);
-          if (carried.length > 0) {
-            await deps.knowledge.carryKnowledge({
-              runId, projectId: request.projectId, carried,
-              // After the seed entries, which end at this revision.
-              firstRevision: 3 + request.requirements.length + request.constraints.length,
-              occurredAt: now(),
-            }).catch(() => 0);
+        if (deps.knowledge !== undefined && carrySelection !== null) {
+          const restoring = deps.knowledge.restore({
+            runId, projectId: request.projectId, arm: carryArm, selection: carrySelection,
+            // After the seed entries, which end at this revision.
+            firstRevision: 3 + request.requirements.length + request.constraints.length,
+            occurredAt: now(),
+          });
+          if (carryArm === 'WITH') {
+            const held = await restoring;
+            if (held < carrySelection.selected.length) {
+              return refuse('carry_restore_incomplete',
+                `This mission is the WITH arm of a learning pair, and it holds ${String(held)} of the ${String(carrySelection.selected.length)} `
+                + 'items its carry selected: it was not started, and nothing was dispatched. Submitting it again resumes the restore.', true);
+            }
+          } else {
+            await restoring.catch(() => 0);
           }
         }
         await deps.runs.addTask({

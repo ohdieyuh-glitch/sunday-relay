@@ -163,6 +163,20 @@ export interface JuliusBootstrapRequest {
    */
   readonly rerunKey?: string;
   /**
+   * THE LEARNING ARM THIS MISSION RUNS AS, when it is one half of a Decision C
+   * matched pair. Absent: an ordinary mission, which inherits what the corrected
+   * carry selects and is never refused for an empty carry.
+   *
+   *   WITHOUT  inherits nothing. Its manifest says so.
+   *   WITH     must inherit at least one VERIFIED REPAIR FINDING. An empty,
+   *            design-only or unreadable carry refuses the bootstrap
+   *            (`carry_pair_invalid`) before a run exists, so before any paid
+   *            dispatch.
+   *
+   * Like `rerunIntent`, set only from a deliberate registration, never as a default.
+   */
+  readonly carryArm?: 'WITHOUT' | 'WITH';
+  /**
    * The repository authority this run REQUESTS. Requested, never granted:
    * Relay's repository resolver narrows it against what a human granted on the
    * registration, and Julius narrows it again per worker and per sub-agent.
