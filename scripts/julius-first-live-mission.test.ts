@@ -1560,8 +1560,11 @@ describe('the evidence dump names only tables and columns the migrations create'
     const statement = "...(contract.learningPair?.arm === 'WITH' && contract.learningPair.withoutRunId !== undefined ? { carry: { required: true, fromRunIds: [contract.learningPair.withoutRunId] } } : {}),";
     expect(entry.split(statement).length - 1, 'arm WITH requires a carry from its own arm WITHOUT, once, at the bootstrap call').toBe(1);
     const bootstrap = read('relay-bridge/julius/bootstrap.ts').replace(/\s+/gu, ' ');
-    expect(bootstrap, 'a required carry that is empty or failed refuses the bootstrap by name')
-      .toContain("if (deps.carry?.required === true && (carry === null || carry.outcome !== 'CARRIED' || carry.carried < 1)) { return refuse('carried_knowledge_required',");
+    expect(bootstrap, 'a required carry is held to the ONE-mode gate and refused by name (Decision C, C-1)')
+      .toContain("if (deps.carry?.required === true) { const refusal = requiredCarryRefusal(carry, deps.carry.fromRunIds ?? []); if (refusal !== null) return refuse('carried_knowledge_required', refusal); }");
+    for (const condition of ['carry.carriedFindings < 1', 'carry.findingSourceRunIds.some((runId) => !pinned.includes(runId))']) {
+      expect(bootstrap, `the gate counts verified repair findings from the pinned run, never rows: ${condition}`).toContain(condition);
+    }
     expect(bootstrap.indexOf("return refuse('carried_knowledge_required',"), 'and it refuses before the run is advanced to READY')
       .toBeLessThan(bootstrap.indexOf("for (const step of ['PLANNING', 'READY'] as const)"));
   });
