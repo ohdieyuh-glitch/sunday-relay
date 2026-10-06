@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **217 production files** across 20/20 subsystems (2 roots, 188 traced, 8 not composed by the live root, 19 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **218 production files** across 20/20 subsystems (2 roots, 189 traced, 8 not composed by the live root, 19 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -48,12 +48,12 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 20 | 5 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 10 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 31 | 8 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 32 | 10 |
 | live composition (relay-bridge/julius/) | other | 6 | 4 |
-| live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 17 | 2 |
+| live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 16 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 2 | 0 |
 | other | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 2 | 2 |
-| persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 25 | 15 |
+| persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 27 | 15 |
 | persistence (src/relay/persistence/) | Project Brain (src/relay/mission/project-brain/) | 3 | 0 |
 | Project Brain (src/relay/mission/project-brain/) | kernel (src/relay/mission/julius/) | 1 | 1 |
 | Relay↔Julius port (src/relay/integration/julius/) | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | 2 | 1 |
@@ -130,7 +130,7 @@ One claimed task all the way through: policy, budget reservation, context compil
 | `src/relay/mission/julius/julius-disagreement.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-execution-coordinator.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-lease-keeper.ts` | traced | `src/relay/mission/julius/julius-run-loop.ts` |
-| `src/relay/mission/julius/julius-peer-channel.ts` | traced | `src/relay/mission/julius/julius-architecture-state.ts` |
+| `src/relay/mission/julius/julius-peer-channel.ts` | traced | `src/relay/mission/julius/julius-finding-lifecycle.ts` |
 | `src/relay/mission/julius/julius-peer-runtime.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-release-runtime.ts` | traced | `src/relay/mission/julius/julius-lineage-asserter.ts` |
 | `src/relay/mission/julius/julius-research-protocol.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
@@ -212,7 +212,7 @@ The judgement role: the Hermes reviewer process runner in an isolated profile, p
 | `relay-bridge/reviewer-harness/hermes/hermes-provider.ts` | traced | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` |
 | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` | traced | `relay-bridge/reviewer-harness/hermes/runner.ts` |
 | `relay-bridge/reviewer-harness/hermes/runner.ts` | traced | `relay-bridge/hermes-reviewer.ts` |
-| `src/relay/mission/julius/julius-finding-lifecycle.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
+| `src/relay/mission/julius/julius-finding-lifecycle.ts` | traced | `src/relay/mission/julius/julius-claim-ledger.ts` |
 | `src/relay/mission/julius/julius-review-stage.ts` | traced | `relay-bridge/reviewer-deadline.ts` |
 | `src/relay/mission/julius/julius-review-verdict.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 
@@ -304,7 +304,7 @@ Acceptance criteria, reviewer findings, `verifyTask` and `evaluateJuliusVerifica
 | --- | --- | --- |
 | `src/relay/mission/julius/julius-accept-review-gate.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-attempt-evidence.ts` | traced | `src/relay/mission/julius/index.ts` |
-| `src/relay/mission/julius/julius-verification-runtime.ts` | traced | `src/relay/mission/julius/julius-runtime-ports.ts` |
+| `src/relay/mission/julius/julius-verification-runtime.ts` | traced | `src/relay/mission/julius/julius-finding-lifecycle.ts` |
 
 ### 14 REPAIR
 
@@ -354,7 +354,7 @@ Every authoritative transition has exactly one event type; the trajectory is the
 | production source | role | reached from |
 | --- | --- | --- |
 | `src/relay/mission/julius/julius-artifact-reference.ts` | traced | `src/relay/mission/julius/julius-execution-coordinator.ts` |
-| `src/relay/mission/julius/julius-events.ts` | traced | `src/relay/mission/julius/julius-recovery.ts` |
+| `src/relay/mission/julius/julius-events.ts` | traced | `src/relay/mission/julius/julius-claim-ledger.ts` |
 | `src/relay/mission/julius/julius-learning-loop.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-learning-record.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-metrics.ts` | traced | `src/relay/mission/julius/index.ts` |
@@ -378,14 +378,14 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/julius-event-postgres.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
 | `src/relay/persistence/julius-lifecycle-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/julius-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
-| `src/relay/persistence/julius-read-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
+| `src/relay/persistence/julius-read-postgres.ts` | traced | `src/relay/persistence/julius-claim-postgres.ts` |
 | `src/relay/persistence/julius-recovery-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/julius-repair-postgres.ts` | not composed by the live root | — |
 | `src/relay/persistence/julius-serializable.ts` | traced | `src/relay/persistence/julius-event-postgres.ts` |
 | `src/relay/persistence/julius-storage-encoding.ts` | traced | `src/relay/persistence/julius-tool-postgres.ts` |
 | `src/relay/persistence/julius-subagent-postgres.ts` | not composed by the live root | — |
 | `src/relay/persistence/julius-test-database.ts` | traced | `relay-bridge/julius-live-mission.ts` |
-| `src/relay/persistence/julius-timeline-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
+| `src/relay/persistence/julius-timeline-postgres.ts` | traced | `src/relay/persistence/julius-claim-postgres.ts` |
 | `src/relay/persistence/julius-tool-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-tool-recovery-postgres.ts` | traced | `src/relay/workspace/julius-tools/executor-control-plane-main.ts` |
 | `src/relay/persistence/julius-tool-settlement-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
@@ -447,6 +447,7 @@ C.A.R.D. roles resolved to live adapters — fail closed, naming every missing v
 - **fixtures** — `src/relay/mission/julius/julius-runtime-fixtures.ts`: a complete deterministic Julius deployment in memory — scripted adapters, stepping clock, counting ids — exported by the kernel barrel for tests; the live composition has no import through which a scripted adapter could arrive. Reached only via `src/relay/mission/julius/index.ts`.
 - **test harness** — `src/relay/mission/julius/julius-fault-injection.ts`: wraps a store so a named method throws on its Nth call — the chaos instrument the recovery scenarios use; no production caller. Reached only via `src/relay/mission/julius/index.ts`.
 - **fake** — `src/relay/connectors/gpt-architect/fake-architect.ts`: the deterministic offline fake of the GPT architect, exported by the connector barrel for the suite and Demo Simulation; the live worker binds runGptArchitect only. Reached only via `src/relay/connectors/gpt-architect/index.ts`, `src/relay/connectors/gpt-architect/index.ts`.
+- **legacy local execution** — `src/relay/mission/julius/julius-carry-verify.ts`: the OFF-HOST verifier of Decision C’s four-point carry chain (C-7): it reads two arms’ evidence bundles and re-derives what arm WITH should have carried with the kernel’s own rule, fold, renderer and record. It runs on a reviewer’s machine after a paid pair, never inside a run, and no runtime path imports it.
 - **legacy local execution** — `src/relay/persistence/julius-event-append-conformance.ts`: the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root.
 - **legacy local execution** — `src/relay/persistence/julius-criteria-scope-conformance.ts`: the criteria-scope contract cases themselves: a criterion belongs to a RUN, not to the database. Written once and run by BOTH the in-memory store, which was always right, and real PostgreSQL, where a global primary key on criterion_id silently gave every rerun no criteria at all. Test support, imported by no root.
 - **legacy local execution** — `src/relay/persistence/julius-decision-write-conformance.ts`: the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root.

@@ -251,7 +251,8 @@ export class JuliusClaimPostgresRepository implements JuliusClaimStore {
     } catch {
       return this.recordCarryFailure(input, 'carry_sources_unreadable');
     }
-    const digests = Object.fromEntries(plan.carried.map((item) => [item.entryId, `sha256:${sha256(item.text).slice(0, 16)}`] as const));
+    // THE FULL sha256 of each copy's text: the off-host verifier (`julius-carry-verify.ts`) binds the copy to it (C-7).
+    const digests = Object.fromEntries(plan.carried.map((item) => [item.entryId, `sha256:${sha256(item.text)}`] as const));
     const facts = juliusKnowledgeCarryFacts(plan, digests);
     const event = juliusKnowledgeCarriedEvent({
       runId: input.runId, projectId: input.projectId, occurredAt: input.occurredAt, facts,
