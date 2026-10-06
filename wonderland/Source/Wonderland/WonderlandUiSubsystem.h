@@ -564,6 +564,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FString GetTerminalCommandRows() const;
 
+	/** QA only (wl.Qa.JuliusDoors): the newest JULIUS 3.3 row the terminal drew, "<headline> | <answer>", or empty. Plain C++, not a
+	 *  UFUNCTION: a new reflected name can shift the FName table under Niagara's type hash (RC1, 10-01). */
+	FString GetTerminalLatestRowForQa() const;
+
 	// ---------------------------------------------------------------- Wonder Web (WonderlandWonderWeb.h)
 	//
 	// THE IN-WORLD BROWSER, OPENED FROM THE PROJECT. A screen stands in the garden ahead of the Dog and the camera glides

@@ -147,6 +147,9 @@ public:
 	/** The newest JULIUS 3.3 headline, or empty. */
 	FString GetLatestJuliusHeadline() const { return !LatestJuliusHeadline.IsEmpty() ? LatestJuliusHeadline : (JuliusRows.Num() > 0 ? JuliusRows.Last().Headline : FString()); }
 
+	/** The newest JULIUS 3.3 row as drawn -- "<headline> | <answer>" (both masked as the row is) -- or empty. Read-only, for QA. */
+	FString GetLatestJuliusRow() const { return JuliusRows.Num() > 0 ? JuliusRows.Last().Headline + TEXT(" | ") + JuliusRows.Last().Detail : FString(); }
+
 	/** Record Julius's newest line without drawing a row for it (the work log has drawn it). */
 	void NoteJuliusHeadline(const FString& Headline) { LatestJuliusHeadline = Headline; }
 

@@ -6129,6 +6129,11 @@ FString UWonderlandUiSubsystem::GetTerminalCommandRows() const
 	return Terminal.IsValid() ? Terminal->DescribeCommandRows() : FString();
 }
 
+FString UWonderlandUiSubsystem::GetTerminalLatestRowForQa() const
+{
+	return Terminal.IsValid() ? Terminal->GetLatestJuliusRow() : FString();
+}
+
 /* ------------------------------------------------------------------ the Wonder Web Wallet */
 
 UWonderlandWalletSubsystem* UWonderlandUiSubsystem::Wallet() const
