@@ -9,13 +9,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { JULIUS_RUNTIME_VERSION, juliusLearningMetrics, scriptedAdapter, type ScriptedOutcome } from '../src/relay/mission/julius';
 import type { JuliusBootstrapRequest } from '../src/relay/integration/julius/julius-port';
 import { juliusArchitectureEntryId } from '../src/relay/mission/julius/julius-architecture-state';
-import { parseJuliusCarrySources, parseJuliusDumpTable, verifyJuliusCarryChain } from '../src/relay/mission/julius/julius-carry-verify';
+import { parseJuliusCarrySources, parseJuliusDumpTable, previewJuliusCarry, verifyJuliusCarryChain } from '../src/relay/mission/julius/julius-carry-verify';
 import { juliusCarriedCopyId } from '../src/relay/mission/julius/julius-claim-ledger';
 import { JuliusContractPostgresRepository } from '../src/relay/persistence/julius-contract-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
-import { createLiveJuliusBootstrapPort } from './julius/bootstrap';
+import { createLiveJuliusBootstrapPort, juliusBootstrapRunId, planTaskId } from './julius/bootstrap';
 import {
   CODER_WORKER, architectWorker, assembleLiveJuliusRuntime, createContextAndClaimHandoffs, driveJuliusRunToTerminal, reviewerWorker,
 } from './julius/live-composition';
@@ -57,6 +57,7 @@ const enabled = databaseUrl !== null;
 const suite = enabled ? describe : describe.todo;
 const CARD = 'card:carry-planner:1';
 const nonce = () => randomBytes(4).toString('hex');
+const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 const PY_ROOT = join(__dirname, '..', 'python');
 /** Found as `scripts/julius-brain-intel-python.test.ts` finds it: Windows' `python3` is a store alias, so the version check decides. */
 const PYTHON = ['python3', 'python'].find((candidate) =>
@@ -102,13 +103,22 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
       testCommand: 'npm test', workspacePath: '/workspace/carry-planner', limits: { spendUsd: 2, repairCycles: 1 },
     };
 
+    /** One arm's request, compiled as the live entrypoint compiles it: the contract with its clause, and its three workers. */
+    const requestOf = (clause: Record<string, unknown>) => {
+      const parsed = parseLiveMissionContract(JSON.stringify({ ...base, learningPair: clause }));
+      if (!parsed.ok) throw new Error(parsed.problem);
+      return compileBootstrapRequest(parsed.contract, [architectWorker({}), CODER_WORKER, reviewerWorker('hermes')].map((worker) => ({
+        role: worker.role as JuliusBootstrapRequest['workers'][number]['role'],
+        integrationId: worker.workerId, adapterId: worker.adapterId,
+        independenceGroup: worker.providerId, requiredCapabilities: worker.capabilities,
+      })), CARD);
+    };
+
     const bootstrap = async (input: {
       readonly clause: Record<string, unknown>;
       readonly scripts: { readonly architect: readonly ScriptedOutcome[]; readonly coder: readonly ScriptedOutcome[]; readonly reviewer: readonly ScriptedOutcome[] };
       readonly carry?: { readonly required: boolean; readonly fromRunIds?: readonly string[] };
     }) => {
-      const parsed = parseLiveMissionContract(JSON.stringify({ ...base, learningPair: input.clause }));
-      if (!parsed.ok) throw new Error(parsed.problem);
       // ONE HANDOFF CACHE PER ARM, so this arm's snapshots are never evicted by the other's.
       const handoffs = createContextAndClaimHandoffs(createJuliusPostgresRuntimeStore(pool));
       const packetFor = (dispatch: { readonly contextId: string }) =>
@@ -121,11 +131,7 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
         { worker: CODER_WORKER, adapter: coder },
         { worker: reviewerWorker('hermes'), adapter: reviewer },
       ];
-      const request = compileBootstrapRequest(parsed.contract, entries.map((entry) => ({
-        role: entry.worker.role as JuliusBootstrapRequest['workers'][number]['role'],
-        integrationId: entry.worker.workerId, adapterId: entry.worker.adapterId,
-        independenceGroup: entry.worker.providerId, requiredCapabilities: entry.worker.capabilities,
-      })), CARD);
+      const request = requestOf(input.clause);
       const runs = new JuliusPostgresRepository(pool);
       const contracts = new JuliusContractPostgresRepository(pool);
       // EXACTLY THE LIVE ENTRYPOINT'S BINDING (`julius-live-mission.ts`): the knowledge store, and on arm WITH the requirement.
@@ -146,7 +152,9 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
       };
       return { submitted, handoffs, architect, coder, reviewer, drive };
     };
-    return { id, digest, base, bootstrap };
+    /** The run an arm's clause names, known before the arm is submitted: the bootstrap's own derivation. */
+    const runIdOf = (clause: Record<string, unknown>): string => juliusBootstrapRunId(requestOf(clause));
+    return { id, digest, base, bootstrap, runIdOf };
   }
 
   const snapshotsOf = async (runId: string): Promise<readonly Snapshot[]> => (await pool.query<Snapshot>(
@@ -163,6 +171,16 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     const line = script.split('\n').find((entry) => entry.startsWith('dump "SELECT') && entry.endsWith(`" ${file}`)) ?? '';
     expect(line, `${file} is dumped`).not.toBe('');
     return line.slice('dump "'.length, line.length - `" ${file}`.length);
+  };
+
+  /** Arm WITHOUT's `carry-sources.json`, by `.github/julius-carry-sources.sql` run as written, its one psql variable bound. */
+  const carrySourcesOf = async (runId: string) => {
+    const sql = readFileSync(join(__dirname, '..', '.github', 'julius-carry-sources.sql'), 'utf8');
+    expect(sql.split(":'run'").length - 1, 'one psql variable: the run the manifest names').toBe(1);
+    const exported = (await pool.query<{ json_build_object: unknown }>(sql.replace(":'run'", '$1'), [runId])).rows[0]?.json_build_object;
+    const parsed = parseJuliusCarrySources(JSON.stringify(exported));
+    if (!parsed.ok) throw new Error(parsed.problem);
+    return { exported, sources: parsed.value };
   };
 
   /** A dump table as `psql -A -F '\t'` writes it: the server's own text for every cell, NULL as empty, then the footer. */
@@ -200,14 +218,16 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
   };
 
   it('CASE 1 — arm WITHOUT’s resolved finding reaches arm WITH’s planner, structured, its design does not, and nothing reaches another worker', async () => {
-    const { digest, base, bootstrap } = pair();
+    const { digest, base, bootstrap, runIdOf } = pair();
 
     /* ---------------------------------------------------------------- arm WITHOUT */
+    const withoutClause = { registrationDigest: digest, arm: 'WITHOUT', rerunKey: `without-${nonce()}`, policy: POLICY };
     const withoutArm = await bootstrap({
-      clause: { registrationDigest: digest, arm: 'WITHOUT', rerunKey: `without-${nonce()}`, policy: POLICY },
+      clause: withoutClause,
       scripts: { architect: [ARCHITECT_WITH_DESIGN], coder: [BUILD], reviewer: [REJECT_PLAN, PASS_AND_RESOLVE] },
     });
     expect(withoutArm.submitted.accepted, 'arm WITHOUT bootstraps: it is the first run of its mission').toBe(true);
+    expect(withoutArm.submitted.accepted && withoutArm.submitted.runId, 'the run its clause named before it was submitted').toBe(runIdOf(withoutClause));
     const withoutOutcome = await withoutArm.drive();
     expect(withoutOutcome.state, String(withoutOutcome.haltCause)).toBe('COMPLETED');
     if (!withoutArm.submitted.accepted) throw new Error('unreachable');
@@ -242,9 +262,21 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     expect(writtenIds, 'the design in force, run-wide in its own run').toContain(design);
     expect(written.rows.find((row) => row.entry_id === design)?.task_id).toBeNull();
 
+    /* THE PROCEDURE GATE, BEFORE ARM WITH EXISTS: arm WITHOUT's export, as its job writes it when it ends, and the
+       WITH run id its clause names, say what WITH will carry. Only CARRIES lets WITH be dispatched. */
+    const exportedBefore = await carrySourcesOf(withoutRun);
+    const withClause = { registrationDigest: digest, arm: 'WITH', rerunKey: `with-${nonce()}`, withoutRunId: withoutRun, policy: POLICY };
+    const promisedRun = runIdOf(withClause);
+    const promised = previewJuliusCarry({
+      sources: exportedBefore.sources, withRunId: promisedRun, scopeTaskId: planTaskId(promisedRun), limit: JULIUS_CARRIED_KNOWLEDGE_LIMIT, sha256,
+    });
+    expect(promised.verdict, 'arm WITHOUT left a verified repair finding: WITH may be dispatched').toBe('CARRIES');
+    expect(promised.carries.map((item) => item.findingId)).toEqual([findingId]);
+    expect(await pool.query('SELECT 1 FROM relay_wonderland.julius_runs WHERE run_id = $1', [promisedRun]), 'previewed before WITH exists').toMatchObject({ rowCount: 0 });
+
     /* ---------------------------------------------------------------- arm WITH */
     const withArm = await bootstrap({
-      clause: { registrationDigest: digest, arm: 'WITH', rerunKey: `with-${nonce()}`, withoutRunId: withoutRun, policy: POLICY },
+      clause: withClause,
       scripts: { architect: [ARCHITECT_WITH_DESIGN], coder: [BUILD], reviewer: [PASS_AND_RESOLVE] },
       carry: { required: true, fromRunIds: [withoutRun] },
     });
@@ -252,6 +284,7 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     if (!withArm.submitted.accepted) throw new Error('unreachable');
     const withRun = withArm.submitted.runId;
     expect(withRun).not.toBe(withoutRun);
+    expect(withRun, 'the run the gate previewed').toBe(promisedRun);
 
     /* (2) WHAT BECAME ELIGIBLE, AND WHY THE REST DID NOT — one decision, on arm WITH's stream. */
     const decisions = await factsOf(withRun, 'knowledge.carried');
@@ -333,29 +366,28 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     expect(withRows.find((row) => row.event_type === 'julius.knowledge.carried')?.carried_entries).toContain(findingCopy);
     expect(withRows.find((row) => row.event_type === 'julius.knowledge.consumed')?.admitted_entry_ids).toContain(findingCopy);
 
-    /* C-7: THE CHAIN, PROVEN AS AN OFF-HOST REVIEWER PROVES IT: the bundle's own queries, then the pure verifier. */
-    const exportSql = readFileSync(join(__dirname, '..', '.github', 'julius-carry-sources.sql'), 'utf8');
-    expect(exportSql.split(":'run'").length - 1, 'one psql variable: the run the manifest names').toBe(1);
-    const exported = (await pool.query<{ json_build_object: unknown }>(exportSql.replace(":'run'", '$1'), [withoutRun])).rows[0]?.json_build_object;
-    const sources = parseJuliusCarrySources(JSON.stringify(exported));
-    if (!sources.ok) throw new Error(sources.problem);
+    /* C-7: THE CHAIN, PROVEN AS AN OFF-HOST REVIEWER PROVES IT: arm WITHOUT's export from before WITH existed, WITH's
+       tables by the bundle's own queries, then the pure verifier. WITH's run left WITHOUT's rows as they were. */
+    expect((await carrySourcesOf(withoutRun)).exported, 'arm WITHOUT\'s rows, unchanged by arm WITH').toEqual(exportedBefore.exported);
     const dumped = async (file: string) => {
       const parsed = parseJuliusDumpTable(await psqlTable(dumpQuery(file)));
       if (!parsed.ok) throw new Error(`${file}: ${parsed.problem}`);
       return parsed.value;
     };
     const chain = verifyJuliusCarryChain({
-      sources: sources.value, withRunId: withRun,
+      sources: exportedBefore.sources, withRunId: withRun,
       knowledge: await dumped('knowledge-carry.tsv'), copies: await dumped('carry-copies.tsv'), tasks: await dumped('tasks.tsv'),
-      limit: JULIUS_CARRIED_KNOWLEDGE_LIMIT, sha256: (text) => createHash('sha256').update(text, 'utf8').digest('hex'),
+      limit: JULIUS_CARRIED_KNOWLEDGE_LIMIT, sha256,
     });
     expect(chain.checks.filter((item) => !item.ok), 'every point of the chain holds').toEqual([]);
     expect(chain).toMatchObject({ verdict: 'PASS', withoutRunId: withoutRun, withRunId: withRun });
     expect(chain.proven.map((item) => item.entryId), 'the one verified repair finding, proven at all four points').toEqual([findingCopy]);
+    expect(chain.proven, 'exactly what the gate promised before WITH existed, digest for digest').toEqual(promised.carries);
+    expect(withRows.find((row) => row.event_type === 'julius.knowledge.carried')?.carried_entries).toBe(promised.carriedEntries);
   });
 
   it('CASE 2 — an arm WITH whose arm WITHOUT left a design but no verified repair finding is REFUSED before READY, with the reason on the record', async () => {
-    const { digest, base, bootstrap } = pair();
+    const { digest, base, bootstrap, runIdOf } = pair();
     // Arm WITHOUT completes cleanly: no reviewer finding. What it leaves is verdict mirrors and its design in force,
     // the row draft r1 would have carried — and a design never satisfies the gate.
     const withoutArm = await bootstrap({
@@ -367,8 +399,18 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     if (!withoutArm.submitted.accepted) throw new Error('unreachable');
     const withoutRun = withoutArm.submitted.runId;
 
+    // THE PROCEDURE GATE says it first, from arm WITHOUT's export alone: EMPTY, so by procedure WITH is never dispatched.
+    const withClause = { registrationDigest: digest, arm: 'WITH', rerunKey: `with-${nonce()}`, withoutRunId: withoutRun, policy: POLICY };
+    const promisedRun = runIdOf(withClause);
+    const promised = previewJuliusCarry({
+      sources: (await carrySourcesOf(withoutRun)).sources, withRunId: promisedRun, scopeTaskId: planTaskId(promisedRun),
+      limit: JULIUS_CARRIED_KNOWLEDGE_LIMIT, sha256,
+    });
+    expect(promised).toMatchObject({ verdict: 'EMPTY', eligible: 0, carriedEntries: '', carries: [] });
+
+    // AND THE RUN'S OWN GATE, had the procedure been skipped.
     const withArm = await bootstrap({
-      clause: { registrationDigest: digest, arm: 'WITH', rerunKey: `with-${nonce()}`, withoutRunId: withoutRun, policy: POLICY },
+      clause: withClause,
       scripts: { architect: [ARCHITECT_PLAIN], coder: [BUILD], reviewer: [PASS_AND_RESOLVE] },
       carry: { required: true, fromRunIds: [withoutRun] },
     });
@@ -378,6 +420,7 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
       'SELECT run_id, state FROM relay_wonderland.julius_runs WHERE mission_id = $1 AND run_id <> $2', [base.missionId, withoutRun]);
     expect(created.rows.map((row) => row.state)).toEqual(['CREATED']);
     const refusedRun = created.rows[0]!.run_id;
+    expect(refusedRun, 'the run the gate previewed').toBe(promisedRun);
     expect(await snapshotsOf(refusedRun)).toEqual([]);
     expect(withArm.architect.dispatches.length + withArm.coder.dispatches.length + withArm.reviewer.dispatches.length).toBe(0);
     // WHY, ON THE RECORD: the carry looked, found verdict mirrors and a design, and said so.

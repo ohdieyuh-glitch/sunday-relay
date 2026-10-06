@@ -74,6 +74,18 @@ export interface RunCreationStore {
 export const planTaskId = (runId: string): string => `${runId}:plan`;
 export const buildTaskId = (runId: string): string => `${runId}:build`;
 
+/**
+ * THE RUN A REQUEST NAMES, before anything is created: the contract's idempotency key, or, for an explicit rerun,
+ * that key and the caller's rerun key (why, at the refusal of a keyless rerun below). One derivation: the bootstrap
+ * names its run with it, and a registration computes every arm's run id with it before any arm runs.
+ */
+const juliusBootstrapIdentity = (request: Pick<JuliusBootstrapRequest, 'idempotencyKey' | 'rerunIntent' | 'rerunKey'>): string =>
+  request.rerunIntent !== 'EXPLICIT'
+    ? request.idempotencyKey
+    : createHash('sha256').update(`${request.idempotencyKey}:rerun:${(request.rerunKey ?? '').trim()}`).digest('hex').slice(0, 24);
+export const juliusBootstrapRunId = (request: Pick<JuliusBootstrapRequest, 'idempotencyKey' | 'rerunIntent' | 'rerunKey'>): string =>
+  `run:${juliusBootstrapIdentity(request)}`;
+
 const REQUIRED_ROLES = ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'] as const;
 
 export function createLiveJuliusBootstrapPort(deps: {
@@ -152,9 +164,7 @@ export function createLiveJuliusBootstrapPort(deps: {
           'An explicit rerun must carry a key of its own, so that repeating the request cannot buy a second execution. '
           + 'Send one stable token per intended rerun.');
       }
-      const identity = request.rerunIntent !== 'EXPLICIT'
-        ? request.idempotencyKey
-        : createHash('sha256').update(`${request.idempotencyKey}:rerun:${(request.rerunKey ?? '').trim()}`).digest('hex').slice(0, 24);
+      const identity = juliusBootstrapIdentity(request);
       const runId = `run:${identity}`;
       const projectBrainRevision = Number.parseInt(request.projectBrain.revision, 10);
       try {
