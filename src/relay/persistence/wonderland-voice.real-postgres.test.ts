@@ -67,7 +67,8 @@ suite('Wonderland voice on real PostgreSQL (staged migration 035)', () => {
     for (const { name, pool } of made) {
       pool.on('error', () => undefined);
       await pool.end().catch(() => undefined);
-      await admin.query(`DROP DATABASE IF EXISTS ${name}`).catch(() => undefined);
+      // FORCE: a case that failed or timed out may still hold a connection, and the database must not outlive the suite.
+      await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(() => undefined);
     }
     await admin?.end();
   });
@@ -154,16 +155,18 @@ suite('Wonderland voice on real PostgreSQL (staged migration 035)', () => {
     url.pathname = `/wvoicelock${nonce}`;
     // Two bridge processes: each its own lock pool, so nothing in this process orders them; only the database can.
     const lockPools = [1, 2, 3].map(() => new Pool({ connectionString: url.toString(), max: 2 }));
+    const held = gate();
     try {
       const first = new WonderlandVoicePostgresStore(pool, { locks: lockPools[0]! });
       const second = new WonderlandVoicePostgresStore(pool, { locks: lockPools[1]! });
       const impatient = new WonderlandVoicePostgresStore(pool, { locks: lockPools[2]!, lockTimeoutMs: 200 });
       const order: string[] = [];
 
-      const held = gate();
       const one = first.withPlayerVoiceLock!('amy', async () => { order.push('first in'); held.reach(); await held.open; order.push('first out'); });
       await held.reached;
-      const voiceLocks = "SELECT granted FROM pg_locks WHERE locktype = 'advisory' AND classid = $1::oid AND objsubid = 2";
+      // pg_locks is the whole cluster's, and the suites beside this one take voice locks in their own databases.
+      const voiceLocks = "SELECT granted FROM pg_locks WHERE locktype = 'advisory' AND classid = $1::oid AND objsubid = 2"
+        + ' AND database = (SELECT oid FROM pg_database WHERE datname = current_database())';
       expect((await pool.query(voiceLocks, [WONDERLAND_VOICE_LOCK_SPACE])).rows, 'the held lock is the database\'s, and visible as such').toEqual([{ granted: true }]);
       const two = second.withPlayerVoiceLock!('amy', async () => { order.push('second in'); return 'second'; });
       expect(await second.withPlayerVoiceLock!('xan', async () => 'xan'), 'another player\'s step does not wait').toBe('xan');
@@ -180,6 +183,9 @@ suite('Wonderland voice on real PostgreSQL (staged migration 035)', () => {
       expect((await pool.query(voiceLocks, [WONDERLAND_VOICE_LOCK_SPACE])).rows, 'no voice lock outlives its step').toEqual([]);
       expect(new WonderlandVoicePostgresStore(pool).withPlayerVoiceLock, 'a store given no lock pool offers no lock').toBeUndefined();
     } finally {
+      // A failed expectation must not leave the first step holding its connection: ending its pool would wait for it for
+      // ever, and the failure would read as a timeout instead of the expectation that failed.
+      held.release();
       for (const locks of lockPools) await locks.end().catch(() => undefined);
     }
   }, 30_000);
