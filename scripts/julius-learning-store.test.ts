@@ -65,7 +65,8 @@ describe('the learning store script, without a database', () => {
       const container = parsed.find((line) => line.mode === 'container' && line.builder === builder)!;
       const host = parsed.find((line) => line.mode === 'host' && line.builder === builder)!;
       expect(container.args, `${builder}: the paid path runs exactly what the test runs`).toBe(host.args);
-      expect(container.prefix).toMatch(/^docker exec -i -e PGUSER -e PGDATABASE -e PGPASSWORD -e PGHOST -e PGPORT \S+ pg_(dump|restore)$/u);
+      // The container's own server: no runner-side PGHOST or PGPORT crosses into it.
+      expect(container.prefix).toMatch(/^docker exec -i -e PGUSER -e PGDATABASE -e PGPASSWORD \S+ pg_(dump|restore)$/u);
       expect(host.prefix).toMatch(/\/pg_(dump|restore)(\.exe)?$/u);
     }
     const argsOf = (builder: string) => parsed.find((line) => line.builder === builder)!.args;
