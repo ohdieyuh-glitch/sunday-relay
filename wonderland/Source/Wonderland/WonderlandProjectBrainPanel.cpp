@@ -1931,8 +1931,10 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeCardStrip()
 		+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)
 		[
 			// MASCOT & VISUAL MODS' way in (founder, 2026-10-06; SECOND JUJU's contract r1 §4): the tab id stays "mascot", the value line
-			// stays the worn look
-			MakeCardTile(TEXT("mascot"), EWonderlandBrainGlyph::Person, TEXT("mascot & visual mods"),
+			// stays the worn look, and the page it opens is titled MASCOT & VISUAL MODS in full. The caption is "visual_mods", in its
+			// neighbours' style (skills_mcp, saved_cards): "mascot & visual mods" was cut to "mascot & visua..." at every resolution
+			// (the panel scales with the screen; r16reh4 frames 10-06, SECOND JUJU's P3 nit).
+			MakeCardTile(TEXT("mascot"), EWonderlandBrainGlyph::Person, TEXT("visual_mods"),
 				[this]() { return FString::Printf(TEXT("%s · %s%s"), *CardView.Skin.ToUpper(), *CardView.Primary, CardView.bModified ? TEXT(" · MODIFIED") : TEXT("")); },
 				[this]() { return CardView.bModified ? CardStatusColour(EWonderlandCardStatus::Unconfigured) : Mist(0.55f); })
 		]
