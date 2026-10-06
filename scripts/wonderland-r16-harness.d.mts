@@ -9,6 +9,8 @@ type Fetch = typeof fetch;
 
 export declare const R16_VERSION: string;
 export declare const R16_CHECKS: readonly string[];
+/** The voice wall's closed list: counted only when the voice wall is checked (`--voice`). */
+export declare const R16_VOICE_CHECKS: readonly string[];
 export declare const R16_HEARTBEAT_MS: number;
 
 export interface R16Players { readonly a: string; readonly b: string; readonly c: string; readonly nobody: string }
@@ -33,13 +35,60 @@ export declare function runR16Scenario(input: {
   readonly fetch: Fetch;
   /** The harness's own clock, for its heartbeat. Defaults to Date.now. */
   readonly clock?: () => number;
+  /** Check the voice wall too. `idTokens` (EOS Connect ID tokens, per player) are bound first; without them each identity must already be bound. */
+  readonly voice?: { readonly idTokens?: Readonly<Record<string, string>> | null } | null;
 }): Promise<{
   readonly results: readonly R16Result[];
   readonly commands: number;
   readonly heartbeats: number;
   /** The name the backend showed for each player while all three were visible to all: from a verified sign-in, or null. */
   readonly names: Readonly<Record<string, string | null>>;
+  /** Null when voice was not checked; otherwise whether every player was admitted to it, and how many joins were made. */
+  readonly voice: { readonly admitted: boolean; readonly joins: number } | null;
 }>;
+
+/* ------------------------------------------------------------------- VOICE --- */
+
+export type R16VoiceBinding =
+  | { readonly bound: true; readonly productUserId: string; readonly outcome: string }
+  | { readonly bound: false; readonly refused: string };
+
+export declare function bindR16VoiceIdentities(input: {
+  readonly bridge: string;
+  readonly origin: string;
+  readonly sessions: Readonly<Record<string, string>>;
+  readonly players: R16Players;
+  readonly idTokens: Readonly<Record<string, string>>;
+  readonly fetch: Fetch;
+}): Promise<Readonly<Record<string, R16VoiceBinding>>>;
+
+export interface R16VoiceJoined { readonly rooms: readonly string[] | null }
+export declare function r16VoiceShape(joined: { readonly a?: R16VoiceJoined | null; readonly b?: R16VoiceJoined | null; readonly c?: R16VoiceJoined | null }): {
+  readonly rooms: { readonly a: number; readonly b: number; readonly c: number };
+  readonly shared: { readonly ab: number; readonly ac: number; readonly bc: number; readonly abc: number };
+};
+
+/** Per player, per channel: the room ids given (never a token), or the refusal. */
+export type R16VoiceRooms = Record<string, { readonly INSTANCE: { readonly rooms: readonly string[] } | { readonly refused: string }; readonly PARTY: { readonly rooms: readonly string[] } | { readonly refused: string } }>;
+
+export declare function readR16VoiceRooms(input: {
+  readonly bridge: string;
+  readonly origin: string;
+  readonly sessions: Readonly<Record<string, string>>;
+  readonly players: R16Players;
+  readonly fetch: Fetch;
+}): Promise<R16VoiceRooms>;
+
+export declare function r16VoiceRestartCheck(player: string): string;
+
+export declare function verifyR16Voice(input: {
+  readonly bridge: string;
+  readonly origin: string;
+  readonly sessions: Readonly<Record<string, string>>;
+  readonly players: R16Players;
+  readonly recorded: { readonly voice?: { readonly rooms: R16VoiceRooms } | null } | null;
+  readonly fetch: Fetch;
+}): Promise<readonly R16Result[]>;
 
 export declare function readR16Views(input: {
   readonly bridge: string;
@@ -84,7 +133,8 @@ export declare function probeR16Voice(input: {
   readonly fetch: Fetch;
 }): Promise<string>;
 
-export declare function summarizeR16(results: readonly R16Result[]): {
+/** With `voice` (or any voice result present), the voice checks are counted too. */
+export declare function summarizeR16(results: readonly R16Result[], options?: { readonly voice?: boolean }): {
   readonly passed: number;
   readonly failed: number;
   readonly missing: readonly string[];

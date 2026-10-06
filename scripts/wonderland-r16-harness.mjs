@@ -69,13 +69,30 @@
  * against the same bridge as a HOSTED_FINAL scenario. Anything less is a
  * REHEARSAL, every reason named; `--final` makes a REHEARSAL exit 1.
  *
- * WHAT IT DOES NOT DO: voice. Voice needs EOS identities on a configured EOS
- * product; the harness reports whether the backend serves voice configuration
- * and nothing more (CORE's final R16 step, with the founder's EOS product).
+ * VOICE (`--voice`): the voice wall, checked over HTTP (`R16_VOICE_CHECKS`).
+ * EOS voice has no per-listener mute, so the wall IS which rooms each player is
+ * given a token for: every room one mutually visible pair
+ * (docs/relay/WONDERLAND_VOICE.md). Room names are opaque digests, so the
+ * harness learns who shares a room the way the wall defines it: by which rooms
+ * two players are BOTH given. At five points of the scenario each player joins
+ * (`POST /wonderland/voice/join`): everyone visible, A hidden, A present and
+ * absent, the party, and the block. It checks pairs and only pairs, the hidden
+ * player and the stranger sharing nothing, a hide taking the stranger's room
+ * back at once, and that nobody's rooms change with the arrival of someone
+ * they cannot see. Each player needs a proven EOS identity: bound by their game
+ * client, or by the harness from `WONDERLAND_R16_EOS_ID_TOKENS` (JSON
+ * `{"<playerId>": "<EOS Connect ID token>"}`, from the environment only, never
+ * printed or recorded). The tokens a join returns are never kept. With
+ * `--state`, each player's rooms are recorded (ids, never a token), and the
+ * verify phase checks that each player, reconnected, is given exactly the same
+ * rooms. The harness never talks to Epic: the backend does, with its own
+ * trusted credentials, which is what is being checked. Without `--voice` it
+ * only reports whether the backend serves EOS client configuration.
  *
- * Exit: 0 every check passed (and, with `--final`, the venue is HOSTED_FINAL);
- * 1 a check failed, the backend could not be reached, or `--final` met a
- * REHEARSAL; 2 usage.
+ * Exit: 0 every check passed (and, with `--final`, the venue is HOSTED_FINAL
+ * and the voice wall was checked); 1 a check failed, the backend could not be
+ * reached, or `--final` met a REHEARSAL or a run that did not check voice; 2
+ * usage.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -116,6 +133,21 @@ export const R16_CHECKS = Object.freeze([
   'DM: a block hides the conversation from both sides and refuses a new message',
   'DM: lifting the block shows the conversation again, with nothing written during the block',
   'LEASE: every player kept their presence alive by heartbeat, as a client must, and is still in the instance at the end',
+]);
+
+/**
+ * THE VOICE WALL'S CLOSED LIST, run with `--voice`: then every one of them
+ * counts, and a voice check not run is a voice check failed.
+ */
+export const R16_VOICE_CHECKS = Object.freeze([
+  'VOICE IDENTITY: each player holds a proven EOS identity, and voice admits them',
+  'VOICE: with everyone visible to everyone, each pair shares exactly one instance room, and no room holds three',
+  'VOICE P1: a player hidden from strangers shares no room with a stranger, and keeps their room with a friend',
+  'VOICE P1: hiding takes back, at once and from both, the one room the hidden player shared with the stranger',
+  'VOICE NO INFERENCE: a stranger is given, with the hidden player present, exactly the rooms they are given with the hidden player absent',
+  'VOICE PARTY: party-mates share exactly one party room per pair, a hidden leader included',
+  'VOICE NO INFERENCE: a block takes back at once every room it ends, and the blocked pair shares no room, in the instance or the party',
+  'VOICE NO INFERENCE: each of a blocked pair is given, with the other present, exactly the rooms they are given with the other absent',
 ]);
 
 export function r16Players(nonce) {
@@ -229,17 +261,114 @@ export function compareR16Views(before, after, path = '') {
   return [...keys].sort().flatMap((key) => compareR16Views(before[key], after[key], `${path}/${key}`));
 }
 
+/* ------------------------------------------------------------------- VOICE --- */
+
+/**
+ * ONE VOICE JOIN, as a client makes it: the rooms of the player's plan for the
+ * channel, each with its token. Kept: the room ids, whether every room came
+ * with a token, and what the backend took back first. Never kept: a token.
+ */
+async function joinVoice(call, token, channel) {
+  const response = await call(token, 'POST', '/wonderland/voice/join', { channel });
+  const data = ok(response.body);
+  const rooms = response.status === 200 && Array.isArray(data?.rooms) ? data.rooms : null;
+  return Object.freeze({
+    status: response.status,
+    refused: response.status === 200 ? null : String(response.body?.error?.kind ?? `status_${String(response.status)}`),
+    rooms: rooms === null ? null : sorted(rooms.map((room) => String(room?.roomId))),
+    tokened: rooms !== null && rooms.every((room) => typeof room?.token === 'string' && room.token !== ''),
+    revoked: typeof data?.revoked === 'number' ? data.revoked : null,
+    revocationFailures: typeof data?.revocationFailures === 'number' ? data.revocationFailures : null,
+  });
+}
+
+/**
+ * BIND EACH PLAYER'S EOS IDENTITY from an EOS Connect ID token, as the game
+ * client does (`POST /wonderland/voice/identity`). The backend verifies the
+ * token against Epic's keys; the harness only carries it. Returns, per player,
+ * the outcome and the product user it was bound to. Never the token.
+ */
+export async function bindR16VoiceIdentities({ bridge, origin, sessions, players, idTokens, fetch }) {
+  const call = client({ bridge, origin, fetch });
+  const bound = {};
+  for (const player of [players.a, players.b, players.c]) {
+    const response = await call(sessions[player], 'POST', '/wonderland/voice/identity', { idToken: idTokens?.[player] });
+    const data = ok(response.body);
+    bound[player] = response.status === 200 && typeof data?.productUserId === 'string'
+      ? Object.freeze({ bound: true, productUserId: data.productUserId, outcome: String(data.outcome) })
+      : Object.freeze({ bound: false, refused: `${String(response.status)} ${String(response.body?.error?.kind ?? 'unknown')}` });
+  }
+  return Object.freeze(bound);
+}
+
+/** Who shares what among A, B and C, from the rooms each was given: counts only, never a room's name. */
+export function r16VoiceShape(joined) {
+  const rooms = (side) => (Array.isArray(joined?.[side]?.rooms) ? joined[side].rooms : []);
+  const both = (x, y) => rooms(x).filter((id) => rooms(y).includes(id));
+  return Object.freeze({
+    rooms: Object.freeze({ a: rooms('a').length, b: rooms('b').length, c: rooms('c').length }),
+    shared: Object.freeze({
+      ab: both('a', 'b').length, ac: both('a', 'c').length, bc: both('b', 'c').length,
+      abc: both('a', 'b').filter((id) => rooms('c').includes(id)).length,
+    }),
+  });
+}
+
+/**
+ * WHAT VOICE GIVES EACH PLAYER NOW, per channel: the rooms (ids, never a token)
+ * or the refusal. Joining is what a client does, and the only way a plan is read.
+ */
+export async function readR16VoiceRooms({ bridge, origin, sessions, players, fetch }) {
+  const call = client({ bridge, origin, fetch });
+  const rooms = {};
+  for (const player of [players.a, players.b, players.c]) {
+    const channels = {};
+    for (const channel of ['INSTANCE', 'PARTY']) {
+      const joined = await joinVoice(call, sessions[player], channel);
+      channels[channel] = joined.status === 200 ? { rooms: joined.rooms } : { refused: joined.refused };
+    }
+    rooms[player] = channels;
+  }
+  return rooms;
+}
+
+/**
+ * THE VOICE HALF OF THE RESTART CHECK, run after the reconnect. A player's plan
+ * is a function of what is stored and who is present, and their EOS identity is
+ * stored (035), so each player must be given exactly the rooms the scenario
+ * recorded. A scenario that recorded no rooms fails here: there is nothing to
+ * hold the backend to.
+ */
+export const r16VoiceRestartCheck = (player) => `VOICE: ${player} reconnected and is given exactly the rooms they were given before`;
+
+export async function verifyR16Voice({ bridge, origin, sessions, players, recorded, fetch }) {
+  const before = recorded?.voice?.rooms ?? null;
+  const now = await readR16VoiceRooms({ bridge, origin, sessions, players, fetch });
+  return Object.freeze([players.a, players.b, players.c].map((player) => {
+    const name = r16VoiceRestartCheck(player);
+    if (before === null || typeof before !== 'object' || !Object.prototype.hasOwnProperty.call(before, player)) {
+      return Object.freeze({ name, result: 'FAIL', detail: 'the scenario recorded no voice rooms: run it with --voice and --state' });
+    }
+    const differences = compareR16Views(before[player], now[player]);
+    return Object.freeze({ name, result: differences.length === 0 ? 'PASS' : 'FAIL', detail: differences.length === 0 ? '' : `differs at ${differences.join(' ')}` });
+  }));
+}
+
 /**
  * THE SCENARIO. Three players: A will hide from strangers, B is A's friend, C is
  * a stranger to both. Every step is a real command through the real route; every
  * assertion is on a real response. Failures are collected, never thrown, so one
  * broken rule cannot hide the others.
+ *
+ * With `voice` (`{ idTokens? }`), the voice wall is checked at five points of the
+ * same scenario (`R16_VOICE_CHECKS`); without it, nothing about voice is sent.
  */
-export async function runR16Scenario({ bridge, origin, sessions, players, nonce, fetch, clock = Date.now }) {
+export async function runR16Scenario({ bridge, origin, sessions, players, nonce, fetch, clock = Date.now, voice = null }) {
   const call = client({ bridge, origin, fetch });
   const results = [];
+  const voiceOn = voice !== null && voice !== undefined && voice !== false;
   const check = (name, passed, detail) => {
-    if (!R16_CHECKS.includes(name)) throw new Error(`r16_check_unregistered: ${name}`);
+    if (!R16_CHECKS.includes(name) && !(voiceOn && R16_VOICE_CHECKS.includes(name))) throw new Error(`r16_check_unregistered: ${name}`);
     results.push({ name, result: passed ? 'PASS' : 'FAIL', detail: passed ? '' : detail });
   };
   const { a, b, c, nobody } = players;
@@ -249,7 +378,9 @@ export async function runR16Scenario({ bridge, origin, sessions, players, nonce,
   const send = async (player, cmd) => {
     commands += 1;
     const response = await call(token(player), 'POST', '/wonderland/social/commands', { commandId: `r16-${nonce}-${String(commands)}`, command: cmd });
-    return { status: response.status, code: ok(response.body)?.code ?? null };
+    // What the backend took back from the ACTOR's own voice rooms after the change, when it serves voice.
+    const followed = response.body?.voice;
+    return { status: response.status, code: ok(response.body)?.code ?? null, ...(followed === undefined ? {} : { voice: followed }) };
   };
   // The client's half of the presence lease: every standing player is refreshed before any request once it is due.
   const leases = new Map();
@@ -291,6 +422,27 @@ export async function runR16Scenario({ bridge, origin, sessions, players, nonce,
   });
   const dogs = { [a]: 'corgi', [b]: 'beagle', [c]: 'husky' };
 
+  // THE VOICE WALL. Down until every player is admitted at the first join; then each later point joins and checks.
+  let joins = 0;
+  const join = async (player, channel) => {
+    await keepAlive();
+    joins += 1;
+    return joinVoice(call, token(player), channel);
+  };
+  // A join with no heartbeat before it, right after a change: if the player still held a room the change ended, only that change could have taken it back.
+  const joinNow = async (player, channel) => {
+    joins += 1;
+    return joinVoice(call, token(player), channel);
+  };
+  let voiceDown = voiceOn ? 'never reached' : null;
+  const voiceLive = () => voiceOn && voiceDown === null;
+  const room = {};
+  const label = (id) => Object.entries(room).find(([, value]) => value === id)?.[0] ?? 'another';
+  const said = (joined) => (joined === null ? 'nothing' : joined.status === 200 ? `[${joined.rooms.map(label).join(',')}]` : `${String(joined.status)} ${String(joined.refused)}`);
+  const joinedAll = (...list) => list.every((joined) => joined?.status === 200);
+  const notRun = (index) => check(R16_VOICE_CHECKS[index], false, `not run: voice was not available to every player (${String(voiceDown)})`);
+  const sharedRoom = (x, y) => x.rooms.find((id) => y.rooms.includes(id)) ?? null;
+
   // SESSIONS — each one is its player, and only its player. Their first request also makes them exist socially.
   const identities = [];
   for (const player of [a, b, c]) identities.push((await me(player))?.playerId ?? null);
@@ -327,8 +479,48 @@ export async function runR16Scenario({ bridge, origin, sessions, players, nonce,
   check(R16_CHECKS[5], recent.c.includes(a) && recent.c.includes(b) && recent.a.includes(b) && recent.a.includes(c),
     `Recent Players were ${JSON.stringify(recent)}`);
 
+  // VOICE, everyone visible to everyone. Each player is first admitted: their EOS identity is proven (bound here from an ID token,
+  // or already by their own client) and the backend serves voice.
+  if (voiceOn) {
+    await keepAlive();
+    const bound = voice.idTokens ? await bindR16VoiceIdentities({ bridge, origin, sessions, players, idTokens: voice.idTokens, fetch }) : null;
+    const first = { a: await join(a, 'INSTANCE'), b: await join(b, 'INSTANCE'), c: await join(c, 'INSTANCE') };
+    const refused = [['A', first.a], ['B', first.b], ['C', first.c]].filter(([, joined]) => joined.status !== 200);
+    voiceDown = refused.length === 0 ? null : refused.map(([who, joined]) => `${who} ${said(joined)}`).join(', ');
+    const puids = bound === null ? [] : [a, b, c].map((player) => bound[player].productUserId ?? null);
+    const proven = bound === null || ([a, b, c].every((player) => bound[player].bound) && new Set(puids).size === 3);
+    check(R16_VOICE_CHECKS[0], voiceDown === null && proven,
+      `${bound === null ? 'identities as the players\' own clients bound them'
+        : `binding ${[a, b, c].map((player) => (bound[player].bound ? bound[player].outcome : `refused ${bound[player].refused}`)).join(', ')}, ${String(new Set(puids.filter(Boolean)).size)} different`}; `
+        + `the first joins: ${voiceDown ?? 'all admitted'}`);
+    if (voiceLive()) {
+      room.AB = sharedRoom(first.a, first.b);
+      room.AC = sharedRoom(first.a, first.c);
+      room.BC = sharedRoom(first.b, first.c);
+      const shape = r16VoiceShape(first);
+      const tokened = [first.a, first.b, first.c].every((joined) => joined.tokened);
+      check(R16_VOICE_CHECKS[1], same(shape, { rooms: { a: 2, b: 2, c: 2 }, shared: { ab: 1, ac: 1, bc: 1, abc: 0 } }) && tokened,
+        `the rooms given were ${JSON.stringify(shape)}${tokened ? '' : ', and a room came without its token'}`);
+    } else notRun(1);
+  }
+
   // A hides from strangers.
   const hidden = await command(a, { kind: 'SET_SETTINGS', settings: { visibility: 'HIDDEN_FROM_STRANGERS' } });
+  // VOICE, A hidden. C joins first, before any heartbeat could reconcile anyone: if C still held the room with A, only the hide
+  // could have taken it back.
+  if (voiceOn) {
+    if (voiceLive()) {
+      const after = { c: await joinNow(c, 'INSTANCE'), a: await join(a, 'INSTANCE'), b: await join(b, 'INSTANCE') };
+      check(R16_VOICE_CHECKS[2],
+        joinedAll(after.a, after.b, after.c) && same(after.a.rooms, [room.AB]) && same(after.b.rooms, sorted([room.AB, room.BC])) && same(after.c.rooms, [room.BC]),
+        `after A hid: A was given ${said(after.a)}, B ${said(after.b)}, C ${said(after.c)}`);
+      check(R16_VOICE_CHECKS[3],
+        hidden.voice?.revoked === 1 && hidden.voice?.revocationFailures === 0
+          && after.c.revoked === 0 && after.c.revocationFailures === 0 && after.a.revoked === 0 && after.b.revoked === 0,
+        `the hide took back ${JSON.stringify(hidden.voice ?? null)} of A's own rooms; after it, C's join took back ${String(after.c.revoked)} `
+          + `(${String(after.c.revocationFailures)} failed), A's ${String(after.a.revoked)}, B's ${String(after.b.revoked)}`);
+    } else { notRun(2); notRun(3); }
+  }
   const hiddenRoster = await roster(c);
   const hiddenListing = await listing(c);
   check(R16_CHECKS[6],
@@ -341,11 +533,20 @@ export async function runR16Scenario({ bridge, origin, sessions, players, nonce,
   const toNobody = await command(c, { kind: 'SEND_MESSAGE', messageId: `r16-${nonce}-to-nobody`, toId: nobody, body: 'hello?' });
   check(R16_CHECKS[8], toHidden.code === 'UNAVAILABLE' && same(toHidden, toNobody), `to the hidden player ${JSON.stringify(toHidden)}, to nobody ${JSON.stringify(toNobody)}`);
   const present = await strangerView(c, a);
+  const heardWithA = voiceLive() ? await join(c, 'INSTANCE') : null;
   const left = await command(a, { kind: 'LEAVE_INSTANCE' });
   const absent = await strangerView(c, a);
+  const heardWithoutA = voiceLive() ? await join(c, 'INSTANCE') : null;
   const back = await enter(a, dogs[a]);
   check(R16_CHECKS[9], done(left) && done(back) && same(present, absent),
     `the views differ at ${JSON.stringify(compareR16Views(present, absent))}`);
+  if (voiceOn) {
+    if (voiceLive()) {
+      check(R16_VOICE_CHECKS[4],
+        joinedAll(heardWithA, heardWithoutA) && same(heardWithA.rooms, heardWithoutA.rooms) && same(heardWithA.rooms, [room.BC]),
+        `C was given ${said(heardWithA)} with A present and ${said(heardWithoutA)} with A absent`);
+    } else notRun(4);
+  }
   const recentHidden = ids((await me(c))?.recentPlayers);
   check(R16_CHECKS[10], !recentHidden.includes(a) && recentHidden.includes(b), `C's Recent Players ${JSON.stringify(recentHidden)}`);
   const bRoster = await roster(b);
@@ -366,11 +567,43 @@ export async function runR16Scenario({ bridge, origin, sessions, players, nonce,
   const mateView = await roster(c);
   check(R16_CHECKS[12], partySteps.every(done) && mateView?.players?.find?.((entry) => entry.playerId === a)?.relation === 'PARTY',
     `party steps ${JSON.stringify(partySteps)}; C's roster ${JSON.stringify(mateView?.players ?? null)}`);
+  // VOICE, the party: party-mates always see one another, so the hidden leader shares a party room with each of them.
+  if (voiceOn) {
+    if (voiceLive()) {
+      const inParty = { a: await join(a, 'PARTY'), b: await join(b, 'PARTY'), c: await join(c, 'PARTY') };
+      const joined = joinedAll(inParty.a, inParty.b, inParty.c);
+      if (joined) {
+        room['party AB'] = sharedRoom(inParty.a, inParty.b);
+        room['party AC'] = sharedRoom(inParty.a, inParty.c);
+        room['party BC'] = sharedRoom(inParty.b, inParty.c);
+      }
+      const shape = r16VoiceShape(inParty);
+      const given = joined ? [...inParty.a.rooms, ...inParty.b.rooms, ...inParty.c.rooms] : [];
+      check(R16_VOICE_CHECKS[5],
+        joined && same(shape, { rooms: { a: 2, b: 2, c: 2 }, shared: { ab: 1, ac: 1, bc: 1, abc: 0 } })
+          && [inParty.a, inParty.b, inParty.c].every((one) => one.tokened) && !given.some((id) => [room.AB, room.AC, room.BC].includes(id)),
+        `the party rooms given were ${JSON.stringify(shape)}: A ${said(inParty.a)}, B ${said(inParty.b)}, C ${said(inParty.c)}`);
+    } else notRun(5);
+  }
   const cBlocksB = await command(c, { kind: 'BLOCK', targetId: b });
+  // VOICE: B joins before anything else is sent, so only the block can have taken back B's rooms with C.
+  const bAfterBlock = voiceLive() ? await joinNow(b, 'INSTANCE') : null;
   const partyAfter = { a: await me(a), c: await me(c) };
   check(R16_CHECKS[13],
     done(cBlocksB) && partyAfter.c?.party?.inParty === false && partyAfter.a?.party?.leaderId === a && same(ids(partyAfter.a?.party?.members), sorted([a, b])),
     `after C blocked B: C ${JSON.stringify(partyAfter.c?.party ?? null)}, A ${JSON.stringify(partyAfter.a?.party ?? null)}`);
+  if (voiceOn) {
+    if (voiceLive()) {
+      // C's rooms the block ends: the instance room with B, and both party rooms (C left the party). B's: the two with C.
+      const blockedPair = { b: bAfterBlock, c: await join(c, 'INSTANCE'), bParty: await join(b, 'PARTY'), cParty: await join(c, 'PARTY') };
+      check(R16_VOICE_CHECKS[6],
+        cBlocksB.voice?.revoked === 3 && cBlocksB.voice?.revocationFailures === 0 && blockedPair.b.revoked === 0 && blockedPair.b.revocationFailures === 0
+          && joinedAll(blockedPair.b, blockedPair.c, blockedPair.bParty) && blockedPair.cParty.status === 409 && blockedPair.cParty.refused === 'not_in_party'
+          && same(blockedPair.b.rooms, [room.AB]) && same(blockedPair.c.rooms, []) && same(blockedPair.bParty.rooms, [room['party AB']]),
+        `the block took back ${JSON.stringify(cBlocksB.voice ?? null)} of C's own rooms, and B's next join ${String(blockedPair.b.revoked)} more; `
+          + `then B was given ${said(blockedPair.b)} in the instance and ${said(blockedPair.bParty)} in the party, C ${said(blockedPair.c)} and ${said(blockedPair.cParty)}`);
+    } else notRun(6);
+  }
   // NO INFERENCE between the blocked pair, in both directions.
   const pair = {
     cRoster: ids((await roster(c))?.players), bRoster: ids((await roster(b))?.players),
@@ -382,10 +615,26 @@ export async function runR16Scenario({ bridge, origin, sessions, players, nonce,
       && pair.cCount === pair.cRoster.length,
     `the blocked pair saw ${JSON.stringify(pair)}`);
   const withB = await strangerView(c, b);
+  const heardWithB = voiceLive() ? await join(c, 'INSTANCE') : null;
   const bLeft = await command(b, { kind: 'LEAVE_INSTANCE' });
   const withoutB = await strangerView(c, b);
+  const heardWithoutB = voiceLive() ? await join(c, 'INSTANCE') : null;
   const bBack = await enter(b, dogs[b]);
   check(R16_CHECKS[15], done(bLeft) && done(bBack) && same(withB, withoutB), `C's views differ at ${JSON.stringify(compareR16Views(withB, withoutB))}`);
+  if (voiceOn) {
+    if (voiceLive()) {
+      // And the other way round, where there is something to hear: B, who still has A, with C present and with C gone.
+      const heardWithC = await join(b, 'INSTANCE');
+      const cLeft = await command(c, { kind: 'LEAVE_INSTANCE' });
+      const heardWithoutC = await join(b, 'INSTANCE');
+      const cBack = await enter(c, dogs[c]);
+      check(R16_VOICE_CHECKS[7],
+        done(cLeft) && done(cBack) && joinedAll(heardWithB, heardWithoutB, heardWithC, heardWithoutC)
+          && same(heardWithB.rooms, heardWithoutB.rooms) && same(heardWithC.rooms, heardWithoutC.rooms) && same(heardWithC.rooms, [room.AB]),
+        `C was given ${said(heardWithB)} with B present and ${said(heardWithoutB)} with B absent; `
+          + `B ${said(heardWithC)} with C present and ${said(heardWithoutC)} with C absent (C left ${JSON.stringify(cLeft)}, came back ${JSON.stringify(cBack)})`);
+    } else notRun(7);
+  }
   await command(c, { kind: 'UNBLOCK', targetId: b });
   const rejoin = [await command(a, { kind: 'PARTY_INVITE', inviteeId: c }), await command(c, { kind: 'PARTY_JOIN', partyId: party })];
   const aBlocksC = await command(a, { kind: 'BLOCK', targetId: c });
@@ -448,7 +697,11 @@ export async function runR16Scenario({ bridge, origin, sessions, players, nonce,
     lapsed.length === 0 && [a, b, c].every((player) => own[player]?.status === 'AVAILABLE' && own[player]?.instanceId === instance),
     `refreshes refused ${JSON.stringify(lapsed)}; each player's own presence ${JSON.stringify(own)}`);
 
-  return Object.freeze({ results: Object.freeze(results), commands, heartbeats, names: Object.freeze(names) });
+  return Object.freeze({
+    results: Object.freeze(results), commands, heartbeats, names: Object.freeze(names),
+    // Whether the voice wall was checked, and whether every player was admitted to it.
+    voice: voiceOn ? Object.freeze({ admitted: voiceDown === null, joins }) : null,
+  });
 }
 
 /**
@@ -539,17 +792,22 @@ export async function verifyR16Restart({ bridge, origin, sessions, players, nonc
   return Object.freeze({ results: Object.freeze(results), reconnect: Object.freeze(reconnect), views: reconnected });
 }
 
-/** Whether the backend serves voice configuration: reported, never a check (voice is CORE's live step). */
+/** Whether the backend serves the game client's EOS configuration: reported. The voice wall itself is `--voice`. */
 export async function probeR16Voice({ bridge, origin, token, fetch }) {
   const response = await client({ bridge, origin, fetch })(token, 'GET', '/wonderland/eos/client-config');
   return response.status === 200 ? 'CONFIGURED' : response.status === 404 ? 'NOT_MOUNTED' : `NOT_CONFIGURED_${String(response.status)}`;
 }
 
-export function summarizeR16(results) {
+/**
+ * THE CLOSED LIST, COUNTED. With voice (asked for, or any voice result present), every voice check counts too, and one not
+ * run is missing: a run cannot check part of the voice wall and count as having checked it.
+ */
+export function summarizeR16(results, { voice = false } = {}) {
+  const expected = voice || results.some((row) => R16_VOICE_CHECKS.includes(row.name)) ? [...R16_CHECKS, ...R16_VOICE_CHECKS] : R16_CHECKS;
   const ran = new Set(results.map((row) => row.name));
-  const missing = R16_CHECKS.filter((name) => !ran.has(name));
+  const missing = expected.filter((name) => !ran.has(name));
   const failed = results.filter((row) => row.result === 'FAIL').length + missing.length;
-  return Object.freeze({ passed: results.filter((row) => row.result === 'PASS').length, failed, missing, of: R16_CHECKS.length });
+  return Object.freeze({ passed: results.filter((row) => row.result === 'PASS').length, failed, missing, of: expected.length });
 }
 
 /* ------------------------------------------------------------------- VENUE --- */
@@ -752,13 +1010,28 @@ async function main(argv, env) {
   const out = (line) => process.stdout.write(`${line}\n`);
   if (!bridge || !/^https?:\/\/[^\s]+$/u.test(bridge) || !origin || !['scenario', 'verify'].includes(phase) || (phase === 'verify' && !statePath)
     || (expectCommit !== null && !/^[0-9a-f]{40}$/u.test(expectCommit))) {
-    process.stderr.write('usage: wonderland-r16-harness.mjs --bridge <url> --origin <allowed origin> [--phase scenario|verify] [--state <file>] [--nonce <n>] [--players <a,b,c>] [--expect-commit <40-hex sha>] [--final]\n');
+    process.stderr.write('usage: wonderland-r16-harness.mjs --bridge <url> --origin <allowed origin> [--phase scenario|verify] [--state <file>] [--nonce <n>] [--players <a,b,c>] [--voice] [--expect-commit <40-hex sha>] [--final]\n');
     return 2;
   }
   const recorded = phase === 'verify' ? JSON.parse(readFileSync(statePath, 'utf8')) : null;
   const nonce = recorded?.nonce ?? option(argv, 'nonce') ?? randomBytes(4).toString('hex');
   const named = option(argv, 'players')?.split(',') ?? null;
   const players = recorded?.players ?? (named === null ? r16Players(nonce) : { a: named[0], b: named[1], c: named[2], nobody: `r16nobody${nonce}` });
+  // VOICE is checked when asked for, and in a verify phase whose scenario recorded it: the two phases are one package.
+  const voice = argv.includes('--voice') || (phase === 'verify' && recorded?.voice !== undefined && recorded?.voice !== null);
+  let idTokens = null;
+  if (env.WONDERLAND_R16_EOS_ID_TOKENS) {
+    // The verify phase never binds: an identity that did not survive the restart must fail there, not be bound again.
+    if (!voice || phase === 'verify') {
+      out('R16 BLOCKED — WONDERLAND_R16_EOS_ID_TOKENS binds EOS identities for the voice check of a scenario: give --voice, and never in the verify phase.');
+      return 2;
+    }
+    try { idTokens = JSON.parse(env.WONDERLAND_R16_EOS_ID_TOKENS); } catch { idTokens = null; }
+    if (idTokens === null || typeof idTokens !== 'object' || [players.a, players.b, players.c].some((id) => typeof idTokens[id] !== 'string')) {
+      out('R16 BLOCKED — WONDERLAND_R16_EOS_ID_TOKENS must hold an EOS Connect ID token for each of the three players.');
+      return 2;
+    }
+  }
 
   let sessions;
   const source = env.WONDERLAND_R16_SESSIONS ? 'SIGNED_IN' : 'SCRIPTED';
@@ -781,7 +1054,9 @@ async function main(argv, env) {
   if (probe.status === 503) { out('R16 BLOCKED — the backend has no social database (social_store_unavailable): migration 033 is not applied there.'); return 1; }
   if (probe.status === 0) { out('R16 BLOCKED — the backend could not be reached.'); return 1; }
   out(`R16 ${R16_VERSION} phase=${phase} backend=${new URL(bridge).host} players=${players.a},${players.b},${players.c}`);
-  out(`R16 VOICE ${await probeR16Voice({ bridge, origin, token: sessions[players.a], fetch })} (reported, not checked: voice is CORE's live EOS step)`);
+  out(`R16 VOICE ${await probeR16Voice({ bridge, origin, token: sessions[players.a], fetch })} (${voice
+    ? `checked: ${phase === 'verify' ? 'each player\'s rooms after the reconnect' : `the ${String(R16_VOICE_CHECKS.length)} voice checks`}`
+    : 'reported, not checked: --voice checks the voice wall'})`);
   const backend = await readR16Backend({ bridge, operatorToken: env.RELAY_BRIDGE_TOKEN, fetch });
   out(`R16 BACKEND ${describeBackend(backend)}`);
   const host = await inspectR16Host(bridge, resolveR16Host);
@@ -790,35 +1065,43 @@ async function main(argv, env) {
     out(`R16 VENUE ${venue.venue}${venue.reasons.length === 0 ? '' : ` reasons=${venue.reasons.join(',')}`}`);
     for (const reason of venue.reasons) out(`R16 VENUE REASON ${reason} — ${R16_VENUE_REASONS[reason]}`);
     if (final && venue.venue !== 'HOSTED_FINAL') out(`R16 FINAL REFUSED — --final was asked for, and this run is a ${venue.venue}`);
+    if (final && !voice) out('R16 FINAL REFUSED — the voice wall was not checked: final R16 is the whole wall, voice included (--voice)');
   };
+  const finalHolds = (venue) => !final || (venue.venue === 'HOSTED_FINAL' && voice);
 
   if (phase === 'verify') {
     const restart = r16RestartCheck(recorded?.backend, backend);
     const verified = await verifyR16Restart({ bridge, origin, sessions, players, nonce, recorded, fetch });
     out(`R16 RECONNECT ${[players.a, players.b, players.c].map((player) => `${player}=${verified.reconnect[player]}`).join(' ')}`);
-    const results = [restart, ...verified.results];
+    // Voice after the reconnect: a plan depends on who is present.
+    const heard = voice ? await verifyR16Voice({ bridge, origin, sessions, players, recorded, fetch }) : [];
+    const results = [restart, ...verified.results, ...heard];
     for (const row of results) out(`R16 ${row.result} ${row.name}${row.result === 'FAIL' ? ` — ${row.detail}` : ''}`);
     const failed = results.filter((row) => row.result === 'FAIL').length;
     const venue = judgeVenue(null);
     reportVenue(venue);
-    out(`R16 SUMMARY phase=verify passed=${String(results.length - failed)} failed=${String(failed)} of=${String(results.length)} venue=${venue.venue}`);
-    return failed === 0 && (!final || venue.venue === 'HOSTED_FINAL') ? 0 : 1;
+    out(`R16 SUMMARY phase=verify passed=${String(results.length - failed)} failed=${String(failed)} of=${String(results.length)} venue=${venue.venue} voice=${voice ? 'CHECKED' : 'NOT_CHECKED'}`);
+    return failed === 0 && finalHolds(venue) ? 0 : 1;
   }
 
-  const outcome = await runR16Scenario({ bridge, origin, sessions, players, nonce, fetch });
+  const outcome = await runR16Scenario({ bridge, origin, sessions, players, nonce, fetch, voice: voice ? { idTokens } : null });
   for (const row of outcome.results) out(`R16 ${row.result} ${row.name}${row.result === 'FAIL' ? ` — ${row.detail}` : ''}`);
-  const summary = summarizeR16(outcome.results);
+  const summary = summarizeR16(outcome.results, { voice });
   for (const name of summary.missing) out(`R16 FAIL ${name} — not run`);
   const venue = judgeVenue(outcome.names);
   reportVenue(venue);
   if (statePath) {
     const views = await readR16Views({ bridge, origin, sessions, players, nonce, fetch });
-    const record = { version: R16_VERSION, nonce, players, views, bridge: new URL(bridge).origin, backend, venue, identities: { source, names: outcome.names } };
+    // The rooms each player is given at the end, when every player was admitted to voice: ids only, never a token.
+    const heard = outcome.voice?.admitted === true ? { rooms: await readR16VoiceRooms({ bridge, origin, sessions, players, fetch }) } : null;
+    const record = {
+      version: R16_VERSION, nonce, players, views, bridge: new URL(bridge).origin, backend, venue, identities: { source, names: outcome.names }, voice: heard,
+    };
     writeFileSync(statePath, `${JSON.stringify(record, null, 2)}\n`);
     out(`R16 STATE recorded for the restart check: ${statePath}`);
   }
-  out(`R16 SUMMARY phase=scenario passed=${String(summary.passed)} failed=${String(summary.failed)} of=${String(summary.of)} venue=${venue.venue}`);
-  return summary.failed === 0 && (!final || venue.venue === 'HOSTED_FINAL') ? 0 : 1;
+  out(`R16 SUMMARY phase=scenario passed=${String(summary.passed)} failed=${String(summary.failed)} of=${String(summary.of)} venue=${venue.venue} voice=${voice ? 'CHECKED' : 'NOT_CHECKED'}`);
+  return summary.failed === 0 && finalHolds(venue) ? 0 : 1;
 }
 
 const entry = (() => {
