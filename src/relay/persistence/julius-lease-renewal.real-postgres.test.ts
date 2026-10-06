@@ -91,6 +91,10 @@ suite('Julius lease renewal on real PostgreSQL', () => {
     await pool?.end().catch(() => undefined);
   });
 
+  // THEIR OWN TIMEOUTS. Each case is dozens of sequential round trips (a renewal, the row, a sweep, per step) plus
+  // fixed settle waits, so its time is the database's latency times that count. In CI's parallel real-PostgreSQL
+  // step, beside every other suite, the first case ran past 5 s, vitest's default (#327, 2026-10-05); it takes
+  // 2.8 s on a quiet database.
   it('a legitimate holder\'s renewals keep the lease ahead of time, and the sweep reclaims nothing', async () => {
     const taskId = `build:${nonce}:legitimate`;
     await repo.addTask({ commandId: `lease:${taskId}`, runId: run, projectId: project, task: buildTask(taskId) });
@@ -112,7 +116,7 @@ suite('Julius lease renewal on real PostgreSQL', () => {
     }
     await keeper.stop();
     expect(keeper.signal.aborted).toBe(false);
-  });
+  }, 30_000);
 
   it('a reclaimed holder\'s renewal is refused by the generation fence and leaves the new lease untouched', async () => {
     const taskId = `build:${nonce}:reclaimed`;
@@ -136,7 +140,7 @@ suite('Julius lease renewal on real PostgreSQL', () => {
     const after = await leaseOf(taskId);
     expect(after).toEqual(before);
     expect(after.lease_owner).toBe('worker-b');
-  });
+  }, 30_000);
 
   it('renewal never writes an expiry past the hold bound', async () => {
     const taskId = `build:${nonce}:bounded`;
@@ -157,5 +161,5 @@ suite('Julius lease renewal on real PostgreSQL', () => {
     }
     expect(keeper.signal.reason).toBe('lease_hold_exhausted');
     expect((await leaseOf(taskId)).expiresMs).toBe(holdUntilMs);
-  });
+  }, 30_000);
 });
