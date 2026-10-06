@@ -290,6 +290,7 @@ export const JULIUS_CARRY_EXCLUSIONS = [
   // reviewer findings
   'finding_not_blocking', 'finding_uncited', 'finding_lifecycle_unreadable', 'finding_superseded',
   'finding_unresolved', 'finding_resolved_without_repair', 'finding_dismissed', 'finding_origin_unknown',
+  'finding_provenance_unverified',
   // architecture: every design is named, and none travels
   'architecture_proposal', 'architecture_not_in_force', 'architecture_run_not_completed',
   'architecture_older_run', 'architecture_standing_not_approved', 'architecture_not_a_source',
@@ -317,6 +318,12 @@ export interface JuliusCarrySourceRun {
   readonly state: string;
 }
 
+/** A task as its own run's rows hold it: the kind of work it was, and whether it finished. */
+export interface JuliusCarryTaskFact {
+  readonly taskType: string;
+  readonly state: string;
+}
+
 /** One finding row of a source run, with the life its ledger gives it and the work it judged. */
 export interface JuliusCarryFindingCandidate {
   readonly runId: string;
@@ -326,6 +333,52 @@ export interface JuliusCarryFindingCandidate {
   readonly life: Pick<JuliusFindingLife, 'originReviewTaskId' | 'state' | 'lastMove' | 'repairTaskIds' | 'resolutionReviewTaskId'> | null;
   /** The work the finding judged (`julius_tasks`); null when the row is not readable. */
   readonly task: { readonly taskType: string; readonly role: string } | null;
+  /**
+   * THE TASKS THE FINDING'S LIFE NAMES, as the source run's own task rows hold
+   * them: the review that raised it, every repair that answered it, and the
+   * re-review that resolved it. A name no task of the run answers to is null;
+   * the whole is null when the life itself could not be read.
+   */
+  readonly lifeTasks: {
+    readonly origin: JuliusCarryTaskFact | null;
+    readonly repairs: readonly (JuliusCarryTaskFact | null)[];
+    readonly resolution: JuliusCarryTaskFact | null;
+  } | null;
+}
+
+/**
+ * ONE FINDING AS THE CARRY JUDGES IT: its row, the life its run's ledger gives
+ * it, the work it judged, and the tasks that life names. The store
+ * (`knowledgeCarryPlan`) and the off-host verifier (`julius-carry-verify.ts`)
+ * both build it here, so "eligible" means one thing at every point of the chain.
+ */
+export function juliusCarryFindingCandidate(input: {
+  readonly runId: string;
+  readonly finding: JuliusCarryFindingCandidate['finding'];
+  readonly life: NonNullable<JuliusCarryFindingCandidate['life']> | undefined;
+  /** The source run's task by id: its kind, its role and its state. */
+  readonly taskOf: (taskId: string) => { readonly taskType: string; readonly role: string; readonly state: string } | undefined;
+}): JuliusCarryFindingCandidate {
+  const { finding, life } = input;
+  const task = input.taskOf(finding.taskId);
+  const fact = (taskId: string | null): JuliusCarryTaskFact | null => {
+    const row = taskId === null ? undefined : input.taskOf(taskId);
+    return row === undefined ? null : { taskType: row.taskType, state: row.state };
+  };
+  return {
+    runId: input.runId,
+    finding,
+    life: life === undefined ? null : {
+      originReviewTaskId: life.originReviewTaskId, state: life.state, lastMove: life.lastMove,
+      repairTaskIds: life.repairTaskIds, resolutionReviewTaskId: life.resolutionReviewTaskId,
+    },
+    task: task === undefined ? null : { taskType: task.taskType, role: task.role },
+    lifeTasks: life === undefined ? null : {
+      origin: fact(life.originReviewTaskId),
+      repairs: life.repairTaskIds.map(fact),
+      resolution: fact(life.resolutionReviewTaskId),
+    },
+  };
 }
 
 /** What a source run's ledger says is the design in force, if any. */
@@ -484,7 +537,26 @@ function findingExclusion(candidate: JuliusCarryFindingCandidate): JuliusCarryEx
   // No review is on record as raising it (`finding.recorded`): its author cannot be shown to be the Independent Reviewer.
   if (life.originReviewTaskId === null) return 'finding_origin_unknown';
   if (life.repairTaskIds.length === 0) return 'finding_resolved_without_repair';
+  /*
+   * PROVENANCE (SECOND, P2b): the review that raised it, every repair that
+   * answered it and the re-review that resolved it are REAL tasks of the source
+   * run, of their kinds, and finished. A lifecycle whose names answer to no such
+   * task is a history nobody can show the runtime lived, which is a hand-seeded
+   * finding, and it does not travel. The residual limit, stated: a forger who
+   * also writes real-looking task rows passes a rule that reads the database.
+   * What covers that is the paid run's own evidence (the off-host chain and the
+   * reviewer's transcript), not this rule.
+   */
+  if (!provenanceHolds(candidate.lifeTasks)) return 'finding_provenance_unverified';
   return null;
+}
+
+const finished = (task: JuliusCarryTaskFact | null, kind: 'review:' | 'repair:'): boolean =>
+  task !== null && task.taskType.startsWith(kind) && task.state === 'SUCCEEDED';
+
+function provenanceHolds(tasks: JuliusCarryFindingCandidate['lifeTasks']): boolean {
+  return tasks !== null && finished(tasks.origin, 'review:') && tasks.repairs.length > 0
+    && tasks.repairs.every((task) => finished(task, 'repair:')) && finished(tasks.resolution, 'review:');
 }
 
 /**

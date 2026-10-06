@@ -8,7 +8,7 @@ import {
   verifyJuliusCarryChain,
   type JuliusCarrySources,
 } from './julius-carry-verify';
-import { juliusKnowledgeCarryFacts, juliusKnowledgeConsumedFacts, planJuliusKnowledgeCarry } from './julius-claim-ledger';
+import { juliusCarryFindingCandidate, juliusKnowledgeCarryFacts, juliusKnowledgeConsumedFacts, planJuliusKnowledgeCarry } from './julius-claim-ledger';
 import { foldJuliusFindings, juliusFindingTransitionFacts } from './julius-finding-lifecycle';
 
 /**
@@ -40,7 +40,13 @@ function sourcesDocument(): Record<string, unknown> {
   });
   return {
     format: JULIUS_CARRY_SOURCES_FORMAT, runId: WITHOUT, projectId: 'prj-1', missionId: 'mission-1', state: 'COMPLETED',
-    tasks: [{ taskId: `${WITHOUT}:plan`, taskType: 'plan', role: 'PROMPT_ARCHITECT' }],
+    // The run's own tasks, the review, the repair and the re-review the resolved finding's life names among them.
+    tasks: [
+      { taskId: `${WITHOUT}:plan`, taskType: 'plan', role: 'PROMPT_ARCHITECT', state: 'SUCCEEDED' },
+      { taskId: `review:${WITHOUT}:plan`, taskType: 'review:plan', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED' },
+      { taskId: `repair:${WITHOUT}:plan:1:task`, taskType: 'repair:plan', role: 'PROMPT_ARCHITECT', state: 'SUCCEEDED' },
+      { taskId: `review:repair:${WITHOUT}:plan:1:task`, taskType: 'review:repair:plan', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED' },
+    ],
     findings: [finding('finding:resolved'), finding('finding:open')],
     ledger: [
       recorded('finding:resolved', 1),
@@ -60,11 +66,13 @@ const parsed = (document: Record<string, unknown>): JuliusCarrySources => {
 /** Arm WITH's dump rows, as the store and `.github/julius-live-evidence-dump.sh` would hold them for these sources. */
 function withSide(sources: JuliusCarrySources) {
   const lives = new Map(foldJuliusFindings(sources.findings, sources.ledger).map((life) => [life.findingId, life] as const));
+  const taskOf = new Map(sources.tasks.map((task) => [task.taskId, task] as const));
   const plan = planJuliusKnowledgeCarry({
     runId: WITH, projectId: sources.projectId, missionId: sources.missionId,
     scope: { taskId: PLAN, taskType: 'plan', role: 'PROMPT_ARCHITECT' },
     sourceRuns: [{ runId: sources.runId, state: sources.state }],
-    findings: sources.findings.map((finding) => ({ runId: sources.runId, finding, life: lives.get(finding.findingId) ?? null, task: { taskType: 'plan', role: 'PROMPT_ARCHITECT' } })),
+    findings: sources.findings.map((finding) =>
+      juliusCarryFindingCandidate({ runId: sources.runId, finding, life: lives.get(finding.findingId), taskOf: (taskId) => taskOf.get(taskId) })),
     architectures: [], brain: [], limit: LIMIT,
   });
   const facts = juliusKnowledgeCarryFacts(plan, Object.fromEntries(plan.carried.map((item) => [item.entryId, `sha256:${sha256(item.text)}`])));
@@ -122,6 +130,15 @@ describe('the off-host verifier: the four-point chain, re-derived from arm WITHO
     const verdict = verify(parsed(altered), withSide(parsed(sourcesDocument())));
     expect(verdict.verdict).toBe('FAIL');
     expect(failed(verdict), 'the text re-derived from the altered export is not the one the record bound').toContain('record_entries');
+  });
+
+  it('FAILS a carry whose finding\'s repair is no task of arm WITHOUT\'s export — the provenance rule, applied off-host too (P2b)', () => {
+    const forged = sourcesDocument();
+    forged.tasks = (forged.tasks as Record<string, unknown>[]).filter((task) => task.taskType !== 'repair:plan');
+    // The record WITH holds was made from the full store; the export says the repair never existed.
+    const verdict = verify(parsed(forged), withSide(parsed(sourcesDocument())));
+    expect(verdict.verdict).toBe('FAIL');
+    expect(failed(verdict)).toEqual(expect.arrayContaining(['record_eligible', 'record_entries', 'copies_exact', 'vrf_carried']));
   });
 
   it('FAILS a copy whose text is not the one the record bound, and a copy that should not exist', () => {

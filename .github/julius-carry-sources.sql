@@ -10,7 +10,9 @@
 --
 -- WHAT IS IN IT, AND WHY IT IS THE STORE READER'S OWN SHAPE.
 --   run       its id, project, mission and state (julius_runs): the header's SOURCE RUN line.
---   tasks     every task of the run with its type and role (julius_tasks): the header's SOURCE TASK line.
+--   tasks     every task of the run with its type, role and state (julius_tasks): the header's SOURCE TASK line,
+--             and the provenance rule's proof that the review, repair and re-review a finding's life names are real,
+--             finished tasks of the run.
 --   findings  every column JuliusReviewerFinding has, as JuliusReadPostgresRepository.findingsForRun reads it:
 --             created_at to the whole second (the reader goes through a JS Date's string form), in the reader's
 --             order. The claim is the reviewer text findings.tsv already carries; JSON, not TSV, because a claim
@@ -27,7 +29,7 @@ SELECT json_build_object(
   'missionId', r.mission_id,
   'state', r.state,
   'tasks', COALESCE((
-    SELECT json_agg(json_build_object('taskId', t.task_id, 'taskType', t.task_type, 'role', t.role) ORDER BY t.ordinal, t.task_id)
+    SELECT json_agg(json_build_object('taskId', t.task_id, 'taskType', t.task_type, 'role', t.role, 'state', t.state) ORDER BY t.ordinal, t.task_id)
     FROM relay_wonderland.julius_tasks t
     WHERE t.run_id = r.run_id
   ), '[]'::json),
