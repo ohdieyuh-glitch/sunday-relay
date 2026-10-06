@@ -1,6 +1,7 @@
 import { isJuliusArchitectureEntryId, juliusArchitectureProposalEntryId } from './julius-architecture-state';
 import { juliusClaimIdFor, type JuliusCarriedKnowledge } from './julius-claim-ledger';
 import { foldJuliusFindings, type JuliusFindingLife } from './julius-finding-lifecycle';
+import { JULIUS_LINEAGE_FAMILIES } from './julius-lineage-asserter';
 import type { JuliusMemoryClaim } from './julius-memory-trust';
 import type { JuliusPeerLedgerEntry } from './julius-peer-channel';
 import type { JuliusReviewerFinding } from './julius-verification-runtime';
@@ -43,7 +44,8 @@ import type { JuliusReviewerFinding } from './julius-verification-runtime';
  *                            happened to address. It is verified, but it is not a
  *                            repair.
  *   ACCEPTED_DECISION        a run-wide DECISION entry whose current standing is
- *                            APPROVED on DECISION evidence: adopted, in force.
+ *                            APPROVED on DECISION evidence (adopted), that no
+ *                            later adoption replaced (in force).
  *
  * Everything else considered is EXCLUDED BY NAME (`JuliusCarryExclusionCode`),
  * so the manifest proves the defect class stayed out instead of merely not
@@ -95,6 +97,7 @@ export const JULIUS_CARRY_EXCLUSION_CODES = [
   'DECISION_PROPOSED_NOT_IN_FORCE',
   'DECISION_NOT_ACCEPTED',
   'DECISION_WITHOUT_AUTHORITY',
+  'DECISION_SUPERSEDED',
   'TASK_SCOPED',
   'TASK_SCOPE_UNKNOWN',
   'CLAIM_TERMINAL',
@@ -316,6 +319,54 @@ function claimVerdict(candidate: JuliusCarryClaimCandidate): { code: JuliusCarry
   return null;
 }
 
+/**
+ * WHERE A DECISION STANDS AMONG ITS SUBJECT'S REVISIONS, or null for one the runtime does not revision by name. The
+ * lineage asserter's own R family (`JULIUS_LINEAGE_FAMILIES`), so the carry and the packet agree on what a revision is:
+ * the accepted architecture (`brain:architecture:<run>:r<N>`), an accepted guidance answer, a Project Brain record
+ * version. Each subject already names its run or record. The V family is a task's verdict, task-scoped, never here.
+ */
+function revisionOf(entryId: string): { readonly subject: string; readonly order: number } | null {
+  for (const { family, shape } of JULIUS_LINEAGE_FAMILIES) {
+    if (family !== 'R') continue;
+    const match = shape.exec(entryId);
+    if (match !== null) return { subject: match[1]!, order: Number(match[2]) };
+  }
+  return null;
+}
+
+/**
+ * IN FORCE, NOT MERELY ADOPTED. Of the decisions every other rule admits, the ones a later ADOPTION replaced:
+ *
+ *   - a revisioned decision below its subject's highest adopted revision. A source run that accepted r1 at its plan
+ *     and r2 after a revision built against r2, and the stored standings say APPROVED for both, because the
+ *     supersession the lineage asserter applies to a packet is computed when a packet is compiled, never stored;
+ *   - a decision another adopted decision names in its claim's `supersedes`.
+ *
+ * Only an adopted replacement counts: a later revision that was merely proposed, or never accepted, leaves the
+ * earlier one in force. Returns each replaced claim's id and the entry that replaced it.
+ */
+function supersededAmong(adopted: readonly JuliusCarryClaimCandidate[]): ReadonlyMap<string, string> {
+  const replaced = new Map<string, string>();
+  const highest = new Map<string, { readonly order: number; readonly entryId: string }>();
+  for (const candidate of adopted) {
+    const at = revisionOf(candidate.entry.entryId);
+    if (at === null) continue;
+    const held = highest.get(at.subject);
+    if (held === undefined || at.order > held.order) highest.set(at.subject, { order: at.order, entryId: candidate.entry.entryId });
+  }
+  for (const candidate of adopted) {
+    const at = revisionOf(candidate.entry.entryId);
+    const top = at === null ? undefined : highest.get(at.subject);
+    if (at !== null && top !== undefined && top.order > at.order) replaced.set(candidate.claim.claimId, top.entryId);
+  }
+  for (const candidate of adopted) {
+    if (candidate.claim.supersedes === null) continue;
+    const target = adopted.find((other) => other !== candidate && other.claim.claimId === candidate.claim.supersedes);
+    if (target !== undefined && !replaced.has(target.claim.claimId)) replaced.set(target.claim.claimId, candidate.entry.entryId);
+  }
+  return replaced;
+}
+
 function decisionItem(targetRunId: string, candidate: JuliusCarryClaimCandidate): JuliusCarryItem {
   const sourceRef = candidate.entry.entryId;
   const entryId = juliusCarryEntryId(targetRunId, candidate.sourceRunId, sourceRef);
@@ -383,11 +434,18 @@ export function selectJuliusCarry(input: {
     }
   }
 
+  const adopted: JuliusCarryClaimCandidate[] = [];
   for (const candidate of input.claims) {
     if (candidate.sourceRunId === input.targetRunId) { exclude(candidate.sourceRunId, candidate.entry.entryId, 'SAME_RUN'); continue; }
     const verdict = claimVerdict(candidate);
-    if (verdict === null) eligible.push(decisionItem(input.targetRunId, candidate));
+    if (verdict === null) adopted.push(candidate);
     else exclude(candidate.sourceRunId, candidate.entry.entryId, verdict.code, verdict.detail);
+  }
+  const replaced = supersededAmong(adopted);
+  for (const candidate of adopted) {
+    const by = replaced.get(candidate.claim.claimId);
+    if (by === undefined) eligible.push(decisionItem(input.targetRunId, candidate));
+    else exclude(candidate.sourceRunId, candidate.entry.entryId, 'DECISION_SUPERSEDED', by);
   }
 
   // One item per copy id: the same fact reached twice (two readers, a replay) is one fact.

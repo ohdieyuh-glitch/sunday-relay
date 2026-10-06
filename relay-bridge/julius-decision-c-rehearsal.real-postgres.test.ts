@@ -226,6 +226,25 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     const lives = foldJuliusFindings(source!.findings, source!.ledger);
     const resolved = lives.filter((life) => life.state === 'RESOLVED' && life.repairTaskIds.length > 0 && life.lastMove === 'REVIEWER_RESOLVED');
     expect(resolved.length, JSON.stringify(lives, null, 2)).toBeGreaterThan(0);
+
+    // THE REPAIR, COUNTED EVERY WAY THE RECORD COUNTS IT. A reader of this run's bundle counts its repairs from the
+    // tasks (tasks.tsv), the ledger (`repair.scheduled`), each repair dispatch's effort (effort.tsv `repair_rounds`) and
+    // each finding's life (the repairs that addressed it), and the carry's "at least one repair round" is the last of
+    // them. One rejected build was repaired once: every counter says one, and every one names the same task.
+    const repairTasks = (await without.query<{ task_id: string }>(
+      "SELECT task_id FROM relay_wonderland.julius_tasks WHERE run_id = $1 AND task_type LIKE 'repair:%'", [withoutRun.runId]))
+      .rows.map((row) => row.task_id);
+    const scheduled = (await without.query<{ task_id: string }>(
+      "SELECT payload->>'taskId' AS task_id FROM relay_wonderland.events WHERE stream_id = $1 AND event_type = 'julius.repair.scheduled' ORDER BY sequence",
+      [withoutRun.runId])).rows.map((row) => row.task_id);
+    const effortRounds = (await without.query<{ task_id: string; repair_rounds: string }>(
+      `SELECT payload->>'taskId' AS task_id, payload->'facts'->>'repairRounds' AS repair_rounds FROM relay_wonderland.events
+        WHERE stream_id = $1 AND event_type = 'julius.worker.effort' AND COALESCE((payload->'facts'->>'repairRounds')::int, 0) > 0
+        ORDER BY sequence`, [withoutRun.runId])).rows.map((row) => [row.task_id, Number(row.repair_rounds)]);
+    expect(repairTasks, 'one rejected build, one repair').toHaveLength(1);
+    expect(scheduled, 'the ledger schedules that repair, once').toEqual(repairTasks);
+    expect(effortRounds, 'its one dispatch is the one repair round the effort record counts').toEqual([[repairTasks[0], 1]]);
+    expect([...new Set(lives.flatMap((life) => life.repairTaskIds))], 'and it is the repair every finding life names').toEqual(repairTasks);
     // A WITHOUT arm inherits nothing, and says so on its own ledger.
     const withoutManifest = await without.query<{ payload: { facts: Record<string, unknown> } }>(
       "SELECT payload FROM relay_wonderland.events WHERE stream_id = $1 AND event_type = 'julius.knowledge.carried'", [withoutRun.runId]);
@@ -276,6 +295,11 @@ suite('Decision C dress rehearsal: a real WITHOUT run teaches a real WITH run, a
     expect(restored.rows.every((row) => row.task_id === null)).toBe(true);
     const reviewerOf = new Map(source!.findings.map((finding) => [finding.findingId, finding.reviewerWorkerId]));
     expect(restored.rows[0]!.worker_id, 'the copy is the reviewer\'s, as raised').toBe(reviewerOf.get(resolved[0]!.findingId));
+    // The copy names the same repair the WITHOUT run's counters agree on, so the WITH arm's record counts it the same way.
+    const copyText = (await withDb.query<{ safe_content: string }>(
+      'SELECT safe_content FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id = $2',
+      [withRun.runId, juliusCarryEntryId(withRun.runId, withoutRun.runId, `finding:${resolved[0]!.findingId}`)])).rows[0]!.safe_content;
+    expect(copyText).toContain(`repaired by ${repairTasks.join(', ')};`);
 
     // POINT 4: the WITH planner's own compile names what it was handed.
     const planTask = (await withDb.query<{ task_id: string }>(

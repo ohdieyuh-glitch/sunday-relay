@@ -1,8 +1,9 @@
 # Julius Decision C: the corrected carry (`julius-carry.v2`)
 
-**Status:** implemented on branch `relay/julius-decision-c-carry`, with cloud CI
-and repo-native qualification. **AWAITING INDEPENDENT REVIEW** (SECOND). No
-score is claimed. Decision C's +1.10 is earned only by the four paid arms under
+**Status:** implemented on branch `relay/julius-decision-c-carry` (#322), which
+since 2026-10-06 is the whole package: the paid-venue transport (#326) folded
+in. Cloud CI and repo-native qualification only. **AWAITING INDEPENDENT REVIEW**
+(SECOND). No score is claimed. Decision C's +1.10 is earned only by the four paid arms under
 the frozen registration, after this carry lands and the 13 (i) compatibility
 gate holds at C's final head.
 
@@ -31,16 +32,16 @@ These are implemented in `src/relay/mission/julius/julius-carry.ts`, which is pu
 |---|---|
 | `VERIFIED_REPAIR_FINDING` | An Independent Reviewer's **blocking** finding. A review is on record as raising it (`finding.recorded`), at least one repair round claimed to address it, and its life ended `RESOLVED` by a reviewer's own declaration (`REVIEWER_RESOLVED` naming the resolving review). It has evidence and is not `DISMISSED`. A warning Julius promoted is recorded blocking, so it counts. |
 | `VERIFIED_FINDING` | The same, resolved by the reviewer with no repair round, or a **non-blocking** finding that a repair round only happened to address (a repair marks every open finding of its unit addressed). It is verified, but it is **not** a repair finding. |
-| `ACCEPTED_DECISION` | A run-wide (`task_id NULL`) `DECISION` entry whose current standing is `APPROVED` on `DECISION` evidence, so it was adopted and is in force. |
+| `ACCEPTED_DECISION` | A run-wide (`task_id NULL`) `DECISION` entry whose current standing is `APPROVED` on `DECISION` evidence, so it was adopted, and that no later adoption replaced, so it is in force (below). |
 
-**Everything else is excluded by name.** The 17 codes, with their tests, are:
+**Everything else is excluded by name.** The 18 codes, with their tests, are:
 - `FINDING_DISMISSED`, `FINDING_UNRESOLVED`, `FINDING_ADDRESSED_NOT_VERIFIED`,
   `FINDING_SUPERSEDED`, `FINDING_ORIGIN_UNKNOWN`, `FINDING_RESOLUTION_UNKNOWN`,
   `FINDING_WITHOUT_EVIDENCE`;
 - `CARRY_OF_CARRY`, `KIND_NOT_CARRYABLE` (`HANDOFF`, `CONSTRAINT`, `REQUIREMENT`,
   `ARTIFACT`, `FINDING`/`REPAIR` brain notes), `DECISION_PROPOSED_NOT_IN_FORCE`,
   `DECISION_NOT_ACCEPTED` (`VERIFIED` is not adopted), `DECISION_WITHOUT_AUTHORITY`,
-  `TASK_SCOPED`, `TASK_SCOPE_UNKNOWN`, `CLAIM_TERMINAL`;
+  `DECISION_SUPERSEDED`, `TASK_SCOPED`, `TASK_SCOPE_UNKNOWN`, `CLAIM_TERMINAL`;
 - `SAME_RUN`, `CARRY_LIMIT`.
 
 **Scope and provenance travel with the fact.**
@@ -58,6 +59,31 @@ These are implemented in `src/relay/mission/julius/julius-carry.ts`, which is pu
   every later heir was written nothing, its standing was deduplicated into the
   first heir's, and a WITH arm was still accepted. Each paid job's database is
   fresh, so the paid venue never met this.
+
+**In force, not merely adopted (2026-10-06).** An adopted decision that a later
+adoption replaced is history, and is excluded as `DECISION_SUPERSEDED`, naming
+its replacement:
+- A revisioned decision (the lineage asserter's own R family: the accepted
+  architecture `brain:architecture:<run>:r<N>`, an accepted guidance answer, a
+  Project Brain record version) is in force only at its subject's highest
+  **adopted** revision. A source run that accepted r1 at its plan and r2 after a
+  revision built against r2, yet the stored standings say `APPROVED` for both:
+  the supersession a packet applies is computed when the packet is compiled,
+  never stored.
+- A decision another adopted decision names in its claim's `supersedes` is not
+  in force.
+- A later revision that was only proposed, or never accepted, replaces nothing.
+
+Two facts bound this class today, and a reviewer should know both:
+- **On the paid venue no decision travels at all.** `carry-export.json` holds
+  findings and their ledger rows only, so a WITH arm's carry is findings only.
+- **On a long-lived store nothing produces an adopted decision yet.** Every
+  stored `DECISION` claim is Julius's own (`run_observed`, `APPROVED` with
+  `EVIDENCE` references only), and accept-time promotion stops at `VERIFIED`.
+  So every real run's decisions are excluded by name as
+  `DECISION_WITHOUT_AUTHORITY`. The rule above is what holds the day an
+  authority (a founder approval with a `DECISION` reference) starts writing
+  them.
 
 **The pair rule (`juliusCarryPairGate`).**
 - A `WITH` arm is valid only with at least one `VERIFIED_REPAIR_FINDING`.
@@ -117,6 +143,16 @@ document. Those belong to the founder and SECOND.
 
 ## The 13 (i) compatibility gate
 
+- **What the package changes on that path** (against `main`):
+  - **Writes, once per run, at bootstrap:** the carried copies, their standings
+    and the `knowledge.carried` manifest (`julius-carry-postgres.ts`), the
+    manifest through the serializable event append. Before any task exists.
+  - **On the run loop:** two facts (`carriedReceived`, `carriedReceivedIds`)
+    added to the existing `context.compiled` event. No new write and no new
+    transaction.
+  - **Removed, read-only:** the old carry's query (`verifiedProjectKnowledge`)
+    and `repairRoundsFor` (below). Nothing on the 8-writer stress's transition
+    path changes.
 - The carry adds writes on a path 13 (i) governs. The manifest append goes
   through `JuliusEventPostgresRepository.append`, which is serializable, and the
   brain/standing writes happen at bootstrap.
@@ -237,6 +273,29 @@ job's own token. The repository trust gate admits only `main`'s reviewed tip,
 so this transport can first run live after it lands, at a WITH arm's preflight,
 which spends nothing.
 
+## The package, condition by condition (2026-10-06)
+
+Each binding rule of Decision C, and each thing the package must show, with
+where it rests. The founder's binding rules are numbered as the founder canon
+states them. If SECOND's accepted list of eight conditions is worded
+differently, its wording governs.
+
+| # | Condition | Where it rests |
+|---|---|---|
+| 1 | The corrected carry lands **before any C paid run**; the old carry's defect is a Beta-blocking P2 | The old query is deleted, not bypassed. The package lands before the freeze (material order). The four paid arms come after it. |
+| 2 | Carry only **verified reviewer findings** and **accepted, in-force decisions** | `findingVerdict` (RESOLVED by a reviewer's own `REVIEWER_RESOLVED`, a known raising review, evidence) and `claimVerdict` + `supersededAmong` (adopted on `DECISION` evidence, run-wide, not a proposal, not replaced). `julius-carry.test.ts` |
+| 3 | **Never promote** proposals, rejected findings, unverified observations or task-scoped state | 18 exclusion codes, each with its test. The manifest's `excludedByCode` proves the class stayed out. |
+| 4 | **Provenance and scope travel** with the fact | The copy names its source run, task, raising review, repairs and resolving review in its text, claim evidence and manifest. Each heir has its own copy id. |
+| 5 | Every valid WITH arm carries **at least one VERIFIED REPAIR FINDING**; design-only carry does not satisfy the pair | `juliusCarryPairGate` (`CARRY_DESIGN_ONLY`). A repair finding must be **blocking** and have a repair round. |
+| 6 | An **empty carry invalidates the pair before paid dispatch** | `CARRY_EMPTY`/`CARRY_UNKNOWN` refused at bootstrap before a run exists. On the paid venue, `verify-carry` refuses `CARRY_SOURCE_NOT_A_VALID_PAIR` at preflight, while refusing is free. |
+| 7 | **Prove all four points** | The table above. The dress rehearsal reads all four from two real databases. `carry.tsv` keeps points 2 and 4 in the bundle. |
+| 8 | All four arms under the **frozen registration**, WITHOUT-1 → WITH-1 → WITHOUT-2 → WITH-2, **no early stop** | `carryArm`/`carryFrom` in the contract digest. A WITH arm must run the WITHOUT arm's exact commit (`_COMMIT_MISMATCH`). The registration document itself belongs to the founder and SECOND. |
+| — | **Bundle reconstructability** | The WITHOUT bundle alone yields the WITH carry: `carry-export.json` (its sha256 in the manifest), `verify-carry` recomputing the selection, and the rehearsal's `fromBundle` equal to `fromStore`, item for item. The WITH manifest names its source by workflow run, commit and three digests. |
+| — | **A real re-review path** | The production reviewer is told to answer each prior finding in `resolutions` by the id after `REVIEW FINDING`, which is the domain's own `findingId`. Its schema has the field, and the parser hands it to the domain (`hermes-review-stage.test.ts`). The pipeline applies only resolutions about the work under review (`applyFindingResolutions`). Silence is no resolution. **Cannot be promised offline:** that a real model answers. The WITHOUT bundle shows whether it did, and `verify-carry` refuses a pair that taught nothing. |
+| — | **Repair counters agree** | One repair is counted one way everywhere: repair tasks = `repair.scheduled` = effort `repairRounds` = the finding life's repairs = the copy's "repaired by". Asserted in the dress rehearsal on real PostgreSQL, with 2 mutants killed. `repairRoundsFor` was removed: nothing called it, the in-memory store counted repair tasks per parent, and PostgreSQL read `julius_repair_cycles`, which the live path never writes (it answered 0 for every real round). |
+| — | **CI real-DB coverage** | `julius-carry.real-postgres`, `julius-carry-archive.real-postgres` and `julius-decision-c-rehearsal.real-postgres` run in `first-live-topology`'s "Every real-PostgreSQL suite in the tree runs, and not one of its cases is todo" step. A todo or skipped case fails that step. |
+| — | **The 13 (i) compatibility gate, prepared** | The scope is above. The gate itself is the frozen stress and census (`row13i/`, local), run unchanged at the package's final head after it is rebased on the `main` that holds #321. **READY FOR LOCAL QUALIFICATION** then; never a cloud substitute. |
+
 ## Not done here
 
 - The four paid C arms. These come after #321, 033, 034 and 035, then the freeze.
@@ -244,3 +303,8 @@ which spends nothing.
   founder and SECOND.
 - SECOND's independent verdict on this change and on the paid-venue transport.
   The transport changes the one workflow that can spend.
+- **The pair-validity choice** (`JULIUS_DECISION_C_PAIR_VALIDITY.md`: A, B or C).
+  Option B is prepared on its own branch (#331). On today's record a WITH arm
+  would almost certainly be refused, so no C pair should be dispatched before
+  the choice.
+- The 13 (i) compatibility gate at the final head (local).

@@ -113,7 +113,6 @@ export function createJuliusPostgresRuntimeStore(
       ]);
       return [...own, ...stated];
     },
-    repairRoundsFor: reader.repairRoundsFor.bind(reader),
     activeTaskCount: reader.activeTaskCount.bind(reader),
     executedBindingFor: reader.executedBindingFor.bind(reader),
     // A coder answered by a model it did not ask for ENDS THE RUN (`advanceRun`),

@@ -424,8 +424,6 @@ export interface JuliusRuntimeReader {
    */
   decisionsForRun(runId: string, projectId: string): Promise<readonly JuliusRecordedDecision[]>;
   brainEntriesForRun(runId: string, projectId: string): Promise<readonly JuliusBrainEntry[]>;
-  /** How many repair rounds this task has already had. Zero, not null. */
-  repairRoundsFor(taskId: string, projectId: string): Promise<number>;
   /**
    * How many of this run's tasks are ACTIVE right now, across every worker.
    *

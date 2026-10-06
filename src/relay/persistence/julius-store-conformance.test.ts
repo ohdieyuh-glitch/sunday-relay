@@ -164,7 +164,6 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore
   criteriaForRun: reader.criteriaForRun.bind(reader),
   decisionsForRun: reader.decisionsForRun.bind(reader),
   brainEntriesForRun: reader.brainEntriesForRun.bind(reader),
-  repairRoundsFor: reader.repairRoundsFor.bind(reader),
   activeTaskCount: reader.activeTaskCount.bind(reader),
   executedBindingFor: reader.executedBindingFor.bind(reader),
   haltingFailureClasses: reader.haltingFailureClasses.bind(reader),
