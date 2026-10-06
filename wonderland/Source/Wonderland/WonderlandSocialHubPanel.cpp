@@ -265,6 +265,9 @@ bool SWonderlandSocialHubPanel::ParseTab(const FString& Text, ETab& Out)
 
 void SWonderlandSocialHubPanel::SetTab(ETab Which)
 {
+	// A PLAYER'S TAB CHANGE, said once (CORE 10-06, R7 on the final RC): only the hub's own buttons call this, so a real-input drive
+	// proves each tab click by the game's own line ("WLSOCIAL hub tab PARTY"), not by a frame alone.
+	UE_LOG(LogTemp, Display, TEXT("WLSOCIAL hub tab %s"), TabName(Which));
 	Tab = Which;
 	Rebuild();
 }
