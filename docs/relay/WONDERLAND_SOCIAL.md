@@ -24,16 +24,18 @@ There is one relation, `wonderlandRelationOf`: `SELF`, `BLOCKED` (either directi
 | **P3:** the dead "appear in Recent Players" switch is removed | settings are exactly `{ visibility }`; `parseWonderlandSocialSettings` refuses `appearInRecentPlayers` by name; the route refuses any unknown command field; 033's post-check refuses any `recent` column | The switch is refused; a command carrying it changes nothing |
 | **P4:** the owner blocks a member → the member is removed, the owner stays | the block cascade | The member is removed and ejected from the instance, cannot rejoin, cannot be re-invited, and the refusal is identical to a nonexistent server's |
 | **P5:** a member blocks the owner → the blocker leaves, the owner stays | the block cascade | The owner and the other members stay |
-| **Party** | the block cascade | A leader blocking a member removes them. A non-leader blocking the leader or another member leaves. Invitations die with the block. A blocked pair can never share a party |
+| **Party** | the block cascade | A leader blocking a member removes them. A non-leader blocking the leader or another member leaves. Invitations die with the block. A blocked pair can never share a party. **An invitation dies when someone blocked with the invitee joins**, so the invitee never watches a blocked player's membership come and go through their own invitation; and a leader sees only the invitees they may see, also after leadership passes (review finding, 2026-10-05) |
 | **DM** | `projectWonderlandConversation`, `projectWonderlandInbox`, `SEND_MESSAGE` | History is hidden from both while the block exists; nothing can be sent or stored; an unblock shows the history again, without anything "sent during" the block |
 | **No inference** | all projections | A blocked player's whole view with the blocker present equals the view without them, in both directions: roster, voice, presence, party, inbox, conversations |
 
-**Mutation-tested.** Five mutants of the wall were each killed by the suite:
+**Mutation-tested.** Seven mutants of the wall were each killed by the suite:
 - strangers see hidden players;
 - the P4 removal is missing;
 - population counts everyone;
 - encounters are recorded blind;
-- a DM ignores a block.
+- a DM ignores a block;
+- an invitation kept (and hidden) while someone blocked with its invitee is in the party;
+- a leader shown every invitee.
 
 **The PostgreSQL store's neighbourhood** is proven by a contract suite. One scripted world (16 players, every rule) runs against both stores, and every projection for every player is equal. Each read path of the loader is necessary: removing it fails the suite. Four expansions that the suite proved unnecessary were removed.
 

@@ -228,8 +228,12 @@ export function projectWonderlandParty(state: WonderlandSocialState, viewerId: s
     partyId: party.partyId,
     leaderId: party.leaderId,
     members: Object.freeze(members),
+    // Only invitees the leader may see. Leadership passes when a leader leaves, and an invitation another leader made
+    // must not show a hidden player to a stranger, or a blocked one to the player they are blocked with (review finding).
     invited: Object.freeze(party.leaderId === viewerId
-      ? state.partyInvites.filter((invite) => invite.partyId === party.partyId).map((invite) => invite.inviteeId).sort()
+      ? state.partyInvites
+        .filter((invite) => invite.partyId === party.partyId && isWonderlandVisibleTo(state, viewerId, invite.inviteeId))
+        .map((invite) => invite.inviteeId).sort()
       : []),
   });
 }

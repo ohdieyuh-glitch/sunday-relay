@@ -323,6 +323,36 @@ describe('PARTY: blocks inside a party', () => {
     expect(await run(store, 'lea', { kind: 'PARTY_INVITE', inviteeId: 'zed' })).toEqual({ ok: false, code: 'UNAVAILABLE' });
   });
 
+  it('an invitation never shows a blocked player\'s membership: it dies when someone blocked with the invitee joins, and stays dead when they leave (review finding)', async () => {
+    const store = await world(['lea', 'vic', 'mal']);
+    await run(store, 'lea', { kind: 'PARTY_CREATE', partyId: 'party-1' });
+    await run(store, 'lea', { kind: 'PARTY_INVITE', inviteeId: 'vic' });
+    await block(store, 'vic', 'mal');
+    expect(projectWonderlandParty(store.snapshot(), 'vic')).toEqual({ inParty: false, invitations: [{ partyId: 'party-1', inviterId: 'lea' }] });
+    await run(store, 'lea', { kind: 'PARTY_INVITE', inviteeId: 'mal' });
+    expect(await run(store, 'mal', { kind: 'PARTY_JOIN', partyId: 'party-1' }), 'Mal\'s join does not depend on who else is invited').toEqual({ ok: true, code: 'DONE' });
+    const whileIn = projectWonderlandParty(store.snapshot(), 'vic');
+    await run(store, 'mal', { kind: 'PARTY_LEAVE' });
+    expect(whileIn).toEqual({ inParty: false, invitations: [] });
+    expect(projectWonderlandParty(store.snapshot(), 'vic'), 'Mal leaving tells Vic nothing: the invitation did not come back').toEqual(whileIn);
+  });
+
+  it('a leader is shown only the invitees they may see, also after leadership passes (review finding)', async () => {
+    const store = await world(['lea', 'mo', 'hid']);
+    await hide(store, 'hid');
+    await befriend(store, 'lea', 'hid');
+    await run(store, 'lea', { kind: 'PARTY_CREATE', partyId: 'party-1' });
+    await run(store, 'lea', { kind: 'PARTY_INVITE', inviteeId: 'mo' });
+    await run(store, 'mo', { kind: 'PARTY_JOIN', partyId: 'party-1' });
+    await run(store, 'lea', { kind: 'PARTY_INVITE', inviteeId: 'hid' });
+    const leas = projectWonderlandParty(store.snapshot(), 'lea');
+    expect(leas.inParty && leas.invited, 'her friend, whom she invited').toEqual(['hid']);
+    await run(store, 'lea', { kind: 'PARTY_LEAVE' });
+    const mos = projectWonderlandParty(store.snapshot(), 'mo');
+    expect(mos.inParty && mos.leaderId).toBe('mo');
+    expect(mos.inParty && mos.invited, 'Hid is hidden from strangers, and Mo is one').toEqual([]);
+  });
+
   it('a party never holds a blocked pair, so its view never shows one', async () => {
     const store = await partyOf('lea', ['mo', 'ned']);
     await block(store, 'mo', 'ned');

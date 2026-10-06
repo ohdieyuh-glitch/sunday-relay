@@ -274,6 +274,14 @@ export function decideWonderlandSocialCommand(
       if (current !== null) mutations.push(...partyDeparture(current, actorId));
       mutations.push({ kind: 'PARTY_INVITE_REMOVED', partyId: party.partyId, inviteeId: actorId });
       mutations.push({ kind: 'PARTY_MEMBER_ADDED', partyId: party.partyId, playerId: actorId });
+      // A pending invitation of someone blocked with the joiner dies with the join. Kept and hidden, it vanished from
+      // the invitee's own view while the joiner was in and came back when they left, so the invitee watched a blocked
+      // player's party membership come and go (review finding, 2026-10-05). A blocked pair never shares a party.
+      for (const invite of state.partyInvites) {
+        if (invite.partyId === party.partyId && invite.inviteeId !== actorId && isWonderlandBlockedPair(state, actorId, invite.inviteeId)) {
+          mutations.push({ kind: 'PARTY_INVITE_REMOVED', partyId: party.partyId, inviteeId: invite.inviteeId });
+        }
+      }
       return done(mutations);
     }
 
