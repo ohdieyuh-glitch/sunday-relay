@@ -14,7 +14,10 @@ param([Parameter(Mandatory = $true)][string]$Exe,
       # the game's OWN first-launch window (no -windowed / -ResX / -ResY): what a tester actually gets
       [switch]$DefaultWindow,
       # a window of the caller's choosing, e.g. a small corner window for an hour-long soak on a laptop someone is using
-      [string]$WindowArgs = '')
+      [string]$WindowArgs = '',
+      # soak only (10-06, R11/R14 on the final package, "signed in, in a world"): wl.Qa.Soak N waitsignin -- the soak starts only once
+      # the player signs in to social through the hub by real input; up to 15 more minutes are allowed for that wait
+      [switch]$WaitSignIn)
 $Root = Split-Path $Exe -Parent
 $PkgDir = Split-Path $Root -Parent
 New-Item -ItemType Directory -Force $Out | Out-Null
@@ -26,8 +29,8 @@ New-Item -ItemType Directory -Force $UserDir | Out-Null
 $UserDir = (Resolve-Path $UserDir).Path
 $Saved = Join-Path $UserDir 'Saved'
 $Log = Join-Path $Saved 'Logs\Wonderland.log'
-$cmd = if ($Mode -eq 'perf') { 'wl.Qa.Perf' } else { "wl.Qa.Soak $Minutes" }
-$limit = if ($Mode -eq 'perf') { 900 } else { $Minutes * 60 + 600 }
+$cmd = if ($Mode -eq 'perf') { 'wl.Qa.Perf' } else { "wl.Qa.Soak $Minutes" + $(if ($WaitSignIn) { ' waitsignin' } else { '' }) }
+$limit = if ($Mode -eq 'perf') { 900 } else { $Minutes * 60 + 600 + $(if ($WaitSignIn) { 900 } else { 0 }) }
 $csv = Join-Path $Out "process_$Mode.csv"
 'seconds,working_set_mb,private_mb,gpu_dedicated_mb,machine_free_mb' | Set-Content -Encoding utf8 $csv
 
