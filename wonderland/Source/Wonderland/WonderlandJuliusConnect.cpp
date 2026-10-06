@@ -1,6 +1,7 @@
 #include "WonderlandJuliusConnect.h"
 #include "WonderlandCard.h"
 #include "WonderlandBeta.h"
+#include "WonderlandJuliusStream.h"
 #include "WonderlandMissionHandoff.h"
 
 #include "Dom/JsonObject.h"
@@ -551,8 +552,9 @@ FString UWonderlandJuliusConnectSubsystem::StartCommand()
 FString UWonderlandJuliusConnectSubsystem::BaseUrl() const
 {
 	FString Url = JuliusConnectTuning::CVarUrl.GetValueOnGameThread();
-	// Loopback only: this client never sends a user's intent anywhere but this machine.
-	if (!Url.StartsWith(TEXT("http://127.0.0.1:")) && !Url.StartsWith(TEXT("http://localhost:")))
+	// Loopback only: this client never sends a user's intent anywhere but this machine -- the whole authority read by the ONE loopback
+	// parser (Second's review of 614695e7, the same class as minor 1: a prefix match took "http://127.0.0.1:1@evil.example")
+	if (!Url.StartsWith(TEXT("http://"), ESearchCase::IgnoreCase) || !WonderlandJuliusStreamLogic::IsLoopbackAuthority(Url.RightChop(7)))
 	{
 		Url = TEXT("http://127.0.0.1:8795");
 	}

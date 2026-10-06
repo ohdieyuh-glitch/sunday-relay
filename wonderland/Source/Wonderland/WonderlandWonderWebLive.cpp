@@ -1,6 +1,7 @@
 #include "WonderlandWonderWebLive.h"
 #include "WonderlandCard.h"
 #include "WonderlandBeta.h"
+#include "WonderlandJuliusStream.h"
 
 #include "Engine/Texture2D.h"
 #include "GenericPlatform/GenericPlatformHttp.h"
@@ -65,8 +66,9 @@ FString UWonderlandWonderWebLiveSubsystem::BaseUrl()
 {
 	static IConsoleVariable* Url = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.JuliusConnect.Url"));
 	FString Base = Url != nullptr ? Url->GetString() : FString();
-	// Loopback only, exactly as the Connections client: this browser is a process on this machine and nowhere else.
-	if (!Base.StartsWith(TEXT("http://127.0.0.1:")) && !Base.StartsWith(TEXT("http://localhost:")))
+	// Loopback only, exactly as the Connections client: this browser is a process on this machine and nowhere else -- the whole
+	// authority read by the ONE loopback parser (Second's review of 614695e7, the same class as minor 1)
+	if (!Base.StartsWith(TEXT("http://"), ESearchCase::IgnoreCase) || !WonderlandJuliusStreamLogic::IsLoopbackAuthority(Base.RightChop(7)))
 	{
 		Base = TEXT("http://127.0.0.1:8795");
 	}

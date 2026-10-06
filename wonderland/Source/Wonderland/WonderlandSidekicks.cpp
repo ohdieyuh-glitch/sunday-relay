@@ -1,5 +1,6 @@
 #include "WonderlandSidekicks.h"
 #include "WonderlandBeta.h"
+#include "WonderlandJuliusStream.h"
 
 #include "CoreGlobals.h"
 #include "Dom/JsonObject.h"
@@ -247,8 +248,9 @@ FWonderlandMissionHandoff& UWonderlandSidekickSubsystem::GetMissionHandoff()
 FString UWonderlandSidekickSubsystem::BaseUrl()
 {
 	FString Url = SidekickTuning::CVarUrl.GetValueOnGameThread();
-	// Loopback only: the companions' runtime is a process on this machine and nowhere else.
-	if (!Url.StartsWith(TEXT("http://127.0.0.1:")) && !Url.StartsWith(TEXT("http://localhost:")))
+	// Loopback only: the companions' runtime is a process on this machine and nowhere else -- the whole authority read by the ONE loopback
+	// parser (Second's review of 614695e7, the same class as minor 1)
+	if (!Url.StartsWith(TEXT("http://"), ESearchCase::IgnoreCase) || !WonderlandJuliusStreamLogic::IsLoopbackAuthority(Url.RightChop(7)))
 	{
 		Url = TEXT("http://127.0.0.1:8795");
 	}
