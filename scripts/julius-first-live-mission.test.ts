@@ -1226,13 +1226,39 @@ describe('the evidence dump names only tables and columns the migrations create'
     expect(regression, 'a stale name must fail the PR, not become a placeholder').toContain('evidence_query_invalid');
   });
 
-  it('DECISION C: the manifest records the digest of the very file the carry-sources export wrote, the one the off-host verifier holds to it', () => {
+  it('DECISION C: run as written, the carry-sources block exports the manifest\'s run and records the sha256 of the very bytes it wrote', () => {
+    // The dump's own block, executed (as the Option D steps are) against a container stub that answers the export:
+    // the digest the off-host verifier holds the export to must be the digest of THESE bytes (SECOND's N39).
     const script = read('.github/julius-live-evidence-dump.sh');
-    const written = /julius-carry-sources\.sql" > "([^"]+)"/u.exec(script)?.[1];
-    const hashed = /carry_digest=\$\(sha256sum "([^"]+)"/u.exec(script)?.[1];
-    expect(written, 'the export writes one file').toBe('$out/carry-sources.json');
-    expect(hashed, 'and that file is the one hashed').toBe(written);
-    expect(script).toContain('echo "carry_sources_sha256=$carry_digest" >> "$out/bundle-manifest.txt"');
+    const start = script.indexOf('carry_run=$(sed -n');
+    const end = script.indexOf('\nfi\n', start);
+    expect(start, 'the block exists').toBeGreaterThan(-1);
+    expect(end, 'and ends').toBeGreaterThan(start);
+    const job = mkdtempSync(join(tmpdir(), 'julius-carry-block-'));
+    try {
+      const out = join(job, 'out');
+      const bin = join(job, 'bin');
+      mkdirSync(out);
+      mkdirSync(bin);
+      const run = 'run:0123456789abcdef01234567';
+      writeFileSync(join(out, 'bundle-manifest.txt'), `julius_run_id=${run}\n`);
+      const exported = `{"format":"julius-carry-sources.v1","runId":"${run}","sentinel":"${randomUUID()}"}`;
+      // docker: the store's container, as the block reaches it; it keeps what it was asked and was handed.
+      writeFileSync(join(bin, 'docker'), ['#!/usr/bin/env bash', 'echo "$*" > "$STUB/args"', 'cat > "$STUB/stdin.sql"', `printf '%s\\n' '${exported}'`].join('\n'), { mode: 0o755 });
+      // $0 is the dump script itself, so the block reads the export SQL beside it, as in the job.
+      execFileSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', script.slice(start, end + '\nfi\n'.length), join(ROOT, '.github', 'julius-live-evidence-dump.sh')], {
+        cwd: job, stdio: 'ignore',
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, STUB: job, out, container: 'julius-postgres', PGUSER: 'julius', PGDATABASE: 'julius' },
+      });
+      const bytes = readFileSync(join(out, 'carry-sources.json'));
+      expect(bytes.toString('utf8'), 'the export is what the store answered').toBe(`${exported}\n`);
+      expect(readFileSync(join(out, 'bundle-manifest.txt'), 'utf8'), 'and its digest is of those bytes')
+        .toBe(`julius_run_id=${run}\ncarry_sources_sha256=${createHash('sha256').update(bytes).digest('hex')}\n`);
+      expect(readFileSync(join(job, 'args'), 'utf8'), 'for the run the manifest names').toContain(`-v run=${run} `);
+      expect(readFileSync(join(job, 'stdin.sql'), 'utf8'), 'with the export SQL itself').toBe(read('.github/julius-carry-sources.sql'));
+    } finally {
+      rmSync(job, { recursive: true, force: true });
+    }
   });
 
   /**

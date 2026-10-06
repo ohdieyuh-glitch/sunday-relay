@@ -511,6 +511,16 @@ describe('the corrected carry, on the record', () => {
     expect(() => validateJuliusEvent(event)).not.toThrow();
   });
 
+  it('counts a carried row as a finding only when it IS a verified repair finding, whatever else a plan holds', () => {
+    // A plan the planner never makes (SECOND's N27): beside the verified repair finding, a carried row of another
+    // source. The record must not count it towards the ">= 1 verified repair finding" the gate and the founder read.
+    const result = mixed();
+    const [finding] = result.carried;
+    const other = { ...finding!, entryId: `${finding!.entryId}:other`, source: 'ACCEPTED_DESIGN' as unknown as typeof finding.source };
+    const facts = juliusKnowledgeCarryFacts({ ...result, carried: [finding!, other] }, {});
+    expect(facts).toMatchObject({ carried: 2, carriedFindings: 1 });
+  });
+
   it('says EMPTY, with its exclusions, when nothing qualified', () => {
     const facts = juliusKnowledgeCarryFacts(plan({ brain: [rowOf(SRC, `brain:decision:${SRC}:plan:ACCEPT:TASK_VERIFIED`, { taskId: `${SRC}:plan` })] }), {});
     expect(facts).toMatchObject({ outcome: 'EMPTY', carried: 0, excluded: 1, excludedByReason: 'decision_mirror=1', carriedEntries: null });

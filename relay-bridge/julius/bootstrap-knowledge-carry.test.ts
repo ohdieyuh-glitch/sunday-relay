@@ -159,6 +159,14 @@ describe('a caller that REQUIRES inheritance (a registered arm WITH) is refused,
     // A finding count without the runs it came from is a claim, not evidence.
     const unsourced = await refusedFor(OUTCOME({ outcome: 'CARRIED', carried: 1, carriedFindings: 1, findingSourceRunIds: [], written: 1 }));
     neverReady(unsourced.outcome, unsourced.fake, 'findings with no source');
+    if (unsourced.outcome.accepted) throw new Error('unreachable');
+    expect(unsourced.outcome.safeMessage).toContain('no verified repair finding');
+    // AND THE CONVERSE, which the store never writes: its own pinned source named, and no finding from it. The gate
+    // holds each half by itself, not by trusting the store to keep them in step (SECOND's N28).
+    const sourceOnly = await refusedFor(OUTCOME({ outcome: 'CARRIED', carried: 1, carriedFindings: 0, findingSourceRunIds: ['run:without'], written: 1 }));
+    neverReady(sourceOnly.outcome, sourceOnly.fake, 'a source with no finding');
+    if (sourceOnly.outcome.accepted) throw new Error('unreachable');
+    expect(sourceOnly.outcome.safeMessage).toContain('no verified repair finding');
   });
 
   it('refuses findings from any run but the ones it pinned, and a required carry that pinned none — its own arm WITHOUT is the only source', async () => {
