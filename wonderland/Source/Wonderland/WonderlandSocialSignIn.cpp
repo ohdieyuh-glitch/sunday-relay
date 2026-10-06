@@ -64,7 +64,8 @@ namespace WonderlandSocialSignInLogic
 		{
 			return TEXT("Couldn't reach Wonderland. Check your connection, then sign in again.");
 		}
-		if (Kind == TEXT("signin_unavailable") || Status == 503)
+		// a server that does not serve sign-in at all (404 / not_found: an old or wrong bridge) is "not available", never a raw kind
+		if (Kind == TEXT("signin_unavailable") || Status == 503 || Status == 404 || Kind == TEXT("not_found"))
 		{
 			return TEXT("Sign-in isn't available on this Wonderland server right now.");
 		}
@@ -76,11 +77,9 @@ namespace WonderlandSocialSignInLogic
 		{
 			return TEXT("Sign-in was declined at GitHub.");
 		}
-		if (!Kind.IsEmpty())
-		{
-			return FString::Printf(TEXT("Sign-in didn't complete (%s). Sign in again."), *Kind.Left(40));
-		}
-		return FString::Printf(TEXT("Sign-in didn't complete (HTTP %d). Sign in again."), Status);
+		// ANY OTHER refusal: words a person can act on; the status and the bridge's kind go to the log, not the screen (Second's R7 minor,
+		// 10-06: "Sign-in didn't complete (not_found)" showed a raw kind)
+		return TEXT("Sign-in didn't complete. Sign in again.");
 	}
 }
 
@@ -208,6 +207,7 @@ void FWonderlandSocialSignIn::Start()
 			SetState(EWonderlandSignInState::Failed, TEXT("Wonderland's sign-in answer was not understood. Sign in again."));
 			return;
 		}
+		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL signin start refused: HTTP %d, kind '%s'"), Status, *Kind.Left(40));
 		SetState(Kind == TEXT("signin_unavailable") ? EWonderlandSignInState::NoServer : EWonderlandSignInState::Failed,
 			WonderlandSocialSignInLogic::MessageFor(Status, Kind));
 	});
@@ -292,6 +292,7 @@ void FWonderlandSocialSignIn::Poll()
 			return;
 		}
 		Handle.Reset();
+		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL signin poll refused: HTTP %d, kind '%s'"), Status, *Kind.Left(40));
 		SetState(EWonderlandSignInState::Failed, WonderlandSocialSignInLogic::MessageFor(Status, Kind));
 	});
 }

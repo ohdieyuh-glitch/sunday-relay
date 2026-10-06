@@ -590,8 +590,16 @@ void UWonderlandMissionSubsystem::MountStrip()
 			]
 		];
 
+	// NOT PAINTED UNDER THE PROJECT BRAIN (Second's R7 minor, 10-06 frames): the panel's glass header let this strip show through and
+	// overlap its honesty line "DEVELOPMENT PREVIEW · SAMPLE DATA · NOT CONNECTED TO PROJECT BRAIN". HIDDEN, not Collapsed: the strip keeps
+	// its geometry, so nothing that reads its rect (the top-right column) moves, and it is back the moment the panel closes.
 	MissionStrip = SNew(SConstraintCanvas)
-		.Visibility(EVisibility::HitTestInvisible)
+		.Visibility_Lambda([WeakThis]()
+		{
+			const ULocalPlayer* Player = WeakThis.IsValid() ? WeakThis->GetLocalPlayer<ULocalPlayer>() : nullptr;
+			const UWonderlandUiSubsystem* Ui = Player != nullptr ? Player->GetSubsystem<UWonderlandUiSubsystem>() : nullptr;
+			return Ui != nullptr && Ui->IsProjectBrainOpen() ? EVisibility::Hidden : EVisibility::HitTestInvisible;
+		})
 		+ SConstraintCanvas::Slot()
 		.Anchors(FAnchors(0.5f, 0.022f, 0.5f, 0.022f))
 		.Alignment(FVector2D(0.5f, 0.0f))
