@@ -1,6 +1,7 @@
 #include "WonderlandSocialSignIn.h"
 
 #include "WonderlandBeta.h"
+#include "WonderlandJuliusStream.h"
 
 #include "Dom/JsonObject.h"
 #include "HAL/IConsoleManager.h"
@@ -24,39 +25,9 @@ namespace WonderlandSocialSignInLogic
 	 *  "http://127.0.0.1.evil.example/", "http://localhost@evil.example/" and "http://127.0.0.1:1@evil.example/" are refused. */
 	bool IsLoopbackPage(const FString& Uri)
 	{
-		FString Rest;
-		if (Uri.StartsWith(TEXT("http://"), ESearchCase::IgnoreCase)) { Rest = Uri.RightChop(7); }
-		else if (Uri.StartsWith(TEXT("https://"), ESearchCase::IgnoreCase)) { Rest = Uri.RightChop(8); }
-		else { return false; }
-		int32 End = Rest.Len();
-		for (int32 At = 0; At < Rest.Len(); ++At)
-		{
-			if (Rest[At] == TEXT('/') || Rest[At] == TEXT('?') || Rest[At] == TEXT('#'))
-			{
-				End = At;
-				break;
-			}
-		}
-		const FString Authority = Rest.Left(End);
-		static const TCHAR* const Hosts[] = { TEXT("127.0.0.1"), TEXT("localhost"), TEXT("[::1]") };
-		for (const TCHAR* Host : Hosts)
-		{
-			if (Authority.Equals(Host, ESearchCase::IgnoreCase))
-			{
-				return true;
-			}
-			const FString WithPort = FString(Host) + TEXT(":");
-			if (Authority.StartsWith(WithPort, ESearchCase::IgnoreCase))
-			{
-				const FString Port = Authority.RightChop(WithPort.Len());
-				bool bDigits = Port.Len() >= 1 && Port.Len() <= 5;
-				for (const TCHAR Character : Port)
-				{
-					bDigits = bDigits && FChar::IsDigit(Character);
-				}
-				return bDigits;
-			}
-		}
+		// the scheme here, the authority by the ONE loopback parser (Second's review of 614695e7, minor 2: no hand copy)
+		if (Uri.StartsWith(TEXT("http://"), ESearchCase::IgnoreCase)) { return WonderlandJuliusStreamLogic::IsLoopbackAuthority(Uri.RightChop(7)); }
+		if (Uri.StartsWith(TEXT("https://"), ESearchCase::IgnoreCase)) { return WonderlandJuliusStreamLogic::IsLoopbackAuthority(Uri.RightChop(8)); }
 		return false;
 	}
 

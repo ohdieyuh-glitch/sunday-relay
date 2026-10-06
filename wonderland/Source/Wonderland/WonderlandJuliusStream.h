@@ -155,6 +155,14 @@ namespace WonderlandJuliusStreamLogic
 	 */
 	WONDERLAND_API FString ResolveBridgeUrl(const FString& CvarValue, const FString& SettingValue, FString& OutProblem);
 
+	/**
+	 * THIS MACHINE, read exactly: the ONE parser behind every loopback decision (the bridge URL's plain-http branch, the developer
+	 * sign-in page, the live and dev-session bases). Rest is what follows "http://" or "https://"; its authority, up to the first '/',
+	 * '?' or '#', must BE 127.0.0.1, localhost or [::1], with at most a port of digits in 1-65535. No prefix match: userinfo
+	 * ("localhost@evil.example"), lookalike hosts ("127.0.0.1.evil.example") and bad ports are refused.
+	 */
+	WONDERLAND_API bool IsLoopbackAuthority(const FString& Rest);
+
 	/** One line a player can read, e.g. "not final · 0 of 1 criteria met". Empty when unknown. */
 	WONDERLAND_API FString ResultHeadline(const FWonderlandJuliusResultReading& Result);
 

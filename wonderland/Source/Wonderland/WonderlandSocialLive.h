@@ -70,8 +70,8 @@ public:
 	void GetEosClientConfig(TFunction<void(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)> Done);
 	FSimpleMulticastDelegate& OnWorldChanged() { return WorldChanged; }
 
-	/** QA ONLY (wl.Qa.WorldRemoval): put this service in a world, feed a world report's answer as if the server sent it, and read the
-	 *  automatic-join plan it left. Never called outside the QA command. */
+	/** QA ONLY (wl.Qa.WorldRemoval): put this service in a world, feed a world report's or a join's answer as if the server sent it, and
+	 *  read the automatic-join plan it left. Never called outside the QA command. */
 	struct FQaAutoJoinPlan
 	{
 		bool bPending = false;
@@ -80,10 +80,17 @@ public:
 		double InSeconds = 0.0;
 		int32 Attempts = 0;
 		FString RejoinContextId;
+		bool bJoinInFlight = false;
 	};
 	void QaSetWorld(const FWonderlandWorldView& View, bool bWanted);
 	void QaFeedWorldReport(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem) { HandleWorldReport(Status, Data, Problem); }
 	void QaClearPendingJoin() { bAutoJoinPending = false; }
+	/** The state a join puts the service in before its request leaves (the same BeginJoin a real join runs), with no request sent. */
+	int32 QaBeginJoin() { return BeginJoin(); }
+	void QaFeedJoinAnswer(int32 Seq, const FString& Target, const FString& Arg, bool bAutomatic, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+	{
+		HandleJoinAnswer(Seq, Target, Arg, bAutomatic, Data, Problem);
+	}
 	FQaAutoJoinPlan QaAutoJoinPlan() const;
 
 private:
@@ -122,8 +129,13 @@ private:
 	bool bWorldWanted = false;
 	bool bWorldBusy = false;
 	double NextWorldAt = 0.0;
-	/** Plans the next automatic join: at once the first time, then on a 2/5/15/30 s backoff until a world report is answered again. */
-	void ScheduleAutoJoin(const FString& Target, const FString& Arg);
+	/** Plans the next automatic join: at once the first time, then on a 2/5/15/30 s backoff until a world report is answered again.
+	 *  bNow: at once and no backoff step -- a planned move that is not a failure (a FRIEND rejoin that landed elsewhere). */
+	void ScheduleAutoJoin(const FString& Target, const FString& Arg, bool bNow = false);
+	/** A join leaving (automatic or the player's own): it owns the in-flight flag, ends any planned retry, and takes the next number. */
+	int32 BeginJoin();
+	/** A join's answer: only the LATEST join's moves anything; extracted from JoinWorldAs's callback so the QA can feed it. */
+	void HandleJoinAnswer(int32 Seq, const FString& Target, const FString& Arg, bool bAutomatic, const TSharedPtr<FJsonObject>& Data, const FString& Problem);
 	/** Every join's number: only the LATEST join's answer moves anything (Second's review m1). */
 	int32 JoinSeq = 0;
 	/** The world a 404 rejoin must land back in; a FRIEND rejoin that lands elsewhere is not followed (m2). */
@@ -131,7 +143,9 @@ private:
 	/** The last world joined (target + argument): a forgotten player is put back into the SAME one. */
 	FString WorldTarget = TEXT("PUBLIC");
 	FString WorldArg = TEXT("golden_arrival");
-	bool bAutoJoinInFlight = false;
+	/** ANY join in flight, automatic or the player's own (Second's review of b7740150, minor 3): while one is, no automatic join is
+	 *  planned from a 404 and no planned one leaves -- that join's answer decides where the player is. */
+	bool bJoinInFlight = false;
 	bool bAutoJoinPending = false;
 	int32 AutoJoinAttempts = 0;
 	double NextAutoJoinAt = 0.0;

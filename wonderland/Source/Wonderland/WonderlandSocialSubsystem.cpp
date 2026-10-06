@@ -246,7 +246,10 @@ bool UWonderlandSocialSubsystem::ConnectLive(const FString& BaseUrl, const FStri
 
 bool UWonderlandSocialSubsystem::ConnectWith(const FString& BaseUrl, const FString& Token)
 {
-	if (!(BaseUrl.StartsWith(TEXT("https://")) || BaseUrl.StartsWith(TEXT("http://127.0.0.1")) || BaseUrl.StartsWith(TEXT("http://localhost"))) || Token.IsEmpty())
+	// THE BRIDGE URL'S OWN RULE, read exactly (Second's review of 614695e7, minor 1): https, or plain http whose WHOLE authority is this
+	// machine. The prefix match this replaces took "http://localhost@evil.example" for this machine.
+	FString BaseProblem;
+	if (WonderlandJuliusStreamLogic::ResolveBridgeUrl(BaseUrl, FString(), BaseProblem).IsEmpty() || Token.IsEmpty())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live: refused (https, or http to this machine only; a token is required)"));
 		return false;
@@ -398,7 +401,9 @@ bool UWonderlandSocialSubsystem::TickRemotePlayers(float DeltaSeconds)
 
 void UWonderlandSocialSubsystem::ConnectDevSession(const FString& BaseUrl, const FString& Player)
 {
-	if (!WonderlandBeta::IsDeveloperSession() || !(BaseUrl.StartsWith(TEXT("http://127.0.0.1")) || BaseUrl.StartsWith(TEXT("http://localhost"))))
+	// plain http to THIS machine only, its whole authority read by the one loopback parser (Second's review of 614695e7, minor 1)
+	if (!WonderlandBeta::IsDeveloperSession() || !BaseUrl.StartsWith(TEXT("http://"), ESearchCase::IgnoreCase)
+		|| !WonderlandJuliusStreamLogic::IsLoopbackAuthority(BaseUrl.RightChop(7)))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL dev session: developer sessions and the loopback dev server only"));
 		return;

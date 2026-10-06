@@ -117,6 +117,43 @@ namespace WonderlandJuliusStreamLogic
 		}
 	}
 
+	bool IsLoopbackAuthority(const FString& Rest)
+	{
+		// ONE PARSER for every "is this machine?" decision (Second's review of 614695e7, minors 1-2: the sign-in page check and the bridge
+		// URL's http branch were hand copies, and ConnectWith / ConnectDevSession kept a prefix match that took "http://localhost@evil").
+		// The authority ends at the first '/', '?' or '#' and must BE 127.0.0.1, localhost or [::1], with at most a port of digits 1-65535.
+		int32 End = Rest.Len();
+		for (int32 Index = 0; Index < Rest.Len(); ++Index)
+		{
+			if (Rest[Index] == TEXT('/') || Rest[Index] == TEXT('?') || Rest[Index] == TEXT('#'))
+			{
+				End = Index;
+				break;
+			}
+		}
+		const FString Authority = Rest.Left(End);
+		static const TCHAR* const LoopbackHosts[] = { TEXT("127.0.0.1"), TEXT("localhost"), TEXT("[::1]") };
+		for (const TCHAR* Host : LoopbackHosts)
+		{
+			if (Authority.Equals(Host, ESearchCase::IgnoreCase))
+			{
+				return true;
+			}
+			const FString WithPort = FString(Host) + TEXT(":");
+			if (Authority.StartsWith(WithPort, ESearchCase::IgnoreCase))
+			{
+				const FString Port = Authority.RightChop(WithPort.Len());
+				bool bDigits = Port.Len() >= 1 && Port.Len() <= 5;
+				for (const TCHAR Character : Port)
+				{
+					bDigits = bDigits && FChar::IsDigit(Character);
+				}
+				return bDigits && FCString::Atoi(*Port) >= 1 && FCString::Atoi(*Port) <= 65535;
+			}
+		}
+		return false;
+	}
+
 	FString ResolveBridgeUrl(const FString& CvarValue, const FString& SettingValue, FString& OutProblem)
 	{
 		OutProblem.Reset();
@@ -140,41 +177,12 @@ namespace WonderlandJuliusStreamLogic
 		}
 		if (Url.StartsWith(TEXT("http://"), ESearchCase::IgnoreCase))
 		{
-			// THE WHOLE AUTHORITY, read exactly (CORE 10-04, the class Second found in the sign-in page check): it ends at the first
-			// '/', '?' or '#', and must BE 127.0.0.1, localhost or [::1], with at most a port of 1-5 digits. A host cut at the first ':'
-			// took "http://localhost:80@evil.example/" -- userinfo, then a remote host -- for this machine, and sent the session in clear.
-			const FString Rest = Url.Mid(7);
-			int32 End = Rest.Len();
-			for (int32 Index = 0; Index < Rest.Len(); ++Index)
+			// THE WHOLE AUTHORITY, read exactly (CORE 10-04, the class Second found in the sign-in page check; one parser since Second's
+			// review of 614695e7): a host cut at the first ':' took "http://localhost:80@evil.example/" -- userinfo, then a remote host --
+			// for this machine, and sent the session in clear.
+			if (IsLoopbackAuthority(Url.Mid(7)))
 			{
-				if (Rest[Index] == TEXT('/') || Rest[Index] == TEXT('?') || Rest[Index] == TEXT('#'))
-				{
-					End = Index;
-					break;
-				}
-			}
-			const FString Authority = Rest.Left(End);
-			static const TCHAR* const LoopbackHosts[] = { TEXT("127.0.0.1"), TEXT("localhost"), TEXT("[::1]") };
-			for (const TCHAR* Host : LoopbackHosts)
-			{
-				if (Authority.Equals(Host, ESearchCase::IgnoreCase))
-				{
-					return Url;
-				}
-				const FString WithPort = FString(Host) + TEXT(":");
-				if (Authority.StartsWith(WithPort, ESearchCase::IgnoreCase))
-				{
-					const FString Port = Authority.RightChop(WithPort.Len());
-					bool bDigits = Port.Len() >= 1 && Port.Len() <= 5;
-					for (const TCHAR Character : Port)
-					{
-						bDigits = bDigits && FChar::IsDigit(Character);
-					}
-					if (bDigits)
-					{
-						return Url;
-					}
-				}
+				return Url;
 			}
 			OutProblem = FString::Printf(TEXT("Refusing %s: plain http to a bridge off this machine would send this client's session in the clear. Use https."), *Url);
 			return FString();
@@ -1333,6 +1341,23 @@ namespace WonderlandJuliusStreamConsole
 			Userinfo.FindChar(TEXT(':'), Colon);
 			Check(TEXT("BUC1"), Colon != INDEX_NONE && Userinfo.Left(Colon).Equals(TEXT("localhost")) && Resolve(TEXT("http://") + Userinfo).IsEmpty(),
 				TEXT("control: the old first-colon cut reads the userinfo URL as localhost; the exact reading refuses it"));
+			// THE ONE LOOPBACK PARSER itself (Second's review of 614695e7, minors 1-2): the sign-in page, the live base (ConnectWith, via
+			// ResolveBridgeUrl) and the dev-session base (ConnectDevSession) all decide "this machine" through IsLoopbackAuthority now
+			static const TCHAR* const ThisMachine[] = { TEXT("127.0.0.1"), TEXT("localhost:8799"), TEXT("[::1]:1"), TEXT("127.0.0.1:65535/x") };
+			for (const TCHAR* Rest : ThisMachine)
+			{
+				Check(FString::Printf(TEXT("BU%d"), Case++), WonderlandJuliusStreamLogic::IsLoopbackAuthority(Rest), FString::Printf(TEXT("this machine: %s"), Rest));
+			}
+			static const TCHAR* const NotThisMachine[] = { TEXT("localhost@evil.example"), TEXT("127.0.0.1@evil.example:8799"), TEXT("127.0.0.1:0"),
+				TEXT("127.0.0.1:65536"), TEXT("localhost.evil.example"), TEXT("127.0.0.1:8799@evil.example/"), TEXT("") };
+			for (const TCHAR* Rest : NotThisMachine)
+			{
+				Check(FString::Printf(TEXT("BU%d"), Case++), !WonderlandJuliusStreamLogic::IsLoopbackAuthority(Rest), FString::Printf(TEXT("not this machine: '%s'"), Rest));
+			}
+			// BUC2, THE CONTROL for minor 1: the prefix rule ConnectWith and ConnectDevSession kept took the userinfo lookalike for this machine
+			const FString Lookalike = TEXT("http://localhost@evil.example");
+			Check(TEXT("BUC2"), Lookalike.StartsWith(TEXT("http://localhost")) && !WonderlandJuliusStreamLogic::IsLoopbackAuthority(Lookalike.RightChop(7))
+				&& Resolve(Lookalike).IsEmpty(), TEXT("control: the old prefix rule accepts the userinfo lookalike; the one parser refuses it"));
 			UE_LOG(LogTemp, Display, TEXT("WLQA BRIDGEURL END pass=%d fail=%d"), Passed, Failed);
 		}));
 }
