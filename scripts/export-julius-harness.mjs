@@ -127,13 +127,13 @@ const EXCLUDED_FILES = [
   { path: 'src/relay/connectors/gpt-architect/fake-architect.ts', category: 'fake', reason: 'the deterministic offline fake of the GPT architect, exported by the connector barrel for the suite and Demo Simulation; the live worker binds runGptArchitect only' },
 ];
 
-/** Kernel dependants that are neither reached nor declared, and why they stay out. */
+/** Kernel dependants that are neither reached nor declared, what kind of file each is, and why it stays out. */
 const KERNEL_DEPENDANT_EXCLUSIONS = [
-  { path: 'src/relay/mission/julius/julius-carry-verify.ts', reason: 'the OFF-HOST verifier of Decision C’s four-point carry chain (C-7): it reads two arms’ evidence bundles and re-derives what arm WITH should have carried with the kernel’s own rule, fold, renderer and record. It runs on a reviewer’s machine after a paid pair, never inside a run, and no runtime path imports it' },
-  { path: 'src/relay/persistence/julius-event-append-conformance.ts', reason: 'the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root' },
-  { path: 'src/relay/persistence/julius-criteria-scope-conformance.ts', reason: 'the criteria-scope contract cases themselves: a criterion belongs to a RUN, not to the database. Written once and run by BOTH the in-memory store, which was always right, and real PostgreSQL, where a global primary key on criterion_id silently gave every rerun no criteria at all. Test support, imported by no root' },
-  { path: 'src/relay/persistence/julius-decision-write-conformance.ts', reason: 'the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root' },
-  { path: 'src/relay/workspace/julius-tools/node-tool-adapter.ts', reason: 'the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests' },
+  { path: 'src/relay/mission/julius/julius-carry-verify.ts', category: 'off-host evidence tooling', reason: 'the OFF-HOST verifier of Decision C’s four-point carry chain (C-7): it reads two arms’ evidence bundles and re-derives what arm WITH should have carried with the kernel’s own rule, fold, renderer and record. It runs on a reviewer’s machine after a paid pair, never inside a run, and no runtime path imports it' },
+  { path: 'src/relay/persistence/julius-event-append-conformance.ts', category: 'conformance cases', reason: 'the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root' },
+  { path: 'src/relay/persistence/julius-criteria-scope-conformance.ts', category: 'conformance cases', reason: 'the criteria-scope contract cases themselves: a criterion belongs to a RUN, not to the database. Written once and run by BOTH the in-memory store, which was always right, and real PostgreSQL, where a global primary key on criterion_id silently gave every rerun no criteria at all. Test support, imported by no root' },
+  { path: 'src/relay/persistence/julius-decision-write-conformance.ts', category: 'conformance cases', reason: 'the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root' },
+  { path: 'src/relay/workspace/julius-tools/node-tool-adapter.ts', category: 'legacy local execution', reason: 'the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests' },
 ];
 
 /**
@@ -925,7 +925,7 @@ function renderManifest(result) {
     const hits = result.exclusionHits.filter((hit) => hit.to === entry.path).map((hit) => `\`${hit.from}\``);
     out.push(`- **${entry.category}** — \`${entry.path}\`: ${entry.reason}. Reached only via ${hits.join(', ') || 'nothing'}.`);
   }
-  for (const entry of KERNEL_DEPENDANT_EXCLUSIONS) out.push(`- **legacy local execution** — \`${entry.path}\`: ${entry.reason}.`);
+  for (const entry of KERNEL_DEPENDANT_EXCLUSIONS) out.push(`- **${entry.category}** — \`${entry.path}\`: ${entry.reason}.`);
   out.push(`- **pre-Julius schema** — ${result.migrationsExcluded.map((path) => `\`${path.slice(MIGRATION_DIR.length)}\``).join(', ')} under \`${MIGRATION_DIR}\`: registered by the same migration runner and applied in order before the Julius migrations; Julius tables reference \`relay_wonderland.projects\`, \`mission_contracts\` and \`budget_reservations\` defined there, and 017 is the Gauntlet Loop's own storage, deliberately not Julius's.`);
   out.push('');
   out.push('Named "julius", outside the harness (no kernel dependency, or CI/test drivers):');
