@@ -32,6 +32,38 @@ The 24 checks (`R16_CHECKS`) form a closed list. A check that did not run counts
 | Lease | every player standing in the instance kept their presence alive by heartbeat, as a client must, and is still there at the end |
 | Restart | `--state` records every player's views (never a token) and the backend's boot. After the backend restarts (which revokes every browser session by design), `--phase verify` signs the same players in again, then checks RESTART, DURABLE, RECONNECT and PRESENCE in that order (below) |
 
+### The voice wall (`--voice`): eight more checks
+
+EOS voice has no per-listener mute, so the voice wall **is** which rooms each player is given a token for: every room is one mutually visible pair ([WONDERLAND_VOICE.md](WONDERLAND_VOICE.md)). Room names are opaque digests, so the harness never learns who is in a room from its name. It judges the wall the way the wall is defined: **by which rooms two players are both given.**
+
+With `--voice`, each player joins (`POST /wonderland/voice/join`) at five points of the same scenario, and `R16_VOICE_CHECKS` join the closed list: a voice check not run is a voice check failed.
+
+| Check | What is checked over HTTP |
+|---|---|
+| Identity | Each player holds a proven EOS identity and voice admits them. Identities the harness binds itself are three different ones |
+| Pairs | With everyone visible to everyone, each pair shares exactly one instance room, and no room holds three. Every room comes with its token |
+| **P1** | (1) After A hides: A keeps only the room with her friend B, the stranger C keeps only the room with B, and A and C share nothing. (2) The hide takes back, at once and from both, the one room A shared with C. A's own answer counts exactly that room; C's next join, sent before any heartbeat, has nothing left to take back |
+| **No inference (hidden)** | C is given, with the hidden A present, exactly the rooms C is given with A absent |
+| Party | Party-mates share exactly one party room per pair, the hidden leader included, and no party room is an instance room |
+| **No inference (block)** | (1) After C blocks B: the block takes back at once every room it ends: C's room with B, and both of C's party rooms, since C left the party. C's own answer counts them, and B's next join has nothing left to take back. The pair shares no room in the instance or the party. (2) Each of the pair is given, with the other present, exactly the rooms they are given with the other absent. For B, who still has A, that is not an empty comparison |
+
+**What "at once, from both" proves, and what it does not.**
+- Every room is a pair, so taking out **either** member separates the pair at once.
+- A backend that took back only the actor's rooms would leave the other member alone in an emptied room: no one hears anyone. That is a **contract violation** (the documented reconcile takes back every room the command ends), never a privacy leak, and the harness reports it as exactly those two checks.
+- The real leak class is different: a record that says a token was taken back while it still admits its player. That was a race in the routes, and is fixed and proven in [WONDERLAND_VOICE.md](WONDERLAND_VOICE.md) decision 4.
+
+**Identities.**
+- Each player's EOS identity is bound by their game client.
+- Or the harness binds it first from `WONDERLAND_R16_EOS_ID_TOKENS`: JSON `{"<playerId>": "<EOS Connect ID token>"}`, from the environment only.
+- Those tokens, and the room tokens a join returns, are never printed and never recorded.
+
+**Restart.**
+- `--state` records each player's rooms at the end (ids only).
+- The verify phase checks that each reconnected player is given exactly those rooms. Their identity is stored (035) and their plan is a function of what is stored and who is present.
+- **The verify phase never binds.** An identity that did not survive the restart must fail there, not be bound again.
+
+**The harness never talks to Epic.** The backend does, with its own trusted credentials, and that is what is being checked.
+
 **Presence is a lease** (`WONDERLAND_SOCIAL.md` decision 6): a presence not refreshed for 120 s is absent everywhere. Two things follow for the harness.
 - **During the scenario, it keeps the client's half.** Every player standing in the instance is refreshed every 20 s (`R16_HEARTBEAT_MS`).
   - Without that, a slow hosted backend could let a lease lapse mid-run.
@@ -71,7 +103,10 @@ The checks say whether a backend kept the privacy wall. They do not say whether 
 - **HOSTED_FINAL is the backend's half of final R16.** The shipped RC and EOS voice are CORE's half, on the same package.
 - **A rehearsal is still evidence**, about the code. It is never evidence about the deployment.
 
-**Voice is reported, not checked.** The harness says whether the backend serves EOS client configuration (`CONFIGURED` / `NOT_CONFIGURED_<status>` / `NOT_MOUNTED`). Proving voice needs EOS identities on a configured EOS product, which is CORE's final step.
+**Voice.**
+- Without `--voice`, the harness only reports whether the backend serves EOS client configuration (`CONFIGURED`, `NOT_CONFIGURED_<status>` or `NOT_MOUNTED`).
+- With `--voice`, it checks the voice wall (above).
+- **`--final` refuses a run that did not check the voice wall:** final R16 is the whole wall, voice included.
 
 ## Running it
 
@@ -85,24 +120,29 @@ RELAY_BRIDGE_TOKEN=... node scripts/wonderland-r16-harness.mjs --bridge <url> --
 # the backend's own report; --expect-commit is the accepted main commit; --final refuses anything less than HOSTED_FINAL.
 WONDERLAND_R16_SESSIONS='{"<idA>":"<token>","<idB>":"<token>","<idC>":"<token>"}' RELAY_BRIDGE_TOKEN=... \
   node scripts/wonderland-r16-harness.mjs --bridge https://<bridge> --origin <origin> --players <idA>,<idB>,<idC> \
-  --state r16.json --expect-commit <main sha> --final
+  --state r16.json --voice --expect-commit <main sha> --final
 # ... a Railway redeploy of the SAME commit (the restart). The restart revokes every session, by design, so each real player
 # signs in again, and the verify phase is given their NEW tokens ...
 WONDERLAND_R16_SESSIONS='{"<idA>":"<new token>",…}' RELAY_BRIDGE_TOKEN=... node scripts/wonderland-r16-harness.mjs --bridge https://<bridge> --origin <origin> \
-  --players <idA>,<idB>,<idC> --phase verify --state r16.json --expect-commit <main sha> --final
+  --players <idA>,<idB>,<idC> --phase verify --state r16.json --voice --expect-commit <main sha> --final
 ```
 
-- **Exit codes:** 0 when every check passed (and, with `--final`, the venue is HOSTED_FINAL); 1 when a check failed, the backend could not be reached, or `--final` met a REHEARSAL; 2 for usage.
+- **Exit codes:**
+  - 0 when every check passed (and, with `--final`, the venue is HOSTED_FINAL and the voice wall was checked);
+  - 1 when a check failed, the backend could not be reached, or `--final` met a REHEARSAL or a run without voice;
+  - 2 for usage.
+- **The players' voice identities:** bound by their own game clients before the run, or by the harness from `WONDERLAND_R16_EOS_ID_TOKENS` (scenario phase only).
 - **What it prints:**
   - one `R16 PASS|FAIL <rule>` line per check;
   - `R16 BACKEND commit=… attested_by=… production=… boot=… store=… through=… pending=… social=…`, or `R16 BACKEND UNREAD <reason>`;
   - `R16 VENUE HOSTED_FINAL|REHEARSAL reasons=…`, then one `R16 VENUE REASON <code> — <words>` line per reason;
-  - with `--final` and a rehearsal, `R16 FINAL REFUSED`;
-  - a summary ending `venue=…`.
+  - `R16 VOICE <probe> (checked: …)` or `R16 VOICE <probe> (reported, not checked: …)`;
+  - with `--final` and a rehearsal, `R16 FINAL REFUSED`; and without `--voice`, `R16 FINAL REFUSED — the voice wall was not checked`;
+  - a summary ending `venue=… voice=CHECKED|NOT_CHECKED`.
 
-  The verify phase also prints `R16 RECONNECT <player>=HELD|REENTERED|ABSENT|REFUSED_…` for each player, and seven results: RESTART, three DURABLE, three PRESENCE.
+  The verify phase also prints `R16 RECONNECT <player>=HELD|REENTERED|ABSENT|REFUSED_…` for each player, and seven results: RESTART, three DURABLE, three PRESENCE. When the scenario recorded voice, three VOICE results follow: one per player.
 - **The state file** also records the bridge's origin, the backend's report (commit and boot), the venue, and how the players were identified.
-- **What it never prints:** the operator token or any session token.
+- **What it never prints:** the operator token, any session token, an EOS ID token or a room token.
 - **A backend with no social database** answers `503 social_store_unavailable`. The harness then says so and stops.
 - **With real players**, the harness changes their social state: a friendship, blocks, a party, a server and messages. It lifts every block it makes. A block's cascade (lost friendship or party seat) stays, as it would for anyone.
 
@@ -165,6 +205,42 @@ WONDERLAND_R16_SESSIONS='{"<idA>":"<new token>",…}' RELAY_BRIDGE_TOKEN=... nod
 | `--final` does not change the exit code | the real-process case |
 | The verify phase has no restart check | the real-process case |
 
+**The voice wall, proven in process** (`relay-bridge/wonderland-r16-voice.test.ts`, 12, and `relay-bridge/wonderland-r16-voice.real-postgres.test.ts`).
+- **Why in process.** The shipped bridge reaches Epic and nothing else, and nothing may point it elsewhere. So the social and voice routes are composed exactly as `server.ts` composes them (`relay-bridge/wonderland-r16-voice.fixture.ts`):
+  - real RS256 ID-token verification;
+  - the reconcile after every committed command;
+  - Epic's trusted server replaced by a fake that keeps who each room admits.
+- **All 24 + 8 checks pass**, and after every request, once the bridge has finished what it started, the trusted server admits nothing the wall forbids.
+- **On PostgreSQL through 035,** a restart (every session gone, the pool closed and reopened):
+  - keeps every identity;
+  - each reconnected player is given exactly the rooms they had;
+  - the issuance record ends with exactly the one room the scenario leaves open.
+- **The harness can fail, as exactly the rules broken:**
+
+  | Backend fault | Checks that fail |
+  |---|---|
+  | Takes nothing back when the wall moves | the two "at once" checks, and the trusted server shows the hidden player and the stranger in one room |
+  | Takes back only the actor's rooms | the same two checks, with no breach on the trusted server: a contract violation, not a leak |
+  | Hands the stranger the hidden player's rooms | the wall checks that see it, and no other |
+  | Serves no voice | the identity check names why; the other seven are "not run"; the 24 still pass |
+  | A forged ID token, or two players proving one identity | the identity check |
+  | Loses identities across a restart | each player's VOICE restart check |
+
+- **The CLI against the real bridge process,** which serves no voice:
+  - `--voice` exits 1, every voice check is named, and the 24 pass;
+  - no EOS ID token is printed or recorded;
+  - the verify phase refuses to bind;
+  - `--final` without `--voice` is refused.
+- **Eight harness mutants, each killed:**
+  - the everyone-visible shape not checked;
+  - the stranger's rooms not checked after the hide;
+  - the stranger's side of the hide not checked;
+  - the block's takeback not checked;
+  - the restart's voice half comparing nothing;
+  - a voice run counting only the 24;
+  - `--final` not requiring voice;
+  - the verify phase binding again.
+
 ## What the hosted final R16 still needs
 
 Each item names its owner.
@@ -178,7 +254,9 @@ Each item names its owner.
 2. **Three real identities** signed in through the hosted site's own sign-in.
    - The third identity is the founder's.
    - The second game client uses a second Windows account.
-3. **EOS voice live.** This is CORE's, with the founder's EOS product, using `docs/relay/WONDERLAND_VOICE.md`.
+3. **EOS voice live.**
+   - The backend's half of the voice wall is `--voice` against the hosted backend, once EOS is configured there (the founder's EOS product, secrets on Railway) and 035 is applied.
+   - The live Epic calls themselves, and the RC's audio, are CORE's, using `docs/relay/WONDERLAND_VOICE.md`.
 4. **The shipped final RC** reaching the hosted backend, not the founder's laptop or 127.0.0.1. This is CORE's.
 5. **Native social.** The final RC's native client needs `allowNative` for social. That is a reviewed decision for SECOND Wonderland and the founder, and costs one line.
 6. **The run itself is judged HOSTED_FINAL** (`--expect-commit <accepted main sha> --final`, above).

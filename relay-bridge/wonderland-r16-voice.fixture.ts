@@ -7,13 +7,15 @@
  * composes them (`wonderlandVoicePorts`): one session store; a social store and
  * an identity store; the game client's configuration read from an environment;
  * ID tokens checked by the real RS256 verifier; and, when voice is live, the
- * reconcile after every committed social command. A fetch puts them behind
+ * reconcile after every committed social command (the actor's rooms before the
+ * answer, everyone else's after it). A fetch puts them behind
  * HTTP-shaped calls. Only Epic's trusted server is a fake, and it keeps the one
  * thing the wall is about: which product users each room admits now.
  *
  * `wallBreaches` reads that fake against the wall's definition, independently
- * of the planner: two players in one room must be mutually visible and in the
- * same instance or party now, and no room holds three.
+ * of the planner, once the bridge has finished what it started: two players in
+ * one room must be mutually visible and in the same instance or party now, and
+ * no room holds three.
  *
  * NOT COMPOSED BY THE LIVE ROOT. Nothing on the live path imports this file; it
  * exists for tests.
@@ -45,7 +47,8 @@ import {
 import {
   handleWonderlandVoiceRoute,
   isWonderlandVoiceRoute,
-  reconcileWonderlandVoice,
+  reconcileWonderlandVoiceAfterCommand,
+  settleWonderlandVoice,
   wonderlandVoiceAffected,
   type WonderlandVoiceRoutePorts,
 } from './wonderland-voice-routes';
@@ -123,8 +126,9 @@ export interface R16VoiceBackendOptions {
   /** Whether EOS is configured on this backend. Off: every voice route answers as an unconfigured backend does. */
   readonly serveVoice?: boolean;
   /**
-   * Whether a committed social command reconciles voice, as `server.ts` does when voice is live: for everyone the
-   * command could move. `false` and `'actor-only'` are faults, there only to prove the harness notices them.
+   * Whether a committed social command reconciles voice, as `server.ts` does when voice is live: the actor before the
+   * answer, everyone else the command can move after it. `false` (nobody) and `'actor-only'` (nobody but the actor)
+   * are faults, there only to prove the harness notices them.
    */
   readonly reconcile?: boolean | 'actor-only';
 }
@@ -136,6 +140,8 @@ export function createR16VoiceBackend(options: R16VoiceBackendOptions) {
   const stores = options.stores ?? (() => memory!);
   const trusted = fakeTrustedServer();
   const known = new Set<string>();
+  /** Removals after a command that failed where nobody could be told: the bridge logs their count. */
+  const laterFailures: number[] = [];
   let now = options.t0;
   let sessions: BrowserSessionStore;
   let current: R16VoiceStores;
@@ -169,8 +175,9 @@ export function createR16VoiceBackend(options: R16VoiceBackendOptions) {
       sessions,
       allowNative: false,
       ...(voiceLive && options.reconcile !== false ? {
-        afterCommand: async ({ actorId, command, before, after, at }) => reconcileWonderlandVoice(
-          voicePorts, options.reconcile === 'actor-only' ? [actorId] : wonderlandVoiceAffected(before, after, actorId, command), at),
+        afterCommand: async ({ actorId, command, before, after, at }) => reconcileWonderlandVoiceAfterCommand(
+          voicePorts, actorId, options.reconcile === 'actor-only' ? [actorId] : wonderlandVoiceAffected(before, after, actorId, command), at,
+          (failures) => { laterFailures.push(failures); }),
       } satisfies Pick<WonderlandSocialRoutePorts, 'afterCommand'> : {}),
     };
   };
@@ -201,12 +208,13 @@ export function createR16VoiceBackend(options: R16VoiceBackendOptions) {
   }));
 
   /**
-   * WHAT THE TRUSTED SERVER ADMITS THAT THE WALL FORBIDS, now: a room holding
-   * three, or two players who are not mutually visible, or not in the same
-   * instance or party. Read from the fake's memberships, never from the
-   * backend's own record of what it issued.
+   * WHAT THE TRUSTED SERVER ADMITS THAT THE WALL FORBIDS, once the bridge has
+   * finished what it started: a room holding three, or two players who are not
+   * mutually visible, or not in the same instance or party. Read from the
+   * fake's memberships, never from the backend's own record of what it issued.
    */
   const wallBreaches = async (): Promise<string[]> => {
+    await settleWonderlandVoice(voicePorts);
     const at = new Date(now).toISOString();
     const puids = await current.identities.productUserIdsOf([...known]);
     const playerOf = new Map(Object.entries(puids).map(([playerId, puid]) => [puid, playerId]));
@@ -235,6 +243,9 @@ export function createR16VoiceBackend(options: R16VoiceBackendOptions) {
     signIn,
     trusted,
     wallBreaches,
+    laterFailures,
+    /** Everything the bridge started, finished: what a command left for after its answer included. */
+    settle: (): Promise<void> => settleWonderlandVoice(voicePorts),
     clock: (): number => now,
     advance: (ms: number): void => { now += ms; },
     /** The backend stops and starts again: every session is gone, the stores hold what they held, and Epic's rooms are Epic's. */

@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import {
-  R16_CHECKS, pairR16Sessions, r16Players, readR16Views, runR16Scenario, summarizeR16, verifyR16Restart,
+  R16_CHECKS, R16_VOICE_CHECKS, pairR16Sessions, r16Players, readR16Views, runR16Scenario, summarizeR16, verifyR16Restart,
 } from '../scripts/wonderland-r16-harness.mjs';
 
 /**
@@ -222,4 +222,51 @@ suite('Wonderland R16, scripted, against the real bridge process', () => {
     expect(unconfigured.status).toBe(2);
     expect(unconfigured.stdout).toContain('R16 BLOCKED — set RELAY_BRIDGE_TOKEN (scripted players) or WONDERLAND_R16_SESSIONS (three real players).');
   }, 180_000);
+
+  it('the CLI with --voice against a bridge that serves no voice: every voice check fails, named, the 24 still pass, and no EOS token is printed or recorded', async () => {
+    const state = join(root, 'r16-voice-state.json');
+    const voiceNonce = randomBytes(4).toString('hex');
+    const players = r16Players(voiceNonce);
+    // Shaped like EOS Connect ID tokens, and marked, so any echo of them is caught. This bridge has no 035, so none is ever verified.
+    const marker = `idtoken-marker-${randomBytes(6).toString('hex')}`;
+    const idTokens = JSON.stringify(Object.fromEntries([players.a, players.b, players.c].map((player) => [player, `eyJhbGciOiJSUzI1NiJ9.${marker}.${player}`])));
+    const run = (args: readonly string[], extra: Record<string, string> = {}) => spawnSync(process.execPath, ['scripts/wonderland-r16-harness.mjs', '--bridge', bridge, '--origin', ORIGIN, ...args], {
+      encoding: 'utf8', env: { PATH: process.env.PATH ?? '', RELAY_BRIDGE_TOKEN: OPERATOR, ...extra }, timeout: 60_000,
+    });
+    const scenario = run(['--state', state, '--nonce', voiceNonce, '--voice'], { WONDERLAND_R16_EOS_ID_TOKENS: idTokens });
+    expect(scenario.status, 'a voice check failed: exit 1').toBe(1);
+    expect(scenario.stdout).toMatch(/^R16 VOICE NOT_CONFIGURED_503 \(checked: the 8 voice checks\)$/mu);
+    expect(scenario.stdout).toMatch(new RegExp(`^R16 FAIL ${R16_VOICE_CHECKS[0]!.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')} — binding refused 503 voice_store_unavailable`, 'mu'));
+    for (const name of R16_VOICE_CHECKS.slice(1)) {
+      expect(scenario.stdout).toContain(`R16 FAIL ${name} — not run: voice was not available to every player (A 503 voice_store_unavailable`);
+    }
+    expect(scenario.stdout).toContain(`R16 SUMMARY phase=scenario passed=${String(R16_CHECKS.length)} failed=${String(R16_VOICE_CHECKS.length)} of=${String(R16_CHECKS.length + R16_VOICE_CHECKS.length)} venue=REHEARSAL voice=CHECKED`);
+    const recorded = JSON.parse(readFileSync(state, 'utf8')) as { voice: unknown };
+    expect(recorded.voice, 'nobody was admitted to voice: no rooms are recorded').toBeNull();
+    for (const output of [scenario.stdout, scenario.stderr, readFileSync(state, 'utf8')]) {
+      expect(output, 'no EOS ID token is printed or recorded').not.toContain(marker);
+      expect(output).not.toContain(OPERATOR);
+    }
+    // The verify phase never binds: an identity that did not survive a restart must fail there, not be bound again.
+    const rebinding = run(['--phase', 'verify', '--state', state, '--voice'], { WONDERLAND_R16_EOS_ID_TOKENS: idTokens });
+    expect(rebinding.status).toBe(2);
+    expect(rebinding.stdout).toContain('R16 BLOCKED — WONDERLAND_R16_EOS_ID_TOKENS binds EOS identities for the voice check of a scenario');
+    expect(rebinding.stdout + rebinding.stderr).not.toContain(marker);
+    // And a verify phase asked for voice, whose scenario recorded no rooms, fails each player's voice check.
+    const verify = run(['--phase', 'verify', '--state', state, '--voice']);
+    expect(verify.stdout).toContain('the scenario recorded no voice rooms: run it with --voice and --state');
+    expect(verify.stdout).toMatch(/voice=CHECKED$/mu);
+    expect(verify.status).toBe(1);
+  }, 180_000);
+
+  it('--final refuses a run that did not check the voice wall, however clean its checks', async () => {
+    const finalNonce = randomBytes(4).toString('hex');
+    const run = spawnSync(process.execPath, ['scripts/wonderland-r16-harness.mjs', '--bridge', bridge, '--origin', ORIGIN, '--nonce', finalNonce, '--final'], {
+      encoding: 'utf8', env: { PATH: process.env.PATH ?? '', RELAY_BRIDGE_TOKEN: OPERATOR }, timeout: 60_000,
+    });
+    expect(run.stdout).toContain(`R16 SUMMARY phase=scenario passed=${String(R16_CHECKS.length)} failed=0 of=${String(R16_CHECKS.length)}`);
+    expect(run.stdout).toMatch(/^R16 VOICE NOT_CONFIGURED_503 \(reported, not checked: --voice checks the voice wall\)$/mu);
+    expect(run.stdout).toContain('R16 FINAL REFUSED — the voice wall was not checked: final R16 is the whole wall, voice included (--voice)');
+    expect(run.status).toBe(1);
+  }, 120_000);
 });
