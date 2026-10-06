@@ -4,7 +4,7 @@ import type { Pool, PoolClient } from 'pg';
 import { foldJuliusArchitecture, juliusArchitectureEntryId } from '../mission/julius/julius-architecture-state';
 import {
   JULIUS_CARRY_CANDIDATE_LIMIT, JULIUS_CARRY_SOURCE_RUN_LIMIT, JULIUS_KNOWLEDGE_CARRY_VERSION,
-  juliusClaimStandingKey, juliusKnowledgeCarriedEvent, juliusKnowledgeCarryFacts, juliusKnowledgeCarryFailureFacts,
+  juliusCarryFindingCandidate, juliusClaimStandingKey, juliusKnowledgeCarriedEvent, juliusKnowledgeCarryFacts, juliusKnowledgeCarryFailureFacts,
   planJuliusKnowledgeCarry,
   type JuliusCarryArchitectureFact, type JuliusCarryBrainCandidate, type JuliusCarryFailure, type JuliusCarryFindingCandidate,
   type JuliusCarryPlan, type JuliusCarryScope, type JuliusCarrySourceRun, type JuliusKnowledgeCarryOutcome,
@@ -196,17 +196,7 @@ export class JuliusClaimPostgresRepository implements JuliusClaimStore {
       const lives = new Map(foldJuliusFindings(rows, ledger).map((life) => [life.findingId, life] as const));
       const taskOf = new Map(tasks.map((task) => [task.taskId, task] as const));
       for (const finding of rows) {
-        const life = lives.get(finding.findingId);
-        const task = taskOf.get(finding.taskId);
-        findings.push({
-          runId: run.runId,
-          finding,
-          life: life === undefined ? null : {
-            originReviewTaskId: life.originReviewTaskId,
-            state: life.state, lastMove: life.lastMove, repairTaskIds: life.repairTaskIds, resolutionReviewTaskId: life.resolutionReviewTaskId,
-          },
-          task: task === undefined ? null : { taskType: task.taskType, role: task.role },
-        });
+        findings.push(juliusCarryFindingCandidate({ runId: run.runId, finding, life: lives.get(finding.findingId), taskOf: (taskId) => taskOf.get(taskId) }));
       }
       const design = foldJuliusArchitecture(ledger);
       architectures.push({

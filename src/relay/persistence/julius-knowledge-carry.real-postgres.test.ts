@@ -147,14 +147,23 @@ suite('the corrected knowledge carry on real PostgreSQL', () => {
    *   - architecture r1 (IN_FORCE) then r2 (IN_FORCE): r2 is in force      -> r2 architecture_not_a_source, r1 architecture_not_in_force
    *   - a proposal r3 (PROPOSED, never accepted)                           -> architecture_proposal
    *   - the plan's REPAIR verdict mirror                                   -> decision_mirror
+   *   - a FORGERY: a resolved finding on the architecture task whose life
+   *     names a review, repair and re-review that are no tasks of the run  -> finding_provenance_unverified
+   * The review, repair and re-review the plan's resolved finding names are seeded as the run's own finished tasks, as
+   * a run that lived them holds them (P2b's provenance rule reads exactly those rows).
    */
   async function sourceRun(input: { projectId: string; missionId: string; runId: string; state: string; createdAt: string }) {
     const { projectId, missionId, runId } = input;
     await run(input);
     await task({ runId, projectId, missionId, taskId: `${runId}:plan`, taskType: 'plan', role: 'PROMPT_ARCHITECT' });
     await task({ runId, projectId, missionId, taskId: `${runId}:architecture:1`, taskType: 'architecture', role: 'PROMPT_ARCHITECT' });
+    await task({ runId, projectId, missionId, taskId: `review:${runId}:plan`, taskType: 'review:plan', role: 'INDEPENDENT_REVIEWER' });
+    await task({ runId, projectId, missionId, taskId: `repair:${runId}:plan:1:task`, taskType: 'repair:plan', role: 'PROMPT_ARCHITECT', parentTaskId: `${runId}:plan` });
+    await task({ runId, projectId, missionId, taskId: `review:repair:${runId}:plan:1:task`, taskType: 'review:repair:plan', role: 'INDEPENDENT_REVIEWER' });
     const resolved = `finding:${runId}:resolved`;
     await finding({ runId, projectId, findingId: resolved, taskId: `${runId}:plan`, blocking: true, moves: ['REPAIR_SUCCEEDED', 'REVIEWER_RESOLVED'] });
+    const forged = `finding:${runId}:forged`;
+    await finding({ runId, projectId, findingId: forged, taskId: `${runId}:architecture:1`, blocking: true, moves: ['REPAIR_SUCCEEDED', 'REVIEWER_RESOLVED'] });
     await finding({ runId, projectId, findingId: `finding:${runId}:open`, taskId: `${runId}:plan`, blocking: true, moves: ['REPAIR_SUCCEEDED', 'REVIEWER_MAINTAINED'] });
     await finding({ runId, projectId, findingId: `finding:${runId}:warning`, taskId: `${runId}:plan`, blocking: false, moves: ['REVIEWER_RESOLVED'] });
     const mirror = `brain:decision:${runId}:plan:REPAIR:BLOCKING_FINDINGS`;
@@ -166,7 +175,7 @@ suite('the corrected knowledge carry on real PostgreSQL', () => {
     const proposal = juliusArchitectureProposalEntryId(`${runId}:architecture:1`);
     await event({ runId, projectId, type: 'architecture.recorded', taskId: `${runId}:architecture:1`, facts: { ...juliusArchitectureFacts(design(3, `${runId}:architecture:1`, 'design-r3')), status: 'PROPOSED' } });
     await brain({ runId, projectId, taskId: `${runId}:architecture:1`, workerId: ARCHITECT, entryId: proposal, kind: 'DECISION', text: 'PROPOSED ARCHITECTURE REVISION — NOT IN FORCE.' });
-    return { resolved, mirror, proposal, r1: juliusArchitectureEntryId(runId, 1), r2: juliusArchitectureEntryId(runId, 2) };
+    return { resolved, forged, mirror, proposal, r1: juliusArchitectureEntryId(runId, 1), r2: juliusArchitectureEntryId(runId, 2) };
   }
 
   /** An inheriting run as the bootstrap leaves it when the carry runs: CREATED, with its plan task. */
@@ -219,7 +228,7 @@ suite('the corrected knowledge carry on real PostgreSQL', () => {
 
     // NOTHING ELSE CROSSED: not the design in force, not the verdict mirror, not the proposal, not the superseded revision, not the open finding.
     const everything = rows.map((row) => `${row.entry_id}\n${row.safe_content}`).join('\n');
-    for (const absent of [seeded.r2, seeded.mirror, seeded.proposal, `${seeded.r1}:into`, 'ACCEPTED ARCHITECTURE', 'Verification requires repair', 'NOT IN FORCE', `finding:${src}:open`, `finding:${src}:warning`]) {
+    for (const absent of [seeded.r2, seeded.forged, seeded.mirror, seeded.proposal, `${seeded.r1}:into`, 'ACCEPTED ARCHITECTURE', 'Verification requires repair', 'NOT IN FORCE', `finding:${src}:open`, `finding:${src}:warning`]) {
       expect(everything, `${absent} must not be carried`).not.toContain(absent);
     }
 
@@ -240,10 +249,11 @@ suite('the corrected knowledge carry on real PostgreSQL', () => {
       outcome: 'CARRIED', missionId, scopeTaskId: `${heirRun}:plan`, scopeRole: 'PROMPT_ARCHITECT', sourceRuns: 1, sourceRunIds: src,
       eligible: 1, carried: 1, carriedFindings: 1, carriedArchitecture: 0,
     });
-    for (const reason of ['finding_unresolved=1', 'finding_not_blocking=1', 'architecture_proposal=1', 'architecture_not_in_force=1', 'architecture_not_a_source=1', 'decision_mirror=1']) {
+    for (const reason of ['finding_unresolved=1', 'finding_not_blocking=1', 'finding_provenance_unverified=1', 'architecture_proposal=1', 'architecture_not_in_force=1', 'architecture_not_a_source=1', 'decision_mirror=1']) {
       expect(String(facts.excludedByReason), reason).toContain(reason);
     }
     expect(String(facts.excludedRefs), 'the design in force, named').toContain(`architecture_not_a_source:${src}:${seeded.r2}`);
+    expect(String(facts.excludedRefs), 'the forged lifecycle, named: its tasks are no tasks of the run').toContain(`finding_provenance_unverified:${src}:${seeded.forged}`);
     expect(String(facts.carriedEntries)).toContain(`${findingRow!.entry_id}|FINDING|VERIFIED_REPAIR_FINDING|${src}|${src}:plan|plan|TASK|HIGH|review|-|${REVIEWER}|VERIFIED|sha256:`);
     expect(JSON.stringify(facts), 'the finding text never reaches the ledger').not.toContain('CARRY-STORE-SENTINEL');
   });

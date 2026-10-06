@@ -9,7 +9,7 @@ import {
   type JuliusLearningPairing,
   type JuliusLearningPolicy,
 } from './julius-learning-loop';
-import { planJuliusKnowledgeCarry, type JuliusCarryItem } from './julius-claim-ledger';
+import { juliusCarryFindingCandidate, planJuliusKnowledgeCarry, type JuliusCarryItem } from './julius-claim-ledger';
 import { promoteJuliusMemoryClaim, admitJuliusMemoryCandidate, type JuliusMemoryClaim } from './julius-memory-trust';
 import {
   cardPolicy, createJuliusHarness, seedTaskContractInto, task, verificationPolicy, worker,
@@ -88,14 +88,22 @@ const ALL_ROLES: JuliusBrainEntry['allowedRoles'] = ['PROMPT_ARCHITECT', 'CODING
  * prior mission's reviewer finding was blocking, cited, repaired and RESOLVED by
  * an independent re-review, so it becomes ONE row of the new run's brain: scoped
  * to its PLAN task, under the copy id, header and standing that
- * `carryProjectKnowledge` writes. Nothing here builds that shape by hand.
+ * `carryProjectKnowledge` writes. Nothing here builds that shape by hand: the
+ * candidate is built by the store's own builder over the prior run's rows,
+ * among them the review, repair and re-review its finding's life names.
  */
 function carriedLesson(runId: string): JuliusCarryItem {
+  const priorTasks = new Map([
+    [`${PRIOR_RUN_ID}-build`, { taskType: 'build', role: 'CODING_AGENT', state: 'SUCCEEDED' }],
+    [`review:${PRIOR_RUN_ID}-build`, { taskType: 'review:build', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED' }],
+    [`repair:${PRIOR_RUN_ID}-build:1:task`, { taskType: 'repair:build', role: 'CODING_AGENT', state: 'SUCCEEDED' }],
+    [`review:repair:${PRIOR_RUN_ID}-build:1:task`, { taskType: 'review:repair:build', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED' }],
+  ]);
   const plan = planJuliusKnowledgeCarry({
     runId, projectId: 'prj-1', missionId: 'msn-1',
     scope: { taskId: `${runId}-plan`, taskType: 'plan', role: 'PROMPT_ARCHITECT' },
     sourceRuns: [{ runId: PRIOR_RUN_ID, state: 'COMPLETED' }],
-    findings: [{
+    findings: [juliusCarryFindingCandidate({
       runId: PRIOR_RUN_ID,
       finding: {
         findingId: PRIOR_FINDING_ID, taskId: `${PRIOR_RUN_ID}-build`, reviewerWorkerId: 'reviewer', severity: 'HIGH',
@@ -106,8 +114,8 @@ function carriedLesson(runId: string): JuliusCarryItem {
         originReviewTaskId: `review:${PRIOR_RUN_ID}-build`, state: 'RESOLVED', lastMove: 'REVIEWER_RESOLVED',
         repairTaskIds: [`repair:${PRIOR_RUN_ID}-build:1:task`], resolutionReviewTaskId: `review:repair:${PRIOR_RUN_ID}-build:1:task`,
       },
-      task: { taskType: 'build', role: 'CODING_AGENT' },
-    }],
+      taskOf: (taskId) => priorTasks.get(taskId),
+    })],
     architectures: [], brain: [], limit: 12,
   });
   expect(plan.carried, 'the prior finding qualifies under the corrected rule').toHaveLength(1);

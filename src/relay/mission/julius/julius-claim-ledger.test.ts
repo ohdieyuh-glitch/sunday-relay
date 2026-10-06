@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { juliusArchitectureEntryId, juliusArchitectureProposalEntryId } from './julius-architecture-state';
 import {
   JULIUS_CARRIED_CLAIM_CHARS, JULIUS_CARRY_EXCLUSIONS, JULIUS_CLAIM_LEDGER_VERSION, JULIUS_KNOWLEDGE_CARRY_VERSION,
-  isJuliusCarriedEntryId, juliusAdmittedClaimFor, juliusCarriedCopyId, juliusClaimIdFor, juliusClaimPromotionsOnAccept,
+  isJuliusCarriedEntryId, juliusAdmittedClaimFor, juliusCarriedCopyId, juliusCarryFindingCandidate, juliusClaimIdFor, juliusClaimPromotionsOnAccept,
   juliusClaimStandingKey, juliusKnowledgeCarriedEvent, juliusKnowledgeCarryFacts, juliusKnowledgeCarryFailureFacts,
   juliusKnowledgeConsumedFacts, mergeJuliusDurableStanding, planJuliusKnowledgeCarry,
   type JuliusCarryArchitectureFact, type JuliusCarryBrainCandidate, type JuliusCarryFindingCandidate, type JuliusCarryScope,
@@ -167,16 +167,28 @@ const findingOf = (over: Partial<JuliusCarryFindingCandidate['finding']> = {}): 
   claim: SENTINEL, criterionId: 'AC-1', evidenceIds: ['evidence:1'], blocking: true, status: 'OPEN', createdAt: '2026-10-04T10:00:00.000Z', ...over,
 });
 
+/** The tasks a product-path life names, as the run's rows hold them (the review that raised it, the repair, the re-review). */
+const LIVED = {
+  origin: { taskType: 'review:plan', state: 'SUCCEEDED' },
+  repairs: [{ taskType: 'repair:plan', state: 'SUCCEEDED' }],
+  resolution: { taskType: 'review:repair:plan', state: 'SUCCEEDED' },
+};
+
 const candidateOf = (over: {
   readonly runId?: string;
   readonly finding?: Partial<JuliusCarryFindingCandidate['finding']>;
   readonly life?: JuliusCarryFindingCandidate['life'];
-} = {}): JuliusCarryFindingCandidate => ({
-  runId: over.runId ?? SRC,
-  finding: findingOf(over.finding),
-  life: over.life === undefined ? RESOLVED : over.life,
-  task: { taskType: 'plan', role: 'PROMPT_ARCHITECT' },
-});
+  readonly lifeTasks?: JuliusCarryFindingCandidate['lifeTasks'];
+} = {}): JuliusCarryFindingCandidate => {
+  const life = over.life === undefined ? RESOLVED : over.life;
+  return {
+    runId: over.runId ?? SRC,
+    finding: findingOf(over.finding),
+    life,
+    task: { taskType: 'plan', role: 'PROMPT_ARCHITECT' },
+    lifeTasks: over.lifeTasks !== undefined ? over.lifeTasks : life === null ? null : LIVED,
+  };
+};
 
 const standing = (entryId: string, trust: JuliusMemoryClaim['trust'], assertedBy: string): JuliusMemoryClaim => ({
   claimId: juliusClaimIdFor(entryId), entryId, provenance: 'run_observed', trust, assertedBy,
@@ -301,6 +313,40 @@ describe('the corrected carry: verified reviewer findings', () => {
       [`${SRC} finding:no-repair`]: 'finding_resolved_without_repair',
       [`${SRC} finding:unreadable`]: 'finding_lifecycle_unreadable',
     });
+  });
+
+  it('carries a resolved finding only when the review that raised it, every repair and the re-review that resolved it are real, finished tasks of its run (P2b)', () => {
+    const forged = (findingId: string, lifeTasks: JuliusCarryFindingCandidate['lifeTasks']) => candidateOf({ finding: { findingId }, lifeTasks });
+    const result = plan({
+      findings: [
+        candidateOf(),
+        forged('finding:origin-not-a-task', { ...LIVED, origin: null }),
+        forged('finding:origin-not-a-review', { ...LIVED, origin: { taskType: 'plan', state: 'SUCCEEDED' } }),
+        forged('finding:repair-not-a-task', { ...LIVED, repairs: [null] }),
+        forged('finding:repair-failed', { ...LIVED, repairs: [{ taskType: 'repair:plan', state: 'FAILED' }] }),
+        forged('finding:one-repair-not-a-task', { ...LIVED, repairs: [LIVED.repairs[0]!, null] }),
+        forged('finding:resolution-not-a-task', { ...LIVED, resolution: null }),
+        forged('finding:resolution-unfinished', { ...LIVED, resolution: { taskType: 'review:repair:plan', state: 'ACTIVE' } }),
+        forged('finding:resolution-not-a-review', { ...LIVED, resolution: { taskType: 'repair:plan', state: 'SUCCEEDED' } }),
+      ],
+    });
+    expect(result.carried.map((item) => item.sourceRef), 'only the finding whose life the runtime lived').toEqual(['finding:evidence:1']);
+    expect(result.excluded).toHaveLength(8);
+    expect(new Set(result.excluded.map((item) => item.reason))).toEqual(new Set(['finding_provenance_unverified']));
+  });
+
+  it('builds a candidate ONE way for the store and the verifier: the life\'s task names resolved against the run\'s own rows', () => {
+    const rows = new Map([
+      [`${SRC}:plan`, { taskType: 'plan', role: 'PROMPT_ARCHITECT', state: 'SUCCEEDED' }],
+      [`review:${SRC}:plan`, { taskType: 'review:plan', role: 'INDEPENDENT_REVIEWER', state: 'SUCCEEDED' }],
+      [`repair:${SRC}:plan:1:task`, { taskType: 'repair:plan', role: 'PROMPT_ARCHITECT', state: 'SUCCEEDED' }],
+    ]);
+    const candidate = juliusCarryFindingCandidate({ runId: SRC, finding: findingOf(), life: RESOLVED, taskOf: (taskId) => rows.get(taskId) });
+    expect(candidate.task).toEqual({ taskType: 'plan', role: 'PROMPT_ARCHITECT' });
+    expect(candidate.lifeTasks).toEqual({ origin: LIVED.origin, repairs: LIVED.repairs, resolution: null });
+    expect(plan({ findings: [candidate] }).excluded.map((item) => item.reason), 'its re-review is no task of the run').toEqual(['finding_provenance_unverified']);
+    expect(juliusCarryFindingCandidate({ runId: SRC, finding: findingOf(), life: undefined, taskOf: (taskId) => rows.get(taskId) }))
+      .toMatchObject({ life: null, lifeTasks: null });
   });
 
   it('hands the planner the finding in STRUCTURED form: every field on its own line, the claim last, never this run\'s finding shape', () => {

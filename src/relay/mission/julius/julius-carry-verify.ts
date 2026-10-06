@@ -1,5 +1,6 @@
 import {
   JULIUS_KNOWLEDGE_CARRY_VERSION,
+  juliusCarryFindingCandidate,
   juliusKnowledgeCarryFacts,
   planJuliusKnowledgeCarry,
   type JuliusCarryScope,
@@ -41,7 +42,7 @@ export interface JuliusCarrySources {
   readonly projectId: string;
   readonly missionId: string;
   readonly state: string;
-  readonly tasks: readonly { readonly taskId: string; readonly taskType: string; readonly role: string }[];
+  readonly tasks: readonly { readonly taskId: string; readonly taskType: string; readonly role: string; readonly state: string }[];
   readonly findings: readonly JuliusReviewerFinding[];
   /** The run's `finding.*` ledger rows, in ledger order. */
   readonly ledger: readonly JuliusPeerLedgerEntry[];
@@ -107,7 +108,7 @@ export function parseJuliusCarrySources(text: string): JuliusCarryParsed<JuliusC
   const state = string(document, 'state', '$');
   const tasks = objects(document, 'tasks', '$').map((task, index) => {
     const path = `$.tasks[${String(index)}]`;
-    return { taskId: string(task, 'taskId', path), taskType: string(task, 'taskType', path), role: string(task, 'role', path) };
+    return { taskId: string(task, 'taskId', path), taskType: string(task, 'taskType', path), role: string(task, 'role', path), state: string(task, 'state', path) };
   });
   const findings = objects(document, 'findings', '$').map((row, index): JuliusReviewerFinding => {
     const path = `$.findings[${String(index)}]`;
@@ -219,19 +220,9 @@ export function verifyJuliusCarryChain(input: {
   const plan = planJuliusKnowledgeCarry({
     runId: withRunId, projectId: sources.projectId, missionId: sources.missionId, scope,
     sourceRuns: [{ runId: sources.runId, state: sources.state }],
-    findings: sources.findings.map((finding) => {
-      const life = lives.get(finding.findingId);
-      const task = taskOf.get(finding.taskId);
-      return {
-        runId: sources.runId,
-        finding,
-        life: life === undefined ? null : {
-          originReviewTaskId: life.originReviewTaskId, state: life.state, lastMove: life.lastMove,
-          repairTaskIds: life.repairTaskIds, resolutionReviewTaskId: life.resolutionReviewTaskId,
-        },
-        task: task === undefined ? null : { taskType: task.taskType, role: task.role },
-      };
-    }),
+    // The store's own builder: the same life, the same judged work, the same tasks the life names (P2b's provenance).
+    findings: sources.findings.map((finding) =>
+      juliusCarryFindingCandidate({ runId: sources.runId, finding, life: lives.get(finding.findingId), taskOf: (taskId) => taskOf.get(taskId) })),
     architectures: [], brain: [], limit: input.limit,
   });
   const digestOf = new Map(plan.carried.map((item) => [item.entryId, input.sha256(item.text)] as const));
