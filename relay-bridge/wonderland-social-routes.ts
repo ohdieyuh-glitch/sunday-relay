@@ -309,7 +309,7 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
     const allowed = deps.eosClientConfigAllowed ?? null;
     const config = deps.eosClientConfig ?? null;
     if (allowed === null || config === null || deps.voice === undefined || deps.voice === null || deps.voiceBindings === undefined || deps.voiceBindings === null) {
-      return err(503, 'voice-unavailable', 'VOICE TRANSPORT PENDING');
+      return err(503, 'voice_unavailable', 'VOICE TRANSPORT PENDING');
     }
     if (!allowed(facts.sessionId, request.now)) return err(429, 'rate_limited', 'Too many requests for the voice config; try again in a minute.');
     deps.log?.(`eos client config served to ${hashId(actor.actorId)}`);

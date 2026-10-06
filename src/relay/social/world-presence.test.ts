@@ -549,3 +549,31 @@ describe("the removal notice survives a sleeping client (Second's review of CORE
     expect(report(2000 + 16 * 60_000).ok).toBe(false);
   });
 });
+
+describe("a privacy change is told only to those whose view of the player it changes (Second's harness at 30a3e864)", () => {
+  const privacy = (s: SocialState, body: Record<string, unknown>, ms: number) => {
+    const r = applySocialOperation(s, 'privacy.update_self', U.KAI, { ids: [], body, query: {} }, at(ms), emptyWorldState());
+    if (!r.ok) throw new Error(r.error.message);
+    return r.value;
+  };
+  const presence = (s: SocialState, body: Record<string, unknown>, ms: number) => {
+    const r = applySocialOperation(s, 'presence.update_self', U.KAI, { ids: [], body, query: {} }, at(ms), emptyWorldState());
+    if (!r.ok) throw new Error(r.error.message);
+    return r.value.state;
+  };
+
+  it('while Kai appears offline, a change no friend can see is told to nobody else; visible, the same change reaches the friends it moves', () => {
+    let s = presence(createSocialFixture(), { availability: 'AVAILABLE', connected: true }, 100);
+    s = privacy(s, { activityVisibility: 'FRIENDS', messagePolicy: 'FRIENDS' }, 150).state;
+    // visible: hiding the activity from friends changes every friend's card (their activity label goes) -- they are told
+    const visible = privacy(s, { activityVisibility: 'NOBODY' }, 200);
+    expect([...visible.audience].sort()).toEqual(expect.arrayContaining([U.KAI, ...friendIdsOf(s, U.KAI)].sort()));
+    // hidden: the same kind of change moves nothing a friend sees (Kai reads OFFLINE to them either way) -- only Kai is told
+    s = presence(visible.state, { availability: 'APPEAR_OFFLINE' }, 300);
+    const hidden = privacy(s, { activityVisibility: 'FRIENDS' }, 400);
+    expect([...hidden.audience]).toEqual([U.KAI]);
+    // the control: a change a hidden player's friends CAN see (who may message him) is still told to them
+    const message = privacy(hidden.state, { messagePolicy: 'NOBODY' }, 500);
+    expect(message.audience.length).toBeGreaterThan(1);
+  });
+});

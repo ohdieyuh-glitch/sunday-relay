@@ -397,7 +397,15 @@ function applyOne(
         if (!c.ok) return invalid(c.message);
         if (c.value !== null) patch[field] = c.value;
       }
-      return changed(updateOwnPrivacy(state, actorId, patch), null, [actorId, ...friendIdsOf(state, actorId)]);
+      const next = updateOwnPrivacy(state, actorId, patch);
+      if (!next.ok) return next;
+      // P1, NOTHING INFERRED FROM THE EVENT STREAM (Second's harness at 30a3e864): a privacy change is told to the actor and to
+      // the friends and party members whose VIEW of the actor it changes -- the card and its presence and actions, or whether the
+      // actor is hidden from them (their world, their Recent Players). A change that moves nothing a viewer can see -- made while
+      // hidden from them, say -- is told to nobody else, or its timing would say the hidden player is there.
+      const viewOf = (st: SocialState, viewerId: SocialUserId) => JSON.stringify([resolveProfileFor(st, viewerId, actorId), presenceHiddenFrom(st, viewerId, actorId)]);
+      const moved = [...friendIdsOf(state, actorId), ...partyMembers(state, actorId)].filter((id) => id !== actorId && viewOf(state, id) !== viewOf(next.value, id));
+      return changed(next, null, [actorId, ...moved]);
     }
 
     /* ---- friends */
@@ -616,7 +624,7 @@ function applyOne(
       if (!located.ok) return located;
       // PLAYED TOGETHER (R16 rehearsal 10-04: two real players shared Golden Arrival and neither appeared in the other's Recent
       // Players, so a person met in the world could never be added -- only a party recorded anybody): everyone live in the
-      // context they just joined, both ways, through the one rule (nothing across a block; not into anyone's list who opted out).
+      // context they just joined, both ways, through the one rule (nothing across a block; the separate opt-out is gone: P3).
       // EACH DIRECTION ONLY WHERE THE OWNER COULD SEE THEM ONLINE (Second's review of 7024e331): a player whose presence is hidden
       // from strangers (presenceVisibility, or appearing offline) leaves no durable "met at T" in a stranger's list -- the row
       // would prove they were online when their own setting says nobody may know. The presence authority decides.

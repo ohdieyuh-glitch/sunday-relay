@@ -117,6 +117,15 @@ describe('social and the desktop sign-in: ON', () => {
     expect(asked).toEqual([]);
   });
 
+  it('the sign-in answers are never stored on the way (the poll carries the session token): no-store, also when refused', async () => {
+    const base = await boot(ON);
+    for (const [path, body] of [['/relay-api/wonderland/native/signin/start', {}], ['/relay-api/wonderland/native/signin/poll', { handle: 'h'.repeat(43) }]] as const) {
+      const response = await realFetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      expect(response.headers.get('cache-control'), path).toBe('no-store');
+      expect(response.headers.get('pragma'), path).toBe('no-cache');
+    }
+  });
+
   it('refuses a web page at the sign-in and at social', async () => {
     const base = await boot(ON);
     expect((await call(base, 'POST', '/relay-api/wonderland/native/signin/start', { body: {}, origin: ORIGIN })).body.error.kind).toBe('native_client_only');

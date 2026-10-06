@@ -283,12 +283,12 @@ describe("the GAME client's EOS config route (founder 10-04: from the backend, h
     expect(log).toEqual([]);
   });
 
-  it('503 voice-unavailable, no-store, without the game config, without a voice provider or bindings, and without the rate limit (never unlimited)', async () => {
+  it('503 voice_unavailable, no-store, without the game config, without a voice provider or bindings, and without the rate limit (never unlimited)', async () => {
     const overs: Array<Partial<SocialRouteDeps>> = [{ eosClientConfig: null }, { voice: null }, { voiceBindings: null }, { eosClientConfigAllowed: null }];
     for (const over of overs) {
       const { log, get, values } = setup(over);
       const r = await get('tok-kai');
-      expect([r.status, r.body.error?.kind], Object.keys(over).join()).toEqual([503, 'voice-unavailable']);
+      expect([r.status, r.body.error?.kind], Object.keys(over).join()).toEqual([503, 'voice_unavailable']);
       expect(r.headers).toEqual(NO_STORE);
       noValueIn(r, values);
       expect(log).toEqual([]);

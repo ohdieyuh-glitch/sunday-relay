@@ -712,7 +712,8 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             oauthRoot: socialGithub.oauthRoot,
             apiRoot: socialGithub.apiRoot,
           });
-          if (signInResult !== null) send(res, signInResult.status, signInResult.body, cors);
+          // NEVER STORED ON THE WAY: the poll's answer carries the session token and the start's the device code (Second's harness)
+          if (signInResult !== null) send(res, signInResult.status, signInResult.body, { ...cors, 'cache-control': 'no-store', pragma: 'no-cache' });
           return;
         }
 
