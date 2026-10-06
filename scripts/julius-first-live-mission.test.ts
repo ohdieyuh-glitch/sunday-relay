@@ -3902,7 +3902,9 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
     expect(header(RESTORE), 'a dry run proves the restore for free').not.toContain('confirm_live');
     expect(header(RESTORE)).toContain('GH_TOKEN: ${{ github.token }}');
     expect(header(RESTORE), 'restoring needs no provider credential').not.toMatch(/secrets\./u);
-    expect(stepScript(RESTORE)).toContain('--no-owner --no-privileges --single-transaction --exit-on-error /tmp/julius.pgdump');
+    // THE DATABASE COMMANDS ARE THE STORE SCRIPT'S, the file the round trip runs; its flags are pinned in its own test.
+    expect(stepScript(RESTORE)).toContain('JULIUS_PG_CONTAINER=julius-postgres ./.github/julius-learning-store.sh restore "$dump" "$WITHOUT_JULIUS_RUN" "$REGISTRATION_DIGEST"');
+    expect(stepScript(RESTORE), 'and no restore of its own beside it').not.toMatch(/pg_restore|docker exec|docker cp/u);
   });
 
   it('arm WITH restores the store its WITHOUT run recorded, and refuses every other', () => {
@@ -3923,13 +3925,20 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
       writeFileSync(join(stub, 'runs'), '1\n');
       writeFileSync(join(stub, 'state'), 'COMPLETED\n');
       writeFileSync(join(stub, 'record'), '1\n');
+      writeFileSync(join(stub, 'occupied'), '0\n');
+      // The step runs the store script from the job's checkout, so the job holds it, byte for byte.
+      mkdirSync(join(job, '.github'));
+      writeFileSync(join(job, '.github', 'julius-learning-store.sh'), readFileSync(join(ROOT, '.github', 'julius-learning-store.sh')), { mode: 0o755 });
       writeFileSync(join(bin, 'gh'), ['#!/usr/bin/env bash', 'case "$2" in',
         '  */runs/999) echo 111;;', '  */runs/4242) cat "$STUB/run.txt";;', '  */runs/4242/artifacts?name=*) cat "$STUB/artifact.id";;',
         '  */zip) echo zip;;', '  *) exit 9;;', 'esac'].join('\n'), { mode: 0o755 });
       // unzip: the artifact named by the zip's base name, from the stub.
       writeFileSync(join(bin, 'unzip'), ['#!/usr/bin/env bash', 'mkdir -p "$4" && cp -R "$STUB/$(basename "$2" .zip)/." "$4/"'].join('\n'), { mode: 0o755 });
+      // docker: the paid job's container, as the store script reaches it (`docker exec -i … julius-postgres <tool> …`).
       writeFileSync(join(bin, 'docker'), ['#!/usr/bin/env bash', 'case "$*" in',
-        '  cp\\ *|*"rm -f"*) exit 0;;', '  *pg_restore*) [ -f "$STUB/restore.fails" ] && exit 1; exit 0;;',
+        '  *"pg_dump --version"*) echo "pg_dump (PostgreSQL) 16.4";;', '  *"SHOW server_version_num"*) echo 160004;;',
+        '  *information_schema.schemata*) cat "$STUB/occupied";;',
+        '  *pg_restore*) cat > /dev/null; [ -f "$STUB/restore.fails" ] && exit 1; exit 0;;',
         '  *"count(*) FROM relay_wonderland.julius_runs"*) cat "$STUB/runs";;', '  *"SELECT state FROM"*) cat "$STUB/state";;',
         '  *julius.learning.arm.recorded*) cat "$STUB/record";;', '  *) exit 9;;', 'esac'].join('\n'), { mode: 0o755 });
       mutate(stub);
@@ -3953,6 +3962,7 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
       ['a digest its scanned evidence does not record', edit('julius-live-evidence/learning-store.txt', /dump_sha256=[0-9a-f]+/u, `dump_sha256=${'0'.repeat(64)}`)],
       ['a store of another Julius run', edit('julius-learning-store/store-manifest.txt', /julius_run_id=\S+/u, 'julius_run_id=run:bbbbbbbbbbbbbbbbbbbbbbb2')],
       ['a WITHOUT bundle that was not paid', edit('julius-live-evidence/bundle-manifest.txt', /mode=paid/u, 'mode=preflight')],
+      ['a target that is not empty', edit('occupied', /0/u, '1')],
       ['a failed restore', (stub: string) => writeFileSync(join(stub, 'restore.fails'), '')],
       ['a store of two runs', edit('runs', /1/u, '2')],
       ['a WITHOUT run that did not complete', edit('state', /COMPLETED/u, 'FAILED')],
@@ -3963,8 +3973,11 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
   it('arm WITHOUT exports only after LIVE succeeded, scans before it uploads, and records the digest in its evidence', () => {
     expect(header(DUMP)).toContain("\n        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.live_mission.outcome == 'success' && steps.learning_arm.outputs.arm == 'WITHOUT'\n");
     const dump = stepScript(DUMP);
-    expect(dump, 'restorable, and every row plain text for the scan').toContain('--format=custom --compress=0');
-    expect(dump, 'read back whole before it leaves').toContain('pg_restore --file=/tmp/julius.sql /tmp/julius.pgdump');
+    // THE DATABASE COMMANDS ARE THE STORE SCRIPT'S (restorable, uncompressed, read back whole, the record found in it),
+    // with the rendering kept where the scan reads it; the step adds only what GitHub knows.
+    expect(dump).toContain('JULIUS_PG_CONTAINER=julius-postgres ./.github/julius-learning-store.sh dump julius-learning-store "$run_id" "$render/julius.sql"');
+    expect(dump, 'and no dump of its own beside it').not.toMatch(/pg_dump|pg_restore|docker exec|docker cp/u);
+    expect(dump).toMatch(/echo "workflow_run_id=\$GITHUB_RUN_ID"\n\s*echo "commit=\$GITHUB_SHA"\n\s*\} >> julius-learning-store\/store-manifest\.txt/u);
     expect(dump).toContain('cp julius-learning-store/store-manifest.txt julius-live-evidence/learning-store.txt');
     expect(header(SCAN)).toContain("\n        if: success() && steps.learning_store.outcome == 'success'\n");
     const upload = workflow.split('- uses: actions/upload-artifact').find((block) => block.includes('name: julius-learning-store\n')) ?? '';

@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # DECISION C, OPTION D: A LEARNING PAIR'S STORE, DUMPED BY ARM WITHOUT AND RESTORED BY ARM WITH.
 #
-#   julius-learning-store.sh dump    <out-dir> <julius-run-id>
+#   julius-learning-store.sh dump    <out-dir> <julius-run-id> [<rendering-file>]
 #   julius-learning-store.sh restore <dump-file> <without-julius-run-id> <registration-digest>
+#
+# `dump` reads the archive back into SQL to prove the WITHOUT record is in its bytes. With <rendering-file> it keeps
+# that SQL there, for the workflow's credential scan, which reads the archive AND its rendering and then deletes it;
+# without one, the rendering is removed when the dump ends.
 #
 # THE DATABASE COMMANDS AND NOTHING ELSE. The workflow keeps everything that needs GitHub: which run this is, the
 # artifact upload and fetch, the digest records, the credential scan with its secret needles. This script holds the
@@ -21,7 +25,7 @@
 set -euo pipefail
 
 die() { echo "$1" >&2; exit 1; }
-usage() { die 'usage: julius-learning-store.sh dump <out-dir> <julius-run-id> | restore <dump-file> <without-julius-run-id> <registration-digest>'; }
+usage() { die 'usage: julius-learning-store.sh dump <out-dir> <julius-run-id> [<rendering-file>] | restore <dump-file> <without-julius-run-id> <registration-digest>'; }
 
 # The run a learning pair's arm is: an explicit rerun's id (`run:` + 24 hex), exactly as the workflow reads it.
 RUN_ID_SHAPE='^run:[0-9a-f]{24}$'
@@ -40,7 +44,8 @@ launcher() { if [ -n "${JULIUS_PG_CONTAINER:-}" ]; then echo container; else ech
 prefix() {
   local mode=$1 tool=$2
   if [ "$mode" = container ]; then
-    printf '%s\n' docker exec -i -e PGUSER -e PGDATABASE -e PGPASSWORD -e PGHOST -e PGPORT "${JULIUS_PG_CONTAINER:-<JULIUS_PG_CONTAINER>}" "$tool"
+    # The container's own server, over its socket: a runner-side PGHOST or PGPORT would name the wrong place in there.
+    printf '%s\n' docker exec -i -e PGUSER -e PGDATABASE -e PGPASSWORD "${JULIUS_PG_CONTAINER:-<JULIUS_PG_CONTAINER>}" "$tool"
   else
     local exe="${JULIUS_PG_BINDIR:-<JULIUS_PG_BINDIR>}/$tool"
     if [ -x "$exe.exe" ]; then exe="$exe.exe"; fi
@@ -102,18 +107,24 @@ umask 077
 
 case "${1:-}" in
   dump)
-    [ "$#" -eq 3 ] || usage
+    [ "$#" -eq 3 ] || [ "$#" -eq 4 ] || usage
     out=$2; run_id=$3
     [[ "$run_id" =~ $RUN_ID_SHAPE ]] || die "julius_store_run_invalid: '$run_id'"
     mkdir -p "$out"
-    render=$(mktemp -d)
-    trap 'rm -rf "$render"' EXIT
+    if [ "$#" -eq 4 ]; then
+      rendering=$4
+      mkdir -p "$(dirname "$rendering")"
+    else
+      render=$(mktemp -d)
+      trap 'rm -rf "$render"' EXIT
+      rendering="$render/julius.sql"
+    fi
     check_versions
     # 1. THE STORE, restorable: custom format, uncompressed, over stdout.
     tool pg_dump args_dump > "$out/julius.pgdump"
     # 2. ITS SQL RENDERING, read back from the archive itself (no server), to prove the record is IN the bytes.
-    tool pg_restore args_render < "$out/julius.pgdump" > "$render/julius.sql"
-    grep -qF "julius-learning-record.v1:$run_id:learning.arm.recorded" "$render/julius.sql" \
+    tool pg_restore args_render < "$out/julius.pgdump" > "$rendering"
+    grep -qF "julius-learning-record.v1:$run_id:learning.arm.recorded" "$rendering" \
       || die 'learning_store_without_record: the store does not hold the WITHOUT record of this run'
     # 3. WHAT WAS DUMPED, said by digest and size (from stdin: sha256sum escapes a file name it dislikes).
     digest=$(sha256sum < "$out/julius.pgdump" | cut -d' ' -f1)
