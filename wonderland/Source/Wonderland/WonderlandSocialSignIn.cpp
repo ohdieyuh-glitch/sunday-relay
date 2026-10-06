@@ -57,6 +57,19 @@ namespace WonderlandSocialSignInLogic
 		return IsSignInPage(Uri, WonderlandBeta::IsDeveloperSession());
 	}
 
+	/** The server's kind as the LOG may hold it (Second's log-hygiene minor, 10-06): a kind is the bridge's short code, so only
+	 *  [a-z_]{1,40} is written; anything else -- a newline, text, a wrong or hostile server's words -- is logged as "unrecognised",
+	 *  so nothing a server sends can forge a line in the player's log that our QA readers grep. */
+	FString LoggableKind(const FString& Kind)
+	{
+		bool bShort = Kind.Len() >= 1 && Kind.Len() <= 40;
+		for (const TCHAR Character : Kind)
+		{
+			bShort = bShort && ((Character >= TEXT('a') && Character <= TEXT('z')) || Character == TEXT('_'));
+		}
+		return bShort ? Kind : FString(TEXT("unrecognised"));
+	}
+
 	/** A refusal, in words for a person. The kind is the bridge's short code; nothing GitHub said is ever echoed. */
 	FString MessageFor(int32 Status, const FString& Kind)
 	{
@@ -207,7 +220,7 @@ void FWonderlandSocialSignIn::Start()
 			SetState(EWonderlandSignInState::Failed, TEXT("Wonderland's sign-in answer was not understood. Sign in again."));
 			return;
 		}
-		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL signin start refused: HTTP %d, kind '%s'"), Status, *Kind.Left(40));
+		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL signin start refused: HTTP %d, kind '%s'"), Status, *WonderlandSocialSignInLogic::LoggableKind(Kind));
 		SetState(Kind == TEXT("signin_unavailable") ? EWonderlandSignInState::NoServer : EWonderlandSignInState::Failed,
 			WonderlandSocialSignInLogic::MessageFor(Status, Kind));
 	});
@@ -292,7 +305,7 @@ void FWonderlandSocialSignIn::Poll()
 			return;
 		}
 		Handle.Reset();
-		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL signin poll refused: HTTP %d, kind '%s'"), Status, *Kind.Left(40));
+		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL signin poll refused: HTTP %d, kind '%s'"), Status, *WonderlandSocialSignInLogic::LoggableKind(Kind));
 		SetState(EWonderlandSignInState::Failed, WonderlandSocialSignInLogic::MessageFor(Status, Kind));
 	});
 }
