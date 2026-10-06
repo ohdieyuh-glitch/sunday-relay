@@ -359,6 +359,21 @@ const juliusPool = (): Pool | null => {
 };
 
 /**
+ * THE VOICE LOCKS' OWN POOL. Each connection holds one player's voice lock while that player's step runs, and does
+ * nothing else (`WonderlandVoicePostgresStore`). Apart from the bridge's pool, so a lock can never take the connection
+ * its own step's queries need. Eight, and a wait for one is bounded: steps for one player already take turns in this
+ * process, so a connection here only ever waits on another process.
+ */
+let wonderlandVoiceLockPoolCache: Pool | null | undefined;
+const wonderlandVoiceLockPool = (): Pool | null => {
+  if (wonderlandVoiceLockPoolCache !== undefined) return wonderlandVoiceLockPoolCache;
+  const url = juliusRuntimeDatabaseUrl();
+  wonderlandVoiceLockPoolCache = url === null ? null : new Pool({ connectionString: url, max: 8, connectionTimeoutMillis: 15_000 });
+  wonderlandVoiceLockPoolCache?.on('error', (error) => console.warn(`[relay-bridge] wonderland voice lock pool: idle connection lost (${error.message})`));
+  return wonderlandVoiceLockPoolCache;
+};
+
+/**
  * WONDERLAND VOICE, COMPOSED — once per process, from the environment and the ledger.
  *
  * The identity store is offered only when migration 035 is in the ledger: 035 is
@@ -388,7 +403,7 @@ function wonderlandVoicePorts(sessions: BrowserSessionStore): Promise<Wonderland
       sessions,
       allowNative: false,
       social: pool === null ? null : new WonderlandSocialPostgresStore(pool),
-      identities: pool !== null && voiceTables ? new WonderlandVoicePostgresStore(pool) : null,
+      identities: pool !== null && voiceTables ? new WonderlandVoicePostgresStore(pool, { locks: wonderlandVoiceLockPool() ?? undefined }) : null,
       eos,
       verifyIdToken: eos.ok
         ? (token: string) => verifyWonderlandEosIdToken({ token, expect: wonderlandEosExpectation(eos.config, process.env), nowSeconds: Math.floor(Date.now() / 1000), keys })

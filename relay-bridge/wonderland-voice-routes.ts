@@ -50,8 +50,10 @@ import { resolveWonderlandPlayer, type WonderlandSocialRoutePorts } from './wond
  * So every step that issues, binds or takes back one player's voice runs under
  * that player's lock (`underVoiceLock`): a join, a bind, and each player's
  * reconcile. A step never holds two players' locks, so no two steps can wait on
- * each other. The lock lives in this process: the hosted bridge is one
- * instance, and a second instance would need the same lock in the database.
+ * each other. The order is kept in this process, and, when the identity store is
+ * one several processes share (PostgreSQL), each step also holds the player's
+ * lock in the database (`withPlayerVoiceLock`): two bridge processes on one
+ * database, a deploy's overlap or a second replica, take turns as well.
  */
 
 export interface WonderlandVoiceRoutePorts extends Pick<WonderlandSocialRoutePorts, 'sessions' | 'allowNative'> {
@@ -106,7 +108,10 @@ function underVoiceLock<T>(ports: WonderlandVoiceRoutePorts, playerId: string, s
     voiceLocks.set(key, locks);
   }
   const chain = locks;
-  const run = (chain.get(playerId) ?? Promise.resolve()).then(step);
+  const identities = ports.identities;
+  // Read when the step runs, through the store, so a store that wraps another keeps its own `this`.
+  const locked = identities?.withPlayerVoiceLock === undefined ? step : () => identities.withPlayerVoiceLock!(playerId, step);
+  const run = (chain.get(playerId) ?? Promise.resolve()).then(locked);
   const settled = run.then(() => undefined, () => undefined);
   chain.set(playerId, settled);
   void settled.then(() => { if (chain.get(playerId) === settled) chain.delete(playerId); });

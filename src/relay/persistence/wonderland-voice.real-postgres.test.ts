@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { juliusTestDatabaseUrl } from './julius-test-database';
 import { WONDERLAND_MIGRATIONS } from './wonderland-postgres';
-import { WonderlandVoicePostgresStore } from './wonderland-voice-postgres';
+import { WONDERLAND_VOICE_LOCK_SPACE, WonderlandVoicePostgresStore } from './wonderland-voice-postgres';
 
 /**
  * WONDERLAND VOICE ON REAL POSTGRESQL — the STAGED migration 035 and its store.
@@ -29,6 +29,15 @@ const committed = (name: string): string => readFileSync(join(DOCS, name), 'utf8
 const MIGRATION_035 = committed('035_wonderland_voice.sql');
 const PLACEHOLDER_034 = "INSERT INTO relay_wonderland.schema_migrations(version) VALUES('034_test_placeholder_not_a_migration')";
 const PUID = (c: string): string => c.repeat(32);
+/** A gate held open until released, and a promise for the moment it is reached. */
+function gate() {
+  let release!: () => void;
+  let reach!: () => void;
+  const open = new Promise<void>((resolve) => { release = resolve; });
+  const reached = new Promise<void>((resolve) => { reach = resolve; });
+  return { open, reached, release, reach };
+}
+const pause = (ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); });
 
 suite('Wonderland voice on real PostgreSQL (staged migration 035)', () => {
   const nonce = randomBytes(5).toString('hex');
@@ -138,4 +147,40 @@ suite('Wonderland voice on real PostgreSQL (staged migration 035)', () => {
     expect((await pool.query("SELECT 1 FROM pg_tables WHERE schemaname='relay_wonderland' AND tablename LIKE 'voice\\_%'")).rowCount).toBe(0);
     expect((await pool.query("SELECT 1 FROM relay_wonderland.schema_migrations WHERE version='035_wonderland_voice'")).rowCount).toBe(0);
   });
+
+  it('ONE PLAYER\'S LOCK, ACROSS PROCESSES: a second process waits for the first, another player does not, a throw releases it, and a wait that cannot end in time is an error', async () => {
+    const pool = await create('lock', [PLACEHOLDER_034, MIGRATION_035]);
+    const url = new URL(databaseUrl!);
+    url.pathname = `/wvoicelock${nonce}`;
+    // Two bridge processes: each its own lock pool, so nothing in this process orders them; only the database can.
+    const lockPools = [1, 2, 3].map(() => new Pool({ connectionString: url.toString(), max: 2 }));
+    try {
+      const first = new WonderlandVoicePostgresStore(pool, { locks: lockPools[0]! });
+      const second = new WonderlandVoicePostgresStore(pool, { locks: lockPools[1]! });
+      const impatient = new WonderlandVoicePostgresStore(pool, { locks: lockPools[2]!, lockTimeoutMs: 200 });
+      const order: string[] = [];
+
+      const held = gate();
+      const one = first.withPlayerVoiceLock!('amy', async () => { order.push('first in'); held.reach(); await held.open; order.push('first out'); });
+      await held.reached;
+      const voiceLocks = "SELECT granted FROM pg_locks WHERE locktype = 'advisory' AND classid = $1::oid AND objsubid = 2";
+      expect((await pool.query(voiceLocks, [WONDERLAND_VOICE_LOCK_SPACE])).rows, 'the held lock is the database\'s, and visible as such').toEqual([{ granted: true }]);
+      const two = second.withPlayerVoiceLock!('amy', async () => { order.push('second in'); return 'second'; });
+      expect(await second.withPlayerVoiceLock!('xan', async () => 'xan'), 'another player\'s step does not wait').toBe('xan');
+      const refused = await impatient.withPlayerVoiceLock!('amy', async () => 'never').then(() => null, (error: { code?: string }) => error.code ?? 'no code');
+      expect(refused, 'a wait that cannot end in time is an error, never a hang').toBe('55P03');
+      await pause(150);
+      expect(order, 'the second process has not started while the first holds the player').toEqual(['first in']);
+      held.release();
+      expect(await Promise.all([one, two])).toEqual([undefined, 'second']);
+      expect(order).toEqual(['first in', 'first out', 'second in']);
+
+      await expect(first.withPlayerVoiceLock!('amy', async () => { throw new Error('the step failed'); })).rejects.toThrow('the step failed');
+      expect(await impatient.withPlayerVoiceLock!('amy', async () => 'free'), 'a step that throws still lets the player go').toBe('free');
+      expect((await pool.query(voiceLocks, [WONDERLAND_VOICE_LOCK_SPACE])).rows, 'no voice lock outlives its step').toEqual([]);
+      expect(new WonderlandVoicePostgresStore(pool).withPlayerVoiceLock, 'a store given no lock pool offers no lock').toBeUndefined();
+    } finally {
+      for (const locks of lockPools) await locks.end().catch(() => undefined);
+    }
+  }, 30_000);
 });
