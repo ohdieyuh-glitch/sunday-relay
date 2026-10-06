@@ -53,7 +53,7 @@ const table = (rows: readonly Record<string, string>[], header: readonly string[
   `${[header.join('\t'), ...rows.map((row) => header.map((name) => row[name] ?? '').join('\t')), `(${String(rows.length)} row${rows.length === 1 ? '' : 's'})`].join('\n')}\n`;
 
 /** Two bundle directories: WITHOUT's export + manifest, and what WITH's store holds for it, written by the production functions. */
-function bundles(label: string, over: { sourcesText?: (text: string) => string; recordedDigest?: (digest: string) => string; skip?: string } = {}) {
+function bundles(label: string, over: { sourcesText?: (text: string) => string; recordedDigest?: (digest: string) => string; skip?: string; manifestRun?: string } = {}) {
   const parsed = parseJuliusCarrySources(JSON.stringify(sourcesDocument()));
   if (!parsed.ok) throw new Error(parsed.problem);
   const sources = parsed.value;
@@ -74,7 +74,7 @@ function bundles(label: string, over: { sourcesText?: (text: string) => string; 
   const sourcesText = (over.sourcesText ?? ((text: string) => text))(`${JSON.stringify(sourcesDocument())}\n`);
   if (over.skip !== 'carry-sources.json') writeFileSync(join(withoutDir, 'carry-sources.json'), sourcesText);
   const recorded = (over.recordedDigest ?? ((digest: string) => digest))(sha256(Buffer.from(`${JSON.stringify(sourcesDocument())}\n`, 'utf8')));
-  writeFileSync(join(withoutDir, 'bundle-manifest.txt'), `julius_run_id=${WITHOUT}\ncarry_sources_sha256=${recorded}\n`);
+  writeFileSync(join(withoutDir, 'bundle-manifest.txt'), `julius_run_id=${over.manifestRun ?? WITHOUT}\ncarry_sources_sha256=${recorded}\n`);
   writeFileSync(join(withDir, 'bundle-manifest.txt'), `julius_run_id=${WITH}\n`);
   const knowledge = [
     { run_id: WITH, event_type: 'julius.knowledge.carried', task_id: '', carry_version: String(facts.carryVersion), outcome: String(facts.outcome), scope_task_id: PLAN, scope_task_type: 'plan', scope_role: 'PROMPT_ARCHITECT', source_run_ids: String(facts.sourceRunIds), eligible: String(facts.eligible), carried_entries: String(facts.carriedEntries ?? ''), entries_truncated: String(facts.entriesTruncated), role: '', task_type: '', in_scope: '', admitted: '', missing: '', admitted_entry_ids: '' },
@@ -101,6 +101,12 @@ describe('the off-host verifier CLI, over two bundle directories', () => {
     expect(edited).toEqual({ code: 2, output: { verdict: 'REFUSED', problem: 'without_sources_digest_mismatch' } });
     const unrecorded = runJuliusCarryVerify(bundles('unrecorded', { recordedDigest: () => '' }));
     expect(unrecorded).toEqual({ code: 2, output: { verdict: 'REFUSED', problem: 'without_sources_digest_unrecorded' } });
+  });
+
+  it('REFUSES arm WITHOUT\'s export when it names another run than its own manifest, exit 2', () => {
+    // The bytes ARE the ones the job recorded; only the run they describe is not the run the bundle is of.
+    expect(runJuliusCarryVerify(bundles('other-run', { manifestRun: 'run:someone-else' })))
+      .toEqual({ code: 2, output: { verdict: 'REFUSED', problem: 'without_sources_run_mismatch: the export names another run than its manifest' } });
   });
 
   it('REFUSES a bundle missing what the chain reads, by name, exit 2', () => {

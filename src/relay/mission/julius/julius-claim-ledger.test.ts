@@ -278,6 +278,8 @@ describe('the corrected carry: the design is not a source (Decision C; SECOND ru
     expect(unrecorded.candidates, 'the design the ledger named was looked at').toBe(1);
     const notADecision = plan({ architectures: [designOf(SRC, 2)], brain: [rowOf(SRC, inForce, { kind: 'HANDOFF' })] });
     expect(notADecision.carried, 'only the DECISION row the runtime wrote is the design').toEqual([]);
+    // Nothing is carried either way under VRF-only, so the REASON is what tells the design from a row under its id.
+    expect(reasonsOf(notADecision), 'a row of another kind under the design\'s id is not the design').toEqual({ [`${SRC} ${inForce}`]: 'architecture_standing_not_approved' });
   });
 });
 

@@ -1226,6 +1226,15 @@ describe('the evidence dump names only tables and columns the migrations create'
     expect(regression, 'a stale name must fail the PR, not become a placeholder').toContain('evidence_query_invalid');
   });
 
+  it('DECISION C: the manifest records the digest of the very file the carry-sources export wrote, the one the off-host verifier holds to it', () => {
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const written = /julius-carry-sources\.sql" > "([^"]+)"/u.exec(script)?.[1];
+    const hashed = /carry_digest=\$\(sha256sum "([^"]+)"/u.exec(script)?.[1];
+    expect(written, 'the export writes one file').toBe('$out/carry-sources.json');
+    expect(hashed, 'and that file is the one hashed').toBe(written);
+    expect(script).toContain('echo "carry_sources_sha256=$carry_digest" >> "$out/bundle-manifest.txt"');
+  });
+
   /**
    * THE FACTS BESIDE THE CLASS. Hand-checked for the same reason as the failure
    * query: it joins. It exists because `failures.tsv` can say

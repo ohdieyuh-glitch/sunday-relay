@@ -1,8 +1,11 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { JuliusTask } from '../mission/julius';
+import { parseJuliusCarrySources } from '../mission/julius/julius-carry-verify';
 import {
   JULIUS_ARCHITECTURE_VERSION, juliusArchitectureEntryId, juliusArchitectureFacts, juliusArchitectureProposalEntryId,
   type JuliusArchitectureState,
@@ -280,6 +283,8 @@ suite('the corrected knowledge carry on real PostgreSQL', () => {
       expect(String(facts.excludedRefs), `${forgery}: its raising review is no finished review of this run`).toContain(`finding_provenance_unverified:${src}:${forgery}`);
     }
     expect(String(facts.carriedEntries)).toContain(`${findingRow!.entry_id}|FINDING|VERIFIED_REPAIR_FINDING|${src}|${src}:plan|plan|TASK|HIGH|review|-|${REVIEWER}|VERIFIED|sha256:`);
+    // The FULL digest of the copy's own text: the chain verifier binds all 64 hex, so a shortened one is no binding.
+    expect(String(facts.carriedEntries)).toContain(`|VERIFIED|sha256:${createHash('sha256').update(findingRow!.safe_content, 'utf8').digest('hex')}`);
     expect(JSON.stringify(facts), 'the finding text never reaches the ledger').not.toContain('CARRY-STORE-SENTINEL');
   });
 
@@ -301,6 +306,37 @@ suite('the corrected knowledge carry on real PostgreSQL', () => {
     const heirElsewhere = `run:carry-heir-elsewhere-${n}`;
     await heir({ projectId: elsewhere, missionId: missionB, runId: heirElsewhere });
     expect(await carry({ runId: heirElsewhere, projectId: elsewhere, missionId: missionB })).toMatchObject({ outcome: 'EMPTY', carried: 0 });
+    // The SOURCE query itself is project-scoped: the same mission id in another project is not even looked at.
+    // (Every per-run read is project-scoped too, so an EMPTY outcome alone could not show the query's own scope.)
+    expect((await carryEvents(heirElsewhere))[0]!.payload.facts).toMatchObject({ outcome: 'EMPTY', sourceRuns: 0, candidates: 0 });
+  });
+
+  it('exports ONE run\'s carry sources (.github/julius-carry-sources.sql as written): its own tasks, findings and ledger, never a neighbour\'s in the same project', async () => {
+    const n = id();
+    const projectId = `prj-carry-export-${n}`;
+    const missionId = `mission:carry-export-${n}`;
+    await project(projectId, [missionId]);
+    const mine = `run:carry-export-mine-${n}`;
+    const neighbour = `run:carry-export-neighbour-${n}`;
+    await sourceRun({ projectId, missionId, runId: mine, state: 'COMPLETED', createdAt: '2026-10-04T09:00:00.000Z' });
+    await sourceRun({ projectId, missionId, runId: neighbour, state: 'COMPLETED', createdAt: '2026-10-04T09:30:00.000Z' });
+    const sql = readFileSync(resolve(__dirname, '..', '..', '..', '.github', 'julius-carry-sources.sql'), 'utf8');
+    expect(sql.split(":'run'").length - 1, 'one psql variable: the run the manifest names').toBe(1);
+    const exported = (await pool.query<{ json_build_object: unknown }>(sql.replace(":'run'", '$1'), [mine])).rows[0]?.json_build_object;
+    const parsed = parseJuliusCarrySources(JSON.stringify(exported));
+    expect(parsed.ok ? 'parsed' : parsed.problem).toBe('parsed');
+    if (!parsed.ok) return;
+    // The control: the neighbour's history is real and of the same project, so a run-blind export would carry it.
+    const ledgerOf = async (runId: string) => (await pool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM relay_wonderland.events WHERE stream_id = $1 AND project_id = $2 AND event_type IN ('julius.finding.recorded', 'julius.finding.transitioned')",
+      [runId, projectId])).rows[0]!.n;
+    expect(await ledgerOf(neighbour), 'the neighbour has a finding history of its own').toBeGreaterThan(0);
+    expect(parsed.value.runId).toBe(mine);
+    expect(parsed.value.ledger, 'exactly this run\'s finding.* rows').toHaveLength(await ledgerOf(mine));
+    expect(parsed.value.findings.length).toBeGreaterThan(0);
+    expect(parsed.value.findings.every((row) => row.runId === mine), 'only this run\'s findings').toBe(true);
+    expect((exported as { tasks: { runId: string }[] }).tasks.every((row) => row.runId === mine), 'only this run\'s tasks, as the SQL wrote them').toBe(true);
+    expect(JSON.stringify(parsed.value), 'nothing names the neighbour').not.toContain(neighbour);
   });
 
   it('a replay writes nothing twice; a second heir gets its own copies; a copy is never a source; a pinned source is the only source', async () => {
