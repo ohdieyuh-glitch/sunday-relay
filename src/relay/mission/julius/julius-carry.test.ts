@@ -273,6 +273,52 @@ describe('what carries: adopted, in-force, run-wide decisions', () => {
     expect(item.claim.entryId).toBe(juliusCarryEntryId(TARGET, SOURCE, entryId));
     expect(item.scope.sourceTaskId).toBeNull();
   });
+
+  const adopted = { trust: 'APPROVED' as const, evidence: [{ kind: 'DECISION' as const, id: 'decision-7' }] };
+
+  it('an adopted architecture a later ADOPTED revision replaced is not in force: r2 carries, r1 stays out by name', () => {
+    // The stored standings say APPROVED for both: the supersession a packet applies is computed when it is compiled, never stored.
+    const r1 = juliusArchitectureEntryId(SOURCE, 1);
+    const r2 = juliusArchitectureEntryId(SOURCE, 2);
+    const selection = selectJuliusCarry({
+      targetRunId: TARGET, sources: [], claims: [candidate(r1, 'DECISION', null, adopted), candidate(r2, 'DECISION', null, adopted)],
+    });
+    expect(selection.selected.map((item) => item.scope.sourceRef)).toEqual([r2]);
+    expect(selection.excluded).toEqual([{ sourceRunId: SOURCE, sourceRef: r1, reasonCode: 'DECISION_SUPERSEDED', detail: r2 }]);
+    expect(selection.counts.ACCEPTED_DECISION).toBe(1);
+  });
+
+  it('a later revision that was never adopted leaves the earlier one in force', () => {
+    const r1 = juliusArchitectureEntryId(SOURCE, 1);
+    const r2 = juliusArchitectureEntryId(SOURCE, 2);
+    const selection = selectJuliusCarry({
+      targetRunId: TARGET, sources: [],
+      claims: [candidate(r1, 'DECISION', null, adopted), candidate(r2, 'DECISION', null, { trust: 'VERIFIED' })],
+    });
+    expect(selection.selected.map((item) => item.scope.sourceRef)).toEqual([r1]);
+    expect(selection.excluded.map((item) => [item.sourceRef, item.reasonCode])).toEqual([[r2, 'DECISION_NOT_ACCEPTED']]);
+  });
+
+  it('a decision another adopted decision supersedes by name stays out, naming its replacement', () => {
+    const replacement = candidate('d:new', 'DECISION', null, { ...adopted, supersedes: juliusClaimIdFor('d:old') });
+    const selection = selectJuliusCarry({
+      targetRunId: TARGET, sources: [], claims: [candidate('d:old', 'DECISION', null, adopted), replacement],
+    });
+    expect(selection.selected.map((item) => item.scope.sourceRef)).toEqual(['d:new']);
+    expect(selection.excluded).toEqual([{ sourceRunId: SOURCE, sourceRef: 'd:old', reasonCode: 'DECISION_SUPERSEDED', detail: 'd:new' }]);
+  });
+
+  it('two runs\' architectures are two subjects: each run\'s own highest adopted revision is in force', () => {
+    const other = 'run:other-earlier';
+    const mine = juliusArchitectureEntryId(SOURCE, 1);
+    const theirs = juliusArchitectureEntryId(other, 3);
+    const selection = selectJuliusCarry({
+      targetRunId: TARGET, sources: [],
+      claims: [candidate(mine, 'DECISION', null, adopted), { ...candidate(theirs, 'DECISION', null, adopted), sourceRunId: other }],
+    });
+    expect(selection.selected.map((item) => item.scope.sourceRef).sort()).toEqual([mine, theirs].sort());
+    expect(selection.excluded).toEqual([]);
+  });
 });
 
 describe('ordering, cap and replay', () => {
@@ -386,6 +432,7 @@ describe('the manifest as event facts', () => {
     // FINDING_RESOLUTION_UNKNOWN is a guard the fold cannot reach today (RESOLVED
     // is only ever reached by REVIEWER_RESOLVED naming a review); it stays so a
     // future fold change cannot quietly carry a resolution nobody declared.
-    expect(JULIUS_CARRY_EXCLUSION_CODES).toHaveLength(17);
+    // DECISION_SUPERSEDED (2026-10-06): an adopted decision a later adoption replaced is not in force.
+    expect(JULIUS_CARRY_EXCLUSION_CODES).toHaveLength(18);
   });
 });
