@@ -24,8 +24,60 @@ import {
  * has to be taken out of the room first. `openIssuancesOf` is what the reconciler
  * takes back from when the wall moves or the player re-binds.
  */
+/**
+ * ONE PLAYER'S VOICE LOCK, WHERE EVERY BRIDGE PROCESS SEES IT.
+ *
+ * The routes already run one player's voice steps one at a time inside a process. Two processes on one database (a
+ * deploy's overlap, a second replica) each had their own order, and the races that order closed came back between
+ * them: a join that had planned before another process's block issued the blocked pair's room after that block's
+ * reconcile had taken it back. So a store several processes share holds the player's lock in PostgreSQL for the step.
+ *
+ * - A session-level advisory lock in the TWO-KEY space (`WONDERLAND_VOICE_LOCK_SPACE`, `hashtext(player)`). The two-key
+ *   and one-key spaces never overlap, so it cannot meet the one-key locks the social store, `migrate()` and the Julius
+ *   writer take. Two players whose names share a hash merely take turns.
+ * - On its OWN small pool: the lock's connection holds the lock and nothing else, and the step's reads and writes go
+ *   through the store's pool as before. A step holding a connection from the pool its own queries need would let
+ *   enough concurrent players hold every connection and wait on each other for ever.
+ * - Bounded: a wait longer than `lockTimeoutMs` is an error (55P03), never a hang.
+ * - Released when the step settles, whatever its outcome. A session that cannot confirm the release is ended rather
+ *   than returned to the pool, and the server releases what that session held.
+ */
+export const WONDERLAND_VOICE_LOCK_SPACE = 0x574c5643; // 'WLVC'
+export const WONDERLAND_VOICE_LOCK_TIMEOUT_MS = 15_000;
+
+async function holdWonderlandVoiceLock<T>(locks: Pool, playerId: string, timeoutMs: number, step: () => Promise<T>): Promise<T> {
+  const client = await locks.connect();
+  let held = false;
+  let healthy = true;
+  try {
+    await client.query("SELECT set_config('lock_timeout', $1, false)", [`${String(Math.max(1, Math.floor(timeoutMs)))}ms`]);
+    await client.query('SELECT pg_advisory_lock($1, hashtext($2))', [WONDERLAND_VOICE_LOCK_SPACE, playerId]);
+    held = true;
+    return await step();
+  } catch (error) {
+    // A lock wait that ran out leaves a healthy session; anything else may not have.
+    if (!held && (error as { code?: string }).code !== '55P03') healthy = false;
+    throw error;
+  } finally {
+    if (held) {
+      const released = await client.query<{ released: boolean }>(
+        'SELECT pg_advisory_unlock($1, hashtext($2)) AS released', [WONDERLAND_VOICE_LOCK_SPACE, playerId],
+      ).then((result) => result.rows[0]?.released === true, () => false);
+      if (!released) healthy = false;
+    }
+    client.release(healthy ? undefined : true);
+  }
+}
+
 export class WonderlandVoicePostgresStore implements WonderlandVoiceIdentityStore {
-  constructor(private readonly pool: Pool) {}
+  /** Present only when the store was given a lock pool: see `holdWonderlandVoiceLock`. */
+  readonly withPlayerVoiceLock?: <T>(playerId: string, step: () => Promise<T>) => Promise<T>;
+
+  constructor(private readonly pool: Pool, options: { readonly locks?: Pool; readonly lockTimeoutMs?: number } = {}) {
+    const locks = options.locks;
+    const timeoutMs = options.lockTimeoutMs ?? WONDERLAND_VOICE_LOCK_TIMEOUT_MS;
+    if (locks !== undefined) this.withPlayerVoiceLock = (playerId, step) => holdWonderlandVoiceLock(locks, playerId, timeoutMs, step);
+  }
 
   async bind(input: { readonly playerId: string; readonly productUserId: string; readonly at: string }): Promise<WonderlandVoiceBindingDecision> {
     if (!WONDERLAND_EOS_PUID.test(input.productUserId)) throw new Error('wonderland_voice_puid_invalid');

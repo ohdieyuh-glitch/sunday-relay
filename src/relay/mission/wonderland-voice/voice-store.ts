@@ -24,6 +24,12 @@ export interface WonderlandVoiceIdentityStore {
   openIssuancesOf(playerId: string): Promise<readonly WonderlandVoiceIssuance[]>;
   /** The trusted server removed the player from the room: the token no longer admits them. */
   recordRevocation(input: { readonly playerId: string; readonly roomId: string; readonly at: string }): Promise<void>;
+  /**
+   * Run `step` while holding this player's voice lock where EVERY process using this store can see it. Present on a
+   * store several processes share (PostgreSQL); absent on one only its own process can use, whose callers' in-process
+   * ordering is then the whole of the lock. A step never takes two players' locks, so no two steps wait on each other.
+   */
+  withPlayerVoiceLock?<T>(playerId: string, step: () => Promise<T>): Promise<T>;
 }
 
 /** An open token: the room, and the EOS identity it admits. */
