@@ -2673,8 +2673,10 @@ bool UWonderlandUiSubsystem::PressSwitchSkin()
 	{
 		return false;
 	}
-	// THE BUTTON'S OWN LINE, AND NOTHING ELSE. WonderlandProjectBrainPanel.cpp:
-	//     .OnClicked_Lambda([this]() { SetSkinsOpen(!bSkinsOpen); return FReply::Handled(); })
+	// THE BUTTON'S OWN DOOR, AND NOTHING ELSE. Since 2026-10-06 (founder: Mascot Skin left 02) the wardrobe's player door is OPEN WARDROBE on
+	// 05 C.A.R.D.'s MASCOT & VISUAL MODS page, WonderlandProjectBrainPanel.cpp:
+	//     .OnClicked_Lambda([this]() { SetSkinsOpen(true); return FReply::Handled(); })
+	// -- the same SetSkinsOpen; this keeps the old tile's toggle so a proof can also close it the way it opened it.
 	BrainPanel->SetSkinsOpen(!BrainPanel->IsSkinsOpen());
 	return true;
 }

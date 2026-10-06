@@ -628,7 +628,8 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 		]
 		+ SHorizontalBox::Slot().FillWidth(1.0f)
 		[
-			MakeMemoryCard(EWonderlandBrainGlyph::Gear, TEXT("Procedural Memory"), {TEXT("instructions"), TEXT("prompt_systems"), TEXT("workflows"), TEXT("skills")})
+			// workflows moved to 04 SKILLS & MODS (SECOND JUJU's contract r1); "skills" here is Learned Skills, what agents demonstrated
+			MakeMemoryCard(EWonderlandBrainGlyph::Gear, TEXT("Procedural Memory"), {TEXT("instructions"), TEXT("prompt_systems"), TEXT("skills")})
 		];
 
 	// 02 PROJECT BRAIN SYSTEMS
@@ -644,9 +645,10 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 		+ SVerticalBox::Slot().FillHeight(1.0f)
 		[
 			SNew(SHorizontalBox)
+			// THE MASCOT SKIN TILE LEFT 02 (founder, 2026-10-06): how the Dog looks is 05 C.A.R.D.'s MASCOT & VISUAL MODS now. The row keeps
+			// its two tiles inside the same anchors.
 			+ SHorizontalBox::Slot().FillWidth(1.2f).Padding(0.0f, 0.0f, 8.0f, 0.0f)[MakeTile(EWonderlandBrainGlyph::Arrows, TEXT("context_handoffs"), 0.0f)]
-			+ SHorizontalBox::Slot().FillWidth(1.2f).Padding(0.0f, 0.0f, 8.0f, 0.0f)[MakeTile(EWonderlandBrainGlyph::Pulse, TEXT("agent_state"), 0.0f)]
-			+ SHorizontalBox::Slot().FillWidth(1.0f)[MakeSkinTile()]
+			+ SHorizontalBox::Slot().FillWidth(1.2f)[MakeTile(EWonderlandBrainGlyph::Pulse, TEXT("agent_state"), 0.0f)]
 		];
 
 	// 03 LARGE LANGUAGE MODEL COMPONENTS
@@ -657,24 +659,25 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 		+ SHorizontalBox::Slot().FillWidth(1.1f).Padding(0.0f, 0.0f, 7.0f, 0.0f)[MakeTile(EWonderlandBrainGlyph::Magnifier, TEXT("independent_reviewer"), 0.0f)]
 		+ SHorizontalBox::Slot().FillWidth(1.0f)[MakeTile(EWonderlandBrainGlyph::People, TEXT("shared_context"), 0.0f)];
 
-	// 04 MISSION CONTEXT -- the brain scope's vocabulary, two rows of chips.
-	TSharedRef<SWidget> MissionBody =
+	// 04 SKILLS & MODS (founder, 2026-10-06: it replaces 04 MISSION CONTEXT; SECOND JUJU's contract r1) -- what EXTENDS the agent 03
+	// configures. The same two rows of four chips, so the layout is unchanged.
+	TSharedRef<SWidget> SkillsBody =
 		SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)[MakeChip(EWonderlandBrainGlyph::Target, TEXT("objective"))]
-			+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)[MakeChip(EWonderlandBrainGlyph::Document, TEXT("requirements"))]
-			+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)[MakeChip(EWonderlandBrainGlyph::Shield, TEXT("constraints"))]
-			+ SHorizontalBox::Slot().FillWidth(1.0f)[MakeChip(EWonderlandBrainGlyph::Check, TEXT("decisions"))]
+			+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)[MakeChip(EWonderlandBrainGlyph::Document, TEXT("skill_md"))]
+			+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)[MakeChip(EWonderlandBrainGlyph::Sparkle, TEXT("skill_library"))]
+			+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)[MakeChip(EWonderlandBrainGlyph::Arrows, TEXT("workflows"))]
+			+ SHorizontalBox::Slot().FillWidth(1.0f)[MakeChip(EWonderlandBrainGlyph::Layers, TEXT("packs"))]
 		]
 		+ SVerticalBox::Slot().AutoHeight()
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)[MakeChip(EWonderlandBrainGlyph::Magnifier, TEXT("evidence"))]
-			+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)[MakeChip(EWonderlandBrainGlyph::Check, TEXT("evaluations"))]
-			+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)[MakeChip(EWonderlandBrainGlyph::Link, TEXT("trace"))]
-			+ SHorizontalBox::Slot().FillWidth(1.0f)[MakeChip(EWonderlandBrainGlyph::Shield, TEXT("governance"))]
+			+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)[MakeChip(EWonderlandBrainGlyph::Code, TEXT("julius_mods"))]
+			+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)[MakeChip(EWonderlandBrainGlyph::Gear, TEXT("deterministic_modules"))]
+			+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)[MakeChip(EWonderlandBrainGlyph::Nodes, TEXT("fuzzy_modules"))]
+			+ SHorizontalBox::Slot().FillWidth(1.0f)[MakeChip(EWonderlandBrainGlyph::Shield, TEXT("extension_permissions"))]
 		];
 
 	SAssignNew(InspectorBody, SVerticalBox);
@@ -817,7 +820,7 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 		]
 		+ SConstraintCanvas::Slot().Anchors(Slot(Panel4)).Offset(FMargin(0.0f))
 		[
-			MakeGlassPanel(TEXT("04"), EWonderlandBrainGlyph::Target, TEXT("MISSION CONTEXT"), TEXT("WHAT THIS MISSION IS HOLDING"), MissionBody)
+			MakeGlassPanel(TEXT("04"), EWonderlandBrainGlyph::Nodes, TEXT("SKILLS & MODS"), TEXT("MORE ABILITIES, SAME AGENT"), SkillsBody)
 		]
 		+ SConstraintCanvas::Slot().Anchors(Slot(Panel5)).Offset(FMargin(0.0f))
 		[
@@ -1159,10 +1162,14 @@ void SWonderlandProjectBrainPanel::RebuildInspector()
 		SNew(SBox).HeightOverride(1.0f)[SNew(SBorder).BorderImage(&RuleBrush).Padding(0.0f)]
 	];
 
-	// The entries: sample lines in the preview, each with the one action its access allows.
+	// The entries: sample lines in the preview, each with the one action its access allows. A surface this build has NO source for (04's
+	// skills & mods in Beta; SECOND JUJU's contract r1 §2) says so plainly, and offers nothing that looks like install, enable or buy.
+	const bool bNothingInThisBuild = Found->bNotInThisBuild && Found->SampleLines.Num() == 0 && Found->Proposals.Num() == 0;
 	InspectorBody->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
 	[
-		SNew(STextBlock).Text(FText::FromString(Model.bDevelopmentPreview ? TEXT("SAMPLE ENTRIES") : TEXT("ENTRIES"))).Font(Font("Bold", 8, 240)).ColorAndOpacity(Violet())
+		SNew(STextBlock).Text(FText::FromString(bNothingInThisBuild ? TEXT("Nothing here in this build.")
+			: Model.bDevelopmentPreview ? TEXT("SAMPLE ENTRIES") : TEXT("ENTRIES")))
+		.Font(bNothingInThisBuild ? Font("Regular", 12) : Font("Bold", 8, 240)).ColorAndOpacity(bNothingInThisBuild ? BrainInk() : Violet())
 	];
 	for (int32 Index = 0; Index < Found->SampleLines.Num(); ++Index)
 	{
@@ -1627,75 +1634,6 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinCard(const FWonderland
 		];
 }
 
-TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinTile()
-{
-	using namespace WonderlandBrainLook;
-	// THE WAY INTO THE WARDROBE, in the shape of the tiles it stands beside, so it reads as part of 02 PROJECT BRAIN
-	// SYSTEMS rather than as a button dropped into it. It shows what the Dog is wearing without being opened,
-	// because a control that only says its own name makes a person open it to learn anything.
-	const auto Worn = [this]() -> const FWonderlandRelaySkin*
-	{
-		const FName Id = EquippedSkin.IsSet() ? EquippedSkin.Get() : NAME_None;
-		return Skins.FindByPredicate([Id](const FWonderlandRelaySkin& Skin) { return Skin.SkinId == Id; });
-	};
-	return SNew(SButton)
-		.ButtonStyle(&SelectableStyle)
-		.OnClicked_Lambda([this]() { SetSkinsOpen(!bSkinsOpen); return FReply::Handled(); })
-		[
-			SNew(SBorder)
-			.BorderImage(&CardBrush)
-			.Padding(FMargin(12.0f, 10.0f))
-			[
-				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()
-				[
-					SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
-					[
-						SNew(SWonderlandBrainIcon).Glyph(EWonderlandBrainGlyph::Sparkle).Size(13.0f).Color(Violet())
-					]
-					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
-					[
-						SNew(STextBlock).Text(INVTEXT("MASCOT SKIN")).Font(Font("Bold", 10, 180)).ColorAndOpacity(BrainInk())
-					]
-				]
-				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
-				[
-					SNew(SHorizontalBox)
-					// The worn skin's own colour, so the tile changes when the Dog does.
-					+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
-					[
-						SNew(SBox).WidthOverride(3.0f)
-						[
-							SNew(SImage).Image(&StatusBrush)
-							.ColorAndOpacity_Lambda([Worn]()
-							{
-								const FWonderlandRelaySkin* Skin = Worn();
-								return FSlateColor(Skin != nullptr ? Skin->Accent : FLinearColor::White);
-							})
-						]
-					]
-					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
-					[
-						SNew(STextBlock)
-						.Text_Lambda([Worn]()
-						{
-							const FWonderlandRelaySkin* Skin = Worn();
-							return FText::FromString(Skin != nullptr ? Skin->DisplayName : TEXT("RELAY OG"));
-						})
-						.Font(Font("Regular", 10, 120)).ColorAndOpacity(Mist())
-					]
-				]
-				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
-				[
-					SNew(STextBlock)
-					.Text_Lambda([this]() { return FText::FromString(bSkinsOpen ? TEXT("CLOSE") : TEXT("SWITCH SKIN")); })
-					.Font(Font("Bold", 8, 220)).ColorAndOpacity(Violet())
-				]
-			]
-		];
-}
-
 TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinsView()
 {
 	using namespace WonderlandBrainLook;
@@ -1992,7 +1930,9 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeCardStrip()
 		]
 		+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 6.0f, 0.0f)
 		[
-			MakeCardTile(TEXT("mascot"), EWonderlandBrainGlyph::Person, TEXT("mascot"),
+			// MASCOT & VISUAL MODS' way in (founder, 2026-10-06; SECOND JUJU's contract r1 §4): the tab id stays "mascot", the value line
+			// stays the worn look
+			MakeCardTile(TEXT("mascot"), EWonderlandBrainGlyph::Person, TEXT("mascot & visual mods"),
 				[this]() { return FString::Printf(TEXT("%s · %s%s"), *CardView.Skin.ToUpper(), *CardView.Primary, CardView.bModified ? TEXT(" · MODIFIED") : TEXT("")); },
 				[this]() { return CardView.bModified ? CardStatusColour(EWonderlandCardStatus::Unconfigured) : Mist(0.55f); })
 		]
@@ -2182,7 +2122,7 @@ void SWonderlandProjectBrainPanel::RebuildCardPage()
 			];
 	};
 
-	const TCHAR* Title = TabId == TEXT("handoff") ? TEXT("MISSION HANDOFF") : TabId == TEXT("mascot") ? TEXT("MASCOT · CLOTHES")
+	const TCHAR* Title = TabId == TEXT("handoff") ? TEXT("MISSION HANDOFF") : TabId == TEXT("mascot") ? TEXT("MASCOT & VISUAL MODS")
 		: TabId == TEXT("companions") ? TEXT("COMPANIONS · IMPORTED AI") : TabId == TEXT("capabilities") ? TEXT("SKILLS · MCP · APIs") : TEXT("SAVED C.A.R.D.s");
 	Add(SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
@@ -2228,12 +2168,17 @@ void SWonderlandProjectBrainPanel::RebuildCardPage()
 	}
 	else if (TabId == TEXT("mascot"))
 	{
-		Add(Line(FString::Printf(TEXT("SKIN  %s"), *V.Skin.ToUpper()), Font("Bold", 13, 80), BrainInk()), 16.0f);
+		// MASCOT & VISUAL MODS (founder, 2026-10-06; SECOND JUJU's contract r1 §4): how the loadout LOOKS. In Beta it holds three things --
+		// this card's mascot, the mascot skins (the wardrobe, which 02 used to open), and Shadow Flame's colourways (inside the wardrobe, as
+		// before). The other visual-mod kinds have no source in this build and are not shown.
+		Add(Line(TEXT("MASCOT"), Font("Bold", 8, 240), Violet()), 16.0f);
+		Add(Line(FString::Printf(TEXT("SKIN  %s"), *V.Skin.ToUpper()), Font("Bold", 13, 80), BrainInk()), 8.0f);
 		Add(Line(FString::Printf(TEXT("PRIMARY  %s"), *V.Primary), Font("Bold", 13, 80), BrainInk()), 6.0f);
 		// COLOR 2 AND COLOR 3 AND THE FLAME, as this card holds them (founder, 2026-10-04: the three colours through the C.A.R.D.)
 		Add(Line(FString::Printf(TEXT("COLOR 2 · ACCENTS / MARBLING  %s"), *V.Colour2), Font("Bold", 10, 80), BrainInk(0.9f)), 6.0f);
 		Add(Line(FString::Printf(TEXT("COLOR 3 · STRIPS  %s"), *V.Colour3), Font("Bold", 10, 80), BrainInk(0.9f)), 4.0f);
 		Add(Line(FString::Printf(TEXT("FLAME  %s"), *V.Flame), Font("Bold", 10, 80), BrainInk(0.9f)), 4.0f);
+		Add(Line(TEXT("MASCOT SKINS"), Font("Bold", 8, 240), Violet()), 16.0f);
 		Add(SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth()
 			[
@@ -2242,9 +2187,11 @@ void SWonderlandProjectBrainPanel::RebuildCardPage()
 				[
 					SNew(STextBlock).Text(FText::FromString(TEXT("OPEN WARDROBE"))).Font(Font("Bold", 9, 160)).ColorAndOpacity(BrainInk())
 				]
-			], 14.0f);
+			], 8.0f);
+		Add(Line(TEXT("SHADOW FLAME"), Font("Bold", 8, 240), Violet()), 16.0f);
+		Add(Line(TEXT("Shadow Flame's colourways are in the wardrobe: choose Shadow Flame there, then its colours."), Font("Regular", 9), Mist()), 6.0f);
 		Add(Line(TEXT("Pick a skin or a colour in the wardrobe, then SAVE TO C.A.R.D. to keep that look in this loadout. Selecting a C.A.R.D. "
-			"puts its look on through the wardrobe's own door."), Font("Regular", 9), Mist()), 10.0f);
+			"puts its look on through the wardrobe's own door."), Font("Regular", 9), Mist()), 14.0f);
 	}
 	else if (TabId == TEXT("companions"))
 	{

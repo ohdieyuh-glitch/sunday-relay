@@ -153,7 +153,7 @@ INSTALL AND RUN
 CONTROLS
 W A S D move, mouse look, Shift run, Ctrl walk, Space jump.
 M          the world map: choose a place, then Teleport.
-B          the Project Brain, and the wardrobe (Switch Skin).
+B          the Project Brain; its C.A.R.D. section's mascot & visual mods opens the wardrobe.
 J          Missions.        Ctrl+T   the agent terminals.        C   command presets.
 /social    typed in the agent terminal: the Social Hub (friends, requests, recent players, messages, party, voice).
 Esc / Tab  the menu: settings, colours, how to play, quit.

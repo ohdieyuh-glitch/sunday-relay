@@ -17,6 +17,9 @@
 //   BL9  the terminal never echoes a pairing code; other /brain lines are echoed as typed (control)
 //   BL10 /brain proposals numbers the pending proposal; adopt/withdraw name its pbr: record AND the version seen; a number past the
 //        end and a word are refused (and BL7: an adopt while cut off is refused)
+//   BL11 every surface sits in a section (01 11, 02 5, 03 4, 04 8); control: a stray-group surface fails the same judge, reads UNPLACED
+//   BL12 a view's retired or unknown surface ids render nowhere and are logged once; control: workflows in the same view fills 04
+//        (BL11/BL12 are SECOND JUJU's PB_UI_CONTRACT_04_05.r1 "BL10"/"BL11", renumbered because BL10 was taken)
 // The model and the write delegates are restored at the end. Logs WLBRAINQA lines. `quit` exits after.
 //
 // PLAIN C++: no UCLASS, no UFUNCTION, no log category (LogTemp) -- a new early FName can shift Niagara's type hash (RC1).
@@ -208,19 +211,22 @@ namespace WonderlandBrainQa
 			Brain->AdoptLive(View);
 			const FWonderlandBrainModel& M = Brain->GetModel();
 			const FWonderlandBrainSurface* Facts = Surface(*Brain, TEXT("user_facts"));
-			const FWonderlandBrainSurface* Decisions = Surface(*Brain, TEXT("decisions"));
+			// RE-POINTED (SECOND JUJU's contract r1 §5, pre-registered before the build): the mission-context surfaces left the panel, so each
+			// case uses a surviving surface of the SAME access -- YOURS writes -> instructions, the SYSTEM refusal -> prompt_systems, the SYSTEM
+			// surface the view does not name -> session_history. The predictions are unchanged.
+			const FWonderlandBrainSurface* History = Surface(*Brain, TEXT("session_history"));
 			const bool bAdopted = Brain->IsLive() && !M.bDevelopmentPreview && M.BrainRevision == 41 && M.ProjectName == Project && M.SourceLine == TEXT("QA FIXTURE VIEW")
 				&& Facts != nullptr && Facts->SampleLines.Num() == 1 && Facts->SampleLines[0] == TEXT("QA fact one") && Facts->EntryCount == 7
-				&& Facts->Proposals.Num() == 1 && Decisions != nullptr && Decisions->SampleLines.Num() == 0 && Decisions->EntryCount == 0;
-			const bool bClean = Brain->Propose(FName(TEXT("requirements")), TEXT("QA: the export must keep every field"));
+				&& Facts->Proposals.Num() == 1 && History != nullptr && History->SampleLines.Num() == 0 && History->EntryCount == 0;
+			const bool bClean = Brain->Propose(FName(TEXT("instructions")), TEXT("QA: the export must keep every field"));
 			const int32 AfterClean = ProposeCalls;
-			const bool bKey = Brain->Propose(FName(TEXT("requirements")), KeyLine);
-			const bool bZwsp = Brain->Propose(FName(TEXT("constraints")), ZwspLine);
-			const bool bSystem = Brain->Propose(FName(TEXT("decisions")), TEXT("QA: a SYSTEM surface is never the player's to write"));
+			const bool bKey = Brain->Propose(FName(TEXT("instructions")), KeyLine);
+			const bool bZwsp = Brain->Propose(FName(TEXT("instructions")), ZwspLine);
+			const bool bSystem = Brain->Propose(FName(TEXT("prompt_systems")), TEXT("QA: a SYSTEM surface is never the player's to write"));
 			Report(T, TEXT("BL6"), bAdopted && bClean && AfterClean == 1 && !bKey && !bZwsp && !bSystem && ProposeCalls == 1 && !LastProposeText.Contains(Key.Mid(8, 16)),
-				FString::Printf(TEXT("live: adopted %s (revision %d, user_facts %d line(s) of %d, decisions %d line(s): empty, never a sample); clean sent %s; key sent %s; "
+				FString::Printf(TEXT("live: adopted %s (revision %d, user_facts %d line(s) of %d, session_history %d line(s): empty, never a sample); clean sent %s; key sent %s; "
 					"key+ZWSP sent %s; a SYSTEM surface %s; sends %d (want 1)"), bAdopted ? TEXT("yes") : TEXT("NO"), M.BrainRevision,
-					Facts != nullptr ? Facts->SampleLines.Num() : -1, Facts != nullptr ? Facts->EntryCount : -1, Decisions != nullptr ? Decisions->SampleLines.Num() : -1,
+					Facts != nullptr ? Facts->SampleLines.Num() : -1, Facts != nullptr ? Facts->EntryCount : -1, History != nullptr ? History->SampleLines.Num() : -1,
 					bClean ? TEXT("yes") : TEXT("NO"), bKey ? TEXT("YES") : TEXT("no"), bZwsp ? TEXT("YES") : TEXT("no"), bSystem ? TEXT("ACCEPTED") : TEXT("refused"), ProposeCalls));
 		}
 
@@ -262,7 +268,7 @@ namespace WonderlandBrainQa
 			const bool bLost = !Brain->IsLive() && Brain->GetModel().bLinkLost && LostLine.StartsWith(TEXT("NOT CONNECTED"));
 			const int32 SendsBefore = ProposeCalls;
 			const int32 ReviewsBefore = ReviewCalls;
-			const bool bProposed = Brain->Propose(FName(TEXT("requirements")), TEXT("QA: written while cut off"));
+			const bool bProposed = Brain->Propose(FName(TEXT("instructions")), TEXT("QA: written while cut off"));
 			const bool bReviewed = Brain->Review(FName(TEXT("learned_facts")), 0, false);
 			const int32 StatusBefore = StatusCalls;
 			FString AdoptCutOff;
@@ -288,6 +294,83 @@ namespace WonderlandBrainQa
 				FString::Printf(TEXT("echo: '%s' (the code shown %s); '/brain status' echoed as '%s'"), *Masked, Masked.Contains(Code) ? TEXT("YES") : TEXT("no"), *Status));
 		}
 
+		// BL11 (the contract's "BL10"; BL10 here already decides a proposal): every surface of the table sits in one of the sections --
+		// 01 memory_core 11, 02 brain_systems 5, 03 llm_components 4, 04 skills_mods 8 (05 C.A.R.D.'s five tiles are the card QA's tab list).
+		// THE CONTROL: the same judge on the same table plus one surface of a group no section holds (what MISSION CONTEXT used to swallow by
+		// default) must FAIL, and that group must read UNPLACED, never a real section.
+		{
+			auto Judge = [](const TArray<FWonderlandBrainSurface>& Surfaces, TMap<FString, int32>& OutCounts, FString& OutUnplaced)
+			{
+				OutCounts.Reset();
+				OutUnplaced.Reset();
+				for (const FWonderlandBrainSurface& Each : Surfaces)
+				{
+					const FString Key = WonderlandBrainText::SectionKey(Each.Group);
+					if (Key.IsEmpty())
+					{
+						OutUnplaced += FString::Printf(TEXT(" %s"), *Each.Id.ToString());
+					}
+					else
+					{
+						OutCounts.FindOrAdd(Key) += 1;
+					}
+				}
+				return OutUnplaced.IsEmpty() && OutCounts.Num() == 4 && OutCounts.FindRef(TEXT("memory_core")) == 11 && OutCounts.FindRef(TEXT("brain_systems")) == 5
+					&& OutCounts.FindRef(TEXT("llm_components")) == 4 && OutCounts.FindRef(TEXT("skills_mods")) == 8;
+			};
+			TMap<FString, int32> Counts;
+			FString Unplaced;
+			const bool bPlaced = Judge(Brain->GetModel().Surfaces, Counts, Unplaced);
+			TArray<FWonderlandBrainSurface> WithStray = Brain->GetModel().Surfaces;
+			FWonderlandBrainSurface Stray;
+			Stray.Id = FName(TEXT("qa_stray_surface"));
+			Stray.Group = static_cast<EWonderlandBrainGroup>(200);
+			WithStray.Add(Stray);
+			TMap<FString, int32> StrayCounts;
+			FString StrayUnplaced;
+			const bool bStrayPassed = Judge(WithStray, StrayCounts, StrayUnplaced);
+			const FString StrayWord = WonderlandBrainText::GroupWord(Stray.Group);
+			Report(T, TEXT("BL11"), bPlaced && !bStrayPassed && StrayUnplaced.Contains(TEXT("qa_stray_surface")) && StrayWord == TEXT("UNPLACED"),
+				FString::Printf(TEXT("sections: memory_core %d, brain_systems %d, llm_components %d, skills_mods %d (want 11/5/4/8), unplaced '%s'; "
+					"control: a stray-group surface %s the judge (unplaced '%s'), shown as '%s'"), Counts.FindRef(TEXT("memory_core")), Counts.FindRef(TEXT("brain_systems")),
+					Counts.FindRef(TEXT("llm_components")), Counts.FindRef(TEXT("skills_mods")), *Unplaced, bStrayPassed ? TEXT("PASSES") : TEXT("fails"), *StrayUnplaced, *StrayWord));
+		}
+
+		// BL12 (the contract's "BL11"): a v1 view naming a retired id (objective) and an unknown one (zz_future_mod) renders neither anywhere
+		// and logs each once -- a second identical view logs nothing more. THE CONTROL: workflows in the same view DOES fill 04.
+		{
+			const FString RefStem = TEXT("pbr:00000000-0000-4000-8000-0000000000");
+			const FString Body = FString::Printf(TEXT("{\"data\":{\"schemaVersion\":\"relay-wonderland-project-brain.v1\",\"projectId\":\"%s\",\"cursor\":\"pbc1.QUFC\","
+				"\"brainRevision\":42,\"sourceLine\":\"QA FIXTURE VIEW 2\",\"missionTitle\":\"QA mission\",\"surfaces\":["
+				"{\"id\":\"objective\",\"entryCount\":1,\"entries\":[{\"ref\":\"%s11\",\"line\":\"QA retired objective line\",\"status\":\"ACTIVE\",\"version\":1}],\"proposals\":[]},"
+				"{\"id\":\"zz_future_mod\",\"entryCount\":1,\"entries\":[{\"ref\":\"%s12\",\"line\":\"QA future mod line\",\"status\":\"ACTIVE\",\"version\":1}],\"proposals\":[]},"
+				"{\"id\":\"workflows\",\"entryCount\":1,\"entries\":[{\"ref\":\"%s13\",\"line\":\"QA workflow line\",\"status\":\"ACTIVE\",\"version\":1}],\"proposals\":[]}"
+				"]}}"), *Project, *RefStem, *RefStem, *RefStem);
+			FWonderlandBrainLiveView View;
+			const bool bParsed = WonderlandProjectBrainLinkLogic::ParseView(Body, View);
+			Brain->AdoptLive(View);
+			const int32 LinesAfterFirst = Brain->UnplacedLogLines();
+			Brain->AdoptLive(View);
+			const int32 LinesAfterSecond = Brain->UnplacedLogLines();
+			bool bShown = false;
+			for (const FWonderlandBrainSurface& Each : Brain->GetModel().Surfaces)
+			{
+				for (const FString& Shown : Each.SampleLines)
+				{
+					bShown = bShown || Shown.Contains(TEXT("QA retired objective line")) || Shown.Contains(TEXT("QA future mod line"));
+				}
+			}
+			const FWonderlandBrainSurface* Workflows = Surface(*Brain, TEXT("workflows"));
+			const bool bControl = Workflows != nullptr && Workflows->Group == EWonderlandBrainGroup::SkillsMods && Workflows->SampleLines.Num() == 1
+				&& Workflows->SampleLines[0] == TEXT("QA workflow line");
+			const bool bLogged = Brain->WasUnplacedLogged(FName(TEXT("objective"))) && Brain->WasUnplacedLogged(FName(TEXT("zz_future_mod")));
+			Report(T, TEXT("BL12"), bParsed && Surface(*Brain, TEXT("objective")) == nullptr && Surface(*Brain, TEXT("zz_future_mod")) == nullptr && !bShown && bLogged
+				&& LinesAfterSecond == LinesAfterFirst && bControl,
+				FString::Printf(TEXT("ids not in this panel: parsed %s; their lines shown %s; logged %s, again on a second view %d (want 0); control: workflows fills 04 %s"),
+					bParsed ? TEXT("yes") : TEXT("NO"), bShown ? TEXT("YES") : TEXT("no"), bLogged ? TEXT("yes") : TEXT("NO"), LinesAfterSecond - LinesAfterFirst,
+					bControl ? TEXT("yes") : TEXT("NO")));
+		}
+
 		Brain->LivePropose = SavedPropose;
 		Brain->LiveReview = SavedReview;
 		Brain->LiveSetStatus = SavedSetStatus;
@@ -303,7 +386,7 @@ namespace WonderlandBrainQa
 	FAutoConsoleCommandWithWorldAndArgs GBrainLinkQa(
 		TEXT("wl.Qa.BrainLink"),
 		TEXT("Project Brain link: its rules checked with no bridge -- views, refusals, the secret screen, cut-off, reviews by reference, "
-			"the terminal echo, deciding a proposal (BL1-BL10). `quit` exits after. WLBRAINQA lines."),
+			"the terminal echo, deciding a proposal, the five sections and ids not in this panel (BL1-BL12). `quit` exits after. WLBRAINQA lines."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			Run(World, Args.Contains(TEXT("quit")));

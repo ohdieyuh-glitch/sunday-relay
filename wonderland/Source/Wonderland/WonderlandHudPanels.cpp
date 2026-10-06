@@ -1216,7 +1216,7 @@ void SWonderlandWelcomePanel::Construct(const FArguments& InArgs)
 	static const FLine Around[] = {
 		{TEXT("W A S D  ·  MOUSE"), TEXT("Move and look. SHIFT runs, CTRL walks, SPACE jumps.")},
 		{TEXT("M"), TEXT("The world map. Pick a place, then TELEPORT to go there.")},
-		{TEXT("B"), TEXT("The Project Brain. SWITCH SKIN opens the wardrobe for your Relay Dog.")},
+		{TEXT("B"), TEXT("The Project Brain. C.A.R.D.'s mascot & visual mods opens the wardrobe.")},
 		{TEXT("J  ·  CTRL T"), TEXT("Missions, and the agent terminals where you write tasks.")},
 		{TEXT("ESC  ·  TAB"), TEXT("The menu: settings, colours, how to play, and quit.")},
 	};

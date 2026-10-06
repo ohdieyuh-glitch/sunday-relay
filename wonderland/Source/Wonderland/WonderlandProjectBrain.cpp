@@ -42,7 +42,33 @@ const TCHAR* WonderlandBrainText::GroupWord(EWonderlandBrainGroup Group)
 	case EWonderlandBrainGroup::ProceduralMemory: return TEXT("MEMORY CORE · PROCEDURAL MEMORY");
 	case EWonderlandBrainGroup::Systems: return TEXT("PROJECT BRAIN SYSTEMS");
 	case EWonderlandBrainGroup::Components: return TEXT("LARGE LANGUAGE MODEL COMPONENTS");
-	default: return TEXT("MISSION CONTEXT");
+	case EWonderlandBrainGroup::SkillsMods: return TEXT("SKILLS & MODS");
+	default:
+	{
+		// NEVER A REAL SECTION BY DEFAULT (SECOND JUJU's contract r1 §1): MISSION CONTEXT used to be this default, so anything unplaced
+		// read as a section. Unreachable for the table (wl.Qa.BrainLink BL11 proves every surface is placed); said once if it ever is not.
+		static bool bSaid = false;
+		if (!bSaid)
+		{
+			bSaid = true;
+			UE_LOG(LogWonderlandProjectBrain, Warning, TEXT("WLBRAIN a surface group (%d) is in no Project Brain section: shown as UNPLACED"), static_cast<int32>(Group));
+		}
+		return TEXT("UNPLACED");
+	}
+	}
+}
+
+const TCHAR* WonderlandBrainText::SectionKey(EWonderlandBrainGroup Group)
+{
+	switch (Group)
+	{
+	case EWonderlandBrainGroup::SemanticMemory:
+	case EWonderlandBrainGroup::EpisodicMemory:
+	case EWonderlandBrainGroup::ProceduralMemory: return TEXT("memory_core");
+	case EWonderlandBrainGroup::Systems: return TEXT("brain_systems");
+	case EWonderlandBrainGroup::Components: return TEXT("llm_components");
+	case EWonderlandBrainGroup::SkillsMods: return TEXT("skills_mods");
+	default: return TEXT("");
 	}
 }
 
@@ -216,6 +242,18 @@ void UWonderlandProjectBrainSubsystem::AdoptLive(const FWonderlandBrainLiveView&
 			Surface.Proposals.Add(Proposal.Line);
 			Surface.ProposalRefs.Add(Proposal.Ref);
 			Surface.ProposalVersions.Add(Proposal.Version);
+		}
+	}
+	// PLACEMENT IS THIS PANEL'S TABLE ALONE (SECOND JUJU's contract r1 §5): a surface the view names that the table does not define -- the
+	// eight retired mission-context ids, or anything a later backend adds -- is ignored, never rendered and never defaulted into a
+	// section, and said ONCE per id per session.
+	for (const FWonderlandBrainLiveSurface& Live : View.Surfaces)
+	{
+		if (FindSurface(Live.Id) == nullptr && !UnplacedLogged.Contains(Live.Id))
+		{
+			UnplacedLogged.Add(Live.Id);
+			++UnplacedLogCount;
+			UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN view surface '%s' not in this build's panel: ignored"), *Live.Id.ToString());
 		}
 	}
 	UE_LOG(LogWonderlandProjectBrain, Log, TEXT("WLBRAIN live view adopted for %s at revision %d"), *View.ProjectId, View.BrainRevision);
@@ -495,9 +533,9 @@ void UWonderlandProjectBrainSubsystem::BuildDevelopmentPreview()
 		{TEXT("Complete each phase with visible Unreal proof."), TEXT("Julius remains the mission authority.")});
 	Add(TEXT("prompt_systems"), TEXT("Prompt Systems"), G::ProceduralMemory, A::System, TEXT("The governed prompt frames each role runs under."),
 		{TEXT("Prompt Architect planning frame."), TEXT("Independent Reviewer challenge frame.")});
-	Add(TEXT("workflows"), TEXT("Workflows"), G::ProceduralMemory, A::Yours, TEXT("The order work moves through."),
-		{TEXT("Plan, build, prove in PIE, report.")});
-	Add(TEXT("skills"), TEXT("Skills"), G::ProceduralMemory, A::System, TEXT("Capabilities agents have demonstrated."),
+	// LEARNED SKILLS STAY MEMORY (contract r1 §2): the backend's `skills` is what agents DEMONSTRATED (trace / SUBAGENT_SUCCEEDED), never an
+	// installable Skill -- 04's Skills is the new id skill_library, so no old payload can land a demonstration there.
+	Add(TEXT("skills"), TEXT("Learned Skills"), G::ProceduralMemory, A::System, TEXT("Capabilities agents have demonstrated on this project."),
 		{TEXT("Unreal PIE capture."), TEXT("Slate interface construction.")});
 
 	// 02 PROJECT BRAIN SYSTEMS
@@ -522,21 +560,22 @@ void UWonderlandProjectBrainSubsystem::BuildDevelopmentPreview()
 	Add(TEXT("shared_context"), TEXT("Shared Context"), G::Components, A::Yours, TEXT("What companions may see once they join a mission."),
 		{*SharedLlm, *SharedAgent});
 
-	// 04 MISSION CONTEXT -- the brain scope's own vocabulary.
-	Add(TEXT("objective"), TEXT("Objective"), G::Mission, A::System, TEXT("What the Mission Contract locked in."),
-		{TEXT("See the companions beside the Relay Dog in Wonderland.")});
-	Add(TEXT("requirements"), TEXT("Requirements"), G::Mission, A::Yours, TEXT("What the result must do. Additions are proposals to the contract."),
-		{TEXT("White LLM Companion bar beside the blue bar."), TEXT("Labels below the bars."), TEXT("Terminals in the Julius family.")});
-	Add(TEXT("constraints"), TEXT("Constraints"), G::Mission, A::Yours, TEXT("What the work must not do."),
-		{TEXT("Unreal is never the source of mission truth."), TEXT("Do not skip a failed visual gate.")});
-	Add(TEXT("decisions"), TEXT("Decisions"), G::Mission, A::System, TEXT("Accepted decisions. Immutable once accepted."),
-		{*AurumDecision});
-	Add(TEXT("evidence"), TEXT("Evidence"), G::Mission, A::System, TEXT("What was observed, as references."),
-		{TEXT("zc_companion_proof: 8 of 8 checks.")});
-	Add(TEXT("evaluations"), TEXT("Evaluations"), G::Mission, A::System, TEXT("Judgements made against the evidence."),
-		{TEXT("Phase 1 visual gate: passed in PIE.")});
-	Add(TEXT("trace"), TEXT("Trace"), G::Mission, A::System, TEXT("Where every entry came from, and when."),
-		{TEXT("Brain revision 12, development preview.")});
-	Add(TEXT("governance"), TEXT("Governance"), G::Mission, A::System, TEXT("Who may change what, and who approves it."),
-		{TEXT("Julius decides. Project Brain records. Wonderland shows.")});
+	// 04 SKILLS & MODS (founder, 2026-10-06; SECOND JUJU's contract r1 §2): what EXTENDS the agent 03 configures, never its configuration.
+	// Workflows move here from 01 (same id, the owner's records); the other seven have no source in this build, so they are empty in the
+	// preview too and say so -- nothing here is proposable or installable in Beta. The eight mission-context surfaces are gone from the
+	// panel: mission context travels with the Mission Contract (WonderlandJuliusStream's create), not as a Project Brain section.
+	const auto AddNotInBuild = [this, &Add](const TCHAR* Id, const TCHAR* Title, const TCHAR* Purpose)
+	{
+		Add(Id, Title, G::SkillsMods, A::System, Purpose, {});
+		Model.Surfaces.Last().bNotInThisBuild = true;
+	};
+	AddNotInBuild(TEXT("skill_md"), TEXT("SKILL.md"), TEXT("SKILL.md files that define a skill for this project's agent."));
+	AddNotInBuild(TEXT("skill_library"), TEXT("Skills"), TEXT("Skills this project's agent can use, each from a SKILL.md, with its version."));
+	Add(TEXT("workflows"), TEXT("Workflows"), G::SkillsMods, A::Yours, TEXT("The order work moves through, including how it is routed."),
+		{TEXT("Plan, build, prove in PIE, report.")});
+	AddNotInBuild(TEXT("packs"), TEXT("Packs"), TEXT("Bundles of skills, workflows and modules installed together."));
+	AddNotInBuild(TEXT("julius_mods"), TEXT("Julius Mods"), TEXT("Mods that extend Julius without changing its core."));
+	AddNotInBuild(TEXT("deterministic_modules"), TEXT("Deterministic Modules"), TEXT("Modules whose output is fixed by their input."));
+	AddNotInBuild(TEXT("fuzzy_modules"), TEXT("Fuzzy Modules"), TEXT("Model-driven modules; each must beat its baseline in a Julius Eval before it is used."));
+	AddNotInBuild(TEXT("extension_permissions"), TEXT("Permissions & Versions"), TEXT("What each skill or mod may touch, and which version is in use."));
 }

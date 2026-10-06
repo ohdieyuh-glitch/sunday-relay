@@ -3,9 +3,10 @@
 // DRAWN TO THE FOUNDER'S FRAME (2026-09-15): "PROJECT BRAIN — MEMORY x REASONING x CONTINUITY x A HIGHER YOU";
 // three glass panels down the left -- 01 MEMORY CORE (semantic, episodic, procedural memory), 02 PROJECT BRAIN
 // SYSTEMS, 03 LARGE LANGUAGE MODEL COMPONENTS -- wired by glowing connectors into a holographic brain on a
-// platform of light, with the chakra rank it glows in. A fourth strip, 04 MISSION CONTEXT, carries the brain
-// scope's own vocabulary (objective, requirements, constraints, decisions, evidence, evaluations, trace,
-// governance), laid into the frame's empty lower band so the frame itself is unchanged.
+// platform of light, with the chakra rank it glows in. A fourth strip, 04 SKILLS & MODS (founder, 2026-10-06: it
+// replaced 04 MISSION CONTEXT), lists what EXTENDS the agent 03 configures -- SKILL.md, skills, workflows, packs,
+// Julius mods, deterministic and fuzzy modules, permissions & versions -- in the frame's lower band, and 05 C.A.R.D.
+// holds the loadout with MASCOT & VISUAL MODS (the mascot, its skins, Shadow Flame), so the frame itself is unchanged.
 //
 // A NATIVE WONDERLAND SURFACE, NOT A DASHBOARD. One thing is inspected at a time: choosing a memory, a system or
 // a component opens it over the brain, with who may change it stated first -- YOURS, REVIEW or SYSTEM (locked) --
@@ -143,7 +144,6 @@ private:
 	TSharedRef<SWidget> MakeTile(EWonderlandBrainGlyph Glyph, FName SurfaceId, float Height);
 	TSharedRef<SWidget> MakeChip(EWonderlandBrainGlyph Glyph, FName SurfaceId);
 	TSharedRef<SWidget> MakeSelectable(FName SurfaceId, const FSlateBrush* RestBrush, TSharedRef<SWidget> Content);
-	TSharedRef<SWidget> MakeSkinTile();
 	TSharedRef<SWidget> MakeSkinsView();
 	TSharedRef<SWidget> MakeSkinCard(const FWonderlandRelaySkin& Skin);
 	void RebuildInspector();

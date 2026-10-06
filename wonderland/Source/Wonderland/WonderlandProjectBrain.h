@@ -17,10 +17,15 @@
 // WHO MAY CHANGE WHAT, which is the point of the surface. Every surface carries one access:
 //
 //   YOURS    the owner authored it and may add to it: facts, preferences, identity, instructions, workflows,
-//            scratchpads, shared context, requirements, constraints.
+//            scratchpads, shared context.
 //   REVIEW   Project Brain proposed it; the owner accepts or declines, and does not rewrite it.
-//   SYSTEM   Julius and Project Brain own it: history, handoffs, agent state, accepted decisions, evidence,
-//            evaluations, trace, governance. Shown, never offered for editing.
+//   SYSTEM   Julius and Project Brain own it: history, handoffs, agent state, prompt systems, learned skills, and the
+//            skills & mods surfaces this build has no source for yet. Shown, never offered for editing.
+//
+// THE FIVE SECTIONS (founder, 2026-10-06; SECOND JUJU's contract PB_UI_CONTRACT_04_05.r1): 01 MEMORY CORE, 02 PROJECT BRAIN
+// SYSTEMS, 03 LARGE LANGUAGE MODEL COMPONENTS (where the compound agent is CONFIGURED), 04 SKILLS & MODS (what EXTENDS the
+// configured agent; it never configures it), 05 C.A.R.D. (the loadout, and MASCOT & VISUAL MODS: how it all LOOKS). Mission
+// context is no Project Brain panel section any more: it travels with the Mission Contract.
 //
 // EDITS ARE PROPOSALS. In the preview, a line added in the world is recorded in this session as PROPOSED and NOT
 // SAVED (it is gone after a restart), and says so. Live, the same action is a proposal to Project Brain itself: the
@@ -51,7 +56,8 @@ enum class EWonderlandBrainGroup : uint8
 	ProceduralMemory,
 	Systems,
 	Components,
-	Mission
+	/** 04 SKILLS & MODS (founder, 2026-10-06: it replaces 04 MISSION CONTEXT). */
+	SkillsMods
 };
 
 struct FWonderlandBrainSurface
@@ -76,6 +82,9 @@ struct FWonderlandBrainSurface
 	 *  adopt or a withdraw names (the bridge refuses a stale version with 409, so a change is never applied to what was not seen). */
 	TArray<FString> ProposalRefs;
 	TArray<int32> ProposalVersions;
+	/** A surface the panel names for the architecture but this build has NO source for (04's skills & mods in Beta): empty in the
+	 *  preview too, never proposable, and the inspector says "Nothing here in this build." -- never an install / enable / buy control. */
+	bool bNotInThisBuild = false;
 };
 
 /** One line of a live surface, as the bridge sent it. */
@@ -214,6 +223,11 @@ public:
 	/** wl.Qa.BrainLink only: put back the model it saved before its fixtures, so a QA boot ends where it began. */
 	void ReplaceModelForQa(const FWonderlandBrainModel& InModel) { Model = InModel; OnBrainChanged.Broadcast(); }
 
+	/** wl.Qa.BrainLink only: whether a live view's surface this panel does not define was logged (once per id per session), and how
+	 *  many such log lines were written in all. Plain C++, no reflection. */
+	bool WasUnplacedLogged(FName SurfaceId) const { return UnplacedLogged.Contains(SurfaceId); }
+	int32 UnplacedLogLines() const { return UnplacedLogCount; }
+
 	/**
 	 * WHERE A LIVE WRITE GOES. Bound by UWonderlandProjectBrainLinkSubsystem; each returns true when the request was
 	 * sent. Unbound (no link), a live model refuses rather than pretending to record anything locally.
@@ -238,10 +252,17 @@ private:
 	FWonderlandBrainModel Model;
 	/** The bridge link that makes this model live once the client is paired; see WonderlandProjectBrainLink.h. */
 	TSharedPtr<FWonderlandProjectBrainLink> Link;
+	/** Live view surfaces this panel does not define: ignored, never rendered or defaulted, and logged ONCE per id (contract r1 §5). */
+	TSet<FName> UnplacedLogged;
+	int32 UnplacedLogCount = 0;
 };
 
 namespace WonderlandBrainText
 {
 	WONDERLAND_API const TCHAR* AccessWord(EWonderlandBrainAccess Access);
+	/** The section (and memory card) a group is shown under. Never a real section by default: an unplaced group reads UNPLACED. */
 	WONDERLAND_API const TCHAR* GroupWord(EWonderlandBrainGroup Group);
+	/** The stable machine key of a group's section: memory_core, brain_systems, llm_components or skills_mods (05 C.A.R.D. holds no
+	 *  Project Brain surface). Empty for a group no section holds. */
+	WONDERLAND_API const TCHAR* SectionKey(EWonderlandBrainGroup Group);
 }

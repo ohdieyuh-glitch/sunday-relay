@@ -581,7 +581,7 @@ bool UWonderlandMissionTaskSubsystem::SubmitDraftScreened(FGuid LocalId, const F
 		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused: a Mission Contract needs an objective"));
 		return false;
 	}
-	// NEVER A SECRET ON DISK (the founder: secrets are never persisted in the Project Brain, and Mission Context is its section 04;
+	// NEVER A SECRET ON DISK (the founder: secrets are never persisted in the Project Brain, which this Mission Contract feeds;
 	// Second's review, 10-03): every flagged word is redacted before the first write -- the objective is kept, the key is not
 	const FString Kept = WonderlandScreenObjective(Trimmed, bKeepAsTyped, OutRedactedCertain, OutRedactedStatistical);
 	if (WonderlandOnlyRedacted(Kept))
