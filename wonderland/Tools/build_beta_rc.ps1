@@ -105,6 +105,11 @@ foreach ($stem in $retired) {
 }
 $cubDir = Join-Path $dst 'Wonderland\RelayCubs'
 if (Test-Path $cubDir) { Get-ChildItem $cubDir -File | Where-Object { $_.Name -like 'CubGhost_Apollo_*' -or $_.Name -like 'CubGhost_ArdenInfernal_*' } | Remove-Item -Force }
+# AND THE SOCIAL PREVIEW'S SYNTHETIC PEOPLE (Second Wonderland's final-package audit, 10-06). A player session never loads them (the
+# founder, 10-02: "Do not expose synthetic users to beta testers as though they are real people"); only a -wldev developer session
+# does, and no shipped launch surface carries -wldev. So the player package does not carry the made-up friends at all.
+$socialPreview = Join-Path $dst 'Wonderland\UiArt\Social'
+if (Test-Path $socialPreview) { Get-ChildItem $socialPreview -File | Where-Object { $_.Name -like 'social-preview*.json' } | Remove-Item -Force }
 
 # 4. an installed build: saves and logs go to %LOCALAPPDATA%\Wonderland\Saved
 New-Item -ItemType Directory -Force (Join-Path $dst 'Engine\Build') | Out-Null
@@ -215,7 +220,7 @@ $manifest = @(
   "zip_bytes    $((Get-Item $zip).Length) ($([math]::Round((Get-Item $zip).Length / 1GB, 2)) GB)",
   "zip_sha256   $hash",
   "prereqs      vc_redist.x64.exe staged; VC++ runtime app-local beside Wonderland\Binaries\Win64\Wonderland.exe",
-  "excluded     Saved/, *.pdb, RelaySkins/_reference, RelaySkins/_previous, ProjectAvatars/_old, .gitignore, Manifest_*.txt, WorldDesign/Look records but practical_lights.json, Vulkan VkLayer_* debug layers, Engine/Extras/GPUDumpViewer, vc_redist.arm64.exe, retired figures (Apollo*, ArdenInfernal*, Bee, Hagoromo, SkeletonFlame, SkeletonFlameV1 and their cubs)",
+  "excluded     Saved/, *.pdb, RelaySkins/_reference, RelaySkins/_previous, ProjectAvatars/_old, .gitignore, Manifest_*.txt, WorldDesign/Look records but practical_lights.json, Vulkan VkLayer_* debug layers, Engine/Extras/GPUDumpViewer, vc_redist.arm64.exe, retired figures (Apollo*, ArdenInfernal*, Bee, Hagoromo, SkeletonFlame, SkeletonFlameV1 and their cubs), UiArt/Social/social-preview*.json (the developer preview's synthetic people)",
   "installed    Engine/Build/InstalledProjectBuild.txt (saves and logs in %LOCALAPPDATA%\Wonderland\Saved)"
 )
 $manifest | Set-Content -Encoding utf8 (Join-Path $ReleaseRoot "RELEASE_MANIFEST_$Version.txt")
