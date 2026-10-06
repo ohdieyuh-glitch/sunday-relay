@@ -7,12 +7,20 @@
  * bridge answers; a block ends a flood aimed at one victim, but nothing ended
  * a flood aimed at everyone.
  *
- * TOKEN BUCKETS, PER PLAYER. Every command draws one token from `all`; a
- * message also from `message`, and anything that lands on another player
- * (a friend request, a party or server invitation) also from `invitation`.
- * A command is admitted only if EVERY bucket it draws on holds a token, and
- * then takes one from each; a refused command takes nothing, so a caller who
- * keeps knocking does not dig their own wait deeper.
+ * TOKEN BUCKETS, PER PLAYER. Every ordinary command draws one token from
+ * `all`; a message also from `message`, and anything that lands on another
+ * player (a friend request, a party or server invitation) also from
+ * `invitation`. A command is admitted only if EVERY bucket it draws on holds a
+ * token, and then takes one from each; a refused command takes nothing, so a
+ * caller who keeps knocking does not dig their own wait deeper.
+ *
+ * A PLAYER CAN ALWAYS PROTECT THEMSELVES. A block, a change of visibility, and
+ * leaving an instance, a party or a server draw ONLY on their own `protect`
+ * bucket, never on `all`. Before this, a client whose own routine traffic had
+ * spent `all` (sixty presence updates while moving, say) was answered 429 to a
+ * block, and the block was not executed (review finding, 2026-10-05). The
+ * `protect` bucket still bounds them, so toggling a block or a setting cannot
+ * become a flood of its own.
  *
  * The limits are generous for a person and hopeless for a script: a burst of
  * sixty commands, then one a second; twenty messages, then one every three
@@ -32,7 +40,7 @@
  * verified sessions, so a caller cannot spray new ones).
  */
 
-export type WonderlandCommandBucket = 'all' | 'message' | 'invitation';
+export type WonderlandCommandBucket = 'all' | 'message' | 'invitation' | 'protect';
 
 export interface WonderlandBucketLimit {
   /** The most commands a player may send at once from a full bucket. */
@@ -45,10 +53,15 @@ export const WONDERLAND_COMMAND_LIMITS: Readonly<Record<WonderlandCommandBucket,
   all: Object.freeze({ capacity: 60, intervalMs: 1_000 }),
   message: Object.freeze({ capacity: 20, intervalMs: 3_000 }),
   invitation: Object.freeze({ capacity: 10, intervalMs: 30_000 }),
+  protect: Object.freeze({ capacity: 30, intervalMs: 2_000 }),
 });
 
-/** Which buckets a command kind draws on, besides `all`. */
+/** What a player does to protect themselves: never held behind their own ordinary traffic. */
+export const WONDERLAND_PROTECTIVE_COMMANDS: readonly string[] = Object.freeze(['BLOCK', 'SET_SETTINGS', 'LEAVE_INSTANCE', 'PARTY_LEAVE', 'SERVER_LEAVE']);
+
+/** Which buckets a command kind draws on. */
 export function wonderlandCommandBuckets(kind: string): readonly WonderlandCommandBucket[] {
+  if (WONDERLAND_PROTECTIVE_COMMANDS.includes(kind)) return ['protect'];
   if (kind === 'SEND_MESSAGE') return ['all', 'message'];
   if (kind === 'FRIEND_REQUEST' || kind === 'PARTY_INVITE' || kind === 'SERVER_INVITE') return ['all', 'invitation'];
   return ['all'];

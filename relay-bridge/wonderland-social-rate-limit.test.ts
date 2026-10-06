@@ -15,12 +15,16 @@ const takeN = (limiter: ReturnType<typeof createWonderlandCommandLimiter>, playe
   Array.from({ length: n }, () => limiter.take(player, kind, at));
 
 describe('the buckets a command draws on', () => {
-  it('every command draws on all; a message also on message; what lands on another player also on invitation', () => {
+  it('every ordinary command draws on all; a message also on message; what lands on another player also on invitation', () => {
     expect(wonderlandCommandBuckets('ENTER_INSTANCE')).toEqual(['all']);
     expect(wonderlandCommandBuckets('UPDATE_PRESENCE')).toEqual(['all']);
-    expect(wonderlandCommandBuckets('BLOCK')).toEqual(['all']);
+    expect(wonderlandCommandBuckets('UNBLOCK')).toEqual(['all']);
     expect(wonderlandCommandBuckets('SEND_MESSAGE')).toEqual(['all', 'message']);
     for (const kind of ['FRIEND_REQUEST', 'PARTY_INVITE', 'SERVER_INVITE']) expect(wonderlandCommandBuckets(kind)).toEqual(['all', 'invitation']);
+  });
+
+  it('what a player does to protect themselves draws only on protect, never on all', () => {
+    for (const kind of ['BLOCK', 'SET_SETTINGS', 'LEAVE_INSTANCE', 'PARTY_LEAVE', 'SERVER_LEAVE']) expect(wonderlandCommandBuckets(kind)).toEqual(['protect']);
   });
 
   it('the limits are a person\'s and not a script\'s, and a client\'s own heartbeat is a small part of them', () => {
@@ -28,6 +32,7 @@ describe('the buckets a command draws on', () => {
       all: { capacity: 60, intervalMs: 1_000 },
       message: { capacity: 20, intervalMs: 3_000 },
       invitation: { capacity: 10, intervalMs: 30_000 },
+      protect: { capacity: 30, intervalMs: 2_000 },
     });
     // One presence refresh every 30 s is one token in thirty of what the all bucket returns.
     expect(30_000 / WONDERLAND_COMMAND_LIMITS.all.intervalMs).toBeGreaterThanOrEqual(30);
@@ -77,6 +82,27 @@ describe('one player\'s budget', () => {
     takeN(limiter, 'ann', 'SEND_MESSAGE', 20);
     takeN(limiter, 'ann', 'ENTER_INSTANCE', 40);
     expect(limiter.take('ann', 'SEND_MESSAGE', T0)).toEqual({ allowed: false, bucket: 'message', retryAfterSeconds: 3 });
+  });
+});
+
+describe('a player can always protect themselves (review finding, 2026-10-05)', () => {
+  it('with all spent on their own routine traffic, a block, a hide and every kind of leaving still pass at once', () => {
+    const limiter = createWonderlandCommandLimiter();
+    expect(takeN(limiter, 'vic', 'UPDATE_PRESENCE', 60).every((verdict) => verdict.allowed)).toBe(true);
+    expect(limiter.take('vic', 'UPDATE_PRESENCE', T0).allowed, 'all is spent').toBe(false);
+    for (const kind of ['BLOCK', 'SET_SETTINGS', 'LEAVE_INSTANCE', 'PARTY_LEAVE', 'SERVER_LEAVE']) {
+      expect(limiter.take('vic', kind, T0), kind).toEqual({ allowed: true });
+    }
+    expect(limiter.take('vic', 'UNBLOCK', T0).allowed, 'lifting a block is ordinary traffic').toBe(false);
+  });
+
+  it('and protecting is bounded on its own: thirty at once, then one every two seconds', () => {
+    const limiter = createWonderlandCommandLimiter();
+    expect(takeN(limiter, 'vic', 'BLOCK', 30).every((verdict) => verdict.allowed)).toBe(true);
+    expect(limiter.take('vic', 'SET_SETTINGS', T0)).toEqual({ allowed: false, bucket: 'protect', retryAfterSeconds: 2 });
+    expect(limiter.take('vic', 'ENTER_INSTANCE', T0).allowed, 'ordinary traffic is untouched by it').toBe(true);
+    expect(limiter.take('vic', 'BLOCK', T0 + 1_999).allowed).toBe(false);
+    expect(limiter.take('vic', 'BLOCK', T0 + 2_000).allowed).toBe(true);
   });
 });
 
