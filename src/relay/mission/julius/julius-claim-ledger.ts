@@ -217,7 +217,7 @@ export function mergeJuliusDurableStanding(
  * reviewer's actual finding, never travelled at all: findings live in
  * `julius_reviewer_findings`, not in the brain.
  *
- * WHAT TRAVELS NOW: TWO SOURCES, A CLOSED LIST, EACH DECIDED FROM DURABLE STATE.
+ * WHAT TRAVELS NOW: ONE SOURCE, A CLOSED LIST, DECIDED FROM DURABLE STATE.
  *
  *   VERIFIED_REPAIR_FINDING  a reviewer finding that was BLOCKING, cites
  *                            evidence, was ADDRESSED by a repair, and that an
@@ -225,11 +225,15 @@ export function mergeJuliusDurableStanding(
  *                            finding's own lifecycle folded from the source
  *                            run's ledger (`foldJuliusFindings`), never the
  *                            row's stored status and never its text.
- *   ACCEPTED_ARCHITECTURE    the design IN FORCE (`foldJuliusArchitecture`)
- *                            when the newest COMPLETED source run ended: never
- *                            a proposal nobody accepted, never a revision a
- *                            later one replaced, never the design of a run that
- *                            did not complete, and one design, not one per run.
+ *
+ * THE DESIGN DOES NOT TRAVEL (Decision C; SECOND's carry ruling (b), 1ee86fc5).
+ * Draft r1 also carried the design in force when the newest COMPLETED source
+ * run ended. The two arms of the learning experiment must differ by the
+ * verified repair finding and by nothing else, and a design beside it could
+ * change the plan for reasons unrelated to the reviewer's lesson. Nor is "in
+ * force" the same as "accepted": a first revision is in force by default. So
+ * every design is still classified, and the one in force is excluded by its
+ * own name (`architecture_not_a_source`), like every other row left behind.
  *
  * Everything else a source run holds is excluded BY NAME
  * (`JULIUS_CARRY_EXCLUSIONS`) and every exclusion is recorded: a verdict
@@ -245,8 +249,8 @@ export function mergeJuliusDurableStanding(
  *
  * WHO RECEIVES IT: THE NEW RUN'S PLANNER, AND NOBODY ELSE. Every carried row is
  * scoped to the new run's `plan` task (the Prompt Architect) whatever its
- * source scope: a task-scoped finding stays task-scoped, a run-wide design is
- * NARROWED to the plan, and nothing is ever widened. The plan is where an
+ * source scope: a task-scoped finding stays task-scoped, and nothing is ever
+ * widened. The plan is where an
  * earlier run's lessons are applied; what the planner adopts reaches the coder
  * and the reviewer through this run's own plan and its own accepted
  * architecture, which is the single design in force inside a run. The source
@@ -265,7 +269,8 @@ export function mergeJuliusDurableStanding(
  * PURE. Its inputs are folded durable rows; it returns a plan the store writes.
  */
 
-export const JULIUS_KNOWLEDGE_CARRY_VERSION = 'julius-knowledge-carry.v2' as const;
+/** v3: the design is no longer a source. A v2 record may hold a carried design; a v3 record never does. */
+export const JULIUS_KNOWLEDGE_CARRY_VERSION = 'julius-knowledge-carry.v3' as const;
 
 /** How many earlier runs of a mission are read as sources. Newest first. */
 export const JULIUS_CARRY_SOURCE_RUN_LIMIT = 8;
@@ -276,18 +281,18 @@ export const JULIUS_CARRY_CANDIDATE_LIMIT = 500;
 /** A carried finding's claim text is cut here: a packet, not an archive. */
 export const JULIUS_CARRIED_CLAIM_CHARS = 2_000;
 
-/** The two things a later run may inherit. A closed list. */
-export const JULIUS_CARRY_SOURCES = ['VERIFIED_REPAIR_FINDING', 'ACCEPTED_ARCHITECTURE'] as const;
+/** The one thing a later run may inherit. A closed list. */
+export const JULIUS_CARRY_SOURCES = ['VERIFIED_REPAIR_FINDING'] as const;
 export type JuliusCarrySource = (typeof JULIUS_CARRY_SOURCES)[number];
 
 /** Why a candidate did not travel. A closed vocabulary, recorded by count and by reference. */
 export const JULIUS_CARRY_EXCLUSIONS = [
   // reviewer findings
   'finding_not_blocking', 'finding_uncited', 'finding_lifecycle_unreadable', 'finding_superseded',
-  'finding_unresolved', 'finding_resolved_without_repair',
-  // architecture
+  'finding_unresolved', 'finding_resolved_without_repair', 'finding_dismissed', 'finding_origin_unknown',
+  // architecture: every design is named, and none travels
   'architecture_proposal', 'architecture_not_in_force', 'architecture_run_not_completed',
-  'architecture_older_run', 'architecture_standing_not_approved',
+  'architecture_older_run', 'architecture_standing_not_approved', 'architecture_not_a_source',
   // everything else the first carry would have handed over
   'decision_mirror', 'task_scoped_entry', 'entry_kind_not_carried', 'carried_copy',
   // eligible, but beyond the packet's bound
@@ -316,9 +321,9 @@ export interface JuliusCarrySourceRun {
 export interface JuliusCarryFindingCandidate {
   readonly runId: string;
   readonly finding: Pick<JuliusReviewerFinding,
-    'findingId' | 'taskId' | 'reviewerWorkerId' | 'severity' | 'category' | 'claim' | 'criterionId' | 'evidenceIds' | 'blocking' | 'createdAt'>;
+    'findingId' | 'taskId' | 'reviewerWorkerId' | 'severity' | 'category' | 'claim' | 'criterionId' | 'evidenceIds' | 'blocking' | 'status' | 'createdAt'>;
   /** `foldJuliusFindings` over the source run's ledger; null when that ledger could not be read. */
-  readonly life: Pick<JuliusFindingLife, 'state' | 'lastMove' | 'repairTaskIds' | 'resolutionReviewTaskId'> | null;
+  readonly life: Pick<JuliusFindingLife, 'originReviewTaskId' | 'state' | 'lastMove' | 'repairTaskIds' | 'resolutionReviewTaskId'> | null;
   /** The work the finding judged (`julius_tasks`); null when the row is not readable. */
   readonly task: { readonly taskType: string; readonly role: string } | null;
 }
@@ -349,7 +354,7 @@ export interface JuliusCarryItem {
   readonly source: JuliusCarrySource;
   readonly sourceRunId: string;
   readonly sourceRunState: string;
-  /** The finding id, or the architecture entry id. */
+  /** The finding id. */
   readonly sourceRef: string;
   readonly sourceTaskId: string | null;
   readonly sourceTaskType: string | null;
@@ -357,7 +362,7 @@ export interface JuliusCarryItem {
   readonly sourceScope: 'TASK' | 'RUN';
   readonly entryId: string;
   readonly kind: 'FINDING' | 'DECISION';
-  /** The copy keeps its author: the reviewer who raised the finding, the worker who wrote the design. */
+  /** The copy keeps its author: the reviewer who raised the finding. */
   readonly workerId: string;
   readonly text: string;
   readonly evidenceIds: readonly string[];
@@ -397,6 +402,10 @@ export interface JuliusKnowledgeCarryOutcome {
   readonly outcome: 'CARRIED' | 'EMPTY' | 'FAILED';
   /** Rows the plan carried (new or already present from an earlier attempt of this bootstrap). */
   readonly carried: number;
+  /** Of those, the VERIFIED_REPAIR_FINDINGs: the only rows a REQUIRED carry counts. */
+  readonly carriedFindings: number;
+  /** The runs those findings came from, each once: a required carry's must all be the runs it pinned. */
+  readonly findingSourceRunIds: readonly string[];
   /** Rows this call newly wrote: 0 on a replay. */
   readonly written: number;
   readonly excluded: number;
@@ -433,31 +442,10 @@ export function renderJuliusCarriedFinding(input: {
     `SOURCE RUN: ${input.sourceRunId} (${input.sourceRunState})`,
     `SOURCE TASK: ${finding.taskId} (${task === null ? 'task type unknown' : `${task.taskType}, ${task.role}`})`,
     `FINDING: ${finding.findingId} | severity ${finding.severity} | category ${finding.category} | criterion ${finding.criterionId ?? 'none'} | ${finding.blocking ? 'blocking' : 'non-blocking'}`,
-    `RAISED BY: ${finding.reviewerWorkerId}, citing ${finding.evidenceIds.join(', ')}`,
+    `RAISED BY: ${finding.reviewerWorkerId} in ${life.originReviewTaskId ?? 'unknown'}, citing ${finding.evidenceIds.join(', ')}`,
     `REPAIRED BY: ${life.repairTaskIds.join(', ')} | RESOLVED BY THE INDEPENDENT RE-REVIEW: ${life.resolutionReviewTaskId ?? 'unknown'}`,
     `SCOPE HERE: ${scope.taskId} (${scope.taskType}, ${scope.role}) only`,
     `REVIEWER'S CLAIM: ${cut(oneLine(finding.claim), JULIUS_CARRIED_CLAIM_CHARS)}`,
-  ].join('\n');
-}
-
-/** A carried design, as the planner reads it: a header that says whose and how old, then the design verbatim. */
-export function renderJuliusCarriedArchitecture(input: {
-  readonly sourceRunId: string;
-  readonly sourceRunState: string;
-  readonly entryId: string;
-  readonly revision: number | null;
-  readonly proposedByTaskId: string | null;
-  readonly workerId: string;
-  readonly text: string;
-  readonly scope: JuliusCarryScope;
-}): string {
-  return [
-    'CARRIED FROM AN EARLIER RUN: ACCEPTED ARCHITECTURE. It was the design in force when that run COMPLETED. It is advisory here: this run\'s Mission Contract, and the architecture this run accepts, govern.',
-    `SOURCE RUN: ${input.sourceRunId} (${input.sourceRunState})`,
-    `SOURCE ENTRY: ${input.entryId} (revision ${input.revision === null ? 'unknown' : String(input.revision)}, proposed by ${input.proposedByTaskId ?? 'unknown'}, written by ${input.workerId}; run-wide in that run)`,
-    `SCOPE HERE: ${input.scope.taskId} (${input.scope.taskType}, ${input.scope.role}) only`,
-    '',
-    input.text,
   ].join('\n');
 }
 
@@ -485,19 +473,23 @@ export function juliusCarriedFindingClaim(input: {
 /** A finding travels only when its own lifecycle says a repair answered it and a reviewer said so. */
 function findingExclusion(candidate: JuliusCarryFindingCandidate): JuliusCarryExclusionReason | null {
   const { finding, life } = candidate;
+  // A rejected finding is not knowledge, whatever happened to it afterwards.
+  if (finding.status === 'DISMISSED') return 'finding_dismissed';
   if (!finding.blocking) return 'finding_not_blocking';
   // A finding that points at nothing is an assertion (`julius-context-provenance.ts`, `needsEvidence`).
   if (finding.evidenceIds.length === 0) return 'finding_uncited';
   if (life === null) return 'finding_lifecycle_unreadable';
   if (life.state === 'SUPERSEDED') return 'finding_superseded';
   if (life.state !== 'RESOLVED' || life.lastMove !== 'REVIEWER_RESOLVED' || life.resolutionReviewTaskId === null) return 'finding_unresolved';
+  // No review is on record as raising it (`finding.recorded`): its author cannot be shown to be the Independent Reviewer.
+  if (life.originReviewTaskId === null) return 'finding_origin_unknown';
   if (life.repairTaskIds.length === 0) return 'finding_resolved_without_repair';
   return null;
 }
 
 /**
  * Why a VERIFIED/APPROVED brain row is not carried — every row except the one
- * design in force. Shapes are the ids the runtime mints (`brain:decision:` in
+ * design in force, which the plan names itself. Shapes are the ids the runtime mints (`brain:decision:` in
  * the pipeline, `brain:architecture:` in `julius-architecture-state.ts`); the
  * unit cases build their inputs with those minting functions, so a drift
  * between the two fails a test rather than a mission.
@@ -547,11 +539,10 @@ export function planJuliusKnowledgeCarry(input: {
   const inForceOf = new Map(input.architectures.filter((fact) => rank.has(fact.runId)).map((fact) => [fact.runId, fact] as const));
   const excluded: JuliusCarryExclusion[] = [];
 
-  // THE ONE DESIGN: in force when the newest COMPLETED run that has one ended.
+  // THE ONE DESIGN: in force when the newest COMPLETED run that has one ended. Named on the record, never carried.
   const designRun = runs.find((run) => run.state === 'COMPLETED' && (inForceOf.get(run.runId)?.inForceEntryId ?? null) !== null);
   const design = designRun === undefined ? null : inForceOf.get(designRun.runId) ?? null;
   const designRow = design === null ? undefined : brain.find((row) => row.runId === design.runId && row.entryId === design.inForceEntryId);
-  const architecture: JuliusCarryItem[] = [];
   if (design !== null && designRow === undefined) {
     // In force on the ledger, and no VERIFIED/APPROVED standing for its row: said, not skipped.
     excluded.push({ sourceRunId: design.runId, sourceRef: design.inForceEntryId ?? '', reason: 'architecture_standing_not_approved' });
@@ -559,25 +550,8 @@ export function planJuliusKnowledgeCarry(input: {
   for (const row of brain) {
     if (row === designRow) {
       // The design's row is a DECISION the runtime wrote at APPROVED; anything else under its id is not that row.
-      if (row.claim.trust !== 'APPROVED' || row.kind !== 'DECISION') {
-        excluded.push({ sourceRunId: row.runId, sourceRef: row.entryId, reason: 'architecture_standing_not_approved' });
-        continue;
-      }
-      const entryId = juliusCarriedCopyId(input.runId, row.runId, row.entryId);
-      architecture.push({
-        source: 'ACCEPTED_ARCHITECTURE', sourceRunId: row.runId, sourceRunState: stateOf.get(row.runId) ?? 'UNKNOWN',
-        sourceRef: row.entryId, sourceTaskId: design?.proposedByTaskId ?? null, sourceTaskType: null, sourceScope: 'RUN',
-        entryId, kind: 'DECISION', workerId: row.workerId,
-        text: renderJuliusCarriedArchitecture({
-          sourceRunId: row.runId, sourceRunState: stateOf.get(row.runId) ?? 'UNKNOWN', entryId: row.entryId,
-          revision: design?.revision ?? null, proposedByTaskId: design?.proposedByTaskId ?? null,
-          workerId: row.workerId, text: row.text, scope: input.scope,
-        }),
-        evidenceIds: [...row.evidenceIds], scope: input.scope,
-        // The source's own standing, about the copy (as `juliusCarriedClaim` keeps it); a copy asserts no lineage of its own.
-        claim: { ...row.claim, claimId: juliusClaimIdFor(entryId), entryId, supersedes: null, contradicts: [] },
-        severity: null, category: null, criterionId: null, revision: design?.revision ?? null,
-      });
+      const approved = row.claim.trust === 'APPROVED' && row.kind === 'DECISION';
+      excluded.push({ sourceRunId: row.runId, sourceRef: row.entryId, reason: approved ? 'architecture_not_a_source' : 'architecture_standing_not_approved' });
       continue;
     }
     excluded.push({ sourceRunId: row.runId, sourceRef: row.entryId, reason: brainExclusion(row, inForceOf, stateOf) });
@@ -616,7 +590,7 @@ export function planJuliusKnowledgeCarry(input: {
 
   // ONE ROW PER ENTRY ID, the first in order wins; then the packet bound, with the rest named.
   const seen = new Set<string>();
-  const eligible = [...architecture, ...findingItems].filter((item) => {
+  const eligible = findingItems.filter((item) => {
     if (seen.has(item.entryId)) return false;
     seen.add(item.entryId);
     return true;
@@ -707,7 +681,8 @@ export function juliusKnowledgeCarryFacts(
     eligible: plan.eligible,
     carried: plan.carried.length,
     carriedFindings: plan.carried.filter((item) => item.source === 'VERIFIED_REPAIR_FINDING').length,
-    carriedArchitecture: plan.carried.filter((item) => item.source === 'ACCEPTED_ARCHITECTURE').length,
+    // Kept in the record's shape (the evidence bundle exports it): a design does not travel, so it is 0.
+    carriedArchitecture: 0,
     carriedEntries: entries.text,
     entriesTruncated: entries.truncated,
     excluded: plan.excluded.length,

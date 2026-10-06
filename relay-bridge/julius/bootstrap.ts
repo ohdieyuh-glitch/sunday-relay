@@ -39,6 +39,7 @@ import {
 import { createHash } from 'node:crypto';
 import { parseJuliusMissionActiveError } from '../../src/relay/persistence/julius-postgres';
 import { seedJuliusTaskContract, type JuliusMissionState, type JuliusTask, type JuliusTaskContract } from '../../src/relay/mission/julius';
+import type { JuliusKnowledgeCarryOutcome } from '../../src/relay/mission/julius/julius-claim-ledger';
 import { JULIUS_CARRIED_KNOWLEDGE_LIMIT, type MissionKnowledgeStore } from './mission-knowledge';
 import type { MissionSeedStore } from './mission-seed';
 
@@ -89,9 +90,12 @@ export function createLiveJuliusBootstrapPort(deps: {
   readonly carry?: {
     /**
      * Refuse the bootstrap — before the run is READY, so nothing is dispatched —
-     * unless at least one row was carried. A registered learning arm WITH
-     * (founder ruling 2026-10-04, R2): an experiment about inherited knowledge
-     * that inherited nothing is not the experiment, and must not be paid for.
+     * unless the carry holds at least one VERIFIED REPAIR FINDING and every
+     * carried finding came from `fromRunIds` (`requiredCarryRefusal`). A
+     * registered learning arm WITH (founder rulings 2026-10-04, R2 and the
+     * non-empty carry; Decision C, C-1): an experiment about inherited knowledge
+     * that inherited no verified lesson from its own arm WITHOUT is not the
+     * experiment, and must not be paid for.
      */
     readonly required: boolean;
     /** Carry only from these runs (arm WITH: its own arm WITHOUT). Still this project and this mission only. */
@@ -240,8 +244,9 @@ export function createLiveJuliusBootstrapPort(deps: {
          * RECORDED, NEVER SWALLOWED. The store writes the outcome as one
          * `knowledge.carried` event — what travelled, what was excluded and why,
          * or why the carry failed — and returns it. Only a caller that REQUIRES
-         * inheritance turns an empty or failed carry into a refusal; everyone
-         * else starts as before, with the reason on the record.
+         * inheritance turns a carry without a verified repair finding from its
+         * pinned runs into a refusal; everyone else starts as before, with the
+         * reason on the record.
          */
         const current = deps.knowledge === undefined && deps.carry === undefined
           ? null : await deps.runs.loadRun(runId, request.projectId);
@@ -251,10 +256,9 @@ export function createLiveJuliusBootstrapPort(deps: {
             scopeTaskId: planTaskId(runId), limit: JULIUS_CARRIED_KNOWLEDGE_LIMIT, occurredAt: now(),
             ...(deps.carry?.fromRunIds === undefined ? {} : { fromRunIds: deps.carry.fromRunIds }),
           });
-          if (deps.carry?.required === true && (carry === null || carry.outcome !== 'CARRIED' || carry.carried < 1)) {
-            return refuse('carried_knowledge_required', carry === null
-              ? 'This mission must inherit verified knowledge from an earlier run, and no knowledge store is bound; the run was not made ready and nothing was dispatched.'
-              : `This mission must inherit verified knowledge from an earlier run, and the carry was ${carry.outcome}${carry.reasonCode === null ? '' : ` (${carry.reasonCode})`}; the run was not made ready and nothing was dispatched.`);
+          if (deps.carry?.required === true) {
+            const refusal = requiredCarryRefusal(carry, deps.carry.fromRunIds ?? []);
+            if (refusal !== null) return refuse('carried_knowledge_required', refusal);
           }
         }
         /**
@@ -351,4 +355,28 @@ export function createLiveJuliusBootstrapPort(deps: {
  */
 function buildEvidenceFor(request: JuliusBootstrapRequest): 'TEST' | 'DIFF' {
   return (request.deterministicCheck?.declared ?? true) ? 'TEST' : 'DIFF';
+}
+
+/**
+ * THE GATE ON A REQUIRED CARRY, IN ONE MODE (Decision C, C-1): valid only when
+ * the carry holds at least one VERIFIED REPAIR FINDING and every carried
+ * finding came from a run the caller pinned (arm WITH: its own arm WITHOUT).
+ * A design never counts, and neither does the word CARRIED: the count and the
+ * sources are the evidence. A required carry that pinned nothing has no
+ * source that could qualify. Null when valid; otherwise the refusal's message.
+ */
+function requiredCarryRefusal(carry: JuliusKnowledgeCarryOutcome | null, pinned: readonly string[]): string | null {
+  const must = 'This mission must inherit a verified repair finding from its own earlier run';
+  const after = 'the run was not made ready and nothing was dispatched.';
+  if (carry === null) return `${must}, and no knowledge store is bound; ${after}`;
+  if (carry.outcome !== 'CARRIED') {
+    return `${must}, and the carry was ${carry.outcome}${carry.reasonCode === null ? '' : ` (${carry.reasonCode})`}; ${after}`;
+  }
+  if (carry.carriedFindings < 1 || carry.findingSourceRunIds.length === 0) {
+    return `${must}, and the carry held ${String(carry.carried)} row(s) but no verified repair finding; ${after}`;
+  }
+  if (carry.findingSourceRunIds.some((runId) => !pinned.includes(runId))) {
+    return `${must}, and a carried finding came from a run it did not pin; ${after}`;
+  }
+  return null;
 }

@@ -33,15 +33,17 @@ import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
  *   ARM WITHOUT  the architect records a design; the reviewer REJECTS the plan with a cited finding (the
  *                sentinel); the real verification repairs the plan; the re-review RESOLVES the finding; the
  *                build passes; the run COMPLETES. Everything between those scripted answers is production code.
- *   ARM WITH     must inherit that finding and that design, in its PLANNER's packet, and nowhere else.
+ *   ARM WITH     must inherit that finding, in its PLANNER's packet, and nowhere else — and not that design
+ *                (Decision C: the arms differ by the verified repair finding and nothing else).
  *
  * WHAT IT PROVES, the founder's four points, each read from durable rows — and the bundle's own query:
  *   (1) exactly what arm WITHOUT wrote: the finding row, its RESOLVED life, the verdict mirrors, the design;
  *   (2) which of it became carry-eligible, and why the rest did not: the `knowledge.carried` row;
- *   (3) exactly what arm WITH carried: two `carried:…:into:<with>` rows, scoped to its plan, with provenance;
- *   (4) that the planner RECEIVED them: the plan's durable snapshot, the packet text it was handed, and the
+ *   (3) exactly what arm WITH carried: one `carried:…:into:<with>` row, the finding, scoped to its plan, with provenance;
+ *   (4) that the planner RECEIVED it: the plan's durable snapshot, the packet text it was handed, and the
  *       `knowledge.consumed` row — and that no other worker of arm WITH did.
- * And the gate: an arm WITH whose WITHOUT left nothing eligible is REFUSED before READY, nothing dispatched.
+ * And the gate: an arm WITH whose WITHOUT left no verified repair finding — only verdict mirrors and a design in
+ * force — is REFUSED before READY, nothing dispatched.
  *
  * NEVER EXECUTED when drafted (read-only session, 2026-10-04): HEAVY, run it foreground, one boot.
  * Gated on JULIUS_TEST_DATABASE_URL like every real-postgres suite, and `todo` without it.
@@ -156,7 +158,7 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     return line.slice('dump "'.length, line.length - `" ${file}`.length);
   };
 
-  it('CASE 1 — arm WITHOUT’s resolved finding and accepted design reach arm WITH’s planner, structured, and reach no other worker', async () => {
+  it('CASE 1 — arm WITHOUT’s resolved finding reaches arm WITH’s planner, structured, its design does not, and nothing reaches another worker', async () => {
     const { digest, bootstrap } = pair();
 
     /* ---------------------------------------------------------------- arm WITHOUT */
@@ -211,20 +213,20 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     const decision = decisions[0]!.facts;
     expect(decision).toMatchObject({
       outcome: 'CARRIED', scopeTaskId: `${withRun}:plan`, scopeRole: 'PROMPT_ARCHITECT', sourceRuns: 1, sourceRunIds: withoutRun,
-      carried: 2, carriedFindings: 1, carriedArchitecture: 1,
+      carried: 1, carriedFindings: 1, carriedArchitecture: 0,
     });
     expect(String(decision.excludedByReason), 'the verdict mirrors were left behind, by name').toMatch(/decision_mirror=\d+/u);
+    expect(String(decision.excludedByReason), 'and so was the design in force').toContain('architecture_not_a_source=1');
 
-    /* (3) EXACTLY WHAT ARM WITH CARRIED: two rows, the plan's, with where they came from. */
+    /* (3) EXACTLY WHAT ARM WITH CARRIED: one row, the finding, the plan's, with where it came from. */
     const findingCopy = juliusCarriedCopyId(withRun, withoutRun, findingId);
     const designCopy = juliusCarriedCopyId(withRun, withoutRun, design);
     const carried = await pool.query<{ entry_id: string; task_id: string | null; entry_kind: string; safe_content: string }>(
       `SELECT entry_id, task_id, entry_kind, safe_content FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE 'carried:%' ORDER BY revision`, [withRun]);
     expect(carried.rows.map((row) => [row.entry_id, row.task_id, row.entry_kind])).toEqual([
-      [designCopy, `${withRun}:plan`, 'DECISION'],
       [findingCopy, `${withRun}:plan`, 'FINDING'],
     ]);
-    const findingText = carried.rows[1]!.safe_content;
+    const findingText = carried.rows[0]!.safe_content;
     for (const line of [
       `SOURCE RUN: ${withoutRun} (COMPLETED)`,
       `SOURCE TASK: ${withoutRun}:plan (plan, PROMPT_ARCHITECT)`,
@@ -233,6 +235,7 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     ]) expect(findingText.split('\n'), line).toContain(line);
     expect(findingText).toMatch(new RegExp(`^FINDING: ${findingId.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')} \\| severity HIGH \\| category review \\| criterion none \\| blocking$`, 'mu'));
     expect(findingText).toMatch(/^REPAIRED BY: repair:\S+ \| RESOLVED BY THE INDEPENDENT RE-REVIEW: \S+$/mu);
+    expect(findingText, 'the review that raised it, as the production path records it').toMatch(/^RAISED BY: \S+ in (?!unknown,)\S+, citing \S+$/mu);
 
     /* (4) THE PLANNER RECEIVED THEM: arm WITH's drive, then its plan's packet. */
     const withOutcome = await withArm.drive();
@@ -242,7 +245,8 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     expect(plans.length, 'the plan was compiled').toBeGreaterThan(0);
     for (const plan of plans) {
       expect(plan.worker_role).toBe('PROMPT_ARCHITECT');
-      expect(plan.source_entry_ids, 'both carried rows are in the planner’s packet').toEqual(expect.arrayContaining([designCopy, findingCopy]));
+      expect(plan.source_entry_ids, 'the carried finding is in the planner’s packet').toContain(findingCopy);
+      expect(plan.source_entry_ids, 'the design never travelled').not.toContain(designCopy);
       expect(plan.integrity_evicted_entry_ids ?? []).not.toContain(findingCopy);
       expect(plan.integrity_excluded_entry_ids ?? []).not.toContain(findingCopy);
     }
@@ -252,7 +256,7 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     const packet = withArm.handoffs.contexts.snapshotFor(planDispatch!.contextId)!.packet;
     const handed = packet.blocks.map((block) => block.text).join('\n');
     expect(handed).toContain(`REVIEWER'S CLAIM: ${SENTINEL}`);
-    expect(handed).toContain('CARRIED FROM AN EARLIER RUN: ACCEPTED ARCHITECTURE.');
+    expect(handed, 'no carried design').not.toContain('CARRIED FROM AN EARLIER RUN: ACCEPTED ARCHITECTURE.');
     expect(handed, 'never the generic verdict line the first carry handed over').not.toContain('Verification requires repair.');
     const ranked = packet.integrity!.admitted.find((row) => row.entryId === findingCopy);
     expect(ranked, 'ranked as a reviewer-verified finding, scoped to this task').toMatchObject({ trust: 'VERIFIED', contextType: 'REVIEW_FINDING', taskScoped: true });
@@ -260,8 +264,8 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     expect(receipts.length, 'every planner compile writes its receipt').toBeGreaterThan(0);
     for (const receipt of receipts) {
       expect(receipt.task_id, 'a receipt is the plan’s, never another task’s').toBe(`${withRun}:plan`);
-      expect(receipt.facts).toMatchObject({ role: 'PROMPT_ARCHITECT', taskType: 'plan', inScope: 2, admitted: 2, evicted: 0, missing: 0 });
-      expect(String(receipt.facts.admittedEntryIds).split(' ').sort()).toEqual([designCopy, findingCopy].sort());
+      expect(receipt.facts).toMatchObject({ role: 'PROMPT_ARCHITECT', taskType: 'plan', inScope: 1, admitted: 1, evicted: 0, missing: 0 });
+      expect(String(receipt.facts.admittedEntryIds).split(' ')).toEqual([findingCopy]);
     }
 
     // AND NOBODY ELSE: no other packet of arm WITH holds a carried row — not the coder's, not the reviewer's.
@@ -275,19 +279,20 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     expect(bundleOf(withoutRun), 'arm WITHOUT: looked, inherited nothing').toEqual([['julius.knowledge.carried', 'EMPTY']]);
     expect(bundleOf(withRun), 'arm WITH: the decision first, then the planner’s receipts').toEqual([
       ['julius.knowledge.carried', 'CARRIED'],
-      ...receipts.map(() => ['julius.knowledge.consumed', '2']),
+      ...receipts.map(() => ['julius.knowledge.consumed', '1']),
     ]);
     const withRows = bundle.filter((row) => row.run_id === withRun);
     expect(withRows.find((row) => row.event_type === 'julius.knowledge.carried')?.carried_entries).toContain(findingCopy);
     expect(withRows.find((row) => row.event_type === 'julius.knowledge.consumed')?.admitted_entry_ids).toContain(findingCopy);
   });
 
-  it('CASE 2 — an arm WITH whose arm WITHOUT left nothing eligible is REFUSED before READY, with the reason on the record', async () => {
+  it('CASE 2 — an arm WITH whose arm WITHOUT left a design but no verified repair finding is REFUSED before READY, with the reason on the record', async () => {
     const { digest, base, bootstrap } = pair();
-    // Arm WITHOUT completes cleanly: no reviewer finding, no design. What it leaves is verdict mirrors only.
+    // Arm WITHOUT completes cleanly: no reviewer finding. What it leaves is verdict mirrors and its design in force,
+    // the row draft r1 would have carried — and a design never satisfies the gate.
     const withoutArm = await bootstrap({
       clause: { registrationDigest: digest, arm: 'WITHOUT', rerunKey: `without-${nonce()}`, policy: POLICY },
-      scripts: { architect: [ARCHITECT_PLAIN], coder: [BUILD], reviewer: [PASS_AND_RESOLVE] },
+      scripts: { architect: [ARCHITECT_WITH_DESIGN], coder: [BUILD], reviewer: [PASS_AND_RESOLVE] },
     });
     const withoutOutcome = await withoutArm.drive();
     expect(withoutOutcome.state, String(withoutOutcome.haltCause)).toBe('COMPLETED');
@@ -307,10 +312,11 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     const refusedRun = created.rows[0]!.run_id;
     expect(await snapshotsOf(refusedRun)).toEqual([]);
     expect(withArm.architect.dispatches.length + withArm.coder.dispatches.length + withArm.reviewer.dispatches.length).toBe(0);
-    // WHY, ON THE RECORD: the carry looked, found only verdict mirrors, and said so.
+    // WHY, ON THE RECORD: the carry looked, found verdict mirrors and a design, and said so.
     const [record] = await factsOf(refusedRun, 'knowledge.carried');
     expect(record?.facts).toMatchObject({ outcome: 'EMPTY', carried: 0, carriedFindings: 0, carriedArchitecture: 0, sourceRuns: 1, sourceRunIds: withoutRun });
     expect(String(record?.facts.excludedByReason), 'the verdict mirrors it found, left behind by name').toMatch(/decision_mirror=\d+/u);
+    expect(String(record?.facts.excludedRefs), 'and the design in force, by name').toContain(`architecture_not_a_source:${withoutRun}:${juliusArchitectureEntryId(withoutRun, 1)}`);
     const rows = await pool.query('SELECT 1 FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE $2', [refusedRun, 'carried:%']);
     expect(rows.rowCount).toBe(0);
   });

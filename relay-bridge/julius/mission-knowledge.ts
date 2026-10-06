@@ -19,10 +19,10 @@ import { JuliusClaimPostgresRepository, type JuliusKnowledgeCarryRequest } from 
  *
  * WHAT IS CARRIED NOW is decided by one pure rule in the claim ledger
  * (`planJuliusKnowledgeCarry`, "THE CARRY, CORRECTED"): a blocking reviewer
- * finding a repair answered and an independent re-review RESOLVED, and the
- * design in force when the newest completed run of the SAME mission ended.
- * Every carried row is scoped to the new run's plan task and keeps where it
- * came from. Everything else is excluded by name.
+ * finding a repair answered and an independent re-review RESOLVED, from an
+ * earlier run of the SAME mission, and nothing else: not even the design in
+ * force (Decision C). Every carried row is scoped to the new run's plan task
+ * and keeps where it came from. Everything else is excluded by name.
  *
  * WHAT IS RECORDED. The whole decision — what travelled, from which run and
  * task, under which scope, and every candidate left behind with its reason — is
