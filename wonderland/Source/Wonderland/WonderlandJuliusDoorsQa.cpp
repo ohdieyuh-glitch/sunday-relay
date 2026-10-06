@@ -11,6 +11,7 @@
 //     JD4  a task typed through the terminal (+, then the objective, as Q13 does) is a local QUEUED Mission Contract, and no "Not
 //          created" row appears: no Julius creation is tried (CreateMission has no caller in the game);
 //     JD5  SIGN IN pressed (the Social Hub's own call): the client reaches its bridge, and the recorder logs it -- the in-run positive;
+//     JD7  the Project Brain PANEL's own doors (its PROPOSE input, its ACCEPT button, a 04 chip in the inspector): kept on this PC;
 //     JD6  after all of it the stream never left idle: paired=no, pages=0, failures=0.
 //   wl.Qa.JuliusDoors open [quit]   the CONTROL (recorder mode "control", which answers /native/session with a FAKE pairing):
 //     JC1  the door forced open (PairingOffered ON): /brain pair through the terminal starts pairing;
@@ -35,6 +36,7 @@
 #include "WonderlandBeta.h"
 #include "WonderlandJuliusStream.h"
 #include "WonderlandMissionTasks.h"
+#include "WonderlandProjectBrain.h"
 #include "Misc/Paths.h"
 #include "WonderlandSocialSubsystem.h"
 #include "WonderlandUiSubsystem.h"
@@ -288,6 +290,39 @@ namespace WonderlandJuliusDoorsQa
 				Next();
 				return true;
 			case 4:
+			{
+				// JD7 (Second's suggestion 2): the Project Brain PANEL's own doors -- its PROPOSE input (the call the input box makes) and its
+				// ACCEPT button (the call the button makes), then a 04 chip opened in the inspector. Unpaired, all of it stays on this PC.
+				UGameInstance* Instance = World->GetGameInstance();
+				UWonderlandProjectBrainSubsystem* Brain = Instance != nullptr ? Instance->GetSubsystem<UWonderlandProjectBrainSubsystem>() : nullptr;
+				if (Run.Step == 0)
+				{
+					if (!Ui->IsProjectBrainOpen())
+					{
+						Ui->ToggleProjectBrain();
+					}
+					Run.Step = 1;
+					Run.PhaseAt = Now;
+					return true;
+				}
+				if (In < 3.0)
+				{
+					return true;
+				}
+				const bool bSelected = Ui->SelectBrainSurface(FName(TEXT("instructions")));
+				const bool bProposed = Ui->ProposeToSelectedBrainSurface(TEXT("QA JD: a proposal through the panel's own input"));
+				const bool bReviewed = Brain != nullptr && Brain->Review(FName(TEXT("learned_facts")), 0, true);
+				const bool bChip = Ui->SelectBrainSurface(FName(TEXT("skill_library")));
+				const bool bLive = Brain != nullptr && Brain->IsLive();
+				Run.Check(TEXT("JD7"), bSelected && bProposed && bReviewed && bChip && !bLive && Field(Stream->Describe(), TEXT("paired")) == TEXT("no"),
+					FString::Printf(TEXT("the Brain panel's doors: instructions selected %s, PROPOSE %s, ACCEPT on learned_facts %s (kept on this PC: live %s), "
+						"the skill_library chip opened %s; the stream paired=%s"), bSelected ? TEXT("yes") : TEXT("NO"), bProposed ? TEXT("yes") : TEXT("NO"),
+						bReviewed ? TEXT("yes") : TEXT("NO"), bLive ? TEXT("YES") : TEXT("no"), bChip ? TEXT("yes") : TEXT("NO"), *Field(Stream->Describe(), TEXT("paired"))));
+				Run.Frame(TEXT("jd7_brain_panel_skill_library"));
+				Next();
+				return true;
+			}
+			case 5:
 			{
 				if (In < 4.0)
 				{
