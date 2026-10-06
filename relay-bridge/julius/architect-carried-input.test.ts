@@ -21,9 +21,12 @@ const CARRIED = renderJuliusCarriedFinding({
   finding: {
     findingId: 'finding:evidence:7', taskId: 'run:without:plan', reviewerWorkerId: 'independent-reviewer-hermes', severity: 'HIGH',
     category: 'review', claim: 'ARCHITECT-INPUT-SENTINEL the plan deploys before the migration runs', criterionId: 'AC-1',
-    evidenceIds: ['evidence:7'], blocking: true, createdAt: '2026-10-04T10:00:00.000Z',
+    evidenceIds: ['evidence:7'], blocking: true, status: 'OPEN', createdAt: '2026-10-04T10:00:00.000Z',
   },
-  life: { state: 'RESOLVED', lastMove: 'REVIEWER_RESOLVED', repairTaskIds: ['repair:run:without:plan:1:task'], resolutionReviewTaskId: 'review:repair:run:without:plan:1:task' },
+  life: {
+    originReviewTaskId: 'review:run:without:plan', state: 'RESOLVED', lastMove: 'REVIEWER_RESOLVED',
+    repairTaskIds: ['repair:run:without:plan:1:task'], resolutionReviewTaskId: 'review:repair:run:without:plan:1:task',
+  },
   task: { taskType: 'plan', role: 'PROMPT_ARCHITECT' },
   scope: SCOPE,
 });
@@ -68,6 +71,7 @@ describe('the live Prompt Architect plans from the packet Julius compiled, carri
     expect(inputs.length, 'the provider was asked').toBeGreaterThan(0);
     expect(inputs[0], 'the carried block reached the planning input, every line of it').toContain(CARRIED);
     for (const line of ['SOURCE RUN: run:without (COMPLETED)', 'FINDING: finding:evidence:7 | severity HIGH | category review | criterion AC-1 | blocking',
+      'RAISED BY: independent-reviewer-hermes in review:run:without:plan, citing evidence:7',
       "REVIEWER'S CLAIM: ARCHITECT-INPUT-SENTINEL the plan deploys before the migration runs"]) {
       expect(inputs[0], line).toContain(line);
     }

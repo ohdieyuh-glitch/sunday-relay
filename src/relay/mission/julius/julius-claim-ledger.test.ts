@@ -157,13 +157,14 @@ const ARCHITECT = 'prompt-architect-openai';
 const SENTINEL = 'CARRY-SENTINEL the plan deploys before the migration runs';
 
 const RESOLVED = {
-  state: 'RESOLVED' as const, lastMove: 'REVIEWER_RESOLVED' as const,
+  originReviewTaskId: `review:${SRC}:plan`, state: 'RESOLVED' as const, lastMove: 'REVIEWER_RESOLVED' as const,
   repairTaskIds: [`repair:${SRC}:plan:1:task`], resolutionReviewTaskId: `review:repair:${SRC}:plan:1:task`,
 };
+const OPEN = { originReviewTaskId: `review:${SRC}:plan`, state: 'OPEN' as const, lastMove: null, repairTaskIds: [], resolutionReviewTaskId: null };
 
 const findingOf = (over: Partial<JuliusCarryFindingCandidate['finding']> = {}): JuliusCarryFindingCandidate['finding'] => ({
   findingId: 'finding:evidence:1', taskId: `${SRC}:plan`, reviewerWorkerId: REVIEWER, severity: 'HIGH', category: 'review',
-  claim: SENTINEL, criterionId: 'AC-1', evidenceIds: ['evidence:1'], blocking: true, createdAt: '2026-10-04T10:00:00.000Z', ...over,
+  claim: SENTINEL, criterionId: 'AC-1', evidenceIds: ['evidence:1'], blocking: true, status: 'OPEN', createdAt: '2026-10-04T10:00:00.000Z', ...over,
 });
 
 const candidateOf = (over: {
@@ -226,8 +227,8 @@ describe('the corrected carry: a DECISION is not knowledge because of its kind',
   });
 });
 
-describe('the corrected carry: the accepted architecture', () => {
-  it('carries exactly one design — the revision in force when the newest COMPLETED run ended — and names every other', () => {
+describe('the corrected carry: the design is not a source (Decision C; SECOND ruling (b))', () => {
+  it('carries no design — not even the APPROVED revision in force when the newest COMPLETED run ended — and names every one', () => {
     const live = juliusArchitectureEntryId(LIVE, 1);
     const superseded = juliusArchitectureEntryId(SRC, 1);
     const inForce = juliusArchitectureEntryId(SRC, 2);
@@ -236,26 +237,22 @@ describe('the corrected carry: the accepted architecture', () => {
       architectures: [designOf(LIVE, 1), designOf(SRC, 2), designOf(OLD, 1)],
       brain: [rowOf(LIVE, live), rowOf(SRC, superseded), rowOf(SRC, inForce, { text: 'ACCEPTED ARCHITECTURE (revision 2) — the design' }), rowOf(OLD, older)],
     });
-    expect(result.carried).toHaveLength(1);
-    const [design] = result.carried;
-    expect(design).toMatchObject({
-      source: 'ACCEPTED_ARCHITECTURE', sourceRunId: SRC, sourceRunState: 'COMPLETED', sourceRef: inForce, sourceScope: 'RUN',
-      entryId: juliusCarriedCopyId(NEW_RUN, SRC, inForce), kind: 'DECISION', workerId: ARCHITECT, scope: SCOPE, revision: 2,
-    });
-    expect(design!.text.split('\n').slice(0, 4)).toEqual([
-      'CARRIED FROM AN EARLIER RUN: ACCEPTED ARCHITECTURE. It was the design in force when that run COMPLETED. It is advisory here: this run\'s Mission Contract, and the architecture this run accepts, govern.',
-      `SOURCE RUN: ${SRC} (COMPLETED)`,
-      `SOURCE ENTRY: ${inForce} (revision 2, proposed by ${SRC}:plan, written by ${ARCHITECT}; run-wide in that run)`,
-      `SCOPE HERE: ${SCOPE.taskId} (plan, PROMPT_ARCHITECT) only`,
-    ]);
-    expect(design!.text.endsWith('ACCEPTED ARCHITECTURE (revision 2) — the design'), 'the design itself, verbatim').toBe(true);
-    // The source's standing, about the copy, with no lineage of its own.
-    expect(design!.claim).toEqual({ ...standing(inForce, 'APPROVED', ARCHITECT), claimId: juliusClaimIdFor(design!.entryId), entryId: design!.entryId });
+    expect(result.carried, 'the design in force, APPROVED, is the one draft r1 carried').toEqual([]);
+    expect(result.eligible).toBe(0);
     expect(reasonsOf(result)).toEqual({
       [`${LIVE} ${live}`]: 'architecture_run_not_completed',
       [`${SRC} ${superseded}`]: 'architecture_not_in_force',
+      [`${SRC} ${inForce}`]: 'architecture_not_a_source',
       [`${OLD} ${older}`]: 'architecture_older_run',
     });
+    expect(result.carried.length + result.excluded.length).toBe(result.candidates);
+  });
+
+  it('a design beside a verified repair finding stays behind: the finding is the only row that travels', () => {
+    const inForce = juliusArchitectureEntryId(SRC, 2);
+    const result = plan({ architectures: [designOf(SRC, 2)], brain: [rowOf(SRC, inForce)], findings: [candidateOf()] });
+    expect(result.carried.map((item) => [item.source, item.sourceRef])).toEqual([['VERIFIED_REPAIR_FINDING', 'finding:evidence:1']]);
+    expect(reasonsOf(result)).toEqual({ [`${SRC} ${inForce}`]: 'architecture_not_a_source' });
   });
 
   it('names a design in force that holds no APPROVED standing instead of carrying it, and counts it as looked at', () => {
@@ -277,7 +274,7 @@ describe('the corrected carry: verified reviewer findings', () => {
     const result = plan({
       findings: [
         candidateOf(),
-        candidateOf({ finding: { findingId: 'finding:open' }, life: { state: 'OPEN', lastMove: null, repairTaskIds: [], resolutionReviewTaskId: null } }),
+        candidateOf({ finding: { findingId: 'finding:open' }, life: OPEN }),
         candidateOf({ finding: { findingId: 'finding:addressed' }, life: { ...RESOLVED, state: 'ADDRESSED', lastMove: 'REPAIR_SUCCEEDED', resolutionReviewTaskId: null } }),
         candidateOf({ finding: { findingId: 'finding:maintained' }, life: { ...RESOLVED, state: 'OPEN', lastMove: 'REVIEWER_MAINTAINED', resolutionReviewTaskId: null } }),
         candidateOf({ finding: { findingId: 'finding:superseded' }, life: { ...RESOLVED, state: 'SUPERSEDED', lastMove: 'REVIEWER_SUPERSEDED', resolutionReviewTaskId: null } }),
@@ -285,10 +282,16 @@ describe('the corrected carry: verified reviewer findings', () => {
         candidateOf({ finding: { findingId: 'finding:uncited', evidenceIds: [] } }),
         candidateOf({ finding: { findingId: 'finding:no-repair' }, life: { ...RESOLVED, repairTaskIds: [] } }),
         candidateOf({ finding: { findingId: 'finding:unreadable' }, life: null }),
+        // REJECTED: a DISMISSED row never travels, even with a life that reads RESOLVED (C-5, by name).
+        candidateOf({ finding: { findingId: 'finding:dismissed', status: 'DISMISSED' } }),
+        // UNPROVENANCED: resolved and repaired, but no review is on record as raising it.
+        candidateOf({ finding: { findingId: 'finding:origin-unknown' }, life: { ...RESOLVED, originReviewTaskId: null } }),
       ],
     });
     expect(result.carried.map((item) => item.sourceRef)).toEqual(['finding:evidence:1']);
     expect(reasonsOf(result)).toEqual({
+      [`${SRC} finding:dismissed`]: 'finding_dismissed',
+      [`${SRC} finding:origin-unknown`]: 'finding_origin_unknown',
       [`${SRC} finding:open`]: 'finding_unresolved',
       [`${SRC} finding:addressed`]: 'finding_unresolved',
       [`${SRC} finding:maintained`]: 'finding_unresolved',
@@ -313,7 +316,7 @@ describe('the corrected carry: verified reviewer findings', () => {
       `SOURCE RUN: ${SRC} (COMPLETED)`,
       `SOURCE TASK: ${SRC}:plan (plan, PROMPT_ARCHITECT)`,
       'FINDING: finding:evidence:1 | severity HIGH | category review | criterion AC-1 | blocking',
-      `RAISED BY: ${REVIEWER}, citing evidence:1`,
+      `RAISED BY: ${REVIEWER} in review:${SRC}:plan, citing evidence:1`,
       `REPAIRED BY: repair:${SRC}:plan:1:task | RESOLVED BY THE INDEPENDENT RE-REVIEW: review:repair:${SRC}:plan:1:task`,
       `SCOPE HERE: ${SCOPE.taskId} (plan, PROMPT_ARCHITECT) only`,
       `REVIEWER'S CLAIM: ${SENTINEL}`,
@@ -342,15 +345,19 @@ describe('the corrected carry: verified reviewer findings', () => {
 });
 
 describe('the corrected carry: scope, sources and order', () => {
-  it('scopes every carried row to the new run\'s plan: task-scoped stays task-scoped, run-wide is narrowed, nothing is widened', () => {
+  it('scopes every carried row to the new run\'s plan: task-scoped stays task-scoped, nothing is widened, and the run-wide design stays behind', () => {
     const inForce = juliusArchitectureEntryId(SRC, 2);
-    const result = plan({ findings: [candidateOf()], architectures: [designOf(SRC, 2)], brain: [rowOf(SRC, inForce)] });
+    const result = plan({
+      findings: [candidateOf(), candidateOf({ finding: { findingId: 'finding:build', taskId: `${SRC}:build` } })],
+      architectures: [designOf(SRC, 2)], brain: [rowOf(SRC, inForce)],
+    });
     expect(result.carried).toHaveLength(2);
     for (const item of result.carried) {
       expect(item.scope, item.entryId).toEqual(SCOPE);
       expect(item.text, item.entryId).toContain(`SCOPE HERE: ${SCOPE.taskId} (plan, PROMPT_ARCHITECT) only`);
     }
-    expect(result.carried.map((item) => item.sourceScope)).toEqual(['RUN', 'TASK']);
+    expect(result.carried.map((item) => [item.sourceTaskId, item.sourceScope])).toEqual([[`${SRC}:build`, 'TASK'], [`${SRC}:plan`, 'TASK']]);
+    expect(reasonsOf(result)).toEqual({ [`${SRC} ${inForce}`]: 'architecture_not_a_source' });
   });
 
   it('never treats a copy as a source, and leaves task-scoped and run-wide material behind by name', () => {
@@ -383,10 +390,10 @@ describe('the corrected carry: scope, sources and order', () => {
     expect(result.candidates, 'what is not a source is not even a candidate').toBe(1);
   });
 
-  it('orders newest run first, most severe first, design first of all — and names what the bound left behind', () => {
+  it('orders newest run first, most severe first — and names what the bound left behind', () => {
     const inForce = juliusArchitectureEntryId(SRC, 2);
     const result = plan({
-      limit: 3,
+      limit: 2,
       architectures: [designOf(SRC, 2)],
       brain: [rowOf(SRC, inForce)],
       findings: [
@@ -396,9 +403,13 @@ describe('the corrected carry: scope, sources and order', () => {
         candidateOf({ finding: { findingId: 'finding:high', severity: 'HIGH' } }),
       ],
     });
-    expect(result.carried.map((item) => item.sourceRef)).toEqual([inForce, 'finding:critical', 'finding:high']);
-    expect(result.eligible).toBe(5);
-    expect(reasonsOf(result)).toEqual({ [`${SRC} finding:medium`]: 'over_limit', [`${OLD} finding:old-critical`]: 'over_limit' });
+    expect(result.carried.map((item) => item.sourceRef)).toEqual(['finding:critical', 'finding:high']);
+    expect(result.eligible).toBe(4);
+    expect(reasonsOf(result)).toEqual({
+      [`${SRC} ${inForce}`]: 'architecture_not_a_source',
+      [`${SRC} finding:medium`]: 'over_limit',
+      [`${OLD} finding:old-critical`]: 'over_limit',
+    });
   });
 
   it('accounts for everything it looked at: every candidate is carried or excluded', () => {
@@ -406,7 +417,7 @@ describe('the corrected carry: scope, sources and order', () => {
     const result = plan({
       architectures: [designOf(SRC, 2), designOf(LIVE, 1)],
       brain: [rowOf(SRC, inForce), rowOf(SRC, `brain:decision:${SRC}:plan:ACCEPT:TASK_VERIFIED`, { taskId: `${SRC}:plan` }), rowOf(LIVE, juliusArchitectureEntryId(LIVE, 1))],
-      findings: [candidateOf(), candidateOf({ finding: { findingId: 'finding:open' }, life: { state: 'OPEN', lastMove: null, repairTaskIds: [], resolutionReviewTaskId: null } })],
+      findings: [candidateOf(), candidateOf({ finding: { findingId: 'finding:open' }, life: OPEN })],
     });
     expect(result.carried.length + result.excluded.length).toBe(result.candidates);
     expect(result.version).toBe(JULIUS_KNOWLEDGE_CARRY_VERSION);
@@ -427,7 +438,7 @@ describe('the corrected carry, on the record', () => {
     return plan({
       architectures: [designOf(SRC, 2)],
       brain: [rowOf(SRC, inForce), rowOf(SRC, `brain:decision:${SRC}:plan:REPAIR:BLOCKING_FINDINGS`, { taskId: `${SRC}:plan` })],
-      findings: [candidateOf(), candidateOf({ finding: { findingId: 'finding:open' }, life: { state: 'OPEN', lastMove: null, repairTaskIds: [], resolutionReviewTaskId: null } })],
+      findings: [candidateOf(), candidateOf({ finding: { findingId: 'finding:open' }, life: OPEN })],
     });
   };
 
@@ -437,9 +448,10 @@ describe('the corrected carry, on the record', () => {
     const facts = juliusKnowledgeCarryFacts(result, digests);
     expect(facts).toMatchObject({
       carryVersion: JULIUS_KNOWLEDGE_CARRY_VERSION, outcome: 'CARRIED', reasonCode: null, scopeTaskId: SCOPE.taskId, scopeRole: 'PROMPT_ARCHITECT',
-      sourceRuns: 3, candidates: 4, eligible: 2, carried: 2, carriedFindings: 1, carriedArchitecture: 1, excluded: 2,
-      excludedByReason: 'finding_unresolved=1,decision_mirror=1',
+      sourceRuns: 3, candidates: 4, eligible: 1, carried: 1, carriedFindings: 1, carriedArchitecture: 0, excluded: 3,
+      excludedByReason: 'finding_unresolved=1,architecture_not_a_source=1,decision_mirror=1',
     });
+    expect(String(facts.carriedEntries), 'the one row is the finding').toMatch(/^[^;]*\|FINDING\|VERIFIED_REPAIR_FINDING\|[^;]*$/u);
     for (const item of result.carried) {
       expect(facts.carriedEntries, item.entryId).toContain(item.entryId);
       expect(facts.carriedEntries, item.entryId).toContain(digests[item.entryId]!);

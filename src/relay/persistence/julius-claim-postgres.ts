@@ -164,8 +164,8 @@ export class JuliusClaimPostgresRepository implements JuliusClaimStore {
    * learning arm WITH finds its arm WITHOUT), never the run doing the carrying,
    * newest first and bounded. For each: its finding rows with the life its own
    * ledger gives them (`foldJuliusFindings`, the one lifecycle definition), the
-   * design its ledger says was in force (`foldJuliusArchitecture`), and the
-   * work each finding judged. Then every brain row of those runs whose CURRENT
+   * design its ledger says was in force (`foldJuliusArchitecture`; named on the
+   * record, never carried), and the work each finding judged. Then every brain row of those runs whose CURRENT
    * standing is VERIFIED or APPROVED — what the first carry copied — so each one
    * the corrected rule leaves behind is named on the record, not just absent.
    *
@@ -202,6 +202,7 @@ export class JuliusClaimPostgresRepository implements JuliusClaimStore {
           runId: run.runId,
           finding,
           life: life === undefined ? null : {
+            originReviewTaskId: life.originReviewTaskId,
             state: life.state, lastMove: life.lastMove, repairTaskIds: life.repairTaskIds, resolutionReviewTaskId: life.resolutionReviewTaskId,
           },
           task: task === undefined ? null : { taskType: task.taskType, role: task.role },
@@ -291,9 +292,12 @@ export class JuliusClaimPostgresRepository implements JuliusClaimStore {
     } catch {
       return this.recordCarryFailure(input, 'carry_write_failed');
     }
+    const findings = plan.carried.filter((item) => item.source === 'VERIFIED_REPAIR_FINDING');
     return {
       outcome: plan.carried.length === 0 ? 'EMPTY' : 'CARRIED',
-      carried: plan.carried.length, written, excluded: plan.excluded.length,
+      carried: plan.carried.length, carriedFindings: findings.length,
+      findingSourceRunIds: [...new Set(findings.map((item) => item.sourceRunId))],
+      written, excluded: plan.excluded.length,
       reasonCode: null, eventId: event.eventId,
     };
   }
@@ -312,7 +316,10 @@ export class JuliusClaimPostgresRepository implements JuliusClaimStore {
       eventId: `${JULIUS_KNOWLEDGE_CARRY_VERSION}:${input.runId}:failed:${sha256(`${input.occurredAt}:${reasonCode}`).slice(0, 24)}`,
     });
     const recorded = await juliusSerializable(this.pool, (client) => appendJuliusEventWithin(client, event)).then(() => true, () => false);
-    return { outcome: 'FAILED', carried: 0, written: 0, excluded: 0, reasonCode, eventId: recorded ? event.eventId : null };
+    return {
+      outcome: 'FAILED', carried: 0, carriedFindings: 0, findingSourceRunIds: [], written: 0, excluded: 0,
+      reasonCode, eventId: recorded ? event.eventId : null,
+    };
   }
 
   /*

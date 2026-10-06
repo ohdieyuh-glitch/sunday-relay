@@ -144,7 +144,7 @@ suite('the corrected knowledge carry on real PostgreSQL', () => {
    *   - finding F-resolved: blocking, repaired, RESOLVED by the re-review   -> CARRIED
    *   - finding F-open: blocking, repaired, the re-review MAINTAINED it     -> finding_unresolved
    *   - finding F-warning: non-blocking, RESOLVED                          -> finding_not_blocking
-   *   - architecture r1 (IN_FORCE) then r2 (IN_FORCE): r2 is in force      -> r2 CARRIED, r1 architecture_not_in_force
+   *   - architecture r1 (IN_FORCE) then r2 (IN_FORCE): r2 is in force      -> r2 architecture_not_a_source, r1 architecture_not_in_force
    *   - a proposal r3 (PROPOSED, never accepted)                           -> architecture_proposal
    *   - the plan's REPAIR verdict mirror                                   -> decision_mirror
    */
@@ -188,7 +188,7 @@ suite('the corrected knowledge carry on real PostgreSQL', () => {
 
   /* ------------------------------------------------------------------------- the cases */
 
-  it('carries the RESOLVED repair finding and the design in force — scoped to the plan, with provenance — and records every exclusion', async () => {
+  it('carries the RESOLVED repair finding — scoped to the plan, with provenance — names the design in force as no source, and records every exclusion', async () => {
     const n = id();
     const projectId = `prj-carry-${n}`;
     const missionId = `mission:carry-${n}`;
@@ -199,44 +199,37 @@ suite('the corrected knowledge carry on real PostgreSQL', () => {
     await heir({ projectId, missionId, runId: heirRun });
 
     const outcome = await carry({ runId: heirRun, projectId, missionId });
-    expect(outcome).toMatchObject({ outcome: 'CARRIED', carried: 2, written: 2, reasonCode: null });
+    expect(outcome).toMatchObject({ outcome: 'CARRIED', carried: 1, carriedFindings: 1, findingSourceRunIds: [src], written: 1, reasonCode: null });
 
-    // (3) WHAT WAS CARRIED: two rows, both scoped to the heir's plan task, none run-wide, each under its own id.
+    // (3) WHAT WAS CARRIED: one row, the finding, scoped to the heir's plan task, never run-wide, under its own id.
     const rows = await carriedRows(heirRun);
-    expect(rows.map((row) => row.entry_id)).toEqual([
-      juliusCarriedCopyId(heirRun, src, seeded.r2),
-      juliusCarriedCopyId(heirRun, src, seeded.resolved),
-    ]);
+    expect(rows.map((row) => row.entry_id)).toEqual([juliusCarriedCopyId(heirRun, src, seeded.resolved)]);
     for (const row of rows) expect(row.task_id, `${row.entry_id} is the plan's, never run-wide`).toBe(`${heirRun}:plan`);
-    const [designRow, findingRow] = rows;
-    expect(designRow).toMatchObject({ entry_kind: 'DECISION', worker_id: ARCHITECT });
-    expect(designRow!.safe_content).toContain(`SOURCE ENTRY: ${seeded.r2} (revision 2, proposed by ${src}:plan, written by ${ARCHITECT}; run-wide in that run)`);
-    expect(designRow!.safe_content).toContain(`ACCEPTED ARCHITECTURE (revision 2) of ${src}`);
+    const [findingRow] = rows;
     expect(findingRow).toMatchObject({ entry_kind: 'FINDING', worker_id: REVIEWER, evidence_ids: [`evidence:${seeded.resolved}`] });
     for (const line of [
       `SOURCE RUN: ${src} (COMPLETED)`,
       `SOURCE TASK: ${src}:plan (plan, PROMPT_ARCHITECT)`,
       `FINDING: ${seeded.resolved} | severity HIGH | category review | criterion none | blocking`,
-      `RAISED BY: ${REVIEWER}, citing evidence:${seeded.resolved}`,
+      `RAISED BY: ${REVIEWER} in review:${src}:plan, citing evidence:${seeded.resolved}`,
       `REPAIRED BY: repair:${src}:plan:1:task | RESOLVED BY THE INDEPENDENT RE-REVIEW: review:repair:${src}:plan:1:task`,
       `SCOPE HERE: ${heirRun}:plan (plan, PROMPT_ARCHITECT) only`,
       `REVIEWER'S CLAIM: ${SENTINEL} (${seeded.resolved})`,
     ]) expect(findingRow!.safe_content.split('\n'), line).toContain(line);
 
-    // NOTHING ELSE CROSSED: not the verdict mirror, not the proposal, not the superseded revision, not the open finding.
+    // NOTHING ELSE CROSSED: not the design in force, not the verdict mirror, not the proposal, not the superseded revision, not the open finding.
     const everything = rows.map((row) => `${row.entry_id}\n${row.safe_content}`).join('\n');
-    for (const absent of [seeded.mirror, seeded.proposal, `${seeded.r1}:into`, 'Verification requires repair', 'NOT IN FORCE', `finding:${src}:open`, `finding:${src}:warning`]) {
+    for (const absent of [seeded.r2, seeded.mirror, seeded.proposal, `${seeded.r1}:into`, 'ACCEPTED ARCHITECTURE', 'Verification requires repair', 'NOT IN FORCE', `finding:${src}:open`, `finding:${src}:warning`]) {
       expect(everything, `${absent} must not be carried`).not.toContain(absent);
     }
 
-    // THE STANDINGS: the finding's is admission's derivation (VERIFIED, the reviewer); the design keeps APPROVED. Reason names the source.
+    // THE STANDING: admission's derivation for the finding (VERIFIED, the reviewer), and no other. Reason names the source.
     const standings = await pool.query<{ claim_id: string; trust: string; provenance: string; asserted_by: string; reason: string }>(
       `SELECT claim_id, trust, provenance, asserted_by, reason FROM relay_wonderland.julius_claim_standings WHERE run_id = $1 AND claim_id LIKE 'claim:carried:%' ORDER BY claim_id`,
       [heirRun]);
     expect(standings.rows).toEqual([
-      { claim_id: juliusClaimIdFor(rows[0]!.entry_id), trust: 'APPROVED', provenance: 'run_observed', asserted_by: ARCHITECT, reason: `CARRIED_FROM:${src}` },
-      { claim_id: juliusClaimIdFor(rows[1]!.entry_id), trust: 'VERIFIED', provenance: 'reviewer_verified', asserted_by: REVIEWER, reason: `CARRIED_FROM:${src}` },
-    ].sort((left, right) => left.claim_id.localeCompare(right.claim_id)));
+      { claim_id: juliusClaimIdFor(findingRow!.entry_id), trust: 'VERIFIED', provenance: 'reviewer_verified', asserted_by: REVIEWER, reason: `CARRIED_FROM:${src}` },
+    ]);
 
     // (2) WHAT BECAME ELIGIBLE, AND WHY THE REST DID NOT: one event on the heir's stream, in the same transaction.
     const recorded = await carryEvents(heirRun);
@@ -245,12 +238,13 @@ suite('the corrected knowledge carry on real PostgreSQL', () => {
     const facts = recorded[0]!.payload.facts;
     expect(facts).toMatchObject({
       outcome: 'CARRIED', missionId, scopeTaskId: `${heirRun}:plan`, scopeRole: 'PROMPT_ARCHITECT', sourceRuns: 1, sourceRunIds: src,
-      eligible: 2, carried: 2, carriedFindings: 1, carriedArchitecture: 1,
+      eligible: 1, carried: 1, carriedFindings: 1, carriedArchitecture: 0,
     });
-    for (const reason of ['finding_unresolved=1', 'finding_not_blocking=1', 'architecture_proposal=1', 'architecture_not_in_force=1', 'decision_mirror=1']) {
+    for (const reason of ['finding_unresolved=1', 'finding_not_blocking=1', 'architecture_proposal=1', 'architecture_not_in_force=1', 'architecture_not_a_source=1', 'decision_mirror=1']) {
       expect(String(facts.excludedByReason), reason).toContain(reason);
     }
-    expect(String(facts.carriedEntries)).toContain(`${rows[1]!.entry_id}|FINDING|VERIFIED_REPAIR_FINDING|${src}|${src}:plan|plan|TASK|HIGH|review|-|${REVIEWER}|VERIFIED|sha256:`);
+    expect(String(facts.excludedRefs), 'the design in force, named').toContain(`architecture_not_a_source:${src}:${seeded.r2}`);
+    expect(String(facts.carriedEntries)).toContain(`${findingRow!.entry_id}|FINDING|VERIFIED_REPAIR_FINDING|${src}|${src}:plan|plan|TASK|HIGH|review|-|${REVIEWER}|VERIFIED|sha256:`);
     expect(JSON.stringify(facts), 'the finding text never reaches the ledger').not.toContain('CARRY-STORE-SENTINEL');
   });
 
@@ -287,8 +281,8 @@ suite('the corrected knowledge carry on real PostgreSQL', () => {
 
     // A REPLAY: the same decision, the same event id, no second row or standing.
     const again = await carry({ runId: first, projectId, missionId });
-    expect(again).toMatchObject({ outcome: 'CARRIED', carried: 2, written: 0, eventId: once.eventId });
-    expect(await carriedRows(first)).toHaveLength(2);
+    expect(again).toMatchObject({ outcome: 'CARRIED', carried: 1, written: 0, eventId: once.eventId });
+    expect(await carriedRows(first)).toHaveLength(1);
     expect(await carryEvents(first)).toHaveLength(1);
     const history = await claims.claimStandingHistory(juliusClaimIdFor(juliusCarriedCopyId(first, src, `finding:${src}:resolved`)), projectId);
     expect(history, 'one standing, recorded once').toHaveLength(1);
@@ -297,9 +291,9 @@ suite('the corrected knowledge carry on real PostgreSQL', () => {
     const second = `run:carry-second-${n}`;
     await heir({ projectId, missionId, runId: second });
     const outcome = await carry({ runId: second, projectId, missionId });
-    expect(outcome).toMatchObject({ outcome: 'CARRIED', carried: 2, written: 2 });
-    // The first heir is a source run now too (same mission): its copies are excluded as copies, never re-carried.
-    expect(String((await carryEvents(second))[0]!.payload.facts.excludedByReason)).toContain('carried_copy=2');
+    expect(outcome).toMatchObject({ outcome: 'CARRIED', carried: 1, written: 1 });
+    // The first heir is a source run now too (same mission): its copy is excluded as a copy, never re-carried.
+    expect(String((await carryEvents(second))[0]!.payload.facts.excludedByReason)).toContain('carried_copy=1');
     expect((await carriedRows(second)).map((row) => row.entry_id).every((entryId) => entryId.startsWith(`carried:${src}:`) && entryId.endsWith(`:into:${second}`))).toBe(true);
 
     // A PINNED SOURCE (arm WITH names its arm WITHOUT): only that run is read.

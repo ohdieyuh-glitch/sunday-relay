@@ -17,12 +17,15 @@ import type { MissionSeedStore } from './mission-seed';
  *     named source runs;
  *   - only on a run still CREATED as the STORE reads it: a replayed create always answers CREATED;
  *   - an EMPTY or FAILED carry starts the mission anyway, unless the caller REQUIRES inheritance, in which case it
- *     is refused by name before the run is READY and before anything could be dispatched.
+ *     is refused by name before the run is READY and before anything could be dispatched — and so is any carry
+ *     without a verified repair finding from the runs the caller pinned (Decision C, C-1: ONE mode).
  */
 
 const OUTCOME = (over: Partial<JuliusKnowledgeCarryOutcome> = {}): JuliusKnowledgeCarryOutcome => ({
-  outcome: 'CARRIED', carried: 2, written: 2, excluded: 3, reasonCode: null, eventId: 'julius-knowledge-carry.v2:run:x:e', ...over,
+  outcome: 'CARRIED', carried: 2, carriedFindings: 2, findingSourceRunIds: ['run:without'], written: 2, excluded: 3,
+  reasonCode: null, eventId: 'julius-knowledge-carry.v3:run:x:e', ...over,
 });
+const NOTHING = { carried: 0, carriedFindings: 0, findingSourceRunIds: [], written: 0 } as const;
 
 function recorder(input: { readonly state?: string; readonly carry?: JuliusKnowledgeCarryOutcome } = {}) {
   const calls: string[] = [];
@@ -88,7 +91,7 @@ describe('the bootstrap carries after the task graph, before READY, for a run th
   });
 
   it('starts a mission whose carry was EMPTY or FAILED when nobody requires inheritance — the outcome is the store’s record, not a reason to stop', async () => {
-    for (const carry of [OUTCOME({ outcome: 'EMPTY', carried: 0, written: 0 }), OUTCOME({ outcome: 'FAILED', carried: 0, written: 0, reasonCode: 'carry_write_failed' })]) {
+    for (const carry of [OUTCOME({ outcome: 'EMPTY', ...NOTHING }), OUTCOME({ outcome: 'FAILED', ...NOTHING, reasonCode: 'carry_write_failed' })]) {
       const fake = recorder({ carry });
       const port = createLiveJuliusBootstrapPort({ runs: fake.runs as never, seeds: fake.seeds, knowledge: fake.knowledge, tenantId: 'tenant-carry', executionId: 'execution-carry' });
       const outcome = await port.submit(REQUEST());
@@ -106,20 +109,25 @@ describe('the bootstrap carries after the task graph, before READY, for a run th
   });
 });
 
-describe('a caller that REQUIRES inheritance (a registered arm WITH) is refused on an empty or failed carry, before READY', () => {
-  const refusedFor = async (carry: JuliusKnowledgeCarryOutcome | null) => {
+describe('a caller that REQUIRES inheritance (a registered arm WITH) is refused, before READY, unless it inherited a verified repair finding from its own arm WITHOUT', () => {
+  const refusedFor = async (carry: JuliusKnowledgeCarryOutcome | null, pin: { readonly fromRunIds?: readonly string[] } = { fromRunIds: ['run:without'] }) => {
     const fake = recorder(carry === null ? {} : { carry });
     const port = createLiveJuliusBootstrapPort({
       runs: fake.runs as never, seeds: fake.seeds, ...(carry === null ? {} : { knowledge: fake.knowledge }),
-      carry: { required: true, fromRunIds: ['run:without'] }, tenantId: 'tenant-carry', executionId: 'execution-carry',
+      carry: { required: true, ...pin }, tenantId: 'tenant-carry', executionId: 'execution-carry',
     });
     return { outcome: await port.submit(REQUEST()), fake };
+  };
+  const neverReady = (outcome: Awaited<ReturnType<typeof refusedFor>>['outcome'], fake: ReturnType<typeof recorder>, label: string) => {
+    expect(outcome, label).toMatchObject({ accepted: false, reasonCode: 'carried_knowledge_required', retryable: false });
+    expect(fake.calls.filter((call) => call.startsWith('transition:')), `${label}: the run is never made READY`).toEqual([]);
+    expect(fake.calls, `${label}: no contract, so nothing could be dispatched`).not.toContain('putTaskContract');
   };
 
   it('refuses EMPTY, FAILED and an unbound store by name, and never advances the run or writes its contract', async () => {
     for (const carry of [
-      OUTCOME({ outcome: 'EMPTY', carried: 0, written: 0 }),
-      OUTCOME({ outcome: 'FAILED', carried: 0, written: 0, reasonCode: 'carry_sources_unreadable', eventId: null }),
+      OUTCOME({ outcome: 'EMPTY', ...NOTHING }),
+      OUTCOME({ outcome: 'FAILED', ...NOTHING, reasonCode: 'carry_sources_unreadable', eventId: null }),
       null,
     ]) {
       const { outcome, fake } = await refusedFor(carry);
@@ -132,14 +140,34 @@ describe('a caller that REQUIRES inheritance (a registered arm WITH) is refused 
     }
   });
 
-  it('starts when the carry inherited at least one row, and pins the source the caller named', async () => {
-    const { outcome, fake } = await refusedFor(OUTCOME({ outcome: 'CARRIED', carried: 1, written: 1 }));
+  it('starts when the carry inherited at least one verified repair finding from the pinned run, and pins the source the caller named', async () => {
+    const { outcome, fake } = await refusedFor(OUTCOME({ outcome: 'CARRIED', carried: 1, carriedFindings: 1, findingSourceRunIds: ['run:without'], written: 1 }));
     expect(outcome).toMatchObject({ accepted: true, state: 'READY' });
     expect(fake.requests[0]?.fromRunIds).toEqual(['run:without']);
   });
 
   it('refuses a carry that says CARRIED with nothing in it — the count is the evidence, not the word', async () => {
-    const { outcome } = await refusedFor(OUTCOME({ outcome: 'CARRIED', carried: 0, written: 0 }));
-    expect(outcome).toMatchObject({ accepted: false, reasonCode: 'carried_knowledge_required' });
+    const { outcome, fake } = await refusedFor(OUTCOME({ outcome: 'CARRIED', ...NOTHING }));
+    neverReady(outcome, fake, 'CARRIED, empty');
+  });
+
+  it('refuses a carry whose rows hold no verified repair finding — a design, or any other row, never satisfies the gate', async () => {
+    const { outcome, fake } = await refusedFor(OUTCOME({ outcome: 'CARRIED', carried: 1, carriedFindings: 0, findingSourceRunIds: [], written: 1 }));
+    neverReady(outcome, fake, 'design-only');
+    if (outcome.accepted) throw new Error('unreachable');
+    expect(outcome.safeMessage).toContain('no verified repair finding');
+    // A finding count without the runs it came from is a claim, not evidence.
+    const unsourced = await refusedFor(OUTCOME({ outcome: 'CARRIED', carried: 1, carriedFindings: 1, findingSourceRunIds: [], written: 1 }));
+    neverReady(unsourced.outcome, unsourced.fake, 'findings with no source');
+  });
+
+  it('refuses findings from any run but the ones it pinned, and a required carry that pinned none — its own arm WITHOUT is the only source', async () => {
+    const stranger = await refusedFor(OUTCOME({ findingSourceRunIds: ['run:without', 'run:stranger'] }));
+    neverReady(stranger.outcome, stranger.fake, 'a stranger among the sources');
+    if (stranger.outcome.accepted) throw new Error('unreachable');
+    expect(stranger.outcome.safeMessage).toContain('did not pin');
+    const unpinned = await refusedFor(OUTCOME(), {});
+    neverReady(unpinned.outcome, unpinned.fake, 'no pin');
+    expect('fromRunIds' in unpinned.fake.requests[0]!, 'the store was asked without a pin, so any run could have answered').toBe(false);
   });
 });
