@@ -1,6 +1,7 @@
 #include "WonderlandSocialHubPanel.h"
 
 #include "Framework/Application/SlateApplication.h"
+#include "HAL/IConsoleManager.h"
 #include "Misc/DateTime.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Input/SButton.h"
@@ -13,6 +14,7 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
+#include "WonderlandSocialLive.h"   // D3 (b) QA: UNBLOCK's operation through the real dispatcher
 #include "WonderlandUiStyle.h"
 
 // Named, not anonymous: the module is one unity translation unit.
@@ -651,6 +653,17 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeFriends()
 				+ SHorizontalBox::Slot().AutoWidth()[MakeButton(TEXT("REPORT"), TEXT("reports.file"), Row->UserId, Can.bReport, true)]
 			];
 		List->AddSlot()[MakePersonRow(*Row, FString(), Actions)];
+	}
+	// BLOCKED BY YOU (founder D3 = (b), 10-06): the players this viewer blocked, each with UNBLOCK; drawn only when there is one.
+	const TArray<FWonderlandSocialPersonRow> Blocked = WonderlandSocialBlocked::BlockedByViewer(Snapshot);
+	if (Blocked.Num() > 0)
+	{
+		List->AddSlot().Padding(0.0f, 14.0f, 0.0f, 6.0f)[MakeSectionTitle(TEXT("BLOCKED BY YOU"), Blocked.Num())];
+		for (const FWonderlandSocialPersonRow& Row : Blocked)
+		{
+			List->AddSlot()[MakePersonRow(Row, FString(TEXT("You are hidden from each other. UNBLOCK undoes it.")),
+				MakeButton(TEXT("UNBLOCK"), TEXT("blocks.remove"), Row.UserId, true, true))];
+		}
 	}
 	return List;
 }
@@ -1330,4 +1343,102 @@ FString SWonderlandSocialHubPanel::Describe() const
 		Snapshot.VisibleParties.Num(), Voice.Connection.IsEmpty() ? TEXT("UNAVAILABLE") : *Voice.Connection,
 		VoiceLabel.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" [%s]"), *VoiceLabel), ShownRows.Num() > 0 ? *FString::Join(ShownRows, TEXT(",")) : TEXT("none"), *LastActionLine,
 		FWonderlandSocialSignIn::StateName(SignIn.State), SignIn.State == EWonderlandSignInState::Waiting ? *FString::Printf(TEXT(" (code %d chars)"), SignIn.UserCode.Len()) : TEXT(""));
+}
+
+TArray<FWonderlandSocialPersonRow> WonderlandSocialBlocked::BlockedByViewer(const FWonderlandSocialSnapshot& Snapshot)
+{
+	TArray<FWonderlandSocialPersonRow> Out;
+	for (const TPair<FString, FWonderlandSocialProfileView>& Entry : Snapshot.Profiles)
+	{
+		const FWonderlandSocialProfileView& View = Entry.Value;
+		if (View.Relationship != TEXT("BLOCKED"))
+		{
+			continue;   // BLOCKED_BY, FRIEND, NONE...: not this list (who blocked the viewer is never shown)
+		}
+		FWonderlandSocialPersonRow Row;
+		Row.UserId = View.Profile.UserId.IsEmpty() ? Entry.Key : View.Profile.UserId;
+		Row.DisplayName = View.Profile.DisplayName;
+		Row.Handle = View.Profile.Handle;
+		Row.AvatarRef = View.Profile.AvatarRef;
+		// NOTHING THE SERVER SENT ABOUT THEIR PRESENCE IS SHOWN: the wall hides each from the other, so the row says "presence hidden".
+		Row.Presence = FWonderlandSocialPresence();
+		Row.Presence.RestrictedReason = TEXT("BLOCKED");
+		Out.Add(MoveTemp(Row));
+	}
+	Out.StableSort([](const FWonderlandSocialPersonRow& A, const FWonderlandSocialPersonRow& B)
+	{
+		const int32 ByName = A.DisplayName.Compare(B.DisplayName, ESearchCase::IgnoreCase);
+		return ByName != 0 ? ByName < 0 : A.UserId < B.UserId;
+	});
+	return Out;
+}
+
+namespace WonderlandSocialBlockedQa
+{
+	/** D3 (b) QA, the founder's "fail-capable client test" (10-06). The BLOCKED BY YOU list holds exactly the players the viewer blocked;
+	 *  UB2 is a control: BLOCKED_BY is fed and must not appear. The list hides their presence, and UNBLOCK's operation is one the client
+	 *  dispatches; UB5's control: an unknown op is refused. UB6 and UB7 prove the checks themselves can FAIL: the same predicates read
+	 *  FAIL on a deliberately wrong list and on a row that leaks ONLINE. Fed snapshots, a throwaway service on a dead loopback port.
+	 *  WLQA UNBLOCK lines. */
+	FAutoConsoleCommand GQaSocialBlocked(
+		TEXT("wl.Qa.SocialBlocked"),
+		TEXT("QA: the FRIENDS tab's BLOCKED BY YOU list and UNBLOCK's operation -- fed snapshots, with fail-capable controls."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			int32 Passed = 0;
+			int32 Failed = 0;
+			auto Check = [&Passed, &Failed](const FString& Id, bool bOk, const FString& What)
+			{
+				(bOk ? Passed : Failed) += 1;
+				UE_LOG(LogTemp, Display, TEXT("WLQA UNBLOCK %s %s -- %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *What);
+			};
+			auto Person = [](const TCHAR* Id, const TCHAR* Name, const TCHAR* Relationship)
+			{
+				FWonderlandSocialProfileView View;
+				View.Profile.UserId = Id;
+				View.Profile.DisplayName = Name;
+				View.Relationship = Relationship;
+				View.Presence.OnlineState = TEXT("ONLINE");   // what a careless server might send: it must never reach the row
+				return View;
+			};
+			auto ListIsRight = [](const TArray<FString>& List)
+			{
+				return FString::Join(List, TEXT(",")) == TEXT("qa-amy,qa-zed") && !List.Contains(TEXT("qa-blocker"));
+			};
+			auto Hidden = [](const FWonderlandSocialPersonRow& R)
+			{
+				return R.Presence.RestrictedReason == TEXT("BLOCKED") && R.Presence.OnlineState.IsEmpty();
+			};
+			FWonderlandSocialSnapshot Fed;
+			Fed.Profiles.Add(TEXT("qa-friend"), Person(TEXT("qa-friend"), TEXT("Fern"), TEXT("FRIEND")));
+			Fed.Profiles.Add(TEXT("qa-zed"), Person(TEXT("qa-zed"), TEXT("zed"), TEXT("BLOCKED")));
+			Fed.Profiles.Add(TEXT("qa-amy"), Person(TEXT("qa-amy"), TEXT("Amy"), TEXT("BLOCKED")));
+			Fed.Profiles.Add(TEXT("qa-blocker"), Person(TEXT("qa-blocker"), TEXT("Bea"), TEXT("BLOCKED_BY")));
+			Fed.Profiles.Add(TEXT("qa-none"), Person(TEXT("qa-none"), TEXT("Nia"), TEXT("NONE")));
+			const TArray<FWonderlandSocialPersonRow> Rows = WonderlandSocialBlocked::BlockedByViewer(Fed);
+			TArray<FString> Ids;
+			for (const FWonderlandSocialPersonRow& R : Rows) { Ids.Add(R.UserId); }
+			const FString Got = FString::Join(Ids, TEXT(","));
+			Check(TEXT("UB1"), ListIsRight(Ids), FString::Printf(TEXT("the viewer's two blocks, by name (Amy, zed): got [%s]"), *Got));
+			Check(TEXT("UB2"), !Ids.Contains(TEXT("qa-blocker")) && !Ids.Contains(TEXT("qa-friend")) && !Ids.Contains(TEXT("qa-none")),
+				TEXT("control: BLOCKED_BY (fed) never appears, nor a friend or a stranger"));
+			bool bHidden = Rows.Num() > 0;
+			for (const FWonderlandSocialPersonRow& R : Rows) { bHidden = bHidden && Hidden(R); }
+			Check(TEXT("UB3"), bHidden, TEXT("every row's presence is hidden (RestrictedReason BLOCKED, no online state), though ONLINE was fed"));
+			Check(TEXT("UB4"), WonderlandSocialBlocked::BlockedByViewer(FWonderlandSocialSnapshot()).Num() == 0, TEXT("no blocks: no rows (the list is not drawn)"));
+			TUniquePtr<FWonderlandSocialLiveService> Probe = MakeUnique<FWonderlandSocialLiveService>(TEXT("http://127.0.0.1:9"), TEXT("qa-unblock"));
+			const FWonderlandSocialActionResult Known = Probe->Request(TEXT("blocks.remove"), TEXT("qa-zed"));
+			const FWonderlandSocialActionResult Unknown = Probe->Request(TEXT("blocks.nonsense"), TEXT("qa-zed"));
+			Check(TEXT("UB5"), Known.bOk && Known.bPending && !Unknown.bOk && Unknown.Reason.Contains(TEXT("not a social action")),
+				FString::Printf(TEXT("UNBLOCK's blocks.remove is dispatched (pending); control: an unknown op is refused ('%s')"), *Unknown.Reason));
+			Probe.Reset();
+			// UB6 / UB7 THE CHECKS CAN FAIL: a predicate that passed everything would pass the wrong inputs here too
+			TArray<FString> Wrong = Ids;
+			Wrong.Add(TEXT("qa-blocker"));
+			Check(TEXT("UB6"), ListIsRight(Ids) && !ListIsRight(Wrong), TEXT("control: the list check passes the right list and FAILS a wrong one (BLOCKED_BY added)"));
+			FWonderlandSocialPersonRow Leaky;
+			Leaky.Presence.OnlineState = TEXT("ONLINE");
+			Check(TEXT("UB7"), !Hidden(Leaky), TEXT("control: the presence check FAILS a row that shows ONLINE"));
+			UE_LOG(LogTemp, Display, TEXT("WLQA UNBLOCK END pass=%d fail=%d"), Passed, Failed);
+		}));
 }

@@ -30,6 +30,15 @@ DECLARE_DELEGATE_TwoParams(FOnWonderlandSocialSend, const FString& /*Conversatio
 /** A voice command: "connect", "disconnect", "mic.mute", "mic.unmute", "local.mute" / "local.unmute" (subject: the member), "preview.step". */
 DECLARE_DELEGATE_TwoParams(FOnWonderlandVoiceCommand, const FString& /*Command*/, const FString& /*SubjectUserId*/);
 
+/** THE PLAYERS THIS VIEWER BLOCKED, as rows for the FRIENDS tab's BLOCKED BY YOU list (founder D3 = (b), 2026-10-06: client-only unblock;
+ *  no new backend behaviour, no migration): the snapshot's profiles whose relationship is BLOCKED (the server already sends them "so they
+ *  can unblock"), sorted by name. Never BLOCKED_BY: who blocked the viewer is never shown (the founder's 10-04 wall). Each row's
+ *  presence is hidden (RestrictedReason BLOCKED), whatever was sent. */
+namespace WonderlandSocialBlocked
+{
+	TArray<FWonderlandSocialPersonRow> BlockedByViewer(const FWonderlandSocialSnapshot& Snapshot);
+}
+
 class WONDERLAND_API SWonderlandSocialHubPanel : public SCompoundWidget
 {
 public:
