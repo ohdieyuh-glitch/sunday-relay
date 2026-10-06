@@ -106,7 +106,7 @@ words from your own commit appear in the bundle; and `sk-` matches inside
 
 ---
 
-## State as of 2026-10-04 (JUJU MAIN, cloud)
+## State as of 2026-10-06 (JUJU MAIN, cloud)
 
 **Read this first. Do not trust remembered readiness, PR numbers, migration
 numbers, scores or blockers from any earlier session.** Re-verify against live
@@ -115,6 +115,95 @@ before acting. Where a figure below says *founder canon*, the record behind it
 lives outside this repository (the local `landing/`, `row13i/`, `alpha_beta/`
 qualification records); it was NOT re-derived from repo evidence in this
 session.
+
+### Read first: what changed 2026-10-05 → 10-06
+
+**Founder rulings in force:**
+1. **#321 ordering.** The 13 (i) qualification package is pinned to #321's head
+   `aeba8b2c2abfb113ccd86be6d9ade5fb62550d30`; a docs-only `main` commit before
+   #321 would move its base. So **this State does not merge into `main` before
+   #321**. It lives on `relay/claude-md-state-2026-10-04` (#329) and in the cloud
+   session's `scratchpad/state.md`, which together are the canonical handoff.
+   Preferred landing: the frozen 13 (i) rerun on #321's exact head → land #321 →
+   accept-main → rebase this branch and merge it before the 033/034/035/C
+   campaign, if no exact-head qualification is in flight. A CLAUDE.md update
+   earns no readiness.
+2. **Migration 027.** Do not release, reuse, renumber or invent 027; do not touch
+   the permanent store; keep 031–035 RESERVED and apply no later migration.
+   **Investigated 2026-10-06** (see Migrations below). The decision is the
+   founder's.
+
+**Current rules (founder, 2026-10-06):**
+- `main` stays untouched unless an already-approved landing sequence permits it.
+- `DATABASE_URL` stays PARKED.
+- #329 stays UNMERGED until after #321's exact-head qualification and landing.
+- 031–035 remain reserved.
+- No readiness is self-awarded from cloud implementation.
+- Read-only review agents are internal adversarial QA only. They never substitute
+  for an independent SECOND qualification.
+- No new PR for a small follow-up: update the existing draft.
+
+**The canonical migration numbering** (recorded by JUJU MAIN closing #337):
+- 031 = 13 (i);
+- 032 = the 030 repair;
+- 033 = Wonderland social;
+- **034 = Project Brain components**, which exists locally in the Project Brain
+  lane and is not on GitHub;
+- 035 = voice.
+
+**Closed unmerged by JUJU MAIN, 2026-10-06 14:27Z (branches kept):**
+- **#324** (`window.sh`), superseded. The live 031+032 window does not use it:
+  MAIN and SECOND JUJU rejected it as the live procedure. It has no landed-commit,
+  file-hash or store-identity pin, and no ledger classifier gate. Its single
+  backup's restore check creates a scratch database inside the live cluster, and
+  it has no rollback-order guard.
+  - The reviewed procedure is `FOUNDER_031_032_APPLY r2` +
+    `FOUNDER_031_032_ROLLBACK r1` (operator tooling, outside the repo), with its
+    own Docker rehearsal.
+  - #324's fingerprints (`6040e517` → `a7fb4199` → `6b59133d`) remain a cross-check
+    only.
+- **#337** (034 options): answered by the numbering above.
+- **#338** (034 as a reserved stamp): contradicts the canon, and SECOND JUJU does
+  not recommend it. Once applied to any persistent store, a reserved 034 cannot
+  give its place back. Its voice-registration work is reusable on top of the
+  real 034.
+- **#341** (window through 035): it depended on #338 and on unlanded 033/035.
+  **Nothing unlanded enters a migration window.**
+
+**Another session's branch, `relay/wonderland-social-r16`:**
+- Author `julius-stack-rehearsal`, tip `0cbbc313` (2026-10-06), 50 commits on the
+  2026-10-02 `main`.
+- It is a separate social implementation under `src/relay/social/`, with its own
+  033/035 SQL. It applies SECOND's R16 reviews (10-04, 10-06), including a 60 s
+  presence lease and per-player command budgets.
+- It overlaps #323, #330 and #340 (this session's 120 s lease and budgets).
+- Left untouched here. **Which implementation is canonical is the founder's and
+  SECOND Wonderland's call.**
+
+**Cloud progress, 10-05 → 10-06** (all draft, AWAITING INDEPENDENT REVIEW; no
+score change):
+- **The wall review of 10-05:** six findings, each reproduced and classified.
+  Each fix killed its mutants:
+  - #325 `98cfad35`: one player's voice moves one step at a time (a per-player
+    lock; the race leaked a room). The actor's answer no longer waits on other
+    players' reconcile, and an invisible actor reconciles nobody else.
+  - #340 `b22ad0b0`: a player can always protect themselves. Block, visibility
+    and leave draw only on a `protect` bucket.
+  - #323 `4433f84c`: no party inference through an invitation.
+  - **Actor-only room takeback** is a reconcile-contract violation, not a leak:
+    removing either member separates a pair room.
+- **#336 `c5fe7470`:** R16 checks the voice wall over HTTP.
+  - `--voice` adds 8 checks, and `--final` requires them.
+  - The PostgreSQL-through-035 restart case and the CLI case against the real
+    bridge are green.
+  - The full gate passed at `84429d1a` except the container-only login probe (#333 fixes it): 14,031 passed. CI is 6/6 at `c5fe7470`.
+- **A CI root cause (#336, #327):**
+  - #321's 032 suite drops about 13 databases one at a time, and on PostgreSQL
+    15+ every `DROP DATABASE` waits on an immediate checkpoint.
+  - Reproduced locally ("Hook timed out in 10000ms" under write load) and fixed
+    by the hook's own timeout, carried in #336 and #327. **#321 should fold the
+    same line.**
+- **Migration 027:** investigated (Migrations below).
 
 ### Repository
 
@@ -184,44 +273,46 @@ Row 13 (i) completion plus the 030 invariant repair: migrations **031 + 032**.
   Venue of the frozen rerun: if it is frozen to a local machine, it is
   `READY FOR LOCAL QUALIFICATION`, never a cloud substitute.
 
-### Decision queue: what gates progress now (2026-10-05)
+### Decision queue: what gates progress now (2026-10-06)
 
-Every JUJU PR below is green. What moves the material order next is a decision, in this order:
+Every open JUJU PR below is green, or running on a test-only push. What moves the material order next is a decision, in this order:
 
 | # | Decision | Owner | Where | JUJU's recommendation |
 |---|---|---|---|---|
 | 1 | The frozen 13 (i) rerun at #321's head | founder / SECOND (local) | #321 | **READY FOR LOCAL QUALIFICATION**; it gates everything after #321 |
-| 2 | Fold the 031 and 032 teardown fixes into #321 | founder | Findings below | yes: two one-line test fixes |
-| 3 | What 034 is | founder / SECOND | #337, #338, #341 | option 4, a reserved stamp: #338 is ready, and #341 makes 031–035 one rehearsed window |
+| 2 | Fold the 031 and 032 teardown fixes into #321 | founder | Findings below | yes: two one-line test fixes. 032's root cause was measured 10-06, and the same line is carried in #336 and #327 |
+| 3 | ~~What 034 is~~ **Answered by the canon:** 034 = Project Brain components (local Project Brain lane). Owed: that 034 reaching GitHub, reviewed | Project Brain lane / founder | closed #337, #338, #341 | none: 035 stays staged behind 034's guard until the real 034 lands |
 | 4 | C pair validity: option A, B or C | founder / SECOND | #326, #331 | B is prepared in #331 |
 | 5 | `allowNative` (native social for the RC) | SECOND Wonderland / founder | #339 | its evidence holds; a one-line change. Players must OWN their client's project |
 | 6 | A rate limit on social commands | SECOND Wonderland / founder | #340 | adopt #340's budgets (60 commands then 1/s; 20 messages then 1 per 3 s; 10 invitations then 1 per 30 s) before any public hosted launch |
 | 7 | Close the stale PRs #290, #291 and #293–#297 | founder | Findings below | close: folded into `main` |
 | 8 | Voice room count: pair rooms cost one EOS room per mutually visible channel mate. Is that within an EOS client's limit, or must instance voice be bounded? | CORE / founder | #325 | pair rooms are the only inference-free construction; bound the channel rather than the wall if EOS requires it |
+| 9 | Migration 027 | founder (+ one read-only check by the founder or SECOND) | Migrations below | declare 027 **permanently vacant**, never filled; add a chain guard that refuses any back-filled number |
+| 10 | Which social implementation is canonical: this session's #323, #330 and #340, or `relay/wonderland-social-r16` | founder / SECOND Wonderland | "Read first" above | not JUJU's to choose. They agree on the message and invitation budgets and differ on the lease (120 s vs 60 s) and the classes. Theirs charges a block to the shared `write` budget (60, then 1/s), the shape #340 removed on 10-06 so that a player's own traffic can never stop them protecting themselves |
 
-### Work in flight from the JUJU MAIN cloud session (2026-10-04; all draft, AWAITING INDEPENDENT REVIEW)
+### Work in flight from the JUJU MAIN cloud session (2026-10-04, updated 10-06; all draft, AWAITING INDEPENDENT REVIEW)
 
 | PR | What | Stack | CI (2026-10-04) |
 |---|---|---|---|
 | **#322** | Decision C corrected carry (`julius-carry.v2`). Only verified repair findings and accepted decisions travel; every exclusion is recorded by code; four-point proof | base `main` | green |
 | **#326** | C on the **paid venue**: a WITH arm learns from its pair's verified evidence bundle (`carryFrom`, input `carry_source_run`, `verify-carry`, `carry-export.json`, `carry.tsv`) | on #322 | green (6/6) |
 | **#331** | C **option B prepared, not chosen**: the reviewer names each finding's kind, a contract may promote kinds (`promotedWarningCategories`), and the bundle records each warning's kind (`review-warnings.tsv`). Rehearsed on real PostgreSQL: a promoting WITHOUT arm teaches a WITH arm; its control is refused for free. The four frozen missions' binding digests are pinned and unchanged | on #326 | green (6/6) |
-| **#324** | 031+032 (+033) migration window tooling (`docs/julius-migrations/window/`) and its Docker rehearsal records | base `relay/julius-13i-completion-r2` | n/a |
-| **#323** | Wonderland social backend and privacy wall P1–P5, migration **033** | on #321 | green |
-| **#325** | Wonderland voice/EOS: rooms are cliques of mutual visibility, PUID binding, **035 staged** behind 034 | on #323 | green |
+| ~~**#324**~~ | **CLOSED 10-06, superseded** (see "Read first"): 031+032 (+033) window tooling (`docs/julius-migrations/window/`); its rehearsal fingerprints stay a cross-check only | base `relay/julius-13i-completion-r2` | closed |
+| **#323** | Wonderland social backend and privacy wall P1–P5, migration **033**. 10-06: no party inference through an invitation | on #321 | green at `4433f84c` |
+| **#325** | Wonderland voice/EOS: every room is one mutually visible pair, PUID binding, one player's voice one step at a time, **035 staged** behind 034 | on #323 | green at `98cfad35` |
 | **#328** | Wonderland social display names: the verified GitHub login is recorded at sign-in, and a nameless request never erases it | on #325 | green |
 | **#330** | Wonderland presence is a **lease**: a presence not refreshed for 120 s is absent everywhere (reads and decisions), a stale heartbeat is `NOT_IN_INSTANCE`, and the next live heartbeat moves live players out of a departed player's voice room | on #328 | green (6/6) |
-| **#327** | Wonderland R16 harness: 24 closed-list checks over HTTP against the real bridge **process**. The scenario keeps the heartbeat, and LEASE fails on a lapse. The restart check is split: DURABLE as stored, then RECONNECT (HELD/REENTERED), then PRESENCE | **restacked on #330** (it must sit above every product change) | green (6/6) on the restacked head |
+| **#327** | Wonderland R16 harness: 24 closed-list checks over HTTP against the real bridge **process**. The scenario keeps the heartbeat, and LEASE fails on a lapse. The restart check is split: DURABLE as stored, then RECONNECT (HELD/REENTERED), then PRESENCE | **restacked on #330** (it must sit above every product change) | `3e36af29` (10-06: the 032 teardown and lease-renewal timeouts); CI running |
 | **#332** | Wonderland **hosted store**: `relay-bridge/wonderland-store.ts` (`inspect`/`bootstrap`) brings the bridge's store from nothing to migrated on a record and REFUSES every database it did not create (the permanent store's case included). `GET /relay-api/wonderland/readiness` (operator only) reports the store as facts. Rehearsed on real PostgreSQL through the real bridge process and the whole R16 scenario | on #327 | green (6/6) |
 | **#333** | Julius **local qualification reliability**, three fixes. `migrate()` serialises itself under a session advisory lock (`WONDERLAND_MIGRATION_LOCK`): 7 of 8 concurrent migrators of an EMPTY store used to be refused. The login-probe test clears the probe's own override table (`CLAUDE_AUTH_PROVIDER_OVERRIDES`). The drill suite drops the two databases it used to leak every run. The full suite against ONE fresh database, every real-PG suite live: 13,783 passed, 0 failed | base `main` | green (6/6) at `62a78d5d` |
 | **#334** | Wonderland **R16 venue**. The bridge reports, operator-only, the commit its platform attests (`RAILWAY_GIT_COMMIT_SHA`, nothing else believed) and a boot id per start. Every R16 run is judged **HOSTED_FINAL** or **REHEARSAL** (19 named reasons) apart from its checks; `--final` refuses a rehearsal. The verify phase gains a **RESTART** check (boot id changed), which found that #327's own CLI test never restarted | on #332 | green (6/6) |
-| **#336** | Wonderland **deploy check** (`scripts/wonderland-deploy-check.mjs`): by reads alone, the hosted bridge is the expected build (attested commit), production-gated, ready (store, social) and closed (health says only ok, report operator-only, foreign origin refused). R16 is now rehearsed **under the production gates**: a bridge refusing pairing on the production branch only passed every R16 test before (7/7, measured) and fails now | on #334 | see the PR |
+| **#336** | Wonderland **deploy check** (`scripts/wonderland-deploy-check.mjs`): by reads alone, the hosted bridge is the expected build (attested commit), production-gated, ready (store, social) and closed (health says only ok, report operator-only, foreign origin refused). R16 is now rehearsed **under the production gates**: a bridge refusing pairing on the production branch only passed every R16 test before (7/7, measured) and fails now. 10-06: the **voice wall over HTTP** (`--voice`, 8 checks, `--final` requires them), with the wall review's fixes merged in | on #334 | green (6/6) at `c5fe7470` |
 | **#335** | **[DO NOT MERGE] landing rehearsal**: all thirteen open PRs merged in material order on one head. One conflict, the generated `JULIUS_HARNESS_MANIFEST.md`. Full suite on it: 742 files, 14,154 passed, 0 failed | base `main` | **green (6/6), closed** as planned |
-| **#337** | **Migration 034 options** (`docs/JULIUS_MIGRATION_034_OPTIONS.md`), evidence for the founder and SECOND, nothing chosen. Five options; option 1 (project memory across missions) interacts with Decision C. JUJU recommends option 4 | base `main` | see the PR |
-| **#339** | Wonderland **R16 over native sessions** (the RC's session kind). The harness speaks as the native client (`--native`, no Origin, `pairR16NativeSessions`). In process with `allowNative` true only in the test: 24/24 plus the restart over native sessions, identical results and views to browser sessions, and the copy guard both ways. The real bridge refuses native social as shipped, and the harness reports it as the decision. **Found: today only a project OWNER can pair a desktop client** (MEMBER decided, not written) | on #336 | see the PR |
-| **#338** | **Option 4 PREPARED, not chosen**: `034_julius_project_brain_reserved` (stamp-only, guarded) and voice **035 in the chain** behind it. A hosted store left at 033 takes 034 and 035 as pending. Found and fixed: 033's DOWN case assumed 033 was last | on #336 | see the PR |
-| **#340** | Wonderland social **command budgets, PREPARED, not chosen**: per verified player, `all` 60 then 1/s, `message` 20 then 1 per 3 s, `invitation` 10 then 1 per 30 s. Past it, `429 rate_limited` with `Retry-After`; the command is not executed and takes nothing. Integer-ms GCRA (a fractional first version never returned a due token). The R16 scenario fits the budget with the clock frozen. 7 mutants killed | on #336 | see the PR |
-| **#341** | **Migration window through 035, PREPARED on option 4, not chosen.** 034 and 035 get pre-check, post-check and DOWN SQL. `window.sh --through 034\|035` reads their PASS conditions, lets 035 add only empty `voice_*` tables, and requires 034 to leave the catalog fingerprint IDENTICAL. Docker rehearsal of record: R1–R5 PASS, 71 conditions, every 2026-10-04 fingerprint reproduced, after-035 `9f65bb10`. Three mutant migrations each STOP the window | on #338 + #324 | see the PR |
+| ~~**#337**~~ | **CLOSED 10-06**, answered by the canonical numbering: Migration 034 options (`docs/JULIUS_MIGRATION_034_OPTIONS.md`) | base `main` | closed |
+| **#339** | Wonderland **R16 over native sessions** (the RC's session kind). The harness speaks as the native client (`--native`, no Origin, `pairR16NativeSessions`). In process with `allowNative` true only in the test: 24/24 plus the restart over native sessions, identical results and views to browser sessions, and the copy guard both ways. The real bridge refuses native social as shipped, and the harness reports it as the decision. **Found: today only a project OWNER can pair a desktop client** (MEMBER decided, not written) | on #336 | green (6/6) at `be8807b3` |
+| ~~**#338**~~ | **CLOSED 10-06**: option 4 contradicts the canon. The branch keeps the voice-registration work (035 in the chain) for reuse on the real 034 | on #336 | closed |
+| **#340** | Wonderland social **command budgets, PREPARED, not chosen**: per verified player, `all` 60 then 1/s, `message` 20 then 1 per 3 s, `invitation` 10 then 1 per 30 s. Past it, `429 rate_limited` with `Retry-After`; the command is not executed and takes nothing. Integer-ms GCRA (a fractional first version never returned a due token). The R16 scenario fits the budget with the clock frozen. 7 mutants killed. 10-06: protective commands draw only on a `protect` bucket (30, then 1 per 2 s) | on #336 | green at `b22ad0b0` |
+| **#341** | **Migration window through 035, PREPARED on option 4, not chosen.** 034 and 035 get pre-check, post-check and DOWN SQL. `window.sh --through 034\|035` reads their PASS conditions, lets 035 add only empty `voice_*` tables, and requires 034 to leave the catalog fingerprint IDENTICAL. Docker rehearsal of record: R1–R5 PASS, 71 conditions, every 2026-10-04 fingerprint reproduced, after-035 `9f65bb10`. Three mutant migrations each STOP the window. **CLOSED 10-06**: nothing unlanded enters a migration window | on #338 + #324 | closed |
 
 **Findings to act on:**
 - **Native social for the final RC (`allowNative`) stays SECOND's and the founder's decision**, and #339 is its evidence.
@@ -248,12 +339,16 @@ Every JUJU PR below is green. What moves the material order next is a decision, 
 - **#321 should fold a one-line test fix** in `julius-migration-031.real-postgres.test.ts`: `pool.on('error', () => undefined)` before `pool.end()`.
   - Without it, a terminated idle client (57P01) raised unhandled errors that failed `first-live-topology (executor-private)` on a stacked PR.
   - The fix was proven on #323 as `0873f6e2`.
-- **#321's migration-032 suite teardown can time out under CI load.** Its `afterAll` runs a plain `DROP DATABASE` per database, and each can wait up to about 5 s for terminated backends to exit, against the 10 s hook default.
-  - Seen on #327's run 37237672139 with 219/219 tests passing.
-  - Proposed one-line fix: give that `afterAll` an explicit timeout (e.g. `}, 90_000)`), next to the 031 fix above.
-- **034 (Project Brain) has no spec in the repo**, and it now gates both lanes: 035 (EOS voice for final R16) behind its guard, and C after 035 in the material order.
-  - The options are in #337. Option 4, a reserved stamp, is prepared in #338.
-  - **The founder and SECOND choose.** If option 1 (UNRESOLVED findings carried across missions) is wanted at all, settle its relation to Decision C before C's registration is frozen.
+- **#321's migration-032 suite teardown times out under CI load.** Root cause measured 2026-10-06:
+  - Its `afterAll` drops the ~13 databases it made one at a time.
+  - On PostgreSQL 15+ every `DROP DATABASE` requests an immediate checkpoint of the whole cluster and waits for it. `CREATE DATABASE` does not; each drop logs `checkpoint starting: immediate force wait`.
+  - With the real-PostgreSQL step run locally, one such checkpoint took 6.96 s.
+  - It failed #327 (10-05) and both of #336's runs before the fix, every case passing each time.
+  - Reproduced: the suite alone beside an 8-client `pgbench` write load fails exactly as CI did; with the hook's own `120_000` it passes under the same load.
+  - Carried in #336 (`c5fe7470`) and #327 (`3ca664f4`). **The same line should fold into #321**, next to the 031 fix above.
+- **034 is Project Brain components (founder canon, 2026-10-06).** It exists locally in the Project Brain lane and is not on GitHub. It gates 035 (EOS voice for final R16, behind its guard) and C after 035 in the material order.
+  - #337 and #338 are closed. #338's voice-registration work is reusable once the real 034 is on GitHub.
+  - If the real 034 carries UNRESOLVED findings across missions, settle its relation to Decision C before C's registration is frozen (#337's memo, option 1).
 - **Hosted R16 needs a hosted PostgreSQL** for the Railway bridge, because the bridge never migrates at boot.
   - Provisioning is the founder's.
   - The procedure is built and rehearsed (`docs/relay/WONDERLAND_HOSTED_STORE.md`, #332) and **AWAITING INDEPENDENT REVIEW**. It runs only after 031–033 land.
@@ -280,23 +375,51 @@ Every JUJU PR below is green. What moves the material order next is a decision, 
 | No. | What | Where |
 |---|---|---|
 | 001–026, 028–030 | landed | `main` (`src/relay/persistence/wonderland-migrations/`) |
-| 027 | **reserved** for the integration lane (`project_execution_profiles`, `player_mission_contracts`) by agreement | not on any branch (see the code comment in `wonderland-postgres.ts`) |
+| 027 | **reserved** for the integration lane (`project_execution_profiles`, `player_mission_contracts`) by agreement, 2026-09-28. **Never existed; never applied anywhere** (investigated 2026-10-06, below) | not on any branch (see the code comment in `wonderland-postgres.ts`) |
 | 029 | Project Brain v1 (`029_julius_project_brain.sql`) | landed in #309 |
 | 030 | outbox stops re-reading its event (row 13 (i)) | landed in #313 |
 | **031** | Julius 13 (i): run transition is a HOT update, plus task-claim work | #321 |
 | **032** | repair of 030's orphan/outbox invariant (two orphan paths closed) | #321 |
 | **033** | Wonderland social (15 `social_*` tables) | #323, stacked on #321; applied in the #324 window rehearsal only |
-| **034** | Project Brain (the next Brain migration; 029 is already the first) | not on any branch; **no spec in the repo** |
-| **035** | voice (`voice_identities`, history, issuances; never a token) | **staged** in #325 (`docs/julius-migrations/035/`); not in the chain until 034 exists |
+| **034** | **Project Brain components** (founder canon, 2026-10-06; 029 is the first Brain migration) | local Project Brain lane; **not on GitHub** |
+| **035** | voice (`voice_identities`, history, issuances; never a token) | **staged** in #325 (`docs/julius-migrations/035/`); not in the chain until 034 exists. It refuses without a 034 stamp, so it can never leave a silent hole |
 
 - **`DATABASE_URL` stays PARKED** unless an explicit, reviewed live-store
   procedure says otherwise. No unlanded migration may touch the permanent store.
   A landed migration reaches the live store only through its reviewed apply
   procedure (`docs/julius-migrations/<nnn>/RUNBOOK.md`), never an ordinary
   `migrate()` entry point.
-- **No migration gaps.** **OPEN QUESTION:** `main` already skips 027 (reserved,
-  unlanded). Settle with the founder whether 027 lands before 033, or the
-  reservation is released, before 033 takes its number.
+- **No migration gaps.** `main` skips 027. **Investigated 2026-10-06**, read-only,
+  with the permanent store untouched.
+  - **What it was.** A number reserved on 2026-09-28 by agreement between two
+    sessions working in parallel. The Julius worker took 028; the Wonderland↔Julius
+    integration lane (branch `relay/julius-mvp-capabilities`, never pushed) was
+    to take 027 for `project_execution_profiles` and `player_mission_contracts`.
+  - **Did it exist?** No `027_*.sql`, `MIGRATION_027` constant, `'027_…'` stamp or
+    SQL naming either table exists in any commit on any of origin's 333
+    branches. No PR, open, merged or closed, carried one.
+  - **Why the gap is safe today.** Nothing measures the integers:
+    - `migrate()` applies by stamp membership;
+    - the chain test checks filename order and self-stamping;
+    - the R1 bootstrap requires the ledger to equal the build's list;
+    - `classify-store.sql` rule 10 defines a gap against the build's chain.
+  - **The live store.** It was EMPTY on 2026-10-03 (030 RUNBOOK). The only
+    reviewed path from EMPTY is the R1 bootstrap, which writes exactly
+    001–026 and 028–030, so its ledger has no 027 by construction. The repo
+    holds no copy of that record. **Owed: one read-only check by the founder or
+    SECOND:** `SELECT version FROM relay_wonderland.schema_migrations ORDER BY
+    applied_at, version;` (expect 29 rows, none `027…`).
+  - **The latent defect is the word "reserved".** A 027 landing now would sort
+    before 028. A fresh database would apply it between 026 and 028, while the
+    live store would apply it last. `classify-store` would call the live store
+    UNEXPECTED, and the hosted-store readiness (#332) would report
+    `LEDGER_NOT_A_PREFIX`.
+  - **Smallest correct fix (the founder's call; NOT applied):** declare 027
+    **permanently vacant**, never to be used. The comment beside the constant
+    says so, and the chain test refuses any number below the chain's top except
+    the documented vacancies (`[27]`). No schema change, no store touch. The
+    integration lane's tables, if they come, take the next free number after
+    031–035.
 
 ### Material pre-freeze order (founder canon)
 
@@ -337,7 +460,7 @@ Every JUJU PR below is green. What moves the material order next is a decision, 
   must show **zero conflicts at C's final head**. This gate does not
   retroactively change 13 (i)'s earned score.
 
-### Open PRs (live GitHub, 2026-10-04)
+### Open PRs (live GitHub, 2026-10-04; updated 10-06)
 
 - **#321**: above. The only active landing candidate.
 - **#298**: `[DO NOT MERGE]` stack rehearsal, CI only.
@@ -345,7 +468,7 @@ Every JUJU PR below is green. What moves the material order next is a decision, 
   #293–#297 are fully folded into `main`** by test title and content (via
   #301/#304/#305/#310/#311). Recommend closing; that is the founder's decision.
   Never merge them on their old evidence.
-- **#322–#328**: see "Work in flight" above.
+- **#322–#340**: see "Work in flight" above. **#324, #337, #338 and #341 were closed unmerged on 2026-10-06** ("Read first"); do not reopen them.
 - **#255** (brand docs, 2026-09-12), **#138–#144** (Coliseum, Wonderland domain,
   mission ownership, error propagation, 2026-08), **#129** (docs): stale.
 - PR #6 from the August notes is no longer open.
@@ -445,9 +568,11 @@ migrations 033/035, endpoint/config delivery and the qualification harnesses.
 
 ### Next score-bearing action
 
-The **frozen 13 (i) rerun at #321's head `aeba8b2c`**: +0.467 is at stake. After
-it come the apply rehearsal (cloud Docker rehearsal recorded in #324) and SECOND's
-verdict; then #321 lands. C (+1.10) is the next score-bearing work, after 033–035.
+The **frozen 13 (i) rerun at #321's head `aeba8b2c`**: +0.467 is at stake. It is
+`READY FOR LOCAL QUALIFICATION`. After it come the reviewed live apply procedure
+(`FOUNDER_031_032_APPLY r2` + `ROLLBACK r1`, outside the repo, with its own Docker
+rehearsal; #324's cloud rehearsal is a cross-check only) and SECOND's verdict;
+then #321 lands. C (+1.10) is the next score-bearing work, after 033–035.
 C needs #322 and #326 landed before the freeze, plus the four C contracts
 (WITHOUT/WITH with `carryArm`/`carryFrom`), which belong to the founder and SECOND.
 Those contracts first need a pair-validity choice: see "Do not dispatch C's four
