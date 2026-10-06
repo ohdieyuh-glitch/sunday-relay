@@ -204,6 +204,12 @@ score change):
     by the hook's own timeout, carried in #336 and #327. **#321 should fold the
     same line.**
 - **Migration 027:** investigated (Migrations below).
+- **Julius block, 10-06** (no score change):
+  - **Decision C is one package: #322 at `079831b8`, with #326 folded in.** #326 sat exactly on #322's head; it is closed as consolidated, and its branch is kept. #331 (option B) is re-stacked on it at `980ab636`. New in the package:
+    - **in force, not merely adopted:** `DECISION_SUPERSEDED`, 18 codes, 4 mutants killed. It is latent today: the paid export carries no decisions, and no store writes an adopted decision yet;
+    - **repair counters agree** on real PostgreSQL, 2 mutants killed. The dead `repairRoundsFor` is removed: PostgreSQL read a table the live path never writes, and answered 0;
+    - **the package, condition by condition**, in `docs/JULIUS_DECISION_C_CARRY.md`.
+  - **#321's two teardown folds are prepared** on `relay/julius-321-teardown-folds` (`69cb99bc`, two test files on `aeba8b2c`, product bytes identical, 33/33). There is no PR, and the founder chooses whether and when.
 
 ### Repository
 
@@ -280,9 +286,9 @@ Every open JUJU PR below is green, or running on a test-only push. What moves th
 | # | Decision | Owner | Where | JUJU's recommendation |
 |---|---|---|---|---|
 | 1 | The frozen 13 (i) rerun at #321's head | founder / SECOND (local) | #321 | **READY FOR LOCAL QUALIFICATION**; it gates everything after #321 |
-| 2 | Fold the 031 and 032 teardown fixes into #321 | founder | Findings below | yes: two one-line test fixes. 032's root cause was measured 10-06, and the same line is carried in #336 and #327 |
+| 2 | Fold the 031 and 032 teardown fixes into #321 | founder | Findings below | yes: two test-only fixes, **ready on `relay/julius-321-teardown-folds` (`69cb99bc`)**. 032's root cause was measured 10-06, and the same line is carried in #336 and #327. Either keep `aeba8b2c` for the frozen rerun and fold after, or fold first (product bytes identical) |
 | 3 | ~~What 034 is~~ **Answered by the canon:** 034 = Project Brain components (local Project Brain lane). Owed: that 034 reaching GitHub, reviewed | Project Brain lane / founder | closed #337, #338, #341 | none: 035 stays staged behind 034's guard until the real 034 lands |
-| 4 | C pair validity: option A, B or C | founder / SECOND | #326, #331 | B is prepared in #331 |
+| 4 | C pair validity: option A, B or C | founder / SECOND | #322 (doc), #331 | B is prepared in #331, re-stacked on the package |
 | 5 | `allowNative` (native social for the RC) | SECOND Wonderland / founder | #339 | its evidence holds; a one-line change. Players must OWN their client's project |
 | 6 | A rate limit on social commands | SECOND Wonderland / founder | #340 | adopt #340's budgets (60 commands then 1/s; 20 messages then 1 per 3 s; 10 invitations then 1 per 30 s) before any public hosted launch |
 | 7 | Close the stale PRs #290, #291 and #293–#297 | founder | Findings below | close: folded into `main` |
@@ -294,15 +300,15 @@ Every open JUJU PR below is green, or running on a test-only push. What moves th
 
 | PR | What | Stack | CI (2026-10-04) |
 |---|---|---|---|
-| **#322** | Decision C corrected carry (`julius-carry.v2`). Only verified repair findings and accepted decisions travel; every exclusion is recorded by code; four-point proof | base `main` | green |
-| **#326** | C on the **paid venue**: a WITH arm learns from its pair's verified evidence bundle (`carryFrom`, input `carry_source_run`, `verify-carry`, `carry-export.json`, `carry.tsv`) | on #322 | green (6/6) |
-| **#331** | C **option B prepared, not chosen**: the reviewer names each finding's kind, a contract may promote kinds (`promotedWarningCategories`), and the bundle records each warning's kind (`review-warnings.tsv`). Rehearsed on real PostgreSQL: a promoting WITHOUT arm teaches a WITH arm; its control is refused for free. The four frozen missions' binding digests are pinned and unchanged | on #326 | green (6/6) |
+| **#322** | **The Decision C package (10-06):** the corrected carry (`julius-carry.v2`; only verified repair findings and adopted, in-force decisions travel; every exclusion is recorded by code, 18 codes; four-point proof), with #326's paid-venue transport folded in, repair counters that agree, and the package's conditions in `docs/JULIUS_DECISION_C_CARRY.md` | base `main` | `079831b8`: real-infra 4/4 green; Verify Relay running |
+| ~~**#326**~~ | **CLOSED 10-06, consolidated into #322**: C on the **paid venue**, a WITH arm learns from its pair's verified evidence bundle (`carryFrom`, input `carry_source_run`, `verify-carry`, `carry-export.json`, `carry.tsv`) | was on #322 | closed |
+| **#331** | C **option B prepared, not chosen**: the reviewer names each finding's kind, a contract may promote kinds (`promotedWarningCategories`), and the bundle records each warning's kind (`review-warnings.tsv`). Rehearsed on real PostgreSQL: a promoting WITHOUT arm teaches a WITH arm; its control is refused for free. The four frozen missions' binding digests are pinned and unchanged | on #322 (re-stacked `980ab636`) | real-infra 4/4 green; Verify Relay running |
 | ~~**#324**~~ | **CLOSED 10-06, superseded** (see "Read first"): 031+032 (+033) window tooling (`docs/julius-migrations/window/`); its rehearsal fingerprints stay a cross-check only | base `relay/julius-13i-completion-r2` | closed |
 | **#323** | Wonderland social backend and privacy wall P1–P5, migration **033**. 10-06: no party inference through an invitation | on #321 | green at `4433f84c` |
 | **#325** | Wonderland voice/EOS: every room is one mutually visible pair, PUID binding, one player's voice one step at a time, **035 staged** behind 034 | on #323 | green at `98cfad35` |
 | **#328** | Wonderland social display names: the verified GitHub login is recorded at sign-in, and a nameless request never erases it | on #325 | green |
 | **#330** | Wonderland presence is a **lease**: a presence not refreshed for 120 s is absent everywhere (reads and decisions), a stale heartbeat is `NOT_IN_INSTANCE`, and the next live heartbeat moves live players out of a departed player's voice room | on #328 | green (6/6) |
-| **#327** | Wonderland R16 harness: 24 closed-list checks over HTTP against the real bridge **process**. The scenario keeps the heartbeat, and LEASE fails on a lapse. The restart check is split: DURABLE as stored, then RECONNECT (HELD/REENTERED), then PRESENCE | **restacked on #330** (it must sit above every product change) | `3e36af29` (10-06: the 032 teardown and lease-renewal timeouts); CI running |
+| **#327** | Wonderland R16 harness: 24 closed-list checks over HTTP against the real bridge **process**. The scenario keeps the heartbeat, and LEASE fails on a lapse. The restart check is split: DURABLE as stored, then RECONNECT (HELD/REENTERED), then PRESENCE | **restacked on #330** (it must sit above every product change) | green (6/6) at `3e36af29` (10-06: the 032 teardown and lease-renewal timeouts) |
 | **#332** | Wonderland **hosted store**: `relay-bridge/wonderland-store.ts` (`inspect`/`bootstrap`) brings the bridge's store from nothing to migrated on a record and REFUSES every database it did not create (the permanent store's case included). `GET /relay-api/wonderland/readiness` (operator only) reports the store as facts. Rehearsed on real PostgreSQL through the real bridge process and the whole R16 scenario | on #327 | green (6/6) |
 | **#333** | Julius **local qualification reliability**, three fixes. `migrate()` serialises itself under a session advisory lock (`WONDERLAND_MIGRATION_LOCK`): 7 of 8 concurrent migrators of an EMPTY store used to be refused. The login-probe test clears the probe's own override table (`CLAUDE_AUTH_PROVIDER_OVERRIDES`). The drill suite drops the two databases it used to leak every run. The full suite against ONE fresh database, every real-PG suite live: 13,783 passed, 0 failed | base `main` | green (6/6) at `62a78d5d` |
 | **#334** | Wonderland **R16 venue**. The bridge reports, operator-only, the commit its platform attests (`RAILWAY_GIT_COMMIT_SHA`, nothing else believed) and a boot id per start. Every R16 run is judged **HOSTED_FINAL** or **REHEARSAL** (19 named reasons) apart from its checks; `--final` refuses a rehearsal. The verify phase gains a **RESTART** check (boot id changed), which found that #327's own CLI test never restarted | on #332 | green (6/6) |
