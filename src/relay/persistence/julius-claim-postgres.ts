@@ -16,6 +16,7 @@ import type { JuliusClaimStandingAppend, JuliusClaimStore } from '../mission/jul
 import { brainKindFromStored, brainKindToStored } from './julius-brain-kinds';
 import { appendJuliusEventWithin } from './julius-event-postgres';
 import { JuliusReadPostgresRepository } from './julius-read-postgres';
+import { juliusSerializable } from './julius-serializable';
 import { JuliusTimelinePostgresRepository } from './julius-timeline-postgres';
 
 /**
@@ -227,7 +228,8 @@ export class JuliusClaimPostgresRepository implements JuliusClaimStore {
   /**
    * CARRY, WRITE, RECORD — or record why not.
    *
-   * One transaction (`inTransaction`) writes every carried row (scoped to the plan
+   * One `juliusSerializable` transaction (THE APPEND DISCIPLINE, below)
+   * writes every carried row (scoped to the plan
    * task, under its own `carried:…:into:<run>` id, at the next revisions of
    * the run's brain), the standing each copy is recorded at (reason
    * `CARRIED_FROM:<sourceRun>`), and the `knowledge.carried` event. A replay
@@ -256,7 +258,7 @@ export class JuliusClaimPostgresRepository implements JuliusClaimStore {
     });
     let written: number;
     try {
-      written = await this.inTransaction(async (client) => {
+      written = await juliusSerializable(this.pool, async (client) => {
         const run = await client.query('SELECT 1 FROM relay_wonderland.julius_runs WHERE run_id = $1 AND project_id = $2 FOR UPDATE', [input.runId, input.projectId]);
         if (run.rowCount === 0) throw new Error('julius_run_not_found');
         const top = await client.query<{ revision: string }>(
@@ -309,37 +311,26 @@ export class JuliusClaimPostgresRepository implements JuliusClaimStore {
       runId: input.runId, projectId: input.projectId, occurredAt: input.occurredAt, facts,
       eventId: `${JULIUS_KNOWLEDGE_CARRY_VERSION}:${input.runId}:failed:${sha256(`${input.occurredAt}:${reasonCode}`).slice(0, 24)}`,
     });
-    const recorded = await this.inTransaction((client) => appendJuliusEventWithin(client, event)).then(() => true, () => false);
+    const recorded = await juliusSerializable(this.pool, (client) => appendJuliusEventWithin(client, event)).then(() => true, () => false);
     return { outcome: 'FAILED', carried: 0, written: 0, excluded: 0, reasonCode, eventId: recorded ? event.eventId : null };
   }
 
-  /**
-   * READ COMMITTED, SERIALISED BY THE RUN ROW — deliberately not `juliusSerializable`.
+  /*
+   * THE APPEND DISCIPLINE (Decision C, C-12; SECOND's carry rulings 1ee86fc5).
    *
-   * The carry writes into ONE run that is still CREATED, and every writer of a
-   * run's brain and stream takes that run's row first (`appendBrainEntry`'s
-   * UPDATE, `appendJuliusEventWithin`'s FOR UPDATE, this transaction's FOR
-   * UPDATE), so they queue on a row lock and cannot interleave. Under
-   * SERIALIZABLE the same transaction would also take predicate locks on every
-   * table it reads and every foreign key it checks — a new participant in the
-   * read/write cycles row 13 (i) is held to zero on (founder, 2026-10-03) — for
-   * no ordering it does not already have. `recordClaimStanding` runs the same
-   * way, for the same reason.
+   * The carry is a Julius writer like every other: its rows, their standings and
+   * its `knowledge.carried` event (and a FAILED record) go through
+   * `juliusSerializable`, the path every event append takes. With row 13 (i)'s
+   * H3 (#321) that path takes the Julius writer lock BEFORE `BEGIN`, so the
+   * carry never runs beside another writer and cannot join a read/write cycle,
+   * which is what row 13 (i) holds to zero and C-12 re-checks at C's head.
+   * Draft r1 used READ COMMITTED serialised by the run row, to keep the carry out
+   * of SERIALIZABLE's predicate locks before H3 existed. H3 serialises writers,
+   * so that exception is no longer needed, and an append outside the writer
+   * discipline was a risk to it. A 40001 is retried by `juliusSerializable`;
+   * every write here is idempotent (`ON CONFLICT (entry_id)`, a fact-derived
+   * event id), so a retry writes the same thing once.
    */
-  private async inTransaction<T>(effect: (client: PoolClient) => Promise<T>): Promise<T> {
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
-      const value = await effect(client);
-      await client.query('COMMIT');
-      return value;
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => undefined);
-      throw error;
-    } finally {
-      client.release();
-    }
-  }
 
   /**
    * Every brain row of these runs whose CURRENT standing is VERIFIED or
