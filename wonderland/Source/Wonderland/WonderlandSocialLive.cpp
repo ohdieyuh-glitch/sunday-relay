@@ -167,8 +167,37 @@ FWonderlandSocialLiveService::~FWonderlandSocialLiveService()
 
 FString FWonderlandSocialLiveService::GetSourceLine() const
 {
+	// AN OUTAGE IS SAID (Second's review of e48a5b3e, MAJOR for R9/R7): never "LIVE" over a view the server can no longer refresh
+	if (bUnreachable)
+	{
+		return TEXT("OFFLINE · can't reach Wonderland social, retrying… (what you see is from before)");
+	}
 	return bHasSnapshot ? FString::Printf(TEXT("LIVE · signed in as %s"), *Snapshot.Self.Profile.DisplayName)
 		: FString(TEXT("LIVE · connecting to Wonderland social"));
+}
+
+void FWonderlandSocialLiveService::NoteTransport(int32 Status, bool bReached)
+{
+	const bool bFailed = !bReached || Status == 0 || Status >= 500;
+	if (bFailed)
+	{
+		++TransportFailures;
+		if (!bUnreachable && TransportFailures >= 2)
+		{
+			bUnreachable = true;
+			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live: Wonderland social cannot be reached (%d answers in a row: status %d) -- OFFLINE, retrying"),
+				TransportFailures, Status);
+			Changed.Broadcast();
+		}
+		return;
+	}
+	TransportFailures = 0;
+	if (bUnreachable)
+	{
+		bUnreachable = false;
+		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL live: Wonderland social answered again (HTTP %d) -- LIVE"), Status);
+		Changed.Broadcast();
+	}
 }
 
 FString FWonderlandSocialLiveService::Describe() const
@@ -221,6 +250,8 @@ void FWonderlandSocialLiveService::Call(const FString& Verb, const FString& Path
 		}
 		InFlight.RemoveAll([&Finished](const TSharedRef<IHttpRequest, ESPMode::ThreadSafe>& R) { return &R.Get() == Finished.Get(); });
 		const int32 Status = Response.IsValid() ? Response->GetResponseCode() : 0;
+		// EVERY ANSWER COUNTS toward "can the server be reached" (poll, snapshot, world report, actions alike), before its own handling
+		NoteTransport(Status, bConnected && Response.IsValid());
 		if (!bConnected || !Response.IsValid())
 		{
 			Done(0, nullptr, TEXT("Wonderland social could not be reached"));
@@ -893,5 +924,59 @@ namespace WonderlandSocialLiveDetail
 				TEXT("a removal mid-join, then the player's join places them: the planned public world is dropped"));
 			Probe.Reset();
 			UE_LOG(LogTemp, Display, TEXT("WLQA WORLDRM END pass=%d fail=%d"), Passed, Failed);
+		}));
+
+	/** R9/R7 CLIENT QA (Second's review of e48a5b3e, MAJOR): an outage of the social server is SAID -- the hub's source line reads OFFLINE
+	 *  after two transport failures in a row (no connection, status 0, a 5xx) and LIVE again at the first answer the server gives, each
+	 *  change broadcast once so the hub repaints. Answers fed as Call would note them, into a throwaway service on a dead loopback port.
+	 *  RC1 is the control: ONE failure alone does not flip the line. WLQA REACH lines. */
+	FAutoConsoleCommand GQaSocialReach(
+		TEXT("wl.Qa.SocialReach"),
+		TEXT("QA: the hub says OFFLINE when Wonderland social cannot be reached (two failures in a row) and LIVE when it answers -- fed answers."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			int32 Passed = 0;
+			int32 Failed = 0;
+			auto Check = [&Passed, &Failed](const FString& Id, bool bOk, const FString& What)
+			{
+				(bOk ? Passed : Failed) += 1;
+				UE_LOG(LogTemp, Display, TEXT("WLQA REACH %s %s -- %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *What);
+			};
+			TUniquePtr<FWonderlandSocialLiveService> Probe = MakeUnique<FWonderlandSocialLiveService>(TEXT("http://127.0.0.1:9"), TEXT("qa-reach"));
+			int32 Changes = 0;
+			Probe->OnChanged().AddLambda([&Changes]() { Changes += 1; });
+			const auto Live = [&Probe]() { return Probe->GetSourceLine().StartsWith(TEXT("LIVE")); };
+			const auto Offline = [&Probe]() { return Probe->GetSourceLine().StartsWith(TEXT("OFFLINE")); };
+			// RC1 THE CONTROL: one lost answer is a blip, not an outage
+			Probe->QaNoteTransport(0, false);
+			Check(TEXT("RC1"), Live() && !Probe->IsUnreachable() && Changes == 0, FString::Printf(TEXT("control: one failure alone keeps '%s' (%d changes)"), *Probe->GetSourceLine(), Changes));
+			// R1: the second in a row is an outage, said once
+			Probe->QaNoteTransport(0, false);
+			Check(TEXT("R1"), Offline() && Probe->IsUnreachable() && Changes == 1, FString::Printf(TEXT("two failures in a row: '%s' (%d change)"), *Probe->GetSourceLine(), Changes));
+			// R2: more failures change nothing more
+			Probe->QaNoteTransport(0, false);
+			Check(TEXT("R2"), Offline() && Changes == 1, FString::Printf(TEXT("a third failure: still offline, no new change (%d)"), Changes));
+			// R3: the first answer the server gives is LIVE again, said once
+			Probe->QaNoteTransport(200, true);
+			Check(TEXT("R3"), Live() && !Probe->IsUnreachable() && Changes == 2, FString::Printf(TEXT("one 200: '%s' (%d changes)"), *Probe->GetSourceLine(), Changes));
+			// R4: 5xx answers are the server failing too
+			Probe->QaNoteTransport(503, true);
+			Probe->QaNoteTransport(502, true);
+			Check(TEXT("R4"), Offline() && Changes == 3, FString::Printf(TEXT("503 then 502: '%s' (%d changes)"), *Probe->GetSourceLine(), Changes));
+			// R5: any answer the server GAVE means it was reached: 404, 400, 429 and 401 each bring it back and never count as an outage
+			Probe->QaNoteTransport(404, true);
+			const bool bBack = Live() && Changes == 4;
+			Probe->QaNoteTransport(400, true);
+			Probe->QaNoteTransport(429, true);
+			Probe->QaNoteTransport(401, true);
+			Probe->QaNoteTransport(404, true);
+			Check(TEXT("R5"), bBack && Live() && Changes == 4, FString::Printf(TEXT("4xx answers (404, 400, 429, 401) reach the server: '%s' (%d changes)"), *Probe->GetSourceLine(), Changes));
+			// R6: a failure, an answer, a failure is never two in a row
+			Probe->QaNoteTransport(0, false);
+			Probe->QaNoteTransport(200, true);
+			Probe->QaNoteTransport(0, false);
+			Check(TEXT("R6"), Live() && Changes == 4, FString::Printf(TEXT("failure, answer, failure: never two in a row ('%s', %d changes)"), *Probe->GetSourceLine(), Changes));
+			Probe.Reset();
+			UE_LOG(LogTemp, Display, TEXT("WLQA REACH END pass=%d fail=%d"), Passed, Failed);
 		}));
 }

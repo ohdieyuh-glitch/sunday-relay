@@ -85,6 +85,10 @@ public:
 	void QaSetWorld(const FWonderlandWorldView& View, bool bWanted);
 	void QaFeedWorldReport(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem) { HandleWorldReport(Status, Data, Problem); }
 	void QaClearPendingJoin() { bAutoJoinPending = false; }
+	/** QA ONLY (wl.Qa.SocialReach): feed one answer's transport outcome as Call would. */
+	void QaNoteTransport(int32 Status, bool bReached) { NoteTransport(Status, bReached); }
+	/** The server could not be reached on the last two answers in a row (GetSourceLine says OFFLINE). */
+	bool IsUnreachable() const { return bUnreachable; }
 	/** The state a join puts the service in before its request leaves (the same BeginJoin a real join runs), with no request sent. */
 	int32 QaBeginJoin() { return BeginJoin(); }
 	void QaFeedJoinAnswer(int32 Seq, const FString& Target, const FString& Arg, bool bAutomatic, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
@@ -104,6 +108,14 @@ private:
 	/** An action's call, its answer broadcast, and the view read again after it. */
 	FWonderlandSocialActionResult Ask(const FString& OperationId, const FString& SubjectId, const FString& Verb, const FString& Path,
 		const TSharedPtr<FJsonObject>& Body);
+	/**
+	 * CAN THE SERVER BE REACHED (Second's review of e48a5b3e, MAJOR for R9/R7: an outage left "LIVE · signed in" over a frozen view). Every
+	 * answer passes here from Call: no connection, status 0 or a 5xx is a TRANSPORT failure; anything the server answered (2xx, 4xx, a 401)
+	 * means it was reached. Two failures in a row = unreachable; one reached answer = reachable again. Each change is broadcast once.
+	 */
+	void NoteTransport(int32 Status, bool bReached);
+	int32 TransportFailures = 0;
+	bool bUnreachable = false;
 
 	FString BaseUrl;
 	FString Token;
