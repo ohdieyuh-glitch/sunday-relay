@@ -77,8 +77,6 @@ export interface EosVoiceConfig {
   readonly clientSecret: string;
   /** Per-deployment secret salt for the opaque room ids (HMAC). */
   readonly roomSalt: string;
-  /** Which EOS client the credentials are: the Trusted Server client (preferred) or the Game Client (fallback). */
-  readonly clientKind?: 'server' | 'game';
 }
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
@@ -91,7 +89,8 @@ const MIN_ENV_SALT = 32;
 export const EOS_FROM_ENV = 'env:';
 /** With WONDERLAND_EOS_ROOM_SALT_FILE=env:, the salt itself: 32 to 512 characters, a STABLE secret of the deployment. */
 export const EOS_ROOM_SALT_ENV = 'WONDERLAND_EOS_ROOM_SALT';
-const EOS_VOICE_KEYS = ['EOS_PRODUCT_ID', 'EOS_SANDBOX_ID', 'EOS_DEPLOYMENT_ID', 'EOS_SERVER_CLIENT_ID', 'EOS_SERVER_CLIENT_SECRET', 'EOS_GAME_CLIENT_ID', 'EOS_GAME_CLIENT_SECRET'] as const;
+/** EOS_GAME_CLIENT_ID is read only to refuse a voice client that IS the game client; the game client's secret is never read here. */
+const EOS_VOICE_KEYS = ['EOS_PRODUCT_ID', 'EOS_SANDBOX_ID', 'EOS_DEPLOYMENT_ID', 'EOS_SERVER_CLIENT_ID', 'EOS_SERVER_CLIENT_SECRET', 'EOS_GAME_CLIENT_ID'] as const;
 
 /** Exactly the named keys from the process environment, as parseDotEnv gives them from a file: trimmed; empty = absent. */
 function eosKeysFromEnv(env: NodeJS.ProcessEnv, names: readonly string[]): Map<string, string> {
@@ -125,10 +124,15 @@ export function parseDotEnv(text: string): Map<string, string> {
 /**
  * The EOS config, named by WONDERLAND_EOS_VOICE_CONFIG (a path outside every repo). TWO FORMATS, told apart by the first
  * non-space character:
- *   '{'  the JSON object {productId, sandboxId, deploymentId, clientId, clientSecret, roomSalt};
- *   else the founder's .env: EOS_PRODUCT_ID, EOS_SANDBOX_ID, EOS_DEPLOYMENT_ID, and the client -- EOS_SERVER_CLIENT_ID +
- *        EOS_SERVER_CLIENT_SECRET (the Trusted Server client) preferred, else EOS_GAME_CLIENT_ID + EOS_GAME_CLIENT_SECRET; the
- *        room salt from the SEPARATE file named by WONDERLAND_EOS_ROOM_SALT_FILE (first line, >= 32 characters).
+ *   '{'  the JSON object {productId, sandboxId, deploymentId, clientId, clientSecret, roomSalt}: clientId is the Trusted Server
+ *        client's;
+ *   else the founder's .env: EOS_PRODUCT_ID, EOS_SANDBOX_ID, EOS_DEPLOYMENT_ID, and the Trusted Server client --
+ *        EOS_SERVER_CLIENT_ID + EOS_SERVER_CLIENT_SECRET; the room salt from the SEPARATE file named by
+ *        WONDERLAND_EOS_ROOM_SALT_FILE (first line, >= 32 characters).
+ * THE TRUSTED SERVER CLIENT ONLY (MAIN's internal review a6d5842c, M3). The game client's pair is handed to every signed-in desktop
+ * client (GET .../voice/eos-client-config); were it the voice client, any player holding it could mint room tokens and remove
+ * participants at Epic directly -- a former member included. So EOS_GAME_* is never a fallback, and a voice client whose id IS
+ * the game client's is refused: in the .env form here; in either form against the game config, in eosFromEnv.
  * EITHER path variable may be `env:` (EOS_FROM_ENV): the same .env keys, or the salt as WONDERLAND_EOS_ROOM_SALT, from the process
  * environment -- a host whose secrets are variables (JUJU MAIN's hosted plan r3).
  * Any missing key, unreadable file, field out of shape or short salt: null -- party voice stays 503, with no fallback. A log line
@@ -180,17 +184,16 @@ function configFromKeys(keys: ReadonlyMap<string, string>, source: string, env: 
   const ids = ['EOS_PRODUCT_ID', 'EOS_SANDBOX_ID', 'EOS_DEPLOYMENT_ID'] as const;
   const missingIds = ids.filter((k) => get(k) === '');
   const shapelessIds = ids.filter((k) => get(k) !== '' && !ID.test(get(k)));
-  // THE CLIENT: the Trusted Server client when both its keys are there, else the Game Client when both of its are
-  const pair = (prefix: 'EOS_SERVER' | 'EOS_GAME') => ({ id: get(`${prefix}_CLIENT_ID`), secret: get(`${prefix}_CLIENT_SECRET`) });
-  const server = pair('EOS_SERVER');
-  const game = pair('EOS_GAME');
-  const kind = server.id !== '' && server.secret !== '' ? 'server' : game.id !== '' && game.secret !== '' ? 'game' : null;
-  const missing = [...missingIds, ...(kind === null ? ['EOS_SERVER_CLIENT_ID + EOS_SERVER_CLIENT_SECRET (or EOS_GAME_CLIENT_ID + EOS_GAME_CLIENT_SECRET)'] : [])];
-  if (missing.length > 0 || kind === null) return refuse(`${source} is missing ${missing.join(', ')}`);
-  const client = kind === 'server' ? server : game;
-  const clientKeyPrefix = kind === 'server' ? 'EOS_SERVER' : 'EOS_GAME';
-  const shapeless = [...shapelessIds, ...(ID.test(client.id) ? [] : [`${clientKeyPrefix}_CLIENT_ID`]), ...(client.secret.length <= 512 ? [] : [`${clientKeyPrefix}_CLIENT_SECRET`])];
+  // THE CLIENT: the Trusted Server client, and only it (M3: the game client is never a fallback)
+  const client = { id: get('EOS_SERVER_CLIENT_ID'), secret: get('EOS_SERVER_CLIENT_SECRET') };
+  const missingClient = [...(client.id === '' ? ['EOS_SERVER_CLIENT_ID'] : []), ...(client.secret === '' ? ['EOS_SERVER_CLIENT_SECRET'] : [])];
+  const missing = [...missingIds, ...missingClient];
+  if (missing.length > 0) {
+    return refuse(`${source} is missing ${missing.join(', ')}${missingClient.length > 0 ? ' (voice uses the Trusted Server client only; EOS_GAME_* is never used for voice)' : ''}`);
+  }
+  const shapeless = [...shapelessIds, ...(ID.test(client.id) ? [] : ['EOS_SERVER_CLIENT_ID']), ...(client.secret.length <= 512 ? [] : ['EOS_SERVER_CLIENT_SECRET'])];
   if (shapeless.length > 0) return refuse(`${source} has out of shape: ${shapeless.join(', ')}`);
+  if (get('EOS_GAME_CLIENT_ID') === client.id) return refuse(`${source} names the game client as the voice client (EOS_SERVER_CLIENT_ID equals EOS_GAME_CLIENT_ID)`);
   // THE ROOM SALT, from its own file (not a founder credential)
   const saltPath = env[EOS_ROOM_SALT_FILE_ENV]?.trim() ?? '';
   if (saltPath === '') return refuse(`${EOS_ROOM_SALT_FILE_ENV} is not set (the room salt file)`);
@@ -208,8 +211,8 @@ function configFromKeys(keys: ReadonlyMap<string, string>, source: string, env: 
   if (salt.length < MIN_ENV_SALT || salt.length > 512) {
     return refuse(saltPath === EOS_FROM_ENV ? `${EOS_ROOM_SALT_ENV} must hold ${MIN_ENV_SALT} to 512 characters` : `the room salt file must hold one line of ${MIN_ENV_SALT} to 512 characters`);
   }
-  log(kind === 'server' ? 'eos voice: client kind server' : 'eos voice: client kind game (fallback): room actions need a Trusted Server policy');
-  return { productId: get('EOS_PRODUCT_ID'), sandboxId: get('EOS_SANDBOX_ID'), deploymentId: get('EOS_DEPLOYMENT_ID'), clientId: client.id, clientSecret: client.secret, roomSalt: salt, clientKind: kind };
+  log('eos voice: client kind server');
+  return { productId: get('EOS_PRODUCT_ID'), sandboxId: get('EOS_SANDBOX_ID'), deploymentId: get('EOS_DEPLOYMENT_ID'), clientId: client.id, clientSecret: client.secret, roomSalt: salt };
 }
 
 /* ------------------------------------------------------------------------------------------------ the game client's config */
@@ -550,15 +553,36 @@ export function createVoiceRemovals(deps: {
   };
 }
 
-/** The bridge's EOS voice, from its environment: the minter and its removal queue, or null (voice 503). */
-export function eosVoiceFromEnv(env: NodeJS.ProcessEnv, deps: EosVoiceDeps & { readonly bindings: () => VoiceBindingStore | null; readonly readFile?: (path: string) => string }): { minter: EosVoiceTokenMinter; removals: VoiceRemovals; deployment: EosDeployment } | null {
-  const config = loadEosVoiceConfig(env, { readFile: deps.readFile, log: deps.log });
-  if (config === null) return null;
+/** The bridge's EOS voice: the minter, its removal queue, and the deployment's ids (no client, no secret). */
+export interface EosVoice {
+  readonly minter: EosVoiceTokenMinter;
+  readonly removals: VoiceRemovals;
+  readonly deployment: EosDeployment;
+}
+
+/**
+ * THE BRIDGE'S EOS, from its environment (server.ts), read once at start:
+ *   - voice: the minter and its removal queue, or null (party voice 503);
+ *   - gameConfig: the GAME client's config handed to signed-in players, or null (the client config route 503). It must name the
+ *     voice config's deployment (loadEosGameClientConfig).
+ * VOICE IS REFUSED WHEN ITS CLIENT IS THE GAME CLIENT (MAIN's internal review a6d5842c, M3): the pair every signed-in player is handed
+ * must never be the pair that mints room tokens and removes participants. The .env form is checked within its own file
+ * (loadEosVoiceConfig); here both forms, the JSON one included, are checked against the game config. The log names keys only.
+ */
+export function eosFromEnv(
+  env: NodeJS.ProcessEnv,
+  deps: EosVoiceDeps & { readonly bindings: () => VoiceBindingStore | null; readonly readFile?: (path: string) => string },
+): { voice: EosVoice | null; gameConfig: EosGameClientConfig | null } {
+  const log = deps.log ?? (() => undefined);
+  const config = loadEosVoiceConfig(env, { readFile: deps.readFile, log });
+  // the ids only (no client, no secret): the game config handed to clients must name the same deployment
+  const deployment = config === null ? null : { productId: config.productId, sandboxId: config.sandboxId, deploymentId: config.deploymentId };
+  const gameConfig = loadEosGameClientConfig(env, { readFile: deps.readFile, log, deployment });
+  if (config === null || deployment === null) return { voice: null, gameConfig };
+  if (gameConfig !== null && gameConfig.clientId === config.clientId) {
+    log('eos voice: the voice client is the game client handed to every signed-in player (the voice config\'s EOS_SERVER_CLIENT_ID or JSON clientId equals EOS_GAME_CLIENT_ID) -- party voice answers 503');
+    return { voice: null, gameConfig };
+  }
   const minter = new EosVoiceTokenMinter(config, deps);
-  return {
-    minter,
-    removals: createVoiceRemovals({ target: minter, bindings: deps.bindings, log: deps.log }),
-    // the ids only (no client, no secret): the game config handed to clients must name the same deployment
-    deployment: { productId: config.productId, sandboxId: config.sandboxId, deploymentId: config.deploymentId },
-  };
+  return { voice: { minter, removals: createVoiceRemovals({ target: minter, bindings: deps.bindings, log: deps.log }), deployment }, gameConfig };
 }

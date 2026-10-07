@@ -7,7 +7,7 @@ import { blockUser } from '../src/relay/social/social-friends';
 import { createInMemorySocialStore, type SocialStore } from '../src/relay/social/social-store';
 import { partyOf } from '../src/relay/social/social-state';
 import { createInMemoryVoiceBindings } from '../src/relay/social/voice-binding';
-import { EPIC, EosVoiceTokenMinter, createVoiceRemovals, eosVoiceFromEnv, hashId, hashPuid, loadEosVoiceConfig, type EosFetch, type EosVoiceConfig } from './eos-voice';
+import { EPIC, EosVoiceTokenMinter, createVoiceRemovals, eosFromEnv, hashId, hashPuid, loadEosVoiceConfig, type EosFetch, type EosVoiceConfig } from './eos-voice';
 import { EOS_FROM_ENV, EOS_GAME_CONFIG_ENV, EOS_ROOM_SALT_ENV, loadEosGameClientConfig, type EosDeployment } from './eos-voice';
 
 /*
@@ -98,7 +98,7 @@ describe('the EOS config file', () => {
     for (const broken of [{ ...good, clientSecret: '' }, { ...good, roomSalt: 'short' }, { ...good, deploymentId: 'a/b' }, { ...good, productId: undefined }]) {
       expect(loadEosVoiceConfig(env, { readFile: () => JSON.stringify(broken), log: (l) => log.push(l) }), JSON.stringify(Object.keys(broken))).toBeNull();
     }
-    expect(eosVoiceFromEnv({}, { bindings: () => null, log: (l) => log.push(l) })).toBeNull();
+    expect(eosFromEnv({}, { bindings: () => null, log: (l) => log.push(l) })).toEqual({ voice: null, gameConfig: null });
     const loaded = loadEosVoiceConfig(env, { readFile: () => `\uFEFF${JSON.stringify(good)}`, log: (l) => log.push(l) });
     expect(loaded).toEqual(good);
     const all = log.join('\n');
@@ -134,27 +134,33 @@ describe('the EOS config as a .env file and a room-salt file', () => {
     const salt = `  ${hex(20)}  \r\nsecond line ignored`;
     const w = world((v) => `\uFEFFEOS_PRODUCT_ID = "${v.product}"\r\n# the founder's EOS file\r\n\r\nEOS_SANDBOX_ID='${v.sandbox}'\r\n  EOS_DEPLOYMENT_ID=${v.deployment}  \r\nSOMETHING_ELSE=whatever\r\nEOS_SERVER_CLIENT_ID = ${v.serverId}\r\nEOS_SERVER_CLIENT_SECRET="${v.serverSecret}"\r\n`, salt);
     const c = w.load();
-    expect(c).toEqual({ productId: w.v.product, sandboxId: w.v.sandbox, deploymentId: w.v.deployment, clientId: w.v.serverId, clientSecret: w.v.serverSecret, roomSalt: salt.split(/\r?\n/)[0].trim(), clientKind: 'server' });
+    expect(c).toEqual({ productId: w.v.product, sandboxId: w.v.sandbox, deploymentId: w.v.deployment, clientId: w.v.serverId, clientSecret: w.v.serverSecret, roomSalt: salt.split(/\r?\n/)[0].trim() });
     // LF works the same
     const lf = world((v) => full(v).join('\n'));
-    expect(lf.load()?.clientKind).toBe('server');
+    expect(lf.load()?.clientId).toBe(lf.v.serverId);
     w.done();
     lf.done();
   });
 
-  it('prefers the Trusted Server client; falls back to the Game Client, saying so -- and only the KIND is logged', () => {
+  it('voice uses the Trusted Server client ONLY: a game-only file, or a half server pair beside the game pair, is refused by key name (review a6d5842c, M3)', () => {
     const both = world((v) => full(v).join('\n'));
-    expect(both.load()).toMatchObject({ clientId: both.v.serverId, clientSecret: both.v.serverSecret, clientKind: 'server' });
-    expect(both.log).toContain('eos voice: client kind server');
+    expect(both.load()).toMatchObject({ clientId: both.v.serverId, clientSecret: both.v.serverSecret });
+    expect(both.log).toEqual(['eos voice: client kind server']);
+    // the game pair is never a fallback: it is the pair every signed-in player is handed
     const gameOnly = world((v) => full(v, { game: true }).join('\n'));
-    expect(gameOnly.load()).toMatchObject({ clientId: gameOnly.v.gameId, clientSecret: gameOnly.v.gameSecret, clientKind: 'game' });
-    expect(gameOnly.log).toContain('eos voice: client kind game (fallback): room actions need a Trusted Server policy');
-    // a half server pair (id, no secret) is not a server client: the game pair is used
+    expect(gameOnly.load()).toBeNull();
+    expect(gameOnly.log).toEqual(['eos voice: the EOS config file is missing EOS_SERVER_CLIENT_ID, EOS_SERVER_CLIENT_SECRET (voice uses the Trusted Server client only; EOS_GAME_* is never used for voice) -- party voice answers 503']);
     const half = world((v) => [...full(v, { game: true }), `EOS_SERVER_CLIENT_ID=${v.serverId}`].join('\n'));
-    expect(half.load()?.clientKind).toBe('game');
-    for (const w of [both, gameOnly, half]) {
+    expect(half.load()).toBeNull();
+    expect(half.log.join('\n')).toMatch(/is missing EOS_SERVER_CLIENT_SECRET \(voice uses the Trusted Server client only/);
+    // the server keys holding the GAME client's id: refused by key name, never started
+    const same = world((v) => [...full(v).filter((l) => !l.startsWith('EOS_SERVER_CLIENT_ID')), `EOS_SERVER_CLIENT_ID=${v.gameId}`].join('\n'));
+    expect(same.load()).toBeNull();
+    expect(same.log).toEqual(['eos voice: the EOS config file names the game client as the voice client (EOS_SERVER_CLIENT_ID equals EOS_GAME_CLIENT_ID) -- party voice answers 503']);
+    for (const w of [both, gameOnly, half, same]) {
       const all = w.log.join('\n');
       for (const value of w.values()) expect(all, 'a log line carries a config value or path').not.toContain(value);
+      expect(all).not.toMatch(/Trusted Server policy/);
       w.done();
     }
   });
@@ -164,8 +170,8 @@ describe('the EOS config as a .env file and a room-salt file', () => {
       ['no product', (v) => full(v).filter((l) => !l.startsWith('EOS_PRODUCT_ID')).join('\n'), hex(20), {}, /missing EOS_PRODUCT_ID/],
       ['no sandbox', (v) => full(v).filter((l) => !l.startsWith('EOS_SANDBOX_ID')).join('\n'), hex(20), {}, /missing EOS_SANDBOX_ID/],
       ['no deployment', (v) => full(v).filter((l) => !l.startsWith('EOS_DEPLOYMENT_ID')).join('\n'), hex(20), {}, /missing EOS_DEPLOYMENT_ID/],
-      ['no client pair at all', (v) => full(v, {}).join('\n'), hex(20), {}, /missing EOS_SERVER_CLIENT_ID \+ EOS_SERVER_CLIENT_SECRET \(or EOS_GAME_CLIENT_ID \+ EOS_GAME_CLIENT_SECRET\)/],
-      ['an empty quoted secret', (v) => [...full(v, {}), `EOS_SERVER_CLIENT_ID=${v.serverId}`, 'EOS_SERVER_CLIENT_SECRET=""'].join('\n'), hex(20), {}, /missing EOS_SERVER_CLIENT_ID/],
+      ['no client pair at all', (v) => full(v, {}).join('\n'), hex(20), {}, /missing EOS_SERVER_CLIENT_ID, EOS_SERVER_CLIENT_SECRET \(voice uses the Trusted Server client only/],
+      ['an empty quoted secret', (v) => [...full(v, {}), `EOS_SERVER_CLIENT_ID=${v.serverId}`, 'EOS_SERVER_CLIENT_SECRET=""'].join('\n'), hex(20), {}, /missing EOS_SERVER_CLIENT_SECRET \(voice uses/],
       ['a deployment id out of shape', (v) => [...full(v).filter((l) => !l.startsWith('EOS_DEPLOYMENT_ID')), 'EOS_DEPLOYMENT_ID=a/b'].join('\n'), hex(20), {}, /out of shape: EOS_DEPLOYMENT_ID/],
       ['a short salt (31 characters)', (v) => full(v).join('\n'), 'x'.repeat(31), {}, /room salt file must hold one line of 32/],
       ['no salt file', (v) => full(v).join('\n'), null, {}, /room salt file could not be read/],
@@ -535,20 +541,48 @@ describe("the GAME client's EOS config: EOS_GAME_* only, never the Trusted Serve
     clean(other.log, [...f.values, elsewhere]);
   });
 
-  it("eosVoiceFromEnv carries the voice config's ids -- and nothing secret -- for that check", () => {
+  it("eosFromEnv carries the voice config's ids -- and nothing secret -- for that check, and checks the game config against them", () => {
     const dir = mkdtempSync(join(tmpdir(), 'eos-deploy-'));
     try {
       const f = fileOf();
       const envPath = join(dir, 'eos-server.env');
+      const gamePath = join(dir, 'eos-game.env');
       const saltPath = join(dir, 'salt.txt');
       writeFileSync(envPath, dotEnv({ ...f.ids, ...f.server }));
+      writeFileSync(gamePath, dotEnv({ ...f.ids, ...f.game }));
       writeFileSync(saltPath, `${hex(32)}\n`);
-      const voice = eosVoiceFromEnv({ WONDERLAND_EOS_VOICE_CONFIG: envPath, WONDERLAND_EOS_ROOM_SALT_FILE: saltPath }, { bindings: () => null });
-      expect(voice?.deployment).toEqual({ productId: f.ids.EOS_PRODUCT_ID, sandboxId: f.ids.EOS_SANDBOX_ID, deploymentId: f.ids.EOS_DEPLOYMENT_ID });
-      for (const v of Object.values(f.server)) expect(JSON.stringify(voice?.deployment)).not.toContain(v);
+      const eos = eosFromEnv({ WONDERLAND_EOS_VOICE_CONFIG: envPath, WONDERLAND_EOS_ROOM_SALT_FILE: saltPath, [EOS_GAME_CONFIG_ENV]: gamePath }, { bindings: () => null });
+      expect(eos.voice?.deployment).toEqual({ productId: f.ids.EOS_PRODUCT_ID, sandboxId: f.ids.EOS_SANDBOX_ID, deploymentId: f.ids.EOS_DEPLOYMENT_ID });
+      for (const v of Object.values(f.server)) expect(JSON.stringify(eos.voice?.deployment)).not.toContain(v);
+      expect(eos.gameConfig?.clientId).toBe(f.game.EOS_GAME_CLIENT_ID);
+      // a game config naming another deployment is refused against the voice config's ids
+      writeFileSync(gamePath, dotEnv({ ...f.ids, EOS_DEPLOYMENT_ID: hex(16), ...f.game }));
+      expect(eosFromEnv({ WONDERLAND_EOS_VOICE_CONFIG: envPath, WONDERLAND_EOS_ROOM_SALT_FILE: saltPath, [EOS_GAME_CONFIG_ENV]: gamePath }, { bindings: () => null }).gameConfig).toBeNull();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("eosFromEnv refuses voice whose client IS the game client handed to players -- the JSON form too; another client starts it (review a6d5842c, M3)", () => {
+    const f = fileOf();
+    const voiceSecret = `planted-voice-${hex(16)}`;
+    const voiceSalt = hex(24);
+    const files: Record<string, string> = { 'voice.json': '', 'eos-game.env': dotEnv({ ...f.ids, ...f.game }) };
+    const json = (clientId: string) => JSON.stringify({ productId: f.ids.EOS_PRODUCT_ID, sandboxId: f.ids.EOS_SANDBOX_ID, deploymentId: f.ids.EOS_DEPLOYMENT_ID, clientId, clientSecret: voiceSecret, roomSalt: voiceSalt });
+    const run = (clientId: string) => {
+      files['voice.json'] = json(clientId);
+      const log: string[] = [];
+      const eos = eosFromEnv({ WONDERLAND_EOS_VOICE_CONFIG: 'voice.json', [EOS_GAME_CONFIG_ENV]: 'eos-game.env' }, { bindings: () => null, readFile: (p) => files[p], log: (l) => log.push(l) });
+      return { eos, log };
+    };
+    const same = run(f.game.EOS_GAME_CLIENT_ID);
+    expect(same.eos.voice).toBeNull();
+    expect(same.log).toContain("eos voice: the voice client is the game client handed to every signed-in player (the voice config's EOS_SERVER_CLIENT_ID or JSON clientId equals EOS_GAME_CLIENT_ID) -- party voice answers 503");
+    clean(same.log, [...f.values, voiceSecret, voiceSalt]);
+    const trusted = run(f.server.EOS_SERVER_CLIENT_ID);
+    expect(trusted.eos.voice?.minter).toBeInstanceOf(EosVoiceTokenMinter);
+    expect(trusted.eos.gameConfig?.clientId).toBe(f.game.EOS_GAME_CLIENT_ID);
+    expect(trusted.log).toEqual(['eos voice: configured (JSON)', 'eos game config: loaded (5 keys)']);
   });
 });
 
@@ -576,7 +610,7 @@ describe("the EOS config from the process ENVIRONMENT (env:), for a host whose s
       { WONDERLAND_EOS_VOICE_CONFIG: EOS_FROM_ENV, WONDERLAND_EOS_ROOM_SALT_FILE: EOS_FROM_ENV, [EOS_ROOM_SALT_ENV]: p.salt, ...p.ids, ...p.server, ...p.game },
       { readFile: noFile, log: (l) => log.push(l) },
     );
-    expect(config).toMatchObject({ productId: p.ids.EOS_PRODUCT_ID, deploymentId: p.ids.EOS_DEPLOYMENT_ID, clientId: p.server.EOS_SERVER_CLIENT_ID, clientSecret: p.server.EOS_SERVER_CLIENT_SECRET, roomSalt: p.salt, clientKind: 'server' });
+    expect(config).toMatchObject({ productId: p.ids.EOS_PRODUCT_ID, deploymentId: p.ids.EOS_DEPLOYMENT_ID, clientId: p.server.EOS_SERVER_CLIENT_ID, clientSecret: p.server.EOS_SERVER_CLIENT_SECRET, roomSalt: p.salt });
     expect(log).toEqual(['eos voice: client kind server']);
     clean(log, p.values);
   });

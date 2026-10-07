@@ -87,7 +87,7 @@ import { GITHUB_STUB_BANNER, githubRootsForNativeSignIn } from './wonderland-git
 import { openSocialPostgresStore } from '../src/relay/persistence/social-postgres';
 import { createPostgresVoiceBindings } from '../src/relay/persistence/voice-binding-postgres';
 import type { VoiceBindingStore } from '../src/relay/social/voice-binding';
-import { eosVoiceFromEnv, loadEosGameClientConfig } from './eos-voice';
+import { eosFromEnv } from './eos-voice';
 import type { SocialStore } from '../src/relay/social/social-store';
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -294,8 +294,13 @@ export function createBridgeServer(
   const socialLogins = new Map<string, string>();
   /**
    * PARTY VOICE = EOS (R16, founder 10-04), behind WONDERLAND_EOS_VOICE_CONFIG (the founder's file; never logged, no fallback;
-   * absent or invalid = voice 503 as before). PUIDs are bound on the Julius pool (migration 035); a committed party departure
-   * removes the departed PUID from that party's room server-side (eos-voice.ts createVoiceRemovals).
+   * absent or invalid = voice 503 as before). It mints with the Trusted Server client only (EOS_SERVER_*), and is refused when
+   * that client is the game client handed to players (eos-voice.ts eosFromEnv, MAIN's internal review a6d5842c M3). PUIDs are
+   * bound on the Julius pool (migration 035); a committed party departure removes the departed member's PUIDs from that party's
+   * room server-side (eos-voice.ts createVoiceRemovals).
+   * THE GAME CLIENT'S EOS CONFIG (founder 10-04), behind WONDERLAND_EOS_GAME_CONFIG (the founder's eos-game.env, by path): read once
+   * here and held in memory only, for GET /wonderland/social/voice/eos-client-config; it must name the voice config's deployment.
+   * Never logged. The rate limit is built once: the route's deps are rebuilt per request.
    */
   let voiceBindingsCache: VoiceBindingStore | null = null;
   const voiceBindings = (): VoiceBindingStore | null => {
@@ -304,15 +309,9 @@ export function createBridgeServer(
     voiceBindingsCache = pool === null ? null : createPostgresVoiceBindings(pool);
     return voiceBindingsCache;
   };
-  const eosVoice = socialEnabled ? eosVoiceFromEnv(process.env, { bindings: voiceBindings, log: (line) => console.warn(`[relay-bridge] ${line}`) }) : null;
-  /**
-   * THE GAME CLIENT'S EOS CONFIG (founder 10-04), behind WONDERLAND_EOS_GAME_CONFIG (the founder's eos-game.env, by path): read once
-   * here and held in memory only, for GET /wonderland/social/voice/eos-client-config; it must name the voice config's deployment.
-   * Never logged. The rate limit is built once: the route's deps are rebuilt per request.
-   */
-  const eosGameConfig = socialEnabled
-    ? loadEosGameClientConfig(process.env, { log: (line) => console.warn(`[relay-bridge] ${line}`), deployment: eosVoice?.deployment ?? null })
-    : null;
+  const eos = socialEnabled ? eosFromEnv(process.env, { bindings: voiceBindings, log: (line) => console.warn(`[relay-bridge] ${line}`) }) : null;
+  const eosVoice = eos?.voice ?? null;
+  const eosGameConfig = eos?.gameConfig ?? null;
   const eosClientConfigAllowed = createSessionRateLimit(EOS_CLIENT_CONFIG_RATE.limit, EOS_CLIENT_CONFIG_RATE.windowMs);
   // PRESENCE IS A LEASE and EVERY PLAYER HAS A BUDGET (Second's R16 review, 10-06): both live in THIS process, built once here --
   // the route's deps are rebuilt per request. One bridge instance holds them, as it holds who is signed in.
