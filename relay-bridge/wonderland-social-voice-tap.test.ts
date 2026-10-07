@@ -15,6 +15,7 @@ import {
   type SocialSessionFacts,
 } from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
+import { hashId, hashPuid } from './eos-voice';
 
 /*
  * PARTY VOICE AND THE DELIVERY TAP, through the real route. The voice minter is a recorder: what matters is WHO the route
@@ -235,6 +236,96 @@ describe('party voice: EOS PUID binding and the uniform 404 (R16 EOS voice backe
       expect(r.body.data, who).toBeUndefined();
     }
     expect(pairsOf(await join(walledDeps, U.KAI, pid))).toEqual(everyone);
+  });
+});
+
+describe('party voice: a re-bind takes the replaced PUID out of the room first (review a6d5842c, B1)', () => {
+  const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 10));
+
+  it('a fresh sign-in on another device: the old PUID leaves the room BEFORE the new one is bound; the room then holds only the new one', async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder();
+    const bindings = createInMemoryVoiceBindings();
+    const order: string[] = [];
+    const traced: VoiceBindingStore = { ...bindings, bind: async (i) => { order.push(`bind ${i.puid}`); return bindings.bind(i); } };
+    const minter: PartyVoiceTokenMinter = { ...rec.minter, removeFromRoom: async (i) => { order.push(`remove ${i.puids.join(',')}`); return rec.minter.removeFromRoom(i); } };
+    const deps = depsFor(state, minter, undefined, traced);
+    expect((await join(deps, U.KAI, pid)).status).toBe(200);
+    expect(rec.heard(pid)).toEqual([puidOf(U.KAI)]);
+    const second = puidOf(`${U.KAI}-second-device`);
+    expect((await join(deps, `${U.KAI}#2`, pid, second)).status).toBe(200);
+    expect(order).toEqual([`bind ${puidOf(U.KAI)}`, `remove ${puidOf(U.KAI)}`, `bind ${second}`]);
+    expect(rec.heard(pid)).toEqual([second]); // the first device no longer hears the party
+    expect(bindings.rows().map((r) => r.puid)).toEqual([second]);
+  });
+
+  it('a re-bind whose removal is not confirmed is a 503 and changes nothing: the old binding stays, and nothing is minted', async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder({ failRemoval: true });
+    const bindings = createInMemoryVoiceBindings();
+    const deps = depsFor(state, rec.minter, undefined, bindings);
+    expect((await join(deps, U.KAI, pid)).status).toBe(200);
+    const r = await join(deps, `${U.KAI}#2`, pid, puidOf(`${U.KAI}-second-device`));
+    expect(r.status).toBe(503);
+    expect(r.body.error?.kind).toBe('voice_unavailable');
+    expect(bindings.rows().map((row) => [row.puid, row.sessionId])).toEqual([[puidOf(U.KAI), U.KAI]]);
+    expect(rec.asked.map((a) => a.puid)).toEqual([puidOf(U.KAI)]);
+  });
+
+  it("no removal at all when nothing is re-bound: the same PUID again, a refused one (same session, or another player's), a first bind", async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder();
+    const deps = depsFor(state, rec.minter);
+    expect((await join(deps, U.KAI, pid)).status).toBe(200); // first bind
+    expect((await join(deps, U.KAI, pid)).status).toBe(200); // the same PUID again (the client's audience re-ask)
+    expect((await join(deps, `${U.KAI}#2`, pid)).status).toBe(200); // the same PUID from a new session
+    expect((await join(deps, U.KAI, pid, puidOf('another-device'))).status).toBe(404); // a different PUID, same session
+    expect((await join(deps, `${U.KAI}#3`, pid, puidOf(U.LYRA))).status).toBe(200); // Lyra's PUID is nobody's yet: a re-bind
+    expect(rec.removals).toEqual([{ partyId: pid, participantId: U.KAI, puids: [puidOf(U.KAI)] }]);
+    // Lyra now asks with her own PUID, which Kai holds: refused, and her room is not touched
+    expect((await join(deps, U.LYRA, pid)).status).toBe(404);
+    expect(rec.removals).toHaveLength(1);
+  });
+
+  it('two fresh sign-ins of one player join at once with two new PUIDs: one join at a time, so the room ends holding only the PUID bound last', async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder();
+    const bindings = createInMemoryVoiceBindings();
+    // the first re-bind's removal is held while the second join has every chance to run
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let holds = 1;
+    const minter: PartyVoiceTokenMinter = { ...rec.minter, removeFromRoom: async (i) => { if (holds-- > 0) await held; return rec.minter.removeFromRoom(i); } };
+    const deps = depsFor(state, minter, undefined, bindings);
+    expect((await join(deps, U.KAI, pid)).status).toBe(200);
+    const [y, z] = [puidOf('kai-device-y'), puidOf('kai-device-z')];
+    const first = join(deps, `${U.KAI}#2`, pid, y);
+    await tick();
+    const second = join(deps, `${U.KAI}#3`, pid, z);
+    await tick();
+    release();
+    expect([(await first).status, (await second).status]).toEqual([200, 200]);
+    expect(bindings.rows().map((r) => r.puid)).toEqual([z]);
+    expect(rec.heard(pid)).toEqual([z]); // y left the room when z re-bound; Kai's first PUID left when y did
+  });
+
+  it('a re-bind nobody predicted (another process moved the binding): the minted PUIDs leave the room before the mint; logged with hashed ids only', async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder();
+    const real = createInMemoryVoiceBindings();
+    let stale = false;
+    // a read that sees no binding, while the table holds one: as if another bridge process bound it in between
+    const racing: VoiceBindingStore = { ...real, bindingOf: async (u) => (stale ? null : real.bindingOf(u)) };
+    const log: string[] = [];
+    const deps: SocialRouteDeps = { ...depsFor(state, rec.minter, undefined, racing), log: (l) => log.push(l) };
+    expect((await join(deps, U.KAI, pid)).status).toBe(200);
+    stale = true;
+    const fresh = puidOf(`${U.KAI}-fresh`);
+    expect((await join(deps, `${U.KAI}#2`, pid, fresh)).status).toBe(200);
+    expect(rec.removals).toEqual([{ partyId: pid, participantId: U.KAI, puids: [] }]);
+    expect(rec.heard(pid)).toEqual([fresh]);
+    expect(log).toEqual([`voice join: the binding moved under this join user=${hashId(U.KAI)} puid=${hashPuid(fresh)} predicted=bound actual=rebound`]);
+    for (const raw of [U.KAI, fresh, puidOf(U.KAI)]) expect(log.join('\n')).not.toContain(raw);
   });
 });
 

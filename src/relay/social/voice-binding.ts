@@ -5,8 +5,11 @@
  * talk to whom is decided here, from the GitHub-authenticated session -- so a PUID is bound to exactly one player:
  *   - the first /voice/join BINDS the caller's PUID to them;
  *   - a PUID already bound to ANOTHER player is refused (the route answers it exactly like a party that does not exist);
- *   - a player's own, DIFFERENT PUID re-binds only from a NEW session (a fresh sign-in), never mid-session;
+ *   - a player's own, DIFFERENT PUID re-binds only from ANOTHER session than the one that bound it (a fresh sign-in), never
+ *     mid-session. "Another", not "newer": the session facts carry no issue time (browser-session/grants.ts), so an older
+ *     session still signed in can take the binding back (MAIN's internal review a6d5842c, m3: open);
  *   - the voice audience a client is shown carries only server-bound PUID -> player pairs.
+ * A re-bind takes the replaced PUID out of the party's room before it binds (relay-bridge/wonderland-social-routes.ts, B1).
  * One pure decision (decideVoiceBinding) for both stores: the in-memory one here, and PostgreSQL
  * (src/relay/persistence/voice-binding-postgres.ts, table relay_wonderland.voice_puid_binding, migration 035).
  */
@@ -33,7 +36,7 @@ export type VoiceBindingOutcome = 'bound' | 'same' | 'rebound' | 'refused';
  *   refused  the PUID is another player's; or the caller asks for a different PUID within the session that bound the old one
  *   same     the caller's own PUID again (nothing changes)
  *   bound    the caller's first binding
- *   rebound  the caller's new PUID, from a new session
+ *   rebound  the caller's new PUID, from another session than the one that bound the old (not provably a NEWER one: see above)
  */
 export function decideVoiceBinding(input: { readonly userId: string; readonly puid: string; readonly sessionId: string; readonly mine: VoiceBindingRow | null; readonly owner: string | null }): VoiceBindingOutcome {
   if (input.owner !== null && input.owner !== input.userId) return 'refused';
@@ -45,6 +48,10 @@ export function decideVoiceBinding(input: { readonly userId: string; readonly pu
 export interface VoiceBindingStore {
   /** Bind (or confirm, or re-bind) the caller's PUID by decideVoiceBinding. The PUID must already be normalised. */
   bind(input: { readonly userId: string; readonly puid: string; readonly sessionId: string; readonly nowIso: string }): Promise<VoiceBindingOutcome>;
+  /** The caller's binding now (PUID, the session that bound it, when), or null: decideVoiceBinding's `mine`, read before a bind. */
+  bindingOf(userId: string): Promise<VoiceBindingRow | null>;
+  /** Who holds this PUID now, or null: decideVoiceBinding's `owner`. The PUID must already be normalised. */
+  ownerOf(puid: string): Promise<string | null>;
   /** The bound PUID of each player who has one. */
   puidsOf(userIds: readonly string[]): Promise<ReadonlyMap<string, string>>;
 }
@@ -58,14 +65,16 @@ export function createInMemoryVoiceBindings(): VoiceBindingStore & { readonly ro
     tail = next.catch(() => undefined);
     return next;
   };
+  const ownerNow = (puid: string): string | null => [...byUser.values()].find((r) => r.puid === puid)?.userId ?? null;
   return {
     bind: ({ userId, puid, sessionId, nowIso }) =>
       serial(() => {
-        const owner = [...byUser.values()].find((r) => r.puid === puid)?.userId ?? null;
-        const outcome = decideVoiceBinding({ userId, puid, sessionId, mine: byUser.get(userId) ?? null, owner });
+        const outcome = decideVoiceBinding({ userId, puid, sessionId, mine: byUser.get(userId) ?? null, owner: ownerNow(puid) });
         if (outcome === 'bound' || outcome === 'rebound') byUser.set(userId, { userId, puid, sessionId, boundAtIso: nowIso });
         return outcome;
       }),
+    bindingOf: (userId) => serial(() => byUser.get(userId) ?? null),
+    ownerOf: (puid) => serial(() => ownerNow(puid)),
     puidsOf: (userIds) =>
       serial(() => new Map(userIds.flatMap((id) => (byUser.has(id) ? [[id, byUser.get(id)!.puid] as const] : [])))),
     rows: () => [...byUser.values()],

@@ -2,12 +2,24 @@ import type { Pool } from 'pg';
 
 import { decideVoiceBinding, type VoiceBindingRow, type VoiceBindingStore } from '../social/voice-binding';
 
+/** A relay_wonderland.voice_puid_binding row as pg returns it. */
+interface BindingRowShape {
+  user_id: string;
+  puid: string;
+  session_id: string;
+  bound_at: Date;
+}
+
+const rowOf = (row: BindingRowShape | undefined): VoiceBindingRow | null =>
+  row === undefined ? null : { userId: row.user_id, puid: row.puid, sessionId: row.session_id, boundAtIso: new Date(row.bound_at).toISOString() };
+
 /**
  * PARTY VOICE PUID BINDINGS, DURABLE: relay_wonderland.voice_puid_binding (wonderland-migrations/035_wonderland_voice.sql).
  *
  * The rule is decideVoiceBinding's (src/relay/social/voice-binding.ts); this applies it in ONE transaction that locks the
  * caller's row, so two joins cannot both bind. The table's UNIQUE(puid) is the last word: a race that would bind one PUID to two
  * players fails the insert, and that is answered as `refused` -- never as a second owner.
+ * bindingOf and ownerOf are plain reads (no lock): the voice route predicts a re-bind from them, and bind decides again.
  */
 export function createPostgresVoiceBindings(pool: Pool): VoiceBindingStore {
   return {
@@ -15,13 +27,12 @@ export function createPostgresVoiceBindings(pool: Pool): VoiceBindingStore {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const mineRows = await client.query<{ user_id: string; puid: string; session_id: string; bound_at: Date }>(
+        const mineRows = await client.query<BindingRowShape>(
           'SELECT user_id, puid, session_id, bound_at FROM relay_wonderland.voice_puid_binding WHERE user_id = $1 FOR UPDATE',
           [userId],
         );
         const ownerRows = await client.query<{ user_id: string }>('SELECT user_id FROM relay_wonderland.voice_puid_binding WHERE puid = $1', [puid]);
-        const row = mineRows.rows[0];
-        const mine: VoiceBindingRow | null = row === undefined ? null : { userId: row.user_id, puid: row.puid, sessionId: row.session_id, boundAtIso: new Date(row.bound_at).toISOString() };
+        const mine = rowOf(mineRows.rows[0]);
         const outcome = decideVoiceBinding({ userId, puid, sessionId, mine, owner: ownerRows.rows[0]?.user_id ?? null });
         if (outcome === 'bound') {
           await client.query('INSERT INTO relay_wonderland.voice_puid_binding(user_id, puid, session_id, bound_at) VALUES($1, $2, $3, $4)', [userId, puid, sessionId, nowIso]);
@@ -38,6 +49,14 @@ export function createPostgresVoiceBindings(pool: Pool): VoiceBindingStore {
       } finally {
         client.release();
       }
+    },
+    async bindingOf(userId) {
+      const rows = await pool.query<BindingRowShape>('SELECT user_id, puid, session_id, bound_at FROM relay_wonderland.voice_puid_binding WHERE user_id = $1', [userId]);
+      return rowOf(rows.rows[0]);
+    },
+    async ownerOf(puid) {
+      const rows = await pool.query<{ user_id: string }>('SELECT user_id FROM relay_wonderland.voice_puid_binding WHERE puid = $1', [puid]);
+      return rows.rows[0]?.user_id ?? null;
     },
     async puidsOf(userIds) {
       if (userIds.length === 0) return new Map();

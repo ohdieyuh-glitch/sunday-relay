@@ -38,6 +38,22 @@ describe('the binding rule (memory store; the PostgreSQL store applies the same 
     expect(await b.bind({ userId: 'ghu-2', puid: P1, sessionId: 's7', nowIso: NOW })).toBe('bound');
   });
 
+  it("bindingOf and ownerOf read what decideVoiceBinding reads: the caller's binding (PUID, session, when) and who holds a PUID (B1)", async () => {
+    const b = createInMemoryVoiceBindings();
+    const LATER = '2026-10-04T09:00:00.000Z';
+    expect(await b.bindingOf('ghu-1')).toBeNull();
+    expect(await b.ownerOf(P1)).toBeNull();
+    await b.bind({ userId: 'ghu-1', puid: P1, sessionId: 's1', nowIso: NOW });
+    expect(await b.bindingOf('ghu-1')).toEqual({ userId: 'ghu-1', puid: P1, sessionId: 's1', boundAtIso: NOW });
+    expect(await b.ownerOf(P1)).toBe('ghu-1');
+    expect(await b.bind({ userId: 'ghu-1', puid: P2, sessionId: 's2', nowIso: LATER })).toBe('rebound');
+    expect(await b.bindingOf('ghu-1')).toEqual({ userId: 'ghu-1', puid: P2, sessionId: 's2', boundAtIso: LATER });
+    expect([await b.ownerOf(P1), await b.ownerOf(P2)]).toEqual([null, 'ghu-1']);
+    // a refused bind changes neither read
+    expect(await b.bind({ userId: 'ghu-2', puid: P2, sessionId: 's9', nowIso: LATER })).toBe('refused');
+    expect([await b.bindingOf('ghu-2'), await b.ownerOf(P2)]).toEqual([null, 'ghu-1']);
+  });
+
   it('decideVoiceBinding, case by case', () => {
     const mine = { userId: 'u', puid: P1, sessionId: 's1', boundAtIso: NOW };
     expect(decideVoiceBinding({ userId: 'u', puid: P1, sessionId: 's1', mine: null, owner: 'other' })).toBe('refused');

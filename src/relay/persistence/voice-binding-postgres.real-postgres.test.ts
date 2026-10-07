@@ -45,7 +45,11 @@ suite('party voice PUID bindings on real PostgreSQL', () => {
     const applied = await new TransactionalWonderlandDatabase(pool).appliedMigrationVersions();
     expect(applied.has('035_wonderland_voice')).toBe(true);
     const bindings = createPostgresVoiceBindings(pool);
+    expect([await bindings.bindingOf(A), await bindings.ownerOf(P1)]).toEqual([null, null]);
     expect(await bindings.bind({ userId: A, puid: P1, sessionId: 's1', nowIso: NOW })).toBe('bound');
+    // what the voice route predicts a re-bind from (B1): the caller's row and the PUID's owner
+    expect(await bindings.bindingOf(A)).toEqual({ userId: A, puid: P1, sessionId: 's1', boundAtIso: NOW });
+    expect(await bindings.ownerOf(P1)).toBe(A);
     expect(await bindings.bind({ userId: A, puid: P1, sessionId: 's1', nowIso: NOW })).toBe('same');
     expect(await bindings.bind({ userId: B, puid: P1, sessionId: 'sb', nowIso: NOW })).toBe('refused');
     expect(await bindings.bind({ userId: A, puid: P2, sessionId: 's1', nowIso: NOW })).toBe('refused');
@@ -54,6 +58,7 @@ suite('party voice PUID bindings on real PostgreSQL', () => {
     expect(Object.fromEntries(await again.puidsOf([A, B]))).toEqual({ [A]: P1 });
     expect(await again.bind({ userId: A, puid: P2, sessionId: 's2', nowIso: NOW })).toBe('rebound');
     expect(Object.fromEntries(await again.puidsOf([A]))).toEqual({ [A]: P2 });
+    expect([(await again.bindingOf(A))?.sessionId, await again.ownerOf(P1), await again.ownerOf(P2)]).toEqual(['s2', null, A]);
     // two racing first binds of one PUID: exactly one owner
     const P3 = randomBytes(16).toString('hex');
     const raced = await Promise.all([again.bind({ userId: B, puid: P3, sessionId: 'sb', nowIso: NOW }), createPostgresVoiceBindings(pool).bind({ userId: A, puid: P3, sessionId: 's3', nowIso: NOW })]);

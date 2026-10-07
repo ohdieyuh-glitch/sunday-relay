@@ -51,9 +51,9 @@ import type { SocialOperationId } from '../src/relay/social/social-contracts';
 import type { SocialPlayerIdentity, SocialStore } from '../src/relay/social/social-store';
 import { voiceAudienceFor, walledFromParty } from '../src/relay/social/social-parties';
 import { partyById, type SocialState } from '../src/relay/social/social-state';
-import { normalizePuid, type VoiceBindingStore } from '../src/relay/social/voice-binding';
+import { decideVoiceBinding, normalizePuid, type VoiceBindingOutcome, type VoiceBindingRow, type VoiceBindingStore } from '../src/relay/social/voice-binding';
 import { bindSocialActor, nativeSocialMayCall, SOCIAL_OPERATIONS } from './wonderland-social-scope';
-import { EOS_CLIENT_CONFIG_SCHEMA, hashId, type EosGameClientConfig } from './eos-voice';
+import { EOS_CLIENT_CONFIG_SCHEMA, hashId, hashPuid, type EosGameClientConfig } from './eos-voice';
 
 export const SOCIAL_ROUTE_PREFIX = '/wonderland/social';
 
@@ -376,6 +376,107 @@ function voiceAudienceIfAdmitted(state: SocialState, userId: string, partyId: st
   return audience.length === 0 ? null : audience;
 }
 
+/**
+ * ONE VOICE JOIN AT A TIME PER PLAYER, in this process (MAIN's internal review a6d5842c, B1). A re-bind's removal is decided from
+ * the binding read BEFORE the bind. Another join of the same player running in between (a second fresh sign-in) would bind past
+ * that read, and the PUID it replaced would never leave the room. Keyed by the binding store, which the bridge builds once (each
+ * test builds its own). An entry is dropped once its last join settles. One bridge process holds this, as it holds presence.
+ */
+const voiceJoinTails = new WeakMap<VoiceBindingStore, Map<string, Promise<void>>>();
+
+function oneVoiceJoinAtATime<T>(bindings: VoiceBindingStore, userId: string, work: () => Promise<T>): Promise<T> {
+  const tails = voiceJoinTails.get(bindings) ?? new Map<string, Promise<void>>();
+  voiceJoinTails.set(bindings, tails);
+  const run = (tails.get(userId) ?? Promise.resolve()).then(work);
+  const tail = run.then(() => undefined, () => undefined);
+  tails.set(userId, tail);
+  void tail.then(() => {
+    if (tails.get(userId) === tail) tails.delete(userId);
+  });
+  return run;
+}
+
+/**
+ * POST /parties/:id/voice/join {eosProductUserId}: a token to the caller's own party room, for their server-bound PUID.
+ *   1. ADMITTED (M2): a member walled from nobody in the party, or the stranger's 404.
+ *   2. THE RE-BIND (B1), one join per player at a time: the outcome is predicted with decideVoiceBinding from the binding now.
+ *      A predicted re-bind first takes the replaced PUID (and every PUID minted for the caller in that room) out of the room.
+ *      If that fails, the answer is 503 and nothing is bound: the old binding stays. Then the store binds. If the store's
+ *      outcome differs from the prediction (another process moved the binding), it is logged with hashed ids, and a re-bind
+ *      nobody predicted takes the caller's minted PUIDs out of the room before any token is minted.
+ *   3. The token, and the answer's audience: only server-bound PUID -> player pairs.
+ */
+async function answerVoiceJoin(input: {
+  readonly store: SocialStore;
+  readonly deps: SocialRouteDeps;
+  readonly actorId: string;
+  readonly sessionId: string;
+  readonly partyId: string;
+  readonly body: Readonly<Record<string, unknown>>;
+  readonly nowIso: string;
+}): Promise<SocialRouteResult> {
+  const { store, deps, actorId, sessionId, partyId, nowIso } = input;
+  // Every refusal that concerns WHO the caller is answers exactly as a party that does not exist (the uniform stranger 404).
+  const notThere = () => err(404, 'not-found', 'party not found');
+  const audience = voiceAudienceIfAdmitted(await store.read(), actorId, partyId);
+  if (audience === null) return notThere();
+  const voice = deps.voice ?? null;
+  const bindings = deps.voiceBindings ?? null;
+  if (voice === null || bindings === null) return err(503, 'voice_unavailable', 'VOICE TRANSPORT PENDING');
+  // THE CALLER'S EOS PUID, bound to them server-side (review #2): another player's PUID, or a different one of their own
+  // within the session that bound the first, is refused -- as a stranger is.
+  const puid = normalizePuid(input.body.eosProductUserId);
+  if (puid === null) return err(400, 'validation-failed', 'eosProductUserId must be an EOS ProductUserId (32 hex characters)');
+  const log = deps.log ?? (() => undefined);
+  const unavailable = () => err(503, 'voice_unavailable', 'The voice provider could not admit you right now.');
+  const who = `user=${hashId(actorId)} puid=${hashPuid(puid)}`;
+  return oneVoiceJoinAtATime(bindings, actorId, async () => {
+    let mine: VoiceBindingRow | null;
+    let owner: string | null;
+    try {
+      [mine, owner] = await Promise.all([bindings.bindingOf(actorId), bindings.ownerOf(puid)]);
+    } catch {
+      return unavailable();
+    }
+    const predicted = decideVoiceBinding({ userId: actorId, puid, sessionId, mine, owner });
+    if (predicted === 'rebound' && mine !== null) {
+      try {
+        await voice.removeFromRoom({ partyId, participantId: actorId, puids: [mine.puid] });
+      } catch {
+        log(`voice join: re-bind held, the replaced PUID is not confirmed out of the room ${who} replaced=${hashPuid(mine.puid)}`);
+        return err(503, 'voice_unavailable', 'Party voice could not take your previous device out of the room; nothing was changed. Try again.');
+      }
+    }
+    let outcome: VoiceBindingOutcome;
+    try {
+      outcome = await bindings.bind({ userId: actorId, puid, sessionId, nowIso });
+    } catch {
+      return unavailable();
+    }
+    if (outcome !== predicted) log(`voice join: the binding moved under this join ${who} predicted=${predicted} actual=${outcome}`);
+    if (outcome === 'refused') return notThere();
+    if (outcome === 'rebound' && predicted !== 'rebound') {
+      try {
+        await voice.removeFromRoom({ partyId, participantId: actorId, puids: mine === null ? [] : [mine.puid] });
+      } catch {
+        log(`voice join: an unpredicted re-bind left minted PUIDs in the room; no token minted ${who}`);
+        return err(503, 'voice_unavailable', 'Party voice could not take your previous device out of the room. Try again.');
+      }
+    }
+    let grant: PartyVoiceGrant;
+    let bound: ReadonlyMap<string, string>;
+    try {
+      grant = await voice.mint({ partyId, participantId: actorId, audience, nowIso, puid });
+      bound = await bindings.puidsOf(audience);
+    } catch {
+      return unavailable();
+    }
+    // the audience a client maps voices with: ONLY server-bound PUID -> player pairs
+    const pairs = audience.filter((id) => bound.has(id)).map((id) => ({ userId: id, puid: bound.get(id) as string }));
+    return ok({ providerId: grant.providerId, roomId: grant.roomId, participantToken: grant.participantToken, expiresAt: grant.expiresAtIso, audience: pairs });
+  });
+}
+
 export async function handleSocialRoute(request: SocialRouteRequest, deps: SocialRouteDeps): Promise<SocialRouteResult | null> {
   const result = await answerSocialRoute(request, deps);
   return result === null ? null : { ...result, headers: { ...NO_STORE, ...(result.headers ?? {}) } };
@@ -446,37 +547,8 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
     return ok(page);
   }
   if (op.id === 'parties.voice_join') {
-    const [partyId] = idsOf(op.template, pathname);
-    // Admitted: a member walled from nobody in the party (M2); their audience is the whole party. Every refusal that concerns
-    // WHO the caller is answers exactly as a party that does not exist (the uniform stranger 404).
-    const notThere = () => err(404, 'not-found', 'party not found');
-    const audience = voiceAudienceIfAdmitted(await store.read(), actor.actorId, partyId ?? '');
-    if (audience === null) return notThere();
-    if (deps.voice === undefined || deps.voice === null || deps.voiceBindings === undefined || deps.voiceBindings === null) {
-      return err(503, 'voice_unavailable', 'VOICE TRANSPORT PENDING');
-    }
-    // THE CALLER'S EOS PUID, bound to them server-side (review #2): another player's PUID, or a different one of their own
-    // within the session that bound the first, is refused -- as a stranger is.
-    const puid = normalizePuid(body.eosProductUserId);
-    if (puid === null) return err(400, 'validation-failed', 'eosProductUserId must be an EOS ProductUserId (32 hex characters)');
-    let binding: string;
-    try {
-      binding = await deps.voiceBindings.bind({ userId: actor.actorId, puid, sessionId: facts.sessionId, nowIso });
-    } catch {
-      return err(503, 'voice_unavailable', 'The voice provider could not admit you right now.');
-    }
-    if (binding === 'refused') return notThere();
-    let grant: PartyVoiceGrant;
-    let bound: ReadonlyMap<string, string>;
-    try {
-      grant = await deps.voice.mint({ partyId: partyId ?? '', participantId: actor.actorId, audience, nowIso, puid });
-      bound = await deps.voiceBindings.puidsOf(audience);
-    } catch {
-      return err(503, 'voice_unavailable', 'The voice provider could not admit you right now.');
-    }
-    // the audience a client maps voices with: ONLY server-bound PUID -> player pairs, only of the walled audience
-    const pairs = audience.filter((id) => bound.has(id)).map((id) => ({ userId: id, puid: bound.get(id) as string }));
-    return ok({ providerId: grant.providerId, roomId: grant.roomId, participantToken: grant.participantToken, expiresAt: grant.expiresAtIso, audience: pairs });
+    const [partyId = ''] = idsOf(op.template, pathname);
+    return answerVoiceJoin({ store, deps, actorId: actor.actorId, sessionId: facts.sessionId, partyId, body, nowIso });
   }
   if (op.id === 'voice.eos_client_config') {
     // THE GAME CLIENT'S EOS CONFIG: to this signed-in player only, never in a log line; no-store, as every social answer.
