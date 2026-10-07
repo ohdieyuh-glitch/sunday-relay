@@ -75,7 +75,7 @@ private:
 	TSharedRef<SWidget> MakeSocialStatus();
 	TSharedRef<SWidget> MakeActions();
 	TSharedRef<SWidget> MakeStatsAndMutuals();
-	TSharedRef<SWidget> ActionButton(const FString& Label, const FString& OperationId, bool bAllowed);
+	TSharedRef<SWidget> ActionButton(const FString& Label, const FString& OperationId, const FString& Subject, bool bAllowed);
 
 	FWonderlandSocialProfileView View;
 	TMap<FString, FString> NamesById;

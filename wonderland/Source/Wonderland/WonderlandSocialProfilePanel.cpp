@@ -24,6 +24,8 @@ namespace WonderlandSocialProfileActions
 	{
 		FString Label;
 		FString OperationId;
+		/** The id the operation acts on: the profile's user id, except JOIN PARTY's (the party the person is in). */
+		FString SubjectId;
 		bool bAllowed = false;
 	};
 
@@ -35,11 +37,12 @@ namespace WonderlandSocialProfileActions
 			return Out;   // your own profile offers no actions
 		}
 		const FWonderlandSocialActions& Can = View.Presence.Can;
-		auto AddAction = [&Out](const TCHAR* Label, const TCHAR* OperationId, bool bAllowed)
+		auto AddAction = [&Out, &View](const TCHAR* Label, const TCHAR* OperationId, bool bAllowed)
 		{
 			FProfileActionRow Row;
 			Row.Label = Label;
 			Row.OperationId = OperationId;
+			Row.SubjectId = View.Profile.UserId;
 			Row.bAllowed = bAllowed;
 			Out.Add(MoveTemp(Row));
 		};
@@ -49,7 +52,11 @@ namespace WonderlandSocialProfileActions
 		// existing conversation when there is one (openDirectConversation), and the conversation then lists under MESSAGES.
 		AddAction(TEXT("MESSAGE"), TEXT("conversations.open"), Can.bMessage);
 		AddAction(TEXT("INVITE TO PARTY"), TEXT("parties.invite"), Can.bInviteToParty);
-		AddAction(TEXT("JOIN PARTY"), TEXT("parties.join"), Can.bJoinParty);
+		// JOIN PARTY joins the PARTY the person is in: parties.join builds /parties/<subject>/join (SocialLive.cpp), so the subject is
+		// the presence's party id, as on the hub's friend row (HubPanel.cpp:716). It sent the USER id, which the server answers 404
+		// "party not found" on every live profile (client-contract audit, 2026-10-07). No party id shown = nothing to join: disabled.
+		AddAction(TEXT("JOIN PARTY"), TEXT("parties.join"), Can.bJoinParty && !View.Presence.PartyId.IsEmpty());
+		Out.Last().SubjectId = View.Presence.PartyId;
 		AddAction(TEXT("JOIN SERVER"), TEXT("server.join"), Can.bJoinServer);
 		// NO "INVITE TO SERVER" IN THE BETA (D4 / finding F-18, 2026-10-07): the invited player's client parses a world invite and never
 		// shows it (SocialLive.cpp:113-129; nothing reads View.Invites), so the button answered "Done" for an invitation nobody could
@@ -570,10 +577,9 @@ TSharedRef<SWidget> SWonderlandSocialProfilePanel::MakeSocialStatus()
 		];
 }
 
-TSharedRef<SWidget> SWonderlandSocialProfilePanel::ActionButton(const FString& Label, const FString& OperationId, bool bAllowed)
+TSharedRef<SWidget> SWonderlandSocialProfilePanel::ActionButton(const FString& Label, const FString& OperationId, const FString& Subject, bool bAllowed)
 {
 	using namespace WonderlandSocialProfileLook;
-	const FString Subject = View.Profile.UserId;
 	return SNew(SButton).ButtonStyle(&ButtonStyle).IsFocusable(false).IsEnabled(bAllowed)
 		.ToolTipText(T(bAllowed ? (bDevelopmentPreview ? FString(TEXT("DEVELOPMENT PREVIEW: shows the action, changes nothing")) : FString()) : FString(TEXT("Not available to you"))))
 		.OnClicked_Lambda([this, OperationId, Subject]()
@@ -592,7 +598,7 @@ TSharedRef<SWidget> SWonderlandSocialProfilePanel::MakeActions()
 	TSharedRef<SWrapBox> Row = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(8.0, 8.0));
 	for (const WonderlandSocialProfileActions::FProfileActionRow& ProfileAction : WonderlandSocialProfileActions::For(View))
 	{
-		Row->AddSlot()[ActionButton(ProfileAction.Label, ProfileAction.OperationId, ProfileAction.bAllowed)];
+		Row->AddSlot()[ActionButton(ProfileAction.Label, ProfileAction.OperationId, ProfileAction.SubjectId, ProfileAction.bAllowed)];
 	}
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()[Row]
@@ -695,10 +701,11 @@ namespace WonderlandSocialProfileActionsQa
 	/** D4 + F-19 QA (2026-10-07), fail-capable, on the very list MakeActions draws. A friend's profile offers no INVITE TO SERVER (an
 	 *  invite the invited player's client never shows), still offers JOIN SERVER, and EVERY operation it offers is one the LIVE client
 	 *  dispatches (the old MESSAGE sent "messages.send", which the live dispatcher refuses as unknown). PA4 and PA5 prove the checks
-	 *  themselves can FAIL. Fed views, a throwaway service on a dead loopback port. WLQA PROFILEACT lines. */
+	 *  themselves can FAIL. PA6 (2026-10-07): JOIN PARTY acts on the party id, with its own control. Fed views, a throwaway service on
+	 *  a dead loopback port. WLQA PROFILEACT lines. */
 	FAutoConsoleCommand GQaSocialProfileActions(
 		TEXT("wl.Qa.SocialProfileActions"),
-		TEXT("QA: the social profile's action row (D4: no INVITE TO SERVER; F-19: MESSAGE dispatched) -- fed views, with fail-capable controls."),
+		TEXT("QA: the social profile's action row (D4: no INVITE TO SERVER; F-19: MESSAGE dispatched; JOIN PARTY on the party id) -- fed views, with fail-capable controls."),
 		FConsoleCommandDelegate::CreateLambda([]()
 		{
 			using WonderlandSocialProfileActions::FProfileActionRow;
@@ -720,6 +727,7 @@ namespace WonderlandSocialProfileActionsQa
 			FriendView.Profile.UserId = TEXT("qa-friend");
 			FriendView.Profile.DisplayName = TEXT("Fern");
 			FriendView.Relationship = TEXT("FRIEND");
+			FriendView.Presence.PartyId = TEXT("qa-party-1");   // joinParty needs partyVisible, which also shows the partyId (social-presence.ts)
 			FWonderlandSocialActions& Can = FriendView.Presence.Can;
 			Can.bMessage = Can.bInviteToParty = Can.bJoinParty = Can.bJoinServer = Can.bInviteToServer = true;
 			Can.bRemoveFriend = Can.bMute = Can.bBlock = Can.bReport = true;
@@ -737,7 +745,7 @@ namespace WonderlandSocialProfileActionsQa
 			TArray<FString> NotDispatched;
 			for (const FProfileActionRow& R : FriendRows)
 			{
-				if (IsUnknownOp(ProbeService->Request(R.OperationId, FriendView.Profile.UserId)))
+				if (IsUnknownOp(ProbeService->Request(R.OperationId, R.SubjectId)))
 				{
 					NotDispatched.Add(R.OperationId);
 				}
@@ -766,6 +774,30 @@ namespace WonderlandSocialProfileActionsQa
 			const FProfileActionRow* AddFriendRow = StrangerRows.FindByPredicate([](const FProfileActionRow& R) { return R.OperationId == TEXT("requests.send"); });
 			Check(TEXT("PA5"), WonderlandSocialProfileActions::For(SelfView).Num() == 0 && AddFriendRow != nullptr && AddFriendRow->bAllowed && !OffersServerInvite(StrangerRows),
 				TEXT("your own profile offers no actions; a stranger's offers ADD FRIEND and no INVITE TO SERVER"));
+			// PA6 JOIN PARTY JOINS THE PARTY: parties.join builds /parties/<subject>/join, so its subject must be the party id the
+			// presence shows (the old row sent the USER id: 404 "party not found" on every live profile); with no party id shown it is
+			// disabled. Control: the same predicate FAILS the old row (the user id as the subject).
+			auto JoinsTheParty = [](const TArray<FProfileActionRow>& Rows, const FString& PartyId)
+			{
+				const FProfileActionRow* Join = Rows.FindByPredicate([](const FProfileActionRow& R) { return R.OperationId == TEXT("parties.join"); });
+				return Join != nullptr && Join->bAllowed && !PartyId.IsEmpty() && Join->SubjectId == PartyId;
+			};
+			FWonderlandSocialProfileView NoPartyView = FriendView;
+			NoPartyView.Presence.PartyId.Reset();
+			const TArray<FProfileActionRow> NoPartyRows = WonderlandSocialProfileActions::For(NoPartyView);
+			const FProfileActionRow* NoPartyJoin = NoPartyRows.FindByPredicate([](const FProfileActionRow& R) { return R.OperationId == TEXT("parties.join"); });
+			TArray<FProfileActionRow> OldRows = FriendRows;
+			for (FProfileActionRow& R : OldRows)
+			{
+				if (R.OperationId == TEXT("parties.join"))
+				{
+					R.SubjectId = FriendView.Profile.UserId;
+				}
+			}
+			Check(TEXT("PA6"), JoinsTheParty(FriendRows, FriendView.Presence.PartyId) && NoPartyJoin != nullptr && !NoPartyJoin->bAllowed
+				&& !JoinsTheParty(OldRows, FriendView.Presence.PartyId),
+				FString::Printf(TEXT("JOIN PARTY acts on the party '%s', not the user '%s'; disabled when no party id is shown; control: the old row (the user id) FAILS"),
+					*FriendView.Presence.PartyId, *FriendView.Profile.UserId));
 			UE_LOG(LogTemp, Display, TEXT("WLQA PROFILEACT END pass=%d fail=%d"), Passed, Failed);
 		}));
 }
