@@ -108,8 +108,11 @@ export interface PartyVoiceTokenMinter {
    * Take a player out of their party's room, server-side (EOS: removeParticipant, which also revokes the room token): every PUID
    * this process minted a token for, for them in that room, plus `puids` (a binding, whose token may predate a restart). Resolves
    * only when every removal is confirmed (an absent participant counts); rejects otherwise.
+   * `mustLeave` (MAIN's internal review af2eb058, m-a): true when these PUIDs must leave whatever the answer (a token taken back, a
+   * re-bind already made) -- one not confirmed is kept pending and tried again; false for a re-bind held on failure (its binding
+   * is unchanged, so its PUID may stay).
    */
-  removeFromRoom(input: { readonly partyId: string; readonly participantId: string; readonly puids: readonly string[] }): Promise<void>;
+  removeFromRoom(input: { readonly partyId: string; readonly participantId: string; readonly puids: readonly string[]; readonly mustLeave: boolean }): Promise<void>;
 }
 
 /** One answer as the tap records it: ids and sequence numbers only. */
@@ -462,7 +465,7 @@ async function answerVoiceJoin(input: {
     const predicted = decideVoiceBinding({ userId: actorId, puid, sessionId, sessionIssuedAtIso, mine, owner });
     if (predicted === 'rebound' && mine !== null) {
       try {
-        await voice.removeFromRoom({ partyId, participantId: actorId, puids: [mine.puid] });
+        await voice.removeFromRoom({ partyId, participantId: actorId, puids: [mine.puid], mustLeave: false });
       } catch (error) {
         return failed(
           'Party voice could not take your previous device out of the room, so your voice identity was not changed. Try again.',
@@ -481,7 +484,7 @@ async function answerVoiceJoin(input: {
     if (outcome === 'refused') return notThere();
     if (outcome === 'rebound' && predicted !== 'rebound') {
       try {
-        await voice.removeFromRoom({ partyId, participantId: actorId, puids: mine === null ? [] : [mine.puid] });
+        await voice.removeFromRoom({ partyId, participantId: actorId, puids: mine === null ? [] : [mine.puid], mustLeave: true });
       } catch (error) {
         return failed('Party voice could not take your previous device out of the room. Try again.', 'an unpredicted re-bind left minted PUIDs in the room; no token minted', error);
       }
@@ -494,8 +497,9 @@ async function answerVoiceJoin(input: {
     }
     // THE JOIN/KICK RACE (M1): membership was read before the bind and the mint. A kick, a leave or a block committed in between
     // queued its removal, which may have reached Epic before this token existed. So read again. No longer admitted: this PUID
-    // leaves the room now (best effort, logged; a removal not confirmed stays recorded for the room's next departure), and the
-    // answer is the stranger's 404. Not readable: the same removal, and 503.
+    // leaves the room now (best effort, logged; a removal not confirmed is kept PENDING by the provider and tried again before
+    // the room's next removal or mint, and by a timer -- af2eb058 m-a), and the answer is the stranger's 404. Not readable: the
+    // same removal, and 503.
     let admittedNow: string[] | null;
     try {
       admittedNow = voiceAudienceIfAdmitted(await store.read(), actorId, partyId);
@@ -519,13 +523,16 @@ async function answerVoiceJoin(input: {
   });
 }
 
-/** A token minted for a caller who is no longer admitted: its PUID leaves the room now. Best effort: a failure is logged, hashed. */
+/**
+ * A token minted for a caller who is no longer admitted: its PUID leaves the room now. Best effort: a failure is logged, hashed, and
+ * the PUID is kept pending by the provider (mustLeave), tried again before the room's next removal or mint and by a timer (m-a).
+ */
 async function takeBackToken(voice: PartyVoiceTokenMinter, log: (line: string) => void, input: { partyId: string; actorId: string; puid: string; who: string; why: string }): Promise<void> {
   try {
-    await voice.removeFromRoom({ partyId: input.partyId, participantId: input.actorId, puids: [input.puid] });
+    await voice.removeFromRoom({ partyId: input.partyId, participantId: input.actorId, puids: [input.puid], mustLeave: true });
     log(`voice join: ${input.why}; the new token is revoked ${input.who}`);
   } catch (error) {
-    log(`voice join: ${input.why}; its removal is NOT confirmed (the room's next departure retries it) ${input.who} (${failureTag(error)})`);
+    log(`voice join: ${input.why}; its removal is NOT confirmed (kept pending: tried again before the room's next removal or mint, and by a timer) ${input.who} (${failureTag(error)})`);
   }
 }
 

@@ -57,6 +57,8 @@ function fixedStore(state: SocialState): SocialStore {
 function minterRecorder(opts: { failRemoval?: boolean } = {}) {
   const asked: Array<{ partyId: string; participantId: string; audience: readonly string[]; puid?: string }> = [];
   const removals: Array<{ partyId: string; participantId: string; puids: readonly string[] }> = [];
+  /** Each removal's `mustLeave`, in order (af2eb058 m-a: a removal not confirmed is kept pending only when it must leave). */
+  const mustLeave: boolean[] = [];
   const inRoom = new Map<string, Set<string>>();
   const mintedFor = new Map<string, Set<string>>();
   const minter: PartyVoiceTokenMinter = {
@@ -72,13 +74,14 @@ function minterRecorder(opts: { failRemoval?: boolean } = {}) {
     },
     removeFromRoom: async (input) => {
       removals.push({ partyId: input.partyId, participantId: input.participantId, puids: [...input.puids] });
+      mustLeave.push(input.mustLeave);
       if (opts.failRemoval === true) throw new Error('provider down');
       const key = `${input.partyId}/${input.participantId}`;
       for (const puid of [...(mintedFor.get(key) ?? []), ...input.puids]) inRoom.get(input.partyId)?.delete(puid);
       mintedFor.delete(key);
     },
   };
-  return { asked, removals, minter, heard: (partyId: string) => [...(inRoom.get(partyId) ?? [])].sort() };
+  return { asked, removals, mustLeave, minter, heard: (partyId: string) => [...(inRoom.get(partyId) ?? [])].sort() };
 }
 
 const join = (deps: SocialRouteDeps, who: string, pid: string, puid: unknown = puidOf(who.split('#')[0])) =>
@@ -270,6 +273,8 @@ describe('party voice: a re-bind takes the replaced PUID out of the room first (
     expect(r.body.error?.kind).toBe('voice_unavailable');
     expect(bindings.rows().map((row) => [row.puid, row.sessionId])).toEqual([[puidOf(U.KAI), U.KAI]]);
     expect(rec.asked.map((a) => a.puid)).toEqual([puidOf(U.KAI)]);
+    // held, so the old PUID is still the binding's: never kept pending for a timer to take away (af2eb058 m-a)
+    expect(rec.mustLeave).toEqual([false]);
   });
 
   it("no removal at all when nothing is re-bound: the same PUID again, a refused one (same session, or another player's), a first bind", async () => {
@@ -376,15 +381,16 @@ describe('party voice: a join racing a kick or a block (review a6d5842c, M1)', (
     expect(rec.removals).toHaveLength(1);
   });
 
-  it('a take-back that is not confirmed is still the 404, and is logged as such (the record keeps the PUID for the next departure)', async () => {
+  it('a take-back that is not confirmed is still the 404, and is logged as such (the provider keeps the PUID pending: af2eb058 m-a)', async () => {
     const { state, pid } = arena();
     const rec = minterRecorder({ failRemoval: true });
     const log: string[] = [];
     const r = await join({ ...depsFor(state, rec.minter), store: steppingStore([state, removed(state, pid, U.KAI)]), log: (l) => log.push(l) }, U.KAI, pid);
     expect(r.status).toBe(404);
+    expect(rec.mustLeave).toEqual([true]); // it must leave: not confirmed, it stays pending at the provider
     // The NOTE fix (a6d5842c) ends every failure line with the error's HASHED tag, never its text: `(<Name> #<12 hex>)`.
     expect(log).toHaveLength(1);
-    const prefix = `voice join: left the party while joining; its removal is NOT confirmed (the room's next departure retries it) user=${hashId(U.KAI)} puid=${hashPuid(puidOf(U.KAI))} (`;
+    const prefix = `voice join: left the party while joining; its removal is NOT confirmed (kept pending: tried again before the room's next removal or mint, and by a timer) user=${hashId(U.KAI)} puid=${hashPuid(puidOf(U.KAI))} (`;
     expect(log[0].startsWith(prefix), log[0]).toBe(true);
     expect(log[0].slice(prefix.length), 'the hashed failure tag, nothing else').toMatch(/^[A-Za-z]+ #[0-9a-f]{12}\)$/);
   });

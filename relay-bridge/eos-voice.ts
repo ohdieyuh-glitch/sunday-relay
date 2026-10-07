@@ -13,7 +13,7 @@ import type { PartyVoiceGrant, PartyVoiceTokenMinter } from './wonderland-social
  *   - createVoiceRemovals: after a committed party departure (leave, a leader's removal, a block's F1 separation), the departed
  *     member's PUIDs -- every one this process minted a token for there, plus the bound one -- are removed from that party's
  *     room server-side (Epic's removeParticipant also revokes their room token), retried with backoff, never blocking or
- *     failing the social change.
+ *     failing the social change; one given up on is kept pending and tried again (EOS_PENDING_RETRY).
  * NOTHING SECRET IS LOGGED: room ids and PUIDs appear only hashed ('#' + sha1, 12 hex); never a client secret, an access token, a
  * participant token or the media server address. The HTTP is behind an injectable fetch, so tests use a recorded fake; the real
  * API is exercised only by the R16 run.
@@ -332,12 +332,29 @@ export type EosFetch = (url: string, init: { method: string; headers: Record<str
  */
 export const EOS_REQUEST_TIMEOUT_MS = 10_000;
 
+/**
+ * A REMOVAL GIVEN UP IS NOT FORGOTTEN (MAIN's internal review af2eb058, m-a). A PUID that must leave a room -- a departed member's, a
+ * token taken back from a caller no longer admitted, one replaced by a re-bind already made -- whose DELETE was given up is KEPT
+ * PENDING. It is tried again before the room's next removal or mint, and by a timer: every `everyMs`, at most `maxTimed` timed
+ * attempts per PUID, then abandoned (logged). The timer runs only while something is pending. Every line is hashed.
+ */
+export const EOS_PENDING_RETRY = Object.freeze({ everyMs: 60_000, maxTimed: 30 });
+
 export interface EosVoiceDeps {
   readonly fetchImpl?: EosFetch;
   readonly log?: (line: string) => void;
   readonly now?: () => number;
   /** Tests only: a shorter EOS_REQUEST_TIMEOUT_MS. */
   readonly timeoutMs?: number;
+  /** Tests only: another EOS_PENDING_RETRY (`everyMs` 0: no timer; tick by hand with retryPendingNow). */
+  readonly pendingRetry?: { readonly everyMs: number; readonly maxTimed: number };
+}
+
+/** One PUID whose removal from a room was given up, though it must leave (m-a): whose it was, its mint serial, timed attempts so far. */
+interface PendingRemoval {
+  readonly userId: string;
+  readonly serial: number | undefined;
+  timedAttempts: number;
 }
 
 class EosHttpError extends Error {
@@ -367,12 +384,23 @@ export class EosVoiceTokenMinter implements PartyVoiceTokenMinter, VoiceRemovalT
    */
   private readonly minted = new Map<string, Map<string, Map<string, number>>>();
   private mintSerial = 0;
+  /**
+   * EVERY PUID THAT MUST STILL LEAVE A ROOM (MAIN's internal review af2eb058, m-a): room -> PUID -> whose, after its removal was
+   * given up. Tried again before the room's next removal or mint, and by the timer (EOS_PENDING_RETRY). Per process, as `minted`.
+   */
+  private readonly pending = new Map<string, Map<string, PendingRemoval>>();
+  /** The retry pass running in a room, if any: one pass at a time per room. */
+  private readonly pendingPasses = new Map<string, Promise<void>>();
+  private pendingTimer: ReturnType<typeof setInterval> | null = null;
+  private pendingTicking = false;
+  private readonly pendingRetry: { readonly everyMs: number; readonly maxTimed: number };
 
   constructor(private readonly config: EosVoiceConfig, deps: EosVoiceDeps = {}) {
     this.fetchImpl = deps.fetchImpl ?? (globalThis.fetch as unknown as EosFetch);
     this.log = deps.log ?? (() => undefined);
     this.now = deps.now ?? Date.now;
     this.timeoutMs = deps.timeoutMs ?? EOS_REQUEST_TIMEOUT_MS;
+    this.pendingRetry = deps.pendingRetry ?? EOS_PENDING_RETRY;
   }
 
   /** The party's room: an opaque HMAC-SHA256(roomSalt, partyId), first 32 hex -- stable, and naming nothing. */
@@ -423,6 +451,10 @@ export class EosVoiceTokenMinter implements PartyVoiceTokenMinter, VoiceRemovalT
     const puid = input.puid ?? '';
     if (!/^[0-9a-f]{32}$/.test(puid)) throw new Error('an EOS room token needs the caller\'s bound PUID');
     const roomId = this.roomIdFor(input.partyId);
+    // m-a: what this room still has pending is tried first; this PUID, admitted by the route now, is no longer pending -- so no
+    // timer takes the token minted here away
+    await this.retryPending(roomId);
+    if (this.dropPending(roomId, puid) !== undefined) this.log(`eos voice: pending removal dropped, admitted again room=${hashId(roomId)} puid=${hashPuid(puid)}`);
     const answer = await this.authorised('POST', EPIC.roomPath(this.config.deploymentId, roomId), {
       [EPIC.roomBody.participants]: [{ [EPIC.roomBody.puid]: puid, [EPIC.roomBody.hardMuted]: false }],
     }, 'createRoomToken');
@@ -442,14 +474,100 @@ export class EosVoiceTokenMinter implements PartyVoiceTokenMinter, VoiceRemovalT
     };
   }
 
-  /** Remove a PUID from a room (and revoke its token). Already absent (404) counts as removed. */
+  /** Remove a PUID from a room (and revoke its token). Already absent (404) counts as removed; a removal pending for it is done. */
   async removeParticipant(roomId: string, puid: string): Promise<void> {
     try {
       await this.authorised('DELETE', EPIC.participantPath(this.config.deploymentId, roomId, puid), undefined, 'removeParticipant');
     } catch (error) {
-      if (error instanceof EosHttpError && error.status === 404) return;
-      throw error;
+      if (!(error instanceof EosHttpError && error.status === 404)) throw error;
     }
+    const settled = this.dropPending(roomId, puid);
+    if (settled !== undefined) this.forgetMinted(roomId, settled.userId, puid, settled.serial);
+  }
+
+  /**
+   * KEEP IT PENDING (m-a): this PUID must leave the room, and its removal was given up. Tried again before the room's next removal
+   * or mint (retryPending), and by the timer, at most EOS_PENDING_RETRY.maxTimed times. `serial`: its mint's, if this process
+   * minted it (forgotten once it is out).
+   */
+  keepPending(roomId: string, userId: string, puid: string, serial: number | undefined): void {
+    let entries = this.pending.get(roomId);
+    if (entries === undefined) this.pending.set(roomId, (entries = new Map()));
+    entries.set(puid, { userId, serial, timedAttempts: 0 });
+    this.log(`eos voice: removal PENDING room=${hashId(roomId)} puid=${hashPuid(puid)}: retried before the room's next removal or mint, and by a timer`);
+    if (this.pendingTimer === null && this.pendingRetry.everyMs > 0) {
+      const timer = setInterval(() => void this.retryPendingNow(), this.pendingRetry.everyMs);
+      timer.unref?.(); // never what keeps the bridge process alive
+      this.pendingTimer = timer;
+    }
+  }
+
+  /** The PUIDs pending in a room, each with whose it was (tests; a reviewer). */
+  pendingIn(roomId: string): ReadonlyMap<string, string> {
+    return new Map([...(this.pending.get(roomId) ?? new Map<string, PendingRemoval>())].map(([puid, entry]) => [puid, entry.userId]));
+  }
+
+  /**
+   * One more attempt at every PUID pending in this room, after any pass already running there (passes in a room never overlap).
+   * `timed`: the timer's attempt, counted against EOS_PENDING_RETRY.maxTimed. Never rejects: what fails stays pending.
+   */
+  async retryPending(roomId: string, timed = false): Promise<void> {
+    for (let running = this.pendingPasses.get(roomId); running !== undefined; running = this.pendingPasses.get(roomId)) await running;
+    if ((this.pending.get(roomId)?.size ?? 0) === 0) return;
+    // a pass never fails its caller: what was not removed stays pending
+    const pass = this.runPendingPass(roomId, timed).catch(() => undefined);
+    this.pendingPasses.set(roomId, pass);
+    try {
+      await pass;
+    } finally {
+      // this caller awaited the pass first, so it clears it before any waiter looks again
+      if (this.pendingPasses.get(roomId) === pass) this.pendingPasses.delete(roomId);
+    }
+  }
+
+  /** One tick of the timer: a timed attempt at every pending PUID, room by room. Ticks never overlap. Never rejects. */
+  async retryPendingNow(): Promise<void> {
+    if (this.pendingTicking) return;
+    this.pendingTicking = true;
+    try {
+      for (const roomId of [...this.pending.keys()]) await this.retryPending(roomId, true);
+    } finally {
+      this.pendingTicking = false;
+    }
+  }
+
+  private async runPendingPass(roomId: string, timed: boolean): Promise<void> {
+    for (const [puid, entry] of [...(this.pending.get(roomId) ?? [])]) {
+      if (this.pending.get(roomId)?.get(puid) !== entry) continue; // out, or admitted again, meanwhile
+      try {
+        await this.removeParticipant(roomId, puid); // drops it from pending
+        this.log(`eos voice: removed room=${hashId(roomId)} puid=${hashPuid(puid)} (a pending removal)`);
+      } catch (error) {
+        const status = error instanceof EosHttpError ? error.status : 'network';
+        if (!timed) {
+          this.log(`eos voice: pending removal failed room=${hashId(roomId)} puid=${hashPuid(puid)} (${status}); still pending`);
+        } else if ((entry.timedAttempts += 1) < this.pendingRetry.maxTimed) {
+          this.log(`eos voice: pending removal failed room=${hashId(roomId)} puid=${hashPuid(puid)} (${status}); timed attempt ${entry.timedAttempts} of ${this.pendingRetry.maxTimed}`);
+        } else if (this.pending.get(roomId)?.get(puid) === entry) {
+          this.dropPending(roomId, puid);
+          this.log(`eos voice: pending removal ABANDONED room=${hashId(roomId)} puid=${hashPuid(puid)} after ${entry.timedAttempts} timed attempts`);
+        }
+      }
+    }
+  }
+
+  /** Take a PUID off the pending record (it is out, admitted again, or abandoned); the timer stops once nothing is pending. */
+  private dropPending(roomId: string, puid: string): PendingRemoval | undefined {
+    const entries = this.pending.get(roomId);
+    const entry = entries?.get(puid);
+    if (entries === undefined || entry === undefined) return undefined;
+    entries.delete(puid);
+    if (entries.size === 0) this.pending.delete(roomId);
+    if (this.pending.size === 0 && this.pendingTimer !== null) {
+      clearInterval(this.pendingTimer);
+      this.pendingTimer = null;
+    }
+    return entry;
   }
 
   private recordMint(roomId: string, userId: string, puid: string): void {
@@ -478,11 +596,13 @@ export class EosVoiceTokenMinter implements PartyVoiceTokenMinter, VoiceRemovalT
 
   /**
    * THE ROUTE'S REMOVAL (PartyVoiceTokenMinter.removeFromRoom): every PUID this process minted for the player in the party's room,
-   * plus `puids` (a binding, whose token may predate a restart), one DELETE each. Resolves when every one is confirmed (an
-   * absent participant counts); otherwise rejects, after trying them all. Ids are logged hashed; the error names none.
+   * plus `puids` (a binding, whose token may predate a restart), one DELETE each -- after what the room has pending (m-a).
+   * Resolves when every one is confirmed (an absent participant counts); otherwise rejects, after trying them all. `mustLeave`:
+   * one not confirmed is KEPT PENDING (keepPending). Ids are logged hashed; the error names none.
    */
-  async removeFromRoom(input: { readonly partyId: string; readonly participantId: string; readonly puids: readonly string[] }): Promise<void> {
+  async removeFromRoom(input: { readonly partyId: string; readonly participantId: string; readonly puids: readonly string[]; readonly mustLeave: boolean }): Promise<void> {
     const roomId = this.roomIdFor(input.partyId);
+    await this.retryPending(roomId);
     const minted = this.mintedIn(roomId, input.participantId);
     const given = input.puids.map((p) => normalizePuid(p)).filter((p): p is string => p !== null);
     const targets = [...new Set([...minted.keys(), ...given])];
@@ -495,6 +615,7 @@ export class EosVoiceTokenMinter implements PartyVoiceTokenMinter, VoiceRemovalT
       } catch (error) {
         failed += 1;
         this.log(`eos voice: removal failed room=${hashId(roomId)} puid=${hashPuid(puid)} (${error instanceof EosHttpError ? error.status : 'network'})`);
+        if (input.mustLeave) this.keepPending(roomId, input.participantId, puid, minted.get(puid));
       }
     }
     if (failed > 0) throw new Error(`${failed} of ${targets.length} participant removals failed`);
@@ -510,6 +631,10 @@ export interface VoiceRemovalTarget {
   mintedIn(roomId: string, userId: string): ReadonlyMap<string, number>;
   /** That PUID is out of the room: forget it, unless it was minted again after `serial`. */
   forgetMinted(roomId: string, userId: string, puid: string, serial: number | undefined): void;
+  /** Its removal was given up, but it must leave: tried again before the room's next removal or mint, and by a timer (m-a). */
+  keepPending(roomId: string, userId: string, puid: string, serial: number | undefined): void;
+  /** One more attempt at what this room has pending. Never rejects. */
+  retryPending(roomId: string): Promise<void>;
 }
 
 export interface VoiceRemovals {
@@ -524,10 +649,11 @@ export interface VoiceRemovals {
  * WHICH PUIDs (MAIN's internal review a6d5842c, B1): every PUID this process minted a token for, for that member in that room
  * (read when the removal runs, so a join racing the departure is caught too), plus the PUID bound to them now -- the fallback for
  * a token minted before a restart (see EosVoiceTokenMinter.minted for the per-process limit). In departure order, one at a time;
- * each PUID tried up to 1 + backoff.length times (default 0.25 s, 1 s, 4 s), then given up and logged; a PUID given up on stays
- * recorded, so the next departure from that room tries it again. Every Epic call times out (EOS_REQUEST_TIMEOUT_MS), so a hung
- * one can no longer stall the removals queued behind it; the binding lookup is retried the same way. A member who never joined
- * voice has nothing to remove. Ids are logged hashed.
+ * each PUID tried up to 1 + backoff.length times (default 0.25 s, 1 s, 4 s), then given up and logged. A PUID given up on is KEPT
+ * PENDING (MAIN's internal review af2eb058, m-a; it used to wait for the same member's next departure, which a taken-back non-member
+ * never makes): tried again before the room's next removal or mint, and by a timer (EOS_PENDING_RETRY). Every Epic call times out
+ * (EOS_REQUEST_TIMEOUT_MS), so a hung one can no longer stall the removals queued behind it; the binding lookup is retried the
+ * same way. A member who never joined voice has nothing to remove. Ids are logged hashed.
  */
 export function createVoiceRemovals(deps: {
   readonly target: VoiceRemovalTarget;
@@ -576,10 +702,12 @@ export function createVoiceRemovals(deps: {
   };
   const removeOne = async (d: PartyDeparture): Promise<void> => {
     const roomId = deps.target.roomIdFor(d.partyId);
+    await deps.target.retryPending(roomId); // m-a: what this room still has pending goes first
     const bound = await boundPuidOf(d.userId);
     const minted = deps.target.mintedIn(roomId, d.userId);
     for (const puid of new Set([...minted.keys(), ...(bound === undefined ? [] : [bound])])) {
       if (await removeWithRetries(roomId, puid)) deps.target.forgetMinted(roomId, d.userId, puid, minted.get(puid));
+      else deps.target.keepPending(roomId, d.userId, puid, minted.get(puid));
     }
   };
   return {

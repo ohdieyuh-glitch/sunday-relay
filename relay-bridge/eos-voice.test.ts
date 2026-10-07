@@ -2,12 +2,12 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { blockUser } from '../src/relay/social/social-friends';
 import { createInMemorySocialStore, type SocialStore } from '../src/relay/social/social-store';
 import { partyOf } from '../src/relay/social/social-state';
 import { createInMemoryVoiceBindings } from '../src/relay/social/voice-binding';
-import { EOS_REQUEST_TIMEOUT_MS, EPIC, EosVoiceTokenMinter, createVoiceRemovals, eosFromEnv, hashId, hashPuid, loadEosVoiceConfig, type EosFetch, type EosVoiceConfig } from './eos-voice';
+import { EOS_PENDING_RETRY, EOS_REQUEST_TIMEOUT_MS, EPIC, EosVoiceTokenMinter, createVoiceRemovals, eosFromEnv, hashId, hashPuid, loadEosVoiceConfig, type EosFetch, type EosVoiceConfig } from './eos-voice';
 import { EOS_FROM_ENV, EOS_GAME_CONFIG_ENV, EOS_ROOM_SALT_ENV, loadEosGameClientConfig, type EosDeployment } from './eos-voice';
 
 /*
@@ -29,8 +29,9 @@ type Answer = { status: number; body?: unknown };
 /**
  * A recorded EOS: tokens, createRoomToken and removeParticipant, each from a script (or a sensible default). 'hang' never answers:
  * it settles only when the call's AbortSignal fires (as a real fetch does), rejecting with the signal's reason.
+ * `removeOf` answers a DELETE by the PUID it names (read at call time), before the `remove` queue; undefined falls through to it.
  */
-function epicFake(script: { token?: Answer[]; room?: Array<Answer | 'hang'>; remove?: Array<Answer | 'hang'> } = {}) {
+function epicFake(script: { token?: Answer[]; room?: Array<Answer | 'hang'>; remove?: Array<Answer | 'hang'>; removeOf?: (puid: string) => Answer | 'hang' | undefined } = {}) {
   const calls: Call[] = [];
   const issued = { access: [] as string[], room: [] as string[], mediaUrls: [] as string[] };
   const queue = { token: [...(script.token ?? [])], room: [...(script.room ?? [])], remove: [...(script.remove ?? [])] };
@@ -60,6 +61,9 @@ function epicFake(script: { token?: Answer[]; room?: Array<Answer | 'hang'>; rem
       return reply({ status: 200, body: { [EPIC.roomAnswer.clientBaseUrl]: media, [EPIC.roomAnswer.participants]: [{ [EPIC.roomAnswer.puid]: puid, [EPIC.roomAnswer.token]: token, hardMuted: false }] } });
     }
     if (init.method === 'DELETE' && /\/participants\/[0-9a-f]{32}$/.test(url)) {
+      const byPuid = script.removeOf?.(url.slice(-32));
+      if (byPuid === 'hang') return hang(init.signal);
+      if (byPuid !== undefined) return reply(byPuid);
       const next = queue.remove.shift();
       if (next === 'hang') return hang(init.signal);
       return reply(next ?? { status: 204 });
@@ -424,7 +428,9 @@ describe("removal takes out EVERY PUID minted for the member in that room, not o
     await w.run('parties.leave', w.people.b, [w.pid], {});
     await w.removals.idle();
     expect(w.log.some((l) => l.includes('GAVE UP'))).toBe(true);
-    expect(w.minter.mintedIn(room, w.people.b).has(p)).toBe(true); // still recorded: the next departure from the room tries it again
+    // still recorded, and kept PENDING (af2eb058 m-a): retried before the room's next removal or mint, and by the timer
+    expect(w.minter.mintedIn(room, w.people.b).has(p)).toBe(true);
+    expect([...w.minter.pendingIn(room).keys()]).toEqual([p]);
     await w.minter.mint({ partyId: w.pid, participantId: w.people.b, audience: [], nowIso, puid: p });
     w.minter.forgetMinted(room, w.people.b, p, first); // a stale serial never drops the newer, live token
     expect(w.minter.mintedIn(room, w.people.b).has(p)).toBe(true);
@@ -441,16 +447,129 @@ describe("removal takes out EVERY PUID minted for the member in that room, not o
     await minter.mint({ partyId: 'pty_1', participantId: 'v', audience: ['v'], nowIso, puid: other }); // another player: untouched
     const room = minter.roomIdFor('pty_1');
     // the given PUID is normalised (and the minted p1 is not asked twice); anything not a PUID is never put in a URL
-    await expect(minter.removeFromRoom({ partyId: 'pty_1', participantId: 'u', puids: [p1.toUpperCase(), 'not-a-puid'] })).rejects.toThrow('1 of 2 participant removals failed');
+    await expect(minter.removeFromRoom({ partyId: 'pty_1', participantId: 'u', puids: [p1.toUpperCase(), 'not-a-puid'], mustLeave: false })).rejects.toThrow('1 of 2 participant removals failed');
     expect(epic.calls.filter((c) => c.method === 'DELETE').map((c) => c.url)).toEqual([p1, p2].map((p) => `https://api.epicgames.dev${EPIC.participantPath('dep-wl', room, p)}`));
     expect([...minter.mintedIn(room, 'u').keys()]).toEqual([p2]); // p1 confirmed and forgotten; p2 failed, so it stays
-    await minter.removeFromRoom({ partyId: 'pty_1', participantId: 'u', puids: [] }); // Epic's 404: already gone counts
+    await minter.removeFromRoom({ partyId: 'pty_1', participantId: 'u', puids: [], mustLeave: false }); // Epic's 404: already gone counts
     expect(minter.mintedIn(room, 'u').size).toBe(0);
     expect([...minter.mintedIn(minter.roomIdFor('pty_2'), 'u').keys()]).toEqual([elsewhere]);
     expect([...minter.mintedIn(room, 'v').keys()]).toEqual([other]);
     const all = log.join('\n');
     for (const raw of [p1, p2, elsewhere, other, room]) expect(all).not.toContain(raw);
     expect(all).toContain(`eos voice: removal failed room=${hashId(room)} puid=${hashPuid(p2)} (500)`);
+  });
+});
+
+describe("a removal GIVEN UP is kept PENDING and retried: before the room's next removal or mint, and on a bounded timer (MAIN's internal reviews af2eb058 m-a, a8ed4c0b MINOR 4)", () => {
+  const nowIso = new Date(T0).toISOString();
+
+  it("every DELETE of a's PUID fails (GAVE UP); then b leaves: a's PUID is DELETEd again, before b's", async () => {
+    const failing = new Set<string>();
+    const w = await voicedArena({ removeOf: (p) => (failing.has(p) ? { status: 500 } : undefined) });
+    const room = w.minter.roomIdFor(w.pid);
+    failing.add(w.puid[w.people.a]);
+    await w.run('parties.leave', w.people.a, [w.pid], {});
+    await w.removals.idle();
+    expect(w.deletes()).toEqual([w.deleteOf(w.people.a), w.deleteOf(w.people.a), w.deleteOf(w.people.a), w.deleteOf(w.people.a)]);
+    expect(w.log).toContain(`eos voice: removal GAVE UP room=${hashId(room)} puid=${hashPuid(w.puid[w.people.a])}`);
+    // Epic answers again; a never departs again -- b's departure is the room's next removal
+    failing.clear();
+    await w.run('parties.leave', w.people.b, [w.pid], {});
+    await w.removals.idle();
+    expect(w.deletes().slice(4)).toEqual([w.deleteOf(w.people.a), w.deleteOf(w.people.b)]);
+  });
+
+  it("the route's removals: a take-back (mustLeave) not confirmed is kept and DELETEd first by the room's next mint; a held re-bind's (not mustLeave) is not", async () => {
+    const failing = new Set<string>();
+    const epic = epicFake({ removeOf: (p) => (failing.has(p) ? { status: 500 } : undefined) });
+    const log: string[] = [];
+    const minter = new EosVoiceTokenMinter(config(), { fetchImpl: epic.fetchImpl, now: () => T0, log: (l) => log.push(l), pendingRetry: { everyMs: 0, maxTimed: 3 } });
+    const room = minter.roomIdFor('pty_1');
+    const [taken, held, other] = [hex(16), hex(16), hex(16)];
+    await minter.mint({ partyId: 'pty_1', participantId: 'u', audience: ['u'], nowIso, puid: taken });
+    await minter.mint({ partyId: 'pty_1', participantId: 'h', audience: ['h'], nowIso, puid: held });
+    failing.add(taken);
+    failing.add(held);
+    await expect(minter.removeFromRoom({ partyId: 'pty_1', participantId: 'u', puids: [taken], mustLeave: true })).rejects.toThrow();
+    await expect(minter.removeFromRoom({ partyId: 'pty_1', participantId: 'h', puids: [held], mustLeave: false })).rejects.toThrow();
+    expect([...minter.pendingIn(room).keys()]).toEqual([taken]);
+    expect(log).toContain(`eos voice: removal PENDING room=${hashId(room)} puid=${hashPuid(taken)}: retried before the room's next removal or mint, and by a timer`);
+    failing.clear();
+    const before = epic.calls.length;
+    await minter.mint({ partyId: 'pty_1', participantId: 'v', audience: ['v'], nowIso, puid: other });
+    expect(epic.calls.slice(before).map((c) => `${c.method} ${c.url.slice(-32)}`)).toEqual([`DELETE ${taken}`, `POST ${room}`]);
+    expect(minter.pendingIn(room).size).toBe(0);
+    expect(minter.mintedIn(room, 'u').size).toBe(0); // confirmed out: forgotten
+    expect([...minter.mintedIn(room, 'h').keys()]).toEqual([held]); // never pending: still the member's
+    const all = log.join('\n');
+    for (const raw of [taken, held, other, room]) expect(all).not.toContain(raw);
+  });
+
+  it('a PUID admitted again (a new mint) is no longer pending: the timer never takes the new token away', async () => {
+    const failing = new Set<string>();
+    const epic = epicFake({ removeOf: (p) => (failing.has(p) ? { status: 500 } : undefined) });
+    const minter = new EosVoiceTokenMinter(config(), { fetchImpl: epic.fetchImpl, now: () => T0, pendingRetry: { everyMs: 0, maxTimed: 3 } });
+    const room = minter.roomIdFor('pty_1');
+    const p = hex(16);
+    await minter.mint({ partyId: 'pty_1', participantId: 'u', audience: ['u'], nowIso, puid: p });
+    failing.add(p);
+    await expect(minter.removeFromRoom({ partyId: 'pty_1', participantId: 'u', puids: [], mustLeave: true })).rejects.toThrow();
+    expect(minter.pendingIn(room).has(p)).toBe(true);
+    // re-admitted (a member again): the mint first tries the pending DELETE (Epic still fails it), then mints -- and drops it
+    await minter.mint({ partyId: 'pty_1', participantId: 'u', audience: ['u'], nowIso, puid: p });
+    expect(minter.pendingIn(room).size).toBe(0);
+    failing.clear();
+    const before = epic.calls.length;
+    await minter.retryPendingNow();
+    expect(epic.calls.length).toBe(before);
+  });
+
+  it('the timer: one timed attempt per pending PUID per tick, at most maxTimed, then ABANDONED and logged; idle once nothing is pending', async () => {
+    const epic = epicFake({ removeOf: () => ({ status: 503 }) });
+    const log: string[] = [];
+    const minter = new EosVoiceTokenMinter(config(), { fetchImpl: epic.fetchImpl, now: () => T0, log: (l) => log.push(l), pendingRetry: { everyMs: 0, maxTimed: 3 } });
+    const room = minter.roomIdFor('pty_1');
+    const p = hex(16);
+    minter.keepPending(room, 'u', p, undefined);
+    for (let tick = 0; tick < 5; tick += 1) await minter.retryPendingNow();
+    expect(epic.calls.filter((c) => c.method === 'DELETE')).toHaveLength(3);
+    expect(minter.pendingIn(room).size).toBe(0);
+    expect(log.filter((l) => l.startsWith('eos voice: pending removal failed'))).toEqual([1, 2].map((n) => `eos voice: pending removal failed room=${hashId(room)} puid=${hashPuid(p)} (503); timed attempt ${n} of 3`));
+    expect(log).toContain(`eos voice: pending removal ABANDONED room=${hashId(room)} puid=${hashPuid(p)} after 3 timed attempts`);
+    expect(log.join('\n')).not.toContain(p);
+  });
+
+  it('the timer is armed by the first pending PUID and disarmed when none is left: every 60 s by default', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    // the tick's work is promise-only (the fake Epic answers at once): one real turn of the event loop settles it
+    const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+    try {
+      expect(EOS_PENDING_RETRY).toEqual({ everyMs: 60_000, maxTimed: 30 });
+      const failing = new Set<string>();
+      const epic = epicFake({ removeOf: (p) => (failing.has(p) ? { status: 500 } : undefined) });
+      const minter = new EosVoiceTokenMinter(config(), { fetchImpl: epic.fetchImpl, now: () => T0 });
+      const room = minter.roomIdFor('pty_1');
+      const p = hex(16);
+      expect(vi.getTimerCount()).toBe(0);
+      failing.add(p);
+      minter.keepPending(room, 'u', p, undefined);
+      expect(vi.getTimerCount()).toBe(1);
+      await vi.advanceTimersByTimeAsync(59_999);
+      await settle();
+      expect(epic.calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1);
+      await settle();
+      expect(epic.calls.filter((c) => c.method === 'DELETE')).toHaveLength(1);
+      expect(minter.pendingIn(room).has(p)).toBe(true);
+      failing.clear();
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(epic.calls.filter((c) => c.method === 'DELETE')).toHaveLength(2);
+      expect(minter.pendingIn(room).size).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
