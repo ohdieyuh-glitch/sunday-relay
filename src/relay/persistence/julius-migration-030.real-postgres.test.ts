@@ -84,7 +84,9 @@ suite('migration 030 under the founder gates (row 13 (i))', () => {
       await admin.query(`DROP DATABASE IF EXISTS ${name}`).catch(() => undefined);
     }
     await admin?.end().catch(() => undefined);
-  });
+    // An explicit bound: this loop ends, terminates and drops one database per case, which can outlast vitest's default
+    // 10_000 ms for a hook on a loaded runner (032's timed out in CI on 2026-10-07; every case passed).
+  }, 60_000);
 
   it('A/F + E: on a clean database 030 applies, the ONLY constraint change is outbox_event_id_fkey removed, and no row is lost', async () => {
     const pool = await at029('clean');

@@ -222,7 +222,9 @@ suite('migration 032: deleting an event forgets it, so no outbox row can name it
       await admin.query(`DROP DATABASE IF EXISTS ${name}`).catch(() => undefined);
     }
     await admin?.end().catch(() => undefined);
-  });
+    // An explicit bound: this loop ends, terminates and drops one database per case, which can outlast vitest's default
+    // 10_000 ms for a hook on a loaded runner (032's timed out in CI on 2026-10-07; every case passed).
+  }, 60_000);
 
   it('A: before 032 the delete path commits an orphan (the control) and 032 refuses that database; after 032 it is refused, and 032 changed exactly two function bodies, in place', async () => {
     const id = 'event:032:defect';
