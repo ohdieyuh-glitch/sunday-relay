@@ -709,6 +709,10 @@ suite('the C.A.R.D., handoff and eval components over a real PostgreSQL', () => 
       const write = await new ProjectBrainComponentStore(old).mutateComponent({ projectId, provenance: PLAYER('p1'), capabilities: EDITOR, command: cmd({ operation: 'CARD_CREATE', idempotencyKey: `no034-${nonce()}`, card: CARD }) });
       expect(write.ok ? 'durable' : `${write.code}/${String(write.durable)}`).toBe('project_brain_components_not_installed/false');
     } finally {
+      // pool.end() resolves before its idle clients have closed, so the DROP ... WITH (FORCE) below can reach a client that is
+      // still closing, and pg-pool re-emits that 57P01 as the pool's 'error' (#344's class; CI run 37676864404, executor-private).
+      // The terminate is this test's own teardown.
+      old.on('error', () => undefined);
       await old.end();
       await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
       await admin.end();
@@ -751,6 +755,10 @@ suite('the C.A.R.D., handoff and eval components over a real PostgreSQL', () => 
       await newer.query('DELETE FROM relay_wonderland.schema_migrations WHERE version=$1', [future]);
       expect((await records.readDocument({ projectId }))?.sections.research.length, 'the same store reads again once it is not newer').toBe(1);
     } finally {
+      // pool.end() resolves before its idle clients have closed, so the DROP ... WITH (FORCE) below can reach a client that is
+      // still closing, and pg-pool re-emits that 57P01 as the pool's 'error' (#344's class; CI run 37676864404, executor-private).
+      // The terminate is this test's own teardown.
+      newer.on('error', () => undefined);
       await newer.end();
       await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
       await admin.end();
