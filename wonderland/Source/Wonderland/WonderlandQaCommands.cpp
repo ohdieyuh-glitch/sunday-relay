@@ -4344,6 +4344,7 @@ namespace
 		FName BootSkin;
 		int32 DashesBefore = 0;         // the Mission Handoff's dash phase: the Dog's counts as it began
 		int32 RefusedBefore = 0;
+		bool bSignedInRun = false;      // armed after a 'waitsignin' wait: the end says whether it still held the session
 		FTSTicker::FDelegateHandle FrameHandle;
 		FTSTicker::FDelegateHandle StepHandle;
 	};
@@ -4444,6 +4445,16 @@ namespace
 	void QaPerfFinish(FQaPerfRun& P, UWorld* World)
 	{
 		QaPerfPhase(P, nullptr);
+		if (P.bSignedInRun)
+		{
+			// A SIGNED-IN RUN THAT LOST ITS SESSION IS NOT A SIGNED-IN RUN (D-06 (ii); R11/R14's soak): the state as the measured
+			// phases end, read the way the wait read it
+			const UGameInstance* EndInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+			const UWonderlandSocialSubsystem* EndSocial = EndInstance != nullptr ? EndInstance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+			const bool bStillSignedIn = EndSocial != nullptr && EndSocial->GetSignInView().State == EWonderlandSignInState::SignedIn;
+			UE_LOG(LogWonderlandQa, Display, TEXT("%s signed-in run: still signed in when the measured phases ended: %s"),
+				P.bSoak ? TEXT("WLSOAK") : TEXT("WLPERF"), bStillSignedIn ? TEXT("yes") : TEXT("NO (VOID: the run lost its session)"));
+		}
 		if (P.bSoak)
 		{
 			// THE TREND FROM A WARM START: the first five minutes fill caches, streaming and shader pipelines, so the
@@ -4766,7 +4777,9 @@ namespace
 		return true;
 	}
 
-	void ArmQaPerf(UWorld* World, bool bSoak, double Minutes)
+	/** StartupSeconds < 0: startup is measured now (engine start to this arm). A run armed after a sign-in wait passes the startup
+	 *  measured when its command arrived, so the wait is never counted as startup (the ABBA judge's V4 reads this line). */
+	void ArmQaPerf(UWorld* World, bool bSoak, double Minutes, double StartupSeconds = -1.0, bool bSignedInRun = false)
 	{
 		if (GQaPerf.IsValid() || GQaRun.IsValid())
 		{
@@ -4776,31 +4789,46 @@ namespace
 		GQaPerf = MakeShared<FQaPerfRun>();
 		GQaPerf->World = World;
 		GQaPerf->bSoak = bSoak;
+		GQaPerf->bSignedInRun = bSignedInRun;
 		GQaPerf->SoakSeconds = FMath::Clamp(Minutes, 1.0, 600.0) * 60.0;
 		GQaPerf->StepStart = QaNow();
 		GQaPerf->FrameHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaPerfFrame), 0.0f);
 		GQaPerf->StepHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaPerfTick), 0.1f);
 		UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF armed (%s%s); startup %.1f s from engine start to a loaded world"),
-			bSoak ? TEXT("soak ") : TEXT("perf"), bSoak ? *FString::Printf(TEXT("%.0f min"), Minutes) : TEXT(""), FPlatformTime::Seconds() - GStartTime);
+			bSoak ? TEXT("soak ") : TEXT("perf"), bSoak ? *FString::Printf(TEXT("%.0f min"), Minutes) : TEXT(""),
+			StartupSeconds >= 0.0 ? StartupSeconds : FPlatformTime::Seconds() - GStartTime);
 	}
+
+	void QaArmAfterSignIn(UWorld* World, bool bSoak, double Minutes);
 
 	FAutoConsoleCommandWithWorldAndArgs GQaPerfCommand(
 		TEXT("wl.Qa.Perf"),
 		TEXT("Measure this (packaged) build: idle, a walk through the centre, five teleports, the map, the wardrobe, a Mission ")
-		TEXT("Contract and creation through the terminal. Logs WLPERF lines (FPS, 1% low, hitches, memory, UObjects) and quits."),
+		TEXT("Contract and creation through the terminal. Logs WLPERF lines (FPS, 1% low, hitches, memory, UObjects) and quits. ")
+		TEXT("'wl.Qa.Perf waitsignin' starts only after the player signs in to Wonderland social (by real input) and a 20 s settle."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
+			if (Args.Contains(TEXT("waitsignin")))
+			{
+				QaArmAfterSignIn(World, false, 0.0);
+				return;
+			}
 			ArmQaPerf(World, false, 0.0);
 		}));
 
 	/** wl.Qa.Soak N waitsignin (CORE 10-06; R11/R14 on the final package, SECOND's pre-registered "signed in, in a world"): nothing
 	 *  is driven until the player has signed in to Wonderland social through the hub by REAL input (the founder approves the device
 	 *  code in the browser), then a 20 s settle, then the soak exactly as without the word. No sign-in within 15 min: "WLSOAK VOID" and
-	 *  quit, never a soak that silently ran signed out. */
+	 *  quit, never a soak that silently ran signed out.
+	 *  wl.Qa.Perf waitsignin (CORE 2026-10-07; D-06 (ii), SECOND's ruling: ONE signed-in perf run, the middle of an A-B-A, with the same
+	 *  route, settle and validity rules): the same wait with WLPERF lines, then the perf run exactly as without the word. Its startup is
+	 *  the one measured when the command arrived, as for the A runs: the wait is not startup (V4 of the ABBA judge). */
 	struct FQaSoakSignInWait
 	{
 		TWeakObjectPtr<UGameInstance> Instance;
+		bool bSoak = true;
 		double Minutes = 30.0;
+		double StartupAtCommand = -1.0;
 		double Since = 0.0;
 		double SignedAt = -1.0;
 	};
@@ -4817,23 +4845,37 @@ namespace
 		const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
 		const bool bSignedIn = Social != nullptr && Social->GetSignInView().State == EWonderlandSignInState::SignedIn;
 		const double Now = QaNow();
+		const bool bSoakSignInWait = GQaSoakWait->bSoak;
 		if (bSignedIn && GQaSoakWait->SignedAt < 0.0)
 		{
 			GQaSoakWait->SignedAt = Now;
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLSOAK signed in after %.0f s of waiting; the soak starts after a 20 s settle"), Now - GQaSoakWait->Since);
+			UE_LOG(LogWonderlandQa, Display, TEXT("%s signed in after %.0f s of waiting; the %s starts after a 20 s settle"),
+				bSoakSignInWait ? TEXT("WLSOAK") : TEXT("WLPERF"), Now - GQaSoakWait->Since, bSoakSignInWait ? TEXT("soak") : TEXT("perf run"));
 		}
 		if (GQaSoakWait->SignedAt >= 0.0 && Now - GQaSoakWait->SignedAt >= 20.0 && World != nullptr)
 		{
 			const double Minutes = GQaSoakWait->Minutes;
+			const double StartupAtCommand = GQaSoakWait->StartupAtCommand;
+			const double SignInWaitedSeconds = Now - GQaSoakWait->Since;
 			GQaSoakWait.Reset();
-			UE_LOG(LogWonderlandQa, Display, TEXT("WLSOAK signed in: starting the %.0f min soak"), Minutes);
-			ArmQaPerf(World, true, Minutes);
+			if (bSoakSignInWait)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLSOAK signed in: starting the %.0f min soak"), Minutes);
+				ArmQaPerf(World, true, Minutes, -1.0, true);
+			}
+			else
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLPERF signed in: starting the perf run (%.0f s of waiting and settling, not counted as startup)"),
+					SignInWaitedSeconds);
+				ArmQaPerf(World, false, 0.0, StartupAtCommand, true);
+			}
 			return false;
 		}
 		if (GQaSoakWait->SignedAt < 0.0 && Now - GQaSoakWait->Since > 15.0 * 60.0)
 		{
 			GQaSoakWait.Reset();
-			UE_LOG(LogWonderlandQa, Warning, TEXT("WLSOAK VOID: no sign-in within 15 min, so the soak never started; quitting"));
+			UE_LOG(LogWonderlandQa, Warning, TEXT("%s VOID: no sign-in within 15 min, so the %s never started; quitting"),
+				bSoakSignInWait ? TEXT("WLSOAK") : TEXT("WLPERF"), bSoakSignInWait ? TEXT("soak") : TEXT("perf run"));
 			if (World != nullptr && GEngine != nullptr)
 			{
 				GEngine->Exec(World, TEXT("quit"));
@@ -4841,6 +4883,24 @@ namespace
 			return false;
 		}
 		return true;
+	}
+
+	void QaArmAfterSignIn(UWorld* World, bool bSoak, double Minutes)
+	{
+		const TCHAR* SignInWaitTag = bSoak ? TEXT("WLSOAK") : TEXT("WLPERF");
+		if (GQaSoakWait.IsValid() || GQaPerf.IsValid() || GQaRun.IsValid() || World == nullptr || World->GetGameInstance() == nullptr)
+		{
+			UE_LOG(LogWonderlandQa, Warning, TEXT("%s cannot wait for a sign-in: a QA run is already going, or there is no game instance"), SignInWaitTag);
+			return;
+		}
+		GQaSoakWait = MakeShared<FQaSoakSignInWait>();
+		GQaSoakWait->Instance = World->GetGameInstance();
+		GQaSoakWait->bSoak = bSoak;
+		GQaSoakWait->Minutes = Minutes;
+		GQaSoakWait->StartupAtCommand = FPlatformTime::Seconds() - GStartTime;
+		GQaSoakWait->Since = QaNow();
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaSoakWaitTick), 0.5f);
+		UE_LOG(LogWonderlandQa, Display, TEXT("%s waiting for a sign-in to Wonderland social (by the player, through the hub); nothing is driven until then"), SignInWaitTag);
 	}
 
 	FAutoConsoleCommandWithWorldAndArgs GQaSoakCommand(
@@ -4853,17 +4913,7 @@ namespace
 			const double Minutes = Args.Num() > 0 ? FCString::Atod(*Args[0]) : 30.0;
 			if (Args.Contains(TEXT("waitsignin")))
 			{
-				if (GQaSoakWait.IsValid() || GQaPerf.IsValid() || GQaRun.IsValid() || World == nullptr || World->GetGameInstance() == nullptr)
-				{
-					UE_LOG(LogWonderlandQa, Warning, TEXT("WLSOAK cannot wait for a sign-in: a QA run is already going, or there is no game instance"));
-					return;
-				}
-				GQaSoakWait = MakeShared<FQaSoakSignInWait>();
-				GQaSoakWait->Instance = World->GetGameInstance();
-				GQaSoakWait->Minutes = Minutes;
-				GQaSoakWait->Since = QaNow();
-				FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaSoakWaitTick), 0.5f);
-				UE_LOG(LogWonderlandQa, Display, TEXT("WLSOAK waiting for a sign-in to Wonderland social (by the player, through the hub); nothing is driven until then"));
+				QaArmAfterSignIn(World, true, Minutes);
 				return;
 			}
 			ArmQaPerf(World, true, Minutes);
