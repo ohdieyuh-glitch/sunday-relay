@@ -109,11 +109,15 @@ export interface ProjectBrainProvenance {
  * capability is derived from it here, deterministically, before any relevance or
  * ranking is applied anywhere.
  */
-export const PROJECT_BRAIN_CAPABILITIES = ['brain:read', 'brain:write', 'brain:adopt'] as const;
+export const PROJECT_BRAIN_CAPABILITIES = ['brain:read', 'brain:write', 'brain:adopt', 'brain:members'] as const;
 export type ProjectBrainCapability = (typeof PROJECT_BRAIN_CAPABILITIES)[number];
 
 export const PROJECT_BRAIN_ROLE_CAPABILITIES: Readonly<Record<string, readonly ProjectBrainCapability[]>> = Object.freeze({
-  OWNER: Object.freeze(['brain:read', 'brain:write', 'brain:adopt'] as const),
+  OWNER: Object.freeze(['brain:read', 'brain:write', 'brain:adopt', 'brain:members'] as const),
+  // Founder decisions 4 and 5 (2026-09-27): an ADMIN holds what an OWNER holds. A MEMBER, in the Brain, is an editor:
+  // it proposes and writes its own statements, never adopts and never manages membership (project-brain-members.ts).
+  ADMIN: Object.freeze(['brain:read', 'brain:write', 'brain:adopt', 'brain:members'] as const),
+  MEMBER: Object.freeze(['brain:read', 'brain:write'] as const),
   EDITOR: Object.freeze(['brain:read', 'brain:write'] as const),
   VIEWER: Object.freeze(['brain:read'] as const),
 });
@@ -168,8 +172,10 @@ export const PROJECT_BRAIN_DOMAIN_RULES: Readonly<Record<ProjectBrainRecordDomai
 
 /**
  * STATUS MOVES, and the capability each needs. Anything not listed is refused.
- * `brain:adopt` is the owner's: only an owner turns a proposal into an adopted
- * term or declines it. An author may always withdraw what they said.
+ * `brain:adopt` is the owner's (and an admin's): only they turn a proposal into an
+ * adopted term or decline it. An author may always withdraw what they said. A live
+ * statement is resolved or superseded by its AUTHOR or an owner/admin, never by
+ * another writer: a member never overwrites another person's state (founder, 10-04).
  */
 const MOVES: ReadonlyArray<{ from: ProjectBrainStatus; to: ProjectBrainStatus; needs: ProjectBrainCapability | 'author' }> = [
   { from: 'PROPOSED', to: 'ADOPTED', needs: 'brain:adopt' },
@@ -177,8 +183,8 @@ const MOVES: ReadonlyArray<{ from: ProjectBrainStatus; to: ProjectBrainStatus; n
   { from: 'PROPOSED', to: 'WITHDRAWN', needs: 'author' },
   { from: 'ADOPTED', to: 'SUPERSEDED', needs: 'brain:adopt' },
   { from: 'ADOPTED', to: 'WITHDRAWN', needs: 'brain:adopt' },
-  { from: 'ACTIVE', to: 'RESOLVED', needs: 'brain:write' },
-  { from: 'ACTIVE', to: 'SUPERSEDED', needs: 'brain:write' },
+  { from: 'ACTIVE', to: 'RESOLVED', needs: 'author' },
+  { from: 'ACTIVE', to: 'SUPERSEDED', needs: 'author' },
   { from: 'ACTIVE', to: 'WITHDRAWN', needs: 'author' },
   { from: 'ACCEPTED', to: 'WITHDRAWN', needs: 'author' },
   { from: 'DECLINED', to: 'WITHDRAWN', needs: 'author' },
@@ -202,6 +208,8 @@ export const PROJECT_BRAIN_LIVE_STATUSES: readonly ProjectBrainStatus[] = ['PROP
  */
 export const PROJECT_BRAIN_REF_TYPES = [
   'pbr', 'mission', 'entry', 'claim', 'finding', 'criterion', 'evidence', 'decision', 'repair', 'approval', 'contract', 'artifact', 'transition', 'trajectory', 'event', 'task',
+  // The C.A.R.D. and eval components (migration 034): `pbcard:<uuid>` or `pbcard:default`, and `pbeval:<uuid>`.
+  'pbcard', 'pbeval',
 ] as const;
 export type ProjectBrainRefType = (typeof PROJECT_BRAIN_REF_TYPES)[number];
 
@@ -220,6 +228,8 @@ export function parseProjectBrainRef(value: unknown): ProjectBrainRef | null {
   const id = value.slice(colon + 1);
   if (!(PROJECT_BRAIN_REF_TYPES as readonly string[]).includes(type) || !REF_ID.test(id)) return null;
   if (type === 'pbr' && !RECORD_UUID.test(id)) return null;
+  if (type === 'pbcard' && id !== 'default' && !RECORD_UUID.test(id)) return null;
+  if (type === 'pbeval' && !RECORD_UUID.test(id)) return null;
   return { type: type as ProjectBrainRefType, id };
 }
 
@@ -526,6 +536,10 @@ export function authorizeProjectBrainMutation(input: {
     if (!rule.authors.includes(author.kind)) {
       return projectBrainRefusal(403, 'domain_not_authorable', `A ${author.kind} cannot state a ${command.domain}.`);
     }
+    // Acknowledging an approval or a contract is a governance act: an owner's or an admin's, never a member's (founder, 10-04).
+    if (command.domain === 'GOVERNANCE_ACK' && !has('brain:adopt')) {
+      return projectBrainRefusal(403, 'governance_not_permitted', 'Only an owner or an admin acknowledges governance for the project.');
+    }
     return { ok: true, nextStatus: rule.initial === 'VERDICT' ? command.verdict : rule.initial };
   }
   if (command.operation === 'LINK') return { ok: true, nextStatus: null };
@@ -598,6 +612,11 @@ export const PROJECT_BRAIN_EVENT_TYPES = [
   'project_brain.finding.created', 'project_brain.evidence.recorded', 'project_brain.decision.recorded', 'project_brain.repair.started',
   'project_brain.eval.recorded', 'project_brain.trace.recorded', 'project_brain.handoff.recorded', 'project_brain.governance.updated',
   'project_brain.provenance.updated', 'project_brain.activity.recorded',
+  // The C.A.R.D., Mission Handoff and eval components (project-brain-components.ts, migration 034).
+  'project_brain.card.created', 'project_brain.card.updated', 'project_brain.card.deleted', 'project_brain.card.selected',
+  'project_brain.mission.card_pinned', 'project_brain.handoff.entered', 'project_brain.handoff.returned', 'project_brain.eval.invalidated',
+  // Membership (project-brain-members.ts): who may use this project's Brain.
+  'project_brain.member.set', 'project_brain.member.removed',
 ] as const;
 export type ProjectBrainEventType = (typeof PROJECT_BRAIN_EVENT_TYPES)[number];
 

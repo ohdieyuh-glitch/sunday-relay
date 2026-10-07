@@ -22,6 +22,10 @@ import {
   wonderlandSurfaceIsReviewable,
 } from '../src/relay/mission/project-brain/project-brain-views';
 import type { ProjectBrainMutationOutcome, ProjectBrainPostgresStore } from '../src/relay/persistence/project-brain-postgres';
+import { parseProjectBrainComponentMutation } from '../src/relay/mission/project-brain/project-brain-components';
+import type { ProjectBrainComponentOutcome, ProjectBrainComponentStore } from '../src/relay/persistence/project-brain-components-postgres';
+import { parseProjectBrainMemberChange } from '../src/relay/mission/project-brain/project-brain-members';
+import type { ProjectBrainMembersStore } from '../src/relay/persistence/project-brain-members-postgres';
 
 /**
  * THE PROJECT BRAIN OVER HTTP: ONE BRAIN, TWO DOORS.
@@ -72,6 +76,10 @@ export type NativeWonderlandSessionVerifier = (input: { readonly token: string; 
 
 export interface ProjectBrainRoutePorts {
   readonly store: ProjectBrainPostgresStore | null;
+  /** The C.A.R.D., handoff and eval components (migration 034), on the same pool. Absent: their routes answer 503. */
+  readonly components?: ProjectBrainComponentStore | null;
+  /** Who may use the project's Brain (project-brain-members.ts, migration 034). Absent: the members routes answer 503. */
+  readonly members?: ProjectBrainMembersStore | null;
   readonly wakeups: ProjectBrainWakeups | null;
   readonly missingConfig: readonly string[];
   readonly sessions: BrowserSessionStore;
@@ -116,9 +124,44 @@ function parseJson(raw: string | undefined): { ok: true; value: unknown } | { ok
   try { return { ok: true, value: JSON.parse(raw) as unknown }; } catch { return { ok: false }; }
 }
 
-function mutationAnswer(outcome: ProjectBrainMutationOutcome): ProjectBrainRouteResult {
+function mutationAnswer(outcome: ProjectBrainMutationOutcome | ProjectBrainComponentOutcome): ProjectBrainRouteResult {
   if (outcome.ok) return ok({ durable: true, replayed: outcome.replayed, ...outcome.result }, outcome.replayed ? 200 : 201);
   return err(outcome.status, outcome.code, outcome.message, { durable: outcome.durable, ...(outcome.details ?? {}) });
+}
+
+/**
+ * A C.A.R.D., HANDOFF OR EVAL CHANGE through either door. The body is the component command, closed-keyed; the
+ * project is the door's, never a field of the change; author and deliverer are the caller's, bound by the door.
+ */
+async function componentAnswer(ports: ProjectBrainRoutePorts, caller: Caller, body: unknown): Promise<ProjectBrainRouteResult> {
+  const components = ports.components ?? null;
+  if (components === null) {
+    return err(503, 'project_brain_components_unavailable', 'This bridge has no C.A.R.D./handoff/eval store. Nothing was saved.', { durable: false });
+  }
+  const record = body !== null && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null;
+  const parsed = parseProjectBrainComponentMutation(record === null ? body : Object.fromEntries(Object.entries(record).filter(([key]) => key !== 'projectId')));
+  if (!parsed.ok) return err(parsed.status, parsed.code, parsed.message, { durable: false });
+  return mutationAnswer(await components.mutateComponent({ projectId: caller.projectId, provenance: caller.provenance, capabilities: caller.capabilities, command: parsed.command }));
+}
+
+/**
+ * WHO IS IN THE PROJECT, through either door. GET lists the members (any member may see who else is in the project).
+ * POST is one MEMBER_SET or MEMBER_REMOVE; the store decides, under the project's lock, against the roles as they are.
+ */
+async function membersAnswer(ports: ProjectBrainRoutePorts, caller: Caller, method: string, body: unknown): Promise<ProjectBrainRouteResult> {
+  const members = ports.members ?? null;
+  if (members === null) return err(503, 'project_brain_members_unavailable', 'This bridge has no membership store. Nothing was read or saved.', { durable: false });
+  if (method === 'GET') {
+    const list = await members.list(caller.projectId);
+    return list === null ? NOT_FOUND() : ok({ projectId: caller.projectId, members: list });
+  }
+  if (method !== 'POST') return err(405, 'method_not_allowed', 'Members are read with GET and changed with POST.');
+  const record = body !== null && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null;
+  const parsed = parseProjectBrainMemberChange(record === null ? body : Object.fromEntries(Object.entries(record).filter(([key]) => key !== 'projectId')));
+  if (!parsed.ok) return err(parsed.status, parsed.code, parsed.message, { durable: false });
+  const outcome = await members.change({ projectId: caller.projectId, provenance: caller.provenance, capabilities: caller.capabilities, actorId: caller.tenantId, command: parsed.command });
+  if (outcome.ok) return ok({ durable: true, replayed: outcome.replayed, ...outcome.result }, outcome.replayed ? 200 : 201);
+  return err(outcome.status, outcome.code, outcome.message, { durable: outcome.durable });
 }
 
 /* ------------------------------------------------------------- callers */
@@ -331,6 +374,8 @@ export async function handleProjectBrainRoute(
         if (!parsed.ok) return err(parsed.status, parsed.code, parsed.message, { durable: false });
         return mutationAnswer(await store.mutate({ projectId, provenance: caller.provenance, capabilities: caller.capabilities, command: parsed.command }));
       }
+      if (view === 'components' && request.method === 'POST') return componentAnswer(ports, caller, body.value);
+      if (view === 'members') return membersAnswer(ports, caller, request.method, body.value);
       if (view === 'companion-context' && request.method === 'GET') {
         if (runId === null) return err(400, 'run_required', 'A companion receives one mission\'s context: name its runId.');
         const document = await store.readDocument({ projectId, runId });
@@ -354,7 +399,7 @@ export async function handleProjectBrainRoute(
         return ok({ projectId, runId, entries: await store.contextEntriesForRun(runId, projectId) });
       }
       return err(404, 'unknown_project_brain_route',
-        'The operator Project Brain serves GET /project-brain/projects/<id>[/events|/companion-context|/julius-context] and POST [/mutations|/companion-results].');
+        'The operator Project Brain serves GET /project-brain/projects/<id>[/events|/members|/companion-context|/julius-context] and POST [/mutations|/components|/members|/companion-results].');
     }
 
     /* ----------------------------------------- the Wonderland door */
@@ -389,8 +434,10 @@ export async function handleProjectBrainRoute(
       }
       return pageFeed({ store, wakeups: ports.wakeups, projectId, cursor, runId, waitMs });
     }
-    if (request.method !== 'POST') return err(404, 'unknown_project_brain_route', 'Wonderland reads /wonderland/brain and /wonderland/brain/events.');
+    if (sub === '/members') return membersAnswer(ports, caller, request.method, body.value);
+    if (request.method !== 'POST') return err(404, 'unknown_project_brain_route', 'Wonderland reads /wonderland/brain, /wonderland/brain/events and /wonderland/brain/members.');
 
+    if (sub === '/components') return componentAnswer(ports, caller, body.value);
     let command: ProjectBrainMutationCommand;
     if (sub === '/proposals') {
       const surfaceId = typeof bodyRecord.surfaceId === 'string' ? bodyRecord.surfaceId : '';
@@ -430,10 +477,20 @@ export async function handleProjectBrainRoute(
       if (!parsed.ok) return err(parsed.status, parsed.code, parsed.message, { durable: false });
       command = parsed.command;
     } else {
-      return err(404, 'unknown_project_brain_route', 'Wonderland writes to /wonderland/brain/proposals, /reviews and /mutations.');
+      return err(404, 'unknown_project_brain_route', 'Wonderland writes to /wonderland/brain/proposals, /reviews, /mutations, /components and /members.');
     }
     return mutationAnswer(await store.mutate({ projectId, provenance: caller.provenance, capabilities: caller.capabilities, command }));
-  } catch {
+  } catch (error) {
+    // A store that cannot be read TRUTHFULLY says why, by name: a retry fixes neither a corrupt row nor a schema newer
+    // than this build (project-brain-pg-shared.ts). Matched by name, so this door does not import the persistence layer.
+    const failure = error instanceof Error ? error : null;
+    const extra = request.method === 'POST' ? { durable: false } : {};
+    if (failure?.name === 'ProjectBrainCorruptionError') {
+      return err(500, 'project_brain_corrupt', `${failure.message}. Nothing was served or saved; this needs an operator, not a retry.`, extra);
+    }
+    if (failure?.name === 'ProjectBrainSchemaNewerError') {
+      return err(503, 'project_brain_schema_newer', `${failure.message}. This build cannot read it; nothing was served or saved.`, extra);
+    }
     // The database could not answer. A read says so -- never as an empty brain --
     // and a write says nothing was saved, because nothing was.
     if (request.method === 'POST') {

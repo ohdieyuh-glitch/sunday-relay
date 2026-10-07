@@ -11,6 +11,14 @@ import {
   type ProjectBrainScope,
   type ProjectBrainStatus,
 } from './project-brain';
+import {
+  PROJECT_BRAIN_CARD_DEFAULT_REF,
+  PROJECT_BRAIN_DEFAULT_CARD,
+  projectBrainCardRevision,
+  type ProjectBrainCardContent,
+  type ProjectBrainComponentRows,
+} from './project-brain-components';
+import { projectBrainCoherence, type ProjectBrainCoherence } from './project-brain-coherence';
 
 /**
  * THE PROJECT BRAIN DOCUMENT: EVERYTHING DURABLE ABOUT A PROJECT, IN ONE READ.
@@ -27,6 +35,9 @@ import {
 export const PROJECT_BRAIN_SECTIONS = [
   'objective', 'missions', 'architecture', 'requirements', 'constraints', 'acceptanceCriteria', 'decisions', 'research',
   'findings', 'handoffs', 'repairs', 'activity', 'evidence', 'evals', 'trace', 'provenance', 'governance', 'memory', 'companions',
+  // The fifth Project Brain component (founder, 2026-10-02): the project's cards, the next mission's selection, and
+  // the card version each mission was pinned to (migration 034).
+  'cards',
 ] as const;
 export type ProjectBrainSection = (typeof PROJECT_BRAIN_SECTIONS)[number];
 
@@ -104,11 +115,17 @@ export interface ProjectBrainRows {
   readonly truncated: readonly string[];
   /** Julius brain entries in scope plus every Project Brain record version in scope, counted in the read's snapshot. */
   readonly revision: number;
+  /**
+   * The C.A.R.D., handoff and eval components, read in the same snapshot. NULL: the store has no migration 034, so the
+   * components are NOT INSTALLED there -- said, never shown as an empty set. Absent: the caller supplied none (pure use).
+   */
+  readonly components?: ProjectBrainComponentRows | null;
 }
 
 /* --------------------------------------------------------------- document */
 
-export type ProjectBrainItemSource = 'JULIUS' | 'PROJECT_BRAIN';
+/** JULIUS: Julius's own rows. PROJECT_BRAIN: a person's statement (a record). COMPONENT: a C.A.R.D., handoff or eval (034). */
+export type ProjectBrainItemSource = 'JULIUS' | 'PROJECT_BRAIN' | 'COMPONENT';
 export type ProjectBrainAttribute = string | number | boolean | null;
 
 export interface ProjectBrainItem {
@@ -163,6 +180,10 @@ export interface ProjectBrainDocument {
   readonly links: readonly { readonly ref: string; readonly fromRef: string; readonly relation: string; readonly toRef: string; readonly createdAt: string }[];
   readonly counts: Readonly<Record<ProjectBrainSection, number>>;
   readonly truncated: readonly string[];
+  /** False when the store this was read from has no C.A.R.D./handoff/eval components (migration 034 not applied). */
+  readonly componentsInstalled: boolean;
+  /** Every impossible mission state or broken evidence link these rows show, by reference (project-brain-coherence.ts). */
+  readonly coherence: ProjectBrainCoherence;
 }
 
 /* ---------------------------------------------------------------- helpers */
@@ -478,6 +499,65 @@ export function buildProjectBrainDocument(rows: ProjectBrainRows): ProjectBrainD
     }));
   }
 
+  // THE COMPONENTS (migration 034), only where the store has them.
+  const components = rows.components ?? null;
+  if (components !== null) {
+    const selectedRef = components.selection?.cardRef ?? PROJECT_BRAIN_CARD_DEFAULT_REF;
+    const cardAttributes = (content: ProjectBrainCardContent, selected: boolean): Record<string, string | number | boolean | null> => ({
+      selected, missionHandoff: content.missionHandoff, skin: content.skin, outfit: content.outfit === '' ? null : content.outfit,
+      primary: content.primary.key, primaryChosen: content.primary.chosen,
+      leftCompanion: content.companions.find((companion) => companion.slot === 0)?.providerId ?? null,
+      rightCompanion: content.companions.find((companion) => companion.slot === 1)?.providerId ?? null,
+      capabilities: content.capabilities.map((capability) => `${capability.kind}:${capability.id}`).join(' '),
+    });
+    const cardText = (content: ProjectBrainCardContent): string => [
+      `form ${content.missionHandoff}`, `skin ${content.skin}${content.outfit === '' ? '' : ` / ${content.outfit}`}`, `primary ${content.primary.key}`,
+      `${content.companions.length} companion(s)`, `${content.capabilities.length} capabilit${content.capabilities.length === 1 ? 'y' : 'ies'}`,
+    ].join(' · ');
+    // The built-in default is always there, version 1 forever, and is what a project without a selection runs under.
+    push(item({
+      ref: PROJECT_BRAIN_CARD_DEFAULT_REF, section: 'cards', kind: 'CARD_BUILT_IN', missionRef: null, scope: 'PROJECT',
+      title: PROJECT_BRAIN_DEFAULT_CARD.name, text: cardText(PROJECT_BRAIN_DEFAULT_CARD), status: 'LIVE', version: 1, recordedAt: null,
+      author: { kind: 'SYSTEM', id: 'relay' }, deliverer: BOOTSTRAP, source: 'COMPONENT', sourceTable: 'built-in',
+      attributes: cardAttributes(PROJECT_BRAIN_DEFAULT_CARD, selectedRef === PROJECT_BRAIN_CARD_DEFAULT_REF),
+    }));
+    for (const card of components.cards) {
+      push(item({
+        ref: card.cardId, section: 'cards', kind: 'CARD', missionRef: null, scope: 'PROJECT', title: card.name, text: cardText(card.content),
+        status: card.state, version: card.version, recordedAt: card.updatedAt, author: card.author, deliverer: card.deliverer,
+        source: 'COMPONENT', sourceTable: 'project_brain_cards',
+        attributes: { ...cardAttributes(card.content, card.state === 'LIVE' && selectedRef === card.cardId), contentHash: card.contentHash, createdAt: card.createdAt },
+      }));
+    }
+    for (const pin of components.missionCards) {
+      const revision = projectBrainCardRevision(pin.cardRef, pin.cardVersion);
+      push(item({
+        ref: `${projectBrainRef('mission', pin.runId)}#card`, section: 'cards', kind: 'MISSION_CARD_PIN', missionRef: missionRef(pin.runId), scope: 'MISSION',
+        title: `Runs under ${revision}`, text: `content sha256 ${pin.contentHash}`, status: 'PINNED', version: null, recordedAt: pin.pinnedAt,
+        author: JULIUS, deliverer: RUNTIME, source: 'COMPONENT', sourceTable: 'project_brain_mission_cards', subjectRef: pin.cardRef,
+        attributes: { cardRevision: revision, cardVersion: pin.cardVersion, contentHash: pin.contentHash },
+      }));
+    }
+    for (const handoff of components.handoffs) {
+      push(item({
+        ref: `${projectBrainRef('mission', handoff.runId)}#handoff`, section: 'handoffs', kind: 'MISSION_HANDOFF', missionRef: missionRef(handoff.runId), scope: 'MISSION',
+        title: handoff.state === 'HANDED_OFF' ? `Handed off (${handoff.form})` : `Returned from handoff (${handoff.form})`,
+        text: 'A presentation transition: the same mission, objective, progress, provider, approvals, reviewer, budget and evidence.',
+        status: handoff.state, version: handoff.version, recordedAt: handoff.updatedAt, author: null, deliverer: null,
+        source: 'COMPONENT', sourceTable: 'project_brain_handoffs', attributes: { form: handoff.form },
+      }));
+    }
+    for (const evaluation of components.evals) {
+      push(item({
+        ref: evaluation.evalId, section: 'evals', kind: 'EVAL', missionRef: missionRef(evaluation.runId), scope: evaluation.runId === null ? 'PROJECT' : 'MISSION',
+        title: `${evaluation.criterion}: ${evaluation.result}`, text: `${evaluation.subjectRef} at ${evaluation.subjectRevision}`,
+        status: evaluation.status, version: evaluation.version, recordedAt: evaluation.updatedAt, author: evaluation.evaluator, deliverer: null,
+        source: 'COMPONENT', sourceTable: 'project_brain_evals', subjectRef: evaluation.subjectRef, evidenceRefs: evaluation.evidenceRefs,
+        attributes: { result: evaluation.result, subjectRevision: evaluation.subjectRevision, criterion: evaluation.criterion, supersededBy: evaluation.supersededBy, recordedAt: evaluation.recordedAt },
+      }));
+    }
+  }
+
   // Newest first in every section; ties broken by ref so two reads order alike.
   for (const section of PROJECT_BRAIN_SECTIONS) {
     sections[section].sort((a, b) => {
@@ -510,5 +590,7 @@ export function buildProjectBrainDocument(rows: ProjectBrainRows): ProjectBrainD
     links: rows.links.map((link) => ({ ref: `link:${link.linkId}`, fromRef: link.fromRef, relation: link.relation, toRef: link.toRef, createdAt: link.createdAt })),
     counts,
     truncated: rows.truncated,
+    componentsInstalled: components !== null,
+    coherence: projectBrainCoherence(rows),
   };
 }

@@ -100,6 +100,19 @@ describe('the operator door', () => {
     const read = await handleProjectBrainRoute(OPERATOR_REQUEST(), ports(store), io);
     expect(read).toMatchObject({ status: 503, body: { error: { kind: 'project_brain_read_failed' } } });
   });
+
+  it('a corrupt row or a store newer than this build is named, never answered as "retry"', async () => {
+    const thrown = (name: string, message: string) => Object.assign(new Error(message), { name });
+    for (const [name, message, status, kind] of [
+      ['ProjectBrainCorruptionError', 'project_brain_corrupt: project_brain_records pbr:x: content does not match its content_hash', 500, 'project_brain_corrupt'],
+      ['ProjectBrainSchemaNewerError', 'project_brain_schema_newer: the store holds migration(s) this build does not carry: 099_x', 503, 'project_brain_schema_newer'],
+    ] as const) {
+      const store = fakeStore({ readDocument: async () => { throw thrown(name, message); } });
+      const read = await handleProjectBrainRoute(OPERATOR_REQUEST(), ports(store), io);
+      expect(read, name).toMatchObject({ status, body: { error: { kind } } });
+      expect(JSON.stringify(read), 'the row or version is named').toContain(message.split(': ').at(-1)!);
+    }
+  });
 });
 
 describe('the long poll answers with events or at its deadline -- never on an empty wake', () => {
@@ -145,5 +158,50 @@ describe('the long poll answers with events or at its deadline -- never on an em
     const capped = { ...ports(fakeStore(), drivenWakeups()), maxWaitMs: 200 };
     await handleProjectBrainRoute(feedRequest(60_000), capped, io);
     expect(Date.now() - started).toBeLessThan(2_000);
+  });
+});
+
+describe('who is in the project: the members door', () => {
+  const membersStore = () => {
+    const changes: unknown[] = [];
+    return {
+      changes,
+      list: async (projectId: string) => (projectId === 'prj-1' ? [{ playerId: 'owner-1', role: 'OWNER', version: null }] : null),
+      change: async (input: Record<string, unknown>) => {
+        changes.push(input);
+        return { ok: true as const, durable: true as const, replayed: false, result: { mutationId: 'pbm:m1', role: 'MEMBER' } };
+      },
+    };
+  };
+  const withMembers = (members: unknown) => ({ ...ports(fakeStore()), members: members as never });
+
+  it('lists the members for anyone who may read the Brain', async () => {
+    const result = await handleProjectBrainRoute(OPERATOR_REQUEST({ path: '/project-brain/projects/prj-1/members', url: '/project-brain/projects/prj-1/members' }), withMembers(membersStore()), io);
+    expect(result).toMatchObject({ status: 200, body: { data: { projectId: 'prj-1', members: [{ playerId: 'owner-1', role: 'OWNER' }] } } });
+  });
+
+  it('a change carries the door\'s project, the caller as the actor and the caller\'s capabilities -- never the body\'s', async () => {
+    const members = membersStore();
+    const result = await handleProjectBrainRoute(OPERATOR_REQUEST({
+      method: 'POST', path: '/project-brain/projects/prj-1/members', url: '/project-brain/projects/prj-1/members',
+      rawBody: JSON.stringify({ operation: 'MEMBER_SET', idempotencyKey: 'member-key-1', playerId: 'p2', role: 'MEMBER', expectedRole: null, projectId: 'prj-other' }),
+    }), withMembers(members), io);
+    expect(result).toMatchObject({ status: 201, body: { data: { durable: true, mutationId: 'pbm:m1' } } });
+    expect(members.changes).toEqual([expect.objectContaining({
+      projectId: 'prj-1', actorId: 'owner-1', capabilities: ['brain:read', 'brain:write', 'brain:adopt', 'brain:members'],
+      command: { operation: 'MEMBER_SET', idempotencyKey: 'member-key-1', playerId: 'p2', role: 'MEMBER', expectedRole: null },
+    })]);
+  });
+
+  it('refuses a malformed change before the store, and answers 503 by name where no membership store is wired', async () => {
+    const members = membersStore();
+    const bad = await handleProjectBrainRoute(OPERATOR_REQUEST({
+      method: 'POST', path: '/project-brain/projects/prj-1/members', url: '/project-brain/projects/prj-1/members',
+      rawBody: JSON.stringify({ operation: 'MEMBER_SET', idempotencyKey: 'member-key-1', playerId: 'p2', role: 'OWNER', expectedRole: null }),
+    }), withMembers(members), io);
+    expect(bad).toMatchObject({ status: 422, body: { error: { kind: 'role_invalid', durable: false } } });
+    expect(members.changes).toEqual([]);
+    const none = await handleProjectBrainRoute(OPERATOR_REQUEST({ path: '/project-brain/projects/prj-1/members', url: '/project-brain/projects/prj-1/members' }), ports(fakeStore()), io);
+    expect(none).toMatchObject({ status: 503, body: { error: { kind: 'project_brain_members_unavailable' } } });
   });
 });

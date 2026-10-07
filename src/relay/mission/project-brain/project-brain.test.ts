@@ -115,8 +115,31 @@ describe('who may change the Project Brain is decided by the membership row, not
   const owner = projectBrainCapabilitiesFor('OWNER');
   const viewer = projectBrainCapabilitiesFor('VIEWER');
 
+  it('FOUNDER 10-04, MEMBER limits: a writer resolves or supersedes only its OWN live statement; an owner/admin any; governance acks are theirs alone', () => {
+    const member = projectBrainCapabilitiesFor('MEMBER');
+    const admin = projectBrainCapabilitiesFor('ADMIN');
+    const theirs = { recordId: 'pbr:00000000-0000-4000-8000-000000000001', projectId: 'p', domain: 'FINDING_RESPONSE' as const, status: 'ACTIVE' as const, version: 1,
+      author: { kind: 'WONDERLAND_PLAYER' as const, id: 'someone-else' } };
+    const mine = { ...theirs, author: PLAYER.author };
+    const move = (status: 'RESOLVED' | 'SUPERSEDED') => ({ operation: 'SET_STATUS' as const, idempotencyKey: 'k-12345678', recordId: theirs.recordId, expectedVersion: 1, status });
+    for (const status of ['RESOLVED', 'SUPERSEDED'] as const) {
+      const other = authorizeProjectBrainMutation({ provenance: PLAYER, capabilities: member, command: move(status), record: theirs });
+      expect(other.ok ? 'ok' : other.code, `a member ${status} another's statement`).toBe('not_the_author');
+      expect(authorizeProjectBrainMutation({ provenance: PLAYER, capabilities: member, command: move(status), record: mine }).ok, `its own, ${status}`).toBe(true);
+      expect(authorizeProjectBrainMutation({ provenance: PLAYER, capabilities: admin, command: move(status), record: theirs }).ok, `an admin, ${status}`).toBe(true);
+    }
+    const ack = create({ domain: 'GOVERNANCE_ACK', subjectRef: 'mission:run-1' });
+    const refused = authorizeProjectBrainMutation({ provenance: PLAYER, capabilities: member, command: ack, record: null });
+    expect(refused.ok ? 'ok' : refused.code).toBe('governance_not_permitted');
+    expect(authorizeProjectBrainMutation({ provenance: PLAYER, capabilities: admin, command: ack, record: null }).ok).toBe(true);
+  });
+
   it('maps roles to capabilities, and an unknown role to nothing', () => {
-    expect(owner).toEqual(['brain:read', 'brain:write', 'brain:adopt']);
+    expect(owner).toEqual(['brain:read', 'brain:write', 'brain:adopt', 'brain:members']);
+    // Founder decisions 4/5: ADMIN holds what OWNER holds; a MEMBER writes like an editor and never adopts or manages.
+    expect(projectBrainCapabilitiesFor('ADMIN')).toEqual(owner);
+    expect(projectBrainCapabilitiesFor('MEMBER')).toEqual(['brain:read', 'brain:write']);
+    expect(write).toEqual(['brain:read', 'brain:write']);
     expect(viewer).toEqual(['brain:read']);
     expect(projectBrainCapabilitiesFor('MYSTERY')).toEqual([]);
     expect(projectBrainCapabilitiesFor(null)).toEqual([]);
