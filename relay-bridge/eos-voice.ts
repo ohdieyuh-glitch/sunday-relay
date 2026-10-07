@@ -1,0 +1,477 @@
+import { createHash, createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+
+import type { PartyDeparture } from '../src/relay/social/social-parties';
+import { normalizePuid, type VoiceBindingStore } from '../src/relay/social/voice-binding';
+import type { PartyVoiceGrant, PartyVoiceTokenMinter } from './wonderland-social-routes';
+
+/**
+ * WONDERLAND PARTY VOICE ON EOS (R16, founder ruling 10-04: "USE EOS VOICE ... The backend may mint the required room/token
+ * authorization"). The bridge side of CORE's FWonderlandEosVoice:
+ *   - EosVoiceTokenMinter: a Trusted Server access token (client credentials), cached; createRoomToken for ONE bound PUID in the
+ *     party's room; the participant token handed back as the JSON EOSVoiceChat expects.
+ *   - createVoiceRemovals: after a committed party departure (leave, a leader's removal, a block's F1 separation), the departed
+ *     PUID is removed from that party's room server-side -- Epic's removeParticipant also revokes their room token -- retried
+ *     with backoff, never blocking or failing the social change.
+ * NOTHING SECRET IS LOGGED: room ids and PUIDs appear only hashed ('#' + sha1, 12 hex); never a client secret, an access token, a
+ * participant token or the media server address. The HTTP is behind an injectable fetch, so tests use a recorded fake; the real
+ * API is exercised only by the R16 run.
+ */
+
+/* ============================================================================================================================
+ * EPIC'S VOICE WEB API, AS THIS FILE SPEAKS IT (https://dev.epicgames.com/docs/web-api-ref/voice-web-api; the EOS auth token
+ * endpoint). EVERY Epic URL, form field, header and JSON field name this module uses is here, and nowhere else.
+ * VERIFIED against Epic on 2026-10-04 07:34Z by a backend probe through loadEosVoiceConfig and these constants (evidence:
+ * _qa_handoff/social/eos_probe/probe_status_20261004T0734Z.txt):
+ *   - the token: oauth 200 with {access_token, expires_in, expires_at, ...};
+ *   - the room: createRoomToken 200 with {clientBaseUrl, participants[{clientIp, hardMuted, puid, token}], roomId, roomOptions,
+ *     deploymentId};
+ *   - the participant: DELETE .../participants/{puid} 204.
+ * STILL UNVERIFIED: that the DELETE also revokes the removed participant's room token (Epic documents it; not yet observed); the
+ * room token's lifetime (the answer carries no expiry field -- roomTokenAssumedTtlMs, 10 min, is an assumption); and Epic does
+ * NOT validate PUIDs, so the server-side PUID binding (migration 035) is the ONLY guard
+ * on who a room token is minted for.
+ * ========================================================================================================================== */
+export const EPIC = Object.freeze({
+  apiRoot: 'https://api.epicgames.dev',
+  // client-credentials grant for the Trusted Server client, scoped to the deployment; HTTP Basic auth = clientId:clientSecret
+  tokenPath: '/auth/v1/oauth/token',
+  tokenForm: { grantType: 'grant_type', grantTypeValue: 'client_credentials', deploymentId: 'deployment_id' },
+  tokenAnswer: { accessToken: 'access_token', expiresIn: 'expires_in', expiresAt: 'expires_at' },
+  // createRoomToken: POST, creates the room if absent; one participant per call here
+  roomPath: (deploymentId: string, roomId: string) => `/rtc/v1/${deploymentId}/room/${roomId}`,
+  roomBody: { participants: 'participants', puid: 'puid', hardMuted: 'hardMuted' },
+  roomAnswer: { clientBaseUrl: 'clientBaseUrl', participants: 'participants', puid: 'puid', token: 'token' },
+  // removeParticipant: DELETE; removes the player from the room AND revokes their room token
+  participantPath: (deploymentId: string, roomId: string, puid: string) => `/rtc/v1/${deploymentId}/room/${roomId}/participants/${puid}`,
+  // the participant token EOSVoiceChat's JoinChannel takes (UE 5.8 EOSVoiceChatTypes.h:14-20 -- CORE's side)
+  sdkToken: { clientBaseUrl: 'client_base_url', participantToken: 'participant_token' },
+  // Epic's answer carries no room-token expiry as far as the reference text shows; the grant reports this ASSUMED lifetime
+  roomTokenAssumedTtlMs: 10 * 60_000,
+});
+
+/**
+ * THE ONLY FORM IN WHICH AN ID REACHES A LOG LINE: '#' + the first 12 lowercase hex of SHA-1(UTF-8 bytes of the value).
+ * SHA-1 because the game hashes the same ids with FSHA1 (UE 5.8 has no SHA-256 on Windows: GetSHA256Signature is checkf(false)),
+ * so a client log line and a bridge log line about the same room or PUID can be matched. A log correlation tag, not a secret:
+ * '0123456789abcdef0123456789abcdef' -> '#b1775a785f09' (pinned in eos-voice.test.ts).
+ * Inputs: a room id exactly as the client receives it (the 32-hex roomId of the grant); a PUID through hashPuid (lowercased).
+ */
+export const hashId = (value: string): string => `#${createHash('sha1').update(value, 'utf8').digest('hex').slice(0, 12)}`;
+
+/** A PUID's log tag: lowercased first (normalizePuid), so 'ABC...' and 'abc...' -- one EOS account -- carry one tag. */
+export const hashPuid = (puid: string): string => hashId(normalizePuid(puid) ?? puid.trim().toLowerCase());
+
+/* ------------------------------------------------------------------------------------------------ config */
+
+export const EOS_VOICE_CONFIG_ENV = 'WONDERLAND_EOS_VOICE_CONFIG';
+/** The room-salt file (one line, >= 32 characters): NOT a founder credential -- the R16 runner generates it. */
+export const EOS_ROOM_SALT_FILE_ENV = 'WONDERLAND_EOS_ROOM_SALT_FILE';
+
+export interface EosVoiceConfig {
+  readonly productId: string;
+  readonly sandboxId: string;
+  readonly deploymentId: string;
+  readonly clientId: string;
+  readonly clientSecret: string;
+  /** Per-deployment secret salt for the opaque room ids (HMAC). */
+  readonly roomSalt: string;
+  /** Which EOS client the credentials are: the Trusted Server client (preferred) or the Game Client (fallback). */
+  readonly clientKind?: 'server' | 'game';
+}
+
+const ID = /^[A-Za-z0-9_-]{1,128}$/;
+const MIN_ENV_SALT = 32;
+
+/**
+ * A config PATH variable set to this reads the SAME keys from the process environment instead of a file: for a host whose secrets
+ * are variables, not files (Railway; JUJU MAIN's hosted deploy plan r3, 10-04, option (iii)). Same refusals, same name-only logs.
+ */
+export const EOS_FROM_ENV = 'env:';
+/** With WONDERLAND_EOS_ROOM_SALT_FILE=env:, the salt itself: 32 to 512 characters, a STABLE secret of the deployment. */
+export const EOS_ROOM_SALT_ENV = 'WONDERLAND_EOS_ROOM_SALT';
+const EOS_VOICE_KEYS = ['EOS_PRODUCT_ID', 'EOS_SANDBOX_ID', 'EOS_DEPLOYMENT_ID', 'EOS_SERVER_CLIENT_ID', 'EOS_SERVER_CLIENT_SECRET', 'EOS_GAME_CLIENT_ID', 'EOS_GAME_CLIENT_SECRET'] as const;
+
+/** Exactly the named keys from the process environment, as parseDotEnv gives them from a file: trimmed; empty = absent. */
+function eosKeysFromEnv(env: NodeJS.ProcessEnv, names: readonly string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const name of names) {
+    const value = env[name]?.trim() ?? '';
+    if (value !== '') out.set(name, value);
+  }
+  return out;
+}
+
+/**
+ * A .env file's KEY=VALUE lines: CRLF or LF, an optional UTF-8 BOM, blank lines and '#' comments ignored, whitespace around '='
+ * trimmed, one pair of surrounding single or double quotes stripped. Every key is kept; the caller reads only the ones it knows.
+ */
+export function parseDotEnv(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const rawLine of text.replace(/^﻿/, '').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line === '' || line.startsWith('#')) continue;
+    const at = line.indexOf('=');
+    if (at <= 0) continue;
+    const key = line.slice(0, at).trim();
+    let value = line.slice(at + 1).trim();
+    if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) value = value.slice(1, -1);
+    out.set(key, value);
+  }
+  return out;
+}
+
+/**
+ * The EOS config, named by WONDERLAND_EOS_VOICE_CONFIG (a path outside every repo). TWO FORMATS, told apart by the first
+ * non-space character:
+ *   '{'  the JSON object {productId, sandboxId, deploymentId, clientId, clientSecret, roomSalt};
+ *   else the founder's .env: EOS_PRODUCT_ID, EOS_SANDBOX_ID, EOS_DEPLOYMENT_ID, and the client -- EOS_SERVER_CLIENT_ID +
+ *        EOS_SERVER_CLIENT_SECRET (the Trusted Server client) preferred, else EOS_GAME_CLIENT_ID + EOS_GAME_CLIENT_SECRET; the
+ *        room salt from the SEPARATE file named by WONDERLAND_EOS_ROOM_SALT_FILE (first line, >= 32 characters).
+ * EITHER path variable may be `env:` (EOS_FROM_ENV): the same .env keys, or the salt as WONDERLAND_EOS_ROOM_SALT, from the process
+ * environment -- a host whose secrets are variables (JUJU MAIN's hosted plan r3).
+ * Any missing key, unreadable file, field out of shape or short salt: null -- party voice stays 503, with no fallback. A log line
+ * names WHICH key or file is wanting (key names only); it never carries a value, and never a path ("the EOS config file", "the
+ * room salt file").
+ */
+export function loadEosVoiceConfig(env: NodeJS.ProcessEnv, deps: { readFile?: (path: string) => string; log?: (line: string) => void } = {}): EosVoiceConfig | null {
+  const log = deps.log ?? (() => undefined);
+  const read = deps.readFile ?? ((p: string) => readFileSync(p, 'utf8'));
+  const refuse = (why: string): null => {
+    log(`eos voice: ${why} -- party voice answers 503`);
+    return null;
+  };
+  const path = env[EOS_VOICE_CONFIG_ENV]?.trim() ?? '';
+  if (path === '') return refuse(`${EOS_VOICE_CONFIG_ENV} is not set`);
+  // a host whose secrets are variables: the same keys, from this process's environment (never a file)
+  if (path === EOS_FROM_ENV) return configFromKeys(eosKeysFromEnv(env, EOS_VOICE_KEYS), 'the environment', env, read, refuse, log);
+  let text: string;
+  try {
+    text = read(path).replace(/^﻿/, '');
+  } catch {
+    return refuse('the EOS config file could not be read');
+  }
+  return text.trimStart().startsWith('{') ? configFromJson(text, refuse, log) : configFromKeys(parseDotEnv(text), 'the EOS config file', env, read, refuse, log);
+}
+
+function configFromJson(text: string, refuse: (why: string) => null, log: (line: string) => void): EosVoiceConfig | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return refuse('the EOS config file is not valid JSON');
+  }
+  const r = (raw !== null && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const str = (k: string) => (typeof r[k] === 'string' ? (r[k] as string).trim() : '');
+  const config = { productId: str('productId'), sandboxId: str('sandboxId'), deploymentId: str('deploymentId'), clientId: str('clientId'), clientSecret: str('clientSecret'), roomSalt: str('roomSalt') };
+  const bad = [
+    ...(['productId', 'sandboxId', 'deploymentId', 'clientId'] as const).filter((k) => !ID.test(config[k])),
+    ...(config.clientSecret.length > 0 && config.clientSecret.length <= 512 ? [] : ['clientSecret']),
+    ...(config.roomSalt.length >= 16 && config.roomSalt.length <= 512 ? [] : ['roomSalt']),
+  ];
+  if (bad.length > 0) return refuse(`the EOS config file is missing or has out of shape: ${bad.join(', ')}`);
+  log('eos voice: configured (JSON)');
+  return config;
+}
+
+function configFromKeys(keys: ReadonlyMap<string, string>, source: string, env: NodeJS.ProcessEnv, read: (path: string) => string, refuse: (why: string) => null, log: (line: string) => void): EosVoiceConfig | null {
+  const get = (k: string) => keys.get(k) ?? '';
+  const ids = ['EOS_PRODUCT_ID', 'EOS_SANDBOX_ID', 'EOS_DEPLOYMENT_ID'] as const;
+  const missingIds = ids.filter((k) => get(k) === '');
+  const shapelessIds = ids.filter((k) => get(k) !== '' && !ID.test(get(k)));
+  // THE CLIENT: the Trusted Server client when both its keys are there, else the Game Client when both of its are
+  const pair = (prefix: 'EOS_SERVER' | 'EOS_GAME') => ({ id: get(`${prefix}_CLIENT_ID`), secret: get(`${prefix}_CLIENT_SECRET`) });
+  const server = pair('EOS_SERVER');
+  const game = pair('EOS_GAME');
+  const kind = server.id !== '' && server.secret !== '' ? 'server' : game.id !== '' && game.secret !== '' ? 'game' : null;
+  const missing = [...missingIds, ...(kind === null ? ['EOS_SERVER_CLIENT_ID + EOS_SERVER_CLIENT_SECRET (or EOS_GAME_CLIENT_ID + EOS_GAME_CLIENT_SECRET)'] : [])];
+  if (missing.length > 0 || kind === null) return refuse(`${source} is missing ${missing.join(', ')}`);
+  const client = kind === 'server' ? server : game;
+  const clientKeyPrefix = kind === 'server' ? 'EOS_SERVER' : 'EOS_GAME';
+  const shapeless = [...shapelessIds, ...(ID.test(client.id) ? [] : [`${clientKeyPrefix}_CLIENT_ID`]), ...(client.secret.length <= 512 ? [] : [`${clientKeyPrefix}_CLIENT_SECRET`])];
+  if (shapeless.length > 0) return refuse(`${source} has out of shape: ${shapeless.join(', ')}`);
+  // THE ROOM SALT, from its own file (not a founder credential)
+  const saltPath = env[EOS_ROOM_SALT_FILE_ENV]?.trim() ?? '';
+  if (saltPath === '') return refuse(`${EOS_ROOM_SALT_FILE_ENV} is not set (the room salt file)`);
+  let salt: string;
+  if (saltPath === EOS_FROM_ENV) {
+    // the salt as a variable: a STABLE secret of the deployment, never generated here (a new salt orphans every room)
+    salt = (env[EOS_ROOM_SALT_ENV] ?? '').trim();
+  } else {
+    try {
+      salt = (read(saltPath).replace(/^﻿/, '').split(/\r?\n/)[0] ?? '').trim();
+    } catch {
+      return refuse('the room salt file could not be read');
+    }
+  }
+  if (salt.length < MIN_ENV_SALT || salt.length > 512) {
+    return refuse(saltPath === EOS_FROM_ENV ? `${EOS_ROOM_SALT_ENV} must hold ${MIN_ENV_SALT} to 512 characters` : `the room salt file must hold one line of ${MIN_ENV_SALT} to 512 characters`);
+  }
+  log(kind === 'server' ? 'eos voice: client kind server' : 'eos voice: client kind game (fallback): room actions need a Trusted Server policy');
+  return { productId: get('EOS_PRODUCT_ID'), sandboxId: get('EOS_SANDBOX_ID'), deploymentId: get('EOS_DEPLOYMENT_ID'), clientId: client.id, clientSecret: client.secret, roomSalt: salt, clientKind: kind };
+}
+
+/* ------------------------------------------------------------------------------------------------ the game client's config */
+
+/** The founder's eos-game.env, by path: the GAME client's EOS values, which the bridge hands to signed-in desktop clients. */
+export const EOS_GAME_CONFIG_ENV = 'WONDERLAND_EOS_GAME_CONFIG';
+/** The client config answer's schema tag; the client checks it before reading a value (CORE's ConfigFromServer). */
+export const EOS_CLIENT_CONFIG_SCHEMA = 'wonderland-eos-client-config.v1';
+
+/** What a desktop client's EOS platform starts with: the GAME client's values, never the Trusted Server's. */
+export interface EosGameClientConfig {
+  readonly productId: string;
+  readonly sandboxId: string;
+  readonly deploymentId: string;
+  readonly clientId: string;
+  readonly clientSecret: string;
+}
+
+/** The ids the game config must share with the voice config: a client started on another deployment never reaches its rooms. */
+export type EosDeployment = Pick<EosVoiceConfig, 'productId' | 'sandboxId' | 'deploymentId'>;
+
+const EOS_GAME_KEYS = ['EOS_PRODUCT_ID', 'EOS_SANDBOX_ID', 'EOS_DEPLOYMENT_ID', 'EOS_GAME_CLIENT_ID', 'EOS_GAME_CLIENT_SECRET'] as const;
+
+/**
+ * THE GAME CLIENT'S EOS CONFIG (founder, 10-04: the backend hands the EOS game-client config to the shipped client, which holds
+ * it in memory only; it is never in the package). Read ONCE, at start, from the founder's eos-game.env named by
+ * WONDERLAND_EOS_GAME_CONFIG: EOS_PRODUCT_ID, EOS_SANDBOX_ID, EOS_DEPLOYMENT_ID, EOS_GAME_CLIENT_ID, EOS_GAME_CLIENT_SECRET.
+ * ONLY the EOS_GAME_* pair is ever read. The Trusted Server's EOS_SERVER_* pair is never a client's: a file holding only that
+ * pair is refused, and a file holding both serves the game pair. Given `deployment` (the voice config's ids), a game config
+ * naming another product, sandbox or deployment is refused, since its clients could never join the rooms the bridge mints.
+ * WONDERLAND_EOS_GAME_CONFIG=env: reads the same five keys from the process environment instead (EOS_FROM_ENV), never EOS_SERVER_*.
+ * Absent, unreadable, not the .env form, missing a key, out of shape or mismatched: null, and the route answers 503. The log
+ * says "eos game config: loaded (5 keys)", "absent", or why not by key or field NAME; never a value, a length or the path.
+ */
+export function loadEosGameClientConfig(
+  env: NodeJS.ProcessEnv,
+  deps: { readFile?: (path: string) => string; log?: (line: string) => void; deployment?: EosDeployment | null } = {},
+): EosGameClientConfig | null {
+  const log = deps.log ?? (() => undefined);
+  const read = deps.readFile ?? ((p: string) => readFileSync(p, 'utf8'));
+  const refuse = (why: string): null => {
+    log(`eos game config: ${why} -- the client config route answers 503`);
+    return null;
+  };
+  const path = env[EOS_GAME_CONFIG_ENV]?.trim() ?? '';
+  if (path === '') {
+    log('eos game config: absent');
+    return null;
+  }
+  let keys: ReadonlyMap<string, string>;
+  let source: string;
+  if (path === EOS_FROM_ENV) {
+    // a host whose secrets are variables: ONLY the five game keys are looked up, so EOS_SERVER_* is never read even beside them
+    keys = eosKeysFromEnv(env, EOS_GAME_KEYS);
+    source = 'the environment';
+  } else {
+    let text: string;
+    try {
+      text = read(path);
+    } catch {
+      return refuse('the EOS game config file could not be read');
+    }
+    // trimStart drops a UTF-8 BOM too (U+FEFF is ECMAScript white space)
+    if (text.trimStart().startsWith('{')) return refuse('the EOS game config file must be the .env form');
+    keys = parseDotEnv(text);
+    source = 'the EOS game config file';
+  }
+  const get = (k: (typeof EOS_GAME_KEYS)[number]) => keys.get(k) ?? '';
+  const missing = EOS_GAME_KEYS.filter((k) => get(k) === '');
+  if (missing.length > 0) return refuse(`${source} is missing ${missing.join(', ')}`);
+  const secret = get('EOS_GAME_CLIENT_SECRET');
+  const shapeless = [
+    ...EOS_GAME_KEYS.filter((k) => k !== 'EOS_GAME_CLIENT_SECRET' && !ID.test(get(k))),
+    ...(secret.length <= 512 && !/\s/.test(secret) ? [] : ['EOS_GAME_CLIENT_SECRET']),
+  ];
+  if (shapeless.length > 0) return refuse(`${source} has out of shape: ${shapeless.join(', ')}`);
+  const config: EosGameClientConfig = Object.freeze({
+    productId: get('EOS_PRODUCT_ID'),
+    sandboxId: get('EOS_SANDBOX_ID'),
+    deploymentId: get('EOS_DEPLOYMENT_ID'),
+    clientId: get('EOS_GAME_CLIENT_ID'),
+    clientSecret: secret,
+  });
+  const expected = deps.deployment ?? null;
+  if (expected !== null) {
+    const differ = (['productId', 'sandboxId', 'deploymentId'] as const).filter((k) => config[k] !== expected[k]);
+    if (differ.length > 0) return refuse(`${source} names another ${differ.join(', ')} than the voice config`);
+  }
+  log('eos game config: loaded (5 keys)');
+  return config;
+}
+
+/* ------------------------------------------------------------------------------------------------ the minter */
+
+export type EosFetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+
+export interface EosVoiceDeps {
+  readonly fetchImpl?: EosFetch;
+  readonly log?: (line: string) => void;
+  readonly now?: () => number;
+}
+
+class EosHttpError extends Error {
+  constructor(readonly status: number, what: string) {
+    super(`${what} answered ${status}`);
+  }
+}
+
+const asRecord = (v: unknown): Record<string, unknown> => (v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+
+export class EosVoiceTokenMinter implements PartyVoiceTokenMinter {
+  readonly providerId = 'eos';
+  private token: { value: string; expiresAtMs: number } | null = null;
+  private readonly fetchImpl: EosFetch;
+  private readonly log: (line: string) => void;
+  private readonly now: () => number;
+
+  constructor(private readonly config: EosVoiceConfig, deps: EosVoiceDeps = {}) {
+    this.fetchImpl = deps.fetchImpl ?? (globalThis.fetch as unknown as EosFetch);
+    this.log = deps.log ?? (() => undefined);
+    this.now = deps.now ?? Date.now;
+  }
+
+  /** The party's room: an opaque HMAC-SHA256(roomSalt, partyId), first 32 hex -- stable, and naming nothing. */
+  roomIdFor(partyId: string): string {
+    return createHmac('sha256', this.config.roomSalt).update(partyId, 'utf8').digest('hex').slice(0, 32);
+  }
+
+  /** A Trusted Server access token, cached until 60 s before it expires. */
+  private async accessToken(forceRefresh = false): Promise<string> {
+    if (!forceRefresh && this.token !== null && this.now() < this.token.expiresAtMs - 60_000) return this.token.value;
+    const form = new URLSearchParams({ [EPIC.tokenForm.grantType]: EPIC.tokenForm.grantTypeValue, [EPIC.tokenForm.deploymentId]: this.config.deploymentId });
+    const basic = Buffer.from(`${this.config.clientId}:${this.config.clientSecret}`, 'utf8').toString('base64');
+    const answer = await this.fetchImpl(`${EPIC.apiRoot}${EPIC.tokenPath}`, {
+      method: 'POST',
+      headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body: form.toString(),
+    });
+    if (!answer.ok) throw new EosHttpError(answer.status, 'the EOS token endpoint');
+    const body = asRecord(await answer.json());
+    const value = typeof body[EPIC.tokenAnswer.accessToken] === 'string' ? (body[EPIC.tokenAnswer.accessToken] as string) : '';
+    if (value === '') throw new Error('the EOS token endpoint answered without an access token');
+    const expiresIn = typeof body[EPIC.tokenAnswer.expiresIn] === 'number' ? (body[EPIC.tokenAnswer.expiresIn] as number) * 1000 : null;
+    const expiresAt = typeof body[EPIC.tokenAnswer.expiresAt] === 'string' ? Date.parse(body[EPIC.tokenAnswer.expiresAt] as string) : Number.NaN;
+    this.token = { value, expiresAtMs: Number.isFinite(expiresAt) ? expiresAt : this.now() + (expiresIn ?? 0) };
+    this.log(`eos voice: access token ${forceRefresh ? 'refreshed after a 401' : 'obtained'}`);
+    return value;
+  }
+
+  /** One authorised call; a 401 refreshes the access token ONCE and tries again. */
+  private async authorised(method: string, path: string, body: unknown, what: string): Promise<{ status: number; json: () => Promise<unknown> }> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const bearer = await this.accessToken(attempt === 1);
+      const answer = await this.fetchImpl(`${EPIC.apiRoot}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      if (answer.status === 401 && attempt === 0) continue;
+      if (!answer.ok) throw new EosHttpError(answer.status, what);
+      return answer;
+    }
+    throw new EosHttpError(401, what);
+  }
+
+  async mint(input: { readonly partyId: string; readonly participantId: string; readonly audience: readonly string[]; readonly nowIso: string; readonly puid?: string }): Promise<PartyVoiceGrant> {
+    const puid = input.puid ?? '';
+    if (!/^[0-9a-f]{32}$/.test(puid)) throw new Error('an EOS room token needs the caller\'s bound PUID');
+    const roomId = this.roomIdFor(input.partyId);
+    const answer = await this.authorised('POST', EPIC.roomPath(this.config.deploymentId, roomId), {
+      [EPIC.roomBody.participants]: [{ [EPIC.roomBody.puid]: puid, [EPIC.roomBody.hardMuted]: false }],
+    }, 'createRoomToken');
+    const body = asRecord(await answer.json());
+    const clientBaseUrl = typeof body[EPIC.roomAnswer.clientBaseUrl] === 'string' ? (body[EPIC.roomAnswer.clientBaseUrl] as string) : '';
+    const participants = Array.isArray(body[EPIC.roomAnswer.participants]) ? (body[EPIC.roomAnswer.participants] as unknown[]).map(asRecord) : [];
+    const mine = participants.find((p) => p[EPIC.roomAnswer.puid] === puid);
+    const token = typeof mine?.[EPIC.roomAnswer.token] === 'string' ? (mine[EPIC.roomAnswer.token] as string) : '';
+    if (clientBaseUrl === '' || token === '') throw new Error('createRoomToken answered without a media endpoint or a token for the caller');
+    this.log(`eos voice: room token minted room=${hashId(roomId)} puid=${hashPuid(puid)}`);
+    return {
+      providerId: this.providerId,
+      roomId,
+      participantToken: JSON.stringify({ [EPIC.sdkToken.clientBaseUrl]: clientBaseUrl, [EPIC.sdkToken.participantToken]: token }),
+      expiresAtIso: new Date(Date.parse(input.nowIso) + EPIC.roomTokenAssumedTtlMs).toISOString(),
+    };
+  }
+
+  /** Remove a PUID from a room (and revoke its token). Already absent (404) counts as removed. */
+  async removeParticipant(roomId: string, puid: string): Promise<void> {
+    try {
+      await this.authorised('DELETE', EPIC.participantPath(this.config.deploymentId, roomId, puid), undefined, 'removeParticipant');
+    } catch (error) {
+      if (error instanceof EosHttpError && error.status === 404) return;
+      throw error;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------ server-side removal */
+
+export interface VoiceRemovalTarget {
+  roomIdFor(partyId: string): string;
+  removeParticipant(roomId: string, puid: string): Promise<void>;
+}
+
+export interface VoiceRemovals {
+  /** Called by the social store's after-commit hook: queues the removals and returns at once (never awaited by the change). */
+  onDepartures(departures: readonly PartyDeparture[]): void;
+  /** Resolves when everything queued so far has finished (tests; a graceful shutdown). */
+  idle(): Promise<void>;
+}
+
+/**
+ * SERVER-SIDE REMOVAL (review #3, #6): a departed member's PUID is taken out of that party's room even if their client misbehaves.
+ * In departure order, one at a time; each removal tried up to 1 + backoff.length times (default 0.25 s, 1 s, 4 s), then given up
+ * and logged. A departed member with no bound PUID has nothing to remove. Ids are logged hashed.
+ */
+export function createVoiceRemovals(deps: {
+  readonly target: VoiceRemovalTarget;
+  readonly bindings: () => VoiceBindingStore | null;
+  readonly log?: (line: string) => void;
+  readonly backoffMs?: readonly number[];
+  readonly sleep?: (ms: number) => Promise<void>;
+}): VoiceRemovals {
+  const log = deps.log ?? (() => undefined);
+  const backoff = deps.backoffMs ?? [250, 1000, 4000];
+  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  let chain: Promise<void> = Promise.resolve();
+  const removeOne = async (d: PartyDeparture): Promise<void> => {
+    const bindings = deps.bindings();
+    const puid = bindings === null ? undefined : (await bindings.puidsOf([d.userId])).get(d.userId);
+    const roomId = deps.target.roomIdFor(d.partyId);
+    if (puid === undefined) return; // never joined voice: nothing to remove
+    for (let attempt = 0; attempt <= backoff.length; attempt += 1) {
+      try {
+        await deps.target.removeParticipant(roomId, puid);
+        log(`eos voice: removed room=${hashId(roomId)} puid=${hashPuid(puid)}${attempt > 0 ? ` after ${attempt} retr${attempt === 1 ? 'y' : 'ies'}` : ''}`);
+        return;
+      } catch (error) {
+        const status = error instanceof EosHttpError ? error.status : 'network';
+        log(`eos voice: removal failed room=${hashId(roomId)} puid=${hashPuid(puid)} attempt ${attempt + 1} (${status})`);
+        if (attempt < backoff.length) await sleep(backoff[attempt]);
+      }
+    }
+    log(`eos voice: removal GAVE UP room=${hashId(roomId)} puid=${hashPuid(puid)}`);
+  };
+  return {
+    onDepartures(departures) {
+      for (const d of departures) chain = chain.then(() => removeOne(d)).catch(() => undefined);
+    },
+    idle: () => chain,
+  };
+}
+
+/** The bridge's EOS voice, from its environment: the minter and its removal queue, or null (voice 503). */
+export function eosVoiceFromEnv(env: NodeJS.ProcessEnv, deps: EosVoiceDeps & { readonly bindings: () => VoiceBindingStore | null; readonly readFile?: (path: string) => string }): { minter: EosVoiceTokenMinter; removals: VoiceRemovals; deployment: EosDeployment } | null {
+  const config = loadEosVoiceConfig(env, { readFile: deps.readFile, log: deps.log });
+  if (config === null) return null;
+  const minter = new EosVoiceTokenMinter(config, deps);
+  return {
+    minter,
+    removals: createVoiceRemovals({ target: minter, bindings: deps.bindings, log: deps.log }),
+    // the ids only (no client, no secret): the game config handed to clients must name the same deployment
+    deployment: { productId: config.productId, sandboxId: config.sandboxId, deploymentId: config.deploymentId },
+  };
+}

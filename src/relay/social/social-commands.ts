@@ -354,6 +354,12 @@ function applyOne(
     case 'events.stream':
       // Served by the store's event log (wonderland-social-routes.ts), never through here.
       return invalid('events are read from the stream, not as an operation');
+    case 'parties.voice_join':
+      // Served by the voice provider's token minter (wonderland-social-routes.ts), never through here: it changes no state.
+      return invalid('party voice is joined through the voice route, not as an operation');
+    case 'voice.eos_client_config':
+      // Served from the bridge's in-memory EOS game-client config (wonderland-social-routes.ts), never through here.
+      return invalid('the EOS client config is served by the voice route, not as an operation');
 
     /* ---- presence & privacy: the actor's own, told to their friends (whose views of the actor change) */
     case 'presence.update_self': {

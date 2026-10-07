@@ -81,10 +81,13 @@ import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute, SIGNIN_START_RATE } from './wonderland-native-signin-routes';
-import { createCommandBudgets, createPresenceLease, endSocialPresence, handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
+import { createCommandBudgets, createPresenceLease, createSessionRateLimit, endSocialPresence, EOS_CLIENT_CONFIG_RATE, handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 import { GITHUB_STUB_BANNER, githubRootsForNativeSignIn } from './wonderland-github-stub-seam';
 import { openSocialPostgresStore } from '../src/relay/persistence/social-postgres';
+import { createPostgresVoiceBindings } from '../src/relay/persistence/voice-binding-postgres';
+import type { VoiceBindingStore } from '../src/relay/social/voice-binding';
+import { eosVoiceFromEnv, loadEosGameClientConfig } from './eos-voice';
 import type { SocialStore } from '../src/relay/social/social-store';
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -264,8 +267,8 @@ export function createBridgeServer(
    *     migrated: this bridge is NOT a migration entry point. No schema, no store: 503.
    *   - Who a player is (their GitHub login, for their social record) is remembered when they sign in, in memory, beside
    *     their session -- which also dies with the process.
-   *   - Party voice TRANSPORT (EOS: tokens, PUID binding, the game-client config) is not served here; it arrives with migration
-   *     035 in its own change.
+   *   - Party voice = EOS, behind WONDERLAND_EOS_VOICE_CONFIG and WONDERLAND_EOS_GAME_CONFIG (below); without them, or without
+   *     migration 035's binding table, voice answers 503 VOICE TRANSPORT PENDING (wonderland-social-routes.ts).
    *   - WONDERLAND_SOCIAL_TAP=<file> (tests and QA only) appends one line per events poll / snapshot answered: ids and
    *     sequences, never content. Refused in production.
    *   - WONDERLAND_SOCIAL_GITHUB_STUB (development rehearsal only) is fenced in wonderland-github-stub-seam.ts: a misuse
@@ -289,6 +292,28 @@ export function createBridgeServer(
   // the desktop sign-in's START is an unauthenticated write too (Second's review, 10-06): one limiter for the process
   const socialSignInStartLimiter = createBetaRateLimiter(SIGNIN_START_RATE);
   const socialLogins = new Map<string, string>();
+  /**
+   * PARTY VOICE = EOS (R16, founder 10-04), behind WONDERLAND_EOS_VOICE_CONFIG (the founder's file; never logged, no fallback;
+   * absent or invalid = voice 503 as before). PUIDs are bound on the Julius pool (migration 035); a committed party departure
+   * removes the departed PUID from that party's room server-side (eos-voice.ts createVoiceRemovals).
+   */
+  let voiceBindingsCache: VoiceBindingStore | null = null;
+  const voiceBindings = (): VoiceBindingStore | null => {
+    if (voiceBindingsCache !== null) return voiceBindingsCache;
+    const pool = juliusPool();
+    voiceBindingsCache = pool === null ? null : createPostgresVoiceBindings(pool);
+    return voiceBindingsCache;
+  };
+  const eosVoice = socialEnabled ? eosVoiceFromEnv(process.env, { bindings: voiceBindings, log: (line) => console.warn(`[relay-bridge] ${line}`) }) : null;
+  /**
+   * THE GAME CLIENT'S EOS CONFIG (founder 10-04), behind WONDERLAND_EOS_GAME_CONFIG (the founder's eos-game.env, by path): read once
+   * here and held in memory only, for GET /wonderland/social/voice/eos-client-config; it must name the voice config's deployment.
+   * Never logged. The rate limit is built once: the route's deps are rebuilt per request.
+   */
+  const eosGameConfig = socialEnabled
+    ? loadEosGameClientConfig(process.env, { log: (line) => console.warn(`[relay-bridge] ${line}`), deployment: eosVoice?.deployment ?? null })
+    : null;
+  const eosClientConfigAllowed = createSessionRateLimit(EOS_CLIENT_CONFIG_RATE.limit, EOS_CLIENT_CONFIG_RATE.windowMs);
   // PRESENCE IS A LEASE and EVERY PLAYER HAS A BUDGET (Second's R16 review, 10-06): both live in THIS process, built once here --
   // the route's deps are rebuilt per request. One bridge instance holds them, as it holds who is signed in.
   const socialPresenceLease = createPresenceLease();
@@ -299,7 +324,7 @@ export function createBridgeServer(
     if (socialStoreReady !== null) return socialStoreReady;
     const pool = juliusPool();
     if (pool === null) return null;
-    socialStoreOpening ??= openSocialPostgresStore(pool).then(
+    socialStoreOpening ??= openSocialPostgresStore(pool, { afterCommit: (commit) => eosVoice?.removals.onDepartures(commit.departures) }).then(
       (opened) => { socialStoreReady = opened; socialStoreOpening = null; return opened; },
       () => { socialStoreOpening = null; return null; },
     );
@@ -734,8 +759,13 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             },
             // opened only after the session gate: an anonymous request never loads the store (JUJU MAIN's hosted plan r3)
             store: socialStore,
+            voice: eosVoice?.minter ?? null,
+            voiceBindings: eosVoice !== null ? voiceBindings() : null,
+            eosClientConfig: eosGameConfig,
+            eosClientConfigAllowed,
             presenceLease: socialPresenceLease,
             commandBudgets: socialCommandBudgets,
+            log: (line) => console.warn(`[relay-bridge] ${line}`),
             tap: socialTap,
           });
           if (socialResult !== null) send(res, socialResult.status, socialResult.body, { ...cors, ...(socialResult.headers ?? {}) });
