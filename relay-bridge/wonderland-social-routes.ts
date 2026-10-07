@@ -267,15 +267,21 @@ export const SOCIAL_BUDGETS = Object.freeze({
   write: Object.freeze({ burst: 60, everyMs: 1_000 }),
   message: Object.freeze({ burst: 20, everyMs: 3_000 }),
   invitation: Object.freeze({ burst: 10, everyMs: 30_000 }),
+  // A VOICE JOIN writes PostgreSQL and calls Epic (a token, createRoomToken, maybe a DELETE), so it is not charged as a read
+  // (MAIN's internal review a6d5842c, m5). The client asks again to name each new room member, throttled to one a second (CORE's
+  // client contract, 10-07): one a second, after a burst of ten, never refuses that rhythm and caps a flood at a fifth of the
+  // read rate.
+  voice: Object.freeze({ burst: 10, everyMs: 1_000 }),
 });
 export type SocialBudgetClass = keyof typeof SOCIAL_BUDGETS;
 type BudgetTable = Readonly<Record<SocialBudgetClass, Readonly<{ burst: number; everyMs: number }>>>;
 
 const INVITATION_OPS = new Set(['requests.send', 'parties.invite', 'world.invite']);
 
-/** The classes a call is charged to: the world report alone; any other read; any write, plus message / invitation for those. */
+/** The classes a call is charged to: the world report alone; a voice join alone; any other read; any write, plus message / invitation for those. */
 export function budgetClassesOf(op: { readonly id: string; readonly writes: boolean }): SocialBudgetClass[] {
   if (op.id === 'world.state') return ['report'];
+  if (op.id === 'parties.voice_join') return ['voice'];
   if (!op.writes) return ['read'];
   if (op.id === 'messages.send') return ['write', 'message'];
   if (INVITATION_OPS.has(op.id)) return ['write', 'invitation'];

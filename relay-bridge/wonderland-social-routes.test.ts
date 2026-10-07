@@ -390,6 +390,37 @@ describe("every player has a budget (Second's R16 review, 10-06: before, a signe
     expect(budgetClassesOf({ id: 'blocks.add', writes: true })).toEqual(['write']);
     expect(budgetClassesOf({ id: 'messages.send', writes: true })).toEqual(['write', 'message']);
     for (const id of ['requests.send', 'parties.invite', 'world.invite']) expect(budgetClassesOf({ id, writes: true })).toEqual(['write', 'invitation']);
+    // a voice join writes PostgreSQL and calls Epic: its own budget, not a read's (review a6d5842c, m5)
+    expect(budgetClassesOf({ id: 'parties.voice_join', writes: false })).toEqual(['voice']);
+  });
+
+  it('a voice join has its OWN budget (review a6d5842c, m5): ten at once, the eleventh is 429; reads are not charged for joins, nor joins for reads', async () => {
+    const w = clocked({ budgets: true });
+    await w.kai.get('/snapshot');
+    await w.nova.get('/snapshot');
+    const voiceJoin = () => w.kai.post('/parties/pty_none/voice/join', { eosProductUserId: '0123456789abcdef0123456789abcdef' });
+    // no party and no provider here: an admitted call runs and answers the stranger's 404; the budget refuses before that
+    for (let i = 0; i < SOCIAL_BUDGETS.voice.burst; i += 1) expect((await voiceJoin()).status, `join ${i + 1}`).toBe(404);
+    const over = await voiceJoin();
+    expect([over.status, over.body.error?.kind, over.headers?.['retry-after']]).toEqual([429, 'rate_limited', '1']);
+    expect((await w.kai.get('/snapshot')).status).toBe(200); // the read budget is untouched by the joins
+    expect((await w.nova.post('/parties/pty_none/voice/join', { eosProductUserId: '0123456789abcdef0123456789abcdef' })).status).toBe(404); // another player is not charged
+    // and many reads leave the voice budget alone: one second on, one more join is admitted
+    for (let i = 0; i < 50; i += 1) await w.kai.get('/snapshot');
+    w.advance(SOCIAL_BUDGETS.voice.everyMs);
+    expect((await voiceJoin()).status).toBe(404);
+    expect((await voiceJoin()).status).toBe(429);
+  });
+
+  it("the client's audience re-ask (throttled to one a second, CORE's client contract) never meets the voice budget: one join a second for two minutes", async () => {
+    const w = clocked({ budgets: true });
+    await w.kai.get('/snapshot');
+    const statuses = new Set<number>();
+    for (let tick = 0; tick < 120; tick += 1) {
+      w.advance(1_000);
+      statuses.add((await w.kai.post('/parties/pty_none/voice/join', { eosProductUserId: '0123456789abcdef0123456789abcdef' })).status);
+    }
+    expect([...statuses]).toEqual([404]);
   });
 
   it('the write after the burst is 429 rate_limited with Retry-After, no-store, and is NOT executed; another player is not charged', async () => {
