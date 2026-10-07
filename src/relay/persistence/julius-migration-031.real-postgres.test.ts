@@ -138,12 +138,19 @@ suite('migration 031: a run update is a HOT update (row 13 (i))', () => {
   beforeAll(async () => { admin = new Pool({ connectionString: databaseUrl! }); }, 30_000);
   afterAll(async () => {
     for (const { name, pool } of made) {
+      // pool.end() resolves before its idle clients have closed (pg-pool 3.14's _remove() does not await client.end()),
+      // so the terminate below can reach a client that is still closing, and pg-pool re-emits that 57P01 as the pool's
+      // 'error' (julius-migration-030's teardown, CI 2026-10-03; here in CI on 2026-10-07). The terminate is this suite's
+      // own teardown.
+      pool.on('error', () => undefined);
       await pool.end().catch(() => undefined);
       await admin.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()', [name]).catch(() => undefined);
       await admin.query(`DROP DATABASE IF EXISTS ${name}`).catch(() => undefined);
     }
     await admin?.end().catch(() => undefined);
-  });
+    // An explicit bound: this loop ends, terminates and drops one database per case, which can outlast vitest's default
+    // 10_000 ms for a hook on a loaded runner (032's timed out in CI on 2026-10-07; every case passed).
+  }, 60_000);
 
   it('A: on a clean database at 030, 031 applies; julius_runs ends with exactly its three indexes, the only index change is the run index re-keyed, and no constraint or row changes', async () => {
     const { pool } = await at030('clean');
