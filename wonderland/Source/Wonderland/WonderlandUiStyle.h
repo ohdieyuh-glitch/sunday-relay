@@ -16,6 +16,8 @@
 
 #include "CoreMinimal.h"
 #include "Styling/CoreStyle.h"
+#include "Fonts/CompositeFont.h"
+#include "Misc/Paths.h"
 
 namespace WonderlandUi
 {
@@ -165,10 +167,40 @@ namespace WonderlandUi
 	inline FLinearColor Sage(float A = 1.0f)     { return Srgb(0x9C, 0xC7, 0x8F, A); }
 	inline FLinearColor Sky(float A = 1.0f)      { return Srgb(0x8F, 0xC6, 0xF2, A); }
 
-	/** The terminal's typeface: the web panel is monospace throughout. */
+	/**
+	 * The terminal's typeface: the web panel is monospace throughout.
+	 *
+	 * FOUNDER, 2026-10-07: the engine's own Engine/Content/Slate/Fonts/DroidSansMono.ttf ("Version 1.00 build 107") carries
+	 * Ascender's per-computer EULA in its name table, so it is excluded from the pak (Config/DefaultPakFileRules.ini). The SAME
+	 * DESIGN ships instead under Apache-2.0 from the Android Open Source Project: Content/Slate/Fonts/DroidSansMono-AOSP.ttf is
+	 * platform/frameworks/base data/fonts/DroidSansMono.ttf at commit 573dfc26bca2f00685b19553ca0a7cd264e3e793 ("Version 1.00
+	 * build 113", sha256 12b552de...a1047), unmodified. Its unitsPerEm, hhea ascender / descender / lineGap and every advance
+	 * width equal build 107's, so Slate's line height, baseline and text widths are unchanged at every size.
+	 *
+	 * BUILT ONCE: a function static, so every caller shares ONE composite font (the font cache keys on the composite font, so a
+	 * font built per call would be a new cache entry every time). It is a copy of the engine default font with only its "Mono"
+	 * entry repointed, so a character the mono font lacks resolves exactly as before: Roboto (the default typeface), then the
+	 * engine's sub-typefaces, then the DroidSansFallback fallback typeface. A plain FCompositeFont, not the GC-registered
+	 * FStandaloneCompositeFont: every entry is a font FILE (the engine builds its default font from file paths), so there is no
+	 * UObject to keep alive, and nothing GC-registered outlives the engine at exit.
+	 */
 	inline FSlateFontInfo Mono(int32 Size)
 	{
-		return FCoreStyle::GetDefaultFontStyle("Mono", Size);
+		static const TSharedRef<const FCompositeFont> MonoFont = []() -> TSharedRef<const FCompositeFont>
+		{
+			static const FName MonoName(TEXT("Mono"));
+			const TSharedRef<const FCompositeFont> EngineDefault = FCoreStyle::GetDefaultFont();
+			TSharedRef<FCompositeFont> Font = MakeShared<FCompositeFont>();
+			Font->DefaultTypeface = EngineDefault->DefaultTypeface;
+			Font->FallbackTypeface = EngineDefault->FallbackTypeface;
+			Font->SubTypefaces = EngineDefault->SubTypefaces;
+			Font->bEnableAscentDescentOverride = EngineDefault->bEnableAscentDescentOverride;
+			Font->DefaultTypeface.Fonts.RemoveAll([](const FTypefaceEntry& Entry) { return Entry.Name == MonoName; });
+			Font->DefaultTypeface.AppendFont(MonoName, FPaths::ProjectContentDir() / TEXT("Slate/Fonts/DroidSansMono-AOSP.ttf"),
+				EFontHinting::Default, EFontLoadingPolicy::LazyLoad);
+			return Font;
+		}();
+		return FSlateFontInfo(MonoFont, Size, TEXT("Mono"));
 	}
 
 	/** Titles and labels. LetterSpacing is in thousandths of an em. */
