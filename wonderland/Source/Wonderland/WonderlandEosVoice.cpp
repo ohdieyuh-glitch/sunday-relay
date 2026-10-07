@@ -16,6 +16,10 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "IEOSSDKManager.h"
+#if PLATFORM_WINDOWS && !PLATFORM_CPU_ARM_FAMILY
+#include "HAL/PlatformProcess.h"
+#include "Windows/eos_Windows.h"
+#endif
 #include "EOSVoiceChatFactory.h"
 #include "VoiceChat.h"
 #include "eos_sdk.h"
@@ -330,7 +334,35 @@ bool FWonderlandEosVoice::Start(FString& OutWhy)
 	PlatformConfig.bDisableOverlay = true;
 	PlatformConfig.bDisableSocialOverlay = true;
 	Sdk->AddPlatformConfig(PlatformConfig, true);
+#if PLATFORM_WINDOWS && !PLATFORM_CPU_ARM_FAMILY
+	// R12 (founder 2026-10-07: an optional, unresolved component is removed, never shipped on an unclear licence): EOS voice uses
+	// the SYSTEM XAudio 2.9 (xaudio2_9.dll in the Windows system folder; every supported Windows has it), exactly as the engine
+	// already does on ARM64 (WindowsEOSSDKManager.cpp, CreatePlatform). The engine's x64 path hands EOS the bundled
+	// Binaries/ThirdParty/Windows/XAudio2_9/x64/xaudio2_9redist.dll, whose own licence names no part of itself as distributable
+	// code, so the package no longer ships that file (build_beta_rc.ps1 step 3). The game's own audio never used it: the XAudio2_9
+	// module links the system xaudio2.lib. This hook runs after the engine set its path (OnPreCreateNamedPlatform fires inside
+	// FEOSSDKManager::CreatePlatform, after FWindowsEOSSDKManager's override) and before EOS_Platform_Create; it touches only THIS
+	// platform ("WonderlandVoice"), and it is removed as soon as the platform exists or failed to.
+	const FDelegateHandle SystemXAudioHook = Sdk->OnPreCreateNamedPlatform.AddLambda(
+		[](const FEOSSDKPlatformConfig& Named, EOS_Platform_Options& Options)
+		{
+			if (Named.Name != TEXT("WonderlandVoice") || Options.RTCOptions == nullptr)
+			{
+				return;
+			}
+			static const FString SystemXAudio = FPaths::Combine(FPlatformProcess::WindowsSystemDir(), TEXT("xaudio2_9.dll"));
+			static const FTCHARToUTF8 SystemXAudioUtf8(*SystemXAudio);
+			static EOS_Windows_RTCOptions WindowsRTCOptions = {};
+			WindowsRTCOptions.ApiVersion = EOS_WINDOWS_RTCOPTIONS_API_LATEST;
+			WindowsRTCOptions.XAudio29DllPath = SystemXAudioUtf8.Get();
+			const_cast<EOS_Platform_RTCOptions*>(Options.RTCOptions)->PlatformSpecificOptions = &WindowsRTCOptions;
+			UE_LOG(LogTemp, Display, TEXT("WLVOICE eos: RTC audio is the system XAudio 2.9 (xaudio2_9.dll, Windows system folder)"));
+		});
 	Impl->Platform = Sdk->CreatePlatform(PlatformConfig.Name);
+	Sdk->OnPreCreateNamedPlatform.Remove(SystemXAudioHook);
+#else
+	Impl->Platform = Sdk->CreatePlatform(PlatformConfig.Name);
+#endif
 	// THE SECRET'S LIFETIME (Second's review of 310b4dc7): the SDK manager keeps every added config for the process's life, so the
 	// named one is overwritten by a blank (the name only) as soon as the platform exists or failed to, and THIS CLIENT'S OWN copies
 	// are zeroed before they are freed. Copies the engine makes (the HTTP payload, the JSON reader's, the parsed tree's, the SDK
