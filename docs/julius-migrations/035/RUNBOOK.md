@@ -1,0 +1,83 @@
+# Migration 035 on the LIVE Julius database: runbook (CANDIDATE, SECOND WONDERLAND, 2026-10-07; the 033 runbook's discipline, scaled)
+
+Migration `035_wonderland_voice` creates the Wonderland party-voice binding inside `relay_wonderland`. It creates 3 relations, writes
+NO row and changes no existing row:
+- 1 table: `voice_puid_binding` (which EOS ProductUserId belongs to which signed-in player; `src/relay/social/voice-binding.ts`);
+- 2 indexes: its primary key `voice_puid_binding_pkey` (user_id) and its UNIQUE `voice_puid_binding_puid_key` (puid);
+- 1 foreign key: `user_id` → `relay_wonderland.players` (001), ON DELETE CASCADE; 2 CHECKs (the puid shape, the session id length);
+- NO row. What it changes on an existing table:
+  - its foreign key gives `players` two internal RI triggers;
+  - a `players` DELETE now cascades into `voice_puid_binding`;
+  - `CREATE TABLE … REFERENCES players` takes SHARE ROW EXCLUSIVE on `players` until COMMIT (milliseconds of DDL; readers are not blocked).
+
+Why: R16 needs REAL EOS Voice (founder ruling, 10-04), and the hosted backend binds each PUID to exactly one signed-in player, durably.
+The bridge is NOT a migration entry point; 035 reaches a persistent store only by this explicit, reviewed apply (FOUNDER_035_APPLY,
+derived from the approved FOUNDER_033_APPLY r2 set).
+
+## THE WINDOW: 035 after 034 (founder ruling, 2026-10-04 16:30Z)
+- 035 is applied in its OWN reviewed window, after 034's post-check has PASSED and its window has closed.
+- Never before 034: 035's guard refuses unless `034_project_brain_components` is applied AND is the ledger's last stamp (gapless).
+- If 035 refuses, or its post-check fails, the store stays at 034, the writers stay stopped, and the migration-order owner decides.
+
+## ORDER: what happens before landing
+Every entry point of a checkout that CONTAINS 035 migrates the database its environment names when it starts: the same eight entry
+points as for 030-034 (`docs/julius-migrations/030/RUNBOOK.md`), plus the dev social server's `--pg` (throwaway URLs only).
+1. **Until step 3 is recorded, from ANY checkout that contains 035:** run none of them against the live store. A local run sets BOTH
+   `JULIUS_DATABASE_URL` and `DATABASE_URL` to a throwaway database (or unsets them).
+2. **Before landing:** step 0 (quiesce), step 1 (a verified backup, sha256 recorded), step 2 (a recorded pre-check).
+3. **The writers stay stopped from step 0 until step 6.**
+4. **Step 3** applies 035 explicitly (the `psql` path), and its record is kept.
+
+## The live store
+The Docker container `julius-postgres` on the workstation (`127.0.0.1:5432`, database `julius`, role `julius`), as for 031-034. Any
+other PERSISTENT store that carries this chain (the approved hosted database included) gets 035 only by its own run of these steps.
+
+## Steps
+**0. Quiesce.** Stop every Julius and social writer (the bridge with `WONDERLAND_SOCIAL_ENABLED=1` is a writer of `players` and of
+`voice_puid_binding`). No other client session may be connected.
+
+**1. Back up and verify, at 034.** A `pg_dump -Fc` of the store, its sha256 recorded, its TOC listing the relay_wonderland objects and NO
+`voice_*` object. It holds the state 034's post-check verified, so rollback (c) returns to 034.
+
+**2. Pre-check** (`precheck.sql`, `psql -A -F '|'`, saved). STOP unless:
+- `other_client_sessions = 0`;
+- `relations_035_expected = 3`, `relations_035_present = 0`, `relations_035_as_created = 0`, `voice_relations_other = 0`;
+- `voice_puid_binding`, `voice_puid_binding_pkey`, `voice_puid_binding_puid_key` all `f`; `voice_puid_binding_rows` and
+  `catalog_035_md5` empty;
+- `voice_fk_constraints = 0`;
+- `migration_034_applied = t`, `migration_035_applied = f`, `ledger_last = 034_project_brain_components`.
+Record `players_rows`, `players_referenced_by_fks`, `ledger_count`.
+
+**3. Apply 035 explicitly**, in one transaction (`psql -v ON_ERROR_STOP=1 -f 035_wonderland_voice.sql`). Its own guard refuses, and
+changes nothing, unless 034 is applied and last, 035 is not, and none of its 3 relations nor any other `voice_*` relation exists. Its
+own post-check rolls everything back unless each relation is exactly as created, the table carries exactly 1 foreign key (on
+`players`), and it holds no row. Expect exactly ONE `NOTICE: migration_035_precheck: …` and ONE `COMMIT`.
+
+**4. Post-check** (`postcheck.sql`, saved beside step 2's). PASS only if:
+- `relations_035_present = 3`, `relations_035_as_created = 3`, `voice_relations_other = 0`, every relation column `t`;
+- `voice_puid_binding_rows = 0`; `catalog_035_md5` = the measured digest the apply pins;
+- `voice_fk_constraints = 1`; `players_rows` = step 2's; `players_referenced_by_fks` = step 2's + 1;
+- `migration_035_applied = t`; `ledger_count` = step 2's + 1; `ledger_last = 035_wonderland_voice`.
+
+**5. Deploy** the landed code (it lists 035; `migrate()` then finds it applied and does nothing).
+
+**6. Restart the writers.** Watch the first `/voice/join`: one row in `voice_puid_binding` for that player.
+
+## Classifying the store in this window
+The chain classifier (FOUNDER_035_APPLY's ClassifyOn): before step 3, exactly the chain through 034 (rule 6); after step 4, exactly
+through 035 (rule 7). Anything else, `PARTIAL` included, is a STOP.
+
+## Rollback
+**(a) 035 refused in step 3.** Nothing changed (one transaction): the store is at 034. Investigate; do not retry until step 2 passes.
+
+**(b) 035 applied, then must go:** `down.sql`, on a recorded decision, through FOUNDER_035_ROLLBACK (its own ledger-lock and checks).
+- It refuses, and changes nothing, unless 035 is applied, NOTHING after 035 is applied, each of the 3 relations is exactly as 035
+  created it, no other `voice_*` relation exists, and `voice_puid_binding` holds no row.
+- **It never drops a binding.** It takes `LOCK TABLE voice_puid_binding IN SHARE MODE` BEFORE counting, so no writer can add a row
+  between the count and the DROP (the 033 review's (b), applied here from the start).
+- It drops the table WITHOUT CASCADE (a dependent object outside 035 makes the DROP fail, 2BP01, and the script rolls back) and
+  deletes the 035 stamp, in one transaction.
+- **Then deploy code that no longer lists 035**, or the next `migrate()` re-applies it.
+- **Rollback order:** 035's down BEFORE 034's, and both before 033's. 033's and 034's downs refuse while 035 is stamped.
+
+**(c) Last resort:** restore the pre-035 backup into a NEW database first, inspect it, and only then replace anything.
