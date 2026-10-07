@@ -1,5 +1,7 @@
 #include "WonderlandEosVoice.h"
 
+#include "WonderlandBeta.h"   // -WLEosConfig is a developer session's (TryCreate)
+
 #include "WonderlandSocialLive.h"
 
 #include "Containers/Ticker.h"
@@ -82,6 +84,22 @@ namespace WonderlandEosVoice
 	FString HashedPuid(const FString& InProductUserId)
 	{
 		return Hashed(InProductUserId.ToLower());
+	}
+
+	FString DeveloperFileFrom(const TCHAR* CommandLine, bool bDeveloperSession, bool& OutIgnored)
+	{
+		OutIgnored = false;
+		FString Path;
+		if (CommandLine == nullptr || !FParse::Value(CommandLine, TEXT("WLEosConfig="), Path) || Path.IsEmpty())
+		{
+			return FString();
+		}
+		if (!bDeveloperSession)
+		{
+			OutIgnored = true;   // named, and refused: a player session takes the shipped path
+			return FString();
+		}
+		return Path;
 	}
 
 	bool ReadConfig(const FString& Path, FWonderlandEosVoice::FConfig& Out, FString& OutWhy)
@@ -175,8 +193,16 @@ namespace WonderlandEosVoice
 // ---------------------------------------------------------------------------------------------------------------- the service
 TUniquePtr<FWonderlandEosVoice> FWonderlandEosVoice::TryCreate(FWonderlandSocialLiveService* InLive, FString& OutWhy)
 {
-	FString Path;
-	if (!FParse::Value(FCommandLine::Get(), TEXT("WLEosConfig="), Path) || Path.IsEmpty())
+	// A DEVELOPER'S FILE BELONGS TO A DEVELOPER SESSION (2026-10-07). The founder's final-package rule names -WLEosConfig, and a player
+	// build has the SHIPPED path (the backend hands the game-client config out after sign-in): in a player session the switch is
+	// ignored, said once, and the session goes on exactly as if it were absent.
+	bool bIgnored = false;
+	const FString Path = WonderlandEosVoice::DeveloperFileFrom(FCommandLine::Get(), WonderlandBeta::IsDeveloperSession(), bIgnored);
+	if (bIgnored)
+	{
+		UE_LOG(LogTemp, Display, TEXT("WLVOICE: -WLEosConfig ignored: a developer setting, and this is a player session (the shipped path follows)"));
+	}
+	if (Path.IsEmpty())
 	{
 		OutWhy = TEXT("no -WLEosConfig");
 		return nullptr;

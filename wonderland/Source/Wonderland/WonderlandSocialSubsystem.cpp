@@ -570,6 +570,20 @@ namespace WonderlandSocialCommands
 			// THE JUDGE'S CONTROL: a reason that DID carry a value must be caught by the same Contains test
 			const FString Leaky = FString::Printf(TEXT("the server's voice config has no clientSecret-%s"), *Canary);
 			Check(TEXT("EC1"), Leaky.Contains(Canary), TEXT("control: a reason carrying a value IS detected by the value-in-reason judge"));
+			// EC2-EC4 (2026-10-07): -WLEosConfig is a DEVELOPER session's. The same synthetic command line (no file is read) is IGNORED in
+			// a player session (EC2) and read in a developer one (EC3, the control: the session decides, nothing else); with no switch the
+			// shipped path is untouched (EC4).
+			const TCHAR* const PlantedLine = TEXT("-windowed -WLEosConfig=C:/qa/synthetic_eos.env -nosound");
+			bool bPlayerIgnored = false;
+			bool bDeveloperIgnored = true;
+			bool bNoneIgnored = true;
+			const FString PlayerFile = WonderlandEosVoice::DeveloperFileFrom(PlantedLine, false, bPlayerIgnored);
+			const FString DeveloperFile = WonderlandEosVoice::DeveloperFileFrom(PlantedLine, true, bDeveloperIgnored);
+			const FString NoneFile = WonderlandEosVoice::DeveloperFileFrom(TEXT("-windowed -nosound"), false, bNoneIgnored);
+			Check(TEXT("EC2"), PlayerFile.IsEmpty() && bPlayerIgnored, TEXT("a player session IGNORES a named -WLEosConfig file (the shipped path follows)"));
+			Check(TEXT("EC3"), DeveloperFile == TEXT("C:/qa/synthetic_eos.env") && !bDeveloperIgnored,
+				TEXT("control: a developer session reads the SAME line's file, so EC2's outcome is the session gate's alone"));
+			Check(TEXT("EC4"), NoneFile.IsEmpty() && !bNoneIgnored, TEXT("no -WLEosConfig: nothing named, nothing ignored (the shipped path, unchanged)"));
 			UE_LOG(LogTemp, Display, TEXT("WLQA EOSCFG END pass=%d fail=%d"), Passed, Failed);
 		}));
 

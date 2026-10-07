@@ -139,6 +139,10 @@ namespace WonderlandEosVoice
 	WONDERLAND_API FString Hashed(const FString& Id);
 	/** The same for a PUID, lowercased first (the backend normalizes them). */
 	WONDERLAND_API FString HashedPuid(const FString& InProductUserId);
+	/** The developer's EOS file named on a command line (-WLEosConfig=<path>), honoured ONLY in a developer session (2026-10-07: the
+	 *  founder's final-package rule names -WLEosConfig; a player session takes the shipped path). Empty when none is named, or when one is
+	 *  named in a player session -- then OutIgnored is true. */
+	WONDERLAND_API FString DeveloperFileFrom(const TCHAR* CommandLine, bool bDeveloperSession, bool& OutIgnored);
 	/** The founder's EOS file: a .env (EOS_PRODUCT_ID ... EOS_GAME_CLIENT_SECRET) or a JSON object. False: OutWhy names the key. */
 	WONDERLAND_API bool ReadConfig(const FString& Path, FWonderlandEosVoice::FConfig& Out, FString& OutWhy);
 	/** The server's answer ({data} of GET /voice/eos-client-config): schema "wonderland-eos-client-config.v1" and five non-empty strings.
