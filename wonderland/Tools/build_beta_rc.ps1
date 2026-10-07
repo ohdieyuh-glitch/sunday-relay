@@ -345,29 +345,58 @@ if ($leftovers.Count) { throw "R12: the release still carries a removed DLL: $($
 # font and vendor binaries; Epic's staged NOTICES.txt carries one FreeType line. The Unreal Engine EULA's Third Party Software
 # clause names Engine/Source/ThirdParty/Licenses as where those terms live. UAT lists every third-party record for THIS game
 # target (step 1b, before the cook); make_package_notices.py builds THIRD_PARTY_NOTICES.txt from them and FAILS the build if any
-# redistributed binary, font or certificate bundle in the package, loose or packed in the pak (the staged UFS manifest), maps to
-# no record with license terms (exit 1 = a GAP; exit 2 = an ERROR, never mistaken for a gap).
+# redistributed binary, font or certificate bundle in the package, loose or packed in the pak, maps to no record with license terms
+# (exit 1 = a GAP; exit 2 = an ERROR, never mistaken for a gap; exit 3 = the R12 ledger still has BLOCKER rows).
+# v4e (the R12 attack's M5, 2026-10-07): THE PAK AS BUILT. UAT writes Manifest_UFSFiles from the staging list BEFORE it applies
+# Config/DefaultPakFileRules.ini (CreateStagingManifest -> ApplyStagingManifest -> the pak step), so that manifest still names a file a
+# rule excluded (the engine's DroidSansMono.ttf). The notices now judge the pak's own index: UnrealPak -List (it reads the index only),
+# with ABSOLUTE paths (a relative UnrealPak path once wrote into Program Files). The staged manifest is kept beside it as evidence.
 $ufsManifest = Join-Path $src 'Manifest_UFSFiles_Win64.txt'
-if (-not (Test-Path $ufsManifest)) { Say "FAILED: no UFS manifest at $ufsManifest (the files packed in the pak cannot be judged)"; throw "No UFS manifest at $ufsManifest" }
-# v4 (R3 m4): an empty or truncated manifest would judge nothing packed: it must look like the staged pak's own list
-$ufsLines = @(Get-Content $ufsManifest | Where-Object { $_.Trim() })
+if (-not (Test-Path $ufsManifest)) { Say "FAILED: no UFS manifest at $ufsManifest"; throw "No UFS manifest at $ufsManifest" }
+$ufsCopy = Join-Path $noticesWork 'Manifest_UFSFiles_Win64.staged.txt'
+Copy-Item $ufsManifest $ufsCopy
+$pakFile = Join-Path $src 'Wonderland\Content\Paks\Wonderland-Windows.pak'
+if (-not (Test-Path $pakFile)) { throw "No pak at $pakFile" }
+$unrealPak = Join-Path $engineRoot 'Engine\Binaries\Win64\UnrealPak.exe'
+$pakListRaw = Join-Path $noticesWork 'pak_list.txt'
+$pl = Start-Process -FilePath $unrealPak -NoNewWindow -Wait -PassThru -ArgumentList "`"$((Resolve-Path $pakFile).Path)`"", '-List' `
+  -RedirectStandardOutput $pakListRaw -RedirectStandardError (Join-Path $noticesWork 'pak_list.err')
+if ($pl.ExitCode -ne 0) { throw "UnrealPak -List exit $($pl.ExitCode) on $pakFile (see $pakListRaw)" }
+$pakRaw = @(Get-Content $pakListRaw)
+$pakPaths = @($pakRaw | ForEach-Object { $m = [regex]::Match($_, '"(?<p>[^"]+)" offset: \d+, size: \d+ bytes, sha1: [0-9A-Fa-f]{40}'); if ($m.Success) { $m.Groups['p'].Value } })
+$declared = [regex]::Match(($pakRaw -join "`n"), 'LogPakFile: Display: (\d+) files')
+if (-not $declared.Success -or [int]$declared.Groups[1].Value -ne $pakPaths.Count) { throw "UnrealPak -List: $($pakPaths.Count) entries parsed, but the listing declares '$($declared.Groups[1].Value)' (see $pakListRaw)" }
+# v4 (R3 m4), now on the pak's own index: an empty or truncated list would judge nothing packed
 foreach ($anchor in 'Engine/Content/Certificates/ThirdParty/cacert.pem', 'Engine/Content/Internationalization/icudt', 'Engine/Config/BaseEngine.ini') {
-  if (-not @($ufsLines | Where-Object { $_.StartsWith($anchor) }).Count) { throw "The UFS manifest $ufsManifest has no '$anchor' entry: not a whole list" }
+  if (-not @($pakPaths | Where-Object { $_.StartsWith($anchor) }).Count) { throw "The pak index $pakListRaw has no '$anchor' entry: not a whole list" }
 }
-if ($ufsLines.Count -lt 1000) { throw "The UFS manifest $ufsManifest lists only $($ufsLines.Count) files (< 1000): not a whole list" }
+if ($pakPaths.Count -lt 1000) { throw "The pak index lists only $($pakPaths.Count) files (< 1000): not a whole list" }
+# THE HUD's MONO FONT (task3 26105c74): the pak carries the AOSP Apache-2.0 build, and the rule kept the engine's Ascender copy out
+if ($pakPaths -notcontains 'Wonderland/Content/Slate/Fonts/DroidSansMono-AOSP.ttf') { throw "The pak has no Wonderland/Content/Slate/Fonts/DroidSansMono-AOSP.ttf (the HUD's mono face, WonderlandUiStyle.h Mono())" }
+if ($pakPaths -contains 'Engine/Content/Slate/Fonts/DroidSansMono.ttf') { throw "The pak still carries Engine/Content/Slate/Fonts/DroidSansMono.ttf (Config/DefaultPakFileRules.ini did not exclude it)" }
+Say "PAK index: $($pakPaths.Count) entries (UnrealPak -List); the AOSP Droid Sans Mono is in, the engine's DroidSansMono.ttf is out"
+$pakFilesAsBuilt = Join-Path $noticesWork 'pak_files_as_built.txt'
+$pakText = (($pakPaths | ForEach-Object { "$_`t-" }) -join "`n") + "`n"
+[IO.File]::WriteAllText($pakFilesAsBuilt, $pakText, (New-Object Text.UTF8Encoding $false))
+# v4e: BLOCKER rows fail a release candidate (exit 3); only an explicit rehearsal version passes --allow-blockers (same rule as the EULA's)
+$rehearsalVersion = $Version -match '^0\.1\.0-r16reh\d+[a-z]?$'
 $noticesOut = Join-Path $noticesWork 'out'
-$gen = Start-Process -FilePath $python -NoNewWindow -Wait -PassThru `
-  -ArgumentList '-I', "`"$(Get-CommittedCopy 'Tools/make_package_notices.py')`"", '--tps-log', "`"$tpsLog`"", '--engine', "`"$engineRoot`"", '--out', "`"$noticesOut`"", '--shipped', "`"$dst`"", '--ufs-manifest', "`"$ufsManifest`"", '--texts', "`"$(Join-Path $ProjectDir 'Tools\ThirdPartyLicenses')`"" `
+$genArgs = @('-I', "`"$(Get-CommittedCopy 'Tools/make_package_notices.py')`"", '--tps-log', "`"$tpsLog`"", '--engine', "`"$engineRoot`"", '--out', "`"$noticesOut`"",
+             '--shipped', "`"$dst`"", '--ufs-manifest', "`"$pakFilesAsBuilt`"", '--texts', "`"$(Join-Path $ProjectDir 'Tools\ThirdPartyLicenses')`"")
+if ($rehearsalVersion) { $genArgs += '--allow-blockers' }
+$gen = Start-Process -FilePath $python -NoNewWindow -Wait -PassThru -ArgumentList $genArgs `
   -RedirectStandardOutput (Join-Path $noticesWork 'make_package_notices.txt') -RedirectStandardError (Join-Path $noticesWork 'make_package_notices.err')
 $genOut = @(Get-Content (Join-Path $noticesWork 'make_package_notices.txt') -Encoding UTF8)
 $genOut | Select-Object -First 2 | ForEach-Object { Say "NOTICES $_" }
-$genOut | Where-Object { $_ -match '^\s*GAP\s|^ERROR' } | ForEach-Object { Say "NOTICES $_" }
+$genOut | Where-Object { $_ -match '^\s*GAP\s|^ERROR|^R12 BLOCKER' } | ForEach-Object { Say "NOTICES $_" }
 Get-Content (Join-Path $noticesWork 'make_package_notices.err') -Tail 5 -ErrorAction SilentlyContinue | Where-Object { $_ } | ForEach-Object { Say "NOTICES stderr: $_" }
 $gapsLine = $genOut | Where-Object { $_ -match '^GAPS: (\d+)$' } | Select-Object -Last 1
 if ($gen.ExitCode -eq 1 -and $gapsLine -and [int]([regex]::Match($gapsLine, '\d+').Value) -gt 0) { throw "THIRD_PARTY_NOTICES: a redistributed file maps to no third-party record with license terms ($gapsLine; see $noticesWork)" }
+if ($gen.ExitCode -eq 3) { throw "THIRD_PARTY_NOTICES: the R12 ledger still has BLOCKER rows: not a release candidate (see $noticesWork)" }
 if ($gen.ExitCode -ne 0) { throw "THIRD_PARTY_NOTICES: the generator failed (exit $($gen.ExitCode): an ERROR, not a gap; see $noticesWork)" }
+$blockerCount = @($genOut | Where-Object { $_ -match '^R12 BLOCKER \(the ledger' }).Count
 Copy-Item (Join-Path $noticesOut 'THIRD_PARTY_NOTICES.txt') (Join-Path $dst 'THIRD_PARTY_NOTICES.txt')
-Say "NOTICES THIRD_PARTY_NOTICES.txt written: every redistributed binary, font and certificate bundle mapped, loose and packed (GAPS 0)"
+Say "NOTICES THIRD_PARTY_NOTICES.txt written: every redistributed binary, font and certificate bundle mapped, loose and packed (GAPS 0); R12 ledger BLOCKER rows: $blockerCount$(if ($blockerCount) { ' (a REHEARSAL: R12 cannot pass)' })"
 
 # 6c. THE BETA END USER LICENSE AGREEMENT (founder Decision 1, 2026-10-07T11:41Z: "add a dedicated end-user agreement to the
 # distributed package. Do NOT rely only on README wording"). The Unreal Engine EULA's Section 4(c) lets end users use the engine
@@ -413,7 +442,13 @@ $manifest = @(
   "eula_scope   $eulaScope (WONDERLAND_BETA_EULA.APPROVAL.txt at $commitFull)",
   "skip_build   $(if ($SkipBuild) { 'yes: an existing archive re-packed, NOT EVIDENCE' } else { 'no' })",
   "eula_sha256  $((Get-FileHash -Algorithm SHA256 (Join-Path $dst 'WONDERLAND_BETA_EULA.txt')).Hash)",
-  "tps_log_sha256 $((Get-FileHash -Algorithm SHA256 $tpsLog).Hash)"
+  "tps_log_sha256 $((Get-FileHash -Algorithm SHA256 $tpsLog).Hash)",
+  "pak_list_sha256 $((Get-FileHash -Algorithm SHA256 $pakListRaw).Hash)",
+  "ufs_manifest_sha256 $((Get-FileHash -Algorithm SHA256 $ufsCopy).Hash)",
+  "generator_sha256 $((Get-FileHash -Algorithm SHA256 (Get-CommittedCopy 'Tools/make_package_notices.py')).Hash)",
+  "ledger_sha256 $((Get-FileHash -Algorithm SHA256 (Join-Path $ProjectDir 'Tools\ThirdPartyLicenses\R12_RESOLUTIONS.tsv')).Hash)",
+  "notices_summary_sha256 $((Get-FileHash -Algorithm SHA256 (Join-Path $noticesOut 'SUMMARY.txt')).Hash)",
+  "r12_blockers $blockerCount"
 )
 $manifest | Set-Content -Encoding utf8 (Join-Path $ReleaseRoot "RELEASE_MANIFEST_$Version.txt")
 $manifest | ForEach-Object { Say $_ }

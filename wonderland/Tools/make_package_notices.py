@@ -38,8 +38,17 @@ R12_RESOLUTIONS.tsv, is committed in the texts folder and PINNED here by sha256 
 - Its state-A rows ride the existing mechanisms (COMMITTED_TEXTS, SOURCE_TERMS, EXPLICIT_LICENSES).
 - Its state-C rows name removed components. BLOCKER rows are listed in SUMMARY.txt.
 - A ledger row that names a record the run does not list is an ERROR.
+v2.3d (2026-10-07, CORE; the R12 attack's M5, AWAITING INDEPENDENT REVIEW): the build-time safety net.
+- A file the ledger records as REMOVED (state C, a FILE: / PAKFONT: key) that still ships, loose or packed, is an ERROR. It is matched
+  by exact path or by basename, case-insensitive, so a copy that moved folders also fails.
+- The engine's DroidSansMono.ttf (Ascender build 107, a per-computer EULA) no longer maps to the AOSP record: only DroidSansFallback
+  does. A returning engine copy is a GAP, and its C row an ERROR.
+- BLOCKER rows are printed and exit 3 unless --allow-blockers (a rehearsal only: the build passes it for 0.1.0-r16reh<n> versions).
+- The packed list must be the pak AS BUILT: build_beta_rc.ps1 v4e lists the pak's own index (UnrealPak -List). UAT writes
+  Manifest_UFSFiles BEFORE it applies Config/DefaultPakFileRules.ini, so that manifest still names a file a rule excluded.
 R12's verdict is core_r12_gate.py (SECOND's K, unmodified, + the ledger re-verified against the bytes), never this tool's exit.
-Exit: 0 written, every redistributed file mapped; 1 a GAP (written, for inspection); 2 an ERROR (nothing trustworthy written).
+Exit: 0 written, every redistributed file mapped; 1 a GAP (written, for inspection); 2 an ERROR (nothing trustworthy written);
+3 written, no GAP, but the ledger still has BLOCKER rows (not a release candidate; --allow-blockers turns this into 0).
 Writes ONLY into --out (refused if it exists): THIRD_PARTY_NOTICES.txt (UTF-8, CRLF), notices_map.json, SUMMARY.txt.
 """
 import argparse
@@ -83,7 +92,9 @@ SHIPPED_MAP = [
     (r'^Engine/Content/SlateDebug/Fonts/LastResort\.(ttf|ufont)$', r'Engine\Content\SlateDebug\Fonts\LastResort.tps', 'TEXT', r'FONT SOFTWARE LICENSE AGREEMENT'),
     (r'^Engine/Content/(Slate/Fonts|Slate/Old/Tiles|EngineFonts/Faces)/Roboto[^/]*\.(ttf|ufont)$', r'Engine\Content\Slate\Fonts\Roboto.tps', 'TEXT', r'Apache License'),
     (r'^Engine/Content/Slate/Fonts/Noto[^/]*\.(ttf|otf)$', r'Engine\Content\Slate\Fonts\Noto.tps', 'TEXT', r'SIL Open Font License,? Version 1\.1'),
-    (r'^Engine/Content/(Slate/Fonts|EngineFonts/Faces)/DroidSans[^/]*\.(ttf|ufont)$', r'Engine\Build\Android\Java\AndroidOpenSourceProject.tps',
+    # v2.3d: only DroidSansFallback. The engine's DroidSansMono.ttf is Ascender's build 107 (a per-computer EULA in its name table), not
+    # the AOSP Apache-2.0 font; the HUD ships the AOSP build (Wonderland/Content/Slate/Fonts/DroidSansMono-AOSP.ttf, its own VENDOR row)
+    (r'^Engine/Content/(Slate/Fonts|EngineFonts/Faces)/DroidSansFallback[^/]*\.(ttf|ufont)$', r'Engine\Build\Android\Java\AndroidOpenSourceProject.tps',
      'TEXT', r'Apache License,? Version 2\.0'),
     (r'^Engine/Content/Certificates/ThirdParty/cacert\.pem$', r'Engine\Content\Certificates\ThirdParty\cacert.pem.tps', 'TEXT', r'Mozilla Public License,? Version 2\.0'),
     (r'^Engine/Content/Internationalization/icudt64l/.+$', r'Engine\Source\ThirdParty\ICU\ICU_64-1.tps', 'TEXT', r'COPYRIGHT AND PERMISSION NOTICE.*Unicode data files'),
@@ -812,6 +823,21 @@ def collect_files(shipped, ufs_manifest):
     return sorted(files), sorted(packed)
 
 
+def c_rows_shipped(res, files, packed):
+    """v2.3d (R12 attack M5): the keys of ledger rows in state C (a FILE: / PAKFONT: key) whose file still ships, loose or packed,
+    matched by exact path or by basename, case-insensitive."""
+    paths = {f.split('pak:', 1)[-1].replace('\\', '/').lower() for f in list(files) + list(packed)}
+    names = {p.rsplit('/', 1)[-1] for p in paths}
+    hits = []
+    for x in res:
+        kind, _, rel = x['key'].partition(':')
+        if x['state'] == 'C' and kind in ('FILE', 'PAKFONT'):
+            want = rel.replace('\\', '/').lower()
+            if want in paths or want.rsplit('/', 1)[-1] in names:
+                hits.append(x['key'])
+    return hits
+
+
 def build(tps_log, engine, out, shipped, ufs_manifest=None):
     assert not os.path.exists(out), f'{out} exists (never overwritten)'
     engine = os.path.normpath(engine)
@@ -854,6 +880,9 @@ def build(tps_log, engine, out, shipped, ufs_manifest=None):
     attached = attach_committed(rows)
     res = load_resolutions()
     marked, file_dets, blockers = apply_determinations(rows, res)
+    removed_but_shipped = c_rows_shipped(res, files, packed)
+    if removed_but_shipped:
+        raise Fail('the R12 ledger records these as REMOVED (state C), but they ship: ' + '; '.join(removed_but_shipped))
     os.makedirs(out)
     allfiles = files + packed
     sections, req = write_notices(os.path.join(out, 'THIRD_PARTY_NOTICES.txt'), engine, rows, allfiles, file_dets)
@@ -876,7 +905,7 @@ def build(tps_log, engine, out, shipped, ufs_manifest=None):
     lines.append(f'GAPS: {len(gaps)}')
     with open(os.path.join(out, 'SUMMARY.txt'), 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')
-    return lines, gaps
+    return lines, gaps, blockers
 
 
 def selftest():
@@ -924,8 +953,19 @@ def selftest():
         ['Engine/Plugins/NNE/NNERuntimeORT/Binaries/ThirdParty/Onnxruntime/Win64/onnxruntime.dll'],
         rows + [T('Engine\\Plugins\\NNE\\NNERuntimeORT\\Source\\ThirdParty\\Onnxruntime\\Onnxruntime_v1.24.1.tps', 'ONNX Runtime')])[1] != [])
     case('V4 a font INSIDE the pak with no record is a GAP', shipped_check(['pak:Engine/Content/Slate/Fonts/DroidSansMono.ttf'], rows)[1] == ['pak:Engine/Content/Slate/Fonts/DroidSansMono.ttf'])
-    case('V4b ... and Droid maps ONLY to its own AOSP record, never the onnxruntime one', shipped_check(['pak:Engine/Content/Slate/Fonts/DroidSansMono.ttf'],
+    case('V4b ... and Droid maps ONLY to its own AOSP record, never the onnxruntime one', shipped_check(['pak:Engine/Content/Slate/Fonts/DroidSansFallback.ttf'],
          [T('Engine\\Plugins\\NNE\\NNERuntimeORT\\Source\\ThirdParty\\Onnxruntime\\The Android Open Source Project_vort.1.24.1.tps', 'The Android Open Source Project ort.1.24.1')])[1] != [])
+    _aosp_rec = T('Engine\\Build\\Android\\Java\\AndroidOpenSourceProject.tps', 'AndroidOpenSourceProject', text=APACHE)
+    case('V37 v2.3d: the engine DroidSansMono.ttf (Ascender) is a GAP even WITH the AOSP record listed',
+         shipped_check(['pak:Engine/Content/Slate/Fonts/DroidSansMono.ttf'], [_aosp_rec])[1] == ['pak:Engine/Content/Slate/Fonts/DroidSansMono.ttf'])
+    case('V37b v2.3d control: DroidSansFallback with the AOSP record maps clean', shipped_check(['pak:Engine/Content/Slate/Fonts/DroidSansFallback.ttf'], [_aosp_rec])[1] == [])
+    _c_res = [{'key': 'FILE:Engine/Binaries/ThirdParty/DbgHelp/dbghelp.dll', 'state': 'C'},
+              {'key': 'PAKFONT:Engine/Content/Slate/Fonts/DroidSansMono.ttf', 'state': 'C'},
+              {'key': 'FILE:Engine/Binaries/Win64/msvcp140.dll', 'state': 'A'}]
+    case('V36 v2.3d: a C-REMOVED file that still ships (loose, exact path) is named', c_rows_shipped(_c_res, ['Engine/Binaries/ThirdParty/DbgHelp/dbghelp.dll'], []) == ['FILE:Engine/Binaries/ThirdParty/DbgHelp/dbghelp.dll'])
+    case('V36b ... in the pak, and a copy that moved folders, in other case', c_rows_shipped(_c_res, ['Wonderland/Binaries/Win64/DBGHELP.DLL'], ['pak:Engine/Content/Slate/Fonts/DroidSansMono.ttf'])
+         == ['FILE:Engine/Binaries/ThirdParty/DbgHelp/dbghelp.dll', 'PAKFONT:Engine/Content/Slate/Fonts/DroidSansMono.ttf'])
+    case('V36c control: none ships (the AOSP mono is another file); a state-A row never counts', c_rows_shipped(_c_res, ['Engine/Binaries/Win64/msvcp140.dll'], ['pak:Wonderland/Content/Slate/Fonts/DroidSansMono-AOSP.ttf']) == [])
     case('V5 a .ufont and the CA bundle inside the pak are judged', shipped_check(['pak:Engine/Content/EngineFonts/Faces/Planted.ufont', 'pak:Engine/Content/Certificates/ThirdParty/cacert.pem'], rows)[1]
          == ['pak:Engine/Content/Certificates/ThirdParty/cacert.pem', 'pak:Engine/Content/EngineFonts/Faces/Planted.ufont'])
     case('V5b a TEXT-required component with only a URL record is a GAP (URL_OK honoured only where mapped)',
@@ -1221,16 +1261,23 @@ def main():
     ap.add_argument('--shipped', required=True)
     ap.add_argument('--ufs-manifest')
     ap.add_argument('--texts')
+    ap.add_argument('--allow-blockers', action='store_true', help='a REHEARSAL only: ledger BLOCKER rows exit 0, not 3')
     A = ap.parse_args()
     if A.texts:
         TEXTS[0] = os.path.abspath(A.texts)
     try:
-        lines, gaps = build(A.tps_log, A.engine, A.out, A.shipped, A.ufs_manifest)
+        lines, gaps, blockers = build(A.tps_log, A.engine, A.out, A.shipped, A.ufs_manifest)
     except Fail as e:
         print('ERROR: ' + str(e))
         sys.exit(2)
     print('\n'.join(lines))
-    sys.exit(1 if gaps else 0)
+    if gaps:
+        sys.exit(1)
+    if blockers:
+        print(f'R12 BLOCKERS: {len(blockers)} ledger row(s) in state BLOCKER: '
+              + ('allowed for this REHEARSAL (--allow-blockers); R12 cannot pass' if A.allow_blockers else 'not a release candidate (exit 3)'))
+        sys.exit(0 if A.allow_blockers else 3)
+    sys.exit(0)
 
 
 if __name__ == '__main__':
