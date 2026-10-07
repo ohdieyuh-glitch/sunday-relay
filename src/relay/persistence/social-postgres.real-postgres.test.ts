@@ -80,7 +80,9 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
   // was made, and there is nothing to remove. This is teardown, not a test; nothing here could assert.
   afterAll(async () => {
     await (pool === undefined ? Promise.resolve() : removeWhatThisSuiteMade(pool));
-  });
+    // An explicit bound (as #344 gives the migration suites'): the cleanup's deletes share the catch-all's one database with
+    // every other real-postgres file, and can outlast vitest's default 10_000 ms for a hook on a loaded runner.
+  }, 60_000);
 
   it('the loop, written through, comes back whole after a restart', async () => {
     // the loop

@@ -227,7 +227,9 @@ suite('migration 033: the Wonderland social store, applied explicitly after 032 
       await admin.query(`DROP DATABASE IF EXISTS ${name}`).catch(() => undefined);
     }
     await admin?.end().catch(() => undefined);
-  });
+    // An explicit bound (as #344 gives 030-032's): this loop ends, terminates and drops one database per case, which can
+    // outlast vitest's default 10_000 ms for a hook on a loaded runner.
+  }, 60_000);
 
   it('A: at 032, 033 applies: every catalog line it adds is a social_* object (the 47 relations exactly, 42 internal triggers on players), none is removed, and no existing row changes (the ledger gains the stamp alone)', async () => {
     const pool = await at032('clean');
