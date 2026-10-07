@@ -230,6 +230,22 @@ if ($gen.ExitCode -ne 0) { throw "THIRD_PARTY_NOTICES: a redistributed binary or
 Copy-Item (Join-Path $noticesOut 'THIRD_PARTY_NOTICES.txt') (Join-Path $dst 'THIRD_PARTY_NOTICES.txt')
 Say "NOTICES THIRD_PARTY_NOTICES.txt written: every redistributed binary and font mapped (GAPS 0)"
 
+# 6c. THE BETA END USER LICENSE AGREEMENT (founder Decision 1, 2026-10-07T11:41Z: "add a dedicated end-user agreement to the
+# distributed package. Do NOT rely only on README wording"). The Unreal Engine EULA's Section 4(c) lets end users use the engine
+# in a distributed product only "pursuant to an end user license agreement that explicitly disclaims any representations,
+# warranties, conditions, and liabilities related to the Licensed Technology". A DRAFT: legal review is required before any wider
+# or public distribution (WONDERLAND_BETA_EULA.REVIEW_NOTES.md, not shipped). Copied verbatim with Windows line endings; the build
+# FAILS if the file is missing or has lost the Epic disclaimer, the third-party pointer or the no-revocation sentence.
+$eulaSrc = Join-Path $PSScriptRoot 'WONDERLAND_BETA_EULA.txt'
+if (-not (Test-Path $eulaSrc)) { throw "The Beta EULA is missing: $eulaSrc" }
+$eula = [IO.File]::ReadAllText($eulaSrc).Replace("`r`n", "`n")
+foreach ($must in @('END USER LICENSE AGREEMENT', 'EPIC MAKES NO REPRESENTATIONS, WARRANTIES OR CONDITIONS', 'Epic is not responsible for Wonderland',
+                    'THIRD_PARTY_NOTICES.txt', 'does not withdraw or narrow the rights', 'LEGAL REVIEW REQUIRED')) {
+  if (-not $eula.Contains($must)) { throw "The Beta EULA lost a required part: '$must'" }
+}
+[IO.File]::WriteAllText((Join-Path $dst 'WONDERLAND_BETA_EULA.txt'), $eula.Replace("`n", "`r`n"), (New-Object Text.UTF8Encoding $false))
+Say "EULA WONDERLAND_BETA_EULA.txt written (draft: legal review required before wider or public distribution)"
+
 # 7. the zip, and the facts about it
 $zip = Join-Path $ReleaseRoot "$name.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }
@@ -250,7 +266,8 @@ $manifest = @(
   "prereqs      vc_redist.x64.exe staged; VC++ runtime app-local beside Wonderland\Binaries\Win64\Wonderland.exe",
   "excluded     Saved/, *.pdb, RelaySkins/_reference, RelaySkins/_previous, ProjectAvatars/_old, .gitignore, Manifest_*.txt, WorldDesign/Look records but practical_lights.json, Vulkan VkLayer_* debug layers, Engine/Extras/GPUDumpViewer, vc_redist.arm64.exe, retired figures (Apollo*, ArdenInfernal*, Bee, Hagoromo, SkeletonFlame, SkeletonFlameV1 and their cubs), UiArt/Social/social-preview*.json (the developer preview's synthetic people)",
   "installed    Engine/Build/InstalledProjectBuild.txt (saves and logs in %LOCALAPPDATA%\Wonderland\Saved)",
-  "notices      THIRD_PARTY_NOTICES.txt (from the engine's third-party records for this target: make_package_notices.py, GAPS 0) beside Epic's NOTICES.txt"
+  "notices      THIRD_PARTY_NOTICES.txt (from the engine's third-party records for this target: make_package_notices.py, GAPS 0) beside Epic's NOTICES.txt",
+  "eula         WONDERLAND_BETA_EULA.txt (the private-Beta end user license agreement; DRAFT, legal review required before wider or public distribution)"
 )
 $manifest | Set-Content -Encoding utf8 (Join-Path $ReleaseRoot "RELEASE_MANIFEST_$Version.txt")
 $manifest | ForEach-Object { Say $_ }

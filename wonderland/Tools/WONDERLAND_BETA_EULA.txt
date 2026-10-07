@@ -1,0 +1,50 @@
+WONDERLAND PRIVATE BETA - END USER LICENSE AGREEMENT
+DRAFT - LEGAL REVIEW REQUIRED BEFORE ANY WIDER OR PUBLIC DISTRIBUTION
+
+This agreement is for testers of the Wonderland private beta (the "Beta"). The Beta is offered by i.Wonder Laboratories, Inc.
+("i.Wonder", "we", "us"). By installing or using the Beta you agree to this agreement. If you do not agree, do not install or
+use the Beta, and delete it.
+
+1. WHAT YOU MAY DO
+For as long as the private beta runs, we permit you to install the Beta on your own computer, to use it to play and test
+Wonderland, and to tell us what you find. The Beta is free. You may not sell, rent or share copies of it, and you may not use
+it to build or offer another product or service.
+
+2. A TEST VERSION
+The Beta is pre-release software made for testing. It may contain errors, it may change without notice, its saves and data may
+be reset, and we may end the private beta at any time. README_BETA.txt, beside this file, says what the Beta does, what it
+keeps on your PC and what it sends when you sign in to social: read it before you use those features.
+
+3. RIGHTS IN WONDERLAND
+This agreement gives you only the permission in section 1. It does not transfer to you any right in Wonderland's software,
+content or names, and it does not itself state who holds those rights. If any part of Wonderland's software was made available
+to you earlier under another license (for example the MIT License), this agreement does not withdraw or narrow the rights that
+license gave you.
+
+4. THE UNREAL ENGINE AND EPIC GAMES
+Wonderland is built with the Unreal(R) Engine, which Epic Games, Inc. ("Epic") licenses under its own terms. Epic's rights in
+the Unreal Engine are Epic's: this agreement covers Wonderland, and it does not grant, change or limit any of Epic's rights.
+- You may use the Unreal Engine only as it is built into the Beta, in object code and as an inseparable part of the Beta, and
+  only as far as you need it to use the Beta. You may not extract any part of the Unreal Engine from the Beta, or use any part
+  of it in your own products, services or other projects.
+- EPIC MAKES NO REPRESENTATIONS, WARRANTIES OR CONDITIONS OF ANY KIND, EXPRESS OR IMPLIED, ABOUT THE UNREAL ENGINE OR ANY OTHER
+  EPIC LICENSED TECHNOLOGY IN THE BETA, AND EPIC HAS NO LIABILITY TO YOU RELATED TO IT. ON OUR OWN BEHALF AND ON EPIC'S, WE
+  DISCLAIM EVERY REPRESENTATION, WARRANTY, CONDITION AND LIABILITY RELATED TO THAT LICENSED TECHNOLOGY.
+- Epic is not responsible for Wonderland, for its operation or for any support of it. Questions and problem reports about the
+  Beta come to us (README_BETA.txt, REPORTING A PROBLEM), not to Epic.
+- Unreal(R) is a trademark or registered trademark of Epic Games, Inc. in the United States of America and elsewhere.
+
+5. THIRD-PARTY SOFTWARE
+The Beta includes software from third parties, each part under its own license. THIRD_PARTY_NOTICES.txt and NOTICES.txt,
+beside this file, name those parts and carry their notices. Nothing in this agreement changes those licenses or the rights they
+give you.
+
+6. NO WARRANTY, AND LIMITS ON LIABILITY
+TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE BETA IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OR CONDITIONS OF
+ANY KIND, AND NEITHER WE NOR ANY THIRD PARTY WHOSE SOFTWARE IS INCLUDED IN THE BETA IS LIABLE FOR ANY LOSS OR DAMAGE ARISING FROM
+YOUR USE OF THE BETA OR FROM BEING UNABLE TO USE IT. Nothing in this agreement excludes a liability that the law does not allow
+to be excluded.
+
+7. WHEN THIS ENDS
+Your permission ends when the private beta ends, when we tell you it has ended, or if you break this agreement. When it ends,
+stop using the Beta and delete it; README_BETA.txt, UNINSTALL, says how to remove it completely.
