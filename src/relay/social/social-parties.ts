@@ -269,6 +269,8 @@ export function reconcileBlockedParties(state: SocialState): SocialState {
  * WHO A PARTY MEMBER MAY HEAR AND SEE IN PARTY VOICE: the party's members, minus anyone blocked either way with them.
  * The voice roster is built from this (through the party view), and a real provider's audio routing and tokens must be
  * minted from it: two players blocked either way never hear each other, even while the wall holds a brief coexistence.
+ * A provider with ONE room per party (EOS) cannot route around a wall, so the voice route admits only a member walled from
+ * nobody (relay-bridge/wonderland-social-routes.ts voiceAudienceIfAdmitted): for them this is the whole party.
  */
 export function voiceAudienceFor(state: SocialState, viewerId: SocialUserId, partyId: string): SocialUserId[] {
   const party = partyById(state, partyId);

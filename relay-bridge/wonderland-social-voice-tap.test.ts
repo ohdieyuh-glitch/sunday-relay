@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { applySocialOperation } from '../src/relay/social/social-commands';
 import { createInMemoryVoiceBindings, type VoiceBindingStore } from '../src/relay/social/voice-binding';
-import { acceptPartyInvite, inviteToParty } from '../src/relay/social/social-parties';
+import { acceptPartyInvite, inviteToParty, voiceAudienceFor } from '../src/relay/social/social-parties';
 import { createSocialFixture, FIXTURE_USERS as U } from '../src/relay/social/social-fixtures';
 import { blockUser } from '../src/relay/social/social-friends';
 import { partyOf, type SocialState } from '../src/relay/social/social-state';
@@ -99,20 +99,29 @@ describe('party voice: the provider seam', () => {
     expect(asked).toEqual([]);
   });
 
-  it('A BLOCKED PAIR SHARING THE PARTY (old data, a restore) never receive a token naming each other', async () => {
+  it("A BLOCKED PAIR STILL SHARING THE PARTY (old data, a restore) gets NO token: the stranger's 404 for BOTH (review a6d5842c, M2)", async () => {
+    // EOS keeps one room per party and the client plays all of it, so a token is never narrower than the room: a walled member
+    // must not be admitted at all
     const { state, pid } = arena();
     const blocked = blockUser(state, U.LYRA, U.ORION, NOW);
     if (!blocked.ok) throw new Error(blocked.error.message);
+    // both are still members: the wall holds a coexistence that F1 never separated
+    expect(voiceAudienceFor(blocked.value, U.LYRA, pid)).toContain(U.LYRA);
+    expect(voiceAudienceFor(blocked.value, U.ORION, pid)).toContain(U.ORION);
     const { asked, minter } = minterRecorder();
-    const deps = depsFor(blocked.value, minter);
-    expect((await join(deps, U.ORION, pid)).status).toBe(200);
-    expect((await join(deps, U.LYRA, pid)).status).toBe(200);
+    const bindings = createInMemoryVoiceBindings();
+    const deps = depsFor(blocked.value, minter, undefined, bindings);
+    const missing = await join(deps, U.KAI, 'pty_does_not_exist');
+    for (const who of [U.ORION, U.LYRA]) {
+      const r = await join(deps, who, pid);
+      expect(r.status, who).toBe(404);
+      expect(r.body, who).toEqual(missing.body);
+    }
+    expect(asked).toEqual([]);
+    expect(bindings.rows()).toEqual([]); // refused before anything was bound
+    // the third member is walled from nobody: admitted, and hears the whole party
     expect((await join(deps, U.KAI, pid)).status).toBe(200);
-    const audienceOf = (who: string) => asked.find((a) => a.participantId === who)?.audience;
-    expect(audienceOf(U.ORION)).toEqual([U.KAI, U.ORION].sort());
-    expect(audienceOf(U.LYRA)).toEqual([U.KAI, U.LYRA].sort());
-    // the third member keeps the permitted view of both
-    expect(audienceOf(U.KAI)).toEqual([U.KAI, U.LYRA, U.ORION].sort());
+    expect(asked).toEqual([{ partyId: pid, participantId: U.KAI, audience: [U.KAI, U.LYRA, U.ORION].sort(), puid: puidOf(U.KAI) }]);
   });
 
   it("a party id naming something Object.prototype holds is the stranger's 404 with no-store, never a thrown 500 (review a6d5842c, m4)", async () => {
@@ -141,7 +150,7 @@ describe('party voice: the provider seam', () => {
 });
 
 describe('party voice: EOS PUID binding and the uniform 404 (R16 EOS voice backend)', () => {
-  it("the first join binds; another player's PUID, a walled caller and a non-member all answer exactly as a party that does not exist", async () => {
+  it("the first join binds; another player's PUID, a WALLED member, a separated member and a non-member all answer exactly as a party that does not exist", async () => {
     const { state, pid } = arena();
     const { asked, minter } = minterRecorder();
     const deps = depsFor(state, minter);
@@ -149,11 +158,17 @@ describe('party voice: EOS PUID binding and the uniform 404 (R16 EOS voice backe
     const missing = await join(deps, U.ORION, 'pty_does_not_exist');
     const nonMember = await join(deps, U.NOVA, pid);
     const stolen = await join(deps, U.LYRA, pid, puidOf(U.KAI)); // Lyra presents Kai's PUID
-    // Orion (leader) blocks Lyra: F1 removes her -- she is walled out of the party
+    // A WALLED MEMBER (M2): Lyra blocked Orion, and both are still in the party (carried-in data: F1 never ran)
+    const carried = blockUser(state, U.LYRA, U.ORION, NOW);
+    if (!carried.ok) throw new Error(carried.error.message);
+    expect(voiceAudienceFor(carried.value, U.LYRA, pid)).toContain(U.LYRA); // still a member, not a removed one
+    const walled = await join({ ...deps, store: fixedStore(carried.value) }, U.LYRA, pid);
+    // A SEPARATED MEMBER: Orion (leader) blocks Lyra through blocks.add -- F1 removes her from the party
     const removed = applySocialOperation(state, 'blocks.add', U.ORION, { ids: [], body: { targetId: U.LYRA, confirmSharedParty: true }, query: {} }, NOW);
     if (!removed.ok) throw new Error(removed.error.message);
-    const walled = await join({ ...deps, store: fixedStore(removed.value.state) }, U.LYRA, pid);
-    for (const r of [nonMember, stolen, walled]) {
+    expect(voiceAudienceFor(removed.value.state, U.LYRA, pid)).toEqual([]);
+    const separated = await join({ ...deps, store: fixedStore(removed.value.state) }, U.LYRA, pid);
+    for (const r of [nonMember, stolen, walled, separated]) {
       expect(r.status).toBe(404);
       expect(r.body).toEqual(missing.body);
     }
@@ -181,20 +196,26 @@ describe('party voice: EOS PUID binding and the uniform 404 (R16 EOS voice backe
     expect(asked[0].puid).toBe(puidOf(U.KAI));
   });
 
-  it("the answer's audience lists only SERVER-BOUND PUID -> player pairs, only of the walled audience", async () => {
+  it("the answer's audience lists only SERVER-BOUND PUID -> player pairs; across a wall nobody gets an audience at all", async () => {
     const { state, pid } = arena();
-    const blocked = blockUser(state, U.LYRA, U.ORION, NOW); // a carried-in blocked pair, still sharing the party
-    if (!blocked.ok) throw new Error(blocked.error.message);
-    const deps = depsFor(blocked.value, minterRecorder().minter);
+    const bindings = createInMemoryVoiceBindings();
+    const deps = depsFor(state, minterRecorder().minter, undefined, bindings);
     expect((await join(deps, U.LYRA, pid)).body.data.audience).toEqual([{ userId: U.LYRA, puid: puidOf(U.LYRA) }]); // nobody else bound yet
     await join(deps, U.ORION, pid);
-    const kai = await join(deps, U.KAI, pid);
-    const pairs = (kai.body.data.audience as Array<{ userId: string; puid: string }>).map((p) => `${p.userId}=${p.puid}`).sort();
-    expect(pairs).toEqual([U.KAI, U.LYRA, U.ORION].map((u) => `${u}=${puidOf(u)}`).sort());
-    // Orion's audience never names Lyra (or her PUID), and the reverse
-    const orion = await join(deps, U.ORION, pid);
-    expect(JSON.stringify(orion.body.data.audience)).not.toContain(U.LYRA);
-    expect(JSON.stringify(orion.body.data.audience)).not.toContain(puidOf(U.LYRA));
+    const pairsOf = (r: Awaited<ReturnType<typeof join>>) => (r.body.data.audience as Array<{ userId: string; puid: string }>).map((p) => `${p.userId}=${p.puid}`).sort();
+    const everyone = [U.KAI, U.LYRA, U.ORION].map((u) => `${u}=${puidOf(u)}`).sort();
+    expect(pairsOf(await join(deps, U.KAI, pid))).toEqual(everyone);
+    // a block carried in between Lyra and Orion (both still members): neither is admitted, so neither is told the other's PUID;
+    // Kai, walled from nobody, keeps hearing and naming both
+    const blocked = blockUser(state, U.LYRA, U.ORION, NOW);
+    if (!blocked.ok) throw new Error(blocked.error.message);
+    const walledDeps = { ...deps, store: fixedStore(blocked.value) };
+    for (const who of [U.ORION, U.LYRA]) {
+      const r = await join(walledDeps, who, pid);
+      expect(r.status, who).toBe(404);
+      expect(r.body.data, who).toBeUndefined();
+    }
+    expect(pairsOf(await join(walledDeps, U.KAI, pid))).toEqual(everyone);
   });
 });
 

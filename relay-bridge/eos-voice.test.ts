@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { blockUser } from '../src/relay/social/social-friends';
 import { createInMemorySocialStore, type SocialStore } from '../src/relay/social/social-store';
 import { partyOf } from '../src/relay/social/social-state';
 import { createInMemoryVoiceBindings } from '../src/relay/social/voice-binding';
@@ -310,6 +311,21 @@ describe('server-side removal after a committed party departure', () => {
     await w.run('parties.leave', w.people.leader, [w.pid], {}); // the last one out ends the party
     await w.removals.idle();
     expect(w.deletes()).toEqual([w.deleteOf(w.people.b), w.deleteOf(w.people.a), w.deleteOf(w.people.leader)]);
+  });
+
+  it("a WALLED member already in the room (a blocked pair carried into a shared party) leaves it: the next commit's F1 separation is a departure (M2)", async () => {
+    const w = await voicedArena();
+    const carried = blockUser(await w.store.read(), w.people.a, w.people.b, new Date(T0).toISOString());
+    if (!carried.ok) throw new Error(carried.error.message);
+    // a restore: both still members, walled; the bridge's hook feeds the same removal queue
+    const restored = createInMemorySocialStore(carried.value, { afterCommit: (c) => w.removals.onDepartures(c.departures) });
+    expect([partyOf(await restored.read(), w.people.a)?.partyId, partyOf(await restored.read(), w.people.b)?.partyId]).toEqual([w.pid, w.pid]);
+    // any committed change reconciles first: a (the blocker, not the leader) leaves by F1
+    const changed = await restored.apply('presence.update_self', w.people.leader, { ids: [], body: { connected: true }, query: {} }, new Date(T0).toISOString());
+    expect(changed.ok).toBe(true);
+    await w.removals.idle();
+    expect(partyOf(await restored.read(), w.people.a)).toBeUndefined();
+    expect(w.deletes()).toEqual([w.deleteOf(w.people.a)]);
   });
 
   it('a failed removal is retried with backoff, then succeeds; a removal that keeps failing gives up -- logged hashed', async () => {

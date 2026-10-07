@@ -25,8 +25,10 @@
  * only when the deployment sets WONDERLAND_SOCIAL_ENABLED=1.
  *
  * PARTY VOICE. `POST /parties/:id/voice/join {eosProductUserId}` asks the configured provider's minter for a token to the
- * caller's OWN party room, for the voice audience only (voiceAudienceFor: the members minus anyone blocked either way), for the
- * caller's server-bound EOS PUID (src/relay/social/voice-binding.ts). A non-member, a walled caller, and another player's PUID all
+ * caller's OWN party room, for the caller's server-bound EOS PUID (src/relay/social/voice-binding.ts). EOS keeps ONE room per
+ * party and the client plays every participant in it, so the block floor is enforced before anything is bound or minted: only a
+ * member walled from nobody in the party is admitted (voiceAudienceIfAdmitted), and their audience is the whole party. A
+ * non-member, a WALLED member (a blocked pair still sharing a party: carried-in data, a restore) and another player's PUID all
  * answer the stranger's 404; the answer's audience lists only server-bound PUID -> player pairs. With no provider (or no binding
  * store) it is 503 VOICE TRANSPORT PENDING: a connected voice state is never fabricated.
  *
@@ -47,7 +49,8 @@
 
 import type { SocialOperationId } from '../src/relay/social/social-contracts';
 import type { SocialPlayerIdentity, SocialStore } from '../src/relay/social/social-store';
-import { voiceAudienceFor } from '../src/relay/social/social-parties';
+import { voiceAudienceFor, walledFromParty } from '../src/relay/social/social-parties';
+import { partyById, type SocialState } from '../src/relay/social/social-state';
 import { normalizePuid, type VoiceBindingStore } from '../src/relay/social/voice-binding';
 import { bindSocialActor, nativeSocialMayCall, SOCIAL_OPERATIONS } from './wonderland-social-scope';
 import { EOS_CLIENT_CONFIG_SCHEMA, hashId, type EosGameClientConfig } from './eos-voice';
@@ -90,8 +93,10 @@ export interface PartyVoiceGrant {
 }
 
 /**
- * THE PROVIDER SEAM. A real provider (EOS Voice, LiveKit, Vivox ...) implements this; it must admit the caller to the room
- * ONLY as one of `audience`, and never anyone else on their behalf. Absent: party voice is honestly unavailable.
+ * THE PROVIDER SEAM. A real provider (EOS Voice, LiveKit, Vivox ...) implements this; it admits the caller, and never anyone else
+ * on their behalf, to their party's room. The route asks only for a member walled from nobody in the party, so `audience` is the
+ * whole party: a provider with one room per party (EOS) cannot carry a voice across a wall. Absent: party voice is honestly
+ * unavailable.
  */
 export interface PartyVoiceTokenMinter {
   readonly providerId: string;
@@ -351,6 +356,20 @@ function statusFor(code: string): number {
   }
 }
 
+/**
+ * WHO MAY HOLD A TOKEN TO A PARTY'S VOICE ROOM, AND WHOM THEY HEAR (MAIN's internal review a6d5842c, M2). EOS keeps ONE room per
+ * party, and the client plays every participant of the room, bound or not: a token is never narrower than the whole room. So the
+ * block floor is enforced HERE, before anything is bound or minted: a member walled from anybody in the party (a blocked pair
+ * still sharing it -- carried-in data, a restore; blocks.add separates a live one) gets no token at all, the stranger's 404, like
+ * a non-member. Whoever is admitted is walled from nobody, so their audience is the whole party. Null: not admitted.
+ */
+function voiceAudienceIfAdmitted(state: SocialState, userId: string, partyId: string): string[] | null {
+  const party = partyById(state, partyId);
+  if (party === undefined || walledFromParty(state, party, userId)) return null;
+  const audience = voiceAudienceFor(state, userId, partyId);
+  return audience.length === 0 ? null : audience;
+}
+
 export async function handleSocialRoute(request: SocialRouteRequest, deps: SocialRouteDeps): Promise<SocialRouteResult | null> {
   const result = await answerSocialRoute(request, deps);
   return result === null ? null : { ...result, headers: { ...NO_STORE, ...(result.headers ?? {}) } };
@@ -422,11 +441,11 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
   }
   if (op.id === 'parties.voice_join') {
     const [partyId] = idsOf(op.template, pathname);
-    // The audience is the WALLED one: a non-member gets none at all, and a member never gets anyone blocked either way.
-    // Every refusal that concerns WHO the caller is answers exactly as a party that does not exist (the uniform stranger 404).
+    // Admitted: a member walled from nobody in the party (M2); their audience is the whole party. Every refusal that concerns
+    // WHO the caller is answers exactly as a party that does not exist (the uniform stranger 404).
     const notThere = () => err(404, 'not-found', 'party not found');
-    const audience = voiceAudienceFor(await store.read(), actor.actorId, partyId ?? '');
-    if (audience.length === 0) return notThere();
+    const audience = voiceAudienceIfAdmitted(await store.read(), actor.actorId, partyId ?? '');
+    if (audience === null) return notThere();
     if (deps.voice === undefined || deps.voice === null || deps.voiceBindings === undefined || deps.voiceBindings === null) {
       return err(503, 'voice_unavailable', 'VOICE TRANSPORT PENDING');
     }
