@@ -203,6 +203,33 @@ $redist = Test-Path (Join-Path $dst 'Engine\Extras\Redist\en-us\vc_redist.x64.ex
 $appLocal = Test-Path (Join-Path $dst 'Wonderland\Binaries\Win64\vcruntime140.dll')
 if (-not ($redist -and $appLocal)) { throw "Prerequisites missing from the release: vc_redist.x64.exe $redist, app-local vcruntime140.dll $appLocal" }
 
+# 6b. THE THIRD-PARTY NOTICES (founder ruling 2026-10-07: "Preserve third-party software/license obligations independently of the
+# project-level proprietary license"). The package redistributes BSD (Ogg/Vorbis), MIT (MsQuic, ONNX Runtime), Apache-2.0 (oneTBB),
+# font and vendor binaries; Epic's staged NOTICES.txt carries one FreeType line. The Unreal Engine EULA's Third Party Software
+# clause names Engine/Source/ThirdParty/Licenses as where those terms live. UAT lists every third-party record for THIS game
+# target; make_package_notices.py builds THIRD_PARTY_NOTICES.txt from them and FAILS the build if any redistributed binary or
+# font in the package maps to none. UAT is called directly, not through RunUAT.bat (cmd would take the '|' of -Target as a pipe),
+# and both tools write to files (a native stderr line through 2>&1 is a terminating error under ErrorActionPreference Stop).
+$engineRoot = Split-Path (Split-Path (Split-Path (Split-Path $UAT)))
+$noticesWork = Join-Path $ReleaseRoot "notices_$Version"
+if (Test-Path $noticesWork) { Remove-Item -Recurse -Force $noticesWork }
+New-Item -ItemType Directory -Force $noticesWork | Out-Null
+$tpsLog = Join-Path $noticesWork 'ListThirdPartySoftware.log'
+$dotnet = Join-Path $engineRoot 'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe'
+$tps = Start-Process -FilePath $dotnet -WorkingDirectory (Join-Path $engineRoot 'Engine\Binaries\DotNET\AutomationTool') -NoNewWindow -Wait -PassThru `
+  -ArgumentList 'AutomationTool.dll', 'ListThirdPartySoftware', "-Project=`"$Project`"", '-Target=Wonderland|Development|Win64' `
+  -RedirectStandardOutput $tpsLog -RedirectStandardError "$tpsLog.err"
+if ($tps.ExitCode -ne 0) { throw "ListThirdPartySoftware failed with exit code $($tps.ExitCode) (see $tpsLog)" }
+$python = (Get-Command python -ErrorAction Stop).Source
+$noticesOut = Join-Path $noticesWork 'out'
+$gen = Start-Process -FilePath $python -NoNewWindow -Wait -PassThru `
+  -ArgumentList '-I', "`"$(Join-Path $PSScriptRoot 'make_package_notices.py')`"", '--tps-log', "`"$tpsLog`"", '--engine', "`"$engineRoot`"", '--out', "`"$noticesOut`"", '--shipped', "`"$dst`"" `
+  -RedirectStandardOutput (Join-Path $noticesWork 'make_package_notices.txt') -RedirectStandardError (Join-Path $noticesWork 'make_package_notices.err')
+Get-Content (Join-Path $noticesWork 'make_package_notices.txt') | Select-Object -First 1 | ForEach-Object { Say "NOTICES $_" }
+if ($gen.ExitCode -ne 0) { throw "THIRD_PARTY_NOTICES: a redistributed binary or font maps to no third-party record (exit $($gen.ExitCode); see $noticesWork)" }
+Copy-Item (Join-Path $noticesOut 'THIRD_PARTY_NOTICES.txt') (Join-Path $dst 'THIRD_PARTY_NOTICES.txt')
+Say "NOTICES THIRD_PARTY_NOTICES.txt written: every redistributed binary and font mapped (GAPS 0)"
+
 # 7. the zip, and the facts about it
 $zip = Join-Path $ReleaseRoot "$name.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }
@@ -222,7 +249,8 @@ $manifest = @(
   "zip_sha256   $hash",
   "prereqs      vc_redist.x64.exe staged; VC++ runtime app-local beside Wonderland\Binaries\Win64\Wonderland.exe",
   "excluded     Saved/, *.pdb, RelaySkins/_reference, RelaySkins/_previous, ProjectAvatars/_old, .gitignore, Manifest_*.txt, WorldDesign/Look records but practical_lights.json, Vulkan VkLayer_* debug layers, Engine/Extras/GPUDumpViewer, vc_redist.arm64.exe, retired figures (Apollo*, ArdenInfernal*, Bee, Hagoromo, SkeletonFlame, SkeletonFlameV1 and their cubs), UiArt/Social/social-preview*.json (the developer preview's synthetic people)",
-  "installed    Engine/Build/InstalledProjectBuild.txt (saves and logs in %LOCALAPPDATA%\Wonderland\Saved)"
+  "installed    Engine/Build/InstalledProjectBuild.txt (saves and logs in %LOCALAPPDATA%\Wonderland\Saved)",
+  "notices      THIRD_PARTY_NOTICES.txt (from the engine's third-party records for this target: make_package_notices.py, GAPS 0) beside Epic's NOTICES.txt"
 )
 $manifest | Set-Content -Encoding utf8 (Join-Path $ReleaseRoot "RELEASE_MANIFEST_$Version.txt")
 $manifest | ForEach-Object { Say $_ }
