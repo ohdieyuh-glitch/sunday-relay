@@ -1,3 +1,4 @@
+import { JULIUS_WRITE_LOCK, JULIUS_WRITE_UNLOCK } from './julius-serializable'; // H3 (row 13 (i) r5): the stub answers the write lock without recording it
 import { describe, expect, it } from 'vitest';
 
 import type { JuliusApprovalRecord } from '../mission/julius';
@@ -39,6 +40,7 @@ function fakePool(script: { runState: string; runVersion: number; prior?: boolea
   const client = {
     released: false,
     async query(sql: string, values: readonly unknown[] = []) {
+      if (sql === JULIUS_WRITE_LOCK || sql === JULIUS_WRITE_UNLOCK) return { rows: [], rowCount: 1 };
       queries.push({ sql, values });
       if (sql.startsWith('SELECT state,version,mission_id FROM relay_wonderland.julius_runs')) {
         return { rows: [{ state: script.runState, version: script.runVersion, mission_id: 'mission-1' }], rowCount: 1 };

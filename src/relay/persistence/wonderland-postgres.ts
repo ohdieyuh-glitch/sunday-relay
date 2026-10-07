@@ -48,7 +48,15 @@ export const WONDERLAND_MIGRATION_029 = migration('029_julius_project_brain.sql'
 // SERIALIZABLE); triggers that read no relation keep the guarantee. 030 by agreement with the social
 // backend, which takes the next number at its own PR.
 export const WONDERLAND_MIGRATION_030 = migration('030_julius_outbox_event_no_reread.sql');
-export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011, WONDERLAND_MIGRATION_012, WONDERLAND_MIGRATION_013, WONDERLAND_MIGRATION_014, WONDERLAND_MIGRATION_015, WONDERLAND_MIGRATION_016, WONDERLAND_MIGRATION_017, WONDERLAND_MIGRATION_018, WONDERLAND_MIGRATION_019, WONDERLAND_MIGRATION_020, WONDERLAND_MIGRATION_021, WONDERLAND_MIGRATION_022, WONDERLAND_MIGRATION_023, WONDERLAND_MIGRATION_024, WONDERLAND_MIGRATION_025, WONDERLAND_MIGRATION_026, WONDERLAND_MIGRATION_028, WONDERLAND_MIGRATION_029, WONDERLAND_MIGRATION_030] as const;
+// Row 13 (i): no index of julius_runs holds a column a run update changes, so a transition is a HOT
+// update and writes no index entry another run's read has locked. 031 for now: whichever of this and
+// the social backend lands first takes it, and the other renumbers at its own PR.
+export const WONDERLAND_MIGRATION_031 = migration('031_julius_run_transition_hot.sql');
+// Row 13 (i), 030 repaired: deleting an event also forgets its id from the transaction's written-event
+// registry, so an outbox row can no longer name an event deleted earlier in its own transaction. 032 by
+// the founder's ruling (2026-10-04): applied right after 031, in the same window; social is 033.
+export const WONDERLAND_MIGRATION_032 = migration('032_julius_outbox_event_delete_forgets.sql');
+export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011, WONDERLAND_MIGRATION_012, WONDERLAND_MIGRATION_013, WONDERLAND_MIGRATION_014, WONDERLAND_MIGRATION_015, WONDERLAND_MIGRATION_016, WONDERLAND_MIGRATION_017, WONDERLAND_MIGRATION_018, WONDERLAND_MIGRATION_019, WONDERLAND_MIGRATION_020, WONDERLAND_MIGRATION_021, WONDERLAND_MIGRATION_022, WONDERLAND_MIGRATION_023, WONDERLAND_MIGRATION_024, WONDERLAND_MIGRATION_025, WONDERLAND_MIGRATION_026, WONDERLAND_MIGRATION_028, WONDERLAND_MIGRATION_029, WONDERLAND_MIGRATION_030, WONDERLAND_MIGRATION_031, WONDERLAND_MIGRATION_032] as const;
 export interface ClaimedOutbox { outboxId: string; eventId: string; projectId: string; attempts: number; }
 export interface BudgetAmounts { inputTokens: number; cachedTokens: number; outputTokens: number; usdMicros: number; toolCalls: number; computeMs: number; runtimeMs: number; swarmWorkers: number; }
 export interface BudgetReservation { reservationId: string; executionId: string; state: 'RESERVED' | 'COMMITTED' | 'RELEASED' | 'EXPIRED' | 'DENIED'; requested: BudgetAmounts; committed: BudgetAmounts | null; expiresAt: string; receiptId: string | null; denialReason: string | null; }

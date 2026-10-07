@@ -30,15 +30,36 @@ export class JuliusRecoveryPostgresRepository {
    */
   async acceptWorkerResult(input: JuliusWorkerResultInput): Promise<JuliusResultReceipt> {
     return juliusSerializable(this.pool, async (client) => {
-      const existing = await client.query<{ status: string }>('SELECT status FROM relay_wonderland.julius_worker_results WHERE run_id=$1 AND idempotency_key=$2 FOR UPDATE', [input.runId, input.idempotencyKey]);
-      if (existing.rows[0]) return { recorded: false, duplicate: true, taskState: existing.rows[0].status };
-      const task = await client.query<{ state: string; lease_generation: string; project_id: string; run_state: JuliusMissionState }>(`SELECT t.state,t.lease_generation,r.project_id,r.state AS run_state FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.task_id=$1 AND t.run_id=$2 FOR UPDATE OF t,r`, [input.taskId, input.runId]);
-      const row = task.rows[0]; if (!row || row.project_id !== input.projectId) throw new Error('julius_task_not_found');
+      // ONE TASK, FOUND BY ITS PRIMARY KEY ONLY (row 13 (i) candidate r3). With `t.run_id=$2` as an index qual the planner
+      // found it through `julius_task_run_state` (run_id, …), a scan over every task of the run that SSI promoted to a
+      // lock on the whole `julius_tasks` heap page, and a task created on that page by a concurrent run became a pivot at
+      // its events/outbox INSERT (H0 diag). Same condition; as IS NOT DISTINCT FROM no btree can use it.
+      const task = await client.query<{ state: string; lease_generation: string; project_id: string; run_state: JuliusMissionState }>(`SELECT t.state,t.lease_generation,r.project_id,r.state AS run_state FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.task_id=$1 AND t.run_id IS NOT DISTINCT FROM $2::text FOR UPDATE OF t,r`, [input.taskId, input.runId]);
+      const row = task.rows[0];
+      // No task in this run means no prior result either: a result is written only for a task found in its run, and it
+      // cascades with that task. So the answer is the one the duplicate check used to reach after finding nothing.
+      if (!row) throw new Error('julius_task_not_found');
+      /*
+       * THE IDEMPOTENCY CHECK IS THE INSERT (row 13 (i) candidate r4). A read for "no prior result" took a predicate lock
+       * on the results index (the planner scanned julius_result_run_timeline, relation-level while it was small), and the
+       * INSERT that followed wrote into it: two acceptances of different results each read what the other wrote, and the
+       * census killed one at COMMIT (H0 diag on r3, 8 of 9 COMMIT pivots). Inserting first, a miss reads nothing; a
+       * conflict answers "duplicate" exactly as before, whatever the task's state now; and every check below still runs
+       * in this transaction, so a refused result rolls its row back with everything else.
+       */
+      const inserted = await client.query<{ result_id: string }>(`INSERT INTO relay_wonderland.julius_worker_results(result_id,run_id,task_id,lease_generation,worker_id,status,safe_summary,evidence_ids,provider_receipt_ids,idempotency_key,occurred_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11) ON CONFLICT (run_id,idempotency_key) DO NOTHING RETURNING result_id`, [input.resultId,input.runId,input.taskId,input.leaseGeneration,input.workerId,input.status,input.safeSummary,json(input.evidenceIds),json(input.providerReceiptIds),input.idempotencyKey,input.occurredAt]);
+      if (inserted.rows.length === 0) {
+        const existing = await client.query<{ status: string }>('SELECT status FROM relay_wonderland.julius_worker_results WHERE run_id=$1 AND idempotency_key=$2 FOR UPDATE', [input.runId, input.idempotencyKey]);
+        if (existing.rows[0]) return { recorded: false, duplicate: true, taskState: existing.rows[0].status };
+        // A conflict this snapshot cannot see is a 40001 under SERIALIZABLE; should one ever surface otherwise, nothing
+        // may fall through to the task's transition without its result row.
+        throw new Error('worker_result_conflict_unresolved');
+      }
+      if (row.project_id !== input.projectId) throw new Error('julius_task_not_found');
       if (row.run_state === 'CANCELLED' || row.state === 'CANCELLED') throw new Error('result_after_cancellation');
       if (row.state !== 'ACTIVE' || Number(row.lease_generation) !== input.leaseGeneration) throw new Error('stale_worker_result');
-      await client.query(`INSERT INTO relay_wonderland.julius_worker_results(result_id,run_id,task_id,lease_generation,worker_id,status,safe_summary,evidence_ids,provider_receipt_ids,idempotency_key,occurred_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11)`, [input.resultId,input.runId,input.taskId,input.leaseGeneration,input.workerId,input.status,input.safeSummary,json(input.evidenceIds),json(input.providerReceiptIds),input.idempotencyKey,input.occurredAt]);
       const next = input.status === 'SUCCEEDED' ? 'SUCCEEDED' : input.status === 'FAILED' ? 'FAILED' : 'CANCELLED';
-      await client.query(`UPDATE relay_wonderland.julius_tasks SET state=$4,lease_owner=NULL,lease_expires_at=NULL,version=version+1,updated_at=$5 WHERE task_id=$1 AND run_id=$2 AND lease_generation=$3`, [input.taskId,input.runId,input.leaseGeneration,next,input.occurredAt]);
+      await client.query(`UPDATE relay_wonderland.julius_tasks SET state=$4,lease_owner=NULL,lease_expires_at=NULL,version=version+1,updated_at=$5 WHERE task_id=$1 AND (run_id,lease_generation) IS NOT DISTINCT FROM ($2::text,$3::bigint)`, [input.taskId,input.runId,input.leaseGeneration,next,input.occurredAt]);
       return { recorded: true, duplicate: false, taskState: next };
     });
   }
@@ -55,6 +76,13 @@ export class JuliusRecoveryPostgresRepository {
    */
   async recoverExpired(now: string, limit = 100, projectId?: string): Promise<JuliusRecoveryAction[]> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error('invalid_recovery_limit');
+    // ROW 13 (i), THE TASK PATH (P2-1). The sweep runs before every tick of every loop and almost always finds
+    // nothing, yet as a SERIALIZABLE read it held a predicate lock on every ACTIVE task row: an rw edge into every
+    // serializable task write of that tick. So a lock-free probe asks first, in its own READ COMMITTED, READ ONLY
+    // transaction (explicit, so a database whose default is SERIALIZABLE cannot turn it back into a predicate read),
+    // whether any lease has expired. Only then does the serializable sweep below open, unchanged. A lease that expires
+    // just after a negative probe is swept by the next tick, as one that expired during the sweep's own scan always was.
+    if (!await this.anyLeaseExpired(now, projectId)) return [];
     // SQL over the expired rows it selects, and pure planning: a serialization
     // failure is retried (`juliusSerializable`) — the kernel sweeps before every
     // tick, so an unretried 40001 here threw the tick itself.
@@ -80,6 +108,26 @@ export class JuliusRecoveryPostgresRepository {
       }
       return actions;
     });
+  }
+
+  /** Whether any ACTIVE task's lease has expired, read without a predicate lock (READ COMMITTED, READ ONLY). */
+  private async anyLeaseExpired(now: string, projectId?: string): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY');
+      const probe = await client.query<{ expired: boolean }>(
+        `SELECT EXISTS(SELECT 1 FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id
+          WHERE t.state='ACTIVE' AND t.lease_expires_at<=$1 AND ($2::text IS NULL OR r.project_id=$2)) AS expired`,
+        [now, projectId ?? null],
+      );
+      await client.query('COMMIT');
+      return probe.rows[0]?.expired === true;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }
 
