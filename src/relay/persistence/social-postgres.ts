@@ -104,10 +104,13 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
     const state: UserPresence = {
       userId: id,
       connected: false, // never stored: true only while a client is talking
-      availability: pr?.availability ?? 'AVAILABLE',
-      activity: pr?.activity ?? 'IDLE',
-      activityDetail: pr?.activity_detail ?? null,
-      location: pr?.location ?? null,
+      availability: pr?.availability ?? 'AVAILABLE', // the player's CHOICE: durable (the offline preference survives a restart)
+      // WHAT THEY WERE DOING AND WHERE are the last session's, not the player's (Second, 10-07): the world is in memory and empty
+      // after a restart, so a stored location names a context that no longer exists, and on signing in again a friend would see
+      // it -- and the old activity -- until the client reported anew. Neither is in the restart-durable list; both start clean.
+      activity: 'IDLE',
+      activityDetail: null,
+      location: null,
       partyId: null, // from the party record, below
       lastSeenAtIso: lastSeen,
       updatedAtIso: pr === undefined ? lastSeen : iso(pr.updated_at),

@@ -100,6 +100,11 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
     expect((await call('nova', 'POST', `/party-invites/${inviteId}/accept`)).status).toBe(200);
     expect((await call('nova', 'POST', '/privacy', { messagePolicy: 'EVERYONE' })).status).toBe(200);
     expect((await call('kai', 'POST', '/mutes', { targetId: NOVA, voice: true, messages: false })).status).toBe(200);
+    // Kai is somewhere and doing something when the server restarts (Second, 10-07): both are the session's, not the player's
+    expect((await call('kai', 'POST', '/world/join', { target: 'PUBLIC' })).status).toBe(200);
+    const kaiBefore = (await store.read()).users[KAI].presence;
+    expect(kaiBefore.location?.serverName).toBe('Golden Arrival');
+    expect(kaiBefore.activity).not.toBe('IDLE');
     const novaEventsBefore = (await call('nova', 'GET', '/events')).body.data;
     expect(novaEventsBefore.events.length).toBeGreaterThan(0);
 
@@ -113,6 +118,10 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
     // the chosen status survives; "connected" does not -- OFFLINE until the client reports again
     expect(nova.friends[0].presence.onlineState).toBe('OFFLINE');
     expect((await store.read()).users[KAI].presence.availability).toBe('BUSY');
+    // ...but where Kai was and what Kai was doing start clean: the world is empty after a restart, so a stored location would name
+    // a context that no longer exists, and a friend would see it (and the old activity) the moment Kai signed in again
+    const kaiAfter = (await store.read()).users[KAI].presence;
+    expect([kaiAfter.location, kaiAfter.activity, kaiAfter.activityDetail]).toEqual([null, 'IDLE', null]);
     // messages, in order, with Nova's read position (1 of 2 read: 1 unread)
     expect(nova.messages[conversationId].map((m: any) => m.body)).toEqual(['first', 'second']);
     expect(nova.conversations.find((c: any) => c.conversationId === conversationId).unread).toBe(1);
