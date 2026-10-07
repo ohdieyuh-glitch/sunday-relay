@@ -20,6 +20,7 @@ suite('party voice PUID bindings on real PostgreSQL', () => {
   const nonce = randomBytes(5).toString('hex');
   const A = `ghu-a-${nonce}`;
   const B = `ghu-b-${nonce}`;
+  const C = `ghu-c-${nonce}`;
   const P1 = randomBytes(16).toString('hex');
   const P2 = randomBytes(16).toString('hex');
   const NOW = '2026-10-04T08:00:00.000Z';
@@ -28,13 +29,13 @@ suite('party voice PUID bindings on real PostgreSQL', () => {
   beforeAll(async () => {
     pool = new Pool({ connectionString: databaseUrl! });
     await new TransactionalWonderlandDatabase(pool).migrate();
-    for (const id of [A, B]) await pool.query('INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING', [id]);
+    for (const id of [A, B, C]) await pool.query('INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING', [id]);
   }, 60_000);
 
   // Shared databases: remove what this suite made (the binding rows cascade with the players). The pool is absent only when
   // beforeAll's first act threw: then nothing was made. This is teardown, not a test; nothing here could assert.
   const removeWhatThisSuiteMade = async (db: Pool): Promise<void> => {
-    await db.query('DELETE FROM relay_wonderland.players WHERE player_id = ANY($1::text[])', [[A, B]]);
+    await db.query('DELETE FROM relay_wonderland.players WHERE player_id = ANY($1::text[])', [[A, B, C]]);
     await db.end();
   };
   afterAll(async () => {
@@ -67,6 +68,18 @@ suite('party voice PUID bindings on real PostgreSQL', () => {
     expect(owners.rowCount).toBe(1);
     // the table itself refuses a malformed PUID and a second owner
     await expect(pool.query('INSERT INTO relay_wonderland.voice_puid_binding(user_id, puid, session_id, bound_at) VALUES($1, $2, $3, $4)', [B, 'NOT-A-PUID', 's', NOW])).rejects.toThrow();
+  }, 60_000);
+
+  it("one player's first join sent twice at once (a client retry) is never refused: one binds, the other re-reads it as the same (review a6d5842c, m2)", async () => {
+    // two requests are two store objects on one pool. Overlapping, the second INSERT waits on the first's unique key and fails 23505
+    // once it commits; the store then decides again and finds the player's own row. Not overlapping, the second sees it at once.
+    const P4 = randomBytes(16).toString('hex');
+    const raced = await Promise.all([
+      createPostgresVoiceBindings(pool).bind({ userId: C, puid: P4, sessionId: 'sc', nowIso: NOW }),
+      createPostgresVoiceBindings(pool).bind({ userId: C, puid: P4, sessionId: 'sc', nowIso: NOW }),
+    ]);
+    expect([...raced].sort()).toEqual(['bound', 'same']);
+    expect(Object.fromEntries(await createPostgresVoiceBindings(pool).puidsOf([C]))).toEqual({ [C]: P4 });
   }, 60_000);
 
   it('the PostgreSQL social store tells a party departure only AFTER its transaction committed (what voice removal reads)', async () => {
