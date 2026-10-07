@@ -1,0 +1,10 @@
+# The seed of julius-unreal-mission-1: task3 8327165b139fa5f4daee4f3af5c5f9d1ca4116fa (CORE, 10-07: neither written file changes on task3 before the run).
+# <workspace path> <git blob at the pin> <sha256 of the bytes in workspace/>
+wonderland/Source/Wonderland/WonderlandSocialHubPanel.cpp 1ce5a0cebd8b6550103b7ad6dbf86b990805efb3 a1050c45dacdd90b2420ab238a91f74d9f14f16de0c9cc89bfd69f00db43a53e
+wonderland/Source/Wonderland/WonderlandSocialHubPanel.h ee9906e332e7e2f385b5082baa371a09d3a44eba 0ff514c9488326584beffdae211afcb5d430f43eb5b6a003172cc6f516aa6a40
+wonderland/Source/Wonderland/WonderlandSocialTypes.h 7de90f0c8bd06a84815c22f9577e68e04cf015d6 336907b669b94a0323399c77375dd862bd1b6582ebafab39febe0c36e9a7dd22
+wonderland/Source/Wonderland/WonderlandSocialProfilePanel.h d911e4237cf9a9e7588df732a4243049e52bcdb3 183f0760b435eafe9e00be47c2ab2a4a7a94212ac89150e17081188c7842854a
+wonderland/Source/Wonderland/WonderlandSocialSignIn.h 69e3bb8dae757cef547e3f7ab70cd757f1dedce0 db4f4106c82fe8e6ce5833ab418d9e40ae328172737fecb23e02cdbc1d2f5eeb
+wonderland/Source/Wonderland/WonderlandUiStyle.h 1373be3ecd3898eceaf999435c40cca51ca33b38 8ba0f50a554e1b50a4ceebebea953e249ae0b98a862c060a04c8ae0f3157b0c5
+wonderland/Source/Wonderland/WonderlandSocialHubScrollQa.cpp (CORE's QA spec, from _qa_handoff/integration/julius_mission_14c/; not on task3 at the pin) ccf7f2a556340acece4505e7f6a2ec5c765280436614708151e73978880c3870
+.julius/hub-scroll-static.test.mjs (the declared test, generated from the seed by MAIN) 5a1f1bff029c693a7f98c36ee8b9f2d7e61bd34ab7efd966fa42300427e1af28

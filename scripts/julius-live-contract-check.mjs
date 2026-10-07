@@ -136,6 +136,7 @@ const MISSION_LIMITS = Object.freeze({
   // model, participation, research, verification or repair budget is reduced
   // to preserve unused credit.
   'julius-continuous-1': Object.freeze({ spendUsd: 60, repairCycles: 3 }),
+  'julius-unreal-mission-1': Object.freeze({ spendUsd: 30, repairCycles: 3 }), // row 14-Unreal C1: founder 14a (10-07), "up to $30 with up to 3 repair cycles"; lane: the default lab
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
