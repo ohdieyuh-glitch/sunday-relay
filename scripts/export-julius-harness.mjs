@@ -918,7 +918,14 @@ function renderManifest(result) {
     out.push(`- **${entry.category}** — \`${entry.path}\`: ${entry.reason}. Reached only via ${hits.join(', ') || 'nothing'}.`);
   }
   for (const entry of KERNEL_DEPENDANT_EXCLUSIONS) out.push(`- **legacy local execution** — \`${entry.path}\`: ${entry.reason}.`);
-  out.push(`- **pre-Julius schema** — ${result.migrationsExcluded.map((path) => `\`${path.slice(MIGRATION_DIR.length)}\``).join(', ')} under \`${MIGRATION_DIR}\`: registered by the same migration runner and applied in order before the Julius migrations; Julius tables reference \`relay_wonderland.projects\`, \`mission_contracts\` and \`budget_reservations\` defined there, and 017 is the Gauntlet Loop's own storage, deliberately not Julius's.`);
+  // A non-Julius migration numbered after the LAST Julius one (Wonderland Social's 033) is not "pre-Julius": it is listed
+  // on its own line, so neither sentence says something false about it.
+  const lastJulius = Math.max(...result.migrations.map((path) => Number.parseInt(path.slice(MIGRATION_DIR.length), 10)));
+  const before = result.migrationsExcluded.filter((path) => Number.parseInt(path.slice(MIGRATION_DIR.length), 10) < lastJulius);
+  const after = result.migrationsExcluded.filter((path) => !before.includes(path));
+  const names = (paths) => paths.map((path) => `\`${path.slice(MIGRATION_DIR.length)}\``).join(', ');
+  out.push(`- **pre-Julius schema** — ${names(before)} under \`${MIGRATION_DIR}\`: registered by the same migration runner and applied in order before the Julius migrations; Julius tables reference \`relay_wonderland.projects\`, \`mission_contracts\` and \`budget_reservations\` defined there, and 017 is the Gauntlet Loop's own storage, deliberately not Julius's.`);
+  if (after.length > 0) out.push(`- **non-Julius schema after the Julius migrations** — ${names(after)} under \`${MIGRATION_DIR}\`: registered by the same migration runner and applied in order after them; Wonderland Social's own storage (additive \`relay_wonderland.social_*\` tables and party voice's \`voice_puid_binding\`, referencing only \`relay_wonderland.players\`), deliberately not Julius's.`);
   out.push('');
   out.push('Named "julius", outside the harness (no kernel dependency, or CI/test drivers):');
   out.push('');
