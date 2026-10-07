@@ -684,7 +684,9 @@ cmd_run() {
   # reached, so an attempt that dies mid-mission still leaves the fact behind. It is local: a
   # GitHub-hosted dispatch cannot see it, and the runbook says so.
   local digest marker_dir stamp
-  digest=$(sha256sum "$CONTRACT" | cut -d' ' -f1)
+  # Read from stdin: given a Windows path, Git Bash's sha256sum prints the digest with a leading '' (an escaped file name),
+  # and the marker directory would then never match the one a POSIX path wrote.
+  digest=$(sha256sum < "$CONTRACT" | cut -d' ' -f1)
   [ -n "$digest" ] || refuse 'contract_digest_unavailable'
   marker_dir="$MARKERS/$digest"
   if compgen -G "$marker_dir/attempted-*" >/dev/null; then

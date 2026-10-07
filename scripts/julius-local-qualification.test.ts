@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ANTHROPIC_CREDENTIAL_ENV_NAMES, CLAUDE_AUTH_MODES } from '../relay-bridge/hosted-coding-agent/hosted-auth';
@@ -397,5 +398,32 @@ describe('the refusals that stand before anything runs', () => {
     const install = bash('.github/julius-live-hermes.sh', [], { ...base, HERMES_PHASE: 'install', HERMES_PYTHON: 'false', HERMES_VENV_DIR: join(home, 'venv') });
     expect(install.status).not.toBe(0);
     expect(install.stderr).not.toContain('missing XAI_API_KEY');
+  });
+});
+
+/**
+ * THE ATTEMPT MARKER IS KEYED BY THE CONTRACT'S DIGEST, WHATEVER ITS PATH LOOKS LIKE. Given a file name holding a
+ * backslash (any Windows path in Git Bash, or a POSIX name holding one), `sha256sum FILE` escapes its output line and
+ * prints the digest behind a leading backslash. The marker directory would then differ from the one the same contract
+ * wrote under a plain path, and "a paid mission attempted once is not attempted again by accident" would fail open.
+ * Reading the contract from stdin prints the bare digest.
+ */
+describe('the attempt marker is keyed by the contract digest on any path', () => {
+  it('reads the digest from stdin; given a backslash path, the old form prefixes a backslash', () => {
+    const code = codeLines(launcher);
+    expect(code.some((line) => line.includes(`digest=$(sha256sum < "$CONTRACT" | cut -d' ' -f1)`)), 'the digest is read from stdin').toBe(true);
+    expect(code.some((line) => line.includes('sha256sum "$CONTRACT"')), 'no digest is read from a path argument').toBe(false);
+    const dir = mkdtempSync(join(tmpdir(), 'julius-digest-'));
+    const BACKSLASH = String.fromCharCode(92);
+    const file = process.platform === 'win32' ? join(dir, 'contract.json') : join(dir, `back${BACKSLASH}slash.json`);
+    writeFileSync(file, '{"mission":"probe"}\n');
+    const want = createHash('sha256').update(readFileSync(file)).digest('hex');
+    const digestBy = (script: string): string => {
+      const run = spawnSync('bash', ['-c', script, '_', file], { encoding: 'utf8' });
+      expect(run.status, run.stderr).toBe(0);
+      return run.stdout.trim();
+    };
+    expect(digestBy(`sha256sum < "$1" | cut -d' ' -f1`), "the launcher's form").toBe(want);
+    expect(digestBy(`sha256sum "$1" | cut -d' ' -f1`), 'the old form, under a backslash path').toBe(BACKSLASH + want);
   });
 });
