@@ -78,6 +78,8 @@ export interface SocialRouteResult {
 export interface SocialSessionFacts {
   readonly sessionId: string;
   readonly participantId: string;
+  /** When the session was issued (ms since the epoch), if the session store says: the voice re-bind's "newest session wins" (m3). */
+  readonly issuedAtMs?: number;
   /** The capabilities the session holds (a desktop sign-in's `native_social` session holds `social`). */
   readonly capabilities: readonly string[];
   /** Which native scope verified it. Absent means `native_world` (the dev server and the older tests). */
@@ -422,11 +424,12 @@ async function answerVoiceJoin(input: {
   readonly deps: SocialRouteDeps;
   readonly actorId: string;
   readonly sessionId: string;
+  readonly sessionIssuedAtIso: string | null;
   readonly partyId: string;
   readonly body: Readonly<Record<string, unknown>>;
   readonly nowIso: string;
 }): Promise<SocialRouteResult> {
-  const { store, deps, actorId, sessionId, partyId, nowIso } = input;
+  const { store, deps, actorId, sessionId, sessionIssuedAtIso, partyId, nowIso } = input;
   // Every refusal that concerns WHO the caller is answers exactly as a party that does not exist (the uniform stranger 404).
   const notThere = () => err(404, 'not-found', 'party not found');
   const audience = voiceAudienceIfAdmitted(await store.read(), actorId, partyId);
@@ -456,7 +459,7 @@ async function answerVoiceJoin(input: {
     } catch (error) {
       return failed('Party voice could not read your voice identity right now.', 'the binding could not be read', error);
     }
-    const predicted = decideVoiceBinding({ userId: actorId, puid, sessionId, mine, owner });
+    const predicted = decideVoiceBinding({ userId: actorId, puid, sessionId, sessionIssuedAtIso, mine, owner });
     if (predicted === 'rebound' && mine !== null) {
       try {
         await voice.removeFromRoom({ partyId, participantId: actorId, puids: [mine.puid] });
@@ -470,7 +473,7 @@ async function answerVoiceJoin(input: {
     }
     let outcome: VoiceBindingOutcome;
     try {
-      outcome = await bindings.bind({ userId: actorId, puid, sessionId, nowIso });
+      outcome = await bindings.bind({ userId: actorId, puid, sessionId, sessionIssuedAtIso, nowIso });
     } catch (error) {
       return failed('Party voice could not record your voice identity right now.', 'the bind failed', error);
     }
@@ -597,7 +600,11 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
   }
   if (op.id === 'parties.voice_join') {
     const [partyId = ''] = idsOf(op.template, pathname);
-    return answerVoiceJoin({ store, deps, actorId: actor.actorId, sessionId: facts.sessionId, partyId, body, nowIso });
+    return answerVoiceJoin({
+      store, deps, actorId: actor.actorId, sessionId: facts.sessionId,
+      sessionIssuedAtIso: typeof facts.issuedAtMs === 'number' ? new Date(facts.issuedAtMs).toISOString() : null,
+      partyId, body, nowIso,
+    });
   }
   if (op.id === 'voice.eos_client_config') {
     // THE GAME CLIENT'S EOS CONFIG: to this signed-in player only, never in a log line; no-store, as every social answer.

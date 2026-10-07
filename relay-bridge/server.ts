@@ -749,7 +749,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             verifySession: (token, now) => {
               const verified = browserSessions.verifyNativeSocialSession({ token, now });
               return verified.ok
-                ? { sessionId: verified.sessionId, participantId: verified.participantId, capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social' }
+                ? { sessionId: verified.sessionId, participantId: verified.participantId, capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social', issuedAtMs: verified.issuedAt }
                 : null;
             },
             identify: async (participantId) => {

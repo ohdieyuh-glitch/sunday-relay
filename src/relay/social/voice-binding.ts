@@ -36,18 +36,24 @@ export type VoiceBindingOutcome = 'bound' | 'same' | 'rebound' | 'refused';
  *   refused  the PUID is another player's; or the caller asks for a different PUID within the session that bound the old one
  *   same     the caller's own PUID again (nothing changes)
  *   bound    the caller's first binding
- *   rebound  the caller's new PUID, from another session than the one that bound the old (not provably a NEWER one: see above)
+ *   rebound  the caller's new PUID, from a session issued AFTER the current binding was made: the NEWEST session wins (m3). When
+ *            the session's issue time is unknown (the dev server, an older caller), from another session than the one that bound
+ *            the old one.
  */
-export function decideVoiceBinding(input: { readonly userId: string; readonly puid: string; readonly sessionId: string; readonly mine: VoiceBindingRow | null; readonly owner: string | null }): VoiceBindingOutcome {
+export function decideVoiceBinding(input: { readonly userId: string; readonly puid: string; readonly sessionId: string; readonly sessionIssuedAtIso?: string | null; readonly mine: VoiceBindingRow | null; readonly owner: string | null }): VoiceBindingOutcome {
   if (input.owner !== null && input.owner !== input.userId) return 'refused';
   if (input.mine === null) return 'bound';
   if (input.mine.puid === input.puid) return 'same';
-  return input.mine.sessionId === input.sessionId ? 'refused' : 'rebound';
+  if (input.mine.sessionId === input.sessionId) return 'refused';
+  // NEWEST SESSION WINS (m3; CORE's client contract, 10-07): an older live session asking again is refused and the binding stays,
+  // so two live clients of one player cannot flip it on every join. Not newer than the binding = refused.
+  if (input.sessionIssuedAtIso != null && !(Date.parse(input.sessionIssuedAtIso) > Date.parse(input.mine.boundAtIso))) return 'refused';
+  return 'rebound';
 }
 
 export interface VoiceBindingStore {
   /** Bind (or confirm, or re-bind) the caller's PUID by decideVoiceBinding. The PUID must already be normalised. */
-  bind(input: { readonly userId: string; readonly puid: string; readonly sessionId: string; readonly nowIso: string }): Promise<VoiceBindingOutcome>;
+  bind(input: { readonly userId: string; readonly puid: string; readonly sessionId: string; readonly sessionIssuedAtIso?: string | null; readonly nowIso: string }): Promise<VoiceBindingOutcome>;
   /** The caller's binding now (PUID, the session that bound it, when), or null: decideVoiceBinding's `mine`, read before a bind. */
   bindingOf(userId: string): Promise<VoiceBindingRow | null>;
   /** Who holds this PUID now, or null: decideVoiceBinding's `owner`. The PUID must already be normalised. */
@@ -67,9 +73,9 @@ export function createInMemoryVoiceBindings(): VoiceBindingStore & { readonly ro
   };
   const ownerNow = (puid: string): string | null => [...byUser.values()].find((r) => r.puid === puid)?.userId ?? null;
   return {
-    bind: ({ userId, puid, sessionId, nowIso }) =>
+    bind: ({ userId, puid, sessionId, sessionIssuedAtIso, nowIso }) =>
       serial(() => {
-        const outcome = decideVoiceBinding({ userId, puid, sessionId, mine: byUser.get(userId) ?? null, owner: ownerNow(puid) });
+        const outcome = decideVoiceBinding({ userId, puid, sessionId, sessionIssuedAtIso, mine: byUser.get(userId) ?? null, owner: ownerNow(puid) });
         if (outcome === 'bound' || outcome === 'rebound') byUser.set(userId, { userId, puid, sessionId, boundAtIso: nowIso });
         return outcome;
       }),

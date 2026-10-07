@@ -54,6 +54,29 @@ describe('the binding rule (memory store; the PostgreSQL store applies the same 
     expect([await b.bindingOf('ghu-2'), await b.ownerOf(P2)]).toEqual([null, 'ghu-1']);
   });
 
+  it('NEWEST SESSION WINS (m3): a different PUID re-binds only from a session issued AFTER the binding; an older one is refused, the binding kept', async () => {
+    const b = createInMemoryVoiceBindings();
+    const T0 = '2026-10-04T08:00:00.000Z';
+    const T1 = '2026-10-04T09:00:00.000Z';
+    const T2 = '2026-10-04T10:00:00.000Z';
+    // s-old was issued at T0, s-new at T2; the first binding is made at T1 by s-old.
+    expect(await b.bind({ userId: 'ghu-1', puid: P1, sessionId: 's-old', sessionIssuedAtIso: T0, nowIso: T1 })).toBe('bound');
+    // a NEWER session (issued after the binding) re-binds
+    expect(await b.bind({ userId: 'ghu-1', puid: P2, sessionId: 's-new', sessionIssuedAtIso: T2, nowIso: T2 })).toBe('rebound');
+    // the OLDER live session asking for its PUID back is refused, and the binding stays the newer one's
+    expect(await b.bind({ userId: 'ghu-1', puid: P1, sessionId: 's-old', sessionIssuedAtIso: T0, nowIso: T2 })).toBe('refused');
+    expect(Object.fromEntries(await b.puidsOf(['ghu-1']))).toEqual({ 'ghu-1': P2 });
+    // a session issued exactly at the binding's time is not newer: refused
+    expect(decideVoiceBinding({ userId: 'u', puid: P1, sessionId: 's2', sessionIssuedAtIso: T1, owner: null,
+      mine: { userId: 'u', puid: P2, sessionId: 's1', boundAtIso: T1 } })).toBe('refused');
+    // unknown issue time (the dev server, an older caller): another session suffices, as before
+    expect(decideVoiceBinding({ userId: 'u', puid: P1, sessionId: 's2', sessionIssuedAtIso: null, owner: null,
+      mine: { userId: 'u', puid: P2, sessionId: 's1', boundAtIso: T1 } })).toBe('rebound');
+    // the same session never re-binds, whatever its issue time
+    expect(decideVoiceBinding({ userId: 'u', puid: P1, sessionId: 's1', sessionIssuedAtIso: T2, owner: null,
+      mine: { userId: 'u', puid: P2, sessionId: 's1', boundAtIso: T1 } })).toBe('refused');
+  });
+
   it('decideVoiceBinding, case by case', () => {
     const mine = { userId: 'u', puid: P1, sessionId: 's1', boundAtIso: NOW };
     expect(decideVoiceBinding({ userId: 'u', puid: P1, sessionId: 's1', mine: null, owner: 'other' })).toBe('refused');

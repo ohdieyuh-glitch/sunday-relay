@@ -27,7 +27,7 @@ const rowOf = (row: BindingRowShape | undefined): VoiceBindingRow | null =>
  */
 export function createPostgresVoiceBindings(pool: Pool): VoiceBindingStore {
   /** One attempt, in its own transaction; any failure is rolled back and thrown. */
-  const bindOnce = async ({ userId, puid, sessionId, nowIso }: Parameters<VoiceBindingStore['bind']>[0]): Promise<VoiceBindingOutcome> => {
+  const bindOnce = async ({ userId, puid, sessionId, sessionIssuedAtIso, nowIso }: Parameters<VoiceBindingStore['bind']>[0]): Promise<VoiceBindingOutcome> => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -37,7 +37,7 @@ export function createPostgresVoiceBindings(pool: Pool): VoiceBindingStore {
       );
       const ownerRows = await client.query<{ user_id: string }>('SELECT user_id FROM relay_wonderland.voice_puid_binding WHERE puid = $1', [puid]);
       const mine = rowOf(mineRows.rows[0]);
-      const outcome = decideVoiceBinding({ userId, puid, sessionId, mine, owner: ownerRows.rows[0]?.user_id ?? null });
+      const outcome = decideVoiceBinding({ userId, puid, sessionId, sessionIssuedAtIso, mine, owner: ownerRows.rows[0]?.user_id ?? null });
       if (outcome === 'bound') {
         await client.query('INSERT INTO relay_wonderland.voice_puid_binding(user_id, puid, session_id, bound_at) VALUES($1, $2, $3, $4)', [userId, puid, sessionId, nowIso]);
       } else if (outcome === 'rebound') {

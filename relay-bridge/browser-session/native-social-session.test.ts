@@ -37,7 +37,7 @@ describe('a native social session', () => {
     expect(minted.session.participantId).toBe(PLAYER);
     expect(minted.session.expiresAt).toBe(T0 + NATIVE_SESSION_TTL_MS);
     expect(store.verifyNativeSocialSession({ token: minted.session.token, now: T0 + 1 })).toEqual({
-      ok: true, sessionId: minted.session.sessionId, participantId: PLAYER,
+      ok: true, sessionId: minted.session.sessionId, participantId: PLAYER, issuedAt: T0,
     });
   });
 
