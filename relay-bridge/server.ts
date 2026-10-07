@@ -79,6 +79,8 @@ import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
+import { handleWonderlandJuliusRoute, isWonderlandJuliusRoute, type WonderlandJuliusWorld } from './wonderland-julius-routes';
+import { wonderlandJuliusWorld } from './wonderland-julius-world';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute, SIGNIN_START_RATE } from './wonderland-native-signin-routes';
 import { createCommandBudgets, createPresenceLease, endSocialPresence, handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
@@ -249,6 +251,12 @@ export function createBridgeServer(
   brainStore: BrainMemoryStore | null = null,
   /** Authoritative Wonderland state. Inject a durable restored instance in production. */
   wonderlandBackend: WonderlandBackend | null = null,
+  /**
+   * The Julius world routes' reads (row 12). Absent in production, where they are
+   * composed lazily over the one Julius pool, read-only; injected only by a test
+   * that proves the routes over real HTTP without a database.
+   */
+  juliusWorld: WonderlandJuliusWorld | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -323,6 +331,22 @@ export function createBridgeServer(
       log: (line) => console.warn(`[relay-bridge] ${line}`),
     });
     return projectBrainPortsCache;
+  };
+  /**
+   * THE JULIUS WORLD ROUTES' READS (row 12, R3'): membership, the run as a world
+   * draws it, and Julius's own result -- on the same Julius pool as the Project
+   * Brain and native pairing, so the world reads runs where Julius writes them,
+   * and every request's reads inside ONE read-only transaction
+   * (wonderland-julius-world.ts). Lazy, so a bridge that never serves a world opens
+   * nothing; no database, no world, and the routes answer 503.
+   */
+  let juliusWorldCache: WonderlandJuliusWorld | null = juliusWorld;
+  const resolveJuliusWorld = (): WonderlandJuliusWorld | null => {
+    if (juliusWorldCache !== null) return juliusWorldCache;
+    const pool = juliusPool();
+    if (pool === null) return null;
+    juliusWorldCache = wonderlandJuliusWorld(pool);
+    return juliusWorldCache;
   };
   /**
    * SIGN IN WITH GITHUB. The CSRF state store lives in memory beside the
@@ -790,6 +814,34 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
           }, projectBrainPorts(), { request: req, response: res, headers: cors });
           if (brainResult !== null && brainResult !== 'streaming') send(res, brainResult.status, brainResult.body, cors);
           return;
+        }
+
+        /**
+         * THE JULIUS WORLD ROUTES (row 12, R3'): GET /wonderland/julius/hydrate,
+         * /events?mode=page and /result -- read-only, for the player's own project.
+         * In front of the Wonderland family, which claims every `/wonderland/` path.
+         * Only a GET is theirs: any other method on these paths reaches the family
+         * exactly as it did before they existed. See wonderland-julius-routes.ts.
+         */
+        if (method === 'GET' && isWonderlandJuliusRoute(path.replace('/relay-api', ''))) {
+          const worldResult = await handleWonderlandJuliusRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            url: (req.url ?? '/').replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+            origin,
+            now: Date.now(),
+          }, {
+            sessions: browserSessions,
+            world: resolveJuliusWorld(),
+            operatorToken: process.env.RELAY_BRIDGE_API_TOKEN,
+            log: (line) => console.warn(`[relay-bridge] ${line}`),
+          });
+          if (worldResult !== null) {
+            // A player's mission state: never kept by a cache on the way.
+            send(res, worldResult.status, worldResult.body, { ...cors, 'cache-control': 'no-store' });
+            return;
+          }
         }
 
         if (isWonderlandRoute(path.replace('/relay-api', ''))) {
