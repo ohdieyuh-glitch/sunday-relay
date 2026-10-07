@@ -462,7 +462,7 @@ async function answerVoiceJoin(input: {
         await voice.removeFromRoom({ partyId, participantId: actorId, puids: [mine.puid] });
       } catch (error) {
         return failed(
-          'Party voice could not take your previous device out of the room; nothing was changed. Try again.',
+          'Party voice could not take your previous device out of the room, so your voice identity was not changed. Try again.',
           `re-bind held, the replaced PUID is not confirmed out of the room (replaced=${hashPuid(mine.puid)})`,
           error,
         );
