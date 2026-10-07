@@ -1,11 +1,11 @@
 # Migration 033 on the LIVE Julius database: runbook (CANDIDATE, 2026-10-07)
 
-Migration `033_wonderland_social` creates the Wonderland social store (R16) inside `relay_wonderland`. It creates 47 relations and changes no existing row:
+Migration `033_wonderland_social` creates the Wonderland social store (R16) inside `relay_wonderland`. It creates 47 relations, writes NO row and changes no existing row:
 - 17 tables: `social_privacy`, `social_friendships`, `social_friend_requests`, `social_blocks`, `social_mutes`, `social_reports`, `social_recent_players`, `social_conversations`, `social_conversation_members`, `social_messages`, `social_parties`, `social_party_members`, `social_party_invites`, `social_profiles`, `social_presence`, `social_meta`, `social_events`;
 - 1 sequence, `social_events_seq_seq` (behind `social_events.seq bigserial`);
 - 29 indexes: the 17 primary keys, `social_messages_conversation_id_sequence_key` (its UNIQUE constraint) and 11 named ones, 4 of them unique;
 - 25 foreign keys: 21 reference `relay_wonderland.players` (001), 2 `social_conversations` and 2 `social_parties`;
-- one row, `social_meta ('next_serial', 1)`, where the social ids start.
+- NO row: a bootstrap leaves every table empty (Julius's `julius-bootstrap-empty-store` holds it). `social_meta`'s `next_serial`, where the social ids start, is written by the store with its first minted id (an upsert).
 
 The one existing table it touches is `players`:
 - each of the 21 foreign keys gives it two internal RI triggers (42 in all);
@@ -92,7 +92,7 @@ STOP unless:
 - `other_client_sessions = 0`;
 - `relations_033_expected = 47`, `relations_033_present = 0`, `relations_033_as_created = 0` and `social_relations_other = 0`;
 - every relation column, `social_privacy` to `social_events_at`, is `f`;
-- every `*_rows` column, `social_meta_seed_matches` and `catalog_033_md5` are empty (NULL: nothing exists to count);
+- every `*_rows` column and `catalog_033_md5` are empty (NULL: nothing exists to count);
 - `social_fk_constraints = 0`;
 - `migration_031_applied = t`, `migration_032_applied = t` and `migration_033_applied = f`;
 - `ledger_last = 032_julius_outbox_event_delete_forgets` (nothing after 032 is applied).
@@ -112,7 +112,7 @@ docker exec -i julius-postgres psql -U julius -d julius -v ON_ERROR_STOP=1 < src
   - a relation is not exactly as 033 creates it (its kind; the sequence owned by `social_events.seq`; each index on its table, primary or unique as written, valid);
   - another `social_*` relation exists;
   - the social tables do not carry exactly 25 foreign keys, 21 of them on `players`;
-  - `social_meta` does not hold exactly its seed row.
+  - `social_meta` holds a row (033 writes none).
 - Locks: each `CREATE TABLE ... REFERENCES players` takes SHARE ROW EXCLUSIVE on `players` until COMMIT.
   - Every `players` INSERT, UPDATE and DELETE waits behind it, and the apply waits behind any open transaction that wrote `players`.
   - Every other lock is on a table this transaction creates.
@@ -129,7 +129,7 @@ PASS only if all of these hold:
 - `other_client_sessions = 0`;
 - `relations_033_expected = 47`, `relations_033_present = 47`, `relations_033_as_created = 47` and `social_relations_other = 0`;
 - every relation column, `social_privacy` to `social_events_at`, is `t`;
-- every `*_rows` column is `0` but `social_meta_rows = 1`, and `social_meta_seed_matches = t`;
+- every `*_rows` column is `0` (033 writes no row);
 - `players_rows` equals step 2's, `players_referenced_by_fks` = step 2's + 21, and `social_fk_constraints = 25`;
 - `migration_031_applied = t`, `migration_032_applied = t` and `migration_033_applied = t`;
 - `ledger_count` = step 2's + 1, and `ledger_last = 033_wonderland_social`.
@@ -168,7 +168,7 @@ docker exec -i julius-postgres psql -U julius -d julius < docs/julius-migrations
 - It refuses, changing nothing, unless:
   - 033 is applied, and nothing after 033 is applied;
   - each of the 47 relations is exactly as 033 created it, and no other `social_*` relation exists;
-  - the social tables hold nothing but 033's seed: no row in any social table, `social_meta` = `('next_serial', 1)` alone, and `social_events_seq_seq` never used.
+  - the social tables hold no data: no row in any social table (a `next_serial` row in `social_meta` included: ids were minted), and `social_events_seq_seq` never used.
 - **This script never drops social data.** 030's down refuses where its restore would be invalid, and 031's and 032's change no row; 033's refuses where it would lose a row. Once players have used the store, the way back is a founder decision: a fresh verified dump first, then rollback (c), or a deliberate, recorded removal of the rows before this script.
 - Locks: dropping the foreign keys removes their triggers from `players` under ACCESS EXCLUSIVE until COMMIT, so even reads of `players` wait. The writers are stopped anyway.
 - An object outside 033 that depends on a social table (a view, a later lane's foreign key) makes its DROP fail (2BP01), and the whole script rolls back.

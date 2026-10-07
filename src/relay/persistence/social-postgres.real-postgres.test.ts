@@ -107,9 +107,16 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
     expect(kaiBefore.activity).not.toBe('IDLE');
     const novaEventsBefore = (await call('nova', 'GET', '/events')).body.data;
     expect(novaEventsBefore.events.length).toBeGreaterThan(0);
+    // THE ID SERIAL IS DURABLE (10-07): migration 033 writes no social_meta row, so the store's first minted id must WRITE
+    // next_serial (an upsert). A bare UPDATE changes nothing there, and after the restart the ids would start again at 1.
+    const serialBefore = (await store.read()).nextSerial;
+    expect(serialBefore, 'ids were minted before the restart').toBeGreaterThan(1);
+    expect((await pool.query(`SELECT value FROM relay_wonderland.social_meta WHERE name = 'next_serial'`)).rows.map((row) => Number(row.value)),
+      'the durable serial is the store\'s').toEqual([serialBefore]);
 
     // THE RESTART: a new store, read back from the database alone
     store = await openSocialPostgresStore(pool);
+    expect((await store.read()).nextSerial, 'the serial continues where it was').toBe(serialBefore);
 
     const kai = (await call('kai', 'GET', '/snapshot')).body.data;
     const nova = (await call('nova', 'GET', '/snapshot')).body.data;

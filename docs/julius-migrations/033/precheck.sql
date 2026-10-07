@@ -7,7 +7,7 @@
 --   other_client_sessions = 0 (the writers are stopped and nothing else is connected);
 --   relations_033_expected = 47, relations_033_present = 0, relations_033_as_created = 0 and social_relations_other = 0;
 --   every relation column, social_privacy to social_events_at, = f;
---   every *_rows column and social_meta_seed_matches empty (NULL: there is no table to count), catalog_033_md5 empty;
+--   every *_rows column empty (NULL: there is no table to count), catalog_033_md5 empty;
 --   social_fk_constraints = 0;
 --   migration_031_applied = t, migration_032_applied = t and migration_033_applied = f;
 --   ledger_last = 032_julius_outbox_event_delete_forgets (033 follows 032 directly: nothing later is applied).
@@ -144,7 +144,7 @@ SELECT count(r.name) AS relations_033_expected,
         ON a.relname = e.name
   ) AS r;
 -- THE 17 TABLES' EXACT ROW COUNTS, counted only where the table exists (NULL where it does not, never an SQL error;
--- counted as 030's rowcounts-store.sql counts), and whether social_meta holds exactly 033's seed row.
+-- counted as 030's rowcounts-store.sql counts).
 SELECT max(t.n) FILTER (WHERE t.name = 'social_privacy') AS social_privacy_rows,
        max(t.n) FILTER (WHERE t.name = 'social_friendships') AS social_friendships_rows,
        max(t.n) FILTER (WHERE t.name = 'social_friend_requests') AS social_friend_requests_rows,
@@ -161,16 +161,12 @@ SELECT max(t.n) FILTER (WHERE t.name = 'social_privacy') AS social_privacy_rows,
        max(t.n) FILTER (WHERE t.name = 'social_profiles') AS social_profiles_rows,
        max(t.n) FILTER (WHERE t.name = 'social_presence') AS social_presence_rows,
        max(t.n) FILTER (WHERE t.name = 'social_meta') AS social_meta_rows,
-       max(t.n) FILTER (WHERE t.name = 'social_events') AS social_events_rows,
-       bool_or(t.seed) FILTER (WHERE t.name = 'social_meta') AS social_meta_seed_matches
+       max(t.n) FILTER (WHERE t.name = 'social_events') AS social_events_rows
   FROM (
     SELECT e.name,
            CASE WHEN c.relkind = 'r'
                 THEN (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM relay_wonderland.%I', e.name), false, true, '')))[1]::text::bigint
-           END AS n,
-           CASE WHEN c.relkind = 'r' AND e.name = 'social_meta'
-                THEN (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) = 1 AND bool_and(name = %L AND value = 1) AS c FROM relay_wonderland.%I', 'next_serial', e.name), false, true, '')))[1]::text::boolean
-           END AS seed
+           END AS n
       FROM unnest(ARRAY['social_privacy', 'social_friendships', 'social_friend_requests', 'social_blocks', 'social_mutes',
                         'social_reports', 'social_recent_players', 'social_conversations', 'social_conversation_members',
                         'social_messages', 'social_parties', 'social_party_members', 'social_party_invites', 'social_profiles',

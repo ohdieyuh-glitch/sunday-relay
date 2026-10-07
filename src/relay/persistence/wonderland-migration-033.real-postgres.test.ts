@@ -11,19 +11,19 @@ import { TransactionalWonderlandDatabase, WONDERLAND_MIGRATIONS, WONDERLAND_MIGR
  * MIGRATION 033: THE WONDERLAND SOCIAL STORE, APPLIED EXPLICITLY AFTER 032 (founder ruling 2026-10-04 16:30Z; R16).
  *
  * 033 creates 47 relations in relay_wonderland -- 17 tables, the sequence behind social_events.seq and 29 indexes, 19 of
- * the 47 named by PostgreSQL itself -- and 25 foreign keys (21 on players), writes one row (social_meta next_serial = 1)
- * and changes no existing row. Each case is its OWN database, created and dropped here, migrated from the real migration
+ * the 47 named by PostgreSQL itself -- and 25 foreign keys (21 on players), writes NO row (Julius's bootstrap leaves every
+ * table empty; the store writes social_meta's next_serial with its first id) and changes no existing row. Each case is its OWN database, created and dropped here, migrated from the real migration
  * list (or by the product's migrate()) and seeded with two players, the rows 033's foreign keys reference:
  *   A      at 032, 033 applies with ONE precheck NOTICE carrying the counts; every catalog line it adds is a social_*
  *          object (the 47 relations exactly, 42 internal RI triggers on players) and none is removed or changed; no
- *          existing row changes; the new tables are empty but the seed; the stamp is the ledger's last;
+ *          existing row changes; the new tables are empty; the stamp is the ledger's last;
  *   G      the guard refuses, changing and stamping nothing: before 032, a second time, after a later stamp, and when a
  *          relation 033 creates already exists -- a table, an implicit key name, the sequence name. The control: a taken
  *          implicit name is no error to PostgreSQL, which quietly names the key social_privacy_pkey1;
  *   POST   the post-check refuses, rolling everything back, when what the file creates is not what it proves (an index
- *          renamed, the seed missing, a foreign key missing);
+ *          renamed, a row written, a foreign key missing);
  *   H      the committed DOWN script refuses while a later migration is applied, while social data exists (a row, the id
- *          serial moved, the event sequence used) and while a relation is not as 033 created it; then it restores the
+ *          serial written, the event sequence used) and while a relation is not as 033 created it; then it restores the
  *          catalog EXACTLY (players' internal triggers and the TOAST count included) and every row count, removes the
  *          stamp, refuses where 033 is not applied, and 033 applies again. 032's DOWN refuses while 033 is stamped;
  *   INV    030-032's invariants still hold after 033: an outbox row for an event deleted in its transaction (032's forget) or
@@ -75,7 +75,7 @@ const BLOCKS = [
   'other_client_sessions',
   ['relations_033_expected', 'relations_033_present', 'relations_033_as_created', 'social_relations_other',
     'social_relations_other_names', ...RELATIONS].join('|'),
-  [...TABLES.map((table) => `${table}_rows`), 'social_meta_seed_matches'].join('|'),
+  TABLES.map((table) => `${table}_rows`).join('|'),
   'catalog_033_md5',
   'players_rows|players_referenced_by_fks|social_fk_constraints',
   'migration_031_applied|migration_032_applied|migration_033_applied|ledger_count|ledger_last',
@@ -253,8 +253,8 @@ suite('migration 033: the Wonderland social store, applied explicitly after 032 
     const withStamp = rowsBefore.map((line) => (line.startsWith('schema_migrations ') ? `schema_migrations ${Number(line.split(' ')[1]) + 1}` : line));
     expect(withStamp, 'the ledger is counted').not.toEqual(rowsBefore);
     expect(rowsAfter.filter((line) => !line.startsWith('social_')), 'no existing row changed; the ledger gained the stamp alone').toEqual(withStamp);
-    expect(rowsAfter.filter((line) => line.startsWith('social_')), 'the new tables are empty but the seed')
-      .toEqual(TABLES.map((table) => `${table} ${table === 'social_meta' ? 1 : 0}`).sort());
+    expect(rowsAfter.filter((line) => line.startsWith('social_')), 'the new tables are empty: 033 writes no row')
+      .toEqual(TABLES.map((table) => `${table} 0`).sort());
     expect(await stamped(pool)).toBe(1);
     expect(await ledgerLast(pool), "and the stamp is the ledger's last").toBe(STAMP_033);
   }, 180_000);
@@ -315,9 +315,10 @@ suite('migration 033: the Wonderland social store, applied explicitly after 032 
         WONDERLAND_MIGRATION_033.replace(statement('CREATE INDEX social_events_at ON relay_wonderland.social_events(at);'),
           'CREATE INDEX social_events_at_mutant ON relay_wonderland.social_events(at);'),
         "migration_033_postcheck: relation(s) not exactly as 033 creates them, or not 033's (social_events_at, social_events_at_mutant)"],
-      ['the seed missing',
-        WONDERLAND_MIGRATION_033.replace(statement("INSERT INTO relay_wonderland.social_meta(name, value) VALUES('next_serial', 1);"), ''),
-        "migration_033_postcheck: social_meta does not hold exactly 033's seed row"],
+      ['a row written (the seed 033 no longer writes)',
+        WONDERLAND_MIGRATION_033.replace(statement('-- THE CHANGE EVENTS CLIENTS POLL.'),
+          "INSERT INTO relay_wonderland.social_meta(name, value) VALUES('next_serial', 1);\n-- THE CHANGE EVENTS CLIENTS POLL."),
+        'migration_033_postcheck: social_meta holds a row, and 033 writes none'],
       ['a foreign key missing',
         WONDERLAND_MIGRATION_033.replace(statement('leader_id text NOT NULL REFERENCES relay_wonderland.players,'), 'leader_id text NOT NULL,'),
         'migration_033_postcheck: the social tables do not carry exactly the 25 foreign keys'],
@@ -354,13 +355,13 @@ suite('migration 033: the Wonderland social store, applied explicitly after 032 
     await refusedWith('a later migration', 'migration_033_down_refused: a later migration is applied (034_later_lane_probe)');
     await pool.query('DELETE FROM relay_wonderland.schema_migrations WHERE version = $1', ['034_later_lane_probe']);
 
-    // SOCIAL DATA, each kind refused and then undone here: a row, the id serial moved past its seed, the event sequence used.
+    // SOCIAL DATA, each kind refused and then undone here: a row, the id serial written (ids were minted), the event sequence used.
     await pool.query('INSERT INTO relay_wonderland.social_privacy(player_id) VALUES($1)', [PLAYERS[0]]);
     await refusedWith('a social row', 'migration_033_down_refused: social data exists (social_privacy 1)');
     await pool.query('DELETE FROM relay_wonderland.social_privacy');
-    await pool.query("UPDATE relay_wonderland.social_meta SET value = 2 WHERE name = 'next_serial'");
-    await refusedWith('the id serial moved', 'migration_033_down_refused: social data exists (social_meta 1)');
-    await pool.query("UPDATE relay_wonderland.social_meta SET value = 1 WHERE name = 'next_serial'");
+    await pool.query("INSERT INTO relay_wonderland.social_meta(name, value) VALUES('next_serial', 2)");
+    await refusedWith('the id serial written', 'migration_033_down_refused: social data exists (social_meta 1)');
+    await pool.query('DELETE FROM relay_wonderland.social_meta');
     await pool.query("SELECT nextval('relay_wonderland.social_events_seq_seq')");
     await refusedWith('the event sequence used', 'migration_033_down_refused: social data exists (social_events_seq_seq used)');
     await pool.query("SELECT setval('relay_wonderland.social_events_seq_seq', 1, false)");
@@ -430,7 +431,7 @@ suite('migration 033: the Wonderland social store, applied explicitly after 032 
     expect(runIndexes.map((index) => index.n), "011's run index stays gone").not.toContain(RUN_INDEX_011);
   }, 180_000);
 
-  it("CHAIN: the product's migrate() carries 033 right after 032, so a new database has the 47 relations, the seed and the stamp", async () => {
+  it("CHAIN: the product's migrate() carries 033 right after 032, so a new database has the 47 relations, no row in them, and the stamp", async () => {
     expect(WONDERLAND_MIGRATIONS.indexOf(WONDERLAND_MIGRATION_033), 'listed right after 032').toBe(WONDERLAND_MIGRATIONS.indexOf(WONDERLAND_MIGRATION_032) + 1);
     const pool = await create('chain');
     await new TransactionalWonderlandDatabase(pool).migrate();
@@ -438,7 +439,7 @@ suite('migration 033: the Wonderland social store, applied explicitly after 032 
       "SELECT c.relname AS r FROM pg_class c WHERE c.relnamespace = 'relay_wonderland'::regnamespace AND c.relname LIKE 'social\\_%'",
     )).rows.map((row: { r: string }) => row.r).sort();
     expect(present, 'the 47 relations, exactly').toEqual([...RELATIONS].sort());
-    expect(await count(pool, "SELECT count(*) AS n FROM relay_wonderland.social_meta WHERE name = 'next_serial' AND value = 1"), 'the seed').toBe(1);
+    expect(await count(pool, 'SELECT count(*) AS n FROM relay_wonderland.social_meta'), 'no row: the store writes next_serial with its first id').toBe(0);
     expect(await stamped(pool)).toBe(1);
   }, 120_000);
 
@@ -455,7 +456,7 @@ suite('migration 033: the Wonderland social store, applied explicitly after 032 
     const text = (value: unknown): string | null => (value === null || value === undefined ? null : String(value));
     const named = (facts: Record<string, unknown>, keys: readonly string[]) => Object.fromEntries(keys.map((key) => [key, text(facts[key])]));
     const SUMMARY = ['relations_033_expected', 'relations_033_present', 'relations_033_as_created', 'social_relations_other', 'social_relations_other_names'];
-    const ROWS = [...TABLES.map((table) => `${table}_rows`), 'social_meta_seed_matches'];
+    const ROWS = TABLES.map((table) => `${table}_rows`);
     const LEDGER = ['migration_031_applied', 'migration_032_applied', 'migration_033_applied', 'ledger_last'];
 
     const pool = await at032('docs');
@@ -476,8 +477,7 @@ suite('migration 033: the Wonderland social store, applied explicitly after 032 
       social_relations_other_names: null,
     });
     expect(named(post, RELATIONS), 'every relation exactly as 033 creates it').toEqual(Object.fromEntries(RELATIONS.map((name) => [name, 'true'])));
-    expect(named(post, ROWS), 'every table empty but the seed').toEqual(Object.fromEntries(ROWS.map((name) => [name,
-      name === 'social_meta_rows' ? '1' : name === 'social_meta_seed_matches' ? 'true' : '0'])));
+    expect(named(post, ROWS), 'every table empty: 033 writes no row').toEqual(Object.fromEntries(ROWS.map((name) => [name, '0'])));
     expect(named(post, LEDGER)).toEqual({ migration_031_applied: 'true', migration_032_applied: 'true', migration_033_applied: 'true', ledger_last: STAMP_033 });
     expect(Number(post.ledger_count), 'the ledger grew by the stamp alone').toBe(Number(pre.ledger_count) + 1);
     expect(text(post.players_rows), 'no players row changed').toBe(text(pre.players_rows));

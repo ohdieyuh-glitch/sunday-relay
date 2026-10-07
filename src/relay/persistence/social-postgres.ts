@@ -228,6 +228,7 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
     conversations,
     messages,
     readStates,
+    // no row until the first id is minted: migration 033 writes none (a bootstrap leaves every table empty)
     nextSerial: serial === undefined ? 1 : Number(serial.value),
   };
 }
@@ -401,7 +402,14 @@ async function writeChanges(c: PoolClient, before: SocialState, after: SocialSta
     }
   }
   if (before.nextSerial !== after.nextSerial) {
-    await c.query(`UPDATE relay_wonderland.social_meta SET value=$1 WHERE name='next_serial'`, [after.nextSerial]);
+    // AN UPSERT: migration 033 writes no row, so the first minted id creates next_serial. A bare UPDATE would change nothing
+    // there, and after a restart the ids would start again at 1: the same ids minted twice, and each ON CONFLICT DO NOTHING
+    // below them would silently drop the new row.
+    await c.query(
+      `INSERT INTO relay_wonderland.social_meta(name, value) VALUES('next_serial', $1)
+       ON CONFLICT(name) DO UPDATE SET value = EXCLUDED.value`,
+      [after.nextSerial],
+    );
   }
 }
 

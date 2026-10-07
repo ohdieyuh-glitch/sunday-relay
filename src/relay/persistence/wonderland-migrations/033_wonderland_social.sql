@@ -11,9 +11,10 @@ BEGIN;
 -- file, 034 = Project Brain, 035 = voice; it was 032 until then). Applied to a
 -- persistent store only after 031 and 032, by its own explicit reviewed apply. Registered in wonderland-postgres.ts like every other file here
 -- (julius-migration-chain.test.ts holds the directory and the list equal).
--- ADDITIVE ONLY: it creates new relay_wonderland.social_* tables, their indexes
--- and one sequence, and writes one row (social_meta next_serial = 1); it changes
--- no existing row. The one existing table it touches is relay_wonderland.players
+-- ADDITIVE AND DDL ONLY: it creates new relay_wonderland.social_* tables, their
+-- indexes and one sequence, and writes NO row (a bootstrap leaves every table
+-- empty; the store writes social_meta's next_serial with its first id); it
+-- changes no existing row. The one existing table it touches is relay_wonderland.players
 -- (001), which 21 of its 25 foreign keys reference: each CREATE TABLE that
 -- references players locks it (SHARE ROW EXCLUSIVE) until COMMIT, and players
 -- gains two internal RI triggers per key, so a players DELETE now cascades into
@@ -31,7 +32,7 @@ BEGIN;
 -- social_privacy_pkey1, so only this guard refuses it. After the CREATEs, still
 -- inside this transaction, the result is proven: each of the 47 exactly as
 -- created, no other social_* relation, the 25 foreign keys (21 on players) and
--- the seed row; any failure rolls it all back. The counts are reported as ONE
+-- no row written; any failure rolls it all back. The counts are reported as ONE
 -- NOTICE for the deploy record. docs/julius-migrations/033/down.sql drops it all
 -- again, and refuses while any social data exists.
 --
@@ -300,12 +301,13 @@ CREATE TABLE relay_wonderland.social_presence(
   updated_at timestamptz NOT NULL
 );
 
--- THE ID SEQUENCE: ids are minted from one serial, so it must outlive the process.
+-- THE ID SEQUENCE: ids are minted from one serial, so it must outlive the process. No row here: a migration writes
+-- no row (Julius's bootstrap leaves every table empty). The store reads a missing next_serial as 1 and writes it
+-- with its first minted id, by an upsert (social-postgres.ts).
 CREATE TABLE relay_wonderland.social_meta(
   name text PRIMARY KEY,
   value bigint NOT NULL CHECK(value >= 1)
 );
-INSERT INTO relay_wonderland.social_meta(name, value) VALUES('next_serial', 1);
 
 -- THE CHANGE EVENTS CLIENTS POLL. An event names the operation and when, and
 -- WHO it concerns -- never its content. A block, mute or report concerns only
@@ -321,8 +323,8 @@ CREATE INDEX social_events_at ON relay_wonderland.social_events(at);
 
 -- POST-CHECK, still inside the transaction: each of the 47 relations exactly as 033 creates it (a permanent table; the
 -- sequence owned by social_events.seq; each index on its table, primary or unique as written, valid), no other
--- relay_wonderland relation named social_*, the 25 foreign keys (21 on players), and social_meta holding exactly its
--- seed row. Any failure rolls back everything above.
+-- relay_wonderland relation named social_*, the 25 foreign keys (21 on players), and no row in social_meta (033
+-- writes none). Any failure rolls back everything above.
 DO $$
 DECLARE
   wrong text;
@@ -404,9 +406,8 @@ BEGIN
             AND k.confrelid = 'relay_wonderland.players'::regclass) <> 21 THEN
     RAISE EXCEPTION 'migration_033_postcheck: the social tables do not carry exactly the 25 foreign keys 033 writes (21 of them on players)';
   END IF;
-  IF (SELECT count(*) FROM relay_wonderland.social_meta) <> 1
-     OR NOT EXISTS (SELECT 1 FROM relay_wonderland.social_meta WHERE name = 'next_serial' AND value = 1) THEN
-    RAISE EXCEPTION 'migration_033_postcheck: social_meta does not hold exactly 033''s seed row (next_serial = 1)';
+  IF EXISTS (SELECT 1 FROM relay_wonderland.social_meta) THEN
+    RAISE EXCEPTION 'migration_033_postcheck: social_meta holds a row, and 033 writes none (the store writes next_serial with its first id)';
   END IF;
 END
 $$;

@@ -4,8 +4,8 @@
 -- Use only on a recorded decision. One transaction: it refuses, and changes nothing, unless 033 is applied, nothing
 -- after 033 is applied (roll a later migration back first, newest first, so the ledger never shows a gap), each of the
 -- 47 relations is exactly as 033 created it and no other relay_wonderland relation is named social_*, and the social
--- tables hold nothing but 033's own seed: no row in any of them, social_meta = ('next_serial', 1) alone, and the event
--- sequence never used. DROPPING SOCIAL DATA WOULD LOSE IT, and no down script of this chain loses data (030's refuses
+-- tables hold no data: no row in any of them (a next_serial row in social_meta included: ids were minted), and the
+-- event sequence never used. DROPPING SOCIAL DATA WOULD LOSE IT, and no down script of this chain loses data (030's refuses
 -- where its restore would be invalid; 031's and 032's change no row). With social data, the way back is a founder
 -- decision (RUNBOOK.md, rollback (b)).
 -- The tables are dropped newest first, which is dependency order, and WITHOUT CASCADE: an object outside 033 that
@@ -101,20 +101,17 @@ BEGIN
   IF wrong IS NOT NULL THEN
     RAISE EXCEPTION 'migration_033_down_refused: relation(s) not exactly as 033 created them, or not 033''s (%)', wrong;
   END IF;
-  -- NO SOCIAL DATA: every table but social_meta empty, social_meta holding its seed alone, the event sequence unused.
+  -- NO SOCIAL DATA: all 17 tables empty (033 writes no row; a next_serial row means ids were minted), the event
+  -- sequence unused.
   FOR t IN SELECT unnest(ARRAY['social_privacy', 'social_friendships', 'social_friend_requests', 'social_blocks', 'social_mutes',
                                'social_reports', 'social_recent_players', 'social_conversations', 'social_conversation_members',
                                'social_messages', 'social_parties', 'social_party_members', 'social_party_invites',
-                               'social_profiles', 'social_presence', 'social_events']) LOOP
+                               'social_profiles', 'social_presence', 'social_meta', 'social_events']) LOOP
     EXECUTE format('SELECT count(*) FROM relay_wonderland.%I', t) INTO n;
     IF n > 0 THEN
       holding := concat_ws(', ', holding, t || ' ' || n);
     END IF;
   END LOOP;
-  SELECT count(*) INTO n FROM relay_wonderland.social_meta WHERE NOT (name = 'next_serial' AND value = 1);
-  IF n > 0 THEN
-    holding := concat_ws(', ', holding, 'social_meta ' || n);
-  END IF;
   IF (SELECT is_called FROM relay_wonderland.social_events_seq_seq) THEN
     holding := concat_ws(', ', holding, 'social_events_seq_seq used');
   END IF;
