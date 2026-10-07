@@ -36,6 +36,13 @@
 			"Enabled": true
 		},
 		{
+			"Name": "NNEDenoiser",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
 			"Name": "ModelingToolsEditorMode",
 			"Enabled": true,
 			"TargetAllowList": [
