@@ -15,7 +15,7 @@ import {
   type SocialSessionFacts,
 } from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
-import { hashId, hashPuid } from './eos-voice';
+import { failureTag, hashId, hashPuid } from './eos-voice';
 
 /*
  * PARTY VOICE AND THE DELIVERY TAP, through the real route. The voice minter is a recorder: what matters is WHO the route
@@ -326,6 +326,126 @@ describe('party voice: a re-bind takes the replaced PUID out of the room first (
     expect(rec.heard(pid)).toEqual([fresh]);
     expect(log).toEqual([`voice join: the binding moved under this join user=${hashId(U.KAI)} puid=${hashPuid(fresh)} predicted=bound actual=rebound`]);
     for (const raw of [U.KAI, fresh, puidOf(U.KAI)]) expect(log.join('\n')).not.toContain(raw);
+  });
+});
+
+/** A store whose reads walk through `states` (the last repeats), or throw at read number `failAt`: what changed between the route's two reads. */
+function steppingStore(states: readonly SocialState[], failAt?: number): SocialStore {
+  let reads = 0;
+  return {
+    ...fixedStore(states[0]),
+    read: async () => {
+      const at = reads;
+      reads += 1;
+      if (at === failAt) throw new Error('the social store is down');
+      return states[Math.min(at, states.length - 1)];
+    },
+  };
+}
+
+describe('party voice: a join racing a kick or a block (review a6d5842c, M1)', () => {
+  const removed = (state: SocialState, pid: string, who: string) => {
+    const kicked = applySocialOperation(state, 'parties.remove_member', U.ORION, { ids: [pid, who], body: {}, query: {} }, NOW);
+    if (!kicked.ok) throw new Error(kicked.error.message);
+    return kicked.value.state;
+  };
+
+  it("kicked between the first read and the mint: the new token is taken back, and the answer is the stranger's 404", async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder();
+    const log: string[] = [];
+    const deps: SocialRouteDeps = { ...depsFor(state, rec.minter), store: steppingStore([state, removed(state, pid, U.KAI)]), log: (l) => log.push(l) };
+    const missing = await join(depsFor(state, minterRecorder().minter), U.KAI, 'pty_does_not_exist');
+    const r = await join(deps, U.KAI, pid);
+    expect(r.status).toBe(404);
+    expect(r.body).toEqual(missing.body);
+    expect(rec.asked.map((a) => a.participantId)).toEqual([U.KAI]); // the token was minted...
+    expect(rec.removals).toEqual([{ partyId: pid, participantId: U.KAI, puids: [puidOf(U.KAI)] }]); // ...and taken back
+    expect(rec.heard(pid)).toEqual([]);
+    expect(log).toEqual([`voice join: left the party while joining; the new token is revoked user=${hashId(U.KAI)} puid=${hashPuid(puidOf(U.KAI))}`]);
+  });
+
+  it('walled between the reads (a block carried in, both still members): the same -- token taken back, 404', async () => {
+    const { state, pid } = arena();
+    const walled = blockUser(state, U.LYRA, U.KAI, NOW);
+    if (!walled.ok) throw new Error(walled.error.message);
+    const rec = minterRecorder();
+    const r = await join({ ...depsFor(state, rec.minter), store: steppingStore([state, walled.value]) }, U.KAI, pid);
+    expect(r.status).toBe(404);
+    expect(rec.heard(pid)).toEqual([]);
+    expect(rec.removals).toHaveLength(1);
+  });
+
+  it('a take-back that is not confirmed is still the 404, and is logged as such (the record keeps the PUID for the next departure)', async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder({ failRemoval: true });
+    const log: string[] = [];
+    const r = await join({ ...depsFor(state, rec.minter), store: steppingStore([state, removed(state, pid, U.KAI)]), log: (l) => log.push(l) }, U.KAI, pid);
+    expect(r.status).toBe(404);
+    expect(log).toEqual([`voice join: left the party while joining; its removal is NOT confirmed (the room's next departure retries it) user=${hashId(U.KAI)} puid=${hashPuid(puidOf(U.KAI))}`]);
+  });
+
+  it('the second read fails: the token is taken back and the answer is 503 -- never a token for a membership nobody confirmed', async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder();
+    const r = await join({ ...depsFor(state, rec.minter), store: steppingStore([state], 1) }, U.KAI, pid);
+    expect(r.status).toBe(503);
+    expect(r.body.error).toEqual({ kind: 'voice_unavailable', message: 'Party voice could not confirm your party right now.' });
+    expect(rec.heard(pid)).toEqual([]);
+  });
+
+  it('the control: still admitted at the second read -- 200, nothing taken back; the audience is the party as it is NOW', async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder();
+    const bindings = createInMemoryVoiceBindings();
+    expect((await join(depsFor(state, rec.minter, undefined, bindings), U.LYRA, pid)).status).toBe(200); // Lyra bound
+    const lyraLeft = applySocialOperation(state, 'parties.leave', U.LYRA, { ids: [pid], body: {}, query: {} }, NOW);
+    if (!lyraLeft.ok) throw new Error(lyraLeft.error.message);
+    const r = await join({ ...depsFor(state, rec.minter, undefined, bindings), store: steppingStore([state, lyraLeft.value.state]) }, U.KAI, pid);
+    expect(r.status).toBe(200);
+    expect(rec.removals).toEqual([]);
+    expect(r.body.data.audience).toEqual([{ userId: U.KAI, puid: puidOf(U.KAI) }]); // Lyra left in between: not named
+  });
+});
+
+describe('party voice: every failure is an honest 503, logged with hashed ids and a hashed reason (review a6d5842c NOTE; CORE 10-07)', () => {
+  // an error whose text names a host, the player, their PUID and something secret-shaped: none of it may reach a log or an answer
+  const leak = `connect ECONNREFUSED voice-db.internal:5432 user=${U.KAI} puid=${puidOf(U.KAI)} key=${puidOf('a-planted-secret')}`;
+  const boom = () => Object.assign(new Error(leak), { code: 'ECONNREFUSED' });
+
+  it('a failed binding read, bind, mint or audience read: each its own message, never the error text, and one hashed log line', async () => {
+    const { state, pid } = arena();
+    const real = createInMemoryVoiceBindings();
+    const cases: Array<[string, Partial<VoiceBindingStore>, PartyVoiceTokenMinter | null, string, string]> = [
+      ['the binding read', { bindingOf: async () => { throw boom(); } }, null, 'Party voice could not read your voice identity right now.', 'the binding could not be read'],
+      ['the bind', { bind: async () => { throw boom(); } }, null, 'Party voice could not record your voice identity right now.', 'the bind failed'],
+      ['the mint', {}, { providerId: 'x', mint: async () => { throw boom(); }, removeFromRoom: async () => undefined }, 'The voice provider could not admit you right now.', 'the provider minted no token'],
+      ['the audience read', { puidsOf: async () => { throw boom(); } }, null, "Party voice could not read the party's voice identities right now.", 'the audience could not be read'],
+    ];
+    const messages = new Set<string>();
+    for (const [label, broken, minter, message, what] of cases) {
+      const log: string[] = [];
+      const deps: SocialRouteDeps = { ...depsFor(state, minter ?? minterRecorder().minter, undefined, { ...real, ...broken }), log: (l) => log.push(l) };
+      const r = await join(deps, U.KAI, pid);
+      expect(r.status, label).toBe(503);
+      expect(r.body.error, label).toEqual({ kind: 'voice_unavailable', message });
+      expect(log, label).toEqual([`voice join: ${what} user=${hashId(U.KAI)} puid=${hashPuid(puidOf(U.KAI))} (code ECONNREFUSED ${hashId(leak)})`]);
+      for (const raw of [leak, 'voice-db.internal', U.KAI, puidOf(U.KAI), puidOf('a-planted-secret')]) {
+        expect(log.join('\n'), `${label}: ${raw}`).not.toContain(raw);
+        expect(JSON.stringify(r.body), `${label}: ${raw}`).not.toContain(raw);
+      }
+      messages.add(message);
+    }
+    // four honest, distinct sentences -- none of them the "no provider configured" one
+    expect(messages.size).toBe(4);
+    expect(messages.has('VOICE TRANSPORT PENDING')).toBe(false);
+  });
+
+  it('the reason tag: a well-formed code, else the error class, else unknown -- and never the text', () => {
+    expect(failureTag(Object.assign(new Error(leak), { code: '23505' }))).toBe(`code 23505 ${hashId(leak)}`);
+    expect(failureTag(new TypeError(leak))).toBe(`TypeError ${hashId(leak)}`);
+    expect(failureTag(leak)).toBe(`unknown ${hashId(leak)}`);
+    expect(failureTag(Object.assign(new Error(leak), { code: 'not a code: secret value' }))).toBe(`Error ${hashId(leak)}`);
   });
 });
 

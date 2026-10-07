@@ -404,7 +404,9 @@ function oneVoiceJoinAtATime<T>(bindings: VoiceBindingStore, userId: string, wor
  *      If that fails, the answer is 503 and nothing is bound: the old binding stays. Then the store binds. If the store's
  *      outcome differs from the prediction (another process moved the binding), it is logged with hashed ids, and a re-bind
  *      nobody predicted takes the caller's minted PUIDs out of the room before any token is minted.
- *   3. The token, and the answer's audience: only server-bound PUID -> player pairs.
+ *   3. The token. Then membership is READ AGAIN (M1): a caller kicked, separated or walled while this ran gets their token taken
+ *      back (removeFromRoom) and the stranger's 404.
+ *   4. The answer's audience: only server-bound PUID -> player pairs.
  */
 async function answerVoiceJoin(input: {
   readonly store: SocialStore;
@@ -428,53 +430,91 @@ async function answerVoiceJoin(input: {
   const puid = normalizePuid(input.body.eosProductUserId);
   if (puid === null) return err(400, 'validation-failed', 'eosProductUserId must be an EOS ProductUserId (32 hex characters)');
   const log = deps.log ?? (() => undefined);
-  const unavailable = () => err(503, 'voice_unavailable', 'The voice provider could not admit you right now.');
   const who = `user=${hashId(actorId)} puid=${hashPuid(puid)}`;
+  /**
+   * A 503 that says honestly WHAT failed (CORE's client contract, 10-07: every voice 503 read "no voice provider"), with a log line
+   * that carries hashed ids and a hashed reason only, never the error's text (MAIN's internal review a6d5842c, NOTE).
+   */
+  const failed = (message: string, what: string, error: unknown): SocialRouteResult => {
+    log(`voice join: ${what} ${who} (${failureTag(error)})`);
+    return err(503, 'voice_unavailable', message);
+  };
   return oneVoiceJoinAtATime(bindings, actorId, async () => {
     let mine: VoiceBindingRow | null;
     let owner: string | null;
     try {
       [mine, owner] = await Promise.all([bindings.bindingOf(actorId), bindings.ownerOf(puid)]);
-    } catch {
-      return unavailable();
+    } catch (error) {
+      return failed('Party voice could not read your voice identity right now.', 'the binding could not be read', error);
     }
     const predicted = decideVoiceBinding({ userId: actorId, puid, sessionId, mine, owner });
     if (predicted === 'rebound' && mine !== null) {
       try {
         await voice.removeFromRoom({ partyId, participantId: actorId, puids: [mine.puid] });
-      } catch {
-        log(`voice join: re-bind held, the replaced PUID is not confirmed out of the room ${who} replaced=${hashPuid(mine.puid)}`);
-        return err(503, 'voice_unavailable', 'Party voice could not take your previous device out of the room; nothing was changed. Try again.');
+      } catch (error) {
+        return failed(
+          'Party voice could not take your previous device out of the room; nothing was changed. Try again.',
+          `re-bind held, the replaced PUID is not confirmed out of the room (replaced=${hashPuid(mine.puid)})`,
+          error,
+        );
       }
     }
     let outcome: VoiceBindingOutcome;
     try {
       outcome = await bindings.bind({ userId: actorId, puid, sessionId, nowIso });
-    } catch {
-      return unavailable();
+    } catch (error) {
+      return failed('Party voice could not record your voice identity right now.', 'the bind failed', error);
     }
     if (outcome !== predicted) log(`voice join: the binding moved under this join ${who} predicted=${predicted} actual=${outcome}`);
     if (outcome === 'refused') return notThere();
     if (outcome === 'rebound' && predicted !== 'rebound') {
       try {
         await voice.removeFromRoom({ partyId, participantId: actorId, puids: mine === null ? [] : [mine.puid] });
-      } catch {
-        log(`voice join: an unpredicted re-bind left minted PUIDs in the room; no token minted ${who}`);
-        return err(503, 'voice_unavailable', 'Party voice could not take your previous device out of the room. Try again.');
+      } catch (error) {
+        return failed('Party voice could not take your previous device out of the room. Try again.', 'an unpredicted re-bind left minted PUIDs in the room; no token minted', error);
       }
     }
     let grant: PartyVoiceGrant;
-    let bound: ReadonlyMap<string, string>;
     try {
       grant = await voice.mint({ partyId, participantId: actorId, audience, nowIso, puid });
-      bound = await bindings.puidsOf(audience);
-    } catch {
-      return unavailable();
+    } catch (error) {
+      return failed('The voice provider could not admit you right now.', 'the provider minted no token', error);
     }
-    // the audience a client maps voices with: ONLY server-bound PUID -> player pairs
-    const pairs = audience.filter((id) => bound.has(id)).map((id) => ({ userId: id, puid: bound.get(id) as string }));
+    // THE JOIN/KICK RACE (M1): membership was read before the bind and the mint. A kick, a leave or a block committed in between
+    // queued its removal, which may have reached Epic before this token existed. So read again. No longer admitted: this PUID
+    // leaves the room now (best effort, logged; a removal not confirmed stays recorded for the room's next departure), and the
+    // answer is the stranger's 404. Not readable: the same removal, and 503.
+    let admittedNow: string[] | null;
+    try {
+      admittedNow = voiceAudienceIfAdmitted(await store.read(), actorId, partyId);
+    } catch (error) {
+      await takeBackToken(voice, log, { partyId, actorId, puid, who, why: `the party could not be read again (${failureTag(error)})` });
+      return err(503, 'voice_unavailable', 'Party voice could not confirm your party right now.');
+    }
+    if (admittedNow === null) {
+      await takeBackToken(voice, log, { partyId, actorId, puid, who, why: 'left the party while joining' });
+      return notThere();
+    }
+    let bound: ReadonlyMap<string, string>;
+    try {
+      bound = await bindings.puidsOf(admittedNow);
+    } catch (error) {
+      return failed("Party voice could not read the party's voice identities right now.", 'the audience could not be read', error);
+    }
+    // the audience a client maps voices with: ONLY server-bound PUID -> player pairs, of the party as it is now
+    const pairs = admittedNow.filter((id) => bound.has(id)).map((id) => ({ userId: id, puid: bound.get(id) as string }));
     return ok({ providerId: grant.providerId, roomId: grant.roomId, participantToken: grant.participantToken, expiresAt: grant.expiresAtIso, audience: pairs });
   });
+}
+
+/** A token minted for a caller who is no longer admitted: its PUID leaves the room now. Best effort: a failure is logged, hashed. */
+async function takeBackToken(voice: PartyVoiceTokenMinter, log: (line: string) => void, input: { partyId: string; actorId: string; puid: string; who: string; why: string }): Promise<void> {
+  try {
+    await voice.removeFromRoom({ partyId: input.partyId, participantId: input.actorId, puids: [input.puid] });
+    log(`voice join: ${input.why}; the new token is revoked ${input.who}`);
+  } catch (error) {
+    log(`voice join: ${input.why}; its removal is NOT confirmed (the room's next departure retries it) ${input.who} (${failureTag(error)})`);
+  }
 }
 
 export async function handleSocialRoute(request: SocialRouteRequest, deps: SocialRouteDeps): Promise<SocialRouteResult | null> {

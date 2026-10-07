@@ -63,6 +63,21 @@ export const hashId = (value: string): string => `#${createHash('sha1').update(v
 /** A PUID's log tag: lowercased first (normalizePuid), so 'ABC...' and 'abc...' -- one EOS account -- carry one tag. */
 export const hashPuid = (puid: string): string => hashId(normalizePuid(puid) ?? puid.trim().toLowerCase());
 
+/**
+ * A FAILURE AS A LOG LINE MAY CARRY IT (MAIN's internal review a6d5842c, NOTE): its kind -- Epic's HTTP status, a SQLSTATE or system
+ * error code, or the error's class -- and hashId of its message. Never the message itself, which can name a host, a path or a
+ * value; the hash still lets two lines about one failure be matched.
+ */
+export function failureTag(error: unknown): string {
+  const e = (typeof error === 'object' && error !== null ? error : {}) as { code?: unknown; name?: unknown; message?: unknown };
+  const kind = error instanceof EosHttpError
+    ? `http ${error.status}`
+    : typeof e.code === 'string' && /^[A-Z0-9_]{1,32}$/.test(e.code)
+      ? `code ${e.code}`
+      : typeof e.name === 'string' && /^[A-Za-z]{1,40}$/.test(e.name) ? e.name : 'unknown';
+  return `${kind} ${hashId(typeof e.message === 'string' ? e.message : String(error))}`;
+}
+
 /* ------------------------------------------------------------------------------------------------ config */
 
 export const EOS_VOICE_CONFIG_ENV = 'WONDERLAND_EOS_VOICE_CONFIG';
