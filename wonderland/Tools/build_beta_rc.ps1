@@ -30,7 +30,7 @@ $ErrorActionPreference = 'Stop'
 Get-ChildItem env: | Where-Object { $_.Name -like 'GIT_*' } | ForEach-Object { Remove-Item "env:$($_.Name)" }
 if ($SkipBuild -and -not $SkipBuildIsNotEvidence) { throw '-SkipBuild re-packs an existing archive: it is NOT evidence. Pass -SkipBuildIsNotEvidence as well to run it anyway.' }
 $ProjectDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-# v4 (R3 m3): the script running IS the project's Toolsuild_beta_rc.ps1 (0a then proves that file is the committed one)
+# v4 (R3 m3): the script running IS the project's Tools\build_beta_rc.ps1 (0a then proves that file is the committed one)
 if ((Resolve-Path $PSCommandPath).Path -ne (Resolve-Path (Join-Path $ProjectDir 'Tools\build_beta_rc.ps1')).Path) { throw "Run the project's own Tools\build_beta_rc.ps1, not a copy ($PSCommandPath)" }
 $Project = Join-Path $ProjectDir 'Wonderland.uproject'
 $UAT = 'C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat'
@@ -119,6 +119,8 @@ Test-Eula $eulaText 'the committed text'
 $eulaBytes = (New-Object Text.UTF8Encoding $false).GetBytes($eulaText.Replace("`n", "`r`n"))
 $eulaSha = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($eulaBytes)).Replace('-', '')
 if ($eulaSha -ne $eulaPin) { throw "The Beta EULA's shipped bytes would be $eulaSha, not the approved $eulaPin (WONDERLAND_BETA_EULA.APPROVAL.txt)" }
+# v4b (SECOND 10-07): a RELEASE CANDIDATE ships only under a FINAL-scope record; a REHEARSAL scope is for rehearsal versions only
+if ($Version -match '^0\.1\.0-rc\d+$' -and $eulaScope -ne 'FINAL') { throw "A release candidate ($Version) needs a FINAL-scope EULA approval record; WONDERLAND_BETA_EULA.APPROVAL.txt at $commitFull says $eulaScope" }
 Say "EULA the committed agreement has every required part, no ownership assertion, and its shipped bytes are the approved $($eulaPin.Substring(0, 12)) (scope $eulaScope)"
 # 0d. THE THIRD-PARTY RECORDS FOR THIS GAME TARGET. UAT and UBT are single-instance per engine install; here, before the cook, a
 #     collision with another lane's UAT / UBT costs seconds (fail fast; no mutex wait). UAT is called directly, not through
@@ -134,6 +136,10 @@ Say "NOTICES the third-party records for this target are listed (before the cook
 if ($GatesOnly) { Say 'GATES ONLY: every pre-cook gate passed; stopping before the label (nothing written into the tree)'; exit 0 }
 
 # 1. the build's name
+# v4b (SECOND 10-07): HEAD MUST STILL BE THE COMMIT STEP 0 RECORDED. Every later HEAD read (the label's short sha, the manifest's
+# commit line) then names $commitFull; a worktree whose HEAD moved after 0a is refused, never labelled with another commit.
+$headNow = (& git -C $ProjectDir rev-parse HEAD).Trim()
+if ($headNow -ne $commitFull) { throw "HEAD moved after step 0: $commitFull -> $headNow (refusing to label or package a different commit)" }
 $infoDir = Join-Path $ProjectDir 'BuildInfo'
 $infoFile = Join-Path $infoDir 'BuildInfo.txt'
 if ($SkipBuild) {
@@ -151,7 +157,9 @@ if ($SkipBuild) {
   # SHIPPED bytes counts: the uproject (its plugin list decides what ships) and the Tools files that write the README template,
   # the third-party notices and the Beta EULA.
   $dirty = (& git --no-optional-locks -C $ProjectDir status --porcelain --untracked-files=all -- Source Config RelaySkins UiArt Companions ProjectAvatars RelayCubs WorldDesign/Look Wonderland.uproject Tools/build_beta_rc.ps1 Tools/make_package_notices.py Tools/WONDERLAND_BETA_EULA.txt) -join ''
-  $suffix = if ($dirty) { '+local-changes' } else { '' }
+  # v4b (SECOND 10-07): a dirty tree THROWS. Its '+local-changes' label was refused by every label check after the cook anyway.
+  if ($dirty) { throw "The tree is dirty in the paths that produce shipped bytes; commit or restore them first:`n$($dirty -join "`n")" }
+  $suffix = ''
   $label = "Private Beta $Version | build $sha$suffix | $(Get-Date -Format 'yyyy-MM-dd')"
   New-Item -ItemType Directory -Force $infoDir | Out-Null
   [IO.File]::WriteAllText($infoFile, $label, (New-Object Text.UTF8Encoding $false))
@@ -353,6 +361,9 @@ if ($writtenSha -ne $eulaPin) { throw "WONDERLAND_BETA_EULA.txt as written is $w
 Say "EULA WONDERLAND_BETA_EULA.txt written, = the approved bytes $($eulaPin.Substring(0, 12)) (scope $eulaScope; draft: legal review required before wider or public distribution)"
 
 # 7. the zip, and the facts about it
+# v4b (SECOND 10-07): the cook took an hour or more; the manifest's commit line reads HEAD, so HEAD must STILL be $commitFull
+$headNow = (& git -C $ProjectDir rev-parse HEAD).Trim()
+if ($headNow -ne $commitFull) { throw "HEAD moved during the build: $commitFull -> $headNow (the package is NOT evidence of either commit)" }
 $zip = Join-Path $ReleaseRoot "$name.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }
 & tar -a -c -f $zip -C $ReleaseRoot $name
