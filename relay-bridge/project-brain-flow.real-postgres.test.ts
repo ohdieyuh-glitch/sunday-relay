@@ -378,11 +378,22 @@ suite('Julius ↔ Project Brain ↔ Wonderland, end to end over a real PostgreSQ
     expect(stored.rows[0].n).toBe(1);
     const sameKeyDifferent = await wonderland('POST', '/wonderland/brain/proposals', { projectId, surfaceId: 'preferences', idempotencyKey: key, text: 'Something else.' });
     expect(sameKeyDifferent.status).toBe(409);
-    // Two people revising one version: one wins, one is told it lost.
-    await pool.query(`INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING`, [`editor-${id}`]);
-    await pool.query(`INSERT INTO relay_wonderland.project_members(project_id,player_id,role) VALUES($1,$2,'EDITOR')`, [projectId, `editor-${id}`]);
+    // A writer who is not the author never resolves another person's live statement (founder, 10-04): refused by name, unchanged.
+    for (const [who, role] of [[`editor-${id}`, 'EDITOR'], [`admin-${id}`, 'ADMIN']] as const) {
+      await pool.query(`INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING`, [who]);
+      await pool.query(`INSERT INTO relay_wonderland.project_members(project_id,player_id,role) VALUES($1,$2,$3)`, [projectId, who, role]);
+    }
     const editor = await signIn(bridge.base, `editor-${id}`);
-    const race = await Promise.all([player, editor].map((who, i) => call(bridge.base, 'POST', `/relay-api/wonderland/brain/mutations?projectId=${projectId}`, {
+    const notTheAuthor = await call(bridge.base, 'POST', `/relay-api/wonderland/brain/mutations?projectId=${projectId}`, {
+      ...editor, body: { operation: 'SET_STATUS', idempotencyKey: `na-${nonce()}`, recordId: instructionRecord, expectedVersion: 1, status: 'RESOLVED' },
+    });
+    expect(notTheAuthor.status).toBe(403);
+    expect(notTheAuthor.json.error?.kind).toBe('not_the_author');
+    // Two people who may both resolve it (the author, and an admin) revising one version: one wins, one is told it lost.
+    // The store takes the row lock and checks the version BEFORE authorizing, so only racers who are both authorized make
+    // the outcome independent of who arrives first.
+    const admin = await signIn(bridge.base, `admin-${id}`);
+    const race = await Promise.all([player, admin].map((who, i) => call(bridge.base, 'POST', `/relay-api/wonderland/brain/mutations?projectId=${projectId}`, {
       ...who, body: { operation: 'SET_STATUS', idempotencyKey: `race-${nonce()}-${i}`, recordId: instructionRecord, expectedVersion: 1, status: 'RESOLVED' },
     })));
     expect(race.map((r) => r.status).sort()).toEqual([201, 409]);
