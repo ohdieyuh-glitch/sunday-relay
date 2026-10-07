@@ -99,7 +99,8 @@ public:
 	 *  every talking on/off rebuilt the hub, so MUTE MIC was the most exposed button. A player's own click (a tab, a conversation)
 	 *  still rebuilds at once. */
 	void FlushRebuild();
-	/** QA (wl.Qa.SocialHubClicks): the centre of a tab's button as last painted, in screen space; false when it has not been painted. */
+	/** QA (wl.Qa.SocialHubClicks): the centre of a tab's button as last painted, in DESKTOP space (where pointer events land); false
+	 *  when it has not been painted. */
 	bool QaTabCentre(ETab Which, FVector2D& OutScreen) const;
 	/** QA: a rebuild AT ONCE, as SetSnapshot did before F-21 (the control that must lose a click). */
 	void QaRebuildNow() { Rebuild(); }

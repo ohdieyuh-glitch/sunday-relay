@@ -322,12 +322,14 @@ bool SWonderlandSocialHubPanel::QaTabCentre(ETab Which, FVector2D& OutScreen) co
 	{
 		return false;
 	}
-	const FGeometry& Painted = Button->GetPaintSpaceGeometry();
-	if (Painted.GetLocalSize().X <= 0.0f || Painted.GetLocalSize().Y <= 0.0f)
+	// DESKTOP space, as pointer events and the hit-test grid use it (SWidget::Paint stores it beside the window-space paint geometry;
+	// the first HUBCLICK run used the paint space and clicked beside the game: HC2 failed and HC4 passed for nothing, 2026-10-07)
+	const FGeometry& OnDesktop = Button->GetTickSpaceGeometry();
+	if (OnDesktop.GetLocalSize().X <= 0.0f || OnDesktop.GetLocalSize().Y <= 0.0f)
 	{
 		return false;
 	}
-	OutScreen = FVector2D(Painted.GetAbsolutePositionAtCoordinates(FVector2D(0.5, 0.5)));
+	OutScreen = FVector2D(OnDesktop.GetAbsolutePositionAtCoordinates(FVector2D(0.5, 0.5)));
 	return true;
 }
 
@@ -1542,6 +1544,7 @@ namespace WonderlandSocialHubClicksQa
 	/** F-21 QA (2026-10-07), fail-capable, through Slate's own routing (the path a real click takes). A refresh that lands just
 	 *  before a click must not eat it:
 	 *    HC0 the hub opens on REQUESTS (a player session: NOT CONNECTED still draws its tabs);
+	 *    HCP the probe's own control: with nothing rebuilt, its click on FRIENDS LANDS (HC4 counts only when it does);
 	 *    HC1 the real refresh path (HandleSocialChanged, as every live snapshot calls it) DEFERS the rebuild;
 	 *    HC2 a click on FRIENDS routed right after that refresh, before any paint, LANDS;
 	 *    HC3 a refresh with no click after it: Slate's pre-tick runs its rebuild BY ITSELF, frames later (the hook is wired);
@@ -1561,6 +1564,8 @@ namespace WonderlandSocialHubClicksQa
 		int32 Failed = 0;
 		/** HC3: was a rebuild pending right after the refresh (before Slate's pre-tick had a chance)? */
 		bool bRefreshPending = false;
+		/** HCP: the probe lands a click when nothing is rebuilt (without it, HC4's "lost" proves nothing). */
+		bool bProbeLands = false;
 	};
 	TSharedPtr<FHubClickRun> GHubClickRun;
 
@@ -1649,6 +1654,22 @@ namespace WonderlandSocialHubClicksQa
 					HubClickEnd();
 					return false;
 				}
+				NextPhase(10);
+			}
+			break;
+		case 10:
+			// HCP, the probe's own control: with NOTHING rebuilt, the probe's click on FRIENDS must land; then back to REQUESTS
+			if (ClickSince >= 1.0)
+			{
+				FVector2D FriendsTabSpot;
+				const bool bTabPainted = ClickHub->QaTabCentre(TabFriends, FriendsTabSpot);
+				HubClickHover(FriendsTabSpot);
+				HubClickPress(FriendsTabSpot);
+				ClickRun.bProbeLands = bTabPainted && ClickHub->GetTab() == TabFriends;
+				HubClickCheck(ClickRun, TEXT("HCP"), ClickRun.bProbeLands,
+					FString::Printf(TEXT("control: the probe's click at %.0f,%.0f lands when nothing is rebuilt (tab now %s; SetTab's own line above)"),
+						FriendsTabSpot.X, FriendsTabSpot.Y, SWonderlandSocialHubPanel::TabName(ClickHub->GetTab())));
+				ClickHub->SetTab(TabRequests);
 				NextPhase(1);
 			}
 			break;
@@ -1702,9 +1723,9 @@ namespace WonderlandSocialHubClicksQa
 				HubClickHover(FriendsTabSpot);
 				ClickHub->QaRebuildNow();
 				HubClickPress(FriendsTabSpot);
-				HubClickCheck(ClickRun, TEXT("HC4"), bTabPainted && ClickHub->GetTab() == TabRequests,
-					FString::Printf(TEXT("control: after a rebuild AT ONCE (SetSnapshot before F-21) the same click is LOST (tab still %s)"),
-						SWonderlandSocialHubPanel::TabName(ClickHub->GetTab())));
+				HubClickCheck(ClickRun, TEXT("HC4"), bTabPainted && ClickRun.bProbeLands && ClickHub->GetTab() == TabRequests,
+					FString::Printf(TEXT("control: after a rebuild AT ONCE (SetSnapshot before F-21) the same click is LOST (tab still %s; the probe lands clicks: %s)"),
+						SWonderlandSocialHubPanel::TabName(ClickHub->GetTab()), ClickRun.bProbeLands ? TEXT("yes") : TEXT("NO, so this proves nothing")));
 				NextPhase(5);
 			}
 			break;
