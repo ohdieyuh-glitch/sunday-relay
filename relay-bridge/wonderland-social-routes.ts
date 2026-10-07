@@ -53,7 +53,7 @@ import { voiceAudienceFor, walledFromParty } from '../src/relay/social/social-pa
 import { partyById, type SocialState } from '../src/relay/social/social-state';
 import { decideVoiceBinding, normalizePuid, type VoiceBindingOutcome, type VoiceBindingRow, type VoiceBindingStore } from '../src/relay/social/voice-binding';
 import { bindSocialActor, nativeSocialMayCall, SOCIAL_OPERATIONS } from './wonderland-social-scope';
-import { EOS_CLIENT_CONFIG_SCHEMA, hashId, hashPuid, type EosGameClientConfig } from './eos-voice';
+import { EOS_CLIENT_CONFIG_SCHEMA, failureTag, hashId, hashPuid, type EosGameClientConfig } from './eos-voice';
 
 export const SOCIAL_ROUTE_PREFIX = '/wonderland/social';
 

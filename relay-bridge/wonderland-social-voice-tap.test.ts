@@ -382,7 +382,11 @@ describe('party voice: a join racing a kick or a block (review a6d5842c, M1)', (
     const log: string[] = [];
     const r = await join({ ...depsFor(state, rec.minter), store: steppingStore([state, removed(state, pid, U.KAI)]), log: (l) => log.push(l) }, U.KAI, pid);
     expect(r.status).toBe(404);
-    expect(log).toEqual([`voice join: left the party while joining; its removal is NOT confirmed (the room's next departure retries it) user=${hashId(U.KAI)} puid=${hashPuid(puidOf(U.KAI))}`]);
+    // The NOTE fix (a6d5842c) ends every failure line with the error's HASHED tag, never its text: `(<Name> #<12 hex>)`.
+    expect(log).toHaveLength(1);
+    const prefix = `voice join: left the party while joining; its removal is NOT confirmed (the room's next departure retries it) user=${hashId(U.KAI)} puid=${hashPuid(puidOf(U.KAI))} (`;
+    expect(log[0].startsWith(prefix), log[0]).toBe(true);
+    expect(log[0].slice(prefix.length), 'the hashed failure tag, nothing else').toMatch(/^[A-Za-z]+ #[0-9a-f]{12}\)$/);
   });
 
   it('the second read fails: the token is taken back and the answer is 503 -- never a token for a membership nobody confirmed', async () => {
