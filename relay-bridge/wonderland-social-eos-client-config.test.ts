@@ -9,6 +9,7 @@ import {
   handleSocialRoute,
   type PartyVoiceTokenMinter,
   type SocialRouteDeps,
+  type SessionRateDecision,
   type SocialSessionFacts,
 } from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
@@ -87,6 +88,10 @@ describe('GET /voice/eos-client-config: what a signed-in desktop client is hande
     expect(seventh.body.data).toBeUndefined();
     expect(JSON.stringify(seventh.body)).not.toContain(w.config.clientSecret);
     expect(seventh.headers?.['cache-control']).toBe('no-store');
+    // Retry-After, as every other social 429 (CORE's client contract, 10-07): the first call leaves the window at T0 + 60 s
+    expect(seventh.headers?.['retry-after']).toBe('54');
+    expect(seventh.body.error?.message).toBe('Too many requests for the voice config; try again in 54 s.');
+    expect((await w.get('usr_kai', T0 + 59_999)).headers?.['retry-after']).toBe('1');
     expect(w.log).toHaveLength(6);
     // the limit is the session's: the same player's other session, and another player, are served at the same instant
     expect((await w.get('usr_kai#2', T0 + 6000)).status).toBe(200);
@@ -105,9 +110,9 @@ describe('GET /voice/eos-client-config: what a signed-in desktop client is hande
     ];
     for (const [label, over] of cases) {
       let charged = 0;
-      const counting = (): boolean => {
+      const counting = (): SessionRateDecision => {
         charged += 1;
-        return true;
+        return { ok: true };
       };
       const w = world({ eosClientConfigAllowed: counting, ...over });
       const r = await w.get('usr_kai', T0);
@@ -119,9 +124,9 @@ describe('GET /voice/eos-client-config: what a signed-in desktop client is hande
     }
     // the control: the same world with everything present serves, and charges the limit once
     let charged = 0;
-    const counting = (): boolean => {
+    const counting = (): SessionRateDecision => {
       charged += 1;
-      return true;
+      return { ok: true };
     };
     expect((await world({ eosClientConfigAllowed: counting }).get('usr_kai', T0)).status).toBe(200);
     expect(charged).toBe(1);
@@ -129,9 +134,9 @@ describe('GET /voice/eos-client-config: what a signed-in desktop client is hande
 
   it('the gates come first: no session or a dead one is 401, a browser origin 403, no social capability 403, no player 403 -- nothing served, logged or charged', async () => {
     let charged = 0;
-    const counting = (): boolean => {
+    const counting = (): SessionRateDecision => {
       charged += 1;
-      return true;
+      return { ok: true };
     };
     const w = world({ eosClientConfigAllowed: counting });
     expect((await w.get(null, T0)).status).toBe(401);

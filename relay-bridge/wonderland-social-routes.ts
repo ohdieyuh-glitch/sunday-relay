@@ -35,9 +35,9 @@
  * THE GAME CLIENT'S EOS CONFIG. `GET /voice/eos-client-config` answers the five values the desktop client's EOS platform starts
  * with -- the GAME client's (founder, 10-04: handed out by the backend, held in the client's memory only, never in the package),
  * never the Trusted Server's -- as {schema: wonderland-eos-client-config.v1, productId, sandboxId, deploymentId, clientId,
- * clientSecret}, after the same five gates as every operation. At most 6 a minute per session
- * (429). Without the bridge's game config, its voice provider or its rate limit: 503. The log says only whom it served,
- * hashed; never a value.
+ * clientSecret}, after the same five gates as every operation. At most 6 a minute per session (429, with Retry-After).
+ * Without the bridge's game config, its voice provider, its binding store or its rate limit: 503. The log says only whom it
+ * served, hashed; never a value.
  *
  * NEVER STORED ON THE WAY. Every answer here -- a refusal included -- carries Cache-Control: no-store (and Pragma: no-cache):
  * a social view is one viewer's, and the EOS client config carries a secret.
@@ -138,7 +138,7 @@ export interface SocialRouteDeps {
   readonly eosClientConfig?: EosGameClientConfig | null;
   /** Whether this session may have the EOS client config now (createSessionRateLimit). Built ONCE by the bridge -- deps are
    *  per request. Absent or null: the route is 503 (it never serves unlimited). */
-  readonly eosClientConfigAllowed?: ((sessionId: string, now: number) => boolean) | null;
+  readonly eosClientConfigAllowed?: ((sessionId: string, now: number) => SessionRateDecision) | null;
   /** Presence as a LEASE (createPresenceLease), built ONCE by the bridge. Absent or null: `connected` is cleared only by the client,
    *  a sign-out or a restart -- the behaviour a crashed client exposed (it stayed ONLINE to its friends). */
   readonly presenceLease?: PresenceLease | null;
@@ -179,21 +179,24 @@ export const EOS_CLIENT_CONFIG_RATE = Object.freeze({ limit: 6, windowMs: 60_000
 /** Never stored by anything between the bridge and the client: on every social answer. */
 const NO_STORE: Readonly<Record<string, string>> = Object.freeze({ 'cache-control': 'no-store', pragma: 'no-cache' });
 
+/** A session rate limit's answer: admitted, or refused until `retryAfterMs` from now (when the oldest counted call leaves the window). */
+export type SessionRateDecision = { readonly ok: true } | { readonly ok: false; readonly retryAfterMs: number };
+
 /**
  * At most `limit` calls per session in any `windowMs`; a refused call is not counted. The state lives in the closure, so the
  * bridge builds ONE and passes it with every request's deps. Sessions idle for a whole window are forgotten.
  */
-export function createSessionRateLimit(limit: number, windowMs: number): (sessionId: string, now: number) => boolean {
+export function createSessionRateLimit(limit: number, windowMs: number): (sessionId: string, now: number) => SessionRateDecision {
   const seen = new Map<string, number[]>();
   return (sessionId, now) => {
     if (seen.size > 10_000) for (const [id, times] of seen) if (times.every((t) => t <= now - windowMs)) seen.delete(id);
     const recent = (seen.get(sessionId) ?? []).filter((t) => t > now - windowMs);
     if (recent.length >= limit) {
       seen.set(sessionId, recent);
-      return false;
+      return { ok: false, retryAfterMs: Math.max(1, recent[recent.length - limit] + windowMs - now) };
     }
     seen.set(sessionId, [...recent, now]);
-    return true;
+    return { ok: true };
   };
 }
 
@@ -597,7 +600,12 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
     if (allowed === null || config === null || deps.voice === undefined || deps.voice === null || deps.voiceBindings === undefined || deps.voiceBindings === null) {
       return err(503, 'voice_unavailable', 'VOICE TRANSPORT PENDING');
     }
-    if (!allowed(facts.sessionId, request.now)) return err(429, 'rate_limited', 'Too many requests for the voice config; try again in a minute.');
+    const admitted = allowed(facts.sessionId, request.now);
+    if (!admitted.ok) {
+      // with its Retry-After, as every other social 429 (CORE's client contract, 10-07: MISMATCHES.md 8)
+      const seconds = Math.max(1, Math.ceil(admitted.retryAfterMs / 1000));
+      return { ...err(429, 'rate_limited', `Too many requests for the voice config; try again in ${seconds} s.`), headers: { 'retry-after': String(seconds) } };
+    }
     deps.log?.(`eos client config served to ${hashId(actor.actorId)}`);
     const { productId, sandboxId, deploymentId, clientId, clientSecret } = config;
     return ok({ schema: EOS_CLIENT_CONFIG_SCHEMA, productId, sandboxId, deploymentId, clientId, clientSecret });
