@@ -7,7 +7,7 @@ import { blockUser } from '../src/relay/social/social-friends';
 import { createInMemorySocialStore, type SocialStore } from '../src/relay/social/social-store';
 import { partyOf } from '../src/relay/social/social-state';
 import { createInMemoryVoiceBindings } from '../src/relay/social/voice-binding';
-import { EPIC, EosVoiceTokenMinter, createVoiceRemovals, eosFromEnv, hashId, hashPuid, loadEosVoiceConfig, type EosFetch, type EosVoiceConfig } from './eos-voice';
+import { EOS_REQUEST_TIMEOUT_MS, EPIC, EosVoiceTokenMinter, createVoiceRemovals, eosFromEnv, hashId, hashPuid, loadEosVoiceConfig, type EosFetch, type EosVoiceConfig } from './eos-voice';
 import { EOS_FROM_ENV, EOS_GAME_CONFIG_ENV, EOS_ROOM_SALT_ENV, loadEosGameClientConfig, type EosDeployment } from './eos-voice';
 
 /*
@@ -23,17 +23,24 @@ function config(over: Partial<EosVoiceConfig> = {}): EosVoiceConfig {
   return { productId: 'prod-wl', sandboxId: 'sbx-dev', deploymentId: 'dep-wl', clientId: 'xyz-trusted', clientSecret: hex(24), roomSalt: hex(24), ...over };
 }
 
-interface Call { method: string; url: string; headers: Record<string, string>; body: string | undefined }
+interface Call { method: string; url: string; headers: Record<string, string>; body: string | undefined; signal: AbortSignal | undefined }
 type Answer = { status: number; body?: unknown };
 
-/** A recorded EOS: tokens, createRoomToken and removeParticipant, each from a script (or a sensible default). */
-function epicFake(script: { token?: Answer[]; room?: Answer[]; remove?: Array<Answer | 'hang'> } = {}) {
+/**
+ * A recorded EOS: tokens, createRoomToken and removeParticipant, each from a script (or a sensible default). 'hang' never answers:
+ * it settles only when the call's AbortSignal fires (as a real fetch does), rejecting with the signal's reason.
+ */
+function epicFake(script: { token?: Answer[]; room?: Array<Answer | 'hang'>; remove?: Array<Answer | 'hang'> } = {}) {
   const calls: Call[] = [];
   const issued = { access: [] as string[], room: [] as string[], mediaUrls: [] as string[] };
   const queue = { token: [...(script.token ?? [])], room: [...(script.room ?? [])], remove: [...(script.remove ?? [])] };
   const reply = (a: Answer) => ({ ok: a.status >= 200 && a.status < 300, status: a.status, json: async () => a.body ?? {} });
+  const hang = (signal: AbortSignal | undefined) =>
+    new Promise<never>((_, reject) => {
+      signal?.addEventListener('abort', () => reject(signal.reason));
+    });
   const fetchImpl: EosFetch = async (url, init) => {
-    calls.push({ method: init.method, url, headers: init.headers, body: init.body });
+    calls.push({ method: init.method, url, headers: init.headers, body: init.body, signal: init.signal });
     if (url === `${EPIC.apiRoot}${EPIC.tokenPath}`) {
       const next = queue.token.shift();
       if (next !== undefined) return reply(next);
@@ -43,6 +50,7 @@ function epicFake(script: { token?: Answer[]; room?: Answer[]; remove?: Array<An
     }
     if (init.method === 'POST' && /\/rtc\/v1\/[^/]+\/room\/[0-9a-f]{32}$/.test(url)) {
       const next = queue.room.shift();
+      if (next === 'hang') return hang(init.signal);
       if (next !== undefined) return reply(next);
       const puid = JSON.parse(init.body ?? '{}')[EPIC.roomBody.participants][0][EPIC.roomBody.puid];
       const token = `rt_${hex(20)}`;
@@ -53,7 +61,7 @@ function epicFake(script: { token?: Answer[]; room?: Answer[]; remove?: Array<An
     }
     if (init.method === 'DELETE' && /\/participants\/[0-9a-f]{32}$/.test(url)) {
       const next = queue.remove.shift();
-      if (next === 'hang') return new Promise(() => undefined);
+      if (next === 'hang') return hang(init.signal);
       return reply(next ?? { status: 204 });
     }
     return reply({ status: 404 });
@@ -271,7 +279,8 @@ describe('the access token', () => {
 async function voicedArena(script: Parameters<typeof epicFake>[0] = {}) {
   const log: string[] = [];
   const epic = epicFake(script);
-  const minter = new EosVoiceTokenMinter(config(), { fetchImpl: epic.fetchImpl, now: () => T0, log: (l) => log.push(l) });
+  // a short Epic timeout (m1): a 'hang' in the script is given up quickly, as a real one would be after EOS_REQUEST_TIMEOUT_MS
+  const minter = new EosVoiceTokenMinter(config(), { fetchImpl: epic.fetchImpl, now: () => T0, log: (l) => log.push(l), timeoutMs: 25 });
   const bindings = createInMemoryVoiceBindings();
   const backoffs: number[] = [];
   const removals = createVoiceRemovals({ target: minter, bindings: () => bindings, log: (l) => log.push(l), sleep: async (ms) => { backoffs.push(ms); } });
@@ -442,6 +451,64 @@ describe("removal takes out EVERY PUID minted for the member in that room, not o
     const all = log.join('\n');
     for (const raw of [p1, p2, elsewhere, other, room]) expect(all).not.toContain(raw);
     expect(all).toContain(`eos voice: removal failed room=${hashId(room)} puid=${hashPuid(p2)} (500)`);
+  });
+});
+
+describe('a hung Epic call, or a failed binding lookup, no longer stalls or loses a removal (review a6d5842c, m1)', () => {
+  const nowIso = new Date(T0).toISOString();
+
+  it('every Epic call carries a timeout signal; a hung createRoomToken fails the mint (a join answers 503) instead of hanging', async () => {
+    expect(EOS_REQUEST_TIMEOUT_MS).toBe(10_000);
+    const epic = epicFake({ room: ['hang'] });
+    const minter = new EosVoiceTokenMinter(config(), { fetchImpl: epic.fetchImpl, now: () => T0, timeoutMs: 25 });
+    await expect(minter.mint({ partyId: 'p', participantId: 'u', audience: ['u'], nowIso, puid: PUID_A })).rejects.toMatchObject({ name: 'TimeoutError' });
+    expect(epic.calls.map((c) => [c.method, c.signal instanceof AbortSignal])).toEqual([['POST', true], ['POST', true]]);
+    expect(minter.mintedIn(minter.roomIdFor('p'), 'u').size).toBe(0); // a mint that failed is not recorded
+  });
+
+  it('a hung DELETE times out and is retried, and the removal queued behind it still runs', async () => {
+    const w = await voicedArena({ remove: ['hang', { status: 204 }, { status: 204 }] });
+    await w.run('parties.leave', w.people.a, [w.pid], {});
+    await w.run('parties.leave', w.people.b, [w.pid], {});
+    await w.removals.idle();
+    expect(w.deletes()).toEqual([w.deleteOf(w.people.a), w.deleteOf(w.people.a), w.deleteOf(w.people.b)]);
+    expect(w.log).toContain(`eos voice: removal failed room=${hashId(w.minter.roomIdFor(w.pid))} puid=${hashPuid(w.puid[w.people.a])} attempt 1 (network)`);
+    expect(w.backoffs).toEqual([250]);
+  });
+
+  it('a failed binding lookup is logged (hashed, with its reason) and retried, where it used to be swallowed', async () => {
+    const w = await voicedArena();
+    let failures = 1;
+    const reason = `db down while reading ${w.people.a}`;
+    const flaky = {
+      ...w.bindings,
+      puidsOf: async (ids: readonly string[]) => {
+        if (failures-- > 0) throw Object.assign(new Error(reason), { code: '57P01' });
+        return w.bindings.puidsOf(ids);
+      },
+    };
+    const log: string[] = [];
+    const sleeps: number[] = [];
+    const removals = createVoiceRemovals({ target: w.minter, bindings: () => flaky, log: (l) => log.push(l), sleep: async (ms) => { sleeps.push(ms); } });
+    removals.onDepartures([{ partyId: w.pid, userId: w.people.a }]);
+    await removals.idle();
+    expect(w.deletes()).toEqual([w.deleteOf(w.people.a)]);
+    expect(log[0]).toBe(`eos voice: binding lookup failed user=${hashId(w.people.a)} attempt 1 (code 57P01 ${hashId(reason)})`);
+    expect(sleeps).toEqual([250]);
+    for (const line of log) expect(line).not.toContain(w.people.a);
+  });
+
+  it('a binding lookup that never answers is given up -- and the PUIDs minted in that room are removed all the same', async () => {
+    const w = await voicedArena();
+    await w.minter.mint({ partyId: w.pid, participantId: w.people.b, audience: [], nowIso, puid: w.puid[w.people.b] });
+    const down = { ...w.bindings, puidsOf: async () => { throw new Error('db down'); } };
+    const log: string[] = [];
+    const removals = createVoiceRemovals({ target: w.minter, bindings: () => down, log: (l) => log.push(l), sleep: async () => undefined });
+    removals.onDepartures([{ partyId: w.pid, userId: w.people.b }]);
+    await removals.idle();
+    expect(log.filter((l) => l.includes('binding lookup failed'))).toHaveLength(4);
+    expect(log).toContain(`eos voice: binding lookup GAVE UP user=${hashId(w.people.b)}; removing the minted PUIDs only`);
+    expect(w.deletes()).toEqual([w.deleteOf(w.people.b)]);
   });
 });
 

@@ -323,12 +323,21 @@ export function loadEosGameClientConfig(
 
 /* ------------------------------------------------------------------------------------------------ the minter */
 
-export type EosFetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+export type EosFetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+
+/**
+ * Every Epic call is given up after this long (MAIN's internal review a6d5842c, m1): removals run one at a time, so one hung
+ * DELETE used to stall every removal queued behind it, and a hung createRoomToken held a join. A timed-out call is a failure
+ * like any other: a removal retries it, and a join answers 503.
+ */
+export const EOS_REQUEST_TIMEOUT_MS = 10_000;
 
 export interface EosVoiceDeps {
   readonly fetchImpl?: EosFetch;
   readonly log?: (line: string) => void;
   readonly now?: () => number;
+  /** Tests only: a shorter EOS_REQUEST_TIMEOUT_MS. */
+  readonly timeoutMs?: number;
 }
 
 class EosHttpError extends Error {
@@ -345,6 +354,7 @@ export class EosVoiceTokenMinter implements PartyVoiceTokenMinter, VoiceRemovalT
   private readonly fetchImpl: EosFetch;
   private readonly log: (line: string) => void;
   private readonly now: () => number;
+  private readonly timeoutMs: number;
   /**
    * EVERY ROOM TOKEN THIS PROCESS MINTED (MAIN's internal review a6d5842c, B1): player -> room -> PUID -> the serial of that PUID's
    * latest mint. A departure, and a re-bind, take out every PUID minted for that player in that room, not only the one bound now
@@ -362,6 +372,7 @@ export class EosVoiceTokenMinter implements PartyVoiceTokenMinter, VoiceRemovalT
     this.fetchImpl = deps.fetchImpl ?? (globalThis.fetch as unknown as EosFetch);
     this.log = deps.log ?? (() => undefined);
     this.now = deps.now ?? Date.now;
+    this.timeoutMs = deps.timeoutMs ?? EOS_REQUEST_TIMEOUT_MS;
   }
 
   /** The party's room: an opaque HMAC-SHA256(roomSalt, partyId), first 32 hex -- stable, and naming nothing. */
@@ -378,6 +389,7 @@ export class EosVoiceTokenMinter implements PartyVoiceTokenMinter, VoiceRemovalT
       method: 'POST',
       headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
       body: form.toString(),
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
     if (!answer.ok) throw new EosHttpError(answer.status, 'the EOS token endpoint');
     const body = asRecord(await answer.json());
@@ -398,6 +410,7 @@ export class EosVoiceTokenMinter implements PartyVoiceTokenMinter, VoiceRemovalT
         method,
         headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json', Accept: 'application/json' },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
       if (answer.status === 401 && attempt === 0) continue;
       if (!answer.ok) throw new EosHttpError(answer.status, what);
@@ -512,8 +525,9 @@ export interface VoiceRemovals {
  * (read when the removal runs, so a join racing the departure is caught too), plus the PUID bound to them now -- the fallback for
  * a token minted before a restart (see EosVoiceTokenMinter.minted for the per-process limit). In departure order, one at a time;
  * each PUID tried up to 1 + backoff.length times (default 0.25 s, 1 s, 4 s), then given up and logged; a PUID given up on stays
- * recorded, so the next departure from that room tries it again. A member who never joined voice has nothing to remove. Ids are
- * logged hashed.
+ * recorded, so the next departure from that room tries it again. Every Epic call times out (EOS_REQUEST_TIMEOUT_MS), so a hung
+ * one can no longer stall the removals queued behind it; the binding lookup is retried the same way. A member who never joined
+ * voice has nothing to remove. Ids are logged hashed.
  */
 export function createVoiceRemovals(deps: {
   readonly target: VoiceRemovalTarget;
@@ -526,16 +540,23 @@ export function createVoiceRemovals(deps: {
   const backoff = deps.backoffMs ?? [250, 1000, 4000];
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   let chain: Promise<void> = Promise.resolve();
-  /** The PUID bound to the member now, if any; a lookup that fails is logged (hashed) and leaves the minted PUIDs to remove. */
+  /**
+   * The PUID bound to the member now, if any. A lookup that fails is logged (hashed, with its reason) and retried with the same
+   * backoff (MAIN's internal review a6d5842c, m1: it used to be swallowed); given up, the minted PUIDs are still removed.
+   */
   const boundPuidOf = async (userId: string): Promise<string | undefined> => {
     const bindings = deps.bindings();
     if (bindings === null) return undefined;
-    try {
-      return (await bindings.puidsOf([userId])).get(userId);
-    } catch {
-      log(`eos voice: binding lookup failed user=${hashId(userId)}`);
-      return undefined;
+    for (let attempt = 0; attempt <= backoff.length; attempt += 1) {
+      try {
+        return (await bindings.puidsOf([userId])).get(userId);
+      } catch (error) {
+        log(`eos voice: binding lookup failed user=${hashId(userId)} attempt ${attempt + 1} (${failureTag(error)})`);
+        if (attempt < backoff.length) await sleep(backoff[attempt]);
+      }
     }
+    log(`eos voice: binding lookup GAVE UP user=${hashId(userId)}; removing the minted PUIDs only`);
+    return undefined;
   };
   /** True once Epic confirmed it (or it was already gone); false when given up. */
   const removeWithRetries = async (roomId: string, puid: string): Promise<boolean> => {
