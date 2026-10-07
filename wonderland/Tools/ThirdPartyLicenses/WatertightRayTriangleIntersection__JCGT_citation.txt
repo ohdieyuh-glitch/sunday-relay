@@ -1,0 +1,1 @@
+Citation: Sven Woop, Carsten Benthin, and Ingo Wald, Watertight Ray/Triangle Intersection, Journal of Computer Graphics Techniques (JCGT), vol. 2, no. 1, 65-82, 2013. Available online http://jcgt.org/published/0002/01/05/

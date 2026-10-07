@@ -1,0 +1,1 @@
+Minimum-Area Rectangle Containing a Set of PointsDavid Eberly, Geometric Tools, Redmond WA 98052https://www.geometrictools.com/This work is licensed under the Creative Commons Attribution 4.0 International License.

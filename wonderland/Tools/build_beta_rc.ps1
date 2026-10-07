@@ -119,8 +119,9 @@ Test-Eula $eulaText 'the committed text'
 $eulaBytes = (New-Object Text.UTF8Encoding $false).GetBytes($eulaText.Replace("`n", "`r`n"))
 $eulaSha = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($eulaBytes)).Replace('-', '')
 if ($eulaSha -ne $eulaPin) { throw "The Beta EULA's shipped bytes would be $eulaSha, not the approved $eulaPin (WONDERLAND_BETA_EULA.APPROVAL.txt)" }
-# v4b (SECOND 10-07): a RELEASE CANDIDATE ships only under a FINAL-scope record; a REHEARSAL scope is for rehearsal versions only
-if ($Version -match '^0\.1\.0-rc\d+$' -and $eulaScope -ne 'FINAL') { throw "A release candidate ($Version) needs a FINAL-scope EULA approval record; WONDERLAND_BETA_EULA.APPROVAL.txt at $commitFull says $eulaScope" }
+# v4c (SECOND's review 52d4610c): DEFAULT-DENY. A REHEARSAL-scope record is allowed ONLY for an explicit rehearsal version
+# (0.1.0-r16reh<n>[letter]); every other version -- 0.1.0, 0.1.0-beta, 0.1.0-rc<n>, anything new -- needs a FINAL-scope record.
+if ($eulaScope -ne 'FINAL' -and $Version -notmatch '^0\.1\.0-r16reh\d+[a-z]?$') { throw "Version $Version needs a FINAL-scope EULA approval record (REHEARSAL is allowed only for 0.1.0-r16reh<n>[letter]); WONDERLAND_BETA_EULA.APPROVAL.txt at $commitFull says $eulaScope" }
 Say "EULA the committed agreement has every required part, no ownership assertion, and its shipped bytes are the approved $($eulaPin.Substring(0, 12)) (scope $eulaScope)"
 # 0d. THE THIRD-PARTY RECORDS FOR THIS GAME TARGET. UAT and UBT are single-instance per engine install; here, before the cook, a
 #     collision with another lane's UAT / UBT costs seconds (fail fast; no mutex wait). UAT is called directly, not through
@@ -147,7 +148,7 @@ if ($SkipBuild) {
   $label = (Get-Content -Raw (Join-Path $ArchiveDir 'Windows\Wonderland\BuildInfo\BuildInfo.txt')).Trim()
   # v3: the current tree's notices / EULA / README template go into this release, so the archive must be HEAD's own build, clean
   $headSha = (& git -C $ProjectDir rev-parse --short=8 HEAD).Trim()
-  $skipDirty = (& git --no-optional-locks -C $ProjectDir status --porcelain --untracked-files=all -- Source Config RelaySkins UiArt Companions ProjectAvatars RelayCubs WorldDesign/Look Wonderland.uproject Tools/build_beta_rc.ps1 Tools/make_package_notices.py Tools/WONDERLAND_BETA_EULA.txt) -join ''
+  $skipDirty = (& git --no-optional-locks -C $ProjectDir status --porcelain --untracked-files=all -- Source Config RelaySkins UiArt Companions ProjectAvatars RelayCubs WorldDesign/Look Wonderland.uproject Tools/build_beta_rc.ps1 Tools/make_package_notices.py Tools/WONDERLAND_BETA_EULA.txt Tools/ThirdPartyLicenses) -join ''
   if ($label -notmatch "\| build $headSha \|" -or $skipDirty) { throw "-SkipBuild refused: the archive's label '$label' is not HEAD $headSha, or the tree is dirty" }
 } else {
   $sha = (& git -C $ProjectDir rev-parse --short=8 HEAD).Trim()
@@ -156,7 +157,7 @@ if ($SkipBuild) {
   # 2026-10-07: lock-free (no index write into the shared .git during another lane's heavy window), and every path that produces
   # SHIPPED bytes counts: the uproject (its plugin list decides what ships) and the Tools files that write the README template,
   # the third-party notices and the Beta EULA.
-  $dirty = (& git --no-optional-locks -C $ProjectDir status --porcelain --untracked-files=all -- Source Config RelaySkins UiArt Companions ProjectAvatars RelayCubs WorldDesign/Look Wonderland.uproject Tools/build_beta_rc.ps1 Tools/make_package_notices.py Tools/WONDERLAND_BETA_EULA.txt) -join ''
+  $dirty = (& git --no-optional-locks -C $ProjectDir status --porcelain --untracked-files=all -- Source Config RelaySkins UiArt Companions ProjectAvatars RelayCubs WorldDesign/Look Wonderland.uproject Tools/build_beta_rc.ps1 Tools/make_package_notices.py Tools/WONDERLAND_BETA_EULA.txt Tools/ThirdPartyLicenses) -join ''
   # v4b (SECOND 10-07): a dirty tree THROWS. Its '+local-changes' label was refused by every label check after the cook anyway.
   if ($dirty) { throw "The tree is dirty in the paths that produce shipped bytes; commit or restore them first:`n$($dirty -join "`n")" }
   $suffix = ''
@@ -209,6 +210,25 @@ $gpuDump = Join-Path $dst 'Engine\Extras\GPUDumpViewer'
 if (Test-Path $gpuDump) { Remove-Item -Recurse -Force $gpuDump }
 $arm64 = Join-Path $dst 'Engine\Extras\Redist\en-us\vc_redist.arm64.exe'
 if (Test-Path $arm64) { Remove-Item -Force $arm64 }
+# v4d, R12 (founder 2026-10-07: UNKNOWN never passes; an optional component whose licence is unresolved is REMOVED, never shipped).
+# The R12 ledger's evidence: _wonderland_beta_release/r12_closure (sa2_files). Two Windows DLLs the engine stages go:
+#  - dbghelp.dll 10.0.25291.1000: no SDK licence is established for that build (the engine's record names 10.0.19041). DBGHELP is
+#    delay-loaded, so the system copy serves; the engine's preload of the bundled copy logs its failure and goes on.
+#  - xaudio2_9redist.dll: its own licence (Microsoft.XAudio2.Redist) names no part of itself as distributable code. EOS voice uses
+#    the system XAudio 2.9 (task3 WonderlandEosVoice.cpp), and the game's audio links the system xaudio2.lib (XAudio2_9.Build.cs).
+$dbghelpDir = Join-Path $dst 'Engine\Binaries\ThirdParty\DbgHelp'
+if (Test-Path $dbghelpDir) { Remove-Item -Recurse -Force $dbghelpDir }
+$xaudioRedistDir = Join-Path $dst 'Engine\Binaries\ThirdParty\Windows\XAudio2_9'
+if (Test-Path $xaudioRedistDir) { Remove-Item -Recurse -Force $xaudioRedistDir }
+# AND THE VC++ REDISTRIBUTABLE is Microsoft's own download, not the engine's copy: the VS 2022 licence's Distributable List covers the
+# packages obtained from Microsoft's download pages; the engine's 14.50.35719 bundle (from the UE install) carries no grant. The root
+# bootstrap needs a runtime >= 14.50.35719 (the app-local DLLs are 14.44), so the installer must stay. Pinned by sha256: aka.ms/vc14/
+# vc_redist.x64.exe, 14.51.36247.0, Authenticode "Microsoft Corporation" (Code Signing PCA 2024), fetched 2026-10-07.
+$VcRedistPinned = 'C:\dev\iwonder\_wonderland_beta_release\vendor\vc_redist.x64_14.51.36247.0.exe'
+$VcRedistSha256 = '843068991DAAA1F73AD9F6239BCE4D0F6A07A51F18C37EA2A867E9BECA71295C'
+if (-not (Test-Path $VcRedistPinned) -or (Get-FileHash $VcRedistPinned -Algorithm SHA256).Hash -ne $VcRedistSha256) { throw "the pinned vc_redist.x64.exe ($VcRedistPinned) is missing or is not $VcRedistSha256" }
+$vcRedistDst = Join-Path $dst 'Engine\Extras\Redist\en-us\vc_redist.x64.exe'
+Copy-Item -Force $VcRedistPinned $vcRedistDst
 # AND THE RETIRED FIGURES (Second Wonderland's RC3 audit). The wardrobe offers the canonical five and nothing loads these,
 # but a tester browsing the folder would meet designs the founder retired. The source files stay in the tree.
 $retired = @('Apollo', 'ApolloV1', 'ApolloV2', 'ArdenInfernal', 'ArdenInfernalV1', 'ArdenInfernalV2', 'Bee', 'Hagoromo', 'SkeletonFlame', 'SkeletonFlameV1')
@@ -315,6 +335,10 @@ Delete this folder and %LOCALAPPDATA%\Wonderland.
 $redist = Test-Path (Join-Path $dst 'Engine\Extras\Redist\en-us\vc_redist.x64.exe')
 $appLocal = Test-Path (Join-Path $dst 'Wonderland\Binaries\Win64\vcruntime140.dll')
 if (-not ($redist -and $appLocal)) { throw "Prerequisites missing from the release: vc_redist.x64.exe $redist, app-local vcruntime140.dll $appLocal" }
+# v4d (R12): the installer is the PINNED Microsoft download, and the two removed DLLs are really gone
+if ((Get-FileHash (Join-Path $dst 'Engine\Extras\Redist\en-us\vc_redist.x64.exe') -Algorithm SHA256).Hash -ne $VcRedistSha256) { throw "vc_redist.x64.exe in the release is not the pinned Microsoft download $VcRedistSha256" }
+$leftovers = @(Get-ChildItem -Recurse -File $dst | Where-Object { $_.Name -in @('dbghelp.dll', 'xaudio2_9redist.dll') } | ForEach-Object { $_.FullName.Substring($dst.Length + 1) })
+if ($leftovers.Count) { throw "R12: the release still carries a removed DLL: $($leftovers -join ', ')" }
 
 # 6b. THE THIRD-PARTY NOTICES (founder ruling 2026-10-07: "Preserve third-party software/license obligations independently of the
 # project-level proprietary license"). The package redistributes BSD (Ogg/Vorbis), MIT (MsQuic), Apache-2.0 (oneTBB),
@@ -333,7 +357,7 @@ foreach ($anchor in 'Engine/Content/Certificates/ThirdParty/cacert.pem', 'Engine
 if ($ufsLines.Count -lt 1000) { throw "The UFS manifest $ufsManifest lists only $($ufsLines.Count) files (< 1000): not a whole list" }
 $noticesOut = Join-Path $noticesWork 'out'
 $gen = Start-Process -FilePath $python -NoNewWindow -Wait -PassThru `
-  -ArgumentList '-I', "`"$(Get-CommittedCopy 'Tools/make_package_notices.py')`"", '--tps-log', "`"$tpsLog`"", '--engine', "`"$engineRoot`"", '--out', "`"$noticesOut`"", '--shipped', "`"$dst`"", '--ufs-manifest', "`"$ufsManifest`"" `
+  -ArgumentList '-I', "`"$(Get-CommittedCopy 'Tools/make_package_notices.py')`"", '--tps-log', "`"$tpsLog`"", '--engine', "`"$engineRoot`"", '--out', "`"$noticesOut`"", '--shipped', "`"$dst`"", '--ufs-manifest', "`"$ufsManifest`"", '--texts', "`"$(Join-Path $ProjectDir 'Tools\ThirdPartyLicenses')`"" `
   -RedirectStandardOutput (Join-Path $noticesWork 'make_package_notices.txt') -RedirectStandardError (Join-Path $noticesWork 'make_package_notices.err')
 $genOut = @(Get-Content (Join-Path $noticesWork 'make_package_notices.txt') -Encoding UTF8)
 $genOut | Select-Object -First 2 | ForEach-Object { Say "NOTICES $_" }

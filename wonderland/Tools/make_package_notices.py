@@ -6,6 +6,7 @@ found in the installation directory for each engine version under the /Engine/So
   python -I make_package_notices.py --tps-log <log> --engine <UE root> --out <NEW folder> --shipped <package folder>
                                     [--ufs-manifest <the staged build's Manifest_UFSFiles_Win64.txt>]
   python -I make_package_notices.py --selftest
+  (v2.3b: [--texts <the committed license texts folder>], default Tools/ThirdPartyLicenses beside this file)
 
 v2.2 (2026-10-07; two rounds of CORE's internal review: reviewers 1-3, then reviewer 6):
 - PARSING: every line of UAT's ListThirdPartySoftware output that names a .tps or a "(redirect from ...)" parses, or the run is an
@@ -23,11 +24,27 @@ v2.2 (2026-10-07; two rounds of CORE's internal review: reviewers 1-3, then revi
   path; a VENDOR file needs its VENDOR_TERMS entry. Loose AND packed (the UFS manifest): binaries, fonts (.ufont too), the CA bundle.
 - REQUIRED ATTRIBUTIONS (verbatim, at the top): the IJG statement (libjpeg-turbo) and the FreeType Team disclaimer (FreeType's FTL).
 - Every section prints its Record(s), so a reader can check the mapping against the records themselves.
+v2.3b (2026-10-07; SECOND WONDERLAND's attack on f8327e7e: its audit K counts a component named only by a URL or a list item as
+UNKNOWN): license TEXTS the engine install does not hold are COMMITTED beside this tool (Tools/ThirdPartyLicenses/, each source named
+in its SOURCES.txt) and PINNED here by sha256 (COMMITTED_TEXTS; a missing file or a changed byte is an ERROR). A record the install
+left at URL / UNRESOLVED takes its committed text; a vendor component with a committed text prints as its own 'Component(s):'
+section. COMPONENT_ALIASES adds the names a shipped file goes by (the Droid Sans fonts) to its section's 'Component(s):' line.
+v2.3c (2026-10-07, CORE; the founder's R12 rule: Q-A = NO, UNKNOWN never passes): the R12 RESOLUTION LEDGER,
+R12_RESOLUTIONS.tsv, is committed in the texts folder and PINNED here by sha256 (RESOLUTIONS_SHA256; a changed byte is an ERROR).
+- Its state-B rows (no separate shipped notice, under an authoritative record) are PRINTED as determinations:
+  - a URL section gets one 'Determination:' line;
+  - an unresolved record moves from the "no license text found" list to a DETERMINATIONS list.
+  Neither ever reaches NOTICE_TEXT_MIN_LINES, so a determination can never pass as a license text.
+- Its state-A rows ride the existing mechanisms (COMMITTED_TEXTS, SOURCE_TERMS, EXPLICIT_LICENSES).
+- Its state-C rows name removed components. BLOCKER rows are listed in SUMMARY.txt.
+- A ledger row that names a record the run does not list is an ERROR.
+R12's verdict is core_r12_gate.py (SECOND's K, unmodified, + the ledger re-verified against the bytes), never this tool's exit.
 Exit: 0 written, every redistributed file mapped; 1 a GAP (written, for inspection); 2 an ERROR (nothing trustworthy written).
 Writes ONLY into --out (refused if it exists): THIRD_PARTY_NOTICES.txt (UTF-8, CRLF), notices_map.json, SUMMARY.txt.
 """
 import argparse
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -48,8 +65,13 @@ SHIPPED_MAP = [
      'TEXT', r'NVIDIA.*Software License Agreement'),
     (r'^Engine/Binaries/ThirdParty/Ogg/Win64/VS2015/libogg_64\.dll$', r'Engine\Source\ThirdParty\Ogg\OggVorbis.tps', 'TEXT', r'Xiph\.org.*binary forms?'),
     (r'^Engine/Binaries/ThirdParty/Vorbis/Win64/VS2015/libvorbis(file)?_64\.dll$', r'Engine\Source\ThirdParty\Ogg\OggVorbis.tps', 'TEXT', r'Xiph\.org.*binary forms?'),
+    # v2.3c (R12): the record's URL is a stale 2017 EULA; the DLL is pinned by content hash to the WinPixEventRuntime 1.0.240308001
+    # package, whose own LICENSE.txt is MIT (committed: COMMITTED_TEXTS)
     (r'^Engine/Binaries/ThirdParty/Windows/WinPixEventRuntime/x64/WinPixEventRuntime\.dll$',
-     r'Engine\Binaries\ThirdParty\Windows\WinPixEventRuntime\WinPixEventRuntime.tps', 'URL', 'https://www.microsoft.com/web/webpi/eula/eula_pix_event_runtime.htm'),
+     r'Engine\Binaries\ThirdParty\Windows\WinPixEventRuntime\WinPixEventRuntime.tps', 'TEXT', r'MIT License.*Permission is hereby granted, free of charge'),
+    # v2.3c (R12; founder 2026-10-07): the HUD's monospace face is the AOSP Apache-2.0 Droid Sans Mono (task3 26105c74), a project
+    # file with no engine record: its AOSP NOTICE is committed (COMMITTED_TEXTS)
+    (r'^Wonderland/Content/Slate/Fonts/DroidSansMono-AOSP\.ttf$', 'VENDOR', 'VENDOR', ''),
     (r'^Engine/Binaries/ThirdParty/Windows/XAudio2_9/x64/xaudio2_9redist\.dll$', 'VENDOR', 'VENDOR', ''),
     (r'^Engine/Binaries/Win64/EOSSDK-Win64-Shipping\.dll$', 'VENDOR', 'VENDOR', ''),
     (r'^(Engine|Wonderland)/Binaries/Win64/' + VC + r'\.dll$', 'VENDOR', 'VENDOR', ''),
@@ -92,6 +114,7 @@ VENDOR_TERMS = [   # named truthfully; no URL or text is invented for them
     ('Epic Online Services SDK (EOSSDK-Win64-Shipping.dll), Epic Games, Inc.', r'(^|/)EOSSDK-Win64-Shipping\.dll$'),
     ('Microsoft Visual C++ runtime (msvcp140 / vcruntime140 / vccorlib140 / concrt140 DLLs and vc_redist.x64.exe)',
      r'(^|/)' + VC + r'\.dll$|(^|/)vc_redist\.x64\.exe$'),
+    ('Droid Sans Mono, Android Open Source Project build 113 (DroidSansMono-AOSP.ttf)', r'(^|/)DroidSansMono-AOSP\.ttf$'),
 ]
 # statements a license REQUIRES in the product's documentation: (a regex on the component's record path or name, the statement)
 REQUIRED_ATTRIBUTIONS = [
@@ -109,12 +132,124 @@ SOURCE_TERMS = [
 EXPLICIT_LICENSES = [
     (r'mobilephonebezelfmorrison\.tps$', ['MobilePhoneBezelImages-Fmorrison_License.txt']),
     (r'mobilephonebezelrayukk\.tps$', ['MobilePhoneBezelImages-Rayukk_License - Copy.txt']),
-    (r'distributed-shaders-compilation-fastbuild\.tps$', ['UnrealFASTBuild_v0-95_License.txt']),
+    # v2.3c (R12, sa1's research): NO mapping for distributed-shaders-compilation-fastbuild.tps. UnrealFASTBuild_v0-95_License.txt (MIT)
+    # belongs, by its own record (UnrealFASTBuild_v0-95.tps), to UBT's FASTBuild build executor, not to the engine's ShaderCompiler code;
+    # no record supports printing it under this one. The R12 ledger determines this record B-EULA7B instead.
     (r'basegizmos[\\/]geometry-tools-engine\.tps$', ['GTEngine_License.txt']),
     # R3 (2026-10-07): the Aftermath record's own .license is a header-only pointer; Epic's Licenses folder holds the NVIDIA SDK
     # license for Aftermath (and NVAPI) under this name
     (r'nvaftermath[\\/]nvidia aftermath sdk_[^\\/]*\.tps$', ['Aftermath_NVAPI_License.txt']),
 ]
+# v2.3b: (kind, match, file name in the committed texts folder, sha256). kind 'record': match = a regex on the record's
+# engine-relative path, used only when the install gave that record no text; kind 'vendor': match = the VENDOR_TERMS name.
+_VCRT = 'Microsoft Visual C++ runtime (msvcp140 / vcruntime140 / vccorlib140 / concrt140 DLLs and vc_redist.x64.exe)'
+_AOSP_MONO = 'Droid Sans Mono, Android Open Source Project build 113 (DroidSansMono-AOSP.ttf)'
+COMMITTED_TEXTS = [
+    # v2.3c (R12, the ledger's shipped-file rows; sources and hashes in ThirdPartyLicenses/SOURCES.txt)
+    ('record', r'WinPixEventRuntime\\WinPixEventRuntime\.tps$', 'WinPixEventRuntime_1.0.240308001_LICENSE.txt',
+     '903df5512f7d02609fed0c780a9b704f5a3eeb6e4d84ebe42a29845c81899a3c'),
+    ('record', r'WinPixEventRuntime\\WinPixEventRuntime\.tps$', 'WinPixEventRuntime_1.0.240308001_ThirdPartyNotices.txt',
+     '3f06560bbbf286c149c6fd4427f2a5d4e79824591fcba835fffab42b6950967c'),
+    ('vendor', _VCRT, 'Microsoft_VisualCpp_2015-2022_Runtime_License_14.44.35211.txt',
+     'a6b3e549f58312979ef6199e562727f8a06776864017523f983e710a3491ac8b'),
+    ('vendor', _VCRT, 'Microsoft_VisualCpp_v14_Redistributable_and_Runtime_License.txt',
+     'f9d4b242e6aad430223dbd9c579885df71231e50c2dc89ee21c3f67ead1c0da9'),
+    ('vendor', _VCRT, 'Microsoft_VisualStudio_2022_Community_License_Terms.txt',
+     '11b61db78d74eaa4bbe6777334229c4a424fbf3e8d8fe02defc2aa35a3a63cb9'),
+    ('vendor', _VCRT, 'Microsoft_VisualStudio_2022_Distributable_Code_List.txt',
+     '90ec3978262bba72615e57d998e12f1c36ebf385f8b44dc748cabab10643f21b'),
+    ('vendor', _AOSP_MONO, 'DroidSansMono-AOSP-NOTICE.txt', '38751245389e1e23f73e6f5384b5cbe7fa972cc4410c5adc9c04b082a0b9561a'),
+    ('vendor', _AOSP_MONO, 'DroidSansMono-AOSP-data-fonts-README.txt', 'c8b88077052fed912b3f724c0ed230c501cf4e18833af7ca44338d3cd0b093e2'),
+    # v2.3c (R12, the ledger's A rows for ENGINE RECORDS: SA1 research, byte-exact excerpts / pinned downloads; SOURCES.txt)
+    ('record', 'Engine\\\\Content\\\\Internationalization\\\\UnicodeCommonLocaleDataRepository\\.tps$', 'UnicodeCommonLocaleDataRepository__01_cldr_35-1_license__unicode-license.txt',
+     'bc4c37c0b70864b8a672bb7a8517f47eb7d2be558a3e8fbbe33bc3ad21e22d39'),
+    ('record', 'Engine\\\\Content\\\\Internationalization\\\\UnicodeCommonLocaleDataRepository\\.tps$', 'UnicodeCommonLocaleDataRepository__02_cldr_23-1_license__unicode-license.txt',
+     '72a95a3930bf6fc1961c08c3011321d294c5d9ee9c5d10b535c1afca15287fba'),
+    ('record', 'Engine\\\\Plugins\\\\Media\\\\WebMMedia\\\\Source\\\\ThirdParty\\\\webm\\\\libwebm\\.tps$', 'libwebm__LICENSE.TXT_L1-29.txt',
+     'fa027f73c8913b96a02ec8576f6984d1d7600b65374ff5715919f84ecf03349d'),
+    ('record', 'Engine\\\\Shaders\\\\Private\\\\ColorMap\\.tps$', 'ColorMap__08_cc0-1.0_legalcode__legalcode.txt',
+     'a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499'),
+    ('record', 'Engine\\\\Shaders\\\\Private\\\\ColorMap\\.tps$', 'ColorMap__ColorMap.ush_L5-5.txt',
+     '43042aa11c29ccfbf61f7eb2be13d2496e82bc808fad0657ba1e68500b47b2d9'),
+    ('record', 'Engine\\\\Shaders\\\\Private\\\\FastMathThirdParty\\.tps$', 'FastMathThirdParty__FastMathThirdParty.ush_L11-29.txt',
+     '50122ce45cbe864ca529ed317dcc891c012ddc60eafa3b4a343665ffcbbe2bd6'),
+    ('record', 'Engine\\\\Shaders\\\\Private\\\\Random4\\.tps$', 'Random4__06_webglnoise_0a8c2fe5_LICENSE__LICENSE.html.txt',
+     'bdafce1bb01517c9ae6c4f3620c01340790b5e9d039ae9e356347d1174250916'),
+    ('record', 'Engine\\\\Shaders\\\\Private\\\\SMAA\\\\SubpixelMorphologicalAntialiasing\\.tps$', 'SubpixelMorphologicalAntialiasing__SMAA.ush_L4-28.txt',
+     '3c9fd05782f8a2f66ea27453185cc7dc44e2c07e18e60bdeba643c6e3c8057eb'),
+    ('record', 'Engine\\\\Shaders\\\\Shared\\\\ThirdParty\\\\AMD\\\\Agslib\\.tps$', 'Agslib__ags_shader_intrinsics_dx12.h_L1-21.txt',
+     '5fddbbcdd1b3d1f0a5cbab07103678d20a896b28ad98a1151fc809a023d91b5c'),
+    # the Intel and NVIDIA shader records are REDIRECT STUBS (to Engine/Source/ThirdParty/Intel/ExtensionsFramework and .../NVIDIA/nvapi):
+    # the run lists their TARGET records, so the shader headers' texts attach there (the sections the ledger rows name)
+    ('record', 'Engine\\\\Source\\\\ThirdParty\\\\Intel\\\\ExtensionsFramework\\\\IntelExtensionsFramework\\.tps$', 'IntelExtensionsFramework__IntelExtensions.h_L1-7.txt',
+     'e20edb5926de34b48ac62cd7acd63dd8f6fc60f79e5ce4e30f44321d03e4bf10'),
+    ('record', 'Engine\\\\Source\\\\ThirdParty\\\\Intel\\\\ExtensionsFramework\\\\IntelExtensionsFramework\\.tps$', 'IntelExtensionsFramework__IntelExtensions12.h_L1-7.txt',
+     '87a045578ca1968aad43cd467617c6b40862bb46758faa75051305425245c42f'),
+    ('record', '\\\\NVAPI_vR570\\.tps$', 'Nvapi__nvHLSLExtns.h_L1-25.txt',
+     '312239f1a521af1ec9ed83347bf1abf9d6c73a0e5495d1c2e78e7854bf5619b9'),
+    ('record', 'Engine\\\\Shaders\\\\Shared\\\\ThirdParty\\\\WatertightRayTriangleIntersection\\.tps$', 'WatertightRayTriangleIntersection__07_cc-by-nd-3.0_legalcode__legalcode.txt',
+     'b9d9816260e23b4bdb71e0edc453497273f4cfc1fdf61207ee6cc1c7075a2479'),
+    ('record', 'Engine\\\\Shaders\\\\Shared\\\\ThirdParty\\\\WatertightRayTriangleIntersection\\.tps$', 'WatertightRayTriangleIntersection__JCGT_citation.txt',
+     '2021e54de901bda9fee61032730854fda3992566bad3e51a4b8973c390e3af98'),
+    ('record', 'Engine\\\\Source\\\\Runtime\\\\Core\\\\Private\\\\Misc\\\\Crc\\.tps$', 'Crc__crc.h_L3-6.txt',
+     'ebfc80286c0e2c29bb79645b910d4ffc658741790b6aa148cb0366621a543c81'),
+    ('record', 'Engine\\\\Source\\\\Runtime\\\\Core\\\\Private\\\\Misc\\\\Crc\\.tps$', 'Crc__bsd-license.html_L190-222.txt',
+     '0f96ebb2282ceb7a5cae54820e09d1c7f97d5829ee2593f28923a6d51e9351cd'),
+    ('record', 'Engine\\\\Source\\\\Runtime\\\\Core\\\\Private\\\\Misc\\\\FNVHashAlgorithm\\.tps$', 'FNVHashAlgorithm__draft-eastlake-fnv-16.txt_L650-681.txt',
+     'a484ab397538878a71df1dfa9c7e32e602d1a40f1f791771d1e5f6e0682eb3f4'),
+    ('record', 'Engine\\\\Source\\\\Runtime\\\\Core\\\\Private\\\\Misc\\\\GuidGenerator\\.tps$', 'GuidGenerator__GuidGenerator.cpp_L5-19.txt',
+     '295cd8d1218d8c6fef12f83a0fd540d25b51e480d04729b872fdf628188418fc'),
+    ('record', 'Engine\\\\Source\\\\Runtime\\\\Core\\\\Public\\\\Experimental\\\\Containers\\\\FAAArrayQueue\\.tps$', 'FAAArrayQueue__FAAArrayQueue.h_L1-27.txt',
+     'b1355f36f1c79d50f16ae202a4b140db440ba9cf2f3034c40d927ff265bb065a'),
+    ('record', 'Engine\\\\Source\\\\Runtime\\\\Core\\\\Public\\\\FramePro\\\\FrameProLib\\.tps$', 'FrameProLib__FramePro.h_L1-14.txt',
+     '3a373558e031490888f13b8f02bb87f6fe2016fd3162079d2e5651b628013b79'),
+    ('record', 'Engine\\\\Source\\\\Runtime\\\\Engine\\\\Private\\\\Animation\\\\AnimPhysicsSolver\\.tps$', 'AnimPhysicsSolver__AnimPhysicsSolver.cpp_L10-28.txt',
+     'af7fdd9bf66bc62ee23fb6019ec584b746b7440493b5aa7c62426009699a5154'),
+    ('record', 'Engine\\\\Source\\\\Runtime\\\\Engine\\\\Private\\\\KismetMathLibrary2\\.tps$', 'KismetMathLibrary2__15_cc-by-4.0_legalcode__legalcode.txt',
+     '9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411'),
+    ('record', 'Engine\\\\Source\\\\Runtime\\\\Engine\\\\Private\\\\KismetMathLibrary2\\.tps$', 'KismetMathLibrary2__MinimumAreaRectangle_pdf_text_line1.txt',
+     'dc36e754af22c3277114448bf2a5226f195a094b3b05ec2da864bcc0a7c8cd00'),
+    ('record', 'Engine\\\\Source\\\\ThirdParty\\\\AMD\\\\AMD_AGS\\\\AGSlib\\.tps$', 'AGSlib__amd_ags.h_L1-21.txt',
+     '5fddbbcdd1b3d1f0a5cbab07103678d20a896b28ad98a1151fc809a023d91b5c'),
+    ('record', 'Engine\\\\Source\\\\ThirdParty\\\\Intel\\\\ExtensionsFramework\\\\IntelExtensionsFramework\\.tps$', 'IntelExtensionsFramework__igdext.h_L1-6.txt',
+     '9bf63cdbbdc8b5d2871c6c30b1b98ad2a1364c21727f1416067f68c5b9404994'),
+    ('record', 'Engine\\\\Source\\\\ThirdParty\\\\Intel\\\\ExtensionsFramework\\\\IntelExtensionsFramework\\.tps$', 'IntelExtensionsFramework__58_spdx_v3.25.0_MIT__MIT.txt',
+     'b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0'),
+    ('record', 'Engine\\\\Source\\\\ThirdParty\\\\libvpx\\\\libvpx\\.tps$', 'libvpx__03_libvpx_v1.14.1_LICENSE__LICENSE.html.txt',
+     '8267348d5af1262c11d1a08de2f5afc77457755f1ac658627dd9acf71011d615'),
+    ('record', 'Engine\\\\Source\\\\ThirdParty\\\\libvpx\\\\libvpx\\.tps$', 'libvpx__04_libvpx_v1.14.1_PATENTS__PATENTS.html.txt',
+     'cc3273e0694ea5896145e0677699b53471b03ea43021ddc50e7923fbb9f5023c'),
+    ('record', 'Engine\\\\Source\\\\ThirdParty\\\\libWebSockets\\\\libwebsockets\\.tps$', 'libwebsockets__05_libwebsockets_v3.0.0_LICENSE__LICENSE.html.txt',
+     '4d092cd5e062c5ab0cf6408963d74619b5baf1571344410be6aa5bcef512eb70'),
+    ('record', 'Engine\\\\Source\\\\ThirdParty\\\\libWebSockets\\\\libwebsockets\\.tps$', 'libwebsockets__sha-1.c_L1-28.txt',
+     '4ba66e155030b6cbe1bb44a7f1111f07967c239125f80c394b56a1c2fd0d8976'),
+    # the engine's own libwebsockets_notice.txt (the "based in part" statement the licence's static-linking exception requires) is
+    # too short for the install search's body rule, so it is committed here as a companion of the licence above
+    ('record', 'Engine\\\\Source\\\\ThirdParty\\\\libWebSockets\\\\libwebsockets\\.tps$', 'libwebsockets__libwebsockets_notice.txt',
+     '951fdf3e75dad67e1e8b17374c9c58e22de984764c835d602fb84a22b4b4d648'),
+    ('record', 'Engine\\\\Source\\\\ThirdParty\\\\MikkTSpace\\\\ComputingTangentSpace\\.tps$', 'ComputingTangentSpace__MikkTSpace_License.txt_L1-19.txt',
+     '7c64be458ca1a9de6f376a8fa34ccc80678eaa29de01c039dc90735ec3dfcd9a'),
+]
+# v2.3b: (a regex on a record's engine-relative path, a name its section's 'Component(s):' line must ALSO carry)
+COMPONENT_ALIASES = [
+    # v2.3c: the engine's DroidSansMono.ttf no longer ships (Config/DefaultPakFileRules.ini); this record's text covers DroidSansFallback
+    (r'^Engine\\Build\\Android\\Java\\AndroidOpenSourceProject\.tps$', 'Droid Sans Fallback (Droid Sans)'),
+]
+# v2.3c: the R12 resolution ledger in the texts folder, pinned (an empty pin = no ledger: the v2.3b behaviour)
+RESOLUTIONS_FILE = 'R12_RESOLUTIONS.tsv'
+RESOLUTIONS_SHA256 = '3b2a805807ee8794327abdb381caf4029a6b31e6e455f36a9b6dff75dd3d0d49'
+RES_COLUMNS = ['key', 'k_class', 'component', 'state', 'basis', 'notices_name', 'text_ref', 'evidence', 'quote', 'notes']
+RES_BASES = {'A': ('A-TEXT',), 'B': ('B-EULA7B', 'B-NOTSHIPPED', 'B-PD', 'B-WAIVER'), 'C': ('C-REMOVED',), 'BLOCKER': ('BLOCKER',)}
+# one short line per basis (ONE substantive line: a determination can never read as a license text)
+BASIS_TEXT = {
+    'B-EULA7B': 'no third-party license terms for it are in the engine\'s Licenses folder, where the Unreal Engine EULA (section 7(b)) '
+                'places such terms, and its shipped code carries none',
+    'B-NOTSHIPPED': 'its code is not compiled into this Windows game build',
+    'B-PD': 'dedicated to the public domain (or CC0) by its author: no notice is required',
+    'B-WAIVER': 'its license waives the notice for binary distribution',
+}
+TEXTS = [os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ThirdPartyLicenses')]   # main() sets it from --texts
+COMMITTED_PREFIX = 'committed:'
 LINE = re.compile(r'^(?P<path>[A-Za-z]:\\.+?)(?:\s+\(redirect from (?P<frm>[A-Za-z]:\\.+?\.tps)\))?\s*$', re.I)
 GUID = re.compile(r'\s*\([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\)\s*$', re.I)
 DRIVE_PATH = re.compile(r'(?<![A-Za-z])[A-Za-z]:[\\/]')
@@ -401,12 +536,131 @@ def parse_tps_log(path):
     return uniq(records), uniq(stubs), uniq(folders), sorted(set(filetargets)), uniq(junk)
 
 
+def lic_path(engine, lf):
+    """A license file reference: engine-relative, or 'committed:<name>' (a v2.3b committed text, its pin already verified)."""
+    return os.path.join(TEXTS[0], lf[len(COMMITTED_PREFIX):]) if lf.startswith(COMMITTED_PREFIX) else os.path.join(engine, lf)
+
+
+def verify_committed():
+    """Every COMMITTED_TEXTS entry: present in TEXTS[0], its bytes = the pin, a real license body. An ERROR otherwise."""
+    seen = set()
+    for kind, match, name, sha in COMMITTED_TEXTS:
+        if kind not in ('record', 'vendor') or not re.fullmatch(r'[0-9a-f]{64}', sha) or os.path.basename(name) != name:
+            raise Fail(f'COMMITTED_TEXTS entry malformed: {(kind, match, name, sha)}')
+        p = os.path.join(TEXTS[0], name)
+        if not os.path.isfile(p):
+            raise Fail(f'the committed license text {name} is not in {os.path.basename(os.path.normpath(TEXTS[0]))}')
+        with open(p, 'rb') as f:
+            got = hashlib.sha256(f.read()).hexdigest()
+        if got != sha:
+            raise Fail(f'the committed license text {name} is sha256 {got}, not the pinned {sha}')
+        if not read_text(p).strip():
+            raise Fail(f'the committed license text {name} is empty')
+        if kind == 'vendor' and match not in [n for n, _ in VENDOR_TERMS]:   # v2.3c: a vendor text must name a real VENDOR_TERMS entry
+            raise Fail(f'the committed vendor text {name} names {match!r}, which is not a VENDOR_TERMS name')
+        seen.add((kind, match))
+    # v2.3c: a LICENSE BODY per component, not per file. Each (kind, match) group needs at least one committed text with a real body
+    # (body_ok); its other texts may be short companions (an attribution / copyright line the licence requires beside it).
+    for kind, match in sorted(seen):
+        if not any(body_ok(read_text(os.path.join(TEXTS[0], n))) for k, m, n, _ in COMMITTED_TEXTS if (k, m) == (kind, match)):
+            raise Fail(f'the committed texts for {kind} {match!r} hold no license body (only short companions)')
+    return len(seen)
+
+
+def attach_committed(rows):
+    """A record the install left at URL / UNRESOLVED takes its COMMITTED text (pins verified first). -> how many attached."""
+    n = 0
+    for r in rows:
+        hit = [name for kind, match, name, _ in COMMITTED_TEXTS if kind == 'record' and re.search(match, r['tps'], re.I)]
+        if not hit:
+            continue
+        if r['status'] == 'TEXT':   # v2.3c: a record WITH a text from the install also takes its committed texts, APPENDED (the R12 ledger's
+            r['license_files'] = list(r.get('license_files', [])) + [COMMITTED_PREFIX + h for h in hit if COMMITTED_PREFIX + h not in r.get('license_files', [])]
+            r['resolved_by'] = (r.get('resolved_by') or '') + '+committed-text'   # extra notices: NVAPI's header MIT, libwebsockets' sha-1.c BSD)
+        else:   # v2.3c: EVERY committed text that matches, in COMMITTED_TEXTS order (a licence + its attribution / notices)
+            r.update(license_files=[COMMITTED_PREFIX + h for h in hit], resolved_by='committed-text', status='TEXT')
+        n += 1
+    return n
+
+
+def vendor_texts(name):
+    """v2.3c: every committed text for a VENDOR_TERMS name, in COMMITTED_TEXTS order ([] = none)."""
+    return [f for kind, match, f, _ in COMMITTED_TEXTS if kind == 'vendor' and match == name]
+
+
+def vendor_text(name):
+    hit = vendor_texts(name)
+    return hit[0] if hit else ''
+
+
+def load_resolutions():
+    """v2.3c: the pinned R12 ledger -> its rows ([] when RESOLUTIONS_SHA256 is empty). Any malformation is an ERROR."""
+    if not RESOLUTIONS_SHA256:
+        return []
+    if not re.fullmatch(r'[0-9a-f]{64}', RESOLUTIONS_SHA256):
+        raise Fail('RESOLUTIONS_SHA256 is not 64 lowercase hex')
+    p = os.path.join(TEXTS[0], RESOLUTIONS_FILE)
+    if not os.path.isfile(p):
+        raise Fail(f'the R12 ledger {RESOLUTIONS_FILE} is not in {os.path.basename(os.path.normpath(TEXTS[0]))}')
+    with open(p, 'rb') as f:
+        data = f.read()
+    got = hashlib.sha256(data).hexdigest()
+    if got != RESOLUTIONS_SHA256:
+        raise Fail(f'the R12 ledger {RESOLUTIONS_FILE} is sha256 {got}, not the pinned {RESOLUTIONS_SHA256}')
+    lines = data.decode('utf-8').replace('\r\n', '\n').split('\n')
+    if lines[0].split('\t') != RES_COLUMNS:
+        raise Fail(f'the R12 ledger header is not {RES_COLUMNS}')
+    rows, keys = [], set()
+    for n, l in enumerate(lines[1:], 2):
+        if not l.strip():
+            continue
+        c = l.split('\t')
+        if len(c) != len(RES_COLUMNS):
+            raise Fail(f'R12 ledger line {n}: {len(c)} columns, not {len(RES_COLUMNS)}')
+        r = dict(zip(RES_COLUMNS, c))
+        if r['state'] not in RES_BASES or r['basis'] not in RES_BASES[r['state']]:
+            raise Fail(f'R12 ledger line {n}: state {r["state"]!r} / basis {r["basis"]!r} is not a valid pair')
+        if r['key'] in keys:
+            raise Fail(f'R12 ledger line {n}: key {r["key"]} appears twice')
+        keys.add(r['key'])
+        rows.append(r)
+    return rows
+
+
+def apply_determinations(rows, res):
+    """v2.3c: each state-B 'TPS:' ledger row marks the record row(s) it names with its basis; naming a record the run does not list
+    is an ERROR (the ledger and the run must agree). -> (records marked, the FILE: B rows by key, the BLOCKER rows)."""
+    by_tps = {}
+    for r in rows:
+        by_tps.setdefault((r['tps'] or '').lower(), []).append(r)
+    marked, files, blockers = 0, {}, []
+    for x in res:
+        if x['state'] == 'BLOCKER':
+            blockers.append(x)
+        if x['state'] != 'B':
+            continue
+        if x['key'].startswith('TPS:'):
+            hits = by_tps.get(x['key'][4:].lower(), [])
+            if not hits:
+                raise Fail(f'the R12 ledger determines {x["key"]}, but this run lists no such record')
+            for r in hits:
+                if r['status'] == 'TEXT':
+                    raise Fail(f'the R12 ledger determines {x["key"]} (state B), but this run found a license TEXT for it: make it A')
+                r['determination'] = x['basis']
+                marked += 1
+        elif x['key'].startswith('FILE:'):
+            files[x['key'][5:]] = x
+        else:
+            raise Fail(f'the R12 ledger row {x["key"]}: state B needs a TPS: or FILE: key')
+    return marked, files, blockers
+
+
 def row_text(engine, r):
     """A record row's license TEXT, flattened: its license files' bodies (Epic's header lines removed) + its source-header terms."""
     if 'license_text' in r:   # the selftest's planted rows
         parts = [r['license_text']]
     else:
-        parts = [body_of(read_text(os.path.join(engine, lf))) for lf in r.get('license_files', [])] + [r.get('source_terms', '')]
+        parts = [body_of(read_text(lic_path(engine, lf))) for lf in r.get('license_files', [])] + [r.get('source_terms', '')]
     return ' '.join(' '.join(parts).split())
 
 
@@ -460,7 +714,15 @@ def required_statements(rows):
                    for r in rows if re.search(pat, ((r.get('name') or '') + ' ' + r['tps']), re.I)})
 
 
-def write_notices(path, engine, rows, files):
+def determination_line(bases):
+    """ONE line for a section's state-B determinations (v2.3c): never more, so it can never count as a license text."""
+    bases = sorted(set(bases))
+    return ('Determination: no separate license text is shipped: ' + '; '.join(BASIS_TEXT[b] for b in bases)
+            + ' (R12 ledger: ' + ', '.join(bases) + ')')
+
+
+def write_notices(path, engine, rows, files, file_dets=None):
+    file_dets = file_dets or {}
     out = ['WONDERLAND PRIVATE BETA -- THIRD-PARTY SOFTWARE NOTICES', '',
            'This package includes third-party software. Each component below remains under its own license; nothing in',
            "Wonderland's own terms changes those licenses. The list comes from the Unreal Engine's own third-party records for",
@@ -482,25 +744,49 @@ def write_notices(path, engine, rows, files):
     keyname = lambda k: ((by_key[k][0].get('name') or by_key[k][0]['tps']).lower(), str(k))
     for key in sorted(by_key, key=keyname):
         comps = by_key[key]
-        names = sorted({c.get('name') or os.path.basename(c['tps']) for c in comps})
+        names = sorted({c.get('name') or os.path.basename(c['tps']) for c in comps}
+                       | {alias for c in comps for pat, alias in COMPONENT_ALIASES if re.search(pat, c['tps'], re.I)})
         out += ['=' * 100, 'Component(s): ' + '; '.join(names), 'Record(s): ' + '; '.join(sorted({c['tps'] for c in comps}))]
         if key[0] == 'URL':
-            out += [f'License: {key[1]}', '']
+            out += [f'License: {key[1]}']
+            dets = [c['determination'] for c in comps if c.get('determination')]
+            if dets:
+                out += [determination_line(dets)]
+            out += ['']
             continue
         for lf in key[1]:
-            body = read_text(os.path.join(engine, lf)).replace('\r\n', '\n').replace('\r', '\n').strip()
-            out += [f'License text ({os.path.basename(lf)}):', '', body, '']
+            body = read_text(lic_path(engine, lf)).replace('\r\n', '\n').replace('\r', '\n').strip()
+            out += [f'License text ({os.path.basename(lf[len(COMMITTED_PREFIX):] if lf.startswith(COMMITTED_PREFIX) else lf)}):', '', body, '']
         if key[2]:
             out += ["License text (from the component's own source header):", '', key[2].replace('\r\n', '\n').strip(), '']
-    nolic = sorted({(r.get('name') or os.path.basename(r['tps'])) + '  [' + r['tps'] + ']' for r in rows if r['status'] == 'UNRESOLVED'})
+    dets = sorted({(r.get('name') or os.path.basename(r['tps'])) + '  [' + r['tps'] + ']: ' + BASIS_TEXT[r['determination']]
+                   + ' (R12 ledger: ' + r['determination'] + ')' for r in rows if r['status'] == 'UNRESOLVED' and r.get('determination')})
+    if dets:
+        out += ['=' * 100, "DETERMINATIONS: components listed in the engine's third-party records for which no separate license text is",
+                'shipped, each with the reason recorded in the R12 resolution ledger (each bracket is the engine record):', '']
+        out += ['  - ' + x for x in dets] + ['']
+    nolic = sorted({(r.get('name') or os.path.basename(r['tps'])) + '  [' + r['tps'] + ']' for r in rows
+                    if r['status'] == 'UNRESOLVED' and not r.get('determination')})
     if nolic:
         out += ['=' * 100, "Components listed in the engine's third-party records for which the logged search (the Licenses folder and",
                 "its subfolders, the record's own and <Location> folders, the reviewed source headers) found no license text or URL",
                 '(named for completeness; each bracket is the engine record):', ''] + ['  - ' + x for x in nolic] + ['']
     vt = [name for name, pat in VENDOR_TERMS if any(re.search(pat, x.split('pak:', 1)[-1], re.I) for x in files)]
+    for name in [n for n in vt if vendor_text(n)]:   # v2.3b: a vendor with a COMMITTED text is its own section, not a list item
+        fs_ = vendor_texts(name)                       # v2.3c: every committed text for it, in order
+        out += ['=' * 100, 'Component(s): ' + name,
+                "Record(s): none in the engine (the vendor's own terms; committed beside the notices tool as "
+                + ', '.join(f'Tools/ThirdPartyLicenses/{f_}' for f_ in fs_) + ')']
+        for f_ in fs_:
+            body = read_text(os.path.join(TEXTS[0], f_)).replace('\r\n', '\n').replace('\r', '\n').strip()
+            out += [f'License text ({f_}):', '', body, '']
+    vt = [n for n in vt if not vendor_text(n)]
     if vt:
         out += ['=' * 100, "Redistributed under their vendors' own terms (the engine holds no third-party record for them):", '']
-        out += ['  - ' + x for x in vt]
+        for x in vt:
+            pat = next(p for n, p in VENDOR_TERMS if n == x)
+            bs = [d['basis'] for f, d in file_dets.items() if re.search(pat, f, re.I)]
+            out += ['  - ' + x + ((' -- ' + determination_line(bs)[len('Determination: '):]) if bs else '')]
     text = '\n'.join(out) + '\n'
     if '\ufffd' in text:
         raise Fail(f'the notices hold {text.count(chr(0xfffd))} U+FFFD replacement character(s)')
@@ -564,16 +850,26 @@ def build(tps_log, engine, out, shipped, ufs_manifest=None):
         if os.path.normcase(stub) not in listed:
             listed.add(os.path.normcase(stub))
             rows.append(tps_row(engine, index, stub, 'a redirect to nothing usable'))
+    verify_committed()
+    attached = attach_committed(rows)
+    res = load_resolutions()
+    marked, file_dets, blockers = apply_determinations(rows, res)
     os.makedirs(out)
     allfiles = files + packed
-    sections, req = write_notices(os.path.join(out, 'THIRD_PARTY_NOTICES.txt'), engine, rows, allfiles)
+    sections, req = write_notices(os.path.join(out, 'THIRD_PARTY_NOTICES.txt'), engine, rows, allfiles, file_dets)
     with open(os.path.join(out, 'notices_map.json'), 'w', encoding='utf-8', newline='\n') as f:
         json.dump(rows, f, indent=1, sort_keys=True)
     count = lambda s: sum(1 for r in rows if r['status'] == s)
     lines = [f'{len(rows)} .tps records ({len(records)} parsed from {os.path.basename(tps_log)}, {len(stubs)} redirect stubs named, '
              f'{len(beside)} beside the shipped binaries / redirect targets, {len(filetargets)} redirects to a file, {len(junk)} to nothing); '
              f'{sections} distinct license texts / URLs; TEXT {count("TEXT")}, URL {count("URL")}, UNRESOLVED (named, no text or URL) {count("UNRESOLVED")}',
-             f'REQUIRED ATTRIBUTIONS printed: {len(req)}']
+             f'REQUIRED ATTRIBUTIONS printed: {len(req)}',
+             f'COMMITTED TEXTS (v2.3b): {len(COMMITTED_TEXTS)} pinned, {attached} record(s) given one',
+             'R12 LEDGER (v2.3c): ' + (f'{RESOLUTIONS_FILE} sha256 {RESOLUTIONS_SHA256}; {len(res)} row(s) ('
+                                       + ', '.join(f'{s} {sum(1 for x in res if x["state"] == s)}' for s in ('A', 'B', 'C', 'BLOCKER'))
+                                       + f'); determinations printed for {marked} record(s) and {len(file_dets)} file(s)'
+                                       if RESOLUTIONS_SHA256 else 'none pinned (v2.3b behaviour)')]
+    lines += [f'R12 BLOCKER (the ledger; R12 cannot pass): {x["key"]}: {x["notes"] or x["component"]}' for x in blockers]
     chk, gaps = shipped_check(allfiles, rows, engine)
     lines.append(f'REDISTRIBUTED files in {os.path.basename(os.path.normpath(shipped))} ({len(files)} loose + {len(packed)} packed), each mapped:')
     lines += chk
@@ -758,6 +1054,152 @@ def selftest():
             f.write('<TpsData>\n  <Name />\n  <Notification>\nRedirect: ../../Source/S/S.tps\n  </Notification>\n</TpsData>\n')
         got = follow_redirect(os.path.join(stubdir, 'S.tps'))
         case('V16 a Redirect stub is followed to the real record(s) in its target folder', len(got) == 1 and 'Real (' in got[0])
+    saved = (list(COMMITTED_TEXTS), TEXTS[0])
+    with tempfile.TemporaryDirectory() as td2:
+        TEXTS[0] = td2
+        with open(os.path.join(td2, 'Vendor_License.txt'), 'w', encoding='utf-8', newline='\n') as f:
+            f.write('MICROSOFT SOFTWARE LICENSE TERMS\n' + '\n'.join(['You may copy and distribute the object code form of the code.',
+                    'Distribution requirements apply to the distributable code.', 'The software is licensed, not sold.',
+                    'Disclaimer of warranty: the software is licensed as-is.', 'Limitation on and exclusion of damages apply.',
+                    'This agreement describes certain legal rights and redistribution terms.']) + '\n')
+        with open(os.path.join(td2, 'Pix_License.txt'), 'w', encoding='utf-8', newline='\n') as f:
+            f.write('\n'.join(['MIT License', 'Copyright (c) Planted Corporation.', 'Permission is hereby granted, free of charge, to any person obtaining a copy',
+                                'of this software and associated documentation files, to deal in the Software', 'without restriction, subject to the following conditions:',
+                                'The above copyright notice and this permission notice shall be included in all copies.',
+                                'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.']) + '\n')
+        sha = lambda n: hashlib.sha256(open(os.path.join(td2, n), 'rb').read()).hexdigest()
+        PIX = 'Engine\\Binaries\\ThirdParty\\Windows\\WinPixEventRuntime\\WinPixEventRuntime.tps'
+        COMMITTED_TEXTS[:] = [('record', r'WinPixEventRuntime\\WinPixEventRuntime\.tps$', 'Pix_License.txt', sha('Pix_License.txt')),
+                              ('vendor', VENDOR_TERMS[0][0], 'Vendor_License.txt', sha('Vendor_License.txt'))]
+        verify_committed()
+        rows2 = [{'tps': PIX, 'name': 'WinPixEventRuntime 1.0.240308001', 'status': 'URL', 'url': 'https://www.microsoft.com/web/webpi/eula/eula_pix_event_runtime.htm'}]
+        n_att = attach_committed(rows2)
+        case('V23 v2.3b: a URL record takes its COMMITTED text (status TEXT, resolved_by committed-text)',
+             n_att == 1 and rows2[0]['status'] == 'TEXT' and rows2[0]['license_files'] == ['committed:Pix_License.txt'])
+        n4 = os.path.join(td2, 'n4.txt')
+        aosp = {'tps': 'Engine\\Build\\Android\\Java\\AndroidOpenSourceProject.tps', 'name': 'AndroidOpenSourceProject', 'status': 'TEXT', 'license_text': APACHE,
+                'license_files': ['committed:Vendor_License.txt']}
+        write_notices(n4, td2, rows2 + [aosp], ['Engine/Binaries/ThirdParty/Windows/XAudio2_9/x64/xaudio2_9redist.dll', 'Engine/Binaries/Win64/EOSSDK-Win64-Shipping.dll'])
+        w4 = read_text(n4).replace('\r\n', '\n')
+        secs = {}
+        for chunk in w4.split('=' * 100 + '\n'):
+            m = re.match(r'Component\(s\): (.*)\n', chunk)
+            if m:
+                secs[m.group(1)] = [l for l in chunk.split('\n')[1:] if l.strip() and not l.startswith(('Record(s):', 'License text'))]
+        pix = [v for k, v in secs.items() if 'WinPixEventRuntime' in k]
+        case('V24 v2.3b: ... and its section prints the text (>= 5 substantive lines under its Component(s) line)', len(pix) == 1 and len(pix[0]) >= 5)
+        xa = [v for k, v in secs.items() if 'xaudio2_9redist.dll' in k]
+        case('V25 v2.3b: a vendor with a COMMITTED text is its own Component(s) section, and leaves the vendor list',
+             len(xa) == 1 and len(xa[0]) >= 5 and '  - ' + VENDOR_TERMS[0][0] not in w4 and '  - ' + VENDOR_TERMS[1][0] in w4)
+        case('V26 v2.3c: the AOSP record\'s Component(s) line also names Droid Sans Fallback (the engine\'s DroidSansMono no longer ships)',
+             any('Droid Sans Fallback (Droid Sans)' in k and 'AndroidOpenSourceProject' in k for k in secs) and not any('DroidSansMono' in k and 'AndroidOpenSourceProject' in k for k in secs))
+        with open(os.path.join(td2, 'Pix_License.txt'), 'a', encoding='utf-8') as f:
+            f.write('one more byte\n')
+        try:
+            verify_committed()
+            case('V27 v2.3b: a committed text whose bytes changed is an ERROR', False)
+        except Fail:
+            case('V27 v2.3b: a committed text whose bytes changed is an ERROR', True)
+        os.remove(os.path.join(td2, 'Pix_License.txt'))
+        try:
+            verify_committed()
+            case('V27b v2.3b: a MISSING committed text is an ERROR', False)
+        except Fail:
+            case('V27b v2.3b: a MISSING committed text is an ERROR', True)
+        # v2.3c: a short companion (an attribution line) is fine BESIDE a licence body, never alone
+        with open(os.path.join(td2, 'Short_Attribution.txt'), 'w', encoding='utf-8', newline='\n') as f:
+            f.write('// Colormap by Someone, CC0\n')
+        with open(os.path.join(td2, 'Pix_License.txt'), 'w', encoding='utf-8', newline='\n') as f:
+            f.write('\n'.join(['MIT License', 'Copyright (c) Planted Corporation.', 'Permission is hereby granted, free of charge, to any person obtaining a copy',
+                                'of this software and associated documentation files, to deal in the Software', 'without restriction, subject to the following conditions:',
+                                'The above copyright notice and this permission notice shall be included in all copies.',
+                                'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.']) + '\n')
+        COMMITTED_TEXTS[:] = [('record', r'X\\Short\.tps$', 'Pix_License.txt', sha('Pix_License.txt')),
+                              ('record', r'X\\Short\.tps$', 'Short_Attribution.txt', sha('Short_Attribution.txt'))]
+        try:
+            verify_committed()
+            case('V27c v2.3c: a short attribution BESIDE a licence body passes', True)
+        except Fail:
+            case('V27c v2.3c: a short attribution BESIDE a licence body passes', False)
+        COMMITTED_TEXTS[:] = [('record', r'X\\Short\.tps$', 'Short_Attribution.txt', sha('Short_Attribution.txt'))]
+        try:
+            verify_committed()
+            case('V27d v2.3c: a short attribution ALONE is an ERROR (no licence body)', False)
+        except Fail:
+            case('V27d v2.3c: a short attribution ALONE is an ERROR (no licence body)', True)
+    # v2.3c: the pinned R12 ledger -> determinations (never a license text), and its refusals
+    saved_pin = RESOLUTIONS_SHA256
+    with tempfile.TemporaryDirectory() as td3:
+        TEXTS[0] = td3
+        COMMITTED_TEXTS[:] = []
+        R1 = 'Engine\\Shaders\\Private\\Random1.tps'
+        U1 = 'Engine\\Source\\Runtime\\Core\\Public\\Math\\UnrealMath.tps'
+        def ledger(rows_):
+            body = '\t'.join(RES_COLUMNS) + '\n' + ''.join('\t'.join(r_) + '\n' for r_ in rows_)
+            p_ = os.path.join(td3, RESOLUTIONS_FILE)
+            with open(p_, 'w', encoding='utf-8', newline='\n') as f:
+                f.write(body)
+            globals()['RESOLUTIONS_SHA256'] = hashlib.sha256(body.encode('utf-8')).hexdigest()
+        good_rows = [['TPS:' + R1, 'UNRESOLVED', 'Fast gradient Perlin noise', 'B', 'B-EULA7B', 'Fast gradient Perlin noise', '-', 'e', 'q', '-'],
+                     ['TPS:' + U1, 'URL-ONLY', "Arvo's algorithm", 'B', 'B-EULA7B', "Code Snippet - Arvo's Algorithm", '-', 'e', 'q', '-'],
+                     ['FILE:Engine/Binaries/Win64/EOSSDK-Win64-Shipping.dll', 'FILE', 'EOS SDK', 'B', 'B-EULA7B', 'EOSSDK-Win64-Shipping.dll', '-', 'e', 'q', '-'],
+                     ['TPS:Engine\\Y\\Blk.tps', 'UNRESOLVED', 'Blocked thing', 'BLOCKER', 'BLOCKER', '-', '-', '-', '-', 'no licence found'],
+                     ['PAKFONT:Engine/Content/Slate/Fonts/DroidSansMono.ttf', 'FONT-FLAG', 'Droid Sans Mono (Ascender)', 'C', 'C-REMOVED', '-', '-', '-', '-', '-']]
+        rows3 = lambda: [{'tps': R1, 'name': 'Fast gradient Perlin noise', 'status': 'UNRESOLVED'},
+                         {'tps': U1, 'name': "Code Snippet - Arvo's Algorithm", 'status': 'URL', 'url': 'https://example.org/arvo'},
+                         {'tps': 'Engine\\X\\Other.tps', 'name': 'Other Thing', 'status': 'UNRESOLVED'}]
+        ledger(good_rows)
+        res3 = load_resolutions()
+        rr = rows3()
+        marked3, fdets3, blk3 = apply_determinations(rr, res3)
+        case('V28 v2.3c: the pinned ledger loads (5 rows); 2 records + 1 file determined; 1 BLOCKER listed',
+             len(res3) == 5 and marked3 == 2 and list(fdets3) == ['Engine/Binaries/Win64/EOSSDK-Win64-Shipping.dll'] and len(blk3) == 1)
+        n5 = os.path.join(td3, 'n5.txt')
+        write_notices(n5, td3, rr, ['Engine/Binaries/Win64/EOSSDK-Win64-Shipping.dll'], fdets3)
+        w5 = read_text(n5).replace('\r\n', '\n')
+        dsec = w5.split('DETERMINATIONS:', 1)[-1].split('=' * 100, 1)[0] if 'DETERMINATIONS:' in w5 else ''
+        nsec = w5.split('found no license text or URL', 1)[-1].split('=' * 100, 1)[0] if 'found no license text or URL' in w5 else ''
+        case('V29 v2.3c: a determined UNRESOLVED record is in the DETERMINATIONS list (with its basis), not the no-text list; an undetermined one stays',
+             'Fast gradient Perlin noise  [' + R1 + ']' in dsec and '(R12 ledger: B-EULA7B)' in dsec and 'Fast gradient Perlin noise' not in nsec
+             and 'Other Thing' in nsec)
+        url_only = re.compile(r'^\s*(?:[A-Za-z][\w ()]*:\s*)?<?https?://\S+>?\s*$')
+        label_only = re.compile(r'^\s*(License text|License|URL|Eula)\s*:\s*$', re.I)
+        arvo = [c for c in w5.split('=' * 100 + '\n') if c.startswith("Component(s): Code Snippet - Arvo's Algorithm")]
+        subst = [l for l in arvo[0].split('\n')[1:] if l.strip() and not url_only.match(l) and not label_only.match(l)] if arvo else []
+        case('V30 v2.3c: a determined URL section gets ONE Determination line and stays under 5 substantive lines (never a TEXT)',
+             len(arvo) == 1 and sum(1 for l in subst if l.startswith('Determination: ')) == 1 and len(subst) < 5)
+        case('V31 v2.3c: a determined vendor FILE carries its determination on its vendor list item',
+             any(l.startswith('  - ' + VENDOR_TERMS[1][0] + ' -- no separate license text is shipped') for l in w5.split('\n')))
+        ledger(good_rows + [['TPS:Engine\\Z\\NotListed.tps', 'URL-ONLY', 'z', 'B', 'B-PD', 'z', '-', 'e', 'q', '-']])
+        try:
+            apply_determinations(rows3(), load_resolutions())
+            case('V32 v2.3c: a ledger B row naming a record this run does not list is an ERROR', False)
+        except Fail:
+            case('V32 v2.3c: a ledger B row naming a record this run does not list is an ERROR', True)
+        ledger(good_rows)
+        with open(os.path.join(td3, RESOLUTIONS_FILE), 'a', encoding='utf-8') as f:
+            f.write('\n')
+        try:
+            load_resolutions()
+            case('V33 v2.3c: a ledger whose bytes changed is an ERROR (the pin)', False)
+        except Fail:
+            case('V33 v2.3c: a ledger whose bytes changed is an ERROR (the pin)', True)
+        ledger(good_rows)
+        rt = rows3()
+        rt[0]['status'] = 'TEXT'
+        try:
+            apply_determinations(rt, load_resolutions())
+            case('V34 v2.3c: a B determination on a record that HAS a license text is an ERROR (it must be A)', False)
+        except Fail:
+            case('V34 v2.3c: a B determination on a record that HAS a license text is an ERROR (it must be A)', True)
+        ledger([['TPS:' + R1, 'UNRESOLVED', 'x', 'A', 'B-PD', 'x', '-', 'e', 'q', '-']])
+        try:
+            load_resolutions()
+            case('V35 v2.3c: a state / basis pair that does not fit is an ERROR', False)
+        except Fail:
+            case('V35 v2.3c: a state / basis pair that does not fit is an ERROR', True)
+    globals()['RESOLUTIONS_SHA256'] = saved_pin
+    COMMITTED_TEXTS[:], TEXTS[0] = saved
     bad = [n for n, ok in results if not ok]
     for n, ok in results:
         print(f'{"ok  " if ok else "BAD "} {n}')
@@ -778,7 +1220,10 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--shipped', required=True)
     ap.add_argument('--ufs-manifest')
+    ap.add_argument('--texts')
     A = ap.parse_args()
+    if A.texts:
+        TEXTS[0] = os.path.abspath(A.texts)
     try:
         lines, gaps = build(A.tps_log, A.engine, A.out, A.shipped, A.ufs_manifest)
     except Fail as e:

@@ -1,0 +1,226 @@
+Tools/ThirdPartyLicenses: the license texts the notices tool (make_package_notices.py v2.3c) commits beside itself, because the
+Unreal Engine install does not hold them. Each file is pinned by sha256 inside the tool (COMMITTED_TEXTS); a changed byte is an
+ERROR. The research and every GET: _wonderland_beta_release/r12_closure (sa2_files, sa3_monofont; their fetch_log.tsv files).
+Times are UTC, copied from those fetch logs. CORE, 2026-10-07. AWAITING INDEPENDENT REVIEW.
+
+== SHIPPED FILES (the R12 ledger's FILE / PAKFONT rows) ==
+
+Microsoft_VisualCpp_2015-2022_Runtime_License_14.44.35211.txt
+  sha256 a6b3e549f58312979ef6199e562727f8a06776864017523f983e710a3491ac8b
+  What: "MICROSOFT VISUAL C++ 2015 - 2022 RUNTIME" end-user terms (EULAID Cpp_2015-2022_ENU.1033).
+  Origin: license.rtf inside Visual Studio 2022's own vc_redist.x64.exe 14.44.35211.0 (the bundle beside the app-local DLLs the
+  package ships, which are byte-identical to VS 2022 Community's VC\Redist\MSVC\14.44.35112\x64\Microsoft.VC143.CRT), converted RTF to
+  text by the research's stdlib rtf_to_text.py. Payload sha256 8099dc3c... (sa2_files REPORT.txt l.192-193).
+  For: the 20 app-local Visual C++ runtime DLLs (Engine/ and Wonderland/Binaries/Win64).
+
+Microsoft_VisualCpp_v14_Redistributable_and_Runtime_License.txt
+  sha256 f9d4b242e6aad430223dbd9c579885df71231e50c2dc89ee21c3f67ead1c0da9
+  What: "MICROSOFT VISUAL C++ V14 REDISTRIBUTABLE and RUNTIME" (Cpp_v14_ENU.1033, Last Updated October 1, 2025).
+  Origin: GET https://aka.ms/VCRedistLicense -> https://visualstudio.microsoft.com/license-terms/vs2026-ga-visualcpp-v14-redist-runtime/
+  (2026-10-07T18:45:02Z) and its DOCX https://visualstudio.microsoft.com/wp-content/uploads/2025/10/Visual-C-V14-License-Redistributable_and_Runtime_ENU.docx
+  (2026-10-07T18:45Z), converted DOCX to text by the research's stdlib docx_to_text.py.
+  For: Engine/Extras/Redist/en-us/vc_redist.x64.exe = Microsoft's own download, aka.ms/vc14/vc_redist.x64.exe, 14.51.36247.0, sha256
+  843068991daaa1f73ad9f6239bce4d0f6a07a51f18c37ea2a867e9beca71295c, Authenticode "Microsoft Corporation" (build_beta_rc.ps1 v4d pins it).
+
+Microsoft_VisualStudio_2022_Community_License_Terms.txt
+  sha256 11b61db78d74eaa4bbe6777334229c4a424fbf3e8d8fe02defc2aa35a3a63cb9
+  What: the Visual Studio 2022 Community license (EULAID VS_Comm_2022_ENU.1033): section 4.a.i, the Distributable List grant.
+  Origin: GET https://go.microsoft.com/fwlink/?LinkId=2179811 -> https://visualstudio.microsoft.com/license-terms/vs2022-ga-community/
+  (2026-10-07T18:42:10Z) and its DOCX https://visualstudio.microsoft.com/wp-content/uploads/2021/11/Visual-Studio-2022-Community-License-EN.docx
+  (2026-10-07T18:42:24Z), converted DOCX to text. The installed product: VS Community 2022 17.14.37628.2.
+
+Microsoft_VisualStudio_2022_Distributable_Code_List.txt
+  sha256 90ec3978262bba72615e57d998e12f1c36ebf385f8b44dc748cabab10643f21b
+  What: the Visual Studio 2022 "Distributable Code" list page the license names (VC\redist; packages obtained from Microsoft's pages).
+  Origin: GET https://aka.ms/vs/17/redistribution -> https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution
+  (2026-10-07T18:41:46Z), converted HTML to text by the research's stdlib html_text.py (page dated 2025-11-11).
+
+WinPixEventRuntime_1.0.240308001_LICENSE.txt
+  sha256 903df5512f7d02609fed0c780a9b704f5a3eeb6e4d84ebe42a29845c81899a3c
+  What: MIT License, Copyright (c) Microsoft Corporation.
+  Origin: LICENSE.txt inside the NuGet package winpixeventruntime 1.0.240308001, GET
+  https://api.nuget.org/v3-flatcontainer/winpixeventruntime/1.0.240308001/winpixeventruntime.1.0.240308001.nupkg (2026-10-07T18:37:38Z).
+  The shipped WinPixEventRuntime.dll is pinned to that package by content hash (sa2_files REPORT.txt).
+
+WinPixEventRuntime_1.0.240308001_ThirdPartyNotices.txt
+  sha256 3f06560bbbf286c149c6fd4427f2a5d4e79824591fcba835fffab42b6950967c
+  What: the same package's ThirdPartyNotices.txt (includes the Windows Implementation Libraries notice, MIT, l.305-329).
+  Origin: inside the same .nupkg as above.
+
+DroidSansMono-AOSP-NOTICE.txt
+  sha256 38751245389e1e23f73e6f5384b5cbe7fa972cc4410c5adc9c04b082a0b9561a   git blob c5b1efa7aac764ae6d8da63476a2d5cec02a6a5d
+  What: "Copyright (c) 2005-2008, The Android Open Source Project" + the Apache License 2.0 (1406 of 1406 words = apache.org's text).
+  Origin: AOSP platform/frameworks/base data/fonts/NOTICE at commit 573dfc26bca2f00685b19553ca0a7cd264e3e793, GET
+  https://android.googlesource.com/platform/frameworks/base/+/573dfc26bca2f00685b19553ca0a7cd264e3e793/data/fonts/NOTICE?format=TEXT
+  (2026-10-07T18:35:05Z), base64-decoded strictly; unmodified (renamed only).
+  For: Wonderland/Content/Slate/Fonts/DroidSansMono-AOSP.ttf = data/fonts/DroidSansMono.ttf at the same commit ("Version 1.00 build
+  113"), sha256 12b552de765dc1265d64f9f5566649930dde4dba07da0251d9f92801e70a1047, git blob a007071944f7c90020e798eea53b10065e2b45a5.
+
+DroidSansMono-AOSP-data-fonts-README.txt
+  sha256 c8b88077052fed912b3f724c0ed230c501cf4e18833af7ca44338d3cd0b093e2   git blob 1a96dfde6c29c908e473ec0b937b6f7ece42d9ba
+  What: data/fonts/README.txt at the same commit: "They are licensed under the Apache 2 license."
+  Origin: GET .../573dfc26bca2f00685b19553ca0a7cd264e3e793/data/fonts/README.txt?format=TEXT (2026-10-07T18:35:05Z).
+
+== ENGINE RECORDS (the R12 ledger's A rows; sa1_records research, its fetch_log.tsv; the notices tool attaches each text to the
+   record(s) its pattern matches) ==
+
+UnicodeCommonLocaleDataRepository__01_cldr_35-1_license__unicode-license.txt
+  sha256 bc4c37c0b70864b8a672bb7a8517f47eb7d2be558a3e8fbbe33bc3ad21e22d39
+  attached to records matching: Engine\\Content\\Internationalization\\UnicodeCommonLocaleDataRepository\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\01_cldr_35-1_license\unicode-license.txt sha256=bc4c37c0b70864b8a672bb7a8517f47eb7d2be558a3e8fbbe33bc3ad21e22d39
+
+UnicodeCommonLocaleDataRepository__02_cldr_23-1_license__unicode-license.txt
+  sha256 72a95a3930bf6fc1961c08c3011321d294c5d9ee9c5d10b535c1afca15287fba
+  attached to records matching: Engine\\Content\\Internationalization\\UnicodeCommonLocaleDataRepository\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\02_cldr_23-1_license\unicode-license.txt sha256=72a95a3930bf6fc1961c08c3011321d294c5d9ee9c5d10b535c1afca15287fba
+
+libwebm__LICENSE.TXT_L1-29.txt
+  sha256 fa027f73c8913b96a02ec8576f6984d1d7600b65374ff5715919f84ecf03349d
+  attached to records matching: Engine\\Plugins\\Media\\WebMMedia\\Source\\ThirdParty\\webm\\libwebm\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Plugins\Media\WebMMedia\Source\ThirdParty\webm\1.0.0.27\LICENSE.TXT#L1-29 sha256=17c029a902ad45a199dfe8e3a1c39305ab28d302b0703360c4a27351a4673dcb
+
+ColorMap__08_cc0-1.0_legalcode__legalcode.txt
+  sha256 a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499
+  attached to records matching: Engine\\Shaders\\Private\\ColorMap\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\08_cc0-1.0_legalcode\legalcode.txt sha256=a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499
+
+ColorMap__ColorMap.ush_L5-5.txt
+  sha256 43042aa11c29ccfbf61f7eb2be13d2496e82bc808fad0657ba1e68500b47b2d9
+  attached to records matching: Engine\\Shaders\\Private\\ColorMap\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Shaders\Private\ColorMap.ush#L5-5 sha256=ed4595db0b286a83097e2922c57cc6ae4317d6bd7596b0e87eb72a7b9816e918
+
+FastMathThirdParty__FastMathThirdParty.ush_L11-29.txt
+  sha256 50122ce45cbe864ca529ed317dcc891c012ddc60eafa3b4a343665ffcbbe2bd6
+  attached to records matching: Engine\\Shaders\\Private\\FastMathThirdParty\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Shaders\Private\FastMathThirdParty.ush#L11-29 sha256=4f76812638643c363edd0f33c8bfa1ec735f2321fad1bf1db6d03ebb860184a5
+
+Random4__06_webglnoise_0a8c2fe5_LICENSE__LICENSE.html.txt
+  sha256 bdafce1bb01517c9ae6c4f3620c01340790b5e9d039ae9e356347d1174250916
+  attached to records matching: Engine\\Shaders\\Private\\Random4\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\06_webglnoise_0a8c2fe5_LICENSE\LICENSE.html sha256=bdafce1bb01517c9ae6c4f3620c01340790b5e9d039ae9e356347d1174250916
+
+SubpixelMorphologicalAntialiasing__SMAA.ush_L4-28.txt
+  sha256 3c9fd05782f8a2f66ea27453185cc7dc44e2c07e18e60bdeba643c6e3c8057eb
+  attached to records matching: Engine\\Shaders\\Private\\SMAA\\SubpixelMorphologicalAntialiasing\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Shaders\Private\SMAA\SMAA.ush#L4-28 sha256=8c0dceba01cf5dc7cffddc35f12c90b9b378519cef843506e5069515b908b741
+
+Agslib__ags_shader_intrinsics_dx12.h_L1-21.txt
+  sha256 5fddbbcdd1b3d1f0a5cbab07103678d20a896b28ad98a1151fc809a023d91b5c
+  attached to records matching: Engine\\Shaders\\Shared\\ThirdParty\\AMD\\Agslib\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Shaders\Shared\ThirdParty\AMD\ags_shader_intrinsics_dx12.h#L1-21 sha256=25edce55b09b39ec8c360d17d7cf2ceef72719ecf66495f15ba75a6d7f28ed36
+
+IntelExtensionsFramework__IntelExtensions.h_L1-7.txt
+  sha256 e20edb5926de34b48ac62cd7acd63dd8f6fc60f79e5ce4e30f44321d03e4bf10
+  attached to records matching: Engine\\Source\\ThirdParty\\Intel\\ExtensionsFramework\\IntelExtensionsFramework\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Shaders\Shared\ThirdParty\Intel\IntelExtensions.h#L1-7 sha256=b312f89d94c4fb5d323eea13f68c2c29f272e8e6c3ab3f26c810210e81448d3e
+
+IntelExtensionsFramework__IntelExtensions12.h_L1-7.txt
+  sha256 87a045578ca1968aad43cd467617c6b40862bb46758faa75051305425245c42f
+  attached to records matching: Engine\\Source\\ThirdParty\\Intel\\ExtensionsFramework\\IntelExtensionsFramework\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Shaders\Shared\ThirdParty\Intel\IntelExtensions12.h#L1-7 sha256=0ae97a8bdb4e29eee323fc0ced69543365ab43aeabab397e9e2b9cbf4e43457d
+
+Nvapi__nvHLSLExtns.h_L1-25.txt
+  sha256 312239f1a521af1ec9ed83347bf1abf9d6c73a0e5495d1c2e78e7854bf5619b9
+  attached to records matching: \\NVAPI_vR570\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Shaders\Shared\ThirdParty\NVIDIA\nvHLSLExtns.h#L1-25 sha256=23e7b1d6dffb6274cde4a7e3513f62a3a29475620ba4cc3f7931c80cfb541ee1
+
+WatertightRayTriangleIntersection__07_cc-by-nd-3.0_legalcode__legalcode.txt
+  sha256 b9d9816260e23b4bdb71e0edc453497273f4cfc1fdf61207ee6cc1c7075a2479
+  attached to records matching: Engine\\Shaders\\Shared\\ThirdParty\\WatertightRayTriangleIntersection\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\07_cc-by-nd-3.0_legalcode\legalcode.txt sha256=b9d9816260e23b4bdb71e0edc453497273f4cfc1fdf61207ee6cc1c7075a2479
+
+WatertightRayTriangleIntersection__JCGT_citation.txt
+  sha256 2021e54de901bda9fee61032730854fda3992566bad3e51a4b8973c390e3af98
+  attached to records matching: Engine\\Shaders\\Shared\\ThirdParty\\WatertightRayTriangleIntersection\.tps$
+  origin: derived by make_attribution_excerpts.py (r12_closure/ledger), its docstring states the exact derivation and its source file
+
+Crc__crc.h_L3-6.txt
+  sha256 ebfc80286c0e2c29bb79645b910d4ffc658741790b6aa148cb0366621a543c81
+  attached to records matching: Engine\\Source\\Runtime\\Core\\Private\\Misc\\Crc\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\57_sf_SB8_zip_extracted\SourceForge-SB8\crc.h#L3-6 sha256=aa5e730f849b724b6a32c3147f53124f5d6b8b0de27ccdc600c2a507fc32a5ce
+
+Crc__bsd-license.html_L190-222.txt
+  sha256 0f96ebb2282ceb7a5cae54820e09d1c7f97d5829ee2593f28923a6d51e9351cd
+  attached to records matching: Engine\\Source\\Runtime\\Core\\Private\\Misc\\Crc\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\45_wb_osi_bsd-license_2006\bsd-license.html#L190-222 sha256=98f97faf5a3e2d54c2e72b0084afac6d20ba894913050a14c3780d6c2787fa60
+
+FNVHashAlgorithm__draft-eastlake-fnv-16.txt_L650-681.txt
+  sha256 a484ab397538878a71df1dfa9c7e32e602d1a40f1f791771d1e5f6e0682eb3f4
+  attached to records matching: Engine\\Source\\Runtime\\Core\\Private\\Misc\\FNVHashAlgorithm\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\12_draft-eastlake-fnv-16\draft-eastlake-fnv-16.txt#L650-681 sha256=1091e7546aae4b17758d0f719f96fc222f204d1d91d5866782b97c789d18322c
+
+GuidGenerator__GuidGenerator.cpp_L5-19.txt
+  sha256 295cd8d1218d8c6fef12f83a0fd540d25b51e480d04729b872fdf628188418fc
+  attached to records matching: Engine\\Source\\Runtime\\Core\\Private\\Misc\\GuidGenerator\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Source\Runtime\Core\Private\Misc\GuidGenerator.cpp#L5-19 sha256=a60eb103bdb52c00615224142277a3f1e01bc72cd3bb0d5138a494d0c2371cdc
+
+FAAArrayQueue__FAAArrayQueue.h_L1-27.txt
+  sha256 b1355f36f1c79d50f16ae202a4b140db440ba9cf2f3034c40d927ff265bb065a
+  attached to records matching: Engine\\Source\\Runtime\\Core\\Public\\Experimental\\Containers\\FAAArrayQueue\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Source\Runtime\Core\Public\Experimental\Containers\FAAArrayQueue.h#L1-27 sha256=a52b534666361668e8b707b942c3b7848c879181c18481b843c6865724d2d8ed
+
+FrameProLib__FramePro.h_L1-14.txt
+  sha256 3a373558e031490888f13b8f02bb87f6fe2016fd3162079d2e5651b628013b79
+  attached to records matching: Engine\\Source\\Runtime\\Core\\Public\\FramePro\\FrameProLib\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Source\Runtime\Core\Public\FramePro\FramePro.h#L1-14 sha256=4d38888f705f231b7d90dcffe13d76ae53ebafe94d56d8732132a8f0f61110ac
+
+AnimPhysicsSolver__AnimPhysicsSolver.cpp_L10-28.txt
+  sha256 af7fdd9bf66bc62ee23fb6019ec584b746b7440493b5aa7c62426009699a5154
+  attached to records matching: Engine\\Source\\Runtime\\Engine\\Private\\Animation\\AnimPhysicsSolver\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Source\Runtime\Engine\Private\Animation\AnimPhysicsSolver.cpp#L10-28 sha256=ba1b6ff6e777ed3825e9930958bccdd7d443501c042820cb0be09f9d227f8dde
+
+KismetMathLibrary2__15_cc-by-4.0_legalcode__legalcode.txt
+  sha256 9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411
+  attached to records matching: Engine\\Source\\Runtime\\Engine\\Private\\KismetMathLibrary2\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\15_cc-by-4.0_legalcode\legalcode.txt sha256=9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411
+
+KismetMathLibrary2__MinimumAreaRectangle_pdf_text_line1.txt
+  sha256 dc36e754af22c3277114448bf2a5226f195a094b3b05ec2da864bcc0a7c8cd00
+  attached to records matching: Engine\\Source\\Runtime\\Engine\\Private\\KismetMathLibrary2\.tps$
+  origin: derived by make_attribution_excerpts.py (r12_closure/ledger), its docstring states the exact derivation and its source file
+
+AGSlib__amd_ags.h_L1-21.txt
+  sha256 5fddbbcdd1b3d1f0a5cbab07103678d20a896b28ad98a1151fc809a023d91b5c
+  attached to records matching: Engine\\Source\\ThirdParty\\AMD\\AMD_AGS\\AGSlib\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Source\ThirdParty\AMD\AMD_AGS\inc\amd_ags.h#L1-21 sha256=0c3117c54e12bc595406e1a4718b657bfb367c2fb67a030c9c16f9a553b1447c
+
+IntelExtensionsFramework__igdext.h_L1-6.txt
+  sha256 9bf63cdbbdc8b5d2871c6c30b1b98ad2a1364c21727f1416067f68c5b9404994
+  attached to records matching: Engine\\Source\\ThirdParty\\Intel\\ExtensionsFramework\\IntelExtensionsFramework\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Source\ThirdParty\Intel\ExtensionsFramework\igdext.h#L1-6 sha256=bd1df197d4970aedd1ea748130498e9962c0b64afc661c0e3a342d225778c05b
+
+IntelExtensionsFramework__58_spdx_v3.25.0_MIT__MIT.txt
+  sha256 b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0
+  attached to records matching: Engine\\Source\\ThirdParty\\Intel\\ExtensionsFramework\\IntelExtensionsFramework\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\58_spdx_v3.25.0_MIT\MIT.txt sha256=b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0
+
+libvpx__03_libvpx_v1.14.1_LICENSE__LICENSE.html.txt
+  sha256 8267348d5af1262c11d1a08de2f5afc77457755f1ac658627dd9acf71011d615
+  attached to records matching: Engine\\Source\\ThirdParty\\libvpx\\libvpx\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\03_libvpx_v1.14.1_LICENSE\LICENSE.html sha256=8267348d5af1262c11d1a08de2f5afc77457755f1ac658627dd9acf71011d615
+
+libvpx__04_libvpx_v1.14.1_PATENTS__PATENTS.html.txt
+  sha256 cc3273e0694ea5896145e0677699b53471b03ea43021ddc50e7923fbb9f5023c
+  attached to records matching: Engine\\Source\\ThirdParty\\libvpx\\libvpx\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\04_libvpx_v1.14.1_PATENTS\PATENTS.html sha256=cc3273e0694ea5896145e0677699b53471b03ea43021ddc50e7923fbb9f5023c
+
+libwebsockets__05_libwebsockets_v3.0.0_LICENSE__LICENSE.html.txt
+  sha256 4d092cd5e062c5ab0cf6408963d74619b5baf1571344410be6aa5bcef512eb70
+  attached to records matching: Engine\\Source\\ThirdParty\\libWebSockets\\libwebsockets\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\05_libwebsockets_v3.0.0_LICENSE\LICENSE.html sha256=4d092cd5e062c5ab0cf6408963d74619b5baf1571344410be6aa5bcef512eb70
+
+libwebsockets__sha-1.c_L1-28.txt
+  sha256 4ba66e155030b6cbe1bb44a7f1111f07967c239125f80c394b56a1c2fd0d8976
+  attached to records matching: Engine\\Source\\ThirdParty\\libWebSockets\\libwebsockets\.tps$
+  origin: C:\dev\iwonder\_wonderland_beta_release\r12_closure\sa1_records\dl\60_libwebsockets_v3.0.0_sha-1.c\sha-1.c#L1-28 sha256=b876504641e45d65d22569805e5c7ded5e9e5273df98614ff4a5a712e15e10f2
+
+libwebsockets__libwebsockets_notice.txt
+  sha256 951fdf3e75dad67e1e8b17374c9c58e22de984764c835d602fb84a22b4b4d648
+  attached to records matching: Engine\\Source\\ThirdParty\\libWebSockets\\libwebsockets\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Source\ThirdParty\Licenses\libwebsockets_notice.txt (the engine install, whole file)
+
+ComputingTangentSpace__MikkTSpace_License.txt_L1-19.txt
+  sha256 7c64be458ca1a9de6f376a8fa34ccc80678eaa29de01c039dc90735ec3dfcd9a
+  attached to records matching: Engine\\Source\\ThirdParty\\MikkTSpace\\ComputingTangentSpace\.tps$
+  origin: C:\Program Files\Epic Games\UE_5.8\Engine\Source\ThirdParty\Licenses\MikkTSpace_License.txt#L1-19 sha256=1e9df95546c002336310e2031f2a28ead1220c2c5b1fb185aba9ed7fe3a4a05d
+
