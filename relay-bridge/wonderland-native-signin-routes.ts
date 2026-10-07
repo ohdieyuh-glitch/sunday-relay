@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import type { BetaRateLimiter, RateLimitConfig } from './beta-rate-limit';
 import type { BrowserSessionStore } from './browser-session/grants';
 import { sessionTokenFrom } from './browser-session/routes';
 import { participantIdForIdentity } from './github-auth-routes';
@@ -24,6 +25,7 @@ import { participantIdForIdentity } from './github-auth-routes';
  * NO SECRET. The device flow needs the App's public client id only; RELAY_GITHUB_APP_CLIENT_SECRET is never read here.
  * OFF BY DEFAULT. Unless the deployment sets WONDERLAND_SOCIAL_ENABLED=1 and has a client id, every route answers 503.
  * IN MEMORY. A pending sign-in, like every session, dies with the process -- the fail-closed direction.
+ * LIMITED. The start -- the one unauthenticated write here -- has a limit (SIGNIN_START_RATE), so a flood never fills the pending store.
  * NO ADMISSION HERE. As on the website's sign-in, signing in spends nothing; the beta gate guards spending, not identity.
  */
 
@@ -34,6 +36,18 @@ export const MAX_PENDING_SIGNINS = 1000;
 /** GitHub's device codes live 15 minutes; never trust a longer claim. */
 const MAX_DEVICE_TTL_S = 900;
 const MIN_INTERVAL_S = 5;
+
+/**
+ * THE START IS LIMITED (Second's review of its own R16 sign-in, 10-06). It is the one unauthenticated write in desktop sign-in:
+ * each start keeps a pending sign-in for up to 15 minutes and asks GitHub for a device code. Unlimited, about one start a second
+ * from one script kept MAX_PENDING_SIGNINS full, and every real player read "Sign-in isn't available" for as long as it ran.
+ * The bridge's reviewed limiter (beta-rate-limit.ts): sixty starts a minute in all, sized so starts alone can never fill the
+ * pending store, (15 minutes / window + 1) x 60 = 960 < 1000; twelve a minute per claimed client, so one address flooding takes
+ * a fifth of that and leaves the rest to everyone else -- while a household's game clients and the R16 harness, all behind one
+ * address, stay well under it. The per-client part rests on x-forwarded-for, which a caller can forge wherever the platform
+ * edge passes it through (the hosted qualification probes that); the global part holds whatever the header says.
+ */
+export const SIGNIN_START_RATE: RateLimitConfig = Object.freeze({ perKey: 12, global: 60, windowMs: 60_000, maxTrackedKeys: 10_000 });
 
 export type SignInFetch = (url: string, init?: {
   method?: string;
@@ -49,11 +63,15 @@ export interface NativeSignInRequest {
   readonly origin: string | undefined;
   readonly body: unknown;
   readonly now: number;
+  /** The client as the platform edge claims it (claimedClientKey in beta-rate-limit.ts): the start's per-client limit is keyed by it. */
+  readonly clientKey: string;
 }
 
 export interface NativeSignInResult {
   readonly status: number;
   readonly body: unknown;
+  /** Extra answer headers: a refused start's Retry-After. */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 /** One pending sign-in. The device code is GitHub's secret for this sign-in and never leaves the bridge. */
@@ -111,6 +129,8 @@ export interface NativeSignInDeps {
   readonly clientId: string | null;
   readonly sessions: BrowserSessionStore;
   readonly pending: PendingSignInStore;
+  /** The start's limit (SIGNIN_START_RATE): ONE limiter for the process, so its windows are shared across requests. */
+  readonly startLimiter: BetaRateLimiter;
   /**
    * Record the verified player BEFORE their session exists: the row the social store's records reference, and the login
    * their social record is named from. Throws when it cannot be recorded; nothing is minted then.
@@ -149,6 +169,9 @@ const EXPIRED = (): NativeSignInResult =>
   err(401, 'signin_expired', 'This sign-in code expired before it was approved. Start signing in again.');
 const DENIED = (): NativeSignInResult =>
   err(401, 'signin_denied', 'The sign-in was declined on GitHub.');
+/** A full pending store and a refused start answer alike: the shipped client words any 503 "Sign-in isn't available ... right now". */
+const BUSY = (): NativeSignInResult =>
+  err(503, 'signin_busy', 'Too many sign-ins are in progress. Try again in a minute.');
 
 export function isNativeSignInRoute(path: string): boolean {
   return path.startsWith(NATIVE_SIGNIN_PREFIX);
@@ -231,6 +254,12 @@ export async function handleNativeSignInRoute(
     return ok({ revoked: true });
   }
 
+  // THE START'S LIMIT COMES FIRST, before any work: a refused start reads no schema, asks GitHub nothing and keeps nothing.
+  if (path === '/wonderland/native/signin/start') {
+    const verdict = deps.startLimiter.check(request.clientKey, now);
+    if (!verdict.allowed) return { ...BUSY(), headers: { 'retry-after': String(verdict.retryAfterSeconds) } };
+  }
+
   if (!deps.enabled || deps.clientId === null || deps.clientId.trim() === '') return UNAVAILABLE();
   if (deps.socialReady !== undefined && !(await deps.socialReady())) return UNAVAILABLE();
   const clientId = deps.clientId.trim();
@@ -261,7 +290,7 @@ export async function handleNativeSignInRoute(
     const interval = typeof answer.interval === 'number' && answer.interval >= MIN_INTERVAL_S ? answer.interval : MIN_INTERVAL_S;
     const expiresAt = now + expiresIn * 1000;
     const handle = deps.pending.put(deviceCode, expiresAt, interval * 1000, now);
-    if (handle === null) return err(503, 'signin_busy', 'Too many sign-ins are in progress. Try again in a minute.');
+    if (handle === null) return BUSY();
     return ok({ handle, userCode, verificationUri, interval, expiresAt: new Date(expiresAt).toISOString() });
   }
 

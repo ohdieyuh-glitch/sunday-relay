@@ -80,7 +80,7 @@ import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePor
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
-import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute } from './wonderland-native-signin-routes';
+import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute, SIGNIN_START_RATE } from './wonderland-native-signin-routes';
 import { createCommandBudgets, createPresenceLease, createSessionRateLimit, endSocialPresence, EOS_CLIENT_CONFIG_RATE, handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 import { GITHUB_STUB_BANNER, githubRootsForNativeSignIn } from './wonderland-github-stub-seam';
@@ -288,6 +288,8 @@ export function createBridgeServer(
     }
   };
   const socialPendingSignIns = createPendingSignInStore();
+  // the desktop sign-in's START is an unauthenticated write too (Second's review, 10-06): one limiter for the process
+  const socialSignInStartLimiter = createBetaRateLimiter(SIGNIN_START_RATE);
   const socialLogins = new Map<string, string>();
   /**
    * PARTY VOICE = EOS (R16, founder 10-04), behind WONDERLAND_EOS_VOICE_CONFIG (the founder's file; never logged, no fallback;
@@ -696,11 +698,13 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             origin,
             body: method === 'POST' ? await readBody(req) : undefined,
             now: Date.now(),
+            clientKey: claimedClientKey(req.headers),
           }, {
             enabled: socialEnabled,
             clientId: process.env.RELAY_GITHUB_APP_CLIENT_ID?.trim() || null,
             sessions: browserSessions,
             pending: socialPendingSignIns,
+            startLimiter: socialSignInStartLimiter,
             // the schema first: a store whose 033 is not applied makes sign-in 503 before anything is written (founder ruling a)
             socialReady: async () => (await socialStore()) !== null,
             recordPlayer: async ({ participantId, login }) => {
@@ -719,8 +723,9 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             oauthRoot: socialGithub.oauthRoot,
             apiRoot: socialGithub.apiRoot,
           });
-          // NEVER STORED ON THE WAY: the poll's answer carries the session token and the start's the device code (Second's harness)
-          if (signInResult !== null) send(res, signInResult.status, signInResult.body, { ...cors, 'cache-control': 'no-store', pragma: 'no-cache' });
+          // NEVER STORED ON THE WAY: the poll's answer carries the session token and the start's the handle it is polled with
+          // (Second's harness); a refused start adds its Retry-After
+          if (signInResult !== null) send(res, signInResult.status, signInResult.body, { ...cors, 'cache-control': 'no-store', pragma: 'no-cache', ...(signInResult.headers ?? {}) });
           return;
         }
 

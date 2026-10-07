@@ -11,7 +11,8 @@ import {
 import { throwawayPgPort as seamPgPort } from '../relay-bridge/wonderland-github-stub-seam';
 import { createGitHubDeviceStub, parseIdentity } from './github-device-stub.mjs';
 import { createBrowserSessionStore } from '../relay-bridge/browser-session/grants';
-import { createPendingSignInStore, handleNativeSignInRoute } from '../relay-bridge/wonderland-native-signin-routes';
+import { createBetaRateLimiter } from '../relay-bridge/beta-rate-limit';
+import { createPendingSignInStore, handleNativeSignInRoute, SIGNIN_START_RATE } from '../relay-bridge/wonderland-native-signin-routes';
 import { R16_THROWAWAY_DATABASE, r16ThrowawayDatabase } from './r16-migrate-throwaway';
 
 /*
@@ -228,9 +229,9 @@ describe('the GitHub device stub, through the bridge\'s real sign-in', () => {
     const sessions = createBrowserSessionStore();
     const recorded: string[] = [];
     let clock = Date.parse('2026-10-03T12:00:00.000Z');
-    const deps = { enabled: true, clientId: 'stub-client-id', sessions, pending: createPendingSignInStore(), recordPlayer: async (p: { participantId: string }) => { recorded.push(p.participantId); }, oauthRoot: root, apiRoot: root };
+    const deps = { enabled: true, clientId: 'stub-client-id', sessions, pending: createPendingSignInStore(), startLimiter: createBetaRateLimiter(SIGNIN_START_RATE), recordPlayer: async (p: { participantId: string }) => { recorded.push(p.participantId); }, oauthRoot: root, apiRoot: root };
     const post = (path: string, body: unknown = {}) =>
-      handleNativeSignInRoute({ method: 'POST', path: `/wonderland/native/signin/${path}`, authorization: undefined, origin: undefined, body, now: clock }, deps) as Promise<{ status: number; body: any }>;
+      handleNativeSignInRoute({ method: 'POST', path: `/wonderland/native/signin/${path}`, authorization: undefined, origin: undefined, body, now: clock, clientKey: '127.0.0.1' }, deps) as Promise<{ status: number; body: any }>;
     const signIn = async () => {
       const started = await post('start');
       expect(started.status).toBe(200);

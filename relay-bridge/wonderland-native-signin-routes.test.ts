@@ -1,9 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { createBetaRateLimiter } from './beta-rate-limit';
 import { createBrowserSessionStore } from './browser-session/grants';
 import {
   createPendingSignInStore,
   handleNativeSignInRoute,
+  MAX_PENDING_SIGNINS,
+  SIGNIN_START_RATE,
   type NativeSignInDeps,
   type SignInFetch,
 } from './wonderland-native-signin-routes';
@@ -53,13 +56,15 @@ function bridge(gh: ReturnType<typeof github>, over: Partial<NativeSignInDeps> =
     clientId: 'Iv1.publicclientid',
     sessions,
     pending: createPendingSignInStore(),
+    startLimiter: createBetaRateLimiter(SIGNIN_START_RATE),
     recordPlayer: async (p) => { recorded.push(p); },
     fetchImpl: gh.fetchImpl,
     ...over,
   };
-  const call = (path: string, body: unknown = null, at = T0, extra: { origin?: string; authorization?: string } = {}) =>
-    handleNativeSignInRoute({ method: 'POST', path: `/wonderland/native/signin/${path}`, body, now: at, origin: extra.origin, authorization: extra.authorization }, deps) as
-      Promise<{ status: number; body: { data?: any; error?: { kind: string; message: string } } }>;
+  // the claimed client (x-forwarded-for's first hop, as server.ts reads it): a documentation address unless a test names one
+  const call = (path: string, body: unknown = null, at = T0, extra: { origin?: string; authorization?: string; clientKey?: string } = {}) =>
+    handleNativeSignInRoute({ method: 'POST', path: `/wonderland/native/signin/${path}`, body, now: at, origin: extra.origin, authorization: extra.authorization, clientKey: extra.clientKey ?? '192.0.2.10' }, deps) as
+      Promise<{ status: number; body: { data?: any; error?: { kind: string; message: string } }; headers?: Record<string, string> }>;
   return { deps, sessions, recorded, call };
 }
 
@@ -275,5 +280,78 @@ describe('desktop sign-out', () => {
     const answer = await failing.call('revoke', null, T0 + 1, { authorization: `Relay-Session ${second.session.token}` });
     expect(answer.body.data).toEqual({ revoked: true });
     expect(failing.sessions.verifyNativeSocialSession({ token: second.session.token, now: T0 + 2 }).ok).toBe(false);
+  });
+});
+
+/*
+ * 10-06 (Second's review of its own R16 sign-in): the START is the one unauthenticated write in desktop sign-in -- each start keeps a
+ * pending sign-in for up to 15 minutes and asks GitHub for a device code. Unlimited, about one start a second from one script held
+ * MAX_PENDING_SIGNINS full, and every real player read "Sign-in isn't available on this Wonderland server right now" for as long
+ * as the script ran.
+ */
+describe('desktop sign-in: a flood of starts cannot lock real players out', () => {
+  const deviceAsks = (gh: ReturnType<typeof github>) => gh.calls.filter((c) => c.url.endsWith('/login/device/code')).length;
+
+  it('one client: twelve starts a minute, then the answer a full store gives (503 signin_busy) with a Retry-After -- GitHub never asked for those', async () => {
+    const gh = github({});
+    let readies = 0;
+    const b = bridge(gh, { socialReady: async () => { readies += 1; return true; } });
+    const answers = [];
+    for (let i = 0; i < 15; i += 1) answers.push(await b.call('start', {}, T0 + i * 1000, { clientKey: '203.0.113.7' }));
+    expect(answers.map((a) => a.status)).toEqual([...Array(12).fill(200), 503, 503, 503]);
+    for (const refused of answers.slice(12)) {
+      // the same answer as a full pending store, which the shipped client already words -- not a 429 it would print as a code
+      expect(refused.body.error?.kind).toBe('signin_busy');
+      const retry = Number(refused.headers?.['retry-after']);
+      expect(retry).toBeGreaterThanOrEqual(1);
+      expect(retry).toBeLessThanOrEqual(60);
+    }
+    for (const allowed of answers.slice(0, 12)) expect(allowed.headers?.['retry-after']).toBeUndefined();
+    // refused BEFORE any work: GitHub was asked twelve times, the schema read twelve times, twelve sign-ins are pending
+    expect(deviceAsks(gh)).toBe(12);
+    expect(readies).toBe(12);
+    expect(b.deps.pending.size).toBe(12);
+    // the control: another client is not refused for it, and the first may start again once its minute has passed
+    expect((await b.call('start', {}, T0 + 9_000, { clientKey: '198.51.100.9' })).status).toBe(200);
+    expect((await b.call('start', {}, T0 + 61_000, { clientKey: '203.0.113.7' })).status).toBe(200);
+  });
+
+  it('a fresh claimed client on every request (a forged x-forwarded-for) meets the global limit: 16 minutes of it never fill the pending store', async () => {
+    const gh = github({});
+    const b = bridge(gh);
+    let most = 0;
+    let n = 0;
+    for (let s = 0; s < 16 * 60; s += 1) {
+      for (const ms of [0, 400]) {
+        n += 1;
+        await b.call('start', {}, T0 + s * 1000 + ms, { clientKey: `10.${(n >> 16) & 255}.${(n >> 8) & 255}.${n & 255}` });
+        most = Math.max(most, b.deps.pending.size);
+      }
+    }
+    expect(n).toBe(1920);
+    expect(most).toBeLessThan(MAX_PENDING_SIGNINS);
+    // GitHub asked at most the global limit in each of the 16 minutes (+1 for a window that straddles the start)
+    expect(deviceAsks(gh)).toBeLessThanOrEqual(17 * SIGNIN_START_RATE.global);
+    expect(deviceAsks(gh)).toBeGreaterThan(0);
+  });
+
+  it('is sized so starts alone can never fill the pending store: (15 minutes / window + 1) x global <= MAX_PENDING_SIGNINS', () => {
+    expect((Math.ceil(900_000 / SIGNIN_START_RATE.windowMs) + 1) * SIGNIN_START_RATE.global).toBeLessThanOrEqual(MAX_PENDING_SIGNINS);
+    // one address may hold a household's three game clients, each pressing SIGN IN twice, and the R16 harness's own sign-ins
+    expect(SIGNIN_START_RATE.perKey).toBeGreaterThanOrEqual(10);
+    expect(SIGNIN_START_RATE.perKey).toBeLessThanOrEqual(SIGNIN_START_RATE.global / 4); // and one address alone never takes the whole minute
+  });
+
+  it('never stops a player who already has a code: polls and sign-out are not starts', async () => {
+    const gh = github({ token: [() => ({ error: 'authorization_pending' }), () => ({ access_token: USER_TOKEN, token_type: 'bearer' })] });
+    const b = bridge(gh);
+    const handle = (await b.call('start', {}, T0, { clientKey: '203.0.113.7' })).body.data.handle as string;
+    for (let i = 1; i <= 12; i += 1) await b.call('start', {}, T0 + i, { clientKey: '203.0.113.7' });
+    expect((await b.call('start', {}, T0 + 13, { clientKey: '203.0.113.7' })).body.error?.kind).toBe('signin_busy');
+    expect((await b.call('poll', { handle }, T0 + 6_000, { clientKey: '203.0.113.7' })).body.data).toEqual({ state: 'pending', interval: 5 });
+    const done = await b.call('poll', { handle }, T0 + 12_000, { clientKey: '203.0.113.7' });
+    expect(done.body.data).toMatchObject({ state: 'signed_in', participantId: 'ghu-4242' });
+    const token = done.body.data.token as string;
+    expect((await b.call('revoke', null, T0 + 13_000, { clientKey: '203.0.113.7', authorization: `Relay-Session ${token}` })).body.data).toEqual({ revoked: true });
   });
 });
