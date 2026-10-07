@@ -404,10 +404,12 @@ async function writeChanges(c: PoolClient, before: SocialState, after: SocialSta
   if (before.nextSerial !== after.nextSerial) {
     // AN UPSERT: migration 033 writes no row, so the first minted id creates next_serial. A bare UPDATE would change nothing
     // there, and after a restart the ids would start again at 1: the same ids minted twice, and each ON CONFLICT DO NOTHING
-    // below them would silently drop the new row.
+    // below them would silently drop the new row. GREATEST (Second Julius, 10-07): the durable serial never moves BACKWARDS,
+    // even when a stale writer (a second bridge left running over a deploy) writes an older one, so a restart never re-mints
+    // an id below anything ever persisted. (One bridge per store is the rule; this bounds the damage of breaking it.)
     await c.query(
       `INSERT INTO relay_wonderland.social_meta(name, value) VALUES('next_serial', $1)
-       ON CONFLICT(name) DO UPDATE SET value = EXCLUDED.value`,
+       ON CONFLICT(name) DO UPDATE SET value = GREATEST(relay_wonderland.social_meta.value, EXCLUDED.value)`,
       [after.nextSerial],
     );
   }

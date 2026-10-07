@@ -215,4 +215,22 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
     // and Kai's own label for Nova (met in his own party, which he still sees) reads its name
     expect((await call('kai', 'GET', '/recent-players')).body.data.find((e: any) => e.userId === NOVA)?.contextLabel).toBe('Lab Crew');
   }, 60_000);
+  it('the durable serial never moves backwards: a stale second store on the same database (a deploy overlap) cannot lower it', async () => {
+    // ONE bridge per store is the rule; a second one mints ids the first already holds (its rows are then dropped by ON CONFLICT
+    // DO NOTHING). What the store guarantees is narrower: the serial a restart reads is never below one ever persisted.
+    const durable = async (): Promise<number[]> =>
+      (await pool.query(`SELECT value FROM relay_wonderland.social_meta WHERE name = 'next_serial'`)).rows.map((row) => Number(row.value));
+    const stale = await openSocialPostgresStore(pool); // holds the durable serial as it is now
+    store = await openSocialPostgresStore(pool);
+    for (let i = 0; i < 3; i += 1) expect((await call('kai', 'POST', '/reports', { reportedId: VEGA, reason: 'SPAM' })).status).toBe(200);
+    const ahead = (await store.read()).nextSerial;
+    expect(await durable(), 'the current store wrote its serial').toEqual([ahead]);
+    // the stale store mints ONE id: its serial is behind, and its write must not move the durable one back
+    store = stale;
+    expect((await call('vega', 'POST', '/reports', { reportedId: KAI, reason: 'SPAM' })).status).toBe(200);
+    expect((await stale.read()).nextSerial, 'the stale store is behind').toBeLessThan(ahead);
+    expect(await durable(), 'the durable serial did not move back').toEqual([ahead]);
+    store = await openSocialPostgresStore(pool);
+    expect((await store.read()).nextSerial, 'a restart reads the highest serial ever written').toBe(ahead);
+  }, 60_000);
 });
