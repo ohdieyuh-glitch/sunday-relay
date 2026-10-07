@@ -2,6 +2,7 @@
 
 #include "Framework/Application/SlateApplication.h"
 #include "Fonts/FontMeasure.h"
+#include "HAL/IConsoleManager.h"
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Images/SImage.h"
@@ -13,7 +14,61 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
+#include "WonderlandSocialLive.h"   // the profile-actions QA: every offered operation through the real dispatcher
 #include "WonderlandUiStyle.h"
+
+// THE PROFILE'S ACTION ROW AS DATA (2026-10-07): MakeActions draws exactly this list, and wl.Qa.SocialProfileActions reads the same list.
+namespace WonderlandSocialProfileActions
+{
+	struct FProfileActionRow
+	{
+		FString Label;
+		FString OperationId;
+		bool bAllowed = false;
+	};
+
+	TArray<FProfileActionRow> For(const FWonderlandSocialProfileView& View)
+	{
+		TArray<FProfileActionRow> Out;
+		if (View.Relationship == TEXT("SELF"))
+		{
+			return Out;   // your own profile offers no actions
+		}
+		const FWonderlandSocialActions& Can = View.Presence.Can;
+		auto AddAction = [&Out](const TCHAR* Label, const TCHAR* OperationId, bool bAllowed)
+		{
+			FProfileActionRow Row;
+			Row.Label = Label;
+			Row.OperationId = OperationId;
+			Row.bAllowed = bAllowed;
+			Out.Add(MoveTemp(Row));
+		};
+		// MESSAGE opens (or finds) the direct conversation, the hub's own path for a friend with none yet (HubPanel.cpp:638). The live
+		// client has no "messages.send" for a PERSON -- it sends to a conversation id (SocialLive.cpp:717) -- so the old op was refused
+		// as "not a social action this client knows" on every live profile (finding F-19, 2026-10-07). The server answers with the
+		// existing conversation when there is one (openDirectConversation), and the conversation then lists under MESSAGES.
+		AddAction(TEXT("MESSAGE"), TEXT("conversations.open"), Can.bMessage);
+		AddAction(TEXT("INVITE TO PARTY"), TEXT("parties.invite"), Can.bInviteToParty);
+		AddAction(TEXT("JOIN PARTY"), TEXT("parties.join"), Can.bJoinParty);
+		AddAction(TEXT("JOIN SERVER"), TEXT("server.join"), Can.bJoinServer);
+		// NO "INVITE TO SERVER" IN THE BETA (D4 / finding F-18, 2026-10-07): the invited player's client parses a world invite and never
+		// shows it (SocialLive.cpp:113-129; nothing reads View.Invites), so the button answered "Done" for an invitation nobody could
+		// see. JOIN SERVER reaches a friend's world without one (the server's FRIEND join). server.invite stays in the dispatcher, sent
+		// by no screen.
+		if (Can.bRemoveFriend)
+		{
+			AddAction(TEXT("REMOVE FRIEND"), TEXT("friends.remove"), true);
+		}
+		else
+		{
+			AddAction(TEXT("ADD FRIEND"), TEXT("requests.send"), Can.bSendFriendRequest);
+		}
+		AddAction(TEXT("MUTE"), TEXT("mutes.set"), Can.bMute);
+		AddAction(TEXT("BLOCK"), TEXT("blocks.add"), Can.bBlock);
+		AddAction(TEXT("REPORT"), TEXT("reports.file"), Can.bReport);
+		return Out;
+	}
+}
 
 // Named, not anonymous: the module is one unity translation unit.
 namespace WonderlandSocialProfileLook
@@ -534,27 +589,10 @@ TSharedRef<SWidget> SWonderlandSocialProfilePanel::ActionButton(const FString& L
 TSharedRef<SWidget> SWonderlandSocialProfilePanel::MakeActions()
 {
 	using namespace WonderlandSocialProfileLook;
-	const FWonderlandSocialActions& Can = View.Presence.Can;
-	const bool bSelf = View.Relationship == TEXT("SELF");
 	TSharedRef<SWrapBox> Row = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(8.0, 8.0));
-	if (!bSelf)
+	for (const WonderlandSocialProfileActions::FProfileActionRow& ProfileAction : WonderlandSocialProfileActions::For(View))
 	{
-		Row->AddSlot()[ActionButton(TEXT("MESSAGE"), TEXT("messages.send"), Can.bMessage)];
-		Row->AddSlot()[ActionButton(TEXT("INVITE TO PARTY"), TEXT("parties.invite"), Can.bInviteToParty)];
-		Row->AddSlot()[ActionButton(TEXT("JOIN PARTY"), TEXT("parties.join"), Can.bJoinParty)];
-		Row->AddSlot()[ActionButton(TEXT("JOIN SERVER"), TEXT("server.join"), Can.bJoinServer)];
-		Row->AddSlot()[ActionButton(TEXT("INVITE TO SERVER"), TEXT("server.invite"), Can.bInviteToServer)];
-		if (Can.bRemoveFriend)
-		{
-			Row->AddSlot()[ActionButton(TEXT("REMOVE FRIEND"), TEXT("friends.remove"), true)];
-		}
-		else
-		{
-			Row->AddSlot()[ActionButton(TEXT("ADD FRIEND"), TEXT("requests.send"), Can.bSendFriendRequest)];
-		}
-		Row->AddSlot()[ActionButton(TEXT("MUTE"), TEXT("mutes.set"), Can.bMute)];
-		Row->AddSlot()[ActionButton(TEXT("BLOCK"), TEXT("blocks.add"), Can.bBlock)];
-		Row->AddSlot()[ActionButton(TEXT("REPORT"), TEXT("reports.file"), Can.bReport)];
+		Row->AddSlot()[ActionButton(ProfileAction.Label, ProfileAction.OperationId, ProfileAction.bAllowed)];
 	}
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()[Row]
@@ -650,4 +688,84 @@ FString SWonderlandSocialProfilePanel::DescribeIdentityColumn() const
 		P.bHasPrimaryAgent ? *P.PrimaryAgent.DisplayName : TEXT("none"), P.bHasPrimaryAgent ? *P.PrimaryAgent.Kind : TEXT("-"),
 		*P.RelayDog.SkinId, DogBrush != nullptr ? 1 : 0, *P.ProgressionSource, *P.ProgressionSource,
 		P.bHasActiveCompanion ? *P.ActiveCompanion.DisplayName : TEXT("none"));
+}
+
+namespace WonderlandSocialProfileActionsQa
+{
+	/** D4 + F-19 QA (2026-10-07), fail-capable, on the very list MakeActions draws. A friend's profile offers no INVITE TO SERVER (an
+	 *  invite the invited player's client never shows), still offers JOIN SERVER, and EVERY operation it offers is one the LIVE client
+	 *  dispatches (the old MESSAGE sent "messages.send", which the live dispatcher refuses as unknown). PA4 and PA5 prove the checks
+	 *  themselves can FAIL. Fed views, a throwaway service on a dead loopback port. WLQA PROFILEACT lines. */
+	FAutoConsoleCommand GQaSocialProfileActions(
+		TEXT("wl.Qa.SocialProfileActions"),
+		TEXT("QA: the social profile's action row (D4: no INVITE TO SERVER; F-19: MESSAGE dispatched) -- fed views, with fail-capable controls."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			using WonderlandSocialProfileActions::FProfileActionRow;
+			int32 Passed = 0;
+			int32 Failed = 0;
+			auto Check = [&Passed, &Failed](const FString& Id, bool bOk, const FString& What)
+			{
+				(bOk ? Passed : Failed) += 1;
+				UE_LOG(LogTemp, Display, TEXT("WLQA PROFILEACT %s %s -- %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *What);
+			};
+			auto OffersServerInvite = [](const TArray<FProfileActionRow>& Rows)
+			{
+				return Rows.ContainsByPredicate([](const FProfileActionRow& R) { return R.OperationId == TEXT("server.invite") || R.Label.Contains(TEXT("INVITE TO SERVER")); });
+			};
+			// the dispatcher's own refusal for an operation it does not know (SocialLive.cpp, the end of Request)
+			auto IsUnknownOp = [](const FWonderlandSocialActionResult& Got) { return !Got.bOk && Got.Reason.Contains(TEXT("not a social action")); };
+			// A FRIEND in a PUBLIC world, with everything the server allows switched ON (server.cjs grants inviteToServer to any friend)
+			FWonderlandSocialProfileView FriendView;
+			FriendView.Profile.UserId = TEXT("qa-friend");
+			FriendView.Profile.DisplayName = TEXT("Fern");
+			FriendView.Relationship = TEXT("FRIEND");
+			FWonderlandSocialActions& Can = FriendView.Presence.Can;
+			Can.bMessage = Can.bInviteToParty = Can.bJoinParty = Can.bJoinServer = Can.bInviteToServer = true;
+			Can.bRemoveFriend = Can.bMute = Can.bBlock = Can.bReport = true;
+			const TArray<FProfileActionRow> FriendRows = WonderlandSocialProfileActions::For(FriendView);
+			TArray<FString> ShownActions;
+			for (const FProfileActionRow& R : FriendRows) { ShownActions.Add(FString::Printf(TEXT("%s=%s"), *R.Label, *R.OperationId)); }
+			Check(TEXT("PA1"), FriendRows.Num() == 8 && !OffersServerInvite(FriendRows),
+				FString::Printf(TEXT("a friend's profile offers no INVITE TO SERVER though the server allows it (%d actions: %s)"), FriendRows.Num(), *FString::Join(ShownActions, TEXT(", "))));
+			const FProfileActionRow* JoinRow = FriendRows.FindByPredicate([](const FProfileActionRow& R) { return R.OperationId == TEXT("server.join"); });
+			const FProfileActionRow* MessageRow = FriendRows.FindByPredicate([](const FProfileActionRow& R) { return R.Label == TEXT("MESSAGE"); });
+			Check(TEXT("PA2"), JoinRow != nullptr && JoinRow->bAllowed && JoinRow->Label == TEXT("JOIN SERVER") && MessageRow != nullptr && MessageRow->OperationId == TEXT("conversations.open"),
+				TEXT("JOIN SERVER stays offered, enabled (D4 option iv); MESSAGE opens the direct conversation (conversations.open, the hub's own path)"));
+			// PA3 NO DEAD BUTTON: every operation offered goes through the LIVE dispatcher; control: an unknown op is refused
+			TUniquePtr<FWonderlandSocialLiveService> ProbeService = MakeUnique<FWonderlandSocialLiveService>(TEXT("http://127.0.0.1:9"), TEXT("qa-profile"));
+			TArray<FString> NotDispatched;
+			for (const FProfileActionRow& R : FriendRows)
+			{
+				if (IsUnknownOp(ProbeService->Request(R.OperationId, FriendView.Profile.UserId)))
+				{
+					NotDispatched.Add(R.OperationId);
+				}
+			}
+			const FWonderlandSocialActionResult OldMessageOp = ProbeService->Request(TEXT("messages.send"), FriendView.Profile.UserId);
+			const FWonderlandSocialActionResult NonsenseOp = ProbeService->Request(TEXT("server.nonsense"), FriendView.Profile.UserId);
+			ProbeService.Reset();
+			Check(TEXT("PA3"), NotDispatched.Num() == 0 && IsUnknownOp(OldMessageOp) && IsUnknownOp(NonsenseOp),
+				FString::Printf(TEXT("all %d offered operations are dispatched (not known: %s); controls: the old MESSAGE op and a nonsense op are refused ('%s')"),
+					FriendRows.Num(), NotDispatched.Num() > 0 ? *FString::Join(NotDispatched, TEXT(",")) : TEXT("none"), *NonsenseOp.Reason));
+			// PA4 / PA5 THE CHECKS CAN FAIL: the same predicates read FAIL on the old row
+			TArray<FProfileActionRow> WithInvite = FriendRows;
+			FProfileActionRow InviteRow;
+			InviteRow.Label = TEXT("INVITE TO SERVER");
+			InviteRow.OperationId = TEXT("server.invite");
+			InviteRow.bAllowed = true;
+			WithInvite.Add(InviteRow);
+			Check(TEXT("PA4"), OffersServerInvite(WithInvite) && !OffersServerInvite(FriendRows), TEXT("control: the PA1 check FAILS a row that carries the old INVITE TO SERVER"));
+			FWonderlandSocialProfileView SelfView = FriendView;
+			SelfView.Relationship = TEXT("SELF");
+			FWonderlandSocialProfileView StrangerView = FriendView;
+			StrangerView.Relationship = TEXT("NONE");
+			StrangerView.Presence.Can = FWonderlandSocialActions();
+			StrangerView.Presence.Can.bSendFriendRequest = StrangerView.Presence.Can.bBlock = StrangerView.Presence.Can.bReport = true;
+			const TArray<FProfileActionRow> StrangerRows = WonderlandSocialProfileActions::For(StrangerView);
+			const FProfileActionRow* AddFriendRow = StrangerRows.FindByPredicate([](const FProfileActionRow& R) { return R.OperationId == TEXT("requests.send"); });
+			Check(TEXT("PA5"), WonderlandSocialProfileActions::For(SelfView).Num() == 0 && AddFriendRow != nullptr && AddFriendRow->bAllowed && !OffersServerInvite(StrangerRows),
+				TEXT("your own profile offers no actions; a stranger's offers ADD FRIEND and no INVITE TO SERVER"));
+			UE_LOG(LogTemp, Display, TEXT("WLQA PROFILEACT END pass=%d fail=%d"), Passed, Failed);
+		}));
 }
