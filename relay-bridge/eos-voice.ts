@@ -108,6 +108,12 @@ export const EOS_ROOM_SALT_ENV = 'WONDERLAND_EOS_ROOM_SALT';
 /** EOS_GAME_CLIENT_ID is read only to refuse a voice client that IS the game client; the game client's secret is never read here. */
 const EOS_VOICE_KEYS = ['EOS_PRODUCT_ID', 'EOS_SANDBOX_ID', 'EOS_DEPLOYMENT_ID', 'EOS_SERVER_CLIENT_ID', 'EOS_SERVER_CLIENT_SECRET', 'EOS_GAME_CLIENT_ID'] as const;
 
+/**
+ * One EOS client, whatever the case (MAIN's internal review af2eb058, m-c): every client id here is trimmed and ID-shaped, so case
+ * is all that can differ -- and a voice client that IS the game client must be refused however it is spelled.
+ */
+const sameClientId = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
+
 /** Exactly the named keys from the process environment, as parseDotEnv gives them from a file: trimmed; empty = absent. */
 function eosKeysFromEnv(env: NodeJS.ProcessEnv, names: readonly string[]): Map<string, string> {
   const out = new Map<string, string>();
@@ -148,7 +154,8 @@ export function parseDotEnv(text: string): Map<string, string> {
  * THE TRUSTED SERVER CLIENT ONLY (MAIN's internal review a6d5842c, M3). The game client's pair is handed to every signed-in desktop
  * client (GET .../voice/eos-client-config); were it the voice client, any player holding it could mint room tokens and remove
  * participants at Epic directly -- a former member included. So EOS_GAME_* is never a fallback, and a voice client whose id IS
- * the game client's is refused: in the .env form here; in either form against the game config, in eosFromEnv.
+ * the game client's (compared case-blind, af2eb058 m-c) is refused: in the .env form here; in either form against the game
+ * config, in eosFromEnv, which also refuses voice when there is no game config to check against.
  * EITHER path variable may be `env:` (EOS_FROM_ENV): the same .env keys, or the salt as WONDERLAND_EOS_ROOM_SALT, from the process
  * environment -- a host whose secrets are variables (JUJU MAIN's hosted plan r3).
  * Any missing key, unreadable file, field out of shape or short salt: null -- party voice stays 503, with no fallback. A log line
@@ -209,7 +216,7 @@ function configFromKeys(keys: ReadonlyMap<string, string>, source: string, env: 
   }
   const shapeless = [...shapelessIds, ...(ID.test(client.id) ? [] : ['EOS_SERVER_CLIENT_ID']), ...(client.secret.length <= 512 ? [] : ['EOS_SERVER_CLIENT_SECRET'])];
   if (shapeless.length > 0) return refuse(`${source} has out of shape: ${shapeless.join(', ')}`);
-  if (get('EOS_GAME_CLIENT_ID') === client.id) return refuse(`${source} names the game client as the voice client (EOS_SERVER_CLIENT_ID equals EOS_GAME_CLIENT_ID)`);
+  if (sameClientId(get('EOS_GAME_CLIENT_ID'), client.id)) return refuse(`${source} names the game client as the voice client (EOS_SERVER_CLIENT_ID equals EOS_GAME_CLIENT_ID)`);
   // THE ROOM SALT, from its own file (not a founder credential)
   const saltPath = env[EOS_ROOM_SALT_FILE_ENV]?.trim() ?? '';
   if (saltPath === '') return refuse(`${EOS_ROOM_SALT_FILE_ENV} is not set (the room salt file)`);
@@ -742,7 +749,10 @@ export interface EosVoice {
  *     voice config's deployment (loadEosGameClientConfig).
  * VOICE IS REFUSED WHEN ITS CLIENT IS THE GAME CLIENT (MAIN's internal review a6d5842c, M3): the pair every signed-in player is handed
  * must never be the pair that mints room tokens and removes participants. The .env form is checked within its own file
- * (loadEosVoiceConfig); here both forms, the JSON one included, are checked against the game config. The log names keys only.
+ * (loadEosVoiceConfig); here both forms, the JSON one included, are checked against the game config, case-blind.
+ * AND THAT CHECK ALWAYS RUNS (MAIN's internal review af2eb058, m-c): without a game config that loads there is nothing to check
+ * the voice client against -- and no shipped client could start EOS anyway (it takes its config from the bridge: CORE's client
+ * contract, section 3) -- so voice is refused too. The log names keys only.
  */
 export function eosFromEnv(
   env: NodeJS.ProcessEnv,
@@ -754,7 +764,11 @@ export function eosFromEnv(
   const deployment = config === null ? null : { productId: config.productId, sandboxId: config.sandboxId, deploymentId: config.deploymentId };
   const gameConfig = loadEosGameClientConfig(env, { readFile: deps.readFile, log, deployment });
   if (config === null || deployment === null) return { voice: null, gameConfig };
-  if (gameConfig !== null && gameConfig.clientId === config.clientId) {
+  if (gameConfig === null) {
+    log('eos voice: no EOS game config loaded (WONDERLAND_EOS_GAME_CONFIG), so the voice client cannot be checked against the game client, and no shipped client could start EOS -- party voice answers 503');
+    return { voice: null, gameConfig };
+  }
+  if (sameClientId(gameConfig.clientId, config.clientId)) {
     log('eos voice: the voice client is the game client handed to every signed-in player (the voice config\'s EOS_SERVER_CLIENT_ID or JSON clientId equals EOS_GAME_CLIENT_ID) -- party voice answers 503');
     return { voice: null, gameConfig };
   }

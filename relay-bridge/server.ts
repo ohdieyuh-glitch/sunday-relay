@@ -295,7 +295,8 @@ export function createBridgeServer(
   /**
    * PARTY VOICE = EOS (R16, founder 10-04), behind WONDERLAND_EOS_VOICE_CONFIG (the founder's file; never logged, no fallback;
    * absent or invalid = voice 503 as before). It mints with the Trusted Server client only (EOS_SERVER_*), and is refused when
-   * that client is the game client handed to players (eos-voice.ts eosFromEnv, MAIN's internal review a6d5842c M3). PUIDs are
+   * that client is the game client handed to players (eos-voice.ts eosFromEnv, MAIN's internal review a6d5842c M3), or when no game
+   * config loads to check it against (af2eb058 m-c). PUIDs are
    * bound on the Julius pool (migration 035); a committed party departure removes the departed member's PUIDs from that party's
    * room server-side (eos-voice.ts createVoiceRemovals).
    * THE GAME CLIENT'S EOS CONFIG (founder 10-04), behind WONDERLAND_EOS_GAME_CONFIG (the founder's eos-game.env, by path): read once

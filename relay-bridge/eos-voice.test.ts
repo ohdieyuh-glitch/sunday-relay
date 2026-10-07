@@ -20,6 +20,8 @@ import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 
 const hex = (n: number) => randomBytes(n).toString('hex');
 const T0 = Date.parse('2026-10-04T09:00:00.000Z');
+/** eosFromEnv's refusal when the game config did not load (MAIN's internal review af2eb058, m-c): key names only. */
+const NO_GAME_CONFIG_LINE = 'eos voice: no EOS game config loaded (WONDERLAND_EOS_GAME_CONFIG), so the voice client cannot be checked against the game client, and no shipped client could start EOS -- party voice answers 503';
 
 function config(over: Partial<EosVoiceConfig> = {}): EosVoiceConfig {
   return { productId: 'prod-wl', sandboxId: 'sbx-dev', deploymentId: 'dep-wl', clientId: 'xyz-trusted', clientSecret: hex(24), roomSalt: hex(24), ...over };
@@ -187,7 +189,12 @@ describe('the EOS config as a .env file and a room-salt file', () => {
     const same = world((v) => [...full(v).filter((l) => !l.startsWith('EOS_SERVER_CLIENT_ID')), `EOS_SERVER_CLIENT_ID=${v.gameId}`].join('\n'));
     expect(same.load()).toBeNull();
     expect(same.log).toEqual(['eos voice: the EOS config file names the game client as the voice client (EOS_SERVER_CLIENT_ID equals EOS_GAME_CLIENT_ID) -- party voice answers 503']);
-    for (const w of [both, gameOnly, half, same]) {
+    // ... in another case too: client ids are compared case-blind (MAIN's internal review af2eb058, m-c)
+    const sameUpper = world((v) => [...full(v).filter((l) => !l.startsWith('EOS_SERVER_CLIENT_ID')), `EOS_SERVER_CLIENT_ID=${v.gameId.toUpperCase()}`].join('\n'));
+    expect(sameUpper.load()).toBeNull();
+    expect(sameUpper.log).toEqual(same.log);
+    expect(sameUpper.log.join('\n')).not.toContain(sameUpper.v.gameId.toUpperCase());
+    for (const w of [both, gameOnly, half, same, sameUpper]) {
       const all = w.log.join('\n');
       for (const value of w.values()) expect(all, 'a log line carries a config value or path').not.toContain(value);
       expect(all).not.toMatch(/Trusted Server policy/);
@@ -844,6 +851,33 @@ describe("the GAME client's EOS config: EOS_GAME_* only, never the Trusted Serve
     expect(trusted.eos.gameConfig?.clientId).toBe(f.game.EOS_GAME_CLIENT_ID);
     expect(trusted.log).toEqual(['eos voice: configured (JSON)', 'eos game config: loaded (5 keys)']);
   });
+
+  it("THE M3 CHECK ALWAYS RUNS, JSON form (MAIN's internal review af2eb058, m-c): the game client's id in another case is refused; without a game config that loads, voice is refused", () => {
+    const f = fileOf();
+    const voiceSecret = `planted-voice-${hex(16)}`;
+    const voiceSalt = hex(24);
+    const json = (clientId: string) => JSON.stringify({ productId: f.ids.EOS_PRODUCT_ID, sandboxId: f.ids.EOS_SANDBOX_ID, deploymentId: f.ids.EOS_DEPLOYMENT_ID, clientId, clientSecret: voiceSecret, roomSalt: voiceSalt });
+    const run = (clientId: string, gameFile: string | null) => {
+      const files: Record<string, string> = { 'voice.json': json(clientId), ...(gameFile === null ? {} : { 'eos-game.env': gameFile }) };
+      const log: string[] = [];
+      const env: NodeJS.ProcessEnv = { WONDERLAND_EOS_VOICE_CONFIG: 'voice.json', ...(gameFile === null ? {} : { [EOS_GAME_CONFIG_ENV]: 'eos-game.env' }) };
+      const eos = eosFromEnv(env, { bindings: () => null, readFile: (p) => files[p], log: (l) => log.push(l) });
+      return { eos, log };
+    };
+    // another case: one client at Epic
+    const upper = run(f.game.EOS_GAME_CLIENT_ID.toUpperCase(), dotEnv({ ...f.ids, ...f.game }));
+    expect(upper.eos.voice).toBeNull();
+    expect(upper.log).toContain("eos voice: the voice client is the game client handed to every signed-in player (the voice config's EOS_SERVER_CLIENT_ID or JSON clientId equals EOS_GAME_CLIENT_ID) -- party voice answers 503");
+    // no game config: the check cannot run, and no shipped client could start EOS (contract 3) -- refused, by name
+    const absent = run(f.server.EOS_SERVER_CLIENT_ID, null);
+    expect(absent.eos).toEqual({ voice: null, gameConfig: null });
+    expect(absent.log).toEqual(['eos voice: configured (JSON)', 'eos game config: absent', NO_GAME_CONFIG_LINE]);
+    // a game config that does not load (here: a missing key) is the same
+    const broken = run(f.server.EOS_SERVER_CLIENT_ID, dotEnv({ ...f.ids, EOS_GAME_CLIENT_ID: f.game.EOS_GAME_CLIENT_ID }));
+    expect(broken.eos).toEqual({ voice: null, gameConfig: null });
+    expect(broken.log.at(-1)).toBe(NO_GAME_CONFIG_LINE);
+    for (const r of [upper, absent, broken]) clean(r.log, [...f.values, f.game.EOS_GAME_CLIENT_ID.toUpperCase(), voiceSecret, voiceSalt]);
+  });
 });
 
 describe("the EOS config from the process ENVIRONMENT (env:), for a host whose secrets are variables (JUJU MAIN's hosted plan r3)", () => {
@@ -873,6 +907,26 @@ describe("the EOS config from the process ENVIRONMENT (env:), for a host whose s
     expect(config).toMatchObject({ productId: p.ids.EOS_PRODUCT_ID, deploymentId: p.ids.EOS_DEPLOYMENT_ID, clientId: p.server.EOS_SERVER_CLIENT_ID, clientSecret: p.server.EOS_SERVER_CLIENT_SECRET, roomSalt: p.salt });
     expect(log).toEqual(['eos voice: client kind server']);
     clean(log, p.values);
+  });
+
+  it("THE M3 CHECK, env: form (test review a8ed4c0b NOTE 8; af2eb058 m-c): EOS_SERVER_CLIENT_ID equal to EOS_GAME_CLIENT_ID, in any case, is refused by key name; without the game config, voice is refused", () => {
+    const p = planted();
+    const base: NodeJS.ProcessEnv = { WONDERLAND_EOS_VOICE_CONFIG: EOS_FROM_ENV, WONDERLAND_EOS_ROOM_SALT_FILE: EOS_FROM_ENV, [EOS_ROOM_SALT_ENV]: p.salt, ...p.ids, ...p.game };
+    for (const serverId of [p.game.EOS_GAME_CLIENT_ID, p.game.EOS_GAME_CLIENT_ID.toUpperCase()]) {
+      const log: string[] = [];
+      expect(loadEosVoiceConfig({ ...base, EOS_SERVER_CLIENT_ID: serverId, EOS_SERVER_CLIENT_SECRET: p.server.EOS_SERVER_CLIENT_SECRET }, { readFile: noFile, log: (l) => log.push(l) }), serverId).toBeNull();
+      expect(log, serverId).toEqual(['eos voice: the environment names the game client as the voice client (EOS_SERVER_CLIENT_ID equals EOS_GAME_CLIENT_ID) -- party voice answers 503']);
+      clean(log, [...p.values, serverId]);
+    }
+    // the whole bridge from variables: with the game config from them too, voice starts; without it, voice is refused
+    const started: string[] = [];
+    const eos = eosFromEnv({ ...base, ...p.server, [EOS_GAME_CONFIG_ENV]: EOS_FROM_ENV }, { bindings: () => null, readFile: noFile, log: (l) => started.push(l) });
+    expect(eos.voice?.minter).toBeInstanceOf(EosVoiceTokenMinter);
+    expect(started).toEqual(['eos voice: client kind server', 'eos game config: loaded (5 keys)']);
+    const refused: string[] = [];
+    expect(eosFromEnv({ ...base, ...p.server }, { bindings: () => null, readFile: noFile, log: (l) => refused.push(l) })).toEqual({ voice: null, gameConfig: null });
+    expect(refused).toEqual(['eos voice: client kind server', 'eos game config: absent', NO_GAME_CONFIG_LINE]);
+    clean([...started, ...refused], p.values);
   });
 
   it('the salt is never made up: absent or short as a variable, the voice config is refused by NAME', () => {
