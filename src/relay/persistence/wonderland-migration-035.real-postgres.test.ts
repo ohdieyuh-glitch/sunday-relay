@@ -38,6 +38,7 @@ const DOWN = committed('035', 'down.sql');
 const PRECHECK = committed('035', 'precheck.sql');
 const POSTCHECK = committed('035', 'postcheck.sql');
 const DOWN_033 = committed('033', 'down.sql');
+const DOWN_034 = committed('034', 'down.sql');
 const INDEX_035 = WONDERLAND_MIGRATIONS.indexOf(WONDERLAND_MIGRATION_035);
 const BEFORE_035 = WONDERLAND_MIGRATIONS.slice(0, INDEX_035);
 const BEFORE_034 = WONDERLAND_MIGRATIONS.slice(0, INDEX_035 - 1);   // CHAIN proves 034 sits right before 035
@@ -226,7 +227,8 @@ suite('migration 035: the Wonderland voice binding, applied explicitly after 034
     };
     const mutants: Array<[string, string, string]> = [
       ['the unique puid key missing',
-        WONDERLAND_MIGRATION_035.replace(statement("puid text NOT NULL UNIQUE CHECK(puid ~ '^[0-9a-f]{32}$'),"), "puid text NOT NULL CHECK(puid ~ '^[0-9a-f]{32}$'),"),
+        // A replacer FUNCTION: as a replacement STRING, "$'" would expand to the text after the match.
+        WONDERLAND_MIGRATION_035.replace(statement("puid text NOT NULL UNIQUE CHECK(puid ~ '^[0-9a-f]{32}$'),"), () => "puid text NOT NULL CHECK(puid ~ '^[0-9a-f]{32}$'),"),
         "migration_035_postcheck: relation(s) not exactly as 035 creates them, or not 035's (voice_puid_binding_puid_key)"],
       ['a row written',
         WONDERLAND_MIGRATION_035.replace(statement('-- POST-CHECK, still inside the transaction:'),
@@ -253,6 +255,8 @@ suite('migration 035: the Wonderland voice binding, applied explicitly after 034
     expect((await run(pool, WONDERLAND_MIGRATION_035)).refusal, '035 applies').toBeNull();
     // THE ROLLBACK ORDER, from 033's side: its DOWN refuses while 035 (and 034) are stamped.
     expect((await run(pool, DOWN_033)).refusal?.message, "033's DOWN while 035 is applied").toContain(STAMP_035);
+    expect((await run(pool, DOWN_034)).refusal?.message, "034's DOWN while 035 is applied")
+      .toContain(`migration_034_down_refused: a later migration is applied (${STAMP_035})`);
     const refusedWith = async (label: string, refusal: string): Promise<void> => {
       const [catalogAt, rowsAt] = [await catalog(pool), await rowCounts(pool)];
       expect((await run(pool, DOWN)).refusal?.message, label).toContain(refusal);

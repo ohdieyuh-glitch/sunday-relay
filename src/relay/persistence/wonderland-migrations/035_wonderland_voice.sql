@@ -9,8 +9,13 @@ BEGIN;
 -- NUMBER 035 (the founder's canonical ruling, 2026-10-04 16:30Z: 031 Julius 13(i), 032 the 030 trigger fix, 033 Wonderland Social,
 -- 034 Project Brain, 035 this file). Applied to a persistent store only after 034, by its own explicit reviewed apply
 -- (FOUNDER_035_APPLY, on the 033 r2 template). Registered in wonderland-postgres.ts like every other file here.
--- ADDITIVE ONLY: one new table referencing relay_wonderland.players (001); it touches no existing table or row. DDL ONLY: it
--- writes no row but its own ledger stamp. One transaction: the guard, the table, the post-check and the stamp, or nothing.
+-- ADDITIVE ONLY: one new table referencing relay_wonderland.players (001). It changes no existing column, constraint, index or row.
+-- Its foreign key does three things to players (RUNBOOK.md):
+--   it adds the two internal RI triggers on players, which every catalog comparison excludes;
+--   it makes a DELETE on players cascade into the new table;
+--   it holds SHARE ROW EXCLUSIVE on players until COMMIT.
+-- DDL ONLY: it writes no row but its own ledger stamp. One transaction: the guard, the table, the post-check and the stamp, or
+-- nothing.
 --
 -- WHAT IS NEVER HERE: EOS credentials, access tokens, room tokens, the media server address.
 

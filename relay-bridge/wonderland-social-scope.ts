@@ -81,12 +81,6 @@ export const SOCIAL_OPERATIONS: readonly SocialOperation[] = Object.freeze([
   { id: 'parties.promote', method: 'POST', pattern: p('/parties/:id/leader'), template: '/parties/:id/leader', writes: true },
   { id: 'parties.rules', method: 'POST', pattern: p('/parties/:id/rules'), template: '/parties/:id/rules', writes: true },
   { id: 'parties.self_mute', method: 'POST', pattern: p('/parties/:id/self-mute'), template: '/parties/:id/self-mute', writes: true },
-  // PARTY VOICE (R16): a provider token for the caller's OWN party room, minted only for the voice audience (the party's
-  // members minus anyone blocked either way). Changes no social state.
-  { id: 'parties.voice_join', method: 'POST', pattern: p('/parties/:id/voice/join'), template: '/parties/:id/voice/join', writes: false },
-  // THE GAME CLIENT'S EOS CONFIG (R16, founder 10-04: handed out by the backend, held in the client's memory only): the five
-  // values the desktop client's EOS platform starts with -- never the Trusted Server's. Changes no social state.
-  { id: 'voice.eos_client_config', method: 'GET', pattern: p('/voice/eos-client-config'), template: '/voice/eos-client-config', writes: false },
   { id: 'party_invites.list', method: 'GET', pattern: p('/party-invites'), template: '/party-invites', writes: false },
   { id: 'party_invites.accept', method: 'POST', pattern: p('/party-invites/:id/accept'), template: '/party-invites/:id/accept', writes: true },
   { id: 'party_invites.decline', method: 'POST', pattern: p('/party-invites/:id/decline'), template: '/party-invites/:id/decline', writes: true },

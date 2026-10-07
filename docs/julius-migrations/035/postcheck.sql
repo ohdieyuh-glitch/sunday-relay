@@ -9,7 +9,7 @@
 --   migration_034_applied = t, migration_035_applied = t, ledger_count = the precheck's + 1, ledger_last = 035_wonderland_voice.
 \set ON_ERROR_STOP on
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
-SELECT now() AS checked_at, current_database() AS database, current_user AS checked_by, version() AS server;
+SELECT now() AS checked_at, current_database() AS database;
 -- Every other client session on this database. The writers are stopped, and nothing else may be connected.
 SELECT count(*) AS other_client_sessions
   FROM pg_stat_activity

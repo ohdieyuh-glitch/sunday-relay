@@ -398,7 +398,8 @@ export interface PartyDeparture {
  * WHO LEFT WHICH PARTY between two states: every member of every party in `before` who is not a member of that same party in
  * `after` (a leave, a leader's removal, a block's F1 separation -- the leader removes / the blocker leaves -- a reconciliation of
  * a carried-in blocked pair, or the last member out). The stores hand this to their after-commit hook, so party voice can take
- * the departed out of that party's room server-side (relay-bridge/eos-voice.ts). Pure, in party then member order.
+ * the departed out of that party's room server-side (the EOS voice transport, which lands with migration 035). Pure, in party
+ * then member order.
  */
 export function partyDepartures(before: SocialState, after: SocialState): PartyDeparture[] {
   const out: PartyDeparture[] = [];
