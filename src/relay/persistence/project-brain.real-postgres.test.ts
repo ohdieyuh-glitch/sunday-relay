@@ -100,7 +100,15 @@ suite('the Project Brain store over a real PostgreSQL', () => {
     const versions = await pool.query<{ version: string }>(`SELECT version FROM relay_wonderland.schema_migrations WHERE version='029_julius_project_brain'`);
     expect(versions.rowCount).toBe(1);
     const tables = await pool.query<{ table_name: string }>(`SELECT table_name FROM information_schema.tables WHERE table_schema='relay_wonderland' AND table_name LIKE 'project_brain_%' ORDER BY 1`);
-    expect(tables.rows.map((r) => r.table_name)).toEqual(['project_brain_links', 'project_brain_mutations', 'project_brain_record_versions', 'project_brain_records']);
+    // 029's four tables, and (migration 034) the C.A.R.D., handoff and eval components beside them: the EXACT set, so a
+    // table nobody reviewed cannot appear unnoticed.
+    expect(tables.rows.map((r) => r.table_name)).toEqual([
+      'project_brain_card_selection', 'project_brain_card_versions', 'project_brain_cards', 'project_brain_eval_versions', 'project_brain_evals',
+      'project_brain_handoff_versions', 'project_brain_handoffs', 'project_brain_links', 'project_brain_member_versions', 'project_brain_mission_cards',
+      'project_brain_mutations', 'project_brain_record_versions', 'project_brain_records',
+    ]);
+    const components = await pool.query(`SELECT version FROM relay_wonderland.schema_migrations WHERE version='034_project_brain_components'`);
+    expect(components.rowCount, 'the components migration runs after 029 in the same chain').toBe(1);
     const triggers = await pool.query<{ tgname: string }>(`SELECT tgname FROM pg_trigger WHERE tgname LIKE 'project_brain_%' ORDER BY 1`);
     expect(triggers.rows.map((r) => r.tgname)).toEqual(expect.arrayContaining([
       'project_brain_event_notify', 'project_brain_links_immutable', 'project_brain_mutations_immutable', 'project_brain_records_guard', 'project_brain_versions_immutable',

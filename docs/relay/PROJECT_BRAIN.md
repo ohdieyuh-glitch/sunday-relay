@@ -42,9 +42,10 @@ is answered by the canonical Brain.
 
 ## 2. Data model (`src/relay/mission/project-brain/`)
 
-**Document** (`relay-project-brain.v1`, `buildProjectBrainDocument`): nineteen sections —
+**Document** (`relay-project-brain.v1`, `buildProjectBrainDocument`): twenty sections —
 objective, missions, architecture, requirements, constraints, acceptanceCriteria, decisions, research, findings,
-handoffs, repairs, activity, evidence, evals, trace, provenance, governance, memory, companions. Every item carries
+handoffs, repairs, activity, evidence, evals, trace, provenance, governance, memory, companions, cards.
+It also carries `componentsInstalled` (false on a store without migration 034) and `coherence` (section 10). Every item carries
 a typed `ref`, its `sourceTable`, `author` and `deliverer`, `evidenceRefs`, `subjectRef`, status/version and time.
 A fact appears once: a verification decision from its own table, never also from its context copy.
 
@@ -169,6 +170,21 @@ the view. Propose and Accept/Decline are sent with one idempotency key per actio
 503). The panel says **"PROPOSED · SAVED IN PROJECT BRAIN"** and the footer says what the last write did, in the
 bridge's words; unpaired, the labelled development preview is unchanged. Console: `wl.Brain.Link`, `wl.Brain.Refresh`.
 
+**The panel's five sections (founder canon, 2026-10-06; contract `PB_UI_CONTRACT_04_05.r1`).**
+
+| | section key | label | what it is |
+|---|---|---|---|
+| 01 | `memory_core` | MEMORY CORE | semantic, episodic and procedural memory; `skills` here is **Learned Skills**: what agents demonstrated (`trace` / `SUBAGENT_SUCCEEDED`) |
+| 02 | `brain_systems` | PROJECT BRAIN SYSTEMS | scratchpads, memory synthesis, auto-generated memories, context handoffs, agent state |
+| 03 | `llm_components` | LARGE LANGUAGE MODEL COMPONENTS | where the compound agent is **configured**: its roles (Prompt Architect, Coding Agent, Independent Reviewer), shared context, model/provider assignment, composition |
+| 04 | `skills_mods` | SKILLS & MODS | what **extends** the configured agent, never its configuration: SKILL.md, skills, workflows (with any routing inside them), packs, Julius Mods, deterministic and fuzzy modules, permissions and versions |
+| 05 | `card` | C.A.R.D. | the loadout, and **MASCOT & VISUAL MODS**: how it all looks (the mascot, its skins, Shadow Flame) |
+
+- **Placement is the client's table.** The view stays `relay-wonderland-project-brain.v1`. Additions are additive: a surface the panel does not define is ignored and logged once, never rendered and never defaulted into a section.
+- **The mission-context surfaces left the panel.** The view may still serve `objective` … `governance`; mission context travels with the Mission Contract.
+- **Beta has no source for 04 except `workflows`** (the owner's WORKFLOW records). The other 04 surfaces are empty, and nothing in 04 is proposable or installable.
+- **After Beta** a 04 item carries kind, id, version, creator, license, permissions and provenance. A fuzzy mod also carries its baseline, typed interface, candidate and Julius Eval, and nothing behavioural installs without that evaluation.
+
 ## 8. What is still mock, demo or local — classified
 
 | where | what | classification |
@@ -181,7 +197,74 @@ bridge's words; unpaired, the labelled development preview is unchanged. Console
 | `src/relay/mission/julius/julius-memory-store.ts` | in-memory Julius store | test-only (fixtures) |
 | `local/project-brain-foundation`, `local/project-brain-python` | standalone `julius_brain` ledger designs | not composed; superseded by this canonical design (P3: retire or fold in) |
 
-## 9. Proof
+## 9. Components: C.A.R.D., Mission Handoff, evals (migration `034_project_brain_components.sql`)
+
+Written through the SAME mutation log, advisory lock, idempotency namespace and event stream as the records, by
+`ProjectBrainComponentStore.mutateComponent` (`src/relay/persistence/project-brain-components-postgres.ts`), which
+re-parses every command it is handed, so a caller inside the process cannot skip validation. Doors:
+`POST /relay-api/project-brain/projects/<id>/components` and `POST /relay-api/wonderland/brain/components`.
+
+* **C.A.R.D.** (the fifth Project Brain component): a typed loadout mirroring Wonderland's `FWonderlandCard`.
+  - Fields: the Mission Handoff form, skin/outfit/primary, companions in slots 0 = LEFT and 1 = RIGHT, MCP/API/SKILL capabilities by id.
+  - Closed keys at every level. Every string is screened: credential shapes, random-looking 20+ character runs and invisible characters are REFUSED, never redacted.
+  - Versioned (CARD_CREATE/UPDATE/DELETE, `expectedVersion`). Deletion is a final DELETED version.
+  - `pbcard:default` is the built-in card: always present, version 1, never edited or deleted.
+  - CARD_SELECT sets the NEXT mission's card (`expectedSelectionVersion`). Deleting the selected card returns the selection to the default in the same write.
+  - **MISSION_PIN_CARD** (runtime/operator only, once per run) records the card version a mission started under, as `pbcard:<id>@v<n>` plus its content hash. A pin never moves, and deleted cards still resolve (`pinnedCard`). Switching cards mid-mission never rewrites a running mission's envelope.
+* **Mission Handoff** (`/handoff`): a presentation state BESIDE the run, HANDED_OFF or RETURNED, versioned. It never writes a Julius row.
+  - ENTER refuses a finished mission and a repeated handoff. EXIT refuses without a handoff.
+  - A stale `expectedVersion` refuses; a duplicated event is answered from the log.
+  - The form comes from the mission's pinned card.
+* **Evals**: one subject at one exact revision against one criterion, with evidence refs (a PASS must cite some, and every ref of a run-scoped eval must be held BY that run: another mission's, a project-wide statement, a card or an event is refused `evidence_from_another_run`, fail closed), recorded only by an evaluator (operator/runtime).
+  - The next eval of the same subject and criterion SUPERSEDES the current one in the same transaction.
+  - An owner may INVALIDATE.
+  - `projectBrainEvalQualifies` admits only a CURRENT PASS of exactly the revision asked about, so an old PASS never qualifies changed code.
+* The database holds the invariants too: forward-only versions, immutable identity and judgements, append-only history, run-in-project triggers, deferred mutation references checked before COMMIT.
+* **Deployment:** 034 is a post-030 migration. On the persistent store it is applied ONLY by the founder's explicit reviewed apply procedure after the verified live bootstrap (founder ruling 2026-10-04), never by an ordinary entry point.
+  - The procedure is `docs/julius-migrations/034/RUNBOOK.md`: a verified backup, `precheck.sql`, the explicit `psql` apply, `postcheck.sql`, and `down.sql` for a rollback before the first component write.
+  - 034's own guard refuses, changing nothing, unless 033 is applied and is the ledger's last stamp, 034 is not, and none of the names it creates is taken.
+  - It is applied by the role that owns 029's tables, because it ALTERs one of them and puts a TRUNCATE guard on four.
+
+## 10. Coherence and corruption (read path)
+
+* `projectBrainCoherence` (`project-brain-coherence.ts`) reports, by reference, every impossible combination the rows show:
+  - COMPLETED with live work;
+  - COMPLETED with an open blocking finding;
+  - a duplicated completion;
+  - a repeated run version in the transitions, or a state without its transition;
+  - an orphan repair;
+  - evidence cited but not held, or held by another mission;
+  - a component on an unknown mission.
+  A truncated read SKIPS the rules that need the whole set and says so; it never passes them.
+* A record or card whose stored content no longer matches its `content_hash` is CORRUPT. Reads fail closed and name the row, and writes refuse `project_brain_corrupt`.
+* JSON read from a row is read STRICTLY. A mission snapshot, an event payload, an evidence/finding id list, claim evidence or a stored replay result that is missing, unparseable or the wrong shape is CORRUPT, named by table, key and column. It is never read as an empty list or object. An optional key inside a snapshot or payload that is absent or null is "not stated". An idempotent replay whose stored result is corrupt refuses `project_brain_corrupt`.
+* A store NEWER than the code (its `schema_migrations` ledger holds a version this build does not carry) is neither read nor written. Every read path throws `project_brain_schema_newer` naming the versions: the document, the feed and its head, Julius's mission context, the components and a pinned card. Writes refuse with the same code. A build whose migrations were not packaged says `wonderland_migration_not_packaged`, never "newer" (`projectBrainSchema`, `project-brain-pg-shared.ts`). A store without 034 reports `componentsInstalled: false` and refuses component writes with `project_brain_components_not_installed`.
+
+## 11. Membership: who may use a project's Brain (multiplayer)
+
+`relay_wonderland.project_members` (migration 001) stays the one membership record every door reads. The roles are founder decisions 4 and 5 (2026-09-27):
+
+| role | world (wonderland-authorization.ts) | Brain (project-brain.ts) |
+|---|---|---|
+| OWNER (the mission seed; permanent) | read world, results, cost; create missions | read, write, adopt, manage members |
+| ADMIN | what OWNER holds | what OWNER holds |
+| MEMBER | read world and results; never cost; never create | read; propose; write and edit its own statements; never adopt, acknowledge governance, manage members, or resolve/supersede another's statement |
+
+The MEMBER row is the FOUNDER'S DECISION of 2026-10-04: a contributing role whose every write still passes the project's authorisation, the revision check, the audit and normal conflict handling. OWNER and ADMIN keep canonical management and governance.
+
+* **Changes:** MEMBER_SET / MEMBER_REMOVE (`project-brain-members.ts`, `ProjectBrainMembersStore`).
+  - Doors: `GET|POST /relay-api/project-brain/projects/<id>/members` and `GET|POST /relay-api/wonderland/brain/members`.
+  - Every change goes through the Brain's mutation log: the project's lock, idempotency, the request hash, a `project_brain.member.*` event. It leaves an append-only row in `project_brain_member_versions` (034): who changed whom, from what role to what, when, by which mutation.
+* **Rules:**
+  - Only `brain:members` changes membership, and never one's own row.
+  - The OWNER is never changed.
+  - Only an OWNER grants, changes or removes an ADMIN.
+  - Every change names the role the caller saw (`expectedRole`), so two concurrent changes cannot both apply (`member_conflict`).
+  - The store re-reads the caller's own role under the lock, so a revoked admin's stale grant is worth nothing.
+  - A removal takes effect on the next request at every door.
+* A MEMBER holds `read_world_state`, so it can pair a desktop client; that is what makes a multiplayer Project Brain in Wonderland possible.
+
+## 12. Proof
 
 * Pure: 32 domain/view cases; 5 wake-up cases; 8 route cases.
 * Real PostgreSQL: 13 store cases (atomicity, idempotency, versions, 12 concurrent writers, racing changes, duplicate

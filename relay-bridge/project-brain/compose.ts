@@ -6,6 +6,8 @@ import type { NativeWonderlandSessionVerifier, ProjectBrainRoutePorts } from '..
 import { createProjectBrainWakeups, type ProjectBrainListenClient } from './brain-wakeups';
 import type { PbSlotRow } from '../../src/relay/mission/project-brain/project-brain-document';
 import { ProjectBrainPostgresStore } from '../../src/relay/persistence/project-brain-postgres';
+import { ProjectBrainComponentStore } from '../../src/relay/persistence/project-brain-components-postgres';
+import { ProjectBrainMembersStore } from '../../src/relay/persistence/project-brain-members-postgres';
 
 /**
  * A NATIVE DESKTOP SESSION, AS THE PROJECT BRAIN DOOR ASKS IT: the player it was
@@ -57,6 +59,8 @@ export function composeProjectBrainPorts(input: {
   };
   return {
     store: new ProjectBrainPostgresStore(pool),
+    components: new ProjectBrainComponentStore(pool),
+    members: new ProjectBrainMembersStore(pool),
     wakeups: createProjectBrainWakeups({
       connect: () => new Client({ connectionString }) as unknown as ProjectBrainListenClient,
       ...(input.log === undefined ? {} : { log: input.log }),

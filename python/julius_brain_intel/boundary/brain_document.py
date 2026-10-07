@@ -26,6 +26,8 @@ SECTIONS: tuple[str, ...] = (
     "objective", "missions", "architecture", "requirements", "constraints", "acceptanceCriteria", "decisions",
     "research", "findings", "handoffs", "repairs", "activity", "evidence", "evals", "trace", "provenance",
     "governance", "memory", "companions",
+    # The fifth Project Brain component (migration 034): cards, the next mission's selection, each mission's pin.
+    "cards",
 )
 STATUSES: tuple[str, ...] = (
     "PROPOSED", "ACTIVE", "ADOPTED", "ACCEPTED", "DECLINED", "RESOLVED", "ACKNOWLEDGED", "WITHDRAWN", "SUPERSEDED",
@@ -50,7 +52,7 @@ RECORD_DOMAINS: tuple[str, ...] = (
     "DECISION", "RESEARCH_NOTE", "MISSION_INPUT", "MEMORY_REVIEW", "FINDING_RESPONSE", "GOVERNANCE_ACK",
     "COMPANION_RESULT",
 )
-ITEM_SOURCES: tuple[str, ...] = ("JULIUS", "PROJECT_BRAIN")
+ITEM_SOURCES: tuple[str, ...] = ("JULIUS", "PROJECT_BRAIN", "COMPONENT")
 
 
 class BrainSchemaError(ValueError):
@@ -218,7 +220,7 @@ def parse_brain_document(raw: Any) -> BrainDocument:
     if set(raw_sections) != set(SECTIONS):
         missing = sorted(set(SECTIONS) - set(raw_sections))
         extra = sorted(set(raw_sections) - set(SECTIONS))
-        raise BrainSchemaError(f"sections differ from the canonical 19: missing={missing} extra={extra}")
+        raise BrainSchemaError(f"sections differ from the canonical {len(SECTIONS)}: missing={missing} extra={extra}")
     sections = {
         name: tuple(_item(item, name, index) for index, item in enumerate(_need(raw_sections, name, list, "sections")))
         for name in SECTIONS

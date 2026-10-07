@@ -9,6 +9,7 @@ import {
   advanceProjectBrainCursor,
   authorizeProjectBrainMutation,
   encodeProjectBrainCursor,
+  parseProjectBrainMutation,
   parseProjectBrainRef,
   projectBrainContentIdentity,
   projectBrainEventTypeForJulius,
@@ -38,6 +39,8 @@ import {
   type ProjectBrainRows,
 } from '../mission/project-brain/project-brain-document';
 import { projectBrainContextEntries } from '../mission/project-brain/project-brain-views';
+import { ProjectBrainComponentStore } from './project-brain-components-postgres';
+import { ProjectBrainCorruptionError, ProjectBrainSchemaNewerError, checkout, projectBrainSchema, resolveProjectBrainRef } from './project-brain-pg-shared';
 
 /**
  * THE PROJECT BRAIN'S DURABLE STORE: JULIUS'S OWN DATABASE, READ AND WRITTEN AS ONE.
@@ -123,25 +126,60 @@ const num = (value: unknown): number => Number(value);
 const numOrNull = (value: unknown): number | null => (value === null || value === undefined ? null : Number(value));
 const iso = (value: unknown): string => new Date(String(value)).toISOString();
 const isoOrNull = (value: unknown): string | null => (value === null || value === undefined ? null : iso(value));
-const jsonOf = <T>(value: unknown, fallback: T): T => {
-  if (value === null || value === undefined) return fallback;
-  if (typeof value === 'string') { try { return JSON.parse(value) as T; } catch { return fallback; } }
-  return value as T;
+/**
+ * JSON FROM A ROW IS READ STRICTLY (PB-F5). Every column read here is `jsonb NOT NULL`, so a value that is missing, does not
+ * parse, or has the wrong shape was not written by Julius: it is CORRUPTION, named by table, key and column, and the read
+ * fails closed. It is never read as an empty list or object, which would silently drop evidence or policy. `where` is
+ * [table, row key, column]. An optional key INSIDE a snapshot or payload that is absent or null is "not stated" (`nested`);
+ * present with the wrong shape, it is corruption like any other.
+ */
+type Where = readonly [table: string, key: string, column: string];
+const parsedAt = (value: unknown, where: Where): unknown => {
+  if (value === null || value === undefined) throw new ProjectBrainCorruptionError(where[0], where[1], `${where[2]} is missing`);
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new ProjectBrainCorruptionError(where[0], where[1], `${where[2]} is not JSON`);
+  }
 };
-const strings = (value: unknown): string[] => {
-  const parsed = jsonOf<unknown>(value, []);
-  return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+const strings = (value: unknown, where: Where, nested = false): string[] => {
+  if (nested && (value === undefined || value === null)) return [];
+  const parsed = parsedAt(value, where);
+  if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== 'string')) {
+    throw new ProjectBrainCorruptionError(where[0], where[1], `${where[2]} is not a list of strings`);
+  }
+  return parsed as string[];
 };
-const objectOf = (value: unknown): Record<string, unknown> => {
-  const parsed = jsonOf<unknown>(value, {});
-  return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+const objectOf = (value: unknown, where: Where, nested = false): Record<string, unknown> => {
+  if (nested && (value === undefined || value === null)) return {};
+  const parsed = parsedAt(value, where);
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new ProjectBrainCorruptionError(where[0], where[1], `${where[2]} is not an object`);
+  }
+  return parsed as Record<string, unknown>;
 };
 const actorOf = (kind: unknown, id: unknown): ProjectBrainActor => ({ kind: str(kind) as ProjectBrainActor['kind'], id: str(id) });
 const delivererOf = (kind: unknown, id: unknown): ProjectBrainDeliverer => ({ kind: str(kind) as ProjectBrainDeliverer['kind'], id: str(id) });
 const codeOf = (error: unknown): string | undefined =>
   error !== null && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : undefined;
 
-const recordRowOf = (row: Row): PbRecordRow => ({
+/**
+ * A RECORD IS READ ONLY IF IT IS STILL WHAT WAS WRITTEN. Its content_hash was taken over its domain, title, body, subject
+ * and status when it was written; a row that no longer hashes to it (a disk fault, a stray tool writing past the
+ * guard) is CORRUPT. The read fails closed and names the record: it is never served, ranked or revised as valid.
+ */
+function verifiedRecord(row: Row): Row {
+  const expected = sha256(projectBrainContentIdentity({
+    domain: str(row.domain), title: str(row.title), body: str(row.body), subjectRef: strOrNull(row.subject_ref), status: str(row.status),
+  }));
+  if (expected !== str(row.content_hash)) {
+    throw new ProjectBrainCorruptionError('project_brain_records', str(row.record_id), 'content does not match its content_hash');
+  }
+  return row;
+}
+
+const recordRowOf = (unverified: Row): PbRecordRow => { const row = verifiedRecord(unverified); return {
   recordId: str(row.record_id),
   runId: strOrNull(row.run_id),
   scope: str(row.scope) as ProjectBrainScope,
@@ -156,17 +194,20 @@ const recordRowOf = (row: Row): PbRecordRow => ({
   deliverer: delivererOf(row.deliverer_kind, row.deliverer_id),
   createdAt: iso(row.created_at),
   updatedAt: iso(row.updated_at),
-});
+}; };
 
 /** Claim evidence refs ({kind,id}) as Project Brain refs. */
-const claimRefs = (value: unknown): string[] => {
-  const parsed = jsonOf<unknown>(value, []);
-  if (!Array.isArray(parsed)) return [];
+const claimRefs = (value: unknown, where: Where): string[] => {
+  const parsed = parsedAt(value, where);
+  const malformed = (ref: unknown) => ref === null || typeof ref !== 'object' || Array.isArray(ref)
+    || typeof (ref as { kind?: unknown }).kind !== 'string' || typeof (ref as { id?: unknown }).id !== 'string';
+  if (!Array.isArray(parsed) || parsed.some(malformed)) {
+    throw new ProjectBrainCorruptionError(where[0], where[1], `${where[2]} is not a list of {kind, id}`);
+  }
   const type = { EVIDENCE: 'evidence', DECISION: 'decision', FINDING: 'finding', RUN: 'mission', REVIEW: 'decision' } as const;
-  return parsed.flatMap((ref) => {
-    const record = ref !== null && typeof ref === 'object' ? ref as { kind?: unknown; id?: unknown } : {};
-    const mapped = type[String(record.kind) as keyof typeof type];
-    return mapped === undefined || typeof record.id !== 'string' ? [] : [projectBrainRef(mapped, record.id)];
+  return (parsed as { kind: string; id: string }[]).flatMap((ref) => {
+    const mapped = type[ref.kind as keyof typeof type];
+    return mapped === undefined ? [] : [projectBrainRef(mapped, ref.id)];
   });
 };
 
@@ -176,14 +217,14 @@ const REF_KEYS: ReadonlyArray<readonly [string, Parameters<typeof projectBrainRe
   ['approvalId', 'approval'], ['criterionId', 'criterion'], ['artifactId', 'artifact'], ['taskId', 'task'],
 ];
 
-function feedRefs(payload: Record<string, unknown>, runId: string | null): string[] {
+function feedRefs(payload: Record<string, unknown>, runId: string | null, eventId: string): string[] {
   const refs = new Set<string>();
   if (runId !== null) refs.add(projectBrainRef('mission', runId));
   for (const key of ['recordRef', 'fromRef', 'toRef', 'subjectRef']) {
     const value = payload[key];
     if (typeof value === 'string' && parseProjectBrainRef(value) !== null) refs.add(value);
   }
-  const facts = objectOf(payload.facts);
+  const facts = objectOf(payload.facts, ['events', eventId, 'payload.facts'], true);
   for (const [key, type] of REF_KEYS) {
     for (const source of [payload, facts]) {
       const value = source[key];
@@ -193,28 +234,6 @@ function feedRefs(payload: Record<string, unknown>, runId: string | null): strin
     }
   }
   return [...refs].slice(0, 16);
-}
-
-/**
- * A CHECKED-OUT CLIENT MUST NOT CRASH THE PROCESS WHEN ITS CONNECTION DIES.
- *
- * node-postgres emits `error` on a client whose backend is terminated; a pool only
- * listens while the client is idle. Unheard, that event is an uncaught exception
- * -- one database restart mid-write would take the whole bridge down instead of
- * answering `durable: false`. The failed query already rejects; this only keeps
- * the event from being fatal while the client is held.
- */
-async function checkout(pool: Pool): Promise<{ client: PoolClient; release: (error?: Error) => void }> {
-  const client = await pool.connect();
-  const swallow = () => undefined;
-  client.on('error', swallow);
-  return {
-    client,
-    release: (error?: Error) => {
-      client.off('error', swallow);
-      client.release(error);
-    },
-  };
 }
 
 export class ProjectBrainPostgresStore {
@@ -254,6 +273,7 @@ export class ProjectBrainPostgresStore {
     let broken: Error | undefined;
     try {
       await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const { componentsInstalled } = await projectBrainSchema(client);
       const exists = await client.query('SELECT 1 FROM relay_wonderland.projects WHERE project_id=$1', [input.projectId]);
       if (exists.rowCount === 0) { await client.query('ROLLBACK'); return null; }
       if (runId !== null) {
@@ -331,6 +351,9 @@ export class ProjectBrainPostgresStore {
           (SELECT count(*) FROM relay_wonderland.julius_brain_entries b WHERE b.project_id=$1${runId === null ? '' : ' AND b.run_id=$2'})
         + (SELECT COALESCE(sum(version),0) FROM relay_wonderland.project_brain_records WHERE project_id=$1${recordFilter}) AS revision`, values);
       const cursor = await this.headWithin(client, p);
+      // THE COMPONENTS, IN THE SAME SNAPSHOT, where this store has them. A store without migration 034 says so (null),
+      // which the document reports as "not installed" -- never as a project with no cards, handoffs or evals.
+      const components = componentsInstalled ? await ProjectBrainComponentStore.readWithin(client, p, runId) : null;
       await client.query('COMMIT');
 
       const runIds = missions.slice(0, 3).map((row) => str(row.run_id));
@@ -341,9 +364,12 @@ export class ProjectBrainPostgresStore {
         cursor,
         runId,
         missions: missions.map((row) => {
-          const snapshot = objectOf(row.snapshot);
-          const scope = objectOf(snapshot.scope);
-          const limitsOf = objectOf(snapshot.limits);
+          // The snapshot is the mission contract's (joined on mission AND project; a run's contract always exists, so a
+          // missing one means a contract of another project: corruption, like a wrong-shaped one).
+          const at = (column: string): Where => ['mission_contracts', str(row.mission_id), column];
+          const snapshot = objectOf(row.snapshot, at('snapshot'));
+          const scope = objectOf(snapshot.scope, at('snapshot.scope'), true);
+          const limitsOf = objectOf(snapshot.limits, at('snapshot.limits'), true);
           const workers = Array.isArray(snapshot.workers) ? snapshot.workers as unknown[] : [];
           return {
             runId: str(row.run_id), missionId: str(row.mission_id), state: str(row.state),
@@ -357,9 +383,9 @@ export class ProjectBrainPostgresStore {
               completionRule: typeof snapshot.completionRule === 'string' ? snapshot.completionRule : null,
               limits: Object.keys(limitsOf).length === 0 ? null : Object.fromEntries(Object.entries(limitsOf)
                 .filter(([, value]) => value === null || typeof value === 'number')) as Record<string, number | null>,
-              requestedPermissions: strings(snapshot.requestedPermissions),
-              systemsInScope: strings(scope.systemsInScope),
-              systemsOutOfScope: strings(scope.systemsOutOfScope),
+              requestedPermissions: strings(snapshot.requestedPermissions, at('snapshot.requestedPermissions'), true),
+              systemsInScope: strings(scope.systemsInScope, at('snapshot.scope.systemsInScope'), true),
+              systemsOutOfScope: strings(scope.systemsOutOfScope, at('snapshot.scope.systemsOutOfScope'), true),
               workerRoles: workers.flatMap((worker) => (worker !== null && typeof worker === 'object' && typeof (worker as { role?: unknown }).role === 'string'
                 ? [(worker as { role: string }).role] : [])),
             },
@@ -367,16 +393,17 @@ export class ProjectBrainPostgresStore {
         }),
         entries: entries.map((row) => ({
           entryId: str(row.entry_id), runId: str(row.run_id), taskId: strOrNull(row.task_id), workerId: str(row.worker_id), kind: str(row.entry_kind),
-          text: str(row.safe_content), evidenceIds: strings(row.evidence_ids), revision: num(row.revision), createdAt: iso(row.created_at),
+          text: str(row.safe_content), evidenceIds: strings(row.evidence_ids, ['julius_brain_entries', str(row.entry_id), 'evidence_ids']), revision: num(row.revision), createdAt: iso(row.created_at),
         })),
         criteria: criteria.map((row) => ({
           runId: str(row.run_id), criterionId: str(row.criterion_id), description: str(row.description), ordinal: num(row.ordinal),
-          passedEvidenceIds: strings(row.passed), linkedEvidenceIds: strings(row.linked),
+          passedEvidenceIds: strings(row.passed, ['julius_acceptance_criteria', `${str(row.run_id)}/${str(row.criterion_id)}`, 'passed evidence']),
+          linkedEvidenceIds: strings(row.linked, ['julius_acceptance_criteria', `${str(row.run_id)}/${str(row.criterion_id)}`, 'linked evidence']),
         })),
         findings: findings.map((row) => ({
           findingId: str(row.finding_id), runId: str(row.run_id), taskId: str(row.task_id), reviewerWorkerId: str(row.reviewer_worker_id),
           severity: str(row.severity), category: str(row.category), claim: str(row.claim), criterionId: strOrNull(row.criterion_id),
-          evidenceIds: strings(row.evidence_ids), blocking: row.blocking === true, status: str(row.status), createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
+          evidenceIds: strings(row.evidence_ids, ['julius_reviewer_findings', str(row.finding_id), 'evidence_ids']), blocking: row.blocking === true, status: str(row.status), createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
         })),
         evidence: evidence.map((row) => ({
           evidenceId: str(row.evidence_id), runId: str(row.run_id), taskId: str(row.task_id), workerId: str(row.worker_id), evidenceType: str(row.evidence_type),
@@ -388,11 +415,12 @@ export class ProjectBrainPostgresStore {
         })),
         decisions: decisions.map((row) => ({
           decisionId: str(row.decision_id), runId: str(row.run_id), taskId: str(row.task_id), action: str(row.action), reasonCode: str(row.reason_code),
-          summary: str(row.safe_summary), evidenceIds: strings(row.evidence_ids), policyRevision: str(row.policy_revision), occurredAt: iso(row.occurred_at),
+          summary: str(row.safe_summary), evidenceIds: strings(row.evidence_ids, ['julius_verification_decisions', str(row.decision_id), 'evidence_ids']), policyRevision: str(row.policy_revision), occurredAt: iso(row.occurred_at),
         })),
         repairs: repairs.map((row) => ({
           repairId: str(row.repair_id), runId: str(row.run_id), originalTaskId: str(row.original_task_id), repairTaskId: str(row.repair_task_id),
-          round: num(row.round), findingIds: strings(row.finding_ids), evidenceIds: strings(row.evidence_ids), state: str(row.state),
+          round: num(row.round), findingIds: strings(row.finding_ids, ['julius_repair_cycles', str(row.repair_id), 'finding_ids']),
+          evidenceIds: strings(row.evidence_ids, ['julius_repair_cycles', str(row.repair_id), 'evidence_ids']), state: str(row.state),
           createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
         })),
         approvals: approvals.map((row) => ({
@@ -406,7 +434,8 @@ export class ProjectBrainPostgresStore {
         })),
         transitions: transitions.map((row) => ({
           transitionId: str(row.transition_id), runId: str(row.run_id), fromState: str(row.from_state), toState: str(row.to_state),
-          reasonCode: str(row.reason_code), summary: str(row.safe_summary), evidenceIds: strings(row.evidence_ids), occurredAt: iso(row.occurred_at), sequence: num(row.sequence),
+          reasonCode: str(row.reason_code), summary: str(row.safe_summary), evidenceIds: strings(row.evidence_ids, ['julius_transitions', str(row.transition_id), 'evidence_ids']),
+          occurredAt: iso(row.occurred_at), sequence: num(row.sequence),
         })),
         trajectory: trajectory.map((row) => ({
           id: str(row.trajectory_event_id), runId: str(row.run_id), kind: str(row.event_kind), taskId: strOrNull(row.task_id), workerId: strOrNull(row.worker_id),
@@ -416,7 +445,7 @@ export class ProjectBrainPostgresStore {
         claims: claims.map((row) => ({
           claimId: str(row.claim_id), standingRevision: num(row.standing_revision), runId: str(row.run_id), entryId: str(row.entry_id),
           provenance: str(row.provenance), trust: str(row.trust), assertedBy: str(row.asserted_by), assertedAt: iso(row.asserted_at),
-          evidenceRefs: claimRefs(row.evidence), reason: str(row.reason),
+          evidenceRefs: claimRefs(row.evidence, ['julius_claim_standings', `${str(row.claim_id)}@${str(row.standing_revision)}`, 'evidence']), reason: str(row.reason),
         })),
         contexts: contexts.map((row) => ({
           contextId: str(row.context_id), runId: str(row.run_id), taskId: str(row.task_id), workerRole: str(row.worker_role),
@@ -443,6 +472,7 @@ export class ProjectBrainPostgresStore {
         slots,
         truncated,
         revision: num(revision.rows[0]?.revision ?? 0),
+        components,
       };
     } catch (error) {
       broken = error instanceof Error ? error : new Error(String(error));
@@ -464,6 +494,7 @@ export class ProjectBrainPostgresStore {
    * anything else looks at them.
    */
   async contextEntriesForRun(runId: string, projectId: string): Promise<readonly JuliusBrainEntry[]> {
+    await projectBrainSchema(this.pool);
     const result = await this.pool.query<Row>(
       `SELECT * FROM relay_wonderland.project_brain_records
         WHERE project_id=$1 AND (scope='PROJECT' OR run_id=$2) AND status = ANY($3::text[]) AND domain<>'SCRATCHPAD'
@@ -486,6 +517,7 @@ export class ProjectBrainPostgresStore {
 
   /** The current head of a project's feed. */
   async head(projectId: string): Promise<ProjectBrainCursor> {
+    await projectBrainSchema(this.pool);
     return this.headWithin(this.pool, projectId);
   }
 
@@ -498,6 +530,7 @@ export class ProjectBrainPostgresStore {
     readonly events: readonly ProjectBrainFeedEvent[]; readonly cursor: ProjectBrainCursor;
   }> {
     const limit = Math.max(1, Math.min(input.limit ?? 200, 500));
+    await projectBrainSchema(this.pool);
     const result = await this.pool.query<Row>(
       `SELECT event_id,stream_id,sequence,event_type,payload,occurred_at FROM relay_wonderland.events
         WHERE project_id=$1 AND visibility='PROJECT' AND ${ENTRY_KIND_SQL}
@@ -511,11 +544,11 @@ export class ProjectBrainPostgresStore {
       const streamId = str(row.stream_id);
       const sequence = num(row.sequence);
       cursor = advanceProjectBrainCursor(cursor, streamId, sequence);
-      const payload = objectOf(row.payload);
+      const payload = objectOf(row.payload, ['events', str(row.event_id), 'payload']);
       const sourceType = str(row.event_type);
       const runId = typeof payload.runId === 'string' ? payload.runId : null;
       if (input.runId !== undefined && input.runId !== null && runId !== null && runId !== input.runId) continue;
-      const actorObject = objectOf(payload.author);
+      const actorObject = objectOf(payload.author, ['events', str(row.event_id), 'payload.author'], true);
       events.push({
         eventId: str(row.event_id),
         type: sourceType.startsWith('project_brain.') ? sourceType as ProjectBrainEventType : projectBrainEventTypeForJulius(sourceType),
@@ -525,7 +558,7 @@ export class ProjectBrainPostgresStore {
         streamId,
         sequence,
         occurredAt: iso(row.occurred_at),
-        refs: feedRefs(payload, runId),
+        refs: feedRefs(payload, runId, str(row.event_id)),
         actor: typeof actorObject.kind === 'string' ? `${actorObject.kind}:${str(actorObject.id)}`
           : typeof payload.workerId === 'string' ? payload.workerId : null,
         cursor: encodeProjectBrainCursor(cursor),
@@ -537,41 +570,7 @@ export class ProjectBrainPostgresStore {
   /* ------------------------------------------------------------- mutations */
 
   private async resolveRef(client: PoolClient, projectId: string, ref: string): Promise<boolean> {
-    const parsed = parseProjectBrainRef(ref);
-    if (parsed === null) return false;
-    const { type, id } = parsed;
-    const one = async (sql: string, values: readonly unknown[]) => ((await client.query(sql, [...values])).rowCount ?? 0) > 0;
-    const viaRun = (table: string, column: string) => one(
-      `SELECT 1 FROM relay_wonderland.${table} x JOIN relay_wonderland.julius_runs r ON r.run_id=x.run_id WHERE x.${column}=$1 AND r.project_id=$2`, [id, projectId]);
-    switch (type) {
-      case 'pbr': return one('SELECT 1 FROM relay_wonderland.project_brain_records WHERE record_id=$1 AND project_id=$2', [ref, projectId]);
-      case 'mission': return one('SELECT 1 FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2', [id, projectId]);
-      case 'entry': return one('SELECT 1 FROM relay_wonderland.julius_brain_entries WHERE entry_id=$1 AND project_id=$2', [id, projectId]);
-      case 'claim': return one('SELECT 1 FROM relay_wonderland.julius_claim_standings WHERE claim_id=$1 AND project_id=$2', [id, projectId]);
-      case 'finding': return viaRun('julius_reviewer_findings', 'finding_id');
-      case 'evidence': return viaRun('julius_evidence', 'evidence_id');
-      case 'decision': return viaRun('julius_verification_decisions', 'decision_id');
-      case 'repair': return viaRun('julius_repair_cycles', 'repair_id');
-      case 'transition': return viaRun('julius_transitions', 'transition_id');
-      case 'task': return viaRun('julius_tasks', 'task_id');
-      case 'approval': return one('SELECT 1 FROM relay_wonderland.julius_approvals WHERE approval_id=$1 AND project_id=$2', [id, projectId]);
-      case 'artifact': return one('SELECT 1 FROM relay_wonderland.julius_work_artifacts WHERE artifact_id=$1 AND project_id=$2', [id, projectId]);
-      case 'trajectory': return one('SELECT 1 FROM relay_wonderland.julius_trajectory_events WHERE trajectory_event_id=$1 AND project_id=$2', [id, projectId]);
-      case 'event': return one('SELECT 1 FROM relay_wonderland.events WHERE event_id=$1 AND project_id=$2', [id, projectId]);
-      case 'criterion': {
-        const slash = id.indexOf('/');
-        if (slash <= 0) return false;
-        return one(`SELECT 1 FROM relay_wonderland.julius_acceptance_criteria c JOIN relay_wonderland.julius_runs r ON r.run_id=c.run_id
-          WHERE c.run_id=$1 AND c.criterion_id=$2 AND r.project_id=$3`, [id.slice(0, slash), id.slice(slash + 1), projectId]);
-      }
-      case 'contract': {
-        const at = id.lastIndexOf('@');
-        const revision = Number(id.slice(at + 1));
-        if (at <= 0 || !Number.isSafeInteger(revision)) return false;
-        return one('SELECT 1 FROM relay_wonderland.julius_task_contracts WHERE contract_id=$1 AND contract_revision=$2 AND project_id=$3', [id.slice(0, at), revision, projectId]);
-      }
-      default: return false;
-    }
+    return resolveProjectBrainRef(client, projectId, ref);
   }
 
   /**
@@ -585,9 +584,16 @@ export class ProjectBrainPostgresStore {
     readonly capabilities: readonly ProjectBrainCapability[];
     readonly command: ProjectBrainMutationCommand;
   }): Promise<ProjectBrainMutationOutcome> {
-    const { projectId, provenance, command } = input;
+    const { projectId, provenance } = input;
     const refuse = (refusal: ProjectBrainRefusal, details?: Record<string, unknown>): ProjectBrainMutationOutcome =>
       ({ ...refusal, durable: false, ...(details === undefined ? {} : { details }) });
+    // THE STORE VALIDATES WHAT IT STORES, whoever calls it (as the component and membership stores do). The doors parse
+    // first, but a caller inside the process -- the runtime, a companion channel -- can hand over a command it built; every
+    // one is parsed again here, so a credential, an unknown field or a malformed reference is refused before a connection
+    // is taken, never stored because a caller skipped a step.
+    const reparsed = parseProjectBrainMutation(input.command);
+    if (!reparsed.ok) return refuse(reparsed);
+    const command = reparsed.command;
     let client: PoolClient;
     let release: (error?: Error) => void;
     try {
@@ -605,6 +611,7 @@ export class ProjectBrainPostgresStore {
     try {
       await client.query('BEGIN');
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`project_brain:${projectId}`]);
+      await projectBrainSchema(client);
       const project = await client.query('SELECT 1 FROM relay_wonderland.projects WHERE project_id=$1', [projectId]);
       if (project.rowCount === 0) return abort(refuse(projectBrainRefusal(404, 'project_not_found', 'No such project.')));
 
@@ -617,9 +624,10 @@ export class ProjectBrainPostgresStore {
           return abort(refuse(projectBrainRefusal(409, 'idempotency_conflict',
             'That idempotency key was already used for a different change. Nothing was saved; use a new key for a new change.')));
         }
+        const stored = objectOf(prior.rows[0].result, ['project_brain_mutations', command.idempotencyKey, 'result']) as unknown as ProjectBrainMutationResult;
         await client.query('ROLLBACK');
         phase = 'done';
-        return { ok: true, durable: true, replayed: true, result: jsonOf<ProjectBrainMutationResult>(prior.rows[0].result, {} as ProjectBrainMutationResult) };
+        return { ok: true, durable: true, replayed: true, result: stored };
       }
 
       let runId: string | null = null;
@@ -763,6 +771,13 @@ export class ProjectBrainPostgresStore {
         };
       }
       await client.query('ROLLBACK').catch(() => undefined);
+      if (error instanceof ProjectBrainCorruptionError) {
+        // A corrupt record is never changed further: fail closed and say which.
+        return refuse(projectBrainRefusal(500, 'project_brain_corrupt', `${error.message}. Nothing was saved.`));
+      }
+      if (error instanceof ProjectBrainSchemaNewerError) {
+        return refuse(projectBrainRefusal(503, 'project_brain_schema_newer', `${error.message}. This build cannot write it; nothing was saved.`));
+      }
       if (codeOf(error) === '23505') {
         return refuse(projectBrainRefusal(409, 'idempotency_conflict', 'A concurrent change used the same key or link. Nothing was saved; read again and retry.'));
       }
