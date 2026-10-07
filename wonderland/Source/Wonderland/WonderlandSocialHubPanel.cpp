@@ -16,6 +16,12 @@
 #include "Widgets/Text/STextBlock.h"
 #include "WonderlandSocialLive.h"   // D3 (b) QA: UNBLOCK's operation through the real dispatcher
 #include "WonderlandUiStyle.h"
+// F-21 QA (wl.Qa.SocialHubClicks): the hub on screen, a ticker, synthetic pointer events
+#include "Containers/Ticker.h"
+#include "Engine/LocalPlayer.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+#include "WonderlandUiSubsystem.h"
 
 // Named, not anonymous: the module is one unity translation unit.
 namespace WonderlandSocialHubLook
@@ -146,9 +152,22 @@ SWonderlandSocialHubPanel::SWonderlandSocialHubPanel()
 {
 }
 
+SWonderlandSocialHubPanel::~SWonderlandSocialHubPanel()
+{
+	if (SlatePreTickHandle.IsValid() && FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().OnPreTick().Remove(SlatePreTickHandle);
+	}
+}
+
 void SWonderlandSocialHubPanel::Construct(const FArguments& InArgs)
 {
 	using namespace WonderlandSocialHubLook;
+	// F-21: a refresh's rebuild runs here, after the frame's input and before its layout (see FlushRebuild)
+	if (FSlateApplication::IsInitialized())
+	{
+		SlatePreTickHandle = FSlateApplication::Get().OnPreTick().AddSP(this, &SWonderlandSocialHubPanel::HandleSlatePreTick);
+	}
 	Snapshot = InArgs._Snapshot;
 	bConnected = InArgs._bConnected;
 	SourceLine = InArgs._SourceLine;
@@ -274,8 +293,68 @@ void SWonderlandSocialHubPanel::SetTab(ETab Which)
 	Rebuild();
 }
 
+void SWonderlandSocialHubPanel::RequestRebuild()
+{
+	bRebuildPending = true;
+}
+
+void SWonderlandSocialHubPanel::HandleSlatePreTick(float DeltaTime)
+{
+	if (bRebuildPending)
+	{
+		Rebuild();
+	}
+}
+
+void SWonderlandSocialHubPanel::FlushRebuild()
+{
+	if (bRebuildPending)
+	{
+		Rebuild();
+	}
+}
+
+bool SWonderlandSocialHubPanel::QaTabCentre(ETab Which, FVector2D& OutScreen) const
+{
+	const int32 Index = static_cast<int32>(Which);
+	const TSharedPtr<SWidget> Button = Index >= 0 && Index < UE_ARRAY_COUNT(TabButtonWidgets) ? TabButtonWidgets[Index].Pin() : nullptr;
+	if (!Button.IsValid())
+	{
+		return false;
+	}
+	const FGeometry& Painted = Button->GetPaintSpaceGeometry();
+	if (Painted.GetLocalSize().X <= 0.0f || Painted.GetLocalSize().Y <= 0.0f)
+	{
+		return false;
+	}
+	OutScreen = FVector2D(Painted.GetAbsolutePositionAtCoordinates(FVector2D(0.5, 0.5)));
+	return true;
+}
+
+FString SWonderlandSocialHubPanel::QaReplyText() const
+{
+	return ReplyBox.IsValid() ? ReplyBox->GetText().ToString() : FString();
+}
+
+bool SWonderlandSocialHubPanel::QaSetReplyText(const FString& Typed)
+{
+	if (!ReplyBox.IsValid())
+	{
+		return false;
+	}
+	ReplyBox->SetText(FText::FromString(Typed));
+	return true;
+}
+
 void SWonderlandSocialHubPanel::Rebuild()
 {
+	bRebuildPending = false;
+	// F-21: WHAT THE PLAYER IS TYPING SURVIVES A REBUILD. Every refresh used to build an empty reply box and drop its keyboard
+	// focus, so the rest of a message went to the game. Kept for the same conversation only.
+	const TSharedPtr<SEditableTextBox> OldReplyBox = ReplyBox;
+	const FText KeptDraft = OldReplyBox.IsValid() ? OldReplyBox->GetText() : FText::GetEmpty();
+	const bool bKeptFocus = OldReplyBox.IsValid() && OldReplyBox->HasAnyUserFocusOrFocusedDescendants();
+	const FString KeptFor = ReplyDraftConversationId;
 	ShownRows.Reset();
 	if (RailHost.IsValid())
 	{
@@ -292,6 +371,18 @@ void SWonderlandSocialHubPanel::Rebuild()
 			BodyHost->SetContent(Tab == ETab::Requests ? MakeRequests() : Tab == ETab::Recent ? MakeRecent() : Tab == ETab::Messages ? MakeMessages() : Tab == ETab::Party ? MakeParty() : MakeFriends());
 		}
 	}
+	if (ReplyBox.IsValid() && ReplyBox != OldReplyBox && KeptFor == OpenConversationId)
+	{
+		if (!KeptDraft.IsEmpty())
+		{
+			ReplyBox->SetText(KeptDraft);
+		}
+		if (bKeptFocus && FSlateApplication::IsInitialized())
+		{
+			FSlateApplication::Get().SetKeyboardFocus(ReplyBox, EFocusCause::SetDirectly);
+		}
+	}
+	ReplyDraftConversationId = OpenConversationId;
 }
 
 TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeRail()
@@ -377,7 +468,8 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeTabButton(ETab Which, const F
 {
 	using namespace WonderlandSocialHubLook;
 	const bool bSelected = Which == Tab;
-	return SNew(SButton).ButtonStyle(bSelected ? &TabSelectedStyle : &TabStyle).IsFocusable(false)
+	TSharedPtr<SButton> TabButton;
+	TSharedRef<SWidget> Made = SAssignNew(TabButton, SButton).ButtonStyle(bSelected ? &TabSelectedStyle : &TabStyle).IsFocusable(false)
 		.OnClicked_Lambda([this, Which]() { SetTab(Which); return FReply::Handled(); })
 		[
 			SNew(SHorizontalBox)
@@ -390,6 +482,8 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeTabButton(ETab Which, const F
 				SNew(STextBlock).Text(T(Count)).Font(WonderlandUi::Sans(10, true)).ColorAndOpacity(WonderlandUi::Gold(bSelected ? 1.0f : 0.70f))
 			]
 		];
+	TabButtonWidgets[static_cast<int32>(Which)] = TabButton;
+	return Made;
 }
 
 TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeNotConnected()
@@ -1007,7 +1101,7 @@ void SWonderlandSocialHubPanel::SetSnapshot(const FWonderlandSocialSnapshot& InS
 	{
 		OpenConversationId = Snapshot.Conversations.Num() > 0 ? Snapshot.Conversations[0].ConversationId : FString();
 	}
-	Rebuild();
+	RequestRebuild();   // F-21: never at once from a refresh (FlushRebuild says why)
 }
 
 void SWonderlandSocialHubPanel::SetSignIn(const FWonderlandSignInView& InView)
@@ -1021,7 +1115,7 @@ void SWonderlandSocialHubPanel::SetVoice(const FWonderlandVoiceState& State, con
 	VoiceLabel = Label;
 	if (Tab == ETab::Party)
 	{
-		Rebuild();
+		RequestRebuild();   // F-21: every talking on/off lands here; a rebuild at once could eat MUTE MIC
 	}
 }
 
@@ -1440,5 +1534,238 @@ namespace WonderlandSocialBlockedQa
 			Leaky.Presence.OnlineState = TEXT("ONLINE");
 			Check(TEXT("UB7"), !Hidden(Leaky), TEXT("control: the presence check FAILS a row that shows ONLINE"));
 			UE_LOG(LogTemp, Display, TEXT("WLQA UNBLOCK END pass=%d fail=%d"), Passed, Failed);
+		}));
+}
+
+namespace WonderlandSocialHubClicksQa
+{
+	/** F-21 QA (2026-10-07), fail-capable, through Slate's own routing (the path a real click takes). A refresh that lands just
+	 *  before a click must not eat it:
+	 *    HC0 the hub opens on REQUESTS (a player session: NOT CONNECTED still draws its tabs);
+	 *    HC1 the real refresh path (HandleSocialChanged, as every live snapshot calls it) DEFERS the rebuild;
+	 *    HC2 a click on FRIENDS routed right after that refresh, before any paint, LANDS;
+	 *    HC3 a refresh with no click after it: Slate's pre-tick runs its rebuild BY ITSELF, frames later (the hook is wired);
+	 *    HC4 CONTROL: a rebuild AT ONCE (SetSnapshot before F-21), then the same click: it is LOST. So the probe can fail, and this
+	 *        is how the 2026-10-07 drive lost its FRIENDS click;
+	 *    HC5 the voice path (SetVoice on PARTY, which every talking on/off calls) defers too;
+	 *    HC6 on an OFF-SCREEN panel fed one conversation, a draft in the reply box survives a refresh's rebuild;
+	 *    HC7 control: the draft is not carried to ANOTHER conversation.
+	 *  The core ticker runs this AFTER the frame's paint, exactly where HTTP answers and EOS callbacks land. The ticker sends
+	 *  synthetic pointer events only (no OS input) and does not quit. WLQA HUBCLICK lines. */
+	struct FHubClickRun
+	{
+		TWeakObjectPtr<UWorld> World;
+		int32 Phase = 0;
+		double At = 0.0;
+		int32 Passed = 0;
+		int32 Failed = 0;
+		/** HC3: was a rebuild pending right after the refresh (before Slate's pre-tick had a chance)? */
+		bool bRefreshPending = false;
+	};
+	TSharedPtr<FHubClickRun> GHubClickRun;
+
+	void HubClickCheck(FHubClickRun& ClickRun, const TCHAR* Id, bool bOk, const FString& What)
+	{
+		(bOk ? ClickRun.Passed : ClickRun.Failed) += 1;
+		UE_LOG(LogTemp, Display, TEXT("WLQA HUBCLICK %s %s -- %s"), Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *What);
+	}
+
+	/** The pointer arrives over a spot and rests there, as a player's cursor does before they click. */
+	void HubClickHover(const FVector2D& ClickSpot)
+	{
+		const FPointerEvent PointerArrive(0, FSlateApplicationBase::CursorPointerIndex, ClickSpot, ClickSpot, TSet<FKey>(), FKey(), 0.0f, FModifierKeysState());
+		FSlateApplication::Get().ProcessMouseMoveEvent(PointerArrive);
+	}
+
+	/** The press and the release, routed by Slate through the hit-test grid of the LAST paint, as a real click is. */
+	void HubClickPress(const FVector2D& ClickSpot)
+	{
+		TSet<FKey> HeldButtons;
+		HeldButtons.Add(EKeys::LeftMouseButton);
+		const FPointerEvent PointerPress(0, FSlateApplicationBase::CursorPointerIndex, ClickSpot, ClickSpot, HeldButtons, EKeys::LeftMouseButton, 0.0f, FModifierKeysState());
+		FSlateApplication::Get().ProcessMouseButtonDownEvent(nullptr, PointerPress);
+		const FPointerEvent PointerRelease(0, FSlateApplicationBase::CursorPointerIndex, ClickSpot, ClickSpot, TSet<FKey>(), EKeys::LeftMouseButton, 0.0f, FModifierKeysState());
+		FSlateApplication::Get().ProcessMouseButtonUpEvent(PointerRelease);
+	}
+
+	UWonderlandUiSubsystem* HubClickUi(UWorld* World)
+	{
+		APlayerController* ClickController = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		ULocalPlayer* ClickPlayer = ClickController != nullptr ? ClickController->GetLocalPlayer() : nullptr;
+		return ClickPlayer != nullptr ? ClickPlayer->GetSubsystem<UWonderlandUiSubsystem>() : nullptr;
+	}
+
+	void HubClickEnd()
+	{
+		if (GHubClickRun.IsValid())
+		{
+			UE_LOG(LogTemp, Display, TEXT("WLQA HUBCLICK END pass=%d fail=%d"), GHubClickRun->Passed, GHubClickRun->Failed);
+		}
+		GHubClickRun.Reset();
+	}
+
+	bool HubClickTick(float)
+	{
+		if (!GHubClickRun.IsValid())
+		{
+			return false;
+		}
+		FHubClickRun& ClickRun = *GHubClickRun;
+		UWonderlandUiSubsystem* ClickUi = HubClickUi(ClickRun.World.Get());
+		const double ClickSince = FPlatformTime::Seconds() - ClickRun.At;
+		const auto NextPhase = [&ClickRun](int32 NewPhase) { ClickRun.Phase = NewPhase; ClickRun.At = FPlatformTime::Seconds(); };
+		if (ClickUi == nullptr || !FSlateApplication::IsInitialized())
+		{
+			if (ClickSince > 120.0)
+			{
+				HubClickCheck(ClickRun, TEXT("HC0"), false, TEXT("no world, UI or Slate within 120 s"));
+				HubClickEnd();
+				return false;
+			}
+			return true;
+		}
+		const TSharedPtr<SWonderlandSocialHubPanel> ClickHub = ClickUi->GetOpenSocialHubForQa();
+		if (ClickRun.Phase > 0 && !ClickHub.IsValid())
+		{
+			HubClickCheck(ClickRun, TEXT("HC0"), false, FString::Printf(TEXT("the hub closed under the test (phase %d)"), ClickRun.Phase));
+			HubClickEnd();
+			return false;
+		}
+		const SWonderlandSocialHubPanel::ETab TabFriends = SWonderlandSocialHubPanel::ETab::Friends;
+		const SWonderlandSocialHubPanel::ETab TabRequests = SWonderlandSocialHubPanel::ETab::Requests;
+		switch (ClickRun.Phase)
+		{
+		case 0:
+			if (ClickSince >= 8.0)
+			{
+				ClickUi->DismissWelcome();
+				ClickUi->CloseOverlay();
+				const bool bClickHubOpened = ClickUi->OpenSocialHub(TEXT("requests"));
+				const TSharedPtr<SWonderlandSocialHubPanel> OpenedHub = ClickUi->GetOpenSocialHubForQa();
+				HubClickCheck(ClickRun, TEXT("HC0"), bClickHubOpened && OpenedHub.IsValid() && OpenedHub->GetTab() == TabRequests,
+					FString::Printf(TEXT("the hub opened on REQUESTS: %s"), *ClickUi->DescribeOpenSocialHub()));
+				if (!OpenedHub.IsValid())
+				{
+					HubClickEnd();
+					return false;
+				}
+				NextPhase(1);
+			}
+			break;
+		case 1:
+			// HC1 + HC2: painted; the pointer rests on FRIENDS; a refresh lands; then the press and release, before any paint
+			if (ClickSince >= 1.0)
+			{
+				FVector2D FriendsTabSpot;
+				const bool bTabPainted = ClickHub->QaTabCentre(TabFriends, FriendsTabSpot);
+				HubClickHover(FriendsTabSpot);
+				ClickUi->RefreshOpenSocialHubForQa();
+				const bool bRefreshDeferred = ClickHub->QaRebuildPending();
+				HubClickPress(FriendsTabSpot);
+				HubClickCheck(ClickRun, TEXT("HC1"), bTabPainted && bRefreshDeferred,
+					FString::Printf(TEXT("a refresh (HandleSocialChanged, as every live snapshot calls it) left the rebuild for Slate's pre-tick (painted %s, pending %s)"),
+						bTabPainted ? TEXT("yes") : TEXT("NO"), bRefreshDeferred ? TEXT("yes") : TEXT("NO")));
+				HubClickCheck(ClickRun, TEXT("HC2"), bTabPainted && ClickHub->GetTab() == TabFriends,
+					FString::Printf(TEXT("a click on FRIENDS at %.0f,%.0f right after that refresh LANDS (tab now %s)"), FriendsTabSpot.X, FriendsTabSpot.Y,
+						SWonderlandSocialHubPanel::TabName(ClickHub->GetTab())));
+				NextPhase(2);
+			}
+			break;
+		case 2:
+			// HC3, part one: a refresh with no click after it; nothing here flushes it (DescribeOpenSocialHub would)
+			if (ClickSince >= 0.3)
+			{
+				ClickUi->RefreshOpenSocialHubForQa();
+				ClickRun.bRefreshPending = ClickHub->QaRebuildPending();
+				NextPhase(3);
+			}
+			break;
+		case 3:
+			// HC3, part two: some frames later Slate's pre-tick has run that rebuild by itself
+			if (ClickSince >= 0.3)
+			{
+				const bool bRanByItself = ClickRun.bRefreshPending && !ClickHub->QaRebuildPending();
+				const FString StillPending = ClickHub->QaRebuildPending() ? TEXT("STILL") : TEXT("no");
+				HubClickCheck(ClickRun, TEXT("HC3"), bRanByItself && ClickUi->DescribeOpenSocialHub().StartsWith(TEXT("tab FRIENDS")),
+					FString::Printf(TEXT("a refresh's rebuild runs by itself at Slate's pre-tick, frames later (pending after the refresh %s, now %s): %s"),
+						ClickRun.bRefreshPending ? TEXT("yes") : TEXT("NO"), *StillPending, *ClickUi->DescribeOpenSocialHub()));
+				ClickHub->SetTab(TabRequests);
+				NextPhase(4);
+			}
+			break;
+		case 4:
+			// HC4 CONTROL: the pre-F-21 rebuild AT ONCE, then the same click
+			if (ClickSince >= 1.0)
+			{
+				FVector2D FriendsTabSpot;
+				const bool bTabPainted = ClickHub->QaTabCentre(TabFriends, FriendsTabSpot);
+				HubClickHover(FriendsTabSpot);
+				ClickHub->QaRebuildNow();
+				HubClickPress(FriendsTabSpot);
+				HubClickCheck(ClickRun, TEXT("HC4"), bTabPainted && ClickHub->GetTab() == TabRequests,
+					FString::Printf(TEXT("control: after a rebuild AT ONCE (SetSnapshot before F-21) the same click is LOST (tab still %s)"),
+						SWonderlandSocialHubPanel::TabName(ClickHub->GetTab())));
+				NextPhase(5);
+			}
+			break;
+		case 5:
+			if (ClickSince >= 0.3)
+			{
+				// HC5: the voice path defers too
+				ClickHub->SetTab(SWonderlandSocialHubPanel::ETab::Party);
+				ClickHub->SetVoice(FWonderlandVoiceState(), FString());
+				const bool bVoiceDeferred = ClickHub->QaRebuildPending();
+				ClickHub->FlushRebuild();
+				HubClickCheck(ClickRun, TEXT("HC5"), bVoiceDeferred && !ClickHub->QaRebuildPending(),
+					TEXT("a voice change on PARTY (SetVoice, which every talking on/off calls) leaves its rebuild for the pre-tick; FlushRebuild runs it"));
+				// HC6 / HC7: an OFF-SCREEN panel fed two conversations (never drawn: no synthetic people on screen)
+				FWonderlandSocialSnapshot FedInbox;
+				FWonderlandSocialConversationRow InboxFirst;
+				InboxFirst.ConversationId = TEXT("qa-conv-a");
+				InboxFirst.Kind = TEXT("DIRECT");
+				InboxFirst.Title = TEXT("Amy");
+				FWonderlandSocialConversationRow InboxSecond = InboxFirst;
+				InboxSecond.ConversationId = TEXT("qa-conv-b");
+				InboxSecond.Title = TEXT("Bo");
+				FedInbox.Conversations.Add(InboxFirst);
+				FedInbox.Conversations.Add(InboxSecond);
+				const TSharedRef<SWonderlandSocialHubPanel> OffScreenHub = SNew(SWonderlandSocialHubPanel)
+					.Snapshot(FedInbox).bConnected(true).bDevelopmentPreview(false).InitialTab(SWonderlandSocialHubPanel::ETab::Messages);
+				OffScreenHub->OpenConversation(TEXT("qa-conv-a"));
+				const bool bDraftTyped = OffScreenHub->QaSetReplyText(TEXT("on my way"));
+				OffScreenHub->SetSnapshot(FedInbox, true, FString(), false);   // a refresh lands while the player types
+				OffScreenHub->FlushRebuild();
+				const FString KeptDraftText = OffScreenHub->QaReplyText();
+				HubClickCheck(ClickRun, TEXT("HC6"), bDraftTyped && KeptDraftText == TEXT("on my way"),
+					FString::Printf(TEXT("a draft in the reply box survives a refresh's rebuild (typed %s, after: '%s')"), bDraftTyped ? TEXT("yes") : TEXT("NO"), *KeptDraftText));
+				OffScreenHub->OpenConversation(TEXT("qa-conv-b"));
+				HubClickCheck(ClickRun, TEXT("HC7"), bDraftTyped && OffScreenHub->QaReplyText().IsEmpty(),
+					FString::Printf(TEXT("control: the draft is not carried to ANOTHER conversation (after: '%s')"), *OffScreenHub->QaReplyText()));
+				ClickUi->CloseOverlay();
+				HubClickEnd();
+				return false;
+			}
+			break;
+		default:
+			break;
+		}
+		return true;
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaSocialHubClicks(
+		TEXT("wl.Qa.SocialHubClicks"),
+		TEXT("QA (F-21): a click survives a refresh that lands just before it (HC1-HC3), the old rebuild-at-once loses it (HC4, the control), ")
+		TEXT("voice changes defer too (HC5), a reply's draft survives a rebuild (HC6, HC7 control). Synthetic pointer events through Slate; no OS input; does not quit."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GHubClickRun.IsValid())
+			{
+				return;
+			}
+			GHubClickRun = MakeShared<FHubClickRun>();
+			GHubClickRun->World = World;
+			GHubClickRun->At = FPlatformTime::Seconds();
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&HubClickTick), 0.1f);
+			UE_LOG(LogTemp, Display, TEXT("WLQA HUBCLICK armed"));
 		}));
 }

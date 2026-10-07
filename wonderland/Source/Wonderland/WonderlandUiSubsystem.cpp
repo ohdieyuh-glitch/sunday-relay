@@ -5285,6 +5285,7 @@ FString UWonderlandUiSubsystem::DescribeOpenSocialHub() const
 	{
 		return FString();
 	}
+	SocialHubPanel->FlushRebuild();   // F-21: a refresh's rebuild waits for Slate's pre-tick; QA reads what the next frame draws
 	return SocialHubPanel->Describe();
 }
 

@@ -110,8 +110,19 @@ public:
 	 * says Social is not connected and lists nobody. Not a UFUNCTION (no new reflected names). False with no player.
 	 */
 	bool OpenSocialHub(const FString& TabName);
-	/** QA: what the open hub shows (SWonderlandSocialHubPanel::Describe); empty when the hub is not open. */
+	/** QA: what the open hub shows (SWonderlandSocialHubPanel::Describe); empty when the hub is not open. A rebuild a refresh asked
+	 *  for (F-21: it waits for Slate's pre-tick) is run first, so QA always reads what the next frame draws. */
 	FString DescribeOpenSocialHub() const;
+	/** QA (wl.Qa.SocialHubClicks, F-21): the hub on screen (null when it is not open), and the refresh a live update makes. */
+	TSharedPtr<SWonderlandSocialHubPanel> GetOpenSocialHubForQa() const
+	{
+		if (Open != EOverlay::Social)
+		{
+			return nullptr;
+		}
+		return SocialHubPanel;
+	}
+	void RefreshOpenSocialHubForQa() { HandleSocialChanged(); }
 	/** A social action asked of the service, its answer shown on the open hub or profile: exactly what their buttons call. */
 	void RequestSocialAction(const FString& OperationId, const FString& SubjectId) { HandleSocialAction(OperationId, SubjectId); }
 	/** QA: the player whose BLOCK is waiting for its confirmation (F1: a shared-party block is warned first), or empty. */

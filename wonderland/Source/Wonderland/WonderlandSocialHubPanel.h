@@ -67,6 +67,7 @@ public:
 	SLATE_END_ARGS()
 
 	SWonderlandSocialHubPanel();
+	virtual ~SWonderlandSocialHubPanel();
 	void Construct(const FArguments& InArgs);
 
 	virtual bool SupportsKeyboardFocus() const override { return true; }
@@ -91,11 +92,36 @@ public:
 	/** For QA: "tab FRIENDS | friends 6 (4 on) | requests in 1 out 0 | party invites 1 | recent 0 | rows <ids> | action: …". */
 	FString Describe() const;
 
+	/** F-21 (2026-10-07): a SERVER refresh (SetSnapshot) or a VOICE change (SetVoice) no longer rebuilds the panel at once. It asks for
+	 *  a rebuild, and Slate's next pre-tick runs it: after that frame's input is routed, before its layout and paint. The old rebuild
+	 *  at once ran in the core ticker AFTER the paint, so the next frame routed a player's click through the hit-test grid of widgets
+	 *  that no longer existed, and the click was lost. A real-input drive lost a tab click that way on 2026-10-07. Every snapshot and
+	 *  every talking on/off rebuilt the hub, so MUTE MIC was the most exposed button. A player's own click (a tab, a conversation)
+	 *  still rebuilds at once. */
+	void FlushRebuild();
+	/** QA (wl.Qa.SocialHubClicks): the centre of a tab's button as last painted, in screen space; false when it has not been painted. */
+	bool QaTabCentre(ETab Which, FVector2D& OutScreen) const;
+	/** QA: a rebuild AT ONCE, as SetSnapshot did before F-21 (the control that must lose a click). */
+	void QaRebuildNow() { Rebuild(); }
+	bool QaRebuildPending() const { return bRebuildPending; }
+	/** QA: the reply box's text (empty when there is none), and typing into it as a player would. */
+	FString QaReplyText() const;
+	bool QaSetReplyText(const FString& Typed);
+
 	static const TCHAR* TabName(ETab Tab);
 	static bool ParseTab(const FString& Text, ETab& Out);
 
 private:
 	void Rebuild();
+	/** F-21: a rebuild for Slate's next pre-tick (see FlushRebuild). */
+	void RequestRebuild();
+	void HandleSlatePreTick(float DeltaTime);
+	bool bRebuildPending = false;
+	FDelegateHandle SlatePreTickHandle;
+	/** The rail's tab buttons as last built, by ETab (QA reads where they were painted). */
+	TWeakPtr<SWidget> TabButtonWidgets[5];
+	/** F-21: the conversation the reply box was last built for (its draft is kept only for the same one). */
+	FString ReplyDraftConversationId;
 	TSharedRef<SWidget> MakeRail();
 	TSharedRef<SWidget> MakeTabButton(ETab Which, const FString& Label, const FString& Count);
 	TSharedRef<SWidget> MakeFriends();
