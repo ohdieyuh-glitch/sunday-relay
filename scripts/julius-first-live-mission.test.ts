@@ -1207,6 +1207,19 @@ describe('the evidence dump names only tables and columns the migrations create'
    * case above already checks each is real); the copy and the resolver are their own suites
    * (julius-evidence-bodies, julius-evidence-resolve).
    */
+  it('R-A: tasks.tsv names each task\'s lease generation and contract-events.tsv each bound claim\'s, appended last, so a bundle shows the accepted attempt', () => {
+    // R-A (the readiness ledger's reading rule): an ACCEPT is judged against the attempt the TASK ROW names
+    // (julius-attempt-evidence.ts: "the attempt a decision is about is the one the task row names"). A bundle that
+    // cannot show it gets the task flagged instead of credited, so the generation must travel in the bundle.
+    const tasks = queries().find((dump) => dump.file === 'tasks.tsv')!;
+    expect(tasks.columns, 'appended last, so no column a reader uses moves')
+      .toEqual(['task_id', 'task_type', 'role', 'state', 'ordinal', 'parent_task_id', 'run_id', 'lease_generation']);
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const contract = script.split('\n').find((line) => line.startsWith('dump "SELECT') && line.includes('contract-events.tsv')) ?? '';
+    expect(contract, 'the claim names the generation it dispatched (julius-task-pipeline.ts, task.claimed)')
+      .toContain("e.occurred_at,e.payload->'facts'->>'leaseGeneration' AS lease_generation FROM");
+  });
+
   it('DECISION A: evidence.tsv ends with integrity_hash and artifact_ref, work-artifacts.tsv carries every column 024 creates, and the dump copies the bodies and the resolver after it', () => {
     const dumps = queries();
     const evidence = dumps.find((dump) => dump.file === 'evidence.tsv')!;
