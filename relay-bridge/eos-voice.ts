@@ -2,7 +2,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import type { PartyDeparture } from '../src/relay/social/social-parties';
-import { normalizePuid, type VoiceBindingStore } from '../src/relay/social/voice-binding';
+import { normalizePuid, oneVoiceJoinAtATime, type VoiceBindingStore } from '../src/relay/social/voice-binding';
 import type { PartyVoiceGrant, PartyVoiceTokenMinter } from './wonderland-social-routes';
 
 /**
@@ -648,8 +648,11 @@ export interface VoiceRemovals {
  * SERVER-SIDE REMOVAL (review #3, #6): a departed member is taken out of that party's room even if their client misbehaves.
  * WHICH PUIDs (MAIN's internal review a6d5842c, B1): every PUID this process minted a token for, for that member in that room
  * (read when the removal runs, so a join racing the departure is caught too), plus the PUID bound to them now -- the fallback for
- * a token minted before a restart (see EosVoiceTokenMinter.minted for the per-process limit). In departure order, one at a time;
- * each PUID tried up to 1 + backoff.length times (default 0.25 s, 1 s, 4 s), then given up and logged. A PUID given up on is KEPT
+ * a token minted before a restart (see EosVoiceTokenMinter.minted for the per-process limit). In departure order, one at a time,
+ * and each in its player's voice queue too (oneVoiceJoinAtATime, MAIN's internal review af2eb058 m-b): queued when the departure
+ * commits, so it runs after that player's joins queued before it and before any join queued after it -- a re-bind in another
+ * party can no longer move the binding before this removal reads it. Each PUID is
+ * tried up to 1 + backoff.length times (default 0.25 s, 1 s, 4 s), then given up and logged. A PUID given up on is KEPT
  * PENDING (MAIN's internal review af2eb058, m-a; it used to wait for the same member's next departure, which a taken-back non-member
  * never makes): tried again before the room's next removal or mint, and by a timer (EOS_PENDING_RETRY). Every Epic call times out
  * (EOS_REQUEST_TIMEOUT_MS), so a hung one can no longer stall the removals queued behind it; the binding lookup is retried the
@@ -712,7 +715,14 @@ export function createVoiceRemovals(deps: {
   };
   return {
     onDepartures(departures) {
-      for (const d of departures) chain = chain.then(() => removeOne(d)).catch(() => undefined);
+      // m-b: each departure joins its player's voice queue NOW, synchronously in the commit hook, so no join of that player
+      // queued later can move the binding first; and it still runs after every departure queued before it
+      const bindings = deps.bindings();
+      for (const d of departures) {
+        const after = chain;
+        const job = (): Promise<void> => after.then(() => removeOne(d));
+        chain = (bindings === null ? job() : oneVoiceJoinAtATime(bindings, d.userId, job)).catch(() => undefined);
+      }
     },
     idle: () => chain,
   };

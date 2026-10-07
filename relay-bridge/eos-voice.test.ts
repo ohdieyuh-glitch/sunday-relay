@@ -6,9 +6,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { blockUser } from '../src/relay/social/social-friends';
 import { createInMemorySocialStore, type SocialStore } from '../src/relay/social/social-store';
 import { partyOf } from '../src/relay/social/social-state';
-import { createInMemoryVoiceBindings } from '../src/relay/social/voice-binding';
+import { createInMemoryVoiceBindings, type VoiceBindingStore } from '../src/relay/social/voice-binding';
 import { EOS_PENDING_RETRY, EOS_REQUEST_TIMEOUT_MS, EPIC, EosVoiceTokenMinter, createVoiceRemovals, eosFromEnv, hashId, hashPuid, loadEosVoiceConfig, type EosFetch, type EosVoiceConfig } from './eos-voice';
 import { EOS_FROM_ENV, EOS_GAME_CONFIG_ENV, EOS_ROOM_SALT_ENV, loadEosGameClientConfig, type EosDeployment } from './eos-voice';
+import { handleSocialRoute, type SocialRouteDeps } from './wonderland-social-routes';
+import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 
 /*
  * PARTY VOICE ON EOS, AGAINST A RECORDED EPIC FAKE (R16 EOS voice backend). Every request the bridge would send to
@@ -570,6 +572,62 @@ describe("a removal GIVEN UP is kept PENDING and retried: before the room's next
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("a player's departures and voice joins run in the order they were queued (MAIN's internal review af2eb058, m-b)", () => {
+  it('departure queued, then a re-bind in ANOTHER party: the departure removes the PUID bound when it was queued, from the room it left', async () => {
+    const epic = epicFake();
+    const minter = new EosVoiceTokenMinter(config(), { fetchImpl: epic.fetchImpl, now: () => T0, pendingRetry: { everyMs: 0, maxTimed: 3 } });
+    const bindings = createInMemoryVoiceBindings();
+    // the departure's binding lookup (the first puidsOf) is held until the test lets it go
+    let letLookupGo: () => void = () => undefined;
+    const lookupHeld = new Promise<void>((resolve) => { letLookupGo = resolve; });
+    let lookups = 0;
+    const held: VoiceBindingStore = { ...bindings, puidsOf: async (ids) => { if (lookups++ === 0) await lookupHeld; return bindings.puidsOf(ids); } };
+    const removals = createVoiceRemovals({ target: minter, bindings: () => held, sleep: async () => undefined });
+    const store = createInMemorySocialStore(undefined, { afterCommit: (c) => removals.onDepartures(c.departures) });
+    const iso = new Date(T0).toISOString();
+    const run = async (op: Parameters<SocialStore['apply']>[0], actor: string, ids: string[], body: Record<string, unknown>) => {
+      const r = await store.apply(op, actor, { ids, body, query: {} }, iso);
+      if (!r.ok) throw new Error(`${op} by ${actor}: ${r.error.message}`);
+      return r.value as Record<string, unknown> | null;
+    };
+    const [P, LA, LB] = ['ghu-p', 'ghu-la', 'ghu-lb'];
+    for (const id of [P, LA, LB]) await store.ensureUser({ userId: id, displayName: id, handle: `@${id}` }, iso);
+    for (const leader of [LA, LB]) {
+      await run('requests.send', leader, [], { toUserId: P });
+      await run('requests.accept', P, [(await store.read()).requests.find((r) => r.fromUserId === leader && r.status === 'PENDING')!.requestId], {});
+      await run('parties.create', leader, [], {});
+    }
+    const [A, B] = [partyOf(await store.read(), LA)!.partyId, partyOf(await store.read(), LB)!.partyId];
+    await run('party_invites.accept', P, [String((await run('parties.invite', LA, [A], { toUserId: P }))?.inviteId)], {});
+    // P's device X was bound (and its token minted before a restart: this process minted nothing)
+    const [X, Y] = [hex(16), hex(16)];
+    await bindings.bind({ userId: P, puid: X, sessionId: 's-p', nowIso: iso });
+    // P leaves A: the removal is queued at the commit, and waits at its binding lookup
+    await run('parties.leave', P, [A], {});
+    await run('party_invites.accept', P, [String((await run('parties.invite', LB, [B], { toUserId: P }))?.inviteId)], {});
+    // a fresh sign-in on another device joins B's voice with Y: a re-bind
+    const deps: SocialRouteDeps = {
+      verifySession: (token) => ({ sessionId: token, participantId: P, capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social', issuedAtMs: T0 + 1000 }),
+      identify: async (id) => ({ userId: id, displayName: id, handle: `@${id}` }),
+      store,
+      voice: minter,
+      voiceBindings: held,
+    };
+    const joining = handleSocialRoute({ method: 'POST', path: `/wonderland/social/parties/${B}/voice/join`, authorization: 'Relay-Session p-second-device', origin: undefined, body: { eosProductUserId: Y }, now: T0 + 2000 }, deps);
+    await new Promise<void>((resolve) => setTimeout(resolve, 20)); // every chance to run ahead of the departure
+    letLookupGo();
+    expect((await joining)?.status).toBe(200);
+    await removals.idle();
+    const name: Record<string, string> = { [minter.roomIdFor(A)]: 'A', [minter.roomIdFor(B)]: 'B', [X]: 'X', [Y]: 'Y' };
+    const trail = epic.calls
+      .filter((c) => c.method === 'DELETE' || c.url.includes('/room/'))
+      .map((c) => (c.method === 'DELETE' ? `DELETE room ${name[c.url.split('/')[7]]} puid ${name[c.url.slice(-32)]}` : `MINT room ${name[c.url.slice(-32)]}`));
+    // A's removal ran first and read X; then the re-bind took X out of B's room and minted Y there. Y never left any room.
+    expect(trail).toEqual(['DELETE room A puid X', 'DELETE room B puid X', 'MINT room B']);
+    expect((await bindings.puidsOf([P])).get(P)).toBe(Y);
   });
 });
 

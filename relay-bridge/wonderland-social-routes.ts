@@ -51,7 +51,7 @@ import type { SocialOperationId } from '../src/relay/social/social-contracts';
 import type { SocialPlayerIdentity, SocialStore } from '../src/relay/social/social-store';
 import { voiceAudienceFor, walledFromParty } from '../src/relay/social/social-parties';
 import { partyById, type SocialState } from '../src/relay/social/social-state';
-import { decideVoiceBinding, normalizePuid, type VoiceBindingOutcome, type VoiceBindingRow, type VoiceBindingStore } from '../src/relay/social/voice-binding';
+import { decideVoiceBinding, normalizePuid, oneVoiceJoinAtATime, type VoiceBindingOutcome, type VoiceBindingRow, type VoiceBindingStore } from '../src/relay/social/voice-binding';
 import { bindSocialActor, nativeSocialMayCall, SOCIAL_OPERATIONS } from './wonderland-social-scope';
 import { EOS_CLIENT_CONFIG_SCHEMA, failureTag, hashId, hashPuid, type EosGameClientConfig } from './eos-voice';
 
@@ -391,29 +391,10 @@ function voiceAudienceIfAdmitted(state: SocialState, userId: string, partyId: st
 }
 
 /**
- * ONE VOICE JOIN AT A TIME PER PLAYER, in this process (MAIN's internal review a6d5842c, B1). A re-bind's removal is decided from
- * the binding read BEFORE the bind. Another join of the same player running in between (a second fresh sign-in) would bind past
- * that read, and the PUID it replaced would never leave the room. Keyed by the binding store, which the bridge builds once (each
- * test builds its own). An entry is dropped once its last join settles. One bridge process holds this, as it holds presence.
- */
-const voiceJoinTails = new WeakMap<VoiceBindingStore, Map<string, Promise<void>>>();
-
-function oneVoiceJoinAtATime<T>(bindings: VoiceBindingStore, userId: string, work: () => Promise<T>): Promise<T> {
-  const tails = voiceJoinTails.get(bindings) ?? new Map<string, Promise<void>>();
-  voiceJoinTails.set(bindings, tails);
-  const run = (tails.get(userId) ?? Promise.resolve()).then(work);
-  const tail = run.then(() => undefined, () => undefined);
-  tails.set(userId, tail);
-  void tail.then(() => {
-    if (tails.get(userId) === tail) tails.delete(userId);
-  });
-  return run;
-}
-
-/**
  * POST /parties/:id/voice/join {eosProductUserId}: a token to the caller's own party room, for their server-bound PUID.
  *   1. ADMITTED (M2): a member walled from nobody in the party, or the stranger's 404.
- *   2. THE RE-BIND (B1), one join per player at a time: the outcome is predicted with decideVoiceBinding from the binding now.
+ *   2. THE RE-BIND (B1), one voice change per player at a time (their joins, and their departures' removals queued before this
+ *      join: oneVoiceJoinAtATime, af2eb058 m-b): the outcome is predicted with decideVoiceBinding from the binding now.
  *      A predicted re-bind first takes the replaced PUID (and every PUID minted for the caller in that room) out of the room.
  *      If that fails, the answer is 503 and nothing is bound: the old binding stays. Then the store binds. If the store's
  *      outcome differs from the prediction (another process moved the binding), it is logged with hashed ids, and a re-bind

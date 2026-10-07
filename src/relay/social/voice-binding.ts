@@ -62,6 +62,32 @@ export interface VoiceBindingStore {
   puidsOf(userIds: readonly string[]): Promise<ReadonlyMap<string, string>>;
 }
 
+/**
+ * ONE VOICE CHANGE AT A TIME PER PLAYER, in this process, in the order queued: the player's voice joins
+ * (relay-bridge/wonderland-social-routes.ts, MAIN's internal review a6d5842c B1) AND their departures' removals
+ * (relay-bridge/eos-voice.ts createVoiceRemovals, MAIN's internal review af2eb058 m-b).
+ *   - B1: a re-bind's removal is decided from the binding read BEFORE the bind; another join of the same player running in between
+ *     (a second fresh sign-in) would bind past that read, and the PUID it replaced would never leave the room.
+ *   - m-b: a departure's removal reads the binding when it RUNS. Queued behind nothing, a join that re-binds in ANOTHER party could
+ *     run first (P leaves A, joins B and re-binds), and A's removal would then read the new PUID and leave the old one in A's
+ *     room. Queued here, synchronously when the departure commits, it runs before any later join of that player.
+ * Keyed by the binding store, which the bridge builds once (each test builds its own). An entry is dropped once its last work
+ * settles; a failed work never blocks the next. One bridge process holds this, as it holds presence.
+ */
+const voiceChangeTails = new WeakMap<VoiceBindingStore, Map<string, Promise<void>>>();
+
+export function oneVoiceJoinAtATime<T>(bindings: VoiceBindingStore, userId: string, work: () => Promise<T>): Promise<T> {
+  const tails = voiceChangeTails.get(bindings) ?? new Map<string, Promise<void>>();
+  voiceChangeTails.set(bindings, tails);
+  const run = (tails.get(userId) ?? Promise.resolve()).then(work);
+  const tail = run.then(() => undefined, () => undefined);
+  tails.set(userId, tail);
+  void tail.then(() => {
+    if (tails.get(userId) === tail) tails.delete(userId);
+  });
+  return run;
+}
+
 /** The development and test store: the same rule, in one process. */
 export function createInMemoryVoiceBindings(): VoiceBindingStore & { readonly rows: () => readonly VoiceBindingRow[] } {
   const byUser = new Map<string, VoiceBindingRow>();
