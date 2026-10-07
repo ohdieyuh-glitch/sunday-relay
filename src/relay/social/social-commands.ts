@@ -74,7 +74,7 @@ import {
 } from './social-parties';
 import { deriveActivity, resolvePresenceFor, resolveProfileFor, type WonderlandActivitySignals } from './social-presence';
 import { buildSocialView } from './social-preview';
-import { areFriends, blockedEitherWay, friendIdsOf, partyOf, presenceHiddenFrom, type SocialState } from './social-state';
+import { areFriends, blockedEitherWay, friendIdsOf, partyById, partyOf, presenceHiddenFrom, type SocialState } from './social-state';
 import {
   WORLD_MOTIONS,
   contextOf,
@@ -446,7 +446,7 @@ function applyOne(
       }
       const separated = separateForBlock(state, actorId, targetId);
       if (!separated.ok) return separated;
-      const remaining = shared !== undefined ? (separated.value.parties[shared.partyId]?.members.map((m) => m.userId) ?? []) : [];
+      const remaining = shared !== undefined ? (partyById(separated.value, shared.partyId)?.members.map((m) => m.userId) ?? []) : [];
       const endsFriendship = areFriends(state, actorId, targetId);
       const told = shared !== undefined || endsFriendship ? [actorId, ...remaining, targetId] : [actorId];
       const blocked = changed(blockUser(separated.value, actorId, targetId, nowIso), null, told);
@@ -554,7 +554,7 @@ function applyOne(
     }
     case 'parties.join': {
       const next = joinParty(state, actorId, id0, nowIso);
-      return changed(next, null, [actorId, ...(state.parties[id0]?.members.map((m) => m.userId) ?? [])]);
+      return changed(next, null, [actorId, ...(partyById(state, id0)?.members.map((m) => m.userId) ?? [])]);
     }
     case 'parties.leave': {
       const before = partyMembers(state, actorId);
@@ -567,15 +567,15 @@ function applyOne(
       if (!invited.ok) return invited;
       return {
         ok: true,
-        value: { state: invited.value.state, data: { inviteId: invited.value.inviteId }, audience: [to.value as string, ...(state.parties[id0]?.members.map((m) => m.userId) ?? [])] },
+        value: { state: invited.value.state, data: { inviteId: invited.value.inviteId }, audience: [to.value as string, ...(partyById(state, id0)?.members.map((m) => m.userId) ?? [])] },
       };
     }
     case 'parties.remove_member': {
-      const before = state.parties[id0]?.members.map((m) => m.userId) ?? [];
+      const before = partyById(state, id0)?.members.map((m) => m.userId) ?? [];
       return changed(removePartyMember(state, actorId, id0, id1), null, [id1, ...before]);
     }
     case 'parties.promote':
-      return changed(promotePartyLeader(state, actorId, id0, String(body.memberId ?? '')), null, state.parties[id0]?.members.map((m) => m.userId) ?? [actorId]);
+      return changed(promotePartyLeader(state, actorId, id0, String(body.memberId ?? '')), null, partyById(state, id0)?.members.map((m) => m.userId) ?? [actorId]);
     case 'parties.rules': {
       const privacy = oneOf(body, 'privacy', PARTY_PRIVACIES, false);
       const permission = oneOf(body, 'invitePermission', PARTY_INVITE_PERMISSIONS, false);
@@ -585,7 +585,7 @@ function applyOne(
       if ((privacy as { value: PartyPrivacy | null }).value !== null) rules.privacy = (privacy as { value: PartyPrivacy }).value;
       if ((permission as { value: PartyInvitePermission | null }).value !== null) rules.invitePermission = (permission as { value: PartyInvitePermission }).value;
       if ((name as { value: string | null }).value !== null) rules.name = (name as { value: string }).value;
-      return changed(setPartyRules(state, actorId, id0, rules), null, state.parties[id0]?.members.map((m) => m.userId) ?? [actorId]);
+      return changed(setPartyRules(state, actorId, id0, rules), null, partyById(state, id0)?.members.map((m) => m.userId) ?? [actorId]);
     }
     case 'parties.self_mute': {
       const muted = bool(body, 'muted');
@@ -594,7 +594,7 @@ function applyOne(
     }
     case 'party_invites.accept': {
       const invite = state.partyInvites.find((i) => i.inviteId === id0);
-      const members = invite ? (state.parties[invite.partyId]?.members.map((m) => m.userId) ?? []) : [];
+      const members = invite ? (partyById(state, invite.partyId)?.members.map((m) => m.userId) ?? []) : [];
       return changed(acceptPartyInvite(state, actorId, id0, nowIso), null, [actorId, ...members]);
     }
     /* ---- MULTIPLAYER PHASE 1: the shared presence layer (world-presence.ts) */

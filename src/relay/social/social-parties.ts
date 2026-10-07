@@ -20,7 +20,7 @@ import {
   type RecentPlayerEntry,
   type SocialUserId,
 } from './social-contracts';
-import { areFriends, blockedEitherWay, hasUser, mintId, partyOf, type SocialState } from './social-state';
+import { areFriends, blockedEitherWay, hasUser, mintId, partyById, partyOf, type SocialState } from './social-state';
 import { recentPlayersFor, recordPlayedTogether } from './social-friends';
 
 const denied = (message: string) => fail<SocialState>(relayError('permission-denied', message));
@@ -73,7 +73,10 @@ function mayInvite(party: Party, actorId: SocialUserId): boolean {
   return party.leaderId === actorId || (party.invitePermission === 'ANY_MEMBER' && party.members.some((m) => m.userId === actorId));
 }
 
-/** Somebody in the party (other than this person) has a block with them, either way: the party is behind their wall. */
+/**
+ * Somebody in the party (other than this person) has a block with them, either way: the party is behind their wall.
+ * Every caller looks `party` up by partyById (an own key), so a request's `constructor` never arrives here as a "party" (m4).
+ */
 export function walledFromParty(state: SocialState, party: Party, userId: SocialUserId): boolean {
   return party.members.some((m) => m.userId !== userId && blockedEitherWay(state, userId, m.userId));
 }
@@ -97,7 +100,7 @@ export function inviteToParty(
   toUserId: SocialUserId,
   atIso: string,
 ): RelayResult<{ state: SocialState; inviteId: string }> {
-  const party = state.parties[partyId];
+  const party = partyById(state, partyId);
   if (party === undefined) return fail(relayError('not-found', 'party not found'));
   if (!hasUser(state, toUserId)) return fail(relayError('not-found', 'user not found'));
   if (!mayInvite(party, actorId)) return fail(relayError('permission-denied', 'you cannot invite to this party'));
@@ -141,7 +144,7 @@ function addMember(state: SocialState, party: Party, userId: SocialUserId, atIso
 
 /** An invite that crosses a wall: its inviter, or anybody in its party, has a block with the invitee, either way. */
 function inviteIsWalled(state: SocialState, invite: PartyInvite): boolean {
-  const party = state.parties[invite.partyId];
+  const party = partyById(state, invite.partyId);
   return blockedEitherWay(state, invite.toUserId, invite.fromUserId) || (party !== undefined && walledFromParty(state, party, invite.toUserId));
 }
 
@@ -157,7 +160,7 @@ export function acceptPartyInvite(state: SocialState, actorId: SocialUserId, inv
   if (invite.toUserId !== actorId) return denied('only the invited person can accept');
   if (inviteIsWalled(state, invite)) return missing('pending party invite');
   if (Date.parse(atIso) > Date.parse(invite.expiresAtIso)) return ok(settleInvite(state, inviteId, 'EXPIRED'));
-  const party = state.parties[invite.partyId];
+  const party = partyById(state, invite.partyId);
   if (party === undefined) return ok(settleInvite(state, inviteId, 'REVOKED'));
   if (partyOf(state, actorId)) return invalid('leave your current party first');
   if (party.members.length >= PARTY_MAX_MEMBERS) return invalid('the party is full');
@@ -177,7 +180,7 @@ export function declinePartyInvite(state: SocialState, actorId: SocialUserId, in
  */
 export function partyInvitesFor(state: SocialState, userId: SocialUserId, nowIso: string): PartyInvite[] {
   return state.partyInvites.filter(
-    (i) => i.toUserId === userId && i.status === 'PENDING' && Date.parse(nowIso) <= Date.parse(i.expiresAtIso) && state.parties[i.partyId] !== undefined
+    (i) => i.toUserId === userId && i.status === 'PENDING' && Date.parse(nowIso) <= Date.parse(i.expiresAtIso) && partyById(state, i.partyId) !== undefined
       && !inviteIsWalled(state, i),
   );
 }
@@ -188,7 +191,7 @@ export function partyInvitesFor(state: SocialState, userId: SocialUserId, nowIso
  * ruling (a): the refusal is an ordinary "can't join", and it names nothing -- not even that the party is there).
  */
 export function joinParty(state: SocialState, actorId: SocialUserId, partyId: string, atIso: string): RelayResult<SocialState> {
-  const party = state.parties[partyId];
+  const party = partyById(state, partyId);
   if (party === undefined || walledFromParty(state, party, actorId)) return missing('party');
   if (partyOf(state, actorId)) return invalid('leave your current party first');
   if (party.privacy !== 'OPEN_TO_FRIENDS') return denied('this party is invite only');
@@ -268,14 +271,14 @@ export function reconcileBlockedParties(state: SocialState): SocialState {
  * minted from it: two players blocked either way never hear each other, even while the wall holds a brief coexistence.
  */
 export function voiceAudienceFor(state: SocialState, viewerId: SocialUserId, partyId: string): SocialUserId[] {
-  const party = state.parties[partyId];
+  const party = partyById(state, partyId);
   if (party === undefined || !party.members.some((m) => m.userId === viewerId)) return [];
   return party.members.map((m) => m.userId).filter((id) => id === viewerId || !blockedEitherWay(state, viewerId, id));
 }
 
 /** LEADER: remove a member (not themselves -- that is leaving). */
 export function removePartyMember(state: SocialState, actorId: SocialUserId, partyId: string, memberId: SocialUserId): RelayResult<SocialState> {
-  const party = state.parties[partyId];
+  const party = partyById(state, partyId);
   if (party === undefined) return missing('party');
   if (party.leaderId !== actorId) return denied('only the leader can remove a member');
   if (memberId === actorId) return invalid('the leader leaves rather than removing themselves');
@@ -285,7 +288,7 @@ export function removePartyMember(state: SocialState, actorId: SocialUserId, par
 
 /** LEADER: hand the party to another member. */
 export function promotePartyLeader(state: SocialState, actorId: SocialUserId, partyId: string, memberId: SocialUserId): RelayResult<SocialState> {
-  const party = state.parties[partyId];
+  const party = partyById(state, partyId);
   if (party === undefined) return missing('party');
   if (party.leaderId !== actorId) return denied('only the leader can promote');
   if (!party.members.some((m) => m.userId === memberId) || memberId === actorId) return invalid('promote another member of this party');
@@ -306,7 +309,7 @@ export function setPartyRules(
   partyId: string,
   rules: { privacy?: PartyPrivacy; invitePermission?: PartyInvitePermission; name?: string },
 ): RelayResult<SocialState> {
-  const party = state.parties[partyId];
+  const party = partyById(state, partyId);
   if (party === undefined) return missing('party');
   if (party.leaderId !== actorId) return denied('only the leader can change the party rules');
   return ok(
@@ -353,7 +356,7 @@ export interface PartyView {
 }
 
 export function partyViewFor(state: SocialState, viewerId: SocialUserId, partyId: string): PartyView | null {
-  const party = state.parties[partyId];
+  const party = partyById(state, partyId);
   if (party === undefined) return null;
   const member = party.members.some((m) => m.userId === viewerId);
   const friendOfOpen =
@@ -403,7 +406,7 @@ export interface PartyDeparture {
 export function partyDepartures(before: SocialState, after: SocialState): PartyDeparture[] {
   const out: PartyDeparture[] = [];
   for (const party of Object.values(before.parties)) {
-    const stays = new Set(after.parties[party.partyId]?.members.map((m) => m.userId) ?? []);
+    const stays = new Set(partyById(after, party.partyId)?.members.map((m) => m.userId) ?? []);
     for (const m of party.members) if (!stays.has(m.userId)) out.push({ partyId: party.partyId, userId: m.userId });
   }
   return out;

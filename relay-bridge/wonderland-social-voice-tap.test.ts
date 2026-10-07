@@ -63,7 +63,7 @@ function minterRecorder() {
 
 const join = (deps: SocialRouteDeps, who: string, pid: string, puid: unknown = puidOf(who.split('#')[0])) =>
   handleSocialRoute({ method: 'POST', path: `/wonderland/social/parties/${pid}/voice/join`, authorization: `Relay-Session ${who}`, origin: undefined, body: { eosProductUserId: puid }, now: T0 }, deps) as
-    Promise<{ status: number; body: { data?: any; error?: { kind: string; message: string } } }>;
+    Promise<{ status: number; body: { data?: any; error?: { kind: string; message: string } }; headers?: Readonly<Record<string, string>> }>;
 
 const depsFor = (state: SocialState, voice: PartyVoiceTokenMinter | null, tap?: (r: SocialDeliveryRecord) => void, voiceBindings: VoiceBindingStore | null = createInMemoryVoiceBindings()): SocialRouteDeps => ({
   verifySession: (token) => facts(token),
@@ -113,6 +113,22 @@ describe('party voice: the provider seam', () => {
     expect(audienceOf(U.LYRA)).toEqual([U.KAI, U.LYRA].sort());
     // the third member keeps the permitted view of both
     expect(audienceOf(U.KAI)).toEqual([U.KAI, U.LYRA, U.ORION].sort());
+  });
+
+  it("a party id naming something Object.prototype holds is the stranger's 404 with no-store, never a thrown 500 (review a6d5842c, m4)", async () => {
+    const { state, pid } = arena();
+    const { asked, minter } = minterRecorder();
+    const deps = depsFor(state, minter);
+    const missing = await join(deps, U.ORION, 'pty_does_not_exist');
+    expect(missing.status).toBe(404);
+    for (const id of ['constructor', '__proto__', 'hasOwnProperty', 'toString', 'valueOf']) {
+      const r = await join(deps, U.ORION, id);
+      expect(r.status, id).toBe(404);
+      expect(r.body, id).toEqual(missing.body);
+      expect(r.headers?.['cache-control'], id).toBe('no-store');
+    }
+    expect(asked).toEqual([]);
+    expect((await join(deps, U.ORION, pid)).status).toBe(200); // the control: the real party id admits its member
   });
 
   it('a provider failure is 503, not a token', async () => {
