@@ -1,0 +1,87 @@
+{
+  "missionId": "mission:julius-unreal-1",
+  "markerNamespace": "julius-unreal-mission-1",
+  "projectId": "prj-julius-unreal-1",
+  "tenantId": "tenant",
+  "objective": "In this workspace, make Wonderland's Social Hub keep the player's scroll position through a server refresh. `wonderland/Source/Wonderland/WonderlandSocialHubPanel.cpp` rebuilds its body on every refresh (the 20-second poll and every social event), and every rebuild makes NEW scroll boxes: a scrolled FRIENDS, REQUESTS, RECENT, PARTY or MESSAGES-inbox list jumps back to the top, and the open conversation is forced to its newest line, so older messages cannot be read past one refresh. Implement the scroll memory, and the six QA hooks that `wonderland/Source/Wonderland/WonderlandSocialHubScrollQa.cpp` calls, by editing `WonderlandSocialHubPanel.cpp` and `WonderlandSocialHubPanel.h` in place. That QA file is the acceptance test: it is read-only here and it is NOT compiled here. This workspace cannot build Unreal; after this mission the game's own pipeline applies your change, compiles it and runs the QA.",
+  "requirements": [
+    "Declare these six functions, exactly as written, in the PUBLIC part of `SWonderlandSocialHubPanel` in `WonderlandSocialHubPanel.h`, and define each exactly once in `WonderlandSocialHubPanel.cpp`: `float QaListScrollOffset() const;` `bool QaSetListScrollOffset(float Offset);` `float QaHistoryScrollOffset() const;` `bool QaSetHistoryScrollOffset(float Offset);` `bool QaHistoryAtEnd() const;` `void QaSetScrollMemory(bool bOn);`. What each one means is stated in the header comment of `WonderlandSocialHubScrollQa.cpp`.",
+    "THE MAIN LIST. A REFRESH (SetSnapshot, then the deferred rebuild that FlushRebuild or Slate's pre-tick runs) keeps the open tab's main list at the offset the player left it: FRIENDS, REQUESTS, RECENT, the MESSAGES inbox, or PARTY's party list. The voice people list on PARTY is not a main list.",
+    "THE HISTORY. A refresh keeps the open conversation's history at the offset the player scrolled back to. When the player was at its end, the history stays at its end and follows new messages.",
+    "The memory never crosses conversations: when a refresh leaves a DIFFERENT conversation open (for example because the open one is no longer in the snapshot), that conversation starts at its end.",
+    "The player's own OpenConversation (a click on a conversation row) opens that conversation at its END, whatever was remembered, also when it is already the open one.",
+    "`QaSetScrollMemory(false)` restores the pre-fix behaviour EXACTLY: every rebuild starts the lists at the top and the history at its end. The memory is ON by default.",
+    "`QaListScrollOffset` and `QaHistoryScrollOffset` return the open tab's main list's and the open conversation's `SScrollBox::GetScrollOffset()`. `QaSetListScrollOffset` and `QaSetHistoryScrollOffset` scroll as a player would (`SScrollBox::SetScrollOffset`) and return false when the open tab draws no main list, or no conversation is open. `QaHistoryAtEnd` is true when the history's offset is within 1.0 Slate unit of `SScrollBox::GetScrollOffsetOfEnd()`; it is meaningful only after a layout.",
+    "Out of scope, any behaviour is acceptable: what a tab switch does to scroll positions, and the voice people list on PARTY.",
+    "F-21 STAYS INTACT. SetSnapshot and SetVoice still only ASK for a rebuild (RequestRebuild) and never rebuild at once. RequestRebuild, HandleSlatePreTick and FlushRebuild keep their bodies. Construct still registers `OnPreTick().AddSP(this, &SWonderlandSocialHubPanel::HandleSlatePreTick)` and the destructor still removes it. The reply draft carry stays: `ReplyDraftConversationId` remains, and Rebuild still clears `bRebuildPending` and still records `ReplyDraftConversationId = OpenConversationId;`.",
+    "The QA code at the foot of `WonderlandSocialHubPanel.cpp`, from the line `namespace WonderlandSocialBlockedQa` to the end of the file, is not edited at all, so `wl.Qa.SocialHubClicks` still reads 9 pass / 0 fail. Put new code above it.",
+    "UNREAL ENGINE 5.8 SScrollBox, as installed (the same facts head the QA file): `GetScrollOffset` returns the DESIRED offset, unclamped. `SetScrollOffset` stores it at once, clears a pending ScrollToEnd and does not clamp, so it is honoured on a NEW box before its first layout. `ScrollToEnd` only sets a flag that the box's Tick resolves from its geometry, so before a layout `GetScrollOffset` still reads the old value (0 on a new box). `GetScrollOffsetOfEnd` uses the box's cached geometry, so it is meaningful only after a layout. Use only these members of SScrollBox and the ones the file already uses.",
+    "After your edits `node --test .julius/hub-scroll-static.test.mjs` must exit zero, with no network and no dependency. It checks statically what this workspace can check: the six declarations and their definitions; that nothing else under `wonderland/` changed; F-21's invariants; the untouched QA region; balanced delimiters; and an unchanged #include set."
+  ],
+  "constraints": [
+    "Edit `wonderland/Source/Wonderland/WonderlandSocialHubPanel.cpp` and `wonderland/Source/Wonderland/WonderlandSocialHubPanel.h` in place. You have `Read`, `Glob`, `Grep` and `Edit`; you cannot create files or run commands, and you do not need to.",
+    "Do not edit `WonderlandSocialHubScrollQa.cpp`, `WonderlandSocialTypes.h`, `WonderlandSocialProfilePanel.h`, `WonderlandSocialSignIn.h` or `WonderlandUiStyle.h`. They are here so you can read the acceptance test and the types the panel uses. Do not touch `.julius/`.",
+    "This is Unreal Engine 5.8 C++, compiled with warnings as errors: a local or a parameter that shadows a member, or an outer local, does not compile. Give every new name a distinct, specific spelling. The game is built in unity mode, so add no new file-scope names; keep new state as members of the panel.",
+    "Add no #include to the .cpp. The header may add only `#include \"Widgets/Layout/SScrollBox.h\"`. Add no module, dependency or file.",
+    "Change nothing else the player sees or does: the rows, their order and actions, the reply draft carry, F-21 and the QA code stay exactly as they are."
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "criterion-hooks",
+      "text": "The six QA hooks are declared exactly as written in the public part of SWonderlandSocialHubPanel, each is defined once in the .cpp, and each does what the QA file's header says.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-list-memory",
+      "text": "A refresh keeps the open tab's main list (FRIENDS, REQUESTS, RECENT, the MESSAGES inbox, PARTY's party list) at the player's offset (wl.Qa.SocialHubScroll SC1).",
+      "blocking": true
+    },
+    {
+      "id": "criterion-history-memory",
+      "text": "A refresh keeps a conversation the player scrolled back in at that offset, not at its end (SC2).",
+      "blocking": true
+    },
+    {
+      "id": "criterion-follow-end",
+      "text": "The player's own OpenConversation opens at the end, and at the end a refresh that brings a new message keeps the history at its new end (SC3).",
+      "blocking": true
+    },
+    {
+      "id": "criterion-no-crossing",
+      "text": "The memory never crosses conversations: a different conversation left open by a refresh starts at its end (SC4).",
+      "blocking": true
+    },
+    {
+      "id": "criterion-controls",
+      "text": "With the memory OFF the panel behaves exactly as before the change: after a refresh the lists are at the top and the history at its end (SC5, SC6).",
+      "blocking": true
+    },
+    {
+      "id": "criterion-f21-intact",
+      "text": "F-21 is intact (refreshes and voice changes only ask for a rebuild; the pre-tick runs it; the reply draft carry stays) and the QA code from `namespace WonderlandSocialBlockedQa` to the end of the .cpp is unchanged.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-scope",
+      "text": "Only WonderlandSocialHubPanel.cpp and WonderlandSocialHubPanel.h change, and the #include set is unchanged (the header may add only Widgets/Layout/SScrollBox.h).",
+      "blocking": true
+    },
+    {
+      "id": "criterion-build",
+      "text": "The change compiles in Unreal Engine 5.8 (the Wonderland editor and game targets, warnings as errors). It is verified AFTER this run by the game's pipeline; in this run, judge it from the code: only SScrollBox members the requirements name or the file already uses, every declaration defined, no shadowing, no new include beyond the one allowed. The in-run reviewer judges this by reading; the absence of a build or QA log in this run is NOT a ground to block. The game's post-run pipeline decides the row.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-qa-suites",
+      "text": "On the built game, wl.Qa.SocialHubScroll reads 6 pass / 0 fail and wl.Qa.SocialHubClicks 9 / 0. Both are verified AFTER this run by the game's pipeline; in this run, judge each SC by reading WonderlandSocialHubScrollQa.cpp against the change. The in-run reviewer judges this by reading; the absence of a build or QA log in this run is NOT a ground to block. The game's post-run pipeline decides the row.",
+      "blocking": true
+    }
+  ],
+  "testCommand": "node --test .julius/hub-scroll-static.test.mjs",
+  "workspacePath": "/tmp/julius-workspace/tenant/ws",
+  "limits": {
+    "spendUsd": 30,
+    "repairCycles": 3,
+    "architectMaxOutputTokens": 20000
+  }
+}

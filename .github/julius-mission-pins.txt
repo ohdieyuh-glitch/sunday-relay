@@ -23,3 +23,8 @@ julius-live-mission-6 .github/julius-mission-slice/loader.mjs b811ab9107dbe59b25
 julius-live-mission-2 .github/julius-missions/julius-live-mission-2 eb14c23a310d54566c63f17cae293a680472a6d1
 julius-live-mission-3 .github/julius-missions/julius-live-mission-3 42fb10ca04e556b71017d267215ddcacb62d54c2
 julius-live-mission-5 .github/julius-missions/julius-live-mission-5 c3381ce915673c85b04b6011f8a69a8f25fdc88f
+#
+# Row 14-Unreal (C1, the Social Hub keeps scroll positions) was frozen on 2026-10-07 by the founder's 14d ruling ("A new
+# pinned mission for this row is approved"). A throwaway tree like Missions 2, 3 and 5: one pin, its directory, holds the
+# contract and every seeded byte (task3 8327165b's six files + CORE's read-only QA spec); nothing is sliced from main.
+julius-unreal-mission-1 .github/julius-missions/julius-unreal-mission-1 b830986ae810be36e23be118f18626680c6f62c0
