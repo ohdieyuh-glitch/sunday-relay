@@ -105,6 +105,22 @@ describe('the EOS config file', () => {
     for (const secret of [good.clientSecret, good.roomSalt, good.clientId, good.deploymentId, hashId(good.deploymentId), 'secret-place']) expect(all).not.toContain(secret);
     expect(all).toContain('configured (JSON)');
   });
+
+  it('the JSON room salt holds 32 to 512 characters, as the .env salt does (review a6d5842c, m6): 31 and 513 are refused by name', () => {
+    const plenty = hex(300);
+    const at = (length: number) => {
+      const log: string[] = [];
+      const roomSalt = plenty.slice(0, length);
+      const loaded = loadEosVoiceConfig({ WONDERLAND_EOS_VOICE_CONFIG: 'x' }, { readFile: () => JSON.stringify(config({ roomSalt })), log: (l) => log.push(l) });
+      for (const line of log) expect(line).not.toContain(roomSalt);
+      return { loaded, log };
+    };
+    for (const refused of [31, 16, 513]) {
+      expect(at(refused).loaded, String(refused)).toBeNull();
+      expect(at(refused).log, String(refused)).toEqual(['eos voice: the EOS config file is missing or has out of shape: roomSalt -- party voice answers 503']);
+    }
+    for (const taken of [32, 512]) expect(at(taken).loaded?.roomSalt, String(taken)).toHaveLength(taken);
+  });
 });
 
 /*

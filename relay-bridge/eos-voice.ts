@@ -95,7 +95,8 @@ export interface EosVoiceConfig {
 }
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
-const MIN_ENV_SALT = 32;
+/** The room salt, in either config form: 32 to 512 characters (MAIN's internal review a6d5842c, m6: the JSON form took 16). */
+const MIN_ROOM_SALT = 32;
 
 /**
  * A config PATH variable set to this reads the SAME keys from the process environment instead of a file: for a host whose secrets
@@ -140,7 +141,7 @@ export function parseDotEnv(text: string): Map<string, string> {
  * The EOS config, named by WONDERLAND_EOS_VOICE_CONFIG (a path outside every repo). TWO FORMATS, told apart by the first
  * non-space character:
  *   '{'  the JSON object {productId, sandboxId, deploymentId, clientId, clientSecret, roomSalt}: clientId is the Trusted Server
- *        client's;
+ *        client's, and roomSalt holds 32 to 512 characters (as the .env form's salt does);
  *   else the founder's .env: EOS_PRODUCT_ID, EOS_SANDBOX_ID, EOS_DEPLOYMENT_ID, and the Trusted Server client --
  *        EOS_SERVER_CLIENT_ID + EOS_SERVER_CLIENT_SECRET; the room salt from the SEPARATE file named by
  *        WONDERLAND_EOS_ROOM_SALT_FILE (first line, >= 32 characters).
@@ -187,7 +188,7 @@ function configFromJson(text: string, refuse: (why: string) => null, log: (line:
   const bad = [
     ...(['productId', 'sandboxId', 'deploymentId', 'clientId'] as const).filter((k) => !ID.test(config[k])),
     ...(config.clientSecret.length > 0 && config.clientSecret.length <= 512 ? [] : ['clientSecret']),
-    ...(config.roomSalt.length >= 16 && config.roomSalt.length <= 512 ? [] : ['roomSalt']),
+    ...(config.roomSalt.length >= MIN_ROOM_SALT && config.roomSalt.length <= 512 ? [] : ['roomSalt']),
   ];
   if (bad.length > 0) return refuse(`the EOS config file is missing or has out of shape: ${bad.join(', ')}`);
   log('eos voice: configured (JSON)');
@@ -223,8 +224,8 @@ function configFromKeys(keys: ReadonlyMap<string, string>, source: string, env: 
       return refuse('the room salt file could not be read');
     }
   }
-  if (salt.length < MIN_ENV_SALT || salt.length > 512) {
-    return refuse(saltPath === EOS_FROM_ENV ? `${EOS_ROOM_SALT_ENV} must hold ${MIN_ENV_SALT} to 512 characters` : `the room salt file must hold one line of ${MIN_ENV_SALT} to 512 characters`);
+  if (salt.length < MIN_ROOM_SALT || salt.length > 512) {
+    return refuse(saltPath === EOS_FROM_ENV ? `${EOS_ROOM_SALT_ENV} must hold ${MIN_ROOM_SALT} to 512 characters` : `the room salt file must hold one line of ${MIN_ROOM_SALT} to 512 characters`);
   }
   log('eos voice: client kind server');
   return { productId: get('EOS_PRODUCT_ID'), sandboxId: get('EOS_SANDBOX_ID'), deploymentId: get('EOS_DEPLOYMENT_ID'), clientId: client.id, clientSecret: client.secret, roomSalt: salt };
