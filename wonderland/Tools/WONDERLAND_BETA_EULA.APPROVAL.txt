@@ -1,0 +1,15 @@
+WONDERLAND BETA EULA: THE APPROVED SHIPPED BYTES (this record is NOT shipped)
+eula_sha256 17528cf110349020af0ce4fb80d75995547df36a6cd47c9b299f19128738e3af
+scope REHEARSAL
+approved_by CORE, as a REHEARSAL PIN of the committed draft only. This is NOT an approval of the text.
+date 2026-10-07T14:32:02Z
+
+What the pin is: the sha256 of WONDERLAND_BETA_EULA.txt exactly as build step 6c writes it into the package (UTF-8, no BOM, CRLF
+line ends) from the text committed beside this record. build_beta_rc.ps1 (v4) refuses a build whose EULA bytes differ, and
+core_final_static.py (S14, v3.3) takes its pin from this record only.
+
+What it is not: a FINAL scope. A final package needs:
+- the founder's acceptance of the text;
+- counsel's review per WONDERLAND_BETA_EULA.REVIEW_NOTES.md.
+Both are recorded here by a new commit that changes "scope REHEARSAL" to "scope FINAL" and names who approved. Until then, the
+static scan of any package built from this record reads at best PASS-REHEARSAL.

@@ -24,9 +24,14 @@ param([Parameter(Mandatory = $true)][string]$Version,
       [string]$ArchiveDir = 'C:\dev\iwonder\_wonderland_beta_archive',
       [string]$ReleaseRoot = 'C:\dev\iwonder\_wonderland_beta_release',
       [string]$AppLocalRoot = 'C:\dev\iwonder\_wonderland_applocal',
-      [switch]$SkipBuild)
+      [switch]$SkipBuild, [switch]$SkipBuildIsNotEvidence, [switch]$GatesOnly)
 $ErrorActionPreference = 'Stop'
+# v4 (R3 m3): no GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE ... can redirect a git call of this build
+Get-ChildItem env: | Where-Object { $_.Name -like 'GIT_*' } | ForEach-Object { Remove-Item "env:$($_.Name)" }
+if ($SkipBuild -and -not $SkipBuildIsNotEvidence) { throw '-SkipBuild re-packs an existing archive: it is NOT evidence. Pass -SkipBuildIsNotEvidence as well to run it anyway.' }
 $ProjectDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+# v4 (R3 m3): the script running IS the project's Toolsuild_beta_rc.ps1 (0a then proves that file is the committed one)
+if ((Resolve-Path $PSCommandPath).Path -ne (Resolve-Path (Join-Path $ProjectDir 'Tools\build_beta_rc.ps1')).Path) { throw "Run the project's own Tools\build_beta_rc.ps1, not a copy ($PSCommandPath)" }
 $Project = Join-Path $ProjectDir 'Wonderland.uproject'
 $UAT = 'C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat'
 if (Get-Process UnrealEditor*, Wonderland* -ErrorAction SilentlyContinue) { throw 'Close the editor and any running Wonderland first.' }
@@ -34,6 +39,99 @@ New-Item -ItemType Directory -Force $ReleaseRoot | Out-Null
 $Log = Join-Path $ReleaseRoot "build_$Version.log"
 function Say([string]$Text) { $Text; $Text | Out-File -Append -Encoding utf8 $Log }
 '' | Out-File -Encoding utf8 $Log
+# v3 (2026-10-07): ANY throw from here on is written into the build log before the script stops (reviewer 7: a 6b / 6c / git
+# failure used to leave its reason in neither the build log nor the console log)
+trap { Say "FAILED: $_"; break }
+
+# 0. THE PRE-COOK GATES (v3, CORE's internal review round 2). Everything that can fail without a cook fails HERE, before the label
+# and BuildInfo.txt are written (a failure between that write and the try/finally below would leave BuildInfo.txt in the tree, and
+# the founder's editor would then show a build that never happened).
+$engineRoot = Split-Path (Split-Path (Split-Path (Split-Path $UAT)))
+$commitFull = (& git -C $ProjectDir rev-parse HEAD).Trim()
+$gitTop = "$(& git -C $ProjectDir rev-parse --show-toplevel)".Trim().Replace('/', '\').TrimEnd('\')
+if (-not $gitTop -or -not $ProjectDir.StartsWith($gitTop + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "git's toplevel '$gitTop' does not hold the project $ProjectDir" }
+Say "BUILD COMMIT $commitFull"
+# 0a. the Tools files that write SHIPPED bytes must be the ones in THIS commit (checked against the sha recorded now, not a later HEAD).
+#     ls-tree is silent when a path is absent (no native stderr line, which ErrorActionPreference Stop would turn into a bare stop).
+$blob = @{}
+foreach ($t in 'Tools/WONDERLAND_BETA_EULA.txt', 'Tools/WONDERLAND_BETA_EULA.APPROVAL.txt', 'Tools/make_package_notices.py', 'Tools/build_beta_rc.ps1') {
+  $inCommit = "$(& git -C $ProjectDir ls-tree --object-only $commitFull -- $t)".Trim()
+  $here = "$(& git -C $ProjectDir hash-object -- $t)".Trim()
+  if (-not $inCommit) { throw "$t is not in commit $commitFull" }
+  if ($inCommit -ne $here) { throw "$t in the working tree ($here) is not the one in commit $commitFull ($inCommit)" }
+  $blob[$t] = $inCommit
+}
+$python = (Get-Command python -ErrorAction Stop).Source
+$noticesWork = Join-Path $ReleaseRoot "notices_$Version"
+if (Test-Path $noticesWork) { Remove-Item -Recurse -Force $noticesWork }
+New-Item -ItemType Directory -Force $noticesWork | Out-Null
+# v4 (R3 M3): the build USES the committed bytes only. Each file is written out of the commit (git cat-file, raw bytes), checked
+# against its blob id now, and again right before each use; the working tree is never read for them after this point.
+$committed = Join-Path $noticesWork 'committed'
+New-Item -ItemType Directory -Force $committed | Out-Null
+function Get-CommittedCopy([string]$T) {
+  $out = Join-Path $committed (Split-Path $T -Leaf)
+  if (-not (Test-Path $out)) {
+    $p = Start-Process -FilePath git -NoNewWindow -Wait -PassThru -ArgumentList '-C', "`"$ProjectDir`"", 'cat-file', 'blob', $blob[$T] -RedirectStandardOutput $out -RedirectStandardError "$out.err"
+    if ($p.ExitCode -ne 0) { throw "git cat-file $($blob[$T]) ($T) exit $($p.ExitCode)" }
+  }
+  $now = "$(& git -C $ProjectDir hash-object -- $out)".Trim()
+  if ($now -ne $blob[$T]) { throw "the committed copy of $T ($out) is $now, not the commit's $($blob[$T])" }
+  return $out
+}
+$genCopy = Get-CommittedCopy 'Tools/make_package_notices.py'
+$eulaCopy = Get-CommittedCopy 'Tools/WONDERLAND_BETA_EULA.txt'
+$apprCopy = Get-CommittedCopy 'Tools/WONDERLAND_BETA_EULA.APPROVAL.txt'
+Say "COMMITTED COPIES the generator, the EULA and its approval record, out of $commitFull into $committed"
+# 0b. the notices generator's own selftest (its controls must behave before it judges anything)
+$st = Start-Process -FilePath $python -NoNewWindow -Wait -PassThru -ArgumentList '-I', "`"$(Get-CommittedCopy 'Tools/make_package_notices.py')`"", '--selftest' `
+  -RedirectStandardOutput (Join-Path $noticesWork 'selftest.txt') -RedirectStandardError (Join-Path $noticesWork 'selftest.err')
+if ($st.ExitCode -ne 0) { throw "make_package_notices.py --selftest exit $($st.ExitCode) (see $noticesWork\selftest.txt)" }
+Say "NOTICES generator selftest: $((Get-Content (Join-Path $noticesWork 'selftest.txt') | Select-Object -Last 1))"
+# 0c. THE BETA EULA's parts (founder Decision 1): the SAME 9 phrases the static gate (core_final_static S14) requires, matched with
+#     whitespace flattened, plus its ownership screen (R-1). It is checked again at 6c on the file actually written.
+$EulaMust = @('END USER LICENSE AGREEMENT', 'LEGAL REVIEW REQUIRED', 'EPIC MAKES NO REPRESENTATIONS, WARRANTIES OR CONDITIONS',
+              'DISCLAIM EVERY REPRESENTATION, WARRANTY, CONDITION AND LIABILITY', 'Epic is not responsible for Wonderland',
+              'You may not extract any part of the Unreal Engine', 'THIRD_PARTY_NOTICES.txt', 'does not withdraw or narrow the rights',
+              'does not itself state who holds those rights')
+$copy = [string][char]0x00A9
+# v4 (R3 M4): the SAME list as core_final_static.py's EULA_MUST_NOT (v3.3), matched on the FLATTENED text (every whitespace run,
+# newlines and no-break spaces included, is one space)
+$EulaMustNot = $copy + '|\(c\)\s*\d{4}|\bcopyright\s+(\d{4}|\(c\)|' + $copy + '|i\.wonder|ohdieyuh)|\bcopyright\s*:|all rights reserved|\bowned by\b|' +
+               '\bis the (sole |exclusive )?owner\b|\b(i\.wonder|we)\s+(own|owns|retain|retains|reserve|reserves)\b|\bowns?\s+wonderland\b|' +
+               '\breserves?\s+all\s+rights\b|\bproprietary (property )?(of|to) i\.wonder|\bproprietary\s+software\b|' +
+               'all right,? title,? and interest|\bthe (sole |exclusive )?property of\b|\bintellectual property of\b|\bexclusive (owner|property)\b'
+function Test-Eula([string]$Text, [string]$Where) {
+  $flat = [regex]::Replace($Text, '[\s\u00A0\u2007\u202F\u2028\u2029]+', ' ')
+  foreach ($m in $EulaMust) { if (-not $flat.Contains($m)) { throw "The Beta EULA ($Where) lost a required part: '$m'" } }
+  $hit = [regex]::Match($flat, $EulaMustNot, 'IgnoreCase')
+  if ($hit.Success) { throw "The Beta EULA ($Where) asserts ownership / copyright: '$($hit.Value)' (R-1 is open)" }
+}
+# v4 (R3 M4): THE PINNED BYTES. The approval record (committed, not shipped) names the sha256 of the EULA AS SHIPPED (UTF-8, CRLF:
+# exactly what 6c writes) and its scope. A REHEARSAL scope pins the draft for rehearsals; only a FINAL scope (the founder's
+# acceptance, recorded by a new commit) can ship a final package.
+$appr = [IO.File]::ReadAllText($apprCopy)
+$eulaPin = ([regex]::Match($appr, '(?m)^eula_sha256 ([0-9a-fA-F]{64})\s*$')).Groups[1].Value.ToUpperInvariant()
+$eulaScope = ([regex]::Match($appr, '(?m)^scope (REHEARSAL|FINAL)\s*$')).Groups[1].Value
+if (-not $eulaPin -or -not $eulaScope) { throw "The EULA approval record ($apprCopy) has no 'eula_sha256 <64 hex>' or 'scope REHEARSAL|FINAL' line" }
+$eulaText = [IO.File]::ReadAllText($eulaCopy).Replace("`r`n", "`n")
+Test-Eula $eulaText 'the committed text'
+$eulaBytes = (New-Object Text.UTF8Encoding $false).GetBytes($eulaText.Replace("`n", "`r`n"))
+$eulaSha = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($eulaBytes)).Replace('-', '')
+if ($eulaSha -ne $eulaPin) { throw "The Beta EULA's shipped bytes would be $eulaSha, not the approved $eulaPin (WONDERLAND_BETA_EULA.APPROVAL.txt)" }
+Say "EULA the committed agreement has every required part, no ownership assertion, and its shipped bytes are the approved $($eulaPin.Substring(0, 12)) (scope $eulaScope)"
+# 0d. THE THIRD-PARTY RECORDS FOR THIS GAME TARGET. UAT and UBT are single-instance per engine install; here, before the cook, a
+#     collision with another lane's UAT / UBT costs seconds (fail fast; no mutex wait). UAT is called directly, not through
+#     RunUAT.bat (cmd would take the '|' of -Target as a pipe); both tools write to files.
+$tpsLog = Join-Path $noticesWork 'ListThirdPartySoftware.log'
+$dotnet = Join-Path $engineRoot 'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe'
+$tps = Start-Process -FilePath $dotnet -WorkingDirectory (Join-Path $engineRoot 'Engine\Binaries\DotNET\AutomationTool') -NoNewWindow -Wait -PassThru `
+  -ArgumentList 'AutomationTool.dll', 'ListThirdPartySoftware', "-Project=`"$Project`"", '-Target=Wonderland|Development|Win64' `
+  -RedirectStandardOutput $tpsLog -RedirectStandardError "$tpsLog.err"
+if ($tps.ExitCode -ne 0) { throw "ListThirdPartySoftware exit code $($tps.ExitCode) (see $tpsLog and $tpsLog.err)" }
+Say "NOTICES the third-party records for this target are listed (before the cook): $tpsLog"
+# v4: -GatesOnly runs the pre-cook gates (0a-0d) and stops BEFORE the label and BuildInfo.txt are written: a gate test, never a build
+if ($GatesOnly) { Say 'GATES ONLY: every pre-cook gate passed; stopping before the label (nothing written into the tree)'; exit 0 }
 
 # 1. the build's name
 $infoDir = Join-Path $ProjectDir 'BuildInfo'
@@ -41,11 +139,18 @@ $infoFile = Join-Path $infoDir 'BuildInfo.txt'
 if ($SkipBuild) {
   # an old archive keeps the label it was built with: never stamp HEAD onto something HEAD did not build
   $label = (Get-Content -Raw (Join-Path $ArchiveDir 'Windows\Wonderland\BuildInfo\BuildInfo.txt')).Trim()
+  # v3: the current tree's notices / EULA / README template go into this release, so the archive must be HEAD's own build, clean
+  $headSha = (& git -C $ProjectDir rev-parse --short=8 HEAD).Trim()
+  $skipDirty = (& git --no-optional-locks -C $ProjectDir status --porcelain --untracked-files=all -- Source Config RelaySkins UiArt Companions ProjectAvatars RelayCubs WorldDesign/Look Wonderland.uproject Tools/build_beta_rc.ps1 Tools/make_package_notices.py Tools/WONDERLAND_BETA_EULA.txt) -join ''
+  if ($label -notmatch "\| build $headSha \|" -or $skipDirty) { throw "-SkipBuild refused: the archive's label '$label' is not HEAD $headSha, or the tree is dirty" }
 } else {
   $sha = (& git -C $ProjectDir rev-parse --short=8 HEAD).Trim()
   # TRACKED FILES ONLY: Content is the junction to the shared world tree and always reads as untracked here, which made
   # RC2's label say +local-changes for nothing. The world itself is fingerprinted by its map checkpoints, not by git.
-  $dirty = (& git -C $ProjectDir status --porcelain --untracked-files=no -- Source Config RelaySkins UiArt Companions ProjectAvatars RelayCubs WorldDesign/Look) -join ''
+  # 2026-10-07: lock-free (no index write into the shared .git during another lane's heavy window), and every path that produces
+  # SHIPPED bytes counts: the uproject (its plugin list decides what ships) and the Tools files that write the README template,
+  # the third-party notices and the Beta EULA.
+  $dirty = (& git --no-optional-locks -C $ProjectDir status --porcelain --untracked-files=all -- Source Config RelaySkins UiArt Companions ProjectAvatars RelayCubs WorldDesign/Look Wonderland.uproject Tools/build_beta_rc.ps1 Tools/make_package_notices.py Tools/WONDERLAND_BETA_EULA.txt) -join ''
   $suffix = if ($dirty) { '+local-changes' } else { '' }
   $label = "Private Beta $Version | build $sha$suffix | $(Get-Date -Format 'yyyy-MM-dd')"
   New-Item -ItemType Directory -Force $infoDir | Out-Null
@@ -204,31 +309,33 @@ $appLocal = Test-Path (Join-Path $dst 'Wonderland\Binaries\Win64\vcruntime140.dl
 if (-not ($redist -and $appLocal)) { throw "Prerequisites missing from the release: vc_redist.x64.exe $redist, app-local vcruntime140.dll $appLocal" }
 
 # 6b. THE THIRD-PARTY NOTICES (founder ruling 2026-10-07: "Preserve third-party software/license obligations independently of the
-# project-level proprietary license"). The package redistributes BSD (Ogg/Vorbis), MIT (MsQuic, ONNX Runtime), Apache-2.0 (oneTBB),
+# project-level proprietary license"). The package redistributes BSD (Ogg/Vorbis), MIT (MsQuic), Apache-2.0 (oneTBB),
 # font and vendor binaries; Epic's staged NOTICES.txt carries one FreeType line. The Unreal Engine EULA's Third Party Software
 # clause names Engine/Source/ThirdParty/Licenses as where those terms live. UAT lists every third-party record for THIS game
-# target; make_package_notices.py builds THIRD_PARTY_NOTICES.txt from them and FAILS the build if any redistributed binary or
-# font in the package maps to none. UAT is called directly, not through RunUAT.bat (cmd would take the '|' of -Target as a pipe),
-# and both tools write to files (a native stderr line through 2>&1 is a terminating error under ErrorActionPreference Stop).
-$engineRoot = Split-Path (Split-Path (Split-Path (Split-Path $UAT)))
-$noticesWork = Join-Path $ReleaseRoot "notices_$Version"
-if (Test-Path $noticesWork) { Remove-Item -Recurse -Force $noticesWork }
-New-Item -ItemType Directory -Force $noticesWork | Out-Null
-$tpsLog = Join-Path $noticesWork 'ListThirdPartySoftware.log'
-$dotnet = Join-Path $engineRoot 'Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe'
-$tps = Start-Process -FilePath $dotnet -WorkingDirectory (Join-Path $engineRoot 'Engine\Binaries\DotNET\AutomationTool') -NoNewWindow -Wait -PassThru `
-  -ArgumentList 'AutomationTool.dll', 'ListThirdPartySoftware', "-Project=`"$Project`"", '-Target=Wonderland|Development|Win64' `
-  -RedirectStandardOutput $tpsLog -RedirectStandardError "$tpsLog.err"
-if ($tps.ExitCode -ne 0) { throw "ListThirdPartySoftware failed with exit code $($tps.ExitCode) (see $tpsLog)" }
-$python = (Get-Command python -ErrorAction Stop).Source
+# target (step 1b, before the cook); make_package_notices.py builds THIRD_PARTY_NOTICES.txt from them and FAILS the build if any
+# redistributed binary, font or certificate bundle in the package, loose or packed in the pak (the staged UFS manifest), maps to
+# no record with license terms (exit 1 = a GAP; exit 2 = an ERROR, never mistaken for a gap).
+$ufsManifest = Join-Path $src 'Manifest_UFSFiles_Win64.txt'
+if (-not (Test-Path $ufsManifest)) { Say "FAILED: no UFS manifest at $ufsManifest (the files packed in the pak cannot be judged)"; throw "No UFS manifest at $ufsManifest" }
+# v4 (R3 m4): an empty or truncated manifest would judge nothing packed: it must look like the staged pak's own list
+$ufsLines = @(Get-Content $ufsManifest | Where-Object { $_.Trim() })
+foreach ($anchor in 'Engine/Content/Certificates/ThirdParty/cacert.pem', 'Engine/Content/Internationalization/icudt', 'Engine/Config/BaseEngine.ini') {
+  if (-not @($ufsLines | Where-Object { $_.StartsWith($anchor) }).Count) { throw "The UFS manifest $ufsManifest has no '$anchor' entry: not a whole list" }
+}
+if ($ufsLines.Count -lt 1000) { throw "The UFS manifest $ufsManifest lists only $($ufsLines.Count) files (< 1000): not a whole list" }
 $noticesOut = Join-Path $noticesWork 'out'
 $gen = Start-Process -FilePath $python -NoNewWindow -Wait -PassThru `
-  -ArgumentList '-I', "`"$(Join-Path $PSScriptRoot 'make_package_notices.py')`"", '--tps-log', "`"$tpsLog`"", '--engine', "`"$engineRoot`"", '--out', "`"$noticesOut`"", '--shipped', "`"$dst`"" `
+  -ArgumentList '-I', "`"$(Get-CommittedCopy 'Tools/make_package_notices.py')`"", '--tps-log', "`"$tpsLog`"", '--engine', "`"$engineRoot`"", '--out', "`"$noticesOut`"", '--shipped', "`"$dst`"", '--ufs-manifest', "`"$ufsManifest`"" `
   -RedirectStandardOutput (Join-Path $noticesWork 'make_package_notices.txt') -RedirectStandardError (Join-Path $noticesWork 'make_package_notices.err')
-Get-Content (Join-Path $noticesWork 'make_package_notices.txt') | Select-Object -First 1 | ForEach-Object { Say "NOTICES $_" }
-if ($gen.ExitCode -ne 0) { throw "THIRD_PARTY_NOTICES: a redistributed binary or font maps to no third-party record (exit $($gen.ExitCode); see $noticesWork)" }
+$genOut = @(Get-Content (Join-Path $noticesWork 'make_package_notices.txt') -Encoding UTF8)
+$genOut | Select-Object -First 2 | ForEach-Object { Say "NOTICES $_" }
+$genOut | Where-Object { $_ -match '^\s*GAP\s|^ERROR' } | ForEach-Object { Say "NOTICES $_" }
+Get-Content (Join-Path $noticesWork 'make_package_notices.err') -Tail 5 -ErrorAction SilentlyContinue | Where-Object { $_ } | ForEach-Object { Say "NOTICES stderr: $_" }
+$gapsLine = $genOut | Where-Object { $_ -match '^GAPS: (\d+)$' } | Select-Object -Last 1
+if ($gen.ExitCode -eq 1 -and $gapsLine -and [int]([regex]::Match($gapsLine, '\d+').Value) -gt 0) { throw "THIRD_PARTY_NOTICES: a redistributed file maps to no third-party record with license terms ($gapsLine; see $noticesWork)" }
+if ($gen.ExitCode -ne 0) { throw "THIRD_PARTY_NOTICES: the generator failed (exit $($gen.ExitCode): an ERROR, not a gap; see $noticesWork)" }
 Copy-Item (Join-Path $noticesOut 'THIRD_PARTY_NOTICES.txt') (Join-Path $dst 'THIRD_PARTY_NOTICES.txt')
-Say "NOTICES THIRD_PARTY_NOTICES.txt written: every redistributed binary and font mapped (GAPS 0)"
+Say "NOTICES THIRD_PARTY_NOTICES.txt written: every redistributed binary, font and certificate bundle mapped, loose and packed (GAPS 0)"
 
 # 6c. THE BETA END USER LICENSE AGREEMENT (founder Decision 1, 2026-10-07T11:41Z: "add a dedicated end-user agreement to the
 # distributed package. Do NOT rely only on README wording"). The Unreal Engine EULA's Section 4(c) lets end users use the engine
@@ -236,15 +343,14 @@ Say "NOTICES THIRD_PARTY_NOTICES.txt written: every redistributed binary and fon
 # warranties, conditions, and liabilities related to the Licensed Technology". A DRAFT: legal review is required before any wider
 # or public distribution (WONDERLAND_BETA_EULA.REVIEW_NOTES.md, not shipped). Copied verbatim with Windows line endings; the build
 # FAILS if the file is missing or has lost the Epic disclaimer, the third-party pointer or the no-revocation sentence.
-$eulaSrc = Join-Path $PSScriptRoot 'WONDERLAND_BETA_EULA.txt'
-if (-not (Test-Path $eulaSrc)) { throw "The Beta EULA is missing: $eulaSrc" }
-$eula = [IO.File]::ReadAllText($eulaSrc).Replace("`r`n", "`n")
-foreach ($must in @('END USER LICENSE AGREEMENT', 'EPIC MAKES NO REPRESENTATIONS, WARRANTIES OR CONDITIONS', 'Epic is not responsible for Wonderland',
-                    'THIRD_PARTY_NOTICES.txt', 'does not withdraw or narrow the rights', 'LEGAL REVIEW REQUIRED')) {
-  if (-not $eula.Contains($must)) { throw "The Beta EULA lost a required part: '$must'" }
-}
+# v4 (R3 M3 / M4): THE COMMITTED COPY ONLY (re-verified against its blob id here), written with CRLF, then PINNED
+$eula = [IO.File]::ReadAllText((Get-CommittedCopy 'Tools/WONDERLAND_BETA_EULA.txt')).Replace("`r`n", "`n")
+Test-Eula $eula 'the text to write'
 [IO.File]::WriteAllText((Join-Path $dst 'WONDERLAND_BETA_EULA.txt'), $eula.Replace("`n", "`r`n"), (New-Object Text.UTF8Encoding $false))
-Say "EULA WONDERLAND_BETA_EULA.txt written (draft: legal review required before wider or public distribution)"
+Test-Eula ([IO.File]::ReadAllText((Join-Path $dst 'WONDERLAND_BETA_EULA.txt'))) 'the file written into the package'
+$writtenSha = (Get-FileHash -Algorithm SHA256 (Join-Path $dst 'WONDERLAND_BETA_EULA.txt')).Hash
+if ($writtenSha -ne $eulaPin) { throw "WONDERLAND_BETA_EULA.txt as written is $writtenSha, not the approved $eulaPin" }
+Say "EULA WONDERLAND_BETA_EULA.txt written, = the approved bytes $($eulaPin.Substring(0, 12)) (scope $eulaScope; draft: legal review required before wider or public distribution)"
 
 # 7. the zip, and the facts about it
 $zip = Join-Path $ReleaseRoot "$name.zip"
@@ -267,7 +373,12 @@ $manifest = @(
   "excluded     Saved/, *.pdb, RelaySkins/_reference, RelaySkins/_previous, ProjectAvatars/_old, .gitignore, Manifest_*.txt, WorldDesign/Look records but practical_lights.json, Vulkan VkLayer_* debug layers, Engine/Extras/GPUDumpViewer, vc_redist.arm64.exe, retired figures (Apollo*, ArdenInfernal*, Bee, Hagoromo, SkeletonFlame, SkeletonFlameV1 and their cubs), UiArt/Social/social-preview*.json (the developer preview's synthetic people)",
   "installed    Engine/Build/InstalledProjectBuild.txt (saves and logs in %LOCALAPPDATA%\Wonderland\Saved)",
   "notices      THIRD_PARTY_NOTICES.txt (from the engine's third-party records for this target: make_package_notices.py, GAPS 0) beside Epic's NOTICES.txt",
-  "eula         WONDERLAND_BETA_EULA.txt (the private-Beta end user license agreement; DRAFT, legal review required before wider or public distribution)"
+  "eula         WONDERLAND_BETA_EULA.txt (the private-Beta end user license agreement; DRAFT, legal review required before wider or public distribution)",
+  "notices_sha256 $((Get-FileHash -Algorithm SHA256 (Join-Path $dst 'THIRD_PARTY_NOTICES.txt')).Hash)",
+  "eula_scope   $eulaScope (WONDERLAND_BETA_EULA.APPROVAL.txt at $commitFull)",
+  "skip_build   $(if ($SkipBuild) { 'yes: an existing archive re-packed, NOT EVIDENCE' } else { 'no' })",
+  "eula_sha256  $((Get-FileHash -Algorithm SHA256 (Join-Path $dst 'WONDERLAND_BETA_EULA.txt')).Hash)",
+  "tps_log_sha256 $((Get-FileHash -Algorithm SHA256 $tpsLog).Hash)"
 )
 $manifest | Set-Content -Encoding utf8 (Join-Path $ReleaseRoot "RELEASE_MANIFEST_$Version.txt")
 $manifest | ForEach-Object { Say $_ }
