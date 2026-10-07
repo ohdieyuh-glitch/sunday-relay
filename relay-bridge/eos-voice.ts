@@ -11,8 +11,9 @@ import type { PartyVoiceGrant, PartyVoiceTokenMinter } from './wonderland-social
  *   - EosVoiceTokenMinter: a Trusted Server access token (client credentials), cached; createRoomToken for ONE bound PUID in the
  *     party's room; the participant token handed back as the JSON EOSVoiceChat expects.
  *   - createVoiceRemovals: after a committed party departure (leave, a leader's removal, a block's F1 separation), the departed
- *     PUID is removed from that party's room server-side -- Epic's removeParticipant also revokes their room token -- retried
- *     with backoff, never blocking or failing the social change.
+ *     member's PUIDs -- every one this process minted a token for there, plus the bound one -- are removed from that party's
+ *     room server-side (Epic's removeParticipant also revokes their room token), retried with backoff, never blocking or
+ *     failing the social change.
  * NOTHING SECRET IS LOGGED: room ids and PUIDs appear only hashed ('#' + sha1, 12 hex); never a client secret, an access token, a
  * participant token or the media server address. The HTTP is behind an injectable fetch, so tests use a recorded fake; the real
  * API is exercised only by the R16 run.
@@ -319,12 +320,24 @@ class EosHttpError extends Error {
 
 const asRecord = (v: unknown): Record<string, unknown> => (v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 
-export class EosVoiceTokenMinter implements PartyVoiceTokenMinter {
+export class EosVoiceTokenMinter implements PartyVoiceTokenMinter, VoiceRemovalTarget {
   readonly providerId = 'eos';
   private token: { value: string; expiresAtMs: number } | null = null;
   private readonly fetchImpl: EosFetch;
   private readonly log: (line: string) => void;
   private readonly now: () => number;
+  /**
+   * EVERY ROOM TOKEN THIS PROCESS MINTED (MAIN's internal review a6d5842c, B1): player -> room -> PUID -> the serial of that PUID's
+   * latest mint. A departure, and a re-bind, take out every PUID minted for that player in that room, not only the one bound now
+   * (a re-bind replaces the binding, and Epic does not validate PUIDs, so the replaced one could keep listening).
+   * PER PROCESS: this lives in the bridge's memory (the hosted bridge runs ONE instance, as presence does), and a restart forgets
+   * it. After a restart, a departure removes the binding's PUID only (the fallback, read when the removal runs). A PUID that a
+   * re-bind replaced was already taken out of the room by that re-bind (wonderland-social-routes.ts), and the binding table
+   * survives a restart. What a restart can still lose: a token minted for a PUID that is neither bound now nor was the
+   * replaced binding.
+   */
+  private readonly minted = new Map<string, Map<string, Map<string, number>>>();
+  private mintSerial = 0;
 
   constructor(private readonly config: EosVoiceConfig, deps: EosVoiceDeps = {}) {
     this.fetchImpl = deps.fetchImpl ?? (globalThis.fetch as unknown as EosFetch);
@@ -387,6 +400,7 @@ export class EosVoiceTokenMinter implements PartyVoiceTokenMinter {
     const mine = participants.find((p) => p[EPIC.roomAnswer.puid] === puid);
     const token = typeof mine?.[EPIC.roomAnswer.token] === 'string' ? (mine[EPIC.roomAnswer.token] as string) : '';
     if (clientBaseUrl === '' || token === '') throw new Error('createRoomToken answered without a media endpoint or a token for the caller');
+    this.recordMint(roomId, input.participantId, puid);
     this.log(`eos voice: room token minted room=${hashId(roomId)} puid=${hashPuid(puid)}`);
     return {
       providerId: this.providerId,
@@ -405,6 +419,54 @@ export class EosVoiceTokenMinter implements PartyVoiceTokenMinter {
       throw error;
     }
   }
+
+  private recordMint(roomId: string, userId: string, puid: string): void {
+    let rooms = this.minted.get(userId);
+    if (rooms === undefined) this.minted.set(userId, (rooms = new Map()));
+    let puids = rooms.get(roomId);
+    if (puids === undefined) rooms.set(roomId, (puids = new Map()));
+    this.mintSerial += 1;
+    puids.set(puid, this.mintSerial);
+  }
+
+  /** Every PUID this process minted a room token for, for this player in this room, each with the serial of its latest mint. */
+  mintedIn(roomId: string, userId: string): ReadonlyMap<string, number> {
+    return new Map(this.minted.get(userId)?.get(roomId) ?? []);
+  }
+
+  /** That PUID is out of the room: forget it -- unless it was minted again after `serial` (that newer token is still live). */
+  forgetMinted(roomId: string, userId: string, puid: string, serial: number | undefined): void {
+    const rooms = this.minted.get(userId);
+    const puids = rooms?.get(roomId);
+    if (rooms === undefined || puids === undefined || serial === undefined || puids.get(puid) !== serial) return;
+    puids.delete(puid);
+    if (puids.size === 0) rooms.delete(roomId);
+    if (rooms.size === 0) this.minted.delete(userId);
+  }
+
+  /**
+   * THE ROUTE'S REMOVAL (PartyVoiceTokenMinter.removeFromRoom): every PUID this process minted for the player in the party's room,
+   * plus `puids` (a binding, whose token may predate a restart), one DELETE each. Resolves when every one is confirmed (an
+   * absent participant counts); otherwise rejects, after trying them all. Ids are logged hashed; the error names none.
+   */
+  async removeFromRoom(input: { readonly partyId: string; readonly participantId: string; readonly puids: readonly string[] }): Promise<void> {
+    const roomId = this.roomIdFor(input.partyId);
+    const minted = this.mintedIn(roomId, input.participantId);
+    const given = input.puids.map((p) => normalizePuid(p)).filter((p): p is string => p !== null);
+    const targets = [...new Set([...minted.keys(), ...given])];
+    let failed = 0;
+    for (const puid of targets) {
+      try {
+        await this.removeParticipant(roomId, puid);
+        this.forgetMinted(roomId, input.participantId, puid, minted.get(puid));
+        this.log(`eos voice: removed room=${hashId(roomId)} puid=${hashPuid(puid)}`);
+      } catch (error) {
+        failed += 1;
+        this.log(`eos voice: removal failed room=${hashId(roomId)} puid=${hashPuid(puid)} (${error instanceof EosHttpError ? error.status : 'network'})`);
+      }
+    }
+    if (failed > 0) throw new Error(`${failed} of ${targets.length} participant removals failed`);
+  }
 }
 
 /* ------------------------------------------------------------------------------------------------ server-side removal */
@@ -412,6 +474,10 @@ export class EosVoiceTokenMinter implements PartyVoiceTokenMinter {
 export interface VoiceRemovalTarget {
   roomIdFor(partyId: string): string;
   removeParticipant(roomId: string, puid: string): Promise<void>;
+  /** Every PUID this process minted a token for, for this player in this room (EosVoiceTokenMinter's record). */
+  mintedIn(roomId: string, userId: string): ReadonlyMap<string, number>;
+  /** That PUID is out of the room: forget it, unless it was minted again after `serial`. */
+  forgetMinted(roomId: string, userId: string, puid: string, serial: number | undefined): void;
 }
 
 export interface VoiceRemovals {
@@ -422,9 +488,13 @@ export interface VoiceRemovals {
 }
 
 /**
- * SERVER-SIDE REMOVAL (review #3, #6): a departed member's PUID is taken out of that party's room even if their client misbehaves.
- * In departure order, one at a time; each removal tried up to 1 + backoff.length times (default 0.25 s, 1 s, 4 s), then given up
- * and logged. A departed member with no bound PUID has nothing to remove. Ids are logged hashed.
+ * SERVER-SIDE REMOVAL (review #3, #6): a departed member is taken out of that party's room even if their client misbehaves.
+ * WHICH PUIDs (MAIN's internal review a6d5842c, B1): every PUID this process minted a token for, for that member in that room
+ * (read when the removal runs, so a join racing the departure is caught too), plus the PUID bound to them now -- the fallback for
+ * a token minted before a restart (see EosVoiceTokenMinter.minted for the per-process limit). In departure order, one at a time;
+ * each PUID tried up to 1 + backoff.length times (default 0.25 s, 1 s, 4 s), then given up and logged; a PUID given up on stays
+ * recorded, so the next departure from that room tries it again. A member who never joined voice has nothing to remove. Ids are
+ * logged hashed.
  */
 export function createVoiceRemovals(deps: {
   readonly target: VoiceRemovalTarget;
@@ -437,16 +507,24 @@ export function createVoiceRemovals(deps: {
   const backoff = deps.backoffMs ?? [250, 1000, 4000];
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   let chain: Promise<void> = Promise.resolve();
-  const removeOne = async (d: PartyDeparture): Promise<void> => {
+  /** The PUID bound to the member now, if any; a lookup that fails is logged (hashed) and leaves the minted PUIDs to remove. */
+  const boundPuidOf = async (userId: string): Promise<string | undefined> => {
     const bindings = deps.bindings();
-    const puid = bindings === null ? undefined : (await bindings.puidsOf([d.userId])).get(d.userId);
-    const roomId = deps.target.roomIdFor(d.partyId);
-    if (puid === undefined) return; // never joined voice: nothing to remove
+    if (bindings === null) return undefined;
+    try {
+      return (await bindings.puidsOf([userId])).get(userId);
+    } catch {
+      log(`eos voice: binding lookup failed user=${hashId(userId)}`);
+      return undefined;
+    }
+  };
+  /** True once Epic confirmed it (or it was already gone); false when given up. */
+  const removeWithRetries = async (roomId: string, puid: string): Promise<boolean> => {
     for (let attempt = 0; attempt <= backoff.length; attempt += 1) {
       try {
         await deps.target.removeParticipant(roomId, puid);
         log(`eos voice: removed room=${hashId(roomId)} puid=${hashPuid(puid)}${attempt > 0 ? ` after ${attempt} retr${attempt === 1 ? 'y' : 'ies'}` : ''}`);
-        return;
+        return true;
       } catch (error) {
         const status = error instanceof EosHttpError ? error.status : 'network';
         log(`eos voice: removal failed room=${hashId(roomId)} puid=${hashPuid(puid)} attempt ${attempt + 1} (${status})`);
@@ -454,6 +532,15 @@ export function createVoiceRemovals(deps: {
       }
     }
     log(`eos voice: removal GAVE UP room=${hashId(roomId)} puid=${hashPuid(puid)}`);
+    return false;
+  };
+  const removeOne = async (d: PartyDeparture): Promise<void> => {
+    const roomId = deps.target.roomIdFor(d.partyId);
+    const bound = await boundPuidOf(d.userId);
+    const minted = deps.target.mintedIn(roomId, d.userId);
+    for (const puid of new Set([...minted.keys(), ...(bound === undefined ? [] : [bound])])) {
+      if (await removeWithRetries(roomId, puid)) deps.target.forgetMinted(roomId, d.userId, puid, minted.get(puid));
+    }
   };
   return {
     onDepartures(departures) {

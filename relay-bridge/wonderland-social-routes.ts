@@ -102,6 +102,12 @@ export interface PartyVoiceTokenMinter {
   readonly providerId: string;
   /** `puid`: the caller's server-bound EOS ProductUserId (EOS voice admits exactly that PUID to the room). */
   mint(input: { readonly partyId: string; readonly participantId: string; readonly audience: readonly string[]; readonly nowIso: string; readonly puid?: string }): Promise<PartyVoiceGrant>;
+  /**
+   * Take a player out of their party's room, server-side (EOS: removeParticipant, which also revokes the room token): every PUID
+   * this process minted a token for, for them in that room, plus `puids` (a binding, whose token may predate a restart). Resolves
+   * only when every removal is confirmed (an absent participant counts); rejects otherwise.
+   */
+  removeFromRoom(input: { readonly partyId: string; readonly participantId: string; readonly puids: readonly string[] }): Promise<void>;
 }
 
 /** One answer as the tap records it: ids and sequence numbers only. */

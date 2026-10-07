@@ -280,8 +280,9 @@ async function voicedArena(script: Parameters<typeof epicFake>[0] = {}) {
   const pid = partyOf(await store.read(), people.leader)!.partyId;
   for (const m of [people.a, people.b]) await run('party_invites.accept', m, [String((await run('parties.invite', people.leader, [pid], { toUserId: m }))?.inviteId)], {});
   const deletes = () => epic.calls.filter((c) => c.method === 'DELETE').map((c) => c.url);
-  const deleteOf = (who: string) => `https://api.epicgames.dev${EPIC.participantPath('dep-wl', minter.roomIdFor(pid), puid[who])}`;
-  return { store, run, removals, epic, pid, people, puid, deletes, deleteOf, commits, log, backoffs };
+  const deleteOfPuid = (p: string) => `https://api.epicgames.dev${EPIC.participantPath('dep-wl', minter.roomIdFor(pid), p)}`;
+  const deleteOf = (who: string) => deleteOfPuid(puid[who]);
+  return { store, run, removals, epic, pid, people, puid, deletes, deleteOf, deleteOfPuid, commits, log, backoffs, minter, bindings };
 }
 
 describe('server-side removal after a committed party departure', () => {
@@ -353,6 +354,72 @@ describe('server-side removal after a committed party departure', () => {
     await store.apply('parties.create', 'x', { ids: [], body: {}, query: {} }, new Date(T0).toISOString());
     const pid = partyOf(await store.read(), 'x')!.partyId;
     expect((await store.apply('parties.leave', 'x', { ids: [pid], body: {}, query: {} }, new Date(T0).toISOString())).ok).toBe(true);
+  });
+});
+
+describe("removal takes out EVERY PUID minted for the member in that room, not only the one bound now (review a6d5842c, B1)", () => {
+  const nowIso = new Date(T0).toISOString();
+
+  it('a re-bind left the old PUID in the room: a kick DELETEs the old one and the new one, and forgets both', async () => {
+    const w = await voicedArena();
+    const room = w.minter.roomIdFor(w.pid);
+    const old = w.puid[w.people.a];
+    await w.minter.mint({ partyId: w.pid, participantId: w.people.a, audience: [], nowIso, puid: old });
+    // a fresh sign-in re-binds a to a new PUID (Epic does not validate PUIDs: any 32 hex), and a token is minted for it as well
+    const fresh = hex(16);
+    expect(await w.bindings.bind({ userId: w.people.a, puid: fresh, sessionId: 's-a-2', nowIso })).toBe('rebound');
+    await w.minter.mint({ partyId: w.pid, participantId: w.people.a, audience: [], nowIso, puid: fresh });
+    expect([...w.minter.mintedIn(room, w.people.a).keys()]).toEqual([old, fresh]);
+    await w.run('parties.remove_member', w.people.leader, [w.pid, w.people.a], {});
+    await w.removals.idle();
+    expect(w.deletes()).toEqual([w.deleteOfPuid(old), w.deleteOfPuid(fresh)]);
+    expect(w.minter.mintedIn(room, w.people.a).size).toBe(0);
+  });
+
+  it("after a restart nothing minted is remembered: the binding's PUID is the fallback", async () => {
+    const w = await voicedArena(); // this minter minted nothing: as after a restart
+    expect(w.minter.mintedIn(w.minter.roomIdFor(w.pid), w.people.b).size).toBe(0);
+    await w.run('parties.leave', w.people.b, [w.pid], {});
+    await w.removals.idle();
+    expect(w.deletes()).toEqual([w.deleteOf(w.people.b)]);
+  });
+
+  it('the record forgets a PUID only when that mint is confirmed removed: a removal given up on, or a newer mint, stays', async () => {
+    const w = await voicedArena({ remove: [{ status: 500 }, { status: 500 }, { status: 500 }, { status: 500 }] });
+    const room = w.minter.roomIdFor(w.pid);
+    const p = w.puid[w.people.b];
+    await w.minter.mint({ partyId: w.pid, participantId: w.people.b, audience: [], nowIso, puid: p });
+    const first = w.minter.mintedIn(room, w.people.b).get(p);
+    await w.run('parties.leave', w.people.b, [w.pid], {});
+    await w.removals.idle();
+    expect(w.log.some((l) => l.includes('GAVE UP'))).toBe(true);
+    expect(w.minter.mintedIn(room, w.people.b).has(p)).toBe(true); // still recorded: the next departure from the room tries it again
+    await w.minter.mint({ partyId: w.pid, participantId: w.people.b, audience: [], nowIso, puid: p });
+    w.minter.forgetMinted(room, w.people.b, p, first); // a stale serial never drops the newer, live token
+    expect(w.minter.mintedIn(room, w.people.b).has(p)).toBe(true);
+  });
+
+  it("the route's removeFromRoom: the minted PUIDs plus the given one, one DELETE each; rejects after trying all; logs hashed only", async () => {
+    const epic = epicFake({ remove: [{ status: 204 }, { status: 500 }, { status: 404 }] });
+    const log: string[] = [];
+    const minter = new EosVoiceTokenMinter(config(), { fetchImpl: epic.fetchImpl, now: () => T0, log: (l) => log.push(l) });
+    const [p1, p2, elsewhere, other] = [hex(16), hex(16), hex(16), hex(16)];
+    await minter.mint({ partyId: 'pty_1', participantId: 'u', audience: ['u'], nowIso, puid: p1 });
+    await minter.mint({ partyId: 'pty_1', participantId: 'u', audience: ['u'], nowIso, puid: p2 });
+    await minter.mint({ partyId: 'pty_2', participantId: 'u', audience: ['u'], nowIso, puid: elsewhere }); // another room: untouched
+    await minter.mint({ partyId: 'pty_1', participantId: 'v', audience: ['v'], nowIso, puid: other }); // another player: untouched
+    const room = minter.roomIdFor('pty_1');
+    // the given PUID is normalised (and the minted p1 is not asked twice); anything not a PUID is never put in a URL
+    await expect(minter.removeFromRoom({ partyId: 'pty_1', participantId: 'u', puids: [p1.toUpperCase(), 'not-a-puid'] })).rejects.toThrow('1 of 2 participant removals failed');
+    expect(epic.calls.filter((c) => c.method === 'DELETE').map((c) => c.url)).toEqual([p1, p2].map((p) => `https://api.epicgames.dev${EPIC.participantPath('dep-wl', room, p)}`));
+    expect([...minter.mintedIn(room, 'u').keys()]).toEqual([p2]); // p1 confirmed and forgotten; p2 failed, so it stays
+    await minter.removeFromRoom({ partyId: 'pty_1', participantId: 'u', puids: [] }); // Epic's 404: already gone counts
+    expect(minter.mintedIn(room, 'u').size).toBe(0);
+    expect([...minter.mintedIn(minter.roomIdFor('pty_2'), 'u').keys()]).toEqual([elsewhere]);
+    expect([...minter.mintedIn(room, 'v').keys()]).toEqual([other]);
+    const all = log.join('\n');
+    for (const raw of [p1, p2, elsewhere, other, room]) expect(all).not.toContain(raw);
+    expect(all).toContain(`eos voice: removal failed room=${hashId(room)} puid=${hashPuid(p2)} (500)`);
   });
 });
 

@@ -49,16 +49,35 @@ function fixedStore(state: SocialState): SocialStore {
   };
 }
 
-function minterRecorder() {
+/**
+ * The minter as a recorder: WHO the route asks it to admit, and to which room. It also keeps each room as a provider would
+ * (every PUID admitted and not removed since), so a test can read who would still hear the party: `heard(partyId)`.
+ */
+function minterRecorder(opts: { failRemoval?: boolean } = {}) {
   const asked: Array<{ partyId: string; participantId: string; audience: readonly string[]; puid?: string }> = [];
+  const removals: Array<{ partyId: string; participantId: string; puids: readonly string[] }> = [];
+  const inRoom = new Map<string, Set<string>>();
+  const mintedFor = new Map<string, Set<string>>();
   const minter: PartyVoiceTokenMinter = {
     providerId: 'test-provider',
     mint: async (input) => {
       asked.push({ partyId: input.partyId, participantId: input.participantId, audience: [...input.audience].sort(), puid: input.puid });
+      const key = `${input.partyId}/${input.participantId}`;
+      if (input.puid !== undefined) {
+        inRoom.set(input.partyId, new Set([...(inRoom.get(input.partyId) ?? []), input.puid]));
+        mintedFor.set(key, new Set([...(mintedFor.get(key) ?? []), input.puid]));
+      }
       return { providerId: 'test-provider', roomId: `room-${input.partyId}`, participantToken: `token-for-${input.participantId}`, expiresAtIso: NOW };
     },
+    removeFromRoom: async (input) => {
+      removals.push({ partyId: input.partyId, participantId: input.participantId, puids: [...input.puids] });
+      if (opts.failRemoval === true) throw new Error('provider down');
+      const key = `${input.partyId}/${input.participantId}`;
+      for (const puid of [...(mintedFor.get(key) ?? []), ...input.puids]) inRoom.get(input.partyId)?.delete(puid);
+      mintedFor.delete(key);
+    },
   };
-  return { asked, minter };
+  return { asked, removals, minter, heard: (partyId: string) => [...(inRoom.get(partyId) ?? [])].sort() };
 }
 
 const join = (deps: SocialRouteDeps, who: string, pid: string, puid: unknown = puidOf(who.split('#')[0])) =>
@@ -142,7 +161,7 @@ describe('party voice: the provider seam', () => {
 
   it('a provider failure is 503, not a token', async () => {
     const { state, pid } = arena();
-    const failing: PartyVoiceTokenMinter = { providerId: 'x', mint: async () => { throw new Error('provider down'); } };
+    const failing: PartyVoiceTokenMinter = { providerId: 'x', mint: async () => { throw new Error('provider down'); }, removeFromRoom: async () => undefined };
     const r = await join(depsFor(state, failing), U.ORION, pid);
     expect(r.status).toBe(503);
     expect(JSON.stringify(r.body)).not.toContain('provider down');
