@@ -219,6 +219,13 @@ class PostgresWonderlandTransaction implements WonderlandTransaction {
  * requires every migration to carry exactly this statement with its own
  * filename version.
  */
+/**
+ * The advisory lock every migrator of a store holds on its own session while it migrates: one migrator at a time,
+ * per database. "MIGRAT" in ASCII, beside the social store's "SOCIAL"; above the 32-bit range every `hashtext` key
+ * lives in, so it can meet no other lock in this schema.
+ */
+export const WONDERLAND_MIGRATION_LOCK = (0x4d4947524154n).toString();
+
 export function migrationVersion(sql: string): string | null {
   // THE LAST MATCH, ANCHORED TO A STATEMENT. `exec` takes the first occurrence
   // anywhere, including inside a comment — and these files carry long
@@ -229,6 +236,16 @@ export function migrationVersion(sql: string): string | null {
   // or malformed stamp yields null, which always applies and fails loudly.
   const matches = [...sql.matchAll(/^INSERT INTO relay_wonderland\.schema_migrations\(version\) VALUES\('([^']+)'\)/gmu)];
   return matches.at(-1)?.[1] ?? null;
+}
+
+/** The ledger as one session reads it: empty when the schema, or the ledger table itself, does not exist yet. */
+async function appliedVersionsOn(db: { query: Pool['query'] }): Promise<ReadonlySet<string>> {
+  const present = await db.query(
+    "SELECT 1 FROM information_schema.tables WHERE table_schema='relay_wonderland' AND table_name='schema_migrations'",
+  );
+  if (present.rowCount === 0) return new Set();
+  const rows = await db.query<{ version: string }>('SELECT version FROM relay_wonderland.schema_migrations');
+  return new Set(rows.rows.map((row) => String(row.version)));
 }
 
 export class TransactionalWonderlandDatabase {
@@ -259,22 +276,38 @@ export class TransactionalWonderlandDatabase {
    */
   async migrate(): Promise<void> {
     if (WONDERLAND_MIGRATIONS.some(sql => sql === '')) throw new Error('wonderland_migration_not_packaged');
-    const applied = await this.appliedMigrationVersions();
-    for (const sql of WONDERLAND_MIGRATIONS) {
-      const version = migrationVersion(sql);
-      if (version !== null && applied.has(version)) continue;
-      await this.pool.query(sql);
+    /**
+     * ONE MIGRATOR AT A TIME, PER DATABASE. Two callers migrating one EMPTY store at once both saw the schema missing
+     * and both ran 001's `CREATE SCHEMA IF NOT EXISTS`, which is not safe against a concurrent creator: PostgreSQL
+     * refused the second at its catalog, and seven of eight concurrent migrators failed on `pg_namespace_nspname_index`. The real-PostgreSQL suites share one database in CI and were safe
+     * only because earlier single-suite steps had migrated it first. Every migrator now holds a session advisory
+     * lock for the whole chain; a second one waits, reads the ledger after the first is done, and has nothing to do.
+     *
+     * A migration that fails can leave its session inside an aborted transaction, still holding the lock. That
+     * connection is destroyed rather than returned to the pool: the server ends the session, and with it the lock.
+     */
+    const client = await this.pool.connect();
+    let failed = false;
+    try {
+      await client.query('SELECT pg_advisory_lock($1)', [WONDERLAND_MIGRATION_LOCK]);
+      const applied = await appliedVersionsOn(client);
+      for (const sql of WONDERLAND_MIGRATIONS) {
+        const version = migrationVersion(sql);
+        if (version !== null && applied.has(version)) continue;
+        await client.query(sql);
+      }
+      await client.query('SELECT pg_advisory_unlock($1)', [WONDERLAND_MIGRATION_LOCK]);
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      client.release(failed ? true : undefined);
     }
   }
 
   /** Empty when the schema — or the ledger table itself — does not exist yet. */
   async appliedMigrationVersions(): Promise<ReadonlySet<string>> {
-    const present = await this.pool.query(
-      "SELECT 1 FROM information_schema.tables WHERE table_schema='relay_wonderland' AND table_name='schema_migrations'",
-    );
-    if (present.rowCount === 0) return new Set();
-    const rows = await this.pool.query<{ version: string }>('SELECT version FROM relay_wonderland.schema_migrations');
-    return new Set(rows.rows.map((row) => String(row.version)));
+    return appliedVersionsOn(this.pool);
   }
   async commitCommand<T>(input: { scope: string; commandId: string; requestHash: string; streamId: string; event: Omit<WonderlandEvent, 'sequence'> }, effect: (transaction: WonderlandTransaction) => Promise<T>): Promise<{ response: T; event: WonderlandEvent }> {
     return this.transaction(transaction => transaction.idempotent(input.scope, input.commandId, input.requestHash, async () => {

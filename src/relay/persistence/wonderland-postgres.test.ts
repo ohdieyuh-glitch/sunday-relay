@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
-import { TransactionalWonderlandDatabase, migrationVersion, WONDERLAND_MIGRATIONS, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011, WONDERLAND_MIGRATION_012, WONDERLAND_MIGRATION_013, WONDERLAND_MIGRATION_014, WONDERLAND_MIGRATION_015, WONDERLAND_MIGRATION_016, WONDERLAND_MIGRATION_017, WONDERLAND_MIGRATION_018 } from './wonderland-postgres';
+import { TransactionalWonderlandDatabase, migrationVersion, WONDERLAND_MIGRATION_LOCK, WONDERLAND_MIGRATIONS, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011, WONDERLAND_MIGRATION_012, WONDERLAND_MIGRATION_013, WONDERLAND_MIGRATION_014, WONDERLAND_MIGRATION_015, WONDERLAND_MIGRATION_016, WONDERLAND_MIGRATION_017, WONDERLAND_MIGRATION_018 } from './wonderland-postgres';
 import type { WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
 
 class FakePool {
@@ -9,7 +9,7 @@ class FakePool {
    *  only which statement ran. */
   values: unknown[][] = [];
   async query(text: string, values?: readonly unknown[]) { this.commands.push(text); if (values) this.values.push([...values]); return { rows: this.topRows, rowCount: text.startsWith('UPDATE') ? 1 : this.topRows.length }; }
-  async connect() { const pool = this; return { async query(text: string) { pool.commands.push(text); if (text.startsWith('SELECT snapshot')) return { rows: pool.rows, rowCount: pool.rows.length }; if (text.includes('RETURNING next_sequence-1')) return { rows: [{ sequence: '1' }], rowCount: 1 }; return { rows: [], rowCount: text.startsWith('UPDATE') || text.startsWith('INSERT') ? 1 : 0 }; }, release() { pool.released += 1; } }; }
+  async connect() { const pool = this; return { async query(text: string, values?: readonly unknown[]) { pool.commands.push(text); if (values) pool.values.push([...values]); if (text.includes('schema_migrations') && !text.startsWith('BEGIN;')) return { rows: pool.topRows, rowCount: pool.topRows.length }; if (text.startsWith('SELECT snapshot')) return { rows: pool.rows, rowCount: pool.rows.length }; if (text.includes('RETURNING next_sequence-1')) return { rows: [{ sequence: '1' }], rowCount: 1 }; return { rows: [], rowCount: text.startsWith('UPDATE') || text.startsWith('INSERT') ? 1 : 0 }; }, release() { pool.released += 1; } }; }
   async end() { this.ended = true; }
 }
 const database = (pool: FakePool) => new TransactionalWonderlandDatabase(pool as unknown as Pool);
@@ -41,7 +41,13 @@ describe('Wonderland PostgreSQL migration', () => {
   it('defines durable sub-agent grants with depth, narrowed permissions and per-parent counting',()=>{expect(WONDERLAND_MIGRATION_016).toContain('julius_subagents');expect(WONDERLAND_MIGRATION_016).toContain('CHECK(depth>0)');expect(WONDERLAND_MIGRATION_016).toContain('child_task_id text NOT NULL UNIQUE');expect(WONDERLAND_MIGRATION_016).toContain('julius_subagent_parent');});
   it('persists the GAUNTLET COMMAND outside the Julius namespace, with its activator',()=>{expect(WONDERLAND_MIGRATION_017).toContain('relay_wonderland.gauntlet_runs');expect(WONDERLAND_MIGRATION_017).not.toContain('relay_wonderland.julius_gauntlet');expect(WONDERLAND_MIGRATION_017).toContain('activated_by');expect(WONDERLAND_MIGRATION_017).toContain('UNIQUE(run_id,subject_task_id)');expect(WONDERLAND_MIGRATION_017).toContain('PRIMARY KEY(gauntlet_id,round,phase)');});
   it('persists approvals with one pending request per gated operation',()=>{expect(WONDERLAND_MIGRATION_018).toContain('julius_approvals');expect(WONDERLAND_MIGRATION_018).toContain('julius_approval_one_pending');expect(WONDERLAND_MIGRATION_018).toContain("WHERE state='PENDING'");expect(WONDERLAND_MIGRATION_018).toContain('lifecycle_actor');});
-  it('applies every checked-in migration to an empty database, in order', async () => { const pool = new FakePool(); const db = database(pool); await db.migrate(); expect(pool.commands.filter((command) => !command.includes('information_schema.tables'))).toEqual([...WONDERLAND_MIGRATIONS]); });
+  it('applies every checked-in migration to an empty database, in order, holding the migration lock for the whole chain', async () => {
+    const pool = new FakePool(); const db = database(pool); await db.migrate();
+    expect(pool.commands.filter((command) => !command.includes('information_schema.tables')))
+      .toEqual(['SELECT pg_advisory_lock($1)', ...WONDERLAND_MIGRATIONS, 'SELECT pg_advisory_unlock($1)']);
+    expect(pool.values, 'the lock is the migration lock, taken and released').toEqual([[WONDERLAND_MIGRATION_LOCK], [WONDERLAND_MIGRATION_LOCK]]);
+    expect(pool.released, 'on one session, returned once').toBe(1);
+  });
 
   /**
    * A MIGRATED DATABASE MUST NOT BE REPLAYED, AND A PARTLY MIGRATED ONE MUST BE
