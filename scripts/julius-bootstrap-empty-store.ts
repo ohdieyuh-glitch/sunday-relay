@@ -179,7 +179,8 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv, cwd:
 
     let result: { readonly alreadyPresent: number; readonly applied: readonly string[] };
     try {
-      result = await migrateIfNeeded(pool);
+      // the ONE caller allowed past the protected-store refusal: this store's identity and emptiness were verified above
+      result = await migrateIfNeeded(pool, { reviewedBootstrap: { database: who.db, systemIdentifier: who.sid } });
     } catch (error) {
       const message = (error instanceof Error ? error.message : String(error)).replace(/\s+/gu, ' ').slice(0, 300);
       const hasLedger = (await pool.query<{ present: boolean }>(

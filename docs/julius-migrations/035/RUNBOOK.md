@@ -1,4 +1,15 @@
-# Migration 035 on the LIVE Julius database: runbook (CANDIDATE, SECOND WONDERLAND, 2026-10-07; the 033 runbook's discipline, scaled)
+# Migration 035 on a PERSISTENT store: runbook (CANDIDATE, SECOND WONDERLAND, 2026-10-07; the 033 runbook's discipline, scaled; re-scoped by MAIN WONDERLAND, 2026-10-11, to the founder's ruling below)
+
+> **THE FOUNDER'S RULING (2026-10-11, "ONE CHAIN, FULL REVIEW") GOVERNS THIS RUNBOOK.**
+> - 035 reaches the **Wonderland hosted database** through its own reviewed run of these steps. That is where voice data lives.
+> - The **Julius live store** receives 035 ONLY after ALL of the following:
+>   - the independent review of 035 passes;
+>   - the 035 rehearsal passes;
+>   - MAIN JUJU confirms compatibility;
+>   - the exact live apply is presented for the founder's explicit approval;
+>   - a protected JULIUS HEAVY window is opened.
+> - On the Julius live store the voice table stays **EMPTY**. No social or voice writer is ever pointed at that store, and no voice session or player voice record is ever written there.
+> - No automatic runner may apply 035 there. `migrate()` REFUSES the Julius live store (`src/relay/persistence/protected-store.ts`), so step 3's explicit apply is the ONLY path.
 
 Migration `035_wonderland_voice` creates the Wonderland party-voice binding inside `relay_wonderland`. It creates 3 relations, writes
 NO row and changes no existing row:
@@ -28,13 +39,17 @@ points as for 030-034 (`docs/julius-migrations/030/RUNBOOK.md`), plus the dev so
 3. **The writers stay stopped from step 0 until step 6.**
 4. **Step 3** applies 035 explicitly (the `psql` path), and its record is kept.
 
-## The live store
-The Docker container `julius-postgres` on the workstation (`127.0.0.1:5432`, database `julius`, role `julius`), as for 031-034. Any
-other PERSISTENT store that carries this chain (the approved hosted database included) gets 035 only by its own run of these steps.
+## The stores
+- **The Julius live store:** the Docker container `julius-postgres` on the workstation (`127.0.0.1:5432`, database `julius`, role
+  `julius`), as for 031-034. It gets 035 only under the ruling above, and its voice table stays empty forever.
+- **The Wonderland hosted store** (O1, Railway project wonderland-beta): it gets 035 by its own run of these steps, after #346 lands.
+  This is the only store a social / voice writer uses.
+- Any other PERSISTENT store that carries this chain gets 035 only by its own run of these steps.
 
 ## Steps
-**0. Quiesce.** Stop every Julius and social writer (the bridge with `WONDERLAND_SOCIAL_ENABLED=1` is a writer of `players` and of
-`voice_puid_binding`). No other client session may be connected.
+**0. Quiesce.** Stop every writer of THIS store. No other client session may be connected.
+- On the Julius live store, those are the Julius writers. No social or voice writer may be pointed at it, ever: if one is found connected, STOP. That is an incident, not a step.
+- On the Wonderland hosted store, they include the bridge with `WONDERLAND_SOCIAL_ENABLED=1`, a writer of `players` and of `voice_puid_binding`.
 
 **1. Back up and verify, at 034.** A `pg_dump -Fc` of the store, its sha256 recorded, its TOC listing the relay_wonderland objects and NO
 `voice_*` object. It holds the state 034's post-check verified, so rollback (c) returns to 034.
@@ -59,9 +74,11 @@ own post-check rolls everything back unless each relation is exactly as created,
 - `voice_fk_constraints = 1`; `players_rows` = step 2's; `players_referenced_by_fks` = step 2's + 1;
 - `migration_035_applied = t`; `ledger_count` = step 2's + 1; `ledger_last = 035_wonderland_voice`.
 
-**5. Deploy** the landed code (it lists 035; `migrate()` then finds it applied and does nothing).
+**5. Deploy** the landed code. It lists 035, so `migrate()` finds it applied and does nothing. On the Julius live store `migrate()` would REFUSE to run anything in any case (protected-store.ts).
 
-**6. Restart the writers.** Watch the first `/voice/join`: one row in `voice_puid_binding` for that player.
+**6. Restart the writers.**
+- **The Julius live store:** restart the JULIUS writers only. `SELECT count(*) FROM relay_wonderland.voice_puid_binding` must read 0, now and at every later check. A row there is an incident: voice data belongs in the Wonderland store (the founder, 2026-10-11).
+- **The Wonderland hosted store:** restart the social bridge, and watch the first `/voice/join` write one row in `voice_puid_binding` for that player.
 
 ## Classifying the store in this window
 The chain classifier (FOUNDER_035_APPLY's ClassifyOn): before step 3, exactly the chain through 034 (rule 6); after step 4, exactly
@@ -77,7 +94,7 @@ through 035 (rule 7). Anything else, `PARTIAL` included, is a STOP.
   between the count and the DROP (the 033 review's (b), applied here from the start).
 - It drops the table WITHOUT CASCADE (a dependent object outside 035 makes the DROP fail, 2BP01, and the script rolls back) and
   deletes the 035 stamp, in one transaction.
-- **Then deploy code that no longer lists 035**, or the next `migrate()` re-applies it.
+- **Then deploy code that no longer lists 035.** Otherwise the next `migrate()` re-applies it on any store that is not protected. On the Julius live store `migrate()` refuses instead (protected-store.ts), so 035 returns there only by another reviewed, founder-approved apply.
 - **Rollback order:** 035's down BEFORE 034's, and both before 033's. 033's and 034's downs refuse while 035 is stamped.
 
 **(c) Last resort:** restore the pre-035 backup into a NEW database first, inspect it, and only then replace anything.
