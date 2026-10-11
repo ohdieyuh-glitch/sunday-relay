@@ -21,6 +21,8 @@ interface Identity {
   readonly db: string;
   readonly sid: string | 'DENIED';
   readonly marker?: string | null;
+  /** The first N marker reads fail (a dropped connection, 08006). */
+  readonly markerReadFailures?: number;
 }
 const LIVE_STORES: ReadonlyArray<readonly [string, Identity]> = [
   ['the live store (S2, its pinned identity)', { db: 'julius', sid: LIVE_SID }],
@@ -32,9 +34,14 @@ const ORDINARY: Identity = { db: 'railway', sid: '7000000000000000001' };
 function fakePool(id: Identity) {
   const executed: string[] = [];
   let identityReads = 0;
+  let markerFailures = 0;
   const query = async (sql: string): Promise<{ rows: Record<string, unknown>[]; rowCount: number }> => {
     if (sql.includes('shobj_description')) {
       identityReads += 1;
+      if (markerFailures < (id.markerReadFailures ?? 0)) {
+        markerFailures += 1;
+        throw Object.assign(new Error('server closed the connection unexpectedly'), { code: '08006' });
+      }
       return { rows: [{ c: id.marker ?? null }], rowCount: 1 };
     }
     if (sql === 'SELECT current_database() AS db') {
@@ -103,6 +110,35 @@ describe('C2: voice and social data never touch a protected store', () => {
     const opened = await openSocialPostgresStore(pool).then(() => null, (e: unknown) => e);
     expect(opened).not.toBeInstanceOf(ProtectedStoreWriteRefused);
     expect(executed[0]).toBe('SELECT * FROM relay_wonderland.social_profiles');
+  });
+
+  it('MINOR-1: a FAILED marker read refuses and caches nothing; the next good read decides', async () => {
+    const failedWith08006 = async (call: Promise<unknown>): Promise<void> => {
+      const error = await call.then(() => null, (e: unknown) => e);
+      expect((error as { code?: unknown } | null)?.code).toBe('08006');
+    };
+    // a live store protected ONLY by its marker (restored into a new cluster under a new name)
+    {
+      const { pool, executed } = fakePool({ ...LIVE_STORES[1][1], markerReadFailures: 1 });
+      const bindings = createPostgresVoiceBindings(pool);
+      await failedWith08006(bindings.bindingOf('usr_a'));
+      await refusedBy(bindings.bind(bindInput)); // the next call reads the marker: refused, not a cached pass
+      expect(executed).toEqual([]);
+    }
+    // an ordinary store: the failure is not cached as a refusal either; the next good read clears it
+    {
+      const { pool, executed } = fakePool({ ...ORDINARY, markerReadFailures: 1 });
+      const bindings = createPostgresVoiceBindings(pool);
+      await failedWith08006(bindings.bindingOf('usr_a'));
+      expect(executed).toEqual([]);
+      expect(await bindings.bind(bindInput)).toBe('bound');
+    }
+    // the social store's open
+    {
+      const { pool, executed } = fakePool({ ...LIVE_STORES[1][1], markerReadFailures: 1 });
+      await failedWith08006(openSocialPostgresStore(pool));
+      expect(executed).toEqual([]);
+    }
   });
 
   it('a protected store is refused on EVERY call: no refusal is cached into a pass', async () => {
