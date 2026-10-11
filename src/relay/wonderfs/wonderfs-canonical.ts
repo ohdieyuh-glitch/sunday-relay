@@ -32,6 +32,16 @@ export function canonicalJson(value: unknown): string {
   }
 }
 
+/**
+ * r1.2 §19.M7: `main`'s genesis anchor = sha256 of the JCS of {project_id, genesis: "wonderfs.v1"}. A branch's first commit
+ * links to its parent's commit hash at the fork (or to this anchor when the parent had no commit yet), so every chain is
+ * anchored to `main`. `canonicalJson` is RFC 8785 for the values a commit holds: keys sorted by UTF-16 code units (the
+ * default sort), ECMAScript string escaping (non-ASCII raw), finite numbers only, no whitespace.
+ */
+export function wfsGenesisHash(projectId: string, sha256Hex: (text: string) => string): string {
+  return sha256Hex(canonicalJson({ project_id: projectId, genesis: 'wonderfs.v1' }));
+}
+
 /** What a commit's hash covers: every field but the hash itself. */
 export function wfsCommitHashInput(commit: Omit<WfsCommit, 'commitHash'> | WfsCommit): string {
   const { commitHash: _omitted, ...body } = commit as WfsCommit;
@@ -45,10 +55,11 @@ export interface WfsChainBreak {
 
 /**
  * Re-hash a branch's commits in order. Returns the FIRST break, or `null` when every commit re-hashes to its stored hash,
- * links to its predecessor, and holds the next revision.
+ * links to its predecessor, and holds the next revision. `anchor` is what the FIRST commit must link to (r1.2 §19.M7):
+ * `main`'s genesis hash, or the parent's commit hash at the fork.
  */
-export function verifyWfsChain(commits: readonly WfsCommit[], sha256Hex: (text: string) => string): WfsChainBreak | null {
-  let prev: string | null = null;
+export function verifyWfsChain(commits: readonly WfsCommit[], sha256Hex: (text: string) => string, anchor: string): WfsChainBreak | null {
+  let prev: string | null = anchor;
   for (let i = 0; i < commits.length; i += 1) {
     const c = commits[i];
     if (c.rev !== i + 1) return { rev: c.rev, reason: 'rev' };

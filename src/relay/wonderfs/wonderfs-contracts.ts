@@ -151,7 +151,35 @@ export interface WfsCommit {
   readonly mergesBranchId: WfsBranchId | null;
   /** The merged branch's commit hashes, in order (§6.5). */
   readonly carriedCommitHashes: readonly string[];
-  readonly approvedBy: string | null;
+  /** r1.2 §19.M1: the human approval this merge carried, bound to the branch head it approved. */
+  readonly approval: WfsMergeApproval | null;
+  /** r1.2 §19.M1: the review verdict this merge carried, bound to the branch head it reviewed. */
+  readonly reviewVerdict: WfsReviewVerdict | null;
+  /** r1.2 §19.M7: on a branch's FIRST commit only, where it forked; null otherwise. */
+  readonly fork: { readonly parentBranchId: WfsBranchId; readonly parentRev: number } | null;
+}
+
+/**
+ * An imported agent's human approval (r1.2 §19.M1): valid only for the exact branch and head it names. Written ONLY by a human
+ * holding editor or owner (r1.4 N-minor-1, `issueWfsApproval`); `approvedBy` is server-set, and the approver's role is re-read
+ * at merge.
+ */
+export interface WfsMergeApproval {
+  readonly approvalId: string;
+  readonly branchId: WfsBranchId;
+  readonly approvedBy: string;
+  readonly approvedHeadCommitHash: string;
+  readonly approvedBaseRev: number;
+  readonly approvedAtIso: string;
+}
+
+/** A Julius review verdict (r1.2 §19.M1, J-9b): valid only for the exact head it names. */
+export interface WfsReviewVerdict {
+  readonly verdictId: string;
+  readonly verdictHash: string;
+  readonly reviewedBranchId: WfsBranchId;
+  readonly reviewedHeadCommitHash: string;
+  readonly reviewedBaseRev: number;
 }
 
 /** A refused changeset, preserved whole with its author (INV-2). */

@@ -20,7 +20,7 @@
  */
 
 import { fail, ok, relayError, type RelayResult } from '../protocol/errors';
-import { canonicalJson, wfsCommitHashInput } from './wonderfs-canonical';
+import { canonicalJson, wfsCommitHashInput, wfsGenesisHash } from './wonderfs-canonical';
 import type {
   WfsBranchId,
   WfsCommit,
@@ -31,6 +31,7 @@ import type {
   WfsEntry,
   WfsFileId,
   WfsLimits,
+  WfsMergeApproval,
   WfsMergePut,
   WfsOp,
   WfsOpFailure,
@@ -38,8 +39,10 @@ import type {
   WfsPrincipalKind,
   WfsProjectId,
   WfsRecordedOp,
+  WfsReviewVerdict,
   WfsSha256,
 } from './wonderfs-contracts';
+import type { WfsHumanRole } from './wonderfs-authz';
 import { normalizeWfsPath, wfsIsBeneath, wfsParentPath, wfsPathKey, wfsRebase, WFS_MAX_PATH_CHARS, type WfsPath } from './wonderfs-paths';
 
 export const WFS_MAIN_BRANCH: WfsBranchId = 'main';
@@ -52,7 +55,10 @@ export interface WfsBranchState {
   /** Who works on an agent branch. `null` for main. */
   readonly owner: WfsPrincipal | null;
   readonly headRev: number;
-  readonly headCommitHash: string | null;
+  /** The newest commit's hash; at rev 0, the branch's anchor (r1.2 §19.M7). */
+  readonly headCommitHash: string;
+  /** What this branch's FIRST commit links to: main's genesis hash, or the parent's commit hash at the fork (r1.2 §19.M7). */
+  readonly anchorHash: string;
   /** Every entry this branch can see, tombstones included, by file id. */
   readonly entries: ReadonlyMap<WfsFileId, WfsEntry>;
   /** The parent's entries at the fork: what merge-back compares against, and where history replay starts. Empty for main. */
@@ -85,14 +91,16 @@ export interface WfsEngineContext {
 
 export type WfsApplied = { readonly project: WfsProjectState; readonly outcome: WfsCommitOutcome };
 
-export function emptyWfsProject(projectId: WfsProjectId): WfsProjectState {
+export function emptyWfsProject(projectId: WfsProjectId, sha256Hex: (text: string) => string): WfsProjectState {
+  const genesis = wfsGenesisHash(projectId, sha256Hex);
   const main: WfsBranchState = {
     branchId: WFS_MAIN_BRANCH,
     kind: 'main',
     parent: null,
     owner: null,
     headRev: 0,
-    headCommitHash: null,
+    headCommitHash: genesis,
+    anchorHash: genesis,
     entries: new Map(),
     base: new Map(),
     commits: [],
@@ -417,7 +425,8 @@ interface CommitInput {
   readonly resolvesConflictId: WfsConflictId | null;
   readonly mergesBranchId: WfsBranchId | null;
   readonly carriedCommitHashes: readonly string[];
-  readonly approvedBy: string | null;
+  readonly approval: WfsMergeApproval | null;
+  readonly reviewVerdict: WfsReviewVerdict | null;
 }
 
 type Step = { readonly kind: 'op'; readonly op: CheckedOp } | { readonly kind: 'merge'; readonly put: WfsMergePut };
@@ -523,7 +532,9 @@ function commitSteps(project: WfsProjectState, branch: WfsBranchState, steps: re
     resolvesConflictId: input.resolvesConflictId,
     mergesBranchId: input.mergesBranchId,
     carriedCommitHashes: input.carriedCommitHashes,
-    approvedBy: input.approvedBy,
+    approval: input.approval,
+    reviewVerdict: input.reviewVerdict,
+    fork: branch.headRev === 0 && branch.parent !== null ? { parentBranchId: branch.parent.branchId, parentRev: branch.parent.forkRev } : null,
   };
   const commit: WfsCommit = { ...body, commitHash: ctx.sha256Hex(wfsCommitHashInput(body)) };
   const nextBranch: WfsBranchState = { ...branch, headRev: rev, headCommitHash: commit.commitHash, entries: t, commits: [...branch.commits, commit] };
@@ -589,7 +600,8 @@ export function applyWfsCommit(project: WfsProjectState, req: WfsCommitRequest, 
     resolvesConflictId: resolves,
     mergesBranchId: null,
     carriedCommitHashes: [],
-    approvedBy: null,
+    approval: null,
+    reviewVerdict: null,
   }, ctx);
 }
 
@@ -610,7 +622,8 @@ export function forkWfsBranch(project: WfsProjectState, input: { readonly fromBr
     parent: { branchId: from.value.branchId, forkRev: from.value.headRev },
     owner: input.owner,
     headRev: 0,
-    headCommitHash: null,
+    headCommitHash: from.value.headCommitHash,
+    anchorHash: from.value.headCommitHash,
     entries: new Map(from.value.entries),
     base: new Map(from.value.entries),
     commits: [],
@@ -626,13 +639,26 @@ export function forkWfsBranch(project: WfsProjectState, input: { readonly fromBr
  */
 export function mergeBackWfsBranch(
   project: WfsProjectState,
-  input: { readonly requestId: string; readonly branchId: WfsBranchId; readonly principal: WfsPrincipal; readonly approvedBy: string | null },
+  input: {
+    readonly requestId: string;
+    readonly branchId: WfsBranchId;
+    readonly principal: WfsPrincipal;
+    /** r1.2 §19.M1: an imported agent's merge into main needs this, bound to the branch head. */
+    readonly approval: WfsMergeApproval | null;
+    /** r1.2 §19.M1 (J-9b): a Julius merge into main needs this, bound to the branch head. */
+    readonly reviewVerdict: WfsReviewVerdict | null;
+    /**
+     * r1.4 N-minor-1: the approver's project_members role NOW, re-read by the store for `approval.approvedBy` with this request
+     * (null: no longer a member, or no approval). Server-derived, so it is not part of the request's payload hash.
+     */
+    readonly approverRoleNow: WfsHumanRole | null;
+  },
   ctx: WfsEngineContext,
 ): RelayResult<WfsApplied> {
   if (typeof input.requestId !== 'string' || !REQUEST_ID_RE.test(input.requestId)) return invalid('the request id is malformed');
   const badPrincipal = checkPrincipal(input.principal);
   if (badPrincipal !== null) return invalid(badPrincipal);
-  const payloadHash = ctx.sha256Hex(canonicalJson({ kind: 'merge', branchId: input.branchId, principal: input.principal, approvedBy: input.approvedBy }));
+  const payloadHash = ctx.sha256Hex(canonicalJson({ kind: 'merge', branchId: input.branchId, principal: input.principal, approval: input.approval, reviewVerdict: input.reviewVerdict }));
   const prior = replayed(project, input.requestId, payloadHash);
   if (prior !== null) return prior;
 
@@ -642,6 +668,29 @@ export function mergeBackWfsBranch(
   if (b.kind !== 'agent' || b.parent === null) return invalid('only an agent branch merges back');
   const target = openBranch(project, b.parent.branchId);
   if (!target.ok) return target;
+
+  // r1.2 §19.M1: WHAT was reviewed or approved is exactly what merges. A verdict or an approval names the branch head and its
+  // fork revision; one commit more and it is stale. Julius into main needs a verdict, an imported agent into main an approval.
+  const intoMain = target.value.kind === 'main';
+  const ownerKind = b.owner?.kind ?? null;
+  const verdict = input.reviewVerdict;
+  const approval = input.approval;
+  if (intoMain && ownerKind === 'julius' && verdict === null) {
+    return fail(relayError('evidence-required', 'This merge needs its independent review verdict.', { details: ['wonderfs: review_required'] }));
+  }
+  if (intoMain && ownerKind === 'imported_agent' && approval === null) {
+    return fail(relayError('evidence-required', 'This merge needs a person\'s approval.', { details: ['wonderfs: approval_required'] }));
+  }
+  if (verdict !== null && (verdict.reviewedBranchId !== b.branchId || verdict.reviewedHeadCommitHash !== b.headCommitHash || verdict.reviewedBaseRev !== b.parent.forkRev)) {
+    return fail(relayError('stale-context', 'The review verdict is for a different head of this branch: review it again.', { details: ['wonderfs: review_stale'] }));
+  }
+  if (approval !== null && (approval.branchId !== b.branchId || approval.approvedHeadCommitHash !== b.headCommitHash || approval.approvedBaseRev !== b.parent.forkRev)) {
+    return fail(relayError('stale-context', 'The approval is for a different head of this branch: approve it again.', { details: ['wonderfs: approval_stale'] }));
+  }
+  // r1.4 N-minor-1: the approver's role is RE-DERIVED now. Removed or demoted since approving, and the approval no longer counts.
+  if (approval !== null && input.approverRoleNow !== 'owner' && input.approverRoleNow !== 'editor') {
+    return fail(relayError('stale-context', 'The person who approved this no longer edits this project: it needs a new approval.', { details: ['wonderfs: approval_stale'] }));
+  }
 
   const puts: WfsMergePut[] = [];
   for (const e of b.entries.values()) {
@@ -680,12 +729,36 @@ export function mergeBackWfsBranch(
     resolvesConflictId: null,
     mergesBranchId: b.branchId,
     carriedCommitHashes: b.commits.map((c) => c.commitHash),
-    approvedBy: input.approvedBy,
+    approval,
+    reviewVerdict: verdict,
   }, ctx);
   if (!applied.ok || applied.value.outcome.status !== 'committed') return applied;
   const merged = applied.value;
   const closed: WfsBranchState = { ...b, closed: { how: 'merged', atIso: ctx.nowIso, targetRev: merged.outcome.status === 'committed' ? merged.outcome.rev : null } };
   return ok({ project: { ...merged.project, branches: new Map(merged.project.branches).set(b.branchId, closed) }, outcome: merged.outcome });
+}
+
+/**
+ * r1.4 N-minor-1 (EXTENDS §19.M1): an approval is written ONLY by a HUMAN who holds editor or owner NOW (`roleNow`, read from
+ * project_members with the request), never under an agent, clone or service grant. `approvedBy` is that human's id, taken from
+ * the authenticated principal, never from the client. It approves the branch's head as it is now, and nothing after it.
+ */
+export function issueWfsApproval(
+  project: WfsProjectState,
+  input: { readonly approvalId: string; readonly branchId: WfsBranchId; readonly principal: WfsPrincipal; readonly roleNow: WfsHumanRole | null },
+  nowIso: string,
+): RelayResult<WfsMergeApproval> {
+  const badPrincipal = checkPrincipal(input.principal);
+  if (badPrincipal !== null) return invalid(badPrincipal);
+  // decided before the branch is looked up, so the refusal says nothing about which branches exist
+  if (input.principal.kind !== 'human' || (input.roleNow !== 'owner' && input.roleNow !== 'editor')) {
+    return fail(relayError('permission-denied', "Only a person who edits this project can approve an agent's changes.", { details: ['wonderfs: approval_forbidden'] }));
+  }
+  const branch = openBranch(project, input.branchId);
+  if (!branch.ok) return branch;
+  const b = branch.value;
+  if (b.kind !== 'agent' || b.parent === null) return invalid('only an agent branch is approved');
+  return ok({ approvalId: input.approvalId, branchId: b.branchId, approvedBy: input.principal.id, approvedHeadCommitHash: b.headCommitHash, approvedBaseRev: b.parent.forkRev, approvedAtIso: nowIso });
 }
 
 /** Close an agent branch without merging. Its commits stay in history (an agent's work is never silently deleted either). */

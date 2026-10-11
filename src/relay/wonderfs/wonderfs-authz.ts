@@ -110,6 +110,54 @@ export function wfsGlobCovered(child: string, parentGlobs: readonly string[]): b
 const GRANT_OPS_FOR: Partial<Record<WfsAction, WfsGrantOp>> = { read: 'read', write: 'write', delete: 'delete', move: 'move', merge: 'merge' };
 
 /**
+ * r1.3 §19.M3: what NO agent (julius, imported_agent, clone) may write, whatever its grant says -- the UNION of the contract's
+ * table and the classes of juliusPathLocation (src/relay/mission/julius/julius-workspace-paths.ts). Matched on fold keys, so
+ * no case spelling slips past. A protected SEGMENT protects its directory entry and everything beneath it.
+ */
+export const WFS_AGENT_PROTECTED_SEGMENTS: readonly string[] = [
+  // control: what a later tool or session LOADS or EXECUTES
+  '.git', '.julius', '.claude', '.husky', '.githooks', '.hg', '.svn', '.bzr', 'node_modules',
+  // credentials
+  '.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.config',
+];
+export const WFS_AGENT_PROTECTED_GLOBS: readonly string[] = [
+  '**/.envrc',
+  // CI: the directory entry itself counts, as in juliusPathLocation ("a GRANT naming .github/workflows ... is a workflow authority")
+  '.github/workflows', '.github/workflows/**', '.github/actions', '.github/actions/**', '.gitlab-ci.yml', '.circleci', '.circleci/**', 'azure-pipelines.yml', '**/.pre-commit-config.yaml',
+  '**/.env', '**/.env.*',
+  '**/*.pem', '**/*.key', '**/id_rsa*', '**/id_dsa*', '**/id_ecdsa*', '**/id_ed25519*',
+  '**/.npmrc', '**/.pypirc', '**/.netrc', '**/_netrc', '**/.git-credentials', '**/.yarnrc', '**/.yarnrc.yml', '**/credentials',
+];
+/** Julius's ENV_DOCUMENTATION: ordinary files a mission may well be asked to write (r1.3 §19.M3). */
+const ENV_DOCUMENTATION_SUFFIXES = ['.example', '.sample', '.template', '.dist'];
+
+/** True when an agent may never write `path` (r1.3 §19.M3). `path` must already be normalized. */
+export function wfsIsAgentProtected(path: string): boolean {
+  const key = wfsPathKey(path);
+  const parts = key.split('/');
+  if (parts.some((p) => WFS_AGENT_PROTECTED_SEGMENTS.includes(p))) return true;
+  const name = parts[parts.length - 1];
+  if (name.startsWith('.env.') && ENV_DOCUMENTATION_SUFFIXES.some((s) => name === `.env${s}`)) return false;
+  return WFS_AGENT_PROTECTED_GLOBS.some((glob) => wfsGlobMatches(glob, path));
+}
+
+/**
+ * r1.2 §19.M2: the issuer's rights NOW, read with the grant. A human issuer: their project_members role and whether they
+ * hold create_mission today; a clone's grant: whether its parent grant is valid right now (recursively).
+ */
+export type WfsIssuerNow =
+  | { readonly kind: 'human'; readonly role: WfsHumanRole | null; readonly createMission: boolean }
+  | { readonly kind: 'grant'; readonly parentValid: boolean };
+
+/** Do the issuer's CURRENT rights still cover a grant of this kind (r1.2 §19.M2 guard b)? */
+export function wfsIssuerStillCovers(principalKind: WfsGrant['principalKind'], issuer: WfsIssuerNow): boolean {
+  if (principalKind === 'clone') return issuer.kind === 'grant' && issuer.parentValid;
+  if (issuer.kind !== 'human' || issuer.role === null) return false;
+  if (principalKind === 'julius') return issuer.createMission && (issuer.role === 'owner' || issuer.role === 'editor');
+  return issuer.role === 'owner' || issuer.role === 'editor';
+}
+
+/**
  * A non-human's request under its grant. `branchOwnedByPrincipal` / `branchIsMain` describe the branch it targets; the store
  * knows which branch a principal owns. Checked on EVERY use: a revocation or an expiry bites on the next request.
  */
@@ -122,12 +170,15 @@ export function authorizeAgent(input: {
   readonly branchIsMain: boolean;
   readonly branchOwnedByPrincipal: boolean;
   readonly paths: readonly string[];
+  /** The issuer's rights NOW, read with the grant (r1.2 §19.M2). */
+  readonly issuerNow: WfsIssuerNow;
 }): RelayResult<true> {
   const g = input.grant;
   if (g === null) return refused('no grant');
   if (g.projectId !== input.projectId || g.principalId !== input.principalId) return refused('the grant belongs to another project or principal');
   if (g.revokedAtIso !== null && g.revokedAtIso <= input.nowIso) return refused('the grant was revoked');
   if (g.expiresAtIso <= input.nowIso) return refused('the grant expired');
+  if (!wfsIssuerStillCovers(g.principalKind, input.issuerNow)) return refused('the issuer no longer holds the rights this grant needs');
   const op = GRANT_OPS_FOR[input.action];
   if (op === undefined || !g.ops.includes(op)) return refused(`the grant does not allow ${input.action}`);
   if (input.branchIsMain ? g.branches !== 'main_and_own' : !input.branchOwnedByPrincipal) return refused('the grant does not reach this branch');
@@ -136,6 +187,8 @@ export function authorizeAgent(input: {
     const n = normalizeWfsPath(p);
     if (!n.ok) return refused('a malformed path');
     if (!g.paths.some((glob) => wfsGlobMatches(glob, n.value.path))) return refused('a path outside the grant');
+    // r1.3 §19.M3: protection beats a grant -- a protected path is never written by an agent, whatever its globs cover
+    if (input.action !== 'read' && wfsIsAgentProtected(n.value.path)) return refused('a protected path');
   }
   return ok(true);
 }

@@ -5,6 +5,7 @@ import {
   discardWfsBranch,
   emptyWfsProject,
   forkWfsBranch,
+  issueWfsApproval,
   mergeBackWfsBranch,
   verifyWfsChain,
   wfsChangesAfter,
@@ -19,10 +20,14 @@ import {
   type WfsConflict,
   type WfsEngineContext,
   type WfsEntry,
+  type WfsHumanRole,
   type WfsLimits,
+  type WfsMergeApproval,
   type WfsOp,
   type WfsPrincipal,
   type WfsProjectState,
+  type WfsReviewVerdict,
+  wfsGenesisHash,
 } from './index';
 
 /**
@@ -32,6 +37,15 @@ import {
  */
 
 const sha = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
+/** r1.2 §19.M7: project prj-1's main chain anchor. */
+const GENESIS = wfsGenesisHash('prj-1', sha);
+
+/** r1.2 §19.M1: a review verdict bound to the branch's head NOW (the Julius runner reads it from WonderFS before the review). */
+function verdictFor(p: WfsProjectState, branchId: string): WfsReviewVerdict {
+  const b = p.branches.get(branchId);
+  if (b === undefined || b.parent === null) throw new Error(`no agent branch ${branchId}`);
+  return { verdictId: `verdict-${b.headRev}`, verdictHash: sha(`verdict:${b.headCommitHash}`), reviewedBranchId: branchId, reviewedHeadCommitHash: b.headCommitHash, reviewedBaseRev: b.parent.forkRev };
+}
 
 interface Harness {
   ctx: WfsEngineContext;
@@ -110,7 +124,7 @@ function entry(p: WfsProjectState, path: string, branchId = WFS_MAIN_BRANCH): Wf
 /** A project with `src/` and `src/main.cpp` ("v1") on main at rev 1. */
 function seeded(h: Harness): WfsProjectState {
   const v1 = h.blob('int main() { return 1; }');
-  return apply(emptyWfsProject('prj-1'), request([
+  return apply(emptyWfsProject('prj-1', sha), request([
     { op: 'create', path: 'src', kind: 'dir' },
     { op: 'create', path: 'src/main.cpp', kind: 'file', ...v1 },
   ], who('ghu-1')), h.ctx).project;
@@ -131,7 +145,7 @@ describe('WonderFS engine: commits', () => {
 
   it('refuses a file whose content was not uploaded first, and changes nothing', () => {
     const h = harness();
-    const p0 = emptyWfsProject('prj-1');
+    const p0 = emptyWfsProject('prj-1', sha);
     const r = applyWfsCommit(p0, request([{ op: 'create', path: 'a.txt', kind: 'file', sha256: sha('never uploaded'), size: 14 }], who('ghu-1')), h.ctx);
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error('accepted');
@@ -142,21 +156,21 @@ describe('WonderFS engine: commits', () => {
   it('refuses a size that does not match the uploaded content', () => {
     const h = harness();
     const b = h.blob('hello');
-    const r = applyWfsCommit(emptyWfsProject('prj-1'), request([{ op: 'create', path: 'a.txt', kind: 'file', sha256: b.sha256, size: b.size + 1 }], who('ghu-1')), h.ctx);
+    const r = applyWfsCommit(emptyWfsProject('prj-1', sha), request([{ op: 'create', path: 'a.txt', kind: 'file', sha256: b.sha256, size: b.size + 1 }], who('ghu-1')), h.ctx);
     expect(r.ok).toBe(false);
   });
 
   it('refuses a merge_put sent by a caller (only merge-back writes it)', () => {
     const h = harness();
     const forged = { op: 'merge_put', fileId: 'file-1', expectVersion: 0, state: { kind: 'file', path: 'x', sha256: null, size: null, deleted: false } } as unknown as WfsOp;
-    const r = applyWfsCommit(emptyWfsProject('prj-1'), request([forged], who('ghu-1')), h.ctx);
+    const r = applyWfsCommit(emptyWfsProject('prj-1', sha), request([forged], who('ghu-1')), h.ctx);
     expect(r.ok).toBe(false);
   });
 
   it('refuses a file created in a folder that does not exist (as a preserved conflict)', () => {
     const h = harness();
     const b = h.blob('x');
-    const out = apply(emptyWfsProject('prj-1'), request([{ op: 'create', path: 'missing/a.txt', kind: 'file', ...b }], who('ghu-1')), h.ctx);
+    const out = apply(emptyWfsProject('prj-1', sha), request([{ op: 'create', path: 'missing/a.txt', kind: 'file', ...b }], who('ghu-1')), h.ctx);
     expect(conflicted(out.outcome).failures.map((f) => f.kind)).toEqual(['parent_missing']);
     expect(main(out.project).headRev).toBe(0);
   });
@@ -295,7 +309,7 @@ describe('WonderFS engine: moves, folders and deletes', () => {
 
   it('T-DIR-MOVE: a folder move carries everything beneath it and keeps every file id', () => {
     const h = harness();
-    const p1 = apply(emptyWfsProject('prj-1'), request([
+    const p1 = apply(emptyWfsProject('prj-1', sha), request([
       { op: 'create', path: 'a', kind: 'dir' },
       { op: 'create', path: 'a/b', kind: 'dir' },
       { op: 'create', path: 'a/b/c.txt', kind: 'file', ...h.blob('c') },
@@ -311,7 +325,7 @@ describe('WonderFS engine: moves, folders and deletes', () => {
 
   it('refuses to move a folder into itself (cycle), as a preserved conflict', () => {
     const h = harness();
-    const p1 = apply(emptyWfsProject('prj-1'), request([{ op: 'create', path: 'a', kind: 'dir' }, { op: 'create', path: 'a/b', kind: 'dir' }], who('ghu-1')), h.ctx).project;
+    const p1 = apply(emptyWfsProject('prj-1', sha), request([{ op: 'create', path: 'a', kind: 'dir' }, { op: 'create', path: 'a/b', kind: 'dir' }], who('ghu-1')), h.ctx).project;
     const out = apply(p1, request([{ op: 'move', fileId: entry(p1, 'a').fileId, expectPathVersion: 1, newPath: 'a/b/a' }], who('ghu-1')), h.ctx);
     expect(conflicted(out.outcome).failures[0].kind).toBe('cycle');
   });
@@ -320,7 +334,7 @@ describe('WonderFS engine: moves, folders and deletes', () => {
     const h = harness();
     const first = h.blob('first');
     const second = h.blob('second');
-    const p1 = apply(emptyWfsProject('prj-1'), request([{ op: 'create', path: 'Readme.md', kind: 'file', ...first }], who('ghu-alice')), h.ctx).project;
+    const p1 = apply(emptyWfsProject('prj-1', sha), request([{ op: 'create', path: 'Readme.md', kind: 'file', ...first }], who('ghu-alice')), h.ctx).project;
     const out = apply(p1, request([{ op: 'create', path: 'README.md', kind: 'file', ...second }], who('ghu-bob')), h.ctx);
     const c = conflicted(out.outcome);
     expect(c.failures[0].kind).toBe('path_taken');
@@ -387,7 +401,7 @@ describe('WonderFS engine: moves, folders and deletes', () => {
 describe('WonderFS engine: T-IDEMPOTENT (INV-8)', () => {
   it('answers a repeated request with the original outcome and applies it once', () => {
     const h = harness();
-    const p0 = emptyWfsProject('prj-1');
+    const p0 = emptyWfsProject('prj-1', sha);
     const req = request([{ op: 'create', path: 'a.txt', kind: 'file', ...h.blob('a') }], who('ghu-1'));
     const first = apply(p0, req, h.ctx);
     const again = apply(first.project, req, h.ctx);
@@ -410,7 +424,7 @@ describe('WonderFS engine: T-IDEMPOTENT (INV-8)', () => {
 
   it('refuses a request id reused for a different change', () => {
     const h = harness();
-    const p0 = emptyWfsProject('prj-1');
+    const p0 = emptyWfsProject('prj-1', sha);
     const req = request([{ op: 'create', path: 'a.txt', kind: 'file', ...h.blob('a') }], who('ghu-1'));
     const first = apply(p0, req, h.ctx);
     const reused = applyWfsCommit(first.project, { ...req, ops: [{ op: 'create', path: 'b.txt', kind: 'file', ...h.blob('b') }] }, h.ctx);
@@ -421,7 +435,7 @@ describe('WonderFS engine: T-IDEMPOTENT (INV-8)', () => {
 
   it('does not remember a REFUSED (malformed) request: the corrected request may reuse its id', () => {
     const h = harness();
-    const p0 = emptyWfsProject('prj-1');
+    const p0 = emptyWfsProject('prj-1', sha);
     const id = rid();
     const bad = applyWfsCommit(p0, { requestId: id, branchId: WFS_MAIN_BRANCH, baseRev: 0, ops: [{ op: 'create', path: 'bad\nname', kind: 'dir' }], principal: who('ghu-1') }, h.ctx);
     expect(bad.ok).toBe(false);
@@ -443,20 +457,20 @@ describe('WonderFS engine: T-CHAIN and history (INV-6, INV-7)', () => {
   it('links every commit to its predecessor and re-hashes to its stored hash', () => {
     const { commits } = threeCommits();
     expect(commits.map((c) => c.rev)).toEqual([1, 2, 3]);
-    expect(commits[0].prevCommitHash).toBeNull();
+    expect(commits[0].prevCommitHash).toBe(GENESIS); // r1.2 §19.M7: main's chain is anchored to its genesis
     expect(commits[1].prevCommitHash).toBe(commits[0].commitHash);
-    expect(verifyWfsChain(commits, sha)).toBeNull();
+    expect(verifyWfsChain(commits, sha, GENESIS)).toBeNull();
   });
 
   it('detects an edited resulting state, an edited author and a broken link', () => {
     const { commits } = threeCommits();
     const touchedEdited = commits.map((c, i) => (i === 1 ? { ...c, touched: c.touched.map((e) => ({ ...e, sha256: sha('forged') })) } : c));
-    expect(verifyWfsChain(touchedEdited, sha)).toEqual({ rev: 2, reason: 'hash' });
+    expect(verifyWfsChain(touchedEdited, sha, GENESIS)).toEqual({ rev: 2, reason: 'hash' });
     const authorEdited = commits.map((c, i) => (i === 2 ? { ...c, principal: who('ghu-someone-else') } : c));
-    expect(verifyWfsChain(authorEdited, sha)).toEqual({ rev: 3, reason: 'hash' });
+    expect(verifyWfsChain(authorEdited, sha, GENESIS)).toEqual({ rev: 3, reason: 'hash' });
     const relinked = commits.map((c, i) => (i === 2 ? { ...c, prevCommitHash: commits[0].commitHash } : c));
-    expect(verifyWfsChain(relinked, sha)).toEqual({ rev: 3, reason: 'link' });
-    expect(verifyWfsChain(commits.slice(1), sha)).toEqual({ rev: 2, reason: 'rev' });
+    expect(verifyWfsChain(relinked, sha, GENESIS)).toEqual({ rev: 3, reason: 'link' });
+    expect(verifyWfsChain(commits.slice(1), sha, GENESIS)).toEqual({ rev: 2, reason: 'rev' });
   });
 
   it('rebuilds the tree at any earlier revision from the commits', () => {
@@ -472,7 +486,7 @@ describe('WonderFS engine: T-CHAIN and history (INV-6, INV-7)', () => {
 describe('WonderFS engine: T-FEED (§7)', () => {
   it('pages commits after a revision, gapless and in order, and is empty past the head', () => {
     const h = harness();
-    let p = emptyWfsProject('prj-1');
+    let p = emptyWfsProject('prj-1', sha);
     for (const name of ['a', 'b', 'c', 'd', 'e']) p = apply(p, request([{ op: 'create', path: name, kind: 'dir' }], who('ghu-1')), h.ctx).project;
     expect(wfsChangesAfter(main(p), 0, 2).commits.map((c) => c.rev)).toEqual([1, 2]);
     expect(wfsChangesAfter(main(p), 2, 2).commits.map((c) => c.rev)).toEqual([3, 4]);
@@ -498,7 +512,7 @@ describe('WonderFS engine: T-AGENT (branches, §6.5)', () => {
     p = apply(p, request([{ op: 'create', path: 'notes.md', kind: 'file', ...h.blob('human note') }], who('ghu-1')), h.ctx).project;
     expect(entry(p, 'src/main.cpp').sha256).not.toBe(agentEdit.sha256);
     const branchHashes = p.branches.get(branchId)!.commits.map((c) => c.commitHash);
-    const merged = mergeBackWfsBranch(p, { requestId: rid(), branchId, principal: who('julius-7', 'julius'), approvedBy: null }, h.ctx);
+    const merged = mergeBackWfsBranch(p, { requestId: rid(), branchId, principal: who('julius-7', 'julius'), approval: null, reviewVerdict: verdictFor(p, branchId), approverRoleNow: null }, h.ctx);
     expect(merged.ok).toBe(true);
     if (!merged.ok) throw new Error(merged.error.message);
     const out = committed(merged.value.outcome);
@@ -510,7 +524,7 @@ describe('WonderFS engine: T-AGENT (branches, §6.5)', () => {
     expect(mergeCommit.mergesBranchId).toBe(branchId);
     expect(mergeCommit.carriedCommitHashes).toEqual(branchHashes);
     expect(mp.branches.get(branchId)?.closed?.how).toBe('merged');
-    expect(verifyWfsChain(main(mp).commits, sha)).toBeNull();
+    expect(verifyWfsChain(main(mp).commits, sha, GENESIS)).toBeNull();
   });
 
   it('a merge-back over a file main changed applies NOTHING, keeps a conflict naming the branch, and leaves the branch open', () => {
@@ -526,7 +540,7 @@ describe('WonderFS engine: T-AGENT (branches, §6.5)', () => {
     ], who('julius-7', 'julius'), { branchId }), h.ctx).project;
     p = apply(p, request([{ op: 'update', fileId: file.fileId, expectContentVersion: 1, ...h.blob('human') }], who('ghu-1')), h.ctx).project;
     const headBefore = main(p).headRev;
-    const merged = mergeBackWfsBranch(p, { requestId: rid(), branchId, principal: who('julius-7', 'julius'), approvedBy: null }, h.ctx);
+    const merged = mergeBackWfsBranch(p, { requestId: rid(), branchId, principal: who('julius-7', 'julius'), approval: null, reviewVerdict: verdictFor(p, branchId), approverRoleNow: null }, h.ctx);
     expect(merged.ok).toBe(true);
     if (!merged.ok) throw new Error(merged.error.message);
     const c = conflicted(merged.value.outcome);
@@ -546,7 +560,7 @@ describe('WonderFS engine: T-AGENT (branches, §6.5)', () => {
       return { p: fork.value.project, branchId: fork.value.branchId, fileId: entry(p1, 'src/main.cpp').fileId };
     }
     const mergeOf = (p: WfsProjectState, branchId: string, h: Harness): WfsApplied => {
-      const r = mergeBackWfsBranch(p, { requestId: rid(), branchId, principal: who('julius-7', 'julius'), approvedBy: null }, h.ctx);
+      const r = mergeBackWfsBranch(p, { requestId: rid(), branchId, principal: who('julius-7', 'julius'), approval: null, reviewVerdict: verdictFor(p, branchId), approverRoleNow: null }, h.ctx);
       if (!r.ok) throw new Error(r.error.message);
       return r.value;
     };
@@ -625,7 +639,7 @@ describe('WonderFS engine: T-AGENT (branches, §6.5)', () => {
     const clone = forkWfsBranch(agent.value.project, { fromBranchId: agent.value.branchId, owner: who('clone-1', 'clone') }, h.ctx);
     if (!clone.ok) throw new Error(clone.error.message);
     const p = apply(clone.value.project, request([{ op: 'create', path: 'src/from-clone.cpp', kind: 'file', ...h.blob('clone') }], who('clone-1', 'clone'), { branchId: clone.value.branchId }), h.ctx).project;
-    const merged = mergeBackWfsBranch(p, { requestId: rid(), branchId: clone.value.branchId, principal: who('clone-1', 'clone'), approvedBy: null }, h.ctx);
+    const merged = mergeBackWfsBranch(p, { requestId: rid(), branchId: clone.value.branchId, principal: who('clone-1', 'clone'), approval: null, reviewVerdict: null, approverRoleNow: null }, h.ctx);
     if (!merged.ok) throw new Error(merged.error.message);
     expect(committed(merged.value.outcome).branchId).toBe(agent.value.branchId);
     expect(at(merged.value.project, 'src/from-clone.cpp', agent.value.branchId)).toBeDefined();
@@ -655,7 +669,7 @@ describe('WonderFS engine: T-LIMITS (§11)', () => {
   it('refuses a commit that grows a project past its file limit, and changes nothing', () => {
     const h = harness();
     const ctx = h.withLimits({ ...WFS_ALPHA_LIMITS, maxFiles: 2 });
-    const p1 = apply(emptyWfsProject('prj-1'), request([
+    const p1 = apply(emptyWfsProject('prj-1', sha), request([
       { op: 'create', path: 'a', kind: 'file', ...h.blob('a') },
       { op: 'create', path: 'b', kind: 'file', ...h.blob('b') },
     ], who('ghu-1')), ctx).project;
@@ -668,7 +682,7 @@ describe('WonderFS engine: T-LIMITS (§11)', () => {
 
   it('still allows a commit that SHRINKS a project that is over a (lowered) limit', () => {
     const h = harness();
-    const p1 = apply(emptyWfsProject('prj-1'), request([
+    const p1 = apply(emptyWfsProject('prj-1', sha), request([
       { op: 'create', path: 'a', kind: 'file', ...h.blob('a') },
       { op: 'create', path: 'b', kind: 'file', ...h.blob('b') },
     ], who('ghu-1')), h.ctx).project;
@@ -680,7 +694,135 @@ describe('WonderFS engine: T-LIMITS (§11)', () => {
   it('refuses a file over the per-file size limit before anything is checked against the tree', () => {
     const h = harness();
     const ctx = h.withLimits({ ...WFS_ALPHA_LIMITS, maxFileBytes: 4 });
-    const r = applyWfsCommit(emptyWfsProject('prj-1'), request([{ op: 'create', path: 'big', kind: 'file', ...h.blob('12345') }], who('ghu-1')), ctx);
+    const r = applyWfsCommit(emptyWfsProject('prj-1', sha), request([{ op: 'create', path: 'big', kind: 'file', ...h.blob('12345') }], who('ghu-1')), ctx);
     expect(r.ok).toBe(false);
+  });
+});
+
+describe('WonderFS engine: r1.2 §19.M1 (T-APPROVAL-BIND) and §19.M7 (anchored chains)', () => {
+  /** An agent branch of the given owner kind with ONE commit on it (head H1). */
+  function agentWithOneCommit(h: Harness, kind: 'julius' | 'imported_agent'): { p: WfsProjectState; branchId: string; owner: WfsPrincipal } {
+    const p1 = seeded(h);
+    const owner = who(kind === 'julius' ? 'julius-7' : 'agent-x', kind);
+    const fork = forkWfsBranch(p1, { fromBranchId: WFS_MAIN_BRANCH, owner }, h.ctx);
+    if (!fork.ok) throw new Error(fork.error.message);
+    const p = apply(fork.value.project, request([{ op: 'create', path: 'src/h1.cpp', kind: 'file', ...h.blob('h1') }], owner, { branchId: fork.value.branchId }), h.ctx).project;
+    return { p, branchId: fork.value.branchId, owner };
+  }
+  /** r1.4 N-minor-1: an approval as the server writes it, for a human holding `roleNow`. */
+  function approve(p: WfsProjectState, branchId: string, principal: WfsPrincipal, roleNow: WfsHumanRole | null, approvalId: string): WfsMergeApproval {
+    const r = issueWfsApproval(p, { approvalId, branchId, principal, roleNow }, '2026-10-11T04:00:00.000Z');
+    if (!r.ok) throw new Error(r.error.message);
+    return r.value;
+  }
+  function refusedAs(r: ReturnType<typeof mergeBackWfsBranch>, code: string, detail: string): void {
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error('merged');
+    expect(r.error.code).toBe(code);
+    expect(r.error.details).toEqual([`wonderfs: ${detail}`]);
+  }
+
+  it('a Julius merge into main needs a review verdict, and only a verdict for the CURRENT head merges', () => {
+    const h = harness();
+    const { p, branchId, owner } = agentWithOneCommit(h, 'julius');
+    refusedAs(mergeBackWfsBranch(p, { requestId: rid(), branchId, principal: owner, approval: null, reviewVerdict: null, approverRoleNow: null }, h.ctx), 'evidence-required', 'review_required');
+    const forH1 = verdictFor(p, branchId);
+    // one more branch commit after the review: H2
+    const p2 = apply(p, request([{ op: 'create', path: 'src/h2.cpp', kind: 'file', ...h.blob('h2, unreviewed') }], owner, { branchId }), h.ctx).project;
+    const headBefore = main(p2).headRev;
+    refusedAs(mergeBackWfsBranch(p2, { requestId: rid(), branchId, principal: owner, approval: null, reviewVerdict: forH1, approverRoleNow: null }, h.ctx), 'stale-context', 'review_stale');
+    expect(main(p2).headRev).toBe(headBefore);
+    expect(p2.branches.get(branchId)?.closed).toBeNull();
+    // a verdict naming another branch is stale too
+    refusedAs(mergeBackWfsBranch(p2, { requestId: rid(), branchId, principal: owner, approval: null, reviewVerdict: { ...verdictFor(p2, branchId), reviewedBranchId: 'branch-other' }, approverRoleNow: null }, h.ctx), 'stale-context', 'review_stale');
+    const forH2 = verdictFor(p2, branchId);
+    const merged = mergeBackWfsBranch(p2, { requestId: rid(), branchId, principal: owner, approval: null, reviewVerdict: forH2, approverRoleNow: null }, h.ctx);
+    if (!merged.ok) throw new Error(merged.error.message);
+    const done = committed(merged.value.outcome);
+    expect(main(merged.value.project).commits[done.rev - 1].reviewVerdict).toEqual(forH2);
+    expect(at(merged.value.project, 'src/h2.cpp')).toBeDefined();
+  });
+
+  it("an imported agent's merge into main needs a person's approval bound to the head; a stale one is refused", () => {
+    const h = harness();
+    const { p, branchId, owner } = agentWithOneCommit(h, 'imported_agent');
+    refusedAs(mergeBackWfsBranch(p, { requestId: rid(), branchId, principal: owner, approval: null, reviewVerdict: null, approverRoleNow: null }, h.ctx), 'evidence-required', 'approval_required');
+    const editor = who('ghu-editor');
+    const approval = approve(p, branchId, editor, 'editor', 'appr-1');
+    const p2 = apply(p, request([{ op: 'create', path: 'src/later.cpp', kind: 'file', ...h.blob('after the approval') }], owner, { branchId }), h.ctx).project;
+    refusedAs(mergeBackWfsBranch(p2, { requestId: rid(), branchId, principal: owner, approval, reviewVerdict: null, approverRoleNow: 'editor' }, h.ctx), 'stale-context', 'approval_stale');
+    // an approval naming another branch is stale too, whatever head it names
+    const otherBranch = { ...approve(p2, branchId, editor, 'editor', 'appr-x'), branchId: 'branch-other' };
+    refusedAs(mergeBackWfsBranch(p2, { requestId: rid(), branchId, principal: owner, approval: otherBranch, reviewVerdict: null, approverRoleNow: 'editor' }, h.ctx), 'stale-context', 'approval_stale');
+    const fresh = approve(p2, branchId, editor, 'editor', 'appr-2');
+    const merged = mergeBackWfsBranch(p2, { requestId: rid(), branchId, principal: owner, approval: fresh, reviewVerdict: null, approverRoleNow: 'editor' }, h.ctx);
+    if (!merged.ok) throw new Error(merged.error.message);
+    const done = committed(merged.value.outcome);
+    expect(main(merged.value.project).commits[done.rev - 1].approval).toEqual(fresh);
+  });
+
+  it('N-minor-1 (a): only a HUMAN editor or owner writes an approval; approvedBy is the server-set principal, bound to the head now', () => {
+    const h = harness();
+    const { p, branchId, owner } = agentWithOneCommit(h, 'imported_agent');
+    const forbidden = (principal: WfsPrincipal, roleNow: WfsHumanRole | null, onBranch: string = branchId): void => {
+      const r = issueWfsApproval(p, { approvalId: 'appr-x', branchId: onBranch, principal, roleNow }, h.ctx.nowIso);
+      expect(r.ok).toBe(false);
+      if (r.ok) throw new Error('approved');
+      expect(r.error.code).toBe('permission-denied');
+      expect(r.error.details).toEqual(['wonderfs: approval_forbidden']);
+    };
+    forbidden(owner, 'editor'); // the imported agent itself (an agent grant), even with a role handed in
+    forbidden(who('clone-1', 'clone'), 'editor');
+    forbidden(who('julius-7', 'julius'), 'owner');
+    forbidden(who('svc-1', 'service'), 'owner');
+    forbidden(who('ghu-viewer'), 'viewer'); // a person without edit rights
+    forbidden(who('ghu-gone'), null); // a person no longer a member
+    forbidden(owner, 'editor', 'branch-that-does-not-exist'); // decided before the lookup: the same answer, no existence leak
+
+    const b = p.branches.get(branchId)!;
+    const r = issueWfsApproval(p, { approvalId: 'appr-1', branchId, principal: who('ghu-owner'), roleNow: 'owner' }, h.ctx.nowIso);
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value).toEqual({ approvalId: 'appr-1', branchId, approvedBy: 'ghu-owner', approvedHeadCommitHash: b.headCommitHash, approvedBaseRev: b.parent!.forkRev, approvedAtIso: h.ctx.nowIso });
+    expect(issueWfsApproval(p, { approvalId: 'appr-2', branchId: WFS_MAIN_BRANCH, principal: who('ghu-owner'), roleNow: 'owner' }, h.ctx.nowIso).ok).toBe(false);
+  });
+
+  it('N-minor-1 (b): the approver demoted or removed before the merge -> refused (an issue-time-only check would accept it)', () => {
+    const h = harness();
+    const { p, branchId, owner } = agentWithOneCommit(h, 'imported_agent');
+    const approval = approve(p, branchId, who('ghu-editor'), 'editor', 'appr-1');
+    const headBefore = main(p).headRev;
+    for (const roleNow of ['viewer', null] as const) {
+      refusedAs(mergeBackWfsBranch(p, { requestId: rid(), branchId, principal: owner, approval, reviewVerdict: null, approverRoleNow: roleNow }, h.ctx), 'stale-context', 'approval_stale');
+    }
+    expect(main(p).headRev).toBe(headBefore);
+    expect(p.branches.get(branchId)?.closed).toBeNull();
+    // the same approval, its approver still able to edit (here promoted to owner), merges
+    const merged = mergeBackWfsBranch(p, { requestId: rid(), branchId, principal: owner, approval, reviewVerdict: null, approverRoleNow: 'owner' }, h.ctx);
+    if (!merged.ok) throw new Error(merged.error.message);
+    expect(main(merged.value.project).commits[committed(merged.value.outcome).rev - 1].approval).toEqual(approval);
+  });
+
+  it("main's chain is anchored to its genesis; a branch's first commit links to its parent's head at the fork and says so", () => {
+    const h = harness();
+    const p1 = seeded(h);
+    expect(main(p1).anchorHash).toBe(GENESIS);
+    expect(main(p1).commits[0].prevCommitHash).toBe(GENESIS);
+    expect(verifyWfsChain(main(p1).commits, sha, GENESIS)).toBeNull();
+    expect(verifyWfsChain(main(p1).commits, sha, wfsGenesisHash('prj-other', sha))).toEqual({ rev: 1, reason: 'link' });
+
+    const fork = forkWfsBranch(p1, { fromBranchId: WFS_MAIN_BRANCH, owner: who('julius-7', 'julius') }, h.ctx);
+    if (!fork.ok) throw new Error(fork.error.message);
+    const branchId = fork.value.branchId;
+    const p2 = apply(fork.value.project, request([{ op: 'create', path: 'b.txt', kind: 'file', ...h.blob('b') }], who('julius-7', 'julius'), { branchId }), h.ctx).project;
+    const branch = p2.branches.get(branchId)!;
+    expect(branch.anchorHash).toBe(main(p1).headCommitHash);
+    expect(branch.commits[0].prevCommitHash).toBe(main(p1).headCommitHash);
+    expect(branch.commits[0].fork).toEqual({ parentBranchId: WFS_MAIN_BRANCH, parentRev: 1 });
+    expect(verifyWfsChain(branch.commits, sha, branch.anchorHash)).toBeNull();
+    // the branch's chain does not verify against main's genesis: it is anchored to the fork point, not floating
+    expect(verifyWfsChain(branch.commits, sha, GENESIS)).toEqual({ rev: 1, reason: 'link' });
+    // only a branch's FIRST commit records the fork
+    const p3 = apply(p2, request([{ op: 'create', path: 'c.txt', kind: 'file', ...h.blob('c') }], who('julius-7', 'julius'), { branchId }), h.ctx).project;
+    expect(p3.branches.get(branchId)!.commits[1].fork).toBeNull();
   });
 });
