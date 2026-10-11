@@ -51,9 +51,11 @@ describe('the frozen pins hold, and a drifted pin refuses', () => {
       if (!name || name.startsWith('#')) continue;
       counts.set(name, (counts.get(name) ?? 0) + 1);
     }
-    expect([...counts.keys()].sort()).toEqual(['julius-live-mission-2', 'julius-live-mission-3', 'julius-live-mission-5', 'julius-live-mission-6', 'julius-unreal-mission-1']);
+    const pairArms = ['julius-learning-pair-1-without-1', 'julius-learning-pair-1-with-1', 'julius-learning-pair-1-without-2', 'julius-learning-pair-1-with-2'];
+    expect([...counts.keys()].sort()).toEqual([...pairArms, 'julius-live-mission-2', 'julius-live-mission-3', 'julius-live-mission-5', 'julius-live-mission-6', 'julius-unreal-mission-1'].sort());
     expect(counts.get('julius-live-mission-5'), 'Mission 5 is a throwaway tree: its directory is its one pin').toBe(1);
     expect(counts.get('julius-unreal-mission-1'), 'row 14-Unreal is a throwaway tree: its directory is its one pin').toBe(1);
+    for (const arm of pairArms) expect(counts.get(arm), `${arm}: a Decision C arm is a throwaway tree, its directory its one pin`).toBe(1);
     for (const [mission, count] of counts) {
       const run = pins([mission, '.', 'HEAD']);
       expect(run.stderr, mission).toBe('');
