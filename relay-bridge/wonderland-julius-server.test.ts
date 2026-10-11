@@ -141,6 +141,36 @@ describe('an authenticated world request on an unconfigured bridge', () => {
     }, 30_000);
   }
 
+  it('says WHY it is 503 in the operator\'s log -- world_not_configured -- with no database, and with a URL that would weaken the world pool (internal review A2)', async () => {
+    // The composition root's guard (resolveJuliusWorld: no pool, no world) is what this pins. Without it the route is
+    // handed a world over NO pool; its read throws inside the route's own try, and the catch ALSO answers 503 -- as
+    // store_unavailable. The status cannot tell the two apart; the line the route writes can.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      for (const url of [null, 'postgres://127.0.0.1:1/never?options=-c%20default_transaction_read_only%3Doff']) {
+        warn.mockClear();
+        const store = createBrowserSessionStore();
+        const base = await boot(url, null, store);
+        for (const route of ROUTES) {
+          const res = await getNative(base, `/relay-api/wonderland/julius/${route}?${queryFor(route)}`, nativeSession(store));
+          expect(res.status, `${route} ${String(url)}`).toBe(503);
+        }
+        const lines = warn.mock.calls.map((call) => String(call[0]));
+        expect(lines.filter((line) => line.includes('wonderland julius')), String(url)).toEqual(ROUTES.map((route) =>
+          `[relay-bridge] wonderland julius ${route}: 503 world_not_configured player=player-1 project=project-alpha run=run-1`));
+        expect(lines.join('\n'), String(url)).not.toContain('store_unavailable');
+        if (url !== null) {
+          // The refused URL is named by its KEY, once per attempt to build the pool -- never by its value.
+          expect(lines.filter((line) => line.includes('julius world pool refused'))[0])
+            .toBe('[relay-bridge] julius world pool refused: the database URL sets options, which would replace the world\'s read-only session settings');
+          expect(lines.join('\n')).not.toContain('127.0.0.1:1');
+        }
+      }
+    } finally {
+      warn.mockRestore();
+    }
+  }, 30_000);
+
   it('does not open up merely because a database exists', async () => {
     // With DATABASE_URL set, the world is built and the route reaches its
     // read-only transaction -- against a database that cannot be reached. That
@@ -490,6 +520,39 @@ describe('a fully wired bridge serves a world', () => {
     }
     // Refused before any read: not one transaction was opened.
     expect(fake.connections()).toBe(0);
+  }, 30_000);
+
+  it('admits the native client only WITHOUT an Origin: the same native token WITH one is the one 404, on every route (internal review A3)', async () => {
+    // Every other HTTP test either sends a native token with no Origin or a browser token. This is the native token
+    // itself, sent once as the Unreal client sends it and once with the bridge's own approved Origin added.
+    const view: JuliusMissionResultView = {
+      runId: 'run-1', missionId: 'mission-1', state: 'EXECUTING', verified: false, terminal: false,
+      criteria: [], deliverables: [], outstandingFindings: [], reviewDecisions: [],
+      cost: { knownUsdMicros: 0, unknownComponents: 0, complete: true }, failure: null,
+    };
+    const { world, fake } = worldOver({ run: RUN_ROW, citation: CITATION_ROW }, view);
+    const store = createBrowserSessionStore();
+    const base = await boot(null, world, store);
+    const token = nativeSession(store);
+    for (const route of ROUTES) {
+      const before = fake.connections();
+      const withOrigin = await get(base, `/relay-api/wonderland/julius/${route}?${queryFor(route)}`, { Authorization: `Relay-Session ${token}` });
+      expect(withOrigin.status, route).toBe(404);
+      expect(await withOrigin.json(), route).toEqual({ error: 'permission denied' });
+      expect(withOrigin.headers.get('cache-control'), route).toBe('no-store');
+      // Refused on the header alone: no transaction was opened for it.
+      expect(fake.connections(), route).toBe(before);
+      // An Origin the bridge does not approve never reaches a route at all -- the bridge's origin gate, unchanged.
+      const unapproved = await realFetch(`${base}/relay-api/wonderland/julius/${route}?${queryFor(route)}`, {
+        headers: { Origin: 'https://evil.example', Authorization: `Relay-Session ${token}` },
+      });
+      expect(unapproved.status, route).toBe(403);
+      expect(fake.connections(), route).toBe(before);
+      // CONTROL: the SAME token with NO Origin, as the Unreal client sends it, is served -- in one transaction.
+      const native = await getNative(base, `/relay-api/wonderland/julius/${route}?${queryFor(route)}`, token);
+      expect(native.status, route).toBe(200);
+      expect(fake.connections(), route).toBe(before + 1);
+    }
   }, 30_000);
 
   it('refuses a member of ANOTHER project without saying so -- the one 404', async () => {

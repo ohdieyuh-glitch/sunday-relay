@@ -14,7 +14,7 @@ import {
   wonderlandJuliusWorldPoolConfig,
 } from './wonderland-julius-world';
 import type { WonderlandJuliusReadOnlyQueryable } from './wonderland-julius-world';
-import { handleWonderlandJuliusRoute } from './wonderland-julius-routes';
+import { WONDERLAND_JULIUS_NOT_FOUND, handleWonderlandJuliusRoute } from './wonderland-julius-routes';
 import { NATIVE_WORLD_AUDIENCE, createBrowserSessionStore } from './browser-session/grants';
 import type { BrowserSessionStore } from './browser-session/grants';
 import { WONDERLAND_UNAVAILABLE_MESSAGE } from '../src/relay/mission/wonderland/wonderland-authorization';
@@ -267,6 +267,53 @@ describe('every world read runs inside ONE read-only transaction', () => {
     expect(answer?.status).toBe(404);
     auditReadOnly(spy);
     expect(spy.connections[0].statements).toEqual([WONDERLAND_JULIUS_READ_ONLY_BEGIN, expect.stringContaining('project_members'), 'COMMIT']);
+  });
+});
+
+describe('the refusals, through main\'s real compositions -- Julius\'s own result API included (internal review A5)', () => {
+  // Until the review the real composeJuliusStateApi ran only on the owner's success path. Here every route is asked,
+  // with NO double between the route and the emulated server, for a run that does not exist, for a run that lives in
+  // ANOTHER project, and by a player who is not a member: each is the one 404, byte for byte, inside one read-only
+  // transaction. The spy keys every run-scoped read by its bound (run, project), as the SQL does.
+  const RUN_READ = {
+    hydrate: expect.stringContaining('AS at_sequence'),
+    events: expect.stringContaining('LEFT JOIN LATERAL'),
+    // Julius's own loadRun (inspectResult -> #authorizedRun), keyed (run, project).
+    result: expect.stringMatching(/FROM relay_wonderland\.julius_runs WHERE run_id=\$1 AND project_id=\$2/u),
+  } as const;
+  const CASES = [
+    ['a run that does not exist', { runProject: null }],
+    ['a run of ANOTHER project', { runProject: 'project-beta' }],
+    ['a player who is not a member', { member: false }],
+  ] as const;
+
+  for (const [label, options] of CASES) {
+    for (const route of ['hydrate', 'events', 'result'] as const) {
+      it(`${route}, ${label}: the one 404, read-only, nothing read past the refusal`, async () => {
+        const spy = spyPool(options);
+        const store = createBrowserSessionStore();
+        const answer = await ask(store, nativeSession(store), route, wonderlandJuliusWorld(spy.pool as never));
+        expect(answer).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+        expect(answer?.body).toBe(WONDERLAND_JULIUS_NOT_FOUND);
+        expect(spy.connections.length).toBe(1);
+        auditReadOnly(spy);
+        expect(spy.connections[0].statements).toEqual('member' in options
+          // Refused on membership: no run is read, and Julius's API is never asked.
+          ? [WONDERLAND_JULIUS_READ_ONLY_BEGIN, expect.stringContaining('project_members'), 'COMMIT']
+          // Membership granted, then ONE read of the run by (run, project), which finds no row this project can see.
+          : [WONDERLAND_JULIUS_READ_ONLY_BEGIN, expect.stringContaining('project_members'), RUN_READ[route], 'COMMIT']);
+      });
+    }
+  }
+
+  it('CONTROL: the same composition, the run in THIS project and a member asking, serves every route', async () => {
+    for (const route of ['hydrate', 'events', 'result'] as const) {
+      const spy = spyPool({ runProject: PROJECT, member: true });
+      const store = createBrowserSessionStore();
+      const answer = await ask(store, nativeSession(store), route, wonderlandJuliusWorld(spy.pool as never));
+      expect(answer?.status, route).toBe(200);
+      auditReadOnly(spy);
+    }
   });
 });
 

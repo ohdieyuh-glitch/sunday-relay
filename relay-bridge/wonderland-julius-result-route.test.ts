@@ -28,8 +28,10 @@ import { JULIUS_DEFAULT_ROLES } from '../src/relay/mission/julius/julius-runtime
 import type { WonderlandJuliusBillingRecord } from '../src/relay/mission/wonderland/wonderland-julius-result';
 import {
   WONDERLAND_DENIAL_MESSAGE,
+  WONDERLAND_ROLE_CAPABILITIES,
   WONDERLAND_UNAVAILABLE_MESSAGE,
 } from '../src/relay/mission/wonderland/wonderland-authorization';
+import type { WonderlandAuthorizationDecision } from '../src/relay/mission/wonderland/wonderland-authorization';
 
 /**
  * GET /wonderland/julius/result -- THE USER RESULT, BEHIND THE WORLD'S OWN DOOR.
@@ -442,5 +444,69 @@ describe('wonderlandJuliusResultsFrom -- the billing read, through Julius\'s own
     expect(await wonderlandJuliusResultsFrom(notFound).billing?.(ask)).toBeNull();
     const refused = { ...api, timeline: async (): Promise<JuliusApiResult<JuliusTimelinePage>> => ({ ok: false, reason: 'scope_missing', safeMessage: 'no' }) };
     await expect(wonderlandJuliusResultsFrom(refused).billing?.(ask)).rejects.toThrow(/scope_missing/);
+  });
+});
+
+/* ------------------------------------ the canonical role table (review A4) */
+
+describe('THE CANONICAL ROLE TABLE, as production runs it (internal review A4)', () => {
+  // Every other role test here injects a table (DECIDED). Production injects none: WONDERLAND_ROLE_CAPABILITIES
+  // decides, and it names the OWNER alone. So what production returns to a member who is NOT the owner is pinned
+  // here, on all three routes: the one 404, decided as unrecognised_role -- the run never read, the result never
+  // read, the billing never read, cost never present. "A member sees the result without its cost" (DECIDED) stays
+  // dormant until a route writes that role and adds its row to the canonical table.
+  const PATHS = ['/wonderland/julius/hydrate', '/wonderland/julius/events', '/wonderland/julius/result'] as const;
+
+  /** Every read a request could make, recorded; and every authorisation decision. */
+  const recorded = (role: string) => {
+    const reads: string[] = [];
+    const decisions: WonderlandAuthorizationDecision[] = [];
+    const results: WonderlandJuliusResultSource = {
+      result: async () => { reads.push('result'); return resultView(); },
+      billing: async () => { reads.push('billing'); return { slots: THREE_SLOTS, settlements: [], whole: true }; },
+    };
+    const reader: WonderlandJuliusReader = {
+      hydrate: async () => { reads.push('hydrate'); return null; },
+      events: async () => { reads.push('events'); return { rows: [], revision: 1 }; },
+    };
+    return {
+      reads,
+      decisions,
+      over: { membership: members({ [`${PLAYER}|${PROJECT}`]: role }), results, reader, onAuthorization: (decision: WonderlandAuthorizationDecision) => decisions.push(decision) },
+    };
+  };
+
+  it('the production table is the OWNER alone, and only the OWNER carries read_mission_cost', () => {
+    expect(Object.keys(WONDERLAND_ROLE_CAPABILITIES)).toEqual(['OWNER']);
+    expect(WONDERLAND_ROLE_CAPABILITIES.OWNER).toContain('read_mission_cost');
+  });
+
+  it('a member who is not the OWNER gets the one 404 on every route: nothing read, cost never present', async () => {
+    for (const role of ['MEMBER', 'ADMIN', 'WATCHER', 'VIEWER', 'owner', '']) {
+      for (const path of PATHS) {
+        const store = createBrowserSessionStore();
+        const { reads, decisions, over } = recorded(role);
+        // No roleCapabilities: the canonical table, exactly as the server composes the route.
+        const answer = await handleWonderlandJuliusRoute(request(paired(store), undefined, PROJECT, path), deps(store, over));
+        const label = `${role === '' ? '(blank)' : role} ${path}`;
+        expect(answer, label).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+        expect(reads, label).toEqual([]);
+        expect(decisions.map((decision) => [decision.capability, decision.verdict, decision.granted]), label)
+          .toEqual([[path.endsWith('/result') ? 'read_mission_result' : 'read_world_state', 'unrecognised_role', false]]);
+        expect(JSON.stringify(answer?.body), label).not.toMatch(/cost|4200|billing|visible/u);
+      }
+    }
+  });
+
+  it('CONTROL: the OWNER, by the same production table, reads the world and the result WITH its exact cost and billing', async () => {
+    const store = createBrowserSessionStore();
+    const owner = recorded('OWNER');
+    const result = await handleWonderlandJuliusRoute(request(paired(store), undefined), deps(store, owner.over));
+    expect(result?.status).toBe(200);
+    expect(dataOf(result).cost).toMatchObject({ visible: true, knownUsdMicros: 4_200, unknownComponents: 1, complete: false });
+    expect(owner.reads).toEqual(['result', 'billing']);
+    expect(owner.decisions.map((decision) => [decision.capability, decision.granted])).toEqual([['read_mission_result', true], ['read_mission_cost', true]]);
+    const events = await handleWonderlandJuliusRoute(request(paired(store), undefined, PROJECT, '/wonderland/julius/events'), deps(store, recorded('OWNER').over));
+    expect(events?.status).toBe(200);
   });
 });

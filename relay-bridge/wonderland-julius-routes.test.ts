@@ -256,6 +256,21 @@ describe('a route that will not open without its authorisation', () => {
     }
   });
 
+  it('says WHY in the operator\'s log -- world_not_configured, never a store failure -- on every route (internal review A2)', async () => {
+    // The 503 alone could not tell the guard was there: without it, `world.read` on null throws inside the route's
+    // own try, and the catch ALSO answers 503 (store_unavailable). So the guard is pinned by the line it writes.
+    for (const world of [undefined, null]) {
+      for (const route of ['hydrate', 'events', 'result'] as const) {
+        const lines: string[] = [];
+        const answer = await handleWonderlandJuliusRoute(request(`/wonderland/julius/${route}`), {
+          sessions: sessions('player-1'), world, log: (line) => lines.push(line),
+        });
+        expect(answer, `${route} ${String(world)}`).toEqual({ status: 503, body: { error: WONDERLAND_UNAVAILABLE_MESSAGE } });
+        expect(lines, `${route} ${String(world)}`).toEqual([`wonderland julius ${route}: 503 world_not_configured player=player-1 project=${PROJECT} run=${RUN}`]);
+      }
+    }
+  });
+
   it('never reaches the membership check -- or opens a transaction -- without a session', async () => {
     let asked = false;
     const world = worldOf({
