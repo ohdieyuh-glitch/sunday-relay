@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { applySocialOperation } from '../src/relay/social/social-commands';
 import { createInMemoryVoiceBindings, type VoiceBindingStore } from '../src/relay/social/voice-binding';
@@ -9,6 +11,7 @@ import { partyOf, type SocialState } from '../src/relay/social/social-state';
 import type { SocialStore } from '../src/relay/social/social-store';
 import {
   handleSocialRoute,
+  nativeSocialSessionDeps,
   type PartyVoiceTokenMinter,
   type SocialDeliveryRecord,
   type SocialRouteDeps,
@@ -16,6 +19,7 @@ import {
 } from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 import { failureTag, hashId, hashPuid } from './eos-voice';
+import { createBrowserSessionStore } from './browser-session/grants';
 
 /*
  * PARTY VOICE AND THE DELIVERY TAP, through the real route. The voice minter is a recorder: what matters is WHO the route
@@ -338,6 +342,106 @@ describe('party voice: a re-bind takes the replaced PUID out of the room first (
     expect(rec.heard(pid)).toEqual([fresh]);
     expect(log).toEqual([`voice join: the binding moved under this join user=${hashId(U.KAI)} puid=${hashPuid(fresh)} predicted=bound actual=rebound`]);
     for (const raw of [U.KAI, fresh, puidOf(U.KAI)]) expect(log.join('\n')).not.toContain(raw);
+  });
+});
+
+describe("party voice: the NEWEST SESSION WINS on the production path (MAIN's internal reviews af2eb058 m-d/m-e, a8ed4c0b MAJOR 1)", () => {
+  // These carry the issue times production carries: the facts' issuedAtMs, and the session store's lookup. Before m-e no route
+  // test did, so every re-bind case ran the dev server's "another session" fallback.
+
+  it("KAI's older session binds X; his NEWER session re-binds Y (200); the older asks again with X: the stranger's 404, nothing removed, Y stays bound and heard", async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder();
+    const bindings = createInMemoryVoiceBindings();
+    const deps = depsFor(state, rec.minter, undefined, bindings);
+    const [older, newer] = [U.KAI, `${U.KAI}#2`];
+    // both live, both signed in before the first join, the older a second before the newer
+    expect(facts(older).issuedAtMs).toBeLessThan(facts(newer).issuedAtMs);
+    expect(facts(newer).issuedAtMs).toBeLessThan(T0);
+    const [X, Y] = [puidOf('kai-device-x'), puidOf('kai-device-y')];
+    expect((await join(deps, older, pid, X)).status).toBe(200);
+    expect((await join(deps, newer, pid, Y)).status).toBe(200);
+    expect(rec.removals).toEqual([{ partyId: pid, participantId: U.KAI, puids: [X] }]);
+    const missing = await join(deps, older, 'pty_does_not_exist', X);
+    const again = await join(deps, older, pid, X);
+    expect(again.status).toBe(404);
+    expect(again.body).toEqual(missing.body);
+    expect(rec.removals).toHaveLength(1); // the refused ask removed nothing
+    expect(rec.asked.map((a) => a.puid)).toEqual([X, Y]); // and was minted nothing
+    expect(bindings.rows().map((r) => [r.puid, r.sessionId])).toEqual([[Y, newer]]);
+    expect(rec.heard(pid)).toEqual([Y]);
+  });
+
+  it('once the newer session is gone (signed out, expired), its binding yields: the older session re-binds X, and Y leaves the room', async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder();
+    const bindings = createInMemoryVoiceBindings();
+    const gone = new Set<string>();
+    const deps: SocialRouteDeps = { ...depsFor(state, rec.minter, undefined, bindings), sessionIssuedAt: (id) => (gone.has(id) ? null : issuedAtOf(id)) };
+    const [X, Y] = [puidOf('kai-device-x'), puidOf('kai-device-y')];
+    expect((await join(deps, U.KAI, pid, X)).status).toBe(200);
+    expect((await join(deps, `${U.KAI}#2`, pid, Y)).status).toBe(200);
+    expect((await join(deps, U.KAI, pid, X)).status).toBe(404);
+    gone.add(`${U.KAI}#2`);
+    expect((await join(deps, U.KAI, pid, X)).status).toBe(200);
+    expect(bindings.rows().map((r) => [r.puid, r.sessionId])).toEqual([[X, U.KAI]]);
+    expect(rec.removals.map((r) => r.puids)).toEqual([[X], [Y]]);
+    expect(rec.heard(pid)).toEqual([X]);
+  });
+});
+
+describe("the bridge's session hop for social: nativeSocialSessionDeps, exactly what server.ts spreads (MAIN's internal reviews af2eb058 m-d/m-e, a8ed4c0b MAJOR 1)", () => {
+  const mintFor = (sessions: ReturnType<typeof createBrowserSessionStore>, participantId: string, at: number) => {
+    const minted = sessions.mintNativeSocialSession({ now: at, participantId });
+    if (!minted.ok) throw new Error(`mint: ${minted.reason}`);
+    return minted.session;
+  };
+
+  it("a native social session's facts carry its issue time; the lookup answers it by id while the session lives, and null once it is revoked", () => {
+    const sessions = createBrowserSessionStore();
+    const first = mintFor(sessions, U.KAI, T0 - 60_000);
+    const second = mintFor(sessions, U.KAI, T0 - 30_000);
+    const hop = nativeSocialSessionDeps(sessions);
+    expect(hop.verifySession(first.token, T0)).toEqual({ sessionId: first.sessionId, participantId: U.KAI, capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social', issuedAtMs: T0 - 60_000 });
+    expect(hop.verifySession(second.token, T0)?.issuedAtMs).toBe(T0 - 30_000);
+    expect(hop.sessionIssuedAt?.(first.sessionId, T0)).toBe(T0 - 60_000);
+    expect(hop.sessionIssuedAt?.(second.sessionId, T0)).toBe(T0 - 30_000);
+    expect(sessions.revokeSession({ token: first.token, now: T0 })).toBe(true);
+    expect(hop.verifySession(first.token, T0)).toBeNull();
+    expect(hop.sessionIssuedAt?.(first.sessionId, T0)).toBeNull();
+  });
+
+  it('through the voice route on REAL sessions: the newer session wins though it signed in before the first join; the older cannot take the binding back until the newer signs out', async () => {
+    const { state, pid } = arena();
+    const sessions = createBrowserSessionStore();
+    const older = mintFor(sessions, U.KAI, T0 - 60_000);
+    const newer = mintFor(sessions, U.KAI, T0 - 30_000); // before the older session's first join: the m-d case
+    const rec = minterRecorder();
+    const bindings = createInMemoryVoiceBindings();
+    const deps: SocialRouteDeps = { ...depsFor(state, rec.minter, undefined, bindings), ...nativeSocialSessionDeps(sessions) };
+    const [X, Y] = [puidOf('kai-real-x'), puidOf('kai-real-y')];
+    expect((await join(deps, older.token, pid, X)).status).toBe(200);
+    expect((await join(deps, newer.token, pid, Y)).status).toBe(200);
+    expect((await join(deps, older.token, pid, X)).status).toBe(404);
+    expect(bindings.rows().map((r) => [r.puid, r.sessionId])).toEqual([[Y, newer.sessionId]]);
+    expect(rec.heard(pid)).toEqual([Y]);
+    expect(sessions.revokeSession({ token: newer.token, now: T0 })).toBe(true); // the newer signs out
+    expect((await join(deps, older.token, pid, X)).status).toBe(200);
+    expect(bindings.rows().map((r) => [r.puid, r.sessionId])).toEqual([[X, older.sessionId]]);
+    expect(rec.heard(pid)).toEqual([X]);
+  });
+
+  it('server.ts serves social with exactly this hop, and builds no session facts of its own', () => {
+    const server = readFileSync(resolve(__dirname, 'server.ts'), 'utf8');
+    const start = server.indexOf('const socialResult = await handleSocialRoute(');
+    expect(start, 'the social route is mounted').toBeGreaterThan(0);
+    const end = server.indexOf('\n          });', start);
+    expect(end, 'the call closes').toBeGreaterThan(start);
+    const call = server.slice(start, end);
+    expect(call).toContain('...nativeSocialSessionDeps(browserSessions),');
+    expect(call).not.toContain('verifySession:');
+    expect(call).not.toContain('sessionIssuedAt:');
+    expect(server).not.toContain('verifyNativeSocialSession(');
   });
 });
 

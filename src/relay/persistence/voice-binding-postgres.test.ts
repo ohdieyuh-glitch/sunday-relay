@@ -96,3 +96,52 @@ describe('the PostgreSQL bind re-reads ONCE on 23505 (review a6d5842c, m2)', () 
     expect(db.released()).toBe(1);
   });
 });
+
+describe("NEWEST SESSION WINS in the PostgreSQL bind (MAIN's internal reviews af2eb058 m-d/m-e, a8ed4c0b MAJOR 1)", () => {
+  const T = Date.parse(NOW);
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const P2 = 'fedcba9876543210fedcba9876543210';
+  /** The caller's row: P1, bound at NOW by session s1 (issued two minutes before NOW, per the lookups below). */
+  const seeded = () => {
+    const db = scriptedPool({});
+    db.table.push({ user_id: 'ghu-1', puid: P1, session_id: 's1', bound_at: new Date(NOW) });
+    return db;
+  };
+  /** The session store's lookup as the bridge passes it; each question is recorded among the statements PostgreSQL saw. */
+  const lookupFor = (db: ReturnType<typeof scriptedPool>, live: ReadonlyMap<string, number>) => (id: string): number | null => {
+    db.sent.push(`lookup ${id}`);
+    return live.get(id) ?? null;
+  };
+  const caller = (sessionId: string, issuedMs: number, of: ((id: string) => number | null) | null) =>
+    ({ userId: 'ghu-1', puid: P2, sessionId, sessionIssuedAtIso: iso(issuedMs), sessionIssuedAtOf: of, nowIso: iso(T + 60_000) });
+
+  it("a session NOT newer than the binding's live session -- older, or issued at the same instant -- is 'refused', and no UPDATE is sent", async () => {
+    for (const [label, issued] of [['older', T - 180_000], ['the same instant', T - 120_000]] as const) {
+      const db = seeded();
+      const live = new Map([['s1', T - 120_000]]);
+      expect(await createPostgresVoiceBindings(db.pool).bind(caller('s0', issued, lookupFor(db, live))), label).toBe('refused');
+      // asked about the BINDING's session, inside the transaction; nothing written
+      expect(db.sent, label).toEqual([...ONE_TRY, 'lookup s1', 'COMMIT']);
+      expect(db.table, label).toEqual([{ user_id: 'ghu-1', puid: P1, session_id: 's1', bound_at: new Date(NOW) }]);
+      expect(db.released(), label).toBe(1);
+    }
+  });
+
+  it('the control: a NEWER session re-binds with one UPDATE, though it was issued before the binding was made (the m-d case); so does any session once the binding\'s is gone', async () => {
+    const newer = seeded();
+    expect(await createPostgresVoiceBindings(newer.pool).bind(caller('s2', T - 60_000, lookupFor(newer, new Map([['s1', T - 120_000]]))))).toBe('rebound');
+    expect(newer.sent).toEqual([...ONE_TRY, 'lookup s1', 'UPDATE', 'COMMIT']);
+    expect(newer.table.map((r) => [r.puid, r.session_id])).toEqual([[P2, 's2']]);
+    const gone = seeded();
+    expect(await createPostgresVoiceBindings(gone.pool).bind(caller('s0', T - 180_000, lookupFor(gone, new Map())))).toBe('rebound');
+    expect(gone.sent).toEqual([...ONE_TRY, 'lookup s1', 'UPDATE', 'COMMIT']);
+  });
+
+  it("a store that cannot answer (sessionIssuedAtOf null): bound_at stands in, and a session issued at or before it is 'refused' with no UPDATE", async () => {
+    for (const issued of [T - 60_000, T]) {
+      const db = seeded();
+      expect(await createPostgresVoiceBindings(db.pool).bind(caller('s2', issued, null)), iso(issued)).toBe('refused');
+      expect(db.sent, iso(issued)).toEqual([...ONE_TRY, 'COMMIT']);
+    }
+  });
+});
