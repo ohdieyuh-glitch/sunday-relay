@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 
 import { decideVoiceBinding, type VoiceBindingOutcome, type VoiceBindingRow, type VoiceBindingStore } from '../social/voice-binding';
+import { protectedStoreWriterGuard } from './protected-store-writer-guard';
 
 /** A relay_wonderland.voice_puid_binding row as pg returns it. */
 interface BindingRowShape {
@@ -26,6 +27,8 @@ const rowOf = (row: BindingRowShape | undefined): VoiceBindingRow | null =>
  * bindingOf and ownerOf are plain reads (no lock): the voice route predicts a re-bind from them, and bind decides again.
  */
 export function createPostgresVoiceBindings(pool: Pool): VoiceBindingStore {
+  // C2: voice data never touches a protected store (the Julius live store). Every method asks first, reads included.
+  const refuseProtectedStore = protectedStoreWriterGuard(pool, 'voice bindings');
   /** One attempt, in its own transaction; any failure is rolled back and thrown. */
   const bindOnce = async ({ userId, puid, sessionId, sessionIssuedAtIso, sessionIssuedAtOf, nowIso }: Parameters<VoiceBindingStore['bind']>[0]): Promise<VoiceBindingOutcome> => {
     const client = await pool.connect();
@@ -56,6 +59,7 @@ export function createPostgresVoiceBindings(pool: Pool): VoiceBindingStore {
   const isUniqueViolation = (error: unknown): boolean => (error as { code?: unknown } | null)?.code === '23505';
   return {
     async bind(input) {
+      await refuseProtectedStore();
       try {
         return await bindOnce(input);
       } catch (error) {
@@ -70,14 +74,17 @@ export function createPostgresVoiceBindings(pool: Pool): VoiceBindingStore {
       }
     },
     async bindingOf(userId) {
+      await refuseProtectedStore();
       const rows = await pool.query<BindingRowShape>('SELECT user_id, puid, session_id, bound_at FROM relay_wonderland.voice_puid_binding WHERE user_id = $1', [userId]);
       return rowOf(rows.rows[0]);
     },
     async ownerOf(puid) {
+      await refuseProtectedStore();
       const rows = await pool.query<{ user_id: string }>('SELECT user_id FROM relay_wonderland.voice_puid_binding WHERE puid = $1', [puid]);
       return rows.rows[0]?.user_id ?? null;
     },
     async puidsOf(userIds) {
+      await refuseProtectedStore();
       if (userIds.length === 0) return new Map();
       const rows = await pool.query<{ user_id: string; puid: string }>('SELECT user_id, puid FROM relay_wonderland.voice_puid_binding WHERE user_id = ANY($1::text[])', [[...userIds]]);
       return new Map(rows.rows.map((r) => [r.user_id, r.puid]));

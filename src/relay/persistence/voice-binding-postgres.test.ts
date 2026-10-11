@@ -31,6 +31,10 @@ function scriptedPool(opts: { collisions?: Array<((table: Row[]) => void) | unde
   let released = 0;
   let writes = 0;
   const query = async (sql: string, params: unknown[] = []) => {
+    // the C2 guard's identity reads (protected-store.ts): an ordinary database, not recorded in `sent`
+    if (sql.includes('shobj_description')) return { rows: [{ c: null }] };
+    if (sql === 'SELECT current_database() AS db') return { rows: [{ db: 'wonderland' }] };
+    if (sql.includes('pg_control_system()')) return { rows: [{ sid: '7000000000000000001' }] };
     const verb = sql.trim().split(/\s+/)[0].toUpperCase();
     sent.push(verb !== 'SELECT' ? verb : sql.includes('FOR UPDATE') ? 'SELECT mine' : 'SELECT owner');
     if (verb === 'SELECT') {
