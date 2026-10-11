@@ -77,7 +77,7 @@ import type {
   WonderlandProjectCapability,
 } from '../src/relay/mission/wonderland/wonderland-authorization';
 import { emptyJuliusActivity } from '../src/relay/mission/wonderland/wonderland-julius-activity';
-import { ingestWonderlandRows } from '../src/relay/mission/wonderland/wonderland-ingress';
+import { ingestWonderlandRows, wonderlandIngressScope } from '../src/relay/mission/wonderland/wonderland-ingress';
 import type { WonderlandIngressGrant } from '../src/relay/mission/wonderland/wonderland-ingress';
 import { openWonderlandCursor } from '../src/relay/mission/wonderland/wonderland-ordering';
 import type { WonderlandLedgerRow } from '../src/relay/mission/wonderland/wonderland-ledger-adapter';
@@ -423,12 +423,14 @@ export function identifyWonderlandJuliusCaller(
 
 /**
  * Serve one page of the tail: read, ingest, and hand back what a world applies.
- * Null when the project has no such run.
+ * Null when the project has no such run -- and null when the reader answered
+ * with ANY row that is not the asked run's (internal review A1); the route
+ * answers both with the one 404.
  *
  * The ingest is where every refusal lives, and it is the same function the
  * suite exercises against reconnects and mis-routed fan-outs. This adds
- * reading and nothing else -- which is why it can be trusted without a server
- * in the loop.
+ * reading and the page's scope check, nothing else -- which is why it can be
+ * trusted without a server in the loop.
  */
 export async function serveWonderlandJuliusPage(
   grant: WonderlandIngressGrant,
@@ -446,6 +448,11 @@ export async function serveWonderlandJuliusPage(
     limit: WONDERLAND_JULIUS_PAGE_LIMIT,
   });
   if (page === null) return null;
+  // EVERY ROW IS THE ASKED RUN'S, OR NOTHING IS SERVED (internal review A1). The reader keys its page by
+  // (project, run) in SQL; this does not take that on trust, as hydrate does not. The ingest below would refuse a
+  // stray row and serve the rest -- a 200 carrying another run's position and a count of refusals. One row of
+  // another project or run means the reader answered for somebody else, so the whole page is the one 404.
+  if (page.rows.some((row) => wonderlandIngressScope(grant, row) !== 'granted')) return null;
 
   const result = ingestWonderlandRows({
     grant,
@@ -607,6 +614,8 @@ export async function handleWonderlandJuliusRoute(
         reader: scope.reader,
         worldSessionId: caller.sessionId,
       });
+      // Absent, another project's -- or a page holding ANY row that is not this run's (internal review A1): the
+      // page function re-checks every row against the AUTHORISED (project, run), as hydrate re-checks its run.
       if (page === null) {
         note(404, 'no_such_run', ids);
         return NOT_FOUND();

@@ -818,3 +818,67 @@ describe('the handler', () => {
     expect((resumed as { body: { data: { nextCursor: number } } }).body.data.nextCursor).toBe(4);
   });
 });
+
+/* ------------------------------------------- a page is the asked run's */
+
+describe('a page is the asked run\'s, row by row (internal review A1)', () => {
+  // The reader keys its page by (project, run) in SQL (reader-postgres pins `r.project_id=$2`). The route does not
+  // take that on trust, as hydrate does not: a reader that answers with ONE row of another project -- or of another
+  // run -- makes the whole page the one 404, never a 200 carrying a foreign position and a count of refusals.
+  const STRAYS = [
+    ['another project', { projectId: 'project-beta' }],
+    ['another run of this project', { streamId: 'run-2' }],
+    ['another project and run', { projectId: 'project-beta', streamId: 'run-2' }],
+  ] as const;
+
+  /** A reader that LIES: asked for RUN in PROJECT, it answers with the run's rows plus one stray, at `at`. */
+  const lying = (stray: Partial<WonderlandLedgerRow>, at: number): WonderlandJuliusReader & { readonly asked: () => number } => {
+    let asked = 0;
+    return {
+      asked: () => asked,
+      hydrate: async () => null,
+      events: async () => {
+        asked += 1;
+        const rows: WonderlandLedgerRow[] = [1, 2, 3].map((sequence) => row(sequence, 'run.transitioned', { to: sequence % 2 === 0 ? 'REVIEWING' : 'EXECUTING' }));
+        rows.splice(at, 0, { ...row(9, 'run.transitioned', { to: 'REVIEWING' }), ...stray });
+        return { rows, revision: 7 };
+      },
+    };
+  };
+
+  it('answers the one 404 -- byte for byte -- when the reader slips in a row of another project or run, wherever it sits', async () => {
+    for (const [label, stray] of STRAYS) {
+      for (const at of [0, 2, 3]) {
+        const lines: string[] = [];
+        const source = lying(stray, at);
+        const answer = await handleWonderlandJuliusRoute(request('/wonderland/julius/events'), deps({
+          parts: { reader: source },
+          log: (line) => lines.push(line),
+        }));
+        expect(source.asked(), `${label} @${at}`).toBe(1);
+        expect(answer, `${label} @${at}`).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+        expect(answer?.body, `${label} @${at}`).toBe(WONDERLAND_JULIUS_NOT_FOUND);
+        expect(JSON.stringify(answer?.body), `${label} @${at}`).not.toMatch(/nextCursor|deliveries|summary|project-beta|run-2/u);
+        expect(lines, `${label} @${at}`).toEqual([`wonderland julius events: 404 no_such_run player=player-1 project=${PROJECT} run=${RUN}`]);
+      }
+    }
+  });
+
+  it('and the page function itself serves nothing for such a page', async () => {
+    for (const [label, stray] of STRAYS) {
+      expect(await serveWonderlandJuliusPage({ projectId: PROJECT, runId: RUN }, 0, { reader: lying(stray, 1), worldSessionId: null }), label).toBeNull();
+    }
+  });
+
+  it('CONTROL: the same reader with the stray row spelled as the asked run\'s serves the whole page', async () => {
+    const answer = await handleWonderlandJuliusRoute(request('/wonderland/julius/events'), deps({
+      parts: { reader: lying({ projectId: PROJECT, streamId: RUN }, 3) },
+    }));
+    expect(answer?.status).toBe(200);
+    const data = (answer?.body as { data: { deliveries: unknown[]; nextCursor: number; summary: Record<string, number> } }).data;
+    expect(data.deliveries.length).toBe(4);
+    expect(data.nextCursor).toBe(9);
+    expect(data.summary.unauthorized_project).toBe(0);
+    expect(data.summary.unauthorized_run).toBe(0);
+  });
+});

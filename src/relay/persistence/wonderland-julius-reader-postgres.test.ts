@@ -404,6 +404,18 @@ describe('reading the tail', () => {
     expect(issued[0].sql).toContain(`event_type LIKE 'julius.%'`);
   });
 
+  it('anchors the page on THIS project\'s run: `r.project_id=$2` is in the WHERE clause, as text (review A1)', async () => {
+    // The values alone prove nothing about scope: [RUN, PROJECT] bound to a statement that never reads $2 would scope
+    // the page by run only. So the anchor's text is pinned, and the lateral join that keys every row to it.
+    const { issued, reader } = pool([]);
+    await reader.events({ projectId: PROJECT, runId: RUN, afterSequence: 0, limit: 10 });
+    const sql = issued[0].sql.replace(/--[^\n]*/g, '').replace(/\s+/gu, ' ').trim();
+    expect(sql).toMatch(/ FROM relay_wonderland\.julius_runs r LEFT JOIN LATERAL \(/u);
+    expect(sql).toMatch(/\) e ON true WHERE r\.run_id=\$1 AND r\.project_id=\$2 ORDER BY e\.sequence$/u);
+    expect(sql).toContain('WHERE stream_id=r.run_id AND project_id=r.project_id AND sequence>$3');
+    expect(issued[0].values.slice(0, 2)).toEqual([RUN, PROJECT]);
+  });
+
   it('is NULL -- not an empty page -- when this project has no such run', async () => {
     // Absent, deleted, or another project's: no run row at all. The page route
     // answers it with the same 404 as hydrate (row 12); on the branch it was an
