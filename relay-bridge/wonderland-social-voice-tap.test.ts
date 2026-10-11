@@ -362,6 +362,31 @@ describe('party voice: a re-bind takes the replaced PUID out of the room first (
     expect(log).toEqual([`voice join: the binding moved under this join user=${hashId(U.KAI)} puid=${hashPuid(fresh)} predicted=bound actual=rebound`]);
     for (const raw of [U.KAI, fresh, puidOf(U.KAI)]) expect(log.join('\n')).not.toContain(raw);
   });
+
+  it('a re-bind nobody predicted whose removal is NOT confirmed fails closed: 503, and no token is minted for the new PUID (test review a8ed4c0b MINOR 3)', async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder({ failRemoval: true });
+    const real = createInMemoryVoiceBindings();
+    let stale = false;
+    // the same race as above: a read that sees no binding while the table holds one
+    const racing: VoiceBindingStore = { ...real, bindingOf: async (u) => (stale ? null : real.bindingOf(u)) };
+    const log: string[] = [];
+    const deps: SocialRouteDeps = { ...depsFor(state, rec.minter, undefined, racing), log: (l) => log.push(l) };
+    expect((await join(deps, U.KAI, pid)).status).toBe(200); // a first bind: nothing to remove, one mint
+    stale = true;
+    const fresh = puidOf(`${U.KAI}-fresh`);
+    const r = await join(deps, `${U.KAI}#2`, pid, fresh);
+    expect(r.status).toBe(503);
+    expect(r.body.error).toEqual({ kind: 'voice_unavailable', message: 'Party voice could not take your previous device out of the room. Try again.' });
+    expect(rec.asked.map((a) => a.puid)).toEqual([puidOf(U.KAI)]); // only the first join's mint: none for `fresh`
+    expect(rec.removals).toEqual([{ partyId: pid, participantId: U.KAI, puids: [] }]);
+    // the binding already moved, so what is left of the old device must leave: kept pending at the provider (af2eb058 m-a)
+    expect(rec.mustLeave).toEqual([true]);
+    expect(log).toEqual([
+      `voice join: the binding moved under this join user=${hashId(U.KAI)} puid=${hashPuid(fresh)} predicted=bound actual=rebound`,
+      `voice join: an unpredicted re-bind left minted PUIDs in the room; no token minted user=${hashId(U.KAI)} puid=${hashPuid(fresh)} (${failureTag(new Error('provider down'))})`,
+    ]);
+  });
 });
 
 describe("party voice: the NEWEST SESSION WINS on the production path (MAIN's internal reviews af2eb058 m-d/m-e, a8ed4c0b MAJOR 1)", () => {
