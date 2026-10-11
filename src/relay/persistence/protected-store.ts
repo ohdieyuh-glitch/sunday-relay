@@ -11,7 +11,7 @@
  *
  * How the Julius live store is identified -- any ONE signal suffices:
  *   - S1, a catalog marker: `COMMENT ON DATABASE ... IS 'relay-store-role=julius-live'`, read from the catalog
- *     (shobj_description), which no SET or connection option can change. Optional; not written today.
+ *     (shobj_description), which no SET or connection option can change. Written on the live store in 035's window (RUNBOOK step 4m); the only signal that survives a restore into a new cluster.
  *   - S2, the pinned identity: sha256("<system identifier>/<database>") equals the pin taken BY COMMAND from the live store's
  *     own apply record. Per database, so other databases in the same cluster stay migratable.
  *   - S3, when the system identifier is UNREADABLE (a role without the privilege): the database is named `julius`. The live
@@ -50,33 +50,39 @@ export const storeIdentitySha256 = (systemIdentifier: string, database: string):
 
 type Queryable = Pick<Pool, 'query'>;
 
-/** The database's own identity, or a null system identifier when this role may not read it. */
+/** PostgreSQL's SQLSTATE for "this role may not": the ONE failure that means a signal is unreadable rather than broken. */
+const INSUFFICIENT_PRIVILEGE = '42501';
+
+/**
+ * The database's own identity, or a null system identifier when this role may not read it (SQLSTATE 42501, and nothing else).
+ * Any other failure THROWS: a broken read is never a quieter answer (the Reviewer's MINOR-1 on 7d3b2dfe / 0378bcfd).
+ */
 export async function storeIdentity(q: Queryable): Promise<{ readonly database: string; readonly systemIdentifier: string | null }> {
   const db = await q.query<{ db: string }>('SELECT current_database() AS db');
-  const database = String(db.rows[0]?.db ?? '');
+  const name: unknown = db.rows[0]?.db;
+  if (typeof name !== 'string' || name === '') throw new Error('protected-store: current_database() returned no name');
   let systemIdentifier: string | null = null;
   try {
     const sid = await q.query<{ sid: string | null }>('SELECT system_identifier::text AS sid FROM pg_control_system()');
     const value = sid.rows[0]?.sid;
     systemIdentifier = value === null || value === undefined ? null : String(value);
-  } catch {
+  } catch (error) {
+    if ((error as { code?: unknown } | null)?.code !== INSUFFICIENT_PRIVILEGE) throw error;
     systemIdentifier = null;
   }
-  return { database, systemIdentifier };
+  return { database: name, systemIdentifier };
 }
 
 /**
- * Which protected store this is, or null for any other database. Never throws on an unreadable signal: S1's catalog read is
- * open to every role; S2 abstains when the identifier is unreadable, and S3 then decides by the database name.
+ * Which protected store this is, or null for any other database. A signal this role MAY NOT read abstains: S2 when the system
+ * identifier is denied to it, and S3 then decides by the database name. A read that FAILS for any other reason throws, so a
+ * failure can never be taken for "not protected": migrate() then executes nothing, and a writer guard caches nothing.
  */
 export async function protectedStoreRole(q: Queryable): Promise<string | null> {
-  try {
-    const m = await q.query<{ c: string | null }>("SELECT shobj_description(d.oid, 'pg_database') AS c FROM pg_database d WHERE d.datname = current_database()");
-    const marked = MARKER.exec(m.rows[0]?.c ?? '')?.[1] ?? null;
-    if (marked !== null && PROTECTED_ROLES.has(marked)) return marked;
-  } catch {
-    // the marker is optional; S2 and S3 still decide
-  }
+  // S1: pg_database and shobj_description are readable by every role, so this read has no "may not" case. Any failure throws.
+  const m = await q.query<{ c: string | null }>("SELECT shobj_description(d.oid, 'pg_database') AS c FROM pg_database d WHERE d.datname = current_database()");
+  const marked = MARKER.exec(m.rows[0]?.c ?? '')?.[1] ?? null;
+  if (marked !== null && PROTECTED_ROLES.has(marked)) return marked;
   const id = await storeIdentity(q);
   if (id.systemIdentifier !== null) {
     const sha = storeIdentitySha256(id.systemIdentifier, id.database);
