@@ -7,7 +7,12 @@ import { WonderlandJuliusReaderPostgres } from '../src/relay/persistence/wonderl
 import { projectJuliusTaskState } from '../src/relay/mission/wonderland/wonderland-julius-task-state';
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { composeJuliusMissionBootstrap, handleJuliusMissionRoute } from './julius-mission-routes';
-import { WONDERLAND_JULIUS_READ_ONLY_BEGIN, wonderlandJuliusWorld } from './wonderland-julius-world';
+import {
+  WONDERLAND_JULIUS_READ_ONLY_BEGIN,
+  createWonderlandJuliusWorldPool,
+  withWonderlandJuliusReadOnlyTransaction,
+  wonderlandJuliusWorld,
+} from './wonderland-julius-world';
 
 /**
  * A MISSION JULIUS CREATES IS VISIBLE TO THE WORLD'S OWN READER.
@@ -189,5 +194,43 @@ suite('a mission Julius creates is visible to the WORLD reader', () => {
     // A write attempted through the world never reaches the server.
     await expect(world.read((scope) => (scope.reader as unknown as { pool: { query(sql: string): Promise<unknown> } })
       .pool.query('DELETE FROM relay_wonderland.players'))).rejects.toThrow(/not a read/u);
+  });
+
+  it('THE WORLD\'S OWN POOL: read-only before any BEGIN, bounded by its timeouts, and a smuggled second command refused (review M1+M2)', async () => {
+    // The unit suite proves what `pg` is told to send (the startup message); this proves what a real server
+    // makes of it, and what the extended protocol buys against a real server.
+    const worldPool = createWonderlandJuliusWorldPool(url as string);
+    expect(worldPool, 'the throwaway database URL was refused for the world pool').not.toBeNull();
+    const probe = `world-pool-probe-${nonce}`;
+    try {
+      const client = await (worldPool as Pool).connect();
+      try {
+        const settings = await client.query<{ name: string; setting: string }>(
+          `SELECT name, setting FROM pg_settings
+            WHERE name IN ('default_transaction_read_only', 'idle_in_transaction_session_timeout', 'statement_timeout')
+            ORDER BY name`,
+        );
+        expect(settings.rows).toEqual([
+          { name: 'default_transaction_read_only', setting: 'on' },
+          { name: 'idle_in_transaction_session_timeout', setting: '10000' },
+          { name: 'statement_timeout', setting: '5000' },
+        ]);
+        // Outside any BEGIN, a write is refused by the SESSION's default -- not by the world's BEGIN.
+        const refused = await client.query('INSERT INTO relay_wonderland.players(player_id) VALUES($1)', [probe])
+          .then(() => null, (error: { code?: string }) => error);
+        expect(refused?.code, 'a write on a world-pool session was not refused').toBe('25006');
+      } finally {
+        client.release();
+      }
+      // THE FACADE against the real server: one command per statement on the extended protocol, so the COMMIT
+      // and the DELETE smuggled behind a SELECT never run (42601), and the connection is destroyed.
+      await expect(withWonderlandJuliusReadOnlyTransaction(worldPool as Pool,
+        (db) => db.query('SELECT 1; COMMIT; DELETE FROM relay_wonderland.players WHERE player_id IS NULL')))
+        .rejects.toMatchObject({ code: '42601' });
+    } finally {
+      await worldPool?.end();
+    }
+    const left = await pool.query('SELECT 1 FROM relay_wonderland.players WHERE player_id=$1', [probe]);
+    expect(left.rows).toEqual([]);
   });
 });

@@ -80,7 +80,7 @@ import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePor
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
 import { handleWonderlandJuliusRoute, isWonderlandJuliusRoute, type WonderlandJuliusWorld } from './wonderland-julius-routes';
-import { wonderlandJuliusWorld } from './wonderland-julius-world';
+import { createWonderlandJuliusWorldPool, wonderlandJuliusWorld } from './wonderland-julius-world';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute, SIGNIN_START_RATE } from './wonderland-native-signin-routes';
 import { createCommandBudgets, createPresenceLease, endSocialPresence, handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
@@ -334,18 +334,27 @@ export function createBridgeServer(
   };
   /**
    * THE JULIUS WORLD ROUTES' READS (row 12, R3'): membership, the run as a world
-   * draws it, and Julius's own result -- on the same Julius pool as the Project
-   * Brain and native pairing, so the world reads runs where Julius writes them,
-   * and every request's reads inside ONE read-only transaction
-   * (wonderland-julius-world.ts). Lazy, so a bridge that never serves a world opens
-   * nothing; no database, no world, and the routes answer 503.
+   * draws it, and Julius's own result -- from the database Julius writes to
+   * (`juliusRuntimeDatabaseUrl`, the URL `juliusPool()` uses), but through the
+   * WORLD'S OWN POOL (internal review M1+M2): at most four connections, every
+   * session read-only by default, with statement and idle-in-transaction
+   * timeouts, so a polling world can never hold the Julius writers' connections
+   * (wonderland-julius-world.ts). Every request's reads run inside ONE read-only
+   * transaction on it. Lazy, so a bridge that never serves a world opens nothing;
+   * no database -- or a URL that would replace the pool's read-only settings --
+   * no world, and the routes answer 503.
    */
   let juliusWorldCache: WonderlandJuliusWorld | null = juliusWorld;
+  let juliusWorldPoolCache: Pool | null | undefined;
   const resolveJuliusWorld = (): WonderlandJuliusWorld | null => {
     if (juliusWorldCache !== null) return juliusWorldCache;
-    const pool = juliusPool();
-    if (pool === null) return null;
-    juliusWorldCache = wonderlandJuliusWorld(pool);
+    if (juliusWorldPoolCache === undefined) {
+      juliusWorldPoolCache = createWonderlandJuliusWorldPool(juliusRuntimeDatabaseUrl(), (line) => console.warn(`[relay-bridge] ${line}`));
+      // As for the Julius pool: an idle world connection that dies is reported here, never as an uncaught exception.
+      juliusWorldPoolCache?.on('error', (error) => console.warn(`[relay-bridge] julius world pool: idle connection lost (${error.message})`));
+    }
+    if (juliusWorldPoolCache === null) return null;
+    juliusWorldCache = wonderlandJuliusWorld(juliusWorldPoolCache);
     return juliusWorldCache;
   };
   /**
@@ -402,6 +411,10 @@ export function createBridgeServer(
  * `juliusRuntimeDatabaseUrl` is what chooses the URL: `JULIUS_DATABASE_URL`
  * first, `DATABASE_URL` after it. That is the launcher's decision to make — and
  * it is deliberately NOT the variable the real-PostgreSQL test suites read.
+ *
+ * The one exception is the Wonderland world routes (row 12): they read the same
+ * database through a small pool of their own, read-only by default and bounded,
+ * so a polling world can never hold these connections (`resolveJuliusWorld`).
  */
 let juliusPoolCache: Pool | null | undefined;
 const juliusPool = (): Pool | null => {

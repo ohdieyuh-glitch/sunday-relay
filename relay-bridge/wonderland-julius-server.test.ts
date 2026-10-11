@@ -284,13 +284,16 @@ interface FakeRows {
 
 /**
  * A pool whose clients answer the world's statements the way Postgres would,
- * and record every statement and every connection.
+ * and record every statement and every connection. A statement arrives as text
+ * (the transaction's own BEGIN / COMMIT) or as a query config (every read: the
+ * world's facade sends each one on the extended protocol, review M1).
  */
 function fakePool(rows: FakeRows) {
   const statements: string[] = [];
   let connections = 0;
   let released = 0;
-  const answer = async (sql: string) => {
+  const answer = async (input: string | { readonly text: string }) => {
+    const sql = typeof input === 'string' ? input : input.text;
     statements.push(sql);
     if (/^\s*(BEGIN|COMMIT|ROLLBACK)\b/i.test(sql)) return { rows: [], rowCount: 0 };
     if (sql.includes('project_members')) {

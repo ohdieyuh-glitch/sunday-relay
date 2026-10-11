@@ -185,8 +185,9 @@ export interface WonderlandJuliusReadScope {
  * the route answers that with 503, never with a guess.
  *
  * The production composition is `wonderlandJuliusWorld` (wonderland-julius-world.ts):
- * `BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY` on the bridge's
- * one Julius pool.
+ * `BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY` on the world's
+ * own pool (`createWonderlandJuliusWorldPool`: the Julius database, at most four
+ * connections, every session read-only by default; internal review M1+M2).
  */
 export interface WonderlandJuliusWorld {
   read<T>(work: (scope: WonderlandJuliusReadScope) => Promise<T>): Promise<T>;
