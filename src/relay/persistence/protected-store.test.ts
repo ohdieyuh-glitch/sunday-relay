@@ -103,6 +103,19 @@ describe('G1: migrate() refuses the Julius live store and executes nothing there
     expect(await migrated({ ledger: without(V035), db: 'railway', sid: 'DENIED', marker: 'relay-store-role=wonderland-hosted' })).toEqual([WONDERLAND_MIGRATION_035]);
   });
 
+  it('C1 (restore): the live store restored into a NEW cluster (a new sid) or under a new name is refused by its marker alone; without the marker it is not, the gap the marker closes', async () => {
+    const NEW_SID = '7999999999999999999';
+    for (const db of ['julius', 'julius_restored']) {
+      const restored: FakeStore = { ledger: without(V035), db, sid: NEW_SID };
+      const { executed } = await refusal({ ...restored, marker: 'relay-store-role=julius-live' });
+      expect(executed).toEqual([]);
+      // CONTROL: the same restore without its marker. S2 misses (a new sid, or a new name), and S3 needs the sid unreadable.
+      expect(await migrated(restored)).toEqual([WONDERLAND_MIGRATION_035]);
+    }
+    // the marker is found inside a longer comment, as a whole token
+    await refusal({ ledger: without(V035), db: 'julius', sid: NEW_SID, marker: 'Julius live store (restored 2026-10-11) relay-store-role=julius-live' });
+  });
+
   it('T7: the reviewed bootstrap of an EMPTY live store migrates the whole chain -- and the override does nothing anywhere else', async () => {
     const reviewed = { reviewedBootstrap: { database: 'julius', systemIdentifier: LIVE_SID } };
     expect(await migrated({ ledger: null, db: 'julius', sid: LIVE_SID }, reviewed)).toHaveLength(WONDERLAND_MIGRATIONS.length);

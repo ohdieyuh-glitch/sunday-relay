@@ -46,6 +46,14 @@ points as for 030-034 (`docs/julius-migrations/030/RUNBOOK.md`), plus the dev so
   This is the only store a social / voice writer uses.
 - Any other PERSISTENT store that carries this chain gets 035 only by its own run of these steps.
 
+## How code recognises the Julius live store (src/relay/persistence/protected-store.ts)
+`migrate()` refuses to run anything on the Julius live store if ANY ONE of these holds:
+- **S1, the marker:** the database's own catalog comment carries the token `relay-store-role=julius-live`. Written by step 4m.
+- **S2, the pin:** sha256("<system identifier>/<database>") equals the pin taken BY COMMAND from the live store's 034 apply record.
+- **S3:** the system identifier cannot be read AND the database is named `julius`.
+
+Only S1 survives a restore into a NEW cluster (a new system identifier) or under a new name. That is why step 4m writes it, and rollback (c) re-writes it.
+
 ## Steps
 **0. Quiesce.** Stop every writer of THIS store. No other client session may be connected.
 - On the Julius live store, those are the Julius writers. No social or voice writer may be pointed at it, ever: if one is found connected, STOP. That is an incident, not a step.
@@ -74,6 +82,12 @@ own post-check rolls everything back unless each relation is exactly as created,
 - `voice_fk_constraints = 1`; `players_rows` = step 2's; `players_referenced_by_fks` = step 2's + 1;
 - `migration_035_applied = t`; `ledger_count` = step 2's + 1; `ledger_last = 035_wonderland_voice`.
 
+**4m. (The Julius live store ONLY) Write the marker** in its own transaction, after step 4 passes:
+`COMMENT ON DATABASE julius IS 'relay-store-role=julius-live'`.
+- PASS only if `SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = 'julius'` reads exactly `relay-store-role=julius-live`. Save that output beside step 4's.
+- The marker stays, whatever happens to 035 later. Rollback (b) does not remove it.
+- Never write it on any other store. A drill, a rehearsal or a throwaway carrying it would be refused by every runner (fail-closed, but wrong).
+
 **5. Deploy** the landed code. It lists 035, so `migrate()` finds it applied and does nothing. On the Julius live store `migrate()` would REFUSE to run anything in any case (protected-store.ts).
 
 **6. Restart the writers.**
@@ -98,3 +112,12 @@ through 035 (rule 7). Anything else, `PARTIAL` included, is a STOP.
 - **Rollback order:** 035's down BEFORE 034's, and both before 033's. 033's and 034's downs refuse while 035 is stamped.
 
 **(c) Last resort:** restore the pre-035 backup into a NEW database first, inspect it, and only then replace anything.
+- **A restored or replacement live store is NOT protected until its marker is written again.**
+  - A restore may leave the comment behind: `pg_restore` without `--create` does not restore database-level properties.
+  - A new cluster has a new system identifier, so S2 misses it.
+  - A renamed database misses S2 and S3.
+- **Before ANY runner, bridge or script connects to it:**
+  - write the marker exactly as step 4m does, and read it back;
+  - record its system identifier and name;
+  - if either changed, re-pin `PROTECTED_STORES` in protected-store.ts by a reviewed revision.
+- Until then its URL stays parked, and only the founder runs anything against it.
