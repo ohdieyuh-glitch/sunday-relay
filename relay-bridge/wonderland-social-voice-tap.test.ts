@@ -116,12 +116,13 @@ const depsFor = (state: SocialState, voice: PartyVoiceTokenMinter | null, tap?: 
 });
 
 describe('party voice: the provider seam', () => {
-  it('with no provider (or no binding store) it is 503 VOICE TRANSPORT PENDING -- never a connected state', async () => {
+  it('with no provider (or no binding store) it is 503 VOICE TRANSPORT PENDING, saying which is missing -- never a connected state', async () => {
     const { state, pid } = arena();
     const r = await join(depsFor(state, null), U.ORION, pid);
     expect(r.status).toBe(503);
-    expect(r.body.error).toEqual({ kind: 'voice_unavailable', message: 'VOICE TRANSPORT PENDING' });
-    expect((await join(depsFor(state, minterRecorder().minter, undefined, null), U.ORION, pid)).body.error?.message).toBe('VOICE TRANSPORT PENDING');
+    expect(r.body.error).toEqual({ kind: 'voice_unavailable', message: 'VOICE TRANSPORT PENDING: no voice provider is configured on this server.' });
+    const unbound = await join(depsFor(state, minterRecorder().minter, undefined, null), U.ORION, pid);
+    expect([unbound.status, unbound.body.error]).toEqual([503, { kind: 'voice_unavailable', message: 'VOICE TRANSPORT PENDING: no voice binding store is configured on this server.' }]);
   });
 
   it('a member gets a token for their own party room, for the whole un-walled party, for their own bound PUID', async () => {
@@ -648,9 +649,9 @@ describe('party voice: every failure is an honest 503, logged with hashed ids an
       }
       messages.add(message);
     }
-    // four honest, distinct sentences -- none of them the "no provider configured" one
+    // four honest, distinct sentences -- none of them the "not configured" family
     expect(messages.size).toBe(4);
-    expect(messages.has('VOICE TRANSPORT PENDING')).toBe(false);
+    expect([...messages].filter((m) => m.startsWith('VOICE TRANSPORT PENDING'))).toEqual([]);
   });
 
   it('the reason tag: a well-formed code, else the error class, else unknown -- and never the text', () => {
@@ -658,6 +659,58 @@ describe('party voice: every failure is an honest 503, logged with hashed ids an
     expect(failureTag(new TypeError(leak))).toBe(`TypeError ${hashId(leak)}`);
     expect(failureTag(leak)).toBe(`unknown ${hashId(leak)}`);
     expect(failureTag(Object.assign(new Error(leak), { code: 'not a code: secret value' }))).toBe(`Error ${hashId(leak)}`);
+  });
+});
+
+describe("every voice 503, path by path: the status stays 503 voice_unavailable, and the body says WHAT failed (CORE's client review 10-07, agreed with MAIN WONDERLAND)", () => {
+  // The client maps any voice 503 to its own fixed text, and Wonderland's R16 instruments read the CLIENT's lines, so only these
+  // words may change -- never a status. Each path says its own sentence and names nothing secret (no id, no error text).
+  const leak = `connect ECONNREFUSED voice-db.internal:5432 user=${U.KAI} puid=${puidOf(U.KAI)}`;
+  const boom = () => Object.assign(new Error(leak), { code: 'ECONNREFUSED' });
+
+  it('the join route: nine ways to fail, each a 503 with its own sentence', async () => {
+    const { state, pid } = arena();
+    const fresh = puidOf(`${U.KAI}-fresh`);
+    const broken = (over: Partial<VoiceBindingStore>): VoiceBindingStore => ({ ...createInMemoryVoiceBindings(), ...over });
+    const paths: Array<[string, () => Promise<Awaited<ReturnType<typeof join>>>, string]> = [
+      ['no voice provider', () => join(depsFor(state, null), U.KAI, pid),
+        'VOICE TRANSPORT PENDING: no voice provider is configured on this server.'],
+      ['no binding store (migration 035 not served)', () => join(depsFor(state, minterRecorder().minter, undefined, null), U.KAI, pid),
+        'VOICE TRANSPORT PENDING: no voice binding store is configured on this server.'],
+      ['the binding read throws', () => join(depsFor(state, minterRecorder().minter, undefined, broken({ bindingOf: async () => { throw boom(); } })), U.KAI, pid),
+        'Party voice could not read your voice identity right now.'],
+      ["a re-bind's removal is not confirmed", async () => {
+        const deps = depsFor(state, minterRecorder({ failRemoval: true }).minter);
+        expect((await join(deps, U.KAI, pid)).status).toBe(200);
+        return join(deps, `${U.KAI}#2`, pid, fresh);
+      }, 'Party voice could not take your previous device out of the room, so your voice identity was not changed. Try again.'],
+      ['the bind throws', () => join(depsFor(state, minterRecorder().minter, undefined, broken({ bind: async () => { throw boom(); } })), U.KAI, pid),
+        'Party voice could not record your voice identity right now.'],
+      ["an unpredicted re-bind's removal is not confirmed", async () => {
+        const real = createInMemoryVoiceBindings();
+        let stale = false;
+        const deps = depsFor(state, minterRecorder({ failRemoval: true }).minter, undefined, { ...real, bindingOf: async (u) => (stale ? null : real.bindingOf(u)) });
+        expect((await join(deps, U.KAI, pid)).status).toBe(200);
+        stale = true;
+        return join(deps, `${U.KAI}#2`, pid, fresh);
+      }, 'Party voice could not take your previous device out of the room. Try again.'],
+      ['the mint throws', () => join(depsFor(state, { providerId: 'x', mint: async () => { throw boom(); }, removeFromRoom: async () => undefined }), U.KAI, pid),
+        'The voice provider could not admit you right now.'],
+      ['the second membership read throws', () => join({ ...depsFor(state, minterRecorder().minter), store: steppingStore([state], 1) }, U.KAI, pid),
+        'Party voice could not confirm your party right now.'],
+      ['the audience read throws', () => join(depsFor(state, minterRecorder().minter, undefined, broken({ puidsOf: async () => { throw boom(); } })), U.KAI, pid),
+        "Party voice could not read the party's voice identities right now."],
+    ];
+    const said = new Set<string>();
+    for (const [label, run, message] of paths) {
+      const r = await run();
+      expect(r.status, label).toBe(503);
+      expect(r.body, label).toEqual({ error: { kind: 'voice_unavailable', message } });
+      expect(r.headers?.['cache-control'], label).toBe('no-store');
+      for (const raw of [leak, 'voice-db.internal', U.KAI, puidOf(U.KAI), fresh]) expect(JSON.stringify(r.body), `${label}: ${raw}`).not.toContain(raw);
+      said.add(message);
+    }
+    expect(said.size, 'every path says its own sentence').toBe(paths.length);
   });
 });
 

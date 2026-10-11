@@ -101,15 +101,17 @@ describe('GET /voice/eos-client-config: what a signed-in desktop client is hande
     expect((await w.get('usr_kai', T0 + 60_001)).status).toBe(200);
   });
 
-  it('every 503: no game config, no rate limit, no voice provider, no binding store (035 not served) -- PENDING, no-store, nothing served, logged or charged', async () => {
-    const cases: Array<[string, Partial<SocialRouteDeps>]> = [
-      ['no game config', { eosClientConfig: null }],
-      ['no game config (absent)', { eosClientConfig: undefined }],
-      ['no rate limit', { eosClientConfigAllowed: null }],
-      ['no voice provider', { voice: null }],
-      ['no binding store (migration 035 not served)', { voiceBindings: null }],
+  it("every 503 says WHICH piece is missing -- no game config, no rate limit, no voice provider, no binding store (035 not served) -- each its own sentence, the status 503 (CORE's client review 10-07); no-store, nothing served, logged or charged", async () => {
+    const NO_GAME_CONFIG = "VOICE TRANSPORT PENDING: the game client's EOS config is not loaded on this server.";
+    const cases: Array<[string, Partial<SocialRouteDeps>, string]> = [
+      ['no game config', { eosClientConfig: null }, NO_GAME_CONFIG],
+      ['no game config (absent)', { eosClientConfig: undefined }, NO_GAME_CONFIG],
+      ['no rate limit', { eosClientConfigAllowed: null }, 'VOICE TRANSPORT PENDING: the voice config rate limit is not configured on this server.'],
+      ['no voice provider', { voice: null }, 'VOICE TRANSPORT PENDING: no voice provider is configured on this server.'],
+      ['no binding store (migration 035 not served)', { voiceBindings: null }, 'VOICE TRANSPORT PENDING: no voice binding store is configured on this server.'],
     ];
-    for (const [label, over] of cases) {
+    const said = new Set<string>();
+    for (const [label, over, message] of cases) {
       let charged = 0;
       const counting = (): SessionRateDecision => {
         charged += 1;
@@ -118,11 +120,17 @@ describe('GET /voice/eos-client-config: what a signed-in desktop client is hande
       const w = world({ eosClientConfigAllowed: counting, ...over });
       const r = await w.get('usr_kai', T0);
       expect(r.status, label).toBe(503);
-      expect(r.body, label).toEqual({ error: { kind: 'voice_unavailable', message: 'VOICE TRANSPORT PENDING' } });
+      expect(r.body, label).toEqual({ error: { kind: 'voice_unavailable', message } });
+      expect(JSON.stringify(r.body), label).not.toContain(w.config.clientSecret);
       expect(r.headers?.['cache-control'], label).toBe('no-store');
       expect(w.log, label).toEqual([]);
       expect(charged, label).toBe(0);
+      said.add(message);
     }
+    expect(said.size, 'four missing pieces, four sentences').toBe(4);
+    // several missing at once: the game config is named first (without it, af2eb058 m-c starts no voice provider either)
+    const both = world({ eosClientConfig: null, voice: null });
+    expect((await both.get('usr_kai', T0)).body.error?.message).toBe(NO_GAME_CONFIG);
     // the control: the same world with everything present serves, and charges the limit once
     let charged = 0;
     const counting = (): SessionRateDecision => {

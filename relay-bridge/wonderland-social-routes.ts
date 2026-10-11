@@ -30,14 +30,15 @@
  * member walled from nobody in the party is admitted (voiceAudienceIfAdmitted), and their audience is the whole party. A
  * non-member, a WALLED member (a blocked pair still sharing a party: carried-in data, a restore) and another player's PUID all
  * answer the stranger's 404; the answer's audience lists only server-bound PUID -> player pairs. With no provider (or no binding
- * store) it is 503 VOICE TRANSPORT PENDING: a connected voice state is never fabricated.
+ * store) it is 503 VOICE TRANSPORT PENDING, naming which is missing: a connected voice state is never fabricated. A failure while
+ * serving is a 503 too, with its own sentence (what failed, never an id or the error's text).
  *
  * THE GAME CLIENT'S EOS CONFIG. `GET /voice/eos-client-config` answers the five values the desktop client's EOS platform starts
  * with -- the GAME client's (founder, 10-04: handed out by the backend, held in the client's memory only, never in the package),
  * never the Trusted Server's -- as {schema: wonderland-eos-client-config.v1, productId, sandboxId, deploymentId, clientId,
  * clientSecret}, after the same five gates as every operation. At most 6 a minute per session (429, with Retry-After).
- * Without the bridge's game config, its voice provider, its binding store or its rate limit: 503. The log says only whom it
- * served, hashed; never a value.
+ * Without the bridge's game config, its voice provider, its binding store or its rate limit: 503, naming which (the game config
+ * first). The log says only whom it served, hashed; never a value.
  *
  * NEVER STORED ON THE WAY. Every answer here -- a refusal included -- carries Cache-Control: no-store (and Pragma: no-cache):
  * a social view is one viewer's, and the EOS client config carries a secret.
@@ -208,6 +209,18 @@ function peopleNamedIn(value: unknown, into: Set<string> = new Set()): Set<strin
 
 const ok = (data: unknown): SocialRouteResult => ({ status: 200, body: { data } });
 const err = (status: number, kind: string, message: string): SocialRouteResult => ({ status, body: { error: { kind, message } } });
+
+/**
+ * A VOICE 503 SAYS WHICH PIECE IS MISSING (CORE's client review 10-07, agreed with MAIN WONDERLAND, which owns the client). The
+ * client maps every voice 503 to its own fixed text, and Wonderland's R16 instruments read the CLIENT's lines, so only these
+ * words may change -- never a status. A failure while serving says its own sentence (answerVoiceJoin's `failed`). No value, no id.
+ */
+const VOICE_NOT_CONFIGURED = Object.freeze({
+  provider: 'VOICE TRANSPORT PENDING: no voice provider is configured on this server.',
+  bindings: 'VOICE TRANSPORT PENDING: no voice binding store is configured on this server.',
+  gameConfig: "VOICE TRANSPORT PENDING: the game client's EOS config is not loaded on this server.",
+  rateLimit: 'VOICE TRANSPORT PENDING: the voice config rate limit is not configured on this server.',
+});
 
 /** The EOS client config's rate: a client fetches it once per sign-in. */
 export const EOS_CLIENT_CONFIG_RATE = Object.freeze({ limit: 6, windowMs: 60_000 });
@@ -453,7 +466,8 @@ async function answerVoiceJoin(input: {
   if (audience === null) return notThere();
   const voice = deps.voice ?? null;
   const bindings = deps.voiceBindings ?? null;
-  if (voice === null || bindings === null) return err(503, 'voice_unavailable', 'VOICE TRANSPORT PENDING');
+  if (voice === null) return err(503, 'voice_unavailable', VOICE_NOT_CONFIGURED.provider);
+  if (bindings === null) return err(503, 'voice_unavailable', VOICE_NOT_CONFIGURED.bindings);
   // THE CALLER'S EOS PUID, bound to them server-side (review #2): another player's PUID, or a different one of their own
   // within the session that bound the first, is refused -- as a stranger is.
   const puid = normalizePuid(input.body.eosProductUserId);
@@ -634,9 +648,11 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
     // THE GAME CLIENT'S EOS CONFIG: to this signed-in player only, never in a log line; no-store, as every social answer.
     const allowed = deps.eosClientConfigAllowed ?? null;
     const config = deps.eosClientConfig ?? null;
-    if (allowed === null || config === null || deps.voice === undefined || deps.voice === null || deps.voiceBindings === undefined || deps.voiceBindings === null) {
-      return err(503, 'voice_unavailable', 'VOICE TRANSPORT PENDING');
-    }
+    // which piece is missing, the game config first: without it, eosFromEnv starts no voice provider either (af2eb058 m-c)
+    if (config === null) return err(503, 'voice_unavailable', VOICE_NOT_CONFIGURED.gameConfig);
+    if (deps.voice === undefined || deps.voice === null) return err(503, 'voice_unavailable', VOICE_NOT_CONFIGURED.provider);
+    if (deps.voiceBindings === undefined || deps.voiceBindings === null) return err(503, 'voice_unavailable', VOICE_NOT_CONFIGURED.bindings);
+    if (allowed === null) return err(503, 'voice_unavailable', VOICE_NOT_CONFIGURED.rateLimit);
     const admitted = allowed(facts.sessionId, request.now);
     if (!admitted.ok) {
       // with its Retry-After, as every other social 429 (CORE's client contract, 10-07: MISMATCHES.md 8)
