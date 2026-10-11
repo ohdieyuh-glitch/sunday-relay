@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "julius.learning-registration.v1",
+  "registrationId": "julius-learning-pair-1",
+  "registeredAt": "2026-10-11T23:16:28Z",
+  "hypothesis": "Carrying arm WITHOUT's verified repair findings into arm WITH's planner reduces repair rounds on the same mission.",
+  "weakness": {
+    "description": "Run 34529874100 (2026-09-10, Mission 5): one PLAN repair after three blocking findings, among them INTEGRATION, a requirement the declared test does not enforce. Verified by SECOND JUJU from the job log (R-W); the artifact has expired, which is disclosed.",
+    "evidence": [
+      "github-actions-run:34529874100"
+    ]
+  },
+  "adaptation": {
+    "kind": "cross-run-verified-repair-finding-carry",
+    "description": "julius-knowledge-carry.v3: the verified repair findings a WITHOUT-k run writes are carried, plan-scoped, into its WITH-k run's architect packet; the design in force is never carried; WITH-k is refused before READY when nothing qualifies.",
+    "changeRef": "julius-knowledge-carry.v3 (Decision C candidate; code pinned in the PREREG addendum): the verified repair findings each WITHOUT-k run writes, carried as carried:<WITHOUT-k>:<findingId>:into:<WITH-k>, WITHOUT run ids run:e50d275a63daa1dc3bc92a2a, run:b009e3e39c4d80d607dbaf5d"
+  },
+  "baselineRuns": [
+    "run:e50d275a63daa1dc3bc92a2a",
+    "run:b009e3e39c4d80d607dbaf5d"
+  ],
+  "metrics": [
+    {
+      "name": "mission.repair_rounds",
+      "expectedDirection": "lower",
+      "minEffect": 0.5,
+      "primary": true
+    }
+  ],
+  "matchedOn": [
+    "contractDigest",
+    "mode",
+    "requestedModels",
+    "runtimeVersion",
+    "commit"
+  ],
+  "confounders": [],
+  "failureRule": "The TS policy is ['repairs'], 0.5, 1, identical on all four arms. The experiment counts only under the validity conditions V1-V6 (V1-R included) of DECISION_C4_REGISTRATION_DESIGN r8.2 (sha256 ccb34502) section 4, with all four arms dispatched in order (WITHOUT-1, WITH-1, WITHOUT-2, WITH-2) and each arm's recorded commit equal to the landed commit recorded outside this digest (section 7); a pair failing any of them makes this registration non-creditable. learning-evaluate runs once, on the four registered arms only, and counts only with a verdict of RETAIN, REJECT or PROVISIONAL and primary.n = {baseline 2, candidate 2}. Any effect is selection-conditioned (V1 requires a coder catch, a diffed repair and an accepting re-review in every baseline) and is not attributed to the carry by itself (section 6). The adaptation is rejected when the primary metric does not move by at least its minimum effect in the expected direction.",
+  "minRunsPerSide": 2,
+  "supersedes": null
+}
