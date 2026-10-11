@@ -28,8 +28,10 @@
  * caller's OWN party room, for the caller's server-bound EOS PUID (src/relay/social/voice-binding.ts). EOS keeps ONE room per
  * party and the client plays every participant in it, so the block floor is enforced before anything is bound or minted: only a
  * member walled from nobody in the party is admitted (voiceAudienceIfAdmitted), and their audience is the whole party. A
- * non-member, a WALLED member (a blocked pair still sharing a party: carried-in data, a restore) and another player's PUID all
- * answer the stranger's 404; the answer's audience lists only server-bound PUID -> player pairs. With no provider (or no binding
+ * non-member and a WALLED member (a blocked pair still sharing a party: carried-in data, a restore) answer the stranger's 404.
+ * An ADMITTED member presenting a PUID another player holds -- two players on one Windows account share one EOS device id -- is
+ * refused with the accurate 409 voice_identity_in_use (the founder's EOS OPTION A, 10-11); the binding is never moved across
+ * players. The answer's audience lists only server-bound PUID -> player pairs. With no provider (or no binding
  * store) it is 503 VOICE TRANSPORT PENDING, naming which is missing: a connected voice state is never fabricated. A failure while
  * serving is a 503 too, with its own sentence (what failed, never an id or the error's text).
  *
@@ -220,6 +222,23 @@ const VOICE_NOT_CONFIGURED = Object.freeze({
   bindings: 'VOICE TRANSPORT PENDING: no voice binding store is configured on this server.',
   gameConfig: "VOICE TRANSPORT PENDING: the game client's EOS config is not loaded on this server.",
   rateLimit: 'VOICE TRANSPORT PENDING: the voice config rate limit is not configured on this server.',
+});
+
+/**
+ * EOS OPTION A (founder, 10-11): ONE active EOS voice identity per Windows account in the private Alpha. EOS Connect's device-id
+ * login is per local OS user, so two Wonderland players on one Windows account present the SAME PUID. The second is refused --
+ * no reassignment across players; m-d's newest-session rule stays same-player only -- and is told so, accurately:
+ *   - the text is fixed: one line of printable ASCII, no id, no name, nothing dynamic;
+ *   - it is reached only by an ADMITTED caller, after every earlier gate (a non-member or a walled member still gets the
+ *     stranger's 404), from the owner read the join already makes, so it is no existence oracle and adds no lookup;
+ *   - the body nests under `error` like every social error, because the client shows error.message verbatim
+ *     ("the party's voice refused (409 <message>)", WonderlandEosVoice.cpp) -- a flat body would show nothing.
+ */
+export const VOICE_IDENTITY_IN_USE_MESSAGE =
+  'Voice is already set up for another Wonderland player on this Windows account. In this Alpha, one player per Windows account can use voice.';
+const voiceIdentityInUse = (): SocialRouteResult => ({
+  status: 409,
+  body: { schema: 'wonderland-voice-error.v1', error: { kind: 'voice_identity_in_use', message: VOICE_IDENTITY_IN_USE_MESSAGE } },
 });
 
 /** The EOS client config's rate: a client fetches it once per sign-in. */
@@ -468,8 +487,8 @@ async function answerVoiceJoin(input: {
   const bindings = deps.voiceBindings ?? null;
   if (voice === null) return err(503, 'voice_unavailable', VOICE_NOT_CONFIGURED.provider);
   if (bindings === null) return err(503, 'voice_unavailable', VOICE_NOT_CONFIGURED.bindings);
-  // THE CALLER'S EOS PUID, bound to them server-side (review #2): another player's PUID, or a different one of their own
-  // within the session that bound the first, is refused -- as a stranger is.
+  // THE CALLER'S EOS PUID, bound to them server-side (review #2): another player's PUID is refused with the accurate 409 (EOS
+  // OPTION A); a different one of their own within the session that bound the first is refused as a stranger is (404).
   const puid = normalizePuid(input.body.eosProductUserId);
   if (puid === null) return err(400, 'validation-failed', 'eosProductUserId must be an EOS ProductUserId (32 hex characters)');
   const log = deps.log ?? (() => undefined);
@@ -509,7 +528,10 @@ async function answerVoiceJoin(input: {
       return failed('Party voice could not record your voice identity right now.', 'the bind failed', error);
     }
     if (outcome !== predicted) log(`voice join: the binding moved under this join ${who} predicted=${predicted} actual=${outcome}`);
-    if (outcome === 'refused') return notThere();
+    // EOS OPTION A: the PUID is another player's (the owner read above, after every earlier gate) -> the accurate 409. Any other
+    // refusal (a second PUID of the caller's own within one session, an older session) stays the stranger's 404. A binding moved
+    // under this join (the owner read was null) answers 404 this once; the next join reads the owner and answers 409.
+    if (outcome === 'refused') return owner !== null && owner !== actorId ? voiceIdentityInUse() : notThere();
     if (outcome === 'rebound' && predicted !== 'rebound') {
       try {
         await voice.removeFromRoom({ partyId, participantId: actorId, puids: mine === null ? [] : [mine.puid], mustLeave: true });

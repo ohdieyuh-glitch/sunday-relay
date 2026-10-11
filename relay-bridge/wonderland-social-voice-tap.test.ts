@@ -16,6 +16,7 @@ import {
   type SocialDeliveryRecord,
   type SocialRouteDeps,
   type SocialSessionFacts,
+  VOICE_IDENTITY_IN_USE_MESSAGE,
 } from './wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 import { failureTag, hashId, hashPuid } from './eos-voice';
@@ -37,6 +38,8 @@ const issuedAtOf = (token: string): number => T0 - 60_000 + 1000 * Number(token.
 const facts = (token: string): SocialSessionFacts => ({ sessionId: token, participantId: token.split('#')[0], capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social', issuedAtMs: issuedAtOf(token) });
 /** A deterministic EOS ProductUserId per player (and per variant), made at run time. */
 const puidOf = (who: string) => createHash('sha256').update(who).digest('hex').slice(0, 32);
+/** EOS OPTION A's refusal, exactly (founder, 10-11). Nested under `error`: the client shows error.message verbatim. */
+const VOICE_IDENTITY_IN_USE_BODY = { schema: 'wonderland-voice-error.v1', error: { kind: 'voice_identity_in_use', message: VOICE_IDENTITY_IN_USE_MESSAGE } };
 
 /** Arena Run: ORION leads, LYRA joined, KAI invited in -- three members. */
 function arena(): { state: SocialState; pid: string } {
@@ -192,14 +195,16 @@ describe('party voice: the provider seam', () => {
 });
 
 describe('party voice: EOS PUID binding and the uniform 404 (R16 EOS voice backend)', () => {
-  it("the first join binds; another player's PUID, a WALLED member, a separated member and a non-member all answer exactly as a party that does not exist", async () => {
+  it("the first join binds; a WALLED member, a separated member and a non-member answer exactly as a party that does not exist; another player's PUID is the accurate 409 (EOS OPTION A)", async () => {
     const { state, pid } = arena();
     const { asked, minter } = minterRecorder();
     const deps = depsFor(state, minter);
     expect((await join(deps, U.KAI, pid)).status).toBe(200); // Kai binds his PUID
     const missing = await join(deps, U.ORION, 'pty_does_not_exist');
     const nonMember = await join(deps, U.NOVA, pid);
-    const stolen = await join(deps, U.LYRA, pid, puidOf(U.KAI)); // Lyra presents Kai's PUID
+    const stolen = await join(deps, U.LYRA, pid, puidOf(U.KAI)); // Lyra presents Kai's PUID: one Windows account, two players
+    expect(stolen.status).toBe(409);
+    expect(stolen.body).toEqual(VOICE_IDENTITY_IN_USE_BODY);
     // A WALLED MEMBER (M2): Lyra blocked Orion, and both are still in the party (carried-in data: F1 never ran)
     const carried = blockUser(state, U.LYRA, U.ORION, NOW);
     if (!carried.ok) throw new Error(carried.error.message);
@@ -210,7 +215,7 @@ describe('party voice: EOS PUID binding and the uniform 404 (R16 EOS voice backe
     if (!removed.ok) throw new Error(removed.error.message);
     expect(voiceAudienceFor(removed.value.state, U.LYRA, pid)).toEqual([]);
     const separated = await join({ ...deps, store: fixedStore(removed.value.state) }, U.LYRA, pid);
-    for (const r of [nonMember, stolen, walled, separated]) {
+    for (const r of [nonMember, walled, separated]) {
       expect(r.status).toBe(404);
       expect(r.body).toEqual(missing.body);
     }
@@ -308,8 +313,8 @@ describe('party voice: a re-bind takes the replaced PUID out of the room first (
     expect((await join(deps, U.KAI, pid, puidOf('another-device'))).status).toBe(404); // a different PUID, same session
     expect((await join(deps, `${U.KAI}#3`, pid, puidOf(U.LYRA))).status).toBe(200); // Lyra's PUID is nobody's yet: a re-bind
     expect(rec.removals).toEqual([{ partyId: pid, participantId: U.KAI, puids: [puidOf(U.KAI)] }]);
-    // Lyra now asks with her own PUID, which Kai holds: refused, and her room is not touched
-    expect((await join(deps, U.LYRA, pid)).status).toBe(404);
+    // Lyra now asks with her own PUID, which Kai holds: refused (the accurate 409, EOS OPTION A), and her room is not touched
+    expect((await join(deps, U.LYRA, pid)).status).toBe(409);
     expect(rec.removals).toHaveLength(1);
   });
 
@@ -321,11 +326,11 @@ describe('party voice: a re-bind takes the replaced PUID out of the room first (
     const [X, L] = [puidOf(U.KAI), puidOf(U.LYRA)];
     expect((await join(deps, U.KAI, pid, X)).status).toBe(200); // Kai has bound X
     expect((await join(deps, U.LYRA, pid, L)).status).toBe(200); // Lyra has bound L
-    // Kai's newer session (it would win a re-bind of his own) presents Lyra's L
-    const missing = await join(deps, `${U.KAI}#2`, 'pty_does_not_exist', L);
+    // Kai's newer session (it would win a re-bind of his own) presents Lyra's L: newest-session wins only for the SAME player,
+    // so it is refused, with the accurate 409 (EOS OPTION A: no reassignment across players)
     const stolen = await join(deps, `${U.KAI}#2`, pid, L);
-    expect(stolen.status).toBe(404);
-    expect(stolen.body).toEqual(missing.body);
+    expect(stolen.status).toBe(409);
+    expect(stolen.body).toEqual(VOICE_IDENTITY_IN_USE_BODY);
     expect(rec.removals).toEqual([]); // X never left the room for a re-bind the store was always going to refuse
     expect(rec.heard(pid)).toEqual([X, L].sort()); // X is still heard
     expect(bindings.rows().map((r) => `${r.userId}=${r.puid}`).sort()).toEqual([`${U.KAI}=${X}`, `${U.LYRA}=${L}`].sort());
@@ -747,5 +752,104 @@ describe('the delivery tap', () => {
     expect(novaLast?.userIds).toContain(U.KAI);
     expect(novaLast?.userIds).toContain(U.NOVA);
     expect(JSON.stringify(records)).not.toContain(secret);
+  });
+});
+
+describe('party voice: EOS OPTION A -- one active voice identity per Windows account (founder, 10-11)', () => {
+  /** The binding store with its owner reads counted (condition c: the lookup runs only after every earlier gate). */
+  function spiedBindings() {
+    const inner = createInMemoryVoiceBindings();
+    let ownerReads = 0;
+    const spied: VoiceBindingStore = {
+      bind: (input) => inner.bind(input),
+      bindingOf: (userId) => inner.bindingOf(userId),
+      ownerOf: async (puid) => {
+        ownerReads += 1;
+        return inner.ownerOf(puid);
+      },
+      puidsOf: (userIds) => inner.puidsOf(userIds),
+    };
+    return { spied, inner, reads: () => ownerReads, reset: () => { ownerReads = 0; } };
+  }
+
+  it('(a) the refusal is the fixed text: one line of printable ASCII, at most 200 characters, the same bytes whoever asks', async () => {
+    expect(VOICE_IDENTITY_IN_USE_MESSAGE).toBe('Voice is already set up for another Wonderland player on this Windows account. In this Alpha, one player per Windows account can use voice.');
+    expect(VOICE_IDENTITY_IN_USE_MESSAGE.length).toBeLessThanOrEqual(200);
+    expect(/^[\x20-\x7e]+$/.test(VOICE_IDENTITY_IN_USE_MESSAGE)).toBe(true);
+    const { state, pid } = arena();
+    const deps = depsFor(state, minterRecorder().minter);
+    expect((await join(deps, U.KAI, pid)).status).toBe(200);
+    expect((await join(deps, U.ORION, pid)).status).toBe(200);
+    const a = await join(deps, U.LYRA, pid, puidOf(U.KAI));
+    const b = await join(deps, U.LYRA, pid, puidOf(U.ORION));
+    expect([a.status, b.status]).toEqual([409, 409]);
+    expect(a.body).toEqual(VOICE_IDENTITY_IN_USE_BODY);
+    expect(JSON.stringify(b.body)).toBe(JSON.stringify(a.body)); // nothing in it depends on the request
+    expect(a.body.error?.message).toBe(VOICE_IDENTITY_IN_USE_MESSAGE); // where the client reads it (SocialLive.cpp error.message)
+  });
+
+  it('(b) ORDER: a non-member, a WALLED member and a separated member presenting an in-use PUID get the stranger 404, never the 409', async () => {
+    const { state, pid } = arena();
+    const deps = depsFor(state, minterRecorder().minter);
+    expect((await join(deps, U.KAI, pid)).status).toBe(200); // Kai holds his PUID
+    const kais = puidOf(U.KAI);
+    const missing = await join(deps, U.ORION, 'pty_does_not_exist');
+    const carried = blockUser(state, U.LYRA, U.ORION, NOW); // Lyra walled: still a member, admitted to nothing
+    if (!carried.ok) throw new Error(carried.error.message);
+    const removed = applySocialOperation(state, 'blocks.add', U.ORION, { ids: [], body: { targetId: U.LYRA, confirmSharedParty: true }, query: {} }, NOW);
+    if (!removed.ok) throw new Error(removed.error.message);
+    const answers = [
+      await join(deps, U.NOVA, pid, kais),
+      await join({ ...deps, store: fixedStore(carried.value) }, U.LYRA, pid, kais),
+      await join({ ...deps, store: fixedStore(removed.value.state) }, U.LYRA, pid, kais),
+    ];
+    for (const r of answers) {
+      expect(r.status).toBe(404);
+      expect(r.body).toEqual(missing.body);
+    }
+    // the control: the same PUID from an ADMITTED member is the 409
+    expect((await join(deps, U.LYRA, pid, kais)).status).toBe(409);
+  });
+
+  it('(c) the owner lookup runs only after every earlier gate: none for a non-member, a walled member, a malformed PUID or no provider; one for an admitted member', async () => {
+    const { state, pid } = arena();
+    const { spied, reads, reset } = spiedBindings();
+    const deps = depsFor(state, minterRecorder().minter, undefined, spied);
+    expect((await join(deps, U.KAI, pid)).status).toBe(200);
+    reset();
+    const carried = blockUser(state, U.LYRA, U.ORION, NOW);
+    if (!carried.ok) throw new Error(carried.error.message);
+    expect((await join(deps, U.NOVA, pid, puidOf(U.KAI))).status).toBe(404);
+    expect((await join({ ...deps, store: fixedStore(carried.value) }, U.LYRA, pid, puidOf(U.KAI))).status).toBe(404);
+    expect((await join(deps, U.LYRA, pid, 'not-a-puid')).status).toBe(400);
+    expect((await join({ ...deps, voice: null }, U.LYRA, pid, puidOf(U.KAI))).status).toBe(503);
+    expect(reads()).toBe(0);
+    expect((await join(deps, U.LYRA, pid, puidOf(U.KAI))).status).toBe(409);
+    expect(reads()).toBe(1); // the join's own owner read: the 409 adds no lookup
+  });
+
+  it("(d) the refusal names nobody: not the holder's id, name or handle, nor the PUID", async () => {
+    const { state, pid } = arena();
+    const deps = depsFor(state, minterRecorder().minter);
+    expect((await join(deps, U.KAI, pid)).status).toBe(200);
+    const r = await join(deps, U.LYRA, pid, puidOf(U.KAI));
+    expect(r.status).toBe(409);
+    const text = JSON.stringify(r.body).toLowerCase();
+    for (const leak of [U.KAI, `@${U.KAI}`, 'kai', puidOf(U.KAI), hashId(U.KAI), hashPuid(puidOf(U.KAI))]) expect(text).not.toContain(leak.toLowerCase());
+  });
+
+  it('(e) the binding never moves across players and nothing is minted -- not even for the second player\'s NEWER session', async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder();
+    const bindings = createInMemoryVoiceBindings();
+    const deps = depsFor(state, rec.minter, undefined, bindings);
+    expect((await join(deps, U.KAI, pid)).status).toBe(200);
+    expect((await join(deps, U.LYRA, pid, puidOf(U.KAI))).status).toBe(409);
+    expect((await join(deps, `${U.LYRA}#2`, pid, puidOf(U.KAI))).status).toBe(409); // newest-session wins only for one player
+    expect(bindings.rows().map((row) => `${row.userId}=${row.puid}`)).toEqual([`${U.KAI}=${puidOf(U.KAI)}`]);
+    expect(rec.asked.map((a) => a.participantId)).toEqual([U.KAI]);
+    expect(rec.removals).toEqual([]);
+    // the control: Lyra with her OWN device id joins as ever
+    expect((await join(deps, U.LYRA, pid)).status).toBe(200);
   });
 });
