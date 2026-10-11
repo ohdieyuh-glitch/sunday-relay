@@ -80,6 +80,31 @@ describe('a native social session', () => {
     expect(store.verifyNativeSocialSession({ token: 'not-a-token', now: T0 + 1 })).toEqual({ ok: false, reason: 'not_found' });
   });
 
+  it("answers a LIVE social session's issue time by its id, and null once it is gone or is not a social session (the voice re-bind's lookup, af2eb058 m-d)", () => {
+    const store = createBrowserSessionStore();
+    const first = store.mintNativeSocialSession({ now: T0, participantId: PLAYER });
+    const second = store.mintNativeSocialSession({ now: T0 + 5, participantId: PLAYER });
+    if (!first.ok || !second.ok) throw new Error('mint');
+    expect(store.nativeSocialSessionIssuedAt({ sessionId: first.session.sessionId, now: T0 + 10 })).toBe(T0);
+    expect(store.nativeSocialSessionIssuedAt({ sessionId: second.session.sessionId, now: T0 + 10 })).toBe(T0 + 5);
+    // expired: gone, even before a sweep drops it
+    expect(store.nativeSocialSessionIssuedAt({ sessionId: first.session.sessionId, now: T0 + NATIVE_SESSION_TTL_MS })).toBeNull();
+    // revoked (a sign-out): gone
+    expect(store.revokeSession({ token: second.session.token, now: T0 + 20 })).toBe(true);
+    expect(store.nativeSocialSessionIssuedAt({ sessionId: second.session.sessionId, now: T0 + 21 })).toBeNull();
+    // never known to this process (a restart ends every session)
+    expect(store.nativeSocialSessionIssuedAt({ sessionId: 'no-such-session', now: T0 + 10 })).toBeNull();
+    // a browser session's id, or a native WORLD session's, is not a social session's
+    const browser = store.mintIdentitySession({ origin: WEB, now: T0, participantId: PLAYER, scope: 'browser_control' });
+    if (!browser.ok) throw new Error('browser mint');
+    const grant = store.createGrant({ origin: NATIVE_WORLD_AUDIENCE, now: T0, scope: 'native_world', participantId: PLAYER, projectId: 'proj_1' });
+    const world = store.consumeGrant({ grantId: grant.grantId, secret: grant.secret, origin: NATIVE_WORLD_AUDIENCE, now: T0 });
+    if (!world.ok) throw new Error('native world grant did not redeem');
+    for (const other of [browser.session.sessionId, world.session.sessionId]) expect(store.nativeSocialSessionIssuedAt({ sessionId: other, now: T0 + 10 })).toBeNull();
+    // a read: the expired session is still held until a write sweeps it
+    expect(store.size.sessions).toBe(3);
+  });
+
   it('has no other way in: no grant and no identity session can be made with the social scope', () => {
     const store = createBrowserSessionStore();
     expect(() => store.createGrant({ origin: NATIVE_SOCIAL_AUDIENCE, now: T0, scope: 'native_social', participantId: PLAYER })).toThrow();

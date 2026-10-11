@@ -51,8 +51,9 @@ import type { SocialOperationId } from '../src/relay/social/social-contracts';
 import type { SocialPlayerIdentity, SocialStore } from '../src/relay/social/social-store';
 import { voiceAudienceFor, walledFromParty } from '../src/relay/social/social-parties';
 import { partyById, type SocialState } from '../src/relay/social/social-state';
-import { decideVoiceBinding, normalizePuid, oneVoiceJoinAtATime, type VoiceBindingOutcome, type VoiceBindingRow, type VoiceBindingStore } from '../src/relay/social/voice-binding';
-import { bindSocialActor, nativeSocialMayCall, SOCIAL_OPERATIONS } from './wonderland-social-scope';
+import { decideVoiceBinding, normalizePuid, oneVoiceJoinAtATime, type SessionIssuedAtLookup, type VoiceBindingOutcome, type VoiceBindingRow, type VoiceBindingStore } from '../src/relay/social/voice-binding';
+import type { BrowserSessionStore } from './browser-session/grants';
+import { bindSocialActor, NATIVE_SOCIAL_CAPABILITY, nativeSocialMayCall, SOCIAL_OPERATIONS } from './wonderland-social-scope';
 import { EOS_CLIENT_CONFIG_SCHEMA, failureTag, hashId, hashPuid, type EosGameClientConfig } from './eos-voice';
 
 export const SOCIAL_ROUTE_PREFIX = '/wonderland/social';
@@ -78,8 +79,12 @@ export interface SocialRouteResult {
 export interface SocialSessionFacts {
   readonly sessionId: string;
   readonly participantId: string;
-  /** When the session was issued (ms since the epoch), if the session store says: the voice re-bind's "newest session wins" (m3). */
-  readonly issuedAtMs?: number;
+  /**
+   * When the session was issued (ms since the epoch): the voice re-bind's "newest session wins" (m3). REQUIRED (MAIN's internal
+   * reviews af2eb058 m-d, a8ed4c0b MAJOR 1): every producer -- the bridge's session store, the dev server -- sets it, so no hop can
+   * drop it and silently weaken the rule.
+   */
+  readonly issuedAtMs: number;
   /** The capabilities the session holds (a desktop sign-in's `native_social` session holds `social`). */
   readonly capabilities: readonly string[];
   /** Which native scope verified it. Absent means `native_world` (the dev server and the older tests). */
@@ -128,6 +133,13 @@ export interface SocialDeliveryRecord {
 export interface SocialRouteDeps {
   /** A live native session's facts, or null (unknown, expired, revoked, or not a native session). */
   readonly verifySession: (token: string, now: number) => SocialSessionFacts | null;
+  /**
+   * The session store's lookup of a session's issue time by id: ms while it is live, null once it is gone (expired, revoked, never
+   * known to this process). The voice re-bind asks it about the session that made the caller's binding: NEWEST SESSION WINS
+   * (MAIN's internal review af2eb058, m-d). REQUIRED, so the bridge cannot drop it silently; null says out loud that this server's
+   * sessions cannot answer (the dev server, tests), and the rule then compares with the binding's bound_at.
+   */
+  readonly sessionIssuedAt: ((sessionId: string, now: number) => number | null) | null;
   /** Who the paired player is, for their social record. Null when the account is unknown. */
   readonly identify: (participantId: string) => Promise<SocialPlayerIdentity | null>;
   /**
@@ -153,6 +165,25 @@ export interface SocialRouteDeps {
   readonly log?: ((line: string) => void) | null;
   /** Tests and QA only: told about every events poll and snapshot answered. */
   readonly tap?: ((record: SocialDeliveryRecord) => void) | null;
+}
+
+/**
+ * THE BRIDGE'S SESSION HOPS FOR SOCIAL, in one tested place (server.ts spreads exactly this; MAIN's internal reviews af2eb058 m-d
+ * and m-e, a8ed4c0b MAJOR 1): a native social session's facts -- its issue time included -- and the lookup of a session's issue
+ * time by id, which the voice re-bind asks about the session that made a binding.
+ */
+export function nativeSocialSessionDeps(
+  sessions: Pick<BrowserSessionStore, 'verifyNativeSocialSession' | 'nativeSocialSessionIssuedAt'>,
+): Pick<SocialRouteDeps, 'verifySession' | 'sessionIssuedAt'> {
+  return {
+    verifySession: (token, now) => {
+      const verified = sessions.verifyNativeSocialSession({ token, now });
+      return verified.ok
+        ? { sessionId: verified.sessionId, participantId: verified.participantId, capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social', issuedAtMs: verified.issuedAt }
+        : null;
+    },
+    sessionIssuedAt: (sessionId, now) => sessions.nativeSocialSessionIssuedAt({ sessionId, now }),
+  };
 }
 
 /** The keys of a social view that name a PERSON. Party, conversation and request ids are not people. */
@@ -409,11 +440,13 @@ async function answerVoiceJoin(input: {
   readonly actorId: string;
   readonly sessionId: string;
   readonly sessionIssuedAtIso: string | null;
+  /** The session store's lookup for the session that made the caller's binding (m-d), or null when it cannot answer. */
+  readonly sessionIssuedAtOf: SessionIssuedAtLookup | null;
   readonly partyId: string;
   readonly body: Readonly<Record<string, unknown>>;
   readonly nowIso: string;
 }): Promise<SocialRouteResult> {
-  const { store, deps, actorId, sessionId, sessionIssuedAtIso, partyId, nowIso } = input;
+  const { store, deps, actorId, sessionId, sessionIssuedAtIso, sessionIssuedAtOf, partyId, nowIso } = input;
   // Every refusal that concerns WHO the caller is answers exactly as a party that does not exist (the uniform stranger 404).
   const notThere = () => err(404, 'not-found', 'party not found');
   const audience = voiceAudienceIfAdmitted(await store.read(), actorId, partyId);
@@ -443,7 +476,7 @@ async function answerVoiceJoin(input: {
     } catch (error) {
       return failed('Party voice could not read your voice identity right now.', 'the binding could not be read', error);
     }
-    const predicted = decideVoiceBinding({ userId: actorId, puid, sessionId, sessionIssuedAtIso, mine, owner });
+    const predicted = decideVoiceBinding({ userId: actorId, puid, sessionId, sessionIssuedAtIso, sessionIssuedAtOf, mine, owner });
     if (predicted === 'rebound' && mine !== null) {
       try {
         await voice.removeFromRoom({ partyId, participantId: actorId, puids: [mine.puid], mustLeave: false });
@@ -457,7 +490,7 @@ async function answerVoiceJoin(input: {
     }
     let outcome: VoiceBindingOutcome;
     try {
-      outcome = await bindings.bind({ userId: actorId, puid, sessionId, sessionIssuedAtIso, nowIso });
+      outcome = await bindings.bind({ userId: actorId, puid, sessionId, sessionIssuedAtIso, sessionIssuedAtOf, nowIso });
     } catch (error) {
       return failed('Party voice could not record your voice identity right now.', 'the bind failed', error);
     }
@@ -588,9 +621,11 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
   }
   if (op.id === 'parties.voice_join') {
     const [partyId = ''] = idsOf(op.template, pathname);
+    const lookup = deps.sessionIssuedAt;
     return answerVoiceJoin({
       store, deps, actorId: actor.actorId, sessionId: facts.sessionId,
       sessionIssuedAtIso: typeof facts.issuedAtMs === 'number' ? new Date(facts.issuedAtMs).toISOString() : null,
+      sessionIssuedAtOf: lookup === null ? null : (sessionId) => lookup(sessionId, request.now),
       partyId, body, nowIso,
     });
   }

@@ -22,16 +22,17 @@ import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 const T0 = Date.parse('2026-10-02T12:00:00.000Z');
 
 const SESSIONS: Record<string, SocialSessionFacts> = {
-  'tok-kai': { sessionId: 's1', participantId: 'usr_kai', capabilities: [NATIVE_SOCIAL_CAPABILITY] },
-  'tok-nova': { sessionId: 's2', participantId: 'usr_nova', capabilities: [NATIVE_SOCIAL_CAPABILITY] },
-  'tok-mira': { sessionId: 's3', participantId: 'usr_mira', capabilities: [] },
-  'tok-vega': { sessionId: 's4', participantId: 'usr_vega', capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+  'tok-kai': { sessionId: 's1', participantId: 'usr_kai', issuedAtMs: T0, capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+  'tok-nova': { sessionId: 's2', participantId: 'usr_nova', issuedAtMs: T0, capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+  'tok-mira': { sessionId: 's3', participantId: 'usr_mira', issuedAtMs: T0, capabilities: [] },
+  'tok-vega': { sessionId: 's4', participantId: 'usr_vega', issuedAtMs: T0, capabilities: [NATIVE_SOCIAL_CAPABILITY] },
 };
 
 function world(store: SocialStore = createInMemorySocialStore()) {
   let clock = T0;
   const deps: SocialRouteDeps = {
     verifySession: (token) => SESSIONS[token] ?? null,
+    sessionIssuedAt: null,
     identify: async (participantId) => ({ userId: participantId, displayName: participantId.replace('usr_', '').replace(/^./, (c) => c.toUpperCase()), handle: `@${participantId.replace('usr_', '')}` }),
     store,
   };
@@ -64,7 +65,7 @@ describe('the social routes: who may call', () => {
   });
 
   it('is 503 without a store, after the gates', async () => {
-    const deps: SocialRouteDeps = { verifySession: (t) => SESSIONS[t] ?? null, identify: async () => null, store: null };
+    const deps: SocialRouteDeps = { verifySession: (t) => SESSIONS[t] ?? null, sessionIssuedAt: null, identify: async () => null, store: null };
     const result = await handleSocialRoute({ method: 'GET', path: '/wonderland/social/snapshot', authorization: 'Relay-Session tok-kai', origin: undefined, body: null, now: T0 }, deps);
     expect(result?.status).toBe(503);
   });
@@ -219,6 +220,7 @@ describe("the store opens only after the session gate (JUJU MAIN's hosted plan r
     const memory = createInMemorySocialStore();
     const deps: SocialRouteDeps = {
       verifySession: (token) => SESSIONS[token] ?? null,
+      sessionIssuedAt: null,
       identify: async (participantId) => ({ userId: participantId, displayName: participantId, handle: `@${participantId}` }),
       store: async () => {
         opened += 1;
@@ -247,6 +249,7 @@ function clocked(opts: { lease?: boolean; budgets?: boolean } = {}) {
   const store = createInMemorySocialStore();
   const deps: SocialRouteDeps = {
     verifySession: (token) => SESSIONS[token] ?? null,
+    sessionIssuedAt: null,
     identify: async (participantId) => ({ userId: participantId, displayName: participantId.replace('usr_', ''), handle: `@${participantId.replace('usr_', '')}` }),
     store,
     presenceLease: opts.lease === false ? null : createPresenceLease(),

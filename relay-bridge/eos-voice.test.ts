@@ -314,7 +314,7 @@ async function voicedArena(script: Parameters<typeof epicFake>[0] = {}) {
   const puid: Record<string, string> = { [people.leader]: hex(16), [people.a]: hex(16), [people.b]: hex(16) };
   for (const id of Object.values(people)) {
     await store.ensureUser({ userId: id, displayName: id, handle: `@${id}` }, new Date(T0).toISOString());
-    await bindings.bind({ userId: id, puid: puid[id], sessionId: `s-${id}`, nowIso: new Date(T0).toISOString() });
+    await bindings.bind({ userId: id, puid: puid[id], sessionId: `s-${id}`, sessionIssuedAtIso: null, sessionIssuedAtOf: null, nowIso: new Date(T0).toISOString() });
   }
   for (const friend of [people.a, people.b]) {
     await run('requests.send', people.leader, [], { toUserId: friend });
@@ -411,7 +411,7 @@ describe("removal takes out EVERY PUID minted for the member in that room, not o
     await w.minter.mint({ partyId: w.pid, participantId: w.people.a, audience: [], nowIso, puid: old });
     // a fresh sign-in re-binds a to a new PUID (Epic does not validate PUIDs: any 32 hex), and a token is minted for it as well
     const fresh = hex(16);
-    expect(await w.bindings.bind({ userId: w.people.a, puid: fresh, sessionId: 's-a-2', nowIso })).toBe('rebound');
+    expect(await w.bindings.bind({ userId: w.people.a, puid: fresh, sessionId: 's-a-2', sessionIssuedAtIso: null, sessionIssuedAtOf: null, nowIso })).toBe('rebound');
     await w.minter.mint({ partyId: w.pid, participantId: w.people.a, audience: [], nowIso, puid: fresh });
     expect([...w.minter.mintedIn(room, w.people.a).keys()]).toEqual([old, fresh]);
     await w.run('parties.remove_member', w.people.leader, [w.pid, w.people.a], {});
@@ -611,13 +611,15 @@ describe("a player's departures and voice joins run in the order they were queue
     await run('party_invites.accept', P, [String((await run('parties.invite', LA, [A], { toUserId: P }))?.inviteId)], {});
     // P's device X was bound (and its token minted before a restart: this process minted nothing)
     const [X, Y] = [hex(16), hex(16)];
-    await bindings.bind({ userId: P, puid: X, sessionId: 's-p', nowIso: iso });
+    await bindings.bind({ userId: P, puid: X, sessionId: 's-p', sessionIssuedAtIso: null, sessionIssuedAtOf: null, nowIso: iso });
     // P leaves A: the removal is queued at the commit, and waits at its binding lookup
     await run('parties.leave', P, [A], {});
     await run('party_invites.accept', P, [String((await run('parties.invite', LB, [B], { toUserId: P }))?.inviteId)], {});
     // a fresh sign-in on another device joins B's voice with Y: a re-bind
     const deps: SocialRouteDeps = {
       verifySession: (token) => ({ sessionId: token, participantId: P, capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social', issuedAtMs: T0 + 1000 }),
+      // 's-p' (the session that bound X) predates a restart: the session store no longer knows it, so the newer session re-binds
+      sessionIssuedAt: (sessionId) => (sessionId === 'p-second-device' ? T0 + 1000 : null),
       identify: async (id) => ({ userId: id, displayName: id, handle: `@${id}` }),
       store,
       voice: minter,
@@ -705,7 +707,7 @@ describe('logs carry hashed ids only', () => {
     const minter = new EosVoiceTokenMinter(cfg, { fetchImpl: epic.fetchImpl, now: () => T0, log: (l) => log.push(l) });
     const grant = await minter.mint({ partyId: 'pty_9', participantId: 'u', audience: ['u'], nowIso: new Date(T0).toISOString(), puid: PUID_B });
     const bindings = createInMemoryVoiceBindings();
-    await bindings.bind({ userId: 'u', puid: PUID_B, sessionId: 's', nowIso: new Date(T0).toISOString() });
+    await bindings.bind({ userId: 'u', puid: PUID_B, sessionId: 's', sessionIssuedAtIso: null, sessionIssuedAtOf: null, nowIso: new Date(T0).toISOString() });
     const removals = createVoiceRemovals({ target: minter, bindings: () => bindings, log: (l) => log.push(l), sleep: async () => undefined });
     removals.onDepartures([{ partyId: 'pty_9', userId: 'u' }]);
     await removals.idle();

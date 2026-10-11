@@ -61,14 +61,14 @@ const ONE_TRY = ['BEGIN', 'SELECT mine', 'SELECT owner'];
 describe('the PostgreSQL bind re-reads ONCE on 23505 (review a6d5842c, m2)', () => {
   it("the control: no collision, one transaction, 'bound'", async () => {
     const db = scriptedPool({});
-    expect(await createPostgresVoiceBindings(db.pool).bind({ userId: 'ghu-1', puid: P1, sessionId: 's1', nowIso: NOW })).toBe('bound');
+    expect(await createPostgresVoiceBindings(db.pool).bind({ userId: 'ghu-1', puid: P1, sessionId: 's1', sessionIssuedAtIso: null, sessionIssuedAtOf: null, nowIso: NOW })).toBe('bound');
     expect(db.sent).toEqual([...ONE_TRY, 'INSERT', 'COMMIT']);
     expect(db.released()).toBe(1);
   });
 
   it("a player's first join sent twice at once: the INSERT collides with their OWN committed row, and the re-read answers 'same' (never 'refused')", async () => {
     const db = scriptedPool({ collisions: [(t) => t.push({ user_id: 'ghu-1', puid: P1, session_id: 's1', bound_at: new Date(NOW) })] });
-    expect(await createPostgresVoiceBindings(db.pool).bind({ userId: 'ghu-1', puid: P1, sessionId: 's1', nowIso: NOW })).toBe('same');
+    expect(await createPostgresVoiceBindings(db.pool).bind({ userId: 'ghu-1', puid: P1, sessionId: 's1', sessionIssuedAtIso: null, sessionIssuedAtOf: null, nowIso: NOW })).toBe('same');
     expect(db.sent).toEqual([...ONE_TRY, 'INSERT', 'ROLLBACK', ...ONE_TRY, 'COMMIT']);
     expect(db.released()).toBe(2);
     expect(db.table).toHaveLength(1);
@@ -76,14 +76,14 @@ describe('the PostgreSQL bind re-reads ONCE on 23505 (review a6d5842c, m2)', () 
 
   it("the collision was ANOTHER player's bind of that PUID: the re-read answers 'refused' -- never a second owner", async () => {
     const db = scriptedPool({ collisions: [(t) => t.push({ user_id: 'ghu-2', puid: P1, session_id: 's9', bound_at: new Date(NOW) })] });
-    expect(await createPostgresVoiceBindings(db.pool).bind({ userId: 'ghu-1', puid: P1, sessionId: 's1', nowIso: NOW })).toBe('refused');
+    expect(await createPostgresVoiceBindings(db.pool).bind({ userId: 'ghu-1', puid: P1, sessionId: 's1', sessionIssuedAtIso: null, sessionIssuedAtOf: null, nowIso: NOW })).toBe('refused');
     expect(db.sent).toEqual([...ONE_TRY, 'INSERT', 'ROLLBACK', ...ONE_TRY, 'COMMIT']);
     expect(db.table.map((r) => r.user_id)).toEqual(['ghu-2']);
   });
 
   it("one re-read only: a second collision is 'refused', each transaction rolled back and its client released", async () => {
     const db = scriptedPool({ collisions: [() => undefined, () => undefined] });
-    expect(await createPostgresVoiceBindings(db.pool).bind({ userId: 'ghu-1', puid: P1, sessionId: 's1', nowIso: NOW })).toBe('refused');
+    expect(await createPostgresVoiceBindings(db.pool).bind({ userId: 'ghu-1', puid: P1, sessionId: 's1', sessionIssuedAtIso: null, sessionIssuedAtOf: null, nowIso: NOW })).toBe('refused');
     expect(db.sent).toEqual([...ONE_TRY, 'INSERT', 'ROLLBACK', ...ONE_TRY, 'INSERT', 'ROLLBACK']);
     expect(db.released()).toBe(2);
     expect(db.table).toEqual([]);
@@ -91,7 +91,7 @@ describe('the PostgreSQL bind re-reads ONCE on 23505 (review a6d5842c, m2)', () 
 
   it('any other failure is thrown at once: rolled back, released, never retried', async () => {
     const db = scriptedPool({ failWith: { code: '57P01' } });
-    await expect(createPostgresVoiceBindings(db.pool).bind({ userId: 'ghu-1', puid: P1, sessionId: 's1', nowIso: NOW })).rejects.toMatchObject({ code: '57P01' });
+    await expect(createPostgresVoiceBindings(db.pool).bind({ userId: 'ghu-1', puid: P1, sessionId: 's1', sessionIssuedAtIso: null, sessionIssuedAtOf: null, nowIso: NOW })).rejects.toMatchObject({ code: '57P01' });
     expect(db.sent).toEqual([...ONE_TRY, 'INSERT', 'ROLLBACK']);
     expect(db.released()).toBe(1);
   });

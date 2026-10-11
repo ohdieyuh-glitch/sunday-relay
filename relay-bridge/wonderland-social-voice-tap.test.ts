@@ -24,8 +24,13 @@ import { failureTag, hashId, hashPuid } from './eos-voice';
 
 const T0 = Date.parse('2026-10-03T12:00:00.000Z');
 const NOW = new Date(T0).toISOString();
-/** A session token "usr_x" is player usr_x in session usr_x; "usr_x#2" is the same player in a NEW session (a fresh sign-in). */
-const facts = (token: string): SocialSessionFacts => ({ sessionId: token, participantId: token.split('#')[0], capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social' });
+/**
+ * A session token "usr_x" is player usr_x in session usr_x; "usr_x#2" is the same player in a NEWER session (a fresh sign-in),
+ * "#3" newer still. Every one was issued BEFORE the joins below (at T0): a minute before, one second apart, by its number. The
+ * facts carry that issue time and the session lookup answers it (af2eb058 m-d/m-e: the production path, not the fallback).
+ */
+const issuedAtOf = (token: string): number => T0 - 60_000 + 1000 * Number(token.split('#')[1] ?? '1');
+const facts = (token: string): SocialSessionFacts => ({ sessionId: token, participantId: token.split('#')[0], capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social', issuedAtMs: issuedAtOf(token) });
 /** A deterministic EOS ProductUserId per player (and per variant), made at run time. */
 const puidOf = (who: string) => createHash('sha256').update(who).digest('hex').slice(0, 32);
 
@@ -90,6 +95,8 @@ const join = (deps: SocialRouteDeps, who: string, pid: string, puid: unknown = p
 
 const depsFor = (state: SocialState, voice: PartyVoiceTokenMinter | null, tap?: (r: SocialDeliveryRecord) => void, voiceBindings: VoiceBindingStore | null = createInMemoryVoiceBindings()): SocialRouteDeps => ({
   verifySession: (token) => facts(token),
+  // every session here is live: its issue time, by its id (the token)
+  sessionIssuedAt: (sessionId) => issuedAtOf(sessionId),
   identify: async (id) => ({ userId: id, displayName: id, handle: `@${id}` }),
   store: fixedStore(state),
   voice,
@@ -466,6 +473,7 @@ describe('the delivery tap', () => {
     const records: SocialDeliveryRecord[] = [];
     const deps: SocialRouteDeps = {
       verifySession: (token) => facts(token),
+      sessionIssuedAt: null,
       identify: async (id) => ({ userId: id, displayName: id.replace('usr_', ''), handle: `@${id}` }),
       store,
       tap: (r) => records.push(r),

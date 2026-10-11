@@ -81,8 +81,7 @@ import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute, SIGNIN_START_RATE } from './wonderland-native-signin-routes';
-import { createCommandBudgets, createPresenceLease, createSessionRateLimit, endSocialPresence, EOS_CLIENT_CONFIG_RATE, handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
-import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
+import { createCommandBudgets, createPresenceLease, createSessionRateLimit, endSocialPresence, EOS_CLIENT_CONFIG_RATE, handleSocialRoute, isSocialRoute, nativeSocialSessionDeps, type SocialDeliveryRecord } from './wonderland-social-routes';
 import { GITHUB_STUB_BANNER, githubRootsForNativeSignIn } from './wonderland-github-stub-seam';
 import { openSocialPostgresStore } from '../src/relay/persistence/social-postgres';
 import { createPostgresVoiceBindings } from '../src/relay/persistence/voice-binding-postgres';
@@ -747,12 +746,8 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             body: method === 'POST' ? await readBody(req) : null,
             now: Date.now(),
           }, {
-            verifySession: (token, now) => {
-              const verified = browserSessions.verifyNativeSocialSession({ token, now });
-              return verified.ok
-                ? { sessionId: verified.sessionId, participantId: verified.participantId, capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social', issuedAtMs: verified.issuedAt }
-                : null;
-            },
+            // the session's facts (its issue time included) and the session lookup the voice re-bind asks (af2eb058 m-d)
+            ...nativeSocialSessionDeps(browserSessions),
             identify: async (participantId) => {
               const login = socialLogins.get(participantId);
               return login === undefined ? null : { userId: participantId, displayName: login, handle: `@${login}` };

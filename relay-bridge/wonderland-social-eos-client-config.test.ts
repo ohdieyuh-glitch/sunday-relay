@@ -28,7 +28,7 @@ const hex = (n: number) => randomBytes(n).toString('hex');
 
 /** A session token "usr_x" is player usr_x in session usr_x; "usr_x#2" is the same player in another session. */
 const facts = (token: string): SocialSessionFacts | null =>
-  token.startsWith('usr_') ? { sessionId: token, participantId: token.split('#')[0], capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social' } : null;
+  token.startsWith('usr_') ? { sessionId: token, participantId: token.split('#')[0], capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social', issuedAtMs: T0 } : null;
 
 /** The game client's config as the bridge holds it (loadEosGameClientConfig freezes it), planted at run time. */
 const plantedGameConfig = (): EosGameClientConfig =>
@@ -50,6 +50,7 @@ function world(over: Partial<SocialRouteDeps> = {}) {
   const config = plantedGameConfig();
   const deps: SocialRouteDeps = {
     verifySession: (token) => facts(token),
+    sessionIssuedAt: null,
     identify: async (id) => ({ userId: id, displayName: id, handle: `@${id}` }),
     store: createInMemorySocialStore(),
     voice: minter,
@@ -143,7 +144,7 @@ describe('GET /voice/eos-client-config: what a signed-in desktop client is hande
     expect((await w.get('not-a-session', T0)).status).toBe(401);
     const browser = await w.get('usr_kai', T0, 'https://evil.example');
     expect([browser.status, browser.body.error?.kind]).toEqual([403, 'desktop_only']);
-    const noSocial = world({ eosClientConfigAllowed: counting, verifySession: () => ({ sessionId: 's', participantId: 'usr_kai', capabilities: [] }) });
+    const noSocial = world({ eosClientConfigAllowed: counting, verifySession: () => ({ sessionId: 's', participantId: 'usr_kai', issuedAtMs: T0, capabilities: [] }) });
     const refused = await noSocial.get('usr_kai', T0);
     expect([refused.status, refused.body.error?.kind]).toEqual([403, 'not_permitted']);
     const unknown = world({ eosClientConfigAllowed: counting, identify: async () => null });

@@ -261,6 +261,12 @@ export interface BrowserSessionStore {
     token: string; now: number;
   }): { ok: true; sessionId: string; participantId: string; issuedAt: number }
     | { ok: false; reason: GrantFailure | 'not_native_social' };
+  /**
+   * When a LIVE native social session was issued (ms since the epoch), looked up by its id -- or null: gone (expired, revoked,
+   * or never known to this process, since a restart ends every session) or not a native social session. A read: it never sweeps.
+   * The voice re-bind's "newest session wins" (MAIN's internal review af2eb058, m-d) asks it about the session that made a binding.
+   */
+  nativeSocialSessionIssuedAt(input: { sessionId: string; now: number }): number | null;
   revokeSession(input: { token: string; now: number }): boolean;
   /**
    * Drops expired records. Called on the WRITE path only — a read must never
@@ -479,6 +485,13 @@ export function createBrowserSessionStore(): BrowserSessionStore {
         return { ok: true, sessionId: session.sessionId, participantId: session.participantId, issuedAt: session.issuedAt };
       }
       return { ok: false, reason: 'not_found' };
+    },
+
+    nativeSocialSessionIssuedAt({ sessionId, now }) {
+      const session = sessions.get(sessionId);
+      if (session === undefined || session.revokedAt !== null || session.expiresAt <= now) return null;
+      if (session.scope !== 'native_social' || session.origin !== NATIVE_SOCIAL_AUDIENCE) return null;
+      return session.issuedAt;
     },
 
     revokeSession({ token, now }) {
