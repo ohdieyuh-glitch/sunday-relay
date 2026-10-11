@@ -159,4 +159,35 @@ describe('export-julius-harness generates the Julius harness export from the liv
     expect(committed).toContain('## Production composition roots');
     for (const name of REQUIRED_SUBSYSTEMS) expect(committed).toContain(` ${name}\n`);
   });
+
+  it('META: the gate FAILS when the harness reaches an excluded kernel dependant across a boundary (internal review N6)', () => {
+    // The trace stops at a boundary, so the "reached by the trace" check could never fire for the exclusions under
+    // one. A copy of the generator whose exclusion list also names a file the harness REALLY crosses into (the
+    // wonderland boundary's first crossing in the clean run above) must fail, naming it.
+    const { boundaries } = report as unknown as { boundaries: { prefix: string; crossings: { to: string }[] }[] };
+    const crossed = boundaries.find((entry) => entry.prefix === 'src/relay/mission/wonderland/')!.crossings[0].to;
+    const swaps: Array<[string, string]> = [
+      ['const require = createRequire(import.meta.url);', `const require = createRequire(${JSON.stringify(GENERATOR)});`],
+      ["const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');", `const REPO_ROOT = ${JSON.stringify(REPO_ROOT)};`],
+      ['const KERNEL_DEPENDANT_EXCLUSIONS = [', `const KERNEL_DEPENDANT_EXCLUSIONS = [\n  { path: ${JSON.stringify(crossed)}, reason: 'meta-test' },`],
+    ];
+    let source = readFileSync(GENERATOR, 'utf8');
+    for (const [from, to] of swaps) {
+      expect(source.split(from).length - 1, from).toBe(1);
+      source = source.replace(from, () => to);
+    }
+    const copy = join(workspace, 'export-julius-harness.meta.mjs');
+    writeFileSync(copy, source);
+    let stdout: string;
+    try {
+      stdout = execFileSync('node', [copy, '--json', '--no-manifest', '--out', join(workspace, 'meta.txt')], { cwd: REPO_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (error) {
+      stdout = (error as { stdout?: string }).stdout ?? '';
+    }
+    const meta = JSON.parse(stdout) as JsonReport;
+    expect(meta.status).toBe('FAILED');
+    expect(meta.problems).toContain(`excluded as a kernel dependant but reached from the harness across the src/relay/mission/wonderland/ boundary — reclassify: ${crossed}`);
+    // CONTROL: the unmodified generator, on the same tree, raised no such problem.
+    expect(report.problems).toEqual([]);
+  });
 });

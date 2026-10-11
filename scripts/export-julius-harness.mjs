@@ -115,7 +115,7 @@ const BOUNDARIES = [
   },
   {
     prefix: 'src/relay/mission/wonderland/',
-    reason: 'the pre-Julius Wonderland mission runtime domain, reached only as type imports of the shared relay_wonderland database class whose migrate() Julius calls; none of it participates in Julius behaviour. Its integration layer now READS Julius vocabularies to derive what the world shows — a one-way edge, recorded in KERNEL_DEPENDANT_EXCLUSIONS — and still nothing in it is reachable from the kernel.',
+    reason: 'the pre-Julius Wonderland mission runtime domain, reached only as type imports of the shared relay_wonderland database class whose migrate() Julius calls; none of it participates in Julius behaviour. Its integration layer now READS Julius vocabularies to derive what the world shows — a one-way edge, recorded in KERNEL_DEPENDANT_EXCLUSIONS — and the gate FAILS if the harness reaches any of those files, directly or across this boundary.',
   },
 ];
 
@@ -706,6 +706,13 @@ function trace() {
     for (const path of seen) lines += countLines(readFileSync(abs(path)));
     return { prefix: boundary.prefix, reason: boundary.reason, files: [...seen].sort(), lines, crossings: crossings.filter((edge) => edge.boundary === boundary.prefix) };
   });
+  // The trace stops at a boundary, so "reached by the trace" above can never fire for an exclusion UNDER one: follow
+  // every crossing to its end, and an excluded kernel dependant found there fails the gate too (internal review N6).
+  for (const pruned of prunedSubtrees) {
+    for (const path of pruned.files) {
+      if (KERNEL_DEPENDANT_EXCLUSIONS.some((entry) => entry.path === path)) problems.push(`excluded as a kernel dependant but reached from the harness across the ${pruned.prefix} boundary — reclassify: ${path}`);
+    }
+  }
 
   /* Observed dependency direction between coarse groups. */
   const direction = new Map();
@@ -928,7 +935,7 @@ function renderManifest(result) {
     const hits = result.exclusionHits.filter((hit) => hit.to === entry.path).map((hit) => `\`${hit.from}\``);
     out.push(`- **${entry.category}** — \`${entry.path}\`: ${entry.reason}. Reached only via ${hits.join(', ') || 'nothing'}.`);
   }
-  for (const entry of KERNEL_DEPENDANT_EXCLUSIONS) out.push(`- **legacy local execution** — \`${entry.path}\`: ${entry.reason}.`);
+  for (const entry of KERNEL_DEPENDANT_EXCLUSIONS) out.push(`- **kernel dependant, outside the harness** — \`${entry.path}\`: ${entry.reason}.`);
   // A non-Julius migration numbered after the LAST Julius one (Wonderland Social's 033) is not "pre-Julius": it is listed
   // on its own line, so neither sentence says something false about it.
   const lastJulius = Math.max(...result.migrations.map((path) => Number.parseInt(path.slice(MIGRATION_DIR.length), 10)));
