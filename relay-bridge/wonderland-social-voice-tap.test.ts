@@ -303,6 +303,25 @@ describe('party voice: a re-bind takes the replaced PUID out of the room first (
     expect(rec.removals).toHaveLength(1);
   });
 
+  it("ANOTHER PLAYER'S PUID from the caller's newer session: refused before anything is removed -- the prediction reads the PUID's owner (test review a8ed4c0b MINOR 2)", async () => {
+    const { state, pid } = arena();
+    const rec = minterRecorder();
+    const bindings = createInMemoryVoiceBindings();
+    const deps = depsFor(state, rec.minter, undefined, bindings);
+    const [X, L] = [puidOf(U.KAI), puidOf(U.LYRA)];
+    expect((await join(deps, U.KAI, pid, X)).status).toBe(200); // Kai has bound X
+    expect((await join(deps, U.LYRA, pid, L)).status).toBe(200); // Lyra has bound L
+    // Kai's newer session (it would win a re-bind of his own) presents Lyra's L
+    const missing = await join(deps, `${U.KAI}#2`, 'pty_does_not_exist', L);
+    const stolen = await join(deps, `${U.KAI}#2`, pid, L);
+    expect(stolen.status).toBe(404);
+    expect(stolen.body).toEqual(missing.body);
+    expect(rec.removals).toEqual([]); // X never left the room for a re-bind the store was always going to refuse
+    expect(rec.heard(pid)).toEqual([X, L].sort()); // X is still heard
+    expect(bindings.rows().map((r) => `${r.userId}=${r.puid}`).sort()).toEqual([`${U.KAI}=${X}`, `${U.LYRA}=${L}`].sort());
+    expect(rec.asked.map((a) => a.puid)).toEqual([X, L]);
+  });
+
   it('two fresh sign-ins of one player join at once with two new PUIDs: one join at a time, so the room ends holding only the PUID bound last', async () => {
     const { state, pid } = arena();
     const rec = minterRecorder();
