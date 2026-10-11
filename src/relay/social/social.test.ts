@@ -144,11 +144,12 @@ describe('presence: one authority', () => {
     expect(conversationsFor(s, U.KAI)[0].otherUserId).toBe(U.NOVA); // the Messages row draws this same view
   });
 
-  it('APPEAR_OFFLINE is OFFLINE to everybody else, with no fresh last-seen to betray it', () => {
+  it('APPEAR_OFFLINE is OFFLINE to everybody else, with the last-seen frozen when they hid: no fresh time, no tell-tale null', () => {
     const s = createSocialFixture();
     const sol = resolvePresenceFor(s, U.KAI, U.SOL)!;
     expect(sol.onlineState).toBe('OFFLINE');
-    expect(sol.lastSeenAtIso).toBeNull();
+    // (10-07, the privacy attacker's M1) a null here, and only here, told every friend "online and hiding from you"
+    expect(sol.lastSeenAtIso).toBe(s.users[U.SOL].presence.lastSeenAtIso);
     expect(resolvePresenceFor(s, U.SOL, U.SOL)!.onlineState).toBe('ONLINE');
   });
 });

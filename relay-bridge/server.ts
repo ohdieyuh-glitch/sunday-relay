@@ -18,6 +18,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { appendFileSync, chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  healthBody, healthIdentityEnabled, healthIdentityProblem,
   loadBridgeConfig, productionConfigProblems, productionConfigWarnings, type BridgeConfig,
 } from './config';
 import { createMissionRegistry, type MissionRegistry } from './mission';
@@ -426,6 +427,10 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
   (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined);
 
   const pspStore = config.stateRoot === null ? null : createPspConfigStore({ root: config.stateRoot });
+  // Read once: `/health` answers the same body for the life of the process.
+  const health = healthBody(process.env);
+  // typed (CORE, 10-07): inferred, the union `{ 'cache-control'?: undefined }` arm is not a Record<string, string> for send() (TS2345)
+  const healthHeaders: Record<string, string> = healthIdentityEnabled(process.env) ? { 'cache-control': 'no-store' } : {};
   return createServer((req, res) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
     const cors = corsHeaders(config, origin);
@@ -454,9 +459,15 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
      * URL, no host path, no mission, no readiness detail — a managed host's
      * health checker needs none of it, and anyone else scanning the internet
      * should learn nothing.
+     *
+     * The one exception is the founder's, made at deploy time: with
+     * `RELAY_HEALTH_IDENTITY=1` the body also carries exactly `commit` and
+     * `bootId`, so a qualification can tie every answer to the deployed sha
+     * and PROVE a restart. Unset, the body is `{status:'ok'}` as before (see
+     * `healthBody` in config.ts).
      */
     if (method === 'GET' && path === '/health') {
-      send(res, 200, { status: 'ok' }, cors);
+      send(res, 200, health, { ...cors, ...healthHeaders });
       return;
     }
 
@@ -1490,6 +1501,15 @@ export function prepareStateRoot(root: string | null): { ok: true } | { ok: fals
 
 export function main(): void {
   const config = loadBridgeConfig();
+
+  // A `/health` disclosure setting nobody could have meant refuses on ANY host:
+  // a typo must not become a silent OFF (or ON). Named, never its value.
+  const healthProblem = healthIdentityProblem(process.env);
+  if (healthProblem !== null) {
+    console.error(`Relay bridge cannot start: ${healthProblem}`);
+    process.exitCode = 1;
+    return;
+  }
 
   // Refuse to boot a production bridge that would be unsafe. Names only —
   // never values — so this is safe in a deployment log.

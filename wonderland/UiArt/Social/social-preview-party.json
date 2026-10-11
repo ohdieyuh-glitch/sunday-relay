@@ -287,7 +287,7 @@
         "activityLabel": null,
         "location": null,
         "partyId": null,
-        "lastSeenAtIso": null,
+        "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
         "can": {
           "viewProfile": true,
           "message": true,
@@ -1020,7 +1020,7 @@
         "activityLabel": null,
         "location": null,
         "partyId": null,
-        "lastSeenAtIso": null,
+        "lastSeenAtIso": "2026-10-01T20:00:00.000Z",
         "can": {
           "viewProfile": true,
           "message": true,

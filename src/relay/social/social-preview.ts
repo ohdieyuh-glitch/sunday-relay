@@ -27,7 +27,7 @@ import { FIXTURE_NOW, FIXTURE_USERS, createSocialFixture } from './social-fixtur
 import { pendingRequestsFor } from './social-friends';
 import { acceptPartyInvite, partyInvitesFor, partyViewFor, recentPlayersViewFor, type PartyView } from './social-parties';
 import { resolvePresenceFor, resolveProfileFor } from './social-presence';
-import { friendIdsOf, partyOf, type SocialState } from './social-state';
+import { friendIdsOf, messagesOf, partyOf, userById, type SocialState } from './social-state';
 import { createLocalVoiceHarness, createUnavailableVoiceService } from './social-voice';
 
 export const SOCIAL_PREVIEW_SCHEMA = 'relay-wonderland-social-preview.v1' as const;
@@ -67,7 +67,7 @@ export interface SocialPreviewSnapshot {
 }
 
 function row(state: SocialState, viewerId: SocialUserId, userId: SocialUserId): SocialPersonRow | null {
-  const user = state.users[userId];
+  const user = userById(state, userId);
   const presence = resolvePresenceFor(state, viewerId, userId);
   if (user === undefined || presence === null) return null;
   return { userId, displayName: user.profile.displayName, handle: user.profile.handle, avatarRef: user.profile.avatarRef, presence };
@@ -122,7 +122,7 @@ export function buildSocialView(state: SocialState, viewerId: SocialUserId, nowI
   for (const p of [myParty, ...visibleParties]) for (const m of p?.members ?? []) described.add(m.userId);
   for (const c of conversations) {
     if (c.otherUserId !== null) described.add(c.otherUserId);
-    for (const m of state.messages[c.conversationId] ?? []) described.add(m.senderId);
+    for (const m of messagesOf(state, c.conversationId)) described.add(m.senderId);
   }
   for (const i of invites) described.add(i.fromUserId);
   for (const b of state.blocks) if (b.blockerId === viewerId) described.add(b.blockedId);
@@ -150,7 +150,7 @@ export function buildSocialView(state: SocialState, viewerId: SocialUserId, nowI
       .map((e) => ({ ...e, person: row(state, viewerId, e.userId)! }))
       .filter((e) => e.person !== null),
     conversations,
-    messages: Object.fromEntries(conversations.map((c) => [c.conversationId, state.messages[c.conversationId] ?? []])),
+    messages: Object.fromEntries(conversations.map((c) => [c.conversationId, messagesOf(state, c.conversationId)])),
     party: myParty,
     visibleParties,
     partyInvites: invites
