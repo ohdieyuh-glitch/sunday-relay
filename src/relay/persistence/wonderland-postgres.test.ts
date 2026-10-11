@@ -8,7 +8,14 @@ class FakePool {
   /** Bound parameters, so a test can assert what was actually stored and not
    *  only which statement ran. */
   values: unknown[][] = [];
-  async query(text: string, values?: readonly unknown[]) { this.commands.push(text); if (values) this.values.push([...values]); return { rows: this.topRows, rowCount: text.startsWith('UPDATE') ? 1 : this.topRows.length }; }
+  async query(text: string, values?: readonly unknown[]) {
+    this.commands.push(text); if (values) this.values.push([...values]);
+    // the protected-store check's identity reads, answered as an ORDINARY database does (protected-store.ts throws on a nameless one)
+    if (text === 'SELECT current_database() AS db') return { rows: [{ db: 'wonderland_test' }], rowCount: 1 };
+    if (text.includes('pg_control_system()')) return { rows: [{ sid: '7000000000000000001' }], rowCount: 1 };
+    if (text.includes('shobj_description')) return { rows: [{ c: null }], rowCount: 1 };
+    return { rows: this.topRows, rowCount: text.startsWith('UPDATE') ? 1 : this.topRows.length };
+  }
   async connect() { const pool = this; return { async query(text: string) { pool.commands.push(text); if (text.startsWith('SELECT snapshot')) return { rows: pool.rows, rowCount: pool.rows.length }; if (text.includes('RETURNING next_sequence-1')) return { rows: [{ sequence: '1' }], rowCount: 1 }; return { rows: [], rowCount: text.startsWith('UPDATE') || text.startsWith('INSERT') ? 1 : 0 }; }, release() { pool.released += 1; } }; }
   async end() { this.ended = true; }
 }
