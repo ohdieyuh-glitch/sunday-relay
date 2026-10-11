@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createBridgeServer } from './server';
+import { NATIVE_WORLD_AUDIENCE, createBrowserSessionStore } from './browser-session/grants';
+import type { BrowserSessionStore } from './browser-session/grants';
 import { wonderlandJuliusDatabaseUrl, wonderlandJuliusWorld } from './wonderland-julius-world';
 import type { WonderlandJuliusWorld } from './wonderland-julius-routes';
 import { loadBridgeConfig } from './config';
@@ -39,7 +41,7 @@ afterEach(async () => {
   vi.unstubAllEnvs();
 });
 
-async function boot(databaseUrl: string | null, world: WonderlandJuliusWorld | null = null): Promise<string> {
+async function boot(databaseUrl: string | null, world: WonderlandJuliusWorld | null = null, sessions: BrowserSessionStore | null = null): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), 'relay-julius-world-'));
   roots.push(root);
   vi.stubEnv('RELAY_BRIDGE_API_TOKEN', OPERATOR);
@@ -61,8 +63,8 @@ async function boot(databaseUrl: string | null, world: WonderlandJuliusWorld | n
     createBetaEnrolmentStore({ root }),
     [{ wave: 'wave_0', state: betaWaveZeroState(process.env), seats: 100 }],
     // betaLimiter, liveReachService, repositoryStore, brainStore,
-    // wonderlandBackend -- then the injected world.
-    null, null, null, null, null, world,
+    // wonderlandBackend -- then the injected world, and the session store (null: the bridge builds its own).
+    null, null, null, null, null, world, sessions,
   );
   servers.push(server as never);
   await new Promise<void>((r) =>
@@ -74,20 +76,34 @@ async function boot(databaseUrl: string | null, world: WonderlandJuliusWorld | n
 const get = (base: string, path: string, headers: Record<string, string> = {}) =>
   realFetch(`${base}${path}`, { headers: { Origin: ORIGIN, ...headers } });
 
+/** A GET as the Unreal world sends it (WonderlandJuliusStream.cpp NewRequest): its session, and NO Origin. */
+const getNative = (base: string, path: string, token: string) =>
+  realFetch(`${base}${path}`, { headers: { Authorization: `Relay-Session ${token}` } });
+
+/**
+ * A real NATIVE world session, minted in the store the bridge is then booted with. The world routes are
+ * native-only (internal review N5), and over HTTP only pairing mints one -- which needs a membership database --
+ * so the store is the one the server is given, and the session is minted exactly as pairing mints it.
+ */
+function nativeSession(store: BrowserSessionStore, playerId = 'player-1', projectId = 'project-alpha'): string {
+  const grant = store.createGrant({ origin: NATIVE_WORLD_AUDIENCE, now: Date.now(), scope: 'native_world', participantId: playerId, projectId });
+  const redeemed = store.consumeGrant({ grantId: grant.grantId, secret: grant.secret, origin: NATIVE_WORLD_AUDIENCE, now: Date.now() });
+  if (!redeemed.ok) throw new Error('fixture could not redeem a native grant');
+  return redeemed.session.token;
+}
+
 const QUERY = 'projectId=project-alpha&runId=run-1';
 /** The query each route is sent with: the events route serves pages only. */
 const queryFor = (route: string) => (route === 'events' ? `${QUERY}&mode=page` : QUERY);
 const ROUTES = ['hydrate', 'events', 'result'] as const;
 
 /**
- * A real browser session, minted the way production does: the operator pairs a
+ * A real BROWSER session, minted the way production does: the operator pairs a
  * grant bound to a player, the browser redeems it from the approved origin.
  *
- * Needed because the routes check the SESSION before they check whether this
- * deployment can answer at all -- deliberately, so that session and origin
- * validation stay independent of the membership authority. Without a real
- * session every request stops at 401 and the branches past it are unreachable
- * from here.
+ * The world routes no longer admit one (native-only, internal review N5); it is
+ * kept to prove that a non-GET with a signed-in browser still reaches the
+ * Wonderland family exactly as before, and that a browser is refused.
  */
 async function pairSession(base: string, playerId: string): Promise<string> {
   const minted = await realFetch(`${base}/relay-api/browser/pair`, {
@@ -115,11 +131,9 @@ describe('an authenticated world request on an unconfigured bridge', () => {
       // request may have been perfectly authorised and this deployment could
       // not check, and reporting that as a denial sends an operator hunting
       // permissions that were never the issue.
-      const base = await boot(null);
-      const token = await pairSession(base, 'player-1');
-      const res = await get(base, `/relay-api/wonderland/julius/${route}?${queryFor(route)}`, {
-        Authorization: `Relay-Session ${token}`,
-      });
+      const store = createBrowserSessionStore();
+      const base = await boot(null, null, store);
+      const res = await getNative(base, `/relay-api/wonderland/julius/${route}?${queryFor(route)}`, nativeSession(store));
       expect(res.status).toBe(503);
       const body = await res.json();
       expect(body.error).not.toBe('permission denied');
@@ -131,11 +145,9 @@ describe('an authenticated world request on an unconfigured bridge', () => {
     // With DATABASE_URL set, the world is built and the route reaches its
     // read-only transaction -- against a database that cannot be reached. That
     // is an authority that could not answer, which is 503 and never a grant.
-    const base = await boot('postgres://127.0.0.1:1/never');
-    const token = await pairSession(base, 'player-1');
-    const res = await get(base, `/relay-api/wonderland/julius/events?${queryFor('events')}`, {
-      Authorization: `Relay-Session ${token}`,
-    });
+    const store = createBrowserSessionStore();
+    const base = await boot('postgres://127.0.0.1:1/never', null, store);
+    const res = await getNative(base, `/relay-api/wonderland/julius/events?${queryFor('events')}`, nativeSession(store));
     expect(res.status).toBe(503);
     expect((await res.json()).error).not.toBe('permission denied');
   }, 30_000);
@@ -402,11 +414,10 @@ describe('a fully wired bridge serves a world', () => {
     // transaction, over real HTTP. Only the database is a stub, and it answers
     // the shapes `pg` actually returns.
     const { world, fake } = worldOver({ run: RUN_ROW, citation: CITATION_ROW });
-    const base = await boot(null, world);
-    const token = await pairSession(base, 'player-1');
-    const res = await get(base, `/relay-api/wonderland/julius/hydrate?${QUERY}`, {
-      Authorization: `Relay-Session ${token}`,
-    });
+    const store = createBrowserSessionStore();
+    const base = await boot(null, world, store);
+    const token = nativeSession(store);
+    const res = await getNative(base, `/relay-api/wonderland/julius/hydrate?${QUERY}`, token);
 
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
@@ -461,25 +472,40 @@ describe('a fully wired bridge serves a world', () => {
     for (const statement of fake.statements.slice(1, -1)) expect(statement).toMatch(/^\s*(SELECT|WITH)\b/iu);
   }, 30_000);
 
-  it('refuses a member of ANOTHER project without saying so -- the one 404', async () => {
-    const { world } = worldOver({ run: RUN_ROW, member: false });
+  it('refuses a signed-in BROWSER over real HTTP -- from its own Origin or with none -- the one 404, on every route (review N5)', async () => {
+    // The world routes are native-only: the branch's browser door is gone. A browser_control session is the
+    // website's credential, bound to no project, and no world route admits it.
+    const { world, fake } = worldOver({ run: RUN_ROW, citation: CITATION_ROW });
     const base = await boot(null, world);
     const token = await pairSession(base, 'player-1');
-    const res = await get(base, `/relay-api/wonderland/julius/hydrate?${QUERY}`, {
-      Authorization: `Relay-Session ${token}`,
-    });
+    for (const route of ROUTES) {
+      const fromItsOrigin = await get(base, `/relay-api/wonderland/julius/${route}?${queryFor(route)}`, { Authorization: `Relay-Session ${token}` });
+      expect(fromItsOrigin.status, route).toBe(404);
+      expect(await fromItsOrigin.json(), route).toEqual({ error: 'permission denied' });
+      const withoutOrigin = await getNative(base, `/relay-api/wonderland/julius/${route}?${queryFor(route)}`, token);
+      expect(withoutOrigin.status, route).toBe(404);
+    }
+    // Refused before any read: not one transaction was opened.
+    expect(fake.connections()).toBe(0);
+  }, 30_000);
+
+  it('refuses a member of ANOTHER project without saying so -- the one 404', async () => {
+    const { world } = worldOver({ run: RUN_ROW, member: false });
+    const store = createBrowserSessionStore();
+    const base = await boot(null, world, store);
+    const token = nativeSession(store);
+    const res = await getNative(base, `/relay-api/wonderland/julius/hydrate?${QUERY}`, token);
     expect(res.status).toBe(404);
     expect((await res.json()).error).toBe('permission denied');
   }, 30_000);
 
   it('gives a member a run that does not exist the same answer as a forbidden one, on every route', async () => {
     const { world } = worldOver({ run: null });
-    const base = await boot(null, world);
-    const token = await pairSession(base, 'player-1');
+    const store = createBrowserSessionStore();
+    const base = await boot(null, world, store);
+    const token = nativeSession(store);
     for (const route of ['hydrate', 'events'] as const) {
-      const res = await get(base, `/relay-api/wonderland/julius/${route}?${queryFor(route)}`, {
-        Authorization: `Relay-Session ${token}`,
-      });
+      const res = await getNative(base, `/relay-api/wonderland/julius/${route}?${queryFor(route)}`, token);
       expect(res.status, route).toBe(404);
       expect(await res.json(), route).toEqual({ error: 'permission denied' });
     }
@@ -499,11 +525,10 @@ describe('a fully wired bridge serves a world', () => {
         },
       }],
     });
-    const base = await boot(null, world);
-    const token = await pairSession(base, 'player-1');
-    const res = await get(base, `/relay-api/wonderland/julius/events?${QUERY}&cursor=42&mode=page`, {
-      Authorization: `Relay-Session ${token}`,
-    });
+    const store = createBrowserSessionStore();
+    const base = await boot(null, world, store);
+    const token = nativeSession(store);
+    const res = await getNative(base, `/relay-api/wonderland/julius/events?${QUERY}&cursor=42&mode=page`, token);
     expect(res.status).toBe(200);
     const page = (await res.json()).data as { deliveries: Array<{ envelope: { sequence: number; state: string } }>; nextCursor: number };
     // REVIEWING is the kernel's word; `independent_review` is the world's. The
@@ -524,9 +549,10 @@ describe('a fully wired bridge serves a world', () => {
       cost: { knownUsdMicros: 1_500, unknownComponents: 0, complete: true }, failure: null,
     };
     const { world } = worldOver({ run: RUN_ROW }, view);
-    const base = await boot(null, world);
-    const token = await pairSession(base, 'player-1');
-    const res = await get(base, `/relay-api/wonderland/julius/result?${QUERY}`, { Authorization: `Relay-Session ${token}` });
+    const store = createBrowserSessionStore();
+    const base = await boot(null, world, store);
+    const token = nativeSession(store);
+    const res = await getNative(base, `/relay-api/wonderland/julius/result?${QUERY}`, token);
     expect(res.status).toBe(200);
     const data = (await res.json()).data as Record<string, unknown>;
     expect(data).toMatchObject({
@@ -534,7 +560,7 @@ describe('a fully wired bridge serves a world', () => {
       cost: { visible: true, knownUsdMicros: 1_500, unknownComponents: 0, complete: true },
     });
     // CONTROL: another run of the same project is the one 404, through the same door.
-    const other = await get(base, '/relay-api/wonderland/julius/result?projectId=project-alpha&runId=run-2', { Authorization: `Relay-Session ${token}` });
+    const other = await getNative(base, '/relay-api/wonderland/julius/result?projectId=project-alpha&runId=run-2', token);
     expect(other.status).toBe(404);
   }, 30_000);
 });

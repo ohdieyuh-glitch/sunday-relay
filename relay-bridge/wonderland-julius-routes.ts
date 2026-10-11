@@ -38,25 +38,30 @@
  *   it on every read, and a server-side poll is load nobody asked for.
  *
  *   ONE NOT-FOUND. An absent run, another project's run, a non-member, a session
- *   of the wrong kind and the operator credential all get the SAME 404 body. A
- *   403 for "exists but not yours" beside a 404 for "absent" is an existence
- *   oracle, and a different status for each refusal is a membership one.
+ *   of the wrong kind, a browser and the operator credential all get the SAME 404
+ *   body. A 403 for "exists but not yours" beside a 404 for "absent" is an
+ *   existence oracle, and a different status for each refusal is a membership one.
+ *
+ *   NATIVE ONLY (internal review N5, MAIN's ruling). The branch also admitted a
+ *   signed-in browser through a second door; the founder's requirements never ask
+ *   for one and the client never uses it, so it is gone: a request carrying an
+ *   Origin is the one 404, whatever session it holds. A decided deviation from
+ *   the design's Q1 lean -- see `identifyWonderlandJuliusCaller`.
  * ─────────────────────────────────────────────────────────────────────────
  *
  * WHY THESE ROUTES REFUSE TO RUN WITHOUT A WORLD
  *
- * A browser session carries a participant, an origin and a scope, and NOT a
- * project; a native session carries the one project it was paired for. Neither
- * proves the player still belongs to that project, and the tempting default --
- * any authenticated player may read any project -- is a cross-tenant read of
- * mission state, C.A.R.D. slots and spend. So the membership authority is part
- * of the world port and its absence is 503, not 200. A route that opened up when
- * its authorisation was unconfigured would work perfectly in every environment
- * where nobody had wired it.
+ * A native session carries the player and the one project it was paired for. It
+ * does not prove the player still belongs to that project, and the tempting
+ * default -- a paired player may read their project -- is a cross-tenant read of
+ * mission state, C.A.R.D. slots and spend the moment a membership is revoked. So
+ * the membership authority is part of the world port and its absence is 503, not
+ * 200. A route that opened up when its authorisation was unconfigured would work
+ * perfectly in every environment where nobody had wired it.
  */
 
 import { bearerMatches } from './bearer-auth';
-import { isValidParticipantId, isValidProjectId } from './browser-session/grants';
+import { isValidProjectId } from './browser-session/grants';
 import type { BrowserSessionStore } from './browser-session/grants';
 import { sessionTokenFrom } from './browser-session/routes';
 import { WONDERLAND_WORLD_CAPABILITY } from './wonderland-native-pairing-routes';
@@ -360,29 +365,31 @@ export type WonderlandJuliusCaller =
     readonly ok: true;
     readonly playerId: string;
     readonly sessionId: string;
-    /** The project a NATIVE session was paired for; null for a browser session, which carries none. */
-    readonly boundProjectId: string | null;
-    readonly door: 'native' | 'browser';
+    /** The ONE project the native session was paired for (founder decision 2). */
+    readonly boundProjectId: string;
   }
   | { readonly ok: false; readonly status: 401 | 404; readonly reason: string };
 
 /**
- * WHO IS CALLING -- two doors, each with its own audience check, and nothing
- * else gets in.
+ * WHO IS CALLING -- ONE DOOR, the native client's, and nothing else gets in.
  *
- * NATIVE (no Origin): `verifyNativeSession` accepts only a `native_world`
- * session bound to NATIVE_WORLD_AUDIENCE. A browser session copied into a native
- * client -- the cookie copy the founder ruled out -- is the wrong kind of
- * session, however valid.
+ * NATIVE-ONLY (internal review N5, MAIN's ruling; a DECIDED DEVIATION from the
+ * design's Q1 lean, which kept the branch's browser door beside the native one).
+ * The founder's requirements never ask for a browser to read these routes, and
+ * the one client that does is the Unreal world, which sends NO Origin
+ * (WonderlandJuliusStream.cpp NewRequest). A browser door only added surface: a
+ * `browser_control` token is not bound to one project, so a leaked one would read
+ * every project where its player is an owner. So:
  *
- * BROWSER (an Origin): `verifySession` checks the origin the session was minted
- * for, and only a `browser_control` session names a player. A native credential
- * presented from a web page fails the audience check; a read-only browser
- * session names nobody.
- *
- * MISSING, EXPIRED OR REVOKED is 401: the client pairs again. EVERY OTHER REFUSAL
- * is the one not-found: the operator credential (an operator is not a player),
- * a session of the wrong kind, a session for another audience.
+ *   NO SESSION is 401, Origin or not: the client pairs again (R3).
+ *   AN ORIGIN is the one 404 for EVERY credential -- a valid native session
+ *   included -- and no session is even looked up for it: a web page has no door
+ *   here, and since any caller can send any Origin, the rule is the header's.
+ *   NO ORIGIN: `verifyNativeSession` accepts only a `native_world` session bound
+ *   to NATIVE_WORLD_AUDIENCE and to one project. Any other session -- a browser
+ *   session copied into a native client, the cookie copy the founder ruled out --
+ *   is the wrong kind, however valid: the one 404. Expired or revoked: 401.
+ *   THE OPERATOR CREDENTIAL is the one 404: an operator is not a player.
  */
 export function identifyWonderlandJuliusCaller(
   input: Pick<WonderlandJuliusRouteRequest, 'authorization' | 'origin' | 'now'>,
@@ -393,27 +400,15 @@ export function identifyWonderlandJuliusCaller(
   }
   const token = sessionTokenFrom(input.authorization);
   if (token === null) return { ok: false, status: 401, reason: 'no_session' };
+  if (input.origin !== undefined) return { ok: false, status: 404, reason: 'a_browser_has_no_door' };
 
-  if (input.origin === undefined) {
-    const native = deps.sessions.verifyNativeSession({ token, now: input.now });
-    if (native.ok) {
-      return { ok: true, playerId: native.participantId, sessionId: native.sessionId, boundProjectId: native.projectId, door: 'native' };
-    }
-    return native.reason === 'not_native'
-      ? { ok: false, status: 404, reason: 'not_a_native_session' }
-      : { ok: false, status: 401, reason: `session_${native.reason}` };
+  const native = deps.sessions.verifyNativeSession({ token, now: input.now });
+  if (native.ok) {
+    return { ok: true, playerId: native.participantId, sessionId: native.sessionId, boundProjectId: native.projectId };
   }
-
-  const browser = deps.sessions.verifySession({ token, origin: input.origin, now: input.now });
-  if (!browser.ok) {
-    return browser.reason === 'origin_mismatch'
-      ? { ok: false, status: 404, reason: 'session_for_another_audience' }
-      : { ok: false, status: 401, reason: `session_${browser.reason}` };
-  }
-  if (browser.scope !== 'browser_control' || !isValidParticipantId(browser.participantId)) {
-    return { ok: false, status: 404, reason: 'not_a_player_session' };
-  }
-  return { ok: true, playerId: browser.participantId, sessionId: browser.sessionId, boundProjectId: null, door: 'browser' };
+  return native.reason === 'not_native'
+    ? { ok: false, status: 404, reason: 'not_a_native_session' }
+    : { ok: false, status: 401, reason: `session_${native.reason}` };
 }
 
 /**
@@ -471,8 +466,9 @@ export async function serveWonderlandJuliusPage(
  *
  * THE ORDER IS THE POLICY:
  *   1. the query (400) -- nothing is looked up for a request that names nothing;
- *   2. the caller, from the credential alone (401 / the one 404) -- no database
- *      is touched for an anonymous request;
+ *   2. the caller, from the credential alone (401 / the one 404, which is also
+ *      every request carrying an Origin) -- no database is touched for an
+ *      anonymous request;
  *   3. identifiers that cannot exist, and a native session asking for a project
  *      it was not paired for (the one 404);
  *   4. a deployment that cannot answer (503);
@@ -518,7 +514,7 @@ export async function handleWonderlandJuliusRoute(
 
   // A NATIVE SESSION IS BOUND TO THE PROJECT IT WAS PAIRED FOR (founder decision 2). Asking for another is
   // refused before membership is consulted -- and membership still applies below, so neither guard stands alone.
-  if (caller.boundProjectId !== null && caller.boundProjectId !== query.projectId) {
+  if (caller.boundProjectId !== query.projectId) {
     note(404, 'session_paired_for_another_project', ids);
     return NOT_FOUND();
   }

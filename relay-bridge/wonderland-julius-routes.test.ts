@@ -40,7 +40,9 @@ import { WONDERLAND_UNAVAILABLE_MESSAGE } from '../src/relay/mission/wonderland/
  * row-12 design: every refusal a caller can provoke by naming something it may
  * not read is the SAME 404 (the branch answered 403 for some of them, which is a
  * membership oracle beside a 404 for an absent run); every read happens inside
- * the world port's one read-only transaction; `/events` serves pages only.
+ * the world port's one read-only transaction; `/events` serves pages only; and
+ * only the native client -- a native_world session, NO Origin -- is admitted
+ * (internal review N5: the branch's browser door is gone).
  */
 
 const PROJECT = 'project-alpha';
@@ -50,13 +52,20 @@ const NOW = 1_757_289_600_000;
 const WEB = 'https://sunday-relay.vercel.app';
 const OPERATOR = 'operator-secret-for-tests-0123456789abcdef';
 
-/** A browser session store that admits one player from the web origin -- the shape `verifySession` answers. */
-const sessions = (participantId: string | null, ok = true): BrowserSessionStore =>
+/**
+ * A session store that admits one NATIVE player, paired for `projectId` -- the shape `verifyNativeSession` answers.
+ * A session naming no player is no native session (createGrant refuses to mint one). The routes are native-only
+ * (internal review N5), so the browser door's own check, `verifySession`, must never be asked.
+ */
+const sessions = (participantId: string | null, ok = true, projectId = PROJECT): BrowserSessionStore =>
   ({
-    verifySession: () => (ok
-      ? { ok, participantId, sessionId: 'world-session-1', scope: participantId === null ? 'browser_read_only' : 'browser_control' }
-      : { ok: false, reason: 'expired' }),
-    verifyNativeSession: () => ({ ok: false, reason: 'not_found' }),
+    verifyNativeSession: () => {
+      if (!ok) return { ok: false, reason: 'expired' };
+      return participantId === null
+        ? { ok: false, reason: 'not_native' }
+        : { ok: true, participantId, sessionId: 'world-session-1', projectId };
+    },
+    verifySession: () => { throw new Error('the browser door is gone, yet verifySession was asked'); },
   }) as unknown as BrowserSessionStore;
 
 const membership = (allow: boolean): WonderlandProjectMembershipSource => ({
@@ -151,12 +160,13 @@ const hydrationFor = (projectId = PROJECT, runId = RUN): WonderlandHydration => 
   });
 };
 
+/** A request as the native client makes it: a session, and NO Origin. */
 const request = (path: string, query = `projectId=${PROJECT}&runId=${RUN}${path.endsWith('/events') ? '&mode=page' : ''}`) => ({
   method: 'GET',
   path,
   url: `${path}?${query}`,
   authorization: 'Relay-Session tok' as string | undefined,
-  origin: WEB as string | undefined,
+  origin: undefined as string | undefined,
   now: NOW,
 });
 
@@ -243,7 +253,7 @@ describe('a route that will not open without its authorisation', () => {
     expect(anonymous?.status).toBe(401);
     const expired = await handleWonderlandJuliusRoute(request('/wonderland/julius/events'), deps({ world, sessions: sessions('player-1', false) }));
     expect(expired?.status).toBe(401);
-    // A valid session that names NO player (a read-only browser session) is the wrong kind of session: the one 404.
+    // A valid session that is not a native world session (one naming no player) is the wrong kind of session: the one 404.
     const nobody = await handleWonderlandJuliusRoute(request('/wonderland/julius/events'), deps({ world, sessions: sessions(null) }));
     expect(nobody).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
     expect(asked).toBe(false);
@@ -309,7 +319,7 @@ describe('a route that will not open without its authorisation', () => {
 
 /* ---------------------------------------------------- who may call: R3 */
 
-describe('two doors, each with its own audience check -- and the operator is not a player', () => {
+describe('ONE door, the native client\'s: every browser is refused, and the operator is not a player (review N5)', () => {
   const nativeFor = (store: BrowserSessionStore, projectId = PROJECT): string => {
     const grant = store.createGrant({ origin: NATIVE_WORLD_AUDIENCE, now: NOW, scope: 'native_world', participantId: 'player-1', projectId });
     const redeemed = store.consumeGrant({ grantId: grant.grantId, secret: grant.secret, origin: NATIVE_WORLD_AUDIENCE, now: NOW });
@@ -329,20 +339,48 @@ describe('two doors, each with its own audience check -- and the operator is not
       now: over.now ?? NOW,
     }, { sessions: store, operatorToken: OPERATOR, world: worldOf({ reader: reader([], hydrationFor()) }) });
 
-  it('CONTROL: the native client (no Origin) and a signed-in browser (its Origin) are both admitted', async () => {
+  it('CONTROL: the native client -- a native_world session and NO Origin -- is admitted', async () => {
     const store = createBrowserSessionStore();
     expect((await ask(store, `Relay-Session ${nativeFor(store)}`, undefined))?.status).toBe(200);
-    expect((await ask(store, `Relay-Session ${browserFor(store)}`, WEB))?.status).toBe(200);
   });
 
-  it('a BROWSER session on the native door (no Origin) is the wrong kind of session: the one 404', async () => {
+  it('a signed-in BROWSER session, from its own approved Origin, is the one 404: the browser door is gone', async () => {
+    const store = createBrowserSessionStore();
+    expect(await ask(store, `Relay-Session ${browserFor(store)}`, WEB)).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+  });
+
+  it('a BROWSER session with no Origin is the wrong kind of session: the one 404', async () => {
     const store = createBrowserSessionStore();
     expect(await ask(store, `Relay-Session ${browserFor(store)}`, undefined)).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
   });
 
-  it('a NATIVE session presented from a web page fails the audience check: the one 404', async () => {
+  it('a request CARRYING AN ORIGIN is the one 404 whatever it holds -- a valid native session too -- and no session is looked up', async () => {
     const store = createBrowserSessionStore();
-    expect(await ask(store, `Relay-Session ${nativeFor(store)}`, WEB)).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+    const valid = nativeFor(store);
+    const lapsed = nativeFor(store);
+    let lookedUp = 0;
+    const counting: BrowserSessionStore = {
+      ...store,
+      verifyNativeSession: (input) => { lookedUp += 1; return store.verifyNativeSession(input); },
+      verifySession: (input) => { lookedUp += 1; return store.verifySession(input); },
+    };
+    const askWith = (auth: string, origin: string, now = NOW) => handleWonderlandJuliusRoute({
+      ...request('/wonderland/julius/hydrate', `projectId=${PROJECT}&runId=${RUN}`), authorization: auth, origin, now,
+    }, { sessions: counting, world: worldOf({ reader: reader([], hydrationFor()) }) });
+    for (const origin of [WEB, 'https://evil.example', 'null', '']) {
+      expect(await askWith(`Relay-Session ${valid}`, origin), `valid native, Origin ${JSON.stringify(origin)}`)
+        .toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+      // Not 401 for a lapsed or unknown token either: with an Origin, the token is never asked about.
+      expect(await askWith(`Relay-Session ${lapsed}`, origin, NOW + NATIVE_SESSION_TTL_MS))
+        .toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+      expect(await askWith('Relay-Session never-issued', origin)).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+    }
+    expect(lookedUp).toBe(0);
+    // An Origin with NO credential is still anonymous: 401, the client pairs again (R3).
+    expect((await handleWonderlandJuliusRoute({ ...request('/wonderland/julius/hydrate'), authorization: undefined, origin: WEB },
+      { sessions: counting, world: worldOf({}) }))?.status).toBe(401);
+    // CONTROL: the same valid token without the Origin is admitted, so the 404s above are the Origin's.
+    expect((await ask(store, `Relay-Session ${valid}`, undefined))?.status).toBe(200);
   });
 
   it('a browser session from ANOTHER origin is the one 404, not a sign-in prompt', async () => {
@@ -395,9 +433,11 @@ describe('two doors, each with its own audience check -- and the operator is not
   it('identifies the caller from the credential alone', () => {
     const store = createBrowserSessionStore();
     expect(identifyWonderlandJuliusCaller({ authorization: `Relay-Session ${nativeFor(store)}`, origin: undefined, now: NOW }, { sessions: store }))
-      .toMatchObject({ ok: true, playerId: 'player-1', boundProjectId: PROJECT, door: 'native' });
+      .toMatchObject({ ok: true, playerId: 'player-1', boundProjectId: PROJECT });
     expect(identifyWonderlandJuliusCaller({ authorization: `Relay-Session ${browserFor(store)}`, origin: WEB, now: NOW }, { sessions: store }))
-      .toMatchObject({ ok: true, playerId: 'player-1', boundProjectId: null, door: 'browser' });
+      .toEqual({ ok: false, status: 404, reason: 'a_browser_has_no_door' });
+    expect(identifyWonderlandJuliusCaller({ authorization: `Relay-Session ${browserFor(store)}`, origin: undefined, now: NOW }, { sessions: store }))
+      .toEqual({ ok: false, status: 404, reason: 'not_a_native_session' });
     expect(identifyWonderlandJuliusCaller({ authorization: undefined, origin: undefined, now: NOW }, { sessions: store }))
       .toEqual({ ok: false, status: 401, reason: 'no_session' });
   });
@@ -456,7 +496,9 @@ describe('a run id is not a way to pick your own authorisation', () => {
     const missing = await handleWonderlandJuliusRoute(request('/wonderland/julius/hydrate'), deps({ parts: { reader: reader([], null) } }));
     const forbidden = await handleWonderlandJuliusRoute(request('/wonderland/julius/hydrate'), deps({ parts: { reader: reader([], hydrationFor('project-beta')) } }));
     const stranger = await handleWonderlandJuliusRoute(request('/wonderland/julius/hydrate'), deps({ parts: { membership: membership(false) } }));
-    const absentPage = await handleWonderlandJuliusRoute(request('/wonderland/julius/events', `projectId=project-beta&runId=${RUN}&mode=page`), deps({}));
+    // The page route, for a project the session IS paired for and that has no such run (the reader answers null).
+    const absentPage = await handleWonderlandJuliusRoute(request('/wonderland/julius/events', `projectId=project-beta&runId=${RUN}&mode=page`),
+      deps({ sessions: sessions('player-1', true, 'project-beta') }));
     for (const answer of [missing, forbidden, stranger, absentPage]) {
       expect(answer?.status).toBe(404);
       expect(JSON.stringify(answer?.body)).toBe(JSON.stringify(missing?.body));
@@ -483,11 +525,10 @@ describe('membership is asked per request, never cached into the session', () =>
     expect(after).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
   });
 
-  it('re-authorises when the same session names a DIFFERENT project', async () => {
-    // A project switch mid-stream is a NEW request to authorise, not a
-    // continuation of one already granted. The session is the same, the origin
-    // is the same, the player is the same -- and none of that carries a
-    // permission across a project boundary.
+  it('re-authorises when the same player, paired for a DIFFERENT project, asks about it', async () => {
+    // A native session is bound to one project, so reading another takes a second pairing -- and that is a NEW
+    // request to authorise, not a continuation of one already granted. The player is the same, and that carries
+    // no permission across a project boundary.
     const asked: string[] = [];
     const world = worldOf({
       reader: reader([row(1, 'run.transitioned', { to: 'EXECUTING' })], hydrationFor()),
@@ -504,7 +545,7 @@ describe('membership is asked per request, never cached into the session', () =>
 
     const switched = await handleWonderlandJuliusRoute(
       request('/wonderland/julius/events', `projectId=project-beta&runId=${RUN}&mode=page`),
-      deps({ world }),
+      deps({ world, sessions: sessions('player-1', true, 'project-beta') }),
     );
     expect(switched).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
 
@@ -514,13 +555,14 @@ describe('membership is asked per request, never cached into the session', () =>
   });
 
   it('scopes the read to the project each request named, with nothing carried over', async () => {
-    // The positive half: a switch a member is entitled to make succeeds, and
-    // what is read is scoped to the NEW project. A grant that still named the
+    // The positive half: a project a member is entitled to read succeeds, and
+    // what is read is scoped to THAT project. A grant that still named the
     // first would send the second project's reader the wrong filter.
     const source = reader();
     const world = worldOf({ reader: source });
     await handleWonderlandJuliusRoute(request('/wonderland/julius/events'), deps({ world }));
-    await handleWonderlandJuliusRoute(request('/wonderland/julius/events', 'projectId=project-beta&runId=run-9&mode=page'), deps({ world }));
+    await handleWonderlandJuliusRoute(request('/wonderland/julius/events', 'projectId=project-beta&runId=run-9&mode=page'),
+      deps({ world, sessions: sessions('player-1', true, 'project-beta') }));
     expect(source.calls.asked).toEqual([{ projectId: PROJECT, runId: RUN }, { projectId: 'project-beta', runId: 'run-9' }]);
   });
 

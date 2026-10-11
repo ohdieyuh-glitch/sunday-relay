@@ -62,7 +62,7 @@ import { missionDispatchProblems, resolveRoleSlotsFromEnv } from './role-slot-co
 import {
   createCronScheduler, cronSchedulerEnabled, schedulerIntervalSeconds,
 } from './cron-scheduler';
-import { createBrowserSessionStore } from './browser-session/grants';
+import { createBrowserSessionStore, type BrowserSessionStore } from './browser-session/grants';
 import {
   createInstallationGrants, createOAuthStateStore, createSignInClaimStore,
   handleGithubAuthRoute, isGithubAuthRoute,
@@ -253,17 +253,24 @@ export function createBridgeServer(
   wonderlandBackend: WonderlandBackend | null = null,
   /**
    * The Julius world routes' reads (row 12). Absent in production, where they are
-   * composed lazily over the one Julius pool, read-only; injected only by a test
-   * that proves the routes over real HTTP without a database.
+   * composed lazily over the world's own read-only pool (internal review M1+M2);
+   * injected only by a test that proves the routes over real HTTP without a database.
    */
   juliusWorld: WonderlandJuliusWorld | null = null,
+  /**
+   * The session store. Absent in production, where it is built below, in memory.
+   * Injected only by a test that needs a NATIVE world session over real HTTP: the
+   * world routes are native-only (row 12, internal review N5), and the one route
+   * that mints a native session -- pairing -- needs a membership database.
+   */
+  sessionStore: BrowserSessionStore | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
    * A restart therefore revokes every grant and session — fail-closed — and no
    * browser credential is ever written to the mounted volume.
    */
-  const browserSessions = createBrowserSessionStore();
+  const browserSessions = sessionStore ?? createBrowserSessionStore();
   const wonderland = wonderlandBackend ?? WonderlandBackend.empty();
   /**
    * WONDERLAND SOCIAL (R16): the desktop client's own sign-in (GitHub's device flow) and the social routes. OFF unless the

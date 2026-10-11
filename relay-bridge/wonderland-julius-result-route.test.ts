@@ -91,6 +91,7 @@ const DECIDED = Object.freeze({
   WATCHER: Object.freeze(['read_world_state'] as const),
 });
 
+/** A signed-in BROWSER session: the website's credential, which these routes no longer admit (review N5). */
 function signedIn(store: BrowserSessionStore): string {
   const minted = store.mintIdentitySession({ origin: WEB, now: NOW, participantId: PLAYER, scope: 'browser_control' });
   if (!minted.ok) throw new Error('fixture could not sign in');
@@ -103,6 +104,9 @@ function nativeFor(store: BrowserSessionStore, projectId: string): string {
   if (!redeemed.ok) throw new Error('fixture could not redeem');
   return redeemed.session.token;
 }
+
+/** The caller these routes serve: the native client, paired for PROJECT, asking with NO Origin. */
+const paired = (store: BrowserSessionStore): string => nativeFor(store, PROJECT);
 
 const request = (token: string | null, origin: string | undefined, projectId = PROJECT, path = '/wonderland/julius/result') => ({
   method: 'GET',
@@ -141,12 +145,12 @@ describe('the route', () => {
   it('is one of the world routes, and GET only', async () => {
     expect(isWonderlandJuliusRoute('/wonderland/julius/result')).toBe(true);
     const store = createBrowserSessionStore();
-    expect(await handleWonderlandJuliusRoute({ ...request(signedIn(store), WEB), method: 'POST' }, deps(store))).toBeNull();
+    expect(await handleWonderlandJuliusRoute({ ...request(paired(store), undefined), method: 'POST' }, deps(store))).toBeNull();
   });
 
   it('the OWNER reads the user result, with its exact cost, and tokens UNKNOWN', async () => {
     const store = createBrowserSessionStore();
-    const answer = await handleWonderlandJuliusRoute(request(signedIn(store), WEB), deps(store));
+    const answer = await handleWonderlandJuliusRoute(request(paired(store), undefined), deps(store));
     expect(answer?.status).toBe(200);
     expect(dataOf(answer)).toMatchObject({
       runId: RUN, juliusState: 'READY', taskState: 'Queued', verified: false, terminal: false, tokens: 'UNKNOWN',
@@ -157,7 +161,7 @@ describe('the route', () => {
   it('asks Julius for the AUTHORISED project and run, as the player -- never anything the caller did not name', async () => {
     const store = createBrowserSessionStore();
     const { results, asked } = source();
-    await handleWonderlandJuliusRoute(request(signedIn(store), WEB), deps(store, { results }));
+    await handleWonderlandJuliusRoute(request(paired(store), undefined), deps(store, { results }));
     expect(asked).toEqual([{ projectId: PROJECT, runId: RUN, actorId: PLAYER }]);
   });
 });
@@ -165,7 +169,7 @@ describe('the route', () => {
 describe('COST is the owner\'s and an admin\'s, never an ordinary member\'s (founder decision 5)', () => {
   const as = async (role: string) => {
     const store = createBrowserSessionStore();
-    return handleWonderlandJuliusRoute(request(signedIn(store), WEB), deps(store, {
+    return handleWonderlandJuliusRoute(request(paired(store), undefined), deps(store, {
       membership: members({ [`${PLAYER}|${PROJECT}`]: role }), roleCapabilities: DECIDED,
     }));
   };
@@ -185,17 +189,17 @@ describe('COST is the owner\'s and an admin\'s, never an ordinary member\'s (fou
 
   it('a role that may watch the world but not read results is refused the result -- and still admitted to the world', async () => {
     const store = createBrowserSessionStore();
-    const token = signedIn(store);
+    const token = paired(store);
     const watcher = deps(store, { membership: members({ [`${PLAYER}|${PROJECT}`]: 'WATCHER' }), roleCapabilities: DECIDED });
-    const answer = await handleWonderlandJuliusRoute(request(token, WEB), watcher);
+    const answer = await handleWonderlandJuliusRoute(request(token, undefined), watcher);
     expect(answer).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
     // CONTROL: the same row, the world's own question.
-    expect((await handleWonderlandJuliusRoute(request(token, WEB, PROJECT, '/wonderland/julius/events'), watcher))?.status).toBe(200);
+    expect((await handleWonderlandJuliusRoute(request(token, undefined, PROJECT, '/wonderland/julius/events'), watcher))?.status).toBe(200);
   });
 
   it('TODAY, with the canonical table, a MEMBER row reads nothing: the product does not write that role yet', async () => {
     const store = createBrowserSessionStore();
-    const answer = await handleWonderlandJuliusRoute(request(signedIn(store), WEB), deps(store, {
+    const answer = await handleWonderlandJuliusRoute(request(paired(store), undefined), deps(store, {
       membership: members({ [`${PLAYER}|${PROJECT}`]: 'MEMBER' }),
     }));
     expect(answer).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
@@ -205,13 +209,13 @@ describe('COST is the owner\'s and an admin\'s, never an ordinary member\'s (fou
 describe('fail closed, and one answer for not-found and not-yours', () => {
   it('no world is 503 -- the deployment cannot answer, which is not a denial', async () => {
     const store = createBrowserSessionStore();
-    const answer = await handleWonderlandJuliusRoute(request(signedIn(store), WEB), deps(store, { world: null }));
+    const answer = await handleWonderlandJuliusRoute(request(paired(store), undefined), deps(store, { world: null }));
     expect(answer).toEqual({ status: 503, body: { error: WONDERLAND_UNAVAILABLE_MESSAGE } });
   });
 
   it('a source that cannot answer is 503, never an empty result', async () => {
     const store = createBrowserSessionStore();
-    const answer = await handleWonderlandJuliusRoute(request(signedIn(store), WEB), deps(store, {
+    const answer = await handleWonderlandJuliusRoute(request(paired(store), undefined), deps(store, {
       results: { result: async () => { throw new Error('database down'); } },
     }));
     expect(answer).toEqual({ status: 503, body: { error: WONDERLAND_UNAVAILABLE_MESSAGE } });
@@ -219,9 +223,9 @@ describe('fail closed, and one answer for not-found and not-yours', () => {
 
   it('no such run is the same 404 as a run answered for someone else', async () => {
     const store = createBrowserSessionStore();
-    const token = signedIn(store);
-    const missing = await handleWonderlandJuliusRoute(request(token, WEB), deps(store, { results: source(null).results }));
-    const foreign = await handleWonderlandJuliusRoute(request(token, WEB), deps(store, {
+    const token = paired(store);
+    const missing = await handleWonderlandJuliusRoute(request(token, undefined), deps(store, { results: source(null).results }));
+    const foreign = await handleWonderlandJuliusRoute(request(token, undefined), deps(store, {
       results: source(resultView({ runId: 'run:someone-else' })).results,
     }));
     expect(missing).toEqual({ status: 404, body: { error: WONDERLAND_DENIAL_MESSAGE } });
@@ -230,11 +234,26 @@ describe('fail closed, and one answer for not-found and not-yours', () => {
 
   it('no session is 401; a non-member is the SAME 404 as an absent run, with the one denial sentence', async () => {
     const store = createBrowserSessionStore();
-    expect((await handleWonderlandJuliusRoute(request(null, WEB), deps(store)))?.status).toBe(401);
-    const stranger = await handleWonderlandJuliusRoute(request(signedIn(store), WEB), deps(store, { membership: members({}) }));
+    expect((await handleWonderlandJuliusRoute(request(null, undefined), deps(store)))?.status).toBe(401);
+    const stranger = await handleWonderlandJuliusRoute(request(paired(store), undefined), deps(store, { membership: members({}) }));
     expect(stranger).toEqual({ status: 404, body: { error: WONDERLAND_DENIAL_MESSAGE } });
-    const missing = await handleWonderlandJuliusRoute(request(signedIn(store), WEB), deps(store, { results: source(null).results }));
+    const missing = await handleWonderlandJuliusRoute(request(paired(store), undefined), deps(store, { results: source(null).results }));
     expect(JSON.stringify(stranger?.body)).toBe(JSON.stringify(missing?.body));
+  });
+});
+
+describe('a BROWSER reads no result: the routes are native-only (internal review N5)', () => {
+  it('a signed-in browser session is the one 404 -- from its own Origin, and with none', async () => {
+    const store = createBrowserSessionStore();
+    const browser = signedIn(store);
+    for (const origin of [WEB, undefined]) {
+      expect(await handleWonderlandJuliusRoute(request(browser, origin), deps(store)), String(origin))
+        .toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+    }
+    // And a NATIVE session sent with an Origin is the same 404.
+    expect(await handleWonderlandJuliusRoute(request(paired(store), WEB), deps(store))).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+    // CONTROL: the native session with no Origin reads it.
+    expect((await handleWonderlandJuliusRoute(request(paired(store), undefined), deps(store)))?.status).toBe(200);
   });
 });
 
@@ -335,7 +354,7 @@ describe('BILLING is read for the owner only, and read whole', () => {
   };
   const as = async (role: string, results: WonderlandJuliusResultSource) => {
     const store = createBrowserSessionStore();
-    return handleWonderlandJuliusRoute(request(signedIn(store), WEB), deps(store, {
+    return handleWonderlandJuliusRoute(request(paired(store), undefined), deps(store, {
       membership: members({ [`${PLAYER}|${PROJECT}`]: role }), roleCapabilities: DECIDED, results,
     }));
   };

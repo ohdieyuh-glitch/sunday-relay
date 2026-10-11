@@ -71,8 +71,9 @@ function ledger(initial: readonly WonderlandLedgerRow[]) {
 
 function deps(reader: WonderlandJuliusReader, member: () => boolean = () => true): WonderlandJuliusRouteDeps {
   return {
+    // The native client's session, paired for PROJECT: the one door these routes have (internal review N5).
     sessions: {
-      verifySession: () => ({ ok: true, participantId: 'player-1', sessionId: 's-1', scope: 'browser_control' }),
+      verifyNativeSession: () => ({ ok: true, participantId: 'player-1', sessionId: 's-1', projectId: PROJECT }),
     } as unknown as BrowserSessionStore,
     world: {
       read: async (work) => work({
@@ -89,7 +90,8 @@ const request = (cursor: number, mode: string | null = 'page') => ({
   path: '/wonderland/julius/events',
   url: `/wonderland/julius/events?projectId=${PROJECT}&runId=${RUN}&cursor=${cursor}${mode === null ? '' : `&mode=${mode}`}`,
   authorization: 'Relay-Session tok',
-  origin: 'https://sunday-relay.vercel.app',
+  // As the native client asks: NO Origin.
+  origin: undefined,
   now: Date.UTC(2026, 8, 27),
 });
 
