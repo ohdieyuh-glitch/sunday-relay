@@ -199,12 +199,14 @@ describe('COST is the owner\'s and an admin\'s, never an ordinary member\'s (fou
     expect((await handleWonderlandJuliusRoute(request(token, undefined, PROJECT, '/wonderland/julius/events'), watcher))?.status).toBe(200);
   });
 
-  it('TODAY, with the canonical table, a MEMBER row reads nothing: the product does not write that role yet', async () => {
+  it('with the CANONICAL table -- which holds MEMBER since main #345 writes that role -- a MEMBER reads the result WITHOUT its cost', async () => {
     const store = createBrowserSessionStore();
     const answer = await handleWonderlandJuliusRoute(request(paired(store), undefined), deps(store, {
       membership: members({ [`${PLAYER}|${PROJECT}`]: 'MEMBER' }),
     }));
-    expect(answer).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+    expect(answer?.status).toBe(200);
+    expect(dataOf(answer).cost).toEqual({ visible: false });
+    expect(JSON.stringify(answer?.body)).not.toContain('4200');
   });
 });
 
@@ -451,10 +453,11 @@ describe('wonderlandJuliusResultsFrom -- the billing read, through Julius\'s own
 
 describe('THE CANONICAL ROLE TABLE, as production runs it (internal review A4)', () => {
   // Every other role test here injects a table (DECIDED). Production injects none: WONDERLAND_ROLE_CAPABILITIES
-  // decides, and it names the OWNER alone. So what production returns to a member who is NOT the owner is pinned
-  // here, on all three routes: the one 404, decided as unrecognised_role -- the run never read, the result never
-  // read, the billing never read, cost never present. "A member sees the result without its cost" (DECIDED) stays
-  // dormant until a route writes that role and adds its row to the canonical table.
+  // decides. Since main's #345 the product WRITES ADMIN and MEMBER (the Project Brain's membership change), so the
+  // canonical table holds founder decisions 4 and 5: OWNER and ADMIN read everything, an ordinary MEMBER the world
+  // and the result -- never the cost. What production returns to each role is pinned here, on all three routes:
+  // a non-owner MEMBER is served with the cost NEVER present and the billing never read; a role the product does
+  // not write is the one 404, decided as unrecognised_role, with nothing read.
   const PATHS = ['/wonderland/julius/hydrate', '/wonderland/julius/events', '/wonderland/julius/result'] as const;
 
   /** Every read a request could make, recorded; and every authorisation decision. */
@@ -466,6 +469,8 @@ describe('THE CANONICAL ROLE TABLE, as production runs it (internal review A4)',
       billing: async () => { reads.push('billing'); return { slots: THREE_SLOTS, settlements: [], whole: true }; },
     };
     const reader: WonderlandJuliusReader = {
+      // No run to hydrate in this double: a hydrate that is AUTHORISED reaches the read, and the reader's empty
+      // answer is the 404 -- the decision recorded is what this suite pins.
       hydrate: async () => { reads.push('hydrate'); return null; },
       events: async () => { reads.push('events'); return { rows: [], revision: 1 }; },
     };
@@ -475,38 +480,59 @@ describe('THE CANONICAL ROLE TABLE, as production runs it (internal review A4)',
       over: { membership: members({ [`${PLAYER}|${PROJECT}`]: role }), results, reader, onAuthorization: (decision: WonderlandAuthorizationDecision) => decisions.push(decision) },
     };
   };
+  /** One request on `path` by `role`, through the canonical table (no roleCapabilities, as the server composes it). */
+  const ask = async (role: string, path: (typeof PATHS)[number]) => {
+    const store = createBrowserSessionStore();
+    const { reads, decisions, over } = recorded(role);
+    const answer = await handleWonderlandJuliusRoute(request(paired(store), undefined, PROJECT, path), deps(store, over));
+    return { answer, reads, granted: decisions.map((decision) => [decision.capability, decision.granted]), verdicts: decisions.map((decision) => decision.verdict) };
+  };
 
-  it('the production table is the OWNER alone, and only the OWNER carries read_mission_cost', () => {
-    expect(Object.keys(WONDERLAND_ROLE_CAPABILITIES)).toEqual(['OWNER']);
-    expect(WONDERLAND_ROLE_CAPABILITIES.OWNER).toContain('read_mission_cost');
+  it('the production table: OWNER and ADMIN carry read_mission_cost; a MEMBER reads the world and the result, never the cost', () => {
+    expect(Object.keys(WONDERLAND_ROLE_CAPABILITIES).sort()).toEqual(['ADMIN', 'MEMBER', 'OWNER']);
+    for (const role of ['OWNER', 'ADMIN']) expect(WONDERLAND_ROLE_CAPABILITIES[role], role).toContain('read_mission_cost');
+    expect(WONDERLAND_ROLE_CAPABILITIES.MEMBER).toEqual(expect.arrayContaining(['read_world_state', 'read_mission_result']));
+    expect(WONDERLAND_ROLE_CAPABILITIES.MEMBER).not.toContain('read_mission_cost');
   });
 
-  it('a member who is not the OWNER gets the one 404 on every route: nothing read, cost never present', async () => {
-    for (const role of ['MEMBER', 'ADMIN', 'WATCHER', 'VIEWER', 'owner', '']) {
-      for (const path of PATHS) {
-        const store = createBrowserSessionStore();
-        const { reads, decisions, over } = recorded(role);
-        // No roleCapabilities: the canonical table, exactly as the server composes the route.
-        const answer = await handleWonderlandJuliusRoute(request(paired(store), undefined, PROJECT, path), deps(store, over));
-        const label = `${role === '' ? '(blank)' : role} ${path}`;
-        expect(answer, label).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
-        expect(reads, label).toEqual([]);
-        expect(decisions.map((decision) => [decision.capability, decision.verdict, decision.granted]), label)
-          .toEqual([[path.endsWith('/result') ? 'read_mission_result' : 'read_world_state', 'unrecognised_role', false]]);
-        expect(JSON.stringify(answer?.body), label).not.toMatch(/cost|4200|billing|visible/u);
-      }
+  it('a MEMBER who is not the owner is served on every route -- and the cost is NEVER present, the billing never read', async () => {
+    const result = await ask('MEMBER', '/wonderland/julius/result');
+    expect(result.answer?.status).toBe(200);
+    expect(dataOf(result.answer).cost).toEqual({ visible: false });
+    expect(result.reads).toEqual(['result']);
+    expect(result.granted).toEqual([['read_mission_result', true], ['read_mission_cost', false]]);
+    expect(JSON.stringify(result.answer?.body)).not.toMatch(/knownUsdMicros|unknownComponents|4200|billing/u);
+    const events = await ask('MEMBER', '/wonderland/julius/events');
+    expect(events.answer?.status).toBe(200);
+    expect(events.reads).toEqual(['events']);
+    expect(events.granted).toEqual([['read_world_state', true]]);
+    const hydrate = await ask('MEMBER', '/wonderland/julius/hydrate');
+    expect(hydrate.reads).toEqual(['hydrate']);
+    expect(hydrate.granted).toEqual([['read_world_state', true]]);
+    for (const { answer } of [result, events, hydrate]) expect(JSON.stringify(answer?.body)).not.toMatch(/knownUsdMicros|4200|billing/u);
+  });
+
+  it('an ADMIN, by the same production table, holds what the OWNER holds: the result WITH its exact cost and billing', async () => {
+    for (const role of ['OWNER', 'ADMIN']) {
+      const result = await ask(role, '/wonderland/julius/result');
+      expect(result.answer?.status, role).toBe(200);
+      expect(dataOf(result.answer).cost, role).toMatchObject({ visible: true, knownUsdMicros: 4_200, unknownComponents: 1, complete: false });
+      expect(result.reads, role).toEqual(['result', 'billing']);
+      expect(result.granted, role).toEqual([['read_mission_result', true], ['read_mission_cost', true]]);
+      expect((await ask(role, '/wonderland/julius/events')).answer?.status, role).toBe(200);
     }
   });
 
-  it('CONTROL: the OWNER, by the same production table, reads the world and the result WITH its exact cost and billing', async () => {
-    const store = createBrowserSessionStore();
-    const owner = recorded('OWNER');
-    const result = await handleWonderlandJuliusRoute(request(paired(store), undefined), deps(store, owner.over));
-    expect(result?.status).toBe(200);
-    expect(dataOf(result).cost).toMatchObject({ visible: true, knownUsdMicros: 4_200, unknownComponents: 1, complete: false });
-    expect(owner.reads).toEqual(['result', 'billing']);
-    expect(owner.decisions.map((decision) => [decision.capability, decision.granted])).toEqual([['read_mission_result', true], ['read_mission_cost', true]]);
-    const events = await handleWonderlandJuliusRoute(request(paired(store), undefined, PROJECT, '/wonderland/julius/events'), deps(store, recorded('OWNER').over));
-    expect(events?.status).toBe(200);
+  it('a role the product does not write gets the one 404 on every route: nothing read, decided unrecognised_role', async () => {
+    for (const role of ['WATCHER', 'VIEWER', 'GUEST', 'owner', 'member', '']) {
+      for (const path of PATHS) {
+        const { answer, reads, granted, verdicts } = await ask(role, path);
+        const label = `${role === '' ? '(blank)' : role} ${path}`;
+        expect(answer, label).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+        expect(reads, label).toEqual([]);
+        expect(granted, label).toEqual([[path.endsWith('/result') ? 'read_mission_result' : 'read_world_state', false]]);
+        expect(verdicts, label).toEqual(['unrecognised_role']);
+      }
+    }
   });
 });

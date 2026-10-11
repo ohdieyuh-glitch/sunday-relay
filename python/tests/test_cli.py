@@ -73,7 +73,7 @@ class CliTests(unittest.TestCase):
 
     def test_vocabulary_and_safety_classify(self):
         vocab = json.loads(cli("vocabulary").stdout)
-        self.assertEqual(len(vocab["sections"]), 19)
+        self.assertEqual(len(vocab["sections"]), 20)
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as handle:
             json.dump(["julius-task-contract.ts", "sk-ant-api03-FAKETESTNOTREAL", "plain"], handle)
         try:

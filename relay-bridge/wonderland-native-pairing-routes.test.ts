@@ -188,16 +188,20 @@ describe('POST /wonderland/native/pair -- only the signed-in player, for themsel
     const as = (role: string): WonderlandProjectMembershipSource => ({
       lookup: async ({ playerId, projectId }) => ({ playerId, projectId, role }),
     });
-    for (const role of ['MEMBER', 'VIEWER', '']) {
+    // MEMBER is no longer in this list: founder decisions 4 and 5 (2026-09-27) give an ordinary MEMBER read_world_state,
+    // and the Project Brain membership change made MEMBER a written role (WONDERLAND_ROLE_CAPABILITIES). These roles still grant no world.
+    for (const role of ['VIEWER', 'GUEST', '']) {
       const result = await handleNativePairingRoute(
         req({ authorization: `Relay-Session ${token}`, origin: WEB, body: { projectId: PROJECT } }), deps(store, as(role)));
       expect(result?.status, role).toBe(403);
     }
     expect(store.size.grants).toBe(0);
-    // CONTROL: the same row as OWNER pairs.
-    const owner = await handleNativePairingRoute(
-      req({ authorization: `Relay-Session ${token}`, origin: WEB, body: { projectId: PROJECT } }), deps(store, as('OWNER')));
-    expect(owner?.status).toBe(200);
+    // CONTROLS: the same row as OWNER, ADMIN or MEMBER pairs (each grants read_world_state).
+    for (const role of ['OWNER', 'ADMIN', 'MEMBER']) {
+      const granted = await handleNativePairingRoute(
+        req({ authorization: `Relay-Session ${token}`, origin: WEB, body: { projectId: PROJECT } }), deps(store, as(role)));
+      expect(granted?.status, role).toBe(200);
+    }
   });
 
   it('refuses a project the player does not belong to, and mints nothing', async () => {

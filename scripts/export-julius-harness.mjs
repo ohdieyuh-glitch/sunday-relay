@@ -30,7 +30,8 @@
  *      port but are not reached from either root (the live root composes a
  *      subset) are included and FLAGGED "not composed by the live root".
  *   5. PATH-LOADED ASSETS. The Julius schema migrations the migration runner
- *      registers by filename, and the in-sandbox executor script.
+ *      registers by filename (named "julius", or on the explicit list in
+ *      `julius-harness-migrations.mjs`), and the in-sandbox executor script.
  *   6. DRIFT GATE. Every production file that imports the Julius kernel or the
  *      Julius port must be reached, declared, or explicitly excluded here —
  *      an unclassified one fails the run. A declared file that becomes
@@ -58,6 +59,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import { createRequire } from 'node:module';
 import { dirname, posix, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  JULIUS_SCHEMA_MIGRATION_REASONS, describeNonJuliusMigrations, isJuliusSchemaMigration, juliusSchemaListProblems,
+} from './julius-harness-migrations.mjs';
 
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
@@ -155,7 +159,6 @@ const KERNEL_DEPENDANT_EXCLUSIONS = [
  */
 const MIGRATION_RUNNER = 'src/relay/persistence/wonderland-postgres.ts';
 const MIGRATION_DIR = 'src/relay/persistence/wonderland-migrations/';
-const MIGRATION_IS_JULIUS = (name) => /julius/i.test(name);
 const DECLARED_ASSETS = [
   {
     path: 'scripts/julius-docker-executor.sh',
@@ -635,6 +638,7 @@ function trace() {
   /* Path-loaded assets. */
   const migrations = [];
   const migrationsExcluded = [];
+  let migrationLines = [];
   if (!included.has(MIGRATION_RUNNER)) problems.push(`the migration runner ${MIGRATION_RUNNER} was not reached — migrations cannot be discovered`);
   else {
     const runnerText = readFileSync(abs(MIGRATION_RUNNER), 'utf8');
@@ -643,9 +647,20 @@ function trace() {
     for (const name of names) {
       const path = `${MIGRATION_DIR}${name}`;
       if (!existsSync(abs(path))) { problems.push(`registered migration does not exist: ${path}`); continue; }
-      if (MIGRATION_IS_JULIUS(name)) migrations.push(path); else migrationsExcluded.push(path);
+      if (isJuliusSchemaMigration(name)) migrations.push(path); else migrationsExcluded.push(path);
     }
-    for (const path of migrations) included.set(path, { role: 'asset', reachedFrom: MIGRATION_RUNNER, reason: 'Julius schema migration, registered by filename in the migration runner' });
+    problems.push(...juliusSchemaListProblems(names));
+    for (const path of migrations) {
+      const name = path.slice(MIGRATION_DIR.length);
+      included.set(path, { role: 'asset', reachedFrom: MIGRATION_RUNNER, reason: JULIUS_SCHEMA_MIGRATION_REASONS[name] ?? 'Julius schema migration, registered by filename in the migration runner' });
+    }
+    // The manifest's line for every registered migration that is not Julius's. The describer THROWS on a
+    // migration it has no line for; nothing here catches it, so the run exits 1 rather than printing a guess.
+    migrationLines = describeNonJuliusMigrations({
+      julius: migrations.map((path) => path.slice(MIGRATION_DIR.length)),
+      excluded: migrationsExcluded.map((path) => path.slice(MIGRATION_DIR.length)),
+      dir: MIGRATION_DIR,
+    });
   }
   for (const asset of DECLARED_ASSETS) {
     for (const evidence of asset.evidence) {
@@ -747,7 +762,7 @@ function trace() {
   const excludedInUniverse = [...universePaths].filter((path) => !included.has(path)).sort();
 
   return {
-    files, crossings, exclusionHits, externals, problems, migrations, migrationsExcluded, kernelDependants, prunedSubtrees,
+    files, crossings, exclusionHits, externals, problems, migrations, migrationsExcluded, migrationLines, kernelDependants, prunedSubtrees,
     direction: [...direction.values()].sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to)),
     coverage: { universe, represented, excludedInUniverse, percentBytes: universe.bytes === 0 ? 0 : (represented.bytes / universe.bytes) * 100, percentFiles: universe.files === 0 ? 0 : (represented.files / universe.files) * 100 },
     commit: git(['rev-parse', 'HEAD']) ?? 'unknown',
@@ -936,14 +951,9 @@ function renderManifest(result) {
     out.push(`- **${entry.category}** — \`${entry.path}\`: ${entry.reason}. Reached only via ${hits.join(', ') || 'nothing'}.`);
   }
   for (const entry of KERNEL_DEPENDANT_EXCLUSIONS) out.push(`- **kernel dependant, outside the harness** — \`${entry.path}\`: ${entry.reason}.`);
-  // A non-Julius migration numbered after the LAST Julius one (Wonderland Social's 033) is not "pre-Julius": it is listed
-  // on its own line, so neither sentence says something false about it.
-  const lastJulius = Math.max(...result.migrations.map((path) => Number.parseInt(path.slice(MIGRATION_DIR.length), 10)));
-  const before = result.migrationsExcluded.filter((path) => Number.parseInt(path.slice(MIGRATION_DIR.length), 10) < lastJulius);
-  const after = result.migrationsExcluded.filter((path) => !before.includes(path));
-  const names = (paths) => paths.map((path) => `\`${path.slice(MIGRATION_DIR.length)}\``).join(', ');
-  out.push(`- **pre-Julius schema** — ${names(before)} under \`${MIGRATION_DIR}\`: registered by the same migration runner and applied in order before the Julius migrations; Julius tables reference \`relay_wonderland.projects\`, \`mission_contracts\` and \`budget_reservations\` defined there, and 017 is the Gauntlet Loop's own storage, deliberately not Julius's.`);
-  if (after.length > 0) out.push(`- **non-Julius schema after the Julius migrations** — ${names(after)} under \`${MIGRATION_DIR}\`: registered by the same migration runner and applied in order after them; Wonderland Social's own storage (additive \`relay_wonderland.social_*\` tables and party voice's \`voice_puid_binding\`, referencing only \`relay_wonderland.players\`), deliberately not Julius's.`);
+  // Registered migrations that are not Julius's: one line for those before the first Julius migration, and
+  // one line EACH, from julius-harness-migrations.mjs, for every later one (interleaved like 017, or after like 033).
+  out.push(...result.migrationLines);
   out.push('');
   out.push('Named "julius", outside the harness (no kernel dependency, or CI/test drivers):');
   out.push('');

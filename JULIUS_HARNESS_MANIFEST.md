@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **218 production files** across 20/20 subsystems (2 roots, 187 traced, 8 not composed by the live root, 21 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **223 production files** across 20/20 subsystems (2 roots, 191 traced, 8 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -54,7 +54,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 2 | 0 |
 | other | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 2 | 2 |
 | persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 25 | 15 |
-| persistence (src/relay/persistence/) | Project Brain (src/relay/mission/project-brain/) | 3 | 0 |
+| persistence (src/relay/persistence/) | Project Brain (src/relay/mission/project-brain/) | 6 | 0 |
 | Project Brain (src/relay/mission/project-brain/) | kernel (src/relay/mission/julius/) | 1 | 1 |
 | Relay↔Julius port (src/relay/integration/julius/) | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | 2 | 1 |
 | Relay↔Julius port (src/relay/integration/julius/) | kernel (src/relay/mission/julius/) | 1 | 1 |
@@ -112,6 +112,8 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | `src/relay/mission/julius/julius-runtime-ports.ts` | traced | `src/relay/mission/julius/julius-claim-ledger.ts` |
 | `src/relay/mission/julius/julius-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-state-path.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/project-brain/project-brain-coherence.ts` | traced | `src/relay/mission/project-brain/project-brain-document.ts` |
+| `src/relay/mission/project-brain/project-brain-components.ts` | traced | `src/relay/mission/project-brain/project-brain-document.ts` |
 | `src/relay/mission/project-brain/project-brain-document.ts` | traced | `src/relay/persistence/project-brain-postgres.ts` |
 | `src/relay/mission/project-brain/project-brain-views.ts` | traced | `src/relay/persistence/project-brain-postgres.ts` |
 | `src/relay/mission/project-brain/project-brain.ts` | traced | `src/relay/persistence/project-brain-postgres.ts` |
@@ -389,6 +391,8 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/julius-tool-settlement-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-trajectory-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/julius-verification-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
+| `src/relay/persistence/project-brain-components-postgres.ts` | traced | `src/relay/persistence/project-brain-postgres.ts` |
+| `src/relay/persistence/project-brain-pg-shared.ts` | traced | `src/relay/persistence/project-brain-components-postgres.ts` |
 | `src/relay/persistence/project-brain-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/redaction.ts` | traced | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-migrations/011_julius_runtime.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
@@ -411,6 +415,7 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/wonderland-migrations/030_julius_outbox_event_no_reread.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-migrations/031_julius_run_transition_hot.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-migrations/032_julius_outbox_event_delete_forgets.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
+| `src/relay/persistence/wonderland-migrations/034_project_brain_components.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 
 ### 19 LIVE PROVIDER COMPOSITION
@@ -463,8 +468,9 @@ C.A.R.D. roles resolved to live adapters — fail closed, naming every missing v
 - **kernel dependant, outside the harness** — `src/relay/mission/wonderland/wonderland-human-gate.ts`: the same layer's projection of an OPEN APPROVAL: what a world may be told about the one moment in a run where a person is required. It imports JuliusPolicyOperation as a TYPE ONLY, and only to assert in both directions that its own vocabulary covers the kernel's and invents nothing beyond it — an operation added to the policy and not here stops the build. It reads the closed list and emits nothing; the kernel owns the gate, the decision and the resume, and a Julius deployment that never renders a world never reaches this.
 - **kernel dependant, outside the harness** — `src/relay/mission/wonderland/wonderland-julius-result.ts`: the same layer's projection of a run's USER RESULT (founder decision 5): what a project member's world may show of JuliusRuntimeApi.inspectResult. It imports JuliusMissionResultView, JuliusSlotView and JuliusTimelineEntry as TYPES and the kernel's own durable-reference and digest rules (julius-artifact-reference, pure) so a reference Julius would not promise is never shown. For the owner's billing provenance it imports juliusCostComponent, JULIUS_BILLING_PATHS and consistentJuliusBillingPath (julius-cost-accounting, pure) so what counts as money, the billing words and when a stated path is believed are the kernel's rules, and JULIUS_DEFAULT_ROLES so the roles cannot drift from the kernel's list. It only removes, screens and groups -- verified, satisfied, the failure, the spend basis and the billing path are the kernel's, re-derived nowhere -- emits nothing, and a Julius deployment that never renders a world never reaches it.
 - **kernel dependant, outside the harness** — `relay-bridge/wonderland-julius-routes.ts`: the bridge's three READ-ONLY Wonderland world routes (row 12, R3'): GET /wonderland/julius/hydrate, /events?mode=page and /result, for a player's own project, every read inside one READ ONLY transaction composed by wonderland-julius-world.ts. It imports JuliusRuntimeApi's identity, result, view, slot and timeline TYPES only, so the result read -- and, for a viewer who may see cost, the billing read over inspectSlots and the paged timeline -- is handed to the API julius-state-routes composes (wonderlandJuliusResultsFrom) rather than re-deriving anything; it composes nothing of Julius, writes nothing, and it is reached from the HTTP server, a Relay surface and not a mission root.
-- **pre-Julius schema** — `001_wonderland_runtime.sql`, `002_wonderland_outbox.sql`, `003_wonderland_budget_reservations.sql`, `004_wonderland_ratings.sql`, `005_wonderland_inventory.sql`, `006_wonderland_eval_runtime.sql`, `007_wonderland_provider_operations.sql`, `008_wonderland_swarm_scheduler.sql`, `009_wonderland_gve_runs.sql`, `010_wonderland_hidden_fixtures.sql`, `017_gauntlet_command.sql` under `src/relay/persistence/wonderland-migrations/`: registered by the same migration runner and applied in order before the Julius migrations; Julius tables reference `relay_wonderland.projects`, `mission_contracts` and `budget_reservations` defined there, and 017 is the Gauntlet Loop's own storage, deliberately not Julius's.
-- **non-Julius schema after the Julius migrations** — `033_wonderland_social.sql` under `src/relay/persistence/wonderland-migrations/`: registered by the same migration runner and applied in order after them; Wonderland Social's own storage (additive `relay_wonderland.social_*` tables and party voice's `voice_puid_binding`, referencing only `relay_wonderland.players`), deliberately not Julius's.
+- **pre-Julius schema** — `001_wonderland_runtime.sql`, `002_wonderland_outbox.sql`, `003_wonderland_budget_reservations.sql`, `004_wonderland_ratings.sql`, `005_wonderland_inventory.sql`, `006_wonderland_eval_runtime.sql`, `007_wonderland_provider_operations.sql`, `008_wonderland_swarm_scheduler.sql`, `009_wonderland_gve_runs.sql`, `010_wonderland_hidden_fixtures.sql` under `src/relay/persistence/wonderland-migrations/`: registered by the same migration runner and applied in order before the Julius migrations; Julius tables reference `relay_wonderland.projects`, `mission_contracts` and `budget_reservations` defined there.
+- **non-Julius schema** — `017_gauntlet_command.sql` under `src/relay/persistence/wonderland-migrations/`: registered by the same migration runner, which applies every migration in numeric order; the Gauntlet Loop's own storage (`relay_wonderland.gauntlet_runs` and `gauntlet_rounds`). Its foreign keys point at `julius_runs` and `julius_tasks`, and no Julius migration references it; deliberately not Julius's.
+- **non-Julius schema** — `033_wonderland_social.sql` under `src/relay/persistence/wonderland-migrations/`: registered by the same migration runner, which applies every migration in numeric order; Wonderland Social's own storage: 17 additive `relay_wonderland.social_*` tables referencing only `relay_wonderland.players` and each other; deliberately not Julius's.
 
 Named "julius", outside the harness (no kernel dependency, or CI/test drivers):
 

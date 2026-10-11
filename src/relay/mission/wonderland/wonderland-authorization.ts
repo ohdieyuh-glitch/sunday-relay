@@ -83,7 +83,7 @@ export type WonderlandProjectCapability = (typeof WONDERLAND_PROJECT_CAPABILITIE
 /**
  * What each role may do. THE ONE PLACE A PERMISSION MODEL BELONGS.
  *
- * `OWNER` is the only role the product writes, so it is the only role here. A
+ * OWNER (the mission seed) and ADMIN / MEMBER (a membership change) are the roles the product writes. A
  * role the table holds and this table does not is NOT an error and NOT an
  * allow: it grants nothing, and the refusal names it as unrecognised so an
  * operator can see the product moved without this file.
@@ -92,17 +92,20 @@ export type WonderlandProjectCapability = (typeof WONDERLAND_PROJECT_CAPABILITIE
  * defaulted open would hand every future role every capability the day it was
  * inserted, before anybody had decided what it was for.
  *
- * DECIDED, NOT YET WRITTEN (founder decisions 4 and 5, 2026-09-27). An
- * explicitly authorised ADMIN is to hold what OWNER holds, and an ordinary
- * MEMBER `read_world_state` and `read_mission_result` -- never
- * `read_mission_cost`, and never `create_mission`. They are not rows here yet because nothing in the
- * product writes those roles, and this table names only roles that are written
- * (the seed test holds that). The route that first writes one adds its row.
+ * DECIDED AND NOW WRITTEN (founder decisions 4 and 5, 2026-09-27). An
+ * explicitly authorised ADMIN holds what OWNER holds, and an ordinary MEMBER
+ * `read_world_state` and `read_mission_result` -- never `read_mission_cost`,
+ * and never `create_mission`. The Project Brain's membership change
+ * (project-brain-members.ts, through its store) is the route that writes them;
+ * this table still names only roles the product writes (the test holds that,
+ * against the mission seed AND the grantable roles).
  */
 export const WONDERLAND_ROLE_CAPABILITIES: Readonly<
   Record<string, readonly WonderlandProjectCapability[]>
 > = Object.freeze({
   OWNER: Object.freeze(['read_world_state', 'read_mission_result', 'read_mission_cost', 'create_mission'] as const),
+  ADMIN: Object.freeze(['read_world_state', 'read_mission_result', 'read_mission_cost', 'create_mission'] as const),
+  MEMBER: Object.freeze(['read_world_state', 'read_mission_result'] as const),
 });
 
 /**

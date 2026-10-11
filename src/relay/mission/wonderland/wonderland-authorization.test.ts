@@ -37,18 +37,34 @@ describe('this reuses the product’s membership record and holds none of its ow
     expect(decision.verdict).toBe('granted');
   });
 
-  it('names OWNER because that is what the seed and the schema use', () => {
-    // `mission-seed.ts` inserts OWNER; `julius-tool-postgres.ts` authorises
-    // against the same table. If the product's written role ever changes, this
-    // fails rather than silently granting nothing.
-    const seed = readFileSync(
-      join(__dirname, '..', '..', '..', '..', 'relay-bridge', 'julius', 'mission-seed.ts'),
-      'utf8',
-    );
+  it('names exactly the roles the product writes: OWNER from the seed, ADMIN and MEMBER from a membership change', () => {
+    // `mission-seed.ts` inserts OWNER; the Project Brain's membership change
+    // grants PROJECT_BRAIN_GRANTABLE_ROLES and its store writes project_members.
+    // `julius-tool-postgres.ts` authorises against the same table. A role here
+    // that no writer writes -- or a writer's role missing here -- fails, rather
+    // than silently granting nothing (or granting a role nobody decided).
+    const root = join(__dirname, '..', '..', '..', '..');
+    const seed = readFileSync(join(root, 'relay-bridge', 'julius', 'mission-seed.ts'), 'utf8');
+    const members = readFileSync(join(root, 'src', 'relay', 'mission', 'project-brain', 'project-brain-members.ts'), 'utf8');
+    const store = readFileSync(join(root, 'src', 'relay', 'persistence', 'project-brain-members-postgres.ts'), 'utf8');
     expect(seed).toContain('project_members');
-    for (const role of Object.keys(WONDERLAND_ROLE_CAPABILITIES)) {
-      expect(seed).toContain(`'${role}'`);
-    }
+    expect(store).toContain('project_members');
+    const grantable = /PROJECT_BRAIN_GRANTABLE_ROLES = \[([^\]]*)\]/u.exec(members)?.[1] ?? '';
+    const written = new Set([
+      ...[...seed.matchAll(/project_members\([^)]*\) VALUES\([^)]*'([A-Z]+)'\)/gu)].map((match) => match[1]!),
+      ...[...grantable.matchAll(/'([A-Z]+)'/gu)].map((match) => match[1]!),
+    ]);
+    expect([...written].sort(), 'the writers were read (a parse that finds nothing proves nothing)').toEqual(['ADMIN', 'MEMBER', 'OWNER']);
+    expect(Object.keys(WONDERLAND_ROLE_CAPABILITIES).sort()).toEqual([...written].sort());
+  });
+
+  it('decisions 4 and 5: an ADMIN holds what an OWNER holds; a MEMBER reads the world and results, never the cost, never creates', () => {
+    expect(WONDERLAND_ROLE_CAPABILITIES.ADMIN).toEqual(WONDERLAND_ROLE_CAPABILITIES.OWNER);
+    expect(WONDERLAND_ROLE_CAPABILITIES.MEMBER).toEqual(['read_world_state', 'read_mission_result']);
+    const member: WonderlandMembership = { projectId: PROJECT, playerId: PLAYER, role: 'MEMBER' };
+    expect(ask(member).granted).toBe(true);
+    expect(ask(member, { capability: 'read_mission_cost' }).granted).toBe(false);
+    expect(ask(member, { capability: 'create_mission' }).granted).toBe(false);
   });
 
   it('stores no membership of its own', () => {
