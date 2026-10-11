@@ -121,6 +121,12 @@ export function juliusTransitionState(
  * it protects the LEDGER. This allowlist protects the WORLD, and the two are
  * different trust boundaries — the ledger is operator-visible and the world is
  * whatever the SSE route's visibility rules let a player see.
+ *
+ * THREE OF THEM ARE CODES (row 12, internal review M3): `reasonCode`, `severity`
+ * and `outcome` reach a world only in the code shape, and any value holding a
+ * host path is dropped whatever its key -- both enforced where the envelope's
+ * metadata is sanitised (`WONDERLAND_CODE_METADATA_KEYS`, wonderland-envelope.ts),
+ * so every drop is counted in `metadataDropped`.
  */
 export const WONDERLAND_CARRIED_FACT_KEYS = [
   'reasonCode',

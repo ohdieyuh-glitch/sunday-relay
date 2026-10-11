@@ -45,6 +45,7 @@ import {
 } from '../../integration/terminal/terminal-redaction';
 import { JULIUS_DEFAULT_ROLES } from '../julius/julius-runtime';
 import type { JuliusWorkerRole } from '../julius/julius-runtime';
+import { containsWonderlandHostPath } from './wonderland-host-paths';
 import { JULIUS_STATE_SOURCES, JULIUS_VISUAL_STATES } from './wonderland-julius-state';
 import type { JuliusStateSource, JuliusVisualState } from './wonderland-julius-state';
 
@@ -118,6 +119,26 @@ export interface WonderlandMetadataResult {
 }
 
 /**
+ * THE METADATA KEYS THAT HOLD CODES (row 12, R4; internal review M3).
+ *
+ * The Julius normalizer carries a kernel event's `reasonCode`, `severity` and
+ * `outcome` here (`WONDERLAND_CARRIED_FACT_KEYS`), and the kernel's write-time
+ * check only refuses `key=value` text -- so each was a free string of up to 120
+ * characters, a host path among them. A code is a machine word: the human gate's
+ * shape (wonderland-human-gate.ts), in either case, because the kernel's own
+ * codes are both SCREAMING_SNAKE (`EVIDENCE_FAILED`) and lower_snake
+ * (`checkpoint_identity_required`). No space, slash, backslash or colon fits, so
+ * neither prose nor a path can travel under one of these keys.
+ *
+ * DROPPED, never replaced: the Unreal client decodes `metadata` as an open map of
+ * scalars and requires none of these keys (WonderlandWireDecode.cpp,
+ * DecodeEnvelopeObject), so a value that is not a code is removed and counted in
+ * `metadataDropped` like every other drop.
+ */
+export const WONDERLAND_CODE_METADATA_KEYS: ReadonlySet<string> = new Set(['reasonCode', 'severity', 'outcome']);
+const METADATA_CODE = /^[A-Za-z0-9][A-Za-z0-9._]{0,63}$/u;
+
+/**
  * SANITISE, which is the enforcement of rule 1.
  *
  * Drops rather than redacts. A redacted value still occupies a key a renderer
@@ -139,6 +160,12 @@ export function sanitizeWonderlandMetadata(raw: unknown): WonderlandMetadataResu
       continue;
     }
     if (factKeyIsSecretShaped(key)) {
+      dropped += 1;
+      continue;
+    }
+    // A CODE KEY CARRIES A CODE OR NOTHING (review M3): a string of the code shape, never prose, a path, a
+    // number, a boolean or null.
+    if (WONDERLAND_CODE_METADATA_KEYS.has(key) && !(typeof value === 'string' && METADATA_CODE.test(value))) {
       dropped += 1;
       continue;
     }
@@ -167,8 +194,11 @@ export function sanitizeWonderlandMetadata(raw: unknown): WonderlandMetadataResu
       // `apiKey`; it cannot stop a provider's error code that echoed a key into
       // `reasonCode`, and the kernel's own write-time check only refuses
       // `key=value` text. So the VALUE is screened by the repository's boundary
-      // redactor, and private reasoning or a stack trace is dropped the same way.
-      if (redactBoundaryText(value).redactions > 0 || containsPrivateReasoning(value) || containsStackTrace(value)) {
+      // redactor, and private reasoning or a stack trace is dropped the same way
+      // -- and so is a PATH ON THE HOST, by the patterns /result trims with
+      // (wonderland-host-paths.ts; internal review M3).
+      if (redactBoundaryText(value).redactions > 0 || containsPrivateReasoning(value) || containsStackTrace(value)
+        || containsWonderlandHostPath(value)) {
         dropped += 1;
         continue;
       }

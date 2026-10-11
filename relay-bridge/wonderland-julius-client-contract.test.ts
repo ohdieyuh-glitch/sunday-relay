@@ -1059,6 +1059,79 @@ describe('R4: no secret in any response or log line', () => {
     clientPage(events.body, ASKED);
     clientResult(result.body, RUN);
   });
+
+  /*
+   * A PATH ON THE HOST THAT RAN THE MISSION (internal review M3; R4 forbids one in ANY body), in the shapes a
+   * run can carry: Windows (a drive, and a UNC share), POSIX and macOS. Each names a user and a directory of
+   * its own, so a body that kept ANY part of the directory is caught -- not only one that kept the path whole.
+   * /result cuts a path back to its file name (trimHostPaths), so a file name may remain there by design.
+   */
+  const HOST_PATHS = {
+    windows: 'C:\\Users\\winfounder\\hostdir-win\\deploy.env',
+    windowsShare: '\\\\fileserver\\hostdir-share\\plan.md',
+    posix: '/home/posixfounder/hostdir-posix/notes.md',
+    macos: '/Users/macfounder/hostdir-mac/keys.txt',
+  };
+  const HOST_PRIVATE = /winfounder|posixfounder|macfounder|fileserver|hostdir-(?:win|share|posix|mac)/u;
+
+  const hostPathLedger = (): Ledger => ({
+    gates: [{ gate_id: 'approval-1', task_id: 'task-build', operation: 'EXECUTE_PROCESS', reason_code: HOST_PATHS.posix, requested_at: AT }],
+    events: [
+      flatEvent(1, 'run.created', { missionId: 'mission:alpha' }),
+      flatEvent(2, 'run.transitioned', { to: 'EXECUTING', reasonCode: HOST_PATHS.windows, outcome: HOST_PATHS.macos }),
+      flatEvent(3, 'run.transitioned', { to: 'REVIEWING', reasonCode: 'BUILD_SUBMITTED', severity: HOST_PATHS.windowsShare, role: HOST_PATHS.posix }),
+    ],
+  });
+
+  const hostPathView: JuliusMissionResultView = {
+    ...VIEW,
+    state: 'FAILED', verified: false,
+    criteria: [{ ...VIEW.criteria[0], description: `Reads ${HOST_PATHS.macos}` }, VIEW.criteria[1]],
+    deliverables: [{ ...VIEW.deliverables[0], safeSummary: `Wrote ${HOST_PATHS.windows}`, artifactRef: HOST_PATHS.posix }],
+    outstandingFindings: [{ findingId: 'finding-1', taskId: 'task-build', claim: `Missing ${HOST_PATHS.windowsShare}`, severity: 'HIGH' }],
+    reviewDecisions: [{ taskId: 'task-build', action: 'HALT', reasonCode: HOST_PATHS.posix }],
+    failure: { reasonCode: HOST_PATHS.macos, failureClass: HOST_PATHS.windows },
+  };
+
+  it('hydrate, events and result carry no seeded HOST PATH -- Windows, POSIX and macOS -- and neither does any log line (review M3)', async () => {
+    const logged: string[] = [];
+    const bodies: Array<[string, string]> = [];
+    for (const route of ['hydrate', 'events', 'result'] as const) {
+      const { status, body } = await asClient(route, {
+        world: worldOver(ledgerPool(hostPathLedger()), OWNER, hostPathView),
+        log: (line) => logged.push(line),
+        onAuthorization: (decision) => logged.push(JSON.stringify(decision)),
+      });
+      expect(status, `${route}: ${body}`).toBe(200);
+      bodies.push([route, body]);
+    }
+    for (const [route, body] of bodies) {
+      expect(body, `${route} keeps part of a host path`).not.toMatch(HOST_PRIVATE);
+      for (const path of Object.values(HOST_PATHS)) {
+        // As JSON writes it, backslashes escaped: the form a body would hold it in.
+        expect(body.includes(JSON.stringify(path).slice(1, -1)), `${route} carries ${path}`).toBe(false);
+      }
+    }
+    for (const line of logged) expect(line, `a log line keeps part of a host path: ${line}`).not.toMatch(HOST_PRIVATE);
+  });
+
+  it('CONTROL: the host-path fields still cross -- an event\'s code beside a dropped path, /result\'s text cut back to the file name', async () => {
+    const events = await asClient('events', { world: worldOver(ledgerPool(hostPathLedger()), OWNER, hostPathView) });
+    const result = await asClient('result', { world: worldOver(ledgerPool(hostPathLedger()), OWNER, hostPathView) });
+    const deliveries = JSON.parse(events.body).data.deliveries as Array<{ envelope: { sequence: number; metadata: Record<string, unknown>; metadataDropped: number } }>;
+    const bySequence = new Map(deliveries.map((delivery) => [delivery.envelope.sequence, delivery.envelope]));
+    // seq 2: both paths dropped, and counted; the transition itself still crossed.
+    expect(bySequence.get(2)?.metadata).toEqual({ juliusEventType: 'run.transitioned', runId: RUN, juliusRunState: 'EXECUTING' });
+    expect(bySequence.get(2)?.metadataDropped).toBe(2);
+    // seq 3: the code crosses verbatim beside the two paths that did not.
+    expect(bySequence.get(3)?.metadata.reasonCode).toBe('BUILD_SUBMITTED');
+    expect(bySequence.get(3)?.metadataDropped).toBe(2);
+    const data = JSON.parse(result.body).data as { deliverables: Array<{ summary: string }>; failure: { reasonCode: string } };
+    expect(data.deliverables[0].summary).toBe('Wrote …/deploy.env');
+    expect(data.failure.reasonCode).toBe('…/keys.txt');
+    clientPage(events.body, ASKED);
+    clientResult(result.body, RUN);
+  });
 });
 
 /* ===================================================================== */

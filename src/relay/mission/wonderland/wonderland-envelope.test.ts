@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { JULIUS_DEFAULT_ROLES } from '../julius/julius-runtime';
 import {
+  WONDERLAND_CODE_METADATA_KEYS,
   WONDERLAND_ENVELOPE_FIELDS,
   WONDERLAND_ENVELOPE_SCHEMA_V1,
   WONDERLAND_ENVELOPE_VOCABULARIES,
@@ -12,6 +13,7 @@ import {
   wonderlandEnvelope,
   wonderlandWorkerRole,
 } from './wonderland-envelope';
+import { WONDERLAND_CARRIED_FACT_KEYS } from './wonderland-julius-normalizer';
 
 /**
  * THE ENVELOPE'S OWN TESTS.
@@ -170,6 +172,49 @@ describe('metadata sanitising', () => {
     expect(metadata).toEqual({ attempt: 2, kept: 'BUILD_SUBMITTED' });
     expect(dropped).toBe(4);
     expect(JSON.stringify(metadata)).not.toContain(key);
+  });
+
+  it('drops a HOST PATH under any key -- a drive, a UNC share, POSIX, macOS, a file URL -- the shapes /result trims (review M3, R4)', () => {
+    const { metadata, dropped } = sanitizeWonderlandMetadata({
+      windows: 'C:\\Users\\founder\\work\\deploy.env',
+      windowsForward: 'D:/builds/founder/out.log',
+      share: '\\\\fileserver\\share\\plan.md',
+      posix: '/home/founder/project/notes.md',
+      macos: '/Users/founder/Library/keys.txt',
+      url: 'file:///tmp/founder/trace.json',
+      relative: 'src/app.ts',
+      kept: 'BUILD_SUBMITTED',
+    });
+    // A RELATIVE path is the project's own and stays, exactly as /result keeps it.
+    expect(metadata).toEqual({ relative: 'src/app.ts', kept: 'BUILD_SUBMITTED' });
+    expect(dropped).toBe(6);
+    expect(JSON.stringify(metadata)).not.toContain('founder');
+    // Asked again and again, the same answer: a global RegExp's `test` would move its lastIndex between calls.
+    for (let round = 0; round < 3; round += 1) {
+      expect(sanitizeWonderlandMetadata({ p: '/home/founder/a.md', q: '/home/founder/b.md' }).dropped, `round ${round}`).toBe(2);
+    }
+  });
+
+  it('the CODE keys -- reasonCode, severity, outcome -- carry a code or nothing, and a drop is counted (review M3, R4)', () => {
+    // A code: the human gate's shape, in either case (the kernel writes EVIDENCE_FAILED and checkpoint_identity_required).
+    for (const code of ['PLAN_ACCEPTED', 'checkpoint_identity_required', 'HIGH', 'accepted', 'v1.2']) {
+      for (const key of WONDERLAND_CODE_METADATA_KEYS) {
+        expect(sanitizeWonderlandMetadata({ [key]: code }), `${key}=${code}`).toEqual({ metadata: { [key]: code }, dropped: 0 });
+      }
+    }
+    // Not a code: prose, a path of any kind, a URL, punctuation first, empty, too long, or not a string at all.
+    for (const notCode of ['build submitted', 'src/app.ts', 'a\\b', 'x:y', 'https://example.com', '-dash', '', 'X'.repeat(65), null, 7, true]) {
+      for (const key of WONDERLAND_CODE_METADATA_KEYS) {
+        expect(sanitizeWonderlandMetadata({ [key]: notCode }), `${key}=${String(notCode)}`).toEqual({ metadata: {}, dropped: 1 });
+      }
+    }
+    // CONTROL: the same values under a key that is NOT a code still cross -- the rule is the key's, not the value's.
+    expect(sanitizeWonderlandMetadata({ note: 'build submitted', ref: 'src/app.ts', n: 7, flag: true, none: null }).dropped).toBe(0);
+  });
+
+  it('the code keys are exactly the codes the Julius normalizer carries', () => {
+    expect([...WONDERLAND_CODE_METADATA_KEYS].sort()).toEqual(['outcome', 'reasonCode', 'severity']);
+    for (const key of WONDERLAND_CODE_METADATA_KEYS) expect(WONDERLAND_CARRIED_FACT_KEYS).toContain(key);
   });
 
   it('drops long strings, because prose is the payload this keeps out', () => {

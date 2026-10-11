@@ -58,6 +58,7 @@ import {
   redactBoundaryText,
 } from '../../integration/terminal/terminal-redaction';
 import { exactKeys } from './wonderland-contracts';
+import { WONDERLAND_HOST_PATH_PATTERNS } from './wonderland-host-paths';
 import { projectJuliusTaskState } from './wonderland-julius-task-state';
 
 export const WONDERLAND_JULIUS_RESULT_SCHEMA_V1 = 'relay-wonderland-julius-result.v1' as const;
@@ -233,16 +234,12 @@ export const WONDERLAND_JULIUS_RESULT_FIELDS = exactKeys<WonderlandJuliusResult>
 /* ------------------------------------------------------------ host paths */
 
 /**
- * A PATH ON THE HOST THAT RAN THE MISSION. `file://` URLs first, so one is cut
- * as a whole; then drive paths, UNC paths, and POSIX paths under a system or
- * home root. A RELATIVE path -- `src/app.ts` -- is the project's own and stays.
+ * A PATH ON THE HOST THAT RAN THE MISSION: `WONDERLAND_HOST_PATH_PATTERNS`
+ * (wonderland-host-paths.ts), the one definition the `/events` envelope screens
+ * with too (row 12, internal review M3). A RELATIVE path -- `src/app.ts` -- is the
+ * project's own and stays.
  */
-const HOST_PATH_PATTERNS: readonly RegExp[] = Object.freeze([
-  /\bfile:\/\/[^\s"'`<>]+/gi,
-  /\b[A-Za-z]:[\\/][^\s"'`<>|]*/g,
-  /\\\\[^\s\\"'`<>|]+\\[^\s"'`<>|]*/g,
-  /(?<![\w.~:/\\-])\/(?:home|Users|root|tmp|var|opt|srv|mnt|private|etc|usr|workspace|workspaces|data|run|Volumes)\/[^\s"'`<>]*/g,
-]);
+const HOST_PATH_PATTERNS: readonly RegExp[] = WONDERLAND_HOST_PATH_PATTERNS;
 
 /** Punctuation that ends a sentence rather than a path, kept after the cut. */
 const TRAILING_PUNCTUATION = /[.,;:!?)\]}]+$/u;
