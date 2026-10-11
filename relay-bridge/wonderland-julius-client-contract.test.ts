@@ -12,6 +12,7 @@ import { NATIVE_WORLD_AUDIENCE, createBrowserSessionStore } from './browser-sess
 import type { BrowserSessionStore } from './browser-session/grants';
 import { WonderlandJuliusReaderPostgres } from '../src/relay/persistence/wonderland-julius-reader-postgres';
 import type { JuliusMissionResultView } from '../src/relay/mission/julius/julius-runtime-api';
+import { WONDERLAND_USAGE_NOT_REPORTED_REASON } from '../src/relay/mission/wonderland/wonderland-usage-authority';
 
 /**
  * ROW 12, R6: THE BODIES ARE CHECKED AGAINST THE CLIENT'S DECODERS, NOT THE SERVER'S
@@ -21,23 +22,55 @@ import type { JuliusMissionResultView } from '../src/relay/mission/julius/julius
  * THE PORT BELOW IS THE CLIENT'S RULES, field for field, from CORE's final RC
  * (task3 6eb97308; its stream and decoder sources unchanged since 8327165b):
  *
- *   WonderlandJuliusStream.cpp   DataOf (l.103), SplitPage (l.199), ParseResult (l.231),
- *                                RunQuery (l.472), the result's run check (l.837)
+ *   WonderlandJuliusStream.cpp   LinkStateForFailure (l.66), DataOf (l.103), SplitPage (l.199),
+ *                                ParseResult (l.231), RunQuery (l.472), hydrate (l.684),
+ *                                events (l.738), result + its run check (l.824-853), Failed (l.1011)
  *   WonderlandWireDecode.cpp     the strict reader (l.61-311), FFieldReader (l.324-492),
  *                                envelope (l.563), activity (l.664), delivery (l.785),
  *                                usage (l.893-1032), hydration (l.1058-1547)
  *   WonderlandWireDecode.tables.cpp   every token a decoder accepts
  *   WonderlandJuliusSubsystem.cpp     AdoptHydration's identity rules (l.159-200)
  *
- * Where the engine is LENIENT (UE's FJsonObject getters coerce a number to a
- * string, for instance) the port is STRICT: a body the strict port accepts is a
- * body the client accepts. Where the engine is strict, the port is equally so,
- * and the controls below prove each rule refuses what the client refuses -- an
- * instrument that cannot fail proves nothing.
+ * TWO READERS, EACH PORTED AS IT IS (internal review a8349715, Part B):
+ *   - WonderlandWireDecode, which decodes the hydration and every delivery, is the
+ *     client's own STRICT reader: a duplicate key, a wrong type or an unknown token is
+ *     refused by name. The port is exactly as strict.
+ *   - DataOf, SplitPage and ParseResult read through Unreal's FJsonObject getters (UE
+ *     5.8, the client's EngineAssociation), which COERCE: any string is a bool
+ *     (FString::ToBool, never refused), a number or a bool is a string, any string is an
+ *     int32 / int64 (LexFromString, never refused). The port reads through the same
+ *     getters (`ue`, below), and a field the client reads with a TryGet... whose failure
+ *     it ignores is never a refusal here either. Until the review this half of the port
+ *     was STRICT, and its controls "refused" bodies the client accepts (`verified:'true'`,
+ *     a failure without its reasonCode, review fields of another type, a numeric
+ *     evidenceId). Those are now acceptance tests, and every control below refuses only
+ *     what the client refuses -- an instrument that cannot fail proves nothing, and one
+ *     that fails where the client does not proves the wrong thing.
  *
- * The Unreal decoder itself cannot run on this machine's test runner; the
- * golden bodies in R5 are the captured bodies a WonderlandWireDecode unit run
- * would be given.
+ * KNOWN DIVERGENCES (the review's NOTEs; no body these routes send reaches one):
+ *   - AdoptHydration also refuses a hydration OLDER than the one the world already holds
+ *     (WonderlandJuliusSubsystem.cpp:196). That rule needs held state, which a port of a
+ *     single read does not have: clientHydrate checks the identities only.
+ *   - Number limits: the C++ reader converts with std::stod, which under MSVC throws
+ *     out_of_range on 1e400 -- the C++ reports out_of_range where this port reports
+ *     number_not_finite -- and ALSO on 1e-400, which this port accepts (as 0). The server
+ *     emits neither.
+ *   - UnwrapData (JS:194-197) and SplitPage hand the strict reader UE's OWN condensed
+ *     re-serialisation of the parsed object; this port re-serialises with JSON.stringify.
+ *     Neither this port nor the offline C++ run exercises UE's writer (its number
+ *     formatting, its escaping), so a difference there would not show here.
+ *
+ * THE CLIENT'S OWN DECODER, RUN OFFLINE. WonderlandWireDecode (6eb97308, built with MSVC
+ * at /Od and /O2 against the offline harness's syntax stubs) was run on these routes'
+ * captured hydrate and delivery bodies, beside task3's own canonical cases: 331 checks,
+ * 0 failures, the two builds' outputs identical. The harness, its inputs and its outputs,
+ * with a sha256 manifest, are in the QA handoff (julius_readiness/row12/
+ * client-decoder-evidence). ParseResult needs UE's Json module (FJsonObject), which that
+ * harness does not have: the RESULT body has been decoded by this port only, never by
+ * the C++.
+ *
+ * THE GOLDENS (R5) are NOT captured output: each route's expected body is derived here,
+ * field by field, from the fixture and the contract (internal review A6).
  */
 
 /* ===================================================================== */
@@ -574,12 +607,63 @@ function clientHydrate(body: string, asked: { readonly projectId: string; readon
   return hydration;
 }
 
+/**
+ * UNREAL'S FJsonObject GETTERS, as UE 5.8 implements them (Engine/Source/Runtime/Json:
+ * Private/Dom/JsonObject.cpp TryGet*Field = the field exists AND its value's TryGet*;
+ * Private/Dom/JsonValue.cpp and Public/Dom/JsonValue.h for each value kind). DataOf,
+ * SplitPage and ParseResult read through these, so the port does too. `undefined` is the
+ * getter answering false. JSON.parse keeps the LAST of two equal keys, as FJsonObject's
+ * SetField does.
+ *   string   a string -> itself; a number -> FString::SanitizeFloat(n, 0); a bool -> "true" / "false"
+ *   bool     a bool -> itself; a number -> n != 0; ANY string -> FString::ToBool(), never refused
+ *   int32 / int64   a number or a bool -> the double, if within the type's range, rounded half away
+ *            from zero (TryConvertNumber); ANY string -> LexFromString, never refused
+ *   array / object  only an array / only an object
+ * null answers false to every getter (FJsonValueNull overrides none of them), and an array or an
+ * object answers false to the scalar ones. Only acceptance is modelled exactly: a coerced value the
+ * port does not report (a cost figure, a coerced flag's truth) is not computed the engine's way.
+ */
+const ue = {
+  string(value: unknown): string | undefined {
+    if (typeof value === 'string') return value;
+    // SanitizeFloat's exact spelling is not modelled; a number never spells a run id (every one holds a colon).
+    if (typeof value === 'number') return String(value);
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    return undefined;
+  },
+  bool(value: unknown): boolean | undefined {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    // FString::ToBool: "true" / "yes" / "on" in any case, else a non-zero leading integer. ALWAYS read.
+    if (typeof value === 'string') return /^(?:true|yes|on)$/iu.test(value) || (Number.parseInt(value, 10) || 0) !== 0;
+    return undefined;
+  },
+  integer(value: unknown, bits: 32 | 64): number | undefined {
+    // LexFromString: whatever leading integer the text has, 0 if none -- and the getter answers TRUE either way.
+    if (typeof value === 'string') return Number.parseInt(value, 10) || 0;
+    const double = typeof value === 'number' ? value : typeof value === 'boolean' ? (value ? 1 : 0) : undefined;
+    if (double === undefined) return undefined;
+    const inRange = bits === 32 ? double >= -2_147_483_648 && double <= 2_147_483_647 : double >= -(2 ** 63) && double < 2 ** 63;
+    return inRange ? Math.sign(double) * Math.round(Math.abs(double)) : undefined;
+  },
+  array(value: unknown): readonly unknown[] | undefined {
+    return Array.isArray(value) ? value : undefined;
+  },
+  object(value: unknown): Record<string, unknown> | undefined {
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  },
+};
+
 /** The events leg: SplitPage, then every delivery through the strict decoder (the first refusal stops the page). */
 function clientPage(body: string, asked: { readonly projectId: string; readonly runId: string }) {
   const data = dataOf(body);
-  if (!Array.isArray(data.deliveries)) throw new Refused('missing_field', 'deliveries');
-  if (typeof data.nextCursor !== 'number' || !Number.isSafeInteger(data.nextCursor)) throw new Refused('missing_field', 'nextCursor');
-  const deliveries = (data.deliveries as unknown[]).map((delivery) => {
+  // TryGetArrayField, then TryGetNumberField into an int64 (JS:206-210). The cursor is read and then IGNORED
+  // (JS:790): the world resumes from its own applied cursor.
+  const list = ue.array(data.deliveries);
+  if (list === undefined) throw new Refused('missing_field', 'deliveries');
+  const nextCursor = ue.integer(data.nextCursor, 64);
+  if (nextCursor === undefined) throw new Refused('missing_field', 'nextCursor');
+  const deliveries = list.map((delivery) => {
     if (delivery === null || typeof delivery !== 'object' || Array.isArray(delivery)) throw new Refused('not_object', 'delivery');
     const decoded = decodeDelivery(JSON.stringify(delivery));
     // The subsystem applies only its own project's envelopes; a foreign one is refused there.
@@ -587,61 +671,122 @@ function clientPage(body: string, asked: { readonly projectId: string; readonly 
     if (decoded.envelope.runId !== null && decoded.envelope.runId !== asked.runId) throw new Refused('foreign_run', 'apply');
     return decoded;
   });
-  return { deliveries, nextCursor: data.nextCursor as number };
+  return { deliveries, nextCursor };
 }
 
-/** ParseResult, strict where the engine coerces, plus the run check (JS:837). */
+/**
+ * ParseResult (JS:231-311), line for line through UE's getters, plus the run check (JS:837).
+ * REQUIRED (a getter answering false refuses the result whole): schemaVersion (then compared
+ * exactly), a non-empty runId, juliusState, verified, terminal, the criteria / deliverables /
+ * openFindings arrays, the cost object and its `visible`; each criterion an object with
+ * `satisfied`, each deliverable an object with `evidenceId`; and -- only when the cost is
+ * visible -- knownUsdMicros (int64), unknownComponents (int32) and complete.
+ * READ, NEVER REFUSED (JS:262, :285-298, :307-308: the getter's answer is ignored): taskState,
+ * review {verdict, repairRounds, reReviewedAfterRepair} and failure {reasonCode, failureClass}
+ * -- each read only when its object IS an object -- tokens and withheldDetails.
+ */
 function clientResult(body: string, askedRunId: string) {
   const data = dataOf(body);
-  const isObject = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
-  const need = (ok: boolean, name: string) => { if (!ok) throw new Refused('refused', name); };
-  need(data.schemaVersion === RESULT_SCHEMA, 'schemaVersion');
-  need(typeof data.runId === 'string' && data.runId !== '', 'runId');
-  need(typeof data.juliusState === 'string', 'juliusState');
-  need(typeof data.verified === 'boolean', 'verified');
-  need(typeof data.terminal === 'boolean', 'terminal');
-  need(Array.isArray(data.criteria), 'criteria');
-  need(Array.isArray(data.deliverables), 'deliverables');
-  need(Array.isArray(data.openFindings), 'openFindings');
-  need(isObject(data.cost) && typeof data.cost.visible === 'boolean', 'cost');
-  need(data.taskState === undefined || data.taskState === null || typeof data.taskState === 'string', 'taskState');
-  for (const criterion of data.criteria as unknown[]) need(isObject(criterion) && typeof criterion.satisfied === 'boolean', 'criteria.satisfied');
-  for (const deliverable of data.deliverables as unknown[]) need(isObject(deliverable) && typeof deliverable.evidenceId === 'string', 'deliverables.evidenceId');
-  if (data.review !== undefined && data.review !== null) {
-    const review = data.review;
-    need(isObject(review), 'review');
-    if (isObject(review)) {
-      need(review.verdict === undefined || review.verdict === null || typeof review.verdict === 'string', 'review.verdict');
-      need(review.repairRounds === undefined || typeof review.repairRounds === 'number', 'review.repairRounds');
-      need(review.reReviewedAfterRepair === undefined || typeof review.reReviewedAfterRepair === 'boolean', 'review.reReviewedAfterRepair');
-    }
-  }
-  if (data.failure !== undefined && data.failure !== null) {
-    const failure = data.failure;
-    need(isObject(failure), 'failure');
-    if (isObject(failure)) {
-      need(typeof failure.reasonCode === 'string', 'failure.reasonCode');
-      need(failure.failureClass === undefined || failure.failureClass === null || typeof failure.failureClass === 'string', 'failure.failureClass');
-    }
-  }
-  const cost = data.cost as Record<string, unknown>;
-  if (cost.visible === true) {
-    need(typeof cost.knownUsdMicros === 'number', 'cost.knownUsdMicros');
-    need(typeof cost.unknownComponents === 'number', 'cost.unknownComponents');
-    need(typeof cost.complete === 'boolean', 'cost.complete');
-  }
-  need(data.tokens === undefined || typeof data.tokens === 'string', 'tokens');
-  need(data.withheldDetails === undefined || typeof data.withheldDetails === 'number', 'withheldDetails');
-  // A result for another run is not this one's (JS:837).
-  need(data.runId === askedRunId, 'runId (asked)');
-  return {
-    runId: data.runId as string,
-    criteriaMet: (data.criteria as Array<{ satisfied: boolean }>).filter((criterion) => criterion.satisfied).length,
-    criteriaTotal: (data.criteria as unknown[]).length,
-    deliverableIds: (data.deliverables as Array<{ evidenceId: string }>).map((deliverable) => deliverable.evidenceId),
-    openFindings: (data.openFindings as unknown[]).length,
-    costVisible: cost.visible === true,
+  const need = <T>(value: T | undefined, name: string): T => {
+    if (value === undefined) throw new Refused('refused', name);
+    return value;
   };
+  const schema = need(ue.string(data.schemaVersion), 'schemaVersion');
+  if (schema !== RESULT_SCHEMA) throw new Refused('refused', 'schemaVersion');
+  const runId = need(ue.string(data.runId), 'runId');
+  if (runId === '') throw new Refused('refused', 'runId');
+  const juliusState = need(ue.string(data.juliusState), 'juliusState');
+  const verified = need(ue.bool(data.verified), 'verified');
+  const terminal = need(ue.bool(data.terminal), 'terminal');
+  const criteria = need(ue.array(data.criteria), 'criteria');
+  const deliverables = need(ue.array(data.deliverables), 'deliverables');
+  const findings = need(ue.array(data.openFindings), 'openFindings');
+  const cost = need(ue.object(data.cost), 'cost');
+  const costVisible = need(ue.bool(cost.visible), 'cost');
+  // "A null taskState is no mapping, and stays empty" -- and so does any value the getter cannot read.
+  const taskState = ue.string(data.taskState) ?? '';
+  const satisfied = criteria.map((criterion) => need(ue.bool(ue.object(criterion)?.satisfied), 'criteria.satisfied'));
+  const deliverableIds = deliverables.map((deliverable) => need(ue.string(ue.object(deliverable)?.evidenceId), 'deliverables.evidenceId'));
+  const review = ue.object(data.review);
+  const failure = ue.object(data.failure);
+  if (costVisible) {
+    need(ue.integer(cost.knownUsdMicros, 64), 'cost.knownUsdMicros');
+    need(ue.integer(cost.unknownComponents, 32), 'cost.unknownComponents');
+    need(ue.bool(cost.complete), 'cost.complete');
+  }
+  // A result for another run is not this one's: JS:837 reads it as a failure to read the result.
+  if (runId !== askedRunId) throw new Refused('refused', 'runId (asked)');
+  return {
+    runId,
+    juliusState,
+    verified,
+    terminal,
+    taskState,
+    criteriaMet: satisfied.filter(Boolean).length,
+    criteriaTotal: satisfied.length,
+    deliverableIds,
+    openFindings: findings.length,
+    costVisible,
+    verdict: ue.string(review?.verdict) ?? '',
+    failureReason: ue.string(failure?.reasonCode) ?? '',
+    tokens: ue.string(data.tokens) ?? '',
+  };
+}
+
+/* ------------------------------------------------- the link the world shows */
+
+/** EWonderlandLinkState, as far as a route's answer can move it. */
+type ClientLinkState = 'Live' | 'SessionExpired' | 'Refused' | 'Stale';
+
+/** WonderlandJuliusStreamLogic::LinkStateForFailure (JS:66-80), verbatim. */
+function linkStateForFailure(httpStatus: number, connected: boolean): ClientLinkState {
+  if (!connected) return 'Stale';
+  if (httpStatus === 401) return 'SessionExpired';
+  if (httpStatus === 403 || httpStatus === 404) return 'Refused';
+  return 'Stale';
+}
+
+/**
+ * What the world does with one answer to its hydrate or events read (JS:684-721, :738-793):
+ * a 200 that decodes is Live; anything else goes through Failed (JS:1011-1031), which takes
+ * LinkStateForFailure's state, invalidates the session token on SessionExpired (JS:1015-1018)
+ * and hydrates again after a backoff. A 200 the decoder -- or, for a hydration, AdoptHydration
+ * -- refuses is Failed(200): Stale. A DECODED delivery of another project or run is not a
+ * failure: ApplyEnvelope refuses that one envelope by the subsystem's own rule and the page
+ * still ends Live (JS:772-793).
+ */
+function clientFollowLeg(route: 'hydrate' | 'events', status: number, body: string, asked: { readonly projectId: string; readonly runId: string }) {
+  const failed = (httpStatus: number) => {
+    const link = linkStateForFailure(httpStatus, true);
+    return { link, tokenInvalidated: link === 'SessionExpired', rehydrates: true };
+  };
+  if (status !== 200) return failed(status);
+  try {
+    if (route === 'hydrate') clientHydrate(body, asked);
+    else clientPage(body, asked);
+  } catch (error) {
+    if (!(error instanceof Refused)) throw error;
+    if (!(route === 'events' && error.field === 'apply')) return failed(status);
+  }
+  return { link: 'Live' as ClientLinkState, tokenInvalidated: false, rehydrates: false };
+}
+
+/**
+ * What the world does with one answer to its result read (JS:824-853): "NOT A LINK FAILURE".
+ * Whatever the status, the link is left alone; a body that is not a 200 ParseResult reads for
+ * the asked run is counted and asked for again after a backoff, and only a good one is adopted.
+ */
+function clientResultLeg(status: number, body: string, askedRunId: string) {
+  let adopted = false;
+  if (status === 200) {
+    try {
+      clientResult(body, askedRunId);
+      adopted = true;
+    } catch (error) {
+      if (!(error instanceof Refused)) throw error;
+    }
+  }
+  return { linkChanged: false, tokenInvalidated: false, adopted, retriesAfterBackoff: !adopted };
 }
 
 /* ===================================================================== */
@@ -675,6 +820,18 @@ const DEFAULT_EVENTS = [
   flatEvent(4, 'run.transitioned', { to: 'REVIEWING', reasonCode: 'BUILD_SUBMITTED', outcome: 'accepted' }),
 ];
 
+/** The run's latest Project Brain context snapshot, as the reader's statement returns it. */
+const SNAPSHOT_ROW = {
+  task_id: 'task-plan', project_brain_revision: '3', content_hash: 'sha256:0f9e8d7c', character_count: '2048', redaction_count: '1',
+  truncated: false, created_at: AT, kinds: ['DECISION', 'CONSTRAINT', 'RESEARCH_NOTE'],
+} as const;
+
+/** The run row the hydration reads (its `at_sequence`, `pending_approvals` and `open_gates` come from the ledger). */
+const RUN_ROW = { state: 'REVIEWING', version: '9', mission_id: 'mission:alpha', card_revision: 'card:alpha:2', active_tasks: '1', observed_at: AT } as const;
+
+/** The ledger revision every page row carries (the run's version, read in the page's own statement). */
+const PAGE_REVISION = '9';
+
 /** A pg pool answering the reader's statements with rows shaped as `pg` returns them. */
 function ledgerPool(ledger: Ledger = {}): Pool {
   const events = ledger.events ?? DEFAULT_EVENTS;
@@ -683,23 +840,20 @@ function ledgerPool(ledger: Ledger = {}): Pool {
     query: async (sql: string, values: readonly unknown[] = []) => {
       const ours = values[0] === RUN && values[1] === PROJECT;
       if (sql.includes('julius_context_snapshots')) {
-        return { rows: ours ? [{
-          task_id: 'task-plan', project_brain_revision: '3', content_hash: 'sha256:0f9e8d7c', character_count: '2048', redaction_count: '1',
-          truncated: false, created_at: AT, kinds: ['DECISION', 'CONSTRAINT', 'RESEARCH_NOTE'],
-        }] : [] };
+        return { rows: ours ? [{ ...SNAPSHOT_ROW, kinds: [...SNAPSHOT_ROW.kinds] }] : [] };
       }
       if (sql.includes('LEFT JOIN LATERAL')) {
         if (!ours) return { rows: [] };
         const after = Number(values[2]);
         const page = events.filter((event) => Number(event.sequence) > after).slice(0, Number(values[3]));
-        return { rows: page.length > 0 ? page.map((event) => ({ revision: '9', ...event }))
-          : [{ revision: '9', event_id: null, stream_id: null, project_id: null, sequence: null, event_type: null, payload: null, occurred_at: null }] };
+        return { rows: page.length > 0 ? page.map((event) => ({ revision: PAGE_REVISION, ...event }))
+          : [{ revision: PAGE_REVISION, event_id: null, stream_id: null, project_id: null, sequence: null, event_type: null, payload: null, occurred_at: null }] };
       }
       if (sql.includes('AS at_sequence')) {
         return { rows: ours ? [{
-          state: 'REVIEWING', version: '9', mission_id: 'mission:alpha', card_revision: 'card:alpha:2',
-          at_sequence: String(atSequence), active_tasks: '1', pending_approvals: String((ledger.gates ?? []).length),
-          open_gates: (ledger.gates ?? []).length === 0 ? null : ledger.gates, observed_at: AT,
+          ...RUN_ROW,
+          at_sequence: String(atSequence), pending_approvals: String((ledger.gates ?? []).length),
+          open_gates: (ledger.gates ?? []).length === 0 ? null : ledger.gates,
         }] : [] };
       }
       if (sql.includes('sequence<=$3')) {
@@ -866,12 +1020,71 @@ describe('the ported client decoders can fail (controls)', () => {
     };
     expect(broken((d) => { d.schemaVersion = 'relay-wonderland-julius-result.v2'; })).toBe('refused at schemaVersion');
     expect(broken(() => undefined, 'run:asked-for-another')).toBe('refused at runId (asked)');
+    expect(broken((d) => { d.runId = ''; })).toBe('refused at runId');
     expect(broken((d) => { delete d.cost.knownUsdMicros; })).toBe('refused at cost.knownUsdMicros');
+    expect(broken((d) => { d.cost.knownUsdMicros = 1e20; })).toBe('refused at cost.knownUsdMicros'); // past int64
+    expect(broken((d) => { d.cost.unknownComponents = 3e9; })).toBe('refused at cost.unknownComponents'); // past int32
+    expect(broken((d) => { d.cost.complete = null; })).toBe('refused at cost.complete');
     expect(broken((d) => { delete d.criteria[0].satisfied; })).toBe('refused at criteria.satisfied');
-    expect(broken((d) => { d.deliverables[0].evidenceId = 7; })).toBe('refused at deliverables.evidenceId');
-    expect(broken((d) => { d.verified = 'true'; })).toBe('refused at verified');
+    expect(broken((d) => { d.criteria[0].satisfied = {}; })).toBe('refused at criteria.satisfied');
+    expect(broken((d) => { d.criteria[1] = 'met'; })).toBe('refused at criteria.satisfied');
+    // A JSON null, an array or an object is what UE's getters refuse; a number or a bool would be READ as a string.
+    expect(broken((d) => { d.deliverables[0].evidenceId = null; })).toBe('refused at deliverables.evidenceId');
+    expect(broken((d) => { d.deliverables[0].evidenceId = ['evidence-diff-1']; })).toBe('refused at deliverables.evidenceId');
+    // A bool field refuses null, an array and an object -- never a string (see the acceptance test below).
+    expect(broken((d) => { d.verified = null; })).toBe('refused at verified');
+    expect(broken((d) => { d.terminal = []; })).toBe('refused at terminal');
+    expect(broken((d) => { d.juliusState = null; })).toBe('refused at juliusState');
     expect(broken((d) => { delete d.openFindings; })).toBe('refused at openFindings');
+    expect(broken((d) => { d.openFindings = {}; })).toBe('refused at openFindings');
+    expect(broken((d) => { d.cost = [d.cost]; })).toBe('refused at cost');
+    expect(broken((d) => { d.cost.visible = null; })).toBe('refused at cost');
     expect(refusalOf(() => clientResult(JSON.stringify(body.data), RUN))).toBe('missing_field at data');
+  });
+
+  it('a result is ACCEPTED where UE\'s getters coerce or the client ignores the field -- as the client accepts it (review Part B)', async () => {
+    // Each of these was "refused" by the port before the review; the client reads every one of them.
+    const body = JSON.parse((await asClient('result', { world: worldOver(ledgerPool()) })).body);
+    const read = (change: (data: Record<string, any>) => void) => {
+      const copy = JSON.parse(JSON.stringify(body));
+      change(copy.data);
+      return clientResult(JSON.stringify(copy), RUN);
+    };
+    // THE THREE OVER-STRICT CASES: a bool as a string (FString::ToBool, never refused) ...
+    expect(read((d) => { d.verified = 'true'; }).verified).toBe(true);
+    expect(read((d) => { d.verified = 'FALSE'; }).verified).toBe(false);
+    expect(read((d) => { d.terminal = 'not a bool at all'; }).terminal).toBe(false);
+    // ... a failure without its reasonCode -- or one that is not even an object -- is read, never refused (JS:293-298) ...
+    expect(read((d) => { d.failure = { failureClass: 'PROVIDER' }; }).failureReason).toBe('');
+    expect(read((d) => { d.failure = { reasonCode: 7 }; }).failureReason).toBe('7');
+    expect(read((d) => { d.failure = 'it failed'; }).failureReason).toBe('');
+    // ... and the review's fields of another type are skipped one by one (JS:285-291).
+    expect(read((d) => { d.review = { verdict: null, repairRounds: 'two', reReviewedAfterRepair: [] }; }).verdict).toBe('');
+    expect(read((d) => { d.review = ['ACCEPT']; }).verdict).toBe('');
+    // The rest of the coercions the client makes, on the required fields and the optional ones.
+    expect(read((d) => { d.deliverables[0].evidenceId = 7; }).deliverableIds).toEqual(['7', 'evidence-test-1']);
+    expect(read((d) => { d.criteria[0].satisfied = 0; }).criteriaMet).toBe(1);
+    expect(read((d) => { d.juliusState = 5; }).juliusState).toBe('5');
+    expect(read((d) => { d.cost.knownUsdMicros = 'eighty'; d.cost.unknownComponents = true; d.cost.complete = 1; }).costVisible).toBe(true);
+    expect(read((d) => { d.cost.visible = 'no'; delete d.cost.knownUsdMicros; }).costVisible).toBe(false);
+    expect(read((d) => { d.taskState = { state: 'Completed' }; }).taskState).toBe('');
+    expect(read((d) => { d.taskState = null; }).taskState).toBe('');
+    expect(read((d) => { d.tokens = 12; d.withheldDetails = 'some'; }).tokens).toBe('12');
+    expect(read((d) => { d.extra = { anything: [1, 2] }; }).runId).toBe(RUN);
+  });
+
+  it('a page is ACCEPTED with a cursor UE reads as an int64 -- a string, a bool, a fraction it rounds (review Part B)', async () => {
+    const page = JSON.parse((await asClient('events', { world: worldOver(ledgerPool()) })).body);
+    const cursor = (nextCursor: unknown) => clientPage(JSON.stringify({ data: { ...page.data, nextCursor } }), ASKED).nextCursor;
+    expect(cursor('4')).toBe(4);
+    expect(cursor('not a number')).toBe(0);
+    expect(cursor(true)).toBe(1);
+    expect(cursor(3.5)).toBe(4);
+    expect(cursor(-3.5)).toBe(-4);
+    // What UE refuses: null, an object, an array, and a double at or past 2^63.
+    for (const refused of [null, {}, [4], 2 ** 63]) {
+      expect(() => cursor(refused), JSON.stringify(refused)).toThrow(/missing_field at nextCursor/u);
+    }
   });
 });
 
@@ -916,7 +1129,9 @@ describe('R6: every route\'s body decodes by the client\'s rules', () => {
     const { status, body } = await asClient('result', { world: worldOver(ledgerPool()) });
     expect(status).toBe(200);
     expect(clientResult(body, RUN)).toEqual({
-      runId: RUN, criteriaMet: 2, criteriaTotal: 2, deliverableIds: ['evidence-diff-1', 'evidence-test-1'], openFindings: 0, costVisible: true,
+      runId: RUN, juliusState: 'COMPLETED', verified: true, terminal: true, taskState: 'Completed',
+      criteriaMet: 2, criteriaTotal: 2, deliverableIds: ['evidence-diff-1', 'evidence-test-1'], openFindings: 0, costVisible: true,
+      verdict: 'ACCEPT', failureReason: '', tokens: 'UNKNOWN',
     });
   });
 
@@ -1135,463 +1350,356 @@ describe('R4: no secret in any response or log line', () => {
 });
 
 /* ===================================================================== */
-/*  R5: GOLDEN BODIES -- the exact bytes each route answers for one fixed  */
-/*  run (the caller's random session id normalised to `world-session`).   */
-/*  These are also the captured bodies the client's own decoder was run   */
-/*  on (WonderlandWireDecode, task3 6eb97308, built offline).              */
+/*  R5: GOLDEN BODIES, DERIVED. Each route's expected body is built here, */
+/*  field by field, from the FIXTURE above and the CONTRACT -- never      */
+/*  captured from the route (internal review A6: a captured golden passes */
+/*  any wrong body that is stable). The caller's random session id is     */
+/*  normalised to `world-session`, as `asClient` does.                    */
 /* ===================================================================== */
 
 const GOLDEN_GATES = [{ gate_id: 'approval-1', task_id: 'task-build', operation: 'EXECUTE_PROCESS', reason_code: 'CARD_APPROVAL_REQUIRED', requested_at: AT }];
+const WORLD_SESSION = 'world-session';
+type FixtureEvent = ReturnType<typeof flatEvent>;
 
-const GOLDEN_HYDRATE = `{
-  "data": {
-    "schemaVersion": "relay-wonderland-hydration.v1",
-    "projectId": "project-alpha",
-    "worldSessionId": "world-session",
-    "run": {
-      "schemaVersion": "relay-wonderland-snapshot.v1",
-      "projectId": "project-alpha",
-      "juliusInstanceId": null,
-      "runId": "run:0a1b2c3d",
-      "missionId": "mission:alpha",
-      "state": "REVIEWING",
-      "revision": 9,
-      "atSequence": 4,
-      "observedAtIso": "2026-10-07T12:00:00.000Z",
-      "activeTasks": 1,
-      "pendingApprovals": 1
-    },
-    "visualState": "independent_review",
-    "terminal": false,
-    "usage": {
-      "schemaVersion": "relay-wonderland-usage.v1",
-      "anchor": "top_left",
-      "compoundAgent": {
-        "schemaVersion": "relay-wonderland-usage.v1",
-        "channel": "compound_agent",
-        "tierId": null,
-        "tierLabel": null,
-        "unitLabel": null,
-        "capacityUnits": {
-          "known": false,
-          "value": null,
-          "reason": "not_observed"
-        },
-        "usedUnits": {
-          "known": false,
-          "value": null,
-          "reason": "not_observed"
-        },
-        "remainingUnits": {
-          "known": false,
-          "value": null,
-          "reason": "not_observed"
-        },
-        "referenceCapacityUnits": {
-          "known": false,
-          "value": null,
-          "reason": "not_observed"
-        },
-        "capacitySpan": {
-          "known": false,
-          "value": null,
-          "reason": "unknown_denominator"
-        },
-        "fillFraction": {
-          "known": false,
-          "value": null,
-          "reason": "unknown_denominator"
-        },
-        "remainingFraction": {
-          "known": false,
-          "value": null,
-          "reason": "unknown_denominator"
-        },
-        "status": "unavailable",
-        "unavailableReason": "No usage authority has reported capacity for this world yet.",
-        "provenance": "simulated",
-        "simulated": true,
-        "anchor": "top_left",
-        "observedAtIso": "2026-10-07T12:00:00.000Z"
-      },
-      "singleAgent": {
-        "schemaVersion": "relay-wonderland-usage.v1",
-        "channel": "single_agent",
-        "tierId": null,
-        "tierLabel": null,
-        "unitLabel": null,
-        "capacityUnits": {
-          "known": false,
-          "value": null,
-          "reason": "not_observed"
-        },
-        "usedUnits": {
-          "known": false,
-          "value": null,
-          "reason": "not_observed"
-        },
-        "remainingUnits": {
-          "known": false,
-          "value": null,
-          "reason": "not_observed"
-        },
-        "referenceCapacityUnits": {
-          "known": false,
-          "value": null,
-          "reason": "not_observed"
-        },
-        "capacitySpan": {
-          "known": false,
-          "value": null,
-          "reason": "unknown_denominator"
-        },
-        "fillFraction": {
-          "known": false,
-          "value": null,
-          "reason": "unknown_denominator"
-        },
-        "remainingFraction": {
-          "known": false,
-          "value": null,
-          "reason": "unknown_denominator"
-        },
-        "status": "unavailable",
-        "unavailableReason": "No usage authority has reported capacity for this world yet.",
-        "provenance": "simulated",
-        "simulated": true,
-        "anchor": "top_left",
-        "observedAtIso": "2026-10-07T12:00:00.000Z"
-      },
-      "observedAtIso": "2026-10-07T12:00:00.000Z"
-    },
-    "usageStatus": {
-      "reading": "not_reported",
-      "reason": "No usage authority has reported capacity for this world yet.",
-      "ageSeconds": null,
-      "revision": 0,
-      "authorityId": null,
-      "foreignProjectReportsRejected": 0,
-      "staleRevisionsRejected": 0,
-      "malformedReportsRejected": 0
-    },
-    "activity": {
-      "schemaVersion": "relay-wonderland-activity.v1",
-      "projectId": "project-alpha",
-      "runId": "run:0a1b2c3d",
-      "signals": [],
-      "workers": [
-        {
-          "workerId": "worker-coder",
-          "signals": []
-        }
-      ],
-      "activeSubagents": 0,
-      "subagentsDenied": 0,
-      "observedAtIso": "2026-10-07T12:00:00.000Z",
-      "unusedEvents": 3,
-      "foreignEvents": 0
-    },
-    "brain": {
-      "schemaVersion": "relay-wonderland-brain.v1",
-      "projectId": "project-alpha",
-      "runId": "run:0a1b2c3d",
-      "taskId": "task-plan",
-      "brainRevision": 3,
-      "entryCount": 3,
-      "kindCounts": {
-        "OBJECTIVE": 0,
-        "REQUIREMENT": 0,
-        "CONSTRAINT": 1,
-        "DECISION": 1,
-        "FINDING": 0,
-        "REPAIR": 0,
-        "HANDOFF": 0,
-        "ARTIFACT": 0,
-        "EVIDENCE": 0
-      },
-      "characterCount": 2048,
-      "redactionCount": 1,
-      "truncated": false,
-      "contentHash": "sha256:0f9e8d7c",
-      "observedAtIso": "2026-10-07T12:00:00.000Z"
-    },
-    "card": {
-      "cardRevision": "card:alpha:2",
-      "hasPromptArchitect": null,
-      "hasCodingAgent": null,
-      "hasIndependentReviewer": null,
-      "swarmEligible": null,
-      "eligibleSwarmRoles": [],
-      "autonomy": null
-    },
-    "humanGates": [
-      {
-        "schemaVersion": "relay-wonderland-human-gate.v1",
-        "projectId": "project-alpha",
-        "runId": "run:0a1b2c3d",
-        "gateId": "approval-1",
-        "taskId": "task-build",
-        "operation": "EXECUTE_PROCESS",
-        "reasonCode": "CARD_APPROVAL_REQUIRED",
-        "requestedAtIso": "2026-10-07T12:00:00.000Z"
-      }
-    ],
-    "observedAtIso": "2026-10-07T12:00:00.000Z"
+/*
+ * HOW EACH FIXTURE EVENT MOVES A WORLD, by the documented tables -- stated here, not computed by them:
+ *   - its drawable state (wonderland-julius-state.ts): a kernel event that names a run state (`to`) is
+ *     drawn from it -- source julius_run_state, EXECUTING -> coding, REVIEWING -> independent_review;
+ *     `run.created` names none, so it is drawn from its world event type, mission.created -> attention
+ *     (source event_type). `worker.dispatched` has NO world event type: it is SILENT -- no delivery, one
+ *     `silent` in the page's summary (wonderland-julius-normalizer.ts, wonderland-ingress.ts).
+ *   - the activity (wonderland-julius-activity.ts, JULIUS_ACTIVITY_RULES): `worker.dispatched` clears
+ *     retrying, switching_worker and retrieving_context, so it MOVES the fold -- its worker is registered,
+ *     with no signal raised, and it stamps observedAtIso; `run.created` and `run.transitioned` raise and
+ *     clear nothing, so each counts as an unused event. Nothing here raises a signal or names a subagent.
+ */
+const RUN_STATE_DRAWN: Readonly<Record<string, string>> = { EXECUTING: 'coding', REVIEWING: 'independent_review' };
+const EVENT_TYPE_DRAWN: Readonly<Record<string, string>> = { 'mission.created': 'attention' };
+const WORLD_EVENT_TYPE: Readonly<Record<string, string | null>> = { 'run.created': 'mission.created', 'run.transitioned': 'mission.stage_changed', 'worker.dispatched': null };
+const MOVES_ACTIVITY: ReadonlySet<string> = new Set(['worker.dispatched']);
+/** The kernel facts a world event carries (WONDERLAND_CARRIED_FACT_KEYS), each a code in this fixture. */
+const CARRIED_FACTS = ['reasonCode', 'severity', 'outcome', 'role', 'attempt'] as const;
+
+function drawn(event: FixtureEvent): { state: string; stateSource: string; sourceState: string } | null {
+  if (WORLD_EVENT_TYPE[event.payload.type] === null) return null;
+  const to = event.payload.facts.to;
+  if (typeof to === 'string') return { state: RUN_STATE_DRAWN[to], stateSource: 'julius_run_state', sourceState: to };
+  const worldType = WORLD_EVENT_TYPE[event.payload.type] as string;
+  return { state: EVENT_TYPE_DRAWN[worldType], stateSource: 'event_type', sourceState: worldType };
+}
+
+/** The activity a world holds after `events`, folded from an empty reading. */
+function expectedActivity(events: readonly FixtureEvent[]) {
+  const workers = new Set<string>();
+  let observedAtIso: string | null = null;
+  let unusedEvents = 0;
+  for (const event of events) {
+    if (!MOVES_ACTIVITY.has(event.payload.type)) { unusedEvents += 1; continue; }
+    if (event.payload.workerId !== null) workers.add(event.payload.workerId);
+    observedAtIso = event.payload.occurredAt;
   }
-}`;
+  return {
+    schemaVersion: 'relay-wonderland-activity.v1', projectId: PROJECT, runId: RUN,
+    signals: [], workers: [...workers].sort().map((workerId) => ({ workerId, signals: [] })),
+    activeSubagents: 0, subagentsDenied: 0, observedAtIso, unusedEvents,
+    // Every row is this run's: nothing foreign was folded.
+    foreignEvents: 0,
+  };
+}
 
-const GOLDEN_EVENTS = `{
-  "data": {
-    "deliveries": [
-      {
-        "envelope": {
-          "schemaVersion": "relay-wonderland-envelope.v1",
-          "eventId": "event-1",
-          "projectId": "project-alpha",
-          "worldSessionId": "world-session",
-          "juliusInstanceId": null,
-          "missionId": null,
-          "runId": "run:0a1b2c3d",
-          "taskId": null,
-          "workerRole": null,
-          "state": "attention",
-          "stateSource": "event_type",
-          "sourceState": "mission.created",
-          "terminal": false,
-          "sequence": 1,
-          "revision": 9,
-          "occurredAt": "2026-10-07T12:00:00.000Z",
-          "metadata": {
-            "juliusEventType": "run.created",
-            "runId": "run:0a1b2c3d"
-          },
-          "metadataDropped": 0
-        },
-        "activity": {
-          "schemaVersion": "relay-wonderland-activity.v1",
-          "projectId": "project-alpha",
-          "runId": "run:0a1b2c3d",
-          "signals": [],
-          "workers": [],
-          "activeSubagents": 0,
-          "subagentsDenied": 0,
-          "observedAtIso": null,
-          "unusedEvents": 1,
-          "foreignEvents": 0
-        }
-      },
-      {
-        "envelope": {
-          "schemaVersion": "relay-wonderland-envelope.v1",
-          "eventId": "event-2",
-          "projectId": "project-alpha",
-          "worldSessionId": "world-session",
-          "juliusInstanceId": null,
-          "missionId": null,
-          "runId": "run:0a1b2c3d",
-          "taskId": null,
-          "workerRole": null,
-          "state": "coding",
-          "stateSource": "julius_run_state",
-          "sourceState": "EXECUTING",
-          "terminal": false,
-          "sequence": 2,
-          "revision": 9,
-          "occurredAt": "2026-10-07T12:00:00.000Z",
-          "metadata": {
-            "juliusEventType": "run.transitioned",
-            "runId": "run:0a1b2c3d",
-            "reasonCode": "PLAN_ACCEPTED",
-            "juliusRunState": "EXECUTING"
-          },
-          "metadataDropped": 0
-        },
-        "activity": {
-          "schemaVersion": "relay-wonderland-activity.v1",
-          "projectId": "project-alpha",
-          "runId": "run:0a1b2c3d",
-          "signals": [],
-          "workers": [],
-          "activeSubagents": 0,
-          "subagentsDenied": 0,
-          "observedAtIso": null,
-          "unusedEvents": 2,
-          "foreignEvents": 0
-        }
-      },
-      {
-        "envelope": {
-          "schemaVersion": "relay-wonderland-envelope.v1",
-          "eventId": "event-4",
-          "projectId": "project-alpha",
-          "worldSessionId": "world-session",
-          "juliusInstanceId": null,
-          "missionId": null,
-          "runId": "run:0a1b2c3d",
-          "taskId": null,
-          "workerRole": null,
-          "state": "independent_review",
-          "stateSource": "julius_run_state",
-          "sourceState": "REVIEWING",
-          "terminal": false,
-          "sequence": 4,
-          "revision": 9,
-          "occurredAt": "2026-10-07T12:00:00.000Z",
-          "metadata": {
-            "juliusEventType": "run.transitioned",
-            "runId": "run:0a1b2c3d",
-            "reasonCode": "BUILD_SUBMITTED",
-            "outcome": "accepted",
-            "juliusRunState": "REVIEWING"
-          },
-          "metadataDropped": 0
-        },
-        "activity": {
-          "schemaVersion": "relay-wonderland-activity.v1",
-          "projectId": "project-alpha",
-          "runId": "run:0a1b2c3d",
-          "signals": [],
-          "workers": [
-            {
-              "workerId": "worker-coder",
-              "signals": []
-            }
-          ],
-          "activeSubagents": 0,
-          "subagentsDenied": 0,
-          "observedAtIso": "2026-10-07T12:00:00.000Z",
-          "unusedEvents": 3,
-          "foreignEvents": 0
-        }
-      }
-    ],
-    "nextCursor": 4,
-    "summary": {
-      "unauthorized_project": 0,
-      "unauthorized_run": 0,
-      "unreadable": 0,
-      "silent": 1,
-      "no_state": 0,
-      "out_of_order": 0
-    }
-  }
-}`;
+/** One world event's metadata: the kernel type and run, the carried facts present, and the run state it names. */
+function expectedMetadata(event: FixtureEvent): Record<string, unknown> {
+  const facts = event.payload.facts;
+  const metadata: Record<string, unknown> = { juliusEventType: event.payload.type, runId: event.payload.runId };
+  for (const key of CARRIED_FACTS) if (facts[key] !== undefined) metadata[key] = facts[key];
+  if (typeof facts.to === 'string') metadata.juliusRunState = facts.to;
+  return metadata;
+}
 
-const GOLDEN_RESULT = `{
-  "data": {
-    "schemaVersion": "relay-wonderland-julius-result.v1",
-    "runId": "run:0a1b2c3d",
-    "missionId": "mission:alpha",
-    "juliusState": "COMPLETED",
-    "taskState": "Completed",
-    "verified": true,
-    "terminal": true,
-    "criteria": [
-      {
-        "criterionId": "criterion-renders",
-        "description": "The page renders the leaderboard",
-        "satisfied": true,
-        "basis": "EVIDENCE",
-        "requiredEvidenceTypes": [
-          "TEST"
-        ],
-        "evidenceIds": [
-          "evidence-test-1"
-        ]
+/** GET /events?mode=page&cursor=<after>: one delivery per drawable event after the cursor, each with the fold so far. */
+function expectedPage(events: readonly FixtureEvent[], after: number) {
+  const page = events.filter((event) => Number(event.sequence) > after);
+  const deliveries: unknown[] = [];
+  let silent = 0;
+  page.forEach((event, index) => {
+    const state = drawn(event);
+    if (state === null) { silent += 1; return; }
+    deliveries.push({
+      envelope: {
+        schemaVersion: 'relay-wonderland-envelope.v1',
+        eventId: event.payload.eventId,
+        projectId: event.payload.projectId,
+        worldSessionId: WORLD_SESSION,
+        // Nothing on this path names an instance, a mission (a run id is a stream key, not a mission id), a task
+        // or a worker role for a drawn event: each is null, never guessed.
+        juliusInstanceId: null, missionId: null, runId: event.payload.runId, taskId: null, workerRole: null,
+        ...state,
+        // None of attention / coding / independent_review is an end state.
+        terminal: false,
+        sequence: Number(event.sequence),
+        revision: Number(PAGE_REVISION),
+        occurredAt: event.payload.occurredAt,
+        metadata: expectedMetadata(event),
+        metadataDropped: 0,
       },
-      {
-        "criterionId": "criterion-complete",
-        "description": "The mission is complete",
-        "satisfied": true,
-        "basis": "COMPLETION",
-        "requiredEvidenceTypes": [],
-        "evidenceIds": []
-      }
-    ],
-    "deliverables": [
-      {
-        "evidenceId": "evidence-diff-1",
-        "type": "DIFF",
-        "summary": "Added the leaderboard component",
-        "artifactRef": null,
-        "integrityHash": null,
-        "retained": false,
-        "occurredAt": "2026-10-07T12:00:00.000Z"
-      },
-      {
-        "evidenceId": "evidence-test-1",
-        "type": "TEST",
-        "summary": "12 tests passed",
-        "artifactRef": null,
-        "integrityHash": null,
-        "retained": false,
-        "occurredAt": "2026-10-07T12:00:00.000Z"
-      }
-    ],
-    "openFindings": [],
-    "review": {
-      "verdict": "ACCEPT",
-      "reasonCode": "MISSION_VERIFIED",
-      "repairRounds": 1,
-      "reReviewedAfterRepair": true,
-      "decisions": 2
+      // The fold AFTER this event, from an empty reading at the page's start -- silent events before it included.
+      activity: expectedActivity(page.slice(0, index + 1)),
+    });
+  });
+  return {
+    data: {
+      deliveries,
+      // The ledger's own position: the last row read, or the cursor itself when there was none.
+      nextCursor: page.length === 0 ? after : Number(page[page.length - 1].sequence),
+      // Every refusal kind the ingress counts (WONDERLAND_INGRESS_REFUSALS); only the silent event is one.
+      summary: { unauthorized_project: 0, unauthorized_run: 0, unreadable: 0, silent, no_state: 0, out_of_order: 0 },
     },
-    "failure": null,
-    "cost": {
-      "visible": true,
-      "knownUsdMicros": 84210,
-      "unknownComponents": 0,
-      "complete": true,
-      "billing": [
-        {
-          "role": "PROMPT_ARCHITECT",
-          "billingPath": "UNKNOWN",
-          "apiSpendUsdMicros": null,
-          "unestablishedComponents": 1
-        },
-        {
-          "role": "CODING_AGENT",
-          "billingPath": "UNKNOWN",
-          "apiSpendUsdMicros": null,
-          "unestablishedComponents": 1
-        },
-        {
-          "role": "INDEPENDENT_REVIEWER",
-          "billingPath": "UNKNOWN",
-          "apiSpendUsdMicros": null,
-          "unestablishedComponents": 1
-        }
-      ]
+  };
+}
+
+/** A usage figure nobody reported: unknown, with the meter's reason (wonderland-usage-meter.ts). */
+const unknownFigure = (reason: 'not_observed' | 'unknown_denominator') => ({ known: false, value: null, reason });
+
+/**
+ * One channel's meter when NO usage authority has ever reported (wonderland-usage-authority.ts:
+ * readWonderlandUsageAuthority -> not_reported; statusFor -> unavailable; provenanceFor -> simulated,
+ * which says so). Every count unobserved; every fraction and span without a denominator. The HUD's
+ * default anchor, and the time the run was observed.
+ */
+const unreportedMeter = (channel: 'compound_agent' | 'single_agent') => ({
+  schemaVersion: 'relay-wonderland-usage.v1', channel, tierId: null, tierLabel: null, unitLabel: null,
+  capacityUnits: unknownFigure('not_observed'), usedUnits: unknownFigure('not_observed'),
+  remainingUnits: unknownFigure('not_observed'), referenceCapacityUnits: unknownFigure('not_observed'),
+  capacitySpan: unknownFigure('unknown_denominator'), fillFraction: unknownFigure('unknown_denominator'),
+  remainingFraction: unknownFigure('unknown_denominator'),
+  status: 'unavailable', unavailableReason: WONDERLAND_USAGE_NOT_REPORTED_REASON, provenance: 'simulated', simulated: true,
+  anchor: 'top_left', observedAtIso: RUN_ROW.observed_at,
+});
+
+/** GET /hydrate: the run row, every event up to its atSequence, the latest Brain snapshot, the open gates. */
+function expectedHydration(events: readonly FixtureEvent[], gates: readonly (typeof GOLDEN_GATES)[number][]) {
+  const atSequence = Math.max(...events.map((event) => Number(event.sequence)));
+  return {
+    data: {
+      schemaVersion: HYDRATION_SCHEMA,
+      projectId: PROJECT,
+      worldSessionId: WORLD_SESSION,
+      run: {
+        schemaVersion: 'relay-wonderland-snapshot.v1', projectId: PROJECT, juliusInstanceId: null, runId: RUN,
+        missionId: RUN_ROW.mission_id, state: RUN_ROW.state, revision: Number(RUN_ROW.version), atSequence,
+        observedAtIso: RUN_ROW.observed_at, activeTasks: Number(RUN_ROW.active_tasks), pendingApprovals: gates.length,
+      },
+      visualState: RUN_STATE_DRAWN[RUN_ROW.state],
+      terminal: false,
+      usage: {
+        schemaVersion: 'relay-wonderland-usage.v1', anchor: 'top_left',
+        compoundAgent: unreportedMeter('compound_agent'), singleAgent: unreportedMeter('single_agent'),
+        observedAtIso: RUN_ROW.observed_at,
+      },
+      // No authority has spoken to this world: nothing accepted (revision 0), nothing rejected, no authority named.
+      usageStatus: {
+        reading: 'not_reported', reason: WONDERLAND_USAGE_NOT_REPORTED_REASON, ageSeconds: null, revision: 0, authorityId: null,
+        foreignProjectReportsRejected: 0, staleRevisionsRejected: 0, malformedReportsRejected: 0,
+      },
+      activity: expectedActivity(events.filter((event) => Number(event.sequence) <= atSequence)),
+      brain: {
+        schemaVersion: 'relay-wonderland-brain.v1', projectId: PROJECT, runId: RUN, taskId: SNAPSHOT_ROW.task_id,
+        brainRevision: Number(SNAPSHOT_ROW.project_brain_revision),
+        // Every entry counts -- a kind the client does not know (RESEARCH_NOTE) included; the per-kind counts name
+        // exactly the kinds the client knows (its EWonderlandBrainKind table), every one present.
+        entryCount: SNAPSHOT_ROW.kinds.length,
+        kindCounts: Object.fromEntries(TOKENS.EWonderlandBrainKind.map((kind) => [kind, SNAPSHOT_ROW.kinds.filter((held) => held === kind).length])),
+        characterCount: Number(SNAPSHOT_ROW.character_count), redactionCount: Number(SNAPSHOT_ROW.redaction_count),
+        truncated: SNAPSHOT_ROW.truncated, contentHash: SNAPSHOT_ROW.content_hash, observedAtIso: SNAPSHOT_ROW.created_at,
+      },
+      // The hydration reads the card's REVISION only: what the card holds is unknown here (null, never false), and the
+      // client's decoder requires the swarm-role list, so it is the empty one.
+      card: {
+        cardRevision: RUN_ROW.card_revision, hasPromptArchitect: null, hasCodingAgent: null, hasIndependentReviewer: null,
+        swarmEligible: null, eligibleSwarmRoles: [], autonomy: null,
+      },
+      humanGates: gates.map((gate) => ({
+        schemaVersion: 'relay-wonderland-human-gate.v1', projectId: PROJECT, runId: RUN, gateId: gate.gate_id, taskId: gate.task_id,
+        operation: gate.operation, reasonCode: gate.reason_code, requestedAtIso: gate.requested_at,
+      })),
+      observedAtIso: RUN_ROW.observed_at,
     },
-    "tokens": "UNKNOWN",
-    "withheldDetails": 0
-  }
-}`;
+  };
+}
 
-describe('R5: golden bodies, byte for byte (key order included)', () => {
-  const pretty = (body: string) => JSON.stringify(JSON.parse(body), null, 2);
+/** MissionTasks' EWonderlandTaskState for a Julius state (the verbatim C++ table, wonderland-julius-task-state.test.ts). */
+const TASK_STATE_OF: Readonly<Record<string, string>> = { COMPLETED: 'Completed' };
 
+/** GET /result for the OWNER (read_mission_cost): Julius's result view through the allow-list, with no billing record read. */
+function expectedResult(view: JuliusMissionResultView) {
+  const decisions = view.reviewDecisions;
+  const latest = decisions[decisions.length - 1];
+  const lastRepair = decisions.map((decision) => decision.action).lastIndexOf('REPAIR');
+  return {
+    data: {
+      schemaVersion: RESULT_SCHEMA,
+      runId: view.runId,
+      missionId: view.missionId,
+      juliusState: view.state,
+      taskState: TASK_STATE_OF[view.state],
+      verified: view.verified,
+      terminal: view.terminal,
+      criteria: view.criteria.map((criterion) => ({
+        criterionId: criterion.criterionId, description: criterion.description, satisfied: criterion.satisfied, basis: criterion.basis,
+        requiredEvidenceTypes: [...criterion.requiredEvidenceTypes], evidenceIds: [...criterion.evidenceIds],
+      })),
+      // The deliverable's task is not shown; its safe summary is; it is RETAINED only with a durable artifact reference.
+      deliverables: view.deliverables.map((item) => ({
+        evidenceId: item.evidenceId, type: item.type, summary: item.safeSummary, artifactRef: item.artifactRef,
+        integrityHash: item.integrityHash, retained: item.artifactRef !== null, occurredAt: item.occurredAt,
+      })),
+      openFindings: view.outstandingFindings.map((finding) => ({ findingId: finding.findingId, severity: finding.severity, claim: finding.claim })),
+      // The latest decision is the verdict; REPAIR decisions are the repair rounds; a decision after the last repair is a re-review.
+      review: {
+        verdict: latest.action, reasonCode: latest.reasonCode,
+        repairRounds: decisions.filter((decision) => decision.action === 'REPAIR').length,
+        reReviewedAfterRepair: lastRepair !== -1 && lastRepair < decisions.length - 1,
+        decisions: decisions.length,
+      },
+      failure: view.failure,
+      // No billing record was read (the fixture's result source has none), so every C.A.R.D. role's billing is
+      // UNKNOWN -- one unestablished component each, no amount -- never guessed.
+      cost: {
+        visible: true, knownUsdMicros: view.cost.knownUsdMicros, unknownComponents: view.cost.unknownComponents, complete: view.cost.complete,
+        billing: ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'].map((role) => ({
+          role, billingPath: 'UNKNOWN', apiSpendUsdMicros: null, unestablishedComponents: 1,
+        })),
+      },
+      // Nothing Julius serves reports tokens; nothing in this view needed screening.
+      tokens: 'UNKNOWN',
+      withheldDetails: 0,
+    },
+  };
+}
+
+describe('R5: golden bodies, DERIVED from the fixture and the contract -- not captured (internal review A6)', () => {
+  // Key ORDER is not part of the client contract (UE's FJsonObject and the strict reader both read by name), so the
+  // comparison is structural; that the same run answers the same BYTES twice is pinned in "R5: a deterministic contract".
   it('hydrate', async () => {
     const { status, body } = await asClient('hydrate', { world: worldOver(ledgerPool({ gates: GOLDEN_GATES })) });
     expect(status).toBe(200);
-    expect(pretty(body)).toBe(GOLDEN_HYDRATE);
+    expect(JSON.parse(body)).toStrictEqual(expectedHydration(DEFAULT_EVENTS, GOLDEN_GATES));
+  });
+
+  it('hydrate, with two gates open -- so the open approvals (2) and the active tasks (1) cannot be mistaken for each other', async () => {
+    const gates = [...GOLDEN_GATES, { ...GOLDEN_GATES[0], gate_id: 'approval-2', operation: 'ACCESS_NETWORK', reason_code: 'NETWORK_APPROVAL_REQUIRED' }];
+    const { status, body } = await asClient('hydrate', { world: worldOver(ledgerPool({ gates })) });
+    expect(status).toBe(200);
+    expect(JSON.parse(body)).toStrictEqual(expectedHydration(DEFAULT_EVENTS, gates));
   });
 
   it('events?mode=page from cursor 0', async () => {
     const { status, body } = await asClient('events', { world: worldOver(ledgerPool()) });
     expect(status).toBe(200);
-    expect(pretty(body)).toBe(GOLDEN_EVENTS);
+    expect(JSON.parse(body)).toStrictEqual(expectedPage(DEFAULT_EVENTS, 0));
+  });
+
+  it('events?mode=page resumed after 2 -- the fold starts afresh at the page, the silent event first', async () => {
+    const { status, body } = await asClient('events', { world: worldOver(ledgerPool()) }, 2);
+    expect(status).toBe(200);
+    expect(JSON.parse(body)).toStrictEqual(expectedPage(DEFAULT_EVENTS, 2));
   });
 
   it('result, for the owner', async () => {
     const { status, body } = await asClient('result', { world: worldOver(ledgerPool()) });
     expect(status).toBe(200);
-    expect(pretty(body)).toBe(GOLDEN_RESULT);
+    expect(JSON.parse(body)).toStrictEqual(expectedResult(VIEW));
   });
 
-  it('every golden decodes by the client\'s rules -- a golden the client would refuse would pin the wrong contract', () => {
-    expect(clientHydrate(GOLDEN_HYDRATE, ASKED).run.runId).toBe(RUN);
-    expect(clientPage(GOLDEN_EVENTS, ASKED).deliveries.map((delivery) => delivery.envelope.sequence)).toEqual([1, 2, 4]);
-    expect(clientResult(GOLDEN_RESULT, RUN)).toMatchObject({ runId: RUN, criteriaTotal: 2, costVisible: true });
+  it('every derived golden decodes by the client\'s rules -- a golden the client would refuse would pin the wrong contract', () => {
+    expect(clientHydrate(JSON.stringify(expectedHydration(DEFAULT_EVENTS, GOLDEN_GATES)), ASKED).run.runId).toBe(RUN);
+    expect(clientPage(JSON.stringify(expectedPage(DEFAULT_EVENTS, 0)), ASKED).deliveries.map((delivery) => delivery.envelope.sequence)).toEqual([1, 2, 4]);
+    expect(clientResult(JSON.stringify(expectedResult(VIEW)), RUN)).toMatchObject({ runId: RUN, criteriaMet: 2, criteriaTotal: 2, costVisible: true, taskState: 'Completed' });
+  });
+});
+
+/* ===================================================================== */
+/*  THE LINK THE WORLD SHOWS for every answer these routes give           */
+/*  (LinkStateForFailure, internal review Part B)                         */
+/* ===================================================================== */
+
+describe('every status these routes answer, as the client reads it: its link state, its token, its retry', () => {
+  const NOBODY: WonderlandProjectMembershipSource = { lookup: async () => null };
+
+  /** One real route answer, asked as the client asks -- with the request varied the way each status needs. */
+  async function answerFor(route: 'hydrate' | 'events' | 'result', vary: {
+    readonly authorization?: string | null;
+    readonly world?: WonderlandJuliusWorld | null;
+    readonly runId?: string;
+    readonly cursor?: string;
+  }) {
+    const store = createBrowserSessionStore();
+    const token = nativeSession(store);
+    const query = `projectId=${encodeURIComponent(PROJECT)}&runId=${vary.runId ?? RUN}&cursor=${vary.cursor ?? '0'}`;
+    const url = route === 'events' ? `/wonderland/julius/events?mode=page&${query}` : `/wonderland/julius/${route}?${query}`;
+    const authorization = vary.authorization === undefined ? `Relay-Session ${token}` : vary.authorization ?? undefined;
+    const answer = await handleWonderlandJuliusRoute(
+      { method: 'GET', path: `/wonderland/julius/${route}`, url, authorization, origin: undefined, now: NOW },
+      { sessions: store, world: vary.world === undefined ? worldOver(ledgerPool()) : vary.world },
+    );
+    return { status: answer?.status ?? 0, body: JSON.stringify(answer?.body ?? null) };
+  }
+
+  const CASES: ReadonlyArray<[string, Parameters<typeof answerFor>[1], number]> = [
+    ['the run, served', {}, 200],
+    ['no session at all', { authorization: null }, 401],
+    ['a session the bridge does not know', { authorization: 'Relay-Session not-a-session-the-bridge-minted' }, 401],
+    ['a player who is not a member', { world: worldOver(ledgerPool(), NOBODY) }, 404],
+    ['a run that does not exist', { runId: 'run:ffffffff' }, 404],
+    ['an identified caller\'s malformed cursor', { cursor: '0x10' }, 400],
+    ['a bridge with no world configured', { world: null }, 503],
+  ];
+
+  /** Failed(status) for any status LinkStateForFailure does not name: Stale, the token kept, hydrate again after a backoff. */
+  const FAILED_STALE = { link: 'Stale' as ClientLinkState, tokenInvalidated: false, rehydrates: true };
+  /** What the world's follow should show for each status (JS:66-80 through Failed, JS:1011-1031). */
+  const FOLLOW: Readonly<Record<number, { link: ClientLinkState; tokenInvalidated: boolean; rehydrates: boolean }>> = {
+    200: { link: 'Live', tokenInvalidated: false, rehydrates: false },
+    401: { link: 'SessionExpired', tokenInvalidated: true, rehydrates: true },
+    404: { link: 'Refused', tokenInvalidated: false, rehydrates: true },
+    400: FAILED_STALE,
+    503: FAILED_STALE,
+  };
+
+  for (const [label, vary, status] of CASES) {
+    it(`${status}, ${label}: hydrate and events move the link as LinkStateForFailure says; the result leaves it alone`, async () => {
+      for (const route of ['hydrate', 'events'] as const) {
+        const answer = await answerFor(route, vary);
+        expect(answer.status, `${route}: ${answer.body}`).toBe(status);
+        expect(clientFollowLeg(route, answer.status, answer.body, ASKED), route).toEqual(FOLLOW[status]);
+      }
+      const result = await answerFor('result', vary);
+      expect(result.status, result.body).toBe(status);
+      // "NOT A LINK FAILURE" (JS:839-846): whatever the status, the link and the token are untouched; only a good 200 is adopted.
+      expect(clientResultLeg(result.status, result.body, RUN)).toEqual({
+        linkChanged: false, tokenInvalidated: false, adopted: status === 200, retriesAfterBackoff: status !== 200,
+      });
+    });
+  }
+
+  it('LinkStateForFailure itself, verbatim: no connection is Stale whatever the status; 401 SessionExpired; 403 and 404 Refused; anything else Stale', () => {
+    expect(linkStateForFailure(401, false)).toBe('Stale');
+    expect(linkStateForFailure(0, false)).toBe('Stale');
+    expect(linkStateForFailure(401, true)).toBe('SessionExpired');
+    expect(linkStateForFailure(403, true)).toBe('Refused');
+    expect(linkStateForFailure(404, true)).toBe('Refused');
+    for (const other of [200, 400, 429, 500, 502, 503, 504]) expect(linkStateForFailure(other, true), String(other)).toBe('Stale');
+  });
+
+  it('a 200 the client cannot decode is Failed(200) -- Stale, never Live -- while a DECODED foreign delivery leaves the page Live', async () => {
+    const hydrate = JSON.parse((await asClient('hydrate', { world: worldOver(ledgerPool()) })).body);
+    hydrate.data.visualState = 'running';
+    expect(clientFollowLeg('hydrate', 200, JSON.stringify(hydrate), ASKED)).toEqual(FAILED_STALE);
+    // AdoptHydration's refusal is a failure of the hydrate leg too.
+    expect(clientFollowLeg('hydrate', 200, (await asClient('hydrate', { world: worldOver(ledgerPool()) })).body, { projectId: PROJECT, runId: 'run:other' }).link).toBe('Stale');
+    const page = JSON.parse((await asClient('events', { world: worldOver(ledgerPool()) })).body);
+    expect(clientFollowLeg('events', 200, JSON.stringify({ data: { ...page.data, deliveries: 'none' } }), ASKED).link).toBe('Stale');
+    // ApplyEnvelope refuses an envelope of another run by the subsystem's rule; that is no link failure (JS:772-793).
+    expect(clientFollowLeg('events', 200, (await asClient('events', { world: worldOver(ledgerPool()) })).body, { projectId: PROJECT, runId: 'run:other' }).link).toBe('Live');
   });
 });
