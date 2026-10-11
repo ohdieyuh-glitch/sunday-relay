@@ -624,7 +624,8 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
     const lookup = deps.sessionIssuedAt;
     return answerVoiceJoin({
       store, deps, actorId: actor.actorId, sessionId: facts.sessionId,
-      sessionIssuedAtIso: typeof facts.issuedAtMs === 'number' ? new Date(facts.issuedAtMs).toISOString() : null,
+      // a time that is not a finite number is unknown, never a thrown 500 at toISOString (MAIN's internal review af2eb058, NOTE)
+      sessionIssuedAtIso: Number.isFinite(facts.issuedAtMs) ? new Date(facts.issuedAtMs).toISOString() : null,
       sessionIssuedAtOf: lookup === null ? null : (sessionId) => lookup(sessionId, request.now),
       partyId, body, nowIso,
     });

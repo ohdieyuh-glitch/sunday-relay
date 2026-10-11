@@ -62,8 +62,11 @@ function fixedStore(state: SocialState): SocialStore {
 /**
  * The minter as a recorder: WHO the route asks it to admit, and to which room. It also keeps each room as a provider would
  * (every PUID admitted and not removed since), so a test can read who would still hear the party: `heard(partyId)`.
+ * A removal decides WHICH PUIDs when it starts, as the EOS minter does (it snapshots its minted record before its first DELETE),
+ * and only then waits on `holdRemoval` (a slow DELETE): a PUID minted while it is held is not among them (test review a8ed4c0b
+ * NOTE 6 -- a double that read the record after the hold could never show such a PUID left in the room).
  */
-function minterRecorder(opts: { failRemoval?: boolean } = {}) {
+function minterRecorder(opts: { failRemoval?: boolean; holdRemoval?: () => Promise<void> } = {}) {
   const asked: Array<{ partyId: string; participantId: string; audience: readonly string[]; puid?: string }> = [];
   const removals: Array<{ partyId: string; participantId: string; puids: readonly string[] }> = [];
   /** Each removal's `mustLeave`, in order (af2eb058 m-a: a removal not confirmed is kept pending only when it must leave). */
@@ -84,10 +87,14 @@ function minterRecorder(opts: { failRemoval?: boolean } = {}) {
     removeFromRoom: async (input) => {
       removals.push({ partyId: input.partyId, participantId: input.participantId, puids: [...input.puids] });
       mustLeave.push(input.mustLeave);
-      if (opts.failRemoval === true) throw new Error('provider down');
       const key = `${input.partyId}/${input.participantId}`;
-      for (const puid of [...(mintedFor.get(key) ?? []), ...input.puids]) inRoom.get(input.partyId)?.delete(puid);
-      mintedFor.delete(key);
+      const targets = [...(mintedFor.get(key) ?? []), ...input.puids]; // decided now, before any wait
+      await opts.holdRemoval?.();
+      if (opts.failRemoval === true) throw new Error('provider down');
+      for (const puid of targets) {
+        inRoom.get(input.partyId)?.delete(puid);
+        mintedFor.get(key)?.delete(puid);
+      }
     },
   };
   return { asked, removals, mustLeave, minter, heard: (partyId: string) => [...(inRoom.get(partyId) ?? [])].sort() };
@@ -281,7 +288,9 @@ describe('party voice: a re-bind takes the replaced PUID out of the room first (
     expect((await join(deps, U.KAI, pid)).status).toBe(200);
     const r = await join(deps, `${U.KAI}#2`, pid, puidOf(`${U.KAI}-second-device`));
     expect(r.status).toBe(503);
-    expect(r.body.error?.kind).toBe('voice_unavailable');
+    // the sentence 2e7014e3 settled (review a6d5842c B1): the binding is unchanged, not "nothing was changed" (test review
+    // a8ed4c0b NOTE 9)
+    expect(r.body.error).toEqual({ kind: 'voice_unavailable', message: 'Party voice could not take your previous device out of the room, so your voice identity was not changed. Try again.' });
     expect(bindings.rows().map((row) => [row.puid, row.sessionId])).toEqual([[puidOf(U.KAI), U.KAI]]);
     expect(rec.asked.map((a) => a.puid)).toEqual([puidOf(U.KAI)]);
     // held, so the old PUID is still the binding's: never kept pending for a timer to take away (af2eb058 m-a)
@@ -324,14 +333,14 @@ describe('party voice: a re-bind takes the replaced PUID out of the room first (
 
   it('two fresh sign-ins of one player join at once with two new PUIDs: one join at a time, so the room ends holding only the PUID bound last', async () => {
     const { state, pid } = arena();
-    const rec = minterRecorder();
-    const bindings = createInMemoryVoiceBindings();
-    // the first re-bind's removal is held while the second join has every chance to run
+    // the first re-bind's removal is held -- after it has decided which PUIDs it removes, as the EOS minter does (test review
+    // a8ed4c0b NOTE 6) -- while the second join has every chance to run
     let release: () => void = () => undefined;
     const held = new Promise<void>((resolve) => { release = resolve; });
     let holds = 1;
-    const minter: PartyVoiceTokenMinter = { ...rec.minter, removeFromRoom: async (i) => { if (holds-- > 0) await held; return rec.minter.removeFromRoom(i); } };
-    const deps = depsFor(state, minter, undefined, bindings);
+    const rec = minterRecorder({ holdRemoval: async () => { if (holds-- > 0) await held; } });
+    const bindings = createInMemoryVoiceBindings();
+    const deps = depsFor(state, rec.minter, undefined, bindings);
     expect((await join(deps, U.KAI, pid)).status).toBe(200);
     const [y, z] = [puidOf('kai-device-y'), puidOf('kai-device-z')];
     const first = join(deps, `${U.KAI}#2`, pid, y);
@@ -342,6 +351,28 @@ describe('party voice: a re-bind takes the replaced PUID out of the room first (
     expect([(await first).status, (await second).status]).toEqual([200, 200]);
     expect(bindings.rows().map((r) => r.puid)).toEqual([z]);
     expect(rec.heard(pid)).toEqual([z]); // y left the room when z re-bound; Kai's first PUID left when y did
+  });
+
+  it("the same race with the NEWER sign-in first: the older one's join waits its turn and is refused, and no PUID is left in the room beside the bound one (test review a8ed4c0b NOTE 6)", async () => {
+    const { state, pid } = arena();
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let holds = 1;
+    const rec = minterRecorder({ holdRemoval: async () => { if (holds-- > 0) await held; } });
+    const bindings = createInMemoryVoiceBindings();
+    const deps = depsFor(state, rec.minter, undefined, bindings);
+    expect((await join(deps, U.KAI, pid)).status).toBe(200);
+    const [y, z] = [puidOf('kai-device-y'), puidOf('kai-device-z')];
+    const newer = join(deps, `${U.KAI}#3`, pid, y);
+    await tick();
+    const older = join(deps, `${U.KAI}#2`, pid, z);
+    await tick();
+    release();
+    const statuses = [(await newer).status, (await older).status];
+    // the room first: two joins at once would leave z in it beside y (the held removal decided its PUIDs before z was minted)
+    expect(rec.heard(pid)).toEqual([y]);
+    expect(statuses).toEqual([200, 404]);
+    expect(bindings.rows().map((r) => r.puid)).toEqual([y]);
   });
 
   it('a re-bind nobody predicted (another process moved the binding): the minted PUIDs leave the room before the mint; logged with hashed ids only', async () => {
@@ -431,6 +462,22 @@ describe("party voice: the NEWEST SESSION WINS on the production path (MAIN's in
     expect(bindings.rows().map((r) => [r.puid, r.sessionId])).toEqual([[X, U.KAI]]);
     expect(rec.removals.map((r) => r.puids)).toEqual([[X], [Y]]);
     expect(rec.heard(pid)).toEqual([X]);
+  });
+
+  it("an issue time that is not a finite number is UNKNOWN (the rule's \"another session\" fallback), never a thrown 500 at toISOString (MAIN's internal review af2eb058, NOTE)", async () => {
+    const { state, pid } = arena();
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      const rec = minterRecorder();
+      const bindings = createInMemoryVoiceBindings();
+      const deps: SocialRouteDeps = {
+        ...depsFor(state, rec.minter, undefined, bindings),
+        verifySession: (token) => ({ ...facts(token), ...(token.endsWith('#9') ? { issuedAtMs: bad } : {}) }),
+      };
+      expect((await join(deps, U.KAI, pid)).status, String(bad)).toBe(200);
+      const r = await join(deps, `${U.KAI}#9`, pid, puidOf('kai-device-unknown-time'));
+      expect(r.status, String(bad)).toBe(200);
+      expect(bindings.rows().map((row) => row.sessionId), String(bad)).toEqual([`${U.KAI}#9`]);
+    }
   });
 });
 

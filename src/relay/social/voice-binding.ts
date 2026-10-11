@@ -5,9 +5,9 @@
  * talk to whom is decided here, from the GitHub-authenticated session -- so a PUID is bound to exactly one player:
  *   - the first /voice/join BINDS the caller's PUID to them;
  *   - a PUID already bound to ANOTHER player is refused (the route answers it exactly like a party that does not exist);
- *   - a player's own, DIFFERENT PUID re-binds only from ANOTHER session than the one that bound it (a fresh sign-in), never
- *     mid-session. "Another", not "newer": the session facts carry no issue time (browser-session/grants.ts), so an older
- *     session still signed in can take the binding back (MAIN's internal review a6d5842c, m3: open);
+ *   - a player's own, DIFFERENT PUID re-binds only from a NEWER session than the one that bound it (a fresh sign-in), never
+ *     mid-session: the NEWEST SESSION WINS (MAIN's internal reviews a6d5842c m3, af2eb058 m-d; decideVoiceBinding). An older
+ *     session still signed in cannot take the binding back; once the session that bound it is gone, another session may;
  *   - the voice audience a client is shown carries only server-bound PUID -> player pairs.
  * A re-bind takes the replaced PUID out of the party's room before it binds (relay-bridge/wonderland-social-routes.ts, B1).
  * One pure decision (decideVoiceBinding) for both stores: the in-memory one here, and PostgreSQL
