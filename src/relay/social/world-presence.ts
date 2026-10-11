@@ -20,7 +20,7 @@
 
 import type { SocialServerKind, SocialUserId } from './social-contracts';
 import { resolvePresenceFor } from './social-presence';
-import { hasBlocked, partyOf, presenceHiddenFrom, type SocialState } from './social-state';
+import { hasBlocked, hasUser, partyOf, presenceHiddenFrom, userById, type SocialState } from './social-state';
 
 export const WORLD_PUBLIC_CAPACITY = 32;
 export const WORLD_PRIVATE_CAPACITY = 16;
@@ -186,7 +186,7 @@ function walledFromOwner(social: SocialState, context: WorldContext, userId: Soc
  * this module's: following a friend needs `can.joinServer` as `resolvePresenceFor` computes it for this viewer.
  */
 export function joinWorld(world: WorldState, social: SocialState, actorId: SocialUserId, target: WorldJoinTarget, nowMs: number): WorldResult<{ world: WorldState; context: WorldContext }> {
-  if (social.users[actorId] === undefined) return fail('not-found', 'no social record for this player');
+  if (!hasUser(social, actorId)) return fail('not-found', 'no social record for this player');
   const swept = sweepWorld(world, nowMs);
   switch (target.kind) {
     case 'PUBLIC': {
@@ -252,8 +252,15 @@ export function joinWorld(world: WorldState, social: SocialState, actorId: Socia
     case 'PARTY': {
       const party = partyOf(social, actorId);
       const leaderContext = party === undefined ? undefined : contextOf(swept, party.leaderId);
-      if (party === undefined || leaderContext === undefined) return fail('not-found', 'Your party leader is not in a world');
-      if (walledFromOwner(social, leaderContext, actorId)) return fail('permission-denied', 'You cannot join them there');
+      // A HIDDEN LEADER IS NOT FOLLOWED (the privacy attacker's B3, 10-07): this answered 200 with the leader's context id and
+      // server name to any member -- a non-friend admitted by an open party included -- while the leader was HIDDEN from them
+      // (P1: APPEAR_OFFLINE, or presence not shared with them; presenceHiddenFrom, the canon's own test). Such a leader, and one
+      // behind the owner's wall, answer exactly as a leader in no world. Location / private-server visibility do NOT gate the
+      // follow (a party follows its leader; the founder's question in SOCIAL_HARDENING_PR_PLAN), or no member could follow the
+      // leader into the leader's own private server under the default privacy.
+      if (party === undefined || leaderContext === undefined || presenceHiddenFrom(social, actorId, party.leaderId) || walledFromOwner(social, leaderContext, actorId)) {
+        return fail('not-found', 'Your party leader is not in a world');
+      }
       if (liveMembers(swept, leaderContext, nowMs) >= leaderContext.capacity && !leaderContext.memberIds.includes(actorId)) return fail('full', 'That world is full');
       const next = withMember(swept, leaderContext, actorId);
       return { ok: true, value: { world: next, context: next.contexts[leaderContext.contextId] } };
@@ -350,13 +357,13 @@ export function worldViewFor(world: WorldState, social: SocialState, viewerId: S
           .filter(visible)
           .map((id) => world.avatars[id])
           .filter((a): a is AvatarState => a !== undefined && nowMs - a.reportedAtMs <= WORLD_AVATAR_STALE_MS && a.contextId === context.contextId)
-          .map((a) => ({ ...a, displayName: social.users[a.userId]?.profile.displayName ?? 'Player', ageMs: nowMs - a.reportedAtMs }));
+          .map((a) => ({ ...a, displayName: userById(social, a.userId)?.profile.displayName ?? 'Player', ageMs: nowMs - a.reportedAtMs }));
   const invites = world.invites
     .filter((i) => i.toUserId === viewerId && i.expiresAtMs > nowMs && unwalled(i.fromUserId) && world.contexts[i.contextId] !== undefined && !walledFromOwner(social, world.contexts[i.contextId], viewerId))
     .map((i) => ({
       inviteId: i.inviteId,
       fromUserId: i.fromUserId,
-      fromName: social.users[i.fromUserId]?.profile.displayName ?? 'Player',
+      fromName: userById(social, i.fromUserId)?.profile.displayName ?? 'Player',
       serverName: world.contexts[i.contextId].serverName,
       expiresInMs: i.expiresAtMs - nowMs,
     }));
