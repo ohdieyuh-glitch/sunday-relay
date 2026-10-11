@@ -17,9 +17,14 @@ const V035 = migrationVersion(WONDERLAND_MIGRATION_035) as string;
 interface FakeStore {
   readonly ledger: readonly string[] | null; // null = no ledger table (an EMPTY store)
   readonly db: string;
-  readonly sid: string | 'DENIED';
+  /** DENIED = this role may not read it (42501); BROKEN = the read fails for another reason (a dropped connection, 08006). */
+  readonly sid: string | 'DENIED' | 'BROKEN';
   readonly marker?: string | null;
+  /** The S1 catalog read fails (a dropped connection, 08006). */
+  readonly markerReadFails?: boolean;
 }
+
+const brokenConnection = () => Object.assign(new Error('server closed the connection unexpectedly'), { code: '08006' });
 
 class FakePool {
   readonly executed: string[] = [];
@@ -35,10 +40,14 @@ class FakePool {
       const rows = (this.s.ledger ?? []).map((version) => ({ version }));
       return { rows, rowCount: rows.length };
     }
-    if (sql.includes('shobj_description')) return { rows: [{ c: this.s.marker ?? null }], rowCount: 1 };
+    if (sql.includes('shobj_description')) {
+      if (this.s.markerReadFails === true) throw brokenConnection();
+      return { rows: [{ c: this.s.marker ?? null }], rowCount: 1 };
+    }
     if (sql === 'SELECT current_database() AS db') return { rows: [{ db: this.s.db }], rowCount: 1 };
     if (sql.includes('pg_control_system()')) {
       if (this.s.sid === 'DENIED') throw Object.assign(new Error('permission denied for function pg_control_system'), { code: '42501' });
+      if (this.s.sid === 'BROKEN') throw brokenConnection();
       return { rows: [{ sid: this.s.sid }], rowCount: 1 };
     }
     this.executed.push(sql);
@@ -101,6 +110,53 @@ describe('G1: migrate() refuses the Julius live store and executes nothing there
     await refusal({ ledger: without(V035), db: 'railway', sid: 'DENIED', marker: 'relay-store-role=julius-live' });
     expect(await migrated({ ledger: without(V035), db: 'railway', sid: 'DENIED', marker: 'relay-store-role=julius-livex' })).toEqual([WONDERLAND_MIGRATION_035]);
     expect(await migrated({ ledger: without(V035), db: 'railway', sid: 'DENIED', marker: 'relay-store-role=wonderland-hosted' })).toEqual([WONDERLAND_MIGRATION_035]);
+  });
+
+  it('C1 (restore): the live store restored into a NEW cluster (a new sid) or under a new name is refused by its marker alone; without the marker it is not, the gap the marker closes', async () => {
+    const NEW_SID = '7999999999999999999';
+    for (const db of ['julius', 'julius_restored']) {
+      const restored: FakeStore = { ledger: without(V035), db, sid: NEW_SID };
+      const { executed } = await refusal({ ...restored, marker: 'relay-store-role=julius-live' });
+      expect(executed).toEqual([]);
+      // CONTROL: the same restore without its marker. S2 misses (a new sid, or a new name), and S3 needs the sid unreadable.
+      expect(await migrated(restored)).toEqual([WONDERLAND_MIGRATION_035]);
+    }
+    // the marker is found inside a longer comment, as a whole token
+    await refusal({ ledger: without(V035), db: 'julius', sid: NEW_SID, marker: 'Julius live store (restored 2026-10-11) relay-store-role=julius-live' });
+  });
+
+  it('MINOR-1: a FAILED identity read is an error, never "not protected" -- nothing executes (CONTROL: a privilege denial still lets S3 decide)', async () => {
+    const failed = async (store: FakeStore): Promise<void> => {
+      const { pool, database } = databaseOn(store);
+      const error = await database.migrate().then(() => null, (e: unknown) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as { code?: unknown }).code).toBe('08006');
+      expect(pool.executed).toEqual([]);
+    };
+    // the marker read fails on a store whose ONLY protection is its marker (restored into a new cluster under a new name)
+    await failed({ ledger: without(V035), db: 'julius_restored', sid: '7999999999999999999', marker: 'relay-store-role=julius-live', markerReadFails: true });
+    // ... and on an ordinary store: the failure surfaces, it is not read as "unmarked"
+    await failed({ ledger: without(V035), db: 'railway', sid: '7000000000000000001', markerReadFails: true });
+    // the system identifier read fails for a reason OTHER than privilege, in an ordinary run and in the bootstrap's re-read
+    await failed({ ledger: without(V035), db: 'railway', sid: 'BROKEN' });
+    {
+      const { pool, database } = databaseOn({ ledger: null, db: 'julius', sid: 'BROKEN' });
+      const error = await database.migrate({ reviewedBootstrap: { database: 'julius', systemIdentifier: LIVE_SID } }).then(() => null, (e: unknown) => e);
+      expect((error as { code?: unknown }).code).toBe('08006');
+      expect(pool.executed).toEqual([]);
+    }
+    // a database with no name is an error too, not a store that matches nothing
+    {
+      const { pool, database } = databaseOn({ ledger: without(V035), db: '', sid: '7000000000000000001' });
+      const error = await database.migrate().then(() => null, (e: unknown) => e);
+      expect(String(error)).toContain('current_database() returned no name');
+      expect(pool.executed).toEqual([]);
+    }
+    // CONTROL: privilege (42501) is the one failure that means "unreadable"; S3 then decides by the name
+    expect(await migrated({ ledger: without(V035), db: 'railway', sid: 'DENIED' })).toEqual([WONDERLAND_MIGRATION_035]);
+    await refusal({ ledger: without(V035), db: 'julius', sid: 'DENIED' });
+    // the steady state reads nothing, so it cannot fail this way
+    expect(await migrated({ ledger: ALL, db: 'railway', sid: 'BROKEN', markerReadFails: true })).toEqual([]);
   });
 
   it('T7: the reviewed bootstrap of an EMPTY live store migrates the whole chain -- and the override does nothing anywhere else', async () => {
