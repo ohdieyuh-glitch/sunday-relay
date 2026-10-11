@@ -316,23 +316,62 @@ function applyUndelete(t: Map<WfsFileId, WfsEntry>, given: WfsOp & { op: 'undele
   return null;
 }
 
+/**
+ * One file of a merge-back (§6.5, D-6), judged aspect by aspect against the target's counters at the fork:
+ *   - content the branch changed conflicts only with content the target changed (`content`);
+ *   - a path the branch changed conflicts only with a path the target changed (`move_move`);
+ *   - an edit or move on the branch conflicts with a deletion on the target (`edit_deleted`);
+ *   - a deletion on the branch conflicts with ANY change on the target (`delete_edited`): deleting what someone else just
+ *     changed must be a human's choice, never a merge's.
+ */
 function applyMergePut(t: Map<WfsFileId, WfsEntry>, put: WfsMergePut, rev: number): Failure | null {
   const cur = t.get(put.fileId);
-  const unchanged = put.expectVersion === 0 ? cur === undefined : cur !== undefined && cur.version === put.expectVersion;
-  if (!unchanged) return failure('content', put.fileId, cur?.path ?? put.state.path, 'the target changed this file since the branch forked');
-  const s = put.state;
-  t.set(put.fileId, {
-    fileId: put.fileId,
-    kind: s.kind,
-    path: s.path,
-    pathKey: wfsPathKey(s.path),
-    sha256: s.sha256,
-    size: s.size,
-    deleted: s.deleted,
-    version: (cur?.version ?? 0) + 1,
-    contentVersion: cur === undefined ? 1 : cur.contentVersion + (cur.sha256 !== s.sha256 || cur.size !== s.size ? 1 : 0),
-    pathVersion: cur === undefined ? 1 : cur.pathVersion + (cur.path !== s.path ? 1 : 0),
-    createdRev: cur?.createdRev ?? rev,
+  const c = put.changes;
+  if (put.base === null) {
+    if (cur !== undefined) return failure('content', put.fileId, cur.path, 'the target already holds this file id');
+    if (c.path === undefined) return failure('invariant', put.fileId, null, 'a new file carries no path');
+    t.set(put.fileId, {
+      fileId: put.fileId,
+      kind: put.kind,
+      path: c.path,
+      pathKey: wfsPathKey(c.path),
+      sha256: put.kind === 'file' ? (c.content?.sha256 ?? null) : null,
+      size: put.kind === 'file' ? (c.content?.size ?? null) : null,
+      deleted: false,
+      version: 1,
+      contentVersion: 1,
+      pathVersion: 1,
+      createdRev: rev,
+      updatedRev: rev,
+    });
+    return null;
+  }
+  const base = put.base;
+  if (cur === undefined) return failure('missing', put.fileId, c.path ?? null, 'the target no longer holds this file');
+  const targetDeleted = cur.deleted && !base.deleted;
+  if (c.deleted === true) {
+    if (cur.version !== base.version) return failure('delete_edited', cur.fileId, cur.path, 'the branch deletes a file the target changed since the fork');
+  } else if (c.deleted === false) {
+    if (cur.version !== base.version) return failure('content', cur.fileId, cur.path, 'the branch restores a file the target changed since the fork');
+  } else if (targetDeleted && (c.content !== undefined || c.path !== undefined)) {
+    return failure('edit_deleted', cur.fileId, cur.path, 'the target deleted this file since the fork');
+  }
+  if (c.content !== undefined && cur.contentVersion !== base.contentVersion) {
+    return failure('content', cur.fileId, cur.path, `the target changed this file's content since the fork (version ${cur.contentVersion}, fork ${base.contentVersion})`);
+  }
+  if (c.path !== undefined && cur.pathVersion !== base.pathVersion) {
+    return failure('move_move', cur.fileId, cur.path, 'the target moved this file since the fork');
+  }
+  const contentChanges = c.content !== undefined && (c.content.sha256 !== cur.sha256 || c.content.size !== cur.size);
+  const pathChanges = c.path !== undefined && c.path !== cur.path;
+  const deletionChanges = c.deleted !== undefined && c.deleted !== cur.deleted;
+  if (!contentChanges && !pathChanges && !deletionChanges) return null;
+  t.set(cur.fileId, {
+    ...cur,
+    ...(contentChanges ? { sha256: c.content!.sha256, size: c.content!.size, contentVersion: cur.contentVersion + 1 } : {}),
+    ...(pathChanges ? { path: c.path!, pathKey: wfsPathKey(c.path!), pathVersion: cur.pathVersion + 1 } : {}),
+    ...(deletionChanges ? { deleted: c.deleted! } : {}),
+    version: cur.version + 1,
     updatedRev: rev,
   });
   return null;
@@ -607,9 +646,29 @@ export function mergeBackWfsBranch(
   const puts: WfsMergePut[] = [];
   for (const e of b.entries.values()) {
     const base = b.base.get(e.fileId);
-    if (base === undefined && e.deleted) continue; // made and removed on the branch: nothing to bring back
-    if (base !== undefined && base.version === e.version) continue;
-    puts.push({ op: 'merge_put', fileId: e.fileId, expectVersion: base?.version ?? 0, state: { kind: e.kind, path: e.path, sha256: e.sha256, size: e.size, deleted: e.deleted } });
+    if (base === undefined) {
+      if (e.deleted) continue; // made and removed on the branch: nothing to bring back
+      puts.push({
+        op: 'merge_put',
+        fileId: e.fileId,
+        kind: e.kind,
+        base: null,
+        changes: e.kind === 'file' ? { path: e.path, content: { sha256: e.sha256, size: e.size } } : { path: e.path },
+      });
+      continue;
+    }
+    if (base.version === e.version) continue;
+    const content = e.sha256 !== base.sha256 || e.size !== base.size ? { sha256: e.sha256, size: e.size } : undefined;
+    const path = e.path !== base.path ? e.path : undefined;
+    const deleted = e.deleted !== base.deleted ? e.deleted : undefined;
+    if (content === undefined && path === undefined && deleted === undefined) continue; // e.g. deleted and restored: back where it was
+    puts.push({
+      op: 'merge_put',
+      fileId: e.fileId,
+      kind: e.kind,
+      base: { version: base.version, contentVersion: base.contentVersion, pathVersion: base.pathVersion, deleted: base.deleted },
+      changes: { ...(content !== undefined ? { content } : {}), ...(path !== undefined ? { path } : {}), ...(deleted !== undefined ? { deleted } : {}) },
+    });
   }
   puts.sort((x, y) => (x.fileId < y.fileId ? -1 : x.fileId > y.fileId ? 1 : 0));
 
