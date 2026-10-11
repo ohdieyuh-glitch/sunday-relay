@@ -113,6 +113,13 @@ export const WONDERLAND_JULIUS_PAGE_LIMIT = 500;
  */
 const RUN_ID = /^[A-Za-z0-9:_-]{1,128}$/u;
 
+/**
+ * A cursor, as the client writes one: a plain non-negative decimal -- `0`, or a
+ * digit 1-9 followed by digits. Its value must also be a safe integer
+ * (`readWonderlandJuliusQuery`); internal review N4.
+ */
+const CURSOR = /^(0|[1-9]\d*)$/u;
+
 /** What the routes need from Julius. Read-only, and narrow on purpose. */
 export interface WonderlandJuliusReader {
   /**
@@ -351,11 +358,14 @@ export function readWonderlandJuliusQuery(
   if (projectId === null || projectId.trim() === '') return null;
   if (runId === null || runId.trim() === '') return null;
   const raw = parsed.searchParams.get('cursor');
-  const cursor = raw === null ? 0 : Number(raw);
   // A cursor that is not a position is refused rather than clamped. Clamping a
   // client's bad cursor to 0 would silently replay a run from the beginning.
-  if (raw !== null && raw.trim() === '') return null;
-  if (!Number.isSafeInteger(cursor) || cursor < 0) return null;
+  // ONLY A PLAIN DECIMAL is a position (internal review N4): `Number()` alone
+  // read `0x10` as 16, `1e3` as 1000 and `+5` as 5. The client writes `%lld`
+  // (RunQuery, WonderlandJuliusStream.cpp): digits, no sign, no leading zero.
+  if (raw !== null && !CURSOR.test(raw)) return null;
+  const cursor = raw === null ? 0 : Number(raw);
+  if (!Number.isSafeInteger(cursor)) return null;
   return { projectId, runId, cursor, mode: parsed.searchParams.get('mode') };
 }
 

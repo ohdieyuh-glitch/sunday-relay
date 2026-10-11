@@ -132,8 +132,11 @@ export class WonderlandJuliusReaderPostgres {
                   AND e.event_type LIKE 'julius.%') AS at_sequence,
               (SELECT count(*) FROM relay_wonderland.julius_tasks t
                 WHERE t.run_id=r.run_id AND t.state='ACTIVE') AS active_tasks,
+              -- KEYED (run, project) like the gate list below (review N2).
+              -- julius_tasks has no project_id, so the task count above is
+              -- keyed through r, which the WHERE keys by (run, project).
               (SELECT count(*) FROM relay_wonderland.julius_approvals a
-                WHERE a.run_id=r.run_id AND a.state='PENDING') AS pending_approvals,
+                WHERE a.run_id=r.run_id AND a.project_id=r.project_id AND a.state='PENDING') AS pending_approvals,
               -- THE GATES THEMSELVES, IN THE SAME STATEMENT AS THEIR COUNT.
               -- Read separately, the number and the list would be two views of
               -- a run that answered a gate between them, and a world would show

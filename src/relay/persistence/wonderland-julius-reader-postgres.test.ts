@@ -158,6 +158,24 @@ describe('hydrating a run', () => {
     expect(issued[0].values).toEqual([RUN, PROJECT]);
   });
 
+  it('keys the pending-approval COUNT by project as well as by run, like the gate list beside it (review N2)', async () => {
+    // run_id is julius_runs' primary key, so the run alone already pins the row; this is R2's wording -- every
+    // lookup keyed (project, run) -- held by the count exactly as the list holds it.
+    const { issued, reader } = pool([]);
+    await reader.hydrate({ projectId: PROJECT, runId: RUN, worldSessionId: null });
+    const sql = issued[0].sql.replace(/--[^\n]*/g, '');
+    const count = /\(SELECT count\(\*\) FROM relay_wonderland\.julius_approvals a\s+WHERE ([^)]*)\) AS pending_approvals/u.exec(sql);
+    expect(count, 'the pending-approval count was not found').not.toBeNull();
+    expect(count?.[1].replace(/\s+/gu, ' ').trim()).toMatch(/^a\.run_id=r\.run_id AND a\.project_id=r\.project_id AND a\.state='PENDING'$/u);
+    // CONTROL: the gate list beside it was already keyed both ways.
+    expect(sql).toMatch(/WHERE a\.run_id=r\.run_id AND a\.project_id=r\.project_id\s+AND a\.state='PENDING'\) AS open_gates/u);
+    // The ACTIVE-TASK count cannot carry a project: julius_tasks has no project_id column (011_julius_runtime.sql),
+    // so it is keyed through the run row `r`, which the outer WHERE keys by (run, project).
+    const tasks = /\(SELECT count\(\*\) FROM relay_wonderland\.julius_tasks t\s+WHERE ([^)]*)\) AS active_tasks/u.exec(sql);
+    expect(tasks?.[1].replace(/\s+/gu, ' ').trim()).toBe("t.run_id=r.run_id AND t.state='ACTIVE'");
+    expect(sql).toMatch(/WHERE r\.run_id=\$1 AND r\.project_id=\$2/u);
+  });
+
   it('answers null for a run this project does not have', async () => {
     const { reader } = pool([]);
     expect(await reader.hydrate({ projectId: PROJECT, runId: RUN, worldSessionId: null })).toBeNull();

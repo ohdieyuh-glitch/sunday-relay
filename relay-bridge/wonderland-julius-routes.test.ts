@@ -200,6 +200,23 @@ describe('the query a world sends', () => {
     expect(readWonderlandJuliusQuery(`/x?projectId=${PROJECT}&runId=${RUN}&cursor=42`)?.cursor).toBe(42);
   });
 
+  it('accepts only a PLAIN DECIMAL cursor in the safe-integer range -- no hex, exponent, sign or leading zero (review N4)', async () => {
+    // `Number()` read all of these as positions: 0x10 as 16, 1e3 as 1000, +5 as 5. The client writes a plain
+    // non-negative decimal (RunQuery, WonderlandJuliusStream.cpp), so anything else is not a cursor.
+    for (const cursor of ['0x10', '1e3', '+5', '%2B5', '-1', '01', '00', '5.0', '%205', '5%20', '0b1', '9007199254740992', '99999999999999999999']) {
+      expect(readWonderlandJuliusQuery(`/x?projectId=${PROJECT}&runId=${RUN}&cursor=${cursor}`), cursor).toBeNull();
+    }
+    // CONTROL: the plain decimals the client writes, up to the largest safe integer.
+    for (const [cursor, position] of [['0', 0], ['7', 7], ['42', 42], ['9007199254740991', Number.MAX_SAFE_INTEGER]] as const) {
+      expect(readWonderlandJuliusQuery(`/x?projectId=${PROJECT}&runId=${RUN}&cursor=${cursor}`)?.cursor, cursor).toBe(position);
+    }
+    // And through the route: an identified caller's hex cursor is the 400, and opens nothing.
+    const world = worldOf({});
+    const answer = await handleWonderlandJuliusRoute(request('/wonderland/julius/events', `projectId=${PROJECT}&runId=${RUN}&mode=page&cursor=0x10`), deps({ world }));
+    expect(answer?.status).toBe(400);
+    expect(world.opened()).toBe(0);
+  });
+
   it('reads the run id the client sends RAW, colon and all, and the url-encoded spelling the same', () => {
     // The Unreal client sends `runId=run:<hex>` unencoded (RunQuery, WonderlandJuliusStream.cpp).
     expect(readWonderlandJuliusQuery(`/x?projectId=${PROJECT}&runId=run:0a1b&cursor=0`)?.runId).toBe('run:0a1b');
