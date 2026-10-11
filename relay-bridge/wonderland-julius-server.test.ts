@@ -184,10 +184,13 @@ describe('the world routes over the real bridge', () => {
     }
   }, 30_000);
 
-  it('refuses a bad query before it looks at anything else', async () => {
-    const base = await boot('postgres://127.0.0.1:1/never');
-    const res = await get(base, '/relay-api/wonderland/julius/events?projectId=&runId=&mode=page');
-    expect(res.status).toBe(400);
+  it('identifies the caller before it reads the query: anonymous and malformed is 401, identified and malformed 400 (review N1)', async () => {
+    const store = createBrowserSessionStore();
+    const base = await boot('postgres://127.0.0.1:1/never', null, store);
+    const anonymous = await get(base, '/relay-api/wonderland/julius/events?projectId=&runId=&mode=page');
+    expect(anonymous.status).toBe(401);
+    const identified = await getNative(base, '/relay-api/wonderland/julius/events?projectId=&runId=&mode=page', nativeSession(store));
+    expect(identified.status).toBe(400);
   }, 30_000);
 
   it('validates the session INDEPENDENTLY of whether an authority exists', async () => {

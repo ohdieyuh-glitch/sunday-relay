@@ -293,13 +293,38 @@ describe('a route that will not open without its authorisation', () => {
     expect(source.calls.asked).toEqual([{ projectId: PROJECT, runId: RUN }]);
   });
 
-  it('refuses a bad query before anything else', async () => {
+  it('refuses an identified caller\'s bad query with 400, and opens nothing for it', async () => {
     const world = worldOf({});
     const answer = await handleWonderlandJuliusRoute(
       { ...request('/wonderland/julius/events'), url: '/wonderland/julius/events' },
       deps({ world }),
     );
     expect(answer?.status).toBe(400);
+    expect(world.opened()).toBe(0);
+  });
+
+  it('identifies the caller FIRST: an anonymous malformed request is 401, an identified one 400 (review N1)', async () => {
+    const world = worldOf({});
+    const malformed = [
+      '/wonderland/julius/events',
+      `/wonderland/julius/events?projectId=${PROJECT}&mode=page`,
+      `/wonderland/julius/events?runId=${RUN}&mode=page`,
+      `/wonderland/julius/events?projectId=${PROJECT}&runId=${RUN}&cursor=-1&mode=page`,
+      `/wonderland/julius/events?projectId=${PROJECT}&runId=${RUN}`,
+    ];
+    for (const url of malformed) {
+      const asked = (over: Partial<ReturnType<typeof request>>, from: WonderlandJuliusRouteDeps) =>
+        handleWonderlandJuliusRoute({ ...request('/wonderland/julius/events'), url, ...over }, from);
+      // NOT IDENTIFIED -- no session, or a lapsed one: the query is not even read. 401, as R3 says.
+      expect((await asked({ authorization: undefined }, deps({ world })))?.status, `anonymous ${url}`).toBe(401);
+      expect((await asked({}, deps({ world, sessions: sessions('player-1', false) })))?.status, `expired ${url}`).toBe(401);
+      // IDENTIFIED: now the query is answered.
+      expect((await asked({}, deps({ world })))?.status, `identified ${url}`).toBe(400);
+      // REFUSED FOR WHO IT IS: the one 404, whatever it asked -- the operator, and a browser (an Origin).
+      expect(await asked({ authorization: `Bearer ${OPERATOR}` }, deps({ world, operatorToken: OPERATOR })), `operator ${url}`)
+        .toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+      expect(await asked({ origin: WEB }, deps({ world })), `browser ${url}`).toEqual({ status: 404, body: WONDERLAND_JULIUS_NOT_FOUND });
+    }
     expect(world.opened()).toBe(0);
   });
 

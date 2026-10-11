@@ -465,10 +465,12 @@ export async function serveWonderlandJuliusPage(
  * Wonderland family exactly as it did before they existed).
  *
  * THE ORDER IS THE POLICY:
- *   1. the query (400) -- nothing is looked up for a request that names nothing;
- *   2. the caller, from the credential alone (401 / the one 404, which is also
- *      every request carrying an Origin) -- no database is touched for an
- *      anonymous request;
+ *   1. the caller, from the credential alone (401 / the one 404, which is also
+ *      every request carrying an Origin) -- no database is touched, and nothing
+ *      about the query is answered, for a caller who is not identified (internal
+ *      review N1: an anonymous malformed request is 401, never 400);
+ *   2. the query (400), for an identified caller -- nothing is looked up for a
+ *      request that names nothing;
  *   3. identifiers that cannot exist, and a native session asking for a project
  *      it was not paired for (the one 404);
  *   4. a deployment that cannot answer (503);
@@ -491,18 +493,21 @@ export async function handleWonderlandJuliusRoute(
     deps.log?.(`wonderland julius ${route}: ${status} ${reason}${named.length === 0 ? '' : ` ${named.join(' ')}`}`);
   };
 
-  const query = readWonderlandJuliusQuery(input.url);
-  if (query === null) return BAD_QUERY('projectId, runId and a whole cursor are required');
-  if (route === 'events' && query.mode !== 'page') {
-    return BAD_QUERY('the events route serves one page per request: send mode=page');
-  }
-
+  // WHO IS CALLING, BEFORE WHAT IT ASKED (internal review N1). A caller who is not identified is answered 401 for
+  // any query, well-formed or not -- R3's wording -- and one refused for who it is gets the one 404 whatever it asked.
   const caller = identifyWonderlandJuliusCaller(input, deps);
   if (!caller.ok) {
     // An anonymous caller is not logged: a scanner would fill the log with nothing an operator can act on.
     if (caller.status === 401) return SIGN_IN();
     note(404, caller.reason);
     return NOT_FOUND();
+  }
+
+  // ONLY NOW THE QUERY: an identified caller's malformed request is 400.
+  const query = readWonderlandJuliusQuery(input.url);
+  if (query === null) return BAD_QUERY('projectId, runId and a whole cursor are required');
+  if (route === 'events' && query.mode !== 'page') {
+    return BAD_QUERY('the events route serves one page per request: send mode=page');
   }
 
   // NOTHING CAN BE NAMED BY A MALFORMED ID, so it is answered as absent -- and kept out of every log line.
