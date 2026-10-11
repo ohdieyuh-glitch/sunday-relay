@@ -34,9 +34,9 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
   const NOVA = `usr_nova_${nonce}`;
   const VEGA = `usr_vega_${nonce}`;
   const SESSIONS: Record<string, SocialSessionFacts> = {
-    kai: { sessionId: 's1', participantId: KAI, capabilities: [NATIVE_SOCIAL_CAPABILITY] },
-    nova: { sessionId: 's2', participantId: NOVA, capabilities: [NATIVE_SOCIAL_CAPABILITY] },
-    vega: { sessionId: 's3', participantId: VEGA, capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+    kai: { sessionId: 's1', participantId: KAI, issuedAtMs: Date.parse('2026-10-02T15:00:00.000Z'), capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+    nova: { sessionId: 's2', participantId: NOVA, issuedAtMs: Date.parse('2026-10-02T15:00:00.000Z'), capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+    vega: { sessionId: 's3', participantId: VEGA, issuedAtMs: Date.parse('2026-10-02T15:00:00.000Z'), capabilities: [NATIVE_SOCIAL_CAPABILITY] },
   };
   let pool: Pool;
   let store: SocialStore;
@@ -48,6 +48,7 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
     clock += 1000;
     const deps: SocialRouteDeps = {
       verifySession: (token) => SESSIONS[token] ?? null,
+      sessionIssuedAt: null,
       identify: async (id) => ({ userId: id, displayName: id.split('_')[1].replace(/^./, (c) => c.toUpperCase()), handle: `@${id}` }),
       store,
     };
