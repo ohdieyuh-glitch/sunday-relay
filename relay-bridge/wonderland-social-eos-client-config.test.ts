@@ -93,6 +93,15 @@ describe('GET /voice/eos-client-config: what a signed-in desktop client is hande
     expect(seventh.headers?.['retry-after']).toBe('54');
     expect(seventh.body.error?.message).toBe('Too many requests for the voice config; try again in 54 s.');
     expect((await w.get('usr_kai', T0 + 59_999)).headers?.['retry-after']).toBe('1');
+    // ITEM 10 (MAIN WONDERLAND's condition ii): the body's N IS the Retry-After value, at every point of the window -- the client
+    // shows the body verbatim, so a header and a sentence that disagree would tell the player two different waits
+    for (const at of [T0 + 6000, T0 + 6001, T0 + 30_500, T0 + 54_999, T0 + 59_000, T0 + 59_999]) {
+      const refused = await w.get('usr_kai', at);
+      expect(refused.status, String(at)).toBe(429);
+      const n = /try again in (\d+) s\.$/.exec(refused.body.error?.message ?? '')?.[1];
+      expect(n, String(at)).toBeDefined();
+      expect(refused.headers?.['retry-after'], String(at)).toBe(n);
+    }
     expect(w.log).toHaveLength(6);
     // the limit is the session's: the same player's other session, and another player, are served at the same instant
     expect((await w.get('usr_kai#2', T0 + 6000)).status).toBe(200);
