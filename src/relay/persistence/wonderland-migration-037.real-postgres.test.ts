@@ -316,8 +316,8 @@ suite('migration 037: Wonderland private servers, applied explicitly after 036',
     const join = (store: Awaited<ReturnType<typeof openSocialPostgresStore>>, actor: string, ms: number) =>
       store.apply('world.join', actor, { ids: [], body: { target: 'PRIVATE', name: 'Lab' }, query: {} }, at(ms));
     const store = await openSocialPostgresStore(pool);
-    await store.ensureUser({ userId: kai }, at(0));
-    await store.ensureUser({ userId: nova }, at(0));
+    await store.ensureUser({ userId: kai, displayName: 'Kai', handle: '@kai037' }, at(0));
+    await store.ensureUser({ userId: nova, displayName: 'Nova', handle: '@nova037' }, at(0));
     await store.apply('requests.send', kai, { ids: [], body: { toUserId: nova }, query: {} }, at(0));
     const W = PRIVATE_SERVER_POLICY.freeActiveWindowMs;
     const C = PRIVATE_SERVER_POLICY.freeCooldownMs;
@@ -358,7 +358,7 @@ suite('migration 037: Wonderland private servers, applied explicitly after 036',
     const cleo = 'usr_037_c';
     await pool.query('INSERT INTO relay_wonderland.players(player_id) VALUES($1)', [cleo]);
     const third = await openSocialPostgresStore(pool);
-    await third.ensureUser({ userId: cleo }, at(0));
+    await third.ensureUser({ userId: cleo, displayName: 'Cleo', handle: '@cleo037' }, at(0));
     await pool.query('ALTER TABLE relay_wonderland.private_server_entitlements RENAME TO private_server_entitlements_gone');
     try {
       const outage = await join(third, cleo, W + C + MIN);

@@ -18,7 +18,7 @@ import {
   type WfsProjectState,
 } from '../wonderfs';
 import { juliusTestDatabaseUrl } from './julius-test-database';
-import { openWfsPostgresStore, type WfsPostgresStore } from './wonderfs-postgres';
+import { openWfsPostgresStore } from './wonderfs-postgres';
 import { TransactionalWonderlandDatabase } from './wonderland-postgres';
 
 /**
