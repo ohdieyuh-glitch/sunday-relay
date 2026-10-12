@@ -18,9 +18,15 @@ import {
   type WfsStoredRequest,
 } from '../wonderfs/wonderfs-engine';
 import {
+  wfsAdmitCommit,
+  wfsAdmitWrite,
   wfsBlobIntegrity,
+  wfsBlobRoom,
   wfsBlobsNamed,
   wfsBoundPage,
+  wfsCheckUpload,
+  wfsHashMismatch,
+  wfsSha256InSlices,
   wfsCheckChangesQuery,
   wfsCheckConflictsQuery,
   wfsCheckEventsQuery,
@@ -88,7 +94,13 @@ export { WFS_CONFLICT_RETENTION_MS, type WfsStoreEvent } from '../wonderfs/wonde
  *
  * BLOBS (§10.1, §10.2): `putBlob` hashes the bytes HERE, so a blob's address is never the client's word; the Alpha / test store is
  * PostgreSQL `bytea` (wfs_blob_bytes) behind this interface, until the Railway bucket passes T-STORE. The schema refuses deleting a
- * blob anything still names (N-MAJOR-1).
+ * blob anything still names (N-MAJOR-1). R2 (§19.m3): an upload takes the project's row lock FOR UPDATE -- serialised with every
+ * commit and every other upload of the project, on every bridge -- so its room check (main's live bytes + every orphan's pending
+ * bytes + the new blob, `PROJECT_ROOM_SQL`) is exact when it decides, and a refused upload keeps no byte.
+ *
+ * WRITES WITH AN AUTHORITY (R2): the member's role is read INSIDE the write's transaction, `FOR SHARE` on its project_members row
+ * (`lockedRoleNow`): a removal or demotion committed before it is seen; one attempted during it waits until this write ends. It is
+ * judged before the engine runs, so before the replay lookup.
  *
  * WHAT IS NEVER HERE: the Julius live store. Like every Wonderland writer, this refuses a PROTECTED store before its first read or
  * write (protected-store-writer-guard.ts): WonderFS data lives in the Wonderland database only.
@@ -141,6 +153,21 @@ const BLOB_REFERENCE_SQL = `SELECT (SELECT b.size FROM relay_wonderland.wfs_blob
    OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_entries e WHERE e.project_id = $1 AND e.sha256 = $2)
    OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_branch_base x WHERE x.project_id = $1 AND x.sha256 = $2)
    OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_conflict_blobs c WHERE c.project_id = $1 AND c.sha256 = $2)) AS referenced`;
+
+/**
+ * R2 (§19.m3, §11): project $1's room, in ONE row -- main's live file bytes, and the PENDING bytes of every ORPHAN: a blob it holds
+ * that no version, current or fork-time entry, or retained conflict (wfs_conflict_blobs, N-MAJOR-1) names, on any branch. The same
+ * four references as BLOB_REFERENCE_SQL, as anti-joins (each table read once for the project).
+ */
+const PROJECT_ROOM_SQL = `SELECT
+  (SELECT coalesce(sum(e.size), 0) FROM relay_wonderland.wfs_entries e
+    WHERE e.project_id = $1 AND e.branch_id = 'main' AND e.kind = 'file' AND NOT e.deleted)::text AS live_bytes,
+  (SELECT coalesce(sum(b.size), 0) FROM relay_wonderland.wfs_blobs b
+    WHERE b.project_id = $1
+      AND NOT EXISTS (SELECT 1 FROM relay_wonderland.wfs_versions v WHERE v.project_id = b.project_id AND v.sha256 = b.sha256)
+      AND NOT EXISTS (SELECT 1 FROM relay_wonderland.wfs_entries x WHERE x.project_id = b.project_id AND x.sha256 = b.sha256)
+      AND NOT EXISTS (SELECT 1 FROM relay_wonderland.wfs_branch_base f WHERE f.project_id = b.project_id AND f.sha256 = b.sha256)
+      AND NOT EXISTS (SELECT 1 FROM relay_wonderland.wfs_conflict_blobs c WHERE c.project_id = b.project_id AND c.sha256 = b.sha256))::text AS pending_bytes`;
 
 const entryOf = (r: EntryRow): WfsEntry => ({
   fileId: r.file_id,
@@ -389,6 +416,13 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
   const ROLE_SQL = 'SELECT role FROM relay_wonderland.project_members WHERE project_id = $1 AND player_id = $2';
   const roleNow = async (db: Queryable, projectId: string, playerId: string): Promise<WfsHumanRole | null> =>
     wfsHumanRoleFromMembership((await db.query<{ role: string }>(ROLE_SQL, [projectId, playerId])).rows[0]?.role);
+  /**
+   * R2: the role INSIDE a write's transaction, its row held FOR SHARE to the end of it: a DELETE or an UPDATE of that membership
+   * (both conflict with FOR SHARE) committed first is what this reads (READ COMMITTED re-reads the newest version after a wait), and
+   * one that comes after waits for this write to end. No row: no role (and nothing to lock).
+   */
+  const lockedRoleNow = async (db: Queryable, projectId: string, playerId: string): Promise<WfsHumanRole | null> =>
+    wfsHumanRoleFromMembership((await db.query<{ role: string }>(`${ROLE_SQL} FOR SHARE`, [projectId, playerId])).rows[0]?.role);
 
   /**
    * F4: ONE consistent read. Every statement `work` runs sees the same committed state (REPEATABLE READ: the snapshot is taken at
@@ -788,8 +822,13 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         return ok(wfsBlobIntegrity(sha.value, row === undefined ? null : Number(row.size), bytes, sha256Bytes));
       });
     },
-    commit: (projectId, req, nowIso) =>
-      mutate(projectId, nowIso, 'the change', requestedBlobs(req.ops, limits), async (state, ctx) => {
+    commit: (projectId, req, nowIso, authority) =>
+      mutate(projectId, nowIso, 'the change', requestedBlobs(req.ops, limits), async (state, ctx, db) => {
+        // R2: the role NOW, in this transaction, before the engine (and its replay lookup) runs
+        if (authority !== undefined) {
+          const admitted = wfsAdmitCommit(await lockedRoleNow(db, projectId, authority.playerId), authority, state, req);
+          if (!admitted.ok) return admitted;
+        }
         const r = applyWfsCommit(state, req, ctx);
         if (!r.ok) return r;
         return ok({ state: r.value.project, value: r.value.outcome, event: wfsOutcomeEvent(r.value.outcome, 'commit') });
@@ -845,26 +884,47 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         if (!r.ok) return r;
         return ok({ state: r.value, value: null, event: { kind: 'branch.discard', body: { branchId } } });
       }),
-    async putBlob(projectId, bytes) {
+    async putBlob(projectId, bytes, options = {}) {
       await refuseProtectedStore();
-      if (bytes.byteLength > limits.maxFileBytes) return fail(relayError('validation-failed', 'That file is larger than a project allows.', { details: ['wonderfs: file_too_large'] }));
-      const sha256 = sha256Bytes(bytes);
-      const size = bytes.byteLength;
+      const checked = wfsCheckUpload(bytes.byteLength, options.claimedSha256, limits);
+      if (!checked.ok) return checked;
+      // its own copy first (the caller's buffer may change while the hash yields); the address is computed HERE
+      const copy = Buffer.from(bytes);
+      const sha256 = await wfsSha256InSlices(copy, createHash('sha256'));
+      if (checked.value !== null && checked.value !== sha256) return wfsHashMismatch(); // §10.1: nothing kept, nothing touched
+      const size = copy.byteLength;
       return serial(projectId, async () => {
         const client = await pool.connect();
         try {
           await client.query('BEGIN');
-          const live = await client.query('SELECT 1 FROM relay_wonderland.wfs_projects WHERE project_id = $1 AND deleted_at IS NULL FOR SHARE', [projectId]);
+          // FOR UPDATE: serialised with commits and other uploads of this project on every bridge, so the room below is exact
+          const live = await client.query('SELECT 1 FROM relay_wonderland.wfs_projects WHERE project_id = $1 AND deleted_at IS NULL FOR UPDATE', [projectId]);
           if (live.rows.length === 0) {
             await client.query('ROLLBACK');
             return noProject();
           }
-          const made = await client.query(
-            "INSERT INTO relay_wonderland.wfs_blobs(project_id, sha256, size, store) VALUES($1,$2,$3,'pg') ON CONFLICT(project_id, sha256) DO NOTHING",
-            [projectId, sha256, size],
-          );
-          if ((made.rowCount ?? 0) === 1) {
-            await client.query('INSERT INTO relay_wonderland.wfs_blob_bytes(project_id, sha256, bytes) VALUES($1,$2,$3)', [projectId, sha256, Buffer.from(bytes)]);
+          if (options.authority !== undefined) {
+            const admitted = wfsAdmitWrite(await lockedRoleNow(client, projectId, options.authority.playerId), options.authority);
+            if (!admitted.ok) {
+              await client.query('ROLLBACK');
+              return admitted;
+            }
+          }
+          const held = await client.query('SELECT 1 FROM relay_wonderland.wfs_blobs WHERE project_id = $1 AND sha256 = $2', [projectId, sha256]);
+          if (held.rows.length === 0) {
+            // §19.m3: a NEW blob must fit beside main's live bytes and every orphan's pending bytes -- before a byte is kept
+            const room = (await client.query<{ live_bytes: string; pending_bytes: string }>(PROJECT_ROOM_SQL, [projectId])).rows[0];
+            const fits = wfsBlobRoom({ liveBytes: Number(room.live_bytes), pendingBytes: Number(room.pending_bytes), size, limits });
+            if (!fits.ok) {
+              await client.query('ROLLBACK');
+              return fits;
+            }
+            await client.query("INSERT INTO relay_wonderland.wfs_blobs(project_id, sha256, size, store) VALUES($1,$2,$3,'pg')", [projectId, sha256, size]);
+          }
+          // the bytes, unless they are there: a held blob whose bytes went missing is repaired (REVIEW_WONDERFS_R0B MINOR-7)
+          const bytesHeld = await client.query('SELECT 1 FROM relay_wonderland.wfs_blob_bytes WHERE project_id = $1 AND sha256 = $2', [projectId, sha256]);
+          if (bytesHeld.rows.length === 0) {
+            await client.query('INSERT INTO relay_wonderland.wfs_blob_bytes(project_id, sha256, bytes) VALUES($1,$2,$3)', [projectId, sha256, copy]);
           }
           await client.query('COMMIT');
           return ok({ sha256, size });
