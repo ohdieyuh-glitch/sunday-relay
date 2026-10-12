@@ -27,8 +27,14 @@
  * BYTES. `application/octet-stream` (a WonderFS file has no media type: §6.2's create carries none, so octet-stream is the honest
  * type; the client names the file from the tree), `X-Content-Type-Options: nosniff`, `Content-Disposition: attachment`, a
  * `Content-Security-Policy` that runs nothing, `ETag: "<sha256>"` (strong: the address IS the bytes), `Accept-Ranges: bytes`.
- *   RANGE (RFC 9110 §14): one `bytes=a-b | a- | -n` is honoured (206 + Content-Range); an unsatisfiable one is 416 -- any Range of a
- *   0-byte file is unsatisfiable, as the RFC says; several ranges, or a malformed header, are ignored and the whole file is sent.
+ *   RANGE (RFC 9110 §14): one `bytes=a-b | a- | -n` is honoured (206 + Content-Range); an unsatisfiable one (§14.1.2: first-pos
+ *   not less than the length, or a zero suffix-length) is 416 + `Content-Range: bytes *\/<length>`; an invalid one (§14.1.1: last-pos
+ *   below first-pos), several ranges, or a malformed header are ignored (§14.2) and the whole file is sent. A 0-BYTE file: `bytes=0-`,
+ *   `bytes=0-0` and `bytes=-0` are 416; `bytes=-n` (n > 0) is satisfiable (§14.1.2) but a 206 cannot carry an empty range, so it is
+ *   ignored (§14.2) and the empty file is sent whole, 200 (`wonderfsRange` below).
+ *   FOR THE C1 CLIENT (review of r4, MINOR-2): a 416 whose `Content-Range: bytes *\/<length>` length EQUALS the bytes it already
+ *   holds means "COMPLETE" -- e.g. a resumed download (`Range: bytes=<held>-`, `If-Range: "<sha256>"`) of a file it already has
+ *   whole -- never an error: keep the bytes held (and check them against the ETag's sha256).
  *   IF-RANGE (RFC 9110 §13.1.5, R1 correctness MAJOR-2): with a Range, it must STRONGLY match the current ETag, else the Range is
  *   ignored and the whole current file is sent (200). A weak tag or a date never matches (no Last-Modified is sent). So a client
  *   resuming `content` after the file changed gets the new file whole, never old and new bytes spliced.
@@ -145,8 +151,16 @@ function decodeTreeCursor(projectId: string, cursor: string): { ok: true; storeC
 export type WonderfsRange = { readonly kind: 'whole' } | { readonly kind: 'part'; readonly start: number; readonly end: number } | { readonly kind: 'unsatisfiable' };
 
 /**
- * ONE byte range of a `size`-byte body (RFC 9110 §14): `bytes=a-b`, `bytes=a-`, `bytes=-n`. Anything else is ignored (whole). Any range
- * of a 0-byte body is unsatisfiable (there is no first byte to give), as the RFC says.
+ * ONE byte range of a `size`-byte body (RFC 9110 §14): `bytes=a-b`, `bytes=a-`, `bytes=-n`. Anything else -- several ranges, another
+ * unit, a malformed header -- is ignored (whole), as §14.2 allows ("A server MAY ignore the Range header field").
+ *   - INVALID (§14.1.1: "An int-range is invalid if the last-pos value is present and less than the first-pos"): ignored -> whole.
+ *   - SATISFIABLE (§14.1.2): an int-range whose first-pos is less than the length, or a suffix-range with a NON-ZERO suffix-length.
+ *     So `bytes=-0` is unsatisfiable (416) at any size, and `bytes=a-` / `bytes=a-b` with a >= length is unsatisfiable (416).
+ *   - A 0-BYTE BODY (§14.1.2: "When a selected representation has zero length, the only satisfiable form of range-spec in a GET
+ *     request is a suffix-range with a non-zero suffix-length"): `bytes=0-` and `bytes=0-0` are unsatisfiable (416), but
+ *     `bytes=-n` (n > 0) IS satisfiable -- and a 206 cannot carry an empty range, so the Range is ignored (§14.2: a server "MAY
+ *     ignore a Range header field when the selected representation has no content") and the empty body goes out whole, 200.
+ *     R1-r5 (review of r4, MAJOR-1): that case answered 416 before.
  */
 export function wonderfsRange(header: string | undefined, size: number): WonderfsRange {
   if (header === undefined) return { kind: 'whole' };
@@ -154,15 +168,16 @@ export function wonderfsRange(header: string | undefined, size: number): Wonderf
   if (m === null || (m[1] === '' && m[2] === '')) return { kind: 'whole' };
   if (m[1] === '') {
     const suffix = Number(m[2]);
-    if (suffix === 0 || size === 0) return { kind: 'unsatisfiable' };
+    if (suffix === 0) return { kind: 'unsatisfiable' }; // §14.1.2: a zero suffix-length is never satisfiable
+    if (size === 0) return { kind: 'whole' }; // satisfiable, but nothing to put in a 206: ignored (§14.2), the empty body whole
     return { kind: 'part', start: Math.max(0, size - suffix), end: size - 1 };
   }
   const start = Number(m[1]);
   // only an EXPLICIT last position below the first is invalid (ignored); an open end is never compared before the size check --
   // R1-r4 (CI r1.10): `bytes=<size>-` once turned its open end into size-1 < start and answered the whole file instead of 416
   const explicitEnd = m[2] === '' ? null : Number(m[2]);
-  if (explicitEnd !== null && explicitEnd < start) return { kind: 'whole' };
-  if (start >= size) return { kind: 'unsatisfiable' }; // RFC 9110 §14.1.1: no byte at or after `start`
+  if (explicitEnd !== null && explicitEnd < start) return { kind: 'whole' }; // §14.1.1: invalid, ignored
+  if (start >= size) return { kind: 'unsatisfiable' }; // §14.1.2: first-pos not less than the length
   return { kind: 'part', start, end: Math.min(explicitEnd ?? size - 1, size - 1) };
 }
 

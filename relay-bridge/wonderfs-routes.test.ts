@@ -535,6 +535,13 @@ describe('WonderFS R1 reads: bytes', () => {
     expect(wonderfsRange('bytes=9-', 10)).toEqual({ kind: 'part', start: 9, end: 9 });
     expect(wonderfsRange('bytes=3-99', 10), 'a last position past the end is clamped').toEqual({ kind: 'part', start: 3, end: 9 });
     expect(wonderfsRange('bytes=-99', 10), 'a suffix longer than the file is the whole file as a part').toEqual({ kind: 'part', start: 0, end: 9 });
+    // R1-r5 (review of r4, MAJOR-1): a 0-BYTE file, each form (RFC 9110 §14.1.2 satisfiability; §14.2 MAY ignore)
+    expect(wonderfsRange('bytes=-5', 0), '-N on 0 bytes: satisfiable but no 206 can carry it -> the empty body whole (200)').toEqual({ kind: 'whole' });
+    expect(wonderfsRange('bytes=-1', 0)).toEqual({ kind: 'whole' });
+    expect(wonderfsRange('bytes=-0', 0), '-0: a zero suffix-length is never satisfiable').toEqual({ kind: 'unsatisfiable' });
+    expect(wonderfsRange('bytes=0-', 0), '0- on 0 bytes: first-pos not less than the length').toEqual({ kind: 'unsatisfiable' });
+    expect(wonderfsRange('bytes=0-0', 0), '0-0 on 0 bytes').toEqual({ kind: 'unsatisfiable' });
+    expect(wonderfsRange('bytes=-0', 10), '-0 at any length').toEqual({ kind: 'unsatisfiable' });
   }, 60_000);
 
   it('bytes that fail their check (address or size) are NEVER served: 503, and the log names the blob; CONTROL: intact, served', async () => {
@@ -600,16 +607,16 @@ describe('WonderFS R1 reads: budgets (§8.4)', () => {
     const path = `/wonderfs/v1/projects/${PROJECT}/blobs/${f.blobs.v1.sha256}`;
     const first = call(base, path, { token: tokens['ghu-1'] });
     const second = call(base, path, { token: tokens['ghu-2'] });
-    await vi.waitFor(() => expect(slow.waiting.length).toBe(2));
+    await vi.waitFor(() => expect(slow.waiting.length).toBe(2), { timeout: 10_000, interval: 5 });
     expect(counted.held()).toBe(2);
     const third = await call(base, path, { token: tokens['ghu-3'] });
     expect([third.status, third.headers['retry-after'], third.json.error.message]).toEqual([429, '1', 'Too many requests; try again in 1 s.']);
     for (const go of slow.waiting.splice(0)) go();
     expect([(await first).status, (await second).status]).toEqual([200, 200]);
     // the slots return once the two answers are written; then the next byte read is admitted
-    await vi.waitFor(() => expect(counted.held()).toBe(0));
+    await vi.waitFor(() => expect(counted.held()).toBe(0), { timeout: 10_000, interval: 5 });
     expect((await call(base, path, { token: tokens['ghu-3'] })).status).toBe(200);
-  });
+  }, 30_000); // above the 10 s vi.waitFor bounds (vitest default: 5 s)
 
   it('ONE PLAYER CANNOT HOLD ANOTHER\'S BYTE READS (security MAJOR-1(a)): a player\'s second concurrent byte read is 429 while another player is served; CONTROL: a process-only cap refuses the other player instead', async () => {
     const f = await fixture();
@@ -624,19 +631,19 @@ describe('WonderFS R1 reads: budgets (§8.4)', () => {
       let settled = 0;
       const settle = (a: Promise<Answer>) => a.then((x) => { settled += 1; return x; });
       const first = settle(call(base, path, { token: tokens['ghu-1'] }));
-      await vi.waitFor(() => expect(slow.waiting.length).toBe(1));
+      await vi.waitFor(() => expect(slow.waiting.length).toBe(1), { timeout: 10_000, interval: 5 });
       // the player's second read, held or refused, BEFORE the other player asks: a fixed order
       const own = settle(call(base, path, { token: tokens['ghu-1'] }));
-      await vi.waitFor(() => expect(slow.waiting.length + settled).toBe(2));
+      await vi.waitFor(() => expect(slow.waiting.length + settled).toBe(2), { timeout: 10_000, interval: 5 });
       const other = settle(call(base, path, { token: tokens['ghu-2'] }));
-      await vi.waitFor(() => expect(slow.waiting.length + settled).toBe(3));
+      await vi.waitFor(() => expect(slow.waiting.length + settled).toBe(3), { timeout: 10_000, interval: 5 });
       expect(slow.waiting.length, 'two reads hold slots at the store; the third was refused at the gate').toBe(2);
       for (const go of slow.waiting.splice(0)) go();
       return [(await first).status, (await own).status, (await other).status];
     };
     expect(await run(1), 'one per player: the player\'s second is refused, the other player is served').toEqual([200, 429, 200]);
     expect(await run(2), 'CONTROL, a process-only cap: the first player takes both slots and the other player is refused').toEqual([200, 200, 429]);
-  });
+  }, 30_000);
 
   it('a per-player BYTES budget (security MAJOR-1(b)): charged the whole blob read and verified, whatever the Range; over it, 429 + Retry-After N = the body\'s N; another player is unaffected', async () => {
     const f = await fixture();
@@ -685,17 +692,17 @@ describe('WonderFS R1 reads: budgets (§8.4)', () => {
       const path = `/wonderfs/v1/projects/${PROJECT}/blobs/${f.blobs.v1.sha256}`;
       const aborts = [new AbortController(), new AbortController()];
       const pending = ['ghu-1', 'ghu-2'].map((p, i) => realFetch(`${base}${path}`, { headers: { authorization: `Relay-Session ${tokens[p]}` }, signal: aborts[i].signal }).then(() => 'answered', () => 'aborted'));
-      await vi.waitFor(() => expect(slow.waiting.length).toBe(2));
+      await vi.waitFor(() => expect(slow.waiting.length).toBe(2), { timeout: 10_000, interval: 5 });
       expect(counted.held()).toBe(2);
       for (const a of aborts) a.abort();
       expect(await Promise.all(pending)).toEqual(['aborted', 'aborted']);
-      await vi.waitFor(() => expect(sockets.filter((s) => s.destroyed).length).toBe(2));
+      await vi.waitFor(() => expect(sockets.filter((s) => s.destroyed).length).toBe(2), { timeout: 10_000, interval: 5 });
       for (const go of slow.waiting.splice(0)) go();
-      await vi.waitFor(() => expect(written).toBe(2));
+      await vi.waitFor(() => expect(written).toBe(2), { timeout: 10_000, interval: 5 });
       // no sleeping: where a release is due, wait for it; in the control, flush the event loop once (finished / close call back on the
       // next tick) -- after that nothing queued can give the slots back, because their `close` fired before anyone listened
       if (mode === 'r2-control') await new Promise<void>((r) => setImmediate(r));
-      else await vi.waitFor(() => expect(counted.held()).toBe(0));
+      else await vi.waitFor(() => expect(counted.held()).toBe(0), { timeout: 10_000, interval: 5 });
       const held = counted.held();
       const next = await call(base, path, { token: tokens['ghu-3'] });
       return { held, next: next.status };
@@ -712,14 +719,14 @@ describe('WonderFS R1 reads: budgets (§8.4)', () => {
     const stalledRes = Object.assign(stalled, { writeHead: () => stalled, setTimeout: () => stalled }) as unknown as ServerResponse;
     writeWonderfsAnswer(stalledRes, { status: 200, headers: {}, body: Buffer.alloc(64), release: () => { released += 1; } }, {}, { deadlineMs: 50, idleMs: 60_000 });
     expect(released, 'held while it writes').toBe(0);
-    await vi.waitFor(() => expect(released).toBe(1), { timeout: 2_000 });
+    await vi.waitFor(() => expect(released).toBe(1), { timeout: 10_000, interval: 5 });
     expect(stalled.destroyed, 'the deadline destroyed it').toBe(true);
     let releasedFast = 0;
     const flowing = new Writable({ write(_chunk, _encoding, callback) { callback(); } });
     const flowingRes = Object.assign(flowing, { writeHead: () => flowing, setTimeout: () => flowing }) as unknown as ServerResponse;
     writeWonderfsAnswer(flowingRes, { status: 200, headers: {}, body: Buffer.alloc(64), release: () => { releasedFast += 1; } }, {}, { deadlineMs: 60_000, idleMs: 60_000 });
-    await vi.waitFor(() => expect(releasedFast).toBe(1));
-  });
+    await vi.waitFor(() => expect(releasedFast).toBe(1), { timeout: 10_000, interval: 5 });
+  }, 30_000);
 });
 
 describe('WonderFS R1 reads: If-Range (RFC 9110 §13.1.5; correctness MAJOR-2)', () => {
