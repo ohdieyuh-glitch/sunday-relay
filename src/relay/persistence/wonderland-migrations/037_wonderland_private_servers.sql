@@ -7,9 +7,10 @@ BEGIN;
 --     never a row.
 --   - private_servers: one lifecycle row per owner (one private server each, `priv_<owner>`). It holds the server's own name (its
 --     configuration, kept across restarts), the tier and policy its current cycle opened under, and the cycle's three times fixed
---     AT ACTIVATION from server time. A FREE cycle's window and cooldown are held to the founder's APPROVED RANGES here too (6-8 h,
---     then 4-5 h), so no writer can store a longer window, a shorter cooldown or times out of order. Updates are compare-and-set
---     on `version`.
+--     AT ACTIVATION from server time. A FREE cycle's times must be in order, and its window and cooldown inside NEUTRAL SANITY
+--     BOUNDS only (window 1 min to 24 h, cooldown 1 min to 24 h): bounds against corrupt rows, NOT product policy. The Free
+--     durations (6-8 h active, 4-5 h cooldown) are PROPOSED (not approved); they live in the code's policy and are deliberately not
+--     encoded here, so the founder's eventual choice needs no new migration. Updates are compare-and-set on `version`.
 -- NOTHING HERE DELETES USER DATA. A window ending closes a session; it touches no WonderFS, Project Brain or social row (rule F).
 --
 -- NUMBER 037, PROVISIONAL (agreed with MAIN JUJU 10-11: 036 WonderFS, 037 this file, 038 Project Brain file-memory; each claimed
@@ -75,13 +76,16 @@ CREATE TABLE relay_wonderland.private_servers(
   updated_at timestamptz NOT NULL,
   CONSTRAINT private_servers_pkey PRIMARY KEY(owner_id),
   CONSTRAINT private_servers_owner_fk FOREIGN KEY(owner_id) REFERENCES relay_wonderland.players(player_id) ON DELETE CASCADE,
-  -- A FREE row: never opened (no times, READY), or a cycle inside the founder's approved ranges, its times in order.
+  -- A FREE row: never opened (no times, READY), or a cycle with its times in order (activated_at < active_until < cooldown_until)
+  -- inside SANITY BOUNDS, not policy: an active window of 1 minute to 24 hours, a cooldown of 1 minute to 24 hours (the same bounds
+  -- makePrivateServerPolicy holds a policy to). The Free durations themselves are PROPOSED (not approved) and live in
+  -- private-server-lifecycle.ts, never in this CHECK.
   CONSTRAINT private_servers_free_cycle CHECK(
     cycle_tier <> 'FREE'
     OR (activated_at IS NULL AND active_until IS NULL AND cooldown_until IS NULL AND status = 'READY')
     OR (activated_at IS NOT NULL AND active_until IS NOT NULL AND cooldown_until IS NOT NULL
-        AND active_until - activated_at BETWEEN interval '6 hours' AND interval '8 hours'
-        AND cooldown_until - active_until BETWEEN interval '4 hours' AND interval '5 hours'
+        AND active_until - activated_at BETWEEN interval '1 minute' AND interval '24 hours'
+        AND cooldown_until - active_until BETWEEN interval '1 minute' AND interval '24 hours'
         AND status IN ('READY', 'ACTIVE', 'COOLDOWN'))
   ),
   -- A PRO / MAX row: continuous, opened at a time, with no window and no cooldown.

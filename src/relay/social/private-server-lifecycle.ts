@@ -3,8 +3,8 @@
  *
  * THE RULES:
  *   A. Every player may OPEN a private server, free: no charge and no tier needed. One per owner (`priv_<owner>`, world-presence.ts).
- *   B. FREE: once opened, a server stays open for one ACTIVE WINDOW of SERVER time (approved range 6-8 h) ...
- *   C. ... then it COOLS DOWN (approved range 4-5 h). Nobody opens it or joins it until the cooldown ends.
+ *   B. FREE: once opened, a server stays open for one ACTIVE WINDOW of SERVER time (6-8 h PROPOSED, not approved) ...
+ *   C. ... then it COOLS DOWN (4-5 h PROPOSED, not approved). Nobody opens it or joins it until the cooldown ends.
  *   D/E. PRO and MAX: continuous. No window, no cooldown. There is NO Team tier.
  *   F. A window ending closes the SESSION, never the data. Nothing here deletes anything. The server's own settings (its name) are
  *      kept with its record, and WonderFS, Project Brain and social rows are never touched by a lifecycle change.
@@ -52,11 +52,23 @@ const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 
 /**
- * The founder's APPROVED RANGES (2026-10-11): a Free active window of 6-8 hours, then a cooldown of 4-5 hours. A policy outside
- * them is refused when it is made, and migration 037's CHECKs refuse any stored cycle outside them as well.
+ * The Free durations as PROPOSED (not approved) to the founder on 2026-10-11: an active window of 6-8 hours, then a cooldown of
+ * 4-5 hours. FOR DOCUMENTATION AND UI ONLY: no validation reads this, and neither does migration 037. The founder has not approved
+ * these ranges, so they are not law anywhere in code or schema.
  */
-export const FREE_ACTIVE_WINDOW_RANGE_MS = Object.freeze({ min: 6 * HOUR_MS, max: 8 * HOUR_MS });
-export const FREE_COOLDOWN_RANGE_MS = Object.freeze({ min: 4 * HOUR_MS, max: 5 * HOUR_MS });
+export const FREE_PROPOSED_RANGES_MS = Object.freeze({
+  activeWindow: Object.freeze({ min: 6 * HOUR_MS, max: 8 * HOUR_MS }),
+  cooldown: Object.freeze({ min: 4 * HOUR_MS, max: 5 * HOUR_MS }),
+});
+
+/**
+ * NEUTRAL SANITY BOUNDS, NOT POLICY: what makePrivateServerPolicy accepts, and the same bounds migration 037's
+ * private_servers_free_cycle CHECK holds a stored Free cycle to. An active window of 1 minute to 24 hours; a cooldown of 1 minute
+ * to 24 hours (a Free server always has a cooldown: none at all would make it a continuous one). They exist to refuse nonsense (a zero or day-long-plus window), not to encode the founder's proposal, so any duration the
+ * founder later chooses inside a day needs a code change only, never a new migration.
+ */
+export const FREE_ACTIVE_WINDOW_SANITY_MS = Object.freeze({ min: MINUTE_MS, max: 24 * HOUR_MS });
+export const FREE_COOLDOWN_SANITY_MS = Object.freeze({ min: MINUTE_MS, max: 24 * HOUR_MS });
 
 export interface PrivateServerPolicy {
   /** Stored on every cycle, so the record says which terms it opened under. */
@@ -67,15 +79,18 @@ export interface PrivateServerPolicy {
   readonly frozen: boolean;
 }
 
-/** A policy inside the approved ranges, in whole minutes, or a RangeError. Never a value outside the founder's ranges. */
+/**
+ * A policy in whole minutes inside the SANITY BOUNDS (window 1 min to 24 h, cooldown 1 min to 24 h), or a RangeError. The bounds are not
+ * the founder's proposal: a window outside 6-8 h is accepted here, because those figures are PROPOSED (not approved).
+ */
 export function makePrivateServerPolicy(input: { readonly freeActiveWindowMs: number; readonly freeCooldownMs: number; readonly frozen: boolean }): PrivateServerPolicy {
   const { freeActiveWindowMs: w, freeCooldownMs: c } = input;
   const whole = (ms: number) => Number.isSafeInteger(ms) && ms % MINUTE_MS === 0;
-  if (!whole(w) || w < FREE_ACTIVE_WINDOW_RANGE_MS.min || w > FREE_ACTIVE_WINDOW_RANGE_MS.max) {
-    throw new RangeError(`the Free active window must be whole minutes within the approved 6-8 h, not ${w} ms`);
+  if (!whole(w) || w < FREE_ACTIVE_WINDOW_SANITY_MS.min || w > FREE_ACTIVE_WINDOW_SANITY_MS.max) {
+    throw new RangeError(`the Free active window must be whole minutes from 1 min to 24 h (a sanity bound, not policy), not ${w} ms`);
   }
-  if (!whole(c) || c < FREE_COOLDOWN_RANGE_MS.min || c > FREE_COOLDOWN_RANGE_MS.max) {
-    throw new RangeError(`the Free cooldown must be whole minutes within the approved 4-5 h, not ${c} ms`);
+  if (!whole(c) || c < FREE_COOLDOWN_SANITY_MS.min || c > FREE_COOLDOWN_SANITY_MS.max) {
+    throw new RangeError(`the Free cooldown must be whole minutes from 1 min to 24 h (a sanity bound, not policy), not ${c} ms`);
   }
   return Object.freeze({
     policyId: `free-${w / MINUTE_MS}m-cool-${c / MINUTE_MS}m${input.frozen ? '' : '-proposed'}`,
@@ -86,9 +101,10 @@ export function makePrivateServerPolicy(input: { readonly freeActiveWindowMs: nu
 }
 
 /**
- * THE ONE PLACE THE DURATIONS LIVE. PROPOSED to the founder on 2026-10-11, NOT frozen: 8 h active + 4 h cooldown, a 12-hour cycle
- * (twice a day). The founder approved the ranges, not these values. Changing them is this one line, and a running cycle keeps the
- * terms it opened under.
+ * THE ONE PLACE THE DURATIONS LIVE. PROPOSED (not approved) to the founder on 2026-10-11, NOT frozen: 8 h active + 4 h cooldown,
+ * a 12-hour cycle (twice a day). Neither these values nor the 6-8 h / 4-5 h ranges are approved, so the policy id ends "-proposed"
+ * and `frozen` is false. Freezing it takes an explicit code change to this line (there is no environment or runtime override), and a
+ * running cycle keeps the terms it opened under.
  */
 export const PRIVATE_SERVER_POLICY: PrivateServerPolicy = makePrivateServerPolicy({ freeActiveWindowMs: 8 * HOUR_MS, freeCooldownMs: 4 * HOUR_MS, frozen: false });
 
@@ -179,6 +195,16 @@ function governingFreeCycle(record: PrivateServerRecord | null, lapsedAtMs: numb
 /** How far a cycle's opening may lie AHEAD of the server clock (an NTP step) and still count as begun. Beyond it: closed. */
 export const PRIVATE_SERVER_CLOCK_TOLERANCE_MS = 2 * MINUTE_MS;
 
+/**
+ * A cycle whose opening lies AHEAD of the server clock by more than the tolerance (a clock stepped back, or an invalid activation
+ * time): privateServerAccess reads it closed, and NOTHING about it is observed or written until the clock reaches it. Its
+ * "COOLDOWN" carries the opening as cooldownUntilMs, not a real cooldown end, so deriving a Free record from it would put
+ * active_until before activated_at (the internal review's M1, 10-12).
+ */
+function cycleNotYetReached(record: PrivateServerRecord, nowMs: number): boolean {
+  return record.activatedAtMs !== null && nowMs < record.activatedAtMs - PRIVATE_SERVER_CLOCK_TOLERANCE_MS;
+}
+
 /** What the owner's server allows NOW, from the two trusted records and the server clock. */
 export function privateServerAccess(record: PrivateServerRecord | null, entitlement: ServerEntitlementRow | null, policy: PrivateServerPolicy, nowMs: number): PrivateServerAccess {
   const { tier, lapsedAtMs } = effectiveServerTier(entitlement, nowMs);
@@ -198,7 +224,7 @@ export function privateServerAccess(record: PrivateServerRecord | null, entitlem
  * deletion, a renewal dated later) can move the times. Null when there is nothing to convert.
  */
 export function lapsedCycleRecord(record: PrivateServerRecord | null, entitlement: ServerEntitlementRow | null, policy: PrivateServerPolicy, nowMs: number): PrivateServerRecord | null {
-  if (record === null || record.cycleTier === 'FREE' || record.activatedAtMs === null) return null;
+  if (record === null || record.cycleTier === 'FREE' || record.activatedAtMs === null || cycleNotYetReached(record, nowMs)) return null;
   const { tier, lapsedAtMs } = effectiveServerTier(entitlement, nowMs);
   if (tier !== 'FREE') return null;
   const cycle = freeCycleFrom(Math.max(record.activatedAtMs, lapsedAtMs ?? record.activatedAtMs), policy);
@@ -256,6 +282,8 @@ export function openPrivateServer(
   switch (access.status) {
     case 'COOLDOWN': {
       if (record === null) return { ok: false, access, record: null, write: false };
+      // A cycle the server clock has not reached: refused, and nothing is observed or written (see cycleNotYetReached).
+      if (cycleNotYetReached(record, nowMs)) return { ok: false, access, record, write: false };
       // The cycle's times are already fixed; only the observed status may need recording (the owner's name request is not applied
       // to a server they may not open).
       const observed = record.status === 'COOLDOWN' && record.cycleTier === 'FREE' ? record : freeRecordOf(record, access, ownerId, policy, nowMs, 'COOLDOWN');
@@ -318,7 +346,7 @@ function freeRecordOf(record: PrivateServerRecord, access: PrivateServerAccess, 
 
 /** A Free server's window just ended while people were inside: the record of that observation (status COOLDOWN), times unchanged. */
 export function observeClosed(record: PrivateServerRecord | null, access: PrivateServerAccess, policy: PrivateServerPolicy, nowMs: number): PrivateServerRecord | null {
-  if (record === null || access.status !== 'COOLDOWN' || (record.status === 'COOLDOWN' && record.cycleTier === 'FREE')) return null;
+  if (record === null || access.status !== 'COOLDOWN' || (record.status === 'COOLDOWN' && record.cycleTier === 'FREE') || cycleNotYetReached(record, nowMs)) return null;
   return freeRecordOf(record, access, record.ownerId, policy, nowMs, 'COOLDOWN');
 }
 

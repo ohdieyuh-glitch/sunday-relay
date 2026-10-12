@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { openPrivateServer, privateServerAccess, PRIVATE_SERVER_POLICY } from './private-server-lifecycle';
 import { applySocialOperation, type SocialCommandOutcome } from './social-commands';
 import { createSocialFixture, FIXTURE_USERS as U } from './social-fixtures';
 import { partyOf, type SocialState } from './social-state';
-import { contextOf, emptyWorldState } from './world-presence';
+import { contextOf, emptyWorldState, type PrivateServerGate } from './world-presence';
 
 /*
  * NO CONTROL CHARACTER IN ANYTHING A PLAYER WRITES FOR OTHER PLAYERS TO READ (CORE, 10-07: the log-injection finding).
@@ -20,8 +21,18 @@ import { contextOf, emptyWorldState } from './world-presence';
 const NOW = '2026-10-07T18:00:00.000Z';
 
 type Outcome = { ok: true; value: SocialCommandOutcome } | { ok: false; error: { code: string; message: string } };
-const op = (s: SocialState, actor: string, name: Parameters<typeof applySocialOperation>[1], body: Record<string, unknown>, ids: string[] = []): Outcome =>
-  applySocialOperation(s, name, actor, { ids, body, query: {} }, NOW, emptyWorldState()) as Outcome;
+const op = (s: SocialState, actor: string, name: Parameters<typeof applySocialOperation>[1], body: Record<string, unknown>, ids: string[] = [], gate: PrivateServerGate | null = null): Outcome =>
+  applySocialOperation(s, name, actor, { ids, body, query: {} }, NOW, emptyWorldState(), gate) as Outcome;
+
+/**
+ * Migration 037: an owner enters their private server only by the store's read of it (fail closed). Kai has no record yet (READY),
+ * so this read OPENS it, a Free window from NOW, under the name asked for: every refusal of that field below is the name's
+ * (validation-failed), never a closed server's (illegal-transition), and the ordinary name is let in.
+ */
+const kaiOpens = (name: string): PrivateServerGate => {
+  const nowMs = Date.parse(NOW);
+  return { ownerId: U.KAI, access: privateServerAccess(null, null, PRIVATE_SERVER_POLICY, nowMs), open: openPrivateServer(null, null, PRIVATE_SERVER_POLICY, U.KAI, name, nowMs) };
+};
 
 /** One of each kind: NUL, SOH, TAB, LF, VT, CR, ESC, the last C0 (U+001F), DEL, and the line and paragraph separators. */
 const CONTROLS = [0x00, 0x01, 0x09, 0x0a, 0x0b, 0x0d, 0x1b, 0x1f, 0x7f, 0x2028, 0x2029];
@@ -63,7 +74,7 @@ const FIELDS: readonly Field[] = [
   },
   {
     name: 'world.join PRIVATE name',
-    send: (s, text) => op(s, U.KAI, 'world.join', { target: 'PRIVATE', name: text }),
+    send: (s, text) => op(s, U.KAI, 'world.join', { target: 'PRIVATE', name: text }, [], kaiOpens(text)),
     kept: (o) => (o.world === undefined ? undefined : contextOf(o.world, U.KAI)?.serverName),
   },
   {
