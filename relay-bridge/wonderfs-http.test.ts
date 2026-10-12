@@ -98,7 +98,8 @@ describe('WonderFS on the real bridge: ALWAYS ON (INV-10, §19.m6)', () => {
   it('the same WonderFS answers with WONDERLAND_SOCIAL_ENABLED unset, 0 and 1 -- and with a planted WONDERFS_DISABLED; CONTROL: the flag does switch social', async () => {
     const answers: unknown[] = [];
     const social: number[] = [];
-    for (const env of [{}, { WONDERLAND_SOCIAL_ENABLED: '0' }, { WONDERLAND_SOCIAL_ENABLED: '1', RELAY_GITHUB_APP_CLIENT_ID: 'Iv1.public' }, { WONDERFS_DISABLED: '1', WONDERFS_ENABLED: '0' }]) {
+    const envs: Record<string, string>[] = [{}, { WONDERLAND_SOCIAL_ENABLED: '0' }, { WONDERLAND_SOCIAL_ENABLED: '1', RELAY_GITHUB_APP_CLIENT_ID: 'Iv1.public' }, { WONDERFS_DISABLED: '1', WONDERFS_ENABLED: '0' }];
+    for (const env of envs) {
       const base = await boot(env);
       const a = await call(base, '/relay-api/wonderfs/v1/projects/prj-1/branches/main/tree');
       answers.push([a.status, a.body, a.cacheControl]);
