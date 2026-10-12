@@ -27,7 +27,9 @@ import {
   type WfsPrincipal,
   type WfsProjectState,
   type WfsReviewVerdict,
+  canonicalJson,
   wfsGenesisHash,
+  WFS_REQUEST_HASH_VERSION,
 } from './index';
 
 /**
@@ -879,6 +881,32 @@ describe('WonderFS engine: r1.2 §19.M1 (T-APPROVAL-BIND) and §19.M7 (anchored 
     // CONTROL: the same request id under another attempt is not this request
     const otherAttempt = mergeBackWfsBranch(merged.value.project, { ...input, principal: { ...runner, attemptId: 'attempt-2' } }, h.ctx);
     expect(otherAttempt.ok === false && otherAttempt.error.code).toBe('duplicate-idempotency-key');
+  });
+
+  it('R0a review MINOR-2: the request-identity hash is VERSIONED (wfs-req.2) for commits AND merges; a row stored under another formula is refused, never answered', () => {
+    expect(WFS_REQUEST_HASH_VERSION).toBe('wfs-req.2');
+    const h = harness();
+    const { p, branchId, owner } = agentWithOneCommit(h, 'julius');
+    const actorOf = (x: WfsPrincipal) => ({ kind: x.kind, id: x.id, onBehalfOf: x.onBehalfOf, grantId: x.grantId, missionId: x.missionId, attemptId: x.attemptId });
+    // the COMMIT formula, pinned: the stored hash is the tagged one (CONTROL: dropping `v` from the engine's object turns this red)
+    const req = request([{ op: 'create', path: 'tagged.txt', kind: 'file', ...h.blob('t') }], who('ghu-1'));
+    const first = apply(p, req, h.ctx);
+    const commitBody = { kind: 'commit', branchId: req.branchId, baseRev: req.baseRev, ops: req.ops, actor: actorOf(req.principal), resolvesConflictId: null };
+    expect(first.project.requests.get(req.requestId)?.payloadHash).toBe(sha(canonicalJson({ v: 'wfs-req.2', ...commitBody })));
+    // the MERGE formula, pinned the same way
+    const input = { requestId: rid(), branchId, principal: owner, approval: null, reviewVerdict: verdictFor(first.project, branchId), approverRoleNow: null };
+    const merged = mergeBackWfsBranch(first.project, input, h.ctx);
+    if (!merged.ok) throw new Error(merged.error.message);
+    const mergeBody = { kind: 'merge', branchId, actor: actorOf(owner), approval: null, reviewVerdict: input.reviewVerdict };
+    expect(merged.value.project.requests.get(input.requestId)?.payloadHash).toBe(sha(canonicalJson({ v: 'wfs-req.2', ...mergeBody })));
+    // a row written under the UNTAGGED formula (as R0a's code wrote it) is a different formula: its replay is refused, not answered
+    const stored = first.project.requests.get(req.requestId)!;
+    const legacy: WfsProjectState = { ...first.project, requests: new Map(first.project.requests).set(req.requestId, { ...stored, payloadHash: sha(canonicalJson(commitBody)) }) };
+    const replayOfLegacy = applyWfsCommit(legacy, req, h.ctx);
+    expect(replayOfLegacy.ok === false && replayOfLegacy.error.code).toBe('duplicate-idempotency-key');
+    // CONTROL: the same replay against the tagged row is answered with the original revision
+    const replayOfTagged = applyWfsCommit(first.project, req, h.ctx);
+    expect(replayOfTagged.ok && replayOfTagged.value.outcome).toEqual({ ...first.outcome, replay: true });
   });
 
   it("main's chain is anchored to its genesis; a branch's first commit links to its parent's head at the fork and says so", () => {
