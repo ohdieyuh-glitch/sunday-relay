@@ -416,7 +416,10 @@ describe("a party id naming something Object.prototype holds is a party that doe
     ];
     for (const id of INHERITED) {
       for (const [op, body, more] of cases) {
-        const r = applySocialOperation(s, op, U.ORION, { ids: [id, ...more], body, query: {} }, T(1));
+        // JOIN AS SOMEBODY WITH NO PARTY: the hardening's B2 answers a joiner already in a party "leave your current party first"
+        // BEFORE it reads the id (that answer names nothing about the party asked for), so the id path is reached only by Kai.
+        const actor = op === 'parties.join' ? U.KAI : U.ORION;
+        const r = applySocialOperation(s, op, actor, { ids: [id, ...more], body, query: {} }, T(1));
         expect(r.ok ? 'ok' : r.error.code, `${op} ${id}`).toBe('not-found');
       }
     }
