@@ -5,7 +5,7 @@ import type { RelayError, RelayResult } from '../protocol/errors';
 import { applySocialOperation, type SocialCommandOutcome } from './social-commands';
 import { NEVER_SOCIAL_CONCERNS, type SocialOperationId } from './social-contracts';
 import { FIXTURE_NOW, FIXTURE_USERS as U, createSocialFixture } from './social-fixtures';
-import type { LffFeedPage, LffMyRequests, LffPostDetail, LffPostRequests, LffPostView } from './social-lff';
+import { LFF_REREQUEST_COOLDOWN_MS, type LffFeedPage, type LffMyRequests, type LffPostDetail, type LffPostRequests, type LffPostView } from './social-lff';
 import { resolvePresenceFor } from './social-presence';
 import { buildSocialView, type SocialPersonRow } from './social-preview';
 import { emptySocialState, lffPostById, lffRequestById, type SocialState } from './social-state';
@@ -165,14 +165,18 @@ describe('rule 2: a block, either way', () => {
     expect(feedIds(lifted, U.VEGA)).toContain(kai.postId);
   });
 
-  for (const [who, blocker, blocked] of [['the owner blocks the requester', U.NOVA, U.KAI], ['the requester blocks the owner', U.KAI, U.NOVA]] as const) {
-    it(`${who}: the pending request is CANCELLED -- a deletion to the requester, a withdrawal to the owner; a third requester is untouched`, () => {
+  // SEC m-a: the OWNER's block stores CANCELLED; the REQUESTER's block stores WITHDRAWN (exactly their own withdrawal's row)
+  for (const [who, blocker, blocked, stored] of [
+    ['the owner blocks the requester', U.NOVA, U.KAI, 'CANCELLED'],
+    ['the requester blocks the owner', U.KAI, U.NOVA, 'WITHDRAWN'],
+  ] as const) {
+    it(`${who}: the pending request ends ${stored} -- a deletion to the requester, a withdrawal to the owner; a third requester is untouched`, () => {
       const p = post(createSocialFixture(), U.NOVA);
       const kai = ask(p.state, U.KAI, p.postId);
       const orion = ask(kai.state, U.ORION, p.postId);
       const before = orion.state;
       const walled = block(before, blocker, blocked);
-      expect(lffRequestById(walled, kai.requestId)?.status).toBe('CANCELLED');
+      expect(lffRequestById(walled, kai.requestId)?.status).toBe(stored);
       expect(lffRequestById(walled, orion.requestId)?.status, 'the control: a request the block does not cross').toBe('PENDING');
       // the requester: exactly what a deleted post leaves
       const deleted = must(run(before, U.NOVA, 'lff.post.delete', { ids: [p.postId] })).state;
@@ -188,22 +192,53 @@ describe('rule 2: a block, either way', () => {
       expect(inbox(walled, U.NOVA, p.postId).requests.map((r) => r.requester.userId)).toEqual([U.ORION]);
       expect(detail(walled, U.NOVA, p.postId)).toEqual(detail(withdrawn, U.NOVA, p.postId));
       expect(refused(run(walled, U.NOVA, 'lff.request.accept', { ids: [kai.requestId] }))).toEqual(missingPost(walled));
-      // a cancellation outlives an unblock (as a revoked party invite does): the post comes back, the request does not
+      // the requester's own block IS their withdrawal: the very row a withdrawal at the same time leaves
+      if (stored === 'WITHDRAWN') expect(lffRequestById(walled, kai.requestId)).toEqual(lffRequestById(withdrawn, kai.requestId));
+      // an ended request outlives an unblock (as a revoked party invite does): the post comes back, the request does not
       const lifted = must(run(walled, blocker, 'blocks.remove', { ids: [blocked] })).state;
       expect(feedIds(lifted, U.KAI)).toContain(p.postId);
       expect(mine(lifted, U.KAI).requests).toEqual([]);
-      expect(lffRequestById(lifted, kai.requestId)?.status).toBe('CANCELLED');
+      expect(lffRequestById(lifted, kai.requestId)?.status).toBe(stored);
     });
   }
 
-  it('the requester blocks the owner of a post they were ACCEPTED on: cancelled, the slot freed -- the owner sees exactly a withdrawal', () => {
+  it('SEC m-a: the requester blocks the owner, unblocks and asks again -- refused exactly as after a withdrawal until the cooldown ends; the owner sees a withdrawal throughout', () => {
+    const p = post(createSocialFixture(), U.NOVA);
+    const kai = ask(p.state, U.KAI, p.postId);
+    const before = kai.state;
+    const lifted = must(run(block(before, U.KAI, U.NOVA), U.KAI, 'blocks.remove', { ids: [U.NOVA] })).state;
+    const withdrawn = must(run(before, U.KAI, 'lff.request.withdraw', { ids: [kai.requestId] })).state;
+    // the owner's views and the stored row: a withdrawal's
+    expect(lffRequestById(lifted, kai.requestId)).toEqual(lffRequestById(withdrawn, kai.requestId));
+    expect(inbox(lifted, U.NOVA, p.postId)).toEqual(inbox(withdrawn, U.NOVA, p.postId));
+    expect(detail(lifted, U.NOVA, p.postId)).toEqual(detail(withdrawn, U.NOVA, p.postId));
+    // asking again 1 min later: the SAME refusal as after a withdrawal; at the cooldown's end, accepted after either
+    const oneMin = T0 + 60_000;
+    const afterBlock = refused(run(lifted, U.KAI, 'lff.request.create', { ids: [p.postId] }, oneMin));
+    expect(afterBlock).toEqual(refused(run(withdrawn, U.KAI, 'lff.request.create', { ids: [p.postId] }, oneMin)));
+    expect(afterBlock.code).toBe('illegal-transition');
+    const cooled = T0 + LFF_REREQUEST_COOLDOWN_MS;
+    expect(run(lifted, U.KAI, 'lff.request.create', { ids: [p.postId] }, cooled).ok).toBe(true);
+    expect(run(withdrawn, U.KAI, 'lff.request.create', { ids: [p.postId] }, cooled).ok).toBe(true);
+  });
+
+  it('SEC m-a, the other way: the OWNER blocks the requester and unblocks -- CANCELLED carries no cooldown (one would tell the requester of the block), so asking again 1 min later is accepted', () => {
+    const p = post(createSocialFixture(), U.NOVA);
+    const kai = ask(p.state, U.KAI, p.postId);
+    const lifted = must(run(block(kai.state, U.NOVA, U.KAI), U.NOVA, 'blocks.remove', { ids: [U.KAI] })).state;
+    expect(lffRequestById(lifted, kai.requestId)?.status).toBe('CANCELLED');
+    expect(run(lifted, U.KAI, 'lff.request.create', { ids: [p.postId] }, T0 + 60_000).ok).toBe(true);
+  });
+
+  it('the requester blocks the owner of a post they were ACCEPTED on: withdrawn, the slot freed -- the owner sees exactly a withdrawal', () => {
     const p = post(createSocialFixture(), U.NOVA, { openSlots: 3 });
     const kai = ask(p.state, U.KAI, p.postId);
     const before = accept(kai.state, U.NOVA, kai.requestId);
     expect(detail(before, U.NOVA, p.postId).availableSlots).toBe(2);
     const walled = block(before, U.KAI, U.NOVA);
     const withdrawn = must(run(before, U.KAI, 'lff.request.withdraw', { ids: [kai.requestId] })).state;
-    expect(lffRequestById(walled, kai.requestId)?.status).toBe('CANCELLED');
+    expect(lffRequestById(walled, kai.requestId)).toEqual(lffRequestById(withdrawn, kai.requestId));
+    expect(lffRequestById(walled, kai.requestId)?.status).toBe('WITHDRAWN');
     expect(detail(walled, U.NOVA, p.postId)).toEqual(detail(withdrawn, U.NOVA, p.postId));
     expect(detail(walled, U.NOVA, p.postId).availableSlots).toBe(3);
     expect(detail(walled, U.NOVA, p.postId).accepted).toEqual([]);

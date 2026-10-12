@@ -6,14 +6,19 @@ import { FIXTURE_NOW, FIXTURE_USERS as U, createSocialFixture } from './social-f
 import {
   LFF_CATEGORIES,
   LFF_CREATION_WINDOW_MS,
+  LFF_DECLINE_COOLDOWN_MS,
   LFF_MAX_CREATED_PER_WINDOW,
   LFF_MAX_OPEN_POSTS_PER_USER,
   LFF_MAX_PENDING_OUTGOING_PER_USER,
   LFF_MAX_PENDING_PER_POST,
   LFF_NOT_FOUND_MESSAGE,
   LFF_POST_TTL_MS,
+  LFF_PURGE_BATCH,
   LFF_REREQUEST_COOLDOWN_MS,
+  LFF_RETENTION_MS,
+  purgeLffPastRetention,
   type LffFeedPage,
+  type LffPost,
   type LffMyRequests,
   type LffPostDetail,
   type LffPostRequests,
@@ -572,15 +577,27 @@ describe('LFF requests: ask, withdraw, accept, decline', () => {
     expect(refused(run(acc.state, U.NOVA, 'lff.request.decline', { ids: [a.requestId] }))).toEqual(missingPost(acc.state));
   });
 
-  it('decline: the requester sees DECLINED, the owner\'s inbox no longer lists it, and asking again is allowed at once', () => {
+  it(`decline: the requester sees DECLINED, the owner's inbox no longer lists it, and asking again waits ${LFF_DECLINE_COOLDOWN_MS / MIN} minutes (SEC m-c)`, () => {
     const p = post(createSocialFixture(), U.NOVA);
-    const a = ask(p.state, U.KAI, p.postId);
-    const d = must(run(a.state, U.NOVA, 'lff.request.decline', { ids: [a.requestId] }));
+    const q = post(p.state, U.RHEA);
+    const a = ask(q.state, U.KAI, p.postId);
+    const declinedAt = T0 + MIN;
+    const d = must(run(a.state, U.NOVA, 'lff.request.decline', { ids: [a.requestId] }, declinedAt));
     expect([...d.audience].sort()).toEqual([U.KAI, U.NOVA].sort());
-    expect(mine(d.state, U.KAI).requests.map((r) => r.status)).toEqual(['DECLINED']);
-    expect(detail(d.state, U.KAI, p.postId).viewerRequest).toEqual({ requestId: a.requestId, status: 'DECLINED' });
+    expect(mine(d.state, U.KAI, declinedAt).requests.map((r) => r.status)).toEqual(['DECLINED']);
+    expect(detail(d.state, U.KAI, p.postId, declinedAt).viewerRequest).toEqual({ requestId: a.requestId, status: 'DECLINED' });
     expect(inbox(d.state, U.NOVA, p.postId).requests).toEqual([]);
-    expect(run(d.state, U.KAI, 'lff.request.create', { ids: [p.postId] }).ok).toBe(true);
+    // THE EDGE (PROPOSED, 1 hour): refused at once and 1 ms before the hour, as an illegal transition -- never the missing post's
+    // answer, and it tells nothing new: the requester already sees DECLINED. At exactly the hour, accepted.
+    expect(LFF_DECLINE_COOLDOWN_MS).toBe(60 * MIN);
+    for (const at of [declinedAt, declinedAt + LFF_DECLINE_COOLDOWN_MS - 1]) {
+      const r = refused(run(d.state, U.KAI, 'lff.request.create', { ids: [p.postId] }, at));
+      expect([r.code, r.message], `at +${at - declinedAt} ms`).toEqual(['illegal-transition', 'your request to this post was declined: you can ask again 60 minutes after']);
+    }
+    expect(run(d.state, U.KAI, 'lff.request.create', { ids: [p.postId] }, declinedAt + LFF_DECLINE_COOLDOWN_MS).ok, 'at exactly the hour').toBe(true);
+    // THE CONTROLS: another post, or another player, at once
+    expect(run(d.state, U.KAI, 'lff.request.create', { ids: [q.postId] }, declinedAt).ok, 'another post at once').toBe(true);
+    expect(run(d.state, U.ORION, 'lff.request.create', { ids: [p.postId] }, declinedAt).ok, 'another player at once').toBe(true);
   });
 
   it('accepting on a closed or expired post is refused; declining there is still accepted', () => {
@@ -687,7 +704,9 @@ describe('LFF time: a stepped-back server clock never moves updatedAt backwards 
     const closed = must(run(b.state, U.NOVA, 'lff.post.close', { ids: [p.postId] }, back)).state;
     expect(lffPostById(closed, p.postId)).toMatchObject({ status: 'CLOSED', updatedAtMs: T0, version: 2 });
     const blocked = must(run(b.state, U.ORION, 'blocks.add', { body: { targetId: U.NOVA } }, back)).state;
-    expect(lffRequestById(blocked, b.requestId)).toMatchObject({ status: 'CANCELLED', updatedAtMs: T0 });
+    expect(lffRequestById(blocked, b.requestId), 'the requester blocked: stored as their withdrawal').toMatchObject({ status: 'WITHDRAWN', updatedAtMs: T0 });
+    const blockedByOwner = must(run(b.state, U.NOVA, 'blocks.add', { body: { targetId: U.ORION } }, back)).state;
+    expect(lffRequestById(blockedByOwner, b.requestId), 'the owner blocked: cancelled').toMatchObject({ status: 'CANCELLED', updatedAtMs: T0 });
     // the control: a later clock does move it
     const later = must(run(b.state, U.NOVA, 'lff.post.edit', { ids: [p.postId], body: { title: 'x' } }, T0 + MIN)).state;
     expect(lffPostById(later, p.postId)!.updatedAtMs).toBe(T0 + MIN);
@@ -819,5 +838,108 @@ describe('LFF expiry is read from the server clock', () => {
     const expiry = lffPostById(a.state, p.postId)!.expiresAtMs;
     expect(mine(a.state, U.KAI, expiry).requests[0].status).toBe('PENDING');
     expect(mine(a.state, U.KAI, expiry + 1).requests.map((r) => [r.status, r.post])).toEqual([['NO_LONGER_AVAILABLE', null]]);
+  });
+});
+
+describe('LFF retention (rule 7, PROPOSED; the B2b review m3): a post no longer open and more than 30 days old is purged, with its requests, by the next write', () => {
+  const DAY = 24 * 60 * MIN;
+
+  /** Nova's post at T0: Orion asked and was accepted, Kai asked and was declined, then she closed it. Rhea's post a day later, closed. */
+  function oldPosts(): { state: SocialState; novaPost: string; rheaPost: string; kaiRequest: string; orionRequest: string } {
+    const p = post(createSocialFixture(), U.NOVA, { openSlots: 3 }, T0);
+    const o = ask(p.state, U.ORION, p.postId, {}, T0 + 1000);
+    const k = ask(o.state, U.KAI, p.postId, {}, T0 + 2000);
+    let s = must(run(k.state, U.NOVA, 'lff.request.accept', { ids: [o.requestId] }, T0 + 3000)).state;
+    s = must(run(s, U.NOVA, 'lff.request.decline', { ids: [k.requestId] }, T0 + 4000)).state;
+    s = must(run(s, U.NOVA, 'lff.post.close', { ids: [p.postId] }, T0 + 5000)).state;
+    const r = post(s, U.RHEA, {}, T0 + DAY);
+    s = must(run(r.state, U.RHEA, 'lff.post.close', { ids: [r.postId] }, T0 + DAY + 1000)).state;
+    return { state: s, novaPost: p.postId, rheaPost: r.postId, kaiRequest: k.requestId, orionRequest: o.requestId };
+  }
+
+  it('THE EDGE: exactly 30 days old the post is kept; 1 ms older, the next write deletes it and every request on it -- nothing else, and tells nobody', () => {
+    expect(LFF_RETENTION_MS).toBe(30 * DAY);
+    const old = oldPosts();
+    // Lyra posts an hour before the edge (an OPEN post: the one she edits below)
+    const lyra = post(old.state, U.LYRA, { title: 'Lyra\'s' }, T0 + LFF_RETENTION_MS - 60 * MIN);
+    const edit = (s: SocialState, nowMs: number) => must(run(s, U.LYRA, 'lff.post.edit', { ids: [lyra.postId], body: { title: `at ${nowMs}` } }, nowMs));
+    // AT EXACTLY 30 DAYS: kept, with its requests
+    const kept = edit(lyra.state, T0 + LFF_RETENTION_MS);
+    expect(lffPostById(kept.state, old.novaPost), 'exactly 30 days old: kept').toBeDefined();
+    expect([lffRequestById(kept.state, old.kaiRequest)?.status, lffRequestById(kept.state, old.orionRequest)?.status]).toEqual(['DECLINED', 'ACCEPTED']);
+    expect(kept.state.lffRequests, 'nothing purged: the request list is the same object').toBe(lyra.state.lffRequests);
+    // 1 MS LATER: the next write purges it
+    const at = T0 + LFF_RETENTION_MS + 1;
+    const purged = edit(kept.state, at);
+    expect(lffPostById(purged.state, old.novaPost), '1 ms past 30 days: purged').toBeUndefined();
+    expect(purged.state.lffRequests.filter((r) => r.postId === old.novaPost), 'its requests go with it').toEqual([]);
+    expect(lffPostById(purged.state, old.rheaPost), 'a younger closed post stays').toBeDefined();
+    expect(lffPostById(purged.state, lyra.postId)).toMatchObject({ title: `at ${at}`, status: 'OPEN' });
+    expect(purged.state.lffCreations, 'the creation record is not the purge\'s (its own 24 h prune)').toBe(kept.state.lffCreations);
+    // the write answers exactly as it would without the purge: told to its actor alone, no extra event
+    expect([purged.audience, purged.extraEvents]).toEqual([[U.LYRA], undefined]);
+    // and every view reads as a deletion: the owner's own list, the accepted and the declined requester's lists, a get
+    expect(feed(purged.state, U.NOVA, { mine: true }, at).posts).toEqual([]);
+    expect(mine(purged.state, U.ORION, at).requests).toEqual([]);
+    expect(mine(purged.state, U.KAI, at).requests).toEqual([]);
+    expect(refused(run(purged.state, U.NOVA, 'lff.post.get', { ids: [old.novaPost] }, at))).toEqual(missingPost(purged.state));
+  });
+
+  it('a READ never purges: past the edge, a feed or a get leaves the state exactly as it was', () => {
+    const old = oldPosts();
+    const at = T0 + LFF_RETENTION_MS + 1;
+    expect(must(run(old.state, U.NOVA, 'lff.feed.list', { body: { mine: true } }, at)).state).toBe(old.state);
+    expect(must(run(old.state, U.NOVA, 'lff.post.get', { ids: [old.novaPost] }, at)).state).toBe(old.state);
+    expect(feed(old.state, U.NOVA, { mine: true }, at).posts.map((p) => [p.postId, p.status]), 'not yet purged: still the owner\'s, EXPIRED').toEqual([[old.novaPost, 'EXPIRED']]);
+  });
+
+  it(`a BOUNDED BATCH: at most ${LFF_PURGE_BATCH} posts per write, oldest first whatever the array order; the rest go with the next write`, () => {
+    expect(LFF_PURGE_BATCH).toBe(50);
+    const n = LFF_PURGE_BATCH + 1;
+    // n closed posts, stored NEWEST first (the array's order is not the purge's); a request on the newest one
+    const raw: LffPost[] = Array.from({ length: n }, (_, i): LffPost => {
+      const createdAtMs = T0 + (n - 1 - i) * 1000;
+      return {
+        id: `lffp_${900_000 + i}`, ownerId: U.NOVA, category: 'TEAMS', title: `old ${i}`, description: '', projectLabel: '', skills: [], openSlots: 1,
+        status: 'CLOSED', createdAtMs, updatedAtMs: createdAtMs, expiresAtMs: createdAtMs + LFF_POST_TTL_MS, version: 2,
+      };
+    });
+    const base = createSocialFixture();
+    const s: SocialState = {
+      ...base,
+      lffPosts: raw,
+      lffRequests: [{ id: 'lffr_990000', postId: raw[0].id, requesterId: U.KAI, message: '', status: 'DECLINED', createdAtMs: T0 + MIN, updatedAtMs: T0 + MIN }],
+    };
+    const at = T0 + LFF_RETENTION_MS + n * 1000;
+    const first = must(run(s, U.ORION, 'lff.post.create', { body: BASE }, at)).state;
+    expect(first.lffPosts.filter((p) => p.ownerId === U.NOVA).map((p) => p.id), 'the newest old post waits').toEqual([raw[0].id]);
+    expect(first.lffRequests.map((r) => r.id), 'and its request with it').toContain('lffr_990000');
+    const orionPost = first.lffPosts.find((p) => p.ownerId === U.ORION)!.id;
+    const second = must(run(first, U.ORION, 'lff.post.close', { ids: [orionPost] }, at)).state;
+    expect(second.lffPosts.filter((p) => p.ownerId === U.NOVA), 'the next write takes the rest').toEqual([]);
+    expect(second.lffRequests.map((r) => r.id)).not.toContain('lffr_990000');
+    // the function itself: nothing due gives back the SAME state (a store's by-reference diff then writes nothing)
+    expect(purgeLffPastRetention(second, at)).toBe(second);
+    expect(purgeLffPastRetention(s, T0 + LFF_RETENTION_MS)).toBe(s);
+  });
+
+  it('an OPEN post is never purged, however old (a hand-made row past 038\'s 30-day bound): only once it reads EXPIRED', () => {
+    const p = post(createSocialFixture(), U.NOVA, {}, T0);
+    const longLived: SocialState = { ...p.state, lffPosts: p.state.lffPosts.map((x) => ({ ...x, expiresAtMs: T0 + 40 * DAY })) };
+    expect(purgeLffPastRetention(longLived, T0 + 31 * DAY), 'OPEN at 31 days: kept').toBe(longLived);
+    expect(purgeLffPastRetention(longLived, T0 + 40 * DAY), 'OPEN at exactly its expiry: kept').toBe(longLived);
+    expect(purgeLffPastRetention(longLived, T0 + 40 * DAY + 1).lffPosts, 'EXPIRED, and past 30 days: purged').toEqual([]);
+    // a stepped-back clock: a post stamped after "now" is never due
+    expect(purgeLffPastRetention(p.state, T0 - DAY)).toBe(p.state);
+  });
+
+  it('the owner\'s DELETE takes no clock and runs no batch (it removes rows itself); the next timed write does', () => {
+    const old = oldPosts();
+    const at = T0 + LFF_RETENTION_MS + 1;
+    const fresh = post(old.state, U.NOVA, { title: 'fresh' }, at - 60 * MIN);
+    const deleted = must(run(fresh.state, U.NOVA, 'lff.post.delete', { ids: [fresh.postId] }, at)).state;
+    expect(lffPostById(deleted, old.novaPost), 'the delete purged nothing').toBeDefined();
+    const after = must(run(deleted, U.NOVA, 'lff.post.create', { body: BASE }, at)).state;
+    expect(lffPostById(after, old.novaPost)).toBeUndefined();
   });
 });
