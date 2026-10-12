@@ -11,3 +11,4 @@ export * from './wonderfs-paths';
 export * from './wonderfs-canonical';
 export * from './wonderfs-engine';
 export * from './wonderfs-authz';
+export * from './wonderfs-store';

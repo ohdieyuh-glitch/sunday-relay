@@ -575,6 +575,15 @@ function requestActor(p: WfsPrincipal): Readonly<Record<string, string | null>> 
   return { kind: p.kind, id: p.id, onBehalfOf: p.onBehalfOf ?? null, grantId: p.grantId ?? null, missionId: p.missionId ?? null, attemptId: p.attemptId ?? null };
 }
 
+/**
+ * The request-identity hash formula's VERSION, hashed into every request's payload hash (R0a review MINOR-2). A stored
+ * `wfs_requests.payload_hash` outlives the code that wrote it, so changing what the hash covers is an explicit, testable event:
+ * change the formula, bump this tag. A row written under another formula then refuses its replay (duplicate-idempotency-key),
+ * never answers a different request. 'wfs-req.2' = R0a's formula (the change + the actor allow-list above), the first tagged one;
+ * no environment holds a row written under an earlier formula (no route has ever written wfs_requests).
+ */
+export const WFS_REQUEST_HASH_VERSION = 'wfs-req.2';
+
 /** INV-8: the stored answer for a request id, or a refusal when the id is reused for something else. `null` = new. */
 function replayed(project: WfsProjectState, requestId: string, payloadHash: string): RelayResult<WfsApplied> | null {
   const prior = project.requests.get(requestId);
@@ -598,7 +607,7 @@ export function applyWfsCommit(project: WfsProjectState, req: WfsCommitRequest, 
   const badPrincipal = checkPrincipal(req.principal);
   if (badPrincipal !== null) return invalid(badPrincipal);
   const resolves = req.resolvesConflictId ?? null;
-  const payloadHash = ctx.sha256Hex(canonicalJson({ kind: 'commit', branchId: req.branchId, baseRev: req.baseRev, ops: req.ops, actor: requestActor(req.principal), resolvesConflictId: resolves }));
+  const payloadHash = ctx.sha256Hex(canonicalJson({ v: WFS_REQUEST_HASH_VERSION, kind: 'commit', branchId: req.branchId, baseRev: req.baseRev, ops: req.ops, actor: requestActor(req.principal), resolvesConflictId: resolves }));
   const prior = replayed(project, req.requestId, payloadHash);
   if (prior !== null) return prior;
 
@@ -678,7 +687,7 @@ export function mergeBackWfsBranch(
   if (typeof input.requestId !== 'string' || !REQUEST_ID_RE.test(input.requestId)) return invalid('the request id is malformed');
   const badPrincipal = checkPrincipal(input.principal);
   if (badPrincipal !== null) return invalid(badPrincipal);
-  const payloadHash = ctx.sha256Hex(canonicalJson({ kind: 'merge', branchId: input.branchId, actor: requestActor(input.principal), approval: input.approval, reviewVerdict: input.reviewVerdict }));
+  const payloadHash = ctx.sha256Hex(canonicalJson({ v: WFS_REQUEST_HASH_VERSION, kind: 'merge', branchId: input.branchId, actor: requestActor(input.principal), approval: input.approval, reviewVerdict: input.reviewVerdict }));
   const prior = replayed(project, input.requestId, payloadHash);
   if (prior !== null) return prior;
 
