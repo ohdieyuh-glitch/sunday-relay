@@ -40,7 +40,10 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
   };
   let pool: Pool;
   let store: SocialStore;
-  let clock = Date.parse('2026-10-02T15:00:00.000Z');
+  // THE CLOCK STARTS AT THE REAL NOW, never a fixed date: the store prunes events older than its retention (7 days) against the
+  // REAL clock (eventsFor), so a fixed 2026-10-02 start made every run after 2026-10-09T15:00Z prune this suite's own events
+  // before reading them -- "expected 0 > 0", and the two cases after it failed on its missing state (CI 38159218942, 10-11).
+  let clock = Date.now();
   let conversationId = '';
   let partyId = '';
 
