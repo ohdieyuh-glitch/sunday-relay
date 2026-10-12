@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -129,5 +131,34 @@ describe('WonderFS store helpers: blobs, conflicts, events', () => {
     expect(wfsOutcomeEvent(committed, 'branch.merge')).toEqual({ kind: 'branch.merge', body: { branchId: 'main', rev: 3, commitId: 'commit-1' } });
     expect(wfsOutcomeEvent({ status: 'conflict', branchId: 'main', conflictId: 'conflict-1', failures: [], headRev: 2, replay: false }, 'commit')).toEqual({ kind: 'conflict', body: { branchId: 'main', conflictId: 'conflict-1' } });
     expect(wfsOutcomeEvent({ ...committed, replay: true }, 'commit')).toBeNull();
+  });
+});
+
+/**
+ * R0b-fix (CI r1.7, real PostgreSQL): the events page came back as [1, 10, 11, 12, ...]. Its SQL said `SELECT seq::text AS seq ...
+ * ORDER BY seq`, and PostgreSQL binds a bare ORDER BY name to an OUTPUT column first -- the TEXT alias, not the bigint column. The
+ * conformance case NUMERIC-KEYS catches it on rows (CI); this catches the SHAPE here, on every run, with no database: no query of
+ * the PostgreSQL store may order by a bare name that some SELECT list in it re-types (`x::type AS name`).
+ */
+function orderByRetypedAlias(source: string): string[] {
+  const retyped = new Set([...source.matchAll(/[\w.]+::\w+ AS (\w+)/gu)].map((m) => m[1]));
+  const offenders: string[] = [];
+  for (const m of source.matchAll(/ORDER BY\s+([\s\S]*?)(?=\s+LIMIT\b|\s+OFFSET\b|\)|`|'|$)/gu)) {
+    for (const item of m[1].split(',')) {
+      const name = item.trim().split(/\s+/u)[0];
+      if (!name.includes('.') && retyped.has(name)) offenders.push(name);
+    }
+  }
+  return offenders;
+}
+
+describe('WonderFS store: numeric paging keys in SQL (R0b-fix, CI r1.7)', () => {
+  it('no query of the PostgreSQL store orders by a bare name it re-typed as an output alias; CONTROL: the query that failed CI is caught, its fix is not', () => {
+    const source = readFileSync(join(process.cwd(), 'src', 'relay', 'persistence', 'wonderfs-postgres.ts'), 'utf8');
+    expect(source).toContain('ORDER BY'); // the scan has something to read
+    expect(orderByRetypedAlias(source)).toEqual([]);
+    expect(orderByRetypedAlias("'SELECT seq::text AS seq, kind, body, at FROM relay_wonderland.wfs_events WHERE project_id = $1 AND seq > $2 ORDER BY seq LIMIT $3'")).toEqual(['seq']);
+    expect(orderByRetypedAlias("'SELECT e.seq::text AS seq FROM relay_wonderland.wfs_events e WHERE e.seq > $2 ORDER BY e.seq LIMIT $3'")).toEqual([]);
+    expect(orderByRetypedAlias("const C = 'size::text AS size'; `SELECT ${C} FROM t ORDER BY path_key COLLATE \"C\", size DESC LIMIT 1`")).toEqual(['size']);
   });
 });

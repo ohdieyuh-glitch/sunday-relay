@@ -61,6 +61,25 @@ export interface WfsStoreEvent {
   readonly body: Readonly<Record<string, unknown>>;
 }
 
+/** H1 (R1): the caller's projects, a page at a time. */
+export interface WfsProjectsQuery {
+  /** The previous page's `next` (a project id): only projects after it, in code-point order. */
+  readonly after?: string | null;
+  readonly limit?: number;
+}
+
+/** A project the player may read: a membership the ONE mapping gives a role, with a LIVE file environment. */
+export interface WfsMemberProject {
+  readonly projectId: string;
+  readonly role: WfsHumanRole;
+}
+
+export interface WfsProjectsPage {
+  /** By project id, in code-point order. */
+  readonly projects: readonly WfsMemberProject[];
+  readonly next: string | null;
+}
+
 /** H4: what a member sees first. */
 export interface WfsProjectHead {
   readonly projectId: string;
@@ -216,6 +235,14 @@ export interface WfsStore {
    * membership (no wfs_* row), so a route can call it BEFORE any other lookup (§19.m2). An outage is a failure, never `null`.
    */
   memberRole(projectId: string, playerId: string): Promise<RelayResult<WfsHumanRole | null>>;
+  /**
+   * H1 (R1; the R0b review's MAJOR-2 / C3): the projects `playerId` may read -- a membership whose PRODUCT role the ONE mapping
+   * turns into a WonderFS role, JOINED to a live file environment, in ONE consistent state. A soft-deleted project, a membership in
+   * a project with no file environment, and a role no product writer produces are all ABSENT (never an error). Paged by project id
+   * in code-point order. It reads the caller's own memberships only: no requested object is named, so nothing is looked up before
+   * an authorization (§19.m2).
+   */
+  projectsOf(playerId: string, query: WfsProjectsQuery): Promise<RelayResult<WfsProjectsPage>>;
 
   /** The whole state as committed (one consistent state), or null. For tests, the oracle and tools; routes use the paged reads. */
   project(projectId: string): Promise<WfsProjectState | null>;
@@ -327,6 +354,17 @@ export function wfsCheckChangesQuery(q: WfsChangesQuery): RelayResult<{ readonly
   if (!limit.ok) return limit;
   if (!isCount(q.afterRev, 0)) return invalidQuery('the revision to read after is malformed');
   return ok({ branchId: branchId.value, afterRev: q.afterRev, limit: limit.value });
+}
+
+/** H1's query, and the player it is for, checked before any lookup. */
+export function wfsCheckProjectsQuery(playerId: unknown, q: WfsProjectsQuery): RelayResult<{ readonly playerId: string; readonly after: string | null; readonly limit: number }> {
+  const player = checkId(playerId, 'player id');
+  if (!player.ok) return player;
+  const limit = wfsPageLimit(q.limit);
+  if (!limit.ok) return limit;
+  const after = q.after ?? null;
+  if (after !== null && !checkId(after, 'project cursor').ok) return invalidQuery('the project cursor is malformed');
+  return ok({ playerId: player.value, after, limit: limit.value });
 }
 
 export function wfsCheckEventsQuery(q: WfsEventsQuery): RelayResult<{ readonly afterSeq: number; readonly limit: number }> {

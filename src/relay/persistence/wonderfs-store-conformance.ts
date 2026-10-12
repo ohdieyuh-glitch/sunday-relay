@@ -17,9 +17,12 @@
  *             ALONE and the feed moves on;
  *   FEEDS     history, changes, events and conflicts page by immutable keys: a change landing between pages never repeats or
  *             drops an item;
+ *   NUMERIC-KEYS (R0b-fix, CI r1.7) event seq, change rev, history version and a tree cursor's revision page in NUMERIC order across
+ *             the 9|10 boundary (the PostgreSQL events query once sorted by its text alias: [1, 10, 11, 12, ...]);
  *   BLOB      a blob stored through one store instance (one bridge) is committable through another whose state is cached (F5);
  *             storing it does not move the project's version, so no version-keyed cache could have seen it;
  *   ROLE      the product's OWNER / ADMIN / MEMBER through the one mapping; anything else is no role, never an error;
+ *   PROJECTS  (R1, H1) a player's projects: a mapped membership JOINED to a live file environment, paged by project id;
  *   APPROVE   the STORED approval by id, its approver's role re-read at merge;
  *   UNKNOWN   every read of an unknown project, branch, file, conflict or revision is the ONE not-found;
  *   REPLAY    a replay keeps nothing; the same request id for another change is refused.
@@ -456,6 +459,62 @@ export const WFS_STORE_CASES: readonly WfsStoreCase[] = [
     },
   },
   {
+    name: 'NUMERIC-KEYS (R0b-fix, CI r1.7): every numeric paging key -- event seq, change rev, history version, a tree cursor\'s revision -- orders as a NUMBER across the 9|10 boundary (text order puts 10 before 2 and skips 2..9)',
+    async run(h) {
+      const P = 'prj-numeric';
+      await h.seed(P, { usr_owner: 'OWNER' });
+      const store = h.open();
+      value(await store.createProject(P, NOW), 'createProject');
+      const owner = who('usr_owner');
+      const v: Array<{ sha256: string; size: number }> = [];
+      for (let i = 1; i <= 12; i += 1) v.push(await put(store, P, `numeric ${i}`));
+      await commitOk(store, P, { requestId: 'req-num-01', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: owner, ops: [{ op: 'create', path: 'a.txt', kind: 'file', ...v[0] }, { op: 'create', path: 'n.txt', kind: 'file', ...v[0] }] });
+      const N = (value(await store.tree(P, { branchId: WFS_MAIN_BRANCH }), 'tree').entries.find((e) => e.path === 'n.txt') ?? breach('no n.txt')).fileId;
+      for (let i = 2; i <= 12; i += 1) {
+        await commitOk(store, P, { requestId: `req-num-${String(i).padStart(2, '0')}`, branchId: WFS_MAIN_BRANCH, baseRev: i - 1, principal: owner, ops: [{ op: 'update', fileId: N, expectContentVersion: i - 1, ...v[i - 1] }] });
+      }
+      const byThree = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]];
+      // EVENTS by seq: pages of 3, so one page ends at 9 and the next starts at 10
+      const eventPages: number[][] = [];
+      let afterSeq = 0;
+      for (let guard = 0; guard < 20; guard += 1) {
+        const page = value(await store.events(P, { afterSeq, limit: 3 }), `events after ${afterSeq}`);
+        eventPages.push(page.events.map((e) => e.seq));
+        if (page.next === null) break;
+        afterSeq = page.next;
+      }
+      same(eventPages, byThree, 'events page by page, in numeric order');
+      same(value(await store.events(P, { afterSeq: 0, limit: WFS_PAGE_MAX_LIMIT }), 'all events').events.map((e) => e.seq), byThree.flat(), 'all events in one page, in numeric order');
+      same(value(await store.events(P, { afterSeq: 9, limit: 2 }), 'events after 9').events.map((e) => e.seq), [10, 11], 'after 9 comes 10');
+      // CHANGES by revision
+      const changePages: number[][] = [];
+      let afterRev = 0;
+      for (let guard = 0; guard < 20; guard += 1) {
+        const page = value(await store.changes(P, { branchId: WFS_MAIN_BRANCH, afterRev, limit: 3 }), `changes after ${afterRev}`);
+        changePages.push(page.commits.map((c) => c.rev));
+        if (page.next === null) break;
+        afterRev = page.next;
+      }
+      same(changePages, byThree, 'changes page by page, in numeric order');
+      // HISTORY by version, newest first
+      const historyPages: number[][] = [];
+      let before: number | null = null;
+      for (let guard = 0; guard < 20; guard += 1) {
+        const page = value(await store.fileHistory(P, { branchId: WFS_MAIN_BRANCH, fileId: N, before, limit: 3 }), `history before ${before}`);
+        historyPages.push(page.versions.map((x) => x.entry.version));
+        if (page.next === null) break;
+        before = page.next;
+      }
+      same(historyPages, [[12, 11, 10], [9, 8, 7], [6, 5, 4], [3, 2, 1]], 'history page by page, in numeric order');
+      // a TREE cursor pinned to a one-digit and to a two-digit revision pages the same way
+      for (const rev of [9, 10, 12]) {
+        const first = value(await store.tree(P, { branchId: WFS_MAIN_BRANCH, rev, limit: 1 }), `tree @${rev}`);
+        const second = value(await store.tree(P, { branchId: WFS_MAIN_BRANCH, cursor: first.next, limit: 1 }), `tree @${rev} page 2`);
+        same([first.rev, second.rev, [...first.entries, ...second.entries].map((e) => [e.path, e.version]), second.next], [rev, rev, [['a.txt', 1], ['n.txt', rev]], null], `the tree at ${rev}, page by page`);
+      }
+    },
+  },
+  {
     name: 'BLOB (F5): a blob stored through one bridge is committable through another whose state is cached; storing it does not move the version; address and integrity are the store\'s',
     async run(h) {
       const P = 'prj-blob';
@@ -505,6 +564,46 @@ export const WFS_STORE_CASES: readonly WfsStoreCase[] = [
       same(value(await store.memberRole(P, 'usr_member'), 'removed'), null, 'removed: no role');
       await h.setRole(P, 'usr_lower', 'MEMBER');
       same(value(await store.memberRole(P, 'usr_lower'), 'fixed'), 'editor', 'rewritten as the product writes it: editor');
+    },
+  },
+  {
+    name: 'PROJECTS (H1): a player\'s projects are the memberships the one mapping gives a role AND a live file environment, paged by project id in code-point order; anything else is absent, never an error',
+    async run(h) {
+      const store = h.open();
+      const me = 'usr_lister';
+      // a OWNER, b MEMBER, c ADMIN; d a lower-case legacy 'owner' (no role); e a MEMBER with NO file environment; f someone else's
+      await h.seed('prj-list-a', { [me]: 'OWNER' });
+      await h.seed('prj-list-b', { [me]: 'MEMBER' });
+      await h.seed('prj-list-c', { [me]: 'ADMIN' });
+      await h.seed('prj-list-d', { [me]: 'owner' });
+      await h.seed('prj-list-e', { [me]: 'MEMBER' });
+      await h.seed('prj-list-f', { usr_list_other: 'OWNER' });
+      for (const p of ['prj-list-a', 'prj-list-b', 'prj-list-c', 'prj-list-d', 'prj-list-f']) value(await store.createProject(p, NOW), `createProject ${p}`);
+      const ids = (r: RelayResult<{ readonly projects: ReadonlyArray<{ readonly projectId: string }> }>, what: string) => value(r, what).projects.map((x) => x.projectId);
+      same(value(await store.projectsOf(me, { limit: WFS_PAGE_MAX_LIMIT }), 'mine'), {
+        projects: [{ projectId: 'prj-list-a', role: 'owner' }, { projectId: 'prj-list-b', role: 'editor' }, { projectId: 'prj-list-c', role: 'editor' }],
+        next: null,
+      }, 'exactly the readable ones, with their WonderFS roles');
+      // CONTROLS: what keeps d and e out is real -- e IS a membership with a role (only its file environment is missing; a listing
+      // without the join would show it), and d HAS a file environment (only its role is no role; a case-insensitive map shows it)
+      same(value(await store.memberRole('prj-list-e', me), 'role in e'), 'editor', 'CONTROL: e is a membership with a role');
+      same(value(await store.head('prj-list-d'), 'head of d').main.headRev, 0, 'CONTROL: d has a live file environment');
+      // pages: by 2, gapless, nothing twice
+      const p1 = value(await store.projectsOf(me, { limit: 2 }), 'page 1');
+      same([p1.projects.map((x) => x.projectId), p1.next], [['prj-list-a', 'prj-list-b'], 'prj-list-b'], 'page 1');
+      same(ids(await store.projectsOf(me, { after: p1.next, limit: 2 }), 'page 2'), ['prj-list-c'], 'page 2');
+      same(value(await store.projectsOf(me, { after: 'prj-list-c', limit: 2 }), 'past the end'), { projects: [], next: null }, 'past the end');
+      // read NOW: a removed membership is gone at once, and a new file environment appears at once
+      await h.setRole('prj-list-b', me, null);
+      value(await store.createProject('prj-list-e', NOW), 'createProject prj-list-e');
+      same(ids(await store.projectsOf(me, {}), 'after the changes'), ['prj-list-a', 'prj-list-c', 'prj-list-e'], 'b removed, e has a file environment now');
+      // another player sees only their own; a stranger sees nothing (no error)
+      same(value(await store.projectsOf('usr_list_other', {}), 'other'), { projects: [{ projectId: 'prj-list-f', role: 'owner' }], next: null }, 'another player: their own only');
+      same(value(await store.projectsOf('usr_list_stranger', {}), 'stranger'), { projects: [], next: null }, 'a stranger: nothing');
+      // refused before any lookup
+      for (const limit of [0, -1, 1.5, WFS_PAGE_MAX_LIMIT + 1]) refused(await store.projectsOf(me, { limit }), 'validation-failed', `limit ${limit}`);
+      refused(await store.projectsOf(me, { after: 'no/slash' }), 'validation-failed', 'a malformed cursor');
+      refused(await store.projectsOf('', {}), 'validation-failed', 'an empty player id');
     },
   },
   {

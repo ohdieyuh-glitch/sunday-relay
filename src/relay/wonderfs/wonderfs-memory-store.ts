@@ -42,6 +42,7 @@ import {
   wfsCheckConflictsQuery,
   wfsCheckEventsQuery,
   wfsCheckHistoryQuery,
+  wfsCheckProjectsQuery,
   wfsCheckSha256,
   wfsCheckTreeQuery,
   wfsCompareEntries,
@@ -62,7 +63,9 @@ import {
   type WfsEventsPage,
   type WfsFileVersion,
   type WfsHistoryPage,
+  type WfsMemberProject,
   type WfsProjectHead,
+  type WfsProjectsPage,
   type WfsStore,
   type WfsStoreEvent,
   type WfsTreePage,
@@ -179,6 +182,23 @@ export function openWfsMemoryStore(options: WfsMemoryOptions = {}): WfsMemorySto
     },
     async memberRole(projectId, playerId) {
       return ok(roleOf(projectId, playerId));
+    },
+    async projectsOf(playerId, query) {
+      const q = wfsCheckProjectsQuery(playerId, query);
+      if (!q.ok) return q;
+      const { after, limit } = q.value;
+      // the membership (through the ONE mapping) JOINED to a live file environment: either missing, the project is absent
+      const mine: WfsMemberProject[] = [];
+      for (const [projectId, members] of backing.products) {
+        const role = wfsHumanRoleFromMembership(members.get(q.value.playerId));
+        if (role === null || !backing.projects.has(projectId)) continue;
+        if (after !== null && wfsCompareKeys(projectId, after) <= 0) continue;
+        mine.push({ projectId, role });
+      }
+      mine.sort((a, b) => wfsCompareKeys(a.projectId, b.projectId));
+      const page = wfsBoundPage(mine.slice(0, limit + 1), limit);
+      const answer: WfsProjectsPage = { projects: page.items, next: page.more ? page.items[page.items.length - 1].projectId : null };
+      return ok(answer);
     },
     async project(projectId) {
       return backing.projects.get(projectId)?.state ?? null;

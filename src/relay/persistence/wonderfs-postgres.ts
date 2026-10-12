@@ -25,6 +25,7 @@ import {
   wfsCheckConflictsQuery,
   wfsCheckEventsQuery,
   wfsCheckHistoryQuery,
+  wfsCheckProjectsQuery,
   wfsCheckSha256,
   wfsCheckTreeQuery,
   wfsConflictClosing,
@@ -44,7 +45,9 @@ import {
   type WfsEventsPage,
   type WfsFileVersion,
   type WfsHistoryPage,
+  type WfsMemberProject,
   type WfsProjectHead,
+  type WfsProjectsPage,
   type WfsStore,
   type WfsStoreEvent,
   type WfsTreePage,
@@ -515,6 +518,34 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         return readOutage();
       }
     },
+    async projectsOf(playerId, query) {
+      const q = wfsCheckProjectsQuery(playerId, query);
+      if (!q.ok) return q;
+      const { after, limit } = q.value;
+      return snapshot<WfsProjectsPage>(async (db) => {
+        // the membership JOINED to a live file environment; the role through the ONE mapping (in code, never re-spelled in SQL),
+        // so rows the mapping gives no role are skipped and batches are read until a page is full or nothing is left
+        const found: WfsMemberProject[] = [];
+        let cursor = after;
+        for (;;) {
+          const rows = await db.query<{ project_id: string; role: string }>(
+            `SELECT m.project_id, m.role FROM relay_wonderland.project_members m
+               JOIN relay_wonderland.wfs_projects p ON p.project_id = m.project_id AND p.deleted_at IS NULL
+              WHERE m.player_id = $1 AND ($2::text IS NULL OR m.project_id COLLATE "C" > $2::text)
+              ORDER BY m.project_id COLLATE "C" LIMIT $3`,
+            [q.value.playerId, cursor, limit + 1],
+          );
+          for (const r of rows.rows) {
+            const role = wfsHumanRoleFromMembership(r.role);
+            if (role !== null) found.push({ projectId: r.project_id, role });
+          }
+          if (rows.rows.length < limit + 1 || found.length > limit) break;
+          cursor = rows.rows[rows.rows.length - 1].project_id;
+        }
+        const page = wfsBoundPage(found.slice(0, limit + 1), limit);
+        return ok({ projects: page.items, next: page.more ? page.items[page.items.length - 1].projectId : null });
+      });
+    },
     async project(projectId) {
       const read = await snapshot<WfsProjectState | null>(async (db) => {
         const seq = await liveSeq(db, projectId);
@@ -625,7 +656,10 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         const seq = await liveSeq(db, projectId);
         if (seq === null) return wfsNotFound('unknown project');
         const rows = await db.query<EventRow>(
-          'SELECT seq::text AS seq, kind, body, at FROM relay_wonderland.wfs_events WHERE project_id = $1 AND seq > $2 ORDER BY seq LIMIT $3',
+          // R0b-fix (CI r1.7): sorted by the bigint COLUMN, qualified as e.seq. PostgreSQL binds a BARE sort name to an output
+          // column first -- here the text cast of the same name -- so pages came back in TEXT order ('10' < '2') and skipped 2..9.
+          // wonderfs-store.test.ts scans this file for that shape.
+          'SELECT e.seq::text AS seq, e.kind, e.body, e.at FROM relay_wonderland.wfs_events e WHERE e.project_id = $1 AND e.seq > $2 ORDER BY e.seq LIMIT $3',
           [projectId, afterSeq, limit + 1],
         );
         const page = wfsBoundPage<WfsEventRecord>(rows.rows.map((r) => ({ seq: Number(r.seq), kind: r.kind, body: r.body, atIso: wfsIso(r.at) })), limit);
