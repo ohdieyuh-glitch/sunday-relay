@@ -29,6 +29,7 @@ import type {
   UserPresence,
   UserProfile,
 } from './social-contracts';
+import type { LffCreation, LffJoinRequest, LffPost } from './social-lff';
 
 /** Everything known about one account. */
 export interface SocialUserRecord {
@@ -50,6 +51,11 @@ export interface SocialState {
   readonly conversations: Readonly<Record<string, Conversation>>;
   readonly messages: Readonly<Record<string, readonly Message[]>>;
   readonly readStates: readonly ConversationReadState[];
+  /** LFF, the Looking For Feed (social-lff.ts): the posts, and the requests to join them. Never part of the snapshot. */
+  readonly lffPosts: readonly LffPost[];
+  readonly lffRequests: readonly LffJoinRequest[];
+  /** When each player created posts, inside the rolling creation window only (social-lff.ts LFF_MAX_CREATED_PER_WINDOW). */
+  readonly lffCreations: readonly LffCreation[];
   /** Monotonic id source, so ids are deterministic in tests and replays. */
   readonly nextSerial: number;
 }
@@ -68,6 +74,9 @@ export function emptySocialState(): SocialState {
     conversations: {},
     messages: {},
     readStates: [],
+    lffPosts: [],
+    lffRequests: [],
+    lffCreations: [],
     nextSerial: 1,
   };
 }
@@ -99,6 +108,19 @@ export function conversationById(state: SocialState, conversationId: string): Co
 /** A conversation's messages by the same rule: none unless the list is the map's own. */
 export function messagesOf(state: SocialState, conversationId: string): readonly Message[] {
   return Object.hasOwn(state.messages, conversationId) ? state.messages[conversationId] : [];
+}
+
+/**
+ * An LFF post or join request by id, or undefined. Lists searched by their records' own ids, so a client-sent id such as
+ * `constructor` or `__proto__` (it matches the route's id shape) is simply no record -- never something Object.prototype holds
+ * (the own-keys rule above; social-own-keys.test.ts).
+ */
+export function lffPostById(state: SocialState, postId: string): LffPost | undefined {
+  return state.lffPosts.find((p) => p.id === postId);
+}
+
+export function lffRequestById(state: SocialState, requestId: string): LffJoinRequest | undefined {
+  return state.lffRequests.find((r) => r.id === requestId);
 }
 
 export function areFriends(state: SocialState, a: SocialUserId, b: SocialUserId): boolean {

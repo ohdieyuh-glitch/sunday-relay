@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest';
  * two losing its guard, fails here until it is reviewed. Reads `git ls-files` and the sources only.
  * 037 (the private-server rules, 10-11) adds the private_server* tables and exactly ONE module that writes them,
  * private-server-postgres.ts, under the same guard: three writers in all.
+ * 038 (LFF, the "Looking For Feed", PROVISIONAL number, 10-12) adds the lff_* tables and NO new writer: their one writer is
+ * social-postgres.ts (slice B2b), already one of the three and already guarded. Until B2b lands, nothing writes them.
  */
 
 const ROOT = resolve(__dirname, '..', '..', '..');
@@ -19,8 +21,8 @@ const files = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' })
   .split('\n')
   .filter((f) => SCANNED.test(f) && SOURCE.test(f) && !TEST.test(f));
 
-/** A write to a social_*, voice_* or private_server* table of relay_wonderland, in any case and spacing SQL allows. */
-const WRITE = /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|MERGE\s+INTO|COPY)\s+(?:ONLY\s+)?relay_wonderland\s*\.\s*(?:(?:social|voice)_[a-z_]+|private_server[a-z_]*)/iu;
+/** A write to a social_*, voice_*, private_server* or lff_* table of relay_wonderland, in any case and spacing SQL allows. */
+const WRITE = /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|MERGE\s+INTO|COPY)\s+(?:ONLY\s+)?relay_wonderland\s*\.\s*(?:(?:social|voice|lff)_[a-z_]+|private_server[a-z_]*)/iu;
 const writes = (source: string): boolean => WRITE.test(source);
 
 const WRITERS = ['src/relay/persistence/private-server-postgres.ts', 'src/relay/persistence/social-postgres.ts', 'src/relay/persistence/voice-binding-postgres.ts'];
@@ -31,7 +33,7 @@ const code = (f: string): string =>
     .replace(/\/\*[\s\S]*?\*\//gu, '')
     .replace(/^\s*\/\/.*$/gmu, '');
 
-describe('C2: the social, voice and private-server tables have exactly three writers, and each refuses a protected store', () => {
+describe('C2: the social, voice, private-server and LFF tables have exactly three writers, and each refuses a protected store', () => {
   it('the detector sees what it must (planted text)', () => {
     expect(writes('await c.query(`INSERT INTO relay_wonderland.social_messages(id) VALUES($1)`)')).toBe(true);
     expect(writes('update relay_wonderland.voice_puid_binding set puid = $2')).toBe(true);
@@ -39,8 +41,13 @@ describe('C2: the social, voice and private-server tables have exactly three wri
     expect(writes('TRUNCATE TABLE relay_wonderland.social_events')).toBe(true);
     expect(writes('UPDATE relay_wonderland.private_servers SET version = $2')).toBe(true);
     expect(writes('insert into relay_wonderland.private_server_entitlements(player_id) values($1)')).toBe(true);
+    expect(writes('INSERT INTO relay_wonderland.lff_posts(post_id, owner_id) VALUES($1, $2)')).toBe(true);
+    expect(writes('delete from relay_wonderland . lff_join_requests where request_id = $1')).toBe(true);
+    expect(writes('UPDATE ONLY relay_wonderland.lff_posts SET status = $2')).toBe(true);
     expect(writes('SELECT * FROM relay_wonderland.social_profiles')).toBe(false); // a read is not a write
     expect(writes('SELECT tier FROM relay_wonderland.private_server_entitlements')).toBe(false); // a read is not a write
+    expect(writes('SELECT * FROM relay_wonderland.lff_posts WHERE status = $1')).toBe(false); // a read is not a write
+    expect(writes('INSERT INTO relay_wonderland.lff(x) VALUES($1)')).toBe(false); // not an lff_* table
     expect(writes('INSERT INTO relay_wonderland.players(player_id) VALUES($1)')).toBe(false); // not a social table
   });
 

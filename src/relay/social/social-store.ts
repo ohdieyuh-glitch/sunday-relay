@@ -234,11 +234,18 @@ export function createInMemorySocialStore(initial: SocialState = emptySocialStat
         if (outcome.value.state !== state || (outcome.value.audience.length > 0 && op.startsWith('world.'))) {
           const before = state;
           state = outcome.value.state;
+          // THE ORDINARY CHANGES TOLD AS THEMSELVES (social-commands.ts extraEvents), each its own event, BEFORE the operation's own:
+          // a post a fill closed, told to the others as a close; an LFF request a block cancelled, told as a withdrawal or a deletion
+          for (const extra of outcome.value.extraEvents ?? []) {
+            if (extra.audience.length === 0) continue;
+            seq += 1;
+            log.push({ seq, op: extra.op, atIso: nowIso, audience: new Set(extra.audience) });
+          }
           if (outcome.value.audience.length > 0) {
             seq += 1;
             log.push({ seq, op: outcome.value.eventOp ?? op, atIso: nowIso, audience: new Set(outcome.value.audience) });
-            if (log.length > maxEvents) log.splice(0, log.length - maxEvents);
           }
+          if (log.length > maxEvents) log.splice(0, log.length - maxEvents);
           tellAfterCommit(options.afterCommit, op, actorId, before, state);
         }
         return { ok: true, value: outcome.value.data };
