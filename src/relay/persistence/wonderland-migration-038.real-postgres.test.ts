@@ -42,7 +42,8 @@ import { migrationVersion, TransactionalWonderlandDatabase, WONDERLAND_MIGRATION
  *          037's DOWN refuses while 038 is stamped;
  *   CHAIN  the product's migrate() carries 038 right after 037 on a fresh database, and a second migrate() changes nothing;
  *   ROLE   a NOSUPERUSER database owner (the O1 bootstrap's D4 role) applies the whole chain, 038 included.
- * The STORE case (durability through openSocialPostgresStore across a restart) arrives with slice B2b's store wiring.
+ * The STORE cases (durability through openSocialPostgresStore across a restart, the creation cap, the event stream) are slice B2b's,
+ * in social-postgres-lff.real-postgres.test.ts (each its own database too); social-postgres-lff.test.ts runs the same story with none.
  * There is no DOCS case: like 037, 038 has no separate precheck.sql / postcheck.sql (its NOTICE and post-check are A / G / POST).
  * Runs wherever JULIUS_TEST_DATABASE_URL names a THROWAWAY server (never DATABASE_URL); `todo` elsewhere. The static block at the
  * end needs no database and runs everywhere: the schema states exactly social-lff.ts's vocabulary and bounds.

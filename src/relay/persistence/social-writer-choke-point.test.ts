@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -10,7 +10,10 @@ import { describe, expect, it } from 'vitest';
  * 037 (the private-server rules, 10-11) adds the private_server* tables and exactly ONE module that writes them,
  * private-server-postgres.ts, under the same guard: three writers in all.
  * 038 (LFF, the "Looking For Feed", PROVISIONAL number, 10-12) adds the lff_* tables and NO new writer: their one writer is
- * social-postgres.ts (slice B2b), already one of the three and already guarded. Until B2b lands, nothing writes them.
+ * social-postgres.ts (slice B2b: its write-through and its event log), already one of the three and already guarded.
+ * B2b's review (m2) narrows it: social-postgres.ts is the ONLY writer of the lff_* tables (the union scan alone would let another of
+ * the three gain an lff_* write), and writeSocialEvent -- exported, so a caller writes social_events with no SQL in its own text --
+ * is used exactly where it is today. Both scans read tracked AND untracked (not ignored) files, so new work is caught before it lands.
  */
 
 const ROOT = resolve(__dirname, '..', '..', '..');
@@ -26,6 +29,19 @@ const WRITE = /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|MER
 const writes = (source: string): boolean => WRITE.test(source);
 
 const WRITERS = ['src/relay/persistence/private-server-postgres.ts', 'src/relay/persistence/social-postgres.ts', 'src/relay/persistence/voice-binding-postgres.ts'];
+
+/** Every source file, tests included, tracked or new (not ignored): what the two narrower scans below read. */
+const everySource = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], { cwd: ROOT, encoding: 'utf8' })
+  .split('\n')
+  .filter((f) => SCANNED.test(f) && SOURCE.test(f) && existsSync(join(ROOT, f)));
+const SELF = 'src/relay/persistence/social-writer-choke-point.test.ts';
+
+/** A write to an lff_* table, schema-qualified OR NOT (a writer on a search_path), in any case and spacing SQL allows. */
+const LFF_WRITE = /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|MERGE\s+INTO|COPY)\s+(?:ONLY\s+)?(?:relay_wonderland\s*\.\s*)?lff_[a-z_]+/iu;
+const LFF_WRITERS = ['src/relay/persistence/social-postgres.ts'];
+
+/** Every file that uses writeSocialEvent in code (its definition, its one call site, its unit test). A new one is reviewed first. */
+const EVENT_WRITER_USERS = ['src/relay/persistence/social-postgres-lff.test.ts', 'src/relay/persistence/social-postgres.ts'];
 
 /** Without its block comments and whole-line comments, so a comment that NAMES the guard does not count as calling it. */
 const code = (f: string): string =>
@@ -59,6 +75,23 @@ describe('C2: the social, voice, private-server and LFF tables have exactly thre
   it('the writers are exactly the three (nothing writes the trusted tier row: an operator does)', () => {
     expect(files.filter((f) => writes(readFileSync(join(ROOT, f), 'utf8')))).toEqual(WRITERS);
     expect(code('src/relay/persistence/private-server-postgres.ts')).not.toMatch(/(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+relay_wonderland\.private_server_entitlements/iu);
+  });
+
+  it('the lff_* tables have exactly ONE writer, social-postgres.ts: not another of the three, not anything else (B2b review m2)', () => {
+    // planted text first: the detector sees an lff_* write, qualified or not, and nothing that is not one
+    expect(LFF_WRITE.test('INSERT INTO relay_wonderland.lff_posts(post_id) VALUES($1)')).toBe(true);
+    expect(LFF_WRITE.test('delete from lff_join_requests where request_id = $1')).toBe(true);
+    expect(LFF_WRITE.test('UPDATE ONLY relay_wonderland . lff_post_creations SET created_at = $2')).toBe(true);
+    expect(LFF_WRITE.test('SELECT * FROM relay_wonderland.lff_posts ORDER BY post_id')).toBe(false); // a read is not a write
+    expect(LFF_WRITE.test('INSERT INTO relay_wonderland.social_events(op) VALUES($1)')).toBe(false); // not an lff_* table
+    expect(everySource.length).toBeGreaterThan(files.length); // the wider list holds the tests too: not vacuous
+    expect(everySource.filter((f) => !TEST.test(f) && LFF_WRITE.test(readFileSync(join(ROOT, f), 'utf8')))).toEqual(LFF_WRITERS);
+  });
+
+  it('writeSocialEvent, the event log\'s exported writer, is used exactly where it is today: a new caller fails here (B2b review m2)', () => {
+    const users = everySource.filter((f) => f !== SELF && /\bwriteSocialEvent\b/u.test(code(f)));
+    expect(users).toEqual(EVENT_WRITER_USERS);
+    expect(code('src/relay/persistence/social-postgres.ts')).toMatch(/export async function writeSocialEvent\(/u);
   });
 
   it('each of the three builds the guard in code (each method calling it is proven in protected-store-writer-guard.test.ts)', () => {

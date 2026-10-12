@@ -20,7 +20,8 @@ import {
   type UserPresence,
   type UserProfile,
 } from '../social/social-contracts';
-import { applySocialOperation, type SocialCommandInput } from '../social/social-commands';
+import { applySocialOperation, type SocialCommandInput, type SocialCommandOutcome } from '../social/social-commands';
+import type { LffCreation, LffJoinRequest, LffPost } from '../social/social-lff';
 import { emptySocialState, hasUser, type SocialState, type SocialUserRecord } from '../social/social-state';
 import { ensureSocialUser, tellAfterCommit, viewerCursor, type SocialAfterCommit, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
 import { emptyWorldState, type WorldState } from '../social/world-presence';
@@ -42,7 +43,13 @@ import { protectedStoreWriterGuard } from './protected-store-writer-guard';
  *
  * EVENTS ARE ROWS. A change concerning anyone writes `social_events` (operation, time, audience) in the same
  * transaction, so a client polling after a restart still finds what it missed, and the events cannot disagree with the
- * state they describe.
+ * state they describe. That includes the ORDINARY CHANGES AN OPERATION TELLS AS THEMSELVES (SocialCommandOutcome.extraEvents:
+ * a post a fill closed, told to the others as a close; an LFF request a block cancelled, told as a withdrawal or a deletion),
+ * each written BEFORE the operation's own event, as the in-memory store logs them -- or the whole operation fails (LFF B2b).
+ *
+ * LFF (wonderland-migrations/038_wonderland_lff.sql, slice B2b): the posts, the requests and the creation record are three more
+ * tables of the same state, read back on open and written through by the same diff, so no restart loses a post, a request (a
+ * CANCELLED one included) or a player's creation cap.
  *
  * A database that cannot be reached THROWS out of `open`, and the route answers 503: an outage is not an empty social
  * graph.
@@ -50,6 +57,8 @@ import { protectedStoreWriterGuard } from './protected-store-writer-guard';
 
 const ISO = (value: Date | string | null): string | null => (value === null ? null : new Date(value).toISOString());
 const iso = (value: Date | string): string => new Date(value).toISOString();
+/** A timestamptz as the LFF domain holds it: epoch milliseconds (038 stores what the domain wrote, to the millisecond). */
+const ms = (value: Date | string): number => new Date(value).getTime();
 
 /** Keyed by-reference diff: the domain makes a new object only for what it changed. */
 function diffBy<T>(before: readonly T[], after: readonly T[], key: (t: T) => string): { put: T[]; drop: string[] } {
@@ -218,6 +227,40 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
   }
   const serial = (await q<{ value: string }>(`SELECT value FROM relay_wonderland.social_meta WHERE name='next_serial'`))[0];
 
+  // LFF (038). pg hands a bigint (version) back as a string and an integer as a number: both are read through Number; a time as a
+  // Date, read as epoch milliseconds. ORDERED BY THE ID'S SERIAL (a shorter id is a smaller serial: one prefix, digits only, by
+  // 038's id-shape CHECKs), which is the order the domain appended every one of them in, so a restart reads back exactly the lists
+  // it held. Nothing depends on that: social-lff.ts sorts every list it shows explicitly.
+  const lffPosts: LffPost[] = (await q<Record<string, any>>(`SELECT * FROM relay_wonderland.lff_posts ORDER BY length(post_id), post_id COLLATE "C"`)).map((r) => ({
+    id: r.post_id,
+    ownerId: r.owner_id,
+    category: r.category,
+    title: r.title,
+    description: r.description,
+    projectLabel: r.project_label,
+    skills: r.skills ?? [],
+    openSlots: Number(r.open_slots),
+    status: r.status,
+    createdAtMs: ms(r.created_at),
+    updatedAtMs: ms(r.updated_at),
+    expiresAtMs: ms(r.expires_at),
+    version: Number(r.version),
+  }));
+  const lffRequests: LffJoinRequest[] = (await q<Record<string, any>>(`SELECT * FROM relay_wonderland.lff_join_requests ORDER BY length(request_id), request_id COLLATE "C"`)).map((r) => ({
+    id: r.request_id,
+    postId: r.post_id,
+    requesterId: r.requester_id,
+    message: r.message,
+    status: r.status,
+    createdAtMs: ms(r.created_at),
+    updatedAtMs: ms(r.updated_at),
+  }));
+  const lffCreations: LffCreation[] = (await q<Record<string, any>>(`SELECT * FROM relay_wonderland.lff_post_creations ORDER BY length(post_id), post_id COLLATE "C", owner_id COLLATE "C"`)).map((r) => ({
+    userId: r.owner_id,
+    postId: r.post_id,
+    atMs: ms(r.created_at),
+  }));
+
   return {
     ...emptySocialState(),
     users,
@@ -232,6 +275,9 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
     conversations,
     messages,
     readStates,
+    lffPosts,
+    lffRequests,
+    lffCreations,
     // no row until the first id is minted: migration 033 writes none (a bootstrap leaves every table empty)
     nextSerial: serial === undefined ? 1 : Number(serial.value),
   };
@@ -241,6 +287,41 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
 
 /** 033's social_events CHECK(cardinality(audience) BETWEEN 1 AND 256): one event is written as as many rows as it needs. */
 export const EVENT_AUDIENCE_MAX = 256;
+
+/** An event row the database did not keep (a rule or a trigger that swallowed the INSERT): the operation fails, never drops it. */
+export class SocialEventNotWritten extends Error {}
+
+/**
+ * ONE EVENT, WRITTEN AS AS MANY ROWS AS IT NEEDS: its audience de-duplicated, then cut into rows of at most EVENT_AUDIENCE_MAX
+ * (each viewer is in exactly one row, so each sees it once). An EMPTY audience writes NO row (033 refuses one, and there is nobody
+ * to tell). Every row must be KEPT: an INSERT the database reports as not inserted (rowCount 0) throws SocialEventNotWritten, which
+ * rolls the whole operation back -- an event is never silently missing beside the state it describes. Returns the rows written.
+ */
+export async function writeSocialEvent(c: Pick<PoolClient, 'query'>, op: SocialOperationId, atIso: string, audience: readonly SocialUserId[]): Promise<number> {
+  const viewers = [...new Set(audience)];
+  let rows = 0;
+  for (let i = 0; i < viewers.length; i += EVENT_AUDIENCE_MAX) {
+    const written = await c.query(`INSERT INTO relay_wonderland.social_events(op, at, audience) VALUES($1,$2,$3)`, [op, atIso, viewers.slice(i, i + EVENT_AUDIENCE_MAX)]);
+    if (written.rowCount !== 1) throw new SocialEventNotWritten(`the event ${op} was not kept by the database`);
+    rows += 1;
+  }
+  return rows;
+}
+
+/**
+ * WHAT AN ACCEPTED OUTCOME NEEDS FROM THE DATABASE:
+ *   'write' -- the state moved, somebody is told (the operation's own event OR an ordinary change told as itself, extraEvents), or
+ *              a private server's record must be written: ALL of it in one transaction, or none of it;
+ *   'world' -- only the in-memory world moved (a position report, a read of the world): nothing durable;
+ *   'none'  -- a read.
+ * AN EXTRA EVENT IS NEVER DROPPED (LFF B2b; the security review's C1): an outcome carrying one is a write even if nothing else
+ * moved, so neither the world path nor the read path can swallow it. (Today every extra comes with a state change.)
+ */
+export function durableWriteOf(state: SocialState, outcome: SocialCommandOutcome): 'write' | 'world' | 'none' {
+  const tells = outcome.audience.length > 0 || (outcome.extraEvents?.length ?? 0) > 0;
+  if (outcome.state !== state || tells || outcome.serverWrite !== undefined) return 'write';
+  return outcome.world !== undefined ? 'world' : 'none';
+}
 
 async function writeUser(c: PoolClient, id: string, record: SocialUserRecord, before: SocialUserRecord | undefined): Promise<void> {
   const p = record.profile;
@@ -281,6 +362,75 @@ async function writeUser(c: PoolClient, id: string, record: SocialUserRecord, be
          location=EXCLUDED.location, last_seen_at=EXCLUDED.last_seen_at, updated_at=EXCLUDED.updated_at`,
       [id, s.availability, s.activity, s.activityDetail, s.location === null ? null : JSON.stringify(s.location), s.lastSeenAtIso, s.updatedAtIso],
     );
+  }
+}
+
+/** An LFF upsert that found ANOTHER row under its id (another owner, another post or requester, a newer version): fail closed. */
+class LffRowNotOurs extends Error {}
+
+const NOTHING_CHANGED = { put: [], drop: [] } as const;
+/** diffBy, skipped outright when the domain kept the list itself (most operations touch no LFF row at all). */
+const diffIfMoved = <T>(before: readonly T[], after: readonly T[], key: (t: T) => string): { put: readonly T[]; drop: readonly string[] } =>
+  before === after ? NOTHING_CHANGED : diffBy(before, after, key);
+
+/**
+ * LFF (038, slice B2b): the rows of the three LFF tables the command changed, by the same by-reference diff (the domain makes a
+ * new object only for what it changed, and keeps every other one). IN THIS ORDER:
+ *   1. post deletes FIRST (the owner's hard delete; each CASCADES its requests, so a request delete after it finds nothing);
+ *   2. request deletes (only ever a deleted post's: already gone with it, harmless);
+ *   3. post upserts BEFORE request upserts (a request's foreign key names its post). A post's owner, created_at and expires_at
+ *      never change; everything else the domain may move (an edit, a close, the accept that fills it: status and version);
+ *   4. request upserts: a request changes only its status and updated_at (an accept, a decline, a withdraw, a block's CANCELLED);
+ *   5. the creation record: deletes, then inserts. A create PRUNES every player's entries older than the window, so its deletes
+ *      name OTHER players' rows too (correct, and bounded). A creation is immutable: a plain INSERT, so a second write of one key
+ *      is a refusal (class 23, the whole operation refused), never a silent overwrite.
+ * Times go in as Dates of the domain's milliseconds; skills as a text[]. The domain refuses bad input first: 038's CHECKs are a
+ * backstop, and a class 22 / 23 refusal from them surfaces as validation-failed (below, in apply).
+ * AN UPSERT NEVER GRAFTS ONTO ANOTHER PLAYER'S ROW (B2b review m1). The ids come from the in-memory serial; if it ever falls behind
+ * the database (a COMMIT whose acknowledgement was lost, a stale second bridge over a deploy), a NEW post or request could mint an
+ * id the database already holds. Each upsert therefore updates only ITS OWN row -- a post of the same owner, created at the same
+ * time, at no newer version than ours; a request of the same post and requester -- and must report exactly one row (inserted or
+ * updated). Anything else throws LffRowNotOurs: the whole operation rolls back and answers a retryable outage, fail closed.
+ * RETENTION IS NOT HERE YET (review m3, DEFERRED as an Alpha follow-up only): closed and expired posts and requests in a final
+ * status (their messages included) are kept until their post or player is deleted; their growth is bounded by the caps and
+ * budgets. A retention rule belongs in this writer before Beta.
+ */
+async function writeLffChanges(c: PoolClient, before: SocialState, after: SocialState): Promise<void> {
+  const posts = diffIfMoved(before.lffPosts, after.lffPosts, (p) => p.id);
+  const requests = diffIfMoved(before.lffRequests, after.lffRequests, (r) => r.id);
+  const creations = diffIfMoved(before.lffCreations, after.lffCreations, (x) => pairKey(x.userId, x.postId));
+  for (const id of posts.drop) await c.query(`DELETE FROM relay_wonderland.lff_posts WHERE post_id=$1`, [id]);
+  for (const id of requests.drop) await c.query(`DELETE FROM relay_wonderland.lff_join_requests WHERE request_id=$1`, [id]);
+  for (const p of posts.put) {
+    const written = await c.query(
+      `INSERT INTO relay_wonderland.lff_posts(post_id, owner_id, category, title, description, project_label, skills, open_slots, status, created_at,
+         updated_at, expires_at, version)
+       VALUES($1,$2,$3,$4,$5,$6,$7::text[],$8,$9,$10,$11,$12,$13)
+       ON CONFLICT(post_id) DO UPDATE SET category=EXCLUDED.category, title=EXCLUDED.title, description=EXCLUDED.description,
+         project_label=EXCLUDED.project_label, skills=EXCLUDED.skills, open_slots=EXCLUDED.open_slots, status=EXCLUDED.status,
+         updated_at=EXCLUDED.updated_at, version=EXCLUDED.version
+       WHERE relay_wonderland.lff_posts.owner_id = EXCLUDED.owner_id AND relay_wonderland.lff_posts.created_at = EXCLUDED.created_at
+         AND relay_wonderland.lff_posts.version <= EXCLUDED.version`,
+      [p.id, p.ownerId, p.category, p.title, p.description, p.projectLabel, [...p.skills], p.openSlots, p.status, new Date(p.createdAtMs),
+        new Date(p.updatedAtMs), new Date(p.expiresAtMs), p.version],
+    );
+    if (written.rowCount !== 1) throw new LffRowNotOurs(`post ${p.id}: the database holds another row under this id`);
+  }
+  for (const r of requests.put) {
+    const written = await c.query(
+      `INSERT INTO relay_wonderland.lff_join_requests(request_id, post_id, requester_id, message, status, created_at, updated_at) VALUES($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT(request_id) DO UPDATE SET status=EXCLUDED.status, updated_at=EXCLUDED.updated_at
+       WHERE relay_wonderland.lff_join_requests.post_id = EXCLUDED.post_id AND relay_wonderland.lff_join_requests.requester_id = EXCLUDED.requester_id`,
+      [r.id, r.postId, r.requesterId, r.message, r.status, new Date(r.createdAtMs), new Date(r.updatedAtMs)],
+    );
+    if (written.rowCount !== 1) throw new LffRowNotOurs(`request ${r.id}: the database holds another row under this id`);
+  }
+  for (const k of creations.drop) {
+    const [owner, post] = k.split('\u0000');
+    await c.query(`DELETE FROM relay_wonderland.lff_post_creations WHERE owner_id=$1 AND post_id=$2`, [owner, post]);
+  }
+  for (const x of creations.put) {
+    await c.query(`INSERT INTO relay_wonderland.lff_post_creations(owner_id, post_id, created_at) VALUES($1,$2,$3)`, [x.userId, x.postId, new Date(x.atMs)]);
   }
 }
 
@@ -411,6 +561,7 @@ async function writeChanges(c: PoolClient, before: SocialState, after: SocialSta
       }
     }
   }
+  await writeLffChanges(c, before, after);
   if (before.nextSerial !== after.nextSerial) {
     // AN UPSERT: migration 033 writes no row, so the first minted id creates next_serial. A bare UPDATE would change nothing
     // there, and after a restart the ids would start again at 1: the same ids minted twice, and each ON CONFLICT DO NOTHING
@@ -500,31 +651,38 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
         if (!outcome.ok) return outcome;
         const next = outcome.value.state;
         const serverWrite = outcome.value.serverWrite;
-        if (next === state && outcome.value.world !== undefined && outcome.value.audience.length === 0 && serverWrite === undefined) {
+        // THE OUTCOME AFTER applySocialOperation: its audience and its extra events have already passed the block floor
+        const extraEvents = outcome.value.extraEvents ?? [];
+        const needs = durableWriteOf(state, outcome.value);
+        if (needs === 'world' && outcome.value.world !== undefined) {
           world = outcome.value.world;   // a position report or a read: nothing durable moved
           // a private server found closed: its COOLDOWN is recorded, best effort (the times that decide were fixed at activation)
           if (outcome.value.closedServerOf !== undefined) await gates.observeClosed(outcome.value.closedServerOf, nowMs);
           return { ok: true, value: outcome.value.data };
         }
-        if (next !== state || outcome.value.audience.length > 0 || serverWrite !== undefined) {
-          // SAVED ONLY AFTER THE DURABLE WRITE: the new state is adopted only when its rows (and its event) committed.
+        if (needs === 'write') {
+          // SAVED ONLY AFTER THE DURABLE WRITE: the new state is adopted only when its rows (and its events) committed.
           try {
             await transact(async (c) => {
               // THE OWNER'S OPEN FIRST, by compare-and-set on the version it read: a lost race rolls the whole operation back
               if (serverWrite !== undefined && !(await writePrivateServerRecord(c, serverWrite))) throw new PrivateServerRaced('private server moved');
               await writeChanges(c, state, next);
+              // THE ORDINARY CHANGES TOLD AS THEMSELVES (LFF B2b, the security review's C1), each its own event, in THIS transaction
+              // and BEFORE the operation's own -- the in-memory store's order (social-store.ts), so a viewer's stream is the same on
+              // both: a fill's close told to the other requesters; a block's cancellation told to the far side as a withdrawal or a
+              // deletion. A failure writing any of them fails the operation: nothing is committed, the state is not adopted.
+              for (const extra of extraEvents) await writeSocialEvent(c, extra.op, nowIso, extra.audience);
               // 033 caps one event row's audience at 256 (social_events CHECK); a player with many friends would have hit it on
               // every world.join, forever (the migration adversary's M3, 10-07). One event, as many rows as it needs: each
               // viewer is in exactly one of them, so each still sees it once.
-              const audience = [...new Set(outcome.value.audience)];
-              for (let i = 0; i < audience.length; i += EVENT_AUDIENCE_MAX) {
-                await c.query(`INSERT INTO relay_wonderland.social_events(op, at, audience) VALUES($1,$2,$3)`, [outcome.value.eventOp ?? op, nowIso, audience.slice(i, i + EVENT_AUDIENCE_MAX)]);
-              }
+              await writeSocialEvent(c, outcome.value.eventOp ?? op, nowIso, outcome.value.audience);
             });
           } catch (error) {
             if (serverWrite !== undefined) gates.forget(serverWrite.ownerId);
             // A CLOSED PRIVATE SERVER CLOSES WHATEVER THE DATABASE SAYS: its members' cleared locations could not be saved, but the
             // closure itself only takes away, so it stands in memory (fail closed). The stale locations are written by the next change.
+            // Only a world report finds a server closed (social-commands.ts), and it carries no extraEvents: none is skipped here. An op
+            // that ever sets both must not take this path (B2b review n4).
             if (outcome.value.closedServerOf !== undefined && outcome.value.world !== undefined) {
               world = outcome.value.world;
               return { ok: true, value: outcome.value.data };
