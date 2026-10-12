@@ -6,7 +6,8 @@
  *   - NEVER SILENTLY DISCARD (INV-2): a changeset whose preconditions fail is kept whole, with its author, as a CONFLICT, in
  *     the same step that refuses it. Only a later recorded commit (keep mine / keep both) or dismissal (keep theirs) closes it.
  *   - LINEAR (INV-4): each branch's revisions are gapless; each commit names its predecessor's hash (INV-6).
- *   - IDEMPOTENT (INV-8): a request id answers the same way forever; reused with another payload it is refused.
+ *   - IDEMPOTENT (INV-8): a request id answers the same way forever, to the same actor sending the same change from ANY session
+ *     (a journal replay after a re-sign-in, INV-11); reused with another payload, or by another actor, it is refused.
  *   - HISTORY (INV-7): a deletion is a tombstone; the tree at any revision is reconstructible from the commits.
  *
  * Concurrency is per-file preconditions (§6.3), never locks: an edit and a concurrent move of the same file both land, because
@@ -555,6 +556,25 @@ function commitSteps(project: WfsProjectState, branch: WfsBranchState, steps: re
   });
 }
 
+/**
+ * INV-8 / INV-11 / T-CRASH ("after COMMIT, before the response: the retry returns the original rev"): WHO, for the purpose of
+ * "is this the same request?". Only the principal's STABLE identity: its kind and id, and for a non-human the grant, the
+ * mission and the attempt it acts under and the human it acts for (§8.1: a token is bound to principal, grant and attempt; a
+ * grant is mission-scoped and issued by that human).
+ *
+ * NOT `sessionId`: a bridge restart signs every player out (§8.1), so the journal's replay comes from a NEW sign-in with a new
+ * session_ref (§12; §19.m1: the ref names a session and authenticates nothing). NOT `clientBuild` / `tool`: descriptive
+ * provenance, which a client updated between the send and its replay changes. Hashing those refused a replay of a commit that
+ * had landed (`duplicate-idempotency-key`) instead of answering with its original revision.
+ *
+ * An allow-list on purpose: a provenance field added later (e.g. the Julius lease generation, which moves on every re-lease)
+ * never silently becomes part of the request's identity. The commit RECORD still carries the whole principal, and a replay
+ * returns the original outcome; nothing about the stored commit changes.
+ */
+function requestActor(p: WfsPrincipal): Readonly<Record<string, string | null>> {
+  return { kind: p.kind, id: p.id, onBehalfOf: p.onBehalfOf ?? null, grantId: p.grantId ?? null, missionId: p.missionId ?? null, attemptId: p.attemptId ?? null };
+}
+
 /** INV-8: the stored answer for a request id, or a refusal when the id is reused for something else. `null` = new. */
 function replayed(project: WfsProjectState, requestId: string, payloadHash: string): RelayResult<WfsApplied> | null {
   const prior = project.requests.get(requestId);
@@ -578,7 +598,7 @@ export function applyWfsCommit(project: WfsProjectState, req: WfsCommitRequest, 
   const badPrincipal = checkPrincipal(req.principal);
   if (badPrincipal !== null) return invalid(badPrincipal);
   const resolves = req.resolvesConflictId ?? null;
-  const payloadHash = ctx.sha256Hex(canonicalJson({ kind: 'commit', branchId: req.branchId, baseRev: req.baseRev, ops: req.ops, principal: req.principal, resolvesConflictId: resolves }));
+  const payloadHash = ctx.sha256Hex(canonicalJson({ kind: 'commit', branchId: req.branchId, baseRev: req.baseRev, ops: req.ops, actor: requestActor(req.principal), resolvesConflictId: resolves }));
   const prior = replayed(project, req.requestId, payloadHash);
   if (prior !== null) return prior;
 
@@ -658,7 +678,7 @@ export function mergeBackWfsBranch(
   if (typeof input.requestId !== 'string' || !REQUEST_ID_RE.test(input.requestId)) return invalid('the request id is malformed');
   const badPrincipal = checkPrincipal(input.principal);
   if (badPrincipal !== null) return invalid(badPrincipal);
-  const payloadHash = ctx.sha256Hex(canonicalJson({ kind: 'merge', branchId: input.branchId, principal: input.principal, approval: input.approval, reviewVerdict: input.reviewVerdict }));
+  const payloadHash = ctx.sha256Hex(canonicalJson({ kind: 'merge', branchId: input.branchId, actor: requestActor(input.principal), approval: input.approval, reviewVerdict: input.reviewVerdict }));
   const prior = replayed(project, input.requestId, payloadHash);
   if (prior !== null) return prior;
 

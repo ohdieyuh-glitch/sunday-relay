@@ -1,7 +1,8 @@
 /**
  * WONDERFS — who may do what (§8). Pure: the caller resolves the principal, its role or grant, and the clock.
  *
- *   - A HUMAN acts by role in the project: owner / editor / viewer (§8.2).
+ *   - A HUMAN acts by role in the project: owner / editor / viewer (§8.2), read from project_members' OWNER / ADMIN / MEMBER
+ *     through ONE mapping (`wfsHumanRoleFromMembership`); any other value is no role.
  *   - Every NON-HUMAN acts under exactly one GRANT (§8.3): scoped to branches, operations and path globs, expiring,
  *     revocable, and never wider than whoever issued it. A clone's grant is a subset of its parent's.
  *   - The server's own namespace (`.wonderfs` at the root) is never writable, whatever a grant says.
@@ -15,6 +16,31 @@ import type { WfsPrincipalKind, WfsProjectId } from './wonderfs-contracts';
 import { normalizeWfsPath, wfsIsBeneath, wfsPathKey, WFS_RESERVED_ROOT } from './wonderfs-paths';
 
 export type WfsHumanRole = 'owner' | 'editor' | 'viewer';
+
+/**
+ * r1.4 §8.2 (J-17; Q-1 RESOLVED): THE ONE MAPPING from the product's role -- `relay_wonderland.project_members.role`, written as
+ * OWNER by the mission seed and as ADMIN / MEMBER by Project Brain's membership change (wonderland-authorization.ts pins the
+ * writers) -- to a WonderFS role. Every WonderFS read of a member's role goes through `wfsHumanRoleFromMembership`.
+ *   OWNER  -> owner   the only role that deletes / restores the project or changes members (§8.2 table: owner only);
+ *   ADMIN  -> editor  NOT owner, so an ADMIN gets no `manage_project` here. ADMIN's create_mission / read_mission_cost are
+ *                     WONDERLAND_ROLE_CAPABILITIES' answer, read on their own for a Julius grant; this role never implies them;
+ *   MEMBER -> editor.
+ * Exact and case-sensitive. ANYTHING ELSE IS NO ROLE (fail closed), indistinguishable from "not a member" (§9.1, §16): no row,
+ * '', 'VIEWER', a value some future writer invents, and lower case ('owner', 'editor', 'viewer'). The product never writes lower
+ * case, and the product's own capability table (case-sensitive, absent-means-nothing) grants such a row nothing; reading
+ * 'owner' as owner here would hand delete-the-project and change-members to a row no product writer produced. Nothing maps to
+ * `viewer` until Q-9 settles where a viewer is stored (§8.2 Alpha default: no viewers).
+ */
+const WFS_ROLE_BY_PRODUCT_ROLE: ReadonlyMap<string, WfsHumanRole> = new Map<string, WfsHumanRole>([
+  ['OWNER', 'owner'],
+  ['ADMIN', 'editor'],
+  ['MEMBER', 'editor'],
+]);
+
+/** A project_members role value (whatever the column holds, or nothing) as a WonderFS role; `null` = no role. */
+export function wfsHumanRoleFromMembership(productRole: unknown): WfsHumanRole | null {
+  return typeof productRole === 'string' ? WFS_ROLE_BY_PRODUCT_ROLE.get(productRole) ?? null : null;
+}
 
 /** What a principal asks to do. `paths` are the paths an operation reads or writes (both ends of a move). */
 export type WfsAction = 'read' | 'write' | 'delete' | 'move' | 'merge' | 'resolve' | 'approve_merge' | 'issue_grant' | 'manage_project';

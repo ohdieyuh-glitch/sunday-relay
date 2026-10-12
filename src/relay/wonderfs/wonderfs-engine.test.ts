@@ -433,6 +433,68 @@ describe('WonderFS engine: T-IDEMPOTENT (INV-8)', () => {
     expect(reused.error.code).toBe('duplicate-idempotency-key');
   });
 
+  it('T-CRASH "after COMMIT, before the response" (INV-11): the journal replays after a restart and a NEW sign-in -> the ORIGINAL revision', () => {
+    const h = harness();
+    const p0 = emptyWfsProject('prj-1', sha);
+    const beforeRestart: WfsPrincipal = { ...who('ghu-1'), sessionId: 'sref-before-restart', clientBuild: 'build-1', tool: 'wonderland-client' };
+    const req = request([{ op: 'create', path: 'a.txt', kind: 'file', ...h.blob('a') }], beforeRestart);
+    const first = apply(p0, req, h.ctx);
+    // the commit landed but its answer was lost; meanwhile another player committed, so the head moved on
+    const later = apply(first.project, request([{ op: 'create', path: 'b.txt', kind: 'file', ...h.blob('b') }], who('ghu-2'), { baseRev: 1 }), h.ctx).project;
+    // the bridge restarted (every player signed out): the same player signs in again -- a new session ref -- on an updated client
+    const afterRestart: WfsPrincipal = { ...beforeRestart, sessionId: 'sref-after-restart', clientBuild: 'build-2', tool: 'wonderland-client-2' };
+    const again = apply(later, { ...req, principal: afterRestart }, h.ctx);
+    expect(again.outcome).toEqual({ ...first.outcome, replay: true });
+    expect(committed(again.outcome).rev, 'the ORIGINAL revision, not the head').toBe(1);
+    expect(again.project, 'nothing applied twice').toBe(later);
+    expect(main(again.project).commits[0].principal, 'the stored commit still names the session that made it').toEqual(beforeRestart);
+    // CONTROLS: the same request id from ANOTHER player, or with other content from the same player, is still refused
+    for (const reuse of [{ ...req, principal: { ...afterRestart, id: 'ghu-2' } }, { ...req, principal: afterRestart, ops: [{ op: 'create', path: 'c.txt', kind: 'dir' }] as WfsOp[] }]) {
+      const r = applyWfsCommit(later, reuse, h.ctx);
+      expect(r.ok === false && r.error.code).toBe('duplicate-idempotency-key');
+    }
+  });
+
+  it('T-CRASH: a replayed CONFLICT from a new session is the SAME conflict, never a second one', () => {
+    const h = harness();
+    const p1 = seeded(h);
+    const file = entry(p1, 'src/main.cpp');
+    const p2 = apply(p1, request([{ op: 'update', fileId: file.fileId, expectContentVersion: 1, ...h.blob('A') }], who('ghu-alice')), h.ctx).project;
+    const bob: WfsPrincipal = { ...who('ghu-bob'), sessionId: 'sref-1', clientBuild: 'build-1' };
+    const req = request([{ op: 'update', fileId: file.fileId, expectContentVersion: 1, ...h.blob('B') }], bob);
+    const first = apply(p2, req, h.ctx);
+    const again = apply(first.project, { ...req, principal: { ...bob, sessionId: 'sref-2', clientBuild: 'build-2' } }, h.ctx);
+    expect(again.outcome).toEqual({ ...first.outcome, replay: true });
+    expect(again.project.conflicts.size).toBe(1);
+  });
+
+  it('WHAT makes it the same request: the actor\'s stable identity and the change -- never the session, the build or the tool (each field pinned)', () => {
+    const h = harness();
+    const p0 = emptyWfsProject('prj-1', sha);
+    const actor: WfsPrincipal = { kind: 'julius', id: 'julius-7', onBehalfOf: 'ghu-1', grantId: 'grant-1', sessionId: 'sref-1', clientBuild: 'build-1', tool: 'julius-runner', missionId: 'mission-1', attemptId: 'attempt-1' };
+    const req = request([{ op: 'create', path: 'a.txt', kind: 'file', ...h.blob('a') }], actor);
+    const first = apply(p0, req, h.ctx);
+    const send = (r: WfsCommitRequest) => applyWfsCommit(first.project, r, h.ctx);
+    // per sign-in / descriptive provenance: a replay (CONTROL: hashing the whole principal refuses each of these)
+    const replays: Partial<WfsPrincipal>[] = [{ sessionId: 'sref-2' }, { sessionId: null }, { clientBuild: 'build-2' }, { clientBuild: null }, { tool: 'julius-runner-2' }, { tool: null }];
+    for (const over of replays) {
+      const r = send({ ...req, principal: { ...actor, ...over } });
+      expect(r.ok && r.value.outcome, JSON.stringify(over)).toEqual({ ...first.outcome, replay: true });
+    }
+    // identity: refused (CONTROL: dropping any one of these from the hash replays another actor's answer)
+    const others: Partial<WfsPrincipal>[] = [{ kind: 'imported_agent' }, { id: 'julius-8' }, { onBehalfOf: 'ghu-2' }, { grantId: 'grant-2' }, { missionId: 'mission-2' }, { attemptId: 'attempt-2' }];
+    for (const over of others) {
+      const r = send({ ...req, principal: { ...actor, ...over } });
+      expect(r.ok === false && r.error.code, JSON.stringify(over)).toBe('duplicate-idempotency-key');
+    }
+    // the change itself: refused
+    const changes: Partial<WfsCommitRequest>[] = [{ baseRev: 1 }, { branchId: 'branch-other' }, { resolvesConflictId: 'conflict-x' }, { ops: [{ op: 'create', path: 'a.txt', kind: 'dir' }] }];
+    for (const over of changes) {
+      const r = send({ ...req, ...over });
+      expect(r.ok === false && r.error.code, JSON.stringify(over)).toBe('duplicate-idempotency-key');
+    }
+  });
+
   it('does not remember a REFUSED (malformed) request: the corrected request may reuse its id', () => {
     const h = harness();
     const p0 = emptyWfsProject('prj-1', sha);
@@ -800,6 +862,23 @@ describe('WonderFS engine: r1.2 §19.M1 (T-APPROVAL-BIND) and §19.M7 (anchored 
     const merged = mergeBackWfsBranch(p, { requestId: rid(), branchId, principal: owner, approval, reviewVerdict: null, approverRoleNow: 'owner' }, h.ctx);
     if (!merged.ok) throw new Error(merged.error.message);
     expect(main(merged.value.project).commits[committed(merged.value.outcome).rev - 1].approval).toEqual(approval);
+  });
+
+  it('T-CRASH for a merge: the same runner re-sends it after a restart (a new session ref) -> the ORIGINAL merge; another attempt -> refused', () => {
+    const h = harness();
+    const { p, branchId, owner } = agentWithOneCommit(h, 'julius');
+    const runner: WfsPrincipal = { ...owner, sessionId: 'sref-1', missionId: 'mission-1', attemptId: 'attempt-1' };
+    const input = { requestId: rid(), branchId, principal: runner, approval: null, reviewVerdict: verdictFor(p, branchId), approverRoleNow: null };
+    const merged = mergeBackWfsBranch(p, input, h.ctx);
+    if (!merged.ok) throw new Error(merged.error.message);
+    // the branch is closed now: only the stored answer can reply, and it does
+    const again = mergeBackWfsBranch(merged.value.project, { ...input, principal: { ...runner, sessionId: 'sref-2', clientBuild: 'build-2' } }, h.ctx);
+    if (!again.ok) throw new Error(again.error.message);
+    expect(again.value.outcome).toEqual({ ...merged.value.outcome, replay: true });
+    expect(again.value.project).toBe(merged.value.project);
+    // CONTROL: the same request id under another attempt is not this request
+    const otherAttempt = mergeBackWfsBranch(merged.value.project, { ...input, principal: { ...runner, attemptId: 'attempt-2' } }, h.ctx);
+    expect(otherAttempt.ok === false && otherAttempt.error.code).toBe('duplicate-idempotency-key');
   });
 
   it("main's chain is anchored to its genesis; a branch's first commit links to its parent's head at the fork and says so", () => {

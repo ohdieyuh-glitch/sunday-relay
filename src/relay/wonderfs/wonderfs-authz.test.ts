@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { juliusPathLocation } from '../mission/julius/julius-workspace-paths';
+import { WONDERLAND_ROLE_CAPABILITIES } from '../mission/wonderland/wonderland-authorization';
 import {
   authorizeAgent,
   authorizeHuman,
   wfsCloneGrantWithin,
   wfsGlobCovered,
   wfsGlobMatches,
+  wfsHumanRoleFromMembership,
   wfsIsAgentProtected,
   wfsIssuerStillCovers,
   wfsMergeNeedsApproval,
@@ -73,6 +75,43 @@ describe('WonderFS authorization: humans (§8.2)', () => {
   it('refuses every write into the server\'s reserved namespace, even to an owner', () => {
     refusedUniformly(authorizeHuman({ role: 'owner', action: 'write', paths: ['.wonderfs/state.json'] }));
     refusedUniformly(authorizeHuman({ role: 'owner', action: 'move', paths: ['a.txt', '.WONDERFS/a.txt'] }));
+  });
+});
+
+describe('WonderFS authorization: the product role -> WonderFS role mapping (r1.4 §8.2)', () => {
+  it('maps exactly what the product writes: OWNER -> owner, ADMIN -> editor, MEMBER -> editor', () => {
+    expect(wfsHumanRoleFromMembership('OWNER')).toBe('owner');
+    expect(wfsHumanRoleFromMembership('ADMIN')).toBe('editor');
+    expect(wfsHumanRoleFromMembership('MEMBER')).toBe('editor');
+  });
+
+  it('an ADMIN is an editor, never an owner: it edits and approves, but never manages the project or its members (§8.2: owner only)', () => {
+    const admin = wfsHumanRoleFromMembership('ADMIN');
+    expect(authorizeHuman({ role: admin, action: 'write', paths: ['a.txt'] }).ok).toBe(true);
+    expect(authorizeHuman({ role: admin, action: 'approve_merge', paths: [] }).ok).toBe(true);
+    refusedUniformly(authorizeHuman({ role: admin, action: 'manage_project', paths: [] }));
+    // CONTROL: the owner does manage it
+    expect(authorizeHuman({ role: wfsHumanRoleFromMembership('OWNER'), action: 'manage_project', paths: [] }).ok).toBe(true);
+  });
+
+  it('anything else is NO role (fail closed): lower case is never silently elevated; nothing becomes a viewer before Q-9', () => {
+    const notRoles: unknown[] = [
+      'owner', 'editor', 'viewer', 'admin', 'member', 'Owner', 'Admin', // legacy / other case: the product never writes them
+      'VIEWER', 'EDITOR', 'GUEST', // not product roles
+      ' OWNER', 'OWNER ', 'OWNER\n', '', // padded / empty
+      'constructor', '__proto__', 'toString', 'hasOwnProperty', // no lookup through the prototype
+      null, undefined, 1, true, {}, ['OWNER'], // no row, or not text
+    ];
+    for (const value of notRoles) expect(wfsHumanRoleFromMembership(value), String(JSON.stringify(value))).toBeNull();
+    // and NO role is refused exactly as "no such project" is, even for a read
+    refusedUniformly(authorizeHuman({ role: wfsHumanRoleFromMembership('owner'), action: 'read', paths: [] }));
+  });
+
+  it('THE DRIFT TEST: every role the product grants capabilities to has a WonderFS role, and they are the three it writes', () => {
+    // a new product role must be decided here (mapped, or refused on purpose), never silently read as "not a member"
+    const productRoles = Object.keys(WONDERLAND_ROLE_CAPABILITIES).sort();
+    expect(productRoles).toEqual(['ADMIN', 'MEMBER', 'OWNER']);
+    for (const role of productRoles) expect(wfsHumanRoleFromMembership(role), role).not.toBeNull();
   });
 });
 
