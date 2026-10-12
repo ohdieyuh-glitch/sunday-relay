@@ -1520,6 +1520,7 @@ void SWonderlandSocialLffView::Tick(const FGeometry& AllottedGeometry, const dou
 {
 	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
 	LastDrawnFrame = GFrameCounter;
+	bEverDrawn = true;
 	// DRAWN, SO SHOWN: the model reads when it is first on screen, and after a change it was told of while hidden
 	if (Model.IsValid())
 	{
@@ -1544,13 +1545,14 @@ void SWonderlandSocialLffView::HandleSlatePreTick(float DeltaTime)
 		Rebuild();
 	}
 	// A REQUESTER'S CARD THAT ARRIVED IN AN ANSWER opens here, after the frame's input and before its layout (F-21), never in the answer --
-	// and only while this view is ON SCREEN (drawn in the previous frame): a late answer after the hub closed opens nothing over the world
+	// and only while this view is ON SCREEN (drawn in the previous frame): a late answer after the hub closed opens nothing over the world.
+	// DRAWN AT ALL is its own flag: frame 0 is a real frame (GFrameCounter is 0 all through the engine's first one), not "never drawn".
 	if (bProfileOpenPending)
 	{
 		bProfileOpenPending = false;
 		const FWonderlandSocialProfileView Card = PendingProfileCard;
 		PendingProfileCard = FWonderlandSocialProfileView();
-		const bool bOnScreen = LastDrawnFrame > 0 && GFrameCounter - LastDrawnFrame <= 1;
+		const bool bOnScreen = bEverDrawn && GFrameCounter - LastDrawnFrame <= 1;
 		if (bOnScreen)
 		{
 			OnOpenProfileView.ExecuteIfBound(Card);

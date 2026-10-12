@@ -357,8 +357,19 @@ public:
 	void QaOpenProfileOf(const FString& UserId) { OpenProfileOf(UserId); }
 	bool QaProfileOpenPending() const { return bProfileOpenPending; }
 	void QaRunPreTick() { HandleSlatePreTick(0.0f); }
-	/** QA: as if the view was drawn this frame (true) or last drawn long ago (false: the hub closed) -- what Tick records. */
-	void QaNoteDrawn(bool bDrawnNow) { LastDrawnFrame = bDrawnNow ? GFrameCounter : (GFrameCounter > 10 ? GFrameCounter - 10 : 0); }
+	/**
+	 * QA: as Tick would leave the view -- drawn ONE frame ago (true: the hub on screen; Slate's pre-tick runs before the frame's paint, so an
+	 * on-screen view always reads exactly 1 there) or TWO frames ago (false: the hub closed; the nearest distance that must drop). uint64
+	 * arithmetic is modular, so both distances hold at any engine frame, frame 0 included (a product guard "GFrameCounter >= LastDrawnFrame"
+	 * would make the frame-0 open check FAIL: loudly, and for this reason).
+	 */
+	void QaNoteDrawn(bool bOnScreen)
+	{
+		bEverDrawn = true;
+		LastDrawnFrame = GFrameCounter - (bOnScreen ? uint64(1) : uint64(2));
+	}
+	/** QA: as if Tick never ran (only at frames 0-1 does this differ from "drawn last frame": the bEverDrawn arm). */
+	void QaNoteNeverDrawn() { bEverDrawn = false; LastDrawnFrame = 0; }
 
 private:
 	void Rebuild();
@@ -415,6 +426,12 @@ private:
 	FWonderlandSocialProfileView PendingProfileCard;
 	/** The engine frame this view was last drawn (Tick): a queued card opens only while the view is on screen (r3 review m-r3-1). */
 	uint64 LastDrawnFrame = 0;
+	/**
+	 * Whether Tick ever ran. Frame 0 is NOT "never drawn": GFrameCounter stays 0 through the engine's whole first frame (LaunchEngineLoop
+	 * increments it at the frame's end, after the deferred commands a -ExecCmds run executes), so a view drawn then has LastDrawnFrame 0.
+	 * Testing "LastDrawnFrame > 0" dropped such a view's card as if it had never been on screen (the in-engine LH9 FAIL, 2026-10-12).
+	 */
+	bool bEverDrawn = false;
 
 	TSharedPtr<SBorder> ContentHost;
 	/** The text boxes, built ONCE: every rebuild re-slots these same widgets (what is typed, the caret and the focus stay; a selection does not). */

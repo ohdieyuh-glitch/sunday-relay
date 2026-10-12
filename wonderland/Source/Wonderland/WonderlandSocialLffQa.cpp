@@ -1147,8 +1147,10 @@ namespace WonderlandSocialLffQa
 					Check(TEXT("LH8"), bAgainDrawn && bPendingNoAsk && bFirstAsk,
 						FString::Printf(TEXT("DECLINED on an open post draws the note and REQUEST AGAIN (%s); controls: PENDING draws neither (%s), no request draws REQUEST TO JOIN (%s)"),
 							bAgainDrawn ? TEXT("yes") : TEXT("NO"), bPendingNoAsk ? TEXT("yes") : TEXT("NO"), bFirstAsk ? TEXT("yes") : TEXT("NO")));
-					// LH9: A REQUESTER'S PROFILE IS NEVER OPENED FROM THE ANSWER (F-21): the card is kept and opens at the next pre-tick; control: a
-					// not-found keeps nothing and opens nothing
+					// LH9: A REQUESTER'S PROFILE IS NEVER OPENED FROM THE ANSWER (F-21): the card is kept and opens at the next pre-tick while the view
+					// was drawn ONE frame before (what a real pre-tick reads); controls: a not-found opens nothing, a view drawn TWO frames before
+					// (the hub closed) opens nothing, a view never drawn opens nothing. Valid at any engine frame, frame 0 included; the never-drawn
+					// control can only FAIL at frames 0-1 (every -ExecCmds run), the only frames where a never-drawn view's distance is <= 1
 					int32 ProfileOpens = 0;
 					FString ProfileOpened;
 					const TSharedRef<FWonderlandLffModel> ProfileModel = MakeShared<FWonderlandLffModel>([Svc]() -> IWonderlandSocialService* { return Svc; });
@@ -1164,6 +1166,7 @@ namespace WonderlandSocialLffQa
 					bool bOpenedAtPreTick = false;
 					bool bNotFoundNothing = false;
 					bool bClosedNothing = false;
+					bool bNeverDrawnNothing = false;
 					if (ProfileView.IsValid())
 					{
 						Svc->Forget();
@@ -1172,7 +1175,7 @@ namespace WonderlandSocialLffQa
 						NovaCard.Profile.UserId = TEXT("usr_qa_nova");
 						Svc->AnswerProfile(Svc->Profiles.Num() - 1, AnswerOk(), NovaCard);
 						bQueued = ProfileOpens == 0 && ProfileView->QaProfileOpenPending();
-						ProfileView->QaNoteDrawn(true);   // the hub on screen
+						ProfileView->QaNoteDrawn(true);   // the hub on screen: drawn ONE frame before this pre-tick, as a real pre-tick reads it
 						ProfileView->QaRunPreTick();
 						bOpenedAtPreTick = ProfileOpens == 1 && ProfileOpened == TEXT("usr_qa_nova") && !ProfileView->QaProfileOpenPending();
 						ProfileView->QaOpenProfileOf(TEXT("usr_qa_hidden"));
@@ -1183,14 +1186,21 @@ namespace WonderlandSocialLffQa
 						ProfileView->QaOpenProfileOf(TEXT("usr_qa_nova"));
 						Svc->AnswerProfile(Svc->Profiles.Num() - 1, AnswerOk(), NovaCard);
 						const bool bQueuedAgain = ProfileView->QaProfileOpenPending();
-						ProfileView->QaNoteDrawn(false);
+						ProfileView->QaNoteDrawn(false);   // drawn TWO frames before this pre-tick: the nearest distance that must drop
 						ProfileView->QaRunPreTick();
 						bClosedNothing = bQueuedAgain && ProfileOpens == 1 && !ProfileView->QaProfileOpenPending();
+						// control: a view NEVER drawn opens nothing (at frames 0-1 only bEverDrawn tells it from "drawn last frame")
+						ProfileView->QaOpenProfileOf(TEXT("usr_qa_nova"));
+						Svc->AnswerProfile(Svc->Profiles.Num() - 1, AnswerOk(), NovaCard);
+						const bool bQueuedThird = ProfileView->QaProfileOpenPending();
+						ProfileView->QaNoteNeverDrawn();
+						ProfileView->QaRunPreTick();
+						bNeverDrawnNothing = bQueuedThird && ProfileOpens == 1 && !ProfileView->QaProfileOpenPending();
 					}
-					Check(TEXT("LH9"), bQueued && bOpenedAtPreTick && bNotFoundNothing && bClosedNothing,
-						FString::Printf(TEXT("a requester's card is kept by the answer, not opened (%s), and opens at the next pre-tick while the hub is on screen (%s); controls: a not-found opens nothing (%s), a card arriving after the hub closed opens nothing (%s)"),
+					Check(TEXT("LH9"), bQueued && bOpenedAtPreTick && bNotFoundNothing && bClosedNothing && bNeverDrawnNothing,
+						FString::Printf(TEXT("a requester's card is kept by the answer, not opened (%s), and opens at the next pre-tick while the hub is on screen (%s); controls: a not-found opens nothing (%s), a card arriving after the hub closed opens nothing (%s), a view never drawn opens nothing (%s) [engine frame %llu]"),
 							bQueued ? TEXT("yes") : TEXT("NO"), bOpenedAtPreTick ? TEXT("yes") : TEXT("NO"), bNotFoundNothing ? TEXT("yes") : TEXT("NO"),
-							bClosedNothing ? TEXT("yes") : TEXT("NO")));
+							bClosedNothing ? TEXT("yes") : TEXT("NO"), bNeverDrawnNothing ? TEXT("yes") : TEXT("NO"), GFrameCounter));
 				}
 			}
 
