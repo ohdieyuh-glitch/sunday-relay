@@ -77,19 +77,23 @@ import { buildSocialView } from './social-preview';
 import { areFriends, blockedEitherWay, conversationById, friendIdsOf, messagesOf, partyById, partyOf, presenceHiddenFrom, userById, type SocialState } from './social-state';
 import {
   WORLD_MOTIONS,
+  closePrivateServer,
   contextOf,
   emptyWorldState,
   inviteToWorld,
   joinWorld,
   leaveWorld,
+  privateServerAdmits,
   recentlyRemoved,
   removeFromPrivateServer,
   reportAvatar,
   worldViewFor,
+  type PrivateServerGate,
   type WorldJoinTarget,
   type WorldMotion,
   type WorldState,
 } from './world-presence';
+import type { PrivateServerRecord } from './private-server-lifecycle';
 
 /** What one operation did. `audience` is empty for a read. `world` is the shared presence layer's next state, if it moved. */
 export interface SocialCommandOutcome {
@@ -110,6 +114,13 @@ export interface SocialCommandOutcome {
    * Silence there was itself the tell: a kick, a leave and an unfriend each notify; a block alone did not.
    */
   readonly floorExempt?: readonly SocialUserId[];
+  /**
+   * A private server's lifecycle record the store MUST persist with this operation (compare-and-set on the version before it), or
+   * the operation does not happen: the owner opened their server and its cycle moved (private-server-lifecycle.ts).
+   */
+  readonly serverWrite?: PrivateServerRecord;
+  /** The owner whose private server this operation found closed and emptied: the store records the observation (best effort). */
+  readonly closedServerOf?: SocialUserId;
 }
 
 /** The operation's inputs: the path's ids in order (e.g. a request id, a party id then a member id) and the JSON body. */
@@ -337,8 +348,9 @@ export function applySocialOperation(
   input: SocialCommandInput,
   nowIso: string,
   world: WorldState = emptyWorldState(),
+  servers: PrivateServerGate | null = null,
 ): RelayResult<SocialCommandOutcome> {
-  const outcome = applyOne(reconcileBlockedParties(state), op, actorId, input, nowIso, world);
+  const outcome = applyOne(reconcileBlockedParties(state), op, actorId, input, nowIso, world, servers);
   if (!outcome.ok || outcome.value.audience.length === 0) return outcome;
   const after = outcome.value.state;
   const exempt = new Set(outcome.value.floorExempt ?? []);
@@ -353,12 +365,14 @@ function applyOne(
   input: SocialCommandInput,
   nowIso: string,
   world: WorldState,
+  servers: PrivateServerGate | null,
 ): RelayResult<SocialCommandOutcome> {
   const { ids, body } = input;
   const nowMs = Date.parse(nowIso);
   const worldFail = (r: { code: string; message: string }): RelayResult<never> => ({
     ok: false,
-    error: relayError(r.code === 'permission-denied' ? 'permission-denied' : r.code === 'not-found' ? 'not-found' : r.code === 'full' ? 'illegal-transition' : 'validation-failed', r.message),
+    // a CLOSED private server (cooling down, or unverified) is a 409 like a full world: the request was fine, the server is not open
+    error: relayError(r.code === 'permission-denied' ? 'permission-denied' : r.code === 'not-found' ? 'not-found' : r.code === 'full' || r.code === 'closed' ? 'illegal-transition' : 'validation-failed', r.message),
   });
   const id0 = ids[0] ?? '';
   const id1 = ids[1] ?? '';
@@ -650,7 +664,7 @@ function applyOne(
     }
     /* ---- MULTIPLAYER PHASE 1: the shared presence layer (world-presence.ts) */
     case 'world.read':
-      return { ok: true, value: { state, world, data: worldViewFor(world, state, actorId, nowMs), audience: [] } };
+      return { ok: true, value: { state, world, data: worldViewFor(world, state, actorId, nowMs, servers), audience: [] } };
     case 'world.join': {
       const kind = oneOf(body, 'target', ['PUBLIC', 'PRIVATE', 'FRIEND', 'INVITE', 'PARTY'] as const);
       if (!kind.ok) return invalid(kind.message);
@@ -659,15 +673,21 @@ function applyOne(
       // ("WLWORLD joined"): no control character (displayText's rule). Everything else about it stays the domain's (trimmed, cut
       // to 60, else the neutral name). The other targets carry no text a person reads: a public place is a safe id, and its
       // placeName is ignored (the server names a public world from that id).
-      if (kind.value === 'PRIVATE' && hasControlCharacter(text('name'))) return invalid(controlRefusal('name'));
+      // ... and no C1 control either (U+0080-U+009F): migration 037 stores the name, and its CHECK refuses every control character, so
+      // the rule is the same in memory and on PostgreSQL (the private-server review's m2, 10-11)
+      if (kind.value === 'PRIVATE' && (hasControlCharacter(text('name')) || /[\u0080-\u009f]/u.test(text('name')))) return invalid(controlRefusal('name'));
       const target: WorldJoinTarget =
         kind.value === 'PUBLIC' ? { kind: 'PUBLIC', place: text('place') || 'golden_arrival', placeName: text('placeName') || 'Golden Arrival' }
         : kind.value === 'PRIVATE' ? { kind: 'PRIVATE', name: text('name') }
         : kind.value === 'FRIEND' ? { kind: 'FRIEND', userId: text('userId') }
         : kind.value === 'INVITE' ? { kind: 'INVITE', inviteId: text('inviteId') }
         : { kind: 'PARTY' };
-      const joined = joinWorld(world, state, actorId, target, nowMs);
+      const joined = joinWorld(world, state, actorId, target, nowMs, servers);
       if (!joined.ok) return worldFail(joined);
+      // THE OWNER'S OPEN moved their cycle (a new Free window, a continuous opening, a lapse put on the Free clock, a rename): the
+      // store persists that record with this operation, or nothing happens. The view shows the access AFTER the open.
+      const opened = kind.value === 'PRIVATE' && servers !== null && servers.open !== undefined && servers.open.ok ? servers.open : undefined;
+      const viewGate: PrivateServerGate | null = opened === undefined ? servers : { ownerId: actorId, access: opened.access };
       // WHERE THEY ARE becomes their presence location, through the one presence authority -- so friends see it as their
       // privacy allows, and a friend's server-join rule has a place to admit them to.
       const ctx = joined.value.context;
@@ -699,7 +719,8 @@ function applyOne(
         value: {
           state: met,
           world: joined.value.world,
-          data: worldViewFor(joined.value.world, met, actorId, nowMs),
+          data: worldViewFor(joined.value.world, met, actorId, nowMs, viewGate),
+          ...(opened !== undefined && opened.write ? { serverWrite: opened.record } : {}),
           // told only to whoever may see the actor (the founder, 10-04, P1): a hidden arrival moves nobody's view, so nobody is told
           // (M3, 10-07) the people IN the world see the arrival through worldViewFor (P1-filtered); a friend elsewhere is told
           // only when their view of the actor moved -- one who may not see the actor's location learns no move from its timing
@@ -726,6 +747,34 @@ function applyOne(
       // sign of a removal (CORE's client contract: it had a private server, now none, while it wanted to stay -> "You can't stay
       // in this server." and back to the public world). An answer, never an error, and it names nothing.
       if (recentlyRemoved(world, actorId, nowMs)) return { ok: true, value: { state, data: worldViewFor(world, state, actorId, nowMs), audience: [] } };
+      // A PRIVATE SERVER THAT IS NO LONGER OPEN (its Free window ended -- by the server's clock, whoever reports -- or its state could
+      // not be verified) CLOSES for everyone in it, on the first report that finds it so. Answered, never an error: the view has no
+      // context and says when the server may open again; the client takes its player back to the public world.
+      const here = contextOf(world, actorId);
+      if (here !== undefined && !privateServerAdmits(here, servers)) {
+        const reopensAtMs = servers !== null && servers.ownerId === here.ownerId ? servers.access.cooldownUntilMs : null;
+        const closed = closePrivateServer(world, here.contextId, reopensAtMs, nowMs);
+        // EVERY MEMBER'S LOCATION CLEARS, exactly as a leave clears it (review m1): nobody stays "in" a closed server in a friend's
+        // list, and on PostgreSQL the cleared location is what persists. Told to each member and to the friends whose view moved.
+        let cleared = state;
+        const told: SocialUserId[] = [];
+        for (const memberId of here.memberIds) {
+          const moved = updateOwnPresence(cleared, memberId, { location: null }, nowIso);
+          if (!moved.ok) continue;
+          told.push(memberId, ...viewMoved(cleared, moved.value, memberId, friendIdsOf(cleared, memberId).filter((id) => !here.memberIds.includes(id))));
+          cleared = moved.value;
+        }
+        return {
+          ok: true,
+          value: {
+            state: cleared,
+            world: closed,
+            data: worldViewFor(closed, cleared, actorId, nowMs),
+            audience: [...new Set(told)],
+            ...(here.ownerId === null ? {} : { closedServerOf: here.ownerId }),
+          },
+        };
+      }
       const reported = reportAvatar(
         world,
         actorId,
@@ -734,12 +783,12 @@ function applyOne(
       );
       if (!reported.ok) return worldFail(reported);
       // ONE CALL A TICK: the report answers with the view, so a client reporting ~5 a second needs nothing else to see the others.
-      return { ok: true, value: { state, world: reported.value, data: worldViewFor(reported.value, state, actorId, nowMs), audience: [] } };
+      return { ok: true, value: { state, world: reported.value, data: worldViewFor(reported.value, state, actorId, nowMs, servers), audience: [] } };
     }
     case 'world.invite': {
       const to = str(body, 'toUserId', MAX_LABEL);
       if (!to.ok) return invalid(to.message);
-      const invited = inviteToWorld(world, state, actorId, to.value as string, nowMs);
+      const invited = inviteToWorld(world, state, actorId, to.value as string, nowMs, servers);
       if (!invited.ok) return worldFail(invited);
       // an invitation the owner's wall stops is answered alike but reaches nobody (world-presence.ts walledFromOwner)
       return { ok: true, value: { state, world: invited.value.world, data: { inviteId: invited.value.inviteId }, audience: invited.value.delivered ? [to.value as string] : [] } };

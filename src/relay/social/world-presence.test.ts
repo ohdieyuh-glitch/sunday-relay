@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { openPrivateServer, privateServerAccess, PRIVATE_SERVER_POLICY, type PrivateServerRecord } from './private-server-lifecycle';
 import { applySocialOperation, type SocialCommandOutcome } from './social-commands';
 import { createSocialFixture, FIXTURE_USERS as U } from './social-fixtures';
 import { blockUser } from './social-friends';
@@ -12,9 +13,11 @@ import {
   contextOf,
   emptyWorldState,
   joinWorld,
+  privateServerTouched,
   reportAvatar,
   sweepWorld,
   worldViewFor,
+  type PrivateServerGate,
   type WorldState,
 } from './world-presence';
 
@@ -26,9 +29,28 @@ import {
 const T0 = Date.parse('2026-10-01T20:00:00.000Z');
 const at = (ms: number) => new Date(T0 + ms).toISOString();
 
+/*
+ * THE STORE'S PART (private-server-registry.ts), done here synchronously: read the private server an operation touches and, for
+ * an owner's open, open it -- with the same pure rules the stores apply. Every owner is FREE, and the lifecycle rows live in this
+ * map (cleared per test), so these tests run inside a Free window (minutes, against 8 h). The lifecycle's own suite
+ * (private-server-lifecycle.test.ts) proves the windows, the cooldowns and the tiers.
+ */
+const lifecycleRows = new Map<string, PrivateServerRecord>();
+beforeEach(() => lifecycleRows.clear());
+
+function gateFor(state: SocialState, world: WorldState, actor: string, op: string, body: Record<string, unknown>, nowMs: number): PrivateServerGate | null {
+  const owner = privateServerTouched(world, state, actor, op, body);
+  if (owner === null) return null;
+  const record = lifecycleRows.get(owner) ?? null;
+  const access = privateServerAccess(record, null, PRIVATE_SERVER_POLICY, nowMs);
+  if (op !== 'world.join' || body.target !== 'PRIVATE') return { ownerId: owner, access };
+  return { ownerId: owner, access, open: openPrivateServer(record, null, PRIVATE_SERVER_POLICY, owner, typeof body.name === 'string' ? body.name : '', nowMs) };
+}
+
 function run(state: SocialState, world: WorldState, actor: string, op: Parameters<typeof applySocialOperation>[1], body: Record<string, unknown> = {}, ms = 0) {
-  const r = applySocialOperation(state, op, actor, { ids: [], body, query: {} }, at(ms), world);
+  const r = applySocialOperation(state, op, actor, { ids: [], body, query: {} }, at(ms), world, gateFor(state, world, actor, op, body, T0 + ms));
   if (!r.ok) throw new Error(`${op} refused: ${r.error.message}`);
+  if (r.value.serverWrite !== undefined) lifecycleRows.set(r.value.serverWrite.ownerId, r.value.serverWrite);
   return r.value as SocialCommandOutcome & { world: WorldState };
 }
 

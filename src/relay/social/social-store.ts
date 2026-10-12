@@ -28,6 +28,14 @@ import { applySocialOperation, type SocialCommandInput } from './social-commands
 import { emptySocialState, hasUser, userById, type SocialState, type SocialUserRecord } from './social-state';
 import { partyDepartures, type PartyDeparture } from './social-parties';
 import { emptyWorldState, type WorldState } from './world-presence';
+import { PRIVATE_SERVER_POLICY, type PrivateServerPolicy } from './private-server-lifecycle';
+import {
+  createInMemoryPrivateServerRegistry,
+  createPrivateServerGates,
+  PRIVATE_SERVER_RACE_MESSAGE,
+  PRIVATE_SERVER_UNAVAILABLE_MESSAGE,
+  type PrivateServerRegistry,
+} from './private-server-registry';
 
 /** What a change says to the people it concerns: which operation, and when. Nothing of its content. */
 export interface SocialEvent {
@@ -162,6 +170,13 @@ export interface InMemorySocialStoreOptions {
   readonly maxEvents?: number;
   /** Told after each committed change that took somebody out of a party (party voice removal). */
   readonly afterCommit?: SocialAfterCommit;
+  /**
+   * Where private servers' lifecycle and tier rows live (private-server-registry.ts). Default: a fresh in-memory registry, in
+   * which everyone is FREE. Hand the same registry to a second store to model a restart: the lifecycle outlives the store.
+   */
+  readonly privateServers?: PrivateServerRegistry;
+  /** The private-server policy (default: PRIVATE_SERVER_POLICY, the one place the durations live). */
+  readonly privateServerPolicy?: PrivateServerPolicy;
 }
 
 /** The development and test store: one process, atomic, nothing survives a restart. */
@@ -174,11 +189,15 @@ export function createInMemorySocialStore(initial: SocialState = emptySocialStat
   const log: StoredEvent[] = [];
   // ONE AT A TIME: every command waits for the one before it, so no two read the same state and both write.
   let tail: Promise<unknown> = Promise.resolve();
-  const serial = <T>(work: () => T): Promise<T> => {
+  const serial = <T>(work: () => T | Promise<T>): Promise<T> => {
     const next = tail.then(work, work);
     tail = next.catch(() => undefined);
     return next;
   };
+  // PRIVATE SERVERS: their records are read before each world operation that touches one (fail closed), and an owner's open is
+  // persisted (compare-and-set) before the operation takes effect.
+  const registry = options.privateServers ?? createInMemoryPrivateServerRegistry();
+  const gates = createPrivateServerGates(registry, options.privateServerPolicy ?? PRIVATE_SERVER_POLICY);
 
   return {
     read: () => serial(() => state),
@@ -187,10 +206,30 @@ export function createInMemorySocialStore(initial: SocialState = emptySocialStat
         state = ensureSocialUser(state, identity, nowIso);
       }),
     apply: (op, actorId, input, nowIso) =>
-      serial((): RelayResult<unknown> => {
+      serial(async (): Promise<RelayResult<unknown>> => {
         if (!hasUser(state, actorId)) return { ok: false, error: relayError('not-found', 'no social record for this player') };
-        const outcome = applySocialOperation(state, op, actorId, input, nowIso, world);
+        const nowMs = Date.parse(nowIso);
+        const read = await gates.gateFor(world, state, actorId, op, input.body, nowMs);
+        if (!read.ok) return { ok: false, error: relayError('stale-ledger-version', PRIVATE_SERVER_UNAVAILABLE_MESSAGE, { retryable: true }) };
+        const outcome = applySocialOperation(state, op, actorId, input, nowIso, world, read.gate);
         if (!outcome.ok) return outcome;
+        const serverWrite = outcome.value.serverWrite;
+        if (serverWrite !== undefined) {
+          // THE OWNER'S OPEN IS PERSISTED FIRST, or it does not happen: a lost compare-and-set (another request moved the server)
+          // or an unreachable registry changes nothing, and answers as an outage.
+          let wrote = false;
+          try {
+            wrote = await registry.write(serverWrite);
+          } catch {
+            wrote = false;
+          }
+          if (!wrote) {
+            gates.forget(serverWrite.ownerId);
+            return { ok: false, error: relayError('stale-ledger-version', PRIVATE_SERVER_RACE_MESSAGE, { retryable: true }) };
+          }
+          gates.remember(serverWrite, nowMs);
+        }
+        if (outcome.value.closedServerOf !== undefined) await gates.observeClosed(outcome.value.closedServerOf, nowMs);
         if (outcome.value.world !== undefined) world = outcome.value.world;
         if (outcome.value.state !== state || (outcome.value.audience.length > 0 && op.startsWith('world.'))) {
           const before = state;
