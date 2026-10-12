@@ -365,8 +365,23 @@ async function writeUser(c: PoolClient, id: string, record: SocialUserRecord, be
   }
 }
 
-/** An LFF upsert that found ANOTHER row under its id (another owner, another post or requester, a newer version): fail closed. */
-class LffRowNotOurs extends Error {}
+/**
+ * An LFF upsert that found ANOTHER row under its id (another owner, post, requester or created_at, a newer version): fail closed.
+ * It means this store's in-memory id serial is BEHIND the ids the database holds (B2b r2 review n1); `kind` says which table.
+ */
+class LffRowNotOurs extends Error {
+  constructor(readonly kind: 'post' | 'request', message: string) {
+    super(message);
+  }
+}
+
+/**
+ * THE ONE LINE AN OPERATOR SEES when the store's id serial is found behind the database (B2b r2 review n1): which table, and that a
+ * restart heals it (the store re-reads next_serial on open). NO DATA: no id, player, text or SQL. A fixed string; the store keeps
+ * failing closed (every write that mints a colliding id is refused as a retryable outage) until a restart.
+ */
+export const lffSerialBehindLine = (kind: 'post' | 'request'): string =>
+  `[social-postgres] lff_row_not_ours ${kind}: the store's id serial is behind the database; the write was refused (fail closed); a restart reloads the serial`;
 
 const NOTHING_CHANGED = { put: [], drop: [] } as const;
 /** diffBy, skipped outright when the domain kept the list itself (most operations touch no LFF row at all). */
@@ -376,8 +391,10 @@ const diffIfMoved = <T>(before: readonly T[], after: readonly T[], key: (t: T) =
 /**
  * LFF (038, slice B2b): the rows of the three LFF tables the command changed, by the same by-reference diff (the domain makes a
  * new object only for what it changed, and keeps every other one). IN THIS ORDER:
- *   1. post deletes FIRST (the owner's hard delete; each CASCADES its requests, so a request delete after it finds nothing);
- *   2. request deletes (only ever a deleted post's: already gone with it, harmless);
+ *   1. post deletes FIRST (the owner's hard delete, or the retention purge's batch; each CASCADES its requests: 038's
+ *      lff_join_requests_post_fk ON DELETE CASCADE);
+ *   2. request deletes, SKIPPING every request of a post deleted in step 1 (the cascade took it; B2b review n3): a purge of
+ *      LFF_PURGE_BATCH posts is that many statements, never one per request. A request dropped while its post stays is deleted;
  *   3. post upserts BEFORE request upserts (a request's foreign key names its post). A post's owner, created_at and expires_at
  *      never change; everything else the domain may move (an edit, a close, the accept that fills it: status and version);
  *   4. request upserts: a request changes only its status and updated_at (an accept, a decline, a withdraw, a block's CANCELLED);
@@ -389,18 +406,27 @@ const diffIfMoved = <T>(before: readonly T[], after: readonly T[], key: (t: T) =
  * AN UPSERT NEVER GRAFTS ONTO ANOTHER PLAYER'S ROW (B2b review m1). The ids come from the in-memory serial; if it ever falls behind
  * the database (a COMMIT whose acknowledgement was lost, a stale second bridge over a deploy), a NEW post or request could mint an
  * id the database already holds. Each upsert therefore updates only ITS OWN row -- a post of the same owner, created at the same
- * time, at no newer version than ours; a request of the same post and requester -- and must report exactly one row (inserted or
- * updated). Anything else throws LffRowNotOurs: the whole operation rolls back and answers a retryable outage, fail closed.
- * RETENTION IS NOT HERE YET (review m3, DEFERRED as an Alpha follow-up only): closed and expired posts and requests in a final
- * status (their messages included) are kept until their post or player is deleted; their growth is bounded by the caps and
- * budgets. A retention rule belongs in this writer before Beta.
+ * time, at no newer version than ours; a request of the same post and requester, created at the same time (B2b r2 review r2-m1:
+ * a behind store re-minting the SAME player's request id on the SAME post must not overwrite the held row's status, e.g. an
+ * owner's accept) -- and must report exactly one row (inserted or updated). Anything else throws LffRowNotOurs: the whole
+ * operation rolls back, answers a retryable outage (fail closed), and the store logs one line (lffSerialBehindLine).
+ * RETENTION (review m3) is the DOMAIN's rule (social-lff.ts purgeLffPastRetention, rule 7): a post no longer open and more than
+ * 30 days old is dropped from the state with its requests, at most LFF_PURGE_BATCH per write, and this diff deletes those rows
+ * (step 1; their requests by the cascade). The creation record is pruned after 24 h, as before (step 5).
  */
 async function writeLffChanges(c: PoolClient, before: SocialState, after: SocialState): Promise<void> {
   const posts = diffIfMoved(before.lffPosts, after.lffPosts, (p) => p.id);
   const requests = diffIfMoved(before.lffRequests, after.lffRequests, (r) => r.id);
   const creations = diffIfMoved(before.lffCreations, after.lffCreations, (x) => pairKey(x.userId, x.postId));
   for (const id of posts.drop) await c.query(`DELETE FROM relay_wonderland.lff_posts WHERE post_id=$1`, [id]);
-  for (const id of requests.drop) await c.query(`DELETE FROM relay_wonderland.lff_join_requests WHERE request_id=$1`, [id]);
+  if (requests.drop.length > 0) {
+    const goneWithPost = new Set(posts.drop);
+    const postOf = new Map(before.lffRequests.map((r) => [r.id, r.postId]));
+    for (const id of requests.drop) {
+      if (goneWithPost.has(postOf.get(id) ?? '')) continue; // the cascade of step 1 already took it
+      await c.query(`DELETE FROM relay_wonderland.lff_join_requests WHERE request_id=$1`, [id]);
+    }
+  }
   for (const p of posts.put) {
     const written = await c.query(
       `INSERT INTO relay_wonderland.lff_posts(post_id, owner_id, category, title, description, project_label, skills, open_slots, status, created_at,
@@ -414,16 +440,17 @@ async function writeLffChanges(c: PoolClient, before: SocialState, after: Social
       [p.id, p.ownerId, p.category, p.title, p.description, p.projectLabel, [...p.skills], p.openSlots, p.status, new Date(p.createdAtMs),
         new Date(p.updatedAtMs), new Date(p.expiresAtMs), p.version],
     );
-    if (written.rowCount !== 1) throw new LffRowNotOurs(`post ${p.id}: the database holds another row under this id`);
+    if (written.rowCount !== 1) throw new LffRowNotOurs('post', `post ${p.id}: the database holds another row under this id`);
   }
   for (const r of requests.put) {
     const written = await c.query(
       `INSERT INTO relay_wonderland.lff_join_requests(request_id, post_id, requester_id, message, status, created_at, updated_at) VALUES($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT(request_id) DO UPDATE SET status=EXCLUDED.status, updated_at=EXCLUDED.updated_at
-       WHERE relay_wonderland.lff_join_requests.post_id = EXCLUDED.post_id AND relay_wonderland.lff_join_requests.requester_id = EXCLUDED.requester_id`,
+       WHERE relay_wonderland.lff_join_requests.post_id = EXCLUDED.post_id AND relay_wonderland.lff_join_requests.requester_id = EXCLUDED.requester_id
+         AND relay_wonderland.lff_join_requests.created_at = EXCLUDED.created_at`,
       [r.id, r.postId, r.requesterId, r.message, r.status, new Date(r.createdAtMs), new Date(r.updatedAtMs)],
     );
-    if (written.rowCount !== 1) throw new LffRowNotOurs(`request ${r.id}: the database holds another row under this id`);
+    if (written.rowCount !== 1) throw new LffRowNotOurs('request', `request ${r.id}: the database holds another row under this id`);
   }
   for (const k of creations.drop) {
     const [owner, post] = k.split('\u0000');
@@ -585,6 +612,8 @@ export interface SocialPostgresOptions {
   readonly afterCommit?: SocialAfterCommit;
   /** The private-server policy (default: PRIVATE_SERVER_POLICY, the one place the durations live). */
   readonly privateServerPolicy?: PrivateServerPolicy;
+  /** Where the store's operator lines go (default: console.warn). Each line is a fixed string that carries no data. */
+  readonly log?: (line: string) => void;
 }
 
 /** An owner's open lost its compare-and-set inside the transaction: another request moved the server first. */
@@ -604,6 +633,7 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
   // The records outlive this process: a restart empties the world, never a cycle (the founder's private-server rules, 10-11).
   const gates = createPrivateServerGates(createPostgresPrivateServerRegistry(pool), options.privateServerPolicy ?? PRIVATE_SERVER_POLICY);
   const retentionMs = Math.max(60_000, options.eventRetentionMs ?? 7 * 24 * 3600 * 1000);
+  const log = options.log ?? ((line: string) => console.warn(line));
   let lastPruneAt = 0;
   let tail: Promise<unknown> = Promise.resolve();
   const serial = <T>(work: () => Promise<T>): Promise<T> => {
@@ -688,6 +718,14 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
               return { ok: true, value: outcome.value.data };
             }
             if (error instanceof PrivateServerRaced) return { ok: false, error: relayError('stale-ledger-version', PRIVATE_SERVER_RACE_MESSAGE, { retryable: true }) };
+            // THE ID SERIAL IS BEHIND THE DATABASE (B2b r2 review n1): one line, no data, and still the retryable outage below
+            if (error instanceof LffRowNotOurs) {
+              try {
+                log(lffSerialBehindLine(error.kind));
+              } catch {
+                // a log line never changes an answer
+              }
+            }
             // A REFUSAL IS NOT AN OUTAGE (MINOR 1, 10-07): a data or integrity error (SQLSTATE class 22 / 23) refuses the same way
             // every time, so it is not offered as a retry; anything else (a serialization failure, a lost connection) is.
             const sqlState = typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : '';

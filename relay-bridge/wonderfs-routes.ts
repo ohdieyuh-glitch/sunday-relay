@@ -158,10 +158,12 @@ export function wonderfsRange(header: string | undefined, size: number): Wonderf
     return { kind: 'part', start: Math.max(0, size - suffix), end: size - 1 };
   }
   const start = Number(m[1]);
-  const end = m[2] === '' ? size - 1 : Number(m[2]);
-  if (end < start) return { kind: 'whole' }; // syntactically invalid: ignored
-  if (start >= size) return { kind: 'unsatisfiable' };
-  return { kind: 'part', start, end: Math.min(end, size - 1) };
+  // only an EXPLICIT last position below the first is invalid (ignored); an open end is never compared before the size check --
+  // R1-r4 (CI r1.10): `bytes=<size>-` once turned its open end into size-1 < start and answered the whole file instead of 416
+  const explicitEnd = m[2] === '' ? null : Number(m[2]);
+  if (explicitEnd !== null && explicitEnd < start) return { kind: 'whole' };
+  if (start >= size) return { kind: 'unsatisfiable' }; // RFC 9110 §14.1.1: no byte at or after `start`
+  return { kind: 'part', start, end: Math.min(explicitEnd ?? size - 1, size - 1) };
 }
 
 /**

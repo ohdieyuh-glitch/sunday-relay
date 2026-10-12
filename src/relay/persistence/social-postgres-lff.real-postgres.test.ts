@@ -4,10 +4,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { RelayResult } from '../protocol/errors';
 import type { SocialOperationId } from '../social/social-contracts';
-import { LFF_CREATION_WINDOW_MS, LFF_MAX_CREATED_PER_WINDOW } from '../social/social-lff';
+import { LFF_CREATION_WINDOW_MS, LFF_MAX_CREATED_PER_WINDOW, LFF_RETENTION_MS } from '../social/social-lff';
 import { createInMemorySocialStore, type SocialStore } from '../social/social-store';
 import { juliusTestDatabaseUrl } from './julius-test-database';
-import { openSocialPostgresStore } from './social-postgres';
+import { lffSerialBehindLine, openSocialPostgresStore } from './social-postgres';
 import { TransactionalWonderlandDatabase } from './wonderland-postgres';
 
 /**
@@ -32,7 +32,11 @@ import { TransactionalWonderlandDatabase } from './wonderland-postgres';
  *               changes the post too (CLOSED, version + 1);
  *   NO GRAFT    (review m1) a STALE second store re-mints ids the database already holds -- its post (another owner) and its request
  *               (another requester) are refused by the guarded upserts and roll back whole: no row of any table moves, the held
- *               rows keep their own words; a fresh store then writes both under new ids, and the owner's own rows update.
+ *               rows keep their own words; a fresh store then writes both under new ids, and the owner's own rows update;
+ *   SAME PLAYER (r2 review r2-m1) a stale store re-mints the id of the SAME player's request on the SAME post, which the owner
+ *               ACCEPTED meanwhile: refused by created_at, the accept stands; the store logs one line with no data;
+ *   RETENTION   (review m3) a closed post exactly 30 days old stays; 1 ms older, the next write deletes it and the cascade its
+ *               requests, in that write's transaction; a younger closed post and the creation record are untouched.
  * social-postgres-lff.test.ts runs the same story (the same text, checked there) with no database. Runs wherever
  * JULIUS_TEST_DATABASE_URL names a THROWAWAY server (never DATABASE_URL); `todo` elsewhere.
  */
@@ -52,7 +56,8 @@ type Act = (op: SocialOperationId, actor: string, ids?: string[], body?: Record<
 /**
  * THE LFF STORY: Kai's three posts and everything B1 can do to them -- a create, requests, an accept that FILLS a post (the other
  * requester told a close), an edit that fills one (the live requesters told a close), a requester who blocks the owner (two live
- * requests CANCELLED; the owner told two withdrawals), an owner who blocks a requester (the requester told a deletion), a withdraw,
+ * requests stored as her WITHDRAWALS; the owner told two withdrawals), an owner who blocks a requester (CANCELLED; the requester
+ * told a deletion), a withdraw,
  * a decline and, at 'all', the owner's delete (the live requester told it). Before the delete every request status is held:
  * PENDING, ACCEPTED, DECLINED, WITHDRAWN and CANCELLED.
  */
@@ -68,7 +73,7 @@ async function lffStory(act: Act, P: Cast, until: 'before-delete' | 'all') {
   await act('lff.post.edit', P.KAI, [B], { openSlots: 1 }); // fills B by an edit: Lyra and Orion are told a close
   const C = (await act('lff.post.create', P.KAI, [], { category: 'DESIGNERS', title: 'A level designer', openSlots: 3 })).postId as string;
   const vegaOnC = (await act('lff.request.create', P.VEGA, [C])).requestId as string;
-  await act('blocks.add', P.VEGA, [], { targetId: P.KAI }); // the requester blocks the owner: A's and C's requests CANCELLED, Kai told two withdrawals
+  await act('blocks.add', P.VEGA, [], { targetId: P.KAI }); // the requester blocks the owner: A's and C's requests WITHDRAWN (hers, SEC m-a), Kai told two withdrawals
   const cleoOnC = (await act('lff.request.create', P.CLEO, [C])).requestId as string;
   await act('blocks.add', P.KAI, [], { targetId: P.CLEO }); // the owner blocks the requester: CANCELLED, Cleo told C's deletion
   const orionOnC = (await act('lff.request.create', P.ORION, [C])).requestId as string;
@@ -204,10 +209,11 @@ suite('LFF on real PostgreSQL through the social store (slice B2b)', () => {
     const restarted = await openSocialPostgresStore(pool);
     expect(await lffOf(restarted), 'read back exactly, in the order the domain held them').toEqual(held);
     expect([...new Set(held.requests.map((r) => r.status))].sort()).toEqual(['ACCEPTED', 'CANCELLED', 'DECLINED', 'PENDING', 'WITHDRAWN']);
-    // the rows themselves: the statuses, and the times the domain stamped (a block's CANCELLED at the block's time)
+    // the rows themselves: the statuses, and the times the domain stamped (a block's ending at the block's time). Vega, the requester,
+    // blocked: her two are WITHDRAWN (SEC m-a); Kai, the owner, blocked Cleo: hers is CANCELLED
     const requests = (await pool.query('SELECT request_id, status, updated_at FROM relay_wonderland.lff_join_requests ORDER BY length(request_id), request_id')).rows;
     expect(requests.map((r: { request_id: string; status: string }) => [r.request_id, r.status])).toEqual([
-      [ids.novaOnA, 'ACCEPTED'], [ids.vegaOnA, 'CANCELLED'], [ids.lyraOnB, 'ACCEPTED'], [ids.orionOnB, 'PENDING'], [ids.vegaOnC, 'CANCELLED'],
+      [ids.novaOnA, 'ACCEPTED'], [ids.vegaOnA, 'WITHDRAWN'], [ids.lyraOnB, 'ACCEPTED'], [ids.orionOnB, 'PENDING'], [ids.vegaOnC, 'WITHDRAWN'],
       [ids.cleoOnC, 'CANCELLED'], [ids.orionOnC, 'WITHDRAWN'], [ids.dexOnC, 'DECLINED'], [ids.eliOnC, 'PENDING'],
     ]);
     expect(requests.map((r: { updated_at: Date }) => r.updated_at.getTime())).toEqual(held.requests.map((r) => r.updatedAtMs));
@@ -295,7 +301,7 @@ suite('LFF on real PostgreSQL through the social store (slice B2b)', () => {
     const times = (row: { created_at: Date; updated_at: Date }) => [row.created_at.getTime(), row.updated_at.getTime()];
     expect([(await post(P)).status, Number((await post(P)).version), ...times(await post(P))], 'edited and closed in the past: updated_at stays at T').toEqual(['CLOSED', 3, T, T]);
     expect([(await request(nova)).status, ...times(await request(nova))]).toEqual(['WITHDRAWN', T + 1000, T + 1000]);
-    expect([(await request(vega)).status, ...times(await request(vega))]).toEqual(['CANCELLED', T + 2000, T + 2000]);
+    expect([(await request(vega)).status, ...times(await request(vega))], 'Vega, the requester, blocked: her withdrawal').toEqual(['WITHDRAWN', T + 2000, T + 2000]);
     expect(times(await post(Q)), 'a post made at the stepped-back time is simply made then').toEqual([back, back]);
     // THE CONTROL: the later clock moves updated_at
     await ok('lff.request.decline', CAST.KAI, [lyra], {}, T + 10_000);
@@ -404,5 +410,72 @@ suite('LFF on real PostgreSQL through the social store (slice B2b)', () => {
       .map((r: { request_id: string; requester_id: string; status: string }) => [r.request_id, r.requester_id, r.status])).toEqual([
       [vega, CAST.VEGA, 'ACCEPTED'], [nova, CAST.NOVA, 'PENDING'],
     ]);
+  }, 300_000);
+
+  it('SAME PLAYER (r2 review r2-m1): a stale store re-mints the id of Nova\'s own request on the same post, which Kai ACCEPTED meanwhile -- refused by created_at, the accept stands, one line logged with no data', async () => {
+    const pool = await database('sameplayer');
+    const clock = { ms: Date.now() };
+    const live = await openSocialPostgresStore(pool);
+    await signIn([live], clock.ms);
+    const act = actor([live], clock);
+    const A = (await act('lff.post.create', CAST.KAI, [], { category: 'TEAMS', title: 'A squad', openSlots: 2 })).postId as string;
+    // ONE BRIDGE PER STORE is the rule; this breaks it (a deploy overlap): the stale store holds the serial as it is now
+    const lines: string[] = [];
+    const stale = await openSocialPostgresStore(pool, { log: (line) => lines.push(line) });
+    const nova = (await act('lff.request.create', CAST.NOVA, [A], { message: 'first ask' })).requestId as string;
+    await act('lff.request.accept', CAST.KAI, [nova]);
+    const rowsBefore = await checksums(pool);
+    // the stale store mints Nova's request id again -- for Nova, on A: the same post and requester, a later created_at
+    const again = await apply(stale, 'lff.request.create', CAST.NOVA, [A], { message: 'second ask' }, (clock.ms += 1000));
+    expect(again.ok === false && again.error, `the stale store minted ${nova} again`).toMatchObject({
+      code: 'stale-ledger-version', retryable: true, message: 'the change could not be saved; nothing was changed',
+    });
+    expect(await checksums(pool), 'no row of any table moved: the owner\'s accept stands').toEqual(rowsBefore);
+    expect((await pool.query('SELECT requester_id, status, message FROM relay_wonderland.lff_join_requests WHERE request_id = $1', [nova])).rows)
+      .toEqual([{ requester_id: CAST.NOVA, status: 'ACCEPTED', message: 'first ask' }]);
+    expect(lines, 'one line, and it names no id, player or words').toEqual([lffSerialBehindLine('request')]);
+    for (const secret of [nova, A, CAST.NOVA, CAST.KAI, 'second ask']) expect(lines[0]).not.toContain(secret);
+    // THE CONTROL: the live store's own row updates (Nova withdraws the request she was accepted on)
+    await act('lff.request.withdraw', CAST.NOVA, [nova]);
+    expect((await pool.query('SELECT status FROM relay_wonderland.lff_join_requests WHERE request_id = $1', [nova])).rows).toEqual([{ status: 'WITHDRAWN' }]);
+  }, 300_000);
+
+  it('RETENTION (review m3): a closed post exactly 30 days old stays; 1 ms older, the next write deletes it and the cascade its requests -- a younger closed post, the creation record and everyone\'s events are untouched', async () => {
+    const pool = await database('retention');
+    const T = Date.now();
+    const pg = await openSocialPostgresStore(pool);
+    await signIn([pg], T - HOUR);
+    const ok = async (op: SocialOperationId, who: string, ids: string[], body: Record<string, unknown>, ms: number): Promise<any> => {
+      const r = await apply(pg, op, who, ids, body, ms);
+      expect(r.ok, `${op} by ${who} at ${at(ms)}: ${r.ok ? '' : `${r.error.code} ${r.error.message}`}`).toBe(true);
+      return r.ok ? r.value : undefined;
+    };
+    const A = (await ok('lff.post.create', CAST.KAI, [], { category: 'TEAMS', title: 'A squad', openSlots: 3 }, T)).postId as string;
+    const nova = (await ok('lff.request.create', CAST.NOVA, [A], { message: 'hello' }, T + 1000)).requestId as string;
+    const vega = (await ok('lff.request.create', CAST.VEGA, [A], {}, T + 2000)).requestId as string;
+    await ok('lff.request.accept', CAST.KAI, [nova], {}, T + 3000);
+    await ok('lff.request.decline', CAST.KAI, [vega], {}, T + 4000);
+    await ok('lff.post.close', CAST.KAI, [A], {}, T + 5000);
+    const B = (await ok('lff.post.create', CAST.LYRA, [], { category: 'BUILDERS', title: 'Younger', openSlots: 1 }, T + HOUR)).postId as string;
+    await ok('lff.post.close', CAST.LYRA, [B], {}, T + HOUR + 1000);
+    const L = (await ok('lff.post.create', CAST.ORION, [], { category: 'DESIGNERS', title: 'Orion\'s', openSlots: 1 }, T + LFF_RETENTION_MS - HOUR)).postId as string;
+    const postsNamed = async (id: string) => count(pool, 'SELECT count(*) AS n FROM relay_wonderland.lff_posts WHERE post_id = $1', [id]);
+    const requestsOn = async (id: string) => count(pool, 'SELECT count(*) AS n FROM relay_wonderland.lff_join_requests WHERE post_id = $1', [id]);
+    const creations = async () => (await pool.query('SELECT owner_id, post_id, created_at FROM relay_wonderland.lff_post_creations ORDER BY owner_id, post_id')).rows;
+    const creationsBefore = await creations();
+
+    // AT EXACTLY 30 DAYS: Orion's edit leaves Kai's post and its two requests in place
+    await ok('lff.post.edit', CAST.ORION, [L], { title: 'at the edge' }, T + LFF_RETENTION_MS);
+    expect([await postsNamed(A), await requestsOn(A)]).toEqual([1, 2]);
+
+    // 1 MS LATER: the same kind of write deletes it; the cascade takes both requests, in that write's transaction
+    const seq = await lastSeq(pool);
+    await ok('lff.post.edit', CAST.ORION, [L], { title: 'past it' }, T + LFF_RETENTION_MS + 1);
+    expect([await postsNamed(A), await requestsOn(A)], 'purged, with its requests').toEqual([0, 0]);
+    expect(await postsNamed(B), 'a younger closed post stays').toBe(1);
+    expect((await pool.query('SELECT title, version FROM relay_wonderland.lff_posts WHERE post_id = $1', [L])).rows.map((r: { title: string; version: string }) => [r.title, Number(r.version)])).toEqual([['past it', 3]]);
+    expect(await creations(), 'the creation record is not the purge\'s').toEqual(creationsBefore);
+    expect(await eventsAfter(pool, seq), 'the write tells its actor; the purge tells nobody').toEqual([['lff.post.edit', [CAST.ORION]]]);
+    expect(await lffOf(await openSocialPostgresStore(pool)), 'and a restart reads the purged state').toEqual(await lffOf(pg));
   }, 300_000);
 });

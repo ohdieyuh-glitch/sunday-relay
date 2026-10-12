@@ -14,10 +14,14 @@
  *   1. THE ACTOR IS THE SESSION'S PLAYER, and ownership is checked on edit, close, delete, accept and decline. Anyone else is
  *      answered EXACTLY as a missing post (lffNotFound): never a refusal that says the post exists.
  *   2. A BLOCK EITHER WAY makes the post absent for the other side -- not in the feed, not by id, not requestable, each answered
- *      as a missing post -- and CANCELS the live requests it crosses (social-friends.ts blockUser). Each side is then shown, and
+ *      as a missing post -- and ENDS the live requests it crosses (social-friends.ts blockUser). Each side is then shown, and
  *      TOLD, exactly what the ordinary change it imitates shows and tells (SEC-M2: silence was itself the tell): to the owner the
  *      request reads as withdrawn and the owner is told lff.request.withdraw; to the requester the post reads as deleted and they
  *      are told lff.post.delete (lffBlockNotices, sent by blocks.add past the block floor). Nothing names the block.
+ *      WHEN THE REQUESTER IS THE BLOCKER the request is STORED as WITHDRAWN (SEC m-a): it is then a withdrawal in every respect,
+ *      the re-request cooldown included, so an owner cannot tell a lifted block from a withdrawal by how soon the requester asks
+ *      again. WHEN THE OWNER IS THE BLOCKER it is CANCELLED (no cooldown: a cooldown there would tell the requester they were
+ *      blocked, since to them the post was "deleted").
  *   3. A POST IS SHOWN ONLY TO A VIEWER WHO MAY SEE ITS AUTHOR (SEC-M1, SEC-M4/CORR-M2; decision D-L3 = do not list): the presence
  *      audience the author chose (presenceVisibility -- the presence authority's own "may this viewer see this person") must
  *      admit the viewer, and no block may stand either way. Otherwise the post is ABSENT, answered as a missing post. There is no
@@ -27,11 +31,15 @@
  *   4. THE GENERAL FEED IS OPEN POSTS ONLY (SEC-M3). A CLOSED or EXPIRED post is shown only to its owner (their `mine` list, and by
  *      id) and to the users accepted on it; to anyone else it is absent.
  *   5. CAPS (all PROPOSED, decision D-L2): open posts per owner; posts CREATED per rolling 24 hours, closed and deleted ones counted
- *      (lffCreations), so close-and-repost cannot flood; pending requests out per player and per post; and a cooldown before a
- *      player who withdrew from a post may ask it again.
+ *      (lffCreations), so close-and-repost cannot flood; pending requests out per player and per post; a cooldown before a
+ *      player who withdrew from a post may ask it again; and a longer one after their request to it was DECLINED (SEC m-c).
  *   6. LFF GRANTS NOTHING. No repository, private server, agent, WonderFS, Project Brain or voice is reached from here: the
  *      imports below are the whole list (social-lff-privacy.test.ts walks the real graph), and an accept changes only the request
  *      row (and, when it fills the post, the post's status).
+ *   7. RETENTION (PROPOSED, the B2b review's m3): a post that is no longer open and was created more than LFF_RETENTION_MS ago
+ *      (30 days, 038's sanity bound on a post's whole life) is HARD-DELETED with every request on it, by the LFF writes that carry
+ *      the server's time, at most LFF_PURGE_BATCH posts per write (purgeLffPastRetention). It is nobody's act, so it tells nobody.
+ *      The creation record keeps its own 24 h prune (createLffPost).
  * No counts or rosters leak: how many have been accepted is the owner's alone (availableSlots); the accepted list is shown to the
  * owner, and to an accepted user with only the co-accepted they may see (rule 3's test, person by person); pending requests are
  * listed to the owner only; and the post a fill closes is told to the others as an ordinary close, never as an accept.
@@ -76,9 +84,10 @@ export type LffPostStatus = (typeof LFF_POST_STATUSES)[number];
 export type LffStoredPostStatus = Exclude<LffPostStatus, 'EXPIRED'>;
 
 /**
- * A request as stored. CANCELLED is a request a block crossed (social-friends.ts blockUser): it stays cancelled after an unblock,
- * as a cancelled friend request and a revoked party invite do, and it is shown to nobody. There is no request version (MAIN r2,
- * CORR-M1: 038 drops the column).
+ * A request as stored. CANCELLED is a request the OWNER's block crossed (social-friends.ts blockUser): it stays cancelled after an
+ * unblock, as a cancelled friend request and a revoked party invite do, and it is shown to nobody. A request the REQUESTER's block
+ * crossed is stored WITHDRAWN instead (rule 2, SEC m-a): exactly the row their own withdrawal would leave. There is no request
+ * version (MAIN r2, CORR-M1: 038 drops the column).
  */
 export const LFF_REQUEST_STATUSES = ['PENDING', 'ACCEPTED', 'DECLINED', 'WITHDRAWN', 'CANCELLED'] as const;
 export type LffRequestStatus = (typeof LFF_REQUEST_STATUSES)[number];
@@ -108,8 +117,24 @@ export const LFF_CREATION_WINDOW_MS = 24 * 60 * 60_000;
 export const LFF_MAX_PENDING_OUTGOING_PER_USER = 20;
 /** PROPOSED (D-L2): pending requests one post may hold at once. */
 export const LFF_MAX_PENDING_PER_POST = 50;
-/** PROPOSED (MAIN r2, SEC m7): a player who withdrew from a post may ask it again only this long after the withdrawal. */
+/**
+ * PROPOSED (MAIN r2, SEC m7): a player who withdrew from a post may ask it again only this long after the withdrawal. A requester's
+ * own block stores a withdrawal (rule 2), so the same wait follows lifting it.
+ */
 export const LFF_REREQUEST_COOLDOWN_MS = 10 * 60_000;
+/**
+ * PROPOSED (SEC m-c): a player whose request to a post was DECLINED may ask it again only this long after the decline (at exactly
+ * this long, they may). It reveals nothing: the requester is already shown DECLINED.
+ */
+export const LFF_DECLINE_COOLDOWN_MS = 60 * 60_000;
+/**
+ * PROPOSED (the B2b review's m3): a post no longer open is kept until it is this old (from its creation), then purged with its
+ * requests. 30 days is 038's sanity bound on a post's life (lff_posts_times: expires_at at most 30 days after created_at), so a
+ * post past it is past every expiry the schema admits. Exactly 30 days old it is kept; 1 ms older it is due.
+ */
+export const LFF_RETENTION_MS = 30 * 24 * 60 * 60_000;
+/** PROPOSED (m3): at most this many posts are purged by one write, oldest first; the rest wait for the next write. */
+export const LFF_PURGE_BATCH = 50;
 
 /** Field bounds (contract, "Post fields"), in CODE POINTS -- PostgreSQL's char_length, as private-server-lifecycle.ts cleanServerName. */
 export const LFF_TITLE_MAX = 80;
@@ -353,6 +378,34 @@ const bumped = (post: LffPost, fields: LffPostChange, nowMs: number): LffPost =>
   version: post.version + 1,
 });
 
+/**
+ * A post due for retention at `nowMs` (rule 7): created MORE than LFF_RETENTION_MS ago AND no longer open (CLOSED or EXPIRED, read
+ * at `nowMs`). Exactly LFF_RETENTION_MS old it is kept. One stamped after `nowMs` (a stepped-back clock) is never due.
+ */
+const pastRetention = (post: LffPost, nowMs: number): boolean => nowMs - post.createdAtMs > LFF_RETENTION_MS && lffPostStatusAt(post, nowMs) !== 'OPEN';
+
+/**
+ * RETENTION (rule 7, PROPOSED; the B2b review's m3): the posts due at `nowMs` are HARD-DELETED with every request on them, oldest
+ * first (creation time, then serial), at most LFF_PURGE_BATCH per call; the rest wait for the next write. The creation record is not
+ * touched (it is pruned after 24 h by createLffPost). Nothing due: the SAME state object, so a store's by-reference diff sees no
+ * change. Run by every LFF write that carries the server's time, AFTER its own rule (so the operation itself answers exactly as
+ * before), never by a refusal. A purge is nobody's act and tells nobody: like expiry, it is the server's time passing.
+ */
+export function purgeLffPastRetention(state: SocialState, nowMs: number): SocialState {
+  const due = state.lffPosts.filter((p) => pastRetention(p, nowMs));
+  if (due.length === 0) return state;
+  const gone = new Set(due.sort(oldestFirst).slice(0, LFF_PURGE_BATCH).map((p) => p.id));
+  const requestsGo = state.lffRequests.some((r) => gone.has(r.postId));
+  return {
+    ...state,
+    lffPosts: state.lffPosts.filter((p) => !gone.has(p.id)),
+    lffRequests: requestsGo ? state.lffRequests.filter((r) => !gone.has(r.postId)) : state.lffRequests,
+  };
+}
+
+/** A successful LFF write, then the retention batch (rule 7) at the same server time. */
+const retained = <C extends { readonly state: SocialState }>(change: C, nowMs: number): C => ({ ...change, state: purgeLffPastRetention(change.state, nowMs) });
+
 /* ----------------------------------------------------------------------------------------------------------- the rules */
 
 /**
@@ -404,7 +457,7 @@ export function createLffPost(state: SocialState, actorId: SocialUserId, fields:
   };
   // the creation record keeps only the window: everyone's older entries are pruned here, on write, so it stays bounded
   const creations = [...minted.state.lffCreations.filter((c) => inCreationWindow(c, nowMs)), { userId: actorId, postId: post.id, atMs: nowMs }];
-  return ok({ state: { ...minted.state, lffPosts: [...minted.state.lffPosts, post], lffCreations: creations }, postId: post.id, told: [actorId] });
+  return ok(retained({ state: { ...minted.state, lffPosts: [...minted.state.lffPosts, post], lffCreations: creations }, postId: post.id, told: [actorId] }, nowMs));
 }
 
 /**
@@ -428,7 +481,7 @@ export function editLffPost(state: SocialState, actorId: SocialUserId, postId: s
   const fills = patch.openSlots !== undefined && patch.openSlots === accepted;
   if (patch.openSlots !== undefined) fields.openSlots = patch.openSlots;
   if (fills) fields.status = 'CLOSED';
-  return ok({ state: replacePost(state, bumped(post, fields, nowMs)), told: [actorId], notices: fills ? closeNotices(liveRequesters(state, post.id)) : [] });
+  return ok(retained({ state: replacePost(state, bumped(post, fields, nowMs)), told: [actorId], notices: fills ? closeNotices(liveRequesters(state, post.id)) : [] }, nowMs));
 }
 
 /** CLOSE a post: the owner only, OPEN only. Everyone with a live request on it is told (their request no longer leads anywhere). */
@@ -436,10 +489,13 @@ export function closeLffPost(state: SocialState, actorId: SocialUserId, postId: 
   const post = ownedPost(state, actorId, postId);
   if (post === undefined) return fail(lffNotFound());
   if (lffPostStatusAt(post, nowMs) !== 'OPEN') return fail(relayError('illegal-transition', 'this post is not open'));
-  return ok({ state: replacePost(state, bumped(post, { status: 'CLOSED' }, nowMs)), told: [actorId, ...liveRequesters(state, post.id)] });
+  return ok(retained({ state: replacePost(state, bumped(post, { status: 'CLOSED' }, nowMs)), told: [actorId, ...liveRequesters(state, post.id)] }, nowMs));
 }
 
-/** DELETE a post: the owner only, in any status. A HARD delete: the post and every request to it are gone. */
+/**
+ * DELETE a post: the owner only, in any status. A HARD delete: the post and every request to it are gone. It takes no clock
+ * (social-commands.ts calls it without one), so it runs no retention batch (rule 7): it removes rows itself.
+ */
 export function deleteLffPost(state: SocialState, actorId: SocialUserId, postId: string): RelayResult<LffChange> {
   const post = ownedPost(state, actorId, postId);
   if (post === undefined) return fail(lffNotFound());
@@ -452,7 +508,8 @@ export function deleteLffPost(state: SocialState, actorId: SocialUserId, postId:
 /**
  * ASK TO JOIN a post. Refused: for a post the actor may not see (missing, walled, its author hidden from them, closed or expired)
  * as one answer, lffNotFound; on one's own post; on a post that is not open; while a request of one's own to it is pending or
- * accepted; within LFF_REREQUEST_COOLDOWN_MS of withdrawing from it; past the player's and the post's pending caps.
+ * accepted; within LFF_REREQUEST_COOLDOWN_MS of withdrawing from it (a withdrawal by one's own block included); within
+ * LFF_DECLINE_COOLDOWN_MS of its owner declining one's request to it; past the player's and the post's pending caps.
  */
 export function createLffRequest(state: SocialState, actorId: SocialUserId, postId: string, message: string, nowMs: number): RelayResult<LffChange & { requestId: string }> {
   const post = visiblePost(state, actorId, postId, nowMs);
@@ -464,6 +521,9 @@ export function createLffRequest(state: SocialState, actorId: SocialUserId, post
   if (mine.some((r) => r.status === 'ACCEPTED')) return fail(relayError('validation-failed', 'you have already been accepted on this post'));
   if (mine.some((r) => r.status === 'WITHDRAWN' && nowMs - r.updatedAtMs < LFF_REREQUEST_COOLDOWN_MS)) {
     return fail(relayError('illegal-transition', `you withdrew from this post: you can ask again ${LFF_REREQUEST_COOLDOWN_MS / 60_000} minutes after`));
+  }
+  if (mine.some((r) => r.status === 'DECLINED' && nowMs - r.updatedAtMs < LFF_DECLINE_COOLDOWN_MS)) {
+    return fail(relayError('illegal-transition', `your request to this post was declined: you can ask again ${LFF_DECLINE_COOLDOWN_MS / 60_000} minutes after`));
   }
   if (liveOutgoingOf(state, actorId, nowMs) >= LFF_MAX_PENDING_OUTGOING_PER_USER) {
     return fail(relayError('illegal-transition', `you already have ${LFF_MAX_PENDING_OUTGOING_PER_USER} pending requests: withdraw one first`));
@@ -481,14 +541,14 @@ export function createLffRequest(state: SocialState, actorId: SocialUserId, post
     createdAtMs: nowMs,
     updatedAtMs: nowMs,
   };
-  return ok({ state: { ...minted.state, lffRequests: [...minted.state.lffRequests, request] }, requestId: request.id, told: [actorId, post.ownerId] });
+  return ok(retained({ state: { ...minted.state, lffRequests: [...minted.state.lffRequests, request] }, requestId: request.id, told: [actorId, post.ownerId] }, nowMs));
 }
 
 /** WITHDRAW one's own pending or accepted request (leaving a post one was accepted on frees the slot). The requester only. */
 export function withdrawLffRequest(state: SocialState, actorId: SocialUserId, requestId: string, nowMs: number): RelayResult<LffChange> {
   const found = ownRequest(state, actorId, requestId);
   if (found === undefined) return fail(lffNotFound());
-  return ok({ state: resolveRequest(state, found.request, 'WITHDRAWN', nowMs), told: [actorId, found.post.ownerId] });
+  return ok(retained({ state: resolveRequest(state, found.request, 'WITHDRAWN', nowMs), told: [actorId, found.post.ownerId] }, nowMs));
 }
 
 /**
@@ -504,29 +564,37 @@ export function acceptLffRequest(state: SocialState, actorId: SocialUserId, requ
   if (lffPostStatusAt(post, nowMs) !== 'OPEN') return fail(relayError('illegal-transition', 'this post is not open'));
   const accepted = resolveRequest(state, request, 'ACCEPTED', nowMs);
   const filled = acceptedCount(accepted, post.id) >= post.openSlots;
-  if (!filled) return ok({ state: accepted, told: [actorId, request.requesterId], closed: false });
+  if (!filled) return ok(retained({ state: accepted, told: [actorId, request.requesterId], closed: false }, nowMs));
   const others = liveRequesters(accepted, post.id).filter((id) => id !== request.requesterId);
-  return ok({ state: replacePost(accepted, bumped(post, { status: 'CLOSED' }, nowMs)), told: [actorId, request.requesterId], notices: closeNotices(others), closed: true });
+  return ok(retained({ state: replacePost(accepted, bumped(post, { status: 'CLOSED' }, nowMs)), told: [actorId, request.requesterId], notices: closeNotices(others), closed: true }, nowMs));
 }
 
 /** DECLINE a pending request: the post's owner only, whatever the post's status. */
 export function declineLffRequest(state: SocialState, actorId: SocialUserId, requestId: string, nowMs: number): RelayResult<LffChange> {
   const found = incomingPending(state, actorId, requestId);
   if (found === undefined) return fail(lffNotFound());
-  return ok({ state: resolveRequest(state, found.request, 'DECLINED', nowMs), told: [actorId, found.request.requesterId] });
+  return ok(retained({ state: resolveRequest(state, found.request, 'DECLINED', nowMs), told: [actorId, found.request.requesterId] }, nowMs));
 }
 
 /**
- * WHAT A BLOCK'S CANCELLATIONS MUST TELL (rule 2, SEC-M2), one notice per request the block moved from live to CANCELLED, in
- * request order: the blocker is the actor and is told the block as always; the OTHER side is told the ordinary change it now
- * sees -- an owner whose requester blocked them, a withdrawal (lff.request.withdraw); a requester whose owner blocked them, a
- * deletion of that post (lff.post.delete). blocks.add sends these past the block floor (they are addressed across it on purpose).
+ * WHAT A BLOCK'S CANCELLATIONS MUST TELL (rule 2, SEC-M2), one notice per request the block moved from live to ended -- WITHDRAWN
+ * when the requester blocked, CANCELLED when the owner did (social-friends.ts blockUser) -- in request order: the blocker is the
+ * actor and is told the block as always; the OTHER side is told the ordinary change it now sees -- an owner whose requester blocked
+ * them, a withdrawal (lff.request.withdraw); a requester whose owner blocked them, a deletion of that post (lff.post.delete).
+ * blocks.add sends these past the block floor (they are addressed across it on purpose). `before` and `after` are the block's own
+ * states, so every live request that ends between them is one the block ended.
+ * ONE TIME, A FIXED ORDER (SEC m-b, ACCEPTED and documented rather than changed): a block that ends two or more requests (or also
+ * ends a friendship or a party) gives the far side two or more events at the block's one server time, with consecutive sequence
+ * numbers, where the ordinary changes they imitate would usually come at separate times. Their ORDER is deterministic (request
+ * creation time, then serial; then the block's own event, as both stores write them), so nothing varies between stores or runs;
+ * what remains is the narrow "several at one instant" pattern, which needs two or more crossings between the same two people.
+ * Separate times would need a clock per notice that no store has; that is a store change, not a rule, and is not made for Alpha.
  */
 export function lffBlockNotices(before: SocialState, after: SocialState, actorId: SocialUserId): LffNotice[] {
   const notices: LffNotice[] = [];
   const cancelled = after.lffRequests
     .filter((r) => {
-      if (r.status !== 'CANCELLED') return false;
+      if (r.status !== 'CANCELLED' && r.status !== 'WITHDRAWN') return false;
       const was = lffRequestById(before, r.id)?.status;
       return was === 'PENDING' || was === 'ACCEPTED';
     })
@@ -731,8 +799,9 @@ export function lffPostFor(state: SocialState, viewerId: SocialUserId, postId: s
 }
 
 /**
- * THE REQUESTER'S OWN REQUESTS, newest first. A withdrawn one is gone; a CANCELLED one (a block crossed it) and one whose post is
- * behind a wall are absent exactly as a deleted post's requests are -- so a block reads as a deletion, never as a block. A post
+ * THE REQUESTER'S OWN REQUESTS, newest first. A withdrawn one is gone (one their own block ended is stored withdrawn); a CANCELLED
+ * one (the owner's block crossed it) and one whose post is behind a wall are absent exactly as a deleted post's requests are -- so a
+ * block reads as a deletion, never as a block. A post
  * the requester may no longer see (closed, expired, its author hidden from them) is not shown: the request reads
  * NO_LONGER_AVAILABLE while pending, and keeps its ACCEPTED or DECLINED word otherwise.
  */

@@ -529,6 +529,12 @@ describe('WonderFS R1 reads: bytes', () => {
     expect([several.status, several.bytes.byteLength], 'several ranges: the whole file').toEqual([200, BIG.length]);
     expect(wonderfsRange('bytes=5-2', 10), 'an inverted range is ignored').toEqual({ kind: 'whole' });
     expect(wonderfsRange('bytes=0-', 0), 'nothing to give of an empty file').toEqual({ kind: 'unsatisfiable' });
+    // R1-r4 (CI r1.10): an OPEN end at or past the size is unsatisfiable, never "invalid, send it all"
+    expect(wonderfsRange('bytes=10-', 10)).toEqual({ kind: 'unsatisfiable' });
+    expect(wonderfsRange('bytes=10-20', 10)).toEqual({ kind: 'unsatisfiable' });
+    expect(wonderfsRange('bytes=9-', 10)).toEqual({ kind: 'part', start: 9, end: 9 });
+    expect(wonderfsRange('bytes=3-99', 10), 'a last position past the end is clamped').toEqual({ kind: 'part', start: 3, end: 9 });
+    expect(wonderfsRange('bytes=-99', 10), 'a suffix longer than the file is the whole file as a part').toEqual({ kind: 'part', start: 0, end: 9 });
   }, 60_000);
 
   it('bytes that fail their check (address or size) are NEVER served: 503, and the log names the blob; CONTROL: intact, served', async () => {
@@ -612,14 +618,19 @@ describe('WonderFS R1 reads: budgets (§8.4)', () => {
     const run = async (perPlayer: number) => {
       const slow = slowStore(f.store, 2);
       const base = await boot({ verifySession: wonderfsSessionVerifier(sessions), store: slow.store, budgets: createWonderfsBudgets(undefined, { maxByteReadsPerPlayer: perPlayer }) });
-      const first = call(base, path, { token: tokens['ghu-1'] });
+      // every read is either HELD at the store (its slot taken, its answer not yet possible) or already ANSWERED (refused before the
+      // store); nothing is released until all three are one or the other -- R1-r4 (CI r1.10): releasing earlier let the first reads
+      // finish before the other player's request reached the gate, so the control could not fail
+      let settled = 0;
+      const settle = (a: Promise<Answer>) => a.then((x) => { settled += 1; return x; });
+      const first = settle(call(base, path, { token: tokens['ghu-1'] }));
       await vi.waitFor(() => expect(slow.waiting.length).toBe(1));
-      // the player's second read, settled (refused) or held at the store, BEFORE the other player asks: a fixed order
-      let ownSettled = false;
-      const own = call(base, path, { token: tokens['ghu-1'] }).then((a) => { ownSettled = true; return a; });
-      await vi.waitFor(() => expect(ownSettled || slow.waiting.length === 2).toBe(true));
-      const other = call(base, path, { token: tokens['ghu-2'] });
-      await vi.waitFor(() => expect(slow.waiting.length).toBe(2));
+      // the player's second read, held or refused, BEFORE the other player asks: a fixed order
+      const own = settle(call(base, path, { token: tokens['ghu-1'] }));
+      await vi.waitFor(() => expect(slow.waiting.length + settled).toBe(2));
+      const other = settle(call(base, path, { token: tokens['ghu-2'] }));
+      await vi.waitFor(() => expect(slow.waiting.length + settled).toBe(3));
+      expect(slow.waiting.length, 'two reads hold slots at the store; the third was refused at the gate').toBe(2);
       for (const go of slow.waiting.splice(0)) go();
       return [(await first).status, (await own).status, (await other).status];
     };
@@ -681,7 +692,10 @@ describe('WonderFS R1 reads: budgets (§8.4)', () => {
       await vi.waitFor(() => expect(sockets.filter((s) => s.destroyed).length).toBe(2));
       for (const go of slow.waiting.splice(0)) go();
       await vi.waitFor(() => expect(written).toBe(2));
-      await new Promise<void>((r) => setTimeout(r, 50)); // let every close / finished callback run
+      // no sleeping: where a release is due, wait for it; in the control, flush the event loop once (finished / close call back on the
+      // next tick) -- after that nothing queued can give the slots back, because their `close` fired before anyone listened
+      if (mode === 'r2-control') await new Promise<void>((r) => setImmediate(r));
+      else await vi.waitFor(() => expect(counted.held()).toBe(0));
       const held = counted.held();
       const next = await call(base, path, { token: tokens['ghu-3'] });
       return { held, next: next.status };
