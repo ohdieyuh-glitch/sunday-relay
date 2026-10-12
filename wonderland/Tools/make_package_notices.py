@@ -46,6 +46,10 @@ v2.3d (2026-10-07, CORE; the R12 attack's M5, AWAITING INDEPENDENT REVIEW): the 
 - BLOCKER rows are printed and exit 3 unless --allow-blockers (a rehearsal only: the build passes it for 0.1.0-r16reh<n> versions).
 - The packed list must be the pak AS BUILT: build_beta_rc.ps1 v4e lists the pak's own index (UnrealPak -List). UAT writes
   Manifest_UFSFiles BEFORE it applies Config/DefaultPakFileRules.ini, so that manifest still names a file a rule excluded.
+v2.3e (2026-10-12, MAIN WONDERLAND, PROPOSED, AWAITING REVIEW): the R12 ledger is re-pinned to its v3 (RESOLUTIONS_SHA256),
+which fixes the ledger / evidence defects R12 gate v2.2 reports (M3 shipped_sha256 on the FILE / PAKFONT A rows, +A-SRC text_refs
+that cite the committed texts in this folder, M1 quotes, m5 evidence) and records the DirectX SDK row as a BLOCKER
+(r12_closure/ledger_v3/r3b_20261012). No code change.
 R12's verdict is core_r12_gate.py (SECOND's K, unmodified, + the ledger re-verified against the bytes), never this tool's exit.
 Exit: 0 written, every redistributed file mapped; 1 a GAP (written, for inspection); 2 an ERROR (nothing trustworthy written);
 3 written, no GAP, but the ledger still has BLOCKER rows (not a release candidate; --allow-blockers turns this into 0).
@@ -248,7 +252,7 @@ COMPONENT_ALIASES = [
 ]
 # v2.3c: the R12 resolution ledger in the texts folder, pinned (an empty pin = no ledger: the v2.3b behaviour)
 RESOLUTIONS_FILE = 'R12_RESOLUTIONS.tsv'
-RESOLUTIONS_SHA256 = '3b2a805807ee8794327abdb381caf4029a6b31e6e455f36a9b6dff75dd3d0d49'
+RESOLUTIONS_SHA256 = 'cce79c6ba1b67186753a0f134bad100099a13e94081ab075772b41d5b2235577'
 RES_COLUMNS = ['key', 'k_class', 'component', 'state', 'basis', 'notices_name', 'text_ref', 'evidence', 'quote', 'notes']
 RES_BASES = {'A': ('A-TEXT',), 'B': ('B-EULA7B', 'B-NOTSHIPPED', 'B-PD', 'B-WAIVER'), 'C': ('C-REMOVED',), 'BLOCKER': ('BLOCKER',)}
 # one short line per basis (ONE substantive line: a determination can never read as a license text)
