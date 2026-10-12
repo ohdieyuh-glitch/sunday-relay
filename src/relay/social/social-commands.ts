@@ -72,8 +72,41 @@ import {
   sharedPartyBlockWarning,
   sharedPartyOf,
 } from './social-parties';
+import {
+  LFF_CATEGORIES,
+  LFF_DESCRIPTION_MAX,
+  LFF_FEED_PAGE_DEFAULT,
+  LFF_FEED_PAGE_MAX,
+  LFF_MESSAGE_MAX,
+  LFF_PROJECT_LABEL_MAX,
+  LFF_SKILL_MAX,
+  LFF_SKILLS_MAX,
+  LFF_SLOTS_MAX,
+  LFF_SLOTS_MIN,
+  LFF_TITLE_MAX,
+  acceptLffRequest,
+  closeLffPost,
+  createLffPost,
+  createLffRequest,
+  declineLffRequest,
+  deleteLffPost,
+  editLffPost,
+  lffBlockNotices,
+  lffFeedFor,
+  lffNotFound,
+  lffPostFor,
+  lffRequestsForPost,
+  lffRequestsMineFor,
+  parseLffCursor,
+  withdrawLffRequest,
+  type LffChange,
+  type LffFeedCursor,
+  type LffFeedFilter,
+  type LffPostFields,
+  type LffPostPatch,
+} from './social-lff';
 import { deriveActivity, resolvePresenceFor, resolveProfileFor, type WonderlandActivitySignals } from './social-presence';
-import { buildSocialView } from './social-preview';
+import { buildSocialView, row } from './social-preview';
 import { areFriends, blockedEitherWay, conversationById, friendIdsOf, messagesOf, partyById, partyOf, presenceHiddenFrom, userById, type SocialState } from './social-state';
 import {
   WORLD_MOTIONS,
@@ -121,6 +154,14 @@ export interface SocialCommandOutcome {
   readonly serverWrite?: PrivateServerRecord;
   /** The owner whose private server this operation found closed and emptied: the store records the observation (best effort). */
   readonly closedServerOf?: SocialUserId;
+  /**
+   * ORDINARY CHANGES TOLD AS THEMSELVES, each as its own event, logged BEFORE the operation's own (LFF, social-lff.ts): the post a
+   * fill closed, told to the others with a close's op (never an accept's: that would say it filled); and an LFF request a block
+   * cancelled, told to the other side as a withdrawal or a deletion (silence was itself the tell, SEC-M2). The block floor applies
+   * to them as to `audience`; the counterparts a block's own notices are addressed to are in `floorExempt`. A store must log
+   * them with the operation, in the same commit (the PostgreSQL store: B2b).
+   */
+  readonly extraEvents?: readonly { readonly op: SocialOperationId; readonly audience: readonly SocialUserId[] }[];
 }
 
 /** The operation's inputs: the path's ids in order (e.g. a request id, a party id then a member id) and the JSON body. */
@@ -165,6 +206,23 @@ function hasControlCharacter(value: string): boolean {
 
 const controlRefusal = (field: string) => `${field} must not contain a control character or a line break`;
 
+/** A C1 control (U+0080-U+009F): refused where a migration's CHECK refuses [[:cntrl:]], so memory and PostgreSQL agree (world.join). */
+const hasC1Control = (value: string): boolean => /[\u0080-\u009f]/u.test(value);
+
+/** A UTF-16 surrogate that is not half of a pair (what a JSON escape of a lone high or low surrogate decodes to). Judged by code unit. */
+function hasLoneSurrogate(value: string): boolean {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code >= 0xdc00 && code <= 0xdfff) return true;
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = i + 1 < value.length ? value.charCodeAt(i + 1) : 0;
+      if (next < 0xdc00 || next > 0xdfff) return true;
+      i += 1;
+    }
+  }
+  return false;
+}
+
 /**
  * TEXT A PLAYER WRITES FOR OTHER PLAYERS TO READ: str(), and no control character anywhere in it (CORE, 10-07, the log-injection
  * finding). A party name, a private server's name, an activity detail, a location label and a message body each reach other
@@ -206,6 +264,148 @@ function bool(body: Readonly<Record<string, unknown>>, field: string): Check<boo
   if (value === undefined || value === null) return { ok: true, value: null };
   if (typeof value !== 'boolean') return { ok: false, message: `${field} must be true or false` };
   return { ok: true, value };
+}
+
+/* ------------------------------------------------------------------------------------------- LFF inputs (social-lff.ts) */
+
+/** A field name safe to repeat in a refusal: a client-sent key is echoed only when it is a plain identifier. */
+const PLAIN_FIELD = /^[A-Za-z][A-Za-z0-9_]{0,39}$/;
+
+/**
+ * UNKNOWN FIELDS ARE REFUSED (the LFF contract, rule 7): every key of the body, and of the query, must be one the operation takes.
+ * Validation never depends on whether the post exists, so a refusal here says nothing about it.
+ */
+function onlyFields(input: SocialCommandInput, bodyFields: readonly string[], queryFields: readonly string[] = []): Check<true> {
+  const unknown =
+    Object.keys(input.body ?? {}).find((k) => !bodyFields.includes(k)) ?? Object.keys(input.query ?? {}).find((k) => !queryFields.includes(k));
+  if (unknown === undefined) return { ok: true, value: true };
+  return { ok: false, message: PLAIN_FIELD.test(unknown) ? `${unknown} is not a field of this operation` : 'a field is not one this operation takes' };
+}
+
+/**
+ * TEXT A PLAYER WRITES ON LFF FOR OTHER PLAYERS TO READ: displayText's rule exactly -- a NUL refused in str()'s words, any other
+ * control character or line break in controlRefusal's, judged on the value AS SENT -- plus the C1 controls (U+0080-U+009F), as a
+ * private server's name refuses them (world.join), so that memory and a PostgreSQL CHECK on [[:cntrl:]] agree. Lengths are counted
+ * in CODE POINTS after the trim (PostgreSQL's char_length, as private-server-lifecycle.ts cleanServerName): an emoji is one.
+ */
+function lffText(value: unknown, field: string, min: 0 | 1, max: number, required: boolean): Check<string | null> {
+  if (value === undefined || value === null) return required ? { ok: false, message: `${field} is required` } : { ok: true, value: null };
+  if (typeof value !== 'string') return { ok: false, message: `${field} must be a string` };
+  if (value.includes('\u0000')) return { ok: false, message: `${field} must not contain a NUL character` };
+  if (hasControlCharacter(value) || hasC1Control(value)) return { ok: false, message: controlRefusal(field) };
+  // an unpaired surrogate is no text at all: the pg driver would store U+FFFD in its place, so memory and PostgreSQL would disagree
+  if (hasLoneSurrogate(value)) return { ok: false, message: `${field} is not valid text` };
+  const trimmed = value.trim();
+  const length = Array.from(trimmed).length;
+  if (length < min) return { ok: false, message: `${field} must not be empty` };
+  if (length > max) return { ok: false, message: `${field} is longer than ${max} characters` };
+  return { ok: true, value: trimmed };
+}
+
+/** The skills a post asks for: 0-8 items, each 1-32 code points of player text. */
+function lffSkills(value: unknown): Check<string[] | null> {
+  if (value === undefined || value === null) return { ok: true, value: null };
+  if (!Array.isArray(value)) return { ok: false, message: 'skills must be a list' };
+  if (value.length > LFF_SKILLS_MAX) return { ok: false, message: `skills has more than ${LFF_SKILLS_MAX} items` };
+  const skills: string[] = [];
+  for (let i = 0; i < value.length; i += 1) {
+    const item = lffText(value[i], `skills[${i}]`, 1, LFF_SKILL_MAX, true);
+    if (!item.ok) return item;
+    skills.push(item.value as string);
+  }
+  return { ok: true, value: skills };
+}
+
+function lffSlots(value: unknown, required: boolean): Check<number | null> {
+  if (value === undefined || value === null) return required ? { ok: false, message: 'openSlots is required' } : { ok: true, value: null };
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < LFF_SLOTS_MIN || value > LFF_SLOTS_MAX) {
+    return { ok: false, message: `openSlots must be a whole number from ${LFF_SLOTS_MIN} to ${LFF_SLOTS_MAX}` };
+  }
+  return { ok: true, value };
+}
+
+const LFF_POST_FIELDS = ['category', 'title', 'description', 'projectLabel', 'skills', 'openSlots'] as const;
+
+/** A post's fields: to create, category, title and openSlots are required (the rest may be left out); to edit, any of them. */
+function readLffPost(body: Readonly<Record<string, unknown>>, partial: boolean): Check<LffPostPatch> {
+  const category = oneOf(body, 'category', LFF_CATEGORIES, !partial);
+  if (!category.ok) return category;
+  const title = lffText(body.title, 'title', 1, LFF_TITLE_MAX, !partial);
+  if (!title.ok) return title;
+  const description = lffText(body.description, 'description', 0, LFF_DESCRIPTION_MAX, false);
+  if (!description.ok) return description;
+  const projectLabel = lffText(body.projectLabel, 'projectLabel', 0, LFF_PROJECT_LABEL_MAX, false);
+  if (!projectLabel.ok) return projectLabel;
+  const skills = lffSkills(body.skills);
+  if (!skills.ok) return skills;
+  const openSlots = lffSlots(body.openSlots, !partial);
+  if (!openSlots.ok) return openSlots;
+  const patch: { -readonly [K in keyof LffPostFields]?: LffPostFields[K] } = {};
+  if (category.value !== null) patch.category = category.value;
+  if (title.value !== null) patch.title = title.value;
+  if (description.value !== null) patch.description = description.value;
+  if (projectLabel.value !== null) patch.projectLabel = projectLabel.value;
+  if (skills.value !== null) patch.skills = skills.value;
+  if (openSlots.value !== null) patch.openSlots = openSlots.value;
+  return { ok: true, value: patch };
+}
+
+const LFF_FEED_FIELDS = ['category', 'projectLabel', 'skill', 'hasOpenSlots', 'mine', 'cursor', 'limit'] as const;
+
+/** A yes/no filter: a JSON boolean in a body, or 1 / 0 / true / false in a query string. Absent is no. */
+function lffFlag(value: unknown, field: string): Check<boolean> {
+  if (value === undefined || value === null) return { ok: true, value: false };
+  if (value === true || value === '1' || value === 'true') return { ok: true, value: true };
+  if (value === false || value === '0' || value === 'false') return { ok: true, value: false };
+  return { ok: false, message: `${field} must be true or false` };
+}
+
+/** The feed's filters, from the query (a GET) or the body. An empty query value is no filter. */
+function readLffFeedFilter(input: SocialCommandInput): Check<LffFeedFilter> {
+  const known = onlyFields(input, LFF_FEED_FIELDS, LFF_FEED_FIELDS);
+  if (!known.ok) return known;
+  const raw: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries({ ...(input.query ?? {}), ...(input.body ?? {}) })) if (value !== '') raw[key] = value;
+  const category = oneOf(raw, 'category', LFF_CATEGORIES, false);
+  if (!category.ok) return category;
+  const projectLabel = lffText(raw.projectLabel, 'projectLabel', 1, LFF_PROJECT_LABEL_MAX, false);
+  if (!projectLabel.ok) return projectLabel;
+  const skill = lffText(raw.skill, 'skill', 1, LFF_SKILL_MAX, false);
+  if (!skill.ok) return skill;
+  const hasOpenSlots = lffFlag(raw.hasOpenSlots, 'hasOpenSlots');
+  if (!hasOpenSlots.ok) return hasOpenSlots;
+  const mine = lffFlag(raw.mine, 'mine');
+  if (!mine.ok) return mine;
+  const rawCursor = raw.cursor;
+  let cursor: LffFeedCursor | null = null;
+  if (rawCursor !== undefined && rawCursor !== null) {
+    cursor = typeof rawCursor === 'string' ? parseLffCursor(rawCursor) : null;
+    if (cursor === null) return { ok: false, message: 'cursor is not one this feed gave' };
+  }
+  const rawLimit = raw.limit;
+  let limit = LFF_FEED_PAGE_DEFAULT;
+  if (rawLimit !== undefined && rawLimit !== null) {
+    const n = typeof rawLimit === 'number' ? rawLimit : typeof rawLimit === 'string' && /^\d{1,3}$/.test(rawLimit) ? Number(rawLimit) : Number.NaN;
+    if (!Number.isInteger(n) || n < 1 || n > LFF_FEED_PAGE_MAX) return { ok: false, message: `limit must be a whole number from 1 to ${LFF_FEED_PAGE_MAX}` };
+    limit = n;
+  }
+  return {
+    ok: true,
+    value: { category: category.value, projectLabel: projectLabel.value, skill: skill.value, hasOpenSlots: hasOpenSlots.value, mine: mine.value, cursor, limit },
+  };
+}
+
+/**
+ * An LFF change as an outcome: the next state, the actor's answer, exactly the people it concerns, and any ordinary change it also
+ * tells as itself (a fill's close) -- then the block floor, for all of them.
+ */
+function lffChanged(change: LffChange, data: unknown): RelayResult<SocialCommandOutcome> {
+  const notices = (change.notices ?? []).filter((n) => n.audience.length > 0).map((n) => ({ op: n.op, audience: [...new Set(n.audience)] }));
+  return { ok: true, value: { state: change.state, data, audience: [...new Set(change.told)], ...(notices.length === 0 ? {} : { extraEvents: notices }) } };
+}
+
+function lffResult(result: RelayResult<LffChange>, data: unknown): RelayResult<SocialCommandOutcome> {
+  return result.ok ? lffChanged(result.value, data) : result;
 }
 
 function unchanged(state: SocialState, data: unknown): RelayResult<SocialCommandOutcome> {
@@ -351,11 +551,14 @@ export function applySocialOperation(
   servers: PrivateServerGate | null = null,
 ): RelayResult<SocialCommandOutcome> {
   const outcome = applyOne(reconcileBlockedParties(state), op, actorId, input, nowIso, world, servers);
-  if (!outcome.ok || outcome.value.audience.length === 0) return outcome;
+  if (!outcome.ok || (outcome.value.audience.length === 0 && (outcome.value.extraEvents ?? []).length === 0)) return outcome;
   const after = outcome.value.state;
   const exempt = new Set(outcome.value.floorExempt ?? []);
-  const audience = outcome.value.audience.filter((id) => id === actorId || exempt.has(id) || !blockedEitherWay(after, actorId, id));
-  return { ok: true, value: { ...outcome.value, audience } };
+  const admits = (id: SocialUserId) => id === actorId || exempt.has(id) || !blockedEitherWay(after, actorId, id);
+  const audience = outcome.value.audience.filter(admits);
+  if (outcome.value.extraEvents === undefined) return { ok: true, value: { ...outcome.value, audience } };
+  const extraEvents = outcome.value.extraEvents.map((e) => ({ op: e.op, audience: e.audience.filter(admits) })).filter((e) => e.audience.length > 0);
+  return { ok: true, value: { ...outcome.value, audience, extraEvents } };
 }
 
 function applyOne(
@@ -527,15 +730,20 @@ function applyOne(
         if (!cleared.ok) return cleared;
         outcome = { ok: true, value: { ...blocked.value, state: cleared.value, world: removeFromPrivateServer(world, removedId, Date.parse(nowIso)) } };
       }
+      // LFF REQUESTS THE BLOCK CANCELLED are told to the other side as the ordinary change each now reads as -- to an owner a
+      // withdrawal, to a requester the post's deletion (social-lff.ts lffBlockNotices; SEC-M2: silence was itself the tell) --
+      // each past the block floor for exactly its one addressee, and logged before the block's own event.
+      const notices = lffBlockNotices(state, outcome.value.state, actorId);
+      const withLffNotices = (value: SocialCommandOutcome): RelayResult<SocialCommandOutcome> =>
+        notices.length === 0
+          ? { ok: true, value }
+          : { ok: true, value: { ...value, extraEvents: notices, floorExempt: [...(value.floorExempt ?? []), ...notices.flatMap((n) => n.audience)] } };
       // TOLD AS THE ORDINARY CHANGE, NEVER AS A BLOCK: the leader removed a member, the blocker left, or a friendship ended.
       if (shared !== undefined) {
-        return {
-          ok: true,
-          value: { ...outcome.value, eventOp: shared.leaderId === actorId ? 'parties.remove_member' : 'parties.leave', floorExempt: [targetId] },
-        };
+        return withLffNotices({ ...outcome.value, eventOp: shared.leaderId === actorId ? 'parties.remove_member' : 'parties.leave', floorExempt: [targetId] });
       }
-      if (endsFriendship) return { ok: true, value: { ...outcome.value, eventOp: 'friends.remove', floorExempt: [targetId] } };
-      return outcome;
+      if (endsFriendship) return withLffNotices({ ...outcome.value, eventOp: 'friends.remove', floorExempt: [targetId] });
+      return withLffNotices(outcome.value);
     }
     case 'blocks.remove':
       return changed(unblockUser(state, actorId, id0), null, [actorId]);
@@ -675,7 +883,7 @@ function applyOne(
       // placeName is ignored (the server names a public world from that id).
       // ... and no C1 control either (U+0080-U+009F): migration 037 stores the name, and its CHECK refuses every control character, so
       // the rule is the same in memory and on PostgreSQL (the private-server review's m2, 10-11)
-      if (kind.value === 'PRIVATE' && (hasControlCharacter(text('name')) || /[\u0080-\u009f]/u.test(text('name')))) return invalid(controlRefusal('name'));
+      if (kind.value === 'PRIVATE' && (hasControlCharacter(text('name')) || hasC1Control(text('name')))) return invalid(controlRefusal('name'));
       const target: WorldJoinTarget =
         kind.value === 'PUBLIC' ? { kind: 'PUBLIC', place: text('place') || 'golden_arrival', placeName: text('placeName') || 'Golden Arrival' }
         : kind.value === 'PRIVATE' ? { kind: 'PRIVATE', name: text('name') }
@@ -796,6 +1004,82 @@ function applyOne(
     case 'party_invites.decline': {
       const invite = state.partyInvites.find((i) => i.inviteId === id0);
       return changed(declinePartyInvite(state, actorId, id0), null, invite ? [actorId, invite.fromUserId] : [actorId]);
+    }
+
+    /* ---- LFF, the Looking For Feed (social-lff.ts): its own bounded reads, never the snapshot; each write told only to whom it
+     *      concerns (create and edit: the owner; close and delete: the owner and live requesters; a request: requester and owner) */
+    case 'lff.feed.list': {
+      const filter = readLffFeedFilter(input);
+      if (!filter.ok) return invalid(filter.message);
+      return unchanged(state, lffFeedFor(state, actorId, filter.value, nowMs, row));
+    }
+    case 'lff.post.get': {
+      const known = onlyFields(input, []);
+      if (!known.ok) return invalid(known.message);
+      const view = lffPostFor(state, actorId, id0, nowMs, row);
+      return view === null ? { ok: false, error: lffNotFound() } : unchanged(state, view);
+    }
+    case 'lff.requests.mine': {
+      const known = onlyFields(input, []);
+      if (!known.ok) return invalid(known.message);
+      return unchanged(state, lffRequestsMineFor(state, actorId, nowMs, row));
+    }
+    case 'lff.requests.forPost': {
+      const known = onlyFields(input, []);
+      if (!known.ok) return invalid(known.message);
+      const view = lffRequestsForPost(state, actorId, id0, row);
+      return view.ok ? unchanged(state, view.value) : view;
+    }
+    case 'lff.post.create': {
+      const known = onlyFields(input, LFF_POST_FIELDS);
+      if (!known.ok) return invalid(known.message);
+      const read = readLffPost(body, false);
+      if (!read.ok) return invalid(read.message);
+      const p = read.value;
+      const fields: LffPostFields = {
+        category: p.category!,
+        title: p.title!,
+        description: p.description ?? '',
+        projectLabel: p.projectLabel ?? '',
+        skills: p.skills ?? [],
+        openSlots: p.openSlots!,
+      };
+      const created = createLffPost(state, actorId, fields, nowMs);
+      return created.ok ? lffChanged(created.value, { postId: created.value.postId }) : created;
+    }
+    case 'lff.post.edit': {
+      const known = onlyFields(input, LFF_POST_FIELDS);
+      if (!known.ok) return invalid(known.message);
+      const read = readLffPost(body, true);
+      if (!read.ok) return invalid(read.message);
+      if (Object.keys(read.value).length === 0) return invalid('nothing to change: send at least one field');
+      return lffResult(editLffPost(state, actorId, id0, read.value, nowMs), null);
+    }
+    case 'lff.post.close': {
+      const known = onlyFields(input, []);
+      if (!known.ok) return invalid(known.message);
+      return lffResult(closeLffPost(state, actorId, id0, nowMs), null);
+    }
+    case 'lff.post.delete': {
+      const known = onlyFields(input, []);
+      if (!known.ok) return invalid(known.message);
+      return lffResult(deleteLffPost(state, actorId, id0), null);
+    }
+    case 'lff.request.create': {
+      const known = onlyFields(input, ['message']);
+      if (!known.ok) return invalid(known.message);
+      const message = lffText(body.message, 'message', 0, LFF_MESSAGE_MAX, false);
+      if (!message.ok) return invalid(message.message);
+      const asked = createLffRequest(state, actorId, id0, message.value ?? '', nowMs);
+      return asked.ok ? lffChanged(asked.value, { requestId: asked.value.requestId }) : asked;
+    }
+    case 'lff.request.withdraw':
+    case 'lff.request.accept':
+    case 'lff.request.decline': {
+      const known = onlyFields(input, []);
+      if (!known.ok) return invalid(known.message);
+      const rule = op === 'lff.request.withdraw' ? withdrawLffRequest : op === 'lff.request.accept' ? acceptLffRequest : declineLffRequest;
+      return lffResult(rule(state, actorId, id0, nowMs), null);
     }
     default: {
       const never: never = op;

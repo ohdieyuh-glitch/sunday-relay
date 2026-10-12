@@ -53,6 +53,15 @@ const lastBody = (s: SocialState) => {
 };
 const place = (fields: Record<string, string>) => ({ serverId: 'srv_kai_den', serverKind: 'PUBLIC_WORLD', serverName: 'Den', ...fields });
 
+/** LFF (social-lff.ts): a post by `owner`, made through the dispatcher, for an edit or a request to carry the text. */
+const lffPost = (s: SocialState, owner: string): { state: SocialState; postId: string } => {
+  const o = op(s, owner, 'lff.post.create', { category: 'TEAMS', title: 'Squad', openSlots: 2 });
+  if (!o.ok) throw new Error(`the LFF post was not made: ${o.error.message}`);
+  return { state: o.value.state, postId: (o.value.data as { postId: string }).postId };
+};
+const lastLffPost = (s: SocialState) => s.lffPosts[s.lffPosts.length - 1];
+const lffCreate = (s: SocialState, fields: Record<string, unknown>) => op(s, U.KAI, 'lff.post.create', { category: 'TEAMS', title: 'Squad', openSlots: 1, ...fields });
+
 interface Field {
   readonly name: string;
   /** The operation that carries the field, with `text` in it. */
@@ -101,6 +110,43 @@ const FIELDS: readonly Field[] = [
     name: 'messages.send body',
     send: (s, text) => op(s, U.KAI, 'messages.send', { body: text }, [dmOf(s)]),
     kept: (o) => lastBody(o.state),
+  },
+  // LFF (the Looking For Feed): every text a player writes on a post or a request reaches other players' clients
+  {
+    name: 'lff.post.create title',
+    send: (s, text) => lffCreate(s, { title: text }),
+    kept: (o) => lastLffPost(o.state)?.title,
+  },
+  {
+    name: 'lff.post.create description',
+    send: (s, text) => lffCreate(s, { description: text }),
+    kept: (o) => lastLffPost(o.state)?.description,
+  },
+  {
+    name: 'lff.post.create projectLabel',
+    send: (s, text) => lffCreate(s, { projectLabel: text }),
+    kept: (o) => lastLffPost(o.state)?.projectLabel,
+  },
+  {
+    name: 'lff.post.create skills item',
+    send: (s, text) => lffCreate(s, { skills: ['UE5', text] }),
+    kept: (o) => lastLffPost(o.state)?.skills[1],
+  },
+  {
+    name: 'lff.post.edit title',
+    send: (s, text) => {
+      const p = lffPost(s, U.KAI);
+      return op(p.state, U.KAI, 'lff.post.edit', { title: text }, [p.postId]);
+    },
+    kept: (o) => lastLffPost(o.state)?.title,
+  },
+  {
+    name: 'lff.request.create message',
+    send: (s, text) => {
+      const p = lffPost(s, U.NOVA);
+      return op(p.state, U.KAI, 'lff.request.create', { message: text }, [p.postId]);
+    },
+    kept: (o) => o.state.lffRequests[o.state.lffRequests.length - 1]?.message,
   },
 ];
 

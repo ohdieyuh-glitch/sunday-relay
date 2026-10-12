@@ -19,6 +19,7 @@ import {
   blockedEitherWay,
   hasBlocked,
   hasUser,
+  lffPostById,
   mintId,
   pendingRequestBetween,
   presenceHiddenFrom,
@@ -142,6 +143,10 @@ export function removeFriend(state: SocialState, actorId: SocialUserId, friendId
  * one of the pair to the other (sent between them, either way and whichever of them invited; or to one of them into a party
  * the other is in), and from now on the presence authority shows each to the other as nothing more than a stranger
  * (social-presence.ts). A revoked invite stays revoked: unblocking restores nobody to a party (Second's R16 W7/W8, 10-04).
+ * And it CANCELS every live LFF join request between the pair, either way (one of them asked to join the other's post, pending
+ * or already accepted): to the requester the post then reads exactly as a deleted one, to the owner the request as a withdrawn
+ * one (social-lff.ts), and blocks.add TELLS each of them so, as that ordinary change (social-lff.ts lffBlockNotices) -- nothing
+ * names the block. A cancelled request stays cancelled after an unblock, as a revoked invite does.
  * Party membership is NOT broken here: blocks.add separates a shared party first (F1, social-parties.ts separateForBlock),
  * and social-parties.ts refuses new invites and joins across the wall.
  */
@@ -158,6 +163,11 @@ export function blockUser(state: SocialState, actorId: SocialUserId, targetId: S
     (i.fromUserId === targetId && i.toUserId === actorId) ||
     (i.toUserId === actorId && isMember(i.partyId, targetId)) ||
     (i.toUserId === targetId && isMember(i.partyId, actorId));
+  const atMs = Date.parse(atIso);
+  const lffCrossesTheWall = (r: SocialState['lffRequests'][number]) => {
+    const ownerId = lffPostById(next, r.postId)?.ownerId;
+    return (r.requesterId === actorId && ownerId === targetId) || (r.requesterId === targetId && ownerId === actorId);
+  };
   return ok({
     ...next,
     requests: next.requests.map((r) =>
@@ -167,6 +177,9 @@ export function blockUser(state: SocialState, actorId: SocialUserId, targetId: S
         : r,
     ),
     partyInvites: next.partyInvites.map((i) => (i.status === 'PENDING' && crossesTheWall(i) ? { ...i, status: 'REVOKED' } : i)),
+    lffRequests: next.lffRequests.map((r) =>
+      (r.status === 'PENDING' || r.status === 'ACCEPTED') && lffCrossesTheWall(r) ? { ...r, status: 'CANCELLED', updatedAtMs: Math.max(atMs, r.updatedAtMs) } : r,
+    ),
     blocks: [...next.blocks, { blockerId: actorId, blockedId: targetId, sinceIso: atIso }],
   });
 }
