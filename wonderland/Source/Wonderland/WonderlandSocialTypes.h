@@ -268,3 +268,133 @@ struct FWonderlandSocialSnapshot
 	/** User id -> display name, for chips (mutual friends) without opening a profile. */
 	TMap<FString, FString> NamesById;
 };
+
+// ---- LFF, THE LOOKING FOR FEED (the private-Alpha launch gate, founder 2026-10-12; _qa_handoff/lff/LFF_ALPHA_CONTRACT_r1_20261012.md with
+// its amendment r2/r2.1). Its OWN bounded reads under /lff (relay-bridge/wonderland-social-scope.ts, the lff.* rows), never part of the
+// snapshot above: these mirror src/relay/social/social-lff.ts's views field for field. A post this viewer may not see is ABSENT -- the one
+// "post not found" -- and the client never guesses at one. LFF grants nothing: after an accept, the people connect through the existing
+// ADD FRIEND / MESSAGE / INVITE actions, each with its own checks.
+
+/** One post as one viewer sees it (LffPostView). */
+struct FWonderlandLffPost
+{
+	FString PostId;
+	/** TEAMS, BUILDERS, AI_ENGINEERS, DESIGNERS, COMPETITORS, COLLABORATORS */
+	FString Category;
+	/** The authority's words for the category ("AI engineers"). */
+	FString CategoryLabel;
+	FString Title;
+	/** '' when none. */
+	FString Description;
+	/** A free-text project or activity label, '' when none: never a link to a project, a repository or a server. */
+	FString ProjectLabel;
+	TArray<FString> Skills;
+	/** How many people the owner is looking for (1-20). */
+	int32 OpenSlots = 0;
+	/** Slots still open: the OWNER's view only (a count of acceptances is a roster); -1 for everyone else. */
+	int32 AvailableSlots = -1;
+	/** OPEN, CLOSED, EXPIRED */
+	FString Status;
+	FString CreatedAtIso;
+	FString UpdatedAtIso;
+	FString ExpiresAtIso;
+	int64 Version = 0;
+	/** The author, always: a post is shown only to a viewer who may see its author. */
+	FWonderlandSocialPersonRow Author;
+	bool bViewerIsOwner = false;
+	/** The viewer's own request on the post, if one is still theirs to see. */
+	bool bHasViewerRequest = false;
+	FString ViewerRequestId;
+	/** PENDING, ACCEPTED, DECLINED, NO_LONGER_AVAILABLE */
+	FString ViewerRequestStatus;
+};
+
+/** One post in detail (lff.post.get): the author's card exactly as profile.read would show it, and the accepted list for those it is for. */
+struct FWonderlandLffPostDetail
+{
+	FWonderlandLffPost Post;
+	bool bHasAuthorProfile = false;
+	FWonderlandSocialProfileView AuthorProfile;
+	/** The owner sees every accepted person; an accepted user those of them they may see; everyone else nothing (null on the wire). */
+	bool bHasAccepted = false;
+	TArray<FWonderlandSocialPersonRow> Accepted;
+};
+
+/** One page of the feed, newest first by server time. */
+struct FWonderlandLffFeedPage
+{
+	TArray<FWonderlandLffPost> Posts;
+	/** Pass it back for the next page; empty when this page is the last. */
+	FString NextCursor;
+};
+
+/** What a feed read asks for. The server filters; the client never filters a loaded page (it would miss posts on other pages). */
+struct FWonderlandLffFeedQuery
+{
+	/** One category, or empty for all. */
+	FString Category;
+	/** A substring of the project/activity label (any text: sent percent-encoded), or empty. */
+	FString ProjectLabel;
+	/** One whole skill, case-insensitive (any text: sent percent-encoded), or empty. */
+	FString Skill;
+	/** The viewer's own posts instead, CLOSED and EXPIRED ones included. */
+	bool bMine = false;
+	/** Only posts still OPEN ("has open slots": an open post always has one). The general feed is OPEN-only anyway, so this narrows only
+	 *  the viewer's own posts (social-lff.ts LffFeedFilter.hasOpenSlots; sent as hasOpenSlots=1). */
+	bool bHasOpenSlots = false;
+	/** A cursor the feed gave, or empty for the first page. */
+	FString Cursor;
+	int32 Limit = 50;
+};
+
+/** One of the viewer's own requests (lff.requests.mine). */
+struct FWonderlandLffMyRequest
+{
+	FString RequestId;
+	FString PostId;
+	/** PENDING, ACCEPTED, DECLINED, NO_LONGER_AVAILABLE */
+	FString Status;
+	/** The requester's own note to the owner. */
+	FString Message;
+	FString CreatedAtIso;
+	FString UpdatedAtIso;
+	/** The post as the requester may see it now; false when they may no longer see it. */
+	bool bHasPost = false;
+	FWonderlandLffPost Post;
+};
+
+struct FWonderlandLffMyRequests
+{
+	TArray<FWonderlandLffMyRequest> Requests;
+	/** Older requests were left out of this answer. */
+	bool bTruncated = false;
+};
+
+/** One request to the owner's own post (lff.requests.forPost). */
+struct FWonderlandLffIncomingRequest
+{
+	FString RequestId;
+	/** PENDING or ACCEPTED */
+	FString Status;
+	FString Message;
+	FString CreatedAtIso;
+	FString UpdatedAtIso;
+	FWonderlandSocialPersonRow Requester;
+};
+
+struct FWonderlandLffPostRequests
+{
+	FString PostId;
+	TArray<FWonderlandLffIncomingRequest> Requests;
+};
+
+/** The fields a player writes on a post, as the client sends them. The server validates every one of them again. */
+struct FWonderlandLffPostFields
+{
+	FString Category;
+	FString Title;
+	FString Description;
+	FString ProjectLabel;
+	TArray<FString> Skills;
+	int32 OpenSlots = 1;
+};

@@ -7,6 +7,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Engine/LocalPlayer.h"
 #include "WonderlandBeta.h"
+#include "WonderlandSocialLffView.h"
 #include "WonderlandSocialLive.h"
 #include "RelayDogCharacter.h"
 #include "Components/CapsuleComponent.h"
@@ -28,6 +29,11 @@ void UWonderlandSocialSubsystem::Initialize(FSubsystemCollectionBase& Collection
 {
 	Super::Initialize(Collection);
 	RemoteTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWonderlandSocialSubsystem::TickRemotePlayers), 0.0f);
+	// LFF ASKS WHICHEVER SERVICE IS CURRENT, each time: sign-in and sign-out replace it (Adopt resets the model with it)
+	Lff = MakeShared<FWonderlandLffModel>([WeakSocial = TWeakObjectPtr<UWonderlandSocialSubsystem>(this)]() -> IWonderlandSocialService*
+	{
+		return WeakSocial.IsValid() ? WeakSocial->GetService() : nullptr;
+	});
 	// ONE BRIDGE: social signs in to the same main-line bridge the Julius link uses, resolved by the same rule (the project
 	// setting; the wl.Julius.Bridge.Url override; https, or plain http to this machine only).
 	SignIn = MakeUnique<FWonderlandSocialSignIn>([](FString& OutProblem) -> FString
@@ -60,6 +66,7 @@ void UWonderlandSocialSubsystem::Deinitialize()
 	Voice.Reset();   // before the service: an EOS voice holds the live service's pointer
 	Live = nullptr;
 	Service.Reset();
+	Lff.Reset();     // after the service: no answer can reach it any more
 	SignIn.Reset();   // the session dies with the process (memory only); the bridge lets it expire
 	Super::Deinitialize();
 }
@@ -225,10 +232,23 @@ void UWonderlandSocialSubsystem::Adopt(TUniquePtr<IWonderlandSocialService> NewS
 {
 	RemotePlayers.Clear();   // the other players belonged to the service that is going
 	Service = MoveTemp(NewService);
+	// LFF BELONGED TO THE SERVICE THAT IS GOING too: its feed, its open post, its drafts (one player's never reach the next)
+	if (Lff.IsValid())
+	{
+		Lff->Reset();
+	}
 	if (Service.IsValid())
 	{
 		Service->OnChanged().AddUObject(this, &UWonderlandSocialSubsystem::HandleServiceChanged);
 		Service->OnAnswered().AddUObject(this, &UWonderlandSocialSubsystem::HandleServiceAnswered);
+		// an lff.* event, a block or a reset: the LFF tab reads again (now if it is on screen, else when next shown)
+		Service->OnLffChanged().AddLambda([WeakLff = TWeakPtr<FWonderlandLffModel>(Lff)]()
+		{
+			if (const TSharedPtr<FWonderlandLffModel> Model = WeakLff.Pin())
+			{
+				Model->HandleServerChange();
+			}
+		});
 	}
 	SocialChanged.Broadcast();
 }
@@ -671,7 +691,7 @@ namespace WonderlandSocialCommands
 	/** Open the Social Hub on a tab -- the same path the player's way in will take. */
 	FAutoConsoleCommandWithWorldAndArgs GSocialHub(
 		TEXT("wl.Social.Hub"),
-		TEXT("Open the Social Hub: `wl.Social.Hub [friends|requests|recent]`. In a player session it says Social is not connected."),
+		TEXT("Open the Social Hub: `wl.Social.Hub [friends|requests|recent|messages|party|lff]`. In a player session it says Social is not connected."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			UGameInstance* Instance = World != nullptr ? World->GetGameInstance() : nullptr;

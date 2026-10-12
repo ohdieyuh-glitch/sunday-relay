@@ -5,7 +5,8 @@
 // requests both ways (accept / decline / cancel) and party invitations. RECENT is the people you played with. MESSAGES is
 // the inbox (unread counts, each conversation's history, a reply box). PARTY is the viewer's party (members, leader controls,
 // rules, invites) or, without one, CREATE and friends' parties to join -- beside PARTY VOICE, drawn from the one voice
-// service (WonderlandVoice.h), which says VOICE TRANSPORT PENDING until a provider is chosen.
+// service (WonderlandVoice.h), which says VOICE TRANSPORT PENDING until a provider is chosen. LFF is the Looking For Feed
+// (WonderlandSocialLffView.h): a sixth tab, content only -- the HUD is unchanged (a HUD button stays the founder's decision).
 //
 // Like the profile, it draws views and decides nothing (WonderlandSocialTypes.h). Every row's actions are the ones the
 // social authority allowed for that viewer (FWonderlandSocialActions); every press asks the social service, by the
@@ -18,6 +19,7 @@
 #include "Styling/SlateBrush.h"
 #include "Styling/SlateTypes.h"
 #include "Widgets/SCompoundWidget.h"
+#include "WonderlandSocialLffView.h"
 #include "WonderlandSocialProfilePanel.h"
 #include "WonderlandSocialSignIn.h"
 #include "WonderlandSocialTypes.h"
@@ -39,10 +41,23 @@ namespace WonderlandSocialBlocked
 	TArray<FWonderlandSocialPersonRow> BlockedByViewer(const FWonderlandSocialSnapshot& Snapshot);
 }
 
+/** The hub's own words for a person and for time (defined in WonderlandSocialHubPanel.cpp), shared with the LFF view so both say them alike. */
+namespace WonderlandSocialHubLook
+{
+	FString Initial(const FString& Name);
+	FLinearColor StateDot(const FWonderlandSocialPresence& P);
+	/** "IN GVE · Tower Lane · ICARUS", "OFFLINE · seen 3 h ago", or why it is hidden -- never a guess at a withheld field. */
+	FString PresenceLine(const FWonderlandSocialPresence& P);
+	/** "just now", "12 min ago", "3 h ago", "2 d ago" from an ISO time; empty when it does not parse. */
+	FString Ago(const FString& Iso);
+	/** "expires in 40 min" / "expired" from an ISO time; empty when it does not parse. */
+	FString ExpiresIn(const FString& Iso);
+}
+
 class WONDERLAND_API SWonderlandSocialHubPanel : public SCompoundWidget
 {
 public:
-	enum class ETab : uint8 { Friends, Requests, Recent, Messages, Party };
+	enum class ETab : uint8 { Friends, Requests, Recent, Messages, Party, Lff };
 
 	SLATE_BEGIN_ARGS(SWonderlandSocialHubPanel) : _bConnected(false), _bDevelopmentPreview(true), _InitialTab(ETab::Friends) {}
 		SLATE_ARGUMENT(FWonderlandSocialSnapshot, Snapshot)
@@ -64,6 +79,11 @@ public:
 		/** The player's sign-in, shown when there is no live service: SIGN IN, the GitHub code, CANCEL; SIGN OUT when live. Its
 		 *  buttons go through OnAction as "signin.start" / "signin.open" / "signin.cancel" / "signin.out". */
 		SLATE_ARGUMENT(FWonderlandSignInView, SignIn)
+		/** LFF: the session's Looking For Feed state and drafts (the social subsystem's; it outlives this panel). Null: the tab says LFF is
+		 *  not available here. */
+		SLATE_ARGUMENT(TSharedPtr<FWonderlandLffModel>, Lff)
+		/** LFF's PROFILE: the author's card from the LFF answer, through the existing profile panel. */
+		SLATE_EVENT(FOnWonderlandLffOpenProfileView, OnOpenProfileView)
 	SLATE_END_ARGS()
 
 	SWonderlandSocialHubPanel();
@@ -89,8 +109,13 @@ public:
 	/** The social service's answer to an action this hub asked for, shown at the foot. */
 	void ShowActionResult(const FString& Line);
 	FString GetLastActionLine() const { return LastActionLine; }
-	/** For QA: "tab FRIENDS | friends 6 (4 on) | requests in 1 out 0 | party invites 1 | recent 0 | rows <ids> | action: …". */
+	/** "DEVELOPMENT PREVIEW · …" or the live service's line, as last set. */
+	const FString& GetSourceLine() const { return SourceLine; }
+	/** For QA: "tab FRIENDS | friends 6 (4 on) | requests in 1 out 0 | party invites 1 | recent 0 | rows <ids> | action: …" (on the LFF
+	 *  tab, then "| lff <the model's Describe>": ids and states only). */
 	FString Describe() const;
+	/** QA (wl.Qa.SocialLff): the LFF tab's view as last built, or null when it has not been shown. */
+	TSharedPtr<SWonderlandSocialLffView> QaLffView() const { return LffView; }
 
 	/** F-21 (2026-10-07): a SERVER refresh (SetSnapshot) or a VOICE change (SetVoice) no longer rebuilds the panel at once. It asks for
 	 *  a rebuild, and Slate's next pre-tick runs it: after that frame's input is routed, before its layout and paint. The old rebuild
@@ -120,7 +145,7 @@ private:
 	bool bRebuildPending = false;
 	FDelegateHandle SlatePreTickHandle;
 	/** The rail's tab buttons as last built, by ETab (QA reads where they were painted). */
-	TWeakPtr<SWidget> TabButtonWidgets[5];
+	TWeakPtr<SWidget> TabButtonWidgets[6];
 	/** F-21: the conversation the reply box was last built for (its draft is kept only for the same one). */
 	FString ReplyDraftConversationId;
 	TSharedRef<SWidget> MakeRail();
@@ -130,6 +155,8 @@ private:
 	TSharedRef<SWidget> MakeRecent();
 	TSharedRef<SWidget> MakeMessages();
 	TSharedRef<SWidget> MakeParty();
+	/** LFF: the ONE view, built the first time and kept across rebuilds (its typed text, cursor and focus stay through every refresh). */
+	TSharedRef<SWidget> MakeLff();
 	TSharedRef<SWidget> MakeVoice();
 	TSharedRef<SWidget> MakeMemberRow(const FWonderlandSocialPartyMember& Member);
 	TSharedRef<SWidget> MakeVisiblePartyRow(const FWonderlandSocialParty& Party);
@@ -174,6 +201,9 @@ private:
 	FOnWonderlandVoiceCommand OnVoice;
 	FString LastActionLine;
 	FWonderlandSignInView SignIn;
+	TSharedPtr<FWonderlandLffModel> Lff;
+	FOnWonderlandLffOpenProfileView OnOpenProfileView;
+	TSharedPtr<SWonderlandSocialLffView> LffView;
 
 	TSharedPtr<SBorder> RailHost;
 	TSharedPtr<SBorder> BodyHost;

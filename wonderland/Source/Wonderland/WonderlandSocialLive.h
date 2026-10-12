@@ -34,6 +34,18 @@ public:
 	virtual FString GetLastError() const override { return LastError; }
 	virtual FWonderlandSocialActionResult Request(const FString& OperationId, const FString& SubjectId) override;
 	virtual FWonderlandSocialActionResult SendMessage(const FString& ConversationId, const FString& Body) override;
+	// LFF, THE LOOKING FOR FEED (the lff.* rows): ids only in a path, filters percent-encoded (WonderlandLffFeedPath), bodies as the
+	// routes take them; answers parsed strictly. Logged by operation, id and status -- never a title, a description, a label or a note.
+	virtual void ReadLffFeed(const FWonderlandLffFeedQuery& Query, FWonderlandLffFeedDone Done) override;
+	virtual void ReadLffPost(const FString& PostId, FWonderlandLffPostDone Done) override;
+	virtual void ReadLffPostRequests(const FString& PostId, FWonderlandLffPostRequestsDone Done) override;
+	virtual void ReadLffMyRequests(FWonderlandLffMyRequestsDone Done) override;
+	virtual void CreateLffPost(const FWonderlandLffPostFields& Fields, FWonderlandLffWriteDone Done) override;
+	virtual void EditLffPost(const FString& PostId, const FWonderlandLffPostFields& Fields, FWonderlandLffWriteDone Done) override;
+	virtual void SendLffRequest(const FString& PostId, const FString& Message, FWonderlandLffWriteDone Done) override;
+	virtual void ActOnLff(const FString& OperationId, const FString& SubjectId, FWonderlandLffWriteDone Done) override;
+	virtual void ReportLffPost(const FString& AuthorId, const FString& PostId, FWonderlandLffWriteDone Done) override;
+	virtual void ReadProfile(const FString& UserId, FWonderlandLffProfileDone Done) override;
 
 	/** True once the first snapshot has arrived. Until then the surfaces show an empty, connected view. */
 	bool HasSnapshot() const { return bHasSnapshot; }
@@ -108,6 +120,14 @@ private:
 	/** An action's call, its answer broadcast, and the view read again after it. */
 	FWonderlandSocialActionResult Ask(const FString& OperationId, const FString& SubjectId, const FString& Verb, const FString& Path,
 		const TSharedPtr<FJsonObject>& Body);
+	/** An LFF call: Call's answer as an FWonderlandLffAnswer (a 429's Retry-After included) with the answer's data, logged without content. */
+	void CallLff(const FString& OperationId, const FString& SubjectId, const FString& Verb, const FString& Path, const TSharedPtr<FJsonObject>& Body,
+		TFunction<void(const FWonderlandLffAnswer& Answer, const TSharedPtr<FJsonObject>& Data)> Done);
+	/** A write's call: its answer and, for a create, the new id read from the answer's data (IdField). */
+	void WriteLff(const FString& OperationId, const FString& SubjectId, const FString& Path, const TSharedPtr<FJsonObject>& Body, const TCHAR* IdField,
+		FWonderlandLffWriteDone Done);
+	/** The last answer's Retry-After (a 429's), set by Call just before its Done runs; 0 for every other answer. */
+	int32 LastRetryAfterSeconds = 0;
 	/**
 	 * CAN THE SERVER BE REACHED (Second's review of e48a5b3e, MAJOR for R9/R7: an outage left "LIVE · signed in" over a frozen view). Every
 	 * answer passes here from Call: no connection, status 0 or a 5xx is a TRANSPORT failure; anything the server answered (2xx, 4xx, a 401)

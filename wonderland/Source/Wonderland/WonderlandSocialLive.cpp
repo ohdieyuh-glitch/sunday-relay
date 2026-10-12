@@ -252,10 +252,17 @@ void FWonderlandSocialLiveService::Call(const FString& Verb, const FString& Path
 		const int32 Status = Response.IsValid() ? Response->GetResponseCode() : 0;
 		// EVERY ANSWER COUNTS toward "can the server be reached" (poll, snapshot, world report, actions alike), before its own handling
 		NoteTransport(Status, bConnected && Response.IsValid());
+		LastRetryAfterSeconds = 0;
 		if (!bConnected || !Response.IsValid())
 		{
 			Done(0, nullptr, TEXT("Wonderland social could not be reached"));
 			return;
+		}
+		// A 429 SAYS HOW LONG TO WAIT (Retry-After, whole seconds, as every social 429 sends it): read here, just before Done, for the
+		// LFF surfaces to show (CallLff); every other caller ignores it
+		if (Status == 429)
+		{
+			LastRetryAfterSeconds = FMath::Clamp(FCString::Atoi(*Response->GetHeader(TEXT("Retry-After"))), 0, 24 * 60 * 60);
 		}
 		// THE SESSION IS GONE (expired, revoked, or the bridge restarted: its sessions live in memory). Said ONCE; polling
 		// stops; the owner forgets the token and offers SIGN IN again. Social state itself is durable on the server.
@@ -601,10 +608,27 @@ void FWonderlandSocialLiveService::PollEvents()
 		const int32 Count = Data->TryGetArrayField(TEXT("events"), Events) && Events != nullptr ? Events->Num() : 0;
 		LatestEvent = FMath::Max(LatestEvent, static_cast<int64>(Latest));
 		EventsSeen += Count;
+		// LFF IS NOT IN THE SNAPSHOT (its own bounded reads): an lff.* event -- or a block, which hides posts both ways, or a reset -- tells
+		// the LFF surfaces to read again. The op is all an event says; nothing about a post is in it.
+		bool bLff = bReset;
+		for (int32 Index = 0; !bLff && Events != nullptr && Index < Events->Num(); ++Index)
+		{
+			const TSharedPtr<FJsonObject>* Event = nullptr;
+			FString Op;
+			if ((*Events)[Index].IsValid() && (*Events)[Index]->TryGetObject(Event) && Event != nullptr && (*Event).IsValid()
+				&& (*Event)->TryGetStringField(TEXT("op"), Op))
+			{
+				bLff = Op.StartsWith(TEXT("lff."), ESearchCase::CaseSensitive) || Op.StartsWith(TEXT("blocks."), ESearchCase::CaseSensitive);
+			}
+		}
 		// WHAT CHANGED IS NOT IN THE EVENT: the view is read again, and shows what the authority lets this player see.
 		if (Count > 0 || bReset)
 		{
 			Refresh();
+		}
+		if (bLff)
+		{
+			LffChanged.Broadcast();
 		}
 	});
 }
@@ -623,6 +647,12 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::Ask(const FString& O
 		if (Answer.bOk)
 		{
 			Refresh();
+			// THE VIEWER'S OWN BLOCK (or unblock) changes which LFF posts and requests they see, and its event may be told as an ordinary
+			// friends.remove or parties.leave (never as a block): the LFF surfaces read again
+			if (OperationId.StartsWith(TEXT("blocks."), ESearchCase::CaseSensitive))
+			{
+				LffChanged.Broadcast();
+			}
 		}
 	});
 	FWonderlandSocialActionResult Pending;
@@ -716,6 +746,256 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::SendMessage(const FS
 	}
 	return Ask(TEXT("messages.send"), ConversationId, TEXT("POST"), FString::Printf(TEXT("/conversations/%s/messages"), *ConversationId),
 		WonderlandSocialLiveDetail::Object(TEXT("body"), Body));
+}
+
+// ---- LFF, THE LOOKING FOR FEED: relay-bridge/wonderland-social-scope.ts (the lff.* rows) and social-lff.ts's views.
+
+namespace WonderlandSocialLiveDetail
+{
+	/** Refused here, before anything leaves: the reason a person can read. */
+	FWonderlandLffAnswer LffRefusedHere(const FString& Why)
+	{
+		FWonderlandLffAnswer Answer;
+		Answer.bRefusedHere = true;
+		Answer.Problem = Why;
+		return Answer;
+	}
+
+	/** A post's fields as the routes take them (lff.post.create / lff.post.edit): every field, the server validating each again. */
+	TSharedPtr<FJsonObject> LffPostBody(const FWonderlandLffPostFields& Fields)
+	{
+		TSharedPtr<FJsonObject> Body = MakeShared<FJsonObject>();
+		Body->SetStringField(TEXT("category"), Fields.Category);
+		Body->SetStringField(TEXT("title"), Fields.Title);
+		Body->SetStringField(TEXT("description"), Fields.Description);
+		Body->SetStringField(TEXT("projectLabel"), Fields.ProjectLabel);
+		TArray<TSharedPtr<FJsonValue>> Skills;
+		for (const FString& Skill : Fields.Skills)
+		{
+			Skills.Add(MakeShared<FJsonValueString>(Skill));
+		}
+		Body->SetArrayField(TEXT("skills"), Skills);
+		Body->SetNumberField(TEXT("openSlots"), static_cast<double>(Fields.OpenSlots));
+		return Body;
+	}
+}
+
+void FWonderlandSocialLiveService::CallLff(const FString& OperationId, const FString& SubjectId, const FString& Verb, const FString& Path,
+	const TSharedPtr<FJsonObject>& Body, TFunction<void(const FWonderlandLffAnswer&, const TSharedPtr<FJsonObject>&)> Done)
+{
+	Call(Verb, Path, Body, [this, OperationId, SubjectId, Done](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+	{
+		FWonderlandLffAnswer Answer;
+		Answer.Status = Status;
+		Answer.Problem = Problem;
+		Answer.RetryAfterSeconds = Status == 429 ? FMath::Max(1, LastRetryAfterSeconds) : 0;
+		// THE OPERATION, THE ID AND THE STATUS ONLY: a post's text is the player's, never the log's (the 10-07 log-injection rule). The
+		// server's refusals name fields, never their values (social-commands.ts onlyFields / lffText).
+		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live %s %s: %s (HTTP %d)%s"), *OperationId, SubjectId.IsEmpty() ? TEXT("-") : *SubjectId,
+			Problem.IsEmpty() ? TEXT("ok") : TEXT("refused"), Status, Problem.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Problem));
+		Done(Answer, Data);
+	});
+}
+
+void FWonderlandSocialLiveService::WriteLff(const FString& OperationId, const FString& SubjectId, const FString& Path, const TSharedPtr<FJsonObject>& Body,
+	const TCHAR* IdField, FWonderlandLffWriteDone Done)
+{
+	const FString Field = IdField != nullptr ? FString(IdField) : FString();
+	CallLff(OperationId, SubjectId, TEXT("POST"), Path, Body.IsValid() ? Body : TSharedPtr<FJsonObject>(MakeShared<FJsonObject>()),
+		[Field, Done](const FWonderlandLffAnswer& Answer, const TSharedPtr<FJsonObject>& Data)
+	{
+		FString CreatedId;
+		FWonderlandLffAnswer Out = Answer;
+		if (Out.IsOk() && !Field.IsEmpty() && (!Data.IsValid() || !Data->TryGetStringField(Field, CreatedId) || !WonderlandSocialLiveDetail::SafeId(CreatedId)))
+		{
+			// a create that answered without its new id: not an answer this client can act on (a proxy, never the bridge)
+			Out.Problem = FString::Printf(TEXT("the social server's answer carried no %s"), *Field);
+			CreatedId.Reset();
+		}
+		Done(Out, CreatedId);
+	});
+}
+
+void FWonderlandSocialLiveService::ReadLffFeed(const FWonderlandLffFeedQuery& Query, FWonderlandLffFeedDone Done)
+{
+	FString Path;
+	FString Why;
+	if (!WonderlandLffFeedPath(Query, Path, Why))
+	{
+		Done(WonderlandSocialLiveDetail::LffRefusedHere(Why), FWonderlandLffFeedPage());
+		return;
+	}
+	CallLff(TEXT("lff.feed.list"), Query.bMine ? FString(TEXT("mine")) : Query.Category, TEXT("GET"), Path, nullptr,
+		[Done](const FWonderlandLffAnswer& Answer, const TSharedPtr<FJsonObject>& Data)
+	{
+		FWonderlandLffAnswer Out = Answer;
+		FWonderlandLffFeedPage Page;
+		FString Problem;
+		if (Out.IsOk() && !WonderlandParseLffFeed(Data, Page, Problem))
+		{
+			Out.Problem = FString::Printf(TEXT("the feed was not readable: %s"), *Problem);
+			Page = FWonderlandLffFeedPage();
+			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live lff.feed.list refused: %s"), *Problem);
+		}
+		Done(Out, Page);
+	});
+}
+
+void FWonderlandSocialLiveService::ReadLffPost(const FString& PostId, FWonderlandLffPostDone Done)
+{
+	if (!WonderlandSocialLiveDetail::SafeId(PostId))
+	{
+		Done(WonderlandSocialLiveDetail::LffRefusedHere(TEXT("That is not a valid post")), FWonderlandLffPostDetail());
+		return;
+	}
+	CallLff(TEXT("lff.post.get"), PostId, TEXT("GET"), FString::Printf(TEXT("/lff/posts/%s"), *PostId), nullptr,
+		[Done](const FWonderlandLffAnswer& Answer, const TSharedPtr<FJsonObject>& Data)
+	{
+		FWonderlandLffAnswer Out = Answer;
+		FWonderlandLffPostDetail Detail;
+		FString Problem;
+		if (Out.IsOk() && !WonderlandParseLffPostDetail(Data, Detail, Problem))
+		{
+			Out.Problem = FString::Printf(TEXT("the post was not readable: %s"), *Problem);
+			Detail = FWonderlandLffPostDetail();
+			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live lff.post.get refused: %s"), *Problem);
+		}
+		Done(Out, Detail);
+	});
+}
+
+void FWonderlandSocialLiveService::ReadLffPostRequests(const FString& PostId, FWonderlandLffPostRequestsDone Done)
+{
+	if (!WonderlandSocialLiveDetail::SafeId(PostId))
+	{
+		Done(WonderlandSocialLiveDetail::LffRefusedHere(TEXT("That is not a valid post")), FWonderlandLffPostRequests());
+		return;
+	}
+	CallLff(TEXT("lff.requests.forPost"), PostId, TEXT("GET"), FString::Printf(TEXT("/lff/posts/%s/requests"), *PostId), nullptr,
+		[Done](const FWonderlandLffAnswer& Answer, const TSharedPtr<FJsonObject>& Data)
+	{
+		FWonderlandLffAnswer Out = Answer;
+		FWonderlandLffPostRequests Inbox;
+		FString Problem;
+		if (Out.IsOk() && !WonderlandParseLffPostRequests(Data, Inbox, Problem))
+		{
+			Out.Problem = FString::Printf(TEXT("the post's requests were not readable: %s"), *Problem);
+			Inbox = FWonderlandLffPostRequests();
+			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live lff.requests.forPost refused: %s"), *Problem);
+		}
+		Done(Out, Inbox);
+	});
+}
+
+void FWonderlandSocialLiveService::ReadLffMyRequests(FWonderlandLffMyRequestsDone Done)
+{
+	CallLff(TEXT("lff.requests.mine"), FString(), TEXT("GET"), TEXT("/lff/requests"), nullptr,
+		[Done](const FWonderlandLffAnswer& Answer, const TSharedPtr<FJsonObject>& Data)
+	{
+		FWonderlandLffAnswer Out = Answer;
+		FWonderlandLffMyRequests Mine;
+		FString Problem;
+		if (Out.IsOk() && !WonderlandParseLffMyRequests(Data, Mine, Problem))
+		{
+			Out.Problem = FString::Printf(TEXT("your requests were not readable: %s"), *Problem);
+			Mine = FWonderlandLffMyRequests();
+			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live lff.requests.mine refused: %s"), *Problem);
+		}
+		Done(Out, Mine);
+	});
+}
+
+void FWonderlandSocialLiveService::CreateLffPost(const FWonderlandLffPostFields& Fields, FWonderlandLffWriteDone Done)
+{
+	WriteLff(TEXT("lff.post.create"), FString(), TEXT("/lff/posts"), WonderlandSocialLiveDetail::LffPostBody(Fields), TEXT("postId"), MoveTemp(Done));
+}
+
+void FWonderlandSocialLiveService::EditLffPost(const FString& PostId, const FWonderlandLffPostFields& Fields, FWonderlandLffWriteDone Done)
+{
+	if (!WonderlandSocialLiveDetail::SafeId(PostId))
+	{
+		Done(WonderlandSocialLiveDetail::LffRefusedHere(TEXT("That is not a valid post")), FString());
+		return;
+	}
+	WriteLff(TEXT("lff.post.edit"), PostId, FString::Printf(TEXT("/lff/posts/%s/edit"), *PostId), WonderlandSocialLiveDetail::LffPostBody(Fields), nullptr, MoveTemp(Done));
+}
+
+void FWonderlandSocialLiveService::SendLffRequest(const FString& PostId, const FString& Message, FWonderlandLffWriteDone Done)
+{
+	if (!WonderlandSocialLiveDetail::SafeId(PostId))
+	{
+		Done(WonderlandSocialLiveDetail::LffRefusedHere(TEXT("That is not a valid post")), FString());
+		return;
+	}
+	// THE NOTE IS OPTIONAL: no note, no field (the routes take `message` or nothing)
+	TSharedPtr<FJsonObject> Body = MakeShared<FJsonObject>();
+	if (!Message.IsEmpty())
+	{
+		Body->SetStringField(TEXT("message"), Message);
+	}
+	WriteLff(TEXT("lff.request.create"), PostId, FString::Printf(TEXT("/lff/posts/%s/requests"), *PostId), Body, TEXT("requestId"), MoveTemp(Done));
+}
+
+void FWonderlandSocialLiveService::ActOnLff(const FString& OperationId, const FString& SubjectId, FWonderlandLffWriteDone Done)
+{
+	using namespace WonderlandSocialLiveDetail;
+	if (!SafeId(SubjectId))
+	{
+		Done(LffRefusedHere(TEXT("That is not a valid id")), FString());
+		return;
+	}
+	// THE TABLE, op by op: a post's id for close / delete, a request's for withdraw / accept / decline; an empty body (the routes refuse
+	// any field these take none of)
+	FString Path;
+	if (OperationId == TEXT("lff.post.close")) Path = FString::Printf(TEXT("/lff/posts/%s/close"), *SubjectId);
+	else if (OperationId == TEXT("lff.post.delete")) Path = FString::Printf(TEXT("/lff/posts/%s/delete"), *SubjectId);
+	else if (OperationId == TEXT("lff.request.withdraw")) Path = FString::Printf(TEXT("/lff/requests/%s/withdraw"), *SubjectId);
+	else if (OperationId == TEXT("lff.request.accept")) Path = FString::Printf(TEXT("/lff/requests/%s/accept"), *SubjectId);
+	else if (OperationId == TEXT("lff.request.decline")) Path = FString::Printf(TEXT("/lff/requests/%s/decline"), *SubjectId);
+	if (Path.IsEmpty())
+	{
+		Done(LffRefusedHere(FString::Printf(TEXT("%s is not a Looking For Feed action this client knows"), *OperationId)), FString());
+		return;
+	}
+	WriteLff(OperationId, SubjectId, Path, MakeShared<FJsonObject>(), nullptr, MoveTemp(Done));
+}
+
+void FWonderlandSocialLiveService::ReportLffPost(const FString& AuthorId, const FString& PostId, FWonderlandLffWriteDone Done)
+{
+	using namespace WonderlandSocialLiveDetail;
+	if (!SafeId(AuthorId) || !SafeId(PostId))
+	{
+		Done(LffRefusedHere(TEXT("That is not a valid post")), FString());
+		return;
+	}
+	// THE EXISTING REPORT FLOW (reports.file), the post as its subject: referenced by id, never copied (social-contracts.ts)
+	TSharedPtr<FJsonObject> Body = Object(TEXT("reportedId"), AuthorId, TEXT("reason"), TEXT("OTHER"));
+	Body->SetStringField(TEXT("subjectRef"), PostId);
+	WriteLff(TEXT("reports.file"), PostId, TEXT("/reports"), Body, nullptr, MoveTemp(Done));
+}
+
+void FWonderlandSocialLiveService::ReadProfile(const FString& UserId, FWonderlandLffProfileDone Done)
+{
+	if (!WonderlandSocialLiveDetail::SafeId(UserId))
+	{
+		Done(WonderlandSocialLiveDetail::LffRefusedHere(TEXT("That is not a valid player")), FWonderlandSocialProfileView());
+		return;
+	}
+	// THE EXISTING profile.read (scope.ts): the authority's card for this viewer, or its not-found for a person they may not see
+	CallLff(TEXT("profile.read"), UserId, TEXT("GET"), FString::Printf(TEXT("/profiles/%s"), *UserId), nullptr,
+		[Done](const FWonderlandLffAnswer& Answer, const TSharedPtr<FJsonObject>& Data)
+	{
+		FWonderlandLffAnswer Out = Answer;
+		FWonderlandSocialProfileView View;
+		FString Problem;
+		if (Out.IsOk() && !WonderlandParseSocialProfileView(Data, View, Problem))
+		{
+			Out.Problem = TEXT("the profile was not readable");
+			View = FWonderlandSocialProfileView();
+			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live profile.read refused: the answer is not a profile this client reads"));
+		}
+		Done(Out, View);
+	});
 }
 
 void FWonderlandSocialLiveService::ReportPresence(bool bConnected)

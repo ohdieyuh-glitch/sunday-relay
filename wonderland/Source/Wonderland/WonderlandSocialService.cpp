@@ -302,6 +302,453 @@ namespace WonderlandSocialJson
 		Out.PartyMemberCount = Party.IsValid() && Party->TryGetNumberField(TEXT("memberCount"), Count) ? static_cast<int32>(Count) : -1;
 		return true;
 	}
+
+	// ---- LFF (social-lff.ts's views). Strict, as the snapshot's parse is: a required field missing or outside its vocabulary refuses the
+	// whole answer. A field the contract allows to be null (availableSlots, viewerRequest, authorProfile, accepted, post, nextCursor) reads
+	// as absent; any other type there is refused, never guessed at.
+
+	/** A whole number (JSON has only doubles): false when absent, not a number, or not whole. */
+	bool Whole(const TSharedPtr<FJsonObject>& J, const TCHAR* Field, int64& Out)
+	{
+		double Value = 0.0;
+		if (!J.IsValid() || !J->TryGetNumberField(Field, Value) || !FMath::IsFinite(Value) || Value != FMath::FloorToDouble(Value))
+		{
+			return false;
+		}
+		Out = static_cast<int64>(Value);
+		return true;
+	}
+
+	/** True when the field is there and is neither null nor an object: a nullable object the client must not guess at. */
+	bool NeitherObjectNorNull(const TSharedPtr<FJsonObject>& J, const TCHAR* Field)
+	{
+		return J.IsValid() && J->HasField(Field) && !J->HasTypedField<EJson::Null>(Field) && !J->HasTypedField<EJson::Object>(Field);
+	}
+
+	bool IsPostStatus(const FString& S) { return S == TEXT("OPEN") || S == TEXT("CLOSED") || S == TEXT("EXPIRED"); }
+
+	/**
+	 * AN LFF ID AS THE AUTHORITY MINTS IT (lffp_<n>, lffr_<n>): 1-80 ASCII letters, digits, '_' or '-'. Anything else refuses the answer
+	 * (the security review's m3): an id is written into a refusal that may reach a Warning line, so a line break in one could forge a log
+	 * line, and an id that is not one is not a view this client knows.
+	 */
+	bool IsLffId(const FString& Id)
+	{
+		if (Id.IsEmpty() || Id.Len() > 80)
+		{
+			return false;
+		}
+		for (const TCHAR Character : Id)
+		{
+			const bool bAscii = (Character >= TEXT('A') && Character <= TEXT('Z')) || (Character >= TEXT('a') && Character <= TEXT('z'))
+				|| (Character >= TEXT('0') && Character <= TEXT('9')) || Character == TEXT('_') || Character == TEXT('-');
+			if (!bAscii)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** What the REQUESTER is shown of their own request (LFF_REQUESTER_STATUSES). */
+	bool IsRequesterStatus(const FString& S)
+	{
+		return S == TEXT("PENDING") || S == TEXT("ACCEPTED") || S == TEXT("DECLINED") || S == TEXT("NO_LONGER_AVAILABLE");
+	}
+
+	bool LffPost(const TSharedPtr<FJsonObject>& J, FWonderlandLffPost& Out, FString& Problem)
+	{
+		if (!J.IsValid())
+		{
+			Problem = TEXT("an LFF post is missing");
+			return false;
+		}
+		FWonderlandLffPost Post;
+		Post.PostId = Str(J, TEXT("postId"));
+		Post.Category = Str(J, TEXT("category"));
+		Post.CategoryLabel = Str(J, TEXT("categoryLabel"));
+		Post.Title = Str(J, TEXT("title"));
+		Post.Description = Str(J, TEXT("description"));
+		Post.ProjectLabel = Str(J, TEXT("projectLabel"));
+		Post.Status = Str(J, TEXT("status"));
+		Post.CreatedAtIso = Str(J, TEXT("createdAtIso"));
+		Post.UpdatedAtIso = Str(J, TEXT("updatedAtIso"));
+		Post.ExpiresAtIso = Str(J, TEXT("expiresAtIso"));
+		Post.bViewerIsOwner = Bool(J, TEXT("viewerIsOwner"));
+		if (!IsLffId(Post.PostId) || Post.Title.IsEmpty())
+		{
+			Problem = TEXT("an LFF post has no valid id or no title");
+			return false;
+		}
+		// ids only in a problem, never a title (the 10-07 log rule: a problem may reach the log)
+		if (!WonderlandLffIsCategory(Post.Category) || !IsPostStatus(Post.Status))
+		{
+			Problem = FString::Printf(TEXT("LFF post %s has an unknown category or status"), *Post.PostId);
+			return false;
+		}
+		if (Post.CategoryLabel.IsEmpty())
+		{
+			Post.CategoryLabel = WonderlandLffCategoryLabel(Post.Category);
+		}
+		int64 Slots = 0;
+		if (!Whole(J, TEXT("openSlots"), Slots) || Slots < 1 || Slots > 20)
+		{
+			Problem = FString::Printf(TEXT("LFF post %s does not look for 1 to 20 people"), *Post.PostId);
+			return false;
+		}
+		Post.OpenSlots = static_cast<int32>(Slots);
+		// THE OWNER'S COUNT ONLY: null for everyone else (a count of acceptances is a roster), read as -1
+		int64 Available = -1;
+		if (J->HasField(TEXT("availableSlots")) && !J->HasTypedField<EJson::Null>(TEXT("availableSlots"))
+			&& (!Whole(J, TEXT("availableSlots"), Available) || Available < 0 || Available > Slots))
+		{
+			Problem = FString::Printf(TEXT("LFF post %s has an unreadable slot count"), *Post.PostId);
+			return false;
+		}
+		Post.AvailableSlots = static_cast<int32>(Available);
+		int64 Version = 0;
+		Post.Version = Whole(J, TEXT("version"), Version) ? Version : 0;
+		const TArray<TSharedPtr<FJsonValue>>* Skills = Arr(J, TEXT("skills"));
+		if (Skills == nullptr)
+		{
+			Problem = FString::Printf(TEXT("LFF post %s has no skills list"), *Post.PostId);
+			return false;
+		}
+		for (const TSharedPtr<FJsonValue>& V : *Skills)
+		{
+			// a STRING, not a number read as one (FJsonValueNumber answers TryGetString too)
+			FString Skill;
+			if (!V.IsValid() || V->Type != EJson::String || !V->TryGetString(Skill) || Skill.IsEmpty())
+			{
+				Problem = FString::Printf(TEXT("LFF post %s has a skill that is not text"), *Post.PostId);
+				return false;
+			}
+			Post.Skills.Add(MoveTemp(Skill));
+		}
+		if (!PersonRow(Obj(J, TEXT("author")), Post.Author, Problem))
+		{
+			return false;
+		}
+		if (Post.Author.UserId.IsEmpty())
+		{
+			Problem = FString::Printf(TEXT("LFF post %s has no author"), *Post.PostId);
+			return false;
+		}
+		// THE VIEWER'S OWN REQUEST, or none (null); anything else is not a view this client knows
+		if (const TSharedPtr<FJsonObject> Mine = Obj(J, TEXT("viewerRequest")))
+		{
+			Post.bHasViewerRequest = true;
+			Post.ViewerRequestId = Str(Mine, TEXT("requestId"));
+			Post.ViewerRequestStatus = Str(Mine, TEXT("status"));
+			if (!IsLffId(Post.ViewerRequestId) || !IsRequesterStatus(Post.ViewerRequestStatus))
+			{
+				Problem = FString::Printf(TEXT("LFF post %s carries an unreadable request of the viewer's"), *Post.PostId);
+				return false;
+			}
+		}
+		else if (NeitherObjectNorNull(J, TEXT("viewerRequest")))
+		{
+			Problem = FString::Printf(TEXT("LFF post %s carries an unreadable request of the viewer's"), *Post.PostId);
+			return false;
+		}
+		Out = MoveTemp(Post);
+		return true;
+	}
+}
+
+const TArray<FString>& WonderlandLffCategories()
+{
+	// social-lff.ts LFF_CATEGORIES, in its order; a category added there is refused here until the client knows it
+	static const TArray<FString> Categories = { TEXT("TEAMS"), TEXT("BUILDERS"), TEXT("AI_ENGINEERS"), TEXT("DESIGNERS"), TEXT("COMPETITORS"), TEXT("COLLABORATORS") };
+	return Categories;
+}
+
+bool WonderlandLffIsCategory(const FString& Category)
+{
+	// exact, case-sensitive: the authority's own tokens
+	return WonderlandLffCategories().ContainsByPredicate([&Category](const FString& Known) { return Known.Equals(Category, ESearchCase::CaseSensitive); });
+}
+
+FString WonderlandLffCategoryLabel(const FString& Category)
+{
+	// social-lff.ts LFF_CATEGORY_LABELS, word for word
+	if (Category == TEXT("TEAMS")) return TEXT("Teams");
+	if (Category == TEXT("BUILDERS")) return TEXT("Builders");
+	if (Category == TEXT("AI_ENGINEERS")) return TEXT("AI engineers");
+	if (Category == TEXT("DESIGNERS")) return TEXT("Designers");
+	if (Category == TEXT("COMPETITORS")) return TEXT("Competitors");
+	if (Category == TEXT("COLLABORATORS")) return TEXT("Collaborators");
+	return FString();
+}
+
+FString WonderlandLffEncodeQueryValue(const FString& Value)
+{
+	// THE CLIENT'S OWN ENCODER, not the engine's: the bytes it sends are fixed here, and wl.Qa.SocialLff proves them ("Wonder Web+" ->
+	// "Wonder%20Web%2B"). A space is %20, never '+': the routes decode exactly once, and '+' there is a plus.
+	FString Out;
+	const FTCHARToUTF8 Utf8(*Value, Value.Len());
+	const uint8* Bytes = reinterpret_cast<const uint8*>(Utf8.Get());
+	for (int32 Index = 0; Index < Utf8.Length(); ++Index)
+	{
+		const uint8 Byte = Bytes[Index];
+		const bool bUnreserved = (Byte >= 'A' && Byte <= 'Z') || (Byte >= 'a' && Byte <= 'z') || (Byte >= '0' && Byte <= '9')
+			|| Byte == '-' || Byte == '.' || Byte == '_' || Byte == '~';
+		if (bUnreserved)
+		{
+			Out.AppendChar(static_cast<TCHAR>(Byte));
+		}
+		else
+		{
+			Out += FString::Printf(TEXT("%%%02X"), static_cast<uint32>(Byte));
+		}
+	}
+	return Out;
+}
+
+bool WonderlandLffFeedPath(const FWonderlandLffFeedQuery& Query, FString& OutPath, FString& OutProblem)
+{
+	OutPath.Reset();
+	OutProblem.Reset();
+	// THE FEED IS FILTERED BY THE SERVER, every page: a filter applied by the client to the page it holds would miss the posts on the others
+	FString Path = FString::Printf(TEXT("/lff/posts?limit=%d"), FMath::Clamp(Query.Limit, 1, 50));
+	if (!Query.Category.IsEmpty())
+	{
+		if (!WonderlandLffIsCategory(Query.Category))
+		{
+			OutProblem = TEXT("That is not a Looking For Feed category");
+			return false;
+		}
+		Path += FString::Printf(TEXT("&category=%s"), *Query.Category);
+	}
+	// A FILTER IS PLAYER TEXT: any character a person types, sent percent-encoded -- but never a control character or a line break (the
+	// routes refuse them, as every LFF field does; the 10-07 log-injection rule)
+	const TPair<const TCHAR*, const FString*> Filters[] = { {TEXT("projectLabel"), &Query.ProjectLabel}, {TEXT("skill"), &Query.Skill} };
+	for (const TPair<const TCHAR*, const FString*>& Filter : Filters)
+	{
+		const FString Value = Filter.Value->TrimStartAndEnd();
+		if (Value.IsEmpty())
+		{
+			continue;
+		}
+		for (int32 Index = 0; Index < Value.Len(); ++Index)
+		{
+			const uint32 Code = static_cast<uint32>(Value[Index]);
+			if (Code < 0x20 || Code == 0x7F || (Code >= 0x80 && Code <= 0x9F) || Code == 0x2028 || Code == 0x2029)
+			{
+				OutProblem = TEXT("A filter must not contain a control character or a line break");
+				return false;
+			}
+			// A LONE SURROGATE IS NO TEXT (the security review's m4): UTF-8 would carry a replacement byte, a filter the player never typed
+			const uint32 Next = Index + 1 < Value.Len() ? static_cast<uint32>(Value[Index + 1]) : 0;
+			const bool bHigh = Code >= 0xD800 && Code <= 0xDBFF;
+			if ((Code >= 0xDC00 && Code <= 0xDFFF) || (bHigh && (Next < 0xDC00 || Next > 0xDFFF)))
+			{
+				OutProblem = TEXT("A filter is not valid text");
+				return false;
+			}
+			Index += bHigh ? 1 : 0;
+		}
+		Path += FString::Printf(TEXT("&%s=%s"), Filter.Key, *WonderlandLffEncodeQueryValue(Value));
+	}
+	if (Query.bMine)
+	{
+		Path += TEXT("&mine=1");
+	}
+	if (Query.bHasOpenSlots)
+	{
+		Path += TEXT("&hasOpenSlots=1");   // a plain token (routes lffQueryOf), read by social-commands.ts lffFlag
+	}
+	if (!Query.Cursor.IsEmpty())
+	{
+		// "<ms>.<serial>" (social-lff.ts lffCursorOf): digits and one dot, or it is not a cursor this feed gave
+		bool bCursor = Query.Cursor.Len() <= 40;
+		int32 Dots = 0;
+		for (const TCHAR Character : Query.Cursor)
+		{
+			Dots += Character == TEXT('.') ? 1 : 0;
+			bCursor = bCursor && (FChar::IsDigit(Character) || Character == TEXT('.'));
+		}
+		if (!bCursor || Dots != 1)
+		{
+			OutProblem = TEXT("That is not a feed position this server gave");
+			return false;
+		}
+		Path += FString::Printf(TEXT("&cursor=%s"), *Query.Cursor);
+	}
+	OutPath = MoveTemp(Path);
+	return true;
+}
+
+bool WonderlandParseSocialProfileView(const TSharedPtr<FJsonObject>& Json, FWonderlandSocialProfileView& Out, FString& OutProblem)
+{
+	if (!Json.IsValid())
+	{
+		OutProblem = TEXT("the profile is missing");
+		return false;
+	}
+	FWonderlandSocialProfileView View;
+	if (!WonderlandSocialJson::ProfileView(Json, View, OutProblem))
+	{
+		return false;
+	}
+	Out = MoveTemp(View);
+	return true;
+}
+
+bool WonderlandParseLffPost(const TSharedPtr<FJsonObject>& Json, FWonderlandLffPost& Out, FString& OutProblem)
+{
+	return WonderlandSocialJson::LffPost(Json, Out, OutProblem);
+}
+
+bool WonderlandParseLffFeed(const TSharedPtr<FJsonObject>& Json, FWonderlandLffFeedPage& Out, FString& OutProblem)
+{
+	using namespace WonderlandSocialJson;
+	const TArray<TSharedPtr<FJsonValue>>* Posts = Arr(Json, TEXT("posts"));
+	if (Posts == nullptr)
+	{
+		OutProblem = TEXT("the feed has no posts list");
+		return false;
+	}
+	FWonderlandLffFeedPage Page;
+	for (const TSharedPtr<FJsonValue>& V : *Posts)
+	{
+		FWonderlandLffPost Post;
+		if (!LffPost(V.IsValid() && V->Type == EJson::Object ? V->AsObject() : nullptr, Post, OutProblem))
+		{
+			return false;
+		}
+		Page.Posts.Add(MoveTemp(Post));
+	}
+	Page.NextCursor = Str(Json, TEXT("nextCursor"));   // null on the last page reads as empty
+	Out = MoveTemp(Page);
+	return true;
+}
+
+bool WonderlandParseLffPostDetail(const TSharedPtr<FJsonObject>& Json, FWonderlandLffPostDetail& Out, FString& OutProblem)
+{
+	using namespace WonderlandSocialJson;
+	FWonderlandLffPostDetail Detail;
+	if (!LffPost(Json, Detail.Post, OutProblem))
+	{
+		return false;
+	}
+	// THE AUTHOR'S CARD, exactly what profile.read would show this viewer (resolveProfileFor): opened by the existing profile panel
+	if (const TSharedPtr<FJsonObject> Card = Obj(Json, TEXT("authorProfile")))
+	{
+		if (!ProfileView(Card, Detail.AuthorProfile, OutProblem))
+		{
+			return false;
+		}
+		Detail.bHasAuthorProfile = true;
+	}
+	else if (NeitherObjectNorNull(Json, TEXT("authorProfile")))
+	{
+		OutProblem = FString::Printf(TEXT("LFF post %s carries an unreadable author card"), *Detail.Post.PostId);
+		return false;
+	}
+	// THE ACCEPTED LIST, for the owner and the accepted only (null for everyone else)
+	if (const TArray<TSharedPtr<FJsonValue>>* Accepted = Arr(Json, TEXT("accepted")))
+	{
+		Detail.bHasAccepted = true;
+		for (const TSharedPtr<FJsonValue>& V : *Accepted)
+		{
+			FWonderlandSocialPersonRow Row;
+			if (!PersonRow(V.IsValid() && V->Type == EJson::Object ? V->AsObject() : nullptr, Row, OutProblem))
+			{
+				return false;
+			}
+			Detail.Accepted.Add(MoveTemp(Row));
+		}
+	}
+	else if (Json->HasField(TEXT("accepted")) && !Json->HasTypedField<EJson::Null>(TEXT("accepted")))
+	{
+		OutProblem = FString::Printf(TEXT("LFF post %s carries an unreadable accepted list"), *Detail.Post.PostId);
+		return false;
+	}
+	Out = MoveTemp(Detail);
+	return true;
+}
+
+bool WonderlandParseLffMyRequests(const TSharedPtr<FJsonObject>& Json, FWonderlandLffMyRequests& Out, FString& OutProblem)
+{
+	using namespace WonderlandSocialJson;
+	const TArray<TSharedPtr<FJsonValue>>* List = Arr(Json, TEXT("requests"));
+	if (List == nullptr)
+	{
+		OutProblem = TEXT("the requests answer has no list");
+		return false;
+	}
+	FWonderlandLffMyRequests Mine;
+	for (const TSharedPtr<FJsonValue>& V : *List)
+	{
+		const TSharedPtr<FJsonObject> R = V.IsValid() && V->Type == EJson::Object ? V->AsObject() : nullptr;
+		FWonderlandLffMyRequest Row;
+		Row.RequestId = Str(R, TEXT("requestId"));
+		Row.PostId = Str(R, TEXT("postId"));
+		Row.Status = Str(R, TEXT("status"));
+		Row.Message = Str(R, TEXT("message"));
+		Row.CreatedAtIso = Str(R, TEXT("createdAtIso"));
+		Row.UpdatedAtIso = Str(R, TEXT("updatedAtIso"));
+		if (!IsLffId(Row.RequestId) || !IsLffId(Row.PostId) || !IsRequesterStatus(Row.Status))
+		{
+			OutProblem = TEXT("a request of the viewer's has no valid id, no valid post or an unknown status");
+			return false;
+		}
+		// THE POST AS THE REQUESTER MAY SEE IT NOW, or null (closed, expired, its author no longer visible to them)
+		if (const TSharedPtr<FJsonObject> Post = Obj(R, TEXT("post")))
+		{
+			if (!LffPost(Post, Row.Post, OutProblem))
+			{
+				return false;
+			}
+			Row.bHasPost = true;
+		}
+		else if (NeitherObjectNorNull(R, TEXT("post")))
+		{
+			OutProblem = FString::Printf(TEXT("request %s carries an unreadable post"), *Row.RequestId);
+			return false;
+		}
+		Mine.Requests.Add(MoveTemp(Row));
+	}
+	Mine.bTruncated = Bool(Json, TEXT("truncated"));
+	Out = MoveTemp(Mine);
+	return true;
+}
+
+bool WonderlandParseLffPostRequests(const TSharedPtr<FJsonObject>& Json, FWonderlandLffPostRequests& Out, FString& OutProblem)
+{
+	using namespace WonderlandSocialJson;
+	FWonderlandLffPostRequests Inbox;
+	Inbox.PostId = Str(Json, TEXT("postId"));
+	const TArray<TSharedPtr<FJsonValue>>* List = Arr(Json, TEXT("requests"));
+	if (!IsLffId(Inbox.PostId) || List == nullptr)
+	{
+		OutProblem = TEXT("the post's requests answer has no valid post or no list");
+		return false;
+	}
+	for (const TSharedPtr<FJsonValue>& V : *List)
+	{
+		const TSharedPtr<FJsonObject> R = V.IsValid() && V->Type == EJson::Object ? V->AsObject() : nullptr;
+		FWonderlandLffIncomingRequest Row;
+		Row.RequestId = Str(R, TEXT("requestId"));
+		Row.Status = Str(R, TEXT("status"));
+		Row.Message = Str(R, TEXT("message"));
+		Row.CreatedAtIso = Str(R, TEXT("createdAtIso"));
+		Row.UpdatedAtIso = Str(R, TEXT("updatedAtIso"));
+		// THE OWNER'S INBOX HOLDS ONLY LIVE REQUESTS: a declined, withdrawn or cancelled one is never listed to them
+		if (!IsLffId(Row.RequestId) || (Row.Status != TEXT("PENDING") && Row.Status != TEXT("ACCEPTED")))
+		{
+			OutProblem = TEXT("a request on the post has no valid id or is neither PENDING nor ACCEPTED");
+			return false;
+		}
+		if (!PersonRow(Obj(R, TEXT("requester")), Row.Requester, OutProblem))
+		{
+			return false;
+		}
+		Inbox.Requests.Add(MoveTemp(Row));
+	}
+	Out = MoveTemp(Inbox);
+	return true;
 }
 
 bool WonderlandParseSocialPreview(const TSharedPtr<FJsonObject>& Json, FWonderlandSocialSnapshot& Out, FString& OutProblem)
@@ -576,4 +1023,64 @@ FWonderlandSocialActionResult FWonderlandSocialPreviewService::Request(const FSt
 	Result.bOk = false;
 	Result.Reason = TEXT("DEVELOPMENT PREVIEW · social is not connected in this build");
 	return Result;
+}
+
+FWonderlandLffAnswer FWonderlandSocialPreviewService::LffNeedsLive()
+{
+	// NO LFF PEOPLE AND NO LFF POSTS IN THE PREVIEW (the LFF contract; social-fixtures.ts has none either): an honest state, never fake posts
+	FWonderlandLffAnswer Answer;
+	Answer.bNeedsLive = true;
+	Answer.Problem = TEXT("The Looking For Feed needs a live connection: sign in to Wonderland social. The DEVELOPMENT PREVIEW has no posts.");
+	return Answer;
+}
+
+void FWonderlandSocialPreviewService::ReadLffFeed(const FWonderlandLffFeedQuery& Query, FWonderlandLffFeedDone Done)
+{
+	Done(LffNeedsLive(), FWonderlandLffFeedPage());
+}
+
+void FWonderlandSocialPreviewService::ReadLffPost(const FString& PostId, FWonderlandLffPostDone Done)
+{
+	Done(LffNeedsLive(), FWonderlandLffPostDetail());
+}
+
+void FWonderlandSocialPreviewService::ReadLffPostRequests(const FString& PostId, FWonderlandLffPostRequestsDone Done)
+{
+	Done(LffNeedsLive(), FWonderlandLffPostRequests());
+}
+
+void FWonderlandSocialPreviewService::ReadLffMyRequests(FWonderlandLffMyRequestsDone Done)
+{
+	Done(LffNeedsLive(), FWonderlandLffMyRequests());
+}
+
+void FWonderlandSocialPreviewService::CreateLffPost(const FWonderlandLffPostFields& Fields, FWonderlandLffWriteDone Done)
+{
+	Done(LffNeedsLive(), FString());
+}
+
+void FWonderlandSocialPreviewService::EditLffPost(const FString& PostId, const FWonderlandLffPostFields& Fields, FWonderlandLffWriteDone Done)
+{
+	Done(LffNeedsLive(), FString());
+}
+
+void FWonderlandSocialPreviewService::SendLffRequest(const FString& PostId, const FString& Message, FWonderlandLffWriteDone Done)
+{
+	Done(LffNeedsLive(), FString());
+}
+
+void FWonderlandSocialPreviewService::ActOnLff(const FString& OperationId, const FString& SubjectId, FWonderlandLffWriteDone Done)
+{
+	Done(LffNeedsLive(), FString());
+}
+
+void FWonderlandSocialPreviewService::ReportLffPost(const FString& AuthorId, const FString& PostId, FWonderlandLffWriteDone Done)
+{
+	Done(LffNeedsLive(), FString());
+}
+
+void FWonderlandSocialPreviewService::ReadProfile(const FString& UserId, FWonderlandLffProfileDone Done)
+{
+	// the preview's profiles open from its snapshot (the existing path); nothing is fetched for a person it does not carry
+	Done(LffNeedsLive(), FWonderlandSocialProfileView());
 }

@@ -181,6 +181,8 @@ void SWonderlandSocialHubPanel::Construct(const FArguments& InArgs)
 	OnVoice = InArgs._OnVoice;
 	OnRequestClose = InArgs._OnRequestClose;
 	SignIn = InArgs._SignIn;
+	Lff = InArgs._Lff;
+	OnOpenProfileView = InArgs._OnOpenProfileView;
 	OpenConversationId = Snapshot.Conversations.Num() > 0 ? Snapshot.Conversations[0].ConversationId : FString();
 	ScrimBrush.DrawAs = ESlateBrushDrawType::Image;
 	ScrimBrush.TintColor = FSlateColor(WonderlandUi::Srgb(3, 4, 8, 0.70f));
@@ -270,6 +272,7 @@ const TCHAR* SWonderlandSocialHubPanel::TabName(ETab Which)
 	case ETab::Recent:   return TEXT("RECENT");
 	case ETab::Messages: return TEXT("MESSAGES");
 	case ETab::Party:    return TEXT("PARTY");
+	case ETab::Lff:      return TEXT("LFF");
 	default:             return TEXT("FRIENDS");
 	}
 }
@@ -281,6 +284,7 @@ bool SWonderlandSocialHubPanel::ParseTab(const FString& Text, ETab& Out)
 	if (Text.Equals(TEXT("recent"), ESearchCase::IgnoreCase)) { Out = ETab::Recent; return true; }
 	if (Text.Equals(TEXT("messages"), ESearchCase::IgnoreCase)) { Out = ETab::Messages; return true; }
 	if (Text.Equals(TEXT("party"), ESearchCase::IgnoreCase)) { Out = ETab::Party; return true; }
+	if (Text.Equals(TEXT("lff"), ESearchCase::IgnoreCase)) { Out = ETab::Lff; return true; }
 	return false;
 }
 
@@ -370,7 +374,8 @@ void SWonderlandSocialHubPanel::Rebuild()
 		}
 		else
 		{
-			BodyHost->SetContent(Tab == ETab::Requests ? MakeRequests() : Tab == ETab::Recent ? MakeRecent() : Tab == ETab::Messages ? MakeMessages() : Tab == ETab::Party ? MakeParty() : MakeFriends());
+			BodyHost->SetContent(Tab == ETab::Requests ? MakeRequests() : Tab == ETab::Recent ? MakeRecent() : Tab == ETab::Messages ? MakeMessages() : Tab == ETab::Party ? MakeParty()
+				: Tab == ETab::Lff ? MakeLff() : MakeFriends());
 		}
 	}
 	if (ReplyBox.IsValid() && ReplyBox != OldReplyBox && KeptFor == OpenConversationId)
@@ -416,6 +421,11 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeRail()
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
 		[
 			MakeTabButton(ETab::Recent, TEXT("RECENT PLAYERS"), bConnected && Snapshot.RecentPlayers.Num() > 0 ? FString::FromInt(Snapshot.RecentPlayers.Num()) : FString())
+		]
+		// LFF, THE LOOKING FOR FEED: a sixth tab, last -- content in the existing hub, no count (it is read only while it is shown)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
+		[
+			MakeTabButton(ETab::Lff, TEXT("LFF"), FString())
 		]
 		// SIGNED IN AS A REAL PERSON: who, and the way out. Shown only for a live sign-in, never over the preview.
 		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f, 18.0f, 4.0f, 2.0f)
@@ -1407,6 +1417,29 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeParty()
 		];
 }
 
+TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeLff()
+{
+	if (!Lff.IsValid())
+	{
+		return MakeEmpty(TEXT("The Looking For Feed is not available here."));
+	}
+	// THE SAME VIEW ACROSS REBUILDS (the audit's risk 5): a live refresh rebuilds this hub every 2 s while anything happens, and a new view
+	// would drop the keyboard focus and the cursor of whatever the player is typing. Only its context is updated; the model it draws (the
+	// social subsystem's) holds the drafts for a hub opened again.
+	if (!LffView.IsValid())
+	{
+		SAssignNew(LffView, SWonderlandSocialLffView).Model(Lff).ViewerId(Snapshot.ViewerId).bDevelopmentPreview(bDevelopmentPreview)
+			.OnAction(OnAction).OnOpenProfileView(OnOpenProfileView);
+	}
+	else
+	{
+		LffView->SetContext(Snapshot.ViewerId, bDevelopmentPreview);
+	}
+	// THE TAB IS BEING SHOWN: its first read (or one it missed while hidden) starts now, not only at the view's first tick
+	Lff->NoteOnScreen(FPlatformTime::Seconds());
+	return LffView.ToSharedRef();
+}
+
 FReply SWonderlandSocialHubPanel::OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent)
 {
 	if (InKeyEvent.GetKey() == EKeys::Escape)
@@ -1429,7 +1462,9 @@ void SWonderlandSocialHubPanel::ShowActionResult(const FString& Line)
 FString SWonderlandSocialHubPanel::Describe() const
 {
 	const TArray<FWonderlandSocialMessage>* History = Snapshot.Messages.Find(OpenConversationId);
-	return FString::Printf(TEXT("tab %s | %s | friends %d (%d on) | requests in %d out %d | party invites %d | recent %d | conversations %d (unread %d) | open %s (%d messages) | party %s (%d members%s) | visible parties %d | voice %s%s | rows %s | action: %s | signin %s%s"),
+	// THE LFF TAB adds its model's state: ids and states only, never a post's text (the 10-07 log rule)
+	const FString LffPart = Tab == ETab::Lff ? FString::Printf(TEXT(" | lff %s"), Lff.IsValid() ? *Lff->Describe() : TEXT("not available")) : FString();
+	return FString::Printf(TEXT("tab %s | %s | friends %d (%d on) | requests in %d out %d | party invites %d | recent %d | conversations %d (unread %d) | open %s (%d messages) | party %s (%d members%s) | visible parties %d | voice %s%s | rows %s | action: %s | signin %s%s%s"),
 		TabName(Tab), bConnected ? (bDevelopmentPreview ? TEXT("DEVELOPMENT PREVIEW") : TEXT("connected")) : TEXT("NOT CONNECTED"),
 		Snapshot.Friends.Num(), CountOn(), Snapshot.IncomingRequests.Num(), Snapshot.OutgoingRequests.Num(), Snapshot.PartyInvites.Num(),
 		Snapshot.RecentPlayers.Num(), Snapshot.Conversations.Num(), CountUnread(), OpenConversationId.IsEmpty() ? TEXT("none") : *OpenConversationId,
@@ -1438,7 +1473,8 @@ FString SWonderlandSocialHubPanel::Describe() const
 		Snapshot.bHasParty ? *FString::Printf(TEXT(", leader %s%s"), *Snapshot.Party.LeaderId, Snapshot.Party.bViewerIsLeader ? TEXT(" (you)") : TEXT("")) : TEXT(""),
 		Snapshot.VisibleParties.Num(), Voice.Connection.IsEmpty() ? TEXT("UNAVAILABLE") : *Voice.Connection,
 		VoiceLabel.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" [%s]"), *VoiceLabel), ShownRows.Num() > 0 ? *FString::Join(ShownRows, TEXT(",")) : TEXT("none"), *LastActionLine,
-		FWonderlandSocialSignIn::StateName(SignIn.State), SignIn.State == EWonderlandSignInState::Waiting ? *FString::Printf(TEXT(" (code %d chars)"), SignIn.UserCode.Len()) : TEXT(""));
+		FWonderlandSocialSignIn::StateName(SignIn.State), SignIn.State == EWonderlandSignInState::Waiting ? *FString::Printf(TEXT(" (code %d chars)"), SignIn.UserCode.Len()) : TEXT(""),
+		*LffPart);
 }
 
 TArray<FWonderlandSocialPersonRow> WonderlandSocialBlocked::BlockedByViewer(const FWonderlandSocialSnapshot& Snapshot)

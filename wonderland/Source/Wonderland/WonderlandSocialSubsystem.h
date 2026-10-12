@@ -14,6 +14,8 @@
 #include "WonderlandWorldPresence.h"
 #include "WonderlandSocialSubsystem.generated.h"
 
+class FWonderlandLffModel;
+
 UCLASS()
 // NO UFUNCTIONS, NO UPROPERTIES: nothing in Blueprint needs this, and every reflected name is an early FName that can shift
 // Niagara's type hashes at boot (memory: niagara-fname-hash-crash). The UCLASS itself is what a subsystem has to be.
@@ -86,6 +88,13 @@ public:
 	/** Open a profile on screen, the way a Friends row, a conversation or a party member does. False if not openable. */
 	bool OpenProfile(const FString& UserId);
 
+	/**
+	 * LFF, THE LOOKING FOR FEED: what the Social Hub's LFF tab knows and every draft the player typed there, kept for the session OUTSIDE
+	 * the hub (which every live refresh rebuilds and every reopening replaces). Dropped whenever the service changes: a sign-out never
+	 * leaves one player's feed or drafts for the next. Never null after Initialize.
+	 */
+	TSharedPtr<FWonderlandLffModel> GetLff() const { return Lff; }
+
 private:
 	/** Go live at BaseUrl as Token. The developer gate is the caller's (ConnectLive); the sign-in path has none. */
 	bool ConnectWith(const FString& BaseUrl, const FString& Token);
@@ -121,6 +130,8 @@ private:
 	TUniquePtr<IWonderlandVoiceService> Voice;
 	FWonderlandVoicePreviewScript* VoicePreview = nullptr;
 	FString Scene = TEXT("base");
+	/** LFF's state and drafts (see GetLff); reset in Adopt. */
+	TSharedPtr<FWonderlandLffModel> Lff;
 	TUniquePtr<FWonderlandSocialSignIn> SignIn;
 	/** True while live through the sign-in (not a developer token): a 401 then returns the player to SIGN IN. */
 	bool bLiveBySignIn = false;

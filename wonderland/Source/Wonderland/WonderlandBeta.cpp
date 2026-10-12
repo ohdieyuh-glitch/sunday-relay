@@ -603,4 +603,9 @@ namespace WonderlandBeta
 	{
 		SaveTextAtomically(WelcomePath(), BuildLabel());
 	}
+
+	void ForgetWelcomeSeen()
+	{
+		IFileManager::Get().Delete(*WelcomePath(), false, true, true);
+	}
 }

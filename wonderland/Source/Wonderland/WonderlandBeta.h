@@ -127,4 +127,6 @@ namespace WonderlandBeta
 	/** Whether the first-launch welcome has been dismissed on this machine (a file in the player's Saved folder). */
 	WONDERLAND_API bool HasSeenWelcome();
 	WONDERLAND_API void MarkWelcomeSeen();
+	/** Undo MarkWelcomeSeen (QA only: wl.Qa.SocialLffScreen leaves a machine's welcome exactly as it found it). */
+	WONDERLAND_API void ForgetWelcomeSeen();
 }

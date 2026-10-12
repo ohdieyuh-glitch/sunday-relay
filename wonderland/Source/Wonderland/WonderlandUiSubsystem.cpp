@@ -1001,6 +1001,19 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 			.VoiceLabel(Social != nullptr && Social->GetVoice() != nullptr ? Social->GetVoice()->GetPreviewLabel() : FString())
 			.OnVoice_Lambda([WeakThis](const FString& Command, const FString& Subject) { if (WeakThis.IsValid()) { WeakThis->HandleVoiceCommand(Command, Subject); } })
 			.SignIn(Social != nullptr ? Social->GetSignInView() : FWonderlandSignInView())
+			// LFF (the Looking For Feed): the session's state and drafts live in the social subsystem, outside this panel, which every refresh
+			// rebuilds and every reopening replaces
+			.Lff(Social != nullptr ? Social->GetLff() : TSharedPtr<FWonderlandLffModel>())
+			// AN LFF AUTHOR'S CARD (from the LFF answer: exactly what profile.read shows this viewer) through the existing profile panel; Esc
+			// there comes back to the hub on the LFF tab, as from any hub row
+			.OnOpenProfileView_Lambda([WeakThis](const FWonderlandSocialProfileView& View)
+			{
+				// ONLY OVER THE HUB: a card that arrives after the hub was closed opens nothing over the world
+				if (WeakThis.IsValid() && WeakThis->Open == EOverlay::Social)
+				{
+					WeakThis->OpenPlayerProfile(View, WeakThis->SocialHubPanel.IsValid() ? WeakThis->SocialHubPanel->GetSourceLine() : FString());
+				}
+			})
 			.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
 		Panel = SocialHubPanel;
 		Focus = SocialHubPanel;
@@ -4491,12 +4504,13 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		return true;
 	}
 
-	if (Command == TEXT("/social") || Command == TEXT("/friends") || Command == TEXT("/party"))
+	if (Command == TEXT("/social") || Command == TEXT("/friends") || Command == TEXT("/party") || Command == TEXT("/lff"))
 	{
 		// SOCIAL, THE PLAYER'S WAY IN (R16, Second's review of RC12: the hub opened from the developer console only, so a tester could not
 		// reach it): content in the existing terminal, like /card and /brain -- the HUD is unchanged. /social [friends|requests|recent|
-		// messages|party]; /friends and /party open their own tabs. A build with no social connection opens the hub on its honest "not
-		// connected" view. The answer names the tab that ACTUALLY opened (read back from the hub), never the words typed.
+		// messages|party|lff]; /friends, /party and /lff (the Looking For Feed) open their own tabs. A build with no social connection opens
+		// the hub on its honest "not connected" view. The answer names the tab that ACTUALLY opened (read back from the hub), never the
+		// words typed. LFF has no HUD button: a main-interface entry is the founder's decision (LFF contract D-L1).
 		FString HubTab = Argument.TrimStartAndEnd().ToLower();
 		if (Command == TEXT("/friends"))
 		{
@@ -4506,11 +4520,15 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		{
 			HubTab = TEXT("party");
 		}
+		else if (Command == TEXT("/lff"))
+		{
+			HubTab = TEXT("lff");
+		}
 		SWonderlandSocialHubPanel::ETab Wanted = SWonderlandSocialHubPanel::ETab::Friends;
 		if (!HubTab.IsEmpty() && !SWonderlandSocialHubPanel::ParseTab(HubTab, Wanted))
 		{
 			Terminal->AddJuliusRow(TEXT("You"), Line,
-				FString::Printf(TEXT("There is no %s tab. Try /social friends, requests, recent, messages or party."), *HubTab));
+				FString::Printf(TEXT("There is no %s tab. Try /social friends, requests, recent, messages, party or lff."), *HubTab));
 			return true;
 		}
 		const bool bHubOpened = OpenSocialHub(HubTab);
@@ -4541,7 +4559,7 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 				"/handoff — Mission Handoff: roam while a mission carries on (/handoff again, or /handoff return, to come back). "
 				"/card — your C.A.R.D. loadout (list, select NAME, new NAME, save, rename NAME, delete NAME). "
 				"/brain — Project Brain (status; it says whether this build can connect it). "
-				"/social [friends|requests|recent|messages|party] — the Social Hub (/friends, /party open their tabs)."));
+				"/social [friends|requests|recent|messages|party|lff] — the Social Hub (/friends, /party open their tabs; /lff the Looking For Feed)."));
 		return true;
 	}
 
