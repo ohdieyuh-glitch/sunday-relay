@@ -261,7 +261,9 @@ suite('Wonderland social hardening on real PostgreSQL (10-07)', () => {
   const ALL = [HOST, ...FRIENDS, ASKER, GONE];
   let pool: Pool;
   let store: SocialStore;
-  let clock = Date.parse('2026-10-07T13:00:00.000Z');
+  // THE REAL NOW, never a fixed date: eventsFor prunes events older than 7 days against the REAL clock, so a fixed 2026-10-07 start
+  // would have pruned this suite's own events from 2026-10-14T13:00Z (the time bomb that fired in the suite above on 10-09)
+  let clock = Date.now();
   const at = () => new Date((clock += 1000)).toISOString();
   const apply = async (op: Parameters<SocialStore['apply']>[0], actor: string, body: Record<string, unknown> = {}, ids: string[] = []) => {
     const r = await store.apply(op, actor, { ids, body, query: {} }, at());
