@@ -24,7 +24,9 @@ import {
   wfsCheckChangesQuery,
   wfsCheckConflictsQuery,
   wfsCheckEventsQuery,
+  wfsCheckFileAtQuery,
   wfsCheckHistoryQuery,
+  wfsCheckProjectsQuery,
   wfsCheckSha256,
   wfsCheckTreeQuery,
   wfsConflictClosing,
@@ -42,9 +44,13 @@ import {
   type WfsConflictView,
   type WfsEventRecord,
   type WfsEventsPage,
+  type WfsFileAt,
   type WfsFileVersion,
   type WfsHistoryPage,
+  type WfsMemberProject,
   type WfsProjectHead,
+  type WfsProjectsPage,
+  type WfsReferencedBlob,
   type WfsStore,
   type WfsStoreEvent,
   type WfsTreePage,
@@ -124,6 +130,17 @@ interface EntryRow {
 const ENTRY_COLUMNS = 'branch_id, file_id, kind, path, path_key, sha256, size::text AS size, deleted, version, content_version, path_version, created_rev, updated_rev';
 /** The same columns, unconverted, for a UNION over the entry-shaped tables. */
 const ENTRY_RAW = 'branch_id, file_id, kind, path, path_key, sha256, size, deleted, version, content_version, path_version, created_rev, updated_rev';
+
+/**
+ * Whether anything of project $1 names address $2 -- a version, a current or fork-time entry, a retained conflict, on any branch --
+ * and the size it was stored with (null: not held). ONE row, always: the four EXISTS run whether or not the address is held, so an
+ * unknown address and a held-but-unreferenced upload cost the same work (R1 security review MINOR-2).
+ */
+const BLOB_REFERENCE_SQL = `SELECT (SELECT b.size FROM relay_wonderland.wfs_blobs b WHERE b.project_id = $1 AND b.sha256 = $2)::text AS size,
+  (EXISTS (SELECT 1 FROM relay_wonderland.wfs_versions v WHERE v.project_id = $1 AND v.sha256 = $2)
+   OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_entries e WHERE e.project_id = $1 AND e.sha256 = $2)
+   OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_branch_base x WHERE x.project_id = $1 AND x.sha256 = $2)
+   OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_conflict_blobs c WHERE c.project_id = $1 AND c.sha256 = $2)) AS referenced`;
 
 const entryOf = (r: EntryRow): WfsEntry => ({
   fileId: r.file_id,
@@ -515,6 +532,34 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         return readOutage();
       }
     },
+    async projectsOf(playerId, query) {
+      const q = wfsCheckProjectsQuery(playerId, query);
+      if (!q.ok) return q;
+      const { after, limit } = q.value;
+      return snapshot<WfsProjectsPage>(async (db) => {
+        // the membership JOINED to a live file environment; the role through the ONE mapping (in code, never re-spelled in SQL),
+        // so rows the mapping gives no role are skipped and batches are read until a page is full or nothing is left
+        const found: WfsMemberProject[] = [];
+        let cursor = after;
+        for (;;) {
+          const rows = await db.query<{ project_id: string; role: string }>(
+            `SELECT m.project_id, m.role FROM relay_wonderland.project_members m
+               JOIN relay_wonderland.wfs_projects p ON p.project_id = m.project_id AND p.deleted_at IS NULL
+              WHERE m.player_id = $1 AND ($2::text IS NULL OR m.project_id COLLATE "C" > $2::text)
+              ORDER BY m.project_id COLLATE "C" LIMIT $3`,
+            [q.value.playerId, cursor, limit + 1],
+          );
+          for (const r of rows.rows) {
+            const role = wfsHumanRoleFromMembership(r.role);
+            if (role !== null) found.push({ projectId: r.project_id, role });
+          }
+          if (rows.rows.length < limit + 1 || found.length > limit) break;
+          cursor = rows.rows[rows.rows.length - 1].project_id;
+        }
+        const page = wfsBoundPage(found.slice(0, limit + 1), limit);
+        return ok({ projects: page.items, next: page.more ? page.items[page.items.length - 1].projectId : null });
+      });
+    },
     async project(projectId) {
       const read = await snapshot<WfsProjectState | null>(async (db) => {
         const seq = await liveSeq(db, projectId);
@@ -602,6 +647,30 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         return ok({ branchId, fileId, current: entryOf(current.rows[0]), versions: page.items, next: page.more ? page.items[page.items.length - 1].entry.version : null });
       });
     },
+    async fileAt(projectId, query) {
+      const q = wfsCheckFileAtQuery(query);
+      if (!q.ok) return q;
+      const { branchId, fileId, rev } = q.value;
+      return snapshot<WfsFileAt>(async (db) => {
+        const headRev = await branchHead(db, projectId, branchId);
+        if (headRev === null) return wfsNotFound('unknown project or branch');
+        const current = await db.query<EntryRow>(`SELECT ${ENTRY_COLUMNS} FROM relay_wonderland.wfs_entries WHERE project_id = $1 AND branch_id = $2 AND file_id = $3`, [projectId, branchId, fileId]);
+        if (current.rows[0] === undefined) return wfsNotFound('unknown file');
+        if (rev === null) return ok({ headRev, rev: headRev, entry: entryOf(current.rows[0]) });
+        if (rev > headRev) return wfsNotFound('no such revision');
+        // the newest version at or below the revision (an agent branch's fork-time base counts as revision 0): one indexed read
+        const at = await db.query<EntryRow>(
+          `SELECT ${ENTRY_COLUMNS} FROM (
+             SELECT ${ENTRY_RAW} FROM relay_wonderland.wfs_versions WHERE project_id = $1 AND branch_id = $2 AND file_id = $3 AND rev <= $4
+             UNION ALL
+             SELECT ${ENTRY_RAW} FROM relay_wonderland.wfs_branch_base WHERE project_id = $1 AND branch_id = $2 AND file_id = $3
+           ) AS h ORDER BY version DESC LIMIT 1`,
+          [projectId, branchId, fileId, rev],
+        );
+        if (at.rows[0] === undefined) return wfsNotFound('no version at that revision');
+        return ok({ headRev, rev, entry: entryOf(at.rows[0]) });
+      });
+    },
     async changes(projectId, query) {
       const q = wfsCheckChangesQuery(query);
       if (!q.ok) return q;
@@ -625,7 +694,10 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         const seq = await liveSeq(db, projectId);
         if (seq === null) return wfsNotFound('unknown project');
         const rows = await db.query<EventRow>(
-          'SELECT seq::text AS seq, kind, body, at FROM relay_wonderland.wfs_events WHERE project_id = $1 AND seq > $2 ORDER BY seq LIMIT $3',
+          // R0b-fix (CI r1.7): sorted by the bigint COLUMN, qualified as e.seq. PostgreSQL binds a BARE sort name to an output
+          // column first -- here the text cast of the same name -- so pages came back in TEXT order ('10' < '2') and skipped 2..9.
+          // wonderfs-store.test.ts scans this file for that shape.
+          'SELECT e.seq::text AS seq, e.kind, e.body, e.at FROM relay_wonderland.wfs_events e WHERE e.project_id = $1 AND e.seq > $2 ORDER BY e.seq LIMIT $3',
           [projectId, afterSeq, limit + 1],
         );
         const page = wfsBoundPage<WfsEventRecord>(rows.rows.map((r) => ({ seq: Number(r.seq), kind: r.kind, body: r.body, atIso: wfsIso(r.at) })), limit);
@@ -684,17 +756,20 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
       if (!sha.ok) return sha;
       return snapshot<WfsBlobInfo | null>(async (db) => {
         if ((await liveSeq(db, projectId)) === null) return wfsNotFound('unknown project');
-        const r = await db.query<{ size: string; referenced: boolean }>(
-          `SELECT b.size::text AS size,
-                  (EXISTS (SELECT 1 FROM relay_wonderland.wfs_versions v WHERE v.project_id = b.project_id AND v.sha256 = b.sha256)
-                   OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_entries e WHERE e.project_id = b.project_id AND e.sha256 = b.sha256)
-                   OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_branch_base x WHERE x.project_id = b.project_id AND x.sha256 = b.sha256)
-                   OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_conflict_blobs c WHERE c.project_id = b.project_id AND c.sha256 = b.sha256)) AS referenced
-             FROM relay_wonderland.wfs_blobs b WHERE b.project_id = $1 AND b.sha256 = $2`,
-          [projectId, sha.value],
-        );
-        const row = r.rows[0];
-        return ok(row === undefined ? null : { sha256: sha.value, size: Number(row.size), referenced: row.referenced });
+        const row = (await db.query<{ size: string | null; referenced: boolean }>(BLOB_REFERENCE_SQL, [projectId, sha.value])).rows[0];
+        return ok(row === undefined || row.size === null ? null : { sha256: sha.value, size: Number(row.size), referenced: row.referenced });
+      });
+    },
+    async readReferencedBlob(projectId, sha256) {
+      const sha = wfsCheckSha256(sha256);
+      if (!sha.ok) return sha;
+      return snapshot<WfsReferencedBlob | null>(async (db) => {
+        // ONE consistent read: the project is live, something of it names the address, and its bytes (R0b MINOR-7)
+        if ((await liveSeq(db, projectId)) === null) return wfsNotFound('unknown project');
+        const ref = (await db.query<{ size: string | null; referenced: boolean }>(BLOB_REFERENCE_SQL, [projectId, sha.value])).rows[0];
+        if (ref === undefined || ref.size === null || !ref.referenced) return ok(null);
+        const held = await db.query<{ bytes: Buffer }>('SELECT bytes FROM relay_wonderland.wfs_blob_bytes WHERE project_id = $1 AND sha256 = $2', [projectId, sha.value]);
+        return ok({ size: Number(ref.size), bytes: held.rows[0] === undefined ? null : new Uint8Array(held.rows[0].bytes) });
       });
     },
     async verifyBlob(projectId, sha256) {

@@ -44,6 +44,8 @@ import { TransactionalWonderlandDatabase } from './wonderland-postgres';
  *   CACHE     a store whose remembered state is stale reads, and builds on, the rows;
  *   CREATE-IN-TX createProjectIn joins the CALLER's transaction: rolled back with it, nothing is left; CONTROL: committed, it works;
  *   VERIFY    changed, short and missing bytes are each named; an untouched blob is intact.
+ * R1 adds:
+ *   PROJECTS  a soft-deleted project leaves its member's list (H1); restored, it is back.
  * Runs wherever JULIUS_TEST_DATABASE_URL names a THROWAWAY server (never DATABASE_URL); `todo` elsewhere.
  */
 
@@ -483,5 +485,39 @@ suite('the WonderFS store on real PostgreSQL: the engine is the oracle', () => {
     expect(await store.verifyBlob('prj-1', changed)).toEqual({ ok: true, value: { status: 'corrupt', reason: 'hash_mismatch' } });
     expect(await store.verifyBlob('prj-1', short)).toEqual({ ok: true, value: { status: 'corrupt', reason: 'size_mismatch' } });
     expect(await store.verifyBlob('prj-1', gone)).toEqual({ ok: true, value: { status: 'corrupt', reason: 'bytes_missing' } });
+  }, 120_000);
+
+  it('PROJECTS (R1, H1) soft delete: a soft-deleted project leaves the member\'s list at once; CONTROL: restored, it is back', async () => {
+    const pool = await fresh('projects');
+    const store = openWfsPostgresStore(pool);
+    await pool.query("INSERT INTO relay_wonderland.projects(project_id) VALUES('prj-2')");
+    await pool.query("INSERT INTO relay_wonderland.project_members(project_id, player_id, role) VALUES('prj-2','usr_owner','OWNER')");
+    expect((await store.createProject('prj-1', NOW)).ok).toBe(true);
+    expect((await store.createProject('prj-2', NOW)).ok).toBe(true);
+    const mine = async () => {
+      const r = await store.projectsOf('usr_owner', {});
+      if (!r.ok) throw new Error(r.error.message);
+      return r.value.projects.map((p) => p.projectId);
+    };
+    expect(await mine()).toEqual(['prj-1', 'prj-2']);
+    // R1-r3: a committed blob of prj-2 is readable through readReferencedBlob while the project is live
+    const blob = await store.putBlob('prj-2', new TextEncoder().encode('kept'));
+    if (!blob.ok) throw new Error(blob.error.message);
+    expect((await store.commit('prj-2', { requestId: 'req-soft-0001', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: who('usr_owner'), ops: [{ op: 'create', path: 'k.txt', kind: 'file', ...blob.value }] }, NOW)).ok).toBe(true);
+    const keptSha = blob.value.sha256;
+    const readable = async () => {
+      const r = await store.readReferencedBlob('prj-2', keptSha);
+      return r.ok ? (r.value === null ? 'null' : new TextDecoder().decode(r.value.bytes ?? new Uint8Array())) : r.error.code;
+    };
+    expect(await readable()).toBe('kept');
+    await pool.query("UPDATE relay_wonderland.wfs_projects SET deleted_at = now(), purge_after = now() + interval '30 days' WHERE project_id = 'prj-2'");
+    expect(await mine(), 'a soft-deleted project is hidden from its members').toEqual(['prj-1']);
+    expect(await readable(), 'and its bytes are not served (R0b MINOR-7: liveness in the same read)').toBe('not-found');
+    await pool.query("UPDATE relay_wonderland.wfs_projects SET deleted_at = NULL, purge_after = NULL WHERE project_id = 'prj-2'");
+    expect(await mine(), 'CONTROL: restored, it is listed again').toEqual(['prj-1', 'prj-2']);
+    expect(await readable(), 'CONTROL: and served again').toBe('kept');
+    // the legacy lower-case rows of the fixture (usr_legacy_owner 'owner') list nothing
+    const legacy = await store.projectsOf('usr_legacy_owner', {});
+    expect(legacy.ok && legacy.value).toEqual({ projects: [], next: null });
   }, 120_000);
 });

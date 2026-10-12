@@ -166,6 +166,13 @@ interface StoredSession {
   readonly scope: BrowserSessionScope;
   readonly participantId: string | null;
   readonly projectId: string | null;
+  /**
+   * A native SOCIAL session's `session_ref` (WonderFS contract r1.4 §19.m1): 128 random bits minted WITH the session and kept
+   * beside it. Not the token, not the token's hash (the lookup key), not the session id, derivable from none of them, and
+   * accepted by no verifier: it authenticates nothing. It is what WonderFS records as a player's provenance `session_id`. Null
+   * for every other scope.
+   */
+  readonly sessionRef: string | null;
   revokedAt: number | null;
 }
 
@@ -267,6 +274,13 @@ export interface BrowserSessionStore {
    * The voice re-bind's "newest session wins" (MAIN's internal review af2eb058, m-d) asks it about the session that made a binding.
    */
   nativeSocialSessionIssuedAt(input: { sessionId: string; now: number }): number | null;
+  /**
+   * The NON-AUTHENTICATING `session_ref` of a LIVE native social session (WonderFS contract r1.4 §19.m1), looked up by the session's
+   * id -- or null: gone, or not a native social session. A read: it never sweeps. 128 random bits minted with the session; not the
+   * token, not its hash, derivable from neither, and no verifier accepts it. WonderFS records it as a player's provenance
+   * `session_id`. (A lookup by id, beside `nativeSocialSessionIssuedAt`, so `verifyNativeSocialSession`'s answer is unchanged.)
+   */
+  nativeSocialSessionRef(input: { sessionId: string; now: number }): string | null;
   revokeSession(input: { token: string; now: number }): boolean;
   /**
    * Drops expired records. Called on the WRITE path only — a read must never
@@ -358,6 +372,7 @@ export function createBrowserSessionStore(): BrowserSessionStore {
         scope: grant.scope,
         participantId: grant.participantId,
         projectId: grant.projectId,
+        sessionRef: null,
         revokedAt: null,
       });
       return {
@@ -399,6 +414,7 @@ export function createBrowserSessionStore(): BrowserSessionStore {
         scope,
         participantId: scope === 'browser_control' ? participantId : null,
         projectId: null,
+        sessionRef: null,
         revokedAt: null,
       });
       return {
@@ -463,7 +479,10 @@ export function createBrowserSessionStore(): BrowserSessionStore {
       const expiresAt = now + NATIVE_SESSION_TTL_MS;
       sessions.set(sessionId, {
         sessionId, tokenHash: sha256(token), origin: NATIVE_SOCIAL_AUDIENCE, expiresAt, issuedAt: now,
-        scope: 'native_social', participantId, projectId: null, revokedAt: null,
+        scope: 'native_social', participantId, projectId: null,
+        // §19.m1: its own 128 random bits, drawn apart from the token and the id -- never computed from either
+        sessionRef: randomBytes(16).toString('hex'),
+        revokedAt: null,
       });
       return {
         ok: true,
@@ -492,6 +511,13 @@ export function createBrowserSessionStore(): BrowserSessionStore {
       if (session === undefined || session.revokedAt !== null || session.expiresAt <= now) return null;
       if (session.scope !== 'native_social' || session.origin !== NATIVE_SOCIAL_AUDIENCE) return null;
       return session.issuedAt;
+    },
+
+    nativeSocialSessionRef({ sessionId, now }) {
+      const session = sessions.get(sessionId);
+      if (session === undefined || session.revokedAt !== null || session.expiresAt <= now) return null;
+      if (session.scope !== 'native_social' || session.origin !== NATIVE_SOCIAL_AUDIENCE) return null;
+      return session.sessionRef;
     },
 
     revokeSession({ token, now }) {
