@@ -1,13 +1,13 @@
 /**
  * THE WONDERFS GATE (R1): every /wonderfs/v1 request passes the same gates, in this order, before any WonderFS row is read.
  *
- *   1. DESKTOP ONLY. A request with a browser Origin is refused (403 desktop_only), as social's.
+ *   1. DESKTOP ONLY. A request with ANY Origin header -- an empty one included -- is refused (403 desktop_only), as social's.
  *   2. THE SCHEME (plan §2.2, interface point 1): `Authorization: Relay-Session <token>` is a PLAYER; `WonderFS-Grant <token>` is
  *      RESERVED for agents and refused until the agent phase builds grants (A1); anything else is no credential. A player session
  *      never acts under a grant, and a grant never acts as a player.
  *   3. A LIVE SESSION: the desktop client's `native_social` session (grants.ts), the same `ghu-<id>` player social sees, admitted
  *      here holding ONE capability, `wonderfs`. Its `session_ref` (§19.m1) is read with it: the principal's provenance session id.
- *      No session: 401 session_required.
+ *      A token outside the minted shape is never looked up. No session: 401 session_required.
  *   4. THE TABLE (wonderfs-scope.ts): the path is exactly one operation's, or 403 not_permitted.
  *   5. THE STORE EXISTS: without a database the answer is 503 wonderfs_unavailable -- a fact about this server, NEVER a switch
  *      (INV-10, §19.m6). Nothing here reads a setting.
@@ -45,7 +45,12 @@ export const WONDERFS_NO_STORE: Readonly<Record<string, string>> = Object.freeze
 
 export function wonderfsJson(status: number, value: unknown, headers: Readonly<Record<string, string>> = {}): WonderfsAnswer {
   const body = Buffer.from(JSON.stringify(value), 'utf8');
-  return { status, body, headers: { ...WONDERFS_NO_STORE, 'content-type': 'application/json; charset=utf-8', 'content-length': String(body.byteLength), ...headers } };
+  return {
+    status,
+    body,
+    // nosniff on JSON too (R1 security MINOR-4): a page must never be sniffed into anything a browser would run
+    headers: { ...WONDERFS_NO_STORE, 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff', 'content-length': String(body.byteLength), ...headers },
+  };
 }
 
 export function wonderfsError(status: number, kind: string, message: string, headers: Readonly<Record<string, string>> = {}): WonderfsAnswer {
@@ -112,10 +117,17 @@ export function wonderfsSessionVerifier(sessions: Pick<BrowserSessionStore, 'ver
 /** The Authorization header, by SCHEME (plan §2.2 interface point 1). */
 export type WonderfsCredential = { readonly kind: 'session'; readonly token: string } | { readonly kind: 'grant' } | { readonly kind: 'none' };
 
+/**
+ * A session token's SHAPE, checked before any session is looked up (R1 security MINOR-5): the store hashes the presented token once
+ * per stored session, so an unbounded header would cost (sessions x its length) before any budget. A minted token is 43 base64url
+ * characters (grants.ts randomSecret); anything outside this shape is no session.
+ */
+const SESSION_TOKEN = /^[A-Za-z0-9_-]{16,128}$/;
+
 export function wonderfsCredential(header: string | undefined): WonderfsCredential {
   if (header === undefined) return { kind: 'none' };
   const session = /^Relay-Session\s+(\S+)$/i.exec(header.trim());
-  if (session !== null) return { kind: 'session', token: session[1] };
+  if (session !== null) return SESSION_TOKEN.test(session[1]) ? { kind: 'session', token: session[1] } : { kind: 'none' };
   if (/^WonderFS-Grant\s+\S+$/i.test(header.trim())) return { kind: 'grant' };
   return { kind: 'none' };
 }
@@ -153,6 +165,10 @@ export interface WonderfsRequest {
   readonly clientBuild: string | undefined;
   /** `range`. */
   readonly range: string | undefined;
+  /** `if-range` (RFC 9110 §13.1.5): a Range is honoured only while this names the CURRENT representation. */
+  readonly ifRange?: string | undefined;
+  /** True once the client has gone (its socket closed): a byte answer then stops before hashing or sending. Absent: never known. */
+  readonly closed?: () => boolean;
   readonly now: number;
 }
 
@@ -179,8 +195,8 @@ export type WonderfsGateResult = { readonly ok: true; readonly admitted: Wonderf
 const refuse = (answer: WonderfsAnswer): WonderfsGateResult => ({ ok: false, answer });
 
 export async function wonderfsGate(request: WonderfsRequest, deps: WonderfsGateDeps): Promise<WonderfsGateResult> {
-  // 1. desktop only
-  if (request.origin !== undefined && request.origin !== '') {
+  // 1. desktop only: ANY Origin header, an empty one included, is a browser's (R1 security MINOR-6)
+  if (request.origin !== undefined) {
     return refuse(wonderfsError(403, 'desktop_only', 'WonderFS is reached from the Wonderland desktop client.'));
   }
   // 2. the scheme; 3. a live session

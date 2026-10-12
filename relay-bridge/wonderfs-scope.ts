@@ -15,7 +15,10 @@
  * IDS ONLY IN PATHS (plan §2): a file PATH never travels in a URL or a query string, so a file is addressed by its stable id.
  * Every id segment is anchored: a project as grants.ts PROJECT_ID_PATTERN, a file id as the engine's ids, a blob as 64 lowercase
  * hex. Any path holding '..', '%' or '//' is refused before the table is read (as wonderland-social-scope.ts l.125).
- * Only `main` is readable by a human in R1: agent branches belong to the agent phase.
+ * Only `main`'s tree, files and content are listed for a human in R1: agent branches belong to the agent phase. H7 (a blob by its
+ * address) is wider by design: it serves a blob that ANYTHING of the project names -- a version, an entry or a fork base on any
+ * branch, or a retained conflict -- which §8.2 allows an editor (R1 security MINOR-3). Before A1 creates mission branches, record
+ * whether a human may fetch an unmerged mission branch's bytes by address.
  */
 
 export const NATIVE_WONDERFS_CAPABILITY = 'wonderfs' as const;

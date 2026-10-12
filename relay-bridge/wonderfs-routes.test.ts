@@ -1,4 +1,6 @@
-import { createServer, request as httpRequest, type Server } from 'node:http';
+import { createServer, request as httpRequest, type Server, type ServerResponse } from 'node:http';
+import type { Socket } from 'node:net';
+import { Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { openWfsMemoryStore, wfsMemoryBacking } from '../src/relay/wonderfs/wonderfs-memory-store';
@@ -8,7 +10,16 @@ import { WFS_PAGE_MAX_BYTES, type WfsStore } from '../src/relay/wonderfs/wonderf
 import { createBrowserSessionStore, NATIVE_WORLD_AUDIENCE } from './browser-session/grants';
 import { createWonderfsBudgets, type WonderfsBudgets } from './wonderfs-budgets';
 import { wonderfsNotFound, wonderfsSessionVerifier } from './wonderfs-gate';
-import { answerWonderfs, wonderfsEncodeTreeCursor, wonderfsRange, wonderfsRequestOf, writeWonderfsAnswer, type WonderfsRouteDeps } from './wonderfs-routes';
+import {
+  answerWonderfs,
+  createWonderfsMount,
+  wonderfsEncodeTreeCursor,
+  wonderfsRange,
+  wonderfsRequestOf,
+  writeWonderfsAnswer,
+  type WonderfsByteAnswer,
+  type WonderfsRouteDeps,
+} from './wonderfs-routes';
 
 /**
  * WONDERFS R1 -- THE READ ROUTES over the in-memory store, through a REAL loopback HTTP server (node:http + fetch), the way the
@@ -108,12 +119,55 @@ async function boot(deps: WonderfsRouteDeps, clock: () => number = () => T0 + 1)
   return `http://127.0.0.1:${typeof address === 'object' && address !== null ? address.port : 0}`;
 }
 
-async function call(base: string, path: string, opts: { token?: string; auth?: string; origin?: string; range?: string; method?: string } = {}): Promise<Answer> {
+/** A store whose first `hold` byte reads wait until the test lets them go; later ones pass straight through. */
+function slowStore(store: WfsStore, hold = Number.POSITIVE_INFINITY): { store: WfsStore; waiting: Array<() => void> } {
+  const waiting: Array<() => void> = [];
+  let held = 0;
+  const slow: WfsStore = new Proxy(store, {
+    get(t, prop) {
+      if (prop !== 'readReferencedBlob') return Reflect.get(t, prop);
+      return async (p: string, s: string) => {
+        if (held < hold) {
+          held += 1;
+          await new Promise<void>((r) => waiting.push(r));
+        }
+        return t.readReferencedBlob(p, s);
+      };
+    },
+  });
+  return { store: slow, waiting };
+}
+
+/** Real budgets, counted: how many byte-read slots are held right now. */
+function countedBudgets(real: WonderfsBudgets): { budgets: WonderfsBudgets; held: () => number } {
+  let held = 0;
+  return {
+    held: () => held,
+    budgets: {
+      take: (player, project, now) => real.take(player, project, now),
+      takeBytes: (player, bytes, now) => real.takeBytes(player, bytes, now),
+      startByteRead: (player) => {
+        const end = real.startByteRead(player);
+        if (end === null) return null;
+        held += 1;
+        let ended = false;
+        return () => {
+          if (!ended) held -= 1;
+          ended = true;
+          end();
+        };
+      },
+    },
+  };
+}
+
+async function call(base: string, path: string, opts: { token?: string; auth?: string; origin?: string; range?: string; ifRange?: string; method?: string } = {}): Promise<Answer> {
   const headers: Record<string, string> = {};
   if (opts.token !== undefined) headers.authorization = `Relay-Session ${opts.token}`;
   if (opts.auth !== undefined) headers.authorization = opts.auth;
   if (opts.origin !== undefined) headers.origin = opts.origin;
   if (opts.range !== undefined) headers.range = opts.range;
+  if (opts.ifRange !== undefined) headers['if-range'] = opts.ifRange;
   const response = await realFetch(`${base}${path}`, { method: opts.method ?? 'GET', headers });
   const bytes = Buffer.from(await response.arrayBuffer());
   const out: Record<string, string> = {};
@@ -531,47 +585,190 @@ describe('WonderFS R1 reads: budgets (§8.4)', () => {
     expect(statuses).toEqual([404, 404, 404, 429]);
   });
 
-  it('at most two byte answers in flight per process: a third is 429 (Retry-After 1); a slot comes back when an answer is written', async () => {
+  it('at most two byte answers in flight per process: a third player is 429 (Retry-After 1); a slot comes back when an answer is written', async () => {
     const f = await fixture();
-    const { sessions, tokens } = sessionsFor(['ghu-1']);
-    const waiting: Array<() => void> = [];
-    const slow: WfsStore = new Proxy(f.store, {
-      get(t, prop) {
-        if (prop !== 'readBlob') return Reflect.get(t, prop);
-        return async (p: string, s: string) => {
-          await new Promise<void>((r) => waiting.push(r));
-          return t.readBlob(p, s);
-        };
-      },
-    });
-    const real = createWonderfsBudgets();
-    let held = 0;
-    // the process's real budgets, counted: how many byte-read slots are held right now
-    const budgets: WonderfsBudgets = {
-      take: (player, project, now) => real.take(player, project, now),
-      startByteRead: () => {
-        const end = real.startByteRead();
-        if (end === null) return null;
-        held += 1;
-        return () => { held -= 1; end(); };
-      },
-    };
-    const base = await boot({ verifySession: wonderfsSessionVerifier(sessions), store: slow, budgets });
+    const { sessions, tokens } = sessionsFor(['ghu-1', 'ghu-2', 'ghu-3']);
+    const slow = slowStore(f.store, 2);
+    const counted = countedBudgets(createWonderfsBudgets());
+    const base = await boot({ verifySession: wonderfsSessionVerifier(sessions), store: slow.store, budgets: counted.budgets });
     const path = `/wonderfs/v1/projects/${PROJECT}/blobs/${f.blobs.v1.sha256}`;
     const first = call(base, path, { token: tokens['ghu-1'] });
-    const second = call(base, path, { token: tokens['ghu-1'] });
-    await vi.waitFor(() => expect(waiting.length).toBe(2));
-    expect(held).toBe(2);
-    const third = await call(base, path, { token: tokens['ghu-1'] });
+    const second = call(base, path, { token: tokens['ghu-2'] });
+    await vi.waitFor(() => expect(slow.waiting.length).toBe(2));
+    expect(counted.held()).toBe(2);
+    const third = await call(base, path, { token: tokens['ghu-3'] });
     expect([third.status, third.headers['retry-after'], third.json.error.message]).toEqual([429, '1', 'Too many requests; try again in 1 s.']);
-    for (const go of waiting.splice(0)) go();
+    for (const go of slow.waiting.splice(0)) go();
     expect([(await first).status, (await second).status]).toEqual([200, 200]);
     // the slots return once the two answers are written; then the next byte read is admitted
-    await vi.waitFor(() => expect(held).toBe(0));
-    const again = call(base, path, { token: tokens['ghu-1'] });
-    await vi.waitFor(() => expect(waiting.length).toBe(1));
-    for (const go of waiting.splice(0)) go();
-    expect((await again).status).toBe(200);
+    await vi.waitFor(() => expect(counted.held()).toBe(0));
+    expect((await call(base, path, { token: tokens['ghu-3'] })).status).toBe(200);
+  });
+
+  it('ONE PLAYER CANNOT HOLD ANOTHER\'S BYTE READS (security MAJOR-1(a)): a player\'s second concurrent byte read is 429 while another player is served; CONTROL: a process-only cap refuses the other player instead', async () => {
+    const f = await fixture();
+    const { sessions, tokens } = sessionsFor(['ghu-1', 'ghu-2']);
+    const path = `/wonderfs/v1/projects/${PROJECT}/blobs/${f.blobs.v1.sha256}`;
+    const run = async (perPlayer: number) => {
+      const slow = slowStore(f.store, 2);
+      const base = await boot({ verifySession: wonderfsSessionVerifier(sessions), store: slow.store, budgets: createWonderfsBudgets(undefined, { maxByteReadsPerPlayer: perPlayer }) });
+      const first = call(base, path, { token: tokens['ghu-1'] });
+      await vi.waitFor(() => expect(slow.waiting.length).toBe(1));
+      // the player's second read, settled (refused) or held at the store, BEFORE the other player asks: a fixed order
+      let ownSettled = false;
+      const own = call(base, path, { token: tokens['ghu-1'] }).then((a) => { ownSettled = true; return a; });
+      await vi.waitFor(() => expect(ownSettled || slow.waiting.length === 2).toBe(true));
+      const other = call(base, path, { token: tokens['ghu-2'] });
+      await vi.waitFor(() => expect(slow.waiting.length).toBe(2));
+      for (const go of slow.waiting.splice(0)) go();
+      return [(await first).status, (await own).status, (await other).status];
+    };
+    expect(await run(1), 'one per player: the player\'s second is refused, the other player is served').toEqual([200, 429, 200]);
+    expect(await run(2), 'CONTROL, a process-only cap: the first player takes both slots and the other player is refused').toEqual([200, 200, 429]);
+  });
+
+  it('a per-player BYTES budget (security MAJOR-1(b)): charged the whole blob read and verified, whatever the Range; over it, 429 + Retry-After N = the body\'s N; another player is unaffected', async () => {
+    const f = await fixture();
+    const { sessions, tokens } = sessionsFor(['ghu-1', 'ghu-2']);
+    const budgets = createWonderfsBudgets(undefined, { byteBudget: { burstBytes: 30, perMinuteBytes: 30 } });
+    const base = await boot({ verifySession: wonderfsSessionVerifier(sessions), store: f.store, budgets });
+    const path = `/wonderfs/v1/projects/${PROJECT}/branches/main/files/${f.ids.readme}/content`; // 20 bytes
+    expect((await call(base, path, { token: tokens['ghu-1'] })).status).toBe(200);
+    const over = await call(base, path, { token: tokens['ghu-1'], range: 'bytes=0-0' });
+    const n = over.json.error.message.match(/try again in (\d+) s\./u)?.[1];
+    // 10 bytes are left; 20 more are needed at 30 bytes a minute: 10 bytes take 20 s
+    expect([over.status, over.headers['retry-after'], n]).toEqual([429, '20', '20']);
+    expect((await call(base, path, { token: tokens['ghu-2'] })).status, 'another player').toBe(200);
+  });
+
+  it('A CLIENT THAT LEAVES DURING THE READ RETURNS ITS SLOT (security BLOCKER-1, correctness MAJOR-1): after two aborted downloads every slot is free; CONTROL: the R1-r2 writer (a late once(close)) leaks both', async () => {
+    /** R1-r2's writer, kept here as the CONTROL: it listened for `close` only after the read, so a close during the read was missed. */
+    const lateCloseWriter = (res: ServerResponse, answer: WonderfsByteAnswer): void => {
+      if (answer.release !== undefined) res.once('close', answer.release);
+      res.writeHead(answer.status, answer.headers);
+      res.end(answer.body);
+    };
+    const abortTwice = async (mode: 'fixed' | 'writer-only' | 'r2-control') => {
+      const f = await fixture();
+      const { sessions, tokens } = sessionsFor(['ghu-1', 'ghu-2', 'ghu-3']);
+      const slow = slowStore(f.store, 2);
+      const counted = countedBudgets(createWonderfsBudgets());
+      const deps: WonderfsRouteDeps = { verifySession: wonderfsSessionVerifier(sessions), store: slow.store, budgets: counted.budgets };
+      let written = 0;
+      const sockets: Socket[] = [];
+      const server = createServer((req, res) => {
+        void (async () => {
+          const request = wonderfsRequestOf(req, T0 + 1);
+          // 'writer-only' and the control do not look for a closed client: only the writer can return the slot
+          const answer = (await answerWonderfs(mode === 'fixed' ? request : { ...request, closed: undefined }, deps)) ?? wonderfsNotFound();
+          if (mode === 'r2-control') lateCloseWriter(res, answer);
+          else writeWonderfsAnswer(res, answer);
+          written += 1;
+        })();
+      });
+      server.on('connection', (s: Socket) => sockets.push(s));
+      servers.push(server);
+      await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+      const address = server.address();
+      const base = `http://127.0.0.1:${typeof address === 'object' && address !== null ? address.port : 0}`;
+      const path = `/wonderfs/v1/projects/${PROJECT}/blobs/${f.blobs.v1.sha256}`;
+      const aborts = [new AbortController(), new AbortController()];
+      const pending = ['ghu-1', 'ghu-2'].map((p, i) => realFetch(`${base}${path}`, { headers: { authorization: `Relay-Session ${tokens[p]}` }, signal: aborts[i].signal }).then(() => 'answered', () => 'aborted'));
+      await vi.waitFor(() => expect(slow.waiting.length).toBe(2));
+      expect(counted.held()).toBe(2);
+      for (const a of aborts) a.abort();
+      expect(await Promise.all(pending)).toEqual(['aborted', 'aborted']);
+      await vi.waitFor(() => expect(sockets.filter((s) => s.destroyed).length).toBe(2));
+      for (const go of slow.waiting.splice(0)) go();
+      await vi.waitFor(() => expect(written).toBe(2));
+      await new Promise<void>((r) => setTimeout(r, 50)); // let every close / finished callback run
+      const held = counted.held();
+      const next = await call(base, path, { token: tokens['ghu-3'] });
+      return { held, next: next.status };
+    };
+    expect(await abortTwice('fixed'), 'the fix').toEqual({ held: 0, next: 200 });
+    expect(await abortTwice('writer-only'), 'stream.finished alone returns a slot whose client had already gone').toEqual({ held: 0, next: 200 });
+    expect(await abortTwice('r2-control'), 'CONTROL: the late once(close) leaks both slots and the bridge refuses every byte read').toEqual({ held: 2, next: 429 });
+  }, 60_000);
+
+  it('a byte answer that never finishes writing is destroyed at its deadline and its slot comes back (security MAJOR-1(c)); CONTROL: one that finishes returns it at once', async () => {
+    let released = 0;
+    // a reader that never reads: no write ever completes
+    const stalled = new Writable({ highWaterMark: 1, write(_chunk, _encoding, _callback) { /* never called back */ } });
+    const stalledRes = Object.assign(stalled, { writeHead: () => stalled, setTimeout: () => stalled }) as unknown as ServerResponse;
+    writeWonderfsAnswer(stalledRes, { status: 200, headers: {}, body: Buffer.alloc(64), release: () => { released += 1; } }, {}, { deadlineMs: 50, idleMs: 60_000 });
+    expect(released, 'held while it writes').toBe(0);
+    await vi.waitFor(() => expect(released).toBe(1), { timeout: 2_000 });
+    expect(stalled.destroyed, 'the deadline destroyed it').toBe(true);
+    let releasedFast = 0;
+    const flowing = new Writable({ write(_chunk, _encoding, callback) { callback(); } });
+    const flowingRes = Object.assign(flowing, { writeHead: () => flowing, setTimeout: () => flowing }) as unknown as ServerResponse;
+    writeWonderfsAnswer(flowingRes, { status: 200, headers: {}, body: Buffer.alloc(64), release: () => { releasedFast += 1; } }, {}, { deadlineMs: 60_000, idleMs: 60_000 });
+    await vi.waitFor(() => expect(releasedFast).toBe(1));
+  });
+});
+
+describe('WonderFS R1 reads: If-Range (RFC 9110 §13.1.5; correctness MAJOR-2)', () => {
+  it('resuming content after the file changed sends the NEW file whole (200), never spliced; a matching strong ETag resumes (206); a weak tag or a date never matches', async () => {
+    const f = await fixture();
+    const { sessions, tokens } = sessionsFor(['ghu-1']);
+    const base = await boot({ verifySession: wonderfsSessionVerifier(sessions), store: f.store, budgets: createWonderfsBudgets() });
+    const path = `/wonderfs/v1/projects/${PROJECT}/branches/main/files/${f.ids.readme}/content`;
+    const before = await call(base, path, { token: tokens['ghu-1'] });
+    const oldTag = before.headers.etag;
+    expect(oldTag).toBe(`"${f.blobs.v2.sha256}"`);
+    // the file changes
+    const v3 = await f.store.putBlob(PROJECT, utf8('readme, the third words'));
+    if (!v3.ok) throw new Error(v3.error.message);
+    const changed = await f.store.commit(PROJECT, { requestId: 'req-if-range-01', branchId: WFS_MAIN_BRANCH, baseRev: 7, principal: human('ghu-1'), ops: [{ op: 'update', fileId: f.ids.readme, expectContentVersion: 2, ...v3.value }] }, NOW_ISO);
+    expect(changed.ok && changed.value.status).toBe('committed');
+    const newTag = `"${v3.value.sha256}"`;
+    const stale = await call(base, path, { token: tokens['ghu-1'], range: 'bytes=8-', ifRange: oldTag });
+    expect([stale.status, stale.bytes.toString('utf8'), stale.headers['content-range'], stale.headers.etag]).toEqual([200, 'readme, the third words', undefined, newTag]);
+    const current = await call(base, path, { token: tokens['ghu-1'], range: 'bytes=8-', ifRange: newTag });
+    expect([current.status, current.bytes.toString('utf8')], 'CONTROL: the current ETag resumes').toEqual([206, 'the third words']);
+    expect((await call(base, path, { token: tokens['ghu-1'], range: 'bytes=8-', ifRange: `W/${newTag}` })).status, 'a weak tag never matches').toBe(200);
+    expect((await call(base, path, { token: tokens['ghu-1'], range: 'bytes=8-', ifRange: 'Mon, 12 Oct 2026 12:00:00 GMT' })).status, 'a date never matches').toBe(200);
+    expect((await call(base, path, { token: tokens['ghu-1'], range: 'bytes=8-' })).status, 'CONTROL: a Range alone is honoured').toBe(206);
+    expect((await call(base, path, { token: tokens['ghu-1'], ifRange: oldTag })).status, 'If-Range without a Range: the whole file').toBe(200);
+  });
+});
+
+describe('WonderFS R1 reads: gate hardening (security MINOR-5, MINOR-6)', () => {
+  it('an EMPTY Origin is a browser\'s too (403); a token outside the minted shape is no session and is never looked up; CONTROL: the minted token is served', async () => {
+    const f = await fixture();
+    const { sessions, tokens } = sessionsFor(['ghu-1']);
+    let looked = 0;
+    const verify = wonderfsSessionVerifier(sessions);
+    const deps: WonderfsRouteDeps = { verifySession: (token, now) => { looked += 1; return verify(token, now); }, store: f.store, budgets: null };
+    const ask = async (authorization: string, origin?: string) => {
+      const a = await answerWonderfs({ method: 'GET', url: `/wonderfs/v1/projects/${PROJECT}`, authorization, origin, clientBuild: undefined, range: undefined, now: T0 + 1 }, deps);
+      return [a?.status, a === null ? null : JSON.parse(a.body.toString('utf8')).error?.kind ?? 'ok'];
+    };
+    expect(await ask(`Relay-Session ${tokens['ghu-1']}`, '')).toEqual([403, 'desktop_only']);
+    for (const token of ['x'.repeat(5000), 'short', 'é'.repeat(43), 'a.b.c.d.e.f.g.h.i.j']) expect(await ask(`Relay-Session ${token}`), token.slice(0, 12)).toEqual([401, 'session_required']);
+    expect(looked, 'no malformed token reached the session store').toBe(0);
+    expect(await ask(`Relay-Session ${tokens['ghu-1']}`), 'CONTROL').toEqual([200, 'ok']);
+    expect(looked).toBe(1);
+  });
+});
+
+describe('WonderFS R1 reads: the bridge mount (correctness MINOR-5)', () => {
+  it('createWonderfsMount without a database: a signed-in player gets 503 wonderfs_unavailable, an anonymous one 401; the pool is asked only after the session gate', async () => {
+    const sessions = createBrowserSessionStore();
+    const minted = sessions.mintNativeSocialSession({ now: Date.now(), participantId: 'ghu-1' });
+    if (!minted.ok) throw new Error('not minted');
+    let asked = 0;
+    const mount = createWonderfsMount({ sessions, pool: () => { asked += 1; return null; } });
+    const server = createServer((req, res) => { void mount.serve(req, res, {}); });
+    servers.push(server);
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const address = server.address();
+    const base = `http://127.0.0.1:${typeof address === 'object' && address !== null ? address.port : 0}`;
+    const anonymous = await call(base, `/relay-api/wonderfs/v1/projects/${PROJECT}`);
+    expect([anonymous.status, anonymous.json.error.kind, asked]).toEqual([401, 'session_required', 0]);
+    const signedIn = await call(base, `/relay-api/wonderfs/v1/projects/${PROJECT}`, { token: minted.session.token });
+    expect([signedIn.status, signedIn.json.error.kind, asked]).toEqual([503, 'wonderfs_unavailable', 1]);
   });
 });
 

@@ -19,6 +19,7 @@
  *             drops an item;
  *   NUMERIC-KEYS (R0b-fix, CI r1.7) event seq, change rev, history version and a tree cursor's revision page in NUMERIC order across
  *             the 9|10 boundary (the PostgreSQL events query once sorted by its text alias: [1, 10, 11, 12, ...]);
+ *   READ-AT   (R1-r3) fileAt: a file at one revision in one read; readReferencedBlob: bytes only while the live project names them;
  *   BLOB      a blob stored through one store instance (one bridge) is committable through another whose state is cached (F5);
  *             storing it does not move the project's version, so no version-keyed cache could have seen it;
  *   ROLE      the product's OWNER / ADMIN / MEMBER through the one mapping; anything else is no role, never an error;
@@ -46,11 +47,16 @@ import {
   WFS_PAGE_MAX_BYTES,
   WFS_PAGE_MAX_LIMIT,
   type WfsBranchState,
+  type WfsChangesPage,
+  type WfsCommit,
   type WfsCommitOutcome,
   type WfsCommitRequest,
   type WfsConflict,
   type WfsEngineContext,
   type WfsEntry,
+  type WfsEventsPage,
+  type WfsFileVersion,
+  type WfsHistoryPage,
   type WfsLimits,
   type WfsOp,
   type WfsPrincipal,
@@ -478,7 +484,8 @@ export const WFS_STORE_CASES: readonly WfsStoreCase[] = [
       const eventPages: number[][] = [];
       let afterSeq = 0;
       for (let guard = 0; guard < 20; guard += 1) {
-        const page = value(await store.events(P, { afterSeq, limit: 3 }), `events after ${afterSeq}`);
+        // explicit page types: each loop's cursor is read from the page it just fetched (TS7022 otherwise)
+        const page: WfsEventsPage = value(await store.events(P, { afterSeq, limit: 3 }), `events after ${afterSeq}`);
         eventPages.push(page.events.map((e) => e.seq));
         if (page.next === null) break;
         afterSeq = page.next;
@@ -490,8 +497,8 @@ export const WFS_STORE_CASES: readonly WfsStoreCase[] = [
       const changePages: number[][] = [];
       let afterRev = 0;
       for (let guard = 0; guard < 20; guard += 1) {
-        const page = value(await store.changes(P, { branchId: WFS_MAIN_BRANCH, afterRev, limit: 3 }), `changes after ${afterRev}`);
-        changePages.push(page.commits.map((c) => c.rev));
+        const page: WfsChangesPage = value(await store.changes(P, { branchId: WFS_MAIN_BRANCH, afterRev, limit: 3 }), `changes after ${afterRev}`);
+        changePages.push(page.commits.map((c: WfsCommit) => c.rev));
         if (page.next === null) break;
         afterRev = page.next;
       }
@@ -500,8 +507,8 @@ export const WFS_STORE_CASES: readonly WfsStoreCase[] = [
       const historyPages: number[][] = [];
       let before: number | null = null;
       for (let guard = 0; guard < 20; guard += 1) {
-        const page = value(await store.fileHistory(P, { branchId: WFS_MAIN_BRANCH, fileId: N, before, limit: 3 }), `history before ${before}`);
-        historyPages.push(page.versions.map((x) => x.entry.version));
+        const page: WfsHistoryPage = value(await store.fileHistory(P, { branchId: WFS_MAIN_BRANCH, fileId: N, before, limit: 3 }), `history before ${before}`);
+        historyPages.push(page.versions.map((x: WfsFileVersion) => x.entry.version));
         if (page.next === null) break;
         before = page.next;
       }
@@ -512,6 +519,47 @@ export const WFS_STORE_CASES: readonly WfsStoreCase[] = [
         const second = value(await store.tree(P, { branchId: WFS_MAIN_BRANCH, cursor: first.next, limit: 1 }), `tree @${rev} page 2`);
         same([first.rev, second.rev, [...first.entries, ...second.entries].map((e) => [e.path, e.version]), second.next], [rev, rev, [['a.txt', 1], ['n.txt', rev]], null], `the tree at ${rev}, page by page`);
       }
+    },
+  },
+  {
+    name: 'READ-AT (R1-r3): a file at one revision in ONE read (the head, each revision, a tombstone, before it existed, past the head); a blob\'s bytes only while something of the live project names it',
+    async run(h) {
+      const P = 'prj-read-at';
+      await h.seed(P, { usr_owner: 'OWNER' });
+      const store = h.open();
+      value(await store.createProject(P, NOW), 'createProject');
+      const owner = who('usr_owner');
+      const a1 = await put(store, P, 'read-at one');
+      const a2 = await put(store, P, 'read-at two');
+      const loose = await put(store, P, 'read-at never committed');
+      await commitOk(store, P, { requestId: 'req-at-0001', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: owner, ops: [{ op: 'create', path: 'd', kind: 'dir' }] });
+      await commitOk(store, P, { requestId: 'req-at-0002', branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: owner, ops: [{ op: 'create', path: 'd/f.txt', kind: 'file', ...a1 }] });
+      const F = (value(await store.tree(P, { branchId: WFS_MAIN_BRANCH }), 'tree').entries.find((e) => e.path === 'd/f.txt') ?? breach('no d/f.txt')).fileId;
+      await commitOk(store, P, { requestId: 'req-at-0003', branchId: WFS_MAIN_BRANCH, baseRev: 2, principal: owner, ops: [{ op: 'update', fileId: F, expectContentVersion: 1, ...a2 }] });
+      await commitOk(store, P, { requestId: 'req-at-0004', branchId: WFS_MAIN_BRANCH, baseRev: 3, principal: owner, ops: [{ op: 'delete', fileId: F, expectContentVersion: 2 }] });
+      const at = (rev?: number) => store.fileAt(P, { branchId: WFS_MAIN_BRANCH, fileId: F, rev });
+      const head = value(await at(), 'at the head');
+      same([head.headRev, head.rev, head.entry.deleted, head.entry.version], [4, 4, true, 3], 'at the head: the tombstone');
+      same([value(await at(2), 'at 2').entry.sha256, value(await at(3), 'at 3').entry.sha256, value(await at(4), 'at 4').entry.deleted], [a1.sha256, a2.sha256, true], 'each revision: its own version');
+      same(value(await at(3), 'at 3 again').rev, 3, 'the revision answered');
+      notFound(await at(1), 'before the file existed');
+      notFound(await at(5), 'past the head');
+      notFound(await store.fileAt(P, { branchId: WFS_MAIN_BRANCH, fileId: 'file-nope' }), 'an unknown file');
+      notFound(await store.fileAt(P, { branchId: 'branch-nope', fileId: F }), 'an unknown branch');
+      notFound(await store.fileAt('prj-nowhere', { branchId: WFS_MAIN_BRANCH, fileId: F }), 'an unknown project');
+      refused(await store.fileAt(P, { branchId: WFS_MAIN_BRANCH, fileId: F, rev: -1 }), 'validation-failed', 'a negative revision');
+      refused(await store.fileAt(P, { branchId: WFS_MAIN_BRANCH, fileId: '../x' }), 'validation-failed', 'a malformed file id');
+      // bytes: a referenced blob (even one only an OLD version names) with its recorded size; an unreferenced or unknown one is null
+      for (const b of [a1, a2]) {
+        const got = value(await store.readReferencedBlob(P, b.sha256), `referenced ${b.sha256.slice(0, 8)}`);
+        same(got === null ? null : [got.size, got.bytes === null ? null : sha256Bytes(got.bytes)], [b.size, b.sha256], 'a referenced blob: its size and its bytes');
+      }
+      same(value(await store.readReferencedBlob(P, loose.sha256), 'loose'), null, 'an uploaded, never committed blob: null');
+      same(value(await store.readReferencedBlob(P, sha('nothing at all')), 'unknown'), null, 'an unknown address: null');
+      notFound(await store.readReferencedBlob('prj-nowhere', a1.sha256), 'an unknown project');
+      refused(await store.readReferencedBlob(P, 'ABC'), 'validation-failed', 'a malformed address');
+      // CONTROL: the loose blob IS held -- only its reference is missing
+      same(value(await store.blobInfo(P, loose.sha256), 'blobInfo loose'), { ...loose, referenced: false }, 'CONTROL: the loose blob is held');
     },
   },
   {

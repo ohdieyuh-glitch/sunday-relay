@@ -24,6 +24,7 @@ import {
   wfsCheckChangesQuery,
   wfsCheckConflictsQuery,
   wfsCheckEventsQuery,
+  wfsCheckFileAtQuery,
   wfsCheckHistoryQuery,
   wfsCheckProjectsQuery,
   wfsCheckSha256,
@@ -43,11 +44,13 @@ import {
   type WfsConflictView,
   type WfsEventRecord,
   type WfsEventsPage,
+  type WfsFileAt,
   type WfsFileVersion,
   type WfsHistoryPage,
   type WfsMemberProject,
   type WfsProjectHead,
   type WfsProjectsPage,
+  type WfsReferencedBlob,
   type WfsStore,
   type WfsStoreEvent,
   type WfsTreePage,
@@ -127,6 +130,17 @@ interface EntryRow {
 const ENTRY_COLUMNS = 'branch_id, file_id, kind, path, path_key, sha256, size::text AS size, deleted, version, content_version, path_version, created_rev, updated_rev';
 /** The same columns, unconverted, for a UNION over the entry-shaped tables. */
 const ENTRY_RAW = 'branch_id, file_id, kind, path, path_key, sha256, size, deleted, version, content_version, path_version, created_rev, updated_rev';
+
+/**
+ * Whether anything of project $1 names address $2 -- a version, a current or fork-time entry, a retained conflict, on any branch --
+ * and the size it was stored with (null: not held). ONE row, always: the four EXISTS run whether or not the address is held, so an
+ * unknown address and a held-but-unreferenced upload cost the same work (R1 security review MINOR-2).
+ */
+const BLOB_REFERENCE_SQL = `SELECT (SELECT b.size FROM relay_wonderland.wfs_blobs b WHERE b.project_id = $1 AND b.sha256 = $2)::text AS size,
+  (EXISTS (SELECT 1 FROM relay_wonderland.wfs_versions v WHERE v.project_id = $1 AND v.sha256 = $2)
+   OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_entries e WHERE e.project_id = $1 AND e.sha256 = $2)
+   OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_branch_base x WHERE x.project_id = $1 AND x.sha256 = $2)
+   OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_conflict_blobs c WHERE c.project_id = $1 AND c.sha256 = $2)) AS referenced`;
 
 const entryOf = (r: EntryRow): WfsEntry => ({
   fileId: r.file_id,
@@ -633,6 +647,30 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         return ok({ branchId, fileId, current: entryOf(current.rows[0]), versions: page.items, next: page.more ? page.items[page.items.length - 1].entry.version : null });
       });
     },
+    async fileAt(projectId, query) {
+      const q = wfsCheckFileAtQuery(query);
+      if (!q.ok) return q;
+      const { branchId, fileId, rev } = q.value;
+      return snapshot<WfsFileAt>(async (db) => {
+        const headRev = await branchHead(db, projectId, branchId);
+        if (headRev === null) return wfsNotFound('unknown project or branch');
+        const current = await db.query<EntryRow>(`SELECT ${ENTRY_COLUMNS} FROM relay_wonderland.wfs_entries WHERE project_id = $1 AND branch_id = $2 AND file_id = $3`, [projectId, branchId, fileId]);
+        if (current.rows[0] === undefined) return wfsNotFound('unknown file');
+        if (rev === null) return ok({ headRev, rev: headRev, entry: entryOf(current.rows[0]) });
+        if (rev > headRev) return wfsNotFound('no such revision');
+        // the newest version at or below the revision (an agent branch's fork-time base counts as revision 0): one indexed read
+        const at = await db.query<EntryRow>(
+          `SELECT ${ENTRY_COLUMNS} FROM (
+             SELECT ${ENTRY_RAW} FROM relay_wonderland.wfs_versions WHERE project_id = $1 AND branch_id = $2 AND file_id = $3 AND rev <= $4
+             UNION ALL
+             SELECT ${ENTRY_RAW} FROM relay_wonderland.wfs_branch_base WHERE project_id = $1 AND branch_id = $2 AND file_id = $3
+           ) AS h ORDER BY version DESC LIMIT 1`,
+          [projectId, branchId, fileId, rev],
+        );
+        if (at.rows[0] === undefined) return wfsNotFound('no version at that revision');
+        return ok({ headRev, rev, entry: entryOf(at.rows[0]) });
+      });
+    },
     async changes(projectId, query) {
       const q = wfsCheckChangesQuery(query);
       if (!q.ok) return q;
@@ -718,17 +756,20 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
       if (!sha.ok) return sha;
       return snapshot<WfsBlobInfo | null>(async (db) => {
         if ((await liveSeq(db, projectId)) === null) return wfsNotFound('unknown project');
-        const r = await db.query<{ size: string; referenced: boolean }>(
-          `SELECT b.size::text AS size,
-                  (EXISTS (SELECT 1 FROM relay_wonderland.wfs_versions v WHERE v.project_id = b.project_id AND v.sha256 = b.sha256)
-                   OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_entries e WHERE e.project_id = b.project_id AND e.sha256 = b.sha256)
-                   OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_branch_base x WHERE x.project_id = b.project_id AND x.sha256 = b.sha256)
-                   OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_conflict_blobs c WHERE c.project_id = b.project_id AND c.sha256 = b.sha256)) AS referenced
-             FROM relay_wonderland.wfs_blobs b WHERE b.project_id = $1 AND b.sha256 = $2`,
-          [projectId, sha.value],
-        );
-        const row = r.rows[0];
-        return ok(row === undefined ? null : { sha256: sha.value, size: Number(row.size), referenced: row.referenced });
+        const row = (await db.query<{ size: string | null; referenced: boolean }>(BLOB_REFERENCE_SQL, [projectId, sha.value])).rows[0];
+        return ok(row === undefined || row.size === null ? null : { sha256: sha.value, size: Number(row.size), referenced: row.referenced });
+      });
+    },
+    async readReferencedBlob(projectId, sha256) {
+      const sha = wfsCheckSha256(sha256);
+      if (!sha.ok) return sha;
+      return snapshot<WfsReferencedBlob | null>(async (db) => {
+        // ONE consistent read: the project is live, something of it names the address, and its bytes (R0b MINOR-7)
+        if ((await liveSeq(db, projectId)) === null) return wfsNotFound('unknown project');
+        const ref = (await db.query<{ size: string | null; referenced: boolean }>(BLOB_REFERENCE_SQL, [projectId, sha.value])).rows[0];
+        if (ref === undefined || ref.size === null || !ref.referenced) return ok(null);
+        const held = await db.query<{ bytes: Buffer }>('SELECT bytes FROM relay_wonderland.wfs_blob_bytes WHERE project_id = $1 AND sha256 = $2', [projectId, sha.value]);
+        return ok({ size: Number(ref.size), bytes: held.rows[0] === undefined ? null : new Uint8Array(held.rows[0].bytes) });
       });
     },
     async verifyBlob(projectId, sha256) {

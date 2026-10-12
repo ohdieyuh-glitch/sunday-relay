@@ -41,6 +41,7 @@ import {
   wfsCheckChangesQuery,
   wfsCheckConflictsQuery,
   wfsCheckEventsQuery,
+  wfsCheckFileAtQuery,
   wfsCheckHistoryQuery,
   wfsCheckProjectsQuery,
   wfsCheckSha256,
@@ -61,11 +62,13 @@ import {
   type WfsConflictView,
   type WfsEventRecord,
   type WfsEventsPage,
+  type WfsFileAt,
   type WfsFileVersion,
   type WfsHistoryPage,
   type WfsMemberProject,
   type WfsProjectHead,
   type WfsProjectsPage,
+  type WfsReferencedBlob,
   type WfsStore,
   type WfsStoreEvent,
   type WfsTreePage,
@@ -157,6 +160,13 @@ export function openWfsMemoryStore(options: WfsMemoryOptions = {}): WfsMemorySto
   };
 
   const closingOf = (p: WfsMemoryProject, c: WfsConflict): WfsConflictClosing => p.closings.get(c.conflictId) ?? wfsConflictClosing(c, p.state.branches, c.atIso);
+
+  /** Whether anything of this project names `sha` (any branch's versions, entries or fork base; any retained conflict). Worked out whether or not the blob is held. */
+  const referencedIn = (p: WfsMemoryProject, sha: string): boolean => {
+    const named = (e: WfsEntry) => e.sha256 === sha;
+    return [...p.state.branches.values()].some((b) => [...b.entries.values()].some(named) || [...b.base.values()].some(named) || b.commits.some((c) => c.touched.some(named)))
+      || [...p.state.conflicts.values()].some((c) => wfsBlobsNamed(c.ops).includes(sha));
+  };
 
   return {
     backing,
@@ -251,6 +261,27 @@ export function openWfsMemoryStore(options: WfsMemoryOptions = {}): WfsMemorySto
         return ok({ branchId, fileId, current, versions: page.items, next: page.more ? page.items[page.items.length - 1].entry.version : null });
       });
     },
+    async fileAt(projectId, query) {
+      const q = wfsCheckFileAtQuery(query);
+      if (!q.ok) return q;
+      const { branchId, fileId, rev } = q.value;
+      return read<WfsFileAt>(projectId, (p) => {
+        const branch = p.state.branches.get(branchId);
+        if (branch === undefined) return wfsNotFound('unknown project or branch');
+        const current = branch.entries.get(fileId);
+        if (current === undefined) return wfsNotFound('unknown file');
+        if (rev === null) return ok({ headRev: branch.headRev, rev: branch.headRev, entry: current });
+        if (rev > branch.headRev) return wfsNotFound('no such revision');
+        const base = branch.base.get(fileId);
+        const versions: WfsFileVersion[] = [
+          ...(base === undefined ? [] : [{ rev: 0, entry: base }]),
+          ...branch.commits.flatMap((c) => c.touched.filter((e) => e.fileId === fileId).map((entry) => ({ rev: c.rev, entry }))),
+        ];
+        const at = versions.filter((v) => v.rev <= rev).sort((a, b) => b.entry.version - a.entry.version)[0];
+        if (at === undefined) return wfsNotFound('no version at that revision');
+        return ok({ headRev: branch.headRev, rev, entry: at.entry });
+      });
+    },
     async changes(projectId, query) {
       const q = wfsCheckChangesQuery(query);
       if (!q.ok) return q;
@@ -312,13 +343,20 @@ export function openWfsMemoryStore(options: WfsMemoryOptions = {}): WfsMemorySto
       const sha = wfsCheckSha256(sha256);
       if (!sha.ok) return sha;
       return read<WfsBlobInfo | null>(projectId, (p) => {
+        const referenced = referencedIn(p, sha.value);
         const held = p.blobs.get(sha.value);
-        if (held === undefined) return ok(null);
-        const named = (e: WfsEntry) => e.sha256 === sha.value;
-        const referenced = [...p.state.branches.values()].some((b) => [...b.entries.values()].some(named) || [...b.base.values()].some(named) || b.commits.some((c) => c.touched.some(named)))
-          || [...p.state.conflicts.values()].some((c) => wfsBlobsNamed(c.ops).includes(sha.value));
-        return ok({ sha256: sha.value, size: held.byteLength, referenced });
+        return ok(held === undefined ? null : { sha256: sha.value, size: held.byteLength, referenced });
       });
+    },
+    async readReferencedBlob(projectId, sha256) {
+      const sha = wfsCheckSha256(sha256);
+      if (!sha.ok) return sha;
+      const p = backing.projects.get(projectId);
+      if (p === undefined) return wfsNotFound('unknown project');
+      const referenced = referencedIn(p, sha.value);
+      const held = p.blobs.get(sha.value);
+      const answer: WfsReferencedBlob | null = !referenced || held === undefined ? null : { size: held.byteLength, bytes: new Uint8Array(held) };
+      return ok(answer);
     },
     async verifyBlob(projectId, sha256) {
       const sha = wfsCheckSha256(sha256);

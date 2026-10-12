@@ -500,10 +500,22 @@ suite('the WonderFS store on real PostgreSQL: the engine is the oracle', () => {
       return r.value.projects.map((p) => p.projectId);
     };
     expect(await mine()).toEqual(['prj-1', 'prj-2']);
+    // R1-r3: a committed blob of prj-2 is readable through readReferencedBlob while the project is live
+    const blob = await store.putBlob('prj-2', new TextEncoder().encode('kept'));
+    if (!blob.ok) throw new Error(blob.error.message);
+    expect((await store.commit('prj-2', { requestId: 'req-soft-0001', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: who('usr_owner'), ops: [{ op: 'create', path: 'k.txt', kind: 'file', ...blob.value }] }, NOW)).ok).toBe(true);
+    const keptSha = blob.value.sha256;
+    const readable = async () => {
+      const r = await store.readReferencedBlob('prj-2', keptSha);
+      return r.ok ? (r.value === null ? 'null' : new TextDecoder().decode(r.value.bytes ?? new Uint8Array())) : r.error.code;
+    };
+    expect(await readable()).toBe('kept');
     await pool.query("UPDATE relay_wonderland.wfs_projects SET deleted_at = now(), purge_after = now() + interval '30 days' WHERE project_id = 'prj-2'");
     expect(await mine(), 'a soft-deleted project is hidden from its members').toEqual(['prj-1']);
+    expect(await readable(), 'and its bytes are not served (R0b MINOR-7: liveness in the same read)').toBe('not-found');
     await pool.query("UPDATE relay_wonderland.wfs_projects SET deleted_at = NULL, purge_after = NULL WHERE project_id = 'prj-2'");
     expect(await mine(), 'CONTROL: restored, it is listed again').toEqual(['prj-1', 'prj-2']);
+    expect(await readable(), 'CONTROL: and served again').toBe('kept');
     // the legacy lower-case rows of the fixture (usr_legacy_owner 'owner') list nothing
     const legacy = await store.projectsOf('usr_legacy_owner', {});
     expect(legacy.ok && legacy.value).toEqual({ projects: [], next: null });
