@@ -21,7 +21,8 @@ import { migrationVersion, TransactionalWonderlandDatabase, WONDERLAND_MIGRATION
  *          its keys put on players; none is removed; no existing row changes; both tables are empty; the stamp is the last;
  *   G      the guard refuses, changing and stamping nothing: before 036, a second time, after a later stamp, a private_server* relation;
  *   C      every constraint holds against real rows, each refusal with a control that is accepted: no TEAM or FREE tier row, a period in
- *          order, the Free window and cooldown inside the founder's ranges at both bounds, a Free row's times all-or-none and in order, a
+ *          order, the Free window and cooldown inside the 24 h SANITY BOUNDS at both ends (the 6-8 h / 4-5 h durations are PROPOSED, not
+ *          approved, and not encoded: a 9 h window is accepted, a 25 h one refused), a Free row's times all-or-none and in order, a
  *          continuous row with no window, no control character in a name, the owner a real player;
  *   H      the committed DOWN refuses while a later migration is applied and while EITHER table holds a row; then it restores the
  *          catalog EXACTLY, removes the stamp, and 037 applies again. 036's DOWN refuses while 037 is stamped;
@@ -224,10 +225,15 @@ suite('migration 037: Wonderland private servers, applied explicitly after 036',
       over.version ?? 1, ts(T0), over.updated ?? ts(T0),
     ];
     const cycle = 'private_servers_free_cycle';
-    await refused(pool, 'a window under 6 h', row, free(6 * HOUR - MIN, 4 * HOUR), '23514', cycle);
-    await refused(pool, 'a window over 8 h', row, free(8 * HOUR + MIN, 4 * HOUR), '23514', cycle);
-    await refused(pool, 'a cooldown under 4 h', row, free(8 * HOUR, 4 * HOUR - MIN), '23514', cycle);
-    await refused(pool, 'a cooldown over 5 h', row, free(8 * HOUR, 5 * HOUR + MIN), '23514', cycle);
+    // The Free durations are PROPOSED (not approved), so the CHECK holds only NEUTRAL SANITY BOUNDS: a window of 1 minute to 24 h,
+    // a cooldown of 1 minute to 24 h, the times in order.
+    await refused(pool, 'a zero window', row, free(0, 4 * HOUR), '23514', cycle);
+    await refused(pool, 'a window that ends before it opens', row, free(-HOUR, 4 * HOUR), '23514', cycle);
+    await refused(pool, 'a window over 24 h (24 h + 1 min)', row, free(24 * HOUR + MIN, 4 * HOUR), '23514', cycle);
+    await refused(pool, 'a 25 h window', row, free(25 * HOUR, 4 * HOUR), '23514', cycle);
+    await refused(pool, 'a cooldown over 24 h (24 h + 1 min)', row, free(8 * HOUR, 24 * HOUR + MIN), '23514', cycle);
+    await refused(pool, 'no cooldown at all (0): a Free server always cools down', row, free(8 * HOUR, 0), '23514', cycle);
+    await refused(pool, 'a window under 1 minute (59 s)', row, free(59_000, 4 * HOUR), '23514', cycle);
     await refused(pool, 'a cooldown before the window ends', row, free(8 * HOUR, 4 * HOUR, { cool: ts(T0 + HOUR) }), '23514', cycle);
     await refused(pool, 'a Free row with only some times', row, free(8 * HOUR, 4 * HOUR, { cool: null }), '23514', cycle);
     await refused(pool, 'a Free row called CONTINUOUS', row, free(8 * HOUR, 4 * HOUR, { status: 'CONTINUOUS' }), '23514', cycle);
@@ -240,8 +246,9 @@ suite('migration 037: Wonderland private servers, applied explicitly after 036',
     await refused(pool, 'version 0', row, free(8 * HOUR, 4 * HOUR, { version: 0 }), '23514');
     await refused(pool, 'activated after its own update', row, free(8 * HOUR, 4 * HOUR, { activated: ts(T0 + MIN) }), '23514');
     await refused(pool, 'not a player', row, ['usr_nobody', ...free(8 * HOUR, 4 * HOUR).slice(1)], '23503', 'private_servers_owner_fk');
-    // CONTROLS: both bounds of both ranges are accepted, and a continuous row
-    for (const [w, c] of [[6 * HOUR, 4 * HOUR], [8 * HOUR, 5 * HOUR]]) {
+    // CONTROLS: both ends of both sanity bounds are accepted; so are the PROPOSED 6-8 h / 4-5 h figures and a 9 h or 10 h window
+    // outside them (the proposal is not law in the database); and a continuous row
+    for (const [w, c] of [[MIN, MIN], [24 * HOUR, 24 * HOUR], [6 * HOUR, 4 * HOUR], [8 * HOUR, 5 * HOUR], [9 * HOUR, 4 * HOUR], [10 * HOUR, 4 * HOUR]]) {
       await pool.query(row, free(w, c));
       await pool.query('DELETE FROM relay_wonderland.private_servers WHERE owner_id = $1', [A]);
     }

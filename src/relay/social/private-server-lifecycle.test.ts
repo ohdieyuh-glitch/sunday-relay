@@ -1,11 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   cleanServerName,
   cooldownMessage,
   effectiveServerTier,
   lapsedCycleRecord,
-  FREE_ACTIVE_WINDOW_RANGE_MS,
-  FREE_COOLDOWN_RANGE_MS,
+  FREE_ACTIVE_WINDOW_SANITY_MS,
+  FREE_COOLDOWN_SANITY_MS,
+  FREE_PROPOSED_RANGES_MS,
   lifecycleViewFor,
   makePrivateServerPolicy,
   observeClosed,
@@ -41,25 +44,60 @@ function opened(record: PrivateServerRecord | null, tier: ServerEntitlementRow |
   return o.record;
 }
 
-describe('the policy: the founder approved RANGES, and the durations live in one place', () => {
-  it('PRIVATE_SERVER_POLICY is inside 6-8 h then 4-5 h, and is marked PROPOSED (not frozen) until the founder fixes it', () => {
+describe('the policy: the durations are PROPOSED (not approved), and they live in one place', () => {
+  it('PRIVATE_SERVER_POLICY is the proposal (8 h then 4 h, inside the PROPOSED 6-8 h / 4-5 h), and is marked PROPOSED (not frozen) until the founder fixes it', () => {
     expect(W).toBeGreaterThanOrEqual(6 * H);
     expect(W).toBeLessThanOrEqual(8 * H);
     expect(C).toBeGreaterThanOrEqual(4 * H);
     expect(C).toBeLessThanOrEqual(5 * H);
     expect(P.frozen).toBe(false);
     expect(P.policyId).toMatch(/-proposed$/);
-    expect(FREE_ACTIVE_WINDOW_RANGE_MS).toEqual({ min: 6 * H, max: 8 * H });
-    expect(FREE_COOLDOWN_RANGE_MS).toEqual({ min: 4 * H, max: 5 * H });
+    expect(FREE_PROPOSED_RANGES_MS).toEqual({ activeWindow: { min: 6 * H, max: 8 * H }, cooldown: { min: 4 * H, max: 5 * H } });
+    expect(FREE_ACTIVE_WINDOW_SANITY_MS).toEqual({ min: MIN, max: 24 * H });
+    expect(FREE_COOLDOWN_SANITY_MS).toEqual({ min: MIN, max: 24 * H });
   });
 
-  it('a policy outside the approved ranges cannot be made (each bound, and a non-minute value); the bounds themselves can', () => {
+  it('the DEFAULT policy is not frozen and its id ends "-proposed": exactly 8 h + 4 h, free-480m-cool-240m-proposed', () => {
+    expect(P).toEqual({ policyId: 'free-480m-cool-240m-proposed', freeActiveWindowMs: 8 * H, freeCooldownMs: 4 * H, frozen: false });
+    expect(P.policyId.endsWith('-proposed')).toBe(true);
+    expect(P.frozen).toBe(false);
+    expect(Object.isFrozen(P)).toBe(true); // the object cannot be flipped to frozen at run time
+    // CONTROL: the id drops "-proposed" only for a policy made frozen in code
+    expect(makePrivateServerPolicy({ freeActiveWindowMs: 8 * H, freeCooldownMs: 4 * H, frozen: true }).policyId).toBe('free-480m-cool-240m');
+  });
+
+  it('a policy outside the SANITY BOUNDS cannot be made (each bound, and a non-minute value); the bounds themselves can', () => {
     const make = (w: number, c: number) => () => makePrivateServerPolicy({ freeActiveWindowMs: w, freeCooldownMs: c, frozen: true });
-    for (const [w, c] of [[6 * H - MIN, 4 * H], [8 * H + MIN, 4 * H], [7 * H, 4 * H - MIN], [7 * H, 5 * H + MIN], [7 * H + 1, 4 * H], [7 * H, Number.NaN], [Number.POSITIVE_INFINITY, 4 * H]]) {
+    for (const [w, c] of [[0, 4 * H], [-MIN, 4 * H], [24 * H + MIN, 4 * H], [7 * H, 0], [7 * H, -MIN], [7 * H, 24 * H + MIN], [7 * H + 1, 4 * H], [7 * H, 4 * H + 1], [7 * H, Number.NaN], [Number.POSITIVE_INFINITY, 4 * H]]) {
       expect(make(w, c), `${w} / ${c}`).toThrow(RangeError);
     }
+    // CONTROLS: both ends of both sanity bounds
+    expect(make(MIN, MIN)().policyId).toBe('free-1m-cool-1m');
+    expect(make(24 * H, 24 * H)().policyId).toBe('free-1440m-cool-1440m');
     expect(make(6 * H, 4 * H)().policyId).toBe('free-360m-cool-240m');
     expect(make(8 * H, 5 * H)().policyId).toBe('free-480m-cool-300m');
+  });
+
+  it('the PROPOSED 6-8 h / 4-5 h ranges are not law: a policy outside them on either side is ACCEPTED (a 10 h window, a 5 h window, a 6 h or 3 h cooldown)', () => {
+    const make = (w: number, c: number) => makePrivateServerPolicy({ freeActiveWindowMs: w, freeCooldownMs: c, frozen: false });
+    expect(make(10 * H, 4 * H)).toMatchObject({ freeActiveWindowMs: 10 * H, policyId: 'free-600m-cool-240m-proposed', frozen: false });
+    expect(make(5 * H, 4 * H).freeActiveWindowMs).toBe(5 * H);
+    expect(make(8 * H, 6 * H).freeCooldownMs).toBe(6 * H);
+    expect(make(8 * H, 3 * H).freeCooldownMs).toBe(3 * H);
+  });
+
+  it('migration 037 encodes no proposed duration: its Free-cycle CHECK holds only the 24 h sanity bounds and the order of the times', () => {
+    const sql = readFileSync(join(__dirname, '..', 'persistence', 'wonderland-migrations', '037_wonderland_private_servers.sql'), 'utf8');
+    const check = /CONSTRAINT private_servers_free_cycle CHECK\(([\s\S]*?)\n {2}\),/u.exec(sql)?.[1] ?? '';
+    expect(check, 'the CHECK is found').toContain("cycle_tier <> 'FREE'");
+    for (const proposal of ["'4 hours'", "'5 hours'", "'6 hours'", "'8 hours'"]) expect(check, proposal).not.toContain(proposal);
+    // the only bounds are the sanity bounds, the same as FREE_*_SANITY_MS: 1 minute to 24 hours, for the window and the cooldown
+    expect(check).toContain("active_until - activated_at BETWEEN interval '1 minute' AND interval '24 hours'");
+    expect(check).toContain("cooldown_until - active_until BETWEEN interval '1 minute' AND interval '24 hours'");
+    expect(check.match(/BETWEEN/gu)?.length, 'exactly the two sanity bounds').toBe(2);
+    expect(FREE_ACTIVE_WINDOW_SANITY_MS.min).toBe(MIN);
+    expect(FREE_COOLDOWN_SANITY_MS.min).toBe(MIN);
+    expect(sql, 'nothing in 037 calls the durations approved').not.toMatch(/approved range|APPROVED RANGE/u);
   });
 
   it('there is NO Team tier: the enum is FREE / PRO / MAX, and a forged "TEAM" row grants nothing', () => {
@@ -238,7 +276,8 @@ describe('records are written by compare-and-set: each change names the version 
 
   it('a server clock stepped BACK never writes updated_at before created_at, the last update or the cycle\'s opening (037\'s times CHECK)', () => {
     const a = opened(null, null, T0);
-    const renamed = openPrivateServer(a, null, P, OWNER, 'Renamed', T0 - 10 * MIN); // the clock went back 10 minutes
+    // the clock went back 1 minute: inside PRIVATE_SERVER_CLOCK_TOLERANCE_MS, so the cycle still reads ACTIVE and the rename writes
+    const renamed = openPrivateServer(a, null, P, OWNER, 'Renamed', T0 - MIN);
     expect(renamed.ok && renamed.write).toBe(true);
     if (!renamed.ok) return;
     expect(renamed.record.updatedAtMs).toBeGreaterThanOrEqual(renamed.record.createdAtMs);
@@ -246,6 +285,26 @@ describe('records are written by compare-and-set: each change names the version 
     expect(renamed.record.updatedAtMs).toBeGreaterThanOrEqual(renamed.record.activatedAtMs as number);
     // and the decision still reads the cycle's own fixed times, not the stepped clock
     expect(renamed.record.activeUntilMs).toBe(T0 + W);
+  });
+
+  it('a server clock stepped back BEYOND the tolerance reads the cycle as not yet reached: the open is refused and writes nothing', () => {
+    const a = opened(null, null, T0);
+    const stepped = openPrivateServer(a, null, P, OWNER, 'Renamed', T0 - 10 * MIN); // the clock went back 10 minutes
+    expect(stepped.ok).toBe(false);
+    expect(stepped.write).toBe(false);
+    expect(stepped.record).toBe(a); // the record handed back is the one read, unchanged: no observation with derived times
+    expect(privateServerAccess(a, null, P, T0 - 10 * MIN).status).toBe('COOLDOWN');
+    // observeClosed and lapsedCycleRecord have nothing to write either
+    expect(observeClosed(a, privateServerAccess(a, null, P, T0 - 10 * MIN), P, T0 - 10 * MIN)).toBeNull();
+    const continuous = opened(null, pro(T0 - H), T0); // a PRO cycle opened at T0, its tier row then gone
+    expect(lapsedCycleRecord(continuous, null, P, T0 - 10 * MIN)).toBeNull();
+    expect(lapsedCycleRecord(continuous, null, P, T0 + MIN)).not.toBeNull(); // CONTROL: once reached, the lapse is written down
+    // CONTROL: inside its real cooldown (the window over), the same record IS observed and written (the guard is only for an unreached opening)
+    const late = openPrivateServer(a, null, P, OWNER, '', T0 + W + MIN);
+    expect(late.ok).toBe(false);
+    expect(late.write).toBe(true);
+    // the control: the same cycle at its own opening minute is ACTIVE
+    expect(privateServerAccess(a, null, P, T0).status).toBe('ACTIVE');
   });
 
   it('the refusal\'s reopening time is rounded UP to the minute, so a retry at the stated minute is never refused', () => {

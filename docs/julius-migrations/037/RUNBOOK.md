@@ -1,8 +1,9 @@
 # Migration 037 — Wonderland private servers (PROVISIONAL number)
 
-The founder's private-server rules (2026-10-11): free creation, a Free active window then a cooldown (approved 6–8 h and 4–5 h;
-the exact values are PROPOSED, not frozen: `PRIVATE_SERVER_POLICY` in `src/relay/social/private-server-lifecycle.ts`), Pro / Max
-continuous, no Team tier, server time only, fail closed. 037 persists what those decisions are made from:
+The founder's private-server rules (2026-10-11): free creation, a Free active window then a cooldown (6–8 h and 4–5 h are
+PROPOSED (not approved), and so is the default 8 h + 4 h; it is not frozen: `PRIVATE_SERVER_POLICY` in
+`src/relay/social/private-server-lifecycle.ts`, id `free-480m-cool-240m-proposed`), Pro / Max continuous (an operator-written
+tier row in Alpha; no billing exists), NO Team tier, server time only, fail closed. 037 persists what those decisions are made from:
 
 | table | written by | holds |
 |---|---|---|
@@ -34,7 +35,9 @@ landing, in order; whichever lands later renumbers.
 ## What 037 refuses in the database itself
 
 - A tier other than PRO / MAX (no TEAM; FREE is the absence of a row); a period out of order; an owner who is not a player.
-- A Free cycle outside the founder's ranges (window 6–8 h, cooldown 4–5 h), with only some of its times, or with times out of order.
+- A Free cycle outside NEUTRAL SANITY BOUNDS (window 1 min to 24 h, cooldown 1 min to 24 h), with only some of its times,
+  or with times out of order. These bounds are not policy: the 6–8 h / 4–5 h durations are PROPOSED (not approved) and are
+  deliberately NOT in the schema, so the founder's eventual choice (inside a day) is a code change, never a new migration.
 - A PRO / MAX row with a window, or not CONTINUOUS. A name with a control character or over 60 characters. `version` < 1.
 - `updated_at` before `created_at` or before the cycle's opening.
 

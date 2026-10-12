@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { openPrivateServer, privateServerAccess, PRIVATE_SERVER_POLICY, type PrivateServerRecord } from './private-server-lifecycle';
+import { openPrivateServer, privateServerAccess, PRIVATE_SERVER_CLOSED_MESSAGE, PRIVATE_SERVER_POLICY, type PrivateServerRecord } from './private-server-lifecycle';
 import { applySocialOperation, type SocialCommandOutcome } from './social-commands';
 import { createSocialFixture, FIXTURE_USERS as U } from './social-fixtures';
 import { blockUser } from './social-friends';
@@ -53,6 +53,12 @@ function run(state: SocialState, world: WorldState, actor: string, op: Parameter
   if (r.value.serverWrite !== undefined) lifecycleRows.set(r.value.serverWrite.ownerId, r.value.serverWrite);
   return r.value as SocialCommandOutcome & { world: WorldState };
 }
+
+/** One operation exactly as `run` makes it -- with the store's read of the private server it touches -- answered as it is, refusals included. */
+function attempt(state: SocialState, world: WorldState, actor: string, op: Parameters<typeof applySocialOperation>[1], body: Record<string, unknown> = {}, ms = 0) {
+  return applySocialOperation(state, op, actor, { ids: [], body, query: {} }, at(ms), world, gateFor(state, world, actor, op, body, T0 + ms));
+}
+const worldOf = (r: ReturnType<typeof applySocialOperation>) => (r.ok ? (r.value as SocialCommandOutcome & { world: WorldState }).world : undefined);
 
 const here = { x: 100, y: 200, z: 22, yaw: 90, speed: 0, motion: 'IDLE', skinId: 'shadow_flame' };
 
@@ -298,11 +304,35 @@ describe('world names never carry a person, and a wall holds through a friend in
 
   it("nobody walled from a private server's owner FOLLOWS a friend into it; control: an unwalled friend does", () => {
     const { s, w } = novaHostsKaiInside();
-    const orion = applySocialOperation(s, 'world.join', U.ORION, { ids: [], body: { target: 'FRIEND', userId: U.KAI }, query: {} }, at(2000), w);
+    const toKai = { target: 'FRIEND', userId: U.KAI };
+    // the store's read of Nova's server says OPEN (inside its Free window): a refusal below is the wall's, never "closed"
+    expect(gateFor(s, w, U.ORION, 'world.join', toKai, T0 + 2000)).toMatchObject({ ownerId: U.NOVA, access: { status: 'ACTIVE' } });
+    const orion = attempt(s, w, U.ORION, 'world.join', toKai, 2000);
     expect(orion.ok).toBe(false);
     if (!orion.ok) expect(orion.error.message).toBe('You cannot join them there'); // the ordinary can't-join, naming nobody
-    const lyra = applySocialOperation(s, 'world.join', U.LYRA, { ids: [], body: { target: 'FRIEND', userId: U.KAI }, query: {} }, at(2000), w);
+    if (!orion.ok) expect(orion.error.code).toBe('permission-denied'); // the wall's refusal, not a closed server's (illegal-transition)
+    const lyra = attempt(s, w, U.LYRA, 'world.join', toKai, 2000);
     expect(lyra.ok).toBe(true);
+    expect(contextOf(worldOf(lyra) ?? emptyWorldState(), U.LYRA)?.contextId).toBe(`priv_${U.NOVA}`);
+  });
+
+  it("FAIL CLOSED (037): with no read of the owner's server, even an unwalled friend's follow is refused as closed, and a walled one still gets only the wall's answer; control: with the open read, the friend follows", () => {
+    const { s, w } = novaHostsKaiInside();
+    const toKai = { target: 'FRIEND', userId: U.KAI };
+    const answerOf = (r: ReturnType<typeof applySocialOperation>) => (r.ok ? 'ACCEPTED' : `${r.error.code}: ${r.error.message}`);
+    const ungated = (who: string) => applySocialOperation(s, 'world.join', who, { ids: [], body: toKai, query: {} }, at(2000), w, null);
+    expect(answerOf(ungated(U.LYRA))).toBe(`illegal-transition: ${PRIVATE_SERVER_CLOSED_MESSAGE}`);
+    // a read that speaks for ANOTHER owner's server, however open, is no read of this one
+    const open = gateFor(s, w, U.LYRA, 'world.join', toKai, T0 + 2000);
+    expect(open).toMatchObject({ ownerId: U.NOVA, access: { status: 'ACTIVE' } });
+    const foreign = applySocialOperation(s, 'world.join', U.LYRA, { ids: [], body: toKai, query: {} }, at(2000), w, { ...open!, ownerId: U.KAI });
+    expect(answerOf(foreign)).toBe(`illegal-transition: ${PRIVATE_SERVER_CLOSED_MESSAGE}`);
+    // the wall is decided BEFORE the gate: a walled player never learns the server is closed (only one who could join it may)
+    expect(answerOf(ungated(U.ORION))).toBe('permission-denied: You cannot join them there');
+    // control: the same follow with the store's open read of Nova's server
+    const lyra = attempt(s, w, U.LYRA, 'world.join', toKai, 2000);
+    expect(answerOf(lyra)).toBe('ACCEPTED');
+    expect(contextOf(worldOf(lyra) ?? emptyWorldState(), U.LYRA)?.contextId).toBe(`priv_${U.NOVA}`);
   });
 
   it("an invitation from inside to someone walled from the owner is answered alike and never delivered; control: an unwalled friend's arrives", () => {
@@ -335,13 +365,18 @@ describe('world names never carry a person, and a wall holds through a friend in
       const invited = run(s, w, U.KAI, 'world.invite', { toUserId: U.ORION }, 1100);
       w = invited.world;
       ({ state: s, world: w } = run(s, w, U.ORION, 'world.join', { target: 'INVITE', inviteId: worldViewFor(w, s, U.ORION, T0 + 1200).invites[0].inviteId }, 1300));
-      return applySocialOperation(s, 'world.join', U.LYRA, { ids: [], body: { target: 'PARTY' }, query: {} }, at(2000), w);
+      // the store's read of Kai's server says OPEN (inside its Free window): the walled arm's refusal is the wall's, never "closed"
+      expect(gateFor(s, w, U.LYRA, 'world.join', { target: 'PARTY' }, T0 + 2000)).toMatchObject({ ownerId: U.KAI, access: { status: 'ACTIVE' } });
+      return attempt(s, w, U.LYRA, 'world.join', { target: 'PARTY' }, 2000);
     };
     const walledJoin = setUp(true);
     expect(walledJoin.ok).toBe(false);
     // (10-07, B3) the owner's wall now answers exactly as a leader in no world: the follow names nothing about where the leader is
     if (!walledJoin.ok) expect(walledJoin.error.message).toBe('Your party leader is not in a world');
-    expect(setUp(false).ok).toBe(true);
+    if (!walledJoin.ok) expect(walledJoin.error.code).toBe('not-found'); // the wall's answer, not a closed server's (illegal-transition)
+    const unwalled = setUp(false);
+    expect(unwalled.ok).toBe(true);
+    expect(contextOf(worldOf(unwalled) ?? emptyWorldState(), U.LYRA)?.contextId).toBe(`priv_${U.KAI}`);
   });
 });
 
@@ -603,7 +638,8 @@ describe("a privacy change is told only to those whose view of the player it cha
 
 describe('10-07 B3: following the party leader never reveals a leader the member may not see', () => {
   const answerOf = (r: ReturnType<typeof applySocialOperation>) => (r.ok ? 'ACCEPTED' : `${r.error.code}: ${r.error.message}`);
-  const follow = (s: SocialState, w: WorldState, ms: number) => applySocialOperation(s, 'world.join', U.LYRA, { ids: [], body: { target: 'PARTY' }, query: {} }, at(ms), w);
+  // with the store's read of the leader's private server, when the leader is in one (a public world needs none)
+  const follow = (s: SocialState, w: WorldState, ms: number) => attempt(s, w, U.LYRA, 'world.join', { target: 'PARTY' }, ms);
 
   it('a HIDDEN leader (appear offline, or presence to nobody) answers exactly as a leader in no world', () => {
     const base = createSocialFixture();
@@ -633,6 +669,7 @@ describe('10-07 B3: following the party leader never reveals a leader the member
     ({ state: s2, world: w2 } = run(s2, w2, U.ORION, 'world.join', { target: 'PRIVATE', name: "Orion's Den" }, 100));
     const r2 = follow(s2, w2, 200);
     expect(r2.ok).toBe(true);
+    expect(contextOf(worldOf(r2) ?? emptyWorldState(), U.LYRA)?.contextId).toBe(`priv_${U.ORION}`);
   });
 });
 
