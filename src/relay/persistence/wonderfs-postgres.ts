@@ -20,6 +20,8 @@ import {
 import {
   wfsAdmitCommit,
   wfsAdmitWrite,
+  wfsConflictCapApplies,
+  wfsConflictCapAt,
   wfsBlobIntegrity,
   wfsBlobRoom,
   wfsBlobsNamed,
@@ -95,12 +97,22 @@ export { WFS_CONFLICT_RETENTION_MS, type WfsStoreEvent } from '../wonderfs/wonde
  * BLOBS (§10.1, §10.2): `putBlob` hashes the bytes HERE, so a blob's address is never the client's word; the Alpha / test store is
  * PostgreSQL `bytea` (wfs_blob_bytes) behind this interface, until the Railway bucket passes T-STORE. The schema refuses deleting a
  * blob anything still names (N-MAJOR-1). R2 (§19.m3): an upload takes the project's row lock FOR UPDATE -- serialised with every
- * commit and every other upload of the project, on every bridge -- so its room check (main's live bytes + every orphan's pending
- * bytes + the new blob, `PROJECT_ROOM_SQL`) is exact when it decides, and a refused upload keeps no byte.
+ * commit and every other upload of the project, on every bridge -- so its room check (main's live bytes + the pending bytes of every
+ * blob no file's history names, `PROJECT_ROOM_SQL`) is exact when it decides, and a refused upload keeps no byte.
  *
  * WRITES WITH AN AUTHORITY (R2): the member's role is read INSIDE the write's transaction, `FOR SHARE` on its project_members row
  * (`lockedRoleNow`): a removal or demotion committed before it is seen; one attempted during it waits until this write ends. It is
- * judged before the engine runs, so before the replay lookup.
+ * judged before the engine runs, so before the replay lookup. Every write transaction is READ COMMITTED, stated (contract §6.3; the
+ * FOR SHARE re-read after a wait relies on it). LOCK ORDER: the project row first, then the membership row (wonderfs-store.ts).
+ *
+ * A COMMIT LOADS WHAT IT DECIDES ON, NO MORE (R2-r2, security MAJOR-2(d)): the branches with their entries and fork-time bases, the
+ * ONE request row its id names and the ONE conflict it resolves -- never every commit record, conflict record and request of the
+ * project (`loadWfsProject(..., { history: false })` + `askedFor`). The whole state is loaded only by `project()` (tools, the oracle)
+ * and by the agent-phase changes (fork, merge, approve, discard), which no player reaches.
+ *
+ * TWO PASSES FOR THE ENTRIES (R2-r2, correctness B1): `wfs_entries_live_path` is a unique INDEX (not deferrable), and one commit may
+ * free a path and take it again (delete + create of the same path; a rename chain). So every touched row is first taken out of the
+ * live set (`deleted = true`), then each final state is written; the engine's whole-tree check guarantees the final states agree.
  *
  * WHAT IS NEVER HERE: the Julius live store. Like every Wonderland writer, this refuses a PROTECTED store before its first read or
  * write (protected-store-writer-guard.ts): WonderFS data lives in the Wonderland database only.
@@ -155,9 +167,10 @@ const BLOB_REFERENCE_SQL = `SELECT (SELECT b.size FROM relay_wonderland.wfs_blob
    OR EXISTS (SELECT 1 FROM relay_wonderland.wfs_conflict_blobs c WHERE c.project_id = $1 AND c.sha256 = $2)) AS referenced`;
 
 /**
- * R2 (§19.m3, §11): project $1's room, in ONE row -- main's live file bytes, and the PENDING bytes of every ORPHAN: a blob it holds
- * that no version, current or fork-time entry, or retained conflict (wfs_conflict_blobs, N-MAJOR-1) names, on any branch. The same
- * four references as BLOB_REFERENCE_SQL, as anti-joins (each table read once for the project).
+ * R2 (§19.m3, §11): project $1's room, in ONE row -- main's live file bytes, and the PENDING bytes of every blob it holds that no
+ * file's history names: no version, current or fork-time entry, on any branch. A blob only a conflict names counts as pending too
+ * (R2-r2, security MAJOR-3): it stays READABLE while the conflict is retained (BLOB_REFERENCE_SQL, N-MAJOR-1) but it is room taken.
+ * Anti-joins: each table read once for the project.
  */
 const PROJECT_ROOM_SQL = `SELECT
   (SELECT coalesce(sum(e.size), 0) FROM relay_wonderland.wfs_entries e
@@ -166,8 +179,11 @@ const PROJECT_ROOM_SQL = `SELECT
     WHERE b.project_id = $1
       AND NOT EXISTS (SELECT 1 FROM relay_wonderland.wfs_versions v WHERE v.project_id = b.project_id AND v.sha256 = b.sha256)
       AND NOT EXISTS (SELECT 1 FROM relay_wonderland.wfs_entries x WHERE x.project_id = b.project_id AND x.sha256 = b.sha256)
-      AND NOT EXISTS (SELECT 1 FROM relay_wonderland.wfs_branch_base f WHERE f.project_id = b.project_id AND f.sha256 = b.sha256)
-      AND NOT EXISTS (SELECT 1 FROM relay_wonderland.wfs_conflict_blobs c WHERE c.project_id = b.project_id AND c.sha256 = b.sha256))::text AS pending_bytes`;
+      AND NOT EXISTS (SELECT 1 FROM relay_wonderland.wfs_branch_base f WHERE f.project_id = b.project_id AND f.sha256 = b.sha256))::text AS pending_bytes`;
+
+/** R2-r2 (security MAJOR-2): the conflicts player $2 authored in project $1 that are still RETAINED at $3 (open, or kept 30 days). */
+const RETAINED_CONFLICTS_SQL = `SELECT count(*)::text AS n FROM relay_wonderland.wfs_conflicts
+  WHERE project_id = $1 AND record->'principal'->>'kind' = 'human' AND record->'principal'->>'id' = $2 AND (status = 'open' OR retain_until > $3::timestamptz)`;
 
 const entryOf = (r: EntryRow): WfsEntry => ({
   fileId: r.file_id,
@@ -187,8 +203,11 @@ const entryOf = (r: EntryRow): WfsEntry => ({
 /**
  * A project's whole state, read back from its rows (or null: no such project, or deleted). Its statements are only consistent
  * with each other inside ONE snapshot or under the project's row lock: callers give it exactly that (`project()`, `mutate`).
+ * `history: false` (R2-r2): the branches with their entries and bases only -- every branch's `commits`, and the project's conflicts and
+ * requests, come back EMPTY (a commit asks for the one request and the one conflict it needs: `askedFor`).
  */
-export async function loadWfsProject(db: Queryable, projectId: string): Promise<{ state: WfsProjectState; seq: number } | null> {
+export async function loadWfsProject(db: Queryable, projectId: string, options: { readonly history?: boolean } = {}): Promise<{ state: WfsProjectState; seq: number } | null> {
+  const history = options.history ?? true;
   const project = await db.query<{ next_event_seq: string }>(
     'SELECT next_event_seq::text AS next_event_seq FROM relay_wonderland.wfs_projects WHERE project_id = $1 AND deleted_at IS NULL',
     [projectId],
@@ -204,15 +223,15 @@ export async function loadWfsProject(db: Queryable, projectId: string): Promise<
   );
   const entries = await db.query<EntryRow>(`SELECT ${ENTRY_COLUMNS} FROM relay_wonderland.wfs_entries WHERE project_id = $1`, [projectId]);
   const bases = await db.query<EntryRow>(`SELECT ${ENTRY_COLUMNS} FROM relay_wonderland.wfs_branch_base WHERE project_id = $1`, [projectId]);
-  const commits = await db.query<{ branch_id: string; record: WfsCommit }>(
-    'SELECT branch_id, record FROM relay_wonderland.wfs_commits WHERE project_id = $1 ORDER BY branch_id, rev',
-    [projectId],
-  );
-  const conflicts = await db.query<{ record: WfsConflict }>('SELECT record FROM relay_wonderland.wfs_conflicts WHERE project_id = $1', [projectId]);
-  const requests = await db.query<{ request_id: string; payload_hash: string; outcome: WfsCommitOutcome }>(
-    'SELECT request_id, payload_hash, outcome FROM relay_wonderland.wfs_requests WHERE project_id = $1',
-    [projectId],
-  );
+  const commits: { rows: Array<{ branch_id: string; record: WfsCommit }> } = history
+    ? await db.query<{ branch_id: string; record: WfsCommit }>('SELECT branch_id, record FROM relay_wonderland.wfs_commits WHERE project_id = $1 ORDER BY branch_id, rev', [projectId])
+    : { rows: [] };
+  const conflicts: { rows: Array<{ record: WfsConflict }> } = history
+    ? await db.query<{ record: WfsConflict }>('SELECT record FROM relay_wonderland.wfs_conflicts WHERE project_id = $1', [projectId])
+    : { rows: [] };
+  const requests: { rows: Array<{ request_id: string; payload_hash: string; outcome: WfsCommitOutcome }> } = history
+    ? await db.query<{ request_id: string; payload_hash: string; outcome: WfsCommitOutcome }>('SELECT request_id, payload_hash, outcome FROM relay_wonderland.wfs_requests WHERE project_id = $1', [projectId])
+    : { rows: [] };
 
   const byBranch = <T extends { branch_id: string }>(rows: readonly T[]): Map<string, T[]> => {
     const out = new Map<string, T[]>();
@@ -246,6 +265,29 @@ export async function loadWfsProject(db: Queryable, projectId: string): Promise<
   };
   return { state, seq: Number(project.rows[0].next_event_seq) };
 }
+
+/** R2-r2: the ONE request row `requestId` names and the ONE conflict `conflictId` names, if any (what a commit decides on besides the tree). */
+async function askedFor(db: Queryable, projectId: string, requestId: unknown, conflictId: unknown): Promise<{ requests: Map<string, WfsStoredRequest>; conflicts: Map<string, WfsConflict> }> {
+  const requests = new Map<string, WfsStoredRequest>();
+  if (typeof requestId === 'string') {
+    const r = await db.query<{ payload_hash: string; outcome: WfsCommitOutcome }>('SELECT payload_hash, outcome FROM relay_wonderland.wfs_requests WHERE project_id = $1 AND request_id = $2', [projectId, requestId]);
+    if (r.rows[0] !== undefined) requests.set(requestId, { payloadHash: r.rows[0].payload_hash, outcome: r.rows[0].outcome });
+  }
+  const conflicts = new Map<string, WfsConflict>();
+  if (typeof conflictId === 'string') {
+    const c = await db.query<{ record: WfsConflict }>('SELECT record FROM relay_wonderland.wfs_conflicts WHERE project_id = $1 AND conflict_id = $2', [projectId, conflictId]);
+    if (c.rows[0] !== undefined) conflicts.set(conflictId, c.rows[0].record);
+  }
+  return { requests, conflicts };
+}
+
+/** A state with its history dropped: every branch's commits, and the conflicts and requests (what a commit's cache may keep). */
+const withoutHistory = (state: WfsProjectState): WfsProjectState => ({
+  projectId: state.projectId,
+  branches: new Map([...state.branches].map(([id, b]) => [id, { ...b, commits: [] }])),
+  conflicts: new Map(),
+  requests: new Map(),
+});
 
 /* ---------------------------------------------------------------------------------------------------------- write through */
 
@@ -294,12 +336,17 @@ async function persistWfsChange(db: Queryable, projectId: string, before: WfsPro
     }
     // the entries: a new branch carries its whole fork-time tree; an existing one, the post-state of what its new commits touched
     const touched = was === undefined ? [...b.entries.values()] : fresh.flatMap((c) => c.touched).map((e) => b.entries.get(e.fileId) ?? e);
-    const seen = new Set<string>();
-    for (const e of touched) {
-      if (seen.has(e.fileId)) continue;
-      seen.add(e.fileId);
-      await insertEntry(db, 'wfs_entries', projectId, branchId, e);
+    const finals = new Map<string, WfsEntry>();
+    for (const e of touched) if (!finals.has(e.fileId)) finals.set(e.fileId, e);
+    // B1 (R2-r2): pass 1 takes every touched row OUT of the live-path index (not deferrable), so a path this commit frees and takes
+    // again -- in any file-id order -- never meets itself mid-write; pass 2 writes the final states, which the engine checked agree
+    if (was !== undefined && finals.size > 0) {
+      await db.query(
+        'UPDATE relay_wonderland.wfs_entries SET deleted = true WHERE project_id = $1 AND branch_id = $2 AND file_id = ANY($3::text[]) AND NOT deleted',
+        [projectId, branchId, [...finals.keys()]],
+      );
     }
+    for (const e of finals.values()) await insertEntry(db, 'wfs_entries', projectId, branchId, e);
     if (was !== undefined && (was.headRev !== b.headRev || was.headCommitHash !== b.headCommitHash || was.closed !== b.closed)) {
       await db.query(
         `UPDATE relay_wonderland.wfs_branches SET head_rev=$3, head_commit_hash=$4, closed_how=$5, closed_at=$6, closed_target_rev=$7
@@ -400,6 +447,8 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
   const limits = options.limits ?? WFS_ALPHA_LIMITS;
   const newId = options.newId ?? ((kind) => `${kind}_${randomUUID()}`);
   const cache = new Map<string, CachedProject>();
+  /** R2-r2: what a commit decides on (branches + entries; no history), by project version. Never handed to a reader. */
+  const changeCache = new Map<string, CachedProject>();
   const remember = (projectId: string, entry: CachedProject): void => {
     const held = cache.get(projectId);
     if (held === undefined || held.seq <= entry.seq) cache.set(projectId, entry);
@@ -423,6 +472,9 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
    */
   const lockedRoleNow = async (db: Queryable, projectId: string, playerId: string): Promise<WfsHumanRole | null> =>
     wfsHumanRoleFromMembership((await db.query<{ role: string }>(`${ROLE_SQL} FOR SHARE`, [projectId, playerId])).rows[0]?.role);
+  /** R2-r2: the conflicts `playerId` authored in the project that are still retained at `nowIso`, inside a write. */
+  const retainedBy = async (db: Queryable, projectId: string, playerId: string, nowIso: string): Promise<number> =>
+    Number((await db.query<{ n: string }>(RETAINED_CONFLICTS_SQL, [projectId, playerId, nowIso])).rows[0].n);
 
   /**
    * F4: ONE consistent read. Every statement `work` runs sees the same committed state (REPEATABLE READ: the snapshot is taken at
@@ -463,20 +515,28 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
 
   /**
    * One mutation: lock, (re)load, read the blobs the request names, decide, write through, commit, adopt. `decide` returns the
-   * next state (the SAME object when nothing changed: a replay), the caller's answer, and the event to record.
+   * next state (the SAME object when nothing changed: a replay), the caller's answer, and the event to record. `scope`: 'whole' loads
+   * the whole state (the agent-phase changes); a commit's scope names the one request and the one conflict it needs (R2-r2).
    */
   const mutate = <T>(
     projectId: string,
     nowIso: string,
     what: string,
     blobShas: readonly string[],
+    scope: 'whole' | { readonly requestId: unknown; readonly conflictId: unknown },
     decide: (state: WfsProjectState, ctx: WfsEngineContext, db: Queryable) => Promise<RelayResult<{ state: WfsProjectState; value: T; event: WfsStoreEvent | null; after?: (db: Queryable) => Promise<void> }>>,
   ): Promise<RelayResult<T>> =>
     serial(projectId, async () => {
       await refuseProtectedStore();
       const client = await pool.connect();
+      /** Keep what was decided on (or became) at version `at`: the whole state only from a whole load; the tree for every commit. */
+      const keep = (state: WfsProjectState, at: number): void => {
+        if (scope === 'whole') cache.set(projectId, { state, seq: at });
+        else cache.delete(projectId);
+        changeCache.set(projectId, { state: withoutHistory(state), seq: at });
+      };
       try {
-        await client.query('BEGIN');
+        await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
         const locked = await client.query<{ next_event_seq: string }>(
           'SELECT next_event_seq::text AS next_event_seq FROM relay_wonderland.wfs_projects WHERE project_id = $1 AND deleted_at IS NULL FOR UPDATE',
           [projectId],
@@ -486,14 +546,18 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
           return noProject();
         }
         const seq = Number(locked.rows[0].next_event_seq);
-        let current = cache.get(projectId);
+        let current = scope === 'whole' ? cache.get(projectId) : changeCache.get(projectId);
         if (current === undefined || current.seq !== seq) {
-          const loaded = await loadWfsProject(client, projectId);
+          const loaded = await loadWfsProject(client, projectId, { history: scope === 'whole' });
           if (loaded === null) {
             await client.query('ROLLBACK');
             return noProject();
           }
           current = loaded;
+        }
+        if (scope !== 'whole') {
+          const asked = await askedFor(client, projectId, scope.requestId, scope.conflictId);
+          current = { state: { ...current.state, requests: asked.requests, conflicts: asked.conflicts }, seq };
         }
         // F5: the blobs THIS request names, as the database holds them now (any bridge may have stored them)
         const present = new Map<string, number>();
@@ -508,13 +572,13 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         const decided = await decide(current.state, ctx, client);
         if (!decided.ok) {
           await client.query('ROLLBACK');
-          cache.set(projectId, current);
+          keep(current.state, seq);
           return decided;
         }
         const { state: next, value, event } = decided.value;
         if (next === current.state && event === null) {
           await client.query('ROLLBACK'); // a replay: nothing to write
-          cache.set(projectId, current);
+          keep(current.state, seq);
           return ok(value);
         }
         await persistWfsChange(client, projectId, current.state, next, nowIso);
@@ -524,11 +588,12 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         }
         await client.query('UPDATE relay_wonderland.wfs_projects SET next_event_seq = $2 WHERE project_id = $1', [projectId, seq + 1]);
         await client.query('COMMIT');
-        cache.set(projectId, { state: next, seq: seq + 1 });
+        keep(next, seq + 1);
         return ok(value);
       } catch {
         await client.query('ROLLBACK').catch(() => undefined);
         cache.delete(projectId);
+        changeCache.delete(projectId);
         return outage(what);
       } finally {
         client.release();
@@ -823,24 +888,29 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
       });
     },
     commit: (projectId, req, nowIso, authority) =>
-      mutate(projectId, nowIso, 'the change', requestedBlobs(req.ops, limits), async (state, ctx, db) => {
+      mutate(projectId, nowIso, 'the change', requestedBlobs(req.ops, limits), { requestId: req.requestId, conflictId: req.resolvesConflictId ?? null }, async (state, ctx, db) => {
         // R2: the role NOW, in this transaction, before the engine (and its replay lookup) runs
         if (authority !== undefined) {
-          const admitted = wfsAdmitCommit(await lockedRoleNow(db, projectId, authority.playerId), authority, state, req);
+          const admitted = wfsAdmitCommit(await lockedRoleNow(db, projectId, authority.playerId), authority, req);
           if (!admitted.ok) return admitted;
         }
         const r = applyWfsCommit(state, req, ctx);
         if (!r.ok) return r;
+        // R2-r2: a NEW conflict past its author's cap of retained conflicts keeps nothing
+        if (authority !== undefined && wfsConflictCapApplies(r.value.outcome, authority)) {
+          const capped = wfsConflictCapAt(await retainedBy(db, projectId, authority.playerId, nowIso), authority);
+          if (!capped.ok) return capped;
+        }
         return ok({ state: r.value.project, value: r.value.outcome, event: wfsOutcomeEvent(r.value.outcome, 'commit') });
       }),
     fork: (projectId, input, nowIso) =>
-      mutate(projectId, nowIso, 'the branch', [], async (state, ctx) => {
+      mutate(projectId, nowIso, 'the branch', [], 'whole', async (state, ctx) => {
         const r = forkWfsBranch(state, input, ctx);
         if (!r.ok) return r;
         return ok({ state: r.value.project, value: { branchId: r.value.branchId }, event: { kind: 'branch.fork', body: { branchId: r.value.branchId, fromBranchId: input.fromBranchId } } });
       }),
     mergeBack: (projectId, input, nowIso) =>
-      mutate(projectId, nowIso, 'the merge', [], async (state, ctx, db) => {
+      mutate(projectId, nowIso, 'the merge', [], 'whole', async (state, ctx, db) => {
         const row = input.approvalId === null ? undefined : (await db.query<{ approval_id: string; branch_id: string; approved_by: string; approved_head_commit_hash: string; approved_base_rev: number; approved_at: Date }>(
           `SELECT approval_id, branch_id, approved_by, approved_head_commit_hash, approved_base_rev, approved_at
              FROM relay_wonderland.wfs_approvals WHERE project_id = $1 AND approval_id = $2`,
@@ -860,7 +930,7 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         return ok({ state: r.value.project, value: r.value.outcome, event: wfsOutcomeEvent(r.value.outcome, 'branch.merge') });
       }),
     approve: (projectId, input, nowIso) =>
-      mutate(projectId, nowIso, 'the approval', [], async (state, _ctx, db) => {
+      mutate(projectId, nowIso, 'the approval', [], 'whole', async (state, _ctx, db) => {
         const roleNowValue = input.principal.kind === 'human' ? await roleNow(db, projectId, input.principal.id) : null;
         const r = issueWfsApproval(state, { approvalId: newId('approval'), branchId: input.branchId, principal: input.principal, roleNow: roleNowValue }, nowIso);
         if (!r.ok) return r;
@@ -879,7 +949,7 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         });
       }),
     discard: (projectId, branchId, nowIso) =>
-      mutate(projectId, nowIso, 'the branch', [], async (state) => {
+      mutate(projectId, nowIso, 'the branch', [], 'whole', async (state) => {
         const r = discardWfsBranch(state, branchId, nowIso);
         if (!r.ok) return r;
         return ok({ state: r.value, value: null, event: { kind: 'branch.discard', body: { branchId } } });
@@ -888,15 +958,16 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
       await refuseProtectedStore();
       const checked = wfsCheckUpload(bytes.byteLength, options.claimedSha256, limits);
       if (!checked.ok) return checked;
-      // its own copy first (the caller's buffer may change while the hash yields); the address is computed HERE
-      const copy = Buffer.from(bytes);
-      const sha256 = await wfsSha256InSlices(copy, createHash('sha256'));
+      // the address is computed HERE. The bytes are the caller's, handed over: no copy (R2-r2, security MINOR-5), so they must not
+      // change until this resolves -- the route's upload buffer is its own and is never touched again
+      const view = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const sha256 = await wfsSha256InSlices(view, createHash('sha256'));
       if (checked.value !== null && checked.value !== sha256) return wfsHashMismatch(); // §10.1: nothing kept, nothing touched
-      const size = copy.byteLength;
+      const size = view.byteLength;
       return serial(projectId, async () => {
         const client = await pool.connect();
         try {
-          await client.query('BEGIN');
+          await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
           // FOR UPDATE: serialised with commits and other uploads of this project on every bridge, so the room below is exact
           const live = await client.query('SELECT 1 FROM relay_wonderland.wfs_projects WHERE project_id = $1 AND deleted_at IS NULL FOR UPDATE', [projectId]);
           if (live.rows.length === 0) {
@@ -911,7 +982,8 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
             }
           }
           const held = await client.query('SELECT 1 FROM relay_wonderland.wfs_blobs WHERE project_id = $1 AND sha256 = $2', [projectId, sha256]);
-          if (held.rows.length === 0) {
+          const created = held.rows.length === 0;
+          if (created) {
             // §19.m3: a NEW blob must fit beside main's live bytes and every orphan's pending bytes -- before a byte is kept
             const room = (await client.query<{ live_bytes: string; pending_bytes: string }>(PROJECT_ROOM_SQL, [projectId])).rows[0];
             const fits = wfsBlobRoom({ liveBytes: Number(room.live_bytes), pendingBytes: Number(room.pending_bytes), size, limits });
@@ -924,10 +996,10 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
           // the bytes, unless they are there: a held blob whose bytes went missing is repaired (REVIEW_WONDERFS_R0B MINOR-7)
           const bytesHeld = await client.query('SELECT 1 FROM relay_wonderland.wfs_blob_bytes WHERE project_id = $1 AND sha256 = $2', [projectId, sha256]);
           if (bytesHeld.rows.length === 0) {
-            await client.query('INSERT INTO relay_wonderland.wfs_blob_bytes(project_id, sha256, bytes) VALUES($1,$2,$3)', [projectId, sha256, copy]);
+            await client.query('INSERT INTO relay_wonderland.wfs_blob_bytes(project_id, sha256, bytes) VALUES($1,$2,$3)', [projectId, sha256, view]);
           }
           await client.query('COMMIT');
-          return ok({ sha256, size });
+          return ok({ sha256, size, created });
         } catch {
           await client.query('ROLLBACK').catch(() => undefined);
           return outage('the file');

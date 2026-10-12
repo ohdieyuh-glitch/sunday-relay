@@ -149,10 +149,10 @@ function unreadable(why: 'overrun' | 'aborted' | 'timeout'): { ok: false; answer
 }
 
 /**
- * H12's body: `application/json`, at most `maxBytes` (1 MiB), UTF-8, one JSON value. The value is returned as parsed; its SHAPE is the
- * caller's to check.
+ * H12's body: `application/json`, at most `maxBytes` (1 MiB), UTF-8, one JSON value. The value is returned as parsed (its SHAPE is the
+ * caller's to check), with the body's size in bytes (what a bytes budget charges).
  */
-export async function readWonderfsJson(source: WonderfsBodySource, options: WonderfsBodyTimeouts & { readonly maxBytes?: number } = {}): Promise<WonderfsBodyResult<unknown>> {
+export async function readWonderfsJson(source: WonderfsBodySource, options: WonderfsBodyTimeouts & { readonly maxBytes?: number } = {}): Promise<WonderfsBodyResult<{ readonly value: unknown; readonly size: number }>> {
   const maxBytes = options.maxBytes ?? WONDERFS_JSON_MAX_BYTES;
   if (mediaType(source) !== 'application/json') return refuse(415, 'unsupported_media_type', 'WonderFS takes this request as application/json.', true);
   const declared = declaredLength(source);
@@ -172,7 +172,7 @@ export async function readWonderfsJson(source: WonderfsBodySource, options: Wond
     return refuse(400, 'invalid_request', 'The request is not UTF-8 text.', false);
   }
   try {
-    return { ok: true, value: JSON.parse(text) as unknown };
+    return { ok: true, value: { value: JSON.parse(text) as unknown, size: read.size } };
   } catch {
     return refuse(400, 'invalid_request', 'The request is not one JSON value.', false);
   }

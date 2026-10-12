@@ -24,6 +24,7 @@ import {
   wonderfsKeepBothPath,
   wonderfsKeepMine,
   wonderfsKeepTheirs,
+  wonderfsUploadDeadlineMs,
   type WonderfsWriteBudgets,
 } from './wonderfs-write-routes';
 
@@ -79,18 +80,18 @@ async function world(options: { limits?: WfsLimits; backing?: WfsMemoryBacking }
 }
 
 /** A sign-in for each player. Calling it again is a NEW sign-in: new tokens and new session_refs (a bridge restart). */
-function signIn(players: readonly string[]): { sessions: BrowserSessionStore; tokens: Record<string, string>; refOf: (player: string) => string } {
+function signIn(players: readonly string[], at = T0): { sessions: BrowserSessionStore; tokens: Record<string, string>; refOf: (player: string) => string } {
   const sessions = createBrowserSessionStore();
   const tokens: Record<string, string> = {};
   for (const p of players) {
-    const m = sessions.mintNativeSocialSession({ now: T0, participantId: p });
+    const m = sessions.mintNativeSocialSession({ now: at, participantId: p });
     if (!m.ok) throw new Error('not minted');
     tokens[p] = m.session.token;
   }
   const refOf = (player: string): string => {
-    const v = sessions.verifyNativeSocialSession({ token: tokens[player], now: T0 + 1 });
+    const v = sessions.verifyNativeSocialSession({ token: tokens[player], now: at + 1 });
     if (!v.ok) throw new Error('no session');
-    return sessions.nativeSocialSessionRef({ sessionId: v.sessionId, now: T0 + 1 }) as string;
+    return sessions.nativeSocialSessionRef({ sessionId: v.sessionId, now: at + 1 }) as string;
   };
   return { sessions, tokens, refOf };
 }
@@ -98,10 +99,11 @@ function signIn(players: readonly string[]): { sessions: BrowserSessionStore; to
 const depsOf = (store: WfsStore, sessions: BrowserSessionStore, extra: Partial<WonderfsRouteDeps> = {}): WonderfsRouteDeps =>
   ({ verifySession: wonderfsSessionVerifier(sessions), store, budgets: null, writeBudgets: null, ...extra });
 
-async function boot(deps: WonderfsRouteDeps): Promise<string> {
+/** A loopback server over the routes; every request it answers is stamped `now` (the clock is the test's, never the wall's). */
+async function boot(deps: WonderfsRouteDeps, now = T0 + 1): Promise<string> {
   const server = createServer((req, res) => {
     void (async () => {
-      const answer = await answerWonderfs(wonderfsRequestOf(req, T0 + 1), deps);
+      const answer = await answerWonderfs(wonderfsRequestOf(req, now), deps);
       writeWonderfsAnswer(res, answer ?? wonderfsNotFound());
     })();
   });
@@ -237,6 +239,9 @@ describe('WonderFS R2 writes: who may write (§8.2, §9.1, §19.m2)', () => {
     const strangerUp = await upload(base, tokens['ghu-5'], 'x');
     const strangerCommit = await commit(base, tokens['ghu-5'], { requestId: rid('who'), baseRev: 3, ops: [{ op: 'create', path: 'z', kind: 'dir' }] });
     expect([strangerUp.status, strangerUp.json, strangerCommit.json]).toEqual([404, NOT_FOUND, NOT_FOUND]);
+    // a POST refused at the gate leaves its body unread: the socket is closed, never drained for reuse (R2-r2); a GET is not
+    const at = (method: string, url: string) => answerWonderfs({ method, url, authorization: `Relay-Session ${tokens['ghu-5']}`, origin: undefined, clientBuild: undefined, range: undefined, now: T0 + 1 }, depsOf(w.store, sessions));
+    expect([(await at('POST', COMMITS()))?.headers.connection, (await at('POST', BLOBS()))?.headers.connection, (await at('GET', `/wonderfs/v1/projects/${PROJECT}`))?.headers.connection]).toEqual(['close', 'close', undefined]);
     for (const [label, a] of [
       ['legacy row, upload', await upload(base, tokens['ghu-9'], 'x')],
       ['unknown project, upload', await upload(base, tokens['ghu-1'], 'x', { project: 'prj-nowhere' })],
@@ -307,7 +312,7 @@ describe('WonderFS R2 writes: who may write (§8.2, §9.1, §19.m2)', () => {
     expect(record.principal.sessionId, 'the session_ref, never the token').not.toBe(tokens['ghu-3']);
   });
 
-  it('the reserved root (.wonderfs, any case, any end of a move) is never written by a person: the one 404, nothing kept (CONTROL: a name beside it lands)', async () => {
+  it('the reserved root (.wonderfs, any case, the new end of a move) is a §6.6 refusal: 400 invalid_request, never a conflict, nothing kept (R2-r2, correctness MINOR-7); the STORE refuses it too; CONTROL: a name beside it lands', async () => {
     const w = await world();
     const { sessions, tokens } = signIn(['ghu-1']);
     const base = await boot(depsOf(w.store, sessions));
@@ -318,12 +323,17 @@ describe('WonderFS R2 writes: who may write (§8.2, §9.1, §19.m2)', () => {
       [{ op: 'move', fileId: notes, expectPathVersion: 1, newPath: '.wonderfs/notes.txt' }],
     ]) {
       const a = await commit(base, tokens['ghu-1'], { requestId: rid('reserved'), baseRev: 1, ops });
-      expect([a.status, a.json], JSON.stringify(ops)).toEqual([404, NOT_FOUND]);
+      expect([a.status, a.json.error.kind], JSON.stringify(ops)).toEqual([400, 'invalid_request']);
     }
     expect(await headRev(w.store)).toBe(1);
+    const none = await w.store.conflicts(PROJECT, { status: 'all' });
+    expect(none.ok && none.value.conflicts.length, 'not a conflict').toBe(0);
+    // the store's own check, inside the change, for any caller that skipped the route's
+    const owner = { kind: 'human' as const, id: 'ghu-1', onBehalfOf: null, grantId: null, sessionId: null, clientBuild: null, tool: null, missionId: null, attemptId: null };
+    const direct = await w.store.commit(PROJECT, { requestId: rid('reserved'), branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: owner, ops: [{ op: 'create', path: 'x', kind: 'dir' }] }, NOW_ISO, { playerId: 'ghu-1', needs: [{ action: 'write', paths: ['.wonderfs/x'] }] });
+    expect(direct.ok ? 'written' : [direct.error.code, direct.error.message]).toEqual(['not-found', 'Not found.']);
     expect(await committed(base, tokens['ghu-1'], 1, [{ op: 'create', path: 'wonderfs', kind: 'dir' }]), 'CONTROL').toBe(2);
   });
-
   it('IN THE TRANSACTION: a membership removed or demoted after the gate let the request in writes NOTHING (upload and commit) and answers the one 404; CONTROL: the same store asked WITHOUT the authority would have written', async () => {
     const w = await world();
     const { sessions, tokens } = signIn(['ghu-3']);
@@ -414,6 +424,31 @@ describe('WonderFS R2 H12: one atomic change to main (§6.2, INV-2, INV-3, INV-8
     expect(record.ops, 'all three, as given').toEqual(ops(true));
     expect(await committed(base, tokens['ghu-1'], 1, ops(false)), 'CONTROL').toBe(2);
     expect((await liveTree(w.store)).map((e) => e.path)).toEqual(['docs', 'docs/new.txt', 'docs/notes.txt', 'docs/readme.txt']);
+  });
+
+  it('every number in a commit is a whole number 0..2^31-1, refused before anything is decided -- a record is hashed and kept forever (§19.M7; R2-r2, security MAJOR-1); CONTROL: the largest allowed lands', async () => {
+    const w = await world();
+    const { sessions, tokens } = signIn(['ghu-1']);
+    const base = await boot(depsOf(w.store, sessions));
+    const { docs, readme } = await seed(base, tokens['ghu-1'], w.store);
+    const raw = (body: string) => send(base, COMMITS(), { method: 'POST', token: tokens['ghu-1'], headers: { 'content-type': 'application/json' }, body });
+    for (const n of ['9007199254740993', '2147483648', '1e300', '1.5', '-1']) {
+      const bodies = [
+        `{"requestId":"${rid('num')}","baseRev":${n},"ops":[{"op":"create","path":"x","kind":"dir"}]}`,
+        `{"requestId":"${rid('num')}","baseRev":1,"ops":[{"op":"update","fileId":"${readme}","expectContentVersion":${n},"sha256":"${sha('first words')}","size":11}]}`,
+        // the one an unbounded engine counter would LET THROUGH: a folder delete passes when nothing changed after the given revision
+        `{"requestId":"${rid('num')}","baseRev":1,"ops":[{"op":"delete","fileId":"${docs}","expectSubtreeRev":${n}}]}`,
+      ];
+      for (const body of bodies) {
+        const a = await raw(body);
+        expect([a.status, a.json.error.kind], `${n}: ${body.slice(0, 70)}`).toEqual([400, 'invalid_request']);
+      }
+    }
+    expect(await headRev(w.store), 'nothing decided, nothing kept').toBe(1);
+    const largest = await raw(`{"requestId":"${rid('num')}","baseRev":2147483647,"ops":[{"op":"delete","fileId":"${docs}","expectSubtreeRev":2147483647}]}`);
+    expect([largest.status, largest.json.data?.rev], 'CONTROL: 2^31-1 lands (and that delete does pass the engine)').toEqual([200, 2]);
+    const record = (await mainOf(w.store)).commits[1];
+    expect([record.baseRev, Number.isSafeInteger(record.baseRev)]).toEqual([2147483647, true]);
   });
 
   it('T-IDEMPOTENT: the same id and change answers the same forever (a conflict too); the same id with another change, or from another player, is 409 duplicate_idempotency_key', async () => {
@@ -689,6 +724,37 @@ describe('WonderFS R2 H12: conflicts and their three resolutions (§6.4, INV-2)'
     expect([unknown.status, unknown.json]).toEqual([404, NOT_FOUND]);
   });
 
+  it('resolution helpers (R2-r2, correctness MINOR-6): keep mine over a file deleted meanwhile brings it back first and lands; keep both picks a name no live file has (a counter after the time) and lands twice', async () => {
+    const w = await world();
+    const { sessions, tokens } = signIn(['ghu-1', 'ghu-2', 'ghu-3']);
+    const base = await boot(depsOf(w.store, sessions));
+    const { readme, notes } = await seed(base, tokens['ghu-1'], w.store);
+    const now = async () => {
+      const main = await mainOf(w.store);
+      return { entries: main.entries, headRev: main.headRev };
+    };
+    // KEEP MINE over edit_deleted
+    await committed(base, tokens['ghu-2'], 1, [{ op: 'delete', fileId: notes, expectContentVersion: 1 }]);
+    const mine = await uploaded(base, tokens['ghu-3'], 'my notes');
+    const lost = await commit(base, tokens['ghu-3'], { requestId: rid('help'), baseRev: 1, ops: [{ op: 'update', fileId: notes, expectContentVersion: 1, ...mine }] });
+    expect([lost.status, lost.json.error.failures[0].kind]).toEqual([409, 'edit_deleted']);
+    const keepMine = wonderfsKeepMine(await conflictRecord(w.store, lost.json.error.conflictId), await now(), rid('help'));
+    expect(keepMine?.ops).toEqual([{ op: 'undelete', fileId: notes, expectVersion: 2 }, { op: 'update', fileId: notes, expectContentVersion: 1, ...mine }]);
+    expect((await commit(base, tokens['ghu-3'], keepMine)).status).toBe(200);
+    expect(await contentOf(base, tokens['ghu-1'], notes)).toBe('my notes');
+    // KEEP BOTH, twice on one file at one second: the second name takes a counter
+    for (const [i, expected] of [[1, `docs/readme (conflict, ghu-3, ${AT_UTC}).txt`], [2, `docs/readme (conflict, ghu-3, ${AT_UTC}, 2).txt`]] as const) {
+      const cur = (await mainOf(w.store)).entries.get(readme);
+      const theirs = await uploaded(base, tokens['ghu-2'], `theirs ${i}`);
+      await committed(base, tokens['ghu-2'], (await now()).headRev, [{ op: 'update', fileId: readme, expectContentVersion: cur?.contentVersion as number, ...theirs }]);
+      const late = await uploaded(base, tokens['ghu-3'], `late ${i}`);
+      const refused = await commit(base, tokens['ghu-3'], { requestId: rid('help'), baseRev: 1, ops: [{ op: 'update', fileId: readme, expectContentVersion: cur?.contentVersion as number, ...late }] });
+      const both = wonderfsKeepBoth(await conflictRecord(w.store, refused.json.error.conflictId), await now(), rid('help'));
+      expect(both?.ops.map((o) => (o.op === 'create' ? o.path : o.op))).toEqual([expected]);
+      expect((await commit(base, tokens['ghu-3'], both)).status, expected).toBe(200);
+    }
+  });
+
   it('keep-both NAMES: colon-free UTC, the author, the extension kept, the stem shortened to 200 characters and 255 bytes, every one a legal path; CONTROL: the ISO time\'s colons are refused (§6.6)', () => {
     expect(wonderfsCompactUtc('2026-10-12T17:12:28.123Z')).toBe('20261012T171228Z');
     expect(wonderfsCompactUtc('not a time')).toBeNull();
@@ -710,6 +776,13 @@ describe('WonderFS R2 H12: conflicts and their three resolutions (§6.4, INV-2)'
       expect(Buffer.from(named, 'utf8').toString('utf8'), 'no half of a surrogate pair').toBe(named);
       expect(named).toContain(` (conflict, ghu-3, 20261012T171228Z)`);
     }
+    // a stem is cut by whole grapheme clusters: x + U+0301 has no precomposed form, so NFC keeps it two code points, and a cut by
+    // code point would leave a bare x (R2-r2, correctness MINOR-6). '.mdx' puts the first fitting code-point cut mid-cluster.
+    const accented = wonderfsKeepBothPath(`${'x\u0301'.repeat(80)}.mdx`, 'ghu-3', at) as string;
+    expect([accented.includes('x (conflict'), accented.includes('x\u0301 (conflict'), Buffer.byteLength(accented, 'utf8') <= 255]).toEqual([false, true, true]);
+    // taken names get a counter; every counter taken, no name
+    expect(wonderfsKeepBothPath('a.md', 'ghu-3', at, (key) => key === 'a (conflict, ghu-3, 20261012t171228z).md')).toBe('a (conflict, ghu-3, 20261012T171228Z, 2).md');
+    expect(wonderfsKeepBothPath('a.md', 'ghu-3', at, () => true)).toBeNull();
     // CONTROL: the ISO spelling is not a legal name
     expect(normalizeWfsPath(`docs/readme (conflict, ghu-3, ${at}).txt`).ok).toBe(false);
   });
@@ -778,7 +851,7 @@ describe('WonderFS R2 H11: uploads (§6.2 put_blob, §10.1, §19.m3)', () => {
     expect(blobCount(w.store), 'CONTROL: the retry lands').toBe(1);
   }, 30_000);
 
-  it('T-ORPHAN, its counting half (§19.m3, N-MAJOR-1): an upload nothing names counts as PENDING from the moment it lands -- to the limit, then 413 project_full before a byte is kept; a held blob grows nothing; committing makes it live, deleting frees it; a retained conflict\'s blob is not pending', async () => {
+  it('T-ORPHAN, its counting half (§19.m3; R2-r2, security MAJOR-3): every upload no file\'s history names -- an orphan, or one only a conflict names -- counts as PENDING: to the limit, then 413 project_full before a byte is kept; a held blob grows nothing; a file taking it makes it live, deleting that file frees the room', async () => {
     const w = await world({ limits: SMALL });
     const { sessions, tokens } = signIn(['ghu-1']);
     const base = await boot(depsOf(w.store, sessions, { limits: SMALL }));
@@ -797,32 +870,33 @@ describe('WonderFS R2 H11: uploads (§6.2 put_blob, §10.1, §19.m3)', () => {
     await committed(base, tokens['ghu-1'], 1, [{ op: 'delete', fileId: aFile, expectContentVersion: 1 }]);
     const c1 = await uploaded(base, tokens['ghu-1'], 'c'); // live 0 + pending 40 + 1: the deleted file's bytes are history, not pending
     const d59 = await uploaded(base, tokens['ghu-1'], 'd'.repeat(59)); // pending 100
-    expect((await upload(base, tokens['ghu-1'], 'e')).status, 'CONTROL: d is pending now').toBe(413);
-    // a conflict naming d (an edit of the deleted file): d is referenced while the conflict is retained, open or dismissed
+    // a conflict naming d (an edit of the deleted file): d is READABLE while the conflict is retained, but it is still room taken
     const refused = await commit(base, tokens['ghu-1'], { requestId: rid('orphan'), baseRev: 2, ops: [{ op: 'update', fileId: aFile, expectContentVersion: 1, ...d59 }] });
     expect([refused.status, refused.json.error.failures[0].kind]).toEqual([409, 'edit_deleted']);
-    expect((await upload(base, tokens['ghu-1'], 'e'.repeat(59))).status, 'd no longer pending').toBe(200);
+    expect((await upload(base, tokens['ghu-1'], 'e')).status, 'conflict-held d is still pending: full').toBe(413);
     expect((await commit(base, tokens['ghu-1'], wonderfsKeepTheirs(refused.json.error.conflictId, rid('orphan'), 2))).status).toBe(200);
-    // dismissed (keep theirs) but RETAINED 30 days: d is still named -- served by address, which an orphan never is
     const info = await w.store.blobInfo(PROJECT, d59.sha256);
-    expect([info.ok && info.value?.referenced, (await send(base, `${BLOBS()}/${d59.sha256}`, { token: tokens['ghu-1'] })).status]).toEqual([true, 200]);
+    expect([info.ok && info.value?.referenced, (await send(base, `${BLOBS()}/${d59.sha256}`, { token: tokens['ghu-1'] })).status], 'dismissed, retained: still named and served').toEqual([true, 200]);
+    expect((await upload(base, tokens['ghu-1'], 'e')).status, 'and still pending').toBe(413);
+    // CONTROL: once a FILE names d it is live, not pending; deleting that file leaves it history, and the room comes back
+    await committed(base, tokens['ghu-1'], 3, [{ op: 'create', path: 'd.txt', kind: 'file', ...d59 }]);
+    const dFile = (await entryAt(w.store, 'd.txt'))?.fileId as string;
+    await committed(base, tokens['ghu-1'], 4, [{ op: 'delete', fileId: dFile, expectContentVersion: 1 }]);
+    expect((await upload(base, tokens['ghu-1'], 'e'.repeat(59))).status, 'live 0 + pending 41 + 59').toBe(200);
     const orphan = await w.store.blobInfo(PROJECT, sha('e'.repeat(59)));
-    expect(orphan.ok && orphan.value?.referenced, 'CONTROL: e, uploaded and never named, is an orphan').toBe(false);
+    expect(orphan.ok && orphan.value?.referenced, 'e, uploaded and never named, is an orphan').toBe(false);
     expect([b40.size, c1.size]).toEqual([40, 1]);
   });
-
-  it('upload budgets (§8.4): one upload in flight per player and two per process (429 + Retry-After 1), and bytes per (player, project) per day with Retry-After N equal to the body\'s N (CONTROLS: another player, another project, a smaller file)', async () => {
+  it('upload room (§8.4; R2-r2, security MINOR-1): one upload in flight per player, DECLARED bytes in flight per process (429 + Retry-After 1) -- a small upload fits beside two held ones, a larger one does not; bytes per (player, project) per day, Retry-After N = the body\'s N (CONTROLS: the room comes back; another project has its own)', async () => {
     const w = await world();
     w.store.seedProject('prj-beta', { 'ghu-1': 'OWNER' });
     const { sessions, tokens } = signIn(['ghu-1', 'ghu-2', 'ghu-3']);
-    const real = createWonderfsWriteBudgets({ uploadBytes: { burstBytes: 100, perMinuteBytes: 60 } });
+    const real = createWonderfsWriteBudgets({ uploadBytes: { burstBytes: 100, perMinuteBytes: 60 }, maxUploadBytesInFlight: 25 });
     let held = 0;
     const counted: WonderfsWriteBudgets = {
       ...real,
-      takeCommit: real.takeCommit,
-      takeUploadBytes: real.takeUploadBytes,
-      startUpload: (player) => {
-        const end = real.startUpload(player);
+      startUpload: (player, declared) => {
+        const end = real.startUpload(player, declared);
         if (end === null) return null;
         held += 1;
         let ended = false;
@@ -843,21 +917,55 @@ describe('WonderFS R2 H11: uploads (§6.2 put_blob, §10.1, §19.m3)', () => {
     const second = rawPost(base, BLOBS(), auth('ghu-2'));
     second.req.write('12345');
     await vi.waitFor(() => expect(held).toBe(2), { timeout: 10_000, interval: 5 });
-    const third = await upload(base, tokens['ghu-3'], 'third');
-    expect(third.status, 'the process holds two').toBe(429);
+    // 20 of 25 declared bytes are in flight: 5 more fit, 6 do not
+    expect((await upload(base, tokens['ghu-3'], 'fives')).status, 'CONTROL: a small upload fits beside two held ones').toBe(200);
+    const larger = await upload(base, tokens['ghu-3'], 'sixsix');
+    expect([larger.status, larger.headers['retry-after']], 'the process\'s declared bytes are taken').toEqual([429, '1']);
     first.req.end('67890');
     second.req.end('67890');
     expect([(await first.answer)?.status, (await second.answer)?.status]).toEqual([200, 200]);
     await vi.waitFor(() => expect(held).toBe(0), { timeout: 10_000, interval: 5 });
-    expect((await upload(base, tokens['ghu-3'], 'third')).status, 'CONTROL: the slots came back').toBe(200);
-    // bytes: 10 of 100 used by ghu-1 on PROJECT; 80 more fit, then 20 do not
-    expect((await upload(base, tokens['ghu-1'], 'x'.repeat(80))).status).toBe(200);
-    const over = await upload(base, tokens['ghu-1'], 'y'.repeat(20));
+    expect((await upload(base, tokens['ghu-3'], 'sixsix')).status, 'CONTROL: the room came back').toBe(200);
+    // bytes per (player, project) per day (budgets of their own: the 25-byte room above admits no larger upload at all)
+    const daily = await boot(depsOf(w.store, sessions, { writeBudgets: createWonderfsWriteBudgets({ uploadBytes: { burstBytes: 100, perMinuteBytes: 60 } }) }));
+    expect((await upload(daily, tokens['ghu-1'], 'x'.repeat(80))).status).toBe(200);
+    const over = await upload(daily, tokens['ghu-1'], 'y'.repeat(30));
     const n = Number(over.headers['retry-after']);
     expect([over.status, over.json.error.message]).toEqual([429, `Too many requests; try again in ${n} s.`]);
     expect(n).toBeGreaterThanOrEqual(1);
-    expect((await upload(base, tokens['ghu-1'], 'z'.repeat(10))).status, 'CONTROL: what is left still fits').toBe(200);
-    expect((await upload(base, tokens['ghu-1'], 'y'.repeat(20), { project: 'prj-beta' })).status, 'CONTROL: another project has its own').toBe(200);
+    expect((await upload(daily, tokens['ghu-1'], 'z'.repeat(20))).status, 'CONTROL: what is left still fits').toBe(200);
+    expect((await upload(daily, tokens['ghu-1'], 'y'.repeat(30), { project: 'prj-beta' })).status, 'CONTROL: another project has its own').toBe(200);
+  }, 30_000);
+
+  it('the upload budget is GIVEN BACK when nothing new is kept -- bytes the project holds, a 422, a 413 -- and NOT when the client failed to send what it declared (an abort keeps its cost); a stalled small upload holds its room for seconds, not minutes (R2-r2, correctness MINOR-1, security MINOR-1)', async () => {
+    const w = await world({ limits: SMALL });
+    const { sessions, tokens } = signIn(['ghu-1']);
+    const real = createWonderfsWriteBudgets({ uploadBytes: { burstBytes: 1_000, perMinuteBytes: 60 } });
+    const refunds: number[] = [];
+    const counted: WonderfsWriteBudgets = { ...real, refundUploadBytes: (player, project, bytes, now) => { refunds.push(bytes); real.refundUploadBytes(player, project, bytes, now); } };
+    const base = await boot(depsOf(w.store, sessions, { limits: SMALL, writeBudgets: counted }));
+    expect((await upload(base, tokens['ghu-1'], 'a'.repeat(30))).status).toBe(200);
+    expect(refunds, 'CONTROL: a new blob is paid for').toEqual([]);
+    expect((await upload(base, tokens['ghu-1'], 'a'.repeat(30))).status).toBe(200);
+    expect(refunds, 'held bytes: given back').toEqual([30]);
+    expect((await upload(base, tokens['ghu-1'], 'c'.repeat(10), { sha: sha('not these') })).status).toBe(422);
+    expect((await upload(base, tokens['ghu-1'], 'b'.repeat(64))).status).toBe(200); // pending 94
+    expect((await upload(base, tokens['ghu-1'], 'f'.repeat(10))).status).toBe(413);
+    expect(refunds, 'the 422 and the 413: given back').toEqual([30, 10, 10]);
+    const gone = rawPost(base, BLOBS(), { authorization: `Relay-Session ${tokens['ghu-1']}`, 'content-type': 'application/octet-stream', 'content-length': '20' });
+    gone.req.write('12345');
+    await new Promise<void>((r) => setImmediate(r));
+    gone.req.destroy();
+    expect(await gone.answer).toBeNull();
+    await vi.waitFor(async () => expect((await upload(base, tokens['ghu-1'], 'a'.repeat(30))).status).toBe(200), { timeout: 10_000, interval: 5 });
+    expect(refunds, 'an abort (20 declared) is not given back; the held re-upload after it is').toEqual([30, 10, 10, 30]);
+    // the bucket arithmetic itself: take, refuse, give back, take
+    const b = createWonderfsWriteBudgets({ uploadBytes: { burstBytes: 100, perMinuteBytes: 60 } });
+    expect([b.takeUploadBytes('p', 'q', 60, T0).ok, b.takeUploadBytes('p', 'q', 50, T0).ok]).toEqual([true, false]);
+    b.refundUploadBytes('p', 'q', 60, T0);
+    expect(b.takeUploadBytes('p', 'q', 100, T0).ok, 'given back in full').toBe(true);
+    // the deadline follows the declared size: a 30-byte upload stalls for ~10 s at most, a 64 MiB one for 300 s
+    expect([wonderfsUploadDeadlineMs(30), wonderfsUploadDeadlineMs(64 * 1024 * 1024), wonderfsUploadDeadlineMs(1024 * 1024)]).toEqual([10_001, 300_000, 26_000]);
   }, 30_000);
 });
 
@@ -879,24 +987,54 @@ describe('WonderFS R2: commit budgets (§8.4)', () => {
     expect(beta.status, 'CONTROL').toBe(200);
   });
 
-  it('the open-conflicts cap, judged inside the change: at the cap a NEW change is 429 and nothing is kept; resolving is always allowed, a replay keeps its answer, and the cap is per player (CONTROLS)', async () => {
+  it('commit bodies are a daily BYTES budget per (player, project) (R2-r2, security MAJOR-2(c)): past it, 429 with the body\'s N and nothing kept; CONTROL: within it they land', async () => {
+    const w = await world();
+    const { sessions, tokens } = signIn(['ghu-1']);
+    const bodies = [0, 1, 2].map((i) => ({ requestId: rid('bytes'), baseRev: i, ops: [{ op: 'create', path: `${'d'.repeat(60)}${i}`, kind: 'dir' }] }));
+    const sizes = bodies.map((b) => Buffer.byteLength(JSON.stringify(b), 'utf8'));
+    const base = await boot(depsOf(w.store, sessions, { writeBudgets: createWonderfsWriteBudgets({ commitBytes: { burstBytes: sizes[0] + sizes[1], perMinuteBytes: 60 } }) }));
+    expect([(await commit(base, tokens['ghu-1'], bodies[0])).status, (await commit(base, tokens['ghu-1'], bodies[1])).status], 'CONTROL').toEqual([200, 200]);
+    const third = await commit(base, tokens['ghu-1'], bodies[2]);
+    const n = Number(third.headers['retry-after']);
+    expect([third.status, third.json.error.message]).toEqual([429, `Too many requests; try again in ${n} s.`]);
+    expect(await headRev(w.store)).toBe(2);
+  });
+
+  it('the conflict cap (R2-r2, security MAJOR-2), judged on the OUTCOME inside the change: at the cap a NEW conflict is 429 (reason too_many_conflicts) and nothing is kept -- a resolution that fails too; a change that lands and a replay are never refused; a DISMISSED conflict counts while it is retained, and stops counting after its 30 days (CONTROLS)', async () => {
     const w = await world();
     const { sessions, tokens } = signIn(['ghu-1', 'ghu-3']);
-    const base = await boot(depsOf(w.store, sessions, { writeBudgets: createWonderfsWriteBudgets({ maxOpenConflicts: 2 }) }));
+    const budgets = createWonderfsWriteBudgets({ maxConflicts: 2 });
+    const base = await boot(depsOf(w.store, sessions, { writeBudgets: budgets }));
     const { readme } = await seed(base, tokens['ghu-1'], w.store);
-    const stale = () => ({ requestId: rid('cap'), baseRev: 1, ops: [{ op: 'update', fileId: readme, expectContentVersion: 9, sha256: sha('first words'), size: 11 }] });
+    const stale = (extra: Record<string, unknown> = {}) => ({ requestId: rid('cap'), baseRev: 1, ops: [{ op: 'update', fileId: readme, expectContentVersion: 9, sha256: sha('first words'), size: 11 }], ...extra });
+    const conflictCount = async () => {
+      const all = await w.store.conflicts(PROJECT, { status: 'all' });
+      return all.ok ? all.value.conflicts.length : -1;
+    };
     const first = stale();
     const one = await commit(base, tokens['ghu-3'], first);
     const two = await commit(base, tokens['ghu-3'], stale());
     expect([one.status, two.status]).toEqual([409, 409]);
-    const capped = await commit(base, tokens['ghu-3'], { requestId: rid('cap'), baseRev: 1, ops: [{ op: 'create', path: 'clean', kind: 'dir' }] });
-    expect([capped.status, capped.json.error.kind, capped.headers['retry-after'], capped.json.error.message]).toEqual([429, 'rate_limited', '60', 'You have too many unresolved conflicts in this project: resolve some; try again in 60 s.']);
-    expect(await headRev(w.store), 'nothing kept').toBe(1);
+    const capped = await commit(base, tokens['ghu-3'], stale());
+    expect([capped.status, capped.json.error.kind, capped.json.error.reason, capped.headers['retry-after'], capped.json.error.message])
+      .toEqual([429, 'rate_limited', 'too_many_conflicts', '60', 'You have too many conflicts in this project still kept for review: resolve some; try again in 60 s.']);
+    expect(await conflictCount(), 'nothing kept').toBe(2);
+    expect((await commit(base, tokens['ghu-3'], { requestId: rid('cap'), baseRev: 1, ops: [{ op: 'create', path: 'clean', kind: 'dir' }] })).status, 'CONTROL: a change that lands is never refused').toBe(200);
     const replay = await commit(base, tokens['ghu-3'], first);
     expect([replay.status, replay.json.error.conflictId, replay.json.error.replay], 'CONTROL: a replay keeps its answer').toEqual([409, one.json.error.conflictId, true]);
-    expect((await commit(base, tokens['ghu-1'], { requestId: rid('cap'), baseRev: 1, ops: [{ op: 'create', path: 'owner', kind: 'dir' }] })).status, 'CONTROL: per player').toBe(200);
-    expect((await commit(base, tokens['ghu-3'], wonderfsKeepTheirs(one.json.error.conflictId, rid('cap'), 2))).status, 'resolving is allowed at the cap').toBe(200);
-    expect((await commit(base, tokens['ghu-3'], { requestId: rid('cap'), baseRev: 3, ops: [{ op: 'create', path: 'clean', kind: 'dir' }] })).status, 'CONTROL: below the cap again').toBe(200);
+    // a resolution that FAILS opens a new conflict: it counts (MAJOR-2(a))
+    const failing = await commit(base, tokens['ghu-3'], stale({ resolvesConflictId: one.json.error.conflictId }));
+    expect([failing.status, failing.json.error.reason]).toEqual([429, 'too_many_conflicts']);
+    expect(await conflictCount()).toBe(2);
+    // a resolution that lands is allowed; the DISMISSED conflict is still retained, so the cap still holds (MAJOR-2(b))
+    expect((await commit(base, tokens['ghu-3'], wonderfsKeepTheirs(one.json.error.conflictId, rid('cap'), 2))).status).toBe(200);
+    expect((await commit(base, tokens['ghu-3'], stale())).status, 'dismissed but retained: still counted').toBe(429);
+    expect((await commit(base, tokens['ghu-1'], stale())).status, 'CONTROL: per player').toBe(409);
+    // 31 days on, the dismissal's retention is over: one retained conflict left, room for another
+    const later = T0 + 31 * 24 * 3600 * 1000;
+    const s2 = signIn(['ghu-3'], later);
+    const after = await boot(depsOf(w.store, s2.sessions, { writeBudgets: budgets }), later + 1);
+    expect((await commit(after, s2.tokens['ghu-3'], stale())).status, 'CONTROL: no longer counted').toBe(409);
   });
 });
 
@@ -949,14 +1087,23 @@ describe('WonderFS R2: T-PERSIST and T-CRASH (§10.3; INV-1, INV-8, INV-11)', ()
     const bytes = await send(again, `/wonderfs/v1/projects/${PROJECT}/branches/main/files/${readme}/content`, { token: after.tokens['ghu-1'] });
     expect([bytes.status, sha(bytes.bytes)]).toEqual([200, first.sha256]);
     expect((await send(again, `/wonderfs/v1/projects/${PROJECT}/branches/main/tree`, { token: before.tokens['ghu-1'] })).status, 'the old sign-in is gone').toBe(401);
-    // CONTROL: a store that dropped every write
-    const dropped = await world();
-    const lost = await boot(depsOf(dropped.store, after.sessions));
-    const none = await send(lost, `/wonderfs/v1/projects/${PROJECT}/branches/main/tree`, { token: after.tokens['ghu-1'] });
-    expect([none.status, none.json.data.entries]).toEqual([200, []]);
+    // CONTROL (R2-r2, correctness MINOR-5): a store that ANSWERS every write 200 but keeps it elsewhere -- the client cannot tell, the
+    // restart can: the assertion above would go red
+    const kept = await world();
+    const elsewhere = await world();
+    const dropping = proxied(kept.store, {
+      commit: (p, req, now, authority) => elsewhere.store.commit(p, req, now, authority),
+      putBlob: (p, bytes, options) => elsewhere.store.putBlob(p, bytes, options),
+    });
+    const s3 = signIn(['ghu-1']);
+    await seed(await boot(depsOf(dropping, s3.sessions)), s3.tokens['ghu-1'], elsewhere.store); // every write answered 200
+    const s4 = signIn(['ghu-1']);
+    const lostBase = await boot(depsOf((await world({ backing: kept.backing })).store, s4.sessions));
+    const none = await send(lostBase, `/wonderfs/v1/projects/${PROJECT}/branches/main/tree`, { token: s4.tokens['ghu-1'] });
+    expect([none.status, none.json.data.entries], 'the dropped writes are not there after the restart').toEqual([200, []]);
   });
 
-  it('T-CRASH rows 2-4, killed at the store seam: after the blob (an invisible orphan; the commit lands on retry), inside the commit (nothing applied; once on retry), after COMMIT before the answer (503; the retry after a NEW sign-in returns the ORIGINAL revision)', async () => {
+  it('T-CRASH rows 2-4 at the store SEAM -- what the ROUTE answers (the rollback inside a transaction is proven on rows, wonderfs-write.real-postgres.test.ts): after the blob (an invisible orphan; the commit lands on retry), a store that dies before keeping the change (503; once on retry), after COMMIT before the answer (503; the retry after a NEW sign-in returns the ORIGINAL revision)', async () => {
     const w = await world();
     const s1 = signIn(['ghu-3']);
     const base1 = await boot(depsOf(w.store, s1.sessions));
@@ -1021,7 +1168,7 @@ describe('WonderFS R2 body readers (wonderfs-body.ts): bounded, abort-safe, time
     const parsing = readWonderfsJson(fine, { maxBytes: 1000 });
     fine.end('{"a":[1,2]}');
     const parsed = await parsing;
-    expect(parsed.ok && parsed.value).toEqual({ a: [1, 2] });
+    expect(parsed.ok && parsed.value).toEqual({ value: { a: [1, 2] }, size: 11 });
   });
 
   it('a body that ends early, a client gone (an error, a close, or already destroyed), and a stall each settle ONCE, with every listener removed', async () => {

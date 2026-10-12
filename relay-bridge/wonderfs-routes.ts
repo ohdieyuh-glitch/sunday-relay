@@ -82,7 +82,7 @@ import {
   type WonderfsRequest,
 } from './wonderfs-gate';
 import { isWonderfsRoute, type WonderfsQueryKey } from './wonderfs-scope';
-import { serveWonderfsWrite, type WonderfsWriteDeps, type WonderfsWriteRequest } from './wonderfs-write-routes';
+import { serveWonderfsWrite, wonderfsClosing, type WonderfsWriteDeps, type WonderfsWriteRequest } from './wonderfs-write-routes';
 
 export { isWonderfsRoute } from './wonderfs-scope';
 export type { WonderfsAnswer, WonderfsRequest } from './wonderfs-gate';
@@ -357,7 +357,8 @@ export async function answerWonderfs(request: WonderfsWriteRequest, deps: Wonder
   if (!isWonderfsRoute(request.url)) return null;
   try {
     const gate = await wonderfsGate(request, deps);
-    if (!gate.ok) return gate.answer;
+    // R2-r2 (reviews' NIT): a POST refused at the gate leaves its body unread -- the socket is closed, never drained for reuse
+    if (!gate.ok) return request.method === 'GET' ? gate.answer : wonderfsClosing(gate.answer);
     return await serveAdmitted(gate.admitted, request, deps);
   } catch (error) {
     deps.log?.(`wonderfs: a request failed in the store (${error instanceof Error ? error.name : 'unknown'}); answered 503`);

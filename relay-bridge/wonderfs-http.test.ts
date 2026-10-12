@@ -129,8 +129,11 @@ describe('WonderFS on the real bridge: ALWAYS ON (INV-10, §19.m6)', () => {
 /* -------------------------------------------------------------------------------------------- the static no-toggle check */
 
 const ROOT = resolve(__dirname, '..');
-// R2 adds its write routes and its body readers: the same scan, the same rule
-const WONDERFS_FILES = ['relay-bridge/wonderfs-scope.ts', 'relay-bridge/wonderfs-gate.ts', 'relay-bridge/wonderfs-budgets.ts', 'relay-bridge/wonderfs-routes.ts', 'relay-bridge/wonderfs-write-routes.ts', 'relay-bridge/wonderfs-body.ts'];
+// R2 adds its write routes and its body readers, and (R2-r2, security NIT-2) the three stores its writes go through: the same scan
+const WONDERFS_FILES = [
+  'relay-bridge/wonderfs-scope.ts', 'relay-bridge/wonderfs-gate.ts', 'relay-bridge/wonderfs-budgets.ts', 'relay-bridge/wonderfs-routes.ts', 'relay-bridge/wonderfs-write-routes.ts', 'relay-bridge/wonderfs-body.ts',
+  'src/relay/wonderfs/wonderfs-store.ts', 'src/relay/wonderfs/wonderfs-memory-store.ts', 'src/relay/persistence/wonderfs-postgres.ts',
+];
 
 /** Every way a source could switch WonderFS on configuration: an environment read, the social flag, a toggle-shaped name. */
 function togglesIn(source: string): string[] {

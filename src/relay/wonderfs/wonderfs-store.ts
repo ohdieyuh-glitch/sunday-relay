@@ -23,9 +23,15 @@
  * project_members role the store reads INSIDE the write's own transaction (locked until it commits), judged by `authorizeHuman`
  * BEFORE anything else the write does, the idempotency replay lookup included. A role revoked after the route's own check therefore
  * writes nothing (R0a review MINOR-5(b), R0b review MINOR-1). `putBlob` re-hashes the bytes (a claimed address that differs is
- * refused and nothing is kept: 422) and refuses a NEW blob that would take the project past its live-bytes limit counting every
- * ORPHAN (uploaded, named by nothing) as pending bytes -- before a byte is kept (413 project_full). The shared rules are below
- * (`wfsAdmitWrite`, `wfsAdmitCommit`, `wfsBlobRoom`), so the two stores cannot drift apart.
+ * refused and nothing is kept: 422) and refuses a NEW blob that would take the project past its live-bytes limit counting as PENDING
+ * every blob no file's history names -- an orphan, AND (R2-r2, security MAJOR-3) one only a conflict names -- before a byte is kept
+ * (413 project_full). A commit whose OUTCOME is a new conflict is refused when its author already holds the cap of RETAINED conflicts
+ * (open, or closed within their 30 days: R2-r2, security MAJOR-2). The shared rules are below (`wfsAdmitWrite`, `wfsAdmitCommit`,
+ * `wfsConflictCap`, `wfsBlobRoom`), so the two stores cannot drift apart; wonderfs-store-conformance.ts runs each against both.
+ *
+ * LOCK ORDER (R2-r2, reviews' MINOR-3 / MINOR-4): a write takes the project's `wfs_projects` row FOR UPDATE FIRST, then the member's
+ * `project_members` row FOR SHARE. A later transaction that holds a membership row and then touches a `wfs_*` row of that project
+ * (R3's bootstrap, A1's M2(a) grant revocation) deadlocks with it unless it takes them in THIS order.
  *
  * NOT here (later slices): the route's first authorization (it asks `memberRole` FIRST and reads nothing else before it succeeds,
  * §19.m2), the WfsBlobStore seam (R5), the orphan collector (R5), snapshots (R4).
@@ -278,11 +284,20 @@ export interface WfsWriteAuthority {
 
 export interface WfsCommitAuthority extends WfsWriteAuthority {
   /**
-   * §8.4 (plan §3.3): the most OPEN conflicts this player may hold in the project. At the cap a NEW request that resolves no conflict
-   * is refused (`budget-exceeded`, detail WFS_DETAIL_OPEN_CONFLICTS: the route's 429) and nothing is kept; the client's journal keeps
-   * it. A replay of a request already answered is never refused by it. null / absent: no cap.
+   * §8.4 (plan §3.3; R2-r2, security MAJOR-2): the most RETAINED conflicts this player may have authored in the project -- open, or
+   * closed (resolved / dismissed) and still inside its 30-day retention (§11, N-MAJOR-1), since a retained record keeps its ops and
+   * its bytes either way. Judged on the OUTCOME: a change the engine turns into a NEW conflict is refused at the cap (`budget-exceeded`,
+   * detail WFS_DETAIL_TOO_MANY_CONFLICTS: the route's 429) and nothing is kept -- a resolution that fails opens one too, so it counts.
+   * A change that lands, and a replay, are never refused by it. null / absent: no cap.
    */
-  readonly maxOpenConflicts?: number | null;
+  readonly maxConflicts?: number | null;
+}
+
+/** What putBlob kept: the address, the size, and whether THIS call stored a blob the project did not hold (a budget may refund otherwise). */
+export interface WfsPutBlobResult {
+  readonly sha256: string;
+  readonly size: number;
+  readonly created: boolean;
 }
 
 export interface WfsPutBlobOptions {
@@ -295,7 +310,7 @@ export interface WfsPutBlobOptions {
 export const WFS_DETAIL_FILE_TOO_LARGE = 'wonderfs: file_too_large';
 export const WFS_DETAIL_HASH_MISMATCH = 'wonderfs: hash_mismatch';
 export const WFS_DETAIL_PROJECT_FULL = 'wonderfs: project_full';
-export const WFS_DETAIL_OPEN_CONFLICTS = 'wonderfs: open_conflicts';
+export const WFS_DETAIL_TOO_MANY_CONFLICTS = 'wonderfs: too_many_conflicts';
 /** §11's words when a project would grow past a limit: the engine's, for a commit; the same for an upload. */
 export const WFS_PROJECT_FULL_MESSAGE = 'This project is full: delete something, or keep this change for later.';
 
@@ -352,7 +367,8 @@ export interface WfsStore {
   /**
    * §6.2. Blob presence is read from the store inside the change (never a process cache): a blob another bridge stored counts.
    * R2: with `authority`, the human's role is read and judged INSIDE the change, before the replay lookup (`wfsAdmitCommit`); the
-   * request's principal must be that human. Without it, the caller has authorized (tests, the oracle, tools).
+   * request's principal must be that human; and a NEW conflict past the author's cap is refused (`wfsConflictCap`). Without it, the
+   * caller has authorized (tests, the oracle, tools).
    */
   commit(projectId: string, req: WfsCommitRequest, nowIso: string, authority?: WfsCommitAuthority): Promise<RelayResult<WfsCommitOutcome>>;
   fork(projectId: string, input: { readonly fromBranchId: WfsBranchId; readonly owner: WfsPrincipal }, nowIso: string): Promise<RelayResult<{ readonly branchId: WfsBranchId }>>;
@@ -373,12 +389,13 @@ export interface WfsStore {
    *   the bytes hash to another address than claimed  -> validation-failed, WFS_DETAIL_HASH_MISMATCH (§10.1: 422)
    *   no such live project                            -> not-found
    *   `authority` refused (read inside the write)     -> not-found
-   *   a NEW blob, and main's live bytes + every orphan's pending bytes + this blob > the live-bytes limit
+   *   a NEW blob, and main's live bytes + the PENDING bytes (every held blob no file's history names: orphans, and blobs only a
+   *   conflict names) + this blob > the live-bytes limit
    *                                                   -> budget-exceeded, WFS_DETAIL_PROJECT_FULL (§19.m3: 413 project_full)
    * A blob the project already holds grows nothing, so it is never refused for room (grow-only, §11); its bytes, if they went
    * missing, are written back (REVIEW_WONDERFS_R0B MINOR-7). An outage is retryable, never "not found".
    */
-  putBlob(projectId: string, bytes: Uint8Array, options?: WfsPutBlobOptions): Promise<RelayResult<{ readonly sha256: string; readonly size: number }>>;
+  putBlob(projectId: string, bytes: Uint8Array, options?: WfsPutBlobOptions): Promise<RelayResult<WfsPutBlobResult>>;
 }
 
 /* ------------------------------------------------------------------------------------------ shared by both implementations */
@@ -605,33 +622,36 @@ export function wfsAdmitWrite(role: WfsHumanRole | null, authority: WfsWriteAuth
   return ok(true);
 }
 
-/** How many OPEN conflicts `playerId` authored in this project, on any branch (§8.4's open-conflicts budget). */
-export function wfsOpenConflictsBy(state: WfsProjectState, playerId: string): number {
-  let open = 0;
-  for (const c of state.conflicts.values()) if (c.status === 'open' && c.principal.kind === 'human' && c.principal.id === playerId) open += 1;
-  return open;
+/**
+ * THE COMMIT'S IN-TRANSACTION GATE (R2), BEFORE the engine (and so before its replay lookup): the request's principal is the human
+ * whose role was read, and that role allows every need.
+ */
+export function wfsAdmitCommit(role: WfsHumanRole | null, authority: WfsCommitAuthority, req: WfsCommitRequest): RelayResult<true> {
+  const principal = req.principal as WfsPrincipal | null | undefined;
+  if (principal?.kind !== 'human' || principal.id !== authority.playerId) return wfsNotFound('the commit names another principal than the member whose role was read');
+  return wfsAdmitWrite(role, authority);
+}
+
+/** Whether a conflict's record is still RETAINED at `nowIso`: open, or closed less than its 30 days ago (§11, N-MAJOR-1). */
+export function wfsConflictRetained(closing: WfsConflictClosing, nowIso: string): boolean {
+  return closing.status === 'open' || (closing.retainUntilIso !== null && Date.parse(closing.retainUntilIso) > Date.parse(nowIso));
 }
 
 /**
- * THE COMMIT'S IN-TRANSACTION GATE (R2), on the state the change itself decides on, BEFORE the engine (and so before its replay
- * lookup): the request's principal is the human whose role was read; that role allows every need; and, for a request this project
- * has never answered that resolves no conflict, the player is below the open-conflicts cap.
+ * R2-r2 (security MAJOR-2): THE CONFLICT CAP, judged on the engine's OUTCOME, inside the change. It asks only about a NEW conflict
+ * (not a replay) under an authority that names a cap; the store then counts the RETAINED conflicts its author already has in the
+ * project (`wfsConflictRetained`) and `wfsConflictCapAt` decides. At the cap: refused, nothing kept.
  */
-export function wfsAdmitCommit(role: WfsHumanRole | null, authority: WfsCommitAuthority, state: WfsProjectState, req: WfsCommitRequest): RelayResult<true> {
-  const principal = req.principal as WfsPrincipal | null | undefined;
-  if (principal?.kind !== 'human' || principal.id !== authority.playerId) return wfsNotFound('the commit names another principal than the member whose role was read');
-  const admitted = wfsAdmitWrite(role, authority);
-  if (!admitted.ok) return admitted;
-  const max = authority.maxOpenConflicts ?? null;
-  if (max !== null && !state.requests.has(req.requestId) && (req.resolvesConflictId ?? null) === null) {
-    const open = wfsOpenConflictsBy(state, authority.playerId);
-    if (open >= max) {
-      return fail(relayError('budget-exceeded', 'You have too many unresolved conflicts in this project: resolve some, then send this again.', {
-        details: [WFS_DETAIL_OPEN_CONFLICTS, `wonderfs: open conflicts ${open}/${max}`],
-      }));
-    }
-  }
-  return ok(true);
+export function wfsConflictCapApplies(outcome: WfsCommitOutcome, authority: WfsCommitAuthority | undefined): boolean {
+  return (authority?.maxConflicts ?? null) !== null && outcome.status === 'conflict' && !outcome.replay;
+}
+
+export function wfsConflictCapAt(held: number, authority: WfsCommitAuthority): RelayResult<null> {
+  const max = authority.maxConflicts ?? null;
+  if (max === null || held < max) return ok(null);
+  return fail(relayError('budget-exceeded', 'You have too many conflicts in this project still kept for review: resolve them, or wait for older ones to expire, then send this again.', {
+    details: [WFS_DETAIL_TOO_MANY_CONFLICTS, `wonderfs: retained conflicts ${held}/${max}`],
+  }));
 }
 
 /**

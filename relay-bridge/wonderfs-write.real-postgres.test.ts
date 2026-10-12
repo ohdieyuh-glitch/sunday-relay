@@ -12,7 +12,7 @@ import { WFS_CONFLICT_RETENTION_MS, WFS_PROJECT_FULL_MESSAGE, type WfsStore } fr
 import { createBrowserSessionStore, type BrowserSessionStore } from './browser-session/grants';
 import { wonderfsNotFound, wonderfsSessionVerifier } from './wonderfs-gate';
 import { answerWonderfs, createWonderfsMount, wonderfsRequestOf, writeWonderfsAnswer, type WonderfsRouteDeps } from './wonderfs-routes';
-import { wonderfsKeepBoth, wonderfsKeepMine, wonderfsKeepTheirs } from './wonderfs-write-routes';
+import { wonderfsCompactUtc, wonderfsKeepBoth, wonderfsKeepMine, wonderfsKeepTheirs } from './wonderfs-write-routes';
 
 /**
  * WONDERFS R2 WRITE ROUTES ON REAL POSTGRESQL (migration 036; CI's real-PostgreSQL catch-all runs every `*real-postgres*` file). The
@@ -26,14 +26,20 @@ import { wonderfsKeepBoth, wonderfsKeepMine, wonderfsKeepTheirs } from './wonder
  *   - T-PERSIST across a new pool, store and sign-in; T-CONFLICT's rows (wfs_conflicts status, wfs_conflict_blobs, retention);
  *   - §10.1's 422 and §19.m3's pending bytes counted from rows (T-ORPHAN's counting half, N-MAJOR-1), and bytes repaired.
  * Runs wherever JULIUS_TEST_DATABASE_URL names a THROWAWAY server (never DATABASE_URL); `todo` elsewhere.
+ *
+ * ONE CLOCK (R2-r2: CI r1.13's time bomb). The bridge's mount stamps each request with the WALL clock (createWonderfsMount:
+ * `Date.now()`), so every session here is minted on that clock -- T0 is the wall time this file loaded -- and nothing below expects a
+ * wall-clock-pinned value: the keep-both name is computed from T0 like everything else.
  */
 
 const databaseUrl = juliusTestDatabaseUrl();
 const suite = databaseUrl !== null ? describe : describe.todo;
-const T0 = Date.parse('2026-10-12T12:00:00.000Z');
+const T0 = Date.now();
 const NOW = new Date(T0).toISOString();
 const P = 'prj-alpha';
 const NOT_FOUND = { error: { kind: 'not_found', message: 'Not found.' } };
+/** What a conflict made through `bootDeps` (stamped T0 + 1) is named for keep-both. */
+const AT_UTC = wonderfsCompactUtc(new Date(T0 + 1).toISOString()) as string;
 const SMALL: WfsLimits = { ...WFS_ALPHA_LIMITS, maxFileBytes: 64, maxProjectBytes: 100 };
 const realFetch = globalThis.fetch.bind(globalThis);
 const sha = (text: string | Uint8Array): string => createHash('sha256').update(typeof text === 'string' ? Buffer.from(text, 'utf8') : text).digest('hex');
@@ -284,7 +290,7 @@ suite('WonderFS R2 write routes on real PostgreSQL', () => {
     expect([removed.status, removed.json, await count(pool, 'wfs_commits')]).toEqual([404, NOT_FOUND, 1]);
   }, 180_000);
 
-  it('T-CRASH on rows, killed statement by statement: inside the upload (no blob row), after the blob (an orphan nobody can read), inside the commit (no row anywhere), after COMMIT before the answer (the retry after a NEW sign-in is the ORIGINAL revision; one commit row)', async () => {
+  it('T-CRASH on rows, killed at three chosen statements (an upload\'s bytes INSERT, a commit\'s event INSERT, a commit\'s COMMIT; not a sweep): inside the upload (no blob row), after the blob (an orphan nobody can read), inside the commit (no row anywhere), after COMMIT before the answer (the retry after a NEW sign-in is the ORIGINAL revision; one commit row)', async () => {
     const pool = await fresh('crash');
     await seeded(pool);
     const fault: Fault = { armed: false, when: () => false, phase: 'before' };
@@ -294,6 +300,7 @@ suite('WonderFS R2 write routes on real PostgreSQL', () => {
     // ROW 1: inside the upload's transaction, at the bytes
     arm((sql) => sql.startsWith('INSERT INTO relay_wonderland.wfs_blob_bytes'), 'before');
     const dead = await upload(base1, s1.tokens['ghu-3'], 'journaled bytes');
+    expect(fault.armed, 'row 1: the planted fault fired').toBe(false);
     expect([dead.status, dead.json.error.kind, await count(pool, 'wfs_blobs')]).toEqual([503, 'wonderfs_unavailable', 0]);
     // ROW 2: after the blob, before the commit -- an orphan, invisible by address
     const blob = await uploaded(base1, s1.tokens['ghu-3'], 'journaled bytes');
@@ -302,16 +309,17 @@ suite('WonderFS R2 write routes on real PostgreSQL', () => {
     const body = { requestId: rid('crash'), baseRev: 0, ops: [{ op: 'create', path: 'kept.txt', kind: 'file', ...blob }] };
     arm((sql) => sql.startsWith('INSERT INTO relay_wonderland.wfs_events'), 'before');
     const inside = await commit(base1, s1.tokens['ghu-3'], body);
+    expect(fault.armed, 'row 3: the planted fault fired').toBe(false);
     expect([inside.status, inside.json.error.kind]).toEqual([503, 'wonderfs_unavailable']);
     expect([await count(pool, 'wfs_commits'), await count(pool, 'wfs_requests'), await count(pool, 'wfs_versions'), await count(pool, 'wfs_events')], 'rolled back whole').toEqual([0, 0, 0, 0]);
     // ROW 4: after COMMIT, before the answer
     arm((sql) => sql === 'COMMIT', 'after');
     const lost = await commit(base1, s1.tokens['ghu-3'], body);
+    expect(fault.armed, 'row 4: the planted fault fired').toBe(false);
     expect([lost.status, lost.json.error.kind, await count(pool, 'wfs_commits')]).toEqual([503, 'wonderfs_unavailable', 1]);
     const row = (await pool.query<{ commit_id: string; commit_hash: string; record: { principal: { sessionId: string } } }>('SELECT commit_id, commit_hash, record FROM relay_wonderland.wfs_commits WHERE project_id = $1', [P])).rows[0];
     expect(row.record.principal.sessionId).toBe(s1.refOf('ghu-3'));
     // the journal replays after a NEW sign-in on a restarted bridge (a pool without the fault)
-    expect(fault.armed, 'every planted fault fired').toBe(false);
     const s2 = signIn(['ghu-3']);
     expect(s2.refOf('ghu-3')).not.toBe(s1.refOf('ghu-3'));
     const base2 = await bootMount(s2.sessions, reopen(pool));
@@ -322,6 +330,46 @@ suite('WonderFS R2 write routes on real PostgreSQL', () => {
     // CONTROL: the replay path is real -- the same id with another change is refused
     const changed = await commit(base2, s2.tokens['ghu-3'], { ...body, ops: [{ op: 'create', path: 'other.txt', kind: 'file', ...blob }] });
     expect([changed.status, changed.json.error.kind]).toEqual([409, 'duplicate_idempotency_key']);
+  }, 180_000);
+
+  it('B1 ON ROWS (R2-r2): over H12, a commit that frees a path and takes it again -- delete + create of one path, a rename chain -- answers 200 in the file-id order that met the live-path index; CONTROL: the other order lands too', async () => {
+    const pool = await fresh('livepath');
+    await seeded(pool);
+    const s = signIn(['ghu-1']);
+    /** A project of its own, and a store whose next file ids are `ids`, in order: the case forces which file sorts first. */
+    const project = async (projectId: string, ids: readonly string[]) => {
+      await pool.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1)', [projectId]);
+      await pool.query("INSERT INTO relay_wonderland.project_members(project_id, player_id, role) VALUES($1, 'ghu-1', 'OWNER')", [projectId]);
+      let next = 0;
+      const store = openWfsPostgresStore(pool, { newId: (kind) => (kind === 'file' && next < ids.length ? ids[next++] : `${kind}_${randomBytes(8).toString('hex')}`) });
+      expect((await store.createProject(projectId, NOW)).ok).toBe(true);
+      return bootDeps(depsOf(store, s.sessions));
+    };
+    const treeOf = async (base: string, projectId: string) =>
+      ((await send(base, `/wonderfs/v1/projects/${projectId}/branches/main/tree`, { token: s.tokens['ghu-1'] })).json.data.entries as Array<{ path: string; fileId: string }>).map((e) => [e.path, e.fileId]);
+    const blobIn = async (base: string, projectId: string, text: string) => {
+      const a = await upload(base, s.tokens['ghu-1'], text, { project: projectId });
+      expect(a.status).toBe(200);
+      return { sha256: a.json.data.sha256 as string, size: a.json.data.size as number };
+    };
+    for (const [oldId, newId] of [['file-zz', 'file-aa'], ['file-aa', 'file-zz']] as const) {
+      const projectId = `prj-replace-${oldId}`;
+      const base = await project(projectId, [oldId, newId]);
+      const before = await blobIn(base, projectId, 'old words');
+      const after = await blobIn(base, projectId, 'new words');
+      expect((await commit(base, s.tokens['ghu-1'], { requestId: rid('lp'), baseRev: 0, ops: [{ op: 'create', path: 'notes.txt', kind: 'file', ...before }] }, projectId)).status).toBe(200);
+      const replaced = await commit(base, s.tokens['ghu-1'], { requestId: rid('lp'), baseRev: 1, ops: [{ op: 'delete', fileId: oldId, expectContentVersion: 1 }, { op: 'create', path: 'notes.txt', kind: 'file', ...after }] }, projectId);
+      expect([replaced.status, replaced.json.data?.rev], `delete + create of one path (old ${oldId}, new ${newId})`).toEqual([200, 2]);
+      expect(await treeOf(base, projectId)).toEqual([['notes.txt', newId]]);
+    }
+    for (const [xId, yId] of [['file-aa', 'file-zz'], ['file-zz', 'file-aa']] as const) {
+      const projectId = `prj-chain-${xId}`;
+      const base = await project(projectId, [xId, yId]);
+      expect((await commit(base, s.tokens['ghu-1'], { requestId: rid('lp'), baseRev: 0, ops: [{ op: 'create', path: 'p', kind: 'dir' }, { op: 'create', path: 'q', kind: 'dir' }] }, projectId)).status).toBe(200);
+      const chain = await commit(base, s.tokens['ghu-1'], { requestId: rid('lp'), baseRev: 1, ops: [{ op: 'move', fileId: yId, expectPathVersion: 1, newPath: 'r' }, { op: 'move', fileId: xId, expectPathVersion: 1, newPath: 'q' }] }, projectId);
+      expect([chain.status, chain.json.data?.rev], `a rename chain (x ${xId}, y ${yId})`).toEqual([200, 2]);
+      expect(await treeOf(base, projectId)).toEqual([['q', xId], ['r', yId]]);
+    }
   }, 180_000);
 
   it('T-CONFLICT on rows: one of two lands, the other is kept whole (wfs_conflicts open, its bytes in wfs_conflict_blobs); keep theirs is DISMISSED and retained 30 days, keep mine and keep both RESOLVED', async () => {
@@ -366,11 +414,11 @@ suite('WonderFS R2 write routes on real PostgreSQL', () => {
       const status = (await pool.query<{ status: string }>('SELECT status FROM relay_wonderland.wfs_conflicts WHERE project_id = $1 AND conflict_id = $2', [P, refused.json.error.conflictId])).rows[0].status;
       expect(status, how).toBe('resolved');
     }
-    const kept = await count(pool, 'wfs_entries', "branch_id = 'main' AND path = $1 AND NOT deleted", ['docs/readme (conflict, ghu-3, 20261012T120000Z).txt']);
+    const kept = await count(pool, 'wfs_entries', "branch_id = 'main' AND path = $1 AND NOT deleted", [`docs/readme (conflict, ghu-3, ${AT_UTC}).txt`]);
     expect(kept, 'keep both made its file').toBe(1);
   }, 180_000);
 
-  it('§10.1 and §19.m3 on rows: a mismatching claimed address is 422 and NO row is kept; pending bytes are counted from rows (to the limit, then 413 project_full; a held blob grows nothing; a retained conflict\'s blob is not pending); missing bytes are repaired by the same upload', async () => {
+  it('§10.1 and §19.m3 on rows: a mismatching claimed address is 422 and NO row is kept; pending bytes are counted from rows (to the limit, then 413 project_full; a held blob grows nothing; a conflict-held upload stays pending while staying readable); missing bytes are repaired by the same upload', async () => {
     const pool = await fresh('orphan');
     await seeded(pool);
     const s = signIn(['ghu-1']);
@@ -399,9 +447,10 @@ suite('WonderFS R2 write routes on real PostgreSQL', () => {
     expect((await upload(base, s.tokens['ghu-1'], 'e')).status, 'CONTROL: d is pending').toBe(413);
     const refused = await commit(base, s.tokens['ghu-1'], { requestId: rid('orphan'), baseRev: 2, ops: [{ op: 'update', fileId: aFile, expectContentVersion: 1, ...d59 }] });
     expect(refused.status).toBe(409);
-    expect((await upload(base, s.tokens['ghu-1'], 'e'.repeat(59))).status, 'a conflict names d: not pending').toBe(200);
+    expect((await upload(base, s.tokens['ghu-1'], 'e'.repeat(59))).status, 'a conflict-held upload is still PENDING (R2-r2, security MAJOR-3): full').toBe(413);
     expect((await commit(base, s.tokens['ghu-1'], wonderfsKeepTheirs(refused.json.error.conflictId, rid('orphan'), 2))).status).toBe(200);
     expect((await send(base, `${BLOBS()}/${d59.sha256}`, { token: s.tokens['ghu-1'] })).status, 'dismissed, retained, still named').toBe(200);
+    expect((await upload(base, s.tokens['ghu-1'], 'e')).status, 'and still pending').toBe(413);
     // repair: a held blob whose bytes went missing is restored by uploading the same bytes
     await pool.query('DELETE FROM relay_wonderland.wfs_blob_bytes WHERE project_id = $1 AND sha256 = $2', [P, d59.sha256]);
     expect((await send(base, `${BLOBS()}/${d59.sha256}`, { token: s.tokens['ghu-1'] })).status, 'never served without its bytes').toBe(503);
