@@ -24,7 +24,7 @@ import {
   type SocialUserId,
 } from './social-contracts';
 import { resolvePresenceFor } from './social-presence';
-import { audienceAdmits, blockedEitherWay, hasUser, isMuted, mintId, type SocialState } from './social-state';
+import { audienceAdmits, blockedEitherWay, conversationById, hasUser, isMuted, messagesOf, mintId, userById, type SocialState } from './social-state';
 
 const denied = (message: string) => fail<SocialState>(relayError('permission-denied', message));
 const invalid = (message: string) => fail<SocialState>(relayError('validation-failed', message));
@@ -60,7 +60,7 @@ export function openDirectConversation(
   if (actorId === otherId) return fail(relayError('validation-failed', 'a person cannot message themselves'));
   if (blockedEitherWay(state, actorId, otherId)) return fail(relayError('permission-denied', NOT_ACCEPTING_MESSAGES));
   const id = directConversationId(actorId, otherId);
-  if (state.conversations[id]) return ok({ state, conversationId: id });
+  if (conversationById(state, id) !== undefined) return ok({ state, conversationId: id });
   const view = resolvePresenceFor(state, actorId, otherId);
   if (view === null || !view.can.message) return fail(relayError('permission-denied', NOT_ACCEPTING_MESSAGES));
   const conversation: Conversation = {
@@ -87,8 +87,9 @@ export function openGroupConversation(
   const members = [...new Set([actorId, ...memberIds])].sort();
   if (members.length < 3 || members.length > 16) return fail(relayError('validation-failed', 'a group has 3 to 16 members'));
   for (const id of members) {
-    if (!hasUser(state, id)) return fail(relayError('not-found', 'user not found'));
-    if (id !== actorId && (blockedEitherWay(state, actorId, id) || !audienceAdmits(state, state.users[id].privacy.messagePolicy, actorId, id))) {
+    const member = userById(state, id);
+    if (member === undefined) return fail(relayError('not-found', 'user not found'));
+    if (id !== actorId && (blockedEitherWay(state, actorId, id) || !audienceAdmits(state, member.privacy.messagePolicy, actorId, id))) {
       return fail(relayError('permission-denied', 'not everybody listed accepts messages from you'));
     }
   }
@@ -124,12 +125,15 @@ export function sendMessage(
   input: { kind?: MessageKind; body: string; ref?: string | null },
   atIso: string,
 ): RelayResult<SocialState> {
-  const conversation = state.conversations[conversationId];
-  if (conversation === undefined || isWalledDirect(state, conversation, actorId)) return fail(relayError('not-found', 'conversation not found'));
-  if (!conversation.memberIds.includes(actorId)) return denied('only a member can write here');
+  const conversation = conversationById(state, conversationId);
+  // NOT A MEMBER = NOT THERE (the privacy attacker's B1, 10-07): a 403 for a non-member against a 404 for no conversation told
+  // any player whether two others had ever opened a DM (dm_<a>__<b> is computable). One answer for both, as messages.list gives.
+  if (conversation === undefined || isWalledDirect(state, conversation, actorId) || !conversation.memberIds.includes(actorId)) {
+    return fail(relayError('not-found', 'conversation not found'));
+  }
   if (conversation.kind === 'DIRECT') {
     const other = conversation.memberIds.find((id) => id !== actorId);
-    const recipient = other === undefined ? undefined : state.users[other];
+    const recipient = other === undefined ? undefined : userById(state, other);
     if (recipient !== undefined && !audienceAdmits(state, recipient.privacy.messagePolicy, actorId, recipient.profile.userId)) return denied(NOT_ACCEPTING_MESSAGES);
   }
   const kind = input.kind ?? 'TEXT';
@@ -152,7 +156,7 @@ export function sendMessage(
   return ok({
     ...next,
     conversations: { ...next.conversations, [conversationId]: { ...conversation, lastSequence: sequence, lastMessageAtIso: atIso } },
-    messages: { ...next.messages, [conversationId]: [...(next.messages[conversationId] ?? []), message] },
+    messages: { ...next.messages, [conversationId]: [...messagesOf(next, conversationId), message] },
     // The sender has read their own message.
     readStates: setRead(next.readStates, conversationId, actorId, sequence),
   });
@@ -166,19 +170,21 @@ function setRead(states: SocialState['readStates'], conversationId: string, user
 
 /** Mark read up to `sequence` (default: everything). Never moves backwards. A hidden conversation is not there. */
 export function markRead(state: SocialState, actorId: SocialUserId, conversationId: string, sequence?: number): RelayResult<SocialState> {
-  const conversation = state.conversations[conversationId];
-  if (conversation === undefined || isWalledDirect(state, conversation, actorId)) return fail(relayError('not-found', 'conversation not found'));
-  if (!conversation.memberIds.includes(actorId)) return denied('only a member can read here');
+  const conversation = conversationById(state, conversationId);
+  // NOT A MEMBER = NOT THERE (B1): the same single answer as sendMessage, and as a conversation that does not exist.
+  if (conversation === undefined || isWalledDirect(state, conversation, actorId) || !conversation.memberIds.includes(actorId)) {
+    return fail(relayError('not-found', 'conversation not found'));
+  }
   const upTo = Math.min(sequence ?? conversation.lastSequence, conversation.lastSequence);
   return ok({ ...state, readStates: setRead(state.readStates, conversationId, actorId, upTo) });
 }
 
 export function unreadCount(state: SocialState, userId: SocialUserId, conversationId: string): number {
-  const conversation = state.conversations[conversationId];
+  const conversation = conversationById(state, conversationId);
   if (conversation === undefined || !conversation.memberIds.includes(userId)) return 0;
   const read = state.readStates.find((r) => r.conversationId === conversationId && r.userId === userId)?.lastReadSequence ?? 0;
   // Messages from somebody this reader muted for messages, or blocked, do not count as unread.
-  return (state.messages[conversationId] ?? []).filter(
+  return messagesOf(state, conversationId).filter(
     (m) => m.sequence > read && m.senderId !== userId && !isMuted(state, userId, m.senderId, 'messages') && !blockedEitherWay(state, userId, m.senderId),
   ).length;
 }
@@ -200,11 +206,11 @@ export function conversationsFor(state: SocialState, userId: SocialUserId): Conv
     .filter((c) => c.memberIds.includes(userId) && !isWalledDirect(state, c, userId))
     .map((c) => {
       const other = c.kind === 'DIRECT' ? (c.memberIds.find((id) => id !== userId) ?? null) : null;
-      const last = (state.messages[c.conversationId] ?? []).at(-1);
+      const last = messagesOf(state, c.conversationId).at(-1);
       return {
         conversationId: c.conversationId,
         kind: c.kind,
-        title: c.title ?? (other !== null ? (state.users[other]?.profile.displayName ?? other) : 'Conversation'),
+        title: c.title ?? (other !== null ? (userById(state, other)?.profile.displayName ?? other) : 'Conversation'),
         otherUserId: other,
         lastMessagePreview: last === undefined ? null : last.kind === 'TEXT' ? last.body.slice(0, 80) : last.kind === 'PARTY_INVITE' ? 'Party invite' : last.kind === 'SERVER_INVITE' ? 'Server invite' : last.body.slice(0, 80),
         lastMessageAtIso: c.lastMessageAtIso,

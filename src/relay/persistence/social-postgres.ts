@@ -21,8 +21,8 @@ import {
   type UserProfile,
 } from '../social/social-contracts';
 import { applySocialOperation, type SocialCommandInput } from '../social/social-commands';
-import { emptySocialState, type SocialState, type SocialUserRecord } from '../social/social-state';
-import { newSocialUser, tellAfterCommit, viewerCursor, type SocialAfterCommit, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
+import { emptySocialState, hasUser, type SocialState, type SocialUserRecord } from '../social/social-state';
+import { ensureSocialUser, tellAfterCommit, viewerCursor, type SocialAfterCommit, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
 import { emptyWorldState, type WorldState } from '../social/world-presence';
 
 /**
@@ -235,6 +235,9 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
 
 /* ----------------------------------------------------------------------------------------------------------- write */
 
+/** 033's social_events CHECK(cardinality(audience) BETWEEN 1 AND 256): one event is written as as many rows as it needs. */
+export const EVENT_AUDIENCE_MAX = 256;
+
 async function writeUser(c: PoolClient, id: string, record: SocialUserRecord, before: SocialUserRecord | undefined): Promise<void> {
   const p = record.profile;
   if (before === undefined || before.profile !== p) {
@@ -370,7 +373,11 @@ async function writeChanges(c: PoolClient, before: SocialState, after: SocialSta
       [i.inviteId, i.partyId, i.fromUserId, i.toUserId, i.status, i.createdAtIso, i.expiresAtIso],
     );
   }
-  const readChanged = before.readStates !== after.readStates;
+  // READ STATES BY KEY (the migration adversary's M2, 10-07): any send or read used to rewrite every member row of every
+  // conversation in the store. Now a conversation that changed writes its members; otherwise only the rows whose read moved.
+  const readKey = (conversationId: string, userId: string) => `${conversationId}\u0000${userId}`;
+  const readAfter = new Map(after.readStates.map((r) => [readKey(r.conversationId, r.userId), r.lastReadSequence]));
+  const readBefore = before.readStates === after.readStates ? readAfter : new Map(before.readStates.map((r) => [readKey(r.conversationId, r.userId), r.lastReadSequence]));
   for (const conv of Object.values(after.conversations)) {
     const was = before.conversations[conv.conversationId];
     if (was !== conv) {
@@ -381,15 +388,14 @@ async function writeChanges(c: PoolClient, before: SocialState, after: SocialSta
       );
       await c.query(`DELETE FROM relay_wonderland.social_conversation_members WHERE conversation_id=$1 AND NOT (player_id = ANY($2::text[]))`, [conv.conversationId, conv.memberIds]);
     }
-    if (was !== conv || readChanged) {
-      for (const member of conv.memberIds) {
-        const read = after.readStates.find((r) => r.conversationId === conv.conversationId && r.userId === member)?.lastReadSequence ?? 0;
-        await c.query(
-          `INSERT INTO relay_wonderland.social_conversation_members(conversation_id, player_id, last_read_sequence) VALUES($1,$2,$3)
-           ON CONFLICT(conversation_id, player_id) DO UPDATE SET last_read_sequence=EXCLUDED.last_read_sequence`,
-          [conv.conversationId, member, read],
-        );
-      }
+    for (const member of conv.memberIds) {
+      const key = readKey(conv.conversationId, member);
+      if (was === conv && readBefore.get(key) === readAfter.get(key)) continue;
+      await c.query(
+        `INSERT INTO relay_wonderland.social_conversation_members(conversation_id, player_id, last_read_sequence) VALUES($1,$2,$3)
+         ON CONFLICT(conversation_id, player_id) DO UPDATE SET last_read_sequence=EXCLUDED.last_read_sequence`,
+        [conv.conversationId, member, readAfter.get(key) ?? 0],
+      );
     }
     if (before.messages[conv.conversationId] !== after.messages[conv.conversationId]) {
       for (const m of diffBy(before.messages[conv.conversationId] ?? [], after.messages[conv.conversationId] ?? [], (x) => x.messageId).put) {
@@ -455,14 +461,20 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
     read: () => serial(async () => state),
     ensureUser: (identity: SocialPlayerIdentity, nowIso: string) =>
       serial(async () => {
-        if (state.users[identity.userId] !== undefined) return;
-        const record = newSocialUser(identity, nowIso);
-        await transact((c) => writeUser(c, identity.userId, record, undefined));
-        state = { ...state, users: { ...state.users, [identity.userId]: record } };
+        const next = ensureSocialUser(state, identity, nowIso);
+        if (next === state) return;
+        // ensureSocialUser changes only this player's record (an incumbent keeps a contested handle); the ordering below stays
+        // harmless and general: any other changed record is written first, as 033's unique lower(handle) is checked row by row
+        const changedIds = Object.keys(next.users).filter((id) => next.users[id] !== state.users[id]);
+        const order = [...changedIds.filter((id) => id !== identity.userId), ...changedIds.filter((id) => id === identity.userId)];
+        await transact(async (c) => {
+          for (const id of order) await writeUser(c, id, next.users[id], state.users[id]);
+        });
+        state = next;
       }),
     apply: (op: SocialOperationId, actorId: SocialUserId, input: SocialCommandInput, nowIso: string) =>
       serial(async (): Promise<RelayResult<unknown>> => {
-        if (state.users[actorId] === undefined) return { ok: false, error: relayError('not-found', 'no social record for this player') };
+        if (!hasUser(state, actorId)) return { ok: false, error: relayError('not-found', 'no social record for this player') };
         const outcome = applySocialOperation(state, op, actorId, input, nowIso, world);
         if (!outcome.ok) return outcome;
         const next = outcome.value.state;
@@ -475,11 +487,19 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
           try {
             await transact(async (c) => {
               await writeChanges(c, state, next);
-              if (outcome.value.audience.length > 0) {
-                await c.query(`INSERT INTO relay_wonderland.social_events(op, at, audience) VALUES($1,$2,$3)`, [outcome.value.eventOp ?? op, nowIso, [...outcome.value.audience]]);
+              // 033 caps one event row's audience at 256 (social_events CHECK); a player with many friends would have hit it on
+              // every world.join, forever (the migration adversary's M3, 10-07). One event, as many rows as it needs: each
+              // viewer is in exactly one of them, so each still sees it once.
+              const audience = [...new Set(outcome.value.audience)];
+              for (let i = 0; i < audience.length; i += EVENT_AUDIENCE_MAX) {
+                await c.query(`INSERT INTO relay_wonderland.social_events(op, at, audience) VALUES($1,$2,$3)`, [outcome.value.eventOp ?? op, nowIso, audience.slice(i, i + EVENT_AUDIENCE_MAX)]);
               }
             });
           } catch (error) {
+            // A REFUSAL IS NOT AN OUTAGE (MINOR 1, 10-07): a data or integrity error (SQLSTATE class 22 / 23) refuses the same way
+            // every time, so it is not offered as a retry; anything else (a serialization failure, a lost connection) is.
+            const sqlState = typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : '';
+            if (/^2[23]/.test(sqlState)) return { ok: false, error: relayError('validation-failed', 'the store refused this change; nothing was changed') };
             return { ok: false, error: relayError('stale-ledger-version', 'the change could not be saved; nothing was changed', { retryable: true }) };
           }
           const before = state;
