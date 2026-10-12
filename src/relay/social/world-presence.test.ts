@@ -59,6 +59,27 @@ function attempt(state: SocialState, world: WorldState, actor: string, op: Param
   return applySocialOperation(state, op, actor, { ids: [], body, query: {} }, at(ms), world, gateFor(state, world, actor, op, body, T0 + ms));
 }
 const worldOf = (r: ReturnType<typeof applySocialOperation>) => (r.ok ? (r.value as SocialCommandOutcome & { world: WorldState }).world : undefined);
+/** An answer as one string: 'ACCEPTED', or the refusal's code and message exactly as the player is told them. */
+const verdictOf = (r: ReturnType<typeof applySocialOperation>) => (r.ok ? 'ACCEPTED' : `${r.error.code}: ${r.error.message}`);
+/** The ordinary can't-join of a follow (world-presence.ts, FRIEND): it names nobody, and no block. */
+const CANNOT_JOIN = 'permission-denied: You cannot join them there';
+type PrivacyPatch = Partial<SocialState['users'][string]['privacy']>;
+const withPrivacy = (s: SocialState, who: string, patch: PrivacyPatch): SocialState => ({
+  ...s,
+  users: { ...s.users, [who]: { ...s.users[who], privacy: { ...s.users[who].privacy, ...patch } } },
+});
+/**
+ * A private server, its place and its join rule shown and opened to EVERYONE. A block ends the friendship, so under the
+ * defaults (FRIENDS / NOBODY) a blocked player is refused as a non-friend whatever the block does; opened to everyone, the
+ * block is the only thing left that can refuse them.
+ */
+const OPEN_TO_EVERYONE: PrivacyPatch = { privateServerVisibility: 'EVERYONE', locationVisibility: 'EVERYONE', serverJoinPolicy: 'EVERYONE' };
+/** `blocks.remove` as the blocker sends it (the target in ids[0]); the state after. */
+const unblock = (s: SocialState, w: WorldState, blocker: string, blocked: string, ms: number): SocialState => {
+  const r = applySocialOperation(s, 'blocks.remove', blocker, { ids: [blocked], body: {}, query: {} }, at(ms), w, null);
+  if (!r.ok) throw new Error(`blocks.remove refused: ${r.error.message}`);
+  return r.value.state;
+};
 
 const here = { x: 100, y: 200, z: 22, yaw: 90, speed: 0, motion: 'IDLE', skinId: 'shadow_flame' };
 
@@ -98,18 +119,25 @@ describe('the shared presence layer', () => {
     let s = createSocialFixture();
     let w = emptyWorldState();
     ({ state: s, world: w } = run(s, w, U.NOVA, 'world.join', { target: 'PRIVATE', name: "Nova's Lab" }));
-    // Kai is Nova's friend; Nova's server-join policy (fixture default FRIENDS) admits friends -- unless the
-    // presence authority withholds the private server's location from this viewer, in which case it refuses.
-    const follow = applySocialOperation(s, 'world.join', U.KAI, { ids: [], body: { target: 'FRIEND', userId: U.NOVA }, query: {} }, at(100), w);
-    const novaPrivacy = s.users[U.NOVA].privacy;
-    if (novaPrivacy.privateServerVisibility === 'NOBODY') {
-      expect(follow.ok).toBe(false);
-    } else {
-      expect(follow.ok).toBe(true);
-    }
-    // a stranger (Vega is not Nova's friend) is refused by the FRIENDS rule
-    const stranger = applySocialOperation(s, 'world.join', U.VEGA, { ids: [], body: { target: 'FRIEND', userId: U.NOVA }, query: {} }, at(100), w);
-    expect(stranger.ok).toBe(false);
+    const toNova = { target: 'FRIEND', userId: U.NOVA };
+    // the store's read of Nova's server says OPEN (inside its Free window): every refusal below is the rule's, never "closed"
+    expect(gateFor(s, w, U.KAI, 'world.join', toNova, T0 + 100)).toMatchObject({ ownerId: U.NOVA, access: { status: 'ACTIVE' } });
+    // Kai is Nova's friend, and Nova's join rule (default FRIENDS) admits friends -- but the presence authority withholds a private
+    // server from everyone by default (privateServerVisibility NOBODY), so the follow is refused
+    expect(s.users[U.NOVA].privacy.privateServerVisibility).toBe('NOBODY');
+    expect(verdictOf(attempt(s, w, U.KAI, 'world.join', toNova, 100))).toBe(CANNOT_JOIN);
+    // control: Nova shares her private server with friends -- the same friend follows her in
+    const kai = attempt(withPrivacy(s, U.NOVA, { privateServerVisibility: 'FRIENDS' }), w, U.KAI, 'world.join', toNova, 100);
+    expect(verdictOf(kai)).toBe('ACCEPTED');
+    expect(contextOf(worldOf(kai) ?? emptyWorldState(), U.KAI)?.contextId).toBe(`priv_${U.NOVA}`);
+    // a stranger (Vega is not Nova's friend) is refused by the FRIENDS join rule -- even with the server and its place shown to everyone
+    const shown = withPrivacy(s, U.NOVA, { privateServerVisibility: 'EVERYONE', locationVisibility: 'EVERYONE' });
+    expect(shown.users[U.NOVA].privacy.serverJoinPolicy).toBe('FRIENDS');
+    expect(verdictOf(attempt(shown, w, U.VEGA, 'world.join', toNova, 100))).toBe(CANNOT_JOIN);
+    // control: the same stranger, with Nova's join rule opened to everyone, follows her in
+    const vega = attempt(withPrivacy(shown, U.NOVA, { serverJoinPolicy: 'EVERYONE' }), w, U.VEGA, 'world.join', toNova, 100);
+    expect(verdictOf(vega)).toBe('ACCEPTED');
+    expect(contextOf(worldOf(vega) ?? emptyWorldState(), U.VEGA)?.contextId).toBe(`priv_${U.NOVA}`);
   });
 
   it('an invitation brings a friend into the inviter\'s context; the party follows its leader', () => {
@@ -472,9 +500,17 @@ describe("the founder's 10-04 rulings P1 / P2 / P4 / P5: hidden means hidden, an
       expect(view.avatars).toEqual([]);
       expect(JSON.stringify(view)).not.toMatch(/block/i);
     }
-    // re-entry while the block stands: refused with the ordinary can't-join
-    const back = applySocialOperation(blocked.state, 'world.join', U.NOVA, { ids: [], body: { target: 'FRIEND', userId: U.KAI }, query: {} }, at(2200), blocked.world);
-    expect(back.ok).toBe(false);
+    // re-entry while the block stands -- with the store's OPEN read of Kai's server, and Kai's server, place and join rule opened to
+    // everyone (the block ended the friendship: under FRIENDS, Nova would be refused as a non-friend whatever the block did) --
+    // is refused by the block alone, with the ordinary can't-join
+    const toKai = { target: 'FRIEND', userId: U.KAI };
+    const shown = withPrivacy(blocked.state, U.KAI, OPEN_TO_EVERYONE);
+    expect(gateFor(shown, blocked.world, U.NOVA, 'world.join', toKai, T0 + 2200)).toMatchObject({ ownerId: U.KAI, access: { status: 'ACTIVE' } });
+    expect(verdictOf(attempt(shown, blocked.world, U.NOVA, 'world.join', toKai, 2200))).toBe(CANNOT_JOIN);
+    // control: the same state and world with the owner's block lifted -- Nova follows Kai straight back in
+    const back = attempt(unblock(shown, blocked.world, U.KAI, U.NOVA, 2150), blocked.world, U.NOVA, 'world.join', toKai, 2200);
+    expect(verdictOf(back)).toBe('ACCEPTED');
+    expect(contextOf(worldOf(back) ?? emptyWorldState(), U.NOVA)?.contextId).toBe(`priv_${U.KAI}`);
   });
 
   it("P5 (the founder's written correction, 10-04 ~17:35Z): a MEMBER blocking the OWNER inside the owner's server -- the blocker is out at once (answered with no context), the owner stays, re-entry is refused while the block stands", () => {
@@ -490,14 +526,45 @@ describe("the founder's 10-04 rulings P1 / P2 / P4 / P5: hidden means hidden, an
     // the control: someone who never joined is still refused ("Join a world first"), not answered
     const stranger = applySocialOperation(memberBlocks.state, 'world.state', U.VEGA, { ids: [], body: here, query: {} }, at(2100), memberBlocks.world);
     expect(stranger.ok).toBe(false);
-    const reenter = applySocialOperation(memberBlocks.state, 'world.join', U.NOVA, { ids: [], body: { target: 'FRIEND', userId: U.KAI }, query: {} }, at(2200), memberBlocks.world);
-    expect(reenter.ok).toBe(false);
+    // re-entry while the blocker's block stands -- the store's OPEN read of Kai's server, Kai's server, place and join rule opened to
+    // everyone -- is refused by the block alone, with the ordinary can't-join
+    const toKai = { target: 'FRIEND', userId: U.KAI };
+    const shown = withPrivacy(memberBlocks.state, U.KAI, OPEN_TO_EVERYONE);
+    expect(gateFor(shown, memberBlocks.world, U.NOVA, 'world.join', toKai, T0 + 2200)).toMatchObject({ ownerId: U.KAI, access: { status: 'ACTIVE' } });
+    expect(verdictOf(attempt(shown, memberBlocks.world, U.NOVA, 'world.join', toKai, 2200))).toBe(CANNOT_JOIN);
+    // control: the same state and world once the member lifts their block -- they follow the owner straight back in
+    const reenter = attempt(unblock(shown, memberBlocks.world, U.NOVA, U.KAI, 2150), memberBlocks.world, U.NOVA, 'world.join', toKai, 2200);
+    expect(verdictOf(reenter)).toBe('ACCEPTED');
+    expect(contextOf(worldOf(reenter) ?? emptyWorldState(), U.NOVA)?.contextId).toBe(`priv_${U.KAI}`);
     // after a new join anywhere the notice is gone: the player moved on
     const elsewhere = run(memberBlocks.state, memberBlocks.world, U.NOVA, 'world.join', { target: 'PUBLIC' }, 2300);
     expect(elsewhere.world.removals?.[U.NOVA]).toBeUndefined();
     // the control: the owner blocking someone OUTSIDE the server moves nobody
     const outsider = run(s, w, U.KAI, 'blocks.add', { targetId: U.VEGA }, 2500);
     expect(outsider.world).toBeUndefined();
+  });
+
+  it("P4/P5: a blocked re-entry is answered word for word as any player the server's own rules do not admit -- the answer never tells a block from a join rule", () => {
+    const { s, w } = kaiHostsNovaInside();
+    const toKai = { target: 'FRIEND', userId: U.KAI };
+    const ownerBlocked = run(s, w, U.KAI, 'blocks.add', { targetId: U.NOVA }, 2000); // P4: the owner blocked the member
+    const memberBlocked = run(s, w, U.NOVA, 'blocks.add', { targetId: U.KAI }, 2000); // P5: the member blocked the owner
+    for (const [rule, after] of [['P4', ownerBlocked], ['P5', memberBlocked]] as const) {
+      // the store's read of Kai's server says OPEN: no answer below is "closed"
+      expect(gateFor(after.state, after.world, U.NOVA, 'world.join', toKai, T0 + 2200), rule).toMatchObject({ ownerId: U.KAI, access: { status: 'ACTIVE' } });
+      // under Kai's own (default) settings: Vega, a stranger the FRIENDS join rule refuses; Lyra, a friend from whom the server is
+      // hidden (privateServerVisibility NOBODY); and Nova, behind the block -- one answer, word for word
+      const stranger = verdictOf(attempt(after.state, after.world, U.VEGA, 'world.join', toKai, 2200));
+      const hiddenFrom = verdictOf(attempt(after.state, after.world, U.LYRA, 'world.join', toKai, 2200));
+      const blockedOut = verdictOf(attempt(after.state, after.world, U.NOVA, 'world.join', toKai, 2200));
+      expect([stranger, hiddenFrom, blockedOut], rule).toEqual([CANNOT_JOIN, CANNOT_JOIN, CANNOT_JOIN]);
+      expect(blockedOut, rule).not.toMatch(/block/i);
+      // opened to everyone, the same stranger and friend are admitted -- and the blocked player still gets that same answer
+      const open = withPrivacy(after.state, U.KAI, OPEN_TO_EVERYONE);
+      expect(verdictOf(attempt(open, after.world, U.VEGA, 'world.join', toKai, 2200)), rule).toBe('ACCEPTED');
+      expect(verdictOf(attempt(open, after.world, U.LYRA, 'world.join', toKai, 2200)), rule).toBe('ACCEPTED');
+      expect(verdictOf(attempt(open, after.world, U.NOVA, 'world.join', toKai, 2200)), rule).toBe(stranger);
+    }
   });
 });
 
