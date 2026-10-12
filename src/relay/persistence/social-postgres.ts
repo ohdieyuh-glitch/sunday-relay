@@ -21,9 +21,13 @@ import {
   type UserProfile,
 } from '../social/social-contracts';
 import { applySocialOperation, type SocialCommandInput } from '../social/social-commands';
-import { emptySocialState, type SocialState, type SocialUserRecord } from '../social/social-state';
-import { newSocialUser, tellAfterCommit, viewerCursor, type SocialAfterCommit, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
+import { emptySocialState, hasUser, type SocialState, type SocialUserRecord } from '../social/social-state';
+import { ensureSocialUser, tellAfterCommit, viewerCursor, type SocialAfterCommit, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
 import { emptyWorldState, type WorldState } from '../social/world-presence';
+import { PRIVATE_SERVER_POLICY, type PrivateServerPolicy } from '../social/private-server-lifecycle';
+import { createPrivateServerGates, PRIVATE_SERVER_RACE_MESSAGE, PRIVATE_SERVER_UNAVAILABLE_MESSAGE } from '../social/private-server-registry';
+import { createPostgresPrivateServerRegistry, writePrivateServerRecord } from './private-server-postgres';
+import { protectedStoreWriterGuard } from './protected-store-writer-guard';
 
 /**
  * WONDERLAND SOCIAL, DURABLE: the social store over PostgreSQL (wonderland-migrations/033_wonderland_social.sql).
@@ -235,6 +239,9 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
 
 /* ----------------------------------------------------------------------------------------------------------- write */
 
+/** 033's social_events CHECK(cardinality(audience) BETWEEN 1 AND 256): one event is written as as many rows as it needs. */
+export const EVENT_AUDIENCE_MAX = 256;
+
 async function writeUser(c: PoolClient, id: string, record: SocialUserRecord, before: SocialUserRecord | undefined): Promise<void> {
   const p = record.profile;
   if (before === undefined || before.profile !== p) {
@@ -370,7 +377,11 @@ async function writeChanges(c: PoolClient, before: SocialState, after: SocialSta
       [i.inviteId, i.partyId, i.fromUserId, i.toUserId, i.status, i.createdAtIso, i.expiresAtIso],
     );
   }
-  const readChanged = before.readStates !== after.readStates;
+  // READ STATES BY KEY (the migration adversary's M2, 10-07): any send or read used to rewrite every member row of every
+  // conversation in the store. Now a conversation that changed writes its members; otherwise only the rows whose read moved.
+  const readKey = (conversationId: string, userId: string) => `${conversationId}\u0000${userId}`;
+  const readAfter = new Map(after.readStates.map((r) => [readKey(r.conversationId, r.userId), r.lastReadSequence]));
+  const readBefore = before.readStates === after.readStates ? readAfter : new Map(before.readStates.map((r) => [readKey(r.conversationId, r.userId), r.lastReadSequence]));
   for (const conv of Object.values(after.conversations)) {
     const was = before.conversations[conv.conversationId];
     if (was !== conv) {
@@ -381,15 +392,14 @@ async function writeChanges(c: PoolClient, before: SocialState, after: SocialSta
       );
       await c.query(`DELETE FROM relay_wonderland.social_conversation_members WHERE conversation_id=$1 AND NOT (player_id = ANY($2::text[]))`, [conv.conversationId, conv.memberIds]);
     }
-    if (was !== conv || readChanged) {
-      for (const member of conv.memberIds) {
-        const read = after.readStates.find((r) => r.conversationId === conv.conversationId && r.userId === member)?.lastReadSequence ?? 0;
-        await c.query(
-          `INSERT INTO relay_wonderland.social_conversation_members(conversation_id, player_id, last_read_sequence) VALUES($1,$2,$3)
-           ON CONFLICT(conversation_id, player_id) DO UPDATE SET last_read_sequence=EXCLUDED.last_read_sequence`,
-          [conv.conversationId, member, read],
-        );
-      }
+    for (const member of conv.memberIds) {
+      const key = readKey(conv.conversationId, member);
+      if (was === conv && readBefore.get(key) === readAfter.get(key)) continue;
+      await c.query(
+        `INSERT INTO relay_wonderland.social_conversation_members(conversation_id, player_id, last_read_sequence) VALUES($1,$2,$3)
+         ON CONFLICT(conversation_id, player_id) DO UPDATE SET last_read_sequence=EXCLUDED.last_read_sequence`,
+        [conv.conversationId, member, readAfter.get(key) ?? 0],
+      );
     }
     if (before.messages[conv.conversationId] !== after.messages[conv.conversationId]) {
       for (const m of diffBy(before.messages[conv.conversationId] ?? [], after.messages[conv.conversationId] ?? [], (x) => x.messageId).put) {
@@ -422,13 +432,26 @@ export interface SocialPostgresOptions {
   readonly eventRetentionMs?: number;
   /** Told after each change that took somebody out of a party, once its transaction COMMITTED (party voice removal). */
   readonly afterCommit?: SocialAfterCommit;
+  /** The private-server policy (default: PRIVATE_SERVER_POLICY, the one place the durations live). */
+  readonly privateServerPolicy?: PrivateServerPolicy;
 }
 
-/** Read every social row back and serve the store. THROWS when the database cannot be reached (the route answers 503). */
+/** An owner's open lost its compare-and-set inside the transaction: another request moved the server first. */
+class PrivateServerRaced extends Error {}
+
+/**
+ * Read every social row back and serve the store. THROWS when the database cannot be reached, or when it is a protected store
+ * (C2: the Julius live store never holds social data), BEFORE reading anything. The route then answers 503.
+ */
 export async function openSocialPostgresStore(pool: Pool, options: SocialPostgresOptions = {}): Promise<SocialStore> {
+  await protectedStoreWriterGuard(pool, 'the social store')();
   let state = await loadState(pool);
   // THE SHARED PRESENCE LAYER is real-time and in memory only: a restart empties it, and clients rejoin.
   let world: WorldState = emptyWorldState();
+  // PRIVATE SERVERS (migration 037): their records are read before each world operation that touches one -- a join or invite
+  // fresh, a report from a bounded cache -- and an owner's open is written by compare-and-set INSIDE the operation's transaction.
+  // The records outlive this process: a restart empties the world, never a cycle (the founder's private-server rules, 10-11).
+  const gates = createPrivateServerGates(createPostgresPrivateServerRegistry(pool), options.privateServerPolicy ?? PRIVATE_SERVER_POLICY);
   const retentionMs = Math.max(60_000, options.eventRetentionMs ?? 7 * 24 * 3600 * 1000);
   let lastPruneAt = 0;
   let tail: Promise<unknown> = Promise.resolve();
@@ -455,38 +478,72 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
     read: () => serial(async () => state),
     ensureUser: (identity: SocialPlayerIdentity, nowIso: string) =>
       serial(async () => {
-        if (state.users[identity.userId] !== undefined) return;
-        const record = newSocialUser(identity, nowIso);
-        await transact((c) => writeUser(c, identity.userId, record, undefined));
-        state = { ...state, users: { ...state.users, [identity.userId]: record } };
+        const next = ensureSocialUser(state, identity, nowIso);
+        if (next === state) return;
+        // ensureSocialUser changes only this player's record (an incumbent keeps a contested handle); the ordering below stays
+        // harmless and general: any other changed record is written first, as 033's unique lower(handle) is checked row by row
+        const changedIds = Object.keys(next.users).filter((id) => next.users[id] !== state.users[id]);
+        const order = [...changedIds.filter((id) => id !== identity.userId), ...changedIds.filter((id) => id === identity.userId)];
+        await transact(async (c) => {
+          for (const id of order) await writeUser(c, id, next.users[id], state.users[id]);
+        });
+        state = next;
       }),
     apply: (op: SocialOperationId, actorId: SocialUserId, input: SocialCommandInput, nowIso: string) =>
       serial(async (): Promise<RelayResult<unknown>> => {
-        if (state.users[actorId] === undefined) return { ok: false, error: relayError('not-found', 'no social record for this player') };
-        const outcome = applySocialOperation(state, op, actorId, input, nowIso, world);
+        if (!hasUser(state, actorId)) return { ok: false, error: relayError('not-found', 'no social record for this player') };
+        const nowMs = Date.parse(nowIso);
+        // FAIL CLOSED: a join or invite whose private server's records cannot be read changes nothing and answers as an outage
+        const read = await gates.gateFor(world, state, actorId, op, input.body, nowMs);
+        if (!read.ok) return { ok: false, error: relayError('stale-ledger-version', PRIVATE_SERVER_UNAVAILABLE_MESSAGE, { retryable: true }) };
+        const outcome = applySocialOperation(state, op, actorId, input, nowIso, world, read.gate);
         if (!outcome.ok) return outcome;
         const next = outcome.value.state;
-        if (next === state && outcome.value.world !== undefined && outcome.value.audience.length === 0) {
+        const serverWrite = outcome.value.serverWrite;
+        if (next === state && outcome.value.world !== undefined && outcome.value.audience.length === 0 && serverWrite === undefined) {
           world = outcome.value.world;   // a position report or a read: nothing durable moved
+          // a private server found closed: its COOLDOWN is recorded, best effort (the times that decide were fixed at activation)
+          if (outcome.value.closedServerOf !== undefined) await gates.observeClosed(outcome.value.closedServerOf, nowMs);
           return { ok: true, value: outcome.value.data };
         }
-        if (next !== state || outcome.value.audience.length > 0) {
+        if (next !== state || outcome.value.audience.length > 0 || serverWrite !== undefined) {
           // SAVED ONLY AFTER THE DURABLE WRITE: the new state is adopted only when its rows (and its event) committed.
           try {
             await transact(async (c) => {
+              // THE OWNER'S OPEN FIRST, by compare-and-set on the version it read: a lost race rolls the whole operation back
+              if (serverWrite !== undefined && !(await writePrivateServerRecord(c, serverWrite))) throw new PrivateServerRaced('private server moved');
               await writeChanges(c, state, next);
-              if (outcome.value.audience.length > 0) {
-                await c.query(`INSERT INTO relay_wonderland.social_events(op, at, audience) VALUES($1,$2,$3)`, [outcome.value.eventOp ?? op, nowIso, [...outcome.value.audience]]);
+              // 033 caps one event row's audience at 256 (social_events CHECK); a player with many friends would have hit it on
+              // every world.join, forever (the migration adversary's M3, 10-07). One event, as many rows as it needs: each
+              // viewer is in exactly one of them, so each still sees it once.
+              const audience = [...new Set(outcome.value.audience)];
+              for (let i = 0; i < audience.length; i += EVENT_AUDIENCE_MAX) {
+                await c.query(`INSERT INTO relay_wonderland.social_events(op, at, audience) VALUES($1,$2,$3)`, [outcome.value.eventOp ?? op, nowIso, audience.slice(i, i + EVENT_AUDIENCE_MAX)]);
               }
             });
           } catch (error) {
+            if (serverWrite !== undefined) gates.forget(serverWrite.ownerId);
+            // A CLOSED PRIVATE SERVER CLOSES WHATEVER THE DATABASE SAYS: its members' cleared locations could not be saved, but the
+            // closure itself only takes away, so it stands in memory (fail closed). The stale locations are written by the next change.
+            if (outcome.value.closedServerOf !== undefined && outcome.value.world !== undefined) {
+              world = outcome.value.world;
+              return { ok: true, value: outcome.value.data };
+            }
+            if (error instanceof PrivateServerRaced) return { ok: false, error: relayError('stale-ledger-version', PRIVATE_SERVER_RACE_MESSAGE, { retryable: true }) };
+            // A REFUSAL IS NOT AN OUTAGE (MINOR 1, 10-07): a data or integrity error (SQLSTATE class 22 / 23) refuses the same way
+            // every time, so it is not offered as a retry; anything else (a serialization failure, a lost connection) is.
+            const sqlState = typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : '';
+            if (/^2[23]/.test(sqlState)) return { ok: false, error: relayError('validation-failed', 'the store refused this change; nothing was changed') };
             return { ok: false, error: relayError('stale-ledger-version', 'the change could not be saved; nothing was changed', { retryable: true }) };
           }
+          if (serverWrite !== undefined) gates.remember(serverWrite, nowMs);
           const before = state;
           state = next;
           if (outcome.value.world !== undefined) world = outcome.value.world;
           // AFTER THE COMMIT, never before it, and never waited on (voice removal retries on its own; the change stands)
           tellAfterCommit(options.afterCommit, op, actorId, before, next);
+          // a private server found closed (its members' locations just cleared): its COOLDOWN is recorded, best effort
+          if (outcome.value.closedServerOf !== undefined) await gates.observeClosed(outcome.value.closedServerOf, nowMs);
         }
         return { ok: true, value: outcome.value.data };
       }),

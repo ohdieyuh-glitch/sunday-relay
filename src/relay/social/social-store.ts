@@ -25,9 +25,17 @@ import {
   type UserProfile,
 } from './social-contracts';
 import { applySocialOperation, type SocialCommandInput } from './social-commands';
-import { emptySocialState, type SocialState, type SocialUserRecord } from './social-state';
+import { emptySocialState, hasUser, userById, type SocialState, type SocialUserRecord } from './social-state';
 import { partyDepartures, type PartyDeparture } from './social-parties';
 import { emptyWorldState, type WorldState } from './world-presence';
+import { PRIVATE_SERVER_POLICY, type PrivateServerPolicy } from './private-server-lifecycle';
+import {
+  createInMemoryPrivateServerRegistry,
+  createPrivateServerGates,
+  PRIVATE_SERVER_RACE_MESSAGE,
+  PRIVATE_SERVER_UNAVAILABLE_MESSAGE,
+  type PrivateServerRegistry,
+} from './private-server-registry';
 
 /** What a change says to the people it concerns: which operation, and when. Nothing of its content. */
 export interface SocialEvent {
@@ -104,10 +112,28 @@ export function newSocialUser(identity: SocialPlayerIdentity, nowIso: string): S
   return { profile, privacy: defaultPrivacySettings(identity.userId), presence };
 }
 
-/** The state with this player in it (unchanged if they already are). */
+/**
+ * The state with this player in it, their handle following their CURRENT login (unchanged if both already hold).
+ *
+ * THE HANDLE IS NEVER A COLLISION (the migration adversary's M1, 10-07). A handle is the player's GitHub login and 033 keeps
+ * lower(handle) unique, but a record never refreshed it: when a player renamed on GitHub and somebody else took the old name,
+ * the new holder's first contact hit the unique index on every call, forever (HTTP 500).
+ *   - A player's record follows their current login when that handle is FREE.
+ *   - When another record holds it, the INCUMBENT keeps it and the claimant falls back to `@_<userId>` (GitHub logins never contain
+ *     "_", so no login can collide with it). The bridge's login for a live session is cached at sign-in, so "the claimant is
+ *     fresher" cannot be known here; letting either side take it made two live sessions rename each other on every request (the
+ *     hardening reviewer's MINOR 5). The incumbent frees the handle the moment they sign in under their new login.
+ */
 export function ensureSocialUser(state: SocialState, identity: SocialPlayerIdentity, nowIso: string): SocialState {
-  if (state.users[identity.userId] !== undefined) return state;
-  return { ...state, users: { ...state.users, [identity.userId]: newSocialUser(identity, nowIso) } };
+  const wanted = identity.handle.trim() || `@${identity.userId}`;
+  const own = userById(state, identity.userId);
+  const heldByAnother = Object.entries(state.users).some(([id, record]) => id !== identity.userId && record.profile.handle.toLowerCase() === wanted.toLowerCase());
+  const handle = heldByAnother ? `@_${identity.userId}` : wanted;
+  if (own !== undefined && own.profile.handle === handle) return state;
+  const record = own === undefined
+    ? (() => { const fresh = newSocialUser(identity, nowIso); return { ...fresh, profile: { ...fresh.profile, handle } }; })()
+    : { ...own, profile: { ...own.profile, handle } };
+  return { ...state, users: { ...state.users, [identity.userId]: record } };
 }
 
 interface StoredEvent extends SocialEvent {
@@ -144,6 +170,13 @@ export interface InMemorySocialStoreOptions {
   readonly maxEvents?: number;
   /** Told after each committed change that took somebody out of a party (party voice removal). */
   readonly afterCommit?: SocialAfterCommit;
+  /**
+   * Where private servers' lifecycle and tier rows live (private-server-registry.ts). Default: a fresh in-memory registry, in
+   * which everyone is FREE. Hand the same registry to a second store to model a restart: the lifecycle outlives the store.
+   */
+  readonly privateServers?: PrivateServerRegistry;
+  /** The private-server policy (default: PRIVATE_SERVER_POLICY, the one place the durations live). */
+  readonly privateServerPolicy?: PrivateServerPolicy;
 }
 
 /** The development and test store: one process, atomic, nothing survives a restart. */
@@ -156,11 +189,15 @@ export function createInMemorySocialStore(initial: SocialState = emptySocialStat
   const log: StoredEvent[] = [];
   // ONE AT A TIME: every command waits for the one before it, so no two read the same state and both write.
   let tail: Promise<unknown> = Promise.resolve();
-  const serial = <T>(work: () => T): Promise<T> => {
+  const serial = <T>(work: () => T | Promise<T>): Promise<T> => {
     const next = tail.then(work, work);
     tail = next.catch(() => undefined);
     return next;
   };
+  // PRIVATE SERVERS: their records are read before each world operation that touches one (fail closed), and an owner's open is
+  // persisted (compare-and-set) before the operation takes effect.
+  const registry = options.privateServers ?? createInMemoryPrivateServerRegistry();
+  const gates = createPrivateServerGates(registry, options.privateServerPolicy ?? PRIVATE_SERVER_POLICY);
 
   return {
     read: () => serial(() => state),
@@ -169,10 +206,30 @@ export function createInMemorySocialStore(initial: SocialState = emptySocialStat
         state = ensureSocialUser(state, identity, nowIso);
       }),
     apply: (op, actorId, input, nowIso) =>
-      serial((): RelayResult<unknown> => {
-        if (state.users[actorId] === undefined) return { ok: false, error: relayError('not-found', 'no social record for this player') };
-        const outcome = applySocialOperation(state, op, actorId, input, nowIso, world);
+      serial(async (): Promise<RelayResult<unknown>> => {
+        if (!hasUser(state, actorId)) return { ok: false, error: relayError('not-found', 'no social record for this player') };
+        const nowMs = Date.parse(nowIso);
+        const read = await gates.gateFor(world, state, actorId, op, input.body, nowMs);
+        if (!read.ok) return { ok: false, error: relayError('stale-ledger-version', PRIVATE_SERVER_UNAVAILABLE_MESSAGE, { retryable: true }) };
+        const outcome = applySocialOperation(state, op, actorId, input, nowIso, world, read.gate);
         if (!outcome.ok) return outcome;
+        const serverWrite = outcome.value.serverWrite;
+        if (serverWrite !== undefined) {
+          // THE OWNER'S OPEN IS PERSISTED FIRST, or it does not happen: a lost compare-and-set (another request moved the server)
+          // or an unreachable registry changes nothing, and answers as an outage.
+          let wrote = false;
+          try {
+            wrote = await registry.write(serverWrite);
+          } catch {
+            wrote = false;
+          }
+          if (!wrote) {
+            gates.forget(serverWrite.ownerId);
+            return { ok: false, error: relayError('stale-ledger-version', PRIVATE_SERVER_RACE_MESSAGE, { retryable: true }) };
+          }
+          gates.remember(serverWrite, nowMs);
+        }
+        if (outcome.value.closedServerOf !== undefined) await gates.observeClosed(outcome.value.closedServerOf, nowMs);
         if (outcome.value.world !== undefined) world = outcome.value.world;
         if (outcome.value.state !== state || (outcome.value.audience.length > 0 && op.startsWith('world.'))) {
           const before = state;

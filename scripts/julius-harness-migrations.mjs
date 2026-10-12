@@ -71,6 +71,9 @@ export function juliusSchemaListProblems(registeredNames, list = JULIUS_SCHEMA_M
 export const NON_JULIUS_MIGRATION_DESCRIPTIONS = Object.freeze({
   '017_gauntlet_command.sql': 'the Gauntlet Loop\'s own storage (`relay_wonderland.gauntlet_runs` and `gauntlet_rounds`). Its foreign keys point at `julius_runs` and `julius_tasks`, and no Julius migration references it',
   '033_wonderland_social.sql': 'Wonderland Social\'s own storage: 17 additive `relay_wonderland.social_*` tables referencing only `relay_wonderland.players` and each other',
+  '035_wonderland_voice.sql': 'Wonderland party voice\'s own storage: 1 additive `relay_wonderland.voice_puid_binding` table referencing only `relay_wonderland.players`',
+  '036_wonderfs.sql': 'WonderFS\'s own storage (the project file system, contract r1.4): 16 additive `relay_wonderland.wfs_*` tables, referencing only `relay_wonderland.projects` outside them',
+  '037_wonderland_private_servers.sql': 'Wonderland private servers\' own storage (the founder\'s private-server rules): 2 additive `relay_wonderland.private_server*` tables (the trusted tier row and the owner\'s lifecycle row), referencing only `relay_wonderland.players`',
 });
 
 const migrationNumber = (name) => {

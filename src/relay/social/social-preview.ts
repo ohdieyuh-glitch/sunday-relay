@@ -27,7 +27,7 @@ import { FIXTURE_NOW, FIXTURE_USERS, createSocialFixture } from './social-fixtur
 import { pendingRequestsFor } from './social-friends';
 import { acceptPartyInvite, partyInvitesFor, partyViewFor, recentPlayersViewFor, type PartyView } from './social-parties';
 import { resolvePresenceFor, resolveProfileFor } from './social-presence';
-import { friendIdsOf, partyOf, type SocialState } from './social-state';
+import { friendIdsOf, messagesOf, partyOf, userById, type SocialState } from './social-state';
 import { createLocalVoiceHarness, createUnavailableVoiceService } from './social-voice';
 
 export const SOCIAL_PREVIEW_SCHEMA = 'relay-wonderland-social-preview.v1' as const;
@@ -55,7 +55,10 @@ export interface SocialPreviewSnapshot {
   readonly requests: { readonly incoming: readonly { requestId: string; from: SocialPersonRow }[]; readonly outgoing: readonly { requestId: string; to: SocialPersonRow }[] };
   readonly recentPlayers: readonly (RecentPlayerEntry & { person: SocialPersonRow })[];
   readonly conversations: readonly ConversationSummary[];
+  /** Each conversation's NEWEST messages, oldest first, within the snapshot's bound (boundedSnapshotMessages). */
   readonly messages: Readonly<Record<string, readonly Message[]>>;
+  /** How many OLDER messages each conversation left out of this view (absent = none). Nothing is deleted from the store. */
+  readonly messagesOmitted: Readonly<Record<string, number>>;
   readonly party: PartyView | null;
   readonly visibleParties: readonly PartyView[];
   /** Invites to the viewer: an invitee sees the inviting party's name and who invited them, and nothing else of it. */
@@ -67,13 +70,48 @@ export interface SocialPreviewSnapshot {
 }
 
 function row(state: SocialState, viewerId: SocialUserId, userId: SocialUserId): SocialPersonRow | null {
-  const user = state.users[userId];
+  const user = userById(state, userId);
   const presence = resolvePresenceFor(state, viewerId, userId);
   if (user === undefined || presence === null) return null;
   return { userId, displayName: user.profile.displayName, handle: user.profile.handle, avatarRef: user.profile.avatarRef, presence };
 }
 
 const ONLINE_ORDER: Record<UserPresenceView['onlineState'], number> = { ONLINE: 0, BUSY: 1, AWAY: 2, OFFLINE: 3 };
+
+/**
+ * THE SNAPSHOT'S MESSAGE HISTORY IS BOUNDED (CORE's latent MAJOR of 10-07, taken by MAIN WONDERLAND 10-11). The client refuses
+ * any answer longer than 2 Mi characters (WonderlandSocialLive.cpp MaxResponseBytes) and never pages older history, so an
+ * unbounded history would one day make a player's whole social view unreadable -- the more they talked, the sooner. The newest
+ * messages win: conversations newest first (conversationsFor's order), each keeping at most SNAPSHOT_MESSAGES_PER_CONVERSATION
+ * of its newest messages, until SNAPSHOT_MESSAGE_CHAR_BUDGET characters of serialized messages are used -- half the client's
+ * cap, the rest of the view being bounded elsewhere (friends, parties, group sizes). A message is costed as it is sent: its own
+ * JSON. Nothing leaves the store; `omitted` says how many older messages each conversation left out of this view.
+ */
+export const SNAPSHOT_MESSAGES_PER_CONVERSATION = 100;
+export const SNAPSHOT_MESSAGE_CHAR_BUDGET = 1_000_000;
+
+export function boundedSnapshotMessages(
+  state: SocialState,
+  conversations: readonly ConversationSummary[],
+): { readonly messages: Record<string, readonly Message[]>; readonly omitted: Record<string, number> } {
+  let budget = SNAPSHOT_MESSAGE_CHAR_BUDGET;
+  const messages: Record<string, readonly Message[]> = {};
+  const omitted: Record<string, number> = {};
+  for (const c of conversations) {
+    const all = messagesOf(state, c.conversationId);
+    const kept: Message[] = [];
+    for (let i = all.length - 1; i >= 0 && kept.length < SNAPSHOT_MESSAGES_PER_CONVERSATION; i -= 1) {
+      const cost = JSON.stringify(all[i]).length + 1;
+      if (cost > budget) break;
+      budget -= cost;
+      kept.push(all[i]);
+    }
+    kept.reverse();
+    messages[c.conversationId] = kept;
+    if (all.length > kept.length) omitted[c.conversationId] = all.length - kept.length;
+  }
+  return { messages, omitted };
+}
 
 /** THE PREVIEW: the fixture's synthetic people and the scripted voice states, said to be a preview on its face. */
 export function buildSocialPreview(state: SocialState = createSocialFixture(), viewerId: SocialUserId = FIXTURE_USERS.KAI, nowIso = FIXTURE_NOW): SocialPreviewSnapshot {
@@ -115,6 +153,7 @@ export function buildSocialView(state: SocialState, viewerId: SocialUserId, nowI
    * those surfaces is already walled, so a blocker is absent exactly as a stranger is absent: the same absence an unfriend
    * leaves. Anybody else's card is still one profile.read away.
    */
+  const bounded = boundedSnapshotMessages(state, conversations);
   const described = new Set<SocialUserId>([viewerId, ...friends.map((f) => f.userId)]);
   for (const r of pending.incoming) described.add(r.fromUserId);
   for (const r of pending.outgoing) described.add(r.toUserId);
@@ -122,7 +161,7 @@ export function buildSocialView(state: SocialState, viewerId: SocialUserId, nowI
   for (const p of [myParty, ...visibleParties]) for (const m of p?.members ?? []) described.add(m.userId);
   for (const c of conversations) {
     if (c.otherUserId !== null) described.add(c.otherUserId);
-    for (const m of state.messages[c.conversationId] ?? []) described.add(m.senderId);
+    for (const m of bounded.messages[c.conversationId] ?? []) described.add(m.senderId);
   }
   for (const i of invites) described.add(i.fromUserId);
   for (const b of state.blocks) if (b.blockerId === viewerId) described.add(b.blockedId);
@@ -150,7 +189,8 @@ export function buildSocialView(state: SocialState, viewerId: SocialUserId, nowI
       .map((e) => ({ ...e, person: row(state, viewerId, e.userId)! }))
       .filter((e) => e.person !== null),
     conversations,
-    messages: Object.fromEntries(conversations.map((c) => [c.conversationId, state.messages[c.conversationId] ?? []])),
+    messages: bounded.messages,
+    messagesOmitted: bounded.omitted,
     party: myParty,
     visibleParties,
     partyInvites: invites

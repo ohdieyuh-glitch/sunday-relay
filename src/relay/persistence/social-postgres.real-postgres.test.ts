@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { handleSocialRoute, type SocialRouteDeps, type SocialSessionFacts } from '../../../relay-bridge/wonderland-social-routes';
 import { NATIVE_SOCIAL_CAPABILITY } from '../../../relay-bridge/wonderland-social-scope';
+import { applySocialOperation } from '../social/social-commands';
 import { juliusTestDatabaseUrl } from './julius-test-database';
 import { openSocialPostgresStore } from './social-postgres';
 import { TransactionalWonderlandDatabase } from './wonderland-postgres';
@@ -33,13 +34,16 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
   const NOVA = `usr_nova_${nonce}`;
   const VEGA = `usr_vega_${nonce}`;
   const SESSIONS: Record<string, SocialSessionFacts> = {
-    kai: { sessionId: 's1', participantId: KAI, capabilities: [NATIVE_SOCIAL_CAPABILITY] },
-    nova: { sessionId: 's2', participantId: NOVA, capabilities: [NATIVE_SOCIAL_CAPABILITY] },
-    vega: { sessionId: 's3', participantId: VEGA, capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+    kai: { sessionId: 's1', participantId: KAI, issuedAtMs: Date.parse('2026-10-02T15:00:00.000Z'), capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+    nova: { sessionId: 's2', participantId: NOVA, issuedAtMs: Date.parse('2026-10-02T15:00:00.000Z'), capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+    vega: { sessionId: 's3', participantId: VEGA, issuedAtMs: Date.parse('2026-10-02T15:00:00.000Z'), capabilities: [NATIVE_SOCIAL_CAPABILITY] },
   };
   let pool: Pool;
   let store: SocialStore;
-  let clock = Date.parse('2026-10-02T15:00:00.000Z');
+  // THE CLOCK STARTS AT THE REAL NOW, never a fixed date: the store prunes events older than its retention (7 days) against the
+  // REAL clock (eventsFor), so a fixed 2026-10-02 start made every run after 2026-10-09T15:00Z prune this suite's own events
+  // before reading them -- "expected 0 > 0", and the two cases after it failed on its missing state (CI 38159218942, 10-11).
+  let clock = Date.now();
   let conversationId = '';
   let partyId = '';
 
@@ -47,6 +51,7 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
     clock += 1000;
     const deps: SocialRouteDeps = {
       verifySession: (token) => SESSIONS[token] ?? null,
+      sessionIssuedAt: null,
       identify: async (id) => ({ userId: id, displayName: id.split('_')[1].replace(/^./, (c) => c.toUpperCase()), handle: `@${id}` }),
       store,
     };
@@ -234,5 +239,128 @@ suite('Wonderland social on real PostgreSQL, across a restart', () => {
     expect(await durable(), 'the durable serial did not move back').toEqual([ahead]);
     store = await openSocialPostgresStore(pool);
     expect((await store.read()).nextSerial, 'a restart reads the highest serial ever written').toBe(ahead);
+  }, 60_000);
+});
+
+/**
+ * THE 10-07 HARDENING ON REAL POSTGRESQL (SECOND WONDERLAND): what only the database can show. Its own players (a nonce), its own
+ * cleanup, the same throwaway rule as above.
+ *   - one event to 261 viewers is written as two rows (033: audience <= 256), and every viewer still sees it exactly once;
+ *   - a message in one conversation does not rewrite the member rows of another (their xmin is unchanged);
+ *   - a handle held by another record is never a 23505: the incumbent keeps it, the claimant falls back;
+ *   - a refusal the database makes deterministically (SQLSTATE class 23: a foreign key the store cannot see) answers 400, never a
+ *     retryable 503 (CORE, 10-07: the NUL case below no longer reaches the database, so this is the case that isolates the mapping);
+ *   - a NUL in a private server's name never reaches the database at all: refused at validation, never retryable.
+ */
+suite('Wonderland social hardening on real PostgreSQL (10-07)', () => {
+  const nonce = randomBytes(5).toString('hex');
+  const HOST = `usr_host_${nonce}`;
+  const FRIENDS = Array.from({ length: 260 }, (_, i) => `usr_f${i}_${nonce}`);
+  const ASKER = `usr_asker_${nonce}`;
+  const GONE = `usr_gone_${nonce}`;
+  const ALL = [HOST, ...FRIENDS, ASKER, GONE];
+  let pool: Pool;
+  let store: SocialStore;
+  // THE REAL NOW, never a fixed date: eventsFor prunes events older than 7 days against the REAL clock, so a fixed 2026-10-07 start
+  // would have pruned this suite's own events from 2026-10-14T13:00Z (the time bomb that fired in the suite above on 10-09)
+  let clock = Date.now();
+  const at = () => new Date((clock += 1000)).toISOString();
+  const apply = async (op: Parameters<SocialStore['apply']>[0], actor: string, body: Record<string, unknown> = {}, ids: string[] = []) => {
+    const r = await store.apply(op, actor, { ids, body, query: {} }, at());
+    if (!r.ok) throw new Error(`${op} by ${actor} refused: ${r.error.message}`);
+    return r.value as any;
+  };
+
+  beforeAll(async () => {
+    pool = new Pool({ connectionString: databaseUrl! });
+    await new TransactionalWonderlandDatabase(pool).migrate();
+    await pool.query(`INSERT INTO relay_wonderland.players(player_id) SELECT unnest($1::text[]) ON CONFLICT DO NOTHING`, [ALL]);
+    store = await openSocialPostgresStore(pool);
+    for (const id of ALL) await store.ensureUser({ userId: id, displayName: id.split('_')[1], handle: `@${id}` }, at());
+  }, 120_000);
+
+  // THE SAME TEARDOWN SHAPE AS THE SUITE ABOVE (CORE, 10-07: a bare early return here failed ci-test-accounting's "no test can
+  // END without asserting"). The pool is absent only when its construction threw, and then nothing was made.
+  const removeWhatTheHardeningMade = async (db: Pool): Promise<void> => {
+    await db.query(`DELETE FROM relay_wonderland.social_parties WHERE leader_id = ANY($1::text[])`, [ALL]);
+    await db.query(
+      `DELETE FROM relay_wonderland.social_conversations WHERE conversation_id IN
+         (SELECT conversation_id FROM relay_wonderland.social_conversation_members WHERE player_id = ANY($1::text[]))`,
+      [ALL],
+    );
+    await db.query(`DELETE FROM relay_wonderland.social_events WHERE audience && $1::text[]`, [ALL]);
+    await db.query(`DELETE FROM relay_wonderland.players WHERE player_id = ANY($1::text[])`, [ALL]);
+    await db.end();
+  };
+  afterAll(async () => {
+    await (pool === undefined ? Promise.resolve() : removeWhatTheHardeningMade(pool));
+  }, 120_000);
+
+  it('one event to 261 viewers is two rows (<= 256 each), and every viewer sees it exactly once', async () => {
+    for (const f of FRIENDS) {
+      await apply('requests.send', f, { toUserId: HOST });
+      const req = (await store.read()).requests.find((r) => r.fromUserId === f && r.toUserId === HOST && r.status === 'PENDING')!;
+      await apply('requests.accept', HOST, {}, [req.requestId]);
+    }
+    // the host is ONLINE (CORE, 10-07): a friend's view of an offline player shows no party, so viewMoved rightly told nobody of
+    // the party and the event had one viewer; online, the open party moves all 260 friends' views
+    await apply('presence.update_self', HOST, { connected: true });
+    const before = Number((await pool.query(`SELECT coalesce(max(seq), 0) AS m FROM relay_wonderland.social_events`)).rows[0].m);
+    await apply('parties.create', HOST, { name: 'Big', privacy: 'OPEN_TO_FRIENDS' });
+    const rows = (await pool.query(`SELECT cardinality(audience) AS n FROM relay_wonderland.social_events WHERE seq > $1 AND op = 'parties.create' AND audience && $2::text[]`, [before, ALL])).rows;
+    expect(rows.map((r) => Number(r.n)).sort((a, b) => b - a)).toEqual([256, 5]);
+    for (const viewer of [HOST, FRIENDS[0], FRIENDS[255], FRIENDS[259]]) {
+      const page = await store.eventsFor(viewer, before, 500);
+      expect(page.events.filter((e) => e.op === 'parties.create').length, viewer).toBe(1);
+    }
+  }, 300_000);
+
+  it('a message in one conversation does not rewrite the member rows of another (xmin unchanged)', async () => {
+    const one = (await apply('conversations.open', HOST, { otherUserId: FRIENDS[0] })).conversationId as string;
+    const two = (await apply('conversations.open', HOST, { otherUserId: FRIENDS[1] })).conversationId as string;
+    await apply('messages.send', HOST, { body: 'to two' }, [two]);
+    const xmin = async (id: string) => (await pool.query(`SELECT player_id, xmin::text AS x FROM relay_wonderland.social_conversation_members WHERE conversation_id = $1 ORDER BY player_id`, [id])).rows;
+    const twoBefore = await xmin(two);
+    await apply('messages.send', HOST, { body: 'to one' }, [one]);
+    await apply('messages.read', FRIENDS[0], {}, [one]);
+    expect(await xmin(two)).toEqual(twoBefore);
+    // control: the conversation that moved DID write its read row
+    const oneRead = (await pool.query(`SELECT last_read_sequence FROM relay_wonderland.social_conversation_members WHERE conversation_id = $1 AND player_id = $2`, [one, FRIENDS[0]])).rows;
+    expect(oneRead.map((r) => Number(r.last_read_sequence))).toEqual([1]);
+  }, 120_000);
+
+  it('a handle held by another record is never a 23505: the incumbent keeps it, the claimant falls back (and survives a restart)', async () => {
+    const login = `@h${nonce}`;
+    await store.ensureUser({ userId: FRIENDS[2], displayName: 'h', handle: login }, at());
+    await store.ensureUser({ userId: FRIENDS[3], displayName: 'h', handle: login.toUpperCase() }, at());
+    store = await openSocialPostgresStore(pool);
+    const handles = (await pool.query(`SELECT player_id, handle FROM relay_wonderland.social_profiles WHERE player_id = ANY($1::text[]) ORDER BY player_id`, [[FRIENDS[2], FRIENDS[3]]])).rows;
+    expect(Object.fromEntries(handles.map((r) => [r.player_id, r.handle]))).toEqual({ [FRIENDS[2]]: login, [FRIENDS[3]]: `@_${FRIENDS[3]}` });
+  }, 60_000);
+
+  it('a deterministic database refusal (a player row deleted behind the store: a foreign key, SQLSTATE class 23) answers validation-failed, never retryable', async () => {
+    // The row (and, by cascade, every social row of theirs) goes behind the store's back. The store still holds the player, so
+    // the DOMAIN accepts a friend request to them: only the database's foreign key refuses it, and the same way every time.
+    await pool.query(`DELETE FROM relay_wonderland.players WHERE player_id = $1`, [GONE]);
+    const ask = { ids: [], body: { toUserId: GONE }, query: {} };
+    expect(applySocialOperation(await store.read(), 'requests.send', ASKER, ask, at()).ok, 'the domain alone accepts it: the refusal is the database\'s').toBe(true);
+    const r = await store.apply('requests.send', ASKER, ask, at());
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe('validation-failed');
+      expect(r.error.retryable).not.toBe(true);
+    }
+    // and nothing changed: neither the store nor the database holds the request
+    expect((await store.read()).requests.some((q) => q.fromUserId === ASKER && q.toUserId === GONE)).toBe(false);
+    expect((await pool.query(`SELECT 1 FROM relay_wonderland.social_friend_requests WHERE from_user = $1`, [ASKER])).rowCount).toBe(0);
+  }, 60_000);
+
+  it('a NUL in a private server name never reaches the database: validation-failed, never retryable', async () => {
+    const r = await store.apply('world.join', FRIENDS[4], { ids: [], body: { target: 'PRIVATE', name: 'a\u0000b' }, query: {} }, at());
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe('validation-failed');
+      expect(r.error.retryable).not.toBe(true);
+    }
   }, 60_000);
 });

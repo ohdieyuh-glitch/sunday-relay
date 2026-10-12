@@ -8,7 +8,14 @@ class FakePool {
   /** Bound parameters, so a test can assert what was actually stored and not
    *  only which statement ran. */
   values: unknown[][] = [];
-  async query(text: string, values?: readonly unknown[]) { this.commands.push(text); if (values) this.values.push([...values]); return { rows: this.topRows, rowCount: text.startsWith('UPDATE') ? 1 : this.topRows.length }; }
+  async query(text: string, values?: readonly unknown[]) {
+    this.commands.push(text); if (values) this.values.push([...values]);
+    // the protected-store check's identity reads, answered as an ORDINARY database does (protected-store.ts throws on a nameless one)
+    if (text === 'SELECT current_database() AS db') return { rows: [{ db: 'wonderland_test' }], rowCount: 1 };
+    if (text.includes('pg_control_system()')) return { rows: [{ sid: '7000000000000000001' }], rowCount: 1 };
+    if (text.includes('shobj_description')) return { rows: [{ c: null }], rowCount: 1 };
+    return { rows: this.topRows, rowCount: text.startsWith('UPDATE') ? 1 : this.topRows.length };
+  }
   async connect() { const pool = this; return { async query(text: string) { pool.commands.push(text); if (text.startsWith('SELECT snapshot')) return { rows: pool.rows, rowCount: pool.rows.length }; if (text.includes('RETURNING next_sequence-1')) return { rows: [{ sequence: '1' }], rowCount: 1 }; return { rows: [], rowCount: text.startsWith('UPDATE') || text.startsWith('INSERT') ? 1 : 0 }; }, release() { pool.released += 1; } }; }
   async end() { this.ended = true; }
 }
@@ -41,7 +48,15 @@ describe('Wonderland PostgreSQL migration', () => {
   it('defines durable sub-agent grants with depth, narrowed permissions and per-parent counting',()=>{expect(WONDERLAND_MIGRATION_016).toContain('julius_subagents');expect(WONDERLAND_MIGRATION_016).toContain('CHECK(depth>0)');expect(WONDERLAND_MIGRATION_016).toContain('child_task_id text NOT NULL UNIQUE');expect(WONDERLAND_MIGRATION_016).toContain('julius_subagent_parent');});
   it('persists the GAUNTLET COMMAND outside the Julius namespace, with its activator',()=>{expect(WONDERLAND_MIGRATION_017).toContain('relay_wonderland.gauntlet_runs');expect(WONDERLAND_MIGRATION_017).not.toContain('relay_wonderland.julius_gauntlet');expect(WONDERLAND_MIGRATION_017).toContain('activated_by');expect(WONDERLAND_MIGRATION_017).toContain('UNIQUE(run_id,subject_task_id)');expect(WONDERLAND_MIGRATION_017).toContain('PRIMARY KEY(gauntlet_id,round,phase)');});
   it('persists approvals with one pending request per gated operation',()=>{expect(WONDERLAND_MIGRATION_018).toContain('julius_approvals');expect(WONDERLAND_MIGRATION_018).toContain('julius_approval_one_pending');expect(WONDERLAND_MIGRATION_018).toContain("WHERE state='PENDING'");expect(WONDERLAND_MIGRATION_018).toContain('lifecycle_actor');});
-  it('applies every checked-in migration to an empty database, in order', async () => { const pool = new FakePool(); const db = database(pool); await db.migrate(); expect(pool.commands.filter((command) => !command.includes('information_schema.tables'))).toEqual([...WONDERLAND_MIGRATIONS]); });
+  it('applies every checked-in migration to an empty database, in order', async () => {
+    const pool = new FakePool(); const db = database(pool); await db.migrate();
+    // the protected-store check (protected-store.ts, the founder's 035 guard) only READS the database's identity
+    const identityRead = /shobj_description|SELECT current_database\(\) AS db|pg_control_system\(\)/u;
+    expect(pool.commands.filter((command) => !command.includes('information_schema.tables') && !identityRead.test(command))).toEqual([...WONDERLAND_MIGRATIONS]);
+    // ... and it reads BEFORE anything runs: its three reads all precede the first migration
+    const first = pool.commands.indexOf(WONDERLAND_MIGRATIONS[0]);
+    expect(pool.commands.slice(0, first).filter((command) => identityRead.test(command))).toHaveLength(3);
+  });
 
   /**
    * A MIGRATED DATABASE MUST NOT BE REPLAYED, AND A PARTLY MIGRATED ONE MUST BE
