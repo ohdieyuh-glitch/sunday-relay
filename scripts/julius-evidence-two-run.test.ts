@@ -193,3 +193,48 @@ describe('F1: arm WITH resolves its two-run bundle (the restored WITHOUT run is 
     expect(resolver.exitCodeFor(verdicts, false)).toBe(1);
   });
 });
+
+/**
+ * A RUN'S EVIDENCE VOUCHES ONLY FOR ITS OWN ARTIFACTS (MAIN internal review 39b7192e, MINOR-3 F1c, 2026-10-13). With
+ * the resolver's cross-run check removed (`artifact_ref names a work artifact of another run`), all 26 evidence tests
+ * stayed green, while a row of one run naming the other run's artifact would be folded into that artifact's verdict: a
+ * body vouched for across runs, and a bundle passing --strict. Such a row is never accepted: it is UNRESOLVABLE (a
+ * failing verdict), and the artifact it names is judged by its own run's evidence alone.
+ */
+describe('F1: evidence of one run never vouches for an artifact of another (review MINOR-3, F1c)', () => {
+  it('a WITH row naming a restored WITHOUT artifact, and a WITHOUT row naming a WITH artifact, each with the right hash: UNRESOLVABLE, never folded, and the bundle fails', async () => {
+    const without = await runOnRunner(WITHOUT_RUN);
+    const withArm = await runOnRunner(WITH_RUN);
+    rmSync(without.root, { recursive: true, force: true });
+    const diffOf = (rows: JuliusWorkArtifactRecord[]) => rows.find((row) => row.kind === 'DIFF')!;
+    // The producer's own ref for each run's DIFF, read from the producer's own evidence row (never retyped).
+    const refOf = (evidence: string[]) => evidence.find((line) => line.split('\t')[1] === 'DIFF')!.split('\t').at(-1)!;
+    const diffText = (run: string) => BODIES_OF(run).find((body) => body.kind === 'DIFF')!.text;
+    const cross = (id: string, run: string, otherRun: string, otherEvidence: string[]) => [id, 'DIFF', 'PASSED', 'names the other run',
+      '2026-10-13 12:10:00+00', run, `${run}:build`, sha(Buffer.from(diffText(otherRun), 'utf8')), refOf(otherEvidence)].join('\t');
+    const CROSS_WITH = `cross:${WITH_RUN}:1`;
+    const CROSS_WITHOUT = `cross:${WITHOUT_RUN}:1`;
+    const crossRows = [cross(CROSS_WITH, WITH_RUN, WITHOUT_RUN, without.evidence), cross(CROSS_WITHOUT, WITHOUT_RUN, WITH_RUN, withArm.evidence)];
+    const both = { ownRun: WITH_RUN, restoredFrom: WITHOUT_RUN, rows: [...without.rows, ...withArm.rows] };
+
+    // CONTROL: the same two runs without the cross rows pass --strict, so the failure below is the cross rows' alone.
+    const control = bundleOf({ ...both, evidence: [...without.evidence, ...withArm.evidence] });
+    bodies.copyEvidenceBodies({ bundleDir: control, configuredRoot: withArm.root });
+    expect(resolver.exitCodeFor(resolve(control), true)).toBe(0);
+
+    const bundle = bundleOf({ ...both, evidence: [...without.evidence, ...withArm.evidence, ...crossRows] });
+    bodies.copyEvidenceBodies({ bundleDir: bundle, configuredRoot: withArm.root });
+    const verdicts = resolve(bundle);
+    for (const id of [CROSS_WITH, CROSS_WITHOUT]) {
+      expect(verdicts.filter((entry) => entry.subject === id), id).toEqual([{ verdict: 'UNRESOLVABLE', subject: id, detail: 'artifact_ref names a work artifact of another run' }]);
+    }
+    const judged = (row: JuliusWorkArtifactRecord) => verdicts.find((entry) => entry.subject === row.artifactId)!;
+    expect(judged(diffOf(without.rows)).verdict).toBe('PRIOR_RUN');
+    expect(judged(diffOf(withArm.rows)).verdict).toBe('RESOLVED');
+    for (const row of [diffOf(without.rows), diffOf(withArm.rows)]) {
+      expect(judged(row).detail, `${row.artifactId}: the other run's row is not among its witnesses`).not.toContain('cross:');
+    }
+    expect(resolver.exitCodeFor(verdicts, true)).toBe(1);
+    expect(resolver.exitCodeFor(verdicts, false)).toBe(1);
+  });
+});
