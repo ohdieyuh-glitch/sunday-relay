@@ -37,7 +37,7 @@ import {
   createContextAndClaimHandoffs,
   driveJuliusRunToTerminal,
   JULIUS_JOB_STAMP_LAG_RESERVE_MS,
-  JULIUS_LIVE_LEASE_SETTLEMENT_ALLOWANCE_MS,
+  JULIUS_STAGE_SETTLEMENT_MARGIN_MS,
   JULIUS_LIVE_RATE_LIMIT_BACKOFF,
   juliusRateLimitBackoffMs,
   JULIUS_RESERVE_AFTER_LIVE_MS,
@@ -90,8 +90,11 @@ function seed(store: ReturnType<typeof createJuliusMemoryStore>): void {
 }
 
 /** A mission whose every dispatch takes STAGE_MS on the fake clock, driven with (or without) a deadline. */
+/** Every role's stage takes STAGE_MS here, so each is bounded by it. */
+const BOUNDS = { PROMPT_ARCHITECT: STAGE_MS, CODING_AGENT: STAGE_MS, INDEPENDENT_REVIEWER: STAGE_MS };
+
 async function driveSlowMission(
-  deadline?: { readonly stopStartingAtMs: number; readonly hardLimitAtMs: number },
+  deadline?: { readonly stagesEndByMs: number; readonly hardLimitAtMs: number },
   options: { readonly rateLimitFirstBuild?: boolean; readonly backoff?: boolean } = {},
 ) {
   const memory = createJuliusMemoryStore();
@@ -125,7 +128,7 @@ async function driveSlowMission(
   const outcome = await driveJuliusRunToTerminal({
     loop: runtime.loop, store: handoffs.store, runId: RUN, projectId: PROJECT, verification: runtime.verification,
     now: () => clock,
-    ...(deadline === undefined ? {} : { deadline: { ...deadline, longestStageMs: STAGE_MS, reserveAfterLiveMs: 10 * 60_000 } }),
+    ...(deadline === undefined ? {} : { deadline: { ...deadline, stageBoundMs: BOUNDS, reserveAfterLiveMs: 5 * 60_000 } }),
     ...(options.backoff === true ? { retryBackoff: JULIUS_LIVE_RATE_LIMIT_BACKOFF, sleep: async (ms: number) => { sleeps.push(ms); clock += ms; } } : {}),
   });
   const timeline: JuliusTimelineEntry[] = [];
@@ -146,20 +149,20 @@ describe('F3: past the stop line no stage starts, and the run ends FAILED with a
     expect(starts.length, 'plan, its review, build, its review').toBeGreaterThanOrEqual(4);
   });
 
-  it('with the stop line at +60 min: no stage starts at or after it, the run is FAILED (job_deadline_reached, TIMEOUT), and its learning record is written', async () => {
-    const stop = T0 + 60 * 60_000;
-    const { outcome, starts, timeline, memory } = await driveSlowMission({ stopStartingAtMs: stop, hardLimitAtMs: T0 + 100 * 60_000 });
+  it('stages must end by +85 min: every stage that starts ends by then, the run is FAILED (job_deadline_reached, TIMEOUT), and its learning record is written', async () => {
+    const endBy = T0 + 85 * 60_000;
+    const { outcome, starts, timeline, memory } = await driveSlowMission({ stagesEndByMs: endBy, hardLimitAtMs: T0 + 90 * 60_000 });
     expect(starts.length, 'stages started').toBeGreaterThan(0);
-    expect(starts.every((at) => at < stop), `every stage started before the stop line: ${starts.map((at) => (at - T0) / 60_000).join(',')} min`).toBe(true);
+    expect(starts.every((at) => at + STAGE_MS <= endBy), `every stage started could end in time: ${starts.map((at) => (at - T0) / 60_000).join(',')} min`).toBe(true);
     expect(starts.length, 'and the mission did not get to finish').toBe(3);
     expect(outcome).toMatchObject({ state: 'FAILED', stalled: false });
-    expect(outcome.haltCause).toMatch(/^job_deadline_reached: No new stage may start after 2026-10-13T13:00:00\.000Z/u);
+    expect(outcome.haltCause).toMatch(/^job_deadline_reached: The next stage \(up to 1500000 ms\) cannot end by 2026-10-13T13:25:00\.000Z/u);
     expect((await memory.loadRun(RUN, PROJECT))?.state).toBe('FAILED');
     const failed = timeline.filter((entry) => entry.type === 'run.failed');
     expect(failed).toHaveLength(1);
     expect(failed[0]!.facts).toMatchObject({
-      reasonCode: 'job_deadline_reached', code: 'TIMEOUT', stopStartingAt: '2026-10-13T13:00:00.000Z', hardLimitAt: '2026-10-13T13:40:00.000Z',
-      longestStageMs: STAGE_MS, reserveAfterLiveMs: 600_000,
+      reasonCode: 'job_deadline_reached', code: 'TIMEOUT', stagesEndBy: '2026-10-13T13:25:00.000Z', hardLimitAt: '2026-10-13T13:30:00.000Z',
+      nextStageMs: STAGE_MS, reserveAfterLiveMs: 300_000,
     });
 
     // THE RECORD A REGISTERED ARM OWES: a run killed by the runner stays RUNNING and records NOT_TERMINAL; this one is
@@ -177,7 +180,7 @@ describe('F3: past the stop line no stage starts, and the run ends FAILED with a
   });
 
   it('a stop line already behind the clock starts nothing at all', async () => {
-    const { outcome, starts } = await driveSlowMission({ stopStartingAtMs: T0, hardLimitAtMs: T0 + 40 * 60_000 });
+    const { outcome, starts } = await driveSlowMission({ stagesEndByMs: T0 + STAGE_MS - 1, hardLimitAtMs: T0 + 40 * 60_000 });
     expect(starts).toEqual([]);
     expect(outcome.state).toBe('FAILED');
   });
@@ -186,14 +189,16 @@ describe('F3: past the stop line no stage starts, and the run ends FAILED with a
 describe('F3: the entrypoint derives the stop line from the job stamp and the workers, prints it, and enforces it', () => {
   const workers = [architectWorker({}), CODER_WORKER, REVIEWER_WORKER];
 
-  it('stop line = stamp + JOB_BUDGET_MS - the stamp lag - the reserve after LIVE - the longest hold bound', () => {
-    const longest = Math.max(...workers.map((worker) => juliusLeaseHoldBoundMs(workers, worker, JULIUS_LIVE_LEASE_SETTLEMENT_ALLOWANCE_MS)));
+  it('stages end by stamp + JOB_BUDGET_MS - the stamp lag - the reserve after LIVE; each role is bounded by its own workers plus the settlement margin', () => {
     const started = Date.parse('2026-10-13T12:00:00Z');
+    const bound = (role: string) => juliusLeaseHoldBoundMs(workers, { role }, JULIUS_STAGE_SETTLEMENT_MARGIN_MS);
     expect(liveStageDeadline({ jobStartedAt: '2026-10-13T12:00:00Z', workers })).toEqual({
       hardLimitAtMs: started + JOB_BUDGET_MS - JULIUS_JOB_STAMP_LAG_RESERVE_MS,
-      stopStartingAtMs: started + JOB_BUDGET_MS - JULIUS_JOB_STAMP_LAG_RESERVE_MS - JULIUS_RESERVE_AFTER_LIVE_MS - longest,
-      longestStageMs: longest, reserveAfterLiveMs: JULIUS_RESERVE_AFTER_LIVE_MS,
+      stagesEndByMs: started + JOB_BUDGET_MS - JULIUS_JOB_STAMP_LAG_RESERVE_MS - JULIUS_RESERVE_AFTER_LIVE_MS,
+      reserveAfterLiveMs: JULIUS_RESERVE_AFTER_LIVE_MS,
+      stageBoundMs: { CODING_AGENT: bound('CODING_AGENT'), INDEPENDENT_REVIEWER: bound('INDEPENDENT_REVIEWER'), PROMPT_ARCHITECT: bound('PROMPT_ARCHITECT') },
     });
+    expect(bound('INDEPENDENT_REVIEWER'), 'a review is held to its own bound, not the coder\'s').toBeLessThan(bound('CODING_AGENT'));
     for (const unrecorded of [undefined, '', 'not a time']) expect(liveStageDeadline({ jobStartedAt: unrecorded, workers })).toBeNull();
   });
 
@@ -256,10 +261,10 @@ describe('F5: a rate-limited retry waits a bounded backoff, never past the stop 
     expect(retried, 'the retry started one stage plus the backoff after the refused dispatch').toBeGreaterThan(0);
   });
 
-  it('the wait never crosses the stop line: 10 s before it, the drive waits 10 s and the deadline then ends the run', async () => {
+  it('the wait never crosses the end-by line: 10 s before it, the drive waits 10 s and the deadline then ends the run', async () => {
     // plan at 0, its review at 25, the rate-limited build at 50 (the clock reads 75 min after it).
-    const stop = T0 + 75 * 60_000 + 10_000;
-    const { outcome, sleeps } = await driveSlowMission({ stopStartingAtMs: stop, hardLimitAtMs: stop + 40 * 60_000 }, { rateLimitFirstBuild: true, backoff: true });
+    const endBy = T0 + 75 * 60_000 + 10_000;
+    const { outcome, sleeps } = await driveSlowMission({ stagesEndByMs: endBy, hardLimitAtMs: endBy + 5 * 60_000 }, { rateLimitFirstBuild: true, backoff: true });
     expect(sleeps).toEqual([10_000]);
     expect(outcome.state).toBe('FAILED');
     expect(outcome.haltCause).toMatch(/^job_deadline_reached: /u);

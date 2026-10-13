@@ -921,20 +921,35 @@ export interface DriveOutcome {
 
 /**
  * THE JOB'S CLOCK, ENFORCED (Decision C, audit F3). The workflow kills the job at `timeout-minutes`, and a run killed
- * mid-stage stays RUNNING: no `run.failed`, no learning record, no store export. So the drive stops STARTING stages
- * while a started one can still finish, the run ends FAILED through its ordinary path, and every step after LIVE
- * still has its time.
+ * mid-stage stays RUNNING: no `run.failed`, no learning record, no store export. So the drive starts a stage only when
+ * that stage, at its own bound, ends before the steps after LIVE need the rest of the job; otherwise the run ends FAILED
+ * through its ordinary path, while every step after LIVE still has its time.
+ *
+ * PER STAGE, NOT ONE WORST CASE. A single bound (the coder's, the longest) would refuse a review that easily fits, and
+ * cut even the priced normal path (coder-envelope.test.ts's job-budget proof) short of the job's limit. So each role
+ * has its own bound, and the check reads the roles of the tasks the next tick can claim.
  */
 export interface JuliusDriveDeadline {
-  /** No tick (no stage) starts at or after this instant. */
-  readonly stopStartingAtMs: number;
+  /** Every stage must END by this instant: the job's limit less the reserve after LIVE. */
+  readonly stagesEndByMs: number;
   /** The job's limit as this process can know it, conservatively early. */
   readonly hardLimitAtMs: number;
-  /** The longest a stage started at the stop line may legitimately take: a worker hold bound. */
-  readonly longestStageMs: number;
   /** What the steps after LIVE are left: the learning record, the evidence dump, the scans and the uploads. */
   readonly reserveAfterLiveMs: number;
+  /**
+   * The longest a stage of each role may take once started. A role with no entry is held to the longest entry, and an
+   * empty map to nothing at all (the stage then only has to start before `stagesEndByMs`).
+   */
+  readonly stageBoundMs: Readonly<Record<string, number>>;
 }
+
+/**
+ * WHAT SETTLING A STAGE MAY TAKE after its worker's declared deadline, which the coordinator enforces itself
+ * ("Worker exceeded the deadline it declares"): evidence, artifacts and the verification decision, all writes to
+ * this job's own database. Two minutes. (The lease keeper's 600 s also covers research served inline; the C arms'
+ * contracts grant no research, and the reserve after LIVE absorbs the rest of any overrun.)
+ */
+export const JULIUS_STAGE_SETTLEMENT_MARGIN_MS = 2 * 60_000;
 
 /**
  * HOW LATE THE WORKFLOW'S JOB STAMP IS. `JULIUS_JOB_STARTED_AT` is written by the dispatch-input gate, not at the job's
@@ -944,15 +959,15 @@ export interface JuliusDriveDeadline {
 export const JULIUS_JOB_STAMP_LAG_RESERVE_MS = 2 * 60_000;
 /**
  * WHAT THE STEPS AFTER LIVE ARE LEFT. Measured 11-15 s from LIVE's end to teardown in those five runs; the founder
- * draft r4 adds the learning-store dump, its scan and upload, and the strict resolver. Ten minutes, so an artifact
- * upload having a slow day still lands before the runner's cut.
+ * draft r4 adds the learning-store dump, its scan and upload, and the strict resolver. Five minutes, twenty times the
+ * longest measured, so an artifact upload having a slow day still lands before the runner's cut.
  */
-export const JULIUS_RESERVE_AFTER_LIVE_MS = 10 * 60_000;
+export const JULIUS_RESERVE_AFTER_LIVE_MS = 5 * 60_000;
 
 /**
  * THE STAGE DEADLINE FOR A LIVE RUN, or null when the job's start was not recorded (nothing is then enforced, as
- * before). The longest stage is the largest lease hold bound over the registered roles, which is what the lease keeper
- * already allows a claimed task to hold: every worker of its role at its declared deadline, plus settlement.
+ * before). A role's stage bound is the lease keeper's dispatch part of its hold bound (every worker of the role at its
+ * declared deadline, a reroute trying each) plus `JULIUS_STAGE_SETTLEMENT_MARGIN_MS`.
  */
 export function liveStageDeadline(input: {
   readonly jobStartedAt: string | undefined;
@@ -961,13 +976,10 @@ export function liveStageDeadline(input: {
 }): JuliusDriveDeadline | null {
   const started = Date.parse(input.jobStartedAt ?? '');
   if (!Number.isFinite(started)) return null;
-  const roles = [...new Set(input.workers.map((worker) => worker.role))];
-  const longestStageMs = roles.reduce((longest, role) => Math.max(longest, juliusLeaseHoldBoundMs(input.workers, { role }, JULIUS_LIVE_LEASE_SETTLEMENT_ALLOWANCE_MS)), 0);
+  const roles = [...new Set(input.workers.map((worker) => worker.role))].sort();
+  const stageBoundMs = Object.fromEntries(roles.map((role) => [role, juliusLeaseHoldBoundMs(input.workers, { role }, JULIUS_STAGE_SETTLEMENT_MARGIN_MS)]));
   const hardLimitAtMs = started + (input.jobBudgetMs ?? JOB_BUDGET_MS) - JULIUS_JOB_STAMP_LAG_RESERVE_MS;
-  return {
-    stopStartingAtMs: hardLimitAtMs - JULIUS_RESERVE_AFTER_LIVE_MS - longestStageMs,
-    hardLimitAtMs, longestStageMs, reserveAfterLiveMs: JULIUS_RESERVE_AFTER_LIVE_MS,
-  };
+  return { stagesEndByMs: hardLimitAtMs - JULIUS_RESERVE_AFTER_LIVE_MS, hardLimitAtMs, reserveAfterLiveMs: JULIUS_RESERVE_AFTER_LIVE_MS, stageBoundMs };
 }
 
 /**
@@ -1095,10 +1107,18 @@ export async function driveJuliusRunToTerminal(input: {
         return failForTickBudget({ input, consumed: tick - 1, account: accountAt(tick - 1, true)! });
       }
     }
-    // THE STOP LINE, BEFORE A STAGE STARTS, never during one: a stage started before it ends before the job's limit
-    // by construction (`liveStageDeadline`), so the run ends here, FAILED, with time left for its record.
-    if (input.deadline !== undefined && now() >= input.deadline.stopStartingAtMs) {
-      return failForDeadline({ input, deadline: input.deadline, consumed: tick - 1, account: accountAt(tick - 1, false) });
+    // THE STOP LINE, BEFORE A STAGE STARTS, never during one: the next tick claims among the run's RUNNABLE tasks, and it
+    // may start only if the longest of their stages, at its bound, still ends by `stagesEndByMs`. Otherwise the run ends
+    // here, FAILED, with time left for its record and its evidence.
+    if (input.deadline !== undefined) {
+      const bounds = Object.values(input.deadline.stageBoundMs);
+      const fallback = bounds.length === 0 ? 0 : Math.max(...bounds);
+      const nextStageMs = (await input.store.tasksForRun(input.runId, input.projectId))
+        .filter((task) => task.state === 'RUNNABLE')
+        .reduce((longest, task) => Math.max(longest, input.deadline!.stageBoundMs[task.role] ?? fallback), 0);
+      if (now() + nextStageMs > input.deadline.stagesEndByMs) {
+        return failForDeadline({ input, deadline: input.deadline, nextStageMs, consumed: tick - 1, account: accountAt(tick - 1, false) });
+      }
     }
     // THE SWEEP IS THE KERNEL'S. This driver used to call `recover` before
     // every tick, which made a store-level guarantee depend on one composition
@@ -1120,7 +1140,7 @@ export async function driveJuliusRunToTerminal(input: {
         rateLimitRetries += limited.length;
         const asked = limited.flatMap((outcome) => (outcome.kind === 'RETRY' && outcome.retryAfterMs !== undefined ? [outcome.retryAfterMs] : []));
         const wanted = juliusRateLimitBackoffMs({ ...input.retryBackoff, retries: rateLimitRetries, retryAfterMs: asked.length > 0 ? Math.max(...asked) : null });
-        const wait = input.deadline === undefined ? wanted : Math.min(wanted, Math.max(0, input.deadline.stopStartingAtMs - now()));
+        const wait = input.deadline === undefined ? wanted : Math.min(wanted, Math.max(0, input.deadline.stagesEndByMs - now()));
         if (wait > 0) await sleep(wait);
       }
     }
@@ -1218,14 +1238,15 @@ async function moveRunToFailed(input: DriveFailureInput, commandPrefix: string, 
 async function failForDeadline(args: {
   readonly input: DriveFailureInput;
   readonly deadline: JuliusDriveDeadline;
+  readonly nextStageMs: number;
   readonly consumed: number;
   readonly account: DriveTickAccount | null;
 }): Promise<DriveOutcome> {
   const { input, deadline } = args;
   const reasonCode = 'job_deadline_reached';
-  const stopAt = new Date(deadline.stopStartingAtMs).toISOString();
+  const endBy = new Date(deadline.stagesEndByMs).toISOString();
   const limitAt = new Date(deadline.hardLimitAtMs).toISOString();
-  const safeSummary = `No new stage may start after ${stopAt}: the job's limit is ${limitAt}, and a stage (up to ${String(deadline.longestStageMs)} ms) plus the steps after LIVE (${String(deadline.reserveAfterLiveMs)} ms) would not fit. The run stops here, before the runner's cut, so its record, its learning outcome and its evidence are written.`;
+  const safeSummary = `The next stage (up to ${String(args.nextStageMs)} ms) cannot end by ${endBy}, which leaves the steps after LIVE ${String(deadline.reserveAfterLiveMs)} ms before the job's limit ${limitAt}. The run stops here, before the runner's cut, so its record, its learning outcome and its evidence are written.`;
   const state = await moveRunToFailed(input, 'job-deadline', reasonCode, safeSummary);
   if (state === 'FAILED') {
     await input.store.appendEvent({
@@ -1233,8 +1254,8 @@ async function failForDeadline(args: {
       taskId: null, workerId: null, correlationId: `job-deadline:${input.runId}`, causationId: null,
       occurredAt: new Date().toISOString(),
       facts: {
-        reasonCode, code: 'TIMEOUT', stopStartingAt: stopAt, hardLimitAt: limitAt,
-        longestStageMs: deadline.longestStageMs, reserveAfterLiveMs: deadline.reserveAfterLiveMs, ticksConsumed: args.consumed,
+        reasonCode, code: 'TIMEOUT', stagesEndBy: endBy, hardLimitAt: limitAt,
+        nextStageMs: args.nextStageMs, reserveAfterLiveMs: deadline.reserveAfterLiveMs, ticksConsumed: args.consumed,
       },
     });
   }

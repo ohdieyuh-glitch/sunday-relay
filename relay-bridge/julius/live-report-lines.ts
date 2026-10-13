@@ -49,13 +49,14 @@ export function liveTickBudgetLine(
 }
 
 /**
- * THE STAGE DEADLINE THE DRIVE ENFORCES (audit F3), said before the first dispatch beside the wall clock deadline:
- * the stop line no stage starts after, the job's limit it is derived from, and the two reserves. UNKNOWN when the job's
- * start was not recorded, in which case nothing is enforced.
+ * THE STAGE DEADLINE THE DRIVE ENFORCES (audit F3), said before the first dispatch beside the wall clock deadline: the
+ * instant every stage must end by, the job's limit it is derived from, the reserve after LIVE and each role's stage
+ * bound. UNKNOWN when the job's start was not recorded, in which case nothing is enforced.
  */
 export function liveStageDeadlineLine(deadline: JuliusDriveDeadline | null): string {
   if (deadline === null) return '  stage deadline: UNKNOWN (no job start recorded; not enforced)';
-  return `  stage deadline: no stage starts after ${new Date(deadline.stopStartingAtMs).toISOString()} (job limit ${new Date(deadline.hardLimitAtMs).toISOString()}; reserve_after_live_ms=${deadline.reserveAfterLiveMs} longest_stage_ms=${deadline.longestStageMs})`;
+  const bounds = Object.entries(deadline.stageBoundMs).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([role, ms]) => `${role}:${ms}`).join(',');
+  return `  stage deadline: every stage must end by ${new Date(deadline.stagesEndByMs).toISOString()} (job limit ${new Date(deadline.hardLimitAtMs).toISOString()}; reserve_after_live_ms=${deadline.reserveAfterLiveMs}; stage_bounds_ms=${bounds || 'none'})`;
 }
 
 /** What the run consumed. The entrypoint prints it between RESULT (and its cause) and the `run:` line. */
