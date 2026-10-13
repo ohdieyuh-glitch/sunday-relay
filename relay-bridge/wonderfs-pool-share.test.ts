@@ -16,7 +16,7 @@ import { createWonderfsMount } from './wonderfs-routes';
  * IT DOES WAITS WITHOUT A BOUND. These run against the REAL pg-pool (the bridge's juliusPool is `new Pool(...)`, max 10 by pg-pool's
  * default) with a fake database client under it, so the pool's own checkout, queueing and `max` are what is measured; the statements'
  * effects on PostgreSQL itself (a lock wait cut off at lock_timeout, a statement at statement_timeout) are proven on rows in
- * src/relay/persistence/wonderfs-bounds.real-postgres.test.ts (CI).
+ * relay-bridge/wonderfs-bounds.real-postgres.test.ts (CI), which also runs the guard's read in the burst on a real database.
  *
  * The CONTROLS put today's shape -- a bare `pool.query` per gate lookup, per guard read, uncapped -- on the same pool, and show it
  * taking every client ahead of a Julius-route query.

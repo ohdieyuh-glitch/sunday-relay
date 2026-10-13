@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { openWfsMemoryStore, wfsMemoryBacking } from '../src/relay/wonderfs/wonderfs-memory-store';
 import { WFS_MAIN_BRANCH, wfsTreeAt } from '../src/relay/wonderfs/wonderfs-engine';
 import type { WfsOp, WfsPrincipal } from '../src/relay/wonderfs/wonderfs-contracts';
+import { WFS_PINNED_UNICODE } from '../src/relay/wonderfs/wonderfs-paths';
 import { WFS_PAGE_MAX_BYTES, type WfsStore } from '../src/relay/wonderfs/wonderfs-store';
 import { createBrowserSessionStore, NATIVE_WORLD_AUDIENCE } from './browser-session/grants';
 import { createWonderfsBudgets, type WonderfsBudgets } from './wonderfs-budgets';
@@ -16,6 +17,7 @@ import {
   wonderfsEncodeTreeCursor,
   wonderfsRange,
   wonderfsRequestOf,
+  wonderfsUnicodeRefusedLine,
   writeWonderfsAnswer,
   type WonderfsByteAnswer,
   type WonderfsRouteDeps,
@@ -793,6 +795,40 @@ describe('WonderFS R1 reads: the bridge mount (correctness MINOR-5)', () => {
     expect([anonymous.status, anonymous.json.error.kind, asked]).toEqual([401, 'session_required', 0]);
     const signedIn = await call(base, `/relay-api/wonderfs/v1/projects/${PROJECT}`, { token: minted.session.token });
     expect([signedIn.status, signedIn.json.error.kind, asked]).toEqual([503, 'wonderfs_unavailable', 1]);
+  });
+
+  it('b7 / K5 at the mount (security SEC-R5-02): on a runtime whose Unicode version is not the pinned one -- older, newer, or none -- the store is NEVER opened: every signed-in read and write is 503 wonderfs_unavailable, the pool is never asked, and the log holds ONE fixed line, written once at mount; CONTROL: on the pinned version the same mount asks the pool', async () => {
+    const sessions = createBrowserSessionStore();
+    const minted = sessions.mintNativeSocialSession({ now: Date.now(), participantId: 'ghu-1' });
+    if (!minted.ok) throw new Error('not minted');
+    const mountWith = async (unicodeVersion: () => string | undefined) => {
+      const seen = { asked: 0, logs: [] as string[] };
+      const mount = createWonderfsMount({ sessions, pool: () => { seen.asked += 1; return null; }, log: (line) => seen.logs.push(line), unicodeVersion });
+      const server = createServer((req, res) => { void mount.serve(req, res, {}); });
+      servers.push(server);
+      await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+      const address = server.address();
+      return { base: `http://127.0.0.1:${typeof address === 'object' && address !== null ? address.port : 0}`, seen };
+    };
+    for (const reported of ['15.1', '18.0', undefined]) {
+      const { base, seen } = await mountWith(() => reported);
+      expect(seen.logs, `${String(reported)}: one fixed line at mount, before any request`).toEqual([wonderfsUnicodeRefusedLine(reported)]);
+      const answers = [
+        await call(base, `/relay-api/wonderfs/v1/projects/${PROJECT}`, { token: minted.session.token }),
+        await call(base, `/relay-api/wonderfs/v1/projects/${PROJECT}/events`, { token: minted.session.token }),
+        await call(base, `/relay-api/wonderfs/v1/projects/${PROJECT}/branches/main/commits`, { token: minted.session.token, method: 'POST' }),
+      ];
+      expect(answers.map((a) => [a.status, (a.json as { error: { kind: string } }).error.kind]), `${String(reported)}: reads and the write`).toEqual(Array.from({ length: 3 }, () => [503, 'wonderfs_unavailable']));
+      expect(seen.asked, `${String(reported)}: the pool is never asked (no store, no read, no path key)`).toBe(0);
+      expect(seen.logs, `${String(reported)}: still that one line`).toHaveLength(1);
+      const anonymous = await call(base, `/relay-api/wonderfs/v1/projects/${PROJECT}`);
+      expect(anonymous.status, `${String(reported)}: the session gate still answers first`).toBe(401);
+    }
+    expect(wonderfsUnicodeRefusedLine(undefined)).toContain('Unicode (none), not the pinned 17.0');
+    // CONTROL: the pinned version opens the way to the store (here no database: 503 by THAT fact, after the pool was asked); no line
+    const pinned = await mountWith(() => WFS_PINNED_UNICODE);
+    const served = await call(pinned.base, `/relay-api/wonderfs/v1/projects/${PROJECT}`, { token: minted.session.token });
+    expect([served.status, pinned.seen.asked, pinned.seen.logs], 'CONTROL: the pool is asked; nothing logged').toEqual([503, 1, []]);
   });
 });
 

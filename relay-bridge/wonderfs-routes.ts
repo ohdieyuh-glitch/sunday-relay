@@ -63,7 +63,7 @@ import { Pool } from 'pg';
 import { openWfsPostgresStore, wfsHearIdleLoss, wfsPoolMax, WFS_DEDICATED_POOL_MAX, WFS_SHARED_POOL_MIN_MAX } from '../src/relay/persistence/wonderfs-postgres';
 import { WFS_ALPHA_LIMITS, type WfsLimits } from '../src/relay/wonderfs/wonderfs-contracts';
 import { WFS_MAIN_BRANCH } from '../src/relay/wonderfs/wonderfs-engine';
-import { WFS_MAX_PATH_CHARS } from '../src/relay/wonderfs/wonderfs-paths';
+import { wfsUnicodeFit, WFS_MAX_PATH_CHARS, WFS_PINNED_UNICODE } from '../src/relay/wonderfs/wonderfs-paths';
 import type { WfsStore } from '../src/relay/wonderfs/wonderfs-store';
 import type { BrowserSessionStore } from './browser-session/grants';
 import { createWonderfsBudgets, WONDERFS_BYTE_READ_RETRY_MS, type WonderfsBudgets } from './wonderfs-budgets';
@@ -435,6 +435,8 @@ export interface WonderfsMountInput {
    * `openWonderfsDedicatedPool`; a test passes one it tracks). It must return a NEW pool of at most WFS_DEDICATED_POOL_MAX clients.
    */
   readonly openDedicatedPool?: (shared: Pool) => Pool;
+  /** b7 / K5: the Unicode version this runtime reports (default: `process.versions.unicode`; a test passes another). Read once, at mount. */
+  readonly unicodeVersion?: () => string | undefined;
 }
 
 /**
@@ -467,12 +469,19 @@ export interface WonderfsMount {
  * WHAT server.ts MOUNTS: built ONCE per process (its budgets and its store live as long as the process), served from ONE dispatch
  * block. No flag, no setting: the store opens lazily on the bridge's pool, and no pool means 503 by fact. K7: on that pool only when
  * its actual max leaves the other families their 6 (`wonderfsPoolFor`); otherwise on a pool of its own, opened once.
+ * b7 / K5: a runtime whose Unicode version is not the pinned one would key paths with other tables than every stored `path_key` --
+ * "a contract event: it needs a re-key of every stored path_key before it serves" (b7). So it never opens the store: every admitted
+ * request is 503 by fact (gate step 5, before any budget, read or path key), and the log gets one fixed line, once.
  */
 export function createWonderfsMount(input: WonderfsMountInput): WonderfsMount {
   const budgets: WonderfsBudgets = createWonderfsBudgets();
   const verifySession = wonderfsSessionVerifier(input.sessions);
+  const unicode = (input.unicodeVersion ?? ((): string | undefined => process.versions.unicode))();
+  const unicodeFit = wfsUnicodeFit(unicode);
+  if (!unicodeFit) input.log?.(wonderfsUnicodeRefusedLine(unicode));
   let opened: { readonly shared: Pool; readonly pool: Pool; readonly own: boolean; readonly store: WfsStore } | null = null;
   const store = (): WfsStore | null => {
+    if (!unicodeFit) return null;
     const shared = input.pool();
     if (shared === null) return null;
     if (opened === null || opened.shared !== shared) {
@@ -489,4 +498,13 @@ export function createWonderfsMount(input: WonderfsMountInput): WonderfsMount {
       writeWonderfsAnswer(res, answer ?? wonderfsNotFound(), extraHeaders);
     },
   };
+}
+
+/**
+ * b7 / K5 AT THE MOUNT (security review R2-r5 SEC-R5-02): the ONE line a runtime on another Unicode version writes, once, when mounted.
+ * Fixed text; the only value in it is the version the runtime itself reports.
+ */
+export function wonderfsUnicodeRefusedLine(reported: string | undefined): string {
+  return `wonderfs: this runtime reports Unicode ${reported === undefined ? '(none)' : JSON.stringify(reported)}, not the pinned ${WFS_PINNED_UNICODE} ` +
+    '(contract b7 / K5); every WonderFS request is answered 503 wonderfs_unavailable until it runs on the pinned version, or a contract revision re-keys every stored path_key';
 }

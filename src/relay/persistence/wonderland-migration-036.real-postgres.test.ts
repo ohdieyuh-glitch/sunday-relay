@@ -187,11 +187,12 @@ suite('migration 036: WonderFS, applied explicitly after 035 (contract r1.4)', (
       .toEqual([...RELATIONS].sort());
     expect(added.filter((line) => line.startsWith('internal trigger projects ')), 'two RI triggers on projects for its one foreign key out').toHaveLength(2);
     expect(added.filter((line) => line.startsWith('constraint ') && / FOREIGN KEY /u.test(line)), 'the 22 foreign keys').toHaveLength(22);
-    // THE SCHEMA COUNTS, from the catalog itself (the DDL holds 91 CHECKs, 16 primary keys, 2 UNIQUE constraints, 22 foreign keys)
+    // THE SCHEMA COUNTS, from the catalog itself (the DDL holds 92 CHECKs, 16 primary keys, 2 UNIQUE constraints, 22 foreign keys).
+    // 92 = r1.4's 91 + wfs_requests.actor_key's CHECK(actor_key ~ '^[0-9a-f]{64}$'), which contract r1.6.2 §21 K4 requires (e2).
     const kinds = Object.fromEntries((await pool.query(
       "SELECT k.contype AS t, count(*) AS n FROM pg_constraint k JOIN pg_class c ON c.oid = k.conrelid WHERE c.relnamespace = 'relay_wonderland'::regnamespace AND c.relname LIKE 'wfs\\_%' GROUP BY k.contype",
     )).rows.map((row: { t: string; n: string }) => [row.t, Number(row.n)]));
-    expect(kinds, 'CHECK 91, PRIMARY KEY 16, UNIQUE 2, FOREIGN KEY 22, nothing else').toEqual({ c: 91, p: 16, u: 2, f: 22 });
+    expect(kinds, 'CHECK 92, PRIMARY KEY 16, UNIQUE 2, FOREIGN KEY 22, nothing else').toEqual({ c: 92, p: 16, u: 2, f: 22 });
     expect(await count(pool, "SELECT count(*) AS n FROM pg_constraint k JOIN pg_class c ON c.oid = k.conrelid WHERE c.relnamespace = 'relay_wonderland'::regnamespace AND c.relname LIKE 'wfs\\_%' AND k.contype = 'f' AND k.condeferrable AND k.condeferred"),
       'the 6 purge-path keys are DEFERRABLE INITIALLY DEFERRED').toBe(6);
     const withStamp = rowsBefore.map((line) => (line.startsWith('schema_migrations ') ? `schema_migrations ${Number(line.split(' ')[1]) + 1}` : line));

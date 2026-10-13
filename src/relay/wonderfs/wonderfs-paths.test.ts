@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeWfsPath, wfsIsBeneath, wfsParentPath, wfsPathKey, wfsRebase, WFS_MAX_PATH_CHARS } from './wonderfs-paths';
+import { normalizeWfsPath, wfsIsBeneath, wfsParentPath, wfsPathKey, wfsRebase, wfsUnicodeFit, WFS_MAX_PATH_CHARS, WFS_PINNED_UNICODE } from './wonderfs-paths';
 
 /** T-PATH (§6.6): what a path may be, and when two paths are one. */
 
@@ -137,14 +137,21 @@ describe('WonderFS paths: helpers', () => {
 /**
  * K5 (contract r1.6.2 b7 / §21 K5; attack WFS15-11): THE PATH KEY'S UNICODE VERSION IS PINNED. `wfsPathKey` folds with the runtime's
  * case and NFC tables (ECMAScript toUpperCase / toLowerCase / normalize), so a runtime on another Unicode version can key a stored path
- * differently: a contract event that needs a re-key of every stored `path_key` before it serves. The pin is the value CI's pinned Node 22
- * reports, read by command when R2-r5 lands and copied into the freeze record (`node -p process.versions.unicode`); the local Node 22.23.2
- * (ICU 78.2) reports the same. CONTROL: set the pin to any other value (e.g. '15.1', CPython 3.13's) and this turns red.
+ * differently: a contract event that needs a re-key of every stored `path_key` before it serves (b7). The pin, WFS_PINNED_UNICODE, is read
+ * by command (`node -p process.versions.unicode`): local Node 22.23.2 / ICU 78.2; CI's Node 22.23.3 passed this assertion (relay-ci
+ * "Verify Relay" on a34738cd, 2026-10-13). A CI or a deployment on a Node reporting another version is RED here and 503 at the mount
+ * (wonderfs-routes.test.ts, "b7 / K5 at the mount") BY DESIGN: fail-closed, never an accident to wave through by editing the pin.
  */
-const WFS_PINNED_UNICODE = '17.0';
-
 describe('WonderFS paths: the Unicode version the key is computed on (K5)', () => {
-  it('the runtime\'s Unicode version is the pinned one', () => {
+  it('the pin is the recorded value, and the runtime\'s Unicode version is exactly it', () => {
+    expect(WFS_PINNED_UNICODE, 'the value the contract\'s freeze record carries').toBe('17.0');
     expect(process.versions.unicode, `node ${process.versions.node}, icu ${process.versions.icu}: a different Unicode version keys paths differently (b7)`).toBe(WFS_PINNED_UNICODE);
+    expect(wfsUnicodeFit(process.versions.unicode), 'this runtime is fit to key paths').toBe(true);
+  });
+
+  it('FAIL-CLOSED (the CONTROL): any other version -- older (15.1, CPython 3.13\'s), newer (17.1, 18.0), a longer spelling of the same (17.0.0) -- an empty one, or none at all (a Node without ICU) is unfit', () => {
+    expect(wfsUnicodeFit(WFS_PINNED_UNICODE), 'CONTROL: the pinned version is fit').toBe(true);
+    for (const other of ['15.1', '16.0', '17.1', '18.0', '17.0.0', '17', ' 17.0', '']) expect(wfsUnicodeFit(other), JSON.stringify(other)).toBe(false);
+    expect(wfsUnicodeFit(undefined), 'no version reported').toBe(false);
   });
 });

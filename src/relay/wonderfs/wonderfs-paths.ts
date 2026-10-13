@@ -108,3 +108,23 @@ export function wfsIsBeneath(key: string, dirKey: string): boolean {
 export function wfsRebase(descendantPath: string, fromDepth: number, toComponents: readonly string[]): string {
   return [...toComponents, ...descendantPath.split('/').slice(fromDepth)].join('/');
 }
+
+/**
+ * b7 / K5 (contract r1.6.2; attack WFS15-11): THE UNICODE VERSION EVERY PATH KEY IS COMPUTED ON. `wfsPathKey` folds with the runtime's
+ * own case and NFC tables (ECMAScript toUpperCase / toLowerCase / normalize), so every stored `path_key` and the live-path unique index
+ * hold keys of ONE version: this one. Read by command (`node -p process.versions.unicode`) on the local Node 22.23.2 (ICU 78.2); CI's
+ * Node 22.23.3 reports it too (relay-ci "Verify Relay" on a34738cd, 2026-10-13: the K5 assertion of exactly this value passed). The
+ * freeze record copies it. It changes only by a contract revision that re-keys every stored `path_key` (b7), never by an edit here.
+ */
+export const WFS_PINNED_UNICODE = '17.0';
+
+/**
+ * b7 (r1.6.2): "A runtime whose tables differ is a contract event: it needs a re-key of every stored `path_key` before it serves." So a
+ * runtime may key WonderFS paths only when it REPORTS exactly the pinned version. FAIL-CLOSED: no version (a Node built without ICU), an
+ * empty one, or any other value -- older or newer -- is unfit; nothing is "close enough". (C11's narrower rule, a deny for code points
+ * unassigned in the caller's own version, is for an implementation that compares ITS key with the server's -- C1, the Julius importer's
+ * pre-check, PB -- never for the server, whose pin and re-key rule C11 leaves unchanged: contract r1.6.2 l.1039.)
+ */
+export function wfsUnicodeFit(reported: string | undefined): boolean {
+  return typeof reported === 'string' && reported === WFS_PINNED_UNICODE;
+}
