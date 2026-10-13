@@ -745,6 +745,24 @@ describe('BF-2: the profile Relay Dog wears the skin the player wears, through t
     expect(shown.audience).toContain(B);
   });
 
+  it('FROZEN WHEN SIGNED OUT (R360-2: Appear Offline == sign-out): a tick still in flight after sign-out records nothing; signed back in, it is recorded', () => {
+    const { s, w } = loop();
+    const worn = run(s, w, A, 'world.state', tick('baal'), 300);
+    // a sign-out does not leave the world (presence.update_self has no leaveWorld), so the client's next tick is still answered
+    const out = run(worn.state, worn.world, A, 'presence.update_self', { connected: false }, 400);
+    expect(out.state.users[A].presence.connected).toBe(false);
+    const r = run(out.state, worn.world, A, 'world.state', tick('shadow_flame'), 600);
+    expect(r.world.avatars[A]?.skinId, 'the tick itself was taken').toBe('shadow_flame');
+    expect(r.state).toBe(out.state);
+    expect(r.audience).toEqual([]);
+    expect([skinOn(r.state, B, A), skinOn(r.state, C, A)]).toEqual(['baal', 'baal']);
+    // the control: signed back in, the same report is recorded and told
+    const back = run(r.state, r.world, A, 'presence.update_self', { connected: true }, 700);
+    const shown = run(back.state, r.world, A, 'world.state', tick('shadow_flame'), 900);
+    expect([skinOn(shown.state, B, A), skinOn(shown.state, C, A)]).toEqual(['shadow_flame', 'shadow_flame']);
+    expect(shown.audience).toContain(B);
+  });
+
   it('a stored id outside the registry (a record written behind the store) is never served, not even to its owner', () => {
     const { s } = loop();
     const dog = { ...s.users[A].profile.relayDog, skinId: 'apollo' } as unknown as SocialState['users'][string]['profile']['relayDog'];

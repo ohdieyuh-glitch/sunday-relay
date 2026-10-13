@@ -254,13 +254,14 @@ export function updateOwnPresence(state: SocialState, actorId: SocialUserId, inp
  * THE PROFILE'S RELAY DOG WEARS WHAT THE PLAYER WEARS (BF-2). The skin the player's world report carries -- the one the world now
  * holds for their figure -- becomes their profile's Dog skin, so another player opening the profile sees the Dog as it is, not a
  * fixed Relay OG. Only a canonical skin (RELAY_DOG_SKIN_IDS, the client registry's ids) is recorded: any other id leaves the
- * profile as it was. FROZEN WHILE HIDDEN, as last-seen is: a player appearing offline changes nothing others can read, or a new
- * skin on their card would say they are playing. Unchanged state (the same object) when nothing moves, so a report a tick writes
- * nothing.
+ * profile as it was. FROZEN WHILE HIDDEN, as last-seen is: a player appearing offline -- or signed out (Appear Offline ==
+ * sign-out; a tick still in flight after presence.update_self {connected:false}, which does not leave the world) -- changes nothing
+ * others can read, or a new skin on their card would say they are playing. Unchanged state (the same object) when nothing moves, so
+ * a report a tick writes nothing.
  */
 export function recordWornSkin(state: SocialState, actorId: SocialUserId, skinId: string | undefined): SocialState {
   const user = userById(state, actorId);
-  if (user === undefined || !isRelayDogSkinId(skinId) || user.presence.availability === 'APPEAR_OFFLINE') return state;
+  if (user === undefined || !isRelayDogSkinId(skinId) || !user.presence.connected || user.presence.availability === 'APPEAR_OFFLINE') return state;
   if (user.profile.relayDog.skinId === skinId) return state;
   const profile = { ...user.profile, relayDog: { ...user.profile.relayDog, skinId } };
   return { ...state, users: { ...state.users, [actorId]: { ...user, profile } } };
