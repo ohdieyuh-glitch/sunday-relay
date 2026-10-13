@@ -29,12 +29,12 @@ julius-live-mission-5 .github/julius-missions/julius-live-mission-5 c3381ce91567
 # contract and every seeded byte (task3 8327165b's six files + CORE's read-only QA spec); nothing is sliced from main.
 julius-unreal-mission-1 .github/julius-missions/julius-unreal-mission-1 b830986ae810be36e23be118f18626680c6f62c0
 #
-# Decision C's learning pair (registration design r8.4 section 2): the four arms of ONE registration, dispatched in this order.
+# Decision C's learning pair (registration design r8.5 section 2): the four arms of ONE registration, dispatched in this order.
 # Each is a throwaway tree with Mission 5's body and seed (founder c1, 2026-10-07: "Reuse Mission 5's existing mission body"),
 # so one pin, its directory, holds the contract and every seeded byte. The four contracts differ only inside their
 # learningPair clause. The founder authorized adding all four arm directories here and freezing their exact pins before
 # dispatch (2026-10-04, the C pair, point 3).
-julius-learning-pair-1-without-1 .github/julius-missions/julius-learning-pair-1-without-1 cc7bc97905a4ef0e7502095ec5453b5c554f1bfb
-julius-learning-pair-1-with-1 .github/julius-missions/julius-learning-pair-1-with-1 22a5569b3f338121efbd09579237f236650690d2
-julius-learning-pair-1-without-2 .github/julius-missions/julius-learning-pair-1-without-2 78508577b1d36a19337b1ef27cd0c4ec3384d00c
-julius-learning-pair-1-with-2 .github/julius-missions/julius-learning-pair-1-with-2 e46522bbc1d8865770d6eb182e69c35b10cedcdf
+julius-learning-pair-1-without-1 .github/julius-missions/julius-learning-pair-1-without-1 11b7925dc7e15e9f88c751195370640b6d0657f2
+julius-learning-pair-1-with-1 .github/julius-missions/julius-learning-pair-1-with-1 7fefcbbf132c18723c09ec5a438df243b934d4bb
+julius-learning-pair-1-without-2 .github/julius-missions/julius-learning-pair-1-without-2 176eb7ac71a08703bdfacbeac009574156e358b8
+julius-learning-pair-1-with-2 .github/julius-missions/julius-learning-pair-1-with-2 35a338ef439834f28d7600e0390c95e86c4978d2

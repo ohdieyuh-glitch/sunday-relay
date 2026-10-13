@@ -102,7 +102,7 @@
     "architectMaxOutputTokens": 20000
   },
   "learningPair": {
-    "registrationDigest": "5285b9cc092c15e961d7a624149f80134a2f061d7c65a3f991792996754107ce",
+    "registrationDigest": "4ebb010e2c04b08f129c9c1590d062be11900905f0cb9f22bd6bcb1f8198a62f",
     "arm": "WITHOUT",
     "rerunKey": "jlp1-without-2",
     "policy": {
