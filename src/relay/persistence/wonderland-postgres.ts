@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { sanitizeText } from './redaction';
 import { protectedStoreRole, ProtectedStoreMigrationRefused, storeIdentity } from './protected-store';
+import { checkoutHeld } from './pg-held-client';
 import { join } from 'node:path';
 import { Pool, type PoolConfig, type QueryResultRow } from 'pg';
 import type { ProviderUsageReceipt, WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
@@ -328,7 +329,7 @@ export class TransactionalWonderlandDatabase {
     const result=await this.pool.query<{worker_id:string;swarm_id:string;role:string;lease_generation:string;attempt:number}>(`WITH candidates AS (SELECT picked.worker_id FROM relay_wonderland.swarm_runs s CROSS JOIN LATERAL (SELECT w.worker_id FROM relay_wonderland.swarm_workers w WHERE w.swarm_id=s.swarm_id AND (w.state='PENDING' OR (w.state IN('CLAIMED','STARTING','RUNNING') AND w.lease_expires_at<=$2)) ORDER BY w.created_at FOR UPDATE SKIP LOCKED LIMIT GREATEST(0,s.concurrency_ceiling-(SELECT count(*) FROM relay_wonderland.swarm_workers active WHERE active.swarm_id=s.swarm_id AND active.state IN('CLAIMED','STARTING','RUNNING') AND active.lease_expires_at>$2))) picked WHERE s.state IN('PENDING','RUNNING') AND s.deadline>$2 LIMIT $4) UPDATE relay_wonderland.swarm_workers w SET state='CLAIMED',lease_owner=$1,lease_generation=w.lease_generation+1,lease_expires_at=$3,last_heartbeat=$2,attempt=w.attempt+1,updated_at=$2 FROM candidates c WHERE w.worker_id=c.worker_id RETURNING w.worker_id,w.swarm_id,w.role,w.lease_generation,w.attempt`,[workerOwner,now,leaseExpiresAt,limit]);
     return result.rows.map(row=>({workerId:row.worker_id,swarmId:row.swarm_id,role:row.role,leaseGeneration:Number(row.lease_generation),attempt:row.attempt}));
   }
-  async createSwarmRun(input:CreateSwarmRun):Promise<boolean>{if(!input.swarmId.trim()||!Number.isSafeInteger(input.concurrencyCeiling)||input.concurrencyCeiling<1||input.workers.length<1||input.workers.some(worker=>!input.authorizedRoles.includes(worker.role)))throw new Error('invalid_swarm_run');const client=await this.pool.connect();try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');const inserted=await client.query(`INSERT INTO relay_wonderland.swarm_runs(swarm_id,battle_id,parent_execution_id,parent_agent_id,card_version_id,mode,requested_roles,authorized_roles,concurrency_ceiling,budget,state,activated_at,deadline) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10::jsonb,'PENDING',$11,$12) ON CONFLICT(swarm_id) DO NOTHING`,[input.swarmId,input.battleId,input.parentExecutionId,input.parentAgentId,input.cardVersionId,input.mode,json(input.requestedRoles),json(input.authorizedRoles),input.concurrencyCeiling,json(input.budget),input.activatedAt,input.deadline]);if(inserted.rowCount!==1){await client.query('ROLLBACK');return false;}for(const worker of input.workers)await client.query(`INSERT INTO relay_wonderland.swarm_workers(worker_id,swarm_id,role,state) VALUES($1,$2,$3,'PENDING')`,[worker.workerId,input.swarmId,worker.role]);await client.query('COMMIT');return true;}catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}}
+  async createSwarmRun(input:CreateSwarmRun):Promise<boolean>{if(!input.swarmId.trim()||!Number.isSafeInteger(input.concurrencyCeiling)||input.concurrencyCeiling<1||input.workers.length<1||input.workers.some(worker=>!input.authorizedRoles.includes(worker.role)))throw new Error('invalid_swarm_run');const{client,release}=await checkoutHeld(this.pool,'wonderland store');try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');const inserted=await client.query(`INSERT INTO relay_wonderland.swarm_runs(swarm_id,battle_id,parent_execution_id,parent_agent_id,card_version_id,mode,requested_roles,authorized_roles,concurrency_ceiling,budget,state,activated_at,deadline) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10::jsonb,'PENDING',$11,$12) ON CONFLICT(swarm_id) DO NOTHING`,[input.swarmId,input.battleId,input.parentExecutionId,input.parentAgentId,input.cardVersionId,input.mode,json(input.requestedRoles),json(input.authorizedRoles),input.concurrencyCeiling,json(input.budget),input.activatedAt,input.deadline]);if(inserted.rowCount!==1){await client.query('ROLLBACK');return false;}for(const worker of input.workers)await client.query(`INSERT INTO relay_wonderland.swarm_workers(worker_id,swarm_id,role,state) VALUES($1,$2,$3,'PENDING')`,[worker.workerId,input.swarmId,worker.role]);await client.query('COMMIT');return true;}catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{release();}}
   async heartbeatSwarmWorker(input:{workerId:string;workerOwner:string;leaseGeneration:number;now:string;leaseExpiresAt:string;state:'STARTING'|'RUNNING'}):Promise<boolean>{const result=await this.pool.query(`UPDATE relay_wonderland.swarm_workers SET state=$4,last_heartbeat=$5,lease_expires_at=$6,updated_at=$5 WHERE worker_id=$1 AND lease_owner=$2 AND lease_generation=$3 AND state IN('CLAIMED','STARTING','RUNNING')`,[input.workerId,input.workerOwner,input.leaseGeneration,input.state,input.now,input.leaseExpiresAt]);return result.rowCount===1;}
   async completeSwarmWorker(input:{workerId:string;workerOwner:string;leaseGeneration:number;now:string;state:'COMPLETE'|'FAILED'|'CANCELLED'|'TIMED_OUT'|'BUDGET_EXHAUSTED';result?:unknown;evidenceIds?:readonly string[];artifactIds?:readonly string[];safeError?:string}):Promise<boolean>{const result=await this.pool.query(`UPDATE relay_wonderland.swarm_workers SET state=$4,result=$5::jsonb,evidence_ids=$6::jsonb,artifact_ids=$7::jsonb,safe_error=$8,lease_owner=NULL,lease_expires_at=NULL,updated_at=$9 WHERE worker_id=$1 AND lease_owner=$2 AND lease_generation=$3 AND state IN('CLAIMED','STARTING','RUNNING')`,[input.workerId,input.workerOwner,input.leaseGeneration,input.state,json(input.result??null),json(input.evidenceIds??[]),json(input.artifactIds??[]),(input.safeError??null)?.slice(0,500),input.now]);return result.rowCount===1;}
   async claimOutbox(workerId: string, now: string, claimedUntil: string, limit = 100): Promise<ClaimedOutbox[]> {
@@ -347,7 +348,9 @@ export class TransactionalWonderlandDatabase {
   async transaction<T>(effect: (transaction: WonderlandTransaction) => Promise<T>, maxAttempts = 3): Promise<T> {
     let attempt = 0;
     while (true) {
-      attempt += 1; const client = await this.pool.connect();
+      // MW-B-001: a connection that dies while this transaction (or createSwarmRun's) holds it is heard and logged, never an
+      // uncaught exception (pg-held-client.ts). The transaction then throws, and is not retried: only 40001/40P01 are.
+      attempt += 1; const { client, release } = await checkoutHeld(this.pool, 'wonderland store');
       try {
         await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
         const value = await effect(new PostgresWonderlandTransaction(client));
@@ -356,7 +359,7 @@ export class TransactionalWonderlandDatabase {
         await client.query('ROLLBACK').catch(() => undefined);
         if ((codeOf(error) === '40001' || codeOf(error) === '40P01') && attempt < maxAttempts) continue;
         throw error;
-      } finally { client.release(); }
+      } finally { release(); }
     }
   }
   async close(): Promise<void> { await this.pool.end(); }
