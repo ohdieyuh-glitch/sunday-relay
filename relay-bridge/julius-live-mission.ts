@@ -52,6 +52,7 @@ import { Pool } from 'pg';
 import { JULIUS_RUNTIME_DATABASE_ENV_NAMES, juliusRuntimeDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
+import { JuliusLifecyclePostgresRepository } from '../src/relay/persistence/julius-lifecycle-postgres';
 import { JuliusContractPostgresRepository } from '../src/relay/persistence/julius-contract-postgres';
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
 import { JuliusToolSettlementPostgresRepository } from '../src/relay/persistence/julius-tool-settlement-postgres';
@@ -78,8 +79,8 @@ import { LocalJuliusArtifactStore } from '../src/relay/workspace/julius-tools/lo
 import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/julius-work-artifact-postgres';
 import { liveEvidenceLines } from './julius/live-evidence-lines';
 import {
-  liveApprovalGatesLine, liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveOneLine, liveResearchLines, liveTickAccountLine,
-  liveTickBudgetLine, liveWorkersBlockedLines,
+  JULIUS_EXIT_HELD_FOR_APPROVAL, liveApprovalGatesLine, liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveHeldForApprovalLines,
+  liveOneLine, liveResearchLines, liveTickAccountLine, liveTickBudgetLine, liveWorkersBlockedLines,
 } from './julius/live-report-lines';
 import {
   assembleLiveJuliusRuntime,
@@ -1014,6 +1015,20 @@ async function main(argv: readonly string[]): Promise<number> {
     const evidence = await handoffs.store.evidenceForRun(submitted.runId, contract.projectId);
     const findings = await handoffs.store.findingsForRun(submitted.runId, contract.projectId);
     const decisions = await handoffs.store.decisionsForRun(submitted.runId, contract.projectId);
+    /*
+     * V6 G-3: A RUN HELD ON ITS DECLARED GATE EXITS HELD, NOT FAILED. The PENDING approvals are read only for a
+     * gated contract whose drive says the run is held for an approval; the held report is then HELD_FOR_APPROVAL
+     * lines and NO RESULT, and the exit is JULIUS_EXIT_HELD_FOR_APPROVAL (3), at this one site. Every other case
+     * (`liveHeldForApprovalLines` is null) prints below exactly the report this entrypoint always printed.
+     */
+    const pending = contract.approvalGates !== undefined && outcome.heldForApproval
+      ? await new JuliusLifecyclePostgresRepository(pool).pendingApprovals(submitted.runId, contract.projectId)
+      : [];
+    const held = liveHeldForApprovalLines({ outcome, runId: submitted.runId, gated: contract.approvalGates !== undefined, pending, tasks });
+    if (held !== null) {
+      for (const line of held) out(line);
+      return JULIUS_EXIT_HELD_FOR_APPROVAL;
+    }
     /*
      * THE RUN IS NAMED DIRECTLY UNDER ITS RESULT, then the details (JUJU's review of ef0c09c3, F10).
      * The gate credits a RESULT only to a `  run:` line at most three lines below it. With the cause

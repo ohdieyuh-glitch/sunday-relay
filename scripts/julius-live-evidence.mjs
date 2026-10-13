@@ -49,6 +49,9 @@ const ALLOWED = [
   // subject to the secret rejectors below, like every other kept line.
   /^RESULT: [A-Z_]+( at bootstrap)? — .+$/u,
   /^JULIUS LIVE MISSION crashed: .+$/u,
+  // V6 G-3: a run held on its declared approval gate (`liveHeldForApprovalLines`), exit 3 and NO RESULT line.
+  // Identifiers and closed tokens only; a free suffix is not this shape and is dropped.
+  /^HELD_FOR_APPROVAL: run [\w:.-]+ approval [\w:.-]+ operation [A-Z_]+ task [\w:.-]+$/u,
   /^  cause: .+$/u,
   // The tick account: what the mission's structure permitted, before the first
   // dispatch, and what the run consumed. Closed tokens and numbers only, EXACTLY
