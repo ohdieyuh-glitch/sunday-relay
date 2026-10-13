@@ -538,11 +538,18 @@ export function slotJobFrom(jobs) {
  * Read everything `decidePaidSlot` needs, fetching jobs only for the runs whose
  * slot state can matter: live runs that are paid or unreadable, and completed
  * runs carrying this run's own key.
+ *
+ * A PAID RUN WITH NO DISPATCH KEY READS ONLY ITSELF (r8.5 [r8.5-4], MAIN internal review 39b7192e MINOR-1). Its own run
+ * record is all its refusal needs, so the queue is never read for it: the listing and the other runs' jobs are not
+ * requested, and it reaches `decidePaidSlot` with an empty listing, which refuses it as unkeyed before any listing check.
+ * A dry run is not affected: it never runs this job, and a preflight title is not a paid run.
  */
 export async function readPaidSlotState(api, { repo, runId, sinceIso }) {
   const selfRow = await api.getJson(`repos/${repo}/actions/runs/${runId}`);
   const self = toRun(selfRow);
   if (!isRunId(self.id)) throw new GitHubApiError('github_self_run_unreadable');
+  const selfTitle = parseRunTitle(self.title);
+  if (selfTitle !== null && selfTitle.mode === 'paid' && selfTitle.key === null) return { self, runs: [] };
   const runs = await listPaidWorkflowRuns(api, { repo, sinceIso });
   const selfKey = parseRunTitle(self.title)?.key ?? null;
   for (const run of runs) {
