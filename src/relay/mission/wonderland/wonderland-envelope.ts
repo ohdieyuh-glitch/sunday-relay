@@ -139,6 +139,19 @@ export const WONDERLAND_CODE_METADATA_KEYS: ReadonlySet<string> = new Set(['reas
 const METADATA_CODE = /^[A-Za-z0-9][A-Za-z0-9._]{0,63}$/u;
 
 /**
+ * THE METADATA KEY THAT HOLDS A WORKER ROLE (row 12; internal verify n4).
+ *
+ * The Julius normalizer carries a kernel event's `role` fact here
+ * (`WONDERLAND_CARRIED_FACT_KEYS`), and for a specialist the kernel writes
+ * `SPECIALIST:<name>` -- the orchestrator-chosen name rule 2 keeps off the wire.
+ * `workerRole` already obeyed rule 2; this key did not, so the name crossed beside
+ * it. The SAME function now decides both: `wonderlandWorkerRole` keeps a permanent
+ * role, collapses a specialist to `SPECIALIST`, and answers null for anything else,
+ * which is DROPPED and counted, never guessed.
+ */
+export const WONDERLAND_ROLE_METADATA_KEY = 'role';
+
+/**
  * SANITISE, which is the enforcement of rule 1.
  *
  * Drops rather than redacts. A redacted value still occupies a key a renderer
@@ -167,6 +180,17 @@ export function sanitizeWonderlandMetadata(raw: unknown): WonderlandMetadataResu
     // number, a boolean or null.
     if (WONDERLAND_CODE_METADATA_KEYS.has(key) && !(typeof value === 'string' && METADATA_CODE.test(value))) {
       dropped += 1;
+      continue;
+    }
+    // THE ROLE KEY OBEYS RULE 2 (verify n4): the wire role or nothing, by `workerRole`'s own function.
+    if (key === WONDERLAND_ROLE_METADATA_KEY) {
+      const role = wonderlandWorkerRole(typeof value === 'string' ? value : null);
+      if (role === null) {
+        dropped += 1;
+        continue;
+      }
+      out[key] = role;
+      kept += 1;
       continue;
     }
     if (value === null || typeof value === 'boolean') {

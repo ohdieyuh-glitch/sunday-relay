@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { JuliusOperationalEvent, JuliusOperationalEventType } from '../julius/julius-events';
+import { JULIUS_DEFAULT_ROLES } from '../julius/julius-runtime';
+import { sanitizeWonderlandMetadata, wonderlandWorkerRole } from './wonderland-envelope';
 import { applyWonderlandOrdering, openWonderlandCursor } from './wonderland-ordering';
 import { adoptWonderlandSnapshot, wonderlandRunSnapshot } from './wonderland-rehydration';
 import {
@@ -105,6 +107,39 @@ describe('a real Julius event becomes an envelope', () => {
     if (!withoutRole.ok) return;
     // Null, not a token. No role travelled, and a worker id is not one.
     expect(withoutRole.envelope.workerRole).toBeNull();
+  });
+
+  it('the role in METADATA obeys rule 2 as well: a specialist\'s own name never crosses (internal verify n4)', () => {
+    // The normalizer carries the kernel's `role` fact into the payload this envelope's metadata is built from, so
+    // `SPECIALIST:<name>` reached the wire beside a `workerRole` that had collapsed it.
+    const specialist = produce(event({ type: 'review.started', facts: { role: 'SPECIALIST:sql-tuning' } }));
+    expect(specialist.ok).toBe(true);
+    if (!specialist.ok) return;
+    expect(specialist.envelope.workerRole).toBe('SPECIALIST');
+    expect(specialist.envelope.metadata.role).toBe('SPECIALIST');
+    expect(specialist.envelope.metadataDropped).toBe(0);
+    expect(JSON.stringify(specialist.envelope)).not.toContain('sql-tuning');
+    // The same function decides both places: whatever `workerRole` says, metadata says, for every role the kernel writes.
+    for (const role of [...JULIUS_DEFAULT_ROLES, 'SPECIALIST', 'SPECIALIST:gpt-4o-migration-helper']) {
+      const produced = produce(event({ type: 'review.started', facts: { role } }));
+      expect(produced.ok, role).toBe(true);
+      if (!produced.ok) return;
+      expect(produced.envelope.metadata.role, role).toBe(wonderlandWorkerRole(role));
+      expect(produced.envelope.metadata.role, role).toBe(produced.envelope.workerRole);
+    }
+  });
+
+  it('a role the world does not model is DROPPED from metadata and counted, never guessed (internal verify n4)', () => {
+    for (const role of ['OPERATOR', 'coding_agent', 'SPECIALIST-x', '/home/founder/role.txt', '', 7, true, null]) {
+      const produced = produce(event({ type: 'review.started', facts: { role } }));
+      expect(produced.ok, String(role)).toBe(true);
+      if (!produced.ok) return;
+      expect(Object.keys(produced.envelope.metadata), String(role)).not.toContain('role');
+      expect(produced.envelope.metadataDropped, String(role)).toBe(1);
+    }
+    // At the sanitiser, under the key and only under it: the rule is the key's, not the value's.
+    expect(sanitizeWonderlandMetadata({ role: 'SPECIALIST:sql-tuning', note: 'SPECIALIST:sql-tuning' }))
+      .toEqual({ metadata: { role: 'SPECIALIST', note: 'SPECIALIST:sql-tuning' }, dropped: 0 });
   });
 });
 
