@@ -3,7 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { JULIUS_RUNTIME_VERSION, juliusLearningMetrics, scriptedAdapter, type ScriptedOutcome } from '../src/relay/mission/julius';
@@ -13,6 +13,7 @@ import { juliusFindingTransitionFacts } from '../src/relay/mission/julius/julius
 import { JuliusClaimPostgresRepository } from '../src/relay/persistence/julius-claim-postgres';
 import { JuliusContractPostgresRepository } from '../src/relay/persistence/julius-contract-postgres';
 import { JuliusEventPostgresRepository } from '../src/relay/persistence/julius-event-postgres';
+import { juliusSqlStateOf } from '../src/relay/persistence/julius-pg-held';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
@@ -149,6 +150,21 @@ suite('a learning pair across two databases: dumped and restored as Option D doe
   let admin: Pool;
   const pools: Pool[] = [];
   const created: string[] = [];
+  /**
+   * THE TEARDOWN TERMINATES ITS OWN CONNECTIONS: every pool listens, and no drop runs before they have closed (#353's CI
+   * run 38451857952, first-live-topology host-visible: every case green, two unhandled FATAL 57P01 from this file; the
+   * class #344 and #347 fixed in other suites). pg-pool's end() resolves BEFORE its idle clients have closed: it calls
+   * client.end() on each and does not wait. The DROP ... WITH (FORCE) below could then reach a client still closing;
+   * its backend's 57P01 reached the client, pg-pool's idle listener re-emitted it on the POOL, and a pool nobody listened
+   * to threw it as an uncaught exception, which fails the whole run although every case passed.
+   * So (1) every connection a pool opened is awaited CLOSED, bounded, before the first drop; and (2) every pool listens,
+   * recording what reached it by SQLSTATE only, never the message. A loss while the cases run fails the suite by name,
+   * as the uncaught exception did; at teardown only the suite's own terminate (57P01) is expected.
+   */
+  const open = new Set<PoolClient>();
+  const lost: { readonly during: 'cases' | 'teardown'; readonly sqlState: string }[] = [];
+  let during: 'cases' | 'teardown' = 'cases';
+  const CLOSE_BOUND_MS = 15_000;
   const suffix = nonce();
   const scratch = mkdtempSync(join(tmpdir(), 'jlrt-'));
   const realFetch = globalThis.fetch;
@@ -165,13 +181,20 @@ suite('a learning pair across two databases: dumped and restored as Option D doe
 
   afterAll(async () => {
     globalThis.fetch = realFetch;
+    during = 'teardown';
+    const closing = [...open].map((client) => new Promise<void>((closed) => { client.once('end', () => closed()); }));
     for (const pool of pools) await pool.end().catch(() => undefined);
+    let bound: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([Promise.all(closing), new Promise<void>((expired) => { bound = setTimeout(expired, CLOSE_BOUND_MS); })]);
+    clearTimeout(bound);
     for (const name of created) await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
     const left = await admin.query<{ datname: string }>('SELECT datname FROM pg_database WHERE datname = ANY($1)', [created]);
     await admin.end();
     rmSync(scratch, { recursive: true, force: true });
     if (left.rows.length > 0) throw new Error(`jlrt_databases_left: ${left.rows.map((row) => row.datname).join(', ')}`);
-  });
+    const unexpected = lost.filter((entry) => entry.during === 'cases' || entry.sqlState !== 'SQLSTATE 57P01');
+    if (unexpected.length > 0) throw new Error(`jlrt_connection_lost: ${unexpected.map((entry) => `${entry.during} ${entry.sqlState}`).join(', ')}`);
+  }, 60_000);
 
   /** A fresh database on the test server, recorded for the drop. template0: never polluted, never "in use". */
   async function database(label: string, encoding: 'UTF8' | 'LATIN1' = 'UTF8'): Promise<{ readonly name: string; readonly pool: Pool }> {
@@ -181,6 +204,11 @@ suite('a learning pair across two databases: dumped and restored as Option D doe
     const url = new URL(databaseUrl!);
     url.pathname = `/${name}`;
     const pool = new Pool({ connectionString: url.toString() });
+    pool.on('error', (error) => { lost.push({ during, sqlState: juliusSqlStateOf(error) }); });
+    pool.on('connect', (client) => {
+      open.add(client);
+      client.once('end', () => { open.delete(client); });
+    });
     pools.push(pool);
     return { name, pool };
   }
