@@ -948,11 +948,13 @@ describe('LFF retention (rule 7, PROPOSED; the B2b review m3): a post no longer 
 describe('D-L5 (rule 8, contract r2.4): a REPORTED post is moderation evidence -- HELD, never deleted, and to every player exactly a deleted post', () => {
   const DAY = 24 * 60 * MIN;
   /**
-   * A report through the existing flow (reports.file), by Lyra about Nova: naming `subjectRef` as its subject, or none. The CONTROL of
-   * every case is the SAME report naming no post, so both branches file one report and mint the same ids afterwards.
+   * A report through the existing flow (reports.file), by `reporter` about `reportedId`: naming `subjectRef` as its subject, or none.
+   * The CONTROL of every hold is the SAME report naming no post, so both branches file one report and mint the same ids afterwards.
    */
-  const report = (s: SocialState, subjectRef: string | null, nowMs = T0): SocialState =>
-    must(run(s, U.LYRA, 'reports.file', { body: { reportedId: U.NOVA, reason: 'SPAM', ...(subjectRef === null ? {} : { subjectRef }) } }, nowMs)).state;
+  const report = (s: SocialState, subjectRef: string | null, nowMs = T0, reporter: string = U.LYRA, reportedId: string = U.NOVA): SocialState =>
+    must(run(s, reporter, 'reports.file', { body: { reportedId, reason: 'SPAM', ...(subjectRef === null ? {} : { subjectRef }) } }, nowMs)).state;
+  const block = (s: SocialState, actor: string, target: string): SocialState => must(run(s, actor, 'blocks.add', { body: { targetId: target } })).state;
+  const hide = (s: SocialState, who: string, presenceVisibility: string): SocialState => must(run(s, who, 'privacy.update_self', { body: { presenceVisibility } })).state;
 
   /** Nova's post at T0: Orion asked and was accepted, Kai asked and was declined, Vega asked (still pending); closed at +6 s, or not. */
   function novasPost(close: boolean): { state: SocialState; postId: string; orion: string; kai: string; vega: string } {
@@ -966,13 +968,18 @@ describe('D-L5 (rule 8, contract r2.4): a REPORTED post is moderation evidence -
     return { state: s, postId: p.postId, orion: o.requestId, kai: k.requestId, vega: v.requestId };
   }
   const requestsOf = (s: SocialState, postId: string) => s.lffRequests.filter((r) => r.postId === postId);
+  /** Deleting the post a day on: is it then HELD (evidence) or gone? */
+  const heldByDelete = (s: SocialState, postId: string): boolean =>
+    must(run(s, U.NOVA, 'lff.post.delete', { ids: [postId] }, T0 + DAY)).state.lffHeld.some((h) => h.post.id === postId);
 
-  for (const [status, close] of [['CLOSED', true], ['EXPIRED', false]] as const) {
+  for (const [status, close, reportedAt] of [['CLOSED', true, T0 + DAY], ['EXPIRED', false, T0 + 15 * DAY]] as const) {
     it(`R-1 THE EDGE (${status}): reported after it ended, it is never purged -- 1 ms past 30 days it is HELD with every request (the accepted list included) and reads exactly as the purged control; the same post unreported IS purged`, () => {
       const n = novasPost(close);
-      // the report comes a day AFTER the post ended: what decides is the server's state at the purge
-      const reported = report(n.state, n.postId, T0 + DAY);
-      const control = report(n.state, null, T0 + DAY);
+      // ORION, accepted on it, reports it after it ended (he may still see it): what decides is the server's state at the purge
+      const reported = report(n.state, n.postId, reportedAt, U.ORION);
+      const control = report(n.state, null, reportedAt, U.ORION);
+      expect(reported.lffSnapshots.map((x) => [x.postId, x.seq, x.cause]), 'the report made it evidence').toEqual([[n.postId, 1, 'REPORTED']]);
+      expect(control.lffSnapshots).toEqual([]);
       // the write that carries the purge: Lyra edits her own OPEN post
       const lyra = (s: SocialState) => post(s, U.LYRA, { title: 'Lyra\'s' }, T0 + LFF_RETENTION_MS - 60 * MIN);
       const [r0, c0] = [lyra(reported), lyra(control)];
@@ -1002,10 +1009,11 @@ describe('D-L5 (rule 8, contract r2.4): a REPORTED post is moderation evidence -
         expect(JSON.stringify(feed(r2.state, viewer, { mine: true }, at)), `${viewer}: own posts`).toBe(JSON.stringify(feed(c2.state, viewer, { mine: true }, at)));
         expect(refused(run(r2.state, viewer, 'lff.post.get', { ids: [n.postId] }, at)), `${viewer}: get`).toEqual(missingPost(c2.state));
       }
-      // ANY AGE: a year on, the next purge (it takes Lyra's own expired post) leaves the evidence exactly as it was
+      // ANY AGE: a year on, the next purge (it takes Lyra's own expired post) leaves the evidence and its snapshot exactly as they were
       const yearOn = must(run(r2.state, U.RHEA, 'lff.post.create', { body: BASE }, T0 + 365 * DAY)).state;
       expect(lffPostById(yearOn, r0.postId), 'the year-on write did purge (an unreported post)').toBeUndefined();
-      expect(yearOn.lffHeld, 'the evidence is untouched').toBe(r2.state.lffHeld);
+      expect([yearOn.lffHeld, yearOn.lffSnapshots], 'the evidence is untouched').toEqual([r2.state.lffHeld, r2.state.lffSnapshots]);
+      expect(yearOn.lffHeld).toBe(r2.state.lffHeld);
       // the rule itself, called directly: the reported post is held, the control purged
       expect(purgeLffPastRetention(r1.state, at).lffHeld.map((h) => h.post.id)).toEqual([n.postId]);
       expect(purgeLffPastRetention(c1.state, at).lffHeld).toEqual([]);
@@ -1028,7 +1036,7 @@ describe('D-L5 (rule 8, contract r2.4): a REPORTED post is moderation evidence -
     expect([held.data, held.audience, held.extraEvents]).toEqual([deleted.data, deleted.audience, deleted.extraEvents]);
     expect([...held.audience].sort()).toEqual([U.NOVA, U.ORION, U.VEGA].sort());
     expect([held.state.lffPosts, held.state.lffRequests, held.state.lffCreations, held.state.nextSerial]).toEqual([deleted.state.lffPosts, deleted.state.lffRequests, deleted.state.lffCreations, deleted.state.nextSerial]);
-    // NO LATER PATH DELETES IT: a second delete is the uniform not-found, and no purge ever reaches it
+    // NO LATER PATH DELETES IT: a second delete is the uniform not-found, and no purge ever reaches it or its snapshot
     expect(refused(run(held.state, U.NOVA, 'lff.post.delete', { ids: [n.postId] }, at))).toEqual(missingPost(held.state));
     expect(purgeLffPastRetention(held.state, T0 + 400 * DAY)).toBe(held.state);
     // a stepped-back clock: held no earlier than the post was last written (038's lff_posts_held_at CHECK)
@@ -1041,7 +1049,7 @@ describe('D-L5 (rule 8, contract r2.4): a REPORTED post is moderation evidence -
     const other = post(n.state, U.NOVA, { title: 'Another' });
     const aboutOther = report(other.state, other.postId);
     expect(must(run(aboutOther, U.NOVA, 'lff.post.delete', { ids: [n.postId] })).state.lffHeld, 'the other post\'s report does not hold this one').toEqual([]);
-    const both = report(report(other.state, n.postId), n.postId);
+    const both = report(report(other.state, n.postId), n.postId, T0, U.KAI);
     const first = must(run(both, U.NOVA, 'lff.post.delete', { ids: [n.postId] })).state;
     const gone = must(run(first, U.NOVA, 'lff.post.delete', { ids: [other.postId] })).state;
     expect(gone.lffHeld.map((h) => h.post.id), 'two reports, one hold; the unreported second post is deleted').toEqual([n.postId]);
@@ -1060,5 +1068,89 @@ describe('D-L5 (rule 8, contract r2.4): a REPORTED post is moderation evidence -
     expect(reported.lffHeld).toEqual([]);
     const closed = must(run(reported, U.NOVA, 'lff.post.close', { ids: [p.postId] })).state;
     expect(JSON.stringify(feed(closed, U.RHEA)), 'the control: the same comparison sees a close').not.toBe(JSON.stringify(feed(p.state, U.RHEA)));
+  });
+
+  it('M-1: the content AS REPORTED survives the owner\'s edits -- the report snapshots the post, each later edit appends one, the hold keeps them all; to Nova each edit is exactly an unreported post\'s edit', () => {
+    const p = post(createSocialFixture(), U.NOVA, { title: 'Abusive words', description: 'More of them' });
+    const original = lffPostById(p.state, p.postId)!;
+    const reported = report(p.state, p.postId, T0 + MIN);
+    const control = report(p.state, null, T0 + MIN);
+    const reportId = reported.reports[reported.reports.length - 1].reportId;
+    expect(reported.lffSnapshots).toEqual([{ postId: p.postId, seq: 1, cause: 'REPORTED', reportId, capturedAtMs: T0 + MIN, post: original }]);
+    // a second report adds nothing: every edit since the first is snapshotted as it happens
+    const [twice, controlTwice] = [report(reported, p.postId, T0 + 2 * MIN, U.KAI), report(control, null, T0 + 2 * MIN, U.KAI)];
+    expect(twice.lffSnapshots, 'one snapshot per report-made-evidence, not per report').toBe(reported.lffSnapshots);
+    // Nova cleans it up, twice, then deletes it
+    const edits = (s: SocialState) => {
+      const e1 = must(run(s, U.NOVA, 'lff.post.edit', { ids: [p.postId], body: { title: 'Nice words' } }, T0 + 3 * MIN));
+      const e2 = must(run(e1.state, U.NOVA, 'lff.post.edit', { ids: [p.postId], body: { description: 'Nothing to see' } }, T0 + 4 * MIN));
+      const gone = must(run(e2.state, U.NOVA, 'lff.post.delete', { ids: [p.postId] }, T0 + 5 * MIN));
+      return { e1, e2, gone };
+    };
+    const [r, c] = [edits(twice), edits(controlTwice)];
+    expect(r.gone.state.lffSnapshots.map((x) => [x.seq, x.cause, x.reportId, x.post.title, x.post.description, x.post.version, x.capturedAtMs])).toEqual([
+      [1, 'REPORTED', reportId, 'Abusive words', 'More of them', 1, T0 + MIN],
+      [2, 'EDITED', null, 'Nice words', 'More of them', 2, T0 + 3 * MIN],
+      [3, 'EDITED', null, 'Nice words', 'Nothing to see', 3, T0 + 4 * MIN],
+    ]);
+    expect(r.gone.state.lffHeld.map((h) => [h.post.title, h.post.description]), 'the held post is the last written').toEqual([['Nice words', 'Nothing to see']]);
+    // THE CONTROL: an unreported post's edits snapshot nothing (the very same list object throughout)
+    expect(c.gone.state.lffSnapshots).toBe(controlTwice.lffSnapshots);
+    expect(c.gone.state.lffSnapshots).toEqual([]);
+    // TO NOVA, NOTHING DIFFERENT: each edit and the delete answer, and are told, exactly as the control's; the same player-facing state
+    for (const step of ['e1', 'e2', 'gone'] as const) {
+      expect([r[step].data, r[step].audience, r[step].extraEvents], step).toEqual([c[step].data, c[step].audience, c[step].extraEvents]);
+      const [rs, cs] = [r[step].state, c[step].state];
+      expect([rs.lffPosts, rs.lffRequests, rs.lffCreations, rs.nextSerial], step).toEqual([cs.lffPosts, cs.lffRequests, cs.lffCreations, cs.nextSerial]);
+    }
+    // NEVER PURGED: a year on, the snapshots are the same list
+    expect(purgeLffPastRetention(r.gone.state, T0 + 400 * DAY).lffSnapshots).toBe(r.gone.state.lffSnapshots);
+  });
+
+  describe('FQ-1 (MAIN\'s default, flagged to the founder): only a report naming the post\'s OWNER, about a post that exists, from a reporter who may see it, makes it evidence', () => {
+    it('(a) the report must name the post\'s owner: naming anyone else it is filed as before and holds nothing; the control (naming Nova) holds', () => {
+      const p = post(createSocialFixture(), U.NOVA);
+      const elsewhere = report(p.state, p.postId, T0, U.LYRA, U.KAI);
+      expect(elsewhere.reports[elsewhere.reports.length - 1], 'filed').toMatchObject({ reporterId: U.LYRA, reportedId: U.KAI, subjectRef: p.postId });
+      expect([elsewhere.lffSnapshots, heldByDelete(elsewhere, p.postId)]).toEqual([[], false]);
+      expect(heldByDelete(report(p.state, p.postId), p.postId), 'the control').toBe(true);
+    });
+
+    it('(b) the post must exist when the report is filed: a pre-report of the next id, and one dated before the post (a stepped-back clock), hold nothing; the control (at exactly its creation) holds', () => {
+      const s0 = createSocialFixture();
+      const nextId = `lffp_${s0.nextSerial + 1}`; // the report itself mints rep_<serial>; the post takes the next serial
+      const p = post(report(s0, nextId), U.NOVA);
+      expect(p.postId).toBe(nextId);
+      expect([p.state.reports[p.state.reports.length - 1].subjectRef, p.state.lffSnapshots, heldByDelete(p.state, p.postId)]).toEqual([nextId, [], false]);
+      const q = post(createSocialFixture(), U.NOVA, {}, T0);
+      const early = report(q.state, q.postId, T0 - 1);
+      expect([early.lffSnapshots, heldByDelete(early, q.postId)], 'filed 1 ms before the post was made').toEqual([[], false]);
+      expect(heldByDelete(report(q.state, q.postId, T0), q.postId), 'the control: filed at exactly its creation').toBe(true);
+    });
+
+    it('(c) the reporter must be able to see the post: walled either way, hidden from by the author\'s privacy, or not shown a closed post, the report holds nothing; each control holds', () => {
+      const p = post(createSocialFixture(), U.NOVA);
+      for (const [blocker, blocked] of [[U.NOVA, U.LYRA], [U.LYRA, U.NOVA]]) {
+        const walled = report(block(p.state, blocker, blocked), p.postId);
+        expect([walled.reports.length, walled.lffSnapshots, heldByDelete(walled, p.postId)], `${blocker} blocked ${blocked}: filed, holds nothing`).toEqual([p.state.reports.length + 1, [], false]);
+      }
+      const friendsOnly = hide(p.state, U.NOVA, 'FRIENDS');
+      expect(heldByDelete(report(friendsOnly, p.postId), p.postId), 'Lyra, no friend of Nova\'s, is hidden from').toBe(false);
+      expect(heldByDelete(report(friendsOnly, p.postId, T0, U.KAI), p.postId), 'the control: Kai, her friend, may see it').toBe(true);
+      const closed = novasPost(true);
+      expect(heldByDelete(report(closed.state, closed.postId, T0 + MIN), closed.postId), 'Lyra is not shown a closed post').toBe(false);
+      expect(heldByDelete(report(closed.state, closed.postId, T0 + MIN, U.ORION), closed.postId), 'the control: Orion, accepted on it, is').toBe(true);
+      expect(heldByDelete(report(p.state, p.postId), p.postId), 'the control: the same report, nothing in the way').toBe(true);
+    });
+
+    it('SILENT: a report that holds nothing answers, and is told, byte for byte as one that makes the post evidence', () => {
+      const p = post(createSocialFixture(), U.NOVA);
+      const file = (s: SocialState, reportedId: string) => run(s, U.LYRA, 'reports.file', { body: { reportedId, reason: 'SPAM', subjectRef: p.postId } });
+      const [counts, holdsNothing] = [must(file(p.state, U.NOVA)), must(file(p.state, U.KAI))];
+      expect(counts.state.lffSnapshots).toHaveLength(1);
+      expect(holdsNothing.state.lffSnapshots).toHaveLength(0);
+      expect(JSON.stringify([holdsNothing.data, holdsNothing.audience, holdsNothing.extraEvents ?? null, holdsNothing.eventOp ?? null]))
+        .toBe(JSON.stringify([counts.data, counts.audience, counts.extraEvents ?? null, counts.eventOp ?? null]));
+    });
   });
 });

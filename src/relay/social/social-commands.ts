@@ -98,6 +98,7 @@ import {
   lffRequestsForPost,
   lffRequestsMineFor,
   parseLffCursor,
+  recordLffReport,
   withdrawLffRequest,
   type LffChange,
   type LffFeedCursor,
@@ -764,21 +765,22 @@ function applyOne(
       const note = str(body, 'note', MAX_TEXT, false);
       const subjectRef = str(body, 'subjectRef', MAX_LABEL, false);
       for (const c of [reported, reason, note, subjectRef]) if (!c.ok) return invalid(c.message);
-      return changed(
-        fileReport(
-          state,
-          actorId,
-          {
-            reportedId: (reported as { value: string }).value,
-            reason: (reason as { value: SocialReportReason }).value,
-            note: (note as { value: string | null }).value ?? '',
-            subjectRef: (subjectRef as { value: string | null }).value,
-          },
-          nowIso,
-        ),
-        null,
-        [actorId],
+      const filed = fileReport(
+        state,
+        actorId,
+        {
+          reportedId: (reported as { value: string }).value,
+          reason: (reason as { value: SocialReportReason }).value,
+          note: (note as { value: string | null }).value ?? '',
+          subjectRef: (subjectRef as { value: string | null }).value,
+        },
+        nowIso,
       );
+      if (!filed.ok) return filed;
+      // LFF D-L5 (social-lff.ts rule 8): a report that names a post its reporter may see, and that post's owner, makes the post
+      // moderation evidence -- SILENTLY: the answer, the audience and the event below are the same whether it does or not
+      const report = filed.value.reports[filed.value.reports.length - 1];
+      return changed({ ok: true as const, value: recordLffReport(filed.value, report, nowMs) }, null, [actorId]);
     }
 
     /* ---- conversations */

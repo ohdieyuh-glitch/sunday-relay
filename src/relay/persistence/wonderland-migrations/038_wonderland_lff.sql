@@ -1,25 +1,32 @@
 BEGIN;
 -- WONDERLAND LFF, the "Looking For Feed" (the private-Alpha launch gate, founder 2026-10-12; contract
--- _qa_handoff/lff/LFF_ALPHA_CONTRACT_r1_20261012.md with its AMENDMENT r2 / r2.1, persistence per LFF_DEPENDENCY_AUDIT_20261012.md
+-- _qa_handoff/lff/LFF_ALPHA_CONTRACT_r1_20261012.md with its AMENDMENTS r2 / r2.1 / r2.4, persistence per LFF_DEPENDENCY_AUDIT_20261012.md
 -- section 4). A player posts what they are looking for (a team, builders, AI engineers, designers, competitors, collaborators); other
 -- players ask to join; the owner accepts or declines. The RULES live in src/relay/social/social-lff.ts (pure) and social-commands.ts
--- (input validation); these three tables PERSIST what those rules decide, so that no bridge restart loses a post, a request or a cap:
---   - lff_posts: one row per post, owned by a player. A hard delete (the owner's delete of an UNREPORTED post, or retention)
---     cascades its requests. A REPORTED post is never deleted by the app: it is HELD as moderation evidence (held_at, below).
+-- (input validation); these four tables PERSIST what those rules decide, so that no bridge restart loses a post, a request, a cap or
+-- a piece of moderation evidence:
+--   - lff_posts: one row per post, owned by a player. A hard delete (the owner's delete of a post that is not evidence, or retention)
+--     cascades its requests. An EVIDENCE post is never deleted by the app: it is HELD (held_at, below).
 --   - lff_join_requests: one row per request to join a post. At most ONE live (PENDING or ACCEPTED) request per (post, requester).
 --     Requests carry NO version column (contract r2); posts keep theirs.
 --   - lff_post_creations: one row per post a player CREATED, kept after the post is closed or deleted (its post_id has NO foreign
 --     key, so a post delete leaves it), so the creation cap (r2: 10 posts per rolling 24 h per player, deleted and closed ones
 --     counted) survives a delete and a restart. The domain prunes rows older than 24 h when it writes; a player delete cascades.
--- MODERATION EVIDENCE (founder decision D-L5, contract AMENDMENT r2.4 R-1..R-5; social-lff.ts rule 8). A post is REPORTED when at
--- least one relay_wonderland.social_reports row (033, the existing reports.file flow) has subject_ref = its post_id. A reported post
--- that its owner deletes, or that retention reaches, is HELD instead of deleted: its row keeps every column as last written, its
--- held_at is set, and its join requests stay with it (no delete, so no cascade). The store never writes a held row again, and to
--- every player a held post reads exactly as a deleted one (the store loads held rows apart; no player surface reads them).
--- Authorized moderators -- database operators, until the founder names a role and a surface -- read the evidence through ONE view,
--- relay_wonderland.lff_moderation_evidence: every held or reported post with the reports naming it and its requests. No app route
--- serves it; 038 GRANTS NOTHING (no GRANT anywhere in it), and the view is security_invoker (PostgreSQL 15+), so it reads with its
--- CALLER's privileges on lff_posts, lff_join_requests and social_reports: it can never show anyone a row those tables would not.
+--   - lff_post_snapshots (D-L5): the post's content AS REPORTED and after every later edit, append-only (below).
+-- MODERATION EVIDENCE (founder decision D-L5, contract AMENDMENT r2.4 R-1..R-5; social-lff.ts rule 8). A report filed through the
+-- existing reports.file flow (relay_wonderland.social_reports, 033) makes a post EVIDENCE only if, when it is filed, it names the
+-- post's owner, the post exists, and its reporter may see the post (MAIN's default, flagged to the founder). That decision is the
+-- domain's, made once, and RECORDED here as the post's first lff_post_snapshots row (seq 1, REPORTED, naming the report): every
+-- evidence predicate below reads that row, never social_reports, so the domain, the store's DELETE and the view agree. An evidence
+-- post that its owner deletes, or that retention reaches, is HELD instead of deleted: its row keeps every column as last written,
+-- its held_at is set, and its join requests and snapshots stay with it (no delete, so no cascade). The store never writes a held row
+-- again, and to every player a held post reads exactly as a deleted one (the store loads held rows apart; no player surface reads
+-- them). Authorized moderators -- database operators, until the founder names a role and a surface -- read the evidence through ONE
+-- view, relay_wonderland.lff_moderation_evidence. No app route serves it. 038 GRANTS NOTHING (no GRANT anywhere in it) and its
+-- post-check refuses any ACL on its relations; the view is security_invoker (PostgreSQL 15+), so it reads with its CALLER's
+-- privileges on the tables it reads: it can never show anyone a row those tables would not. NOTE: the bridge's own database role
+-- OWNS these tables (it applies the migrations), so it -- and anyone holding its credentials, or the superuser -- can read the
+-- evidence; security_invoker only keeps out a role that is granted the view alone. There is no read audit.
 -- How long evidence is kept, and what an account erasure does to it, are OPEN for counsel and the founder: nothing here decides them
 -- (the foreign keys to players still CASCADE, as below).
 -- EVERY CHECK MIRRORS A DOMAIN RULE AND IS A BACKSTOP: the domain refuses first (a class-23 refusal here surfaces as
@@ -55,10 +62,10 @@ BEGIN;
 -- constant, the docs folder and the test file. Founder decision D-L4). Applied to a persistent store only after 037, by its own
 -- reviewed apply. It reaches the Julius live store only under the founder's protections, and then only as the EMPTY schema
 -- (protected-store.ts refuses every runner there).
--- ADDITIVE ONLY: 3 new tables and 1 view. Each table references relay_wonderland.players (001) once; lff_join_requests also
--- references lff_posts; the view reads lff_posts, lff_join_requests and social_reports (033) and writes nothing. It changes no
--- existing column, constraint, index or row. Its three keys to players add internal RI triggers on players, and a players DELETE
--- now cascades into all three tables (held evidence included).
+-- ADDITIVE ONLY: 4 new tables and 1 view. lff_posts, lff_join_requests and lff_post_creations each reference relay_wonderland.players
+-- (001) once; lff_join_requests and lff_post_snapshots also reference lff_posts; the view reads the lff_* tables and social_reports
+-- (033) and writes nothing. It changes no existing column, constraint, index or row. Its three keys to players add internal RI
+-- triggers on players, and a players DELETE now cascades into all four tables (held evidence and snapshots included).
 -- DDL ONLY: it writes no row but its own ledger stamp. One transaction: the guard, the tables, the view, the post-check and the stamp, or nothing.
 
 -- THE GUARD (the 035 / 036 / 037 template's shape).
@@ -80,7 +87,7 @@ BEGIN
     FROM pg_class c
    WHERE c.relnamespace = 'relay_wonderland'::regnamespace AND c.relname LIKE 'lff\_%';
   IF present IS NOT NULL THEN
-    RAISE EXCEPTION 'migration_038_refused: relation(s) named lff_* already exist in relay_wonderland (%); 038 creates all 15 or nothing', present;
+    RAISE EXCEPTION 'migration_038_refused: relation(s) named lff_* already exist in relay_wonderland (%); 038 creates all 17 or nothing', present;
   END IF;
   RAISE NOTICE 'migration_038_precheck: 037 applied and the ledger''s last, 038 not; no lff_* relation exists; players %; ledger %',
     (SELECT count(*) FROM relay_wonderland.players), (SELECT count(*) FROM relay_wonderland.schema_migrations);
@@ -102,8 +109,8 @@ CREATE TABLE relay_wonderland.lff_posts(
   updated_at timestamptz NOT NULL,
   expires_at timestamptz NOT NULL,
   version bigint NOT NULL,
-  -- MODERATION EVIDENCE (D-L5): NULL while the post is a player's; set, once, when a REPORTED post is deleted by its owner or reached
-  -- by retention (social-lff.ts rule 8). A held row is never updated or deleted by the app, and no player surface reads it.
+  -- MODERATION EVIDENCE (D-L5): NULL while the post is a player's; set, once, when an EVIDENCE post is deleted by its owner or
+  -- reached by retention (social-lff.ts rule 8). A held row is never updated or deleted by the app, and no player surface reads it.
   held_at timestamptz,
   CONSTRAINT lff_posts_pkey PRIMARY KEY(post_id),
   CONSTRAINT lff_posts_owner_fk FOREIGN KEY(owner_id) REFERENCES relay_wonderland.players(player_id) ON DELETE CASCADE,
@@ -179,11 +186,45 @@ CREATE TABLE relay_wonderland.lff_post_creations(
 -- A player's creations in the window, newest last.
 CREATE INDEX lff_post_creations_recent ON relay_wonderland.lff_post_creations(owner_id, created_at);
 
--- THE MODERATION EVIDENCE (D-L5 R-4), READ-ONLY, FOR DATABASE OPERATORS: one row per post that is HELD or that a report names (an
--- OPEN reported post stays a player's and is listed too, R-5), the post as last written, every report naming it (oldest first) and
--- every request on it in any status (oldest first; the accepted list included). A held post whose reports were since removed (a
--- reporter's account deleted: social_reports cascades from players) is still listed by its held_at. No app route reads it, and it
--- reads with its CALLER's privileges (security_invoker): it widens no one's access, and 038 grants nothing on it.
+-- EVIDENCE SNAPSHOTS (D-L5; MAIN r2, the security review's M-1: "Any LFF post that is reported MUST be preserved as moderation
+-- evidence" -- the text that was reported, not only the text as last written). One row per capture of an evidence post, every field
+-- of the post as it read then: seq 1 when the report that made it evidence was filed (REPORTED, naming that report), then one per
+-- later edit (EDITED). APPEND-ONLY: the store only INSERTs (a second write of a key is a class-23 refusal), never updates or deletes
+-- one, and no player surface reads it. Keyed (post_id, seq): no id is minted, so capturing moves no serial a player could see. Its
+-- key to lff_posts CASCADES only on a DELETE of the post, which the store never issues for a post that has a snapshot. report_id
+-- names the report without a key (a reporter's account delete cascades social_reports, never the evidence).
+CREATE TABLE relay_wonderland.lff_post_snapshots(
+  post_id text NOT NULL,
+  seq integer NOT NULL,
+  cause text NOT NULL,
+  report_id text,
+  captured_at timestamptz NOT NULL,
+  owner_id text NOT NULL,
+  category text NOT NULL,
+  title text NOT NULL,
+  description text NOT NULL,
+  project_label text NOT NULL,
+  skills text[] NOT NULL,
+  open_slots integer NOT NULL,
+  status text NOT NULL,
+  created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL,
+  expires_at timestamptz NOT NULL,
+  version bigint NOT NULL,
+  CONSTRAINT lff_post_snapshots_pkey PRIMARY KEY(post_id, seq),
+  CONSTRAINT lff_post_snapshots_post_fk FOREIGN KEY(post_id) REFERENCES relay_wonderland.lff_posts(post_id) ON DELETE CASCADE,
+  -- the first is the report's, every later one an edit's (social-lff.ts LFF_SNAPSHOT_CAUSES)
+  CONSTRAINT lff_post_snapshots_cause CHECK((cause = 'REPORTED' AND seq = 1 AND report_id IS NOT NULL) OR (cause = 'EDITED' AND seq > 1 AND report_id IS NULL)),
+  -- captured no earlier than the post was last written, as held_at
+  CONSTRAINT lff_post_snapshots_times CHECK(captured_at >= updated_at AND updated_at >= created_at)
+);
+
+-- THE MODERATION EVIDENCE (D-L5 R-4), READ-ONLY, FOR DATABASE OPERATORS: one row per EVIDENCE post -- one with a snapshot (a report
+-- made it evidence; an OPEN one stays a player's and is listed too, R-5) or a held one -- with the post as last written, every
+-- report naming it (oldest first; ANY report naming it, the ones that made it evidence or not), every request on it in any status
+-- (oldest first; the accepted list included) and every snapshot (by seq: the content as reported, then each edit). A held post
+-- stays listed whatever happens to its reports. No app route reads it, and it reads with its CALLER's privileges
+-- (security_invoker): it widens no one's access, and 038 grants nothing on it.
 CREATE VIEW relay_wonderland.lff_moderation_evidence WITH (security_invoker = true) AS
 SELECT p.post_id, p.owner_id, p.held_at, p.status, p.category, p.title, p.description, p.project_label, p.skills, p.open_slots,
        p.created_at, p.updated_at, p.expires_at, p.version,
@@ -192,16 +233,21 @@ SELECT p.post_id, p.owner_id, p.held_at, p.status, p.category, p.title, p.descri
           FROM relay_wonderland.social_reports r WHERE r.subject_ref = p.post_id) AS reports,
        (SELECT coalesce(jsonb_agg(jsonb_build_object('request_id', q.request_id, 'requester_id', q.requester_id, 'message', q.message,
                  'status', q.status, 'created_at', q.created_at, 'updated_at', q.updated_at) ORDER BY q.created_at, q.request_id), '[]'::jsonb)
-          FROM relay_wonderland.lff_join_requests q WHERE q.post_id = p.post_id) AS requests
+          FROM relay_wonderland.lff_join_requests q WHERE q.post_id = p.post_id) AS requests,
+       (SELECT coalesce(jsonb_agg(jsonb_build_object('seq', s.seq, 'cause', s.cause, 'report_id', s.report_id, 'captured_at', s.captured_at,
+                 'category', s.category, 'title', s.title, 'description', s.description, 'project_label', s.project_label, 'skills', s.skills,
+                 'open_slots', s.open_slots, 'status', s.status, 'updated_at', s.updated_at, 'version', s.version) ORDER BY s.seq), '[]'::jsonb)
+          FROM relay_wonderland.lff_post_snapshots s WHERE s.post_id = p.post_id) AS snapshots
   FROM relay_wonderland.lff_posts p
  WHERE p.held_at IS NOT NULL
-    OR EXISTS (SELECT 1 FROM relay_wonderland.social_reports r WHERE r.subject_ref = p.post_id);
+    OR EXISTS (SELECT 1 FROM relay_wonderland.lff_post_snapshots s WHERE s.post_id = p.post_id);
 
--- POST-CHECK, still inside the transaction: each of the 15 relations exactly as 038 creates it (a permanent table; each index on its
+-- POST-CHECK, still inside the transaction: each of the 17 relations exactly as 038 creates it (a permanent table; each index on its
 -- table, primary / unique-and-partial / partial / plain, valid; the evidence view a view) and no other relay_wonderland relation
--- named lff_*; each of the 23 constraints exactly as written (kind, table, validated; each foreign key to its table ON DELETE
--- CASCADE) and no other on the lff_* tables; the evidence view reading with its caller's privileges (security_invoker); and no row
--- in any of the three tables (038 writes none). Any failure rolls back everything.
+-- named lff_*; no privilege granted on any of them (a default ACL would hand evidence to another role); each of the 27 constraints
+-- exactly as written (kind, table, validated; each foreign key to its table ON DELETE CASCADE) and no other on the lff_* tables;
+-- the evidence view reading with its caller's privileges (security_invoker); and no row in any of the four tables (038 writes none).
+-- Any failure rolls back everything.
 DO $$
 DECLARE
   wrong text;
@@ -226,6 +272,7 @@ BEGIN
           ('lff_join_requests_requester', 'i', 'lff_join_requests', '-'), ('lff_join_requests_post', 'i', 'lff_join_requests', '-'),
           ('lff_post_creations', 'r', NULL, '-'), ('lff_post_creations_pkey', 'i', 'lff_post_creations', 'p'),
           ('lff_post_creations_recent', 'i', 'lff_post_creations', '-'),
+          ('lff_post_snapshots', 'r', NULL, '-'), ('lff_post_snapshots_pkey', 'i', 'lff_post_snapshots', 'p'),
           ('lff_moderation_evidence', 'v', NULL, '-')
         ) AS e(name, kind, on_table, flag)
         FULL JOIN (SELECT c.oid, c.relname::text AS relname, c.relkind::text AS relkind, c.relpersistence
@@ -236,6 +283,14 @@ BEGIN
    WHERE NOT r.as_created;
   IF wrong IS NOT NULL THEN
     RAISE EXCEPTION 'migration_038_postcheck: relation(s) not exactly as 038 creates them, or not 038''s (%)', wrong;
+  END IF;
+  -- NO PRIVILEGE ON ANY OF THEM (the security review's m-4): 038 grants nothing, so a privilege here came from a default ACL of this
+  -- store, and would hand the LFF tables and the evidence to another role. Refused; the way on is a recorded decision.
+  SELECT string_agg(c.relname::text, ', ' ORDER BY c.relname::text COLLATE "C") INTO wrong
+    FROM pg_class c
+   WHERE c.relnamespace = 'relay_wonderland'::regnamespace AND c.relname LIKE 'lff\_%' AND c.relkind IN ('r', 'v') AND c.relacl IS NOT NULL;
+  IF wrong IS NOT NULL THEN
+    RAISE EXCEPTION 'migration_038_postcheck: privileges are set on % (038 sets none: a default ACL of this store would hand LFF evidence to another role)', wrong;
   END IF;
   -- THE EVIDENCE VIEW reads with its CALLER's privileges (D-L5 R-4): a view that ran as its owner would hand anyone granted it the
   -- rows of three tables they may not read.
@@ -266,7 +321,10 @@ BEGIN
           ('lff_join_requests_status', 'c', 'lff_join_requests', NULL), ('lff_join_requests_times', 'c', 'lff_join_requests', NULL),
           ('lff_post_creations_pkey', 'p', 'lff_post_creations', NULL),
           ('lff_post_creations_owner_fk', 'f', 'lff_post_creations', 'players'),
-          ('lff_post_creations_post_id_shape', 'c', 'lff_post_creations', NULL)
+          ('lff_post_creations_post_id_shape', 'c', 'lff_post_creations', NULL),
+          ('lff_post_snapshots_pkey', 'p', 'lff_post_snapshots', NULL),
+          ('lff_post_snapshots_post_fk', 'f', 'lff_post_snapshots', 'lff_posts'),
+          ('lff_post_snapshots_cause', 'c', 'lff_post_snapshots', NULL), ('lff_post_snapshots_times', 'c', 'lff_post_snapshots', NULL)
         ) AS e(name, kind, on_table, refs)
         FULL JOIN (SELECT k.oid, k.conname::text AS conname, k.contype::text AS contype, k.conrelid, k.confrelid, k.confdeltype, k.convalidated
                      FROM pg_constraint k JOIN pg_class c ON c.oid = k.conrelid

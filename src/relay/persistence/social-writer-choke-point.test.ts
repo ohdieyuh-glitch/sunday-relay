@@ -105,3 +105,71 @@ describe('C2: the social, voice, private-server and LFF tables have exactly thre
     expect(code('src/relay/persistence/social-postgres.ts')).toMatch(/await protectedStoreWriterGuard\(pool, '[^']+'\)\(\);\s*let state = await loadState\(pool\);/u);
   });
 });
+
+/*
+ * D-L5 TRIPWIRES (the D-L5 security review's m-5). Moderation evidence (founder D-L5: a reported LFF post is kept, silently, for
+ * moderators only) is safe only while (1) no app code reads it -- not the evidence view, not the held posts or the snapshots in
+ * memory -- and (2) no statement undoes it: none clears held_at, none updates or deletes a snapshot, every post DELETE carries both
+ * evidence guards, and nothing deletes a player (the players cascade would take the evidence: founder question FQ-3). The file-level
+ * writer scan above would pass a change that broke any of these, so each is pinned here, on code with its comments stripped, each
+ * detector proven on planted text first. Non-test sources only, tracked or new (not ignored).
+ */
+describe('D-L5 tripwires: no app code reads the evidence, and no statement un-holds it, rewrites a snapshot or deletes a player', () => {
+  const appSources = everySource.filter((f) => !TEST.test(f));
+  /** The SQL text of every statement in `source` that starts with `head`: up to the template literal's closing backtick. */
+  const statements = (source: string, head: RegExp): string[] =>
+    [...source.matchAll(new RegExp(`${head.source}[^\`]*`, 'giu'))].map((m) => m[0].replace(/\s+/gu, ' '));
+  const POST_DELETE = /\bDELETE\s+FROM\s+(?:ONLY\s+)?(?:relay_wonderland\s*\.\s*)?lff_posts\b/u;
+  const SNAPSHOT_REWRITE = /\b(?:UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|MERGE\s+INTO)\s+(?:ONLY\s+)?(?:relay_wonderland\s*\.\s*)?lff_post_snapshots\b/iu;
+  const UNHOLD = /\bheld_at\s*=\s*(?:NULL|DEFAULT)\b/iu;
+  const PLAYER_DELETE = /\b(?:DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:ONLY\s+)?(?:relay_wonderland\s*\.\s*)?players\b/iu;
+  const GUARDS = ['held_at IS NULL', 'NOT EXISTS (SELECT 1 FROM relay_wonderland.lff_post_snapshots s WHERE s.post_id = $1)'];
+
+  it('the detectors see what they must (planted text)', () => {
+    expect(statements('x `DELETE FROM relay_wonderland.lff_posts WHERE post_id=$1` y', POST_DELETE)).toEqual(['DELETE FROM relay_wonderland.lff_posts WHERE post_id=$1']);
+    expect(statements('`SELECT 1 FROM relay_wonderland.lff_posts`', POST_DELETE)).toEqual([]);
+    expect(SNAPSHOT_REWRITE.test('update relay_wonderland . lff_post_snapshots set title = $2')).toBe(true);
+    expect(SNAPSHOT_REWRITE.test('DELETE FROM lff_post_snapshots WHERE post_id = $1')).toBe(true);
+    expect(SNAPSHOT_REWRITE.test('INSERT INTO relay_wonderland.lff_post_snapshots(post_id) VALUES($1)')).toBe(false); // appending is the point
+    expect(UNHOLD.test('UPDATE relay_wonderland.lff_posts SET held_at = NULL WHERE post_id=$1')).toBe(true);
+    expect(UNHOLD.test('SET held_at=GREATEST($2::timestamptz, updated_at)')).toBe(false);
+    expect(PLAYER_DELETE.test('delete from relay_wonderland.players where player_id = $1')).toBe(true);
+    expect(PLAYER_DELETE.test('TRUNCATE players')).toBe(true);
+    expect(PLAYER_DELETE.test('SELECT * FROM relay_wonderland.players')).toBe(false);
+    expect(appSources.length, 'not vacuous').toBeGreaterThan(200);
+  });
+
+  it('no app source names the evidence view: only database operators read it (R-4; no route serves it)', () => {
+    expect(appSources.filter((f) => /\blff_moderation_evidence\b/u.test(code(f)))).toEqual([]);
+    // the control: a test does name it, so the scan reads the text it must
+    expect(everySource.filter((f) => TEST.test(f) && /\blff_moderation_evidence\b/u.test(code(f))).length).toBeGreaterThan(0);
+  });
+
+  it('the held posts and the snapshots are named in code only by the domain, the state and the store (no player surface reads them, R-3)', () => {
+    const named = (word: string) => sorted(appSources.filter((f) => new RegExp(`\\b${word}\\b`, 'u').test(code(f))));
+    const ONLY = sorted(['src/relay/social/social-lff.ts', 'src/relay/social/social-state.ts', 'src/relay/persistence/social-postgres.ts']);
+    expect(named('lffHeld')).toEqual(ONLY);
+    expect(named('lffSnapshots')).toEqual(ONLY);
+  });
+
+  it('no statement clears held_at or rewrites a snapshot, the snapshot INSERT has no ON CONFLICT, and every lff_posts DELETE carries both evidence guards', () => {
+    expect(appSources.filter((f) => UNHOLD.test(code(f))), 'held_at is never cleared').toEqual([]);
+    expect(appSources.filter((f) => SNAPSHOT_REWRITE.test(code(f))), 'a snapshot is never updated or deleted').toEqual([]);
+    const store = code('src/relay/persistence/social-postgres.ts');
+    const appends = statements(store, /\bINSERT\s+INTO\s+relay_wonderland\.lff_post_snapshots\b/u);
+    expect(appends, 'one snapshot INSERT').toHaveLength(1);
+    expect(appends[0], 'a second write of a key is a refusal, never an overwrite').not.toMatch(/ON\s+CONFLICT/iu);
+    const holds = statements(store, /\bSET\s+held_at\s*=/u);
+    expect(holds.length, 'the hold and its backstop').toBe(2);
+    for (const h of holds) expect(h).toMatch(/^SET held_at=GREATEST\(\$2::timestamptz, updated_at\) WHERE post_id=\$1 AND owner_id=\$3 AND created_at=\$4 /u);
+    const deletes = appSources.flatMap((f) => statements(code(f), POST_DELETE).map((s) => [f, s] as const));
+    expect(deletes.map(([f]) => f), 'one post DELETE, in the store').toEqual(['src/relay/persistence/social-postgres.ts']);
+    for (const [, d] of deletes) for (const guard of GUARDS) expect(d, guard).toContain(guard);
+    // the control: a DELETE without the guards is what this would catch
+    expect(GUARDS.every((g) => 'DELETE FROM relay_wonderland.lff_posts WHERE post_id=$1'.includes(g))).toBe(false);
+  });
+
+  it('no app source deletes or truncates a player: the players cascade would destroy held evidence (FQ-3, open for counsel)', () => {
+    expect(appSources.filter((f) => PLAYER_DELETE.test(code(f)))).toEqual([]);
+  });
+});

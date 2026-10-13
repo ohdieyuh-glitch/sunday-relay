@@ -29,7 +29,7 @@ import type {
   UserPresence,
   UserProfile,
 } from './social-contracts';
-import type { LffCreation, LffHeldPost, LffJoinRequest, LffPost } from './social-lff';
+import type { LffCreation, LffHeldPost, LffJoinRequest, LffPost, LffPostSnapshot } from './social-lff';
 
 /** Everything known about one account. */
 export interface SocialUserRecord {
@@ -57,12 +57,18 @@ export interface SocialState {
   /** When each player created posts, inside the rolling creation window only (social-lff.ts LFF_MAX_CREATED_PER_WINDOW). */
   readonly lffCreations: readonly LffCreation[];
   /**
-   * MODERATION EVIDENCE (founder D-L5, contract r2.4; social-lff.ts rule 8): REPORTED posts that left every player surface -- their
+   * MODERATION EVIDENCE (founder D-L5, contract r2.4; social-lff.ts rule 8): EVIDENCE posts that left every player surface -- their
    * owner deleted them, or retention reached them -- kept as last written, with every request on them, ordered by the post id's
    * serial. A held post is in NEITHER lffPosts NOR lffRequests, so every rule and every view reads it exactly as a deleted one; NO
    * player surface reads this list. Never part of the snapshot.
    */
   readonly lffHeld: readonly LffHeldPost[];
+  /**
+   * EVIDENCE SNAPSHOTS (social-lff.ts rule 8): for every post a qualifying report made evidence, the post as it read when that report
+   * was filed, then after each later edit -- append-only, ordered by the post id's serial then seq, held or live alike. Its first
+   * entry for a post IS the record that the post is evidence. NO player surface reads this list. Never part of the snapshot.
+   */
+  readonly lffSnapshots: readonly LffPostSnapshot[];
   /** Monotonic id source, so ids are deterministic in tests and replays. */
   readonly nextSerial: number;
 }
@@ -85,6 +91,7 @@ export function emptySocialState(): SocialState {
     lffRequests: [],
     lffCreations: [],
     lffHeld: [],
+    lffSnapshots: [],
     nextSerial: 1,
   };
 }

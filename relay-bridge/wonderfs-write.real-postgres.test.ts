@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { openWfsPostgresStore } from '../src/relay/persistence/wonderfs-postgres';
+import { wfsThrowawayDatabases } from '../src/relay/persistence/wonderfs-test-databases';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { WFS_ALPHA_LIMITS, type WfsLimits, type WfsOp } from '../src/relay/wonderfs/wonderfs-contracts';
 import { WFS_MAIN_BRANCH, type WfsBranchState } from '../src/relay/wonderfs/wonderfs-engine';
@@ -84,7 +85,13 @@ function faulty(pool: Pool, fault: Fault): Pool {
 suite('WonderFS R2 write routes on real PostgreSQL', () => {
   const nonce = randomBytes(5).toString('hex');
   let admin: Pool;
-  const made: Array<{ name: string; pool: Pool }> = [];
+  /**
+   * R2-r4 (CI r1.16: 3 uncaught 57P01 "Errors", one per reopen() below): EVERY pool -- fresh() and reopen() alike -- is tracked from
+   * birth with an 'error' listener that RECORDS; teardown ends them ALL, and waits for their clients to close, before any database's
+   * backends are terminated or it is dropped (wonderfs-test-databases.ts). r3's afterAll ended one pool and then terminated its
+   * database while a reopened pool on it still held an idle client with no listener yet.
+   */
+  const databases = wfsThrowawayDatabases();
   const servers: Server[] = [];
 
   const fresh = async (label: string): Promise<Pool> => {
@@ -92,19 +99,16 @@ suite('WonderFS R2 write routes on real PostgreSQL', () => {
     await admin.query(`CREATE DATABASE ${name}`);
     const url = new URL(databaseUrl!);
     url.pathname = `/${name}`;
-    const pool = new Pool({ connectionString: url.toString(), max: 6 });
-    made.push({ name, pool });
+    const pool = databases.track(name, new Pool({ connectionString: url.toString(), max: 6 }));
     await new TransactionalWonderlandDatabase(pool).migrate();
     return pool;
   };
-  /** Another pool on the SAME database (a restarted bridge). */
+  /** Another pool on the SAME database (a restarted bridge): tracked like the first, so it is ended before that database is dropped. */
   const reopen = (pool: Pool): Pool => {
-    const name = made.find((m) => m.pool === pool)?.name as string;
+    const name = databases.databaseOf(pool) as string;
     const url = new URL(databaseUrl!);
     url.pathname = `/${name}`;
-    const again = new Pool({ connectionString: url.toString(), max: 6 });
-    made.push({ name, pool: again });
-    return again;
+    return databases.track(name, new Pool({ connectionString: url.toString(), max: 6 }));
   };
 
   beforeAll(async () => { admin = new Pool({ connectionString: databaseUrl! }); }, 30_000);
@@ -113,15 +117,16 @@ suite('WonderFS R2 write routes on real PostgreSQL', () => {
       s.closeAllConnections();
       s.close(() => r());
     })));
+    // a pool that lost a client DURING a case is that case's failure, not a teardown echo and not an uncaught exception
+    expect(databases.takeCaseErrors(), 'no pool lost a client during the case').toEqual([]);
   });
   afterAll(async () => {
-    for (const { name, pool } of made) {
-      pool.on('error', () => undefined);
-      await pool.end().catch(() => undefined);
-      await admin.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()', [name]).catch(() => undefined);
-      await admin.query(`DROP DATABASE IF EXISTS ${name}`).catch(() => undefined);
+    // every pool ended and its clients closed FIRST; then each database's backends terminated and it dropped, once
+    try {
+      if (admin !== undefined) await databases.teardown(admin);
+    } finally {
+      await admin?.end().catch(() => undefined);
     }
-    await admin?.end().catch(() => undefined);
   }, 60_000);
 
   /** The product's rows, as the product writes them (OWNER / ADMIN / MEMBER; a lower-case legacy row), and the file environments. */
@@ -250,7 +255,7 @@ suite('WonderFS R2 write routes on real PostgreSQL', () => {
     const base = await bootDeps(depsOf(openWfsPostgresStore(pool), s.sessions));
     const waiting = async () => Number((await admin.query<{ n: string }>(
       "SELECT count(*)::text AS n FROM pg_stat_activity WHERE datname = $1 AND wait_event_type = 'Lock'",
-      [made.find((m) => m.pool === pool)?.name],
+      [databases.databaseOf(pool)],
     )).rows[0].n);
     const demoteWhileWaiting = async (write: () => Promise<{ status: number; json: any }>, keep: boolean) => {
       const demoter = await pool.connect();

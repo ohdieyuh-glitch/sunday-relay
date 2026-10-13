@@ -74,7 +74,8 @@ export const WONDERLAND_MIGRATION_036 = migration('036_wonderfs.sql');
 // right after 036. PROVISIONAL NUMBER (036 WonderFS / 037 this / 038 Project Brain file-memory, agreed with MAIN JUJU 10-11; claimed at
 // landing, in order). Never reaches the Julius live store by a runner (protected-store.ts), and there only empty.
 export const WONDERLAND_MIGRATION_037 = migration('037_wonderland_private_servers.sql');
-// LFF, the "Looking For Feed" (the private-Alpha launch gate, founder 2026-10-12): posts and join requests -- 2 additive lff_* tables,
+// LFF, the "Looking For Feed" (the private-Alpha launch gate, founder 2026-10-12): posts, join requests, the creation record and the
+// moderation-evidence snapshots -- 4 additive lff_* tables and 1 read-only view (founder D-L5),
 // applied explicitly right after 037. PROVISIONAL NUMBER (037 names 038 as Project Brain file-memory; each claimed at landing, in
 // order, and whichever of the two lands later renumbers). Never reaches the Julius live store by a runner (protected-store.ts).
 export const WONDERLAND_MIGRATION_038 = migration('038_wonderland_lff.sql');

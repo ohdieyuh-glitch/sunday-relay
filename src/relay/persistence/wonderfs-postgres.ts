@@ -441,7 +441,12 @@ export interface WfsPostgresOptions {
   readonly limits?: WfsLimits;
   /** Ids for files, commits, conflicts, branches and approvals (default: random UUIDs, prefixed by kind). */
   readonly newId?: (kind: 'file' | 'commit' | 'conflict' | 'branch' | 'approval') => string;
+  /** The server's log (the bridge's mount passes its own): where WFS_HELD_CONNECTION_LOST is written. */
+  readonly log?: (line: string) => void;
 }
+
+/** R2-r4: the ONE line a connection lost while this store held it writes to the log (fixed: no server text, no SQLSTATE). */
+export const WFS_HELD_CONNECTION_LOST = 'wonderfs: a database connection was lost while in use; that client is discarded and the pool kept';
 
 const outage = (what: string): RelayResult<never> => fail(relayError('stale-ledger-version', `WonderFS could not save ${what}; nothing was changed.`, { retryable: true }));
 /**
@@ -485,6 +490,32 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
     return next;
   };
 
+  /**
+   * R2-r4 (MAIN's product check after CI r1.16): A CONNECTION LOST WHILE HELD IS NOT A CRASH. pg-pool hears a client's 'error' only
+   * while the client is idle in it: it takes its listener off at checkout and puts it back at release (pg-pool 3.14
+   * _acquireClient / _release). So a backend ended while this store holds the client -- a database restart or failover (57P01 /
+   * 57P02 / 57P03), or the socket simply ending -- is emitted on a client nobody hears: an uncaught exception that takes the whole
+   * bridge down. Every checkout here goes through this: the event is HEARD (one fixed line to the log, once per client), the
+   * statement in flight still rejects on its own (the caller's retryable outage, as before), and the client goes back WITH the error,
+   * so the pool discards it and keeps itself. (An IDLE client's loss is the pool's own 'error': server.ts juliusPool listens.)
+   */
+  const holdClient = async (): Promise<{ readonly client: PoolClient; readonly release: () => void }> => {
+    const client = await pool.connect();
+    let lost: Error | null = null;
+    const heard = (error: Error): void => {
+      if (lost === null) options.log?.(WFS_HELD_CONNECTION_LOST);
+      lost ??= error;
+    };
+    client.on('error', heard);
+    return {
+      client,
+      release: () => {
+        client.off('error', heard);
+        client.release(lost ?? undefined);
+      },
+    };
+  };
+
   /** The member's role NOW, through the ONE product -> WonderFS mapping (r1.4 §8.2): OWNER / ADMIN / MEMBER; anything else is none. */
   const ROLE_SQL = 'SELECT role FROM relay_wonderland.project_members WHERE project_id = $1 AND player_id = $2';
   const roleNow = async (db: Queryable, projectId: string, playerId: string): Promise<WfsHumanRole | null> =>
@@ -508,18 +539,18 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
    */
   const snapshot = async <T>(work: (db: Queryable) => Promise<RelayResult<T>>): Promise<RelayResult<T>> => {
     await refuseProtectedStore();
-    let client: PoolClient | null = null;
+    let held: Awaited<ReturnType<typeof holdClient>> | null = null;
     try {
-      client = await pool.connect();
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      const out = await work(client);
-      await client.query('COMMIT');
+      held = await holdClient();
+      await held.client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const out = await work(held.client);
+      await held.client.query('COMMIT');
       return out;
     } catch {
-      await client?.query('ROLLBACK').catch(() => undefined);
+      await held?.client.query('ROLLBACK').catch(() => undefined);
       return readOutage();
     } finally {
-      client?.release();
+      held?.release();
     }
   };
 
@@ -554,7 +585,7 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
   ): Promise<RelayResult<T>> =>
     serial(projectId, async () => {
       await refuseProtectedStore();
-      const client = await pool.connect();
+      const { client, release } = await holdClient();
       /** Keep what was decided on (or became) at version `at`: the whole state only from a whole load; the tree for every commit. */
       const keep = (state: WfsProjectState, at: number): void => {
         if (scope === 'whole') cache.set(projectId, { state, seq: at });
@@ -622,14 +653,14 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         changeCache.delete(projectId);
         return writeFailed(error, what);
       } finally {
-        client.release();
+        release();
       }
     });
 
   return {
     async createProject(projectId, nowIso) {
       await refuseProtectedStore();
-      const client = await pool.connect();
+      const { client, release } = await holdClient();
       try {
         await client.query('BEGIN');
         const made = await createWfsProjectIn(client, projectId, nowIso);
@@ -641,7 +672,7 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
         if ((error as { code?: string }).code === '23503') return fail(relayError('not-found', 'No such project to give a file environment.', { details: ['wonderfs: unknown project'] }));
         return outage('the new project');
       } finally {
-        client.release();
+        release();
       }
     },
     async createProjectIn(tx, projectId, nowIso) {
@@ -991,7 +1022,7 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
       if (checked.value !== null && checked.value !== sha256) return wfsHashMismatch(); // §10.1: nothing kept, nothing touched
       const size = view.byteLength;
       return serial(projectId, async () => {
-        const client = await pool.connect();
+        const { client, release } = await holdClient();
         try {
           await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
           // FOR UPDATE: serialised with commits and other uploads of this project on every bridge, so the room below is exact
@@ -1030,7 +1061,7 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
           await client.query('ROLLBACK').catch(() => undefined);
           return writeFailed(error, 'the file');
         } finally {
-          client.release();
+          release();
         }
       });
     },

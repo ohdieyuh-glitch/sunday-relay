@@ -21,7 +21,7 @@ import {
   type UserProfile,
 } from '../social/social-contracts';
 import { applySocialOperation, type SocialCommandInput, type SocialCommandOutcome } from '../social/social-commands';
-import type { LffCreation, LffHeldPost, LffJoinRequest, LffPost } from '../social/social-lff';
+import type { LffCreation, LffHeldPost, LffJoinRequest, LffPost, LffPostSnapshot } from '../social/social-lff';
 import { emptySocialState, hasUser, type SocialState, type SocialUserRecord } from '../social/social-state';
 import { ensureSocialUser, tellAfterCommit, viewerCursor, type SocialAfterCommit, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
 import { emptyWorldState, type WorldState } from '../social/world-presence';
@@ -47,10 +47,11 @@ import { protectedStoreWriterGuard } from './protected-store-writer-guard';
  * a post a fill closed, told to the others as a close; an LFF request a block cancelled, told as a withdrawal or a deletion),
  * each written BEFORE the operation's own event, as the in-memory store logs them -- or the whole operation fails (LFF B2b).
  *
- * LFF (wonderland-migrations/038_wonderland_lff.sql, slice B2b): the posts, the requests and the creation record are three more
- * tables of the same state, read back on open and written through by the same diff, so no restart loses a post, a request (a
- * CANCELLED one included) or a player's creation cap. A REPORTED post is never deleted here: its owner's delete and retention HOLD
- * its rows as moderation evidence (founder D-L5; writeLffChanges step 1), read back apart from every player's state (lffHeld).
+ * LFF (wonderland-migrations/038_wonderland_lff.sql, slice B2b): the posts, the requests, the creation record and the evidence
+ * snapshots are four more tables of the same state, read back on open and written through by the same diff, so no restart loses a
+ * post, a request (a CANCELLED one included), a player's creation cap or a piece of evidence. An EVIDENCE post (a qualifying report
+ * made it so, social-lff.ts rule 8) is never deleted here: its owner's delete and retention HOLD its rows (founder D-L5;
+ * writeLffChanges step 1), read back apart from every player's state (lffHeld); its snapshots are only ever appended (step 6).
  *
  * A database that cannot be reached THROWS out of `open`, and the route answers 503: an outage is not an empty social
  * graph.
@@ -271,6 +272,16 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
     postId: r.post_id,
     atMs: ms(r.created_at),
   }));
+  // THE EVIDENCE SNAPSHOTS (D-L5, M-1), every one, held post or live: a snapshot row carries every column of the post as it read then,
+  // under the same names, so lffPostOf reads it. In the domain's order: the post id's serial, then seq.
+  const lffSnapshots: LffPostSnapshot[] = (await q<Record<string, any>>(`SELECT * FROM relay_wonderland.lff_post_snapshots ORDER BY length(post_id), post_id COLLATE "C", seq`)).map((r) => ({
+    postId: r.post_id,
+    seq: Number(r.seq),
+    cause: r.cause,
+    reportId: r.report_id,
+    capturedAtMs: ms(r.captured_at),
+    post: lffPostOf(r),
+  }));
 
   return {
     ...emptySocialState(),
@@ -290,6 +301,7 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
     lffRequests,
     lffCreations,
     lffHeld,
+    lffSnapshots,
     // no row until the first id is minted: migration 033 writes none (a bootstrap leaves every table empty)
     nextSerial: serial === undefined ? 1 : Number(serial.value),
   };
@@ -378,8 +390,9 @@ async function writeUser(c: PoolClient, id: string, record: SocialUserRecord, be
 }
 
 /**
- * An LFF upsert that found ANOTHER row under its id (another owner, post, requester or created_at, a newer version): fail closed.
- * It means this store's in-memory id serial is BEHIND the ids the database holds (B2b r2 review n1); `kind` says which table.
+ * An LFF write that found ANOTHER row than its own under an id, or a row this store's state does not know as it is (another owner,
+ * post, requester or created_at, a newer version, a HELD post): fail closed. The store's state is BEHIND the database -- its id
+ * serial (B2b r2 review n1), or another writer's change (a second bridge over a deploy, D-L5); `kind` says which table.
  */
 class LffRowNotOurs extends Error {
   constructor(readonly kind: 'post' | 'request', message: string) {
@@ -388,29 +401,67 @@ class LffRowNotOurs extends Error {
 }
 
 /**
- * THE ONE LINE AN OPERATOR SEES when the store's id serial is found behind the database (B2b r2 review n1): which table, and that a
- * restart heals it (the store re-reads next_serial on open). NO DATA: no id, player, text or SQL. A fixed string; the store keeps
- * failing closed (every write that mints a colliding id is refused as a retryable outage) until a restart.
+ * THE ONE LINE AN OPERATOR SEES when the store's state is found behind the database (B2b r2 review n1; D-L5): which table, and that a
+ * restart heals it (the store re-reads every row and next_serial on open). NO DATA: no id, player, text or SQL. A fixed string; the
+ * store keeps failing closed (every write that meets such a row is refused as a retryable outage) until a restart.
  */
 export const lffSerialBehindLine = (kind: 'post' | 'request'): string =>
-  `[social-postgres] lff_row_not_ours ${kind}: the store's id serial is behind the database; the write was refused (fail closed); a restart reloads the serial`;
+  `[social-postgres] lff_row_not_ours ${kind}: the store's state is behind the database (a re-minted id, or a row another writer changed or held); the write was refused (fail closed); a restart reloads the state`;
 
 const NOTHING_CHANGED = { put: [], drop: [] } as const;
 /** diffBy, skipped outright when the domain kept the list itself (most operations touch no LFF row at all). */
 const diffIfMoved = <T>(before: readonly T[], after: readonly T[], key: (t: T) => string): { put: readonly T[]; drop: readonly string[] } =>
   before === after ? NOTHING_CHANGED : diffBy(before, after, key);
 
+/** ONE POST, upserted: its own row only (no graft, B2b review m1), never over a HELD row (D-L5); anything else fails closed. */
+async function upsertLffPost(c: PoolClient, p: LffPost): Promise<void> {
+  const written = await c.query(
+    `INSERT INTO relay_wonderland.lff_posts(post_id, owner_id, category, title, description, project_label, skills, open_slots, status, created_at,
+       updated_at, expires_at, version)
+     VALUES($1,$2,$3,$4,$5,$6,$7::text[],$8,$9,$10,$11,$12,$13)
+     ON CONFLICT(post_id) DO UPDATE SET category=EXCLUDED.category, title=EXCLUDED.title, description=EXCLUDED.description,
+       project_label=EXCLUDED.project_label, skills=EXCLUDED.skills, open_slots=EXCLUDED.open_slots, status=EXCLUDED.status,
+       updated_at=EXCLUDED.updated_at, version=EXCLUDED.version
+     WHERE relay_wonderland.lff_posts.owner_id = EXCLUDED.owner_id AND relay_wonderland.lff_posts.created_at = EXCLUDED.created_at
+       AND relay_wonderland.lff_posts.version <= EXCLUDED.version AND relay_wonderland.lff_posts.held_at IS NULL`,
+    [p.id, p.ownerId, p.category, p.title, p.description, p.projectLabel, [...p.skills], p.openSlots, p.status, new Date(p.createdAtMs),
+      new Date(p.updatedAtMs), new Date(p.expiresAtMs), p.version],
+  );
+  if (written.rowCount !== 1) throw new LffRowNotOurs('post', `post ${p.id}: the database holds another row under this id`);
+}
+
 /**
- * LFF (038, slice B2b): the rows of the three LFF tables the command changed, by the same by-reference diff (the domain makes a
+ * ONE REQUEST, upserted: its own row only (same post, requester and created_at: B2b r2 review r2-m1), and NOTHING -- neither a new
+ * row nor a change -- on a HELD post (D-L5; the security review's m-3: the INSERT's own SELECT yields no row then). Anything else
+ * fails closed. The SELECT's parameters are typed, as an INSERT ... SELECT needs.
+ */
+async function upsertLffRequest(c: PoolClient, r: LffJoinRequest): Promise<void> {
+  const written = await c.query(
+    `INSERT INTO relay_wonderland.lff_join_requests(request_id, post_id, requester_id, message, status, created_at, updated_at)
+     SELECT $1::text, $2::text, $3::text, $4::text, $5::text, $6::timestamptz, $7::timestamptz
+      WHERE NOT EXISTS (SELECT 1 FROM relay_wonderland.lff_posts h WHERE h.post_id = $2::text AND h.held_at IS NOT NULL)
+     ON CONFLICT(request_id) DO UPDATE SET status=EXCLUDED.status, updated_at=EXCLUDED.updated_at
+     WHERE relay_wonderland.lff_join_requests.post_id = EXCLUDED.post_id AND relay_wonderland.lff_join_requests.requester_id = EXCLUDED.requester_id
+       AND relay_wonderland.lff_join_requests.created_at = EXCLUDED.created_at`,
+    [r.id, r.postId, r.requesterId, r.message, r.status, new Date(r.createdAtMs), new Date(r.updatedAtMs)],
+  );
+  if (written.rowCount !== 1) throw new LffRowNotOurs('request', `request ${r.id}: the database holds another row under this id, or its post is held`);
+}
+
+/**
+ * LFF (038, slice B2b; D-L5): the rows of the four LFF tables the command changed, by the same by-reference diff (the domain makes a
  * new object only for what it changed, and keeps every other one). IN THIS ORDER:
- *   1. the posts that LEFT the state FIRST (the owner's delete, or the retention purge's batch), each by ONE statement:
- *      - one the domain HELD (a report names it: social-lff.ts rule 8, founder D-L5) is HELD here -- its held_at set to the domain's
- *        stamp, every column and every request on it left exactly as they are (no delete, so no cascade). A hold that finds no live
- *        row (already held, or gone) changes nothing: the evidence is already the database's, or never was this store's;
- *      - any other is HARD-DELETED, its requests by 038's lff_join_requests_post_fk ON DELETE CASCADE -- but only while NO report
- *        names it in the database and it is not held (the DELETE's own WHERE). NO APP PATH HARD-DELETES A REPORTED POST: should the
- *        database hold a report this store's state lacks (a second bridge filed it), the DELETE removes nothing, and the post is
- *        HELD instead (one more statement, only then), at the operation's server time (never before the row's updated_at);
+ *   1. the posts that LEFT the state FIRST (the owner's delete, or the retention purge's batch):
+ *      - one the domain HELD (it is evidence: social-lff.ts rule 8, founder D-L5) is HELD here, never deleted. FIRST, whatever this
+ *        very write changed on it or on a request of it is written (the correctness review's m1: a decline or withdraw whose own
+ *        write purges the post -- the evidence, and a restart, read the requests as last written); THEN one UPDATE sets its held_at
+ *        (the domain's stamp, never before the row's updated_at: the security review's m-1), on its OWN row only -- same owner and
+ *        created_at (m-2: no graft). Its requests and snapshots stay (no delete, so no cascade). A row already held is the evidence
+ *        already there; a gone row, nothing to hold; ANOTHER row under the id fails closed (LffRowNotOurs);
+ *      - any other is HARD-DELETED, its requests by 038's lff_join_requests_post_fk ON DELETE CASCADE -- but only its OWN row, only
+ *        while it is not held, and only while NO SNAPSHOT says it is evidence (the DELETE's own WHERE). NO APP PATH HARD-DELETES AN
+ *        EVIDENCE POST: should the database hold a snapshot this store's state lacks (a second bridge recorded the report), the
+ *        DELETE removes nothing and the post is HELD instead (one more statement, only then);
  *   2. request deletes, SKIPPING every request of a post that left in step 1 (the cascade took it, or the hold keeps it as evidence;
  *      B2b review n3): a purge of LFF_PURGE_BATCH posts is that many statements, never one per request. A request dropped while its
  *      post stays is deleted, unless its post is held (the DELETE's own WHERE);
@@ -419,48 +470,68 @@ const diffIfMoved = <T>(before: readonly T[], after: readonly T[], key: (t: T) =
  *   4. request upserts: a request changes only its status and updated_at (an accept, a decline, a withdraw, a block's CANCELLED);
  *   5. the creation record: deletes, then inserts. A create PRUNES every player's entries older than the window, so its deletes
  *      name OTHER players' rows too (correct, and bounded). A creation is immutable: a plain INSERT, so a second write of one key
- *      is a refusal (class 23, the whole operation refused), never a silent overwrite.
+ *      is a refusal (class 23, the whole operation refused), never a silent overwrite;
+ *   6. EVIDENCE SNAPSHOTS (D-L5, M-1): INSERTS ONLY, after the post they name. The domain only ever appends one (the report that
+ *      made a post evidence, then each edit of it); no statement here updates or deletes one, and a second write of a key is a
+ *      class-23 refusal of the whole operation.
  * Times go in as Dates of the domain's milliseconds; skills as a text[]. The domain refuses bad input first: 038's CHECKs are a
  * backstop, and a class 22 / 23 refusal from them surfaces as validation-failed (below, in apply).
  * AN UPSERT NEVER GRAFTS ONTO ANOTHER PLAYER'S ROW (B2b review m1). The ids come from the in-memory serial; if it ever falls behind
  * the database (a COMMIT whose acknowledgement was lost, a stale second bridge over a deploy), a NEW post or request could mint an
  * id the database already holds. Each upsert therefore updates only ITS OWN row -- a post of the same owner, created at the same
- * time, at no newer version than ours; a request of the same post and requester, created at the same time (B2b r2 review r2-m1:
- * a behind store re-minting the SAME player's request id on the SAME post must not overwrite the held row's status, e.g. an
- * owner's accept) -- and must report exactly one row (inserted or updated). Anything else throws LffRowNotOurs: the whole
- * operation rolls back, answers a retryable outage (fail closed), and the store logs one line (lffSerialBehindLine).
+ * time, at no newer version than ours; a request of the same post and requester, created at the same time (B2b r2 review r2-m1) --
+ * and must report exactly one row (inserted or updated). Anything else throws LffRowNotOurs: the whole operation rolls back,
+ * answers a retryable outage (fail closed), and the store logs one line (lffSerialBehindLine).
  * A HELD ROW IS NEVER WRITTEN AGAIN (D-L5): the domain never holds a held post in lffPosts or its requests in lffRequests, and should a
- * stale store (a second bridge) try, the upserts' WHERE refuses to UPDATE a held post or any request on one (rowCount 0, so
- * LffRowNotOurs: fail closed), and step 2 never deletes a request of a held post. What remains for a stale store is only ADDING a new
- * request row to a held post (an insert under a new id): it changes no evidence row, and one bridge per store is the rule.
+ * stale store (a second bridge) try, the post upsert refuses to update a held post and the request upsert writes nothing on one --
+ * no change, no new row (rowCount 0, so LffRowNotOurs: fail closed) -- and step 2 never deletes a request of a held post.
  * RETENTION (review m3) is the DOMAIN's rule (social-lff.ts purgeLffPastRetention, rule 7): a post no longer open and more than
  * 30 days old leaves the state with its requests, at most LFF_PURGE_BATCH per write, and this diff deletes those rows -- or holds
- * them, when a report names the post (step 1). The creation record is pruned after 24 h, as before (step 5).
+ * them, when the post is evidence (step 1). The creation record is pruned after 24 h, as before (step 5).
  */
 async function writeLffChanges(c: PoolClient, before: SocialState, after: SocialState, nowIso: string): Promise<void> {
   const posts = diffIfMoved(before.lffPosts, after.lffPosts, (p) => p.id);
   const requests = diffIfMoved(before.lffRequests, after.lffRequests, (r) => r.id);
   const creations = diffIfMoved(before.lffCreations, after.lffCreations, (x) => pairKey(x.userId, x.postId));
-  // the posts the domain HELD in this command (rule 8): new entries of lffHeld, by the post's id
-  const heldNow = new Map(diffIfMoved(before.lffHeld, after.lffHeld, (h) => h.post.id).put.map((h) => [h.post.id, h.heldAtMs]));
-  for (const id of posts.drop) {
-    const heldAtMs = heldNow.get(id);
-    if (heldAtMs !== undefined) {
-      await c.query(`UPDATE relay_wonderland.lff_posts SET held_at=$2 WHERE post_id=$1 AND held_at IS NULL`, [id, new Date(heldAtMs)]);
-      continue;
-    }
-    const deleted = await c.query(
-      `DELETE FROM relay_wonderland.lff_posts WHERE post_id=$1 AND held_at IS NULL
-         AND NOT EXISTS (SELECT 1 FROM relay_wonderland.social_reports r WHERE r.subject_ref = $1)`,
-      [id],
-    );
-    if (deleted.rowCount === 0) {
-      // THE BACKSTOP: a report the database holds and this state did not -- the post is held, never deleted (nothing, if it is gone)
-      await c.query(
-        `UPDATE relay_wonderland.lff_posts SET held_at=GREATEST($2::timestamptz, updated_at) WHERE post_id=$1 AND held_at IS NULL
-           AND EXISTS (SELECT 1 FROM relay_wonderland.social_reports r WHERE r.subject_ref = $1)`,
-        [id, new Date(nowIso)],
+  const snapshots = diffIfMoved(before.lffSnapshots, after.lffSnapshots, (s) => pairKey(s.postId, String(s.seq)));
+  if (posts.drop.length > 0) {
+    // the posts the domain HELD in this command (rule 8): new entries of lffHeld, by the post's id
+    const heldNow = new Map(diffIfMoved(before.lffHeld, after.lffHeld, (h) => h.post.id).put.map((h) => [h.post.id, h]));
+    const postBefore = new Map(before.lffPosts.map((p) => [p.id, p]));
+    const requestBefore = new Map(before.lffRequests.map((r) => [r.id, r]));
+    for (const id of posts.drop) {
+      const was = postBefore.get(id)!; // a dropped post is one `before` held
+      const held = heldNow.get(id);
+      if (held !== undefined) {
+        // m1: what this very write changed on the post or a request of it goes in first, while the row is not yet held
+        if (held.post !== was) await upsertLffPost(c, held.post);
+        for (const r of held.requests) if (requestBefore.get(r.id) !== r) await upsertLffRequest(c, r);
+        const hold = await c.query(
+          `UPDATE relay_wonderland.lff_posts SET held_at=GREATEST($2::timestamptz, updated_at)
+            WHERE post_id=$1 AND owner_id=$3 AND created_at=$4 AND held_at IS NULL`,
+          [id, new Date(held.heldAtMs), held.post.ownerId, new Date(held.post.createdAtMs)],
+        );
+        if (hold.rowCount !== 1) {
+          // ours and already held (another bridge held it first), or gone: nothing to do. ANOTHER row under the id: fail closed.
+          const other = await c.query(`SELECT 1 FROM relay_wonderland.lff_posts WHERE post_id=$1 AND NOT (owner_id=$2 AND created_at=$3)`, [id, held.post.ownerId, new Date(held.post.createdAtMs)]);
+          if (other.rowCount !== 0) throw new LffRowNotOurs('post', `post ${id}: the database holds another row under this id`);
+        }
+        continue;
+      }
+      const deleted = await c.query(
+        `DELETE FROM relay_wonderland.lff_posts WHERE post_id=$1 AND owner_id=$2 AND created_at=$3 AND held_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM relay_wonderland.lff_post_snapshots s WHERE s.post_id = $1)`,
+        [id, was.ownerId, new Date(was.createdAtMs)],
       );
+      if (deleted.rowCount === 0) {
+        // THE BACKSTOP: evidence the database holds and this state did not -- the post is held, never deleted (nothing, if it is gone
+        // or is not ours)
+        await c.query(
+          `UPDATE relay_wonderland.lff_posts SET held_at=GREATEST($2::timestamptz, updated_at) WHERE post_id=$1 AND owner_id=$3 AND created_at=$4
+             AND held_at IS NULL AND EXISTS (SELECT 1 FROM relay_wonderland.lff_post_snapshots s WHERE s.post_id = $1)`,
+          [id, new Date(nowIso), was.ownerId, new Date(was.createdAtMs)],
+        );
+      }
     }
   }
   if (requests.drop.length > 0) {
@@ -475,38 +546,25 @@ async function writeLffChanges(c: PoolClient, before: SocialState, after: Social
       );
     }
   }
-  for (const p of posts.put) {
-    const written = await c.query(
-      `INSERT INTO relay_wonderland.lff_posts(post_id, owner_id, category, title, description, project_label, skills, open_slots, status, created_at,
-         updated_at, expires_at, version)
-       VALUES($1,$2,$3,$4,$5,$6,$7::text[],$8,$9,$10,$11,$12,$13)
-       ON CONFLICT(post_id) DO UPDATE SET category=EXCLUDED.category, title=EXCLUDED.title, description=EXCLUDED.description,
-         project_label=EXCLUDED.project_label, skills=EXCLUDED.skills, open_slots=EXCLUDED.open_slots, status=EXCLUDED.status,
-         updated_at=EXCLUDED.updated_at, version=EXCLUDED.version
-       WHERE relay_wonderland.lff_posts.owner_id = EXCLUDED.owner_id AND relay_wonderland.lff_posts.created_at = EXCLUDED.created_at
-         AND relay_wonderland.lff_posts.version <= EXCLUDED.version AND relay_wonderland.lff_posts.held_at IS NULL`,
-      [p.id, p.ownerId, p.category, p.title, p.description, p.projectLabel, [...p.skills], p.openSlots, p.status, new Date(p.createdAtMs),
-        new Date(p.updatedAtMs), new Date(p.expiresAtMs), p.version],
-    );
-    if (written.rowCount !== 1) throw new LffRowNotOurs('post', `post ${p.id}: the database holds another row under this id`);
-  }
-  for (const r of requests.put) {
-    const written = await c.query(
-      `INSERT INTO relay_wonderland.lff_join_requests(request_id, post_id, requester_id, message, status, created_at, updated_at) VALUES($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT(request_id) DO UPDATE SET status=EXCLUDED.status, updated_at=EXCLUDED.updated_at
-       WHERE relay_wonderland.lff_join_requests.post_id = EXCLUDED.post_id AND relay_wonderland.lff_join_requests.requester_id = EXCLUDED.requester_id
-         AND relay_wonderland.lff_join_requests.created_at = EXCLUDED.created_at
-         AND NOT EXISTS (SELECT 1 FROM relay_wonderland.lff_posts h WHERE h.post_id = EXCLUDED.post_id AND h.held_at IS NOT NULL)`,
-      [r.id, r.postId, r.requesterId, r.message, r.status, new Date(r.createdAtMs), new Date(r.updatedAtMs)],
-    );
-    if (written.rowCount !== 1) throw new LffRowNotOurs('request', `request ${r.id}: the database holds another row under this id`);
-  }
+  for (const p of posts.put) await upsertLffPost(c, p);
+  for (const r of requests.put) await upsertLffRequest(c, r);
   for (const k of creations.drop) {
     const [owner, post] = k.split('\u0000');
     await c.query(`DELETE FROM relay_wonderland.lff_post_creations WHERE owner_id=$1 AND post_id=$2`, [owner, post]);
   }
   for (const x of creations.put) {
     await c.query(`INSERT INTO relay_wonderland.lff_post_creations(owner_id, post_id, created_at) VALUES($1,$2,$3)`, [x.userId, x.postId, new Date(x.atMs)]);
+  }
+  // step 6: snapshots, appended only (the domain never removes one; were it to, nothing here would delete it)
+  for (const s of snapshots.put) {
+    const p = s.post;
+    await c.query(
+      `INSERT INTO relay_wonderland.lff_post_snapshots(post_id, seq, cause, report_id, captured_at, owner_id, category, title, description, project_label,
+         skills, open_slots, status, created_at, updated_at, expires_at, version)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::text[],$12,$13,$14,$15,$16,$17)`,
+      [s.postId, s.seq, s.cause, s.reportId, new Date(s.capturedAtMs), p.ownerId, p.category, p.title, p.description, p.projectLabel, [...p.skills],
+        p.openSlots, p.status, new Date(p.createdAtMs), new Date(p.updatedAtMs), new Date(p.expiresAtMs), p.version],
+    );
   }
 }
 

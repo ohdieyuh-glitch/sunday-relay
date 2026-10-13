@@ -16,6 +16,7 @@ import {
   LFF_SKILLS_MAX,
   LFF_SLOTS_MAX,
   LFF_SLOTS_MIN,
+  LFF_SNAPSHOT_CAUSES,
   LFF_TITLE_MAX,
 } from '../social/social-lff';
 import { juliusTestDatabaseUrl } from './julius-test-database';
@@ -23,26 +24,31 @@ import { migrationVersion, TransactionalWonderlandDatabase, WONDERLAND_MIGRATION
 
 /**
  * MIGRATION 038: WONDERLAND LFF, the "Looking For Feed" (the private-Alpha launch gate, founder 2026-10-12; contract r1 + AMENDMENT
- * r2 / r2.1 / r2.4), APPLIED EXPLICITLY AFTER 037. PROVISIONAL NUMBER (claimed at landing; whichever of LFF and the Julius file-memory
- * lands second renumbers). 038 creates 15 relations in relay_wonderland -- lff_posts, lff_join_requests, lff_post_creations, their
- * primary keys and 8 indexes, and the moderation evidence view lff_moderation_evidence (founder D-L5) -- 23 constraints (3 primary
- * keys, 4 foreign keys, 16 CHECKs), writes NO row and changes no existing row.
+ * r2 / r2.1 / r2.4 / r2.5), APPLIED EXPLICITLY AFTER 037. PROVISIONAL NUMBER (claimed at landing; whichever of LFF and the Julius
+ * file-memory lands second renumbers). 038 creates 17 relations in relay_wonderland -- lff_posts, lff_join_requests,
+ * lff_post_creations, lff_post_snapshots (D-L5 r2: the content AS REPORTED, append-only), their 4 primary keys and 8 indexes, and the
+ * moderation evidence view lff_moderation_evidence (founder D-L5) -- 27 constraints (4 primary keys, 5 foreign keys, 18 CHECKs),
+ * grants nothing, writes NO row and changes no existing row.
  * Each database case is its OWN database:
  *   A      at 037, 038 applies with ONE precheck NOTICE; every catalog line it adds is an lff_* object or an internal RI trigger its
  *          keys put on players / lff_posts; EVERY COLUMN exactly (name, type, NOT NULL; requests carry no version); none is removed;
- *          no existing row changes; all three tables are empty; the stamp is the last;
+ *          no existing row changes; all four tables are empty; no lff_* relation carries a privilege; the stamp is the last;
  *   G      the guard refuses, changing and stamping nothing: before 037, a second time, after a later stamp, an lff_* relation present;
- *   POST   the in-transaction post-check refuses (rolling everything back) when what the file creates is not what it proves;
+ *   POST   the in-transaction post-check refuses (rolling everything back) when what the file creates is not what it proves, and
+ *          when a default ACL of the store would hand the LFF tables or the evidence view to another role (security m-4);
  *   C      every constraint holds against real rows, each refusal beside a control that is accepted, at each bound's edge and one
  *          past it; the vocabularies are social-lff.ts's own (CANCELLED stored; EXPIRED never stored); the domain's refused
  *          characters (C0, DEL, C1, U+2028/9) refused in every text and every allowed neighbour (ZWJ emoji included) accepted, under
  *          any locale; one LIVE (PENDING or ACCEPTED) request per (post, requester); the creation record, which a post delete
- *          leaves and a player delete removes; the cascades; what the schema deliberately does NOT refuse;
- *   V      (D-L5 R-4) the evidence view lists every HELD or REPORTED post -- the post as last written, the reports naming it, its
- *          requests -- and no other; 038 grants nothing on it, and it reads with its CALLER's privileges (security_invoker): a role
- *          granted the view alone is refused, and the control, granted the tables too, reads;
- *   H      the committed DOWN refuses while a later migration is applied, while ANY of the three tables holds a row (a HELD post
- *          included) and while a relation is not as 038 created it; then it restores the catalog EXACTLY (the view gone too),
+ *          leaves and a player delete removes; the evidence snapshot (its cause/seq/report rule, its times, one row per (post, seq));
+ *          the cascades; what the schema deliberately does NOT refuse;
+ *   V      (D-L5 R-4, r2) the evidence view lists every EVIDENCE post -- one a snapshot names (a qualifying report made it evidence),
+ *          or a held one -- with the post as last written, every report naming it, its requests and its snapshots in seq order; a
+ *          post that only a NON-qualifying report names is not listed (the predicate reads the snapshots, never social_reports);
+ *          038 grants nothing on it, and it reads with its CALLER's privileges (security_invoker): a role granted the view alone is
+ *          refused, and the control, granted the tables too, reads;
+ *   H      the committed DOWN refuses while a later migration is applied, while ANY of the four tables holds a row (a HELD post and
+ *          a snapshot included) and while a relation is not as 038 created it; then it restores the catalog EXACTLY (the view gone too),
  *          removes the stamp, and 038 applies again. 037's DOWN refuses while 038 is stamped;
  *   CHAIN  the product's migrate() carries 038 right after 037 on a fresh database, and a second migrate() changes nothing;
  *   ROLE   a NOSUPERUSER database owner (the O1 bootstrap's D4 role) applies the whole chain, 038 included.
@@ -66,11 +72,12 @@ const BEFORE_037 = WONDERLAND_MIGRATIONS.slice(0, INDEX_038 - 1); // CHAIN prove
 const STAMP_037 = '037_wonderland_private_servers';
 const STAMP_038 = '038_wonderland_lff';
 const PLAYERS = ['usr_038_a', 'usr_038_b', 'usr_038_c', 'usr_038_d'];
-const TABLES = ['lff_join_requests', 'lff_post_creations', 'lff_posts'];
+const TABLES = ['lff_join_requests', 'lff_post_creations', 'lff_post_snapshots', 'lff_posts'];
 const RELATIONS = [
   'lff_posts', 'lff_posts_pkey', 'lff_posts_feed', 'lff_posts_category_feed', 'lff_posts_owner', 'lff_posts_held',
   'lff_join_requests', 'lff_join_requests_pkey', 'lff_join_requests_one_live', 'lff_join_requests_requester', 'lff_join_requests_post',
   'lff_post_creations', 'lff_post_creations_pkey', 'lff_post_creations_recent',
+  'lff_post_snapshots', 'lff_post_snapshots_pkey',
   'lff_moderation_evidence',
 ];
 /** Every column 038 creates, as the catalog reads it: name, type, NOT NULL. Requests carry NO version (contract r2). */
@@ -87,12 +94,22 @@ const COLUMNS = [
   'column lff_join_requests #7 updated_at timestamp with time zone not-null',
   'column lff_post_creations #1 owner_id text not-null', 'column lff_post_creations #2 post_id text not-null',
   'column lff_post_creations #3 created_at timestamp with time zone not-null',
+  // D-L5 r2: an evidence snapshot -- every column of the post as it read then (lff_posts' names, so the store reads one as a post), and
+  // its own key, cause, report and capture time; report_id is NULL on an edit's snapshot
+  'column lff_post_snapshots #1 post_id text not-null', 'column lff_post_snapshots #2 seq integer not-null', 'column lff_post_snapshots #3 cause text not-null',
+  'column lff_post_snapshots #4 report_id text', 'column lff_post_snapshots #5 captured_at timestamp with time zone not-null',
+  'column lff_post_snapshots #6 owner_id text not-null', 'column lff_post_snapshots #7 category text not-null', 'column lff_post_snapshots #8 title text not-null',
+  'column lff_post_snapshots #9 description text not-null', 'column lff_post_snapshots #10 project_label text not-null',
+  'column lff_post_snapshots #11 skills text[] not-null', 'column lff_post_snapshots #12 open_slots integer not-null',
+  'column lff_post_snapshots #13 status text not-null', 'column lff_post_snapshots #14 created_at timestamp with time zone not-null',
+  'column lff_post_snapshots #15 updated_at timestamp with time zone not-null', 'column lff_post_snapshots #16 expires_at timestamp with time zone not-null',
+  'column lff_post_snapshots #17 version bigint not-null',
 ];
-/** The evidence view's columns (D-L5 R-4), as the catalog reads them: the post as last written, then its reports and its requests. */
+/** The evidence view's columns (D-L5 R-4), as the catalog reads them: the post as last written, then its reports, requests and snapshots. */
 const VIEW_COLUMNS = [
   'post_id text', 'owner_id text', 'held_at timestamp with time zone', 'status text', 'category text', 'title text', 'description text',
   'project_label text', 'skills text[]', 'open_slots integer', 'created_at timestamp with time zone', 'updated_at timestamp with time zone',
-  'expires_at timestamp with time zone', 'version bigint', 'reports jsonb', 'requests jsonb',
+  'expires_at timestamp with time zone', 'version bigint', 'reports jsonb', 'requests jsonb', 'snapshots jsonb',
 ].map((c, i) => `column lff_moderation_evidence #${i + 1} ${c}`);
 const VIEW = 'lff_moderation_evidence';
 const ONE_LIVE = 'lff_join_requests_one_live';
@@ -122,6 +139,7 @@ const POST_SQL = 'INSERT INTO relay_wonderland.lff_posts(post_id, owner_id, cate
 const REPORT_SQL = 'INSERT INTO relay_wonderland.social_reports(report_id, reporter_id, reported_id, reason, note, subject_ref, filed_at) VALUES($1,$2,$3,$4,$5,$6,$7)';
 const REQUEST_SQL = 'INSERT INTO relay_wonderland.lff_join_requests(request_id, post_id, requester_id, message, status, created_at, updated_at) VALUES($1,$2,$3,$4,$5,$6,$7)';
 const CREATION_SQL = 'INSERT INTO relay_wonderland.lff_post_creations(owner_id, post_id, created_at) VALUES($1,$2,$3)';
+const SNAPSHOT_SQL = 'INSERT INTO relay_wonderland.lff_post_snapshots(post_id, seq, cause, report_id, captured_at, owner_id, category, title, description, project_label, skills, open_slots, status, created_at, updated_at, expires_at, version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)';
 let serial = 0;
 interface PostRow { id: string; owner: string; category: string; title: string; description: string; label: string; skills: unknown; slots: number; status: string; created: number; updated: number; expires: number; version: number; held: number | null }
 /** A post row that every CHECK accepts (a player's: not held), with one field overridden; a fresh `lffp_<serial>` id unless one is given. */
@@ -137,6 +155,12 @@ interface RequestRow { id: string; post: string; requester: string; message: str
 const request = (postId: string, over: Partial<RequestRow> = {}): unknown[] => {
   const r: RequestRow = { id: `lffr_${++serial}`, post: postId, requester: PLAYERS[1], message: '', status: 'DECLINED', created: T0, updated: T0, ...over };
   return [r.id, r.post, r.requester, r.message, r.status, ts(r.created), ts(r.updated)];
+};
+interface SnapshotRow { seq: number; cause: string; report: string | null; captured: number; owner: string; title: string; status: string; created: number; updated: number; version: number }
+/** An evidence snapshot every CHECK accepts (the REPORTED one, seq 1) of `postId` as it read then, with one field overridden. */
+const snapshot = (postId: string, over: Partial<SnapshotRow> = {}): unknown[] => {
+  const r: SnapshotRow = { seq: 1, cause: 'REPORTED', report: 'rep_1', captured: T0, owner: PLAYERS[0], title: 'Looking for a team', status: 'OPEN', created: T0, updated: T0, version: 1, ...over };
+  return [postId, r.seq, r.cause, r.report, ts(r.captured), r.owner, 'TEAMS', r.title, '', '', [], 3, r.status, ts(r.created), ts(r.updated), ts(r.created + LFF_POST_TTL_MS), r.version];
 };
 
 type Refusal = { code: string | undefined; message: string; constraint?: string };
@@ -254,7 +278,7 @@ suite('migration 038: Wonderland LFF, applied explicitly after 037', () => {
     await admin?.end().catch(() => undefined);
   }, 60_000);
 
-  it('A: at 037, 038 applies with one precheck NOTICE: it only ADDS lff_* objects (and the RI triggers its keys put on players), every column exactly, no row moves, all three tables empty, the stamp last', async () => {
+  it('A: at 037, 038 applies with one precheck NOTICE: it only ADDS lff_* objects (and the RI triggers its keys put on players), every column exactly, no row moves, all four tables empty, no privilege on any, the stamp last', async () => {
     const pool = await at037('clean');
     const before = await catalog(pool);
     const rowsBefore = await checksums(pool, []);
@@ -265,21 +289,24 @@ suite('migration 038: Wonderland LFF, applied explicitly after 037', () => {
     expect(before.filter((line) => !after.includes(line)), 'nothing removed').toEqual([]);
     const added = after.filter((line) => !before.includes(line));
     for (const line of added) expect(line, 'every added line is 038\'s').toMatch(/lff_/u);
-    // EVERY COLUMN of the three tables: name, position, type and NOT NULL, and no other (requests carry no version, r2)
-    expect(added.filter((line) => /^column lff_(posts|join_requests|post_creations) #/u.test(line)).sort(), 'every column, exactly').toEqual([...COLUMNS].sort());
+    // EVERY COLUMN of the four tables: name, position, type and NOT NULL, and no other (requests carry no version, r2)
+    expect(added.filter((line) => /^column lff_(posts|join_requests|post_creations|post_snapshots) #/u.test(line)).sort(), 'every column, exactly').toEqual([...COLUMNS].sort());
     expect(added.some((line) => line.startsWith('column lff_join_requests ') && line.includes(' version ')), 'a request has no version').toBe(false);
     expect(added.filter((line) => line.startsWith('internal trigger players ')), 'the RI triggers on players: 2 per key, 3 keys').toHaveLength(6);
-    expect(added.filter((line) => line.startsWith('internal trigger lff_posts ')), 'on lff_posts: its own key\'s 2 checks, and 2 as the requests\' parent').toHaveLength(4);
+    expect(added.filter((line) => line.startsWith('internal trigger lff_posts ')), 'on lff_posts: its own key\'s 2 checks, 2 as the requests\' parent, 2 as the snapshots\'').toHaveLength(6);
     expect(added.filter((line) => line.startsWith('internal trigger lff_join_requests ')), 'on lff_join_requests: 2 checks per key, 2 keys').toHaveLength(4);
     expect(added.filter((line) => line.startsWith('internal trigger lff_post_creations ')), 'on lff_post_creations: its one key\'s 2 checks (none to lff_posts)').toHaveLength(2);
-    expect(added.filter((line) => line.startsWith('internal trigger ') && !/^internal trigger (players|lff_posts|lff_join_requests|lff_post_creations) /u.test(line)), 'no RI trigger anywhere else').toEqual([]);
+    expect(added.filter((line) => line.startsWith('internal trigger lff_post_snapshots ')), 'on lff_post_snapshots: its one key\'s 2 checks (to lff_posts; none to players)').toHaveLength(2);
+    expect(added.filter((line) => line.startsWith('internal trigger ') && !/^internal trigger (players|lff_posts|lff_join_requests|lff_post_creations|lff_post_snapshots) /u.test(line)), 'no RI trigger anywhere else').toEqual([]);
     expect(await present(pool)).toEqual([...RELATIONS].sort());
     const counts = (await pool.query(`
       SELECT count(*) FILTER (WHERE contype = 'c') AS checks, count(*) FILTER (WHERE contype = 'p') AS pks, count(*) FILTER (WHERE contype = 'f') AS fks,
              count(*) FILTER (WHERE contype = 'u') AS uniques
         FROM pg_constraint k JOIN pg_class c ON c.oid = k.conrelid
        WHERE c.relnamespace = 'relay_wonderland'::regnamespace AND c.relname LIKE 'lff\\_%'`)).rows[0];
-    expect({ checks: Number(counts.checks), pks: Number(counts.pks), fks: Number(counts.fks), uniques: Number(counts.uniques) }).toEqual({ checks: 16, pks: 3, fks: 4, uniques: 0 });
+    expect({ checks: Number(counts.checks), pks: Number(counts.pks), fks: Number(counts.fks), uniques: Number(counts.uniques) }).toEqual({ checks: 18, pks: 4, fks: 5, uniques: 0 });
+    // NO PRIVILEGE ON ANY lff_* RELATION (security m-4): 038 grants nothing, and this store has no default ACL
+    expect((await pool.query("SELECT c.relname AS r FROM pg_class c WHERE c.relnamespace = 'relay_wonderland'::regnamespace AND c.relname LIKE 'lff\\_%' AND c.relacl IS NOT NULL")).rows, 'no privilege set').toEqual([]);
     // THE EVIDENCE VIEW (D-L5 R-4): exactly its columns, a view reading with its caller's privileges, granted to nobody
     expect(added.filter((line) => line.startsWith(`column ${VIEW} #`)).sort(), 'the view\'s columns, exactly').toEqual([...VIEW_COLUMNS].sort());
     const view = (await pool.query(`SELECT relkind::text AS kind, reloptions, relacl FROM pg_class WHERE oid = 'relay_wonderland.${VIEW}'::regclass`)).rows[0];
@@ -360,6 +387,16 @@ suite('migration 038: Wonderland LFF, applied explicitly after 037', () => {
         WONDERLAND_MIGRATION_038.slice(WONDERLAND_MIGRATION_038.indexOf('CREATE VIEW'), WONDERLAND_MIGRATION_038.indexOf('-- POST-CHECK')), ''), `${relations} (lff_moderation_evidence)`],
       ['a row written', after(`INSERT INTO relay_wonderland.lff_post_creations(owner_id, post_id, created_at) VALUES('${PLAYERS[0]}', 'lffp_1', now());`),
         'migration_038_postcheck: lff_post_creations holds 1 row(s), and 038 writes none'],
+      // D-L5 r2: the snapshots' own rules and key, exactly as 038 writes them; and no privilege on any lff_* relation (security m-4)
+      ['the snapshot cause rule missing (an edit could pose as the report, or a report name none)',
+        mutate("CONSTRAINT lff_post_snapshots_cause CHECK((cause = 'REPORTED' AND seq = 1 AND report_id IS NOT NULL) OR (cause = 'EDITED' AND seq > 1 AND report_id IS NULL)),", ''),
+        `${constraints} (lff_post_snapshots_cause)`],
+      ['the snapshot key to its post not cascading (a players delete would then fail on any evidence)',
+        mutate('CONSTRAINT lff_post_snapshots_post_fk FOREIGN KEY(post_id) REFERENCES relay_wonderland.lff_posts(post_id) ON DELETE CASCADE,',
+          'CONSTRAINT lff_post_snapshots_post_fk FOREIGN KEY(post_id) REFERENCES relay_wonderland.lff_posts(post_id) ON DELETE RESTRICT,'),
+        `${constraints} (lff_post_snapshots_post_fk)`],
+      ['a privilege granted in the file (it would hand a table of evidence to every role)', after('GRANT SELECT ON relay_wonderland.lff_posts TO PUBLIC;'),
+        'migration_038_postcheck: privileges are set on lff_posts'],
     ];
     const pool = await at037('postcheck');
     const catalogBefore = await catalog(pool);
@@ -372,6 +409,19 @@ suite('migration 038: Wonderland LFF, applied explicitly after 037', () => {
     }
     // CONTROL: the file itself passes its own post-check on the same database
     expect((await run(pool, WONDERLAND_MIGRATION_038)).refusal, '038 itself applies').toBeNull();
+    // A DEFAULT ACL OF THE STORE (security m-4): every table and view 038 creates would carry it -- the evidence and its tables handed
+    // to PUBLIC, with no GRANT in the file. The post-check refuses, rolling everything back; the CONTROL, the default revoked, applies.
+    const defacl = await at037('defacl');
+    const defaclBefore = await catalog(defacl);
+    await defacl.query('ALTER DEFAULT PRIVILEGES IN SCHEMA relay_wonderland GRANT SELECT ON TABLES TO PUBLIC');
+    const defaulted = await run(defacl, WONDERLAND_MIGRATION_038);
+    expect(defaulted.refusal?.message, 'a default ACL').toContain(
+      'migration_038_postcheck: privileges are set on lff_join_requests, lff_moderation_evidence, lff_post_creations, lff_post_snapshots, lff_posts',
+    );
+    expect(await catalog(defacl), 'a default ACL: rolled back').toEqual(defaclBefore);
+    expect(await stamped(defacl), 'a default ACL: not stamped').toBe(0);
+    await defacl.query('ALTER DEFAULT PRIVILEGES IN SCHEMA relay_wonderland REVOKE SELECT ON TABLES FROM PUBLIC');
+    expect((await run(defacl, WONDERLAND_MIGRATION_038)).refusal, 'the control: the default revoked, 038 applies').toBeNull();
   }, 300_000);
 
   it('C: every constraint holds against real rows, each refusal beside a control that is accepted, with social-lff.ts\'s own vocabulary, bounds and refused characters', async () => {
@@ -539,6 +589,29 @@ suite('migration 038: Wonderland LFF, applied explicitly after 037', () => {
     await accepts(pool, 'a creation record whose post no longer exists (a deleted post still counts toward the cap)', PC, [A, 'lffp_800002', ts(T0)]);
     await accepts(pool, 'two creation records at the same time', PC, [A, 'lffp_800003', ts(T0)]);
 
+    // THE EVIDENCE SNAPSHOT (D-L5 r2, the security review's M-1): the first is the report's (seq 1, REPORTED, naming it), every later
+    // one an edit's (seq > 1, EDITED, naming none); captured no earlier than the post was last written; ONE row per (post, seq), so a
+    // second write is refused, never an overwrite (append-only); only of a post that exists
+    const SN = SNAPSHOT_SQL;
+    const cause = 'lff_post_snapshots_cause';
+    await refused(pool, 'a snapshot of a post that does not exist', SN, snapshot('lffp_404'), '23503', 'lff_post_snapshots_post_fk');
+    await accepts(pool, 'the report\'s snapshot (seq 1, REPORTED, naming the report)', SN, snapshot(BASE));
+    await refused(pool, 'the same (post, seq) again: append-only, never an overwrite', SN, snapshot(BASE, { report: 'rep_2', title: 'Other words' }), '23505', 'lff_post_snapshots_pkey');
+    await refused(pool, 'an edit\'s snapshot at seq 1', SN, snapshot(OTHER, { cause: 'EDITED', report: null, owner: B }), '23514', cause);
+    await refused(pool, 'a report\'s snapshot at seq 2', SN, snapshot(BASE, { seq: 2 }), '23514', cause);
+    await refused(pool, 'a report\'s snapshot naming no report', SN, snapshot(OTHER, { report: null, owner: B }), '23514', cause);
+    await refused(pool, 'an edit\'s snapshot naming a report', SN, snapshot(BASE, { seq: 2, cause: 'EDITED' }), '23514', cause);
+    await refused(pool, 'seq 0', SN, snapshot(OTHER, { seq: 0, owner: B }), '23514', cause);
+    for (const c of ['DELETED', 'HELD', 'reported', 'edited']) await refused(pool, `a cause ${c}`, SN, snapshot(BASE, { seq: 2, cause: c, report: null }), '23514', cause);
+    await accepts(pool, 'an edit\'s snapshot (seq 2, EDITED, naming none)', SN, snapshot(BASE, { seq: 2, cause: 'EDITED', report: null, title: 'Edited', updated: T0 + DAY, captured: T0 + DAY, version: 2 }));
+    const stimes = 'lff_post_snapshots_times';
+    await refused(pool, 'captured before the post was last written', SN, snapshot(BASE, { seq: 3, cause: 'EDITED', report: null, updated: T0 + DAY, captured: T0 + DAY - 1 }), '23514', stimes);
+    await refused(pool, 'a post updated before it was made', SN, snapshot(BASE, { seq: 3, cause: 'EDITED', report: null, updated: T0 - 1, captured: T0 }), '23514', stimes);
+    await accepts(pool, 'captured exactly at the last write', SN, snapshot(BASE, { seq: 3, cause: 'EDITED', report: null, updated: T0 + 2 * DAY, captured: T0 + 2 * DAY, version: 3 }));
+    await accepts(pool, 'captured a year after it (a report filed long after)', SN, snapshot(OTHER, { owner: B, captured: T0 + 365 * DAY }));
+    const snapshotsOf = (postId: string) => count(pool, 'SELECT count(*) AS n FROM relay_wonderland.lff_post_snapshots WHERE post_id = $1', [postId]);
+    expect([await snapshotsOf(BASE), await snapshotsOf(OTHER)]).toEqual([3, 1]);
+
     // THE CASCADES
     const requestsOn = (postId: string) => count(pool, 'SELECT count(*) AS n FROM relay_wonderland.lff_join_requests WHERE post_id = $1', [postId]);
     const requestsBy = (player: string) => count(pool, 'SELECT count(*) AS n FROM relay_wonderland.lff_join_requests WHERE requester_id = $1', [player]);
@@ -549,6 +622,7 @@ suite('migration 038: Wonderland LFF, applied explicitly after 037', () => {
     expect(onOther, 'OTHER has a request').toBeGreaterThan(0);
     await pool.query('DELETE FROM relay_wonderland.lff_posts WHERE post_id = $1', [OTHER]);
     expect(await requestsOn(OTHER), 'the deleted post\'s requests went with it').toBe(0);
+    expect(await snapshotsOf(OTHER), 'and its snapshot (the store never issues this DELETE for a post a snapshot names: it holds it)').toBe(0);
     expect(await requestsOn(BASE), 'no other post\'s requests moved').toBe(onBase);
     expect(await count(pool, 'SELECT count(*) AS n FROM relay_wonderland.lff_post_creations WHERE owner_id = $1 AND post_id = $2', [B, OTHER]), 'the creation record outlives the post: the cap still counts it').toBe(1);
     // a player delete takes their own requests (C only requested), and leaves the posts they asked to join
@@ -567,6 +641,7 @@ suite('migration 038: Wonderland LFF, applied explicitly after 037', () => {
     expect(await requestsOn(BASE), 'and every request to them').toBe(0);
     expect(await requestsBy(A), 'and A\'s own request on B\'s post').toBe(0);
     expect(await creationsOf(A), 'and A\'s creation records').toBe(0);
+    expect(await snapshotsOf(BASE), 'and the snapshots of A\'s posts (FQ-3: account erasure vs evidence is open for counsel)').toBe(0);
     expect(await count(pool, 'SELECT count(*) AS n FROM relay_wonderland.lff_posts WHERE post_id = $1', [THIRD]), 'B\'s post stays').toBe(1);
     expect(await creationsOf(B), 'B\'s creation record stays').toBe(1);
     expect(await count(pool, 'SELECT count(*) AS n FROM relay_wonderland.players WHERE player_id = $1', [B]), 'B stays').toBe(1);
@@ -575,39 +650,51 @@ suite('migration 038: Wonderland LFF, applied explicitly after 037', () => {
     const HELD = 'lffp_700004';
     await accepts(pool, 'a held post by B', P, post({ id: HELD, owner: B, status: 'CLOSED', held: T0 + DAY }));
     await accepts(pool, 'D\'s request on it', R, request(HELD, { requester: D, status: 'ACCEPTED' }));
+    await accepts(pool, 'its snapshot', SN, snapshot(HELD, { owner: B, status: 'CLOSED', captured: T0 + 1000 }));
     await pool.query('DELETE FROM relay_wonderland.players WHERE player_id = $1', [B]);
-    expect([await count(pool, 'SELECT count(*) AS n FROM relay_wonderland.lff_posts WHERE post_id = $1', [HELD]), await requestsOn(HELD)], 'the evidence went with the owner').toEqual([0, 0]);
+    expect([await count(pool, 'SELECT count(*) AS n FROM relay_wonderland.lff_posts WHERE post_id = $1', [HELD]), await requestsOn(HELD), await snapshotsOf(HELD)], 'the evidence went with the owner').toEqual([0, 0, 0]);
   }, 300_000);
 
-  it('V (D-L5 R-4): the evidence view lists every HELD or REPORTED post -- the post as last written, its reports, its requests -- and no other; 038 grants nothing on it, and it reads with its caller\'s privileges', async () => {
+  it('V (D-L5 R-4, r2): the evidence view lists every EVIDENCE post -- a snapshot names it, or it is held -- with the post as last written, its reports, its requests and its snapshots; a post only a non-qualifying report names is not listed; 038 grants nothing on it, and it reads with its caller\'s privileges', async () => {
     const pool = await at038('view');
     const [A, B, C, D] = PLAYERS;
-    await pool.query(POST_SQL, post({ id: 'lffp_1', owner: A, status: 'CLOSED', held: T0 + DAY })); // held; its reports since removed
-    await pool.query(POST_SQL, post({ id: 'lffp_2', owner: A, title: 'Open and reported' })); // reported, still a player's (R-5)
+    await pool.query(POST_SQL, post({ id: 'lffp_1', owner: A, status: 'CLOSED', held: T0 + DAY })); // held; no report or snapshot names it now
+    await pool.query(POST_SQL, post({ id: 'lffp_2', owner: A, title: 'Open and reported' })); // evidence, still a player's (R-5)
     await pool.query(POST_SQL, post({ id: 'lffp_3', owner: B })); // neither: the CONTROL
-    await pool.query(POST_SQL, post({ id: 'lffp_4', owner: B, title: 'Held, reported twice', updated: T0 + 5000, held: T0 + DAY })); // held and reported
+    await pool.query(POST_SQL, post({ id: 'lffp_4', owner: B, title: 'Held, reported twice', updated: T0 + 5000, version: 2, held: T0 + DAY })); // edited after the report, then held
+    await pool.query(POST_SQL, post({ id: 'lffp_5', owner: B, title: 'Named by a report that did not qualify' })); // the r2 CONTROL: a report, no snapshot
     await pool.query(REQUEST_SQL, request('lffp_4', { id: 'lffr_5', requester: C, message: 'me', status: 'ACCEPTED', created: T0 + 1000, updated: T0 + 2000 }));
     await pool.query(REQUEST_SQL, request('lffp_4', { id: 'lffr_6', requester: D, status: 'PENDING', created: T0 + 3000, updated: T0 + 3000 }));
     await pool.query(REQUEST_SQL, request('lffp_3', { id: 'lffr_7', requester: C, status: 'PENDING' }));
     await pool.query(REPORT_SQL, ['rep_1', C, A, 'SPAM', '', 'lffp_2', ts(T0 + 10_000)]);
     await pool.query(REPORT_SQL, ['rep_3', D, B, 'SPAM', '', 'lffp_4', ts(T0 + 30_000)]);
-    await pool.query(REPORT_SQL, ['rep_2', C, B, 'HARASSMENT', 'rude', 'lffp_4', ts(T0 + 20_000)]);
+    await pool.query(REPORT_SQL, ['rep_2', C, B, 'HARASSMENT', 'rude', 'lffp_4', ts(T0 + 2000)]);
     await pool.query(REPORT_SQL, ['rep_4', D, B, 'SPAM', '', null, ts(T0 + 40_000)]); // about the person: names no post
     await pool.query(REPORT_SQL, ['rep_5', D, B, 'SPAM', '', 'msg_9', ts(T0 + 50_000)]); // names something else
+    await pool.query(REPORT_SQL, ['rep_6', D, A, 'SPAM', '', 'lffp_5', ts(T0 + 60_000)]); // names lffp_5 but not its owner: no snapshot (FQ-1 a)
+    // THE SNAPSHOTS: lffp_2's report's; lffp_4's report's (as reported: 'Abusive words', v1) and its edit's -- the edit's written FIRST,
+    // so the view's own ORDER BY seq is what orders them
+    await pool.query(SNAPSHOT_SQL, snapshot('lffp_2', { owner: A, title: 'Open and reported', report: 'rep_1', captured: T0 + 10_000 }));
+    await pool.query(SNAPSHOT_SQL, snapshot('lffp_4', { seq: 2, cause: 'EDITED', report: null, owner: B, title: 'Held, reported twice', updated: T0 + 5000, captured: T0 + 5000, version: 2 }));
+    await pool.query(SNAPSHOT_SQL, snapshot('lffp_4', { owner: B, title: 'Abusive words', report: 'rep_2', captured: T0 + 2000 }));
     const rows = (await pool.query(`SELECT * FROM relay_wonderland.${VIEW} ORDER BY post_id`)).rows;
-    expect(rows.map((r: { post_id: string }) => r.post_id), 'held or reported, never the control').toEqual(['lffp_1', 'lffp_2', 'lffp_4']);
+    expect(rows.map((r: { post_id: string }) => r.post_id), 'every evidence post, never the control nor a post only a non-qualifying report names').toEqual(['lffp_1', 'lffp_2', 'lffp_4']);
     expect(Object.keys(rows[0]), 'the columns, in order').toEqual(VIEW_COLUMNS.map((line) => line.split(' ')[3]));
     const byId = Object.fromEntries(rows.map((r: { post_id: string }) => [r.post_id, r])) as Record<string, Record<string, any>>;
     const time = (v: string | Date | null) => (v === null ? null : new Date(v).getTime());
-    expect([time(byId.lffp_1.held_at), byId.lffp_1.reports, byId.lffp_1.requests], 'held, its reports gone: still listed').toEqual([T0 + DAY, [], []]);
+    expect([time(byId.lffp_1.held_at), byId.lffp_1.reports, byId.lffp_1.requests, byId.lffp_1.snapshots], 'held, nothing else naming it: still listed').toEqual([T0 + DAY, [], [], []]);
     expect([byId.lffp_2.held_at, byId.lffp_2.status, byId.lffp_2.title, byId.lffp_2.reports.map((x: { report_id: string }) => x.report_id)]).toEqual([null, 'OPEN', 'Open and reported', ['rep_1']]);
+    expect(byId.lffp_2.snapshots.map((x: Record<string, unknown>) => [x.seq, x.cause, x.report_id])).toEqual([[1, 'REPORTED', 'rep_1']]);
     const held = byId.lffp_4;
-    expect([held.owner_id, held.title, held.status, time(held.updated_at), time(held.held_at), Number(held.version)], 'the post as last written').toEqual([B, 'Held, reported twice', 'OPEN', T0 + 5000, T0 + DAY, 1]);
+    expect([held.owner_id, held.title, held.status, time(held.updated_at), time(held.held_at), Number(held.version)], 'the post as last written').toEqual([B, 'Held, reported twice', 'OPEN', T0 + 5000, T0 + DAY, 2]);
     expect(held.reports.map((x: Record<string, string>) => [x.report_id, x.reporter_id, x.reported_id, x.reason, x.note, time(x.filed_at)]), 'its reports, oldest first').toEqual([
-      ['rep_2', C, B, 'HARASSMENT', 'rude', T0 + 20_000], ['rep_3', D, B, 'SPAM', '', T0 + 30_000],
+      ['rep_2', C, B, 'HARASSMENT', 'rude', T0 + 2000], ['rep_3', D, B, 'SPAM', '', T0 + 30_000],
     ]);
     expect(held.requests.map((x: Record<string, string>) => [x.request_id, x.requester_id, x.message, x.status, time(x.created_at), time(x.updated_at)]), 'its requests, oldest first').toEqual([
       ['lffr_5', C, 'me', 'ACCEPTED', T0 + 1000, T0 + 2000], ['lffr_6', D, '', 'PENDING', T0 + 3000, T0 + 3000],
+    ]);
+    expect(held.snapshots.map((x: Record<string, any>) => [x.seq, x.cause, x.report_id, x.title, Number(x.version), time(x.captured_at)]), 'AS REPORTED, then as edited, by seq').toEqual([
+      [1, 'REPORTED', 'rep_2', 'Abusive words', 1, T0 + 2000], [2, 'EDITED', null, 'Held, reported twice', 2, T0 + 5000],
     ]);
     // 038 GRANTS NOTHING ON IT, and it reads with its CALLER's privileges: a role with none is refused; granted the view ALONE it is
     // still refused (the tables are the caller's to read, not the owner's to lend); the CONTROL, granted the tables too, reads it
@@ -630,8 +717,8 @@ suite('migration 038: Wonderland LFF, applied explicitly after 037', () => {
       await pool.query(`GRANT SELECT ON relay_wonderland.${VIEW} TO ${role}`);
       const viewOnly = await attempt(READ);
       expect(viewOnly?.code, 'the view alone').toBe('42501');
-      expect(viewOnly?.message, 'refused for a TABLE: the view reads as its caller').toMatch(/^permission denied for table (lff_posts|lff_join_requests|social_reports)$/u);
-      await pool.query(`GRANT SELECT ON relay_wonderland.lff_posts, relay_wonderland.lff_join_requests, relay_wonderland.social_reports TO ${role}`);
+      expect(viewOnly?.message, 'refused for a TABLE: the view reads as its caller').toMatch(/^permission denied for table (lff_posts|lff_join_requests|lff_post_snapshots|social_reports)$/u);
+      await pool.query(`GRANT SELECT ON relay_wonderland.lff_posts, relay_wonderland.lff_join_requests, relay_wonderland.lff_post_snapshots, relay_wonderland.social_reports TO ${role}`);
       expect(await attempt(READ), 'the control: granted the tables, it reads').toBeNull();
     } finally {
       await reader.end().catch(() => undefined);
@@ -656,8 +743,10 @@ suite('migration 038: Wonderland LFF, applied explicitly after 037', () => {
     expect((await run(pool, DOWN)).refusal?.message).toContain(`${data} (lff_join_requests 1, lff_posts 1)`);
     await pool.query(CREATION_SQL, [PLAYERS[0], 'lffp_1', ts(T0)]);
     expect((await run(pool, DOWN)).refusal?.message).toContain(`${data} (lff_join_requests 1, lff_post_creations 1, lff_posts 1)`);
+    await pool.query(SNAPSHOT_SQL, snapshot('lffp_1')); // an evidence snapshot (D-L5 r2) is data like any other
+    expect((await run(pool, DOWN)).refusal?.message).toContain(`${data} (lff_join_requests 1, lff_post_creations 1, lff_post_snapshots 1, lff_posts 1)`);
     await pool.query('DELETE FROM relay_wonderland.lff_posts');
-    expect((await run(pool, DOWN)).refusal?.message, 'the post delete cascaded its request, and left its creation record').toContain(`${data} (lff_post_creations 1)`);
+    expect((await run(pool, DOWN)).refusal?.message, 'the post delete cascaded its request and its snapshot, and left its creation record').toContain(`${data} (lff_post_creations 1)`);
     await pool.query('DELETE FROM relay_wonderland.lff_post_creations');
     // a relation not as 038 created it
     await pool.query('DROP INDEX relay_wonderland.lff_posts_feed');
@@ -675,13 +764,13 @@ suite('migration 038: Wonderland LFF, applied explicitly after 037', () => {
     expect((await run(pool, WONDERLAND_MIGRATION_038)).refusal, '038 applies again').toBeNull();
   }, 300_000);
 
-  it("CHAIN: the product's migrate() carries 038 right after 037, a new database has the 13 relations and no LFF row, and a second migrate() changes nothing", async () => {
+  it("CHAIN: the product's migrate() carries 038 right after 037, a new database has the 17 relations and no LFF row, and a second migrate() changes nothing", async () => {
     const pool = await create('chain');
     await new TransactionalWonderlandDatabase(pool).migrate();
     const stamps = (await pool.query('SELECT version FROM relay_wonderland.schema_migrations ORDER BY version COLLATE "C"')).rows.map((r: { version: string }) => r.version);
     expect(stamps.slice(stamps.indexOf(STAMP_037), stamps.indexOf(STAMP_037) + 2), '037 then 038, adjacent').toEqual([STAMP_037, STAMP_038]);
     expect(WONDERLAND_MIGRATIONS.indexOf(WONDERLAND_MIGRATION_038), 'registered right after 037').toBe(WONDERLAND_MIGRATIONS.indexOf(WONDERLAND_MIGRATION_037) + 1);
-    expect(await present(pool), 'the 13 relations, exactly').toEqual([...RELATIONS].sort());
+    expect(await present(pool), 'the 17 relations, exactly').toEqual([...RELATIONS].sort());
     const catalogOnce = await catalog(pool);
     await new TransactionalWonderlandDatabase(pool).migrate();
     expect(await catalog(pool), 'a second migrate() changes nothing').toEqual(catalogOnce);
@@ -758,6 +847,26 @@ describe('migration 038 states social-lff.ts\'s own vocabulary and bounds (stati
     expect(occurrences('  held_at timestamptz,'), 'nullable: a player\'s post holds NULL').toBe(1);
     expect(occurrences('CREATE VIEW relay_wonderland.lff_moderation_evidence WITH (security_invoker = true) AS')).toBe(1);
     expect(occurrences('CONSTRAINT lff_posts_held_at CHECK(held_at IS NULL OR held_at >= updated_at)')).toBe(1);
+  });
+
+  it('D-L5 r2: every evidence predicate reads the SNAPSHOTS, never social_reports; a snapshot holds every column of a post (the store reads one as a post); its causes are social-lff.ts\'s; the post-check refuses any privilege', () => {
+    const flat = sql.replace(/--.*$/gmu, '').replace(/\s+/gu, ' ');
+    expect(occurrences('CREATE TABLE relay_wonderland.lff_post_snapshots(')).toBe(1);
+    expect(flat, 'the view lists a held post or one a snapshot names').toContain(
+      'WHERE p.held_at IS NOT NULL OR EXISTS (SELECT 1 FROM relay_wonderland.lff_post_snapshots s WHERE s.post_id = p.post_id);',
+    );
+    expect(flat, 'social_reports is read only for the view\'s reports column, never to decide evidence').not.toMatch(/EXISTS \(SELECT 1 FROM relay_wonderland\.social_reports/u);
+    const columnsOf = (table: string): string[] => {
+      const start = sql.indexOf(`CREATE TABLE relay_wonderland.${table}(`);
+      return [...sql.slice(start, sql.indexOf('\n);', start)).matchAll(/^ {2}([a-z_]+) [a-z]/gmu)].map((m) => m[1]);
+    };
+    const postColumns = columnsOf('lff_posts');
+    expect(postColumns).toContain('held_at');
+    expect(columnsOf('lff_post_snapshots')).toEqual(['post_id', 'seq', 'cause', 'report_id', 'captured_at', ...postColumns.filter((c) => c !== 'post_id' && c !== 'held_at')]);
+    expect(occurrences("CONSTRAINT lff_post_snapshots_cause CHECK((cause = 'REPORTED' AND seq = 1 AND report_id IS NOT NULL) OR (cause = 'EDITED' AND seq > 1 AND report_id IS NULL))")).toBe(1);
+    expect([...sql.matchAll(/cause = '([A-Z]+)'/gu)].map((m) => m[1]), 'the causes, in order').toEqual([...LFF_SNAPSHOT_CAUSES]);
+    expect(occurrences('CONSTRAINT lff_post_snapshots_times CHECK(captured_at >= updated_at AND updated_at >= created_at)')).toBe(1);
+    expect(occurrences("c.relname LIKE 'lff\\_%' AND c.relkind IN ('r', 'v') AND c.relacl IS NOT NULL"), 'the privilege post-check (security m-4)').toBe(1);
   });
 
   it('a request carries no version; a post keeps its own', () => {

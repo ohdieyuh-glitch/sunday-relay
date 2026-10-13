@@ -447,7 +447,8 @@ export function createWonderfsMount(input: WonderfsMountInput): WonderfsMount {
   const store = (): WfsStore | null => {
     const pool = input.pool();
     if (pool === null) return null;
-    if (opened === null || opened.pool !== pool) opened = { pool, store: openWfsPostgresStore(pool) };
+    // R2-r4: the store writes a connection lost while held to the bridge's log (WFS_HELD_CONNECTION_LOST)
+    if (opened === null || opened.pool !== pool) opened = { pool, store: openWfsPostgresStore(pool, { log: input.log }) };
     return opened.store;
   };
   return {

@@ -39,15 +39,22 @@
  *   7. RETENTION (PROPOSED, the B2b review's m3): a post that is no longer open and was created more than LFF_RETENTION_MS ago
  *      (30 days, 038's sanity bound on a post's whole life) is HARD-DELETED with every request on it, by the LFF writes that carry
  *      the server's time, at most LFF_PURGE_BATCH posts per write (purgeLffPastRetention). It is nobody's act, so it tells nobody.
- *      The creation record keeps its own 24 h prune (createLffPost). A REPORTED post is never purged: it is HELD (rule 8).
- *   8. A REPORTED POST IS MODERATION EVIDENCE (founder D-L5, contract r2.4 R-1..R-5). Reported = at least one report (reports.file,
- *      the existing flow) whose subjectRef is the post's id, read from the server's state at the moment of the delete or the purge,
- *      so a report filed after a close still counts (lffPostReported). Such a post is never deleted by any app path: the owner's
- *      delete (R-2) and the retention purge (R-1) HOLD it instead -- it leaves lffPosts and its requests leave lffRequests exactly
- *      as a deletion takes them, so every rule, view, count and event reads a held post EXACTLY as a deleted one and no player
- *      surface can tell the two apart (R-3); the post as last written and every request on it (the accepted list included) move to
- *      lffHeld, which no player surface reads (removeLffPosts). The persistence keeps the rows, marked held (038's held_at), and
- *      authorized moderators -- database operators until the founder names a role and a surface -- read them through 038's view
+ *      The creation record keeps its own 24 h prune (createLffPost). An EVIDENCE post is never purged: it is HELD (rule 8).
+ *   8. A REPORTED POST IS MODERATION EVIDENCE (founder D-L5, contract r2.4 R-1..R-5). A report (reports.file, the existing flow)
+ *      MAKES A POST EVIDENCE only when, at the moment it is filed (recordLffReport; MAIN's DEFAULT for the founder's FQ-1, flagged
+ *      to the founder, not final): (a) its reportedId is the post's owner, (b) the post exists and the report is filed no earlier
+ *      than the post was created (a report of an id not yet minted counts for nothing), and (c) the reporter may see the post
+ *      (postVisibleTo, the feed's and get's own rule: a walled, hidden-from or never-shown reporter's report holds nothing). Any
+ *      other report is still filed exactly as before, for moderators to read; it just holds nothing. A post becomes evidence ONCE,
+ *      and that is recorded as its first SNAPSHOT: the post as it read when that report was filed (REPORTED, naming the report).
+ *      Every later edit of it appends another (EDITED), so the content that was reported is never lost to an edit (MAIN r2, the
+ *      security review's M-1). Snapshots are append-only, silent and read by no player surface (lffSnapshots).
+ *      An evidence post is never deleted by any app path: the owner's delete (R-2) and the retention purge (R-1), reported or not
+ *      when it ended, HOLD it instead -- it leaves lffPosts and its requests leave lffRequests exactly as a deletion takes them, so
+ *      every rule, view, count and event reads a held post EXACTLY as a deleted one and no player surface can tell the two apart
+ *      (R-3); the post as last written and every request on it (the accepted list included) move to lffHeld, which no player
+ *      surface reads (removeLffPosts). The persistence keeps the rows, marked held (038's held_at), and authorized moderators --
+ *      database operators until the founder names a role and a surface -- read them through 038's view
  *      relay_wonderland.lff_moderation_evidence (R-4); no route serves them. An OPEN reported post stays visible (R-5, rule 5).
  * No counts or rosters leak: how many have been accepted is the owner's alone (availableSlots); the accepted list is shown to the
  * owner, and to an accepted user with only the co-accepted they may see (rule 3's test, person by person); pending requests are
@@ -67,7 +74,7 @@
  */
 
 import { fail, ok, relayError, type RelayError, type RelayResult } from '../protocol/errors';
-import type { SocialOperationId, SocialUserId, UserProfileView } from './social-contracts';
+import type { SocialOperationId, SocialReport, SocialUserId, UserProfileView } from './social-contracts';
 import { resolveProfileFor } from './social-presence';
 import type { SocialPersonRow } from './social-preview';
 import { audienceAdmits, blockedEitherWay, lffPostById, lffRequestById, mintId, userById, type SocialState } from './social-state';
@@ -219,7 +226,7 @@ export interface LffCreation {
 }
 
 /**
- * ONE HELD POST: MODERATION EVIDENCE (rule 8, founder D-L5). A reported post its owner deleted, or that retention reached, exactly
+ * ONE HELD POST: MODERATION EVIDENCE (rule 8, founder D-L5). An evidence post its owner deleted, or that retention reached, exactly
  * as it was last written, with every request on it in any status (the accepted list included), as they were at that moment.
  * Persisted as the same relay_wonderland.lff_posts / lff_join_requests rows, the post's held_at set (038), and never written again.
  * No player surface reads it: to every player it is a deleted post.
@@ -230,6 +237,28 @@ export interface LffHeldPost {
   readonly requests: readonly LffJoinRequest[];
   /** The server's time of the delete or the purge that held it; never before the post's own updatedAtMs (a stepped-back clock). */
   readonly heldAtMs: number;
+}
+
+/** Why an evidence snapshot was taken (rule 8): the report that made the post evidence, or an edit after it. */
+export const LFF_SNAPSHOT_CAUSES = ['REPORTED', 'EDITED'] as const;
+export type LffSnapshotCause = (typeof LFF_SNAPSHOT_CAUSES)[number];
+
+/**
+ * ONE EVIDENCE SNAPSHOT (rule 8; MAIN r2, the security review's M-1): the post exactly as it read when the report that made it
+ * evidence was filed (seq 1, REPORTED, naming that report), or right after a later edit of it (seq 2, 3, ..., EDITED). Persisted as
+ * relay_wonderland.lff_post_snapshots (038), keyed (post_id, seq) -- no id is minted, so a snapshot moves no serial a player could
+ * see. Append-only: the app never changes or removes one. No player surface reads it.
+ */
+export interface LffPostSnapshot {
+  readonly postId: string;
+  readonly seq: number;
+  readonly cause: LffSnapshotCause;
+  /** The report that made the post evidence (seq 1); null for an edit's snapshot. */
+  readonly reportId: string | null;
+  /** The server's time of the report or the edit; never before the post's updatedAtMs as captured. */
+  readonly capturedAtMs: number;
+  /** The post as it read at that moment, every field. */
+  readonly post: LffPost;
 }
 
 /** The fields a player writes on a post, already validated (social-commands.ts). */
@@ -408,24 +437,52 @@ const bumped = (post: LffPost, fields: LffPostChange, nowMs: number): LffPost =>
 const pastRetention = (post: LffPost, nowMs: number): boolean => nowMs - post.createdAtMs > LFF_RETENTION_MS && lffPostStatusAt(post, nowMs) !== 'OPEN';
 
 /**
- * WHETHER A REPORT NAMES THIS POST (rule 8, founder D-L5): at least one report whose subjectRef is the post's id, in the server's
- * state NOW -- whoever filed it, whenever (a report filed after the post closed counts). The reports.file flow is the existing one.
+ * WHETHER A POST IS EVIDENCE (rule 8): a report that qualified when it was filed made it so, and that is recorded as the post's
+ * first snapshot (recordLffReport). Read from the server's state at the moment of the delete or the purge, so a report filed after
+ * the post closed counts -- if its reporter could still see the post then (the owner, or a user accepted on it).
  */
-export const lffPostReported = (state: SocialState, postId: string): boolean => state.reports.some((r) => r.subjectRef === postId);
+export const lffPostReported = (state: SocialState, postId: string): boolean => state.lffSnapshots.some((s) => s.postId === postId);
 
 /** Held posts in one order whatever order they were held in: by the post id's serial (the order a store reads its rows back in). */
 const bySerial = (a: LffHeldPost, b: LffHeldPost): number => serialOf(a.post.id) - serialOf(b.post.id);
 
+/** Snapshots in one order whatever order they were taken in: by the post id's serial, then seq (a store's read-back order). */
+const snapshotOrder = (a: LffPostSnapshot, b: LffPostSnapshot): number => serialOf(a.postId) - serialOf(b.postId) || a.seq - b.seq;
+
+const withSnapshot = (state: SocialState, snapshot: LffPostSnapshot): SocialState => ({
+  ...state,
+  lffSnapshots: [...state.lffSnapshots, snapshot].sort(snapshotOrder),
+});
+
+/**
+ * A REPORT, FILED (reports.file): does it make a post EVIDENCE? (rule 8; MAIN's DEFAULT for the founder's FQ-1, flagged, not
+ * final.) Only a report naming a post as its subjectRef that, at this moment: (a) names the post's OWNER as reportedId, (b) is filed
+ * no earlier than the post was created (a pre-report of an id not yet minted names no post here, and a stepped-back clock cannot
+ * date one earlier), and (c) comes from a reporter who may see the post (postVisibleTo: the feed's and get's own rule). Then, once
+ * per post, the post as it reads now is snapshotted (seq 1, REPORTED, naming the report); a later report adds nothing (every edit
+ * since is snapshotted as it happens). Anything else returns the SAME state: the report is filed as before and holds nothing.
+ * SILENT: the caller's answer, audience and events are the same either way, so no reporter learns whether their report counted.
+ */
+export function recordLffReport(state: SocialState, report: SocialReport, nowMs: number): SocialState {
+  if (report.subjectRef === null) return state;
+  const post = lffPostById(state, report.subjectRef);
+  if (post === undefined || report.reportedId !== post.ownerId || nowMs < post.createdAtMs) return state;
+  if (!postVisibleTo(state, report.reporterId, post, nowMs)) return state;
+  if (lffPostReported(state, post.id)) return state;
+  return withSnapshot(state, { postId: post.id, seq: 1, cause: 'REPORTED', reportId: report.reportId, capturedAtMs: Math.max(nowMs, post.updatedAtMs), post });
+}
+
 /**
  * THE ONE WAY A POST LEAVES THE STATE (the owner's delete, the retention purge). Every post in `gone` leaves lffPosts and every
- * request on it leaves lffRequests -- for EVERY post alike, reported or not, so what any player can be shown afterwards does not
- * depend on reports (R-3). A REPORTED one is not lost (R-1, R-2): the post as last written, with every request on it, moves to
- * lffHeld, stamped with the server's time (never before its own updatedAtMs); an unreported one is gone. Lists nothing moved in are
- * kept as the same objects (a store's by-reference diff then writes nothing for them).
+ * request on it leaves lffRequests -- for EVERY post alike, evidence or not, so what any player can be shown afterwards does not
+ * depend on reports (R-3). An EVIDENCE post is not lost (R-1, R-2): the post as last written, with every request on it, moves to
+ * lffHeld, stamped with the server's time (never before its own updatedAtMs); any other is gone. Its snapshots stay as they are.
+ * Lists nothing moved in are kept as the same objects (a store's by-reference diff then writes nothing for them).
  */
 function removeLffPosts(state: SocialState, gone: ReadonlySet<string>, nowMs: number): SocialState {
+  const evidence = new Set(state.lffSnapshots.map((s) => s.postId));
   const held: LffHeldPost[] = state.lffPosts
-    .filter((p) => gone.has(p.id) && lffPostReported(state, p.id))
+    .filter((p) => gone.has(p.id) && evidence.has(p.id))
     .map((post) => ({ post, requests: state.lffRequests.filter((r) => r.postId === post.id), heldAtMs: Math.max(nowMs, post.updatedAtMs) }));
   const requestsGo = state.lffRequests.some((r) => gone.has(r.postId));
   return {
@@ -438,9 +495,9 @@ function removeLffPosts(state: SocialState, gone: ReadonlySet<string>, nowMs: nu
 
 /**
  * RETENTION (rule 7, PROPOSED; the B2b review's m3): the posts due at `nowMs` leave the state with every request on them, oldest
- * first (creation time, then serial), at most LFF_PURGE_BATCH per call; the rest wait for the next write. An unreported post is
- * HARD-DELETED; a REPORTED one is HELD as evidence instead, whatever its age or status (rule 8, R-1), and to every player it reads
- * exactly as a purged one. The creation record is not touched (it is pruned after 24 h by createLffPost). Nothing due: the SAME
+ * first (creation time, then serial), at most LFF_PURGE_BATCH per call; the rest wait for the next write. A post that is not
+ * evidence is HARD-DELETED; an EVIDENCE one (rule 8: a qualifying report) is HELD instead, whatever its age or status (R-1), and to
+ * every player it reads exactly as a purged one. The creation record is not touched (it is pruned after 24 h by createLffPost). Nothing due: the SAME
  * state object, so a store's by-reference diff sees no change. Run by every LFF write that carries the server's time, AFTER its own
  * rule (so the operation itself answers exactly as before), never by a refusal. A purge is nobody's act and tells nobody: like
  * expiry, it is the server's time passing.
@@ -529,7 +586,13 @@ export function editLffPost(state: SocialState, actorId: SocialUserId, postId: s
   const fills = patch.openSlots !== undefined && patch.openSlots === accepted;
   if (patch.openSlots !== undefined) fields.openSlots = patch.openSlots;
   if (fills) fields.status = 'CLOSED';
-  return ok(retained({ state: replacePost(state, bumped(post, fields, nowMs)), told: [actorId], notices: fills ? closeNotices(liveRequesters(state, post.id)) : [] }, nowMs));
+  const edited = bumped(post, fields, nowMs);
+  // AN EVIDENCE POST'S EDIT IS SNAPSHOTTED (rule 8, M-1), silently: the answer, the people told and every view are the same
+  const taken = state.lffSnapshots.filter((s) => s.postId === post.id);
+  const next = taken.length === 0
+    ? replacePost(state, edited)
+    : withSnapshot(replacePost(state, edited), { postId: post.id, seq: Math.max(...taken.map((s) => s.seq)) + 1, cause: 'EDITED', reportId: null, capturedAtMs: edited.updatedAtMs, post: edited });
+  return ok(retained({ state: next, told: [actorId], notices: fills ? closeNotices(liveRequesters(state, post.id)) : [] }, nowMs));
 }
 
 /** CLOSE a post: the owner only, OPEN only. Everyone with a live request on it is told (their request no longer leads anywhere). */
@@ -542,7 +605,7 @@ export function closeLffPost(state: SocialState, actorId: SocialUserId, postId: 
 
 /**
  * DELETE a post: the owner only, in any status. The post and every request to it are gone, for every player, the owner included:
- * a HARD delete -- unless a report names the post, when it is HELD as moderation evidence instead (rule 8, R-2). The answer, the
+ * a HARD delete -- unless a report made the post evidence (rule 8), when it is HELD instead (rule 8, R-2). The answer, the
  * people told and every later view are the same either way (R-3). Its clock only stamps a hold: it runs no retention batch (rule 7).
  */
 export function deleteLffPost(state: SocialState, actorId: SocialUserId, postId: string, nowMs: number): RelayResult<LffChange> {
