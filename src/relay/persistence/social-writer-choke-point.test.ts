@@ -52,4 +52,11 @@ describe('C2: the social and voice tables have exactly two writers, and both ref
     for (const f of WRITERS) expect(code(f), f).toMatch(/protectedStoreWriterGuard\(pool, '[^']+'\)/u);
     expect(code('src/relay/persistence/social-postgres.ts')).toMatch(/await protectedStoreWriterGuard\(pool, '[^']+'\)\(\);\s*let state = await loadState\(pool\);/u);
   });
+
+  it('the guard asks protectedStoreRole alone, never the migration-only pin (O1 keeps its social and voice data: protected-store.ts)', () => {
+    const guard = code('src/relay/persistence/protected-store-writer-guard.ts');
+    expect(guard).toMatch(/import \{ protectedStoreRole \} from '\.\/protected-store';/u);
+    expect(guard).toMatch(/const role = await protectedStoreRole\(pool\);/u);
+    expect(guard).not.toMatch(/migrationPinnedStoreRole|MIGRATION_PINNED_STORES/u);
+  });
 });
