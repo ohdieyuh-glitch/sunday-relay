@@ -61,10 +61,10 @@ afterwards. Volume is not claimed and would not help.
 | C1 | research / structured analysis to a document | DETERMINISTIC | `src/relay/mission/julius/julius-mission-breadth.e2e.test.ts` | `completes a professional-work mission with no tests and no test evidence` |
 | C2 | a rejected document becomes repair, not completion | DETERMINISTIC | `src/relay/mission/julius/julius-mission-breadth.e2e.test.ts` | `still repairs a non-code mission when the reviewer rejects it` |
 | C3 | the same, on the LIVE path with no test command | DETERMINISTIC | `relay-bridge/julius/julius-live-composition.test.ts` | `runs nothing, records no TEST row, and still completes on the diff it produced` |
-| C4 | prior learning improves the next mission, leaking nothing | DETERMINISTIC | `src/relay/mission/julius/julius-learning-loop.e2e.test.ts` | `hands the coder the relevant finding and none of the residue` |
+| C4 | prior learning improves the next mission, leaking nothing | DETERMINISTIC | `src/relay/mission/julius/julius-learning-loop.e2e.test.ts` | `hands the planner the carried finding, and the coder only the plan it shaped — never the carried row, never the residue` |
 | C5 | a memory's standing is durable, and a reviewer raises it | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `raises the architect` |
-| C6 | what mission A VERIFIED is inherited by mission B, and what A only asserted is not (gated on `JULIUS_TEST_DATABASE_URL`) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what mission A VERIFIED is inherited by mission B` |
-| C7 | the inherited fact reaches the next mission's packet AS VERIFIED, with none of the residue | DETERMINISTIC | `src/relay/mission/julius/julius-learning-loop.e2e.test.ts` | `hands the coder the relevant finding and none of the residue` |
+| C6 | what mission A's reviewer verified and a repair answered reaches the plan of A's next run, and nothing else of A does (the corrected carry; gated on `JULIUS_TEST_DATABASE_URL`) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what mission A’s reviewer verified and a repair answered reaches the next run of THAT mission’s plan — and nothing else of A does` |
+| C7 | the inherited fact reaches the next mission's packet AS VERIFIED, with none of the residue | DETERMINISTIC | `src/relay/mission/julius/julius-learning-loop.e2e.test.ts` | `hands the planner the carried finding, and the coder only the plan it shaped — never the carried row, never the residue` |
 
 ## Category E — useful everyday / basic-necessity work
 

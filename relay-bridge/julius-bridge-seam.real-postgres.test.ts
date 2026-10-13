@@ -7,6 +7,8 @@ import { juliusCarriedCopyId, juliusClaimIdFor } from '../src/relay/mission/juli
 import { juliusFindingTransitionFacts } from '../src/relay/mission/julius/julius-finding-lifecycle';
 import { JuliusClaimPostgresRepository } from '../src/relay/persistence/julius-claim-postgres';
 import { JuliusEventPostgresRepository } from '../src/relay/persistence/julius-event-postgres';
+import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
+import type { JuliusTask } from '../src/relay/mission/julius';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { composeJuliusMissionBootstrap, handleJuliusMissionRoute } from './julius-mission-routes';
 import { composeJuliusStateApi, handleJuliusStateRoute, type JuliusStateRoutePorts } from './julius-state-routes';
@@ -298,9 +300,29 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
    * RESOLVED — written row by row the way the pipeline writes it: the finding
    * row on A's plan, then its life on A's ledger (`finding.recorded`, then
    * `finding.transitioned` REPAIR_SUCCEEDED and REVIEWER_RESOLVED).
+   *
+   * THAT LIFE IS A's OWN TASKS. The carry admits a finding only when the review that raised it, every repair that
+   * answered it and the re-review that resolved it are finished tasks of the source run (julius-claim-ledger.ts,
+   * `finding_provenance_unverified`), so they are seeded here, SUCCEEDED, under the pipeline's own ids, the way
+   * the store test's task() helper seeds them. Without them the finding is refused for its provenance and both
+   * cases below would read nothing carried for the wrong reason.
    */
-  async function resolvedFinding(runId: string, projectId: string, claim: string): Promise<string> {
+  async function resolvedFinding(runId: string, projectId: string, missionId: string, claim: string): Promise<string> {
     const findingId = `finding:evidence:${runId}:plan-review`;
+    const tasks = new JuliusPostgresRepository(pool);
+    const lived: ReadonlyArray<readonly [taskId: string, taskType: string, role: JuliusTask['role'], parentTaskId: string | null]> = [
+      [`review:${runId}:plan`, 'review:plan', 'INDEPENDENT_REVIEWER', null],
+      [`repair:${runId}:plan:1:task`, 'repair:plan', 'PROMPT_ARCHITECT', `${runId}:plan`],
+      [`review:repair:${runId}:plan:1:task`, 'review:repair:plan', 'INDEPENDENT_REVIEWER', null],
+    ];
+    for (const [taskId, taskType, role, parentTaskId] of lived) {
+      expect(await tasks.addTask({
+        commandId: `seam:${taskId}`, runId, projectId,
+        task: {
+          taskId, missionId, parentTaskId, dependencyIds: [], requiredEvidenceTypes: ['ARTIFACT'], taskType, role, ordinal: 0, state: 'SUCCEEDED',
+        } as JuliusTask,
+      }), `${taskId} is a task of the source run`).toBe(true);
+    }
     await pool.query(
       `INSERT INTO relay_wonderland.julius_reviewer_findings(finding_id,run_id,task_id,reviewer_worker_id,severity,category,claim,criterion_id,evidence_ids,blocking,status,created_at,updated_at)
        VALUES($1,$2,$3,'independent-reviewer-hermes','HIGH','review',$4,NULL,'["evidence:plan-review"]',true,'OPEN',now(),now())`,
@@ -310,7 +332,7 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
       eventId: `seam:${randomBytes(6).toString('hex')}`, runId, projectId, type, taskId: `${runId}:plan`, workerId: 'independent-reviewer-hermes',
       correlationId: `seam:${runId}`, causationId: null, occurredAt: new Date().toISOString(), facts,
     });
-    await append('finding.recorded', { findingId, evidenceId: 'evidence:plan-review', blocking: true, reviewTaskId: `${runId}:plan:review` });
+    await append('finding.recorded', { findingId, evidenceId: 'evidence:plan-review', blocking: true, reviewTaskId: `review:${runId}:plan` });
     await append('finding.transitioned', juliusFindingTransitionFacts({ findingId, move: 'REPAIR_SUCCEEDED', at: '2026-10-04T10:00:00.000Z', repairTaskId: `repair:${runId}:plan:1:task` }));
     await append('finding.transitioned', juliusFindingTransitionFacts({ findingId, move: 'REVIEWER_RESOLVED', at: '2026-10-04T10:05:00.000Z', reviewTaskId: `review:repair:${runId}:plan:1:task` }));
     return findingId;
@@ -326,7 +348,7 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
     const body = JSON.stringify(missionA);
     const runA = dataOf<{ runId: string }>(await create(body)).runId;
     const claim = 'The save format must be written little-endian; the loader rejects big-endian.';
-    const findingId = await resolvedFinding(runA, missionA.projectId, claim);
+    const findingId = await resolvedFinding(runA, missionA.projectId, missionA.missionId, claim);
 
     // WHAT THE FIRST CARRY WOULD HAVE HANDED OVER, and must not now: a brain row whose standing alone says VERIFIED
     // (no finding behind it, no lifecycle), and one that is merely asserted.
@@ -402,7 +424,7 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
     const missionA = contractFor(id);
     const runA = dataOf<{ runId: string }>(await create(JSON.stringify(missionA))).runId;
     // A finding that WOULD be inherited by A's own next run (the case above proves the rule carries it).
-    await resolvedFinding(runA, missionA.projectId, 'A fact that belongs to one project.');
+    await resolvedFinding(runA, missionA.projectId, missionA.missionId, 'A fact that belongs to one project.');
 
     // A mission in ANOTHER project inherits nothing of it.
     const elsewhere = contractFor(nonce());
