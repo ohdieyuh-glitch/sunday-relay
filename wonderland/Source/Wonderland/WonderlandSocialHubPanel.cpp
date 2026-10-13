@@ -15,6 +15,8 @@
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
 #include "WonderlandSocialLive.h"   // D3 (b) QA: UNBLOCK's operation through the real dispatcher
+#include "Dom/JsonObject.h"        // R16 CF-1 QA: the presence body is read back
+#include "WonderlandWonderWeb.h"     // R16 CF-1 r2 QA: what counts as creating (WonderlandWonderWebShowsOwnCreation)
 #include "WonderlandUiStyle.h"
 // F-21 QA (wl.Qa.SocialHubClicks): the hub on screen, a ticker, synthetic pointer events
 #include "Containers/Ticker.h"
@@ -132,6 +134,43 @@ namespace WonderlandSocialHubLook
 			Line += TEXT("  ·  IN PARTY");
 		}
 		return Line;
+	}
+
+	void WorldControlOf(const FWonderlandSocialPresence& Own, FString& OutLabel, FString& OutOperationId, FString& OutSubject)
+	{
+		// IN A WORLD IS THE SERVER'S WORD: world.join sets the player's presence location and world.leave clears it (sunday-relay
+		// social-commands.ts:674-677, :714), and the self view always carries the player's own location (social-presence.ts:210)
+		// r2 (the privacy review's F6): "SHARED" -- the player stays in Golden Arrival on their own screen; what they leave is the shared
+		// layer (the others stop seeing their Dog, and they the others'). Never "YOUR WORLD": that reads as a world they own (deferred).
+		if (Own.bHasLocation)
+		{
+			OutLabel = TEXT("LEAVE SHARED WORLD");
+			OutOperationId = TEXT("world.leave");
+			OutSubject.Reset();
+			return;
+		}
+		OutLabel = TEXT("REJOIN SHARED WORLD");
+		OutOperationId = TEXT("world.join");
+		OutSubject = TEXT("golden_arrival");
+	}
+
+	bool UnreadThroughOf(const FWonderlandSocialSnapshot& View, const FString& ConversationId, int64& OutThrough)
+	{
+		OutThrough = 0;
+		const FWonderlandSocialConversationRow* Row = ConversationId.IsEmpty() ? nullptr
+			: View.Conversations.FindByPredicate([&ConversationId](const FWonderlandSocialConversationRow& C) { return C.ConversationId == ConversationId; });
+		if (Row == nullptr || Row->Unread <= 0)
+		{
+			return false;   // nothing unread (a muted sender's messages never count: social-conversations.ts:186-188)
+		}
+		if (const TArray<FWonderlandSocialMessage>* History = View.Messages.Find(ConversationId))
+		{
+			for (const FWonderlandSocialMessage& M : *History)
+			{
+				OutThrough = FMath::Max(OutThrough, M.Sequence);
+			}
+		}
+		return OutThrough > 0;
 	}
 }
 
@@ -390,12 +429,43 @@ void SWonderlandSocialHubPanel::Rebuild()
 		}
 	}
 	ReplyDraftConversationId = OpenConversationId;
+	// R16 CF-2: what the player now SEES may be read (a conversation opened, a tab chosen, new messages landed in the open one)
+	MarkShownConversationRead();
+}
+
+void SWonderlandSocialHubPanel::MarkShownConversationRead()
+{
+	// ONLY A LIVE HUB, ON MESSAGES, SHOWING A CONVERSATION: the preview's people are not read, and a hidden tab is not looking
+	if (!bConnected || bDevelopmentPreview || Tab != ETab::Messages)
+	{
+		return;
+	}
+	int64 Through = 0;
+	if (!WonderlandSocialHubLook::UnreadThroughOf(Snapshot, OpenConversationId, Through))
+	{
+		return;
+	}
+	// ONCE PER NEWEST MESSAGE: a refresh that changes nothing asks nothing, a new message asks again (a refused read is not repeated for
+	// the same message; opening the hub again, or the conversation again after another, asks once more)
+	if (ReadAskedConversationId == OpenConversationId && Through <= ReadAskedThrough)
+	{
+		return;
+	}
+	ReadAskedConversationId = OpenConversationId;
+	ReadAskedThrough = Through;
+	OnAction.ExecuteIfBound(TEXT("messages.read"), OpenConversationId);
 }
 
 TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeRail()
 {
 	using namespace WonderlandSocialHubLook;
 	const int32 Waiting = Snapshot.IncomingRequests.Num() + Snapshot.PartyInvites.Num();
+	// R16 CF-3: SHARED WORLD, beside YOUR STATUS and drawn by the same rule (a live sign-in only)
+	const EVisibility SignedInLive = bConnected && !bDevelopmentPreview && SignIn.State == EWonderlandSignInState::SignedIn ? EVisibility::Visible : EVisibility::Collapsed;
+	FString WorldLabel;
+	FString WorldOperation;
+	FString WorldSubject;
+	WorldControlOf(Snapshot.Self.Presence, WorldLabel, WorldOperation, WorldSubject);
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f, 2.0f, 4.0f, 12.0f)
 		[
@@ -457,6 +527,22 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeRail()
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth()[ MakeButton(TEXT("BUSY"), TEXT("presence.set"), TEXT("BUSY"), true, OwnAvailability() != TEXT("BUSY")) ]
 				+ SHorizontalBox::Slot().AutoWidth()[ MakeButton(TEXT("APPEAR OFFLINE"), TEXT("presence.set"), TEXT("APPEAR_OFFLINE"), true, OwnAvailability() != TEXT("APPEAR_OFFLINE")) ]
+			]
+		]
+		// SHARED WORLD (R16 CF-3, B34: the CONTEXT's leave and rejoin by the player's own click). Content in the existing rail, under YOUR
+		// STATUS and in its style -- no new HUD panel, no anchor or size changed (memory: preserve HUD layout). LEAVE SHARED WORLD takes the
+		// player out of the shared layer (the others see their Dog go); REJOIN SHARED WORLD joins the public world again, as signing in does.
+		// Quiet, as SIGN OUT is (r2): in this rail the plain style means "the chosen one" (YOUR STATUS).
+		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f, 8.0f, 4.0f, 2.0f)
+		[
+			SNew(STextBlock).Visibility(SignedInLive).Text(T(TEXT("SHARED WORLD"))).Font(WonderlandUi::Sans(8, true, 120)).ColorAndOpacity(WonderlandUi::Dim())
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f)
+		[
+			SNew(SBox).Visibility(SignedInLive)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth()[ MakeButton(WorldLabel, WorldOperation, WorldSubject, true, true) ]
 			]
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 2.0f)
@@ -1824,5 +1910,459 @@ namespace WonderlandSocialHubClicksQa
 			GHubClickRun->At = FPlatformTime::Seconds();
 			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&HubClickTick), 0.1f);
 			UE_LOG(LogTemp, Display, TEXT("WLQA HUBCLICK armed"));
+		}));
+}
+
+namespace WonderlandSocialR16ClientQa
+{
+	/** R16 CF-1..CF-4 CLIENT QA (2026-10-13, r2): offline. A fake clock, fed snapshots, surfaces and world answers, off-screen hubs that are
+	 *  never drawn (no synthetic people on screen), and throwaway live services on a dead loopback port (127.0.0.1:9: nothing listens, never
+	 *  a real server; no answer is waited for or read). It proves the PURE logic and the dispatch decisions; it does not drive the live
+	 *  wiring (TickActivity, SendPresence's 429, the UI's messages.read branch) or read a request's path or body -- the two-client run does.
+	 *    PA1-PA10   CF-1 the presence reporter: exploring held after movement; nothing re-sent unchanged; the 3 s gap (control); nothing in
+	 *               flight; a 429's Retry-After; a party change re-reports (control); the details; a flapping input inside the budget;
+	 *               a LOST answer re-sends the current state (control: a 4xx refusal does not)
+	 *    PB1-PB3    CF-1 the presence body: never inGveBattle / inPrivateServer / juliusWorking, never inParty; the detail or null (PB3: the
+	 *               check FAILS a forged body)
+	 *    WW1-WW4    CF-1 CREATING only on the player's OWN tab with a creation being built or opened; controls: the idle page, a sample
+	 *               peer's tab, a failed build or an unobservable surface are NOT creating
+	 *    RD1-RD9    CF-2 read when a conversation is shown with unread messages, once per newest message; controls: nothing unread,
+	 *               another tab, a preview hub; RD8/RD9: the service sends a read for a held conversation and refuses an unknown one
+	 *               (RD9's invalid id and empty subject are generic guards, not CF-2 controls)
+	 *    LW1-LW6    CF-3 the rail's control follows the server's location (control); LEAVE and REJOIN dispatch; a leave is not undone
+	 *               by a 404; a report answered after the leave is dropped (control: the same answer to a player who wants the world is
+	 *               applied); LW5's invalid place and preview refusals are generic guards, not CF-3 controls
+	 *    PO1-PO5    CF-4 "WLWORLD population <n>" on a change only (control: repeats say nothing), said again after a world is left; PO5 is
+	 *               a format guard
+	 *    SN1-SN2    CF-4 the snapshot line's exact form with the recent count; SN2: the line still matches the judge's STRUCT catch-all
+	 *               form (control: an insertion before the party would not) -- it does NOT test any reader's party capture
+	 *  WLQA R16C lines, then WLQA R16C END pass=<n> fail=<n> (r2: 39 checks). */
+	FAutoConsoleCommand GQaSocialR16Client(
+		TEXT("wl.Qa.SocialR16Client"),
+		TEXT("QA (R16 CF-1..CF-4): presence on change (debounced, honest, never GVE/private server/Julius), read on open, LEAVE / REJOIN SHARED WORLD, ")
+		TEXT("the population and recent evidence lines -- offline: a fake clock, fed views, off-screen hubs, a dead loopback port."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			int32 Passed = 0;
+			int32 Failed = 0;
+			auto Check = [&Passed, &Failed](const FString& Id, bool bOk, const FString& What)
+			{
+				(bOk ? Passed : Failed) += 1;
+				UE_LOG(LogTemp, Display, TEXT("WLQA R16C %s %s -- %s"), *Id, bOk ? TEXT("PASS") : TEXT("FAIL"), *What);
+			};
+
+			// ---- CF-1: THE REPORTER, on a fake clock (T0 is any time; the reporter only compares)
+			const double T0 = 1000.0;
+			FWonderlandPresenceReporter Reporter(T0);
+			FWonderlandActivitySample Still;
+			FWonderlandActivitySample OnlyCreating;
+			OnlyCreating.bCreating = true;
+			FWonderlandActivitySample SimMission;
+			SimMission.bRunningMission = true;
+			SimMission.bMissionSimulated = true;
+
+			// PA1: the arrival is exploring (what the connect report says), and the first report is due
+			const FWonderlandPresenceSignals Arrived = Reporter.Want(Still, T0 + 1.0);
+			Check(TEXT("PA1"), Arrived.bExploring && !Arrived.bCreating && !Arrived.bRunningMission && Arrived.Detail.IsEmpty() && Reporter.IsDue(Arrived, FString(), T0 + 1.0),
+				FString::Printf(TEXT("arrival reads exploring, nothing accepted yet: due (%s)"), *Arrived.Describe()));
+			Reporter.NoteSent(Arrived, FString(), T0 + 1.0);
+			Reporter.NoteAnswered(true, 0, T0 + 1.2);
+			// PA2: nothing changed: nothing is due, however much time passes inside the hold
+			Check(TEXT("PA2"), !Reporter.IsDue(Reporter.Want(Still, T0 + 6.0), FString(), T0 + 6.0),
+				TEXT("unchanged signals, the gap long past: nothing is re-sent"));
+			// PA3: still for the whole hold: exploring at 7.9 s, not at 8.1 s -- and that change is due
+			const FWonderlandPresenceSignals AtEdge = Reporter.Want(Still, T0 + 7.9);
+			const FWonderlandPresenceSignals PastEdge = Reporter.Want(Still, T0 + 8.1);
+			Check(TEXT("PA3"), AtEdge.bExploring && !PastEdge.bExploring && Reporter.IsDue(PastEdge, FString(), T0 + 8.1),
+				FString::Printf(TEXT("exploring holds %.0f s after the last movement, then stops and is reported (%s -> %s)"),
+					FWonderlandPresenceReporter::ExploringHoldSeconds, *AtEdge.Describe(), *PastEdge.Describe()));
+			Reporter.NoteSent(PastEdge, FString(), T0 + 8.1);
+			Reporter.NoteAnswered(true, 0, T0 + 8.2);
+			// PA4: a change 0.9 s after the last report waits for the gap; CONTROL: the same change past the gap is due (the wait is the gap's)
+			const bool bInGap = Reporter.IsDue(Reporter.Want(OnlyCreating, T0 + 9.0), FString(), T0 + 9.0);
+			const FWonderlandPresenceSignals CreatingWanted = Reporter.Want(OnlyCreating, T0 + 11.2);
+			const bool bPastGap = Reporter.IsDue(CreatingWanted, FString(), T0 + 11.2);
+			Check(TEXT("PA4"), !bInGap && bPastGap,
+				FString::Printf(TEXT("debounce: 0.9 s after a report the change waits (due %d); control: 3.1 s after, the same change is due (%d)"), bInGap ? 1 : 0, bPastGap ? 1 : 0));
+			Reporter.NoteSent(CreatingWanted, FString(), T0 + 11.2);
+			// PA5: nothing while a report is in flight, even past the gap; its answer accepted, the next change is due
+			const bool bWhileFlying = Reporter.IsDue(Reporter.Want(SimMission, T0 + 15.0), FString(), T0 + 15.0);
+			Reporter.NoteAnswered(true, 0, T0 + 15.1);
+			const FWonderlandPresenceSignals MissionWanted = Reporter.Want(SimMission, T0 + 15.2);
+			Check(TEXT("PA5"), !bWhileFlying && Reporter.IsDue(MissionWanted, FString(), T0 + 15.2) && Reporter.GetAccepted().bCreating,
+				TEXT("in flight: nothing more is sent; once the creation report is accepted, the mission is due"));
+			// PA6: refused with 429 Retry-After 20: not before it (though the gap and the 6 s retry have passed), due after; the server still holds creating
+			Reporter.NoteSent(MissionWanted, FString(), T0 + 15.2);
+			Reporter.NoteAnswered(false, 20, T0 + 15.3);
+			const bool bEarly = Reporter.IsDue(Reporter.Want(SimMission, T0 + 30.0), FString(), T0 + 30.0);
+			const bool bLater = Reporter.IsDue(Reporter.Want(SimMission, T0 + 35.4), FString(), T0 + 35.4);
+			Check(TEXT("PA6"), !bEarly && bLater && Reporter.GetAccepted().bCreating && !Reporter.GetAccepted().bRunningMission,
+				FString::Printf(TEXT("a 429 waits its Retry-After (due at +14.7 s: %d, at +20.1 s: %d); the accepted state is unchanged until accepted"), bEarly ? 1 : 0, bLater ? 1 : 0));
+			Reporter.NoteSent(MissionWanted, FString(), T0 + 35.4);
+			Reporter.NoteAnswered(true, 0, T0 + 35.5);
+			// PA7: joining a party re-reports the SAME signals (the authority re-derives IN PARTY only on a report); CONTROL: no party change, nothing due
+			const FWonderlandPresenceSignals SameSignals = Reporter.Want(SimMission, T0 + 40.0);
+			Check(TEXT("PA7"), Reporter.IsDue(SameSignals, TEXT("qa-party"), T0 + 40.0) && !Reporter.IsDue(SameSignals, FString(), T0 + 40.0),
+				TEXT("a party joined re-reports; control: the same signals and no party change are not re-sent"));
+			// PA8: the honest details: a mission (simulated) over creating; creating alone; a REAL mission carries none of the client's words
+			FWonderlandPresenceReporter Fresh(T0);
+			FWonderlandActivitySample Both = SimMission;
+			Both.bCreating = true;
+			FWonderlandActivitySample RealMission;
+			RealMission.bRunningMission = true;
+			RealMission.bMissionSimulated = false;
+			const FString DetailBoth = Fresh.Want(Both, T0).Detail;
+			const FString DetailCreating = Fresh.Want(OnlyCreating, T0).Detail;
+			const FString DetailReal = Fresh.Want(RealMission, T0).Detail;
+			const FString DetailNone = Fresh.Want(Still, T0).Detail;
+			Check(TEXT("PA8"), DetailBoth.Equals(WonderlandPresenceDetail::SimulatedMission(), ESearchCase::CaseSensitive)
+				&& DetailCreating.Equals(WonderlandPresenceDetail::SimulatedCreation(), ESearchCase::CaseSensitive)
+				&& DetailBoth.Contains(TEXT("simulated")) && DetailCreating.Contains(TEXT("simulated")) && DetailReal.IsEmpty() && DetailNone.IsEmpty()
+				&& DetailBoth != DetailCreating,
+				FString::Printf(TEXT("details: mission+creating '%s', creating '%s', real mission '%s', nothing '%s'"), *DetailBoth, *DetailCreating, *DetailReal, *DetailNone));
+			// PA9: 60 s of a window flipping every 0.25 s tick (and the Dog twitching), each report accepted at once: at most one per 3 s
+			FWonderlandPresenceReporter Flapping(T0);
+			int32 Sends = 0;
+			int32 Changes = 0;
+			FWonderlandPresenceSignals Previous;
+			for (int32 Step = 0; Step < 240; ++Step)
+			{
+				const double At = T0 + Step * 0.25;
+				FWonderlandActivitySample Flip;
+				Flip.bCreating = (Step % 2) == 0;
+				Flip.bMoving = (Step % 3) == 0;
+				const FWonderlandPresenceSignals FlipWanted = Flapping.Want(Flip, At);
+				Changes += (Step > 0 && FlipWanted != Previous) ? 1 : 0;
+				Previous = FlipWanted;
+				if (Flapping.IsDue(FlipWanted, FString(), At))
+				{
+					Flapping.NoteSent(FlipWanted, FString(), At);
+					Flapping.NoteAnswered(true, 0, At);
+					Sends += 1;
+				}
+			}
+			Check(TEXT("PA9"), Sends >= 2 && Sends <= 21 && Changes > 100,
+				FString::Printf(TEXT("a flapping input: %d reports for %d changes in 60 s (<= 21: one per %.0f s, a third of the write budget's 1 a second)"),
+					Sends, Changes, FWonderlandPresenceReporter::MinGapSeconds));
+			// PA10 (r2, the correctness review's F3): the creation report's answer is LOST (no answer, a 5xx), so the server may hold CREATING;
+			// the player closes the window, which is the last ACCEPTED state again -- it is still sent, after the retry wait. CONTROL: the same
+			// report REFUSED (a 4xx: the server holds what it held) re-sends nothing unchanged
+			FWonderlandPresenceReporter LostAnswer(T0);
+			FWonderlandPresenceReporter RefusedAnswer(T0);
+			const FWonderlandPresenceSignals IdleWanted = LostAnswer.Want(Still, T0 + 9.0);
+			const FWonderlandPresenceSignals OpenedWanted = LostAnswer.Want(OnlyCreating, T0 + 13.0);
+			const FWonderlandPresenceSignals ClosedWanted = LostAnswer.Want(Still, T0 + 14.0);
+			LostAnswer.NoteSent(IdleWanted, FString(), T0 + 9.0);
+			LostAnswer.NoteAnswered(true, 0, T0 + 9.1);
+			LostAnswer.NoteSent(OpenedWanted, FString(), T0 + 13.0);
+			LostAnswer.NoteAnswered(false, 0, T0 + 13.2, true);
+			RefusedAnswer.NoteSent(IdleWanted, FString(), T0 + 9.0);
+			RefusedAnswer.NoteAnswered(true, 0, T0 + 9.1);
+			RefusedAnswer.NoteSent(OpenedWanted, FString(), T0 + 13.0);
+			RefusedAnswer.NoteAnswered(false, 0, T0 + 13.2, false);
+			const bool bLostInWait = LostAnswer.IsDue(ClosedWanted, FString(), T0 + 16.0);
+			const bool bLostAfterWait = LostAnswer.IsDue(ClosedWanted, FString(), T0 + 19.3);
+			const bool bRefusedAfterWait = RefusedAnswer.IsDue(ClosedWanted, FString(), T0 + 19.3);
+			Check(TEXT("PA10"), ClosedWanted == IdleWanted && !bLostInWait && bLostAfterWait && !bRefusedAfterWait,
+				FString::Printf(TEXT("a lost answer: the unchanged state is re-sent after the %.0f s wait (in it %d, after %d); control: a 4xx refusal re-sends nothing unchanged (%d)"),
+					FWonderlandPresenceReporter::RetrySeconds, bLostInWait ? 1 : 0, bLostAfterWait ? 1 : 0, bRefusedAfterWait ? 1 : 0));
+
+			// ---- CF-1: THE BODY
+			auto NeverClaims = [](const TSharedPtr<FJsonObject>& Flags)
+			{
+				bool bGve = true;
+				bool bPrivate = true;
+				bool bJulius = true;
+				return Flags.IsValid() && Flags->TryGetBoolField(TEXT("inGveBattle"), bGve) && !bGve && Flags->TryGetBoolField(TEXT("inPrivateServer"), bPrivate) && !bPrivate
+					&& Flags->TryGetBoolField(TEXT("juliusWorking"), bJulius) && !bJulius && !Flags->HasField(TEXT("inParty"));
+			};
+			{
+				FWonderlandPresenceSignals Creating;
+				Creating.bCreating = true;
+				Creating.Detail = WonderlandPresenceDetail::SimulatedCreation();
+				const TSharedRef<FJsonObject> CreatingBody = WonderlandPresenceBody(true, Creating);
+				const TSharedPtr<FJsonObject>* CreatingFlags = nullptr;
+				FString CreatingKind;
+				FString CreatingDetail;
+				bool bConnectedSaid = false;
+				const bool bShape = CreatingBody->TryGetObjectField(TEXT("signals"), CreatingFlags) && CreatingFlags != nullptr
+					&& (*CreatingFlags)->TryGetStringField(TEXT("creating"), CreatingKind) && CreatingBody->TryGetStringField(TEXT("activityDetail"), CreatingDetail)
+					&& CreatingBody->TryGetBoolField(TEXT("connected"), bConnectedSaid);
+				Check(TEXT("PB1"), bShape && NeverClaims(*CreatingFlags) && CreatingKind.Equals(TEXT("SOFTWARE"), ESearchCase::CaseSensitive)
+					&& CreatingDetail.Equals(TEXT("simulated sample (development preview)"), ESearchCase::CaseSensitive) && bConnectedSaid,
+					FString::Printf(TEXT("creating: connected, creating %s, detail '%s'; GVE, private server and Julius said false; no inParty"), *CreatingKind, *CreatingDetail));
+				FWonderlandPresenceSignals Plain;
+				Plain.bExploring = true;
+				const TSharedRef<FJsonObject> PlainBody = WonderlandPresenceBody(true, Plain);
+				const TSharedPtr<FJsonValue> PlainDetail = PlainBody->TryGetField(TEXT("activityDetail"));
+				const TSharedPtr<FJsonObject>* PlainFlags = nullptr;
+				const bool bPlainFlags = PlainBody->TryGetObjectField(TEXT("signals"), PlainFlags) && PlainFlags != nullptr;
+				const TSharedPtr<FJsonValue> PlainCreating = bPlainFlags ? (*PlainFlags)->TryGetField(TEXT("creating")) : nullptr;
+				Check(TEXT("PB2"), PlainDetail.IsValid() && PlainDetail->IsNull() && PlainCreating.IsValid() && PlainCreating->IsNull() && bPlainFlags && NeverClaims(*PlainFlags),
+					TEXT("exploring: the detail is SENT as null (an earlier activity's words are cleared), creating null, the three never claimed"));
+				// PB3 CONTROL: the same predicate FAILS a body that claims Julius at work
+				TSharedPtr<FJsonObject> Forged = MakeShared<FJsonObject>();
+				Forged->SetBoolField(TEXT("inGveBattle"), false);
+				Forged->SetBoolField(TEXT("inPrivateServer"), false);
+				Forged->SetBoolField(TEXT("juliusWorking"), true);
+				Check(TEXT("PB3"), !NeverClaims(Forged), TEXT("control: the never-claims check FAILS a body with juliusWorking true"));
+			}
+
+			// ---- CF-1 r2 (the privacy review's F1): CREATING only on the player's OWN tab with a creation being built or opened
+			auto WebSurface = [](EWonderWebViewportKind Kind)
+			{
+				FWonderWebSurface Made;
+				Made.bValid = true;
+				FWonderWebTab Mine;
+				Mine.UserId = TEXT("qa-me");
+				Mine.Label = TEXT("MY VIEW");
+				Mine.bIsSelf = true;
+				Mine.Access = EWonderWebAccess::Control;
+				FWonderWebTab Peer;
+				Peer.UserId = TEXT("qa-peer");
+				Peer.Label = TEXT("Sample peer");
+				Peer.Access = EWonderWebAccess::Observe;
+				Made.Tabs.Add(Mine);
+				Made.Tabs.Add(Peer);
+				Made.Viewport.Kind = Kind;
+				return Made;
+			};
+			{
+				const bool bWorking = WonderlandWonderWebShowsOwnCreation(WebSurface(EWonderWebViewportKind::Working), 0);
+				const bool bOpened = WonderlandWonderWebShowsOwnCreation(WebSurface(EWonderWebViewportKind::Creation), 0);
+				Check(TEXT("WW1"), bWorking && bOpened,
+					FString::Printf(TEXT("the player's own tab, a creation being built (%d) or opened (%d): creating"), bWorking ? 1 : 0, bOpened ? 1 : 0));
+				const bool bIdle = WonderlandWonderWebShowsOwnCreation(WebSurface(EWonderWebViewportKind::Idle), 0);
+				Check(TEXT("WW2"), !bIdle, TEXT("control: Wonder Web open on its idle page (OPEN SAMPLE CREATION not pressed) is NOT creating"));
+				const bool bPeerObserved = WonderlandWonderWebShowsOwnCreation(WebSurface(EWonderWebViewportKind::Observed), 1);
+				const bool bPeerCreationKind = WonderlandWonderWebShowsOwnCreation(WebSurface(EWonderWebViewportKind::Creation), 1);
+				Check(TEXT("WW3"), !bPeerObserved && !bPeerCreationKind,
+					TEXT("control: a sample PEER's tab is NOT creating -- observed, and even with a creation view (the tab decides, not only the view)"));
+				FWonderWebSurface UnobservedSurface = WebSurface(EWonderWebViewportKind::Creation);
+				UnobservedSurface.UnavailableReason = TEXT("qa: could not be observed");
+				FWonderWebSurface NeverRead = WebSurface(EWonderWebViewportKind::Working);
+				NeverRead.bValid = false;
+				const bool bFailedBuild = WonderlandWonderWebShowsOwnCreation(WebSurface(EWonderWebViewportKind::Failed), 0);
+				const bool bOutOfRange = WonderlandWonderWebShowsOwnCreation(WebSurface(EWonderWebViewportKind::Creation), 5);
+				Check(TEXT("WW4"), !bFailedBuild && !WonderlandWonderWebShowsOwnCreation(UnobservedSurface, 0) && !WonderlandWonderWebShowsOwnCreation(NeverRead, 0) && !bOutOfRange,
+					TEXT("control: a failed build, an unobservable surface, a surface never read and a tab out of range are NOT creating"));
+			}
+
+			// ---- CF-2: READ ON OPEN, on an off-screen hub fed an inbox (never drawn)
+			auto Message = [](const FString& ConversationId, int64 Sequence, const FString& SenderId)
+			{
+				FWonderlandSocialMessage M;
+				M.MessageId = FString::Printf(TEXT("qa-msg-%s-%lld"), *ConversationId, Sequence);
+				M.ConversationId = ConversationId;
+				M.Sequence = Sequence;
+				M.SenderId = SenderId;
+				M.Kind = TEXT("TEXT");
+				M.Body = TEXT("qa");
+				return M;
+			};
+			auto Conversation = [](const FString& ConversationId, const FString& Title, int32 Unread)
+			{
+				FWonderlandSocialConversationRow Row;
+				Row.ConversationId = ConversationId;
+				Row.Kind = TEXT("DIRECT");
+				Row.Title = Title;
+				Row.OtherUserId = FString::Printf(TEXT("qa-%s"), *Title.ToLower());
+				Row.Unread = Unread;
+				return Row;
+			};
+			FWonderlandSocialSnapshot Inbox;
+			Inbox.bDevelopmentPreview = false;
+			Inbox.ViewerId = TEXT("qa-me");
+			Inbox.Conversations.Add(Conversation(TEXT("qa-conv-a"), TEXT("Amy"), 2));
+			Inbox.Conversations.Add(Conversation(TEXT("qa-conv-b"), TEXT("Bo"), 1));
+			TArray<FWonderlandSocialMessage> HistoryA;
+			HistoryA.Add(Message(TEXT("qa-conv-a"), 1, TEXT("qa-me")));
+			HistoryA.Add(Message(TEXT("qa-conv-a"), 2, TEXT("qa-amy")));
+			HistoryA.Add(Message(TEXT("qa-conv-a"), 3, TEXT("qa-amy")));
+			TArray<FWonderlandSocialMessage> HistoryB;
+			HistoryB.Add(Message(TEXT("qa-conv-b"), 1, TEXT("qa-bo")));
+			Inbox.Messages.Add(TEXT("qa-conv-a"), HistoryA);
+			Inbox.Messages.Add(TEXT("qa-conv-b"), HistoryB);
+			{
+				TArray<FString> Asked;
+				const TSharedRef<SWonderlandSocialHubPanel> ReadHub = SNew(SWonderlandSocialHubPanel).Snapshot(Inbox).bConnected(true).bDevelopmentPreview(false)
+					.InitialTab(SWonderlandSocialHubPanel::ETab::Messages)
+					.OnAction_Lambda([&Asked](const FString& Operation, const FString& Subject) { Asked.Add(FString::Printf(TEXT("%s %s"), *Operation, *Subject)); });
+				const FString Joined1 = FString::Join(Asked, TEXT(" | "));
+				Check(TEXT("RD1"), Asked.Num() == 1 && Asked[0] == TEXT("messages.read qa-conv-a"),
+					FString::Printf(TEXT("the hub opened on MESSAGES shows Amy's conversation (2 unread): one read asked [%s]"), *Joined1));
+				ReadHub->SetSnapshot(Inbox, true, FString(), false);
+				ReadHub->FlushRebuild();
+				Check(TEXT("RD2"), Asked.Num() == 1, FString::Printf(TEXT("a refresh that changes nothing asks nothing more (%d asked)"), Asked.Num()));
+				FWonderlandSocialSnapshot NewMessage = Inbox;
+				NewMessage.Conversations[0].Unread = 3;
+				NewMessage.Messages[TEXT("qa-conv-a")].Add(Message(TEXT("qa-conv-a"), 4, TEXT("qa-amy")));
+				ReadHub->SetSnapshot(NewMessage, true, FString(), false);
+				ReadHub->FlushRebuild();
+				Check(TEXT("RD3"), Asked.Num() == 2 && Asked.Last() == TEXT("messages.read qa-conv-a"),
+					FString::Printf(TEXT("a new message landing in the open conversation asks again (%d asked)"), Asked.Num()));
+				FWonderlandSocialSnapshot Cleared = NewMessage;
+				Cleared.Conversations[0].Unread = 0;
+				Cleared.Messages[TEXT("qa-conv-a")].Add(Message(TEXT("qa-conv-a"), 5, TEXT("qa-amy")));   // e.g. from a muted sender: not unread
+				ReadHub->SetSnapshot(Cleared, true, FString(), false);
+				ReadHub->FlushRebuild();
+				Check(TEXT("RD4"), Asked.Num() == 2, FString::Printf(TEXT("control: a newer message with NOTHING unread asks nothing (%d asked)"), Asked.Num()));
+				ReadHub->OpenConversation(TEXT("qa-conv-b"));
+				Check(TEXT("RD5"), Asked.Num() == 3 && Asked.Last() == TEXT("messages.read qa-conv-b"),
+					FString::Printf(TEXT("opening Bo's conversation (1 unread) asks for it (%s)"), Asked.Num() > 0 ? *Asked.Last() : TEXT("none")));
+				// RD6 CONTROL: on another tab nothing is read, though a message lands in the conversation; opening MESSAGES again reads it
+				ReadHub->SetTab(SWonderlandSocialHubPanel::ETab::Friends);
+				FWonderlandSocialSnapshot Away = Cleared;
+				Away.Conversations[1].Unread = 2;
+				Away.Messages[TEXT("qa-conv-b")].Add(Message(TEXT("qa-conv-b"), 2, TEXT("qa-bo")));
+				ReadHub->SetSnapshot(Away, true, FString(), false);
+				ReadHub->FlushRebuild();
+				const int32 OnFriends = Asked.Num();
+				ReadHub->SetTab(SWonderlandSocialHubPanel::ETab::Messages);
+				Check(TEXT("RD6"), OnFriends == 3 && Asked.Num() == 4 && Asked.Last() == TEXT("messages.read qa-conv-b"),
+					FString::Printf(TEXT("control: on FRIENDS nothing is read (%d asked); back on MESSAGES the open one is (%d asked)"), OnFriends, Asked.Num()));
+			}
+			{
+				// RD7 CONTROL: a DEVELOPMENT PREVIEW hub (synthetic people) never reads, with the same unread inbox
+				int32 PreviewAsked = 0;
+				const TSharedRef<SWonderlandSocialHubPanel> PreviewHub = SNew(SWonderlandSocialHubPanel).Snapshot(Inbox).bConnected(true).bDevelopmentPreview(true)
+					.InitialTab(SWonderlandSocialHubPanel::ETab::Messages)
+					.OnAction_Lambda([&PreviewAsked](const FString&, const FString&) { PreviewAsked += 1; });
+				PreviewHub->FlushRebuild();
+				Check(TEXT("RD7"), PreviewAsked == 0, FString::Printf(TEXT("control: a preview hub with the same unread inbox asks nothing (%d)"), PreviewAsked));
+			}
+			{
+				// RD8 / RD9: the live service's dispatch -- read up to the newest message ITS view holds; refused before sending otherwise
+				TUniquePtr<FWonderlandSocialLiveService> ReadProbe = MakeUnique<FWonderlandSocialLiveService>(TEXT("http://127.0.0.1:9"), TEXT("qa-read"));
+				ReadProbe->QaSetSnapshot(Inbox);
+				const FWonderlandSocialActionResult Known = ReadProbe->Request(TEXT("messages.read"), TEXT("qa-conv-a"));
+				Check(TEXT("RD8"), Known.bOk && Known.bPending,
+					FString::Printf(TEXT("messages.read on a held conversation is sent (pending: %s) -- its path and sequence body are not read here"), *Known.Reason));
+				const FWonderlandSocialActionResult Unknown = ReadProbe->Request(TEXT("messages.read"), TEXT("qa-conv-none"));
+				const FWonderlandSocialActionResult BadId = ReadProbe->Request(TEXT("messages.read"), TEXT("bad id!"));
+				const FWonderlandSocialActionResult NoSubject = ReadProbe->Request(TEXT("messages.read"), FString());
+				Check(TEXT("RD9"), !Unknown.bOk && !Unknown.bPending && !BadId.bOk && !NoSubject.bOk,
+					FString::Printf(TEXT("a conversation this view does not hold is refused by CF-2 ('%s'); guards: an invalid id ('%s', the generic safe-id rule) and none ('%s')"),
+						*Unknown.Reason, *BadId.Reason, *NoSubject.Reason));
+				ReadProbe.Reset();   // cancels what it started (to a dead port)
+			}
+
+			// A world report's answer, as the server sends it (the CF-3 and CF-4 checks feed it)
+			auto WorldAnswer = [](const FString& ContextId, int32 Population)
+			{
+				TSharedPtr<FJsonObject> Made = MakeShared<FJsonObject>();
+				Made->SetArrayField(TEXT("avatars"), TArray<TSharedPtr<FJsonValue>>());
+				TSharedPtr<FJsonObject> Context = MakeShared<FJsonObject>();
+				Context->SetStringField(TEXT("contextId"), ContextId);
+				Context->SetStringField(TEXT("kind"), TEXT("PUBLIC_WORLD"));
+				Context->SetStringField(TEXT("serverName"), TEXT("Golden Arrival"));
+				Context->SetNumberField(TEXT("population"), Population);
+				Context->SetNumberField(TEXT("capacity"), 32);
+				Made->SetObjectField(TEXT("context"), Context);
+				return Made;
+			};
+
+			// ---- CF-3: LEAVE / REJOIN SHARED WORLD
+			{
+				FWonderlandSocialPresence InWorld;
+				InWorld.bHasLocation = true;
+				InWorld.Location.ServerId = TEXT("pub_qa");
+				FWonderlandSocialPresence OutOfWorld;
+				FString InLabel, InOperation, InSubject, OutLabel, OutOperation, OutSubject;
+				WonderlandSocialHubLook::WorldControlOf(InWorld, InLabel, InOperation, InSubject);
+				WonderlandSocialHubLook::WorldControlOf(OutOfWorld, OutLabel, OutOperation, OutSubject);
+				Check(TEXT("LW1"), InLabel.Equals(TEXT("LEAVE SHARED WORLD"), ESearchCase::CaseSensitive) && InOperation == TEXT("world.leave") && InSubject.IsEmpty(),
+					FString::Printf(TEXT("in a world (the server's location): %s -> %s"), *InLabel, *InOperation));
+				Check(TEXT("LW2"), OutLabel.Equals(TEXT("REJOIN SHARED WORLD"), ESearchCase::CaseSensitive) && OutOperation == TEXT("world.join")
+					&& OutSubject == TEXT("golden_arrival") && OutLabel != InLabel,
+					FString::Printf(TEXT("control, no location: %s -> %s %s (the control reads the location, not a constant)"), *OutLabel, *OutOperation, *OutSubject));
+				TUniquePtr<FWonderlandSocialLiveService> WorldProbe = MakeUnique<FWonderlandSocialLiveService>(TEXT("http://127.0.0.1:9"), TEXT("qa-world-leave"));
+				FWonderlandWorldView GoldenView;
+				GoldenView.bInWorld = true;
+				GoldenView.ContextId = TEXT("pub_qa");
+				GoldenView.Kind = TEXT("PUBLIC_WORLD");
+				GoldenView.ServerName = TEXT("Golden Arrival");
+				WorldProbe->QaSetWorld(GoldenView, true);
+				const FWonderlandSocialActionResult LeaveAnswer = WorldProbe->Request(InOperation, InSubject);
+				Check(TEXT("LW3"), LeaveAnswer.bOk && LeaveAnswer.bPending && !WorldProbe->GetWorldView().bInWorld && !WorldProbe->QaAutoJoinPlan().bPending,
+					TEXT("LEAVE SHARED WORLD: world.leave is sent, the world view is gone at once, no automatic join is planned"));
+				// LW4: a leave is not undone: the server forgetting the world (404) plans no quiet rejoin for a player who chose to leave
+				WorldProbe->QaFeedWorldReport(404, nullptr, TEXT("Join a world first"));
+				Check(TEXT("LW4"), !WorldProbe->QaAutoJoinPlan().bPending && !WorldProbe->GetWorldView().bInWorld,
+					TEXT("after LEAVE SHARED WORLD a 404 world answer plans no automatic join (the player chose to leave)"));
+				// LW6 (r2, the correctness review's F1): a report sent BEFORE the leave and answered after it is dropped -- the view stays out of the
+				// world, no population line, no join planned (no frozen Dogs, no false "appeared"). CONTROL: the same answer to a player who wants
+				// the world IS applied (in the world, one population line)
+				const int32 LinesBeforeStale = WorldProbe->QaPopulationLines();
+				WorldProbe->QaFeedWorldReport(200, WorldAnswer(TEXT("pub_qa"), 2), FString());
+				const bool bStaleDropped = !WorldProbe->GetWorldView().bInWorld && WorldProbe->QaPopulationLines() == LinesBeforeStale
+					&& !WorldProbe->QaAutoJoinPlan().bPending;
+				TUniquePtr<FWonderlandSocialLiveService> StayProbe = MakeUnique<FWonderlandSocialLiveService>(TEXT("http://127.0.0.1:9"), TEXT("qa-world-stay"));
+				StayProbe->QaSetWorld(GoldenView, true);
+				StayProbe->QaFeedWorldReport(200, WorldAnswer(TEXT("pub_qa"), 2), FString());
+				const bool bWantedApplied = StayProbe->GetWorldView().bInWorld && StayProbe->QaPopulationLines() == 1;
+				StayProbe.Reset();
+				Check(TEXT("LW6"), bStaleDropped && bWantedApplied,
+					FString::Printf(TEXT("a world answer landing after the leave is dropped (dropped %d); control: the same answer to a player in the world is applied (%d)"),
+						bStaleDropped ? 1 : 0, bWantedApplied ? 1 : 0));
+				const FWonderlandSocialActionResult BackAnswer = WorldProbe->Request(OutOperation, OutSubject);
+				const FWonderlandSocialActionResult BadPlace = WorldProbe->Request(TEXT("world.join"), TEXT("bad place!"));
+				FWonderlandSocialPreviewService NotLive;
+				const FWonderlandSocialActionResult PreviewLeave = NotLive.Request(TEXT("world.leave"), FString());
+				Check(TEXT("LW5"), BackAnswer.bOk && BackAnswer.bPending && WorldProbe->QaAutoJoinPlan().bJoinInFlight && !BadPlace.bOk && !PreviewLeave.bOk,
+					FString::Printf(TEXT("REJOIN SHARED WORLD: the player's own PUBLIC join leaves (in flight); guards, not CF-3 controls: an invalid place ('%s', the safe-id rule) and the preview ('%s', refuses every op)"),
+						*BadPlace.Reason, *PreviewLeave.Reason));
+				WorldProbe.Reset();
+			}
+
+			// ---- CF-4: THE EVIDENCE LINES
+			{
+				TUniquePtr<FWonderlandSocialLiveService> CountProbe = MakeUnique<FWonderlandSocialLiveService>(TEXT("http://127.0.0.1:9"), TEXT("qa-population"));
+				FWonderlandWorldView Entering;
+				Entering.bInWorld = true;
+				Entering.ContextId = TEXT("pub_qa");
+				CountProbe->QaSetWorld(Entering, true);
+				CountProbe->QaFeedWorldReport(200, WorldAnswer(TEXT("pub_qa"), 2), FString());
+				const int32 AfterFirst = CountProbe->QaPopulationLines();
+				const FString FirstLine = CountProbe->QaLastPopulationLine();
+				Check(TEXT("PO1"), AfterFirst == 1 && FirstLine.Equals(TEXT("WLWORLD population 2 in pub_qa (Golden Arrival)"), ESearchCase::CaseSensitive),
+					FString::Printf(TEXT("the first answer in a world says its population: '%s'"), *FirstLine));
+				for (int32 Repeat = 0; Repeat < 4; ++Repeat)
+				{
+					CountProbe->QaFeedWorldReport(200, WorldAnswer(TEXT("pub_qa"), 2), FString());
+				}
+				Check(TEXT("PO2"), CountProbe->QaPopulationLines() == 1,
+					FString::Printf(TEXT("control: four more answers with the same population say nothing (%d line)"), CountProbe->QaPopulationLines()));
+				CountProbe->QaFeedWorldReport(200, WorldAnswer(TEXT("pub_qa"), 1), FString());
+				Check(TEXT("PO3"), CountProbe->QaPopulationLines() == 2 && CountProbe->QaLastPopulationLine().StartsWith(TEXT("WLWORLD population 1 in pub_qa")),
+					FString::Printf(TEXT("a player gone from this view: '%s'"), *CountProbe->QaLastPopulationLine()));
+				CountProbe->QaFeedWorldReport(404, nullptr, TEXT("Join a world first"));
+				const int32 AfterForgotten = CountProbe->QaPopulationLines();
+				CountProbe->QaClearPendingJoin();
+				CountProbe->QaFeedWorldReport(200, WorldAnswer(TEXT("pub_qa"), 1), FString());
+				Check(TEXT("PO4"), AfterForgotten == 2 && CountProbe->QaPopulationLines() == 3,
+					FString::Printf(TEXT("out of the world nothing is said (%d); back in it the same population is said again (%d)"), AfterForgotten, CountProbe->QaPopulationLines()));
+				const FString Said = CountProbe->QaLastPopulationLine();
+				Check(TEXT("PO5"), Said.StartsWith(TEXT("WLWORLD population ")) && !Said.StartsWith(TEXT("WLWORLD joined")) && !Said.StartsWith(TEXT("WLWORLD player")),
+					TEXT("format guard: the line is its own prefix, never one of the structured WLWORLD forms an evidence judge parses (joined / player)"));
+				CountProbe.Reset();
+
+				FWonderlandSocialSnapshot Counted;
+				Counted.ViewerId = TEXT("qa-me");
+				Counted.RecentPlayers.AddDefaulted(2);
+				const FString SnapshotSaid = WonderlandSocialSnapshotLine(Counted);
+				Check(TEXT("SN1"), SnapshotSaid.Equals(TEXT("WLSOCIAL live snapshot: qa-me, 0 friends, 0 requests in, 0 conversations, party none | recent 2"), ESearchCase::CaseSensitive),
+					FString::Printf(TEXT("the snapshot line says the recent count: '%s'"), *SnapshotSaid));
+				// SN2, THE STRUCT FORM: the line still matches the judge's catch-all STRUCT form ("…, <n> conversations, party .*"); CONTROL: had the
+				// count gone before the party, it would not. It does NOT test a reader's party CAPTURE: that capture must split on the LAST " | recent "
+				auto EarlierFormReads = [](const FString& Text)
+				{
+					return Text.StartsWith(TEXT("WLSOCIAL live snapshot: ")) && Text.Contains(TEXT(" conversations, party "));
+				};
+				const FString Inserted = TEXT("WLSOCIAL live snapshot: qa-me, 0 friends, 0 requests in, 0 conversations, 2 recent, party none");
+				Check(TEXT("SN2"), EarlierFormReads(SnapshotSaid) && !EarlierFormReads(Inserted),
+					TEXT("STRUCT form: the line still matches the catch-all form '<n> conversations, party '; control: a count inserted before the party FAILS it (a reader's party capture is not tested here)"));
+			}
+			UE_LOG(LogTemp, Display, TEXT("WLQA R16C END pass=%d fail=%d"), Passed, Failed);
 		}));
 }

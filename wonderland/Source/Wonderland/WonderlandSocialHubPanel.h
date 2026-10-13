@@ -52,6 +52,11 @@ namespace WonderlandSocialHubLook
 	FString Ago(const FString& Iso);
 	/** "expires in 40 min" / "expired" from an ISO time; empty when it does not parse. */
 	FString ExpiresIn(const FString& Iso);
+	/** R16 CF-3: the rail's SHARED WORLD control from the player's OWN presence as the server keeps it (a location = in the shared world):
+	 *  LEAVE SHARED WORLD (world.leave), else REJOIN SHARED WORLD (world.join, the public place golden_arrival). */
+	void WorldControlOf(const FWonderlandSocialPresence& Own, FString& OutLabel, FString& OutOperationId, FString& OutSubject);
+	/** R16 CF-2: true when this conversation is in the inbox with unread messages, and the newest sequence this view holds of it (> 0). */
+	bool UnreadThroughOf(const FWonderlandSocialSnapshot& View, const FString& ConversationId, int64& OutThrough);
 }
 
 class WONDERLAND_API SWonderlandSocialHubPanel : public SCompoundWidget
@@ -148,6 +153,12 @@ private:
 	TWeakPtr<SWidget> TabButtonWidgets[6];
 	/** F-21: the conversation the reply box was last built for (its draft is kept only for the same one). */
 	FString ReplyDraftConversationId;
+	/** R16 CF-2 (B25): after every rebuild, a live hub SHOWING a conversation with unread messages asks the service to mark it read
+	 *  (OnAction "messages.read"), once per newest sequence: opening it asks, a new message landing in it asks again, and nothing else
+	 *  does (the read's own refresh clears the unread, so it cannot loop). */
+	void MarkShownConversationRead();
+	FString ReadAskedConversationId;
+	int64 ReadAskedThrough = 0;
 	TSharedRef<SWidget> MakeRail();
 	TSharedRef<SWidget> MakeTabButton(ETab Which, const FString& Label, const FString& Count);
 	TSharedRef<SWidget> MakeFriends();

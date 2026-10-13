@@ -3580,6 +3580,23 @@ bool UWonderlandUiSubsystem::IsWonderWebOpen() const
 	return Open == EOverlay::WonderWeb;
 }
 
+bool UWonderlandUiSubsystem::IsWonderWebCreationOnScreen() const
+{
+	if (Open != EOverlay::WonderWeb)
+	{
+		return false;
+	}
+	const FWonderWebWindow* CreationWindow = FindWonderWebWindow(WonderWebWindowIds::Creation);
+	if (CreationWindow == nullptr || !CreationWindow->bOpen || CreationWindow->bMinimized)
+	{
+		return false;
+	}
+	// r2 (the privacy review's F1): the window being open is not creating -- it opens on the idle page, and it can show a sample peer's tab.
+	// Only the player's OWN tab with a creation being built or opened counts (WonderlandWonderWebShowsOwnCreation).
+	const UWonderlandWonderWebSubsystem* CreationState = WonderWebState();
+	return CreationState != nullptr && WonderlandWonderWebShowsOwnCreation(CreationState->GetSurface(), CreationState->GetSelectedTab());
+}
+
 void UWonderlandUiSubsystem::HandleJuliusConnectChanged()
 {
 	const UWonderlandJuliusConnectSubsystem* Connect = JuliusConnect();
@@ -5085,6 +5102,19 @@ void UWonderlandUiSubsystem::HandleSocialAction(const FString& OperationId, cons
 		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL hub %s: %s"), *OperationId, *Social->DescribeSignIn());
 		return;
 	}
+	// R16 CF-2 (B25): the hub marks the conversation the player is LOOKING AT as read -- when one with unread messages is shown, and again
+	// when new ones land in it. Not a press: no foot line ("Sending…" / "Done") replaces the player's own, and its answer reaches no screen
+	// (HandleSocialAnswered). The live service logs it as it logs every operation ("WLSOCIAL live messages.read <conversation>: ok").
+	if (OperationId == TEXT("messages.read"))
+	{
+		const FWonderlandSocialActionResult Read = Service != nullptr ? Service->Request(OperationId, SubjectId)
+			: FWonderlandSocialActionResult{false, TEXT("Social is not available in this build")};
+		if (!Read.bOk)
+		{
+			UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL read %s not asked: %s"), *SubjectId, *Read.Reason);
+		}
+		return;
+	}
 	// F1, THE FOUNDER'S FINAL RULE (2026-10-02): a BLOCK on somebody in this player's party is committed only after it is
 	// confirmed. The first BLOCK only WARNS, in the founder's words -- a leader's block also removes them, anybody else's makes
 	// the blocker leave -- and a second BLOCK on the same person within 15 s confirms it (blocks.add.confirm). The server
@@ -5218,6 +5248,10 @@ void UWonderlandUiSubsystem::HandleSocialAnswered(const FString& OperationId, co
 	if (OperationId == TEXT("world.join.auto"))
 	{
 		return;   // a join the client made by itself: no screen answers it, so its "Done" never overwrites a notice (Second's review M1)
+	}
+	if (OperationId == TEXT("messages.read"))
+	{
+		return;   // R16 CF-2: a read the hub made because the player was looking: no screen answers it (the live service logged it)
 	}
 	const FString Line = Answer.bOk ? FString(TEXT("Done")) : Answer.Reason;
 	if (Open == EOverlay::Social && SocialHubPanel.IsValid())

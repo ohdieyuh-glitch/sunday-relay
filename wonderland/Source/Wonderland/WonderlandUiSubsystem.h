@@ -685,6 +685,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Wonder Web")
 	bool IsWonderWebOpen() const;
 
+	/** R16 CF-1 (the CREATING presence): Wonder Web's CREATION window is on screen -- the workspace open, that window open and not folded
+	 *  to its chip -- AND (r2) it shows the player's OWN tab with a creation being built or opened (never the idle page, a failed build or a
+	 *  sample peer's tab: WonderlandWonderWebShowsOwnCreation). Plain C++, not reflected: a new reflected name is an early FName (memory:
+	 *  niagara-fname-hash-crash). */
+	bool IsWonderWebCreationOnScreen() const;
+
 	/** The screen standing in the world and the camera on it, as "presented=1 view_target=1 ...". */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Wonder Web")
 	FString DescribeWonderWeb() const;

@@ -499,6 +499,15 @@ bool WonderlandParseWonderWebSurface(const TSharedPtr<FJsonObject>& Json, FWonde
 	return true;
 }
 
+bool WonderlandWonderWebShowsOwnCreation(const FWonderWebSurface& Surface, int32 SelectedTab)
+{
+	if (!Surface.bValid || !Surface.UnavailableReason.IsEmpty() || !Surface.Tabs.IsValidIndex(SelectedTab) || !Surface.Tabs[SelectedTab].bIsSelf)
+	{
+		return false;   // nothing observed, or not the player's own tab (a sample peer's creation is watched, not made)
+	}
+	return Surface.Viewport.Kind == EWonderWebViewportKind::Working || Surface.Viewport.Kind == EWonderWebViewportKind::Creation;
+}
+
 /* ==================================================================== the subsystem */
 
 void UWonderlandWonderWebSubsystem::Initialize(FSubsystemCollectionBase& Collection)

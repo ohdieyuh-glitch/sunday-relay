@@ -144,12 +144,20 @@ namespace WonderlandSocialLiveDetail
 	}
 }
 
+FString WonderlandSocialSnapshotLine(const FWonderlandSocialSnapshot& View)
+{
+	return FString::Printf(TEXT("WLSOCIAL live snapshot: %s, %d friends, %d requests in, %d conversations, party %s | recent %d"), *View.ViewerId,
+		View.Friends.Num(), View.IncomingRequests.Num(), View.Conversations.Num(), View.bHasParty ? *View.Party.Name : TEXT("none"), View.RecentPlayers.Num());
+}
+
 FWonderlandSocialLiveService::FWonderlandSocialLiveService(const FString& InBaseUrl, const FString& InToken)
 	: BaseUrl(InBaseUrl.TrimStartAndEnd())
 	, Token(InToken.TrimStartAndEnd())
 {
 	BaseUrl.RemoveFromEnd(TEXT("/"));
 	TickerHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FWonderlandSocialLiveService::Tick), 0.25f);
+	// R16 CF-1: the arrival counts as movement, so the "exploring" this first report says holds for ExploringHoldSeconds
+	PresenceReporter = FWonderlandPresenceReporter(FPlatformTime::Seconds());
 	ReportPresence(true);
 	Refresh();
 }
@@ -333,8 +341,7 @@ void FWonderlandSocialLiveService::Refresh()
 			bHasSnapshot = true;
 			SnapshotAt = FPlatformTime::Seconds();
 			LastError.Reset();
-			UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live snapshot: %s, %d friends, %d requests in, %d conversations, party %s"), *Snapshot.ViewerId,
-				Snapshot.Friends.Num(), Snapshot.IncomingRequests.Num(), Snapshot.Conversations.Num(), Snapshot.bHasParty ? *Snapshot.Party.Name : TEXT("none"));
+			UE_LOG(LogTemp, Log, TEXT("%s"), *WonderlandSocialSnapshotLine(Snapshot));
 			Changed.Broadcast();
 		}
 		if (bRefreshAgain)
@@ -374,7 +381,49 @@ bool FWonderlandSocialLiveService::Tick(float)
 	{
 		TickWorld();
 	}
+	if (ActivitySource)
+	{
+		TickActivity();
+	}
 	return true;
+}
+
+void FWonderlandSocialLiveService::TickActivity()
+{
+	FWonderlandActivitySample Sample;
+	if (!ActivitySource(Sample))
+	{
+		return;   // nothing to read this tick (no Dog yet, a map loading): what the server holds stands
+	}
+	const double Now = FPlatformTime::Seconds();
+	const FWonderlandPresenceSignals Wanted = PresenceReporter.Want(Sample, Now);
+	// THE PARTY AS THIS VIEW LAST SAID IT: joining or leaving one (or being removed) re-reports, so the authority derives IN PARTY anew
+	const FString PartyKey = bHasSnapshot && Snapshot.bHasParty ? Snapshot.Party.PartyId : FString();
+	if (PresenceReporter.IsDue(Wanted, PartyKey, Now))
+	{
+		SendPresence(true, Wanted, PartyKey);
+	}
+}
+
+void FWonderlandSocialLiveService::NotePopulation()
+{
+	if (!WorldView.bInWorld)
+	{
+		// out of every world (a leave, a forgotten world, a removal): the next world's population is said again, whatever it is
+		LoggedPopulation = -1;
+		LoggedPopulationContext.Reset();
+		return;
+	}
+	if (WorldView.Population == LoggedPopulation && WorldView.ContextId == LoggedPopulationContext)
+	{
+		return;
+	}
+	LoggedPopulation = WorldView.Population;
+	LoggedPopulationContext = WorldView.ContextId;
+	// THE POPULATION THIS VIEWER IS SHOWN (worldViewFor counts the viewer and those visible to them: P1 keeps a hidden player out of it)
+	LastPopulationLine = FString::Printf(TEXT("WLWORLD population %d in %s (%s)"), WorldView.Population, *WorldView.ContextId, *WorldView.ServerName);
+	PopulationLineCount += 1;
+	UE_LOG(LogTemp, Display, TEXT("%s"), *LastPopulationLine);
 }
 
 void FWonderlandSocialLiveService::TickWorld()
@@ -406,6 +455,13 @@ void FWonderlandSocialLiveService::TickWorld()
 void FWonderlandSocialLiveService::HandleWorldReport(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
 {
 	NextWorldAt = FPlatformTime::Seconds() + (Problem.IsEmpty() ? WonderlandSocialLiveDetail::WorldSeconds : WonderlandSocialLiveDetail::RetrySeconds);
+	// R16 CF-3 r2 (the correctness review's F1): A REPORT SENT BEFORE LEAVE SHARED WORLD answers about a world the player chose to leave.
+	// Its answer is dropped whatever it says: applied, it put the view back "in" that world -- frozen copies of the others' Dogs, a false
+	// "appeared" and a population line after "world.leave : ok" -- and a 404 for it is no reason to say "staying" either.
+	if (!bWorldWanted)
+	{
+		return;
+	}
 	if (!Problem.IsEmpty())
 	{
 		// A REFUSAL IS NEVER A REMOVAL (Second's review of 4d31c524: since b7dd6eae the server answers a removal 200 with no context).
@@ -421,6 +477,7 @@ void FWonderlandSocialLiveService::HandleWorldReport(int32 Status, const TShared
 				UE_LOG(LogTemp, Display, TEXT("WLWORLD the server no longer holds this player's world (404): joining the same one again quietly"));
 				RejoinContextId = WorldView.ContextId;   // a FRIEND rejoin must land in this same world, or the player is not moved (m2)
 				WorldView = FWonderlandWorldView();
+				NotePopulation();
 				WorldChanged.Broadcast();
 				ScheduleAutoJoin(WorldTarget, WorldArg);
 			}
@@ -450,11 +507,13 @@ void FWonderlandSocialLiveService::HandleWorldReport(int32 Status, const TShared
 		// flight, the plan waits for its answer: placed somewhere, the plan is dropped; refused, it runs (never stranded out of a world).
 		UE_LOG(LogTemp, Display, TEXT("WLWORLD removed from a private server by the server: back to the public world"));
 		Answered.Broadcast(TEXT("world.removed"), FString(), FWonderlandSocialActionResult{false, TEXT("You can't stay in this server."), false});
+		NotePopulation();
 		WorldChanged.Broadcast();
 		RejoinContextId.Reset();
 		ScheduleAutoJoin(TEXT("PUBLIC"), TEXT("golden_arrival"));
 		return;
 	}
+	NotePopulation();
 	WorldChanged.Broadcast();
 }
 
@@ -548,6 +607,7 @@ void FWonderlandSocialLiveService::HandleJoinAnswer(int32 Seq, const FString& Ta
 		WorldArg = Arg;
 		UE_LOG(LogTemp, Display, TEXT("WLWORLD joined %s (%s), %d of %d here%s"), *WorldView.ContextId, *WorldView.ServerName, WorldView.Population,
 			WorldView.Capacity, bAutomatic ? TEXT(" (automatically)") : TEXT(""));
+		NotePopulation();
 		WorldChanged.Broadcast();
 	}
 	else
@@ -574,6 +634,7 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::LeaveWorld()
 	bJoinInFlight = false;
 	++JoinSeq;                  // nor does a join still in flight: its answer is now an earlier join's
 	WorldView = FWonderlandWorldView();
+	NotePopulation();
 	WorldChanged.Broadcast();
 	return Ask(TEXT("world.leave"), FString(), TEXT("POST"), TEXT("/world/leave"), MakeShared<FJsonObject>());
 }
@@ -715,6 +776,26 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::Request(const FStrin
 		return Ask(OperationId, SubjectId, TEXT("POST"), TEXT("/presence"), Object(TEXT("availability"), SubjectId));
 	}
 	if (OperationId == TEXT("conversations.open")) return Ask(OperationId, SubjectId, TEXT("POST"), TEXT("/conversations"), Object(TEXT("otherUserId"), SubjectId));
+	if (OperationId == TEXT("messages.read"))
+	{
+		// R16 CF-2 (B25): the conversation the hub is SHOWING, read up to the newest message THIS view holds of it -- never one the player
+		// has not been shown (markRead never moves backwards and stops at the conversation's last: social-conversations.ts:172-180)
+		int64 Through = 0;
+		if (const TArray<FWonderlandSocialMessage>* History = SubjectId.IsEmpty() ? nullptr : Snapshot.Messages.Find(SubjectId))
+		{
+			for (const FWonderlandSocialMessage& Shown : *History)
+			{
+				Through = FMath::Max(Through, Shown.Sequence);
+			}
+		}
+		if (Through <= 0)
+		{
+			return Refuse(TEXT("There is nothing to mark read in that conversation"));
+		}
+		TSharedPtr<FJsonObject> Body = MakeShared<FJsonObject>();
+		Body->SetNumberField(TEXT("sequence"), static_cast<double>(Through));
+		return Ask(OperationId, SubjectId, TEXT("POST"), FString::Printf(TEXT("/conversations/%s/read"), *SubjectId), Body);
+	}
 	if (OperationId == TEXT("parties.create")) return Ask(OperationId, SubjectId, TEXT("POST"), TEXT("/parties"), MakeShared<FJsonObject>());
 	if (OperationId == TEXT("parties.join")) return Ask(OperationId, SubjectId, TEXT("POST"), FString::Printf(TEXT("/parties/%s/join"), *SubjectId), MakeShared<FJsonObject>());
 	if (OperationId == TEXT("party_invites.accept")) return Ask(OperationId, SubjectId, TEXT("POST"), FString::Printf(TEXT("/party-invites/%s/accept"), *SubjectId), MakeShared<FJsonObject>());
@@ -735,6 +816,11 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::Request(const FStrin
 	// JOIN / INVITE TO A WORLD: the shared presence layer (Multiplayer Phase 1). A friend's world by THEIR join rule.
 	if (OperationId == TEXT("server.join")) return JoinWorld(TEXT("FRIEND"), SubjectId);
 	if (OperationId == TEXT("server.invite")) return InviteToWorld(SubjectId);
+	// R16 CF-3 (B34, the CONTEXT's leave and rejoin): the hub's LEAVE / REJOIN SHARED WORLD, through the leave and the join this client
+	// already makes -- LeaveWorld (world.leave: no automatic join puts the player back), and the PUBLIC join the sign-in itself makes, as the
+	// player's own join (its answer is shown). The subject of world.join is the public place's id (the safe-id rule above).
+	if (OperationId == TEXT("world.leave")) return LeaveWorld();
+	if (OperationId == TEXT("world.join")) return JoinWorld(TEXT("PUBLIC"), SubjectId.IsEmpty() ? FString(TEXT("golden_arrival")) : SubjectId);
 	return Refuse(FString::Printf(TEXT("%s is not a social action this client knows"), *OperationId));
 }
 
@@ -1000,19 +1086,126 @@ void FWonderlandSocialLiveService::ReadProfile(const FString& UserId, FWonderlan
 
 void FWonderlandSocialLiveService::ReportPresence(bool bConnected)
 {
-	TSharedPtr<FJsonObject> Body = MakeShared<FJsonObject>();
-	Body->SetBoolField(TEXT("connected"), bConnected);
-	// THE CLIENT'S PART: connected, and what it is doing. The activity is derived by the authority's one precedence.
-	TSharedPtr<FJsonObject> Signals = MakeShared<FJsonObject>();
-	Signals->SetBoolField(TEXT("exploring"), bConnected);
-	Body->SetObjectField(TEXT("signals"), Signals);
-	Call(TEXT("POST"), TEXT("/presence"), Body, [](int32, const TSharedPtr<FJsonObject>&, const FString& Problem)
+	// THE CLIENT'S PART: connected, and what it is doing. The activity is derived by the authority's one precedence. Arriving is
+	// exploring (as it always was); leaving is nothing. Either way any detail an earlier activity left is cleared (null).
+	FWonderlandPresenceSignals Arrival;
+	Arrival.bExploring = bConnected;
+	SendPresence(bConnected, Arrival, bHasSnapshot && Snapshot.bHasParty ? Snapshot.Party.PartyId : FString());
+}
+
+void FWonderlandSocialLiveService::SendPresence(bool bConnected, const FWonderlandPresenceSignals& Signals, const FString& PartyKey)
+{
+	PresenceReporter.NoteSent(Signals, PartyKey, FPlatformTime::Seconds());
+	// THE SIGNALS AND WHETHER THERE IS A PARTY, ONE TOKEN (the operation-line form every "WLSOCIAL live <op> <subject>: ok" reader takes);
+	// the detail is the client's own fixed words, never a player's text
+	const FString Said = FString::Printf(TEXT("%s,connected=%d,party=%s"), *Signals.Describe(), bConnected ? 1 : 0, PartyKey.IsEmpty() ? TEXT("no") : TEXT("yes"));
+	Call(TEXT("POST"), TEXT("/presence"), WonderlandPresenceBody(bConnected, Signals), [this, Said](int32 Status, const TSharedPtr<FJsonObject>&, const FString& Problem)
 	{
+		// no answer (status 0) or a 5xx: the outcome is unknown, so the reporter sends the current state again (r2, F3)
+		PresenceReporter.NoteAnswered(Problem.IsEmpty(), Status == 429 ? LastRetryAfterSeconds : 0, FPlatformTime::Seconds(), Status == 0 || Status >= 500);
 		if (!Problem.IsEmpty())
 		{
-			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live presence not reported: %s"), *Problem);
+			// SAID ONCE PER NEW REASON: an outage retries every few seconds, and the log must not fill with the same line
+			if (Problem != PresenceProblem)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live presence not reported: %s"), *Problem);
+			}
+			PresenceProblem = Problem;
+			return;
 		}
+		PresenceProblem.Reset();
+		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live presence.update_self %s: ok"), *Said);
 	});
+}
+
+TSharedRef<FJsonObject> WonderlandPresenceBody(bool bConnected, const FWonderlandPresenceSignals& Signals)
+{
+	TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+	Body->SetBoolField(TEXT("connected"), bConnected);
+	TSharedPtr<FJsonObject> Flags = MakeShared<FJsonObject>();
+	Flags->SetBoolField(TEXT("exploring"), Signals.bExploring);
+	Flags->SetBoolField(TEXT("runningMission"), Signals.bRunningMission);
+	if (Signals.bCreating)
+	{
+		Flags->SetStringField(TEXT("creating"), TEXT("SOFTWARE"));
+	}
+	else
+	{
+		Flags->SetField(TEXT("creating"), MakeShared<FJsonValueNull>());
+	}
+	// NEVER CLAIMED BY THIS CLIENT (founder 10-13): GVE and private servers are deferred, and Julius at work is representation only. Said
+	// false outright, so no earlier report can leave one standing. "inParty" is never sent: the authority reads its own party record.
+	Flags->SetBoolField(TEXT("inGveBattle"), false);
+	Flags->SetBoolField(TEXT("inPrivateServer"), false);
+	Flags->SetBoolField(TEXT("juliusWorking"), false);
+	Body->SetObjectField(TEXT("signals"), Flags);
+	if (Signals.Detail.IsEmpty())
+	{
+		Body->SetField(TEXT("activityDetail"), MakeShared<FJsonValueNull>());
+	}
+	else
+	{
+		Body->SetStringField(TEXT("activityDetail"), Signals.Detail);
+	}
+	return Body;
+}
+
+FWonderlandPresenceSignals FWonderlandPresenceReporter::Want(const FWonderlandActivitySample& Sample, double Now)
+{
+	if (Sample.bMoving)
+	{
+		LastMovedAt = Now;
+	}
+	FWonderlandPresenceSignals Out;
+	Out.bExploring = Now - LastMovedAt <= ExploringHoldSeconds;
+	Out.bCreating = Sample.bCreating;
+	Out.bRunningMission = Sample.bRunningMission;
+	// ONE DETAIL, for the activity the authority will show (deriveActivity: a mission over creating). A mission this build only simulates
+	// says so; a real one followed (none in this build) carries no words of the client's. The creation window's sample is simulated.
+	Out.Detail = Sample.bRunningMission ? (Sample.bMissionSimulated ? FString(WonderlandPresenceDetail::SimulatedMission()) : FString())
+		: Sample.bCreating ? FString(WonderlandPresenceDetail::SimulatedCreation()) : FString();
+	return Out;
+}
+
+bool FWonderlandPresenceReporter::IsDue(const FWonderlandPresenceSignals& Wanted, const FString& PartyKey, double Now) const
+{
+	if (bInFlight || Now < NotBefore)
+	{
+		return false;
+	}
+	return !bHasAccepted || Wanted != Accepted || !PartyKey.Equals(AcceptedParty, ESearchCase::CaseSensitive);
+}
+
+void FWonderlandPresenceReporter::NoteSent(const FWonderlandPresenceSignals& Sent, const FString& PartyKey, double Now)
+{
+	bInFlight = true;
+	InFlightSignals = Sent;
+	InFlightParty = PartyKey;
+	NotBefore = Now + MinGapSeconds;
+}
+
+void FWonderlandPresenceReporter::NoteAnswered(bool bAccepted, int32 RetryAfterSeconds, double Now, bool bOutcomeUnknown)
+{
+	if (!bInFlight)
+	{
+		return;   // an answer to nothing this reporter sent (it was reset meanwhile)
+	}
+	bInFlight = false;
+	if (bAccepted)
+	{
+		bHasAccepted = true;
+		Accepted = InFlightSignals;
+		AcceptedParty = InFlightParty;
+		return;
+	}
+	// LOST (no answer, a 5xx): the report may have been applied, so nothing is known of what the server holds -- the current state is
+	// sent again after the wait, even if it equals the last accepted one (the player closed the window meanwhile: friends must not keep
+	// seeing CREATING). REFUSED (4xx): the server holds what it held, so only a change is sent. Either way not before the retry wait.
+	if (bOutcomeUnknown)
+	{
+		bHasAccepted = false;
+	}
+	NotBefore = FMath::Max(NotBefore, Now + FMath::Max(RetrySeconds, static_cast<double>(RetryAfterSeconds)));
 }
 
 FWonderlandSocialLiveService::FQaAutoJoinPlan FWonderlandSocialLiveService::QaAutoJoinPlan() const

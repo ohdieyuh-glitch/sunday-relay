@@ -10,7 +10,8 @@
 //     OnAnswered, with the snapshot refreshed after it;
 //   - the session is a native session (`Relay-Session <token>`) holding the `social` capability, and no Origin header is
 //     ever sent.
-// Its own presence (connected, exploring) is reported when it connects.
+// Its own presence (connected, exploring) is reported when it connects, and what the player is doing is reported again whenever
+// it changes (R16 CF-1, FWonderlandPresenceReporter below).
 #pragma once
 
 #include "CoreMinimal.h"
@@ -20,6 +21,114 @@
 #include "WonderlandWorldPresence.h"
 
 class FJsonObject;
+
+// ---- R16 CF-1: WHAT THIS PLAYER IS DOING, reported on CHANGE (sunday-relay src/relay/social/social-presence.ts deriveActivity: the
+// authority derives ONE activity from these signals, by one precedence -- a mission over creating over exploring over a party -- and
+// takes "in a party" from its own party record, never from the client: social-commands.ts updateOwnPresence / readSignals). The
+// client sends only what it knows. It NEVER sends inGveBattle, inPrivateServer or juliusWorking as true (founder 10-13: GVE and private
+// servers are DEFERRED; WORKING WITH JULIUS is representation only), and every activity this build can only SIMULATE says so in its
+// activityDetail, which the authority shows after the activity's label ("Running a mission · simulated").
+
+/** What the client knows about its player this moment, sampled by the owner (the social subsystem) every tick. */
+struct FWonderlandActivitySample
+{
+	/** The player's Dog moved this tick (walking, running, falling). */
+	bool bMoving = false;
+	/** Wonder Web's CREATION window is on screen: in this build its sample creation is SIMULATED (WonderlandWonderWebPanel.cpp:343). */
+	bool bCreating = false;
+	/** A mission is running: a fixture playing, or a Mission Contract manifested. */
+	bool bRunningMission = false;
+	/** That mission is a SIMULATION (the mission subsystem's own IsDevelopmentPreview, which asks rather than asserts). */
+	bool bMissionSimulated = true;
+};
+
+/** The honest words a simulated activity carries (the activityDetail: <= 80 characters, no control character, as displayText takes it).
+ *  r2 (the privacy review's F3): they say WHAT is simulated -- the CONTENT is a development-preview simulation, as the player's own screens
+ *  say ("DEVELOPMENT PREVIEW · SAMPLE DATA · SIMULATED CREATION", "DEVELOPMENT PREVIEW - SIMULATED JULIUS EXECUTION") -- never that the
+ *  presence is. ASCII, no comma and no middle dot: the log token (Describe) is comma-separated. */
+namespace WonderlandPresenceDetail
+{
+	inline const TCHAR* SimulatedCreation() { return TEXT("simulated sample (development preview)"); }
+	inline const TCHAR* SimulatedMission() { return TEXT("simulated (development preview)"); }
+}
+
+/** The signals one presence.update_self carries. Empty Detail is sent as null: it CLEARS a detail left by an earlier activity. */
+struct FWonderlandPresenceSignals
+{
+	bool bExploring = false;
+	/** Sent as creating "SOFTWARE" (Wonder Web is where a player builds and runs software), else null. */
+	bool bCreating = false;
+	bool bRunningMission = false;
+	FString Detail;
+
+	bool operator==(const FWonderlandPresenceSignals& Other) const
+	{
+		return bExploring == Other.bExploring && bCreating == Other.bCreating && bRunningMission == Other.bRunningMission
+			&& Detail.Equals(Other.Detail, ESearchCase::CaseSensitive);
+	}
+	bool operator!=(const FWonderlandPresenceSignals& Other) const { return !(*this == Other); }
+	/** One token, no spaces, for the log ("exploring=0,creating=SOFTWARE,runningMission=0,detail=simulated_sample_(development_preview)"). */
+	FString Describe() const
+	{
+		return FString::Printf(TEXT("exploring=%d,creating=%s,runningMission=%d,detail=%s"), bExploring ? 1 : 0, bCreating ? TEXT("SOFTWARE") : TEXT("null"),
+			bRunningMission ? 1 : 0, Detail.IsEmpty() ? TEXT("null") : *Detail.Replace(TEXT(" "), TEXT("_")));
+	}
+};
+
+/** presence.update_self's body: connected, the signals (the three the client never claims set false), and the detail (null when empty). */
+WONDERLAND_API TSharedRef<FJsonObject> WonderlandPresenceBody(bool bConnected, const FWonderlandPresenceSignals& Signals);
+
+/**
+ * THE SNAPSHOT LINE, logged once per view read. R16 CF-4 (B11): the Recent Players count is said too -- the client reads Recent inside
+ * snapshot.read, so this line is where "the recent list was answered" shows. APPENDED as " | recent <n>" after the party, so a reader of
+ * the earlier form ("…, <n> conversations, party <name>") still matches; a party name is a player's text, so a reader takes the LAST
+ * " | recent ".
+ */
+WONDERLAND_API FString WonderlandSocialSnapshotLine(const FWonderlandSocialSnapshot& View);
+
+/**
+ * WHEN THE CLIENT REPORTS AGAIN: a pure, clock-driven decision (no I/O; wl.Qa.SocialR16Client drives it with a fake clock).
+ *   - exploring = the Dog moved within ExploringHoldSeconds (a pause to look around is still exploring; standing at a surface is not);
+ *   - a report is due when what is wanted, or the player's party, differs from what the server last ACCEPTED -- the party because the
+ *     authority re-derives "in a party" only when signals are reported (social-commands.ts:235);
+ *   - never while one is in flight, never sooner than MinGapSeconds after the last one, and after a refusal not before RetrySeconds (or a
+ *     429's Retry-After); a LOST answer (no answer, a 5xx) re-sends the current state after that wait. Worst case ~20 a minute: a third of the write budget's steady rate (wonderland-social-routes.ts SOCIAL_BUDGETS.write,
+ *     a burst of 60 then one a second), which every other write shares.
+ */
+class WONDERLAND_API FWonderlandPresenceReporter
+{
+public:
+	static constexpr double ExploringHoldSeconds = 8.0;
+	static constexpr double MinGapSeconds = 3.0;
+	static constexpr double RetrySeconds = 6.0;
+
+	explicit FWonderlandPresenceReporter(double InStartedAt = 0.0) : LastMovedAt(InStartedAt) {}
+
+	/** What this sample means now. The detail follows the activity the authority's precedence will show (a mission over creating). */
+	FWonderlandPresenceSignals Want(const FWonderlandActivitySample& Sample, double Now);
+	bool IsDue(const FWonderlandPresenceSignals& Wanted, const FString& PartyKey, double Now) const;
+	void NoteSent(const FWonderlandPresenceSignals& Sent, const FString& PartyKey, double Now);
+	/** The server's answer to the report in flight. RetryAfterSeconds: a 429's, else 0. bOutcomeUnknown (r2, the correctness review's F3):
+	 *  no answer, or a 5xx -- the report may have been APPLIED, so what the server holds is unknown and the current state is sent again
+	 *  after the retry wait, changed or not (a lost answer must not leave a stale activity shown to friends). A refusal the server
+	 *  answered (4xx) changed nothing there: only a change is sent. */
+	void NoteAnswered(bool bAccepted, int32 RetryAfterSeconds, double Now, bool bOutcomeUnknown = false);
+
+	bool IsInFlight() const { return bInFlight; }
+	bool HasAccepted() const { return bHasAccepted; }
+	const FWonderlandPresenceSignals& GetAccepted() const { return Accepted; }
+	double GetNotBefore() const { return NotBefore; }
+
+private:
+	double LastMovedAt = 0.0;
+	bool bInFlight = false;
+	FWonderlandPresenceSignals InFlightSignals;
+	FString InFlightParty;
+	bool bHasAccepted = false;
+	FWonderlandPresenceSignals Accepted;
+	FString AcceptedParty;
+	double NotBefore = 0.0;
+};
 
 class WONDERLAND_API FWonderlandSocialLiveService final : public IWonderlandSocialService
 {
@@ -51,8 +160,12 @@ public:
 	bool HasSnapshot() const { return bHasSnapshot; }
 	/** Read the snapshot again now. */
 	void Refresh();
-	/** Report this player's own presence (the client's part of the presence authority's input). */
+	/** Report this player's own presence (the client's part of the presence authority's input): connected (and exploring, as on arrival),
+	 *  or leaving. What the player is DOING after that is reported on change from the activity source (SetActivitySource). */
 	void ReportPresence(bool bConnected);
+	/** R16 CF-1: what the player is doing, asked every tick (false: nothing to read this tick, nothing changes). */
+	void SetActivitySource(TFunction<bool(FWonderlandActivitySample&)> Source) { ActivitySource = MoveTemp(Source); }
+	const FWonderlandPresenceReporter& GetPresenceReporter() const { return PresenceReporter; }
 	/** For QA and the log: "live http://… as usr_kai | events 12 | snapshot 3 s old | last error …". */
 	FString Describe() const;
 	/** The server refused the session (HTTP 401), once: it expired, was revoked, or the bridge restarted. Polling stops. */
@@ -108,6 +221,11 @@ public:
 		HandleJoinAnswer(Seq, Target, Arg, bAutomatic, Data, Problem);
 	}
 	FQaAutoJoinPlan QaAutoJoinPlan() const;
+	/** QA ONLY (wl.Qa.SocialR16Client): hold this view as if the server had sent it (messages.read reads its sequences from it). */
+	void QaSetSnapshot(const FWonderlandSocialSnapshot& View) { Snapshot = View; bHasSnapshot = true; }
+	/** QA ONLY: how many "WLWORLD population" lines this service logged, and the last one. */
+	int32 QaPopulationLines() const { return PopulationLineCount; }
+	const FString& QaLastPopulationLine() const { return LastPopulationLine; }
 
 private:
 	bool Tick(float DeltaSeconds);
@@ -156,6 +274,21 @@ private:
 	/** A world report's answer: a 404 rejoins quietly, any other refusal stays, a private server's no-context ok is a removal. */
 	void HandleWorldReport(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem);
 	TFunction<bool(FWonderlandAvatarReport&)> AvatarSource;
+	/** R16 CF-1: sample the activity, and report it when the reporter says it is due. */
+	void TickActivity();
+	/** One presence.update_self: the reporter is told it left, and told the answer. Logged by its signals, never by anything a player wrote. */
+	void SendPresence(bool bConnected, const FWonderlandPresenceSignals& Signals, const FString& PartyKey);
+	TFunction<bool(FWonderlandActivitySample&)> ActivitySource;
+	FWonderlandPresenceReporter PresenceReporter;
+	/** The last presence refusal said in the log (each new reason is said once; a success clears it). */
+	FString PresenceProblem;
+	/** R16 CF-4: "WLWORLD population <n> in <context> (<name>)" each time the population this viewer is shown changes (or a world is
+	 *  entered); not in a world, the next one is said again. Called wherever the world view changes (before each OnWorldChanged). */
+	void NotePopulation();
+	int32 LoggedPopulation = -1;
+	FString LoggedPopulationContext;
+	FString LastPopulationLine;
+	int32 PopulationLineCount = 0;
 	FWonderlandWorldView WorldView;
 	FSimpleMulticastDelegate WorldChanged;
 	bool bWorldWanted = false;

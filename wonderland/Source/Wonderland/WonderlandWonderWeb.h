@@ -130,6 +130,14 @@ struct FWonderWebSurface
 /** Read one `WonderWebSurface` from its JSON. Strict: a missing field or an unknown viewport kind is not a surface. */
 WONDERLAND_API bool WonderlandParseWonderWebSurface(const TSharedPtr<class FJsonObject>& Json, FWonderWebSurface& Out, FString& OutProblem);
 
+/**
+ * R16 CF-1 r2 (the privacy review's F1): is the player CREATING here? Only when the tab shown is the player's OWN (bIsSelf) and its view
+ * is a creation being built (Working) or one of theirs opened (Creation). The idle page, a failed build, a sample PEER's tab (Observed)
+ * and a surface that could not be observed are not creating: opening Wonder Web, or watching someone else, is not making anything.
+ * Surface: the one on screen (UWonderlandWonderWebSubsystem::GetSurface); SelectedTab: its index in that surface's Tabs.
+ */
+WONDERLAND_API bool WonderlandWonderWebShowsOwnCreation(const FWonderWebSurface& Surface, int32 SelectedTab);
+
 /** One line the user's own terminal session added: what they typed, or what the preview answered. Never a creation log. */
 struct FWonderWebSessionLine
 {

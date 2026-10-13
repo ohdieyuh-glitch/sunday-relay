@@ -112,6 +112,9 @@ private:
 	bool TickRemotePlayers(float DeltaSeconds);
 	/** This player's own representation, from the local Relay Dog: the soles, facing, speed, motion, worn skin. */
 	bool ReportLocalPlayer(FWonderlandAvatarReport& Out) const;
+	/** R16 CF-1: what this player is doing (the Dog moving, Wonder Web's creation window on screen, a mission running and whether it is
+	 *  simulated), for the live service's presence reports. False when there is no player controller to read. */
+	bool SampleLocalActivity(struct FWonderlandActivitySample& Out) const;
 
 	FWonderlandRemoteAvatars RemotePlayers;
 	FTSTicker::FDelegateHandle RemoteTicker;

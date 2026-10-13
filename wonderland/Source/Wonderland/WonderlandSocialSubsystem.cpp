@@ -21,6 +21,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "WonderlandUiSubsystem.h"
 #include "WonderlandJuliusStream.h"
+#include "WonderlandMissionSubsystem.h"   // R16 CF-1: IN MISSION, and whether that mission is simulated
 
 // NO NEW LOG CATEGORY: a category is an early FName, and a new early FName shifted the name table under Niagara and
 // crashed a UE 5.8 package at boot (memory: niagara-fname-hash-crash). LogTemp with a WLSOCIAL prefix, like the rest.
@@ -306,6 +307,11 @@ bool UWonderlandSocialSubsystem::ConnectWith(const FString& BaseUrl, const FStri
 	{
 		return WeakThis.IsValid() && WeakThis->ReportLocalPlayer(Out);
 	});
+	// R16 CF-1: what the player is DOING, reported again whenever it changes (the live service debounces it within the command budgets)
+	Live->SetActivitySource([WeakThis = TWeakObjectPtr<UWonderlandSocialSubsystem>(this)](FWonderlandActivitySample& Out)
+	{
+		return WeakThis.IsValid() && WeakThis->SampleLocalActivity(Out);
+	});
 	Live->OnWorldChanged().AddUObject(this, &UWonderlandSocialSubsystem::HandleWorldChanged);
 	Live->OnSessionEnded().AddUObject(this, &UWonderlandSocialSubsystem::HandleLiveSessionEnded);
 	Adopt(MoveTemp(Connected));
@@ -393,6 +399,35 @@ bool UWonderlandSocialSubsystem::ReportLocalPlayer(FWonderlandAvatarReport& Out)
 	Out.Motion = Move != nullptr && Move->IsFalling() ? (Velocity.Z > 0.0 ? TEXT("JUMP") : TEXT("FALL"))
 		: Out.Speed < 10.0f ? TEXT("IDLE") : Out.Speed < 400.0f ? TEXT("WALK") : TEXT("RUN");
 	Out.SkinId = Dog->GetWornSkinId().IsNone() ? FString(TEXT("relay_og")) : Dog->GetWornSkinId().ToString();
+	return true;
+}
+
+bool UWonderlandSocialSubsystem::SampleLocalActivity(FWonderlandActivitySample& Out) const
+{
+	const UGameInstance* Instance = GetGameInstance();
+	UWorld* World = Instance != nullptr ? Instance->GetWorld() : nullptr;
+	APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+	if (PC == nullptr)
+	{
+		return false;
+	}
+	// MOVING: the same thresholds the world report's motion uses (IDLE below 10 uu/s; JUMP and FALL count as moving)
+	if (const ARelayDogCharacter* Dog = Cast<ARelayDogCharacter>(PC->GetPawn()))
+	{
+		const FVector Velocity = Dog->GetVelocity();
+		const UCharacterMovementComponent* Move = Dog->GetCharacterMovement();
+		Out.bMoving = FVector2D(Velocity.X, Velocity.Y).Size() >= 10.0 || (Move != nullptr && Move->IsFalling());
+	}
+	ULocalPlayer* Player = PC->GetLocalPlayer();
+	// CREATING: Wonder Web's CREATION window on screen (its sample creation is SIMULATED in this build and says so: the live service
+	// sends the honest detail)
+	const UWonderlandUiSubsystem* Ui = Player != nullptr ? Player->GetSubsystem<UWonderlandUiSubsystem>() : nullptr;
+	Out.bCreating = Ui != nullptr && Ui->IsWonderWebCreationOnScreen();
+	// IN MISSION: a fixture playing (MISSIONS (J)'s simulated mission) or a Mission Contract manifested; the subsystem's own
+	// IsDevelopmentPreview says whether it is a simulation (it asks, never asserts)
+	const UWonderlandMissionSubsystem* Mission = Player != nullptr ? Player->GetSubsystem<UWonderlandMissionSubsystem>() : nullptr;
+	Out.bRunningMission = Mission != nullptr && (Mission->IsFixtureRunning() || Mission->IsOrbInWorld());
+	Out.bMissionSimulated = Mission == nullptr || Mission->IsDevelopmentPreview();
 	return true;
 }
 
