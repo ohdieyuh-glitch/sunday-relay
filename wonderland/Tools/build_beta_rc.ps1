@@ -262,10 +262,24 @@ WHAT THIS BETA DOES NOT INCLUDE
 - Julius and the AI companions are not connected in this build. Nothing in the beta calls an AI service.
   Tasks you write are saved on your PC as QUEUED Mission Contracts; the Missions panel (J) can play a SIMULATED
   mission so you can see how one unfolds.
-- Friends, messages, parties and party voice live in the Social Hub: type /social in the agent terminal (Ctrl+T).
-  They need a Wonderland social server and a GitHub sign-in. This build connects only when a server is set up for
-  your test session; without one, pressing SIGN IN in the hub tells you social is not connected in this build, and
-  nothing is sent.
+
+SOCIAL: FRIENDS, MESSAGES, PARTIES AND PARTY VOICE
+- Type /social in the agent terminal (Ctrl+T) to open the Social Hub, then press SIGN IN WITH GITHUB. The hub shows
+  a short code: open GitHub's page (github.com/login/device), enter the code and approve Wonderland. Wonderland reads
+  your GitHub user name, id and account type once, to know who you are; it never sees your password and does not
+  keep GitHub's sign-in token.
+- Your friends, messages, parties, status, privacy choices and the players you met recently are kept on the
+  Wonderland social server. Your colours, settings and tasks stay on this PC.
+- Signed in, you share the world: other players in it (up to 32) see your Relay Dog where it is, in the skin it
+  wears, with your GitHub user name. The game sends its position, movement and skin to the social server a few
+  times a second, and the server holds them only while you play. Appear offline hides your Dog from everyone.
+- YOUR STATUS in the hub: Available, Away, Busy or Appear offline. Appear offline shows you as offline to everyone,
+  friends included.
+- Blocking someone hides each of you from the other, and you no longer share a party or a private server. Nobody is
+  told why. To undo it: Social Hub > FRIENDS > BLOCKED BY YOU > UNBLOCK.
+- Party voice uses Epic Online Services. Your microphone is used only while you are in your party's voice room;
+  LEAVE VOICE ends it.
+- If the social server restarts, you are signed out: sign in again. Your friends, messages and parties are kept.
 
 REQUIREMENTS
 - Windows 10 or 11, 64-bit
@@ -283,8 +297,9 @@ INSTALL AND RUN
    cannot start on that PC until the beta is signed; please tell us rather than turning Smart App Control off.
 4. Windows may ask whether to allow Wonderland on public and private networks. Please click Cancel: nothing in
    Wonderland needs other computers to connect to it. The request comes from a diagnostics feature of the game
-   engine, which this build switches off right after it starts. Wonderland connects out only after you sign in
-   to social: to the social server, and to Epic Online Services for party voice.
+   engine, which this build switches off right after it starts. Wonderland connects out only after you press
+   SIGN IN WITH GITHUB in the Social Hub: to the Wonderland social server, and to Epic Online Services for party
+   voice. GitHub's sign-in page opens in your web browser.
 5. If Windows reports a missing VCRUNTIME140.dll or MSVCP140.dll, run Engine\Extras\Redist\en-us\vc_redist.x64.exe
    once from this folder, then start Wonderland again.
 
@@ -323,8 +338,10 @@ REPORTING A PROBLEM
 Say what you did and what happened, copy the build line from the bottom of the menu, and attach
 %LOCALAPPDATA%\Wonderland\Saved\Logs\Wonderland.log. If the game crashed, also attach the newest folder in
 %LOCALAPPDATA%\Wonderland\Saved\Crashes.
-The log names your Windows user name and computer name, and shows folder paths that contain your user name. Open it
-in Notepad first if you would rather replace those before you send it.
+The log names your Windows user name and computer name, and shows folder paths that contain your user name. Once you
+sign in to social, it also holds your GitHub user name and id, the GitHub user names and ids of players who were in
+the world with you, and the ids of players you chose in the Social Hub (to add, message, invite, mute, block or
+report). Open it in Notepad first if you would rather replace those before you send it.
 
 UNINSTALL
 Delete this folder and %LOCALAPPDATA%\Wonderland.
