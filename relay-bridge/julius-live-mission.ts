@@ -83,7 +83,7 @@ import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
   driveJuliusRunToTerminal,
-  liveTickBudgetFor, liveStageDeadline, liveRunAttemptRefusal,
+  liveTickBudgetFor, liveStageDeadline, liveRunAttemptRefusal, JULIUS_LIVE_RATE_LIMIT_BACKOFF,
   recordJuliusLearningOutcome,
   resolveLiveWorkers,
 } from './julius/live-composition';
@@ -1023,6 +1023,7 @@ async function main(argv: readonly string[]): Promise<number> {
       verification: runtime.verification,
       ...(tickOverride.override === undefined ? {} : { maxTicks: tickOverride.override }),
       ...(stageDeadline === null ? {} : { deadline: stageDeadline }),
+      retryBackoff: JULIUS_LIVE_RATE_LIMIT_BACKOFF,
     });
 
     /*

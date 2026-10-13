@@ -100,6 +100,7 @@ describe('a hosted coder failure is classified, never quoted', () => {
   it('reaches every classified reason from text a provider actually produces', () => {
     const cases: readonly (readonly [string, HostedFailureReason])[] = [
       ['API Error: 429 {"type":"rate_limit_error"}', 'rate_limited'],
+      ['Claude AI usage limit reached|1760400000', 'usage_limit_reached'],
       // The shape Attempt 5 actually ended on: a 400 that is not a bad request.
       ['API Error: 400 {"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API."}', 'credit_unavailable'],
       ['prompt is too long: 250000 tokens > 200000 maximum', 'context_length_exceeded'],
@@ -160,5 +161,43 @@ describe('the adapter can say exactly what the mission projection admits', () =>
 
   it('names its own version, so a later vocabulary change is visible in the record', () => {
     expect(HOSTED_FAILURE_REASON_VOCABULARY_VERSION).toBe('julius-hosted-failure-reason.v1');
+  });
+});
+
+/**
+ * THE SUBSCRIPTION'S USAGE LIMIT, CLASSIFIED (Decision C, audit F5, 2026-10-13). Four Opus arms back to back on one
+ * Max subscription can reach its limit mid-arm. The smoke recognised the sentence; the live coder's classifier did not,
+ * so the record said UNCLASSIFIED (or PARTIAL_RESPONSE) instead of the limit.
+ */
+describe('F5: the usage-limit sentence is the smoke\'s, recognised by one function', () => {
+  it('every wording the smoke recognises is usage_limit_reached here, ahead of a 429 or an error word in the same text', () => {
+    for (const text of [
+      'Claude AI usage limit reached|1760400000',
+      '5-hour limit reached ∙ resets 3pm',
+      'Weekly limit reached - resets Mon 9am',
+      'Opus limit reached',
+      'API Error: 429 usage limit reached for this session',
+    ]) expect(classifyHostedFailure(text), text).toBe('usage_limit_reached');
+    expect(classifyHostedFailure('API Error: 429 {"type":"rate_limit_error"}'), 'a plain 429 is still a rate limit').toBe('rate_limited');
+  });
+
+  it('it is never retried within the run, and the durable row names it', async () => {
+    const { codingAgentFailureFromHostedReason } = await import('../julius/claude-code-coding-provider');
+    const { juliusCodingAgentFailureDisposition } = await import('../../src/relay/mission/julius');
+    const failure = codingAgentFailureFromHostedReason('usage_limit_reached');
+    expect(failure).toBe('CREDIT_UNAVAILABLE');
+    expect(juliusCodingAgentFailureDisposition(failure)).toMatchObject({ retryable: false, operatorAction: true });
+    expect(safeReviewDiagnostics({ failureReason: 'usage_limit_reached' })?.failureReason).toBe('usage_limit_reached');
+  });
+
+  it('ONE RECOGNISER: the smoke and the classifier import it, and neither restates the sentence', () => {
+    const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
+    const shared = read('scripts/julius-usage-limit.mjs');
+    expect(shared).toContain('limit reached');
+    for (const reader of ['scripts/julius-subscription-check.mjs', 'relay-bridge/hosted-coding-agent/hosted-failure-reason.ts']) {
+      const source = read(reader);
+      expect(source, `${reader} imports the shared recogniser`).toMatch(/import \{ isSubscriptionUsageLimit \} from '[./]+(scripts\/)?julius-usage-limit\.mjs';/u);
+      expect(source, `${reader} does not restate the sentence`).not.toMatch(/limit reached/u);
+    }
   });
 });

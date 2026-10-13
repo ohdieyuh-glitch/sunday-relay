@@ -982,6 +982,27 @@ export function liveRunAttemptRefusal(env: Record<string, string | undefined>): 
   return `paid_run_rerun_refused: workflow run attempt ${attempt} is not the first; a re-run of a paid run never spends again. Dispatch a new run; no provider was contacted.`;
 }
 
+/**
+ * A RATE-LIMITED RETRY WAITS BEFORE IT IS TRIED AGAIN (Decision C, audit F5). The pipeline requeues a RATE_LIMIT at
+ * once and the drive ticked at once, so up to three attempts met the same limit back to back. Opt-in, so every other
+ * caller ticks exactly as before; the live entrypoint passes `JULIUS_LIVE_RATE_LIMIT_BACKOFF`.
+ */
+export interface JuliusRetryBackoff {
+  readonly baseMs: number;
+  readonly maxMs: number;
+}
+/** 15 s, then 30 s: at most 45 s across the three attempts a task gets, never more than 120 s for one wait. */
+export const JULIUS_LIVE_RATE_LIMIT_BACKOFF: JuliusRetryBackoff = Object.freeze({ baseMs: 15_000, maxMs: 120_000 });
+
+/**
+ * HOW LONG TO WAIT before the next tick after the `retries`-th rate-limited retry of this drive: the provider's own
+ * Retry-After when the retry reported one, else `baseMs` doubling per retry; never more than `maxMs`.
+ */
+export function juliusRateLimitBackoffMs(input: JuliusRetryBackoff & { readonly retries: number; readonly retryAfterMs: number | null }): number {
+  if (input.retryAfterMs !== null && Number.isFinite(input.retryAfterMs) && input.retryAfterMs >= 0) return Math.min(Math.ceil(input.retryAfterMs), input.maxMs);
+  return Math.min(input.baseMs * 2 ** Math.max(0, input.retries - 1), input.maxMs);
+}
+
 export interface DriveTickAccount {
   readonly plannedTicks: number;
   readonly hardMaxTicks: number;
@@ -1026,9 +1047,15 @@ export async function driveJuliusRunToTerminal(input: {
   readonly deadline?: JuliusDriveDeadline;
   /** The wall clock the deadline is read on, in ms. Injected by the proofs; the system clock otherwise. */
   readonly now?: () => number;
+  /** Wait after a rate-limited retry (`JULIUS_LIVE_RATE_LIMIT_BACKOFF`); absent, the drive ticks at once as before. */
+  readonly retryBackoff?: JuliusRetryBackoff;
+  /** How the drive waits. Injected by the proofs; a timer otherwise. */
+  readonly sleep?: (ms: number) => Promise<void>;
 }): Promise<DriveOutcome> {
   const maxTicks = input.maxTicks ?? 32;
   const now = input.now ?? ((): number => Date.now());
+  const sleep = input.sleep ?? ((ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms); }));
+  let rateLimitRetries = 0;
   const override = input.verification !== undefined && input.maxTicks !== undefined ? input.maxTicks : null;
   const budget = input.verification === undefined ? null : await liveTickBudgetFor({
     store: input.store, runId: input.runId, projectId: input.projectId, verification: input.verification,
@@ -1084,6 +1111,18 @@ export async function driveJuliusRunToTerminal(input: {
     lastState = run?.state ?? 'UNKNOWN';
     if (run !== null && terminal.has(run.state)) {
       return { state: run.state, ticks: tick, stalled: false, haltCause: null, tickAccount: accountAt(tick, false) };
+    }
+    // A RATE-LIMITED RETRY WAITS, BOUNDED (audit F5): by the backoff's own ceiling, and never past the stop line, where
+    // the next tick's deadline check ends the run instead.
+    if (input.retryBackoff !== undefined) {
+      const limited = report.outcomes.filter((outcome) => outcome.kind === 'RETRY' && outcome.code === 'RATE_LIMIT');
+      if (limited.length > 0) {
+        rateLimitRetries += limited.length;
+        const asked = limited.flatMap((outcome) => (outcome.kind === 'RETRY' && outcome.retryAfterMs !== undefined ? [outcome.retryAfterMs] : []));
+        const wanted = juliusRateLimitBackoffMs({ ...input.retryBackoff, retries: rateLimitRetries, retryAfterMs: asked.length > 0 ? Math.max(...asked) : null });
+        const wait = input.deadline === undefined ? wanted : Math.min(wanted, Math.max(0, input.deadline.stopStartingAtMs - now()));
+        if (wait > 0) await sleep(wait);
+      }
     }
     if (report.claimed === 0) {
       const advance = await input.loop.advanceRun(input.runId, input.projectId);

@@ -325,7 +325,8 @@ export type JuliusTaskOutcome =
   /** The dispatch ended at a barrier: not reviewed, because its continuation carries the work. */
   | { readonly kind: 'YIELDED'; readonly taskId: string; readonly workerId: string; readonly continuationTaskId: string }
   | { readonly kind: 'REPAIR_SCHEDULED'; readonly taskId: string; readonly repairTaskId: string; readonly round: number }
-  | { readonly kind: 'RETRY'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
+  /** `retryAfterMs`: the provider's own Retry-After, only when the dispatch's diagnostics carried one (audit F5). */
+  | { readonly kind: 'RETRY'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null; readonly retryAfterMs?: number }
   | { readonly kind: 'FAILED'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
   /**
    * THE WORK WAS NOT DONE AND THE TASK DID NOT FAIL: a provider declined the
@@ -1099,6 +1100,16 @@ export async function prepareClaimedTask(
  * findings are passed in rather than recomputed, so the run, the role and the
  * task row are each read once and the policy is evaluated in exactly one place.
  */
+/**
+ * A PROVIDER'S OWN RETRY-AFTER, when the dispatch's (flattened) diagnostics carried one as a whole number of ms; nothing
+ * otherwise. Read for the live drive's rate-limit backoff (audit F5); the key reaches a row only through the
+ * diagnostics allowlist.
+ */
+function retryAfterOf(diagnostics: Readonly<Record<string, string | number | boolean | null>> | undefined): { retryAfterMs?: number } {
+  const value = diagnostics?.diag_retryAfterMs;
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? { retryAfterMs: value } : {};
+}
+
 /** The three closed values that name an agreement on a trajectory row; null when the role is unbound. */
 /**
  * THE MEASUREMENT COLUMNS OF A FAILED ATTEMPT, read out of the boundary's own
@@ -2084,7 +2095,7 @@ export async function runClaimedTask(
       ...diagnosedMeasurement(outcome.diagnostics),
       facts: { failureClass: outcome.failureClass ?? null, ...bindingFacts(preflight.contractBinding) },
     });
-    if (requeued) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
+    if (requeued) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null, ...retryAfterOf(outcome.diagnostics) };
     if (outcome.status === 'DENIED') return { kind: 'DENIED', taskId: claim.taskId, reasonCode: outcome.code };
     if (supersededBy !== null && finished) {
       return {

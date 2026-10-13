@@ -38,6 +38,8 @@ import {
   driveJuliusRunToTerminal,
   JULIUS_JOB_STAMP_LAG_RESERVE_MS,
   JULIUS_LIVE_LEASE_SETTLEMENT_ALLOWANCE_MS,
+  JULIUS_LIVE_RATE_LIMIT_BACKOFF,
+  juliusRateLimitBackoffMs,
   JULIUS_RESERVE_AFTER_LIVE_MS,
   liveRunAttemptRefusal,
   liveStageDeadline,
@@ -88,17 +90,26 @@ function seed(store: ReturnType<typeof createJuliusMemoryStore>): void {
 }
 
 /** A mission whose every dispatch takes STAGE_MS on the fake clock, driven with (or without) a deadline. */
-async function driveSlowMission(deadline?: { readonly stopStartingAtMs: number; readonly hardLimitAtMs: number }) {
+async function driveSlowMission(
+  deadline?: { readonly stopStartingAtMs: number; readonly hardLimitAtMs: number },
+  options: { readonly rateLimitFirstBuild?: boolean; readonly backoff?: boolean } = {},
+) {
   const memory = createJuliusMemoryStore();
   const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
   seed(memory);
   let clock = T0;
   const starts: number[] = [];
+  const sleeps: number[] = [];
+  let rateLimited = options.rateLimitFirstBuild !== true;
   const slow = (worker: JuliusWorker, outcome: ScriptedOutcome): JuliusProviderAdapter => ({
     adapterId: worker.adapterId,
     async dispatch(input) {
       starts.push(clock);
       clock += STAGE_MS;
+      if (worker === CODER_WORKER && !rateLimited) {
+        rateLimited = true;
+        return scriptedAdapter(worker, [{ kind: 'fail', code: 'RATE_LIMIT' }]).dispatch(input);
+      }
       return scriptedAdapter(worker, [outcome]).dispatch(input);
     },
   });
@@ -115,6 +126,7 @@ async function driveSlowMission(deadline?: { readonly stopStartingAtMs: number; 
     loop: runtime.loop, store: handoffs.store, runId: RUN, projectId: PROJECT, verification: runtime.verification,
     now: () => clock,
     ...(deadline === undefined ? {} : { deadline: { ...deadline, longestStageMs: STAGE_MS, reserveAfterLiveMs: 10 * 60_000 } }),
+    ...(options.backoff === true ? { retryBackoff: JULIUS_LIVE_RATE_LIMIT_BACKOFF, sleep: async (ms: number) => { sleeps.push(ms); clock += ms; } } : {}),
   });
   const timeline: JuliusTimelineEntry[] = [];
   let sinceSequence = 0;
@@ -124,7 +136,7 @@ async function driveSlowMission(deadline?: { readonly stopStartingAtMs: number; 
     if (page.entries.length === 0 || !page.hasMore) break;
     sinceSequence = Math.max(...page.entries.map((entry) => entry.sequence));
   }
-  return { outcome, starts, timeline, memory };
+  return { outcome, starts, sleeps, timeline, memory };
 }
 
 describe('F3: past the stop line no stage starts, and the run ends FAILED with a record', () => {
@@ -220,5 +232,36 @@ describe('F4: a GitHub re-run of a paid run stops before the drive, whichever jo
     const line = `RESULT: BLOCKED — ${liveRunAttemptRefusal({ GITHUB_ACTIONS: 'true', GITHUB_RUN_ATTEMPT: '2' })}`;
     const filtered = spawnSync(process.execPath, [join(ROOT, 'scripts/julius-live-evidence.mjs'), '-'], { input: `${line}\n`, encoding: 'utf8' });
     expect(filtered.stdout.split('\n')).toContain(line);
+  });
+});
+
+describe('F5: a rate-limited retry waits a bounded backoff, never past the stop line', () => {
+  it('the backoff: 15 s, then 30 s, capped at 120 s; a provider Retry-After is honoured within the cap', () => {
+    const at = (retries: number, retryAfterMs: number | null = null) => juliusRateLimitBackoffMs({ ...JULIUS_LIVE_RATE_LIMIT_BACKOFF, retries, retryAfterMs });
+    expect([at(1), at(2), at(3), at(4), at(5)]).toEqual([15_000, 30_000, 60_000, 120_000, 120_000]);
+    expect([at(1, 45_000), at(1, 0), at(2, 10 * 60_000)]).toEqual([45_000, 0, 120_000]);
+  });
+
+  it('CONTROL: without the backoff the drive retries at once, as every other caller still does', async () => {
+    const { outcome, sleeps } = await driveSlowMission(undefined, { rateLimitFirstBuild: true });
+    expect(outcome.state).toBe('COMPLETED');
+    expect(sleeps).toEqual([]);
+  });
+
+  it('with the backoff the rate-limited build waits 15 s once, then completes', async () => {
+    const { outcome, sleeps, starts } = await driveSlowMission(undefined, { rateLimitFirstBuild: true, backoff: true });
+    expect(outcome.state).toBe('COMPLETED');
+    expect(sleeps).toEqual([15_000]);
+    const retried = starts.findIndex((at, index) => index > 0 && at - starts[index - 1]! === STAGE_MS + 15_000);
+    expect(retried, 'the retry started one stage plus the backoff after the refused dispatch').toBeGreaterThan(0);
+  });
+
+  it('the wait never crosses the stop line: 10 s before it, the drive waits 10 s and the deadline then ends the run', async () => {
+    // plan at 0, its review at 25, the rate-limited build at 50 (the clock reads 75 min after it).
+    const stop = T0 + 75 * 60_000 + 10_000;
+    const { outcome, sleeps } = await driveSlowMission({ stopStartingAtMs: stop, hardLimitAtMs: stop + 40 * 60_000 }, { rateLimitFirstBuild: true, backoff: true });
+    expect(sleeps).toEqual([10_000]);
+    expect(outcome.state).toBe('FAILED');
+    expect(outcome.haltCause).toMatch(/^job_deadline_reached: /u);
   });
 });

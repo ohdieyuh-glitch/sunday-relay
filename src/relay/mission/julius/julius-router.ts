@@ -81,7 +81,7 @@ export const safeReasonCode=(value:unknown):string|null=>typeof value==='string'
  * not import the mission projection; `hosted-failure-reason.test.ts` fails if
  * the two ever disagree.
  */
-export const JULIUS_HOSTED_FAILURE_REASONS=['rate_limited','credit_unavailable','context_length_exceeded','content_filtered','provider_overloaded','provider_auth_rejected','provider_bad_request','provider_server_error','stream_interrupted','execution_error','unclassified','no_message'] as const;
+export const JULIUS_HOSTED_FAILURE_REASONS=['rate_limited','usage_limit_reached','credit_unavailable','context_length_exceeded','content_filtered','provider_overloaded','provider_auth_rejected','provider_bad_request','provider_server_error','stream_interrupted','execution_error','unclassified','no_message'] as const;
 export type JuliusHostedFailureReason=(typeof JULIUS_HOSTED_FAILURE_REASONS)[number];
 /**
  * WHAT A CODING AGENT'S RESULT MESSAGE AMOUNTED TO, read from every field of it

@@ -459,6 +459,9 @@ const FILE_RULES = [
   ['relay-bridge/julius/claude-code-coding-provider.ts', 'CODING AGENT'],
   ['relay-bridge/julius/coder-workspace.ts', 'CODING AGENT'],
   ['relay-bridge/hosted-coding-agent/', 'CODING AGENT'],
+  // The one recogniser of the subscription's usage-limit sentence (audit F5): the hosted classifier and the paid
+  // workflow's subscription smoke both import it, so it lives as plain `.mjs` beside the smoke.
+  ['scripts/julius-usage-limit.mjs', 'CODING AGENT'],
   ['src/relay/connectors/claude-code/result-classification.ts', 'CODING AGENT'],
   ['relay-bridge/hermes-reviewer.ts', 'INDEPENDENT REVIEWER'],
   // The one derivation that decides how long a review may take, read by the

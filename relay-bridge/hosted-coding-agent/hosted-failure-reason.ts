@@ -33,10 +33,18 @@
  * and not a guess.
  */
 
+import { isSubscriptionUsageLimit } from '../../scripts/julius-usage-limit.mjs';
+
 export const HOSTED_FAILURE_REASON_VOCABULARY_VERSION = 'julius-hosted-failure-reason.v1' as const;
 
 export const HOSTED_FAILURE_REASONS = [
   'rate_limited',
+  /**
+   * The Claude subscription's own usage limit (its 5-hour window, weekly, session or Opus allowance) was reached
+   * (audit F5). The sentence is recognised by the SAME function the paid workflow's subscription smoke uses
+   * (`scripts/julius-usage-limit.mjs`); it was `unclassified` here while the smoke knew it.
+   */
+  'usage_limit_reached',
   /**
    * The provider account cannot pay for the call. Attempt 5 of the
    * continuous-worker qualification ended on exactly this, and the classifier
@@ -87,6 +95,8 @@ const PATTERNS: readonly (readonly [RegExp, HostedFailureReason])[] = [
  */
 export function classifyHostedFailure(finalText: string | null | undefined): HostedFailureReason {
   if (typeof finalText !== 'string' || finalText.trim() === '') return 'no_message';
+  // FIRST, because it is the most specific: a limit sentence may also carry a 429 or the word "error".
+  if (isSubscriptionUsageLimit(finalText)) return 'usage_limit_reached';
   for (const [pattern, reason] of PATTERNS) if (pattern.test(finalText)) return reason;
   return 'unclassified';
 }
