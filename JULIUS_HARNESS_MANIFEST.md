@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **226 production files** across 20/20 subsystems (2 roots, 194 traced, 8 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **227 production files** across 20/20 subsystems (2 roots, 195 traced, 8 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -28,7 +28,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | bridge provider stacks (hosted Claude, Hermes, redaction) | connectors (gpt-architect, prompt-architect contracts) | 2 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 10 | 3 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | live composition (relay-bridge/julius/) | 6 | 0 |
-| bridge provider stacks (hosted Claude, Hermes, redaction) | other | 4 | 0 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | other | 5 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | persistence (src/relay/persistence/) | 4 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 1 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | kernel (src/relay/mission/julius/) | 1 | 0 |
@@ -198,6 +198,7 @@ The implementation role: one hosted Claude Agent SDK execution behind a pure saf
 | `relay-bridge/hosted-coding-agent/hosted-tool-authority.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
 | `relay-bridge/julius/claude-code-coding-provider.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/julius/coder-workspace.ts` | traced | `relay-bridge/julius/live-workers.ts` |
+| `scripts/julius-usage-limit.mjs` | traced | `relay-bridge/hosted-coding-agent/hosted-failure-reason.ts` |
 | `src/relay/connectors/claude-code/result-classification.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-observation.ts` |
 | `src/relay/mission/julius/julius-coding-agent.ts` | traced | `src/relay/mission/julius/julius-router.ts` |
 | `src/relay/mission/julius/julius-workspace-attribution.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
