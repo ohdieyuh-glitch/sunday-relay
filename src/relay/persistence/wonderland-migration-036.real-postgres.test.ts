@@ -5,7 +5,7 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { juliusTestDatabaseUrl } from './julius-test-database';
-import { TransactionalWonderlandDatabase, WONDERLAND_MIGRATIONS, WONDERLAND_MIGRATION_035, WONDERLAND_MIGRATION_036 } from './wonderland-postgres';
+import { migrationVersion, TransactionalWonderlandDatabase, WONDERLAND_MIGRATIONS, WONDERLAND_MIGRATION_035, WONDERLAND_MIGRATION_036 } from './wonderland-postgres';
 
 /**
  * MIGRATION 036: WONDERFS (contract r1.4, frozen 2026-10-11), APPLIED EXPLICITLY AFTER 035. PROVISIONAL NUMBER (the founder orders it).
@@ -420,7 +420,9 @@ suite('migration 036: WonderFS, applied explicitly after 035 (contract r1.4)', (
     const pool = await create('role', { role, password });
     expect((await pool.query('SELECT rolsuper FROM pg_roles WHERE rolname = current_user')).rows[0].rolsuper, 'not a superuser').toBe(false);
     await new TransactionalWonderlandDatabase(pool).migrate();
-    expect(await ledgerLast(pool), 'the whole chain, 036 last').toBe(STAMP_036);
+    // the whole chain, 036 included (037, LFF, follows it; its own suite proves it)
+    expect(await count(pool, 'SELECT count(*) AS n FROM relay_wonderland.schema_migrations WHERE version = $1', [STAMP_036]), 'the whole chain, 036 included').toBe(1);
+    expect(await ledgerLast(pool), 'the whole chain, to its last').toBe(migrationVersion(WONDERLAND_MIGRATIONS[WONDERLAND_MIGRATIONS.length - 1]));
     expect(await count(pool, "SELECT count(*) AS n FROM pg_class c WHERE c.relnamespace = 'relay_wonderland'::regnamespace AND c.relname LIKE 'wfs\\_%'")).toBe(RELATIONS.length);
   }, 180_000);
 });

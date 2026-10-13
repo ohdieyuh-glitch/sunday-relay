@@ -19,6 +19,7 @@ import {
   blockedEitherWay,
   hasBlocked,
   hasUser,
+  lffPostById,
   mintId,
   pendingRequestBetween,
   presenceHiddenFrom,
@@ -142,6 +143,13 @@ export function removeFriend(state: SocialState, actorId: SocialUserId, friendId
  * one of the pair to the other (sent between them, either way and whichever of them invited; or to one of them into a party
  * the other is in), and from now on the presence authority shows each to the other as nothing more than a stranger
  * (social-presence.ts). A revoked invite stays revoked: unblocking restores nobody to a party (Second's R16 W7/W8, 10-04).
+ * And it ENDS every live LFF join request between the pair, either way (one of them asked to join the other's post, pending
+ * or already accepted): to the requester the post then reads exactly as a deleted one, to the owner the request as a withdrawn
+ * one (social-lff.ts), and blocks.add TELLS each of them so, as that ordinary change (social-lff.ts lffBlockNotices) -- nothing
+ * names the block. WHICH STATUS IT STORES depends on who blocked (SEC m-a): the REQUESTER blocking stores WITHDRAWN, exactly the
+ * row their own withdrawal leaves (the re-request cooldown included, so the owner cannot tell a lifted block from a withdrawal
+ * by how soon they ask again); the OWNER blocking stores CANCELLED (no cooldown, which would tell the requester of the block).
+ * Either stays after an unblock, as a revoked invite does.
  * Party membership is NOT broken here: blocks.add separates a shared party first (F1, social-parties.ts separateForBlock),
  * and social-parties.ts refuses new invites and joins across the wall.
  */
@@ -158,6 +166,13 @@ export function blockUser(state: SocialState, actorId: SocialUserId, targetId: S
     (i.fromUserId === targetId && i.toUserId === actorId) ||
     (i.toUserId === actorId && isMember(i.partyId, targetId)) ||
     (i.toUserId === targetId && isMember(i.partyId, actorId));
+  const atMs = Date.parse(atIso);
+  const lffCrossesTheWall = (r: SocialState['lffRequests'][number]) => {
+    const ownerId = lffPostById(next, r.postId)?.ownerId;
+    return (r.requesterId === actorId && ownerId === targetId) || (r.requesterId === targetId && ownerId === actorId);
+  };
+  // the requester's own block is their withdrawal; the owner's is a cancellation (SEC m-a, above)
+  const endedAs = (r: SocialState['lffRequests'][number]): SocialState['lffRequests'][number]['status'] => (r.requesterId === actorId ? 'WITHDRAWN' : 'CANCELLED');
   return ok({
     ...next,
     requests: next.requests.map((r) =>
@@ -167,6 +182,11 @@ export function blockUser(state: SocialState, actorId: SocialUserId, targetId: S
         : r,
     ),
     partyInvites: next.partyInvites.map((i) => (i.status === 'PENDING' && crossesTheWall(i) ? { ...i, status: 'REVOKED' } : i)),
+    lffRequests: next.lffRequests.map((r) =>
+      (r.status === 'PENDING' || r.status === 'ACCEPTED') && lffCrossesTheWall(r)
+        ? { ...r, status: endedAs(r), updatedAtMs: Math.max(atMs, r.updatedAtMs) }
+        : r,
+    ),
     blocks: [...next.blocks, { blockerId: actorId, blockedId: targetId, sinceIso: atIso }],
   });
 }

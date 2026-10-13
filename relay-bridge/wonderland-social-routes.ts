@@ -42,6 +42,13 @@
  * Without the bridge's game config, its voice provider, its binding store or its rate limit: 503, naming which (the game config
  * first). The log says only whom it served, hashed; never a value.
  *
+ * LFF, THE LOOKING FOR FEED (the lff.* rows of wonderland-social-scope.ts). Every LFF call passes the same seven gates and runs as ONE
+ * store operation (src/relay/social/social-lff.ts); nothing here branches per post. A post or request that is missing, not the actor's
+ * or behind a block either way answers the one `post not found` 404, byte for byte, with the same headers. Creating or editing a post
+ * is charged to `post` as well as `write`; asking to join one, to `invitation` as well. An LFF query is read whole or refused
+ * (lffQueryOf), before any store, lease or budget: a filter it cannot read is a 400, never an unfiltered feed; the feed's text
+ * filters (projectLabel, skill) are percent-decoded exactly once and then meet the domain's own text rule.
+ *
  * NEVER STORED ON THE WAY. Every answer here -- a refusal included -- carries Cache-Control: no-store (and Pragma: no-cache):
  * a social view is one viewer's, and the EOS client config carries a secret.
  *
@@ -51,6 +58,7 @@
  */
 
 import type { SocialOperationId } from '../src/relay/social/social-contracts';
+import { LFF_PROJECT_LABEL_MAX, LFF_SKILL_MAX } from '../src/relay/social/social-lff';
 import type { SocialPlayerIdentity, SocialStore } from '../src/relay/social/social-store';
 import { voiceAudienceFor, walledFromParty } from '../src/relay/social/social-parties';
 import { partyById, type SocialState } from '../src/relay/social/social-state';
@@ -340,19 +348,30 @@ export const SOCIAL_BUDGETS = Object.freeze({
   // client contract, 10-07): one a second, after a burst of ten, never refuses that rhythm and caps a flood at a fifth of the
   // read rate.
   voice: Object.freeze({ burst: 10, everyMs: 1_000 }),
+  // AN LFF POST, made or edited -- PROPOSED (the LFF dependency audit §1.8; contract r2.2, for the founder's caps decision D-L2):
+  // every Alpha player reads the feed, so a burst of five, then one every two minutes, on top of `write`. Shared by create AND
+  // edit. The domain's own durable caps (social-lff.ts) hold across a restart; this does not.
+  post: Object.freeze({ burst: 5, everyMs: 120_000 }),
 });
 export type SocialBudgetClass = keyof typeof SOCIAL_BUDGETS;
 type BudgetTable = Readonly<Record<SocialBudgetClass, Readonly<{ burst: number; everyMs: number }>>>;
 
-const INVITATION_OPS = new Set(['requests.send', 'parties.invite', 'world.invite']);
+/** Asking somebody for something: a friend request, a party or world invite, a request to join an LFF post (contract r1). */
+const INVITATION_OPS = new Set(['requests.send', 'parties.invite', 'world.invite', 'lff.request.create']);
+/** Making or changing what the whole LFF feed shows. */
+const POST_OPS = new Set(['lff.post.create', 'lff.post.edit']);
 
-/** The classes a call is charged to: the world report alone; a voice join alone; any other read; any write, plus message / invitation for those. */
+/**
+ * The classes a call is charged to: the world report alone; a voice join alone; any other read; any write, plus message /
+ * invitation / post for those.
+ */
 export function budgetClassesOf(op: { readonly id: string; readonly writes: boolean }): SocialBudgetClass[] {
   if (op.id === 'world.state') return ['report'];
   if (op.id === 'parties.voice_join') return ['voice'];
   if (!op.writes) return ['read'];
   if (op.id === 'messages.send') return ['write', 'message'];
   if (INVITATION_OPS.has(op.id)) return ['write', 'invitation'];
+  if (POST_OPS.has(op.id)) return ['write', 'post'];
   return ['write'];
 }
 
@@ -408,6 +427,60 @@ function parseQuery(search: string): Record<string, string> {
   }
   return out;
 }
+
+/** parseQuery's own rules for a key and a plain value. */
+const LFF_QUERY_KEY = /^[A-Za-z0-9_-]{1,32}$/;
+const LFF_QUERY_TOKEN = /^[A-Za-z0-9_.-]{0,80}$/;
+/** The feed's two TEXT filters: player text, so their values may arrive percent-encoded. */
+const LFF_TEXT_QUERY_KEYS: ReadonlySet<string> = new Set(['projectLabel', 'skill']);
+/** Unreserved characters and %XX escapes, at most the longest text filter's code points x 4 UTF-8 bytes x 3 characters an escape. */
+const LFF_TEXT_QUERY_RAW = new RegExp(`^(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2}){0,${Math.max(LFF_PROJECT_LABEL_MAX, LFF_SKILL_MAX) * 4 * 3}}$`);
+
+/**
+ * AN LFF QUERY, READ WHOLE OR REFUSED (B3, from MAIN's B1 correctness review 10-12 §3.1; B3.1 = the B3 review's R1, accepted by
+ * MAIN). parseQuery DROPS a pair it cannot read, so a filter it dropped would come back as an UNFILTERED feed, with no error. An LFF
+ * operation's query is therefore read here, from the WHOLE path (the route's own split keeps nothing after a second '?'), and any
+ * pair that breaks a rule refuses the call:
+ *   - a KEY is 1-32 ASCII letters, digits, '_' or '-', never decoded, given once;
+ *   - a VALUE is 0-80 ASCII letters, digits, '.', '_' or '-' (parseQuery's plain token), kept as sent;
+ *   - except the feed's TEXT filters (projectLabel, skill), whose value may also hold '~' and %XX escapes and is percent-decoded
+ *     EXACTLY ONCE (decodeURIComponent; a malformed escape, or bytes that are not UTF-8 -- an overlong form, an encoded surrogate
+ *     -- refuse the call). The decoded text then meets the domain's own rule, unchanged (social-commands.ts lffText: control
+ *     characters, lengths in code points): %00 or %0A is refused there, and %2520 is the literal text "%20".
+ *   - A RAW '+' IS REFUSED, as parseQuery never carried one: a plus is %2B and a space %20, so form-encoding's "+ is a space" is
+ *     never guessed at.
+ * Null: refused (400 LFF_QUERY_REFUSAL). Nothing else is decoded anywhere, and parseQuery is unchanged for every other route.
+ */
+function lffQueryOf(path: string, opId: SocialOperationId): Record<string, string> | null {
+  const at = path.indexOf('?');
+  const search = at < 0 ? '' : path.slice(at + 1);
+  const pairs = new Map<string, string>();
+  for (const pair of search.split('&')) {
+    if (pair.length === 0) continue;
+    const eq = pair.indexOf('=');
+    const key = eq < 0 ? pair : pair.slice(0, eq);
+    const raw = eq < 0 ? '' : pair.slice(eq + 1);
+    if (!LFF_QUERY_KEY.test(key) || pairs.has(key)) return null;
+    if (LFF_QUERY_TOKEN.test(raw)) {
+      pairs.set(key, raw);
+    } else if (opId === 'lff.feed.list' && LFF_TEXT_QUERY_KEYS.has(key) && LFF_TEXT_QUERY_RAW.test(raw)) {
+      try {
+        pairs.set(key, decodeURIComponent(raw));
+      } catch {
+        return null;   // URIError: a malformed escape, or bytes that are not UTF-8
+      }
+    } else {
+      return null;
+    }
+  }
+  return Object.fromEntries(pairs);
+}
+
+/** The rules above, as the client developer reads them. */
+const LFF_QUERY_REFUSAL =
+  'This query cannot be read: each key (1-32 characters) must be ASCII letters, digits, "_" or "-", given once; each value (up to 80 ' +
+  'characters) ASCII letters, digits, ".", "_" or "-"; a projectLabel or skill value may also hold "~" and %XX escapes of UTF-8 text, ' +
+  'decoded once (a space is %20, a plus %2B; a raw "+" is refused).';
 
 /** The ids of a path, in the order its template names them ("/parties/:id/members/:id/remove" -> [party, member]). */
 function idsOf(template: string, pathname: string): string[] {
@@ -606,6 +679,9 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
   const scope = facts.scope ?? 'native_world';
   const op = nativeSocialMayCall(request.method, pathname, { scope, participantId: facts.participantId, capabilities: facts.capabilities });
   if (op === null) return err(403, 'not_permitted', 'This session may not do that.');
+  // an LFF query is read whole or the call is refused HERE: before the store opens, the lease is touched or a budget is spent (B3.1 m1)
+  const lffQuery = op.id.startsWith('lff.') ? lffQueryOf(request.path, op.id) : null;
+  if (op.id.startsWith('lff.') && lffQuery === null) return err(400, 'validation-failed', LFF_QUERY_REFUSAL);
   const store = typeof deps.store === 'function' ? await deps.store() : deps.store;
   if (store === null) return err(503, 'social_unavailable', 'Social is not available on this server.');
   // 4. the actor is the session's player
@@ -647,7 +723,7 @@ async function answerSocialRoute(request: SocialRouteRequest, deps: SocialRouteD
     }
   }
 
-  const query = parseQuery(search);
+  const query = lffQuery ?? parseQuery(search);
   if (op.id === 'events.stream') {
     const after = Number.parseInt(query.after ?? '0', 10);
     const limit = Number.parseInt(query.limit ?? '100', 10);
