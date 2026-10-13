@@ -19,6 +19,16 @@
  *     non-superuser on the live store cannot slip past S2 (MAIN JUJU's review, 10-11).
  * There is no environment-variable override: an env token would leak through the many places that spread process.env into
  * child processes. The reviewed EMPTY-store bootstrap passes its verified identity programmatically (wonderland-postgres.ts).
+ *
+ * MIGRATION-PINNED STORES (MW-B-005 / MW-X-005, MIGRATE_GUARD_O1_PROPOSAL.md option A): the hosted Wonderland database (O1)
+ * is migrated ONLY by its reviewed, per-version windows (psql applies), so migrate() refuses it too: a runner handed its URL
+ * would otherwise apply every missing version in one call. But its social and voice data are legitimate, so it is NOT a
+ * protected store: `protectedStoreRole` never names it, and the social / voice writer guard (protected-store-writer-guard.ts,
+ * which reads `protectedStoreRole` alone) keeps allowing it. migrate() asks `migrationPinnedStoreRole` after
+ * `protectedStoreRole`. It matches by S1 (a `relay-store-role=<its role>` marker) or S2 (its pinned identity), never by name.
+ * NEVER ADD A MIGRATION-PINNED STORE TO PROTECTED_STORES: the writer guard would then refuse every social and voice write on
+ * the one database whose purpose is to hold them. After a rebuild (a new system identifier) the pin is re-taken by command
+ * from the new bootstrap record, and the marker re-written.
  */
 
 import { createHash } from 'node:crypto';
@@ -42,8 +52,24 @@ export const PROTECTED_STORES: readonly ProtectedStore[] = Object.freeze([
 /** The database name the live Julius store uses (S3). */
 export const PROTECTED_DATABASE_NAMES: readonly string[] = Object.freeze(['julius']);
 
+/**
+ * Stores that ONLY reviewed, per-version windows migrate, but whose social and voice data are legitimate: the hosted Wonderland
+ * database (O1). migrate() refuses them; the social / voice writer guard does NOT (it reads protectedStoreRole, which never
+ * names these). Never add one of these to PROTECTED_STORES.
+ */
+export const MIGRATION_PINNED_STORES: readonly ProtectedStore[] = Object.freeze([
+  Object.freeze({
+    role: 'wonderland-o1',
+    identitySha256: '186bed84722c5dec6989a9920911848bd2e8ddd51b60027feeba21835ac2dfbf',
+    pinnedFrom:
+      '_wonderland_beta_release/o1_hosted/hosted_bootstrap_20261012/db_bootstrap_20261012T164601Z/RECORD.json (sha256 3fb9cc9c033987be...): ' +
+      '.oids.sid + "/" + .oids.database, hashed by command',
+  }),
+]);
+
 const MARKER = /(?:^|\s)relay-store-role=([a-z][a-z0-9-]{0,40})(?:\s|$)/u;
 const PROTECTED_ROLES: ReadonlySet<string> = new Set(PROTECTED_STORES.map((s) => s.role));
+const MIGRATION_ONLY_ROLES: ReadonlySet<string> = new Set(MIGRATION_PINNED_STORES.map((s) => s.role));
 
 export const storeIdentitySha256 = (systemIdentifier: string, database: string): string =>
   createHash('sha256').update(`${systemIdentifier}/${database}`, 'utf8').digest('hex');
@@ -89,6 +115,22 @@ export async function protectedStoreRole(q: Queryable): Promise<string | null> {
     return PROTECTED_STORES.find((s) => s.identitySha256 === sha)?.role ?? null;
   }
   return PROTECTED_DATABASE_NAMES.includes(id.database) ? 'julius-live' : null;
+}
+
+/**
+ * For migrate() ONLY, asked after protectedStoreRole: which MIGRATION-PINNED store this is (by its S1 marker or its S2 identity),
+ * or null. It never names a protected store, and protectedStoreRole never names one of these, so the writer guard is unchanged.
+ * No S3 name rule: `railway` is every Railway template's database name, and S1 covers a role that may not read the system
+ * identifier. As in protectedStoreRole, a read that fails for any reason but privilege throws, never "not pinned".
+ */
+export async function migrationPinnedStoreRole(q: Queryable): Promise<string | null> {
+  const m = await q.query<{ c: string | null }>("SELECT shobj_description(d.oid, 'pg_database') AS c FROM pg_database d WHERE d.datname = current_database()");
+  const marked = MARKER.exec(m.rows[0]?.c ?? '')?.[1] ?? null;
+  if (marked !== null && MIGRATION_ONLY_ROLES.has(marked)) return marked;
+  const id = await storeIdentity(q);
+  if (id.systemIdentifier === null) return null;
+  const sha = storeIdentitySha256(id.systemIdentifier, id.database);
+  return MIGRATION_PINNED_STORES.find((s) => s.identitySha256 === sha)?.role ?? null;
 }
 
 /** migrate() refused a protected store: nothing was executed. */

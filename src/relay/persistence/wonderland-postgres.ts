@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { sanitizeText } from './redaction';
+import { migrationPinnedStoreRole } from './protected-store';
 import { protectedStoreRole, ProtectedStoreMigrationRefused, storeIdentity } from './protected-store';
 import { join } from 'node:path';
 import { Pool, type PoolConfig, type QueryResultRow } from 'pg';
@@ -301,8 +302,9 @@ export class TransactionalWonderlandDatabase {
     // a store already at the chain's head is never refused: nothing would run
     if (missing.length === 0) return;
     // A PROTECTED STORE (the Julius live store) is never changed by a runner (protected-store.ts; the founder, 2026-10-11).
+    // Nor is a MIGRATION-PINNED store (O1, the hosted Wonderland database): only its reviewed per-version windows migrate it.
     // The ONE exception is the reviewed bootstrap of a store verified EMPTY, which names the exact identity it verified.
-    const role = await protectedStoreRole(this.pool);
+    const role = (await protectedStoreRole(this.pool)) ?? (await migrationPinnedStoreRole(this.pool));
     if (role !== null && !(applied.size === 0 && await this.isReviewedBootstrap(options.reviewedBootstrap))) {
       throw new ProtectedStoreMigrationRefused(role, missing.map((sql) => migrationVersion(sql) ?? '(unversioned)'));
     }

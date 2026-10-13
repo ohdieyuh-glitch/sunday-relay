@@ -1,7 +1,8 @@
 import type { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
 
-import { ProtectedStoreWriteRefused } from './protected-store-writer-guard';
+import { migrationPinnedStoreRole, protectedStoreRole } from './protected-store';
+import { ProtectedStoreWriteRefused, protectedStoreWriterGuard } from './protected-store-writer-guard';
 import { openSocialPostgresStore } from './social-postgres';
 import { createPostgresVoiceBindings } from './voice-binding-postgres';
 
@@ -149,5 +150,45 @@ describe('C2: voice and social data never touch a protected store', () => {
     await refusedBy(bindings.bindingOf('usr_a'));
     expect(identityReads()).toBe(2 * readsAfterFirst);
     expect(executed).toEqual([]);
+  });
+});
+
+/*
+ * O1 (MIGRATE_GUARD_O1_PROPOSAL.md section 2, the trap): the hosted Wonderland database is MIGRATION-pinned
+ * (protected-store.ts MIGRATION_PINNED_STORES, so migrate() refuses it), but it is the database whose purpose is to hold the
+ * social and voice data, so its writers must NOT be refused. Putting O1 into PROTECTED_STORES would make every case below fail.
+ */
+const O1_SID = '7695365722645385278';
+const O1_STORES: ReadonlyArray<readonly [string, Identity]> = [
+  ['O1 by its pinned identity (S2)', { db: 'railway', sid: O1_SID }],
+  ['O1 by its catalog marker, the sid denied (S1)', { db: 'railway', sid: 'DENIED', marker: 'relay-store-role=wonderland-o1' }],
+  ['O1 by both', { db: 'railway', sid: O1_SID, marker: 'relay-store-role=wonderland-o1' }],
+];
+
+describe('O1: the hosted Wonderland store is pinned against migration, never against its social and voice writers', () => {
+  for (const [name, id] of O1_STORES) {
+    it(`${name}: voice and social reach their tables; protectedStoreRole does not name it, migrate()'s pin does`, async () => {
+      // the writers first: on the trap, THESE are what refuse (every social route would answer 503 on O1)
+      const voice = fakePool(id);
+      expect(await createPostgresVoiceBindings(voice.pool).bind(bindInput)).toBe('bound');
+      expect(voice.executed.some((s) => s.startsWith('INSERT INTO relay_wonderland.voice_puid_binding'))).toBe(true);
+      const social = fakePool(id);
+      const opened = await openSocialPostgresStore(social.pool).then(() => null, (e: unknown) => e);
+      expect(opened).not.toBeInstanceOf(ProtectedStoreWriteRefused);
+      expect(social.executed[0]).toBe('SELECT * FROM relay_wonderland.social_profiles');
+      await expect(protectedStoreWriterGuard(fakePool(id).pool, 'the social store')()).resolves.toBeUndefined();
+      expect(await protectedStoreRole(fakePool(id).pool)).toBeNull();
+      expect(await migrationPinnedStoreRole(fakePool(id).pool)).toBe('wonderland-o1');
+    });
+  }
+
+  it('CONTROL: the same calls on the julius-live identity are refused, and reach nothing (one fact differs: the identity)', async () => {
+    const live = LIVE_STORES[0][1];
+    await expect(protectedStoreWriterGuard(fakePool(live).pool, 'the social store')()).rejects.toBeInstanceOf(ProtectedStoreWriteRefused);
+    const voice = fakePool(live);
+    await refusedBy(createPostgresVoiceBindings(voice.pool).bind(bindInput));
+    const social = fakePool(live);
+    await refusedBy(openSocialPostgresStore(social.pool));
+    expect([...voice.executed, ...social.executed]).toEqual([]);
   });
 });
