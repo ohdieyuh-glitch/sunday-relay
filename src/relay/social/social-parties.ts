@@ -20,7 +20,7 @@ import {
   type RecentPlayerEntry,
   type SocialUserId,
 } from './social-contracts';
-import { areFriends, blockedEitherWay, hasUser, mintId, partyById, partyOf, type SocialState } from './social-state';
+import { areFriends, blockedEitherWay, hasUser, mintId, outsiderSeesParty, partyById, partyOf, partyRosterFor, type SocialState } from './social-state';
 import { recentPlayersFor, recordPlayedTogether } from './social-friends';
 
 const denied = (message: string) => fail<SocialState>(relayError('permission-denied', message));
@@ -189,9 +189,11 @@ export function partyInvitesFor(state: SocialState, userId: SocialUserId, nowIso
 }
 
 /**
- * JOIN WITHOUT AN INVITE: only an OPEN_TO_FRIENDS party, only for a friend of some member, never across a block with any
- * member, and only with room. A party behind the joiner's wall answers exactly as a party that does not exist (founder
- * ruling (a): the refusal is an ordinary "can't join", and it names nothing -- not even that the party is there).
+ * JOIN WITHOUT AN INVITE: only a party the joiner sees from outside (outsiderSeesParty: OPEN_TO_FRIENDS, with room, never across
+ * a block with any member, its leader seen online by the joiner, a friend among the members the joiner sees online).
+ * A party behind the joiner's wall answers exactly as a party that does not exist (founder ruling (a): the refusal is an
+ * ordinary "can't join", and it names nothing -- not even that the party is there); so does one they cannot see (WL-351-02: an
+ * Appear-Offline leader's open party is no more joinable by id than it is listed).
  */
 export function joinParty(state: SocialState, actorId: SocialUserId, partyId: string, atIso: string): RelayResult<SocialState> {
   // The joiner's own state first: it says nothing about the party asked for.
@@ -199,16 +201,9 @@ export function joinParty(state: SocialState, actorId: SocialUserId, partyId: st
   const party = partyById(state, partyId);
   // ONE ANSWER FOR EVERY "CAN'T JOIN" (the privacy attacker's B2, 10-07): walled answered 404 while invite-only, no friend and
   // full answered 403/400, so a removed player could tell a block-kick from an ordinary kick, and follow whether the blocker is
-  // still in the party. Not there, behind a wall, invite only, no friend inside, full: one ordinary refusal that names nothing.
-  if (
-    party === undefined ||
-    walledFromParty(state, party, actorId) ||
-    party.privacy !== 'OPEN_TO_FRIENDS' ||
-    !party.members.some((m) => areFriends(state, actorId, m.userId)) ||
-    party.members.length >= PARTY_MAX_MEMBERS
-  ) {
-    return missing('party');
-  }
+  // still in the party. Not there, behind a wall, invite only, no friend inside, unseen (WL-351-02) or full: one ordinary refusal
+  // that names nothing.
+  if (party === undefined || !outsiderSeesParty(state, actorId, party)) return missing('party');
   return addMember(state, party, actorId, atIso);
 }
 
@@ -351,10 +346,12 @@ export function setSelfMuted(state: SocialState, actorId: SocialUserId, muted: b
 }
 
 /**
- * What a party looks like to one of its members, or to a friend allowed to see it. Null otherwise.
+ * What a party looks like to one of its members, or to an outsider who sees it (outsiderSeesParty). Null otherwise.
  * A block does not break a shared party (blockUser), so the view is where it is enforced: a member blocked either way with
  * the viewer is not in the viewer's roster at all -- no id, role or live mute (F1, 10-02) -- and `leaderId` is '' when the
- * leader is such a member.
+ * leader is such a member. An outsider's roster is only the members they see online (WL-351-02, partyRosterFor): a member
+ * hidden from them, or appearing offline, is no id, role, mute or count to them -- and a FULL party is not shown to an outsider
+ * at all, since "full" beside a roster with room would count the hidden.
  */
 export interface PartyView {
   readonly partyId: string;
@@ -373,17 +370,13 @@ export function partyViewFor(state: SocialState, viewerId: SocialUserId, partyId
   const party = partyById(state, partyId);
   if (party === undefined) return null;
   const member = party.members.some((m) => m.userId === viewerId);
-  const friendOfOpen =
-    party.privacy === 'OPEN_TO_FRIENDS' &&
-    party.members.some((m) => areFriends(state, viewerId, m.userId)) &&
-    !party.members.some((m) => blockedEitherWay(state, viewerId, m.userId));
-  if (!member && !friendOfOpen) return null;
-  const hidden = (userId: SocialUserId): boolean => userId !== viewerId && blockedEitherWay(state, viewerId, userId);
+  if (!member && !outsiderSeesParty(state, viewerId, party)) return null;
+  const seen = partyRosterFor(state, viewerId, party);
   return {
     partyId: party.partyId,
     name: party.name,
-    leaderId: hidden(party.leaderId) ? '' : party.leaderId,
-    members: party.members.filter((m) => !hidden(m.userId)).map((m) => ({ userId: m.userId, role: m.role, selfMuted: m.selfMuted })),
+    leaderId: seen.some((m) => m.userId === party.leaderId) ? party.leaderId : '',
+    members: seen.map((m) => ({ userId: m.userId, role: m.role, selfMuted: m.selfMuted })),
     privacy: party.privacy,
     invitePermission: party.invitePermission,
     viewerIsMember: member,
@@ -394,10 +387,10 @@ export function partyViewFor(state: SocialState, viewerId: SocialUserId, partyId
 
 /**
  * THE RECENT PLAYERS TAB, labelled for its viewer. A PARTY meeting's stored label is the party's id (its source); it is shown as
- * that party's name only while this viewer may see the party (partyViewFor: a member, or a friend of an open party -- and never
- * across a wall), else as DEFAULT_PARTY_NAME. So no label names, or derives from, somebody behind the viewer's wall, and a rename
- * reaches only those who may see the party anyway (Second's R16 run, 10-04: B's entry for C read "stub-alpha's party" after A
- * blocked B, across restarts). Labels stored before this (a name, not an id) read as DEFAULT_PARTY_NAME.
+ * that party's name only while this viewer may see the party (partyViewFor: a member, or an outsider who sees it -- never across
+ * a wall, never through a hidden leader), else as DEFAULT_PARTY_NAME. So no label names, or derives from, somebody behind the
+ * viewer's wall, and a rename reaches only those who may see the party anyway (Second's R16 run, 10-04: B's entry for C read
+ * "stub-alpha's party" after A blocked B, across restarts). Labels stored before this (a name, not an id) read as DEFAULT_PARTY_NAME.
  */
 export function recentPlayersViewFor(state: SocialState, ownerId: SocialUserId): RecentPlayerEntry[] {
   return recentPlayersFor(state, ownerId).map((e) =>

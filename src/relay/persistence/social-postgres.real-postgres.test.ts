@@ -364,3 +364,80 @@ suite('Wonderland social hardening on real PostgreSQL (10-07)', () => {
     }
   }, 60_000);
 });
+
+/**
+ * BF-2 (R16 B23) ON REAL POSTGRESQL: the profile's Relay Dog follows the skin the player wears in a world. What only the database
+ * can show: the skin lands in social_profiles.relay_dog (033's jsonb, no migration), a tick that changes nothing leaves the row
+ * untouched (its xmin), and a restarted store serves it -- as privacy allows -- to a friend and a stranger. Its own players (a
+ * nonce), its own cleanup, the same throwaway rule as above.
+ */
+suite('BF-2: the worn skin on real PostgreSQL, across a restart', () => {
+  const nonce = randomBytes(5).toString('hex');
+  const ADA = `usr_ada_${nonce}`;
+  const BO = `usr_bo_${nonce}`;
+  const CY = `usr_cy_${nonce}`;
+  const ALL = [ADA, BO, CY];
+  let pool: Pool;
+  let store: SocialStore;
+  // THE REAL NOW (see the suites above: eventsFor prunes against the real clock)
+  let clock = Date.now();
+  const at = () => new Date((clock += 1000)).toISOString();
+  const apply = async (op: Parameters<SocialStore['apply']>[0], actor: string, body: Record<string, unknown> = {}, ids: string[] = []) => {
+    const r = await store.apply(op, actor, { ids, body, query: {} }, at());
+    if (!r.ok) throw new Error(`${op} by ${actor} refused: ${r.error.message}`);
+    return r.value as any;
+  };
+  const tick = (skinId: string) => apply('world.state', ADA, { x: 1, y: 2, z: 3, yaw: 0, speed: 0, motion: 'IDLE', skinId });
+  const skinSeenBy = async (viewer: string) => (await apply('profile.read', viewer, {}, [ADA])).profile.relayDog.skinId as string;
+  const row = async () => (await pool.query(`SELECT relay_dog->>'skinId' AS skin, xmin::text AS x FROM relay_wonderland.social_profiles WHERE player_id = $1`, [ADA])).rows[0];
+
+  beforeAll(async () => {
+    pool = new Pool({ connectionString: databaseUrl! });
+    await new TransactionalWonderlandDatabase(pool).migrate();
+    await pool.query(`INSERT INTO relay_wonderland.players(player_id) SELECT unnest($1::text[]) ON CONFLICT DO NOTHING`, [ALL]);
+    store = await openSocialPostgresStore(pool);
+    for (const id of ALL) await store.ensureUser({ userId: id, displayName: id.split('_')[1], handle: `@${id}` }, at());
+  }, 60_000);
+
+  // THE SAME TEARDOWN SHAPE AS THE SUITES ABOVE: no party or conversation is made here; the players' deletion cascades the rest
+  const removeWhatBf2Made = async (db: Pool): Promise<void> => {
+    await db.query(`DELETE FROM relay_wonderland.social_events WHERE audience && $1::text[]`, [ALL]);
+    await db.query(`DELETE FROM relay_wonderland.players WHERE player_id = ANY($1::text[])`, [ALL]);
+    await db.end();
+  };
+  afterAll(async () => {
+    await (pool === undefined ? Promise.resolve() : removeWhatBf2Made(pool));
+  }, 60_000);
+
+  it('the worn skin lands in relay_dog once, is told to the friend, and a restarted store serves it as privacy allows', async () => {
+    await apply('requests.send', ADA, { toUserId: BO });
+    const req = (await store.read()).requests.find((r) => r.fromUserId === ADA && r.toUserId === BO && r.status === 'PENDING')!;
+    await apply('requests.accept', BO, {}, [req.requestId]);
+    await apply('world.join', ADA, { target: 'PUBLIC' });
+    expect((await row()).skin, 'the control: the base form before any report').toBe('relay_og');
+    const boLatest = (await store.eventsFor(BO, 0, 500)).latest;
+    await tick('baal');
+    const written = await row();
+    expect(written.skin).toBe('baal');
+    expect((await store.eventsFor(BO, boLatest, 500)).events.map((e) => e.op)).toEqual(['world.state']);
+    // a tick that changes no skin, and one with an unregistered id: the row is not rewritten (xmin unchanged)
+    await tick('baal');
+    await tick('bee');
+    expect(await row()).toEqual(written);
+
+    // THE RESTART
+    store = await openSocialPostgresStore(pool);
+    expect([await skinSeenBy(BO), await skinSeenBy(CY), await skinSeenBy(ADA)]).toEqual(['baal', 'baal', 'baal']);
+    expect((await apply('profile.read', BO, {}, [ADA])).profile.primaryAgent, 'RQ-1: no agent configured, never a default').toBeNull();
+    // presence to friends only: the stranger reads the base form, the friend the skin -- after a restart too
+    await apply('privacy.update_self', ADA, { presenceVisibility: 'FRIENDS' });
+    store = await openSocialPostgresStore(pool);
+    expect([await skinSeenBy(BO), await skinSeenBy(CY)]).toEqual(['baal', 'relay_og']);
+    // a block either way: nothing (presence EVERYONE again, so the block alone decides)
+    await apply('privacy.update_self', ADA, { presenceVisibility: 'EVERYONE' });
+    await apply('blocks.add', CY, { targetId: ADA });
+    store = await openSocialPostgresStore(pool);
+    expect([await skinSeenBy(BO), await skinSeenBy(CY)]).toEqual(['baal', 'relay_og']);
+    expect((await row()).skin, 'the stored skin itself is unchanged by who may see it').toBe('baal');
+  }, 60_000);
+});

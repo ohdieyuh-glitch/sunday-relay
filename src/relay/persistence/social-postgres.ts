@@ -22,7 +22,7 @@ import {
 } from '../social/social-contracts';
 import { applySocialOperation, type SocialCommandInput } from '../social/social-commands';
 import { emptySocialState, hasUser, type SocialState, type SocialUserRecord } from '../social/social-state';
-import { ensureSocialUser, tellAfterCommit, viewerCursor, type SocialAfterCommit, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
+import { ensureSocialUser, newRelayDog, tellAfterCommit, viewerCursor, type SocialAfterCommit, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
 import { emptyWorldState, type WorldState } from '../social/world-presence';
 import { protectedStoreWriterGuard } from './protected-store-writer-guard';
 
@@ -79,7 +79,9 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
       clanName: p.clan_name,
       progression: { source: 'PENDING', rank: null, level: null },
       primaryAgent: p.primary_agent,
-      relayDog: p.relay_dog,
+      // 033 constrains relay_dog only NOT NULL: a row holding no object reads as the new player's Dog (an unregistered skin id in
+      // an object is kept as stored and never served: resolveProfileFor shows only canonical skins)
+      relayDog: p.relay_dog !== null && typeof p.relay_dog === 'object' && !Array.isArray(p.relay_dog) ? p.relay_dog : newRelayDog(),
       activeCompanion: p.active_companion,
       showcaseAgents: p.showcase_agents,
       showcaseCompanions: p.showcase_companions,
