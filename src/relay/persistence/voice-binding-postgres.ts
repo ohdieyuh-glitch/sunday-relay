@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 
 import { decideVoiceBinding, type VoiceBindingOutcome, type VoiceBindingRow, type VoiceBindingStore } from '../social/voice-binding';
+import { checkoutHeld } from './pg-held-client';
 import { protectedStoreWriterGuard } from './protected-store-writer-guard';
 
 /** A relay_wonderland.voice_puid_binding row as pg returns it. */
@@ -31,7 +32,9 @@ export function createPostgresVoiceBindings(pool: Pool): VoiceBindingStore {
   const refuseProtectedStore = protectedStoreWriterGuard(pool, 'voice bindings');
   /** One attempt, in its own transaction; any failure is rolled back and thrown. */
   const bindOnce = async ({ userId, puid, sessionId, sessionIssuedAtIso, sessionIssuedAtOf, nowIso }: Parameters<VoiceBindingStore['bind']>[0]): Promise<VoiceBindingOutcome> => {
-    const client = await pool.connect();
+    // MW-B-001: a connection that dies while this transaction holds it is heard and logged, never an uncaught exception
+    // (pg-held-client.ts). The bind then throws, and the voice route answers 503.
+    const { client, release } = await checkoutHeld(pool, 'voice bindings');
     try {
       await client.query('BEGIN');
       const mineRows = await client.query<BindingRowShape>(
@@ -53,7 +56,7 @@ export function createPostgresVoiceBindings(pool: Pool): VoiceBindingStore {
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;
     } finally {
-      client.release();
+      release();
     }
   };
   const isUniqueViolation = (error: unknown): boolean => (error as { code?: unknown } | null)?.code === '23505';
