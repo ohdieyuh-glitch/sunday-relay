@@ -32,6 +32,7 @@ import {
   juliusSharedCeilingPolicy,
   type JuliusBudgetPort,
   type JuliusCardPolicy,
+  type JuliusApprovalScope,
   type JuliusPolicyOperation,
   type JuliusClaimedTask,
   type JuliusContextSnapshot,
@@ -733,6 +734,15 @@ export function assembleLiveJuliusRuntime(options: {
    * (`decideJuliusApproval`). A gate is mission authority, not a code change.
    */
   readonly approvals?: readonly JuliusPolicyOperation[];
+  /**
+   * V6 G-2: GATES SCOPED TO ONE ROLE AND ONE TASK TYPE (`JuliusApprovalScope`).
+   *
+   * Absent, none, and the card carries no `approvalScopes` key at all, so every
+   * ungated mission composes exactly the card it always did. Present, only the
+   * dispatches whose role AND task type a scope names are held for a person;
+   * the plan, the reviews and the repairs of a mission gated on its build go on.
+   */
+  readonly approvalScopes?: readonly JuliusApprovalScope[];
 }): LiveJuliusRuntime {
   const registry = new JuliusWorkerRegistry();
   const adapters = new Map<string, JuliusProviderAdapter>();
@@ -756,6 +766,9 @@ export function assembleLiveJuliusRuntime(options: {
     iterativeReview: { allowed: true, maxRounds: Math.max(1, options.maxRepairRounds + 1) },
     concurrency: 1,
     approvals: [...(options.approvals ?? [])],
+    ...(options.approvalScopes === undefined ? {} : {
+      approvalScopes: options.approvalScopes.map((scope) => ({ operation: scope.operation, roles: [...scope.roles], taskTypes: [...scope.taskTypes] })),
+    }),
   };
   const verification: JuliusVerificationPolicy = {
     revision: `verify:${options.cardRevision}`,
