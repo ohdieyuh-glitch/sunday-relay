@@ -20,6 +20,7 @@ import {
   hasBlocked,
   hasUser,
   mintId,
+  partyById,
   pendingRequestBetween,
   presenceHiddenFrom,
   userById,
@@ -152,7 +153,7 @@ export function blockUser(state: SocialState, actorId: SocialUserId, targetId: S
   const withoutFriendship = areFriends(state, actorId, targetId) ? removeFriend(state, actorId, targetId) : ok(state);
   if (!withoutFriendship.ok) return withoutFriendship;
   const next = withoutFriendship.value;
-  const isMember = (partyId: string, userId: SocialUserId) => next.parties[partyId]?.members.some((m) => m.userId === userId) ?? false;
+  const isMember = (partyId: string, userId: SocialUserId) => partyById(next, partyId)?.members.some((m) => m.userId === userId) ?? false;
   const crossesTheWall = (i: SocialState['partyInvites'][number]) =>
     (i.fromUserId === actorId && i.toUserId === targetId) ||
     (i.fromUserId === targetId && i.toUserId === actorId) ||
