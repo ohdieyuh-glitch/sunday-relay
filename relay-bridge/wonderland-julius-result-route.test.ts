@@ -85,7 +85,11 @@ const members = (rows: Record<string, string>): WonderlandProjectMembershipSourc
   },
 });
 
-/** The table the product has DECIDED (decisions 4 and 5) but does not write yet -- injected, never the canonical one. */
+/**
+ * The table the product has DECIDED (decisions 4 and 5), injected, never the canonical one. Since main's #345 the
+ * product WRITES its OWNER, ADMIN and MEMBER: the canonical table, pinned below by "THE CANONICAL ROLE TABLE, as
+ * production runs it". WATCHER it still does not write, and reaching that role is what an injected table is for.
+ */
 const DECIDED = Object.freeze({
   OWNER: Object.freeze(['read_world_state', 'read_mission_result', 'read_mission_cost'] as const),
   ADMIN: Object.freeze(['read_world_state', 'read_mission_result', 'read_mission_cost'] as const),

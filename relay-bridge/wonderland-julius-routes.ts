@@ -297,9 +297,10 @@ export interface WonderlandJuliusRouteDeps {
   readonly operatorToken?: string;
   /**
    * The role table decisions are made against. Absent in production, where it is
-   * the canonical `WONDERLAND_ROLE_CAPABILITIES`; injected only so a test can
-   * reach a role the product does not write yet -- the member who may read a
-   * result but not its cost -- without unfreezing the canonical table.
+   * the canonical `WONDERLAND_ROLE_CAPABILITIES` -- OWNER, and since main's #345
+   * ADMIN and MEMBER too, the roles the product writes (a MEMBER may read a result
+   * but never its cost). Injected only so a test can reach a role the product does
+   * NOT write, such as a watcher, without unfreezing the canonical table.
    */
   readonly roleCapabilities?: Readonly<Record<string, readonly WonderlandProjectCapability[]>>;
   /** Called with every decision, granted or not. For an operator's log only. */
