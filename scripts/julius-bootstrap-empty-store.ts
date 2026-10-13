@@ -35,6 +35,7 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
+import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
 import { WONDERLAND_MIGRATIONS, migrationVersion } from '../src/relay/persistence/wonderland-postgres';
 import { migrateIfNeeded } from './julius-live-preflight-identity';
 
@@ -142,7 +143,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv, cwd:
   const versions = loaded.map((entry) => entry.version as string);
   for (const [index, entry] of loaded.entries()) out(`LOADED ${String(index + 1).padStart(2, '0')} ${entry.version} sha256=${entry.sha256}`);
 
-  const pool = new Pool({ connectionString: url, max: 1, application_name: 'julius-bootstrap-empty-store' });
+  const pool = listenJuliusPool(new Pool({ connectionString: url, max: 1, application_name: 'julius-bootstrap-empty-store' }), 'julius bootstrap store');
   try {
     const who = (await pool.query<{ db: string; sid: string; others: number }>(
       `SELECT current_database() AS db, (SELECT system_identifier::text FROM pg_control_system()) AS sid,

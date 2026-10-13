@@ -1,4 +1,4 @@
-import type{Pool}from'pg';import type{JuliusContextSnapshot}from'../mission/julius';const json=(value:unknown)=>JSON.stringify(value);/**
+import type{Pool}from'pg';import type{JuliusContextSnapshot}from'../mission/julius';import{checkoutJuliusHeld}from'./julius-pg-held';const json=(value:unknown)=>JSON.stringify(value);/**
  * NULL SURVIVES AS NULL. `JSON.stringify(null)` is the four-character string
  * `"null"`, which Postgres stores as a jsonb null VALUE — a row that says the
  * integrity decision was the JSON null rather than a row that says no decision
@@ -59,9 +59,9 @@ async persist(input:{projectId:string;snapshot:JuliusContextSnapshot}):Promise<s
  * prevent, and unknown is not an id.
  */
 if(typeof this.pool.connect!=='function')return null;
-let client;
-try{client=await this.pool.connect();}catch{return null;}
+let held;
+try{held=await checkoutJuliusHeld(this.pool,'julius context store');}catch{return null;}
 try{
- const settled=await client.query<{context_id:string}>(`SELECT c.context_id FROM relay_wonderland.julius_context_snapshots c WHERE c.task_id=$1 AND c.worker_id=$2 AND c.content_hash=$3 AND EXISTS(SELECT 1 FROM relay_wonderland.julius_runs WHERE run_id=$4 AND project_id=$5) LIMIT 1`,[s.taskId,s.workerId,s.contentHash,s.runId,input.projectId]);
+ const settled=await held.client.query<{context_id:string}>(`SELECT c.context_id FROM relay_wonderland.julius_context_snapshots c WHERE c.task_id=$1 AND c.worker_id=$2 AND c.content_hash=$3 AND EXISTS(SELECT 1 FROM relay_wonderland.julius_runs WHERE run_id=$4 AND project_id=$5) LIMIT 1`,[s.taskId,s.workerId,s.contentHash,s.runId,input.projectId]);
  return settled.rows[0]?.context_id??null;
-}finally{client.release();}}}
+}finally{held.release();}}}

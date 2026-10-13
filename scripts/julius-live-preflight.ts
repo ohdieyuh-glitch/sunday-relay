@@ -71,6 +71,7 @@ import { promisify } from 'node:util';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
+import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
 import type { ExecutorOperation } from '../src/relay/workspace/julius-tools/executor-operation-request';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
@@ -164,7 +165,7 @@ async function proveDurableStore(pool: Pool, out: (line: string) => void): Promi
 
 async function main(): Promise<number> {
   const out = (line: string): void => { process.stdout.write(`${line}\n`); };
-  const pool = new Pool({ connectionString: required('DATABASE_URL') });
+  const pool = listenJuliusPool(new Pool({ connectionString: required('DATABASE_URL') }), 'julius preflight store');
   let identity: PreflightIdentity | null = null;
   let code = 1;
   let cleanupFailed = false;

@@ -49,6 +49,7 @@ import { observeCoderLogin, resolveCoderClaudeExecutable } from './hosted-coding
 import { readFileSync } from 'node:fs';
 import { createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
+import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
 import { JULIUS_RUNTIME_DATABASE_ENV_NAMES, juliusRuntimeDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
@@ -784,7 +785,7 @@ async function main(argv: readonly string[]): Promise<number> {
    * No query is made: the check is whether the composed store carries the
    * reader both consumers are gated on, not whether the database is reachable.
    */
-  const ledger = databaseMissing.length > 0 ? 'UNKNOWN' : liveLedgerState(createJuliusPostgresRuntimeStore(new Pool({ connectionString: databaseUrl! })));
+  const ledger = databaseMissing.length > 0 ? 'UNKNOWN' : liveLedgerState(createJuliusPostgresRuntimeStore(listenJuliusPool(new Pool({ connectionString: databaseUrl! }), 'julius live store')));
   out(`  live_ledger: ${ledger}`);
   if (ledger === 'UNBOUND') out('  BLOCKED allocation: the live store serves no timeline, so every dispatch would be allocated a flat estimate');
 
@@ -803,7 +804,7 @@ async function main(argv: readonly string[]): Promise<number> {
   }
 
   /* ------------------------------------------------- confirmed live path */
-  const pool = new Pool({ connectionString: databaseUrl! });
+  const pool = listenJuliusPool(new Pool({ connectionString: databaseUrl! }), 'julius live store');
   try {
     /* `migrate()` applies only the versions `schema_migrations` does not
      * already hold, so this is safe against an empty database, a partially

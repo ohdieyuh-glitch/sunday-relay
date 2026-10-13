@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **227 production files** across 20/20 subsystems (2 roots, 195 traced, 8 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **228 production files** across 20/20 subsystems (2 roots, 196 traced, 8 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -40,10 +40,10 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | entrypoint (relay-bridge/julius-live-mission.ts) | kernel (src/relay/mission/julius/) | 1 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | live composition (relay-bridge/julius/) | 11 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | other | 1 | 0 |
-| entrypoint (relay-bridge/julius-live-mission.ts) | persistence (src/relay/persistence/) | 7 | 0 |
+| entrypoint (relay-bridge/julius-live-mission.ts) | persistence (src/relay/persistence/) | 8 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 1 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | kernel (src/relay/mission/julius/) | 10 | 8 |
-| executor + tool substrate (src/relay/workspace/julius-tools/) | persistence (src/relay/persistence/) | 1 | 0 |
+| executor + tool substrate (src/relay/workspace/julius-tools/) | persistence (src/relay/persistence/) | 2 | 0 |
 | kernel (src/relay/mission/julius/) | other | 5 | 0 |
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 20 | 5 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 10 | 1 |
@@ -380,6 +380,7 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/julius-contract-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-event-postgres.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
 | `src/relay/persistence/julius-lifecycle-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
+| `src/relay/persistence/julius-pg-held.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-read-postgres.ts` | traced | `src/relay/persistence/julius-claim-postgres.ts` |
 | `src/relay/persistence/julius-recovery-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |

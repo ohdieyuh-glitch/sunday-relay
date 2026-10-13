@@ -83,6 +83,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { Pool } from 'pg';
+import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
 
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
@@ -525,7 +526,7 @@ export async function runRecoveryDrill(input: {
   const outDir = outIndex >= 0 && input.argv[outIndex + 1] !== undefined
     ? resolve(input.argv[outIndex + 1]!)
     : join(input.repoRoot, 'julius-capability-proofs');
-  const pool = new Pool({ connectionString: target.url });
+  const pool = listenJuliusPool(new Pool({ connectionString: target.url }), 'julius recovery drill store');
   try {
     if (mode === 'crash') { await crash(pool, RECOVERED, 'at-handoff'); return 0; }
     if (mode === 'resume') { await resume(pool, RECOVERED); return 0; }

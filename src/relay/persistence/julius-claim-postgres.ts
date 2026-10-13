@@ -17,6 +17,7 @@ import { brainKindFromStored, brainKindToStored } from './julius-brain-kinds';
 import { appendJuliusEventWithin } from './julius-event-postgres';
 import { JuliusReadPostgresRepository } from './julius-read-postgres';
 import { juliusSerializable } from './julius-serializable';
+import { checkoutJuliusHeld } from './julius-pg-held';
 import { JuliusTimelinePostgresRepository } from './julius-timeline-postgres';
 
 /**
@@ -142,7 +143,7 @@ export class JuliusClaimPostgresRepository implements JuliusClaimStore {
   }
 
   async recordClaimStanding(input: JuliusClaimStandingAppend): Promise<boolean> {
-    const client = await this.pool.connect();
+    const { client, release } = await checkoutJuliusHeld(this.pool, 'julius claim store');
     try {
       await client.query('BEGIN');
       const recorded = await recordStandingWithin(client, input);
@@ -152,7 +153,7 @@ export class JuliusClaimPostgresRepository implements JuliusClaimStore {
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;
     } finally {
-      client.release();
+      release();
     }
   }
 

@@ -63,6 +63,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
+import { checkoutJuliusHeld } from '../src/relay/persistence/julius-pg-held';
 import { TransactionalWonderlandDatabase, type ReviewedBootstrapIdentity } from '../src/relay/persistence/wonderland-postgres';
 
 export interface PreflightIdentity {
@@ -166,7 +167,7 @@ export async function seedPreflightIdentity(pool: Pool, identity: PreflightIdent
   // sizes it from its request timeout, and 15 minutes is the floor.
   const leaseMinutes = Math.max(15, Math.ceil(options.leaseMinutes ?? 15));
   // One transaction: a preflight that dies mid-seed leaves either the whole ancestry or none of it.
-  const client = await pool.connect();
+  const { client, release } = await checkoutJuliusHeld(pool, 'julius preflight identity');
   try {
     await client.query('BEGIN');
     await client.query('INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING', [identity.tenantId]);
@@ -206,7 +207,7 @@ export async function seedPreflightIdentity(pool: Pool, identity: PreflightIdent
     await client.query('ROLLBACK').catch(() => undefined);
     throw error;
   } finally {
-    client.release();
+    release();
   }
 }
 
@@ -273,7 +274,7 @@ export interface PreflightCleanupReport {
  */
 export async function cleanupPreflightIdentity(pool: Pool, identity: PreflightIdentity): Promise<PreflightCleanupReport> {
   assertOwned(identity);
-  const client = await pool.connect();
+  const { client, release } = await checkoutJuliusHeld(pool, 'julius preflight identity');
   const deleted: Record<string, number> = {};
   try {
     await client.query('BEGIN');
@@ -308,7 +309,7 @@ export async function cleanupPreflightIdentity(pool: Pool, identity: PreflightId
     await client.query('ROLLBACK').catch(() => undefined);
     throw error;
   } finally {
-    client.release();
+    release();
   }
   // Every table a preflight can leave a row in, by its ownership key.
   const remaining = await pool.query<{ total: string }>(

@@ -1,6 +1,7 @@
 import { createPrivateKey } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Pool } from 'pg';
+import { listenJuliusPool } from '../../persistence/julius-pg-held';
 import { JuliusToolRecoveryPostgresRepository } from '../../persistence/julius-tool-recovery-postgres';
 import { DockerJuliusSandboxAdapter, permittedWorkspace } from './docker-sandbox-adapter';
 import { FilesystemExecutionLedger, FilesystemSandboxTenancyLedger } from './durable-execution-ledger';
@@ -16,7 +17,7 @@ const port=Number(process.env.EXECUTOR_PORT??'8787');
 if(!Number.isSafeInteger(port)||port<1||port>65535)throw new Error('executor_config_invalid:EXECUTOR_PORT');
 
 async function main():Promise<void>{
-  const pool=new Pool(process.env.DATABASE_URL?{connectionString:process.env.DATABASE_URL}:{});
+  const pool=listenJuliusPool(new Pool(process.env.DATABASE_URL?{connectionString:process.env.DATABASE_URL}:{}),'julius executor store');
   const receipts=new DockerExecutorReceiptStore(required('EXECUTOR_RECEIPT_ROOT'));
   const ledgerRoot=required('EXECUTOR_LEDGER_ROOT');
   const executionLedger=new FilesystemExecutionLedger(ledgerRoot),tenancyLedger=new FilesystemSandboxTenancyLedger(`${ledgerRoot}/tenancy`);

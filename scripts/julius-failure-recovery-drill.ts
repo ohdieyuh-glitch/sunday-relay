@@ -42,6 +42,7 @@
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
 
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
@@ -282,7 +283,7 @@ export async function runFailureRecoveryDrill(input: {
   const outDir = outIndex >= 0 && input.argv[outIndex + 1] !== undefined
     ? resolve(input.argv[outIndex + 1]!)
     : join(input.repoRoot, 'julius-capability-proofs');
-  const pool = new Pool({ connectionString: target.url });
+  const pool = listenJuliusPool(new Pool({ connectionString: target.url }), 'julius failure-recovery drill store');
   try {
     const code = await orchestrate(pool, outDir, input.repoRoot);
     process.stdout.write(readFileSync(join(outDir, TRANSCRIPT_FILE), 'utf8'));
