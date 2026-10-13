@@ -133,3 +133,18 @@ describe('WonderFS paths: helpers', () => {
     expect(wfsRebase('Straße/x.txt', 1, ['new'])).toBe('new/x.txt');
   });
 });
+
+/**
+ * K5 (contract r1.6.2 b7 / §21 K5; attack WFS15-11): THE PATH KEY'S UNICODE VERSION IS PINNED. `wfsPathKey` folds with the runtime's
+ * case and NFC tables (ECMAScript toUpperCase / toLowerCase / normalize), so a runtime on another Unicode version can key a stored path
+ * differently: a contract event that needs a re-key of every stored `path_key` before it serves. The pin is the value CI's pinned Node 22
+ * reports, read by command when R2-r5 lands and copied into the freeze record (`node -p process.versions.unicode`); the local Node 22.23.2
+ * (ICU 78.2) reports the same. CONTROL: set the pin to any other value (e.g. '15.1', CPython 3.13's) and this turns red.
+ */
+const WFS_PINNED_UNICODE = '17.0';
+
+describe('WonderFS paths: the Unicode version the key is computed on (K5)', () => {
+  it('the runtime\'s Unicode version is the pinned one', () => {
+    expect(process.versions.unicode, `node ${process.versions.node}, icu ${process.versions.icu}: a different Unicode version keys paths differently (b7)`).toBe(WFS_PINNED_UNICODE);
+  });
+});
