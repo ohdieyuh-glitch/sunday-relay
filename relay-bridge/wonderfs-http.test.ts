@@ -85,21 +85,6 @@ describe('WonderFS on the real bridge: its own family, its own gate', () => {
     expect([elsewhere.status, elsewhere.body]).toEqual([404, { error: 'not found' }]);
   });
 
-  it('R2: the two WRITE paths, POSTed with a body, reach WonderFS\'s gate too -- 401 session_required, no-store; an allowed Origin 403 desktop_only (no other family reads the body or claims the POST)', async () => {
-    const base = await boot({});
-    for (const [path, type, body] of [
-      ['/relay-api/wonderfs/v1/projects/prj-1/blobs', 'application/octet-stream', 'bytes'],
-      ['/relay-api/wonderfs/v1/projects/prj-1/branches/main/commits', 'application/json', '{"requestId":"req-00000001","baseRev":0,"ops":[]}'],
-    ] as const) {
-      for (const auth of [undefined, `Relay-Session ${'x'.repeat(43)}`]) {
-        const response = await realFetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': type, ...(auth === undefined ? {} : { authorization: auth }) }, body });
-        expect([response.status, await response.json(), response.headers.get('cache-control')], path).toEqual([401, SESSION_REQUIRED, 'no-store']);
-      }
-      const page = await realFetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': type, origin: ORIGIN }, body });
-      expect([page.status, ((await page.json()) as { error: { kind: string } }).error.kind], path).toEqual([403, 'desktop_only']);
-    }
-  });
-
   it('desktop only: an allowed browser Origin gets WonderFS\'s 403 desktop_only; an unknown Origin never reaches a route', async () => {
     const base = await boot({});
     const page = await call(base, '/relay-api/wonderfs/v1/projects', { origin: ORIGIN, auth: `Relay-Session ${'x'.repeat(43)}` });
@@ -129,11 +114,7 @@ describe('WonderFS on the real bridge: ALWAYS ON (INV-10, §19.m6)', () => {
 /* -------------------------------------------------------------------------------------------- the static no-toggle check */
 
 const ROOT = resolve(__dirname, '..');
-// R2 adds its write routes and its body readers, and (R2-r2, security NIT-2) the three stores its writes go through: the same scan
-const WONDERFS_FILES = [
-  'relay-bridge/wonderfs-scope.ts', 'relay-bridge/wonderfs-gate.ts', 'relay-bridge/wonderfs-budgets.ts', 'relay-bridge/wonderfs-routes.ts', 'relay-bridge/wonderfs-write-routes.ts', 'relay-bridge/wonderfs-body.ts',
-  'src/relay/wonderfs/wonderfs-store.ts', 'src/relay/wonderfs/wonderfs-memory-store.ts', 'src/relay/persistence/wonderfs-postgres.ts',
-];
+const WONDERFS_FILES = ['relay-bridge/wonderfs-scope.ts', 'relay-bridge/wonderfs-gate.ts', 'relay-bridge/wonderfs-budgets.ts', 'relay-bridge/wonderfs-routes.ts'];
 
 /** Every way a source could switch WonderFS on configuration: an environment read, the social flag, a toggle-shaped name. */
 function togglesIn(source: string): string[] {

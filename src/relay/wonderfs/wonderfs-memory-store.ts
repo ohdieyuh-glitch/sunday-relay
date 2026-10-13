@@ -35,18 +35,9 @@ import {
   type WfsProjectState,
 } from './wonderfs-engine';
 import {
-  wfsAdmitCommit,
-  wfsAdmitWrite,
-  wfsConflictCapApplies,
-  wfsConflictCapAt,
-  wfsConflictRetained,
   wfsBlobIntegrity,
-  wfsBlobRoom,
   wfsBlobsNamed,
   wfsBoundPage,
-  wfsCheckUpload,
-  wfsHashMismatch,
-  wfsSha256InSlices,
   wfsCheckChangesQuery,
   wfsCheckConflictsQuery,
   wfsCheckEventsQuery,
@@ -170,34 +161,11 @@ export function openWfsMemoryStore(options: WfsMemoryOptions = {}): WfsMemorySto
 
   const closingOf = (p: WfsMemoryProject, c: WfsConflict): WfsConflictClosing => p.closings.get(c.conflictId) ?? wfsConflictClosing(c, p.state.branches, c.atIso);
 
-  /** Whether a file's history names `sha`: any branch's versions, current entries or fork-time base. */
-  const inHistory = (p: WfsMemoryProject, sha: string): boolean => {
+  /** Whether anything of this project names `sha` (any branch's versions, entries or fork base; any retained conflict). Worked out whether or not the blob is held. */
+  const referencedIn = (p: WfsMemoryProject, sha: string): boolean => {
     const named = (e: WfsEntry) => e.sha256 === sha;
-    return [...p.state.branches.values()].some((b) => [...b.entries.values()].some(named) || [...b.base.values()].some(named) || b.commits.some((c) => c.touched.some(named)));
-  };
-
-  /** Whether anything of this project names `sha` (a file's history, or any retained conflict). Worked out whether or not the blob is held. */
-  const referencedIn = (p: WfsMemoryProject, sha: string): boolean => inHistory(p, sha) || [...p.state.conflicts.values()].some((c) => wfsBlobsNamed(c.ops).includes(sha));
-
-  /**
-   * R2 (§19.m3): main's live file bytes, and as PENDING the bytes of every held blob no file's history names -- an orphan, or (R2-r2,
-   * security MAJOR-3) one only a conflict names: a conflict-held upload counts against the room until a file takes it.
-   */
-  const room = (p: WfsMemoryProject): { liveBytes: number; pendingBytes: number } => {
-    let liveBytes = 0;
-    for (const e of p.state.branches.get(WFS_MAIN_BRANCH)?.entries.values() ?? []) if (!e.deleted && e.kind === 'file') liveBytes += e.size ?? 0;
-    let pendingBytes = 0;
-    for (const [sha, held] of p.blobs) if (!inHistory(p, sha)) pendingBytes += held.byteLength;
-    return { liveBytes, pendingBytes };
-  };
-
-  /** R2-r2 (security MAJOR-2): the conflicts `playerId` authored in this project that are still RETAINED at `nowIso`. */
-  const retainedBy = (p: WfsMemoryProject, playerId: string, nowIso: string): number => {
-    let held = 0;
-    for (const c of p.state.conflicts.values()) {
-      if (c.principal.kind === 'human' && c.principal.id === playerId && wfsConflictRetained(closingOf(p, c), nowIso)) held += 1;
-    }
-    return held;
+    return [...p.state.branches.values()].some((b) => [...b.entries.values()].some(named) || [...b.base.values()].some(named) || b.commits.some((c) => c.touched.some(named)))
+      || [...p.state.conflicts.values()].some((c) => wfsBlobsNamed(c.ops).includes(sha));
   };
 
   return {
@@ -403,20 +371,10 @@ export function openWfsMemoryStore(options: WfsMemoryOptions = {}): WfsMemorySto
       return held === undefined ? null : new Uint8Array(held);
     },
 
-    commit: (projectId, req, nowIso, authority) =>
+    commit: (projectId, req, nowIso) =>
       mutate(projectId, nowIso, (p, ctx) => {
-        // R2: the role NOW, inside the change (this synchronous block is the memory store's transaction), before the replay lookup
-        if (authority !== undefined) {
-          const admitted = wfsAdmitCommit(roleOf(projectId, authority.playerId), authority, req);
-          if (!admitted.ok) return admitted;
-        }
         const r = applyWfsCommit(p.state, req, ctx);
         if (!r.ok) return r;
-        // R2-r2: a NEW conflict past its author's cap of retained conflicts keeps nothing
-        if (authority !== undefined && wfsConflictCapApplies(r.value.outcome, authority)) {
-          const capped = wfsConflictCapAt(retainedBy(p, authority.playerId, nowIso), authority);
-          if (!capped.ok) return capped;
-        }
         return ok({ state: r.value.project, value: r.value.outcome, event: wfsOutcomeEvent(r.value.outcome, 'commit') });
       }),
     fork: (projectId, input, nowIso) =>
@@ -447,27 +405,13 @@ export function openWfsMemoryStore(options: WfsMemoryOptions = {}): WfsMemorySto
         if (!r.ok) return r;
         return ok({ state: r.value, value: null, event: { kind: 'branch.discard', body: { branchId } } });
       }),
-    async putBlob(projectId, bytes, options = {}) {
-      const checked = wfsCheckUpload(bytes.byteLength, options.claimedSha256, limits);
-      if (!checked.ok) return checked;
-      // its own copy first: the caller's buffer may change while the hash yields
-      const copy = new Uint8Array(bytes);
-      const sha256 = await wfsSha256InSlices(copy, createHash('sha256'));
-      if (checked.value !== null && checked.value !== sha256) return wfsHashMismatch();
-      // from here on, synchronous: the memory store's transaction
+    async putBlob(projectId, bytes) {
+      if (bytes.byteLength > limits.maxFileBytes) return fail(relayError('validation-failed', 'That file is larger than a project allows.', { details: ['wonderfs: file_too_large'] }));
       const p = backing.projects.get(projectId);
       if (p === undefined) return noProject();
-      if (options.authority !== undefined) {
-        const admitted = wfsAdmitWrite(roleOf(projectId, options.authority.playerId), options.authority);
-        if (!admitted.ok) return admitted;
-      }
-      const created = !p.blobs.has(sha256);
-      if (created) {
-        const fits = wfsBlobRoom({ ...room(p), size: copy.byteLength, limits });
-        if (!fits.ok) return fits;
-        p.blobs.set(sha256, copy);
-      }
-      return ok({ sha256, size: copy.byteLength, created });
+      const sha256 = sha256Bytes(bytes);
+      if (!p.blobs.has(sha256)) p.blobs.set(sha256, new Uint8Array(bytes));
+      return ok({ sha256, size: bytes.byteLength });
     },
   };
 }

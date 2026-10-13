@@ -1,7 +1,6 @@
 /**
  * WONDERFS /wonderfs/v1 -- R1: the READ routes, for the Wonderland desktop client (contract r1.4 §6.1, §7, §8.2, §9.1, §11, §17;
- * the routes plan §2.1). The WRITES (H11 upload, H12 commit) are R2's, in wonderfs-write-routes.ts, dispatched from here behind the
- * same gate.
+ * the routes plan §2.1). Writes are R2.
  *
  * ALWAYS ON (INV-10, §19.m6): nothing in this file, the gate, the table or the budgets reads a setting. The one thing that can make
  * WonderFS answer 503 is a FACT -- this server has no database -- never a switch.
@@ -79,15 +78,15 @@ import {
   WONDERFS_NO_STORE,
   type WonderfsAdmission,
   type WonderfsAnswer,
+  type WonderfsGateDeps,
   type WonderfsRequest,
 } from './wonderfs-gate';
 import { isWonderfsRoute, type WonderfsQueryKey } from './wonderfs-scope';
-import { serveWonderfsWrite, wonderfsClosing, type WonderfsWriteDeps, type WonderfsWriteRequest } from './wonderfs-write-routes';
 
 export { isWonderfsRoute } from './wonderfs-scope';
 export type { WonderfsAnswer, WonderfsRequest } from './wonderfs-gate';
 
-export interface WonderfsRouteDeps extends WonderfsWriteDeps {
+export interface WonderfsRouteDeps extends WonderfsGateDeps {
   /** The limits this deployment's store enforces (§11), reported by H4; default the Alpha's. */
   readonly limits?: WfsLimits;
 }
@@ -260,7 +259,7 @@ async function bytesAnswer(admitted: WonderfsAdmission, request: WonderfsRequest
 
 const data = (schema: string, value: Record<string, unknown>): WonderfsAnswer => wonderfsJson(200, { data: { schema, ...value } });
 
-async function serveAdmitted(admitted: WonderfsAdmission, request: WonderfsWriteRequest, deps: WonderfsRouteDeps): Promise<WonderfsByteAnswer> {
+async function serveAdmitted(admitted: WonderfsAdmission, request: WonderfsRequest, deps: WonderfsRouteDeps): Promise<WonderfsByteAnswer> {
   const { op, store, principal } = admitted;
   const query = readQuery(admitted.search, op.query);
   if (!query.ok) return query.answer;
@@ -341,9 +340,6 @@ async function serveAdmitted(admitted: WonderfsAdmission, request: WonderfsWrite
       if (!r.ok) return refused(r);
       return data('wonderfs.events_page.v1', { events: r.value.events, lastSeq: r.value.lastSeq, next: r.value.next });
     }
-    case 'blob.upload':
-    case 'commit.create':
-      return serveWonderfsWrite(admitted, request, deps); // R2: H11 / H12
     default:
       return wonderfsError(403, 'not_permitted', 'This session may not do that.');
   }
@@ -353,12 +349,11 @@ async function serveAdmitted(admitted: WonderfsAdmission, request: WonderfsWrite
  * THE ROUTE: null when the path is not WonderFS's; otherwise always an answer. A store that THROWS (an outage on a process's first
  * call, a protected store refused: REVIEW_WONDERFS_R0B MINOR-5) is 503 wonderfs_unavailable, never a 500 with a stack.
  */
-export async function answerWonderfs(request: WonderfsWriteRequest, deps: WonderfsRouteDeps): Promise<WonderfsByteAnswer | null> {
+export async function answerWonderfs(request: WonderfsRequest, deps: WonderfsRouteDeps): Promise<WonderfsByteAnswer | null> {
   if (!isWonderfsRoute(request.url)) return null;
   try {
     const gate = await wonderfsGate(request, deps);
-    // R2-r2 (reviews' NIT): a POST refused at the gate leaves its body unread -- the socket is closed, never drained for reuse
-    if (!gate.ok) return request.method === 'GET' ? gate.answer : wonderfsClosing(gate.answer);
+    if (!gate.ok) return gate.answer;
     return await serveAdmitted(gate.admitted, request, deps);
   } catch (error) {
     deps.log?.(`wonderfs: a request failed in the store (${error instanceof Error ? error.name : 'unknown'}); answered 503`);
@@ -405,8 +400,8 @@ export function writeWonderfsAnswer(res: ServerResponse, answer: WonderfsByteAns
 
 /* ----------------------------------------------------------------------------------------------------- the bridge mount */
 
-/** What WonderFS reads of an HTTP request: the path after /relay-api with its query, five headers, whether the client is gone, and the body (read only by R2's writes, wonderfs-body.ts). */
-export function wonderfsRequestOf(req: IncomingMessage, now: number): WonderfsWriteRequest {
+/** What WonderFS reads of an HTTP request: the path after /relay-api with its query, five headers, and whether the client is gone. No body. */
+export function wonderfsRequestOf(req: IncomingMessage, now: number): WonderfsRequest {
   const header = (name: string): string | undefined => {
     const value = req.headers[name];
     return typeof value === 'string' ? value : undefined;
@@ -421,7 +416,6 @@ export function wonderfsRequestOf(req: IncomingMessage, now: number): WonderfsWr
     ifRange: header('if-range'),
     closed: () => req.socket.destroyed,
     now,
-    body: req,
   };
 }
 
