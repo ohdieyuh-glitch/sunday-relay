@@ -16,7 +16,7 @@ import type { JuliusTickBudget } from '../../src/relay/mission/julius/julius-tic
 import type { JuliusLearningMetrics } from '../../src/relay/mission/julius/julius-learning-loop';
 import { juliusLearningProposal } from '../../src/relay/mission/julius/julius-learning-record';
 import type { LiveReachReadiness } from '../../src/relay/mission/live-reach';
-import type { DriveTickAccount, JuliusLearningOutcome } from './live-composition';
+import type { DriveTickAccount, JuliusDriveDeadline, JuliusLearningOutcome } from './live-composition';
 
 /**
  * EVERY PRINTED LINE IS ONE PHYSICAL LINE (JUJU's review of 1cee61fd).
@@ -46,6 +46,16 @@ export function liveTickBudgetLine(
   override: number | undefined,
 ): string {
   return `  tick budget: planned=${budget.plannedTicks} hard_max=${budget.hardMaxTicks} ${budget.reason} override=${override ?? 'none'} version=${budget.version}`;
+}
+
+/**
+ * THE STAGE DEADLINE THE DRIVE ENFORCES (audit F3), said before the first dispatch beside the wall clock deadline:
+ * the stop line no stage starts after, the job's limit it is derived from, and the two reserves. UNKNOWN when the job's
+ * start was not recorded, in which case nothing is enforced.
+ */
+export function liveStageDeadlineLine(deadline: JuliusDriveDeadline | null): string {
+  if (deadline === null) return '  stage deadline: UNKNOWN (no job start recorded; not enforced)';
+  return `  stage deadline: no stage starts after ${new Date(deadline.stopStartingAtMs).toISOString()} (job limit ${new Date(deadline.hardLimitAtMs).toISOString()}; reserve_after_live_ms=${deadline.reserveAfterLiveMs} longest_stage_ms=${deadline.longestStageMs})`;
 }
 
 /** What the run consumed. The entrypoint prints it between RESULT (and its cause) and the `run:` line. */

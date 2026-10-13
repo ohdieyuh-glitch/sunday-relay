@@ -77,13 +77,13 @@ import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/j
 import { liveEvidenceLines } from './julius/live-evidence-lines';
 import {
   liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveLearningFailedLine, liveOneLine, liveResearchLines, liveTickAccountLine,
-  liveTickBudgetLine, liveWorkersBlockedLines,
+  liveTickBudgetLine, liveWorkersBlockedLines, liveStageDeadlineLine,
 } from './julius/live-report-lines';
 import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
   driveJuliusRunToTerminal,
-  liveTickBudgetFor,
+  liveTickBudgetFor, liveStageDeadline,
   recordJuliusLearningOutcome,
   resolveLiveWorkers,
 } from './julius/live-composition';
@@ -94,8 +94,8 @@ import { JOB_BUDGET_MS } from './reviewer-deadline';
  * moment the workflow recorded at its dispatch-input gate, plus the job budget
  * the workflow's own timeout mirrors. The gate runs a few tens of seconds after
  * the job starts, so the real deadline is that much EARLIER than printed.
- * UNKNOWN when the moment was not recorded. Printed, never enforced: the
- * runner's timeout is the stop.
+ * UNKNOWN when the moment was not recorded. Printed as recorded; what the
+ * drive ENFORCES is `liveStageDeadline`, derived from it (audit F3).
  */
 function wallClockDeadline(env: Record<string, string | undefined>): string {
   const started = Date.parse(env.JULIUS_JOB_STARTED_AT ?? '');
@@ -1003,12 +1003,18 @@ async function main(argv: readonly string[]): Promise<number> {
     });
     out(liveTickBudgetLine(tickBudget, tickOverride.override));
     out(`  wall clock deadline: ${wallClockDeadline(env)}`);
+    /* THE DEADLINE IS ENFORCED NOW, NOT ONLY PRINTED (audit F3): no stage starts once a stage could no longer finish
+       with the steps after LIVE still inside the job's limit. The run then ends FAILED (job_deadline_reached, Julius
+       code TIMEOUT) through its ordinary path, so its learning record below is written and the evidence steps run. */
+    const stageDeadline = liveStageDeadline({ jobStartedAt: env.JULIUS_JOB_STARTED_AT, workers: resolution.entries.map((entry) => entry.worker) });
+    out(liveStageDeadlineLine(stageDeadline));
     out(liveExecutionScopeLine(liveExecutionScope(env)));
     const outcome = await driveJuliusRunToTerminal({
       loop: runtime.loop, store: handoffs.store,
       runId: submitted.runId, projectId: contract.projectId,
       verification: runtime.verification,
       ...(tickOverride.override === undefined ? {} : { maxTicks: tickOverride.override }),
+      ...(stageDeadline === null ? {} : { deadline: stageDeadline }),
     });
 
     /*

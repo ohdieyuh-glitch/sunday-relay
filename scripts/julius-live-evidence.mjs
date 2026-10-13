@@ -57,6 +57,8 @@ const ALLOWED = [
   // dropped both lines from every paid run's artifact (P4).
   /^  tick budget: planned=\d+ hard_max=\d+ units=[A-Za-z_,]+ repair_rounds=\d+ segment_ceiling=\d+ reviewer=(required|not_required) attempts=\d+ disagreement=(one_rebuttal_one_re_review_per_review|unreachable) architecture=max_\d+_consultations_per_run override=(none|\d+) version=julius-tick-budget\.v1$/u,
   /^  wall clock deadline: (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z|UNKNOWN)$/u,
+  // The stage deadline the drive enforces (`liveStageDeadlineLine`, audit F3): instants and numbers only.
+  /^  stage deadline: (no stage starts after \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \(job limit \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z; reserve_after_live_ms=\d+ longest_stage_ms=\d+\)|UNKNOWN \(no job start recorded; not enforced\))$/u,
   /^  ticks: consumed=\d+ allowance=\d+ remaining=\d+ beyond_main_path=\d+ disagreement=\d+ architecture=\d+ retries=\d+ exhausted=(yes|no)$/u,
   // Which workflow attempt the run's peer records are scoped to (`liveExecutionScope`).
   /^  peer execution scope: (gh-\d{1,20}\.\d{1,4}|local)$/u,

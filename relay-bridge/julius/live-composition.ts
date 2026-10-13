@@ -19,7 +19,7 @@
 
 import { coderAttemptDeadlineMs } from '../hosted-coding-agent/coder-envelope';
 import { architectOperativeTimeoutMs } from '../../src/relay/connectors/gpt-architect/config';
-import { reviewerOperativeTimeoutMs } from '../reviewer-deadline';
+import { JOB_BUDGET_MS, reviewerOperativeTimeoutMs } from '../reviewer-deadline';
 import { randomUUID } from 'node:crypto';
 import {
   JuliusProviderHealthRegistry,
@@ -919,6 +919,57 @@ export interface DriveOutcome {
   readonly tickAccount: DriveTickAccount | null;
 }
 
+/**
+ * THE JOB'S CLOCK, ENFORCED (Decision C, audit F3). The workflow kills the job at `timeout-minutes`, and a run killed
+ * mid-stage stays RUNNING: no `run.failed`, no learning record, no store export. So the drive stops STARTING stages
+ * while a started one can still finish, the run ends FAILED through its ordinary path, and every step after LIVE
+ * still has its time.
+ */
+export interface JuliusDriveDeadline {
+  /** No tick (no stage) starts at or after this instant. */
+  readonly stopStartingAtMs: number;
+  /** The job's limit as this process can know it, conservatively early. */
+  readonly hardLimitAtMs: number;
+  /** The longest a stage started at the stop line may legitimately take: a worker hold bound. */
+  readonly longestStageMs: number;
+  /** What the steps after LIVE are left: the learning record, the evidence dump, the scans and the uploads. */
+  readonly reserveAfterLiveMs: number;
+}
+
+/**
+ * HOW LATE THE WORKFLOW'S JOB STAMP IS. `JULIUS_JOB_STARTED_AT` is written by the dispatch-input gate, not at the job's
+ * start: 39-68 s after it in the five paid runs measured on 2026-10-13 (37222057584, 37039013641, 36915013287,
+ * 34774471909, 34766115321). The job's real limit is that much EARLIER than the stamp plus the budget.
+ */
+export const JULIUS_JOB_STAMP_LAG_RESERVE_MS = 2 * 60_000;
+/**
+ * WHAT THE STEPS AFTER LIVE ARE LEFT. Measured 11-15 s from LIVE's end to teardown in those five runs; the founder
+ * draft r4 adds the learning-store dump, its scan and upload, and the strict resolver. Ten minutes, so an artifact
+ * upload having a slow day still lands before the runner's cut.
+ */
+export const JULIUS_RESERVE_AFTER_LIVE_MS = 10 * 60_000;
+
+/**
+ * THE STAGE DEADLINE FOR A LIVE RUN, or null when the job's start was not recorded (nothing is then enforced, as
+ * before). The longest stage is the largest lease hold bound over the registered roles, which is what the lease keeper
+ * already allows a claimed task to hold: every worker of its role at its declared deadline, plus settlement.
+ */
+export function liveStageDeadline(input: {
+  readonly jobStartedAt: string | undefined;
+  readonly workers: readonly { readonly role: string; readonly timeoutMs: number }[];
+  readonly jobBudgetMs?: number;
+}): JuliusDriveDeadline | null {
+  const started = Date.parse(input.jobStartedAt ?? '');
+  if (!Number.isFinite(started)) return null;
+  const roles = [...new Set(input.workers.map((worker) => worker.role))];
+  const longestStageMs = roles.reduce((longest, role) => Math.max(longest, juliusLeaseHoldBoundMs(input.workers, { role }, JULIUS_LIVE_LEASE_SETTLEMENT_ALLOWANCE_MS)), 0);
+  const hardLimitAtMs = started + (input.jobBudgetMs ?? JOB_BUDGET_MS) - JULIUS_JOB_STAMP_LAG_RESERVE_MS;
+  return {
+    stopStartingAtMs: hardLimitAtMs - JULIUS_RESERVE_AFTER_LIVE_MS - longestStageMs,
+    hardLimitAtMs, longestStageMs, reserveAfterLiveMs: JULIUS_RESERVE_AFTER_LIVE_MS,
+  };
+}
+
 export interface DriveTickAccount {
   readonly plannedTicks: number;
   readonly hardMaxTicks: number;
@@ -959,8 +1010,13 @@ export async function driveJuliusRunToTerminal(input: {
    */
   readonly verification?: JuliusVerificationPolicy;
   readonly maxTicks?: number;
+  /** The job's clock (`liveStageDeadline`): no stage starts at or after its stop line. Absent: nothing is enforced. */
+  readonly deadline?: JuliusDriveDeadline;
+  /** The wall clock the deadline is read on, in ms. Injected by the proofs; the system clock otherwise. */
+  readonly now?: () => number;
 }): Promise<DriveOutcome> {
   const maxTicks = input.maxTicks ?? 32;
+  const now = input.now ?? ((): number => Date.now());
   const override = input.verification !== undefined && input.maxTicks !== undefined ? input.maxTicks : null;
   const budget = input.verification === undefined ? null : await liveTickBudgetFor({
     store: input.store, runId: input.runId, projectId: input.projectId, verification: input.verification,
@@ -999,6 +1055,11 @@ export async function driveJuliusRunToTerminal(input: {
       if (tick > account.allowance) {
         return failForTickBudget({ input, consumed: tick - 1, account: accountAt(tick - 1, true)! });
       }
+    }
+    // THE STOP LINE, BEFORE A STAGE STARTS, never during one: a stage started before it ends before the job's limit
+    // by construction (`liveStageDeadline`), so the run ends here, FAILED, with time left for its record.
+    if (input.deadline !== undefined && now() >= input.deadline.stopStartingAtMs) {
+      return failForDeadline({ input, deadline: input.deadline, consumed: tick - 1, account: accountAt(tick - 1, false) });
     }
     // THE SWEEP IS THE KERNEL'S. This driver used to call `recover` before
     // every tick, which made a store-level guarantee depend on one composition
@@ -1069,14 +1130,13 @@ export async function liveTickBudgetFor(input: {
  * and any override. If the move cannot be made, the state is reported as it
  * stands and no failure is claimed.
  */
-async function failForTickBudget(args: {
-  readonly input: { readonly store: JuliusRuntimeStore & JuliusRecoveryDriver; readonly runId: string; readonly projectId: string };
-  readonly consumed: number;
-  readonly account: DriveTickAccount;
-}): Promise<DriveOutcome> {
-  const { input, account } = args;
-  const reasonCode = 'tick_budget_exhausted';
-  const safeSummary = `The run consumed its whole tick allowance (${String(account.allowance)} of a planned ${String(account.plannedTicks)}, hard maximum ${String(account.hardMaxTicks)}) without reaching a terminal state.`;
+type DriveFailureInput = { readonly store: JuliusRuntimeStore & JuliusRecoveryDriver; readonly runId: string; readonly projectId: string };
+
+/**
+ * THE RUN MOVES TO FAILED ALONG A LEGAL PATH, or is reported as it stands. Shared by the two limits a drive enforces
+ * (its tick allowance and its stage deadline), so both end a run the same way.
+ */
+async function moveRunToFailed(input: DriveFailureInput, commandPrefix: string, reasonCode: string, safeSummary: string): Promise<string> {
   let current = await input.store.loadRun(input.runId, input.projectId);
   for (let attempt = 0; attempt < 3 && current !== null && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(current.state); attempt += 1) {
     const path = planRunStatePath(current.state, 'FAILED');
@@ -1085,7 +1145,7 @@ async function failForTickBudget(args: {
       for (const [index, step] of path.entries()) {
         const last = index === path.length - 1;
         current = await input.store.transition({
-          commandId: `tick-budget:${input.runId}:${String(current.version)}:${step}`,
+          commandId: `${commandPrefix}:${input.runId}:${String(current.version)}:${step}`,
           runId: input.runId, projectId: input.projectId, expectedVersion: current.version, to: step,
           reasonCode: last ? reasonCode : 'PASSED_THROUGH',
           safeSummary: last ? safeSummary : `Run passed through ${step} on the way to FAILED.`,
@@ -1096,7 +1156,53 @@ async function failForTickBudget(args: {
       current = await input.store.loadRun(input.runId, input.projectId);
     }
   }
-  const state = current?.state ?? 'UNKNOWN';
+  return current?.state ?? 'UNKNOWN';
+}
+
+/**
+ * THE JOB'S CLOCK RAN OUT FOR NEW STAGES, AND THE RUN SAYS SO (audit F3). The run moves to FAILED along the same path
+ * an exhausted allowance takes, and its `run.failed` row carries the Julius code TIMEOUT (`JULIUS_ERROR_CODES`) and the
+ * numbers: where the stop line was, the job's limit, the longest stage and the reserve after LIVE.
+ */
+async function failForDeadline(args: {
+  readonly input: DriveFailureInput;
+  readonly deadline: JuliusDriveDeadline;
+  readonly consumed: number;
+  readonly account: DriveTickAccount | null;
+}): Promise<DriveOutcome> {
+  const { input, deadline } = args;
+  const reasonCode = 'job_deadline_reached';
+  const stopAt = new Date(deadline.stopStartingAtMs).toISOString();
+  const limitAt = new Date(deadline.hardLimitAtMs).toISOString();
+  const safeSummary = `No new stage may start after ${stopAt}: the job's limit is ${limitAt}, and a stage (up to ${String(deadline.longestStageMs)} ms) plus the steps after LIVE (${String(deadline.reserveAfterLiveMs)} ms) would not fit. The run stops here, before the runner's cut, so its record, its learning outcome and its evidence are written.`;
+  const state = await moveRunToFailed(input, 'job-deadline', reasonCode, safeSummary);
+  if (state === 'FAILED') {
+    await input.store.appendEvent({
+      eventId: `event:${randomUUID()}`, runId: input.runId, projectId: input.projectId, type: 'run.failed',
+      taskId: null, workerId: null, correlationId: `job-deadline:${input.runId}`, causationId: null,
+      occurredAt: new Date().toISOString(),
+      facts: {
+        reasonCode, code: 'TIMEOUT', stopStartingAt: stopAt, hardLimitAt: limitAt,
+        longestStageMs: deadline.longestStageMs, reserveAfterLiveMs: deadline.reserveAfterLiveMs, ticksConsumed: args.consumed,
+      },
+    });
+  }
+  return {
+    state, ticks: args.consumed, stalled: state !== 'FAILED',
+    haltCause: state === 'FAILED' ? `${reasonCode}: ${safeSummary}` : null,
+    tickAccount: args.account,
+  };
+}
+
+async function failForTickBudget(args: {
+  readonly input: DriveFailureInput;
+  readonly consumed: number;
+  readonly account: DriveTickAccount;
+}): Promise<DriveOutcome> {
+  const { input, account } = args;
+  const reasonCode = 'tick_budget_exhausted';
+  const safeSummary = `The run consumed its whole tick allowance (${String(account.allowance)} of a planned ${String(account.plannedTicks)}, hard maximum ${String(account.hardMaxTicks)}) without reaching a terminal state.`;
+  const state = await moveRunToFailed(input, 'tick-budget', reasonCode, safeSummary);
   if (state === 'FAILED') {
     await input.store.appendEvent({
       eventId: `event:${randomUUID()}`, runId: input.runId, projectId: input.projectId, type: 'run.failed',
