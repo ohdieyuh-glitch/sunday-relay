@@ -69,7 +69,12 @@ export interface SocialPreviewSnapshot {
   readonly voiceStates: readonly { readonly label: string; readonly state: PartyVoiceState }[];
 }
 
-function row(state: SocialState, viewerId: SocialUserId, userId: SocialUserId): SocialPersonRow | null {
+/**
+ * ONE PERSON AS A LIST ROW FOR ONE VIEWER, through the one presence authority (resolvePresenceFor). Exported for LFF's own bounded
+ * reads (social-lff.ts, through social-commands.ts), which show their people exactly as every other list does. LFF data is never
+ * part of this snapshot or the committed preview.
+ */
+export function row(state: SocialState, viewerId: SocialUserId, userId: SocialUserId): SocialPersonRow | null {
   const user = userById(state, userId);
   const presence = resolvePresenceFor(state, viewerId, userId);
   if (user === undefined || presence === null) return null;

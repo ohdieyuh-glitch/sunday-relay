@@ -300,7 +300,8 @@ suite('migration 035: the Wonderland voice binding, applied explicitly after 034
     const pool = await create('chain');
     await new TransactionalWonderlandDatabase(pool).migrate();
     const stamps = (await pool.query('SELECT version FROM relay_wonderland.schema_migrations ORDER BY version COLLATE "C"')).rows.map((r: { version: string }) => r.version);
-    expect(stamps.slice(-2), '034 then 035, the last two').toEqual([STAMP_034, STAMP_035]);
+    // 035 is no longer the chain's last (036, WonderFS, follows it): adjacency, not position, is what CHAIN proves
+    expect(stamps.slice(stamps.indexOf(STAMP_034), stamps.indexOf(STAMP_034) + 2), '034 then 035, adjacent').toEqual([STAMP_034, STAMP_035]);
     const present = (await pool.query(
       "SELECT c.relname AS r FROM pg_class c WHERE c.relnamespace = 'relay_wonderland'::regnamespace AND c.relname LIKE 'voice\\_%'",
     )).rows.map((row: { r: string }) => row.r).sort();

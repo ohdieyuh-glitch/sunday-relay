@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MIGRATION_PINNED_STORES, migrationPinnedStoreRole, PROTECTED_STORES, ProtectedStoreMigrationRefused, protectedStoreRole, storeIdentitySha256 } from './protected-store';
-import { migrationVersion, TransactionalWonderlandDatabase, WONDERLAND_MIGRATIONS, WONDERLAND_MIGRATION_035 } from './wonderland-postgres';
+import { migrationVersion, TransactionalWonderlandDatabase, WONDERLAND_MIGRATIONS, WONDERLAND_MIGRATION_035, WONDERLAND_MIGRATION_036, WONDERLAND_MIGRATION_037 } from './wonderland-postgres';
 
 /**
  * G1 (the founder, 2026-10-11: a code guard inside #346): migrate() REFUSES the Julius live store and executes nothing there,
@@ -169,6 +169,37 @@ describe('G1: migrate() refuses the Julius live store and executes nothing there
     await refusal({ ledger: without(V035), db: 'julius', sid: 'DENIED' });
     // the steady state reads nothing, so it cannot fail this way
     expect(await migrated({ ledger: ALL, db: 'railway', sid: 'BROKEN', markerReadFails: true })).toEqual([]);
+  });
+
+  it('036 (WonderFS): the live store at 035 is REFUSED 036 and nothing is executed, by pin, by marker after a restore, and by name; CONTROL: an ordinary database at 035 migrates exactly 036 and what follows it', async () => {
+    const V036 = migrationVersion(WONDERLAND_MIGRATION_036) as string;
+    const V037 = migrationVersion(WONDERLAND_MIGRATION_037) as string;
+    const at035 = ALL.filter((v) => v !== V036 && v !== V037);
+    for (const live of [
+      { ledger: at035, db: 'julius', sid: LIVE_SID },
+      { ledger: at035, db: 'julius_restored', sid: '7999999999999999999', marker: 'relay-store-role=julius-live' },
+      { ledger: at035, db: 'julius', sid: 'DENIED' as const },
+    ]) {
+      const { error, executed } = await refusal(live);
+      expect(error.missingVersions).toEqual([V036, V037]);
+      expect(executed).toEqual([]);
+    }
+    expect(await migrated({ ledger: at035, db: 'railway', sid: '7000000000000000001' })).toEqual([WONDERLAND_MIGRATION_036, WONDERLAND_MIGRATION_037]);
+  });
+
+  it('037 (LFF): the live store at 036 is REFUSED 037 and nothing is executed, by pin, by marker after a restore, and by name; CONTROL: an ordinary database at 036 migrates exactly 037', async () => {
+    const V037 = migrationVersion(WONDERLAND_MIGRATION_037) as string;
+    const at036 = without(V037);
+    for (const live of [
+      { ledger: at036, db: 'julius', sid: LIVE_SID },
+      { ledger: at036, db: 'julius_restored', sid: '7999999999999999999', marker: 'relay-store-role=julius-live' },
+      { ledger: at036, db: 'julius', sid: 'DENIED' as const },
+    ]) {
+      const { error, executed } = await refusal(live);
+      expect(error.missingVersions).toEqual([V037]);
+      expect(executed).toEqual([]);
+    }
+    expect(await migrated({ ledger: at036, db: 'railway', sid: '7000000000000000001' })).toEqual([WONDERLAND_MIGRATION_037]);
   });
 
   it('T7: the reviewed bootstrap of an EMPTY live store migrates the whole chain -- and the override does nothing anywhere else', async () => {

@@ -54,7 +54,9 @@ function fakeDatabase(seed: Row[] = []) {
         };
         (pending ?? profiles).set(id as string, row);
       }
-      return { rows: [], rowCount: 0 };
+      // AS POSTGRESQL ANSWERS: a one-row INSERT (an upsert included) reports one row. The store refuses an event INSERT that reports
+      // none (writeSocialEvent: SocialEventNotWritten, LFF B2b), so a fake answering 0 here failed every write it was given.
+      return { rows: [], rowCount: text.startsWith('INSERT INTO') ? 1 : 0 };
     };
     return { query, release: () => undefined };
   };
