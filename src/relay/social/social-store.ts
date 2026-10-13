@@ -25,7 +25,7 @@ import {
   type UserProfile,
 } from './social-contracts';
 import { applySocialOperation, type SocialCommandInput } from './social-commands';
-import { emptySocialState, type SocialState, type SocialUserRecord } from './social-state';
+import { emptySocialState, hasUser, userById, type SocialState, type SocialUserRecord } from './social-state';
 import { partyDepartures, type PartyDeparture } from './social-parties';
 import { emptyWorldState, type WorldState } from './world-presence';
 
@@ -104,10 +104,28 @@ export function newSocialUser(identity: SocialPlayerIdentity, nowIso: string): S
   return { profile, privacy: defaultPrivacySettings(identity.userId), presence };
 }
 
-/** The state with this player in it (unchanged if they already are). */
+/**
+ * The state with this player in it, their handle following their CURRENT login (unchanged if both already hold).
+ *
+ * THE HANDLE IS NEVER A COLLISION (the migration adversary's M1, 10-07). A handle is the player's GitHub login and 033 keeps
+ * lower(handle) unique, but a record never refreshed it: when a player renamed on GitHub and somebody else took the old name,
+ * the new holder's first contact hit the unique index on every call, forever (HTTP 500).
+ *   - A player's record follows their current login when that handle is FREE.
+ *   - When another record holds it, the INCUMBENT keeps it and the claimant falls back to `@_<userId>` (GitHub logins never contain
+ *     "_", so no login can collide with it). The bridge's login for a live session is cached at sign-in, so "the claimant is
+ *     fresher" cannot be known here; letting either side take it made two live sessions rename each other on every request (the
+ *     hardening reviewer's MINOR 5). The incumbent frees the handle the moment they sign in under their new login.
+ */
 export function ensureSocialUser(state: SocialState, identity: SocialPlayerIdentity, nowIso: string): SocialState {
-  if (state.users[identity.userId] !== undefined) return state;
-  return { ...state, users: { ...state.users, [identity.userId]: newSocialUser(identity, nowIso) } };
+  const wanted = identity.handle.trim() || `@${identity.userId}`;
+  const own = userById(state, identity.userId);
+  const heldByAnother = Object.entries(state.users).some(([id, record]) => id !== identity.userId && record.profile.handle.toLowerCase() === wanted.toLowerCase());
+  const handle = heldByAnother ? `@_${identity.userId}` : wanted;
+  if (own !== undefined && own.profile.handle === handle) return state;
+  const record = own === undefined
+    ? (() => { const fresh = newSocialUser(identity, nowIso); return { ...fresh, profile: { ...fresh.profile, handle } }; })()
+    : { ...own, profile: { ...own.profile, handle } };
+  return { ...state, users: { ...state.users, [identity.userId]: record } };
 }
 
 interface StoredEvent extends SocialEvent {
@@ -170,7 +188,7 @@ export function createInMemorySocialStore(initial: SocialState = emptySocialStat
       }),
     apply: (op, actorId, input, nowIso) =>
       serial((): RelayResult<unknown> => {
-        if (state.users[actorId] === undefined) return { ok: false, error: relayError('not-found', 'no social record for this player') };
+        if (!hasUser(state, actorId)) return { ok: false, error: relayError('not-found', 'no social record for this player') };
         const outcome = applySocialOperation(state, op, actorId, input, nowIso, world);
         if (!outcome.ok) return outcome;
         if (outcome.value.world !== undefined) world = outcome.value.world;

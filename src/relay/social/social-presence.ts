@@ -32,6 +32,7 @@ import {
   partyOf,
   relationshipOf,
   sharePartyWith,
+  userById,
   type SocialState,
 } from './social-state';
 
@@ -144,7 +145,7 @@ function privateServerOwnerOf(serverId: string): SocialUserId | null {
  *   5. the actions follow from what is now known, never from the raw record.
  */
 export function resolvePresenceFor(state: SocialState, viewerId: SocialUserId, subjectId: SocialUserId): UserPresenceView | null {
-  const subject = state.users[subjectId];
+  const subject = userById(state, subjectId);
   if (subject === undefined) return null;
   const relationship = relationshipOf(state, viewerId, subjectId);
 
@@ -192,8 +193,10 @@ export function resolvePresenceFor(state: SocialState, viewerId: SocialUserId, s
       activityLabel: null,
       location: null,
       partyId: null,
-      // Last seen only for those who may see presence at all, so an APPEAR_OFFLINE person is not betrayed by a fresh time.
-      lastSeenAtIso: seesPresence && presence.availability !== 'APPEAR_OFFLINE' ? presence.lastSeenAtIso : null,
+      // Last seen only for those who may see presence at all. An APPEAR_OFFLINE person's last-seen FROZE when they went hidden
+      // (updateOwnPresence), so they read exactly as somebody who signed out then: a null here, for them alone, had told every
+      // friend "online and hiding from you" (the privacy attacker's M1, 10-07).
+      lastSeenAtIso: seesPresence ? presence.lastSeenAtIso : null,
       can: baseActions,
       restrictedReason: seesPresence ? 'OFFLINE' : privacy.presenceVisibility === 'FRIENDS' ? 'FRIENDS_ONLY' : 'PRIVATE',
       // the player's own choice, to them alone
@@ -280,7 +283,7 @@ export function resolvePresenceFor(state: SocialState, viewerId: SocialUserId, s
  * side would itself name the block.
  */
 export function resolveProfileFor(state: SocialState, viewerId: SocialUserId, subjectId: SocialUserId): UserProfileView | null {
-  const subject = state.users[subjectId];
+  const subject = userById(state, subjectId);
   const presence = resolvePresenceFor(state, viewerId, subjectId);
   if (subject === undefined || presence === null || !presence.can.viewProfile) return null;
   const actual = relationshipOf(state, viewerId, subjectId);

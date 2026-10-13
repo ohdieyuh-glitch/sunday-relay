@@ -1,11 +1,12 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Server } from 'node:http';
+import { Server } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createBridgeServer, prepareStateRoot } from './server';
+import { createBridgeServer, main, prepareStateRoot } from './server';
 import {
+  DEPLOYED_COMMIT_ENV_NAMES, PROCESS_BOOT_ID, deployedCommitFromEnv, healthIdentityProblem,
   loadBridgeConfig, parseAllowedOrigins, productionConfigProblems, productionConfigWarnings,
 } from './config';
 
@@ -129,6 +130,130 @@ describe('the public liveness probe discloses nothing', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   }, 30_000);
+});
+
+/* ------------------------------------------------- /health identity --- */
+
+/**
+ * THE FOUNDER'S OPT-IN (hosted deploy plan r6): `RELAY_HEALTH_IDENTITY=1` adds
+ * exactly `commit` + `bootId`; anything but unset / "" / "1" refuses to start.
+ * The default body above is unchanged — these tests pin the other branch.
+ */
+const SHA = 'a065968e0123456789abcdef0123456789abcdef';
+const NO_PLATFORM_COMMIT = { RAILWAY_GIT_COMMIT_SHA: '', RENDER_GIT_COMMIT: '', SOURCE_VERSION: '' };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+describe('the /health identity is the founder opt-in, and exact when on', () => {
+  it('stays exactly {status:"ok"} when the variable is empty, even with a platform commit present', async () => {
+    const base = await boot({ ...NO_PLATFORM_COMMIT, RELAY_HEALTH_IDENTITY: '', RAILWAY_GIT_COMMIT_SHA: SHA });
+    const res = await fetch(`${base}/health`);
+    const text = await res.text();
+    expect(JSON.parse(text)).toEqual({ status: 'ok' });
+    expect(text).not.toContain(SHA);
+    expect(res.headers.get('cache-control')).toBeNull();
+  }, 30_000);
+
+  it('answers exactly status + commit + bootId when "1", uncached', async () => {
+    const base = await boot({
+      ...NO_PLATFORM_COMMIT, RELAY_HEALTH_IDENTITY: '1', RAILWAY_GIT_COMMIT_SHA: SHA,
+      RELAY_ALLOWED_ORIGINS: ORIGIN, RELAY_BRIDGE_API_TOKEN: TOKEN, RELAY_DATA_DIR: '/data',
+    });
+    const res = await fetch(`${base}/health`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    const text = await res.text();
+    const body = JSON.parse(text) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(['bootId', 'commit', 'status']);
+    expect(body.status).toBe('ok');
+    expect(body.commit).toBe(SHA);
+    expect(body.bootId).toMatch(UUID);
+    for (const secret of [TOKEN, '/data', 'fusion', 'claude', 'sundayMode', 'confirmLive', 'grok']) {
+      expect(text.toLowerCase()).not.toContain(secret.toLowerCase());
+    }
+  }, 30_000);
+
+  it('keeps one bootId for the process: two answers, two servers', async () => {
+    const env = { ...NO_PLATFORM_COMMIT, RELAY_HEALTH_IDENTITY: '1' };
+    const a = await boot(env);
+    const b = await boot(env);
+    const ids = await Promise.all([a, a, b].map(async (base) =>
+      ((await (await fetch(`${base}/health`)).json()) as { bootId: string }).bootId));
+    expect(new Set(ids).size).toBe(1);
+    // a real id first (CORE, 10-07): where no bootId exists, undefined === undefined made the next line pass
+    expect(ids[0]).toMatch(UUID);
+    expect(ids[0]).toBe(PROCESS_BOOT_ID);
+  }, 30_000);
+
+  it('mints a new bootId when the module loads again (a process restart)', async () => {
+    vi.resetModules();
+    const first = (await import('./config')).PROCESS_BOOT_ID;
+    vi.resetModules();
+    const second = (await import('./config')).PROCESS_BOOT_ID;
+    expect(first).toMatch(UUID);
+    expect(second).toMatch(UUID);
+    expect(second).not.toBe(first);
+  });
+
+  it('states a commit only when every listed platform variable that is set is a full lowercase sha and they agree', () => {
+    const at = (env: Record<string, string>) =>
+      deployedCommitFromEnv({ ...NO_PLATFORM_COMMIT, ...env } as NodeJS.ProcessEnv);
+    expect(DEPLOYED_COMMIT_ENV_NAMES).toEqual(['RAILWAY_GIT_COMMIT_SHA', 'RENDER_GIT_COMMIT', 'SOURCE_VERSION']);
+    expect(at({})).toBeNull();
+    expect(at({ RAILWAY_GIT_COMMIT_SHA: SHA })).toBe(SHA);
+    expect(at({ RENDER_GIT_COMMIT: SHA })).toBe(SHA);
+    expect(at({ SOURCE_VERSION: SHA })).toBe(SHA);
+    expect(at({ RAILWAY_GIT_COMMIT_SHA: SHA, SOURCE_VERSION: SHA })).toBe(SHA);
+    // Junk is null, never a guess.
+    expect(at({ RAILWAY_GIT_COMMIT_SHA: SHA.toUpperCase() })).toBeNull();
+    expect(at({ RAILWAY_GIT_COMMIT_SHA: SHA.slice(0, 8) })).toBeNull();
+    expect(at({ RAILWAY_GIT_COMMIT_SHA: `${SHA}\n` })).toBeNull();
+    expect(at({ RAILWAY_GIT_COMMIT_SHA: ` ${SHA}` })).toBeNull();
+    expect(at({ RAILWAY_GIT_COMMIT_SHA: 'main' })).toBeNull();
+    // Two that disagree, or one valid beside one malformed: null.
+    expect(at({ RAILWAY_GIT_COMMIT_SHA: SHA, RENDER_GIT_COMMIT: 'b'.repeat(40) })).toBeNull();
+    expect(at({ RAILWAY_GIT_COMMIT_SHA: SHA, SOURCE_VERSION: 'main' })).toBeNull();
+    // A variable outside the list is never read.
+    expect(at({ GIT_COMMIT: SHA, COMMIT_SHA: SHA, VERCEL_GIT_COMMIT_SHA: SHA })).toBeNull();
+  });
+
+  it('answers commit null on a junk platform value rather than echoing it', async () => {
+    const base = await boot({ ...NO_PLATFORM_COMMIT, RELAY_HEALTH_IDENTITY: '1', RAILWAY_GIT_COMMIT_SHA: 'not-a-sha<script>' });
+    const text = await (await fetch(`${base}/health`)).text();
+    expect(JSON.parse(text).commit).toBeNull();
+    expect(text).not.toContain('not-a-sha');
+  }, 30_000);
+
+  it('accepts only unset, "" and "1"; every other value is a start refusal naming the variable, never the value', () => {
+    expect(healthIdentityProblem({} as NodeJS.ProcessEnv)).toBeNull();
+    expect(healthIdentityProblem({ RELAY_HEALTH_IDENTITY: '' } as NodeJS.ProcessEnv)).toBeNull();
+    expect(healthIdentityProblem({ RELAY_HEALTH_IDENTITY: '1' } as NodeJS.ProcessEnv)).toBeNull();
+    for (const value of ['0', 'true', 'yes', 'on', ' 1', '1 ', '01', 'TRUE', 'x-distinct-value-7']) {
+      const problem = healthIdentityProblem({ RELAY_HEALTH_IDENTITY: value } as NodeJS.ProcessEnv);
+      expect(problem, JSON.stringify(value)).not.toBeNull();
+      expect(problem).toContain('RELAY_HEALTH_IDENTITY');
+      if (value.trim().length > 1) expect(problem).not.toContain(value.trim());
+    }
+  });
+
+  it('main() refuses to start on a bad value before it binds anything, on a non-production host too', () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('RELAY_HEALTH_IDENTITY', 'x-distinct-value-7');
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    // Recorded, never bound (CORE, 10-07): without the refusal (the base, or a mutant) main() runs on to listen on the default
+    // 0.0.0.0:8790, and a spy that called through would open a real port from inside the test worker.
+    const listen = vi.spyOn(Server.prototype, 'listen').mockImplementation(function (this: Server) { return this; });
+    const exitCode = process.exitCode;
+    try {
+      main();
+      expect(process.exitCode).toBe(1);
+      expect(listen).not.toHaveBeenCalled();
+      const printed = errors.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(printed).toContain('RELAY_HEALTH_IDENTITY');
+      expect(printed).not.toContain('x-distinct-value-7');
+    } finally {
+      process.exitCode = exitCode;
+    }
+  });
 });
 
 /* ------------------------------------------------------- authentication --- */

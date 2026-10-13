@@ -359,6 +359,9 @@ describe('D8: the events cursor is the viewer\'s own, never a global count', () 
     };
     await run('requests.send', U.KAI, [], { toUserId: U.NOVA });
     await run('requests.accept', U.NOVA, [(await store.read()).requests[0].requestId], {});
+    // ONLINE (CORE, 10-07): under the hardening's view rule an offline player's activity is nobody's to see, so a change to it is
+    // told to nobody, and these cases' "a friend acting" would tell nothing. Online, each change below is one a friend can see.
+    for (const id of [U.KAI, U.NOVA, U.VEGA]) await run('presence.update_self', id, [], { connected: true });
     return { store, run };
   }
 
@@ -412,5 +415,126 @@ describe('D6b: a block that ends a friendship (no shared party) is told exactly 
     // a stranger's block changes nothing Kai can see, and tells him nothing
     const s = createSocialFixture();
     expect(must(s, U.KAI, 'blocks.add', { targetId: U.VEGA }).audience).toEqual([U.KAI]);
+  });
+});
+
+/*
+ * THE 10-07 HARDENING (SECOND WONDERLAND's privacy attacker, run on #343 a065968e): every probe below answered DIFFERENTLY for a
+ * thing that exists behind a wall than for a thing that does not, or told a hidden player's timing. Each case is the attack.
+ */
+describe('10-07 B1: a non-member learns nothing about somebody else\'s DM', () => {
+  it('send and read on another pair\'s DM answer exactly as on a conversation that does not exist (and as list does)', () => {
+    const s = createSocialFixture();
+    const dm = Object.values(s.conversations).find((c) => c.kind === 'DIRECT' && c.memberIds.includes(U.KAI) && c.memberIds.includes(U.NOVA))!;
+    const ghost = `dm_${U.VEGA}__${U.ORION}`;
+    for (const [name, body] of [['messages.send', { body: 'hello?' }], ['messages.read', {}], ['messages.list', {}]] as const) {
+      const real = op(s, U.VEGA, name, body, [dm.conversationId]);
+      expect(real.ok, name).toBe(false);
+      expect(refusal(real), name).toBe(refusal(op(s, U.VEGA, name, body, [ghost])));
+    }
+    // control: the members still write and read
+    expect(op(s, U.KAI, 'messages.send', { body: 'still here' }, [dm.conversationId]).ok).toBe(true);
+    expect(op(s, U.NOVA, 'messages.read', {}, [dm.conversationId]).ok).toBe(true);
+  });
+});
+
+describe('10-07 B2: an outsider learns nothing about a party, and a block-kick reads as an ordinary kick', () => {
+  it('every party op by a non-member answers exactly as for a party that does not exist', () => {
+    const s = createSocialFixture();
+    const arena = partyOf(s, U.ORION)!.partyId; // Orion + Lyra; Vega is in no party and nobody's friend there
+    const probes: Array<[Parameters<typeof applySocialOperation>[1], Record<string, unknown>, string[]]> = [
+      ['parties.invite', { toUserId: U.VEGA }, [arena]],
+      ['parties.rules', { privacy: 'INVITE_ONLY' }, [arena]],
+      ['parties.promote', { memberId: U.LYRA }, [arena]],
+      ['parties.remove_member', {}, [arena, U.LYRA]],
+      ['parties.join', {}, [arena]],
+    ];
+    for (const [name, body, ids] of probes) {
+      const real = op(s, U.VEGA, name, body, ids);
+      expect(real.ok, name).toBe(false);
+      expect(refusal(real), name).toBe(refusal(op(s, U.VEGA, name, body, ['pty_does_not_exist', ...ids.slice(1)])));
+    }
+  });
+
+  it('after a removal, a walled party and an ordinary one refuse the join identically (invite-only vs walled)', () => {
+    let s = createSocialFixture();
+    const arena = partyOf(s, U.ORION)!.partyId;
+    s = must(s, U.KAI, 'parties.join', {}, [arena]).state; // Kai (friend of Orion and Lyra) joins the open arena
+    s = must(s, U.ORION, 'parties.remove_member', {}, [arena, U.KAI]).state; // an ORDINARY kick
+    s = must(s, U.ORION, 'parties.rules', { privacy: 'INVITE_ONLY' }, [arena]).state;
+    const ordinary = refusal(op(s, U.KAI, 'parties.join', {}, [arena]));
+    const walledState = must(must(s, U.ORION, 'parties.rules', { privacy: 'OPEN_TO_FRIENDS' }, [arena]).state, U.LYRA, 'blocks.add', { targetId: U.KAI }).state;
+    const walled = refusal(op(walledState, U.KAI, 'parties.join', {}, [arena]));
+    const missingParty = refusal(op(s, U.KAI, 'parties.join', {}, ['pty_does_not_exist']));
+    expect(walled).toBe(missingParty);
+    expect(ordinary).toBe(missingParty);
+    // control: the open, unwalled party still admits Kai
+    expect(op(must(s, U.ORION, 'parties.rules', { privacy: 'OPEN_TO_FRIENDS' }, [arena]).state, U.KAI, 'parties.join', {}, [arena]).ok).toBe(true);
+  });
+});
+
+describe('10-07 M1/M2: Appear Offline is not betrayed by last-seen or by a new party', () => {
+  it('an APPEAR_OFFLINE friend shows the last-seen frozen when they went hidden, exactly like a friend who signed out then', () => {
+    let s = createSocialFixture();
+    const before = s.users[U.NOVA].presence.lastSeenAtIso;
+    s = must(s, U.NOVA, 'presence.update_self', { availability: 'APPEAR_OFFLINE', connected: true }).state;
+    const later = applySocialOperation(s, 'presence.update_self', U.NOVA, { ids: [], body: { connected: true }, query: {} }, '2026-10-04T06:00:00.000Z');
+    if (!later.ok) throw new Error('presence refused');
+    s = (later.value as SocialCommandOutcome).state;
+    const seen = resolvePresenceFor(s, U.KAI, U.NOVA)!;
+    expect(seen.onlineState).toBe('OFFLINE');
+    expect(seen.lastSeenAtIso).toBe(before);           // a time, never null
+    expect(seen.lastSeenAtIso).not.toBe('2026-10-04T06:00:00.000Z');   // and never the fresh one
+    // control: back to AVAILABLE, the last-seen moves again
+    s = must(s, U.NOVA, 'presence.update_self', { availability: 'AVAILABLE' }).state;
+    expect(resolvePresenceFor(s, U.KAI, U.NOVA)!.onlineState).not.toBe('OFFLINE');
+    expect(resolvePresenceFor(s, U.KAI, U.NOVA)!.lastSeenAtIso).toBe(NOW);   // it moved again, to this report's time
+  });
+
+  it('a hidden player\'s new party is told to nobody but themself; a visible one\'s open party reaches their friends', () => {
+    let s = createSocialFixture();
+    s = must(s, U.NOVA, 'presence.update_self', { availability: 'APPEAR_OFFLINE' }).state;
+    const hidden = must(s, U.NOVA, 'parties.create', { name: 'Quiet', privacy: 'OPEN_TO_FRIENDS' });
+    expect(hidden.audience).toEqual([U.NOVA]);
+    const shown = must(createSocialFixture(), U.NOVA, 'parties.create', { name: 'Loud', privacy: 'OPEN_TO_FRIENDS' });
+    expect(shown.audience).toContain(U.KAI);
+  });
+});
+
+describe('10-07 M3: a change a friend cannot see is not told to that friend', () => {
+  it('an activity-detail change reaches nobody whose activityVisibility hides it', () => {
+    let s = createSocialFixture();
+    s = must(s, U.NOVA, 'privacy.update_self', { activityVisibility: 'NOBODY' }).state;
+    const moved = must(s, U.NOVA, 'presence.update_self', { activityDetail: 'a secret project' });
+    expect(moved.audience).toEqual([U.NOVA]);
+    // control: with the activity shared, the same change reaches Kai
+    expect(must(createSocialFixture(), U.NOVA, 'presence.update_self', { activityDetail: 'a public project' }).audience).toContain(U.KAI);
+  });
+});
+
+describe('10-07 migration M1: a handle is never a collision (033 keeps lower(handle) unique)', () => {
+  it('a login still held by another record: the incumbent keeps it, the claimant falls back; when it is freed, the claimant follows', () => {
+    let s = createSocialFixture();
+    const unique = () => { const l = Object.values(s.users).map((u) => u.profile.handle.toLowerCase()); return new Set(l).size === l.length; };
+    s = ensureSocialUser(s, { userId: 'ghu-1', displayName: 'Alice', handle: '@alice' }, NOW);
+    // ghu-1 renamed on GitHub (its live session still says "alice"); ghu-2 registered "Alice"
+    s = ensureSocialUser(s, { userId: 'ghu-2', displayName: 'Alice', handle: '@Alice' }, NOW);
+    expect([s.users['ghu-1'].profile.handle, s.users['ghu-2'].profile.handle]).toEqual(['@alice', '@_ghu-2']);
+    expect(unique()).toBe(true);
+    // the two live sessions keep calling: NOTHING flips back and forth (the hardening reviewer's MINOR 5)
+    const settled = s;
+    s = ensureSocialUser(s, { userId: 'ghu-1', displayName: 'Alice', handle: '@alice' }, NOW);
+    s = ensureSocialUser(s, { userId: 'ghu-2', displayName: 'Alice', handle: '@Alice' }, NOW);
+    expect(s).toBe(settled);
+    // ghu-1 signs in under the new login: the old handle is freed, and ghu-2's next call takes it
+    s = ensureSocialUser(s, { userId: 'ghu-1', displayName: 'Alice', handle: '@alice-renamed' }, NOW);
+    s = ensureSocialUser(s, { userId: 'ghu-2', displayName: 'Alice', handle: '@Alice' }, NOW);
+    expect([s.users['ghu-1'].profile.handle, s.users['ghu-2'].profile.handle]).toEqual(['@alice-renamed', '@Alice']);
+    expect(unique()).toBe(true);
+  });
+
+  it('an unchanged sign-in returns the very same state (nothing to write)', () => {
+    const s = ensureSocialUser(createSocialFixture(), { userId: 'ghu-7', displayName: 'Seven', handle: '@seven' }, NOW);
+    expect(ensureSocialUser(s, { userId: 'ghu-7', displayName: 'Seven', handle: '@seven' }, NOW)).toBe(s);
   });
 });
