@@ -3,9 +3,11 @@ import { applySocialOperation, type SocialCommandOutcome } from './social-comman
 import { createSocialFixture, FIXTURE_USERS as U } from './social-fixtures';
 import { blockUser } from './social-friends';
 import { recentPlayersViewFor } from './social-parties';
-import { resolvePresenceFor } from './social-presence';
+import { resolvePresenceFor, resolveProfileFor } from './social-presence';
+import { buildSocialView } from './social-preview';
 import type { SocialState } from './social-state';
-import { friendIdsOf } from './social-state';
+import { emptySocialState, friendIdsOf } from './social-state';
+import { ensureSocialUser } from './social-store';
 import {
   WORLD_AVATAR_STALE_MS,
   WORLD_PUBLIC_CAPACITY,
@@ -625,5 +627,155 @@ describe('10-07 M3: a move between worlds is told only to friends who may see wh
       expect(contextOf(moved.world, U.NOVA)?.contextId, 'the move happened').not.toBe(contextOf(w, U.NOVA)?.contextId);
       expect(moved.audience.includes(U.KAI), `location hidden from Kai: ${hidden}`).toBe(!hidden);
     }
+  });
+});
+
+/*
+ * BF-2 (R16 B23): ANOTHER PLAYER'S PROFILE SHOWS THEIR RELAY DOG IN THE SKIN THEY WEAR. Real records here, not the fixture's
+ * synthetic people (whose cards carry preset skins and a preview Julius): three players made on first contact, as the routes make
+ * them, so every skin on a card below was recorded by a world report.
+ */
+describe('BF-2: the profile Relay Dog wears the skin the player wears, through the presence audience', () => {
+  const A = 'usr_bf2_a';
+  const B = 'usr_bf2_b';
+  const C = 'usr_bf2_c';
+  const tick = (skinId: string) => ({ x: 10, y: 20, z: 30, yaw: 0, speed: 0, motion: 'IDLE', skinId });
+  const skinOn = (s: SocialState, viewer: string, subject: string) => resolveProfileFor(s, viewer, subject)?.profile.relayDog.skinId;
+  /** A and B friends, C a stranger; A in Golden Arrival. Nothing has reported a skin yet. */
+  function loop() {
+    let s = emptySocialState();
+    for (const [id, name] of [[A, 'Ada'], [B, 'Bo'], [C, 'Cy']]) s = ensureSocialUser(s, { userId: id, displayName: name, handle: `@${name.toLowerCase()}` }, at(0));
+    s = run(s, emptyWorldState(), A, 'requests.send', { toUserId: B }, 10).state;
+    const accepted = applySocialOperation(s, 'requests.accept', B, { ids: [s.requests[0].requestId], body: {}, query: {} }, at(20), emptyWorldState());
+    if (!accepted.ok) throw new Error(accepted.error.message);
+    const joined = run(accepted.value.state, emptyWorldState(), A, 'world.join', { target: 'PUBLIC' }, 100);
+    return { s: joined.state, w: joined.world };
+  }
+
+  it('a canonical skin from world.state is recorded on the profile and served to a friend and a stranger who may see the player', () => {
+    const { s, w } = loop();
+    // the control before any report: every card reads the base form
+    expect([skinOn(s, B, A), skinOn(s, C, A), skinOn(s, A, A)]).toEqual(['relay_og', 'relay_og', 'relay_og']);
+    const r = run(s, w, A, 'world.state', tick('baal'), 300);
+    expect(r.state.users[A].profile.relayDog).toEqual({ skinId: 'baal', primary: null, secondary: null, flame: null, appearanceTier: null });
+    expect([skinOn(r.state, B, A), skinOn(r.state, C, A), skinOn(r.state, A, A)]).toEqual(['baal', 'baal', 'baal']);
+    // the snapshot's card (the hub opens a friend's profile from it) and the in-world figure agree with the profile
+    expect(buildSocialView(r.state, B, at(300), { developmentPreview: false }).profiles[A]?.profile.relayDog.skinId).toBe('baal');
+    expect(r.world.avatars[A]?.skinId).toBe('baal');
+    // told to A and to the friend whose card moved, so the friend's snapshot follows; a stranger is no candidate (as for presence)
+    expect([...r.audience].sort()).toEqual([A, B].sort());
+  });
+
+  it('a tick that changes no skin is the SAME state and tells nobody; a report inside the minimum interval records nothing', () => {
+    const { s, w } = loop();
+    const first = run(s, w, A, 'world.state', tick('baal'), 300);
+    const again = run(first.state, first.world, A, 'world.state', { ...tick('baal'), x: 99 }, 500);
+    expect(again.state).toBe(first.state);
+    expect(again.audience).toEqual([]);
+    // inside WORLD_REPORT_MIN_INTERVAL_MS the world keeps the earlier figure, so the profile keeps the earlier skin
+    const tooSoon = run(again.state, again.world, A, 'world.state', tick('jack_flame'), 550);
+    expect(tooSoon.state).toBe(again.state);
+    expect(tooSoon.world.avatars[A]?.skinId).toBe('baal');
+    // the control: the same change one interval later is recorded
+    expect(run(tooSoon.state, tooSoon.world, A, 'world.state', tick('jack_flame'), 700).state.users[A].profile.relayDog.skinId).toBe('jack_flame');
+  });
+
+  it('an id outside the canonical registry is never recorded (retired, removed or invented); a malformed one is refused outright', () => {
+    const { s, w } = loop();
+    const worn = run(s, w, A, 'world.state', tick('celestial_light'), 300);
+    let t = 300;
+    for (const id of ['bee', 'hagoromo', 'apollo', 'arden_infernal', 'skeleton_flame_v1', 'not_a_skin']) {
+      t += 200;
+      const r = run(worn.state, worn.world, A, 'world.state', tick(id), t);
+      expect(r.state, id).toBe(worn.state); // the profile keeps the canonical skin it had
+      expect(skinOn(r.state, B, A), id).toBe('celestial_light');
+      expect(r.world.avatars[A]?.skinId, `${id}: the in-world report itself stands, as before BF-2`).toBe(id);
+    }
+    for (const bad of ['BAAL', 'baal!', '', 'x'.repeat(41)]) {
+      const r = applySocialOperation(worn.state, 'world.state', A, { ids: [], body: tick(bad), query: {} }, at(2000), worn.world);
+      expect(r.ok, JSON.stringify(bad)).toBe(false);
+    }
+    // the control: a registered id in the same place IS recorded
+    expect(run(worn.state, worn.world, A, 'world.state', tick('shadow_flame'), 3000).state.users[A].profile.relayDog.skinId).toBe('shadow_flame');
+  });
+
+  it('privacy: outside the presence audience, or blocked either way, the card shows the base form -- exactly a private stranger', () => {
+    const { s, w } = loop();
+    let x = run(s, w, A, 'world.state', tick('jack_flame'), 300).state;
+    x = run(x, emptyWorldState(), A, 'privacy.update_self', { presenceVisibility: 'FRIENDS' }, 400).state;
+    expect([skinOn(x, B, A), skinOn(x, C, A), skinOn(x, A, A)]).toEqual(['jack_flame', 'relay_og', 'jack_flame']);
+    x = run(x, emptyWorldState(), A, 'privacy.update_self', { presenceVisibility: 'NOBODY' }, 500).state;
+    expect([skinOn(x, B, A), skinOn(x, A, A)]).toEqual(['relay_og', 'jack_flame']);
+    // blocked, either way: nothing (presence EVERYONE again, so only the block decides)
+    x = run(x, emptyWorldState(), A, 'privacy.update_self', { presenceVisibility: 'EVERYONE' }, 600).state;
+    expect(skinOn(x, C, A), 'control: the stranger sees it while nothing walls them').toBe('jack_flame');
+    const aBlocksC = run(x, emptyWorldState(), A, 'blocks.add', { targetId: C }, 700).state;
+    const cBlocksA = run(x, emptyWorldState(), C, 'blocks.add', { targetId: A }, 700).state;
+    expect([skinOn(aBlocksC, C, A), skinOn(cBlocksA, C, A)]).toEqual(['relay_og', 'relay_og']);
+    expect(skinOn(aBlocksC, B, A), 'a block between A and C changes nothing for B').toBe('jack_flame');
+    // the blocked side's card is a private stranger's, Dog included
+    const privateStranger = run(x, emptyWorldState(), A, 'privacy.update_self', { presenceVisibility: 'NOBODY' }, 800).state;
+    expect(resolveProfileFor(aBlocksC, C, A)?.profile).toEqual(resolveProfileFor(privateStranger, C, A)?.profile);
+  });
+
+  it('a skin change is told only to friends whose card moved: a friend outside the presence audience is not told', () => {
+    for (const hidden of [true, false]) {
+      const base = loop();
+      const w = base.w;
+      let s = base.s;
+      if (hidden) s = run(s, w, A, 'privacy.update_self', { presenceVisibility: 'NOBODY' }, 50).state;
+      const r = run(s, w, A, 'world.state', tick('baal'), 300);
+      expect(r.state.users[A].profile.relayDog.skinId, 'recorded either way: it is the player\'s own card').toBe('baal');
+      expect(r.audience.includes(B), `presence hidden from B: ${hidden}`).toBe(!hidden);
+    }
+  });
+
+  it('FROZEN WHILE HIDDEN: appearing offline, a new skin changes nothing others can read and tells nobody; visible again, it is recorded', () => {
+    const { s, w } = loop();
+    const worn = run(s, w, A, 'world.state', tick('baal'), 300);
+    const hidden = run(worn.state, worn.world, A, 'presence.update_self', { availability: 'APPEAR_OFFLINE' }, 400);
+    const r = run(hidden.state, worn.world, A, 'world.state', tick('skeleton_flame'), 600);
+    expect(r.state).toBe(hidden.state);
+    expect(r.audience).toEqual([]);
+    expect(skinOn(r.state, B, A)).toBe('baal');
+    // the control: the same report once visible again is recorded, and told
+    const back = run(r.state, r.world, A, 'presence.update_self', { availability: 'AVAILABLE' }, 700);
+    const shown = run(back.state, r.world, A, 'world.state', tick('skeleton_flame'), 900);
+    expect(skinOn(shown.state, B, A)).toBe('skeleton_flame');
+    expect(shown.audience).toContain(B);
+  });
+
+  it('FROZEN WHEN SIGNED OUT (R360-2: Appear Offline == sign-out): a tick still in flight after sign-out records nothing; signed back in, it is recorded', () => {
+    const { s, w } = loop();
+    const worn = run(s, w, A, 'world.state', tick('baal'), 300);
+    // a sign-out does not leave the world (presence.update_self has no leaveWorld), so the client's next tick is still answered
+    const out = run(worn.state, worn.world, A, 'presence.update_self', { connected: false }, 400);
+    expect(out.state.users[A].presence.connected).toBe(false);
+    const r = run(out.state, worn.world, A, 'world.state', tick('shadow_flame'), 600);
+    expect(r.world.avatars[A]?.skinId, 'the tick itself was taken').toBe('shadow_flame');
+    expect(r.state).toBe(out.state);
+    expect(r.audience).toEqual([]);
+    expect([skinOn(r.state, B, A), skinOn(r.state, C, A)]).toEqual(['baal', 'baal']);
+    // the control: signed back in, the same report is recorded and told
+    const back = run(r.state, r.world, A, 'presence.update_self', { connected: true }, 700);
+    const shown = run(back.state, r.world, A, 'world.state', tick('shadow_flame'), 900);
+    expect([skinOn(shown.state, B, A), skinOn(shown.state, C, A)]).toEqual(['shadow_flame', 'shadow_flame']);
+    expect(shown.audience).toContain(B);
+  });
+
+  it('a stored id outside the registry (a record written behind the store) is never served, not even to its owner', () => {
+    const { s } = loop();
+    const dog = { ...s.users[A].profile.relayDog, skinId: 'apollo' } as unknown as SocialState['users'][string]['profile']['relayDog'];
+    const tampered: SocialState = { ...s, users: { ...s.users, [A]: { ...s.users[A], profile: { ...s.users[A].profile, relayDog: dog } } } };
+    expect([skinOn(tampered, B, A), skinOn(tampered, A, A)]).toEqual(['relay_og', 'relay_og']);
+  });
+
+  it("RQ-1: a real player's primary Compound AI Agent is null (no agent configured) through the whole loop -- never a default Julius", () => {
+    const { s, w } = loop();
+    const after = run(s, w, A, 'world.state', tick('baal'), 300).state;
+    for (const viewer of [A, B, C]) expect(resolveProfileFor(after, viewer, A)?.profile.primaryAgent, viewer).toBeNull();
+    expect(buildSocialView(after, B, at(300), { developmentPreview: false }).profiles[A]?.profile.primaryAgent).toBeNull();
+    // the control: the resolver does carry an agent when a record has one (the preview fixture's synthetic Julius)
+    expect(resolveProfileFor(createSocialFixture(), U.KAI, U.NOVA)?.profile.primaryAgent?.kind).toBe('JULIUS');
   });
 });

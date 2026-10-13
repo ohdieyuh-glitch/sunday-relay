@@ -10,24 +10,25 @@
  * commands in and views out. Neither is imported here.
  */
 
-import type {
-  Conversation,
-  ConversationReadState,
-  FriendRelationship,
-  FriendRequest,
-  Message,
-  Party,
-  PartyInvite,
-  RecentPlayerEntry,
-  SocialAudience,
-  SocialBlock,
-  SocialMute,
-  SocialPrivacySettings,
-  SocialRelationship,
-  SocialReport,
-  SocialUserId,
-  UserPresence,
-  UserProfile,
+import {
+  PARTY_MAX_MEMBERS,
+  type Conversation,
+  type ConversationReadState,
+  type FriendRelationship,
+  type FriendRequest,
+  type Message,
+  type Party,
+  type PartyInvite,
+  type RecentPlayerEntry,
+  type SocialAudience,
+  type SocialBlock,
+  type SocialMute,
+  type SocialPrivacySettings,
+  type SocialRelationship,
+  type SocialReport,
+  type SocialUserId,
+  type UserPresence,
+  type UserProfile,
 } from './social-contracts';
 
 /** Everything known about one account. */
@@ -84,7 +85,8 @@ export function mintId(state: SocialState, prefix: string): { id: string; state:
  * client can send (a path segment, a body field), and a plain object answers for keys it never stored: users["constructor"] is
  * Object.prototype.constructor, users["__proto__"] is Object.prototype itself. hasUser("toString") was TRUE, and the read after it
  * dereferenced a function (a TypeError, so a 500). Every read with such an id goes through these: undefined (or none) unless the
- * record is the map's OWN. Party lookups are swept the same way on the voice branch (partyById), not here.
+ * record is the map's OWN. Party lookups go through partyById below, by the same rule (WL-351-01: a party id `constructor` is a
+ * clean 404 "party not found" on every party route, never a 500).
  */
 export const hasUser = (state: SocialState, userId: SocialUserId): boolean => Object.hasOwn(state.users, userId);
 
@@ -182,6 +184,55 @@ export function presenceHiddenFrom(state: SocialState, viewerId: SocialUserId, s
   const subject = userById(state, subjectId);
   if (subject === undefined) return true;
   return subject.presence.availability === 'APPEAR_OFFLINE' || !audienceAdmits(state, subject.privacy.presenceVisibility, viewerId, subjectId);
+}
+
+/**
+ * SEEN ONLINE BY THIS VIEWER: exactly when resolvePresenceFor shows the subject to the viewer as anything but OFFLINE -- connected,
+ * not blocked either way, and not presenceHiddenFrom the viewer. Not a second visibility model: it is the presence authority's own
+ * `online`, without the rest of the view, so the party rules below can ask it without recursing into the presence resolver
+ * (social-party-visibility.test.ts holds the two equal for every viewer and subject).
+ */
+export function seenOnlineBy(state: SocialState, viewerId: SocialUserId, subjectId: SocialUserId): boolean {
+  const subject = userById(state, subjectId);
+  if (subject === undefined || !subject.presence.connected) return false;
+  if (viewerId === subjectId) return true;
+  return !blockedEitherWay(state, viewerId, subjectId) && !presenceHiddenFrom(state, viewerId, subjectId);
+}
+
+/**
+ * A PARTY SEEN FROM OUTSIDE IT (WL-351-02, the independent review of #351, 10-13). A viewer who is not a member sees a party -- in
+ * the snapshot's visibleParties, a friend's presence and profile, parties.read, a Recent Players label -- and may join it, only
+ * when ALL of these hold:
+ *   - it is OPEN_TO_FRIENDS;
+ *   - nobody in it is blocked either way with the viewer (the wall, as before);
+ *   - its LEADER is seen online by the viewer (seenOnlineBy). An APPEAR_OFFLINE leader's party is not there, exactly as a
+ *     signed-out leader's is not: the founder's "Appear offline looks identical to a real sign-out". (The reviewer's repro: Nova,
+ *     hidden, started "Quiet", and every friend's next snapshot listed it, led by her.)
+ *   - a FRIEND of the viewer is among the members the viewer sees online, so the roster shown always holds the reason the party
+ *     is shown. A party listed for a friend who is hidden inside it would itself say "a friend of yours is in here";
+ *   - it has ROOM (MAIN's ruling on r1's question 2, 10-13). A full party is not there for an outsider at all: shown as "not
+ *     joinable" beside a visible roster with room, it would count the members hidden from them. Members still see it whole.
+ * The roster an outsider sees is the members they see online (partyRosterFor): nobody hidden from them (P1: a member hidden from
+ * strangers is no id, role, mute state or count to a stranger), and nobody offline either, so a member who goes Appear Offline
+ * leaves it exactly as one who signs out does. Members see their own party whole, as before.
+ */
+export function outsiderSeesParty(state: SocialState, viewerId: SocialUserId, party: Party): boolean {
+  if (party.privacy !== 'OPEN_TO_FRIENDS' || party.members.length >= PARTY_MAX_MEMBERS) return false;
+  if (party.members.some((m) => m.userId === viewerId || blockedEitherWay(state, viewerId, m.userId))) return false;
+  if (!seenOnlineBy(state, viewerId, party.leaderId)) return false;
+  return party.members.some((m) => areFriends(state, viewerId, m.userId) && seenOnlineBy(state, viewerId, m.userId));
+}
+
+/**
+ * THE MEMBERS OF A PARTY THIS VIEWER MAY SEE, and so may count. A member: everybody but whoever is blocked either way with them
+ * (F1, 10-02, unchanged). An outsider: nobody unless outsiderSeesParty, and then only the members they see online.
+ */
+export function partyRosterFor(state: SocialState, viewerId: SocialUserId, party: Party): Party['members'] {
+  if (party.members.some((m) => m.userId === viewerId)) {
+    return party.members.filter((m) => m.userId === viewerId || !blockedEitherWay(state, viewerId, m.userId));
+  }
+  if (!outsiderSeesParty(state, viewerId, party)) return [];
+  return party.members.filter((m) => seenOnlineBy(state, viewerId, m.userId));
 }
 
 export function friendIdsOf(state: SocialState, userId: SocialUserId): SocialUserId[] {
