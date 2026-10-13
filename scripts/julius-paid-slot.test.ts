@@ -5,9 +5,12 @@ import {
   decidePaidSlot,
   derivePaidRunState,
   parseRunTitle,
+  paidRunAttemptRefusal,
   pinnedModelsFrom,
   waitForPaidSlot,
 } from './julius-paid-slot.mjs';
+import { spawnSync } from 'node:child_process';
+import { resolve } from 'node:path';
 
 /**
  * THE PAID PROVIDER SLOT, PROVEN BY CALLING THE RULE.
@@ -270,5 +273,36 @@ describe('status says what is true, and no more', () => {
       '      RELAY_HERMES_MODEL: grok-build-0.1',
     ].join('\n');
     expect(pinnedModelsFrom(yaml)).toEqual({ architect: 'gpt-5.6-sol', coder: 'claude-fable-5', reviewerProvider: 'xai', reviewerModel: 'grok-build-0.1' });
+  });
+});
+
+/**
+ * A GITHUB RE-RUN OF A PAID ARM NEVER SPENDS AGAIN (Decision C, audit F4, 2026-10-13). A re-run keeps its run id, so
+ * its key is never a duplicate of itself, and arms 2-4 carry the typed rerun acknowledgement by design.
+ */
+describe('F4: only a first attempt is admitted', () => {
+  it('attempt "1" passes; any later attempt, and an unknown one, is refused', () => {
+    expect(paidRunAttemptRefusal('1')).toBeNull();
+    for (const later of ['2', '3', '17']) expect(paidRunAttemptRefusal(later), later).toBe('paid_slot_rerun_refused');
+    for (const unknown of [undefined, '', ' 1', '1 ', 'one', '01x']) expect(paidRunAttemptRefusal(unknown), String(unknown)).toBe('paid_slot_run_attempt_unknown');
+  });
+
+  it('the wait command refuses attempt 2 before it reads anything (exit 5), and lets attempt 1 through to the queue', () => {
+    const script = resolve(import.meta.dirname, 'julius-paid-slot.mjs');
+    const run = (attempt: string | undefined) => spawnSync(process.execPath, [script, 'wait', '--repo', 'owner/repo', '--run-id', '37300000002'], {
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '', ...(attempt === undefined ? {} : { GITHUB_RUN_ATTEMPT: attempt }) },
+    });
+    const second = run('2');
+    expect(second.status, second.stderr).toBe(5);
+    expect(second.stdout).toContain('paid_slot_rerun_refused: workflow run attempt 2 is not the first');
+    const unknown = run(undefined);
+    expect(unknown.status).toBe(5);
+    expect(unknown.stdout).toContain('paid_slot_run_attempt_unknown: workflow run attempt unknown');
+    // The first attempt passes the attempt check and stops at the next one (no token here), so no network is touched.
+    const first = run('1');
+    expect(first.status).toBe(2);
+    expect(first.stderr).toContain('paid_slot_refused: github_token_missing');
+    expect(first.stdout).not.toContain('paid_slot_rerun_refused');
   });
 });

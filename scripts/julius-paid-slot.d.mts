@@ -83,3 +83,6 @@ export declare class GitHubApiError extends Error {
   constructor(code: string);
   readonly code: string;
 }
+
+/** Null for a first attempt ("1"); a refusal reason for a re-run or an unknown attempt (audit F4). */
+export declare function paidRunAttemptRefusal(attempt: string | undefined): 'paid_slot_rerun_refused' | 'paid_slot_run_attempt_unknown' | null;

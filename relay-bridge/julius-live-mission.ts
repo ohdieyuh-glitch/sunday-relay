@@ -83,7 +83,7 @@ import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
   driveJuliusRunToTerminal,
-  liveTickBudgetFor, liveStageDeadline,
+  liveTickBudgetFor, liveStageDeadline, liveRunAttemptRefusal,
   recordJuliusLearningOutcome,
   resolveLiveWorkers,
 } from './julius/live-composition';
@@ -963,6 +963,14 @@ async function main(argv: readonly string[]): Promise<number> {
       return 1;
     }
     out(`Run ${submitted.runId} accepted in state ${submitted.state}; driving the Julius run loop.`);
+    /* A RE-RUN STOPS HERE, before any provider can be reached (audit F4): the bootstrap above wrote only to this job's
+       disposable database, and the drive below is the first thing that can spend. */
+    const rerunRefusal = liveRunAttemptRefusal(env);
+    if (rerunRefusal !== null) {
+      out(`RESULT: BLOCKED — ${rerunRefusal}`);
+      out(`  run: ${submitted.runId}`);
+      return 1;
+    }
 
     /**
      * THE TWO HALVES OF RESEARCH AUTHORITY, SUPPLIED SEPARATELY BECAUSE THEY

@@ -970,6 +970,18 @@ export function liveStageDeadline(input: {
   };
 }
 
+/**
+ * A GITHUB RE-RUN OF A PAID RUN NEVER REACHES A PROVIDER (Decision C, audit F4). "Re-run failed jobs" re-runs the paid
+ * job and REUSES the admission job's earlier success, so `paid-slot` (which refuses any attempt but the first) never
+ * sees it; this is the last check before the drive can reach a provider. Under GitHub Actions only an attempt of
+ * exactly "1" passes, and an absent one is refused; a local launch (no GITHUB_ACTIONS) is unaffected. Null to proceed.
+ */
+export function liveRunAttemptRefusal(env: Record<string, string | undefined>): string | null {
+  if (env.GITHUB_ACTIONS !== 'true' || env.GITHUB_RUN_ATTEMPT === '1') return null;
+  const attempt = /^[0-9]{1,6}$/u.test(env.GITHUB_RUN_ATTEMPT ?? '') ? env.GITHUB_RUN_ATTEMPT as string : 'unknown';
+  return `paid_run_rerun_refused: workflow run attempt ${attempt} is not the first; a re-run of a paid run never spends again. Dispatch a new run; no provider was contacted.`;
+}
+
 export interface DriveTickAccount {
   readonly plannedTicks: number;
   readonly hardMaxTicks: number;

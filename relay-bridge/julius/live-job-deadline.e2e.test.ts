@@ -39,6 +39,7 @@ import {
   JULIUS_JOB_STAMP_LAG_RESERVE_MS,
   JULIUS_LIVE_LEASE_SETTLEMENT_ALLOWANCE_MS,
   JULIUS_RESERVE_AFTER_LIVE_MS,
+  liveRunAttemptRefusal,
   liveStageDeadline,
   recordJuliusLearningOutcome,
   reviewerWorker,
@@ -198,5 +199,26 @@ describe('F3: the entrypoint derives the stop line from the job stamp and the wo
     const filtered = spawnSync(process.execPath, [join(ROOT, 'scripts/julius-live-evidence.mjs'), '-'], { input: `${lines.join('\n')}\n`, encoding: 'utf8' });
     expect(filtered.status, filtered.stderr).toBe(0);
     for (const line of lines) expect(filtered.stdout.split('\n'), line).toContain(line);
+  });
+});
+
+describe('F4: a GitHub re-run of a paid run stops before the drive, whichever jobs were re-run', () => {
+  it('under Actions only attempt "1" proceeds; a later or absent attempt is refused; a local launch is unaffected', () => {
+    expect(liveRunAttemptRefusal({ GITHUB_ACTIONS: 'true', GITHUB_RUN_ATTEMPT: '1' })).toBeNull();
+    expect(liveRunAttemptRefusal({ GITHUB_ACTIONS: 'true', GITHUB_RUN_ATTEMPT: '2' })).toMatch(/^paid_run_rerun_refused: workflow run attempt 2 is not the first/u);
+    expect(liveRunAttemptRefusal({ GITHUB_ACTIONS: 'true' })).toMatch(/^paid_run_rerun_refused: workflow run attempt unknown/u);
+    expect(liveRunAttemptRefusal({})).toBeNull();
+    expect(liveRunAttemptRefusal({ GITHUB_RUN_ATTEMPT: '2' }), 'off a runner the attempt means nothing').toBeNull();
+  });
+
+  it('the entrypoint checks it after the bootstrap and before the runtime and the drive, and says so as a RESULT the allowlist keeps', () => {
+    const entry = readFileSync(join(ROOT, 'relay-bridge/julius-live-mission.ts'), 'utf8');
+    const check = entry.indexOf('const rerunRefusal = liveRunAttemptRefusal(env);');
+    expect(check).toBeGreaterThan(entry.indexOf('const submitted = await bootstrap.submit(request);'));
+    expect(check).toBeLessThan(entry.indexOf('const runtime = assembleLiveJuliusRuntime({'));
+    expect(check).toBeLessThan(entry.indexOf('const outcome = await driveJuliusRunToTerminal({'));
+    const line = `RESULT: BLOCKED — ${liveRunAttemptRefusal({ GITHUB_ACTIONS: 'true', GITHUB_RUN_ATTEMPT: '2' })}`;
+    const filtered = spawnSync(process.execPath, [join(ROOT, 'scripts/julius-live-evidence.mjs'), '-'], { input: `${line}\n`, encoding: 'utf8' });
+    expect(filtered.stdout.split('\n')).toContain(line);
   });
 });

@@ -339,13 +339,31 @@ export function pinnedModelsFrom(workflowText) {
   };
 }
 
+/* ------------------------------------------------------------ re-runs --- */
+
+/**
+ * A PAID RUN IS ADMITTED ON ITS FIRST ATTEMPT ONLY (Decision C, audit F4).
+ *
+ * A GitHub "Re-run" keeps the run id, so its own dispatch key is never a duplicate of itself, and it inherits the
+ * typed acknowledgement a C arm 2-4 is dispatched with: every guard above let it spend again under the same Julius
+ * run. `GITHUB_RUN_ATTEMPT` is the Actions default variable every step receives (1 on the first attempt, then 2, 3, …),
+ * so an attempt that is not exactly "1" is refused before the queue is read, and nothing is spent. Absent or malformed
+ * is unknown, and unknown is refused. A deliberate repeat is a NEW dispatch, with its own key.
+ *
+ * "Re-run failed jobs" does not re-run a `paid-slot` that succeeded; the live entrypoint refuses that case itself.
+ */
+export function paidRunAttemptRefusal(attempt) {
+  if (attempt === '1') return null;
+  return typeof attempt === 'string' && /^[0-9]{1,6}$/u.test(attempt) ? 'paid_slot_rerun_refused' : 'paid_slot_run_attempt_unknown';
+}
+
 /* ----------------------------------------------------------- the waiting --- */
 
 /**
  * Wait for admission. Everything with a side effect is injected, so the loop's
  * fail-closed properties are tested with a fake clock rather than believed.
  *
- * Exit codes: 0 admitted, 3 duplicate dispatch, 4 waited too long.
+ * Exit codes: 0 admitted, 3 duplicate dispatch, 4 waited too long (and, from the CLI, 5: a re-run attempt refused).
  */
 export async function waitForPaidSlot({
   readState, sleep, now, log,
@@ -540,6 +558,12 @@ async function runWait(argv, env) {
   if (typeof repo !== 'string' || !REPO.test(repo) || !isRunId(runId) || !Number.isFinite(maxWaitMinutes) || maxWaitMinutes <= 0) {
     process.stderr.write('usage: julius-paid-slot.mjs wait --repo <owner/repo> --run-id <id> [--max-wait-minutes N]\n');
     return 2;
+  }
+  const rerun = paidRunAttemptRefusal(env.GITHUB_RUN_ATTEMPT);
+  if (rerun !== null) {
+    const attempt = typeof env.GITHUB_RUN_ATTEMPT === 'string' && /^[0-9]{1,6}$/u.test(env.GITHUB_RUN_ATTEMPT) ? env.GITHUB_RUN_ATTEMPT : 'unknown';
+    process.stdout.write(`${rerun}: workflow run attempt ${attempt} is not the first; a re-run of a paid run never spends again. Dispatch a new run with a new key; nothing was spent.\n`);
+    return 5;
   }
   let api;
   try { api = createGitHubTransport({ token: env.GH_TOKEN }); } catch (error) {
