@@ -1347,6 +1347,73 @@ describe('R4: no secret in any response or log line', () => {
     clientPage(events.body, ASKED);
     clientResult(result.body, RUN);
   });
+
+  /*
+   * THE ROOTS THE FIRST LIST MISSED (internal verify m2): a container's working directory (/app, the Railway/Nixpacks
+   * default), GitHub's container jobs (/github, /__w), /nix and /builds, macOS's /Library, /System and /Applications,
+   * and a home-relative ~/ path. Each is seeded, one shape per request set, into every field the block above seeds;
+   * on /events it travels as `attempt`, the one carried fact that is neither a code key nor a role, so ONLY the
+   * host-path rule stands between it and the body. Every private segment carries `m2founder` or `m2dir-`.
+   */
+  const M2_HOST_PATHS: ReadonlyArray<readonly [string, string, string]> = [
+    ['a container working directory', '/app/m2founder/m2dir-app/server.env', 'server.env'],
+    ['a GitHub container job', '/github/workspace/m2founder/m2dir-github/out.log', 'out.log'],
+    ['a GitHub runner work tree', '/__w/m2founder/m2dir-w/build.log', 'build.log'],
+    ['the Nix store', '/nix/store/m2founder-m2dir-nix/bin/run.sh', 'run.sh'],
+    ['a GitLab runner build tree', '/builds/m2founder/m2dir-builds/job.log', 'job.log'],
+    ['macOS /Library', '/Library/m2founder/m2dir-lib/prefs.plist', 'prefs.plist'],
+    ['macOS /System', '/System/m2founder/m2dir-sys/kext.txt', 'kext.txt'],
+    ['macOS /Applications', '/Applications/m2founder/m2dir-apps/app.cfg', 'app.cfg'],
+    ['a home-relative path', '~/m2founder/m2dir-home/notes.md', 'notes.md'],
+    ['a home-relative path, Windows separators', '~\\m2founder\\m2dir-homewin\\notes.md', 'notes.md'],
+  ];
+  const M2_PRIVATE = /m2founder|m2dir-/u;
+
+  for (const [shape, path, name] of M2_HOST_PATHS) {
+    it(`hydrate, events and result carry no part of ${shape}, and no log line does; the fields still cross (verify m2)`, async () => {
+      const ledger: Ledger = {
+        gates: [{ gate_id: 'approval-1', task_id: 'task-build', operation: 'EXECUTE_PROCESS', reason_code: path, requested_at: AT }],
+        events: [
+          flatEvent(1, 'run.created', { missionId: 'mission:alpha' }),
+          flatEvent(2, 'run.transitioned', { to: 'EXECUTING', reasonCode: path, attempt: path }),
+        ],
+      };
+      const view: JuliusMissionResultView = {
+        ...VIEW,
+        state: 'FAILED', verified: false,
+        criteria: [{ ...VIEW.criteria[0], description: `Reads ${path}` }, VIEW.criteria[1]],
+        deliverables: [{ ...VIEW.deliverables[0], safeSummary: `Wrote ${path}`, artifactRef: path }],
+        outstandingFindings: [{ findingId: 'finding-1', taskId: 'task-build', claim: `Missing ${path}`, severity: 'HIGH' }],
+        reviewDecisions: [{ taskId: 'task-build', action: 'HALT', reasonCode: path }],
+        failure: { reasonCode: path, failureClass: path },
+      };
+      const logged: string[] = [];
+      const bodies = new Map<string, string>();
+      for (const route of ['hydrate', 'events', 'result'] as const) {
+        const { status, body } = await asClient(route, {
+          world: worldOver(ledgerPool(ledger), OWNER, view),
+          log: (line) => logged.push(line),
+          onAuthorization: (decision) => logged.push(JSON.stringify(decision)),
+        });
+        expect(status, `${shape}, ${route}: ${body}`).toBe(200);
+        expect(body, `${route} keeps part of ${shape}`).not.toMatch(M2_PRIVATE);
+        expect(body.includes(JSON.stringify(path).slice(1, -1)), `${route} carries ${shape}`).toBe(false);
+        bodies.set(route, body);
+      }
+      for (const line of logged) expect(line, `a log line keeps part of ${shape}: ${line}`).not.toMatch(M2_PRIVATE);
+      // CONTROL, per shape: the fields still cross -- the transition with both of its paths dropped and counted,
+      // /result's text cut back to the file name -- and both bodies still decode by the client's rules.
+      const deliveries = JSON.parse(bodies.get('events')!).data.deliveries as Array<{ envelope: { sequence: number; metadata: Record<string, unknown>; metadataDropped: number } }>;
+      const transition = deliveries.find((delivery) => delivery.envelope.sequence === 2)?.envelope;
+      expect(transition?.metadata, shape).toEqual({ juliusEventType: 'run.transitioned', runId: RUN, juliusRunState: 'EXECUTING' });
+      expect(transition?.metadataDropped, shape).toBe(2);
+      const data = JSON.parse(bodies.get('result')!).data as { deliverables: Array<{ summary: string }>; failure: { reasonCode: string } };
+      expect(data.deliverables[0].summary, shape).toBe(`Wrote …/${name}`);
+      expect(data.failure.reasonCode, shape).toBe(`…/${name}`);
+      clientPage(bodies.get('events')!, ASKED);
+      clientResult(bodies.get('result')!, RUN);
+    });
+  }
 });
 
 /* ===================================================================== */

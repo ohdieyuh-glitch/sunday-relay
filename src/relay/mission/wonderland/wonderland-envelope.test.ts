@@ -195,6 +195,38 @@ describe('metadata sanitising', () => {
     }
   });
 
+  // THE HOST ROOTS THE FIRST LIST MISSED (internal verify m2), one test per shape, each under a key that is NOT a
+  // code key, so only the host-path rule can drop it.
+  for (const [shape, path] of [
+    ['a container working directory (Railway/Nixpacks)', '/app/m2founder/m2dir-app/server.env'],
+    ['a GitHub container job', '/github/workspace/m2founder/m2dir-github/out.log'],
+    ['a GitHub runner work tree', '/__w/m2founder/m2dir-w/build.log'],
+    ['the Nix store', '/nix/store/m2founder-m2dir-nix/bin/run.sh'],
+    ['a GitLab runner build tree', '/builds/m2founder/m2dir-builds/job.log'],
+    ['macOS /Library', '/Library/m2founder/m2dir-lib/prefs.plist'],
+    ['macOS /System', '/System/m2founder/m2dir-sys/kext.txt'],
+    ['macOS /Applications', '/Applications/m2founder/m2dir-apps/app.cfg'],
+    ['a home-relative path', '~/m2founder/m2dir-home/notes.md'],
+    ['a home-relative path, Windows separators', '~\\m2founder\\m2dir-homewin\\notes.md'],
+    ['a home-relative path inside prose', 'wrote ~/m2founder/m2dir-prose/notes.md today'],
+  ] as const) {
+    it(`drops ${shape} under any key (verify m2)`, () => {
+      expect(sanitizeWonderlandMetadata({ detail: path, kept: 'BUILD_SUBMITTED' }))
+        .toEqual({ metadata: { kept: 'BUILD_SUBMITTED' }, dropped: 1 });
+    });
+  }
+
+  it('CONTROL: text that only LOOKS near the roots verify m2 added still crosses', () => {
+    // A route, a URL, a relative path under an `apps` or `app` directory of the project's own, a MIME type, an
+    // approximation, a bare root with nothing under it.
+    for (const text of [
+      'the /api/users route', 'see https://example.com/app/page', 'apps/web/src/app.ts', 'src/app/main.ts',
+      'application/json', '~5/10 checks', 'about ~ 3 files', 'deployed to /app', 'path.to/app/x', 'v1.2/app/x',
+    ]) {
+      expect(sanitizeWonderlandMetadata({ detail: text }), text).toEqual({ metadata: { detail: text }, dropped: 0 });
+    }
+  });
+
   it('the CODE keys -- reasonCode, severity, outcome -- carry a code or nothing, and a drop is counted (review M3, R4)', () => {
     // A code: the human gate's shape, in either case (the kernel writes EVIDENCE_FAILED and checkpoint_identity_required).
     for (const code of ['PLAN_ACCEPTED', 'checkpoint_identity_required', 'HIGH', 'accepted', 'v1.2']) {

@@ -542,10 +542,31 @@ describe('trimHostPaths', () => {
       .toEqual({ text: 'a \u2026/z.txt b \u2026/r.md c \u2026/s.doc d \u2026/t.log', trimmed: 4 });
   });
 
+  // The host roots the first list missed (internal verify m2), one test per shape.
+  for (const [path, name] of [
+    ['/app/m2founder/m2dir-app/server.env', 'server.env'],
+    ['/github/workspace/m2founder/m2dir-github/out.log', 'out.log'],
+    ['/__w/m2founder/m2dir-w/build.log', 'build.log'],
+    ['/nix/store/m2founder-m2dir-nix/bin/run.sh', 'run.sh'],
+    ['/builds/m2founder/m2dir-builds/job.log', 'job.log'],
+    ['/Library/m2founder/m2dir-lib/prefs.plist', 'prefs.plist'],
+    ['/System/m2founder/m2dir-sys/kext.txt', 'kext.txt'],
+    ['/Applications/m2founder/m2dir-apps/app.cfg', 'app.cfg'],
+    ['~/m2founder/m2dir-home/notes.md', 'notes.md'],
+    ['~\\m2founder\\m2dir-homewin\\notes.md', 'notes.md'],
+  ] as const) {
+    it(`cuts ${path} back to its file name (verify m2)`, () => {
+      expect(trimHostPaths(`read ${path}.`)).toEqual({ text: `read …/${name}.`, trimmed: 1 });
+    });
+  }
+
   it('CONTROL: leaves the project\'s own relative paths, URLs and ordinary prose alone', () => {
+    // `a ~/notes file` was a CONTROL here until verify m2: a home-relative path names the home directory of
+    // whoever ran the mission, so it is a host path now (the row above) and no longer prose.
     for (const text of [
       'edited src/app.ts and docs/readme.md', 'see https://example.com/home/page', 'ratio 3:4 at 10:30',
-      'the /api/users route', 'a ~/notes file',
+      'the /api/users route', 'see https://example.com/app/page', 'apps/web/src/app.ts', 'src/app/main.ts',
+      'application/json', '~5/10 checks', 'about ~ 3 files', 'deployed to /app', 'path.to/app/x', 'v1.2/app/x',
     ]) {
       expect(trimHostPaths(text), text).toEqual({ text, trimmed: 0 });
     }
