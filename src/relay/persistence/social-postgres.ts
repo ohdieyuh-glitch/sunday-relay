@@ -24,6 +24,7 @@ import { applySocialOperation, type SocialCommandInput } from '../social/social-
 import { emptySocialState, hasUser, type SocialState, type SocialUserRecord } from '../social/social-state';
 import { ensureSocialUser, tellAfterCommit, viewerCursor, type SocialAfterCommit, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
 import { emptyWorldState, type WorldState } from '../social/world-presence';
+import { protectedStoreWriterGuard } from './protected-store-writer-guard';
 
 /**
  * WONDERLAND SOCIAL, DURABLE: the social store over PostgreSQL (wonderland-migrations/033_wonderland_social.sql).
@@ -430,8 +431,12 @@ export interface SocialPostgresOptions {
   readonly afterCommit?: SocialAfterCommit;
 }
 
-/** Read every social row back and serve the store. THROWS when the database cannot be reached (the route answers 503). */
+/**
+ * Read every social row back and serve the store. THROWS when the database cannot be reached, or when it is a protected store
+ * (C2: the Julius live store never holds social data), BEFORE reading anything. The route then answers 503.
+ */
 export async function openSocialPostgresStore(pool: Pool, options: SocialPostgresOptions = {}): Promise<SocialStore> {
+  await protectedStoreWriterGuard(pool, 'the social store')();
   let state = await loadState(pool);
   // THE SHARED PRESENCE LAYER is real-time and in memory only: a restart empties it, and clients rejoin.
   let world: WorldState = emptyWorldState();

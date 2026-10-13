@@ -124,6 +124,15 @@ export function partyOf(state: SocialState, userId: SocialUserId): Party | undef
   return Object.values(state.parties).find((p) => p.members.some((m) => m.userId === userId));
 }
 
+/**
+ * The party with this id, or undefined. An OWN key only: a request's party id such as `constructor` or `__proto__` matches the
+ * route's id shape ([A-Za-z0-9_-]{1,80}), and a plain `state.parties[id]` hands back what Object.prototype holds under that
+ * name -- a TypeError (a 500, without no-store) where the answer is "party not found" (MAIN's internal review a6d5842c, m4).
+ */
+export function partyById(state: SocialState, partyId: string): Party | undefined {
+  return Object.hasOwn(state.parties, partyId) ? state.parties[partyId] : undefined;
+}
+
 export const sharePartyWith = (state: SocialState, a: SocialUserId, b: SocialUserId): boolean => {
   const party = partyOf(state, a);
   return party !== undefined && party.members.some((m) => m.userId === b);

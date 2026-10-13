@@ -98,6 +98,8 @@ export function createDevSocialServer(durable?: { store: SocialStore; pool: Pool
           sessions.set(token, {
             sessionId: token.slice(-8),
             participantId: `usr_${player}`,
+            // when it was issued: every session producer says so (af2eb058 m-d), the development one included
+            issuedAtMs: Date.now(),
             capabilities: [NATIVE_SOCIAL_CAPABILITY],
             displayName: player.replace(/^./, (c) => c.toUpperCase()),
           });
@@ -107,6 +109,8 @@ export function createDevSocialServer(durable?: { store: SocialStore; pool: Pool
           { method: req.method ?? 'GET', path, authorization: req.headers.authorization, origin: undefined, body, now: Date.now() },
           {
             verifySession: (token) => sessions.get(token) ?? null,
+            // this server has no party voice (no minter, no bindings: voice answers 503), so nothing asks for a binding's session
+            sessionIssuedAt: null,
             identify: async (participantId) => {
               const facts = [...sessions.values()].find((s) => s.participantId === participantId);
               return facts === undefined ? null : { userId: participantId, displayName: facts.displayName, handle: `@${participantId.replace(/^usr_/, '')}` };
