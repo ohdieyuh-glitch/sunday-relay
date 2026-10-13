@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { WonderlandJuliusReaderPostgres } from '../src/relay/persistence/wonderland-julius-reader-postgres';
 import { projectJuliusTaskState } from '../src/relay/mission/wonderland/wonderland-julius-task-state';
-import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
+import { juliusTestDatabaseNamesLiveStore, juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { composeJuliusMissionBootstrap, handleJuliusMissionRoute } from './julius-mission-routes';
 import {
   WONDERLAND_JULIUS_READ_ONLY_BEGIN,
@@ -38,17 +38,16 @@ import {
  * which must name a throwaway database, and nothing else -- never DATABASE_URL,
  * which on the development laptop points at the persistent Julius store. Without
  * it the suite is `todo`: a proof not taken, never a pass. As a second guard it
- * still refuses anything that looks like the live `julius` database outright.
+ * still refuses a database NAMED like the live store, `julius`, outright -- by its
+ * name, never its port: CI's own throwaway is `julius-postgres:5432/julius_suites`,
+ * which a port rule refused (#348's first CI run; `juliusTestDatabaseNamesLiveStore`).
  */
 
 const url = juliusTestDatabaseUrl();
 const enabled = url !== null;
 
-if (enabled) {
-  const parsed = new URL(url as string);
-  if (parsed.port === '5432' || parsed.pathname === '/julius') {
-    throw new Error('refusing to run against what looks like the live julius database');
-  }
+if (enabled && juliusTestDatabaseNamesLiveStore(url as string)) {
+  throw new Error('refusing to run against what looks like the live julius database');
 }
 
 const suite = enabled ? describe : describe.todo;
