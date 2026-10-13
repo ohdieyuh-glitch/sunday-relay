@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **223 production files** across 20/20 subsystems (2 roots, 191 traced, 8 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **224 production files** across 20/20 subsystems (2 roots, 192 traced, 8 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -394,6 +394,7 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/project-brain-components-postgres.ts` | traced | `src/relay/persistence/project-brain-postgres.ts` |
 | `src/relay/persistence/project-brain-pg-shared.ts` | traced | `src/relay/persistence/project-brain-components-postgres.ts` |
 | `src/relay/persistence/project-brain-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
+| `src/relay/persistence/protected-store.ts` | traced | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/redaction.ts` | traced | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-migrations/011_julius_runtime.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
 | `src/relay/persistence/wonderland-migrations/012_julius_recovery.sql` | asset (path-loaded) | `src/relay/persistence/wonderland-postgres.ts` |
@@ -471,6 +472,7 @@ C.A.R.D. roles resolved to live adapters — fail closed, naming every missing v
 - **pre-Julius schema** — `001_wonderland_runtime.sql`, `002_wonderland_outbox.sql`, `003_wonderland_budget_reservations.sql`, `004_wonderland_ratings.sql`, `005_wonderland_inventory.sql`, `006_wonderland_eval_runtime.sql`, `007_wonderland_provider_operations.sql`, `008_wonderland_swarm_scheduler.sql`, `009_wonderland_gve_runs.sql`, `010_wonderland_hidden_fixtures.sql` under `src/relay/persistence/wonderland-migrations/`: registered by the same migration runner and applied in order before the Julius migrations; Julius tables reference `relay_wonderland.projects`, `mission_contracts` and `budget_reservations` defined there.
 - **non-Julius schema** — `017_gauntlet_command.sql` under `src/relay/persistence/wonderland-migrations/`: registered by the same migration runner, which applies every migration in numeric order; the Gauntlet Loop's own storage (`relay_wonderland.gauntlet_runs` and `gauntlet_rounds`). Its foreign keys point at `julius_runs` and `julius_tasks`, and no Julius migration references it; deliberately not Julius's.
 - **non-Julius schema** — `033_wonderland_social.sql` under `src/relay/persistence/wonderland-migrations/`: registered by the same migration runner, which applies every migration in numeric order; Wonderland Social's own storage: 17 additive `relay_wonderland.social_*` tables referencing only `relay_wonderland.players` and each other; deliberately not Julius's.
+- **non-Julius schema** — `035_wonderland_voice.sql` under `src/relay/persistence/wonderland-migrations/`: registered by the same migration runner, which applies every migration in numeric order; Wonderland party voice's own storage: 1 additive `relay_wonderland.voice_puid_binding` table referencing only `relay_wonderland.players`; deliberately not Julius's.
 
 Named "julius", outside the harness (no kernel dependency, or CI/test drivers):
 

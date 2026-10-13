@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { sanitizeText } from './redaction';
+import { protectedStoreRole, ProtectedStoreMigrationRefused, storeIdentity } from './protected-store';
 import { join } from 'node:path';
 import { Pool, type PoolConfig, type QueryResultRow } from 'pg';
 import type { ProviderUsageReceipt, WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
@@ -60,7 +61,14 @@ export const WONDERLAND_MIGRATION_032 = migration('032_julius_outbox_event_delet
 // 033 (the founder's canonical ruling, 2026-10-04 16:30Z: 031 Julius 13(i), 032 the 030 trigger fix, 033 social, 034 Project Brain, 035 voice).
 export const WONDERLAND_MIGRATION_033 = migration('033_wonderland_social.sql');
 export const WONDERLAND_MIGRATION_034 = migration('034_project_brain_components.sql');
-export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011, WONDERLAND_MIGRATION_012, WONDERLAND_MIGRATION_013, WONDERLAND_MIGRATION_014, WONDERLAND_MIGRATION_015, WONDERLAND_MIGRATION_016, WONDERLAND_MIGRATION_017, WONDERLAND_MIGRATION_018, WONDERLAND_MIGRATION_019, WONDERLAND_MIGRATION_020, WONDERLAND_MIGRATION_021, WONDERLAND_MIGRATION_022, WONDERLAND_MIGRATION_023, WONDERLAND_MIGRATION_024, WONDERLAND_MIGRATION_025, WONDERLAND_MIGRATION_026, WONDERLAND_MIGRATION_028, WONDERLAND_MIGRATION_029, WONDERLAND_MIGRATION_030, WONDERLAND_MIGRATION_031, WONDERLAND_MIGRATION_032, WONDERLAND_MIGRATION_033, WONDERLAND_MIGRATION_034] as const;
+// WONDERLAND PARTY VOICE (R16, EOS): which EOS ProductUserId belongs to which signed-in player -- one additive table, the next
+// after 034. Its own guard checks ORDER only (034 applied and last); it is migrate()'s protected-store refusal
+// (protected-store.ts) that keeps it off the Julius live store, which gets it -- empty, never written -- only through its own
+// reviewed, founder-approved apply (the founder, 2026-10-11: one chain, full review).
+export const WONDERLAND_MIGRATION_035 = migration('035_wonderland_voice.sql');
+export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011, WONDERLAND_MIGRATION_012, WONDERLAND_MIGRATION_013, WONDERLAND_MIGRATION_014, WONDERLAND_MIGRATION_015, WONDERLAND_MIGRATION_016, WONDERLAND_MIGRATION_017, WONDERLAND_MIGRATION_018, WONDERLAND_MIGRATION_019, WONDERLAND_MIGRATION_020, WONDERLAND_MIGRATION_021, WONDERLAND_MIGRATION_022, WONDERLAND_MIGRATION_023, WONDERLAND_MIGRATION_024, WONDERLAND_MIGRATION_025, WONDERLAND_MIGRATION_026, WONDERLAND_MIGRATION_028, WONDERLAND_MIGRATION_029, WONDERLAND_MIGRATION_030, WONDERLAND_MIGRATION_031, WONDERLAND_MIGRATION_032, WONDERLAND_MIGRATION_033, WONDERLAND_MIGRATION_034, WONDERLAND_MIGRATION_035] as const;
+/** What the reviewed EMPTY-store bootstrap verified before it migrates (julius-bootstrap-empty-store.ts). */
+export interface ReviewedBootstrapIdentity { readonly database: string; readonly systemIdentifier: string; }
 export interface ClaimedOutbox { outboxId: string; eventId: string; projectId: string; attempts: number; }
 export interface BudgetAmounts { inputTokens: number; cachedTokens: number; outputTokens: number; usdMicros: number; toolCalls: number; computeMs: number; runtimeMs: number; swarmWorkers: number; }
 export interface BudgetReservation { reservationId: string; executionId: string; state: 'RESERVED' | 'COMMITTED' | 'RELEASED' | 'EXPIRED' | 'DENIED'; requested: BudgetAmounts; committed: BudgetAmounts | null; expiresAt: string; receiptId: string | null; denialReason: string | null; }
@@ -257,14 +265,29 @@ export class TransactionalWonderlandDatabase {
    * chain test guarantees every migration stamps its own filename version, so
    * the version read here is the one the file writes.
    */
-  async migrate(): Promise<void> {
+  async migrate(options: { readonly reviewedBootstrap?: ReviewedBootstrapIdentity } = {}): Promise<void> {
     if (WONDERLAND_MIGRATIONS.some(sql => sql === '')) throw new Error('wonderland_migration_not_packaged');
     const applied = await this.appliedMigrationVersions();
-    for (const sql of WONDERLAND_MIGRATIONS) {
+    const missing = WONDERLAND_MIGRATIONS.filter((sql) => {
       const version = migrationVersion(sql);
-      if (version !== null && applied.has(version)) continue;
-      await this.pool.query(sql);
+      return version === null || !applied.has(version);
+    });
+    // a store already at the chain's head is never refused: nothing would run
+    if (missing.length === 0) return;
+    // A PROTECTED STORE (the Julius live store) is never changed by a runner (protected-store.ts; the founder, 2026-10-11).
+    // The ONE exception is the reviewed bootstrap of a store verified EMPTY, which names the exact identity it verified.
+    const role = await protectedStoreRole(this.pool);
+    if (role !== null && !(applied.size === 0 && await this.isReviewedBootstrap(options.reviewedBootstrap))) {
+      throw new ProtectedStoreMigrationRefused(role, missing.map((sql) => migrationVersion(sql) ?? '(unversioned)'));
     }
+    for (const sql of missing) await this.pool.query(sql);
+  }
+
+  /** True only when the bootstrap's verified identity IS this database's identity, read now. */
+  private async isReviewedBootstrap(expected: ReviewedBootstrapIdentity | undefined): Promise<boolean> {
+    if (expected === undefined) return false;
+    const now = await storeIdentity(this.pool);
+    return now.systemIdentifier !== null && now.database === expected.database && now.systemIdentifier === expected.systemIdentifier;
   }
 
   /** Empty when the schema — or the ledger table itself — does not exist yet. */

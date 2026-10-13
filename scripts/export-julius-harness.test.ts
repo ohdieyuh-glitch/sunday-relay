@@ -218,11 +218,12 @@ const PRE_JULIUS = [
 const LINE_PRE = `- **pre-Julius schema** — ${PRE_JULIUS.map((name) => `\`${name}\``).join(', ')} under \`${MIGRATION_DIR}\`: registered by the same migration runner and applied in order before the Julius migrations; Julius tables reference \`relay_wonderland.projects\`, \`mission_contracts\` and \`budget_reservations\` defined there.`;
 const LINE_017 = `- **non-Julius schema** — \`017_gauntlet_command.sql\` under \`${MIGRATION_DIR}\`: registered by the same migration runner, which applies every migration in numeric order; the Gauntlet Loop's own storage (\`relay_wonderland.gauntlet_runs\` and \`gauntlet_rounds\`). Its foreign keys point at \`julius_runs\` and \`julius_tasks\`, and no Julius migration references it; deliberately not Julius's.`;
 const LINE_033 = `- **non-Julius schema** — \`033_wonderland_social.sql\` under \`${MIGRATION_DIR}\`: registered by the same migration runner, which applies every migration in numeric order; Wonderland Social's own storage: 17 additive \`relay_wonderland.social_*\` tables referencing only \`relay_wonderland.players\` and each other; deliberately not Julius's.`;
+const LINE_035 = `- **non-Julius schema** — \`035_wonderland_voice.sql\` under \`${MIGRATION_DIR}\`: registered by the same migration runner, which applies every migration in numeric order; Wonderland party voice's own storage: 1 additive \`relay_wonderland.voice_puid_binding\` table referencing only \`relay_wonderland.players\`; deliberately not Julius's.`;
 const MIGRATION_034 = '034_project_brain_components.sql';
-/** A synthetic registration in the real shape: Julius from 011 on (034 by the list), 017 and 033 interleaved. */
+/** A synthetic registration in the real shape: Julius from 011 on (034 by the list), 017, 033 and 035 (voice, after 034) not Julius's. */
 const SHAPE = {
   julius: ['011_julius_runtime.sql', '016_julius_subagents.sql', '018_julius_lifecycle.sql', '032_julius_outbox_event_delete_forgets.sql', MIGRATION_034],
-  excluded: [...PRE_JULIUS, '017_gauntlet_command.sql', '033_wonderland_social.sql'],
+  excluded: [...PRE_JULIUS, '017_gauntlet_command.sql', '033_wonderland_social.sql', '035_wonderland_voice.sql'],
   dir: MIGRATION_DIR,
 };
 
@@ -298,30 +299,33 @@ describe('the Julius schema migrations, and one true manifest line for every oth
       .toContain(`# PATH:      ${path}\n# SUBSYSTEM: 18 PERSISTENCE\n# ROLE:      asset — ${JULIUS_SCHEMA_MIGRATION_REASONS[MIGRATION_034]}\n`);
   });
 
-  it('the generated map: pre-Julius is 001-010 only, 017 and 033 each get their own true line, and 034 is in neither sentence', () => {
+  it('the generated map: pre-Julius is 001-010 only, 017, 033 and 035 each get their own true line, and 034 is in neither sentence', () => {
     const lines = readFileSync(manifestPath, 'utf8').split('\n')
       .filter((line) => line.startsWith('- **pre-Julius schema**') || line.startsWith('- **non-Julius schema'));
-    expect(lines).toEqual([LINE_PRE, LINE_017, LINE_033]);
+    expect(lines).toEqual([LINE_PRE, LINE_017, LINE_033, LINE_035]);
     for (const line of lines) {
       expect(line, 'a Julius schema migration is never described as not Julius').not.toContain('034_');
-      expect(line, 'no voice storage exists before 035').not.toContain('voice');
+      if (line !== LINE_035) expect(line, 'no voice storage exists before 035, and only 035\'s line says voice').not.toContain('voice');
     }
   });
 
-  it('the describer gives 033 its exact line, and the K2 knock-on cannot pull 033 into "pre-Julius"', () => {
-    // 034 is now the LAST Julius migration. The split anchors on the FIRST one, so 033 (< 034) keeps its own line.
-    expect(describeNonJuliusMigrations(SHAPE)).toEqual([LINE_PRE, LINE_017, LINE_033]);
+  it('the describer gives 033 and 035 their exact lines, and the K2 knock-on cannot pull 033 into "pre-Julius"', () => {
+    // 034 is the LAST Julius migration. The split anchors on the FIRST one, so 033 (< 034) and 035 (> 034) each keep their own line.
+    expect(describeNonJuliusMigrations(SHAPE)).toEqual([LINE_PRE, LINE_017, LINE_033, LINE_035]);
     expect(NON_JULIUS_MIGRATION_DESCRIPTIONS['033_wonderland_social.sql'])
       .toBe("Wonderland Social's own storage: 17 additive `relay_wonderland.social_*` tables referencing only `relay_wonderland.players` and each other");
+    expect(NON_JULIUS_MIGRATION_DESCRIPTIONS['035_wonderland_voice.sql'])
+      .toBe("Wonderland party voice's own storage: 1 additive `relay_wonderland.voice_puid_binding` table referencing only `relay_wonderland.players`");
   });
 
   it('fails closed: an undescribed later migration, a stale line, no Julius anchor and an unnumbered name each throw', () => {
-    // CONTROL: 035 with its OWN line is accepted, and printed as its own line.
-    const withVoice = { ...SHAPE, excluded: [...SHAPE.excluded, '035_wonderland_voice.sql'] };
-    expect(describeNonJuliusMigrations({ ...withVoice, descriptions: { ...NON_JULIUS_MIGRATION_DESCRIPTIONS, '035_wonderland_voice.sql': 'probe' } }).at(-1))
-      .toBe(`- **non-Julius schema** — \`035_wonderland_voice.sql\` under \`${MIGRATION_DIR}\`: registered by the same migration runner, which applies every migration in numeric order; probe; deliberately not Julius's.`);
-    expect(() => describeNonJuliusMigrations(withVoice)).toThrow(/no manifest description .*: 035_wonderland_voice\.sql$/);
-    expect(() => describeNonJuliusMigrations({ ...SHAPE, excluded: [...PRE_JULIUS, '017_gauntlet_command.sql'] }))
+    // CONTROL: a later migration (a synthetic 036) with its OWN line is accepted, and printed as its own line; without one it throws.
+    const withLater = { ...SHAPE, excluded: [...SHAPE.excluded, '036_wonderland_later_probe.sql'] };
+    expect(describeNonJuliusMigrations({ ...withLater, descriptions: { ...NON_JULIUS_MIGRATION_DESCRIPTIONS, '036_wonderland_later_probe.sql': 'probe' } }).at(-1))
+      .toBe(`- **non-Julius schema** — \`036_wonderland_later_probe.sql\` under \`${MIGRATION_DIR}\`: registered by the same migration runner, which applies every migration in numeric order; probe; deliberately not Julius's.`);
+    expect(() => describeNonJuliusMigrations(withLater)).toThrow(/no manifest description .*: 036_wonderland_later_probe\.sql$/);
+    // A stale line: 033's description with no 033 registered (035 kept, so 033 is the only stale name).
+    expect(() => describeNonJuliusMigrations({ ...SHAPE, excluded: [...PRE_JULIUS, '017_gauntlet_command.sql', '035_wonderland_voice.sql'] }))
       .toThrow(/none is registered under that name .*: 033_wonderland_social\.sql$/);
     expect(() => describeNonJuliusMigrations({ ...SHAPE, julius: [] })).toThrow(/no Julius schema migration is registered/);
     expect(() => describeNonJuliusMigrations({ ...SHAPE, excluded: [...SHAPE.excluded, 'wonderland_voice.sql'] }))

@@ -63,7 +63,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
-import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
+import { TransactionalWonderlandDatabase, type ReviewedBootstrapIdentity } from '../src/relay/persistence/wonderland-postgres';
 
 export interface PreflightIdentity {
   readonly nonce: string;
@@ -98,10 +98,13 @@ export interface PreflightIdentity {
  */
 export async function migrateIfNeeded(
   pool: Pool,
+  // ONLY the reviewed EMPTY-store bootstrap passes this (julius-bootstrap-empty-store.ts), after verifying the store's identity
+  // and emptiness itself; every other caller leaves it out, so a protected store refuses (protected-store.ts).
+  options: { readonly reviewedBootstrap?: ReviewedBootstrapIdentity } = {},
 ): Promise<{ readonly alreadyPresent: number; readonly applied: readonly string[] }> {
   const database = new TransactionalWonderlandDatabase(pool);
   const before = await database.appliedMigrationVersions();
-  await database.migrate();
+  await database.migrate(options);
   const after = await database.appliedMigrationVersions();
   // WHAT HAPPENED, NOT A VERDICT ABOUT IT. A boolean here made the caller
   // report "empty database" for a database that held 21 migrations and
