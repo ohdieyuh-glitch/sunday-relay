@@ -61,6 +61,25 @@ export interface WfsStoreEvent {
   readonly body: Readonly<Record<string, unknown>>;
 }
 
+/** H1 (R1): the caller's projects, a page at a time. */
+export interface WfsProjectsQuery {
+  /** The previous page's `next` (a project id): only projects after it, in code-point order. */
+  readonly after?: string | null;
+  readonly limit?: number;
+}
+
+/** A project the player may read: a membership the ONE mapping gives a role, with a LIVE file environment. */
+export interface WfsMemberProject {
+  readonly projectId: string;
+  readonly role: WfsHumanRole;
+}
+
+export interface WfsProjectsPage {
+  /** By project id, in code-point order. */
+  readonly projects: readonly WfsMemberProject[];
+  readonly next: string | null;
+}
+
 /** H4: what a member sees first. */
 export interface WfsProjectHead {
   readonly projectId: string;
@@ -200,6 +219,30 @@ export interface WfsBlobInfo {
   readonly referenced: boolean;
 }
 
+/** R1-r3: one file at one revision of a branch (`rev` omitted or null: the head). */
+export interface WfsFileAtQuery {
+  readonly branchId: WfsBranchId;
+  readonly fileId: WfsFileId;
+  readonly rev?: number | null;
+}
+
+export interface WfsFileAt {
+  /** The branch's head NOW. */
+  readonly headRev: number;
+  /** The revision answered (the head when none was asked). */
+  readonly rev: number;
+  /** The file's newest version at or below `rev` (a tombstone when it was deleted by then). */
+  readonly entry: WfsEntry;
+}
+
+/** R1-r3: a referenced blob's bytes, read in the same consistent state as the check that something names it. */
+export interface WfsReferencedBlob {
+  /** The size recorded when the blob was stored. */
+  readonly size: number;
+  /** null: the row is held but its bytes are missing -- an integrity failure for the caller to report, never "not found". */
+  readonly bytes: Uint8Array | null;
+}
+
 /** A blob's bytes checked against its address and recorded size, read from the store (never from a process's memory). */
 export type WfsBlobIntegrity =
   | { readonly status: 'absent' }
@@ -216,18 +259,42 @@ export interface WfsStore {
    * membership (no wfs_* row), so a route can call it BEFORE any other lookup (§19.m2). An outage is a failure, never `null`.
    */
   memberRole(projectId: string, playerId: string): Promise<RelayResult<WfsHumanRole | null>>;
+  /**
+   * H1 (R1; the R0b review's MAJOR-2 / C3): the projects `playerId` may read -- a membership whose PRODUCT role the ONE mapping
+   * turns into a WonderFS role, JOINED to a live file environment, in ONE consistent state. A soft-deleted project, a membership in
+   * a project with no file environment, and a role no product writer produces are all ABSENT (never an error). Paged by project id
+   * in code-point order. It reads the caller's own memberships only: no requested object is named, so nothing is looked up before
+   * an authorization (§19.m2).
+   */
+  projectsOf(playerId: string, query: WfsProjectsQuery): Promise<RelayResult<WfsProjectsPage>>;
 
   /** The whole state as committed (one consistent state), or null. For tests, the oracle and tools; routes use the paged reads. */
   project(projectId: string): Promise<WfsProjectState | null>;
   head(projectId: string): Promise<RelayResult<WfsProjectHead>>;
   tree(projectId: string, query: WfsTreeQuery): Promise<RelayResult<WfsTreePage>>;
   fileHistory(projectId: string, query: WfsHistoryQuery): Promise<RelayResult<WfsHistoryPage>>;
+  /**
+   * R1-r3 (R1 reviews: security MINOR-1, correctness MINOR-3): a file as it was at ONE revision, in ONE consistent read -- the
+   * branch head and the newest version at or below the revision -- instead of a walk over the history's pages. Unknown project,
+   * branch or file, a revision past the head, or a revision before the file existed: the one not-found.
+   */
+  fileAt(projectId: string, query: WfsFileAtQuery): Promise<RelayResult<WfsFileAt>>;
   changes(projectId: string, query: WfsChangesQuery): Promise<RelayResult<WfsChangesPage>>;
   events(projectId: string, query: WfsEventsQuery): Promise<RelayResult<WfsEventsPage>>;
   conflicts(projectId: string, query: WfsConflictsQuery): Promise<RelayResult<WfsConflictsPage>>;
   conflict(projectId: string, conflictId: string): Promise<RelayResult<WfsConflictView>>;
-  /** A blob this project holds (null: it holds none at that address), read from the store: correct across bridge instances. */
+  /**
+   * A blob this project holds (null: it holds none at that address), read from the store: correct across bridge instances. Whether
+   * something names it is worked out the SAME way whether or not the address is held (R1 security MINOR-2), so an unknown address and
+   * a held-but-unreferenced one cost a member the same.
+   */
   blobInfo(projectId: string, sha256: string): Promise<RelayResult<WfsBlobInfo | null>>;
+  /**
+   * R1-r3 (R0b MINOR-7; R1 correctness MINOR-2): a blob's bytes ONLY IF this LIVE project names it (a version, a current or fork-time
+   * entry, or a retained conflict, on any branch), in ONE consistent read with that check; null otherwise. The bytes are NOT
+   * verified here: the caller re-hashes them before serving any.
+   */
+  readReferencedBlob(projectId: string, sha256: string): Promise<RelayResult<WfsReferencedBlob | null>>;
   /** Re-hash a held blob's stored bytes against its address and recorded size. */
   verifyBlob(projectId: string, sha256: string): Promise<RelayResult<WfsBlobIntegrity>>;
   readBlob(projectId: string, sha256: string): Promise<Uint8Array | null>;
@@ -320,6 +387,16 @@ export function wfsCheckHistoryQuery(q: WfsHistoryQuery): RelayResult<{ readonly
   return ok({ branchId: branchId.value, fileId: fileId.value, before, limit: limit.value });
 }
 
+export function wfsCheckFileAtQuery(q: WfsFileAtQuery): RelayResult<{ readonly branchId: string; readonly fileId: string; readonly rev: number | null }> {
+  const branchId = checkId(q.branchId, 'branch id');
+  if (!branchId.ok) return branchId;
+  const fileId = checkId(q.fileId, 'file id');
+  if (!fileId.ok) return fileId;
+  const rev = q.rev ?? null;
+  if (rev !== null && !isCount(rev, 0)) return invalidQuery('the revision is malformed');
+  return ok({ branchId: branchId.value, fileId: fileId.value, rev });
+}
+
 export function wfsCheckChangesQuery(q: WfsChangesQuery): RelayResult<{ readonly branchId: string; readonly afterRev: number; readonly limit: number }> {
   const branchId = checkId(q.branchId, 'branch id');
   if (!branchId.ok) return branchId;
@@ -327,6 +404,17 @@ export function wfsCheckChangesQuery(q: WfsChangesQuery): RelayResult<{ readonly
   if (!limit.ok) return limit;
   if (!isCount(q.afterRev, 0)) return invalidQuery('the revision to read after is malformed');
   return ok({ branchId: branchId.value, afterRev: q.afterRev, limit: limit.value });
+}
+
+/** H1's query, and the player it is for, checked before any lookup. */
+export function wfsCheckProjectsQuery(playerId: unknown, q: WfsProjectsQuery): RelayResult<{ readonly playerId: string; readonly after: string | null; readonly limit: number }> {
+  const player = checkId(playerId, 'player id');
+  if (!player.ok) return player;
+  const limit = wfsPageLimit(q.limit);
+  if (!limit.ok) return limit;
+  const after = q.after ?? null;
+  if (after !== null && !checkId(after, 'project cursor').ok) return invalidQuery('the project cursor is malformed');
+  return ok({ playerId: player.value, after, limit: limit.value });
 }
 
 export function wfsCheckEventsQuery(q: WfsEventsQuery): RelayResult<{ readonly afterSeq: number; readonly limit: number }> {

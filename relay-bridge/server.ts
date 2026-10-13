@@ -89,6 +89,7 @@ import { createPostgresVoiceBindings } from '../src/relay/persistence/voice-bind
 import type { VoiceBindingStore } from '../src/relay/social/voice-binding';
 import { eosFromEnv } from './eos-voice';
 import type { SocialStore } from '../src/relay/social/social-store';
+import { createWonderfsMount, isWonderfsRoute } from './wonderfs-routes';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -330,6 +331,11 @@ export function createBridgeServer(
     );
     return socialStoreOpening;
   };
+  // WONDERFS BLOCK BEGIN
+  // WONDERFS (R1; contract r1.4 §13): its session gate, budgets and lazily opened store live as long as the process, like social's.
+  // ALWAYS ON (INV-10, §19.m6): no setting and no flag here; without a database it answers 503 wonderfs_unavailable, by fact.
+  const wonderfs = createWonderfsMount({ sessions: browserSessions, pool: () => juliusPool(), log: (line) => console.warn(`[relay-bridge] ${line}`) });
+  // WONDERFS BLOCK END
   /**
    * THE PROJECT BRAIN, on the same Julius pool as every other Julius family, so
    * what Wonderland reads and writes is what the mission job reads. Lazy, so a
@@ -777,6 +783,17 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
           if (socialResult !== null) send(res, socialResult.status, socialResult.body, { ...cors, ...(socialResult.headers ?? {}) });
           return;
         }
+
+        // WONDERFS BLOCK BEGIN
+        /**
+         * WONDERFS /wonderfs/v1 (R1, reads): the file environment under every Project Avatar. Its own family -- no `/wonderland/`
+         * handler claims it -- and its own gates, table and budgets (wonderfs-gate.ts, wonderfs-scope.ts, wonderfs-budgets.ts).
+         */
+        if (isWonderfsRoute(path.replace('/relay-api', ''))) {
+          await wonderfs.serve(req, res, cors);
+          return;
+        }
+        // WONDERFS BLOCK END
 
         /**
          * NATIVE CLIENT PAIRING, in front of every other `/wonderland/` route
