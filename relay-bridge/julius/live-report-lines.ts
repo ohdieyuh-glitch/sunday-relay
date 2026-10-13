@@ -93,3 +93,15 @@ export function liveWorkersBlockedLines(problems: readonly { readonly role: stri
     `RESULT: BLOCKED — live_workers_unresolved: ${problems.map((problem) => problem.role).join(', ')}; nothing was submitted and no provider was contacted.`,
   ];
 }
+
+/**
+ * V6 G-1: WHAT THE CONTRACT'S `approvalGates` CLAUSE HOLDS FOR A PERSON, said in the preflight before anything is
+ * submitted. Ungated (no clause): no line at all, so an ungated mission's output is unchanged. Closed tokens only;
+ * the gate's `reason` is not printed (`scripts/julius-live-evidence.mjs` keeps exactly this shape).
+ */
+export function liveApprovalGatesLine(
+  gates: readonly { readonly operation: string; readonly roles: readonly string[]; readonly taskTypes: readonly string[] }[] | undefined,
+): string | null {
+  if (gates === undefined) return null;
+  return `  approval gates: ${gates.length} (${gates.map((gate) => `${gate.operation} role=${gate.roles.join(',')} task=${gate.taskTypes.join(',')}`).join('; ')})`;
+}

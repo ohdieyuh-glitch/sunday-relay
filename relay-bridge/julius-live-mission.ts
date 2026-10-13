@@ -59,7 +59,9 @@ import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/
 import type { ExecutorOperation } from '../src/relay/workspace/julius-tools/executor-operation-request';
 import { type JuliusBootstrapRequest } from '../src/relay/integration/julius/julius-port';
 import {
+  approvalScopesOf,
   compileBootstrapRequest,
+  gatedCardRevision,
   parseLiveMissionContract,
   sealLiveMissionResearchPolicy,
   type LiveMissionContractFile,
@@ -76,8 +78,8 @@ import { LocalJuliusArtifactStore } from '../src/relay/workspace/julius-tools/lo
 import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/julius-work-artifact-postgres';
 import { liveEvidenceLines } from './julius/live-evidence-lines';
 import {
-  liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveOneLine, liveResearchLines, liveTickAccountLine, liveTickBudgetLine,
-  liveWorkersBlockedLines,
+  liveApprovalGatesLine, liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveOneLine, liveResearchLines, liveTickAccountLine,
+  liveTickBudgetLine, liveWorkersBlockedLines,
 } from './julius/live-report-lines';
 import {
   assembleLiveJuliusRuntime,
@@ -615,7 +617,9 @@ async function main(argv: readonly string[]): Promise<number> {
   const contract = parsedContract.contract;
 
   const env = process.env as Record<string, string | undefined>;
-  const cardRevision = env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1';
+  // V6 G-1: a gated contract runs under its own card revision (the base plus the clause's digest), so its
+  // approvals are keyed to the gate it declared; an ungated contract's revision is exactly the base.
+  const cardRevision = gatedCardRevision(env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1', contract.approvalGates);
 
   /**
    * THE OPERATOR'S OBSERVATIONS, CHECKED BEFORE ANYTHING IS SUBMITTED.
@@ -669,6 +673,9 @@ async function main(argv: readonly string[]): Promise<number> {
 
   out('JULIUS LIVE MISSION — preflight');
   out(`  mission: ${contract.missionId} (project ${contract.projectId})`);
+  // V6 G-1: what the contract holds for a person, before anything is submitted. No clause, no line.
+  const gatesLine = liveApprovalGatesLine(contract.approvalGates);
+  if (gatesLine !== null) out(gatesLine);
   out(`  requested models: architect=${preflight.requested.architectModel ?? 'MISSING'} coder=${preflight.requested.codingModel ?? 'MISSING'} reviewer=${preflight.requested.reviewerProvider ?? 'MISSING'}/${preflight.requested.reviewerModel ?? 'MISSING'}`);
   for (const row of presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', CLAUDE_SUBSCRIPTION_TOKEN_ENV, 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV])) out(row);
   out('  note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.');
@@ -975,6 +982,9 @@ async function main(argv: readonly string[]): Promise<number> {
         researchPolicyFor: researchPolicyOf,
         researchProbes: observed.probes,
       }),
+      // V6 G-1: the contract's gate, SCOPED (G-2) to its roles and task types; never the unscoped list, which
+      // would hold every dispatch. No clause, no key: an ungated mission composes the card it always did.
+      ...(contract.approvalGates === undefined ? {} : { approvalScopes: approvalScopesOf(contract.approvalGates) }),
     });
     /* WHAT THE CLAUSE CAN ACTUALLY REACH, said before the money is spent
        rather than discovered one refusal at a time in the evidence. */

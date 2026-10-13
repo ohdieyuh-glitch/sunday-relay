@@ -17,6 +17,8 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 
+import { approvalGateProblems } from './julius-approval-gates.mjs';
+
 /**
  * CEILINGS, PER MISSION, because a decision about one mission is not a decision
  * about the next one.
@@ -448,6 +450,18 @@ if (research !== undefined) {
   }
 }
 
+/* ------------------------------------------------- approval-gate authority */
+
+/**
+ * V6 G-1: A contract may declare an approval gate. It may not register its own.
+ *
+ * The gate is pre-registered per namespace in `julius-approval-gates.mjs` (the
+ * research grants' pattern above), and the clause must EQUAL the registration:
+ * a clause with no registration, a registration with no clause and an unequal
+ * clause are each refused.
+ */
+for (const problem of approvalGateProblems(namespace, contract.approvalGates)) refuse(problem);
+
 /* -------------------------------------------------- the workspace is not us */
 
 if (typeof contract.workspacePath === 'string' && contract.workspacePath.trim() !== '') {
@@ -479,6 +493,9 @@ out(`  paid-run lanes: ${lanesFor(namespace).join(', ')}${claimedLane === null ?
 out(`  research: ${research === undefined
   ? 'NONE — every ask is refused research_not_authorized'
   : `${Array.isArray(research.allowances) ? research.allowances.length : 0} allowance(s) for ${Array.isArray(research.roles) ? research.roles.join(', ') : 'no role'}`}`);
+out(`  approval gates: ${contract.approvalGates === undefined
+  ? 'NONE'
+  : `${Array.isArray(contract.approvalGates) ? contract.approvalGates.length : 'malformed'} declared`}`);
 
 if (problems.length > 0) {
   out('CONTRACT REFUSED:');
