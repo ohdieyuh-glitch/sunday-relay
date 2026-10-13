@@ -523,8 +523,8 @@ describe('10-07 log injection: a control character in a name or a message is a 4
  * Object.prototype member. Before the fix users["toString"] was a function, so hasUser("toString") was true and the next read
  * dereferenced it (a TypeError, a 500), or a block / mute / report of a user who does not exist was STORED, and the blocker's
  * snapshot then built a profile for it. Every route that takes a user, conversation, request or invitation id is planted with each
- * name below: a clean 4xx, the state object untouched, nothing thrown. Party ids are not planted (the voice branch sweeps party
- * lookups); a REAL party carries a planted invitee / member instead.
+ * name below: a clean 4xx, the state object untouched, nothing thrown. Here a REAL party carries a planted invitee / member; the
+ * party ids themselves are planted in the WL-351-01 describe below.
  */
 describe('10-07 own keys: an id named like an Object.prototype member is no record, on every route that takes one (CORE)', () => {
   const PLANTED = ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf'];
@@ -579,4 +579,72 @@ describe('10-07 own keys: an id named like an Object.prototype member is no reco
       expect((await w.kai.get('/snapshot')).status).toBe(200);
     });
   }
+});
+
+/*
+ * WL-351-01 (the independent review of #351, 10-13): the #351 body said a party id like `constructor` is "simply a party that does
+ * not exist", but party lookups were still raw (`state.parties[id]`), so such an id was a thrown TypeError -- a 500. Every route
+ * that looks a party up by its path id is planted with each name below: the answer is exactly a missing party's (status, kind and
+ * words, against a real-shaped id that names nothing), the state object is untouched and nothing is thrown.
+ */
+describe('WL-351-01: a party id named like an Object.prototype member is a party that does not exist, on every party route', () => {
+  const PLANTED_PARTY_IDS = ['constructor', '__proto__', 'hasOwnProperty', 'toString', 'valueOf'];
+  type Answer = { status: number; body: { data?: any; error?: { kind: string; message: string } } };
+  type W = Awaited<ReturnType<typeof friendsOn>>;
+  const PUID = '0123456789abcdef0123456789abcdef';
+  const PARTY_ROUTES: ReadonlyArray<readonly [string, (w: W, party: string) => Promise<Answer>]> = [
+    ['GET /parties/:id', (w, k) => w.nova.get(`/parties/${k}`)],
+    // Nova is in no party, so the join reaches the id (a joiner already in one is told to leave first, naming nothing)
+    ['POST /parties/:id/join', (w, k) => w.nova.post(`/parties/${k}/join`)],
+    ['POST /parties/:id/invites', (w, k) => w.kai.post(`/parties/${k}/invites`, { toUserId: 'usr_nova' })],
+    ['POST /parties/:id/members/:id/remove', (w, k) => w.kai.post(`/parties/${k}/members/usr_nova/remove`)],
+    ['POST /parties/:id/leader', (w, k) => w.kai.post(`/parties/${k}/leader`, { memberId: 'usr_nova' })],
+    ['POST /parties/:id/rules', (w, k) => w.kai.post(`/parties/${k}/rules`, { privacy: 'OPEN_TO_FRIENDS' })],
+    ['POST /parties/:id/voice/join', (w, k) => w.kai.post(`/parties/${k}/voice/join`, { eosProductUserId: PUID })],
+  ];
+
+  for (const [route, call] of PARTY_ROUTES) {
+    it(`${route}: every planted party id answers exactly as a missing party (404), changes nothing and throws nothing`, async () => {
+      const store = createInMemorySocialStore();
+      const w = await friendsOn(store);
+      expect((await w.kai.post('/parties', { name: 'Crew' })).status).toBe(200); // Kai leads a real party; Nova is in none
+      const missing = await call(w, 'pty_does_not_exist');
+      expect([missing.status, missing.body.error?.kind]).toEqual([404, 'not-found']);
+      for (const key of PLANTED_PARTY_IDS) {
+        const before = await store.read();
+        const answer = await call(w, key).catch((e: unknown): Answer => ({ status: 500, body: { error: { kind: 'THROWN', message: String(e) } } }));
+        const label = `${route} with ${JSON.stringify(key)} -> ${answer.status} ${JSON.stringify(answer.body.error ?? answer.body.data ?? null).slice(0, 160)}`;
+        expect([answer.status, answer.body.error], label).toEqual([missing.status, missing.body.error]);
+        expect(await store.read(), `${label}: the state must not move`).toBe(before);
+      }
+      expect((await w.kai.get('/snapshot')).status).toBe(200);
+      expect((await w.nova.get('/snapshot')).status).toBe(200);
+    });
+  }
+});
+
+/*
+ * WL-351-02 through the real routes: the reviewer's repro (an APPEAR_OFFLINE player's new open party reached every friend's next
+ * snapshot, though M2 had silenced the event) on two real sessions, with its control.
+ */
+describe('WL-351-02: an Appear-Offline leader\'s open party is not in a friend\'s /snapshot (routes)', () => {
+  it('hidden: no visibleParties entry, no mention of the id, /parties/:id answers as a missing party; AVAILABLE again: listed and readable', async () => {
+    const w = await friends();
+    expect((await w.kai.post('/presence', { connected: true, availability: 'APPEAR_OFFLINE' })).status).toBe(200);
+    const created = await w.kai.post('/parties', { name: 'Quiet', privacy: 'OPEN_TO_FRIENDS' });
+    expect(created.status).toBe(200);
+    const partyId = created.body.data.partyId as string;
+    expect((await w.nova.post('/presence', { connected: true, availability: 'AVAILABLE' })).status).toBe(200);
+    const hidden = (await w.nova.get('/snapshot')).body.data;
+    expect(hidden.visibleParties).toEqual([]);
+    expect(JSON.stringify(hidden)).not.toContain(JSON.stringify(partyId));
+    const read = await w.nova.get(`/parties/${partyId}`);
+    const missing = await w.nova.get('/parties/pty_does_not_exist');
+    expect([read.status, read.body.error]).toEqual([missing.status, missing.body.error]);
+    // control: Kai visible again -- the same party is listed, led by Kai, and readable
+    expect((await w.kai.post('/presence', { availability: 'AVAILABLE' })).status).toBe(200);
+    const shown = (await w.nova.get('/snapshot')).body.data;
+    expect(shown.visibleParties.map((p: any) => [p.partyId, p.leaderId])).toEqual([[partyId, 'usr_kai']]);
+    expect((await w.nova.get(`/parties/${partyId}`)).status).toBe(200);
+  });
 });
