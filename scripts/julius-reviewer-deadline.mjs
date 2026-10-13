@@ -28,7 +28,7 @@ export const RECORDED_REVIEWER_OBSERVATIONS = [
   { runId: '34470535718', taskId: 'run:c8910d0afb5608e0ea68aa72:build:review', stage: 'build', elapsedMs: 218_324, outcome: 'COMPLETED' },
 ];
 
-export const JOB_BUDGET_MS = 120 * 60_000;
+export const JOB_BUDGET_MS = 300 * 60_000;
 export const REVIEWER_JOB_SHARE_MS = 50 * 60_000;
 
 /* Mirrors the DOMAIN's own numbers: the review stages a normal mission runs,
