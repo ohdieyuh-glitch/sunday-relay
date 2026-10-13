@@ -18,6 +18,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { appendFileSync, chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  healthBody, healthIdentityEnabled, healthIdentityProblem,
   loadBridgeConfig, productionConfigProblems, productionConfigWarnings, type BridgeConfig,
 } from './config';
 import { createMissionRegistry, type MissionRegistry } from './mission';
@@ -81,10 +82,12 @@ import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute, SIGNIN_START_RATE } from './wonderland-native-signin-routes';
-import { createCommandBudgets, createPresenceLease, endSocialPresence, handleSocialRoute, isSocialRoute, type SocialDeliveryRecord } from './wonderland-social-routes';
-import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
+import { createCommandBudgets, createPresenceLease, createSessionRateLimit, endSocialPresence, EOS_CLIENT_CONFIG_RATE, handleSocialRoute, isSocialRoute, nativeSocialSessionDeps, type SocialDeliveryRecord } from './wonderland-social-routes';
 import { GITHUB_STUB_BANNER, githubRootsForNativeSignIn } from './wonderland-github-stub-seam';
 import { openSocialPostgresStore } from '../src/relay/persistence/social-postgres';
+import { createPostgresVoiceBindings } from '../src/relay/persistence/voice-binding-postgres';
+import type { VoiceBindingStore } from '../src/relay/social/voice-binding';
+import { eosFromEnv } from './eos-voice';
 import type { SocialStore } from '../src/relay/social/social-store';
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -264,8 +267,8 @@ export function createBridgeServer(
    *     migrated: this bridge is NOT a migration entry point. No schema, no store: 503.
    *   - Who a player is (their GitHub login, for their social record) is remembered when they sign in, in memory, beside
    *     their session -- which also dies with the process.
-   *   - Party voice TRANSPORT (EOS: tokens, PUID binding, the game-client config) is not served here; it arrives with migration
-   *     035 in its own change.
+   *   - Party voice = EOS, behind WONDERLAND_EOS_VOICE_CONFIG and WONDERLAND_EOS_GAME_CONFIG (below); without them, or without
+   *     migration 035's binding table, voice answers 503 VOICE TRANSPORT PENDING (wonderland-social-routes.ts).
    *   - WONDERLAND_SOCIAL_TAP=<file> (tests and QA only) appends one line per events poll / snapshot answered: ids and
    *     sequences, never content. Refused in production.
    *   - WONDERLAND_SOCIAL_GITHUB_STUB (development rehearsal only) is fenced in wonderland-github-stub-seam.ts: a misuse
@@ -289,6 +292,28 @@ export function createBridgeServer(
   // the desktop sign-in's START is an unauthenticated write too (Second's review, 10-06): one limiter for the process
   const socialSignInStartLimiter = createBetaRateLimiter(SIGNIN_START_RATE);
   const socialLogins = new Map<string, string>();
+  /**
+   * PARTY VOICE = EOS (R16, founder 10-04), behind WONDERLAND_EOS_VOICE_CONFIG (the founder's file; never logged, no fallback;
+   * absent or invalid = voice 503 as before). It mints with the Trusted Server client only (EOS_SERVER_*), and is refused when
+   * that client is the game client handed to players (eos-voice.ts eosFromEnv, MAIN's internal review a6d5842c M3), or when no game
+   * config loads to check it against (af2eb058 m-c). PUIDs are
+   * bound on the Julius pool (migration 035); a committed party departure removes the departed member's PUIDs from that party's
+   * room server-side (eos-voice.ts createVoiceRemovals).
+   * THE GAME CLIENT'S EOS CONFIG (founder 10-04), behind WONDERLAND_EOS_GAME_CONFIG (the founder's eos-game.env, by path): read once
+   * here and held in memory only, for GET /wonderland/social/voice/eos-client-config; it must name the voice config's deployment.
+   * Never logged. The rate limit is built once: the route's deps are rebuilt per request.
+   */
+  let voiceBindingsCache: VoiceBindingStore | null = null;
+  const voiceBindings = (): VoiceBindingStore | null => {
+    if (voiceBindingsCache !== null) return voiceBindingsCache;
+    const pool = juliusPool();
+    voiceBindingsCache = pool === null ? null : createPostgresVoiceBindings(pool);
+    return voiceBindingsCache;
+  };
+  const eos = socialEnabled ? eosFromEnv(process.env, { bindings: voiceBindings, log: (line) => console.warn(`[relay-bridge] ${line}`) }) : null;
+  const eosVoice = eos?.voice ?? null;
+  const eosGameConfig = eos?.gameConfig ?? null;
+  const eosClientConfigAllowed = createSessionRateLimit(EOS_CLIENT_CONFIG_RATE.limit, EOS_CLIENT_CONFIG_RATE.windowMs);
   // PRESENCE IS A LEASE and EVERY PLAYER HAS A BUDGET (Second's R16 review, 10-06): both live in THIS process, built once here --
   // the route's deps are rebuilt per request. One bridge instance holds them, as it holds who is signed in.
   const socialPresenceLease = createPresenceLease();
@@ -299,7 +324,7 @@ export function createBridgeServer(
     if (socialStoreReady !== null) return socialStoreReady;
     const pool = juliusPool();
     if (pool === null) return null;
-    socialStoreOpening ??= openSocialPostgresStore(pool).then(
+    socialStoreOpening ??= openSocialPostgresStore(pool, { afterCommit: (commit) => eosVoice?.removals.onDepartures(commit.departures) }).then(
       (opened) => { socialStoreReady = opened; socialStoreOpening = null; return opened; },
       () => { socialStoreOpening = null; return null; },
     );
@@ -426,6 +451,10 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
   (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined);
 
   const pspStore = config.stateRoot === null ? null : createPspConfigStore({ root: config.stateRoot });
+  // Read once: `/health` answers the same body for the life of the process.
+  const health = healthBody(process.env);
+  // typed (CORE, 10-07): inferred, the union `{ 'cache-control'?: undefined }` arm is not a Record<string, string> for send() (TS2345)
+  const healthHeaders: Record<string, string> = healthIdentityEnabled(process.env) ? { 'cache-control': 'no-store' } : {};
   return createServer((req, res) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
     const cors = corsHeaders(config, origin);
@@ -454,9 +483,15 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
      * URL, no host path, no mission, no readiness detail — a managed host's
      * health checker needs none of it, and anyone else scanning the internet
      * should learn nothing.
+     *
+     * The one exception is the founder's, made at deploy time: with
+     * `RELAY_HEALTH_IDENTITY=1` the body also carries exactly `commit` and
+     * `bootId`, so a qualification can tie every answer to the deployed sha
+     * and PROVE a restart. Unset, the body is `{status:'ok'}` as before (see
+     * `healthBody` in config.ts).
      */
     if (method === 'GET' && path === '/health') {
-      send(res, 200, { status: 'ok' }, cors);
+      send(res, 200, health, { ...cors, ...healthHeaders });
       return;
     }
 
@@ -722,20 +757,21 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             body: method === 'POST' ? await readBody(req) : null,
             now: Date.now(),
           }, {
-            verifySession: (token, now) => {
-              const verified = browserSessions.verifyNativeSocialSession({ token, now });
-              return verified.ok
-                ? { sessionId: verified.sessionId, participantId: verified.participantId, capabilities: [NATIVE_SOCIAL_CAPABILITY], scope: 'native_social' }
-                : null;
-            },
+            // the session's facts (its issue time included) and the session lookup the voice re-bind asks (af2eb058 m-d)
+            ...nativeSocialSessionDeps(browserSessions),
             identify: async (participantId) => {
               const login = socialLogins.get(participantId);
               return login === undefined ? null : { userId: participantId, displayName: login, handle: `@${login}` };
             },
             // opened only after the session gate: an anonymous request never loads the store (JUJU MAIN's hosted plan r3)
             store: socialStore,
+            voice: eosVoice?.minter ?? null,
+            voiceBindings: eosVoice !== null ? voiceBindings() : null,
+            eosClientConfig: eosGameConfig,
+            eosClientConfigAllowed,
             presenceLease: socialPresenceLease,
             commandBudgets: socialCommandBudgets,
+            log: (line) => console.warn(`[relay-bridge] ${line}`),
             tap: socialTap,
           });
           if (socialResult !== null) send(res, socialResult.status, socialResult.body, { ...cors, ...(socialResult.headers ?? {}) });
@@ -1490,6 +1526,15 @@ export function prepareStateRoot(root: string | null): { ok: true } | { ok: fals
 
 export function main(): void {
   const config = loadBridgeConfig();
+
+  // A `/health` disclosure setting nobody could have meant refuses on ANY host:
+  // a typo must not become a silent OFF (or ON). Named, never its value.
+  const healthProblem = healthIdentityProblem(process.env);
+  if (healthProblem !== null) {
+    console.error(`Relay bridge cannot start: ${healthProblem}`);
+    process.exitCode = 1;
+    return;
+  }
 
   // Refuse to boot a production bridge that would be unsafe. Names only —
   // never values — so this is safe in a deployment log.

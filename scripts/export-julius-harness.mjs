@@ -119,7 +119,7 @@ const BOUNDARIES = [
   },
   {
     prefix: 'src/relay/mission/wonderland/',
-    reason: 'the pre-Julius Wonderland mission runtime domain, reached only as type imports of the shared relay_wonderland database class whose migrate() Julius calls; none of it participates in Julius behaviour.',
+    reason: 'the pre-Julius Wonderland mission runtime domain, reached from the shared relay_wonderland database class whose migrate() Julius calls: by type imports, and by ONE value import, the closed WONDERLAND_EVENT_TYPES list that class’s Wonderland replay() filters the shared events table by, so a Julius ledger row never reaches a Wonderland browser; none of it participates in Julius behaviour.',
   },
 ];
 

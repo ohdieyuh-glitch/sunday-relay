@@ -22,6 +22,7 @@ import {
   mintId,
   pendingRequestBetween,
   presenceHiddenFrom,
+  userById,
   type SocialState,
 } from './social-state';
 
@@ -67,7 +68,7 @@ export function sendFriendRequest(state: SocialState, actorId: SocialUserId, toU
   if (pendingRequestBetween(state, actorId, toUserId)) return invalid('a request is already pending');
   const crossing = pendingRequestBetween(state, toUserId, actorId);
   if (crossing) return ok(befriend(resolveRequest(state, crossing.requestId, 'ACCEPTED', atIso), actorId, toUserId, atIso));
-  if (state.users[toUserId].privacy.friendRequestPolicy !== 'EVERYONE') return denied(NOT_ACCEPTING_REQUESTS);
+  if (userById(state, toUserId)?.privacy.friendRequestPolicy !== 'EVERYONE') return denied(NOT_ACCEPTING_REQUESTS);
   const minted = mintId(state, 'freq');
   const request: FriendRequest = {
     requestId: minted.id,

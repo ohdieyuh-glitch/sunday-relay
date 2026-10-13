@@ -79,7 +79,27 @@ export function mintId(state: SocialState, prefix: string): { id: string; state:
 
 /* ------------------------------------------------------------- questions */
 
-export const hasUser = (state: SocialState, userId: SocialUserId): boolean => state.users[userId] !== undefined;
+/*
+ * OWN KEYS ONLY (CORE, 10-07, MAIN JUJU's finding). `users`, `conversations` and `messages` are plain objects indexed by ids a
+ * client can send (a path segment, a body field), and a plain object answers for keys it never stored: users["constructor"] is
+ * Object.prototype.constructor, users["__proto__"] is Object.prototype itself. hasUser("toString") was TRUE, and the read after it
+ * dereferenced a function (a TypeError, so a 500). Every read with such an id goes through these: undefined (or none) unless the
+ * record is the map's OWN. Party lookups are swept the same way on the voice branch (partyById), not here.
+ */
+export const hasUser = (state: SocialState, userId: SocialUserId): boolean => Object.hasOwn(state.users, userId);
+
+export function userById(state: SocialState, userId: SocialUserId): SocialUserRecord | undefined {
+  return Object.hasOwn(state.users, userId) ? state.users[userId] : undefined;
+}
+
+export function conversationById(state: SocialState, conversationId: string): Conversation | undefined {
+  return Object.hasOwn(state.conversations, conversationId) ? state.conversations[conversationId] : undefined;
+}
+
+/** A conversation's messages by the same rule: none unless the list is the map's own. */
+export function messagesOf(state: SocialState, conversationId: string): readonly Message[] {
+  return Object.hasOwn(state.messages, conversationId) ? state.messages[conversationId] : [];
+}
 
 export function areFriends(state: SocialState, a: SocialUserId, b: SocialUserId): boolean {
   if (a === b) return false;
@@ -102,6 +122,15 @@ export function pendingRequestBetween(state: SocialState, from: SocialUserId, to
 /** The party a user is in, if any. A user is in at most one party. */
 export function partyOf(state: SocialState, userId: SocialUserId): Party | undefined {
   return Object.values(state.parties).find((p) => p.members.some((m) => m.userId === userId));
+}
+
+/**
+ * The party with this id, or undefined. An OWN key only: a request's party id such as `constructor` or `__proto__` matches the
+ * route's id shape ([A-Za-z0-9_-]{1,80}), and a plain `state.parties[id]` hands back what Object.prototype holds under that
+ * name -- a TypeError (a 500, without no-store) where the answer is "party not found" (MAIN's internal review a6d5842c, m4).
+ */
+export function partyById(state: SocialState, partyId: string): Party | undefined {
+  return Object.hasOwn(state.parties, partyId) ? state.parties[partyId] : undefined;
 }
 
 export const sharePartyWith = (state: SocialState, a: SocialUserId, b: SocialUserId): boolean => {
@@ -150,7 +179,7 @@ export function audienceAdmits(
  */
 export function presenceHiddenFrom(state: SocialState, viewerId: SocialUserId, subjectId: SocialUserId): boolean {
   if (viewerId === subjectId) return false;
-  const subject = state.users[subjectId];
+  const subject = userById(state, subjectId);
   if (subject === undefined) return true;
   return subject.presence.availability === 'APPEAR_OFFLINE' || !audienceAdmits(state, subject.privacy.presenceVisibility, viewerId, subjectId);
 }

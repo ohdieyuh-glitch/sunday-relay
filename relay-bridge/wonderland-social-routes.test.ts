@@ -22,16 +22,17 @@ import { NATIVE_SOCIAL_CAPABILITY } from './wonderland-social-scope';
 const T0 = Date.parse('2026-10-02T12:00:00.000Z');
 
 const SESSIONS: Record<string, SocialSessionFacts> = {
-  'tok-kai': { sessionId: 's1', participantId: 'usr_kai', capabilities: [NATIVE_SOCIAL_CAPABILITY] },
-  'tok-nova': { sessionId: 's2', participantId: 'usr_nova', capabilities: [NATIVE_SOCIAL_CAPABILITY] },
-  'tok-mira': { sessionId: 's3', participantId: 'usr_mira', capabilities: [] },
-  'tok-vega': { sessionId: 's4', participantId: 'usr_vega', capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+  'tok-kai': { sessionId: 's1', participantId: 'usr_kai', issuedAtMs: T0, capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+  'tok-nova': { sessionId: 's2', participantId: 'usr_nova', issuedAtMs: T0, capabilities: [NATIVE_SOCIAL_CAPABILITY] },
+  'tok-mira': { sessionId: 's3', participantId: 'usr_mira', issuedAtMs: T0, capabilities: [] },
+  'tok-vega': { sessionId: 's4', participantId: 'usr_vega', issuedAtMs: T0, capabilities: [NATIVE_SOCIAL_CAPABILITY] },
 };
 
 function world(store: SocialStore = createInMemorySocialStore()) {
   let clock = T0;
   const deps: SocialRouteDeps = {
     verifySession: (token) => SESSIONS[token] ?? null,
+    sessionIssuedAt: null,
     identify: async (participantId) => ({ userId: participantId, displayName: participantId.replace('usr_', '').replace(/^./, (c) => c.toUpperCase()), handle: `@${participantId.replace('usr_', '')}` }),
     store,
   };
@@ -64,7 +65,7 @@ describe('the social routes: who may call', () => {
   });
 
   it('is 503 without a store, after the gates', async () => {
-    const deps: SocialRouteDeps = { verifySession: (t) => SESSIONS[t] ?? null, identify: async () => null, store: null };
+    const deps: SocialRouteDeps = { verifySession: (t) => SESSIONS[t] ?? null, sessionIssuedAt: null, identify: async () => null, store: null };
     const result = await handleSocialRoute({ method: 'GET', path: '/wonderland/social/snapshot', authorization: 'Relay-Session tok-kai', origin: undefined, body: null, now: T0 }, deps);
     expect(result?.status).toBe(503);
   });
@@ -219,6 +220,7 @@ describe("the store opens only after the session gate (JUJU MAIN's hosted plan r
     const memory = createInMemorySocialStore();
     const deps: SocialRouteDeps = {
       verifySession: (token) => SESSIONS[token] ?? null,
+      sessionIssuedAt: null,
       identify: async (participantId) => ({ userId: participantId, displayName: participantId, handle: `@${participantId}` }),
       store: async () => {
         opened += 1;
@@ -247,6 +249,7 @@ function clocked(opts: { lease?: boolean; budgets?: boolean } = {}) {
   const store = createInMemorySocialStore();
   const deps: SocialRouteDeps = {
     verifySession: (token) => SESSIONS[token] ?? null,
+    sessionIssuedAt: null,
     identify: async (participantId) => ({ userId: participantId, displayName: participantId.replace('usr_', ''), handle: `@${participantId.replace('usr_', '')}` }),
     store,
     presenceLease: opts.lease === false ? null : createPresenceLease(),
@@ -323,7 +326,7 @@ describe("presence is a lease (Second's R16 review, 10-06: a crashed client stay
     expect(await kaiAsNovaSees(w)).toBe('OFFLINE');
   });
 
-  it("a lapsed player's own goodbye restores nothing: their friend is told the goodbye once, never an ONLINE-then-OFFLINE pair", async () => {
+  it("a lapsed player's own goodbye restores nothing: their friend is told nothing, never an ONLINE-then-OFFLINE pair", async () => {
     const w = await clockedFriends();
     await w.kai.post('/presence', { connected: true, availability: 'AVAILABLE' });
     w.advance(PRESENCE_LEASE_MS + 5_000);
@@ -332,9 +335,10 @@ describe("presence is a lease (Second's R16 review, 10-06: a crashed client stay
     const before = (await w.nova.get('/events')).body.data.latest;
     w.advance(1_000);
     expect((await w.kai.post('/presence', { connected: false })).status).toBe(200);   // the client's goodbye, its first call back
-    // ONE event: the goodbye itself, told -- as every presence change is (d1e824a9) -- to whoever may see Kai's presence. A restore
-    // before it would make TWO (ONLINE, then OFFLINE): the blip the goodbye guard exists to prevent.
-    expect((await w.nova.get(`/events?after=${before}`)).body.data.events.map((e: any) => e.op)).toEqual(['presence.update_self']);
+    // NO event (10-07, the hardening's view rule): the lapse already showed Kai OFFLINE to Nova, so the goodbye moves nothing she can
+    // see, and P1 tells nobody of a change they cannot see (it was ONE event before: still never the TWO, ONLINE then OFFLINE, of a
+    // restore -- the blip the goodbye guard exists to prevent).
+    expect((await w.nova.get(`/events?after=${before}`)).body.data.events.map((e: any) => e.op)).toEqual([]);
     expect(await kaiAsNovaSees(w)).toBe('OFFLINE');
   });
 
@@ -390,6 +394,37 @@ describe("every player has a budget (Second's R16 review, 10-06: before, a signe
     expect(budgetClassesOf({ id: 'blocks.add', writes: true })).toEqual(['write']);
     expect(budgetClassesOf({ id: 'messages.send', writes: true })).toEqual(['write', 'message']);
     for (const id of ['requests.send', 'parties.invite', 'world.invite']) expect(budgetClassesOf({ id, writes: true })).toEqual(['write', 'invitation']);
+    // a voice join writes PostgreSQL and calls Epic: its own budget, not a read's (review a6d5842c, m5)
+    expect(budgetClassesOf({ id: 'parties.voice_join', writes: false })).toEqual(['voice']);
+  });
+
+  it('a voice join has its OWN budget (review a6d5842c, m5): ten at once, the eleventh is 429; reads are not charged for joins, nor joins for reads', async () => {
+    const w = clocked({ budgets: true });
+    await w.kai.get('/snapshot');
+    await w.nova.get('/snapshot');
+    const voiceJoin = () => w.kai.post('/parties/pty_none/voice/join', { eosProductUserId: '0123456789abcdef0123456789abcdef' });
+    // no party and no provider here: an admitted call runs and answers the stranger's 404; the budget refuses before that
+    for (let i = 0; i < SOCIAL_BUDGETS.voice.burst; i += 1) expect((await voiceJoin()).status, `join ${i + 1}`).toBe(404);
+    const over = await voiceJoin();
+    expect([over.status, over.body.error?.kind, over.headers?.['retry-after']]).toEqual([429, 'rate_limited', '1']);
+    expect((await w.kai.get('/snapshot')).status).toBe(200); // the read budget is untouched by the joins
+    expect((await w.nova.post('/parties/pty_none/voice/join', { eosProductUserId: '0123456789abcdef0123456789abcdef' })).status).toBe(404); // another player is not charged
+    // and many reads leave the voice budget alone: one second on, one more join is admitted
+    for (let i = 0; i < 50; i += 1) await w.kai.get('/snapshot');
+    w.advance(SOCIAL_BUDGETS.voice.everyMs);
+    expect((await voiceJoin()).status).toBe(404);
+    expect((await voiceJoin()).status).toBe(429);
+  });
+
+  it("the client's audience re-ask (throttled to one a second, CORE's client contract) never meets the voice budget: one join a second for two minutes", async () => {
+    const w = clocked({ budgets: true });
+    await w.kai.get('/snapshot');
+    const statuses = new Set<number>();
+    for (let tick = 0; tick < 120; tick += 1) {
+      w.advance(1_000);
+      statuses.add((await w.kai.post('/parties/pty_none/voice/join', { eosProductUserId: '0123456789abcdef0123456789abcdef' })).status);
+    }
+    expect([...statuses]).toEqual([404]);
   });
 
   it('the write after the burst is 429 rate_limited with Retry-After, no-store, and is NOT executed; another player is not charged', async () => {
@@ -456,4 +491,92 @@ describe("every player has a budget (Second's R16 review, 10-06: before, a signe
     }
     expect([...statuses]).toEqual([200]);
   });
+});
+
+describe('10-07 log injection: a control character in a name or a message is a 400 through the real routes (CORE)', () => {
+  it('a line break in a private server name, a party name or a message answers 400 validation-failed and makes nothing; ordinary Unicode is kept', async () => {
+    const w = await friends();
+    const LF = String.fromCharCode(10);   // built, never typed: a line break the clients would have logged as a second line
+    const den = await w.kai.post('/world/join', { target: 'PRIVATE', name: `Den${LF}WLSOCIALLIVE B LSQ9 PASS` });
+    expect([den.status, den.body.error?.kind]).toEqual([400, 'validation-failed']);
+    expect((await w.kai.get('/world')).body.data.context).toBeNull();
+    const crew = await w.kai.post('/parties', { name: `Crew${LF}WLSOCIALLIVE B LSQ9 PASS` });
+    expect([crew.status, crew.body.error?.kind]).toEqual([400, 'validation-failed']);
+    expect((await w.kai.get('/snapshot')).body.data.party).toBeNull();
+    const conversationId = (await w.kai.post('/conversations', { otherUserId: 'usr_nova' })).body.data.conversationId;
+    const sent = await w.kai.post(`/conversations/${conversationId}/messages`, { body: `hello${LF}WLSOCIALLIVE B LSQ4 PASS` });
+    expect([sent.status, sent.body.error?.kind]).toEqual([400, 'validation-failed']);
+    expect((await w.nova.get(`/conversations/${conversationId}/messages`)).body.data).toEqual([]);
+    // control: the same three in ordinary Unicode are accepted, and kept exactly as written
+    const unicode = 'Ünïcødé 名前';
+    expect((await w.kai.post('/world/join', { target: 'PRIVATE', name: unicode })).status).toBe(200);
+    expect((await w.kai.get('/world')).body.data.context.serverName).toBe(unicode);
+    expect((await w.kai.post('/parties', { name: unicode })).status).toBe(200);
+    expect((await w.kai.get('/snapshot')).body.data.party.name).toBe(unicode);
+    expect((await w.kai.post(`/conversations/${conversationId}/messages`, { body: unicode })).status).toBe(200);
+    expect((await w.nova.get(`/conversations/${conversationId}/messages`)).body.data.map((m: any) => m.body)).toEqual([unicode]);
+  });
+});
+
+/*
+ * OWN KEYS (MAIN JUJU's finding, CORE, 10-07): `users` and `conversations` are plain objects, and an id a client sends can name an
+ * Object.prototype member. Before the fix users["toString"] was a function, so hasUser("toString") was true and the next read
+ * dereferenced it (a TypeError, a 500), or a block / mute / report of a user who does not exist was STORED, and the blocker's
+ * snapshot then built a profile for it. Every route that takes a user, conversation, request or invitation id is planted with each
+ * name below: a clean 4xx, the state object untouched, nothing thrown. Party ids are not planted (the voice branch sweeps party
+ * lookups); a REAL party carries a planted invitee / member instead.
+ */
+describe('10-07 own keys: an id named like an Object.prototype member is no record, on every route that takes one (CORE)', () => {
+  const PLANTED = ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf'];
+  type Answer = { status: number; body: { data?: any; error?: { kind: string; message: string } } };
+  type W = Awaited<ReturnType<typeof friendsOn>>;
+  const ROUTES: ReadonlyArray<readonly [string, number, (w: W, key: string, party: string) => Promise<Answer>]> = [
+    ['GET /profiles/:id', 404, (w, k) => w.kai.get(`/profiles/${k}`)],
+    ['GET /profiles/:id/showcase', 404, (w, k) => w.kai.get(`/profiles/${k}/showcase`)],
+    ['POST /friends/:id/remove', 400, (w, k) => w.kai.post(`/friends/${k}/remove`)],
+    ['POST /requests {toUserId}', 404, (w, k) => w.kai.post('/requests', { toUserId: k })],
+    ['POST /requests/:id/accept', 404, (w, k) => w.kai.post(`/requests/${k}/accept`)],
+    ['POST /requests/:id/decline', 404, (w, k) => w.kai.post(`/requests/${k}/decline`)],
+    ['POST /requests/:id/cancel', 404, (w, k) => w.kai.post(`/requests/${k}/cancel`)],
+    ['POST /blocks {targetId}', 404, (w, k) => w.kai.post('/blocks', { targetId: k })],
+    ['POST /blocks/:id/remove', 400, (w, k) => w.kai.post(`/blocks/${k}/remove`)],
+    ['POST /mutes {targetId}', 404, (w, k) => w.kai.post('/mutes', { targetId: k, voice: true, messages: true })],
+    ['POST /reports {reportedId}', 404, (w, k) => w.kai.post('/reports', { reportedId: k, reason: 'SPAM' })],
+    ['POST /conversations {otherUserId}', 404, (w, k) => w.kai.post('/conversations', { otherUserId: k })],
+    ['GET /conversations/:id/messages', 404, (w, k) => w.kai.get(`/conversations/${k}/messages`)],
+    ['POST /conversations/:id/messages', 404, (w, k) => w.kai.post(`/conversations/${k}/messages`, { body: 'hello?' })],
+    ['POST /conversations/:id/read', 404, (w, k) => w.kai.post(`/conversations/${k}/read`, {})],
+    ['POST /parties/:id/invites {toUserId}', 404, (w, k, party) => w.kai.post(`/parties/${party}/invites`, { toUserId: k })],
+    ['POST /parties/:id/members/:id/remove', 404, (w, k, party) => w.kai.post(`/parties/${party}/members/${k}/remove`)],
+    ['POST /parties/:id/leader {memberId}', 400, (w, k, party) => w.kai.post(`/parties/${party}/leader`, { memberId: k })],
+    ['POST /party-invites/:id/accept', 404, (w, k) => w.kai.post(`/party-invites/${k}/accept`)],
+    ['POST /party-invites/:id/decline', 404, (w, k) => w.kai.post(`/party-invites/${k}/decline`)],
+    ['POST /world/join {FRIEND userId}', 403, (w, k) => w.kai.post('/world/join', { target: 'FRIEND', userId: k })],
+    ['POST /world/join {INVITE inviteId}', 404, (w, k) => w.kai.post('/world/join', { target: 'INVITE', inviteId: k })],
+    ['POST /world/invites {toUserId}', 403, (w, k) => w.kai.post('/world/invites', { toUserId: k })],
+  ];
+
+  /** Kai and Nova, friends; Kai leads a party and stands in a public world (so the invite routes reach their user lookup). */
+  async function setUp() {
+    const store = createInMemorySocialStore();
+    const w = await friendsOn(store);
+    const party = (await w.kai.post('/parties', { name: 'Crew' })).body.data.partyId as string;
+    expect((await w.kai.post('/world/join', { target: 'PUBLIC' })).status).toBe(200);
+    return { store, w, party };
+  }
+
+  for (const [route, status, call] of ROUTES) {
+    it(`${route}: every planted id answers ${status}, changes nothing and throws nothing`, async () => {
+      const { store, w, party } = await setUp();
+      for (const key of PLANTED) {
+        const before = await store.read();
+        const answer = await call(w, key, party).catch((e: unknown): Answer => ({ status: 500, body: { error: { kind: 'THROWN', message: String(e) } } }));
+        const label = `${route} with ${JSON.stringify(key)} -> ${JSON.stringify(answer.body.error ?? answer.body.data ?? null).slice(0, 160)}`;
+        expect(answer.status, label).toBe(status);
+        expect(await store.read(), `${label}: the state must not move`).toBe(before);
+      }
+      // the actor's own view still answers: a stored record for a planted id had broken it (snapshot.read builds a profile for each)
+      expect((await w.kai.get('/snapshot')).status).toBe(200);
+    });
+  }
 });
