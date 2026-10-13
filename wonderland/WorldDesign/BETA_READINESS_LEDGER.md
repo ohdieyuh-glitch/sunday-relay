@@ -73,6 +73,11 @@ multiple real Wonderland clients, by CORE and independently by Second.
 - Engineering since 10-04 that moves no row by itself (each recorded with its evidence class in `_independent_review_20261013/requests/REQ_wonderland_READINESS_EVIDENCE_20261013T143818Z.md`):
   #346 (035) and #351 (social hardening, main 42e8c06b) merged; #356 voice re-cut (tree 42b7563d) awaiting merge; the O1 hosted DB at 034; rehearsal
   r16reh12 (10b00c15) built 10-13 14:44Z with the NNE never-cook fix. R16 stays 0 until the hosted two-client run passes the checklist.
+- **CORRECTION (independent finding WL-LEDGER-01, 2026-10-13 ~14:56Z): the FQ bullet above paraphrased the option answers; the founder's WRITTEN
+  rulings govern.** FQ-2 (written): the 8 reachable presence states are verified LIVE; "Working with Julius" is in scope as representation only
+  (correctly represented, never falsely active, its transition never claimed as tested); "private server" and "GVE" are DEFERRED, NOT APPLICABLE
+  (not "counted"). FQ-4 (written): no private-server protocol tests are required; authenticated API-level verification stays acceptable for other
+  in-scope features where appropriate, subject to the existing evidence and security requirements, with sanitized raw request evidence retained.
 
 **WONDERLAND BETA READINESS: 56.25%** (2026-10-04 ~17:00Z, a change of DEFINITION, not of evidence; CORE "Wonderland main").
 - **FOUNDER RULINGS (explicit option answers + written rulings, CORE's session; memory founder-rulings-20261004-1700-r16-gate):**
