@@ -239,6 +239,8 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     const dir = mkdtempSync(join(tmpdir(), 'julius-readiness-'));
     mkdirSync(join(dir, 'scripts'));
     copyFileSync(join(ROOT, 'scripts', 'julius-subscription-check.mjs'), join(dir, 'scripts', 'julius-subscription-check.mjs'));
+    // Its one import, as the checkout holds it beside it: the usage-limit recogniser it shares with the live coder (F5).
+    copyFileSync(join(ROOT, 'scripts', 'julius-usage-limit.mjs'), join(dir, 'scripts', 'julius-usage-limit.mjs'));
     const shimDir = join(dir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk-linux-x64');
     mkdirSync(shimDir, { recursive: true });
     const record = dir.replace(/\\/gu, '/');
@@ -356,6 +358,8 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     const dir = mkdtempSync(join(tmpdir(), 'julius-smoke-'));
     mkdirSync(join(dir, 'scripts'));
     copyFileSync(join(ROOT, 'scripts', 'julius-subscription-check.mjs'), join(dir, 'scripts', 'julius-subscription-check.mjs'));
+    // Its one import, as the checkout holds it beside it: the usage-limit recogniser it shares with the live coder (F5).
+    copyFileSync(join(ROOT, 'scripts', 'julius-usage-limit.mjs'), join(dir, 'scripts', 'julius-usage-limit.mjs'));
     const shimDir = join(dir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk-linux-x64');
     mkdirSync(shimDir, { recursive: true });
     writeFileSync(join(dir, 'status.json'), statusJson);

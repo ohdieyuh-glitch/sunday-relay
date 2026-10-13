@@ -183,7 +183,7 @@ describe('F5: the usage-limit sentence is the smoke\'s, recognised by one functi
 
   it('it is never retried within the run, and the durable row names it', async () => {
     const { codingAgentFailureFromHostedReason } = await import('../julius/claude-code-coding-provider');
-    const { juliusCodingAgentFailureDisposition } = await import('../../src/relay/mission/julius');
+    const { juliusCodingAgentFailureDisposition } = await import('../../src/relay/mission/julius/julius-coding-agent');
     const failure = codingAgentFailureFromHostedReason('usage_limit_reached');
     expect(failure).toBe('CREDIT_UNAVAILABLE');
     expect(juliusCodingAgentFailureDisposition(failure)).toMatchObject({ retryable: false, operatorAction: true });
