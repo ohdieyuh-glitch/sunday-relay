@@ -21,14 +21,26 @@
  * must be followed by `/`, and none may follow a word character, a dot or another
  * path character, so `deployed to /app`, `src/app/main.ts`, `example.com/app/x`
  * and `~5/10` are prose, not paths.
+ *
+ * THE WINDOWS SHAPES A UNIX-STYLE SHELL WRITES (independent review JU-348-04):
+ * Git Bash and MSYS2 name a drive as a ONE-LETTER ROOT -- `/c/Users/<name>/…`,
+ * `/d/dev/…` -- and Cygwin as `/cygdrive/c/…`. A one-letter root followed by `/`
+ * is a host path, under the same look-behind, so `cmd /c x`, `a/c/b`, `1/c/2`,
+ * `./c/main.c` and `example.com/c/x` stay prose; the price is that a route whose
+ * FIRST segment is one letter (`/v/1/users`) is cut too. WSL's `/mnt/c/…` was
+ * already a root. The Win32 extended-length and device prefixes (`\\?\C:\…`,
+ * `\\.\C:\…`) were already cut by the UNC pattern, but the drive pattern cut the
+ * `C:\…` inside them first, so ONE path counted as TWO cuts; the drive pattern now
+ * leaves a drive that follows such a prefix to the UNC pattern.
  */
 
 /** Global patterns, for a caller that REPLACES every match (`String#replace`). */
 export const WONDERLAND_HOST_PATH_PATTERNS: readonly RegExp[] = Object.freeze([
   /\bfile:\/\/[^\s"'`<>]+/gi,
-  /\b[A-Za-z]:[\\/][^\s"'`<>|]*/g,
+  /(?<!\\\\[?.]\\)\b[A-Za-z]:[\\/][^\s"'`<>|]*/g,
   /\\\\[^\s\\"'`<>|]+\\[^\s"'`<>|]*/g,
-  /(?<![\w.~:/\\-])\/(?:home|Users|root|tmp|var|opt|srv|mnt|private|etc|usr|workspace|workspaces|data|run|Volumes|app|github|__w|nix|builds|Library|System|Applications)\/[^\s"'`<>]*/g,
+  /(?<![\w.~:/\\-])\/(?:home|Users|root|tmp|var|opt|srv|mnt|private|etc|usr|workspace|workspaces|data|run|Volumes|app|github|__w|nix|builds|Library|System|Applications|cygdrive)\/[^\s"'`<>]*/g,
+  /(?<![\w.~:/\\-])\/[A-Za-z]\/[^\s"'`<>]*/g,
   /(?<![\w.~:/\\-])~[\\/][^\s"'`<>]+/g,
 ]);
 

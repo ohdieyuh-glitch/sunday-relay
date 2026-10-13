@@ -227,6 +227,52 @@ describe('metadata sanitising', () => {
     }
   });
 
+  // THE WINDOWS SHAPES A UNIX-STYLE SHELL WRITES (independent review JU-348-04): Git Bash / MSYS2 name a drive as a
+  // one-letter root (`/c/Users/<name>/...`, `/d/dev/...`), Cygwin as `/cygdrive/c/...`. One test per shape, each
+  // under a key that is NOT a code key, so only the host-path rule can drop it.
+  for (const [shape, path] of [
+    ['an MSYS / Git Bash drive path', '/c/Users/ju04founder/ju04dir-c/deploy.env'],
+    ['an MSYS drive path outside Users', '/d/dev/ju04founder/ju04dir-d/build.log'],
+    ['an MSYS drive path, upper-case drive letter', '/C/Users/ju04founder/ju04dir-upper/notes.md'],
+    ['a Cygwin drive path', '/cygdrive/c/Users/ju04founder/ju04dir-cyg/run.sh'],
+    ['an MSYS drive path inside an assignment', 'HOME=/c/Users/ju04founder/ju04dir-home'],
+    ['an MSYS drive path inside prose', 'cd /c/Users/ju04founder/ju04dir-prose failed'],
+  ] as const) {
+    it(`drops ${shape} under any key (JU-348-04)`, () => {
+      expect(sanitizeWonderlandMetadata({ detail: path, kept: 'BUILD_SUBMITTED' }))
+        .toEqual({ metadata: { kept: 'BUILD_SUBMITTED' }, dropped: 1 });
+    });
+  }
+
+  // PINNED, not new: the other Windows shapes JU-348-04 asked about were already caught -- WSL's mount of a drive
+  // by the /mnt root, the Win32 extended-length and device prefixes and WSL's own shares by the UNC pattern.
+  for (const [shape, path] of [
+    ['a WSL mount of a Windows drive', '/mnt/c/Users/ju04founder/ju04dir-wsl/a.txt'],
+    ['a Win32 extended-length path', '\\\\?\\C:\\Users\\ju04founder\\ju04dir-long\\c.txt'],
+    ['a Win32 device path', '\\\\.\\C:\\Users\\ju04founder\\ju04dir-device\\h.txt'],
+    ['an extended-length UNC path', '\\\\?\\UNC\\ju04server\\share\\ju04dir-unc\\d.txt'],
+    ['a WSL distribution share', '\\\\wsl$\\Ubuntu\\home\\ju04founder\\ju04dir-wsls\\f.txt'],
+    ['a WSL localhost share', '\\\\wsl.localhost\\Ubuntu\\home\\ju04founder\\ju04dir-wslh\\g.txt'],
+  ] as const) {
+    it(`still drops ${shape} under any key (JU-348-04, caught before it)`, () => {
+      expect(sanitizeWonderlandMetadata({ detail: path, kept: 'BUILD_SUBMITTED' }))
+        .toEqual({ metadata: { kept: 'BUILD_SUBMITTED' }, dropped: 1 });
+    });
+  }
+
+  it('CONTROL: text that only LOOKS like a one-letter drive root still crosses (JU-348-04)', () => {
+    // cmd.exe's own switches (`/c` with nothing under it), a one-letter segment inside a word, a ratio, a URL, a
+    // protocol-relative URL, a sed expression, the project's own relative paths through a directory named `c`, and
+    // the usual slashed abbreviations.
+    for (const text of [
+      'cmd /c build.bat', 'rmdir /S /Q build', 'the /cmd flag', 'a/c/b', 'ratio 1/c/2',
+      'see https://example.com/c/Users/page', 'load //cdn.example.com/c/lib.js', 'sed s/a/b/g',
+      './c/main.c', '../c/main.c', 'src/c/main.c', 'and/or', 'I/O', 'w/o', 'km/h',
+    ]) {
+      expect(sanitizeWonderlandMetadata({ detail: text }), text).toEqual({ metadata: { detail: text }, dropped: 0 });
+    }
+  });
+
   it('the CODE keys -- reasonCode, severity, outcome -- carry a code or nothing, and a drop is counted (review M3, R4)', () => {
     // A code: the human gate's shape, in either case (the kernel writes EVIDENCE_FAILED and checkpoint_identity_required).
     for (const code of ['PLAN_ACCEPTED', 'checkpoint_identity_required', 'HIGH', 'accepted', 'v1.2']) {

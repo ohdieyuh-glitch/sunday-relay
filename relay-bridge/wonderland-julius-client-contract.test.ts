@@ -1414,6 +1414,67 @@ describe('R4: no secret in any response or log line', () => {
       clientResult(bodies.get('result')!, RUN);
     });
   }
+
+  /*
+   * THE WINDOWS SHAPES A UNIX-STYLE SHELL WRITES (independent review JU-348-04): Git Bash / MSYS2's one-letter drive
+   * root and Cygwin's /cygdrive -- the shapes this workstation itself produces -- plus two the review asked about that
+   * were already caught (WSL's /mnt/c, the Win32 extended-length prefix), pinned here end to end. Seeded exactly as
+   * the verify m2 block above seeds; every private segment carries `ju04founder` or `ju04dir-`.
+   */
+  const JU04_HOST_PATHS: ReadonlyArray<readonly [string, string, string]> = [
+    ['an MSYS / Git Bash drive path', '/c/Users/ju04founder/ju04dir-c/deploy.env', 'deploy.env'],
+    ['an MSYS drive path outside Users', '/d/dev/ju04founder/ju04dir-d/build.log', 'build.log'],
+    ['a Cygwin drive path', '/cygdrive/c/Users/ju04founder/ju04dir-cyg/run.sh', 'run.sh'],
+    ['a WSL mount of a Windows drive (caught before JU-348-04)', '/mnt/c/Users/ju04founder/ju04dir-wsl/a.txt', 'a.txt'],
+    ['a Win32 extended-length path (caught before JU-348-04)', '\\\\?\\C:\\Users\\ju04founder\\ju04dir-long\\c.txt', 'c.txt'],
+  ];
+  const JU04_PRIVATE = /ju04founder|ju04dir-/u;
+
+  for (const [shape, path, name] of JU04_HOST_PATHS) {
+    it(`hydrate, events and result carry no part of ${shape}, and no log line does; the fields still cross (JU-348-04)`, async () => {
+      const ledger: Ledger = {
+        gates: [{ gate_id: 'approval-1', task_id: 'task-build', operation: 'EXECUTE_PROCESS', reason_code: path, requested_at: AT }],
+        events: [
+          flatEvent(1, 'run.created', { missionId: 'mission:alpha' }),
+          flatEvent(2, 'run.transitioned', { to: 'EXECUTING', reasonCode: path, attempt: path }),
+        ],
+      };
+      const view: JuliusMissionResultView = {
+        ...VIEW,
+        state: 'FAILED', verified: false,
+        criteria: [{ ...VIEW.criteria[0], description: `Reads ${path}` }, VIEW.criteria[1]],
+        deliverables: [{ ...VIEW.deliverables[0], safeSummary: `Wrote ${path}`, artifactRef: path }],
+        outstandingFindings: [{ findingId: 'finding-1', taskId: 'task-build', claim: `Missing ${path}`, severity: 'HIGH' }],
+        reviewDecisions: [{ taskId: 'task-build', action: 'HALT', reasonCode: path }],
+        failure: { reasonCode: path, failureClass: path },
+      };
+      const logged: string[] = [];
+      const bodies = new Map<string, string>();
+      for (const route of ['hydrate', 'events', 'result'] as const) {
+        const { status, body } = await asClient(route, {
+          world: worldOver(ledgerPool(ledger), OWNER, view),
+          log: (line) => logged.push(line),
+          onAuthorization: (decision) => logged.push(JSON.stringify(decision)),
+        });
+        expect(status, `${shape}, ${route}: ${body}`).toBe(200);
+        expect(body, `${route} keeps part of ${shape}`).not.toMatch(JU04_PRIVATE);
+        expect(body.includes(JSON.stringify(path).slice(1, -1)), `${route} carries ${shape}`).toBe(false);
+        bodies.set(route, body);
+      }
+      for (const line of logged) expect(line, `a log line keeps part of ${shape}: ${line}`).not.toMatch(JU04_PRIVATE);
+      // CONTROL, per shape: the fields still cross -- the transition with both of its paths dropped and counted,
+      // /result's text cut back to the file name -- and both bodies still decode by the client's rules.
+      const deliveries = JSON.parse(bodies.get('events')!).data.deliveries as Array<{ envelope: { sequence: number; metadata: Record<string, unknown>; metadataDropped: number } }>;
+      const transition = deliveries.find((delivery) => delivery.envelope.sequence === 2)?.envelope;
+      expect(transition?.metadata, shape).toEqual({ juliusEventType: 'run.transitioned', runId: RUN, juliusRunState: 'EXECUTING' });
+      expect(transition?.metadataDropped, shape).toBe(2);
+      const data = JSON.parse(bodies.get('result')!).data as { deliverables: Array<{ summary: string }>; failure: { reasonCode: string } };
+      expect(data.deliverables[0].summary, shape).toBe(`Wrote …/${name}`);
+      expect(data.failure.reasonCode, shape).toBe(`…/${name}`);
+      clientPage(bodies.get('events')!, ASKED);
+      clientResult(bodies.get('result')!, RUN);
+    });
+  }
 });
 
 /* ===================================================================== */

@@ -571,4 +571,43 @@ describe('trimHostPaths', () => {
       expect(trimHostPaths(text), text).toEqual({ text, trimmed: 0 });
     }
   });
+
+  // The Windows shapes a Unix-style shell writes (independent review JU-348-04), one test per shape: Git Bash /
+  // MSYS2's one-letter drive root and Cygwin's /cygdrive -- and the Win32 extended-length and device prefixes,
+  // which were cut before but counted TWICE (the drive pattern cut `C:\...` inside them, then the UNC pattern cut
+  // what was left): one path is one cut.
+  for (const [path, name] of [
+    ['/c/Users/ju04founder/ju04dir-c/deploy.env', 'deploy.env'],
+    ['/d/dev/ju04founder/ju04dir-d/build.log', 'build.log'],
+    ['/C/Users/ju04founder/ju04dir-upper/notes.md', 'notes.md'],
+    ['/cygdrive/c/Users/ju04founder/ju04dir-cyg/run.sh', 'run.sh'],
+    ['\\\\?\\C:\\Users\\ju04founder\\ju04dir-long\\c.txt', 'c.txt'],
+    ['\\\\.\\C:\\Users\\ju04founder\\ju04dir-device\\h.txt', 'h.txt'],
+  ] as const) {
+    it(`cuts ${path} back to its file name, once (JU-348-04)`, () => {
+      expect(trimHostPaths(`read ${path}.`)).toEqual({ text: `read …/${name}.`, trimmed: 1 });
+    });
+  }
+
+  // PINNED, not new: caught and counted once before JU-348-04 too.
+  for (const [path, name] of [
+    ['/mnt/c/Users/ju04founder/ju04dir-wsl/a.txt', 'a.txt'],
+    ['\\\\?\\UNC\\ju04server\\share\\ju04dir-unc\\d.txt', 'd.txt'],
+    ['\\\\wsl$\\Ubuntu\\home\\ju04founder\\ju04dir-wsls\\f.txt', 'f.txt'],
+    ['\\\\wsl.localhost\\Ubuntu\\home\\ju04founder\\ju04dir-wslh\\g.txt', 'g.txt'],
+  ] as const) {
+    it(`still cuts ${path} back to its file name, once (JU-348-04, caught before it)`, () => {
+      expect(trimHostPaths(`read ${path}.`)).toEqual({ text: `read …/${name}.`, trimmed: 1 });
+    });
+  }
+
+  it('CONTROL: text that only LOOKS like a one-letter drive root is left alone (JU-348-04)', () => {
+    for (const text of [
+      'cmd /c build.bat', 'rmdir /S /Q build', 'the /cmd flag', 'a/c/b', 'ratio 1/c/2',
+      'see https://example.com/c/Users/page', 'load //cdn.example.com/c/lib.js', 'sed s/a/b/g',
+      './c/main.c', '../c/main.c', 'src/c/main.c', 'and/or', 'I/O', 'w/o', 'km/h',
+    ]) {
+      expect(trimHostPaths(text), text).toEqual({ text, trimmed: 0 });
+    }
+  });
 });
