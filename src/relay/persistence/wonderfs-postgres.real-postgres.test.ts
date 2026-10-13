@@ -1,12 +1,15 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   applyWfsCommit,
+  canonicalJson,
   emptyWfsProject,
   forkWfsBranch,
   verifyWfsChain,
+  wfsEntriesAt,
+  wfsGenesisHash,
   wfsTreeAt,
   WFS_ALPHA_LIMITS,
   WFS_MAIN_BRANCH,
@@ -18,7 +21,8 @@ import {
   type WfsProjectState,
 } from '../wonderfs';
 import { juliusTestDatabaseUrl } from './julius-test-database';
-import { openWfsPostgresStore } from './wonderfs-postgres';
+import { loadWfsProject, openWfsPostgresStore } from './wonderfs-postgres';
+import { WFS_STORE_CASES, type WfsStoreHarness } from './wonderfs-store-conformance';
 import { TransactionalWonderlandDatabase } from './wonderland-postgres';
 
 /**
@@ -32,6 +36,14 @@ import { TransactionalWonderlandDatabase } from './wonderland-postgres';
  *            is what the PRODUCT writes (OWNER / ADMIN / MEMBER) through the one mapping, and a lower-case legacy value is no role;
  *   BLOB     a blob's address is computed here; a commit naming an unheld blob is refused; a referenced blob cannot be deleted;
  *   ATOMIC   a failure inside the write rolls everything back (the version does not move, nothing half-written).
+ * R0b adds:
+ *   CONTRACT  the store-interface cases (wonderfs-store-conformance.ts) the in-memory store passes on every run, here on rows;
+ *   TORN-READ a commit landing BETWEEN a read's statements (deterministically: the read's client pauses right after its first
+ *             look at wfs_branches while another bridge commits) is invisible to project() and tree(); CONTROL: the same
+ *             statements outside one snapshot tear;
+ *   CACHE     a store whose remembered state is stale reads, and builds on, the rows;
+ *   CREATE-IN-TX createProjectIn joins the CALLER's transaction: rolled back with it, nothing is left; CONTROL: committed, it works;
+ *   VERIFY    changed, short and missing bytes are each named; an untouched blob is intact.
  * Runs wherever JULIUS_TEST_DATABASE_URL names a THROWAWAY server (never DATABASE_URL); `todo` elsewhere.
  */
 
@@ -50,6 +62,66 @@ function idSource() {
     n += 1;
     return `${kind}-${String(n).padStart(5, '0')}`;
   };
+}
+
+/** The store harness for the shared contract cases: stores over ONE database, its product rows written as the product writes them. */
+function pgHarness(pool: Pool): WfsStoreHarness {
+  const member = async (projectId: string, playerId: string, role: string) => {
+    await pool.query('INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING', [playerId]);
+    await pool.query('INSERT INTO relay_wonderland.project_members(project_id, player_id, role) VALUES($1,$2,$3)', [projectId, playerId, role]);
+  };
+  return {
+    open: (options = {}) => openWfsPostgresStore(pool, options),
+    async seed(projectId, members) {
+      await pool.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1)', [projectId]);
+      for (const [playerId, role] of Object.entries(members)) await member(projectId, playerId, role);
+    },
+    async setRole(projectId, playerId, productRole) {
+      await pool.query('DELETE FROM relay_wonderland.project_members WHERE project_id = $1 AND player_id = $2', [projectId, playerId]);
+      if (productRole !== null) await member(projectId, playerId, productRole);
+    },
+  };
+}
+
+/**
+ * A pool whose clients, right after the FIRST statement matching `after`, run `land` -- another bridge's whole commit -- before
+ * the caller's next statement goes out. Deterministic interleaving: no timing, no retries.
+ */
+function interleaved(pool: Pool, after: RegExp, land: () => Promise<void>): Pool {
+  let fired = false;
+  const passThrough = <T extends object>(target: T, prop: string | symbol): unknown => {
+    const v: unknown = Reflect.get(target, prop);
+    return typeof v === 'function' ? v.bind(target) : v;
+  };
+  const wrap = (client: PoolClient): PoolClient => new Proxy(client, {
+    get(target, prop) {
+      if (prop !== 'query') return passThrough(target, prop);
+      return async (text: unknown, values?: unknown) => {
+        const result: unknown = await (target.query as unknown as (t: unknown, v?: unknown) => Promise<unknown>).call(target, text, values);
+        if (!fired && typeof text === 'string' && after.test(text)) {
+          fired = true;
+          await land();
+        }
+        return result;
+      };
+    },
+  });
+  return new Proxy(pool, {
+    get(target, prop) {
+      if (prop === 'connect') return async () => wrap(await target.connect());
+      return passThrough(target, prop);
+    },
+  });
+}
+
+/** One committed state: main's commits are gapless up to its head, the head hash is the last commit's, and the entries are what the commits make. */
+function consistent(s: WfsProjectState): boolean {
+  const main = s.branches.get(WFS_MAIN_BRANCH)!;
+  const sorted = (m: ReadonlyMap<string, unknown>) => canonicalJson([...m.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  return main.commits.length === main.headRev
+    && main.commits.every((c, i) => c.rev === i + 1)
+    && (main.commits.at(-1)?.commitHash ?? main.anchorHash) === main.headCommitHash
+    && sorted(main.entries) === sorted(wfsEntriesAt(main));
 }
 
 /** A project state as comparable data (Maps become sorted entry lists). */
@@ -278,5 +350,138 @@ suite('the WonderFS store on real PostgreSQL: the engine is the oracle', () => {
     await pool.query('DROP TRIGGER wfs_test_refuse ON relay_wonderland.wfs_versions');
     const again = await store.commit('prj-1', { requestId: 'req-atom-0001', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: who('usr_owner'), ops: [{ op: 'create', path: 'd', kind: 'dir' }] }, NOW);
     expect(again.ok && again.value.status).toBe('committed');
+  }, 120_000);
+
+  // R0b: THE STORE CONTRACT -- the same cases the in-memory store passes on every run (wonderfs-memory-store.test.ts), here on rows
+  let contract: WfsStoreHarness | null = null;
+  const contractHarness = async (): Promise<WfsStoreHarness> => {
+    if (contract === null) contract = pgHarness(await fresh('contract'));
+    return contract;
+  };
+  for (const c of WFS_STORE_CASES) {
+    it(`CONTRACT ${c.name}`, async () => c.run(await contractHarness()), 300_000);
+  }
+
+  const dir = (i: number, baseRev = 0): WfsCommitRequest => ({
+    requestId: `req-dir-${String(i).padStart(5, '0')}`, branchId: WFS_MAIN_BRANCH, baseRev, principal: who('usr_owner'), ops: [{ op: 'create', path: `d${i}`, kind: 'dir' }],
+  });
+
+  it('TORN-READ (F4): a commit landing BETWEEN a read\'s statements is invisible to it -- project() and tree() each show ONE committed state; CONTROL: outside one snapshot the same statements tear', async () => {
+    const pool = await fresh('torn');
+    const writer = openWfsPostgresStore(pool);
+    await writer.createProject('prj-1', NOW);
+    for (let i = 1; i <= 3; i += 1) expect((await writer.commit('prj-1', dir(i), NOW)).ok).toBe(true);
+    let landed = 0;
+    const land = async (): Promise<void> => {
+      landed += 1;
+      const r = await writer.commit('prj-1', dir(100 + landed), NOW);
+      expect(r.ok && r.value.status, 'the interleaved commit lands').toBe('committed');
+    };
+    const AFTER_BRANCHES = /FROM relay_wonderland\.wfs_branches/u;
+    const headNow = async () => (await openWfsPostgresStore(pool).project('prj-1'))!.branches.get(WFS_MAIN_BRANCH)!;
+
+    // CONTROL: the whole-state read's statements, one by one outside a transaction (READ COMMITTED autocommit), with a commit
+    // landing after the branches were read: the head says 3, the commits and entries say 4 -- a state that never existed
+    const tearing = await interleaved(pool, AFTER_BRANCHES, land).connect();
+    const torn = await loadWfsProject(tearing, 'prj-1').finally(() => tearing.release());
+    expect(landed).toBe(1);
+    expect(torn!.state.branches.get(WFS_MAIN_BRANCH)!.headRev).toBe(3);
+    expect(torn!.state.branches.get(WFS_MAIN_BRANCH)!.commits.length, 'CONTROL: outside one snapshot the read mixes two states').toBe(4);
+    expect(consistent(torn!.state), 'CONTROL: the torn state fails the check').toBe(false);
+
+    // project(): ONE snapshot -- the commit that lands mid-read (rev 5) is invisible; the read is exactly the rev-4 state
+    const atFour = await openWfsPostgresStore(pool).project('prj-1');
+    expect(atFour!.branches.get(WFS_MAIN_BRANCH)!.headRev).toBe(4);
+    const seen = await openWfsPostgresStore(interleaved(pool, AFTER_BRANCHES, land)).project('prj-1');
+    expect(landed, 'a commit landed DURING the read').toBe(2);
+    expect(consistent(seen!)).toBe(true);
+    expect(plain(seen!), 'the read is the state at its start').toEqual(plain(atFour!));
+    expect((await headNow()).headRev, 'and the commit did land').toBe(5);
+
+    // tree(): the head is read, a commit lands (rev 6), the entries are read -- still the rev-5 tree, nothing of rev 6
+    const page = await openWfsPostgresStore(interleaved(pool, AFTER_BRANCHES, land)).tree('prj-1', { branchId: WFS_MAIN_BRANCH });
+    expect(landed).toBe(3);
+    const main = await headNow();
+    expect(main.headRev).toBe(6);
+    expect(page.ok && [page.value.rev, page.value.headRev]).toEqual([5, 5]);
+    expect(page.ok && page.value.entries.map((e) => e.path)).toEqual(wfsTreeAt(main, 5).map((e) => e.path));
+    expect(wfsTreeAt(main, 6).length, 'CONTROL: the mid-read commit added an entry the page must not show').toBe(wfsTreeAt(main, 5).length + 1);
+  }, 120_000);
+
+  it('CACHE: a store whose remembered state is stale (another bridge committed since) reads, and builds on, the rows', async () => {
+    const pool = await fresh('cache');
+    const one = openWfsPostgresStore(pool);
+    const two = openWfsPostgresStore(pool);
+    await one.createProject('prj-1', NOW);
+    expect((await one.commit('prj-1', dir(1), NOW)).ok).toBe(true); // one remembers the project at this version
+    expect((await two.commit('prj-1', dir(2, 1), NOW)).ok).toBe(true); // the rows move on without it
+    const seen = await one.project('prj-1');
+    expect(seen!.branches.get(WFS_MAIN_BRANCH)!.headRev).toBe(2);
+    expect(plain(seen!)).toEqual(plain((await openWfsPostgresStore(pool).project('prj-1'))!));
+    const head = await one.head('prj-1');
+    expect(head.ok && head.value.main.headRev).toBe(2);
+    const next = await one.commit('prj-1', dir(3, 2), NOW);
+    expect(next.ok && next.value.status === 'committed' && next.value.rev, 'built on the rows, not on a stale memory').toBe(3);
+  }, 120_000);
+
+  it('CREATE-IN-TX: createProjectIn joins the CALLER\'s transaction -- rolled back with it, nothing is left; CONTROL: committed with it, the project works', async () => {
+    const pool = await fresh('createin');
+    const store = openWfsPostgresStore(pool);
+    const count = async (table: string, projectId: string) => Number((await pool.query(`SELECT count(*) AS n FROM relay_wonderland.${table} WHERE project_id = $1`, [projectId])).rows[0].n);
+    const inCallerTx = async (projectId: string, end: 'COMMIT' | 'ROLLBACK') => {
+      const tx = await pool.connect();
+      try {
+        await tx.query('BEGIN');
+        await tx.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1)', [projectId]);
+        const made = await store.createProjectIn(tx, projectId, NOW);
+        expect(made).toEqual({ genesisHash: wfsGenesisHash(projectId, sha), created: true });
+        expect(Number((await tx.query("SELECT count(*) AS n FROM relay_wonderland.wfs_branches WHERE project_id = $1 AND branch_id = 'main'", [projectId])).rows[0].n), 'inside the caller\'s transaction: main exists').toBe(1);
+        expect(await count('wfs_projects', projectId), 'outside it, before it ends: nothing (it is the caller\'s transaction, not one of its own)').toBe(0);
+        await tx.query(end);
+      } finally {
+        tx.release();
+      }
+    };
+    await inCallerTx('prj-rolled-back', 'ROLLBACK');
+    expect([await count('wfs_projects', 'prj-rolled-back'), await count('wfs_branches', 'prj-rolled-back'), await count('projects', 'prj-rolled-back')]).toEqual([0, 0, 0]);
+    const gone = await store.head('prj-rolled-back');
+    expect(gone.ok === false && gone.error.code).toBe('not-found');
+    // CONTROL: the same steps, committed, leave a working project
+    await inCallerTx('prj-committed', 'COMMIT');
+    const first = await store.commit('prj-committed', dir(1), NOW);
+    expect(first.ok && first.value.status === 'committed' && first.value.rev).toBe(1);
+    // a second createProjectIn for it keeps the one it has
+    const tx = await pool.connect();
+    try {
+      await tx.query('BEGIN');
+      expect(await store.createProjectIn(tx, 'prj-committed', NOW)).toEqual({ genesisHash: wfsGenesisHash('prj-committed', sha), created: false });
+      await tx.query('COMMIT');
+    } finally {
+      tx.release();
+    }
+    const head = await store.head('prj-committed');
+    expect(head.ok && head.value.main.headRev).toBe(1);
+  }, 120_000);
+
+  it('VERIFY: a blob\'s stored bytes are re-hashed against its address and size -- changed, short and missing bytes are each named; an untouched blob is intact', async () => {
+    const pool = await fresh('verify');
+    const store = openWfsPostgresStore(pool);
+    await store.createProject('prj-1', NOW);
+    const put = async (text: string): Promise<string> => {
+      const r = await store.putBlob('prj-1', new TextEncoder().encode(text));
+      if (!r.ok) throw new Error(r.error.message);
+      return r.value.sha256;
+    };
+    const intact = await put('intact');
+    const changed = await put('changed');
+    const short = await put('short');
+    const gone = await put('gone');
+    await pool.query('UPDATE relay_wonderland.wfs_blob_bytes SET bytes = $2 WHERE sha256 = $1', [changed, Buffer.from('chanGed')]);
+    await pool.query('UPDATE relay_wonderland.wfs_blob_bytes SET bytes = $2 WHERE sha256 = $1', [short, Buffer.from('shor')]);
+    await pool.query('DELETE FROM relay_wonderland.wfs_blob_bytes WHERE sha256 = $1', [gone]);
+    expect(await store.verifyBlob('prj-1', intact)).toEqual({ ok: true, value: { status: 'intact', size: 6 } });
+    expect(await store.verifyBlob('prj-1', changed)).toEqual({ ok: true, value: { status: 'corrupt', reason: 'hash_mismatch' } });
+    expect(await store.verifyBlob('prj-1', short)).toEqual({ ok: true, value: { status: 'corrupt', reason: 'size_mismatch' } });
+    expect(await store.verifyBlob('prj-1', gone)).toEqual({ ok: true, value: { status: 'corrupt', reason: 'bytes_missing' } });
   }, 120_000);
 });
