@@ -14,6 +14,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { transformSync } from 'esbuild';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -268,5 +269,111 @@ describe('F5: a rate-limited retry waits a bounded backoff, never past the stop 
     expect(sleeps).toEqual([10_000]);
     expect(outcome.state).toBe('FAILED');
     expect(outcome.haltCause).toMatch(/^job_deadline_reached: /u);
+  });
+});
+
+/**
+ * THE RE-RUN REFUSAL RETURNS (MAIN internal review 39b7192e, MINOR-3 F4e, 2026-10-13). The structural case above shows
+ * WHERE the check sits. With the `return 1` after its RESULT line removed, every test here stayed green, while a
+ * "Re-run failed jobs" attempt would have gone on into the runtime and the drive and spent again.
+ *
+ * `main` is not exported, and it reaches its bootstrap only through a real database. So the code AFTER the bootstrap is
+ * run as it is written: the entrypoint's own source, from the line that reports the accepted run to the end of the
+ * confirmed path's `try`, transpiled by esbuild and executed with every name it reads supplied here (the attempt rule
+ * is the real one). Nothing is retyped, so a change that drops the stop fails here. A name not supplied throws, naming it.
+ */
+describe('F4: a refused re-run RETURNS 1 from the entrypoint, and reaches nothing that can spend (review MINOR-3, F4e)', () => {
+  const entry = readFileSync(join(ROOT, 'relay-bridge/julius-live-mission.ts'), 'utf8');
+  const FROM = 'out(`Run ${submitted.runId} accepted in state ${submitted.state}; driving the Julius run loop.`);';
+  const TO = '\n  } finally {';
+  const DRIVE_REACHED = 'fake drive reached';
+  const READ_BEFORE_THE_REFUSAL_RETURNS = ['out', 'submitted', 'liveRunAttemptRefusal', 'env'];
+
+  /** The entrypoint's code after its bootstrap accepted the run, as an async function of a scope the test supplies. */
+  function afterBootstrap(): (scope: object) => Promise<unknown> {
+    const from = entry.indexOf(FROM);
+    expect(from, 'the accepted-run line').toBeGreaterThan(0);
+    expect(entry.indexOf(FROM, from + 1), 'appears once').toBe(-1);
+    const to = entry.indexOf(TO, from);
+    expect(to, 'and the confirmed path\'s try ends after it').toBeGreaterThan(from);
+    const code = transformSync(`(async () => {\n${entry.slice(from, to)}\n})`, { loader: 'ts' }).code.trim().replace(/;$/u, '');
+    // A sloppy-mode body, so that `with` can hand the slice the names it reads; the slice itself is the entrypoint's text.
+    return new Function('scope', `with (scope) { return (${code})(); }`) as (scope: object) => Promise<unknown>;
+  }
+
+  /** Every name the slice reads, faked; each lookup is recorded. The drive records its input and stops the slice. */
+  function scopeFor(env: Record<string, string | undefined>) {
+    const looked: string[] = [];
+    const lines: string[] = [];
+    const calls = { assemble: 0, drive: 0 };
+    let driveInput: Record<string, unknown> | null = null;
+    const supplied: Record<string, unknown> = {
+      env,
+      out: (line: string) => { lines.push(line); },
+      submitted: { runId: RUN, state: 'READY' },
+      liveRunAttemptRefusal,
+      handoffs: { store: {} },
+      resolution: { entries: [] },
+      cardRevision: 'card-rerun',
+      contract: { missionId: MISSION, projectId: PROJECT, limits: undefined, learningPair: undefined },
+      researchClause: undefined,
+      researchPolicyOf: () => null,
+      observed: { probes: [] },
+      assembleLiveJuliusRuntime: () => { calls.assemble += 1; return { loop: {}, verification: {} }; },
+      liveExecutionScope: () => null,
+      liveResearchLines: () => [],
+      researchReachSummary: () => null,
+      liveTickBudgetFor: async () => ({}),
+      liveTickBudgetLine: () => '  tick budget: faked',
+      tickOverride: { override: undefined },
+      wallClockDeadline: () => 'faked',
+      liveStageDeadline: () => null,
+      liveStageDeadlineLine: () => '  stage deadline: faked',
+      liveExecutionScopeLine: () => '  execution scope: faked',
+      JULIUS_LIVE_RATE_LIMIT_BACKOFF,
+      driveJuliusRunToTerminal: async (input: Record<string, unknown>) => { calls.drive += 1; driveInput = input; throw new Error(DRIVE_REACHED); },
+    };
+    const scope = new Proxy(supplied, {
+      has: (target, name) => typeof name === 'string' && (name in target || !(name in globalThis)),
+      get: (target, name) => {
+        if (typeof name !== 'string') return undefined;
+        looked.push(name);
+        if (!(name in target)) throw new Error(`the entrypoint slice read a name this test does not supply: ${name}`);
+        return target[name];
+      },
+    });
+    return { scope, looked, lines, calls, driveInput: () => driveInput };
+  }
+
+  it('CONTROL: a first attempt under Actions goes on into the runtime and the drive (the fake drive stops it there)', async () => {
+    const { scope, lines, calls, driveInput } = scopeFor({ GITHUB_ACTIONS: 'true', GITHUB_RUN_ATTEMPT: '1' });
+    await expect(afterBootstrap()(scope)).rejects.toThrow(DRIVE_REACHED);
+    expect(calls).toEqual({ assemble: 1, drive: 1 });
+    expect(lines[0]).toBe(`Run ${RUN} accepted in state READY; driving the Julius run loop.`);
+    expect(lines.filter((line) => line.startsWith('RESULT:')), 'no RESULT before the drive').toEqual([]);
+    expect(driveInput(), 'the drive is the live one: this run, the live rate-limit backoff').toMatchObject({
+      runId: RUN, projectId: PROJECT, retryBackoff: JULIUS_LIVE_RATE_LIMIT_BACKOFF,
+    });
+  });
+
+  it('a re-run (attempt 2, attempt 3, or no attempt under Actions) returns 1 after its RESULT and run lines, and nothing past them is even looked up', async () => {
+    const run = afterBootstrap();
+    for (const env of [{ GITHUB_ACTIONS: 'true', GITHUB_RUN_ATTEMPT: '2' }, { GITHUB_ACTIONS: 'true', GITHUB_RUN_ATTEMPT: '3' }, { GITHUB_ACTIONS: 'true' }]) {
+      const label = JSON.stringify(env);
+      const { scope, looked, lines, calls } = scopeFor(env);
+      let returned: unknown;
+      let thrown: unknown = null;
+      try { returned = await run(scope); } catch (error) { thrown = error; }
+      expect(looked.filter((name) => !READ_BEFORE_THE_REFUSAL_RETURNS.includes(name)), `${label}: nothing past the refusal is looked up`).toEqual([]);
+      expect(calls, `${label}: neither the runtime nor the drive, the only path to a provider, is reached`).toEqual({ assemble: 0, drive: 0 });
+      expect(thrown, label).toBeNull();
+      expect(returned, `${label}: main returns 1, a failed job`).toBe(1);
+      expect(lines, label).toEqual([
+        `Run ${RUN} accepted in state READY; driving the Julius run loop.`,
+        `RESULT: BLOCKED — ${liveRunAttemptRefusal(env)}`,
+        `  run: ${RUN}`,
+      ]);
+    }
+    expect(entry, 'and the entry guard makes main\'s return the exit code').toContain('(code) => { process.exitCode = code; },');
   });
 });
