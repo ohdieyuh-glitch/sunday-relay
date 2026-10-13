@@ -203,6 +203,49 @@ describe('sign-out ends presence (Second\'s R16 run, 10-04)', () => {
   });
 });
 
+describe('BF-2 through the real routes: the profile Relay Dog follows the worn skin, as privacy allows (R16 B23)', () => {
+  const report = (skinId: string) => ({ x: 1, y: 2, z: 3, yaw: 0, speed: 0, motion: 'IDLE', skinId });
+  const skinOf = async (who: { get: (path: string) => Promise<{ body: { data?: any } }> }, id: string) =>
+    (await who.get(`/profiles/${id}`)).body.data?.profile.relayDog.skinId;
+
+  it('Kai wears Jack Flame in the world -> Nova is told, and her profile read and snapshot card show it; Vega, a stranger, as privacy allows', async () => {
+    const store = createInMemorySocialStore();
+    const w = await friendsOn(store);
+    await w.vega.get('/snapshot');
+    expect((await w.kai.post('/world/join', { target: 'PUBLIC' })).status).toBe(200);
+    // the control before any report: the base form, for everybody
+    expect([await skinOf(w.nova, 'usr_kai'), await skinOf(w.vega, 'usr_kai')]).toEqual(['relay_og', 'relay_og']);
+    const novaLatest = (await w.nova.get('/events')).body.data.latest;
+    expect((await w.kai.post('/world/state', report('jack_flame'))).status).toBe(200);
+    expect((await w.nova.get(`/events?after=${novaLatest}`)).body.data.events.map((e: any) => e.op)).toEqual(['world.state']);
+    expect(await skinOf(w.nova, 'usr_kai')).toBe('jack_flame');
+    expect((await w.nova.get('/snapshot')).body.data.profiles.usr_kai.profile.relayDog.skinId).toBe('jack_flame');
+    expect((await w.kai.get('/snapshot')).body.data.self.profile.relayDog.skinId).toBe('jack_flame');
+    expect(await skinOf(w.vega, 'usr_kai'), 'presence is EVERYONE by default: a stranger sees it').toBe('jack_flame');
+    // the agent card: nothing configured, said as null -- never a default Julius (RQ-1)
+    expect((await w.nova.get('/profiles/usr_kai')).body.data.profile.primaryAgent).toBeNull();
+
+    // an unregistered id: the report is answered (the in-world figure stands), the profile is not touched; a malformed one is a 400
+    expect((await w.kai.post('/world/state', report('bee'))).status).toBe(200);
+    expect(await skinOf(w.nova, 'usr_kai')).toBe('jack_flame');
+    expect((await w.kai.post('/world/state', report('JACK FLAME'))).status).toBe(400);
+    expect(await skinOf(w.nova, 'usr_kai')).toBe('jack_flame');
+
+    // privacy: presence to friends only -> the stranger reads the base form, the friend still the skin
+    expect((await w.kai.post('/privacy', { presenceVisibility: 'FRIENDS' })).status).toBe(200);
+    expect([await skinOf(w.nova, 'usr_kai'), await skinOf(w.vega, 'usr_kai')]).toEqual(['jack_flame', 'relay_og']);
+    // a block, either way: nothing (presence EVERYONE again, so the block alone decides; control first)
+    expect((await w.kai.post('/privacy', { presenceVisibility: 'EVERYONE' })).status).toBe(200);
+    expect(await skinOf(w.vega, 'usr_kai')).toBe('jack_flame');
+    expect((await w.vega.post('/blocks', { targetId: 'usr_kai' })).status).toBe(200);
+    expect(await skinOf(w.vega, 'usr_kai')).toBe('relay_og');
+    expect((await w.vega.post('/blocks/usr_kai/remove')).status).toBe(200);
+    expect((await w.kai.post('/blocks', { targetId: 'usr_vega' })).status).toBe(200);
+    expect(await skinOf(w.vega, 'usr_kai')).toBe('relay_og');
+    expect(await skinOf(w.nova, 'usr_kai'), 'their block changes nothing for Nova').toBe('jack_flame');
+  });
+});
+
 /** Kai and Nova, friends, on a given store. */
 async function friendsOn(store: SocialStore) {
   const w = world(store);

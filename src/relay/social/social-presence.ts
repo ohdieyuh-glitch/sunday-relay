@@ -15,7 +15,9 @@
 
 import {
   PARTY_MAX_MEMBERS,
+  RELAY_DOG_BASE_SKIN_ID,
   SOCIAL_ACTIVITY_LABELS,
+  isRelayDogSkinId,
   type SocialActionAvailability,
   type SocialActivityType,
   type SocialLocation,
@@ -23,6 +25,7 @@ import {
   type SocialPresenceHeadline,
   type SocialUserId,
   type UserPresenceView,
+  type UserProfile,
   type UserProfileView,
 } from './social-contracts';
 import {
@@ -292,6 +295,11 @@ export function resolveProfileFor(state: SocialState, viewerId: SocialUserId, su
   const actual = relationshipOf(state, viewerId, subjectId);
   const relationship = actual === 'BLOCKED_BY' ? 'NONE' : actual;
   const blocked = blockedEitherWay(state, viewerId, subjectId);
+  // THE WORN SKIN (BF-2) follows the player's presence audience: it is recorded from their world reports, so its changes are a
+  // sign they are playing. Outside that audience, or blocked either way, the card shows the base form -- what every card showed
+  // before the skin was recorded -- so the blocked side still sees exactly a stranger who shares nothing.
+  const seesWornSkin = viewerId === subjectId || (!blocked && audienceAdmits(state, subject.privacy.presenceVisibility, viewerId, subjectId));
+  const profile = profileWithSkinFor(subject.profile, seesWornSkin);
   const mine = new Set(friendIdsOf(state, viewerId));
   const mutualFriendIds =
     blocked || viewerId === subjectId || relationship === 'NONE'
@@ -303,7 +311,7 @@ export function resolveProfileFor(state: SocialState, viewerId: SocialUserId, su
   // appearing offline (WL-351-02: the same roster the party view shows them, partyRosterFor).
   const visibleMembers = party === undefined ? 0 : partyRosterFor(state, viewerId, party).length;
   return {
-    profile: subject.profile,
+    profile,
     presence,
     relationship,
     mutualFriendIds,
@@ -313,4 +321,14 @@ export function resolveProfileFor(state: SocialState, viewerId: SocialUserId, su
       joinable: presence.can.joinParty,
     },
   };
+}
+
+/**
+ * The card with the Dog's skin this viewer may see: the stored skin when they may see it and it is a canonical one, else the base
+ * form. A stored id outside the registry (a row written behind the store's back) is never served. Only the skin id is replaced.
+ */
+function profileWithSkinFor(profile: UserProfile, seesWornSkin: boolean): UserProfile {
+  const stored = profile.relayDog.skinId;
+  const skinId = seesWornSkin && isRelayDogSkinId(stored) ? stored : RELAY_DOG_BASE_SKIN_ID;
+  return skinId === stored ? profile : { ...profile, relayDog: { ...profile.relayDog, skinId } };
 }
