@@ -1,4 +1,4 @@
-"""Decision C's zero-spend ``learning-evaluate`` fixture (registration design r8.2, section 8 item 6; V5 E1(d)).
+"""Decision C's zero-spend ``learning-evaluate`` fixture (registration design r8.4, section 8 item 6; V5 E1(d)).
 
 THE registration -- the committed draft, ``.github/julius-learning-registrations/julius-learning-pair-1.json`` -- through this
 package's own CLI, the one the verifier runs; the four arm contracts, ``.github/julius-missions/julius-learning-pair-1-*``, which

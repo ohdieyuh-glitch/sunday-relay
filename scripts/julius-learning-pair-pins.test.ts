@@ -7,7 +7,7 @@ import { juliusBootstrapRunId } from '../relay-bridge/julius/bootstrap';
 import { compileBootstrapRequest, parseLiveMissionContract } from '../relay-bridge/julius/mission-contract';
 
 /**
- * DECISION C'S LEARNING PAIR, PINNED BEFORE ANY ARM RUNS (registration design r8.2, section 2 and section 8 item 4).
+ * DECISION C'S LEARNING PAIR, PINNED BEFORE ANY ARM RUNS (registration design r8.4, section 2 and section 8 item 4).
  *
  * Four mission directories, one namespace, one registration. What makes them ONE experiment is held here, by
  * the production code that will run them:
@@ -31,7 +31,7 @@ const MISSIONS = '.github/julius-missions';
 const M5 = `${MISSIONS}/julius-live-mission-5`;
 const REGISTRATION = '.github/julius-learning-registrations/julius-learning-pair-1.json';
 /** What `learning-validate` printed for the registration, without its `sha256:` prefix: the form a clause carries. */
-const REGISTRATION_DIGEST = 'e30759cbb4e05c96324079de2d60ddadef271eb8c672191ccef570851f29a5a2';
+const REGISTRATION_DIGEST = '5285b9cc092c15e961d7a624149f80134a2f061d7c65a3f991792996754107ce';
 const IDENTITY = { missionId: 'mission:julius-learning-pair-1', markerNamespace: 'julius-learning-pair-1', projectId: 'prj-julius-learning-pair-1' };
 const POLICY = { dimensions: ['repairs'], minimumRelativeImprovement: 0.5, minimumImprovedDimensions: 1 };
 /** The four arm runs, derived before any of them ran (section 2) and registered before arm 1 (section 4, V5 E1(a)). */
