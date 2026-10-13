@@ -174,7 +174,7 @@ const wait = (reason, extra = {}) => ({ decision: 'WAIT', holder: null, ahead: [
  * @param {Array<{ id: number, createdAt: string, status: string, title: string,
  *   slotJob: { status: string, conclusion: string | null } | null }>} input.runs
  * @returns {{ decision: 'PROCEED' } | { decision: 'WAIT', holder: number | null, ahead: number[], reason: string, queue?: number[] }
- *   | { decision: 'REFUSE_DUPLICATE', original: number }}
+ *   | { decision: 'REFUSE_DUPLICATE', original: number } | { decision: 'REFUSE_UNKEYED' }}
  */
 export function decidePaidSlot(input) {
   const self = input?.self;
@@ -190,6 +190,15 @@ export function decidePaidSlot(input) {
   }
   const selfParsed = parseRunTitle(self.title);
   if (selfParsed === null || selfParsed.mode !== 'paid') return wait('self_title_unparseable');
+  /**
+   * A PAID RUN NAMES ITS DISPATCH KEY, OR IT NEVER SPENDS (Decision C fix round 2).
+   *
+   * The key is what makes a second dispatch of the same request refuse itself below, and what the dispatch
+   * client reconciles an ambiguous failure by. The client never sends a paid request without one, but a hand
+   * dispatch can, and its title then says `key=none`. Refused from its own title, before the listing is read.
+   * A dry run never reaches this: it skips `paid-slot`, and a preflight title is not a paid run (above).
+   */
+  if (selfParsed.key === null) return { decision: 'REFUSE_UNKEYED' };
   // LISTING LAG. A run that cannot see itself in the list is looking at a list
   // older than itself, which may be missing other runs as recent as it is.
   if (!runs.some((run) => run.id === self.id)) return wait('self_not_listed');
@@ -363,7 +372,8 @@ export function paidRunAttemptRefusal(attempt) {
  * Wait for admission. Everything with a side effect is injected, so the loop's
  * fail-closed properties are tested with a fake clock rather than believed.
  *
- * Exit codes: 0 admitted, 3 duplicate dispatch, 4 waited too long (and, from the CLI, 5: a re-run attempt refused).
+ * Exit codes: 0 admitted, 3 duplicate dispatch, 4 waited too long, 6 a paid run without a dispatch key (and, from the
+ * CLI, 5: a re-run attempt refused).
  */
 export async function waitForPaidSlot({
   readState, sleep, now, log,
@@ -390,6 +400,10 @@ export async function waitForPaidSlot({
       log(`paid_slot state=UNKNOWN error=${code} attempt=${consecutiveErrors}`);
       await sleep(Math.min(pollMs * 2 ** (consecutiveErrors - 1), maxBackoffMs));
       continue;
+    }
+    if (decision.decision === 'REFUSE_UNKEYED') {
+      log('paid_slot_dispatch_key_required: a paid run must carry the dispatch key scripts/julius-paid-dispatch.mjs mints; this run will not spend');
+      return 6;
     }
     if (decision.decision === 'REFUSE_DUPLICATE') {
       log(`paid_slot_duplicate_dispatch: run ${decision.original} already carries this dispatch key; this run will not spend`);

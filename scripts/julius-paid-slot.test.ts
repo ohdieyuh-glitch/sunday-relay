@@ -161,6 +161,42 @@ describe('a key spends once', () => {
   });
 });
 
+describe('a paid run names its dispatch key, or it never spends (Decision C fix round 2)', () => {
+  // The dispatch client never sends a paid request without a key (`dispatch_key_required`), but a hand dispatch from
+  // the Actions page can, and its title then says `key=none`. That run competed for the slot and could spend like any
+  // other, with no key to make a second one refuse itself. It is refused here, server-side, before the queue is read.
+  const unkeyed = (id: number, minute: number): Run =>
+    ({ id, createdAt: T(minute), status: 'in_progress', title: title('julius-learning-pair-1-without-1', 'lab'), slotJob: WAITING });
+
+  it('a paid self with key=none refuses itself, even with the slot free and nobody ahead', () => {
+    const self = unkeyed(100, 0);
+    expect(parseRunTitle(self.title)).toMatchObject({ mode: 'paid', key: null });
+    expect(decide(self, [self])).toEqual({ decision: 'REFUSE_UNKEYED' });
+    expect(decide(self, [lab(99, 0, ADMITTED), self])).toEqual({ decision: 'REFUSE_UNKEYED' });
+  });
+
+  it('the wait stops at the first reading, in one line, with a code of its own, and nothing is spent', async () => {
+    const self = unkeyed(101, 0);
+    const lines: string[] = [];
+    let reads = 0;
+    let clock = 0;
+    const code = await waitForPaidSlot({
+      readState: async () => { reads += 1; return { self, runs: [self] }; },
+      sleep: async (ms: number) => { clock += ms; }, now: () => clock, log: (line) => { lines.push(line); },
+    });
+    expect(code).toBe(6);
+    expect(reads).toBe(1);
+    expect(lines).toEqual(['paid_slot_dispatch_key_required: a paid run must carry the dispatch key scripts/julius-paid-dispatch.mjs mints; this run will not spend']);
+  });
+
+  it('a dry run is untouched: an unkeyed preflight title is not a paid run, and it does not hold up a paid one', () => {
+    const dry: Run = { id: 102, createdAt: T(0), status: 'in_progress', title: title('julius-learning-pair-1-without-1', 'unspecified', 'none', 'preflight'), slotJob: null };
+    expect(decide(dry, [dry])).toMatchObject({ decision: 'WAIT', reason: 'self_title_unparseable' });
+    const keyed = lab(103, 5);
+    expect(decide(keyed, [dry, keyed]).decision).toBe('PROCEED');
+  });
+});
+
 describe('the waiting loop', () => {
   const clock = () => {
     let now = 0;

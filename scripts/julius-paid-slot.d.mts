@@ -37,7 +37,8 @@ export interface PaidRunListing {
 export type PaidSlotDecision =
   | { readonly decision: 'PROCEED' }
   | { readonly decision: 'WAIT'; readonly holder: number | null; readonly ahead: readonly number[]; readonly reason: string; readonly queue?: readonly number[] }
-  | { readonly decision: 'REFUSE_DUPLICATE'; readonly original: number };
+  | { readonly decision: 'REFUSE_DUPLICATE'; readonly original: number }
+  | { readonly decision: 'REFUSE_UNKEYED' };
 
 export declare function decidePaidSlot(input: { readonly self: unknown; readonly runs: unknown }): PaidSlotDecision;
 
