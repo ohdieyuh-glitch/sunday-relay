@@ -160,6 +160,8 @@ interface StoredSession {
   readonly sessionId: string;
   readonly tokenHash: Buffer;
   readonly origin: string;
+  /** When it was minted (ms since the epoch): the voice re-bind's "newest session wins" (m3) reads it. */
+  readonly issuedAt: number;
   readonly expiresAt: number;
   readonly scope: BrowserSessionScope;
   readonly participantId: string | null;
@@ -257,8 +259,14 @@ export interface BrowserSessionStore {
    */
   verifyNativeSocialSession(input: {
     token: string; now: number;
-  }): { ok: true; sessionId: string; participantId: string }
+  }): { ok: true; sessionId: string; participantId: string; issuedAt: number }
     | { ok: false; reason: GrantFailure | 'not_native_social' };
+  /**
+   * When a LIVE native social session was issued (ms since the epoch), looked up by its id -- or null: gone (expired, revoked,
+   * or never known to this process, since a restart ends every session) or not a native social session. A read: it never sweeps.
+   * The voice re-bind's "newest session wins" (MAIN's internal review af2eb058, m-d) asks it about the session that made a binding.
+   */
+  nativeSocialSessionIssuedAt(input: { sessionId: string; now: number }): number | null;
   revokeSession(input: { token: string; now: number }): boolean;
   /**
    * Drops expired records. Called on the WRITE path only — a read must never
@@ -344,7 +352,7 @@ export function createBrowserSessionStore(): BrowserSessionStore {
       const token = randomSecret();
       const expiresAt = now + (grant.scope === 'native_world' ? NATIVE_SESSION_TTL_MS : SESSION_TTL_MS);
       sessions.set(sessionId, {
-        sessionId, tokenHash: sha256(token), origin, expiresAt,
+        sessionId, tokenHash: sha256(token), origin, expiresAt, issuedAt: now,
         // The session inherits the grant's scope, identity and project EXACTLY.
         // The exchange can never widen what was minted.
         scope: grant.scope,
@@ -387,7 +395,7 @@ export function createBrowserSessionStore(): BrowserSessionStore {
       const token = randomSecret();
       const expiresAt = now + SESSION_TTL_MS;
       sessions.set(sessionId, {
-        sessionId, tokenHash: sha256(token), origin, expiresAt,
+        sessionId, tokenHash: sha256(token), origin, expiresAt, issuedAt: now,
         scope,
         participantId: scope === 'browser_control' ? participantId : null,
         projectId: null,
@@ -454,7 +462,7 @@ export function createBrowserSessionStore(): BrowserSessionStore {
       const token = randomSecret();
       const expiresAt = now + NATIVE_SESSION_TTL_MS;
       sessions.set(sessionId, {
-        sessionId, tokenHash: sha256(token), origin: NATIVE_SOCIAL_AUDIENCE, expiresAt,
+        sessionId, tokenHash: sha256(token), origin: NATIVE_SOCIAL_AUDIENCE, expiresAt, issuedAt: now,
         scope: 'native_social', participantId, projectId: null, revokedAt: null,
       });
       return {
@@ -474,9 +482,16 @@ export function createBrowserSessionStore(): BrowserSessionStore {
           return { ok: false, reason: 'not_native_social' };
         }
         if (!isValidParticipantId(session.participantId)) return { ok: false, reason: 'not_native_social' };
-        return { ok: true, sessionId: session.sessionId, participantId: session.participantId };
+        return { ok: true, sessionId: session.sessionId, participantId: session.participantId, issuedAt: session.issuedAt };
       }
       return { ok: false, reason: 'not_found' };
+    },
+
+    nativeSocialSessionIssuedAt({ sessionId, now }) {
+      const session = sessions.get(sessionId);
+      if (session === undefined || session.revokedAt !== null || session.expiresAt <= now) return null;
+      if (session.scope !== 'native_social' || session.origin !== NATIVE_SOCIAL_AUDIENCE) return null;
+      return session.issuedAt;
     },
 
     revokeSession({ token, now }) {
