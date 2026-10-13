@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "about": "V6 G-4: who may decide a held Julius run's approval. An approver must ALSO appear in the founder workflow's literal JULIUS_APPROVER_LOGINS (relay-bridge/julius-approval-decide.ts, committedApproverAuthority). Each entry is a GitHub login and its numeric user id. EMPTY: nobody may approve; the founder registers himself here, pinned with the mission.",
+  "approvers": [],
+  "operations": ["DISPATCH_WORKER"]
+}
