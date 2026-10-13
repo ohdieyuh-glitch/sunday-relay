@@ -75,18 +75,23 @@ export type WfsOp =
   | { readonly op: 'delete'; readonly fileId: WfsFileId; readonly expectContentVersion?: number; readonly expectSubtreeRev?: number }
   | { readonly op: 'undelete'; readonly fileId: WfsFileId; readonly expectVersion: number };
 
-/** What merge-back writes (§6.5). Never accepted from a caller: only `mergeBack` produces it. */
+/**
+ * What merge-back writes (§6.5, D-6). Never accepted from a caller: only `mergeBack` produces it.
+ *
+ * Aspect by aspect: a merge carries ONLY what the branch changed (content, path, deletion) and is judged ONLY against the
+ * same aspect on the target, so a human MOVING a file on main never stales an agent's clean CONTENT edit, and vice versa.
+ */
 export interface WfsMergePut {
   readonly op: 'merge_put';
   readonly fileId: WfsFileId;
-  /** The target's `version` of this file at the fork; 0 = the file did not exist there. */
-  readonly expectVersion: number;
-  readonly state: {
-    readonly kind: WfsEntryKind;
-    readonly path: string;
-    readonly sha256: WfsSha256 | null;
-    readonly size: number | null;
-    readonly deleted: boolean;
+  readonly kind: WfsEntryKind;
+  /** The target's counters for this file at the fork; `null` = the file is new on the branch. */
+  readonly base: { readonly version: number; readonly contentVersion: number; readonly pathVersion: number; readonly deleted: boolean } | null;
+  /** The aspects the branch changed since the fork. A new file carries its path (and content, for a file). */
+  readonly changes: {
+    readonly content?: { readonly sha256: WfsSha256 | null; readonly size: number | null };
+    readonly path?: string;
+    readonly deleted?: boolean;
   };
 }
 

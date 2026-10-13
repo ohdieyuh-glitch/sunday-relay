@@ -538,6 +538,85 @@ describe('WonderFS engine: T-AGENT (branches, §6.5)', () => {
     expect(at(mp, 'src/extra.cpp', branchId)).toBeDefined();
   });
 
+  describe('aspect by aspect (D-6)', () => {
+    function forkedWithFile(h: Harness): { p: WfsProjectState; branchId: string; fileId: string } {
+      const p1 = seeded(h);
+      const fork = forkWfsBranch(p1, { fromBranchId: WFS_MAIN_BRANCH, owner: who('julius-7', 'julius') }, h.ctx);
+      if (!fork.ok) throw new Error(fork.error.message);
+      return { p: fork.value.project, branchId: fork.value.branchId, fileId: entry(p1, 'src/main.cpp').fileId };
+    }
+    const mergeOf = (p: WfsProjectState, branchId: string, h: Harness): WfsApplied => {
+      const r = mergeBackWfsBranch(p, { requestId: rid(), branchId, principal: who('julius-7', 'julius'), approvedBy: null }, h.ctx);
+      if (!r.ok) throw new Error(r.error.message);
+      return r.value;
+    };
+
+    it('a human MOVE on main does not stale an agent CONTENT edit: both land', () => {
+      const h = harness();
+      const { p, branchId, fileId } = forkedWithFile(h);
+      const agent = h.blob('agent content');
+      let q = apply(p, request([{ op: 'update', fileId, expectContentVersion: 1, ...agent }], who('julius-7', 'julius'), { branchId }), h.ctx).project;
+      q = apply(q, request([{ op: 'move', fileId, expectPathVersion: 1, newPath: 'src/game.cpp' }], who('ghu-1')), h.ctx).project;
+      const merged = mergeOf(q, branchId, h);
+      committed(merged.outcome);
+      const e = entry(merged.project, 'src/game.cpp');
+      expect(e.fileId).toBe(fileId);
+      expect(e.sha256).toBe(agent.sha256);
+      expect(at(merged.project, 'src/main.cpp')).toBeUndefined();
+    });
+
+    it('an agent MOVE lands over a human CONTENT edit', () => {
+      const h = harness();
+      const { p, branchId, fileId } = forkedWithFile(h);
+      const human = h.blob('human content');
+      let q = apply(p, request([{ op: 'move', fileId, expectPathVersion: 1, newPath: 'src/renamed.cpp' }], who('julius-7', 'julius'), { branchId }), h.ctx).project;
+      q = apply(q, request([{ op: 'update', fileId, expectContentVersion: 1, ...human }], who('ghu-1')), h.ctx).project;
+      const merged = mergeOf(q, branchId, h);
+      committed(merged.outcome);
+      expect(entry(merged.project, 'src/renamed.cpp').sha256).toBe(human.sha256);
+    });
+
+    it('two moves of the same file conflict (move_move), and nothing applies', () => {
+      const h = harness();
+      const { p, branchId, fileId } = forkedWithFile(h);
+      let q = apply(p, request([{ op: 'move', fileId, expectPathVersion: 1, newPath: 'src/a.cpp' }], who('julius-7', 'julius'), { branchId }), h.ctx).project;
+      q = apply(q, request([{ op: 'move', fileId, expectPathVersion: 1, newPath: 'src/b.cpp' }], who('ghu-1')), h.ctx).project;
+      const merged = mergeOf(q, branchId, h);
+      expect(conflicted(merged.outcome).failures.map((f) => f.kind)).toEqual(['move_move']);
+      expect(entry(merged.project, 'src/b.cpp').fileId).toBe(fileId);
+    });
+
+    it('an agent DELETE of a file a human changed is a conflict (delete_edited)', () => {
+      const h = harness();
+      const { p, branchId, fileId } = forkedWithFile(h);
+      let q = apply(p, request([{ op: 'delete', fileId, expectContentVersion: 1 }], who('julius-7', 'julius'), { branchId }), h.ctx).project;
+      q = apply(q, request([{ op: 'move', fileId, expectPathVersion: 1, newPath: 'src/kept.cpp' }], who('ghu-1')), h.ctx).project;
+      const merged = mergeOf(q, branchId, h);
+      expect(conflicted(merged.outcome).failures.map((f) => f.kind)).toEqual(['delete_edited']);
+      expect(at(merged.project, 'src/kept.cpp')).toBeDefined();
+    });
+
+    it('an agent EDIT of a file a human deleted is a conflict (edit_deleted)', () => {
+      const h = harness();
+      const { p, branchId, fileId } = forkedWithFile(h);
+      let q = apply(p, request([{ op: 'update', fileId, expectContentVersion: 1, ...h.blob('agent') }], who('julius-7', 'julius'), { branchId }), h.ctx).project;
+      q = apply(q, request([{ op: 'delete', fileId, expectContentVersion: 1 }], who('ghu-1')), h.ctx).project;
+      const merged = mergeOf(q, branchId, h);
+      expect(conflicted(merged.outcome).failures.map((f) => f.kind)).toEqual(['edit_deleted']);
+      expect(main(merged.project).entries.get(fileId)?.deleted).toBe(true);
+    });
+
+    it('an agent DELETE of a file nobody else touched lands as a tombstone', () => {
+      const h = harness();
+      const { p, branchId, fileId } = forkedWithFile(h);
+      const q = apply(p, request([{ op: 'delete', fileId, expectContentVersion: 1 }], who('julius-7', 'julius'), { branchId }), h.ctx).project;
+      const merged = mergeOf(q, branchId, h);
+      committed(merged.outcome);
+      expect(main(merged.project).entries.get(fileId)?.deleted).toBe(true);
+      expect(at(merged.project, 'src/main.cpp')).toBeUndefined();
+    });
+  });
+
   it('a clone forks from its agent\'s branch and merges into THAT branch, not main', () => {
     const h = harness();
     const p1 = seeded(h);
