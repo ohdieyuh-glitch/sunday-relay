@@ -26,6 +26,7 @@ import { recentPlayersFor, recordPlayedTogether } from './social-friends';
 const denied = (message: string) => fail<SocialState>(relayError('permission-denied', message));
 const invalid = (message: string) => fail<SocialState>(relayError('validation-failed', message));
 const missing = (what: string) => fail<SocialState>(relayError('not-found', `${what} not found`));
+const isMember = (party: Party, userId: SocialUserId) => party.members.some((m) => m.userId === userId);
 
 const putParty = (state: SocialState, party: Party): SocialState => ({ ...state, parties: { ...state.parties, [party.partyId]: party } });
 
@@ -98,7 +99,9 @@ export function inviteToParty(
   atIso: string,
 ): RelayResult<{ state: SocialState; inviteId: string }> {
   const party = state.parties[partyId];
-  if (party === undefined) return fail(relayError('not-found', 'party not found'));
+  // A NON-MEMBER LEARNS NOTHING OF A PARTY (the privacy attacker's B2, 10-07): a 403 here against join's 404 told an outsider
+  // the party exists, and then whether somebody in it has a block with them. Outside the party = no such party.
+  if (party === undefined || !isMember(party, actorId)) return fail(relayError('not-found', 'party not found'));
   if (!hasUser(state, toUserId)) return fail(relayError('not-found', 'user not found'));
   if (!mayInvite(party, actorId)) return fail(relayError('permission-denied', 'you cannot invite to this party'));
   const walled = blockedEitherWay(state, actorId, toUserId) || walledFromParty(state, party, toUserId);
@@ -188,12 +191,21 @@ export function partyInvitesFor(state: SocialState, userId: SocialUserId, nowIso
  * ruling (a): the refusal is an ordinary "can't join", and it names nothing -- not even that the party is there).
  */
 export function joinParty(state: SocialState, actorId: SocialUserId, partyId: string, atIso: string): RelayResult<SocialState> {
-  const party = state.parties[partyId];
-  if (party === undefined || walledFromParty(state, party, actorId)) return missing('party');
+  // The joiner's own state first: it says nothing about the party asked for.
   if (partyOf(state, actorId)) return invalid('leave your current party first');
-  if (party.privacy !== 'OPEN_TO_FRIENDS') return denied('this party is invite only');
-  if (!party.members.some((m) => areFriends(state, actorId, m.userId))) return denied('only friends of the party can join');
-  if (party.members.length >= PARTY_MAX_MEMBERS) return invalid('the party is full');
+  const party = state.parties[partyId];
+  // ONE ANSWER FOR EVERY "CAN'T JOIN" (the privacy attacker's B2, 10-07): walled answered 404 while invite-only, no friend and
+  // full answered 403/400, so a removed player could tell a block-kick from an ordinary kick, and follow whether the blocker is
+  // still in the party. Not there, behind a wall, invite only, no friend inside, full: one ordinary refusal that names nothing.
+  if (
+    party === undefined ||
+    walledFromParty(state, party, actorId) ||
+    party.privacy !== 'OPEN_TO_FRIENDS' ||
+    !party.members.some((m) => areFriends(state, actorId, m.userId)) ||
+    party.members.length >= PARTY_MAX_MEMBERS
+  ) {
+    return missing('party');
+  }
   return addMember(state, party, actorId, atIso);
 }
 
@@ -276,7 +288,7 @@ export function voiceAudienceFor(state: SocialState, viewerId: SocialUserId, par
 /** LEADER: remove a member (not themselves -- that is leaving). */
 export function removePartyMember(state: SocialState, actorId: SocialUserId, partyId: string, memberId: SocialUserId): RelayResult<SocialState> {
   const party = state.parties[partyId];
-  if (party === undefined) return missing('party');
+  if (party === undefined || !isMember(party, actorId)) return missing('party');   // B2: outside the party = no such party
   if (party.leaderId !== actorId) return denied('only the leader can remove a member');
   if (memberId === actorId) return invalid('the leader leaves rather than removing themselves');
   if (!party.members.some((m) => m.userId === memberId)) return missing('member');
@@ -286,7 +298,7 @@ export function removePartyMember(state: SocialState, actorId: SocialUserId, par
 /** LEADER: hand the party to another member. */
 export function promotePartyLeader(state: SocialState, actorId: SocialUserId, partyId: string, memberId: SocialUserId): RelayResult<SocialState> {
   const party = state.parties[partyId];
-  if (party === undefined) return missing('party');
+  if (party === undefined || !isMember(party, actorId)) return missing('party');   // B2
   if (party.leaderId !== actorId) return denied('only the leader can promote');
   if (!party.members.some((m) => m.userId === memberId) || memberId === actorId) return invalid('promote another member of this party');
   return ok(
@@ -307,7 +319,7 @@ export function setPartyRules(
   rules: { privacy?: PartyPrivacy; invitePermission?: PartyInvitePermission; name?: string },
 ): RelayResult<SocialState> {
   const party = state.parties[partyId];
-  if (party === undefined) return missing('party');
+  if (party === undefined || !isMember(party, actorId)) return missing('party');   // B2
   if (party.leaderId !== actorId) return denied('only the leader can change the party rules');
   return ok(
     putParty(state, {

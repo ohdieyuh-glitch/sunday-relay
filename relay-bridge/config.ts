@@ -26,6 +26,7 @@
 
 import { isProductionDeployment } from './deployment-environment';
 import { isAbsolute } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { SundayMode } from './architect';
 
 export interface BridgeConfig {
@@ -249,4 +250,71 @@ export function productionConfigWarnings(config: BridgeConfig): string[] {
     warnings.push('RELAY_DATA_DIR is not set — durable state uses the default path, not a mounted volume.');
   }
   return warnings;
+}
+
+/**
+ * THE SERVICE-REPORTED IDENTITY ON `/health`, and why it is OFF by default.
+ *
+ * `/health` is the least informative endpoint in the product, and a new field
+ * there is a disclosure decision, not a detail. The founder makes it at deploy
+ * time with `RELAY_HEALTH_IDENTITY` (hosted deploy plan r6, §4 / §5 / §6 item 7):
+ *
+ *   unset or ""  -> OFF: the body stays exactly `{status:'ok'}`;
+ *   exactly "1"  -> ON:  the body is exactly `{status, commit, bootId}`;
+ *   anything else -> the server REFUSES TO START, naming the variable and never
+ *                    its value. A typo must be loud at deploy time, not a
+ *                    silent OFF that a qualification then reads as "no field".
+ *
+ * Unlike `productionConfigProblems`, this refusal is not gated on
+ * `NODE_ENV=production`: the variable is only ever set by an operator who
+ * opted in, so a value nobody could have meant is that operator's mistake on
+ * any host.
+ */
+export const HEALTH_IDENTITY_ENV = 'RELAY_HEALTH_IDENTITY';
+
+export function healthIdentityProblem(env: NodeJS.ProcessEnv = process.env): string | null {
+  const raw = env[HEALTH_IDENTITY_ENV];
+  if (raw === undefined || raw === '' || raw === '1') return null;
+  return `${HEALTH_IDENTITY_ENV} must be unset, empty or exactly "1".`;
+}
+
+export function healthIdentityEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[HEALTH_IDENTITY_ENV] === '1';
+}
+
+/**
+ * The platform's OWN build-commit variables, in a fixed list. Nothing here is
+ * typed by a person, and nothing outside this list is read.
+ */
+export const DEPLOYED_COMMIT_ENV_NAMES = ['RAILWAY_GIT_COMMIT_SHA', 'RENDER_GIT_COMMIT', 'SOURCE_VERSION'] as const;
+
+/**
+ * The deployed commit, or null when it cannot be stated exactly.
+ *
+ * Null is always the safe answer: a qualification compares this value with the
+ * platform's deploy record and stops on a mismatch, so a wrong sha would be
+ * worse than none. Therefore every listed variable that is set must be a full
+ * 40-character lowercase hex sha, and all of them must agree. One malformed
+ * value, or two that disagree, gives null rather than a guess between them.
+ */
+export function deployedCommitFromEnv(env: NodeJS.ProcessEnv = process.env): string | null {
+  const values = DEPLOYED_COMMIT_ENV_NAMES
+    .map((name) => env[name])
+    .filter((value): value is string => value !== undefined && value !== '');
+  if (values.length === 0) return null;
+  if (!values.every((value) => /^[0-9a-f]{40}$/.test(value))) return null;
+  return values.every((value) => value === values[0]) ? values[0] : null;
+}
+
+/**
+ * New on every process start and stable for the process's life: a change in
+ * `bootId` between two answers is the proof that the service restarted, which
+ * a run of 401s or timeouts never is.
+ */
+export const PROCESS_BOOT_ID = randomUUID();
+
+/** The exact `/health` body for this environment. */
+export function healthBody(env: NodeJS.ProcessEnv = process.env): Record<string, string | null> {
+  if (!healthIdentityEnabled(env)) return { status: 'ok' };
+  return { status: 'ok', commit: deployedCommitFromEnv(env), bootId: PROCESS_BOOT_ID };
 }
