@@ -1,6 +1,7 @@
 /**
  * WONDERFS /wonderfs/v1 -- R1: the READ routes, for the Wonderland desktop client (contract r1.4 §6.1, §7, §8.2, §9.1, §11, §17;
- * the routes plan §2.1). Writes are R2.
+ * the routes plan §2.1). The WRITES (H11 upload, H12 commit) are R2's, in wonderfs-write-routes.ts, dispatched from here behind the
+ * same gate.
  *
  * ALWAYS ON (INV-10, §19.m6): nothing in this file, the gate, the table or the budgets reads a setting. The one thing that can make
  * WonderFS answer 503 is a FACT -- this server has no database -- never a switch.
@@ -57,9 +58,9 @@
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { finished } from 'node:stream';
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
 
-import { openWfsPostgresStore } from '../src/relay/persistence/wonderfs-postgres';
+import { openWfsPostgresStore, wfsHearIdleLoss, wfsPoolMax, WFS_DEDICATED_POOL_MAX, WFS_SHARED_POOL_MIN_MAX } from '../src/relay/persistence/wonderfs-postgres';
 import { WFS_ALPHA_LIMITS, type WfsLimits } from '../src/relay/wonderfs/wonderfs-contracts';
 import { WFS_MAIN_BRANCH } from '../src/relay/wonderfs/wonderfs-engine';
 import { WFS_MAX_PATH_CHARS } from '../src/relay/wonderfs/wonderfs-paths';
@@ -78,15 +79,15 @@ import {
   WONDERFS_NO_STORE,
   type WonderfsAdmission,
   type WonderfsAnswer,
-  type WonderfsGateDeps,
   type WonderfsRequest,
 } from './wonderfs-gate';
 import { isWonderfsRoute, type WonderfsQueryKey } from './wonderfs-scope';
+import { serveWonderfsWrite, wonderfsClosing, type WonderfsWriteDeps, type WonderfsWriteRequest } from './wonderfs-write-routes';
 
 export { isWonderfsRoute } from './wonderfs-scope';
 export type { WonderfsAnswer, WonderfsRequest } from './wonderfs-gate';
 
-export interface WonderfsRouteDeps extends WonderfsGateDeps {
+export interface WonderfsRouteDeps extends WonderfsWriteDeps {
   /** The limits this deployment's store enforces (§11), reported by H4; default the Alpha's. */
   readonly limits?: WfsLimits;
 }
@@ -259,7 +260,7 @@ async function bytesAnswer(admitted: WonderfsAdmission, request: WonderfsRequest
 
 const data = (schema: string, value: Record<string, unknown>): WonderfsAnswer => wonderfsJson(200, { data: { schema, ...value } });
 
-async function serveAdmitted(admitted: WonderfsAdmission, request: WonderfsRequest, deps: WonderfsRouteDeps): Promise<WonderfsByteAnswer> {
+async function serveAdmitted(admitted: WonderfsAdmission, request: WonderfsWriteRequest, deps: WonderfsRouteDeps): Promise<WonderfsByteAnswer> {
   const { op, store, principal } = admitted;
   const query = readQuery(admitted.search, op.query);
   if (!query.ok) return query.answer;
@@ -340,6 +341,9 @@ async function serveAdmitted(admitted: WonderfsAdmission, request: WonderfsReque
       if (!r.ok) return refused(r);
       return data('wonderfs.events_page.v1', { events: r.value.events, lastSeq: r.value.lastSeq, next: r.value.next });
     }
+    case 'blob.upload':
+    case 'commit.create':
+      return serveWonderfsWrite(admitted, request, deps); // R2: H11 / H12
     default:
       return wonderfsError(403, 'not_permitted', 'This session may not do that.');
   }
@@ -349,11 +353,12 @@ async function serveAdmitted(admitted: WonderfsAdmission, request: WonderfsReque
  * THE ROUTE: null when the path is not WonderFS's; otherwise always an answer. A store that THROWS (an outage on a process's first
  * call, a protected store refused: REVIEW_WONDERFS_R0B MINOR-5) is 503 wonderfs_unavailable, never a 500 with a stack.
  */
-export async function answerWonderfs(request: WonderfsRequest, deps: WonderfsRouteDeps): Promise<WonderfsByteAnswer | null> {
+export async function answerWonderfs(request: WonderfsWriteRequest, deps: WonderfsRouteDeps): Promise<WonderfsByteAnswer | null> {
   if (!isWonderfsRoute(request.url)) return null;
   try {
     const gate = await wonderfsGate(request, deps);
-    if (!gate.ok) return gate.answer;
+    // R2-r2 (reviews' NIT): a POST refused at the gate leaves its body unread -- the socket is closed, never drained for reuse
+    if (!gate.ok) return request.method === 'GET' ? gate.answer : wonderfsClosing(gate.answer);
     return await serveAdmitted(gate.admitted, request, deps);
   } catch (error) {
     deps.log?.(`wonderfs: a request failed in the store (${error instanceof Error ? error.name : 'unknown'}); answered 503`);
@@ -400,8 +405,8 @@ export function writeWonderfsAnswer(res: ServerResponse, answer: WonderfsByteAns
 
 /* ----------------------------------------------------------------------------------------------------- the bridge mount */
 
-/** What WonderFS reads of an HTTP request: the path after /relay-api with its query, five headers, and whether the client is gone. No body. */
-export function wonderfsRequestOf(req: IncomingMessage, now: number): WonderfsRequest {
+/** What WonderFS reads of an HTTP request: the path after /relay-api with its query, five headers, whether the client is gone, and the body (read only by R2's writes, wonderfs-body.ts). */
+export function wonderfsRequestOf(req: IncomingMessage, now: number): WonderfsWriteRequest {
   const header = (name: string): string | undefined => {
     const value = req.headers[name];
     return typeof value === 'string' ? value : undefined;
@@ -416,6 +421,7 @@ export function wonderfsRequestOf(req: IncomingMessage, now: number): WonderfsRe
     ifRange: header('if-range'),
     closed: () => req.socket.destroyed,
     now,
+    body: req,
   };
 }
 
@@ -424,6 +430,33 @@ export interface WonderfsMountInput {
   /** The bridge's one database pool (server.ts juliusPool), or null: this server has no database. Asked per request. */
   readonly pool: () => Pool | null;
   readonly log?: (line: string) => void;
+  /**
+   * K7: opens WonderFS's OWN pool when the shared pool's ACTUAL max is below WFS_SHARED_POOL_MIN_MAX (default:
+   * `openWonderfsDedicatedPool`; a test passes one it tracks). It must return a NEW pool of at most WFS_DEDICATED_POOL_MAX clients.
+   */
+  readonly openDedicatedPool?: (shared: Pool) => Pool;
+}
+
+/**
+ * K7 (contract r1.6.2 e1 / §21 K7): WonderFS's OWN pool, on the same database as the shared one -- its connection options copied, the
+ * shared pool itself untouched (juliusPool is never edited) -- with at most WFS_DEDICATED_POOL_MAX clients.
+ */
+export function openWonderfsDedicatedPool(shared: Pool): Pool {
+  // pg-pool keeps a given `password` non-enumerable on its options: carried over by name
+  return new Pool({ ...shared.options, password: shared.options.password, max: WFS_DEDICATED_POOL_MAX });
+}
+
+/**
+ * K7: THE POOL WONDERFS RUNS ON, judged on the shared pool's ACTUAL max (read as pg-pool reads it). At least
+ * WFS_SHARED_POOL_MIN_MAX (10): it shares that pool, and the store's cap holds it to 4, so at least 6 clients stay for the Julius state,
+ * mission-creation and Project Brain families. Below it: a pool of its own (max 4), whose idle losses are heard as juliusPool's are.
+ */
+function wonderfsPoolFor(shared: Pool, input: WonderfsMountInput): { readonly pool: Pool; readonly own: boolean } {
+  if (wfsPoolMax(shared) >= WFS_SHARED_POOL_MIN_MAX) return { pool: shared, own: false };
+  const own = (input.openDedicatedPool ?? openWonderfsDedicatedPool)(shared);
+  if (own === shared || wfsPoolMax(own) > WFS_DEDICATED_POOL_MAX) throw new Error(`wonderfs: its own pool must be a new pool of at most ${WFS_DEDICATED_POOL_MAX} clients`);
+  wfsHearIdleLoss(own, input.log);
+  return { pool: own, own: true };
 }
 
 export interface WonderfsMount {
@@ -432,16 +465,22 @@ export interface WonderfsMount {
 
 /**
  * WHAT server.ts MOUNTS: built ONCE per process (its budgets and its store live as long as the process), served from ONE dispatch
- * block. No flag, no setting: the store opens lazily on the bridge's pool, and no pool means 503 by fact.
+ * block. No flag, no setting: the store opens lazily on the bridge's pool, and no pool means 503 by fact. K7: on that pool only when
+ * its actual max leaves the other families their 6 (`wonderfsPoolFor`); otherwise on a pool of its own, opened once.
  */
 export function createWonderfsMount(input: WonderfsMountInput): WonderfsMount {
   const budgets: WonderfsBudgets = createWonderfsBudgets();
   const verifySession = wonderfsSessionVerifier(input.sessions);
-  let opened: { readonly pool: Pool; readonly store: WfsStore } | null = null;
+  let opened: { readonly shared: Pool; readonly pool: Pool; readonly own: boolean; readonly store: WfsStore } | null = null;
   const store = (): WfsStore | null => {
-    const pool = input.pool();
-    if (pool === null) return null;
-    if (opened === null || opened.pool !== pool) opened = { pool, store: openWfsPostgresStore(pool) };
+    const shared = input.pool();
+    if (shared === null) return null;
+    if (opened === null || opened.shared !== shared) {
+      if (opened?.own === true) void opened.pool.end().catch(() => undefined);
+      const chosen = wonderfsPoolFor(shared, input);
+      // R2-r4: the store writes a connection lost while held to the bridge's log (WFS_HELD_CONNECTION_LOST)
+      opened = { shared, pool: chosen.pool, own: chosen.own, store: openWfsPostgresStore(chosen.pool, { log: input.log }) };
+    }
     return opened.store;
   };
   return {

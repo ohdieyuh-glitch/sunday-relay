@@ -18,7 +18,9 @@
 import { relayError, type RelayResult } from '../protocol/errors';
 import {
   PENDING_PROGRESSION,
+  RELAY_DOG_BASE_SKIN_ID,
   defaultPrivacySettings,
+  type PublicRelayDogProfile,
   type SocialOperationId,
   type SocialUserId,
   type UserPresence,
@@ -71,6 +73,11 @@ export interface SocialStore {
 
 const DISPLAY_NAME_MAX = 40;
 
+/** A new player's Relay Dog: the base form, the skin's own colours. Their world reports then record the skin they wear (BF-2). */
+export function newRelayDog(): PublicRelayDogProfile {
+  return { skinId: RELAY_DOG_BASE_SKIN_ID, primary: null, secondary: null, flame: null, appearanceTier: null };
+}
+
 /** THE NEW PLAYER'S RECORD. Everything public starts minimal: no agent, no companion, nothing shown until the player chooses. */
 export function newSocialUser(identity: SocialPlayerIdentity, nowIso: string): SocialUserRecord {
   const displayName = identity.displayName.trim().slice(0, DISPLAY_NAME_MAX) || 'Player';
@@ -83,7 +90,7 @@ export function newSocialUser(identity: SocialPlayerIdentity, nowIso: string): S
     clanName: null,
     progression: PENDING_PROGRESSION,
     primaryAgent: null,
-    relayDog: { skinId: 'relay_og', primary: null, secondary: null, flame: null, appearanceTier: null },
+    relayDog: newRelayDog(),
     activeCompanion: null,
     showcaseAgents: [],
     showcaseCompanions: [],

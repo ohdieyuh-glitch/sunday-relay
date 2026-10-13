@@ -424,7 +424,7 @@ describe('WonderFS engine: T-IDEMPOTENT (INV-8)', () => {
     expect(again.project.conflicts.size).toBe(1);
   });
 
-  it('refuses a request id reused for a different change', () => {
+  it('refuses a request id reused by the SAME actor for a different change; ANOTHER actor using that id is an independent request (K4, contract r1.6.2 e2)', () => {
     const h = harness();
     const p0 = emptyWfsProject('prj-1', sha);
     const req = request([{ op: 'create', path: 'a.txt', kind: 'file', ...h.blob('a') }], who('ghu-1'));
@@ -433,6 +433,32 @@ describe('WonderFS engine: T-IDEMPOTENT (INV-8)', () => {
     expect(reused.ok).toBe(false);
     if (reused.ok) throw new Error('accepted');
     expect(reused.error.code).toBe('duplicate-idempotency-key');
+    // another player, the same id, its own change: it LANDS, with its own outcome (never the first actor's, never a 409)
+    const other = apply(first.project, { ...req, baseRev: 1, principal: who('ghu-2'), ops: [{ op: 'create', path: 'b.txt', kind: 'file', ...h.blob('b') }] }, h.ctx);
+    expect(committed(other.outcome).rev).toBe(2);
+    expect(other.outcome.replay).toBe(false);
+    expect(main(other.project).commits[1].principal.id).toBe('ghu-2');
+  });
+
+  it('K4 PRE-CLAIM (contract r1.6.2 e2; attack WFS15-06 / BS-W2-03): member B commits under id X FIRST; then member A\'s change under X lands with A\'s OWN outcome, and A\'s replay answers A\'s, B\'s answers B\'s (CONTROL: B reusing X for A\'s change is still 409)', () => {
+    const h = harness();
+    const p0 = emptyWfsProject('prj-1', sha);
+    const X = 'req-guessable-0001';
+    const bob = apply(p0, { requestId: X, branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: who('ghu-bob'), ops: [{ op: 'create', path: 'squat', kind: 'dir' }] }, h.ctx);
+    const aliceReq: WfsCommitRequest = { requestId: X, branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: who('ghu-alice'), ops: [{ op: 'create', path: 'mine.txt', kind: 'file', ...h.blob('alice') }] };
+    const alice = apply(bob.project, aliceReq, h.ctx);
+    const landed = committed(alice.outcome);
+    expect([landed.rev, landed.replay]).toEqual([2, false]);
+    expect(landed.commitId).not.toBe(committed(bob.outcome).commitId);
+    expect(at(alice.project, 'mine.txt')?.sha256, 'A\'s change is what landed').toBe(sha('alice'));
+    // each actor's replay answers its OWN outcome
+    const aliceAgain = apply(alice.project, { ...aliceReq, principal: { ...aliceReq.principal, sessionId: 'sref-new' } }, h.ctx);
+    expect(aliceAgain.outcome).toEqual({ ...alice.outcome, replay: true });
+    const bobAgain = apply(alice.project, { requestId: X, branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: who('ghu-bob'), ops: [{ op: 'create', path: 'squat', kind: 'dir' }] }, h.ctx);
+    expect(bobAgain.outcome).toEqual({ ...bob.outcome, replay: true });
+    // CONTROL: within ONE actor the id is still claimed -- B sending A's change under X is refused
+    const bobReuse = applyWfsCommit(alice.project, { ...aliceReq, principal: who('ghu-bob') }, h.ctx);
+    expect(bobReuse.ok === false && bobReuse.error.code).toBe('duplicate-idempotency-key');
   });
 
   it('T-CRASH "after COMMIT, before the response" (INV-11): the journal replays after a restart and a NEW sign-in -> the ORIGINAL revision', () => {
@@ -450,11 +476,13 @@ describe('WonderFS engine: T-IDEMPOTENT (INV-8)', () => {
     expect(committed(again.outcome).rev, 'the ORIGINAL revision, not the head').toBe(1);
     expect(again.project, 'nothing applied twice').toBe(later);
     expect(main(again.project).commits[0].principal, 'the stored commit still names the session that made it').toEqual(beforeRestart);
-    // CONTROLS: the same request id from ANOTHER player, or with other content from the same player, is still refused
-    for (const reuse of [{ ...req, principal: { ...afterRestart, id: 'ghu-2' } }, { ...req, principal: afterRestart, ops: [{ op: 'create', path: 'c.txt', kind: 'dir' }] as WfsOp[] }]) {
-      const r = applyWfsCommit(later, reuse, h.ctx);
-      expect(r.ok === false && r.error.code).toBe('duplicate-idempotency-key');
-    }
+    // CONTROL: the same request id with other content from the same player is still refused
+    const reuse = applyWfsCommit(later, { ...req, principal: afterRestart, ops: [{ op: 'create', path: 'c.txt', kind: 'dir' }] as WfsOp[] }, h.ctx);
+    expect(reuse.ok === false && reuse.error.code).toBe('duplicate-idempotency-key');
+    // K4 (contract r1.6.2 e2): from ANOTHER player the same id is an independent request -- judged afresh (here: a.txt is taken, so
+    // a conflict of its own), never answered with the first player's revision
+    const other = apply(later, { ...req, principal: { ...afterRestart, id: 'ghu-2' } }, h.ctx);
+    expect(conflicted(other.outcome).replay).toBe(false);
   });
 
   it('T-CRASH: a replayed CONFLICT from a new session is the SAME conflict, never a second one', () => {
@@ -483,11 +511,14 @@ describe('WonderFS engine: T-IDEMPOTENT (INV-8)', () => {
       const r = send({ ...req, principal: { ...actor, ...over } });
       expect(r.ok && r.value.outcome, JSON.stringify(over)).toEqual({ ...first.outcome, replay: true });
     }
-    // identity: refused (CONTROL: dropping any one of these from the hash replays another actor's answer)
+    // identity (K4, contract r1.6.2 e2): each is ANOTHER actor, so the same id is an independent request, judged afresh (a.txt is taken:
+    // a conflict of its own) -- never answered with the first actor's outcome, never a 409 (CONTROL: dropping any one of these from the
+    // actor key either replays the first actor's answer or refuses it as a reused id)
     const others: Partial<WfsPrincipal>[] = [{ kind: 'imported_agent' }, { id: 'julius-8' }, { onBehalfOf: 'ghu-2' }, { grantId: 'grant-2' }, { missionId: 'mission-2' }, { attemptId: 'attempt-2' }];
     for (const over of others) {
       const r = send({ ...req, principal: { ...actor, ...over } });
-      expect(r.ok === false && r.error.code, JSON.stringify(over)).toBe('duplicate-idempotency-key');
+      expect(r.ok && r.value.outcome.status, JSON.stringify(over)).toBe('conflict');
+      expect(r.ok && r.value.outcome.replay, JSON.stringify(over)).toBe(false);
     }
     // the change itself: refused
     const changes: Partial<WfsCommitRequest>[] = [{ baseRev: 1 }, { branchId: 'branch-other' }, { resolvesConflictId: 'conflict-x' }, { ops: [{ op: 'create', path: 'a.txt', kind: 'dir' }] }];
@@ -744,6 +775,25 @@ describe('WonderFS engine: T-LIMITS (§11)', () => {
     expect(main(p1).headRev).toBe(1);
   });
 
+  it('K1 (contract r1.6.2 r1 / §21 K1): DIRECTORIES count toward §11\'s entries limit -- a directory-only commit past it is refused and changes nothing (CONTROL: the files-only count let it land); a shrink of directories lands, and growing again is refused', () => {
+    const h = harness();
+    const ctx = h.withLimits({ ...WFS_ALPHA_LIMITS, maxFiles: 2 });
+    // CONTROL: two folders are two entries, within the limit
+    const p1 = apply(emptyWfsProject('prj-1', sha), request([{ op: 'create', path: 'd1', kind: 'dir' }, { op: 'create', path: 'd2', kind: 'dir' }], who('ghu-1')), ctx).project;
+    const r = applyWfsCommit(p1, request([{ op: 'create', path: 'd3', kind: 'dir' }], who('ghu-1'), { baseRev: 1 }), ctx);
+    expect(r.ok === false && [r.error.code, r.error.message]).toEqual(['budget-exceeded', 'This project is full: delete something, or keep this change for later.']);
+    expect(main(p1).headRev).toBe(1);
+    // a file beside folders: one file, but three entries
+    const mixed = applyWfsCommit(p1, request([{ op: 'create', path: 'f.txt', kind: 'file', ...h.blob('f') }], who('ghu-1'), { baseRev: 1 }), ctx);
+    expect(mixed.ok === false && mixed.error.code, 'a file is an entry beside the folders').toBe('budget-exceeded');
+    // the same project under a tighter limit (one entry): deleting a folder SHRINKS it and lands; growing again is refused
+    const tight = h.withLimits({ ...WFS_ALPHA_LIMITS, maxFiles: 1 });
+    const shrunk = apply(p1, request([{ op: 'delete', fileId: entry(p1, 'd2').fileId, expectSubtreeRev: 1 }], who('ghu-1'), { baseRev: 1 }), tight);
+    expect(committed(shrunk.outcome).rev, 'CONTROL: a shrink lands').toBe(2);
+    const again = applyWfsCommit(shrunk.project, request([{ op: 'create', path: 'd4', kind: 'dir' }], who('ghu-1'), { baseRev: 2 }), tight);
+    expect(again.ok === false && again.error.code, 'growing again is refused').toBe('budget-exceeded');
+  });
+
   it('still allows a commit that SHRINKS a project that is over a (lowered) limit', () => {
     const h = harness();
     const p1 = apply(emptyWfsProject('prj-1', sha), request([
@@ -878,9 +928,10 @@ describe('WonderFS engine: r1.2 §19.M1 (T-APPROVAL-BIND) and §19.M7 (anchored 
     if (!again.ok) throw new Error(again.error.message);
     expect(again.value.outcome).toEqual({ ...merged.value.outcome, replay: true });
     expect(again.value.project).toBe(merged.value.project);
-    // CONTROL: the same request id under another attempt is not this request
+    // CONTROL: the same request id under another attempt is not this request (K4: another actor, an independent request) -- it is
+    // never answered with this merge; judged afresh, it meets the branch this merge closed
     const otherAttempt = mergeBackWfsBranch(merged.value.project, { ...input, principal: { ...runner, attemptId: 'attempt-2' } }, h.ctx);
-    expect(otherAttempt.ok === false && otherAttempt.error.code).toBe('duplicate-idempotency-key');
+    expect(otherAttempt.ok === false && otherAttempt.error.code).toBe('immutable');
   });
 
   it('R0a review MINOR-2: the request-identity hash is VERSIONED (wfs-req.2) for commits AND merges; a row stored under another formula is refused, never answered', () => {
@@ -888,20 +939,22 @@ describe('WonderFS engine: r1.2 §19.M1 (T-APPROVAL-BIND) and §19.M7 (anchored 
     const h = harness();
     const { p, branchId, owner } = agentWithOneCommit(h, 'julius');
     const actorOf = (x: WfsPrincipal) => ({ kind: x.kind, id: x.id, onBehalfOf: x.onBehalfOf, grantId: x.grantId, missionId: x.missionId, attemptId: x.attemptId });
+    // K4 (contract r1.6.2 e2): a request is stored under (actor_key, request_id); actor_key = sha256 of the canonical actor allow-list
+    const keyOf = (x: WfsPrincipal, requestId: string) => `${sha(canonicalJson(actorOf(x)))}\n${requestId}`;
     // the COMMIT formula, pinned: the stored hash is the tagged one (CONTROL: dropping `v` from the engine's object turns this red)
     const req = request([{ op: 'create', path: 'tagged.txt', kind: 'file', ...h.blob('t') }], who('ghu-1'));
     const first = apply(p, req, h.ctx);
     const commitBody = { kind: 'commit', branchId: req.branchId, baseRev: req.baseRev, ops: req.ops, actor: actorOf(req.principal), resolvesConflictId: null };
-    expect(first.project.requests.get(req.requestId)?.payloadHash).toBe(sha(canonicalJson({ v: 'wfs-req.2', ...commitBody })));
+    expect(first.project.requests.get(keyOf(req.principal, req.requestId))?.payloadHash).toBe(sha(canonicalJson({ v: 'wfs-req.2', ...commitBody })));
     // the MERGE formula, pinned the same way
     const input = { requestId: rid(), branchId, principal: owner, approval: null, reviewVerdict: verdictFor(first.project, branchId), approverRoleNow: null };
     const merged = mergeBackWfsBranch(first.project, input, h.ctx);
     if (!merged.ok) throw new Error(merged.error.message);
     const mergeBody = { kind: 'merge', branchId, actor: actorOf(owner), approval: null, reviewVerdict: input.reviewVerdict };
-    expect(merged.value.project.requests.get(input.requestId)?.payloadHash).toBe(sha(canonicalJson({ v: 'wfs-req.2', ...mergeBody })));
+    expect(merged.value.project.requests.get(keyOf(owner, input.requestId))?.payloadHash).toBe(sha(canonicalJson({ v: 'wfs-req.2', ...mergeBody })));
     // a row written under the UNTAGGED formula (as R0a's code wrote it) is a different formula: its replay is refused, not answered
-    const stored = first.project.requests.get(req.requestId)!;
-    const legacy: WfsProjectState = { ...first.project, requests: new Map(first.project.requests).set(req.requestId, { ...stored, payloadHash: sha(canonicalJson(commitBody)) }) };
+    const stored = first.project.requests.get(keyOf(req.principal, req.requestId))!;
+    const legacy: WfsProjectState = { ...first.project, requests: new Map(first.project.requests).set(keyOf(req.principal, req.requestId), { ...stored, payloadHash: sha(canonicalJson(commitBody)) }) };
     const replayOfLegacy = applyWfsCommit(legacy, req, h.ctx);
     expect(replayOfLegacy.ok === false && replayOfLegacy.error.code).toBe('duplicate-idempotency-key');
     // CONTROL: the same replay against the tagged row is answered with the original revision

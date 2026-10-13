@@ -6,8 +6,10 @@
  *   - NEVER SILENTLY DISCARD (INV-2): a changeset whose preconditions fail is kept whole, with its author, as a CONFLICT, in
  *     the same step that refuses it. Only a later recorded commit (keep mine / keep both) or dismissal (keep theirs) closes it.
  *   - LINEAR (INV-4): each branch's revisions are gapless; each commit names its predecessor's hash (INV-6).
- *   - IDEMPOTENT (INV-8): a request id answers the same way forever, to the same actor sending the same change from ANY session
- *     (a journal replay after a re-sign-in, INV-11); reused with another payload, or by another actor, it is refused.
+ *   - IDEMPOTENT (INV-8, per ACTOR): a request id answers the same way forever, to the same actor sending the same change from ANY
+ *     session (a journal replay after a re-sign-in, INV-11); reused BY THAT ACTOR with another payload, it is refused. Ids are one
+ *     namespace per (project, actor) -- contract r1.6.2 e2 / K4 -- so ANOTHER actor's same id is an independent request: never
+ *     refused for it, never answered with the first actor's outcome (an id another member took first cannot block a change).
  *   - HISTORY (INV-7): a deletion is a tombstone; the tree at any revision is reconstructible from the commits.
  *
  * Concurrency is per-file preconditions (§6.3), never locks: an edit and a concurrent move of the same file both land, because
@@ -69,6 +71,9 @@ export interface WfsBranchState {
 }
 
 export interface WfsStoredRequest {
+  /** K4 (contract r1.6.2 e2): WHO the request is for -- sha256 of the canonical actor allow-list (`wfsRequestActorKey`). */
+  readonly actorKey: string;
+  readonly requestId: string;
   readonly payloadHash: string;
   readonly outcome: WfsCommitOutcome;
 }
@@ -77,7 +82,7 @@ export interface WfsProjectState {
   readonly projectId: WfsProjectId;
   readonly branches: ReadonlyMap<WfsBranchId, WfsBranchState>;
   readonly conflicts: ReadonlyMap<WfsConflictId, WfsConflict>;
-  /** Request id -> what it was and how it was answered (INV-8). */
+  /** `wfsRequestKey(actorKey, requestId)` -> what it was and how it was answered (INV-8, per actor: K4). */
   readonly requests: ReadonlyMap<string, WfsStoredRequest>;
 }
 
@@ -402,16 +407,23 @@ function treeInvariantFailures(t: ReadonlyMap<WfsFileId, WfsEntry>, opIndex: num
   return out;
 }
 
-function usage(t: ReadonlyMap<WfsFileId, WfsEntry>): { files: number; bytes: number } {
+/**
+ * §11's usage of a branch: its live FILES and their bytes, and (K1, contract r1.6.2 r1) its live ENTRIES -- files AND directories, the
+ * count r1.4 §2 / §11's 10,000 is judged on ("File: a file or directory entry").
+ */
+function usage(t: ReadonlyMap<WfsFileId, WfsEntry>): { files: number; bytes: number; entries: number } {
   let files = 0;
   let bytes = 0;
+  let entries = 0;
   for (const e of t.values()) {
-    if (!e.deleted && e.kind === 'file') {
+    if (e.deleted) continue;
+    entries += 1;
+    if (e.kind === 'file') {
       files += 1;
       bytes += e.size ?? 0;
     }
   }
-  return { files, bytes };
+  return { files, bytes, entries };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -420,6 +432,8 @@ function usage(t: ReadonlyMap<WfsFileId, WfsEntry>): { files: number; bytes: num
 
 interface CommitInput {
   readonly requestId: string;
+  /** K4: the actor the request id is keyed under. */
+  readonly actorKey: string;
   readonly payloadHash: string;
   readonly baseRev: number;
   readonly principal: WfsPrincipal;
@@ -500,18 +514,19 @@ function commitSteps(project: WfsProjectState, branch: WfsBranchState, steps: re
       project: {
         ...project,
         conflicts: new Map(project.conflicts).set(conflictId, conflict),
-        requests: new Map(project.requests).set(input.requestId, { payloadHash: input.payloadHash, outcome }),
+        requests: new Map(project.requests).set(wfsRequestKey(input.actorKey, input.requestId), { actorKey: input.actorKey, requestId: input.requestId, payloadHash: input.payloadHash, outcome }),
       },
       outcome,
     });
   }
 
-  // §11: scale is limited. A commit that would GROW a project past a limit is refused (nothing changes; the client keeps it).
+  // §11: scale is limited. A commit that would GROW a project past a limit is refused (nothing changes; the client keeps it). K1
+  // (contract r1.6.2 r1): `maxFiles` bounds every live ENTRY of the branch, directories included; the bytes are the live files'.
   const before = usage(branch.entries);
   const after = usage(t);
-  if ((after.files > ctx.limits.maxFiles && after.files > before.files) || (after.bytes > ctx.limits.maxProjectBytes && after.bytes > before.bytes)) {
+  if ((after.entries > ctx.limits.maxFiles && after.entries > before.entries) || (after.bytes > ctx.limits.maxProjectBytes && after.bytes > before.bytes)) {
     return fail(relayError('budget-exceeded', 'This project is full: delete something, or keep this change for later.', {
-      details: [`wonderfs: files ${after.files}/${ctx.limits.maxFiles}, bytes ${after.bytes}/${ctx.limits.maxProjectBytes}`],
+      details: [`wonderfs: entries ${after.entries}/${ctx.limits.maxFiles}, bytes ${after.bytes}/${ctx.limits.maxProjectBytes}`],
     }));
   }
 
@@ -550,7 +565,7 @@ function commitSteps(project: WfsProjectState, branch: WfsBranchState, steps: re
       ...project,
       branches: new Map(project.branches).set(branch.branchId, nextBranch),
       conflicts,
-      requests: new Map(project.requests).set(input.requestId, { payloadHash: input.payloadHash, outcome }),
+      requests: new Map(project.requests).set(wfsRequestKey(input.actorKey, input.requestId), { actorKey: input.actorKey, requestId: input.requestId, payloadHash: input.payloadHash, outcome }),
     },
     outcome,
   });
@@ -576,6 +591,25 @@ function requestActor(p: WfsPrincipal): Readonly<Record<string, string | null>> 
 }
 
 /**
+ * K4 (contract r1.6.2 e2; JULIUS_DEV C7; attack WFS15-06 / BS-W2-03): THE IDEMPOTENCY NAMESPACE IS (project, actor_key, request id).
+ * `actor_key` = hex sha256 of the canonical JSON of the SAME actor allow-list the payload hash covers (`requestActor`), so a journal
+ * replay after a new sign-in keeps its key, and another principal -- another player, another grant, mission or attempt -- has a key of
+ * its own: it can neither take another's next id first (J-8's deterministic Julius id is computable from provenance) nor be answered
+ * with another's outcome. The payload hash is unchanged (the actor is already in it): no formula change, so e3 does not engage.
+ * null: the principal is malformed (the engine refuses such a request before any lookup; a store asks this first to know which row
+ * to read).
+ */
+export function wfsRequestActorKey(principal: unknown, sha256Hex: (text: string) => string): string | null {
+  if (checkPrincipal(principal) !== null) return null;
+  return sha256Hex(canonicalJson(requestActor(principal as WfsPrincipal)));
+}
+
+/** The engine's key for a stored request: its actor's key and its id (neither holds a newline: hex, and `^[A-Za-z0-9_-]{8,128}$`). */
+export function wfsRequestKey(actorKey: string, requestId: string): string {
+  return `${actorKey}\n${requestId}`;
+}
+
+/**
  * The request-identity hash formula's VERSION, hashed into every request's payload hash (R0a review MINOR-2). A stored
  * `wfs_requests.payload_hash` outlives the code that wrote it, so changing what the hash covers is an explicit, testable event:
  * change the formula, bump this tag. A row written under another formula then refuses its replay (duplicate-idempotency-key),
@@ -584,9 +618,12 @@ function requestActor(p: WfsPrincipal): Readonly<Record<string, string | null>> 
  */
 export const WFS_REQUEST_HASH_VERSION = 'wfs-req.2';
 
-/** INV-8: the stored answer for a request id, or a refusal when the id is reused for something else. `null` = new. */
-function replayed(project: WfsProjectState, requestId: string, payloadHash: string): RelayResult<WfsApplied> | null {
-  const prior = project.requests.get(requestId);
+/**
+ * INV-8, per actor (K4): the stored answer for THIS actor's request id, or a refusal when that actor reuses the id for something
+ * else. `null` = new for this actor (another actor's row under the same id is never consulted).
+ */
+function replayed(project: WfsProjectState, key: string, payloadHash: string): RelayResult<WfsApplied> | null {
+  const prior = project.requests.get(key);
   if (prior === undefined) return null;
   if (prior.payloadHash !== payloadHash) {
     return fail(relayError('duplicate-idempotency-key', 'That request id was already used for a different change.', { details: ['wonderfs: request id reused with another payload'] }));
@@ -608,7 +645,8 @@ export function applyWfsCommit(project: WfsProjectState, req: WfsCommitRequest, 
   if (badPrincipal !== null) return invalid(badPrincipal);
   const resolves = req.resolvesConflictId ?? null;
   const payloadHash = ctx.sha256Hex(canonicalJson({ v: WFS_REQUEST_HASH_VERSION, kind: 'commit', branchId: req.branchId, baseRev: req.baseRev, ops: req.ops, actor: requestActor(req.principal), resolvesConflictId: resolves }));
-  const prior = replayed(project, req.requestId, payloadHash);
+  const actorKey = wfsRequestActorKey(req.principal, ctx.sha256Hex) as string;
+  const prior = replayed(project, wfsRequestKey(actorKey, req.requestId), payloadHash);
   if (prior !== null) return prior;
 
   if (!isCount(req.baseRev, 0)) return invalid('the base revision is malformed');
@@ -623,6 +661,7 @@ export function applyWfsCommit(project: WfsProjectState, req: WfsCommitRequest, 
   if (!checked.ok) return checked;
   return commitSteps(project, branch.value, checked.value.map((op) => ({ kind: 'op' as const, op })), {
     requestId: req.requestId,
+    actorKey,
     payloadHash,
     baseRev: req.baseRev,
     principal: req.principal,
@@ -688,7 +727,8 @@ export function mergeBackWfsBranch(
   const badPrincipal = checkPrincipal(input.principal);
   if (badPrincipal !== null) return invalid(badPrincipal);
   const payloadHash = ctx.sha256Hex(canonicalJson({ v: WFS_REQUEST_HASH_VERSION, kind: 'merge', branchId: input.branchId, actor: requestActor(input.principal), approval: input.approval, reviewVerdict: input.reviewVerdict }));
-  const prior = replayed(project, input.requestId, payloadHash);
+  const actorKey = wfsRequestActorKey(input.principal, ctx.sha256Hex) as string;
+  const prior = replayed(project, wfsRequestKey(actorKey, input.requestId), payloadHash);
   if (prior !== null) return prior;
 
   const branch = openBranch(project, input.branchId);
@@ -752,6 +792,7 @@ export function mergeBackWfsBranch(
 
   const applied = commitSteps(project, target.value, puts.map((put) => ({ kind: 'merge' as const, put })), {
     requestId: input.requestId,
+    actorKey,
     payloadHash,
     baseRev: b.parent.forkRev,
     principal: input.principal,

@@ -273,7 +273,7 @@ suite('migration 036: WonderFS, applied explicitly after 035 (contract r1.4)', (
     await pool.query(entry, [A, 'main', 'f1', 'file', 'Docs/Readme.md', 'docs/readme.md', H('1'), 5, false]);
     await pool.query(entry, [A, 'main', 'd1', 'dir', 'Docs', 'docs', null, null, false]);
     await pool.query("INSERT INTO relay_wonderland.wfs_versions(project_id, branch_id, file_id, version, rev, kind, path, path_key, sha256, size, deleted, content_version, path_version, created_rev, updated_rev) VALUES($1, 'main', 'f1', 1, 1, 'file', 'Docs/Readme.md', 'docs/readme.md', $2, 5, false, 1, 1, 1, 1)", [A, H('1')]);
-    await pool.query("INSERT INTO relay_wonderland.wfs_requests(project_id, request_id, payload_hash, outcome) VALUES($1, 'req-00000001', $2, '{\"status\":\"committed\"}')", [A, H('d')]);
+    await pool.query("INSERT INTO relay_wonderland.wfs_requests(project_id, actor_key, request_id, payload_hash, outcome) VALUES($1, $2, 'req-00000001', $3, '{\"status\":\"committed\"}')", [A, H('a'), H('d')]);
     await pool.query("INSERT INTO relay_wonderland.wfs_conflicts(project_id, conflict_id, branch_id, request_id, status, record, opened_at) VALUES($1, 'cfl-1', 'main', 'req-00000002', 'open', $2, now())",
       [A, JSON.stringify({ conflictId: 'cfl-1', branchId: 'main', requestId: 'req-00000002' })]);
     await pool.query('INSERT INTO relay_wonderland.wfs_conflict_blobs VALUES($1, \'cfl-1\', $2)', [A, H('2')]);
@@ -307,8 +307,12 @@ suite('migration 036: WonderFS, applied explicitly after 035 (contract r1.4)', (
     // versions: made by an existing commit, at that commit's revision
     await refused(pool, 'a version with no commit', "INSERT INTO relay_wonderland.wfs_versions(project_id, branch_id, file_id, version, rev, kind, path, path_key, sha256, size, deleted, content_version, path_version, created_rev, updated_rev) VALUES($1, 'main', 'f1', 2, 2, 'file', 'a', 'a', $2, 5, false, 2, 1, 1, 2)", [A, H('1')], '23503', 'wfs_versions_commit_fk');
     await refused(pool, 'a version not at its commit', "INSERT INTO relay_wonderland.wfs_versions(project_id, branch_id, file_id, version, rev, kind, path, path_key, sha256, size, deleted, content_version, path_version, created_rev, updated_rev) VALUES($1, 'main', 'd1', 1, 1, 'dir', 'Docs', 'docs', NULL, NULL, false, 1, 1, 0, 0)", [A], '23514', 'wfs_versions_made_by_its_commit');
-    // INV-8: a request id answers once
-    await refused(pool, 'a request id reused', "INSERT INTO relay_wonderland.wfs_requests(project_id, request_id, payload_hash, outcome) VALUES($1, 'req-00000001', $2, '{}')", [A, H('e')], '23505', 'wfs_requests_pkey');
+    // INV-8, per ACTOR (contract r1.6.2 e2 / K4): a request id answers once for one actor; another actor's same id is its own row
+    const request = "INSERT INTO relay_wonderland.wfs_requests(project_id, actor_key, request_id, payload_hash, outcome) VALUES($1, $2, 'req-00000001', $3, '{}')";
+    await refused(pool, 'a request id reused by the same actor', request, [A, H('a'), H('e')], '23505', 'wfs_requests_pkey');
+    await pool.query(request, [A, H('b'), H('e')]); // CONTROL: another actor, the same id
+    await refused(pool, 'an actor key that is not 64 lower-case hex', request, [A, 'A'.repeat(64), H('e')], '23514');
+    await refused(pool, 'a request with no actor key', "INSERT INTO relay_wonderland.wfs_requests(project_id, request_id, payload_hash, outcome) VALUES($1, 'req-00000009', $2, '{}')", [A, H('e')], '23502');
     // conflicts: closing needs a time and a retention
     await refused(pool, 'a resolved conflict with no close time', "INSERT INTO relay_wonderland.wfs_conflicts(project_id, conflict_id, branch_id, request_id, status, record, opened_at) VALUES($1, 'cfl-2', 'main', 'req-00000004', 'resolved', $2, now())",
       [A, JSON.stringify({ conflictId: 'cfl-2', branchId: 'main', requestId: 'req-00000004' })], '23514', 'wfs_conflicts_closing');

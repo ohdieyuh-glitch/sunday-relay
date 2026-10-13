@@ -7,7 +7,8 @@
  * nothing else under any prefix. It is the shape of founder decision A for social (wonderland-social-scope.ts l.4-7), applied to a
  * second capability without a second identity system.
  *
- * R1 = READS ONLY. Writes (blob upload, commit) are R2 and are appended here then. NOT in R1, on purpose:
+ * R1 = the reads; R2 appends the two human WRITES (H11 blob upload, H12 commit to main), each admitted as `write` here and judged
+ * again per operation, and INSIDE the write's own transaction, by wonderfs-write-routes.ts. NOT here yet, on purpose:
  *   - the change feed (`changes`, plan H8) and the conflict list / record (H10): one commit or conflict record can exceed the
  *     contract's 1 MiB page and the client's 2 MiB cap (REVIEW_WONDERFS_R0B MAJOR-1, C2); they wait for contract r1.5;
  *   - long-poll (`wait` > 0, R4), snapshots and presence (R4), project create / delete / members (R3), every agent route (A1-A5).
@@ -25,14 +26,14 @@ export const NATIVE_WONDERFS_CAPABILITY = 'wonderfs' as const;
 
 export const WONDERFS_ROUTE_PREFIX = '/wonderfs';
 
-export type WonderfsOperationId = 'projects.list' | 'project.read' | 'tree.read' | 'file.history' | 'file.content' | 'blob.read' | 'events.read';
+export type WonderfsOperationId = 'projects.list' | 'project.read' | 'tree.read' | 'file.history' | 'file.content' | 'blob.read' | 'events.read' | 'blob.upload' | 'commit.create';
 
 /** The query keys an operation reads; any other key is refused (400), so a misspelt cursor never silently restarts a listing. */
 export type WonderfsQueryKey = 'after' | 'before' | 'limit' | 'rev' | 'wait';
 
 export interface WonderfsOperation {
   readonly id: WonderfsOperationId;
-  readonly method: 'GET';
+  readonly method: 'GET' | 'POST';
   /** Anchored; its capture groups are the ids named in `params`, in order. */
   readonly pattern: RegExp;
   readonly template: string;
@@ -40,9 +41,10 @@ export interface WonderfsOperation {
   readonly query: readonly WonderfsQueryKey[];
   /**
    * What the caller's role in the project must allow (§8.2's table, through `authorizeHuman`), read NOW, per request. `null`: the
-   * operation names no project (H1 lists the caller's OWN memberships, so there is nothing to authorize against).
+   * operation names no project (H1 lists the caller's OWN memberships, so there is nothing to authorize against). `write` (R2): an
+   * editor's or owner's; the write route then judges each operation it carries.
    */
-  readonly action: 'read' | null;
+  readonly action: 'read' | 'write' | null;
   /** The routes plan's id and the contract clause it serves, for a reviewer. */
   readonly plan: string;
   readonly contract: string;
@@ -65,6 +67,8 @@ export const WONDERFS_OPERATIONS: readonly WonderfsOperation[] = Object.freeze([
   { id: 'file.content', method: 'GET', template: '/v1/projects/:project/branches/main/files/:file/content', pattern: route('/projects/:project/branches/main/files/:file/content'), params: ['projectId', 'fileId'], query: ['rev'], action: 'read', plan: 'H6 + H7', contract: '§6.1 blob(sha256), Range' },
   { id: 'blob.read', method: 'GET', template: '/v1/projects/:project/blobs/:sha256', pattern: route('/projects/:project/blobs/:sha256'), params: ['projectId', 'sha256'], query: [], action: 'read', plan: 'H7', contract: '§6.1 blob(sha256), Range; §9.1' },
   { id: 'events.read', method: 'GET', template: '/v1/projects/:project/events', pattern: route('/projects/:project/events'), params: ['projectId'], query: ['after', 'limit', 'wait'], action: 'read', plan: 'H9 (wait=0)', contract: '§7 D-5 events(project, after_seq)' },
+  { id: 'blob.upload', method: 'POST', template: '/v1/projects/:project/blobs', pattern: route('/projects/:project/blobs'), params: ['projectId'], query: [], action: 'write', plan: 'H11 (R2)', contract: '§6.2 put_blob, §10.1, §19.m3' },
+  { id: 'commit.create', method: 'POST', template: '/v1/projects/:project/branches/main/commits', pattern: route('/projects/:project/branches/main/commits'), params: ['projectId'], query: [], action: 'write', plan: 'H12 (R2)', contract: '§6.2 commit, §6.4, INV-2, INV-8' },
 ]);
 
 /** What the table needs of a verified session. */

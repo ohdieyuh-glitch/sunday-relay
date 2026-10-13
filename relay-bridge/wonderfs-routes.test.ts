@@ -272,6 +272,9 @@ describe('WonderFS R1 reads: who may read what', () => {
       lastEventSeq: head.value.lastEventSeq, limits: { maxFileBytes: 64 * 1024 * 1024, maxFiles: 10_000, maxProjectBytes: 2 * 1024 * 1024 * 1024, maxOpsPerCommit: 2_000, maxPathChars: 200 },
     });
     expect(owner.main.headRev).toBe(7);
+    // K1 (contract r1.6.2 a9 / r1): usage.entries = main's live entries, files AND folders -- docs/, d0..d3 and two live files (old.txt
+    // is deleted) -- the count §11's maxFiles is judged on; usage.files and usage.bytes stay the live FILES
+    expect(owner.usage).toEqual({ files: 2, bytes: utf8('readme, second words').byteLength + BIG.byteLength, entries: 7 });
     expect((await call(base, `/wonderfs/v1/projects/${PROJECT}`, { token: tokens['ghu-2'] })).json.data.role, 'an ADMIN is an editor').toBe('editor');
   });
 });

@@ -28,6 +28,7 @@ import {
   SOCIAL_REPORT_REASONS,
   SOCIAL_SERVER_KINDS,
   WONDERLAND_NATION_IDS,
+  isRelayDogSkinId,
   type MessageKind,
   type PartyInvitePermission,
   type PartyPrivacy,
@@ -448,6 +449,23 @@ export function updateOwnPresence(state: SocialState, actorId: SocialUserId, inp
     updatedAtIso: atIso,
   };
   return { ok: true, value: { ...state, users: { ...state.users, [actorId]: { ...user, presence } } } };
+}
+
+/**
+ * THE PROFILE'S RELAY DOG WEARS WHAT THE PLAYER WEARS (BF-2). The skin the player's world report carries -- the one the world now
+ * holds for their figure -- becomes their profile's Dog skin, so another player opening the profile sees the Dog as it is, not a
+ * fixed Relay OG. Only a canonical skin (RELAY_DOG_SKIN_IDS, the client registry's ids) is recorded: any other id leaves the
+ * profile as it was. FROZEN WHILE HIDDEN, as last-seen is: a player appearing offline -- or signed out (Appear Offline ==
+ * sign-out; a tick still in flight after presence.update_self {connected:false}, which does not leave the world) -- changes nothing
+ * others can read, or a new skin on their card would say they are playing. Unchanged state (the same object) when nothing moves, so
+ * a report a tick writes nothing.
+ */
+export function recordWornSkin(state: SocialState, actorId: SocialUserId, skinId: string | undefined): SocialState {
+  const user = userById(state, actorId);
+  if (user === undefined || !isRelayDogSkinId(skinId) || !user.presence.connected || user.presence.availability === 'APPEAR_OFFLINE') return state;
+  if (user.profile.relayDog.skinId === skinId) return state;
+  const profile = { ...user.profile, relayDog: { ...user.profile.relayDog, skinId } };
+  return { ...state, users: { ...state.users, [actorId]: { ...user, profile } } };
 }
 
 type PrivacyPatch = Partial<Omit<SocialPrivacySettings, 'userId'>>;
@@ -943,8 +961,14 @@ function applyOne(
         nowMs,
       );
       if (!reported.ok) return worldFail(reported);
+      // THE SKIN THE WORLD NOW HOLDS for their figure (a report inside the minimum interval is not stored, so neither is its skin)
+      // becomes their profile's Dog (BF-2). A change is told only to the friends and party members whose view of the card moved
+      // (viewMoved: the presence audience decides who sees the skin), so their snapshot's card follows; a tick that changes no
+      // skin is the same state, and writes and tells nothing.
+      const worn = recordWornSkin(state, actorId, reported.value.avatars[actorId]?.skinId);
+      const audience = worn === state ? [] : [actorId, ...viewMoved(state, worn, actorId, [...friendIdsOf(state, actorId), ...partyMembers(state, actorId)])];
       // ONE CALL A TICK: the report answers with the view, so a client reporting ~5 a second needs nothing else to see the others.
-      return { ok: true, value: { state, world: reported.value, data: worldViewFor(reported.value, state, actorId, nowMs), audience: [] } };
+      return { ok: true, value: { state: worn, world: reported.value, data: worldViewFor(reported.value, worn, actorId, nowMs), audience } };
     }
     case 'world.invite': {
       const to = str(body, 'toUserId', MAX_LABEL);

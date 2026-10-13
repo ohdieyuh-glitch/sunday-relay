@@ -15,7 +15,9 @@
 
 import {
   PARTY_MAX_MEMBERS,
+  RELAY_DOG_BASE_SKIN_ID,
   SOCIAL_ACTIVITY_LABELS,
+  isRelayDogSkinId,
   type SocialActionAvailability,
   type SocialActivityType,
   type SocialLocation,
@@ -23,13 +25,16 @@ import {
   type SocialPresenceHeadline,
   type SocialUserId,
   type UserPresenceView,
+  type UserProfile,
   type UserProfileView,
 } from './social-contracts';
 import {
   audienceAdmits,
   blockedEitherWay,
   friendIdsOf,
+  outsiderSeesParty,
   partyOf,
+  partyRosterFor,
   relationshipOf,
   sharePartyWith,
   userById,
@@ -234,9 +239,10 @@ export function resolvePresenceFor(state: SocialState, viewerId: SocialUserId, s
   const sameParty = sharePartyWith(state, viewerId, subjectId);
   // THE BLOCK WALL REACHES THROUGH A FRIEND (F1, 2026-10-02): a friend's party that holds somebody blocked either way with
   // the viewer is not shown at all -- no id, no member count, no join -- or the friend's presence would tell the viewer
-  // that the party they were removed from (or left) still exists, and who is likely still in it.
-  const partyHoldsBlocked = party !== undefined && party.members.some((m) => m.userId !== viewerId && blockedEitherWay(state, viewerId, m.userId));
-  const partyVisible = party !== undefined && (self || sameParty || (friend && party.privacy === 'OPEN_TO_FRIENDS' && !partyHoldsBlocked));
+  // that the party they were removed from (or left) still exists, and who is likely still in it. And a friend's party is shown
+  // only as the snapshot lists it (WL-351-02, outsiderSeesParty): never while it is full or its leader is hidden from the viewer
+  // or appears offline, or this friend's card would say the party the viewer cannot see is there.
+  const partyVisible = party !== undefined && (self || sameParty || (friend && outsiderSeesParty(state, viewerId, party)));
   const partyHasRoom = party !== undefined && party.members.length < PARTY_MAX_MEMBERS;
   const viewerMayInvite =
     viewerParty !== undefined &&
@@ -289,6 +295,11 @@ export function resolveProfileFor(state: SocialState, viewerId: SocialUserId, su
   const actual = relationshipOf(state, viewerId, subjectId);
   const relationship = actual === 'BLOCKED_BY' ? 'NONE' : actual;
   const blocked = blockedEitherWay(state, viewerId, subjectId);
+  // THE WORN SKIN (BF-2) follows the player's presence audience: it is recorded from their world reports, so its changes are a
+  // sign they are playing. Outside that audience, or blocked either way, the card shows the base form -- what every card showed
+  // before the skin was recorded -- so the blocked side still sees exactly a stranger who shares nothing.
+  const seesWornSkin = viewerId === subjectId || (!blocked && audienceAdmits(state, subject.privacy.presenceVisibility, viewerId, subjectId));
+  const profile = profileWithSkinFor(subject.profile, seesWornSkin);
   const mine = new Set(friendIdsOf(state, viewerId));
   const mutualFriendIds =
     blocked || viewerId === subjectId || relationship === 'NONE'
@@ -296,10 +307,11 @@ export function resolveProfileFor(state: SocialState, viewerId: SocialUserId, su
       : friendIdsOf(state, subjectId).filter((id) => mine.has(id) && !blockedEitherWay(state, viewerId, id));
   const party = partyOf(state, subjectId);
   const partyKnown = presence.partyId !== null;
-  // A count is a roster: members behind the viewer's wall are not in it.
-  const visibleMembers = party === undefined ? 0 : party.members.filter((m) => m.userId === viewerId || !blockedEitherWay(state, viewerId, m.userId)).length;
+  // A count is a roster: members behind the viewer's wall are not in it, nor, for an outsider, members hidden from them or
+  // appearing offline (WL-351-02: the same roster the party view shows them, partyRosterFor).
+  const visibleMembers = party === undefined ? 0 : partyRosterFor(state, viewerId, party).length;
   return {
-    profile: subject.profile,
+    profile,
     presence,
     relationship,
     mutualFriendIds,
@@ -309,4 +321,14 @@ export function resolveProfileFor(state: SocialState, viewerId: SocialUserId, su
       joinable: presence.can.joinParty,
     },
   };
+}
+
+/**
+ * The card with the Dog's skin this viewer may see: the stored skin when they may see it and it is a canonical one, else the base
+ * form. A stored id outside the registry (a row written behind the store's back) is never served. Only the skin id is replaced.
+ */
+function profileWithSkinFor(profile: UserProfile, seesWornSkin: boolean): UserProfile {
+  const stored = profile.relayDog.skinId;
+  const skinId = seesWornSkin && isRelayDogSkinId(stored) ? stored : RELAY_DOG_BASE_SKIN_ID;
+  return skinId === stored ? profile : { ...profile, relayDog: { ...profile.relayDog, skinId } };
 }

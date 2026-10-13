@@ -27,7 +27,7 @@ import { FIXTURE_NOW, FIXTURE_USERS, createSocialFixture } from './social-fixtur
 import { pendingRequestsFor } from './social-friends';
 import { acceptPartyInvite, partyInvitesFor, partyViewFor, recentPlayersViewFor, type PartyView } from './social-parties';
 import { resolvePresenceFor, resolveProfileFor } from './social-presence';
-import { friendIdsOf, messagesOf, partyOf, userById, type SocialState } from './social-state';
+import { friendIdsOf, messagesOf, partyById, partyOf, userById, type SocialState } from './social-state';
 import { createLocalVoiceHarness, createUnavailableVoiceService } from './social-voice';
 
 export const SOCIAL_PREVIEW_SCHEMA = 'relay-wonderland-social-preview.v1' as const;
@@ -141,6 +141,8 @@ export function buildSocialView(state: SocialState, viewerId: SocialUserId, nowI
     .sort((a, b) => ONLINE_ORDER[a.presence.onlineState] - ONLINE_ORDER[b.presence.onlineState] || a.displayName.localeCompare(b.displayName));
   const pending = pendingRequestsFor(state, viewerId);
   const conversations = conversationsFor(state, viewerId);
+  // Parties the viewer is NOT in, as an outsider sees them (WL-351-02, partyViewFor -> outsiderSeesParty): only with room, only
+  // through a leader and a friend the viewer sees online, and only the members the viewer sees online.
   const visibleParties = Object.keys(state.parties)
     .map((id) => partyViewFor(state, viewerId, id))
     .filter((p): p is PartyView => p !== null && !p.viewerIsMember);
@@ -199,7 +201,7 @@ export function buildSocialView(state: SocialState, viewerId: SocialUserId, nowI
     party: myParty,
     visibleParties,
     partyInvites: invites
-      .map((i) => ({ ...i, partyName: state.parties[i.partyId]?.name ?? 'Party', from: row(state, viewerId, i.fromUserId)! }))
+      .map((i) => ({ ...i, partyName: partyById(state, i.partyId)?.name ?? 'Party', from: row(state, viewerId, i.fromUserId)! }))
       .filter((i) => i.from !== null),
     profiles,
     voiceStates: options.developmentPreview ? scriptedVoiceStates(viewerId) : [],

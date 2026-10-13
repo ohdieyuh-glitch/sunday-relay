@@ -407,6 +407,14 @@ export interface PublicCompoundAgentProfile {
 export const RELAY_DOG_SKIN_IDS = ['relay_og', 'celestial_light', 'skeleton_flame', 'jack_flame', 'baal', 'shadow_flame'] as const;
 export type RelayDogSkinId = (typeof RELAY_DOG_SKIN_IDS)[number];
 
+/** The base form: the Dog's own appearance, not a grant (the registry's one base-form skin). What a profile shows by default. */
+export const RELAY_DOG_BASE_SKIN_ID: RelayDogSkinId = 'relay_og';
+
+/** Whether an id is one of the canonical skins. Only these are ever stored on, or served from, a profile. */
+export function isRelayDogSkinId(value: unknown): value is RelayDogSkinId {
+  return typeof value === 'string' && (RELAY_DOG_SKIN_IDS as readonly string[]).includes(value);
+}
+
 /** A colour as `#RRGGBB`. */
 export type SocialHexColour = string;
 
@@ -457,7 +465,16 @@ export interface UserProfile {
   readonly nationId: WonderlandNationId | null;
   readonly clanName: string | null;
   readonly progression: PlayerProgression;
+  /**
+   * NULL = THE PLAYER HAS NO COMPOUND AI AGENT CONFIGURED, said truthfully. Every real player's today: a new record starts with
+   * none, and no operation writes one (Julius mission creation is deferred past Beta, 027 B). It is never filled with a default
+   * Julius; the fixture's Julius cards are DEVELOPMENT PREVIEW people only.
+   */
   readonly primaryAgent: PublicCompoundAgentProfile | null;
+  /**
+   * The player's Relay Dog in the skin they last wore in a world (BF-2: world.state records it). Only viewers who may see the
+   * player's presence see that skin; anyone else, and anyone blocked either way, sees the base form (resolveProfileFor).
+   */
   readonly relayDog: PublicRelayDogProfile;
   readonly activeCompanion: PublicCompanionProfile | null;
   /** Other agents and companions the owner CHOSE to show. Order is the owner's. */

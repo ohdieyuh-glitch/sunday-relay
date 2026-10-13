@@ -19,14 +19,30 @@
  *   - UNKNOWN = `not-found` with one message ("Not found."), for a project, branch, file, conflict or revision alike (§9.1); a
  *     malformed query is `validation-failed`; an outage is `stale-ledger-version` (retryable), never "not found".
  *
- * NOT here (later slices): authorization (the route asks `memberRole` FIRST and reads nothing else before it succeeds, §19.m2),
- * streaming blobs / Range / the WfsBlobStore seam (R1/R2), snapshots (R4).
+ * WRITES (R2; contract r1.4 §6.2, §8.2, §10.1, §11, §19.m3): a write may carry a `WfsWriteAuthority` -- the human whose
+ * project_members role the store reads INSIDE the write's own transaction (locked until it commits), judged by `authorizeHuman`
+ * BEFORE anything else the write does, the idempotency replay lookup included. A role revoked after the route's own check therefore
+ * writes nothing (R0a review MINOR-5(b), R0b review MINOR-1). `putBlob` re-hashes the bytes (a claimed address that differs is
+ * refused and nothing is kept: 422) and refuses a NEW blob that would take the project past its live-bytes limit counting as PENDING
+ * every blob no file's history names -- an orphan, AND (R2-r2, security MAJOR-3) one only a conflict names -- before a byte is kept
+ * (413 project_full). A commit whose OUTCOME is a new conflict meets TWO honest limits (R2-r3; R2 reviews' N1 and security MAJOR-2):
+ * its author's OPEN conflicts (§8.4: resolving lifts it), and its author's RETAINED conflicts -- open, or closed within their 30 days
+ * -- a storage limit that resolving does NOT lift and that frees on a known date. The shared rules are below (`wfsAdmitWrite`,
+ * `wfsAdmitCommit`, `wfsConflictLimits`, `wfsBlobRoom`), so the two stores cannot drift apart; wonderfs-store-conformance.ts runs each
+ * against both.
+ *
+ * LOCK ORDER (R2-r2, reviews' MINOR-3 / MINOR-4): a write takes the project's `wfs_projects` row FOR UPDATE FIRST, then the member's
+ * `project_members` row FOR SHARE. A later transaction that holds a membership row and then touches a `wfs_*` row of that project
+ * (R3's bootstrap, A1's M2(a) grant revocation) deadlocks with it unless it takes them in THIS order.
+ *
+ * NOT here (later slices): the route's first authorization (it asks `memberRole` FIRST and reads nothing else before it succeeds,
+ * §19.m2), the WfsBlobStore seam (R5), the orphan collector (R5), snapshots (R4).
  *
  * Pure: no Node, no I/O. Types, limits and the shared paging / status helpers both stores use, so they cannot drift apart.
  */
 
 import { fail, ok, relayError, type RelayResult } from '../protocol/errors';
-import type { WfsHumanRole } from './wonderfs-authz';
+import { authorizeHuman, type WfsAction, type WfsHumanRole } from './wonderfs-authz';
 import type {
   WfsBranchId,
   WfsCommit,
@@ -35,6 +51,7 @@ import type {
   WfsConflict,
   WfsEntry,
   WfsFileId,
+  WfsLimits,
   WfsMergeApproval,
   WfsPrincipal,
   WfsRecordedOp,
@@ -86,8 +103,11 @@ export interface WfsProjectHead {
   /** main's chain anchor (§19.M7). */
   readonly genesisHash: string;
   readonly main: { readonly headRev: number; readonly headCommitHash: string };
-  /** Live files and their bytes on main (§11's limits are judged on these). */
-  readonly usage: { readonly files: number; readonly bytes: number };
+  /**
+   * Main's live FILES and their bytes, and (K1, contract r1.6.2 a9 / r1) its live ENTRIES -- files AND directories: §11's 10,000
+   * (`limits.maxFiles`) is judged on `entries`, its live-bytes limit on `bytes`. `entries` is additive on the wire (§17).
+   */
+  readonly usage: { readonly files: number; readonly bytes: number; readonly entries: number };
   /** The newest lifecycle event's sequence number (0: none yet): where an events reader starts. */
   readonly lastEventSeq: number;
 }
@@ -215,7 +235,11 @@ export interface WfsConflictView extends WfsConflictClosing {
 export interface WfsBlobInfo {
   readonly sha256: string;
   readonly size: number;
-  /** Named by a version, a current or fork-time entry, or a retained conflict, on any branch of this project. */
+  /**
+   * Named by a version, a current or fork-time entry, on any branch of this project, or by a conflict while that conflict is RETAINED
+   * (open, or closed less than its 30 days ago: K2, contract r1.6.2 r2). A blob only an expired conflict names is NOT referenced (it
+   * still counts as pending room, b5, until R5's collector).
+   */
   readonly referenced: boolean;
 }
 
@@ -248,6 +272,81 @@ export type WfsBlobIntegrity =
   | { readonly status: 'absent' }
   | { readonly status: 'intact'; readonly size: number }
   | { readonly status: 'corrupt'; readonly reason: 'bytes_missing' | 'size_mismatch' | 'hash_mismatch' };
+
+/** One thing a write does, as `authorizeHuman` judges it: the action and the paths it names (both ends of a move: the new one). */
+export interface WfsAuthorityNeed {
+  readonly action: WfsAction;
+  readonly paths: readonly string[];
+}
+
+/**
+ * R2: WHO a write is for, re-judged INSIDE the write's own transaction. The store reads `playerId`'s project_members role there
+ * (PostgreSQL: `FOR SHARE`, so a removal or demotion committed first is seen, and one attempted meanwhile waits for this write), runs
+ * `authorizeHuman` for every need, and on any refusal writes NOTHING and answers the one not-found. It runs BEFORE the replay lookup,
+ * so a caller who lost the role learns nothing from a request id it once used.
+ */
+export interface WfsWriteAuthority {
+  readonly playerId: string;
+  /** At least one; an empty list is refused (fail closed). */
+  readonly needs: readonly WfsAuthorityNeed[];
+}
+
+/**
+ * The two conflict limits (R2-r3). Both are judged on the OUTCOME, inside the change: a change the engine turns into a NEW conflict is
+ * refused at either limit (`budget-exceeded`) and nothing is kept -- a resolution that fails opens a conflict too, so it counts. A
+ * change that lands, and a replay, are never refused by them. null / absent: no limit.
+ */
+export interface WfsCommitAuthority extends WfsWriteAuthority {
+  /**
+   * §8.4's OPEN-conflicts budget: the most OPEN conflicts this player may have authored in the project. Resolving one (keep mine,
+   * keep theirs, keep both) lifts it. Refusal detail WFS_DETAIL_TOO_MANY_OPEN_CONFLICTS.
+   */
+  readonly maxOpenConflicts?: number | null;
+  /**
+   * A STORAGE limit (R2-r2 security MAJOR-2, made honest in R2-r3): the most RETAINED conflicts this player may have authored in the
+   * project -- open, or closed and still inside its 30-day retention (§11, N-MAJOR-1), since a retained record keeps its ops and its
+   * bytes either way. Resolving does NOT lift it; the oldest closed one's retention ending does, on a date the refusal names
+   * (WFS_DETAIL_RETAINED_CONFLICTS + `wfsRetainedConflictsFreeAt`). Dismiss-and-recreate therefore cannot fill the database.
+   */
+  readonly maxRetainedConflicts?: number | null;
+}
+
+/** One author's conflicts in one project, at one instant: open, retained (open or closed within 30 days), and when the next closed one stops being retained. */
+export interface WfsConflictTally {
+  readonly open: number;
+  readonly retained: number;
+  /** The earliest retention end among the CLOSED conflicts still retained; null when none is closed. */
+  readonly nextFreeIso: string | null;
+}
+
+/** What putBlob kept: the address, the size, and whether THIS call stored a blob the project did not hold (a budget may refund otherwise). */
+export interface WfsPutBlobResult {
+  readonly sha256: string;
+  readonly size: number;
+  readonly created: boolean;
+}
+
+export interface WfsPutBlobOptions {
+  /** The address the uploader says the bytes have; when given and the bytes hash otherwise, NOTHING is kept (§10.1: 422). */
+  readonly claimedSha256?: string | null;
+  readonly authority?: WfsWriteAuthority;
+}
+
+/** The log-only `details` tags a route maps a store refusal by (never sent to a caller). */
+export const WFS_DETAIL_FILE_TOO_LARGE = 'wonderfs: file_too_large';
+export const WFS_DETAIL_HASH_MISMATCH = 'wonderfs: hash_mismatch';
+export const WFS_DETAIL_PROJECT_FULL = 'wonderfs: project_full';
+export const WFS_DETAIL_TOO_MANY_OPEN_CONFLICTS = 'wonderfs: too_many_open_conflicts';
+export const WFS_DETAIL_RETAINED_CONFLICTS = 'wonderfs: retained_conflicts_full';
+/** A storage refusal's companion tag: when the next retained conflict frees (log-only; the route turns it into Retry-After). */
+const RETAINED_FREE_AT = 'wonderfs: retained_conflicts_free_at=';
+/** When the next retained conflict frees, from a refusal's details; null when none is named. */
+export function wfsRetainedConflictsFreeAt(details: readonly string[] | undefined): string | null {
+  const tag = (details ?? []).find((d) => d.startsWith(RETAINED_FREE_AT));
+  return tag === undefined ? null : tag.slice(RETAINED_FREE_AT.length);
+}
+/** §11's words when a project would grow past a limit: the engine's, for a commit; the same for an upload. */
+export const WFS_PROJECT_FULL_MESSAGE = 'This project is full: delete something, or keep this change for later.';
 
 /* ------------------------------------------------------------------------------------------------------------- the store */
 
@@ -299,8 +398,13 @@ export interface WfsStore {
   verifyBlob(projectId: string, sha256: string): Promise<RelayResult<WfsBlobIntegrity>>;
   readBlob(projectId: string, sha256: string): Promise<Uint8Array | null>;
 
-  /** §6.2. Blob presence is read from the store inside the change (never a process cache): a blob another bridge stored counts. */
-  commit(projectId: string, req: WfsCommitRequest, nowIso: string): Promise<RelayResult<WfsCommitOutcome>>;
+  /**
+   * §6.2. Blob presence is read from the store inside the change (never a process cache): a blob another bridge stored counts.
+   * R2: with `authority`, the human's role is read and judged INSIDE the change, before the replay lookup (`wfsAdmitCommit`); the
+   * request's principal must be that human; and a NEW conflict past either conflict limit is refused (`wfsConflictLimits`). Without it, the
+   * caller has authorized (tests, the oracle, tools).
+   */
+  commit(projectId: string, req: WfsCommitRequest, nowIso: string, authority?: WfsCommitAuthority): Promise<RelayResult<WfsCommitOutcome>>;
   fork(projectId: string, input: { readonly fromBranchId: WfsBranchId; readonly owner: WfsPrincipal }, nowIso: string): Promise<RelayResult<{ readonly branchId: WfsBranchId }>>;
   /**
    * The approval is the one STORED by `approve`, looked up by its id -- never an object the caller built -- and the approver's
@@ -311,8 +415,22 @@ export interface WfsStore {
   /** The human's CURRENT role is read with the approval (r1.4 N-minor-1); the approval is kept. */
   approve(projectId: string, input: { readonly branchId: WfsBranchId; readonly principal: WfsPrincipal }, nowIso: string): Promise<RelayResult<WfsMergeApproval>>;
   discard(projectId: string, branchId: WfsBranchId, nowIso: string): Promise<RelayResult<null>>;
-  /** Stores bytes under the sha256 computed HERE; idempotent. */
-  putBlob(projectId: string, bytes: Uint8Array): Promise<RelayResult<{ readonly sha256: string; readonly size: number }>>;
+  /**
+   * Stores bytes under the sha256 computed HERE (§10.1); idempotent: the same bytes again keep nothing new and answer the same.
+   * The bytes are HANDED OVER: they must not change until this resolves (the PostgreSQL store hashes and stores a view of them).
+   * R2, in this order, each refusal keeping NOTHING:
+   *   over the per-file limit                         -> validation-failed, WFS_DETAIL_FILE_TOO_LARGE
+   *   `claimedSha256` malformed                       -> validation-failed
+   *   the bytes hash to another address than claimed  -> validation-failed, WFS_DETAIL_HASH_MISMATCH (§10.1: 422)
+   *   no such live project                            -> not-found
+   *   `authority` refused (read inside the write)     -> not-found
+   *   a NEW blob, and main's live bytes + the PENDING bytes (every held blob no file's history names: orphans, and blobs only a
+   *   conflict names) + this blob > the live-bytes limit
+   *                                                   -> budget-exceeded, WFS_DETAIL_PROJECT_FULL (§19.m3: 413 project_full)
+   * A blob the project already holds grows nothing, so it is never refused for room (grow-only, §11); its bytes, if they went
+   * missing, are written back (REVIEW_WONDERFS_R0B MINOR-7). An outage is retryable, never "not found".
+   */
+  putBlob(projectId: string, bytes: Uint8Array, options?: WfsPutBlobOptions): Promise<RelayResult<WfsPutBlobResult>>;
 }
 
 /* ------------------------------------------------------------------------------------------ shared by both implementations */
@@ -522,6 +640,103 @@ export function wfsOutcomeEvent(outcome: WfsCommitOutcome, kind: string): WfsSto
   return outcome.status === 'committed'
     ? { kind, body: { branchId: outcome.branchId, rev: outcome.rev, commitId: outcome.commitId } }
     : { kind: 'conflict', body: { branchId: outcome.branchId, conflictId: outcome.conflictId } };
+}
+
+/* --------------------------------------------------------------------------------------------------- R2: writes, shared */
+
+/**
+ * The human's role, read INSIDE the write, against everything the write does (`authorizeHuman` per need). Any refusal is the one
+ * not-found: a caller who lost the role cannot tell a refused write from a project that does not exist (§9.1).
+ */
+export function wfsAdmitWrite(role: WfsHumanRole | null, authority: WfsWriteAuthority): RelayResult<true> {
+  if (authority.needs.length === 0) return wfsNotFound('a write named nothing it does (refused: fail closed)');
+  for (const need of authority.needs) {
+    const allowed = authorizeHuman({ role, action: need.action, paths: need.paths });
+    if (!allowed.ok) return allowed;
+  }
+  return ok(true);
+}
+
+/**
+ * THE COMMIT'S IN-TRANSACTION GATE (R2), BEFORE the engine (and so before its replay lookup): the request's principal is the human
+ * whose role was read, and that role allows every need.
+ */
+export function wfsAdmitCommit(role: WfsHumanRole | null, authority: WfsCommitAuthority, req: WfsCommitRequest): RelayResult<true> {
+  const principal = req.principal as WfsPrincipal | null | undefined;
+  if (principal?.kind !== 'human' || principal.id !== authority.playerId) return wfsNotFound('the commit names another principal than the member whose role was read');
+  return wfsAdmitWrite(role, authority);
+}
+
+/** Whether a conflict's record is still RETAINED at `nowIso`: open, or closed less than its 30 days ago (§11, N-MAJOR-1). */
+export function wfsConflictRetained(closing: WfsConflictClosing, nowIso: string): boolean {
+  return closing.status === 'open' || (closing.retainUntilIso !== null && Date.parse(closing.retainUntilIso) > Date.parse(nowIso));
+}
+
+/**
+ * THE CONFLICT LIMITS (R2-r3), judged on the engine's OUTCOME, inside the change. They are asked only about a NEW conflict (not a
+ * replay) under an authority that names a limit; the store then tallies its author's conflicts (`wfsConflictRetained`) and
+ * `wfsConflictLimits` decides -- the OPEN limit first (resolving lifts it), then the RETAINED storage limit (time lifts it).
+ */
+export function wfsConflictLimitsApply(outcome: WfsCommitOutcome, authority: WfsCommitAuthority | undefined): boolean {
+  if (authority === undefined || outcome.status !== 'conflict' || outcome.replay) return false;
+  return (authority.maxOpenConflicts ?? null) !== null || (authority.maxRetainedConflicts ?? null) !== null;
+}
+
+export function wfsConflictLimits(tally: WfsConflictTally, authority: WfsCommitAuthority): RelayResult<null> {
+  const maxOpen = authority.maxOpenConflicts ?? null;
+  if (maxOpen !== null && tally.open >= maxOpen) {
+    return fail(relayError('budget-exceeded', 'You have too many unresolved conflicts in this project: resolve some, then send this again.', {
+      details: [WFS_DETAIL_TOO_MANY_OPEN_CONFLICTS, `wonderfs: open conflicts ${tally.open}/${maxOpen}`],
+    }));
+  }
+  const maxRetained = authority.maxRetainedConflicts ?? null;
+  if (maxRetained !== null && tally.retained >= maxRetained) {
+    return fail(relayError('budget-exceeded', 'This project keeps each of your conflicts for 30 days after it closes, and it holds as many of yours as it keeps; send this again once an older one has expired.', {
+      details: [WFS_DETAIL_RETAINED_CONFLICTS, `wonderfs: retained conflicts ${tally.retained}/${maxRetained}`, ...(tally.nextFreeIso === null ? [] : [`${RETAINED_FREE_AT}${tally.nextFreeIso}`])],
+    }));
+  }
+  return ok(null);
+}
+
+/**
+ * §19.m3 + §11, for a blob the project does NOT hold yet: main's live file bytes, plus every orphan's PENDING bytes, plus this blob,
+ * must stay within the live-bytes limit. Grow-only: a blob already held grows nothing and is never asked.
+ */
+export function wfsBlobRoom(input: { readonly liveBytes: number; readonly pendingBytes: number; readonly size: number; readonly limits: WfsLimits }): RelayResult<null> {
+  const after = input.liveBytes + input.pendingBytes + input.size;
+  if (after <= input.limits.maxProjectBytes) return ok(null);
+  return fail(relayError('budget-exceeded', WFS_PROJECT_FULL_MESSAGE, {
+    details: [WFS_DETAIL_PROJECT_FULL, `wonderfs: live ${input.liveBytes} + pending ${input.pendingBytes} + new ${input.size} > ${input.limits.maxProjectBytes}`],
+  }));
+}
+
+/** putBlob's refusals before any storage is touched: the per-file limit and a malformed claimed address. */
+export function wfsCheckUpload(size: number, claimedSha256: unknown, limits: WfsLimits): RelayResult<string | null> {
+  if (size > limits.maxFileBytes) return fail(relayError('validation-failed', 'That file is larger than a project allows.', { details: [WFS_DETAIL_FILE_TOO_LARGE] }));
+  if (claimedSha256 === undefined || claimedSha256 === null) return ok(null);
+  return wfsIsSha256(claimedSha256) ? ok(claimedSha256) : invalidQuery('the claimed content hash is not 64 lowercase hex characters');
+}
+
+/** §10.1: the bytes hash to another address than the uploader claimed. Nothing is kept. */
+export function wfsHashMismatch(): RelayResult<never> {
+  return fail(relayError('validation-failed', 'The file\'s bytes do not match the content hash sent with them; nothing was kept.', { details: [WFS_DETAIL_HASH_MISMATCH] }));
+}
+
+/** An incremental sha256 (node:crypto's Hash), injected so this module stays free of Node. */
+export interface WfsSha256Hasher {
+  update(chunk: Uint8Array): unknown;
+  digest(encoding: 'hex'): string;
+}
+
+export const WFS_HASH_SLICE_BYTES = 1024 * 1024;
+
+/** sha256 in 1 MiB slices, yielding between them, so a 64 MiB upload's re-hash never holds the bridge's one thread (cf. R1's reads). */
+export async function wfsSha256InSlices(bytes: Uint8Array, hasher: WfsSha256Hasher): Promise<string> {
+  for (let at = 0; at < bytes.byteLength; at += WFS_HASH_SLICE_BYTES) {
+    hasher.update(bytes.subarray(at, at + WFS_HASH_SLICE_BYTES));
+    if (at + WFS_HASH_SLICE_BYTES < bytes.byteLength) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+  return hasher.digest('hex');
 }
 
 /** A held blob's bytes against its address and recorded size (`recordedSize: null` = not held). */

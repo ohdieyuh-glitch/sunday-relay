@@ -255,11 +255,17 @@ suite('the WonderFS store on real PostgreSQL: the engine is the oracle', () => {
     const replayed = await restarted.commit('prj-1', resignedIn, NOW);
     expect(replayed.ok && replayed.value).toEqual(first.ok && { ...first.value, replay: true });
     expect(await events(), 'a replay after a restart writes nothing').toBe(eventsBeforeReplay);
-    // CONTROLS: the same key from ANOTHER player, or with other content, is still refused
-    const otherPlayer = await restarted.commit('prj-1', { ...resignedIn, principal: who('usr_member') }, NOW);
-    expect(otherPlayer.ok === false && otherPlayer.error.code).toBe('duplicate-idempotency-key');
+    // CONTROL: the same key with other content from the same player is still refused
     const otherContent = await restarted.commit('prj-1', { ...resignedIn, ops: [{ op: 'create', path: 'other', kind: 'dir' }] }, NOW);
     expect(otherContent.ok === false && otherContent.error.code).toBe('duplicate-idempotency-key');
+    // K4 (contract r1.6.2 e2): from ANOTHER player the same id is an independent request, stored under its own actor_key -- judged
+    // afresh (`notes` is taken: a conflict of its own), never the first player's revision; then BOTH rows answer their own actor
+    const otherPlayer = await restarted.commit('prj-1', { ...resignedIn, principal: who('usr_member') }, NOW);
+    expect(otherPlayer.ok && [otherPlayer.value.status, otherPlayer.value.replay]).toEqual(['conflict', false]);
+    const keyed = (await pool.query<{ n: string; actors: string }>("SELECT count(*)::text AS n, count(DISTINCT actor_key)::text AS actors FROM relay_wonderland.wfs_requests WHERE project_id = 'prj-1' AND request_id = 'req-replay-01'")).rows[0];
+    expect([keyed.n, keyed.actors], 'one row per actor under the one id').toEqual(['2', '2']);
+    const mine = await openWfsPostgresStore(pool, { newId: idSource() }).commit('prj-1', resignedIn, NOW);
+    expect(mine.ok && mine.value).toEqual(first.ok && { ...first.value, replay: true });
   }, 120_000);
 
   it('RACE: two stores (two bridges) commit to one branch at once -- every commit lands, the revisions are gapless, nothing is lost', async () => {
@@ -326,7 +332,7 @@ suite('the WonderFS store on real PostgreSQL: the engine is the oracle', () => {
     await store.createProject('prj-1', NOW);
     const held = await store.putBlob('prj-1', new TextEncoder().encode('held'));
     if (!held.ok) throw new Error(held.error.message);
-    expect(held.value).toEqual({ sha256: sha('held'), size: 4 });
+    expect(held.value).toEqual({ sha256: sha('held'), size: 4, created: true });
     expect(new TextDecoder().decode((await store.readBlob('prj-1', sha('held')))!)).toBe('held');
     const unheld = await store.commit('prj-1', { requestId: 'req-blob-0001', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: who('usr_owner'), ops: [{ op: 'create', path: 'x.txt', kind: 'file', sha256: sha('never uploaded'), size: 14 }] }, NOW);
     expect(unheld.ok).toBe(false);

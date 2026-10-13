@@ -207,14 +207,18 @@ CREATE TABLE relay_wonderland.wfs_versions(
 );
 CREATE INDEX wfs_versions_by_rev ON relay_wonderland.wfs_versions(project_id, branch_id, rev);
 
--- A request id answers the same way forever (INV-8): what it was (its payload hash) and how it was answered.
+-- A request id answers the same way forever (INV-8), PER ACTOR (contract r1.6.2 e2 / K4, amending this unapplied 036): what it was
+-- (its payload hash) and how it was answered, keyed by (project, actor_key, request id). actor_key = the hex sha256 of the canonical
+-- actor allow-list the payload hash covers (wonderfs-engine.ts wfsRequestActorKey), so another principal's same id is its own row:
+-- an id another member took first can neither block a change nor answer it.
 CREATE TABLE relay_wonderland.wfs_requests(
   project_id text NOT NULL,
+  actor_key text NOT NULL CHECK(actor_key ~ '^[0-9a-f]{64}$'),
   request_id text NOT NULL CHECK(request_id ~ '^[A-Za-z0-9_-]{8,128}$'),
   payload_hash text NOT NULL CHECK(payload_hash ~ '^[0-9a-f]{64}$'),
   outcome jsonb NOT NULL,
   at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT wfs_requests_pkey PRIMARY KEY(project_id, request_id),
+  CONSTRAINT wfs_requests_pkey PRIMARY KEY(project_id, actor_key, request_id),
   CONSTRAINT wfs_requests_project_fk FOREIGN KEY(project_id) REFERENCES relay_wonderland.wfs_projects(project_id) ON DELETE CASCADE
 );
 
