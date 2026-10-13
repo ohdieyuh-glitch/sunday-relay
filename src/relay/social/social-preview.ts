@@ -136,8 +136,8 @@ export function buildSocialView(state: SocialState, viewerId: SocialUserId, nowI
     .sort((a, b) => ONLINE_ORDER[a.presence.onlineState] - ONLINE_ORDER[b.presence.onlineState] || a.displayName.localeCompare(b.displayName));
   const pending = pendingRequestsFor(state, viewerId);
   const conversations = conversationsFor(state, viewerId);
-  // Parties the viewer is NOT in, as an outsider sees them (WL-351-02, partyViewFor -> outsiderSeesParty): only with room, only
-  // through a leader and a friend the viewer sees online, and only the members the viewer sees online.
+  // Parties the viewer is NOT in, as an outsider sees them (WL-351-02, partyViewFor -> outsiderSeesParty): only with room, with a
+  // friend inside, and only when the viewer sees every member online (WL-358-01: a member hidden from them closes it).
   const visibleParties = Object.keys(state.parties)
     .map((id) => partyViewFor(state, viewerId, id))
     .filter((p): p is PartyView => p !== null && !p.viewerIsMember);
