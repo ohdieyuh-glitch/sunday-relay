@@ -913,30 +913,15 @@ suite('the Wonderland reader against a real PostgreSQL', () => {
 
   /* ------------------- the OTHER writer, reading the shared table */
 
-  /*
-   * A KNOWN DEFECT, PINNED -- WONDERLAND-OWNED, NOT ROW 12's, AND NOT FIXED HERE (row 12 fix round 2, item 2).
-   *
-   * `relay_wonderland.events` is shared: Julius's ledger writes into it with `event_type = 'julius.…'` and a payload
-   * of another shape (`{schemaVersion:'relay-julius-event.v1', …}`, no `eventType`, no `sequence`). Wonderland's
-   * `replay()` (src/relay/persistence/wonderland-postgres.ts, `PostgresWonderlandTransaction.replay`, the read behind
-   * `replayEvents` and so behind wonderland-realtime.ts) selects by project alone and casts every payload to a
-   * WonderlandEvent, so a Julius row reaches a browser with `eventType` undefined.
-   *
-   * WHY THIS FILE CARRIED A CONTRACT MAIN DOES NOT MEET. The fix and its two cases were written together on
-   * relay/wonderland-julius-integration (50b439d9: `AND event_type = ANY($4)` over `WONDERLAND_EVENT_TYPES`, the
-   * closed list, at 35917fda:src/relay/persistence/wonderland-postgres.ts:205). Row 12's build (4f363767) carried
-   * this test file byte-identical from 35917fda and did NOT carry wonderland-postgres.ts, so on #348 the first case
-   * failed at "a replayed event with no type reached a browser" and the second passed VACUOUSLY (the third-shape row
-   * came back with no `eventId` at all, so `not.toContain('battle-1')` held for the wrong reason).
-   *
-   * The replay is Wonderland's realtime path, which Julius does not own (the founder, 2026-10-11), so the one-line
-   * filter is MAIN WONDERLAND's to land. Until it lands this case asserts the defect EXACTLY -- it runs (never todo)
-   * and passes only while Julius's rows and the third shape still reach the replay. THE DAY THE FILTER LANDS THIS
-   * CASE FAILS: then restore the two cases of 7a7fa3ce, lines 916-979 ("hands a browser only rows of its OWN
-   * vocabulary" and "refuses a row from ANY writer that is not this one, not merely Julius").
-   */
   describe('the battle replay and the Julius ledger share one table', () => {
-    it('KNOWN DEFECT (Wonderland-owned, not fixed here): replay() still hands a browser Julius rows and a third shape, typeless', async () => {
+    it('hands a browser only rows of its OWN vocabulary', async () => {
+      // THE DEFECT. `relay_wonderland.events` is shared, and `replay()` selected
+      // by project alone. A Julius payload is
+      // `{schemaVersion:'relay-julius-event.v1', …}` — no `eventId`, no
+      // `eventType`, no `sequence` — and it was cast straight to a
+      // WonderlandEvent, so every field a browser surface reads came back
+      // undefined. Project A's stream carries rows from both writers, which is
+      // what makes this a real read rather than a fixture that agreed.
       const database = new TransactionalWonderlandDatabase(pool);
 
       // ONE PROPERLY-SHAPED ROW, spelled the way this writer really writes one.
@@ -952,26 +937,20 @@ suite('the Wonderland reader against a real PostgreSQL', () => {
         }), AT],
       );
       try {
-        // Read as what the database really returned, not as the WonderlandEvent the cast claims.
-        const rows = (await database.replayEvents(A, 0, 1000)).map((event) => event as unknown as Record<string, unknown>);
-        const isTyped = (row: Record<string, unknown>): boolean => typeof row.eventType === 'string' && row.eventType !== '';
-        const typed = rows.filter(isTyped);
-        const typeless = rows.filter((row) => !isTyped(row));
+        const replayed = await database.replayEvents(A, 0, 1000);
 
-        // This writer's own rows come back whole, in order, and they are the only TYPED rows.
-        expect(typed.map((row) => row.eventId)).toEqual(['battle-2', 'world-1']);
+        // NOTHING WITHOUT AN IDENTITY. This is the assertion the defect fails:
+        // a Julius payload has no `eventId`, so before the filter this list
+        // held objects whose every field was undefined.
+        for (const event of replayed) {
+          expect(event.eventId, 'a replayed event with no id reached a browser').toBeTruthy();
+          expect(event.eventType, 'a replayed event with no type reached a browser').toBeTruthy();
+        }
+        // Both of this writer's own rows, and neither of the other two shapes.
+        expect(replayed.map((e) => e.eventId)).toEqual(['battle-2', 'world-1']);
 
-        // THE DEFECT, exactly. Every typeless row is one of the two foreign shapes seeded on project A -- a Julius
-        // ledger payload or the third shape -- and both are present. When the closed-list filter lands, `typeless`
-        // is empty and the first assertion below fails: restore the 7a7fa3ce cases then (see the header).
-        const juliusShaped = typeless.filter((row) => row.schemaVersion === 'relay-julius-event.v1');
-        const thirdShape = typeless.filter((row) => row.round === 1 && Object.keys(row).length === 1);
-        expect(typeless.length, 'the closed-list replay filter has landed: restore the 7a7fa3ce contract').toBeGreaterThan(0);
-        expect(juliusShaped.length, 'a Julius ledger row reaching the replay').toBeGreaterThan(0);
-        expect(thirdShape.length, 'the third-shape battle-1 row reaching the replay').toBe(1);
-        expect(juliusShaped.length + thirdShape.length, 'a typeless row of a shape this suite did not seed').toBe(typeless.length);
-
-        // AND THE JULIUS ROWS ARE REALLY THERE, by their own column, so the shape test above is not an accident.
+        // AND THE JULIUS ROWS ARE REALLY THERE, so the filter is doing the work
+        // rather than the fixture being empty.
         const julius = await pool.query<{ n: string }>(
           `SELECT count(*)::text AS n FROM relay_wonderland.events
             WHERE project_id=$1 AND event_type LIKE 'julius.%'`, [A]);
@@ -979,6 +958,23 @@ suite('the Wonderland reader against a real PostgreSQL', () => {
       } finally {
         await pool.query(`DELETE FROM relay_wonderland.events WHERE event_id='world-1'`);
       }
+    });
+
+    it('refuses a row from ANY writer that is not this one, not merely Julius', async () => {
+      // `battle.round.resolved` is in neither vocabulary — it is a third shape
+      // on the shared table, seeded above, and its payload is `{"round":1}`.
+      // A `NOT LIKE 'julius.%'` filter would have handed it over; the closed
+      // list refuses it. The two vocabularies also OVERLAP — `subagent.spawned`
+      // is a member of both, bare here and prefixed there — so any match looser
+      // than an exact one has to get that distinction right by accident.
+      const database = new TransactionalWonderlandDatabase(pool);
+      const replayed = await database.replayEvents(A, 0, 1000);
+      expect(replayed.map((e) => e.eventId)).not.toContain('battle-1');
+
+      const present = await pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM relay_wonderland.events
+          WHERE event_id='battle-1'`);
+      expect(Number(present.rows[0].n), 'the third-shape row is not actually seeded').toBe(1);
     });
   });
 
