@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 
 import { fail, ok, relayError, type RelayResult } from '../protocol/errors';
 import { WFS_ALPHA_LIMITS, type WfsBranchId, type WfsCommit, type WfsCommitOutcome, type WfsCommitRequest, type WfsConflict, type WfsEntry, type WfsLimits, type WfsMergeApproval, type WfsPrincipal, type WfsRecordedOp, type WfsReviewVerdict } from '../wonderfs/wonderfs-contracts';
-import type { WfsHumanRole } from '../wonderfs/wonderfs-authz';
+import { wfsHumanRoleFromMembership, type WfsHumanRole } from '../wonderfs/wonderfs-authz';
 import {
   applyWfsCommit,
   discardWfsBranch,
@@ -299,8 +299,6 @@ export interface WfsPostgresOptions {
 const outage = (what: string): RelayResult<never> => fail(relayError('stale-ledger-version', `WonderFS could not save ${what}; nothing was changed.`, { retryable: true }));
 const noProject = (): RelayResult<never> => fail(relayError('not-found', 'No such project.', { details: ['wonderfs: unknown project'] }));
 
-const roleOf = (role: string | undefined): WfsHumanRole | null => (role === 'owner' || role === 'editor' || role === 'viewer' ? role : null);
-
 export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {}): WfsPostgresStore {
   const refuseProtectedStore = protectedStoreWriterGuard(pool, 'WonderFS');
   const limits = options.limits ?? WFS_ALPHA_LIMITS;
@@ -314,8 +312,9 @@ export function openWfsPostgresStore(pool: Pool, options: WfsPostgresOptions = {
     return next;
   };
 
+  /** The member's role NOW, through the ONE product -> WonderFS mapping (r1.4 §8.2): OWNER / ADMIN / MEMBER; anything else is none. */
   const roleNow = async (db: Queryable, projectId: string, playerId: string): Promise<WfsHumanRole | null> =>
-    roleOf((await db.query<{ role: string }>('SELECT role FROM relay_wonderland.project_members WHERE project_id = $1 AND player_id = $2', [projectId, playerId])).rows[0]?.role);
+    wfsHumanRoleFromMembership((await db.query<{ role: string }>('SELECT role FROM relay_wonderland.project_members WHERE project_id = $1 AND player_id = $2', [projectId, playerId])).rows[0]?.role);
 
   /**
    * One mutation: lock, (re)load, decide, write through, commit, adopt. `decide` returns the next state (the SAME object when

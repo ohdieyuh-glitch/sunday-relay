@@ -28,7 +28,8 @@ import { TransactionalWonderlandDatabase } from './wonderland-postgres';
  *   EQUIV    commits, a conflict kept whole with its author, a resolution, a fork, a merge-back: rows == engine;
  *   REPLAY   an idempotent replay writes nothing (INV-8); a request id reused with another payload is refused;
  *   RACE     two stores (two bridges) committing to one branch at once: every commit lands, revisions gapless, nothing lost;
- *   APPROVE  an approval is the STORED one (by id), bound to the head; a forged object is never consulted;
+ *   APPROVE  an approval is the STORED one (by id), bound to the head; a forged object is never consulted; the approver's role
+ *            is what the PRODUCT writes (OWNER / ADMIN / MEMBER) through the one mapping, and a lower-case legacy value is no role;
  *   BLOB     a blob's address is computed here; a commit naming an unheld blob is refused; a referenced blob cannot be deleted;
  *   ATOMIC   a failure inside the write rolls everything back (the version does not move, nothing half-written).
  * Runs wherever JULIUS_TEST_DATABASE_URL names a THROWAWAY server (never DATABASE_URL); `todo` elsewhere.
@@ -75,9 +76,12 @@ suite('the WonderFS store on real PostgreSQL: the engine is the oracle', () => {
     const pool = new Pool({ connectionString: url.toString(), max: 6 });
     made.push({ name, pool });
     await new TransactionalWonderlandDatabase(pool).migrate();
-    await pool.query("INSERT INTO relay_wonderland.players(player_id) VALUES('usr_owner'), ('usr_editor'), ('usr_viewer')");
+    await pool.query("INSERT INTO relay_wonderland.players(player_id) VALUES('usr_owner'), ('usr_admin'), ('usr_member'), ('usr_legacy_owner'), ('usr_legacy_editor')");
     await pool.query("INSERT INTO relay_wonderland.projects(project_id) VALUES('prj-1')");
-    await pool.query("INSERT INTO relay_wonderland.project_members(project_id, player_id, role) VALUES('prj-1','usr_owner','owner'), ('prj-1','usr_editor','editor'), ('prj-1','usr_viewer','viewer')");
+    // the roles the PRODUCT writes (the mission seed: OWNER; Project Brain's membership change: ADMIN / MEMBER -- pinned by
+    // wonderland-authorization.test.ts), plus two LOWER-CASE legacy rows no product writer produces: they must read as NO role
+    await pool.query(`INSERT INTO relay_wonderland.project_members(project_id, player_id, role) VALUES('prj-1','usr_owner','OWNER'), ('prj-1','usr_admin','ADMIN'),
+      ('prj-1','usr_member','MEMBER'), ('prj-1','usr_legacy_owner','owner'), ('prj-1','usr_legacy_editor','editor')`);
     return pool;
   };
 
@@ -124,7 +128,7 @@ suite('the WonderFS store on real PostgreSQL: the engine is the oracle', () => {
     const fileId = wfsTreeAt(oracle.branches.get(WFS_MAIN_BRANCH)!).find((x) => x.path === 'src/a.txt')!.fileId;
     await both({ requestId: 'req-00000002', branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: human, ops: [{ op: 'update', fileId, expectContentVersion: 1, ...b }] });
     // a STALE edit: kept whole as a conflict, with its author (INV-2)
-    const conflict = await both({ requestId: 'req-00000003', branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: who('usr_editor'), ops: [{ op: 'update', fileId, expectContentVersion: 1, ...a }] });
+    const conflict = await both({ requestId: 'req-00000003', branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: who('usr_member'), ops: [{ op: 'update', fileId, expectContentVersion: 1, ...a }] });
     expect(conflict.status).toBe('conflict');
     // resolved by keeping theirs (a dismissal: a resolving commit with no ops)
     if (conflict.status === 'conflict') await both({ requestId: 'req-00000004', branchId: WFS_MAIN_BRANCH, baseRev: 2, principal: human, ops: [], resolvesConflictId: conflict.conflictId });
@@ -168,6 +172,20 @@ suite('the WonderFS store on real PostgreSQL: the engine is the oracle', () => {
     expect(await events(), 'a replay writes nothing').toBe(before);
     const reused = await store.commit('prj-1', { ...req, ops: [{ op: 'create', path: 'other', kind: 'dir' }] }, NOW);
     expect(reused.ok === false && reused.error.code).toBe('duplicate-idempotency-key');
+    // T-CRASH "after COMMIT, before the response" (INV-11): the bridge restarts (a NEW store, its rows only) and the player signs
+    // in again, so the journal's replay carries a new session ref and build. It is answered with the ORIGINAL revision.
+    await store.commit('prj-1', { ...req, requestId: 'req-replay-02', baseRev: 1, ops: [{ op: 'create', path: 'later', kind: 'dir' }] }, NOW);
+    const restarted = openWfsPostgresStore(pool, { newId: idSource() });
+    const resignedIn: WfsCommitRequest = { ...req, principal: { ...req.principal, sessionId: 'sref-after-restart', clientBuild: 'build-2' } };
+    const eventsBeforeReplay = await events();
+    const replayed = await restarted.commit('prj-1', resignedIn, NOW);
+    expect(replayed.ok && replayed.value).toEqual(first.ok && { ...first.value, replay: true });
+    expect(await events(), 'a replay after a restart writes nothing').toBe(eventsBeforeReplay);
+    // CONTROLS: the same key from ANOTHER player, or with other content, is still refused
+    const otherPlayer = await restarted.commit('prj-1', { ...resignedIn, principal: who('usr_member') }, NOW);
+    expect(otherPlayer.ok === false && otherPlayer.error.code).toBe('duplicate-idempotency-key');
+    const otherContent = await restarted.commit('prj-1', { ...resignedIn, ops: [{ op: 'create', path: 'other', kind: 'dir' }] }, NOW);
+    expect(otherContent.ok === false && otherContent.error.code).toBe('duplicate-idempotency-key');
   }, 120_000);
 
   it('RACE: two stores (two bridges) commit to one branch at once -- every commit lands, the revisions are gapless, nothing is lost', async () => {
@@ -184,7 +202,7 @@ suite('the WonderFS store on real PostgreSQL: the engine is the oracle', () => {
     expect(tree.map((e) => e.path).sort()).toEqual(Array.from({ length: 12 }, (_, i) => `d${i}`).sort());
   }, 120_000);
 
-  it('APPROVE: only an editor/owner approves (role read NOW from project_members); the merge uses the STORED approval by id', async () => {
+  it('APPROVE: only an editor/owner approves (the PRODUCT role read NOW from project_members, through the one mapping); a lower-case legacy value is no role; the merge uses the STORED approval by id', async () => {
     const pool = await fresh('approve');
     const store = openWfsPostgresStore(pool);
     await store.createProject('prj-1', NOW);
@@ -193,23 +211,38 @@ suite('the WonderFS store on real PostgreSQL: the engine is the oracle', () => {
     if (!fork.ok) throw new Error(fork.error.message);
     const branchId = fork.value.branchId;
     await store.commit('prj-1', { requestId: 'req-agent-0001', branchId, baseRev: 0, principal: agent, ops: [{ op: 'create', path: 'agent', kind: 'dir' }] }, NOW);
-    // a viewer may not approve; neither may the agent itself
-    expect((await store.approve('prj-1', { branchId, principal: who('usr_viewer') }, NOW)).ok).toBe(false);
+    // r1.4 §8.2: each role the product writes may approve -- OWNER -> owner, ADMIN -> editor, MEMBER -> editor
+    for (const approver of ['usr_owner', 'usr_admin', 'usr_member']) {
+      const r = await store.approve('prj-1', { branchId, principal: who(approver) }, NOW);
+      expect(r.ok, `${approver} approves`).toBe(true);
+    }
+    // NOT SILENTLY ELEVATED: a lower-case legacy 'owner' / 'editor' row is no role, refused exactly as a non-member is; and the
+    // agent itself never approves (CONTROL for the three above: a case-insensitive mapping would let the legacy rows approve)
+    for (const approver of ['usr_legacy_owner', 'usr_legacy_editor', 'usr_not_a_member']) {
+      const r = await store.approve('prj-1', { branchId, principal: who(approver) }, NOW);
+      expect(r.ok === false && r.error.details, `${approver} is refused`).toEqual(['wonderfs: approval_forbidden']);
+    }
     expect((await store.approve('prj-1', { branchId, principal: agent }, NOW)).ok).toBe(false);
-    const approved = await store.approve('prj-1', { branchId, principal: who('usr_editor') }, NOW);
+    const approved = await store.approve('prj-1', { branchId, principal: who('usr_member') }, NOW);
     if (!approved.ok) throw new Error(approved.error.message);
-    // the editor is demoted before the merge: the approval no longer carries (r1.4 N-minor-1)
-    await pool.query("UPDATE relay_wonderland.project_members SET role = 'viewer' WHERE player_id = 'usr_editor'");
-    const refused = await store.mergeBack('prj-1', { requestId: 'req-merge-0001', branchId, principal: agent, approvalId: approved.value.approvalId, reviewVerdict: null }, NOW);
-    expect(refused.ok && refused.value.status === 'committed').toBe(false);
-    await pool.query("UPDATE relay_wonderland.project_members SET role = 'editor' WHERE player_id = 'usr_editor'");
-    const merged = await store.mergeBack('prj-1', { requestId: 'req-merge-0002', branchId, principal: agent, approvalId: approved.value.approvalId, reviewVerdict: null }, NOW);
+    const mergeWith = (requestId: string) => store.mergeBack('prj-1', { requestId, branchId, principal: agent, approvalId: approved.value.approvalId, reviewVerdict: null }, NOW);
+    // the MEMBER is removed before the merge: the approval no longer carries (r1.4 N-minor-1)
+    await pool.query("DELETE FROM relay_wonderland.project_members WHERE project_id = 'prj-1' AND player_id = 'usr_member'");
+    const removed = await mergeWith('req-merge-0001');
+    expect(removed.ok === false && removed.error.details).toEqual(['wonderfs: approval_stale']);
+    // re-added with a LOWER-CASE legacy value: still no role at merge time, still refused
+    await pool.query("INSERT INTO relay_wonderland.project_members(project_id, player_id, role) VALUES('prj-1','usr_member','editor')");
+    const legacy = await mergeWith('req-merge-0002');
+    expect(legacy.ok === false && legacy.error.details).toEqual(['wonderfs: approval_stale']);
+    // CONTROL: back to what the product writes, the same stored approval merges
+    await pool.query("UPDATE relay_wonderland.project_members SET role = 'MEMBER' WHERE project_id = 'prj-1' AND player_id = 'usr_member'");
+    const merged = await mergeWith('req-merge-0003');
     expect(merged.ok && merged.value.status).toBe('committed');
     // an approval id that was never stored is no approval at all
     const fork2 = await store.fork('prj-1', { fromBranchId: WFS_MAIN_BRANCH, owner: agent }, NOW);
     if (!fork2.ok) throw new Error(fork2.error.message);
     await store.commit('prj-1', { requestId: 'req-agent-0002', branchId: fork2.value.branchId, baseRev: 0, principal: agent, ops: [{ op: 'create', path: 'agent2', kind: 'dir' }] }, NOW);
-    const forged = await store.mergeBack('prj-1', { requestId: 'req-merge-0003', branchId: fork2.value.branchId, principal: agent, approvalId: 'approval_forged', reviewVerdict: null }, NOW);
+    const forged = await store.mergeBack('prj-1', { requestId: 'req-merge-0004', branchId: fork2.value.branchId, principal: agent, approvalId: 'approval_forged', reviewVerdict: null }, NOW);
     expect(forged.ok && forged.value.status === 'committed').toBe(false);
   }, 120_000);
 
