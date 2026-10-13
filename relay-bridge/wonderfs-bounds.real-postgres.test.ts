@@ -4,6 +4,7 @@ import { Pool, type PoolClient } from 'pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
+import { protectedStoreWriterGuard } from '../src/relay/persistence/protected-store-writer-guard';
 import { openWfsPostgresStore } from '../src/relay/persistence/wonderfs-postgres';
 import { wfsThrowawayDatabases } from '../src/relay/persistence/wonderfs-test-databases';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
@@ -21,10 +22,14 @@ import { createWonderfsMount } from './wonderfs-routes';
  *   - DIRECT READS (K7): the gate's membership lookup and readBlob, each bounded the same way (CONTROL: an unbounded one waits);
  *   - POOL SHARE: with WonderFS holding its share of a max-10 pool, a Julius-route query still gets a client (CONTROL: an uncapped
  *     burst takes every client and the Julius query waits);
+ *   - THE GUARD IN THE BURST (K7 test 2): a NEW store, whose every first call runs the protected-store guard's identity read, with gate
+ *     lookups and blob reads behind it, still holds at most 4 (CONTROL: the guard over the bare pool, R4's wiring, takes all 10). The
+ *     guard's read is held at a JS gate on the client it checked out -- holding it in PostgreSQL would need a lock on the shared catalog
+ *     pg_database (dev report open question 7) -- and runs for real once the gate opens;
  *   - THE ACTUAL MAX (K7): mounted on a shared pool of max 8, WonderFS takes no client from it (CONTROL: a store given it does);
  *   - NO LEAK (e1 l.582, JULIUS_DEV N16): WonderFS's bounds are transaction-local -- the next query of another family on the same client
  *     does not carry them (CONTROL: a session-level SET does leak).
- * The pool model with pg-pool itself (and the guard's read in the burst) is relay-bridge/wonderfs-pool-share.test.ts, every run.
+ * The pool model with pg-pool itself over a fake client is relay-bridge/wonderfs-pool-share.test.ts, every run.
  * Runs wherever JULIUS_TEST_DATABASE_URL names a THROWAWAY server (never DATABASE_URL); `todo` elsewhere.
  */
 
@@ -43,6 +48,15 @@ const until = async (ok: () => boolean, ms: number): Promise<boolean> => {
   while (!ok()) {
     if (Date.now() > end) return false;
     await tick(20);
+  }
+  return true;
+};
+/** `until`, for a condition read from the database. */
+const untilAsync = async (ok: () => Promise<boolean>, ms: number): Promise<boolean> => {
+  const end = Date.now() + ms;
+  while (!(await ok())) {
+    if (Date.now() > end) return false;
+    await tick(50);
   }
   return true;
 };
@@ -76,6 +90,46 @@ function recording(pool: Pool, codes: string[]): Pool {
       return typeof value === 'function' ? value.bind(target) : value;
     },
   });
+}
+
+/**
+ * K7 test 2: a pool whose clients HOLD every statement `when` matches at ONE JS gate -- after the checkout, so the client stays taken, as a
+ * slow statement would keep it -- until `open()`; from then on every statement runs on PostgreSQL as written. `held()` counts the holds.
+ */
+function gated(pool: Pool, when: (sql: string) => boolean): { readonly pool: Pool; held(): number; open(): void } {
+  let opened = false;
+  let openGate: () => void = () => undefined;
+  const gate = new Promise<void>((r) => { openGate = r; });
+  let held = 0;
+  const wrap = (client: PoolClient): PoolClient => new Proxy(client, {
+    get(target, prop) {
+      if (prop === 'query') {
+        return async (text: unknown, params?: unknown) => {
+          if (!opened && typeof text === 'string' && when(text)) {
+            held += 1;
+            await gate;
+          }
+          return Reflect.apply(target.query, target, params === undefined ? [text] : [text, params]);
+        };
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  return {
+    pool: new Proxy(pool, {
+      get(target, prop) {
+        if (prop === 'connect') return async () => wrap(await target.connect());
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }),
+    held: () => held,
+    open: () => {
+      opened = true;
+      openGate();
+    },
+  };
 }
 
 suite('WonderFS bounded waits and its pool share on real PostgreSQL (R2-r5 K3, K7)', () => {
@@ -251,6 +305,72 @@ suite('WonderFS bounded waits and its pool share on real PostgreSQL (R2-r5 K3, K
       await releaseAgain();
     }
     await Promise.all([...bare, starved]);
+  }, 90_000);
+
+  it('K7 THE GUARD IN THE BURST (test 2): a NEW store -- every first call runs the protected-store guard\'s identity read -- with its guard reads held, then the gate lookups and blob reads behind them held, takes at most 4 clients of a max-10 pool, and a Julius-route query still gets one at once; then every call is served; CONTROL: the guard over the bare pool (R4\'s wiring) takes all 10 and the Julius query waits', async () => {
+    const pool = open(10);
+    const guardRead = (sql: string): boolean => sql.includes('shobj_description');
+    const checkedOut = (): number => pool.totalCount - pool.idleCount;
+    const julius = async (): Promise<string> => ((await within(pool.query('SELECT 1 AS julius_route'), 1_500)) === TIMED_OUT ? 'starved' : 'served');
+    const lockWaiters = async (): Promise<number> => Number((await seedPool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM pg_stat_activity WHERE datname = $1 AND wait_event_type = 'Lock'", [name],
+    )).rows[0].n);
+    const g = gated(pool, guardRead);
+    const store = openWfsPostgresStore(g.pool, { bounds: { acquireWaitMs: 20_000 } }); // NEW, never warmed: its guard has not cleared
+    const release = await holding(seedPool, [
+      'LOCK TABLE relay_wonderland.project_members IN ACCESS EXCLUSIVE MODE',
+      'LOCK TABLE relay_wonderland.wfs_blob_bytes IN ACCESS EXCLUSIVE MODE',
+    ]);
+    const burst: Array<Promise<unknown>> = [];
+    try {
+      for (let i = 0; i < 6; i += 1) {
+        burst.push(store.memberRole(P, 'ghu-1'));
+        burst.push(store.readBlob(P, 'f'.repeat(64)));
+      }
+      // 1. the guard's identity reads: four hold the four clients; the other eight wait in the cap, never in the pool
+      expect(await until(() => g.held() >= 4, 10_000), 'the guard\'s reads are in the burst').toBe(true);
+      await tick(300);
+      expect(g.held(), 'four guard reads reached a client, no more').toBe(4);
+      expect(checkedOut(), 'WonderFS holds its share, no more').toBeLessThanOrEqual(4);
+      expect(await julius(), 'a Julius-route query gets a client at once').toBe('served');
+      // 2. the guard reads run on PostgreSQL; the gate lookups and blob reads behind them meet the held tables, inside the same four
+      g.open();
+      expect(await untilAsync(async () => (await lockWaiters()) >= 4, 10_000), 'gate lookups and blob reads now hold the four, waiting on the tables').toBe(true);
+      await tick(300);
+      expect(await lockWaiters(), 'no more than four wait').toBe(4);
+      expect(checkedOut(), 'WonderFS still holds its share, no more').toBeLessThanOrEqual(4);
+      expect(await julius(), 'and a Julius-route query still gets a client at once').toBe('served');
+    } finally {
+      g.open();
+      await release();
+    }
+    const settled = await Promise.all(burst);
+    expect(settled.map((r) => (r === null ? 'no such blob' : outcome(r as RelayResult<unknown>))), 'every call is served once the tables are free')
+      .toEqual(Array.from({ length: 12 }, (_, i) => (i % 2 === 0 ? 'ok' : 'no such blob')));
+
+    // CONTROL: the guard over the BARE pool (R4:PG:475's wiring: pool.query = check out, run, give back, no cap), twelve first calls at
+    // once -- every client taken, and the Julius query waits
+    const bare = gated(pool, guardRead);
+    const bareQuery = {
+      query: (async (text: string, values?: unknown[]) => {
+        const client = await bare.pool.connect();
+        try {
+          return await client.query(text, values);
+        } finally {
+          client.release();
+        }
+      }) as Pool['query'],
+    };
+    const guards = Array.from({ length: 12 }, () => protectedStoreWriterGuard(bareQuery, 'control')());
+    let starved: Promise<unknown> = Promise.resolve();
+    try {
+      expect(await until(() => pool.totalCount === 10 && pool.idleCount === 0, 10_000), 'CONTROL: uncapped, every client taken').toBe(true);
+      starved = pool.query('SELECT 1 AS julius_route');
+      expect(await within(starved, 1_500), 'CONTROL: the Julius query waits').toBe(TIMED_OUT);
+    } finally {
+      bare.open();
+    }
+    await Promise.all([...guards, starved]);
   }, 90_000);
 
   it('K7 THE ACTUAL MAX: mounted on a shared pool whose max is 8, WonderFS takes NO client from it -- it runs on its own pool (max <= 4); CONTROL: a store given the max-8 pool draws from it', async () => {
