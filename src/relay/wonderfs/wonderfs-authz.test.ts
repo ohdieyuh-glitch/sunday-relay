@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { juliusPathLocation } from '../mission/julius/julius-workspace-paths';
 import {
   authorizeAgent,
   authorizeHuman,
   wfsCloneGrantWithin,
   wfsGlobCovered,
   wfsGlobMatches,
+  wfsIsAgentProtected,
+  wfsIssuerStillCovers,
   wfsMergeNeedsApproval,
   type WfsGrant,
 } from './index';
@@ -30,7 +35,18 @@ function grant(over: Partial<WfsGrant> = {}): WfsGrant {
 }
 
 function agentRequest(over: Partial<Parameters<typeof authorizeAgent>[0]> = {}): Parameters<typeof authorizeAgent>[0] {
-  return { grant: grant(), principalId: 'julius-7', projectId: 'prj-1', nowIso: NOW, action: 'write', branchIsMain: false, branchOwnedByPrincipal: true, paths: ['src/main.cpp'], ...over };
+  return {
+    grant: grant(),
+    principalId: 'julius-7',
+    projectId: 'prj-1',
+    nowIso: NOW,
+    action: 'write',
+    branchIsMain: false,
+    branchOwnedByPrincipal: true,
+    paths: ['src/main.cpp'],
+    issuerNow: { kind: 'human', role: 'owner', createMission: true },
+    ...over,
+  };
 }
 
 function refusedUniformly(r: ReturnType<typeof authorizeAgent>): void {
@@ -157,5 +173,75 @@ describe('WonderFS authorization: clone grants are never wider than their parent
     expect(wfsMergeNeedsApproval('imported_agent', true)).toBe(true);
     expect(wfsMergeNeedsApproval('imported_agent', false)).toBe(false);
     expect(wfsMergeNeedsApproval('julius', true)).toBe(false);
+  });
+});
+
+describe('WonderFS authorization: a grant follows its issuer (r1.2 §19.M2, T-ISSUER, guard b)', () => {
+  it('refuses, at use, a grant whose issuer was removed or demoted', () => {
+    // removed from project_members: no role now
+    refusedUniformly(authorizeAgent(agentRequest({ issuerNow: { kind: 'human', role: null, createMission: false } })));
+    // an ADMIN (editor) who lost create_mission: their julius grant no longer stands
+    refusedUniformly(authorizeAgent(agentRequest({ issuerNow: { kind: 'human', role: 'editor', createMission: false } })));
+    // a viewer cannot back an imported agent's write grant
+    refusedUniformly(authorizeAgent(agentRequest({ grant: grant({ principalKind: 'imported_agent' }), issuerNow: { kind: 'human', role: 'viewer', createMission: false } })));
+    // a clone whose parent grant is no longer valid
+    refusedUniformly(authorizeAgent(agentRequest({ grant: grant({ principalKind: 'clone', issuedBy: { kind: 'grant', grantId: 'g-parent' } }), issuerNow: { kind: 'grant', parentValid: false } })));
+  });
+
+  it('the controls: an issuer who still holds the rights keeps the grant valid', () => {
+    expect(authorizeAgent(agentRequest({ issuerNow: { kind: 'human', role: 'editor', createMission: true } })).ok).toBe(true);
+    expect(authorizeAgent(agentRequest({ grant: grant({ principalKind: 'imported_agent' }), issuerNow: { kind: 'human', role: 'editor', createMission: false } })).ok).toBe(true);
+    expect(authorizeAgent(agentRequest({ grant: grant({ principalKind: 'clone', issuedBy: { kind: 'grant', grantId: 'g-parent' } }), issuerNow: { kind: 'grant', parentValid: true } })).ok).toBe(true);
+    expect(wfsIssuerStillCovers('julius', { kind: 'grant', parentValid: true })).toBe(false); // a julius grant is a human's, never a grant's
+  });
+});
+
+describe('WonderFS authorization: protected paths on fold keys (r1.3 §19.M3, T-PROTECTED-FOLD)', () => {
+  const allGrant = grant({ paths: ['**'] });
+  it('an agent with a `**` grant writes none of the protected classes, in any case spelling', () => {
+    for (const p of ['.GITHUB/Workflows/ci.yml', '.github/workflows', '.Git/hooks/pre-commit', 'CONFIG/.ENV', '.Claude/settings.json', 'sub/.ENVRC', '.AWS/credentials', 'deep/.SSH', 'keys/server.PEM', 'Node_Modules/x/index.js']) {
+      expect(wfsIsAgentProtected(p), p).toBe(true);
+      refusedUniformly(authorizeAgent(agentRequest({ grant: allGrant, paths: [p] })));
+    }
+  });
+
+  it('the controls: an ordinary path and a documentation .env file are written; a read of a protected path is a matter for the grant', () => {
+    expect(authorizeAgent(agentRequest({ grant: allGrant, paths: ['src/main.cpp'] })).ok).toBe(true);
+    expect(authorizeAgent(agentRequest({ grant: allGrant, paths: ['app/.ENV.Example'] })).ok).toBe(true);
+    expect(authorizeAgent(agentRequest({ grant: allGrant, action: 'read', paths: ['.git/config'] })).ok).toBe(true);
+  });
+
+  it('a human editor may write CI configuration; nobody writes the reserved root', () => {
+    expect(authorizeHuman({ role: 'editor', action: 'write', paths: ['.github/workflows/ci.yml'] }).ok).toBe(true);
+    refusedUniformly(authorizeHuman({ role: 'editor', action: 'write', paths: ['.wonderfs/x'] }));
+  });
+
+  it('THE DRIFT TEST: every location juliusPathLocation protects (read from its source at this commit) is protected here too', () => {
+    const source = readFileSync(join(__dirname, '..', 'mission', 'julius', 'julius-workspace-paths.ts'), 'utf8');
+    const listOf = (name: string): string[] => {
+      // the array literal that follows `const <name>: readonly string[] = Object.freeze(`
+      const decl = source.indexOf(`const ${name}: readonly string[] = Object.freeze(`);
+      expect(decl, `${name} not found in julius-workspace-paths.ts`).toBeGreaterThanOrEqual(0);
+      const open = source.indexOf('[', source.indexOf('Object.freeze(', decl));
+      const close = source.indexOf(']', open);
+      expect(open > decl && close > open, `${name}'s array literal not found`).toBe(true);
+      const items = [...source.slice(open + 1, close).matchAll(/'([^']+)'/gu)].map((x) => x[1]);
+      expect(items.length, `${name} is empty`).toBeGreaterThan(0);
+      return items;
+    };
+    const samples: string[] = [];
+    for (const s of [...listOf('CONTROL_SEGMENTS'), ...listOf('CREDENTIAL_SEGMENTS')]) samples.push(s, `sub/${s}`, `sub/${s}/x.txt`);
+    for (const f of [...listOf('CONTROL_FILES'), ...listOf('CREDENTIAL_FILES')]) samples.push(f, `sub/${f}`);
+    samples.push('.env', 'sub/.env.production', '.github/workflows', '.github/workflows/deploy.yml');
+    expect(samples.length).toBeGreaterThan(40);
+    for (const s of samples) {
+      expect(juliusPathLocation(s.split('/')).kind, `julius classifies ${s}`).not.toBe('ordinary'); // the sample really is protected there
+      expect(wfsIsAgentProtected(s), `WonderFS must protect ${s}`).toBe(true);
+    }
+    // and the documentation exemption agrees both ways
+    for (const doc of ['.env.example', '.env.sample', '.env.template', '.env.dist']) {
+      expect(juliusPathLocation([doc]).kind).toBe('ordinary');
+      expect(wfsIsAgentProtected(doc)).toBe(false);
+    }
   });
 });
