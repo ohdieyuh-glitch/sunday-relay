@@ -20,6 +20,7 @@ import {
   openDirectConversation,
   partyInvitesFor,
   partyOf,
+  partyById,
   partyViewFor,
   pendingRequestsFor,
   promotePartyLeader,
@@ -35,10 +36,13 @@ import {
   totalUnread,
   unblockUser,
   unreadCount,
+  voiceAudienceFor,
+  type SocialOperationId,
   type SocialState,
   type UserPresence,
 } from './index';
 import { FIXTURE_NOW, FIXTURE_USERS as U, createSocialFixture } from './social-fixtures';
+import { applySocialOperation } from './social-commands';
 import type { RelayResult } from '../protocol/errors';
 
 const T = (minutes: number) => new Date(Date.parse(FIXTURE_NOW) + minutes * 60_000).toISOString();
@@ -379,5 +383,49 @@ describe('party voice', () => {
     expect(voice.getState().connection).toBe('DISCONNECTED');
     expect(seen[0]).toBe('DISCONNECTED:');
     expect(seen).toContain('CONNECTED:usr_nova');
+  });
+});
+
+describe("a party id naming something Object.prototype holds is a party that does not exist (MAIN's internal review a6d5842c, m4)", () => {
+  // Each matches the route's id shape ([A-Za-z0-9_-]{1,80}); a plain state.parties[id] resolved it to an inherited member.
+  const INHERITED = ['constructor', '__proto__', 'hasOwnProperty', 'toString', 'valueOf', 'isPrototypeOf'];
+
+  it('the rules answer "not found" for it and never throw; a real party id still resolves (the control)', () => {
+    const s = createSocialFixture();
+    const real = partyOf(s, U.ORION)!.partyId;
+    expect(partyById(s, real)?.partyId).toBe(real);
+    expect(voiceAudienceFor(s, U.ORION, real)).toContain(U.LYRA);
+    for (const id of INHERITED) {
+      expect(partyById(s, id), id).toBeUndefined();
+      expect(voiceAudienceFor(s, U.ORION, id), id).toEqual([]);
+      expect(partyViewFor(s, U.ORION, id), id).toBeNull();
+      const answers = [joinParty(s, U.KAI, id, T(1)), removePartyMember(s, U.ORION, id, U.LYRA), promotePartyLeader(s, U.ORION, id, U.LYRA), inviteToParty(s, U.ORION, id, U.KAI, T(1))];
+      expect(answers.map((r) => (r.ok ? 'ok' : r.error.code)), id).toEqual(['not-found', 'not-found', 'not-found', 'not-found']);
+    }
+  });
+
+  it('every operation that takes a party id refuses it as "not found" -- no thrown TypeError, so never a 500', () => {
+    const s = createSocialFixture();
+    const cases: Array<[SocialOperationId, Record<string, unknown>, string[]]> = [
+      ['parties.read', {}, []],
+      ['parties.join', {}, []],
+      ['parties.invite', { toUserId: U.KAI }, []],
+      ['parties.remove_member', {}, [U.LYRA]],
+      ['parties.promote', { memberId: U.LYRA }, []],
+      ['parties.rules', { privacy: 'OPEN_TO_FRIENDS' }, []],
+    ];
+    for (const id of INHERITED) {
+      for (const [op, body, more] of cases) {
+        // JOIN AS SOMEBODY WITH NO PARTY: the hardening's B2 answers a joiner already in a party "leave your current party first"
+        // BEFORE it reads the id (that answer names nothing about the party asked for), so the id path is reached only by Kai.
+        const actor = op === 'parties.join' ? U.KAI : U.ORION;
+        const r = applySocialOperation(s, op, actor, { ids: [id, ...more], body, query: {} }, T(1));
+        expect(r.ok ? 'ok' : r.error.code, `${op} ${id}`).toBe('not-found');
+      }
+    }
+    // the control: the same operations reach a real party (Orion leads Arena Run)
+    const real = partyOf(s, U.ORION)!.partyId;
+    expect(applySocialOperation(s, 'parties.read', U.ORION, { ids: [real], body: {}, query: {} }, T(1)).ok).toBe(true);
+    expect(applySocialOperation(s, 'parties.rules', U.ORION, { ids: [real], body: { privacy: 'INVITE_ONLY' }, query: {} }, T(1)).ok).toBe(true);
   });
 });
