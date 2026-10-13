@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { RelayResult } from '../protocol/errors';
 import type { SocialCommandOutcome } from '../social/social-commands';
 import type { SocialOperationId } from '../social/social-contracts';
-import { LFF_RETENTION_MS } from '../social/social-lff';
+import { LFF_NOT_FOUND_MESSAGE, LFF_RETENTION_MS } from '../social/social-lff';
 import { emptySocialState, type SocialState } from '../social/social-state';
 import { createInMemorySocialStore, type SocialStore } from '../social/social-store';
 import { emptyWorldState } from '../social/world-presence';
@@ -43,16 +43,31 @@ type Fault = { readonly match: (s: Statement) => boolean; readonly kind: 'throw'
 /** What the fake database knows of a post or request row under an id: the facts the guarded upserts' WHERE compares. */
 interface PostFacts { readonly owner: string; readonly createdMs: number; readonly version: number }
 interface RequestFacts { readonly postId: string; readonly requesterId: string; readonly createdMs: number }
-interface Held { posts: Map<string, PostFacts>; requests: Map<string, RequestFacts> }
-/** Rows the database holds that the store never loaded (an id minted elsewhere: a lost acknowledgement, a stale second bridge). */
-interface Unseen { readonly posts?: Readonly<Record<string, PostFacts>>; readonly requests?: Readonly<Record<string, RequestFacts>> }
+/**
+ * What the fake database holds: post and request rows, the posts whose held_at is set (D-L5 moderation evidence), and the
+ * subject_ref of every social_reports row (what the hold-or-delete statements ask).
+ */
+interface Held { posts: Map<string, PostFacts>; requests: Map<string, RequestFacts>; evidence: Set<string>; reportsNaming: Set<string> }
+/**
+ * Rows the database holds that the store never loaded (an id minted elsewhere: a lost acknowledgement, a stale second bridge), and
+ * facts another bridge wrote: a post held (`evidence`), a report naming a subject (`reports`).
+ */
+interface Unseen {
+  readonly posts?: Readonly<Record<string, PostFacts>>;
+  readonly requests?: Readonly<Record<string, RequestFacts>>;
+  readonly evidence?: readonly string[];
+  readonly reports?: readonly string[];
+}
 
 function fakePool(tables: Readonly<Record<string, readonly Record<string, unknown>[]>> = {}, unseen: Unseen = {}) {
   const executed: Statement[] = [];
   let fault: Fault = null;
   // THE GUARDED UPSERTS AS POSTGRESQL DECIDES THEM (ON CONFLICT ... DO UPDATE ... WHERE): under a held id, a row is updated (rowCount 1)
-  // only when the WHERE holds -- a post of the same owner and created_at at no newer version; a request of the same post, requester
-  // and created_at -- and otherwise nothing happens (rowCount 0). A ROLLBACK puts back what BEGIN saw; a post delete cascades its requests.
+  // only when the WHERE holds -- a post of the same owner and created_at at no newer version, NOT held (D-L5); a request of the same
+  // post, requester and created_at, its post NOT held -- and otherwise nothing happens (rowCount 0). A ROLLBACK puts back what BEGIN
+  // saw; a post delete cascades its requests. THE D-L5 STATEMENTS as their WHERE decides them: the hold (held_at set while NULL), the
+  // backstop hold (only while a report names the post), the post DELETE (refused while the post is held or a report names it) and
+  // the request DELETE (refused while its post is held).
   let held: Held = {
     posts: new Map<string, PostFacts>([
       ...(tables.lff_posts ?? []).map((r): [string, PostFacts] => [String(r.post_id), { owner: String(r.owner_id), createdMs: new Date(r.created_at as Date).getTime(), version: Number(r.version) }]),
@@ -65,30 +80,54 @@ function fakePool(tables: Readonly<Record<string, readonly Record<string, unknow
       ]),
       ...Object.entries(unseen.requests ?? {}),
     ]),
+    evidence: new Set([
+      ...(tables.lff_posts ?? []).filter((r) => r.held_at !== null && r.held_at !== undefined).map((r) => String(r.post_id)),
+      ...(unseen.evidence ?? []),
+    ]),
+    reportsNaming: new Set([
+      ...(tables.social_reports ?? []).filter((r) => r.subject_ref !== null && r.subject_ref !== undefined).map((r) => String(r.subject_ref)),
+      ...(unseen.reports ?? []),
+    ]),
   };
   let saved: Held = held;
-  const copy = (h: Held): Held => ({ posts: new Map(h.posts), requests: new Map(h.requests) });
+  const copy = (h: Held): Held => ({ posts: new Map(h.posts), requests: new Map(h.requests), evidence: new Set(h.evidence), reportsNaming: new Set(h.reportsNaming) });
   const guardedUpsert = (statement: Statement): number | null => {
     const p = statement.params;
     if (statement.sql.startsWith('INSERT INTO relay_wonderland.lff_posts')) {
       const mine: PostFacts = { owner: String(p[1]), createdMs: (p[9] as Date).getTime(), version: Number(p[12]) };
       const was = held.posts.get(String(p[0]));
-      if (was !== undefined && !(was.owner === mine.owner && was.createdMs === mine.createdMs && was.version <= mine.version)) return 0;
+      if (was !== undefined && !(was.owner === mine.owner && was.createdMs === mine.createdMs && was.version <= mine.version && !held.evidence.has(String(p[0])))) return 0;
       held.posts.set(String(p[0]), mine);
       return 1;
     }
     if (statement.sql.startsWith('INSERT INTO relay_wonderland.lff_join_requests')) {
       const mine: RequestFacts = { postId: String(p[1]), requesterId: String(p[2]), createdMs: (p[5] as Date).getTime() };
       const was = held.requests.get(String(p[0]));
-      if (was !== undefined && !(was.postId === mine.postId && was.requesterId === mine.requesterId && was.createdMs === mine.createdMs)) return 0;
+      if (was !== undefined && !(was.postId === mine.postId && was.requesterId === mine.requesterId && was.createdMs === mine.createdMs && !held.evidence.has(mine.postId))) return 0;
       held.requests.set(String(p[0]), mine);
       return 1;
     }
-    if (statement.sql.startsWith('DELETE FROM relay_wonderland.lff_posts')) {
-      held.posts.delete(String(p[0]));
-      for (const [id, r] of held.requests) if (r.postId === String(p[0])) held.requests.delete(id);
+    if (statement.sql.startsWith('INSERT INTO relay_wonderland.social_reports') && p[5] !== null) held.reportsNaming.add(String(p[5]));
+    if (statement.sql.startsWith('UPDATE relay_wonderland.lff_posts SET held_at')) {
+      const id = String(p[0]);
+      const backstop = statement.sql.includes('EXISTS');
+      if (!held.posts.has(id) || held.evidence.has(id) || (backstop && !held.reportsNaming.has(id))) return 0;
+      held.evidence.add(id);
+      return 1;
     }
-    if (statement.sql.startsWith('DELETE FROM relay_wonderland.lff_join_requests')) held.requests.delete(String(p[0]));
+    if (statement.sql.startsWith('DELETE FROM relay_wonderland.lff_posts')) {
+      const id = String(p[0]);
+      if (!held.posts.has(id) || held.evidence.has(id) || held.reportsNaming.has(id)) return 0;
+      held.posts.delete(id);
+      for (const [rid, r] of held.requests) if (r.postId === id) held.requests.delete(rid);
+      return 1;
+    }
+    if (statement.sql.startsWith('DELETE FROM relay_wonderland.lff_join_requests')) {
+      const was = held.requests.get(String(p[0]));
+      if (was === undefined || held.evidence.has(was.postId)) return 0;
+      held.requests.delete(String(p[0]));
+      return 1;
+    }
     return null;
   };
   const query = async (sql: string, params: readonly unknown[] = []): Promise<{ rows: Record<string, unknown>[]; rowCount: number }> => {
@@ -114,7 +153,15 @@ function fakePool(tables: Readonly<Record<string, readonly Record<string, unknow
     return { rows: [], rowCount: /^(INSERT|UPDATE|DELETE)\b/u.test(statement.sql) ? 1 : 0 };
   };
   const pool = { query, connect: async () => ({ query, release: () => undefined }) } as unknown as Pool;
-  return { pool, executed, inject: (next: Fault) => { fault = next; }, held: () => held };
+  return {
+    pool,
+    executed,
+    inject: (next: Fault) => { fault = next; },
+    held: () => held,
+    /** Another bridge's writes the store's state never saw: a report naming `subjectRef`; a post held. */
+    dbReport: (subjectRef: string) => { held.reportsNaming.add(subjectRef); },
+    dbHold: (postId: string) => { held.evidence.add(postId); },
+  };
 }
 
 /** One recorded statement, as a line a case can compare: the verb, the table and the key facts of the row. */
@@ -127,6 +174,7 @@ function label(s: Statement): string {
     case 'social_events':
       return `event ${String(p[0])} -> ${(p[2] as string[]).join(',')}`;
     case 'lff_posts':
+      if (m[1] === 'UPDATE') return `hold post ${String(p[0])}${s.sql.includes('EXISTS') ? ' if reported' : ''}`;
       return m[1] === 'DELETE FROM' ? `delete post ${String(p[0])}` : `upsert post ${String(p[0])} ${String(p[8])} v${String(p[12])}`;
     case 'lff_join_requests':
       return m[1] === 'DELETE FROM' ? `delete request ${String(p[0])}` : `upsert request ${String(p[0])} ${String(p[4])}`;
@@ -408,7 +456,8 @@ describe('LFF on the PostgreSQL social store, without a database (slice B2b)', (
     expect((await apply(pg, 'lff.request.accept', CAST.KAI, ['lffr_2'], {}, back)).ok).toBe(true);
     expect((await apply(pg, 'blocks.add', CAST.VEGA, [], { targetId: CAST.KAI }, back)).ok).toBe(true);
     const rows = executed.slice(mark).filter((s) => /^INSERT INTO relay_wonderland\.lff_(posts|join_requests)/u.test(s.sql));
-    expect(rows.map((s) => [label(s), (s.sql.includes('lff_posts') ? (s.params[10] as Date) : (s.params[6] as Date)).getTime()])).toEqual([
+    // by the statement's TARGET (the request upsert names lff_posts too, in its held-post guard, D-L5)
+    expect(rows.map((s) => [label(s), (s.sql.startsWith('INSERT INTO relay_wonderland.lff_posts') ? (s.params[10] as Date) : (s.params[6] as Date)).getTime()])).toEqual([
       ['upsert post lffp_1 OPEN v2', T0],
       ['upsert request lffr_2 ACCEPTED', T0 + 1000],
       ['upsert request lffr_3 WITHDRAWN', T0 + 2000], // Vega, the requester, blocked: her withdrawal (SEC m-a)
@@ -567,11 +616,190 @@ describe('LFF on the PostgreSQL social store, without a database (slice B2b)', (
         'ON CONFLICT(post_id) DO UPDATE SET category=EXCLUDED.category, title=EXCLUDED.title, description=EXCLUDED.description, '
           + 'project_label=EXCLUDED.project_label, skills=EXCLUDED.skills, open_slots=EXCLUDED.open_slots, status=EXCLUDED.status, '
           + 'updated_at=EXCLUDED.updated_at, version=EXCLUDED.version WHERE relay_wonderland.lff_posts.owner_id = EXCLUDED.owner_id '
-          + 'AND relay_wonderland.lff_posts.created_at = EXCLUDED.created_at AND relay_wonderland.lff_posts.version <= EXCLUDED.version',
+          + 'AND relay_wonderland.lff_posts.created_at = EXCLUDED.created_at AND relay_wonderland.lff_posts.version <= EXCLUDED.version '
+          + 'AND relay_wonderland.lff_posts.held_at IS NULL',
         'ON CONFLICT(request_id) DO UPDATE SET status=EXCLUDED.status, updated_at=EXCLUDED.updated_at '
           + 'WHERE relay_wonderland.lff_join_requests.post_id = EXCLUDED.post_id AND relay_wonderland.lff_join_requests.requester_id = EXCLUDED.requester_id '
-          + 'AND relay_wonderland.lff_join_requests.created_at = EXCLUDED.created_at',
+          + 'AND relay_wonderland.lff_join_requests.created_at = EXCLUDED.created_at '
+          + 'AND NOT EXISTS (SELECT 1 FROM relay_wonderland.lff_posts h WHERE h.post_id = EXCLUDED.post_id AND h.held_at IS NOT NULL)',
       ]);
+    });
+  });
+
+  describe('D-L5: a REPORTED post is moderation EVIDENCE -- the store HOLDS it by one statement and never deletes it; to every player, exactly a delete', () => {
+    /** Lyra's report about Kai through the existing flow: naming `subjectRef`, or (each CONTROL) naming no post. */
+    const spam = (subjectRef: string | null): Record<string, unknown> => ({ reportedId: CAST.KAI, reason: 'SPAM', ...(subjectRef === null ? {} : { subjectRef }) });
+    const outage = { code: 'stale-ledger-version', retryable: true, message: 'the change could not be saved; nothing was changed' };
+
+    /** Through BOTH stores: Kai's post A; Nova asks; Vega asks and is accepted; Lyra reports (naming A, or no post); Kai deletes A or closes it. */
+    async function afterReport(names: 'A' | 'no post', last: 'lff.post.delete' | 'lff.post.close' = 'lff.post.delete') {
+      const s = await stores();
+      const act = actor([s.memory, s.pg]);
+      const A = (await act('lff.post.create', CAST.KAI, [], { category: 'TEAMS', title: 'A squad', openSlots: 2 })).postId as string;
+      const nova = (await act('lff.request.create', CAST.NOVA, [A])).requestId as string;
+      const vega = (await act('lff.request.create', CAST.VEGA, [A])).requestId as string;
+      await act('lff.request.accept', CAST.KAI, [vega]);
+      await act('reports.file', CAST.LYRA, [], spam(names === 'A' ? A : null));
+      const mark = s.executed.length;
+      await act(last, CAST.KAI, [A]);
+      return { ...s, A, nova, vega, mark };
+    }
+    /** One viewer's stream, rebuilt from the committed social_events rows (a fresh bigserial numbers them 1, 2, 3, ...). */
+    const stream = (executed: readonly Statement[], viewer: string): string =>
+      JSON.stringify(committedEvents(executed).map((r, i) => ({ seq: i + 1, ...r })).filter((r) => r.audience.includes(viewer)).map(({ seq, op, atIso }) => ({ seq, op, atIso })));
+
+    it('R-2: the owner\'s delete of a reported post is ONE hold (held_at set, no DELETE, so its requests stay); unreported, ONE delete -- both stores answer alike and hold the same evidence', async () => {
+      const held = await afterReport('A');
+      const deleted = await afterReport('no post');
+      const told = `event lff.post.delete -> ${CAST.KAI},${CAST.NOVA},${CAST.VEGA}`;
+      expect(held.executed.slice(held.mark).map(label)).toEqual(['BEGIN', `hold post ${held.A}`, told, 'COMMIT']);
+      expect(deleted.executed.slice(deleted.mark).map(label), 'the control').toEqual(['BEGIN', `delete post ${deleted.A}`, told, 'COMMIT']);
+      // THE DATABASE: the reported post and both its requests stay, the post marked held; the control's are gone (the cascade)
+      expect([held.held().posts.has(held.A), held.held().evidence.has(held.A), held.held().requests.has(held.nova), held.held().requests.has(held.vega)]).toEqual([true, true, true, true]);
+      expect([deleted.held().posts.has(deleted.A), deleted.held().requests.has(deleted.nova), deleted.held().requests.has(deleted.vega)]).toEqual([false, false, false]);
+      // the stamp is the domain's (the delete's server time), and both stores hold the same evidence
+      const [pgState, memState] = [await held.pg.read(), await held.memory.read()];
+      const hold = held.executed.slice(held.mark).find((st) => st.sql.startsWith('UPDATE relay_wonderland.lff_posts'))!;
+      expect((hold.params[1] as Date).getTime()).toBe(memState.lffHeld[0].heldAtMs);
+      expect(pgState.lffHeld).toEqual(memState.lffHeld);
+      expect(pgState.lffHeld.map((h) => [h.post.id, h.requests.map((r) => `${r.id}:${r.status}`)])).toEqual([[held.A, [`${held.nova}:PENDING`, `${held.vega}:ACCEPTED`]]]);
+      // TO THE PLAYERS, THE CONTROL: the same LFF state, and nothing held there
+      const control = await deleted.pg.read();
+      expect([pgState.lffPosts, pgState.lffRequests, pgState.lffCreations, pgState.nextSerial]).toEqual([control.lffPosts, control.lffRequests, control.lffCreations, control.nextSerial]);
+      expect(control.lffHeld).toEqual([]);
+    });
+
+    it('R-3 through both stores: every viewer\'s committed event stream is byte for byte the ordinary delete\'s; the control (a close instead) shows the comparison can fail', async () => {
+      const held = await afterReport('A');
+      const deleted = await afterReport('no post');
+      for (const viewer of EVERYONE) {
+        expect(stream(held.executed, viewer), viewer).toBe(stream(deleted.executed, viewer));
+        expect(JSON.stringify((await held.memory.eventsFor(viewer, 0, 500)).events), `${viewer} (in memory)`).toBe(JSON.stringify((await deleted.memory.eventsFor(viewer, 0, 500)).events));
+      }
+      const closed = await afterReport('no post', 'lff.post.close');
+      expect(stream(closed.executed, CAST.VEGA), 'the control: a close is told differently').not.toBe(stream(deleted.executed, CAST.VEGA));
+    });
+
+    it('R-1 RETENTION: a closed post reported AFTER it closed, 1 ms past 30 days, is HELD by the purging write (one statement; its requests stay); the same post unreported is deleted', async () => {
+      for (const names of ['A', 'no post'] as const) {
+        const { pg, executed, held } = await stores();
+        const ok = async (op: SocialOperationId, who: string, ids: string[], body: Record<string, unknown>, ms: number): Promise<any> => {
+          const r = await apply(pg, op, who, ids, body, ms);
+          expect(r.ok, `${op} by ${who}: ${r.ok ? '' : r.error.message}`).toBe(true);
+          return r.ok ? r.value : undefined;
+        };
+        const A = (await ok('lff.post.create', CAST.KAI, [], { category: 'TEAMS', title: 'A squad', openSlots: 3 }, T0)).postId as string;
+        const nova = (await ok('lff.request.create', CAST.NOVA, [A], {}, T0 + 1000)).requestId as string;
+        await ok('lff.request.accept', CAST.KAI, [nova], {}, T0 + 2000);
+        await ok('lff.post.close', CAST.KAI, [A], {}, T0 + 3000);
+        await ok('reports.file', CAST.LYRA, [], spam(names === 'A' ? A : null), T0 + 4000);
+        const L = (await ok('lff.post.create', CAST.LYRA, [], { category: 'DESIGNERS', title: 'Lyra\'s', openSlots: 1 }, T0 + LFF_RETENTION_MS - HOUR)).postId as string;
+        const mark = executed.length;
+        await ok('lff.post.edit', CAST.LYRA, [L], { title: 'past it' }, T0 + LFF_RETENTION_MS + 1);
+        expect(executed.slice(mark).map(label), names).toEqual([
+          'BEGIN', names === 'A' ? `hold post ${A}` : `delete post ${A}`, `upsert post ${L} OPEN v2`, `event lff.post.edit -> ${CAST.LYRA}`, 'COMMIT',
+        ]);
+        expect([held().posts.has(A), held().requests.has(nova)], names).toEqual(names === 'A' ? [true, true] : [false, false]);
+        const state = await pg.read();
+        expect([state.lffPosts.map((p) => p.id), state.lffRequests, state.lffHeld.map((h) => h.post.id)], names).toEqual([[L], [], names === 'A' ? [A] : []]);
+      }
+    });
+
+    it('THE BACKSTOP: the DATABASE holds a report the store\'s state lacks (another bridge filed it) -- the guarded DELETE removes nothing and the post is held; the control deletes', async () => {
+      for (const reportedElsewhere of [true, false]) {
+        const { pg, executed, held, dbReport } = await stores();
+        const act = actor([pg]);
+        const A = (await act('lff.post.create', CAST.KAI, [], { category: 'TEAMS', title: 'A squad', openSlots: 2 })).postId as string;
+        const nova = (await act('lff.request.create', CAST.NOVA, [A])).requestId as string;
+        if (reportedElsewhere) dbReport(A);
+        const mark = executed.length;
+        await act('lff.post.delete', CAST.KAI, [A]);
+        const told = `event lff.post.delete -> ${CAST.KAI},${CAST.NOVA}`;
+        expect(executed.slice(mark).map(label)).toEqual(reportedElsewhere ? ['BEGIN', `delete post ${A}`, `hold post ${A} if reported`, told, 'COMMIT'] : ['BEGIN', `delete post ${A}`, told, 'COMMIT']);
+        expect([held().posts.has(A), held().evidence.has(A), held().requests.has(nova)]).toEqual(reportedElsewhere ? [true, true, true] : [false, false, false]);
+        expect((await pg.read()).lffPosts, 'either way the players see a delete').toEqual([]);
+      }
+    });
+
+    it('A HELD ROW IS NEVER WRITTEN AGAIN: a stale store\'s edit of a post another bridge held, and its accept of a request on it, are refused and roll back; the controls (the same edit and accept before the hold) commit', async () => {
+      const { pg, executed, held, dbHold, lines } = await stores();
+      const act = actor([pg]);
+      const A = (await act('lff.post.create', CAST.KAI, [], { category: 'TEAMS', title: 'A squad', openSlots: 3 })).postId as string;
+      const nova = (await act('lff.request.create', CAST.NOVA, [A])).requestId as string;
+      const vega = (await act('lff.request.create', CAST.VEGA, [A])).requestId as string;
+      // THE CONTROLS, before any hold
+      await act('lff.post.edit', CAST.KAI, [A], { title: 'edited' });
+      await act('lff.request.accept', CAST.KAI, [nova]);
+      // another bridge holds A (a report and a delete this store never saw)
+      dbHold(A);
+      const before = await pg.read();
+      let mark = executed.length;
+      const edit = await apply(pg, 'lff.post.edit', CAST.KAI, [A], { title: 'over the evidence' }, T0 + HOUR);
+      expect(edit.ok === false && edit.error).toMatchObject(outage);
+      expect(executed.slice(mark).map(label)).toEqual(['BEGIN', `upsert post ${A} OPEN v3`, 'ROLLBACK']);
+      mark = executed.length;
+      const accept = await apply(pg, 'lff.request.accept', CAST.KAI, [vega], {}, T0 + HOUR);
+      expect(accept.ok === false && accept.error).toMatchObject(outage);
+      expect(executed.slice(mark).map(label)).toEqual(['BEGIN', `upsert request ${vega} ACCEPTED`, 'ROLLBACK']);
+      expect(await pg.read(), 'the store keeps its state').toBe(before);
+      expect(held().posts.get(A)?.version, 'the held row is untouched').toBe(2);
+      expect(lines).toEqual([lffSerialBehindLine('post'), lffSerialBehindLine('request')]);
+    });
+
+    it('LOAD: a held post (held_at set) and its requests come back as EVIDENCE, never as a player\'s post or request; to its owner it is the uniform not-found', async () => {
+      const { pg } = await stores({
+        lff_posts: [
+          {
+            post_id: 'lffp_7', owner_id: CAST.KAI, category: 'TEAMS', title: 'Held', description: '', project_label: '', skills: [], open_slots: 2, status: 'CLOSED',
+            created_at: new Date(T0), updated_at: new Date(T0 + MIN), expires_at: new Date(T0 + 14 * 24 * HOUR), version: '2', held_at: new Date(T0 + HOUR),
+          },
+          {
+            post_id: 'lffp_9', owner_id: CAST.NOVA, category: 'TEAMS', title: 'Live', description: '', project_label: '', skills: [], open_slots: 1, status: 'OPEN',
+            created_at: new Date(T0), updated_at: new Date(T0), expires_at: new Date(T0 + 14 * 24 * HOUR), version: '1', held_at: null,
+          },
+        ],
+        lff_join_requests: [
+          { request_id: 'lffr_8', post_id: 'lffp_7', requester_id: CAST.NOVA, message: 'hi', status: 'ACCEPTED', created_at: new Date(T0 + 1000), updated_at: new Date(T0 + 2000) },
+          { request_id: 'lffr_10', post_id: 'lffp_9', requester_id: CAST.KAI, message: '', status: 'PENDING', created_at: new Date(T0 + 3000), updated_at: new Date(T0 + 3000) },
+        ],
+      });
+      const state = await pg.read();
+      expect([state.lffPosts.map((p) => p.id), state.lffRequests.map((r) => r.id)]).toEqual([['lffp_9'], ['lffr_10']]);
+      expect(state.lffHeld).toEqual([{
+        post: {
+          id: 'lffp_7', ownerId: CAST.KAI, category: 'TEAMS', title: 'Held', description: '', projectLabel: '', skills: [], openSlots: 2, status: 'CLOSED',
+          createdAtMs: T0, updatedAtMs: T0 + MIN, expiresAtMs: T0 + 14 * 24 * HOUR, version: 2,
+        },
+        requests: [{ id: 'lffr_8', postId: 'lffp_7', requesterId: CAST.NOVA, message: 'hi', status: 'ACCEPTED', createdAtMs: T0 + 1000, updatedAtMs: T0 + 2000 }],
+        heldAtMs: T0 + HOUR,
+      }]);
+      for (const who of [CAST.KAI, CAST.NOVA]) {
+        const get = await apply(pg, 'lff.post.get', who, ['lffp_7'], {}, T0 + 2 * HOUR);
+        expect(get.ok === false && get.error, who).toMatchObject({ code: 'not-found', message: LFF_NOT_FOUND_MESSAGE });
+      }
+      expect((await apply(pg, 'lff.post.get', CAST.NOVA, ['lffp_9'], {}, T0 + 2 * HOUR)).ok, 'the control: the live post').toBe(true);
+    });
+
+    it('the SQL says so: the hold, the guarded DELETE and its backstop, and the request DELETE -- each WHERE exactly (the fake decides exactly those)', async () => {
+      const { pg, executed, dbReport } = await stores();
+      const act = actor([pg]);
+      const A = (await act('lff.post.create', CAST.KAI, [], { category: 'TEAMS', title: 'A squad', openSlots: 2 })).postId as string;
+      const B = (await act('lff.post.create', CAST.KAI, [], { category: 'TEAMS', title: 'Another', openSlots: 2 })).postId as string;
+      await act('reports.file', CAST.LYRA, [], spam(A));
+      await act('lff.post.delete', CAST.KAI, [A]); // the domain holds it
+      dbReport(B);
+      await act('lff.post.delete', CAST.KAI, [B]); // the database does
+      expect(executed.filter((st) => /^(UPDATE|DELETE FROM) relay_wonderland\.lff_posts\b/u.test(st.sql)).map((st) => st.sql)).toEqual([
+        'UPDATE relay_wonderland.lff_posts SET held_at=$2 WHERE post_id=$1 AND held_at IS NULL',
+        'DELETE FROM relay_wonderland.lff_posts WHERE post_id=$1 AND held_at IS NULL AND NOT EXISTS (SELECT 1 FROM relay_wonderland.social_reports r WHERE r.subject_ref = $1)',
+        'UPDATE relay_wonderland.lff_posts SET held_at=GREATEST($2::timestamptz, updated_at) WHERE post_id=$1 AND held_at IS NULL '
+          + 'AND EXISTS (SELECT 1 FROM relay_wonderland.social_reports r WHERE r.subject_ref = $1)',
+      ]);
+      // no domain operation drops a lone request today; the statement that would is pinned, so a held post's requests stay
+      expect(readFileSync(join(__dirname, 'social-postgres.ts'), 'utf8').replace(/\s+/gu, ' ')).toContain(
+        'DELETE FROM relay_wonderland.lff_join_requests WHERE request_id=$1 AND NOT EXISTS (SELECT 1 FROM relay_wonderland.lff_posts h '
+          + 'WHERE h.post_id = relay_wonderland.lff_join_requests.post_id AND h.held_at IS NOT NULL)',
+      );
     });
   });
 

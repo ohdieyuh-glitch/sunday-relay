@@ -36,7 +36,14 @@ import { TransactionalWonderlandDatabase } from './wonderland-postgres';
  *   SAME PLAYER (r2 review r2-m1) a stale store re-mints the id of the SAME player's request on the SAME post, which the owner
  *               ACCEPTED meanwhile: refused by created_at, the accept stands; the store logs one line with no data;
  *   RETENTION   (review m3) a closed post exactly 30 days old stays; 1 ms older, the next write deletes it and the cascade its
- *               requests, in that write's transaction; a younger closed post and the creation record are untouched.
+ *               requests, in that write's transaction; a younger closed post and the creation record are untouched;
+ *   EVIDENCE    (founder D-L5, contract r2.4) a REPORTED post's delete, and the purge of reported posts (one closed and reported
+ *               after it closed, one open and reported that expired), HOLD the rows (held_at set, requests kept) while the
+ *               unreported controls are deleted; each is told exactly as a delete and answers the uniform not-found; an open
+ *               reported post stays listed (R-5); the view lff_moderation_evidence lists every held or reported post with its
+ *               reports and requests (R-4); a restart reads the evidence apart from every player's state; a stale store's edit
+ *               and accept on a held post are refused whole and its delete removes nothing; a report only the database holds
+ *               still holds the post (the store's backstop).
  * social-postgres-lff.test.ts runs the same story (the same text, checked there) with no database. Runs wherever
  * JULIUS_TEST_DATABASE_URL names a THROWAWAY server (never DATABASE_URL); `todo` elsewhere.
  */
@@ -477,5 +484,109 @@ suite('LFF on real PostgreSQL through the social store (slice B2b)', () => {
     expect(await creations(), 'the creation record is not the purge\'s').toEqual(creationsBefore);
     expect(await eventsAfter(pool, seq), 'the write tells its actor; the purge tells nobody').toEqual([['lff.post.edit', [CAST.ORION]]]);
     expect(await lffOf(await openSocialPostgresStore(pool)), 'and a restart reads the purged state').toEqual(await lffOf(pg));
+  }, 300_000);
+
+  it('EVIDENCE (D-L5): a reported post\'s delete and a reported post\'s purge HOLD its rows, requests included; the unreported controls are deleted; the view lists the evidence; a restart reads it apart; a report only the database holds still holds; a stale store cannot write over or delete a held row', async () => {
+    const pool = await database('evidence');
+    const T = Date.now();
+    const pg = await openSocialPostgresStore(pool);
+    await signIn([pg], T - HOUR);
+    const ok = async (op: SocialOperationId, who: string, ids: string[], body: Record<string, unknown>, ms: number): Promise<any> => {
+      const r = await apply(pg, op, who, ids, body, ms);
+      expect(r.ok, `${op} by ${who} at ${at(ms)}: ${r.ok ? '' : `${r.error.code} ${r.error.message}`}`).toBe(true);
+      return r.ok ? r.value : undefined;
+    };
+    const create = async (who: string, title: string, ms: number): Promise<string> => (await ok('lff.post.create', who, [], { category: 'TEAMS', title, openSlots: 3 }, ms)).postId as string;
+    const ask = async (who: string, postId: string, ms: number): Promise<string> => (await ok('lff.request.create', who, [postId], {}, ms)).requestId as string;
+    /** A report through the existing flow, by Lyra: naming `subjectRef`, or (each control's) naming no post. */
+    const spam = (reportedId: string, subjectRef: string | null): Record<string, unknown> => ({ reportedId, reason: 'SPAM', ...(subjectRef === null ? {} : { subjectRef }) });
+    const rowOf = async (id: string): Promise<{ held_at: Date | null; title: string; version: string } | undefined> =>
+      (await pool.query('SELECT held_at, title, version FROM relay_wonderland.lff_posts WHERE post_id = $1', [id])).rows[0];
+    const heldAt = async (id: string): Promise<number | null> => (await rowOf(id))?.held_at?.getTime() ?? null;
+    const requestsOn = async (id: string): Promise<string[]> =>
+      (await pool.query('SELECT request_id, status FROM relay_wonderland.lff_join_requests WHERE post_id = $1 ORDER BY length(request_id), request_id', [id])).rows
+        .map((r: { request_id: string; status: string }) => `${r.request_id}:${r.status}`);
+    const evidence = async (): Promise<Array<{ post_id: string; held_at: Date | null; reports: Array<Record<string, string>>; requests: Array<Record<string, string>> }>> =>
+      (await pool.query('SELECT post_id, held_at, reports, requests FROM relay_wonderland.lff_moderation_evidence ORDER BY length(post_id), post_id')).rows;
+
+    // R-2: A, reported, and B, its unreported control -- each with a pending and an accepted request -- deleted by their owner
+    const A = await create(CAST.KAI, 'Reported', T);
+    const nova = await ask(CAST.NOVA, A, T + 1000);
+    const vega = await ask(CAST.VEGA, A, T + 2000);
+    await ok('lff.request.accept', CAST.KAI, [vega], {}, T + 3000);
+    const B = await create(CAST.KAI, 'Control', T + 4000);
+    const novaOnB = await ask(CAST.NOVA, B, T + 5000);
+    await ok('lff.request.accept', CAST.KAI, [novaOnB], {}, T + 5500);
+    // a STALE store (one bridge per store is the rule; a deploy overlap breaks it): it holds A and B live, and never sees what follows
+    const lines: string[] = [];
+    const stale = await openSocialPostgresStore(pool, { log: (line) => lines.push(line) });
+    await ok('reports.file', CAST.LYRA, [], spam(CAST.KAI, A), T + 6000);
+    await ok('reports.file', CAST.LYRA, [], spam(CAST.KAI, null), T + 7000);
+    const seq = await lastSeq(pool);
+    await ok('lff.post.delete', CAST.KAI, [A], {}, T + 8000);
+    await ok('lff.post.delete', CAST.KAI, [B], {}, T + 9000);
+    expect(await heldAt(A), 'A is held at its delete\'s server time').toBe(T + 8000);
+    expect(await requestsOn(A), 'with both its requests, as they were').toEqual([`${nova}:PENDING`, `${vega}:ACCEPTED`]);
+    expect([await rowOf(B), await requestsOn(B)], 'the control is deleted, its request by the cascade').toEqual([undefined, []]);
+    expect(await eventsAfter(pool, seq), 'each told exactly as a delete').toEqual([['lff.post.delete', [CAST.KAI, CAST.NOVA, CAST.VEGA]], ['lff.post.delete', [CAST.KAI, CAST.NOVA]]]);
+    for (const who of [CAST.KAI, CAST.NOVA, CAST.VEGA, CAST.LYRA]) {
+      const [got, control] = [await apply(pg, 'lff.post.get', who, [A], {}, T + 10_000), await apply(pg, 'lff.post.get', who, [B], {}, T + 10_000)];
+      expect(JSON.stringify(got), `${who}: A answers as B, the uniform not-found`).toBe(JSON.stringify(control));
+      expect(got.ok === false && got.error.code).toBe('not-found');
+    }
+
+    // R-5 and R-4: C, OPEN and reported, stays a player's -- in the feed, and in the view with no held_at
+    const C = await create(CAST.KAI, 'Open, reported', T + 11_000);
+    await ok('reports.file', CAST.LYRA, [], spam(CAST.KAI, C), T + 12_000);
+    const feed = await ok('lff.feed.list', CAST.DEX, [], {}, T + 12_500);
+    expect((feed as { posts: Array<{ postId: string }> }).posts.map((p) => p.postId), 'an open reported post stays listed').toContain(C);
+    expect((await evidence()).map((r) => [r.post_id, r.held_at === null ? null : r.held_at.getTime()])).toEqual([[A, T + 8000], [C, null]]);
+    const a = (await evidence())[0];
+    expect(a.reports.map((r) => [r.reporter_id, r.reported_id, r.reason, r.note])).toEqual([[CAST.LYRA, CAST.KAI, 'SPAM', '']]);
+    expect(a.requests.map((r) => `${r.request_id}:${r.requester_id}:${r.status}`)).toEqual([`${nova}:${CAST.NOVA}:PENDING`, `${vega}:${CAST.VEGA}:ACCEPTED`]);
+
+    // R-1: D, closed, reported AFTER it closed; E, closed, unreported. Orion's next timed write 30 days on purges: D held, E deleted
+    const D = await create(CAST.ORION, 'Closed, reported', T + 13_000);
+    const lyraOnD = await ask(CAST.LYRA, D, T + 14_000);
+    await ok('lff.post.close', CAST.ORION, [D], {}, T + 15_000);
+    await ok('reports.file', CAST.LYRA, [], spam(CAST.ORION, D), T + 16_000);
+    const E = await create(CAST.ORION, 'Closed, unreported', T + 17_000);
+    await ok('lff.post.close', CAST.ORION, [E], {}, T + 18_000);
+    const purgeAt = T + 17_000 + LFF_RETENTION_MS + 1;
+    const seq2 = await lastSeq(pool);
+    const F = await create(CAST.ORION, 'The write that purges', purgeAt);
+    expect([await heldAt(D), await requestsOn(D)], 'D held, Lyra\'s request with it').toEqual([purgeAt, [`${lyraOnD}:PENDING`]]);
+    expect(await heldAt(C), 'C, expired and past 30 days, is held too (it was reported)').toBe(purgeAt);
+    expect(await rowOf(E), 'the control is purged').toBeUndefined();
+    expect(await heldAt(A), 'A, held before, is untouched').toBe(T + 8000);
+    expect(await eventsAfter(pool, seq2), 'the purge tells nobody').toEqual([['lff.post.create', [CAST.ORION]]]);
+    expect((await evidence()).map((r) => r.post_id), 'the view: every held or reported post, never B, E or F').toEqual([A, C, D]);
+
+    // A RESTART reads the evidence APART: never a player's post or request
+    const restarted = await openSocialPostgresStore(pool);
+    const after = await restarted.read();
+    expect([after.lffPosts.map((p) => p.id), after.lffRequests.map((r) => r.id)]).toEqual([[F], []]);
+    expect(after.lffHeld.map((h) => [h.post.id, h.heldAtMs, h.requests.map((r) => r.id)])).toEqual([[A, T + 8000, [nova, vega]], [C, purgeAt, []], [D, purgeAt, [lyraOnD]]]);
+    expect(after.lffHeld, 'the live store holds the same evidence').toEqual((await pg.read()).lffHeld);
+
+    // THE STALE STORE: an edit over the held post and an accept of a request on it are refused (no row moves); its delete removes nothing
+    const rowsBefore = await checksums(pool);
+    const outage = { code: 'stale-ledger-version', retryable: true, message: 'the change could not be saved; nothing was changed' };
+    expect(await apply(stale, 'lff.post.edit', CAST.KAI, [A], { title: 'over the evidence' }, T + 20_000)).toMatchObject({ ok: false, error: outage });
+    expect(await apply(stale, 'lff.request.accept', CAST.KAI, [nova], {}, T + 21_000)).toMatchObject({ ok: false, error: outage });
+    expect(await checksums(pool), 'no row of any table moved').toEqual(rowsBefore);
+    expect(lines).toEqual([lffSerialBehindLine('post'), lffSerialBehindLine('request')]);
+    expect((await apply(stale, 'lff.post.delete', CAST.KAI, [A], {}, T + 22_000)).ok, 'the stale store believes it deleted A').toBe(true);
+    expect([await heldAt(A), (await rowOf(A))?.title, await requestsOn(A)], '...but the held rows stay as they were').toEqual([T + 8000, 'Reported', [`${nova}:PENDING`, `${vega}:ACCEPTED`]]);
+
+    // THE BACKSTOP: a report only the DATABASE holds (another bridge filed it) -- the owner's delete holds G; it is never deleted
+    const G = await create(CAST.KAI, 'Reported elsewhere', purgeAt + 10_000);
+    await pool.query(
+      `INSERT INTO relay_wonderland.social_reports(report_id, reporter_id, reported_id, reason, note, subject_ref, filed_at) VALUES($1, $2, $3, 'SPAM', '', $4, $5)`,
+      [`rep_elsewhere_${nonce}`, CAST.LYRA, CAST.KAI, G, at(purgeAt + 10_500)],
+    );
+    await ok('lff.post.delete', CAST.KAI, [G], {}, purgeAt + 11_000);
+    expect(await heldAt(G), 'held at the delete\'s server time, not deleted').toBe(purgeAt + 11_000);
+    expect((await pg.read()).lffPosts.map((p) => p.id), 'to the players, deleted').not.toContain(G);
   }, 300_000);
 });

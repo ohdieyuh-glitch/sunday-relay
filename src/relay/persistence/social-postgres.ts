@@ -21,7 +21,7 @@ import {
   type UserProfile,
 } from '../social/social-contracts';
 import { applySocialOperation, type SocialCommandInput, type SocialCommandOutcome } from '../social/social-commands';
-import type { LffCreation, LffJoinRequest, LffPost } from '../social/social-lff';
+import type { LffCreation, LffHeldPost, LffJoinRequest, LffPost } from '../social/social-lff';
 import { emptySocialState, hasUser, type SocialState, type SocialUserRecord } from '../social/social-state';
 import { ensureSocialUser, tellAfterCommit, viewerCursor, type SocialAfterCommit, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
 import { emptyWorldState, type WorldState } from '../social/world-presence';
@@ -49,7 +49,8 @@ import { protectedStoreWriterGuard } from './protected-store-writer-guard';
  *
  * LFF (wonderland-migrations/038_wonderland_lff.sql, slice B2b): the posts, the requests and the creation record are three more
  * tables of the same state, read back on open and written through by the same diff, so no restart loses a post, a request (a
- * CANCELLED one included) or a player's creation cap.
+ * CANCELLED one included) or a player's creation cap. A REPORTED post is never deleted here: its owner's delete and retention HOLD
+ * its rows as moderation evidence (founder D-L5; writeLffChanges step 1), read back apart from every player's state (lffHeld).
  *
  * A database that cannot be reached THROWS out of `open`, and the route answers 503: an outage is not an empty social
  * graph.
@@ -231,7 +232,11 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
   // Date, read as epoch milliseconds. ORDERED BY THE ID'S SERIAL (a shorter id is a smaller serial: one prefix, digits only, by
   // 038's id-shape CHECKs), which is the order the domain appended every one of them in, so a restart reads back exactly the lists
   // it held. Nothing depends on that: social-lff.ts sorts every list it shows explicitly.
-  const lffPosts: LffPost[] = (await q<Record<string, any>>(`SELECT * FROM relay_wonderland.lff_posts ORDER BY length(post_id), post_id COLLATE "C"`)).map((r) => ({
+  // MODERATION EVIDENCE (D-L5, social-lff.ts rule 8): a post whose held_at is set, and every request on it, are read APART, into
+  // lffHeld, never into lffPosts / lffRequests -- so after a restart, as before it, every player surface reads a held post exactly as
+  // a deleted one.
+  const postRows = await q<Record<string, any>>(`SELECT * FROM relay_wonderland.lff_posts ORDER BY length(post_id), post_id COLLATE "C"`);
+  const lffPostOf = (r: Record<string, any>): LffPost => ({
     id: r.post_id,
     ownerId: r.owner_id,
     category: r.category,
@@ -245,8 +250,10 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
     updatedAtMs: ms(r.updated_at),
     expiresAtMs: ms(r.expires_at),
     version: Number(r.version),
-  }));
-  const lffRequests: LffJoinRequest[] = (await q<Record<string, any>>(`SELECT * FROM relay_wonderland.lff_join_requests ORDER BY length(request_id), request_id COLLATE "C"`)).map((r) => ({
+  });
+  const heldAt = new Map(postRows.filter((r) => r.held_at !== null && r.held_at !== undefined).map((r) => [r.post_id as string, ms(r.held_at)]));
+  const lffPosts: LffPost[] = postRows.filter((r) => !heldAt.has(r.post_id)).map(lffPostOf);
+  const allLffRequests: LffJoinRequest[] = (await q<Record<string, any>>(`SELECT * FROM relay_wonderland.lff_join_requests ORDER BY length(request_id), request_id COLLATE "C"`)).map((r) => ({
     id: r.request_id,
     postId: r.post_id,
     requesterId: r.requester_id,
@@ -255,6 +262,10 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
     createdAtMs: ms(r.created_at),
     updatedAtMs: ms(r.updated_at),
   }));
+  const lffRequests = allLffRequests.filter((r) => !heldAt.has(r.postId));
+  const lffHeld: LffHeldPost[] = postRows
+    .filter((r) => heldAt.has(r.post_id))
+    .map((r) => ({ post: lffPostOf(r), requests: allLffRequests.filter((x) => x.postId === r.post_id), heldAtMs: heldAt.get(r.post_id)! }));
   const lffCreations: LffCreation[] = (await q<Record<string, any>>(`SELECT * FROM relay_wonderland.lff_post_creations ORDER BY length(post_id), post_id COLLATE "C", owner_id COLLATE "C"`)).map((r) => ({
     userId: r.owner_id,
     postId: r.post_id,
@@ -278,6 +289,7 @@ async function loadState(client: Pool | PoolClient): Promise<SocialState> {
     lffPosts,
     lffRequests,
     lffCreations,
+    lffHeld,
     // no row until the first id is minted: migration 033 writes none (a bootstrap leaves every table empty)
     nextSerial: serial === undefined ? 1 : Number(serial.value),
   };
@@ -391,10 +403,17 @@ const diffIfMoved = <T>(before: readonly T[], after: readonly T[], key: (t: T) =
 /**
  * LFF (038, slice B2b): the rows of the three LFF tables the command changed, by the same by-reference diff (the domain makes a
  * new object only for what it changed, and keeps every other one). IN THIS ORDER:
- *   1. post deletes FIRST (the owner's hard delete, or the retention purge's batch; each CASCADES its requests: 038's
- *      lff_join_requests_post_fk ON DELETE CASCADE);
- *   2. request deletes, SKIPPING every request of a post deleted in step 1 (the cascade took it; B2b review n3): a purge of
- *      LFF_PURGE_BATCH posts is that many statements, never one per request. A request dropped while its post stays is deleted;
+ *   1. the posts that LEFT the state FIRST (the owner's delete, or the retention purge's batch), each by ONE statement:
+ *      - one the domain HELD (a report names it: social-lff.ts rule 8, founder D-L5) is HELD here -- its held_at set to the domain's
+ *        stamp, every column and every request on it left exactly as they are (no delete, so no cascade). A hold that finds no live
+ *        row (already held, or gone) changes nothing: the evidence is already the database's, or never was this store's;
+ *      - any other is HARD-DELETED, its requests by 038's lff_join_requests_post_fk ON DELETE CASCADE -- but only while NO report
+ *        names it in the database and it is not held (the DELETE's own WHERE). NO APP PATH HARD-DELETES A REPORTED POST: should the
+ *        database hold a report this store's state lacks (a second bridge filed it), the DELETE removes nothing, and the post is
+ *        HELD instead (one more statement, only then), at the operation's server time (never before the row's updated_at);
+ *   2. request deletes, SKIPPING every request of a post that left in step 1 (the cascade took it, or the hold keeps it as evidence;
+ *      B2b review n3): a purge of LFF_PURGE_BATCH posts is that many statements, never one per request. A request dropped while its
+ *      post stays is deleted, unless its post is held (the DELETE's own WHERE);
  *   3. post upserts BEFORE request upserts (a request's foreign key names its post). A post's owner, created_at and expires_at
  *      never change; everything else the domain may move (an edit, a close, the accept that fills it: status and version);
  *   4. request upserts: a request changes only its status and updated_at (an accept, a decline, a withdraw, a block's CANCELLED);
@@ -410,21 +429,50 @@ const diffIfMoved = <T>(before: readonly T[], after: readonly T[], key: (t: T) =
  * a behind store re-minting the SAME player's request id on the SAME post must not overwrite the held row's status, e.g. an
  * owner's accept) -- and must report exactly one row (inserted or updated). Anything else throws LffRowNotOurs: the whole
  * operation rolls back, answers a retryable outage (fail closed), and the store logs one line (lffSerialBehindLine).
+ * A HELD ROW IS NEVER WRITTEN AGAIN (D-L5): the domain never holds a held post in lffPosts or its requests in lffRequests, and should a
+ * stale store (a second bridge) try, the upserts' WHERE refuses to UPDATE a held post or any request on one (rowCount 0, so
+ * LffRowNotOurs: fail closed), and step 2 never deletes a request of a held post. What remains for a stale store is only ADDING a new
+ * request row to a held post (an insert under a new id): it changes no evidence row, and one bridge per store is the rule.
  * RETENTION (review m3) is the DOMAIN's rule (social-lff.ts purgeLffPastRetention, rule 7): a post no longer open and more than
- * 30 days old is dropped from the state with its requests, at most LFF_PURGE_BATCH per write, and this diff deletes those rows
- * (step 1; their requests by the cascade). The creation record is pruned after 24 h, as before (step 5).
+ * 30 days old leaves the state with its requests, at most LFF_PURGE_BATCH per write, and this diff deletes those rows -- or holds
+ * them, when a report names the post (step 1). The creation record is pruned after 24 h, as before (step 5).
  */
-async function writeLffChanges(c: PoolClient, before: SocialState, after: SocialState): Promise<void> {
+async function writeLffChanges(c: PoolClient, before: SocialState, after: SocialState, nowIso: string): Promise<void> {
   const posts = diffIfMoved(before.lffPosts, after.lffPosts, (p) => p.id);
   const requests = diffIfMoved(before.lffRequests, after.lffRequests, (r) => r.id);
   const creations = diffIfMoved(before.lffCreations, after.lffCreations, (x) => pairKey(x.userId, x.postId));
-  for (const id of posts.drop) await c.query(`DELETE FROM relay_wonderland.lff_posts WHERE post_id=$1`, [id]);
+  // the posts the domain HELD in this command (rule 8): new entries of lffHeld, by the post's id
+  const heldNow = new Map(diffIfMoved(before.lffHeld, after.lffHeld, (h) => h.post.id).put.map((h) => [h.post.id, h.heldAtMs]));
+  for (const id of posts.drop) {
+    const heldAtMs = heldNow.get(id);
+    if (heldAtMs !== undefined) {
+      await c.query(`UPDATE relay_wonderland.lff_posts SET held_at=$2 WHERE post_id=$1 AND held_at IS NULL`, [id, new Date(heldAtMs)]);
+      continue;
+    }
+    const deleted = await c.query(
+      `DELETE FROM relay_wonderland.lff_posts WHERE post_id=$1 AND held_at IS NULL
+         AND NOT EXISTS (SELECT 1 FROM relay_wonderland.social_reports r WHERE r.subject_ref = $1)`,
+      [id],
+    );
+    if (deleted.rowCount === 0) {
+      // THE BACKSTOP: a report the database holds and this state did not -- the post is held, never deleted (nothing, if it is gone)
+      await c.query(
+        `UPDATE relay_wonderland.lff_posts SET held_at=GREATEST($2::timestamptz, updated_at) WHERE post_id=$1 AND held_at IS NULL
+           AND EXISTS (SELECT 1 FROM relay_wonderland.social_reports r WHERE r.subject_ref = $1)`,
+        [id, new Date(nowIso)],
+      );
+    }
+  }
   if (requests.drop.length > 0) {
     const goneWithPost = new Set(posts.drop);
     const postOf = new Map(before.lffRequests.map((r) => [r.id, r.postId]));
     for (const id of requests.drop) {
-      if (goneWithPost.has(postOf.get(id) ?? '')) continue; // the cascade of step 1 already took it
-      await c.query(`DELETE FROM relay_wonderland.lff_join_requests WHERE request_id=$1`, [id]);
+      if (goneWithPost.has(postOf.get(id) ?? '')) continue; // step 1's cascade already took it, or its hold keeps it as evidence
+      await c.query(
+        `DELETE FROM relay_wonderland.lff_join_requests WHERE request_id=$1
+           AND NOT EXISTS (SELECT 1 FROM relay_wonderland.lff_posts h WHERE h.post_id = relay_wonderland.lff_join_requests.post_id AND h.held_at IS NOT NULL)`,
+        [id],
+      );
     }
   }
   for (const p of posts.put) {
@@ -436,7 +484,7 @@ async function writeLffChanges(c: PoolClient, before: SocialState, after: Social
          project_label=EXCLUDED.project_label, skills=EXCLUDED.skills, open_slots=EXCLUDED.open_slots, status=EXCLUDED.status,
          updated_at=EXCLUDED.updated_at, version=EXCLUDED.version
        WHERE relay_wonderland.lff_posts.owner_id = EXCLUDED.owner_id AND relay_wonderland.lff_posts.created_at = EXCLUDED.created_at
-         AND relay_wonderland.lff_posts.version <= EXCLUDED.version`,
+         AND relay_wonderland.lff_posts.version <= EXCLUDED.version AND relay_wonderland.lff_posts.held_at IS NULL`,
       [p.id, p.ownerId, p.category, p.title, p.description, p.projectLabel, [...p.skills], p.openSlots, p.status, new Date(p.createdAtMs),
         new Date(p.updatedAtMs), new Date(p.expiresAtMs), p.version],
     );
@@ -447,7 +495,8 @@ async function writeLffChanges(c: PoolClient, before: SocialState, after: Social
       `INSERT INTO relay_wonderland.lff_join_requests(request_id, post_id, requester_id, message, status, created_at, updated_at) VALUES($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT(request_id) DO UPDATE SET status=EXCLUDED.status, updated_at=EXCLUDED.updated_at
        WHERE relay_wonderland.lff_join_requests.post_id = EXCLUDED.post_id AND relay_wonderland.lff_join_requests.requester_id = EXCLUDED.requester_id
-         AND relay_wonderland.lff_join_requests.created_at = EXCLUDED.created_at`,
+         AND relay_wonderland.lff_join_requests.created_at = EXCLUDED.created_at
+         AND NOT EXISTS (SELECT 1 FROM relay_wonderland.lff_posts h WHERE h.post_id = EXCLUDED.post_id AND h.held_at IS NOT NULL)`,
       [r.id, r.postId, r.requesterId, r.message, r.status, new Date(r.createdAtMs), new Date(r.updatedAtMs)],
     );
     if (written.rowCount !== 1) throw new LffRowNotOurs('request', `request ${r.id}: the database holds another row under this id`);
@@ -461,8 +510,11 @@ async function writeLffChanges(c: PoolClient, before: SocialState, after: Social
   }
 }
 
-/** Every row the command changed, deletes before inserts (a player moving parties must leave before joining). */
-async function writeChanges(c: PoolClient, before: SocialState, after: SocialState): Promise<void> {
+/**
+ * Every row the command changed, deletes before inserts (a player moving parties must leave before joining). `nowIso` is the
+ * operation's server time (it stamps only an LFF hold the database itself decides: writeLffChanges, step 1).
+ */
+async function writeChanges(c: PoolClient, before: SocialState, after: SocialState, nowIso: string): Promise<void> {
   // ---- deletes first
   const friends = diffBy(before.friendships, after.friendships, (f) => pairKey(f.userA, f.userB));
   for (const k of friends.drop) {
@@ -588,7 +640,7 @@ async function writeChanges(c: PoolClient, before: SocialState, after: SocialSta
       }
     }
   }
-  await writeLffChanges(c, before, after);
+  await writeLffChanges(c, before, after, nowIso);
   if (before.nextSerial !== after.nextSerial) {
     // AN UPSERT: migration 033 writes no row, so the first minted id creates next_serial. A bare UPDATE would change nothing
     // there, and after a restart the ids would start again at 1: the same ids minted twice, and each ON CONFLICT DO NOTHING
@@ -696,7 +748,7 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
             await transact(async (c) => {
               // THE OWNER'S OPEN FIRST, by compare-and-set on the version it read: a lost race rolls the whole operation back
               if (serverWrite !== undefined && !(await writePrivateServerRecord(c, serverWrite))) throw new PrivateServerRaced('private server moved');
-              await writeChanges(c, state, next);
+              await writeChanges(c, state, next, nowIso);
               // THE ORDINARY CHANGES TOLD AS THEMSELVES (LFF B2b, the security review's C1), each its own event, in THIS transaction
               // and BEFORE the operation's own -- the in-memory store's order (social-store.ts), so a viewer's stream is the same on
               // both: a fill's close told to the other requesters; a block's cancellation told to the far side as a withdrawal or a

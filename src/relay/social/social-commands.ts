@@ -1063,7 +1063,7 @@ function applyOne(
     case 'lff.post.delete': {
       const known = onlyFields(input, []);
       if (!known.ok) return invalid(known.message);
-      return lffResult(deleteLffPost(state, actorId, id0), null);
+      return lffResult(deleteLffPost(state, actorId, id0, nowMs), null);
     }
     case 'lff.request.create': {
       const known = onlyFields(input, ['message']);

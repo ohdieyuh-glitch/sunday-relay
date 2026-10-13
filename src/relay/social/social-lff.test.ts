@@ -16,6 +16,7 @@ import {
   LFF_PURGE_BATCH,
   LFF_REREQUEST_COOLDOWN_MS,
   LFF_RETENTION_MS,
+  lffPostStatusAt,
   purgeLffPastRetention,
   type LffFeedPage,
   type LffPost,
@@ -933,7 +934,7 @@ describe('LFF retention (rule 7, PROPOSED; the B2b review m3): a post no longer 
     expect(purgeLffPastRetention(p.state, T0 - DAY)).toBe(p.state);
   });
 
-  it('the owner\'s DELETE takes no clock and runs no batch (it removes rows itself); the next timed write does', () => {
+  it('the owner\'s DELETE runs no batch (it removes rows itself; its clock only stamps a D-L5 hold); the next timed write does', () => {
     const old = oldPosts();
     const at = T0 + LFF_RETENTION_MS + 1;
     const fresh = post(old.state, U.NOVA, { title: 'fresh' }, at - 60 * MIN);
@@ -941,5 +942,123 @@ describe('LFF retention (rule 7, PROPOSED; the B2b review m3): a post no longer 
     expect(lffPostById(deleted, old.novaPost), 'the delete purged nothing').toBeDefined();
     const after = must(run(deleted, U.NOVA, 'lff.post.create', { body: BASE }, at)).state;
     expect(lffPostById(after, old.novaPost)).toBeUndefined();
+  });
+});
+
+describe('D-L5 (rule 8, contract r2.4): a REPORTED post is moderation evidence -- HELD, never deleted, and to every player exactly a deleted post', () => {
+  const DAY = 24 * 60 * MIN;
+  /**
+   * A report through the existing flow (reports.file), by Lyra about Nova: naming `subjectRef` as its subject, or none. The CONTROL of
+   * every case is the SAME report naming no post, so both branches file one report and mint the same ids afterwards.
+   */
+  const report = (s: SocialState, subjectRef: string | null, nowMs = T0): SocialState =>
+    must(run(s, U.LYRA, 'reports.file', { body: { reportedId: U.NOVA, reason: 'SPAM', ...(subjectRef === null ? {} : { subjectRef }) } }, nowMs)).state;
+
+  /** Nova's post at T0: Orion asked and was accepted, Kai asked and was declined, Vega asked (still pending); closed at +6 s, or not. */
+  function novasPost(close: boolean): { state: SocialState; postId: string; orion: string; kai: string; vega: string } {
+    const p = post(createSocialFixture(), U.NOVA, { openSlots: 3 }, T0);
+    const o = ask(p.state, U.ORION, p.postId, {}, T0 + 1000);
+    const k = ask(o.state, U.KAI, p.postId, {}, T0 + 2000);
+    const v = ask(k.state, U.VEGA, p.postId, {}, T0 + 3000);
+    let s = must(run(v.state, U.NOVA, 'lff.request.accept', { ids: [o.requestId] }, T0 + 4000)).state;
+    s = must(run(s, U.NOVA, 'lff.request.decline', { ids: [k.requestId] }, T0 + 5000)).state;
+    if (close) s = must(run(s, U.NOVA, 'lff.post.close', { ids: [p.postId] }, T0 + 6000)).state;
+    return { state: s, postId: p.postId, orion: o.requestId, kai: k.requestId, vega: v.requestId };
+  }
+  const requestsOf = (s: SocialState, postId: string) => s.lffRequests.filter((r) => r.postId === postId);
+
+  for (const [status, close] of [['CLOSED', true], ['EXPIRED', false]] as const) {
+    it(`R-1 THE EDGE (${status}): reported after it ended, it is never purged -- 1 ms past 30 days it is HELD with every request (the accepted list included) and reads exactly as the purged control; the same post unreported IS purged`, () => {
+      const n = novasPost(close);
+      // the report comes a day AFTER the post ended: what decides is the server's state at the purge
+      const reported = report(n.state, n.postId, T0 + DAY);
+      const control = report(n.state, null, T0 + DAY);
+      // the write that carries the purge: Lyra edits her own OPEN post
+      const lyra = (s: SocialState) => post(s, U.LYRA, { title: 'Lyra\'s' }, T0 + LFF_RETENTION_MS - 60 * MIN);
+      const [r0, c0] = [lyra(reported), lyra(control)];
+      expect(r0.postId).toBe(c0.postId);
+      const edit = (s: SocialState, nowMs: number) => must(run(s, U.LYRA, 'lff.post.edit', { ids: [r0.postId], body: { title: `at ${nowMs}` } }, nowMs));
+      // AT EXACTLY 30 DAYS: both kept, nothing held
+      const edge = T0 + LFF_RETENTION_MS;
+      const [r1, c1] = [edit(r0.state, edge), edit(c0.state, edge)];
+      expect([lffPostById(r1.state, n.postId) !== undefined, lffPostById(c1.state, n.postId) !== undefined]).toEqual([true, true]);
+      expect([r1.state.lffHeld, c1.state.lffHeld]).toEqual([[], []]);
+      // 1 MS LATER
+      const at = edge + 1;
+      const [r2, c2] = [edit(r1.state, at), edit(c1.state, at)];
+      // THE CONTROL: the unreported post is purged, its requests with it, and nothing is held
+      expect(lffPostById(c2.state, n.postId), 'the control is purged').toBeUndefined();
+      expect([requestsOf(c2.state, n.postId), c2.state.lffHeld]).toEqual([[], []]);
+      // THE REPORTED POST: held exactly as last written, with all three requests, stamped with the purge's server time
+      expect(r2.state.lffHeld).toEqual([{ post: lffPostById(r1.state, n.postId), requests: requestsOf(r1.state, n.postId), heldAtMs: at }]);
+      expect(r2.state.lffHeld[0].requests.map((r) => [r.id, r.status])).toEqual([[n.orion, 'ACCEPTED'], [n.kai, 'DECLINED'], [n.vega, 'PENDING']]);
+      // held exactly as stored (CLOSED, or still OPEN and past its expiry); either way it reads EXPIRED by now
+      expect([r2.state.lffHeld[0].post.status, lffPostStatusAt(r2.state.lffHeld[0].post, at)], 'held as stored').toEqual([close ? 'CLOSED' : 'OPEN', 'EXPIRED']);
+      // TO EVERY PLAYER, THE PURGED CONTROL: the same player-facing state, the same answer, the same views
+      expect([r2.state.lffPosts, r2.state.lffRequests, r2.state.lffCreations, r2.state.nextSerial]).toEqual([c2.state.lffPosts, c2.state.lffRequests, c2.state.lffCreations, c2.state.nextSerial]);
+      expect([r2.data, r2.audience, r2.extraEvents]).toEqual([c2.data, c2.audience, c2.extraEvents]);
+      for (const viewer of [U.NOVA, U.ORION, U.KAI, U.VEGA, U.LYRA, U.RHEA]) {
+        expect(JSON.stringify(mine(r2.state, viewer, at)), `${viewer}: requests.mine`).toBe(JSON.stringify(mine(c2.state, viewer, at)));
+        expect(JSON.stringify(feed(r2.state, viewer, { mine: true }, at)), `${viewer}: own posts`).toBe(JSON.stringify(feed(c2.state, viewer, { mine: true }, at)));
+        expect(refused(run(r2.state, viewer, 'lff.post.get', { ids: [n.postId] }, at)), `${viewer}: get`).toEqual(missingPost(c2.state));
+      }
+      // ANY AGE: a year on, the next purge (it takes Lyra's own expired post) leaves the evidence exactly as it was
+      const yearOn = must(run(r2.state, U.RHEA, 'lff.post.create', { body: BASE }, T0 + 365 * DAY)).state;
+      expect(lffPostById(yearOn, r0.postId), 'the year-on write did purge (an unreported post)').toBeUndefined();
+      expect(yearOn.lffHeld, 'the evidence is untouched').toBe(r2.state.lffHeld);
+      // the rule itself, called directly: the reported post is held, the control purged
+      expect(purgeLffPastRetention(r1.state, at).lffHeld.map((h) => h.post.id)).toEqual([n.postId]);
+      expect(purgeLffPastRetention(c1.state, at).lffHeld).toEqual([]);
+    });
+  }
+
+  it('R-2: the owner deletes a REPORTED post -- kept as evidence with every request; the answer, the people told and the player-facing state are an ordinary delete\'s; the same post unreported is hard-deleted', () => {
+    const n = novasPost(false);
+    const reported = report(n.state, n.postId);
+    const control = report(n.state, null);
+    const at = T0 + MIN;
+    const held = must(run(reported, U.NOVA, 'lff.post.delete', { ids: [n.postId] }, at));
+    const deleted = must(run(control, U.NOVA, 'lff.post.delete', { ids: [n.postId] }, at));
+    // THE CONTROL: a hard delete, nothing kept
+    expect([lffPostById(deleted.state, n.postId), requestsOf(deleted.state, n.postId), deleted.state.lffHeld]).toEqual([undefined, [], []]);
+    // THE EVIDENCE: the post as last written and every request on it, in every status
+    expect(held.state.lffHeld).toEqual([{ post: lffPostById(reported, n.postId), requests: requestsOf(reported, n.postId), heldAtMs: at }]);
+    expect(held.state.lffHeld[0].requests.map((r) => r.status)).toEqual(['ACCEPTED', 'DECLINED', 'PENDING']);
+    // A DELETE IN EVERY RESPECT A PLAYER SEES: the answer, who is told (the owner and the live requesters), the player-facing state
+    expect([held.data, held.audience, held.extraEvents]).toEqual([deleted.data, deleted.audience, deleted.extraEvents]);
+    expect([...held.audience].sort()).toEqual([U.NOVA, U.ORION, U.VEGA].sort());
+    expect([held.state.lffPosts, held.state.lffRequests, held.state.lffCreations, held.state.nextSerial]).toEqual([deleted.state.lffPosts, deleted.state.lffRequests, deleted.state.lffCreations, deleted.state.nextSerial]);
+    // NO LATER PATH DELETES IT: a second delete is the uniform not-found, and no purge ever reaches it
+    expect(refused(run(held.state, U.NOVA, 'lff.post.delete', { ids: [n.postId] }, at))).toEqual(missingPost(held.state));
+    expect(purgeLffPastRetention(held.state, T0 + 400 * DAY)).toBe(held.state);
+    // a stepped-back clock: held no earlier than the post was last written (038's lff_posts_held_at CHECK)
+    const back = must(run(reported, U.NOVA, 'lff.post.delete', { ids: [n.postId] }, T0 - MIN)).state.lffHeld[0];
+    expect(back.heldAtMs).toBe(lffPostById(reported, n.postId)!.updatedAtMs);
+  });
+
+  it('R-2: only a report naming THIS post holds it -- one naming another post holds nothing here; two reports make one hold', () => {
+    const n = novasPost(false);
+    const other = post(n.state, U.NOVA, { title: 'Another' });
+    const aboutOther = report(other.state, other.postId);
+    expect(must(run(aboutOther, U.NOVA, 'lff.post.delete', { ids: [n.postId] })).state.lffHeld, 'the other post\'s report does not hold this one').toEqual([]);
+    const both = report(report(other.state, n.postId), n.postId);
+    const first = must(run(both, U.NOVA, 'lff.post.delete', { ids: [n.postId] })).state;
+    const gone = must(run(first, U.NOVA, 'lff.post.delete', { ids: [other.postId] })).state;
+    expect(gone.lffHeld.map((h) => h.post.id), 'two reports, one hold; the unreported second post is deleted').toEqual([n.postId]);
+    expect(lffPostById(gone, other.postId)).toBeUndefined();
+  });
+
+  it('R-5: an OPEN reported post stays visible and requestable, exactly as before the report; the control (a close) shows the comparison sees a change', () => {
+    const p = post(createSocialFixture(), U.NOVA);
+    const reported = report(p.state, p.postId);
+    for (const viewer of [U.RHEA, U.LYRA, U.KAI, U.NOVA]) {
+      expect(JSON.stringify(feed(reported, viewer)), `${viewer}: the feed`).toBe(JSON.stringify(feed(p.state, viewer)));
+      expect(detail(reported, viewer, p.postId), `${viewer}: the post`).toEqual(detail(p.state, viewer, p.postId));
+    }
+    expect(feed(reported, U.RHEA).posts.map((x) => x.postId)).toContain(p.postId);
+    expect(run(reported, U.KAI, 'lff.request.create', { ids: [p.postId] }).ok, 'still requestable').toBe(true);
+    expect(reported.lffHeld).toEqual([]);
+    const closed = must(run(reported, U.NOVA, 'lff.post.close', { ids: [p.postId] })).state;
+    expect(JSON.stringify(feed(closed, U.RHEA)), 'the control: the same comparison sees a close').not.toBe(JSON.stringify(feed(p.state, U.RHEA)));
   });
 });

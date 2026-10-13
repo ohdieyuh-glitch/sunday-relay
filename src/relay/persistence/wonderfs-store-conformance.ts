@@ -27,9 +27,19 @@
  *   APPROVE   the STORED approval by id, its approver's role re-read at merge;
  *   UNKNOWN   every read of an unknown project, branch, file, conflict or revision is the ONE not-found;
  *   REPLAY    a replay keeps nothing; the same request id for another change is refused.
+ * R2-r2 (the R2 correctness review's B1 and M2: what R2's writes need of a store, proven on BOTH):
+ *   LIVE-PATH a commit that frees a path and takes it again -- delete + create of one path, a rename chain, a swap through a
+ *             temporary name -- lands, with the file-id order FORCED both ways (PostgreSQL's live-path index is not deferrable);
+ *   AUTHORITY the role is judged INSIDE the change, before the replay; the principal must be that member; a refused write keeps nothing;
+ *   UPLOAD    a claimed address the bytes do not have keeps nothing; the room counts every blob no file's history names as pending
+ *             (orphans AND conflict-held uploads), to the limit and not one byte past it; a held blob grows nothing;
+ *   CONFLICT-LIMITS (R2-r3) two limits, judged on the outcome: OPEN conflicts (resolving lifts it) and RETAINED conflicts (a storage
+ *             limit: a dismissal counts until its 30 days end, and the refusal names when the next one frees); a change that lands and
+ *             a replay pass either; a failing resolution counts;
+ *   LIMITS    §11 grow-only: a commit that would grow past a limit is refused in §11's words; one that shrinks an over-limit project lands.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type { RelayResult } from '../protocol/errors';
 import {
@@ -64,6 +74,9 @@ import {
   type WfsReviewVerdict,
   type WfsStore,
   type WfsTreePage,
+  type WfsWriteAuthority,
+  WFS_PROJECT_FULL_MESSAGE,
+  wfsRetainedConflictsFreeAt,
 } from '../wonderfs';
 
 export type WfsIdSource = (kind: 'file' | 'commit' | 'conflict' | 'branch' | 'approval') => string;
@@ -82,13 +95,18 @@ export interface WfsStoreCase {
   run(h: WfsStoreHarness): Promise<void>;
 }
 
-/** Ids drawn per kind, so a store and the oracle given one each draw the same sequence for every kind. */
-export function wfsIdSource(): WfsIdSource {
+/**
+ * Ids drawn per kind, so a store and the oracle given one each draw the same sequence for every kind. `run` makes the sequence this
+ * case's own: on PostgreSQL every case shares ONE contract database, and `wfs_commits.commit_id` is unique across ALL projects
+ * (036 wfs_commits_commit_id), so two cases drawing `commit-00001` collide (R2-r3: the r2 CI's LIVE-PATH failure). Give two id sources
+ * the SAME `run` only when they must draw the same ids (a store and its oracle).
+ */
+export function wfsIdSource(run: string = randomUUID()): WfsIdSource {
   const drawn = new Map<string, number>();
   return (kind) => {
     const n = (drawn.get(kind) ?? 0) + 1;
     drawn.set(kind, n);
-    return `${kind}-${String(n).padStart(5, '0')}`;
+    return `${kind}-${run}-${String(n).padStart(5, '0')}`;
   };
 }
 
@@ -130,6 +148,12 @@ function refused(r: RelayResult<unknown>, code: string, what: string): void {
   else if (r.error.code !== code) breach(`${what}: refused ${r.error.code}, expected ${code}`);
 }
 
+/** Refused with this code AND this log-only reason tag (what a route maps the refusal by). */
+function refusedWith(r: RelayResult<unknown>, code: string, detail: string, what: string): void {
+  refused(r, code, what);
+  if (!r.ok && !(r.error.details ?? []).includes(detail)) breach(`${what}: refused without ${detail}: ${JSON.stringify(r.error.details ?? [])}`);
+}
+
 /** The ONE not-found (§9.1): the code and the message are the same whatever was missing. */
 function notFound(r: RelayResult<unknown>, what: string): void {
   refused(r, 'not-found', what);
@@ -155,9 +179,33 @@ const expectedEvent = (o: WfsCommitOutcome, kind: string): { kind: string; body:
 
 async function put(store: WfsStore, projectId: string, text: string): Promise<{ sha256: string; size: number }> {
   const r = value(await store.putBlob(projectId, utf8(text)), `putBlob ${text}`);
-  same(r, { sha256: sha(text), size: utf8(text).byteLength }, 'a blob\'s address and size are computed by the store');
-  return r;
+  const kept = { sha256: r.sha256, size: r.size };
+  same(kept, { sha256: sha(text), size: utf8(text).byteLength }, 'a blob\'s address and size are computed by the store');
+  return kept;
 }
+
+/**
+ * File ids drawn from `files` in order (then ids unique to this source), so a case can FORCE which of two files sorts first. File ids
+ * are unique per (project, branch) only, so a forced file id is safe to reuse in another project; every OTHER kind -- a commit id
+ * above all, unique across the whole database -- comes from a source of its own.
+ */
+function idsInOrder(files: readonly string[]): WfsIdSource {
+  const rest = wfsIdSource(randomUUID());
+  let next = 0;
+  return (kind) => {
+    if (kind !== 'file' || next >= files.length) return rest(kind);
+    next += 1;
+    return files[next - 1];
+  };
+}
+
+/** A member's write authority, as the routes build it. */
+const asMember = (playerId: string, extra: Partial<{ needs: WfsWriteAuthority['needs']; maxOpenConflicts: number; maxRetainedConflicts: number }> = {}) => ({
+  playerId,
+  needs: extra.needs ?? [{ action: 'write' as const, paths: [] as string[] }],
+  maxOpenConflicts: extra.maxOpenConflicts ?? null,
+  maxRetainedConflicts: extra.maxRetainedConflicts ?? null,
+});
 
 async function commitOk(store: WfsStore, projectId: string, req: WfsCommitRequest): Promise<WfsCommitOutcome> {
   return value(await store.commit(projectId, req, NOW), `commit ${req.requestId}`);
@@ -204,9 +252,11 @@ export const WFS_STORE_CASES: readonly WfsStoreCase[] = [
     async run(h) {
       const P = 'prj-equiv';
       await h.seed(P, { usr_owner: 'OWNER', usr_member: 'MEMBER' });
-      const store = h.open({ newId: wfsIdSource() });
+      // the store and its oracle draw the SAME ids: one run, shared by the two sources (and by no other case)
+      const run = randomUUID();
+      const store = h.open({ newId: wfsIdSource(run) });
       value(await store.createProject(P, NOW), 'createProject');
-      const engineIds = wfsIdSource();
+      const engineIds = wfsIdSource(run);
       const blobs = new Map<string, number>();
       const ctx: WfsEngineContext = { nowIso: NOW, newId: (k) => engineIds(k), sha256Hex: sha, blobSize: (x) => blobs.get(x) ?? null, limits: WFS_ALPHA_LIMITS };
       const blob = async (text: string) => {
@@ -733,6 +783,200 @@ export const WFS_STORE_CASES: readonly WfsStoreCase[] = [
       same(value(await store.head(P), 'head').lastEventSeq, seq, 'a replay keeps nothing');
       refused(await store.commit(P, { ...req, principal: who('usr_member') }, NOW), 'duplicate-idempotency-key', 'another player, the same id');
       refused(await store.commit(P, { ...req, ops: [{ op: 'create', path: 'other', kind: 'dir' }] }, NOW), 'duplicate-idempotency-key', 'another change, the same id');
+    },
+  },
+  {
+    name: 'LIVE-PATH (R2-r2, correctness B1): a commit that frees a path and takes it again lands -- delete + create of one path, a rename chain, a swap through a temporary name -- with the file-id order FORCED both ways',
+    async run(h) {
+      const owner = who('usr_owner');
+      let n = 0;
+      const fresh = async (files: readonly string[]) => {
+        n += 1;
+        const P = `prj-live-path-${n}`;
+        await h.seed(P, { usr_owner: 'OWNER' });
+        const store = h.open({ newId: idsInOrder(files) });
+        value(await store.createProject(P, NOW), 'createProject');
+        return { P, store };
+      };
+      const idsByPath = async (P: string): Promise<Array<[string, string]>> =>
+        value(await h.open().tree(P, { branchId: WFS_MAIN_BRANCH, limit: WFS_PAGE_MAX_LIMIT }), 'tree').entries.map((e): [string, string] => [e.path, e.fileId]);
+      // 1. replace a file in one commit: delete + create at the same path. The new file sorting FIRST is the order that met itself.
+      for (const [oldId, newId] of [['file-zz', 'file-aa'], ['file-aa', 'file-zz']] as const) {
+        const { P, store } = await fresh([oldId, newId]);
+        const before = await put(store, P, 'old words');
+        const after = await put(store, P, 'new words');
+        await commitOk(store, P, { requestId: 'req-live-0001', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: owner, ops: [{ op: 'create', path: 'notes.txt', kind: 'file', ...before }] });
+        const o = await commitOk(store, P, { requestId: 'req-live-0002', branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: owner, ops: [{ op: 'delete', fileId: oldId, expectContentVersion: 1 }, { op: 'create', path: 'notes.txt', kind: 'file', ...after }] });
+        same(committedRev(o, `replace (${oldId} then ${newId})`), 2, `delete + create of one path lands (old ${oldId}, new ${newId})`);
+        same(await idsByPath(P), [['notes.txt', newId]], 'read back through another store: the new file holds the path');
+        same(value(await h.open().fileAt(P, { branchId: WFS_MAIN_BRANCH, fileId: newId }), 'fileAt').entry.sha256, after.sha256, 'with the new bytes');
+      }
+      // 2. a rename chain, y: q -> r then x: p -> q. x sorting FIRST is the order that met itself.
+      for (const [xId, yId] of [['file-aa', 'file-zz'], ['file-zz', 'file-aa']] as const) {
+        const { P, store } = await fresh([xId, yId]); // p gets the first id, q the second (a commit draws ids in op order)
+        await commitOk(store, P, { requestId: 'req-live-0001', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: owner, ops: [{ op: 'create', path: 'p', kind: 'dir' }, { op: 'create', path: 'q', kind: 'dir' }] });
+        same(await idsByPath(P), [['p', xId], ['q', yId]], 'the ids are where the case forced them');
+        const o = await commitOk(store, P, { requestId: 'req-live-0002', branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: owner, ops: [{ op: 'move', fileId: yId, expectPathVersion: 1, newPath: 'r' }, { op: 'move', fileId: xId, expectPathVersion: 1, newPath: 'q' }] });
+        same(committedRev(o, 'chain'), 2, `a rename chain lands (x ${xId}, y ${yId})`);
+        same(await idsByPath(P), [['q', xId], ['r', yId]], 'read back: each file at its new path');
+      }
+      // 3. a swap through a temporary name: x p -> tmp, y q -> p, x tmp -> q. One file touched twice: it meets itself in EVERY order.
+      {
+        const { P, store } = await fresh(['file-aa', 'file-zz']);
+        const one = await put(store, P, 'one');
+        const two = await put(store, P, 'two');
+        await commitOk(store, P, { requestId: 'req-live-0001', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: owner, ops: [{ op: 'create', path: 'p.txt', kind: 'file', ...one }, { op: 'create', path: 'q.txt', kind: 'file', ...two }] });
+        const o = await commitOk(store, P, { requestId: 'req-live-0002', branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: owner, ops: [
+          { op: 'move', fileId: 'file-aa', expectPathVersion: 1, newPath: 'tmp.txt' },
+          { op: 'move', fileId: 'file-zz', expectPathVersion: 1, newPath: 'p.txt' },
+          { op: 'move', fileId: 'file-aa', expectPathVersion: 2, newPath: 'q.txt' },
+        ] });
+        same(committedRev(o, 'swap'), 2, 'a swap through a temporary name lands');
+        same(await idsByPath(P), [['p.txt', 'file-zz'], ['q.txt', 'file-aa']], 'read back: swapped');
+      }
+    },
+  },
+  {
+    name: 'AUTHORITY (R2): the role is judged INSIDE the change, BEFORE the replay; the principal must be that member; an authority naming nothing, or the reserved root, is refused; a refused write keeps nothing',
+    async run(h) {
+      const P = 'prj-authority';
+      await h.seed(P, { usr_owner: 'OWNER', usr_member: 'MEMBER' });
+      const store = h.open();
+      value(await store.createProject(P, NOW), 'createProject');
+      const member = who('usr_member');
+      const dir = (requestId: string, path: string, baseRev: number): WfsCommitRequest => ({ requestId, branchId: WFS_MAIN_BRANCH, baseRev, principal: member, ops: [{ op: 'create', path, kind: 'dir' }] });
+      const first = value(await store.commit(P, dir('req-auth-0001', 'mine', 0), NOW, asMember('usr_member')), 'a member commits');
+      // removed: the same request under the authority is the one not-found -- its stored answer is never reached
+      await h.setRole(P, 'usr_member', null);
+      notFound(await store.commit(P, dir('req-auth-0001', 'mine', 0), NOW, asMember('usr_member')), 'a removed member replaying');
+      same(value(await store.commit(P, dir('req-auth-0001', 'mine', 0), NOW), 'CONTROL: no authority'), { ...first, replay: true }, 'the stored answer is there to leak');
+      await h.setRole(P, 'usr_member', 'VIEWER');
+      notFound(await store.commit(P, dir('req-auth-0002', 'demoted', 1), NOW, asMember('usr_member')), 'a member demoted to a value no writer gives a role');
+      await h.setRole(P, 'usr_member', 'MEMBER');
+      notFound(await store.commit(P, { ...dir('req-auth-0003', 'x', 1), principal: who('usr_owner') }, NOW, asMember('usr_member')), 'a principal other than the member whose role was read');
+      notFound(await store.commit(P, dir('req-auth-0004', 'y', 1), NOW, asMember('usr_member', { needs: [] })), 'an authority naming nothing (fail closed)');
+      notFound(await store.commit(P, dir('req-auth-0005', 'z', 1), NOW, asMember('usr_member', { needs: [{ action: 'write', paths: ['.WonderFS/x'] }] })), 'the reserved root, in any case');
+      same(value(await store.head(P), 'head').main.headRev, 1, 'no refused write kept anything');
+      same(committedRev(value(await store.commit(P, dir('req-auth-0003', 'x', 1), NOW, asMember('usr_member')), 'CONTROL'), 'the member as itself'), 2, 'CONTROL: the member, as itself, lands');
+      // an upload under the authority of a removed member keeps nothing
+      await h.setRole(P, 'usr_member', null);
+      notFound(await store.putBlob(P, utf8('late'), { authority: asMember('usr_member') }), 'a removed member uploading');
+      same(value(await store.blobInfo(P, sha('late')), 'blobInfo'), null, 'nothing kept');
+      await h.setRole(P, 'usr_member', 'MEMBER');
+      same(value(await store.putBlob(P, utf8('late'), { authority: asMember('usr_member') }), 'CONTROL'), { sha256: sha('late'), size: 4, created: true }, 'CONTROL: a member uploads');
+    },
+  },
+  {
+    name: 'UPLOAD (R2; R2-r2 security MAJOR-3): a claimed address the bytes do not have keeps nothing; the room counts every blob no file\'s history names -- orphans AND conflict-held uploads -- as pending, to the limit and not one byte past it; a held blob grows nothing',
+    async run(h) {
+      const P = 'prj-upload';
+      await h.seed(P, { usr_owner: 'OWNER' });
+      const store = h.open({ limits: { ...WFS_ALPHA_LIMITS, maxProjectBytes: 100 } });
+      value(await store.createProject(P, NOW), 'createProject');
+      const owner = who('usr_owner');
+      refusedWith(await store.putBlob(P, utf8('lie'), { claimedSha256: sha('not these') }), 'validation-failed', 'wonderfs: hash_mismatch', 'a claimed address the bytes do not have');
+      same(value(await store.blobInfo(P, sha('lie')), 'blobInfo'), null, 'nothing kept for a mismatch');
+      refused(await store.putBlob(P, utf8('lie'), { claimedSha256: 'ABC' }), 'validation-failed', 'a malformed claimed address');
+      same(value(await store.putBlob(P, utf8('lie'), { claimedSha256: sha('lie') }), 'CONTROL'), { sha256: sha('lie'), size: 3, created: true }, 'CONTROL: the right address is kept');
+      // pending: lie 3 + a 57 + b 40 = 100, exactly the room; one byte more is refused before it is kept
+      const a = value(await store.putBlob(P, utf8('a'.repeat(57))), 'a');
+      const b = value(await store.putBlob(P, utf8('b'.repeat(40))), 'b');
+      same([a.created, b.created], [true, true], 'both new');
+      refusedWith(await store.putBlob(P, utf8('c')), 'budget-exceeded', 'wonderfs: project_full', 'one byte past the room');
+      same(value(await store.blobInfo(P, sha('c')), 'blobInfo'), null, 'nothing kept past the room');
+      same(value(await store.putBlob(P, utf8('a'.repeat(57))), 'held'), { sha256: a.sha256, size: 57, created: false }, 'a held blob grows nothing: never refused, nothing new');
+      // a file takes a (live 57); b, named by a CONFLICT only, stays pending: still exactly full
+      await commitOk(store, P, { requestId: 'req-upl-0001', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: owner, ops: [{ op: 'create', path: 'f', kind: 'file', sha256: a.sha256, size: 57 }] });
+      const f = value(await store.tree(P, { branchId: WFS_MAIN_BRANCH }), 'tree').entries[0].fileId;
+      conflictIdOf(await commitOk(store, P, { requestId: 'req-upl-0002', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: owner, ops: [{ op: 'update', fileId: f, expectContentVersion: 9, sha256: b.sha256, size: 40 }] }), 'a conflict holding b');
+      same(value(await store.blobInfo(P, b.sha256), 'blobInfo')?.referenced, true, 'a retained conflict names b: readable');
+      refusedWith(await store.putBlob(P, utf8('c')), 'budget-exceeded', 'wonderfs: project_full', 'b is room taken while only a conflict names it');
+      // CONTROL: deleting f leaves a as history (not pending): the room is back
+      await commitOk(store, P, { requestId: 'req-upl-0003', branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: owner, ops: [{ op: 'delete', fileId: f, expectContentVersion: 1 }] });
+      same(value(await store.putBlob(P, utf8('c')), 'room back'), { sha256: sha('c'), size: 1, created: true }, 'CONTROL: live 0 + pending 43 + 1');
+    },
+  },
+  {
+    name: 'CONFLICT-LIMITS (R2-r3; the R2 reviews\' N1 and security MAJOR-2): two honest limits, judged on the OUTCOME -- OPEN conflicts (resolving lifts it) and RETAINED conflicts (a storage limit only expiry lifts, naming when the next frees); a change that lands and a replay pass either; a failing resolution counts; each is per player',
+    async run(h) {
+      const owner = who('usr_owner');
+      const member = who('usr_member');
+      const project = async (P: string) => {
+        await h.seed(P, { usr_owner: 'OWNER', usr_member: 'MEMBER' });
+        const store = h.open();
+        value(await store.createProject(P, NOW), 'createProject');
+        const x = await put(store, P, 'x');
+        await commitOk(store, P, { requestId: 'req-lim-0000', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: owner, ops: [{ op: 'create', path: 'f', kind: 'file', ...x }] });
+        const f = value(await store.tree(P, { branchId: WFS_MAIN_BRANCH }), 'tree').entries[0].fileId;
+        const stale = (requestId: string, extra: Partial<WfsCommitRequest> = {}): WfsCommitRequest => ({ requestId, branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: member, ops: [{ op: 'update', fileId: f, expectContentVersion: 9, ...x }], ...extra });
+        const all = async () => value(await store.conflicts(P, { status: 'all' }), 'conflicts').conflicts.length;
+        return { store, stale, all };
+      };
+
+      // 1. THE OPEN LIMIT (§8.4): 2 open
+      {
+        const P = 'prj-open-limit';
+        const { store, stale, all } = await project(P);
+        const lim = asMember('usr_member', { maxOpenConflicts: 2 });
+        const c1 = conflictIdOf(value(await store.commit(P, stale('req-open-0001'), NOW, lim), 'first'), 'first');
+        conflictIdOf(value(await store.commit(P, stale('req-open-0002'), NOW, lim), 'second'), 'second');
+        refusedWith(await store.commit(P, stale('req-open-0003'), NOW, lim), 'budget-exceeded', 'wonderfs: too_many_open_conflicts', 'a third open conflict');
+        same(await all(), 2, 'nothing kept');
+        same(committedRev(value(await store.commit(P, { ...stale('req-open-0004'), ops: [{ op: 'create', path: 'clean', kind: 'dir' }] }, NOW, lim), 'clean'), 'clean'), 2, 'CONTROL: a change that lands is never refused');
+        const replay = value(await store.commit(P, stale('req-open-0001'), NOW, lim), 'replay');
+        same([conflictIdOf(replay, 'replay'), replay.replay], [c1, true], 'CONTROL: a replay keeps its answer');
+        refusedWith(await store.commit(P, stale('req-open-0005', { resolvesConflictId: c1 }), NOW, lim), 'budget-exceeded', 'wonderfs: too_many_open_conflicts', 'a resolution that fails would open one more: counted');
+        same(committedRev(value(await store.commit(P, { ...stale('req-open-0006'), baseRev: 2, ops: [], resolvesConflictId: c1 }, NOW, lim), 'dismiss'), 'dismiss'), 3, 'a dismissal lands');
+        conflictIdOf(value(await store.commit(P, stale('req-open-0007'), NOW, lim), 'after resolving'), 'CONTROL: resolving LIFTS the open limit');
+        conflictIdOf(value(await store.commit(P, { ...stale('req-open-0008'), principal: owner }, NOW, asMember('usr_owner', { maxOpenConflicts: 2 })), 'owner'), 'CONTROL: the owner has a count of its own');
+      }
+
+      // 2. THE RETAINED STORAGE LIMIT: 3 retained (open, or closed within 30 days); the open limit far above it
+      {
+        const P = 'prj-retained-limit';
+        const { store, stale, all } = await project(P);
+        const lim = asMember('usr_member', { maxOpenConflicts: 10, maxRetainedConflicts: 3 });
+        let rev = 1;
+        for (const n of [1, 2]) {
+          const c = conflictIdOf(value(await store.commit(P, stale(`req-ret-000${n}`), NOW, lim), `conflict ${n}`), `conflict ${n}`);
+          rev = committedRev(value(await store.commit(P, { ...stale(`req-ret-001${n}`), baseRev: rev, ops: [], resolvesConflictId: c }, NOW, lim), `dismiss ${n}`), `dismiss ${n}`);
+        }
+        const r3 = conflictIdOf(value(await store.commit(P, stale('req-ret-0003'), NOW, lim), 'third'), 'third: one open, two closed and retained');
+        const full = await store.commit(P, stale('req-ret-0004'), NOW, lim);
+        refusedWith(full, 'budget-exceeded', 'wonderfs: retained_conflicts_full', 'a fourth retained conflict');
+        same(wfsRetainedConflictsFreeAt(full.ok ? [] : full.error.details), new Date(Date.parse(NOW) + WFS_CONFLICT_RETENTION_MS).toISOString(), 'it names when the oldest closed one frees');
+        same(await all(), 3, 'nothing kept');
+        same(committedRev(value(await store.commit(P, { ...stale('req-ret-0013'), baseRev: rev, ops: [], resolvesConflictId: r3 }, NOW, lim), 'dismiss 3'), 'dismiss 3') > rev, true, 'dismissing the third lands');
+        refusedWith(await store.commit(P, stale('req-ret-0005'), NOW, lim), 'budget-exceeded', 'wonderfs: retained_conflicts_full', 'CONTROL: resolving does NOT lift the storage limit');
+        conflictIdOf(value(await store.commit(P, { ...stale('req-ret-0006'), principal: owner }, NOW, asMember('usr_owner', { maxRetainedConflicts: 3 })), 'owner'), 'CONTROL: the owner has a count of its own');
+        const later = new Date(Date.parse(NOW) + 31 * 24 * 3600 * 1000).toISOString();
+        conflictIdOf(value(await store.commit(P, stale('req-ret-0007'), later, lim), 'later'), 'CONTROL: 31 days on, the closed ones no longer count');
+      }
+    },
+  },
+  {
+    name: 'LIMITS (R2, §11 grow-only): a commit that would grow a project past its files or bytes is refused in §11\'s words and keeps nothing; one that shrinks an over-limit project lands',
+    async run(h) {
+      const owner = who('usr_owner');
+      for (const [P, limits, tight] of [
+        ['prj-limits-files', { ...WFS_ALPHA_LIMITS, maxFiles: 2 }, { ...WFS_ALPHA_LIMITS, maxFiles: 0 }],
+        ['prj-limits-bytes', { ...WFS_ALPHA_LIMITS, maxProjectBytes: 100 }, { ...WFS_ALPHA_LIMITS, maxProjectBytes: 50 }],
+      ] as const) {
+        await h.seed(P, { usr_owner: 'OWNER' });
+        const store = h.open({ limits });
+        value(await store.createProject(P, NOW), 'createProject');
+        const blob = await put(store, P, 's'.repeat(40));
+        await commitOk(store, P, { requestId: 'req-lim-0001', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: owner, ops: [{ op: 'create', path: 'f1', kind: 'file', ...blob }, { op: 'create', path: 'f2', kind: 'file', ...blob }] });
+        const grow = await store.commit(P, { requestId: 'req-lim-0002', branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: owner, ops: [{ op: 'create', path: 'f3', kind: 'file', ...blob }] }, NOW);
+        refused(grow, 'budget-exceeded', `${P}: a third file`);
+        same(grow.ok ? null : grow.error.message, WFS_PROJECT_FULL_MESSAGE, '§11\'s words');
+        same(value(await store.head(P), 'head').main.headRev, 1, 'nothing kept');
+        // the same data under a tighter limit: over it now -- growing is refused, shrinking lands
+        const tighter = h.open({ limits: tight });
+        refused(await tighter.commit(P, { requestId: 'req-lim-0003', branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: owner, ops: [{ op: 'create', path: 'g', kind: 'file', ...blob }] }, NOW), 'budget-exceeded', `${P}: growing an over-limit project`);
+        const f2 = value(await store.tree(P, { branchId: WFS_MAIN_BRANCH }), 'tree').entries.find((e) => e.path === 'f2')?.fileId ?? breach('no f2');
+        same(committedRev(value(await tighter.commit(P, { requestId: 'req-lim-0004', branchId: WFS_MAIN_BRANCH, baseRev: 1, principal: owner, ops: [{ op: 'delete', fileId: f2, expectContentVersion: 1 }] }, NOW), 'shrink'), 'shrink'), 2, `${P}: CONTROL: shrinking an over-limit project lands`);
+      }
     },
   },
 ];

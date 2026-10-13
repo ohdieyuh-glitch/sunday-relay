@@ -483,7 +483,7 @@ describe('no counts and no rosters', () => {
 });
 
 describe('rule 6: LFF grants nothing and reaches no other writer', () => {
-  const LFF_KEYS = new Set(['lffPosts', 'lffRequests', 'lffCreations', 'nextSerial']);
+  const LFF_KEYS = new Set(['lffPosts', 'lffRequests', 'lffCreations', 'lffHeld', 'nextSerial']);
   const OTHER_KEYS = Object.keys(emptySocialState()).filter((k) => !LFF_KEYS.has(k)) as Array<keyof SocialState>;
 
   it('every LFF write leaves every other part of the social state the very same object, and asks for no world, server or voice write', () => {
@@ -622,7 +622,7 @@ describe('events: content-free, told only to whom the change concerns', () => {
 describe('no seeded or fake posts; the preview shows no LFF data', () => {
   it('the fixture holds no LFF row and social-fixtures.ts names none; the snapshot of a state with posts is the snapshot without them', () => {
     const fixture = createSocialFixture();
-    expect([fixture.lffPosts, fixture.lffRequests, fixture.lffCreations]).toEqual([[], [], []]);
+    expect([fixture.lffPosts, fixture.lffRequests, fixture.lffCreations, fixture.lffHeld]).toEqual([[], [], [], []]);
     expect(readFileSync(join(__dirname, 'social-fixtures.ts'), 'utf8')).not.toMatch(/lff/i);
     const p = post(fixture, U.NOVA, { title: 'Unmistakable LFF title' });
     const kai = ask(p.state, U.KAI, p.postId);
@@ -635,5 +635,93 @@ describe('no seeded or fake posts; the preview shows no LFF data', () => {
       expect(lff).not.toContain('Unmistakable LFF title');
       expect(lff).not.toContain(p.postId);
     }
+  });
+});
+
+describe('D-L5 R-3: no player surface tells a HELD post from a DELETED one -- not the owner, a requester, a third party or the reporter', () => {
+  const VIEWERS = [U.NOVA, U.ORION, U.KAI, U.VEGA, U.LYRA, U.RHEA];
+  /** Lyra's report about Nova through the existing flow: naming `subjectRef`, or (every CONTROL here) naming no post. */
+  const reportBody = (subjectRef: string | null): Record<string, unknown> => ({ reportedId: U.NOVA, reason: 'SPAM', ...(subjectRef === null ? {} : { subjectRef }) });
+
+  /** Nova's post: Orion asked and was accepted, Kai asked (pending), Vega asked and was declined. */
+  function asked(): { state: SocialState; postId: string; requestIds: string[] } {
+    const p = post(createSocialFixture(), U.NOVA, { openSlots: 3 });
+    const o = ask(p.state, U.ORION, p.postId);
+    const k = ask(o.state, U.KAI, p.postId);
+    const v = ask(k.state, U.VEGA, p.postId);
+    const s = must(run(accept(v.state, U.NOVA, o.requestId), U.NOVA, 'lff.request.decline', { ids: [v.requestId] })).state;
+    return { state: s, postId: p.postId, requestIds: [o.requestId, k.requestId, v.requestId] };
+  }
+
+  /** Lyra reports -- naming the post (the delete then HOLDS it) or naming none (an ordinary delete) -- and Nova deletes the post. */
+  function deletedAfter(subject: 'the post' | 'no post'): { state: SocialState; postId: string; requestIds: string[] } {
+    const a = asked();
+    const reported = must(run(a.state, U.LYRA, 'reports.file', { body: reportBody(subject === 'the post' ? a.postId : null) })).state;
+    return { ...a, state: must(run(reported, U.NOVA, 'lff.post.delete', { ids: [a.postId] }, T0 + 60_000)).state };
+  }
+
+  /**
+   * EVERY LFF SURFACE each viewer has on the post and its requests, serialized: the feed, their own posts, the post, their own
+   * requests, the owner's inbox, the answers asking, editing, closing, deleting, withdrawing, accepting and declining would give, the
+   * answer to their next post (the open-post and creation caps), and their social snapshot.
+   */
+  function surfaces(s: SocialState, postId: string, requestIds: readonly string[]): string {
+    const at = T0 + 120_000;
+    const answer = (r: Outcome) => (r.ok ? { ok: true, data: r.value.data, audience: r.value.audience, extra: r.value.extraEvents ?? null } : { ok: false, error: r.error });
+    const out: Record<string, unknown> = {};
+    for (const v of VIEWERS) {
+      const on = (op: SocialOperationId, ids: string[] = [], body: Record<string, unknown> = {}) => answer(run(s, v, op, { ids, body }, at));
+      out[v] = {
+        feed: on('lff.feed.list'),
+        ownPosts: on('lff.feed.list', [], { mine: true }),
+        get: on('lff.post.get', [postId]),
+        myRequests: on('lff.requests.mine'),
+        inbox: on('lff.requests.forPost', [postId]),
+        ask: on('lff.request.create', [postId]),
+        edit: on('lff.post.edit', [postId], { title: 'x' }),
+        close: on('lff.post.close', [postId]),
+        delete: on('lff.post.delete', [postId]),
+        requests: requestIds.map((id) => [on('lff.request.withdraw', [id]), on('lff.request.accept', [id]), on('lff.request.decline', [id])]),
+        nextPost: on('lff.post.create', [], { category: 'TEAMS', title: 'Next', openSlots: 1 }),
+        snapshot: buildSocialView(s, v, new Date(at).toISOString(), { developmentPreview: false }),
+      };
+    }
+    return JSON.stringify(out);
+  }
+
+  it('every surface of every viewer is byte for byte an ordinary delete\'s, while the evidence is kept', () => {
+    const held = deletedAfter('the post');
+    const deleted = deletedAfter('no post');
+    expect(held.state.lffHeld.map((h) => h.post.id), 'held, not lost').toEqual([held.postId]);
+    expect(held.state.lffHeld[0].requests.map((r) => r.id)).toEqual(held.requestIds);
+    expect(deleted.state.lffHeld).toEqual([]);
+    expect([held.postId, held.requestIds]).toEqual([deleted.postId, deleted.requestIds]);
+    expect(surfaces(held.state, held.postId, held.requestIds)).toBe(surfaces(deleted.state, deleted.postId, deleted.requestIds));
+  });
+
+  it('THE CONTROLS: the same comparison FAILS for a post only reported (not deleted), and for a leaky "hold" that left the post on a player surface', () => {
+    const reference = surfaces(deletedAfter('no post').state, asked().postId, asked().requestIds);
+    const a = asked();
+    const onlyReported = must(run(a.state, U.LYRA, 'reports.file', { body: reportBody(a.postId) })).state;
+    expect(surfaces(onlyReported, a.postId, a.requestIds), 'a post still there').not.toBe(reference);
+    const held = deletedAfter('the post');
+    const kept = held.state.lffHeld[0];
+    const leaky: SocialState = { ...held.state, lffPosts: [...held.state.lffPosts, kept.post], lffRequests: [...held.state.lffRequests, ...kept.requests] };
+    expect(surfaces(leaky, held.postId, held.requestIds), 'a hold that a player could see').not.toBe(reference);
+  });
+
+  it('every viewer\'s event stream through the store is byte for byte an ordinary delete\'s; the control (a close instead of a delete) shows the streams can differ', async () => {
+    const a = asked();
+    const steps = (subjectRef: string | null, last: SocialOperationId): Array<[SocialOperationId, string, string[], Record<string, unknown>]> => [
+      ['reports.file', U.LYRA, [], reportBody(subjectRef)],
+      [last, U.NOVA, [a.postId], {}],
+    ];
+    const held = await streamsAfter(a.state, steps(a.postId, 'lff.post.delete'), VIEWERS);
+    const deleted = await streamsAfter(a.state, steps(null, 'lff.post.delete'), VIEWERS);
+    expect(held).toEqual(deleted);
+    expect(JSON.parse(held[U.ORION]), 'the accepted requester is told a delete').toEqual([{ seq: 2, op: 'lff.post.delete', atIso: LATER }]);
+    expect(JSON.parse(held[U.VEGA]), 'the declined one, nothing').toEqual([]);
+    const closed = await streamsAfter(a.state, steps(null, 'lff.post.close'), VIEWERS);
+    expect(closed[U.ORION], 'the control').not.toBe(deleted[U.ORION]);
   });
 });

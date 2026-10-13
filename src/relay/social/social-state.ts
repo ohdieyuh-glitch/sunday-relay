@@ -29,7 +29,7 @@ import type {
   UserPresence,
   UserProfile,
 } from './social-contracts';
-import type { LffCreation, LffJoinRequest, LffPost } from './social-lff';
+import type { LffCreation, LffHeldPost, LffJoinRequest, LffPost } from './social-lff';
 
 /** Everything known about one account. */
 export interface SocialUserRecord {
@@ -56,6 +56,13 @@ export interface SocialState {
   readonly lffRequests: readonly LffJoinRequest[];
   /** When each player created posts, inside the rolling creation window only (social-lff.ts LFF_MAX_CREATED_PER_WINDOW). */
   readonly lffCreations: readonly LffCreation[];
+  /**
+   * MODERATION EVIDENCE (founder D-L5, contract r2.4; social-lff.ts rule 8): REPORTED posts that left every player surface -- their
+   * owner deleted them, or retention reached them -- kept as last written, with every request on them, ordered by the post id's
+   * serial. A held post is in NEITHER lffPosts NOR lffRequests, so every rule and every view reads it exactly as a deleted one; NO
+   * player surface reads this list. Never part of the snapshot.
+   */
+  readonly lffHeld: readonly LffHeldPost[];
   /** Monotonic id source, so ids are deterministic in tests and replays. */
   readonly nextSerial: number;
 }
@@ -77,6 +84,7 @@ export function emptySocialState(): SocialState {
     lffPosts: [],
     lffRequests: [],
     lffCreations: [],
+    lffHeld: [],
     nextSerial: 1,
   };
 }

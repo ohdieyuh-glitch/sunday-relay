@@ -326,7 +326,7 @@ suite('the WonderFS store on real PostgreSQL: the engine is the oracle', () => {
     await store.createProject('prj-1', NOW);
     const held = await store.putBlob('prj-1', new TextEncoder().encode('held'));
     if (!held.ok) throw new Error(held.error.message);
-    expect(held.value).toEqual({ sha256: sha('held'), size: 4 });
+    expect(held.value).toEqual({ sha256: sha('held'), size: 4, created: true });
     expect(new TextDecoder().decode((await store.readBlob('prj-1', sha('held')))!)).toBe('held');
     const unheld = await store.commit('prj-1', { requestId: 'req-blob-0001', branchId: WFS_MAIN_BRANCH, baseRev: 0, principal: who('usr_owner'), ops: [{ op: 'create', path: 'x.txt', kind: 'file', sha256: sha('never uploaded'), size: 14 }] }, NOW);
     expect(unheld.ok).toBe(false);

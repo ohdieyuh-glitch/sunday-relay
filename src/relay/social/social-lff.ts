@@ -39,7 +39,16 @@
  *   7. RETENTION (PROPOSED, the B2b review's m3): a post that is no longer open and was created more than LFF_RETENTION_MS ago
  *      (30 days, 038's sanity bound on a post's whole life) is HARD-DELETED with every request on it, by the LFF writes that carry
  *      the server's time, at most LFF_PURGE_BATCH posts per write (purgeLffPastRetention). It is nobody's act, so it tells nobody.
- *      The creation record keeps its own 24 h prune (createLffPost).
+ *      The creation record keeps its own 24 h prune (createLffPost). A REPORTED post is never purged: it is HELD (rule 8).
+ *   8. A REPORTED POST IS MODERATION EVIDENCE (founder D-L5, contract r2.4 R-1..R-5). Reported = at least one report (reports.file,
+ *      the existing flow) whose subjectRef is the post's id, read from the server's state at the moment of the delete or the purge,
+ *      so a report filed after a close still counts (lffPostReported). Such a post is never deleted by any app path: the owner's
+ *      delete (R-2) and the retention purge (R-1) HOLD it instead -- it leaves lffPosts and its requests leave lffRequests exactly
+ *      as a deletion takes them, so every rule, view, count and event reads a held post EXACTLY as a deleted one and no player
+ *      surface can tell the two apart (R-3); the post as last written and every request on it (the accepted list included) move to
+ *      lffHeld, which no player surface reads (removeLffPosts). The persistence keeps the rows, marked held (038's held_at), and
+ *      authorized moderators -- database operators until the founder names a role and a surface -- read them through 038's view
+ *      relay_wonderland.lff_moderation_evidence (R-4); no route serves them. An OPEN reported post stays visible (R-5, rule 5).
  * No counts or rosters leak: how many have been accepted is the owner's alone (availableSlots); the accepted list is shown to the
  * owner, and to an accepted user with only the co-accepted they may see (rule 3's test, person by person); pending requests are
  * listed to the owner only; and the post a fill closes is told to the others as an ordinary close, never as an accept.
@@ -207,6 +216,20 @@ export interface LffCreation {
   /** The created post's id (`lffp_<serial>`), kept after the post is closed or deleted. */
   readonly postId: string;
   readonly atMs: number;
+}
+
+/**
+ * ONE HELD POST: MODERATION EVIDENCE (rule 8, founder D-L5). A reported post its owner deleted, or that retention reached, exactly
+ * as it was last written, with every request on it in any status (the accepted list included), as they were at that moment.
+ * Persisted as the same relay_wonderland.lff_posts / lff_join_requests rows, the post's held_at set (038), and never written again.
+ * No player surface reads it: to every player it is a deleted post.
+ */
+export interface LffHeldPost {
+  readonly post: LffPost;
+  /** Every request on the post when it was held, in the order the state held them. */
+  readonly requests: readonly LffJoinRequest[];
+  /** The server's time of the delete or the purge that held it; never before the post's own updatedAtMs (a stepped-back clock). */
+  readonly heldAtMs: number;
 }
 
 /** The fields a player writes on a post, already validated (social-commands.ts). */
@@ -385,22 +408,47 @@ const bumped = (post: LffPost, fields: LffPostChange, nowMs: number): LffPost =>
 const pastRetention = (post: LffPost, nowMs: number): boolean => nowMs - post.createdAtMs > LFF_RETENTION_MS && lffPostStatusAt(post, nowMs) !== 'OPEN';
 
 /**
- * RETENTION (rule 7, PROPOSED; the B2b review's m3): the posts due at `nowMs` are HARD-DELETED with every request on them, oldest
- * first (creation time, then serial), at most LFF_PURGE_BATCH per call; the rest wait for the next write. The creation record is not
- * touched (it is pruned after 24 h by createLffPost). Nothing due: the SAME state object, so a store's by-reference diff sees no
- * change. Run by every LFF write that carries the server's time, AFTER its own rule (so the operation itself answers exactly as
- * before), never by a refusal. A purge is nobody's act and tells nobody: like expiry, it is the server's time passing.
+ * WHETHER A REPORT NAMES THIS POST (rule 8, founder D-L5): at least one report whose subjectRef is the post's id, in the server's
+ * state NOW -- whoever filed it, whenever (a report filed after the post closed counts). The reports.file flow is the existing one.
  */
-export function purgeLffPastRetention(state: SocialState, nowMs: number): SocialState {
-  const due = state.lffPosts.filter((p) => pastRetention(p, nowMs));
-  if (due.length === 0) return state;
-  const gone = new Set(due.sort(oldestFirst).slice(0, LFF_PURGE_BATCH).map((p) => p.id));
+export const lffPostReported = (state: SocialState, postId: string): boolean => state.reports.some((r) => r.subjectRef === postId);
+
+/** Held posts in one order whatever order they were held in: by the post id's serial (the order a store reads its rows back in). */
+const bySerial = (a: LffHeldPost, b: LffHeldPost): number => serialOf(a.post.id) - serialOf(b.post.id);
+
+/**
+ * THE ONE WAY A POST LEAVES THE STATE (the owner's delete, the retention purge). Every post in `gone` leaves lffPosts and every
+ * request on it leaves lffRequests -- for EVERY post alike, reported or not, so what any player can be shown afterwards does not
+ * depend on reports (R-3). A REPORTED one is not lost (R-1, R-2): the post as last written, with every request on it, moves to
+ * lffHeld, stamped with the server's time (never before its own updatedAtMs); an unreported one is gone. Lists nothing moved in are
+ * kept as the same objects (a store's by-reference diff then writes nothing for them).
+ */
+function removeLffPosts(state: SocialState, gone: ReadonlySet<string>, nowMs: number): SocialState {
+  const held: LffHeldPost[] = state.lffPosts
+    .filter((p) => gone.has(p.id) && lffPostReported(state, p.id))
+    .map((post) => ({ post, requests: state.lffRequests.filter((r) => r.postId === post.id), heldAtMs: Math.max(nowMs, post.updatedAtMs) }));
   const requestsGo = state.lffRequests.some((r) => gone.has(r.postId));
   return {
     ...state,
     lffPosts: state.lffPosts.filter((p) => !gone.has(p.id)),
     lffRequests: requestsGo ? state.lffRequests.filter((r) => !gone.has(r.postId)) : state.lffRequests,
+    lffHeld: held.length === 0 ? state.lffHeld : [...state.lffHeld, ...held].sort(bySerial),
   };
+}
+
+/**
+ * RETENTION (rule 7, PROPOSED; the B2b review's m3): the posts due at `nowMs` leave the state with every request on them, oldest
+ * first (creation time, then serial), at most LFF_PURGE_BATCH per call; the rest wait for the next write. An unreported post is
+ * HARD-DELETED; a REPORTED one is HELD as evidence instead, whatever its age or status (rule 8, R-1), and to every player it reads
+ * exactly as a purged one. The creation record is not touched (it is pruned after 24 h by createLffPost). Nothing due: the SAME
+ * state object, so a store's by-reference diff sees no change. Run by every LFF write that carries the server's time, AFTER its own
+ * rule (so the operation itself answers exactly as before), never by a refusal. A purge is nobody's act and tells nobody: like
+ * expiry, it is the server's time passing.
+ */
+export function purgeLffPastRetention(state: SocialState, nowMs: number): SocialState {
+  const due = state.lffPosts.filter((p) => pastRetention(p, nowMs));
+  if (due.length === 0) return state;
+  return removeLffPosts(state, new Set(due.sort(oldestFirst).slice(0, LFF_PURGE_BATCH).map((p) => p.id)), nowMs);
 }
 
 /** A successful LFF write, then the retention batch (rule 7) at the same server time. */
@@ -493,16 +541,14 @@ export function closeLffPost(state: SocialState, actorId: SocialUserId, postId: 
 }
 
 /**
- * DELETE a post: the owner only, in any status. A HARD delete: the post and every request to it are gone. It takes no clock
- * (social-commands.ts calls it without one), so it runs no retention batch (rule 7): it removes rows itself.
+ * DELETE a post: the owner only, in any status. The post and every request to it are gone, for every player, the owner included:
+ * a HARD delete -- unless a report names the post, when it is HELD as moderation evidence instead (rule 8, R-2). The answer, the
+ * people told and every later view are the same either way (R-3). Its clock only stamps a hold: it runs no retention batch (rule 7).
  */
-export function deleteLffPost(state: SocialState, actorId: SocialUserId, postId: string): RelayResult<LffChange> {
+export function deleteLffPost(state: SocialState, actorId: SocialUserId, postId: string, nowMs: number): RelayResult<LffChange> {
   const post = ownedPost(state, actorId, postId);
   if (post === undefined) return fail(lffNotFound());
-  return ok({
-    state: { ...state, lffPosts: state.lffPosts.filter((p) => p.id !== post.id), lffRequests: state.lffRequests.filter((r) => r.postId !== post.id) },
-    told: [actorId, ...liveRequesters(state, post.id)],
-  });
+  return ok({ state: removeLffPosts(state, new Set([post.id]), nowMs), told: [actorId, ...liveRequesters(state, post.id)] });
 }
 
 /**
