@@ -1,7 +1,7 @@
 {
   "schemaVersion": "julius.learning-registration.v1",
   "registrationId": "julius-learning-pair-1",
-  "registeredAt": "2026-10-13T13:45:19Z",
+  "registeredAt": "2026-10-13T16:04:33Z",
   "hypothesis": "Carrying arm WITHOUT's verified repair findings into arm WITH's planner reduces repair rounds on the same mission.",
   "weakness": {
     "description": "Run 34529874100 (2026-09-10, Mission 5): one PLAN repair after three blocking findings, among them INTEGRATION, a requirement the declared test does not enforce. Verified by SECOND JUJU from the job log (R-W); the artifact has expired, which is disclosed.",
@@ -34,7 +34,7 @@
     "commit"
   ],
   "confounders": [],
-  "failureRule": "The TS policy is ['repairs'], 0.5, 1, identical on all four arms. The experiment counts only under the validity conditions V1-V6 (V1-R included) of DECISION_C4_REGISTRATION_DESIGN r8.4 (sha256 90f8c8cb) section 4, with all four arms dispatched in order (WITHOUT-1, WITH-1, WITHOUT-2, WITH-2) and each arm's recorded commit equal to the landed commit recorded outside this digest (section 7); a pair failing any of them makes this registration non-creditable. Row 7 (f) is judged by the frozen R7F model-identity spec, recorded outside this digest beside the other instruments (section 7); a verdict-package condition that spec states outside the checker is read at C's verdict, not before WITH-k, and a record there that contradicts the bundle, or none, makes that pair invalid. learning-evaluate runs once, on the four registered arms only, and counts only with a verdict of RETAIN, REJECT or PROVISIONAL and primary.n = {baseline 2, candidate 2}. Any effect is selection-conditioned (V1 requires a coder catch, a diffed repair and an accepting re-review in every baseline) and is not attributed to the carry by itself (section 6). The adaptation is rejected when the primary metric does not move by at least its minimum effect in the expected direction.",
+  "failureRule": "The TS policy is ['repairs'], 0.5, 1, identical on all four arms. The experiment counts only under the validity conditions V1-V6 (V1-R included) of DECISION_C4_REGISTRATION_DESIGN r8.5 (sha256 24edd9d5) section 4, with all four arms dispatched in order (WITHOUT-1, WITH-1, WITHOUT-2, WITH-2) and each arm's recorded commit equal to the landed commit recorded outside this digest (section 7); a pair failing any of them makes this registration non-creditable. Row 7 (f) is judged by the frozen R7F model-identity spec, recorded outside this digest beside the other instruments (section 7); a verdict-package condition that spec states outside the checker is read at C's verdict, not before WITH-k, and a record there that contradicts the bundle, or none, makes that pair invalid. learning-evaluate runs once, on the four registered arms only, and counts only with a verdict of RETAIN, REJECT or PROVISIONAL and primary.n = {baseline 2, candidate 2}. Any effect is selection-conditioned (V1 requires a coder catch, a diffed repair and an accepting re-review in every baseline) and is not attributed to the carry by itself (section 6). The adaptation is rejected when the primary metric does not move by at least its minimum effect in the expected direction.",
   "minRunsPerSide": 2,
   "supersedes": null
 }
