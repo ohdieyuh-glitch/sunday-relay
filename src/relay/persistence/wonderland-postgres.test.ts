@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
 import { TransactionalWonderlandDatabase, migrationVersion, WONDERLAND_MIGRATIONS, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011, WONDERLAND_MIGRATION_012, WONDERLAND_MIGRATION_013, WONDERLAND_MIGRATION_014, WONDERLAND_MIGRATION_015, WONDERLAND_MIGRATION_016, WONDERLAND_MIGRATION_017, WONDERLAND_MIGRATION_018 } from './wonderland-postgres';
 import type { WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
+import { WONDERLAND_EVENT_TYPES } from '../mission/wonderland/wonderland-backend';
 
 class FakePool {
   commands: string[] = []; released = 0; ended = false; rows: unknown[] = []; topRows: unknown[] = [];
@@ -105,4 +106,77 @@ describe('TransactionalWonderlandDatabase', () => {
   it('restores execution snapshots after a new database facade/process', async () => { const pool = new FakePool(); pool.rows = [{ snapshot: JSON.stringify(session) }]; const restored = await database(pool).transaction(tx => tx.loadExecution('exec-1')); expect(restored).toEqual(session); });
   it('persists an authoritative rating snapshot and immutable battle history atomically',async()=>{const pool=new FakePool();const stored=await database(pool).transaction(tx=>tx.persistRating({agentId:'agent',mode:'GOAL',rating:1510,deviation:300,volatility:.06,period:1,battleCount:1,provisional:true,updatedAt:'2026-08-24T00:00:00Z',sourceBattleId:'battle'}));expect(stored).toBe(true);expect(pool.commands.some(command=>command.includes('INSERT INTO relay_wonderland.rating_history'))).toBe(true);expect(pool.commands.some(command=>command.includes('INSERT INTO relay_wonderland.agent_ratings'))).toBe(true);});
   it('closes the underlying production pool', async () => { const pool = new FakePool(); await database(pool).close(); expect(pool.ended).toBe(true); });
+});
+
+/**
+ * THE REPLAY READS ONLY THIS WRITER'S OWN ROWS. `relay_wonderland.events` is shared with the Julius ledger
+ * (`julius-event-postgres.ts`, `event_type = 'julius.…'`, a payload with no eventId/eventType/sequence), and replay()
+ * selected by project alone, so a Julius row reached a browser as a malformed WonderlandEvent. It is now filtered to the
+ * CLOSED vocabulary, never a `julius.` prefix: the two vocabularies overlap on `subagent.spawned`, and a prefix lets every
+ * third writer through. This pins the statement and the list it binds without a database; the behaviour on rows from
+ * three writers, with both weaker filters caught, is `wonderland-replay-vocabulary.real-postgres.test.ts`.
+ */
+describe('replay() binds the closed Wonderland vocabulary', () => {
+  /** A client that records every statement and its bound values, as the transaction hands them to PostgreSQL. */
+  const recording = () => {
+    const calls: Array<{ text: string; values: readonly unknown[] }> = [];
+    const pool = {
+      async connect() {
+        return {
+          async query(text: string, values: readonly unknown[] = []) {
+            calls.push({ text, values: [...values] });
+            return { rows: text.startsWith('SELECT payload') ? [{ payload: JSON.stringify({ eventId: 'e-1', eventType: 'presence.joined', sequence: 1 }) }] : [], rowCount: 0 };
+          },
+          release() { /* nothing pooled */ },
+        };
+      },
+    };
+    return { calls, database: new TransactionalWonderlandDatabase(pool as unknown as Pool) };
+  };
+  /** Why a replay statement would hand a browser rows that are not this writer's; [] when it would not. */
+  const vocabularyDefects = (text: string, values: readonly unknown[]): string[] => {
+    const defects: string[] = [];
+    const predicate = /\bAND event_type = ANY\(\$(\d+)\)/u.exec(text);
+    if (predicate === null) defects.push('no exact `event_type = ANY($n)` predicate');
+    const bound = predicate === null ? undefined : values[Number(predicate[1]) - 1];
+    if (predicate !== null && JSON.stringify(bound) !== JSON.stringify([...WONDERLAND_EVENT_TYPES])) defects.push(`the bound list is not WONDERLAND_EVENT_TYPES: ${JSON.stringify(bound)}`);
+    if (/\bLIKE\b/iu.test(text)) defects.push('a LIKE pattern, which matches a prefix rather than the list');
+    return defects;
+  };
+
+  it('filters by `event_type = ANY($4)`, and $4 is exactly [...WONDERLAND_EVENT_TYPES]', async () => {
+    const { calls, database: db } = recording();
+    const replayed = await db.replayEvents('project-1', 7, 500);
+    const selects = calls.filter((call) => call.text.startsWith('SELECT payload FROM relay_wonderland.events'));
+    expect(selects, 'one replay statement ran').toHaveLength(1);
+    const [select] = selects;
+    expect(select.text).toContain(' AND event_type = ANY($4) ');
+    expect(select.values).toEqual(['project-1', 7, 500, [...WONDERLAND_EVENT_TYPES]]);
+    expect(vocabularyDefects(select.text, select.values)).toEqual([]);
+    // THE LIST IS THE BARE ONE: `subagent.spawned` is on it unprefixed, and no `julius.` type is (the overlap is the point)
+    const bound = select.values[3] as readonly string[];
+    expect(bound).toContain('subagent.spawned');
+    expect(bound.filter((type) => type.startsWith('julius.'))).toEqual([]);
+    // the transaction around it is unchanged, and the rows still come back parsed
+    expect(calls.map((call) => call.text.split(' ')[0])).toEqual(['BEGIN', 'SELECT', 'COMMIT']);
+    expect(replayed).toEqual([{ eventId: 'e-1', eventType: 'presence.joined', sequence: 1 }]);
+  });
+
+  it('CONTROL: the same check refuses the unfiltered statement (the defect at 42e8c06b), a julius-prefix filter, and a wrong list', () => {
+    const BEFORE = 'SELECT payload FROM relay_wonderland.events WHERE project_id=$1 AND sequence>$2 ORDER BY sequence ASC LIMIT $3';
+    const PREFIX = "SELECT payload FROM relay_wonderland.events WHERE project_id=$1 AND sequence>$2 AND event_type NOT LIKE 'julius.%' ORDER BY sequence ASC LIMIT $3";
+    const RIGHT = 'SELECT payload FROM relay_wonderland.events WHERE project_id=$1 AND sequence>$2 AND event_type = ANY($4) ORDER BY sequence ASC LIMIT $3';
+    expect(vocabularyDefects(BEFORE, ['p', 0, 1000])).toEqual(['no exact `event_type = ANY($n)` predicate']);
+    expect(vocabularyDefects(PREFIX, ['p', 0, 1000])).toEqual(['no exact `event_type = ANY($n)` predicate', 'a LIKE pattern, which matches a prefix rather than the list']);
+    expect(vocabularyDefects(RIGHT, ['p', 0, 1000, [...WONDERLAND_EVENT_TYPES, 'julius.subagent.spawned']])).toHaveLength(1);
+    expect(vocabularyDefects(RIGHT, ['p', 0, 1000, WONDERLAND_EVENT_TYPES.slice(1)])).toHaveLength(1);
+    // ...and accepts the right one, so the refusals above are the statement's, not a check that refuses everything
+    expect(vocabularyDefects(RIGHT, ['p', 0, 1000, [...WONDERLAND_EVENT_TYPES]])).toEqual([]);
+  });
+
+  it('still refuses an invalid cursor before any statement runs', async () => {
+    const { calls, database: db } = recording();
+    await expect(db.replayEvents('project-1', -1, 10)).rejects.toThrow('invalid_replay_cursor');
+    expect(calls.filter((call) => call.text.startsWith('SELECT'))).toEqual([]);
+  });
 });
