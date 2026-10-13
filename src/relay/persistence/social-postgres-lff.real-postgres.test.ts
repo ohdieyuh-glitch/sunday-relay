@@ -49,8 +49,13 @@ import { TransactionalWonderlandDatabase } from './wonderland-postgres';
  *               writes seq 1 in its own transaction, each later edit appends one, the delete holds them all; the view shows them by
  *               seq; both stores and a restart hold the same; a report naming another player, and no report, write none;
  *   HOLD RULE   (FQ-1, MAIN's default, flagged to the founder) a report naming another player, a pre-report of an id not yet
- *               minted, one dated before the post, and one from a reporter walled either way or not shown a closed post are each
- *               FILED and hold nothing (the delete is a hard delete); each control holds;
+ *               minted, and one from a reporter walled either way or not shown a closed post are each FILED and hold nothing (the
+ *               delete is a hard delete); each control holds -- and so does one the server dates before the post (a stepped-back
+ *               clock: the D-L5 r2 security review's m-1, no clock is compared);
+ *   PROVENANCE  (the D-L5 r2 security review's m-3) a stale store's QUALIFYING report re-mints a report id the database holds: the
+ *               report row is not kept (ON CONFLICT DO NOTHING), so the whole report fails closed -- no snapshot names the other
+ *               report, no row of any table moves, one line with no data; the live store's same report commits, its snapshot
+ *               naming its own report;
  *   m1 PARITY   (the correctness review's m1) a decline or a withdraw whose own write purges its evidence post: the request is
  *               written as changed FIRST, then the hold, so the database, the view, both stores and a restart agree.
  * social-postgres-lff.test.ts runs the same story (the same text, checked there) with no database. Runs wherever
@@ -467,6 +472,37 @@ suite('LFF on real PostgreSQL through the social store (slice B2b)', () => {
     expect((await pool.query('SELECT status FROM relay_wonderland.lff_join_requests WHERE request_id = $1', [nova])).rows).toEqual([{ status: 'WITHDRAWN' }]);
   }, 300_000);
 
+  it('PROVENANCE (the D-L5 r2 security review\'s m-3): a stale store\'s QUALIFYING report re-mints a report id the database holds -- the row is not kept, so the whole report fails closed: no snapshot names the other report, no row moves, one line; the live store\'s same report commits, its snapshot naming its own report', async () => {
+    const pool = await database('provenance');
+    const clock = { ms: Date.now() };
+    const live = await openSocialPostgresStore(pool);
+    await signIn([live], clock.ms);
+    const act = actor([live], clock);
+    const A = (await act('lff.post.create', CAST.KAI, [], { category: 'TEAMS', title: 'Abusive words', openSlots: 2 })).postId as string;
+    // ONE BRIDGE PER STORE is the rule; this breaks it (a deploy overlap): the stale store holds the serial as it is now, and sees A
+    const lines: string[] = [];
+    const stale = await openSocialPostgresStore(pool, { log: (line) => lines.push(line) });
+    // the live store files a report that makes nothing evidence (it names no post): it takes the next report id
+    await act('reports.file', CAST.NOVA, [], spamOf(CAST.VEGA, null));
+    const kept = (await pool.query('SELECT report_id, reporter_id FROM relay_wonderland.social_reports')).rows as Array<{ report_id: string; reporter_id: string }>;
+    expect(kept.map((r) => r.reporter_id)).toEqual([CAST.NOVA]);
+    const rowsBefore = await checksums(pool);
+    // the stale store's Lyra reports A, naming its owner -- a QUALIFYING report, under the id the database holds for Nova's report
+    const refused = await apply(stale, 'reports.file', CAST.LYRA, [], spamOf(CAST.KAI, A), (clock.ms += 1000));
+    expect(refused.ok === false && refused.error, `the stale store minted ${kept[0].report_id} again`).toMatchObject({
+      code: 'stale-ledger-version', retryable: true, message: 'the change could not be saved; nothing was changed',
+    });
+    expect(await checksums(pool), 'no row of any table moved: no snapshot names Nova\'s report').toEqual(rowsBefore);
+    expect(lines, 'one line, and it names no id or player').toEqual([lffSerialBehindLine('report')]);
+    for (const secret of [A, kept[0].report_id, CAST.LYRA, CAST.KAI, CAST.NOVA]) expect(lines[0]).not.toContain(secret);
+    // THE CONTROL: the live store's Lyra files the same report; it commits, and the snapshot names HER report
+    await act('reports.file', CAST.LYRA, [], spamOf(CAST.KAI, A));
+    const named = (await pool.query(
+      `SELECT r.reporter_id FROM relay_wonderland.lff_post_snapshots s JOIN relay_wonderland.social_reports r ON r.report_id = s.report_id WHERE s.post_id = $1`, [A],
+    )).rows as Array<{ reporter_id: string }>;
+    expect(named.map((r) => r.reporter_id)).toEqual([CAST.LYRA]);
+  }, 300_000);
+
   it('RETENTION (review m3): a closed post exactly 30 days old stays; 1 ms older, the next write deletes it and the cascade its requests -- a younger closed post, the creation record and everyone\'s events are untouched', async () => {
     const pool = await database('retention');
     const T = Date.now();
@@ -673,7 +709,7 @@ suite('LFF on real PostgreSQL through the social store (slice B2b)', () => {
     expect(fromMemory.lffSnapshots.map((x) => [x.postId, x.seq])).toEqual([[P, 1], [P, 2], [P, 3]]);
   }, 300_000);
 
-  it('HOLD RULE (FQ-1, MAIN\'s default, flagged to the founder): a report naming another player, a pre-report of an id not yet minted, one dated before the post, and one from a reporter walled either way or not shown a closed post are FILED and hold nothing; each control holds', async () => {
+  it('HOLD RULE (FQ-1, MAIN\'s default, flagged to the founder): a report naming another player, a pre-report of an id not yet minted, and one from a reporter walled either way or not shown a closed post are FILED and hold nothing; each control holds, and so does one dated before the post (m-1)', async () => {
     const pool = await database('holdrule');
     const T = Date.now();
     const pg = await openSocialPostgresStore(pool);
@@ -695,8 +731,9 @@ suite('LFF on real PostgreSQL through the social store (slice B2b)', () => {
     await report(CAST.LYRA, CAST.NOVA, A, T + 1000);
     const A2 = await create(CAST.KAI, 'a, the control', T + 2000);
     await report(CAST.LYRA, CAST.KAI, A2, T + 3000);
-    // (b) Orion's posts: a pre-report of the next id (the report mints rep_<serial>, the post takes the next); one filed 1 ms before its
-    // post was made (a stepped-back server clock); the control, at exactly its creation
+    // (b) Orion's posts: a pre-report of the next id (the report mints rep_<serial>, the post takes the next) holds nothing; one filed
+    // 1 ms before its post was made (a stepped-back server clock) is about a post that exists, so it HOLDS (the D-L5 r2 security
+    // review's m-1); the control, at exactly its creation
     const next = `lffp_${(await pg.read()).nextSerial + 1}`;
     await report(CAST.LYRA, CAST.ORION, next, T + 4000);
     const B = await create(CAST.ORION, 'b', T + 5000);
@@ -727,17 +764,20 @@ suite('LFF on real PostgreSQL through the social store (slice B2b)', () => {
     for (const [id, n] of [[A, 1], [A2, 1], [B, 1], [B2, 1], [B3, 1], [C, 3], [C2, 2]] as const) expect(await reportsNaming(id), `${id}: filed`).toHaveLength(n);
     // only the qualifying ones made a post evidence, each naming the report that did
     const qualifying = async (id: string, who: string) => (await pool.query('SELECT report_id FROM relay_wonderland.social_reports WHERE subject_ref = $1 AND reporter_id = $2', [id, who])).rows[0].report_id as string;
-    expect([await snapshotOf(A), await snapshotOf(B), await snapshotOf(B2)], '(a), (b): nothing').toEqual([[], [], []]);
-    expect([await snapshotOf(A2), await snapshotOf(B3), await snapshotOf(C), await snapshotOf(C2)], 'the controls').toEqual([
-      [await qualifying(A2, CAST.LYRA)], [await qualifying(B3, CAST.LYRA)], [await qualifying(C, CAST.NOVA)], [await qualifying(C2, CAST.VEGA)],
+    expect([await snapshotOf(A), await snapshotOf(B)], '(a), (b): nothing').toEqual([[], []]);
+    expect([await snapshotOf(A2), await snapshotOf(B2), await snapshotOf(B3), await snapshotOf(C), await snapshotOf(C2)], 'the controls, and m-1\'s stepped-back report').toEqual([
+      [await qualifying(A2, CAST.LYRA)], [await qualifying(B2, CAST.LYRA)], [await qualifying(B3, CAST.LYRA)], [await qualifying(C, CAST.NOVA)], [await qualifying(C2, CAST.VEGA)],
     ]);
+    // m-1's snapshot is stamped no earlier than the post was last written (037's snapshot times CHECK accepted it)
+    expect((await pool.query('SELECT captured_at, updated_at FROM relay_wonderland.lff_post_snapshots WHERE post_id = $1', [B2])).rows.map((r: { captured_at: Date; updated_at: Date }) => [r.captured_at.getTime(), r.updated_at.getTime()]))
+      .toEqual([[T + 6000, T + 6000]]);
     // THE OWNERS DELETE THEM ALL: the evidence is held, everything else is a hard delete
     for (const [owner, ids] of [[CAST.KAI, [A, A2]], [CAST.ORION, [B, B2, B3]], [CAST.CLEO, [C, C2]]] as const) {
       for (const id of ids) await ok('lff.post.delete', owner, [id], {}, T + 20_000);
     }
     const left = (await pool.query('SELECT post_id, held_at FROM relay_wonderland.lff_posts ORDER BY length(post_id), post_id')).rows;
-    expect(left.map((r: { post_id: string; held_at: Date | null }) => [r.post_id, r.held_at?.getTime() ?? null])).toEqual([[A2, T + 20_000], [B3, T + 20_000], [C, T + 20_000], [C2, T + 20_000]]);
-    expect((await pool.query('SELECT post_id FROM relay_wonderland.lff_moderation_evidence ORDER BY length(post_id), post_id')).rows.map((r: { post_id: string }) => r.post_id)).toEqual([A2, B3, C, C2]);
+    expect(left.map((r: { post_id: string; held_at: Date | null }) => [r.post_id, r.held_at?.getTime() ?? null])).toEqual([[A2, T + 20_000], [B2, T + 20_000], [B3, T + 20_000], [C, T + 20_000], [C2, T + 20_000]]);
+    expect((await pool.query('SELECT post_id FROM relay_wonderland.lff_moderation_evidence ORDER BY length(post_id), post_id')).rows.map((r: { post_id: string }) => r.post_id)).toEqual([A2, B2, B3, C, C2]);
     expect((await (await openSocialPostgresStore(pool)).read()).lffHeld, 'a restart reads the same evidence').toEqual((await pg.read()).lffHeld);
   }, 300_000);
 

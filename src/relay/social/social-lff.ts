@@ -42,9 +42,12 @@
  *      The creation record keeps its own 24 h prune (createLffPost). An EVIDENCE post is never purged: it is HELD (rule 8).
  *   8. A REPORTED POST IS MODERATION EVIDENCE (founder D-L5, contract r2.4 R-1..R-5). A report (reports.file, the existing flow)
  *      MAKES A POST EVIDENCE only when, at the moment it is filed (recordLffReport; MAIN's DEFAULT for the founder's FQ-1, flagged
- *      to the founder, not final): (a) its reportedId is the post's owner, (b) the post exists and the report is filed no earlier
- *      than the post was created (a report of an id not yet minted counts for nothing), and (c) the reporter may see the post
- *      (postVisibleTo, the feed's and get's own rule: a walled, hidden-from or never-shown reporter's report holds nothing). Any
+ *      to the founder, not final): (a) its reportedId is the post's owner, (b) the post exists (a report of an id not yet minted
+ *      counts for nothing; no clock is compared -- the domain is serialized, so a post that exists was made by an earlier operation,
+ *      and a stepped-back clock cannot refuse a real report: the D-L5 r2 security review's m-1), (c) the reporter may see the post
+ *      (postVisibleTo, the feed's and get's own rule: a walled, hidden-from or never-shown reporter's report holds nothing), and
+ *      (d) the reporter's reports have made fewer than LFF_MAX_EVIDENCE_REPORTS_PER_WINDOW posts evidence in the rolling 24 hours
+ *      (PROPOSED, the same review's m-2: one account cannot turn the whole visible feed into permanent evidence). Any
  *      other report is still filed exactly as before, for moderators to read; it just holds nothing. A post becomes evidence ONCE,
  *      and that is recorded as its first SNAPSHOT: the post as it read when that report was filed (REPORTED, naming the report).
  *      Every later edit of it appends another (EDITED), so the content that was reported is never lost to an edit (MAIN r2, the
@@ -151,6 +154,18 @@ export const LFF_DECLINE_COOLDOWN_MS = 60 * 60_000;
 export const LFF_RETENTION_MS = 30 * 24 * 60 * 60_000;
 /** PROPOSED (m3): at most this many posts are purged by one write, oldest first; the rest wait for the next write. */
 export const LFF_PURGE_BATCH = 50;
+/**
+ * PROPOSED (MAIN, the D-L5 r2 security review's m-2; for the founder with FQ-1 and FQ-4): the posts ONE reporter's reports may make
+ * evidence within any rolling LFF_EVIDENCE_REPORT_WINDOW_MS (rule 8 (d)). Past it a report is filed exactly as before and holds
+ * nothing -- SILENTLY: the answer, the people told and the events are the same, so no reporter learns where the cap is or that it
+ * was met. Counted from what both stores hold and reload (the seq-1 snapshots and the reports they name), so a restart keeps it.
+ */
+export const LFF_MAX_EVIDENCE_REPORTS_PER_WINDOW = 10;
+/**
+ * The rolling window of LFF_MAX_EVIDENCE_REPORTS_PER_WINDOW: 24 hours of server time, read on the snapshots' own captured times. One
+ * captured exactly 24 h ago still counts; 1 ms older it no longer does. One stamped after `nowMs` (a stepped-back clock) is inside.
+ */
+export const LFF_EVIDENCE_REPORT_WINDOW_MS = 24 * 60 * 60_000;
 
 /** Field bounds (contract, "Post fields"), in CODE POINTS after the trim -- what PostgreSQL's char_length counts (never UTF-16 units). */
 export const LFF_TITLE_MAX = 80;
@@ -455,20 +470,34 @@ const withSnapshot = (state: SocialState, snapshot: LffPostSnapshot): SocialStat
 });
 
 /**
+ * The posts this reporter's reports made evidence inside the rolling window ending at `nowMs` (rule 8 (d)): the seq-1 snapshots
+ * that name one of their reports, by the snapshot's captured time. One stamped after `nowMs` (a stepped-back clock) is inside.
+ */
+function evidenceMadeBy(state: SocialState, reporterId: SocialUserId, nowMs: number): number {
+  const theirs = new Set(state.reports.filter((r) => r.reporterId === reporterId).map((r) => r.reportId));
+  return state.lffSnapshots.filter(
+    (s) => s.cause === 'REPORTED' && s.reportId !== null && theirs.has(s.reportId) && nowMs - s.capturedAtMs <= LFF_EVIDENCE_REPORT_WINDOW_MS,
+  ).length;
+}
+
+/**
  * A REPORT, FILED (reports.file): does it make a post EVIDENCE? (rule 8; MAIN's DEFAULT for the founder's FQ-1, flagged, not
- * final.) Only a report naming a post as its subjectRef that, at this moment: (a) names the post's OWNER as reportedId, (b) is filed
- * no earlier than the post was created (a pre-report of an id not yet minted names no post here, and a stepped-back clock cannot
- * date one earlier), and (c) comes from a reporter who may see the post (postVisibleTo: the feed's and get's own rule). Then, once
- * per post, the post as it reads now is snapshotted (seq 1, REPORTED, naming the report); a later report adds nothing (every edit
- * since is snapshotted as it happens). Anything else returns the SAME state: the report is filed as before and holds nothing.
+ * final.) Only a report naming a post as its subjectRef that, at this moment: (a) names the post's OWNER as reportedId, (b) names a
+ * post that EXISTS (a pre-report of an id not yet minted names no post here; no clock is compared, so a stepped-back server clock
+ * cannot refuse a report on a post an earlier operation made -- the D-L5 r2 security review's m-1), (c) comes from a reporter who
+ * may see the post (postVisibleTo: the feed's and get's own rule), and (d) comes from a reporter whose reports made fewer than
+ * LFF_MAX_EVIDENCE_REPORTS_PER_WINDOW posts evidence in the rolling window (PROPOSED, the same review's m-2). Then, once per post,
+ * the post as it reads now is snapshotted (seq 1, REPORTED, naming the report); a later report adds nothing (every edit since is
+ * snapshotted as it happens). Anything else returns the SAME state: the report is filed as before and holds nothing.
  * SILENT: the caller's answer, audience and events are the same either way, so no reporter learns whether their report counted.
  */
 export function recordLffReport(state: SocialState, report: SocialReport, nowMs: number): SocialState {
   if (report.subjectRef === null) return state;
   const post = lffPostById(state, report.subjectRef);
-  if (post === undefined || report.reportedId !== post.ownerId || nowMs < post.createdAtMs) return state;
+  if (post === undefined || report.reportedId !== post.ownerId) return state;
   if (!postVisibleTo(state, report.reporterId, post, nowMs)) return state;
   if (lffPostReported(state, post.id)) return state;
+  if (evidenceMadeBy(state, report.reporterId, nowMs) >= LFF_MAX_EVIDENCE_REPORTS_PER_WINDOW) return state;
   return withSnapshot(state, { postId: post.id, seq: 1, cause: 'REPORTED', reportId: report.reportId, capturedAtMs: Math.max(nowMs, post.updatedAtMs), post });
 }
 

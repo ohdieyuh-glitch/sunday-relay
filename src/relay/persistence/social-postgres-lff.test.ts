@@ -748,6 +748,36 @@ describe('LFF on the PostgreSQL social store, without a database (slice B2b)', (
       expect(await s.pg.read()).toBe(pgState);
     });
 
+    it('m-3 (the D-L5 r2 security review): a QUALIFYING report whose row the database does not keep (its id already held there: ON CONFLICT DO NOTHING, rowCount 0) fails closed -- no snapshot names a report that is not this one; one line, no data; the control commits; a report that makes nothing evidence keeps its old answer (the scope)', async () => {
+      const { pg, executed, inject, lines } = await stores();
+      const created = await apply(pg, 'lff.post.create', CAST.KAI, [], { category: 'TEAMS', title: 'A squad', openSlots: 2 }, T0);
+      expect(created.ok).toBe(true);
+      const A = created.ok ? (created.value as { postId: string }).postId : '';
+      // the database already holds a report under the id this store mints (a lost COMMIT acknowledgement, a stale second bridge)
+      inject({ kind: 'swallow', match: (st) => st.sql.startsWith('INSERT INTO relay_wonderland.social_reports') });
+      const before = await pg.read();
+      let mark = executed.length;
+      const refused = await apply(pg, 'reports.file', CAST.LYRA, [], spam(CAST.KAI, A), T0 + 1000);
+      expect(refused.ok === false && refused.error, 'a retryable outage, never ok').toMatchObject(outage);
+      expect(executed.slice(mark).map(label), 'nothing after the report row the database did not keep: no snapshot').toEqual(['BEGIN', 'write social_reports', 'ROLLBACK']);
+      expect(await pg.read(), 'the store keeps its state: A is not evidence').toBe(before);
+      expect(lines, 'one line, the fixed text').toEqual([lffSerialBehindLine('report')]);
+      for (const secret of [A, CAST.LYRA, CAST.KAI, 'rep_', 'INSERT', 'relay_wonderland']) expect(lines[0], `the line carries no ${secret}`).not.toContain(secret);
+      // THE SCOPE: a report that makes nothing evidence is written as before (033's ON CONFLICT DO NOTHING; the stale-serial case of
+      // social-postgres.real-postgres.test.ts relies on it): the guard is for the provenance a snapshot records
+      mark = executed.length;
+      expect((await apply(pg, 'reports.file', CAST.LYRA, [], spam(CAST.KAI, null), T0 + 2000)).ok).toBe(true);
+      expect(executed.slice(mark).map(label)).toEqual(['BEGIN', 'write social_reports', 'write social_meta', `event reports.file -> ${CAST.LYRA}`, 'COMMIT']);
+      // THE CONTROL: the database keeps the row -- the same qualifying report commits, its snapshot naming it
+      inject(null);
+      mark = executed.length;
+      expect((await apply(pg, 'reports.file', CAST.LYRA, [], spam(CAST.KAI, A), T0 + 3000)).ok).toBe(true);
+      expect(executed.slice(mark).map(label)).toEqual(['BEGIN', 'write social_reports', `snapshot ${A} #1 REPORTED`, 'write social_meta', `event reports.file -> ${CAST.LYRA}`, 'COMMIT']);
+      const after = await pg.read();
+      expect(after.lffSnapshots.map((x) => x.reportId)).toEqual([after.reports[after.reports.length - 1].reportId]);
+      expect(lines, 'and nothing more is logged').toHaveLength(1);
+    });
+
     it('R-1 RETENTION: a closed post reported AFTER it closed (by the user accepted on it), 1 ms past 30 days, is HELD by the purging write (one statement; its requests stay); the same post unreported is deleted', async () => {
       for (const names of ['A', 'no post'] as const) {
         const { pg, executed, held } = await stores();

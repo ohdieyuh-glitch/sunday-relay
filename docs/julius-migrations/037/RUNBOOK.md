@@ -104,11 +104,19 @@ constants; the guard compares exact versions, so a stale number refuses at apply
 
 - **Evidence (contract r2.5 R-6, MAIN's DEFAULT for the founder's FQ-1, flagged, not final).** A report filed through the existing
   `reports.file` flow makes a post EVIDENCE only if, when it is filed: (a) its `reportedId` is the post's owner, (b) the post exists
-  and the report is filed no earlier than the post was created, and (c) its reporter may see the post (the feed's and get's own
-  rule: no block either way, the author's presence audience admits them, and an OPEN post or one they were accepted on). Any other
-  report is still filed, and moderators read it in the view's `reports`; it just holds nothing -- so nobody can pre-report post ids to
-  make other players' posts un-deletable. The decision is the domain's, made once, and RECORDED as the post's first snapshot; every
-  database predicate (the DELETE's guard, the backstop, the view) reads `lff_post_snapshots`, never `social_reports`.
+  (no clock is compared: a stepped-back server clock cannot refuse a report on a post that exists -- the D-L5 r2 security review's
+  m-1), (c) its reporter may see the post (the feed's and get's own rule: no block either way, the author's presence audience admits
+  them, and an OPEN post or one they were accepted on), and (d) PROPOSED (the same review's m-2, for the founder with FQ-1/FQ-4) the
+  reporter's reports made fewer than 10 posts evidence in the rolling 24 hours (`LFF_MAX_EVIDENCE_REPORTS_PER_WINDOW`), so one
+  account cannot turn the whole visible feed into indefinite retention. Any other report is still filed, and moderators read it in
+  the view's `reports`; it just holds nothing -- so nobody can pre-report post ids to make other players' posts un-deletable -- and
+  nobody is told which (silent). The decision is the domain's, made once, and RECORDED as the post's first snapshot; every database
+  predicate (the DELETE's guard, the backstop, the view) reads `lff_post_snapshots`, never `social_reports`. It is NOT retroactive
+  (the correctness review's m-B): a report that did not qualify when filed never makes its post evidence later, whatever the founder
+  then decides, and a post already evidence stays held.
+- **Report provenance** (the security review's m-3): a report that a snapshot of the same command names must be the row written
+  there; should the database already hold another report under its id (a lost acknowledgement, a stale bridge), the whole report is
+  refused as a retryable outage with one `lff_row_not_ours report` line, so a snapshot never names another player's report.
 - **R-2a: the content AS REPORTED** (the security review's M-1). The qualifying report writes snapshot seq 1 (`REPORTED`, naming the
   report) in its own transaction; every later edit of the post appends one (`EDITED`). Silently: the reporter's answer, the owner's
   edit answer and every event are byte for byte what they would be without it.
@@ -146,8 +154,8 @@ constants; the guard compares exact versions, so a stale number refuses at apply
   (`JULIUS_TEST_DATABASE_URL`, never `DATABASE_URL`; `todo` elsewhere). V is the evidence view: its rows (a post only a
   non-qualifying report names is not one), its snapshots, and its privileges (a role granted the view alone is refused).
 - `src/relay/persistence/social-postgres-lff.real-postgres.test.ts` (slice B2b, and for D-L5: EVIDENCE -- holds by delete and by
-  purge beside deleted controls, the view, a restart, a stale store, the backstop and its control --, SNAPSHOTS, HOLD RULE and the
-  m1 restart parity) on the same kind of server.
+  purge beside deleted controls, the view, a restart, a stale store, the backstop and its control --, SNAPSHOTS, HOLD RULE,
+  PROVENANCE and the m1 restart parity) on the same kind of server.
 - The unit tripwires in `src/relay/persistence/social-writer-choke-point.test.ts` (D-L5): no app source names the view or reads the
   held posts or snapshots outside the domain, state and store; no statement clears `held_at`, rewrites a snapshot or deletes a
   player; every post DELETE carries both evidence guards.

@@ -394,17 +394,23 @@ async function writeUser(c: PoolClient, id: string, record: SocialUserRecord, be
  * serial (B2b r2 review n1), or another writer's change (a second bridge over a deploy, D-L5); `kind` says which table.
  */
 class LffRowNotOurs extends Error {
-  constructor(readonly kind: 'post' | 'request', message: string) {
+  constructor(readonly kind: LffRowKind, message: string) {
     super(message);
   }
 }
+
+/**
+ * Which row: an LFF post or request, or a REPORT that an evidence snapshot of the same command names (D-L5 r2, the security review's
+ * m-3: the report row was not kept, so the snapshot would name the database's other report under that id).
+ */
+type LffRowKind = 'post' | 'request' | 'report';
 
 /**
  * THE ONE LINE AN OPERATOR SEES when the store's state is found behind the database (B2b r2 review n1; D-L5): which table, and that a
  * restart heals it (the store re-reads every row and next_serial on open). NO DATA: no id, player, text or SQL. A fixed string; the
  * store keeps failing closed (every write that meets such a row is refused as a retryable outage) until a restart.
  */
-export const lffSerialBehindLine = (kind: 'post' | 'request'): string =>
+export const lffSerialBehindLine = (kind: LffRowKind): string =>
   `[social-postgres] lff_row_not_ours ${kind}: the store's state is behind the database (a re-minted id, or a row another writer changed or held); the write was refused (fail closed); a restart reloads the state`;
 
 const NOTHING_CHANGED = { put: [], drop: [] } as const;
@@ -626,12 +632,23 @@ async function writeChanges(c: PoolClient, before: SocialState, after: SocialSta
       [m.muterId, m.mutedId, m.voice, m.messages],
     );
   }
+  // THE REPORTS AN EVIDENCE SNAPSHOT OF THIS VERY COMMAND NAMES (D-L5 r2, the security review's m-3): such a report's row MUST be the
+  // one written here. Should the database already hold another report under its id (the serial behind it: a lost COMMIT
+  // acknowledgement, a stale second bridge), ON CONFLICT DO NOTHING keeps none of it, and the snapshot (step 6 of writeLffChanges,
+  // after this) would name that OTHER report -- so the whole command fails closed instead (LffRowNotOurs: rolled back, a retryable
+  // outage, one line). Any other report keeps 033's answer (dropped on such a conflict, as before).
+  const namedBySnapshot = new Set(
+    diffIfMoved(before.lffSnapshots, after.lffSnapshots, (s) => pairKey(s.postId, String(s.seq))).put.flatMap((s) => (s.reportId === null ? [] : [s.reportId])),
+  );
   for (const r of diffBy(before.reports, after.reports, (x) => x.reportId).put) {
-    await c.query(
+    const written = await c.query(
       `INSERT INTO relay_wonderland.social_reports(report_id, reporter_id, reported_id, reason, note, subject_ref, filed_at) VALUES($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT(report_id) DO NOTHING`,
       [r.reportId, r.reporterId, r.reportedId, r.reason, r.note, r.subjectRef, r.filedAtIso],
     );
+    if (written.rowCount !== 1 && namedBySnapshot.has(r.reportId)) {
+      throw new LffRowNotOurs('report', `report ${r.reportId}: the database holds another report under this id, and an evidence snapshot names it`);
+    }
   }
   for (const r of recent.put) {
     await c.query(

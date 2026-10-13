@@ -7,7 +7,9 @@ import {
   LFF_CATEGORIES,
   LFF_CREATION_WINDOW_MS,
   LFF_DECLINE_COOLDOWN_MS,
+  LFF_EVIDENCE_REPORT_WINDOW_MS,
   LFF_MAX_CREATED_PER_WINDOW,
+  LFF_MAX_EVIDENCE_REPORTS_PER_WINDOW,
   LFF_MAX_OPEN_POSTS_PER_USER,
   LFF_MAX_PENDING_OUTGOING_PER_USER,
   LFF_MAX_PENDING_PER_POST,
@@ -1116,16 +1118,61 @@ describe('D-L5 (rule 8, contract r2.4): a REPORTED post is moderation evidence -
       expect(heldByDelete(report(p.state, p.postId), p.postId), 'the control').toBe(true);
     });
 
-    it('(b) the post must exist when the report is filed: a pre-report of the next id, and one dated before the post (a stepped-back clock), hold nothing; the control (at exactly its creation) holds', () => {
+    it('(b) the post must exist when the report is filed: a pre-report of the next id holds nothing; one the server dates BEFORE the post (a stepped-back clock) is about a post that exists, so it HOLDS (the D-L5 r2 security review\'s m-1: a time term could only refuse a real report); the control (at exactly its creation) holds', () => {
       const s0 = createSocialFixture();
       const nextId = `lffp_${s0.nextSerial + 1}`; // the report itself mints rep_<serial>; the post takes the next serial
       const p = post(report(s0, nextId), U.NOVA);
       expect(p.postId).toBe(nextId);
       expect([p.state.reports[p.state.reports.length - 1].subjectRef, p.state.lffSnapshots, heldByDelete(p.state, p.postId)]).toEqual([nextId, [], false]);
       const q = post(createSocialFixture(), U.NOVA, {}, T0);
+      const original = lffPostById(q.state, q.postId)!;
       const early = report(q.state, q.postId, T0 - 1);
-      expect([early.lffSnapshots, heldByDelete(early, q.postId)], 'filed 1 ms before the post was made').toEqual([[], false]);
+      const reportId = early.reports[early.reports.length - 1].reportId;
+      // the server's clock stepped back 1 ms between the post and the report on it: the report still made it evidence, its snapshot
+      // stamped no earlier than the post was last written (037's lff_post_snapshots times CHECK)
+      expect(early.lffSnapshots, 'filed 1 ms before the post was made').toEqual([{ postId: q.postId, seq: 1, cause: 'REPORTED', reportId, capturedAtMs: original.updatedAtMs, post: original }]);
+      expect(heldByDelete(early, q.postId), 'so the owner\'s delete HOLDS it (fail-closed on evidence)').toBe(true);
       expect(heldByDelete(report(q.state, q.postId, T0), q.postId), 'the control: filed at exactly its creation').toBe(true);
+    });
+
+    it('SILENT CAP (the D-L5 r2 security review\'s m-2; PROPOSED, for the founder with FQ-1/FQ-4): one reporter makes at most 10 posts evidence in any rolling 24 h; the 11th qualifying report is FILED, holds nothing and is answered and told byte for byte as the 10th; another reporter\'s report holds that post (control); exactly 24 h after the first it still counts, 1 ms later the same reporter\'s report holds again', () => {
+      const CAP = 10;
+      const players = withPlayers(createSocialFixture(), CAP + 2);
+      let s = players.state;
+      const posts: string[] = [];
+      for (const owner of players.ids) {
+        const p = post(s, owner, {}, T0);
+        s = p.state;
+        posts.push(p.postId);
+      }
+      /** Lyra (or `who`) reports post `i`, naming its owner: a report that qualifies by (a), (b) and (c). */
+      const file = (st: SocialState, i: number, ms: number, who: string = U.LYRA) =>
+        must(run(st, who, 'reports.file', { body: { reportedId: players.ids[i], reason: 'SPAM', subjectRef: posts[i] } }, ms));
+      const heldWhenDeleted = (st: SocialState, i: number): boolean =>
+        must(run(st, players.ids[i], 'lff.post.delete', { ids: [posts[i]] }, T0 + 2 * DAY)).state.lffHeld.some((h) => h.post.id === posts[i]);
+      let tenth: SocialCommandOutcome | null = null;
+      for (let i = 0; i < CAP; i += 1) {
+        tenth = file(s, i, T0 + i * MIN);
+        s = tenth.state;
+      }
+      expect(s.lffSnapshots.map((x) => [x.postId, x.seq, x.cause]), 'ten qualifying reports: ten posts evidence').toEqual(posts.slice(0, CAP).map((id) => [id, 1, 'REPORTED']));
+      // THE 11TH, a minute later: filed for moderators as always, and it holds nothing
+      const eleventh = file(s, CAP, T0 + CAP * MIN);
+      expect(eleventh.state.reports).toHaveLength(s.reports.length + 1);
+      expect(eleventh.state.lffSnapshots, 'past the cap: no snapshot, the very same list').toBe(s.lffSnapshots);
+      expect(heldWhenDeleted(eleventh.state, CAP), 'so the owner\'s delete is a hard delete').toBe(false);
+      // SILENT: the 11th answers and is told exactly as the 10th, which counted
+      expect(JSON.stringify([eleventh.data, eleventh.audience, eleventh.extraEvents ?? null, eleventh.eventOp ?? null]))
+        .toBe(JSON.stringify([tenth!.data, tenth!.audience, tenth!.extraEvents ?? null, tenth!.eventOp ?? null]));
+      // THE CONTROL: another reporter's report on that post holds it (the cap is per reporter)
+      expect(heldWhenDeleted(file(eleventh.state, CAP, T0 + CAP * MIN, U.KAI).state, CAP), 'Kai\'s report holds it').toBe(true);
+      // THE WINDOW: exactly 24 h after her first, Lyra's ten still count; 1 ms later the first is out and her report holds
+      const atEdge = file(eleventh.state, CAP + 1, T0 + DAY);
+      expect(atEdge.state.lffSnapshots, 'exactly 24 h: still ten in the window').toBe(eleventh.state.lffSnapshots);
+      const past = file(atEdge.state, CAP + 1, T0 + DAY + 1);
+      expect(past.state.lffSnapshots.filter((x) => x.postId === posts[CAP + 1]).map((x) => [x.seq, x.reportId]), '1 ms later: it holds, naming this report')
+        .toEqual([[1, past.state.reports[past.state.reports.length - 1].reportId]]);
+      expect([LFF_MAX_EVIDENCE_REPORTS_PER_WINDOW, LFF_EVIDENCE_REPORT_WINDOW_MS], 'the numbers this case reads').toEqual([CAP, DAY]);
     });
 
     it('(c) the reporter must be able to see the post: walled either way, hidden from by the author\'s privacy, or not shown a closed post, the report holds nothing; each control holds', () => {
