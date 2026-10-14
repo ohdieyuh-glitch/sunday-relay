@@ -80,7 +80,14 @@ import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
-import { handleWonderlandJuliusRoute, isWonderlandJuliusRoute, type WonderlandJuliusWorld } from './wonderland-julius-routes';
+import {
+  WONDERLAND_JULIUS_SESSION_MAX_IN_FLIGHT,
+  WONDERLAND_JULIUS_SESSION_RATE,
+  createWonderlandJuliusSessionLimit,
+  handleWonderlandJuliusRoute,
+  isWonderlandJuliusRoute,
+  type WonderlandJuliusWorld,
+} from './wonderland-julius-routes';
 import { createWonderlandJuliusWorldPool, wonderlandJuliusWorld } from './wonderland-julius-world';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute, SIGNIN_START_RATE } from './wonderland-native-signin-routes';
@@ -389,6 +396,17 @@ export function createBridgeServer(
     juliusWorldCache = wonderlandJuliusWorld(juliusWorldPoolCache);
     return juliusWorldCache;
   };
+  /**
+   * ONE SESSION'S SHARE OF THAT POOL (internal engineering X1, JU-348-05): at
+   * most two requests of one native session at once, and 30 in 10 s -- the
+   * bridge's own sliding window, as the EOS client config's. Built ONCE here:
+   * the route's deps are rebuilt per request. Without it, one paired session
+   * could hold all four world connections and every other world would wait.
+   */
+  const juliusWorldSessionLimit = createWonderlandJuliusSessionLimit({
+    maxInFlight: WONDERLAND_JULIUS_SESSION_MAX_IN_FLIGHT,
+    rate: createSessionRateLimit(WONDERLAND_JULIUS_SESSION_RATE.limit, WONDERLAND_JULIUS_SESSION_RATE.windowMs),
+  });
   /**
    * SIGN IN WITH GITHUB. The CSRF state store lives in memory beside the
    * sessions — a restart forgets an in-flight sign-in, which is fail-closed. The
@@ -892,10 +910,11 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             world: resolveJuliusWorld(),
             operatorToken: process.env.RELAY_BRIDGE_API_TOKEN,
             log: (line) => console.warn(`[relay-bridge] ${line}`),
+            sessionLimit: juliusWorldSessionLimit,
           });
           if (worldResult !== null) {
-            // A player's mission state: never kept by a cache on the way.
-            send(res, worldResult.status, worldResult.body, { ...cors, 'cache-control': 'no-store' });
+            // A player's mission state: never kept by a cache on the way. A 429 adds its retry-after.
+            send(res, worldResult.status, worldResult.body, { ...cors, 'cache-control': 'no-store', ...(worldResult.headers ?? {}) });
             return;
           }
         }

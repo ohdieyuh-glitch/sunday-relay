@@ -630,3 +630,61 @@ describe('a fully wired bridge serves a world', () => {
     expect(other.status).toBe(404);
   }, 30_000);
 });
+
+describe('the bridge gives each native session its share of the world (internal engineering X1, JU-348-05)', () => {
+  it('composes ONE limit for the process: a session\'s third request at once is 429 + retry-after over HTTP, another session is served, a freed slot serves again', async () => {
+    // A world whose reads for player-1 are HELD until `open()` -- a slow store -- so its requests stay in flight.
+    let open: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { open = resolve; });
+    let heldReads = 0;
+    const world: WonderlandJuliusWorld = {
+      read: async (work) => work({
+        membership: {
+          lookup: async ({ playerId, projectId }) => {
+            if (playerId === 'player-1') {
+              heldReads += 1;
+              await gate;
+            }
+            return { playerId, projectId, role: 'OWNER' };
+          },
+        },
+        reader: {
+          hydrate: async () => null,
+          events: async ({ projectId, runId }) => (projectId === 'project-alpha' && runId === 'run-1' ? { rows: [], revision: 0 } : null),
+        },
+        results: { result: async () => null },
+      }),
+    };
+    const store = createBrowserSessionStore();
+    const base = await boot(null, world, store);
+    const flooder = nativeSession(store, 'player-1');
+    const other = nativeSession(store, 'player-2');
+    const path = `/relay-api/wonderland/julius/events?${queryFor('events')}`;
+    const statusOf = async (pending: Promise<Response>): Promise<number> => {
+      const res = await pending;
+      await res.text();
+      return res.status;
+    };
+    try {
+      const held = [getNative(base, path, flooder), getNative(base, path, flooder)];
+      for (let waited = 0; heldReads < 2; waited += 10) {
+        if (waited > 5_000) throw new Error('the two held reads never reached the store');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      // The third at once. Without a limit it would be held like the first two: a second's race says which.
+      const third = await Promise.race([getNative(base, path, flooder), new Promise<null>((resolve) => setTimeout(() => resolve(null), 1_000))]);
+      expect(third?.status).toBe(429);
+      expect(third?.headers.get('retry-after')).toBe('1');
+      expect(third?.headers.get('cache-control')).toBe('no-store');
+      expect(await third?.json()).toEqual({ error: 'too many requests from this session' });
+      // ANOTHER SESSION is not refused for the first one's flood.
+      expect(await statusOf(getNative(base, path, other))).toBe(200);
+      open();
+      expect(await Promise.all(held.map(statusOf))).toEqual([200, 200]);
+      // The slots came back when the answers were made: the same session is served again.
+      expect(await statusOf(getNative(base, path, flooder))).toBe(200);
+    } finally {
+      open();
+    }
+  }, 30_000);
+});
