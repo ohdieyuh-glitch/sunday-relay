@@ -158,9 +158,12 @@ describe('OBS-1 changes nothing for a viewer with a relationship, or inside the 
   };
 
   for (const audience of HIDDEN) {
-    it(`presence ${audience}: friend, party member, pending request either way -- the card opens with the name, handle and avatar`, () => {
+    it(`presence ${audience}: friend, party member, a request Ada sent -- the card opens with the name, handle and avatar`, () => {
       const s = cast(audience);
-      for (const [viewer, relationship] of [[CY, 'FRIEND'], [DEE, 'NONE'], [EVE, 'REQUEST_SENT'], [FAY, 'REQUEST_RECEIVED']] as const) {
+      // OBS-1 round 2 (F1): only a relationship the SUBJECT made counts -- Eve's own request to Ada opens nothing (the nonexistent id's
+      // answer), Fay's request FROM Ada does
+      for (const read of BY_ID) expect(op(s, EVE, read, {}, [ADA]), `${read} by Eve`).toEqual(op(s, EVE, read, {}, [GHOST]));
+      for (const [viewer, relationship] of [[CY, 'FRIEND'], [DEE, 'NONE'], [FAY, 'REQUEST_RECEIVED']] as const) {
         const view = card(s, viewer);
         expect([view.profile.displayName, view.profile.handle, view.profile.avatarRef], viewer).toEqual(['ADA', '@ada', `generated:${ADA}`]);
         expect(view.relationship, viewer).toBe(relationship);
@@ -187,12 +190,14 @@ describe('OBS-1 changes nothing for a viewer with a relationship, or inside the 
     }
   });
 
-  it('the snapshot\'s profiles keep every related person (friend, party member, requests either way)', () => {
+  it('the snapshot\'s profiles keep every person Ada has shown herself to (friend, party member, a request she sent)', () => {
     for (const audience of HIDDEN) {
       const s = cast(audience);
-      for (const viewer of [CY, DEE, EVE, FAY]) {
+      for (const viewer of [CY, DEE, FAY]) {
         expect(buildSocialView(s, viewer, NOW, { developmentPreview: false }).profiles[ADA]?.profile.displayName, `${audience} ${viewer}`).toBe('ADA');
       }
+      // round 2 (F1): Eve's own request does not put Ada's card in Eve's snapshot
+      expect(buildSocialView(s, EVE, NOW, { developmentPreview: false }).profiles[ADA], `${audience} Eve`).toBeUndefined();
     }
   });
 });
@@ -229,7 +234,8 @@ describe('OBS-1, every viewer x every subject: a card is served exactly when the
           const related =
             viewer === subject ||
             s.friendships.some((f) => (f.userA === viewer && f.userB === subject) || (f.userA === subject && f.userB === viewer)) ||
-            s.requests.some((q) => q.status === 'PENDING' && ((q.fromUserId === viewer && q.toUserId === subject) || (q.fromUserId === subject && q.toUserId === viewer))) ||
+            // round 2 (F1): a request counts only when the SUBJECT sent it
+            s.requests.some((q) => q.status === 'PENDING' && q.fromUserId === subject && q.toUserId === viewer) ||
             (partyOf(s, viewer) !== undefined && partyOf(s, viewer) === partyOf(s, subject));
           const inAudience = subjectAudience === 'EVERYONE';
           if (related || inAudience) expect(r.ok, `${viewer} -> ${subject} (${audience})`).toBe(true);

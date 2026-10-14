@@ -235,6 +235,21 @@ export function partyRosterFor(state: SocialState, viewerId: SocialUserId, party
   return party.members.filter((m) => seenOnlineBy(state, viewerId, m.userId));
 }
 
+/**
+ * THE WRITER SPOKE TO THE READER (OBS-1 round 2, F2): a DIRECT conversation between the two holds a message the writer sent. A
+ * conversation the READER opened by id and wrote into alone is not this: only the writer's own words make them known to the reader.
+ */
+export function wroteDirectlyTo(state: SocialState, writerId: SocialUserId, readerId: SocialUserId): boolean {
+  if (writerId === readerId) return false;
+  return Object.values(state.conversations).some(
+    (c) =>
+      c.kind === 'DIRECT' &&
+      c.memberIds.includes(writerId) &&
+      c.memberIds.includes(readerId) &&
+      messagesOf(state, c.conversationId).some((m) => m.senderId === writerId),
+  );
+}
+
 export function friendIdsOf(state: SocialState, userId: SocialUserId): SocialUserId[] {
   return state.friendships
     .filter((f) => f.userA === userId || f.userB === userId)

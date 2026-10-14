@@ -15,6 +15,7 @@
 
 import {
   PARTY_MAX_MEMBERS,
+  PENDING_PROGRESSION,
   RELAY_DOG_BASE_SKIN_ID,
   SOCIAL_ACTIVITY_LABELS,
   isRelayDogSkinId,
@@ -26,18 +27,23 @@ import {
   type SocialUserId,
   type UserPresenceView,
   type UserProfile,
+  type UserProfileCard,
   type UserProfileView,
 } from './social-contracts';
 import {
+  areFriends,
   audienceAdmits,
   blockedEitherWay,
   friendIdsOf,
+  hasBlocked,
   outsiderSeesParty,
   partyOf,
   partyRosterFor,
+  pendingRequestBetween,
   relationshipOf,
   sharePartyWith,
   userById,
+  wroteDirectlyTo,
   type SocialState,
 } from './social-state';
 
@@ -136,6 +142,62 @@ export function privateStrangerView(subjectId: SocialUserId): UserPresenceView {
   };
 }
 
+/**
+ * THE SUBJECT HAS SHOWN THEMSELVES TO THE VIEWER (OBS-1 round 2, founder 10-14: only a relationship the SUBJECT created or accepted
+ * counts): a friendship, a friend request THEY sent the viewer, a shared party, or a message THEY wrote to the viewer in a DIRECT
+ * conversation. Never the viewer's own act by id -- a request the viewer sent (F1), a conversation the viewer opened and wrote into
+ * alone (F2), a block the viewer filed -- or any id-holder could make a hidden player name themselves.
+ */
+function subjectShownTo(state: SocialState, viewerId: SocialUserId, subjectId: SocialUserId): boolean {
+  return (
+    areFriends(state, viewerId, subjectId) ||
+    pendingRequestBetween(state, subjectId, viewerId) !== undefined ||
+    sharePartyWith(state, viewerId, subjectId) ||
+    wroteDirectlyTo(state, subjectId, viewerId)
+  );
+}
+
+/**
+ * WHETHER THIS VIEWER MAY KNOW WHO THE SUBJECT IS -- their name, handle, avatar, Dog and showcase (OBS-1, C14-WL3-12, rounds 1-2):
+ * themselves; or, unless the subject blocked them, a viewer inside the subject's presence audience or one the subject has shown
+ * themselves to (subjectShownTo). Keyed on the audience, never on Appear Offline (which must read as a sign-out). Every surface that
+ * names a person to another asks this: the card (resolveProfileFor), a list row (social-preview.ts row), a DIRECT conversation's
+ * title (social-conversations.ts conversationsFor).
+ */
+export function identityVisibleTo(state: SocialState, viewerId: SocialUserId, subjectId: SocialUserId): boolean {
+  if (viewerId === subjectId) return true;
+  const subject = userById(state, subjectId);
+  if (subject === undefined || hasBlocked(state, subjectId, viewerId)) return false;
+  return audienceAdmits(state, subject.privacy.presenceVisibility, viewerId, subjectId) || subjectShownTo(state, viewerId, subjectId);
+}
+
+/**
+ * WHAT A VIEWER WHO MAY NOT KNOW THE SUBJECT IS SHOWN IN THEIR PLACE: the bare id the viewer already holds as the name (the client's
+ * own fallback for an unknown name, WonderlandSocialHubPanel.cpp NameOf), no handle, and the generated avatar of that id. Never a
+ * made-up name.
+ */
+export function withheldIdentity(userId: SocialUserId): { readonly displayName: string; readonly handle: string; readonly avatarRef: string } {
+  return { displayName: userId, handle: '', avatarRef: `generated:${userId}` };
+}
+
+/** The card with nothing of its owner in it (UserProfileCard): held only through the viewer's own act (a block filed by id). */
+function withheldCard(userId: SocialUserId): UserProfileCard {
+  return {
+    userId,
+    ...withheldIdentity(userId),
+    nationId: null,
+    clanName: null,
+    progression: PENDING_PROGRESSION,
+    primaryAgent: null,
+    relayDog: { skinId: RELAY_DOG_BASE_SKIN_ID, primary: null, secondary: null, flame: null, appearanceTier: null },
+    activeCompanion: null,
+    showcaseAgents: [],
+    showcaseCompanions: [],
+    stats: [],
+    memberSinceIso: null,
+  };
+}
+
 /** The owner of a private server context (world-presence.ts names it `priv_<ownerId>`), else null. */
 function privateServerOwnerOf(serverId: string): SocialUserId | null {
   return serverId.startsWith('priv_') && serverId.length > 'priv_'.length ? serverId.slice('priv_'.length) : null;
@@ -179,13 +241,13 @@ export function resolvePresenceFor(state: SocialState, viewerId: SocialUserId, s
   const seesPresence = self || audienceAdmits(state, privacy.presenceVisibility, viewerId, subjectId);
   const online = presence.connected && (self || presence.availability !== 'APPEAR_OFFLINE') && seesPresence;
 
-  // THE CARD BY ID (OBS-1, C14-WL3-12, founder 10-14): opened by whoever is inside the presence audience, or has a relationship -- a
-  // friend, a pending request either way, a shared party. To anybody else the subject is a player who does not exist (profile.read and
-  // showcase.read answer the nonexistent id's not-found): keyed on the AUDIENCE alone, never on Appear Offline, which must read as a
-  // sign-out to everybody. Mute, block and report stay offered; they take an id, never the card.
-  const related = relationship !== 'NONE' || sharePartyWith(state, viewerId, subjectId);
+  // THE CARD BY ID (OBS-1, C14-WL3-12, founder 10-14): opened by whoever is inside the presence audience, or whom the subject has
+  // shown themselves to (subjectShownTo: a friendship, a request THEY sent, a shared party, a message THEY wrote -- round 2: never the
+  // viewer's own request). To anybody else the subject is a player who does not exist (profile.read and showcase.read answer the
+  // nonexistent id's not-found): keyed on the AUDIENCE alone, never on Appear Offline, which must read as a sign-out to everybody.
+  // Mute, block and report stay offered; they take an id, never the card.
   const baseActions: SocialActionAvailability = {
-    viewProfile: seesPresence || related,
+    viewProfile: seesPresence || subjectShownTo(state, viewerId, subjectId),
     message: !self && audienceAdmits(state, privacy.messagePolicy, viewerId, subjectId),
     inviteToParty: false,
     joinParty: false,
@@ -309,7 +371,9 @@ export function resolveProfileFor(state: SocialState, viewerId: SocialUserId, su
   // sign they are playing. Outside that audience, or blocked either way, the card shows the base form -- what every card showed
   // before the skin was recorded -- so the blocked side still sees exactly a stranger who shares nothing.
   const seesWornSkin = viewerId === subjectId || (!blocked && audienceAdmits(state, subject.privacy.presenceVisibility, viewerId, subjectId));
-  const profile = profileWithSkinFor(subject.profile, seesWornSkin);
+  // THE CARD HELD BY THE VIEWER'S OWN ACT (OBS-1 round 2): the blocker keeps the card of whoever they blocked, to unblock -- but a
+  // block filed by id on somebody hidden from them must not name that person, so the card is then the withheld one (the bare id).
+  const profile: UserProfileCard = identityVisibleTo(state, viewerId, subjectId) ? profileWithSkinFor(subject.profile, seesWornSkin) : withheldCard(subjectId);
   const mine = new Set(friendIdsOf(state, viewerId));
   const mutualFriendIds =
     blocked || viewerId === subjectId || relationship === 'NONE'
