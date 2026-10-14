@@ -224,6 +224,79 @@ export const WONDERLAND_JULIUS_BILLING_MAX_PAGES = 200;
  */
 export const WONDERLAND_WORLD_CALLER_TENANT = 'wonderland' as const;
 
+/**
+ * ONE SESSION'S SHARE OF THE WORLD (internal engineering X1, for the independent
+ * reviewer's LOW JU-348-05). The world pool is four connections for the whole
+ * bridge, and a hydrate folds a whole run: one paired session asking again and
+ * again could hold all four, and every other player's world would wait for a
+ * connection and get 503. So each NATIVE SESSION may have at most this many
+ * requests being answered at once -- the client holds at most two, one stream
+ * leg (hydrate or a page) and one result read (WonderlandJuliusStream.cpp
+ * bInFlight / bResultInFlight) -- and so holds at most two connections.
+ */
+export const WONDERLAND_JULIUS_SESSION_MAX_IN_FLIGHT = 2;
+
+/**
+ * ...and at most this many requests per window. The client polls a page a second
+ * while it follows a run, drains a backlog without waiting, and reads the result
+ * when the run's state changes: well inside 30 in 10 s. Past it, a 429 is a stale
+ * link to the client (LinkStateForFailure), which hydrates again after a backoff.
+ */
+export const WONDERLAND_JULIUS_SESSION_RATE = Object.freeze({ limit: 30, windowMs: 10_000 });
+
+/** The limit's answer: admitted, with the slot to give back when the answer is sent -- or refused, and when to try again. */
+export type WonderlandJuliusSessionAdmission =
+  | { readonly ok: true; readonly release: () => void }
+  | { readonly ok: false; readonly retryAfterSeconds: number };
+
+/** A session's share, held by ONE bridge process: the route's deps are rebuilt per request, so the bridge builds it once. */
+export interface WonderlandJuliusSessionLimit {
+  admit(sessionId: string, now: number): WonderlandJuliusSessionAdmission;
+}
+
+/**
+ * At most `maxInFlight` requests of one session at once, and what `rate` admits.
+ *
+ * `rate` is the bridge's existing sliding window -- `createSessionRateLimit`
+ * (wonderland-social-routes.ts, the EOS client config's limit) -- composed by the
+ * bridge rather than imported here, so these routes do not depend on the social
+ * family. It counts only what it admits, and it is asked only once the in-flight
+ * bound has room, so a request refused for being one too many costs no rate.
+ * A session with nothing in flight is forgotten here (bounded memory); the rate
+ * window forgets its own.
+ */
+export function createWonderlandJuliusSessionLimit(options: {
+  readonly maxInFlight: number;
+  readonly rate: (sessionId: string, now: number) => { readonly ok: true } | { readonly ok: false; readonly retryAfterMs: number };
+}): WonderlandJuliusSessionLimit {
+  const { maxInFlight, rate } = options;
+  if (!Number.isSafeInteger(maxInFlight) || maxInFlight < 1) {
+    throw new Error('a Julius world session limit needs maxInFlight to be a whole number of at least 1');
+  }
+  const inFlight = new Map<string, number>();
+  return {
+    admit(sessionId, now) {
+      const held = inFlight.get(sessionId) ?? 0;
+      if (held >= maxInFlight) return { ok: false, retryAfterSeconds: 1 };
+      const rated = rate(sessionId, now);
+      if (!rated.ok) return { ok: false, retryAfterSeconds: Math.max(1, Math.ceil(rated.retryAfterMs / 1000)) };
+      inFlight.set(sessionId, held + 1);
+      let released = false;
+      return {
+        ok: true,
+        release: () => {
+          // ONCE: a second release of the same admission must never open a slot it did not hold.
+          if (released) return;
+          released = true;
+          const left = (inFlight.get(sessionId) ?? 1) - 1;
+          if (left <= 0) inFlight.delete(sessionId);
+          else inFlight.set(sessionId, left);
+        },
+      };
+    },
+  };
+}
+
 /** The world's result read, through Julius's own API and nothing else. */
 export function wonderlandJuliusResultsFrom(api: {
   inspectResult(identity: JuliusApiIdentity, runId: string): Promise<JuliusApiResult<JuliusMissionResultView>>;
