@@ -447,3 +447,21 @@ dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.
 # never moved. Every transition the runtime writes was legal when written, so the last one is the
 # state the pipeline's own fold reached; `transitions` says how many moves it took.
 dump "SELECT f.run_id,f.finding_id,f.task_id,f.blocking,f.status AS recorded_status,COALESCE((SELECT t.payload->'facts'->>'to' FROM relay_wonderland.events t WHERE t.event_type='julius.finding.transitioned' AND t.stream_id=f.run_id AND t.payload->'facts'->>'findingId'=f.finding_id ORDER BY t.sequence DESC LIMIT 1),f.status) AS effective_status,(SELECT count(*) FROM relay_wonderland.events t WHERE t.event_type='julius.finding.transitioned' AND t.stream_id=f.run_id AND t.payload->'facts'->>'findingId'=f.finding_id)::text AS transitions FROM relay_wonderland.julius_reviewer_findings f ORDER BY f.run_id,f.created_at" finding-status.tsv
+
+# V6 G-5: THE GOVERNANCE RECORD — WHO WAS ASKED, WHO DECIDED, AND WHAT THE RUN DID ABOUT IT.
+#
+# A gated run (a contract `approvalGates` clause, V6 G-1/G-2) writes a PENDING approval and walks to BLOCKED; a
+# person's decision (V6 G-4) writes APPROVED or DENIED with who and why, and walks the run on. None of it reached
+# the bundle: no file read `julius_approvals` or `julius_transitions`, so a held-then-granted run could not show
+# that it held, who released it, or that nothing ran in between. NEW files only: no existing TSV gains or loses a
+# column, so every reader of the files above is unaffected.
+#
+#   approvals.tsv         every approval of every state (never only PENDING), with `decided_by` and the
+#                         `decision_reason` the decider typed (a person's text: it goes through the bundle's
+#                         credential scan like every other file). Columns from 018.
+#   transitions.tsv       the run's recorded walk, in the LEDGER's order (`run_id,sequence`), never the clock's.
+#   lifecycle-events.tsv  the approval and lifecycle events (requested, decided, paused, resumed, cancelled) and the
+#                         dispatches, by ledger position, with their identifying facts only.
+dump "SELECT approval_id,run_id,task_id,operation,policy_revision,reason_code,state,requested_at,decided_at,decided_by,decision_reason,idempotency_key FROM relay_wonderland.julius_approvals ORDER BY requested_at,approval_id" approvals.tsv
+dump "SELECT run_id,sequence,from_state,to_state,reason_code,safe_summary,occurred_at,transition_id FROM relay_wonderland.julius_transitions ORDER BY run_id,sequence" transitions.tsv
+dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'approvalId' AS approval_id,e.payload->'facts'->>'operation' AS operation,e.payload->'facts'->>'decision' AS decision,e.payload->'facts'->>'decidedBy' AS decided_by,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'duplicate' AS duplicate,e.payload->'facts'->>'workerId' AS worker_id,e.payload->'facts'->>'reservationId' AS reservation_id,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.approval.requested','julius.approval.decided','julius.run.paused','julius.run.resumed','julius.run.cancelled','julius.worker.dispatched') ORDER BY e.stream_id,e.sequence" lifecycle-events.tsv

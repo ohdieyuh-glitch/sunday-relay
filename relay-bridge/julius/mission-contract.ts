@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { JULIUS_BOOTSTRAP_REQUEST_VERSION, type JuliusBootstrapRequest } from '../../src/relay/integration/julius/julius-port';
-import { sealJuliusResearchPolicy, type JuliusResearchPolicy } from '../../src/relay/mission/julius';
+import { resolveWorkerRole, sealJuliusResearchPolicy, type JuliusApprovalScope, type JuliusResearchPolicy } from '../../src/relay/mission/julius';
 
 /**
  * THE MISSION CONTRACT — its shape, its parser, its sealing, its compilation.
@@ -84,6 +84,85 @@ export interface LiveMissionContractFile {
    * asserting the one thing it is not in a position to know.
    */
   readonly research?: LiveMissionResearchClause;
+  /**
+   * V6 G-1: THE DISPATCHES THIS MISSION'S C.A.R.D. HOLDS FOR A PERSON.
+   *
+   * ABSENT MEANS UNGATED, and absent is the default: the parsed contract then
+   * carries no `approvalGates` key at all, so every existing contract's parse
+   * result and `missionBindingDigest` are byte-for-byte what they were.
+   *
+   * Present, it is SEALED at parse time like `research`: 1 or 2 gates, each a
+   * `DISPATCH_WORKER` hold on named roles and task types, with a reason. The
+   * entrypoint passes it to the card as `approvalScopes` (`approvalScopesOf`)
+   * and binds the card revision to it (`gatedCardRevision`). Which gate a
+   * mission may declare is REGISTERED per namespace in
+   * `scripts/julius-approval-gates.mjs`; a contract cannot choose its own.
+   */
+  readonly approvalGates?: readonly LiveMissionApprovalGate[];
+}
+
+/** One gate of the `approvalGates` clause (V6 G-1). v1: `DISPATCH_WORKER` only (V6 G-2). */
+export interface LiveMissionApprovalGate {
+  readonly id: string;
+  readonly operation: 'DISPATCH_WORKER';
+  readonly roles: readonly string[];
+  readonly taskTypes: readonly string[];
+  readonly reason: string;
+}
+
+const APPROVAL_GATE_KEYS = ['id', 'operation', 'roles', 'taskTypes', 'reason'] as const;
+
+/**
+ * THE CLAUSE, SEALED, OR THE PROBLEM THAT REFUSES THE CONTRACT. Every refusal
+ * names its problem; nothing is coerced, defaulted or dropped.
+ */
+function sealApprovalGates(value: unknown): { ok: true; gates: readonly LiveMissionApprovalGate[] } | { ok: false; problem: string } {
+  const refuse = (problem: string) => ({ ok: false as const, problem: `The contract's approvalGates clause was refused: ${problem}.` });
+  if (!Array.isArray(value)) return refuse('approvalGates must be an array of 1 or 2 gates');
+  if (value.length < 1 || value.length > 2) return refuse('approvalGates must hold 1 or 2 gates');
+  const ids = new Set<string>();
+  const pairs = new Set<string>();
+  const gates: LiveMissionApprovalGate[] = [];
+  for (const [index, entry] of value.entries()) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return refuse(`gate ${index} must be an object`);
+    const gate = entry as Record<string, unknown>;
+    const unknown = Object.keys(gate).find((key) => !(APPROVAL_GATE_KEYS as readonly string[]).includes(key));
+    if (unknown !== undefined) return refuse(`gate ${index} has an unknown key "${unknown}"`);
+    if (typeof gate.id !== 'string' || !/^[a-z][a-z0-9-]{2,48}$/u.test(gate.id)) {
+      return refuse(`gate ${index} id must be 3-49 lower-case letters, digits or hyphens, starting with a letter`);
+    }
+    if (gate.operation !== 'DISPATCH_WORKER') return refuse(`gate ${index} operation must be DISPATCH_WORKER (the only operation a v1 gate may scope)`);
+    if (!Array.isArray(gate.roles) || gate.roles.length === 0) return refuse(`gate ${index} roles must be a non-empty array`);
+    for (const role of gate.roles) {
+      if (typeof role !== 'string' || resolveWorkerRole(role) === null) return refuse(`gate ${index} role "${String(role)}" is not a role Julius can resolve`);
+    }
+    if (!Array.isArray(gate.taskTypes) || gate.taskTypes.length === 0) return refuse(`gate ${index} taskTypes must be a non-empty array`);
+    for (const taskType of gate.taskTypes) {
+      if (typeof taskType !== 'string' || !/^[a-z][a-z0-9:_-]{0,63}$/u.test(taskType)) {
+        return refuse(`gate ${index} names a wildcard or empty task type "${String(taskType)}"; a gate names exact task types`);
+      }
+    }
+    if (typeof gate.reason !== 'string' || gate.reason.trim() === '' || gate.reason.length > 280) return refuse(`gate ${index} reason must be 1-280 characters`);
+    if (ids.has(gate.id)) return refuse(`duplicate gate id "${gate.id}"`);
+    ids.add(gate.id);
+    for (const role of gate.roles as string[]) {
+      for (const taskType of gate.taskTypes as string[]) {
+        const pair = `${role}/${taskType}`;
+        if (pairs.has(pair)) return refuse(`duplicate role and task type ${pair}`);
+        pairs.add(pair);
+      }
+    }
+    gates.push({
+      id: gate.id, operation: 'DISPATCH_WORKER',
+      roles: [...gate.roles as string[]], taskTypes: [...gate.taskTypes as string[]], reason: gate.reason,
+    });
+  }
+  return { ok: true, gates };
+}
+
+/** The clause as the card's `approvalScopes` (V6 G-2): operation, roles and task types, nothing else. */
+export function approvalScopesOf(gates: readonly LiveMissionApprovalGate[]): JuliusApprovalScope[] {
+  return gates.map((gate) => ({ operation: gate.operation, roles: [...gate.roles], taskTypes: [...gate.taskTypes] }));
 }
 
 /**
@@ -195,6 +274,13 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
     research = clause;
   }
 
+  let approvalGates: readonly LiveMissionApprovalGate[] | undefined;
+  if (value.approvalGates !== undefined) {
+    const sealed = sealApprovalGates(value.approvalGates);
+    if (!sealed.ok) return { ok: false, problem: sealed.problem };
+    approvalGates = sealed.gates;
+  }
+
   return {
     ok: true,
     contract: {
@@ -206,6 +292,8 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
       testCommand: value.testCommand as string, workspacePath: value.workspacePath as string,
       limits: typeof value.limits === 'object' && value.limits !== null ? value.limits as LiveMissionContractFile['limits'] : undefined,
       ...(research === undefined ? {} : { research }),
+      // Spread ONLY when present: an ungated contract parses to exactly the object (and digest) it always did.
+      ...(approvalGates === undefined ? {} : { approvalGates }),
     },
   };
 }
@@ -216,6 +304,18 @@ const stable = (value: unknown): string => value === null || typeof value !== 'o
     ? `[${value.map(stable).join(',')}]`
     : `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`).join(',')}}`;
 const digestOf = (value: unknown): string => createHash('sha256').update(stable(value)).digest('hex');
+
+/**
+ * V6 G-1: THE CARD REVISION A GATED MISSION RUNS UNDER. The base revision, plus
+ * `:gate-` and the first 16 hex of the clause's stable digest, so an approval
+ * (keyed by revision, `juliusDispatchApprovalId`) given under one gate never
+ * authorises a dispatch under another, and the run's `card_revision` names the
+ * gate it ran under. Stable under key order; the characters stay in `[\w:.-]`.
+ * Ungated: the base, untouched.
+ */
+export function gatedCardRevision(base: string, gates: readonly LiveMissionApprovalGate[] | undefined): string {
+  return gates === undefined ? base : `${base}:gate-${digestOf(gates).slice(0, 16)}`;
+}
 
 export function compileBootstrapRequest(contract: LiveMissionContractFile, workers: JuliusBootstrapRequest['workers'], cardRevision: string): JuliusBootstrapRequest {
   const bindingDigest = digestOf(contract);

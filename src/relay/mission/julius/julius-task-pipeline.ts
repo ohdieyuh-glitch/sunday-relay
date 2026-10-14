@@ -1016,7 +1016,9 @@ export async function prepareClaimedTask(
   }
 
   /* -------------------------------------------------- 1. policy, first */
-  const dispatchVerdict = evaluateJuliusPolicy(request.policy, { operation: 'DISPATCH_WORKER' });
+  // WHO AND WHAT, so a gate scoped to one role and one task type (V6 G-2, `approvalScopes`) holds exactly that
+  // dispatch. The role is the one resolved above; the gate key below (`juliusDispatchApprovalId`) is unchanged.
+  const dispatchVerdict = evaluateJuliusPolicy(request.policy, { operation: 'DISPATCH_WORKER', role, taskType: claim.taskType });
   const capabilityVerdict = evaluateJuliusPolicy(request.policy, { operation: 'USE_CAPABILITY', capability: request.capability });
   const verdicts = [['DISPATCH_WORKER', dispatchVerdict], ['USE_CAPABILITY', capabilityVerdict]] as const;
   for (const [operation, verdict] of verdicts) {

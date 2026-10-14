@@ -109,6 +109,7 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'relay-bridge/julius-mission-routes.ts', reason: 'the bridge\u2019s operator-only POST /julius/missions: the contract library\u2019s own parser (julius/mission-contract.ts, shared with the job rather than imported from the job\u2019s entry file, whose require.main guard is true inside the server bundle), the same compileBootstrapRequest and the same createLiveJuliusBootstrapPort the mission job uses, over the same PostgreSQL repositories \u2014 so a mission created here and one read from disk are one mission with one execution identity. Bootstrap only: it composes no provider, spends nothing and ticks nothing; the run lands durable in READY for the state routes to watch and the job to drive. Reached from the HTTP server, which is not a mission root' },
   { path: 'relay-bridge/julius-state-routes.ts', reason: 'the bridge\u2019s READ-ONLY mount of JuliusRuntimeApi for Wonderland \u2014 /julius/runs/<id>/<run|slots|tasks|evidence|verification|timeline>, operator-only, composed over the SAME createJuliusPostgresRuntimeStore the mission job writes through so there is one state authority. Reached from the HTTP server, which is a Relay surface and not a mission root, and never from a mission; it computes nothing about a run, every answer is the API\u2019s own. Also the first composition root for the subagent and lifecycle repositories' },
   { path: 'relay-bridge/julius-lifecycle-routes.ts', reason: 'the bridge’s operator-only POST /julius/runs/<id>/lifecycle {action: pause|resume|cancel, reason}: maps the action to JuliusRuntimeApi.pause/resume/cancel on the SAME api object the read routes serve (composeJuliusStateApi, over the same PostgreSQL store) and the kernel’s answer to a status. It records operator intent and drives nothing: no provider, no tick, no spend; the run loop in the mission job honours the recorded state. Reached from the HTTP server, which is not a mission root' },
+  { path: 'relay-bridge/julius-approval-decide.ts', reason: 'V6 G-4: the decide CLI (`npm run relay:julius:decide:build`) the founder’s in-job approval step runs against the job’s own store: one held run’s ONE PENDING approval, decided through decideJuliusApproval under the committed approver authority (an approver on BOTH .github/julius-approvers.json and the workflow literal; empty refuses everyone), with the identity and authority judged before any store access. It composes no provider, spends nothing and ticks nothing. A separate process the workflow invokes, not reached from the mission root' },
 ];
 
 /** Directories the trace does not enter. Crossing edges are reported, never hidden. */
@@ -314,6 +315,8 @@ const FILE_RULES = [
   // Pause / resume / cancel over HTTP: the operator's control of a run, filed
   // beside the lifecycle runtime it calls through the API.
   ['relay-bridge/julius-lifecycle-routes.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  // V6 G-4: deciding a held run's approval under the committed authority, filed beside the lifecycle runtime it calls.
+  ['relay-bridge/julius-approval-decide.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // A unit of coder work that pauses at a checkpoint and resumes as a bounded
   // continuation. The SCHEDULER's, for the same reason the lifecycle above is:
   // it is the coordinator's account of when work stops, and filing it under the

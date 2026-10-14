@@ -14,7 +14,7 @@
 
 import type { JuliusTickBudget } from '../../src/relay/mission/julius/julius-tick-budget';
 import type { LiveReachReadiness } from '../../src/relay/mission/live-reach';
-import type { DriveTickAccount } from './live-composition';
+import type { DriveOutcome, DriveTickAccount } from './live-composition';
 
 /**
  * EVERY PRINTED LINE IS ONE PHYSICAL LINE (JUJU's review of 1cee61fd).
@@ -91,5 +91,49 @@ export function liveWorkersBlockedLines(problems: readonly { readonly role: stri
   return [
     ...problems.map((problem) => `  BLOCKED ${problem.role}: ${problem.missing.join(', ')}`),
     `RESULT: BLOCKED — live_workers_unresolved: ${problems.map((problem) => problem.role).join(', ')}; nothing was submitted and no provider was contacted.`,
+  ];
+}
+
+/**
+ * V6 G-1: WHAT THE CONTRACT'S `approvalGates` CLAUSE HOLDS FOR A PERSON, said in the preflight before anything is
+ * submitted. Ungated (no clause): no line at all, so an ungated mission's output is unchanged. Closed tokens only;
+ * the gate's `reason` is not printed (`scripts/julius-live-evidence.mjs` keeps exactly this shape).
+ */
+export function liveApprovalGatesLine(
+  gates: readonly { readonly operation: string; readonly roles: readonly string[]; readonly taskTypes: readonly string[] }[] | undefined,
+): string | null {
+  if (gates === undefined) return null;
+  return `  approval gates: ${gates.length} (${gates.map((gate) => `${gate.operation} role=${gate.roles.join(',')} task=${gate.taskTypes.join(',')}`).join('; ')})`;
+}
+
+/** V6 G-3: the entrypoint's exit for a run held on its declared approval gate. Distinct from 0, 1, 2 and 5. */
+export const JULIUS_EXIT_HELD_FOR_APPROVAL = 3;
+
+/**
+ * THE HELD-FOR-APPROVAL REPORT, or null (V6 G-3).
+ *
+ * Non-null in exactly one case: the contract declares an approval gate (`gated`), the drive says the run is held
+ * for an approval (`heldForApproval`: BLOCKED on RUN_AWAITING_APPROVAL) and the store holds the PENDING
+ * approval(s) it is held on. Then the run has not ended and has not failed; a person is being asked. The lines are
+ * one `HELD_FOR_APPROVAL:` per approval, the run, the tick account and the tasks, and NO `RESULT:` line (a held job
+ * is no answer, and the Beta Gate reads only lines that start with `RESULT:`); the entrypoint prints them and
+ * returns `JULIUS_EXIT_HELD_FOR_APPROVAL`.
+ *
+ * Null in every other case, and the entrypoint then prints the report it always printed, unchanged: an ungated
+ * run that somehow stopped on an approval, or a held run whose approval could not be read, keeps RESULT + exit 1.
+ */
+export function liveHeldForApprovalLines(input: {
+  readonly outcome: Pick<DriveOutcome, 'heldForApproval' | 'tickAccount'>;
+  readonly runId: string;
+  readonly gated: boolean;
+  readonly pending: readonly { readonly approvalId: string; readonly operation: string; readonly taskId: string | null }[];
+  readonly tasks: readonly { readonly taskId: string; readonly role: string; readonly taskType: string; readonly state: string }[];
+}): string[] | null {
+  if (!input.gated || !input.outcome.heldForApproval || input.pending.length === 0) return null;
+  return [
+    ...input.pending.map((gate) => `HELD_FOR_APPROVAL: run ${input.runId} approval ${gate.approvalId} operation ${gate.operation} task ${gate.taskId ?? 'none'}`),
+    `  run: ${input.runId}`,
+    ...(input.outcome.tickAccount === null ? [] : [liveTickAccountLine(input.outcome.tickAccount)]),
+    ...input.tasks.map((task) => `  task ${task.taskId} [${task.role}/${task.taskType}] → ${task.state}`),
   ];
 }

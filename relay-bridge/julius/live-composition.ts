@@ -32,6 +32,7 @@ import {
   juliusSharedCeilingPolicy,
   type JuliusBudgetPort,
   type JuliusCardPolicy,
+  type JuliusApprovalScope,
   type JuliusPolicyOperation,
   type JuliusClaimedTask,
   type JuliusContextSnapshot,
@@ -733,6 +734,15 @@ export function assembleLiveJuliusRuntime(options: {
    * (`decideJuliusApproval`). A gate is mission authority, not a code change.
    */
   readonly approvals?: readonly JuliusPolicyOperation[];
+  /**
+   * V6 G-2: GATES SCOPED TO ONE ROLE AND ONE TASK TYPE (`JuliusApprovalScope`).
+   *
+   * Absent, none, and the card carries no `approvalScopes` key at all, so every
+   * ungated mission composes exactly the card it always did. Present, only the
+   * dispatches whose role AND task type a scope names are held for a person;
+   * the plan, the reviews and the repairs of a mission gated on its build go on.
+   */
+  readonly approvalScopes?: readonly JuliusApprovalScope[];
 }): LiveJuliusRuntime {
   const registry = new JuliusWorkerRegistry();
   const adapters = new Map<string, JuliusProviderAdapter>();
@@ -756,6 +766,9 @@ export function assembleLiveJuliusRuntime(options: {
     iterativeReview: { allowed: true, maxRounds: Math.max(1, options.maxRepairRounds + 1) },
     concurrency: 1,
     approvals: [...(options.approvals ?? [])],
+    ...(options.approvalScopes === undefined ? {} : {
+      approvalScopes: options.approvalScopes.map((scope) => ({ operation: scope.operation, roles: [...scope.roles], taskTypes: [...scope.taskTypes] })),
+    }),
   };
   const verification: JuliusVerificationPolicy = {
     revision: `verify:${options.cardRevision}`,
@@ -898,6 +911,14 @@ export interface DriveOutcome {
    * by a bare `maxTicks`.
    */
   readonly tickAccount: DriveTickAccount | null;
+  /**
+   * V6 G-3: HELD FOR AN APPROVAL, NOT STUCK. True only when the drive stalled
+   * because the run loop's own reason was RUN_AWAITING_APPROVAL and the run is
+   * BLOCKED: a person is being asked. A PAUSED run (an operator's decision) is
+   * not held for approval, and nothing else ever is. The entrypoint exits HELD
+   * (3) on it, and only for a contract that declares the gate.
+   */
+  readonly heldForApproval: boolean;
 }
 
 export interface DriveTickAccount {
@@ -991,14 +1012,14 @@ export async function driveJuliusRunToTerminal(input: {
     const run = await input.store.loadRun(input.runId, input.projectId);
     lastState = run?.state ?? 'UNKNOWN';
     if (run !== null && terminal.has(run.state)) {
-      return { state: run.state, ticks: tick, stalled: false, haltCause: null, tickAccount: accountAt(tick, false) };
+      return { state: run.state, ticks: tick, stalled: false, haltCause: null, tickAccount: accountAt(tick, false), heldForApproval: false };
     }
     if (report.claimed === 0) {
       const advance = await input.loop.advanceRun(input.runId, input.projectId);
       const after = await input.store.loadRun(input.runId, input.projectId);
       lastState = after?.state ?? lastState;
       if (after !== null && terminal.has(after.state)) {
-        return { state: after.state, ticks: tick, stalled: false, haltCause: null, tickAccount: accountAt(tick, false) };
+        return { state: after.state, ticks: tick, stalled: false, haltCause: null, tickAccount: accountAt(tick, false), heldForApproval: false };
       }
       /**
        * A RESUMED VERIFICATION IS PROGRESS, even when the run state did not
@@ -1010,11 +1031,14 @@ export async function driveJuliusRunToTerminal(input: {
        * one step from finishing.
        */
       if (advance === null || (!advance.changed && advance.resumedVerifications === 0)) {
-        return { state: lastState, ticks: tick, stalled: true, haltCause: await stallCause(lastState, advance?.reasonCode), tickAccount: accountAt(tick, false) };
+        return {
+          state: lastState, ticks: tick, stalled: true, haltCause: await stallCause(lastState, advance?.reasonCode), tickAccount: accountAt(tick, false),
+          heldForApproval: lastState === 'BLOCKED' && advance?.reasonCode === 'RUN_AWAITING_APPROVAL',
+        };
       }
     }
   }
-  return { state: lastState, ticks: maxTicks, stalled: true, haltCause: await stallCause(lastState), tickAccount: null };
+  return { state: lastState, ticks: maxTicks, stalled: true, haltCause: await stallCause(lastState), tickAccount: null, heldForApproval: false };
 }
 
 /**
@@ -1096,5 +1120,6 @@ async function failForTickBudget(args: {
     state, ticks: args.consumed, stalled: state !== 'FAILED',
     haltCause: state === 'FAILED' ? `${reasonCode}: ${safeSummary}` : null,
     tickAccount: account,
+    heldForApproval: false,
   };
 }
