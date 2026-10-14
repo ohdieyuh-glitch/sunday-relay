@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { applySocialOperation } from './social-commands';
 import type { SocialAudience, SocialOperationId, UserProfileView } from './social-contracts';
+import { openGroupConversation, sendMessage } from './social-conversations';
+import { identityVisibleTo } from './social-presence';
 import { buildSocialView, type SocialPreviewSnapshot } from './social-preview';
-import { emptySocialState, type SocialState } from './social-state';
+import { emptySocialState, wroteDirectlyTo, type SocialState } from './social-state';
 import { ensureSocialUser } from './social-store';
 
 /*
@@ -170,5 +172,58 @@ describe('F2: a DIRECT conversation the viewer opens by id never names a hidden 
     const opened = run(cast('EVERYONE'), BO, 'conversations.open', { otherUserId: ADA });
     const cid = (opened.data as { conversationId: string }).conversationId;
     expect(view(opened.state, BO).conversations.find((c) => c.conversationId === cid)!.title).toBe('ADA');
+  });
+});
+
+/*
+ * THE INTERNAL REVIEW OF #368 (r1, F-4): two guards no reachable sequence of operations could fail. Each is pinned here on the state
+ * where it decides, and the test says how that state arises.
+ */
+describe('F-4: carried-in data -- a request that survived a block never names the blocker to the blocked side', () => {
+  it('Ada (hidden) asked Bo, then blocked him, and a restore kept the PENDING request: Bo\'s incoming row is the bare id', () => {
+    const asked = must(cast('FRIENDS'), ADA, 'requests.send', { toUserId: BO });
+    // the control first: the request Ada sent names her to Bo (a relationship she created)
+    expect(view(asked, BO).requests.incoming[0].from.displayName).toBe('ADA');
+    // CARRIED-IN DATA (a restore or a row written behind the store): the block beside the still-PENDING request. blocks.add itself
+    // cancels the pair's requests (blockUser), so no operation reaches this; pendingRequestsFor hides such a request only from the
+    // blocker, so the BLOCKED side still lists it -- and identityVisibleTo's block check is all that keeps Ada's name off that row.
+    const s: SocialState = { ...asked, blocks: [...asked.blocks, { blockerId: ADA, blockedId: BO, sinceIso: NOW }] };
+    const bo = run(s, BO, 'snapshot.read').data as SocialPreviewSnapshot;
+    expect(bo.requests.incoming.map((r) => r.from.userId)).toEqual([ADA]);
+    const { presence: _p, ...from } = bo.requests.incoming[0].from;
+    expect(from).toEqual(neutral(ADA));
+    expect(bo.profiles[ADA]).toBeUndefined();
+    expect(JSON.stringify(bo)).not.toMatch(LEAK);
+    expect(identityVisibleTo(s, BO, ADA)).toBe(false);
+    expect(op(s, BO, 'profile.read', {}, [ADA])).toEqual(op(s, BO, 'profile.read', {}, [GHOST]));
+  });
+});
+
+describe('F-4 / F-5: only a DIRECT conversation is the subject writing to the viewer', () => {
+  it('Ada (hidden) writes in a GROUP with Bo (built by the domain: no route creates a group today): Bo still may not know her', () => {
+    let s = ensureSocialUser(cast('FRIENDS'), { userId: 'usr_cy', displayName: 'CY', handle: '@cy' }, NOW);
+    const group = openGroupConversation(s, 'usr_cy', [ADA, BO], 'Trio', NOW);
+    if (!group.ok) throw new Error(group.error.message);
+    const wrote = sendMessage(group.value.state, ADA, group.value.conversationId, { body: 'hi all' }, NOW);
+    if (!wrote.ok) throw new Error(wrote.error.message);
+    s = wrote.value;
+    expect(wroteDirectlyTo(s, ADA, BO)).toBe(false);
+    expect(identityVisibleTo(s, BO, ADA)).toBe(false);
+    expect(op(s, BO, 'profile.read', {}, [ADA])).toEqual(op(s, BO, 'profile.read', {}, [GHOST]));
+    const bo = view(s, BO);
+    expect(bo.conversations.map((c) => c.title)).toEqual(['Trio']);
+    expect(bo.profiles[ADA]).toBeUndefined();
+    expect(JSON.stringify(bo)).not.toMatch(LEAK);
+  });
+
+  it('the kind check: a record under the DIRECT id that is not DIRECT does not count (constructed state: no operation writes one)', () => {
+    const opened = run(cast('FRIENDS'), BO, 'conversations.open', { otherUserId: ADA });
+    const cid = (opened.data as { conversationId: string }).conversationId;
+    const s = must(opened.state, ADA, 'messages.send', { body: 'hi' }, [cid]);
+    expect(wroteDirectlyTo(s, ADA, BO), 'the control: Ada wrote in the DM').toBe(true);
+    expect(wroteDirectlyTo(s, BO, ADA), 'Bo did not').toBe(false);
+    const regrouped: SocialState = { ...s, conversations: { ...s.conversations, [cid]: { ...s.conversations[cid], kind: 'GROUP' } } };
+    expect(wroteDirectlyTo(regrouped, ADA, BO)).toBe(false);
+    expect(identityVisibleTo(regrouped, BO, ADA)).toBe(false);
   });
 });
