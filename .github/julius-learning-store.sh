@@ -3,15 +3,18 @@
 #
 #   julius-learning-store.sh dump    <out-dir> <julius-run-id> [<rendering-file>]
 #   julius-learning-store.sh restore <dump-file> <without-julius-run-id> <registration-digest>
+#   julius-learning-store.sh gh-get  <actions-endpoint> [<jq-filter>]
 #
 # `dump` reads the archive back into SQL to prove the WITHOUT record is in its bytes. With <rendering-file> it keeps
 # that SQL there, for the workflow's credential scan, which reads the archive AND its rendering and then deletes it;
 # without one, the rendering is removed when the dump ends.
 #
-# THE DATABASE COMMANDS AND NOTHING ELSE. The workflow keeps everything that needs GitHub: which run this is, the
-# artifact upload and fetch, the digest records, the credential scan with its secret needles. This script holds the
+# THE DATABASE COMMANDS, AND ONE READ'S TRANSPORT. The workflow keeps everything that needs GitHub: which run this is,
+# the artifact upload and fetch, the digest records, the credential scan with its secret needles. This script holds the
 # commands that touch PostgreSQL, so the job that pays and the test that proves it run the SAME ones
-# (relay-bridge/julius-learning-store-roundtrip.real-postgres.test.ts runs this file as it is).
+# (relay-bridge/julius-learning-store-roundtrip.real-postgres.test.ts runs this file as it is). The one exception,
+# `gh-get`, decides nothing: it is the GET those GitHub reads go through, retried when the cause is transient (GITHUB
+# READS below), and what the workflow does with its answer stays the workflow's.
 #
 # ONE ARGUMENT LIST, TWO LAUNCHERS. Every pg_dump / pg_restore / psql argument list is built once (`args_*`). Only
 # the launcher differs: with JULIUS_PG_CONTAINER set, `docker exec -i` into that container (the paid job's
@@ -30,7 +33,7 @@
 set -euo pipefail
 
 die() { echo "$1" >&2; exit 1; }
-usage() { die 'usage: julius-learning-store.sh dump <out-dir> <julius-run-id> [<rendering-file>] | restore <dump-file> <without-julius-run-id> <registration-digest>'; }
+usage() { die 'usage: julius-learning-store.sh dump <out-dir> <julius-run-id> [<rendering-file>] | restore <dump-file> <without-julius-run-id> <registration-digest> | gh-get <actions-endpoint> [<jq-filter>]'; }
 
 # The run a learning pair's arm is: an explicit rerun's id (`run:` + 24 hex), exactly as the workflow reads it.
 RUN_ID_SHAPE='^run:[0-9a-f]{24}$'
@@ -103,6 +106,62 @@ if [ "${JULIUS_STORE_DRY_RUN:-}" = 1 ]; then
       echo "JULIUS_STORE_DRY_RUN $mode $builder | $(prefix "$mode" "$name" | tr '\n' ' ')| $("$builder" | tr '\n' ' ' | sed 's/ $//')"
     done
   done
+  exit 0
+fi
+
+# ---------------------------------------------------------------- GITHUB READS: one GET, retried only for a transient cause
+# gh-get <endpoint> [<jq-filter>] : one GET of a GitHub Actions endpoint; its answer (or the filter's) on stdout.
+#
+# Arm WITH's restore reads arm WITHOUT's run, its artifact listing and its two zips over the API, before anything is
+# spent, and one such read timed out once in the C7 dry run (G2). A read that fails for a TRANSIENT cause is asked
+# again, GH_TRIES times in all at most, after a wait of JULIUS_STORE_GH_BACKOFF_S (default 5) seconds times the attempt
+# number. TRANSIENT means: the network gave no answer (no HTTP status, and gh said so in a network's words), HTTP 5xx,
+# or HTTP 429. Anything else fails AT ONCE: an HTTP 4xx other than 429 IS the answer (that run, that artifact, that
+# permission), and a cause this script cannot name is not guessed to be transient.
+# ONLY THE TRANSPORT IS RETRIED. The first answer that arrives is final. The checks the workflow makes on it (the run's
+# workflow and commit, one unexpired artifact, the digest recorded twice, the paid bundle) run on that answer, and a
+# check that fails is never retried into a pass.
+# A GET BY CONSTRUCTION. The endpoint is shape-checked (an Actions path of one repository, nothing that could be a
+# flag), and no field, no input and no method but GET is ever passed, so nothing this repeats can write.
+# AN ATTEMPT'S BYTES ARE HELD until it has succeeded: gh writes an error's body to stdout, and a failed attempt's body
+# must never land in the caller's file (`gh-get .../zip > store.zip`).
+GH_TRIES=3
+GH_ENDPOINT_SHAPE='^repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/[A-Za-z0-9_./?=&-]+$'
+GH_NETWORK_SHAPE='error connecting to|dial tcp|i/o timeout|connectex|connection reset|connection refused|connection timed out|TLS handshake timeout|unexpected EOF|context deadline exceeded|Client\.Timeout|no such host|server sent GOAWAY'
+gh_held=''
+gh_get() {
+  local endpoint=$1 backoff=${JULIUS_STORE_GH_BACKOFF_S:-5} try status code cause=''
+  local gh_call=(gh api "$endpoint" --method GET)
+  # The shape, and no `..` segment that could walk the path out of the repository's Actions.
+  [[ "$endpoint" =~ $GH_ENDPOINT_SHAPE ]] && [[ "$endpoint" != *..* ]] || die "julius_store_github_endpoint_invalid: '$endpoint'"
+  [[ "$backoff" =~ ^[0-9]{1,2}$ ]] || die "julius_store_github_backoff_invalid: '$backoff'"
+  if [ "$#" -eq 2 ]; then gh_call+=(--jq "$2"); fi
+  gh_held=$(mktemp -d)
+  trap 'rm -rf "$gh_held"' EXIT
+  for ((try = 1; try <= GH_TRIES; try++)); do
+    status=0
+    "${gh_call[@]}" < /dev/null > "$gh_held/out" 2> "$gh_held/err" || status=$?
+    if [ "$status" -eq 0 ]; then cat "$gh_held/out"; return 0; fi
+    cat "$gh_held/err" >&2
+    code=$(grep -oE 'HTTP [0-9]{3}' "$gh_held/err" | tail -n 1 | cut -d' ' -f2 || true)
+    if [ -n "$code" ]; then
+      case "$code" in
+        5[0-9][0-9]|429) cause="HTTP $code" ;;
+        *) die "learning_store_github_read_refused: GET $endpoint answered HTTP $code (not retried)" ;;
+      esac
+    elif grep -qiE "$GH_NETWORK_SHAPE" "$gh_held/err"; then
+      cause='no answer from the network'
+    else
+      die "learning_store_github_read_failed: GET $endpoint failed (gh exit $status) for a cause that is not transient (not retried)"
+    fi
+    echo "JULIUS_STORE_GH_GET try=$try/$GH_TRIES transient=\"$cause\" endpoint=$endpoint" >&2
+    if [ "$try" -lt "$GH_TRIES" ]; then sleep $((backoff * try)); fi
+  done
+  die "learning_store_github_read_exhausted: GET $endpoint failed $GH_TRIES times (last: $cause)"
+}
+if [ "${1:-}" = gh-get ]; then
+  [ "$#" -eq 2 ] || [ "$#" -eq 3 ] || usage
+  gh_get "${@:2}"
   exit 0
 fi
 
