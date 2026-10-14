@@ -1,0 +1,11 @@
+# The seed of julius-unreal-mission-2: task3 e59f218573443b4dc8b8592094909b385b29ab76 (SEED PARAMETER: the RC candidate of 2026-10-14; before ANY paid run dryrun/seed-recheck.py must read SEED HOLDS at the FINAL RC's task3 commit, else re-seed in a NEW folder).
+# <workspace path> <git blob at the pin> <sha256 of the bytes in workspace/>
+wonderland/Source/Wonderland/WonderlandSocialHubPanel.cpp 77ea728109914445503e438433f655820828a667 bf912417c0853b0c1d37d5ee10bc26a8838f6120f767c4f1e8bd8eb2a5fc7537
+wonderland/Source/Wonderland/WonderlandSocialHubPanel.h e665dbd75c0884b5eebdcd455daa2a6504caba29 5b8f68bc6fb516158aa4dc4b6529ffe50a3ab09ad38d526d5a2d4616fd885d4a
+wonderland/Source/Wonderland/WonderlandSocialTypes.h bd5a5f32589396f1dbfd4f9ff330b6e5b15c8d98 ac1548c273647f149145a74fa80184fc36656380c3b5c55cf63b1227d54c2f4f
+wonderland/Source/Wonderland/WonderlandSocialProfilePanel.h 91345386a8d847d205912e4c252bc0db65130d66 1c712a3eacdd9ba86e45828990b9dd449aff9ea7c36124925843de3c4be476a1
+wonderland/Source/Wonderland/WonderlandSocialSignIn.h 69e3bb8dae757cef547e3f7ab70cd757f1dedce0 db4f4106c82fe8e6ce5833ab418d9e40ae328172737fecb23e02cdbc1d2f5eeb
+wonderland/Source/Wonderland/WonderlandUiStyle.h 14fc390b55f151269c3819c7adb6060e6171fcce 1ff2fdd8e07712012b3206c9fe497343edcac3bde03f0d9a0090f739a8f6b3ce
+wonderland/Source/Wonderland/WonderlandSocialLffView.h a481d5d816b18f569629029e53bc4435d1bb3813 7b4d453061ed1960878c867cddcff6bfbc66d1bb77d54f2d70bbed68e4b76f89
+wonderland/Source/Wonderland/WonderlandSocialHubScrollQa.cpp (CORE's QA spec, from _qa_handoff/integration/julius_mission_14c/; not on task3 at the pin) ccf7f2a556340acece4505e7f6a2ec5c765280436614708151e73978880c3870
+.julius/hub-scroll-static.test.mjs (the declared test, generated from the seed by MAIN JULIUS) 719ff5ba8e24df7397c3dc40d1e8fac564d3486b0c00c4392420bd8d15d7b716

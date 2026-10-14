@@ -100,6 +100,9 @@ const MISSION_LIMITS = Object.freeze({
   // way. Three cycles for the same reason as missions 2 through 4: a repair
   // LINEAGE needs more than one.
   'julius-live-mission-5': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
+  // Row 14-Unreal C1, RE-SEEDED (founder directive 2026-10-14 item 7 = review J-5 option A): founder 14a (10-07), "up to $30 with up
+  // to 3 repair cycles"; lane: the default lab. Kept apart from the Decision C entries so it lands as a mission-only change.
+  'julius-unreal-mission-2': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
   //
   // THE FIRST CONTINUOUS QUALIFICATION. Smaller than Mission 5 on every axis of
   // CODE — one pure module of about 200 lines against three integrated files —
