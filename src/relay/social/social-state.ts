@@ -205,27 +205,33 @@ export function seenOnlineBy(state: SocialState, viewerId: SocialUserId, subject
  * when ALL of these hold:
  *   - it is OPEN_TO_FRIENDS;
  *   - nobody in it is blocked either way with the viewer (the wall, as before);
- *   - its LEADER is seen online by the viewer (seenOnlineBy). An APPEAR_OFFLINE leader's party is not there, exactly as a
- *     signed-out leader's is not: the founder's "Appear offline looks identical to a real sign-out". (The reviewer's repro: Nova,
- *     hidden, started "Quiet", and every friend's next snapshot listed it, led by her.)
- *   - a FRIEND of the viewer is among the members the viewer sees online, so the roster shown always holds the reason the party
- *     is shown. A party listed for a friend who is hidden inside it would itself say "a friend of yours is in here";
- *   - it has ROOM (MAIN's ruling on r1's question 2, 10-13). A full party is not there for an outsider at all: shown as "not
- *     joinable" beside a visible roster with room, it would count the members hidden from them. Members still see it whole.
- * The roster an outsider sees is the members they see online (partyRosterFor): nobody hidden from them (P1: a member hidden from
- * strangers is no id, role, mute state or count to a stranger), and nobody offline either, so a member who goes Appear Offline
- * leaves it exactly as one who signs out does. Members see their own party whole, as before.
+ *   - EVERY MEMBER is seen online by the viewer (seenOnlineBy). FOUNDER RULING WL-358-01 ("Block open-join", 10-13 15:52:09Z):
+ *     a viewer may not open-join an OPEN_TO_FRIENDS party that contains a member hidden from them, the same way a party holding a
+ *     blocked member is invisible to them -- so it is not shown to them either. "Hidden" is read as the presence authority reads
+ *     it, not seen online for whatever reason (their presence audience leaves the viewer out, they appear offline, or they signed
+ *     out), because the founder's "Appear offline looks identical to a real sign-out" forbids a party that disappears for one
+ *     and not the other. This covers the LEADER (WL-351-02: an APPEAR_OFFLINE leader's party is not there, exactly as a
+ *     signed-out leader's is not; the reviewer's repro: Nova, hidden, started "Quiet", and every friend's next snapshot listed
+ *     it, led by her) and now every other member: before WL-358-01 a member hidden from the viewer was only left out of the
+ *     roster shown, and the viewer could still open-join and then, a member, see them (F-03 of the internal #358 review);
+ *   - a FRIEND of the viewer is among the members, so the roster shown always holds the reason the party is shown;
+ *   - it has ROOM (MAIN's ruling on r1's question 2, 10-13). A full party is not there for an outsider at all.
+ * So an outsider who sees a party sees all of it (partyRosterFor), and nothing shown to them counts anybody hidden from them.
+ * Invites do not ask this (WL-358-01: "Invites still work"): a member may still invite the viewer explicitly. Members see their
+ * own party whole, as before.
  */
 export function outsiderSeesParty(state: SocialState, viewerId: SocialUserId, party: Party): boolean {
   if (party.privacy !== 'OPEN_TO_FRIENDS' || party.members.length >= PARTY_MAX_MEMBERS) return false;
   if (party.members.some((m) => m.userId === viewerId || blockedEitherWay(state, viewerId, m.userId))) return false;
-  if (!seenOnlineBy(state, viewerId, party.leaderId)) return false;
-  return party.members.some((m) => areFriends(state, viewerId, m.userId) && seenOnlineBy(state, viewerId, m.userId));
+  // WL-358-01: one member the viewer does not see online -- the leader or any other -- closes the party to them
+  if (!party.members.every((m) => seenOnlineBy(state, viewerId, m.userId))) return false;
+  return party.members.some((m) => areFriends(state, viewerId, m.userId));
 }
 
 /**
  * THE MEMBERS OF A PARTY THIS VIEWER MAY SEE, and so may count. A member: everybody but whoever is blocked either way with them
- * (F1, 10-02, unchanged). An outsider: nobody unless outsiderSeesParty, and then only the members they see online.
+ * (F1, 10-02, unchanged). An outsider: nobody unless outsiderSeesParty -- and then, since it requires every member seen online
+ * (WL-358-01), the whole party; the filter stays so a roster can never carry somebody the viewer does not see online.
  */
 export function partyRosterFor(state: SocialState, viewerId: SocialUserId, party: Party): Party['members'] {
   if (party.members.some((m) => m.userId === viewerId)) {
