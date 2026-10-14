@@ -16,6 +16,12 @@ julius-live-mission-6 src/relay/workspace/julius-tools/node-tool-adapter.ts fec0
 julius-live-mission-6 .github/julius-mission-slice/resolve.mjs c222c8c51867ffd31b66b6713dbcd11b92535fff
 julius-live-mission-6 .github/julius-mission-slice/loader.mjs b811ab9107dbe59b25e0d92a84ff5ffd5e6c1ccd
 #
+# Row 14-Unreal (C1, the Social Hub keeps scroll positions), RE-SEEDED: founder directive 2026-10-14 item 7 ("Re-seed the Unreal
+# mission in a new folder named julius-unreal-mission-2"), the review's J-5 option (A). A throwaway tree like Missions 2, 3 and 5:
+# one pin, its directory, holds the contract and every seeded byte (task3 e59f2185's seven files + CORE's read-only QA spec).
+# Before any paid run dryrun/seed-recheck.py must HOLD at the final RC's task3 commit; a drift is a NEW folder, never a new pin here.
+julius-unreal-mission-2 .github/julius-missions/julius-unreal-mission-2 0553807b55c6c39c1a824eec8b8afd29d7f5c899
+#
 # Missions 2, 3 and 5 were frozen on 2026-10-02 by the founder's paid-run roadmap ("mission
 # contract/seed pinned and reviewed" before each Alpha dispatch; Mission 5's drift repair approved
 # and to be frozen before dispatch). Each is a throwaway tree, so one pin, its directory, holds the
