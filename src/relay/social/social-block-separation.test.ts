@@ -95,14 +95,12 @@ describe('F1: leader removes, else blocker leaves', () => {
   it("4. neither side can infer the other's party membership: no party view, no party status, OFFLINE, nothing in the snapshot", () => {
     const { s, pid } = threeMemberArena();
     const out = ok(s, U.ORION, 'blocks.add', { targetId: U.LYRA, confirmSharedParty: true });
-    // LYRA is out of ORION's party; she cannot see it, and ORION's profile tells her nothing: she opens it exactly as a
-    // stranger who shares nothing (founder, 10-04) -- no relationship, no party, no mutual friends, no word of a block
+    // LYRA is out of ORION's party; she cannot see it, and ORION's profile tells her nothing: she reads it exactly as a
+    // stranger who shares nothing (founder, 10-04) -- which, since OBS-1 (C14-WL3-12, founder 10-14), is no card at all: the
+    // answer for a player who does not exist (no relationship, no party, no mutual friends, no word of a block)
     expect(partyViewFor(out.state, U.LYRA, pid)).toBeNull();
-    const lyraSeesOrion = resolveProfileFor(out.state, U.LYRA, U.ORION);
-    expect(lyraSeesOrion?.relationship).toBe('NONE');
-    expect(lyraSeesOrion?.partyStatus).toEqual({ inParty: false, memberCount: null, joinable: false });
-    expect(lyraSeesOrion?.mutualFriendIds).toEqual([]);
-    expect(JSON.stringify(lyraSeesOrion)).not.toMatch(/BLOCKED/);
+    expect(resolveProfileFor(out.state, U.LYRA, U.ORION)).toBeNull();
+    expect(resolveProfileFor(out.state, U.LYRA, 'usr_nobody')).toBeNull();
     // ORION, the blocker, sees LYRA's profile as BLOCKED, OFFLINE, with no party status
     const orionSeesLyra = resolveProfileFor(out.state, U.ORION, U.LYRA);
     expect(orionSeesLyra?.relationship).toBe('BLOCKED');
