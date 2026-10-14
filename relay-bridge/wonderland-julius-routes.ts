@@ -385,9 +385,22 @@ export interface WonderlandJuliusRouteDeps {
    * value).
    */
   readonly log?: (line: string) => void;
+  /**
+   * ONE SESSION'S SHARE (createWonderlandJuliusSessionLimit), built ONCE by the
+   * bridge: these deps are rebuilt per request, so a limit built per request
+   * would forget every request before it. Absent or null: unlimited -- the route
+   * tests and any host that composes none; the bridge always composes one
+   * (wonderland-julius-server.test.ts proves it over HTTP).
+   */
+  readonly sessionLimit?: WonderlandJuliusSessionLimit | null;
 }
 
-export type WonderlandJuliusRouteResult = { readonly status: number; readonly body: unknown } | null;
+/** An answer, and -- for a 429 only -- the header that says when to ask again. */
+export type WonderlandJuliusRouteResult = {
+  readonly status: number;
+  readonly body: unknown;
+  readonly headers?: Readonly<Record<string, string>>;
+} | null;
 
 const ROUTES = {
   '/wonderland/julius/hydrate': 'hydrate',
@@ -414,6 +427,16 @@ const SIGN_IN = (): { readonly status: number; readonly body: unknown } =>
   ({ status: 401, body: { error: 'authenticated player identity required' } });
 const BAD_QUERY = (message: string): { readonly status: number; readonly body: unknown } =>
   ({ status: 400, body: { error: message } });
+
+/**
+ * THE ONE TOO-MANY, frozen like the one not-found: every 429 these routes give
+ * has this body, whatever was asked. Only `retry-after` varies, and it is made
+ * from the SESSION's own requests -- never from a run, a project or a membership.
+ */
+export const WONDERLAND_JULIUS_TOO_MANY = Object.freeze({ error: 'too many requests from this session' });
+
+const TOO_MANY = (retryAfterSeconds: number): NonNullable<WonderlandJuliusRouteResult> =>
+  ({ status: 429, body: WONDERLAND_JULIUS_TOO_MANY, headers: { 'retry-after': String(retryAfterSeconds) } });
 
 /**
  * The query a request carries, or a refusal.
@@ -560,6 +583,16 @@ export async function serveWonderlandJuliusPage(
  *      every request carrying an Origin) -- no database is touched, and nothing
  *      about the query is answered, for a caller who is not identified (internal
  *      review N1: an anonymous malformed request is 401, never 400);
+ *  1b. the SESSION'S SHARE (429 + Retry-After; X1, JU-348-05): at most
+ *      WONDERLAND_JULIUS_SESSION_MAX_IN_FLIGHT of its requests at once and
+ *      WONDERLAND_JULIUS_SESSION_RATE -- decided from the session alone, BEFORE
+ *      the query is read, so one session's 429 is the same for its own run, an
+ *      absent run, another project's and a malformed query: it says how fast the
+ *      session asked, never what exists. A refused request opens no transaction
+ *      and is not logged (as the social routes' 429s are not). The admitted slot
+ *      is held until the answer is made, whatever it is. Past the share, the
+ *      world pool's own bound (WONDERLAND_JULIUS_WORLD_CONNECT_TIMEOUT_MS) caps
+ *      the wait for a connection that OTHER sessions hold: 503, never starvation;
  *   2. the query (400), for an identified caller -- nothing is looked up for a
  *      request that names nothing;
  *   3. identifiers that cannot exist, and a native session asking for a project
@@ -575,7 +608,7 @@ export async function handleWonderlandJuliusRoute(
 ): Promise<WonderlandJuliusRouteResult> {
   if (!isWonderlandJuliusRoute(input.path) || input.method !== 'GET') return null;
   const route: WonderlandJuliusRouteName = ROUTES[input.path as keyof typeof ROUTES];
-  const note = (status: number, reason: string, ids: { projectId?: string; runId?: string; playerId?: string } = {}): void => {
+  const note: WonderlandJuliusNote = (status, reason, ids = {}) => {
     const named = [
       ids.playerId === undefined ? null : `player=${ids.playerId}`,
       ids.projectId === undefined ? null : `project=${ids.projectId}`,
@@ -594,6 +627,32 @@ export async function handleWonderlandJuliusRoute(
     return NOT_FOUND();
   }
 
+  // THE SESSION'S SHARE (1b), before anything it asked is read: the same 429 whatever the query names.
+  const admission = deps.sessionLimit?.admit(caller.sessionId, input.now) ?? null;
+  if (admission !== null && !admission.ok) return TOO_MANY(admission.retryAfterSeconds);
+  try {
+    return await answerIdentifiedCaller(route, caller, input, deps, note);
+  } finally {
+    // Given back whatever the answer was -- 200, 400, the one 404, 503 -- so a session never locks itself out.
+    if (admission !== null && admission.ok) admission.release();
+  }
+}
+
+/** One line for the operator's log: the route, a status, a fixed reason word, and ids that passed their shape checks. */
+type WonderlandJuliusNote = (
+  status: number,
+  reason: string,
+  ids?: { readonly projectId?: string; readonly runId?: string; readonly playerId?: string },
+) => void;
+
+/** Steps 2-5 of the policy above, for a caller step 1 identified and step 1b admitted. */
+async function answerIdentifiedCaller(
+  route: WonderlandJuliusRouteName,
+  caller: Extract<WonderlandJuliusCaller, { readonly ok: true }>,
+  input: WonderlandJuliusRouteRequest,
+  deps: WonderlandJuliusRouteDeps,
+  note: WonderlandJuliusNote,
+): Promise<NonNullable<WonderlandJuliusRouteResult>> {
   // ONLY NOW THE QUERY: an identified caller's malformed request is 400.
   const query = readWonderlandJuliusQuery(input.url);
   if (query === null) return BAD_QUERY('projectId, runId and a whole cursor are required');

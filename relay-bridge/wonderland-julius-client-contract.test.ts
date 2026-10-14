@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Pool } from 'pg';
 
-import { handleWonderlandJuliusRoute } from './wonderland-julius-routes';
+import { createWonderlandJuliusSessionLimit, handleWonderlandJuliusRoute } from './wonderland-julius-routes';
 import type {
   WonderlandJuliusResultSource,
   WonderlandJuliusRouteDeps,
@@ -1760,6 +1760,7 @@ describe('every status these routes answer, as the client reads it: its link sta
     readonly world?: WonderlandJuliusWorld | null;
     readonly runId?: string;
     readonly cursor?: string;
+    readonly sessionLimit?: WonderlandJuliusRouteDeps['sessionLimit'];
   }) {
     const store = createBrowserSessionStore();
     const token = nativeSession(store);
@@ -1768,7 +1769,7 @@ describe('every status these routes answer, as the client reads it: its link sta
     const authorization = vary.authorization === undefined ? `Relay-Session ${token}` : vary.authorization ?? undefined;
     const answer = await handleWonderlandJuliusRoute(
       { method: 'GET', path: `/wonderland/julius/${route}`, url, authorization, origin: undefined, now: NOW },
-      { sessions: store, world: vary.world === undefined ? worldOver(ledgerPool()) : vary.world },
+      { sessions: store, world: vary.world === undefined ? worldOver(ledgerPool()) : vary.world, sessionLimit: vary.sessionLimit },
     );
     return { status: answer?.status ?? 0, body: JSON.stringify(answer?.body ?? null) };
   }
@@ -1781,6 +1782,8 @@ describe('every status these routes answer, as the client reads it: its link sta
     ['a run that does not exist', { runId: 'run:ffffffff' }, 404],
     ['an identified caller\'s malformed cursor', { cursor: '0x10' }, 400],
     ['a bridge with no world configured', { world: null }, 503],
+    // X1 (JU-348-05): a session over its share. The client does not read Retry-After; its own backoff is the retry.
+    ['a session over its share', { sessionLimit: createWonderlandJuliusSessionLimit({ maxInFlight: 2, rate: () => ({ ok: false, retryAfterMs: 3_000 }) }) }, 429],
   ];
 
   /** Failed(status) for any status LinkStateForFailure does not name: Stale, the token kept, hydrate again after a backoff. */
@@ -1791,6 +1794,7 @@ describe('every status these routes answer, as the client reads it: its link sta
     401: { link: 'SessionExpired', tokenInvalidated: true, rehydrates: true },
     404: { link: 'Refused', tokenInvalidated: false, rehydrates: true },
     400: FAILED_STALE,
+    429: FAILED_STALE,
     503: FAILED_STALE,
   };
 
