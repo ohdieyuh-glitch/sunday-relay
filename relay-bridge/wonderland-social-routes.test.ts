@@ -234,9 +234,10 @@ describe('BF-2 through the real routes: the profile Relay Dog follows the worn s
     expect((await w.kai.post('/world/state', report('JACK FLAME'))).status).toBe(400);
     expect(await skinOf(w.nova, 'usr_kai')).toBe('jack_flame');
 
-    // privacy: presence to friends only -> the stranger reads the base form, the friend still the skin
+    // privacy: presence to friends only -> the friend still reads the skin; the stranger reads no card at all (OBS-1, C14-WL3-12,
+    // founder 10-14: a hidden player is, by id, a player who does not exist -- see the OBS-1 describe below)
     expect((await w.kai.post('/privacy', { presenceVisibility: 'FRIENDS' })).status).toBe(200);
-    expect([await skinOf(w.nova, 'usr_kai'), await skinOf(w.vega, 'usr_kai')]).toEqual(['jack_flame', 'relay_og']);
+    expect([await skinOf(w.nova, 'usr_kai'), await skinOf(w.vega, 'usr_kai')]).toEqual(['jack_flame', undefined]);
     // a block, either way: nothing (presence EVERYONE again, so the block alone decides; control first)
     expect((await w.kai.post('/privacy', { presenceVisibility: 'EVERYONE' })).status).toBe(200);
     expect(await skinOf(w.vega, 'usr_kai')).toBe('jack_flame');
@@ -244,7 +245,8 @@ describe('BF-2 through the real routes: the profile Relay Dog follows the worn s
     expect(await skinOf(w.vega, 'usr_kai')).toBe('relay_og');
     expect((await w.vega.post('/blocks/usr_kai/remove')).status).toBe(200);
     expect((await w.kai.post('/blocks', { targetId: 'usr_vega' })).status).toBe(200);
-    expect(await skinOf(w.vega, 'usr_kai')).toBe('relay_og');
+    // the blocked side reads the blocker as a stranger who shares nothing: since OBS-1, no card at all
+    expect(await skinOf(w.vega, 'usr_kai')).toBeUndefined();
     expect(await skinOf(w.nova, 'usr_kai'), 'their block changes nothing for Nova').toBe('jack_flame');
   });
 });
@@ -803,5 +805,45 @@ describe('WL-358-02: accepting an invite to a party that has filled answers the 
     const w = world(store);
     expect((await w.nova.post(`/party-invites/${inviteId}/accept`)).status).toBe(200);
     expect((await w.nova.get('/snapshot')).body.data.party?.partyId).toBe(partyId);
+  });
+});
+
+/*
+ * OBS-1 (independent finding C14-WL3-12, founder ruling 2026-10-14) through the real routes: a player hidden from strangers is, to an
+ * unrelated stranger who knows their id, exactly a player who does not exist -- the whole HTTP answer (status, body, headers) of
+ * GET /profiles/:id and GET /profiles/:id/showcase deep-equals a nonexistent id's. The blocked side reads the blocker the same way.
+ * A friend still opens the card; mute, block and report still reach the hidden player by id alone.
+ */
+describe('OBS-1: a hidden player is, by id, a player who does not exist (routes)', () => {
+  const READS = [(id: string) => `/profiles/${id}`, (id: string) => `/profiles/${id}/showcase`] as const;
+
+  it('presence FRIENDS: Vega (a stranger) gets the nonexistent id\'s answer, field for field; Nova (a friend) gets the card', async () => {
+    const store = createInMemorySocialStore();
+    const w = await friendsOn(store);
+    await w.vega.get('/snapshot');
+    expect((await w.kai.post('/privacy', { presenceVisibility: 'FRIENDS' })).status).toBe(200);
+    for (const read of READS) {
+      const hidden = await w.vega.get(read('usr_kai'));
+      const nobody = await w.vega.get(read('usr_nobody'));
+      expect(nobody.status, 'the control: a nonexistent id is a 404').toBe(404);
+      expect(hidden).toEqual(nobody);
+      expect((await w.nova.get(read('usr_kai'))).status, 'the friend still opens it').toBe(200);
+    }
+    expect((await w.nova.get('/profiles/usr_kai')).body.data.profile.displayName).toBe('Kai');
+    // mute, block and report still reach the hidden player by id, with no profile read first
+    expect((await w.vega.post('/mutes', { targetId: 'usr_kai', voice: true, messages: true })).status).toBe(200);
+    expect((await w.vega.post('/reports', { reportedId: 'usr_kai', reason: 'SPAM' })).status).toBe(200);
+    expect((await w.vega.post('/blocks', { targetId: 'usr_kai' })).status).toBe(200);
+  });
+
+  it('presence EVERYONE: the stranger opens the card; once Kai blocks Vega, Vega gets the nonexistent id\'s answer, field for field', async () => {
+    const store = createInMemorySocialStore();
+    const w = await friendsOn(store);
+    await w.vega.get('/snapshot');
+    expect((await w.vega.get('/profiles/usr_kai')).body.data.profile.displayName, 'the control: a public card opens').toBe('Kai');
+    expect((await w.kai.post('/blocks', { targetId: 'usr_vega' })).status).toBe(200);
+    for (const read of READS) expect(await w.vega.get(read('usr_kai'))).toEqual(await w.vega.get(read('usr_nobody')));
+    // the blocker still opens the card of the person they blocked (to unblock)
+    expect((await w.kai.get('/profiles/usr_vega')).body.data.relationship).toBe('BLOCKED');
   });
 });

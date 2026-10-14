@@ -432,7 +432,13 @@ suite('BF-2: the worn skin on real PostgreSQL, across a restart', () => {
     // presence to friends only: the stranger reads the base form, the friend the skin -- after a restart too
     await apply('privacy.update_self', ADA, { presenceVisibility: 'FRIENDS' });
     store = await openSocialPostgresStore(pool);
-    expect([await skinSeenBy(BO), await skinSeenBy(CY)]).toEqual(['baal', 'relay_og']);
+    expect(await skinSeenBy(BO)).toBe('baal');
+    // OBS-1 (C14-WL3-12, founder 10-14): to the unrelated stranger, a player hidden from strangers is a player who does not exist --
+    // the whole answer deep-equals a nonexistent id's, after a restart too (the friend above still reads the card)
+    const lookUp = (subject: string) => store.apply('profile.read', CY, { ids: [subject], body: {}, query: {} }, at());
+    const nobody = await lookUp(`usr_nobody_${nonce}`);
+    expect(nobody.ok, 'the control: a nonexistent id is refused').toBe(false);
+    expect(await lookUp(ADA)).toEqual(nobody);
     // a block either way: nothing (presence EVERYONE again, so the block alone decides)
     await apply('privacy.update_self', ADA, { presenceVisibility: 'EVERYONE' });
     await apply('blocks.add', CY, { targetId: ADA });

@@ -198,10 +198,12 @@ describe('blocks', () => {
     expect(mira.restrictedReason).toBe('PRIVATE');
     expect(mira.can.message).toBe(false);
     expect(mira.can.sendFriendRequest).toBe(false);
-    const card = resolveProfileFor(s, U.KAI, U.MIRA);
-    expect(card?.relationship).toBe('NONE');
-    expect(card?.mutualFriendIds).toEqual([]);
-    expect(card?.partyStatus).toEqual({ inParty: false, memberCount: null, joinable: false });
+    // OBS-1 (C14-WL3-12, founder 10-14): the stranger who shares nothing has no card to open, so neither does the blocked side --
+    // exactly the answer for a player who does not exist; mute, block and report stay offered (they take an id)
+    expect(mira.can.viewProfile).toBe(false);
+    expect([mira.can.mute, mira.can.block, mira.can.report]).toEqual([true, true, true]);
+    expect(resolveProfileFor(s, U.KAI, U.MIRA)).toBeNull();
+    expect(resolveProfileFor(s, U.KAI, 'usr_nobody')).toBeNull();
   });
 
   it('blocking ends the friendship, the requests, messages and invites both ways; unblocking restores nothing', () => {

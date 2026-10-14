@@ -703,7 +703,8 @@ describe('BF-2: the profile Relay Dog wears the skin the player wears, through t
     const { s, w } = loop();
     let x = run(s, w, A, 'world.state', tick('jack_flame'), 300).state;
     x = run(x, emptyWorldState(), A, 'privacy.update_self', { presenceVisibility: 'FRIENDS' }, 400).state;
-    expect([skinOn(x, B, A), skinOn(x, C, A), skinOn(x, A, A)]).toEqual(['jack_flame', 'relay_og', 'jack_flame']);
+    // the stranger C, outside the audience, reads no card at all (OBS-1, C14-WL3-12, founder 10-14), let alone the skin
+    expect([skinOn(x, B, A), skinOn(x, C, A), skinOn(x, A, A)]).toEqual(['jack_flame', undefined, 'jack_flame']);
     x = run(x, emptyWorldState(), A, 'privacy.update_self', { presenceVisibility: 'NOBODY' }, 500).state;
     expect([skinOn(x, B, A), skinOn(x, A, A)]).toEqual(['relay_og', 'jack_flame']);
     // blocked, either way: nothing (presence EVERYONE again, so only the block decides)
@@ -711,11 +712,14 @@ describe('BF-2: the profile Relay Dog wears the skin the player wears, through t
     expect(skinOn(x, C, A), 'control: the stranger sees it while nothing walls them').toBe('jack_flame');
     const aBlocksC = run(x, emptyWorldState(), A, 'blocks.add', { targetId: C }, 700).state;
     const cBlocksA = run(x, emptyWorldState(), C, 'blocks.add', { targetId: A }, 700).state;
-    expect([skinOn(aBlocksC, C, A), skinOn(cBlocksA, C, A)]).toEqual(['relay_og', 'relay_og']);
+    // the blocked side (C, blocked by A) reads no card (OBS-1: the stranger who shares nothing has none); the blocker (C, who blocked
+    // A) keeps A's card to manage the block, in the base form
+    expect([skinOn(aBlocksC, C, A), skinOn(cBlocksA, C, A)]).toEqual([undefined, 'relay_og']);
     expect(skinOn(aBlocksC, B, A), 'a block between A and C changes nothing for B').toBe('jack_flame');
-    // the blocked side's card is a private stranger's, Dog included
+    // the blocked side's answer is a private stranger's: since OBS-1 both are no card at all
     const privateStranger = run(x, emptyWorldState(), A, 'privacy.update_self', { presenceVisibility: 'NOBODY' }, 800).state;
-    expect(resolveProfileFor(aBlocksC, C, A)?.profile).toEqual(resolveProfileFor(privateStranger, C, A)?.profile);
+    expect(resolveProfileFor(aBlocksC, C, A)).toBeNull();
+    expect(resolveProfileFor(privateStranger, C, A)).toBeNull();
   });
 
   it('a skin change is told only to friends whose card moved: a friend outside the presence audience is not told', () => {

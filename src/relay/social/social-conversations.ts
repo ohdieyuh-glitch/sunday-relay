@@ -23,7 +23,7 @@ import {
   type MessageKind,
   type SocialUserId,
 } from './social-contracts';
-import { resolvePresenceFor } from './social-presence';
+import { identityVisibleTo, resolvePresenceFor } from './social-presence';
 import { audienceAdmits, blockedEitherWay, conversationById, hasUser, isMuted, messagesOf, mintId, userById, type SocialState } from './social-state';
 
 const denied = (message: string) => fail<SocialState>(relayError('permission-denied', message));
@@ -210,7 +210,9 @@ export function conversationsFor(state: SocialState, userId: SocialUserId): Conv
       return {
         conversationId: c.conversationId,
         kind: c.kind,
-        title: c.title ?? (other !== null ? (userById(state, other)?.profile.displayName ?? other) : 'Conversation'),
+        // A DIRECT conversation is titled with the other person's name only if this member may know who they are (OBS-1 round 2,
+        // F2): one opened by id with somebody hidden from them reads as the bare id until that person writes in it.
+        title: c.title ?? (other !== null ? (identityVisibleTo(state, userId, other) ? (userById(state, other)?.profile.displayName ?? other) : other) : 'Conversation'),
         otherUserId: other,
         lastMessagePreview: last === undefined ? null : last.kind === 'TEXT' ? last.body.slice(0, 80) : last.kind === 'PARTY_INVITE' ? 'Party invite' : last.kind === 'SERVER_INVITE' ? 'Server invite' : last.body.slice(0, 80),
         lastMessageAtIso: c.lastMessageAtIso,
