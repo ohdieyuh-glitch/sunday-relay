@@ -471,7 +471,6 @@ export interface UserProfile {
   readonly memberSinceIso: string;
 }
 
-/** A profile as one viewer sees it: the public card plus the viewer-specific presence, relationship and mutual friends. */
 /**
  * A CARD AS SERVED TO ONE VIEWER: the owner's profile, or -- where the viewer holds the card only through an act of their own (OBS-1
  * round 2: a block they filed by id on somebody hidden from them) -- the same shape with nothing of the owner in it: the bare id as
@@ -479,6 +478,7 @@ export interface UserProfile {
  */
 export type UserProfileCard = Omit<UserProfile, 'memberSinceIso'> & { readonly memberSinceIso: string | null };
 
+/** A profile as one viewer sees it: the public card plus the viewer-specific presence, relationship and mutual friends. */
 export interface UserProfileView {
   readonly profile: UserProfileCard;
   readonly presence: UserPresenceView;

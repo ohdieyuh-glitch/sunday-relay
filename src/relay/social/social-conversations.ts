@@ -24,16 +24,24 @@ import {
   type SocialUserId,
 } from './social-contracts';
 import { identityVisibleTo, resolvePresenceFor } from './social-presence';
-import { audienceAdmits, blockedEitherWay, conversationById, hasUser, isMuted, messagesOf, mintId, userById, type SocialState } from './social-state';
+import {
+  audienceAdmits,
+  blockedEitherWay,
+  conversationById,
+  directConversationId,
+  hasUser,
+  isMuted,
+  messagesOf,
+  mintId,
+  userById,
+  type SocialState,
+} from './social-state';
 
 const denied = (message: string) => fail<SocialState>(relayError('permission-denied', message));
 const invalid = (message: string) => fail<SocialState>(relayError('validation-failed', message));
 
-/** The deterministic id of the one DIRECT conversation between two people. */
-export function directConversationId(a: SocialUserId, b: SocialUserId): string {
-  const [x, y] = a < b ? [a, b] : [b, a];
-  return `dm_${x}__${y}`;
-}
+/** The deterministic id of the one DIRECT conversation between two people (defined beside the state's questions, which ask it). */
+export { directConversationId };
 
 /** The refusal for "you may not write to this person": a policy that does not admit you, and anybody across a wall. */
 export const NOT_ACCEPTING_MESSAGES = 'this person is not accepting messages from you';

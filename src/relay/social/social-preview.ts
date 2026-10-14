@@ -158,7 +158,9 @@ export function buildSocialView(state: SocialState, viewerId: SocialUserId, nowI
    * members of their party and of the parties they may see, the other side of the conversations they may see (and the
    * senders in them), whoever invited them -- plus the people they blocked themselves, so they can unblock. Every one of
    * those surfaces is already walled, so a blocker is absent exactly as a stranger is absent: the same absence an unfriend
-   * leaves. Anybody else's card is still one profile.read away.
+   * leaves. Anybody else's card is one profile.read away only where the viewer may know who they are (OBS-1: inside their presence
+   * audience, or shown to by them -- social-presence.ts identityVisibleTo); to anyone else profile.read answers exactly as for a
+   * player who does not exist.
    */
   const bounded = boundedSnapshotMessages(state, conversations);
   const described = new Set<SocialUserId>([viewerId, ...friends.map((f) => f.userId)]);
