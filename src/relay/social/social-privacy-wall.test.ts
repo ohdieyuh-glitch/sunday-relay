@@ -8,7 +8,6 @@ import { buildSocialView } from './social-preview';
 import { partyOf, type SocialState } from './social-state';
 import { createInMemorySocialStore, ensureSocialUser } from './social-store';
 import { resolvePresenceFor } from './social-presence';
-import type { UserProfileView } from './social-contracts';
 
 /*
  * THE PRIVACY WALL, AS SECOND'S ADVERSARIAL R16 HARNESS FOUND IT (2026-10-04, stub identities on a throwaway database), and the
@@ -144,19 +143,19 @@ describe('D1 / D4: the blocked side sees the blocker as an ordinary private stra
     expect(resolvePresenceFor(s, U.MIRA, U.KAI)!.restrictedReason).toBe('BLOCKED');
   });
 
-  it('profile.read and showcase.read of the blocker answer exactly as a private stranger\'s: relationship NONE, no mutual friends, no party', () => {
+  it('profile.read and showcase.read of the blocker answer exactly as a private stranger\'s -- since OBS-1, a nonexistent id\'s', () => {
+    // OBS-1 (C14-WL3-12, founder 10-14): the stranger who shares nothing is, by id, a player who does not exist; so is the blocker
+    // to the blocked side -- the whole answer, field for field, for both reads
     const s = withPrivateStranger(createSocialFixture());
-    const blocker = op(s, U.KAI, 'profile.read', {}, [U.MIRA]);
-    const stranger = op(s, U.KAI, 'profile.read', {}, ['usr_zed']);
-    if (!blocker.ok || !stranger.ok) throw new Error('both profiles must open');
-    const shape = (v: SocialCommandOutcome) => {
-      const { profile: _card, presence, ...rest } = v.data as UserProfileView;
-      return { ...rest, presence: withoutId(presence) };
-    };
-    expect(shape(blocker.value)).toEqual(shape(stranger.value));
-    expect((blocker.value.data as UserProfileView).relationship).toBe('NONE');
-    expect(JSON.stringify(blocker.value.data)).not.toMatch(/BLOCKED/);
-    expect(op(s, U.KAI, 'showcase.read', {}, [U.MIRA]).ok).toBe(op(s, U.KAI, 'showcase.read', {}, ['usr_zed']).ok);
+    for (const read of ['profile.read', 'showcase.read'] as const) {
+      const blocker = op(s, U.KAI, read, {}, [U.MIRA]);
+      const stranger = op(s, U.KAI, read, {}, ['usr_zed']);
+      const nobody = op(s, U.KAI, read, {}, ['usr_nobody']);
+      expect(nobody.ok, `${read}: the control, a nonexistent id, is refused`).toBe(false);
+      expect(blocker, read).toEqual(nobody);
+      expect(stranger, read).toEqual(nobody);
+      expect(JSON.stringify(blocker)).not.toMatch(/BLOCKED|Mira/);
+    }
   });
 
   it('snapshot.profiles: a blocker is absent exactly as a stranger is absent -- the same absence an unfriend leaves', () => {

@@ -94,6 +94,12 @@ export function userById(state: SocialState, userId: SocialUserId): SocialUserRe
   return Object.hasOwn(state.users, userId) ? state.users[userId] : undefined;
 }
 
+/** The deterministic id of the one DIRECT conversation between two people: the only id openDirectConversation ever gives one. */
+export function directConversationId(a: SocialUserId, b: SocialUserId): string {
+  const [x, y] = a < b ? [a, b] : [b, a];
+  return `dm_${x}__${y}`;
+}
+
 export function conversationById(state: SocialState, conversationId: string): Conversation | undefined {
   return Object.hasOwn(state.conversations, conversationId) ? state.conversations[conversationId] : undefined;
 }
@@ -239,6 +245,25 @@ export function partyRosterFor(state: SocialState, viewerId: SocialUserId, party
   }
   if (!outsiderSeesParty(state, viewerId, party)) return [];
   return party.members.filter((m) => seenOnlineBy(state, viewerId, m.userId));
+}
+
+/**
+ * THE WRITER SPOKE TO THE READER (OBS-1 round 2, F2): the DIRECT conversation between the two holds a message the writer sent. A
+ * conversation the READER opened by id and wrote into alone is not this: only the writer's own words make them known to the reader.
+ * ONE LOOKUP (the internal review of #368, F-5): a DIRECT conversation is only ever stored under directConversationId (it is asked per
+ * row, per title and per card, so it does not scan the server's conversations); the kind and members are still checked, so a record
+ * under that id that is not this pair's DIRECT conversation never counts.
+ */
+export function wroteDirectlyTo(state: SocialState, writerId: SocialUserId, readerId: SocialUserId): boolean {
+  if (writerId === readerId) return false;
+  const c = conversationById(state, directConversationId(writerId, readerId));
+  return (
+    c !== undefined &&
+    c.kind === 'DIRECT' &&
+    c.memberIds.includes(writerId) &&
+    c.memberIds.includes(readerId) &&
+    messagesOf(state, c.conversationId).some((m) => m.senderId === writerId)
+  );
 }
 
 export function friendIdsOf(state: SocialState, userId: SocialUserId): SocialUserId[] {
