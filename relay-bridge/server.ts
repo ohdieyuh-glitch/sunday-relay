@@ -63,7 +63,7 @@ import { missionDispatchProblems, resolveRoleSlotsFromEnv } from './role-slot-co
 import {
   createCronScheduler, cronSchedulerEnabled, schedulerIntervalSeconds,
 } from './cron-scheduler';
-import { createBrowserSessionStore } from './browser-session/grants';
+import { createBrowserSessionStore, type BrowserSessionStore } from './browser-session/grants';
 import {
   createInstallationGrants, createOAuthStateStore, createSignInClaimStore,
   handleGithubAuthRoute, isGithubAuthRoute,
@@ -80,6 +80,8 @@ import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
+import { handleWonderlandJuliusRoute, isWonderlandJuliusRoute, type WonderlandJuliusWorld } from './wonderland-julius-routes';
+import { createWonderlandJuliusWorldPool, wonderlandJuliusWorld } from './wonderland-julius-world';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute, SIGNIN_START_RATE } from './wonderland-native-signin-routes';
 import { createCommandBudgets, createPresenceLease, createSessionRateLimit, endSocialPresence, EOS_CLIENT_CONFIG_RATE, handleSocialRoute, isSocialRoute, nativeSocialSessionDeps, type SocialDeliveryRecord } from './wonderland-social-routes';
@@ -252,13 +254,26 @@ export function createBridgeServer(
   brainStore: BrainMemoryStore | null = null,
   /** Authoritative Wonderland state. Inject a durable restored instance in production. */
   wonderlandBackend: WonderlandBackend | null = null,
+  /**
+   * The Julius world routes' reads (row 12). Absent in production, where they are
+   * composed lazily over the world's own read-only pool (internal review M1+M2);
+   * injected only by a test that proves the routes over real HTTP without a database.
+   */
+  juliusWorld: WonderlandJuliusWorld | null = null,
+  /**
+   * The session store. Absent in production, where it is built below, in memory.
+   * Injected only by a test that needs a NATIVE world session over real HTTP: the
+   * world routes are native-only (row 12, internal review N5), and the one route
+   * that mints a native session -- pairing -- needs a membership database.
+   */
+  sessionStore: BrowserSessionStore | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
    * A restart therefore revokes every grant and session — fail-closed — and no
    * browser credential is ever written to the mounted volume.
    */
-  const browserSessions = createBrowserSessionStore();
+  const browserSessions = sessionStore ?? createBrowserSessionStore();
   const wonderland = wonderlandBackend ?? WonderlandBackend.empty();
   /**
    * WONDERLAND SOCIAL (R16): the desktop client's own sign-in (GitHub's device flow) and the social routes. OFF unless the
@@ -350,6 +365,31 @@ export function createBridgeServer(
     return projectBrainPortsCache;
   };
   /**
+   * THE JULIUS WORLD ROUTES' READS (row 12, R3'): membership, the run as a world
+   * draws it, and Julius's own result -- from the database Julius writes to
+   * (`juliusRuntimeDatabaseUrl`, the URL `juliusPool()` uses), but through the
+   * WORLD'S OWN POOL (internal review M1+M2): at most four connections, every
+   * session read-only by default, with statement and idle-in-transaction
+   * timeouts, so a polling world can never hold the Julius writers' connections
+   * (wonderland-julius-world.ts). Every request's reads run inside ONE read-only
+   * transaction on it. Lazy, so a bridge that never serves a world opens nothing;
+   * no database -- or a URL that would replace the pool's read-only settings --
+   * no world, and the routes answer 503.
+   */
+  let juliusWorldCache: WonderlandJuliusWorld | null = juliusWorld;
+  let juliusWorldPoolCache: Pool | null | undefined;
+  const resolveJuliusWorld = (): WonderlandJuliusWorld | null => {
+    if (juliusWorldCache !== null) return juliusWorldCache;
+    if (juliusWorldPoolCache === undefined) {
+      juliusWorldPoolCache = createWonderlandJuliusWorldPool(juliusRuntimeDatabaseUrl(), (line) => console.warn(`[relay-bridge] ${line}`));
+      // As for the Julius pool: an idle world connection that dies is reported here, never as an uncaught exception.
+      juliusWorldPoolCache?.on('error', (error) => console.warn(`[relay-bridge] julius world pool: idle connection lost (${error.message})`));
+    }
+    if (juliusWorldPoolCache === null) return null;
+    juliusWorldCache = wonderlandJuliusWorld(juliusWorldPoolCache);
+    return juliusWorldCache;
+  };
+  /**
    * SIGN IN WITH GITHUB. The CSRF state store lives in memory beside the
    * sessions — a restart forgets an in-flight sign-in, which is fail-closed. The
    * GitHub App config, the registered callback URL, and the origin a minted
@@ -403,6 +443,10 @@ export function createBridgeServer(
  * `juliusRuntimeDatabaseUrl` is what chooses the URL: `JULIUS_DATABASE_URL`
  * first, `DATABASE_URL` after it. That is the launcher's decision to make — and
  * it is deliberately NOT the variable the real-PostgreSQL test suites read.
+ *
+ * The one exception is the Wonderland world routes (row 12): they read the same
+ * database through a small pool of their own, read-only by default and bounded,
+ * so a polling world can never hold these connections (`resolveJuliusWorld`).
  */
 let juliusPoolCache: Pool | null | undefined;
 const juliusPool = (): Pool | null => {
@@ -826,6 +870,34 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
           }, projectBrainPorts(), { request: req, response: res, headers: cors });
           if (brainResult !== null && brainResult !== 'streaming') send(res, brainResult.status, brainResult.body, cors);
           return;
+        }
+
+        /**
+         * THE JULIUS WORLD ROUTES (row 12, R3'): GET /wonderland/julius/hydrate,
+         * /events?mode=page and /result -- read-only, for the player's own project.
+         * In front of the Wonderland family, which claims every `/wonderland/` path.
+         * Only a GET is theirs: any other method on these paths reaches the family
+         * exactly as it did before they existed. See wonderland-julius-routes.ts.
+         */
+        if (method === 'GET' && isWonderlandJuliusRoute(path.replace('/relay-api', ''))) {
+          const worldResult = await handleWonderlandJuliusRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            url: (req.url ?? '/').replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+            origin,
+            now: Date.now(),
+          }, {
+            sessions: browserSessions,
+            world: resolveJuliusWorld(),
+            operatorToken: process.env.RELAY_BRIDGE_API_TOKEN,
+            log: (line) => console.warn(`[relay-bridge] ${line}`),
+          });
+          if (worldResult !== null) {
+            // A player's mission state: never kept by a cache on the way.
+            send(res, worldResult.status, worldResult.body, { ...cors, 'cache-control': 'no-store' });
+            return;
+          }
         }
 
         if (isWonderlandRoute(path.replace('/relay-api', ''))) {

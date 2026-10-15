@@ -57,6 +57,33 @@ export function juliusTestDatabaseUrl(env: NodeJS.ProcessEnv = process.env): str
   return null;
 }
 
+/** The live Julius store's database name. CI's own job database carries it too; its suites use `julius_suites`. */
+export const JULIUS_LIVE_DATABASE_NAME = 'julius';
+
+/**
+ * A SECOND GUARD a suite may stack on `juliusTestDatabaseUrl`: does this URL name the live store's DATABASE?
+ *
+ * DECIDED BY THE DATABASE NAME ALONE -- never the port, never the host. CI's throwaway suite database is
+ * `julius-postgres:5432/julius_suites` in one job and `127.0.0.1:55432/julius_suites` in another
+ * (julius-real-infra.yml), so a port says nothing about which database it is: a guard that refused 5432 refused
+ * CI's own throwaway, and on #348 the world-observe suite threw before a single case ran.
+ *
+ * The name is read where pg-connection-string reads it for a `postgres:` / `postgresql:` URL -- the path, decoded --
+ * and compared without regard to case. A GUARD THAT CANNOT TELL SAYS YES (refuse): a URL that does not parse, any
+ * other scheme, or no name at all (pg then falls back to the user's name, which is `julius` on the live store).
+ */
+export function juliusTestDatabaseNamesLiveStore(url: string): boolean {
+  let name: string;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') return true;
+    name = decodeURIComponent(parsed.pathname.replace(/^\//u, ''));
+  } catch {
+    return true;
+  }
+  return name === '' || name.toLowerCase() === JULIUS_LIVE_DATABASE_NAME;
+}
+
 /**
  * WHY A SUITE DID NOT RUN, in one sentence a reader can act on. Printed by the
  * suites' own names rather than as a silent skip, so "it passed" and "it was

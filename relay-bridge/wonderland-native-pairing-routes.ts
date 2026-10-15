@@ -13,9 +13,9 @@ import {
 } from '../src/relay/mission/wonderland/wonderland-authorization';
 
 /**
- * WHO BELONGS TO WHICH PROJECT, as the routes ask it. Declared here on this
- * branch, where the Julius world routes that also declare it are not present;
- * the shape is theirs, unchanged, so the two compose when both are mounted.
+ * WHO BELONGS TO WHICH PROJECT, as the routes ask it. Declared here once; the
+ * Julius world routes (wonderland-julius-routes.ts) import it and ask it on
+ * every request, so pairing and reading answer from one shape.
  */
 export interface WonderlandProjectMembershipSource {
   lookup(input: {
@@ -67,7 +67,7 @@ export const WONDERLAND_WORLD_CAPABILITY: WonderlandProjectCapability = 'read_wo
  * routes make on every request.
  *
  * WHAT A NATIVE SESSION CAN DO. Read the Julius world stream --
- * /wonderland/julius/hydrate and /events -- for the ONE project it was paired for.
+ * /wonderland/julius/hydrate, /events and /result -- for the ONE project it was paired for.
  * Nothing else: every browser route refuses it, the battle and presence routes
  * refuse it, and it can mint no grant and no session.
  *
