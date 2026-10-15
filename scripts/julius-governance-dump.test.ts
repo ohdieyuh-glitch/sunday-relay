@@ -21,7 +21,23 @@ import { describe, expect, it } from 'vitest';
 const ROOT = join(__dirname, '..');
 const SCRIPT = readFileSync(join(ROOT, '.github', 'julius-live-evidence-dump.sh'), 'utf8');
 const query = (file: string): string => SCRIPT.split('\n').find((line) => line.startsWith('dump "SELECT') && line.endsWith(`" ${file}`)) ?? '';
-const selected = (line: string): string[] => (/^dump "SELECT ([\s\S]*?) FROM relay_wonderland\./u.exec(line)?.[1] ?? '').split(',');
+/** Splits the select list on top-level commas only: `left(col,500) AS col` keeps its own comma. */
+const splitTop = (list: string): string[] => {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of list) {
+    if (ch === '(') depth += 1;
+    if (ch === ')') depth -= 1;
+    if (ch === ',' && depth === 0) { parts.push(current); current = ''; } else current += ch;
+  }
+  return [...parts, current];
+};
+const selectList = (line: string): string => /^dump "SELECT ([\s\S]*?) FROM relay_wonderland\./u.exec(line)?.[1] ?? '';
+/** Column names as the TSV header shows them: the alias if there is one. */
+const selected = (line: string): string[] => splitTop(selectList(line)).map((item) => / AS ([a-z_]+)$/u.exec(item)?.[1] ?? item);
+/** The source columns, looking through `left(col,N)`. */
+const sourceColumns = (line: string): string[] => splitTop(selectList(line)).map((item) => /^left\(([a-z_]+),\d+\)/u.exec(item)?.[1] ?? item);
 
 describe('V6 G-5: the governance dumps', () => {
   it('RED before G-5: the dump writes approvals.tsv, transitions.tsv and lifecycle-events.tsv', () => {
@@ -37,12 +53,14 @@ describe('V6 G-5: the governance dumps', () => {
     expect(line, 'never only the PENDING ones: a granted run must show its grant').not.toMatch(/\bWHERE\b/u);
     expect(line).toContain('FROM relay_wonderland.julius_approvals ORDER BY requested_at,approval_id"');
     const ddl = readFileSync(join(ROOT, 'src', 'relay', 'persistence', 'wonderland-migrations', '018_julius_lifecycle.sql'), 'utf8');
-    for (const column of selected(line)) expect(ddl, `018 creates julius_approvals.${column}`).toMatch(new RegExp(`\\n ${column} `, 'u'));
+    expect(selectList(line), 'the founder text is bounded in the dump, per design section 7').toContain('left(decision_reason,500) AS decision_reason');
+    for (const column of sourceColumns(line)) expect(ddl,`018 creates julius_approvals.${column}`).toMatch(new RegExp(`\\n ${column} `, 'u'));
   });
 
   it('transitions.tsv: the walk in the ledger\'s order, run_id then sequence, never occurred_at', () => {
     const line = query('transitions.tsv');
     expect(selected(line)).toEqual(['run_id', 'sequence', 'from_state', 'to_state', 'reason_code', 'safe_summary', 'occurred_at', 'transition_id']);
+    expect(selectList(line), 'the summary is bounded in the dump, per design section 7').toContain('left(safe_summary,300) AS safe_summary');
     expect(line).toContain('FROM relay_wonderland.julius_transitions ORDER BY run_id,sequence"');
     expect(line).not.toMatch(/ORDER BY[^"]*occurred_at/u);
   });

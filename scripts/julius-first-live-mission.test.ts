@@ -1076,8 +1076,9 @@ describe('the evidence dump names only tables and columns the migrations create'
   const queries = (): Array<{ file: string; table: string; columns: string[]; orderBy: string[] }> => {
     const script = read('.github/julius-live-evidence-dump.sh');
     const found: Array<{ file: string; table: string; columns: string[]; orderBy: string[] }> = [];
-    for (const match of script.matchAll(/dump "SELECT ([a-z_,]+) FROM relay_wonderland\.([a-z_]+)(?: ORDER BY ([a-z_,]+))?" ([a-z-]+\.tsv)/gu)) {
-      found.push({ file: match[4], table: match[2], columns: match[1].split(','), orderBy: match[3] ? match[3].split(',') : [] });
+    for (const match of script.matchAll(/dump "SELECT ((?:left\([a-z_]+,\d+\) AS [a-z_]+|[a-z_]+)(?:,(?:left\([a-z_]+,\d+\) AS [a-z_]+|[a-z_]+))*) FROM relay_wonderland\.([a-z_]+)(?: ORDER BY ([a-z_,]+))?" ([a-z-]+\.tsv)/gu)) {
+      // `left(col,N) AS col` is a bounded column: the migration check looks through it to `col`.
+      found.push({ file: match[4], table: match[2], columns: match[1].split(/,(?![0-9]+\))/u).map((item) => /^left\(([a-z_]+),/u.exec(item)?.[1] ?? item), orderBy: match[3] ? match[3].split(',') : [] });
     }
     return found;
   };
