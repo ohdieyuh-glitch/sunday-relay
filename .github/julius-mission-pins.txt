@@ -34,7 +34,7 @@ julius-unreal-mission-1 .github/julius-missions/julius-unreal-mission-1 b830986a
 # so one pin, its directory, holds the contract and every seeded byte. The four contracts differ only inside their
 # learningPair clause. The founder authorized adding all four arm directories here and freezing their exact pins before
 # dispatch (2026-10-04, the C pair, point 3).
-julius-learning-pair-1-without-1 .github/julius-missions/julius-learning-pair-1-without-1 0fa7a24e98eac6f243e8e7ee6f6765cbc1088dd1
-julius-learning-pair-1-with-1 .github/julius-missions/julius-learning-pair-1-with-1 e58a0415ee3a53023f98870751d6b5c093f66c38
-julius-learning-pair-1-without-2 .github/julius-missions/julius-learning-pair-1-without-2 3ef9911c373ebbd21137fe5bc51b896d48513b94
-julius-learning-pair-1-with-2 .github/julius-missions/julius-learning-pair-1-with-2 52a838b80d64300242cafcbbd60e1cf63bc863df
+julius-learning-pair-1-without-1 .github/julius-missions/julius-learning-pair-1-without-1 1486840adc8b4c2fd880b088c647d9310e8870ac
+julius-learning-pair-1-with-1 .github/julius-missions/julius-learning-pair-1-with-1 9db66ce96cae6fee17e14cfa62c5733e7e948681
+julius-learning-pair-1-without-2 .github/julius-missions/julius-learning-pair-1-without-2 82dfd300d21457c0290d5e52f720e58e63d9fb78
+julius-learning-pair-1-with-2 .github/julius-missions/julius-learning-pair-1-with-2 d5a3eb8312f0315851f88f8ec4ec5630c9b1b19c

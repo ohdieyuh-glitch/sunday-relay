@@ -31,7 +31,7 @@ const MISSIONS = '.github/julius-missions';
 const M5 = `${MISSIONS}/julius-live-mission-5`;
 const REGISTRATION = '.github/julius-learning-registrations/julius-learning-pair-1.json';
 /** What `learning-validate` printed for the registration, without its `sha256:` prefix: the form a clause carries. */
-const REGISTRATION_DIGEST = 'b68ad23c0487744b0abdeb9f4ff69d04c5e98d62ea593461413bd8476a1d55e3';
+const REGISTRATION_DIGEST = '7a3a67f3daf5ea530689b9734e0d3266f56188c8fd8602d45c41851765a9e1b4';
 const IDENTITY = { missionId: 'mission:julius-learning-pair-1', markerNamespace: 'julius-learning-pair-1', projectId: 'prj-julius-learning-pair-1' };
 const POLICY = { dimensions: ['repairs'], minimumRelativeImprovement: 0.5, minimumImprovedDimensions: 1 };
 /** The four arm runs, derived before any of them ran (section 2) and registered before arm 1 (section 4, V5 E1(a)). */
