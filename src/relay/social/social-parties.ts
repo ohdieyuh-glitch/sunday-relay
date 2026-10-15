@@ -145,6 +145,12 @@ function addMember(state: SocialState, party: Party, userId: SocialUserId, atIso
   return ok(next);
 }
 
+/**
+ * WL-358-02: the founder's words for an invitee who cannot join the party right now (it has filled). No count, no reason: the
+ * client shows a refusal's message as it is (WonderlandSocialLive.cpp ErrorMessageOf -> the hub's or profile's action line).
+ */
+export const PARTY_NOT_JOINABLE_NOW = "You can't join this party right now";
+
 /** An invite that crosses a wall: its inviter, or anybody in its party, has a block with the invitee, either way. */
 function inviteIsWalled(state: SocialState, invite: PartyInvite): boolean {
   const party = partyById(state, invite.partyId);
@@ -156,6 +162,12 @@ function inviteIsWalled(state: SocialState, invite: PartyInvite): boolean {
  * FOUNDER RULING (a), 10-04: nobody joins a party that holds somebody they blocked or who blocked them -- and the refusal reads
  * exactly like an invite that is no longer there (a block revokes such invites: blockUser; this answers the same for any that
  * a later join brought behind a wall).
+ * An invite is NOT refused for a member hidden from the invitee (FOUNDER RULING WL-358-01, 10-13: "Invites still work"; the
+ * open-join is what that rule closes, outsiderSeesParty).
+ * FOUNDER RULING WL-358-02 ("Generic message", 10-13 15:52:09Z): a party that has filled since the invite answers
+ * PARTY_NOT_JOINABLE_NOW, not "the party is full" -- which told an invitee the party holds PARTY_MAX_MEMBERS, counting members
+ * hidden from them (F-01 of the internal #358 review). It is a not-found, the shape (HTTP 404) of every other generic party
+ * refusal (a missing invite, a walled one, a missing party), and the invite stays PENDING: once there is room it is accepted.
  */
 export function acceptPartyInvite(state: SocialState, actorId: SocialUserId, inviteId: string, atIso: string): RelayResult<SocialState> {
   const invite = state.partyInvites.find((i) => i.inviteId === inviteId);
@@ -166,7 +178,7 @@ export function acceptPartyInvite(state: SocialState, actorId: SocialUserId, inv
   const party = partyById(state, invite.partyId);
   if (party === undefined) return ok(settleInvite(state, inviteId, 'REVOKED'));
   if (partyOf(state, actorId)) return invalid('leave your current party first');
-  if (party.members.length >= PARTY_MAX_MEMBERS) return invalid('the party is full');
+  if (party.members.length >= PARTY_MAX_MEMBERS) return fail(relayError('not-found', PARTY_NOT_JOINABLE_NOW));
   return addMember(settleInvite(state, inviteId, 'ACCEPTED'), party, actorId, atIso);
 }
 
@@ -190,10 +202,11 @@ export function partyInvitesFor(state: SocialState, userId: SocialUserId, nowIso
 
 /**
  * JOIN WITHOUT AN INVITE: only a party the joiner sees from outside (outsiderSeesParty: OPEN_TO_FRIENDS, with room, never across
- * a block with any member, its leader seen online by the joiner, a friend among the members the joiner sees online).
+ * a block with any member, EVERY member -- the leader included -- seen online by the joiner (WL-358-01), a friend among them).
  * A party behind the joiner's wall answers exactly as a party that does not exist (founder ruling (a): the refusal is an
  * ordinary "can't join", and it names nothing -- not even that the party is there); so does one they cannot see (WL-351-02: an
- * Appear-Offline leader's open party is no more joinable by id than it is listed).
+ * Appear-Offline leader's open party is no more joinable by id than it is listed), and so does one holding a member hidden
+ * from them (FOUNDER RULING WL-358-01, "Block open-join": the same way as a party holding a blocked member).
  */
 export function joinParty(state: SocialState, actorId: SocialUserId, partyId: string, atIso: string): RelayResult<SocialState> {
   // The joiner's own state first: it says nothing about the party asked for.
@@ -201,8 +214,8 @@ export function joinParty(state: SocialState, actorId: SocialUserId, partyId: st
   const party = partyById(state, partyId);
   // ONE ANSWER FOR EVERY "CAN'T JOIN" (the privacy attacker's B2, 10-07): walled answered 404 while invite-only, no friend and
   // full answered 403/400, so a removed player could tell a block-kick from an ordinary kick, and follow whether the blocker is
-  // still in the party. Not there, behind a wall, invite only, no friend inside, unseen (WL-351-02) or full: one ordinary refusal
-  // that names nothing.
+  // still in the party. Not there, behind a wall, invite only, no friend inside, unseen (WL-351-02), holding a member hidden from
+  // the joiner (WL-358-01) or full: one ordinary refusal that names nothing.
   if (party === undefined || !outsiderSeesParty(state, actorId, party)) return missing('party');
   return addMember(state, party, actorId, atIso);
 }
@@ -349,9 +362,9 @@ export function setSelfMuted(state: SocialState, actorId: SocialUserId, muted: b
  * What a party looks like to one of its members, or to an outsider who sees it (outsiderSeesParty). Null otherwise.
  * A block does not break a shared party (blockUser), so the view is where it is enforced: a member blocked either way with
  * the viewer is not in the viewer's roster at all -- no id, role or live mute (F1, 10-02) -- and `leaderId` is '' when the
- * leader is such a member. An outsider's roster is only the members they see online (WL-351-02, partyRosterFor): a member
- * hidden from them, or appearing offline, is no id, role, mute or count to them -- and a FULL party is not shown to an outsider
- * at all, since "full" beside a roster with room would count the hidden.
+ * leader is such a member. An outsider sees a party only when they see every member online (WL-358-01, outsiderSeesParty), so
+ * a party holding a member hidden from them, appearing offline or signed out is no view, id, roster or count to them at all;
+ * nor is a FULL party (WL-351-02 r2).
  */
 export interface PartyView {
   readonly partyId: string;

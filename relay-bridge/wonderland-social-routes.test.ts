@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createInMemorySocialStore, type SocialStore } from '../src/relay/social/social-store';
+import { applySocialOperation } from '../src/relay/social/social-commands';
+import { PARTY_MAX_MEMBERS } from '../src/relay/social/social-contracts';
+import { emptySocialState } from '../src/relay/social/social-state';
+import { createInMemorySocialStore, ensureSocialUser, type SocialStore } from '../src/relay/social/social-store';
 import {
   budgetClassesOf,
   createCommandBudgets,
@@ -689,5 +692,116 @@ describe('WL-351-02: an Appear-Offline leader\'s open party is not in a friend\'
     const shown = (await w.nova.get('/snapshot')).body.data;
     expect(shown.visibleParties.map((p: any) => [p.partyId, p.leaderId])).toEqual([[partyId, 'usr_kai']]);
     expect((await w.nova.get(`/parties/${partyId}`)).status).toBe(200);
+  });
+});
+
+/*
+ * WL-358-01 / WL-358-02 (FOUNDER RULINGS, 2026-10-13T15:52:09Z, R16 acceptance checklist APPENDIX 5) through the real routes, each
+ * with its control: no open-join into a party holding a member hidden from the joiner (invites still work), and an invite into a
+ * party that has filled answers "You can't join this party right now" in a missing invite's 404 shape.
+ */
+describe('WL-358-01: no open-join into a party holding a member hidden from the joiner (routes)', () => {
+  it('Vega, hidden from Nova (presence FRIENDS, strangers), is in Kai\'s open party: join and read are a missing party\'s, /snapshot shows nothing; Vega visible: listed and joined', async () => {
+    const w = await friends(); // Kai and Nova
+    await w.vega.get('/snapshot');
+    expect((await w.kai.post('/requests', { toUserId: 'usr_vega' })).status).toBe(200);
+    const requestId = (await w.vega.get('/snapshot')).body.data.requests.incoming[0].requestId;
+    expect((await w.vega.post(`/requests/${requestId}/accept`)).status).toBe(200);
+    for (const who of [w.kai, w.nova, w.vega]) expect((await who.post('/presence', { connected: true, availability: 'AVAILABLE' })).status).toBe(200);
+    const partyId = (await w.kai.post('/parties', { name: 'Open', privacy: 'OPEN_TO_FRIENDS' })).body.data.partyId as string;
+    expect((await w.vega.post(`/parties/${partyId}/join`)).status).toBe(200);
+    expect((await w.vega.post('/privacy', { presenceVisibility: 'FRIENDS' })).status).toBe(200);
+
+    const missingJoin = await w.nova.post('/parties/pty_does_not_exist/join');
+    expect([missingJoin.status, missingJoin.body.error?.kind]).toEqual([404, 'not-found']);
+    const join = await w.nova.post(`/parties/${partyId}/join`);
+    expect([join.status, join.body.error]).toEqual([missingJoin.status, missingJoin.body.error]);
+    const read = await w.nova.get(`/parties/${partyId}`);
+    const missingRead = await w.nova.get('/parties/pty_does_not_exist');
+    expect([read.status, read.body.error]).toEqual([missingRead.status, missingRead.body.error]);
+    const hidden = (await w.nova.get('/snapshot')).body.data;
+    expect(hidden.visibleParties).toEqual([]);
+    expect(hidden.party).toBeNull();
+    expect(JSON.stringify(hidden)).not.toContain(JSON.stringify(partyId));
+    expect(JSON.stringify(hidden)).not.toContain('usr_vega');
+    expect(hidden.profiles.usr_kai.partyStatus).toEqual({ inParty: false, memberCount: null, joinable: false });
+
+    // control: Vega visible to everyone -- the same party is listed whole and the same join succeeds
+    expect((await w.vega.post('/privacy', { presenceVisibility: 'EVERYONE' })).status).toBe(200);
+    const shown = (await w.nova.get('/snapshot')).body.data;
+    expect(shown.visibleParties.map((p: any) => [p.partyId, p.members.map((m: any) => m.userId).sort()])).toEqual([[partyId, ['usr_kai', 'usr_vega']]]);
+    expect(shown.profiles.usr_kai.partyStatus).toEqual({ inParty: true, memberCount: 2, joinable: true });
+    expect((await w.nova.post(`/parties/${partyId}/join`)).status).toBe(200);
+    expect((await w.nova.get('/snapshot')).body.data.party?.partyId).toBe(partyId);
+  });
+
+  it('invites still work: with Vega hidden from Nova, Kai invites Nova and her accept brings her in, where she sees the party whole', async () => {
+    const w = await friends();
+    await w.vega.get('/snapshot');
+    await w.kai.post('/requests', { toUserId: 'usr_vega' });
+    const requestId = (await w.vega.get('/snapshot')).body.data.requests.incoming[0].requestId;
+    await w.vega.post(`/requests/${requestId}/accept`);
+    for (const who of [w.kai, w.nova, w.vega]) await who.post('/presence', { connected: true, availability: 'AVAILABLE' });
+    const partyId = (await w.kai.post('/parties', { name: 'Open', privacy: 'OPEN_TO_FRIENDS' })).body.data.partyId as string;
+    expect((await w.vega.post(`/parties/${partyId}/join`)).status).toBe(200);
+    expect((await w.vega.post('/privacy', { presenceVisibility: 'FRIENDS' })).status).toBe(200);
+    expect((await w.nova.post(`/parties/${partyId}/join`)).status).toBe(404);
+    const invited = await w.kai.post(`/parties/${partyId}/invites`, { toUserId: 'usr_nova' });
+    expect(invited.status).toBe(200);
+    expect((await w.nova.post(`/party-invites/${invited.body.data.inviteId}/accept`)).status).toBe(200);
+    const mine = (await w.nova.get('/snapshot')).body.data.party;
+    expect([mine?.partyId, mine?.members.map((m: any) => m.userId).sort()]).toEqual([partyId, ['usr_kai', 'usr_nova', 'usr_vega']]);
+  });
+});
+
+describe('WL-358-02: accepting an invite to a party that has filled answers the generic words (routes)', () => {
+  const GENERIC = "You can't join this party right now";
+
+  /** A store whose state has Kai leading a party, Nova invited to it while it had room, then `more` of Kai's friends joined. */
+  function seeded(more: number): { store: SocialStore; partyId: string; inviteId: string } {
+    const at = new Date(T0).toISOString();
+    let s = emptySocialState();
+    const run = (actor: string, name: Parameters<typeof applySocialOperation>[1], body: Record<string, unknown> = {}, ids: string[] = []) => {
+      const r = applySocialOperation(s, name, actor, { ids, body, query: {} }, at);
+      if (!r.ok) throw new Error(`${name} by ${actor} refused: ${r.error.message}`);
+      s = r.value.state;
+      return r.value.data as Record<string, string>;
+    };
+    const befriendKai = (id: string) => {
+      run('usr_kai', 'requests.send', { toUserId: id });
+      run(id, 'requests.accept', {}, [s.requests.find((r) => r.fromUserId === 'usr_kai' && r.toUserId === id && r.status === 'PENDING')!.requestId]);
+    };
+    s = ensureSocialUser(s, { userId: 'usr_kai', displayName: 'Kai', handle: '@kai' }, at);
+    s = ensureSocialUser(s, { userId: 'usr_nova', displayName: 'Nova', handle: '@nova' }, at);
+    befriendKai('usr_nova');
+    const partyId = run('usr_kai', 'parties.create', { name: 'Crew' }).partyId;
+    const inviteId = run('usr_kai', 'parties.invite', { toUserId: 'usr_nova' }, [partyId]).inviteId;
+    for (let i = 1; i <= more; i += 1) {
+      const id = `usr_filler${i}`;
+      s = ensureSocialUser(s, { userId: id, displayName: `Filler${i}`, handle: `@filler${i}` }, at);
+      befriendKai(id);
+      run(id, 'party_invites.accept', {}, [run('usr_kai', 'parties.invite', { toUserId: id }, [partyId]).inviteId]);
+    }
+    return { store: createInMemorySocialStore(s), partyId, inviteId };
+  }
+
+  it('full: Nova\'s accept is a 404 not-found with exactly the generic words (a missing invite\'s shape); the invite stays in her inbox', async () => {
+    const { store, partyId, inviteId } = seeded(PARTY_MAX_MEMBERS - 1); // Kai + 7 = full
+    expect((await store.read()).parties[partyId].members.length).toBe(PARTY_MAX_MEMBERS);
+    const w = world(store);
+    const missing = await w.nova.post('/party-invites/pinv_does_not_exist/accept');
+    expect([missing.status, missing.body.error?.kind]).toEqual([404, 'not-found']);
+    const answer = await w.nova.post(`/party-invites/${inviteId}/accept`);
+    expect([answer.status, answer.body.error]).toEqual([missing.status, { kind: missing.body.error?.kind, message: GENERIC }]);
+    expect((await w.nova.get('/party-invites')).body.data.map((i: any) => i.inviteId)).toEqual([inviteId]);
+    expect((await w.nova.get('/snapshot')).body.data.party).toBeNull();
+  });
+
+  it('control: one fewer (room left), the same accept answers 200 and Nova is in the party', async () => {
+    const { store, partyId, inviteId } = seeded(PARTY_MAX_MEMBERS - 2); // Kai + 6: room for one
+    expect((await store.read()).parties[partyId].members.length).toBe(PARTY_MAX_MEMBERS - 1);
+    const w = world(store);
+    expect((await w.nova.post(`/party-invites/${inviteId}/accept`)).status).toBe(200);
+    expect((await w.nova.get('/snapshot')).body.data.party?.partyId).toBe(partyId);
   });
 });

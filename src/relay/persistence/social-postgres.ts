@@ -24,6 +24,7 @@ import { applySocialOperation, type SocialCommandInput } from '../social/social-
 import { emptySocialState, hasUser, type SocialState, type SocialUserRecord } from '../social/social-state';
 import { ensureSocialUser, newRelayDog, tellAfterCommit, viewerCursor, type SocialAfterCommit, type SocialEventPage, type SocialPlayerIdentity, type SocialStore } from '../social/social-store';
 import { emptyWorldState, type WorldState } from '../social/world-presence';
+import { checkoutHeld } from './pg-held-client';
 import { protectedStoreWriterGuard } from './protected-store-writer-guard';
 
 /**
@@ -451,7 +452,9 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
     return next;
   };
   const transact = async (write: (c: PoolClient) => Promise<void>): Promise<void> => {
-    const client = await pool.connect();
+    // MW-B-001: a connection that dies while this transaction holds it is heard and logged, never an uncaught exception
+    // (pg-held-client.ts). The write then fails, and apply answers its retryable error below.
+    const { client, release } = await checkoutHeld(pool, 'social store');
     try {
       await client.query('BEGIN');
       await write(client);
@@ -460,7 +463,7 @@ export async function openSocialPostgresStore(pool: Pool, options: SocialPostgre
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;
     } finally {
-      client.release();
+      release();
     }
   };
 
