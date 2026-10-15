@@ -26,7 +26,7 @@ import type {
 import { FIXTURE_NOW, FIXTURE_USERS, createSocialFixture } from './social-fixtures';
 import { pendingRequestsFor } from './social-friends';
 import { acceptPartyInvite, partyInvitesFor, partyViewFor, recentPlayersViewFor, type PartyView } from './social-parties';
-import { resolvePresenceFor, resolveProfileFor } from './social-presence';
+import { identityVisibleTo, resolvePresenceFor, resolveProfileFor, withheldIdentity } from './social-presence';
 import { friendIdsOf, messagesOf, partyById, partyOf, userById, type SocialState } from './social-state';
 import { createLocalVoiceHarness, createUnavailableVoiceService } from './social-voice';
 
@@ -73,7 +73,12 @@ function row(state: SocialState, viewerId: SocialUserId, userId: SocialUserId): 
   const user = userById(state, userId);
   const presence = resolvePresenceFor(state, viewerId, userId);
   if (user === undefined || presence === null) return null;
-  return { userId, displayName: user.profile.displayName, handle: user.profile.handle, avatarRef: user.profile.avatarRef, presence };
+  // A ROW NAMES ONLY WHOM THE VIEWER MAY KNOW (OBS-1 round 2, F1): the viewer's own outgoing request to somebody hidden from them
+  // carries the bare id they sent it to, never the name, handle or avatar.
+  const identity = identityVisibleTo(state, viewerId, userId)
+    ? { displayName: user.profile.displayName, handle: user.profile.handle, avatarRef: user.profile.avatarRef }
+    : withheldIdentity(userId);
+  return { userId, ...identity, presence };
 }
 
 const ONLINE_ORDER: Record<UserPresenceView['onlineState'], number> = { ONLINE: 0, BUSY: 1, AWAY: 2, OFFLINE: 3 };
@@ -153,7 +158,9 @@ export function buildSocialView(state: SocialState, viewerId: SocialUserId, nowI
    * members of their party and of the parties they may see, the other side of the conversations they may see (and the
    * senders in them), whoever invited them -- plus the people they blocked themselves, so they can unblock. Every one of
    * those surfaces is already walled, so a blocker is absent exactly as a stranger is absent: the same absence an unfriend
-   * leaves. Anybody else's card is still one profile.read away.
+   * leaves. Anybody else's card is one profile.read away only where the viewer may know who they are (OBS-1: inside their presence
+   * audience, or shown to by them -- social-presence.ts identityVisibleTo); to anyone else profile.read answers exactly as for a
+   * player who does not exist.
    */
   const bounded = boundedSnapshotMessages(state, conversations);
   const described = new Set<SocialUserId>([viewerId, ...friends.map((f) => f.userId)]);
