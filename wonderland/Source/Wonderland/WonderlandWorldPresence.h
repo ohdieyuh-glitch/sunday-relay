@@ -101,6 +101,12 @@ private:
 		double LogNextAt = 0.0;
 		double RecvAt = 0.0;
 		float RecvAgeMs = 0.0f;
+		// Dead reckoning (from the received Speed and the heading of the last two reports).
+		bool bDrHasReport = false;
+		FVector DrHeading = FVector::ZeroVector;   // unit, XY only; zero until a second, different report
+		float DrSpeed = 0.0f;
+		double DrReceivedAt = 0.0;                 // FPlatformTime::Seconds() of the last report that moved the figure's target
+		float DrAgeSeconds = 0.0f;                 // the backend's ageMs for that report
 	};
 	void Remove(FRemote& Remote);
 	TMap<FString, FRemote> Remotes;

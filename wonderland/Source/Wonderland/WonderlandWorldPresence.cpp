@@ -3,6 +3,7 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
 #include "GameFramework/PlayerController.h"
 #include "WonderlandCompanionEmbodiment.h"
 
@@ -15,6 +16,17 @@ namespace WonderlandWorldPresenceDetail
 	/** Further than this from its report, a figure is placed rather than eased (a teleport, a transition). */
 	constexpr float SnapDistanceUu = 1500.0f;
 	constexpr float LabelHeightUu = 215.0f;
+	/** DEAD RECKONING: a figure is steered toward where its player should be by now (the last report plus Speed along the heading of
+	 *  the last two reports), never further ahead than this: a stop or a turn can only ever be this far wrong. XY only; Z is as reported. */
+	constexpr double MaxExtrapolationSeconds = 0.3;
+	/** Below this a report is "standing"; above this a hostile or broken Speed is not believed. */
+	constexpr float MinMovingSpeedUu = 10.0f;
+	constexpr float MaxTrustedSpeedUu = 1200.0f;
+	/** Fewer uu than this between two reports is not a heading. */
+	constexpr float MinHeadingStepUu = 5.0f;
+	/** 1 = steer toward the dead-reckoned point (default), 0 = the old chase of the last report (rollback without a rebuild). */
+	TAutoConsoleVariable<int32> CVarRemoteDeadReckon(TEXT("wl.Remote.DeadReckon"), 1,
+		TEXT("Remote players: 1 steers toward the dead-reckoned position (capped), 0 chases the last report as before."));
 }
 
 FWonderlandRemoteAvatars::~FWonderlandRemoteAvatars()
@@ -73,6 +85,26 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 			// WLREMOTE: a view that carries a new position is a new report; one that repeats it is not.
 			Remote.RecvAt = FPlatformTime::Seconds();
 			Remote.RecvAgeMs = static_cast<float>(A.AgeMs);
+		}
+		{
+			using namespace WonderlandWorldPresenceDetail;
+			// A view that repeats the last position is not a new report (it must not restart the extrapolation clock).
+			const bool bMoved = !Remote.bDrHasReport || !A.Location.Equals(Remote.Target, 0.5);
+			if (bMoved)
+			{
+				if (Remote.bDrHasReport)
+				{
+					const FVector Step(A.Location.X - Remote.Target.X, A.Location.Y - Remote.Target.Y, 0.0);
+					if (Step.Size() >= MinHeadingStepUu)
+					{
+						Remote.DrHeading = Step.GetSafeNormal();
+					}
+				}
+				Remote.bDrHasReport = true;
+				Remote.DrReceivedAt = FPlatformTime::Seconds();
+				Remote.DrAgeSeconds = static_cast<float>(A.AgeMs * 0.001);
+			}
+			Remote.DrSpeed = FMath::Clamp(A.Speed, 0.0f, MaxTrustedSpeedUu);
 		}
 		Remote.Target = A.Location;
 		Remote.TargetYaw = A.Yaw;
@@ -140,6 +172,7 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 	const APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
 	const FVector Camera = PC != nullptr && PC->PlayerCameraManager != nullptr ? PC->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector;
 	const double NowSeconds = FPlatformTime::Seconds();
+	const bool bDeadReckon = CVarRemoteDeadReckon.GetValueOnGameThread() != 0;
 	for (TPair<FString, FRemote>& Pair : Remotes)
 	{
 		FRemote& R = Pair.Value;
@@ -149,9 +182,17 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 			continue;
 		}
 		const FVector Now = Body->GetActorLocation();
-		// EASED, so its gait (driven by the distance it covers) reads the movement as walking and running.
+		// WHERE THEY SHOULD BE BY NOW: the report plus constant velocity (Speed along the last two reports' heading) for the time since
+		// it was taken (its age at the backend plus the time held here), capped. A standing report, a first report, or no heading: the report.
+		FVector Aim = R.Target;
+		if (bDeadReckon && R.DrSpeed >= MinMovingSpeedUu && !R.DrHeading.IsNearlyZero())
+		{
+			const double Ahead = FMath::Clamp((NowSeconds - R.DrReceivedAt) + R.DrAgeSeconds, 0.0, MaxExtrapolationSeconds);
+			Aim += R.DrHeading * (R.DrSpeed * Ahead);
+		}
+		// EASED, so its gait (driven by the distance it covers) reads the movement as walking and running. The snap is still judged on the report.
 		const bool bSnap = FVector::Dist(Now, R.Target) > SnapDistanceUu;
-		const FVector Next = bSnap ? R.Target : FMath::VInterpTo(Now, R.Target, DeltaSeconds, EaseRate);
+		const FVector Next = bSnap ? R.Target : FMath::VInterpTo(Now, Aim, DeltaSeconds, EaseRate);
 		const FRotator Facing = FMath::RInterpTo(Body->GetActorRotation(), FRotator(0.0, R.TargetYaw, 0.0), DeltaSeconds, EaseRate);
 		Body->SetActorLocationAndRotation(Next, Facing);
 		// WLREMOTE: diagnostics only (a snap is said at once; otherwise one line a second per figure). Cheap: no allocation.
