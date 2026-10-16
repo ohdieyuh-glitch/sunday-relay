@@ -27,6 +27,11 @@ namespace WonderlandWorldPresenceDetail
 	/** 1 = steer toward the dead-reckoned point (default), 0 = the old chase of the last report (rollback without a rebuild). */
 	TAutoConsoleVariable<int32> CVarRemoteDeadReckon(TEXT("wl.Remote.DeadReckon"), 1,
 		TEXT("Remote players: 1 steers toward the dead-reckoned position (capped), 0 chases the last report as before."));
+	// r16reh16c: A/B switches so ONE binary can be measured with and without each change (defaults = the new behaviour).
+	TAutoConsoleVariable<int32> CVarRemoteNoHover(TEXT("wl.Remote.NoHover"), 1,
+		TEXT("Remote players: 1 draws a remote figure planted (no FloatRoot hover, no Float-part bob), 0 restores the old hover. Read when a figure spawns."));
+	TAutoConsoleVariable<float> CVarRemoteLogPeriod(TEXT("wl.Remote.LogPeriod"), 1.0f,
+		TEXT("Remote players: seconds between the per-figure WLREMOTE log lines (default 1; a dev measurement can set 0.1)."));
 }
 
 FWonderlandRemoteAvatars::~FWonderlandRemoteAvatars()
@@ -126,7 +131,7 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 			// THE MASCOT, as every player's Dog is: its colourway, its gait, Relay OG's height (the HARD rule).
 			Body->SetBodyRole(EWonderlandBodyRole::Mascot);
 			Body->SetRuntimeActivity(TEXT("IDLE"));
-			Body->SetPlantedNoFloat(true);   // a remote player is drawn planted, not hovering (founder 2026-09-25: skins "remain planted")
+			Body->SetPlantedNoFloat(CVarRemoteNoHover.GetValueOnGameThread() != 0);   // a remote player is drawn planted, not hovering (founder 2026-09-25: skins "remain planted")
 			Body->TargetBodyHeightUU = BodyHeightUu;
 			UTextRenderComponent* Label = NewObject<UTextRenderComponent>(Body, MakeUniqueObjectName(Body, UTextRenderComponent::StaticClass(), TEXT("PlayerName")));
 			Label->SetupAttachment(Body->GetRootComponent());
@@ -204,7 +209,7 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 		}
 		if (NowSeconds >= R.LogNextAt)
 		{
-			R.LogNextAt = NowSeconds + 1.0;
+			R.LogNextAt = NowSeconds + FMath::Max(0.02, static_cast<double>(CVarRemoteLogPeriod.GetValueOnGameThread()));
 			UE_LOG(LogTemp, Display, TEXT("WLREMOTE fig=%s recv=(%.1f,%.1f,%.1f) age=%.0fms applied=(%.1f,%.1f,%.1f) lagUu=%.1f lagXYUu=%.1f worn=%d floatZ=%.2f lowestUu=%.2f"),
 				*Pair.Key, R.Target.X, R.Target.Y, R.Target.Z,
 				(NowSeconds - R.RecvAt) * 1000.0 + R.RecvAgeMs,

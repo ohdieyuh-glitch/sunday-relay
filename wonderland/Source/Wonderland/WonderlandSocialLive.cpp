@@ -22,10 +22,12 @@ namespace WonderlandSocialLiveDetail
 	 */
 	constexpr double ResyncSeconds = 20.0;
 	/** The shared presence layer's report, each answered with the view. The gap AFTER an answer (so the period is round trip + this + tick rounding).
-	 *  r16reh16b: 0.2 -> 0.1 s (measured period 255 ms at 13 ms RTT; remote motion showed surge/stall at that rate). The server stores one report per 100 ms
+	 *  r16reh16b: 0.2 -> 0.1 s. (Alone it changed nothing: the shared Tick runs every 0.25 s and gated the report; r16reh16c adds TickWorldFast, a 50 ms ticker.) Measured period 255 ms at 13 ms RTT; remote motion showed surge/stall at that rate. The server stores one report per 100 ms
 	 *  (WORLD_REPORT_MIN_INTERVAL_MS) and its `report` budget is a burst of 30 then one per 100 ms (SOCIAL_BUDGETS.report), so the period always stays above
 	 *  the floor (RTT + 0.1 s) and far inside the budget; over budget would be 429 + a RetrySeconds wait, which this margin avoids. */
 	constexpr double WorldSeconds = 0.1;
+	TAutoConsoleVariable<int32> CVarWorldFastTick(TEXT("wl.Remote.FastWorldTick"), 1,
+		TEXT("Social: 1 sends the world report from a dedicated 50 ms ticker (about 8 a second), 0 leaves it on the shared 0.25 s tick (4 a second, the old cadence)."));
 	constexpr int64 MaxResponseBytes = 2 * 1024 * 1024;
 
 	const TCHAR* const Root = TEXT("/relay-api/wonderland/social");
@@ -159,6 +161,7 @@ FWonderlandSocialLiveService::FWonderlandSocialLiveService(const FString& InBase
 {
 	BaseUrl.RemoveFromEnd(TEXT("/"));
 	TickerHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FWonderlandSocialLiveService::Tick), 0.25f);
+	WorldTickerHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FWonderlandSocialLiveService::TickWorldFast), 0.05f);
 	// R16 CF-1: the arrival counts as movement, so the "exploring" this first report says holds for ExploringHoldSeconds
 	PresenceReporter = FWonderlandPresenceReporter(FPlatformTime::Seconds());
 	ReportPresence(true);
@@ -168,6 +171,7 @@ FWonderlandSocialLiveService::FWonderlandSocialLiveService(const FString& InBase
 FWonderlandSocialLiveService::~FWonderlandSocialLiveService()
 {
 	FTSTicker::GetCoreTicker().RemoveTicker(TickerHandle);
+	FTSTicker::GetCoreTicker().RemoveTicker(WorldTickerHandle);
 	for (const TSharedRef<IHttpRequest, ESPMode::ThreadSafe>& Request : InFlight)
 	{
 		Request->OnProcessRequestComplete().Unbind();
@@ -387,6 +391,21 @@ bool FWonderlandSocialLiveService::Tick(float)
 	if (ActivitySource)
 	{
 		TickActivity();
+	}
+	return true;
+}
+
+bool FWonderlandSocialLiveService::TickWorldFast(float)
+{
+	// The same guard as Tick's world branch (whichever ticker runs first sets bWorldBusy, so a report never goes out twice). The shared Tick runs every
+	// 0.25 s, so before this the world report could never leave faster than 4 a second whatever WorldSeconds said (measured: period 255 ms at a 13 ms RTT).
+	if (bSessionEnded || WonderlandSocialLiveDetail::CVarWorldFastTick.GetValueOnGameThread() == 0)
+	{
+		return true;
+	}
+	if (bWorldWanted && !bWorldBusy && FPlatformTime::Seconds() >= NextWorldAt)
+	{
+		TickWorld();
 	}
 	return true;
 }

@@ -270,6 +270,9 @@ private:
 	bool bRefreshing = false;
 	bool bRefreshAgain = false;
 	FTSTicker::FDelegateHandle TickerHandle;
+	/** r16reh16c: a dedicated 50 ms ticker for the world report only (the shared Tick runs every 0.25 s, which capped reports at 4 a second). */
+	FTSTicker::FDelegateHandle WorldTickerHandle;
+	bool TickWorldFast(float DeltaSeconds);
 	void TickWorld();
 	/** A world report's answer: a 404 rejoins quietly, any other refusal stays, a private server's no-context ok is a removal. */
 	void HandleWorldReport(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem);
