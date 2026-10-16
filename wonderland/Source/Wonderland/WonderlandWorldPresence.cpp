@@ -177,7 +177,7 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 						}
 					}
 					Remote.Samples.Add(S);
-					UE_LOG(LogTemp, Display, TEXT("WLREMOTE rep fig=%s p=(%.1f,%.1f,%.1f) age=%.0fms n=%d"), *A.UserId, A.Location.X, A.Location.Y, A.Location.Z, static_cast<double>(A.AgeMs), Remote.Samples.Num());
+					UE_LOG(LogTemp, Display, TEXT("WLREMOTE rep fig=%s p=(%.1f,%.1f,%.1f) age=%.0fms n=%d v=%.0f retimeShiftMs=%.0f"), *A.UserId, A.Location.X, A.Location.Y, A.Location.Z, static_cast<double>(A.AgeMs), Remote.Samples.Num(), static_cast<double>(S.V), (S.T - S.Raw) * 1000.0);
 					if (Remote.Samples.Num() > 24)
 					{
 						Remote.Samples.RemoveAt(0, Remote.Samples.Num() - 24, EAllowShrinking::No);
@@ -325,9 +325,13 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 		}
 		else if (bInterp)
 		{
-			// XY eased at InterpEase (smooths the report-rate speed ripple); the HEIGHT follows the floor at its own, fast rate so contact is not delayed
-			const FVector2D Flat = FMath::Vector2DInterpTo(FVector2D(Now.X, Now.Y), FVector2D(Aim.X, Aim.Y), DeltaSeconds, Rate);
-			Next = FVector(Flat.X, Flat.Y, FMath::FInterpTo(static_cast<float>(Now.Z), static_cast<float>(Aim.Z), DeltaSeconds, CVarRemoteInterpEaseZ.GetValueOnGameThread()));
+			// XY eased at InterpEase (smooths the report-rate speed ripple); the HEIGHT follows the floor at its own, fast rate so contact is not delayed.
+			// EXPONENTIAL, so the lag is the same at any frame rate: VInterpTo's linear step snaps to the target when a frame takes >= 1/rate (a slow frame
+			// = a jump, the next fast ones = lag: measured as 0.18-0.27 shown-speed CV where the interpolated path itself is 0.02-0.08).
+			const double Dt = FMath::Max(0.0, static_cast<double>(DeltaSeconds));
+			const double AlphaXY = 1.0 - FMath::Exp(-static_cast<double>(Rate) * Dt);
+			const double AlphaZ = 1.0 - FMath::Exp(-static_cast<double>(CVarRemoteInterpEaseZ.GetValueOnGameThread()) * Dt);
+			Next = FVector(Now.X + (Aim.X - Now.X) * AlphaXY, Now.Y + (Aim.Y - Now.Y) * AlphaXY, Now.Z + (Aim.Z - Now.Z) * AlphaZ);
 		}
 		else
 		{
