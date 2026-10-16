@@ -107,6 +107,9 @@ private:
 		float DrSpeed = 0.0f;
 		double DrReceivedAt = 0.0;                 // FPlatformTime::Seconds() of the last report that moved the figure's target
 		float DrAgeSeconds = 0.0f;                 // the backend's ageMs for that report
+		// r16reh16d snapshot interpolation: reports with the SENDER's time (arrival minus the backend's ageMs); drawn InterpDelay in the past.
+		struct FSample { double T = 0.0; FVector P = FVector::ZeroVector; };
+		TArray<FSample> Samples;
 	};
 	void Remove(FRemote& Remote);
 	TMap<FString, FRemote> Remotes;

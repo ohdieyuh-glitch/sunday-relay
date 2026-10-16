@@ -30,6 +30,16 @@ namespace WonderlandWorldPresenceDetail
 	// r16reh16c: A/B switches so ONE binary can be measured with and without each change (defaults = the new behaviour).
 	TAutoConsoleVariable<int32> CVarRemoteNoHover(TEXT("wl.Remote.NoHover"), 1,
 		TEXT("Remote players: 1 draws a remote figure planted (no FloatRoot hover, no Float-part bob), 0 restores the old hover. Read when a figure spawns."));
+	TAutoConsoleVariable<int32> CVarRemoteInterp(TEXT("wl.Remote.Interp"), 1,
+		TEXT("Remote players: 1 draws a figure InterpDelay seconds in the past, interpolated between the sender's report times (no overshoot); 0 uses the dead-reckoned chase."));
+	TAutoConsoleVariable<float> CVarRemoteInterpDelay(TEXT("wl.Remote.InterpDelay"), 0.25f,
+		TEXT("Remote players: seconds a figure is drawn behind its player in Interp mode (must exceed about two report periods)."));
+	TAutoConsoleVariable<float> CVarRemoteInterpEase(TEXT("wl.Remote.InterpEase"), 30.0f,
+		TEXT("Remote players: chase rate toward the interpolated point in Interp mode (high = tight; lower smooths frame hitches)."));
+	TAutoConsoleVariable<float> CVarRemoteEaseRate(TEXT("wl.Remote.EaseRate"), 9.0f,
+		TEXT("Remote players: chase rate toward the report / dead-reckoned point when Interp is 0."));
+	TAutoConsoleVariable<float> CVarRemoteDrCap(TEXT("wl.Remote.DrCap"), 0.3f,
+		TEXT("Remote players: dead-reckoning cap in seconds when Interp is 0."));
 	TAutoConsoleVariable<float> CVarRemoteLogPeriod(TEXT("wl.Remote.LogPeriod"), 1.0f,
 		TEXT("Remote players: seconds between the per-figure WLREMOTE log lines (default 1; a dev measurement can set 0.1)."));
 }
@@ -103,6 +113,40 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 					if (Step.Size() >= MinHeadingStepUu)
 					{
 						Remote.DrHeading = Step.GetSafeNormal();
+					}
+				}
+				{
+					// the sender's time of this report: arrival here minus the backend's age; kept strictly increasing
+					FRemote::FSample S;
+					S.T = FPlatformTime::Seconds() - A.AgeMs * 0.001;
+					S.P = A.Location;
+					if (Remote.Samples.Num() > 0)
+					{
+						const FRemote::FSample& Last = Remote.Samples.Last();
+						if (FVector::Dist(Last.P, S.P) > SnapDistanceUu)
+						{
+							Remote.Samples.Reset();   // a teleport is placed, never swept across
+						}
+						else
+						{
+							if (S.T <= Last.T)
+							{
+								S.T = Last.T + 0.001;
+							}
+							if (S.T - Last.T > 0.4)
+							{
+								// stood still, then moved: hold the old place until just before the move, do not slide across the whole gap
+								FRemote::FSample Hold;
+								Hold.T = S.T - 0.1;
+								Hold.P = Last.P;
+								Remote.Samples.Add(Hold);
+							}
+						}
+					}
+					Remote.Samples.Add(S);
+					if (Remote.Samples.Num() > 24)
+					{
+						Remote.Samples.RemoveAt(0, Remote.Samples.Num() - 24, EAllowShrinking::No);
 					}
 				}
 				Remote.bDrHasReport = true;
@@ -193,12 +237,39 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 		FVector Aim = R.Target;
 		if (bDeadReckon && R.DrSpeed >= MinMovingSpeedUu && !R.DrHeading.IsNearlyZero())
 		{
-			const double Ahead = FMath::Clamp((NowSeconds - R.DrReceivedAt) + R.DrAgeSeconds, 0.0, MaxExtrapolationSeconds);
+			const double Ahead = FMath::Clamp((NowSeconds - R.DrReceivedAt) + R.DrAgeSeconds, 0.0, static_cast<double>(CVarRemoteDrCap.GetValueOnGameThread()));
 			Aim += R.DrHeading * (R.DrSpeed * Ahead);
 		}
 		// EASED, so its gait (driven by the distance it covers) reads the movement as walking and running. The snap is still judged on the report.
 		const bool bSnap = FVector::Dist(Now, R.Target) > SnapDistanceUu;
-		const FVector Next = bSnap ? R.Target : FMath::VInterpTo(Now, Aim, DeltaSeconds, EaseRate);
+		float Rate = CVarRemoteEaseRate.GetValueOnGameThread();
+		if (CVarRemoteInterp.GetValueOnGameThread() != 0 && R.Samples.Num() > 0)
+		{
+			// DRAWN IN THE PAST, between the sender's own report times: a turn is a turn and a stop is a stop, never guessed ahead.
+			const double RT = NowSeconds - static_cast<double>(CVarRemoteInterpDelay.GetValueOnGameThread());
+			const TArray<FRemote::FSample>& Ss = R.Samples;
+			if (RT <= Ss[0].T)
+			{
+				Aim = Ss[0].P;
+			}
+			else if (RT >= Ss.Last().T)
+			{
+				Aim = Ss.Last().P;
+			}
+			else
+			{
+				int32 I = Ss.Num() - 2;
+				while (I > 0 && Ss[I].T > RT)
+				{
+					--I;
+				}
+				const double Span = Ss[I + 1].T - Ss[I].T;
+				const double F = Span > 1e-6 ? FMath::Clamp((RT - Ss[I].T) / Span, 0.0, 1.0) : 1.0;
+				Aim = FMath::Lerp(Ss[I].P, Ss[I + 1].P, F);
+			}
+			Rate = CVarRemoteInterpEase.GetValueOnGameThread();
+		}
+		const FVector Next = bSnap ? R.Target : FMath::VInterpTo(Now, Aim, DeltaSeconds, Rate);
 		const FRotator Facing = FMath::RInterpTo(Body->GetActorRotation(), FRotator(0.0, R.TargetYaw, 0.0), DeltaSeconds, EaseRate);
 		Body->SetActorLocationAndRotation(Next, Facing);
 		// WLREMOTE: diagnostics only (a snap is said at once; otherwise one line a second per figure). Cheap: no allocation.
