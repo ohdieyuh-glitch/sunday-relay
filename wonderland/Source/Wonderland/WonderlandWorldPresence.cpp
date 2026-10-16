@@ -32,11 +32,15 @@ namespace WonderlandWorldPresenceDetail
 		TEXT("Remote players: 1 draws a remote figure planted (no FloatRoot hover, no Float-part bob), 0 restores the old hover. Read when a figure spawns."));
 	TAutoConsoleVariable<int32> CVarRemoteInterp(TEXT("wl.Remote.Interp"), 1,
 		TEXT("Remote players: 1 draws a figure InterpDelay seconds in the past, interpolated between the sender's report times (no overshoot); 0 uses the dead-reckoned chase."));
-	TAutoConsoleVariable<float> CVarRemoteInterpDelay(TEXT("wl.Remote.InterpDelay"), 0.25f,
+	TAutoConsoleVariable<float> CVarRemoteInterpDelay(TEXT("wl.Remote.InterpDelay"), 0.20f,
 		TEXT("Remote players: seconds a figure is drawn behind its player in Interp mode (must exceed about two report periods)."));
-	TAutoConsoleVariable<float> CVarRemoteInterpEase(TEXT("wl.Remote.InterpEase"), 30.0f,
+	TAutoConsoleVariable<float> CVarRemoteInterpEase(TEXT("wl.Remote.InterpEase"), 10.0f,
 		TEXT("Remote players: chase rate toward the interpolated point in Interp mode (high = tight; lower smooths frame hitches)."));
-	TAutoConsoleVariable<float> CVarRemoteInterpExtrap(TEXT("wl.Remote.InterpExtrap"), 0.15f,
+	TAutoConsoleVariable<int32> CVarRemoteRetime(TEXT("wl.Remote.InterpRetime"), 1,
+		TEXT("Remote players, Interp mode: 1 re-times a steady-motion segment from distance / reported speed (immune to report-delivery jitter), pulled back to the real clock; 0 trusts arrival - age."));
+	TAutoConsoleVariable<float> CVarRemoteRetimePull(TEXT("wl.Remote.InterpRetimePull"), 0.2f,
+		TEXT("Remote players: fraction of the (arrival - age) clock error pulled back into a re-timed sample (keeps the timeline from drifting)."));
+	TAutoConsoleVariable<float> CVarRemoteInterpExtrap(TEXT("wl.Remote.InterpExtrap"), 0.0f,
 		TEXT("Remote players: in Interp mode, seconds a figure may continue at the last segment's velocity when it has caught up with its newest report (0 = hold)."));
 	TAutoConsoleVariable<float> CVarRemoteInterpEaseZ(TEXT("wl.Remote.InterpEaseZ"), 30.0f,
 		TEXT("Remote players: chase rate of the height (floor contact) in Interp mode; XY uses wl.Remote.InterpEase."));
@@ -122,28 +126,53 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 				{
 					// the sender's time of this report: arrival here minus the backend's age; kept strictly increasing
 					FRemote::FSample S;
-					S.T = FPlatformTime::Seconds() - A.AgeMs * 0.001;
+					S.Raw = FPlatformTime::Seconds() - A.AgeMs * 0.001;
+					S.T = S.Raw;
+					S.V = FMath::Clamp(A.Speed, 0.0f, MaxTrustedSpeedUu);
 					S.P = A.Location;
 					if (Remote.Samples.Num() > 0)
 					{
-						const FRemote::FSample& Last = Remote.Samples.Last();
+						const FRemote::FSample Last = Remote.Samples.Last();   // a COPY: Samples grows below
 						if (FVector::Dist(Last.P, S.P) > SnapDistanceUu)
 						{
 							Remote.Samples.Reset();   // a teleport is placed, never swept across
 						}
 						else
 						{
+							const double DRaw = S.Raw - Last.Raw;
+							if (S.Raw - Last.Raw > 0.4)
+							{
+								// stood still, then moved: hold the old place until just before the move, do not slide across the whole gap
+								FRemote::FSample Hold = Last;
+								Hold.T = S.T - 0.1;
+								Hold.Raw = S.Raw - 0.1;
+								Remote.Samples.Add(Hold);
+							}
+							else if (CVarRemoteRetime.GetValueOnGameThread() != 0 && DRaw > 0.02)
+							{
+								// STEADY MOTION: the time between two reports is the distance covered over the reported speed. Delivery jitter (frames, HTTP)
+								// moves arrival - age by tens of ms but cannot change this. Not for a stop, a start or a turn (the speed does not describe
+								// the displacement there): those keep the measured time. Bounded to [0.5, 1.7] x the measured gap, then pulled to the clock.
+								const FVector2D Seg(S.P.X - Last.P.X, S.P.Y - Last.P.Y);
+								const double Dist = Seg.Size();
+								const double VAvg = 0.5 * (static_cast<double>(Last.V) + static_cast<double>(S.V));
+								bool bSteady = VAvg >= MinMovingSpeedUu && Dist >= MinHeadingStepUu && Last.V >= MinMovingSpeedUu && S.V >= MinMovingSpeedUu
+									&& FMath::Abs(static_cast<double>(S.V) - static_cast<double>(Last.V)) <= 0.25 * VAvg;
+								if (bSteady && Remote.Samples.Num() >= 2)
+								{
+									const FVector2D Prev(Last.P.X - Remote.Samples[Remote.Samples.Num() - 2].P.X, Last.P.Y - Remote.Samples[Remote.Samples.Num() - 2].P.Y);
+									bSteady = Prev.Size() >= MinHeadingStepUu && (Prev.GetSafeNormal() | Seg.GetSafeNormal()) > 0.8;   // within ~37 deg: not a turn
+								}
+								if (bSteady)
+								{
+									const double DUse = FMath::Clamp(Dist / VAvg, 0.5 * DRaw, 1.7 * DRaw);
+									S.T = Last.T + DUse;
+									S.T += static_cast<double>(CVarRemoteRetimePull.GetValueOnGameThread()) * (S.Raw - S.T);
+								}
+							}
 							if (S.T <= Last.T)
 							{
 								S.T = Last.T + 0.001;
-							}
-							if (S.T - Last.T > 0.4)
-							{
-								// stood still, then moved: hold the old place until just before the move, do not slide across the whole gap
-								FRemote::FSample Hold;
-								Hold.T = S.T - 0.1;
-								Hold.P = Last.P;
-								Remote.Samples.Add(Hold);
 							}
 						}
 					}

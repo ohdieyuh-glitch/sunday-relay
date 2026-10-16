@@ -108,7 +108,7 @@ private:
 		double DrReceivedAt = 0.0;                 // FPlatformTime::Seconds() of the last report that moved the figure's target
 		float DrAgeSeconds = 0.0f;                 // the backend's ageMs for that report
 		// r16reh16d snapshot interpolation: reports with the SENDER's time (arrival minus the backend's ageMs); drawn InterpDelay in the past.
-		struct FSample { double T = 0.0; FVector P = FVector::ZeroVector; };
+		struct FSample { double T = 0.0; double Raw = 0.0; float V = 0.0f; FVector P = FVector::ZeroVector; };   // T = timeline used, Raw = arrival - age, V = reported speed
 		TArray<FSample> Samples;
 	};
 	void Remove(FRemote& Remote);
