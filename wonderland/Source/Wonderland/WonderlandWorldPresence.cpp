@@ -39,6 +39,8 @@ namespace WonderlandWorldPresenceDetail
 	TAutoConsoleVariable<float> CVarRemoteInterpDelayMin(TEXT("wl.Remote.InterpDelayMin"), 0.12f, TEXT("Remote players: lowest adaptive draw delay (seconds)."));
 	TAutoConsoleVariable<float> CVarRemoteInterpDelayMax(TEXT("wl.Remote.InterpDelayMax"), 0.60f, TEXT("Remote players: highest adaptive draw delay (seconds)."));
 	TAutoConsoleVariable<float> CVarRemoteInterpMargin(TEXT("wl.Remote.InterpMargin"), 0.03f, TEXT("Remote players: seconds added to the worst-case report age for the adaptive delay."));
+	TAutoConsoleVariable<float> CVarRemoteInterpCatchUp(TEXT("wl.Remote.InterpCatchUp"), 1.5f,
+		TEXT("Remote players, Interp mode: the fastest a figure may close on its target after a late report, as a multiple of the player's reported speed (0 = no limit)."));
 	TAutoConsoleVariable<float> CVarRemoteInterpEase(TEXT("wl.Remote.InterpEase"), 10.0f,
 		TEXT("Remote players: chase rate toward the interpolated point in Interp mode (high = tight; lower smooths frame hitches)."));
 	TAutoConsoleVariable<int32> CVarRemoteRetime(TEXT("wl.Remote.InterpRetime"), 1,
@@ -368,6 +370,20 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 			const double AlphaXY = 1.0 - FMath::Exp(-static_cast<double>(Rate) * Dt);
 			const double AlphaZ = 1.0 - FMath::Exp(-static_cast<double>(CVarRemoteInterpEaseZ.GetValueOnGameThread()) * Dt);
 			Next = FVector(Now.X + (Aim.X - Now.X) * AlphaXY, Now.Y + (Aim.Y - Now.Y) * AlphaXY, Now.Z + (Aim.Z - Now.Z) * AlphaZ);
+			// CATCH-UP LIMIT: after a late report the target jumps ahead; the figure may close on it at most CatchUp x the player's own reported speed
+			// (a visible surge is worse than a short extra lag). Standing / unknown speed: no limit beyond a generous 900 uu/s.
+			const double CatchUp = static_cast<double>(CVarRemoteInterpCatchUp.GetValueOnGameThread());
+			if (CatchUp > 0.0)
+			{
+				const double Vmax = (R.DrSpeed >= MinMovingSpeedUu ? static_cast<double>(R.DrSpeed) * CatchUp : 900.0) * Dt;
+				const FVector2D Step(Next.X - Now.X, Next.Y - Now.Y);
+				const double Len = Step.Size();
+				if (Len > Vmax && Len > 1e-6)
+				{
+					Next.X = Now.X + Step.X * (Vmax / Len);
+					Next.Y = Now.Y + Step.Y * (Vmax / Len);
+				}
+			}
 		}
 		else
 		{
