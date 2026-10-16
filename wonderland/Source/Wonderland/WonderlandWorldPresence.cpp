@@ -36,6 +36,10 @@ namespace WonderlandWorldPresenceDetail
 		TEXT("Remote players: seconds a figure is drawn behind its player in Interp mode (must exceed about two report periods)."));
 	TAutoConsoleVariable<float> CVarRemoteInterpEase(TEXT("wl.Remote.InterpEase"), 30.0f,
 		TEXT("Remote players: chase rate toward the interpolated point in Interp mode (high = tight; lower smooths frame hitches)."));
+	TAutoConsoleVariable<float> CVarRemoteInterpExtrap(TEXT("wl.Remote.InterpExtrap"), 0.15f,
+		TEXT("Remote players: in Interp mode, seconds a figure may continue at the last segment's velocity when it has caught up with its newest report (0 = hold)."));
+	TAutoConsoleVariable<float> CVarRemoteInterpEaseZ(TEXT("wl.Remote.InterpEaseZ"), 30.0f,
+		TEXT("Remote players: chase rate of the height (floor contact) in Interp mode; XY uses wl.Remote.InterpEase."));
 	TAutoConsoleVariable<float> CVarRemoteEaseRate(TEXT("wl.Remote.EaseRate"), 9.0f,
 		TEXT("Remote players: chase rate toward the report / dead-reckoned point when Interp is 0."));
 	TAutoConsoleVariable<float> CVarRemoteDrCap(TEXT("wl.Remote.DrCap"), 0.3f,
@@ -144,6 +148,7 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 						}
 					}
 					Remote.Samples.Add(S);
+					UE_LOG(LogTemp, Display, TEXT("WLREMOTE rep fig=%s p=(%.1f,%.1f,%.1f) age=%.0fms n=%d"), *A.UserId, A.Location.X, A.Location.Y, A.Location.Z, static_cast<double>(A.AgeMs), Remote.Samples.Num());
 					if (Remote.Samples.Num() > 24)
 					{
 						Remote.Samples.RemoveAt(0, Remote.Samples.Num() - 24, EAllowShrinking::No);
@@ -243,6 +248,7 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 		// EASED, so its gait (driven by the distance it covers) reads the movement as walking and running. The snap is still judged on the report.
 		const bool bSnap = FVector::Dist(Now, R.Target) > SnapDistanceUu;
 		float Rate = CVarRemoteEaseRate.GetValueOnGameThread();
+		bool bInterp = false;
 		if (CVarRemoteInterp.GetValueOnGameThread() != 0 && R.Samples.Num() > 0)
 		{
 			// DRAWN IN THE PAST, between the sender's own report times: a turn is a turn and a stop is a stop, never guessed ahead.
@@ -255,6 +261,19 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 			else if (RT >= Ss.Last().T)
 			{
 				Aim = Ss.Last().P;
+				// CAUGHT UP with the newest report (a late one): carry on at the last segment's velocity for a short, capped time (XY only) instead of stalling
+				const double Cap = static_cast<double>(CVarRemoteInterpExtrap.GetValueOnGameThread());
+				if (Cap > 0.0 && Ss.Num() >= 2)
+				{
+					const FRemote::FSample& Prev = Ss[Ss.Num() - 2];
+					const double Span = Ss.Last().T - Prev.T;
+					if (Span > 0.02 && Span < 0.4)
+					{
+						const double Ahead = FMath::Min(RT - Ss.Last().T, Cap);
+						Aim.X += (Ss.Last().P.X - Prev.P.X) / Span * Ahead;
+						Aim.Y += (Ss.Last().P.Y - Prev.P.Y) / Span * Ahead;
+					}
+				}
 			}
 			else
 			{
@@ -268,8 +287,23 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 				Aim = FMath::Lerp(Ss[I].P, Ss[I + 1].P, F);
 			}
 			Rate = CVarRemoteInterpEase.GetValueOnGameThread();
+			bInterp = true;
 		}
-		const FVector Next = bSnap ? R.Target : FMath::VInterpTo(Now, Aim, DeltaSeconds, Rate);
+		FVector Next;
+		if (bSnap)
+		{
+			Next = R.Target;
+		}
+		else if (bInterp)
+		{
+			// XY eased at InterpEase (smooths the report-rate speed ripple); the HEIGHT follows the floor at its own, fast rate so contact is not delayed
+			const FVector2D Flat = FMath::Vector2DInterpTo(FVector2D(Now.X, Now.Y), FVector2D(Aim.X, Aim.Y), DeltaSeconds, Rate);
+			Next = FVector(Flat.X, Flat.Y, FMath::FInterpTo(static_cast<float>(Now.Z), static_cast<float>(Aim.Z), DeltaSeconds, CVarRemoteInterpEaseZ.GetValueOnGameThread()));
+		}
+		else
+		{
+			Next = FMath::VInterpTo(Now, Aim, DeltaSeconds, Rate);
+		}
 		const FRotator Facing = FMath::RInterpTo(Body->GetActorRotation(), FRotator(0.0, R.TargetYaw, 0.0), DeltaSeconds, EaseRate);
 		Body->SetActorLocationAndRotation(Next, Facing);
 		// WLREMOTE: diagnostics only (a snap is said at once; otherwise one line a second per figure). Cheap: no allocation.
