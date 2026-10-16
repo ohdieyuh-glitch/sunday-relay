@@ -97,6 +97,10 @@ private:
 		float TargetYaw = 0.0f;
 		FString SkinId;
 		FString DisplayName;
+		// WLREMOTE diagnostics only: never read by the movement code.
+		double LogNextAt = 0.0;
+		double RecvAt = 0.0;
+		float RecvAgeMs = 0.0f;
 	};
 	void Remove(FRemote& Remote);
 	TMap<FString, FRemote> Remotes;

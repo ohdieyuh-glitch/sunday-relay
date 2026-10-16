@@ -68,6 +68,12 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 	for (const FWonderlandRemoteAvatar& A : View.Avatars)
 	{
 		FRemote& Remote = Remotes.FindOrAdd(A.UserId);
+		if (!A.Location.Equals(Remote.Target, 0.01))
+		{
+			// WLREMOTE: a view that carries a new position is a new report; one that repeats it is not.
+			Remote.RecvAt = FPlatformTime::Seconds();
+			Remote.RecvAgeMs = static_cast<float>(A.AgeMs);
+		}
 		Remote.Target = A.Location;
 		Remote.TargetYaw = A.Yaw;
 		Remote.DisplayName = A.DisplayName;
@@ -133,6 +139,7 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 	using namespace WonderlandWorldPresenceDetail;
 	const APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
 	const FVector Camera = PC != nullptr && PC->PlayerCameraManager != nullptr ? PC->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector;
+	const double NowSeconds = FPlatformTime::Seconds();
 	for (TPair<FString, FRemote>& Pair : Remotes)
 	{
 		FRemote& R = Pair.Value;
@@ -143,9 +150,26 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 		}
 		const FVector Now = Body->GetActorLocation();
 		// EASED, so its gait (driven by the distance it covers) reads the movement as walking and running.
-		const FVector Next = FVector::Dist(Now, R.Target) > SnapDistanceUu ? R.Target : FMath::VInterpTo(Now, R.Target, DeltaSeconds, EaseRate);
+		const bool bSnap = FVector::Dist(Now, R.Target) > SnapDistanceUu;
+		const FVector Next = bSnap ? R.Target : FMath::VInterpTo(Now, R.Target, DeltaSeconds, EaseRate);
 		const FRotator Facing = FMath::RInterpTo(Body->GetActorRotation(), FRotator(0.0, R.TargetYaw, 0.0), DeltaSeconds, EaseRate);
 		Body->SetActorLocationAndRotation(Next, Facing);
+		// WLREMOTE: diagnostics only (a snap is said at once; otherwise one line a second per figure). Cheap: no allocation.
+		if (bSnap)
+		{
+			UE_LOG(LogTemp, Display, TEXT("WLREMOTE snap fig=%s from=(%.1f,%.1f,%.1f) to=(%.1f,%.1f,%.1f)"), *Pair.Key,
+				Now.X, Now.Y, Now.Z, R.Target.X, R.Target.Y, R.Target.Z);
+		}
+		if (NowSeconds >= R.LogNextAt)
+		{
+			R.LogNextAt = NowSeconds + 1.0;
+			UE_LOG(LogTemp, Display, TEXT("WLREMOTE fig=%s recv=(%.1f,%.1f,%.1f) age=%.0fms applied=(%.1f,%.1f,%.1f) lagUu=%.1f lagXYUu=%.1f worn=%d floatZ=%.2f lowestUu=%.2f"),
+				*Pair.Key, R.Target.X, R.Target.Y, R.Target.Z,
+				(NowSeconds - R.RecvAt) * 1000.0 + R.RecvAgeMs,
+				Next.X, Next.Y, Next.Z,
+				FVector::Dist(R.Target, Next), FVector::Dist2D(R.Target, Next),
+				Body->IsWornPoseValid() ? 1 : 0, Body->GetFloatRootRelativeZ(), Body->GetFigureLowestUu());
+		}
 		if (UTextRenderComponent* Label = R.Label.Get())
 		{
 			// FACING THE CAMERA: a name is read, not seen edge-on.

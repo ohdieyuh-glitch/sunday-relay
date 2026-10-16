@@ -488,6 +488,9 @@ public:
 	 *  without walking every instance back out of the render proxy to find out where its feet are. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	float GetFigureLowestUu() const { return FigureLowestUU; }
+	/** WLREMOTE diagnostics (read-only): whether a worn pose is being handed down, and FloatRoot's actual relative Z (the hover). */
+	bool IsWornPoseValid() const { return WornPose.bValid; }
+	float GetFloatRootRelativeZ() const;
 
 	/** The canonical body as built: its height, and its lowest point in local uu. 0 for a figure with no `body` record. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")

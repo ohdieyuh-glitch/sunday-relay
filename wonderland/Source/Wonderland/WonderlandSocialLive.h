@@ -294,6 +294,8 @@ private:
 	bool bWorldWanted = false;
 	bool bWorldBusy = false;
 	double NextWorldAt = 0.0;
+	/** WLREMOTE diagnostics only: when the last world report was sent. */
+	double LastWorldSentAt = 0.0;
 	/** Plans the next automatic join: at once the first time, then on a 2/5/15/30 s backoff until a world report is answered again.
 	 *  bNow: at once and no backoff step -- a planned move that is not a failure (a FRIEND rejoin that landed elsewhere). */
 	void ScheduleAutoJoin(const FString& Target, const FString& Arg, bool bNow = false);

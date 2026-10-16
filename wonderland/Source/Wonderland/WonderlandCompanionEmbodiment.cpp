@@ -3175,6 +3175,11 @@ FString AWonderlandCompanionEmbodiment::DescribeShadows() const
 		Surface != nullptr ? Surface->GetNumSections() : 0, (Surface != nullptr && Surface->IsVisible()) ? TEXT("yes") : TEXT("no"), *Material, Out, Up, Widest * 2.0f, *Where);
 }
 
+float AWonderlandCompanionEmbodiment::GetFloatRootRelativeZ() const
+{
+	return FloatRoot != nullptr ? static_cast<float>(FloatRoot->GetRelativeLocation().Z) : 0.0f;
+}
+
 bool AWonderlandCompanionEmbodiment::HasLiveShadows() const
 {
 	// LIVE MEANS DRAWABLE: the renderer culls a primitive whose bounds are NaN or empty, so a surface with sections and

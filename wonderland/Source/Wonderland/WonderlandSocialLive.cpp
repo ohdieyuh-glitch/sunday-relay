@@ -444,10 +444,17 @@ void FWonderlandSocialLiveService::TickWorld()
 	Body->SetStringField(TEXT("motion"), Report.Motion);
 	Body->SetStringField(TEXT("skinId"), Report.SkinId);
 	bWorldBusy = true;
+	// WLREMOTE: diagnostics only (one line per report: the soles sent, the round trip, the send period).
+	const double SentAt = FPlatformTime::Seconds();
+	const double SentPeriodMs = LastWorldSentAt > 0.0 ? (SentAt - LastWorldSentAt) * 1000.0 : 0.0;
+	LastWorldSentAt = SentAt;
+	const FVector SentSoles = Report.Location;
 	// ONE CALL A TICK: the report answers with who else is here.
-	Call(TEXT("POST"), TEXT("/world/state"), Body, [this](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+	Call(TEXT("POST"), TEXT("/world/state"), Body, [this, SentAt, SentPeriodMs, SentSoles](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
 	{
 		bWorldBusy = false;
+		UE_LOG(LogTemp, Display, TEXT("WLREMOTE send soles=(%.1f,%.1f,%.1f) rtt=%.0fms period=%.0fms status=%d"),
+			SentSoles.X, SentSoles.Y, SentSoles.Z, (FPlatformTime::Seconds() - SentAt) * 1000.0, SentPeriodMs, Status);
 		HandleWorldReport(Status, Data, Problem);
 	});
 }
@@ -475,6 +482,7 @@ void FWonderlandSocialLiveService::HandleWorldReport(int32 Status, const TShared
 			if (!bJoinInFlight && !bAutoJoinPending)
 			{
 				UE_LOG(LogTemp, Display, TEXT("WLWORLD the server no longer holds this player's world (404): joining the same one again quietly"));
+				UE_LOG(LogTemp, Display, TEXT("WLREMOTE rejoin404 figures=%d context=%s"), WorldView.Avatars.Num(), *WorldView.ContextId);
 				RejoinContextId = WorldView.ContextId;   // a FRIEND rejoin must land in this same world, or the player is not moved (m2)
 				WorldView = FWonderlandWorldView();
 				NotePopulation();
