@@ -21,8 +21,11 @@ namespace WonderlandSocialLiveDetail
 	 * two-client run (10-02) left A's friend list showing B for minutes. The view is read again when it is this old.
 	 */
 	constexpr double ResyncSeconds = 20.0;
-	/** The shared presence layer's report: ~5 a second, each answered with the view. */
-	constexpr double WorldSeconds = 0.2;
+	/** The shared presence layer's report, each answered with the view. The gap AFTER an answer (so the period is round trip + this + tick rounding).
+	 *  r16reh16b: 0.2 -> 0.1 s (measured period 255 ms at 13 ms RTT; remote motion showed surge/stall at that rate). The server stores one report per 100 ms
+	 *  (WORLD_REPORT_MIN_INTERVAL_MS) and its `report` budget is a burst of 30 then one per 100 ms (SOCIAL_BUDGETS.report), so the period always stays above
+	 *  the floor (RTT + 0.1 s) and far inside the budget; over budget would be 429 + a RetrySeconds wait, which this margin avoids. */
+	constexpr double WorldSeconds = 0.1;
 	constexpr int64 MaxResponseBytes = 2 * 1024 * 1024;
 
 	const TCHAR* const Root = TEXT("/relay-api/wonderland/social");
