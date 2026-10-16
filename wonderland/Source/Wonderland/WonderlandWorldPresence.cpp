@@ -45,7 +45,7 @@ namespace WonderlandWorldPresenceDetail
 		TEXT("Remote players, Interp mode: 1 re-times a steady-motion segment from distance / reported speed (immune to report-delivery jitter), pulled back to the real clock; 0 trusts arrival - age."));
 	TAutoConsoleVariable<float> CVarRemoteRetimePull(TEXT("wl.Remote.InterpRetimePull"), 0.2f,
 		TEXT("Remote players: fraction of the (arrival - age) clock error pulled back into a re-timed sample (keeps the timeline from drifting)."));
-	TAutoConsoleVariable<float> CVarRemoteInterpExtrap(TEXT("wl.Remote.InterpExtrap"), 0.0f,
+	TAutoConsoleVariable<float> CVarRemoteInterpExtrap(TEXT("wl.Remote.InterpExtrap"), 0.2f,
 		TEXT("Remote players: in Interp mode, seconds a figure may continue at the last segment's velocity when it has caught up with its newest report (0 = hold)."));
 	TAutoConsoleVariable<float> CVarRemoteInterpEaseZ(TEXT("wl.Remote.InterpEaseZ"), 30.0f,
 		TEXT("Remote players: chase rate of the height (floor contact) in Interp mode; XY uses wl.Remote.InterpEase."));
@@ -145,6 +145,15 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 						else
 						{
 							const double DRaw = S.Raw - Last.Raw;
+							{
+								// HOW OLD the newest report was when its successor arrived = the draw delay that would just have avoided a hold. Measured here, at
+								// arrival, so a player who stands still (no new reports) does not inflate it; a stand/start gap (> 0.6 s) is not a delivery gap.
+								const double Avail = FPlatformTime::Seconds() - Last.T;
+								if (Avail > 0.0 && Avail <= 0.6)
+								{
+									Remote.PeakAge = FMath::Max(Remote.PeakAge, Avail);
+								}
+							}
 							if (S.Raw - Last.Raw > 0.4)
 							{
 								// stood still, then moved: hold the old place until just before the move, do not slide across the whole gap
@@ -295,7 +304,7 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 				// answer carries it), or the figure catches up with it, holds, and jumps. A leaky peak of that age (+ a margin) is the smallest safe delay.
 				// It RISES at most 10 percent of real time and FALLS at most 5 percent, so a change never reads as a speed change.
 				const double Dt = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.25);
-				R.PeakAge = FMath::Max(FMath::Max(0.0, NowSeconds - Ss.Last().T), R.PeakAge - 0.05 * Dt);
+				R.PeakAge = FMath::Max(0.0, R.PeakAge - 0.05 * Dt);   // raised on report arrival (see the sample insertion); only decays here
 				const double Target = FMath::Clamp(R.PeakAge + static_cast<double>(CVarRemoteInterpMargin.GetValueOnGameThread()),
 					static_cast<double>(CVarRemoteInterpDelayMin.GetValueOnGameThread()), static_cast<double>(CVarRemoteInterpDelayMax.GetValueOnGameThread()));
 				if (R.AdaptDelay < 0.0)
@@ -323,9 +332,11 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 					const double Span = Ss.Last().T - Prev.T;
 					if (Span > 0.02 && Span < 0.4)
 					{
+						// velocity decaying linearly to zero over Cap: the distance carried is v * (a - a^2 / 2Cap), at most v * Cap / 2 (30 uu at 300 uu/s, Cap 0.2)
 						const double Ahead = FMath::Min(RT - Ss.Last().T, Cap);
-						Aim.X += (Ss.Last().P.X - Prev.P.X) / Span * Ahead;
-						Aim.Y += (Ss.Last().P.Y - Prev.P.Y) / Span * Ahead;
+						const double Eff = Ahead - Ahead * Ahead / (2.0 * Cap);
+						Aim.X += (Ss.Last().P.X - Prev.P.X) / Span * Eff;
+						Aim.Y += (Ss.Last().P.Y - Prev.P.Y) / Span * Eff;
 					}
 				}
 			}
