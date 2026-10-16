@@ -348,12 +348,13 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 		if (NowSeconds >= R.LogNextAt)
 		{
 			R.LogNextAt = NowSeconds + FMath::Max(0.02, static_cast<double>(CVarRemoteLogPeriod.GetValueOnGameThread()));
-			UE_LOG(LogTemp, Display, TEXT("WLREMOTE fig=%s recv=(%.1f,%.1f,%.1f) age=%.0fms applied=(%.1f,%.1f,%.1f) lagUu=%.1f lagXYUu=%.1f worn=%d floatZ=%.2f lowestUu=%.2f"),
+			UE_LOG(LogTemp, Display, TEXT("WLREMOTE fig=%s recv=(%.1f,%.1f,%.1f) age=%.0fms applied=(%.1f,%.1f,%.1f) lagUu=%.1f lagXYUu=%.1f worn=%d floatZ=%.2f lowestUu=%.2f aim=(%.1f,%.1f) dtMs=%.1f nowXY=(%.1f,%.1f) interp=%d"),
 				*Pair.Key, R.Target.X, R.Target.Y, R.Target.Z,
 				(NowSeconds - R.RecvAt) * 1000.0 + R.RecvAgeMs,
 				Next.X, Next.Y, Next.Z,
 				FVector::Dist(R.Target, Next), FVector::Dist2D(R.Target, Next),
-				Body->IsWornPoseValid() ? 1 : 0, Body->GetFloatRootRelativeZ(), Body->GetFigureLowestUu());
+				Body->IsWornPoseValid() ? 1 : 0, Body->GetFloatRootRelativeZ(), Body->GetFigureLowestUu(),
+				Aim.X, Aim.Y, static_cast<double>(DeltaSeconds) * 1000.0, Now.X, Now.Y, bInterp ? 1 : 0);
 		}
 		if (UTextRenderComponent* Label = R.Label.Get())
 		{
