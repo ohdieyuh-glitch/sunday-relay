@@ -32,8 +32,13 @@ namespace WonderlandWorldPresenceDetail
 		TEXT("Remote players: 1 draws a remote figure planted (no FloatRoot hover, no Float-part bob), 0 restores the old hover. Read when a figure spawns."));
 	TAutoConsoleVariable<int32> CVarRemoteInterp(TEXT("wl.Remote.Interp"), 1,
 		TEXT("Remote players: 1 draws a figure InterpDelay seconds in the past, interpolated between the sender's report times (no overshoot); 0 uses the dead-reckoned chase."));
-	TAutoConsoleVariable<float> CVarRemoteInterpDelay(TEXT("wl.Remote.InterpDelay"), 0.20f,
+	TAutoConsoleVariable<float> CVarRemoteInterpDelay(TEXT("wl.Remote.InterpDelay"), 0.35f,
 		TEXT("Remote players: seconds a figure is drawn behind its player in Interp mode (must exceed about two report periods)."));
+	TAutoConsoleVariable<int32> CVarRemoteInterpAdaptive(TEXT("wl.Remote.InterpAdaptive"), 1,
+		TEXT("Remote players, Interp mode: 1 sets the draw delay from the recent worst-case age of the newest report (+ InterpMargin, between InterpDelayMin and Max), slewed slowly; 0 uses the fixed wl.Remote.InterpDelay."));
+	TAutoConsoleVariable<float> CVarRemoteInterpDelayMin(TEXT("wl.Remote.InterpDelayMin"), 0.12f, TEXT("Remote players: lowest adaptive draw delay (seconds)."));
+	TAutoConsoleVariable<float> CVarRemoteInterpDelayMax(TEXT("wl.Remote.InterpDelayMax"), 0.60f, TEXT("Remote players: highest adaptive draw delay (seconds)."));
+	TAutoConsoleVariable<float> CVarRemoteInterpMargin(TEXT("wl.Remote.InterpMargin"), 0.03f, TEXT("Remote players: seconds added to the worst-case report age for the adaptive delay."));
 	TAutoConsoleVariable<float> CVarRemoteInterpEase(TEXT("wl.Remote.InterpEase"), 10.0f,
 		TEXT("Remote players: chase rate toward the interpolated point in Interp mode (high = tight; lower smooths frame hitches)."));
 	TAutoConsoleVariable<int32> CVarRemoteRetime(TEXT("wl.Remote.InterpRetime"), 1,
@@ -278,11 +283,31 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 		const bool bSnap = FVector::Dist(Now, R.Target) > SnapDistanceUu;
 		float Rate = CVarRemoteEaseRate.GetValueOnGameThread();
 		bool bInterp = false;
+		double DelayUsed = 0.0;
 		if (CVarRemoteInterp.GetValueOnGameThread() != 0 && R.Samples.Num() > 0)
 		{
 			// DRAWN IN THE PAST, between the sender's own report times: a turn is a turn and a stop is a stop, never guessed ahead.
-			const double RT = NowSeconds - static_cast<double>(CVarRemoteInterpDelay.GetValueOnGameThread());
 			const TArray<FRemote::FSample>& Ss = R.Samples;
+			double Delay = static_cast<double>(CVarRemoteInterpDelay.GetValueOnGameThread());
+			if (CVarRemoteInterpAdaptive.GetValueOnGameThread() != 0)
+			{
+				// The delay must cover how old the NEWEST report can be at any tick (the sender's report gap + the time until this client's own next
+				// answer carries it), or the figure catches up with it, holds, and jumps. A leaky peak of that age (+ a margin) is the smallest safe delay.
+				// It RISES at most 10 percent of real time and FALLS at most 5 percent, so a change never reads as a speed change.
+				const double Dt = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.25);
+				R.PeakAge = FMath::Max(FMath::Max(0.0, NowSeconds - Ss.Last().T), R.PeakAge - 0.05 * Dt);
+				const double Target = FMath::Clamp(R.PeakAge + static_cast<double>(CVarRemoteInterpMargin.GetValueOnGameThread()),
+					static_cast<double>(CVarRemoteInterpDelayMin.GetValueOnGameThread()), static_cast<double>(CVarRemoteInterpDelayMax.GetValueOnGameThread()));
+				if (R.AdaptDelay < 0.0)
+				{
+					R.AdaptDelay = FMath::Max(Delay, Target);   // start safe: the fixed delay, or more if the first reports are already older
+				}
+				const double Step = (Target > R.AdaptDelay ? 0.10 : 0.05) * Dt;
+				R.AdaptDelay += FMath::Clamp(Target - R.AdaptDelay, -Step, Step);
+				Delay = R.AdaptDelay;
+			}
+			DelayUsed = Delay;
+			const double RT = NowSeconds - Delay;
 			if (RT <= Ss[0].T)
 			{
 				Aim = Ss[0].P;
@@ -348,13 +373,13 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 		if (NowSeconds >= R.LogNextAt)
 		{
 			R.LogNextAt = NowSeconds + FMath::Max(0.02, static_cast<double>(CVarRemoteLogPeriod.GetValueOnGameThread()));
-			UE_LOG(LogTemp, Display, TEXT("WLREMOTE fig=%s recv=(%.1f,%.1f,%.1f) age=%.0fms applied=(%.1f,%.1f,%.1f) lagUu=%.1f lagXYUu=%.1f worn=%d floatZ=%.2f lowestUu=%.2f aim=(%.1f,%.1f) dtMs=%.1f nowXY=(%.1f,%.1f) interp=%d"),
+			UE_LOG(LogTemp, Display, TEXT("WLREMOTE fig=%s recv=(%.1f,%.1f,%.1f) age=%.0fms applied=(%.1f,%.1f,%.1f) lagUu=%.1f lagXYUu=%.1f worn=%d floatZ=%.2f lowestUu=%.2f aim=(%.1f,%.1f) dtMs=%.1f nowXY=(%.1f,%.1f) interp=%d delayMs=%.0f"),
 				*Pair.Key, R.Target.X, R.Target.Y, R.Target.Z,
 				(NowSeconds - R.RecvAt) * 1000.0 + R.RecvAgeMs,
 				Next.X, Next.Y, Next.Z,
 				FVector::Dist(R.Target, Next), FVector::Dist2D(R.Target, Next),
 				Body->IsWornPoseValid() ? 1 : 0, Body->GetFloatRootRelativeZ(), Body->GetFigureLowestUu(),
-				Aim.X, Aim.Y, static_cast<double>(DeltaSeconds) * 1000.0, Now.X, Now.Y, bInterp ? 1 : 0);
+				Aim.X, Aim.Y, static_cast<double>(DeltaSeconds) * 1000.0, Now.X, Now.Y, bInterp ? 1 : 0, DelayUsed * 1000.0);
 		}
 		if (UTextRenderComponent* Label = R.Label.Get())
 		{

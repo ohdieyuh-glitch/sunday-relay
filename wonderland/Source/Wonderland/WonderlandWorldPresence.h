@@ -110,6 +110,9 @@ private:
 		// r16reh16d snapshot interpolation: reports with the SENDER's time (arrival minus the backend's ageMs); drawn InterpDelay in the past.
 		struct FSample { double T = 0.0; double Raw = 0.0; float V = 0.0f; FVector P = FVector::ZeroVector; };   // T = timeline used, Raw = arrival - age, V = reported speed
 		TArray<FSample> Samples;
+		// r16reh16i adaptive draw delay: the recent worst-case age of the newest report, and the delay actually used (slewed).
+		double PeakAge = 0.0;
+		double AdaptDelay = -1.0;
 	};
 	void Remove(FRemote& Remote);
 	TMap<FString, FRemote> Remotes;
