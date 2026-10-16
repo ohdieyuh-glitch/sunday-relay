@@ -126,6 +126,7 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 			// THE MASCOT, as every player's Dog is: its colourway, its gait, Relay OG's height (the HARD rule).
 			Body->SetBodyRole(EWonderlandBodyRole::Mascot);
 			Body->SetRuntimeActivity(TEXT("IDLE"));
+			Body->SetPlantedNoFloat(true);   // a remote player is drawn planted, not hovering (founder 2026-09-25: skins "remain planted")
 			Body->TargetBodyHeightUU = BodyHeightUu;
 			UTextRenderComponent* Label = NewObject<UTextRenderComponent>(Body, MakeUniqueObjectName(Body, UTextRenderComponent::StaticClass(), TEXT("PlayerName")));
 			Label->SetupAttachment(Body->GetRootComponent());

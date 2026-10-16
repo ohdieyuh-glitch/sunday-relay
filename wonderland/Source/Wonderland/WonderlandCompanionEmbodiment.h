@@ -393,6 +393,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	void ReleaseCanonicalGait() { bGaitDrivenExternally = false; WornPose.bValid = false; }
 
+	/** A REMOTE PLAYER'S FIGURE stands planted like a costume: no FloatRoot hover and no floating-part bob. It does NOT hand the figure a
+	 *  worn pose (that would put the legs on the canon-sole branches); gait, legs and every other joint are untouched. Off by default. */
+	void SetPlantedNoFloat(bool bPlanted) { bPlantedNoFloat = bPlanted; }
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	bool IsGaitDrivenExternally() const { return bGaitDrivenExternally; }
 
@@ -947,6 +951,7 @@ public:
 
 private:
 	bool bGaitDrivenExternally = false;
+	bool bPlantedNoFloat = false;
 	FWonderlandWornPose WornPose;
 
 	/**

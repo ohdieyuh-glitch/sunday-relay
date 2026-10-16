@@ -3595,7 +3595,7 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 	// were -- which the founder also asked for.
 	if (FloatRoot != nullptr)
 	{
-		if (WornPose.bValid)
+		if (WornPose.bValid || bPlantedNoFloat)
 		{
 			WriteJoint(FloatRoot, FVector::ZeroVector, FRotator::ZeroRotator);
 		}
@@ -3621,7 +3621,7 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		case EWonderlandCompanionMotion::Float:
 		{
 			const float Angle = 2.0f * PI * (ActivityTime / 3.1f + Phase + Part.A);
-			const float Idle = FMath::Sin(Angle) * 2.0f * Scale;
+			const float Idle = bPlantedNoFloat ? 0.0f : FMath::Sin(Angle) * 2.0f * Scale;
 			// THE PERFORMANCE LIFTS THE WHOLE BODY -- 72 uu to meditate, 150 to fly up and verify. A floating part
 			// keeps its own small bob on top of that; what it must not do is ignore the lift entirely, which is
 			// what a costume did through every preparation and verification the founder ever watched.
