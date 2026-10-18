@@ -78,10 +78,10 @@ describe('V6 G-5: the governance dumps', () => {
     expect(line, 'no free text: a decision reason lives in approvals.tsv only, under the bundle scan').not.toContain('reason\'');
   });
 
-  it('NEW files only: the 23 pre-G-5 dumps all stand above the G-5 block, and the block adds exactly three', () => {
+  it('NEW files only: the 26 pre-G-5 dumps all stand above the G-5 block, and the block adds exactly three', () => {
     const before = SCRIPT.slice(0, SCRIPT.indexOf('# V6 G-5: THE GOVERNANCE RECORD'));
     expect(before.length, 'the G-5 block must be found, or this pin is vacuous').toBeLessThan(SCRIPT.length);
-    expect(before.match(/^dump "/gmu), 'the pre-G-5 files, untouched above the block').toHaveLength(23);
-    expect(SCRIPT.match(/^dump "/gmu)).toHaveLength(26);
+    expect(before.match(/^dump "/gmu), 'the pre-G-5 files, untouched above the block').toHaveLength(26);
+    expect(SCRIPT.match(/^dump "/gmu)).toHaveLength(29);
   });
 });

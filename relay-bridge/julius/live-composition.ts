@@ -19,7 +19,7 @@
 
 import { coderAttemptDeadlineMs } from '../hosted-coding-agent/coder-envelope';
 import { architectOperativeTimeoutMs } from '../../src/relay/connectors/gpt-architect/config';
-import { reviewerOperativeTimeoutMs } from '../reviewer-deadline';
+import { JOB_BUDGET_MS, reviewerOperativeTimeoutMs } from '../reviewer-deadline';
 import { randomUUID } from 'node:crypto';
 import {
   JuliusProviderHealthRegistry,
@@ -53,7 +53,26 @@ import {
   noJuliusResearch,
   type JuliusResearchLedger,
   type JuliusResearchPolicy,
+  JULIUS_RUNTIME_VERSION,
+  JULIUS_TERMINAL_MISSION_STATES,
+  compareJuliusLearningPair,
+  decideJuliusLearningPromotion,
+  juliusLearningArmEvent,
+  juliusLearningArmEventId,
+  juliusLearningMetrics,
+  juliusLearningPairRefusal,
+  readJuliusLearningArmRecord,
+  type JuliusLearningComparison,
+  type JuliusLearningMetrics,
+  type JuliusLearningPairOutcome,
+  type JuliusLearningPairing,
+  type JuliusLearningRegistration,
+  type JuliusOperationalEvent,
+  type JuliusTimelineEntry,
+  type JuliusTrajectoryEvent,
+  type JuliusTrajectoryReader,
 } from '../../src/relay/mission/julius';
+import { liveLearningLines } from './live-report-lines';
 import { createJuliusResearchMediator, juliusResearchPortFrom } from './research-mediator';
 import type { MeteredOutcome } from '../../src/relay/mission/live-reach';
 
@@ -921,6 +940,102 @@ export interface DriveOutcome {
   readonly heldForApproval: boolean;
 }
 
+/**
+ * THE JOB'S CLOCK, ENFORCED (Decision C, audit F3). The workflow kills the job at `timeout-minutes`, and a run killed
+ * mid-stage stays RUNNING: no `run.failed`, no learning record, no store export. So the drive starts a stage only when
+ * that stage, at its own bound, ends before the steps after LIVE need the rest of the job; otherwise the run ends FAILED
+ * through its ordinary path, while every step after LIVE still has its time.
+ *
+ * PER STAGE, NOT ONE WORST CASE. A single bound (the coder's, the longest) would refuse a review that easily fits, and
+ * cut even the priced normal path (coder-envelope.test.ts's job-budget proof) short of the job's limit. So each role
+ * has its own bound, and the check reads the roles of the tasks the next tick can claim.
+ */
+export interface JuliusDriveDeadline {
+  /** Every stage must END by this instant: the job's limit less the reserve after LIVE. */
+  readonly stagesEndByMs: number;
+  /** The job's limit as this process can know it, conservatively early. */
+  readonly hardLimitAtMs: number;
+  /** What the steps after LIVE are left: the learning record, the evidence dump, the scans and the uploads. */
+  readonly reserveAfterLiveMs: number;
+  /**
+   * The longest a stage of each role may take once started. A role with no entry is held to the longest entry, and an
+   * empty map to nothing at all (the stage then only has to start before `stagesEndByMs`).
+   */
+  readonly stageBoundMs: Readonly<Record<string, number>>;
+}
+
+/**
+ * WHAT SETTLING A STAGE MAY TAKE after its worker's declared deadline, which the coordinator enforces itself
+ * ("Worker exceeded the deadline it declares"): evidence, artifacts and the verification decision, all writes to
+ * this job's own database. Two minutes. (The lease keeper's 600 s also covers research served inline; the C arms'
+ * contracts grant no research, and the reserve after LIVE absorbs the rest of any overrun.)
+ */
+export const JULIUS_STAGE_SETTLEMENT_MARGIN_MS = 2 * 60_000;
+
+/**
+ * HOW LATE THE WORKFLOW'S JOB STAMP IS. `JULIUS_JOB_STARTED_AT` is written by the dispatch-input gate, not at the job's
+ * start: 39-68 s after it in the five paid runs measured on 2026-10-13 (37222057584, 37039013641, 36915013287,
+ * 34774471909, 34766115321). The job's real limit is that much EARLIER than the stamp plus the budget.
+ */
+export const JULIUS_JOB_STAMP_LAG_RESERVE_MS = 2 * 60_000;
+/**
+ * WHAT THE STEPS AFTER LIVE ARE LEFT. Measured 11-15 s from LIVE's end to teardown in those five runs; the founder
+ * draft r4 adds the learning-store dump, its scan and upload, and the strict resolver. Five minutes, twenty times the
+ * longest measured, so an artifact upload having a slow day still lands before the runner's cut.
+ */
+export const JULIUS_RESERVE_AFTER_LIVE_MS = 5 * 60_000;
+
+/**
+ * THE STAGE DEADLINE FOR A LIVE RUN, or null when the job's start was not recorded (nothing is then enforced, as
+ * before). A role's stage bound is the lease keeper's dispatch part of its hold bound (every worker of the role at its
+ * declared deadline, a reroute trying each) plus `JULIUS_STAGE_SETTLEMENT_MARGIN_MS`.
+ */
+export function liveStageDeadline(input: {
+  readonly jobStartedAt: string | undefined;
+  readonly workers: readonly { readonly role: string; readonly timeoutMs: number }[];
+  readonly jobBudgetMs?: number;
+}): JuliusDriveDeadline | null {
+  const started = Date.parse(input.jobStartedAt ?? '');
+  if (!Number.isFinite(started)) return null;
+  const roles = [...new Set(input.workers.map((worker) => worker.role))].sort();
+  const stageBoundMs = Object.fromEntries(roles.map((role) => [role, juliusLeaseHoldBoundMs(input.workers, { role }, JULIUS_STAGE_SETTLEMENT_MARGIN_MS)]));
+  const hardLimitAtMs = started + (input.jobBudgetMs ?? JOB_BUDGET_MS) - JULIUS_JOB_STAMP_LAG_RESERVE_MS;
+  return { stagesEndByMs: hardLimitAtMs - JULIUS_RESERVE_AFTER_LIVE_MS, hardLimitAtMs, reserveAfterLiveMs: JULIUS_RESERVE_AFTER_LIVE_MS, stageBoundMs };
+}
+
+/**
+ * A GITHUB RE-RUN OF A PAID RUN NEVER REACHES A PROVIDER (Decision C, audit F4). "Re-run failed jobs" re-runs the paid
+ * job and REUSES the admission job's earlier success, so `paid-slot` (which refuses any attempt but the first) never
+ * sees it; this is the last check before the drive can reach a provider. Under GitHub Actions only an attempt of
+ * exactly "1" passes, and an absent one is refused; a local launch (no GITHUB_ACTIONS) is unaffected. Null to proceed.
+ */
+export function liveRunAttemptRefusal(env: Record<string, string | undefined>): string | null {
+  if (env.GITHUB_ACTIONS !== 'true' || env.GITHUB_RUN_ATTEMPT === '1') return null;
+  const attempt = /^[0-9]{1,6}$/u.test(env.GITHUB_RUN_ATTEMPT ?? '') ? env.GITHUB_RUN_ATTEMPT as string : 'unknown';
+  return `paid_run_rerun_refused: workflow run attempt ${attempt} is not the first; a re-run of a paid run never spends again. Dispatch a new run; no provider was contacted.`;
+}
+
+/**
+ * A RATE-LIMITED RETRY WAITS BEFORE IT IS TRIED AGAIN (Decision C, audit F5). The pipeline requeues a RATE_LIMIT at
+ * once and the drive ticked at once, so up to three attempts met the same limit back to back. Opt-in, so every other
+ * caller ticks exactly as before; the live entrypoint passes `JULIUS_LIVE_RATE_LIMIT_BACKOFF`.
+ */
+export interface JuliusRetryBackoff {
+  readonly baseMs: number;
+  readonly maxMs: number;
+}
+/** 15 s, then 30 s: at most 45 s across the three attempts a task gets, never more than 120 s for one wait. */
+export const JULIUS_LIVE_RATE_LIMIT_BACKOFF: JuliusRetryBackoff = Object.freeze({ baseMs: 15_000, maxMs: 120_000 });
+
+/**
+ * HOW LONG TO WAIT before the next tick after the `retries`-th rate-limited retry of this drive: the provider's own
+ * Retry-After when the retry reported one, else `baseMs` doubling per retry; never more than `maxMs`.
+ */
+export function juliusRateLimitBackoffMs(input: JuliusRetryBackoff & { readonly retries: number; readonly retryAfterMs: number | null }): number {
+  if (input.retryAfterMs !== null && Number.isFinite(input.retryAfterMs) && input.retryAfterMs >= 0) return Math.min(Math.ceil(input.retryAfterMs), input.maxMs);
+  return Math.min(input.baseMs * 2 ** Math.max(0, input.retries - 1), input.maxMs);
+}
+
 export interface DriveTickAccount {
   readonly plannedTicks: number;
   readonly hardMaxTicks: number;
@@ -961,8 +1076,19 @@ export async function driveJuliusRunToTerminal(input: {
    */
   readonly verification?: JuliusVerificationPolicy;
   readonly maxTicks?: number;
+  /** The job's clock (`liveStageDeadline`): no stage starts at or after its stop line. Absent: nothing is enforced. */
+  readonly deadline?: JuliusDriveDeadline;
+  /** The wall clock the deadline is read on, in ms. Injected by the proofs; the system clock otherwise. */
+  readonly now?: () => number;
+  /** Wait after a rate-limited retry (`JULIUS_LIVE_RATE_LIMIT_BACKOFF`); absent, the drive ticks at once as before. */
+  readonly retryBackoff?: JuliusRetryBackoff;
+  /** How the drive waits. Injected by the proofs; a timer otherwise. */
+  readonly sleep?: (ms: number) => Promise<void>;
 }): Promise<DriveOutcome> {
   const maxTicks = input.maxTicks ?? 32;
+  const now = input.now ?? ((): number => Date.now());
+  const sleep = input.sleep ?? ((ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms); }));
+  let rateLimitRetries = 0;
   const override = input.verification !== undefined && input.maxTicks !== undefined ? input.maxTicks : null;
   const budget = input.verification === undefined ? null : await liveTickBudgetFor({
     store: input.store, runId: input.runId, projectId: input.projectId, verification: input.verification,
@@ -1002,6 +1128,19 @@ export async function driveJuliusRunToTerminal(input: {
         return failForTickBudget({ input, consumed: tick - 1, account: accountAt(tick - 1, true)! });
       }
     }
+    // THE STOP LINE, BEFORE A STAGE STARTS, never during one: the next tick claims among the run's RUNNABLE tasks, and it
+    // may start only if the longest of their stages, at its bound, still ends by `stagesEndByMs`. Otherwise the run ends
+    // here, FAILED, with time left for its record and its evidence.
+    if (input.deadline !== undefined) {
+      const bounds = Object.values(input.deadline.stageBoundMs);
+      const fallback = bounds.length === 0 ? 0 : Math.max(...bounds);
+      const nextStageMs = (await input.store.tasksForRun(input.runId, input.projectId))
+        .filter((task) => task.state === 'RUNNABLE')
+        .reduce((longest, task) => Math.max(longest, input.deadline!.stageBoundMs[task.role] ?? fallback), 0);
+      if (now() + nextStageMs > input.deadline.stagesEndByMs) {
+        return failForDeadline({ input, deadline: input.deadline, nextStageMs, consumed: tick - 1, account: accountAt(tick - 1, false) });
+      }
+    }
     // THE SWEEP IS THE KERNEL'S. This driver used to call `recover` before
     // every tick, which made a store-level guarantee depend on one composition
     // root remembering to make it — and it passed the default limit of 100
@@ -1013,6 +1152,18 @@ export async function driveJuliusRunToTerminal(input: {
     lastState = run?.state ?? 'UNKNOWN';
     if (run !== null && terminal.has(run.state)) {
       return { state: run.state, ticks: tick, stalled: false, haltCause: null, tickAccount: accountAt(tick, false), heldForApproval: false };
+    }
+    // A RATE-LIMITED RETRY WAITS, BOUNDED (audit F5): by the backoff's own ceiling, and never past the stop line, where
+    // the next tick's deadline check ends the run instead.
+    if (input.retryBackoff !== undefined) {
+      const limited = report.outcomes.filter((outcome) => outcome.kind === 'RETRY' && outcome.code === 'RATE_LIMIT');
+      if (limited.length > 0) {
+        rateLimitRetries += limited.length;
+        const asked = limited.flatMap((outcome) => (outcome.kind === 'RETRY' && outcome.retryAfterMs !== undefined ? [outcome.retryAfterMs] : []));
+        const wanted = juliusRateLimitBackoffMs({ ...input.retryBackoff, retries: rateLimitRetries, retryAfterMs: asked.length > 0 ? Math.max(...asked) : null });
+        const wait = input.deadline === undefined ? wanted : Math.min(wanted, Math.max(0, input.deadline.stagesEndByMs - now()));
+        if (wait > 0) await sleep(wait);
+      }
     }
     if (report.claimed === 0) {
       const advance = await input.loop.advanceRun(input.runId, input.projectId);
@@ -1074,14 +1225,13 @@ export async function liveTickBudgetFor(input: {
  * and any override. If the move cannot be made, the state is reported as it
  * stands and no failure is claimed.
  */
-async function failForTickBudget(args: {
-  readonly input: { readonly store: JuliusRuntimeStore & JuliusRecoveryDriver; readonly runId: string; readonly projectId: string };
-  readonly consumed: number;
-  readonly account: DriveTickAccount;
-}): Promise<DriveOutcome> {
-  const { input, account } = args;
-  const reasonCode = 'tick_budget_exhausted';
-  const safeSummary = `The run consumed its whole tick allowance (${String(account.allowance)} of a planned ${String(account.plannedTicks)}, hard maximum ${String(account.hardMaxTicks)}) without reaching a terminal state.`;
+type DriveFailureInput = { readonly store: JuliusRuntimeStore & JuliusRecoveryDriver; readonly runId: string; readonly projectId: string };
+
+/**
+ * THE RUN MOVES TO FAILED ALONG A LEGAL PATH, or is reported as it stands. Shared by the two limits a drive enforces
+ * (its tick allowance and its stage deadline), so both end a run the same way.
+ */
+async function moveRunToFailed(input: DriveFailureInput, commandPrefix: string, reasonCode: string, safeSummary: string): Promise<string> {
   let current = await input.store.loadRun(input.runId, input.projectId);
   for (let attempt = 0; attempt < 3 && current !== null && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(current.state); attempt += 1) {
     const path = planRunStatePath(current.state, 'FAILED');
@@ -1090,7 +1240,7 @@ async function failForTickBudget(args: {
       for (const [index, step] of path.entries()) {
         const last = index === path.length - 1;
         current = await input.store.transition({
-          commandId: `tick-budget:${input.runId}:${String(current.version)}:${step}`,
+          commandId: `${commandPrefix}:${input.runId}:${String(current.version)}:${step}`,
           runId: input.runId, projectId: input.projectId, expectedVersion: current.version, to: step,
           reasonCode: last ? reasonCode : 'PASSED_THROUGH',
           safeSummary: last ? safeSummary : `Run passed through ${step} on the way to FAILED.`,
@@ -1101,7 +1251,56 @@ async function failForTickBudget(args: {
       current = await input.store.loadRun(input.runId, input.projectId);
     }
   }
-  const state = current?.state ?? 'UNKNOWN';
+  return current?.state ?? 'UNKNOWN';
+}
+
+/**
+ * THE JOB'S CLOCK RAN OUT FOR NEW STAGES, AND THE RUN SAYS SO (audit F3). The run moves to FAILED along the same path
+ * an exhausted allowance takes, and its `run.failed` row carries the Julius code TIMEOUT (`JULIUS_ERROR_CODES`) and the
+ * numbers: where the stop line was, the job's limit, the longest stage and the reserve after LIVE.
+ */
+async function failForDeadline(args: {
+  readonly input: DriveFailureInput;
+  readonly deadline: JuliusDriveDeadline;
+  readonly nextStageMs: number;
+  readonly consumed: number;
+  readonly account: DriveTickAccount | null;
+}): Promise<DriveOutcome> {
+  const { input, deadline } = args;
+  const reasonCode = 'job_deadline_reached';
+  const endBy = new Date(deadline.stagesEndByMs).toISOString();
+  const limitAt = new Date(deadline.hardLimitAtMs).toISOString();
+  const safeSummary = `The next stage (up to ${String(args.nextStageMs)} ms) cannot end by ${endBy}, which leaves the steps after LIVE ${String(deadline.reserveAfterLiveMs)} ms before the job's limit ${limitAt}. The run stops here, before the runner's cut, so its record, its learning outcome and its evidence are written.`;
+  const state = await moveRunToFailed(input, 'job-deadline', reasonCode, safeSummary);
+  if (state === 'FAILED') {
+    await input.store.appendEvent({
+      eventId: `event:${randomUUID()}`, runId: input.runId, projectId: input.projectId, type: 'run.failed',
+      taskId: null, workerId: null, correlationId: `job-deadline:${input.runId}`, causationId: null,
+      occurredAt: new Date().toISOString(),
+      facts: {
+        reasonCode, code: 'TIMEOUT', stagesEndBy: endBy, hardLimitAt: limitAt,
+        nextStageMs: args.nextStageMs, reserveAfterLiveMs: deadline.reserveAfterLiveMs, ticksConsumed: args.consumed,
+      },
+    });
+  }
+  return {
+    state, ticks: args.consumed, stalled: state !== 'FAILED',
+    haltCause: state === 'FAILED' ? `${reasonCode}: ${safeSummary}` : null,
+    tickAccount: args.account,
+    // A run that ran out of time is not a run held for a person (V6 G-3).
+    heldForApproval: false,
+  };
+}
+
+async function failForTickBudget(args: {
+  readonly input: DriveFailureInput;
+  readonly consumed: number;
+  readonly account: DriveTickAccount;
+}): Promise<DriveOutcome> {
+  const { input, account } = args;
+  const reasonCode = 'tick_budget_exhausted';
+  const safeSummary = `The run consumed its whole tick allowance (${String(account.allowance)} of a planned ${String(account.plannedTicks)}, hard maximum ${String(account.hardMaxTicks)}) without reaching a terminal state.`;
+  const state = await moveRunToFailed(input, 'tick-budget', reasonCode, safeSummary);
   if (state === 'FAILED') {
     await input.store.appendEvent({
       eventId: `event:${randomUUID()}`, runId: input.runId, projectId: input.projectId, type: 'run.failed',
@@ -1122,4 +1321,155 @@ async function failForTickBudget(args: {
     tickAccount: account,
     heldForApproval: false,
   };
+}
+
+/* ------------------------------------------- the Learning Loop's caller */
+
+/** What `recordJuliusLearningOutcome` did for one arm, and the lines the entrypoint prints for it. */
+export interface JuliusLearningOutcome {
+  /**
+   * RECORDED: this call wrote the arm's record. DUPLICATE: the same record
+   * already stood, as it does for a retried job. NOT_TERMINAL: the run has not
+   * finished, so there is no outcome to measure and nothing was written.
+   */
+  readonly record: 'RECORDED' | 'DUPLICATE' | 'NOT_TERMINAL';
+  readonly runId: string;
+  readonly runState: string;
+  readonly registration: JuliusLearningRegistration;
+  /** This arm's projection off its own trajectory. Null when nothing was measured. */
+  readonly metrics: JuliusLearningMetrics | null;
+  readonly trajectoryRows: number | null;
+  /** Arm WITH only: what it found when it met arm WITHOUT. */
+  readonly pair: JuliusLearningPairOutcome | null;
+  /** The event appended (or found standing). Null when nothing was written. */
+  readonly event: JuliusOperationalEvent | null;
+  readonly lines: readonly string[];
+}
+
+/**
+ * THE LEARNING LOOP'S RUNTIME CALLER (E9-a): one arm of a registered matched
+ * pair, measured at its terminal state and put on the record.
+ *
+ * Until this, nothing in the runtime called the loop. It was an evaluation
+ * surface a test read after a mission, so whether prior knowledge made the
+ * next mission better could only be answered by a person choosing which
+ * numbers to read, after the fact. The live mission now calls this after the
+ * drive, and ONLY for a contract that registers an arm (`learningPair`); every
+ * other mission is untouched.
+ *
+ *   ARM WITHOUT  projects its metrics from its own durable trajectory and
+ *                records them, with its pairing and the declared policy.
+ *   ARM WITH     does the same, then reads arm WITHOUT's RECORD and
+ *                TRAJECTORY from this same store and project, compares the
+ *                pair under the declared policy, and records the comparison
+ *                and the gate's decision beside its own measurement.
+ *
+ * ONE EVENT PER RUN, idempotent (`juliusLearningArmEventId`): a retried job
+ * finds its record standing and reports DUPLICATE, and a record that would SAY
+ * something different under the same id is refused by the ledger
+ * (`JuliusEventIdConflict`), so the first one stands.
+ *
+ * A REFUSED COMPARISON IS RECORDED, NOT THROWN. A WITHOUT arm that left no
+ * record, was registered under another digest or policy, or ran another
+ * objective is a pair the gate refuses, by name, on the record: an experiment
+ * that could not be scored is a result too. What IS thrown is what would make
+ * the record false: a run that is not in this project, or an arm WITH that
+ * resolved to its own WITHOUT run (the replay MATCHED_PAIR_PREREG §6 warns
+ * of), which would otherwise write a WITH verdict onto the WITHOUT run.
+ *
+ * NEVER A PROMOTION. On PROMOTE the record carries a PROPOSAL and this returns;
+ * `promoteJuliusMemoryClaim` is an independent authority's to call, and this
+ * function has no path to it.
+ *
+ * A RUN THAT HAS NOT FINISHED HAS NO OUTCOME: nothing is written, and the
+ * returned lines say so. A later attempt that drives the same run to its end
+ * records it then.
+ */
+export async function recordJuliusLearningOutcome(input: {
+  readonly store: Pick<JuliusRuntimeStore, 'loadRun' | 'appendEvent'> & JuliusTrajectoryReader & JuliusTimelineReader;
+  readonly runId: string;
+  readonly projectId: string;
+  readonly registration: JuliusLearningRegistration;
+  /** The mission's binding digest (`missionBindingDigest`): the objective both arms must share. */
+  readonly objectiveDigest: string;
+  /** The C.A.R.D. roles this run was resolved with. */
+  readonly roles: readonly string[];
+  readonly now?: () => string;
+}): Promise<JuliusLearningOutcome> {
+  const { store, runId, projectId, registration } = input;
+  const now = input.now ?? (() => new Date().toISOString());
+  const run = await store.loadRun(runId, projectId);
+  if (run === null) throw new Error('learning_run_not_found');
+  if (registration.arm === 'WITH' && registration.withoutRunId === runId) throw new Error('learning_pair_same_run');
+  const finish = (outcome: Omit<JuliusLearningOutcome, 'lines'>): JuliusLearningOutcome => ({ ...outcome, lines: liveLearningLines(outcome) });
+  if (!JULIUS_TERMINAL_MISSION_STATES.includes(run.state)) {
+    return finish({ record: 'NOT_TERMINAL', runId, runState: run.state, registration, metrics: null, trajectoryRows: null, pair: null, event: null });
+  }
+  const events = await store.trajectoryForRun(runId, projectId);
+  const pairing: JuliusLearningPairing = { objectiveDigest: input.objectiveDigest, roles: [...input.roles].sort(), runtimeVersion: JULIUS_RUNTIME_VERSION };
+  const metrics = juliusLearningMetrics(events, JULIUS_RUNTIME_VERSION);
+  const pair = registration.arm === 'WITH' ? await learningPairOutcome({ store, projectId, registration, events, pairing }) : null;
+  const event = juliusLearningArmEvent({
+    runId, projectId, runState: run.state, registration, pairing, metrics, trajectoryRows: events.length, pair, occurredAt: now(),
+  });
+  const recorded = await store.appendEvent(event);
+  return finish({ record: recorded ? 'RECORDED' : 'DUPLICATE', runId, runState: run.state, registration, metrics, trajectoryRows: events.length, pair, event });
+}
+
+/** Arm WITH against arm WITHOUT: the record first, then the trajectory, then the loop. */
+async function learningPairOutcome(input: {
+  readonly store: JuliusTrajectoryReader & JuliusTimelineReader;
+  readonly projectId: string;
+  readonly registration: JuliusLearningRegistration;
+  readonly events: readonly JuliusTrajectoryEvent[];
+  readonly pairing: JuliusLearningPairing;
+}): Promise<JuliusLearningPairOutcome> {
+  const { registration } = input;
+  const withoutRunId = registration.withoutRunId;
+  // The contract parser requires it of arm WITH; a registration built by hand gets no default.
+  if (withoutRunId === undefined) throw new Error('learning_without_run_required');
+  const refused = (reasonCode: string, found: { readonly withoutRunState: string | null; readonly withoutEventId: string | null }): JuliusLearningPairOutcome => {
+    const comparison: JuliusLearningComparison = { outcome: 'UNCOMPARABLE', reasonCode };
+    return { withoutRunId, ...found, withoutTrajectoryRows: null, comparison, decision: decideJuliusLearningPromotion(comparison, registration.policy) };
+  };
+  const recordId = juliusLearningArmEventId(withoutRunId);
+  const entry = await learningRecordOf(input.store, withoutRunId, input.projectId, recordId);
+  if (entry === null) return refused('learning_pair_without_unrecorded', { withoutRunState: null, withoutEventId: null });
+  const read = readJuliusLearningArmRecord(entry.facts);
+  if (!read.ok) return refused(read.reasonCode, { withoutRunState: null, withoutEventId: recordId });
+  const found = { withoutRunState: read.record.runState, withoutEventId: recordId };
+  const mismatch = juliusLearningPairRefusal({ registration, without: read.record });
+  if (mismatch !== null) return refused(mismatch, found);
+  // THE WITHOUT ARM'S PAIRING IS ITS OWN RECORD'S, never this contract's: recomputed
+  // here, the loop's matched-pair refusal could not fire (`julius-learning-record.ts`).
+  const withoutEvents = await input.store.trajectoryForRun(withoutRunId, input.projectId);
+  const comparison = compareJuliusLearningPair({
+    without: { events: withoutEvents, pairing: read.record.pairing },
+    with: { events: input.events, pairing: input.pairing },
+    dimensions: registration.policy.dimensions,
+  });
+  return { withoutRunId, ...found, withoutTrajectoryRows: withoutEvents.length, comparison, decision: decideJuliusLearningPromotion(comparison, registration.policy) };
+}
+
+const LEARNING_TIMELINE_PAGE = 500;
+
+/**
+ * THE WITHOUT ARM'S RECORD, found by its id on that run's own timeline, paged
+ * to the end: it is written after the run's last event, so it is on the last
+ * page a reader reaches. A page that claims more and carries nothing would
+ * loop forever, so it is a reader defect, refused by name.
+ */
+async function learningRecordOf(
+  reader: JuliusTimelineReader, runId: string, projectId: string, eventId: string,
+): Promise<JuliusTimelineEntry | null> {
+  let since = 0;
+  for (;;) {
+    const page = await reader.timeline({ runId, projectId, sinceSequence: since, limit: LEARNING_TIMELINE_PAGE });
+    const found = page.entries.find((entry) => entry.eventId === eventId);
+    if (found !== undefined) return found;
+    if (!page.hasMore) return null;
+    const last = page.entries[page.entries.length - 1];
+    if (last === undefined || last.sequence <= since) throw new Error('learning_timeline_not_advancing');
+    since = last.sequence;
+  }
 }

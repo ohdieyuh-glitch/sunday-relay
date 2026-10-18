@@ -182,7 +182,7 @@ describe('V6 G-3: the entrypoint and the gate, read as source', () => {
     expect(ENTRY.match(/return JULIUS_EXIT_HELD_FOR_APPROVAL;/gu), 'the one held exit').toHaveLength(1);
     const at = ENTRY.indexOf('return JULIUS_EXIT_HELD_FOR_APPROVAL;');
     expect(ENTRY.slice(ENTRY.lastIndexOf('if (held !== null) {', at), at)).toContain('for (const line of held) out(line);');
-    expect(ENTRY.match(/return outcome\.state === 'COMPLETED' \? 0 : 1;/gu), 'the run\'s own exit, unchanged').toHaveLength(1);
+    expect(ENTRY.match(/return outcome\.state === 'COMPLETED' && !learningUnrecorded \? 0 : 1;/gu), 'the run\'s own exit, unchanged').toHaveLength(1);
     expect(at, 'the held exit comes before any RESULT line is printed').toBeLessThan(ENTRY.indexOf('out(`RESULT: ${outcome.state}'));
   });
 

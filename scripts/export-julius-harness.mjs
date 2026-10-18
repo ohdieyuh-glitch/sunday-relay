@@ -132,13 +132,13 @@ const EXCLUDED_FILES = [
   { path: 'src/relay/connectors/gpt-architect/fake-architect.ts', category: 'fake', reason: 'the deterministic offline fake of the GPT architect, exported by the connector barrel for the suite and Demo Simulation; the live worker binds runGptArchitect only' },
 ];
 
-/** Kernel dependants that are neither reached nor declared, and why they stay out. */
+/** Kernel dependants that are neither reached nor declared, what kind of file each is, and why it stays out. */
 const KERNEL_DEPENDANT_EXCLUSIONS = [
-  { path: 'src/relay/persistence/julius-event-append-conformance.ts', reason: 'the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root' },
-  { path: 'src/relay/persistence/julius-criteria-scope-conformance.ts', reason: 'the criteria-scope contract cases themselves: a criterion belongs to a RUN, not to the database. Written once and run by BOTH the in-memory store, which was always right, and real PostgreSQL, where a global primary key on criterion_id silently gave every rerun no criteria at all. Test support, imported by no root' },
-  { path: 'src/relay/persistence/julius-decision-write-conformance.ts', reason: 'the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root' },
-  { path: 'src/relay/mission/julius/julius-learning-loop.ts', reason: 'the Learning Loop’s measurement and promotion gate: it projects a mission’s outcome from the durable trajectory, compares a matched pair and answers whether an artifact may become trusted memory. It is an EVALUATION surface, read after a mission rather than during one, so no dispatch path reaches it — and it deliberately writes nothing: the promotion it authorises is performed by promoteJuliusMemoryClaim, which IS on the kernel path' },
-  { path: 'src/relay/workspace/julius-tools/node-tool-adapter.ts', reason: 'the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests' },
+  { path: 'src/relay/mission/julius/julius-carry-verify.ts', category: 'off-host evidence tooling', reason: 'the OFF-HOST verifier of Decision C’s four-point carry chain (C-7): it reads two arms’ evidence bundles and re-derives what arm WITH should have carried with the kernel’s own rule, fold, renderer and record. It runs on a reviewer’s machine after a paid pair, never inside a run, and no runtime path imports it' },
+  { path: 'src/relay/persistence/julius-event-append-conformance.ts', category: 'conformance cases', reason: 'the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root' },
+  { path: 'src/relay/persistence/julius-criteria-scope-conformance.ts', category: 'conformance cases', reason: 'the criteria-scope contract cases themselves: a criterion belongs to a RUN, not to the database. Written once and run by BOTH the in-memory store, which was always right, and real PostgreSQL, where a global primary key on criterion_id silently gave every rerun no criteria at all. Test support, imported by no root' },
+  { path: 'src/relay/persistence/julius-decision-write-conformance.ts', category: 'conformance cases', reason: 'the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root' },
+  { path: 'src/relay/workspace/julius-tools/node-tool-adapter.ts', category: 'legacy local execution', reason: 'the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests' },
 ];
 
 /**
@@ -303,6 +303,14 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-work-artifact-memory.ts', 'ARTIFACTS / EVIDENCE'],
   ['src/relay/mission/julius/julius-trajectory.ts', 'EVENTS / TRAJECTORIES'],
   ['src/relay/mission/julius/julius-metrics.ts', 'EVENTS / TRAJECTORIES'],
+  // The Learning Loop: a mission's outcome projected from the durable trajectory, a matched pair
+  // compared and the promotion gate. It was excluded as an evaluation surface no dispatch path
+  // reached; since E9-a the live mission calls it at a registered arm's terminal state
+  // (`recordJuliusLearningOutcome`), so it is traced from the live root. It still writes nothing.
+  ['src/relay/mission/julius/julius-learning-loop.ts', 'EVENTS / TRAJECTORIES'],
+  // And what that call leaves on the ledger: one `learning.arm.recorded` event per arm, read back
+  // by arm WITH. A PROMOTE becomes a PROPOSAL; promotion stays `promoteJuliusMemoryClaim`'s.
+  ['src/relay/mission/julius/julius-learning-record.ts', 'EVENTS / TRAJECTORIES'],
   ['src/relay/mission/julius/julius-run-loop.ts', 'COMPLETION AUTHORITY'],
   ['src/relay/mission/julius/julius-runtime-api.ts', 'COMPLETION AUTHORITY'],
   // The bridge's read-only HTTP mount of that API, for Wonderland. Same subsystem
@@ -454,6 +462,9 @@ const FILE_RULES = [
   ['relay-bridge/julius/claude-code-coding-provider.ts', 'CODING AGENT'],
   ['relay-bridge/julius/coder-workspace.ts', 'CODING AGENT'],
   ['relay-bridge/hosted-coding-agent/', 'CODING AGENT'],
+  // The one recogniser of the subscription's usage-limit sentence (audit F5): the hosted classifier and the paid
+  // workflow's subscription smoke both import it, so it lives as plain `.mjs` beside the smoke.
+  ['scripts/julius-usage-limit.mjs', 'CODING AGENT'],
   ['src/relay/connectors/claude-code/result-classification.ts', 'CODING AGENT'],
   ['relay-bridge/hermes-reviewer.ts', 'INDEPENDENT REVIEWER'],
   // The one derivation that decides how long a review may take, read by the
@@ -935,7 +946,7 @@ function renderManifest(result) {
     const hits = result.exclusionHits.filter((hit) => hit.to === entry.path).map((hit) => `\`${hit.from}\``);
     out.push(`- **${entry.category}** — \`${entry.path}\`: ${entry.reason}. Reached only via ${hits.join(', ') || 'nothing'}.`);
   }
-  for (const entry of KERNEL_DEPENDANT_EXCLUSIONS) out.push(`- **legacy local execution** — \`${entry.path}\`: ${entry.reason}.`);
+  for (const entry of KERNEL_DEPENDANT_EXCLUSIONS) out.push(`- **${entry.category}** — \`${entry.path}\`: ${entry.reason}.`);
   // Registered migrations that are not Julius's: one line for those before the first Julius migration, and
   // one line EACH, from julius-harness-migrations.mjs, for every later one (interleaved like 017, or after like 033).
   out.push(...result.migrationLines);

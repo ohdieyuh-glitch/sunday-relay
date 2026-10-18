@@ -2,6 +2,7 @@
 import { createHash, createPublicKey, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Pool } from 'pg';
+import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
@@ -26,7 +27,7 @@ export const endpoint=()=>new URL(process.env.JULIUS_EXECUTOR_ENDPOINT??'http://
 export const scopedCredentials=(name='JULIUS_SCOPED_CREDENTIALS')=>new Map(Object.entries(JSON.parse(required(name)) as Record<string,string>)) as ReadonlyMap<ExecutorOperation,string>;
 
 export async function openJuliusClient():Promise<{pool:Pool;tools:JuliusToolPostgresRepository;client:RemoteExecutorControlPlane;scoped:ReadonlyMap<ExecutorOperation,string>;trustedReceiptKeys:ReadonlyMap<string,import('node:crypto').KeyObject>;workspace:string}>{
-  const pool=new Pool(process.env.DATABASE_URL?{connectionString:process.env.DATABASE_URL}:{});
+  const pool=listenJuliusPool(new Pool(process.env.DATABASE_URL?{connectionString:process.env.DATABASE_URL}:{}),'julius sibling store');
   const scoped=scopedCredentials();
   const trustedReceiptKeys=new Map([[required('EXECUTOR_KEY_ID'),createPublicKey(await readFile(required('JULIUS_PUBLIC_KEY_PATH'),'utf8'))]]);
   const client=new RemoteExecutorControlPlane({endpoint:endpoint(),serviceCredential:scoped.get('execute')!,scopedCredentials:scoped,callerId:required('JULIUS_CALLER_ID'),tenantId:TENANT,requestTimeoutMs:Number(process.env.JULIUS_REQUEST_TIMEOUT_MS??'60000'),trustedReceiptKeys,allowInsecureLoopbackForTests:true});

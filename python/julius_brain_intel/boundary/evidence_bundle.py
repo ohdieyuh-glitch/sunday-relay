@@ -15,8 +15,16 @@ EVERY TABLE SAYS HOW FAR IT CAN BE TRUSTED:
     MALFORMED        ragged rows, or a footer that disagrees with the rows read
                      (a newline inside a cell splits a row; the reader must not guess)
     MISSING          the file is not in the bundle
+    UNATTRIBUTED     the bundle holds more than one run and these rows cannot be scoped to its
+                     own (no run named, no ``run_id`` column, or a row naming no run)
 
 A row-dependent reading over anything but PRESENT/EMPTY_CONFIRMED is Unknown.
+
+ONE BUNDLE IS ONE RUN, EVEN WHEN ITS STORE HELD TWO. Under decision C's Option D the WITH arm's
+job restores the WITHOUT arm's database before it bootstraps, so its dump carries both runs.
+``scope_to_run`` reads such a bundle for one run: every table keeps that run's rows only
+(``run_id`` is appended to every run-bearing table by the dump), and a table whose rows cannot
+be attributed is UNATTRIBUTED rather than summed across two missions.
 
 CREDENTIALS ARE WITHHELD ON LOAD. A cell whose text matches a refused shape is replaced and
 recorded as a problem, so no analysis built on this object can echo it.
@@ -39,6 +47,7 @@ EMPTY_UNCONFIRMED = "EMPTY_UNCONFIRMED"
 UNAVAILABLE = "UNAVAILABLE"
 MALFORMED = "MALFORMED"
 MISSING = "MISSING"
+UNATTRIBUTED = "UNATTRIBUTED"
 READABLE = (PRESENT, EMPTY_CONFIRMED)
 
 _FOOTER = re.compile(r"^\((\d+) rows?\)$")
@@ -201,3 +210,46 @@ def load_bundle(directory: str, names: Iterable[str] | None = None) -> EvidenceB
     if not manifest_present:
         problems.append("bundle-manifest.txt missing: the bundle cannot be bound to a run or a commit")
     return EvidenceBundle(directory, manifest, manifest_present, tables, texts, problems)
+
+
+def bundle_runs(bundle: EvidenceBundle) -> list[str]:
+    """Every run any table names in its ``run_id`` column, sorted. One for a job's own fresh store."""
+    runs: set[str] = set()
+    for table in bundle.tables.values():
+        if "run_id" in table.header:
+            runs.update(row.get("run_id", "") for row in table.rows)
+    runs.discard("")
+    return sorted(runs)
+
+
+def _scoped(table: Table, run_id: str | None, reason: str) -> Table:
+    if not table.rows:
+        return table  # nothing to attribute: a refused, missing or empty table stays what it was
+    if run_id is None:
+        return Table(table.name, UNATTRIBUTED, table.header, (), table.footer_count, (reason,))
+    if "run_id" not in table.header:
+        return Table(table.name, UNATTRIBUTED, table.header, (), table.footer_count,
+                     (f"no run_id column: its rows cannot be scoped to {run_id}",))
+    blank = sum(1 for row in table.rows if not row.get("run_id"))
+    if blank:
+        return Table(table.name, UNATTRIBUTED, table.header, (), table.footer_count,
+                     (f"{blank} row(s) name no run: they cannot be scoped to {run_id}",))
+    kept = tuple(row for row in table.rows if row.get("run_id") == run_id)
+    note = f"scoped to {run_id}: {len(kept)} of {len(table.rows)} row(s)"
+    if table.status not in READABLE:
+        return Table(table.name, table.status, table.header, kept, table.footer_count, table.problems + (note,))
+    if kept:
+        status = PRESENT
+    else:
+        # The query ran and its footer counted the rows; none of them is this run's.
+        status = EMPTY_CONFIRMED if table.footer_count is not None else EMPTY_UNCONFIRMED
+    return Table(table.name, status, table.header, kept, table.footer_count, table.problems + (note,))
+
+
+def scope_to_run(bundle: EvidenceBundle, run_id: str | None, reason: str = "") -> EvidenceBundle:
+    """The bundle read for ONE run. ``run_id`` None marks every row-bearing table UNATTRIBUTED with
+    ``reason``: a bundle of several runs that cannot name its own is never read as their sum. Texts
+    and the manifest are the job's own and pass through unchanged."""
+    tables = {name: _scoped(table, run_id, reason or "the bundle's own run is not named") for name, table in bundle.tables.items()}
+    return EvidenceBundle(bundle.path, bundle.manifest, bundle.manifest_present, tables, dict(bundle.texts),
+                          list(bundle.problems))

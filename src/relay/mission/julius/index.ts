@@ -38,6 +38,8 @@ export * from './julius-memory-store';
 export * from './julius-runtime-fixtures';
 export * from './julius-runtime-api';
 export * from './julius-metrics';
+export * from './julius-learning-loop';
+export * from './julius-learning-record';
 export * from './julius-fault-injection';
 export * from './julius-lease-protocol';
 export * from './julius-tools';

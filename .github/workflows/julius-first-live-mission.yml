@@ -74,6 +74,10 @@ on:
         description: 'Idempotency key from scripts/julius-paid-dispatch.mjs ([A-Za-z0-9._@#-], 8-96). A second run carrying the same key refuses itself before it can spend.'
         required: false
         default: ''
+      learning_without_run:
+        description: 'Only for a mission whose contract is arm WITH of a registered learning pair: the workflow run id of its WITHOUT arm (a successful paid run of this workflow at this commit), whose store this run restores before anything migrates or bootstraps. Empty for every other mission.'
+        required: false
+        default: ''
 
 # READ-ONLY, and every entry is here because a gate needs it. No write scope of
 # any kind, no PAT, and never the coding worker's credential: the trust gates
@@ -227,7 +231,29 @@ jobs:
     # done. `coder-envelope.test.ts` proves the reviewer share, the coder share,
     # the architect's own ceiling and a stated infrastructure allowance all fit
     # inside this number.
-    timeout-minutes: 120
+    #
+    # 120 -> 300 FOR DECISION C's ARMS (r5 DRAFT, 2026-10-13; MAIN audit F3). The
+    # shares above price NO repair cycle ("REPAIR STAGES ARE DELIBERATELY OUT",
+    # reviewer-deadline.ts), while each arm's contract grants 3 and registration
+    # r8.4 [r8-4] makes a coder-level repair a condition of every valid WITHOUT.
+    # Measured from the code at the C fix head (ms):
+    #   priced normal path: reviewer 3000000 + coder 2400000 + architect 600000
+    #     + infrastructure 900000                                 =  6900000
+    #   one coder-level repair cycle: the repair's coder dispatch at both
+    #     attempts (2 x 1199386) + its review at the per-attempt hard ceiling
+    #     (1000000)                                                =  3398772
+    #   three cycles (the arms' repairCycles)                      = 10196316
+    #   worst case                                                 = 17096316  (284.9 min)
+    #   + the entrypoint's own margins: job-stamp lag 120000 and the reserve
+    #     after LIVE 300000 (julius-live-mission's stage deadline)  = 17516316  (291.9 min)
+    # -> 300 minutes, inside GitHub's 360-minute cap for a hosted job. Every
+    # stage is still bounded by its own deadline and the run by its tick
+    # allowance and its $30 ledger ceiling; a longer job buys a slow, legal arm
+    # time to finish, not money. JOB_BUDGET_MS (relay-bridge/reviewer-deadline.ts),
+    # its mirror (scripts/julius-reviewer-deadline.mjs) and the local launcher's
+    # LIVE_TIMEOUT_MINUTES (scripts/julius-local-qualification.sh) are pinned to
+    # this number by tests and move with it in the same landing.
+    timeout-minutes: 300
     environment: julius-live-validation
     defaults:
       run:
@@ -527,6 +553,39 @@ jobs:
           echo "marker_namespace=$namespace" >> "$GITHUB_OUTPUT"
           echo "inputs OK: mission=$MISSION namespace=$namespace max_ticks=$MAX_TICKS hermes_ref=$HERMES_REF mode=$([ "$CONFIRM_LIVE" = 'RUN LIVE MISSION' ] && echo LIVE || echo DRY-RUN)"
 
+      # THE LEARNING-PAIR ARM IS THE CONTRACT'S TO DECLARE (decision C, Option D). A contract carrying a `learningPair`
+      # clause is one arm of a registered matched pair; every other contract reads `arm=none` here, every step below
+      # that names an arm is skipped, and the run is exactly what it was. The arm is read from the reviewed, committed
+      # contract and never typed at dispatch. The one dispatch input is WHICH run's store arm WITH restores: required
+      # of arm WITH, refused of anything else. Only the fields this workflow acts on are read here, in the shapes the
+      # entrypoint's strict parser requires; that parser refuses the rest of the clause in the roles preflight, before
+      # anything can spend.
+      - name: 'Gate: the learning-pair arm the contract declares, and the store it needs'
+        id: learning_arm
+        env:
+          LEARNING_WITHOUT_RUN: ${{ inputs.learning_without_run }}
+        run: |
+          set -euo pipefail
+          LEARNING_WITHOUT_RUN="${LEARNING_WITHOUT_RUN:-}"
+          declared=$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).learningPair;if(p===undefined){process.stdout.write("none - -");process.exit(0)}const ok=(v,r)=>typeof v==="string"&&r.test(v);if(!p||(p.arm!=="WITHOUT"&&p.arm!=="WITH")||!ok(p.registrationDigest,/^[0-9a-f]{64}$/)||(p.arm==="WITH"&&!ok(p.withoutRunId,/^run:[0-9a-f]{24}$/))){console.error("learning_pair_unreadable");process.exit(1)}process.stdout.write(p.arm+" "+(p.arm==="WITH"?p.withoutRunId:"-")+" "+p.registrationDigest)' "$CONTRACT")
+          read -r arm without_julius_run registration_digest <<< "$declared"
+          if [ "$arm" = WITH ]; then
+            case "$LEARNING_WITHOUT_RUN" in
+              ''|*[!0-9]*) echo 'learning_without_run_required: arm WITH restores the store of its WITHOUT arm; name that workflow run id' >&2; exit 1;;
+            esac
+            if [ "${#LEARNING_WITHOUT_RUN}" -gt 20 ] || [ "$LEARNING_WITHOUT_RUN" = "${GITHUB_RUN_ID:-}" ]; then
+              echo "learning_without_run_invalid: '$LEARNING_WITHOUT_RUN'" >&2; exit 1
+            fi
+          elif [ -n "$LEARNING_WITHOUT_RUN" ]; then
+            echo "learning_without_run_unexpected: only arm WITH restores a store, and this contract is arm $arm" >&2; exit 1
+          fi
+          {
+            echo "arm=$arm"
+            echo "without_julius_run=$without_julius_run"
+            echo "registration_digest=$registration_digest"
+          } >> "$GITHUB_OUTPUT"
+          echo "learning pair: arm=$arm without_julius_run=$without_julius_run without_workflow_run=${LEARNING_WITHOUT_RUN:-none}"
+
       - name: 'Gate: no paid mission has been attempted or completed for THIS contract'
         if: inputs.confirm_live == 'RUN LIVE MISSION'
         env:
@@ -765,6 +824,99 @@ jobs:
         # The receipt-transport choice is the script's one topology switch
         # (JULIUS_RECEIPT_HOST_ROOT); see the script header.
         run: ./.github/julius-live-executor.sh
+
+      # LEARNING PAIR, ARM WITH: IT STARTS FROM ARM WITHOUT'S STORE (decision C, Option D; MATCHED_PAIR_PREREG E9-b).
+      #
+      # A pair is two missions in ONE durable store, and this rig's PostgreSQL is per job. So arm WITHOUT's job uploaded
+      # a restorable dump of its own store, and arm WITH's job restores it HERE: into this job's fresh, empty database,
+      # before the preflight migrates it and before LIVE bootstraps, so the WITH run's bootstrap reads arm WITHOUT's
+      # verified claims as the project's own, exactly as a second mission in one store would.
+      #
+      # NOTHING IS TAKEN ON TRUST. The WITHOUT run must be a successful dispatch of THIS workflow at THIS commit (the
+      # pair is matched on the main commit, and the restored schema must be the one this code migrates). Its store must
+      # be the bytes whose sha256 that run recorded twice: beside the dump, and in its own credential-scanned evidence
+      # bundle. Both records and that bundle's manifest must name the Julius run this contract's
+      # `learningPair.withoutRunId` names, and the bundle must be a paid one. The restored store must then hold exactly
+      # that one run, COMPLETED, with its WITHOUT record under this contract's registration. Anything else refuses, and
+      # nothing has been spent.
+      #
+      # It runs on a dry run too: a WITH preflight proves the restore, the migration and the whole preflight against the
+      # restored store for free, before the paid WITH arm is dispatched.
+      - name: 'Learning pair arm WITH: restore arm WITHOUT''s store before anything migrates or bootstraps'
+        id: learning_restore
+        if: success() && steps.learning_arm.outputs.arm == 'WITH'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+          WITHOUT_RUN: ${{ inputs.learning_without_run }}
+          WITHOUT_JULIUS_RUN: ${{ steps.learning_arm.outputs.without_julius_run }}
+          REGISTRATION_DIGEST: ${{ steps.learning_arm.outputs.registration_digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p julius-live-evidence
+          umask 077
+          store="$RUNNER_TEMP/julius-learning-store"
+          rm -rf "$store"
+          mkdir -p "$store"
+          trap 'rm -rf "$store"' EXIT
+          refuse() { echo "$1" >&2; exit 1; }
+          api="repos/${GITHUB_REPOSITORY}/actions"
+
+          # 1. THE WITHOUT RUN: this workflow, this commit, a dispatch that succeeded.
+          this_workflow=$(./.github/julius-learning-store.sh gh-get "$api/runs/$GITHUB_RUN_ID" '.workflow_id')
+          its=$(./.github/julius-learning-store.sh gh-get "$api/runs/$WITHOUT_RUN" '[.workflow_id, .head_sha, .event, .conclusion] | map(tostring) | join(" ")')
+          read -r its_workflow its_sha its_event its_conclusion <<< "$its"
+          [ "$its_workflow" = "$this_workflow" ] || refuse "learning_store_other_workflow: run $WITHOUT_RUN is not a run of this workflow"
+          [ "$its_sha" = "$GITHUB_SHA" ] || refuse "learning_store_other_commit: arm WITHOUT ran $its_sha, this run is $GITHUB_SHA"
+          [ "$its_event" = workflow_dispatch ] && [ "$its_conclusion" = success ] \
+            || refuse "learning_store_without_unusable: event=$its_event conclusion=$its_conclusion"
+
+          # 2. ITS TWO ARTIFACTS, exactly one unexpired copy of each: the store, and the evidence bundle that recorded
+          #    the store's digest.
+          fetch() {
+            local name=$1 id
+            id=$(./.github/julius-learning-store.sh gh-get "$api/runs/$WITHOUT_RUN/artifacts?name=$name&per_page=100" \
+              '[.artifacts[] | select(.expired == false)] | if length == 1 then .[0].id else "none" end')
+            case "$id" in ''|*[!0-9]*) refuse "learning_store_artifact_unavailable: $name";; esac
+            ./.github/julius-learning-store.sh gh-get "$api/artifacts/$id/zip" > "$store/$name.zip"
+            unzip -q "$store/$name.zip" -d "$store/$name"
+          }
+          fetch julius-learning-store
+          fetch julius-live-evidence
+
+          # 3. THE BYTES IN HAND ARE THE BYTES THE WITHOUT RUN RECORDED, beside the dump AND in its scanned evidence.
+          dump="$store/julius-learning-store/julius.pgdump"
+          [ -f "$dump" ] || refuse learning_store_dump_missing
+          # From stdin: sha256sum escapes its output when a FILE NAME holds a backslash or a newline.
+          actual=$(sha256sum < "$dump" | cut -d' ' -f1)
+          recorded=$(sed -n 's/^dump_sha256=\([0-9a-f]\{64\}\)$/\1/p' "$store/julius-live-evidence/learning-store.txt" 2>/dev/null || true)
+          beside=$(sed -n 's/^dump_sha256=\([0-9a-f]\{64\}\)$/\1/p' "$store/julius-learning-store/store-manifest.txt" 2>/dev/null || true)
+          [ -n "$recorded" ] && [ "$actual" = "$recorded" ] && [ "$actual" = "$beside" ] \
+            || refuse 'learning_store_digest_mismatch: the store is not the one its run recorded'
+
+          # 4. AND THE RUN THIS CONTRACT NAMES, in both records and in the paid bundle's own manifest.
+          for record in "$store/julius-live-evidence/learning-store.txt" "$store/julius-learning-store/store-manifest.txt"; do
+            grep -qxF "julius_run_id=$WITHOUT_JULIUS_RUN" "$record" && grep -qxF "workflow_run_id=$WITHOUT_RUN" "$record" \
+              || refuse "learning_store_other_run: the store is not run $WITHOUT_JULIUS_RUN of workflow run $WITHOUT_RUN"
+          done
+          manifest="$store/julius-live-evidence/bundle-manifest.txt"
+          grep -qxF "julius_run_id=$WITHOUT_JULIUS_RUN" "$manifest" && grep -qxF 'mode=paid' "$manifest" \
+            || refuse 'learning_store_without_bundle_unbound: the WITHOUT bundle does not name that paid run'
+
+          # 5. RESTORED by the store script into this job's fresh database: a target it first proves empty, one
+          #    transaction, stopping at the first error.
+          # 6. AND PROVEN ARM WITHOUT, AND ONLY ARM WITHOUT, by the same script: one run, COMPLETED, its WITHOUT record
+          #    under this registration. A WITHOUT arm runs on a fresh store.
+          JULIUS_PG_CONTAINER=julius-postgres ./.github/julius-learning-store.sh restore "$dump" "$WITHOUT_JULIUS_RUN" "$REGISTRATION_DIGEST"
+
+          # 7. SAID IN THIS RUN'S EVIDENCE AND JOB SUMMARY: which store it started from.
+          {
+            echo 'learning_restore_version=1'
+            echo "without_workflow_run_id=$WITHOUT_RUN"
+            echo "without_julius_run_id=$WITHOUT_JULIUS_RUN"
+            echo "dump_sha256=$actual"
+          } > julius-live-evidence/learning-restore.txt
+          echo "LEARNING_STORE_RESTORED without_workflow_run_id=$WITHOUT_RUN without_julius_run_id=$WITHOUT_JULIUS_RUN dump_sha256=$actual" | tee -a "$GITHUB_STEP_SUMMARY"
 
       # ------------------------------------------------------------ PREFLIGHT
 
@@ -1148,6 +1300,95 @@ jobs:
           # An empty directory uploads no artifact and still reports success,
           # so `count_markers julius-first-live-completed` would find none and
           # a later run would be told no paid mission has ever completed.
+          if-no-files-found: error
+
+      # LEARNING PAIR, ARM WITHOUT: ITS STORE, RESTORABLE, FOR ITS WITH ARM (decision C, Option D).
+      #
+      # Only a COMPLETED WITHOUT arm exports: a failed arm is no baseline. `--format=custom` is what pg_restore restores;
+      # `--compress=0` leaves every row inside the archive as plain text, so the scan below reads exactly the bytes a
+      # WITH arm will restore. pg_restore renders the whole archive back to SQL here, which proves it restorable and
+      # gives the scan a canonical text of it too; the rendering never leaves the runner. The digest is recorded twice:
+      # beside the dump, and in this run's own evidence bundle, which the evidence scan covers and the WITH arm reads.
+      # The dump is NOT in the evidence bundle: the bundle is safe columns only, and a store is everything.
+      - name: 'Learning pair arm WITHOUT: dump this run''s store, restorable, for its WITH arm'
+        id: learning_store
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.live_mission.outcome == 'success' && steps.learning_arm.outputs.arm == 'WITHOUT'
+        env:
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: |
+          set -euo pipefail
+          mkdir -p julius-live-evidence
+          umask 077
+          render="$RUNNER_TEMP/julius-learning-store-render"
+          rm -rf julius-learning-store "$render"
+          mkdir -p julius-learning-store "$render"
+          # THE RUN THIS STORE IS, in the entrypoint's own words: its one `Run ... accepted` line.
+          run_id=$(sed -n 's/^Run \(run:[0-9a-f]\{24\}\) accepted in state READY; driving the Julius run loop\.$/\1/p' live-mission.log | sort -u)
+          [ "$(printf '%s\n' "$run_id" | grep -c .)" = 1 ] || { echo 'learning_store_run_unnamed: not exactly one accepted run in the live log' >&2; exit 1; }
+          # THE DATABASE COMMANDS ARE THE STORE SCRIPT'S (.github/julius-learning-store.sh, pinned by its sha256 in the
+          # registration; the test that proves the round trip runs the same file): the dump, its rendering kept for the
+          # scan below, the WITHOUT record found in it, the digest and the manifest. This step adds what only GitHub knows.
+          JULIUS_PG_CONTAINER=julius-postgres ./.github/julius-learning-store.sh dump julius-learning-store "$run_id" "$render/julius.sql"
+          {
+            echo "workflow_run_id=$GITHUB_RUN_ID"
+            echo "commit=$GITHUB_SHA"
+          } >> julius-learning-store/store-manifest.txt
+          cp julius-learning-store/store-manifest.txt julius-live-evidence/learning-store.txt
+          digest=$(sed -n 's/^dump_sha256=//p' julius-learning-store/store-manifest.txt)
+          bytes=$(sed -n 's/^dump_bytes=//p' julius-learning-store/store-manifest.txt)
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]] && [[ "$bytes" =~ ^[0-9]+$ ]] \
+            || { echo 'learning_store_manifest_unreadable: the store manifest gave no digest or no size' >&2; exit 1; }
+          echo "LEARNING_STORE_DUMPED julius_run_id=$run_id dump_sha256=$digest dump_bytes=$bytes" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # THE STORE IS SCANNED BY THE EVIDENCE SCAN'S OWN RULES before it can leave the runner: the same shape pattern and
+      # the same exact-value needles, character for character, over the archive AND its SQL rendering. `-a` makes grep
+      # read the archive's container bytes as text instead of stopping at the first non-text byte. Nothing is dropped:
+      # a store is restored whole or not at all, so any hit, or any scan error, refuses the whole store and says so in
+      # the evidence bundle (which is unaffected). The rendering is removed on every exit path.
+      - name: 'Learning pair arm WITHOUT: refuse to publish a store that contains credential material'
+        id: learning_store_scan
+        if: success() && steps.learning_store.outcome == 'success'
+        env:
+          EXECUTOR_ROOT: ${{ steps.identity.outputs.root }}
+          SCOPED: ${{ steps.identity.outputs.scoped }}
+          DB_PASSWORD: ${{ steps.identity.outputs.database_password }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+        run: |
+          set -uo pipefail
+          render="$RUNNER_TEMP/julius-learning-store-render"
+          umask 077
+          needles=$(mktemp)
+          clean=0
+          trap 'rm -f "$needles"; rm -rf "$render"; [ "$clean" = 1 ] || { rm -rf julius-learning-store; echo "learning_store=REFUSED_BY_SCAN" > julius-live-evidence/learning-store.txt; }' EXIT
+          refuse() { echo "$1: refusing to upload the learning store" >&2; exit 1; }
+          [ -f julius-learning-store/julius.pgdump ] && [ -f "$render/julius.sql" ] || refuse learning_store_incomplete
+          for value in "$EXECUTOR_ROOT" "$DB_PASSWORD" "$OPENAI_API_KEY" "$ANTHROPIC_API_KEY" "$CLAUDE_CODE_OAUTH_TOKEN" "$XAI_API_KEY"; do
+            if [ -n "$value" ]; then printf '%s\n' "$value" >> "$needles"; fi
+          done
+          printf '%s' "$SCOPED" | tr ',' '\n' | sed -n 's/.*:"\([A-Za-z0-9_-]\{20,\}\)".*/\1/p' | awk '{ print }' >> "$needles" || true
+          # grep: 0 = hit, 1 = none, 2+ = an error, and an error is NEVER read as clean.
+          grep -rqaE '((^|[^A-Za-z0-9_-])sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,}|CLAUDE_CODE_OAUTH_TOKEN[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{8,})' julius-learning-store "$render" && rc=0 || rc=$?
+          [ "$rc" -le 1 ] || refuse learning_store_scan_error
+          [ "$rc" -eq 1 ] || refuse learning_store_contains_credential_shaped_material
+          if [ -s "$needles" ]; then
+            grep -rqaF -f "$needles" julius-learning-store "$render" && rc=0 || rc=$?
+            [ "$rc" -le 1 ] || refuse learning_store_scan_error
+            [ "$rc" -eq 1 ] || refuse learning_store_contains_a_live_credential
+          fi
+          echo 'learning store scan clean (shapes and exact values, over the archive and its rendering)'
+          clean=1
+
+      # Short-lived on purpose: the store is the whole mission, not the evidence's safe columns, and it exists only for
+      # its WITH arm. A WITH arm dispatched after it expires is refused by its restore step, and the pair starts again.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: success() && steps.learning_store_scan.outcome == 'success'
+        with:
+          name: julius-learning-store
+          path: julius-learning-store
+          retention-days: 30
           if-no-files-found: error
 
       - name: Collect the redacted validation evidence

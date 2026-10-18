@@ -83,15 +83,25 @@ describe('V6 G-1: the approvalGates clause is parsed and sealed, or the contract
   });
 
   it('CONTROL, byte identity: every committed contract parses with no approvalGates key, to the pre-change digest', () => {
-    // Printed by the pre-change mission-contract.ts (scratchpad v6build/digests.mjs at 1bff1110), never retyped.
+    // Printed by the pre-change mission-contract.ts (scratchpad v6build/digests.mjs at 1bff1110), never retyped;
+    // the learning-pair and unreal-mission-1 rows were printed by main 5004713's mission-contract.ts (no approvalGates code).
     const BEFORE: Readonly<Record<string, string>> = {
       'julius-continuous-1': 'sha256:e6814f7ce2167785052595c60f89aec2ea6bb84bf6f411105e86f317fe02d80a',
       'julius-first-live': 'sha256:f7f8c2fe683cba5819ecc9e71085228ce8bf82f3e1b7f9c2b6862f2e28346a56',
+      'julius-learning-pair-1-with-1': 'sha256:6148c551c9fbaf79e85eaca6906fe5ce59afeb71e054dff6ba0955e472532774',
+      'julius-learning-pair-1-with-2': 'sha256:6148c551c9fbaf79e85eaca6906fe5ce59afeb71e054dff6ba0955e472532774',
+      'julius-learning-pair-1-without-1': 'sha256:6148c551c9fbaf79e85eaca6906fe5ce59afeb71e054dff6ba0955e472532774',
+      'julius-learning-pair-1-without-2': 'sha256:6148c551c9fbaf79e85eaca6906fe5ce59afeb71e054dff6ba0955e472532774',
+      'julius-learning-pair-2-with-1': 'sha256:0ebe60c6575b4806eb9874b86cb98f332eb73fef26ddc7b0ecacc70bb54103ab',
+      'julius-learning-pair-2-with-2': 'sha256:0ebe60c6575b4806eb9874b86cb98f332eb73fef26ddc7b0ecacc70bb54103ab',
+      'julius-learning-pair-2-without-1': 'sha256:0ebe60c6575b4806eb9874b86cb98f332eb73fef26ddc7b0ecacc70bb54103ab',
+      'julius-learning-pair-2-without-2': 'sha256:0ebe60c6575b4806eb9874b86cb98f332eb73fef26ddc7b0ecacc70bb54103ab',
       'julius-live-mission-2': 'sha256:4bf13d0e833a042c74f57555aa7fc520aab8941b5bc621dcef35c975b87b714b',
       'julius-live-mission-3': 'sha256:132b1d96d9eebad0ecf386d541169559057ecc2c93aa7cce7853ed9f2eb5a723',
       'julius-live-mission-4': 'sha256:90967fc2b4726240de490d7bfd97a73a9398352fdf71e777a682abbfd3005ecc',
       'julius-live-mission-5': 'sha256:cecba99c779c967f128dd58c58de5d362e5da37afef2a7974f9fface4b44cc80',
       'julius-live-mission-6': 'sha256:efb6e20f0d11885bc5085a6835d5d27ef0441dfebf14480d0972fdee07ecf71b',
+      'julius-unreal-mission-1': 'sha256:905815a6478f86c98d12fa2383ae2606f818e04697fbbc3ab44b5b0c8465cce0',
     };
     const dir = join(ROOT, '.github', 'julius-missions');
     const seen: string[] = [];

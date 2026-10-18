@@ -1,7 +1,16 @@
 import { createHash } from 'node:crypto';
 
 import { JULIUS_BOOTSTRAP_REQUEST_VERSION, type JuliusBootstrapRequest } from '../../src/relay/integration/julius/julius-port';
-import { resolveWorkerRole, sealJuliusResearchPolicy, type JuliusApprovalScope, type JuliusResearchPolicy } from '../../src/relay/mission/julius';
+import {
+  JULIUS_LEARNING_REGISTRATION_DIGEST,
+  juliusLearningPolicyRefusal,
+  resolveWorkerRole,
+  sealJuliusResearchPolicy,
+  type JuliusApprovalScope,
+  type JuliusLearningDimension,
+  type JuliusLearningRegistration,
+  type JuliusResearchPolicy,
+} from '../../src/relay/mission/julius';
 
 /**
  * THE MISSION CONTRACT — its shape, its parser, its sealing, its compilation.
@@ -99,6 +108,25 @@ export interface LiveMissionContractFile {
    * `scripts/julius-approval-gates.mjs`; a contract cannot choose its own.
    */
   readonly approvalGates?: readonly LiveMissionApprovalGate[];
+  /**
+   * ONE ARM OF A REGISTERED LEARNING PAIR (E9-a). ABSENT IS TODAY'S MISSION,
+   * BYTE FOR BYTE: the same request, the same digest, the same run.
+   *
+   * Present, it does two things and nothing else:
+   *   - the run takes an identity of its OWN through the explicit-rerun path
+   *     (`rerunIntent: 'EXPLICIT'` and this arm's `rerunKey`). Both arms run
+   *     one contract, and a run's id is that contract's digest, so without it
+   *     arm WITH would carry arm WITHOUT's run id and be served as its
+   *     idempotent replay: one run, and no pair (MATCHED_PAIR_PREREG §6);
+   *   - at the run's terminal state the live mission records the arm through
+   *     the Learning Loop (`recordJuliusLearningOutcome`), against the policy
+   *     declared here before anything ran.
+   *
+   * IT IS NOT PART OF THE MISSION'S BINDING (`compileBootstrapRequest`), so the
+   * two arms are provably one objective: the pairing requires it, and an
+   * arm-specific field inside the digest would make every pair unmatched.
+   */
+  readonly learningPair?: LiveMissionLearningPairClause;
 }
 
 /** One gate of the `approvalGates` clause (V6 G-1). v1: `DISPATCH_WORKER` only (V6 G-2). */
@@ -163,6 +191,62 @@ function sealApprovalGates(value: unknown): { ok: true; gates: readonly LiveMiss
 /** The clause as the card's `approvalScopes` (V6 G-2): operation, roles and task types, nothing else. */
 export function approvalScopesOf(gates: readonly LiveMissionApprovalGate[]): JuliusApprovalScope[] {
   return gates.map((gate) => ({ operation: gate.operation, roles: [...gate.roles], taskTypes: [...gate.taskTypes] }));
+}
+
+/**
+ * THE CONTRACT'S WORDS FOR ONE ARM, after strict parsing.
+ *
+ * `registrationDigest` is the sha256 of the frozen pair registration, the
+ * same on both arms. `rerunKey` is this arm's own token: one token, one run,
+ * however often the job is retried. `withoutRunId` is REQUIRED of arm WITH,
+ * which compares against that run, and REFUSED on arm WITHOUT, which has
+ * nothing to compare against. `policy` is the gate's, declared in advance.
+ */
+export interface LiveMissionLearningPairClause extends JuliusLearningRegistration {
+  readonly rerunKey: string;
+}
+
+const LEARNING_PAIR_FIELDS: readonly string[] = ['registrationDigest', 'arm', 'rerunKey', 'withoutRunId', 'policy'];
+/** A token, bounded, with no space or line break: it is folded into a run identity and printed. */
+const LEARNING_RERUN_KEY = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/u;
+/** The run id `createLiveJuliusBootstrapPort` mints: `run:` and 24 hex characters. */
+const BOOTSTRAP_RUN_ID = /^run:[0-9a-f]{24}$/u;
+
+/**
+ * EVERY FIELD VALIDATED, AND NOTHING ELSE ACCEPTED. A field this build does not
+ * read would be a term of the experiment nobody enforces, so an unknown one is
+ * refused rather than carried. The clause is rebuilt from what was checked, so
+ * nothing unchecked reaches the request or the record.
+ */
+function parseLearningPairClause(value: unknown): { ok: true; clause: LiveMissionLearningPairClause } | { ok: false; reason: string } {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return { ok: false, reason: 'learning_pair_not_an_object' };
+  const clause = value as Record<string, unknown>;
+  if (Object.keys(clause).some((key) => !LEARNING_PAIR_FIELDS.includes(key))) return { ok: false, reason: 'learning_pair_field_unknown' };
+  const { registrationDigest, arm, rerunKey, withoutRunId, policy } = clause;
+  if (typeof registrationDigest !== 'string' || !JULIUS_LEARNING_REGISTRATION_DIGEST.test(registrationDigest)) {
+    return { ok: false, reason: 'learning_pair_registration_digest_invalid' };
+  }
+  if (arm !== 'WITHOUT' && arm !== 'WITH') return { ok: false, reason: 'learning_pair_arm_invalid' };
+  if (typeof rerunKey !== 'string' || !LEARNING_RERUN_KEY.test(rerunKey)) return { ok: false, reason: 'learning_pair_rerun_key_invalid' };
+  if (arm === 'WITH' && (typeof withoutRunId !== 'string' || !BOOTSTRAP_RUN_ID.test(withoutRunId))) {
+    return { ok: false, reason: 'learning_pair_without_run_required' };
+  }
+  if (arm === 'WITHOUT' && withoutRunId !== undefined) return { ok: false, reason: 'learning_pair_without_run_forbidden' };
+  const policyRefusal = juliusLearningPolicyRefusal(policy);
+  if (policyRefusal !== null) return { ok: false, reason: policyRefusal };
+  const declared = policy as { dimensions: JuliusLearningDimension[]; minimumRelativeImprovement: number; minimumImprovedDimensions: number };
+  return {
+    ok: true,
+    clause: {
+      registrationDigest, arm, rerunKey,
+      ...(arm === 'WITH' ? { withoutRunId: withoutRunId as string } : {}),
+      policy: {
+        dimensions: [...declared.dimensions],
+        minimumRelativeImprovement: declared.minimumRelativeImprovement,
+        minimumImprovedDimensions: declared.minimumImprovedDimensions,
+      },
+    },
+  };
 }
 
 /**
@@ -281,6 +365,16 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
     approvalGates = sealed.gates;
   }
 
+  /* THE LEARNING-PAIR CLAUSE, LIKE THE RESEARCH CLAUSE, IS REFUSED HERE OR NOT
+     AT ALL: a malformed registration found after the arm has run would be a
+     paid run that measures nothing. */
+  let learningPair: LiveMissionLearningPairClause | undefined;
+  if (value.learningPair !== undefined) {
+    const parsedPair = parseLearningPairClause(value.learningPair);
+    if (!parsedPair.ok) return { ok: false, problem: `The contract's learningPair clause was refused: ${parsedPair.reason}.` };
+    learningPair = parsedPair.clause;
+  }
+
   return {
     ok: true,
     contract: {
@@ -294,6 +388,7 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
       ...(research === undefined ? {} : { research }),
       // Spread ONLY when present: an ungated contract parses to exactly the object (and digest) it always did.
       ...(approvalGates === undefined ? {} : { approvalGates }),
+      ...(learningPair === undefined ? {} : { learningPair }),
     },
   };
 }
@@ -318,7 +413,23 @@ export function gatedCardRevision(base: string, gates: readonly LiveMissionAppro
 }
 
 export function compileBootstrapRequest(contract: LiveMissionContractFile, workers: JuliusBootstrapRequest['workers'], cardRevision: string): JuliusBootstrapRequest {
-  const bindingDigest = digestOf(contract);
+  /**
+   * THE LEARNING-PAIR CLAUSE IS OUTSIDE THE BINDING, ALL OF IT.
+   *
+   * The binding digest is the mission's identity and, as `missionBindingDigest`,
+   * the objective digest the Learning Loop pairs two arms on. The clause's arm,
+   * rerun key and WITHOUT run id differ between the arms by definition, so any
+   * of them inside the digest would make every pair unmatched. Its registration
+   * digest and policy are the same on both arms, and they stay out as well: they
+   * describe the EXPERIMENT, not the mission, so an arm and a plain run of the
+   * same contract are also one objective. The arms are told apart by the rerun
+   * key instead, which is what the explicit-rerun path exists for.
+   *
+   * With no clause the destructuring removes nothing, so the digest, the
+   * idempotency key and the request are exactly what they were before it.
+   */
+  const { learningPair, ...mission } = contract;
+  const bindingDigest = digestOf(mission);
   return {
     requestVersion: JULIUS_BOOTSTRAP_REQUEST_VERSION,
     // Derived from the contract content: re-running the same file resumes the
@@ -356,5 +467,7 @@ export function compileBootstrapRequest(contract: LiveMissionContractFile, worke
     missionRevision: 1,
     missionBindingDigest: `sha256:${bindingDigest}`,
     compiledAt: new Date().toISOString(),
+    // ONE ARM, ONE RUN: the arm's own key folded into the identity (`createLiveJuliusBootstrapPort`).
+    ...(learningPair === undefined ? {} : { rerunIntent: 'EXPLICIT' as const, rerunKey: learningPair.rerunKey }),
   };
 }

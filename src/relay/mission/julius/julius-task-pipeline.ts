@@ -50,7 +50,9 @@ import {
   juliusRunLineageCheckFromRecords, type JuliusLineageRefusal, type JuliusRunLineageCheck,
 } from './julius-lineage-asserter';
 import type { JuliusBrainAppend } from './julius-runtime-ports';
-import { juliusAdmittedClaimFor, juliusClaimPromotionsOnAccept, mergeJuliusDurableStanding } from './julius-claim-ledger';
+import {
+  isJuliusCarriedEntryId, juliusAdmittedClaimFor, juliusClaimPromotionsOnAccept, juliusKnowledgeConsumedFacts, mergeJuliusDurableStanding,
+} from './julius-claim-ledger';
 import { JULIUS_DEFAULT_MAX_CODER_SEGMENTS, evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
 import { juliusWorkUnitRootOf, repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
@@ -323,7 +325,8 @@ export type JuliusTaskOutcome =
   /** The dispatch ended at a barrier: not reviewed, because its continuation carries the work. */
   | { readonly kind: 'YIELDED'; readonly taskId: string; readonly workerId: string; readonly continuationTaskId: string }
   | { readonly kind: 'REPAIR_SCHEDULED'; readonly taskId: string; readonly repairTaskId: string; readonly round: number }
-  | { readonly kind: 'RETRY'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
+  /** `retryAfterMs`: the provider's own Retry-After, only when the dispatch's diagnostics carried one (audit F5). */
+  | { readonly kind: 'RETRY'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null; readonly retryAfterMs?: number }
   | { readonly kind: 'FAILED'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
   /**
    * THE WORK WAS NOT DONE AND THE TASK DID NOT FAIL: a provider declined the
@@ -1099,6 +1102,16 @@ export async function prepareClaimedTask(
  * findings are passed in rather than recomputed, so the run, the role and the
  * task row are each read once and the policy is evaluated in exactly one place.
  */
+/**
+ * A PROVIDER'S OWN RETRY-AFTER, when the dispatch's (flattened) diagnostics carried one as a whole number of ms; nothing
+ * otherwise. Read for the live drive's rate-limit backoff (audit F5); the key reaches a row only through the
+ * diagnostics allowlist.
+ */
+function retryAfterOf(diagnostics: Readonly<Record<string, string | number | boolean | null>> | undefined): { retryAfterMs?: number } {
+  const value = diagnostics?.diag_retryAfterMs;
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? { retryAfterMs: value } : {};
+}
+
 /** The three closed values that name an agreement on a trajectory row; null when the role is unbound. */
 /**
  * THE MEASUREMENT COLUMNS OF A FAILED ATTEMPT, read out of the boundary's own
@@ -1669,6 +1682,34 @@ export async function runClaimedTask(
         },
       });
     }
+    /**
+     * WHAT THIS DISPATCH INHERITED FROM AN EARLIER RUN, BY NAME (founder ruling
+     * 2026-10-04, R2 point 4).
+     *
+     * The bootstrap's carry wrote this run's inherited rows, scoped to its plan
+     * task (`julius-claim-ledger.ts`, "THE CARRY, CORRECTED"), and recorded what
+     * it wrote. Whether the planner was then HANDED them is a fact about this
+     * packet, so it is recorded here, from the snapshot's own source ids, beside
+     * the context id: every carried row this task and role were owed, which
+     * arrived, and which the budget evicted. A packet owed nothing writes nothing,
+     * so every other dispatch's ledger is unchanged.
+     */
+    const inherited = juliusKnowledgeConsumedFacts({
+      owed: brain
+        .filter((entry) => isJuliusCarriedEntryId(entry.entryId) && entry.allowedRoles.includes(worker.role)
+          && (entry.taskIds.length === 0 || entry.taskIds.includes(task.taskId)))
+        .map((entry) => entry.entryId),
+      sourceEntryIds: snapshot.sourceEntryIds,
+      evictedEntryIds: snapshot.integrityEvictedEntryIds,
+      excludedEntryIds: snapshot.integrityExcludedEntryIds,
+      attempt: claim.attempt, role: worker.role, taskType: task.taskType,
+    });
+    if (inherited !== null) {
+      await ledger.event('knowledge.consumed', {
+        taskId: task.taskId, workerId: worker.workerId,
+        facts: { contextId, ...inherited },
+      });
+    }
     await ledger.trajectory('CONTEXT_COMPILED', {
       taskId: task.taskId, workerId: worker.workerId, contextId,
       policyRevision: request.policy.revision,
@@ -2056,7 +2097,7 @@ export async function runClaimedTask(
       ...diagnosedMeasurement(outcome.diagnostics),
       facts: { failureClass: outcome.failureClass ?? null, ...bindingFacts(preflight.contractBinding) },
     });
-    if (requeued) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
+    if (requeued) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null, ...retryAfterOf(outcome.diagnostics) };
     if (outcome.status === 'DENIED') return { kind: 'DENIED', taskId: claim.taskId, reasonCode: outcome.code };
     if (supersededBy !== null && finished) {
       return {

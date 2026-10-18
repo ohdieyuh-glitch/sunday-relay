@@ -98,9 +98,9 @@ export HERMES_REQUEST_TIMEOUT_SECONDS=480
 # THE TWO LOCAL ADDITIONS. Neither exists in the workflow, which is what keeps CI unchanged.
 export JULIUS_CLAUDE_AUTH=CLAUDE_SUBSCRIPTION
 export JULIUS_LIVE_PG_PORT=55432
-# The workflow job's own ceiling, `timeout-minutes: 120`, which JOB_BUDGET_MS in
+# The workflow job's own ceiling, `timeout-minutes: 300` (the founder workflow draft r5), which JOB_BUDGET_MS in
 # relay-bridge/reviewer-deadline.ts is shared out from. Applied to the live step here.
-readonly LIVE_TIMEOUT_MINUTES=120
+readonly LIVE_TIMEOUT_MINUTES=300
 
 # EVERY ROUTE THAT WOULD TAKE THE CODING AGENT OFF THE SUBSCRIPTION. This is the ONE place this
 # file names them. Present on the way in means refused, never quietly dropped: someone expected
@@ -684,7 +684,9 @@ cmd_run() {
   # reached, so an attempt that dies mid-mission still leaves the fact behind. It is local: a
   # GitHub-hosted dispatch cannot see it, and the runbook says so.
   local digest marker_dir stamp
-  digest=$(sha256sum "$CONTRACT" | cut -d' ' -f1)
+  # Read from stdin: given a Windows path, Git Bash's sha256sum prints the digest with a leading '' (an escaped file name),
+  # and the marker directory would then never match the one a POSIX path wrote.
+  digest=$(sha256sum < "$CONTRACT" | cut -d' ' -f1)
   [ -n "$digest" ] || refuse 'contract_digest_unavailable'
   marker_dir="$MARKERS/$digest"
   if compgen -G "$marker_dir/attempted-*" >/dev/null; then
