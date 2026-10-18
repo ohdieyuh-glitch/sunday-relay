@@ -3555,8 +3555,12 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		{
 			const float Travelled = static_cast<float>(FVector::Dist2D(Here, LastGroundSpot));
 			// Smoothed: one stuttered editor frame must not read as a sprint, and one dropped frame must not stop it.
-			GroundSpeedUU = FMath::FInterpTo(GroundSpeedUU, Travelled / Delta, Delta, 6.0f);
-			GaitPhase += Travelled / FMath::Max(StrideLengthUU * Scale, 1.0f);
+			// A REMOTE FIGURE WITH A HINT (the reported speed of the drawn moment) takes it as the target, so report-delivery jitter in the eased path does not reach the legs;
+			// its phase then advances by that smoothed speed, never by more than 1.5 x the ground it actually covered (a figure that is not moving does not march).
+			const bool bHint = RemoteGaitSpeedHint >= 0.0f;
+			GroundSpeedUU = FMath::FInterpTo(GroundSpeedUU, bHint ? RemoteGaitSpeedHint : Travelled / Delta, Delta, 6.0f);
+			const float PhaseDistance = bHint ? FMath::Min(GroundSpeedUU * Delta, Travelled * 1.5f) : Travelled;
+			GaitPhase += PhaseDistance / FMath::Max(StrideLengthUU * Scale, 1.0f);
 		}
 		LastGroundSpot = Here;
 		bHasGroundSpot = true;

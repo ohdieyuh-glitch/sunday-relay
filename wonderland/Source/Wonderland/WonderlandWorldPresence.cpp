@@ -57,6 +57,8 @@ namespace WonderlandWorldPresenceDetail
 		TEXT("Remote players: dead-reckoning cap in seconds when Interp is 0."));
 	TAutoConsoleVariable<int32> CVarRemoteIdleFreeze(TEXT("wl.Remote.IdleFreeze"), 1,
 		TEXT("Remote players: 1 stops a remote figure's own idle motion (weight shift, breath, tail) while its player stands still; 0 restores the old idle."));
+	TAutoConsoleVariable<int32> CVarRemoteGaitFromReport(TEXT("wl.Remote.GaitFromReport"), 1,
+		TEXT("Remote players, Interp mode: 1 feeds the figure's gait speed from the speed the sender reported for the drawn moment (interpolated between the bracketing reports) instead of differentiating the eased position; 0 restores the measured displacement. Position is never affected."));
 	TAutoConsoleVariable<float> CVarRemoteLogPeriod(TEXT("wl.Remote.LogPeriod"), 1.0f,
 		TEXT("Remote players: seconds between the per-figure WLREMOTE log lines (default 1; a dev measurement can set 0.1)."));
 }
@@ -374,6 +376,34 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 			bInterp = true;
 		}
 		FVector Next;
+		// THE REPORTED SPEED OF THE MOMENT BEING DRAWN (for the figure's gait only; never used for position): interpolated between the bracketing reports.
+		// Past the newest report: its speed while it is a run that is merely late (<= 0.4 s), else 0 (a stop-ish final report must not keep a parked figure 'moving').
+		float GaitHint = -1.0f;
+		if (bInterp && !bSnap && CVarRemoteGaitFromReport.GetValueOnGameThread() != 0)
+		{
+			const TArray<FRemote::FSample>& Gs = R.Samples;
+			const double GRT = NowSeconds - DelayUsed;
+			if (GRT <= Gs[0].T)
+			{
+				GaitHint = Gs[0].V;
+			}
+			else if (GRT >= Gs.Last().T)
+			{
+				GaitHint = (Gs.Last().V >= 150.0f && GRT - Gs.Last().T <= 0.4) ? Gs.Last().V : 0.0f;
+			}
+			else
+			{
+				int32 J = Gs.Num() - 2;
+				while (J > 0 && Gs[J].T > GRT)
+				{
+					--J;
+				}
+				const double GSpan = Gs[J + 1].T - Gs[J].T;
+				const double GF = GSpan > 1e-6 ? FMath::Clamp((GRT - Gs[J].T) / GSpan, 0.0, 1.0) : 1.0;
+				GaitHint = static_cast<float>(FMath::Lerp(static_cast<double>(Gs[J].V), static_cast<double>(Gs[J + 1].V), GF));
+			}
+		}
+		Body->SetRemoteGaitSpeedHint(GaitHint);
 		if (bSnap)
 		{
 			Next = R.Target;

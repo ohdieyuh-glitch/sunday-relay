@@ -401,6 +401,11 @@ public:
 	 *  (weight shift, breath, drift, tail, the slow gait turn) ease to a stop. Walking, turning and stopping are untouched (it only acts at ~zero speed). Off by default. */
 	void SetFreezeIdleWhenStill(bool bFreeze) { bFreezeIdleWhenStill = bFreeze; }
 
+	/** A REMOTE PLAYER'S FIGURE reads its gait speed from the speed the sender reported for the moment now being drawn (set every tick by
+	 *  FWonderlandRemoteAvatars), instead of differentiating its own eased position (which carries the report-delivery jitter into the legs).
+	 *  Negative = none (measure the displacement, as before). Position, parking, idle freeze and turning are untouched. */
+	void SetRemoteGaitSpeedHint(float SpeedUU) { RemoteGaitSpeedHint = SpeedUU; }
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	bool IsGaitDrivenExternally() const { return bGaitDrivenExternally; }
 
@@ -963,6 +968,7 @@ private:
 	bool bGaitDrivenExternally = false;
 	bool bPlantedNoFloat = false;
 	bool bFreezeIdleWhenStill = false;
+	float RemoteGaitSpeedHint = -1.0f;   // < 0 = none
 	float IdleFreeze = 0.0f;   // 0 = idle clocks run, 1 = stopped
 	float ActivityPhaseLive = 0.0f;   // the activity clock that NEVER freezes: blink and flame twinkle read it, so a frozen figure can neither hold its eyes shut nor stop its fire
 	FWonderlandWornPose WornPose;
