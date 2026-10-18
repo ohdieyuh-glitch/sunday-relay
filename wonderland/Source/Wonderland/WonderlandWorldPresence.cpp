@@ -211,6 +211,13 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 				Remote.DrReceivedAt = FPlatformTime::Seconds();
 				Remote.DrAgeSeconds = static_cast<float>(A.AgeMs * 0.001);
 			}
+			else if (Remote.Samples.Num() > 0 && Remote.Samples.Last().V >= MinMovingSpeedUu && A.Speed < MinMovingSpeedUu)
+			{
+				// STOPPED ON THE SPOT (r16reh16s): the view repeats the last position, so it is not a new report -- but its SPEED has changed. Stopping against a wall or a step
+				// ends on the position of the last moving report; dropping that report left the stale running speed in the newest sample and the extrapolation carry held for
+				// ever (measured r16reh16r, automated session: 19.6 uu parked past the sender for 5 s). Only the speed of the newest sample is corrected.
+				Remote.Samples.Last().V = FMath::Clamp(A.Speed, 0.0f, MaxTrustedSpeedUu);
+			}
 			Remote.DrSpeed = FMath::Clamp(A.Speed, 0.0f, MaxTrustedSpeedUu);
 		}
 		Remote.Target = A.Location;
