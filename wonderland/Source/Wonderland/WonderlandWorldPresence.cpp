@@ -30,11 +30,12 @@ namespace WonderlandWorldPresenceDetail
 	TAutoConsoleVariable<int32> CVarRemoteDeadReckon(TEXT("wl.Remote.DeadReckon"), 1,
 		TEXT("Remote players: 1 steers toward the dead-reckoned position (capped), 0 chases the last report as before."));
 	// r16reh16c: A/B switches so ONE binary can be measured with and without each change (defaults = the new behaviour).
-	// MP-VIS-01 (remote Relay OG eyes too exposed): 0 = the figure as shipped (default, so ONE binary measures with and without); 10.3 = the canon window depth.
-	TAutoConsoleVariable<float> CVarRemoteEyeRecess(TEXT("wl.Remote.EyeRecessUU"), 0.0f,
-		TEXT("Remote players wearing relay_og: uu to push the visor plate, eyes and halos back into the head (canon window is 13.2 uu deep, the figure's 2.9, so 10.3). 0 = off. Read when the figure loads."));
-	TAutoConsoleVariable<float> CVarRemoteEyeLower(TEXT("wl.Remote.EyeLowerUU"), 0.0f,
-		TEXT("Remote players wearing relay_og: uu to lower the eyes and halos in the window (canon eyes sit lower than the figure's by about 2.05). 0 = off. Read when the figure loads."));
+	// MP-VIS-01 (remote Relay OG eyes too exposed): r16reh16u defaults ON (9.4 / 2.05, the values measured in the r16reh16t automated captures: the eye
+	// stands at the canon height in the window and the lit area falls below 50 % on the local Dog's yaw band); 0 = the figure as shipped, to measure with and without.
+	TAutoConsoleVariable<float> CVarRemoteEyeRecess(TEXT("wl.Remote.EyeRecessUU"), 9.4f,
+		TEXT("Remote players wearing relay_og: uu to push the visor plate, eyes and halos back into the head (canon window is 13.2 uu deep, the figure's 2.9; default 9.4 puts the eye front at the canon depth). 0 = off. Read when the figure loads."));
+	TAutoConsoleVariable<float> CVarRemoteEyeLower(TEXT("wl.Remote.EyeLowerUU"), 2.05f,
+		TEXT("Remote players wearing relay_og: uu to lower the eyes and halos in the window (canon eyes sit lower than the figure's by about 2.05, the default). 0 = off. Read when the figure loads."));
 	TAutoConsoleVariable<int32> CVarRemoteNoHover(TEXT("wl.Remote.NoHover"), 1,
 		TEXT("Remote players: 1 draws a remote figure planted (no FloatRoot hover, no Float-part bob), 0 restores the old hover. Read when a figure spawns."));
 	TAutoConsoleVariable<int32> CVarRemoteInterp(TEXT("wl.Remote.Interp"), 1,
