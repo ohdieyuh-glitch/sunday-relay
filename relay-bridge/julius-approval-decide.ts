@@ -56,6 +56,7 @@ import {
   type JuliusPolicyOperation,
 } from '../src/relay/mission/julius';
 import { JuliusLifecyclePostgresRepository } from '../src/relay/persistence/julius-lifecycle-postgres';
+import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
 import { JULIUS_RUNTIME_DATABASE_ENV_NAMES, juliusRuntimeDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { compileBootstrapRequest, parseLiveMissionContract } from './julius/mission-contract';
@@ -311,7 +312,7 @@ async function main(argv: readonly string[]): Promise<number> {
   if (early !== null) { out(early.line); return early.exitCode; }
   const databaseUrl = juliusRuntimeDatabaseUrl(process.env as Record<string, string | undefined>);
   if (databaseUrl === null) { out(`APPROVAL_REFUSED reason=DATABASE_UNCONFIGURED (${JULIUS_RUNTIME_DATABASE_ENV_NAMES.join(' or ')})`); return 4; }
-  const pool = new Pool({ connectionString: databaseUrl });
+  const pool = listenJuliusPool(new Pool({ connectionString: databaseUrl }), 'julius approval decide');
   try {
     const { store, events } = composeJuliusDecideStore(pool);
     const result = await decideJuliusApprovalGuarded(input, {

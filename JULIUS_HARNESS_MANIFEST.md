@@ -29,7 +29,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 11 | 3 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | live composition (relay-bridge/julius/) | 8 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | other | 5 | 0 |
-| bridge provider stacks (hosted Claude, Hermes, redaction) | persistence (src/relay/persistence/) | 7 | 0 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | persistence (src/relay/persistence/) | 8 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 1 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | kernel (src/relay/mission/julius/) | 1 | 0 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
