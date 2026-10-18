@@ -303,8 +303,8 @@ describe('B1: what was left out of the reviewer\'s evidence is a FACT in the rec
     const line = dump.split(String.fromCharCode(10)).find((l) => l.includes('AS served_model_usage_key')) ?? '';
     expect(line).toContain("e.payload->'facts'->>'diag_reviewEvidencePatchOmitted' AS review_evidence_patch_omitted");
     expect(line).toContain("e.payload->'facts'->>'diag_reviewEvidenceTestOutputOmitted' AS review_evidence_test_output_omitted");
-    // appended LAST, after the last column the frozen checker's needed list could ever name before them
+    // appended after the last column the frozen checker's needed list could ever name before them; the two effort columns (effort-evidence.test.ts) follow them
     expect(line.indexOf('AS result_model_third_output_tokens')).toBeLessThan(line.indexOf('AS review_evidence_patch_omitted'));
-    expect(line).toMatch(/AS review_evidence_test_output_omitted FROM relay_wonderland\.events e/u);
+    expect(line).toMatch(/AS review_evidence_test_output_omitted,e\.payload->'facts'->>'diag_effortSent' AS effort_sent,e\.payload->'facts'->>'diag_effortEchoed' AS effort_echoed FROM relay_wonderland\.events e/u);
   });
 });

@@ -203,6 +203,8 @@ export const hostedCoderDiagnostics = (input: {
     resultModelThirdOutputTokens: usageEntry(2)?.outputTokens ?? null,
     responseId: observed?.sessionId ?? null,
     numTurns: observed?.numTurns ?? null,
+    // The effort option the runner handed the SDK (absent when it passed none); the runtime echoes nothing of it, so there is no `effortEchoed` for the coder.
+    ...(observed?.effortSent === undefined ? {} : { effortSent: observed.effortSent }),
     // INVOCATIONS, not distinct names: `toolsUsed` deduplicates.
     toolUseCount: observed?.toolInvocations ?? null,
     /**

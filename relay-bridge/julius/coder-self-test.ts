@@ -74,19 +74,29 @@ export function createCoderSelfTest(input: {
       }
       const observed = parseJuliusSelfTest(result.stdout, result.stderr);
       if (observed.copyFailed) return refuse(n, 'COPY_FAILED', started, observed.treeBefore);
-      const exitCode = observed.exitCode;
+      // THE EXIT CODE: the header's, which the sandbox printed before the output and the executor's cap cannot reach; failing that (an
+      // output cut before the header, or an older format) the executor's OWN exit status, never an absent marker read as a failure.
+      // A test stopped at the output bound has no exit code of its own, so it is neither a pass nor a read-as-failure exit.
+      const exitCode = observed.outputLimit ? null
+        : observed.exitCode ?? (typeof result.exitCode === 'number' ? result.exitCode : null);
       const passed = exitCode === 0;
+      // WHAT THE SIZE AND DIGEST COVER, said in the record: the whole capture when the sandbox measured it, otherwise only the prefix returned.
+      const measured = observed.fullOutputSha256 !== null && observed.fullOutputBytes !== null;
+      const outputBasis = observed.outputLimit ? 'LIMIT' as const : measured ? 'FULL' as const : 'PREFIX' as const;
       calls.push(Object.freeze({
         n, exitCode, passed, refused: null,
-        outputBytes: Buffer.byteLength(observed.output, 'utf8'),
-        outputDigest: sha256(observed.output),
+        outputBytes: measured ? observed.fullOutputBytes! : Buffer.byteLength(observed.output, 'utf8'),
+        outputDigest: measured ? observed.fullOutputSha256! : sha256(observed.output),
         durationMs: Math.max(0, now() - started),
         treeBefore: observed.treeBefore,
+        outputBasis,
       }));
+      const note = observed.outputLimit ? '[the test printed more than the capture bound and was stopped; it has no exit code]\n' : '';
+      const total = measured ? observed.fullOutputBytes! : null;
       const tail = observed.output.length > JULIUS_SELF_TEST_LIMITS.outputTailChars
-        ? `[output truncated: the last ${JULIUS_SELF_TEST_LIMITS.outputTailChars} of ${observed.output.length} characters]\n${observed.output.slice(-JULIUS_SELF_TEST_LIMITS.outputTailChars)}`
+        ? `[output truncated: the last ${JULIUS_SELF_TEST_LIMITS.outputTailChars} of ${total === null ? `${observed.output.length} characters` : `${total} bytes`}]\n${observed.output.slice(-JULIUS_SELF_TEST_LIMITS.outputTailChars)}`
         : observed.output;
-      return { n, passed, exitCode, refused: null, outputTail: tail };
+      return { n, passed, exitCode, refused: null, outputTail: `${note}${tail}` };
     },
   };
   return { port, record: () => Object.freeze({ calls: Object.freeze([...calls]) }) };

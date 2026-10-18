@@ -581,6 +581,11 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
      either key present is a reported protocol deviation, never a silent pass. --- */
   ...(safePositiveCount(v.reviewEvidencePatchOmitted)===null?{}:{reviewEvidencePatchOmitted:safePositiveCount(v.reviewEvidencePatchOmitted) as number}),
   ...(safePositiveCount(v.reviewEvidenceTestOutputOmitted)===null?{}:{reviewEvidenceTestOutputOmitted:safePositiveCount(v.reviewEvidenceTestOutputOmitted) as number}),
+  /* --- The reasoning effort that was actually TRANSMITTED to a provider and what the provider echoed. Present ONLY when one was sent or
+     echoed (a mission that declares no effort leaves the record exactly as it was). `effortSent` is read from the request / SDK options the
+     adapter built, never from the mission's declaration; `effortEchoed` is the provider's own report, where its response carries one. --- */
+  ...(safeReasonCode(v.effortSent)===null?{}:{effortSent:safeReasonCode(v.effortSent) as string}),
+  ...(safeReasonCode(v.effortEchoed)===null?{}:{effortEchoed:safeReasonCode(v.effortEchoed) as string}),
  });
 };
 /**
