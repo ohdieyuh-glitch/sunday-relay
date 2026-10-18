@@ -345,7 +345,8 @@ describe('the entrypoint hands both levels to the composition at BOTH of its cal
   it('the preflight resolution and the confirmed-run resolution both carry architectEffort and coderEffort', () => {
     const entry = readFileSync(join(ROOT, 'relay-bridge', 'julius-live-mission.ts'), 'utf8');
     expect(entry.match(/resolveLiveWorkers\(\{/gu)).toHaveLength(2);
-    expect(entry.match(/architectEffort: contract\.limits\?\.architectEffort, coderEffort: contract\.limits\?\.coderEffort,/gu)).toHaveLength(2);
+    // all THREE controls, at BOTH sites: a prefix match let the self-test cap be dropped from one site unnoticed (mutants S30, S31)
+    expect(entry.match(/architectEffort: contract\.limits\?\.architectEffort, coderEffort: contract\.limits\?\.coderEffort, coderSelfTestCalls: contract\.limits\?\.coderSelfTestCalls,/gu)).toHaveLength(2);
   });
 });
 
