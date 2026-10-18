@@ -55,6 +55,8 @@ namespace WonderlandWorldPresenceDetail
 		TEXT("Remote players: chase rate toward the report / dead-reckoned point when Interp is 0."));
 	TAutoConsoleVariable<float> CVarRemoteDrCap(TEXT("wl.Remote.DrCap"), 0.3f,
 		TEXT("Remote players: dead-reckoning cap in seconds when Interp is 0."));
+	TAutoConsoleVariable<int32> CVarRemoteIdleFreeze(TEXT("wl.Remote.IdleFreeze"), 1,
+		TEXT("Remote players: 1 stops a remote figure's own idle motion (weight shift, breath, tail) while its player stands still; 0 restores the old idle."));
 	TAutoConsoleVariable<float> CVarRemoteLogPeriod(TEXT("wl.Remote.LogPeriod"), 1.0f,
 		TEXT("Remote players: seconds between the per-figure WLREMOTE log lines (default 1; a dev measurement can set 0.1)."));
 }
@@ -281,6 +283,7 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 		{
 			continue;
 		}
+		Body->SetFreezeIdleWhenStill(CVarRemoteIdleFreeze.GetValueOnGameThread() != 0);
 		const FVector Now = Body->GetActorLocation();
 		// WHERE THEY SHOULD BE BY NOW: the report plus constant velocity (Speed along the last two reports' heading) for the time since
 		// it was taken (its age at the backend plus the time held here), capped. A standing report, a first report, or no heading: the report.
@@ -328,17 +331,22 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 				Aim = Ss.Last().P;
 				// CAUGHT UP with the newest report (a late one): carry on at the last segment's velocity for a short, capped time (XY only) instead of stalling
 				const double Cap = static_cast<double>(CVarRemoteInterpExtrap.GetValueOnGameThread());
-				if (Cap > 0.0 && Ss.Num() >= 2)
+				// ONLY FROM A MOVING REPORT, AT ITS REPORTED SPEED: a stop's last report says speed 0, and the 0.1 s hold-then-jump segment before it (see the
+				// sample insertion) reads as hundreds of uu/s, so the figure was parked up to ~41 uu past the stop for good (measured r16reh16l, 10-18).
+				if (Cap > 0.0 && Ss.Num() >= 2 && Ss.Last().V >= MinMovingSpeedUu)
 				{
 					const FRemote::FSample& Prev = Ss[Ss.Num() - 2];
 					const double Span = Ss.Last().T - Prev.T;
-					if (Span > 0.02 && Span < 0.4)
+					const FVector2D Seg(Ss.Last().P.X - Prev.P.X, Ss.Last().P.Y - Prev.P.Y);
+					if (Span > 0.02 && Span < 0.4 && Seg.SizeSquared() > 1e-6)
 					{
 						// velocity decaying linearly to zero over Cap: the distance carried is v * (a - a^2 / 2Cap), at most v * Cap / 2 (30 uu at 300 uu/s, Cap 0.2)
 						const double Ahead = FMath::Min(RT - Ss.Last().T, Cap);
 						const double Eff = Ahead - Ahead * Ahead / (2.0 * Cap);
-						Aim.X += (Ss.Last().P.X - Prev.P.X) / Span * Eff;
-						Aim.Y += (Ss.Last().P.Y - Prev.P.Y) / Span * Eff;
+						const FVector2D Dir = Seg.GetSafeNormal();
+						const double Speed = FMath::Min(static_cast<double>(Ss.Last().V), Seg.Size() / Span);
+						Aim.X += Dir.X * Speed * Eff;
+						Aim.Y += Dir.Y * Speed * Eff;
 					}
 				}
 			}

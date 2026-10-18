@@ -397,6 +397,10 @@ public:
 	 *  worn pose (that would put the legs on the canon-sole branches); gait, legs and every other joint are untouched. Off by default. */
 	void SetPlantedNoFloat(bool bPlanted) { bPlantedNoFloat = bPlanted; }
 
+	/** A REMOTE PLAYER'S FIGURE holds still when its player does: while the figure covers no ground and its gait has run out, the self-driven idle clocks
+	 *  (weight shift, breath, drift, tail, the slow gait turn) ease to a stop. Walking, turning and stopping are untouched (it only acts at ~zero speed). Off by default. */
+	void SetFreezeIdleWhenStill(bool bFreeze) { bFreezeIdleWhenStill = bFreeze; }
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	bool IsGaitDrivenExternally() const { return bGaitDrivenExternally; }
 
@@ -952,6 +956,8 @@ public:
 private:
 	bool bGaitDrivenExternally = false;
 	bool bPlantedNoFloat = false;
+	bool bFreezeIdleWhenStill = false;
+	float IdleFreeze = 0.0f;   // 0 = idle clocks run, 1 = stopped
 	FWonderlandWornPose WornPose;
 
 	/**

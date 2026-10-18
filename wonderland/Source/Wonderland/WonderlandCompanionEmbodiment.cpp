@@ -3518,7 +3518,11 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		ActivityRate = FMath::Lerp(ActivityRate, Look.Rate, Blend * 0.25f);
 		ActivityAmplitude = FMath::Lerp(ActivityAmplitude, Look.Amplitude, Blend * 0.25f);
 		ActivityHeightUU = FMath::Lerp(ActivityHeightUU, Look.HeightUU, Blend * 0.25f);
-		ActivityPhase += FMath::Max(TimeSeconds - LastAnimateSeconds, 0.0f) * ActivityRate;
+		// A remote figure whose player stands still stops its own idle clocks (eased), so it does not shuffle while the player is motionless.
+		const float FreezeDt = FMath::Max(TimeSeconds - LastAnimateSeconds, 0.0f);
+		const float FreezeWant = (bFreezeIdleWhenStill && !bGaitDrivenExternally && !WornPose.bValid && GroundSpeedUU < 15.0f && GaitWeight < 0.08f) ? 1.0f : 0.0f;
+		IdleFreeze = FMath::FInterpTo(IdleFreeze, FreezeWant, FreezeDt, FreezeWant > IdleFreeze ? 2.5f : 8.0f);
+		ActivityPhase += FreezeDt * ActivityRate * (1.0f - IdleFreeze);
 		LastAnimateSeconds = TimeSeconds;
 	}
 	const float ActivityTime = ActivityPhase;
@@ -3564,7 +3568,7 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		// weight, breathes and settles: a creature frozen between steps reads as a statue that happens to hover.
 		if (GaitWeight < 0.98f)
 		{
-			GaitPhase += Delta * 0.22f * (1.0f - GaitWeight);
+			GaitPhase += Delta * 0.22f * (1.0f - GaitWeight) * (1.0f - IdleFreeze);
 		}
 	}
 	// A SECOND CLOCK AT AN UNRELATED PERIOD. Every joint below mixes a little of this in, so no cycle ever lands in
