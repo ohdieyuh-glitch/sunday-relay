@@ -69,9 +69,13 @@ import {
   renderJuliusResearchAuthority,
   withJuliusResearchAsks,
 } from '../../src/relay/mission/julius/julius-research-protocol';
+import { createCoderSelfTest } from './coder-self-test';
+import { boundReviewEvidence } from './review-evidence-bound';
 import {
   runHostedCodingAgent,
+  type HostedEffort,
   type HostedQueryFn,
+  type HostedSdkHelpers,
 } from '../hosted-coding-agent/hosted-runner';
 import {
   buildJuliusCodingAgentRequest,
@@ -562,6 +566,8 @@ const reviewerDiagnostics = (input: {
   readonly usage?: HermesUsage;
   /** The operator's declared billing path (`juliusReviewerBillingPath`); null says nothing. */
   readonly billingPath: ReturnType<typeof juliusReviewerBillingPath>;
+  /** Characters left out of the diff and the test output the reviewer was shown (`boundReviewEvidence`). Zero, or absent, records nothing. */
+  readonly evidenceOmitted?: { readonly diff: number; readonly testOutput: number };
 }): Record<string, unknown> => {
   const started = input.startedAt === undefined ? Number.NaN : Date.parse(input.startedAt);
   const completed = input.completedAt === undefined ? Number.NaN : Date.parse(input.completedAt);
@@ -594,6 +600,9 @@ const reviewerDiagnostics = (input: {
     estimatedCostUsdMicros: estimated,
     inputTokens: input.usage?.inputTokens ?? null,
     outputTokens: input.usage?.outputTokens ?? null,
+    // FACTS, NOT ONLY A MARKER IN THE PROMPT: a partial diff must be visible in the record, and only when it happened.
+    ...(input.evidenceOmitted !== undefined && input.evidenceOmitted.diff > 0 ? { reviewEvidencePatchOmitted: input.evidenceOmitted.diff } : {}),
+    ...(input.evidenceOmitted !== undefined && input.evidenceOmitted.testOutput > 0 ? { reviewEvidenceTestOutputOmitted: input.evidenceOmitted.testOutput } : {}),
   };
 };
 
@@ -1553,6 +1562,11 @@ export function createJuliusCodingAgentAdapter(input: {
   readonly provider: JuliusCodingAgentProvider;
   /** The mission's sealed research policy, the same source the mediator decides with. */
   readonly researchPolicyFor?: ResearchPolicySource;
+  /**
+   * How many diagnostic self-tests the coder may run (1 to 4), or absent for none. Absent changes nothing: no tool is offered,
+   * the charter is the one it always was and the implementation record carries no `selfTest`. Diagnostic telemetry only.
+   */
+  readonly selfTestCalls?: number;
 }): JuliusProviderAdapter {
   return {
     adapterId: input.worker.adapterId,
@@ -1674,7 +1688,10 @@ export function createJuliusCodingAgentAdapter(input: {
        * on the dispatch row (`elapsedMs`) and the trajectory row (`runtimeMs`).
        */
       const providerStartedAtMs = Date.now();
-      const outcome = await input.provider.execute(request, dispatch.signal);
+      const selfTest = input.selfTestCalls === undefined || input.testCommand.trim() === ''
+        ? null
+        : createCoderSelfTest({ shell: input.shell, scope: shellScope, testCommand: input.testCommand, maxCalls: input.selfTestCalls });
+      const outcome = await input.provider.execute(request, dispatch.signal, selfTest === null ? undefined : { selfTest: selfTest.port });
       const providerElapsedMs = Date.now() - providerStartedAtMs;
 
       /** The close-out look at the workspace: the tree this attempt leaves, the change set, and who changed what. */
@@ -1745,6 +1762,7 @@ export function createJuliusCodingAgentAdapter(input: {
               ? { captured: false, changes: [], truncated: false }
               : { captured: close.status.captured, changes: close.status.changes, truncated: close.status.truncated },
             attempt: attemptRecord(close),
+            ...(selfTest === null ? {} : { selfTest: selfTest.record() }),
             attemptOutcome: 'FAILED',
             ...(cancelled ? { uncapturedReason: 'DISPATCH_CANCELLED' } : {}),
           },
@@ -1879,6 +1897,7 @@ export function createJuliusCodingAgentAdapter(input: {
           providerKind: input.provider.providerKind,
           workspace,
           attempt: attemptRecord(close),
+          ...(selfTest === null ? {} : { selfTest: selfTest.record() }),
           attemptOutcome: 'SUCCEEDED',
           ...(readable && 'report' in participation ? { report: participation.report } : {}),
         },
@@ -1981,6 +2000,12 @@ export function createLiveHostedCodingAdapter(input: {
    * mattered.
    */
   readonly authMode?: ClaudeAuthMode;
+  /** The mission's declared coder effort; absent changes nothing. */
+  readonly effort?: HostedEffort;
+  /** The mission's declared self-test cap; absent offers the coder no test tool. Diagnostic telemetry only. */
+  readonly selfTestCalls?: number;
+  /** Test seam for the SDK's tool helpers; production omits it. */
+  readonly sdkHelpersLoader?: () => Promise<HostedSdkHelpers>;
 }): JuliusProviderAdapter {
   // `testCommand` is deliberately NOT in this guard. Empty means the mission
   // declared no deterministic check, which is a valid mission and not a missing
@@ -1997,10 +2022,13 @@ export function createLiveHostedCodingAdapter(input: {
   return createJuliusCodingAgentAdapter({
     worker: input.worker, contexts: input.contexts, artifacts: input.artifacts, projectId: input.projectId,
     workspacePath: input.workspacePath, testCommand: input.testCommand, shell: input.shell,
+    ...(input.selfTestCalls === undefined ? {} : { selfTestCalls: input.selfTestCalls }),
     ...(input.researchPolicyFor === undefined ? {} : { researchPolicyFor: input.researchPolicyFor }),
     provider: createClaudeCodeCodingAgentProvider({
       apiKey: input.apiKey, requestedModel: input.requestedModel,
       ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
+      ...(input.effort === undefined ? {} : { effort: input.effort }),
+      ...(input.sdkHelpersLoader === undefined ? {} : { sdkHelpersLoader: input.sdkHelpersLoader }),
       ...(input.run === undefined ? {} : { run: input.run }),
       ...(input.queryLoader === undefined ? {} : { queryLoader: input.queryLoader }),
     }),
@@ -2166,6 +2194,12 @@ export function createLiveHermesReviewerAdapter(input: {
        */
       const priorFindings = snapshot.packet.blocks.filter((block) => block.kind === 'FINDING').map((block) => block.text);
       const unifiedDiff = diffArtifact ?? '';
+      /* WHAT THE REVIEWER READS IS BOUNDED, AND SAYS SO WHEN IT IS (`review-evidence-bound.ts`). The digest and the changed-file
+         list below are computed from the FULL diff, so the record of what was reviewed still names the whole artifact. */
+      const shown = boundReviewEvidence({
+        unifiedDiff,
+        testOutput: charge.subject === 'IMPLEMENTATION' ? (await subjectArtifact('TEST_OUTPUT') ?? '') : '',
+      });
       const packet: ReviewPacket = {
         stage,
         charge,
@@ -2198,10 +2232,10 @@ export function createLiveHermesReviewerAdapter(input: {
         baseRevision: await subjectArtifact('BASE_REVISION') ?? 'unknown',
         artifactDigest: sha256(charge.subject === 'IMPLEMENTATION' ? unifiedDiff : planArtifact),
         changedFiles: [...new Set([...unifiedDiff.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((match) => match[1]))],
-        unifiedDiff,
+        unifiedDiff: shown.unifiedDiff,
         changedFileContents: '',
         testCommand: input.testCommand,
-        testOutput: charge.subject === 'IMPLEMENTATION' ? (await subjectArtifact('TEST_OUTPUT') ?? '') : '',
+        testOutput: shown.testOutput,
         relayEvidence: [...snapshot.evidenceIds],
       };
       /**
@@ -2369,7 +2403,7 @@ export function createLiveHermesReviewerAdapter(input: {
         throw new JuliusDispatchError(
           code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape,
           reviewerDiagnostics({
-            diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath,
+            diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath, evidenceOmitted: shown.omitted,
             startedAt: outcome.startedAt, completedAt: outcome.completedAt,
             // A FAILED REVIEW STILL ACCOUNTS FOR WHAT IT BOUGHT: tokens, calls
             // and the served model, from the file Hermes writes on failure too.
@@ -2417,7 +2451,7 @@ export function createLiveHermesReviewerAdapter(input: {
        */
       const reviewUsage: HermesUsage = outcome.usage !== null && typeof outcome.usage === 'object' ? outcome.usage : UNKNOWN_USAGE;
       const reviewDiagnostics = reviewerDiagnostics({
-        diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath,
+        diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath, evidenceOmitted: shown.omitted,
         startedAt: outcome.startedAt, completedAt: outcome.completedAt,
         usage: reviewUsage,
       });

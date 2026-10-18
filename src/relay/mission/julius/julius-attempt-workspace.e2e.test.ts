@@ -332,3 +332,79 @@ describe('W4 — a workspace nobody could read is never a clean one', () => {
     expect(dispatchesOf(harness).filter((item) => item.taskId === 'build-1')[1]!.workspace).toBeUndefined();
   });
 });
+
+/* ------------------------------------------- the coder's self-test, as diagnostic telemetry on the attempt */
+
+describe('W-ST — a coder self-test reaches the durable attempt event as counts, and moves nothing else', () => {
+  const T1 = TREE('7');
+  const T2 = TREE('8');
+  const D = 'c'.repeat(64);
+  const stCall = (n: number, over: Record<string, unknown> = {}) => ({
+    n, exitCode: 0, passed: true, refused: null, outputBytes: 10, outputDigest: D, durationMs: 5, treeBefore: T1, ...over,
+  });
+  const withSelfTest = (record: ReturnType<typeof implementation>, selfTest: unknown) => ({ ...record, selfTest }) as never;
+  const keysOf = (facts: Record<string, unknown> | undefined) => Object.keys(facts ?? {}).filter((key) => key.startsWith('selfTest'));
+  const SELF_TEST_KEYS = ['selfTestCalls', 'selfTestFailThenPass', 'selfTestPasses', 'selfTestRefused'];
+
+  it('a failing self-test then a passing one on a different tree: counts, one pass, and "fail then pass" true', async () => {
+    const record = implementation({ startTree: BASE, endTree: AFTER_ONE, own: ['src/a.ts'] });
+    const harness = build([SUCCEEDS(withSelfTest(record, { calls: [stCall(1, { exitCode: 1, passed: false }), stCall(2, { treeBefore: T2 })] }))]);
+    await drain(harness);
+    const facts = factsOf(harness, 'coder.attempt.workspace').find((item) => item.taskId === 'build-1');
+    expect(facts).toMatchObject({ attemptOutcome: 'SUCCEEDED', selfTestCalls: 2, selfTestRefused: 0, selfTestPasses: 1, selfTestFailThenPass: true });
+    expect(keysOf(facts).sort()).toEqual(SELF_TEST_KEYS);
+  });
+
+  it('refused calls are counted apart from executed ones, and an unedited retry is not a self-repair', async () => {
+    const refused = stCall(3, { exitCode: null, passed: false, refused: 'CALL_CAP', outputDigest: null, treeBefore: null, outputBytes: 0 });
+    const record = implementation({ startTree: BASE, endTree: AFTER_ONE, own: ['src/a.ts'] });
+    const harness = build([SUCCEEDS(withSelfTest(record, { calls: [stCall(1, { exitCode: 1, passed: false }), stCall(2), refused] }))]);
+    await drain(harness);
+    expect(factsOf(harness, 'coder.attempt.workspace').find((item) => item.taskId === 'build-1'))
+      .toMatchObject({ selfTestCalls: 2, selfTestRefused: 1, selfTestPasses: 1, selfTestFailThenPass: false });
+  });
+
+  it('ABSENT IS TODAY: no selfTest key on the event, and no other fact moved', async () => {
+    const record = implementation({ startTree: BASE, endTree: AFTER_ONE, own: ['src/a.ts'] });
+    const plain = build([SUCCEEDS(record)]);
+    await drain(plain);
+    const offered = build([SUCCEEDS(withSelfTest(record, { calls: [stCall(1)] }))]);
+    await drain(offered);
+    const plainFacts = factsOf(plain, 'coder.attempt.workspace').find((item) => item.taskId === 'build-1');
+    const offeredFacts = factsOf(offered, 'coder.attempt.workspace').find((item) => item.taskId === 'build-1');
+    expect(keysOf(plainFacts)).toEqual([]);
+    const without = Object.fromEntries(Object.entries(offeredFacts ?? {}).filter(([key]) => !key.startsWith('selfTest')));
+    expect(without, 'every other fact is identical with and without a self-test').toEqual(plainFacts);
+  });
+
+  it('THE VERIFICATION IS UNTOUCHED: the same event types in the same order, so no new evidence and no extra decision', async () => {
+    const record = implementation({ startTree: BASE, endTree: AFTER_ONE, own: ['src/a.ts'] });
+    const plain = build([SUCCEEDS(record)]);
+    await drain(plain);
+    const offered = build([SUCCEEDS(withSelfTest(record, { calls: [stCall(1, { exitCode: 1, passed: false }), stCall(2, { treeBefore: T2 })] }))]);
+    await drain(offered);
+    expect(offered.store.events().map((event) => event.type)).toEqual(plain.store.events().map((event) => event.type));
+  });
+
+  it('a record the kernel cannot trust is dropped, the attempt is unharmed, and no telemetry is invented', async () => {
+    const record = implementation({ startTree: BASE, endTree: AFTER_ONE, own: ['src/a.ts'] });
+    for (const bad of [{ calls: [{ n: 1, passed: true, exitCode: 1 }] }, { calls: [stCall(2)] }, 'self-test: all green', { calls: 'x' }]) {
+      const harness = build([SUCCEEDS(withSelfTest(record, bad))]);
+      await drain(harness);
+      const facts = factsOf(harness, 'coder.attempt.workspace').find((item) => item.taskId === 'build-1');
+      expect(facts, JSON.stringify(bad)).toMatchObject({ attemptOutcome: 'SUCCEEDED' });
+      expect(keysOf(facts), JSON.stringify(bad)).toEqual([]);
+    }
+  });
+
+  it('a FAILED attempt records what its self-tests left, under its own attempt', async () => {
+    const harness = build([
+      FAILS(withSelfTest(implementation({ startTree: BASE, endTree: AFTER_ONE, own: ['src/a.ts'] }), { calls: [stCall(1, { exitCode: 1, passed: false })] })),
+      SUCCEEDS(implementation({ startTree: AFTER_ONE, endTree: AFTER_TWO, own: ['src/b.ts'], inherited: ['src/a.ts'] })),
+    ]);
+    await drain(harness);
+    const attempts = factsOf(harness, 'coder.attempt.workspace').filter((item) => item.taskId === 'build-1');
+    expect(attempts[0]).toMatchObject({ attemptOutcome: 'FAILED', attempt: 1, selfTestCalls: 1, selfTestPasses: 0, selfTestFailThenPass: false });
+    expect(keysOf(attempts[1]), 'the second attempt offered none, so it records none').toEqual([]);
+  });
+});

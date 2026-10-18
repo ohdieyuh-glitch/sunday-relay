@@ -106,7 +106,7 @@ import {
 import { juliusResultChannelPermitted } from './julius-worker-authority';
 import {
   JULIUS_WORKSPACE_LIMITS, juliusFailureIsContentRefusal, juliusRunHaltingFailureClass, juliusScopeViolations,
-  readJuliusCodingAgentImplementation, sanitizeJuliusCodingAgentReport,
+  readJuliusCodingAgentImplementation, sanitizeJuliusCodingAgentReport, summarizeJuliusSelfTest,
   type JuliusCodingAgentImplementation,
 } from './julius-coding-agent';
 import {
@@ -4281,6 +4281,13 @@ async function recordAttemptWorkspace(input: {
       own: listed(attempt.own.map((change) => change.path)),
       inherited: listed(attempt.inherited.map((change) => change.path)),
       restoreOutcome: attempt.restore?.outcome ?? null,
+      // DIAGNOSTIC TELEMETRY, present only when the coder was offered a self-test tool; absent leaves the event as it always was.
+      ...(implementation.selfTest === undefined ? {} : (() => {
+        const summary = summarizeJuliusSelfTest(implementation.selfTest);
+        return {
+          selfTestCalls: summary.executed, selfTestRefused: summary.refused, selfTestPasses: summary.passes, selfTestFailThenPass: summary.failThenPass,
+        };
+      })()),
     },
   });
   if (attempt.restore !== null) {

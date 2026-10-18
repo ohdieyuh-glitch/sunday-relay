@@ -178,6 +178,8 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
         // Relay's persistence is the memory authority, not the provider's.
         store: false,
         max_output_tokens: config.maxOutputTokens,
+        // Only when the mission declared it; absent sends the request exactly as it always was.
+        ...(config.reasoningEffort === undefined ? {} : { reasoning: { effort: config.reasoningEffort } }),
         text: {
           format: {
             type: 'json_schema',

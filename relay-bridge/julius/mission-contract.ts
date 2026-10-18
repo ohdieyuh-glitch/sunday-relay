@@ -69,6 +69,20 @@ export interface LiveMissionContractFile {
      * already makes, and refused by `julius-live-contract-check.mjs` otherwise.
      */
     readonly architectMaxOutputTokens?: number;
+    /**
+     * The Prompt Architect's reasoning effort for THIS mission. Absent (the default) sends no
+     * `reasoning` field, so an existing contract's request is unchanged. Declared per mission,
+     * inside the binding, so both arms of a registration carry the same one.
+     */
+    readonly architectEffort?: JuliusRoleEffort;
+    /** The Coding Agent's reasoning effort for THIS mission; absent adds no `effort` option. */
+    readonly coderEffort?: JuliusRoleEffort;
+    /**
+     * How many diagnostic self-tests the Coding Agent may run mid-session (1 to 4), or absent for none. Telemetry only: a
+     * self-test is never TEST evidence and never satisfies a scored repair requirement. Declared in the contract, so both arms
+     * of a registration carry the same one.
+     */
+    readonly coderSelfTestCalls?: number;
   };
   /**
    * THE MISSION'S RESEARCH AUTHORITY, SEALED BY THE CONTRACT THAT GRANTS IT.
@@ -209,6 +223,14 @@ export function sealLiveMissionResearchPolicy(
   });
 }
 
+/** The effort levels a contract may declare for a role: the names the architect API and the coder SDK both accept. */
+export const JULIUS_ROLE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type JuliusRoleEffort = (typeof JULIUS_ROLE_EFFORT_LEVELS)[number];
+/** The only keys `limits` may hold. A key this build does not read would be a term nobody enforces. */
+export const JULIUS_LIMITS_KEYS = ['spendUsd', 'repairCycles', 'architectMaxOutputTokens', 'architectEffort', 'coderEffort', 'coderSelfTestCalls'] as const;
+/** The self-test call cap a contract may declare. */
+export const JULIUS_SELF_TEST_CALLS_RANGE = Object.freeze({ min: 1, max: 4 });
+
 export function parseLiveMissionContract(raw: string): { ok: true; contract: LiveMissionContractFile } | { ok: false; problem: string } {
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { return { ok: false, problem: 'The contract file is not valid JSON.' }; }
@@ -275,6 +297,22 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
       return { ok: false, problem: `The contract's research clause was refused: ${reason}.` };
     }
     research = clause;
+  }
+
+  /* THE ROLE-EFFORT KEYS ARE REFUSED HERE OR NOT AT ALL: a declared effort that no role reads, or that
+     names a level the provider rejects, would be a paid run that did not do what its contract said. */
+  if (typeof value.limits === 'object' && value.limits !== null) {
+    const declared = value.limits as Record<string, unknown>;
+    for (const key of ['architectEffort', 'coderEffort'] as const) {
+      if (declared[key] !== undefined && !(JULIUS_ROLE_EFFORT_LEVELS as readonly unknown[]).includes(declared[key])) {
+        return { ok: false, problem: `The contract's limits.${key} must be one of ${JULIUS_ROLE_EFFORT_LEVELS.join(', ')}.` };
+      }
+    }
+    const calls = declared.coderSelfTestCalls;
+    if (calls !== undefined && !(typeof calls === 'number' && Number.isInteger(calls)
+      && calls >= JULIUS_SELF_TEST_CALLS_RANGE.min && calls <= JULIUS_SELF_TEST_CALLS_RANGE.max)) {
+      return { ok: false, problem: `The contract's limits.coderSelfTestCalls must be an integer from ${JULIUS_SELF_TEST_CALLS_RANGE.min} to ${JULIUS_SELF_TEST_CALLS_RANGE.max}.` };
+    }
   }
 
   /* THE LEARNING-PAIR CLAUSE, LIKE THE RESEARCH CLAUSE, IS REFUSED HERE OR NOT

@@ -44,6 +44,10 @@ const DEFAULT_LIMITS = Object.freeze({ spendUsd: 5, repairCycles: 1 });
  * silent drift would let a contract declare a ceiling the budget never reserved.
  */
 const ARCHITECT_OUTPUT_TOKEN_RESERVATION = 20_000;
+/** Mirrors `JULIUS_ROLE_EFFORT_LEVELS` and `JULIUS_LIMITS_KEYS` in relay-bridge/julius/mission-contract.ts; a test holds them equal. */
+const ROLE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
+const LIMITS_KEYS = ['spendUsd', 'repairCycles', 'architectMaxOutputTokens', 'architectEffort', 'coderEffort', 'coderSelfTestCalls'];
+const SELF_TEST_CALLS = { min: 1, max: 4 };
 const MISSION_LIMITS = Object.freeze({
   // Founder decision, 2026-09-06: mission 2 gets a larger bounded budget for
   // its paid rerun. Its first paid attempt entered LIVE and did not complete,
@@ -384,6 +388,18 @@ if (limits === undefined || limits === null || typeof limits !== 'object') {
       refuse(`limits.architectMaxOutputTokens is ${limits.architectMaxOutputTokens}, above the ${ARCHITECT_OUTPUT_TOKEN_RESERVATION} output tokens the run budget reserves per dispatch; raise the reservation deliberately or lower the ceiling`);
     }
   }
+  for (const key of Object.keys(limits)) {
+    if (!LIMITS_KEYS.includes(key)) refuse(`limits.${key} is not a limit this build reads; a term nobody enforces is refused, not carried`);
+  }
+  for (const key of ['architectEffort', 'coderEffort']) {
+    if (limits[key] !== undefined && !ROLE_EFFORT_LEVELS.includes(limits[key])) {
+      refuse(`limits.${key} must be one of ${ROLE_EFFORT_LEVELS.join(', ')} when declared`);
+    }
+  }
+  if (limits.coderSelfTestCalls !== undefined
+    && !(Number.isInteger(limits.coderSelfTestCalls) && limits.coderSelfTestCalls >= SELF_TEST_CALLS.min && limits.coderSelfTestCalls <= SELF_TEST_CALLS.max)) {
+    refuse(`limits.coderSelfTestCalls must be an integer from ${SELF_TEST_CALLS.min} to ${SELF_TEST_CALLS.max} when declared`);
+  }
 }
 
 /* ------------------------------------------------------- research authority */
@@ -484,6 +500,10 @@ out(`  acceptance criteria: ${Array.isArray(criteria) ? criteria.length : 0} (${
 out(`  spend ceiling: ${limits?.spendUsd ?? 'MISSING'} USD`);
 out(`  architect output ceiling: ${limits?.architectMaxOutputTokens ?? 'default (connector)'} of ${ARCHITECT_OUTPUT_TOKEN_RESERVATION} reserved`);
 out(`  repair ceiling: ${limits?.repairCycles ?? 'MISSING'} cycle(s)`);
+// Printed only when declared, so an existing contract's output is unchanged.
+if (limits?.architectEffort !== undefined) out(`  architect effort: ${limits.architectEffort}`);
+if (limits?.coderEffort !== undefined) out(`  coder effort: ${limits.coderEffort}`);
+if (limits?.coderSelfTestCalls !== undefined) out(`  coder self-tests (diagnostic telemetry only): up to ${limits.coderSelfTestCalls}`);
 out(`  paid-run lanes: ${lanesFor(namespace).join(', ')}${claimedLane === null ? '' : ` (claimed: ${claimedLane})`}`);
 out(`  research: ${research === undefined
   ? 'NONE — every ask is refused research_not_authorized'
