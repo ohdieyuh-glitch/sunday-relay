@@ -56,7 +56,7 @@ import type { JuliusContextSnapshot } from './julius-context-snapshot';
 import { juliusTaskContractBindingDigest, type JuliusTaskContract } from './julius-task-contract';
 import type { JuliusAcceptanceCriterion, JuliusReviewerFinding } from './julius-verification-runtime';
 import type {
-  JuliusClaimedTask, JuliusResultReceiptRow, JuliusRunRow, JuliusRuntimeStore,
+  JuliusClaimedTask, JuliusResultReceiptRow, JuliusRunRow, JuliusRuntimeStore, JuliusTrajectoryReader,
 } from './julius-runtime-ports';
 import type {
   JuliusSubagentContext, JuliusSubagentRecord, JuliusSubagentState, JuliusSubagentStore,
@@ -104,7 +104,7 @@ interface ResultRow {
 
 export interface JuliusMemoryStore
   extends JuliusRuntimeStore, JuliusSubagentStore,
-  JuliusApprovalStore, JuliusLifecycleStore, JuliusTimelineReader {
+  JuliusApprovalStore, JuliusLifecycleStore, JuliusTimelineReader, JuliusTrajectoryReader {
   /** Served here, as on PostgreSQL: a run-ending class is enacted in both. */
   haltingFailureClasses(runId: string, projectId: string): Promise<readonly string[]>;
   /* ---- seeding, for tests and offline runs ---- */
@@ -820,6 +820,20 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       trajectoryKeys.add(key);
       trajectoryLog.push({ ...event });
       return true;
+    },
+
+    /**
+     * ONE RUN'S ROWS, in the order the SQL reads them (`occurred_at`, then the
+     * row's id) and scoped to the project the same way, so a measurement made
+     * against this store is the one PostgreSQL would give.
+     */
+    async trajectoryForRun(runId, projectId) {
+      if (!inProject(runId, projectId)) return [];
+      return trajectoryLog
+        .filter((event) => event.runId === runId && event.projectId === projectId)
+        .sort((a, b) => (a.occurredAt < b.occurredAt ? -1 : a.occurredAt > b.occurredAt ? 1
+          : a.trajectoryEventId < b.trajectoryEventId ? -1 : a.trajectoryEventId > b.trajectoryEventId ? 1 : 0))
+        .map((event) => ({ ...event }));
     },
 
     /* -------------------------------------------------------------- reads */

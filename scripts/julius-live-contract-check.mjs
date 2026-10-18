@@ -139,6 +139,15 @@ const MISSION_LIMITS = Object.freeze({
   // model, participation, research, verification or repair budget is reduced
   // to preserve unused credit.
   'julius-continuous-1': Object.freeze({ spendUsd: 60, repairCycles: 3 }),
+  'julius-unreal-mission-1': Object.freeze({ spendUsd: 30, repairCycles: 3 }), // row 14-Unreal C1: founder 14a (10-07), "up to $30 with up to 3 repair cycles"; lane: the default lab
+  // DECISION C, THE LEARNING PAIR (all four arms share this namespace: WITHOUT-1, WITH-1, WITHOUT-2, WITH-2). Founder (c1),
+  // 2026-10-07: "Reuse Mission 5's existing mission body", so Mission 5's limits, per arm. Founder (c2): "Do not spend beyond
+  // what was preregistered" -- four arms, no extra arm, no re-dispatch. No MISSION_LANES entry (the default lab: lanes grant no
+  // money) and no MISSION_RESEARCH entry (Mission 5 has none).
+  'julius-learning-pair-1': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
+  // DECISION C, REGISTRATION 2 (founder, 2026-10-18: "Maximum spending remains $30 per arm, $120 total across four arms"). Same ceilings per arm as
+  // registration 1; no MISSION_LANES entry (the default lab) and no MISSION_RESEARCH entry.
+  'julius-learning-pair-2': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */

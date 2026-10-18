@@ -29,3 +29,23 @@ julius-unreal-mission-2 .github/julius-missions/julius-unreal-mission-2 0553807b
 julius-live-mission-2 .github/julius-missions/julius-live-mission-2 eb14c23a310d54566c63f17cae293a680472a6d1
 julius-live-mission-3 .github/julius-missions/julius-live-mission-3 42fb10ca04e556b71017d267215ddcacb62d54c2
 julius-live-mission-5 .github/julius-missions/julius-live-mission-5 c3381ce915673c85b04b6011f8a69a8f25fdc88f
+#
+# Row 14-Unreal (C1, the Social Hub keeps scroll positions) was frozen on 2026-10-07 by the founder's 14d ruling ("A new
+# pinned mission for this row is approved"). A throwaway tree like Missions 2, 3 and 5: one pin, its directory, holds the
+# contract and every seeded byte (task3 8327165b's six files + CORE's read-only QA spec); nothing is sliced from main.
+julius-unreal-mission-1 .github/julius-missions/julius-unreal-mission-1 b830986ae810be36e23be118f18626680c6f62c0
+#
+# Decision C's learning pair (registration design r8.6 section 2): the four arms of ONE registration, dispatched in this order.
+# Each is a throwaway tree with Mission 5's body and seed (founder c1, 2026-10-07: "Reuse Mission 5's existing mission body"),
+# so one pin, its directory, holds the contract and every seeded byte. The four contracts differ only inside their
+# learningPair clause. The founder authorized adding all four arm directories here and freezing their exact pins before
+# dispatch (2026-10-04, the C pair, point 3).
+julius-learning-pair-1-without-1 .github/julius-missions/julius-learning-pair-1-without-1 1486840adc8b4c2fd880b088c647d9310e8870ac
+julius-learning-pair-1-with-1 .github/julius-missions/julius-learning-pair-1-with-1 9db66ce96cae6fee17e14cfa62c5733e7e948681
+julius-learning-pair-1-without-2 .github/julius-missions/julius-learning-pair-1-without-2 82dfd300d21457c0290d5e52f720e58e63d9fb78
+julius-learning-pair-1-with-2 .github/julius-missions/julius-learning-pair-1-with-2 d5a3eb8312f0315851f88f8ec4ec5630c9b1b19c
+# Decision C, REGISTRATION 2 (2026-10-18): the four arms of julius-learning-pair-2, one namespace, each a throwaway tree whose directory is its one pin.
+julius-learning-pair-2-without-1 .github/julius-missions/julius-learning-pair-2-without-1 d51b504946e0e3bc3117a09982379b71be4e3e46
+julius-learning-pair-2-with-1 .github/julius-missions/julius-learning-pair-2-with-1 cf7b41fffd62e2aa417ba66cd9d04a16d9c0a0f7
+julius-learning-pair-2-without-2 .github/julius-missions/julius-learning-pair-2-without-2 5bc6f3e62e3f269f34c922acc32a4acc35eff5b6
+julius-learning-pair-2-with-2 .github/julius-missions/julius-learning-pair-2-with-2 0d81a0c6a176cec14a495810f7bceacc760befcd

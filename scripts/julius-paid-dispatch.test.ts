@@ -26,6 +26,8 @@ function fakeGitHub(options: {
   listingLag?: number;
   /** How a created run ends when polled. */
   finishAs?: 'success' | 'failure';
+  /** The first failed step of any failed run, as the jobs listing would name it. */
+  failedStep?: string | null;
 }) {
   const runs: FakeRun[] = [...(options.runs ?? [])];
   const pending: Array<{ run: FakeRun; visibleAfter: number }> = [];
@@ -50,6 +52,7 @@ function fakeGitHub(options: {
         run.conclusion = options.finishAs ?? 'success';
         return { ...run };
       },
+      failedStep: () => options.failedStep ?? null,
       dispatch: (args: string[]) => {
         dispatched.push(args);
         const answer = (options.answers ?? [])[dispatched.length - 1] ?? 'accept';
@@ -175,5 +178,95 @@ describe('the paid dispatch enters the queue only after the rig proved itself fo
     expect(first.outcome).toBe('DISPATCHED');
     expect(second.outcome).toBe('ALREADY_IN_FLIGHT');
     expect(fake.dispatched.filter((args) => args.includes('confirm_live=RUN LIVE MISSION'))).toHaveLength(1);
+  });
+});
+
+/**
+ * A LEARNING PAIR'S ARM WITH, THROUGH THE ONE SANCTIONED CLIENT (Decision C, audit F2, 2026-10-13).
+ *
+ * The workflow refuses an arm WITH dispatch without `learning_without_run` (the WITHOUT arm's workflow run id) and an
+ * arm WITHOUT or plain-mission dispatch with one; the client had no such input, so WITH arms could only go out raw,
+ * without the client's key, its ask-before-dispatch and its reconciliation. The arm is the CONTRACT's, read at main.
+ */
+describe('F2: the client dispatches a learning-pair arm WITH, and only with its WITHOUT run named', () => {
+  const WITHOUT_RUN = '37300000001';
+  const MISSION = 'julius-learning-pair-1-with-1';
+  const KEY = `${MISSION}@${SHA.slice(0, 12)}#lab#a1#w${WITHOUT_RUN}`;
+  const armDeps = (github: unknown, learningArm: 'WITH' | 'WITHOUT' | null) => ({
+    github, checkContract: () => ({ ok: true, learningArm }), sleep: async () => {}, log: () => {},
+  });
+  const paidRequests = (dispatched: string[][]) => dispatched.filter((args) => args.includes('confirm_live=RUN LIVE MISSION'));
+
+  it('the key and the request carry the WITHOUT run; a paid request without a key is refused outright', () => {
+    expect(dispatchKey({ mission: MISSION, mainSha: SHA, lane: 'lab', attempt: 1, paid: true, learningWithoutRun: WITHOUT_RUN })).toBe(KEY);
+    expect(dispatchKey({ mission: MISSION, mainSha: SHA, lane: 'lab', attempt: 1, paid: false, learningWithoutRun: WITHOUT_RUN })).toBe(`${KEY}#preflight`);
+    const args = dispatchArgs({ mission: MISSION, lane: 'lab', key: KEY, paid: true, learningWithoutRun: WITHOUT_RUN });
+    expect(args).toContain(`learning_without_run=${WITHOUT_RUN}`);
+    expect(args).toContain(`dispatch_key=${KEY}`);
+    expect(dispatchArgs({ mission: 'm', lane: 'lab', key: 'k'.repeat(8), paid: false }).some((arg) => arg.startsWith('learning_without_run='))).toBe(false);
+    for (const key of [undefined, '', 'none', 'short']) {
+      expect(() => dispatchArgs({ mission: 'm', lane: 'lab', key: key as string, paid: true }), String(key)).toThrow('dispatch_key_required');
+    }
+  });
+
+  it('arm WITH: no WITHOUT run named is refused before any request', async () => {
+    const fake = fakeGitHub({});
+    expect(await runPaidDispatch({ mission: MISSION, lane: 'lab', paid: true }, armDeps(fake.github, 'WITH')))
+      .toMatchObject({ outcome: 'REFUSED', reason: 'learning_without_run_required' });
+    expect(await runPaidDispatch({ mission: MISSION, lane: 'lab', paid: false }, armDeps(fake.github, 'WITH')))
+      .toMatchObject({ outcome: 'REFUSED', reason: 'learning_without_run_required' });
+    expect(fake.dispatched).toHaveLength(0);
+  });
+
+  it('arm WITHOUT, or a mission with no clause: a WITHOUT run named is refused; a malformed id is refused', async () => {
+    const fake = fakeGitHub({});
+    for (const arm of ['WITHOUT', null] as const) {
+      expect(await runPaidDispatch({ mission: 'julius-learning-pair-1-without-1', lane: 'lab', paid: true, learningWithoutRun: WITHOUT_RUN }, armDeps(fake.github, arm)), String(arm))
+        .toMatchObject({ outcome: 'REFUSED', reason: 'learning_without_run_unexpected' });
+    }
+    for (const bad of ['3730000000a', '1'.repeat(21), '-1']) {
+      expect(await runPaidDispatch({ mission: MISSION, lane: 'lab', paid: true, learningWithoutRun: bad }, armDeps(fake.github, 'WITH')), bad)
+        .toMatchObject({ outcome: 'REFUSED', reason: 'learning_without_run_invalid' });
+    }
+    expect(fake.dispatched).toHaveLength(0);
+  });
+
+  it("the green preflight must be THIS arm with THIS WITHOUT run: another run's, or an unkeyed one, is not reused", async () => {
+    const preflightOf = (id: number, key: string) => ({ id, status: 'completed', conclusion: 'success', headSha: SHA, title: `julius mission=${MISSION} lane=lab mode=preflight key=${key}` });
+    const fake = fakeGitHub({ runs: [preflightOf(11, 'none'), preflightOf(12, `${MISSION}@${SHA.slice(0, 12)}#lab#a1#w37300000999#preflight`)] });
+    const result = await runPaidDispatch({ mission: MISSION, lane: 'lab', paid: true, learningWithoutRun: WITHOUT_RUN }, armDeps(fake.github, 'WITH'));
+    expect(result).toMatchObject({ outcome: 'DISPATCHED', key: KEY });
+    expect(fake.dispatched, 'its own preflight first, then the paid request').toHaveLength(2);
+    expect(fake.dispatched[0]).toContain(`dispatch_key=${KEY}#preflight`);
+    for (const request of fake.dispatched) expect(request).toContain(`learning_without_run=${WITHOUT_RUN}`);
+    expect(paidRequests(fake.dispatched)[0]).toContain(`dispatch_key=${KEY}`);
+
+    const reused = fakeGitHub({ runs: [preflightOf(13, `${KEY}#preflight`)] });
+    await runPaidDispatch({ mission: MISSION, lane: 'lab', paid: true, learningWithoutRun: WITHOUT_RUN }, armDeps(reused.github, 'WITH'));
+    expect(reused.dispatched, 'the matching green preflight is reused').toHaveLength(1);
+  });
+
+  it('a WITH preflight refused AT THE RESTORE STEP blocks the paid arm unless the registered dispatch is asked for by name', async () => {
+    const restore = "Learning pair arm WITH: restore arm WITHOUT's store before anything migrates or bootstraps";
+    const failed = { id: 21, status: 'completed', conclusion: 'failure', headSha: SHA, title: `julius mission=${MISSION} lane=lab mode=preflight key=${KEY}#preflight` };
+    const plain = fakeGitHub({ runs: [{ ...failed }], failedStep: restore });
+    expect(await runPaidDispatch({ mission: MISSION, lane: 'lab', paid: true, learningWithoutRun: WITHOUT_RUN }, armDeps(plain.github, 'WITH')))
+      .toMatchObject({ outcome: 'REFUSED', reason: 'preflight_blocked' });
+    expect(paidRequests(plain.dispatched)).toHaveLength(0);
+
+    const asked = fakeGitHub({ runs: [{ ...failed }], failedStep: restore });
+    const result = await runPaidDispatch({ mission: MISSION, lane: 'lab', paid: true, learningWithoutRun: WITHOUT_RUN, dispatchDespiteRestoreRefusal: true }, armDeps(asked.github, 'WITH'));
+    expect(result).toMatchObject({ outcome: 'DISPATCHED', key: KEY, preflightRefusedAtRestore: 21 });
+    expect(paidRequests(asked.dispatched)).toHaveLength(1);
+
+    const elsewhere = fakeGitHub({ runs: [{ ...failed }], failedStep: 'Preflight: durable store, executor, attestation, sandbox, in-sandbox git' });
+    expect(await runPaidDispatch({ mission: MISSION, lane: 'lab', paid: true, learningWithoutRun: WITHOUT_RUN, dispatchDespiteRestoreRefusal: true }, armDeps(elsewhere.github, 'WITH')))
+      .toMatchObject({ outcome: 'REFUSED', reason: 'preflight_blocked' });
+    expect(paidRequests(elsewhere.dispatched)).toHaveLength(0);
+
+    const notWith = fakeGitHub({});
+    expect(await runPaidDispatch({ mission: 'julius-learning-pair-1-without-1', lane: 'lab', paid: true, dispatchDespiteRestoreRefusal: true }, armDeps(notWith.github, 'WITHOUT')))
+      .toMatchObject({ outcome: 'REFUSED', reason: 'restore_refusal_override_not_arm_with' });
+    expect(notWith.dispatched).toHaveLength(0);
   });
 });

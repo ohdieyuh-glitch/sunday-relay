@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
+import { checkoutJuliusHeld } from './julius-pg-held';
 
 /**
  * A SERIALIZATION FAILURE IS RETRIED, BECAUSE POSTGRESQL GUARANTEES IT ROLLED
@@ -121,7 +122,8 @@ export async function juliusSerializable<T>(
   const pause = options.pause ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const nested = writeLockHeld.getStore() === true;
   for (let attempt = 1; ; attempt += 1) {
-    const client = await pool.connect();
+    // A connection that dies while this attempt holds it is heard (julius-pg-held.ts), never an uncaught exception.
+    const { client, release } = await checkoutJuliusHeld(pool, 'julius serializable');
     let locked = false;
     let destroy = false;
     try {
@@ -139,7 +141,7 @@ export async function juliusSerializable<T>(
       if (!isJuliusSerializationFailure(error) || attempt >= attempts) throw error;
     } finally {
       if (locked) await client.query(JULIUS_WRITE_UNLOCK).catch(() => { destroy = true; });
-      client.release(destroy || undefined);
+      release(destroy);
     }
     // Exponential and jittered, so two writers that conflicted once do not
     // collide again in step: up to 10, 20, 40, 80, 160 ms before attempts 2-6.

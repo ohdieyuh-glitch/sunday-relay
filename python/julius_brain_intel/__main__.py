@@ -7,7 +7,8 @@
                                                   julius.memory-eval.v1
     learning-validate REGISTRATION_JSON           the registration's digest, or why it is refused
     learning-evaluate REGISTRATION_JSON --baseline DIR ... --candidate DIR ... --started RUN=ISO ...
-                                                  julius.learning-outcome.v1
+                                                  julius.learning-outcome.v1 (one DIR per arm; RUN
+                                                  is the arm's workflow run id or Julius run id)
     brain-check BRAIN_JSON                        parse a Brain document; counts per section
     vocabulary                                    the mirrored Brain vocabulary (for the drift test)
 
@@ -58,7 +59,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("learning-validate"); p.add_argument("registration")
     p = sub.add_parser("learning-evaluate"); p.add_argument("registration")
     p.add_argument("--baseline", nargs="+", required=True); p.add_argument("--candidate", nargs="+", required=True)
-    p.add_argument("--started", nargs="+", required=True, help="RUN_ID=ISO_TIMESTAMP, as GitHub records it")
+    p.add_argument("--started", nargs="+", required=True,
+                   help="RUN_ID=ISO_TIMESTAMP, as GitHub records it; RUN_ID is a candidate arm's workflow run id or Julius run id")
     p = sub.add_parser("brain-check"); p.add_argument("brain")
     sub.add_parser("vocabulary")
     p = sub.add_parser("safety-classify", help="classify a JSON list of strings (for the cross-language parity test)")

@@ -2,12 +2,17 @@ import { describe, expect, it } from 'vitest';
 import {
   GitHubApiError,
   classifyProviderFailure,
+  createGitHubTransport,
   decidePaidSlot,
   derivePaidRunState,
   parseRunTitle,
+  paidRunAttemptRefusal,
   pinnedModelsFrom,
+  readPaidSlotState,
   waitForPaidSlot,
 } from './julius-paid-slot.mjs';
+import { spawnSync } from 'node:child_process';
+import { resolve } from 'node:path';
 
 /**
  * THE PAID PROVIDER SLOT, PROVEN BY CALLING THE RULE.
@@ -158,6 +163,42 @@ describe('a key spends once', () => {
   });
 });
 
+describe('a paid run names its dispatch key, or it never spends (Decision C fix round 2)', () => {
+  // The dispatch client never sends a paid request without a key (`dispatch_key_required`), but a hand dispatch from
+  // the Actions page can, and its title then says `key=none`. That run competed for the slot and could spend like any
+  // other, with no key to make a second one refuse itself. It is refused here, server-side, before the queue is read.
+  const unkeyed = (id: number, minute: number): Run =>
+    ({ id, createdAt: T(minute), status: 'in_progress', title: title('julius-learning-pair-1-without-1', 'lab'), slotJob: WAITING });
+
+  it('a paid self with key=none refuses itself, even with the slot free and nobody ahead', () => {
+    const self = unkeyed(100, 0);
+    expect(parseRunTitle(self.title)).toMatchObject({ mode: 'paid', key: null });
+    expect(decide(self, [self])).toEqual({ decision: 'REFUSE_UNKEYED' });
+    expect(decide(self, [lab(99, 0, ADMITTED), self])).toEqual({ decision: 'REFUSE_UNKEYED' });
+  });
+
+  it('the wait stops at the first reading, in one line, with a code of its own, and nothing is spent', async () => {
+    const self = unkeyed(101, 0);
+    const lines: string[] = [];
+    let reads = 0;
+    let clock = 0;
+    const code = await waitForPaidSlot({
+      readState: async () => { reads += 1; return { self, runs: [self] }; },
+      sleep: async (ms: number) => { clock += ms; }, now: () => clock, log: (line) => { lines.push(line); },
+    });
+    expect(code).toBe(6);
+    expect(reads).toBe(1);
+    expect(lines).toEqual(['paid_slot_dispatch_key_required: a paid run must carry the dispatch key scripts/julius-paid-dispatch.mjs mints; this run will not spend']);
+  });
+
+  it('a dry run is untouched: an unkeyed preflight title is not a paid run, and it does not hold up a paid one', () => {
+    const dry: Run = { id: 102, createdAt: T(0), status: 'in_progress', title: title('julius-learning-pair-1-without-1', 'unspecified', 'none', 'preflight'), slotJob: null };
+    expect(decide(dry, [dry])).toMatchObject({ decision: 'WAIT', reason: 'self_title_unparseable' });
+    const keyed = lab(103, 5);
+    expect(decide(keyed, [dry, keyed]).decision).toBe('PROCEED');
+  });
+});
+
 describe('the waiting loop', () => {
   const clock = () => {
     let now = 0;
@@ -270,5 +311,107 @@ describe('status says what is true, and no more', () => {
       '      RELAY_HERMES_MODEL: grok-build-0.1',
     ].join('\n');
     expect(pinnedModelsFrom(yaml)).toEqual({ architect: 'gpt-5.6-sol', coder: 'claude-fable-5', reviewerProvider: 'xai', reviewerModel: 'grok-build-0.1' });
+  });
+});
+
+/**
+ * A GITHUB RE-RUN OF A PAID ARM NEVER SPENDS AGAIN (Decision C, audit F4, 2026-10-13). A re-run keeps its run id, so
+ * its key is never a duplicate of itself, and arms 2-4 carry the typed rerun acknowledgement by design.
+ */
+describe('F4: only a first attempt is admitted', () => {
+  it('attempt "1" passes; any later attempt, and an unknown one, is refused', () => {
+    expect(paidRunAttemptRefusal('1')).toBeNull();
+    for (const later of ['2', '3', '17']) expect(paidRunAttemptRefusal(later), later).toBe('paid_slot_rerun_refused');
+    for (const unknown of [undefined, '', ' 1', '1 ', 'one', '01x']) expect(paidRunAttemptRefusal(unknown), String(unknown)).toBe('paid_slot_run_attempt_unknown');
+  });
+
+  it('the wait command refuses attempt 2 before it reads anything (exit 5), and lets attempt 1 through to the queue', () => {
+    const script = resolve(import.meta.dirname, 'julius-paid-slot.mjs');
+    const run = (attempt: string | undefined) => spawnSync(process.execPath, [script, 'wait', '--repo', 'owner/repo', '--run-id', '37300000002'], {
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '', ...(attempt === undefined ? {} : { GITHUB_RUN_ATTEMPT: attempt }) },
+    });
+    const second = run('2');
+    expect(second.status, second.stderr).toBe(5);
+    expect(second.stdout).toContain('paid_slot_rerun_refused: workflow run attempt 2 is not the first');
+    const unknown = run(undefined);
+    expect(unknown.status).toBe(5);
+    expect(unknown.stdout).toContain('paid_slot_run_attempt_unknown: workflow run attempt unknown');
+    // The first attempt passes the attempt check and stops at the next one (no token here), so no network is touched.
+    const first = run('1');
+    expect(first.status).toBe(2);
+    expect(first.stderr).toContain('paid_slot_refused: github_token_missing');
+    expect(first.stdout).not.toContain('paid_slot_rerun_refused');
+  });
+});
+
+/**
+ * THE UNKEYED REFUSAL READS ONLY ITS OWN RUN (MAIN internal review 39b7192e, MINOR-1, 2026-10-13). r8.5 [r8.5-4] says
+ * the paid slot "refuses a paid run with no key before it reads the queue"; it used to read the run, then the whole
+ * listing, then every other live run's jobs, and only then refuse. Counted at the transport: the job's own client
+ * (`createGitHubTransport`) over a fake `fetch` that records every request, read by `readPaidSlotState` as `wait` reads it.
+ */
+describe('a paid run with no key refuses itself from its own run record, before it reads the queue (r8.5 [r8.5-4])', () => {
+  const REPO = 'owner/repo';
+  const SELF = 37300000202;
+  const LIVE = 37300000201;
+  const runRow = (id: number, runTitle: string) => ({ id, created_at: T(id - LIVE), status: 'in_progress', display_title: runTitle });
+  const SELF_READ = `repos/${REPO}/actions/runs/${SELF}`;
+  const LISTING = `repos/${REPO}/actions/workflows/julius-first-live-mission.yml/runs?…`;
+  const LIVE_JOBS = `repos/${REPO}/actions/runs/${LIVE}/jobs?…`;
+
+  /** A live, keyed qualification run waiting for the slot, beside this run: what a real listing could hold. */
+  function actions(selfTitle: string) {
+    const requests: string[] = [];
+    const self = runRow(SELF, selfTitle);
+    const live = runRow(LIVE, title('julius-live-mission-5', 'qualification', 'julius-live-mission-5@0123456789ab#qualification#a1'));
+    const answer = (body: unknown) => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => body });
+    const api = createGitHubTransport({
+      token: 'fake-token-for-a-fake-fetch',
+      fetchImpl: async (url: string) => {
+        const path = url.replace('https://api.github.com/', '');
+        requests.push(path.replace(/\?.*$/u, '?…'));
+        if (path === SELF_READ) return answer(self);
+        if (path.startsWith(LISTING.slice(0, -1))) return answer({ total_count: 2, workflow_runs: [live, self] });
+        if (path.startsWith(LIVE_JOBS.slice(0, -1))) return answer({ jobs: [{ name: 'paid-slot', status: 'in_progress', conclusion: null }] });
+        return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+      },
+    });
+    return { requests, read: () => readPaidSlotState(api, { repo: REPO, runId: SELF, sinceIso: '2026-10-10T00:00:00Z' }) };
+  }
+
+  it('an unkeyed PAID run: exactly ONE GitHub read, its own run record, and it is refused (REFUSE_UNKEYED)', async () => {
+    const { requests, read } = actions(title('julius-learning-pair-1-without-1', 'lab'));
+    const state = await read();
+    expect(requests, 'the listing and the other runs\' jobs are never requested').toEqual([SELF_READ]);
+    expect(decidePaidSlot(state)).toEqual({ decision: 'REFUSE_UNKEYED' });
+  });
+
+  it('the wait refuses it on its first reading, after that one request, with exit 6 and its one line', async () => {
+    const { requests, read } = actions(title('julius-learning-pair-1-without-1', 'lab'));
+    const lines: string[] = [];
+    let clock = 0;
+    const code = await waitForPaidSlot({
+      readState: read, sleep: async (ms: number) => { clock += ms; }, now: () => clock, log: (line) => { lines.push(line); },
+    });
+    expect(code).toBe(6);
+    expect(requests).toEqual([SELF_READ]);
+    expect(lines).toEqual(['paid_slot_dispatch_key_required: a paid run must carry the dispatch key scripts/julius-paid-dispatch.mjs mints; this run will not spend']);
+  });
+
+  it('CONTROL, a keyed paid run is read as before: its run, the listing, the live run\'s jobs, and it waits its turn', async () => {
+    const { requests, read } = actions(title('julius-learning-pair-1-without-1', 'lab', 'julius-learning-pair-1-without-1@0123456789ab#lab#a1'));
+    const state = await read();
+    expect(requests).toEqual([SELF_READ, LISTING, LIVE_JOBS]);
+    expect(decidePaidSlot(state)).toMatchObject({ decision: 'WAIT', reason: 'not_first_in_queue', ahead: [LIVE] });
+  });
+
+  it('a dry run is unaffected: a preflight title (or one that does not parse) is not refused as unkeyed and is read as before', async () => {
+    for (const selfTitle of [title('julius-learning-pair-1-without-1', 'unspecified', 'none', 'preflight'), 'Julius first live mission']) {
+      const { requests, read } = actions(selfTitle);
+      const state = await read();
+      expect(requests, selfTitle).toEqual([SELF_READ, LISTING, LIVE_JOBS]);
+      expect(decidePaidSlot(state), selfTitle).toMatchObject({ decision: 'WAIT', reason: 'self_title_unparseable' });
+    }
   });
 });

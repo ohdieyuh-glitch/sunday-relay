@@ -432,12 +432,81 @@ suite('BF-2: the worn skin on real PostgreSQL, across a restart', () => {
     // presence to friends only: the stranger reads the base form, the friend the skin -- after a restart too
     await apply('privacy.update_self', ADA, { presenceVisibility: 'FRIENDS' });
     store = await openSocialPostgresStore(pool);
-    expect([await skinSeenBy(BO), await skinSeenBy(CY)]).toEqual(['baal', 'relay_og']);
+    expect(await skinSeenBy(BO)).toBe('baal');
+    // OBS-1 (C14-WL3-12, founder 10-14): to the unrelated stranger, a player hidden from strangers is a player who does not exist --
+    // the whole answer deep-equals a nonexistent id's, after a restart too (the friend above still reads the card)
+    const lookUp = (subject: string) => store.apply('profile.read', CY, { ids: [subject], body: {}, query: {} }, at());
+    const nobody = await lookUp(`usr_nobody_${nonce}`);
+    expect(nobody.ok, 'the control: a nonexistent id is refused').toBe(false);
+    expect(await lookUp(ADA)).toEqual(nobody);
     // a block either way: nothing (presence EVERYONE again, so the block alone decides)
     await apply('privacy.update_self', ADA, { presenceVisibility: 'EVERYONE' });
     await apply('blocks.add', CY, { targetId: ADA });
     store = await openSocialPostgresStore(pool);
     expect([await skinSeenBy(BO), await skinSeenBy(CY)]).toEqual(['baal', 'relay_og']);
     expect((await row()).skin, 'the stored skin itself is unchanged by who may see it').toBe('baal');
+  }, 60_000);
+});
+
+/**
+ * OBS-1 ROUND 2 ACROSS A RESTART (the internal review of #368, F-6: the reviewer's case, kept). The rule reads persisted rows only --
+ * the conversation, its members, its messages and the pending request are loaded at open (openSocialPostgresStore) -- so a restarted
+ * store must withhold exactly what the live one did, and name the subject once she has written. Its own players (a nonce), its own
+ * cleanup, the same throwaway rule as above.
+ */
+suite('OBS-1 r2: the subject-wrote rule and the withheld rows survive a restart on real PostgreSQL', () => {
+  const nonce = randomBytes(5).toString('hex');
+  const ADA = `usr_ada_${nonce}`;
+  const BO = `usr_bo_${nonce}`;
+  const GHOST = `usr_ghost_${nonce}`;
+  const ALL = [ADA, BO];
+  let pool: Pool;
+  let store: SocialStore;
+  let clock = Date.now();
+  const at = () => new Date((clock += 1000)).toISOString();
+  const raw = (op: Parameters<SocialStore['apply']>[0], actor: string, body: Record<string, unknown> = {}, ids: string[] = []) =>
+    store.apply(op, actor, { ids, body, query: {} }, at());
+  const apply = async (op: Parameters<SocialStore['apply']>[0], actor: string, body: Record<string, unknown> = {}, ids: string[] = []) => {
+    const r = await raw(op, actor, body, ids);
+    if (!r.ok) throw new Error(`${op} by ${actor} refused: ${r.error.message}`);
+    return r.value as any;
+  };
+
+  beforeAll(async () => {
+    pool = new Pool({ connectionString: databaseUrl! });
+    await new TransactionalWonderlandDatabase(pool).migrate();
+    await pool.query(`INSERT INTO relay_wonderland.players(player_id) SELECT unnest($1::text[]) ON CONFLICT DO NOTHING`, [ALL]);
+    store = await openSocialPostgresStore(pool);
+    for (const id of ALL) await store.ensureUser({ userId: id, displayName: id.split('_')[1].toUpperCase(), handle: `@${id}` }, at());
+  }, 60_000);
+  // THE SAME TEARDOWN SHAPE AS THE SUITES ABOVE (no silent early return: scripts/ci-test-accounting.test.ts); this one made a DM, so
+  // its conversation goes too
+  const removeWhatThisMade = async (db: Pool): Promise<void> => {
+    await db.query(`DELETE FROM relay_wonderland.social_events WHERE audience && $1::text[]`, [ALL]);
+    await db.query(`DELETE FROM relay_wonderland.social_conversations WHERE conversation_id LIKE $1`, [`dm_%${nonce}%`]);
+    await db.query(`DELETE FROM relay_wonderland.players WHERE player_id = ANY($1::text[])`, [ALL]);
+    await db.end();
+  };
+  afterAll(async () => {
+    await (pool === undefined ? Promise.resolve() : removeWhatThisMade(pool));
+  }, 60_000);
+
+  it('Bo opens a DM by id to hidden Ada: bare-id title and no card, after a restart too; Ada writes: named, after a restart too', async () => {
+    await apply('privacy.update_self', ADA, { presenceVisibility: 'FRIENDS', messagePolicy: 'EVERYONE' });
+    await apply('privacy.update_self', BO, { messagePolicy: 'EVERYONE' });
+    const cid = (await apply('conversations.open', BO, { otherUserId: ADA })).conversationId as string;
+    await apply('messages.send', BO, { body: 'hello?' }, [cid]);
+    await apply('requests.send', BO, { toUserId: ADA });
+    store = await openSocialPostgresStore(pool); // RESTART 1
+    let view = await apply('snapshot.read', BO);
+    expect(view.conversations.find((c: any) => c.conversationId === cid).title).toBe(ADA);
+    expect(view.requests.outgoing[0].to.displayName).toBe(ADA);
+    expect(view.profiles[ADA]).toBeUndefined();
+    expect(await raw('profile.read', BO, {}, [ADA])).toEqual(await raw('profile.read', BO, {}, [GHOST]));
+    await apply('messages.send', ADA, { body: 'hi' }, [cid]);
+    store = await openSocialPostgresStore(pool); // RESTART 2
+    view = await apply('snapshot.read', BO);
+    expect(view.conversations.find((c: any) => c.conversationId === cid).title).toBe('ADA');
+    expect((await apply('profile.read', BO, {}, [ADA])).profile.displayName).toBe('ADA');
   }, 60_000);
 });

@@ -37,7 +37,8 @@ export interface PaidRunListing {
 export type PaidSlotDecision =
   | { readonly decision: 'PROCEED' }
   | { readonly decision: 'WAIT'; readonly holder: number | null; readonly ahead: readonly number[]; readonly reason: string; readonly queue?: readonly number[] }
-  | { readonly decision: 'REFUSE_DUPLICATE'; readonly original: number };
+  | { readonly decision: 'REFUSE_DUPLICATE'; readonly original: number }
+  | { readonly decision: 'REFUSE_UNKEYED' };
 
 export declare function decidePaidSlot(input: { readonly self: unknown; readonly runs: unknown }): PaidSlotDecision;
 
@@ -83,3 +84,26 @@ export declare class GitHubApiError extends Error {
   constructor(code: string);
   readonly code: string;
 }
+
+/** Null for a first attempt ("1"); a refusal reason for a re-run or an unknown attempt (audit F4). */
+export declare function paidRunAttemptRefusal(attempt: string | undefined): 'paid_slot_rerun_refused' | 'paid_slot_run_attempt_unknown' | null;
+
+/** The job's read-only Actions client: conditional GETs over `fetch`; a failure carries a code, never a header or a body. */
+export interface PaidSlotGitHubReader {
+  getJson(path: string): Promise<unknown>;
+  getText(path: string): Promise<string>;
+}
+export declare function createGitHubTransport(input: {
+  readonly token: string | undefined;
+  readonly fetchImpl?: (url: string, init: { readonly headers: Record<string, string>; readonly redirect: string }) => Promise<unknown>;
+  readonly apiBase?: string;
+}): PaidSlotGitHubReader;
+
+/**
+ * What `decidePaidSlot` reads, fetched from GitHub. A paid run with no dispatch key is answered from its own run record
+ * alone (r8.5 [r8.5-4]): the listing and the other runs' jobs are not requested for it.
+ */
+export declare function readPaidSlotState(
+  api: Pick<PaidSlotGitHubReader, 'getJson'>,
+  input: { readonly repo: string; readonly runId: number; readonly sinceIso: string },
+): Promise<{ readonly self: PaidRunListing; readonly runs: PaidRunListing[] }>;

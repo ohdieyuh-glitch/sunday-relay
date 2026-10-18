@@ -8,11 +8,16 @@ import { liveBillingPaths, liveExecutionScope, parseLiveMissionContract } from '
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/executor-effects';
 import { LIVE_EVIDENCE_SUPERSEDED_LABEL, liveEvidenceLines } from '../relay-bridge/julius/live-evidence-lines';
 import {
-  liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveOneLine, liveResearchLines, liveTickAccountLine, liveTickBudgetLine,
-  liveWorkersBlockedLines,
+  liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveLearningFailedLine, liveLearningLines, liveOneLine, liveResearchLines,
+  liveTickAccountLine, liveTickBudgetLine, liveWorkersBlockedLines,
 } from '../relay-bridge/julius/live-report-lines';
-import type { DriveTickAccount } from '../relay-bridge/julius/live-composition';
+import type { DriveTickAccount, JuliusLearningOutcome } from '../relay-bridge/julius/live-composition';
 import { planJuliusTickBudget } from '../src/relay/mission/julius/julius-tick-budget';
+import {
+  JULIUS_LEARNING_DIMENSIONS, JULIUS_LEARNING_LOOP_VERSION,
+  type JuliusLearningComparison, type JuliusLearningDecision, type JuliusLearningDelta, type JuliusLearningDimension,
+  type JuliusLearningMetrics,
+} from '../src/relay/mission/julius/julius-learning-loop';
 import { LIVE_REACH_READINESS } from '../src/relay/mission/live-reach';
 import {
   HOSTED_ALLOWED_TOOLS, HOSTED_CHILD_MODEL_PIN_KEYS, HOSTED_DISALLOWED_TOOLS, hostedChildEnv,
@@ -662,15 +667,73 @@ describe('every mission declares its own durable accounting namespace', () => {
     }
   });
 
+  type ParsedContract = Extract<ReturnType<typeof parseLiveMissionContract>, { ok: true }>['contract'];
+  /**
+   * WHO MAY SHARE AN IDENTITY: no two missions, except the arms of ONE registered learning pair (Decision C). Its arms
+   * are one mission by design (the carry crosses only within one project and mission), told apart by their clause:
+   * every directory sharing a value carries a `learningPair` with the same registrationDigest, and each its OWN rerunKey.
+   * The clause is outside the binding, so the rerunKey ALONE names an arm's run: two arms sharing one would be one run.
+   */
+  const sharedIdentityProblems = (contracts: readonly { readonly dir: string; readonly contract: ParsedContract | null }[]): string[] => {
+    const problems: string[] = [];
+    for (const field of ['markerNamespace', 'missionId', 'projectId'] as const) {
+      const groups = new Map<string, (typeof contracts)[number][]>();
+      // An unparsed contract shares nothing: its directory name stands in for the value.
+      for (const entry of contracts) {
+        const value = entry.contract === null ? `unparsed:${entry.dir}` : entry.contract[field];
+        groups.set(value, [...(groups.get(value) ?? []), entry]);
+      }
+      for (const [value, group] of groups) {
+        if (group.length < 2) continue;
+        // Every directory of the group must be an arm: as many clauses as directories, one registration, one rerunKey each.
+        const clauses = group.flatMap((entry) => entry.contract?.learningPair ?? []);
+        const onePair = clauses.length === group.length
+          && new Set(clauses.map((clause) => clause.registrationDigest)).size === 1
+          && new Set(clauses.map((clause) => clause.rerunKey)).size === group.length;
+        if (!onePair) problems.push(`${field} ${value} is shared by ${group.map((entry) => entry.dir).join(', ')}`);
+      }
+    }
+    return problems;
+  };
+
   it('no two missions share a namespace, a mission id or a project id', () => {
     // A collision here is one contract's paid history answering for another's.
-    for (const field of ['markerNamespace', 'missionId', 'projectId'] as const) {
-      const values = MISSIONS.map((mission) => {
-        const parsedMission = parseLiveMissionContract(read(`${MISSIONS_DIR}/${mission}/contract.json`));
-        return parsedMission.ok ? parsedMission.contract[field] : mission;
-      });
-      expect(new Set(values).size, `${field} must be unique across missions`).toBe(values.length);
+    const contracts = MISSIONS.map((mission) => {
+      const parsedMission = parseLiveMissionContract(read(`${MISSIONS_DIR}/${mission}/contract.json`));
+      return { dir: mission, contract: parsedMission.ok ? parsedMission.contract : null };
+    });
+    expect(sharedIdentityProblems(contracts), 'namespace, mission id and project id must be unique across missions').toEqual([]);
+  });
+
+  it('only the arms of one registered learning pair may share them, each on its own rerunKey', () => {
+    const base = JSON.parse(read(`${MISSIONS_DIR}/julius-live-mission-5/contract.json`)) as Record<string, unknown>;
+    const digest = 'c4'.repeat(32);
+    const policy = { dimensions: ['repairs'], minimumRelativeImprovement: 0.5, minimumImprovedDimensions: 1 };
+    const arm = (dir: string, clause: Record<string, unknown> | null, identity: Record<string, unknown> = {}) => {
+      const parsed = parseLiveMissionContract(JSON.stringify({
+        ...base, markerNamespace: 'julius-learning-pair-x', missionId: 'mission:julius-learning-pair-x', projectId: 'prj-julius-learning-pair-x',
+        ...identity, ...(clause === null ? {} : { learningPair: { registrationDigest: digest, policy, ...clause } }),
+      }));
+      expect(parsed.ok ? 'accepted' : parsed.problem, dir).toBe('accepted');
+      return { dir, contract: parsed.ok ? parsed.contract : null };
+    };
+    const without = (key: string) => ({ arm: 'WITHOUT', rerunKey: key });
+    const withArm = (key: string) => ({ arm: 'WITH', rerunKey: key, withoutRunId: `run:${'a1'.repeat(12)}` });
+    const four = [arm('w1', without('jlpx-without-1')), arm('h1', withArm('jlpx-with-1')), arm('w2', without('jlpx-without-2')), arm('h2', withArm('jlpx-with-2'))];
+    expect(sharedIdentityProblems(four), 'four arms of one registration, four rerunKeys').toEqual([]);
+    // Each of these is a real collision, refused for all three fields at once.
+    const refusals: [string, ReturnType<typeof arm>[]][] = [
+      ['an arm on another arm\'s rerunKey: one run, whatever the arm says', [arm('w1', without('jlpx-1')), arm('h1', withArm('jlpx-1'))]],
+      ['two registrations', [arm('w1', without('jlpx-without-1')), arm('h1', { ...withArm('jlpx-with-1'), registrationDigest: 'd5'.repeat(32) })]],
+      ['a plain mission beside an arm', [arm('w1', without('jlpx-without-1')), arm('plain', null)]],
+      ['two plain missions', [arm('a', null), arm('b', null)]],
+    ];
+    for (const [label, contracts] of refusals) {
+      expect(sharedIdentityProblems(contracts).map((problem) => problem.split(' ')[0]), label).toEqual(['markerNamespace', 'missionId', 'projectId']);
     }
+    // And sharing ONE field is refused just the same: the exemption is the pair's, not a field's.
+    expect(sharedIdentityProblems([arm('a', null), arm('b', null, { missionId: 'mission:other', projectId: 'prj-other' })]))
+      .toEqual(['markerNamespace julius-learning-pair-x is shared by a, b']);
   });
 
   it('the first mission keeps the namespace its completed history is filed under', () => {
@@ -1127,7 +1190,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'carry-copies.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'knowledge-carry.tsv', 'learning.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -1144,6 +1207,19 @@ describe('the evidence dump names only tables and columns the migrations create'
    * case above already checks each is real); the copy and the resolver are their own suites
    * (julius-evidence-bodies, julius-evidence-resolve).
    */
+  it('R-A: tasks.tsv names each task\'s lease generation and contract-events.tsv each bound claim\'s, appended last, so a bundle shows the accepted attempt', () => {
+    // R-A (the readiness ledger's reading rule): an ACCEPT is judged against the attempt the TASK ROW names
+    // (julius-attempt-evidence.ts: "the attempt a decision is about is the one the task row names"). A bundle that
+    // cannot show it gets the task flagged instead of credited, so the generation must travel in the bundle.
+    const tasks = queries().find((dump) => dump.file === 'tasks.tsv')!;
+    expect(tasks.columns, 'appended last, so no column a reader uses moves')
+      .toEqual(['task_id', 'task_type', 'role', 'state', 'ordinal', 'parent_task_id', 'run_id', 'lease_generation']);
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const contract = script.split('\n').find((line) => line.startsWith('dump "SELECT') && line.includes('contract-events.tsv')) ?? '';
+    expect(contract, 'the claim names the generation it dispatched (julius-task-pipeline.ts, task.claimed)')
+      .toContain("e.occurred_at,e.payload->'facts'->>'leaseGeneration' AS lease_generation FROM");
+  });
+
   it('DECISION A: evidence.tsv ends with integrity_hash and artifact_ref, work-artifacts.tsv carries every column 024 creates, and the dump copies the bodies and the resolver after it', () => {
     const dumps = queries();
     const evidence = dumps.find((dump) => dump.file === 'evidence.tsv')!;
@@ -1161,6 +1237,41 @@ describe('the evidence dump names only tables and columns the migrations create'
     const regression = read('.github/workflows/julius-real-infra.yml');
     expect(regression).toContain('./.github/julius-live-evidence-dump.sh /tmp/julius-evidence-check');
     expect(regression, 'a stale name must fail the PR, not become a placeholder').toContain('evidence_query_invalid');
+  });
+
+  it('DECISION C: run as written, the carry-sources block exports the manifest\'s run and records the sha256 of the very bytes it wrote', () => {
+    // The dump's own block, executed (as the Option D steps are) against a container stub that answers the export:
+    // the digest the off-host verifier holds the export to must be the digest of THESE bytes (SECOND's N39).
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const start = script.indexOf('carry_run=$(sed -n');
+    const end = script.indexOf('\nfi\n', start);
+    expect(start, 'the block exists').toBeGreaterThan(-1);
+    expect(end, 'and ends').toBeGreaterThan(start);
+    const job = mkdtempSync(join(tmpdir(), 'julius-carry-block-'));
+    try {
+      const out = join(job, 'out');
+      const bin = join(job, 'bin');
+      mkdirSync(out);
+      mkdirSync(bin);
+      const run = 'run:0123456789abcdef01234567';
+      writeFileSync(join(out, 'bundle-manifest.txt'), `julius_run_id=${run}\n`);
+      const exported = `{"format":"julius-carry-sources.v1","runId":"${run}","sentinel":"${randomUUID()}"}`;
+      // docker: the store's container, as the block reaches it; it keeps what it was asked and was handed.
+      writeFileSync(join(bin, 'docker'), ['#!/usr/bin/env bash', 'echo "$*" > "$STUB/args"', 'cat > "$STUB/stdin.sql"', `printf '%s\\n' '${exported}'`].join('\n'), { mode: 0o755 });
+      // $0 is the dump script itself, so the block reads the export SQL beside it, as in the job.
+      execFileSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', script.slice(start, end + '\nfi\n'.length), join(ROOT, '.github', 'julius-live-evidence-dump.sh')], {
+        cwd: job, stdio: 'ignore',
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, STUB: job, out, container: 'julius-postgres', PGUSER: 'julius', PGDATABASE: 'julius' },
+      });
+      const bytes = readFileSync(join(out, 'carry-sources.json'));
+      expect(bytes.toString('utf8'), 'the export is what the store answered').toBe(`${exported}\n`);
+      expect(readFileSync(join(out, 'bundle-manifest.txt'), 'utf8'), 'and its digest is of those bytes')
+        .toBe(`julius_run_id=${run}\ncarry_sources_sha256=${createHash('sha256').update(bytes).digest('hex')}\n`);
+      expect(readFileSync(join(job, 'args'), 'utf8'), 'for the run the manifest names').toContain(`-v run=${run} `);
+      expect(readFileSync(join(job, 'stdin.sql'), 'utf8'), 'with the export SQL itself').toBe(read('.github/julius-carry-sources.sql'));
+    } finally {
+      rmSync(job, { recursive: true, force: true });
+    }
   });
 
   /**
@@ -1443,7 +1554,7 @@ describe('the evidence dump names only tables and columns the migrations create'
       expect(dump.columns, `${dump.file} carries run_id`).toContain('run_id');
     }
     const script = read('.github/julius-live-evidence-dump.sh');
-    for (const file of ['failures.tsv', 'budget.tsv', 'settlement-integrity.tsv', 'worker-diagnostics.tsv', 'contract-events.tsv', 'effort.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'finding-lifecycle.tsv']) {
+    for (const file of ['failures.tsv', 'budget.tsv', 'settlement-integrity.tsv', 'worker-diagnostics.tsv', 'contract-events.tsv', 'effort.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'finding-lifecycle.tsv', 'learning.tsv', 'knowledge-carry.tsv']) {
       const query = script.split('\n').find((line) => line.startsWith('dump "SELECT') && line.endsWith(` ${file}`)) ?? '';
       expect(query, `${file} exports its stream as run_id`).toContain('e.stream_id AS run_id');
     }
@@ -1502,6 +1613,66 @@ describe('the evidence dump names only tables and columns the migrations create'
     for (const query of [lifecycle, line('finding-status.tsv'), scope]) {
       expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
     }
+  });
+
+  /**
+   * THE LEARNING LOOP'S CALLER REACHES THE BUNDLE (E9-a). The pre-registration credits the caller only when a
+   * paid run's job log AND bundle show its recorded comparison and decision, and the ledger dies with the
+   * runner. So the record is dumped: the event type the catalogue declares, the registration and pairing both
+   * arms are matched on, the measurement, and on arm WITH the comparison, the deltas, the decision and the
+   * proposal, with the WITHOUT arm's record cited by id.
+   */
+  it('exports each arm’s learning record, the comparison and the decision, tied by the cited record, and no payload', () => {
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const query = script.split('\n').find((entry) => entry.startsWith('dump "SELECT') && entry.endsWith(' learning.tsv')) ?? '';
+    expect(query, 'the learning dump must exist').not.toBe('');
+    expect(query).toContain("WHERE e.event_type='julius.learning.arm.recorded'");
+    expect(read('src/relay/mission/julius/julius-events.ts'), 'a real event type').toContain("'learning.arm.recorded'");
+    expect(query, 'the WITH row cites the WITHOUT record').toContain("e.payload->>'causationId' AS cites_event_id");
+    for (const key of ['registrationDigest', 'arm', 'runState', 'objectiveDigest', 'roles', 'runtimeVersion', 'policyDimensions',
+      'policyMinimumRelativeImprovement', 'policyMinimumImprovedDimensions', 'trajectoryRows', 'dispatches', 'repairs',
+      'verifiedCompletions', 'withoutRunId', 'comparison', 'comparisonReason', 'deltas', 'decision', 'decisionReason',
+      'improved', 'regressed', 'marginalValue', 'proposal']) {
+      expect(query, `the learning dump exports ${key}`).toContain(`e.payload->'facts'->>'${key}'`);
+    }
+    expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+  });
+
+  /**
+   * WHAT A RUN INHERITED REACHES THE BUNDLE (founder ruling 2026-10-04, R2). The four-point evidence — what the
+   * earlier run wrote, what became eligible, what was carried, and that the planner received it — must be
+   * readable from the artifact, and the ledger dies with the runner. So both carry events are dumped: the
+   * decision (`knowledge.carried`: the sources, the eligible count, one token per carried row with its digest,
+   * every exclusion by reason) and each packet's receipt (`knowledge.consumed`: owed, admitted by id, evicted).
+   * And the paid entrypoint's WITH arm is pinned to REQUIRE a non-empty carry from its own WITHOUT run: that
+   * statement runs only after `--confirm-live`, where no offline test reaches.
+   */
+  it('exports what each run inherited, why the rest was left behind, and what each packet received, and no payload', () => {
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const query = script.split('\n').find((entry) => entry.startsWith('dump "SELECT') && entry.endsWith(' knowledge-carry.tsv')) ?? '';
+    expect(query, 'the carry dump must exist').not.toBe('');
+    expect(query).toContain("WHERE e.event_type IN ('julius.knowledge.carried','julius.knowledge.consumed')");
+    const catalogue = read('src/relay/mission/julius/julius-events.ts');
+    for (const type of ['knowledge.carried', 'knowledge.consumed']) expect(catalogue, `${type} is a real event type`).toContain(`'${type}'`);
+    for (const key of ['carryVersion', 'outcome', 'reasonCode', 'missionId', 'scopeTaskId', 'scopeRole', 'sourceRunIds', 'candidates',
+      'eligible', 'carried', 'carriedFindings', 'carriedArchitecture', 'carriedEntries', 'excludedByReason', 'excludedRefs',
+      'contextId', 'role', 'taskType', 'inScope', 'admitted', 'admittedEntryIds', 'evicted', 'evictedEntryIds', 'missing']) {
+      expect(query, `the carry dump exports ${key}`).toContain(`e.payload->'facts'->>'${key}'`);
+    }
+    for (const prose of ["'claim'", "'text'", "'safeText'"]) expect(query.includes(prose), `the carry dump must not export ${prose}`).toBe(false);
+    expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+
+    const entry = read('relay-bridge/julius-live-mission.ts').replace(/\s+/gu, ' ');
+    const statement = "...(contract.learningPair?.arm === 'WITH' && contract.learningPair.withoutRunId !== undefined ? { carry: { required: true, fromRunIds: [contract.learningPair.withoutRunId] } } : {}),";
+    expect(entry.split(statement).length - 1, 'arm WITH requires a carry from its own arm WITHOUT, once, at the bootstrap call').toBe(1);
+    const bootstrap = read('relay-bridge/julius/bootstrap.ts').replace(/\s+/gu, ' ');
+    expect(bootstrap, 'a required carry is held to the ONE-mode gate and refused by name (Decision C, C-1)')
+      .toContain("if (deps.carry?.required === true) { const refusal = requiredCarryRefusal(carry, deps.carry.fromRunIds ?? []); if (refusal !== null) return refuse('carried_knowledge_required', refusal); }");
+    for (const condition of ['carry.carriedFindings < 1', 'carry.findingSourceRunIds.some((runId) => !pinned.includes(runId))']) {
+      expect(bootstrap, `the gate counts verified repair findings from the pinned run, never rows: ${condition}`).toContain(condition);
+    }
+    expect(bootstrap.indexOf("return refuse('carried_knowledge_required',"), 'and it refuses before the run is advanced to READY')
+      .toBeLessThan(bootstrap.indexOf("for (const step of ['PLANNING', 'READY'] as const)"));
   });
 });
 
@@ -1999,6 +2170,75 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     expect(buildEvidence(strays.join('\n'))).toContain(`# 0 line(s) kept; ${String(strays.length)} unrecognised`);
   });
 
+  /**
+   * THE LEARNING RECORD REACHES THE ARTIFACT, EXACTLY AS THE PRINTER WRITES IT (E9-a). R9-a is credited only when
+   * a paid run's job log shows the caller's comparison and decision, so every shape `liveLearningLines` prints is
+   * generated here and must be kept: every dimension name, every verdict, both decisions, a refusal, an unmeasured
+   * value, an exponent, a run that had not finished, and the failure line. A line with one token changed is not.
+   */
+  it('keeps the learning record’s lines exactly as the printer writes them, and nothing shaped otherwise', () => {
+    const digest = '3b1f'.repeat(16);
+    const withoutRunId = 'run:708cf1f9f852a15ee0a4c114';
+    const registration = (arm: 'WITHOUT' | 'WITH') => ({
+      registrationDigest: digest, arm,
+      policy: { dimensions: ['dispatches', 'repairs'] as JuliusLearningDimension[], minimumRelativeImprovement: 0.1, minimumImprovedDimensions: 1 },
+      ...(arm === 'WITH' ? { withoutRunId } : {}),
+    });
+    const metrics = (over: Partial<JuliusLearningMetrics> = {}): JuliusLearningMetrics => ({
+      runtimeVersion: 'julius-runtime.v1', runs: 1, dispatches: 5, retries: 1, repairs: 1, recoveries: 0, fallbacks: 0,
+      findings: 2, verifiedCompletions: 1, knownUsdMicros: 608861, costComplete: false, averageDurationMs: 41234.5,
+      knownInputTokens: null, knownOutputTokens: 1200, unknownUsageComponents: 3, ...over,
+    });
+    const verdicts = ['IMPROVED', 'NO_EFFECT', 'REGRESSED', 'UNMEASURABLE'] as const;
+    const deltas: JuliusLearningDelta[] = JULIUS_LEARNING_DIMENSIONS.map((dimension, index) => {
+      const verdict = verdicts[index % verdicts.length]!;
+      if (verdict === 'UNMEASURABLE') return { dimension, without: null, with: 4, delta: null, verdict, bounded: true };
+      const after = verdict === 'IMPROVED' ? 4 : verdict === 'REGRESSED' ? 6.5 : 5;
+      return { dimension, without: 5, with: after, delta: after - 5, verdict, bounded: false };
+    });
+    const compared: JuliusLearningComparison = { outcome: 'COMPARED', version: JULIUS_LEARNING_LOOP_VERSION, deltas, without: metrics(), with: metrics({ dispatches: 4 }) };
+    const pair = (comparison: JuliusLearningComparison, decision: JuliusLearningDecision) => ({
+      withoutRunId, comparison, decision,
+      withoutRunState: comparison.outcome === 'COMPARED' ? 'COMPLETED' : null,
+      withoutTrajectoryRows: comparison.outcome === 'COMPARED' ? 14 : null,
+      withoutEventId: null,
+    });
+    const arm = (over: Partial<Omit<JuliusLearningOutcome, 'lines'>>): Omit<JuliusLearningOutcome, 'lines'> => ({
+      record: 'RECORDED', runId: 'run:5c0ffee5c0ffee5c0ffee5c0', runState: 'COMPLETED', registration: registration('WITH'),
+      metrics: metrics({ dispatches: 4 }), trajectoryRows: 11, pair: null, event: null, ...over,
+    });
+    const unrecorded: JuliusLearningComparison = { outcome: 'UNCOMPARABLE', reasonCode: 'learning_pair_without_unrecorded' };
+    const outcomes = [
+      arm({ registration: registration('WITHOUT'), runId: withoutRunId, metrics: metrics(), trajectoryRows: 14 }),
+      arm({ pair: pair(compared, { outcome: 'PROMOTE', improved: ['dispatches', 'knownOutputTokens'], marginalValue: 0.2 }) }),
+      arm({ record: 'DUPLICATE', pair: pair(compared, { outcome: 'PROMOTE', improved: ['verifiedCompletions'], marginalValue: 0.0000005 }) }),
+      arm({ pair: pair(compared, { outcome: 'REFUSE', reasonCode: 'learning_regressed', regressed: ['retries', 'verifiedCompletions'] }) }),
+      arm({ pair: pair(unrecorded, { outcome: 'REFUSE', reasonCode: 'learning_pair_without_unrecorded', regressed: [] }) }),
+      arm({ record: 'NOT_TERMINAL', runState: 'VERIFYING', metrics: null, trajectoryRows: null }),
+    ];
+    const lines = [...outcomes.flatMap((outcome) => liveLearningLines(outcome)), liveLearningFailedLine(new Error('julius_event_id_conflict'))];
+    expect(lines.filter((line) => line.startsWith('LEARNING: delta ')), 'every dimension is printed').toHaveLength(3 * JULIUS_LEARNING_DIMENSIONS.length);
+    expect(lines.some((line) => line.includes('marginal_value=5e-7')), 'an exponent is printed').toBe(true);
+    const output = buildEvidence(lines.join('\n'));
+    for (const line of lines) expect(output, `withheld: ${line}`).toContain(`${line}\n`);
+    expect(output).toContain(`# ${String(lines.length)} line(s) kept; 0 unrecognised and 0 secret-shaped line(s) withheld.`);
+
+    const printed = liveLearningLines(outcomes[1]!);
+    const [armLine, metricsLine, comparisonLine] = printed;
+    const deltaLine = printed.find((line) => line.startsWith('LEARNING: delta ')) ?? '';
+    const decisionLine = printed[printed.length - 1]!;
+    const strays = [
+      armLine!.replace('record=RECORDED', 'record=PROMOTED'),
+      armLine!.replace(`registration=${digest}`, `registration=${digest.toUpperCase()}`),
+      metricsLine!.replace('cost_complete=no', 'cost_complete=maybe'),
+      comparisonLine!.replace('comparison=COMPARED', 'comparison=ASSUMED'),
+      deltaLine.replace('verdict=IMPROVED', 'verdict=BETTER'),
+      decisionLine.replace('proposal=PROMOTION_PROPOSED', 'proposal=PROMOTED'),
+      `${decisionLine} because the model said so`,
+    ];
+    expect(buildEvidence(strays.join('\n'))).toContain(`# 0 line(s) kept; ${String(strays.length)} unrecognised`);
+  });
+
   it('keeps the peer execution scope, the research lines and the refusals, exactly as the printers write them (P4)', () => {
     const refused = resolveClaudeAuthMode({ JULIUS_CLAUDE_AUTH: 'subscriptoin' });
     if (refused.ok) throw new Error('a misspelled mode must be refused');
@@ -2084,6 +2324,9 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
       'for (const line of liveResearchLines(researchClause === undefined ? null : { roles: [...researchClause.roles], allowances: researchClause.allowances.length, observedBackends: observed.probes.length, reach: researchReachSummary(researchClause, observed.probes), })) out(line);',
       'out(liveTickBudgetLine(tickBudget, tickOverride.override));',
       'if (outcome.tickAccount !== null) out(liveTickAccountLine(outcome.tickAccount));',
+      // The learning record's lines are the caller's own (`recordJuliusLearningOutcome` prints through `liveLearningLines`).
+      'for (const line of learning.lines) out(line);',
+      'out(liveLearningFailedLine(error));',
     ]) expect(entry.split(statement).length - 1, statement).toBe(1);
   });
 
@@ -3279,7 +3522,7 @@ describe('the event dumps are ordered by the ledger position, not by the wall cl
   it('covers every chronological event dump, so a new one cannot arrive unordered', () => {
     expect(eventDumps().map(named).sort())
       .toEqual(['budget.tsv', 'contract-events.tsv', 'effort.tsv', 'failures.tsv', 'finding-lifecycle.tsv',
-        'participation.tsv', 'research.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
+        'knowledge-carry.tsv', 'learning.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
   });
 
   it('carries the position the ledger allocated, and the stream it is a position within', () => {
@@ -3679,4 +3922,217 @@ describe('the research a contract grants is observed before the run, through Rel
       expect(kept.test(line), line).toBe(false);
     }
   });
+});
+
+/* ---------------------------------------- decision C, Option D: a learning pair */
+
+/**
+ * TWO ARMS, ONE STORE, TWO JOBS (decision C, Option D; MATCHED_PAIR_PREREG E9-b).
+ *
+ * A registered pair is two missions in ONE durable store, and this rig's PostgreSQL dies with its job. So arm
+ * WITHOUT's job exports a restorable dump of its own store, scanned by the evidence scan's own rules, and arm WITH's
+ * job restores it before anything migrates or bootstraps, after proving it is the store that run recorded. The arm
+ * is the CONTRACT's (`learningPair.arm`); the dispatch names only WHICH run's store to restore. A contract with no
+ * clause reads `arm=none` and runs exactly as before. Each behaviour below is the extracted step itself, executed.
+ */
+describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm WITH restores it (decision C)', () => {
+  const ARM = "'Gate: the learning-pair arm the contract declares, and the store it needs'";
+  const RESTORE = "'Learning pair arm WITH: restore arm WITHOUT''s store before anything migrates or bootstraps'";
+  const DUMP = "'Learning pair arm WITHOUT: dump this run''s store, restorable, for its WITH arm'";
+  const SCAN = "'Learning pair arm WITHOUT: refuse to publish a store that contains credential material'";
+  const EVIDENCE_SCAN = 'Refuse to publish evidence that contains credential material';
+  const DIGEST = 'a1'.repeat(32);
+  const WITHOUT = 'run:aaaaaaaaaaaaaaaaaaaaaaa1';
+  const SHA = '1'.repeat(40);
+  const at = (name: string): number => {
+    const index = workflow.indexOf(`- name: ${name}`);
+    expect(index, name).toBeGreaterThan(-1);
+    return index;
+  };
+  /** A step's lines before its script: name, id, if, env. */
+  const header = (name: string): string => {
+    const rest = workflow.slice(at(name));
+    return rest.slice(0, rest.indexOf('run: |'));
+  };
+  /** The step script as GitHub runs it: `bash --noprofile --norc -eo pipefail`. */
+  const run = (script: string, cwd: string, env: Record<string, string>): number => {
+    try {
+      execFileSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', script], { cwd, stdio: 'ignore', env: { ...process.env, ...env } });
+      return 0;
+    } catch (error) {
+      return (error as { status?: number }).status ?? 1;
+    }
+  };
+
+  it('adds one dispatch input, and reads the arm from the contract, never from the dispatch', () => {
+    expect(triggerBlock()).toMatch(/\n {6}learning_without_run:\n {8}description: '[^']+'\n {8}required: false\n {8}default: ''\n/u);
+    const gate = header(ARM);
+    expect(gate).toContain('\n        id: learning_arm\n');
+    expect(gate, 'the arm gate runs on every dispatch').not.toMatch(/\n\s+if:/u);
+    expect(gate).toContain('LEARNING_WITHOUT_RUN: ${{ inputs.learning_without_run }}');
+    expect(stepScript(ARM), 'the arm is read from the contract file').toContain('"$CONTRACT")');
+    expect(at(ARM), 'after the inputs gate proved the contract exists').toBeGreaterThan(at("'Gate: the dispatch inputs are well formed'"));
+    expect(at(ARM), 'and before anything is built').toBeLessThan(at('Install'));
+    expect(workflow.match(/inputs\.learning_without_run/gu)?.length, 'the arm gate and the restore, nothing else').toBe(2);
+  });
+
+  it('the arm gate: no clause is arm none and refuses the input; arm WITH requires a WITHOUT run id', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'julius-learning-arm-'));
+    const gate = (clause: unknown, input: string): { status: number; output: string } => {
+      const contract = join(dir, 'contract.json');
+      writeFileSync(contract, JSON.stringify(clause === undefined ? { missionId: 'm' } : { missionId: 'm', learningPair: clause }));
+      const output = join(dir, 'out.txt');
+      writeFileSync(output, '');
+      const status = run(stepScript(ARM), ROOT, { CONTRACT: contract, LEARNING_WITHOUT_RUN: input, GITHUB_RUN_ID: '999', GITHUB_OUTPUT: output });
+      return { status, output: readFileSync(output, 'utf8') };
+    };
+    expect(gate(undefined, '')).toEqual({ status: 0, output: 'arm=none\nwithout_julius_run=-\nregistration_digest=-\n' });
+    expect(gate(undefined, '123').status, 'only arm WITH restores a store').not.toBe(0);
+    const without = { arm: 'WITHOUT', registrationDigest: DIGEST, rerunKey: 'w1' };
+    expect(gate(without, '')).toEqual({ status: 0, output: `arm=WITHOUT\nwithout_julius_run=-\nregistration_digest=${DIGEST}\n` });
+    expect(gate(without, '5').status).not.toBe(0);
+    const withArm = { arm: 'WITH', registrationDigest: DIGEST, rerunKey: 'c1', withoutRunId: WITHOUT };
+    expect(gate(withArm, '4242')).toEqual({ status: 0, output: `arm=WITH\nwithout_julius_run=${WITHOUT}\nregistration_digest=${DIGEST}\n` });
+    for (const input of ['', '12a', '999', '1'.repeat(21)]) expect(gate(withArm, input).status, `input '${input}'`).not.toBe(0);
+    for (const clause of [{ ...withArm, arm: 'BOTH' }, { ...withArm, withoutRunId: undefined }, { ...without, registrationDigest: `sha256:${DIGEST}` }]) {
+      expect(gate(clause, '4242').status, JSON.stringify(clause)).not.toBe(0);
+    }
+  }, 30_000);
+
+  it('arm WITH restores into the fresh database: after PostgreSQL starts, before the preflight migrates, before LIVE, on a dry run too', () => {
+    const restore = at(RESTORE);
+    expect(restore).toBeGreaterThan(at('Start PostgreSQL 16 and the independent executor'));
+    expect(restore, 'the preflight migrates: the store must already be there').toBeLessThan(at("'Preflight: durable store, executor, attestation, sandbox, in-sandbox git'"));
+    expect(restore).toBeLessThan(at("'LIVE: run the first real Julius mission'"));
+    expect(header(RESTORE)).toContain("\n        if: success() && steps.learning_arm.outputs.arm == 'WITH'\n");
+    expect(header(RESTORE), 'a dry run proves the restore for free').not.toContain('confirm_live');
+    expect(header(RESTORE)).toContain('GH_TOKEN: ${{ github.token }}');
+    expect(header(RESTORE), 'restoring needs no provider credential').not.toMatch(/secrets\./u);
+    // THE DATABASE COMMANDS ARE THE STORE SCRIPT'S, the file the round trip runs; its flags are pinned in its own test.
+    expect(stepScript(RESTORE)).toContain('JULIUS_PG_CONTAINER=julius-postgres ./.github/julius-learning-store.sh restore "$dump" "$WITHOUT_JULIUS_RUN" "$REGISTRATION_DIGEST"');
+    expect(stepScript(RESTORE), 'and no restore of its own beside it').not.toMatch(/pg_restore|docker exec|docker cp/u);
+  });
+
+  it('arm WITH restores the store its WITHOUT run recorded, and refuses every other', () => {
+    const restoreWith = (mutate: (stub: string) => void): number => {
+      const stub = mkdtempSync(join(tmpdir(), 'julius-learning-restore-'));
+      const job = mkdtempSync(join(tmpdir(), 'julius-learning-job-'));
+      const bin = join(stub, 'bin');
+      for (const dir of [bin, join(stub, 'julius-learning-store'), join(stub, 'julius-live-evidence')]) mkdirSync(dir);
+      const archive = Buffer.from('PGDMP\0archive');
+      writeFileSync(join(stub, 'julius-learning-store', 'julius.pgdump'), archive);
+      const record = ['learning_store_version=1', `julius_run_id=${WITHOUT}`, 'workflow_run_id=4242', `commit=${SHA}`,
+        `dump_sha256=${createHash('sha256').update(archive).digest('hex')}`, 'dump_bytes=13', 'dump_format=pg_dump_custom_uncompressed', ''].join('\n');
+      writeFileSync(join(stub, 'julius-learning-store', 'store-manifest.txt'), record);
+      writeFileSync(join(stub, 'julius-live-evidence', 'learning-store.txt'), record);
+      writeFileSync(join(stub, 'julius-live-evidence', 'bundle-manifest.txt'), `manifest_version=1\nmode=paid\njulius_run_id=${WITHOUT}\n`);
+      writeFileSync(join(stub, 'run.txt'), `111 ${SHA} workflow_dispatch success\n`);
+      writeFileSync(join(stub, 'artifact.id'), '901\n');
+      writeFileSync(join(stub, 'runs'), '1\n');
+      writeFileSync(join(stub, 'state'), 'COMPLETED\n');
+      writeFileSync(join(stub, 'record'), '1\n');
+      writeFileSync(join(stub, 'occupied'), '0\n');
+      // The step runs the store script from the job's checkout, so the job holds it, byte for byte.
+      mkdirSync(join(job, '.github'));
+      writeFileSync(join(job, '.github', 'julius-learning-store.sh'), readFileSync(join(ROOT, '.github', 'julius-learning-store.sh')), { mode: 0o755 });
+      writeFileSync(join(bin, 'gh'), ['#!/usr/bin/env bash', 'case "$2" in',
+        '  */runs/999) echo 111;;', '  */runs/4242) cat "$STUB/run.txt";;', '  */runs/4242/artifacts?name=*) cat "$STUB/artifact.id";;',
+        '  */zip) echo zip;;', '  *) exit 9;;', 'esac'].join('\n'), { mode: 0o755 });
+      // unzip: the artifact named by the zip's base name, from the stub.
+      writeFileSync(join(bin, 'unzip'), ['#!/usr/bin/env bash', 'mkdir -p "$4" && cp -R "$STUB/$(basename "$2" .zip)/." "$4/"'].join('\n'), { mode: 0o755 });
+      // docker: the paid job's container, as the store script reaches it (`docker exec -i … julius-postgres <tool> …`).
+      writeFileSync(join(bin, 'docker'), ['#!/usr/bin/env bash', 'case "$*" in',
+        '  *"pg_dump --version"*) echo "pg_dump (PostgreSQL) 16.4";;', '  *"SHOW server_version_num"*) echo 160004;;',
+        '  *information_schema.schemata*) cat "$STUB/occupied";;',
+        '  *pg_restore*) cat > /dev/null; [ -f "$STUB/restore.fails" ] && exit 1; exit 0;;',
+        '  *"count(*) FROM relay_wonderland.julius_runs"*) cat "$STUB/runs";;', '  *"SELECT state FROM"*) cat "$STUB/state";;',
+        '  *julius.learning.arm.recorded*) cat "$STUB/record";;', '  *) exit 9;;', 'esac'].join('\n'), { mode: 0o755 });
+      mutate(stub);
+      return run(stepScript(RESTORE), job, {
+        PATH: `${bin}:${process.env.PATH ?? ''}`, STUB: stub, GH_TOKEN: 'stub', PGPASSWORD: 'x', PGUSER: 'julius', PGDATABASE: 'julius',
+        GITHUB_REPOSITORY: 'owner/repo', GITHUB_RUN_ID: '999', GITHUB_SHA: SHA, RUNNER_TEMP: mkdtempSync(join(tmpdir(), 'julius-rt-')),
+        GITHUB_STEP_SUMMARY: join(job, 'summary.md'), WITHOUT_RUN: '4242', WITHOUT_JULIUS_RUN: WITHOUT, REGISTRATION_DIGEST: DIGEST,
+      });
+    };
+    const edit = (file: string, from: RegExp, to: string) => (stub: string): void => {
+      const path = join(stub, file);
+      writeFileSync(path, readFileSync(path, 'utf8').replace(from, to));
+    };
+    expect(restoreWith(() => undefined), 'the store its WITHOUT run recorded').toBe(0);
+    for (const [label, mutate] of [
+      ['another commit', edit('run.txt', /^111 1+/u, `111 ${'2'.repeat(40)}`)],
+      ['another workflow', edit('run.txt', /^111/u, '112')],
+      ['a WITHOUT run that failed', edit('run.txt', /success/u, 'failure')],
+      ['no single unexpired store artifact', edit('artifact.id', /901/u, 'none')],
+      ['bytes other than the recorded ones', (stub: string) => writeFileSync(join(stub, 'julius-learning-store', 'julius.pgdump'), 'PGDMP\0tampered')],
+      ['a digest its scanned evidence does not record', edit('julius-live-evidence/learning-store.txt', /dump_sha256=[0-9a-f]+/u, `dump_sha256=${'0'.repeat(64)}`)],
+      ['a store of another Julius run', edit('julius-learning-store/store-manifest.txt', /julius_run_id=\S+/u, 'julius_run_id=run:bbbbbbbbbbbbbbbbbbbbbbb2')],
+      ['a WITHOUT bundle that was not paid', edit('julius-live-evidence/bundle-manifest.txt', /mode=paid/u, 'mode=preflight')],
+      ['a target that is not empty', edit('occupied', /0/u, '1')],
+      ['a failed restore', (stub: string) => writeFileSync(join(stub, 'restore.fails'), '')],
+      ['a store of two runs', edit('runs', /1/u, '2')],
+      ['a WITHOUT run that did not complete', edit('state', /COMPLETED/u, 'FAILED')],
+      ['no WITHOUT record under this registration', edit('record', /1/u, '0')],
+    ] as const) expect(restoreWith(mutate), label).not.toBe(0);
+  }, 60_000);
+
+  it('arm WITHOUT exports only after LIVE succeeded, scans before it uploads, and records the digest in its evidence', () => {
+    expect(header(DUMP)).toContain("\n        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.live_mission.outcome == 'success' && steps.learning_arm.outputs.arm == 'WITHOUT'\n");
+    const dump = stepScript(DUMP);
+    // THE DATABASE COMMANDS ARE THE STORE SCRIPT'S (restorable, uncompressed, read back whole, the record found in it),
+    // with the rendering kept where the scan reads it; the step adds only what GitHub knows.
+    expect(dump).toContain('JULIUS_PG_CONTAINER=julius-postgres ./.github/julius-learning-store.sh dump julius-learning-store "$run_id" "$render/julius.sql"');
+    expect(dump, 'and no dump of its own beside it').not.toMatch(/pg_dump|pg_restore|docker exec|docker cp/u);
+    expect(dump).toMatch(/echo "workflow_run_id=\$GITHUB_RUN_ID"\n\s*echo "commit=\$GITHUB_SHA"\n\s*\} >> julius-learning-store\/store-manifest\.txt/u);
+    expect(dump).toContain('cp julius-learning-store/store-manifest.txt julius-live-evidence/learning-store.txt');
+    expect(header(SCAN)).toContain("\n        if: success() && steps.learning_store.outcome == 'success'\n");
+    const upload = workflow.split('- uses: actions/upload-artifact').find((block) => block.includes('name: julius-learning-store\n')) ?? '';
+    expect(upload).toContain("if: success() && steps.learning_store_scan.outcome == 'success'\n");
+    expect(upload).toContain('if-no-files-found: error');
+    expect(upload).toContain('retention-days: 30');
+    expect(at("'LIVE: run the first real Julius mission'")).toBeLessThan(at(DUMP));
+    expect(at(DUMP)).toBeLessThan(at(SCAN));
+    expect(at(SCAN), 'scanned before it can leave').toBeLessThan(workflow.indexOf('name: julius-learning-store\n'));
+    expect(workflow, 'the store never rides in the evidence bundle').not.toMatch(/julius-live-evidence\/\S*pgdump/u);
+  });
+
+  it('the store scan is the evidence scan’s own rules: the same shape pattern, the same needles, the same values', () => {
+    const evidence = stepScript(EVIDENCE_SCAN);
+    const store = stepScript(SCAN);
+    const shapes = (script: string, target: string): string[] =>
+      [...script.matchAll(new RegExp(`grep -r[a-zA-Z]*E[a-zA-Z]* '([^']+)' ${target}`, 'gu'))].map((match) => match[1]!);
+    const pattern = [...new Set(shapes(evidence, 'julius-live-evidence'))];
+    expect(pattern, 'the evidence scan has one shape pattern').toHaveLength(1);
+    expect(shapes(store, 'julius-learning-store')).toEqual(pattern);
+    const needles = (script: string): string[] => script.split('\n').filter((line) => line.startsWith('for value in ') || line.startsWith('printf \'%s\' "$SCOPED"'));
+    expect(needles(store)).toHaveLength(2);
+    expect(needles(store)).toEqual(needles(evidence));
+    const values = (name: string): string[] => header(name).split('\n').filter((line) => /^ {10}[A-Z_]+: /u.test(line)).sort();
+    expect(values(SCAN)).toEqual(values(EVIDENCE_SCAN));
+  });
+
+  it('the store scan refuses a credential in the archive or its rendering, deletes the store, and says so in the evidence', () => {
+    const scan = (archive: string, rendering: string | null): { status: number; kept: boolean; said: string } => {
+      const job = mkdtempSync(join(tmpdir(), 'julius-learning-scan-'));
+      const temp = mkdtempSync(join(tmpdir(), 'julius-rt-'));
+      for (const dir of [join(job, 'julius-learning-store'), join(job, 'julius-live-evidence'), join(temp, 'julius-learning-store-render')]) mkdirSync(dir);
+      writeFileSync(join(job, 'julius-learning-store', 'julius.pgdump'), Buffer.from(`PGDMP\0\0${archive}\0tail`));
+      if (rendering !== null) writeFileSync(join(temp, 'julius-learning-store-render', 'julius.sql'), `${rendering}\n`);
+      writeFileSync(join(job, 'julius-live-evidence', 'learning-store.txt'), 'dump_sha256=0\n');
+      const status = run(stepScript(SCAN), job, {
+        RUNNER_TEMP: temp, EXECUTOR_ROOT: 'executor-root-value-0001', DB_PASSWORD: 'db-password-value-0001',
+        SCOPED: '{"execute":"Xk7Qm2Rv9TzLbN4pAeWs6YcHgJdF1uOi3ZrKxVtB0nM"}', OPENAI_API_KEY: '', ANTHROPIC_API_KEY: '',
+        CLAUDE_CODE_OAUTH_TOKEN: '', XAI_API_KEY: '',
+      });
+      expect(existsSync(join(temp, 'julius-learning-store-render')), 'the rendering never outlives the step').toBe(false);
+      return { status, kept: existsSync(join(job, 'julius-learning-store')), said: readFileSync(join(job, 'julius-live-evidence', 'learning-store.txt'), 'utf8') };
+    };
+    expect(scan('COPY relay_wonderland.julius_runs', 'COPY relay_wonderland.julius_runs (run_id) FROM stdin;'))
+      .toEqual({ status: 0, kept: true, said: 'dump_sha256=0\n' });
+    const refused = { status: 1, kept: false, said: 'learning_store=REFUSED_BY_SCAN\n' };
+    expect(scan(['fact sk-ant-', 'api03-AAAAAAAAAAAAAAAAAAAAAAAA end'].join(''), 'clean'), 'a vendor-key shape between NUL bytes').toEqual(refused);
+    expect(scan('clean', 'a row naming db-password-value-0001'), 'an exact value the job holds').toEqual(refused);
+    expect(scan('clean', 'Xk7Qm2Rv9TzLbN4pAeWs6YcHgJdF1uOi3ZrKxVtB0nM'), 'a derived scoped credential').toEqual(refused);
+    expect(scan('clean', null), 'no rendering, no upload').toEqual(refused);
+  }, 30_000);
 });
