@@ -1033,7 +1033,9 @@ describe('the mission itself is bounded and aimed away from this repository', ()
       }
       expect(code, `${mission}: the seeded stubs must FAIL the declared test command, or completion is free`).not.toBe(0);
     }
-  });
+    // ONE SPAWNED TEST RUN PER MISSION, so the cost grows with every mission added; the default 5 s timeout stopped fitting once the second diagnostic
+    // mission (whose seeded specification starts real child processes) was added, on a CI runner. A budget for the sum, not a weaker assertion.
+  }, 60_000);
 
   it("reads slice.txt by the rig's own rule, and fails the day the rig's rule changes", () => {
     // `rigSlicePaths` mirrors these lines; if they change, the mirror must change with them.
