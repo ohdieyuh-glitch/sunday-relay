@@ -1,0 +1,12 @@
+event_kind	task_id	worker_id	provider_id	outcome	usd_micros	duration_ms	input_tokens	output_tokens	safe_facts	occurred_at	run_id
+WORKER_SELECTED	run:f8467a9f4fe40e275496b86e:plan	prompt-architect-openai		SELECTED					{"role": "PROMPT_ARCHITECT", "adapterId": "openai-architect-live"}	2026-10-15 09:33:16.755-07	run:f8467a9f4fe40e275496b86e
+PROVIDER_SELECTED	run:f8467a9f4fe40e275496b86e:plan	prompt-architect-openai	openai	SELECTED					{}	2026-10-15 09:33:16.756-07	run:f8467a9f4fe40e275496b86e
+CONTEXT_COMPILED	run:f8467a9f4fe40e275496b86e:plan	prompt-architect-openai							{"truncated": false, "contentHash": "sha256:ba2f20acd6298a41505e2a7adc1d671aac0d18af69ba9b880b0e850e56e1259d", "characterCount": 234, "redactionCount": 0, "researchAnswerIncluded": null}	2026-10-15 09:33:16.924-07	run:f8467a9f4fe40e275496b86e
+DISPATCH	run:f8467a9f4fe40e275496b86e:plan	prompt-architect-openai	openai	COMPLETED		5	10	10	{"duplicate": false, "bindingDigest": null, "contractTaskId": null, "contractRevision": null}	2026-10-15 09:33:16.948-07	run:f8467a9f4fe40e275496b86e
+TASK_TOPOLOGY				READY					{"edges": 2, "roles": 3, "tasks": 3}	2026-10-15 09:33:16.967-07	run:f8467a9f4fe40e275496b86e
+WORKER_SELECTED	run:f8467a9f4fe40e275496b86e:plan:review	independent-reviewer-hermes		SELECTED					{"role": "INDEPENDENT_REVIEWER", "adapterId": "hermes-local-live"}	2026-10-15 09:33:16.979-07	run:f8467a9f4fe40e275496b86e
+PROVIDER_SELECTED	run:f8467a9f4fe40e275496b86e:plan:review	independent-reviewer-hermes	hermes	SELECTED					{}	2026-10-15 09:33:16.98-07	run:f8467a9f4fe40e275496b86e
+CONTEXT_COMPILED	run:f8467a9f4fe40e275496b86e:plan:review	independent-reviewer-hermes							{"truncated": false, "contentHash": "sha256:e9c35096949e9c00ee04164d1316fb8b352b65d7c49083ce5b2768af6534ea30", "characterCount": 234, "redactionCount": 0, "researchAnswerIncluded": null}	2026-10-15 09:33:17.172-07	run:f8467a9f4fe40e275496b86e
+DISPATCH	run:f8467a9f4fe40e275496b86e:plan:review	independent-reviewer-hermes	hermes	COMPLETED		5	10	10	{"duplicate": false, "bindingDigest": null, "contractTaskId": null, "contractRevision": null}	2026-10-15 09:33:17.191-07	run:f8467a9f4fe40e275496b86e
+VERIFICATION	run:f8467a9f4fe40e275496b86e:plan	independent-reviewer-hermes		ACCEPT					{"reasonCode": "TASK_VERIFIED", "criteriaMissing": 0}	2026-10-15 09:33:17.215-07	run:f8467a9f4fe40e275496b86e
+(10 rows)

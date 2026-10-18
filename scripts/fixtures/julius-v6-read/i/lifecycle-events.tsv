@@ -1,0 +1,5 @@
+run_id	sequence	task_id	event_type	approval_id	operation	decision	decided_by	reason_code	duplicate	worker_id	reservation_id	occurred_at
+run:f8467a9f4fe40e275496b86e	11	run:f8467a9f4fe40e275496b86e:plan	julius.worker.dispatched							prompt-architect-openai	reservation:run:f8467a9f4fe40e275496b86e:plan:1:1:budget	2026-10-15 09:33:16.934-07
+run:f8467a9f4fe40e275496b86e	24	run:f8467a9f4fe40e275496b86e:plan:review	julius.worker.dispatched							independent-reviewer-hermes	reservation:run:f8467a9f4fe40e275496b86e:plan:review:1:1:budget	2026-10-15 09:33:17.181-07
+run:f8467a9f4fe40e275496b86e	38	run:f8467a9f4fe40e275496b86e:build	julius.approval.requested	approval:dispatch:run:f8467a9f4fe40e275496b86e:run:f8467a9f4fe40e275496b86e:build:DISPATCH_WORKER:card:julius-live:1:gate-78aeb72bcadb1fc3	DISPATCH_WORKER			CARD_SCOPED_APPROVAL_REQUIRED	false			2026-10-15 09:33:17.244-07
+(3 rows)

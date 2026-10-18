@@ -1,0 +1,14 @@
+run_id	sequence	task_id	event_type	role	allocated_usd_micros	allocation_basis	share_usd_micros	remaining_usd_micros	allocation_policy	settled_usd_micros	cost_basis	estimated_usd_micros	billing_path	execution_usd_micros	reason	slot_refusal	reservation_id	occurred_at
+run:65bbe69f7725a5f0912acbac	8	run:65bbe69f7725a5f0912acbac:plan	julius.budget.allocated	PROMPT_ARCHITECT	700000	SHARED_POOL	500000	2000000	julius-allocation.v3									2026-10-15 09:33:02.36-07
+run:65bbe69f7725a5f0912acbac	10	run:65bbe69f7725a5f0912acbac:plan	julius.budget.reserved	PROMPT_ARCHITECT						300000							reservation:run:65bbe69f7725a5f0912acbac:plan:1:1:budget	2026-10-15 09:33:02.364-07
+run:65bbe69f7725a5f0912acbac	13	run:65bbe69f7725a5f0912acbac:plan	julius.budget.settled	PROMPT_ARCHITECT							UNKNOWN						reservation:run:65bbe69f7725a5f0912acbac:plan:1:1:budget	2026-10-15 09:33:02.375-07
+run:65bbe69f7725a5f0912acbac	21	run:65bbe69f7725a5f0912acbac:plan:review	julius.budget.allocated	INDEPENDENT_REVIEWER	700000	SHARED_POOL	500000	1700000	julius-allocation.v3									2026-10-15 09:33:03.018-07
+run:65bbe69f7725a5f0912acbac	23	run:65bbe69f7725a5f0912acbac:plan:review	julius.budget.reserved	INDEPENDENT_REVIEWER						300000							reservation:run:65bbe69f7725a5f0912acbac:plan:review:1:1:budget	2026-10-15 09:33:03.022-07
+run:65bbe69f7725a5f0912acbac	26	run:65bbe69f7725a5f0912acbac:plan:review	julius.budget.settled	INDEPENDENT_REVIEWER							UNKNOWN						reservation:run:65bbe69f7725a5f0912acbac:plan:review:1:1:budget	2026-10-15 09:33:03.03-07
+run:65bbe69f7725a5f0912acbac	43	run:65bbe69f7725a5f0912acbac:build	julius.budget.allocated	CODING_AGENT	700000	SHARED_POOL	500000	1400000	julius-allocation.v3									2026-10-15 09:33:03.131-07
+run:65bbe69f7725a5f0912acbac	45	run:65bbe69f7725a5f0912acbac:build	julius.budget.reserved	CODING_AGENT						300000							reservation:run:65bbe69f7725a5f0912acbac:build:2:1:budget	2026-10-15 09:33:03.136-07
+run:65bbe69f7725a5f0912acbac	49	run:65bbe69f7725a5f0912acbac:build	julius.budget.settled	CODING_AGENT						1000	PROVIDER_REPORTED						reservation:run:65bbe69f7725a5f0912acbac:build:2:1:budget	2026-10-15 09:33:03.144-07
+run:65bbe69f7725a5f0912acbac	57	run:65bbe69f7725a5f0912acbac:build:review	julius.budget.allocated	INDEPENDENT_REVIEWER	400000	SHARED_POOL	200000	1399000	julius-allocation.v3									2026-10-15 09:33:03.182-07
+run:65bbe69f7725a5f0912acbac	59	run:65bbe69f7725a5f0912acbac:build:review	julius.budget.reserved	INDEPENDENT_REVIEWER						300000							reservation:run:65bbe69f7725a5f0912acbac:build:review:1:1:budget	2026-10-15 09:33:03.185-07
+run:65bbe69f7725a5f0912acbac	62	run:65bbe69f7725a5f0912acbac:build:review	julius.budget.settled	INDEPENDENT_REVIEWER							UNKNOWN						reservation:run:65bbe69f7725a5f0912acbac:build:review:1:1:budget	2026-10-15 09:33:03.19-07
+(12 rows)

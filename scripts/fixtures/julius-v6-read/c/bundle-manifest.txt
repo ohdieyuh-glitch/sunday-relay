@@ -1,0 +1,15 @@
+manifest_version=1
+source=local
+commit=6a4a11b5b053360a087555e6559e5c83efe20d22
+tree=c287fae28e2e55c7151a991462460ec8e5ea82ca
+tracked_changes=0
+mode=paid
+mode_basis=launcher_declared
+julius_run_id=run:65bbe69f7725a5f0912acbac
+workflow_run_id=none
+workflow_run_attempt=none
+workflow_ref=none
+event=none
+ref=none
+github_sha=none
+produced_at=2026-10-15T16:40:10Z

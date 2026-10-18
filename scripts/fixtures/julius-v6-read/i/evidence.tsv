@@ -1,0 +1,4 @@
+evidence_id	evidence_type	status	safe_summary	occurred_at	run_id	task_id	integrity_hash	artifact_ref
+run:f8467a9f4fe40e275496b86e:plan:1:0	ARTIFACT	PASSED	Plan written.	2026-10-15 09:33:16.937-07	run:f8467a9f4fe40e275496b86e	run:f8467a9f4fe40e275496b86e:plan		
+run:f8467a9f4fe40e275496b86e:plan:review:1:0	REVIEW_FINDING	PASSED	No blocking findings.	2026-10-15 09:33:17.184-07	run:f8467a9f4fe40e275496b86e	run:f8467a9f4fe40e275496b86e:plan:review		
+(2 rows)
