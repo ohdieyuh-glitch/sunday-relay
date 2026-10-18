@@ -469,7 +469,15 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 			AnimIn.HeadingDeg = static_cast<float>(Facing.Yaw);
 			AnimIn.DesiredHeadingDeg = AnimSpeed >= MinMovingSpeedUu ? R.TargetYaw : AnimIn.HeadingDeg;
 			const RelayDogStride::FDogPose& AnimPose = R.Anim.Update(AnimIn);
-			Body->WearCanonicalPose(RelayDogPresentation::ComposeWornPose(AnimPose, 0.0f, 0.0f));
+			// STANDING still keeps the figure's own frozen idle (founder-confirmed r16reh16o: the other Dog stands still); the Dog's pose is worn while it moves or settles
+			if (AnimSpeed >= MinMovingSpeedUu || AnimPose.GaitWeight > 0.02f)
+			{
+				Body->WearCanonicalPose(RelayDogPresentation::ComposeWornPose(AnimPose, 0.0f, 0.0f));
+			}
+			else if (Body->IsGaitDrivenExternally())
+			{
+				Body->ReleaseCanonicalGait();
+			}
 		}
 		else if (Body->IsGaitDrivenExternally())
 		{
