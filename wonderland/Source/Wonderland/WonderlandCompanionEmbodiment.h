@@ -958,6 +958,7 @@ private:
 	bool bPlantedNoFloat = false;
 	bool bFreezeIdleWhenStill = false;
 	float IdleFreeze = 0.0f;   // 0 = idle clocks run, 1 = stopped
+	float ActivityPhaseLive = 0.0f;   // the activity clock that NEVER freezes: blink and flame twinkle read it, so a frozen figure can neither hold its eyes shut nor stop its fire
 	FWonderlandWornPose WornPose;
 
 	/**

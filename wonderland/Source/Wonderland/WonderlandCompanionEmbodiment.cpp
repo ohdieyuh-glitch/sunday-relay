@@ -3523,9 +3523,11 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		const float FreezeWant = (bFreezeIdleWhenStill && !bGaitDrivenExternally && !WornPose.bValid && GroundSpeedUU < 15.0f && GaitWeight < 0.08f) ? 1.0f : 0.0f;
 		IdleFreeze = FMath::FInterpTo(IdleFreeze, FreezeWant, FreezeDt, FreezeWant > IdleFreeze ? 2.5f : 8.0f);
 		ActivityPhase += FreezeDt * ActivityRate * (1.0f - IdleFreeze);
+		ActivityPhaseLive += FreezeDt * ActivityRate;
 		LastAnimateSeconds = TimeSeconds;
 	}
 	const float ActivityTime = ActivityPhase;
+	const float ActivityTimeLive = ActivityPhaseLive;   // blink + twinkle only (never frozen by IdleFreeze)
 
 	// ---------------------------------------------------------------- THE GAIT, MEASURED RATHER THAN TIMED
 	//
@@ -3936,7 +3938,7 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		case EWonderlandCompanionMotion::Blink:
 		{
 			// A 0.14 s squash every 5.2 s, offset per companion so the two never blink together.
-			const float Cycle = FMath::Fmod(ActivityTime + Phase * 5.2f, 5.2f);
+			const float Cycle = FMath::Fmod(ActivityTimeLive + Phase * 5.2f, 5.2f);
 			const float Squash = Cycle < 0.14f ? FMath::Lerp(0.12f, 1.0f, FMath::Abs(Cycle - 0.07f) / 0.07f) : 1.0f;
 			Pivot->SetRelativeScale3D(FVector(1.0, 1.0, Squash));
 			break;
@@ -3956,9 +3958,9 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			// into a visible beat -- which is the tell that gave the old one away as an animation.
 			const float Seed = Part.A * 7.13f + Phase * 3.7f;
 			const float Flicker =
-				  0.55f * FMath::Sin(2.0f * PI * (ActivityTime / 0.37f + Seed))
-				+ 0.30f * FMath::Sin(2.0f * PI * (ActivityTime / 0.19f + Seed * 2.3f))
-				+ 0.15f * FMath::Sin(2.0f * PI * (ActivityTime / 0.83f + Seed * 0.7f));
+				  0.55f * FMath::Sin(2.0f * PI * (ActivityTimeLive / 0.37f + Seed))
+				+ 0.30f * FMath::Sin(2.0f * PI * (ActivityTimeLive / 0.19f + Seed * 2.3f))
+				+ 0.15f * FMath::Sin(2.0f * PI * (ActivityTimeLive / 0.83f + Seed * 0.7f));
 			const float Lick = FMath::Clamp(0.5f + 0.5f * Flicker, 0.0f, 1.0f);
 			// Thin as it climbs, broad as it falls back: the volume is roughly held, and holding it is what stops
 			// the tuft pumping like a bellows.
