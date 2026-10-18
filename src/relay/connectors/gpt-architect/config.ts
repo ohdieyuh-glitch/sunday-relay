@@ -11,7 +11,20 @@
  * than inventing a second switch.
  */
 
+/**
+ * The reasoning-effort levels a mission may declare for the Prompt Architect. The same five names
+ * the mission contract allows (`JULIUS_ROLE_EFFORT_LEVELS`) and the Coding Agent SDK accepts; a
+ * parity test holds the three lists equal.
+ */
+export type ArchitectReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 export interface GptArchitectConfig {
+  /**
+   * The reasoning effort THIS MISSION declared, or absent. Absent is the default and sends no
+   * `reasoning` field at all, so every request is byte-for-byte what it was before this field existed.
+   * It is never read from the environment: only the mission contract declares it.
+   */
+  readonly reasoningEffort?: ArchitectReasoningEffort;
   readonly apiKeyPresent: boolean;
   readonly model: string | null;
   readonly liveMode: boolean;

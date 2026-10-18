@@ -18,7 +18,8 @@
  */
 
 import { coderAttemptDeadlineMs } from '../hosted-coding-agent/coder-envelope';
-import { architectOperativeTimeoutMs } from '../../src/relay/connectors/gpt-architect/config';
+import { architectOperativeTimeoutMs, type ArchitectReasoningEffort } from '../../src/relay/connectors/gpt-architect/config';
+import type { HostedEffort } from '../hosted-coding-agent/hosted-runner';
 import { JOB_BUDGET_MS, reviewerOperativeTimeoutMs } from '../reviewer-deadline';
 import { randomUUID } from 'node:crypto';
 import {
@@ -354,6 +355,10 @@ export function resolveLiveWorkers(options: {
    * environment's default stands.
    */
   readonly architectMaxOutputTokens?: number | null;
+  /** The mission contract's `limits.architectEffort`, when it declares one; absent changes nothing. */
+  readonly architectEffort?: ArchitectReasoningEffort | null;
+  /** The mission contract's `limits.coderEffort`, when it declares one; absent changes nothing. */
+  readonly coderEffort?: HostedEffort | null;
   /**
    * The mission's sealed research policy, handed to every worker so each is TOLD
    * what it may ask for. The entrypoint passes the same function to the research
@@ -383,12 +388,16 @@ export function resolveLiveWorkers(options: {
    */
   const envArchitectConfig = readGptArchitectConfig(options.env);
   const declaredCeiling = options.architectMaxOutputTokens;
-  const architectConfig = typeof declaredCeiling === 'number'
+  const ceilingConfig = typeof declaredCeiling === 'number'
       && Number.isInteger(declaredCeiling)
       && declaredCeiling > 0
       && declaredCeiling <= ARCHITECT_OUTPUT_TOKEN_RESERVATION
     ? { ...envArchitectConfig, maxOutputTokens: declaredCeiling }
     : envArchitectConfig;
+  // The declared effort is carried only when the contract named one of the five levels.
+  const architectConfig = options.architectEffort != null
+    ? { ...ceilingConfig, reasoningEffort: options.architectEffort }
+    : ceilingConfig;
   const architectReadiness = evaluateReadiness(architectConfig);
   const hermes = loadHermesConfig(options.env);
   const requested = {
@@ -471,6 +480,7 @@ export function resolveLiveWorkers(options: {
         // child's environment; `hostedChildEnv` omits the variable entirely.
         apiKey: authMode.ok && authMode.mode === 'CLAUDE_SUBSCRIPTION' ? '' : options.env[HOSTED_API_KEY_ENV] ?? '',
         ...(authMode.ok ? { authMode: authMode.mode } : {}),
+        ...(options.coderEffort == null ? {} : { effort: options.coderEffort }),
         requestedModel: requested.codingModel ?? '', workspacePath: options.workspacePath,
         testCommand: options.testCommand, shell: options.shell as ShellEffectPort,
         ...(options.researchPolicyFor === undefined ? {} : { researchPolicyFor: options.researchPolicyFor }),

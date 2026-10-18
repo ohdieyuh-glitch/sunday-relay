@@ -19,6 +19,7 @@ import { dominantTurnModel, hostedServedModel, hostedServedModelVerdict, type Ho
 import {
   loadHostedQuery,
   runHostedCodingAgent,
+  type HostedEffort,
   type HostedQueryFn,
   type HostedRunOutcome,
 } from '../hosted-coding-agent/hosted-runner';
@@ -349,6 +350,8 @@ export function createClaudeCodeCodingAgentProvider(input: {
    * `CLAUDE_SUBSCRIPTION`.
    */
   readonly authMode?: ClaudeAuthMode;
+  /** The mission's declared coder effort; absent changes nothing. Forwarded to the runner. */
+  readonly effort?: HostedEffort;
 }): JuliusCodingAgentProvider {
   const run = input.run ?? runHostedCodingAgent;
   const loadQuery = input.queryLoader ?? loadHostedQuery;
@@ -409,6 +412,7 @@ export function createClaudeCodeCodingAgentProvider(input: {
         apiKey: input.apiKey,
         requestedModel: input.requestedModel,
         ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
+        ...(input.effort === undefined ? {} : { effort: input.effort }),
         limits,
         now: nowIso,
         ...(signal === undefined ? {} : {
