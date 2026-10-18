@@ -1,7 +1,7 @@
 name: Julius real sibling infrastructure
 on:
   pull_request:
-    paths: ['src/relay/mission/julius/**','src/relay/persistence/**','src/relay/workspace/julius-tools/**','scripts/julius-*','.github/julius-*','.github/wait-for-executor.sh','.github/workflows/julius-real-infra.yml','.github/workflows/julius-first-live-mission.yml','package*.json']
+    paths: ['src/relay/mission/julius/**','src/relay/persistence/**','relay-bridge/**','src/relay/workspace/julius-tools/**','scripts/julius-*','.github/julius-*','.github/wait-for-executor.sh','.github/workflows/julius-real-infra.yml','.github/workflows/julius-first-live-mission.yml','package*.json']
   workflow_dispatch:
 permissions:
   contents: read
@@ -350,9 +350,16 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           JULIUS_REAL_POSTGRES: '1'
+          # DECISION C (C-10): the learning store round trip dumps and restores with the server's own major. The
+          # runner image's PostgreSQL 16 client lives here; a missing one FAILS the suite by name, never todo.
+          JULIUS_TEST_PG_BINDIR: /usr/lib/postgresql/16/bin
         run: |
           set -euo pipefail
           : "${JULIUS_TEST_DATABASE_URL:?the throwaway-database step exports it}"
+          # One tool per line: set -e stops only on the LAST command of an && list.
+          "$JULIUS_TEST_PG_BINDIR/pg_dump" --version
+          "$JULIUS_TEST_PG_BINDIR/pg_restore" --version
+          "$JULIUS_TEST_PG_BINDIR/psql" --version
           # ROW 13(iii): the three suites gated only on a test database run here too, under the same todo gate.
           npx vitest run real-postgres julius-live-chain.e2e julius-recovery-drill julius-drill-support --reporter=default --reporter=json --outputFile=/tmp/julius-real-postgres.json
           node --input-type=module -e '
@@ -426,7 +433,7 @@ jobs:
                 failed += 1;
                 continue;
               }
-              console.log(`${id}: ${row.verdict} - ${row.capabilityBasis}`);
+              console.log(`${id}: capability ${row.capability} (mission axis UNKNOWN: no bundle) - ${row.capabilityBasis}`);
             }
             if (failed > 0) process.exit(1);
           '
@@ -503,3 +510,337 @@ jobs:
         run: |
           docker ps -aq --filter 'label=julius.sandbox' | xargs -r docker rm -f 2>/dev/null || true
           docker rm -f julius-real-infra-pg 2>/dev/null || true
+  learning-store-container:
+    # DECISION C (the C7 zero-spend dry run, finding G1): THE LEARNING STORE'S CONTAINER PATH, ON REAL DOCKER, ON EVERY
+    # RELEVANT PR. A learning pair's two arms reach their PostgreSQL only through
+    # `JULIUS_PG_CONTAINER=julius-postgres ./.github/julius-learning-store.sh` (arm WITHOUT's dump, arm WITH's restore),
+    # that is `docker exec -i` into the container the arm starts. Before this job nothing ran that launcher against a
+    # real daemon (scripts/julius-learning-store.test.ts pins its printed prefix; the real-PostgreSQL round trip runs the
+    # host launcher), so its first real run would have been paid WITHOUT-1's dump, AFTER LIVE had spent, and a failure
+    # there leaves WITH-1 nothing to restore.
+    #
+    # THE ARM'S OWN STEPS, read out of julius-first-live-mission.yml by their ids (learning_store, learning_store_scan,
+    # learning_restore), run against a julius-postgres started with the arm's own lines, on a store whose schema the
+    # repository's migrate() builds. Arm WITHOUT dumps and scans it; this job saves it as upload-artifact would (the
+    # directory's contents, zipped); arm WITH's restore fetches it through a `gh` SHIM that answers only those reads,
+    # from those zips. The restore must REFUSE the store while its WITHOUT bundle is unbound (its mode is not paid) and
+    # RESTORE it once the bundle is paid and digest-bound; then the store script's own refusals must hold over the same
+    # launcher. Every GitHub fact here is SYNTHETIC and says so; nothing here is evidence of a paid run.
+    #
+    # ZERO SPEND BY CONSTRUCTION: no `environment:`, no secret anywhere in this job, no token in any step's env, no
+    # provider, no executor, no LIVE. Its only network is npm ci and the PostgreSQL image pull.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PGUSER: julius
+      PGDATABASE: julius
+      # SYNTHETIC: the WITHOUT run this job plays, by a workflow run id no real run has, and its Julius run id.
+      SYN_WITHOUT_RUN: '900000000001'
+      SYN_WITHOUT_JULIUS_RUN: 'run:c10c10c10c10c10c10c10c10'
+      SYN_WORKFLOW_ID: '999000001'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: '22', cache: npm }
+      - run: npm ci
+      - name: Create the ephemeral credentials, as the arm does
+        id: identity
+        run: ./.github/julius-live-identity.sh
+      - name: Start PostgreSQL 16 as julius-postgres, with the arm's own lines
+        env:
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: |
+          set -euo pipefail
+          # THE ARM'S LINES, from .github/julius-live-executor.sh: its PostgreSQL half (the executor half is not the
+          # store's, and is not started). Each is checked against that file first, so a drift fails here, not in a paid job.
+          for line in \
+            'pg_port=${JULIUS_LIVE_PG_PORT:-5432}' \
+            'docker run -d --name julius-postgres -p "127.0.0.1:${pg_port}:5432" \' \
+            '  -e POSTGRES_USER="$PGUSER" -e POSTGRES_PASSWORD="$PGPASSWORD" -e POSTGRES_DB="$PGDATABASE" postgres:16-bookworm' \
+            'for _ in $(seq 1 40); do docker exec julius-postgres pg_isready -U "$PGUSER" && break; sleep 1; done'; do
+            grep -qxF -- "$line" .github/julius-live-executor.sh || { echo "learning_store_container_launch_drift: $line" >&2; exit 1; }
+          done
+          pg_port=${JULIUS_LIVE_PG_PORT:-5432}
+          case "$pg_port" in ''|*[!0-9]*) echo "pg_port_refused:$pg_port" >&2; exit 1 ;; esac
+          docker run -d --name julius-postgres -p "127.0.0.1:${pg_port}:5432" \
+            -e POSTGRES_USER="$PGUSER" -e POSTGRES_PASSWORD="$PGPASSWORD" -e POSTGRES_DB="$PGDATABASE" postgres:16-bookworm
+          for _ in $(seq 1 40); do docker exec julius-postgres pg_isready -U "$PGUSER" && break; sleep 1; done
+          # This job uses the server at once, so it waits for the FINAL one, over TCP (#316): the image's init server
+          # answers on the socket only, just before it stops.
+          for _ in $(seq 1 60); do docker exec julius-postgres pg_isready -h 127.0.0.1 -p 5432 -U "$PGUSER" -d "$PGDATABASE" >/dev/null 2>&1 && break; sleep 1; done
+          docker exec julius-postgres pg_isready -h 127.0.0.1 -p 5432 -U "$PGUSER" -d "$PGDATABASE"
+      - name: Read the arm's own store steps out of julius-first-live-mission.yml
+        run: |
+          set -euo pipefail
+          for tool in jq unzip python3; do command -v "$tool" >/dev/null || { echo "learning_store_container_no_tool: $tool" >&2; exit 1; }; done
+          steps="$RUNNER_TEMP/learning-arm-steps"
+          mkdir -p "$steps"
+          # The step with that id: its `run: |` body as GitHub hands it to bash. The block is every line indented by its
+          # 10 spaces (or empty), less those spaces; it ends at the first line indented less.
+          for id in learning_store learning_store_scan learning_restore; do
+            node -e '
+              const fs = require("node:fs");
+              const [file, id, out] = process.argv.slice(1);
+              const text = fs.readFileSync(file, "utf8");
+              const marker = `\n        id: ${id}\n`;
+              const at = text.indexOf(marker);
+              if (at < 0 || text.indexOf(marker, at + 1) >= 0) { console.error(`learning_store_container_step_not_one: ${id}`); process.exit(1); }
+              const start = text.lastIndexOf("\n      - ", at);
+              const next = text.indexOf("\n      - ", at + 1);
+              const step = text.slice(start, next < 0 ? text.length : next);
+              const head = "\n        run: |\n";
+              const body = step.indexOf(head);
+              if (body < 0) { console.error(`learning_store_container_step_has_no_script: ${id}`); process.exit(1); }
+              const kept = [];
+              for (const line of step.slice(body + head.length).split("\n")) {
+                if (line.trim() !== "" && !line.startsWith(" ".repeat(10))) break;
+                kept.push(line.slice(10));
+              }
+              const script = kept.join("\n");
+              // An expression in the body is for GitHub to substitute, and this job cannot. It is spelled in two parts
+              // here, so that GitHub does not read this line as one.
+              if (script.includes("$" + "{{")) { console.error(`learning_store_container_step_has_an_expression: ${id}`); process.exit(1); }
+              fs.writeFileSync(out, `${script.trimEnd()}\n`);
+            ' .github/workflows/julius-first-live-mission.yml "$id" "$steps/$id.sh"
+          done
+          # THIS JOB PROVES THE CONTAINER PATH ONLY WHILE THE ARM TAKES IT.
+          grep -qF 'JULIUS_PG_CONTAINER=julius-postgres ./.github/julius-learning-store.sh dump ' "$steps/learning_store.sh"
+          grep -qF 'JULIUS_PG_CONTAINER=julius-postgres ./.github/julius-learning-store.sh restore ' "$steps/learning_restore.sh"
+          sha256sum "$steps"/*.sh
+      - name: 'SYNTHETIC arm WITHOUT: a store the repository''s migrate() builds, one COMPLETED run, its WITHOUT record'
+        env:
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: |
+          set -euo pipefail
+          for db in julius_ls_without julius_ls_with julius_ls_foreign; do
+            docker exec -e PGPASSWORD julius-postgres createdb -U "$PGUSER" "$db"
+          done
+          registration=$(printf '%s' 'SYNTHETIC julius-real-infra learning-store-container registration' | sha256sum | cut -d' ' -f1)
+          echo "SYN_REGISTRATION=$registration" >> "$GITHUB_ENV"
+          mkdir -p dist-relay-bridge
+          cat > dist-relay-bridge/learning-store-container.ts <<'TS'
+          // SYNTHETIC, for julius-real-infra.yml `learning-store-container` only; never evidence of a paid run.
+          //   LS_MODE=without   arm WITHOUT's store: the repository's migrate() on a fresh database, one COMPLETED run, and
+          //                     its WITHOUT record, written by recordJuliusLearningOutcome (the call the live entrypoint
+          //                     makes at a registered arm's end). No adapter, no provider, no dispatch.
+          //   LS_MODE=restored  what arm WITH's preflight does next on the restored store: migrateIfNeeded finds nothing
+          //                     missing, and the store holds the WITHOUT run alone.
+          import { createHash } from 'node:crypto';
+          import { Pool } from 'pg';
+          import { recordJuliusLearningOutcome } from '../relay-bridge/julius/live-composition';
+          import { createJuliusPostgresRuntimeStore } from '../relay-bridge/julius/postgres-store';
+          import { migrateIfNeeded } from '../scripts/julius-live-preflight-identity';
+
+          const need = (name: string): string => {
+            const value = process.env[name] ?? '';
+            if (value === '') throw new Error(`learning_store_container_missing: ${name}`);
+            return value;
+          };
+
+          async function main(): Promise<void> {
+            const mode = need('LS_MODE');
+            const runId = need('LS_RUN');
+            const pool = new Pool({ connectionString: need('LS_DATABASE_URL') });
+            try {
+              const migrated = await migrateIfNeeded(pool);
+              if (mode === 'without') {
+                if (migrated.alreadyPresent !== 0) throw new Error(`learning_store_container_not_fresh: ${String(migrated.alreadyPresent)} present`);
+                const projectId = 'prj-learning-store-container';
+                const missionId = 'mission:learning-store-container';
+                await pool.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1)', [projectId]);
+                await pool.query("INSERT INTO relay_wonderland.mission_contracts(mission_id,project_id,stage,canonical_hash,snapshot) VALUES($1,$2,'READY',$1,'{}'::jsonb)", [missionId, projectId]);
+                await pool.query(
+                  'INSERT INTO relay_wonderland.julius_runs(run_id,mission_id,project_id,state,runtime_version,card_revision,mission_contract_revision,project_brain_revision,created_at)'
+                  + " VALUES($1,$2,$3,'COMPLETED','julius-runtime.v1','card',1,0,now())", [runId, missionId, projectId]);
+                const outcome = await recordJuliusLearningOutcome({
+                  store: createJuliusPostgresRuntimeStore(pool), runId, projectId,
+                  registration: { registrationDigest: need('LS_REGISTRATION'), arm: 'WITHOUT', policy: { dimensions: ['repairs'], minimumRelativeImprovement: 0.1, minimumImprovedDimensions: 1 } },
+                  objectiveDigest: createHash('sha256').update('SYNTHETIC learning-store-container objective').digest('hex'),
+                  roles: ['CODING_AGENT', 'INDEPENDENT_REVIEWER', 'PROMPT_ARCHITECT'],
+                });
+                if (outcome.record !== 'RECORDED') throw new Error(`learning_store_container_unrecorded: ${outcome.record}`);
+                console.log(`SYNTHETIC arm WITHOUT store: migrations applied ${String(migrated.applied.length)}; ${runId} COMPLETED; its record ${outcome.record}`);
+              } else if (mode === 'restored') {
+                if (migrated.applied.length !== 0) throw new Error(`learning_store_container_restored_not_current: applied ${migrated.applied.join(',')}`);
+                const runs = (await pool.query<{ run_id: string; state: string }>('SELECT run_id, state FROM relay_wonderland.julius_runs')).rows;
+                if (runs.length !== 1 || runs[0]!.run_id !== runId || runs[0]!.state !== 'COMPLETED') throw new Error(`learning_store_container_restored_runs: ${JSON.stringify(runs)}`);
+                console.log(`restored store: migrations already current (${String(migrated.alreadyPresent)} present); it holds ${runId} COMPLETED, alone`);
+              } else {
+                throw new Error(`learning_store_container_mode_unknown: ${mode}`);
+              }
+            } finally {
+              await pool.end();
+            }
+          }
+
+          main().catch((error: unknown) => { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); });
+          TS
+          ./node_modules/.bin/esbuild dist-relay-bridge/learning-store-container.ts --bundle --platform=node --format=cjs \
+            --outfile=dist-relay-bridge/learning-store-container.cjs --external:@anthropic-ai/claude-agent-sdk --external:pg --log-level=warning
+          LS_DATABASE_URL="postgresql://$PGUSER:$PGPASSWORD@127.0.0.1:${JULIUS_LIVE_PG_PORT:-5432}/julius_ls_without" \
+            LS_MODE=without LS_RUN="$SYN_WITHOUT_JULIUS_RUN" LS_REGISTRATION="$registration" node dist-relay-bridge/learning-store-container.cjs
+      - name: 'Arm WITHOUT''s own dump and store scan, over the container launcher; the store saved as upload-artifact saves it'
+        env:
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+          PGDATABASE: julius_ls_without
+          EXECUTOR_ROOT: ${{ steps.identity.outputs.root }}
+          SCOPED: ${{ steps.identity.outputs.scoped }}
+          DB_PASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: |
+          set -euo pipefail
+          steps="$RUNNER_TEMP/learning-arm-steps"
+          arm="$RUNNER_TEMP/learning-arm-without"
+          saved="$RUNNER_TEMP/learning-saved"
+          rm -rf "$arm" "$saved"
+          mkdir -p "$arm/.github" "$saved"
+          # The arm runs the store script from its checkout: this one, byte for byte.
+          cp .github/julius-learning-store.sh "$arm/.github/julius-learning-store.sh"
+          cmp .github/julius-learning-store.sh "$arm/.github/julius-learning-store.sh"
+          # SYNTHETIC: the one line of LIVE's log the dump step reads, naming this job's WITHOUT run.
+          printf 'Run %s accepted in state READY; driving the Julius run loop.\n' "$SYN_WITHOUT_JULIUS_RUN" > "$arm/live-mission.log"
+          ( cd "$arm" && GITHUB_RUN_ID="$SYN_WITHOUT_RUN" GITHUB_STEP_SUMMARY="$arm/summary.md" \
+              bash --noprofile --norc -eo pipefail "$steps/learning_store.sh" ) > "$arm/dump.log" 2>&1 || { cat "$arm/dump.log"; exit 1; }
+          cat "$arm/dump.log"
+          grep -qx 'JULIUS_STORE_COMMAND container pg_dump --format=custom --compress=0 --no-password' "$arm/dump.log"
+          grep -qx 'JULIUS_STORE_COMMAND container pg_restore --file=- --no-password' "$arm/dump.log"
+          grep -qx "LEARNING_STORE_DUMPED julius_run_id=$SYN_WITHOUT_JULIUS_RUN dump_sha256=[0-9a-f]\{64\} dump_bytes=[0-9]*" "$arm/dump.log"
+          # The scan's provider needles are empty: this job holds no provider credential.
+          ( cd "$arm" && OPENAI_API_KEY='' ANTHROPIC_API_KEY='' CLAUDE_CODE_OAUTH_TOKEN='' XAI_API_KEY='' \
+              bash --noprofile --norc -eo pipefail "$steps/learning_store_scan.sh" ) > "$arm/scan.log" 2>&1 || { cat "$arm/scan.log"; exit 1; }
+          cat "$arm/scan.log"
+          grep -qxF 'learning store scan clean (shapes and exact values, over the archive and its rendering)' "$arm/scan.log"
+          # SAVED as upload-artifact saves a directory: its contents at the zip's root.
+          ( cd "$arm/julius-learning-store" && python3 -m zipfile -c "$saved/julius-learning-store.zip" . )
+          digest=$(sha256sum < "$arm/julius-learning-store/julius.pgdump" | cut -d' ' -f1)
+          echo "SYN_DUMP_SHA256=$digest" >> "$GITHUB_ENV"
+          echo "SYNTHETIC WITHOUT store saved: julius.pgdump sha256 $digest"
+      - name: 'Arm WITH''s own restore, through a SYNTHETIC GitHub: refused while the WITHOUT bundle is unbound, restored once it is paid'
+        env:
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: |
+          set -euo pipefail
+          export LS_STEPS="$RUNNER_TEMP/learning-arm-steps" LS_SAVED="$RUNNER_TEMP/learning-saved" LS_SHIM="$RUNNER_TEMP/learning-gh-shim"
+          rm -rf "$LS_SHIM"
+          mkdir -p "$LS_SHIM/bin"
+          : > "$LS_SHIM/calls.log"
+          # SYNTHETIC GitHub: `gh` answers exactly the reads arm WITH's restore makes, from this job's files, and refuses
+          # anything else (another endpoint, a field, an input, any method but GET). Real jq applies the step's filters.
+          cat > "$LS_SHIM/bin/gh" <<'SHIM'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          printf '%s\n' "$*" >> "$LS_SHIM/calls.log"
+          [ "${1:-}" = api ] || { echo 'gh_shim_refused: only gh api' >&2; exit 2; }
+          shift
+          endpoint='' filter=''
+          while [ "$#" -gt 0 ]; do
+            case "$1" in
+              --jq) filter=$2; shift 2 ;;
+              --method) [ "$2" = GET ] || { echo "gh_shim_refused: method $2" >&2; exit 2; }; shift 2 ;;
+              -*) echo "gh_shim_refused: flag $1" >&2; exit 2 ;;
+              *) [ -z "$endpoint" ] || { echo 'gh_shim_refused: two endpoints' >&2; exit 2; }; endpoint=$1; shift ;;
+            esac
+          done
+          api="repos/$GITHUB_REPOSITORY/actions"
+          case "$endpoint" in
+            "$api/runs/$GITHUB_RUN_ID")
+              body="{\"workflow_id\":$SYN_WORKFLOW_ID,\"head_sha\":\"$GITHUB_SHA\",\"event\":\"pull_request\",\"conclusion\":null}" ;;
+            "$api/runs/$SYN_WITHOUT_RUN")
+              body="{\"workflow_id\":$SYN_WORKFLOW_ID,\"head_sha\":\"$GITHUB_SHA\",\"event\":\"workflow_dispatch\",\"conclusion\":\"success\"}" ;;
+            "$api/runs/$SYN_WITHOUT_RUN/artifacts?name=julius-learning-store&per_page=100")
+              body='{"total_count":1,"artifacts":[{"id":9001,"name":"julius-learning-store","expired":false}]}' ;;
+            "$api/runs/$SYN_WITHOUT_RUN/artifacts?name=julius-live-evidence&per_page=100")
+              body='{"total_count":1,"artifacts":[{"id":9002,"name":"julius-live-evidence","expired":false}]}' ;;
+            "$api/artifacts/9001/zip") cat "$LS_SAVED/julius-learning-store.zip"; exit 0 ;;
+            "$api/artifacts/9002/zip") cat "$LS_SAVED/julius-live-evidence.zip"; exit 0 ;;
+            *) echo "gh_shim_refused: not a read this job answers: $endpoint" >&2; exit 2 ;;
+          esac
+          if [ -n "$filter" ]; then printf '%s' "$body" | jq -r "$filter"; else printf '%s\n' "$body"; fi
+          SHIM
+          chmod +x "$LS_SHIM/bin/gh"
+          # SYNTHETIC: arm WITHOUT's evidence bundle, as the restore reads it: the store record the dump step wrote, and
+          # a bundle manifest naming the run in the given mode. Saved as upload-artifact would save it.
+          evidence() {
+            local mode=$1 dir="$RUNNER_TEMP/learning-evidence-$1"
+            rm -rf "$dir"
+            mkdir -p "$dir"
+            cp "$RUNNER_TEMP/learning-arm-without/julius-live-evidence/learning-store.txt" "$dir/learning-store.txt"
+            echo 'SYNTHETIC: written by julius-real-infra learning-store-container. No paid run; no evidence of one.' > "$dir/SYNTHETIC.txt"
+            printf '%s\n' 'manifest_version=1' "mode=$mode" "julius_run_id=$SYN_WITHOUT_JULIUS_RUN" "workflow_run_id=$SYN_WITHOUT_RUN" \
+              'synthetic=julius-real-infra learning-store-container' > "$dir/bundle-manifest.txt"
+            rm -f "$LS_SAVED/julius-live-evidence.zip"
+            ( cd "$dir" && python3 -m zipfile -c "$LS_SAVED/julius-live-evidence.zip" . )
+          }
+          # One arm WITH job: a fresh directory holding the store script, the arm's restore step, its own log.
+          restored=0
+          restore_with() {
+            local label=$1 database=$2 dir="$RUNNER_TEMP/learning-arm-with-$1"
+            rm -rf "$dir"
+            mkdir -p "$dir/.github"
+            cp .github/julius-learning-store.sh "$dir/.github/julius-learning-store.sh"
+            restored=0
+            ( cd "$dir" && PATH="$LS_SHIM/bin:$PATH" PGDATABASE="$database" GITHUB_STEP_SUMMARY="$dir/summary.md" \
+                WITHOUT_RUN="$SYN_WITHOUT_RUN" WITHOUT_JULIUS_RUN="$SYN_WITHOUT_JULIUS_RUN" REGISTRATION_DIGEST="$SYN_REGISTRATION" \
+                bash --noprofile --norc -eo pipefail "$LS_STEPS/learning_restore.sh" ) > "$dir/restore.log" 2>&1 || restored=$?
+            echo "--- arm WITH restore, case $label: exit $restored"
+            cat "$dir/restore.log"
+          }
+          fail() { echo "learning_store_container_failed: $1" >&2; exit 1; }
+          schemas() { docker exec -e PGPASSWORD julius-postgres psql -X -U "$PGUSER" -d "$1" -At -c "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'relay_wonderland'"; }
+
+          # 1. UNBOUND. The WITHOUT bundle is not a paid one: the restore refuses it by the arm's rule, before the store
+          #    script runs, and the target is left empty.
+          evidence unknown
+          restore_with unbound julius_ls_with
+          log="$RUNNER_TEMP/learning-arm-with-unbound/restore.log"
+          [ "$restored" != 0 ] || fail 'an unbound WITHOUT bundle was restored'
+          grep -qF 'learning_store_without_bundle_unbound: the WITHOUT bundle does not name that paid run' "$log" || fail 'not refused as unbound'
+          if grep -q '^JULIUS_STORE_COMMAND ' "$log"; then fail 'the store script ran for an unbound bundle'; fi
+          [ "$(schemas julius_ls_with)" = 0 ] || fail 'the target is not empty after the refusal'
+
+          # 2. BOUND. The same store, its bundle paid and naming the run: restored over the container launcher, whole.
+          evidence paid
+          restore_with bound julius_ls_with
+          log="$RUNNER_TEMP/learning-arm-with-bound/restore.log"
+          [ "$restored" = 0 ] || fail 'a paid, digest-bound WITHOUT store was not restored'
+          grep -qx 'JULIUS_STORE_COMMAND container pg_restore --no-owner --no-privileges --single-transaction --exit-on-error --no-password --dbname=julius_ls_with' "$log" \
+            || fail 'the restore did not run over the container launcher'
+          grep -qxF "LEARNING_STORE_RESTORED without_workflow_run_id=$SYN_WITHOUT_RUN without_julius_run_id=$SYN_WITHOUT_JULIUS_RUN dump_sha256=$SYN_DUMP_SHA256" "$log" \
+            || fail 'the restore did not name the store it restored'
+          grep -qxF "dump_sha256=$SYN_DUMP_SHA256" "$RUNNER_TEMP/learning-arm-with-bound/julius-live-evidence/learning-restore.txt" || fail 'no restore record'
+          # And what arm WITH's preflight does next on it: the migration finds it current, and it holds that run alone.
+          LS_DATABASE_URL="postgresql://$PGUSER:$PGPASSWORD@127.0.0.1:${JULIUS_LIVE_PG_PORT:-5432}/julius_ls_with" \
+            LS_MODE=restored LS_RUN="$SYN_WITHOUT_JULIUS_RUN" node dist-relay-bridge/learning-store-container.cjs
+
+          # 3. THE STORE SCRIPT'S OWN REFUSAL, over the same launcher: the target now holds a run, so a second restore
+          #    into it is refused by name, before pg_restore runs.
+          restore_with occupied julius_ls_with
+          log="$RUNNER_TEMP/learning-arm-with-occupied/restore.log"
+          [ "$restored" != 0 ] || fail 'a restore into an occupied store passed'
+          grep -qF "julius_store_target_not_empty: the target already holds relay_wonderland (runs: $SYN_WITHOUT_JULIUS_RUN)" "$log" || fail 'not refused as occupied'
+          if grep -q '^JULIUS_STORE_COMMAND container pg_restore' "$log"; then fail 'pg_restore ran into an occupied store'; fi
+
+          # 4. AND AFTER A RESTORE: a store recorded under another registration is restored, then refused by name.
+          other=$(printf '%s' 'SYNTHETIC another registration' | sha256sum | cut -d' ' -f1)
+          status=0
+          PGDATABASE=julius_ls_foreign JULIUS_PG_CONTAINER=julius-postgres ./.github/julius-learning-store.sh restore \
+            "$RUNNER_TEMP/learning-arm-without/julius-learning-store/julius.pgdump" "$SYN_WITHOUT_JULIUS_RUN" "$other" > "$RUNNER_TEMP/learning-foreign.log" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/learning-foreign.log"
+          [ "$status" != 0 ] || fail 'a store of another registration passed'
+          grep -qF 'LEARNING_STORE_RESTORING dump_sha256=' "$RUNNER_TEMP/learning-foreign.log" || fail 'the foreign store was not restored before its check'
+          grep -qF 'learning_store_without_unrecorded: no WITHOUT record under this registration' "$RUNNER_TEMP/learning-foreign.log" || fail 'not refused as unrecorded'
+
+          # THE SHIM SAW READS ONLY: this run, the WITHOUT run, its two artifact listings, its two zips; each a GET.
+          echo '--- the SYNTHETIC GitHub reads'
+          cat "$LS_SHIM/calls.log"
+          [ -s "$LS_SHIM/calls.log" ] || fail 'the restore made no GitHub read'
+          if grep -vqE '^api repos/[^ ]+/actions/(runs/[0-9]+|runs/[0-9]+/artifacts\?name=julius-(learning-store|live-evidence)&per_page=100|artifacts/900[12]/zip)( --method GET)?( --jq .+)?$' "$LS_SHIM/calls.log"; then
+            fail 'a call other than the restore reads'
+          fi
+          echo 'LEARNING STORE CONTAINER PATH OK: dump, scan, save, refused unbound, restored bound, refused occupied, refused unrecorded.'
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f julius-postgres 2>/dev/null || true
+          rm -rf "$RUNNER_TEMP"/learning-* "$RUNNER_TEMP/julius-learning-store-render" dist-relay-bridge/learning-store-container.* 2>/dev/null || true
