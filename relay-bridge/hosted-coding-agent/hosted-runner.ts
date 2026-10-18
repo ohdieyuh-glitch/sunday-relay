@@ -54,6 +54,59 @@ export async function loadHostedQuery(): Promise<HostedQueryFn> {
   return mod.query as HostedQueryFn;
 }
 
+/* ------------------------------------------------------------------ the coder's self-test tool */
+
+export const HOSTED_SELF_TEST_SERVER = 'julius';
+export const HOSTED_SELF_TEST_TOOL = 'run_mission_test';
+/** The name the runtime gives an SDK-hosted tool: `mcp__<server>__<tool>`. The ONLY name beyond the file tools a run may allow. */
+export const HOSTED_SELF_TEST_TOOL_ID = `mcp__${HOSTED_SELF_TEST_SERVER}__${HOSTED_SELF_TEST_TOOL}`;
+
+/** What the harness lends the coder for diagnostics: run the mission's declared test once. Never throws; a refusal is a value. */
+export interface HostedSelfTestTool {
+  readonly maxCalls: number;
+  run(signal?: AbortSignal): Promise<{
+    readonly n: number; readonly passed: boolean; readonly exitCode: number | null; readonly refused: string | null; readonly outputTail: string;
+  }>;
+}
+
+/** The two SDK helpers a self-test tool needs, loaded the same indirect way as `query`. */
+export interface HostedSdkHelpers {
+  readonly createSdkMcpServer: (options: { name: string; version?: string; tools?: unknown[] }) => unknown;
+  readonly tool: (name: string, description: string, inputSchema: Record<string, never>, handler: (args: unknown, extra: unknown) => Promise<unknown>) => unknown;
+}
+
+/** Loads the SDK's tool helpers. Called only for a run that offers the self-test tool. */
+export async function loadHostedSdkHelpers(): Promise<HostedSdkHelpers> {
+  const dynamicImport = new Function('id', 'return import(id)') as (id: string) => Promise<unknown>;
+  const mod = await dynamicImport(HOSTED_SDK_PACKAGE) as { createSdkMcpServer?: unknown; tool?: unknown };
+  if (typeof mod.createSdkMcpServer !== 'function' || typeof mod.tool !== 'function') {
+    throw new Error('The hosted Coding Agent runtime does not expose its tool helpers.');
+  }
+  return { createSdkMcpServer: mod.createSdkMcpServer, tool: mod.tool } as HostedSdkHelpers;
+}
+
+/** The text the coder reads back. It says what the result is NOT, so a passing self-test is never mistaken for completion. */
+export function renderSelfTestResult(r: Awaited<ReturnType<HostedSelfTestTool['run']>>, maxCalls: number): string {
+  const head = r.refused !== null ? `Self-test ${r.n} of ${maxCalls}: NOT RUN (${r.refused}).`
+    : r.passed ? `Self-test ${r.n} of ${maxCalls}: PASSED (exit 0).`
+      : `Self-test ${r.n} of ${maxCalls}: FAILED (exit ${r.exitCode === null ? 'unknown' : String(r.exitCode)}).`;
+  return `${head} This is a diagnostic for you only; Julius runs the verification separately and decides completion.${r.outputTail === '' ? '' : `\n${r.outputTail}`}`;
+}
+
+/** The MCP server that offers exactly one tool, with no arguments. Returns the server config and the plain handler (for tests). */
+export function buildSelfTestServer(helpers: HostedSdkHelpers, selfTest: HostedSelfTestTool, signal: () => AbortSignal | undefined) {
+  const handler = async (): Promise<{ content: { type: 'text'; text: string }[]; isError: boolean }> => {
+    const result = await selfTest.run(signal());
+    return { content: [{ type: 'text', text: renderSelfTestResult(result, selfTest.maxCalls) }], isError: result.refused !== null };
+  };
+  const definition = helpers.tool(
+    HOSTED_SELF_TEST_TOOL,
+    "Run the mission's own test command once against your current edits and read the result. Takes no arguments. Diagnostic only: it does not complete or verify your work.",
+    {}, handler,
+  );
+  return { server: helpers.createSdkMcpServer({ name: HOSTED_SELF_TEST_SERVER, version: '1.0.0', tools: [definition] }), handler };
+}
+
 export type HostedRunOutcome =
   | {
     readonly kind: 'completed';
@@ -116,6 +169,9 @@ export type HostedRunOutcome =
 export type HostedEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface HostedRunInput {
+  /** The coder's self-test tool, when the mission offers one; needs `sdkHelpers`. Absent adds no tool and no server. */
+  readonly selfTestTool?: HostedSelfTestTool;
+  readonly sdkHelpers?: HostedSdkHelpers;
   /**
    * The reasoning effort THIS MISSION declared for the coder, or absent. Absent adds no `effort`
    * option, so the SDK call is exactly what it was before this field existed.
@@ -150,9 +206,11 @@ export const HOSTED_RUN_ADAPTER_ID = HOSTED_ADAPTER_ID;
  */
 export async function runHostedCodingAgent(input: HostedRunInput): Promise<HostedRunOutcome> {
   const limits = input.limits ?? DEFAULT_HOSTED_LIMITS;
+  if (input.selfTestTool !== undefined && input.sdkHelpers === undefined) throw new Error('hosted_self_test_needs_sdk_helpers');
   const envelope = compileHostedEnvelope({
     workspacePath: input.workspacePath,
     requestedModel: input.requestedModel,
+    ...(input.selfTestTool === undefined ? {} : { extraAllowedTools: [HOSTED_SELF_TEST_TOOL_ID] }),
     // The SAME limits the abort timer and the budget stop below use. Passing
     // them is what makes `maxTurns` an operative limit rather than a field.
     limits,
@@ -174,6 +232,10 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
    * in control, credential and workflow locations (`hosted-tool-authority.ts`).
    */
   const authority = juliusHostedToolAuthority({ workspacePath: input.workspacePath, signal: controller.signal });
+
+  const selfTestServer = input.selfTestTool === undefined
+    ? null
+    : buildSelfTestServer(input.sdkHelpers!, input.selfTestTool, () => controller.signal).server;
 
   let observation = emptyObservation();
   try {
@@ -222,6 +284,7 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
         hooks: { PreToolUse: [{ hooks: [authority] }] },
         ...(envelope.model !== null ? { model: envelope.model } : {}),
         ...(input.effort === undefined ? {} : { effort: input.effort }),
+        ...(selfTestServer === null ? {} : { mcpServers: { [HOSTED_SELF_TEST_SERVER]: selfTestServer } }),
       },
     });
 

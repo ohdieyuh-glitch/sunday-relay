@@ -236,6 +236,8 @@ export interface HostedEnvelope {
 export function compileHostedEnvelope(input: {
   workspacePath: string;
   requestedModel?: string | null;
+  /** Extra tool names the caller sanctions for this run (the coder's self-test tool). Absent adds nothing. */
+  extraAllowedTools?: readonly string[];
   /**
    * THE LIMITS THIS RUN WAS ACTUALLY GRANTED.
    *
@@ -252,7 +254,7 @@ export function compileHostedEnvelope(input: {
   return {
     cwd: input.workspacePath,
     model: requested,
-    allowedTools: [...HOSTED_ALLOWED_TOOLS],
+    allowedTools: [...HOSTED_ALLOWED_TOOLS, ...(input.extraAllowedTools ?? [])],
     disallowedTools: [...HOSTED_DISALLOWED_TOOLS],
     // Edits are applied without a prompt because a hosted run has no operator
     // to prompt. Containment is the tool restriction, the pinned cwd, the

@@ -77,6 +77,12 @@ export interface LiveMissionContractFile {
     readonly architectEffort?: JuliusRoleEffort;
     /** The Coding Agent's reasoning effort for THIS mission; absent adds no `effort` option. */
     readonly coderEffort?: JuliusRoleEffort;
+    /**
+     * How many diagnostic self-tests the Coding Agent may run mid-session (1 to 4), or absent for none. Telemetry only: a
+     * self-test is never TEST evidence and never satisfies a scored repair requirement. Declared in the contract, so both arms
+     * of a registration carry the same one.
+     */
+    readonly coderSelfTestCalls?: number;
   };
   /**
    * THE MISSION'S RESEARCH AUTHORITY, SEALED BY THE CONTRACT THAT GRANTS IT.
@@ -221,7 +227,9 @@ export function sealLiveMissionResearchPolicy(
 export const JULIUS_ROLE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type JuliusRoleEffort = (typeof JULIUS_ROLE_EFFORT_LEVELS)[number];
 /** The only keys `limits` may hold. A key this build does not read would be a term nobody enforces. */
-export const JULIUS_LIMITS_KEYS = ['spendUsd', 'repairCycles', 'architectMaxOutputTokens', 'architectEffort', 'coderEffort'] as const;
+export const JULIUS_LIMITS_KEYS = ['spendUsd', 'repairCycles', 'architectMaxOutputTokens', 'architectEffort', 'coderEffort', 'coderSelfTestCalls'] as const;
+/** The self-test call cap a contract may declare. */
+export const JULIUS_SELF_TEST_CALLS_RANGE = Object.freeze({ min: 1, max: 4 });
 
 export function parseLiveMissionContract(raw: string): { ok: true; contract: LiveMissionContractFile } | { ok: false; problem: string } {
   let parsed: unknown;
@@ -299,6 +307,11 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
       if (declared[key] !== undefined && !(JULIUS_ROLE_EFFORT_LEVELS as readonly unknown[]).includes(declared[key])) {
         return { ok: false, problem: `The contract's limits.${key} must be one of ${JULIUS_ROLE_EFFORT_LEVELS.join(', ')}.` };
       }
+    }
+    const calls = declared.coderSelfTestCalls;
+    if (calls !== undefined && !(typeof calls === 'number' && Number.isInteger(calls)
+      && calls >= JULIUS_SELF_TEST_CALLS_RANGE.min && calls <= JULIUS_SELF_TEST_CALLS_RANGE.max)) {
+      return { ok: false, problem: `The contract's limits.coderSelfTestCalls must be an integer from ${JULIUS_SELF_TEST_CALLS_RANGE.min} to ${JULIUS_SELF_TEST_CALLS_RANGE.max}.` };
     }
   }
 

@@ -179,3 +179,70 @@ export function parseJuliusAttemptClose(output: string, captured: boolean): Juli
     truncated: status.truncated || own.truncated || inherited.truncated || cumulative.truncated,
   });
 }
+
+/* ------------------------------------------------------------------ the coder's self-test */
+
+/** Where a self-test runs: a copy, inside the sandbox's own tmpfs, so the live workspace is never written by it. */
+const SELF_TEST_COPY = '/tmp/julius-selftest-copy';
+
+/**
+ * ONE SELF-TEST OF THE CODER'S OWN WORK, as a single executor command.
+ *
+ * DIAGNOSTIC TELEMETRY, NEVER EVIDENCE. This runs the mission's declared test command so the coder can see its own
+ * result mid-session. It records nothing a verification reads: the post-session test run is still the only TEST evidence,
+ * and a self-test's result is never a TEST row.
+ *
+ * WHAT IT DOES, IN ORDER:
+ *   1. snapshots the working tree exactly as an attempt's start does (a temporary index in the sandbox's tmpfs; the real
+ *      index is never touched) and prints it as `SELFTEST_TREE`, so two self-tests can be told apart by whether the coder
+ *      edited between them;
+ *   2. copies the workspace into the sandbox's tmpfs and runs the test command THERE. The executor mounts the live
+ *      workspace read-write, so a test run in place could leave build output that then appears in the attempt's diff and
+ *      in what the attempt is said to have changed; in a copy it cannot;
+ *   3. prints `SELFTEST_EXIT <code>` last, and exits with the test's own code.
+ * A copy that cannot be made prints `SELFTEST_COPY_FAILED` and runs nothing, rather than falling back to the live directory.
+ * The test command goes in its own lines inside a subshell, so a trailing comment in it cannot swallow the closing paren.
+ */
+export function juliusSelfTestCommand(testCommand: string): string {
+  return [
+    'set -u',
+    SNAPSHOT,
+    "printf 'SELFTEST_TREE %s\n' \"$(git write-tree)\"",
+    'rm -f "$GIT_INDEX_FILE"; unset GIT_INDEX_FILE',
+    `JULIUS_COPY=${SELF_TEST_COPY}; rm -rf "$JULIUS_COPY"; mkdir -p "$JULIUS_COPY"`,
+    'if ! cp -a . "$JULIUS_COPY/" 2>/dev/null || ! cd "$JULIUS_COPY"; then printf \'SELFTEST_COPY_FAILED\n\'; exit 90; fi',
+    '(',
+    testCommand,
+    ')',
+    'JULIUS_RC=$?',
+    "printf '\nSELFTEST_EXIT %s\n' \"$JULIUS_RC\"",
+    'exit "$JULIUS_RC"',
+  ].join('\n');
+}
+
+export interface JuliusSelfTestObserved {
+  /** The working tree the test ran against, or null when the snapshot could not be read. */
+  readonly treeBefore: string | null;
+  /** The test's own exit code, or null when the run never reached it (copy failed, executor cut it off). */
+  readonly exitCode: number | null;
+  readonly copyFailed: boolean;
+  /** The test's own output, with Julius's marker lines removed. */
+  readonly output: string;
+}
+
+/** Reads one self-test's output. Everything but the marker lines is the test's own, kept whole for the digest. */
+export function parseJuliusSelfTest(stdout: string, stderr: string): JuliusSelfTestObserved {
+  const treeBefore = TREE_LINE(stdout, 'SELFTEST_TREE');
+  const exit = /^SELFTEST_EXIT (-?\d+)$/mu.exec(stdout);
+  const copyFailed = /^SELFTEST_COPY_FAILED$/mu.test(stdout);
+  const output = stdout
+    .replace(/^SELFTEST_TREE [0-9a-f]{40}\n?/mu, '')
+    .replace(/\n?^SELFTEST_EXIT -?\d+\n?$/mu, '')
+    .replace(/^SELFTEST_COPY_FAILED\n?/mu, '');
+  return Object.freeze({
+    treeBefore,
+    exitCode: exit === null ? null : Number(exit[1]),
+    copyFailed,
+    output: stderr === '' ? output : `${output}${output.endsWith('\n') || output === '' ? '' : '\n'}${stderr}`,
+  });
+}
