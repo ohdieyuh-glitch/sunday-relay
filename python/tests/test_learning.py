@@ -372,6 +372,31 @@ class MatchedPairTests(unittest.TestCase):
         self.assertEqual((report["runScope"]["run"], report["runScope"]["basis"]), (self.C1, "learning_record"))
         self.assertEqual(report["mission"]["repairRounds"], {"value": 0})
 
+    def test_a_single_run_bundle_whose_manifest_names_another_run_is_refused(self):
+        # Codex review of the Decision C PR, finding on own_run(): a bundle of ONE run used to take its manifest's run id
+        # without checking it against the runs, so a mislabelled WITHOUT bundle was read as another run's. It is refused.
+        reg = self.reg()
+        path = arm_bundle(self.tmp, digest(reg), self.W1, "41", repairs=2, julius_run_id=self.W2)
+        report = analyze_bundle(load_bundle(path))
+        self.assertIsNone(report["runScope"]["run"])
+        self.assertIn("which no table of this 1-run bundle holds", report["runScope"]["reason"])
+        self.assertIn("unknown", report["mission"]["runState"])
+        self.assertIn("unknown", report["learning"])
+        # The control: the same bundle named for its own run is read as before.
+        ok = analyze_bundle(load_bundle(arm_bundle(self.tmp, digest(reg), self.W1, "41", repairs=2)))
+        self.assertEqual((ok["runScope"]["run"], ok["learning"]["runId"]), (self.W1, self.W1))
+        self.assertEqual(ok["mission"]["repairRounds"], {"value": 2})
+
+    def test_a_learning_record_that_names_another_run_than_the_bundle_s_own_is_not_read_as_its_record(self):
+        # The four-way identity of registration 2: manifest run == runs table == learning record run == the dispatch's run.
+        # Here the manifest and the runs table agree on W1, the record is W2's: the record is not W1's.
+        reg = self.reg()
+        path = arm_bundle(self.tmp, digest(reg), self.W1, "41", repairs=2, records=[arm_record(self.W2, "WITHOUT", digest(reg))])
+        report = analyze_bundle(load_bundle(path))
+        self.assertEqual(report["runScope"]["run"], self.W1)
+        self.assertIn("unknown", report["learning"])  # W2's record is not W1's: the bundle reads no record for its own run
+        self.assertNotIn("arm", report["learning"])
+
     def test_a_manifest_and_a_with_record_that_disagree_are_not_resolved(self):
         reg = self.reg()
         path = arm_bundle(self.tmp, digest(reg), self.C1, "43", without=self.W1, inherited_repairs=2, julius_run_id=self.W1)

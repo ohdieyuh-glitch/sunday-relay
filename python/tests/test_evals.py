@@ -1,6 +1,6 @@
 import unittest
 
-from helpers import A1, A2, TempDirs, arm_bundle, arm_record, julius, set_manifest
+from helpers import A1, A2, TempDirs, arm_bundle, arm_record, julius, runs_edits, set_manifest
 from julius_brain_intel.boundary import load_bundle
 from julius_brain_intel.evals import (
     bootstrap_diff_ci, cliffs_delta, compare_runs, extract_metrics, marginal_value, mission_quality, permutation_p,
@@ -92,7 +92,11 @@ class CompareTests(unittest.TestCase):
             self.assertEqual([d["key"] for d in report["match"]["differences"]], [key])
 
     def test_without_a_contract_digest_the_julius_run_id_still_stands_for_the_contract(self):
-        other = analyze_bundle(load_bundle(self.tmp.bundle(A2, {"bundle-manifest.txt": set_manifest(julius_run_id=julius(7))})))
+        # The bundle is the run julius(7)'s own: its runs table holds that run as well as its manifest naming it (a manifest
+        # naming a run the tables do not hold is refused, not compared: Codex review of the Decision C PR on own_run()).
+        edits = runs_edits(julius(7))
+        edits["bundle-manifest.txt"] = set_manifest(julius_run_id=julius(7))
+        other = analyze_bundle(load_bundle(self.tmp.bundle(A2, edits)))
         report = compare_runs(self.a2, other)
         self.assertFalse(report["match"]["matched"])
         self.assertEqual([d["key"] for d in report["match"]["differences"]], ["juliusRunId"])

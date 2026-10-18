@@ -63,6 +63,12 @@ def own_run(bundle: EvidenceBundle) -> tuple[EvidenceBundle, RunScope]:
     runs = tuple(bundle_runs(bundle))
     named = _named(bundle.manifest.get("julius_run_id"))
     if len(runs) <= 1:
+        # A bundle of at most one run still has to agree with its manifest: a manifest that names a run no table holds is
+        # refused here exactly as the many-run branch refuses it, never accepted as the bundle's own (Codex review of the
+        # Decision C PR, finding on this branch; the four-way identity check of registration 2).
+        if named is not None and runs and named not in runs:
+            reason = f"the manifest names {named}, which no table of this {len(runs)}-run bundle holds"
+            return scope_to_run(bundle, None, reason), RunScope(runs, None, None, False, reason)
         return bundle, RunScope(runs, named, "manifest" if named else None, False)
     with_runs = _with_record_runs(bundle)
 
