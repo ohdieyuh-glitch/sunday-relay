@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import { JULIUS_CONTEXT_COMPILER_VERSION, type JuliusContextSnapshot } from '../../src/relay/mission/julius';
@@ -98,6 +99,18 @@ describe('boundReviewEvidence', () => {
     expect(boundReviewEvidence({ unifiedDiff: diff, testOutput: out })).toEqual({ unifiedDiff: diff, testOutput: out, omitted: { diff: 0, testOutput: 0 } });
   });
 
+  it('the diff keeps its HEAD and the test output keeps its TAIL, each from its own end', () => {
+    const diff = `FIRST-DIFF-LINE${'\n'}${lines(3_000)}LAST-DIFF-LINE${'\n'}`;
+    const output = `FIRST-OUTPUT-LINE${'\n'}${lines(1_000)}LAST-OUTPUT-LINE${'\n'}`;
+    const bounded = boundReviewEvidence({ unifiedDiff: diff, testOutput: output });
+    expect(bounded.unifiedDiff).toContain('FIRST-DIFF-LINE');
+    expect(bounded.unifiedDiff).not.toContain('LAST-DIFF-LINE');
+    expect(bounded.unifiedDiff).toContain('the first ');
+    expect(bounded.testOutput).toContain('LAST-OUTPUT-LINE');
+    expect(bounded.testOutput).not.toContain('FIRST-OUTPUT-LINE');
+    expect(bounded.testOutput).toContain('the last ');
+  });
+
   it('bounds each field by its own limit and reports what each lost', () => {
     const bounded = boundReviewEvidence({ unifiedDiff: lines(3_000), testOutput: lines(1_000) });
     expect(bounded.omitted.diff).toBeGreaterThan(0);
@@ -185,6 +198,8 @@ describe('the real reviewer adapter', () => {
     expect(bigPacket.changedFiles).toEqual(['src/a.ts', 'src/b.ts', 'src/c.ts']);
     // the digest is of the whole artifact, not of what was shown: it differs between a small and a big diff and does not depend on the bound
     expect(bigPacket.artifactDigest).not.toBe(smallPacket.artifactDigest);
-    expect(bigPacket.artifactDigest).toMatch(/^[0-9a-f]{64}$|^sha256:[0-9a-f]{64}$/u);
+    expect(bigPacket.artifactDigest.replace(/^sha256:/u, ''), 'the digest is of the WHOLE diff the coder produced, not of what the reviewer was shown')
+      .toBe(createHash('sha256').update(big).digest('hex'));
+    expect(smallPacket.artifactDigest.replace(/^sha256:/u, '')).toBe(createHash('sha256').update(small).digest('hex'));
   });
 });
