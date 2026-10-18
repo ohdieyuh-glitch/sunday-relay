@@ -5,6 +5,8 @@
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
 #include "GameFramework/PlayerController.h"
+#include "RelayDogCharacter.h"
+#include "RelayDogPresentation.h"
 #include "WonderlandCompanionEmbodiment.h"
 
 // Named, not anonymous: the module is one unity translation unit.
@@ -59,6 +61,8 @@ namespace WonderlandWorldPresenceDetail
 		TEXT("Remote players: 1 stops a remote figure's own idle motion (weight shift, breath, tail) while its player stands still; 0 restores the old idle."));
 	TAutoConsoleVariable<int32> CVarRemoteGaitFromReport(TEXT("wl.Remote.GaitFromReport"), 1,
 		TEXT("Remote players, Interp mode: 1 feeds the figure's gait speed from the speed the sender reported for the drawn moment (interpolated between the bracketing reports) instead of differentiating the eased position; 0 restores the measured displacement. Position is never affected."));
+	TAutoConsoleVariable<int32> CVarRemoteDogAnimator(TEXT("wl.Remote.DogAnimator"), 1,
+		TEXT("Remote players: 1 animates each remote figure with its own RelayDogStride::FDogAnimator (configured as the owner's Dog is) fed the sender's reported speed, and the figure wears that pose exactly as a worn skin does, so stride, duty, lean, arms-back and timing match the owner's Dog; 0 restores the figure's own simple gait (r16reh16q). Position is never affected."));
 	TAutoConsoleVariable<float> CVarRemoteLogPeriod(TEXT("wl.Remote.LogPeriod"), 1.0f,
 		TEXT("Remote players: seconds between the per-figure WLREMOTE log lines (default 1; a dev measurement can set 0.1)."));
 }
@@ -438,6 +442,39 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 		}
 		const FRotator Facing = FMath::RInterpTo(Body->GetActorRotation(), FRotator(0.0, R.TargetYaw, 0.0), DeltaSeconds, EaseRate);
 		Body->SetActorLocationAndRotation(Next, Facing);
+		// THE OWNER'S DOG ANIMATOR, run for this figure (MP-ANIM-01 cause 2): the same arithmetic, configured the same way, fed the speed the sender
+		// reported for the drawn moment (the gait hint, 0 when standing), the same dt clamp and DistanceUU = speed x dt as ARelayDogCharacter::Tick; its pose
+		// is worn exactly as a skin worn by the Dog wears it. A figure is never airborne, on stairs or under a look target here: the Dog's other inputs stay at their rest values.
+		if (CVarRemoteDogAnimator.GetValueOnGameThread() != 0)
+		{
+			if (!R.bAnimConfigured)
+			{
+				// the canon body's width, asked of the local player's Dog when there is one (as the wardrobe stage does), else the canon's built width
+				float HeadWidth = RelayDogPresentation::CanonHeadWidthUU;
+				if (const ARelayDogCharacter* LocalDog = PC != nullptr ? Cast<ARelayDogCharacter>(PC->GetPawn()) : nullptr)
+				{
+					HeadWidth = LocalDog->HeadWidthUU > 1.0f ? LocalDog->HeadWidthUU : HeadWidth;
+				}
+				RelayDogPresentation::ConfigureCanonAnimator(R.Anim, HeadWidth);
+				R.bAnimConfigured = true;
+			}
+			const float AnimDt = FMath::Clamp(DeltaSeconds, 0.0f, 0.05f);
+			// the reported speed of the drawn moment; with no hint (Interp off, GaitFromReport 0) the distance actually covered; a snap is not a run
+			const float AnimSpeed = bSnap ? 0.0f
+				: (GaitHint >= 0.0f ? GaitHint : (DeltaSeconds > KINDA_SMALL_NUMBER ? static_cast<float>(FVector::Dist2D(Now, Next)) / DeltaSeconds : 0.0f));
+			RelayDogStride::FDogInput AnimIn;
+			AnimIn.DeltaSeconds = AnimDt;
+			AnimIn.SpeedUU = AnimSpeed;
+			AnimIn.DistanceUU = AnimSpeed * AnimDt;
+			AnimIn.HeadingDeg = static_cast<float>(Facing.Yaw);
+			AnimIn.DesiredHeadingDeg = AnimSpeed >= MinMovingSpeedUu ? R.TargetYaw : AnimIn.HeadingDeg;
+			const RelayDogStride::FDogPose& AnimPose = R.Anim.Update(AnimIn);
+			Body->WearCanonicalPose(RelayDogPresentation::ComposeWornPose(AnimPose, 0.0f, 0.0f));
+		}
+		else if (Body->IsGaitDrivenExternally())
+		{
+			Body->ReleaseCanonicalGait();   // kill switch flipped at run time: back to the figure's own gait
+		}
 		// WLREMOTE: diagnostics only (a snap is said at once; otherwise one line a second per figure). Cheap: no allocation.
 		if (bSnap)
 		{
@@ -447,7 +484,7 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 		if (NowSeconds >= R.LogNextAt)
 		{
 			R.LogNextAt = NowSeconds + FMath::Max(0.02, static_cast<double>(CVarRemoteLogPeriod.GetValueOnGameThread()));
-			UE_LOG(LogTemp, Display, TEXT("WLREMOTE fig=%s recv=(%.1f,%.1f,%.1f) age=%.0fms applied=(%.1f,%.1f,%.1f) lagUu=%.1f lagXYUu=%.1f worn=%d floatZ=%.2f lowestUu=%.2f aim=(%.1f,%.1f) dtMs=%.1f nowXY=(%.1f,%.1f) interp=%d delayMs=%.0f yaw=%.2f tyaw=%.2f idleFreeze=%.3f gaitW=%.3f gSpd=%.1f gPh=%.4f actPh=%.4f"),
+			UE_LOG(LogTemp, Display, TEXT("WLREMOTE fig=%s recv=(%.1f,%.1f,%.1f) age=%.0fms applied=(%.1f,%.1f,%.1f) lagUu=%.1f lagXYUu=%.1f worn=%d floatZ=%.2f lowestUu=%.2f aim=(%.1f,%.1f) dtMs=%.1f nowXY=(%.1f,%.1f) interp=%d delayMs=%.0f yaw=%.2f tyaw=%.2f idleFreeze=%.3f gaitW=%.3f gSpd=%.1f gPh=%.4f actPh=%.4f dogAnim=%d dStride=%.1f dDuty=%.2f dLean=%.1f dArms=%.2f dCps=%.2f"),
 				*Pair.Key, R.Target.X, R.Target.Y, R.Target.Z,
 				(NowSeconds - R.RecvAt) * 1000.0 + R.RecvAgeMs,
 				Next.X, Next.Y, Next.Z,
@@ -455,7 +492,10 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 				Body->IsWornPoseValid() ? 1 : 0, Body->GetFloatRootRelativeZ(), Body->GetFigureLowestUu(),
 				Aim.X, Aim.Y, static_cast<double>(DeltaSeconds) * 1000.0, Now.X, Now.Y, bInterp ? 1 : 0, DelayUsed * 1000.0,
 				Body->GetActorRotation().Yaw, static_cast<double>(R.TargetYaw), static_cast<double>(Body->GetIdleFreezeDiag()), static_cast<double>(Body->GetGaitWeightDiag()),
-				static_cast<double>(Body->GetGroundSpeedDiag()), static_cast<double>(Body->GetGaitPhaseDiag()), static_cast<double>(Body->GetActivityPhaseDiag()));
+				static_cast<double>(Body->GetGroundSpeedDiag()), static_cast<double>(Body->GetGaitPhaseDiag()), static_cast<double>(Body->GetActivityPhaseDiag()),
+				R.bAnimConfigured && Body->IsGaitDrivenExternally() ? 1 : 0, static_cast<double>(R.Anim.Pose().Stride.StrideLength), static_cast<double>(R.Anim.Pose().Stride.DutyFactor),
+				static_cast<double>(R.Anim.Pose().LeanDeg), static_cast<double>(R.Anim.Pose().Stride.ArmsBack),
+				R.Anim.Pose().Stride.StrideLength > 1.0f ? static_cast<double>(R.Anim.Pose().SpeedUU / R.Anim.Pose().Stride.StrideLength) : 0.0);
 		}
 		if (UTextRenderComponent* Label = R.Label.Get())
 		{

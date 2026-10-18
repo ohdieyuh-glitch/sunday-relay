@@ -11,6 +11,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "RelayDogStride.h"
 
 class AWonderlandCompanionEmbodiment;
 class UTextRenderComponent;
@@ -113,6 +114,9 @@ private:
 		// r16reh16i adaptive draw delay: the recent worst-case age of the newest report, and the delay actually used (slewed).
 		double PeakAge = 0.0;
 		double AdaptDelay = -1.0;
+		// r16reh16r: the SAME animator the owner's Dog runs (RelayDogStride::FDogAnimator), configured as the Dog configures it, one per figure; its pose is worn by the figure.
+		RelayDogStride::FDogAnimator Anim;
+		bool bAnimConfigured = false;
 	};
 	void Remove(FRemote& Remote);
 	TMap<FString, FRemote> Remotes;
