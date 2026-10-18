@@ -346,7 +346,9 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 						const double Over = RT - Ss.Last().T;
 						const double Ahead = FMath::Min(Over, Cap);
 						double Eff = Ahead - Ahead * Ahead / (2.0 * Cap);
-						if (Over > Cap)
+						// Only when the last report says the player was slowing or stopped (a stop's final report is low but not zero: 33-53 uu/s measured). A runner whose next
+						// report is merely LATE keeps the carried distance: pulling it back and then forward would be a visible stutter.
+						if (Over > Cap && Ss.Last().V < 150.0f)
 						{
 							Eff *= FMath::Max(0.0, 1.0 - (Over - Cap) / Cap);
 						}
