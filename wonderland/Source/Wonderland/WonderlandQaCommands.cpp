@@ -2509,6 +2509,397 @@ namespace
 			UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES armed: %d skins, %d frames each"), static_cast<int32>(UE_ARRAY_COUNT(FaceRoster)), static_cast<int32>(UE_ARRAY_COUNT(FaceShots)));
 		}));
 
+	/* ================================================================ wl.Qa.RemoteFaces (MP-VIS-01, 2026-10-18)
+	 *
+	 * THE LOCAL DOG AND EACH REMOTE RELAY OG, PHOTOGRAPHED FROM THE SAME CAMERAS IN THE SAME LIGHT. SkinFaces hides every
+	 * figure but the Dog's own, photographs only that Dog and quits, so it cannot say whether another player's Relay OG (the
+	 * voxel figure WonderlandWorldPresence draws) shows its eyes the way the Dog's canon body does. This leaves every figure
+	 * standing, holds the sky at an hour, puts the HUD away, and for the local Dog and then for each remote player wearing
+	 * relay_og stands a camera round the figure at yaw 0, 40, 60 and 85 degrees (front 0, side 90) at one distance and field
+	 * of view, plus a close head shot, into Saved/Screenshots/WLFACES. It moves no input and does NOT quit: whoever started
+	 * the game stops it. Diagnostic only; it earns no readiness.
+	 */
+	const FQaFaceShot RemoteFaceShots[] = {
+		{TEXT("yaw00"), 0.0, 150.0, 4.0, 40.0f},
+		{TEXT("yaw40"), 40.0, 150.0, 4.0, 40.0f},
+		{TEXT("yaw60"), 60.0, 150.0, 4.0, 40.0f},
+		{TEXT("yaw85"), 85.0, 150.0, 4.0, 40.0f},
+		{TEXT("head"), 60.0, 110.0, 2.0, 30.0f},
+	};
+	// WonderlandWorldPresence gives every remote player's figure this label; no other body carries it.
+	const TCHAR* const RemotePlayerLabel = TEXT("WONDERLAND PLAYER");
+
+	struct FQaRemoteFaces
+	{
+		struct FSubject
+		{
+			FString Who;
+			bool bLocal = false;
+			TWeakObjectPtr<AWonderlandCompanionEmbodiment> Remote;   // empty for the local Dog
+		};
+		TWeakObjectPtr<UWorld> World;
+		TWeakObjectPtr<ACameraActor> Camera;
+		TArray<FSubject> Subjects;
+		FString SetName;
+		FString Dir;
+		double Hour = 12.0;
+		double At = 0.0;
+		double FoundAt = -1.0;
+		double NoteAt = 0.0;
+		float DayMinutesWas = 24.0f;
+		int32 Subject = 0;
+		int32 Shot = 0;
+		int32 Phase = 0;
+		int32 Saved = 0;
+		int32 Failed = 0;
+		bool bHudHidden = false;
+		// the Dog's escorts stand aside (they photographed as the Dog's face in SkinFaces' first run); players' figures never do
+		TArray<TWeakObjectPtr<AActor>> Hidden;
+	};
+	TSharedPtr<FQaRemoteFaces> GQaRemoteFaces;
+
+	FString QaFileSafe(const FString& Text)
+	{
+		FString Out;
+		for (const TCHAR Letter : Text)
+		{
+			Out.AppendChar(FChar::IsAlnum(Letter) || Letter == TEXT('-') ? Letter : TEXT('_'));
+		}
+		Out.LeftInline(24);
+		return Out;
+	}
+
+	/** A remote player's figure wearing Relay OG: the label WonderlandWorldPresence gives it, and the figure file the registry resolves for relay_og. */
+	bool QaIsRemoteRelayOg(const AWonderlandCompanionEmbodiment* Body, const FString& RelayOgFigure)
+	{
+		return Body != nullptr && Body->ClassLabel == RemotePlayerLabel && !RelayOgFigure.IsEmpty() && Body->GetFigurePath() == RelayOgFigure;
+	}
+
+	/** A figure's soles, its eyes (0.715 of the body's height above the soles, as SkinFaces) and the way it faces. False when it is gone. */
+	bool QaRemoteFacesPose(const ARelayDogCharacter* D, const FQaRemoteFaces::FSubject& S, FVector& OutFeet, FVector& OutEyes, FVector& OutFacing)
+	{
+		if (D == nullptr)
+		{
+			return false;
+		}
+		double Height = D->GetCanonBodyHeightUu();
+		if (S.bLocal)
+		{
+			OutFeet = D->GetActorLocation() - FVector(0.0, 0.0, D->GetSimpleCollisionHalfHeight());
+			OutFacing = D->GetActorForwardVector().GetSafeNormal2D();
+		}
+		else
+		{
+			// a remote figure is built to the Dog's canon height; its origin is the reported soles, its own feet GetFigureLowestUu() from the origin
+			const AWonderlandCompanionEmbodiment* Body = S.Remote.Get();
+			if (Body == nullptr)
+			{
+				return false;
+			}
+			OutFeet = Body->GetActorLocation() + FVector(0.0, 0.0, Body->GetFigureLowestUu());
+			OutFacing = Body->GetActorForwardVector().GetSafeNormal2D();
+			Height = Body->TargetBodyHeightUU > 1.0f ? Body->TargetBodyHeightUU : Height;
+		}
+		OutEyes = OutFeet + FVector(0.0, 0.0, Height * FaceEyeHeight);
+		return true;
+	}
+
+	/** Stand the camera for a shot on a figure (spawned on first use), looking at its eyes; with bCut it also becomes the view. */
+	bool QaRemoteFacesAim(FQaRemoteFaces& F, UWorld* World, APlayerController* PC, const ARelayDogCharacter* D, const FQaFaceShot& S, FVector& OutFeet, FVector& OutEyes, FVector& OutFacing, bool bCut)
+	{
+		if (!QaRemoteFacesPose(D, F.Subjects[F.Subject], OutFeet, OutEyes, OutFacing))
+		{
+			return false;
+		}
+		const FVector Toward = OutFacing.RotateAngleAxis(S.Yaw, FVector::UpVector);
+		const FVector Where = OutEyes + Toward * S.Distance + FVector(0.0, 0.0, S.Rise);
+		ACameraActor* Cam = F.Camera.Get();
+		if (Cam == nullptr)
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Cam = World->SpawnActor<ACameraActor>(Where, FRotator::ZeroRotator, Params);
+			F.Camera = Cam;
+		}
+		if (Cam == nullptr)
+		{
+			return false;
+		}
+		Cam->SetActorLocationAndRotation(Where, (OutEyes - Where).Rotation());
+		Cam->GetCameraComponent()->SetFieldOfView(S.Fov);
+		Cam->GetCameraComponent()->SetConstraintAspectRatio(false);
+		if (bCut)
+		{
+			PC->SetViewTargetWithBlend(Cam, 0.0f);
+		}
+		return true;
+	}
+
+	/** The HUD on or off for the shots: the game layer's player canvas holds every widget added to the player's screen. */
+	void QaRemoteFacesHud(UWorld* World, bool bShow)
+	{
+		if (IConsoleManager::Get().FindConsoleVariable(TEXT("Slate.GameLayer.PlayerCanvasVisible")) == nullptr)
+		{
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES the engine's player-canvas switch is not in this build: the HUD stays on the frames"));
+			return;
+		}
+		GEngine->Exec(World, bShow ? TEXT("Slate.GameLayer.PlayerCanvasVisible 1") : TEXT("Slate.GameLayer.PlayerCanvasVisible 0"));
+	}
+
+	/** Everything the run changed, put back: the camera, the escorts, the HUD, the day length. The sky stays at the hour it was set to. */
+	void QaRemoteFacesRestore(FQaRemoteFaces& F, UWorld* World, APlayerController* PC, ARelayDogCharacter* D)
+	{
+		if (PC != nullptr && D != nullptr)
+		{
+			PC->SetViewTargetWithBlend(D, 0.0f);
+		}
+		if (ACameraActor* Cam = F.Camera.Get())
+		{
+			Cam->Destroy();
+		}
+		for (const TWeakObjectPtr<AActor>& Figure : F.Hidden)
+		{
+			if (AActor* A = Figure.Get())
+			{
+				A->SetActorHiddenInGame(false);
+			}
+		}
+		F.Hidden.Reset();
+		if (F.bHudHidden && World != nullptr)
+		{
+			QaRemoteFacesHud(World, true);
+			GEngine->Exec(World, *FString::Printf(TEXT("wl.Sky.DayMinutes %.3f"), F.DayMinutesWas));
+			F.bHudHidden = false;
+		}
+	}
+
+	bool QaRemoteFacesTick(float)
+	{
+		if (!GQaRemoteFaces.IsValid())
+		{
+			return false;
+		}
+		FQaRemoteFaces& F = *GQaRemoteFaces;
+		UWorld* World = F.World.Get();
+		if (World == nullptr && GEngine != nullptr)
+		{
+			// armed from -ExecCmds before a world stood: take the game world once there is one
+			World = GEngine->GetCurrentPlayWorld();
+			F.World = World;
+		}
+		APlayerController* PC = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		ARelayDogCharacter* D = QaDog(World);
+		const double In = QaNow() - F.At;
+		if (World == nullptr || PC == nullptr || D == nullptr)
+		{
+			if (In > 120.0)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES RemoteFaces stopped: no world or Relay Dog"));
+				QaRemoteFacesRestore(F, World, PC, D);
+				GQaRemoteFaces.Reset();
+				return false;
+			}
+			return true;
+		}
+		switch (F.Phase)
+		{
+		case 0:
+			// the world settles first; the welcome is put away so it covers no face; the sky is held still at the hour; the HUD goes
+			if (In >= 8.0)
+			{
+				if (UWonderlandUiSubsystem* U = QaUi(World))
+				{
+					U->DismissWelcome();
+					U->CloseOverlay();
+				}
+				const IConsoleVariable* Minutes = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Sky.DayMinutes"));
+				F.DayMinutesWas = Minutes != nullptr ? Minutes->GetFloat() : 24.0f;
+				GEngine->Exec(World, TEXT("wl.Sky.DayMinutes 0"));
+				GEngine->Exec(World, *FString::Printf(TEXT("wl.Sky.Hour %.2f"), F.Hour));
+				QaRemoteFacesHud(World, false);
+				F.bHudHidden = true;
+				F.Phase = 1;
+				F.At = QaNow();
+			}
+			break;
+		case 1:
+		{
+			// WHO IS STANDING: the local Dog, then each remote player in relay_og. A second client connects after this one starts, so
+			// the remote is waited for (up to 90 s); a few seconds after the first is seen, so that a second remote is not missed.
+			const UGameInstance* Instance = World->GetGameInstance();
+			const UWonderlandRelaySkinSubsystem* Skins = Instance != nullptr ? Instance->GetSubsystem<UWonderlandRelaySkinSubsystem>() : nullptr;
+			const FString RelayOgFigure = Skins != nullptr ? Skins->FigurePathFor(FName(TEXT("relay_og"))) : FString();
+			TArray<AWonderlandCompanionEmbodiment*> Found;
+			for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+			{
+				if (QaIsRemoteRelayOg(*It, RelayOgFigure))
+				{
+					Found.Add(*It);
+				}
+			}
+			if (Found.Num() > 0 && F.FoundAt < 0.0)
+			{
+				F.FoundAt = QaNow();
+			}
+			if (Found.Num() == 0 && In < 90.0)
+			{
+				if (QaNow() >= F.NoteAt)
+				{
+					UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES waiting for a remote player in relay_og (%.0f s)"), In);
+					F.NoteAt = QaNow() + 15.0;
+				}
+				break;
+			}
+			if (Found.Num() > 0 && QaNow() - F.FoundAt < 3.0)
+			{
+				break;
+			}
+			if (Found.Num() == 0)
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES no remote relay_og figure stands in this world: the local Dog only"));
+			}
+			FQaRemoteFaces::FSubject& Local = F.Subjects.AddDefaulted_GetRef();
+			Local.Who = TEXT("dog");
+			Local.bLocal = true;
+			for (AWonderlandCompanionEmbodiment* Body : Found)
+			{
+				FQaRemoteFaces::FSubject& Remote = F.Subjects.AddDefaulted_GetRef();
+				Remote.Who = QaFileSafe(Body->DisplayName);
+				if (Remote.Who.IsEmpty())
+				{
+					Remote.Who = TEXT("player");
+				}
+				Remote.Remote = Body;
+				// two players of one name keep two files
+				for (int32 Other = 1; Other < F.Subjects.Num() - 1; ++Other)
+				{
+					if (F.Subjects[Other].Who == Remote.Who)
+					{
+						Remote.Who += FString::Printf(TEXT("_%d"), F.Subjects.Num() - 1);
+						break;
+					}
+				}
+			}
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES subjects: the local Dog (worn %s) and %d remote relay_og figure(s) | sky hour %.2f | set %s"),
+				*D->GetWornSkinId().ToString(), Found.Num(), F.Hour, *F.SetName);
+			F.Phase = 2;
+			F.At = QaNow();
+			break;
+		}
+		case 2:
+		{
+			if (F.Subject >= F.Subjects.Num())
+			{
+				F.Phase = 9;
+				F.At = QaNow();
+				break;
+			}
+			if (F.Shot >= static_cast<int32>(UE_ARRAY_COUNT(RemoteFaceShots)))
+			{
+				++F.Subject;
+				F.Shot = 0;
+				break;
+			}
+			// the Dog's escorts out of the shot; every player's figure, the local Dog's included, stays (and never the wardrobe stage's own figure)
+			for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+			{
+				if (*It != D->GetCostume() && !It->IsHidden() && It->ClassLabel != RemotePlayerLabel && Cast<AWonderlandSkinStage>(It->GetOwner()) == nullptr)
+				{
+					It->SetActorHiddenInGame(true);
+					F.Hidden.Add(*It);
+				}
+			}
+			FVector Feet;
+			FVector Eyes;
+			FVector Facing;
+			if (!QaRemoteFacesAim(F, World, PC, D, RemoteFaceShots[F.Shot], Feet, Eyes, Facing, true))
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES %s is gone: its shots are skipped"), *F.Subjects[F.Subject].Who);
+				F.Failed += static_cast<int32>(UE_ARRAY_COUNT(RemoteFaceShots)) - F.Shot;
+				++F.Subject;
+				F.Shot = 0;
+				break;
+			}
+			F.Phase = 3;
+			F.At = QaNow();
+			break;
+		}
+		case 3:
+		{
+			// the camera keeps to the figure while the image settles after the cut (a remote figure eases toward its reports), then it is saved
+			const FQaFaceShot& S = RemoteFaceShots[F.Shot];
+			const FQaRemoteFaces::FSubject& Sub = F.Subjects[F.Subject];
+			FVector Feet;
+			FVector Eyes;
+			FVector Facing;
+			if (!QaRemoteFacesAim(F, World, PC, D, S, Feet, Eyes, Facing, false))
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES %s is gone: its shots are skipped"), *Sub.Who);
+				F.Failed += static_cast<int32>(UE_ARRAY_COUNT(RemoteFaceShots)) - F.Shot;
+				++F.Subject;
+				F.Shot = 0;
+				F.Phase = 2;
+				break;
+			}
+			if (In >= 1.2)
+			{
+				int32 W = 0;
+				int32 H = 0;
+				const FString Path = F.Dir / FString::Printf(TEXT("%s_%s_%s_%s.png"), *F.SetName, *Sub.Who, Sub.bLocal ? TEXT("local") : TEXT("remote"), S.Name);
+				const bool bOk = UWonderlandUiTestLibrary::CaptureGameViewport(Path, W, H);
+				(bOk ? F.Saved : F.Failed)++;
+				const ACameraActor* Cam = F.Camera.Get();
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES shot %s %s %s: figure yaw %.1f soles %s eyes %s | camera %s rot %s, %.0f uu from the eyes, %.0f deg round, fov %.0f | frame %s %s %dx%d"),
+					*Sub.Who, Sub.bLocal ? TEXT("local") : TEXT("remote"), S.Name, Facing.Rotation().Yaw, *Feet.ToCompactString(), *Eyes.ToCompactString(),
+					Cam != nullptr ? *Cam->GetActorLocation().ToCompactString() : TEXT("(none)"), Cam != nullptr ? *Cam->GetActorRotation().ToCompactString() : TEXT("(none)"),
+					S.Distance, S.Yaw, S.Fov, *Path, bOk ? TEXT("saved") : TEXT("FAILED"), W, H);
+				++F.Shot;
+				F.Phase = 2;
+				F.At = QaNow();
+			}
+			break;
+		}
+		case 9:
+			// every shot taken: the Dog's own camera, the escorts, the HUD and the day length back. The game keeps running.
+			QaRemoteFacesRestore(F, World, PC, D);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES RemoteFaces END saved=%d failed=%d"), F.Saved, F.Failed);
+			GQaRemoteFaces.Reset();
+			return false;
+		default:
+			break;
+		}
+		return true;
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GQaRemoteFacesCommand(
+		TEXT("wl.Qa.RemoteFaces"),
+		TEXT("wl.Qa.RemoteFaces [Hour] [SetName]: photograph the local Dog and each remote player's Relay OG from the same fixed cameras (yaw 0, 40, 60, 85 and a ")
+		TEXT("close head shot) with the other figures standing and the HUD hidden, into Saved/Screenshots/WLFACES as <SetName>_<who>_<local|remote>_yaw<NN>.png; does not quit."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GQaRemoteFaces.IsValid())
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES RemoteFaces is already running"));
+				return;
+			}
+			GQaRemoteFaces = MakeShared<FQaRemoteFaces>();
+			GQaRemoteFaces->World = World;
+			GQaRemoteFaces->At = QaNow();
+			GQaRemoteFaces->Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLFACES"));
+			// the hour is the first argument when it is a number; a lone word is the set's name
+			const bool bHourGiven = Args.Num() > 0 && Args[0].IsNumeric();
+			GQaRemoteFaces->Hour = bHourGiven ? FMath::Clamp(FCString::Atod(*Args[0]), 0.0, 24.0) : 12.0;
+			const int32 NameAt = bHourGiven ? 1 : 0;
+			GQaRemoteFaces->SetName = Args.IsValidIndex(NameAt) ? QaFileSafe(Args[NameAt]) : FString();
+			if (GQaRemoteFaces->SetName.IsEmpty())
+			{
+				GQaRemoteFaces->SetName = TEXT("rf");
+			}
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&QaRemoteFacesTick), 0.1f);
+			UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES RemoteFaces armed: hour %.2f, set %s, %d shots per figure"), GQaRemoteFaces->Hour, *GQaRemoteFaces->SetName,
+				static_cast<int32>(UE_ARRAY_COUNT(RemoteFaceShots)));
+		}));
+
 	/* ================================================================ wl.Qa.ShadowFlame (founder, 2026-10-01)
 	 *
 	 * "BUILD THE SHADOW FLAME RELAY DOG SKIN" -- the founder's fifteen runtime checks, measured in the client on what the

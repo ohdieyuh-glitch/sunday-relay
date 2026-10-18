@@ -30,6 +30,11 @@ namespace WonderlandWorldPresenceDetail
 	TAutoConsoleVariable<int32> CVarRemoteDeadReckon(TEXT("wl.Remote.DeadReckon"), 1,
 		TEXT("Remote players: 1 steers toward the dead-reckoned position (capped), 0 chases the last report as before."));
 	// r16reh16c: A/B switches so ONE binary can be measured with and without each change (defaults = the new behaviour).
+	// MP-VIS-01 (remote Relay OG eyes too exposed): 0 = the figure as shipped (default, so ONE binary measures with and without); 10.3 = the canon window depth.
+	TAutoConsoleVariable<float> CVarRemoteEyeRecess(TEXT("wl.Remote.EyeRecessUU"), 0.0f,
+		TEXT("Remote players wearing relay_og: uu to push the visor plate, eyes and halos back into the head (canon window is 13.2 uu deep, the figure's 2.9, so 10.3). 0 = off. Read when the figure loads."));
+	TAutoConsoleVariable<float> CVarRemoteEyeLower(TEXT("wl.Remote.EyeLowerUU"), 0.0f,
+		TEXT("Remote players wearing relay_og: uu to lower the eyes and halos in the window (canon eyes sit lower than the figure's by about 2.05). 0 = off. Read when the figure loads."));
 	TAutoConsoleVariable<int32> CVarRemoteNoHover(TEXT("wl.Remote.NoHover"), 1,
 		TEXT("Remote players: 1 draws a remote figure planted (no FloatRoot hover, no Float-part bob), 0 restores the old hover. Read when a figure spawns."));
 	TAutoConsoleVariable<int32> CVarRemoteInterp(TEXT("wl.Remote.Interp"), 1,
@@ -264,6 +269,11 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 		if (Remote.SkinId != A.SkinId)
 		{
 			const FString Figure = FigurePathFor(A.SkinId);
+			// MP-VIS-01: another player's Relay OG is the voxel preview figure, whose window is 2.9 uu deep; the canon body's is 13.2 uu. Set per
+			// load (a skin change reloads), only for relay_og, default 0 = the figure as shipped.
+			const bool bRelayOg = A.SkinId.IsEmpty() || A.SkinId == TEXT("relay_og");
+			Body->RemoteEyeRecessUU = bRelayOg ? FMath::Max(WonderlandWorldPresenceDetail::CVarRemoteEyeRecess.GetValueOnGameThread(), 0.0f) : 0.0f;
+			Body->RemoteEyeLowerUU = bRelayOg ? FMath::Max(WonderlandWorldPresenceDetail::CVarRemoteEyeLower.GetValueOnGameThread(), 0.0f) : 0.0f;
 			if (!Figure.IsEmpty() && Body->LoadFigure(Figure))
 			{
 				Remote.SkinId = A.SkinId;

@@ -583,6 +583,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")
 	float TargetBodyHeightUU = 0.0f;
 
+	/**
+	 * MP-VIS-01 (REMOTE RELAY OG ONLY): how far, uu, to push the figure's visor plate, eyes and eye halos back into the head when the
+	 * figure is built, so the window is as deep as the canon body's (visorRecess 0.22 head widths = 13.2 uu) without changing the
+	 * figure FILE (RelayOg.wlvox stays byte-identical; the wardrobe preview and every costume leave this at 0 = unchanged). The
+	 * world presence sets it, from wl.Remote.EyeRecessUU, before LoadFigure and only for a remote player wearing relay_og.
+	 * Window liner walls are added so the deeper window is not open to the hollow head. Read at LoadFigure.
+	 */
+	float RemoteEyeRecessUU = 0.0f;
+	/** MP-VIS-01: and how far, uu, to lower the eye panes and their halos in the window (canon eyes sit at 38% of the window height, the figure's at 50%). */
+	float RemoteEyeLowerUU = 0.0f;
+
 	/** Turn to face the camera once the pawn has stood still this long. Negative never does. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")
 	float FaceCameraAfterIdleSeconds = 1.2f;

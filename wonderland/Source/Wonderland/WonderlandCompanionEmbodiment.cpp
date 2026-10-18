@@ -1058,13 +1058,61 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 	ShadowTendrils.Reset();
 	TMap<int32, FBox> ShadowBounds;
 	TMap<int32, int32> ShadowMaterial;
+	// ---- MP-VIS-01: REMOTE RELAY OG EYE RECESS (off unless RemoteEyeRecessUU / RemoteEyeLowerUU are set; see the header).
+	// Measured on this figure before anything moves: the head's front plane and the front shell tile's depth, the visor plate's box in the
+	// head, and the index of the head part and of the bone material (for the liner walls).
+	const bool bEyeRecess = RemoteEyeRecessUU > 0.0f || RemoteEyeLowerUU > 0.0f;
+	int32 EyeHeadPart = INDEX_NONE;
+	int32 EyeBoneMaterial = INDEX_NONE;
+	double EyeFaceFront = -1.0e9;
+	double EyeTileDepth = 0.0;
+	FBox EyePlate(ForceInit);
+	if (bEyeRecess)
+	{
+		for (int32 PartIndex = 0; PartIndex < Figure.Parts.Num(); ++PartIndex)
+		{
+			if (Figure.Parts[PartIndex].Name == FName(TEXT("head"))) { EyeHeadPart = PartIndex; break; }
+		}
+		for (int32 MatIndex = 0; MatIndex < Figure.Materials.Num(); ++MatIndex)
+		{
+			if (Figure.Materials[MatIndex].Name == FName(TEXT("bone"))) { EyeBoneMaterial = MatIndex; break; }
+		}
+		for (const FWonderlandCompanionBox& Box : Figure.Boxes)
+		{
+			if (Box.Part != EyeHeadPart || !Figure.Materials.IsValidIndex(Box.Material)) { continue; }
+			const FName Mat = Figure.Materials[Box.Material].Name;
+			if (Mat == FName(TEXT("bone")) && Box.Centre.X + Box.Size.X * 0.5 > EyeFaceFront)
+			{
+				EyeFaceFront = Box.Centre.X + Box.Size.X * 0.5;
+				EyeTileDepth = Box.Size.X;
+			}
+			else if (Mat == FName(TEXT("visor")))
+			{
+				EyePlate += FBox(Box.Centre - Box.Size * 0.5, Box.Centre + Box.Size * 0.5);
+			}
+		}
+	}
 	for (const FWonderlandCompanionBox& Box : Figure.Boxes)
 	{
 		const bool bFlame = Figure.Parts.IsValidIndex(Box.Part)
 			&& Figure.Parts[Box.Part].Motion == EWonderlandCompanionMotion::Twinkle;
 		const bool bShadow = Figure.Parts.IsValidIndex(Box.Part)
 			&& Figure.Parts[Box.Part].Motion == EWonderlandCompanionMotion::Shadow;
-		const FVector Local = (Box.Centre - Figure.Parts[Box.Part].Pivot) * Unit;
+		FVector Local = (Box.Centre - Figure.Parts[Box.Part].Pivot) * Unit;
+		if (bEyeRecess && Box.Part == EyeHeadPart && Figure.Materials.IsValidIndex(Box.Material))
+		{
+			// the black plate, the eye panes and their halos go back into the head; the eyes and halos also go down to the canon's height
+			const FName Mat = Figure.Materials[Box.Material].Name;
+			const bool bEyePane = Mat == FName(TEXT("eye")) || IsEyeHaloName(Mat);
+			if (bEyePane || Mat == FName(TEXT("visor")))
+			{
+				Local.X -= RemoteEyeRecessUU;
+			}
+			if (bEyePane)
+			{
+				Local.Z -= RemoteEyeLowerUU;
+			}
+		}
 		const FVector Scale = Box.Size * (Unit / 100.0f);
 		if (bShadow)
 		{
@@ -1085,6 +1133,31 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		const int64 Key = (static_cast<int64>(Box.Part) << 32) | static_cast<int64>(static_cast<uint32>(Box.Material));
 		// The engine cube is 100 uu on a side, centred on its pivot.
 		Groups.FindOrAdd(Key).Add(FTransform(Box.Rotation, Local, Scale));
+	}
+	// ---- MP-VIS-01: LINER WALLS for the deeper window. The figure's head is a hollow shell with the window cut through its front tile only,
+	// so a plate pushed behind that tile would be seen through an open hole. Four bone boxes line the opening from the moved plate's front
+	// to the front tile's inner face; each is 0.3 grid units thick, OUTSIDE the opening, so the opening itself is exactly as before.
+	if (RemoteEyeRecessUU > 0.0f && EyeHeadPart != INDEX_NONE && EyeBoneMaterial != INDEX_NONE && EyePlate.IsValid && EyeFaceFront > -1.0e8)
+	{
+		const FVector Pivot = Figure.Parts[EyeHeadPart].Pivot;
+		const double PlateFrontUU = (EyePlate.Max.X - Pivot.X) * Unit - RemoteEyeRecessUU;
+		const double TileInnerUU = (EyeFaceFront - EyeTileDepth - Pivot.X) * Unit;
+		if (TileInnerUU > PlateFrontUU + 0.01)
+		{
+			const FVector Mid = (EyePlate.GetCenter() - Pivot) * Unit;
+			const FVector Half = EyePlate.GetExtent() * Unit;           // the opening's half width and half height (X unused)
+			const double Wall = 0.3 * Unit;
+			const double XC = 0.5 * (PlateFrontUU + TileInnerUU);
+			const double SX = TileInnerUU - PlateFrontUU;
+			TArray<FTransform>& Liner = Groups.FindOrAdd((static_cast<int64>(EyeHeadPart) << 32) | static_cast<int64>(static_cast<uint32>(EyeBoneMaterial)));
+			const double Cube = 100.0;
+			Liner.Add(FTransform(FRotator::ZeroRotator, FVector(XC, Mid.Y + Half.Y + Wall * 0.5, Mid.Z), FVector(SX, Wall, 2.0 * Half.Z + 2.0 * Wall) / Cube));
+			Liner.Add(FTransform(FRotator::ZeroRotator, FVector(XC, Mid.Y - Half.Y - Wall * 0.5, Mid.Z), FVector(SX, Wall, 2.0 * Half.Z + 2.0 * Wall) / Cube));
+			Liner.Add(FTransform(FRotator::ZeroRotator, FVector(XC, Mid.Y, Mid.Z + Half.Z + Wall * 0.5), FVector(SX, 2.0 * Half.Y, Wall) / Cube));
+			Liner.Add(FTransform(FRotator::ZeroRotator, FVector(XC, Mid.Y, Mid.Z - Half.Z - Wall * 0.5), FVector(SX, 2.0 * Half.Y, Wall) / Cube));
+			UE_LOG(LogTemp, Display, TEXT("WLEYE remote relay_og window deepened: plate back %.2f uu, eyes lowered %.2f uu, liner x %.1f..%.1f"),
+				RemoteEyeRecessUU, RemoteEyeLowerUU, PlateFrontUU, TileInnerUU);
+		}
 	}
 	for (const TPair<int32, FBox>& Found : FlameBounds)
 	{
