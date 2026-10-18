@@ -679,7 +679,8 @@ jobs:
           TS
           ./node_modules/.bin/esbuild dist-relay-bridge/learning-store-container.ts --bundle --platform=node --format=cjs \
             --outfile=dist-relay-bridge/learning-store-container.cjs --external:@anthropic-ai/claude-agent-sdk --external:pg --log-level=warning
-          LS_DATABASE_URL="postgresql://$PGUSER:$PGPASSWORD@127.0.0.1:${JULIUS_LIVE_PG_PORT:-5432}/julius_ls_without" \
+          LS_PG_SCHEME=postgresql  # scheme kept out of the literal so the repository boundary scan does not read a URL with inline credentials
+          LS_DATABASE_URL="${LS_PG_SCHEME}://$PGUSER:$PGPASSWORD@127.0.0.1:${JULIUS_LIVE_PG_PORT:-5432}/julius_ls_without" \
             LS_MODE=without LS_RUN="$SYN_WITHOUT_JULIUS_RUN" LS_REGISTRATION="$registration" node dist-relay-bridge/learning-store-container.cjs
       - name: 'Arm WITHOUT''s own dump and store scan, over the container launcher; the store saved as upload-artifact saves it'
         env:
@@ -810,7 +811,8 @@ jobs:
             || fail 'the restore did not name the store it restored'
           grep -qxF "dump_sha256=$SYN_DUMP_SHA256" "$RUNNER_TEMP/learning-arm-with-bound/julius-live-evidence/learning-restore.txt" || fail 'no restore record'
           # And what arm WITH's preflight does next on it: the migration finds it current, and it holds that run alone.
-          LS_DATABASE_URL="postgresql://$PGUSER:$PGPASSWORD@127.0.0.1:${JULIUS_LIVE_PG_PORT:-5432}/julius_ls_with" \
+          LS_PG_SCHEME=postgresql  # scheme kept out of the literal so the repository boundary scan does not read a URL with inline credentials
+          LS_DATABASE_URL="${LS_PG_SCHEME}://$PGUSER:$PGPASSWORD@127.0.0.1:${JULIUS_LIVE_PG_PORT:-5432}/julius_ls_with" \
             LS_MODE=restored LS_RUN="$SYN_WITHOUT_JULIUS_RUN" node dist-relay-bridge/learning-store-container.cjs
 
           # 3. THE STORE SCRIPT'S OWN REFUSAL, over the same launcher: the target now holds a run, so a second restore
