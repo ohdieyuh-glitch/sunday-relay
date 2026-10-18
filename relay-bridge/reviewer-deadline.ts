@@ -107,8 +107,15 @@ export const RECORDED_REVIEWER_OBSERVATIONS: readonly ReviewerDurationObservatio
  * executor steps around it); the architect's own ceiling and the
  * image builds, PostgreSQL, Hermes and the evidence dump need room beside them,
  * and `coder-envelope.test.ts` proves the four add up inside this number.
+ *
+ * 120 -> 300 for Decision C's arms (the founder workflow draft r5, 2026-10-13). The shares above price NO repair
+ * cycle ("REPAIR STAGES ARE DELIBERATELY OUT", below), while each arm's contract grants three and registration
+ * r8.4 [r8-4] makes a coder-level repair a condition of every valid WITHOUT. `coder-envelope.test.ts` proves an
+ * arm's worst case, every granted cycle included, fits with the stage deadline's margins (live-composition.ts).
+ * The paid job's `timeout-minutes` must say the same number: until the founder commits the r5 workflow, the
+ * structural tests that hold the two equal are red BY REGISTRATION (Decision C registration r8.5, section 7).
  */
-export const JOB_BUDGET_MS = 120 * 60_000;
+export const JOB_BUDGET_MS = 300 * 60_000;
 export const REVIEWER_JOB_SHARE_MS = 50 * 60_000;
 
 /**

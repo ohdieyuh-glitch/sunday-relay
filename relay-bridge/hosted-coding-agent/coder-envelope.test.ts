@@ -11,8 +11,10 @@ import {
 } from './coder-envelope';
 import { DEFAULT_HOSTED_LIMITS, compileHostedEnvelope, hostedLimitsForAllocation } from './hosted-envelope';
 import { runHostedCodingAgent, type HostedQueryFn } from './hosted-runner';
-import { REVIEWER_JOB_SHARE_MS } from '../reviewer-deadline';
-import { CODER_WORKER, architectWorker, architectWorstCaseSpendMs } from '../julius/live-composition';
+import { REVIEWER_JOB_SHARE_MS, reviewerDeadlineHardCeilingMs } from '../reviewer-deadline';
+import {
+  CODER_WORKER, JULIUS_JOB_STAMP_LAG_RESERVE_MS, JULIUS_RESERVE_AFTER_LIVE_MS, architectWorker, architectWorstCaseSpendMs,
+} from '../julius/live-composition';
 import { architectOperativeTimeoutMs } from '../../src/relay/connectors/gpt-architect/config';
 
 const ROOT = process.cwd();
@@ -272,6 +274,25 @@ describe('the job budget is shared out, and the shares add up', () => {
   it('fits the reviewer, coder, architect and infrastructure inside JOB_BUDGET_MS', () => {
     const claimed = REVIEWER_JOB_SHARE_MS + CODER_JOB_SHARE_MS + ARCHITECT_WORST_CASE_MS + INFRASTRUCTURE_ALLOWANCE_MS;
     expect(claimed, `claims ${claimed} ms of a ${JOB_BUDGET_MS_FOR_SHARES} ms job`)
+      .toBeLessThanOrEqual(JOB_BUDGET_MS_FOR_SHARES);
+  });
+
+  /**
+   * A REGISTERED LEARNING ARM'S WORST CASE FITS THE JOB (Decision C: 120 -> 300 minutes, the founder workflow draft r5).
+   * The shares above price NO repair cycle, while each arm's contract grants its `repairCycles` and registration r8.4
+   * [r8-4] makes a coder-level repair a condition of every valid WITHOUT. One coder-level cycle is the repair's coder
+   * dispatch at every attempt plus its review at the reviewer's per-attempt ceiling. The entrypoint's stage deadline
+   * then keeps its own two margins (the job stamp's lag and the reserve after LIVE). Every figure is read from the code
+   * and from the arm's own contract, so this moves when any of them does.
+   */
+  it('leaves a registered learning arm its worst case: the priced path, every repair cycle its contract grants, and the stage deadline margins', () => {
+    const arm = JSON.parse(read('.github/julius-missions/julius-learning-pair-1-without-1/contract.json')) as { limits: { repairCycles: number } };
+    expect(arm.limits.repairCycles).toBeGreaterThan(0);
+    const cycleMs = coderAttemptDeadlineMs() * MAX_CODER_ATTEMPTS + reviewerDeadlineHardCeilingMs();
+    const pricedMs = REVIEWER_JOB_SHARE_MS + CODER_JOB_SHARE_MS + ARCHITECT_WORST_CASE_MS + INFRASTRUCTURE_ALLOWANCE_MS;
+    const worstMs = pricedMs + arm.limits.repairCycles * cycleMs + JULIUS_JOB_STAMP_LAG_RESERVE_MS + JULIUS_RESERVE_AFTER_LIVE_MS;
+    expect(worstMs, `an arm's worst case is ${worstMs} ms (priced ${pricedMs} + ${arm.limits.repairCycles} x ${cycleMs} + `
+      + `${JULIUS_JOB_STAMP_LAG_RESERVE_MS + JULIUS_RESERVE_AFTER_LIVE_MS} margins) of a ${JOB_BUDGET_MS_FOR_SHARES} ms job`)
       .toBeLessThanOrEqual(JOB_BUDGET_MS_FOR_SHARES);
   });
 

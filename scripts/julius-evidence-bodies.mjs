@@ -18,6 +18,13 @@
  *     copied and the row is HASH_MISMATCH (evidence of a fault: recorded, never swallowed; the resolver fails on it).
  * The bundle file is `artifacts/<sha256(artifact_id)>.body`: hex only, since artifact ids carry ':'.
  *
+ * WHICH RUN A ROW BELONGS TO (Decision C, audit F1). A learning pair's arm WITH restores arm WITHOUT's whole store, so
+ * its dump holds both runs' rows, and the WITHOUT run's bodies died with the WITHOUT runner. The bundle names its own run
+ * (`bundle-manifest.txt`, written before this runs) and the run it restored (`learning-restore.txt`); the resolver reads
+ * both the same way (`readRunScope`). A row of the declared restored run is PRIOR_RUN and a row of any other run, once
+ * the bundle names its own, is FOREIGN_RUN: no body is looked for, so neither can read as MISSING or be copied as this
+ * run's. A row is still checked for shape first. A bundle that names neither is copied exactly as before.
+ *
  * THE ROOT. `JULIUS_WORK_ARTIFACT_ROOT` when it is set (the job sets it, so the mission and this share one root);
  * otherwise each mission directory under `<tmpdir>/julius-work-artifacts/` is a candidate, and a body must be found
  * in exactly one of them (MISSING / AMBIGUOUS otherwise). Bodies are never found by a name glob.
@@ -35,10 +42,11 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileS
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { readRunScope, runScopeOf } from './julius-evidence-resolve.mjs';
 
 export const BODY_DIRECTORY = 'artifacts';
 export const BODIES_FILE = 'BODIES.tsv';
-export const BODY_STATUSES = Object.freeze(['COPIED', 'MISSING', 'AMBIGUOUS', 'HASH_MISMATCH', 'REFUSED_REF', 'REF_MISMATCH', 'REFUSED_PATH', 'REFUSED_SYMLINK', 'INVALID_ROW']);
+export const BODY_STATUSES = Object.freeze(['COPIED', 'MISSING', 'AMBIGUOUS', 'HASH_MISMATCH', 'REFUSED_REF', 'REF_MISMATCH', 'REFUSED_PATH', 'REFUSED_SYMLINK', 'INVALID_ROW', 'PRIOR_RUN', 'FOREIGN_RUN']);
 const STORAGE_REF = /^local:\/\/([0-9a-f]{64})\/([0-9a-f]{64})\/([0-9a-f]{64})$/u;
 const HEX64 = /^[0-9a-f]{64}$/u;
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
@@ -86,8 +94,11 @@ export function blobUnder(root, segments) {
   return { path: absolute };
 }
 
-/** One work-artifacts row → its outcome, and the bytes when they may be copied. */
-export function bodyFor(row, roots) {
+/**
+ * One work-artifacts row → its outcome, and the bytes when they may be copied. `scope` is the bundle's
+ * `readRunScope`; without one, every row is the bundle's own, as it always was.
+ */
+export function bodyFor(row, roots, scope = { own: null, prior: null }) {
   const artifactId = row?.artifact_id ?? '';
   const outcome = (status, extra = {}) => ({ artifactId, status, contentHash: row?.content_hash ?? '', byteSize: row?.byte_size ?? '', ...extra });
   if (row === null || artifactId === '' || /[\u0000-\u001f]/u.test(artifactId) || !HEX64.test(row.content_hash ?? '') || !/^\d+$/u.test(row.byte_size ?? '')) {
@@ -97,6 +108,9 @@ export function bodyFor(row, roots) {
   if (match === null) return outcome('REFUSED_REF');
   const segments = [match[1], match[2], match[3]];
   if (segments[2] !== sha256(artifactId)) return outcome('REF_MISMATCH');
+  const where = runScopeOf(row.run_id ?? '', scope);
+  if (where === 'PRIOR') return outcome('PRIOR_RUN');
+  if (where === 'FOREIGN') return outcome('FOREIGN_RUN');
   const found = [];
   for (const root of roots) {
     const blob = blobUnder(root, segments);
@@ -119,8 +133,9 @@ export function copyEvidenceBodies({ bundleDir, configuredRoot, discoveryBase })
   const counts = Object.fromEntries(BODY_STATUSES.map((status) => [status, 0]));
   if (dump.status === 'READ') {
     const roots = artifactRoots({ configuredRoot, discoveryBase });
+    const scope = readRunScope(bundleDir);
     for (const row of dump.rows) {
-      const result = bodyFor(row, roots);
+      const result = bodyFor(row, roots, scope);
       if (result.status === 'COPIED') writeFileSync(join(bundleDir, result.body), result.bytes);
       counts[result.status] += 1;
       lines.push([result.artifactId, result.body ?? '-', result.contentHash, result.byteSize, result.status].join('\t'));

@@ -345,6 +345,24 @@ export interface JuliusTrajectoryWriter {
 }
 
 /**
+ * ONE RUN'S TRAJECTORY, READ BACK AS IT WAS APPENDED.
+ *
+ * The Learning Loop projects a mission's outcome from the durable trajectory
+ * and from nothing else (`juliusLearningMetrics`), so its runtime caller needs a
+ * run's rows back EXACTLY: every row of that one run, in the ledger's order
+ * (`occurred_at`, then the row's own id), each one the event `appendTrajectory`
+ * was given. A partial read would be a measurement of a different mission, so a
+ * store that cannot return the whole run REFUSES rather than truncating.
+ *
+ * Optional, like the timeline: it is not part of `JuliusRuntimeStore`, so the
+ * kernel's ports did not grow a method every store must now serve. The
+ * PostgreSQL store's own type requires it, and the in-memory store serves it.
+ */
+export interface JuliusTrajectoryReader {
+  trajectoryForRun(runId: string, projectId: string): Promise<readonly JuliusTrajectoryEvent[]>;
+}
+
+/**
  * BUDGET, AS THE RUNTIME NEEDS IT.
  *
  * Wonderland's `reserveBudget` already exists and is keyed by an execution id.
