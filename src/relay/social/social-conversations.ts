@@ -23,17 +23,25 @@ import {
   type MessageKind,
   type SocialUserId,
 } from './social-contracts';
-import { resolvePresenceFor } from './social-presence';
-import { audienceAdmits, blockedEitherWay, conversationById, hasUser, isMuted, messagesOf, mintId, userById, type SocialState } from './social-state';
+import { identityVisibleTo, resolvePresenceFor } from './social-presence';
+import {
+  audienceAdmits,
+  blockedEitherWay,
+  conversationById,
+  directConversationId,
+  hasUser,
+  isMuted,
+  messagesOf,
+  mintId,
+  userById,
+  type SocialState,
+} from './social-state';
 
 const denied = (message: string) => fail<SocialState>(relayError('permission-denied', message));
 const invalid = (message: string) => fail<SocialState>(relayError('validation-failed', message));
 
-/** The deterministic id of the one DIRECT conversation between two people. */
-export function directConversationId(a: SocialUserId, b: SocialUserId): string {
-  const [x, y] = a < b ? [a, b] : [b, a];
-  return `dm_${x}__${y}`;
-}
+/** The deterministic id of the one DIRECT conversation between two people (defined beside the state's questions, which ask it). */
+export { directConversationId };
 
 /** The refusal for "you may not write to this person": a policy that does not admit you, and anybody across a wall. */
 export const NOT_ACCEPTING_MESSAGES = 'this person is not accepting messages from you';
@@ -210,7 +218,9 @@ export function conversationsFor(state: SocialState, userId: SocialUserId): Conv
       return {
         conversationId: c.conversationId,
         kind: c.kind,
-        title: c.title ?? (other !== null ? (userById(state, other)?.profile.displayName ?? other) : 'Conversation'),
+        // A DIRECT conversation is titled with the other person's name only if this member may know who they are (OBS-1 round 2,
+        // F2): one opened by id with somebody hidden from them reads as the bare id until that person writes in it.
+        title: c.title ?? (other !== null ? (identityVisibleTo(state, userId, other) ? (userById(state, other)?.profile.displayName ?? other) : other) : 'Conversation'),
         otherUserId: other,
         lastMessagePreview: last === undefined ? null : last.kind === 'TEXT' ? last.body.slice(0, 80) : last.kind === 'PARTY_INVITE' ? 'Party invite' : last.kind === 'SERVER_INVITE' ? 'Server invite' : last.body.slice(0, 80),
         lastMessageAtIso: c.lastMessageAtIso,

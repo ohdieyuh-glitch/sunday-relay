@@ -1,7 +1,7 @@
 import os
 import unittest
 
-from helpers import A1, A2, TempDirs, set_cell, set_manifest, tsv_edit
+from helpers import A1, A2, A2_RUN, TempDirs, arm_bundle, julius, set_cell, set_manifest, tsv_edit
 from julius_brain_intel.boundary import load_bundle
 from julius_brain_intel.evidence_analysis import (
     analyze_bundle, compare_anomalies, served_model_match, sha256_file, verify_artifact, verify_sums,
@@ -181,6 +181,52 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(verdicts["SERVED_MODEL_NOT_ATTESTED"]["status"], "RESOLVED")
         self.assertEqual(verdicts["LATENCY_UNRECORDED"]["status"], "PERSISTENT")
         self.assertEqual(verdicts["CODER_REPORT_REFUSED"]["status"], "NEW")
+
+
+class RunScopeTests(unittest.TestCase):
+    """One bundle, one run: a WITH arm's restored store is read for its own run, a single run as before."""
+
+    def setUp(self):
+        self.tmp = TempDirs()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_single_run_bundle_is_read_exactly_as_before(self):
+        raw = load_bundle(A2)
+        report = analyze_bundle(raw)
+        self.assertEqual(report["runScope"], {"runs": [A2_RUN], "run": A2_RUN, "basis": "manifest", "scoped": False,
+                                              "reason": None})
+        self.assertEqual({r["file"]: (r["status"], r["rows"], r["problems"]) for r in report["inventory"] if r["file"].endswith(".tsv")},
+                         {f"{n}.tsv": (t.status, len(t.rows), list(t.problems)) for n, t in raw.tables.items()})
+        # No learning record, so no contract digest or runtime: None, never inferred.
+        self.assertEqual((report["binding"]["contractDigest"], report["binding"]["runtimeVersion"]), (None, None))
+        self.assertEqual(report["learning"], {"unknown": "learning.tsv is MISSING"})
+
+    def test_a_with_arm_s_bundle_keeps_only_its_own_rows(self):
+        own, inherited = julius(0xC1), julius(0xA1)
+        report = analyze_bundle(load_bundle(arm_bundle(self.tmp, "0" * 64, own, "43", without=inherited, inherited_repairs=2)))
+        self.assertTrue(report["completeness"]["complete"], report["completeness"])
+        self.assertEqual(len(report["roles"]), 4)
+        self.assertEqual(report["mission"]["repairRounds"], {"value": 0})
+        status = {r["file"]: r["status"] for r in report["inventory"]}
+        # sessions.tsv is scoped by mission, not run, and both arms run one mission: it cannot be attributed.
+        self.assertEqual(status["sessions.tsv"], "UNATTRIBUTED")
+        sessions = next(r for r in report["inventory"] if r["file"] == "sessions.tsv")
+        self.assertEqual(sessions["problems"], [f"no run_id column: its rows cannot be scoped to {own}"])
+        self.assertEqual(status["runs.tsv"], "PRESENT")
+
+    def test_a_row_naming_no_run_in_a_two_run_bundle_is_unattributed(self):
+        own, inherited = julius(0xC1), julius(0xA1)
+        path = arm_bundle(self.tmp, "0" * 64, own, "43", without=inherited)
+        with open(os.path.join(path, "budget.tsv"), encoding="utf-8", newline="") as handle:
+            budget = handle.read()
+        with open(os.path.join(path, "budget.tsv"), "w", encoding="utf-8", newline="") as handle:
+            handle.write(tsv_edit(set_cell({"run_id": inherited}, "run_id", ""))(budget))
+        report = analyze_bundle(load_bundle(path))
+        budget_row = next(r for r in report["inventory"] if r["file"] == "budget.tsv")
+        self.assertEqual(budget_row["status"], "UNATTRIBUTED")
+        self.assertFalse(report["completeness"]["complete"])
 
 
 if __name__ == "__main__":

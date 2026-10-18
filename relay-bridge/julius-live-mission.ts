@@ -49,6 +49,7 @@ import { observeCoderLogin, resolveCoderClaudeExecutable } from './hosted-coding
 import { readFileSync } from 'node:fs';
 import { createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
+import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
 import { JULIUS_RUNTIME_DATABASE_ENV_NAMES, juliusRuntimeDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
@@ -76,14 +77,15 @@ import { LocalJuliusArtifactStore } from '../src/relay/workspace/julius-tools/lo
 import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/julius-work-artifact-postgres';
 import { liveEvidenceLines } from './julius/live-evidence-lines';
 import {
-  liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveOneLine, liveResearchLines, liveTickAccountLine, liveTickBudgetLine,
-  liveWorkersBlockedLines,
+  liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveLearningFailedLine, liveOneLine, liveResearchLines, liveTickAccountLine,
+  liveTickBudgetLine, liveWorkersBlockedLines, liveStageDeadlineLine,
 } from './julius/live-report-lines';
 import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
   driveJuliusRunToTerminal,
-  liveTickBudgetFor,
+  liveTickBudgetFor, liveStageDeadline, liveRunAttemptRefusal, JULIUS_LIVE_RATE_LIMIT_BACKOFF,
+  recordJuliusLearningOutcome,
   resolveLiveWorkers,
 } from './julius/live-composition';
 import { JOB_BUDGET_MS } from './reviewer-deadline';
@@ -93,8 +95,8 @@ import { JOB_BUDGET_MS } from './reviewer-deadline';
  * moment the workflow recorded at its dispatch-input gate, plus the job budget
  * the workflow's own timeout mirrors. The gate runs a few tens of seconds after
  * the job starts, so the real deadline is that much EARLIER than printed.
- * UNKNOWN when the moment was not recorded. Printed, never enforced: the
- * runner's timeout is the stop.
+ * UNKNOWN when the moment was not recorded. Printed as recorded; what the
+ * drive ENFORCES is `liveStageDeadline`, derived from it (audit F3).
  */
 function wallClockDeadline(env: Record<string, string | undefined>): string {
   const started = Date.parse(env.JULIUS_JOB_STARTED_AT ?? '');
@@ -783,7 +785,7 @@ async function main(argv: readonly string[]): Promise<number> {
    * No query is made: the check is whether the composed store carries the
    * reader both consumers are gated on, not whether the database is reachable.
    */
-  const ledger = databaseMissing.length > 0 ? 'UNKNOWN' : liveLedgerState(createJuliusPostgresRuntimeStore(new Pool({ connectionString: databaseUrl! })));
+  const ledger = databaseMissing.length > 0 ? 'UNKNOWN' : liveLedgerState(createJuliusPostgresRuntimeStore(listenJuliusPool(new Pool({ connectionString: databaseUrl! }), 'julius live store')));
   out(`  live_ledger: ${ledger}`);
   if (ledger === 'UNBOUND') out('  BLOCKED allocation: the live store serves no timeline, so every dispatch would be allocated a flat estimate');
 
@@ -802,7 +804,7 @@ async function main(argv: readonly string[]): Promise<number> {
   }
 
   /* ------------------------------------------------- confirmed live path */
-  const pool = new Pool({ connectionString: databaseUrl! });
+  const pool = listenJuliusPool(new Pool({ connectionString: databaseUrl! }), 'julius live store');
   try {
     /* `migrate()` applies only the versions `schema_migrations` does not
      * already hold, so this is safe against an empty database, a partially
@@ -941,8 +943,18 @@ async function main(argv: readonly string[]): Promise<number> {
         putTaskContract: bootstrapContracts.putTaskContract.bind(bootstrapContracts),
       },
       seeds: createPostgresMissionSeedStore(pool),
-      // The project's verified knowledge, inherited by this mission.
+      // What earlier runs of this mission verified, inherited by this run's planner.
       knowledge: createPostgresMissionKnowledgeStore(pool),
+      /*
+       * A REGISTERED ARM WITH INHERITS FROM ITS OWN ARM WITHOUT, OR IT DOES NOT START (founder ruling
+       * 2026-10-04, R2). The source is pinned to the WITHOUT run the registration names, and an empty or
+       * failed carry refuses the bootstrap before the run is READY: the RESULT line says
+       * `carried_knowledge_required`, the `knowledge.carried` event says why, and no provider is paid for
+       * an experiment about inherited knowledge that inherited nothing. Every other mission is unchanged.
+       */
+      ...(contract.learningPair?.arm === 'WITH' && contract.learningPair.withoutRunId !== undefined
+        ? { carry: { required: true, fromRunIds: [contract.learningPair.withoutRunId] } }
+        : {}),
       tenantId: contract.tenantId,
       executionId,
     });
@@ -952,6 +964,14 @@ async function main(argv: readonly string[]): Promise<number> {
       return 1;
     }
     out(`Run ${submitted.runId} accepted in state ${submitted.state}; driving the Julius run loop.`);
+    /* A RE-RUN STOPS HERE, before any provider can be reached (audit F4): the bootstrap above wrote only to this job's
+       disposable database, and the drive below is the first thing that can spend. */
+    const rerunRefusal = liveRunAttemptRefusal(env);
+    if (rerunRefusal !== null) {
+      out(`RESULT: BLOCKED — ${rerunRefusal}`);
+      out(`  run: ${submitted.runId}`);
+      return 1;
+    }
 
     /**
      * THE TWO HALVES OF RESEARCH AUTHORITY, SUPPLIED SEPARATELY BECAUSE THEY
@@ -992,13 +1012,46 @@ async function main(argv: readonly string[]): Promise<number> {
     });
     out(liveTickBudgetLine(tickBudget, tickOverride.override));
     out(`  wall clock deadline: ${wallClockDeadline(env)}`);
+    /* THE DEADLINE IS ENFORCED NOW, NOT ONLY PRINTED (audit F3): no stage starts once a stage could no longer finish
+       with the steps after LIVE still inside the job's limit. The run then ends FAILED (job_deadline_reached, Julius
+       code TIMEOUT) through its ordinary path, so its learning record below is written and the evidence steps run. */
+    const stageDeadline = liveStageDeadline({ jobStartedAt: env.JULIUS_JOB_STARTED_AT, workers: resolution.entries.map((entry) => entry.worker) });
+    out(liveStageDeadlineLine(stageDeadline));
     out(liveExecutionScopeLine(liveExecutionScope(env)));
     const outcome = await driveJuliusRunToTerminal({
       loop: runtime.loop, store: handoffs.store,
       runId: submitted.runId, projectId: contract.projectId,
       verification: runtime.verification,
       ...(tickOverride.override === undefined ? {} : { maxTicks: tickOverride.override }),
+      ...(stageDeadline === null ? {} : { deadline: stageDeadline }),
+      retryBackoff: JULIUS_LIVE_RATE_LIMIT_BACKOFF,
     });
+
+    /*
+     * THE LEARNING LOOP, CALLED BY THE RUNTIME (E9-a), and only for a contract that registers an arm
+     * of a matched pair. Every other mission runs exactly as it did. The arm is measured off its own
+     * durable trajectory and recorded as ONE ledger event; arm WITH is also compared with arm WITHOUT
+     * from this same store and gated under the policy the contract declared, and a PROMOTE is recorded
+     * as a proposal and nothing more (`recordJuliusLearningOutcome`).
+     *
+     * BEFORE THE RESULT, so the `  run:` line stays directly under it (F10). A record that could not be
+     * made is said here and FAILS THE JOB: an arm of a registered pair whose measurement never reached
+     * the ledger is not a usable arm, and exit 0 would let it be counted as one.
+     */
+    let learningUnrecorded = false;
+    if (contract.learningPair !== undefined) {
+      try {
+        const learning = await recordJuliusLearningOutcome({
+          store: handoffs.store, runId: submitted.runId, projectId: contract.projectId,
+          registration: contract.learningPair, objectiveDigest: request.missionBindingDigest,
+          roles: resolution.entries.map((entry) => entry.worker.role),
+        });
+        for (const line of learning.lines) out(line);
+      } catch (error) {
+        learningUnrecorded = true;
+        out(liveLearningFailedLine(error));
+      }
+    }
 
     const tasks = await handoffs.store.tasksForRun(submitted.runId, contract.projectId);
     const evidence = await handoffs.store.evidenceForRun(submitted.runId, contract.projectId);
@@ -1020,7 +1073,7 @@ async function main(argv: readonly string[]): Promise<number> {
     for (const line of liveEvidenceLines(evidence, tasks)) out(line);
     for (const finding of findings) out(`  finding ${finding.findingId} blocking=${finding.blocking} status=${finding.status} — ${finding.claim}`);
     out(`  verification decisions: ${decisions.map((decision) => decision.action).join(', ') || 'none'}`);
-    return outcome.state === 'COMPLETED' ? 0 : 1;
+    return outcome.state === 'COMPLETED' && !learningUnrecorded ? 0 : 1;
   } finally {
     await pool.end().catch(() => undefined);
   }

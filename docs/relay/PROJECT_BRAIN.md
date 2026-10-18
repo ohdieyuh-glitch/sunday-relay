@@ -80,13 +80,27 @@ own rows are already safe summaries.
   durable context snapshot records exactly which version a worker read.
 * **Cross-mission carry:** project-scoped statements reach every mission of the project; mission-scoped ones only
   their run. Scope is enforced by the SQL and again in the projection, before any ranking (mutation M10 vs control
-  M11). Julius's own carry is unchanged: at bootstrap, `verifiedProjectKnowledge` copies the VERIFIED/APPROVED claims
-  of the project's OTHER runs (newest first, capped at `JULIUS_CARRIED_KNOWLEDGE_LIMIT`) into the new run as
-  `carried:<sourceRun>:<entry>` entries that keep their asserter, evidence and standing; both production bootstraps
-  (bridge route and live job) bind it. Deterministic scope only — project, never this run, trust — and relevance is
-  left to the context integrity layer. Not carried today (P2): a prior mission's UNRESOLVED findings and a summary of
-  the project's mission history; adding them changes the context of every later mission in a project, including a
-  paid one, so it lands only with its own qualification.
+  M11).
+* **Julius's own carry (corrected, founder ruling 2026-10-04):** at bootstrap, after the task graph exists and only
+  while the run is still CREATED, `JuliusClaimPostgresRepository.carryProjectKnowledge` reads the earlier runs of the
+  SAME project and the SAME mission (never this run; newest first; at most `JULIUS_CARRY_SOURCE_RUN_LIMIT`) and the
+  pure rule `planJuliusKnowledgeCarry` (`julius-claim-ledger.ts`) decides what travels. Two sources only, each from
+  durable state: a **verified repair finding** — a blocking reviewer finding that cites evidence, that a repair
+  ADDRESSED and an independent re-review RESOLVED, as the finding's own lifecycle (`foldJuliusFindings`) says; and
+  the **accepted architecture** in force (`foldJuliusArchitecture`) when the newest COMPLETED source run ended.
+  NOT carried, each excluded by a named reason on the record: verification-verdict mirrors (`brain:decision:*`),
+  architecture proposals and superseded revisions, designs of runs that did not complete, unresolved / superseded /
+  non-blocking / uncited findings, handoffs an accepted review promoted, and copies of copies. Every carried row is
+  scoped to the new run's `plan` task (the Prompt Architect) — task-scoped sources stay task-scoped, a run-wide design
+  is narrowed to the plan, nothing is widened — under the id `carried:<sourceRun>:<sourceRef>:into:<run>`, with a
+  text header naming its source run, source task and type and (for a finding) its severity, category, criterion,
+  reviewer, repair and resolving review, and a standing recorded with reason `CARRIED_FROM:<sourceRun>` (a finding's
+  is derived exactly as admission derives a cited FINDING; the design keeps its source standing). The whole decision
+  is one `knowledge.carried` event written in the same transaction (or `FAILED` with a closed reason), and every
+  dispatch owed carried rows writes `knowledge.consumed` (owed / admitted / evicted). Both are dumped to
+  `knowledge-carry.tsv`. A registered learning arm WITH must inherit at least one row from its own arm WITHOUT or
+  its bootstrap is refused (`carried_knowledge_required`) before the run is READY. Not carried (P2): a prior
+  mission's UNRESOLVED findings and a summary of the project's mission history.
 * **Mission contract:** the document projects each mission's contract policy (execution mode, review requirement,
   completion rule, limits, requested permissions, scope, roles) into `governance`, beside approvals, task-contract
   locks, lifecycle control and the per-role served-model topology from `JuliusRuntimeApi.inspectSlots`.

@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { appendJuliusEventWithin } from './julius-event-postgres';
 import { juliusSerializable } from './julius-serializable';
+import { checkoutJuliusHeld } from './julius-pg-held';
 import {
   MAX_TASK_RECOVERIES, juliusRecoverySettlementEvent, planJuliusRecovery, planJuliusRecoverySettlements,
   type JuliusMissionState, type JuliusOpenReservation, type JuliusRecoveryAction, type JuliusRecoveryCandidate, type JuliusRecoverySettlement,
@@ -112,7 +113,7 @@ export class JuliusRecoveryPostgresRepository {
 
   /** Whether any ACTIVE task's lease has expired, read without a predicate lock (READ COMMITTED, READ ONLY). */
   private async anyLeaseExpired(now: string, projectId?: string): Promise<boolean> {
-    const client = await this.pool.connect();
+    const { client, release } = await checkoutJuliusHeld(this.pool, 'julius recovery store');
     try {
       await client.query('BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY');
       const probe = await client.query<{ expired: boolean }>(
@@ -126,7 +127,7 @@ export class JuliusRecoveryPostgresRepository {
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;
     } finally {
-      client.release();
+      release();
     }
   }
 }

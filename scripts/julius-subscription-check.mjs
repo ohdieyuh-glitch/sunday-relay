@@ -42,6 +42,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isSubscriptionUsageLimit } from './julius-usage-limit.mjs';
 
 export const TOKEN_ENV = 'CLAUDE_CODE_OAUTH_TOKEN';
 /**
@@ -155,7 +156,7 @@ export function smokeFailureReason(raw) {
   const errorType = text.match(/"type"\s*:\s*"(not_found_error|authentication_error|permission_error|rate_limit_error|overloaded_error)"/u);
   const reason = subtype === 'error_max_turns' ? 'MAX_TURNS'
     : errorType !== null ? ERROR_TYPE_REASON[errorType[1]]
-      : /usage limit reached|\b(?:5-hour|weekly|session|opus) limit reached\b/iu.test(text) ? 'USAGE_LIMIT'
+      : isSubscriptionUsageLimit(text) ? 'USAGE_LIMIT'
         : status !== null && STATUS_REASON[status] !== undefined ? STATUS_REASON[status]
           : parsed.is_error === true ? 'OTHER'
             : 'UNEXPECTED_REPLY';

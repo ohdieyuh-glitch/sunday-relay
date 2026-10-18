@@ -39,6 +39,7 @@ import {
 import { createHash } from 'node:crypto';
 import { parseJuliusMissionActiveError } from '../../src/relay/persistence/julius-postgres';
 import { seedJuliusTaskContract, type JuliusMissionState, type JuliusTask, type JuliusTaskContract } from '../../src/relay/mission/julius';
+import type { JuliusKnowledgeCarryOutcome } from '../../src/relay/mission/julius/julius-claim-ledger';
 import { JULIUS_CARRIED_KNOWLEDGE_LIMIT, type MissionKnowledgeStore } from './mission-knowledge';
 import type { MissionSeedStore } from './mission-seed';
 
@@ -73,13 +74,45 @@ export interface RunCreationStore {
 export const planTaskId = (runId: string): string => `${runId}:plan`;
 export const buildTaskId = (runId: string): string => `${runId}:build`;
 
+/**
+ * THE RUN A REQUEST NAMES, before anything is created: the contract's idempotency key, or, for an explicit rerun,
+ * that key and the caller's rerun key (why, at the refusal of a keyless rerun below). One derivation: the bootstrap
+ * names its run with it, and a registration computes every arm's run id with it before any arm runs.
+ */
+const juliusBootstrapIdentity = (request: Pick<JuliusBootstrapRequest, 'idempotencyKey' | 'rerunIntent' | 'rerunKey'>): string =>
+  request.rerunIntent !== 'EXPLICIT'
+    ? request.idempotencyKey
+    : createHash('sha256').update(`${request.idempotencyKey}:rerun:${(request.rerunKey ?? '').trim()}`).digest('hex').slice(0, 24);
+export const juliusBootstrapRunId = (request: Pick<JuliusBootstrapRequest, 'idempotencyKey' | 'rerunIntent' | 'rerunKey'>): string =>
+  `run:${juliusBootstrapIdentity(request)}`;
+
 const REQUIRED_ROLES = ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'] as const;
 
 export function createLiveJuliusBootstrapPort(deps: {
   readonly runs: RunCreationStore;
   readonly seeds: MissionSeedStore;
-  /** What earlier missions of this project verified. Absent: nothing is inherited. */
+  /** What earlier runs of this mission verified. Absent: nothing is inherited. */
   readonly knowledge?: MissionKnowledgeStore;
+  /**
+   * WHAT THIS RUN MUST INHERIT, when its caller says so. Absent: the carry runs
+   * whenever a knowledge store is bound, its outcome is recorded either way, and
+   * no outcome stops a mission starting — a mission with no inherited knowledge
+   * is a mission that has to work it out again.
+   */
+  readonly carry?: {
+    /**
+     * Refuse the bootstrap — before the run is READY, so nothing is dispatched —
+     * unless the carry holds at least one VERIFIED REPAIR FINDING and every
+     * carried finding came from `fromRunIds` (`requiredCarryRefusal`). A
+     * registered learning arm WITH (founder rulings 2026-10-04, R2 and the
+     * non-empty carry; Decision C, C-1): an experiment about inherited knowledge
+     * that inherited no verified lesson from its own arm WITHOUT is not the
+     * experiment, and must not be paid for.
+     */
+    readonly required: boolean;
+    /** Carry only from these runs (arm WITH: its own arm WITHOUT). Still this project and this mission only. */
+    readonly fromRunIds?: readonly string[];
+  };
   readonly tenantId: string;
   readonly executionId: string;
   readonly now?: () => string;
@@ -131,9 +164,7 @@ export function createLiveJuliusBootstrapPort(deps: {
           'An explicit rerun must carry a key of its own, so that repeating the request cannot buy a second execution. '
           + 'Send one stable token per intended rerun.');
       }
-      const identity = request.rerunIntent !== 'EXPLICIT'
-        ? request.idempotencyKey
-        : createHash('sha256').update(`${request.idempotencyKey}:rerun:${(request.rerunKey ?? '').trim()}`).digest('hex').slice(0, 24);
+      const identity = juliusBootstrapIdentity(request);
       const runId = `run:${identity}`;
       const projectBrainRevision = Number.parseInt(request.projectBrain.revision, 10);
       try {
@@ -188,37 +219,6 @@ export function createLiveJuliusBootstrapPort(deps: {
             revision: 2 + request.requirements.length + request.constraints.length,
           },
         ]);
-        /**
-         * WHAT EARLIER MISSIONS VERIFIED, HANDED TO THIS ONE.
-         *
-         * A context packet is compiled from ONE run's brain entries, so until
-         * this everything a mission learned died with it and the matched-pair
-         * learning proof had to seed the prior fact itself. Only VERIFIED and
-         * APPROVED claims travel, only from this project, never from this run,
-         * newest first and capped — and each copy keeps its author, its
-         * evidence and its standing, so mission B ranks a reviewer-verified fact
-         * as verified and still cannot self-verify it. Relevance is not decided
-         * here: the context integrity layer ranks and scopes what arrives.
-         *
-         * OPTIONAL PORT, SILENT WHEN ABSENT: a deployment or a test that binds
-         * no knowledge store bootstraps exactly as it did before, and an
-         * unreachable one must not stop a mission starting — a mission with no
-         * inherited knowledge is a mission that has to work it out again, which
-         * is the state every mission was in until now.
-         */
-        if (deps.knowledge !== undefined) {
-          const carried = await deps.knowledge.verifiedProjectKnowledge({
-            projectId: request.projectId, excludeRunId: runId, limit: JULIUS_CARRIED_KNOWLEDGE_LIMIT,
-          }).catch(() => []);
-          if (carried.length > 0) {
-            await deps.knowledge.carryKnowledge({
-              runId, projectId: request.projectId, carried,
-              // After the seed entries, which end at this revision.
-              firstRevision: 3 + request.requirements.length + request.constraints.length,
-              occurredAt: now(),
-            }).catch(() => 0);
-          }
-        }
         await deps.runs.addTask({
           commandId: `bootstrap-task:${planTaskId(runId)}`, runId, projectId: request.projectId,
           task: {
@@ -235,6 +235,42 @@ export function createLiveJuliusBootstrapPort(deps: {
             role: 'CODING_AGENT', ordinal: 1, state: 'BLOCKED',
           } as JuliusTask,
         });
+        /**
+         * WHAT EARLIER RUNS OF THIS MISSION VERIFIED, HANDED TO THIS RUN'S PLANNER
+         * (founder ruling 2026-10-04, R1-R3; the rule is `planJuliusKnowledgeCarry`).
+         *
+         * AFTER THE TASK GRAPH, because every carried row is scoped to this run's
+         * plan task and `julius_brain_entries.task_id` references `julius_tasks`:
+         * the plan task must exist first. Nothing can claim it in between — the
+         * run is CREATED, and only READY and later states are claimable.
+         *
+         * ONLY ON A RUN THAT IS STILL CREATED, read from the store rather than
+         * from `createRun`'s answer: a replayed create returns the response it
+         * recorded the first time, which always says CREATED. A run that already
+         * moved on inherited what it was going to inherit when it was new; a
+         * replay must not hand a running mission something mid-flight. (A replay
+         * while it is still CREATED carries again, which is idempotent.)
+         *
+         * RECORDED, NEVER SWALLOWED. The store writes the outcome as one
+         * `knowledge.carried` event — what travelled, what was excluded and why,
+         * or why the carry failed — and returns it. Only a caller that REQUIRES
+         * inheritance turns a carry without a verified repair finding from its
+         * pinned runs into a refusal; everyone else starts as before, with the
+         * reason on the record.
+         */
+        const current = deps.knowledge === undefined && deps.carry === undefined
+          ? null : await deps.runs.loadRun(runId, request.projectId);
+        if (current !== null && current.state === 'CREATED') {
+          const carry = deps.knowledge === undefined ? null : await deps.knowledge.carryKnowledge({
+            runId, projectId: request.projectId, missionId: request.missionId,
+            scopeTaskId: planTaskId(runId), limit: JULIUS_CARRIED_KNOWLEDGE_LIMIT, occurredAt: now(),
+            ...(deps.carry?.fromRunIds === undefined ? {} : { fromRunIds: deps.carry.fromRunIds }),
+          });
+          if (deps.carry?.required === true) {
+            const refusal = requiredCarryRefusal(carry, deps.carry.fromRunIds ?? []);
+            if (refusal !== null) return refuse('carried_knowledge_required', refusal);
+          }
+        }
         /**
          * THE CONTRACT THE BUILD WILL BE HELD TO, written before the run is
          * READY. Seeded from the mission's own terms, so the criteria ids, the
@@ -329,4 +365,28 @@ export function createLiveJuliusBootstrapPort(deps: {
  */
 function buildEvidenceFor(request: JuliusBootstrapRequest): 'TEST' | 'DIFF' {
   return (request.deterministicCheck?.declared ?? true) ? 'TEST' : 'DIFF';
+}
+
+/**
+ * THE GATE ON A REQUIRED CARRY, IN ONE MODE (Decision C, C-1): valid only when
+ * the carry holds at least one VERIFIED REPAIR FINDING and every carried
+ * finding came from a run the caller pinned (arm WITH: its own arm WITHOUT).
+ * A design never counts, and neither does the word CARRIED: the count and the
+ * sources are the evidence. A required carry that pinned nothing has no
+ * source that could qualify. Null when valid; otherwise the refusal's message.
+ */
+function requiredCarryRefusal(carry: JuliusKnowledgeCarryOutcome | null, pinned: readonly string[]): string | null {
+  const must = 'This mission must inherit a verified repair finding from its own earlier run';
+  const after = 'the run was not made ready and nothing was dispatched.';
+  if (carry === null) return `${must}, and no knowledge store is bound; ${after}`;
+  if (carry.outcome !== 'CARRIED') {
+    return `${must}, and the carry was ${carry.outcome}${carry.reasonCode === null ? '' : ` (${carry.reasonCode})`}; ${after}`;
+  }
+  if (carry.carriedFindings < 1 || carry.findingSourceRunIds.length === 0) {
+    return `${must}, and the carry held ${String(carry.carried)} row(s) but no verified repair finding; ${after}`;
+  }
+  if (carry.findingSourceRunIds.some((runId) => !pinned.includes(runId))) {
+    return `${must}, and a carried finding came from a run it did not pin; ${after}`;
+  }
+  return null;
 }
