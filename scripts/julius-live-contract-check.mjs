@@ -142,6 +142,9 @@ const MISSION_LIMITS = Object.freeze({
   // what was preregistered" -- four arms, no extra arm, no re-dispatch. No MISSION_LANES entry (the default lab: lanes grant no
   // money) and no MISSION_RESEARCH entry (Mission 5 has none).
   'julius-learning-pair-1': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
+  // DECISION C, REGISTRATION 2 (founder, 2026-10-18: "Maximum spending remains $30 per arm, $120 total across four arms"). Same ceilings per arm as
+  // registration 1; no MISSION_LANES entry (the default lab) and no MISSION_RESEARCH entry.
+  'julius-learning-pair-2': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
