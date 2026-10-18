@@ -71,6 +71,7 @@ import {
 } from '../../src/relay/mission/julius/julius-research-protocol';
 import {
   runHostedCodingAgent,
+  type HostedEffort,
   type HostedQueryFn,
 } from '../hosted-coding-agent/hosted-runner';
 import {
@@ -1981,6 +1982,8 @@ export function createLiveHostedCodingAdapter(input: {
    * mattered.
    */
   readonly authMode?: ClaudeAuthMode;
+  /** The mission's declared coder effort; absent changes nothing. */
+  readonly effort?: HostedEffort;
 }): JuliusProviderAdapter {
   // `testCommand` is deliberately NOT in this guard. Empty means the mission
   // declared no deterministic check, which is a valid mission and not a missing
@@ -2001,6 +2004,7 @@ export function createLiveHostedCodingAdapter(input: {
     provider: createClaudeCodeCodingAgentProvider({
       apiKey: input.apiKey, requestedModel: input.requestedModel,
       ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
+      ...(input.effort === undefined ? {} : { effort: input.effort }),
       ...(input.run === undefined ? {} : { run: input.run }),
       ...(input.queryLoader === undefined ? {} : { queryLoader: input.queryLoader }),
     }),

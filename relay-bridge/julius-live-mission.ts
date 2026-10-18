@@ -667,6 +667,7 @@ async function main(argv: readonly string[]): Promise<number> {
     testCommand: contract.testCommand,
     contexts: { snapshotFor: () => null }, artifacts, shell: null,
     architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
+    architectEffort: contract.limits?.architectEffort, coderEffort: contract.limits?.coderEffort,
   });
 
   out('JULIUS LIVE MISSION — preflight');
@@ -910,6 +911,7 @@ async function main(argv: readonly string[]): Promise<number> {
       env, projectId: contract.projectId, workspacePath: contract.workspacePath,
       testCommand: contract.testCommand, contexts: handoffs.contexts, artifacts: liveArtifacts, shell,
       architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
+      architectEffort: contract.limits?.architectEffort, coderEffort: contract.limits?.coderEffort,
       researchPolicyFor: researchPolicyOf,
     });
     if (!resolution.ok) {

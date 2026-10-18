@@ -112,7 +112,15 @@ export type HostedRunOutcome =
     readonly completedAt: string;
   };
 
+/** The reasoning effort a mission may declare for the Coding Agent: the SDK's `effort` levels. */
+export type HostedEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 export interface HostedRunInput {
+  /**
+   * The reasoning effort THIS MISSION declared for the coder, or absent. Absent adds no `effort`
+   * option, so the SDK call is exactly what it was before this field existed.
+   */
+  readonly effort?: HostedEffort;
   /**
    * Which credential the child may use. Absent means `ANTHROPIC_API`, the mode
    * this surface has always had. `CLAUDE_SUBSCRIPTION` omits the API key so the
@@ -213,6 +221,7 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
         // for file tools and has no opinion on the rest.
         hooks: { PreToolUse: [{ hooks: [authority] }] },
         ...(envelope.model !== null ? { model: envelope.model } : {}),
+        ...(input.effort === undefined ? {} : { effort: input.effort }),
       },
     });
 
