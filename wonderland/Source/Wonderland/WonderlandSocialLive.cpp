@@ -471,12 +471,13 @@ void FWonderlandSocialLiveService::TickWorld()
 	const double SentPeriodMs = LastWorldSentAt > 0.0 ? (SentAt - LastWorldSentAt) * 1000.0 : 0.0;
 	LastWorldSentAt = SentAt;
 	const FVector SentSoles = Report.Location;
+	const float SentYaw = Report.Yaw;
 	// ONE CALL A TICK: the report answers with who else is here.
-	Call(TEXT("POST"), TEXT("/world/state"), Body, [this, SentAt, SentPeriodMs, SentSoles](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+	Call(TEXT("POST"), TEXT("/world/state"), Body, [this, SentAt, SentPeriodMs, SentSoles, SentYaw](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
 	{
 		bWorldBusy = false;
-		UE_LOG(LogTemp, Display, TEXT("WLREMOTE send soles=(%.1f,%.1f,%.1f) rtt=%.0fms period=%.0fms status=%d"),
-			SentSoles.X, SentSoles.Y, SentSoles.Z, (FPlatformTime::Seconds() - SentAt) * 1000.0, SentPeriodMs, Status);
+		UE_LOG(LogTemp, Display, TEXT("WLREMOTE send soles=(%.1f,%.1f,%.1f) rtt=%.0fms period=%.0fms status=%d yaw=%.2f"),
+			SentSoles.X, SentSoles.Y, SentSoles.Z, (FPlatformTime::Seconds() - SentAt) * 1000.0, SentPeriodMs, Status, static_cast<double>(SentYaw));
 		HandleWorldReport(Status, Data, Problem);
 	});
 }

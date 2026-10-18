@@ -498,6 +498,12 @@ public:
 	float GetFigureLowestUu() const { return FigureLowestUU; }
 	/** WLREMOTE diagnostics (read-only): whether a worn pose is being handed down, and FloatRoot's actual relative Z (the hover). */
 	bool IsWornPoseValid() const { return WornPose.bValid; }
+	/** WLREMOTE diagnostics (read-only): which clocks and weights drive the figure's own motion, so animation-only movement can be told from a position change. */
+	float GetIdleFreezeDiag() const { return IdleFreeze; }
+	float GetGaitWeightDiag() const { return GaitWeight; }
+	float GetGroundSpeedDiag() const { return GroundSpeedUU; }
+	float GetGaitPhaseDiag() const { return GaitPhase; }
+	float GetActivityPhaseDiag() const { return ActivityPhase; }
 	float GetFloatRootRelativeZ() const;
 
 	/** The canonical body as built: its height, and its lowest point in local uu. 0 for a figure with no `body` record. */
