@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { JULIUS_CONTEXT_COMPILER_VERSION, type JuliusContextSnapshot } from '../../src/relay/mission/julius';
+import { flattenDiagnostics, JULIUS_CONTEXT_COMPILER_VERSION, safeReviewDiagnostics, type JuliusContextSnapshot } from '../../src/relay/mission/julius';
 import { loadHermesConfig, type HermesConfig, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
 import { reviewerOperativeTimeoutMs } from '../reviewer-deadline';
 import { createInMemoryArtifactExchange, createLiveHermesReviewerAdapter } from './live-workers';
@@ -201,5 +203,108 @@ describe('the real reviewer adapter', () => {
     expect(bigPacket.artifactDigest.replace(/^sha256:/u, ''), 'the digest is of the WHOLE diff the coder produced, not of what the reviewer was shown')
       .toBe(createHash('sha256').update(big).digest('hex'));
     expect(smallPacket.artifactDigest.replace(/^sha256:/u, '')).toBe(createHash('sha256').update(small).digest('hex'));
+  });
+});
+
+/* ------------------------------------------------------------------- B1: a bounded review leaves FACTS in the record, and only then */
+
+/** Dispatch a build review whose runner answers `outcome`, and keep what the adapter returned or threw. */
+async function reviewWith(diff: string, testOutput: string, outcome: HermesOutcome): Promise<{ result: Record<string, unknown> | null; failure: { diagnostics?: Record<string, unknown> } | null }> {
+  const artifacts = createInMemoryArtifactExchange();
+  const at = (kind: 'PLAN' | 'DIFF' | 'TEST_OUTPUT' | 'BASE_REVISION', taskId: string, role: 'PROMPT_ARCHITECT' | 'CODING_AGENT') =>
+    ({ kind, runId: 'run-live', taskId, leaseGeneration: 1, role });
+  artifacts.seed(at('PLAN', 'plan-1', 'PROMPT_ARCHITECT'), PLAN);
+  artifacts.seed(at('DIFF', 'build-1', 'CODING_AGENT'), diff);
+  artifacts.seed(at('TEST_OUTPUT', 'build-1', 'CODING_AGENT'), testOutput);
+  artifacts.seed(at('BASE_REVISION', 'build-1', 'CODING_AGENT'), 'abc123');
+  const adapter = createLiveHermesReviewerAdapter({
+    worker, contexts: { snapshotFor: () => snapshot('build-1:review') }, artifacts,
+    config: loadHermesConfig({ RELAY_HERMES_PROVIDER: 'xai', RELAY_HERMES_MODEL: 'grok-build-0.1' } as never),
+    testCommand: 'npm test',
+    run: (async () => outcome) as never,
+  });
+  const dispatch = {
+    taskId: 'build-1:review', attempt: { leaseGeneration: 1 },
+    reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } },
+    contextId: 'ctx-1', taskType: 'review:build',
+    allocation: { usdMicros: 300_000, basis: 'ESTIMATE', policyVersion: 'julius-allocation.v1' },
+  } as never;
+  try {
+    return { result: (await adapter.dispatch(dispatch)) as unknown as Record<string, unknown>, failure: null };
+  } catch (error) {
+    return { result: null, failure: error as { diagnostics?: Record<string, unknown> } };
+  }
+}
+
+const INCOMPLETE = {
+  kind: 'review_incomplete', safeMessage: 'the review process exited', shape: 'review_process_exit',
+  startedAt: '2026-10-18T12:00:00.000Z', completedAt: '2026-10-18T12:00:01.000Z',
+} as unknown as HermesOutcome;
+
+describe('B1: what was left out of the reviewer\'s evidence is a FACT in the record, absent when nothing was left out', () => {
+  const OMITTED_KEYS = ['reviewEvidencePatchOmitted', 'reviewEvidenceTestOutputOmitted'];
+  const big = fileDiff('src/a.ts', lines(3_000));
+  const noisy = lines(1_000);
+
+  it('a bounded review records both omitted counts on the success path, equal to what boundReviewEvidence says it cut', async () => {
+    const cut = boundReviewEvidence({ unifiedDiff: big, testOutput: noisy }).omitted;
+    expect(cut.diff).toBeGreaterThan(0);
+    expect(cut.testOutput).toBeGreaterThan(0);
+    const { result } = await reviewWith(big, noisy, APPROVED);
+    const diagnostics = result?.diagnostics as Record<string, unknown>;
+    expect(diagnostics.reviewEvidencePatchOmitted).toBe(cut.diff);
+    expect(diagnostics.reviewEvidenceTestOutputOmitted).toBe(cut.testOutput);
+  });
+
+  it('only the field that was bounded is recorded: a big diff with a short test output names the diff alone', async () => {
+    const { result } = await reviewWith(big, 'ok' + String.fromCharCode(10), APPROVED);
+    const diagnostics = result?.diagnostics as Record<string, unknown>;
+    expect(diagnostics.reviewEvidencePatchOmitted).toBeGreaterThan(0);
+    expect('reviewEvidenceTestOutputOmitted' in diagnostics).toBe(false);
+  });
+
+  it('ABSENT IS TODAY: a review that saw everything leaves neither key, on success or on failure', async () => {
+    const small = fileDiff('src/a.ts', lines(10));
+    const ok = await reviewWith(small, 'ok' + String.fromCharCode(10), APPROVED);
+    const okDiagnostics = ok.result?.diagnostics as Record<string, unknown>;
+    for (const key of OMITTED_KEYS) expect(key in okDiagnostics, key).toBe(false);
+    const failed = await reviewWith(small, 'ok' + String.fromCharCode(10), INCOMPLETE);
+    expect(failed.failure, 'the incomplete review really failed the dispatch').not.toBeNull();
+    for (const key of OMITTED_KEYS) expect(key in (failed.failure?.diagnostics ?? {}), key).toBe(false);
+  });
+
+  it('a bounded review that then FAILS still leaves the fact: the partial diff is on the record of the failed attempt too', async () => {
+    const cut = boundReviewEvidence({ unifiedDiff: big, testOutput: noisy }).omitted;
+    const { failure } = await reviewWith(big, noisy, INCOMPLETE);
+    expect(failure).not.toBeNull();
+    expect(failure?.diagnostics?.reviewEvidencePatchOmitted).toBe(cut.diff);
+    expect(failure?.diagnostics?.reviewEvidenceTestOutputOmitted).toBe(cut.testOutput);
+  });
+
+  it('the kernel allowlist keeps a positive count, drops anything else, and adds no key when none is reported', () => {
+    const plain = safeReviewDiagnostics({ stage: 'build' }) as Record<string, unknown>;
+    for (const key of OMITTED_KEYS) expect(key in plain, key).toBe(false);
+    const kept = safeReviewDiagnostics({ stage: 'build', reviewEvidencePatchOmitted: 12_345, reviewEvidenceTestOutputOmitted: 7 }) as Record<string, unknown>;
+    expect(kept.reviewEvidencePatchOmitted).toBe(12_345);
+    expect(kept.reviewEvidenceTestOutputOmitted).toBe(7);
+    for (const bad of [0, -1, 1.5, '5', null, Number.NaN, Number.POSITIVE_INFINITY, {}, true]) {
+      const dropped = safeReviewDiagnostics({ stage: 'build', reviewEvidencePatchOmitted: bad, reviewEvidenceTestOutputOmitted: bad }) as Record<string, unknown>;
+      for (const key of OMITTED_KEYS) expect(key in dropped, `${key}=${String(bad)}`).toBe(false);
+    }
+    // the only difference a reported count makes to the object is its own two keys
+    expect(Object.keys(kept).filter((key) => !(key in plain)).sort()).toEqual([...OMITTED_KEYS].sort());
+  });
+
+  it('on the durable event the keys are diag_-prefixed, which is exactly what the evidence dump columns read', () => {
+    const flat = flattenDiagnostics(safeReviewDiagnostics({ stage: 'build', reviewEvidencePatchOmitted: 9 }));
+    expect(flat.diag_reviewEvidencePatchOmitted).toBe(9);
+    expect('diag_reviewEvidenceTestOutputOmitted' in flat).toBe(false);
+    const dump = readFileSync(join(__dirname, '..', '..', '.github', 'julius-live-evidence-dump.sh'), 'utf8');
+    const line = dump.split(String.fromCharCode(10)).find((l) => l.includes('AS served_model_usage_key')) ?? '';
+    expect(line).toContain("e.payload->'facts'->>'diag_reviewEvidencePatchOmitted' AS review_evidence_patch_omitted");
+    expect(line).toContain("e.payload->'facts'->>'diag_reviewEvidenceTestOutputOmitted' AS review_evidence_test_output_omitted");
+    // appended LAST, after the last column the frozen checker's needed list could ever name before them
+    expect(line.indexOf('AS result_model_third_output_tokens')).toBeLessThan(line.indexOf('AS review_evidence_patch_omitted'));
+    expect(line).toMatch(/AS review_evidence_test_output_omitted FROM relay_wonderland\.events e/u);
   });
 });
