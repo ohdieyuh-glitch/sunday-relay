@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { query as realSdkQuery } from '@anthropic-ai/claude-agent-sdk';
+import { createSdkMcpServer, query as realSdkQuery, tool as realSdkTool } from '@anthropic-ai/claude-agent-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { JULIUS_CONTEXT_COMPILER_VERSION, type JuliusContextSnapshot } from '../../src/relay/mission/julius';
@@ -347,4 +347,136 @@ describe('the entrypoint hands both levels to the composition at BOTH of its cal
     expect(entry.match(/resolveLiveWorkers\(\{/gu)).toHaveLength(2);
     expect(entry.match(/architectEffort: contract\.limits\?\.architectEffort, coderEffort: contract\.limits\?\.coderEffort,/gu)).toHaveLength(2);
   });
+});
+
+/* ------------------------------------------------------------ limits.coderSelfTestCalls (diagnostic telemetry) */
+
+describe('limits.coderSelfTestCalls: declared by the contract, bounded, inside the binding', () => {
+  it('1 to 4 parse; anything else is refused with a reason naming the key', () => {
+    for (const ok of [1, 2, 3, 4]) {
+      const parsed = parseLiveMissionContract(withLimits({ coderSelfTestCalls: ok }));
+      expect(parsed.ok && parsed.contract.limits?.coderSelfTestCalls, String(ok)).toBe(ok);
+    }
+    for (const bad of [0, 5, -1, 2.5, '2', null, true, Number.NaN]) {
+      const parsed = parseLiveMissionContract(withLimits({ coderSelfTestCalls: bad }));
+      expect(parsed.ok, String(bad)).toBe(false);
+      if (!parsed.ok) expect(parsed.problem).toContain('limits.coderSelfTestCalls');
+    }
+  });
+
+  it('absent is today (the control digest), and a declared cap changes the digest, each cap again', () => {
+    expect(digestOf(JSON.stringify(rawMission2()))).toBe(MISSION_2_DIGEST_BEFORE);
+    const digests = [1, 2, 3].map((calls) => digestOf(withLimits({ coderSelfTestCalls: calls })));
+    expect(new Set([MISSION_2_DIGEST_BEFORE, ...digests]).size).toBe(4);
+  });
+
+  it('the checker echoes a valid cap, refuses an invalid one, and prints nothing about it when absent', () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'julius-selftest-check-'));
+    try {
+      const check = (raw: string): { code: number; output: string } => {
+        const file = join(scratch, `contract-${Math.random().toString(16).slice(2)}.json`);
+        writeFileSync(file, raw);
+        try { return { code: 0, output: execFileSync(process.execPath, [CHECKER, file], { encoding: 'utf8', cwd: ROOT }) }; } catch (error) {
+          const failed = error as { status: number; stdout: string };
+          return { code: failed.status, output: failed.stdout };
+        }
+      };
+      const valid = check(withLimits({ coderSelfTestCalls: 3 }));
+      expect(valid.code).toBe(0);
+      expect(valid.output).toContain('coder self-tests (diagnostic telemetry only): up to 3');
+      const invalid = check(withLimits({ coderSelfTestCalls: 9 }));
+      expect(invalid.code).toBe(1);
+      expect(invalid.output).toContain('limits.coderSelfTestCalls must be an integer from 1 to 4');
+      expect(check(JSON.stringify(rawMission2())).output).not.toMatch(/self-test/u);
+    } finally { rmSync(scratch, { recursive: true, force: true }); }
+  });
+});
+
+describe('from the contract field to the coder child process: the self-test tool is allowed and the server configured ONLY when declared', () => {
+  let scratch = '';
+  let workspace = '';
+  beforeEach(() => {
+    scratch = mkdtempSync(join(tmpdir(), 'julius-selftest-e2e-'));
+    workspace = join(scratch, 'workspace');
+    mkdirSync(workspace);
+    // The child records its argv AND the first thing the SDK writes to its stdin (the control-channel initialize, which is where
+    // an SDK-hosted MCP server is registered), then exits before speaking the protocol: no provider is contacted.
+    writeFileSync(join(scratch, 'fake-claude.mjs'), [
+      "import { writeFileSync } from 'node:fs';",
+      'let data = ""; let done = false;',
+      'const finish = () => {',
+      '  if (done) return; done = true;',
+      "  writeFileSync(new URL('./child-argv.json', import.meta.url), JSON.stringify(process.argv.slice(2)));",
+      "  writeFileSync(new URL('./child-stdin.txt', import.meta.url), data);",
+      '  process.exit(1);',
+      '};',
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', (chunk) => { data += chunk; if (data.includes(String.fromCharCode(10))) setTimeout(finish, 50); });",
+      'setTimeout(finish, 3000);',
+      '',
+    ].join(String.fromCharCode(10)));
+  });
+  afterEach(() => { rmSync(scratch, { recursive: true, force: true }); });
+
+  const charge = {
+    stage: 'build' as const,
+    binding: { contractId: 'contract:run-live:build-1', taskId: 'build-1', contractRevision: 2, bindingDigest: `sha256:${'b'.repeat(64)}` },
+    objective: 'Normalize the mission label.', responsibilityBoundary: 'Only the slug module.',
+    inScope: ['src/slug.ts'], outOfScope: ['src/persistence/'], permittedPaths: ['src/slug.ts'],
+    prohibitedActions: ['adding a dependency'], blockingCriteria: ['[AC-1] The slug test passes.'], contractReviewCriteria: ['AC-1 holds'],
+    requiredEvidence: ['TEST'] as const, requiredChecks: ['npm test'], failureConditions: ['AC-1 fails'], stoppingCondition: 'The suite is green.',
+  };
+  const snapshot = (): JuliusContextSnapshot => ({
+    contextId: 'ctx-1', runId: 'run-live', taskId: 'build-1', workerId: CODER_WORKER.workerId, workerRole: 'CODING_AGENT',
+    compilerVersion: JULIUS_CONTEXT_COMPILER_VERSION, missionContractRevision: 1, cardRevision: 'card-1', projectBrainRevision: 3,
+    taskContractRevision: 2, taskContractDigest: charge.binding.bindingDigest, sourceEntryIds: ['brain:objective'], dependencyTaskIds: [], evidenceIds: [], findingIds: [],
+    acceptanceCriterionIds: ['AC-1'], contentHash: 'sha256:test', characterCount: 40, redactionCount: 0, truncated: false,
+    integrityVersion: null, integrityConflicts: null, integrityExcludedEntryIds: null, integrityEvictedEntryIds: null,
+    packet: { missionId: 'mission-1', taskId: 'build-1', workerId: CODER_WORKER.workerId, sourceEntryIds: ['brain:objective'], blocks: [{ kind: 'OBJECTIVE', text: 'OBJECTIVE: normalize.' }], truncated: false },
+  });
+  const dispatch = { taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-1', taskType: 'build', contract: charge, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
+
+  const argvFor = async (limits: { coderSelfTestCalls?: number }): Promise<{ argv: string[]; stdin: string }> => {
+    rmSync(join(scratch, 'child-argv.json'), { force: true });
+    rmSync(join(scratch, 'child-stdin.txt'), { force: true });
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
+    const resolution = resolveLiveWorkers({
+      env: BASE, projectId: 'prj-selftest', workspacePath: workspace, testCommand: 'npm test',
+      contexts: { snapshotFor: () => snapshot() }, artifacts, shell: createFakeExecutorShell({}),
+      coderSelfTestCalls: limits.coderSelfTestCalls,
+      runners: {
+        queryLoader: async () => (params) => realSdkQuery({
+          ...params, options: { ...params.options, pathToClaudeCodeExecutable: join(scratch, 'fake-claude.mjs') },
+        } as Parameters<typeof realSdkQuery>[0]) as AsyncIterable<unknown>,
+        // the REAL SDK helpers, imported statically: vitest cannot service the runner's indirect import()
+        sdkHelpersLoader: async () => ({ createSdkMcpServer, tool: realSdkTool }) as never,
+      },
+    });
+    const coder = resolution.entries.find((entry) => entry.worker.role === 'CODING_AGENT');
+    expect(coder, 'the coder must resolve').toBeDefined();
+    await coder!.adapter.dispatch(dispatch as never).then(() => null, () => null);
+    const file = join(scratch, 'child-argv.json');
+    expect(existsSync(file), 'the SDK must actually have started the child').toBe(true);
+    const stdinFile = join(scratch, 'child-stdin.txt');
+    return { argv: JSON.parse(readFileSync(file, 'utf8')) as string[], stdin: existsSync(stdinFile) ? readFileSync(stdinFile, 'utf8') : '' };
+  };
+  const flagValue = (argv: string[], flag: string): string => argv[argv.indexOf(flag) + 1] ?? '';
+
+  it('absent: the allowed tools are the file tools alone and the child is told of no SDK server', async () => {
+    const { argv, stdin } = await argvFor({});
+    expect(flagValue(argv, '--allowedTools')).toBe('Read,Glob,Grep,Edit');
+    expect(argv.join(' ')).not.toContain('run_mission_test');
+    expect(stdin).not.toContain('run_mission_test');
+    expect(stdin).not.toContain('sdkMcpServers');
+  });
+
+  it('declared: exactly the one sanctioned tool id is added to the allowed tools, and the child is told of the julius SDK server', async () => {
+    const { argv, stdin } = await argvFor({ coderSelfTestCalls: 2 });
+    expect(flagValue(argv, '--allowedTools')).toBe('Read,Glob,Grep,Edit,mcp__julius__run_mission_test');
+    // the disallowed list is untouched: Bash still cannot be used
+    expect(flagValue(argv, '--disallowedTools')).toContain('Bash');
+    // the SDK registers an SDK-hosted server over the control channel, not on argv
+    expect(stdin, 'the control-channel initialize names the server').toMatch(/sdkMcpServers.{0,40}julius/u);
+  }, 120_000);
 });
