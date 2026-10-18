@@ -1150,11 +1150,11 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 			const double XC = 0.5 * (PlateFrontUU + TileInnerUU);
 			const double SX = TileInnerUU - PlateFrontUU;
 			TArray<FTransform>& Liner = Groups.FindOrAdd((static_cast<int64>(EyeHeadPart) << 32) | static_cast<int64>(static_cast<uint32>(EyeBoneMaterial)));
-			const double Cube = 100.0;
-			Liner.Add(FTransform(FRotator::ZeroRotator, FVector(XC, Mid.Y + Half.Y + Wall * 0.5, Mid.Z), FVector(SX, Wall, 2.0 * Half.Z + 2.0 * Wall) / Cube));
-			Liner.Add(FTransform(FRotator::ZeroRotator, FVector(XC, Mid.Y - Half.Y - Wall * 0.5, Mid.Z), FVector(SX, Wall, 2.0 * Half.Z + 2.0 * Wall) / Cube));
-			Liner.Add(FTransform(FRotator::ZeroRotator, FVector(XC, Mid.Y, Mid.Z + Half.Z + Wall * 0.5), FVector(SX, 2.0 * Half.Y, Wall) / Cube));
-			Liner.Add(FTransform(FRotator::ZeroRotator, FVector(XC, Mid.Y, Mid.Z - Half.Z - Wall * 0.5), FVector(SX, 2.0 * Half.Y, Wall) / Cube));
+			const double LinerCubeUU = 100.0;
+			Liner.Add(FTransform(FRotator::ZeroRotator, FVector(XC, Mid.Y + Half.Y + Wall * 0.5, Mid.Z), FVector(SX, Wall, 2.0 * Half.Z + 2.0 * Wall) / LinerCubeUU));
+			Liner.Add(FTransform(FRotator::ZeroRotator, FVector(XC, Mid.Y - Half.Y - Wall * 0.5, Mid.Z), FVector(SX, Wall, 2.0 * Half.Z + 2.0 * Wall) / LinerCubeUU));
+			Liner.Add(FTransform(FRotator::ZeroRotator, FVector(XC, Mid.Y, Mid.Z + Half.Z + Wall * 0.5), FVector(SX, 2.0 * Half.Y, Wall) / LinerCubeUU));
+			Liner.Add(FTransform(FRotator::ZeroRotator, FVector(XC, Mid.Y, Mid.Z - Half.Z - Wall * 0.5), FVector(SX, 2.0 * Half.Y, Wall) / LinerCubeUU));
 			UE_LOG(LogTemp, Display, TEXT("WLEYE remote relay_og window deepened: plate back %.2f uu, eyes lowered %.2f uu, liner x %.1f..%.1f"),
 				RemoteEyeRecessUU, RemoteEyeLowerUU, PlateFrontUU, TileInnerUU);
 		}
