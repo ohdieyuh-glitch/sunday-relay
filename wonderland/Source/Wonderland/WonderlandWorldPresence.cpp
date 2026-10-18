@@ -341,8 +341,15 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 					if (Span > 0.02 && Span < 0.4 && Seg.SizeSquared() > 1e-6)
 					{
 						// velocity decaying linearly to zero over Cap: the distance carried is v * (a - a^2 / 2Cap), at most v * Cap / 2 (30 uu at 300 uu/s, Cap 0.2)
-						const double Ahead = FMath::Min(RT - Ss.Last().T, Cap);
-						const double Eff = Ahead - Ahead * Ahead / (2.0 * Cap);
+						// THEN THE CARRIED DISTANCE GIVES BACK THE SAME WAY over the next Cap (zero by 2 x Cap): a report that never comes (the player stopped: no further
+						// report is stored) must not leave the figure parked at the carried point. Measured r16reh16o: a stop reported at v=53 parked 5.2 uu past it for good.
+						const double Over = RT - Ss.Last().T;
+						const double Ahead = FMath::Min(Over, Cap);
+						double Eff = Ahead - Ahead * Ahead / (2.0 * Cap);
+						if (Over > Cap)
+						{
+							Eff *= FMath::Max(0.0, 1.0 - (Over - Cap) / Cap);
+						}
 						const FVector2D Dir = Seg.GetSafeNormal();
 						const double Speed = FMath::Min(static_cast<double>(Ss.Last().V), Seg.Size() / Span);
 						Aim.X += Dir.X * Speed * Eff;
