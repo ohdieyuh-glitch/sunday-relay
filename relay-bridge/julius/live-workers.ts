@@ -566,6 +566,8 @@ const reviewerDiagnostics = (input: {
   readonly usage?: HermesUsage;
   /** The operator's declared billing path (`juliusReviewerBillingPath`); null says nothing. */
   readonly billingPath: ReturnType<typeof juliusReviewerBillingPath>;
+  /** Characters left out of the diff and the test output the reviewer was shown (`boundReviewEvidence`). Zero, or absent, records nothing. */
+  readonly evidenceOmitted?: { readonly diff: number; readonly testOutput: number };
 }): Record<string, unknown> => {
   const started = input.startedAt === undefined ? Number.NaN : Date.parse(input.startedAt);
   const completed = input.completedAt === undefined ? Number.NaN : Date.parse(input.completedAt);
@@ -598,6 +600,9 @@ const reviewerDiagnostics = (input: {
     estimatedCostUsdMicros: estimated,
     inputTokens: input.usage?.inputTokens ?? null,
     outputTokens: input.usage?.outputTokens ?? null,
+    // FACTS, NOT ONLY A MARKER IN THE PROMPT: a partial diff must be visible in the record, and only when it happened.
+    ...(input.evidenceOmitted !== undefined && input.evidenceOmitted.diff > 0 ? { reviewEvidencePatchOmitted: input.evidenceOmitted.diff } : {}),
+    ...(input.evidenceOmitted !== undefined && input.evidenceOmitted.testOutput > 0 ? { reviewEvidenceTestOutputOmitted: input.evidenceOmitted.testOutput } : {}),
   };
 };
 
@@ -2398,7 +2403,7 @@ export function createLiveHermesReviewerAdapter(input: {
         throw new JuliusDispatchError(
           code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape,
           reviewerDiagnostics({
-            diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath,
+            diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath, evidenceOmitted: shown.omitted,
             startedAt: outcome.startedAt, completedAt: outcome.completedAt,
             // A FAILED REVIEW STILL ACCOUNTS FOR WHAT IT BOUGHT: tokens, calls
             // and the served model, from the file Hermes writes on failure too.
@@ -2446,7 +2451,7 @@ export function createLiveHermesReviewerAdapter(input: {
        */
       const reviewUsage: HermesUsage = outcome.usage !== null && typeof outcome.usage === 'object' ? outcome.usage : UNKNOWN_USAGE;
       const reviewDiagnostics = reviewerDiagnostics({
-        diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath,
+        diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath, evidenceOmitted: shown.omitted,
         startedAt: outcome.startedAt, completedAt: outcome.completedAt,
         usage: reviewUsage,
       });

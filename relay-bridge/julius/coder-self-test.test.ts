@@ -554,12 +554,12 @@ describe('the self-test telemetry reaches the evidence bundle by exact name, and
   const ROOT = join(__dirname, '..', '..');
   const read = (relative: string): string => readFileSync(join(ROOT, relative), 'utf8');
 
-  it('the workspace-events dump projects exactly the fact keys the pipeline writes, under the three column names', () => {
+  it('the workspace-events dump projects exactly the fact keys the pipeline writes, under the four column names', () => {
     const dump = read('.github/julius-live-evidence-dump.sh');
     const line = dump.split('\n').find((l) => l.includes('AS attempt_outcome')) ?? '';
     expect(line, 'the dump line carrying the attempt facts is found').not.toBe('');
     const columns = [
-      ['selfTestCalls', 'self_test_calls'], ['selfTestPasses', 'self_test_passes'], ['selfTestFailThenPass', 'self_test_fail_then_pass'],
+      ['selfTestCalls', 'self_test_calls'], ['selfTestRefused', 'self_test_refused'], ['selfTestPasses', 'self_test_passes'], ['selfTestFailThenPass', 'self_test_fail_then_pass'],
     ] as const;
     for (const [fact, column] of columns) expect(line, column).toContain(`e.payload->'facts'->>'${fact}' AS ${column}`);
     const pipeline = read('src/relay/mission/julius/julius-task-pipeline.ts');

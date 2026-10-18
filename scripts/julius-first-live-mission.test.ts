@@ -3320,7 +3320,13 @@ describe('every diagnostic the allowlist admits reaches the exported bundle', ()
     expect(open, 'the allowlist must be a frozen object literal').toBeGreaterThan(-1);
     const close = source.indexOf('\n });\n};', open);
     expect(close, 'the allowlist literal must be closed').toBeGreaterThan(open);
-    const keys = [...source.slice(open, close).matchAll(/^ {2}([A-Za-z][A-Za-z0-9]*):/gmu)].map((match) => match[1]);
+    // Plain `key:` entries, plus the ONE other form the allowlist uses: an OPTIONAL key, present only when a positive count was reported
+    // (`...(safePositiveCount(v.key)===null?{}:{key:...})`), which is how a fact stays ABSENT from a record it does not describe.
+    const literal = source.slice(open, close);
+    const keys = [
+      ...[...literal.matchAll(/^ {2}([A-Za-z][A-Za-z0-9]*):/gmu)].map((match) => match[1]),
+      ...[...literal.matchAll(/^ {2}\.\.\.\(safePositiveCount\(v\.([A-Za-z][A-Za-z0-9]*)\)===null\?\{\}:\{\1:/gmu)].map((match) => match[1]),
+    ];
     // A STRUCTURAL TEST THAT PARSES SOURCE MUST FAIL WHEN ITS PARSE STOPS
     // WORKING, rather than passing over an empty set. Reformatting the
     // allowlist is allowed; reformatting it into invisibility is not.
