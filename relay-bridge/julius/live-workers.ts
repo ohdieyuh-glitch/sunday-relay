@@ -69,6 +69,7 @@ import {
   renderJuliusResearchAuthority,
   withJuliusResearchAsks,
 } from '../../src/relay/mission/julius/julius-research-protocol';
+import { boundReviewEvidence } from './review-evidence-bound';
 import {
   runHostedCodingAgent,
   type HostedEffort,
@@ -2170,6 +2171,12 @@ export function createLiveHermesReviewerAdapter(input: {
        */
       const priorFindings = snapshot.packet.blocks.filter((block) => block.kind === 'FINDING').map((block) => block.text);
       const unifiedDiff = diffArtifact ?? '';
+      /* WHAT THE REVIEWER READS IS BOUNDED, AND SAYS SO WHEN IT IS (`review-evidence-bound.ts`). The digest and the changed-file
+         list below are computed from the FULL diff, so the record of what was reviewed still names the whole artifact. */
+      const shown = boundReviewEvidence({
+        unifiedDiff,
+        testOutput: charge.subject === 'IMPLEMENTATION' ? (await subjectArtifact('TEST_OUTPUT') ?? '') : '',
+      });
       const packet: ReviewPacket = {
         stage,
         charge,
@@ -2202,10 +2209,10 @@ export function createLiveHermesReviewerAdapter(input: {
         baseRevision: await subjectArtifact('BASE_REVISION') ?? 'unknown',
         artifactDigest: sha256(charge.subject === 'IMPLEMENTATION' ? unifiedDiff : planArtifact),
         changedFiles: [...new Set([...unifiedDiff.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((match) => match[1]))],
-        unifiedDiff,
+        unifiedDiff: shown.unifiedDiff,
         changedFileContents: '',
         testCommand: input.testCommand,
-        testOutput: charge.subject === 'IMPLEMENTATION' ? (await subjectArtifact('TEST_OUTPUT') ?? '') : '',
+        testOutput: shown.testOutput,
         relayEvidence: [...snapshot.evidenceIds],
       };
       /**

@@ -469,6 +469,7 @@ const FILE_RULES = [
   // Same subsystem as the reviewer whose deadline it is: a limit that governs
   // the Independent Reviewer belongs with it, not in a policy annex.
   ['relay-bridge/reviewer-deadline.ts', 'INDEPENDENT REVIEWER'],
+  ['relay-bridge/julius/review-evidence-bound.ts', 'INDEPENDENT REVIEWER'],
   ['relay-bridge/reviewer-harness/hermes/', 'INDEPENDENT REVIEWER'],
   ['relay-bridge/redact.ts', 'INDEPENDENT REVIEWER'],
   // Relay ↔ Julius seam and vocabularies.
