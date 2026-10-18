@@ -62,6 +62,20 @@ export interface GptUsage {
   readonly totalTokens: number | null;
 }
 
+/**
+ * THE REASONING EFFORT THAT ACTUALLY WENT ON THE WIRE, and what the provider said it ran at.
+ *
+ * `sent` is read from the request object this runner built, not from the mission's declaration: it is `null` when no effort
+ * was put in the request (the default, which sends nothing). `echoed` is the provider's own `response.reasoning.effort`
+ * when its response carries one, narrowed to a machine token, `null` when it carries none. Neither is an estimate. Without
+ * both, "effort: low" in a contract is a declaration and not evidence that any provider ever received it (paid lab run
+ * 39173804383 recorded no effort at all).
+ */
+export interface GptEffort {
+  readonly sent: string | null;
+  readonly echoed: string | null;
+}
+
 export interface GptRunSuccess {
   readonly ok: true;
   /** The provider response is the AUTHORITY for the actual model. */
@@ -71,6 +85,8 @@ export interface GptRunSuccess {
   /** Raw structured text; the caller validates it before trusting it. */
   readonly outputText: string;
   readonly usage: GptUsage;
+  /** Present whenever the provider answered; see `GptEffort`. */
+  readonly effort?: GptEffort;
 }
 
 export interface GptRunFailure {
@@ -94,6 +110,8 @@ export interface GptRunFailure {
    * to report and inventing one would be the opposite fix.
    */
   readonly usage?: GptUsage;
+  /** Present exactly when `usage` is: the provider answered. See `GptEffort`. */
+  readonly effort?: GptEffort;
   /**
    * THE PROVIDER'S OWN REASON an otherwise-successful call stopped early —
    * `max_output_tokens`, `content_filter`. A machine token, narrowed here, so
@@ -202,6 +220,12 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
       reasoningTokens: response.usage?.output_tokens_details?.reasoning_tokens ?? null,
       totalTokens: response.usage?.total_tokens ?? null,
     };
+    const effort: GptEffort = {
+      // From the request this function built (what left the process), never from the mission's declaration.
+      sent: config.reasoningEffort ?? null,
+      // The provider's own report of the effort it ran at, when the response carries one.
+      echoed: safeReasonToken(response.reasoning?.effort ?? null),
+    };
 
     // A refusal is not a completion.
     for (const item of response.output ?? []) {
@@ -211,7 +235,7 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
             return {
               ok: false, failureClass: 'refused',
               message: safeMessage(part.refusal),
-              actualModel: response.model, responseId: response.id, usage,
+              actualModel: response.model, responseId: response.id, usage, effort,
               providerStatus: safeReasonToken(response.status),
             };
           }
@@ -224,7 +248,7 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
       return {
         ok: false, failureClass: 'incomplete_response',
         message: `The response was incomplete (${response.incomplete_details?.reason ?? 'unknown reason'}).`,
-        actualModel: response.model, responseId: response.id, usage,
+        actualModel: response.model, responseId: response.id, usage, effort,
         providerStatus: safeReasonToken(response.status),
         incompleteReason: safeReasonToken(response.incomplete_details?.reason),
       };
@@ -233,7 +257,7 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
       return {
         ok: false, failureClass: 'provider_error',
         message: `The provider reported status "${response.status}".`,
-        actualModel: response.model, responseId: response.id, usage,
+        actualModel: response.model, responseId: response.id, usage, effort,
         providerStatus: safeReasonToken(response.status),
       };
     }
@@ -243,7 +267,7 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
       return {
         ok: false, failureClass: 'malformed_output',
         message: 'The provider returned no structured output.',
-        actualModel: response.model, responseId: response.id, usage,
+        actualModel: response.model, responseId: response.id, usage, effort,
         providerStatus: safeReasonToken(response.status),
       };
     }
@@ -256,6 +280,7 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
       status: response.status,
       outputText,
       usage,
+      effort,
     };
   } catch (error) {
     return { ok: false, failureClass: classify(error), message: safeMessage(error) };

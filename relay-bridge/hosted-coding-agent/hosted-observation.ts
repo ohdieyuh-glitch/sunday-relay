@@ -120,6 +120,12 @@ export interface HostedResultModelUsage {
 }
 
 export interface HostedObservation {
+  /**
+   * THE `effort` OPTION THE RUNNER HANDED TO THE SDK for this dispatch, or absent when it passed none. Set by the runner from the same
+   * value it spreads into the SDK options (not from the mission's declaration and not read back from the runtime, which echoes nothing
+   * of it), so the durable record can say what was actually transmitted. Absent means no effort option was sent.
+   */
+  readonly effortSent?: string;
   /** True once the runtime's own init message was seen. */
   readonly initSeen: boolean;
   /**

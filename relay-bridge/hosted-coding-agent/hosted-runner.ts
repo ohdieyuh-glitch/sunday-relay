@@ -237,7 +237,9 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
     ? null
     : buildSelfTestServer(input.sdkHelpers!, input.selfTestTool, () => controller.signal).server;
 
-  let observation = emptyObservation();
+  // ONE VALUE, TWO USES: the SDK option and the observation's record of it. The record says what was handed to the SDK, not what the mission declared.
+  const effortOption: { readonly effort?: HostedEffort } = input.effort === undefined ? {} : { effort: input.effort };
+  let observation: HostedObservation = effortOption.effort === undefined ? emptyObservation() : { ...emptyObservation(), effortSent: effortOption.effort };
   try {
     const stream = input.queryFn({
       prompt: input.prompt,
@@ -283,7 +285,7 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
         // for file tools and has no opinion on the rest.
         hooks: { PreToolUse: [{ hooks: [authority] }] },
         ...(envelope.model !== null ? { model: envelope.model } : {}),
-        ...(input.effort === undefined ? {} : { effort: input.effort }),
+        ...effortOption,
         ...(selfTestServer === null ? {} : { mcpServers: { [HOSTED_SELF_TEST_SERVER]: selfTestServer } }),
       },
     });
