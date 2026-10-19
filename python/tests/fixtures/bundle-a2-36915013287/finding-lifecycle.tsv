@@ -1,0 +1,6 @@
+run_id	sequence	task_id	event_type	finding_id	finding_move	to_status	review_task_id	repair_task_id	superseded_by_finding_id	blocking	category	evidence_id	reviewed_task_id	verdict	declared_verdict	derived_verdict	verdict_source	verdict_route	verdict_target	warning_count	resolution_count	warnings_retained	warnings_promoted	reason_code	occurred_at
+run:efb6e20f0d11885bc5085a68	30	run:efb6e20f0d11885bc5085a68:plan:review	julius.review.verdict.declared				run:efb6e20f0d11885bc5085a68:plan:review							CONTINUE						0	0				2026-10-01 19:40:11.514+00
+run:efb6e20f0d11885bc5085a68	31	run:efb6e20f0d11885bc5085a68:plan	julius.review.verdict.applied				run:efb6e20f0d11885bc5085a68:plan:review						run:efb6e20f0d11885bc5085a68:plan	CONTINUE	CONTINUE	CONTINUE	BOTH	PROCEED				0	0		2026-10-01 19:40:11.545+00
+run:efb6e20f0d11885bc5085a68	69	run:efb6e20f0d11885bc5085a68:build:review	julius.review.verdict.declared				run:efb6e20f0d11885bc5085a68:build:review							CONTINUE						0	0				2026-10-01 19:41:17.405+00
+run:efb6e20f0d11885bc5085a68	70	run:efb6e20f0d11885bc5085a68:build	julius.review.verdict.applied				run:efb6e20f0d11885bc5085a68:build:review						run:efb6e20f0d11885bc5085a68:build	CONTINUE	CONTINUE	CONTINUE	BOTH	PROCEED				0	0		2026-10-01 19:41:17.437+00
+(4 rows)
