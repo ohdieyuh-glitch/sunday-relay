@@ -269,10 +269,124 @@ export type JuliusCodingAgentProviderOutcome =
  */
 export interface JuliusCodingAgentProvider {
   readonly providerKind: string;
-  execute(request: JuliusCodingAgentRequest, signal?: AbortSignal): Promise<JuliusCodingAgentProviderOutcome>;
+  execute(request: JuliusCodingAgentRequest, signal?: AbortSignal, session?: JuliusCodingAgentSession): Promise<JuliusCodingAgentProviderOutcome>;
 }
 
 /* ------------------------------------------------------------ the request */
+
+/* ------------------------------------------------------------ the coder's self-test (diagnostic telemetry) */
+
+/** The most self-tests one attempt may run, and how much of a test's output the coder is shown back. */
+export const JULIUS_SELF_TEST_LIMITS = Object.freeze({ maxCalls: 5, outputTailChars: 4_000 });
+
+/** Why a self-test call did not run the test. Closed: a value outside this list is not read. */
+export const JULIUS_SELF_TEST_REFUSALS = ['CALL_CAP', 'CANCELLED', 'NO_TEST_DECLARED', 'EXECUTOR_REFUSED', 'COPY_FAILED'] as const;
+export type JuliusSelfTestRefusal = (typeof JULIUS_SELF_TEST_REFUSALS)[number];
+
+/**
+ * ONE SELF-TEST CALL, as the harness recorded it. The coder's words are not in it: the exit code, the size and digest of
+ * the full output, how long it took and the working tree it ran against all come from the executor.
+ */
+export interface JuliusSelfTestCall {
+  readonly n: number;
+  /** The test's own exit code; null when it never ran. */
+  readonly exitCode: number | null;
+  readonly passed: boolean;
+  readonly refused: JuliusSelfTestRefusal | null;
+  readonly outputBytes: number;
+  /** sha256 (64 hex) of the output named by `outputBasis`; null when nothing ran. */
+  readonly outputDigest: string | null;
+  readonly durationMs: number;
+  /** The working-tree id the test ran against (40 hex); null when unknown. */
+  readonly treeBefore: string | null;
+  /**
+   * WHAT `outputBytes` AND `outputDigest` COVER. FULL: the test's whole output, measured inside the sandbox. LIMIT: the test printed more
+   * than the capture bound and was stopped, so they cover the first bound's worth and `exitCode` is null. PREFIX: only the part of the output
+   * the executor returned (the in-sandbox measurement was not available), so they describe a prefix and must not be read as the full output.
+   * Absent on a refused call and on a record written before the field existed.
+   */
+  readonly outputBasis?: JuliusSelfTestOutputBasis;
+}
+
+export const JULIUS_SELF_TEST_OUTPUT_BASES = ['FULL', 'LIMIT', 'PREFIX'] as const;
+export type JuliusSelfTestOutputBasis = (typeof JULIUS_SELF_TEST_OUTPUT_BASES)[number];
+
+/**
+ * EVERYTHING THE CODER'S SELF-TESTS LEFT, IN CALL ORDER. DIAGNOSTIC TELEMETRY ONLY (founder ruling 2026-10-18): it is never
+ * a TEST evidence row, never read by a verification, and never satisfies the scored reviewer-discovered repair requirement.
+ */
+export interface JuliusSelfTestRecord {
+  readonly calls: readonly JuliusSelfTestCall[];
+}
+
+const HEX64 = /^[0-9a-f]{64}$/u;
+const HEX40 = /^[0-9a-f]{40}$/u;
+
+/** Rebuild a self-test record from an allowlist, or null when it cannot be read. A malformed record is dropped, not trusted. */
+export function readJuliusSelfTest(value: unknown): JuliusSelfTestRecord | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const calls = (value as Record<string, unknown>).calls;
+  if (!Array.isArray(calls) || calls.length > JULIUS_SELF_TEST_LIMITS.maxCalls) return null;
+  const out: JuliusSelfTestCall[] = [];
+  for (const [index, item] of calls.entries()) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) return null;
+    const call = item as Record<string, unknown>;
+    const count = (field: string): number | null => {
+      const v = call[field];
+      return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null;
+    };
+    const refused = call.refused === null ? null
+      : (JULIUS_SELF_TEST_REFUSALS as readonly unknown[]).includes(call.refused) ? call.refused as JuliusSelfTestRefusal : undefined;
+    const outputBytes = count('outputBytes');
+    const durationMs = count('durationMs');
+    const exitCode = call.exitCode === null ? null : typeof call.exitCode === 'number' && Number.isSafeInteger(call.exitCode) ? call.exitCode : undefined;
+    const digest = call.outputDigest === null ? null : typeof call.outputDigest === 'string' && HEX64.test(call.outputDigest) ? call.outputDigest : undefined;
+    const tree = call.treeBefore === null ? null : typeof call.treeBefore === 'string' && HEX40.test(call.treeBefore) ? call.treeBefore : undefined;
+    // The basis is optional (absent on a refused call and on an older record); when present it must be one of the closed values.
+    const basis = !('outputBasis' in call) || call.outputBasis === undefined ? null
+      : (JULIUS_SELF_TEST_OUTPUT_BASES as readonly unknown[]).includes(call.outputBasis) ? call.outputBasis as JuliusSelfTestOutputBasis : undefined;
+    if (call.n !== index + 1 || typeof call.passed !== 'boolean' || refused === undefined || outputBytes === null || durationMs === null
+      || exitCode === undefined || digest === undefined || tree === undefined || basis === undefined) return null;
+    // A call is judged passed only by a test that ran and exited zero: nothing else may claim it.
+    if (call.passed !== (refused === null && exitCode === 0)) return null;
+    // A test stopped at the output bound has no exit code of its own: a basis of LIMIT with a code is a forgery.
+    if (basis === 'LIMIT' && exitCode !== null) return null;
+    out.push(Object.freeze({ n: index + 1, exitCode, passed: call.passed, refused, outputBytes, outputDigest: digest, durationMs, treeBefore: tree, ...(basis === null ? {} : { outputBasis: basis }) }));
+  }
+  return Object.freeze({ calls: Object.freeze(out) });
+}
+
+/** What the durable event carries: counts, and whether the coder edited its way from a failing self-test to a passing one. */
+export function summarizeJuliusSelfTest(record: JuliusSelfTestRecord): {
+  readonly executed: number; readonly refused: number; readonly passes: number; readonly failThenPass: boolean;
+} {
+  const ran = record.calls.filter((call) => call.refused === null);
+  let failThenPass = false;
+  for (const [i, first] of ran.entries()) {
+    if (first.passed) continue;
+    // "Edited" means the tree the later run saw is known and differs from the failing one's: never inferred from the order alone.
+    if (ran.slice(i + 1).some((later) => later.passed && later.treeBefore !== null && first.treeBefore !== null && later.treeBefore !== first.treeBefore)) failThenPass = true;
+  }
+  return Object.freeze({ executed: ran.length, refused: record.calls.length - ran.length, passes: ran.filter((call) => call.passed).length, failThenPass });
+}
+
+/**
+ * THE HARNESS' SIDE OF THE SELF-TEST PORT, handed to a provider that may offer the coder a test tool. `run` executes the
+ * mission's declared test command once through the independent executor and never throws: a refusal is a value.
+ */
+export interface JuliusCoderSelfTestPort {
+  readonly maxCalls: number;
+  run(signal?: AbortSignal): Promise<{
+    readonly n: number; readonly passed: boolean; readonly exitCode: number | null; readonly refused: JuliusSelfTestRefusal | null;
+    /** The tail of the test's output, bounded, for the coder to read. */
+    readonly outputTail: string;
+  }>;
+}
+
+/** What a provider is given for one dispatch beyond the request. Absent members change nothing. */
+export interface JuliusCodingAgentSession {
+  readonly selfTest?: JuliusCoderSelfTestPort;
+}
 
 /** One compiled brain block, with the entry it came from. */
 export interface JuliusCodingAgentBlock {
@@ -423,6 +537,19 @@ export const JULIUS_CODING_AGENT_CHARTER = [
   'The TASK CONTRACT binds you. ACCEPTED GUIDANCE is instruction Julius accepted inside that contract. ARCHITECTURE CONTEXT is advisory: where it disagrees with the contract, the contract wins.',
   'You implement; you do not review or approve your own work, and completion is decided by Julius.',
 ].join(' ');
+
+/**
+ * THE CHARTER FOR THIS DISPATCH. With no self-test offered it is {@link JULIUS_CODING_AGENT_CHARTER}, the same string, so
+ * every prompt that exists today is unchanged. With one, the single sentence that forbids commands names the one sanctioned
+ * exception and says what it is not.
+ */
+export function juliusCodingAgentCharter(selfTestCalls?: number): string {
+  if (selfTestCalls === undefined) return JULIUS_CODING_AGENT_CHARTER;
+  const forbidden = 'Do not run commands; verification is executed separately by an independent executor.';
+  if (!JULIUS_CODING_AGENT_CHARTER.includes(forbidden)) throw new Error('coding_agent_charter_changed');
+  return JULIUS_CODING_AGENT_CHARTER.replace(forbidden,
+    `Do not run commands. You have one diagnostic tool, run_mission_test, which runs the mission's own test command against your current edits (at most ${String(selfTestCalls)} times); it only shows you a result, it does not complete or verify your work, and verification is executed separately by an independent executor.`);
+}
 
 /**
  * THE LOCKED TERMS AS THE CODER READS THEM — the same document the independent
@@ -712,6 +839,8 @@ export interface JuliusCodingAgentImplementation {
   readonly attemptOutcome: 'SUCCEEDED' | 'FAILED' | null;
   /** Why there is no snapshot, when that is known: a cancelled dispatch collects none. */
   readonly uncapturedReason: string | null;
+  /** The coder's self-test telemetry, when it was offered a test tool; the key is ABSENT otherwise. Diagnostic only. */
+  readonly selfTest?: JuliusSelfTestRecord;
   readonly report: unknown;
 }
 
@@ -737,6 +866,7 @@ export function readJuliusCodingAgentImplementation(value: unknown): JuliusCodin
     changes.push(Object.freeze({ path: entry.path, change: entry.change as JuliusWorkspaceChangeKind }));
   }
   const attemptOutcome = source.attemptOutcome === 'SUCCEEDED' || source.attemptOutcome === 'FAILED' ? source.attemptOutcome : null;
+  const selfTest = readJuliusSelfTest(source.selfTest);
   return Object.freeze({
     providerKind,
     workspace: Object.freeze({ captured: ws.captured, changes: Object.freeze(changes), truncated }),
@@ -744,6 +874,7 @@ export function readJuliusCodingAgentImplementation(value: unknown): JuliusCodin
     attemptOutcome,
     uncapturedReason: typeof source.uncapturedReason === 'string' && /^[A-Z][A-Z_]{0,63}$/u.test(source.uncapturedReason)
       ? source.uncapturedReason : null,
+    ...(selfTest === null ? {} : { selfTest }),
     report: source.report,
   });
 }

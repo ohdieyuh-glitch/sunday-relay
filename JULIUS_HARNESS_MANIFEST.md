@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **230 production files** across 20/20 subsystems (2 roots, 197 traced, 9 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **231 production files** across 20/20 subsystems (2 roots, 199 traced, 8 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -26,10 +26,10 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | from | to | edges | type |
 | --- | --- | --- | --- |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | connectors (gpt-architect, prompt-architect contracts) | 2 | 0 |
-| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 11 | 3 |
-| bridge provider stacks (hosted Claude, Hermes, redaction) | live composition (relay-bridge/julius/) | 8 | 0 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 10 | 3 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | live composition (relay-bridge/julius/) | 6 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | other | 5 | 0 |
-| bridge provider stacks (hosted Claude, Hermes, redaction) | persistence (src/relay/persistence/) | 8 | 0 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | persistence (src/relay/persistence/) | 4 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 1 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | kernel (src/relay/mission/julius/) | 1 | 0 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
@@ -40,15 +40,15 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | entrypoint (relay-bridge/julius-live-mission.ts) | kernel (src/relay/mission/julius/) | 1 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | live composition (relay-bridge/julius/) | 11 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | other | 1 | 0 |
-| entrypoint (relay-bridge/julius-live-mission.ts) | persistence (src/relay/persistence/) | 9 | 0 |
+| entrypoint (relay-bridge/julius-live-mission.ts) | persistence (src/relay/persistence/) | 8 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 1 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | kernel (src/relay/mission/julius/) | 10 | 8 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | persistence (src/relay/persistence/) | 2 | 0 |
 | kernel (src/relay/mission/julius/) | other | 5 | 0 |
-| live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 20 | 5 |
+| live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 21 | 6 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 10 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 32 | 10 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 33 | 10 |
 | live composition (relay-bridge/julius/) | other | 6 | 4 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 16 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 2 | 0 |
@@ -197,7 +197,8 @@ The implementation role: one hosted Claude Agent SDK execution behind a pure saf
 | `relay-bridge/hosted-coding-agent/hosted-runner.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-tool-authority.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
 | `relay-bridge/julius/claude-code-coding-provider.ts` | traced | `relay-bridge/julius/live-workers.ts` |
-| `relay-bridge/julius/coder-workspace.ts` | traced | `relay-bridge/julius/live-workers.ts` |
+| `relay-bridge/julius/coder-self-test.ts` | traced | `relay-bridge/julius/live-workers.ts` |
+| `relay-bridge/julius/coder-workspace.ts` | traced | `relay-bridge/julius/coder-self-test.ts` |
 | `scripts/julius-usage-limit.mjs` | traced | `relay-bridge/hosted-coding-agent/hosted-failure-reason.ts` |
 | `src/relay/connectors/claude-code/result-classification.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-observation.ts` |
 | `src/relay/mission/julius/julius-coding-agent.ts` | traced | `src/relay/mission/julius/julius-router.ts` |
@@ -210,6 +211,7 @@ The judgement role: the Hermes reviewer process runner in an isolated profile, p
 | production source | role | reached from |
 | --- | --- | --- |
 | `relay-bridge/hermes-reviewer.ts` | traced | `relay-bridge/julius/live-workers.ts` |
+| `relay-bridge/julius/review-evidence-bound.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/redact.ts` | traced | `relay-bridge/hermes-reviewer.ts` |
 | `relay-bridge/reviewer-deadline.ts` | traced | `relay-bridge/hosted-coding-agent/coder-envelope.ts` |
 | `relay-bridge/reviewer-harness/hermes/hermes-provider.ts` | traced | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` |
@@ -334,7 +336,6 @@ The durable lease protocol (generation fencing, heartbeat, expiry, admission), a
 
 | production source | role | reached from |
 | --- | --- | --- |
-| `relay-bridge/julius-approval-decide.ts` | not composed by the live root | — |
 | `relay-bridge/julius-lifecycle-routes.ts` | not composed by the live root | — |
 | `src/relay/mission/economics/cost-receipt-types.ts` | traced | `src/relay/shared/llmops/spend-citation.ts` |
 | `src/relay/mission/economics/economics-errors.ts` | traced | `src/relay/mission/economics/money.ts` |
@@ -380,7 +381,7 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/julius-context-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/julius-contract-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-event-postgres.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
-| `src/relay/persistence/julius-lifecycle-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
+| `src/relay/persistence/julius-lifecycle-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/julius-pg-held.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-read-postgres.ts` | traced | `src/relay/persistence/julius-claim-postgres.ts` |
@@ -497,7 +498,6 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `relay-bridge/julius-mission-routes.ts` | the bridge’s operator-only POST /julius/missions: the contract library’s own parser (julius/mission-contract.ts, shared with the job rather than imported from the job’s entry file, whose require.main guard is true inside the server bundle), the same compileBootstrapRequest and the same createLiveJuliusBootstrapPort the mission job uses, over the same PostgreSQL repositories — so a mission created here and one read from disk are one mission with one execution identity. Bootstrap only: it composes no provider, spends nothing and ticks nothing; the run lands durable in READY for the state routes to watch and the job to drive. Reached from the HTTP server, which is not a mission root |
 | `relay-bridge/julius-state-routes.ts` | the bridge’s READ-ONLY mount of JuliusRuntimeApi for Wonderland — /julius/runs/<id>/<run|slots|tasks|evidence|verification|timeline>, operator-only, composed over the SAME createJuliusPostgresRuntimeStore the mission job writes through so there is one state authority. Reached from the HTTP server, which is a Relay surface and not a mission root, and never from a mission; it computes nothing about a run, every answer is the API’s own. Also the first composition root for the subagent and lifecycle repositories |
 | `relay-bridge/julius-lifecycle-routes.ts` | the bridge’s operator-only POST /julius/runs/<id>/lifecycle {action: pause|resume|cancel, reason}: maps the action to JuliusRuntimeApi.pause/resume/cancel on the SAME api object the read routes serve (composeJuliusStateApi, over the same PostgreSQL store) and the kernel’s answer to a status. It records operator intent and drives nothing: no provider, no tick, no spend; the run loop in the mission job honours the recorded state. Reached from the HTTP server, which is not a mission root |
-| `relay-bridge/julius-approval-decide.ts` | V6 G-4: the decide CLI (`npm run relay:julius:decide:build`) the founder’s in-job approval step runs against the job’s own store: one held run’s ONE PENDING approval, decided through decideJuliusApproval under the committed approver authority (an approver on BOTH .github/julius-approvers.json and the workflow literal; empty refuses everyone), with the identity and authority judged before any store access. It composes no provider, spends nothing and ticks nothing. A separate process the workflow invokes, not reached from the mission root |
 
 ## External packages observed
 

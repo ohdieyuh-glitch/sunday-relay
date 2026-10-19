@@ -144,6 +144,7 @@ const safeToken=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-
  */
 const safeNullableBool=(value:unknown):boolean|null=>typeof value==='boolean'?value:null;
 const safeCount=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=0&&value<=Number.MAX_SAFE_INTEGER?value:null;
+const safePositiveCount=(value:unknown):number|null=>{const n=safeCount(value);return n!==null&&n>0?n:null;};
 /**
  * AN HTTP STATUS, AND ONLY THAT.
  *
@@ -575,6 +576,16 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   participationAskedReport:safeNullableBool(v.participationAskedReport),
   /** Whether the coder reported what the design did under real code. */
   participationAskedObservations:safeNullableBool(v.participationAskedObservations),
+  /* --- Reviewer evidence that was BOUNDED (review-evidence-bound.ts). Present ONLY when characters were left out of what the
+     reviewer was shown; absent otherwise, so a review that saw everything leaves the record exactly as it was. A scored arm with
+     either key present is a reported protocol deviation, never a silent pass. --- */
+  ...(safePositiveCount(v.reviewEvidencePatchOmitted)===null?{}:{reviewEvidencePatchOmitted:safePositiveCount(v.reviewEvidencePatchOmitted) as number}),
+  ...(safePositiveCount(v.reviewEvidenceTestOutputOmitted)===null?{}:{reviewEvidenceTestOutputOmitted:safePositiveCount(v.reviewEvidenceTestOutputOmitted) as number}),
+  /* --- The reasoning effort that was actually TRANSMITTED to a provider and what the provider echoed. Present ONLY when one was sent or
+     echoed (a mission that declares no effort leaves the record exactly as it was). `effortSent` is read from the request / SDK options the
+     adapter built, never from the mission's declaration; `effortEchoed` is the provider's own report, where its response carries one. --- */
+  ...(safeReasonCode(v.effortSent)===null?{}:{effortSent:safeReasonCode(v.effortSent) as string}),
+  ...(safeReasonCode(v.effortEchoed)===null?{}:{effortEchoed:safeReasonCode(v.effortEchoed) as string}),
  });
 };
 /**

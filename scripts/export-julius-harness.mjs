@@ -461,6 +461,7 @@ const FILE_RULES = [
   // observation carries. Replaced wholesale when the provider is swapped.
   ['relay-bridge/julius/claude-code-coding-provider.ts', 'CODING AGENT'],
   ['relay-bridge/julius/coder-workspace.ts', 'CODING AGENT'],
+  ['relay-bridge/julius/coder-self-test.ts', 'CODING AGENT'],
   ['relay-bridge/hosted-coding-agent/', 'CODING AGENT'],
   // The one recogniser of the subscription's usage-limit sentence (audit F5): the hosted classifier and the paid
   // workflow's subscription smoke both import it, so it lives as plain `.mjs` beside the smoke.
@@ -472,6 +473,7 @@ const FILE_RULES = [
   // Same subsystem as the reviewer whose deadline it is: a limit that governs
   // the Independent Reviewer belongs with it, not in a policy annex.
   ['relay-bridge/reviewer-deadline.ts', 'INDEPENDENT REVIEWER'],
+  ['relay-bridge/julius/review-evidence-bound.ts', 'INDEPENDENT REVIEWER'],
   ['relay-bridge/reviewer-harness/hermes/', 'INDEPENDENT REVIEWER'],
   ['relay-bridge/redact.ts', 'INDEPENDENT REVIEWER'],
   // Relay ↔ Julius seam and vocabularies.

@@ -19,16 +19,20 @@ import { dominantTurnModel, hostedServedModel, hostedServedModelVerdict, type Ho
 import {
   loadHostedQuery,
   runHostedCodingAgent,
+  loadHostedSdkHelpers,
+  type HostedEffort,
   type HostedQueryFn,
+  type HostedSdkHelpers,
   type HostedRunOutcome,
 } from '../hosted-coding-agent/hosted-runner';
 import {
-  JULIUS_CODING_AGENT_CHARTER,
+  juliusCodingAgentCharter,
   renderJuliusCodingAgentPrompt,
   type JuliusCodingAgentFailure,
   type JuliusCodingAgentProvider,
   type JuliusCodingAgentProviderOutcome,
   type JuliusCodingAgentRequest,
+  type JuliusCodingAgentSession,
 } from '../../src/relay/mission/julius/julius-coding-agent';
 import {
   JULIUS_PARTICIPATION_CHANNELS,
@@ -199,6 +203,8 @@ export const hostedCoderDiagnostics = (input: {
     resultModelThirdOutputTokens: usageEntry(2)?.outputTokens ?? null,
     responseId: observed?.sessionId ?? null,
     numTurns: observed?.numTurns ?? null,
+    // The effort option the runner handed the SDK (absent when it passed none); the runtime echoes nothing of it, so there is no `effortEchoed` for the coder.
+    ...(observed?.effortSent === undefined ? {} : { effortSent: observed.effortSent }),
     // INVOCATIONS, not distinct names: `toolsUsed` deduplicates.
     toolUseCount: observed?.toolInvocations ?? null,
     /**
@@ -349,13 +355,17 @@ export function createClaudeCodeCodingAgentProvider(input: {
    * `CLAUDE_SUBSCRIPTION`.
    */
   readonly authMode?: ClaudeAuthMode;
+  /** The mission's declared coder effort; absent changes nothing. Forwarded to the runner. */
+  readonly effort?: HostedEffort;
+  /** Test seam for the SDK's tool helpers; production omits it. */
+  readonly sdkHelpersLoader?: () => Promise<HostedSdkHelpers>;
 }): JuliusCodingAgentProvider {
   const run = input.run ?? runHostedCodingAgent;
   const loadQuery = input.queryLoader ?? loadHostedQuery;
   const nowIso = (): string => new Date().toISOString();
   return {
     providerKind: CLAUDE_CODE_PROVIDER_KIND,
-    async execute(request: JuliusCodingAgentRequest, signal?: AbortSignal): Promise<JuliusCodingAgentProviderOutcome> {
+    async execute(request: JuliusCodingAgentRequest, signal?: AbortSignal, session?: JuliusCodingAgentSession): Promise<JuliusCodingAgentProviderOutcome> {
       /**
        * A DISPATCH CANCELLED BEFORE LAUNCH LAUNCHES NOTHING. The signal was
        * dropped at this method's signature, so a deadline cut or a lost lease
@@ -378,6 +388,19 @@ export function createClaudeCodeCodingAgentProvider(input: {
           safeMessage: 'The hosted Claude Agent SDK runtime is not installed.',
           providerFailureClass: 'coder_runtime_not_installed', diagnostics: {},
         };
+      }
+      /* THE SELF-TEST TOOL IS OFFERED ONLY WHEN THE MISSION DECLARED IT, and needs the SDK's tool helpers, loaded the same
+         way as `query`. A deployment that cannot load them fails to launch rather than quietly running without the tool the
+         contract said the coder had. */
+      let sdkHelpers: HostedSdkHelpers | undefined;
+      if (session?.selfTest !== undefined) {
+        try { sdkHelpers = await (input.sdkHelpersLoader ?? loadHostedSdkHelpers)(); } catch {
+          return {
+            kind: 'failed', failure: 'LAUNCH_FAILED', runtimeStarted: false, costUsdMicros: null,
+            safeMessage: 'The hosted Claude Agent SDK tool helpers are not available for the self-test tool.',
+            providerFailureClass: 'coder_self_test_helpers_unavailable', diagnostics: {},
+          };
+        }
       }
       /**
        * THE MISSION'S ALLOCATION IS THE EXECUTION LIMIT. With no allocation — a
@@ -404,11 +427,13 @@ export function createClaudeCodeCodingAgentProvider(input: {
       let detach = (): void => undefined;
       const outcome: HostedRunOutcome = await run({
         queryFn,
-        prompt: renderJuliusCodingAgentPrompt(request, JULIUS_CODING_AGENT_CHARTER),
+        prompt: renderJuliusCodingAgentPrompt(request, juliusCodingAgentCharter(session?.selfTest?.maxCalls)),
         workspacePath: request.workspacePath,
         apiKey: input.apiKey,
         requestedModel: input.requestedModel,
         ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
+        ...(input.effort === undefined ? {} : { effort: input.effort }),
+        ...(session?.selfTest === undefined || sdkHelpers === undefined ? {} : { selfTestTool: session.selfTest, sdkHelpers }),
         limits,
         now: nowIso,
         ...(signal === undefined ? {} : {
