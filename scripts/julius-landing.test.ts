@@ -1288,6 +1288,16 @@ describe('v3.4: GitHub stores a created commit message without its final newline
     expect(r.merges).toHaveLength(1);
   });
 });
+describe('v3.4 V-1: the README does not oversell the nonce tag', () => {
+  it('says the tag is NOT tamper-proof, names the App that could delete or re-create it, and names the ruleset that would close it', () => {
+    const readme = readFileSync(join(LANDING, 'README.md'), 'utf8');
+    expect(readme).toContain('NOT tamper-proof');
+    expect(readme).toContain('could also delete or re-create it');
+    expect(readme).toContain('refs/tags/julius-landing-nonce-*');
+    expect(readme).not.toMatch(/(?<!NOT )tamper-proof/u);
+  });
+});
+
 describe('v3.4 V-4: redaction also covers a token wrapped across a line break and its base64 forms', () => {
   const TOKEN = 'ghs_' + 'abcdefghijklmnopqrstuvwxyz0123456789'.split('').reverse().join('');
   const compact = (s: string) => s.replace(/\s+/g, '');
