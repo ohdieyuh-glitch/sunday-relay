@@ -1,6 +1,8 @@
 // WDEV 2026-10-19: DEV-ONLY scripted drive for automated rehearsals (never in a Shipping build, and refused without -wldev).
 // It lets a test harness control a game it launched WITHOUT any operating-system input (no SendInput, no focus, nothing taken from the person at the keyboard):
 //   wl.Dev.CmdFile <path>   follow a text file: every line appended to it is executed as a console command (lines are read as they are written)
+//   wl.Dev.Key <name> <down|up>   press / release a key THROUGH the game's own input path (the player controller's InputKey): W A S D Space LeftShift ... exactly what the real bindings see
+//   wl.Dev.Hold <name> <seconds>  press a key and release it that long after
 //   wl.Dev.Move <fwd> <right> <seconds>   walk (camera-relative, like W/A/S/D) for that long
 //   wl.Dev.Jump [seconds]   press jump and hold it that long (default 0.15, the hold-to-rise of the key)
 //   wl.Dev.Yaw <degrees>    face the controller (and so the walk) that way
@@ -15,6 +17,8 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerInput.h"
+#include "InputCoreTypes.h"
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
 #include "HAL/PlatformTime.h"
@@ -35,6 +39,8 @@ namespace WonderlandDevDriveDetail
 		float MoveRight = 0.0f;
 		double JumpUntil = 0.0;
 		bool bJumping = false;
+		struct FRelease { FKey Key; double At = 0.0; };
+		TArray<FRelease> Releases;
 	};
 
 	FDriveState& DriveState()
@@ -116,6 +122,22 @@ namespace WonderlandDevDriveDetail
 			return true;
 		}
 		ReadNewLines(S, World);
+		if (S.Releases.Num() > 0)
+		{
+			APlayerController* Pc = World->GetFirstPlayerController();
+			const double At = FPlatformTime::Seconds();
+			for (int32 I = S.Releases.Num() - 1; I >= 0; --I)
+			{
+				if (At >= S.Releases[I].At)
+				{
+					if (Pc != nullptr)
+					{
+						Pc->InputKey(FInputKeyParams(S.Releases[I].Key, IE_Released, 0.0, false));
+					}
+					S.Releases.RemoveAtSwap(I);
+				}
+			}
+		}
 		ACharacter* Dog = DriveLocalCharacter(World);
 		const double Now = FPlatformTime::Seconds();
 		if (Dog != nullptr && Now < S.MoveUntil)
@@ -206,6 +228,52 @@ namespace WonderlandDevDriveDetail
 			S.bJumping = true;
 			EnsureDriveTicker();
 			UE_LOG(LogTemp, Display, TEXT("WLDEV jump"));
+		}));
+
+
+	FAutoConsoleCommand GDevKey(
+		TEXT("wl.Dev.Key"),
+		TEXT("DEV (-wldev): wl.Dev.Key <name> <down|up> sends a key through the player controller's input path (the game's real bindings see it)."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			if (DriveRefused() || Args.Num() < 2)
+			{
+				return;
+			}
+			UWorld* World = DriveGameWorld();
+			APlayerController* Pc = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+			const FKey Key(*Args[0]);
+			if (Pc != nullptr && Key.IsValid())
+			{
+				const bool bDown = Args[1].Equals(TEXT("down"), ESearchCase::IgnoreCase);
+				Pc->InputKey(FInputKeyParams(Key, bDown ? IE_Pressed : IE_Released, bDown ? 1.0 : 0.0, false));
+				EnsureDriveTicker();
+				UE_LOG(LogTemp, Display, TEXT("WLDEV key %s %s"), *Args[0], bDown ? TEXT("down") : TEXT("up"));
+			}
+		}));
+
+	FAutoConsoleCommand GDevHold(
+		TEXT("wl.Dev.Hold"),
+		TEXT("DEV (-wldev): wl.Dev.Hold <name> <seconds> presses a key through the input path and releases it that long after."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			if (DriveRefused() || Args.Num() < 2)
+			{
+				return;
+			}
+			UWorld* World = DriveGameWorld();
+			APlayerController* Pc = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+			const FKey Key(*Args[0]);
+			if (Pc != nullptr && Key.IsValid())
+			{
+				Pc->InputKey(FInputKeyParams(Key, IE_Pressed, 1.0, false));
+				FDriveState::FRelease Release;
+				Release.Key = Key;
+				Release.At = FPlatformTime::Seconds() + FMath::Clamp(FCString::Atod(*Args[1]), 0.02, 120.0);
+				DriveState().Releases.Add(Release);
+				EnsureDriveTicker();
+				UE_LOG(LogTemp, Display, TEXT("WLDEV hold %s for %s s"), *Args[0], *Args[1]);
+			}
 		}));
 
 	FAutoConsoleCommand GDevYaw(
