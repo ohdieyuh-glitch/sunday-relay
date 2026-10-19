@@ -1,0 +1,31 @@
+node_modules
+dist
+dist-relay
+dist-relay-bridge
+dist-relay-hermes
+dist-relay-executor
+*.tsbuildinfo
+.DS_Store
+.env
+.env.*
+!.env.example
+.relay/
+coverage
+*.log
+
+# card-seam browser harness live-mode bundle
+dist-live/
+
+# Byproducts of running the in-sandbox executor script outside a container
+late.txt
+ran.txt
+
+# Julius single-file inspection export (regenerate: node scripts/export-julius-harness.mjs).
+# Derived, not source of truth; the generator and JULIUS_HARNESS_MANIFEST.md are committed instead.
+generated/
+# The restart/recovery drill's own output: a transcript and an attestation, both
+# written at run time and only meaningful beside the run that produced them.
+julius-capability-proofs/
+# The live-mission evidence bundle name, so a local dry run of the workflow's
+# collection step or the dump script does not leave one in the working tree.
+julius-live-evidence/
