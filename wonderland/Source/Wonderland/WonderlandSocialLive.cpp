@@ -471,6 +471,8 @@ void FWonderlandSocialLiveService::TickWorld()
 	const double SentPeriodMs = LastWorldSentAt > 0.0 ? (SentAt - LastWorldSentAt) * 1000.0 : 0.0;
 	LastWorldSentAt = SentAt;
 	const FVector SentSoles = Report.Location;
+	// WLREMOTE motion: the sender's label with the soles z and vertical speed (log only; no allocation; the send cadence).
+	UE_LOG(LogTemp, Display, TEXT("WLREMOTE send motion=%s z=%.1f vz=%.1f period=%.0fms"), *Report.Motion, Report.Location.Z, static_cast<double>(Report.VerticalSpeed), SentPeriodMs);
 	const float SentYaw = Report.Yaw;
 	// ONE CALL A TICK: the report answers with who else is here.
 	Call(TEXT("POST"), TEXT("/world/state"), Body, [this, SentAt, SentPeriodMs, SentSoles, SentYaw](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)

@@ -124,6 +124,10 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 	for (const FWonderlandRemoteAvatar& A : View.Avatars)
 	{
 		FRemote& Remote = Remotes.FindOrAdd(A.UserId);
+		if (!Remote.Motion.Equals(A.Motion))
+		{
+			Remote.Motion = A.Motion;   // WLREMOTE diagnostics only: copies only on a change
+		}
 		if (!A.Location.Equals(Remote.Target, 0.01))
 		{
 			// WLREMOTE: a view that carries a new position is a new report; one that repeats it is not.
@@ -507,7 +511,8 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 			UE_LOG(LogTemp, Display, TEXT("WLREMOTE snap fig=%s from=(%.1f,%.1f,%.1f) to=(%.1f,%.1f,%.1f)"), *Pair.Key,
 				Now.X, Now.Y, Now.Z, R.Target.X, R.Target.Y, R.Target.Z);
 		}
-		if (NowSeconds >= R.LogNextAt)
+		const bool bLogMotionNow = NowSeconds >= R.LogNextAt;
+		if (bLogMotionNow)
 		{
 			R.LogNextAt = NowSeconds + FMath::Max(0.02, static_cast<double>(CVarRemoteLogPeriod.GetValueOnGameThread()));
 			UE_LOG(LogTemp, Display, TEXT("WLREMOTE fig=%s recv=(%.1f,%.1f,%.1f) age=%.0fms applied=(%.1f,%.1f,%.1f) lagUu=%.1f lagXYUu=%.1f worn=%d floatZ=%.2f lowestUu=%.2f aim=(%.1f,%.1f) dtMs=%.1f nowXY=(%.1f,%.1f) interp=%d delayMs=%.0f yaw=%.2f tyaw=%.2f idleFreeze=%.3f gaitW=%.3f gSpd=%.1f gPh=%.4f actPh=%.4f dogAnim=%d dStride=%.1f dDuty=%.2f dLean=%.1f dArms=%.2f dCps=%.2f"),
@@ -522,6 +527,11 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 				R.bAnimConfigured && Body->IsGaitDrivenExternally() ? 1 : 0, static_cast<double>(R.Anim.Pose().Stride.StrideLength), static_cast<double>(R.Anim.Pose().Stride.DutyFactor),
 				static_cast<double>(R.Anim.Pose().LeanDeg), static_cast<double>(R.Anim.Pose().Stride.ArmsBack),
 				R.Anim.Pose().Stride.StrideLength > 1.0f ? static_cast<double>(R.Anim.Pose().SpeedUU / R.Anim.Pose().Stride.StrideLength) : 0.0);
+		}
+		if (bLogMotionNow)
+		{
+			UE_LOG(LogTemp, Display, TEXT("WLREMOTE motion fig=%s motion=%s z=%.2f"), *Pair.Key, *R.Motion,
+				Next.Z + static_cast<double>(Body->GetFloatRootRelativeZ()) + static_cast<double>(Body->GetFigureLowestUu()));
 		}
 		if (UTextRenderComponent* Label = R.Label.Get())
 		{

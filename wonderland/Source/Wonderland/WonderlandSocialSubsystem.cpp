@@ -398,6 +398,7 @@ bool UWonderlandSocialSubsystem::ReportLocalPlayer(FWonderlandAvatarReport& Out)
 	const UCharacterMovementComponent* Move = Dog->GetCharacterMovement();
 	Out.Motion = Move != nullptr && Move->IsFalling() ? (Velocity.Z > 0.0 ? TEXT("JUMP") : TEXT("FALL"))
 		: Out.Speed < 10.0f ? TEXT("IDLE") : Out.Speed < 400.0f ? TEXT("WALK") : TEXT("RUN");
+	Out.VerticalSpeed = static_cast<float>(Velocity.Z);   // WLREMOTE diagnostics only; not sent
 	Out.SkinId = Dog->GetWornSkinId().IsNone() ? FString(TEXT("relay_og")) : Dog->GetWornSkinId().ToString();
 	return true;
 }
