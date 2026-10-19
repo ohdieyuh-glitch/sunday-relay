@@ -1,0 +1,9 @@
+# Checks that MUST be present exactly once, completed and successful ('neutral' is NOT green), on the head (founder-governed; the lander refuses a PR that touches this directory).
+# `Name @15368` = the check run must ALSO have been produced by that GitHub App id (15368 = GitHub Actions), so a look-alike check posted under the same name by another app cannot
+# stand in for the real job. A line without `@id` is matched by name only.
+Verify Relay @15368
+real-infra-julius @15368
+learning-store-container @15368
+sibling-control-plane @15368
+first-live-topology (executor-private) @15368
+first-live-topology (host-visible) @15368

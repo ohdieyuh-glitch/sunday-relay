@@ -1,0 +1,24 @@
+{
+  // The Hermes Reviewer service is its own TypeScript project.
+  //
+  // It had none, and neither existing project covered it: the root project
+  // includes only `src`, and the bridge project includes only `relay-bridge`.
+  // `relay:hermes:typecheck` pointed at the BRIDGE config, so it passed
+  // without ever reading a line of this directory — a green typecheck for
+  // code nothing typechecked.
+  //
+  // Settings mirror relay-bridge/tsconfig.json: this is server-side CommonJS
+  // built by esbuild, not browser ESM.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "allowImportingTsExtensions": false,
+    "composite": false,
+    "noEmit": true,
+    "paths": {}
+  },
+  "include": ["."]
+}
