@@ -1,0 +1,149 @@
+/**
+ * Mission run controls — PAUSE / RESUME.
+ *
+ * Uses the existing Relay workspace control language (the same plate, cream
+ * text and restrained gold accent as STOP and RETRY). Nothing here redesigns
+ * Mission Operations; the controls simply sit beside the existing ones.
+ */
+
+.rmrc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  /* Never widen the row that hosts STOP / RETRY. */
+  min-width: 0;
+  max-width: 100%;
+}
+
+.rmrc-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.rmrc-control {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.rmrc-btn {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid rgba(217, 164, 65, 0.5);
+  background: transparent;
+  color: #ece9e2;
+  font-family: inherit;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rmrc-btn--primary { background: rgba(217, 164, 65, 0.16); color: #f2c14e; }
+.rmrc-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.rmrc-btn:focus-visible { outline: 2px solid #d9a441; outline-offset: 2px; }
+
+.rmrc-reason {
+  font-size: 0.68rem;
+  color: rgba(236, 233, 226, 0.6);
+  /* Long reasons wrap rather than pushing the row wider. */
+  max-width: 22rem;
+  overflow-wrap: anywhere;
+}
+
+/* -------------------------------- panels -------------------------------- */
+
+.rmrc-panel {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid rgba(217, 164, 65, 0.3);
+  background: rgba(0, 0, 0, 0.35);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.rmrc-panel--checkpoint { border-color: rgba(242, 193, 78, 0.45); }
+
+.rmrc-panel-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  color: #d9a441;
+}
+
+.rmrc-panel-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.72rem;
+  color: rgba(236, 233, 226, 0.72);
+}
+
+.rmrc-will {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.rmrc-will h4 {
+  margin: 0 0 0.2rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  color: rgba(236, 233, 226, 0.55);
+}
+
+.rmrc-will ul {
+  margin: 0;
+  padding-left: 1rem;
+  font-size: 0.72rem;
+  color: #ece9e2;
+}
+
+.rmrc-checkpoints {
+  list-style: none;
+  margin: 0.4rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.rmrc-checkpoints li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.72rem;
+}
+
+.rmrc-checkpoint-target { color: rgba(236, 233, 226, 0.75); }
+
+.rmrc-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+
+/* -------------------------------- notes --------------------------------- */
+
+.rmrc-note {
+  margin: 0;
+  font-size: 0.72rem;
+  max-width: 34rem;
+  overflow-wrap: anywhere;
+}
+
+.rmrc-note--done { color: rgba(236, 233, 226, 0.78); }
+.rmrc-note--error { color: #e06c5a; }
+
+/* -------------------------------- mobile -------------------------------- */
+
+@media (max-width: 720px) {
+  .rmrc-buttons { flex-direction: column; align-items: stretch; }
+  .rmrc-control { width: 100%; }
+  .rmrc-btn { width: 100%; text-align: center; }
+  .rmrc-will { grid-template-columns: 1fr; }
+  .rmrc-actions { flex-direction: column; }
+  .rmrc-reason { max-width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rmrc * { transition: none !important; animation: none !important; }
+}
