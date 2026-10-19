@@ -88,6 +88,7 @@ import { openSocialPostgresStore } from '../src/relay/persistence/social-postgre
 import { createPostgresVoiceBindings } from '../src/relay/persistence/voice-binding-postgres';
 import type { VoiceBindingStore } from '../src/relay/social/voice-binding';
 import { eosFromEnv } from './eos-voice';
+import { createAskLedger, createProductionJuliusAsk, handleJuliusAskRoute, isJuliusAskRoute } from './julius-ask';
 import type { SocialStore } from '../src/relay/social/social-store';
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -450,6 +451,7 @@ const juliusMissionPorts = (): JuliusMissionRoutePorts => {
 const headerValue = (value: string | string[] | undefined): string | undefined =>
   (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined);
 
+  const juliusAsk = createProductionJuliusAsk(createAskLedger(config.stateRoot === null ? null : join(config.stateRoot, 'julius-ask-ledger.jsonl')));
   const pspStore = config.stateRoot === null ? null : createPspConfigStore({ root: config.stateRoot });
   // Read once: `/health` answers the same body for the life of the process.
   const health = healthBody(process.env);
@@ -800,6 +802,17 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             membership: pairingPool === null ? null : new WonderlandMembershipPostgres(pairingPool),
           });
           if (nativeResult !== null) send(res, nativeResult.status, nativeResult.body, cors);
+          return;
+        }
+
+        /** ASK JULIUS (phase A), BEFORE the Wonderland family that claims every `/wonderland/` path. Off unless JULIUS_ASK_ENABLED=1. */
+        if (isJuliusAskRoute(path.replace('/relay-api', ''))) {
+          const askResult = await handleJuliusAskRoute({
+            method, authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined, origin,
+            rawBody: method === 'POST' ? await readRawBody(req) : undefined, idempotencyKey: headerValue(req.headers['x-relay-idempotency-key']),
+            now: Date.now(), operatorToken: process.env.RELAY_BRIDGE_API_TOKEN,
+          }, { ask: juliusAsk, verifyNativeSession: nativeSessionVerifier(browserSessions) });
+          send(res, askResult.status, askResult.body, cors);
           return;
         }
 
