@@ -291,7 +291,7 @@ globalThis.fetch = async (url, init = {}) => {
   // the read-back of the commit the lander created: it echoes what the lander POSTed unless the scenario supplies a tampered answer
   if (method === 'GET' && path.endsWith('/commits/' + scenario.createdSha)) {
     const c = globalThis.__created;
-    return reply(200, scenario.readBack ?? { sha: scenario.createdSha, parents: c.parents.map((sha) => ({ sha })), commit: { tree: { sha: c.tree }, message: c.message, author: c.author, committer: c.committer } });
+    return reply(200, scenario.readBack ?? { sha: scenario.createdSha, parents: c.parents.map((sha) => ({ sha })), commit: { tree: { sha: c.tree }, message: scenario.githubStripsNewline ? c.message.replace(/\\n$/, '') : c.message, author: c.author, committer: c.committer } });
   }
   if (/\\/commits\\/[0-9a-f]{40}$/.test(path)) return reply(200, scenario.commit);
   if (/\\/pulls\\/\\d+\\/files/.test(path)) return reply(200, scenario.files.map((f) => (typeof f === 'string' ? { filename: f } : f)));
@@ -1234,6 +1234,47 @@ describe('round 5 r5: nothing the lander prints carries a credential, whatever a
     const r = runLand({ token: 'plain-secret-value-123', scenario: { failGet: '/git/ref/heads/main', echo: true } });
     expect(r.out).not.toContain('plain-secret-value-123');
     expect(r.out).not.toMatch(/Authorization: Bearer/iu);
+  });
+});
+
+describe('v3.4: GitHub stores a created commit message without its final newline (real run 39290405293)', () => {
+  const S = 'a'.repeat(40);
+  const BASE = 'b'.repeat(40);
+  const TREE = 'c'.repeat(40);
+  const sent = lib.buildLandingCommitMessage({ clearanceText: clearanceText(), signatureB64: sig(clearanceText()) }) as string;
+  const created = (message: string) => ({ sha: S, parents: [{ sha: BASE }], commit: { tree: { sha: TREE }, message, author: lib.LANDER_IDENTITY, committer: lib.LANDER_IDENTITY } });
+  const verdict = (message: string) => lib.checkCreatedCommit({ created: created(message), sha: S, base: BASE, tree: TREE, message: sent }) as string[];
+
+  it('the message as sent, and the message as GitHub stores it (the one final newline removed), are both accepted', () => {
+    expect(sent.endsWith('\n') && !sent.endsWith('\n\n')).toBe(true);
+    expect(verdict(sent)).toEqual([]);
+    expect(verdict(sent.slice(0, -1)), 'the real API answer').toEqual([]);
+  });
+
+  it('NOTHING else is accepted: extra text, extra newlines or spaces after the block, a changed nonce or signature character, a changed free text, a missing marker character', () => {
+    const stripped = sent.slice(0, -1);
+    const lines = stripped.split('\n');
+    const swapLast = (i: number) => lines.map((l, j) => (j === i ? `${l.slice(0, -1)}${l.endsWith('A') ? 'B' : 'A'}` : l)).join('\n');
+    const cases: Array<[string, string]> = [
+      ['extra text after the END marker', `${stripped}\nextra`],
+      ['two final newlines', `${sent}\n`],
+      ['a trailing space after the END marker', `${stripped} `],
+      ['a trailing tab', `${stripped}\t`],
+      ['the END marker cut by one character', stripped.slice(0, -1)],
+      ['the nonce line changed', swapLast(lines.findIndex((l) => l.startsWith('clearance-nonce: ')))],
+      ['the signature line changed', swapLast(lines.findIndex((l) => l.startsWith('signature-b64: ')))],
+      ['the clearance line changed', swapLast(lines.findIndex((l) => l.startsWith('clearance-b64: ')))],
+      ['the free text changed', stripped.replace('Landed PR', 'Landed pr')],
+      ['an empty message', ''],
+    ];
+    for (const [name, message] of cases) expect(verdict(message), name).not.toEqual([]);
+  });
+
+  it('end to end against a fake GitHub that stores the message without its final newline: the landing succeeds exactly once', () => {
+    const r = runLand({ scenario: { githubStripsNewline: true } });
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toContain('LANDED PR #7');
+    expect(r.merges).toHaveLength(1);
   });
 });
 

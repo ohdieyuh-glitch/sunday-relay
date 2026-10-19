@@ -368,6 +368,11 @@ describe('the block parser and the restated clearance rules', () => {
     expect(extractLandingBlock(42).state).toBe('invalid');
     expect(extractLandingBlock(null).state).toBe('invalid');
     expect(extractLandingBlock(message())).toMatchObject({ state: 'ok', nonce: NONCE });
+    // the API returns a stored message WITHOUT its final newline: still ok; anything after the END marker is not
+    expect(extractLandingBlock(message().replace(/\n$/u, ''))).toMatchObject({ state: 'ok', nonce: NONCE });
+    expect(extractLandingBlock(`${message()}extra\n`).state).toBe('invalid');
+    expect(extractLandingBlock(`${message().replace(/\n$/u, '')}\nextra`).state).toBe('invalid');
+    expect(extractLandingBlock(`${message()}\n`).state).toBe('invalid');
   });
 
   it('parseSignedClearance agrees with the lander\'s parseClearance on a corpus of single-line edits', () => {

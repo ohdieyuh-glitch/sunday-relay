@@ -184,7 +184,10 @@ export function checkCreatedCommit({ created, sha, base, tree, message }) {
   if (created?.sha !== undefined && created.sha !== sha) problems.push(`the read-back commit is ${created.sha}, expected ${sha}`);
   if (created?.parents?.length !== 1 || created.parents[0]?.sha !== base) problems.push('the created commit does not have exactly one parent, the cleared base');
   if (created?.commit?.tree?.sha !== tree) problems.push(`the created tree is ${created?.commit?.tree?.sha}, expected ${tree}`);
-  if (created?.commit?.message !== message) problems.push('the created commit message differs from the one that was sent');
+  // GitHub's git data API stores a created commit's message WITHOUT its final newline (real run 39290405293: sent 1246 bytes, stored 1245). Accept exactly the message that was sent, or the
+  // sent message minus its ONE final newline; nothing else (no other trailing whitespace, no other byte). The signed block, the nonce and the signature are still compared byte for byte.
+  const stored = created?.commit?.message;
+  if (typeof message !== 'string' || (stored !== message && !(message.endsWith('\n') && stored === message.slice(0, -1)))) problems.push('the created commit message differs from the one that was sent');
   for (const who of ['author', 'committer']) {
     if (created?.commit?.[who]?.name !== LANDER_IDENTITY.name || created?.commit?.[who]?.email !== LANDER_IDENTITY.email) problems.push(`the created commit ${who} is not ${LANDER_IDENTITY.name}`);
   }
