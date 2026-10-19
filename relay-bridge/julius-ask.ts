@@ -24,10 +24,72 @@ export const ASK_QUESTION_MAX_CHARS = 2_000;
 export const ASK_ANSWER_MAX_CHARS = 8_000;
 export const ASK_DEFAULT_DAILY_CAP = 20;
 export const ASK_DEFAULT_MAX_CONCURRENT = 1;
-export const ASK_DEFAULT_MAX_OUTPUT_TOKENS = 1_500;
-export const ASK_MAX_OUTPUT_TOKENS_CEILING = 4_000;
-/** The provider call is bounded to this even when the architect timeout is longer. */
+/** The provider call is bounded to this even when the architect timeout is longer (a request deadline, not a token or dollar ceiling). */
 export const ASK_MAX_TIMEOUT_MS = 90_000;
+
+/**
+ * THE ASK'S OUTPUT AND REASONING BUDGET, chosen per question. There is NO route-imposed token or dollar ceiling: the
+ * provider's own hard limits and API constraints still apply, and the daily call cap, the concurrency limit, the request
+ * deadline and the one-billed-call rule remain the abuse and cost protections.
+ *
+ * Reasoning effort, by the question's length in characters (a longer question is, on average, a harder one):
+ *   - up to 200 characters   -> 'low'     (a short factual question)
+ *   - 201 to 800 characters  -> 'medium'
+ *   - over 800 characters    -> 'high'    (a long or complex question)
+ * If the model is known NOT to accept a reasoning effort, none is sent (null).
+ *
+ * SERVER-SIDE INPUTS ONLY: the trimmed question's length, the validated config's model and this module's capability table, and
+ * the operator's environment. Nothing the caller supplies (body fields, headers, the idempotency key) reaches this function.
+ * The effort comes from the CLOSED set low|medium|high; the output ceiling is never infinite and never from the request.
+ *
+ * Output budget, in this order (basis recorded in the ledger):
+ *   1. 'operator_override': JULIUS_ASK_MAX_OUTPUT_TOKENS, passed through unchanged;
+ *   2. 'provider_max': the model's DOCUMENTED provider maximum, when the capability table states one;
+ *   3. 'omitted': null, `max_output_tokens` is OMITTED from the request, so the provider's own hard limit applies.
+ * No file in this repository states a documented output maximum for the model in use, so today the table is empty and the
+ * answer is (3) unless the operator sets an override.
+ */
+export interface AskModelCapabilities {
+  /** The model's documented provider maximum output tokens, or null/absent when this repository does not state one. */
+  readonly maxOutputTokens?: number | null;
+  /** False only when the model is known to reject a reasoning effort. Absent means it is accepted. */
+  readonly supportsReasoningEffort?: boolean;
+}
+export type AskReasoningEffort = 'low' | 'medium' | 'high';
+export type AskBudgetBasis = 'operator_override' | 'provider_max' | 'omitted';
+/** The CLOSED set of efforts an ask may send. Anything else is rejected, not forwarded. */
+export const ASK_EFFORTS: readonly AskReasoningEffort[] = ['low', 'medium', 'high'];
+export interface AskBudget {
+  readonly reasoningEffort: AskReasoningEffort | null;
+  /** The value sent as max_output_tokens, or null meaning the field is OMITTED (never a stand-in number). */
+  readonly maxOutputTokens: number | null;
+  readonly basis: AskBudgetBasis;
+}
+export const ASK_EFFORT_LOW_MAX_CHARS = 200;
+export const ASK_EFFORT_MEDIUM_MAX_CHARS = 800;
+
+export function selectAskBudget(input: {
+  readonly questionChars: number;
+  readonly modelCapabilities?: AskModelCapabilities;
+  readonly operatorOverride?: number | null;
+}): AskBudget {
+  const caps = input.modelCapabilities ?? {};
+  const reasoningEffort: AskReasoningEffort | null = caps.supportsReasoningEffort === false
+    ? null
+    : input.questionChars <= ASK_EFFORT_LOW_MAX_CHARS ? 'low'
+      : input.questionChars <= ASK_EFFORT_MEDIUM_MAX_CHARS ? 'medium' : 'high';
+  if (reasoningEffort !== null && !ASK_EFFORTS.includes(reasoningEffort)) throw new Error('ask effort outside the closed set');
+  if (input.operatorOverride !== undefined && input.operatorOverride !== null) {
+    return { reasoningEffort, maxOutputTokens: input.operatorOverride, basis: 'operator_override' };
+  }
+  if (typeof caps.maxOutputTokens === 'number' && Number.isInteger(caps.maxOutputTokens) && caps.maxOutputTokens > 0) {
+    return { reasoningEffort, maxOutputTokens: caps.maxOutputTokens, basis: 'provider_max' };
+  }
+  return { reasoningEffort, maxOutputTokens: null, basis: 'omitted' };
+}
+
+/** Per-model facts this repository documents. Empty on purpose: nothing here states a provider output maximum. */
+const MODEL_CAPABILITIES: Readonly<Record<string, AskModelCapabilities>> = {};
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,80}$/;
 const SCHEMA = {
@@ -59,6 +121,8 @@ export interface JuliusAskDeps {
   readonly now: () => number;
   readonly ledger: AskLedger;
   readonly env: Record<string, string | undefined>;
+  /** What is known about the configured model; defaults to this module's (empty) documented table. */
+  readonly modelCapabilities?: (model: string | null) => AskModelCapabilities;
 }
 
 export interface JuliusAskInput {
@@ -102,6 +166,13 @@ function positiveInt(raw: string | undefined, fallback: number): number {
   return Number.isInteger(n) && n > 0 ? n : fallback;
 }
 
+/** The operator's optional output-token override: null when unset, the number when valid, 'invalid' when set to something unusable (fail closed, never silently uncapped). */
+function parseOverride(raw: string | undefined): number | null | 'invalid' {
+  if (raw === undefined || raw.trim() === '') return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : 'invalid';
+}
+
 function usageOf(usage: GptUsage | undefined): JuliusAskSuccess['usage'] {
   return {
     input: usage?.inputTokens ?? null,
@@ -125,7 +196,10 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
     const readiness = evaluateReadiness(config);
     if (!readiness.ready) return fail('julius_ask_not_configured', 503);
 
-    const ceiling = Math.min(positiveInt(env.JULIUS_ASK_MAX_OUTPUT_TOKENS, ASK_DEFAULT_MAX_OUTPUT_TOKENS), ASK_MAX_OUTPUT_TOKENS_CEILING);
+    const override = parseOverride(env.JULIUS_ASK_MAX_OUTPUT_TOKENS);
+    if (override === 'invalid') return fail('julius_ask_not_configured', 503);
+    const capabilities = (deps.modelCapabilities ?? ((m: string | null) => (m === null ? {} : MODEL_CAPABILITIES[m] ?? {})))(config.model);
+    const budget = selectAskBudget({ questionChars: question.length, modelCapabilities: capabilities, operatorOverride: override });
     const dailyCap = positiveInt(env.JULIUS_ASK_DAILY_CAP, ASK_DEFAULT_DAILY_CAP);
     const maxConcurrent = positiveInt(env.JULIUS_ASK_MAX_CONCURRENT, ASK_DEFAULT_MAX_CONCURRENT);
     const startedAt = deps.now();
@@ -147,7 +221,10 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
       try {
         await deps.ledger.append({
           phase: 'pre_call', askId, at: new Date(startedAt).toISOString(), callerHash, keyHash,
-          questionLength: question.length, maxOutputTokens: ceiling, model: config.model, maxAttempts: 1,
+          questionLength: question.length, model: config.model, maxAttempts: 1,
+          /* The budget BASIS, honestly: the override or documented value, or null when max_output_tokens is omitted. */
+          maxOutputTokensSent: budget.maxOutputTokens === null ? 'omitted' : budget.maxOutputTokens, budgetBasis: budget.basis,
+          reasoningEffortChosen: budget.reasoningEffort, effortBasis: budget.reasoningEffort === null ? 'not_sent' : 'dynamic',
         });
       } catch {
         if (day === today && callsToday > 0) callsToday -= 1;
@@ -159,7 +236,15 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
       try {
         outcome = await deps.runArchitect({
           apiKey,
-          config: { ...config, maxOutputTokens: ceiling, timeoutMs: Math.min(config.timeoutMs, ASK_MAX_TIMEOUT_MS) },
+          config: {
+            ...config,
+            ...(budget.maxOutputTokens === null ? {} : { maxOutputTokens: budget.maxOutputTokens }),
+            /* Always the budget's own choice (or none), never whatever the config reader happened to carry. */
+            reasoningEffort: budget.reasoningEffort ?? undefined,
+            timeoutMs: Math.min(config.timeoutMs, ASK_MAX_TIMEOUT_MS),
+          },
+          /* No route-imposed output cap: the provider's own limit applies (the architect's 4000 default is for plans, not asks). */
+          ...(budget.maxOutputTokens === null ? { omitMaxOutputTokens: true } : {}),
           instructions: INSTRUCTIONS,
           input: question,
           schema: SCHEMA,
@@ -187,6 +272,9 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
           answerChars: result.ok ? result.answerChars : null,
           usage: usageOf(outcome.usage),
           model: outcome.actualModel ?? null,
+          /* The effort that went on the wire and the one the provider reported (GptEffort), as in the Julius pipeline. */
+          effortSent: outcome.effort?.sent ?? null,
+          effortEchoed: outcome.effort?.echoed ?? null,
           /* Exactly one, because the request carried maxRetries 0. */
           attempts: 1,
         });

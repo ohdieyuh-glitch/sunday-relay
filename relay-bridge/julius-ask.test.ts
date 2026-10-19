@@ -4,7 +4,8 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  ASK_ANSWER_MAX_CHARS, createAskLedger, createJuliusAsk, handleJuliusAskRoute, isJuliusAskRoute,
+  ASK_ANSWER_MAX_CHARS, ASK_EFFORTS, ASK_EFFORT_LOW_MAX_CHARS, ASK_EFFORT_MEDIUM_MAX_CHARS, createAskLedger, createJuliusAsk,
+  handleJuliusAskRoute, isJuliusAskRoute, selectAskBudget,
   type AskLedgerLine, type JuliusAskResult,
 } from './julius-ask';
 import { readGptArchitectConfig } from '../src/relay/connectors/gpt-architect/config';
@@ -15,14 +16,16 @@ import { runGptArchitect, type GptRunOutcome, type GptRunRequest } from '../src/
 const sdk = vi.hoisted(() => ({
   constructed: [] as Array<Record<string, unknown>>,
   creates: 0,
+  bodies: [] as Array<Record<string, unknown>>,
   impl: null as null | (() => Promise<unknown>),
 }));
 vi.mock('openai', () => ({
   default: class {
     constructor(options: Record<string, unknown>) { sdk.constructed.push(options); }
     responses = {
-      create: async () => {
+      create: async (body: Record<string, unknown>) => {
         sdk.creates += 1;
+        sdk.bodies.push(body);
         if (sdk.impl === null) throw new Error('no SDK behaviour configured');
         return sdk.impl();
       },
@@ -179,26 +182,17 @@ describe('ask Julius: the answer', () => {
     expect(JSON.stringify(result)).not.toContain(RAW_RESPONSE_ID);
   });
 
-  it('asks for a bare {answer:string} schema, with the ask output cap, and no tool or research field', async () => {
+  it('asks for a bare {answer:string} schema, with no route-imposed output cap, and no tool or research field', async () => {
     const h = harness();
     success(await ask(h));
     const request = h.requests[0];
     expect(request?.schema?.schema).toMatchObject({ required: ['answer'], properties: { answer: { type: 'string' } } });
-    expect(request?.config.maxOutputTokens).toBe(1500);
+    expect(request?.omitMaxOutputTokens).toBe(true);
     expect(request?.config.timeoutMs).toBeLessThanOrEqual(90_000);
-    expect(Object.keys(request ?? {}).sort()).toEqual(['apiKey', 'config', 'input', 'instructions', 'maxRetries', 'schema']);
+    expect(Object.keys(request ?? {}).sort()).toEqual(['apiKey', 'config', 'input', 'instructions', 'maxRetries', 'omitMaxOutputTokens', 'schema']);
     expect(request?.instructions).toContain('no tools');
     /* One ask is at most one billed provider request. */
     expect(request?.maxRetries).toBe(0);
-  });
-
-  it('bounds the output tokens: configurable downward, never above 4000, and a bad value falls back', async () => {
-    const cases: Array<[string | undefined, number]> = [['800', 800], ['99999', 4000], ['4000', 4000], ['0', 1500], ['abc', 1500], ['-5', 1500], ['12.5', 1500]];
-    for (const [raw, expected] of cases) {
-      const h = harness({ env: baseEnv({ JULIUS_ASK_MAX_OUTPUT_TOKENS: raw }) });
-      success(await ask(h));
-      expect(h.requests[0]?.config.maxOutputTokens).toBe(expected);
-    }
   });
 
   it('sanitizes the answer: removes the exact key, secret-shaped strings and escape sequences', async () => {
@@ -295,7 +289,7 @@ describe('ask Julius: the ledger', () => {
     expect(h.lines[1]).toMatchObject({ providerResponseId: RAW_RESPONSE_ID });
     expect(dump).not.toContain('secret-id-77');
     expect(dump).not.toContain('idem-secret-key-42');
-    expect(h.lines[0]).toMatchObject({ phase: 'pre_call', questionLength: question.length, maxOutputTokens: 1500 });
+    expect(h.lines[0]).toMatchObject({ phase: 'pre_call', questionLength: question.length, maxOutputTokensSent: 'omitted', budgetBasis: 'omitted' });
     expect(String(h.lines[0]?.callerHash)).toMatch(/^[0-9a-f]{16}$/);
     expect(String(h.lines[0]?.keyHash)).toMatch(/^[0-9a-f]{16}$/);
     expect(h.lines[1]).toMatchObject({ phase: 'result', outcome: 'answered', usage: { input: 120, cached: 20, output: 80, reasoning: 30, total: 200 } });
@@ -490,7 +484,7 @@ describe('ask Julius: the result ledger row reconciles a billed call', () => {
     expect(h.lines[1]).toEqual({
       phase: 'result', askId: expect.any(String), at: expect.any(String), outcome: 'julius_ask_provider_failed',
       failureClass: 'incomplete_response', incompleteReason: 'max_output_tokens', providerStatus: 'incomplete',
-      providerHttpStatus: 200, providerResponseId: RAW_RESPONSE_ID, model: 'model-served', attempts: 1, answerSha256: null, answerChars: null,
+      providerHttpStatus: 200, providerResponseId: RAW_RESPONSE_ID, model: 'model-served', attempts: 1, answerSha256: null, answerChars: null, effortSent: null, effortEchoed: null,
       usage: { input: 120, cached: 20, output: 80, reasoning: 30, total: 200 },
     });
     expect(JSON.stringify(h.lines)).not.toContain('cut off');
@@ -588,6 +582,166 @@ describe('ask Julius: an idempotency key is bound to its question', () => {
     expect(failure(await ask(h, { question: 'a different question' }))).toEqual({ code: 'julius_ask_idempotency_key_reused', httpStatus: 409 });
     expect(success(await ask(h, { question: '  first question  ' })).askId).toBe(first.askId);
     expect(h.calls()).toBe(1);
+  });
+});
+
+describe('ask Julius: no route-imposed ceiling; the budget is chosen server-side from a closed set', () => {
+  const lastBody = () => sdk.bodies[sdk.bodies.length - 1] ?? {};
+
+  it('selectAskBudget: effort by question length, from the closed set low|medium|high', () => {
+    const effortOf = (questionChars: number) => selectAskBudget({ questionChars }).reasoningEffort;
+    expect(effortOf(1)).toBe('low');
+    expect(effortOf(ASK_EFFORT_LOW_MAX_CHARS)).toBe('low');
+    expect(effortOf(ASK_EFFORT_LOW_MAX_CHARS + 1)).toBe('medium');
+    expect(effortOf(ASK_EFFORT_MEDIUM_MAX_CHARS)).toBe('medium');
+    expect(effortOf(ASK_EFFORT_MEDIUM_MAX_CHARS + 1)).toBe('high');
+    expect(effortOf(2000)).toBe('high');
+    for (const n of [1, 150, 201, 500, 801, 2000]) expect(ASK_EFFORTS).toContain(effortOf(n));
+  });
+
+  it('selectAskBudget: sends no effort for a model known to reject one', () => {
+    expect(selectAskBudget({ questionChars: 900, modelCapabilities: { supportsReasoningEffort: false } }).reasoningEffort).toBeNull();
+  });
+
+  it('selectAskBudget: each basis - operator_override, provider_max, omitted', () => {
+    expect(selectAskBudget({ questionChars: 10, operatorOverride: 777, modelCapabilities: { maxOutputTokens: 9000 } }))
+      .toEqual({ reasoningEffort: 'low', maxOutputTokens: 777, basis: 'operator_override' });
+    expect(selectAskBudget({ questionChars: 10, modelCapabilities: { maxOutputTokens: 9000 } }))
+      .toEqual({ reasoningEffort: 'low', maxOutputTokens: 9000, basis: 'provider_max' });
+    expect(selectAskBudget({ questionChars: 10 })).toEqual({ reasoningEffort: 'low', maxOutputTokens: null, basis: 'omitted' });
+    /* A documented maximum that is not a usable positive integer is ignored, never forwarded or treated as infinite. */
+    for (const bad of [0, -1, 1.5, Number.POSITIVE_INFINITY, Number.NaN]) {
+      expect(selectAskBudget({ questionChars: 10, modelCapabilities: { maxOutputTokens: bad } }).basis).toBe('omitted');
+    }
+  });
+
+  it('with no override the route sends no output cap at all, and records "omitted" honestly in the pre-call row', async () => {
+    const h = harness();
+    success(await ask(h));
+    expect(h.requests[0]?.omitMaxOutputTokens).toBe(true);
+    expect(h.requests[0]?.config.reasoningEffort).toBe('low');
+    expect(h.lines[0]).toMatchObject({
+      phase: 'pre_call', maxOutputTokensSent: 'omitted', budgetBasis: 'omitted', reasoningEffortChosen: 'low', effortBasis: 'dynamic',
+    });
+  });
+
+  it('chooses the effort from the question length through the whole controller', async () => {
+    const cases: Array<[number, string]> = [[20, 'low'], [500, 'medium'], [1500, 'high']];
+    for (const [length, effort] of cases) {
+      const h = harness();
+      success(await ask(h, { question: 'q'.repeat(length) }));
+      expect(h.requests[0]?.config.reasoningEffort).toBe(effort);
+      expect(h.lines[0]).toMatchObject({ reasoningEffortChosen: effort });
+    }
+  });
+
+  it('an operator override is passed through unchanged (no ceiling, no floor) and recorded as operator_override', async () => {
+    for (const raw of ['800', '4000', '99999', '1']) {
+      const h = harness({ env: baseEnv({ JULIUS_ASK_MAX_OUTPUT_TOKENS: raw }) });
+      success(await ask(h));
+      expect(h.requests[0]?.config.maxOutputTokens).toBe(Number(raw));
+      expect(h.requests[0]?.omitMaxOutputTokens).toBeUndefined();
+      expect(h.lines[0]).toMatchObject({ maxOutputTokensSent: Number(raw), budgetBasis: 'operator_override' });
+    }
+  });
+
+  it('an override that is set but unusable refuses (fails closed) rather than silently running uncapped', async () => {
+    for (const raw of ['0', 'abc', '-5', '12.5']) {
+      const h = harness({ env: baseEnv({ JULIUS_ASK_MAX_OUTPUT_TOKENS: raw }) });
+      expect(failure(await ask(h))).toEqual({ code: 'julius_ask_not_configured', httpStatus: 503 });
+      expect(h.calls()).toBe(0);
+    }
+  });
+
+  it('a documented provider maximum is sent and recorded as provider_max', async () => {
+    const events: string[] = [];
+    const requests: GptRunRequest[] = [];
+    const lines: AskLedgerLine[] = [];
+    const controller = createJuliusAsk({
+      env: baseEnv(), readConfig: readGptArchitectConfig, now: () => 1, modelCapabilities: () => ({ maxOutputTokens: 32000 }),
+      ledger: { append: (line) => { events.push('ledger'); lines.push(line); } },
+      runArchitect: async (request) => { requests.push(request); return answered('ok'); },
+    });
+    success(await controller.handleAsk({ question: 'q', idempotencyKey: GOOD_KEY, caller: 'c' }));
+    expect(requests[0]?.config.maxOutputTokens).toBe(32000);
+    expect(lines[0]).toMatchObject({ maxOutputTokensSent: 32000, budgetBasis: 'provider_max' });
+  });
+
+  it('a caller cannot raise or set its own budget: body, headers and the idempotency key are ignored', async () => {
+    const h = harness();
+    const live = { handleAsk: (input: Parameters<typeof h.ask.handleAsk>[0]) => h.ask.handleAsk(input) };
+    const smuggled = {
+      question: 'hello', maxOutputTokens: 100000, max_output_tokens: 100000, reasoningEffort: 'xhigh', reasoning: { effort: 'max' },
+      budget: { maxOutputTokens: 100000 }, effort: 'high', omitMaxOutputTokens: false, model: 'another-model', timeoutMs: 999999,
+    };
+    const response = await handleJuliusAskRoute(
+      {
+        method: 'POST', authorization: `Bearer ${OPERATOR}`, origin: undefined, rawBody: JSON.stringify(smuggled),
+        idempotencyKey: 'effort-max-tokens-100000', now: 1, operatorToken: OPERATOR,
+        ...({ headers: { 'x-relay-max-output-tokens': '100000', 'x-relay-reasoning-effort': 'max' } } as object),
+      },
+      { ask: live, verifyNativeSession: () => null },
+    );
+    expect(response.status).toBe(200);
+    const request = h.requests[0];
+    expect(request?.omitMaxOutputTokens).toBe(true);
+    expect(request?.config.maxOutputTokens).not.toBe(100000);
+    expect(request?.config.reasoningEffort).toBe('low');
+    expect(request?.config.model).toBe('model-configured');
+    expect(request?.config.timeoutMs).toBeLessThanOrEqual(90_000);
+    expect(request?.input).toBe('hello');
+  });
+
+  it('the controller accepts nothing but question, key and caller: extra fields on the input change nothing', async () => {
+    const h = harness();
+    success(await h.ask.handleAsk({ question: 'hi', idempotencyKey: GOOD_KEY, caller: 'c', maxOutputTokens: 1e9, reasoningEffort: 'max' } as never));
+    expect(h.requests[0]?.omitMaxOutputTokens).toBe(true);
+    expect(h.requests[0]?.config.reasoningEffort).toBe('low');
+  });
+
+  it('the real runner OMITS max_output_tokens when asked and still records usage, effort and the answer digest', async () => {
+    sdk.bodies.length = 0;
+    sdk.impl = async () => ({
+      id: RAW_RESPONSE_ID, model: 'model-served', status: 'completed', output: [], reasoning: { effort: 'low' },
+      output_text: JSON.stringify({ answer: 'the real runner answer' }),
+      usage: { input_tokens: 11, output_tokens: 222, total_tokens: 233, input_tokens_details: { cached_tokens: 1 }, output_tokens_details: { reasoning_tokens: 150 } },
+    });
+    const lines: AskLedgerLine[] = [];
+    const controller = createJuliusAsk({
+      env: baseEnv(), readConfig: readGptArchitectConfig, now: () => 1,
+      ledger: { append: (line) => { lines.push(line); } }, runArchitect: runGptArchitect,
+    });
+    const result = success(await controller.handleAsk({ question: 'short question', idempotencyKey: 'omitted-cap-001', caller: 'c' }));
+    expect(Object.keys(lastBody())).not.toContain('max_output_tokens');
+    expect(lastBody().reasoning).toEqual({ effort: 'low' });
+    expect(result.usage).toEqual({ input: 11, cached: 1, output: 222, reasoning: 150, total: 233 });
+    expect(lines[1]).toMatchObject({
+      outcome: 'answered', usage: { input: 11, cached: 1, output: 222, reasoning: 150, total: 233 },
+      effortSent: 'low', effortEchoed: 'low', answerSha256: result.answerDigest,
+    });
+  });
+
+  it('with an override the real runner sends exactly that max_output_tokens', async () => {
+    sdk.bodies.length = 0;
+    sdk.impl = async () => ({ id: RAW_RESPONSE_ID, model: 'm', status: 'completed', output: [], output_text: JSON.stringify({ answer: 'a' }), usage: {} });
+    const controller = createJuliusAsk({
+      env: baseEnv({ JULIUS_ASK_MAX_OUTPUT_TOKENS: '2500' }), readConfig: readGptArchitectConfig, now: () => 1,
+      ledger: { append: () => undefined }, runArchitect: runGptArchitect,
+    });
+    success(await controller.handleAsk({ question: 'q', idempotencyKey: 'override-key-1', caller: 'c' }));
+    expect(lastBody().max_output_tokens).toBe(2500);
+  });
+
+  it('OTHER CALLERS ARE UNCHANGED: the runner without the new flag still sends config.maxOutputTokens, and no reasoning unless declared', async () => {
+    sdk.bodies.length = 0;
+    sdk.impl = async () => ({ id: RAW_RESPONSE_ID, model: 'm', status: 'completed', output: [], output_text: '{}', usage: {} });
+    const config = readGptArchitectConfig(baseEnv());
+    await runGptArchitect({ apiKey: CANARY, config, instructions: 'i', input: 'q' });
+    expect(lastBody().max_output_tokens).toBe(4000);
+    expect(Object.keys(lastBody())).not.toContain('reasoning');
+    await runGptArchitect({ apiKey: CANARY, config: { ...config, maxOutputTokens: 1234, reasoningEffort: 'high' }, instructions: 'i', input: 'q', omitMaxOutputTokens: false });
+    expect(lastBody().max_output_tokens).toBe(1234);
+    expect(lastBody().reasoning).toEqual({ effort: 'high' });
   });
 });
 

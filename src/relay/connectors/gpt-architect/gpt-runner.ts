@@ -51,6 +51,11 @@ export interface GptRunRequest {
    * A caller that must be able to say "one request, one billed call" (the ask route) passes 0.
    */
   readonly maxRetries?: number;
+  /**
+   * Send NO `max_output_tokens`, so the provider's own hard limit applies. Absent/false means the field is sent from
+   * `config.maxOutputTokens`, exactly as before this field existed, so no existing caller changes. Only the ask route sets it.
+   */
+  readonly omitMaxOutputTokens?: boolean;
 }
 
 /**
@@ -202,7 +207,7 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
         input: request.input,
         // Relay's persistence is the memory authority, not the provider's.
         store: false,
-        max_output_tokens: config.maxOutputTokens,
+        ...(request.omitMaxOutputTokens === true ? {} : { max_output_tokens: config.maxOutputTokens }),
         // Only when the mission declared it; absent sends the request exactly as it always was.
         ...(config.reasoningEffort === undefined ? {} : { reasoning: { effort: config.reasoningEffort } }),
         text: {
