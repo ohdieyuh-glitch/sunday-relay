@@ -23,6 +23,7 @@ import { sessionTokenFrom } from './browser-session/routes';
 export const ASK_QUESTION_MAX_CHARS = 2_000;
 export const ASK_ANSWER_MAX_CHARS = 8_000;
 export const ASK_DEFAULT_DAILY_CAP = 20;
+export const ASK_DEFAULT_MAX_CONCURRENT = 1;
 export const ASK_DEFAULT_MAX_OUTPUT_TOKENS = 1_500;
 export const ASK_MAX_OUTPUT_TOKENS_CEILING = 4_000;
 /** The provider call is bounded to this even when the architect timeout is longer. */
@@ -86,7 +87,7 @@ export interface JuliusAskFailure {
 }
 export type JuliusAskResult = JuliusAskSuccess | JuliusAskFailure;
 
-const NOT_ATTEMPTED: ReadonlySet<string> = new Set(['julius_ask_not_configured', 'julius_ask_cap_reached', 'julius_ask_ledger_unavailable']);
+const NOT_ATTEMPTED: ReadonlySet<string> = new Set(['julius_ask_not_configured', 'julius_ask_cap_reached', 'julius_ask_busy', 'julius_ask_ledger_unavailable']);
 const fail = (code: string, httpStatus: number): JuliusAskFailure => ({ ok: false, code, httpStatus });
 const sha = (value: string): string => createHash('sha256').update(value).digest('hex').slice(0, 16);
 const utcDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
@@ -108,10 +109,11 @@ function usageOf(usage: GptUsage | undefined): JuliusAskSuccess['usage'] {
 }
 
 export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusAskInput): Promise<JuliusAskResult> } {
-  /* Per-process state, deliberately: a restart resets it, which is why the ledger (not this map) is the record. */
-  const stored = new Map<string, Promise<JuliusAskResult>>();
+  /* Per-process state, deliberately: a restart resets it, which is why the ledger (not these) is the record. */
+  const stored = new Map<string, { readonly questionHash: string; readonly pending: Promise<JuliusAskResult> }>();
   let day = '';
   let callsToday = 0;
+  let inFlight = 0;
 
   async function runOnce(question: string, callerHash: string, keyHash: string): Promise<JuliusAskResult> {
     const { env } = deps;
@@ -121,50 +123,73 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
 
     const ceiling = Math.min(positiveInt(env.JULIUS_ASK_MAX_OUTPUT_TOKENS, ASK_DEFAULT_MAX_OUTPUT_TOKENS), ASK_MAX_OUTPUT_TOKENS_CEILING);
     const dailyCap = positiveInt(env.JULIUS_ASK_DAILY_CAP, ASK_DEFAULT_DAILY_CAP);
+    const maxConcurrent = positiveInt(env.JULIUS_ASK_MAX_CONCURRENT, ASK_DEFAULT_MAX_CONCURRENT);
     const startedAt = deps.now();
     const today = utcDay(startedAt);
     if (today !== day) { day = today; callsToday = 0; }
     if (callsToday >= dailyCap) return fail('julius_ask_cap_reached', 429);
+    if (inFlight >= maxConcurrent) return fail('julius_ask_busy', 429);
 
-    const askId = `ask_${randomUUID().replace(/-/g, '').slice(0, 20)}`;
-    const ledgerRef = `julius-ask-ledger:${askId}`;
-    /* The pre-call line is written BEFORE the provider is contacted, and a line that cannot be written stops the call. */
-    try {
-      await deps.ledger.append({
-        phase: 'pre_call', askId, at: new Date(startedAt).toISOString(), callerHash, keyHash,
-        questionLength: question.length, maxOutputTokens: ceiling, model: config.model,
-      });
-    } catch {
-      return fail('julius_ask_ledger_unavailable', 503);
-    }
+    /* RESERVE the cap slot and the concurrency slot SYNCHRONOUSLY, before the first await. Check-then-await-then-increment
+       let any number of parallel distinct-key asks pass the same check. Everything above is synchronous, so no other ask
+       can interleave between the check and this reservation. */
     callsToday += 1;
-
-    const apiKey = (env.OPENAI_API_KEY ?? '').trim();
-    let outcome: GptRunOutcome;
+    inFlight += 1;
     try {
-      outcome = await deps.runArchitect({
-        apiKey,
-        config: { ...config, maxOutputTokens: ceiling, timeoutMs: Math.min(config.timeoutMs, ASK_MAX_TIMEOUT_MS) },
-        instructions: INSTRUCTIONS,
-        input: question,
-        schema: SCHEMA,
-      });
-    } catch {
-      outcome = { ok: false, failureClass: 'provider_error', message: 'provider call threw' };
-    }
+      const askId = `ask_${randomUUID().replace(/-/g, '').slice(0, 20)}`;
+      const ledgerRef = `julius-ask-ledger:${askId}`;
+      /* The pre-call line is written BEFORE the provider is contacted, and a line that cannot be written stops the call
+         (and gives the reserved cap slot back: nothing was spent). */
+      try {
+        await deps.ledger.append({
+          phase: 'pre_call', askId, at: new Date(startedAt).toISOString(), callerHash, keyHash,
+          questionLength: question.length, maxOutputTokens: ceiling, model: config.model, maxAttempts: 1,
+        });
+      } catch {
+        if (day === today && callsToday > 0) callsToday -= 1;
+        return fail('julius_ask_ledger_unavailable', 503);
+      }
 
-    const result = finish(outcome, askId, ledgerRef, apiKey);
-    try {
-      await deps.ledger.append({
-        phase: 'result', askId, at: new Date(deps.now()).toISOString(),
-        outcome: result.ok ? 'answered' : result.code,
-        usage: usageOf(outcome.usage),
-        model: outcome.actualModel ?? null,
-      });
-    } catch {
-      /* The pre-call line already exists; a lost result line must not discard an answer that was paid for. */
+      const apiKey = (env.OPENAI_API_KEY ?? '').trim();
+      let outcome: GptRunOutcome;
+      try {
+        outcome = await deps.runArchitect({
+          apiKey,
+          config: { ...config, maxOutputTokens: ceiling, timeoutMs: Math.min(config.timeoutMs, ASK_MAX_TIMEOUT_MS) },
+          instructions: INSTRUCTIONS,
+          input: question,
+          schema: SCHEMA,
+          /* One ask is at most ONE billed provider request: no SDK retry. */
+          maxRetries: 0,
+        });
+      } catch {
+        outcome = { ok: false, failureClass: 'provider_error', message: 'provider call threw' };
+      }
+
+      const result = finish(outcome, askId, ledgerRef, apiKey);
+      try {
+        /* Everything needed to reconcile a billed call with the provider dashboard; never question text, answer text or a key.
+           `providerResponseId` is the FULL id and lives in the ledger only, never in the HTTP response. */
+        await deps.ledger.append({
+          phase: 'result', askId, at: new Date(deps.now()).toISOString(),
+          outcome: result.ok ? 'answered' : result.code,
+          failureClass: outcome.ok ? (result.ok ? null : 'malformed_output') : outcome.failureClass,
+          incompleteReason: outcome.ok ? null : outcome.incompleteReason ?? null,
+          providerStatus: outcome.ok ? outcome.status : outcome.providerStatus ?? null,
+          providerHttpStatus: outcome.ok ? null : outcome.providerHttpStatus ?? null,
+          providerResponseId: outcome.responseId ?? null,
+          usage: usageOf(outcome.usage),
+          model: outcome.actualModel ?? null,
+          /* Exactly one, because the request carried maxRetries 0. */
+          attempts: 1,
+        });
+      } catch {
+        /* The pre-call line already exists; a lost result line must not discard an answer that was paid for. */
+      }
+      return result;
+    } finally {
+      inFlight -= 1;
     }
-    return result;
   }
 
   return {
@@ -179,16 +204,21 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
       }
       const callerHash = sha(input.caller.trim());
       const keyHash = sha(input.idempotencyKey);
+      /* In memory only, never ledgered: it binds a key to ONE question. */
+      const questionHash = createHash('sha256').update(question).digest('hex');
       /* Scoped to the caller, so one caller's key can never replay another's answer. The promise is stored BEFORE awaiting,
          so two concurrent requests with one key share one paid call. A failed attempt is stored too: it may have been billed. */
       const slot = `${callerHash}:${keyHash}`;
       const existing = stored.get(slot);
-      if (existing !== undefined) return existing;
+      if (existing !== undefined) {
+        /* The same key with a DIFFERENT question is a client bug or an attempt to read someone else's answer: refuse it. */
+        return existing.questionHash === questionHash ? existing.pending : fail('julius_ask_idempotency_key_reused', 409);
+      }
       const pending = runOnce(question, callerHash, keyHash);
-      stored.set(slot, pending);
+      stored.set(slot, { questionHash, pending });
       const result = await pending;
-      /* A refusal made BEFORE any provider contact (not configured, cap reached, ledger down) bought nothing, so it is not
-         the key's answer: the caller may retry the same key once the condition clears. */
+      /* A refusal made BEFORE any provider contact (not configured, cap reached, busy, ledger down) bought nothing, so it is
+         not the key's answer: the caller may retry the same key once the condition clears. */
       if (!result.ok && NOT_ATTEMPTED.has(result.code)) stored.delete(slot);
       return result;
     },

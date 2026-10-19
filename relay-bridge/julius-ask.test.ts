@@ -7,7 +7,27 @@ import {
   type AskLedgerLine, type JuliusAskResult,
 } from './julius-ask';
 import { readGptArchitectConfig } from '../src/relay/connectors/gpt-architect/config';
-import type { GptRunOutcome, GptRunRequest } from '../src/relay/connectors/gpt-architect/gpt-runner';
+import { runGptArchitect, type GptRunOutcome, type GptRunRequest } from '../src/relay/connectors/gpt-architect/gpt-runner';
+
+/* The SDK is mocked for the whole file: the fake-runner tests never reach it, and the real-runner tests below prove what
+   options the runner builds the client with and how many requests one ask can send. Nothing contacts a provider. */
+const sdk = vi.hoisted(() => ({
+  constructed: [] as Array<Record<string, unknown>>,
+  creates: 0,
+  impl: null as null | (() => Promise<unknown>),
+}));
+vi.mock('openai', () => ({
+  default: class {
+    constructor(options: Record<string, unknown>) { sdk.constructed.push(options); }
+    responses = {
+      create: async () => {
+        sdk.creates += 1;
+        if (sdk.impl === null) throw new Error('no SDK behaviour configured');
+        return sdk.impl();
+      },
+    };
+  },
+}));
 
 /* The "key" is built at run time so no secret-shaped literal exists in this source. */
 const CANARY = ['canary', 'key', 'a1b2c3d4e5f6a7b8c9d0'].join('_');
@@ -42,6 +62,7 @@ function harness(options: {
   env?: Record<string, string | undefined>;
   outcome?: () => GptRunOutcome | Promise<GptRunOutcome>;
   ledgerFails?: boolean;
+  ledgerDelayMs?: number;
 } = {}): Harness {
   const events: string[] = [];
   const lines: AskLedgerLine[] = [];
@@ -52,8 +73,9 @@ function harness(options: {
     readConfig: readGptArchitectConfig,
     now: () => now,
     ledger: {
-      append: (line) => {
+      append: async (line) => {
         events.push(`ledger:${String(line.phase)}`);
+        if (options.ledgerDelayMs !== undefined) await new Promise((r) => setTimeout(r, options.ledgerDelayMs));
         if (options.ledgerFails === true) throw new Error('disk full');
         lines.push(line);
       },
@@ -163,8 +185,10 @@ describe('ask Julius: the answer', () => {
     expect(request?.schema?.schema).toMatchObject({ required: ['answer'], properties: { answer: { type: 'string' } } });
     expect(request?.config.maxOutputTokens).toBe(1500);
     expect(request?.config.timeoutMs).toBeLessThanOrEqual(90_000);
-    expect(Object.keys(request ?? {}).sort()).toEqual(['apiKey', 'config', 'input', 'instructions', 'schema']);
+    expect(Object.keys(request ?? {}).sort()).toEqual(['apiKey', 'config', 'input', 'instructions', 'maxRetries', 'schema']);
     expect(request?.instructions).toContain('no tools');
+    /* One ask is at most one billed provider request. */
+    expect(request?.maxRetries).toBe(0);
   });
 
   it('bounds the output tokens: configurable downward, never above 4000, and a bad value falls back', async () => {
@@ -258,14 +282,16 @@ describe('ask Julius: the ledger', () => {
     expect(h.events).toEqual(['ledger:pre_call', 'runArchitect', 'ledger:result']);
   });
 
-  it('keeps the question text, the key and the raw response id out of every ledger line', async () => {
+  it('keeps the question text, the answer, the key and the caller out of every ledger line, and the raw response id out of the pre-call line', async () => {
     const question = 'a distinctive question about the weather in the library';
     const h = harness();
     success(await ask(h, { question, caller: 'player:secret-id-77', idempotencyKey: 'idem-secret-key-42' }));
     const dump = JSON.stringify(h.lines);
     expect(dump).not.toContain('distinctive');
     expect(dump).not.toContain(CANARY);
-    expect(dump).not.toContain(RAW_RESPONSE_ID);
+    expect(JSON.stringify(h.lines[0])).not.toContain(RAW_RESPONSE_ID);
+    /* The FULL provider id is in the result row (for dashboard reconciliation) and nowhere else. */
+    expect(h.lines[1]).toMatchObject({ providerResponseId: RAW_RESPONSE_ID });
     expect(dump).not.toContain('secret-id-77');
     expect(dump).not.toContain('idem-secret-key-42');
     expect(h.lines[0]).toMatchObject({ phase: 'pre_call', questionLength: question.length, maxOutputTokens: 1500 });
@@ -357,6 +383,143 @@ describe('ask Julius: provider failures and the key', () => {
     } finally {
       for (const spy of spies) spy.mockRestore();
     }
+  });
+});
+
+describe('ask Julius: the cap is reserved before the first await, and one ask is one billed request', () => {
+  const settle = () => new Promise((r) => setTimeout(r, 15));
+  const gated = () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    return { gate, release: () => release() };
+  };
+
+  it('N parallel distinct-key asks with cap 2 make exactly 2 provider calls', async () => {
+    const { gate, release } = gated();
+    const h = harness({
+      env: baseEnv({ JULIUS_ASK_DAILY_CAP: '2', JULIUS_ASK_MAX_CONCURRENT: '10' }),
+      ledgerDelayMs: 3,
+      outcome: async () => { await gate; return answered('released'); },
+    });
+    const all = Promise.all([1, 2, 3, 4, 5, 6].map((n) => ask(h, { idempotencyKey: `parallel-key-${n}` })));
+    await settle();
+    expect(h.calls()).toBe(2);
+    release();
+    const results = await all;
+    expect(h.calls()).toBe(2);
+    expect(results.filter((r) => r.ok)).toHaveLength(2);
+    expect(results.filter((r) => !r.ok).map((r) => failure(r).code)).toEqual(Array(4).fill('julius_ask_cap_reached'));
+  });
+
+  it('allows one ask in flight by default: a second distinct-key ask is refused as busy, then works after the first finishes', async () => {
+    const { gate, release } = gated();
+    const h = harness({ ledgerDelayMs: 3, outcome: async () => { await gate; return answered('slow'); } });
+    const first = ask(h, { idempotencyKey: 'first-key-0001' });
+    const second = ask(h, { idempotencyKey: 'second-key-0002' });
+    expect(failure(await second)).toEqual({ code: 'julius_ask_busy', httpStatus: 429 });
+    release();
+    success(await first);
+    expect(h.calls()).toBe(1);
+    success(await ask(h, { idempotencyKey: 'second-key-0002' }));
+    expect(h.calls()).toBe(2);
+  });
+
+  it('gives the reserved cap slot back when the pre-call line cannot be written', async () => {
+    let broken = true;
+    const requests: GptRunRequest[] = [];
+    const controller = createJuliusAsk({
+      env: baseEnv({ JULIUS_ASK_DAILY_CAP: '1' }), readConfig: readGptArchitectConfig, now: () => 1,
+      ledger: { append: async () => { await Promise.resolve(); if (broken) throw new Error('down'); } },
+      runArchitect: async (request) => { requests.push(request); return answered('ok'); },
+    });
+    expect(failure(await controller.handleAsk({ question: 'q', idempotencyKey: 'ledger-key-001', caller: 'c' })).code).toBe('julius_ask_ledger_unavailable');
+    broken = false;
+    success(await controller.handleAsk({ question: 'q', idempotencyKey: 'ledger-key-002', caller: 'c' }));
+    expect(requests).toHaveLength(1);
+    expect(failure(await controller.handleAsk({ question: 'q', idempotencyKey: 'ledger-key-003', caller: 'c' })).code).toBe('julius_ask_cap_reached');
+  });
+
+  it('a provider failure keeps its cap slot (it may have been billed) and frees the concurrency slot', async () => {
+    const h = harness({
+      env: baseEnv({ JULIUS_ASK_DAILY_CAP: '1' }),
+      outcome: () => ({ ok: false, failureClass: 'provider_error', message: 'x' }),
+    });
+    expect(failure(await ask(h, { idempotencyKey: 'fail-key-00001' })).code).toBe('julius_ask_provider_failed');
+    expect(failure(await ask(h, { idempotencyKey: 'fail-key-00002' })).code).toBe('julius_ask_cap_reached');
+  });
+
+  it('the real runner builds the SDK client with maxRetries 1 when nothing is said (unchanged) and 0 when asked', async () => {
+    sdk.constructed.length = 0;
+    sdk.impl = async () => { throw new Error('stop'); };
+    const config = readGptArchitectConfig(baseEnv());
+    await runGptArchitect({ apiKey: CANARY, config, instructions: 'i', input: 'q' });
+    await runGptArchitect({ apiKey: CANARY, config, instructions: 'i', input: 'q', maxRetries: 0 });
+    expect(sdk.constructed.map((o) => o.maxRetries)).toEqual([1, 0]);
+  });
+
+  it('end to end over the real runner and a mocked SDK: one ask is one SDK request with no retry, and the failure reconciles', async () => {
+    sdk.constructed.length = 0;
+    sdk.creates = 0;
+    sdk.impl = async () => { throw Object.assign(new Error(`upstream said ${CANARY}`), { status: 503, name: 'InternalServerError' }); };
+    const lines: AskLedgerLine[] = [];
+    const controller = createJuliusAsk({
+      env: baseEnv(), readConfig: readGptArchitectConfig, now: () => 1,
+      ledger: { append: (line) => { lines.push(line); } }, runArchitect: runGptArchitect,
+    });
+    const result = await controller.handleAsk({ question: 'q', idempotencyKey: 'e2e-key-0001', caller: 'c' });
+    expect(failure(result)).toEqual({ code: 'julius_ask_provider_failed', httpStatus: 502 });
+    expect(sdk.creates).toBe(1);
+    expect(sdk.constructed).toHaveLength(1);
+    expect(sdk.constructed[0]?.maxRetries).toBe(0);
+    expect(lines[1]).toMatchObject({ phase: 'result', failureClass: 'provider_error', providerHttpStatus: 503, attempts: 1 });
+    expect(JSON.stringify([result, lines])).not.toContain(CANARY);
+  });
+});
+
+describe('ask Julius: the result ledger row reconciles a billed call', () => {
+  it('records failure class, incomplete reason, provider status, HTTP status, full response id, model, usage and attempts', async () => {
+    const h = harness({
+      outcome: () => ({
+        ok: false, failureClass: 'incomplete_response', message: 'cut off mid sentence', usage, responseId: RAW_RESPONSE_ID,
+        actualModel: 'model-served', providerStatus: 'incomplete', incompleteReason: 'max_output_tokens', providerHttpStatus: 200,
+      }),
+    });
+    const result = await ask(h);
+    expect(failure(result).httpStatus).toBe(502);
+    expect(h.lines[1]).toEqual({
+      phase: 'result', askId: expect.any(String), at: expect.any(String), outcome: 'julius_ask_provider_failed',
+      failureClass: 'incomplete_response', incompleteReason: 'max_output_tokens', providerStatus: 'incomplete',
+      providerHttpStatus: 200, providerResponseId: RAW_RESPONSE_ID, model: 'model-served', attempts: 1,
+      usage: { input: 120, cached: 20, output: 80, reasoning: 30, total: 200 },
+    });
+    expect(JSON.stringify(h.lines)).not.toContain('cut off');
+    expect(JSON.stringify(result)).not.toContain(RAW_RESPONSE_ID);
+  });
+
+  it('records malformed structured output as its own failure class, with the response id', async () => {
+    const h = harness({ outcome: () => answered('x', { outputText: 'not json' }) });
+    await ask(h);
+    expect(h.lines[1]).toMatchObject({ outcome: 'julius_ask_provider_malformed', failureClass: 'malformed_output', providerResponseId: RAW_RESPONSE_ID });
+  });
+
+  it('a success row has no failure fields set and carries the response id and status', async () => {
+    const h = harness();
+    await ask(h);
+    expect(h.lines[1]).toMatchObject({
+      outcome: 'answered', failureClass: null, incompleteReason: null, providerStatus: 'completed', providerHttpStatus: null,
+      providerResponseId: RAW_RESPONSE_ID, attempts: 1,
+    });
+    expect(JSON.stringify(h.lines)).not.toContain('a plain answer');
+  });
+});
+
+describe('ask Julius: an idempotency key is bound to its question', () => {
+  it('refuses the same key with a different question, and still replays the same question', async () => {
+    const h = harness();
+    const first = success(await ask(h, { question: 'first question' }));
+    expect(failure(await ask(h, { question: 'a different question' }))).toEqual({ code: 'julius_ask_idempotency_key_reused', httpStatus: 409 });
+    expect(success(await ask(h, { question: '  first question  ' })).askId).toBe(first.askId);
+    expect(h.calls()).toBe(1);
   });
 });
 

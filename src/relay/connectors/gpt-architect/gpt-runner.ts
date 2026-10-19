@@ -46,6 +46,11 @@ export interface GptRunRequest {
    */
   readonly schema?: { readonly name: string; readonly schema: Record<string, unknown> };
   readonly signal?: AbortSignal;
+  /**
+   * The SDK's own bounded retry count. ABSENT MEANS 1, exactly as before this field existed, so no existing caller changes.
+   * A caller that must be able to say "one request, one billed call" (the ask route) passes 0.
+   */
+  readonly maxRetries?: number;
 }
 
 /**
@@ -122,6 +127,8 @@ export interface GptRunFailure {
    * one that says what to change.
    */
   readonly incompleteReason?: string | null;
+  /** The HTTP status the provider (SDK) reported when the call threw, for reconciling a failure with the provider dashboard. */
+  readonly providerHttpStatus?: number;
   /** The provider's own `status` when it answered — `incomplete`, `failed`. */
   readonly providerStatus?: string | null;
   /** Present when the provider got far enough to identify itself. */
@@ -183,7 +190,7 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
   const client = new OpenAI({
     apiKey: request.apiKey,
     // One bounded transient retry — never an indefinite loop.
-    maxRetries: 1,
+    maxRetries: request.maxRetries ?? 1,
     timeout: config.timeoutMs,
   });
 
@@ -283,7 +290,11 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
       effort,
     };
   } catch (error) {
-    return { ok: false, failureClass: classify(error), message: safeMessage(error) };
+    const httpStatus = (error as { status?: unknown } | null)?.status;
+    return {
+      ok: false, failureClass: classify(error), message: safeMessage(error),
+      ...(typeof httpStatus === 'number' ? { providerHttpStatus: httpStatus } : {}),
+    };
   }
 }
 

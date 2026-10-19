@@ -5,7 +5,7 @@
  *   node scripts/julius-ask-client.mjs --url http://127.0.0.1:8787 --question "What is Julius?"
  *
  * Inputs (flag, then environment): --url / JULIUS_ASK_URL, --question / JULIUS_ASK_QUESTION,
- * --key / JULIUS_ASK_IDEMPOTENCY_KEY (default: a fresh random key), and the credential ONLY from the environment:
+ * --key / JULIUS_ASK_IDEMPOTENCY_KEY (default: a fresh random key, never printed), JULIUS_ASK_TIMEOUT_MS (default 120000), and the credential ONLY from the environment:
  * JULIUS_ASK_SESSION (a paired native Relay-Session token) or JULIUS_ASK_OPERATOR_TOKEN. A credential is never
  * accepted as an argument (it would land in shell history) and is never printed.
  */
@@ -29,12 +29,21 @@ if (base === '' || question.trim() === '' || (session === undefined && operator 
 }
 
 const authorization = session !== undefined ? `Relay-Session ${session}` : `Bearer ${operator}`;
-const response = await fetch(`${base}/relay-api/wonderland/julius/ask`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json', authorization, 'x-relay-idempotency-key': key },
-  body: JSON.stringify({ question }),
-});
-const text = await response.text();
+const timeoutMs = Number(process.env.JULIUS_ASK_TIMEOUT_MS ?? 120000);
+let response;
+let text;
+try {
+  response = await fetch(`${base}/relay-api/wonderland/julius/ask`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization, 'x-relay-idempotency-key': key },
+    body: JSON.stringify({ question }),
+    signal: AbortSignal.timeout(Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 120000),
+  });
+  text = await response.text();
+} catch (error) {
+  console.error(`request failed: ${error?.name === 'TimeoutError' ? 'timed out' : 'network error'}`);
+  process.exit(1);
+}
 let parsed;
 try { parsed = JSON.parse(text); } catch { parsed = null; }
 
@@ -45,4 +54,4 @@ if (!response.ok || parsed?.data === undefined) {
 const d = parsed.data;
 console.log(d.answer);
 console.log(`\n[${d.role} ${d.provider} ${d.model}] tokens in=${d.usage.input} cached=${d.usage.cached} out=${d.usage.output} reasoning=${d.usage.reasoning} total=${d.usage.total}`);
-console.log(`[cost ${d.costBasis}, ${d.billingPath}] ask=${d.askId} response=${d.responseId} ledger=${d.ledgerRef} idempotency-key=${key}`);
+console.log(`[cost ${d.costBasis}, ${d.billingPath}] ask=${d.askId} response=${d.responseId} ledger=${d.ledgerRef}`);
