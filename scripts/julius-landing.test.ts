@@ -119,7 +119,10 @@ describe('the pull request against the clearance', () => {
   it('a truncated, short or huge file list is refused: rows read must equal the PR changed_files, and 300 is the ceiling', () => {
     expect(check({ fileRows: 1, pr: { ...goodPr(), changed_files: 5 } }).join(' ')).toContain('incomplete');
     expect(check({ fileRows: 0, pr: { ...goodPr(), changed_files: 1 } }).join(' ')).toContain('incomplete');
-    expect(check({ files: ['a.ts'], fileRows: 301, pr: { ...goodPr(), changed_files: 301 } }).join(' ')).toContain('more than 300');
+    expect(check({ files: ['a.ts'], fileRows: 301, pr: { ...goodPr(), changed_files: 301 } }).join(' ')).toContain('300 or more');
+    const names = (n: number) => Array.from({ length: n }, (_, i) => `src/relay/x${i}.ts`);
+    expect(check({ files: names(300), fileRows: 300, pr: { ...goodPr(), changed_files: 300 } }).join(' '), 'exactly 300 is refused (the provenance gate needs fewer than 300)').toContain('300 or more');
+    expect(check({ files: names(299), fileRows: 299, pr: { ...goodPr(), changed_files: 299 } }), '299 passes').toEqual([]);
     expect(check({ pr: { ...goodPr(), changed_files: undefined } }).join(' ')).not.toBe('');
   });
 
@@ -217,6 +220,11 @@ writeFileSync(join(landDir, 'allowed-branches.txt'), `# test allowlist\n${BRANCH
 const preload = join(work, 'fake-github.mjs');
 writeFileSync(preload, `
 import { readFileSync, appendFileSync } from 'node:fs';
+// the child process runs on the FIXTURE clock (NOW, still ticking), not the day the suite happens to run: the clearance fixtures are issued at NOW and expire hours later, so on the real
+// clock every end-to-end case would fail once that expiry has passed. The shift is NOW minus the child's own start time, so it holds on any date.
+const clockShift = ${NOW} - Date.now();
+const realNow = Date.now.bind(Date);
+Date.now = () => realNow() + clockShift;
 const scenario = JSON.parse(readFileSync(process.env.FAKE_SCENARIO, 'utf8'));
 const calls = process.env.FAKE_CALLS;
 globalThis.fetch = async (url, init = {}) => {
@@ -350,6 +358,16 @@ describe('land.mjs end to end against a fake GitHub', () => {
       expect(r.merges, `DRY_RUN=${JSON.stringify(dryRun)}`).toHaveLength(0);
       expect(r.out).toContain('DRY RUN');
     }
+  });
+
+  it('CLOCK PIN: on the fixture clock a clearance that expired one second before NOW is refused as expired, and one that expires a minute after NOW lands', () => {
+    const expired = runLand({ text: clearanceText({ issued: '2026-10-19T04:00:00Z', expires: '2026-10-19T04:59:59Z' }) });
+    expect(expired.code, expired.out).toBe(1);
+    expect(expired.out).toContain('the clearance has expired');
+    expect(expired.merges).toHaveLength(0);
+    const live = runLand({ text: clearanceText({ issued: '2026-10-19T04:59:00Z', expires: '2026-10-19T05:01:00Z' }) });
+    expect(live.code, live.out).toBe(0);
+    expect(live.out).toContain('LANDED PR #7');
   });
 
   it('refuses without merging: forged signature, tampered clearance, stale clearance, changed head, moved main, wrong tree', () => {
@@ -690,7 +708,7 @@ describe('L4: every comment, inline comment and review row carries sha256(body) 
   it('identical input gives the same digest, in any order', () => {
     const a = base();
     expect(digest(a)).toBe(digest(base()));
-    const two = { ...a, issueComments: [...a.issueComments, { user: { login: 'w' }, id: 9, updated_at: 't9', body: 'b' }] };
+    const two = { ...a, issueComments: [...a.issueComments, { user: { login: 'w' }, id: 9, updated_at: 't9', created_at: 'c9', body: 'b' }] };
     expect(digest({ ...two, issueComments: [...two.issueComments].reverse() })).toBe(digest(two));
   });
 

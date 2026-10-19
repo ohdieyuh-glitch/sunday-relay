@@ -114,7 +114,7 @@ export function checkPullRequest({ fields, now, pr, commit, files, fileRows, mai
   // `files` holds EVERY name GitHub reports for a changed file: `filename` and, for a rename or copy, `previous_filename` too (a workflow renamed out of .github/workflows is still a
   // workflow change). `fileRows` is how many file rows were actually read; it must equal the PR's own changed_files count, or the list was truncated and nothing is trusted.
   if (fileRows !== pr.changed_files) problems.push(`the files list is incomplete: read ${fileRows} rows, the PR reports ${pr.changed_files} changed files`);
-  if (!Number.isInteger(pr.changed_files) || pr.changed_files > 300) problems.push('the PR changes more than 300 files (or the count is unknown); an unattended landing is refused');
+  if (!Number.isInteger(pr.changed_files) || pr.changed_files >= 300) problems.push('the PR changes 300 or more files (or the count is unknown); an unattended landing is refused');
   const exceptions = fields['governed-exceptions'] === '-' || fields['governed-exceptions'] === undefined ? [] : fields['governed-exceptions'].split(',');
   const hard = files.filter((f) => HARD_FORBIDDEN_PATH.test(f));
   if (hard.length > 0) problems.push(`the PR changes founder-governed paths: ${hard.slice(0, 5).join(', ')}`);
