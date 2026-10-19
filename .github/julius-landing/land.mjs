@@ -4,7 +4,7 @@
 import { readFileSync, appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { REPO, botCommentsDigest, checkCi, checkLanded, checkPullRequest, ciIsPending, nonceUsed, parseClearance, verifyClearanceSignature } from './land-lib.mjs';
+import { REPO, botCommentsDigest, checkCi, checkLanded, checkPullRequest, checkRuntime, ciIsPending, nonceUsed, parseClearance, verifyClearanceSignature } from './land-lib.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const env = process.env;
@@ -44,6 +44,8 @@ if (sigProblems.length) fail(sigProblems);
 const { fields } = parsed;
 if (fields.pr !== number || fields.head !== head) fail([`the dispatch inputs (pr ${number}, head ${head}) differ from the signed clearance (pr ${fields.pr}, head ${fields.head})`]);
 const allowedBranches = readFileSync(join(here, 'allowed-branches.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+const requiredChecks = readFileSync(join(here, 'required-checks.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+if (requiredChecks.length === 0) fail(['required-checks.txt is empty: refusing to land without a required-check list']);
 
 async function snapshot() {
   const [pr, commit, files, issueComments, inlineComments, reviews, mainRef] = await Promise.all([
@@ -51,7 +53,8 @@ async function snapshot() {
     paged(`/repos/${REPO}/issues/${number}/comments`), paged(`/repos/${REPO}/pulls/${number}/comments`), paged(`/repos/${REPO}/pulls/${number}/reviews`),
     gh(`/repos/${REPO}/git/ref/heads/main`),
   ]);
-  return { pr, commit, files: files.map((f) => f.filename), digest: botCommentsDigest({ issueComments, inlineComments, reviews }), mainSha: mainRef.object.sha };
+  // Both names of a rename or copy are checked; the row count is compared with the PR's own changed_files to catch truncation.
+  return { pr, commit, files: files.flatMap((f) => [f.filename, f.previous_filename].filter(Boolean)), fileRows: files.length, digest: botCommentsDigest({ issueComments, inlineComments, reviews }), mainSha: mainRef.object.sha };
 }
 async function ciState() {
   const runs = await gh(`/repos/${REPO}/commits/${head}/check-runs?per_page=100`);
@@ -59,11 +62,16 @@ async function ciState() {
   return { checkRuns: runs.check_runs, statuses: combined.statuses, self: SELF_CHECK };
 }
 
+// 1b. This job must be running the workflow as it is on main's tip (dispatch from another ref or commit is refused).
+const tip = (await gh(`/repos/${REPO}/git/ref/heads/main`)).object.sha;
+const runtimeProblems = checkRuntime({ ref: env.GITHUB_REF, sha: env.GITHUB_SHA, mainSha: tip });
+if (runtimeProblems.length) fail(runtimeProblems);
+
 // 2. The pull request against the clearance.
 let s = await snapshot();
 const history = await gh(`/repos/${REPO}/commits?sha=main&per_page=100`);
 if (nonceUsed(history.map((c) => c.commit?.message ?? ''), fields.nonce)) fail(['this clearance nonce was already used by a landed commit on main (one use per clearance)']);
-const prProblems = checkPullRequest({ fields, now: Date.now(), pr: s.pr, commit: s.commit, files: s.files, mainSha: s.mainSha, allowedBranches, digest: s.digest });
+const prProblems = checkPullRequest({ fields, now: Date.now(), pr: s.pr, commit: s.commit, files: s.files, fileRows: s.fileRows, mainSha: s.mainSha, allowedBranches, digest: s.digest });
 if (prProblems.length) fail(prProblems);
 summary(`Clearance verified: ${fields.kind} head ${head} tree ${fields.tree} base ${fields.base}, signed by the registered reviewer key; PR #${number} is the App's single commit, ${s.files.length} files, none founder-governed.`);
 
@@ -72,17 +80,21 @@ summary(`Clearance verified: ${fields.kind} head ${head} tree ${fields.tree} bas
 const deadline = Date.now() + Number(env.LAND_CI_WAIT_MS ?? 25 * 60 * 1000);
 let ci = await ciState();
 while (ciIsPending(ci) && Date.now() < deadline) { await new Promise((r) => setTimeout(r, 30_000)); ci = await ciState(); }
-const ciProblems = checkCi(ci);
+const ciProblems = checkCi({ ...ci, required: requiredChecks });
 if (ciProblems.length) fail(ciProblems);
 summary(`CI: ${ci.checkRuns.length - 1} check runs and ${ci.statuses.length} statuses green on ${head}.`);
 
 // 4. Re-read everything immediately before acting: the head, main and the bot-comment set must still be exactly what was cleared.
 s = await snapshot();
-const again = checkPullRequest({ fields, now: Date.now(), pr: s.pr, commit: s.commit, files: s.files, mainSha: s.mainSha, allowedBranches, digest: s.digest });
+const again = checkPullRequest({ fields, now: Date.now(), pr: s.pr, commit: s.commit, files: s.files, fileRows: s.fileRows, mainSha: s.mainSha, allowedBranches, digest: s.digest });
 if (again.length) fail(again.map((p) => `re-check before merge: ${p}`));
 
 // Fail closed: ONLY the exact string "false" merges; "true", empty, "False" or anything else is a dry run.
 if (env.DRY_RUN !== 'false') { summary('DRY RUN: every gate holds; the squash merge would be sent now. Nothing was merged.'); process.exit(0); }
+
+// 4b. Main's tip, read ONE MORE TIME immediately before the merge: if it moved since the checks, abort (the cleared base is no longer the tip).
+const tipNow = (await gh(`/repos/${REPO}/git/ref/heads/main`)).object.sha;
+if (tipNow !== fields.base) fail([`main moved to ${tipNow} immediately before the merge; the clearance names base ${fields.base}`]);
 
 // 5. The merge: squash, pinned to the cleared head (GitHub refuses if the head moved).
 const merge = await gh(`/repos/${REPO}/pulls/${number}/merge`, {

@@ -3,7 +3,7 @@
 //                                                                                from an environment variable that exists only in the reviewer's session) goes to the path the
 //                                                                                reviewer chose, mode 600; prints ONLY the public key PEM to commit.
 //   node reviewer-tools.mjs digest  <pr>                                         prints the bot-comments digest of the live PR (needs GH_TOKEN) for the clearance text.
-//   node reviewer-tools.mjs sign    <private-key-path> <pr> <head> <tree> <base> <CLEARED|CLEARED-TREE> <bot-digest> <hours<=24> [--passphrase-env NAME]
+//   node reviewer-tools.mjs sign    <private-key-path> <pr> <head> <tree> <base> <CLEARED|CLEARED-TREE> <bot-digest> <hours<=24> [--exceptions a,b] [--passphrase-env NAME]
 //                                                                                prints the clearance text and its signature as base64 (two labelled blocks) for the dispatcher.
 import { createPrivateKey, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { chmodSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -31,13 +31,14 @@ if (command === 'keygen') {
   console.log(botCommentsDigest({ issueComments, inlineComments, reviews }));
 } else if (command === 'sign') {
   const [path, pr, head, tree, base, kind, digest, hours] = rest;
-  if (!path || !hours) die('usage: sign <private-key-path> <pr> <head> <tree> <base> <CLEARED|CLEARED-TREE> <bot-digest> <hours<=24> [--passphrase-env NAME]');
+  if (!path || !hours) die('usage: sign <private-key-path> <pr> <head> <tree> <base> <CLEARED|CLEARED-TREE> <bot-digest> <hours<=24> [--exceptions a,b] [--passphrase-env NAME]');
+  const exceptions = flag('--exceptions') ?? '-';
   const h = Number(hours);
   if (!(h > 0 && h <= 24)) die('hours must be in (0, 24]');
   const issued = new Date(); issued.setMilliseconds(0);
   const expires = new Date(issued.getTime() + h * 3600_000);
   const iso = (d) => d.toISOString().replace('.000Z', 'Z');
-  const text = ['JULIUS-CLEARANCE-V1', `repo: ${REPO}`, `pr: ${pr}`, `head: ${head}`, `tree: ${tree}`, `base: ${base}`, `kind: ${kind}`, `bot-comments-sha256: ${digest}`, `nonce: ${randomBytes(16).toString('hex')}`, 'by: INDEPENDENT_REVIEW', `issued: ${iso(issued)}`, `expires: ${iso(expires)}`, ''].join('\n');
+  const text = ['JULIUS-CLEARANCE-V1', `repo: ${REPO}`, `pr: ${pr}`, `head: ${head}`, `tree: ${tree}`, `base: ${base}`, `kind: ${kind}`, `bot-comments-sha256: ${digest}`, `governed-exceptions: ${exceptions}`, `nonce: ${randomBytes(16).toString('hex')}`, 'by: INDEPENDENT_REVIEW', `issued: ${iso(issued)}`, `expires: ${iso(expires)}`, ''].join('\n');
   const key = createPrivateKey({ key: readFileSync(path), ...(passphrase() ? { passphrase: passphrase() } : {}) });
   const signature = sign(null, Buffer.from(text, 'utf8'), key).toString('base64');
   console.log('CLEARANCE_B64=' + Buffer.from(text, 'utf8').toString('base64'));

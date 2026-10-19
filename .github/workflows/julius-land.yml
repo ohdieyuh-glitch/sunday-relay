@@ -67,6 +67,9 @@ concurrency:
 jobs:
   land:
     name: Land a cleared pull request
+    # A workflow_dispatch runs the workflow file of the SELECTED ref. Only the copy on main is trusted: a dispatch against any other ref (a branch carrying a modified copy of this
+    # file) does not even start the job. land.mjs checks the same fact again (GITHUB_REF and GITHUB_SHA against main's tip).
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
