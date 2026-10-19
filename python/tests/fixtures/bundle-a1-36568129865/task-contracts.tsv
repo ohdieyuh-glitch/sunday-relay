@@ -1,0 +1,4 @@
+contract_id	contract_revision	task_id	state	binding_digest	locked_at	locked_by_evaluator_id	created_at
+contract:run:efb6e20f0d11885bc5085a68:build	1	run:efb6e20f0d11885bc5085a68:build	DRAFT				2026-09-29 12:31:08.247+00
+contract:run:efb6e20f0d11885bc5085a68:build	2	run:efb6e20f0d11885bc5085a68:build	LOCKED	sha256:432119abd7a87d441b48bdc057b7093b8cc131740cbaaa39fa3d58e72a88b6ba	2026-09-29 12:33:45.141+00	independent-reviewer-hermes	2026-09-29 12:32:02.711+00
+(2 rows)
