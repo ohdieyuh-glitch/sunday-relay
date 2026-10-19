@@ -151,6 +151,13 @@ const MISSION_LIMITS = Object.freeze({
   // DECISION C, REGISTRATION 2 (founder, 2026-10-18: "Maximum spending remains $30 per arm, $120 total across four arms"). Same ceilings per arm as
   // registration 1; no MISSION_LANES entry (the default lab) and no MISSION_RESEARCH entry.
   'julius-learning-pair-2': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
+  // THE SECOND UNSCORED DIAGNOSTIC MISSION, under the founder's PERMANENT MAXIMUM-CAPABILITY LIVE-TESTING DIRECTIVE (2026-10-18): "remove the artificial $5
+  // mission budget and any other discretionary dollar ceiling imposed on Julius's authorized paid live testing ... A mission costing $30, $40, or more is
+  // acceptable. Do not artificially downgrade model capability, truncate meaningful testing, or terminate an authorized mission merely to meet a
+  // discretionary dollar target." $100 IS THIS SCHEMA'S NUMBER, NOT A TARGET AND NOT A COST EXPECTATION: the contract must state a finite figure and
+  // allocation v3 divides it into each slot's protected floor, the shared pool and the repair reserve (see 'julius-continuous-1' above); the provider
+  // balances and the providers' own limits are what bind. Three repair cycles, as the other raised missions. Unscored, lane lab (no money, no priority).
+  'julius-diag-output-safety-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
