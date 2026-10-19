@@ -10,8 +10,10 @@ const SHA = /^[0-9a-f]{40}$/u;
 // HARD-FORBIDDEN: paths an unattended lander must NEVER carry onto main, with or without a clearance. Workflows (GitHub would refuse a GITHUB_TOKEN merge anyway; workflow
 // changes are founder-governed), this landing system (key, allowlist, required checks, code), the mission pins file, migrations, the approver/approval gates, CODEOWNERS,
 // CLAUDE.md, package manifests and the evidence dump. Such changes land only through a founder-governed path.
+// The main-provenance gate and the review-currency module it imports are PREFIX rules (any file whose path starts with scripts/julius-main-provenance or scripts/julius-review-currency):
+// editing either changes what the gate trusts, so no new sibling name can slip past an exact-name list.
 // Case-insensitive: a checkout on a case-insensitive filesystem (Windows, macOS) folds `.GITHUB/Julius-Landing/...` onto the governed file.
-export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance\.(mjs|d\.mts|test\.ts)$|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
+export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
 // SIGNED-EXCEPTION: the spend ceilings and the effort tripwire live here. A PR may change them only if the reviewer's signed clearance lists the EXACT file in `governed-exceptions`.
 export const EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
 // Matched case-insensitively for the same reason as above; a case variant is never in the signed list (that list holds exact names only), so it is always refused.
@@ -187,12 +189,14 @@ export function checkCreatedCommit({ created, sha, base, tree, message }) {
  * The PR number, head, tree and base are NOT repeated as free fields: a reader takes them ONLY from the signed clearance text. */
 export const LANDING_BEGIN = '-----BEGIN JULIUS LANDING-----';
 export const LANDING_END = '-----END JULIUS LANDING-----';
-const MARKER_WORDS = ['BEGIN JULIUS LANDING', 'END JULIUS LANDING'];
+// The provenance gate counts EVERY mention of this (uppercase) phrase in a message and answers indeterminate for more than the two marker lines, so free text may not contain it at all.
+const MARKER_PHRASE = 'JULIUS LANDING';
+const markerMentions = (text) => text.split(MARKER_PHRASE).length - 1;
 const canonicalB64 = (text) => typeof text === 'string' && /^[A-Za-z0-9+/]*={0,2}$/u.test(text) && Buffer.from(text, 'base64').toString('base64') === text;
 const signatureIsCanonical = (b64) => canonicalB64(b64) && Buffer.from(b64, 'base64').length === 64;
 
 /** Build the landing commit message. `freeText` defaults to the title built from the clearance (PR number and head only); a caller-supplied text is allowed but THROWS when any line
- * carries a marker word (a PR title, say, must never be able to forge or truncate the block) or a CR. THROWS when the clearance does not parse or the signature is not canonical
+ * mentions the uppercase phrase JULIUS LANDING at all (a PR title, say, must never be able to forge or truncate the block) or carries a CR. THROWS when the clearance does not parse or the signature is not canonical
  * base64 of 64 bytes (the signature is verified against the key by the caller, not here). */
 export function buildLandingCommitMessage({ clearanceText, signatureB64, freeText }) {
   const parsed = parseClearance(clearanceText);
@@ -204,7 +208,7 @@ export function buildLandingCommitMessage({ clearanceText, signatureB64, freeTex
   const body = String(text).replace(/\n+$/u, '');
   if (body === '') throw new Error('the free text of the landing message must not be empty');
   if (body.includes('\r')) throw new Error('the free text of the landing message must not contain CR');
-  if (MARKER_WORDS.some((w) => body.includes(w))) throw new Error('the free text of the landing message must not contain a landing marker word');
+  if (markerMentions(body) > 0) throw new Error(`the free text of the landing message must not contain "${MARKER_PHRASE}" (uppercase) anywhere`);
   return [body, '', LANDING_BEGIN, 'v: 1', `clearance-nonce: ${f.nonce}`, `clearance-b64: ${Buffer.from(clearanceText, 'utf8').toString('base64')}`, `signature-b64: ${signature}`, LANDING_END, ''].join('\n');
 }
 
@@ -222,6 +226,8 @@ export function parseLandingCommitMessage(message, { expected, publicKeyPem } = 
   const begins = lines.reduce((acc, l, i) => (l.includes('BEGIN JULIUS LANDING') ? [...acc, i] : acc), []);
   const ends = lines.reduce((acc, l, i) => (l.includes('END JULIUS LANDING') ? [...acc, i] : acc), []);
   if (begins.length !== 1 || ends.length !== 1) { problems.push(`exactly one BEGIN and one END marker are required (found ${begins.length} and ${ends.length})`); return { problems, fields }; }
+  // Every mention of the phrase anywhere in the message: exactly the two marker lines carry it (one each), nothing else.
+  if (markerMentions(text) !== 2) { problems.push(`"${MARKER_PHRASE}" must appear exactly twice (the two marker lines); found ${markerMentions(text)}`); return { problems, fields }; }
   const [b] = begins; const [e] = ends;
   if (lines[b] !== LANDING_BEGIN) problems.push('the BEGIN marker must be exactly its line');
   if (lines[e] !== LANDING_END) problems.push('the END marker must be exactly its line');

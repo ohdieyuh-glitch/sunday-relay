@@ -230,6 +230,14 @@ globalThis.fetch = async (url, init = {}) => {
   }
   if (method === 'PATCH' && /\\/git\\/refs\\/heads\\/main$/.test(path)) {
     const b = JSON.parse(init.body);
+    globalThis.__patchSeen = true;
+    // scenario.patchLost: the update is (or is not) APPLIED by GitHub but the answer never arrives: 'applied' | 'unapplied' | 'moved' (main became something else), with 'throw' = a network error
+    // and a number = an HTTP status (5xx) sent back instead of the answer
+    if (scenario.patchLost) {
+      if (scenario.patchLost.applied) globalThis.__mainAfterPatch = b.sha;
+      if (scenario.patchLost.throw) throw new TypeError('fetch failed');
+      return reply(scenario.patchLost.status, { message: 'the fake lost the answer' });
+    }
     if (scenario.patchStatus) return reply(scenario.patchStatus, { message: 'ref update refused by the fake' });
     // GitHub's rule for a NON-forced update: refused unless main is still the parent of the new commit. A forced update would overwrite whatever main became.
     const mainNow = scenario.mainAtPatch ?? scenario.main;
@@ -243,6 +251,8 @@ globalThis.fetch = async (url, init = {}) => {
     const seq = scenario.mainSequence;
     let sha = seq ? seq[Math.min(globalThis.__mainReads = (globalThis.__mainReads ?? 0) + 1, seq.length) - 1] : scenario.main;
     if (globalThis.__mainAfterPatch) sha = scenario.mainAfterOverride ?? globalThis.__mainAfterPatch;
+    else if (globalThis.__patchSeen && scenario.mainAfterFailedPatch) sha = scenario.mainAfterFailedPatch;
+    if (globalThis.__patchSeen && scenario.mainReadFails) return reply(500, { message: 'cannot read main' });
     return reply(200, { object: { sha } });
   }
   if (path.includes('/commits?sha=main')) return reply(200, scenario.history);
@@ -696,7 +706,8 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
       expect(r.code, f).toBe(1);
       expect(r.writes, f).toHaveLength(0);
     }
-    expect(check({ files: ['scripts/julius-main-provenance-notes.md'] })).toEqual([]);
+    // (round 2: the rule is a prefix, so a sibling such as julius-main-provenance-notes.md is governed too; an unrelated neighbour is not)
+    expect(check({ files: ['scripts/julius-main-notes.md'] })).toEqual([]);
   });
 
   it('the shipped allowlist refuses the superseded Candidate C branch (evidence-1) and allows evidence-2', () => {
@@ -706,5 +717,129 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
     const onBranch = (ref: string) => check({ allowedBranches: list, pr: { ...goodPr(), head: { ...goodPr().head, ref } } });
     expect(onBranch('relay/julius-diag-digest-evidence-1').join(' ')).toContain('not in the founder');
     expect(onBranch('relay/julius-diag-digest-evidence-2')).toEqual([]);
+  });
+});
+
+/* ------------------------------------------------------------------------------------------------------------------ v3 round 2: prefix rule, ambiguous ref update, review timestamp */
+
+describe('round 2: the provenance gate and review-currency are PREFIX rules', () => {
+  it('any path starting with scripts/julius-main-provenance or scripts/julius-review-currency is refused, in any case, signed or not; unrelated neighbours are not', () => {
+    const governed = [
+      'scripts/julius-main-provenance2.mjs', 'scripts/julius-main-provenance.mjs', 'scripts/julius-main-provenance-v2.test.ts', 'scripts/julius-main-provenance', 'SCRIPTS/Julius-Main-Provenance.Extra.mjs',
+      'scripts/julius-review-currency.mjs', 'scripts/julius-review-currency.d.mts', 'scripts/julius-review-currency.test.ts', 'scripts/julius-review-currency2.mjs', 'Scripts/JULIUS-REVIEW-CURRENCY.mjs',
+    ];
+    for (const f of governed) {
+      expect(check({ files: ['ok.ts', f], fileRows: 2, pr: { ...goodPr(), changed_files: 2 } }).join(' '), f).toContain('founder-governed');
+      expect(lib.FORBIDDEN_PATH.test(f), f).toBe(true);
+    }
+    for (const f of ['scripts/julius-main-notes.md', 'scripts/other-julius-review-currency.mjs', 'docs/julius-main-provenance.md']) expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(false);
+    for (const f of ['scripts/julius-main-provenance2.mjs', 'scripts/julius-review-currency.mjs']) {
+      const r = runLand({ scenario: { files: ['ok.ts', f], pr: { ...goodPr(), changed_files: 2 } } });
+      expect(r.code, f).toBe(1);
+      expect(r.writes, f).toHaveLength(0);
+    }
+  });
+});
+
+describe('round 2: an ambiguous ref-update outcome is judged by re-reading main, never retried', () => {
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ['HTTP 500', { status: 500 }],
+    ['HTTP 502', { status: 502 }],
+    ['HTTP 408', { status: 408 }],
+    ['HTTP 429', { status: 429 }],
+    ['a network error', { throw: true }],
+  ];
+
+  it('main == the created commit: treated as landed (the PATCH response was lost), then the PR is commented and closed', () => {
+    for (const [name, lost] of cases) {
+      const r = runLand({ scenario: { patchLost: { ...lost, applied: true } } });
+      expect(r.code, `${name}: ${r.out}`).toBe(0);
+      expect(r.out, name).toContain('LANDED (the PATCH response was lost)');
+      expect(r.out, name).toContain('LANDED PR #7');
+      expect(r.merges, `${name}: one attempt, no retry`).toHaveLength(1);
+      expect(JSON.parse(r.merges[0]!.body ?? '{}').force, name).toBe(false);
+      expect(r.writes.map((c) => c.method), name).toEqual(['POST', 'PATCH', 'POST', 'PATCH']);
+    }
+  });
+
+  it('main == the cleared base: nothing landed, reported, no retry, no comment or close', () => {
+    for (const [name, lost] of cases) {
+      const r = runLand({ scenario: { patchLost: { ...lost, applied: false } } });
+      expect(r.code, `${name}: ${r.out}`).toBe(1);
+      expect(r.out, name).toContain('Nothing was landed');
+      expect(r.out, name).toContain('still the cleared base');
+      expect(r.merges, name).toHaveLength(1);
+      expect(r.writes.map((c) => c.method), name).toEqual(['POST', 'PATCH']);
+    }
+  });
+
+  it('main is anything else (or cannot be read): ALERT, exit 2, naming the tip, and nothing more is written', () => {
+    const other = 'f'.repeat(40);
+    for (const [name, lost] of cases) {
+      const r = runLand({ scenario: { patchLost: { ...lost, applied: false }, mainAfterFailedPatch: other } });
+      expect(r.code, `${name}: ${r.out}`).toBe(2);
+      expect(r.out, name).toContain('ALERT AFTER AN AMBIGUOUS REF UPDATE');
+      expect(r.out, name).toContain(other);
+      expect(r.writes.map((c) => c.method), name).toEqual(['POST', 'PATCH']);
+    }
+    const unreadable = runLand({ scenario: { patchLost: { status: 500, applied: false }, mainReadFails: true } });
+    expect(unreadable.code).toBe(2);
+    expect(unreadable.out).toContain('could not be read again');
+    expect(unreadable.writes.map((c) => c.method)).toEqual(['POST', 'PATCH']);
+  });
+
+  it('a clean 4xx refusal is NOT re-judged: it refuses at once and main is not even re-read', () => {
+    const r = runLand({ scenario: { patchStatus: 422 } });
+    expect(r.code).toBe(1);
+    const patchAt = r.calls.findIndex((c) => c.method === 'PATCH');
+    expect(r.calls.slice(patchAt + 1).filter((c) => c.path.includes('/git/ref/heads/main'))).toHaveLength(0);
+  });
+});
+
+describe('round 2: the review row carries its own edit timestamp', () => {
+  it('a review that differs ONLY in submitted_at (or only in updated_at when there is no submitted_at) changes the digest', () => {
+    const review = { user: { login: 'r' }, id: 3, state: 'COMMENTED', commit_id: H, body: 'same body' };
+    const digest = (r: Record<string, unknown>) => lib.botCommentsDigest({ issueComments: [], inlineComments: [], reviews: [r] }) as string;
+    expect(digest({ ...review, submitted_at: '2026-10-19T01:00:00Z' })).not.toBe(digest({ ...review, submitted_at: '2026-10-19T02:00:00Z' }));
+    expect(digest({ ...review, submitted_at: '2026-10-19T01:00:00Z' })).not.toBe(digest(review));
+    expect(digest({ ...review, updated_at: 'u1' })).not.toBe(digest({ ...review, updated_at: 'u2' }));
+    expect(digest({ ...review, submitted_at: '2026-10-19T01:00:00Z' })).toBe(digest({ ...review, submitted_at: '2026-10-19T01:00:00Z' }));
+  });
+});
+
+describe('round 2: the phrase JULIUS LANDING (uppercase) appears exactly twice in a message, in the two marker lines', () => {
+  const text = clearanceText();
+  const build = (freeText: string) => lib.buildLandingCommitMessage({ clearanceText: text, signatureB64: goodSignature(text), freeText }) as string;
+
+  it('the builder refuses any free text containing JULIUS LANDING anywhere; lower and mixed case stay allowed', () => {
+    for (const bad of ['about JULIUS LANDING', 'x BEGIN JULIUS LANDING', 'x END JULIUS LANDING', 'JULIUS LANDING', 'subject\n\nbody mentions JULIUS LANDING in passing', 'JULIUS LANDINGS']) {
+      expect(() => build(bad), JSON.stringify(bad)).toThrow();
+    }
+    for (const ok of ['julius landing', 'Julius landing', 'Julius Landing', 'about julius landing\n\nand the Julius landing workflow']) {
+      const msg = build(ok);
+      expect(lib.parseLandingCommitMessage(msg, { publicKeyPem: publicPem }).problems, ok).toEqual([]);
+      expect(msg.split('JULIUS LANDING').length - 1, ok).toBe(2);
+    }
+    expect(buildMessage().split('JULIUS LANDING').length - 1, 'the default text').toBe(2);
+  });
+
+  it('the parser rejects a message with any extra mention of the phrase, wherever it is', () => {
+    const msg = buildMessage();
+    expect(lib.parseLandingCommitMessage(msg).problems).toEqual([]);
+    const withExtra: Array<[string, string]> = [
+      ['in the free text', msg.replace('Landed by', 'about JULIUS LANDING and landed by')],
+      ['as BEGIN in the free text', msg.replace('Landed by', 'x BEGIN JULIUS LANDING y landed by')],
+      ['a third marker-like line', msg.replace('v: 1\n', 'v: 1\nJULIUS LANDING\n')],
+      ['in the subject', `JULIUS LANDING ${msg}`],
+    ];
+    for (const [name, m] of withExtra) expect(lib.parseLandingCommitMessage(m).problems.length, name).toBeGreaterThan(0);
+  });
+
+  it('a PR title containing JULIUS LANDING never reaches the landing message', () => {
+    const r = runLand({ scenario: { pr: { ...goodPr(), title: 'about JULIUS LANDING' } } });
+    expect(r.code, r.out).toBe(0);
+    const sent = JSON.parse(r.calls.find((c) => c.method === 'POST' && c.path.endsWith('/git/commits'))!.body ?? '{}') as { message: string };
+    expect(sent.message).not.toContain('about');
+    expect(sent.message.split('JULIUS LANDING').length - 1).toBe(2);
   });
 });

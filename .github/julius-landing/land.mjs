@@ -19,7 +19,7 @@ async function gh(path, init = {}) {
   const res = await fetch(`${API}${path}`, { ...init, headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(init.headers ?? {}) } });
   const text = await res.text();
   let body; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
-  if (!res.ok) throw new Error(`${init.method ?? 'GET'} ${path} -> ${res.status}: ${typeof body === 'string' ? body.slice(0, 200) : body?.message}`);
+  if (!res.ok) throw Object.assign(new Error(`${init.method ?? 'GET'} ${path} -> ${res.status}: ${typeof body === 'string' ? body.slice(0, 200) : body?.message}`), { status: res.status });
   return body;
 }
 // Every list is read to its end; past the page cap readAllPages THROWS, which ends the job unmerged (fail closed).
@@ -135,7 +135,19 @@ if (createdProblems.length) fail(createdProblems.map((p) => `created commit ${ne
 try {
   await gh(`/repos/${REPO}/git/refs/heads/main`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(refBody(newSha)) });
 } catch (error) {
-  fail([`the ref update was refused (main moved or the update is not a fast-forward); nothing landed, no retry: ${error instanceof Error ? error.message : String(error)}`]);
+  const text = error instanceof Error ? error.message : String(error);
+  // A CLEAN refusal is an HTTP 4xx answer (408 and 429 excepted): GitHub answered and did not move main. Anything else (timeout, 5xx, network error, an unreadable answer) is AMBIGUOUS:
+  // the update may have been applied with the answer lost, so main's tip is read again and judged. There is never a retry and never a force.
+  const status = error?.status;
+  if (Number.isInteger(status) && status >= 400 && status < 500 && status !== 408 && status !== 429) fail([`the ref update was refused (main moved or the update is not a fast-forward); nothing landed, no retry: ${text}`]);
+  let tipAfter;
+  try { tipAfter = (await gh(`/repos/${REPO}/git/ref/heads/main`)).object.sha; } catch (readError) {
+    summary(`ALERT AFTER AN AMBIGUOUS REF UPDATE (${text}): main's tip could not be read again (${readError instanceof Error ? readError.message : String(readError)}); check main by hand, created commit ${newSha}`);
+    process.exit(2);
+  }
+  if (tipAfter === newSha) summary(`LANDED (the PATCH response was lost): ${text}; main is the created commit ${newSha}`);
+  else if (tipAfter === fields.base) fail([`the ref update outcome was ambiguous (${text}) and main is still the cleared base ${fields.base}; nothing landed, no retry`]);
+  else { summary(`ALERT AFTER AN AMBIGUOUS REF UPDATE (${text}): main is ${tipAfter}, neither the created commit ${newSha} nor the cleared base ${fields.base}`); process.exit(2); }
 }
 summary(`LANDED PR #${number}: ${newSha}`);
 
