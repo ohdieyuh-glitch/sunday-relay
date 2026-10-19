@@ -829,12 +829,18 @@ describe('REPLICAS OVER ONE ROW SET (slice 3): the reserve is atomic across stor
 /**
  * A store that commits the pre-call row and THEN throws (a connection lost after COMMIT). It is branded because THIS factory
  * built it. The provider is never contacted in this case: the reserve threw before the route reached the runner.
+ *
+ * THE CAPABILITY SEAM (agreed by JUDEV for slice 3): the route writes a not_contacted result row ONLY for a store that declares
+ * it takes one. Here that is the plain property `recordsNotContacted: true`. The production NAME and mechanism are the builder's
+ * (it is to be BRANDED by the store factory, like durability via markAskStoreDurable); when it lands, this fake switches to it.
  */
-function commitThenThrowStore(): AskStore & { readonly held: AskLedgerLine[] } {
+type CommitThenThrowStore = AskStore & { readonly held: AskLedgerLine[]; readonly recordsNotContacted?: true };
+function commitThenThrowStore(options: { readonly recordsNotContacted: boolean }): CommitThenThrowStore {
   const inner = createMemoryAskStore();
   let throwAfterNextCommit = true;
-  const store: AskStore & { readonly held: AskLedgerLine[] } = {
+  const store: CommitThenThrowStore = {
     durable: true,
+    ...(options.recordsNotContacted ? { recordsNotContacted: true as const } : {}),
     held: inner.held,
     append: (line) => inner.append(line),
     rows: () => inner.rows(),
@@ -889,8 +895,9 @@ describe('DURABLE-WRITE FAILURE (slice 3, reviewer ruling 4ce81b item 3): commit
        attempt_unknown ("a billed call may have happened"), which is false here, and the row keeps the only slot.
        Seam it needs: (i) the compensating result row (outcome not_contacted), and (ii) a reserve that neither counts a
        not_contacted attempt against the caps nor treats its key as used. The demo FILE store is carved out by the same ruling
-       (control above), so the route needs to know which stores take the compensation; when that seam exists, THIS fake opts in. */
-    const store = commitThenThrowStore();
+       (control above), so the route needs to know which stores take the compensation: the CAPABILITY seam (recordsNotContacted,
+       see commitThenThrowStore). THIS store declares it. */
+    const store = commitThenThrowStore({ recordsNotContacted: true });
     const p = provider();
     const c = instance({ ledger: store, provider: p, env: env({ JULIUS_ASK_DAILY_CAP: '1', JULIUS_ASK_BINDING_SECRET: secretFrom('binding') }) });
     const first = await ask(c, { idempotencyKey: 'commit-throw-0001' });
@@ -902,6 +909,35 @@ describe('DURABLE-WRITE FAILURE (slice 3, reviewer ruling 4ce81b item 3): commit
     const retry = await ask(c, { idempotencyKey: 'commit-throw-0001' });
     expect(retry.ok, `MISSING (ruling 3): the same key could not be retried after a 503 that bought nothing (cap 1): ${describeResult(retry)}`).toBe(true);
     expect(p.requests, 'the retry is exactly one billed call').toHaveLength(1);
+  });
+
+  it('REQUIRED (slice 3, ruling 3): the not_contacted compensation follows the STORE CAPABILITY: a store WITHOUT it keeps 409 attempt_unknown and gets no not_contacted row; a store WITH it gets 503, a not_contacted row and an answered same-key retry', async () => {
+    /* Both sides of the capability in one test, so a route that compensates for EVERY store (ignoring the capability, which would
+       break the demo file store's documented 409) and a route that compensates for NONE (today) both fail. The WITHOUT side is
+       today's behaviour and passes; the WITH side is red today because the route has no capability check and never writes a
+       not_contacted row. The seam is the property recordsNotContacted on the fake; the production name is the builder's. */
+    const run = async (recordsNotContacted: boolean, key: string) => {
+      const store = commitThenThrowStore({ recordsNotContacted });
+      const p = provider();
+      const c = instance({ ledger: store, provider: p, env: env({ JULIUS_ASK_DAILY_CAP: '1', JULIUS_ASK_BINDING_SECRET: secretFrom('binding') }) });
+      const first = await ask(c, { idempotencyKey: key });
+      const callsAfterFirst = p.requests.length;
+      const marks = store.held.filter((row) => row.phase === 'result' && /not_contacted/.test(String(row.outcome)));
+      const retry = await ask(c, { idempotencyKey: key });
+      return { first, callsAfterFirst, marks: marks.length, retry, calls: p.requests.length };
+    };
+    const without = await run(false, 'capability-off-01');
+    expect(without.callsAfterFirst, 'WITHOUT the capability: the provider was not contacted').toBe(0);
+    expect(without.first, 'WITHOUT the capability: the documented 409 attempt_unknown stays').toMatchObject({ ok: false, code: 'julius_ask_attempt_unknown', httpStatus: 409 });
+    expect(without.marks, 'WITHOUT the capability: no not_contacted row is written').toBe(0);
+    expect(without.retry, 'WITHOUT the capability: the same key stays attempt_unknown').toMatchObject({ ok: false, code: 'julius_ask_attempt_unknown', httpStatus: 409 });
+    expect(without.calls, 'WITHOUT the capability: nothing was bought').toBe(0);
+    const withIt = await run(true, 'capability-on-001');
+    expect(withIt.callsAfterFirst, 'WITH the capability: the provider was not contacted on the first attempt').toBe(0);
+    expect(withIt.first, `MISSING (capability): a store that records not_contacted got ${describeResult(withIt.first)}, the same as a store without it; required 503 ledger_unavailable`).toEqual({ ok: false, code: 'julius_ask_ledger_unavailable', httpStatus: 503 });
+    expect(withIt.marks, 'MISSING (capability): no not_contacted row for a store that takes one').toBe(1);
+    expect(withIt.retry.ok, `MISSING (capability): the same key retried was not answered: ${describeResult(withIt.retry)}`).toBe(true);
+    expect(withIt.calls, 'WITH the capability: the retry is exactly one billed call').toBe(1);
   });
 
   it('CONTROL (ruling 3): a pre-call row with NO result row (a crash mid-call, the provider possibly contacted) still answers the same key 409 attempt_unknown after a restart', async () => {
