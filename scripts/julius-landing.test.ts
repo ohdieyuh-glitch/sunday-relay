@@ -213,8 +213,8 @@ globalThis.fetch = async (url, init = {}) => {
     return reply(200, { object: { sha } });
   }
   if (path.includes('/commits?sha=main')) return reply(200, scenario.history);
-  if (/\\/commits\\/[0-9a-f]{40}\\/check-runs/.test(path)) return reply(200, { check_runs: scenario.checkRuns });
-  if (/\\/commits\\/[0-9a-f]{40}\\/status/.test(path)) return reply(200, { statuses: scenario.statuses });
+  if (/\\/commits\\/[0-9a-f]{40}\\/check-runs/.test(path)) return reply(200, { total_count: scenario.checkRuns.length, check_runs: scenario.checkRuns });
+  if (/\\/commits\\/[0-9a-f]{40}\\/status/.test(path)) return reply(200, { total_count: scenario.statuses.length, statuses: scenario.statuses });
   if (path.includes('/commits/' + scenario.mergedSha)) return reply(200, scenario.landed);
   if (/\\/commits\\/[0-9a-f]{40}$/.test(path)) return reply(200, scenario.commit);
   if (/\\/pulls\\/\\d+\\/files/.test(path)) return reply(200, scenario.files.map((f) => (typeof f === 'string' ? { filename: f } : f)));

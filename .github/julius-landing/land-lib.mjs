@@ -10,11 +10,14 @@ const SHA = /^[0-9a-f]{40}$/u;
 // HARD-FORBIDDEN: paths an unattended lander must NEVER carry onto main, with or without a clearance. Workflows (GitHub would refuse a GITHUB_TOKEN merge anyway; workflow
 // changes are founder-governed), this landing system (key, allowlist, required checks, code), the mission pins file, migrations, the approver/approval gates, CODEOWNERS,
 // CLAUDE.md, package manifests and the evidence dump. Such changes land only through a founder-governed path.
-export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/u;
+// Case-insensitive: a checkout on a case-insensitive filesystem (Windows, macOS) folds `.GITHUB/Julius-Landing/...` onto the governed file.
+export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
 // SIGNED-EXCEPTION: the spend ceilings and the effort tripwire live here. A PR may change them only if the reviewer's signed clearance lists the EXACT file in `governed-exceptions`.
 export const EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
+// Matched case-insensitively for the same reason as above; a case variant is never in the signed list (that list holds exact names only), so it is always refused.
+const isExceptionEligible = (f) => EXCEPTION_ELIGIBLE.some((e) => e.toLowerCase() === String(f).toLowerCase());
 // "Is this path founder-governed at all": hard-forbidden OR exception-eligible.
-export const FORBIDDEN_PATH = { test: (f) => HARD_FORBIDDEN_PATH.test(f) || EXCEPTION_ELIGIBLE.includes(f) };
+export const FORBIDDEN_PATH = { test: (f) => HARD_FORBIDDEN_PATH.test(f) || isExceptionEligible(f) };
 
 /** The canonical clearance text the reviewer signs. One `key: value` per line, fixed key order, LF line ends. */
 export const CLEARANCE_KEYS = ['pr', 'head', 'tree', 'base', 'kind', 'bot-comments-sha256', 'governed-exceptions', 'nonce', 'by', 'issued', 'expires'];
@@ -91,6 +94,10 @@ export function checkPullRequest({ fields, now, pr, commit, files, fileRows, mai
   if (commit?.commit?.tree?.sha !== fields.tree) problems.push(`the head tree is ${commit?.commit?.tree?.sha}, the clearance names ${fields.tree}`);
   if (commit?.parents?.length !== 1 || commit.parents[0]?.sha !== fields.base) problems.push('the head is not one commit directly on the cleared base');
   if (commit?.commit?.author?.name !== APP_LOGIN || commit?.commit?.committer?.name !== APP_LOGIN) problems.push('the head commit is not authored and committed by the App');
+  // The git author NAME above is free text. The top-level `author` is the account GitHub resolved from the author email: when present it must be the App. It is null when the
+  // email maps to no account, so an unresolved author is NOT refused here (residual: such a commit is identified by the free-text name only). The top-level `committer` is not
+  // checked: commits created through the API often carry another committer login.
+  if (commit?.author != null && commit.author.login !== APP_LOGIN) problems.push(`the head commit's GitHub author is ${commit.author.login}, not ${APP_LOGIN}`);
   if (!allowedBranches.includes(pr.head?.ref)) problems.push(`branch ${pr.head?.ref} is not in the founder's standing landing allowlist`);
   // `files` holds EVERY name GitHub reports for a changed file: `filename` and, for a rename or copy, `previous_filename` too (a workflow renamed out of .github/workflows is still a
   // workflow change). `fileRows` is how many file rows were actually read; it must equal the PR's own changed_files count, or the list was truncated and nothing is trusted.
@@ -99,7 +106,7 @@ export function checkPullRequest({ fields, now, pr, commit, files, fileRows, mai
   const exceptions = fields['governed-exceptions'] === '-' || fields['governed-exceptions'] === undefined ? [] : fields['governed-exceptions'].split(',');
   const hard = files.filter((f) => HARD_FORBIDDEN_PATH.test(f));
   if (hard.length > 0) problems.push(`the PR changes founder-governed paths: ${hard.slice(0, 5).join(', ')}`);
-  const unsigned = files.filter((f) => EXCEPTION_ELIGIBLE.includes(f) && !exceptions.includes(f));
+  const unsigned = files.filter((f) => isExceptionEligible(f) && !exceptions.includes(f));
   if (unsigned.length > 0) problems.push(`the PR changes founder-governed paths: ${unsigned.join(', ')} (not listed in the signed governed-exceptions)`);
   const unused = exceptions.filter((f) => !files.includes(f));
   if (unused.length > 0) problems.push(`the signed clearance lists exceptions the PR does not change: ${unused.join(', ')}`);
@@ -117,6 +124,10 @@ export function checkCi({ checkRuns, statuses, self, required = [] }) {
     const hits = runs.filter((r) => r.name === name);
     if (hits.length !== 1) problems.push(`required check "${name}" appears ${hits.length} times on the head (exactly 1 required)`);
   }
+  // Any OTHER name seen more than once is ambiguous too (two workflows can emit the same job name; which one is "the" check is unknowable here): refuse rather than guess.
+  const seen = new Map();
+  for (const r of runs) seen.set(r.name, (seen.get(r.name) ?? 0) + 1);
+  for (const [name, n] of seen) if (n > 1 && !required.includes(name)) problems.push(`check "${name}" appears ${n} times on the head (ambiguous)`);
   if (runs.length === 0) problems.push('no check runs found on the head');
   for (const r of runs) {
     if (r.status !== 'completed') problems.push(`check "${r.name}" is ${r.status}`);
@@ -135,6 +146,26 @@ export function checkLanded({ landed, base, tree }) {
   if (landed?.parents?.length !== 1 || landed.parents[0]?.sha !== base) problems.push('the landed commit is not directly on the cleared base');
   if (landed?.commit?.tree?.sha !== tree) problems.push(`the landed tree is ${landed?.commit?.tree?.sha}, expected ${tree}`);
   return problems;
+}
+
+/** The paging rule shared by the lander and the reviewer tools, so both read the same set. `getPage(page)` returns that page's rows (per_page=100). A short page ends the
+ * read; a FULL page at the cap THROWS (fail closed): a silent stop would hide rows past the cap (a forbidden file, a failing check, a comment the digest must cover). */
+export const PER_PAGE = 100;
+export const MAX_PAGES = 10;
+export async function readAllPages(getPage) {
+  const all = [];
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const rows = await getPage(page);
+    if (!Array.isArray(rows)) throw new Error(`page ${page} is not a list`);
+    all.push(...rows);
+    if (rows.length < PER_PAGE) return all;
+  }
+  throw new Error(`more than ${MAX_PAGES * PER_PAGE} rows: refusing rather than reading a partial set`);
+}
+
+/** The squash commit title, built from the PR number and the cleared head only. Never the PR title: anyone with write access can edit that, and it would land verbatim on main. */
+export function squashTitle(number, head) {
+  return `Landed PR #${number} (${String(head).slice(0, 12)})`;
 }
 
 /** One use per nonce: a clearance whose nonce already appears in a commit message on main's recent history has been used. */
