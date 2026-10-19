@@ -1,0 +1,16 @@
+# SPEC: src/relay/gauntlet-fixes.test.ts
+# MAX-EFFORT MISSION DRAFT (SECOND JULIUS), CANDIDATE G: three latent defects in the /gauntletloop command controller, found by READING production Relay code. Real tracked source,
+# byte-identical to the repository's. A DRAFT for review: not registered (no MISSION_LIMITS, no role-effort line, no gate), and it declares `limits.coderRuntimeMinutes`, so it needs the
+# coder-runtime-budget layer (crt r2) to parse and its own clearance (a scored or preregistered use must state the minutes and the guaranteed-versus-declared repair cycles).
+#
+# The coder cannot run commands, so what it writes is judged by the independent reviewer against the acceptance criteria as well as by the seeded specification, which pins the MAIN
+# behaviours of each fix and deliberately not every wider invariant: those are the criteria's job. Nothing here forces, injects or counts a reviewer finding.
+#
+# THE SLICE: the controller (`gauntlet-command.ts`, 498 lines), the pure state machine it drives (`gauntlet-machine.ts`), the deterministic in-memory store the specification runs against
+# (`gauntlet-memory-store.ts`, a test double), and the ports file the controller types against (`gauntlet-ports.ts`, types only). Run-time import closure: 2 files plus a type-only edge.
+# DELIBERATELY UNPINNED by the seeded specification (the criteria and the reviewer judge them): collateral change outside the three fixes; mutation of inputs; the HALTED-before-first-round
+# activation branch; the exact reason codes of a refused race; what the in-memory store does (it is read-only for the coder).
+src/relay/mission/gauntlet/gauntlet-command.ts
+src/relay/mission/gauntlet/gauntlet-machine.ts
+src/relay/mission/gauntlet/gauntlet-memory-store.ts
+src/relay/mission/gauntlet/gauntlet-ports.ts
