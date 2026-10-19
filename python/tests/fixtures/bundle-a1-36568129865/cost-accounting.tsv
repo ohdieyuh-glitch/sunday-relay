@@ -1,0 +1,5 @@
+role	components	known_usd_micros	estimated_usd_micros	unknown_components	estimated_components
+CODING_AGENT	1	0	0	0	0
+INDEPENDENT_REVIEWER	1	0	0	1	0
+PROMPT_ARCHITECT	1	0	0	1	0
+(3 rows)
