@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -1004,5 +1004,49 @@ describe('round 3 R2: the gate and secret-handling scripts workflows run are gov
     expect(check({ files: allowedFiles, fileRows: allowedFiles.length, pr: { ...goodPr(), changed_files: allowedFiles.length } })).toEqual([]);
     const r = runLand({ scenario: { files: allowedFiles.slice(0, 4), pr: { ...goodPr(), changed_files: 4 } } });
     expect(r.code, r.out).toBe(0);
+  });
+});
+
+/* ------------------------------------------------------------------------------------------------------------------ v3 round 4: the landing system's own tests are governed; one reader of required-checks.txt */
+
+describe('round 4: scripts/julius-landing* (the landing tests) is a governed prefix', () => {
+  const landing = ['scripts/julius-landing.test.ts', 'scripts/julius-landing-attack.test.ts', 'scripts/julius-landing-new.test.ts', 'scripts/julius-landing.mjs', 'scripts/julius-landing2.ts'];
+
+  it('every such file is refused by the pure check, in any letter case', () => {
+    for (const f of landing) {
+      for (const variant of [f, f.toUpperCase(), f.replace(/^./u, (c) => c.toUpperCase()), f.replace('landing', 'Landing')]) {
+        expect(check({ files: ['ok.ts', variant], fileRows: 2, pr: { ...goodPr(), changed_files: 2 } }).join(' '), variant).toContain('founder-governed');
+      }
+    }
+  });
+
+  it('end to end: a PR touching any of them is refused and nothing is written', () => {
+    for (const f of landing) {
+      const r = runLand({ scenario: { files: ['ok.ts', f], pr: { ...goodPr(), changed_files: 2 } } });
+      expect(r.code, `${f}: ${r.out}`).toBe(1);
+      expect(r.out).toContain('founder-governed');
+      expect(r.writes, f).toHaveLength(0);
+    }
+  });
+
+  it('neighbours stay allowed: other julius-live scripts, julius-paid-dispatch (a review decision, not added), other julius- tests', () => {
+    const allowedFiles = ['scripts/julius-live-probe-file.ts', 'scripts/julius-live-preflight.ts', 'scripts/julius-paid-dispatch.mjs', 'scripts/julius-evidence-bodies.test.ts', 'scripts/julius-mission-pins.test.ts', 'scripts/julius-drill-support.ts', 'scripts/landing-notes.md', 'docs/scripts/julius-landing.md'];
+    for (const f of allowedFiles) expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(false);
+    expect(check({ files: allowedFiles, fileRows: allowedFiles.length, pr: { ...goodPr(), changed_files: allowedFiles.length } })).toEqual([]);
+    const r = runLand({ scenario: { files: allowedFiles.slice(0, 3), pr: { ...goodPr(), changed_files: 3 } } });
+    expect(r.code, r.out).toBe(0);
+  });
+});
+
+describe('round 4: required-checks.txt has exactly one reader, the lander (via parseRequiredChecks)', () => {
+  it('no workflow and no other script or landing file mentions the file; land.mjs parses it only through parseRequiredChecks', () => {
+    const listed = (dir: string) => readdirSync(resolve(ROOT, dir)).map((f) => join(dir, f));
+    const candidates = [...listed('.github/workflows'), ...listed('scripts').filter((f) => /\.(mjs|ts|sh|js|cjs|mts)$/u.test(f)), ...listed('.github/julius-landing').filter((f) => /\.mjs$/u.test(f))];
+    const readers = candidates.filter((f) => readFileSync(resolve(ROOT, f), 'utf8').includes('required-checks')).map((f) => f.replace(/\\/gu, '/')).sort();
+    // the lander, the lander's library (documentation comment) and the two landing test files (which pin or rewrite the file)
+    expect(readers).toEqual(['.github/julius-landing/land-lib.mjs', '.github/julius-landing/land.mjs', 'scripts/julius-landing-attack.test.ts', 'scripts/julius-landing.test.ts']);
+    const land = readFileSync(join(LANDING, 'land.mjs'), 'utf8');
+    expect(land).toMatch(/parseRequiredChecks\(readFileSync\(join\(here, 'required-checks\.txt'\)/u);
+    expect(land.match(/required-checks\.txt'/gu), 'land.mjs reads the file exactly once').toHaveLength(1);
   });
 });
