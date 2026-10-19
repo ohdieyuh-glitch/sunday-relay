@@ -656,6 +656,9 @@ const providerFacts = (
   readonly maxOutputTokens: number;
   readonly incompleteReason: string | null;
   readonly elapsedMs: number;
+  /** The reasoning effort that went on the wire / the provider's own echo. Present only when there is one (absent means none was sent / none echoed). */
+  readonly effortSent?: string;
+  readonly effortEchoed?: string;
 } => ({
   // The response is the authority for what answered, never the request.
   servedModel: outcome.actualModel ?? null,
@@ -673,6 +676,10 @@ const providerFacts = (
   // A success is by definition not incomplete; null there is the true answer.
   incompleteReason: outcome.ok ? null : outcome.incompleteReason ?? null,
   elapsedMs: completedAtMs - startedAtMs,
+  // EFFORT EVIDENCE (PR #371 follow-up): what the connector put in the request and what the provider's response said it ran at.
+  // Read from the connector's own outcome, absent when none was sent or echoed, so a run that declares no effort is unchanged.
+  ...(outcome.effort?.sent == null ? {} : { effortSent: outcome.effort.sent }),
+  ...(outcome.effort?.echoed == null ? {} : { effortEchoed: outcome.effort.echoed }),
 });
 
 /**
@@ -779,6 +786,9 @@ const planDiagnostics = (input: {
   readonly totalTokens?: number | null;
   /** Wall clock across the provider call, measured by the adapter. */
   readonly elapsedMs?: number | null;
+  /** The reasoning effort the connector put in the request / the provider echoed. Absent unless there is one. */
+  readonly effortSent?: string | null;
+  readonly effortEchoed?: string | null;
 }): Record<string, unknown> => ({
   outcome: input.outcome ?? 'failed',
   stage: 'plan',
@@ -843,6 +853,9 @@ const planDiagnostics = (input: {
   incompleteReason: input.incompleteReason ?? null,
   providerStatus: input.providerStatus ?? null,
   elapsedMs: input.elapsedMs ?? null,
+  // Conditional, like the review-evidence facts: a record with no effort sent or echoed is exactly what it was.
+  ...(input.effortSent == null ? {} : { effortSent: input.effortSent }),
+  ...(input.effortEchoed == null ? {} : { effortEchoed: input.effortEchoed }),
 });
 
 /**

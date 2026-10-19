@@ -294,12 +294,22 @@ export interface JuliusSelfTestCall {
   readonly passed: boolean;
   readonly refused: JuliusSelfTestRefusal | null;
   readonly outputBytes: number;
-  /** sha256 (64 hex) of the full output; null when nothing ran. */
+  /** sha256 (64 hex) of the output named by `outputBasis`; null when nothing ran. */
   readonly outputDigest: string | null;
   readonly durationMs: number;
   /** The working-tree id the test ran against (40 hex); null when unknown. */
   readonly treeBefore: string | null;
+  /**
+   * WHAT `outputBytes` AND `outputDigest` COVER. FULL: the test's whole output, measured inside the sandbox. LIMIT: the test printed more
+   * than the capture bound and was stopped, so they cover the first bound's worth and `exitCode` is null. PREFIX: only the part of the output
+   * the executor returned (the in-sandbox measurement was not available), so they describe a prefix and must not be read as the full output.
+   * Absent on a refused call and on a record written before the field existed.
+   */
+  readonly outputBasis?: JuliusSelfTestOutputBasis;
 }
+
+export const JULIUS_SELF_TEST_OUTPUT_BASES = ['FULL', 'LIMIT', 'PREFIX'] as const;
+export type JuliusSelfTestOutputBasis = (typeof JULIUS_SELF_TEST_OUTPUT_BASES)[number];
 
 /**
  * EVERYTHING THE CODER'S SELF-TESTS LEFT, IN CALL ORDER. DIAGNOSTIC TELEMETRY ONLY (founder ruling 2026-10-18): it is never
@@ -332,11 +342,16 @@ export function readJuliusSelfTest(value: unknown): JuliusSelfTestRecord | null 
     const exitCode = call.exitCode === null ? null : typeof call.exitCode === 'number' && Number.isSafeInteger(call.exitCode) ? call.exitCode : undefined;
     const digest = call.outputDigest === null ? null : typeof call.outputDigest === 'string' && HEX64.test(call.outputDigest) ? call.outputDigest : undefined;
     const tree = call.treeBefore === null ? null : typeof call.treeBefore === 'string' && HEX40.test(call.treeBefore) ? call.treeBefore : undefined;
+    // The basis is optional (absent on a refused call and on an older record); when present it must be one of the closed values.
+    const basis = !('outputBasis' in call) || call.outputBasis === undefined ? null
+      : (JULIUS_SELF_TEST_OUTPUT_BASES as readonly unknown[]).includes(call.outputBasis) ? call.outputBasis as JuliusSelfTestOutputBasis : undefined;
     if (call.n !== index + 1 || typeof call.passed !== 'boolean' || refused === undefined || outputBytes === null || durationMs === null
-      || exitCode === undefined || digest === undefined || tree === undefined) return null;
+      || exitCode === undefined || digest === undefined || tree === undefined || basis === undefined) return null;
     // A call is judged passed only by a test that ran and exited zero: nothing else may claim it.
     if (call.passed !== (refused === null && exitCode === 0)) return null;
-    out.push(Object.freeze({ n: index + 1, exitCode, passed: call.passed, refused, outputBytes, outputDigest: digest, durationMs, treeBefore: tree }));
+    // A test stopped at the output bound has no exit code of its own: a basis of LIMIT with a code is a forgery.
+    if (basis === 'LIMIT' && exitCode !== null) return null;
+    out.push(Object.freeze({ n: index + 1, exitCode, passed: call.passed, refused, outputBytes, outputDigest: digest, durationMs, treeBefore: tree, ...(basis === null ? {} : { outputBasis: basis }) }));
   }
   return Object.freeze({ calls: Object.freeze(out) });
 }

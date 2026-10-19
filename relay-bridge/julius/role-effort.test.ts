@@ -98,30 +98,30 @@ describe('the contract: absent is today, declared is bound, bad is refused', () 
   });
 
   it('no committed contract declares an effort or any limit this build does not read', () => {
-    // The ONE committed contract allowed to declare a per-role effort is the UNSCORED lab mission, and only low/low. No contract may declare the
-    // coder self-test at all: the Independent Reviewer's ruling A on PR #371 forbids it (scored or unscored) until the output-cap defect is fixed in
-    // a reviewed delta and the workspace-copy bound is measured.
-    const EFFORT_LAB = 'julius-option2-lab-1';
+    // The ONLY committed contracts allowed to declare a per-role effort are the UNSCORED diagnostic missions named here, each pinned to low/low. No
+    // contract may declare the coder self-test at all: the Independent Reviewer's ruling A on PR #371 forbids it (scored or unscored) until the
+    // output-cap defect is fixed in a reviewed delta and the workspace-copy bound is measured.
+    const EFFORT_MISSIONS = ['julius-option2-lab-1', 'julius-diag-output-safety-1'];
     const names = readdirSync(MISSIONS).sort();
     let seen = 0;
-    let labSeen = false;
+    const effortSeen: string[] = [];
     for (const name of names) {
       const file = join(MISSIONS, name, 'contract.json');
       if (!existsSync(file)) continue;
       const limits = (JSON.parse(readFileSync(file, 'utf8')) as { limits?: Record<string, unknown> }).limits ?? {};
       expect(Object.keys(limits).filter((key) => !(JULIUS_LIMITS_KEYS as readonly string[]).includes(key)), `${name}: unknown limits keys`).toEqual([]);
       expect('coderSelfTestCalls' in limits, `${name}: no contract may declare the coder self-test yet (ruling A on PR #371)`).toBe(false);
-      if (name === EFFORT_LAB) {
+      if (EFFORT_MISSIONS.includes(name)) {
         expect(limits.architectEffort, `${name}: architect effort`).toBe('low');
         expect(limits.coderEffort, `${name}: coder effort`).toBe('low');
-        labSeen = true;
+        effortSeen.push(name);
       } else {
-        expect('architectEffort' in limits || 'coderEffort' in limits, `${name}: only ${EFFORT_LAB} may declare an effort`).toBe(false);
+        expect('architectEffort' in limits || 'coderEffort' in limits, `${name}: only ${EFFORT_MISSIONS.join(' and ')} may declare an effort`).toBe(false);
       }
       seen += 1;
     }
     expect(seen).toBeGreaterThanOrEqual(16);
-    expect(labSeen || !existsSync(join(MISSIONS, EFFORT_LAB))).toBe(true);
+    expect(effortSeen.sort(), 'each named mission that exists declares its effort').toEqual(EFFORT_MISSIONS.filter((name) => existsSync(join(MISSIONS, name))).sort());
   });
 });
 

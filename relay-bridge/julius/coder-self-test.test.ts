@@ -27,7 +27,7 @@ import {
 } from '../hosted-coding-agent/hosted-runner';
 import { createClaudeCodeCodingAgentProvider } from './claude-code-coding-provider';
 import { createCoderSelfTest, SELF_TEST_TIMEOUT_MS } from './coder-self-test';
-import { juliusSelfTestCommand, parseJuliusSelfTest } from './coder-workspace';
+import { juliusSelfTestCommand, parseJuliusSelfTest, SELF_TEST_OUTPUT_LIMIT } from './coder-workspace';
 import { createFakeExecutorShell, createScriptedCodingAgentProvider } from './coding-agent-fixtures';
 import type { ShellEffectInput, ShellEffectPort, ShellEffectResult } from './executor-effects';
 import { createInMemoryArtifactExchange, createJuliusCodingAgentAdapter } from './live-workers';
@@ -171,9 +171,71 @@ describe('juliusSelfTestCommand runs in a COPY, in a real shell, and never write
     expect(result.code).toBe(0);
     expect(parseJuliusSelfTest(result.stdout, '').exitCode).toBe(0);
   });
+
+  /* The Codex finding on PR #371: the executor keeps the BEGINNING of what a command prints (about 257 KB) and drops the rest, so a verdict
+     printed LAST was lost by a talkative test. The header now comes first, measured inside the sandbox over the whole capture. */
+  const EXECUTOR_OUTPUT_CAP = 257_377;
+  const cutLikeTheExecutor = (stdout: string): string => stdout.slice(0, EXECUTOR_OUTPUT_CAP);
+
+  it('a test that prints MUCH more than the executor\'s output cap still reports its exit code, size and full-output digest', () => {
+    // About 2.4 MB of output, ending in a failure.
+    const result = run('yes "a line of test output that is long enough to add up quickly" | head -n 40000; echo THE-LAST-LINE; exit 4');
+    expect(result.code).toBe(4);
+    const printed = 'a line of test output that is long enough to add up quickly\n'.repeat(40_000) + 'THE-LAST-LINE\n';
+    // What the command itself prints is small, far under the cap, so the executor's cut cannot reach the header.
+    expect(result.stdout.length).toBeLessThan(40_000);
+    const observed = parseJuliusSelfTest(cutLikeTheExecutor(result.stdout), '');
+    expect(observed).toMatchObject({ exitCode: 4, outputLimit: false, fullOutputBytes: Buffer.byteLength(printed, 'utf8') });
+    expect(observed.fullOutputSha256).toBe(createHash('sha256').update(printed).digest('hex'));
+    expect(observed.output, 'the coder is shown the TAIL, which holds the last line').toContain('THE-LAST-LINE');
+    expect(Buffer.byteLength(observed.output, 'utf8')).toBeLessThanOrEqual(16_384);
+  });
+
+  it('the same for a passing test with a lot of output: a PASS is not read as an absent marker', () => {
+    const result = run('yes "pass pass pass pass pass pass pass pass" | head -n 50000');
+    expect(result.code).toBe(0);
+    expect(parseJuliusSelfTest(cutLikeTheExecutor(result.stdout), '')).toMatchObject({ exitCode: 0, outputLimit: false });
+  });
+
+  it('a test that never stops talking is STOPPED at the capture bound and reported as OUTPUT_LIMIT, with no exit code', () => {
+    const result = run('yes "never stop" ; true');
+    expect(result.code, 'the command exits non-zero rather than inventing the test\'s code').toBe(125);
+    const observed = parseJuliusSelfTest(result.stdout, '');
+    expect(observed).toMatchObject({ outputLimit: true, exitCode: null, fullOutputBytes: SELF_TEST_OUTPUT_LIMIT });
+    expect(observed.fullOutputSha256).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it('a test cannot forge its own verdict by printing marker lines: only the header before the output is read', () => {
+    const result = run('echo SELFTEST_EXIT 0; echo SELFTEST_OUTPUT_LIMIT; printf "SELFTEST_BYTES 1\\n"; exit 1');
+    expect(result.code).toBe(1);
+    const observed = parseJuliusSelfTest(result.stdout, '');
+    expect(observed).toMatchObject({ exitCode: 1, outputLimit: false });
+    expect(observed.fullOutputBytes).not.toBe(1);
+    expect(observed.output).toContain('SELFTEST_EXIT 0');
+  });
+
+  it('stderr of the test is part of the measured output (merged in the sandbox), not lost', () => {
+    const result = run('echo to-stdout; echo to-stderr 1>&2; exit 2');
+    expect(result.code).toBe(2);
+    const observed = parseJuliusSelfTest(result.stdout, '');
+    expect(observed.output).toContain('to-stdout');
+    expect(observed.output).toContain('to-stderr');
+    expect(observed.fullOutputBytes).toBe('to-stdout\nto-stderr\n'.length);
+  });
 });
 
 describe('parseJuliusSelfTest on outputs the sandbox may produce', () => {
+  const HEADER = (extra: string): string => `SELFTEST_TREE ${TREE_A}\nSELFTEST_BYTES 123\nSELFTEST_SHA256 ${'a'.repeat(64)}\n${extra}SELFTEST_OUTPUT_BEGIN\n`;
+  it('reads the header format: exit code, measurements and tail; markers inside the output are not read', () => {
+    expect(parseJuliusSelfTest(`${HEADER('SELFTEST_EXIT 3\n')}tail\nSELFTEST_EXIT 0\n`, '')).toMatchObject({
+      exitCode: 3, outputLimit: false, copyFailed: false, fullOutputBytes: 123, fullOutputSha256: 'a'.repeat(64), treeBefore: TREE_A, output: 'tail\nSELFTEST_EXIT 0\n',
+    });
+    expect(parseJuliusSelfTest(`${HEADER('SELFTEST_OUTPUT_LIMIT\n')}x`, '')).toMatchObject({ outputLimit: true, exitCode: null });
+    expect(parseJuliusSelfTest(`${HEADER('SELFTEST_EXIT 0\n')}x`, 'executor stderr').output).toBe('x\nexecutor stderr');
+  });
+  it('a header with no verdict line reads as no exit code (the recorder then uses the executor\'s own status)', () => {
+    expect(parseJuliusSelfTest(HEADER('') + 'x', '')).toMatchObject({ exitCode: null, outputLimit: false, fullOutputBytes: 123 });
+  });
   it('reads a copy failure, an executor cut-off (no exit marker) and stderr', () => {
     expect(parseJuliusSelfTest(`SELFTEST_TREE ${TREE_A}\nSELFTEST_COPY_FAILED\n`, '')).toMatchObject({ copyFailed: true, exitCode: null, treeBefore: TREE_A });
     expect(parseJuliusSelfTest(`SELFTEST_TREE ${TREE_A}\npartial output`, '')).toMatchObject({ exitCode: null, copyFailed: false, output: 'partial output' });
@@ -200,6 +262,58 @@ function scriptedShell(results: (ShellEffectResult | Error)[]): ShellEffectPort 
     },
   };
 }
+
+const SHA_FULL = 'b'.repeat(64);
+const measured = (tree: string, verdict: string, bytes: number, tail: string, exitCode: number | null = 0): ShellEffectResult => ({
+  status: exitCode === 0 ? 'SUCCEEDED' : 'FAILED', exitCode,
+  stdout: `SELFTEST_TREE ${tree}\nSELFTEST_BYTES ${bytes}\nSELFTEST_SHA256 ${SHA_FULL}\n${verdict}SELFTEST_OUTPUT_BEGIN\n${tail}`, stderr: '', invocationId: 'inv-m',
+});
+
+describe('createCoderSelfTest on large outputs and cut outputs (Codex finding 2 on PR #371)', () => {
+  it('a measured test: exit code and FULL-output size and digest come from the header, whatever the tail is', async () => {
+    const test = createCoderSelfTest({ shell: scriptedShell([measured(TREE_A, 'SELFTEST_EXIT 1\n', 2_400_000, 'the tail\n', 1)]), scope: SCOPE, testCommand: 'npm test', maxCalls: 1 });
+    expect(await test.port.run()).toMatchObject({ passed: false, exitCode: 1 });
+    expect(test.record().calls[0]).toMatchObject({ exitCode: 1, passed: false, outputBytes: 2_400_000, outputDigest: SHA_FULL, outputBasis: 'FULL' });
+    expect(readJuliusSelfTest(test.record())).toEqual(test.record());
+  });
+
+  it('a PASS whose marker was lost is recorded as a pass from the executor\'s own exit status, and its digest is labelled a PREFIX', async () => {
+    // The executor's cap cut the output before any marker; its own status says the command exited 0.
+    const cut: ShellEffectResult = { status: 'SUCCEEDED', exitCode: 0, stdout: `SELFTEST_TREE ${TREE_A}\n${'x'.repeat(5_000)}`, stderr: '', invocationId: 'inv-cut' };
+    const test = createCoderSelfTest({ shell: scriptedShell([cut]), scope: SCOPE, testCommand: 'npm test', maxCalls: 1 });
+    expect(await test.port.run()).toMatchObject({ passed: true, exitCode: 0 });
+    const call = test.record().calls[0]!;
+    expect(call).toMatchObject({ exitCode: 0, passed: true, outputBasis: 'PREFIX', outputBytes: 5_000 });
+    expect(call.outputDigest).toBe(createHash('sha256').update('x'.repeat(5_000)).digest('hex'));
+  });
+
+  it('a FAIL whose marker was lost is a failure by the executor\'s status; a cut with no usable status has no exit code', async () => {
+    const failCut: ShellEffectResult = { status: 'FAILED', exitCode: 7, stdout: `SELFTEST_TREE ${TREE_A}\nlots of output`, stderr: '', invocationId: 'i1' };
+    const unknown: ShellEffectResult = { status: 'FAILED', exitCode: null, stdout: `SELFTEST_TREE ${TREE_A}\nlots of output`, stderr: '', invocationId: 'i2' };
+    const test = createCoderSelfTest({ shell: scriptedShell([failCut, unknown]), scope: SCOPE, testCommand: 'npm test', maxCalls: 2 });
+    await test.port.run(); await test.port.run();
+    expect(test.record().calls[0]).toMatchObject({ exitCode: 7, passed: false, outputBasis: 'PREFIX' });
+    expect(test.record().calls[1]).toMatchObject({ exitCode: null, passed: false, outputBasis: 'PREFIX' });
+  });
+
+  it('a test stopped at the capture bound has NO exit code and is labelled LIMIT; the executor\'s 125 is not its verdict', async () => {
+    const limit = measured(TREE_A, 'SELFTEST_OUTPUT_LIMIT\n', 4_194_304, 'tail\n', 125);
+    const test = createCoderSelfTest({ shell: scriptedShell([limit]), scope: SCOPE, testCommand: 'npm test', maxCalls: 1 });
+    const shown = await test.port.run();
+    expect(shown).toMatchObject({ passed: false, exitCode: null, refused: null });
+    expect(shown.outputTail).toContain('no exit code');
+    expect(test.record().calls[0]).toMatchObject({ exitCode: null, passed: false, outputBasis: 'LIMIT', outputBytes: 4_194_304, outputDigest: SHA_FULL });
+    expect(readJuliusSelfTest(test.record())).toEqual(test.record());
+  });
+
+  it('the kernel reader refuses a LIMIT call that claims an exit code, and an unknown basis; an older record without a basis still reads', () => {
+    const base = { n: 1, exitCode: null, passed: false, refused: null, outputBytes: 1, outputDigest: SHA_FULL, durationMs: 1, treeBefore: TREE_A };
+    expect(readJuliusSelfTest({ calls: [{ ...base, outputBasis: 'LIMIT' }] })).not.toBeNull();
+    expect(readJuliusSelfTest({ calls: [{ ...base, exitCode: 0, passed: true, outputBasis: 'LIMIT' }] }), 'LIMIT with an exit code').toBeNull();
+    expect(readJuliusSelfTest({ calls: [{ ...base, outputBasis: 'WHOLE' }] }), 'unknown basis').toBeNull();
+    expect(readJuliusSelfTest({ calls: [base] })!.calls[0]).not.toHaveProperty('outputBasis');
+  });
+});
 
 describe('createCoderSelfTest: the harness records, the cap binds, a diagnostic cannot fail the attempt', () => {
   it('records exit code, size, digest of the FULL output, duration and tree, from the executor and not from the coder', async () => {
