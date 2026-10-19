@@ -10,7 +10,7 @@ import type {
 import type { EventDraft } from '../../protocol/envelopes';
 import { createWorkspaceService, type WorkspaceCommandPolicy, type WorkspacePolicyInput } from '../../workspace';
 import { DEFAULT_WORKSPACE_COMMAND_POLICY } from '../../workspace';
-import { sanitizeOutput } from '../../workspace/output-sanitizer';
+import { sanitizeAndBound } from '../../workspace/output-sanitizer';
 import { runGit } from '../../workspace/repository-inspector';
 import { evaluateCompletionPolicy } from '../../verification/completion';
 import {
@@ -378,7 +378,7 @@ export async function runClaudeProof(options: ClaudeProofOptions): Promise<Claud
      * founder something to look at. */
     const diff = runGit(['diff', '--unified=3'], ws.workspacePath);
     if (diff.ok) {
-      const clean = sanitizeOutput(diff.value.slice(0, MAX_DIFF_BYTES));
+      const clean = sanitizeAndBound(diff.value, MAX_DIFF_BYTES, { open: false });
       result.unifiedDiff = clean.text;
     }
 

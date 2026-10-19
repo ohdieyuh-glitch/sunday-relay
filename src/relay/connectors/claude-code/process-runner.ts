@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createStreamParser, type ParsedStreamState } from './stream-parser';
-import { sanitizeOutput } from '../../workspace/output-sanitizer';
+import { sanitizeAndBound } from '../../workspace/output-sanitizer';
 
 /**
  * Claude Code process runner (Prompt 8). Launches the resolved Claude
@@ -76,7 +76,7 @@ export function runClaudeProcess(
       clearTimeout(timeoutTimer);
       clearTimeout(escalateTimer);
       clearTimeout(confirmTimer);
-      const clean = sanitizeOutput(stderr);
+      const clean = sanitizeAndBound(stderr, Number.POSITIVE_INFINITY, { open: outputTruncated || timedOut || cancelled || signal !== null });
       resolvePromise({
         parsed: parser.end(),
         stderr: clean.text,

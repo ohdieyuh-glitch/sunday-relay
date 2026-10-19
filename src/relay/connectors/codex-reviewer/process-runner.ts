@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createReviewerStreamParser, type ParsedReviewerStream } from './stream-parser';
-import { sanitizeOutput } from '../../workspace/output-sanitizer';
+import { sanitizeAndBound } from '../../workspace/output-sanitizer';
 
 /**
  * Codex Reviewer process runner (Prompt 8.3) — spawns the local Codex
@@ -99,7 +99,7 @@ export function runCodexProcess(
         /* file absent — fall back to the stream */
       }
       if (finalMessage == null) finalMessage = parsed.finalMessage;
-      const sanitizedErr = sanitizeOutput(stderr.slice(0, request.maxStderrBytes));
+      const sanitizedErr = sanitizeAndBound(stderr, request.maxStderrBytes, { open: outputTruncated || timedOut || cancelled || signal !== null });
       const completedAt = now();
       resolve({
         parsed, finalMessage, stderr: sanitizedErr.text, exitCode, signal, startedAt, completedAt,

@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { boundOutput, sanitizeOutput } from './output-sanitizer';
+import { sanitizeAndBound } from './output-sanitizer';
 
 /**
  * Bounded process runner (Prompt 7). Executes an ALREADY-APPROVED command
@@ -69,10 +69,11 @@ export function runBoundedCommand(
       clearTimeout(timeoutTimer);
       clearTimeout(escalateTimer);
       clearTimeout(confirmTimer);
-      const boundedOut = boundOutput(stdout, request.outputLimitBytes);
-      const boundedErr = boundOutput(stderr, request.outputLimitBytes);
-      const cleanOut = sanitizeOutput(boundedOut.text);
-      const cleanErr = sanitizeOutput(boundedErr.text);
+      // Redact the WHOLE captured text, THEN bound it: a secret the cap would have cut is redacted before it can be cut. A stream that stopped early
+      // (cap hit, timeout, cancel, kill) also loses its open tail.
+      const open = outputLimitHit || timedOut || cancelled || signal !== null || termination !== 'not_required';
+      const cleanOut = sanitizeAndBound(stdout, request.outputLimitBytes, { open });
+      const cleanErr = sanitizeAndBound(stderr, request.outputLimitBytes, { open });
       resolvePromise({
         exitCode,
         signal,
@@ -80,7 +81,7 @@ export function runBoundedCommand(
         stderr: cleanErr.text,
         timedOut,
         cancelled,
-        truncated: boundedOut.truncated || boundedErr.truncated || outputLimitHit,
+        truncated: cleanOut.truncated || cleanErr.truncated || outputLimitHit,
         outputLimitHit,
         termination,
         startedAt,
