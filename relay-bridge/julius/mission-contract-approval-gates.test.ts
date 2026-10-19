@@ -106,6 +106,7 @@ describe('V6 G-1: the approvalGates clause is parsed and sealed, or the contract
       'julius-option2-lab-1': 'sha256:ddcbc427835530b5b30b358114a67b046a55f83f965f22ebe79312aa248f1b33',
       'julius-unreal-mission-1': 'sha256:905815a6478f86c98d12fa2383ae2606f818e04697fbbc3ab44b5b0c8465cce0',
     };
+    const REGISTERED_GATED = new Set(['julius-v6-governance-1']);
     const dir = join(ROOT, '.github', 'julius-missions');
     const seen: string[] = [];
     for (const name of readdirSync(dir).sort()) {
@@ -114,11 +115,22 @@ describe('V6 G-1: the approvalGates clause is parsed and sealed, or the contract
       const parsed = parseLiveMissionContract(raw);
       expect(parsed.ok, `${name} parses`).toBe(true);
       if (!parsed.ok) throw new Error(parsed.problem);
+      if (REGISTERED_GATED.has(name)) {
+        // The one mission REGISTERED for a gate (scripts/julius-approval-gates.mjs): it carries the clause, and the clause is
+        // bound into its digest (the same contract without the clause digests differently). It has no pre-G-1 digest.
+        expect('approvalGates' in parsed.contract, `${name}: a registered mission carries its approvalGates clause`).toBe(true);
+        const without = parseLiveMissionContract(JSON.stringify({ ...JSON.parse(raw), approvalGates: undefined }));
+        if (!without.ok) throw new Error(without.problem);
+        expect(compileBootstrapRequest(parsed.contract, [], 'card:julius-live:1').missionBindingDigest)
+          .not.toBe(compileBootstrapRequest(without.contract, [], 'card:julius-live:1').missionBindingDigest);
+        seen.push(name);
+        continue;
+      }
       expect('approvalGates' in parsed.contract, `${name}: an ungated contract carries no approvalGates key`).toBe(false);
       expect(compileBootstrapRequest(parsed.contract, [], 'card:julius-live:1').missionBindingDigest, `${name}: the same digest as before G-1`).toBe(BEFORE[name]);
       seen.push(name);
     }
-    expect(seen, 'every committed contract is covered, and no literal is stale').toEqual(Object.keys(BEFORE).sort());
+    expect(seen, 'every committed contract is covered, and no literal is stale').toEqual([...Object.keys(BEFORE), ...REGISTERED_GATED].sort());
   });
 
   it('the clause is BOUND: a gated contract digests differently from the same contract ungated', () => {
