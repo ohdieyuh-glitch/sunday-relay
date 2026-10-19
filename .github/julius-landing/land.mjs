@@ -1,18 +1,19 @@
 // Driver of the autonomous landing gate. Runs inside .github/workflows/julius-land.yml with the workflow's own token (identity: github-actions[bot]).
-// It reads GitHub, asks `land-lib.mjs` whether EVERY condition holds, and only then squash-merges the pull request pinned to the cleared head. Fail closed: any problem,
-// any unexpected API answer and any timeout ends the job without a merge. DRY_RUN=true runs every check and never merges.
+// It reads GitHub, asks `land-lib.mjs` whether EVERY condition holds, and only then creates the landing commit (the cleared tree on the cleared base, the signed clearance in its
+// message) with the git data API and advances main with a NON-FORCED ref update (a compare-and-swap). It never uses the merge endpoint. Fail closed: any problem, any unexpected API
+// answer and any timeout ends the job without a landing. DRY_RUN=true makes every read and every check and writes nothing.
 import { readFileSync, appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { REPO, botCommentsDigest, checkCi, checkLanded, checkPullRequest, checkRuntime, ciIsPending, nonceUsed, parseClearance, verifyClearanceSignature } from './land-lib.mjs';
-import { PER_PAGE, readAllPages, squashTitle } from './land-lib.mjs';
+import { LANDER_IDENTITY, REPO, botCommentsDigest, buildLandingCommitMessage, checkCi, checkCreatedCommit, checkPullRequest, checkRuntime, ciIsPending, nonceUsed, parseClearance, parseLandingCommitMessage, verifyClearanceSignature } from './land-lib.mjs';
+import { PER_PAGE, readAllPages } from './land-lib.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const env = process.env;
 const API = 'https://api.github.com';
 const SELF_CHECK = 'Land a cleared pull request';
 const summary = (line) => { console.log(line); if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, line + '\n'); };
-const fail = (problems) => { for (const p of problems) summary(`REFUSED: ${p}`); summary('Nothing was merged.'); process.exit(1); };
+const fail = (problems) => { for (const p of problems) summary(`REFUSED: ${p}`); summary('Nothing was landed.'); process.exit(1); };
 
 async function gh(path, init = {}) {
   const res = await fetch(`${API}${path}`, { ...init, headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(init.headers ?? {}) } });
@@ -71,7 +72,7 @@ const tip = (await gh(`/repos/${REPO}/git/ref/heads/main`)).object.sha;
 const runtimeProblems = checkRuntime({ ref: env.GITHUB_REF, sha: env.GITHUB_SHA, mainSha: tip });
 if (runtimeProblems.length) fail(runtimeProblems);
 
-// 2. The pull request against the clearance.
+// 2. The pull request against the clearance (first look; the decision that counts is the FINAL one in step 4).
 let s = await snapshot();
 const history = await gh(`/repos/${REPO}/commits?sha=main&per_page=100`);
 if (nonceUsed(history.map((c) => c.commit?.message ?? ''), fields.nonce)) fail(['this clearance nonce was already used by a landed commit on main (one use per clearance)']);
@@ -88,29 +89,65 @@ const ciProblems = checkCi({ ...ci, required: requiredChecks });
 if (ciProblems.length) fail(ciProblems);
 summary(`CI: ${ci.checkRuns.length - 1} check runs and ${ci.statuses.length} statuses green on ${head}.`);
 
-// 4. Re-read everything immediately before acting: the head, main and the bot-comment set must still be exactly what was cleared.
+// 4. THE FINAL READ, immediately before acting, and the ONLY basis of the decision: the pull request, its files, the bot-comment digest, main's tip AND the CI state (every check run
+// and status, paginated fail-closed) are read again together. A check re-run, a new failing check or a status that appeared after step 3 is seen here, not missed.
 s = await snapshot();
-const again = checkPullRequest({ fields, now: Date.now(), pr: s.pr, commit: s.commit, files: s.files, fileRows: s.fileRows, mainSha: s.mainSha, allowedBranches, digest: s.digest });
-if (again.length) fail(again.map((p) => `re-check before merge: ${p}`));
+ci = await ciState();
+const again = [
+  ...checkPullRequest({ fields, now: Date.now(), pr: s.pr, commit: s.commit, files: s.files, fileRows: s.fileRows, mainSha: s.mainSha, allowedBranches, digest: s.digest }),
+  ...checkCi({ ...ci, required: requiredChecks }),
+];
+if (again.length) fail(again.map((p) => `re-check before landing: ${p}`));
 
-// Fail closed: ONLY the exact string "false" merges; "true", empty, "False" or anything else is a dry run.
-if (env.DRY_RUN !== 'false') { summary('DRY RUN: every gate holds; the squash merge would be sent now. Nothing was merged.'); process.exit(0); }
+// 5. The landing commit: built (and checked to round-trip) whether or not anything is written. Its message carries the signed clearance; see README for the format.
+const message = buildLandingCommitMessage({ clearanceText, signatureB64: env.SIGNATURE_B64 ?? '' });
+const reparsed = parseLandingCommitMessage(message, { expected: { pr: number, head, tree: fields.tree, base: fields.base }, publicKeyPem: keyPem });
+if (reparsed.problems.length) fail(reparsed.problems.map((p) => `the landing commit message does not round-trip: ${p}`));
+const commitBody = { message, tree: fields.tree, parents: [fields.base], author: LANDER_IDENTITY, committer: LANDER_IDENTITY };
+const refBody = (sha) => ({ sha, force: false });
 
-// 4b. Main's tip, read ONE MORE TIME immediately before the merge: if it moved since the checks, abort (the cleared base is no longer the tip).
+// Main's tip, read ONE MORE TIME immediately before acting: if it moved since the checks, abort (the cleared base is no longer the tip). The ref update below is a compare-and-swap
+// on the same fact, so a move after this read is refused by GitHub, not merely noticed.
 const tipNow = (await gh(`/repos/${REPO}/git/ref/heads/main`)).object.sha;
-if (tipNow !== fields.base) fail([`main moved to ${tipNow} immediately before the merge; the clearance names base ${fields.base}`]);
+if (tipNow !== fields.base) fail([`main moved to ${tipNow} immediately before the landing; the clearance names base ${fields.base}`]);
 
-// 5. The merge: squash, pinned to the cleared head (GitHub refuses if the head moved). The title is built here, never taken from the PR title: anyone with write access can edit
-// that, and it would land verbatim on main (claims of approval, another clearance's nonce). The message keeps `clearance-nonce <nonce>` exactly: nonceUsed reads it.
-const merge = await gh(`/repos/${REPO}/pulls/${number}/merge`, {
-  method: 'PUT', headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ sha: head, merge_method: 'squash', commit_title: squashTitle(number, head), commit_message: `Landed by the Julius landing workflow: reviewer clearance (${fields.kind}) issued ${fields.issued}, head ${head}, tree ${fields.tree}, base ${fields.base}. clearance-nonce ${fields.nonce}. Rollback: git revert of this commit.` }),
-});
-summary(`MERGED PR #${number}: ${merge.sha}`);
+// Fail closed: ONLY the exact string "false" lands; "true", empty, "False" or anything else is a dry run. A dry run has made every READ and every check above, and has computed the
+// commit body; it performs NO write (no commit, no ref update, no comment, no close) and prints exactly what the live run would send.
+if (env.DRY_RUN !== 'false') {
+  summary('DRY RUN: every gate holds. The live run would do exactly this, and nothing was written:');
+  summary(`  1. POST /repos/${REPO}/git/commits ${JSON.stringify({ ...commitBody, message: '(below)' })}`);
+  summary(`  2. read the created commit back and require tree ${fields.tree}, the single parent ${fields.base}, the exact message and the github-actions[bot] identity`);
+  summary(`  3. PATCH /repos/${REPO}/git/refs/heads/main ${JSON.stringify(refBody('<the created commit sha>'))} (not forced: fails if main is no longer ${fields.base})`);
+  summary(`  4. comment on PR #${number} naming the landed commit, then close the PR (it will not show as merged; that is expected)`);
+  summary(`--- the landing commit message ---\n${message}--- end ---`);
+  process.exit(0);
+}
 
-// 6. Verify the landed commit is exactly the cleared tree on the cleared base; a mismatch is reported loudly (the merge cannot be undone here).
-const landed = await gh(`/repos/${REPO}/commits/${merge.sha}`);
-const landedProblems = checkLanded({ landed, base: fields.base, tree: fields.tree });
-if (landedProblems.length) { for (const p of landedProblems) summary(`ALERT AFTER MERGE: ${p}`); process.exit(2); }
-summary(`Landed commit ${merge.sha}: parent ${fields.base}, tree ${fields.tree} (= the cleared tree).`);
-if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `landed=${merge.sha}\n`);
+// 6. Create the commit (git data API): exactly the cleared tree, exactly one parent = the cleared base. Nothing is on main yet.
+const created = await gh(`/repos/${REPO}/git/commits`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(commitBody) });
+const newSha = created?.sha;
+const readBack = await gh(`/repos/${REPO}/commits/${newSha}`);
+const createdProblems = checkCreatedCommit({ created: readBack, sha: newSha, base: fields.base, tree: fields.tree, message });
+if (createdProblems.length) fail(createdProblems.map((p) => `created commit ${newSha}: ${p}`));
+
+// 7. Advance main. NOT forced: a non-forced ref update is a fast-forward compare-and-swap that GitHub refuses unless main is still the parent of the new commit. Any failure refuses
+// and reports; there is no retry and never a force.
+try {
+  await gh(`/repos/${REPO}/git/refs/heads/main`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(refBody(newSha)) });
+} catch (error) {
+  fail([`the ref update was refused (main moved or the update is not a fast-forward); nothing landed, no retry: ${error instanceof Error ? error.message : String(error)}`]);
+}
+summary(`LANDED PR #${number}: ${newSha}`);
+
+// 8. Verify main now is the created commit, then close the PR with a comment naming it. The PR does not show as merged (the landed commit is not the PR head); that is expected.
+const mainAfter = (await gh(`/repos/${REPO}/git/ref/heads/main`)).object.sha;
+if (mainAfter !== newSha) { summary(`ALERT AFTER LANDING: main is ${mainAfter}, expected ${newSha}`); process.exit(2); }
+summary(`Landed commit ${newSha}: parent ${fields.base}, tree ${fields.tree} (= the cleared tree).`);
+if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `landed=${newSha}\n`);
+try {
+  await gh(`/repos/${REPO}/issues/${number}/comments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: `Landed on main as ${newSha} (tree ${fields.tree}, parent ${fields.base}) by the Julius landing workflow. This pull request is closed, not merged: the landed commit is not the PR head, which is expected.` }) });
+  await gh(`/repos/${REPO}/pulls/${number}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: 'closed' }) });
+} catch (error) {
+  summary(`WARNING: the commit landed but closing PR #${number} failed: ${error instanceof Error ? error.message : String(error)}. Close it by hand.`);
+  process.exit(3);
+}

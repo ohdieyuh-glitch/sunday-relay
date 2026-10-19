@@ -11,7 +11,7 @@ const SHA = /^[0-9a-f]{40}$/u;
 // changes are founder-governed), this landing system (key, allowlist, required checks, code), the mission pins file, migrations, the approver/approval gates, CODEOWNERS,
 // CLAUDE.md, package manifests and the evidence dump. Such changes land only through a founder-governed path.
 // Case-insensitive: a checkout on a case-insensitive filesystem (Windows, macOS) folds `.GITHUB/Julius-Landing/...` onto the governed file.
-export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
+export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance\.(mjs|d\.mts|test\.ts)$|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
 // SIGNED-EXCEPTION: the spend ceilings and the effort tripwire live here. A PR may change them only if the reviewer's signed clearance lists the EXACT file in `governed-exceptions`.
 export const EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
 // Matched case-insensitively for the same reason as above; a case variant is never in the signed list (that list holds exact names only), so it is always refused.
@@ -65,12 +65,17 @@ export function verifyClearanceSignature(text, signatureB64, publicKeyPem) {
   }
 }
 
-/** The digest the reviewer signs for "these exact bot comments, reviews and inline comments were seen". Order independent. */
+/** sha256 of a body, hex. A missing body hashes as the empty string. */
+const bodyHash = (body) => createHash('sha256').update(String(body ?? ''), 'utf8').digest('hex');
+
+/** The digest the reviewer signs for "these exact bot comments, reviews and inline comments were seen". Order independent. Every row carries sha256(body) AND the edit timestamp
+ * (`updated_at`, else `created_at`; `submitted_at` for a review): an edited body changes the digest even if a timestamp were ever to stay put, and a new edit timestamp changes it
+ * even if the body hash were to stay put. Rows are JSON arrays so no field can bleed into its neighbour. */
 export function botCommentsDigest({ issueComments, inlineComments, reviews }) {
   const rows = [
-    ...issueComments.map((c) => `issue:${c.user?.login}:${c.id}:${c.updated_at}`),
-    ...inlineComments.map((c) => `inline:${c.user?.login}:${c.id}:${c.updated_at ?? c.created_at}`),
-    ...reviews.map((r) => `review:${r.user?.login}:${r.id}:${r.state}:${r.commit_id}`),
+    ...issueComments.map((c) => JSON.stringify(['issue', c.user?.login ?? null, c.id ?? null, c.updated_at ?? c.created_at ?? null, bodyHash(c.body)])),
+    ...inlineComments.map((c) => JSON.stringify(['inline', c.user?.login ?? null, c.id ?? null, c.updated_at ?? c.created_at ?? null, bodyHash(c.body)])),
+    ...reviews.map((r) => JSON.stringify(['review', r.user?.login ?? null, r.id ?? null, r.state ?? null, r.commit_id ?? null, r.submitted_at ?? r.updated_at ?? null, bodyHash(r.body)])),
   ].sort();
   return createHash('sha256').update(rows.join('\n')).digest('hex');
 }
@@ -148,6 +153,107 @@ export function checkLanded({ landed, base, tree }) {
   return problems;
 }
 
+export const LANDER_IDENTITY = { name: 'github-actions[bot]', email: '41898282+github-actions[bot]@users.noreply.github.com' };
+
+/** The commit the lander CREATED, read back from GitHub (REST `commits/{sha}`), against exactly what it asked for: the cleared tree, ONE parent = the cleared base, the exact message
+ * and the github-actions[bot] identity. Any difference means the ref update must not follow. */
+export function checkCreatedCommit({ created, sha, base, tree, message }) {
+  const problems = [];
+  if (!SHA.test(String(sha))) problems.push('the created commit has no valid sha');
+  if (created?.sha !== undefined && created.sha !== sha) problems.push(`the read-back commit is ${created.sha}, expected ${sha}`);
+  if (created?.parents?.length !== 1 || created.parents[0]?.sha !== base) problems.push('the created commit does not have exactly one parent, the cleared base');
+  if (created?.commit?.tree?.sha !== tree) problems.push(`the created tree is ${created?.commit?.tree?.sha}, expected ${tree}`);
+  if (created?.commit?.message !== message) problems.push('the created commit message differs from the one that was sent');
+  for (const who of ['author', 'committer']) {
+    if (created?.commit?.[who]?.name !== LANDER_IDENTITY.name || created?.commit?.[who]?.email !== LANDER_IDENTITY.email) problems.push(`the created commit ${who} is not ${LANDER_IDENTITY.name}`);
+  }
+  return problems;
+}
+
+/* ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ */
+/* THE LANDING COMMIT MESSAGE (format "JULIUS LANDING v1"). The lander creates the landed commit itself (git data API), so the signed clearance travels INSIDE the commit it
+ * authorizes and the main-provenance gate can verify it from the commit message alone. ONE definition, here; .github/julius-landing/README.md specifies it for other implementers.
+ *
+ *   <free text: subject, blank line, body; no line may contain the words BEGIN JULIUS LANDING or END JULIUS LANDING>
+ *   <blank line>
+ *   -----BEGIN JULIUS LANDING-----
+ *   v: 1
+ *   clearance-nonce: <32 hex = the clearance's nonce>
+ *   clearance-b64: <standard base64, padded, ONE line, of the EXACT signed clearance text bytes>
+ *   signature-b64: <standard base64, padded, ONE line, of the 64-byte ed25519 signature over those bytes>
+ *   -----END JULIUS LANDING-----
+ *   <single trailing newline, nothing after>
+ *
+ * The PR number, head, tree and base are NOT repeated as free fields: a reader takes them ONLY from the signed clearance text. */
+export const LANDING_BEGIN = '-----BEGIN JULIUS LANDING-----';
+export const LANDING_END = '-----END JULIUS LANDING-----';
+const MARKER_WORDS = ['BEGIN JULIUS LANDING', 'END JULIUS LANDING'];
+const canonicalB64 = (text) => typeof text === 'string' && /^[A-Za-z0-9+/]*={0,2}$/u.test(text) && Buffer.from(text, 'base64').toString('base64') === text;
+const signatureIsCanonical = (b64) => canonicalB64(b64) && Buffer.from(b64, 'base64').length === 64;
+
+/** Build the landing commit message. `freeText` defaults to the title built from the clearance (PR number and head only); a caller-supplied text is allowed but THROWS when any line
+ * carries a marker word (a PR title, say, must never be able to forge or truncate the block) or a CR. THROWS when the clearance does not parse or the signature is not canonical
+ * base64 of 64 bytes (the signature is verified against the key by the caller, not here). */
+export function buildLandingCommitMessage({ clearanceText, signatureB64, freeText }) {
+  const parsed = parseClearance(clearanceText);
+  if (parsed.problems.length) throw new Error(`cannot build a landing message from a malformed clearance: ${parsed.problems.join('; ')}`);
+  const signature = String(signatureB64).trim();
+  if (!signatureIsCanonical(signature)) throw new Error('the signature must be canonical base64 of 64 bytes');
+  const f = parsed.fields;
+  const text = freeText ?? `${squashTitle(f.pr, f.head)}\n\nLanded by the Julius landing workflow: reviewer clearance (${f.kind}) issued ${f.issued}, head ${f.head}, tree ${f.tree}, base ${f.base}. Rollback: git revert of this commit.`;
+  const body = String(text).replace(/\n+$/u, '');
+  if (body === '') throw new Error('the free text of the landing message must not be empty');
+  if (body.includes('\r')) throw new Error('the free text of the landing message must not contain CR');
+  if (MARKER_WORDS.some((w) => body.includes(w))) throw new Error('the free text of the landing message must not contain a landing marker word');
+  return [body, '', LANDING_BEGIN, 'v: 1', `clearance-nonce: ${f.nonce}`, `clearance-b64: ${Buffer.from(clearanceText, 'utf8').toString('base64')}`, `signature-b64: ${signature}`, LANDING_END, ''].join('\n');
+}
+
+/** Parse a landing commit message strictly. Returns { problems, fields }; fields = { freeText, nonce, clearanceText, signatureB64, clearance } where `clearance` is the parsed signed
+ * text (the ONLY source of pr, head, tree and base). Options: `expected` { pr, head, tree, base } (any subset) must equal the signed clearance's values; `publicKeyPem` also
+ * verifies the ed25519 signature (without it only the format is judged and the caller must verify). */
+export function parseLandingCommitMessage(message, { expected, publicKeyPem } = {}) {
+  const problems = [];
+  const fields = {};
+  const text = String(message);
+  if (text.includes('\r')) problems.push('CR is not allowed');
+  if (!text.endsWith('\n') || text.endsWith('\n\n')) problems.push('the message must end with exactly one newline');
+  const lines = text.split('\n');
+  if (lines[lines.length - 1] === '') lines.pop();
+  const begins = lines.reduce((acc, l, i) => (l.includes('BEGIN JULIUS LANDING') ? [...acc, i] : acc), []);
+  const ends = lines.reduce((acc, l, i) => (l.includes('END JULIUS LANDING') ? [...acc, i] : acc), []);
+  if (begins.length !== 1 || ends.length !== 1) { problems.push(`exactly one BEGIN and one END marker are required (found ${begins.length} and ${ends.length})`); return { problems, fields }; }
+  const [b] = begins; const [e] = ends;
+  if (lines[b] !== LANDING_BEGIN) problems.push('the BEGIN marker must be exactly its line');
+  if (lines[e] !== LANDING_END) problems.push('the END marker must be exactly its line');
+  if (e !== lines.length - 1) problems.push('nothing may follow the END marker');
+  if (b === 0) problems.push('free text must come before the block');
+  if (e - b !== 5) problems.push('the block must hold exactly four key lines');
+  if (problems.length) return { problems, fields };
+  const block = lines.slice(b + 1, e);
+  const raw = {};
+  ['v', 'clearance-nonce', 'clearance-b64', 'signature-b64'].forEach((key, i) => {
+    if (!block[i].startsWith(`${key}: `)) problems.push(`block line ${i + 1} must start with "${key}: "`);
+    else raw[key] = block[i].slice(key.length + 2);
+  });
+  if (raw.v !== undefined && raw.v !== '1') problems.push('v must be 1');
+  if (raw['clearance-nonce'] !== undefined && !/^[0-9a-f]{32}$/u.test(raw['clearance-nonce'])) problems.push('clearance-nonce must be 32 hex characters');
+  if (raw['clearance-b64'] !== undefined && (raw['clearance-b64'] === '' || !canonicalB64(raw['clearance-b64']))) problems.push('clearance-b64 must be canonical base64 on one line');
+  if (raw['signature-b64'] !== undefined && !signatureIsCanonical(raw['signature-b64'])) problems.push('signature-b64 must be canonical base64 of 64 bytes');
+  if (problems.length) return { problems, fields };
+  const clearanceText = Buffer.from(raw['clearance-b64'], 'base64').toString('utf8');
+  const parsed = parseClearance(clearanceText);
+  for (const p of parsed.problems) problems.push(`clearance: ${p}`);
+  if (parsed.problems.length === 0) {
+    const c = parsed.fields;
+    if (raw['clearance-nonce'] !== c.nonce) problems.push(`the block nonce (${raw['clearance-nonce']}) differs from the signed clearance nonce (${c.nonce})`);
+    for (const key of ['pr', 'head', 'tree', 'base']) if (expected?.[key] !== undefined && String(expected[key]) !== c[key]) problems.push(`the signed clearance ${key} is ${c[key]}, expected ${expected[key]}`);
+    fields.clearance = c;
+  }
+  if (publicKeyPem !== undefined) problems.push(...verifyClearanceSignature(clearanceText, raw['signature-b64'], publicKeyPem));
+  Object.assign(fields, { freeText: lines.slice(0, b).join('\n'), nonce: raw['clearance-nonce'], clearanceText, signatureB64: raw['signature-b64'] });
+  return { problems, fields };
+}
+
 /** The paging rule shared by the lander and the reviewer tools, so both read the same set. `getPage(page)` returns that page's rows (per_page=100). A short page ends the
  * read; a FULL page at the cap THROWS (fail closed): a silent stop would hide rows past the cap (a forbidden file, a failing check, a comment the digest must cover). */
 export const PER_PAGE = 100;
@@ -170,7 +276,8 @@ export function squashTitle(number, head) {
 
 /** One use per nonce: a clearance whose nonce already appears in a commit message on main's recent history has been used. */
 export function nonceUsed(commitMessages, nonce) {
-  return commitMessages.some((m) => String(m).includes(`clearance-nonce ${nonce}`));
+  // Two spellings: `clearance-nonce <nonce>` (the earlier merge-API landings) and `clearance-nonce: <nonce>` (the key line of the landing block below).
+  return commitMessages.some((m) => String(m).includes(`clearance-nonce ${nonce}`) || String(m).includes(`clearance-nonce: ${nonce}`));
 }
 
 /** The job must be running the workflow as it is on main's tip: a dispatch from any other ref or commit is refused. */
