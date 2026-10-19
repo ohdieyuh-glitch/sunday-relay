@@ -36,7 +36,7 @@ const leaked = (stored: string, secret: string, k = 6): string | null => {
   return null;
 };
 
-interface Plan { readonly stream: 'stdout' | 'stderr'; readonly pieces: readonly string[]; readonly gapMs?: number; readonly hang?: boolean }
+interface Plan { readonly stream: 'stdout' | 'stderr'; readonly pieces: readonly string[]; readonly gapMs?: number; readonly hang?: boolean; readonly exitCode?: number }
 
 const run = (plan: Plan, outputLimitBytes: number, timeoutMs = 20_000) => {
   const script = `
@@ -44,14 +44,14 @@ const run = (plan: Plan, outputLimitBytes: number, timeoutMs = 20_000) => {
     const gap = Number(process.env.GAP || 0);
     const out = process.${plan.stream};
     let i = 0;
-    const next = () => { if (i < pieces.length) { out.write(pieces[i++]); setTimeout(next, gap); } else if (process.env.HANG === '1') { setInterval(() => {}, 1000); } };
+    const next = () => { if (i < pieces.length) { out.write(pieces[i++]); setTimeout(next, gap); } else if (process.env.HANG === '1') { setInterval(() => {}, 1000); } else if (process.env.EXITCODE) { process.exitCode = Number(process.env.EXITCODE); } };
     next();`;
   return runBoundedCommand(
     {
       executable: process.execPath,
       args: ['-e', script],
       cwd: process.cwd(),
-      env: { ...process.env, PIECES: JSON.stringify(plan.pieces), GAP: String(plan.gapMs ?? 0), HANG: plan.hang === true ? '1' : '0' } as Record<string, string>,
+      env: { ...process.env, PIECES: JSON.stringify(plan.pieces), GAP: String(plan.gapMs ?? 0), HANG: plan.hang === true ? '1' : '0', EXITCODE: plan.exitCode === undefined ? '' : String(plan.exitCode) } as Record<string, string>,
       timeoutMs,
       outputLimitBytes,
     },
@@ -105,6 +105,253 @@ const sweepShapes = (): Shape[] => {
 const TRAILS: Array<[string, string]> = [['lines', '\nnext line of output\ndone.\n'], ['none', ''], ['space', ' '], ['comma-word', ', and more']];
 const surround = (secret: string, lead: string, trail: string): string => `${lead}${secret}${trail}`;
 const LEADS: Array<[string, string]> = [['plain', 'ok line one\nstep two done '], ['multibyte', 'caf\u00e9 \u2713 ok line\nstep two done '], ['stream-start', ''], ['after-newline', 'a line\n']];
+
+/**
+ * THE STRUCTURED PEM SWEEP (third cut). Several private key blocks in ONE stream, in every combination of: complete (dashed footer), incomplete (no footer), a BARE footer phrase, a footer CUT inside its
+ * dashes, a header phrase INSIDE a body; five key kinds; LF and CRLF line ends. Every strict cut offset, by the byte cap and by a kill (a kill may also come after the last byte). Oracle: no 6-character window
+ * of ANY body line is stored (the headers, footers and the phrase inside a body are not secrets). The cap is only judged for strict cuts (a stream the cap did not cut ended by itself and is stored as before).
+ */
+type Footer = 'full' | 'bare' | 'cut' | 'none';
+interface Piece { readonly footer: Footer; readonly inner?: boolean }
+const KINDS = ['PRIVATE KEY', 'RSA PRIVATE KEY', 'EC PRIVATE KEY', 'OPENSSH PRIVATE KEY', 'ENCRYPTED PRIVATE KEY'];
+const P = (footer: Footer, inner = false): Piece => ({ footer, inner });
+const STRUCTURES: Array<[string, Piece[]]> = [
+  ['incomplete+incomplete', [P('none'), P('none')]],
+  ['complete+incomplete', [P('full'), P('none')]],
+  ['incomplete+complete', [P('none'), P('full')]],
+  ['complete+complete+incomplete', [P('full'), P('full'), P('none')]],
+  ['incomplete+complete+incomplete', [P('none'), P('full'), P('none')]],
+  ['complete+incomplete+complete', [P('full'), P('none'), P('full')]],
+  ['three incomplete', [P('none'), P('none'), P('none')]],
+  ['incomplete+incomplete+complete', [P('none'), P('none'), P('full')]],
+  ['bare footer between headers', [P('bare'), P('none')]],
+  ['cut footer between headers', [P('cut'), P('none')]],
+  ['bare footer then complete', [P('bare'), P('full')]],
+  ['cut footer then complete', [P('cut'), P('full')]],
+  ['incomplete+bare+incomplete', [P('none'), P('bare'), P('none')]],
+  ['complete+bare+incomplete', [P('full'), P('bare'), P('none')]],
+  ['incomplete+cut+complete', [P('none'), P('cut'), P('full')]],
+  ['single complete', [P('full')]],
+  ['single incomplete', [P('none')]],
+  ['single bare footer', [P('bare')]],
+  ['single cut footer', [P('cut')]],
+  ['phrase inside body, incomplete+incomplete', [P('none', true), P('none')]],
+  ['phrase inside body, complete+incomplete', [P('full', true), P('none')]],
+  ['phrase inside body, incomplete+complete', [P('none', true), P('full')]],
+  ['phrase inside body, incomplete (second)', [P('full'), P('none', true)]],
+];
+
+const buildPem = (pieces: Piece[], eol: string, kindShift: number, joiner: string = eol): { stream: string; secrets: string[] } => {
+  const secrets: string[] = [];
+  const parts: string[] = [];
+  pieces.forEach((piece, i) => {
+    const kind = KINDS[(i + kindShift) % KINDS.length];
+    const lines = [rand(64), piece.inner === true ? 'inner' : rand(64), rand(64)];
+    const bodyLines = lines.map((line) => {
+      if (line !== 'inner') { secrets.push(line); return line; }
+      const a = rand(24);
+      const b = rand(24);
+      secrets.push(a, b);
+      return `${a} BEGIN ${'PRIVATE'} KEY ${b}`;
+    });
+    const footer = piece.footer === 'full' ? `${DASHES}END ${kind}${DASHES}` : piece.footer === 'bare' ? `END ${kind}` : piece.footer === 'cut' ? `${DASHES}END ${kind}--` : '';
+    parts.push([`${DASHES}BEGIN ${kind}${DASHES}`, ...bodyLines, ...(footer === '' ? [] : [footer])].join(eol));
+  });
+  // a joiner other than the line end glues a block's last byte to the next header (`cat a.pem b.pem` when a.pem lacks a final newline); a CUT footer glued to a header would merge dashes into a
+  // shape the sanitizer cannot read even on an uncut stream, so those joins keep the line end
+  const glued = parts.map((_part, i) => (i < parts.length - 1 && pieces[i].footer !== 'cut' ? joiner : eol));
+  const body = parts.map((part, i) => `${part}${i < parts.length - 1 ? glued[i] : ''}`).join('');
+  return { stream: `build output${eol}${body}${eol}done${eol}`, secrets };
+};
+
+/** The first 6-character window of any secret found in `stored`, or null. The secrets' windows are built once per secrets array (a WeakMap), then ONE pass over the stored text looks each window up. */
+const windowCache = new WeakMap<string[], Set<string>>();
+const leakedAny = (stored: string, secrets: string[], size = 6): string | null => {
+  let windows = windowCache.get(secrets);
+  if (windows === undefined) {
+    windows = new Set<string>();
+    for (const secret of secrets) for (let a = 0; a + size <= secret.length; a += 1) windows.add(secret.slice(a, a + size));
+    windowCache.set(secrets, windows);
+  }
+  for (let a = 0; a + size <= stored.length; a += 1) { const w = stored.slice(a, a + size); if (windows.has(w)) return w; }
+  return null;
+};
+
+/**
+ * ADVERSARIAL FUZZ (my own pass for the third cut). A seeded grammar: 1-5 fragments joined by random separators (including NONE and odd whitespace). A fragment is a vendor token, a keyword secret, a JWT, one or
+ * more PEM blocks (random footer kind, key kind, CRLF or LF) or ordinary text. A random cut, by the cap or by a kill. The oracle is the sweep's: no 6-character window of any secret body stored.
+ */
+describe('ADVERSARIAL FUZZ: random mixes of every shape, odd whitespace, random separators, random cuts', () => {
+  it('no 6-character window of any secret body is stored (seeded, 40,000 streams, cap and kill)', () => {
+    let state = 0x9e3779b9;
+    const next = (n: number): number => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return (state >>> 8) % n; };
+    const pick = <T,>(items: readonly T[]): T => items[next(items.length)];
+    const SEPARATORS = [' ', '\n', '\r\n', '\t', '  ', ', ', ': ', '\n\n', '"', '(', '='];
+    const WORDS = ['build', 'ok', 'step', 'done', 'line', 'END', 'BEGIN', 'KEY', 'PRIVATE', 'error:', 'x=1', '--', '-----'];
+    const text = (): string => Array.from({ length: 1 + next(5) }, () => pick(WORDS)).join(pick([' ', '  ', '\t', '\n', '\r\n']));
+    const alnum = (n: number): string => { const a = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; let o = ''; for (let i = 0; i < n; i += 1) o += a[next(a.length)]; return o; };
+    const fragment = (secrets: string[]): string => {
+      switch (next(9)) {
+        case 0: { const b = alnum(8 + next(40)); secrets.push(b); return `sk-${b}`; }
+        case 1: { const b = alnum(12 + next(20)).toUpperCase(); secrets.push(b); return `AKIA${b}`; }
+        case 2: { const b = alnum(20 + next(30)); secrets.push(b); return `gh${pick(['p', 'o', 'u', 's', 'r'])}_${b}`; }
+        case 3: { const b = alnum(10 + next(30)); secrets.push(b); return `xox${pick(['b', 'a', 'p', 'r', 's'])}-${b}`; }
+        case 4: { const h = alnum(12 + next(20)); const p = alnum(12 + next(20)); const g = alnum(6 + next(20)); secrets.push(h, p, g); return `eyJ${h}.eyJ${p}.${g}`; }
+        case 5: { const b = alnum(8 + next(30)); secrets.push(b); return ` ${pick(['password', 'secret', 'token', 'api_key', 'api-key', 'apikey', 'PASSWORD', 'Token'])}${pick(['=', ':', ' = ', ': ', ' :'])}${b}`; }
+        case 6: case 7: {
+          const eol = pick(['\n', '\r\n']);
+          return Array.from({ length: 1 + next(3) }, () => {
+            const kind = pick(KINDS);
+            const lines = Array.from({ length: 1 + next(3) }, () => alnum(30 + next(40)));
+            secrets.push(...lines);
+            const footer = pick(['full', 'full', 'bare', 'cut', 'none']);
+            const foot = footer === 'full' ? `${DASHES}END ${kind}${DASHES}` : footer === 'bare' ? `END ${kind}` : footer === 'cut' ? `${DASHES}END ${kind}${'-'.repeat(next(5))}${eol}` : '';
+            return [`${DASHES}BEGIN ${kind}${DASHES}`, ...lines, ...(foot === '' ? [] : [foot])].join(eol);
+          }).join(pick([eol, `${eol}${eol}`, '']));
+        }
+        default: return text();
+      }
+    };
+    const failures: string[] = [];
+    let streams = 0;
+    for (let i = 0; i < 40_000; i += 1) {
+      const secrets: string[] = [];
+      const stream = Array.from({ length: 1 + next(5) }, () => fragment(secrets)).join(pick(SEPARATORS));
+      streams += 1;
+      const k = next(stream.length + 1);
+      if (k < stream.length) {
+        const cap = secureCapturedStream(stream, k, false);
+        const capLeak = leakedAny(cap.text, secrets);
+        if (capLeak !== null) failures.push(`CAP k=${k}: ${JSON.stringify(capLeak)} stream ${JSON.stringify(stream)} STORED ${JSON.stringify(cap.text)}`);
+      }
+      const kill = secureCapturedStream(stream.slice(0, k), 1_000_000, true);
+      const killLeak = leakedAny(kill.text, secrets);
+      if (killLeak !== null) failures.push(`KILL k=${k}: ${JSON.stringify(killLeak)} stream ${JSON.stringify(stream.slice(0, 200))}`);
+    }
+    // eslint-disable-next-line no-console
+    console.log(`FUZZ: ${streams} streams, ${failures.length} leak(s)`);
+    expect(failures.slice(0, 6), `${failures.length} leak(s); first ones`).toEqual([]);
+  });
+});
+
+/**
+ * TWO KEYS, NO NEWLINE BETWEEN THEM (`cat a.pem b.pem` when a.pem lacks a final newline): both orders, RSA then EC and EC then RSA, glued with nothing, with five dashes, and (controls) with a line end, a space and an 'x'.
+ * Every strict cut by the cap and every cut by a kill, with the second block cut or whole.
+ */
+describe('TWO KEYS glued without a newline: both orders, every separator, every cut', () => {
+  it('no 6-character window of either body is stored', () => {
+    const failures: string[] = [];
+    let cuts = 0;
+    for (const [first, second] of [['RSA PRIVATE KEY', 'EC PRIVATE KEY'], ['EC PRIVATE KEY', 'RSA PRIVATE KEY']] as const) {
+      for (const sep of ['', '-----', '\n', '\r\n', ' ', 'x']) {
+        const bodyA = [rand(64), rand(64)];
+        const bodyB = [rand(64), rand(64)];
+        const block = (kind: string, body: string[]): string => [`${DASHES}BEGIN ${kind}${DASHES}`, ...body, `${DASHES}END ${kind}${DASHES}`].join('\n');
+        const stream = `${block(first, bodyA)}${sep}${block(second, bodyB)}${sep === '' || sep === '-----' ? '\n' : ''}`;
+        const secrets = [...bodyA, ...bodyB];
+        for (let k = 0; k <= stream.length; k += 1) {
+          cuts += 2;
+          const cap = secureCapturedStream(stream, k, false);
+          if (leakedAny(cap.text, secrets) !== null) failures.push(`CAP  ${first}+${second} sep=${JSON.stringify(sep)} k=${k}`);
+          const kill = secureCapturedStream(stream.slice(0, k), 1_000_000, true);
+          if (leakedAny(kill.text, secrets) !== null) failures.push(`KILL ${first}+${second} sep=${JSON.stringify(sep)} k=${k}`);
+        }
+      }
+    }
+    // eslint-disable-next-line no-console
+    console.log(`TWO KEYS: ${cuts} cuts, ${failures.length} leak(s)`);
+    expect(failures.slice(0, 8), `${failures.length} leak(s); first ones`).toEqual([]);
+  });
+});
+
+describe('a stream that ENDS BY ITSELF is not exempt from the unterminated-key rule (REVIEW, finding 2a)', () => {
+  it('P10: exit 0 after a partial private key (a BEGIN header and body, no footer, e.g. `head -c 500 key.pem`): the body is not stored', async () => {
+    const body = Array.from({ length: 4 }, () => rand(64)).join('\n');
+    const r = await run({ stream: 'stdout', pieces: [`before\n${PEM_HEAD}\n${body}`] }, 100_000);
+    expect(r.exitCode).toBe(0);
+    expect(r.signal).toBeNull();
+    expect(leaked(r.stdout, body), `stored: ${JSON.stringify(r.stdout.slice(-100))}`).toBeNull();
+    expect(r.stdout).toContain('before');
+  });
+
+  it('P11: a NON-ZERO exit with no signal (a crash) after a partial private key: the body is not stored (stderr too)', async () => {
+    for (const stream of ['stdout', 'stderr'] as const) {
+      const body = Array.from({ length: 4 }, () => rand(64)).join('\n');
+      const r = await run({ stream, pieces: [`${PEM_HEAD}\n${body}\nmore log lines`], exitCode: 3 }, 100_000);
+      expect(r.exitCode).toBe(3);
+      expect(r.signal).toBeNull();
+      expect(leaked(r[stream], body), `${stream} stored: ${JSON.stringify(r[stream].slice(-100))}`).toBeNull();
+    }
+  });
+
+  it('S7: a COMPLETE private key in a stream that ended by itself is unchanged: fully redacted, the text after it kept', async () => {
+    const body = Array.from({ length: 4 }, () => rand(64)).join('\n');
+    const r = await run({ stream: 'stdout', pieces: [`${PEM_HEAD}\n${body}\n${PEM_FOOT}\nafter the key\n`] }, 100_000);
+    expect(leaked(r.stdout, body)).toBeNull();
+    expect(r.stdout).toContain('after the key');
+    expect(r.stdout).toContain('[REDACTED:secret-shape]');
+  });
+
+  it('S8: the trailing-partial-token step stays for early-stopped streams only: an \'ok\' with no trailing newline in a stream that ended by itself is stored verbatim', async () => {
+    const r = await run({ stream: 'stdout', pieces: ['line one\nok'] }, 100_000);
+    expect(r.stdout).toBe('line one\nok');
+  });
+});
+
+describe('PEM SWEEP: several key blocks in one stream, every structure x kind rotation x line end, every cut incl. the uncut stream, cap and kill', () => {
+  it('no 6-character window of any body line is stored', () => {
+    const t0 = Date.now();
+    const failures: string[] = [];
+    const byStructure: string[] = [];
+    let cuts = 0;
+    for (const [name, pieces] of STRUCTURES) {
+      let n = 0;
+      for (const [eolName, eol] of [['LF', '\n'], ['CRLF', '\r\n']] as const) {
+        for (const [shift, joinerName, joiner] of [[0, 'eol', eol], [2, 'eol', eol], [0, 'none', ''], [1, 'dashes', '-----']] as const) {
+          if (pieces.length < 2 && joinerName !== 'eol') continue;
+          const { stream, secrets } = buildPem(pieces, eol, shift, joiner);
+          for (let k = 0; k <= stream.length; k += 1) {
+            {
+              n += 1;
+              // k === stream.length is a stream that ENDED BY ITSELF (not cut): the unterminated-key rule applies to it too
+              const cap = secureCapturedStream(stream, k, false);
+              const capLeak = leakedAny(cap.text, secrets);
+              if (capLeak !== null) failures.push(`CAP  ${name}/${eolName}/${joinerName}/shift${shift} k=${k}: ${JSON.stringify(capLeak)} tail ${JSON.stringify(cap.text.slice(-60))}`);
+            }
+            n += 1;
+            const kill = secureCapturedStream(stream.slice(0, k), 1_000_000, true);
+            const killLeak = leakedAny(kill.text, secrets);
+            if (killLeak !== null) failures.push(`KILL ${name}/${eolName}/${joinerName}/shift${shift} k=${k}: ${JSON.stringify(killLeak)} tail ${JSON.stringify(kill.text.slice(-60))}`);
+          }
+        }
+      }
+      cuts += n;
+      byStructure.push(`${name.padEnd(46)} ${String(n).padStart(6)} cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)`);
+    }
+    // eslint-disable-next-line no-console
+    console.log(`PEM SWEEP coverage (${cuts} cuts in ${Date.now() - t0} ms):\n${byStructure.join('\n')}`);
+    const by: Record<string, number> = {};
+    for (const f of failures) { const key = f.split(' k=')[0].replace(/\/(LF|CRLF)\/[a-z]+\/shift\d/, ''); by[key] = (by[key] ?? 0) + 1; }
+    // eslint-disable-next-line no-console
+    console.log(`PEM SWEEP LEAKS BY STRUCTURE AND CUT KIND (${failures.length}): ${JSON.stringify(by)}`);
+    expect(failures.slice(0, 10), `${failures.length} leak(s); first ones`).toEqual([]);
+  });
+
+  it('the PEM sweep can fail: against a runner that withholds only from the LAST header, it finds the multi-header leak (self-test of the control)', () => {
+    let leaks = 0;
+    for (const [, pieces] of STRUCTURES.slice(0, 3)) {
+      const { stream, secrets } = buildPem(pieces, '\n', 0);
+      for (let k = 1; k < stream.length; k += 1) {
+        const text = stream.slice(0, k);
+        const begins = [...text.matchAll(/BEGIN [A-Z ]*PRIVATE KEY/g)];
+        const last = begins[begins.length - 1];
+        const naive = last?.index !== undefined && !/-----END [A-Z ]*PRIVATE KEY-----/.test(text.slice(last.index)) ? `${text.slice(0, last.index)}[REDACTED:secret-shape]` : text;
+        if (leakedAny(naive.replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[R]').replace(/BEGIN [A-Z ]*PRIVATE KEY/g, '[R]'), secrets) !== null) leaks += 1;
+      }
+    }
+    expect(leaks).toBeGreaterThan(20);
+  });
+});
 
 describe('SWEEP: every secret shape, cut at every byte offset, by the byte cap and by a kill', () => {
   it('no 6-character window of any secret body is stored, for any shape, any cut kind, any offset', () => {
