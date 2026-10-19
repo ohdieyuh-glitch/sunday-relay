@@ -1,0 +1,907 @@
+{
+  "manifestVersion": "1.2.0",
+  "description": "Sunday Relay website/CLI capability parity registry. Sunday Relay is ONE repository; the website and the CLI are two surfaces of it that share the canonical domain modules directly, and every declaration below is verified against this tree. Statuses are evidence-based: a capability is only 'implemented' when a real entry point exists, and only 'tested' when a named test asserts it.",
+  "capabilities": [
+    {
+      "capabilityId": "relay-dog-identity",
+      "name": "Official Relay Dog identity",
+      "domain": "relay_dog",
+      "parityClass": "semantic_visual_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/pixel-dog/RelayPixelDog.tsx"
+      ],
+      "cliEntryPoints": [
+        "src/relay/cli/product/dog.ts"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/official-relay-dog/official-relay-dog.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/product/official-relay-dog.test.ts",
+        "src/relay/cli/product/product-hardening.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/shared/official-relay-dog-sprite.ts",
+        "src/relay/shared/official-relay-dog-parity.ts"
+      ]
+    },
+    {
+      "capabilityId": "relay-dog-state-semantics",
+      "name": "Relay Dog state semantics",
+      "domain": "relay_dog",
+      "parityClass": "semantic_visual_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayWorkspaceDog.tsx",
+        "src/relay/ui/project-workspace/use-viewport-width.ts",
+        "src/relay/ui/relay-dog-motion/dog-behavior.ts",
+        "src/relay/ui/relay-stage/RelayStage.tsx",
+        "src/relay/ui/relay-stage/RelayStageBackdrop.tsx",
+        "src/relay/ui/relay-stage/RelayStageBackdropPicker.tsx"
+      ],
+      "cliEntryPoints": [
+        "src/relay/cli/product/dog.ts",
+        "src/relay/cli/product/stage.ts"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/official-relay-dog/official-relay-dog.test.tsx",
+        "src/relay/ui/project-workspace/workspace-stage.test.tsx",
+        "src/relay/ui/relay-dog-motion/relay-dog-motion.test.tsx",
+        "src/relay/ui/relay-stage/relay-stage-backdrop.test.tsx",
+        "src/relay/ui/relay-stage/relay-stage-picker.test.tsx",
+        "src/relay/ui/relay-stage/relay-stage.test.tsx",
+        "src/relay/ui/relay-stage/stage-real-actor.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/product/official-relay-dog.test.ts",
+        "src/relay/cli/product/stage.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/shared/official-relay-dog-states.ts",
+        "src/relay/shared/relay-stage-backdrop.test.ts",
+        "src/relay/shared/relay-stage-backdrop.ts",
+        "src/relay/shared/relay-stage-cast.test.ts",
+        "src/relay/shared/relay-stage-cast.ts",
+        "src/relay/shared/relay-stage-layout.test.ts",
+        "src/relay/shared/relay-stage-layout.ts"
+      ]
+    },
+    {
+      "capabilityId": "psp-agent-id-import",
+      "name": "PSP Agent ID import",
+      "domain": "psp",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/psp-import/RelayPspAgentImport.tsx",
+        "src/relay/ui/project-workspace/RelayProjectWorkspace.tsx#agentsPanel"
+      ],
+      "cliEntryPoints": [
+        "relay agent import",
+        "src/relay/cli/product/psp-agent-import.ts"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/psp-import/psp-import-ui.test.tsx",
+        "src/relay/psp/psp-domain.test.ts"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/product/psp-agent-import.test.ts",
+        "src/relay/psp/psp-domain.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/psp/psp-agent-id.ts",
+        "src/relay/psp/psp-entitlement.ts",
+        "src/relay/psp/psp-import.ts",
+        "src/relay/psp/psp-errors.ts",
+        "src/relay/psp/psp-trace.ts"
+      ]
+    },
+    {
+      "capabilityId": "mission-contract-creation",
+      "name": "Mission Contract creation",
+      "domain": "mission",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/entry-home/RelayProjectBriefDraft.tsx",
+        "src/relay/ui/project-settings/RelayProjectSettings.tsx"
+      ],
+      "cliEntryPoints": [
+        "relay project new",
+        "src/relay/cli/product/app.ts#DRAFT_FIELDS"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/project-settings/project-settings.interactions.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/product/product.test.ts"
+      ],
+      "sharedDomainReferences": []
+    },
+    {
+      "capabilityId": "mission-start",
+      "name": "Mission start",
+      "domain": "mission",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-settings/RelayProjectSettings.tsx#onStartProject"
+      ],
+      "cliEntryPoints": [
+        "relay project run",
+        "src/relay/cli/product/commands.ts#productRunConfirmation"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/project-settings/project-settings.interactions.test.tsx",
+        "src/relay/ui/app/store.test.ts"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/product/product-hardening.test.ts"
+      ],
+      "sharedDomainReferences": []
+    },
+    {
+      "capabilityId": "mission-pause",
+      "name": "Mission pause",
+      "domain": "mission",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/mission-control/RelayMissionRunControls.tsx#PAUSE",
+        "src/relay/ui/project-workspace/RelayLiveMissionControl.tsx#runControls"
+      ],
+      "cliEntryPoints": [
+        "relay (interactive) /pause",
+        "src/relay/core/app.ts#pause -> pause-run"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/mission-control/mission-pause-resume.test.ts",
+        "src/relay/ui/mission-control/RelayMissionRunControls.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/cli.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/commands/command-types.ts#RELAY_MISSION_COMMAND_INTENTS(pause)",
+        "src/relay/mission/commands/command-executor.ts",
+        "src/relay/mission/commands/command-checkpoint.ts"
+      ]
+    },
+    {
+      "capabilityId": "mission-resume",
+      "name": "Mission resume",
+      "domain": "mission",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/mission-control/RelayMissionRunControls.tsx#RESUME",
+        "src/relay/ui/project-workspace/RelayLiveMissionControl.tsx#runControls"
+      ],
+      "cliEntryPoints": [
+        "relay (interactive) /resume",
+        "src/relay/core/app.ts#resume -> resume-run"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/mission-control/mission-pause-resume.test.ts",
+        "src/relay/ui/mission-control/RelayMissionRunControls.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/cli.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/commands/command-types.ts#RELAY_MISSION_COMMAND_INTENTS(resume)",
+        "src/relay/mission/commands/command-executor.ts"
+      ]
+    },
+    {
+      "capabilityId": "mission-cancel",
+      "name": "Mission cancel",
+      "domain": "mission",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayLiveMissionControl.tsx#STOP MISSION"
+      ],
+      "cliEntryPoints": [
+        "relay (interactive) /cancel",
+        "src/relay/core/app.ts#cancel"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/app/live-mission.test.ts"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/cli.test.ts"
+      ],
+      "sharedDomainReferences": []
+    },
+    {
+      "capabilityId": "agent-assignment",
+      "name": "Agent assignment",
+      "domain": "agent",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-settings/RelayProjectSettings.tsx#agentOptions"
+      ],
+      "cliEntryPoints": [
+        "relay project workforce",
+        "src/relay/cli/product/app.ts#DRAFT_FIELDS(architect,codingAgent,reviewer)"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/project-settings/project-settings.interactions.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/product/product.test.ts"
+      ],
+      "sharedDomainReferences": []
+    },
+    {
+      "capabilityId": "agent-reassignment",
+      "name": "Agent reassignment mid-mission",
+      "domain": "agent",
+      "parityClass": "functional_required",
+      "websiteStatus": "planned",
+      "cliStatus": "planned",
+      "websiteEntryPoints": [],
+      "cliEntryPoints": [],
+      "websiteTestReferences": [],
+      "cliTestReferences": [],
+      "sharedDomainReferences": []
+    },
+    {
+      "capabilityId": "review",
+      "name": "Independent review findings",
+      "domain": "review",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayReviewerStatus.tsx"
+      ],
+      "cliEntryPoints": [
+        "relay project findings",
+        "relay (interactive) /review"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/project-workspace/project-workspace.interactions.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/product/product-hardening.test.ts",
+        "src/relay/cli/mission-control.test.ts"
+      ],
+      "sharedDomainReferences": []
+    },
+    {
+      "capabilityId": "repair",
+      "name": "Repair cycle",
+      "domain": "review",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayReviewerStatus.tsx#onOpenRepair"
+      ],
+      "cliEntryPoints": [
+        "relay project repairs"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/project-workspace/project-workspace.interactions.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/product/product-hardening.test.ts"
+      ],
+      "sharedDomainReferences": []
+    },
+    {
+      "capabilityId": "approval",
+      "name": "Manual Task approval",
+      "domain": "mission",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayManualTaskPanel.tsx#onApproveManualTask"
+      ],
+      "cliEntryPoints": [
+        "relay (interactive) /done | /cannot-complete",
+        "relay demo manual"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/project-workspace/project-workspace.interactions.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/manual.test.ts"
+      ],
+      "sharedDomainReferences": []
+    },
+    {
+      "capabilityId": "mission-status",
+      "name": "Mission status",
+      "domain": "mission",
+      "parityClass": "semantic_visual_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayProjectHeader.tsx",
+        "src/relay/ui/project-workspace/RelayProjectPhaseRail.tsx"
+      ],
+      "cliEntryPoints": [
+        "relay project status",
+        "src/relay/cli/product/renderer.ts#renderProjectHome"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/project-workspace/project-workspace.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/product/product.test.ts"
+      ],
+      "sharedDomainReferences": []
+    },
+    {
+      "capabilityId": "evidence-inspection",
+      "name": "Evidence inspection",
+      "domain": "evidence",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayVerificationSummary.tsx"
+      ],
+      "cliEntryPoints": [
+        "relay project evidence",
+        "relay (interactive) /evidence"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/project-workspace/project-workspace.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/product/product-hardening.test.ts"
+      ],
+      "sharedDomainReferences": []
+    },
+    {
+      "capabilityId": "mission-cost-receipts",
+      "name": "Mission cost receipts",
+      "domain": "economics",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayMissionEconomics.tsx#VIEW RECEIPTS"
+      ],
+      "cliEntryPoints": [
+        "relay mission receipts",
+        "src/relay/cli/mission-economics.ts#renderMissionReceipts"
+      ],
+      "websiteTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/ui/project-workspace/mission-economics.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/cli/mission-economics.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/economics/money.ts",
+        "src/relay/mission/economics/cost-receipt-types.ts",
+        "src/relay/mission/economics/cost-receipt-service.ts",
+        "src/relay/mission/economics/budget-evaluation.ts",
+        "src/relay/mission/economics/economics-aggregation.ts",
+        "src/relay/mission/economics/economics-projection.ts",
+        "src/relay/mission/economics/cost-receipt-repository.ts"
+      ]
+    },
+    {
+      "capabilityId": "mission-budget-status",
+      "name": "Mission budget status",
+      "domain": "economics",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayMissionEconomics.tsx"
+      ],
+      "cliEntryPoints": [
+        "relay mission budget",
+        "src/relay/cli/mission-economics.ts#renderMissionBudget"
+      ],
+      "websiteTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/ui/project-workspace/mission-economics.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/cli/mission-economics.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/economics/money.ts",
+        "src/relay/mission/economics/cost-receipt-types.ts",
+        "src/relay/mission/economics/cost-receipt-service.ts",
+        "src/relay/mission/economics/budget-evaluation.ts",
+        "src/relay/mission/economics/economics-aggregation.ts",
+        "src/relay/mission/economics/economics-projection.ts"
+      ]
+    },
+    {
+      "capabilityId": "mission-budget-change",
+      "name": "Mission budget change (change_budget)",
+      "domain": "economics",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayMissionEconomics.tsx#REQUEST BUDGET CHANGE"
+      ],
+      "cliEntryPoints": [
+        "src/relay/cli/mission-economics.ts#renderMissionBudget"
+      ],
+      "websiteTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/ui/project-workspace/mission-economics.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/cli/mission-economics.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/economics/money.ts",
+        "src/relay/mission/economics/cost-receipt-types.ts",
+        "src/relay/mission/economics/cost-receipt-service.ts",
+        "src/relay/mission/economics/budget-evaluation.ts",
+        "src/relay/mission/economics/economics-aggregation.ts",
+        "src/relay/mission/economics/economics-projection.ts",
+        "src/relay/mission/economics/budget-types.ts"
+      ]
+    },
+    {
+      "capabilityId": "mission-economics-summary",
+      "name": "Mission economics summary",
+      "domain": "economics",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayMissionEconomics.tsx"
+      ],
+      "cliEntryPoints": [
+        "relay mission economics",
+        "src/relay/cli/mission-economics.ts#renderMissionEconomics"
+      ],
+      "websiteTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/ui/project-workspace/mission-economics.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/cli/mission-economics.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/economics/money.ts",
+        "src/relay/mission/economics/cost-receipt-types.ts",
+        "src/relay/mission/economics/cost-receipt-service.ts",
+        "src/relay/mission/economics/budget-evaluation.ts",
+        "src/relay/mission/economics/economics-aggregation.ts",
+        "src/relay/mission/economics/economics-projection.ts"
+      ]
+    },
+    {
+      "capabilityId": "mission-cost-breakdown",
+      "name": "Mission cost breakdown by category",
+      "domain": "economics",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayMissionEconomics.tsx"
+      ],
+      "cliEntryPoints": [
+        "relay mission economics",
+        "src/relay/cli/mission-economics.ts#renderMissionEconomics"
+      ],
+      "websiteTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/ui/project-workspace/mission-economics.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/cli/mission-economics.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/economics/money.ts",
+        "src/relay/mission/economics/cost-receipt-types.ts",
+        "src/relay/mission/economics/cost-receipt-service.ts",
+        "src/relay/mission/economics/budget-evaluation.ts",
+        "src/relay/mission/economics/economics-aggregation.ts",
+        "src/relay/mission/economics/economics-projection.ts"
+      ]
+    },
+    {
+      "capabilityId": "budget-warning",
+      "name": "Budget warning threshold",
+      "domain": "economics",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayMissionEconomics.tsx"
+      ],
+      "cliEntryPoints": [
+        "relay mission budget",
+        "src/relay/cli/mission-economics.ts#renderMissionBudget"
+      ],
+      "websiteTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/ui/project-workspace/mission-economics.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/cli/mission-economics.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/economics/money.ts",
+        "src/relay/mission/economics/cost-receipt-types.ts",
+        "src/relay/mission/economics/cost-receipt-service.ts",
+        "src/relay/mission/economics/budget-evaluation.ts",
+        "src/relay/mission/economics/economics-aggregation.ts",
+        "src/relay/mission/economics/economics-projection.ts"
+      ]
+    },
+    {
+      "capabilityId": "budget-hard-limit",
+      "name": "Budget hard limit",
+      "domain": "economics",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayMissionEconomics.tsx"
+      ],
+      "cliEntryPoints": [
+        "relay mission budget",
+        "src/relay/cli/mission-economics.ts#renderMissionBudget"
+      ],
+      "websiteTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/ui/project-workspace/mission-economics.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/cli/mission-economics.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/economics/money.ts",
+        "src/relay/mission/economics/cost-receipt-types.ts",
+        "src/relay/mission/economics/cost-receipt-service.ts",
+        "src/relay/mission/economics/budget-evaluation.ts",
+        "src/relay/mission/economics/economics-aggregation.ts",
+        "src/relay/mission/economics/economics-projection.ts"
+      ]
+    },
+    {
+      "capabilityId": "budget-approval",
+      "name": "Budget approval requirement",
+      "domain": "economics",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayMissionEconomics.tsx"
+      ],
+      "cliEntryPoints": [
+        "relay mission budget",
+        "src/relay/cli/mission-economics.ts#renderMissionBudget"
+      ],
+      "websiteTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/ui/project-workspace/mission-economics.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/cli/mission-economics.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/economics/money.ts",
+        "src/relay/mission/economics/cost-receipt-types.ts",
+        "src/relay/mission/economics/cost-receipt-service.ts",
+        "src/relay/mission/economics/budget-evaluation.ts",
+        "src/relay/mission/economics/economics-aggregation.ts",
+        "src/relay/mission/economics/economics-projection.ts",
+        "src/relay/mission/economics/budget-types.ts"
+      ]
+    },
+    {
+      "capabilityId": "verified-mission-cost",
+      "name": "Cost per verified mission",
+      "domain": "economics",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayMissionEconomics.tsx"
+      ],
+      "cliEntryPoints": [
+        "relay mission economics",
+        "src/relay/cli/mission-economics.ts#renderMissionEconomics"
+      ],
+      "websiteTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/ui/project-workspace/mission-economics.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/mission/economics/economics-scenarios.test.ts",
+        "src/relay/cli/mission-economics.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/economics/money.ts",
+        "src/relay/mission/economics/cost-receipt-types.ts",
+        "src/relay/mission/economics/cost-receipt-service.ts",
+        "src/relay/mission/economics/budget-evaluation.ts",
+        "src/relay/mission/economics/economics-aggregation.ts",
+        "src/relay/mission/economics/economics-projection.ts"
+      ]
+    },
+    {
+      "capabilityId": "agent-operating-profile",
+      "name": "Agent operating profile (runtime, mission contract, environment, tools)",
+      "domain": "agent",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayAgentOperatingInspector.tsx#RelayAgentOperatingInspector",
+        "src/relay/ui/project-workspace/RelayWorkforceStrip.tsx#operating"
+      ],
+      "cliEntryPoints": [
+        "src/relay/cli/agent-operating.ts#renderAgentOperatingProfile",
+        "relay agent profile"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/project-workspace/agent-operating-inspector.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/agent-operating.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/agent-operating/operating-profile-types.ts#RelayAgentOperatingProfile",
+        "src/relay/mission/agent-operating/operating-profile-projection.ts#projectAgentOperatingProfile",
+        "src/relay/mission/agent-operating/operating-profile-tools.ts#RELAY_ROLE_TOOL_GRANTS",
+        "src/relay/mission/agent-operating/operating-profile-builder.ts#buildAgentOperatingProfile",
+        "src/relay/mission/agent-operating/agent-operating.test.ts"
+      ]
+    },
+    {
+      "capabilityId": "loop-command-grammar",
+      "name": "Loop slash-command grammar",
+      "domain": "command",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayProjectConversation.tsx#routeRelayInput",
+        "src/relay/ui/loop/loop-view.ts#openLoopSurface"
+      ],
+      "cliEntryPoints": [
+        "relay loop",
+        "src/relay/cli/loop-cli.ts#slashCommandFromArgv",
+        "src/relay/cli/loop-cli.ts#runLoopCli"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/loop/loop-ui.test.tsx",
+        "src/relay/ui/project-workspace/loop-composer-routing.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/loop-cli.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/loop/loop-command-parser.ts#parseSlashCommand",
+        "src/relay/mission/loop/loop-command-parser.ts#routeRelayInput",
+        "src/relay/mission/loop/loop-command-types.ts",
+        "src/relay/mission/loop/loop-command-parser.test.ts"
+      ]
+    },
+    {
+      "capabilityId": "loop-contract-preview",
+      "name": "Loop contract preview before execution",
+      "domain": "command",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/loop/RelayLoopComposer.tsx",
+        "src/relay/ui/loop/loop-view.ts#projectLoopComposerView"
+      ],
+      "cliEntryPoints": [
+        "relay loop",
+        "src/relay/cli/loop-cli.ts#renderLoopPreviewLines"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/loop/loop-ui.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/loop-cli.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/loop/loop-preview.ts#projectLoopCommandPreview",
+        "src/relay/mission/loop/loop-preview.ts#renderLoopPreviewLines",
+        "src/relay/mission/loop/loop-blockers.ts",
+        "src/relay/mission/loop/loop-target.ts#resolveLoopTarget"
+      ]
+    },
+    {
+      "capabilityId": "loop-run-observation",
+      "name": "Loop run observation and control",
+      "domain": "command",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/loop/RelayLoopRunPanel.tsx",
+        "src/relay/ui/loop/loop-run-view.ts#projectLoopRunView"
+      ],
+      "cliEntryPoints": [
+        "relay loop status",
+        "src/relay/cli/loop-run-cli.ts#runLoopRunCli",
+        "src/relay/cli/loop-execution.ts#executeLoopStatus"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/loop/loop-run-panel.test.tsx",
+        "src/relay/ui/loop/loop-run-view.test.ts"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/loop-run-cli.test.ts",
+        "src/relay/cli/loop-execution.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/loop/cron/cron-approvals.test.ts",
+        "src/relay/mission/loop/cron/cron-approvals.ts",
+        "src/relay/mission/loop/cron/cron-breakers.test.ts",
+        "src/relay/mission/loop/cron/cron-breakers.ts",
+        "src/relay/mission/loop/cron/cron-budget.test.ts",
+        "src/relay/mission/loop/cron/cron-budget.ts",
+        "src/relay/mission/loop/cron/cron-claim.test.ts",
+        "src/relay/mission/loop/cron/cron-versioning.test.ts",
+        "src/relay/mission/loop/cron/cron-versioning.ts",
+        "src/relay/mission/loop/unchain/rechaining.test.ts",
+        "src/relay/mission/loop/unchain/rechaining.ts",
+        "src/relay/mission/loop/cron/index.ts",
+        "src/relay/mission/loop/cron/cron-claim.ts",
+        "src/relay/mission/loop/cron/cron-expression.test.ts",
+        "src/relay/mission/loop/cron/cron-expression.ts",
+        "src/relay/mission/loop/cron/cron-missed.test.ts",
+        "src/relay/mission/loop/cron/cron-missed.ts",
+        "src/relay/mission/loop/cron/cron-overlap.test.ts",
+        "src/relay/mission/loop/cron/cron-overlap.ts",
+        "src/relay/mission/loop/cron/cron-tick.test.ts",
+        "src/relay/mission/loop/cron/cron-tick.ts",
+        "src/relay/mission/loop/cron/cron-occurrences.test.ts",
+        "src/relay/mission/loop/cron/cron-occurrences.ts",
+        "src/relay/mission/loop/cron/timezone-port.test.ts",
+        "src/relay/mission/loop/cron/timezone-port.ts",
+        "src/relay/mission/loop/runtime/loop-projections.ts",
+        "src/relay/mission/loop/runtime/loop-scheduler.test.ts",
+        "src/relay/mission/loop/runtime/loop-scheduler.ts",
+        "src/relay/mission/loop/runtime/loop-target-confirmation.test.ts",
+        "src/relay/mission/loop/runtime/loop-target-confirmation.ts",
+        "src/relay/mission/loop/runtime/loop-worker.test.ts",
+        "src/relay/mission/loop/runtime/loop-worker.ts",
+        "src/relay/ui/loop/loop-run-view.ts#restorePointFor"
+      ],
+      "notes": "The WEBSITE half renders the run panel only when a host supplies a port and a store, and no shipped host supplies either \u2014 the website has no operator credential and no browser-session plumbing for Loop routes. What a user reaches today is the panel\u2019s no-session state, which says so. The CLI half is complete: `relay loop status|inspect|history|pause|resume|stop <id>` reach the bridge. Recorded here rather than implied by a \"tested\" status, because a capability that is reachable is not the same claim as a capability that can answer."
+    },
+    {
+      "capabilityId": "mcp-connection-management",
+      "name": "MCP connection management",
+      "domain": "settings",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/mcp/RelayMcpConnections.tsx",
+        "src/relay/ui/mcp/mcp-settings-view.ts",
+        "src/relay/ui/project-settings/SettingsMcp.tsx",
+        "src/relay/ui/project-settings/RelayProjectSettings.tsx#SectionMcp"
+      ],
+      "cliEntryPoints": [
+        "src/relay/cli/mcp-cli.ts"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/mcp/relay-mcp-ui.test.tsx",
+        "src/relay/ui/project-settings/project-settings-mcp.test.tsx",
+        "src/relay/ui/preview/mcp-host-reachability.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/mcp-cli.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mcp/domain/mcp-surface-projection.ts",
+        "src/relay/mcp/domain/mcp-connection.ts",
+        "src/relay/mcp/registry/mcp-registry-types.ts",
+        "src/relay/mcp/policy/mcp-risk.ts",
+        "src/relay/mcp/policy/mcp-approvals.ts"
+      ]
+    },
+    {
+      "capabilityId": "mcp-mission-preflight",
+      "name": "Mission MCP preflight readiness",
+      "domain": "mission",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/mcp/RelayMcpConnections.tsx",
+        "src/relay/ui/project-settings/SettingsMcp.tsx"
+      ],
+      "cliEntryPoints": [
+        "src/relay/cli/mcp-cli.ts"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/mcp/relay-mcp-ui.test.tsx",
+        "src/relay/ui/project-settings/project-settings-mcp.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/mcp-cli.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mcp/mission/mcp-mission-preflight.ts",
+        "src/relay/mcp/domain/mcp-surface-projection.ts"
+      ]
+    },
+    {
+      "capabilityId": "mission-llmops-operations",
+      "name": "Project operations: latency, errors, health, evaluations, repair loops, waiting",
+      "domain": "mission",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/app/projection.ts",
+        "src/relay/ui/app/store.ts",
+        "src/relay/ui/project-workspace/RelayOperationsPanel.tsx",
+        "src/relay/ui/project-workspace/RelayProjectBrainStatus.tsx"
+      ],
+      "cliEntryPoints": [
+        "src/relay/cli/product/operations.ts"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/app/operations-readback.test.ts",
+        "src/relay/ui/project-workspace/brain-document.test.tsx",
+        "src/relay/ui/project-workspace/operations-panel.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/product/operations.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/connectors/claude-code/adapter-observation.test.ts",
+        "src/relay/connectors/claude-code/adapter.ts",
+        "src/relay/connectors/claude-code/run-observation-adapter.test.ts",
+        "src/relay/connectors/claude-code/run-observation-adapter.ts",
+        "src/relay/mission/repair/repair-loop-engine.test.ts",
+        "src/relay/mission/repair/repair-loop-engine.ts",
+        "src/relay/shared/llmops/brain-memory.test.ts",
+        "src/relay/shared/llmops/brain-memory.ts",
+        "src/relay/shared/llmops/index.ts",
+        "src/relay/shared/llmops/llmops-contracts.ts",
+        "src/relay/shared/llmops/llmops-projection.test.ts",
+        "src/relay/shared/llmops/llmops-projection.ts",
+        "src/relay/shared/llmops/operational-intake.test.ts",
+        "src/relay/shared/llmops/operational-intake.ts",
+        "src/relay/shared/llmops/operational-store.test.ts",
+        "src/relay/shared/llmops/operational-store.ts",
+        "src/relay/shared/llmops/run-observation.test.ts",
+        "src/relay/shared/llmops/run-observation.ts",
+        "src/relay/shared/llmops/spend-citation.test.ts",
+        "src/relay/shared/llmops/spend-citation.ts"
+      ]
+    }
+  ]
+}
