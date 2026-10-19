@@ -1306,6 +1306,13 @@ describe('v3.4 V-1: the README does not oversell the nonce tag', () => {
   });
 });
 
+describe('the README carries the operator runbook', () => {
+  it('names the rules the first live landings taught', () => {
+    const readme = readFileSync(join(LANDING, 'README.md'), 'utf8');
+    for (const phrase of ['Operator runbook', 'signed G6 token', 'final newline', 'gh workflow run julius-real-infra.yml', 'late bot comment', 'close the PR and delete its branch', 'UNKNOWN, never absence', 'about 80 s behind GitHub']) expect(readme, phrase).toContain(phrase);
+  });
+});
+
 describe('the evidence scrubber stays founder-governed', () => {
   it('scripts/julius-live-evidence.mjs is hard-forbidden to the lander and is NOT eligible for a signed exception (REVIEW ruling: its allowed shapes change only through a governed install)', () => {
     expect(lib.HARD_FORBIDDEN_PATH.test('scripts/julius-live-evidence.mjs')).toBe(true);

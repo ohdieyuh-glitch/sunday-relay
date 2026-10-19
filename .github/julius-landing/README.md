@@ -48,3 +48,16 @@ signature-b64: <standard base64, padded, ONE line, of the 64-byte ed25519 signat
 - The digest of bot comments, inline comments and reviews covers, per row, the author, id, the edit timestamp (`updated_at`, else `created_at`; `submitted_at` for a review) and `sha256(body)`. A clearance signed under the earlier digest (no body, no timestamp for reviews) no longer matches: the reviewer re-runs `reviewer-tools.mjs digest` and signs a new clearance.
 - A refused or failed landing can leave the created commit as an unreferenced git object (the commit is created before main is touched). That residue is harmless: nothing points at it, and the ref update is the ONLY thing that lands a change.
 - The landed commit has no CI of its own (it is a new commit on main with the cleared, already-checked tree); the checks that count are those on the cleared head.
+
+## Operator runbook (lessons from the first live landings, 2026-10-19)
+
+1. The human at the installer prompt is the only gate in a founder-run install: type the PR number only after the reviewer's G6 PASS for that exact head (the installer asks for the reviewer's signed G6 token and verifies it against the committed reviewer key).
+2. A dry run cannot show real-GitHub behaviour. GitHub stores a created commit message without its final newline (the lander accepts exactly the sent message or the sent message minus its one final newline). Treat every write path as NOT PROVEN until rehearsed on real GitHub.
+3. The five real-infra checks come from `julius-real-infra.yml`. Its path filter now covers the paths the landing steps touch; if a PR still lacks them, run `gh workflow run julius-real-infra.yml --ref <pr branch>` (the checks must be GitHub Actions, app 15368, on the PR head, once each).
+4. A late bot comment (Vercel, Codex) invalidates the signed bot digest. Wait for the Vercel comment and commit status before asking for the digest, and run dry_run=true and dry_run=false back to back, re-reading the bot items between.
+5. A transient infrastructure failure (Docker Hub 502) is diagnosed from the job logs; `gh run rerun --failed` on the same head is allowed. A clean Codex review on one head does not carry to the next; unresolved Codex findings are blocking and are reproduced first.
+6. Supersede means close the PR and delete its branch: the open script pushes only to an absent branch. A landed branch is retired before its allowlisted name is reused; the allowlist is not extended for re-cuts.
+7. A network error after a write is neither success nor failure: re-read the state independently. An unreadable `git ls-remote` is UNKNOWN, never absence.
+8. Run founder-credential scripts by pasting the bash command into Git Bash. Do not wrap them in PowerShell, and do not route around the permission classifier.
+9. The host clock can be about 80 s behind GitHub: order events against GitHub timestamps.
+10. Any fixture with an expiry needs the clock pin used in the landing suites; long end-to-end cases carry an explicit test timeout.
