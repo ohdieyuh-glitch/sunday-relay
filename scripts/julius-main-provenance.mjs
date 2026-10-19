@@ -139,11 +139,12 @@ export function extractLandingBlock(message) {
 }
 
 /** The clearance text rules, restated here on purpose: this file imports nothing from the lander it is a check on. */
-export function parseSignedClearance(text) {
+export function parseSignedClearance(text, queriedRepo) {
   const problems = [];
   const lines = String(text).split('\n');
   if (lines[0] !== 'JULIUS-CLEARANCE-V1') problems.push('first line must be JULIUS-CLEARANCE-V1');
   if (lines[1] !== `repo: ${LANDING_REPO}`) problems.push(`second line must be "repo: ${LANDING_REPO}"`);
+  else if (typeof queriedRepo === 'string' && queriedRepo !== LANDING_REPO) problems.push(`the clearance is for ${LANDING_REPO}, not the queried repo ${queriedRepo}`);
   const fields = {};
   CLEARANCE_KEYS.forEach((key, i) => {
     const line = lines[2 + i] ?? '';
@@ -240,7 +241,7 @@ export function evaluateSignedLanding(input, tip) {
   if (Buffer.from(clearanceText, 'utf8').toString('base64') !== block.clearanceB64) {
     return signedVerdict('indeterminate', 'the clearance payload is not valid UTF-8', base);
   }
-  const parsed = parseSignedClearance(clearanceText);
+  const parsed = parseSignedClearance(clearanceText, typeof input?.repo === 'string' ? input.repo : undefined);
   if (parsed.problems.length > 0) {
     return signedVerdict('indeterminate', `the signed clearance text is malformed: ${parsed.problems.join('; ')}`, base);
   }
@@ -698,6 +699,7 @@ async function main(argv) {
       parentContainedInReviewedHead,
       baseRefChanged,
       mainCommitMessage,
+      repo,
       reviewerKeyPem,
       reviewerKeyAtSha,
       tipReviewerKeyPem,
