@@ -8,15 +8,16 @@ import { createFakeExecutorShell } from '../julius/coding-agent-fixtures';
 import { createClaudeCodeCodingAgentProvider } from '../julius/claude-code-coding-provider';
 import {
   CODER_FIT_GATED_APPROVAL_WAIT_MS, CODER_WORKER, JULIUS_JOB_STAMP_LAG_RESERVE_MS, JULIUS_RESERVE_AFTER_LIVE_MS, approvalWaitMsFor,
-  architectWorstCaseSpendMs, coderRuntimeBudgetRefusal, coderWorkerForRuntime, liveStageDeadline, resolveLiveWorkers,
+  architectWorstCaseSpendMs, coderRuntimeBudgetRefusal, coderRuntimeScheduleOfContract, coderWorkerForRuntime, liveStageDeadline, resolveLiveWorkers,
 } from '../julius/live-composition';
+import { liveCoderRuntimeBudgetLines } from '../julius/live-report-lines';
 import { createInMemoryArtifactExchange } from '../julius/live-workers';
 import { JULIUS_LIMITS_KEYS, compileBootstrapRequest, parseLiveMissionContract } from '../julius/mission-contract';
 import { JOB_BUDGET_MS, REVIEWER_JOB_SHARE_MS, reviewerDeadlineHardCeilingMs } from '../reviewer-deadline';
 import {
   CODER_CONTRACT_RUNTIME_MAX_MINUTES, CODER_CONTRACT_RUNTIME_MIN_MINUTES, CODER_FIT_INFRASTRUCTURE_ALLOWANCE_MS, CODER_JOB_SHARE_MS,
   CODER_POST_SESSION_ALLOWANCE_MS, CODER_PRE_SESSION_ALLOWANCE_MS, CoderRuntimeBudgetRefused, MAX_CODER_ATTEMPTS, RECORDED_CODER_OBSERVATIONS,
-  coderRuntimeJobFit, coderRuntimeMinutesProblem, resolveCoderEnvelope, resolveContractCoderRuntime, coderRuntimeHardCeilingMs,
+  coderRuntimeSchedule, coderRuntimeMinutesProblem, resolveCoderEnvelope, resolveContractCoderRuntime, coderRuntimeHardCeilingMs,
 } from './coder-envelope';
 import { HOSTED_API_KEY_ENV } from './hosted-readiness';
 import { DEFAULT_HOSTED_LIMITS } from './hosted-envelope';
@@ -27,10 +28,10 @@ import { JULIUS_CONTEXT_COMPILER_VERSION, type JuliusContextSnapshot } from '../
  * THE OPT-IN, CONTRACT-SCOPED CODER SESSION BUDGET (`limits.coderRuntimeMinutes`) — DRAFT, founder policy + reviewer read.
  *
  * What this file pins, in order: the DEFAULT envelope is exactly what it was (so the opt-in changes nothing for a contract that
- * does not use it); the resolver and its absolute range; the job-fit arithmetic and the table of largest fitting sessions; the
+ * does not use it); the resolver and its absolute range; the schedule arithmetic (guaranteed repair cycles; the cap still binding at 3 cycles, with numbers); the
  * checker's mirrored constants equal their TypeScript sources; the parser refuses outside the range and binds the value into
  * the digest; EVERY committed contract's binding digest is byte-identical (the scored learning-pair and Registration 2 included);
- * the checker refuses above the cap and above the fit (the NEGATIVE CONTROLS); the composition carries the minutes into the
+ * the checker refuses above the cap and an infeasible main path ONLY, never a repair-cycle count (the NEGATIVE CONTROLS); the composition carries the minutes into the
  * worker and the runner's limits, and into nothing else; and the entrypoint passes the fields at both call sites.
  */
 
@@ -99,17 +100,17 @@ describe('resolveContractCoderRuntime', () => {
   });
 });
 
-/* ------------------------------------------------------------ the job fit */
+/* ------------------------------------------------------------ the schedule */
 
 const FIGURES = {
   reviewerShareMs: REVIEWER_JOB_SHARE_MS, reviewerCycleCeilingMs: reviewerDeadlineHardCeilingMs(),
   architectWorstCaseMs: architectWorstCaseSpendMs({}), infrastructureMs: CODER_FIT_INFRASTRUCTURE_ALLOWANCE_MS,
   marginsMs: JULIUS_JOB_STAMP_LAG_RESERVE_MS + JULIUS_RESERVE_AFTER_LIVE_MS, jobBudgetMs: JOB_BUDGET_MS,
 };
-const fit = (coderRuntimeMinutes: number, repairCycles: number, approvalWaitMs = 0) =>
-  coderRuntimeJobFit({ coderRuntimeMinutes, repairCycles, approvalWaitMs, ...FIGURES });
+const schedule = (coderRuntimeMinutes: number, repairCycles: number, approvalWaitMs = 0) =>
+  coderRuntimeSchedule({ coderRuntimeMinutes, repairCycles, approvalWaitMs, ...FIGURES });
 
-describe('coderRuntimeJobFit: the whole job under a declared session budget', () => {
+describe('coderRuntimeSchedule: the whole job under a declared session budget; it REPORTS repair cycles and never lowers them', () => {
   it('the committed figures are the ones the design record states', () => {
     expect(FIGURES).toEqual({
       reviewerShareMs: 3_000_000, reviewerCycleCeilingMs: 1_000_000, architectWorstCaseMs: 600_000, infrastructureMs: 900_000,
@@ -117,7 +118,7 @@ describe('coderRuntimeJobFit: the whole job under a declared session budget', ()
     });
   });
 
-  it('at the DEFAULT attempt the formula reproduces the repository\'s own priced path (3 cycles) to within the rounding it uses', () => {
+  it('at the DEFAULT attempt the arithmetic reproduces the repository\'s own priced path (3 cycles) to within the rounding it uses', () => {
     // r8.5 / the job-share test price the coder at its whole 40-minute share (2,400,000) and so state 17,516,316 ms; the exact two
     // attempts are 2 x 1,199,386 = 2,398,772, which gives 17,515,088. The difference is exactly the 1,228 ms of rounding in the share.
     const attempt = resolveCoderEnvelope().attemptDeadlineMs;
@@ -129,39 +130,68 @@ describe('coderRuntimeJobFit: the whole job under a declared session budget', ()
       + 3 * (dispatch + FIGURES.reviewerCycleCeilingMs) + FIGURES.marginsMs;
     expect(repositoryFigure).toBe(17_516_316);
     expect(repositoryFigure - exact).toBe(CODER_JOB_SHARE_MS - dispatch);
-    // and the formula is the same at the default attempt as at a declared session of the same length
-    expect(fit(13, 3).worstCaseMs).toBeLessThan(18_000_000);
+    // the 13-minute floor is the smallest declarable session and keeps all three cycles guaranteed (ungated)
+    expect(schedule(13, 3).allDeclaredCyclesGuaranteed).toBe(true);
   });
 
-  /** The largest session that fits, by repair cycles R and approval wait W; the design record's table, pinned. */
-  const largest = (repairCycles: number, approvalWaitMs: number): number | null => {
-    let best: number | null = null;
-    for (let minutes = CODER_CONTRACT_RUNTIME_MIN_MINUTES; minutes <= CODER_CONTRACT_RUNTIME_MAX_MINUTES; minutes += 1) {
-      if (fit(minutes, repairCycles, approvalWaitMs).fits) best = minutes;
+  it('THE FOUNDER\'S QUESTION, WITH NUMBERS: at 3 repair cycles the largest session for which ALL THREE are guaranteed at worst case is 13 minutes (none, gated)', () => {
+    const largestAll = (cycles: number, wait: number): number | null => {
+      let best: number | null = null;
+      for (let m = CODER_CONTRACT_RUNTIME_MIN_MINUTES; m <= CODER_CONTRACT_RUNTIME_MAX_MINUTES; m += 1) if (schedule(m, cycles, wait).allDeclaredCyclesGuaranteed) best = m;
+      return best;
+    };
+    expect([0, 1, 2, 3, 4].map((cycles) => largestAll(cycles, 0))).toEqual([45, 42, 23, 13, null]);
+    expect([0, 1, 2, 3].map((cycles) => largestAll(cycles, CODER_FIT_GATED_APPROVAL_WAIT_MS))).toEqual([45, 33, 17, null]);
+  });
+
+  it('THE CAP IS STILL BINDING AT 3 CYCLES AND 45 MINUTES, SAID WITH NUMBERS: 0 repair cycles guaranteed at worst case, 2 if each dispatch used one full-length attempt', () => {
+    const s = schedule(45, 3);
+    expect(s).toMatchObject({
+      attemptDeadlineMs: 3_165_000, mainPathWorstCaseMs: 11_250_000, mainPathFits: true, worstCycleMs: 7_330_000,
+      declaredRepairCycles: 3, guaranteedRepairCycles: 0, allDeclaredCyclesGuaranteed: false, singleAttemptCyclesThatFit: 2,
+      worstCaseAtDeclaredMs: 33_240_000, headroomAtDeclaredMs: -15_240_000,
+    });
+    // ... and NOTHING reduced the declared count: the schedule reports; it does not decide.
+    expect(s.declaredRepairCycles).toBe(3);
+  });
+
+  it('the table: guaranteed cycles / cycles that fit with one full attempt per dispatch, for R=3 (no wait | gated)', () => {
+    const row = (wait: number) => [13, 20, 23, 30, 42, 45].map((m) => {
+      const s = schedule(m, 3, wait);
+      return `${m}:${s.guaranteedRepairCycles}/${s.singleAttemptCyclesThatFit}`;
+    });
+    expect(row(0)).toEqual(['13:3/5', '20:2/4', '23:2/3', '30:1/3', '42:1/2', '45:0/2']);
+    expect(row(CODER_FIT_GATED_APPROVAL_WAIT_MS)).toEqual(['13:2/4', '20:1/3', '23:1/3', '30:1/2', '42:0/2', '45:0/1']);
+  });
+
+  it('guaranteed cycles never exceed the declared count (R=1 and R=2 rows)', () => {
+    expect([13, 23, 30, 42, 45].map((m) => schedule(m, 1).guaranteedRepairCycles)).toEqual([1, 1, 1, 1, 0]);
+    expect([13, 23, 30, 42, 45].map((m) => schedule(m, 2).guaranteedRepairCycles)).toEqual([2, 2, 1, 1, 0]);
+  });
+
+  it('the MAIN PATH is feasible for every declarable session, with and without the approval wait (so the schedule refusal is unreachable at the committed figures)', () => {
+    for (const wait of [0, CODER_FIT_GATED_APPROVAL_WAIT_MS]) {
+      for (let m = CODER_CONTRACT_RUNTIME_MIN_MINUTES; m <= CODER_CONTRACT_RUNTIME_MAX_MINUTES; m += 1) {
+        expect(schedule(m, 0, wait).mainPathFits, `${m} min, wait ${wait}`).toBe(true);
+      }
     }
-    return best;
-  };
-
-  it('the table of largest fitting sessions (no approval wait)', () => {
-    expect([0, 1, 2, 3, 4].map((cycles) => largest(cycles, 0))).toEqual([45, 42, 23, 13, null]);
+    expect(schedule(45, 0, CODER_FIT_GATED_APPROVAL_WAIT_MS).mainPathWorstCaseMs).toBe(13_350_000);
   });
 
-  it('the table of largest fitting sessions (a gated mission: 35 minutes of approval wait)', () => {
-    expect([0, 1, 2, 3].map((cycles) => largest(cycles, CODER_FIT_GATED_APPROVAL_WAIT_MS))).toEqual([45, 33, 17, null]);
+  it('NEGATIVE CONTROL for the one schedule refusal: with figures that leave no room for the main path, mainPathFits is false and nothing is guaranteed', () => {
+    const tight = coderRuntimeSchedule({ coderRuntimeMinutes: 45, repairCycles: 3, approvalWaitMs: 0, ...FIGURES, architectWorstCaseMs: 8_000_000 });
+    expect(tight.mainPathFits).toBe(false);
+    expect(tight.guaranteedRepairCycles).toBe(0);
+    expect(tight.singleAttemptCyclesThatFit).toBe(0);
+    expect(tight.declaredRepairCycles, 'still not lowered').toBe(3);
+    // the same figures at the floor session DO fit: it is the session that is refused, never the cycle count
+    expect(coderRuntimeSchedule({ coderRuntimeMinutes: 13, repairCycles: 3, approvalWaitMs: 0, ...FIGURES, architectWorstCaseMs: 8_000_000 }).mainPathFits).toBe(true);
   });
 
-  it('the boundary is exact: the largest fitting minute fits, the next does not', () => {
-    expect(fit(42, 1).fits).toBe(true);
-    expect(fit(42, 1).headroomMs).toBe(140_000);
-    expect(fit(43, 1).fits).toBe(false);
-    expect(fit(43, 1).headroomMs).toBeLessThan(0);
-    expect(fit(45, 1).worstCaseMs).toBe(18_580_000);
-  });
-
-  it('a session budget can never fit by being quietly clamped: an out-of-range value or a negative cycle count is refused', () => {
-    expect(() => fit(46, 0)).toThrow(CoderRuntimeBudgetRefused);
-    expect(() => fit(30, -1)).toThrow(CoderRuntimeBudgetRefused);
-    expect(() => fit(30, 1.5)).toThrow(CoderRuntimeBudgetRefused);
+  it('an out-of-range value or a negative / fractional cycle count is refused by code, never clamped', () => {
+    expect(() => schedule(46, 0)).toThrow(CoderRuntimeBudgetRefused);
+    expect(() => schedule(30, -1)).toThrow(CoderRuntimeBudgetRefused);
+    expect(() => schedule(30, 1.5)).toThrow(CoderRuntimeBudgetRefused);
   });
 });
 
@@ -208,20 +238,31 @@ describe('the checker mirrors every constant it uses, and a test holds each equa
     expect(JULIUS_LIMITS_KEYS).toContain('coderRuntimeMinutes');
   });
 
-  it('the checker\'s formula gives the same worst case as coderRuntimeJobFit for every (minutes, cycles, wait) in range', () => {
-    const body = /const coderRuntimeWorstCaseMs = \(minutes, repairCycles, approvalWaitMs\) => \{([\s\S]*?)\n\};/u.exec(CHECKER_SOURCE);
-    expect(body, 'the checker declares coderRuntimeWorstCaseMs').not.toBeNull();
+  it('the checker\'s arithmetic gives the same schedule as coderRuntimeSchedule for every (minutes, cycles, wait) in range', () => {
+    const body = /const coderRuntimeScheduleMs = \(minutes, repairCycles, approvalWaitMs\) => \{([\s\S]*?)\n\};/u.exec(CHECKER_SOURCE);
+    expect(body, 'the checker declares coderRuntimeScheduleMs').not.toBeNull();
     const CODER_FIT = {
       attemptsPerDispatch: mirroredOf('attemptsPerDispatch'), preSessionMs: mirroredOf('preSessionMs'), postSessionMs: mirroredOf('postSessionMs'),
       reviewerShareMs: mirroredOf('reviewerShareMs'), reviewerCycleCeilingMs: mirroredOf('reviewerCycleCeilingMs'),
       architectWorstCaseMs: mirroredOf('architectWorstCaseMs'), infrastructureMs: mirroredOf('infrastructureMs'), marginsMs: mirroredOf('marginsMs'),
+      jobBudgetMs: mirroredOf('jobBudgetMs'),
     };
     // eslint-disable-next-line no-new-func
-    const fromChecker = new Function('CODER_FIT', 'minutes', 'repairCycles', 'approvalWaitMs', body![1]) as (c: typeof CODER_FIT, m: number, r: number, w: number) => number;
+    const fromChecker = new Function('CODER_FIT', 'minutes', 'repairCycles', 'approvalWaitMs', body![1]) as (
+      c: typeof CODER_FIT, m: number, r: number, w: number,
+    ) => { attemptMs: number; mainPathWorstCaseMs: number; mainPathFits: boolean; worstCycleMs: number; guaranteedRepairCycles: number; singleAttemptCyclesThatFit: number };
     for (const wait of [0, CODER_FIT_GATED_APPROVAL_WAIT_MS]) {
       for (let cycles = 0; cycles <= 4; cycles += 1) {
         for (let minutes = CODER_CONTRACT_RUNTIME_MIN_MINUTES; minutes <= CODER_CONTRACT_RUNTIME_MAX_MINUTES; minutes += 1) {
-          expect(fromChecker(CODER_FIT, minutes, cycles, wait), `${minutes} min, ${cycles} cycles, wait ${wait}`).toBe(fit(minutes, cycles, wait).worstCaseMs);
+          const mine = fromChecker(CODER_FIT, minutes, cycles, wait);
+          const theirs = schedule(minutes, cycles, wait);
+          const label = `${minutes} min, ${cycles} cycles, wait ${wait}`;
+          expect(mine.attemptMs, label).toBe(theirs.attemptDeadlineMs);
+          expect(mine.mainPathWorstCaseMs, label).toBe(theirs.mainPathWorstCaseMs);
+          expect(mine.mainPathFits, label).toBe(theirs.mainPathFits);
+          expect(mine.worstCycleMs, label).toBe(theirs.worstCycleMs);
+          expect(mine.guaranteedRepairCycles, label).toBe(theirs.guaranteedRepairCycles);
+          expect(mine.singleAttemptCyclesThatFit, label).toBe(theirs.singleAttemptCyclesThatFit);
         }
       }
     }
@@ -272,6 +313,7 @@ describe('BYTE IDENTITY: no committed contract moves when the key is absent', ()
   const BEFORE: Readonly<Record<string, string>> = {
     'julius-continuous-1': 'sha256:e6814f7ce2167785052595c60f89aec2ea6bb84bf6f411105e86f317fe02d80a',
     'julius-diag-output-safety-1': 'sha256:7c12a6dfea7bfa3982380997be4da107e2a03c36fbaed59a1d86a0f93056e415',
+    'julius-diag-output-safety-2': 'sha256:dce4650e22fa1b192100ca135ee31ff2449e013bfd6bffc6681319bcc51ba664',
     'julius-first-live': 'sha256:f7f8c2fe683cba5819ecc9e71085228ce8bf82f3e1b7f9c2b6862f2e28346a56',
     'julius-learning-pair-1-with-1': 'sha256:6148c551c9fbaf79e85eaca6906fe5ce59afeb71e054dff6ba0955e472532774',
     'julius-learning-pair-1-with-2': 'sha256:6148c551c9fbaf79e85eaca6906fe5ce59afeb71e054dff6ba0955e472532774',
@@ -322,17 +364,21 @@ describe('the contract checker', () => {
       return { code: failed.status, output: failed.stdout };
     }
   };
+  const SCHEDULE = 'coder session schedule: ';
+  const NOTICE = 'coder session schedule notice: repair cycles beyond the worst-case guarantee start only while the stage stop line allows; none is removed';
 
   it('an unchanged contract passes and prints no session-budget line', () => {
     const result = check(JSON.stringify(rawMission2()));
     expect(result.code).toBe(0);
-    expect(result.output).not.toMatch(/coder session budget/u);
+    expect(result.output).not.toMatch(/coder session/u);
   });
 
-  it('a declared, fitting budget passes and is echoed', () => {
+  it('a declared budget whose declared cycles are all guaranteed passes, echoes the schedule, and prints NO notice', () => {
     const result = check(withLimits({ repairCycles: 1, coderRuntimeMinutes: 20 }));
     expect(result.code).toBe(0);
     expect(result.output).toContain('coder session budget: 20 minute(s)');
+    expect(result.output).toContain(`${SCHEDULE}attempt_deadline_ms=1665000 repair_cycles_declared=1 guaranteed_at_worst_case=1 if_one_full_attempt_per_dispatch=4 main_path_worst_case_ms=8250000 job_limit_ms=18000000 repair_cycles_reduced=no`);
+    expect(result.output).not.toContain(NOTICE);
   });
 
   it('NEGATIVE CONTROL: above the cap is refused (46), below the floor is refused (12), a fraction is refused', () => {
@@ -343,29 +389,38 @@ describe('the contract checker', () => {
     }
   });
 
-  it('NEGATIVE CONTROL: in range but not fitting the job is refused, naming the overrun (45 minutes with one repair cycle)', () => {
+  it('REPAIR CYCLES ARE NEVER REFUSED OR LOWERED: 45 minutes with one declared cycle is ACCEPTED, and says plainly that 0 cycles are guaranteed at worst case', () => {
     const result = check(withLimits({ repairCycles: 1, coderRuntimeMinutes: 45 }));
-    expect(result.code).toBe(1);
-    expect(result.output).toContain('needs 18580000 ms of a 18000000 ms job (580000 ms over)');
+    expect(result.code).toBe(0);
+    expect(result.output).toContain(`${SCHEDULE}attempt_deadline_ms=3165000 repair_cycles_declared=1 guaranteed_at_worst_case=0 if_one_full_attempt_per_dispatch=2 main_path_worst_case_ms=11250000 job_limit_ms=18000000 repair_cycles_reduced=no`);
+    expect(result.output).toContain(NOTICE);
   });
 
-  it('the boundary matches the TypeScript fit exactly: 42 minutes with one cycle passes, 43 is refused', () => {
-    expect(check(withLimits({ repairCycles: 1, coderRuntimeMinutes: 42 })).code).toBe(0);
-    expect(check(withLimits({ repairCycles: 1, coderRuntimeMinutes: 43 })).code).toBe(1);
-    // mission 2's own ceiling is 3 cycles: only the floor session fits there, exactly as the table says
-    expect(check(withLimits({ repairCycles: 3, coderRuntimeMinutes: 13 })).code).toBe(0);
-    expect(check(withLimits({ repairCycles: 3, coderRuntimeMinutes: 14 })).code).toBe(1);
+  it('three cycles at 30 minutes: accepted, 1 guaranteed, 3 would fit with one full attempt per dispatch, the notice printed', () => {
+    const result = check(withLimits({ repairCycles: 3, coderRuntimeMinutes: 30 }));
+    expect(result.code).toBe(0);
+    expect(result.output).toContain(`${SCHEDULE}attempt_deadline_ms=2265000 repair_cycles_declared=3 guaranteed_at_worst_case=1 if_one_full_attempt_per_dispatch=3 main_path_worst_case_ms=9450000 job_limit_ms=18000000 repair_cycles_reduced=no`);
+    expect(result.output).toContain(NOTICE);
   });
 
-  it('a contract that declares an approval gate is fitted with the 35-minute approval wait: 33 minutes with one cycle passes the FIT, 34 is refused for the fit', () => {
-    // The clause is read by name from the raw contract, so this holds before and after the gate registration exists; the
-    // checker's other (gate registration) refusals are not what is asserted here, only whether the FIT line is among them.
+  it('three cycles at the 13-minute floor: all three guaranteed, no notice', () => {
+    const result = check(withLimits({ repairCycles: 3, coderRuntimeMinutes: 13 }));
+    expect(result.code).toBe(0);
+    expect(result.output).toContain('repair_cycles_declared=3 guaranteed_at_worst_case=3 if_one_full_attempt_per_dispatch=5');
+    expect(result.output).not.toContain(NOTICE);
+  });
+
+  it('a contract that declares an approval gate carries the 35-minute approval wait into the schedule: 33 minutes keeps its one cycle guaranteed, 34 does not', () => {
+    // The clause is read by name from the raw contract, so this holds before and after the gate registration exists; the checker's
+    // other (gate registration) refusals are not what is asserted here, only the schedule lines.
     const gate = [{ id: 'gate-x', operation: 'DISPATCH_WORKER', roles: ['CODING_AGENT'], taskTypes: ['build'], reason: 'sign-off' }];
     const gated = (minutes: number): string => JSON.stringify({ ...JSON.parse(withLimits({ repairCycles: 1, coderRuntimeMinutes: minutes })), approvalGates: gate });
-    expect(check(gated(33)).output).not.toContain('needs ');
-    const over = check(gated(34));
-    expect(over.output).toContain('and an approval wait needs ');
-    expect(over.output).toContain('ms over)');
+    const at33 = check(gated(33)).output;
+    expect(at33).toContain('repair_cycles_declared=1 guaranteed_at_worst_case=1 if_one_full_attempt_per_dispatch=2 main_path_worst_case_ms=11910000');
+    expect(at33).not.toContain(NOTICE);
+    const at34 = check(gated(34)).output;
+    expect(at34).toContain('repair_cycles_declared=1 guaranteed_at_worst_case=0');
+    expect(at34).toContain(NOTICE);
   });
 
   it('an unknown limits key is still refused (the whitelist grew by exactly one key)', () => {
@@ -374,6 +429,7 @@ describe('the contract checker', () => {
     expect(result.output).toContain('limits.coderRuntimeSeconds is not a limit this build reads');
   });
 });
+
 
 /* ------------------------------------------------------------ the composition */
 
@@ -418,22 +474,43 @@ describe('the composition carries the declared minutes into the coder worker, an
     expect(CODER_WORKER.timeoutMs, 'the registered constant is untouched').toBe(1_199_386);
   });
 
-  it('the repair-cycle default for the fit is the contract default (1), and the approval wait is added for a gated contract', () => {
-    expect(resolveWith({ coderRuntimeMinutes: 42 }).ok, '42 min fits with the default 1 cycle').toBe(true);
-    expect(resolveWith({ coderRuntimeMinutes: 43 }).ok, '43 min does not').toBe(false);
+  it('NO REPAIR CYCLE IS LOWERED BY THE COMPOSITION: 43, 45 minutes with the default one cycle, and 45 with three, all resolve (the schedule only reports)', () => {
+    for (const extra of [{ coderRuntimeMinutes: 43 }, { coderRuntimeMinutes: 45, repairCycles: 1 }, { coderRuntimeMinutes: 45, repairCycles: 3 }]) {
+      const resolution = resolveWith(extra);
+      expect(resolution.ok, JSON.stringify(extra)).toBe(true);
+      expect(coderOf(resolution)!.worker.timeoutMs).toBe(resolveContractCoderRuntime(extra.coderRuntimeMinutes).attemptDeadlineMs);
+    }
     expect(approvalWaitMsFor({})).toBe(0);
     expect(approvalWaitMsFor({ approvalGates: [] })).toBe(CODER_FIT_GATED_APPROVAL_WAIT_MS);
-    expect(resolveWith({ coderRuntimeMinutes: 33, repairCycles: 1, approvalWaitMs: CODER_FIT_GATED_APPROVAL_WAIT_MS }).ok).toBe(true);
-    expect(resolveWith({ coderRuntimeMinutes: 34, repairCycles: 1, approvalWaitMs: CODER_FIT_GATED_APPROVAL_WAIT_MS }).ok).toBe(false);
   });
 
-  it('NEGATIVE CONTROL: an unfit declared budget is refused in the preflight resolution, with the overrun, and no coder entry exists', () => {
-    const resolution = resolveWith({ coderRuntimeMinutes: 45, repairCycles: 1 });
+  it('the schedule of a CONTRACT (what the report prints): none without the key; the real figures with it; the approval wait only for a gated one', () => {
+    expect(coderRuntimeScheduleOfContract(BASE, { limits: { repairCycles: 3 } })).toBeNull();
+    const plain = coderRuntimeScheduleOfContract(BASE, { limits: { coderRuntimeMinutes: 30, repairCycles: 3 } })!;
+    expect(plain).toMatchObject({ attemptDeadlineMs: 2_265_000, declaredRepairCycles: 3, guaranteedRepairCycles: 1, singleAttemptCyclesThatFit: 3 });
+    const gated = coderRuntimeScheduleOfContract(BASE, { limits: { coderRuntimeMinutes: 30, repairCycles: 3 }, approvalGates: [] } as never)!;
+    expect(gated.mainPathWorstCaseMs - plain.mainPathWorstCaseMs).toBe(CODER_FIT_GATED_APPROVAL_WAIT_MS);
+    expect(coderRuntimeScheduleOfContract(BASE, { limits: { coderRuntimeMinutes: 46, repairCycles: 1 } }), 'out of range: the problem is reported elsewhere').toBeNull();
+  });
+
+  it('NEGATIVE CONTROL (reachable): an environment that leaves the main path no room is refused in the preflight resolution, naming the overrun, with no coder entry', () => {
+    // The architect timeout is the job environment's; 90 minutes x 2 attempts = 10.8 M ms of architect worst case. 45 minutes then
+    // cannot finish even the main path (21.45 M > 18 M); the floor session still can, so it is the SESSION that is refused.
+    const env = { ...BASE, RELAY_PROMPT_ARCHITECT_TIMEOUT_MS: '5400000' };
+    const refusal = coderRuntimeBudgetRefusal({ env, coderRuntimeMinutes: 45, repairCycles: 1, approvalWaitMs: 0 });
+    expect(refusal).toContain('coder_runtime_budget_unfit');
+    expect(refusal).toContain('cannot complete even the main path (no repair)');
+    expect(refusal).toContain('3450000 ms over');
+    expect(coderRuntimeBudgetRefusal({ env, coderRuntimeMinutes: 13, repairCycles: 3, approvalWaitMs: 0 })).toBeNull();
+    const resolution = resolveLiveWorkers({
+      env, projectId: 'prj-crt', workspacePath: workspace, testCommand: 'npm test',
+      contexts: { snapshotFor: () => null }, artifacts: createInMemoryArtifactExchange(), shell: createFakeExecutorShell({}),
+      coderRuntimeMinutes: 45, repairCycles: 1,
+    } as never);
     expect(resolution.ok).toBe(false);
     expect(coderOf(resolution)).toBeUndefined();
     const problem = resolution.problems.find((item) => item.role === 'CODING_AGENT');
     expect(problem?.missing.join(' ')).toContain('coder_runtime_budget_unfit');
-    expect(problem?.missing.join(' ')).toContain('580000 ms over');
   });
 
   it('NEGATIVE CONTROL: an out-of-range value that reaches the composition is refused by code, never clamped', () => {
@@ -548,10 +625,56 @@ describe('the entrypoint hands the fields to the composition at BOTH of its call
   const entry = readFileSync(join(ROOT, 'relay-bridge', 'julius-live-mission.ts'), 'utf8');
   const count = (needle: string): number => entry.split(needle).length - 1;
 
-  it('coderRuntimeMinutes, repairCycles and the approval wait are passed twice each', () => {
+  it('coderRuntimeMinutes, repairCycles and the approval wait are passed twice each, and the schedule lines are printed at BOTH sites', () => {
     expect(count('coderRuntimeMinutes: contract.limits?.coderRuntimeMinutes')).toBe(2);
     expect(count('repairCycles: contract.limits?.repairCycles')).toBe(2);
     expect(count('approvalWaitMs: approvalWaitMsFor(contract)')).toBe(2);
     expect(count('resolveLiveWorkers({')).toBe(2);
+    // The preflight and the confirmed run each say, before anything dispatches, what the declared budget guarantees.
+    expect(count('for (const line of liveCoderRuntimeBudgetLines(coderRuntimeScheduleOfContract(env, contract))) out(line);')).toBe(2);
+  });
+});
+
+/* ------------------------------------------------------------ the printer and the evidence allowlist */
+
+describe('the schedule lines survive the evidence allowlist exactly as the printer writes them, and nothing shaped otherwise', () => {
+  const buildEvidence = (log: string): string => execFileSync(
+    process.execPath, [join(ROOT, 'scripts', 'julius-live-evidence.mjs'), '-'], { input: log, encoding: 'utf8', cwd: ROOT },
+  );
+
+  it('no schedule prints nothing at all (an existing contract\'s report is byte-identical)', () => {
+    expect(liveCoderRuntimeBudgetLines(null)).toEqual([]);
+  });
+
+  it('the line states, as a FACT and not a setting, that no repair cycle was reduced; the notice appears only when fewer cycles are guaranteed than declared', () => {
+    const all = liveCoderRuntimeBudgetLines(schedule(13, 3));
+    expect(all).toHaveLength(1);
+    expect(all[0]).toBe('  coder session budget: minutes=13 attempt_deadline_ms=1245000 repair_cycles_declared=3 repair_cycles_guaranteed_at_worst_case=3 repair_cycles_if_one_full_attempt_per_dispatch=5 main_path_worst_case_ms=7410000 job_limit_ms=18000000 repair_cycles_reduced=no');
+    const some = liveCoderRuntimeBudgetLines(schedule(30, 3));
+    expect(some).toHaveLength(2);
+    expect(some[0]).toContain('repair_cycles_declared=3 repair_cycles_guaranteed_at_worst_case=1');
+    expect(some[0].endsWith('repair_cycles_reduced=no')).toBe(true);
+    expect(some[1]).toBe('  coder session budget notice: repair cycles beyond the worst-case guarantee start only while the stage stop line allows; none is removed');
+  });
+
+  it('both lines are KEPT by the allowlist, byte for byte', () => {
+    const lines = liveCoderRuntimeBudgetLines(schedule(45, 3));
+    expect(lines).toHaveLength(2);
+    const output = buildEvidence(lines.join('\n'));
+    for (const line of lines) expect(output, line).toContain(line);
+    expect(output).toContain('# 2 line(s) kept; 0 unrecognised and 0 secret-shaped line(s) withheld.');
+  });
+
+  it('a stray is WITHHELD: each real line with exactly one token changed, a free-text tail, or a retired shape', () => {
+    const [line] = liveCoderRuntimeBudgetLines(schedule(30, 3));
+    const strays = [
+      line.replace('repair_cycles_reduced=no', 'repair_cycles_reduced=yes'),
+      line.replace('repair_cycles_reduced=no', 'repair_cycles_reduced=no note=free text'),
+      line.replace(/ repair_cycles_if_one_full_attempt_per_dispatch=\d+/u, ''),
+      line.replace('minutes=30', 'minutes=thirty'),
+      '  coder session budget notice: repair cycles are reduced to fit',
+    ];
+    for (const stray of strays) expect(stray === line, 'a replace that matched nothing would leave a REAL line').toBe(false);
+    expect(buildEvidence(strays.join('\n'))).toContain(`# 0 line(s) kept; ${String(strays.length)} unrecognised`);
   });
 });

@@ -52,7 +52,8 @@ const SELF_TEST_CALLS = { min: 1, max: 4 };
  * THE CODER SESSION BUDGET (`limits.coderRuntimeMinutes`) AND ITS JOB FIT. Every figure MIRRORS a TypeScript constant in
  * relay-bridge/hosted-coding-agent/coder-envelope.ts, relay-bridge/reviewer-deadline.ts or relay-bridge/julius/live-composition.ts;
  * `relay-bridge/hosted-coding-agent/coder-runtime-budget.test.ts` holds each equal to its source, so this cannot drift quietly.
- * The checker refuses a declared value outside the absolute range, and one whose whole-job worst case does not fit the job.
+ * The checker refuses a declared value outside the absolute range, and one whose MAIN PATH (no repair) cannot fit the job at its
+ * worst case. It never refuses or lowers a declared number of repair cycles: it reports how many are guaranteed.
  */
 const CODER_RUNTIME_MINUTES = { min: 13, max: 45 };
 const CODER_FIT = Object.freeze({
@@ -60,11 +61,23 @@ const CODER_FIT = Object.freeze({
   reviewerShareMs: 3_000_000, reviewerCycleCeilingMs: 1_000_000, architectWorstCaseMs: 600_000, infrastructureMs: 900_000,
   marginsMs: 420_000, gatedApprovalWaitMs: 2_100_000, jobBudgetMs: 18_000_000,
 });
-/** The whole-job worst case in ms for a declared session budget (the same formula as `coderRuntimeJobFit`). */
-const coderRuntimeWorstCaseMs = (minutes, repairCycles, approvalWaitMs) => {
-  const dispatchMs = CODER_FIT.attemptsPerDispatch * (minutes * 60_000 + CODER_FIT.preSessionMs + CODER_FIT.postSessionMs);
-  return CODER_FIT.reviewerShareMs + dispatchMs + CODER_FIT.architectWorstCaseMs + CODER_FIT.infrastructureMs
-    + repairCycles * (dispatchMs + CODER_FIT.reviewerCycleCeilingMs) + approvalWaitMs + CODER_FIT.marginsMs;
+/**
+ * The schedule of a declared session budget in ms (the same arithmetic as `coderRuntimeSchedule`): the MAIN PATH at its worst case
+ * (the only thing the checker refuses on), the guaranteed repair cycles, and how many would fit with one full attempt per dispatch.
+ * It never lowers a declared repair-cycle count.
+ */
+const coderRuntimeScheduleMs = (minutes, repairCycles, approvalWaitMs) => {
+  const attemptMs = minutes * 60_000 + CODER_FIT.preSessionMs + CODER_FIT.postSessionMs;
+  const dispatchMs = CODER_FIT.attemptsPerDispatch * attemptMs;
+  const fixed = CODER_FIT.reviewerShareMs + CODER_FIT.architectWorstCaseMs + CODER_FIT.infrastructureMs + approvalWaitMs + CODER_FIT.marginsMs;
+  const mainPathWorstCaseMs = fixed + dispatchMs;
+  const worstCycleMs = dispatchMs + CODER_FIT.reviewerCycleCeilingMs;
+  const mainPathFits = mainPathWorstCaseMs <= CODER_FIT.jobBudgetMs;
+  const guaranteedRepairCycles = mainPathFits ? Math.min(repairCycles, Math.floor((CODER_FIT.jobBudgetMs - mainPathWorstCaseMs) / worstCycleMs)) : 0;
+  const singleMainMs = fixed + attemptMs;
+  const singleAttemptCyclesThatFit = singleMainMs <= CODER_FIT.jobBudgetMs
+    ? Math.floor((CODER_FIT.jobBudgetMs - singleMainMs) / (attemptMs + CODER_FIT.reviewerCycleCeilingMs)) : 0;
+  return { attemptMs, mainPathWorstCaseMs, mainPathFits, worstCycleMs, guaranteedRepairCycles, singleAttemptCyclesThatFit };
 };
 const MISSION_LIMITS = Object.freeze({
   // Founder decision, 2026-09-06: mission 2 gets a larger bounded budget for
@@ -431,12 +444,14 @@ if (limits === undefined || limits === null || typeof limits !== 'object') {
     const minutes = limits.coderRuntimeMinutes;
     if (!(Number.isInteger(minutes) && minutes >= CODER_RUNTIME_MINUTES.min && minutes <= CODER_RUNTIME_MINUTES.max)) {
       refuse(`limits.coderRuntimeMinutes must be a whole number of minutes from ${CODER_RUNTIME_MINUTES.min} to ${CODER_RUNTIME_MINUTES.max} when declared`);
-    } else if (Number.isInteger(limits.repairCycles) && limits.repairCycles >= 0) {
-      // THE JOB FIT: a session that wins its minutes by overrunning the job is the runaway this key must not become.
+    } else {
+      // THE MAIN PATH MUST BE FEASIBLE (the only schedule refusal): plan, plan review, one build dispatch with both attempts at their
+      // whole deadline, build review, any approval wait and the margins, in the job. Repair cycles are NEVER refused or lowered
+      // here: the schedule is reported below and the run's stage stop line governs them at run time.
       const wait = contract.approvalGates !== undefined ? CODER_FIT.gatedApprovalWaitMs : 0;
-      const worst = coderRuntimeWorstCaseMs(minutes, limits.repairCycles, wait);
-      if (worst > CODER_FIT.jobBudgetMs) {
-        refuse(`limits.coderRuntimeMinutes ${minutes} with ${limits.repairCycles} repair cycle(s)${wait > 0 ? ' and an approval wait' : ''} needs ${worst} ms of a ${CODER_FIT.jobBudgetMs} ms job (${worst - CODER_FIT.jobBudgetMs} ms over); lower the minutes or the repair cycles`);
+      const schedule = coderRuntimeScheduleMs(minutes, 0, wait);
+      if (!schedule.mainPathFits) {
+        refuse(`limits.coderRuntimeMinutes ${minutes} cannot complete even the main path (no repair) in the job: ${schedule.mainPathWorstCaseMs} ms at worst case against ${CODER_FIT.jobBudgetMs} ms (${schedule.mainPathWorstCaseMs - CODER_FIT.jobBudgetMs} ms over); lower the minutes`);
       }
     }
   }
@@ -544,7 +559,18 @@ out(`  repair ceiling: ${limits?.repairCycles ?? 'MISSING'} cycle(s)`);
 if (limits?.architectEffort !== undefined) out(`  architect effort: ${limits.architectEffort}`);
 if (limits?.coderEffort !== undefined) out(`  coder effort: ${limits.coderEffort}`);
 if (limits?.coderSelfTestCalls !== undefined) out(`  coder self-tests (diagnostic telemetry only): up to ${limits.coderSelfTestCalls}`);
-if (limits?.coderRuntimeMinutes !== undefined) out(`  coder session budget: ${limits.coderRuntimeMinutes} minute(s) (opt-in; default envelope otherwise)`);
+if (limits?.coderRuntimeMinutes !== undefined) {
+  out(`  coder session budget: ${limits.coderRuntimeMinutes} minute(s) (opt-in; default envelope otherwise)`);
+  if (Number.isInteger(limits.coderRuntimeMinutes) && limits.coderRuntimeMinutes >= CODER_RUNTIME_MINUTES.min && limits.coderRuntimeMinutes <= CODER_RUNTIME_MINUTES.max
+    && Number.isInteger(limits.repairCycles) && limits.repairCycles >= 0) {
+    const wait = contract.approvalGates !== undefined ? CODER_FIT.gatedApprovalWaitMs : 0;
+    const s = coderRuntimeScheduleMs(limits.coderRuntimeMinutes, limits.repairCycles, wait);
+    out(`  coder session schedule: attempt_deadline_ms=${s.attemptMs} repair_cycles_declared=${limits.repairCycles} guaranteed_at_worst_case=${s.guaranteedRepairCycles} if_one_full_attempt_per_dispatch=${s.singleAttemptCyclesThatFit} main_path_worst_case_ms=${s.mainPathWorstCaseMs} job_limit_ms=${CODER_FIT.jobBudgetMs} repair_cycles_reduced=no`);
+    if (s.guaranteedRepairCycles < limits.repairCycles) {
+      out('  coder session schedule notice: repair cycles beyond the worst-case guarantee start only while the stage stop line allows; none is removed');
+    }
+  }
+}
 out(`  paid-run lanes: ${lanesFor(namespace).join(', ')}${claimedLane === null ? '' : ` (claimed: ${claimedLane})`}`);
 out(`  research: ${research === undefined
   ? 'NONE — every ask is refused research_not_authorized'

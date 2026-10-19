@@ -18,7 +18,8 @@
  */
 
 import {
-  CODER_FIT_INFRASTRUCTURE_ALLOWANCE_MS, CoderRuntimeBudgetRefused, coderAttemptDeadlineMs, coderRuntimeJobFit, resolveContractCoderRuntime,
+  CODER_FIT_INFRASTRUCTURE_ALLOWANCE_MS, CoderRuntimeBudgetRefused, coderAttemptDeadlineMs, coderRuntimeSchedule, resolveContractCoderRuntime,
+  type CoderRuntimeSchedule,
 } from '../hosted-coding-agent/coder-envelope';
 import { architectOperativeTimeoutMs, type ArchitectReasoningEffort } from '../../src/relay/connectors/gpt-architect/config';
 import type { HostedEffort, HostedSdkHelpers } from '../hosted-coding-agent/hosted-runner';
@@ -307,9 +308,49 @@ export const approvalWaitMsFor = (contract: object): number =>
   (contract as { readonly approvalGates?: unknown }).approvalGates === undefined ? 0 : CODER_FIT_GATED_APPROVAL_WAIT_MS;
 
 /**
- * THE JOB FIT OF A DECLARED SESSION BUDGET, from the REAL figures of this composition (the architect's worst case from the job
- * environment, the reviewer's share and ceiling, the stage-deadline margins). Null when it fits; otherwise the refusal, which the
- * preflight prints before anything is dispatched. Zero spend.
+ * THE SCHEDULE OF A DECLARED SESSION BUDGET, from the REAL figures of this composition (the architect's worst case from the job
+ * environment, the reviewer's share and ceiling, the stage-deadline margins, the job). Pure; throws `CoderRuntimeBudgetRefused`
+ * only for a value outside the absolute range or a bad cycle count.
+ */
+export function coderRuntimeScheduleFor(input: {
+  readonly env: Record<string, string | undefined>;
+  readonly coderRuntimeMinutes: number;
+  readonly repairCycles: number;
+  readonly approvalWaitMs: number;
+}): CoderRuntimeSchedule {
+  return coderRuntimeSchedule({
+    coderRuntimeMinutes: input.coderRuntimeMinutes, repairCycles: input.repairCycles, approvalWaitMs: input.approvalWaitMs,
+    reviewerShareMs: REVIEWER_JOB_SHARE_MS, reviewerCycleCeilingMs: reviewerDeadlineHardCeilingMs(),
+    architectWorstCaseMs: architectWorstCaseSpendMs(input.env), infrastructureMs: CODER_FIT_INFRASTRUCTURE_ALLOWANCE_MS,
+    marginsMs: JULIUS_JOB_STAMP_LAG_RESERVE_MS + JULIUS_RESERVE_AFTER_LIVE_MS, jobBudgetMs: JOB_BUDGET_MS,
+  });
+}
+
+/**
+ * The schedule of a CONTRACT, for the report: null when it declares no `coderRuntimeMinutes` (nothing is printed) or declares one the
+ * absolute range refuses (the refusal is reported by the preflight's own problem, not by a second line here).
+ */
+export function coderRuntimeScheduleOfContract(
+  env: Record<string, string | undefined>,
+  contract: { readonly limits?: { readonly coderRuntimeMinutes?: number; readonly repairCycles?: number } },
+): CoderRuntimeSchedule | null {
+  const minutes = contract.limits?.coderRuntimeMinutes;
+  if (minutes === undefined) return null;
+  try {
+    return coderRuntimeScheduleFor({
+      env, coderRuntimeMinutes: minutes, repairCycles: contract.limits?.repairCycles ?? 1, approvalWaitMs: approvalWaitMsFor(contract),
+    });
+  } catch (error) {
+    if (error instanceof CoderRuntimeBudgetRefused) return null;
+    throw error;
+  }
+}
+
+/**
+ * WHAT IS REFUSED, AND ONLY THAT: a value outside the absolute range, or a MAIN PATH that cannot fit the job even once (so the
+ * mission could not finish a first pass by construction). Null otherwise. It never refuses, and never lowers, a declared number of
+ * repair cycles: those are reported by `coderRuntimeScheduleFor` and governed at run time by the stage stop line. The refusal is
+ * printed by the preflight before anything is dispatched. Zero spend.
  */
 export function coderRuntimeBudgetRefusal(input: {
   readonly env: Record<string, string | undefined>;
@@ -318,15 +359,10 @@ export function coderRuntimeBudgetRefusal(input: {
   readonly approvalWaitMs: number;
 }): string | null {
   try {
-    const fit = coderRuntimeJobFit({
-      coderRuntimeMinutes: input.coderRuntimeMinutes, repairCycles: input.repairCycles, approvalWaitMs: input.approvalWaitMs,
-      reviewerShareMs: REVIEWER_JOB_SHARE_MS, reviewerCycleCeilingMs: reviewerDeadlineHardCeilingMs(),
-      architectWorstCaseMs: architectWorstCaseSpendMs(input.env), infrastructureMs: CODER_FIT_INFRASTRUCTURE_ALLOWANCE_MS,
-      marginsMs: JULIUS_JOB_STAMP_LAG_RESERVE_MS + JULIUS_RESERVE_AFTER_LIVE_MS, jobBudgetMs: JOB_BUDGET_MS,
-    });
-    return fit.fits ? null
-      : `coder_runtime_budget_unfit: limits.coderRuntimeMinutes ${input.coderRuntimeMinutes} with ${input.repairCycles} repair cycle(s) and a ${input.approvalWaitMs} ms approval wait `
-        + `needs ${fit.worstCaseMs} ms of a ${fit.limitMs} ms job (${-fit.headroomMs} ms over); lower the minutes or the repair cycles.`;
+    const schedule = coderRuntimeScheduleFor(input);
+    return schedule.mainPathFits ? null
+      : `coder_runtime_budget_unfit: limits.coderRuntimeMinutes ${input.coderRuntimeMinutes} cannot complete even the main path (no repair) in the job: `
+        + `${schedule.mainPathWorstCaseMs} ms at worst case against ${schedule.limitMs} ms (${schedule.mainPathWorstCaseMs - schedule.limitMs} ms over); lower the minutes.`;
   } catch (error) {
     if (error instanceof CoderRuntimeBudgetRefused) return `${error.code}: ${error.message}`;
     throw error;
