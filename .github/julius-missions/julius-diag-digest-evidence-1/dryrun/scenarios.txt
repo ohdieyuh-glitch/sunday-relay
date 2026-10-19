@@ -1,0 +1,14 @@
+# label|expect|fixes
+unfixed (as the repository is)|fail|
+fix A only (UTF-8 surrogates)|fail|fix-a-utf8.py
+fix B only (future publication)|fail|fix-b-age.py
+both fixes (the reference)|pass|fix-a-utf8.py,fix-b-age.py
+A partial: lone high at end and lone low fixed, the SWALLOWED NEXT CHARACTER left, with B fixed|fail|fix-a-partial-swallow.py,fix-b-age.py
+B partial: only more than 30 s ahead rejected (1-29 s ahead stays live), with A fixed|fail|fix-a-utf8.py,fix-b-partial-30s.py
+# ALTERNATIVE VALID SOLUTIONS: none of these may be spec-red.
+A alternative: code-point loop rewrite of the encoder, with B fixed|pass|alt-a-forof.py,fix-b-age.py
+A alternative: String.prototype.toWellFormed pre-pass, with B fixed|pass|alt-a-towellformed.py,fix-b-age.py
+A alternative: regex pre-pass replacing unpaired surrogates, with B fixed|pass|alt-a-regex.py,fix-b-age.py
+B alternative: rounding kept and NEGATIVE ZERO caught, with A fixed|pass|fix-a-utf8.py,fix-b-alt-negzero.py
+B alternative: direct instant comparison before rounding, with A fixed|pass|fix-a-utf8.py,alt-b-compare.py
+every alternative together (code-point loop + negative-zero catch)|pass|alt-a-forof.py,fix-b-alt-negzero.py
