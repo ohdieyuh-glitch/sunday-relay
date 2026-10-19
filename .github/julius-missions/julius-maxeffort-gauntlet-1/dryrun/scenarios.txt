@@ -1,4 +1,4 @@
-# label|expect|fixes   (A accounting, B cancel race, C activate race, D1 redelivered settlement, D2 next round never requested, D3 resume never requested)
+# label|expect|fixes   (A accounting, B cancel race, C activate race, D1 redelivered settlement, D2 next round never requested, D3 resume never requested, D4 created-never-started)
 unfixed (as the repository is)|fail|
 A only|fail|fix-a-usage.py
 B only|fail|fix-b-cancel.py
@@ -6,19 +6,22 @@ C only|fail|fix-c-activate.py
 D1 only|fail|fix-d1-advance.py
 D2 only|fail|fix-d2-open.py
 D3 only|fail|fix-d3-resume.py
-everything but A|fail|fix-b-cancel.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py
-everything but B|fail|fix-a-usage.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py
-everything but C|fail|fix-a-usage.py,fix-b-cancel.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py
-everything but D1|fail|fix-a-usage.py,fix-b-cancel.py,fix-c-activate.py,fix-d2-open.py,fix-d3-resume.py
-everything but D2|fail|fix-a-usage.py,fix-b-cancel.py,fix-c-activate.py,fix-d1-advance.py,fix-d3-resume.py
-everything but D3|fail|fix-a-usage.py,fix-b-cancel.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py
-all six (the reference)|pass|fix-a-usage.py,fix-b-cancel.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py
+D4 only|fail|fix-d4-ready.py
+everything but A|fail|fix-b-cancel.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py,fix-d4-ready.py
+everything but B|fail|fix-a-usage.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py,fix-d4-ready.py
+everything but C|fail|fix-a-usage.py,fix-b-cancel.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py,fix-d4-ready.py
+everything but D1|fail|fix-a-usage.py,fix-b-cancel.py,fix-c-activate.py,fix-d2-open.py,fix-d3-resume.py,fix-d4-ready.py
+everything but D2|fail|fix-a-usage.py,fix-b-cancel.py,fix-c-activate.py,fix-d1-advance.py,fix-d3-resume.py,fix-d4-ready.py
+everything but D3|fail|fix-a-usage.py,fix-b-cancel.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d4-ready.py
+everything but D4|fail|fix-a-usage.py,fix-b-cancel.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py
+all seven (the reference)|pass|fix-a-usage.py,fix-b-cancel.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py,fix-d4-ready.py
 # ALTERNATIVE VALID SOLUTIONS: none of these may be spec-red.
-A alternative: whole-gauntlet delta|pass|alt-a-delta.py,fix-b-cancel.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py
-B alternative: lost-race cancel REFUSES|pass|fix-a-usage.py,alt-b-refuse.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py
-C alternative: lost-race activation REFUSES|pass|fix-a-usage.py,fix-b-cancel.py,alt-c-refuse.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py
-D2 and D3 alternative: request only when the round row is MISSING|pass|fix-a-usage.py,fix-b-cancel.py,fix-c-activate.py,fix-d1-advance.py,alt-d23-rows.py
-every alternative together|pass|alt-a-delta.py,alt-b-refuse.py,alt-c-refuse.py,fix-d1-advance.py,alt-d23-rows.py
-# WRONG FIXES: each notices the race but reports a lie.
-B wrong: skips the cancel but still reports CANCELLED|fail|fix-a-usage.py,bad-b-claims.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py
-C wrong: skips the request but still reports a fresh round 1|fail|fix-a-usage.py,fix-b-cancel.py,bad-c-fresh.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py
+A alternative: whole-gauntlet delta|pass|alt-a-delta.py,fix-b-cancel.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py,fix-d4-ready.py
+B alternative: lost-race cancel REFUSES|pass|fix-a-usage.py,alt-b-refuse.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py,fix-d4-ready.py
+C alternative: lost-race activation REFUSES|pass|fix-a-usage.py,fix-b-cancel.py,alt-c-refuse.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py,fix-d4-ready.py
+D2 and D3 alternative: request only when the round row is MISSING|pass|fix-a-usage.py,fix-b-cancel.py,fix-c-activate.py,fix-d1-advance.py,fix-d4-ready.py,alt-d23-rows.py
+every alternative together|pass|alt-a-delta.py,alt-b-refuse.py,alt-c-refuse.py,fix-d1-advance.py,alt-d23-rows.py,fix-d4-ready.py
+# WRONG FIXES: each looks plausible and must stay red.
+B wrong: skips the cancel but still reports CANCELLED|fail|fix-a-usage.py,bad-b-claims.py,fix-c-activate.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py,fix-d4-ready.py
+C wrong: skips the request but still reports a fresh round 1|fail|fix-a-usage.py,fix-b-cancel.py,bad-c-fresh.py,fix-d1-advance.py,fix-d2-open.py,fix-d3-resume.py,fix-d4-ready.py
+D1 wrong: absorb on ANY repeated settle (never advances a gauntlet that died between settling and saving)|fail|fix-a-usage.py,fix-b-cancel.py,fix-c-activate.py,bad-d1-early.py,fix-d2-open.py,fix-d3-resume.py,fix-d4-ready.py

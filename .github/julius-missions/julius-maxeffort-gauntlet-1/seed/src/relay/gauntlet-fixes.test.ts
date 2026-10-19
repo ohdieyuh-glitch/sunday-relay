@@ -7,7 +7,7 @@ import {
 import { createGauntletMemoryStore } from './mission/gauntlet/gauntlet-memory-store.ts';
 
 /**
- * THREE LATENT DEFECTS IN THE /gauntletloop COMMAND CONTROLLER: THE SPECIFICATION.
+ * FOUR LATENT DEFECTS IN THE /gauntletloop COMMAND CONTROLLER: THE SPECIFICATION.
  *
  * The controller is real Relay code with documented intent. `advanceGauntletCommand` and `openNextGauntletRound` already treat a lost compare-and-set on `save` by RELOADING
  * the stored gauntlet and reporting what is stored; `GauntletStore.save` is documented as a compare-and-set on `version`. The tests pin the main behaviour of each fix; the acceptance
@@ -19,6 +19,9 @@ import { createGauntletMemoryStore } from './mission/gauntlet/gauntlet-memory-st
  *      CANCELLED, although the stored gauntlet is not.
  *   C. ACTIVATE. `activateGauntlet` ignores the result of the compare-and-set that records the first round. If it loses, it still requests that round's work and reports a freshly
  *      started gauntlet at round 1 that is not what is stored.
+ *   D. RECOVERY. The header promises that "a process that dies between any two of them loses nothing", but the controller saves the new state BEFORE it requests the successor
+ *      work: a crash in between strands the gauntlet (the repair, the next round's review or the first review is never requested) and a redelivery is an error or a no-op.
+ *      A redelivered step must be absorbed without counting its usage twice, and a gauntlet whose successor work is missing must get it.
  */
 
 const LIMITS = { maxRounds: 6, maxRetries: 6, maxDurationMs: 1_000, maxUsdMicros: 250 };
@@ -27,6 +30,8 @@ const POLICY = { allowed: true, maxRounds: 6, requiresApproval: false };
 const harness = (store = createGauntletMemoryStore()) => {
   /** Work ids requested, once each: the real work port is idempotent by the deterministic work id, so is this one. */
   const requested: string[] = [];
+  /** EVERY call to requestWork, duplicates included: for the tests that say a gauntlet must not ask for work at all. */
+  const calls: string[] = [];
   const cancelled: string[] = [];
   /** A work id whose NEXT request throws: the process died after the state was saved and before this work was requested. */
   const crash: { on: string | null } = { on: null };
@@ -35,6 +40,7 @@ const harness = (store = createGauntletMemoryStore()) => {
     store,
     work: {
       requestWork: async (w: { workId: string }) => {
+        calls.push(w.workId);
         if (crash.on === w.workId) { crash.on = null; throw new Error('PROCESS DIED'); }
         if (!requested.includes(w.workId)) requested.push(w.workId);
         return true;
@@ -46,7 +52,7 @@ const harness = (store = createGauntletMemoryStore()) => {
     clock: { now: () => '2026-10-19T00:00:00.000Z' },
     ids: { next: (kind: string) => `${kind}-${++n}` },
   };
-  return { store, deps: deps as never, requested, cancelled, crash };
+  return { store, deps: deps as never, requested, calls, cancelled, crash };
 };
 
 const COMMAND = {
@@ -248,4 +254,83 @@ test('D: control: recovery does not request work that no state implies (a cleare
   await activateGauntlet(COMMAND, h.deps);
   await openNextGauntletRound({ runId: 'run-1', gauntletId: 'g1' }, h.deps);
   assert.deepEqual(h.requested, cleared, 'a cleared gauntlet schedules nothing, on resume or on open');
+});
+
+/* -------------------------------------------------------------------------------- D (continued): the windows a crash can fall into, and what a redelivery may change */
+
+/** A store whose NEXT save throws, once: the process died after everything before the save and before the save itself. */
+const dyingOnSave = (base: ReturnType<typeof createGauntletMemoryStore>) => {
+  let armed = true;
+  return {
+    ...base,
+    save: async (record: never, expectedVersion: number) => {
+      if (armed) { armed = false; throw new Error('PROCESS DIED'); }
+      return base.save(record, expectedVersion);
+    },
+  } as ReturnType<typeof createGauntletMemoryStore>;
+};
+
+test('D: a crash between creating the gauntlet and recording its first round: the second /gauntletloop STARTS it (not just reports it)', async () => {
+  const base = createGauntletMemoryStore();
+  const h = harness(base);
+  await assert.rejects(activateGauntlet(COMMAND, { ...(h.deps as object), store: dyingOnSave(base) } as never), /PROCESS DIED/);
+  let g = await stored(base);
+  assert.deepEqual([g.state, g.round], ['READY', 0], 'created, never started');
+  const second = out(await activateGauntlet(COMMAND, h.deps));
+  assert.equal(second.activated, true);
+  g = await stored(base);
+  assert.deepEqual([g.state, g.round], ['RUNNING', 1], 'the second activation started round 1');
+  assert.ok(h.requested.includes(gauntletWorkId('g1', 1, 'REVIEW')), 'and requested its review');
+  assert.equal(base.all().length, 1, 'one gauntlet');
+  assert.equal((await rowsOf(base, 1, 'REVIEW')).length, 1, 'one review row');
+});
+
+test('D: a crash between settling a phase and saving the new state: the redelivery IS the settlement, applied once, and the first report\'s usage is the one counted', async () => {
+  for (const redelivered of [10, 999]) {
+    const base = createGauntletMemoryStore();
+    const h = harness(base);
+    await activateGauntlet(COMMAND, h.deps);
+    await assert.rejects(advanceGauntletCommand(settleInput('REVIEW'), { ...(h.deps as object), store: dyingOnSave(base) } as never), /PROCESS DIED/);
+    assert.equal((await stored(base)).state, 'RUNNING', 'the state never moved');
+    const again = out(await advanceGauntletCommand(step('REVIEW', { durationMs: 1, usdMicros: redelivered }), h.deps));
+    assert.equal(again.advanced, true);
+    const g = await stored(base);
+    assert.deepEqual([g.state, g.usedUsdMicros, g.usedDurationMs, g.haltReason], ['REPAIRING', 10, 1, null], `redelivered usage ${redelivered}: the first settlement's 10 is counted, once`);
+    assert.ok(h.requested.includes(gauntletWorkId('g1', 1, 'REPAIR')), 'and the repair was requested');
+  }
+});
+
+test('D: a redelivered settlement whose usage report is BIGGER does not change the totals and cannot halt the gauntlet', async () => {
+  const h = harness();
+  await activateGauntlet(COMMAND, h.deps);
+  await advanceGauntletCommand(settleInput('REVIEW'), h.deps);
+  const again = out(await advanceGauntletCommand(step('REVIEW', { durationMs: 5_000, usdMicros: 5_000 }), h.deps));
+  assert.equal(again.advanced, true);
+  const g = await stored(h.store);
+  assert.deepEqual([g.state, g.usedUsdMicros, g.usedDurationMs, g.haltReason, g.version], ['REPAIRING', 10, 1, null, 3], 'a replay is not a new spend');
+});
+
+test('D: control: a gauntlet that is waiting for its repair is never asked for work: a second /gauntletloop, a next-round call and a redelivered review make NO requestWork call', async () => {
+  const h = harness();
+  await activateGauntlet(COMMAND, h.deps);
+  await advanceGauntletCommand(settleInput('REVIEW'), h.deps);
+  const before = h.calls.length;
+  await activateGauntlet(COMMAND, h.deps);
+  await openNextGauntletRound({ runId: 'run-1', gauntletId: 'g1' }, h.deps);
+  assert.equal(h.calls.length, before, 'resume and open leave a REPAIRING gauntlet alone');
+});
+
+test('D: a gauntlet already STRANDED by an earlier version (RUNNING, its round has no review row) is repaired by the next-round call', async () => {
+  const base = createGauntletMemoryStore();
+  const h = harness(base);
+  await activateGauntlet(COMMAND, h.deps);
+  await advanceGauntletCommand(settleInput('REVIEW'), h.deps);
+  await advanceGauntletCommand(settleInput('REPAIR'), h.deps);
+  const cur = await stored(base);
+  assert.equal(await base.save({ ...cur, state: 'RUNNING', round: 2, version: cur.version + 1 } as never, cur.version), true, 'the stranded state, as an earlier version left it');
+  const r = out(await openNextGauntletRound({ runId: 'run-1', gauntletId: 'g1' }, h.deps));
+  assert.equal(r.advanced, true);
+  assert.ok(h.requested.includes(gauntletWorkId('g1', 2, 'REVIEW')), 'round 2 review requested');
+  assert.equal((await rowsOf(base, 2, 'REVIEW')).length, 1);
+  assert.deepEqual([(await stored(base)).state, (await stored(base)).round], ['RUNNING', 2], 'not opened again');
 });
