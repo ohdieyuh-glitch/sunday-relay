@@ -1,0 +1,1507 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MissionControl } from '../MissionControl';
+import { RelayEntryHome } from '../entry-home';
+import { RelayWorld } from '../relay-world';
+import {
+  DEFAULT_CONNECTION_STATUSES,
+  FIXTURE_GUIDE_MESSAGES,
+  FIXTURE_RECENT_PROJECTS,
+  SUGGESTED_QUESTIONS,
+  buildEvidenceRecommendation,
+  buildResearchRecommendation,
+  buildWorkforceRecommendation,
+  fixtureGuideReply,
+} from '../entry-home';
+import type {
+  GuideMessage,
+  ProjectBriefDraft,
+  ProjectRouteDefinition,
+} from '../entry-home';
+import {
+  RelayProjectWorkspace,
+  RelayMissionPlayback,
+  RelayLiveMissionControl,
+  WORKSPACE_FIXTURES,
+  WORKSPACE_FIXTURE_KEYS,
+} from '../project-workspace';
+import {
+  openLoopSurface,
+  type RelayLoopSurface,
+  type RelayLoopSurfaceState,
+} from '../loop';
+import type { RelayMissionState } from '../app';
+import type { ProjectMessage, WorkspaceFixtureKey } from '../project-workspace';
+import { AGENT_OPTIONS, RelayProjectSettings } from '../project-settings';
+import type { WorkforceRole } from '../project-settings';
+import type { ProjectSettingsDraft } from '../project-settings';
+import { buildRelayMcpSettingsView } from '../mcp';
+import { RelayProjectBrainView } from '../project-workspace/RelayProjectBrainView';
+import {
+  deriveMissionProjection,
+  getRelayAppStore,
+  defaultSettingsForProject,
+  useRelayAppState,
+} from '../app';
+import {
+  RelayDemoSimulationControls,
+  RelayDemoMissionSummary,
+  projectDemoSimulationIntoWorkspace,
+  useRelayDemoSimulation,
+} from '../app/demo-simulation';
+import { RelayMissionRunControls } from '../mission-control';
+import {
+  DeterministicCommandInterpreter,
+  InMemoryMissionCommandRepository,
+  InMemoryMissionContextStore,
+} from '../../mission/commands';
+import { createAuthMissionContext } from '../../mission/commands/command-fixtures';
+import type { PSPAgentImportRecord } from '../../psp';
+import { createFixtureEntitlementService } from '../../psp/psp-fixtures';
+import { COLORWAY_LABEL, RELAY_COLORWAYS, applyRelayColorway } from './colorway';
+import type { RelayColorway } from './colorway';
+import type { RelayBackdropId } from '../../shared/relay-stage-backdrop';
+import type { ChakraTier } from '../../shared/relay-chakra';
+import { siblingProductTarget } from './environment';
+import { configuredDeploymentKind } from '../app/bridge-session';
+import { RelayLiveReachSettings } from '../live-reach';
+import {
+  LIVE_REACH_SOURCES,
+  acknowledgeGlobalNotice as acknowledgeLiveReachGlobal,
+  acknowledgeSourceNotice as acknowledgeLiveReachSource,
+  disableAllSources as disableAllLiveReachSources,
+  setCapability as setLiveReachCapability,
+  setGroup as setLiveReachGroup,
+} from '../../mission/live-reach';
+import {
+  EMPTY_USAGE_LATCH,
+  demoUsageSnapshot,
+  deriveUsageThresholdEvents,
+  offlineUsageSnapshot,
+  projectUsageBar,
+  projectUsageDetail,
+  type RelayUsageLatch,
+} from '../../usage';
+import { RelayUsageDetailPanel, type RelayWorkspaceUsage } from '../usage';
+import { RelayNotificationHost, useRelayNotificationCenter } from '../notifications';
+import { RelayMissionRecoveryPanel } from '../recovery';
+import { projectMissionWorktree } from '../../mission/worktree';
+import { projectCodingAgentRuntime } from '../../mission/coding-agent';
+import { projectPromptArchitect } from '../../mission/prompt-architect';
+import { projectReviewerHarness } from '../../mission/reviewer-harness';
+import { useRelayDurableMission } from '../app/useRelayDurableMission';
+import './relay-preview.css';
+
+/**
+ * RELAY BROWSER APPLICATION SHELL — the product host that wires the domain
+ * store (projects, briefs, settings, brains, missions, events) to the
+ * approved screens across a continuous, refresh-safe flow:
+ *
+ *   #/relay                              → Relay Entry Home + Ask Relay
+ *   #/relay/project/:id/settings         → Project Settings
+ *   #/relay/project/:id                  → Active Project Workspace
+ *   #/relay/project/:id/terminal         → full-screen Live Terminal
+ *   #/relay/console                      → Mission Control (execution console)
+ *
+ * All domain state lives in the application store and persists through the
+ * browser-demo adapter, so refresh and direct routes restore the exact
+ * project and mission. The demo mission path is deterministic and offline —
+ * no provider is ever called. The bottom-right DEV PREVIEW switcher —
+ * collapsible at every width behind its handle, with a ZOOM control that
+ * shrinks the whole app into view — SHIPS with the offline demo product
+ * (founder direction, 2026-07-31): the deployed site is the walkable tour,
+ * and the switcher is how a visitor walks it. It drives presentation and the
+ * explicitly labeled Demo Simulation only, never mission execution.
+ *
+ * The shell also owns the ONE canonical usage snapshot (offline until a live
+ * source exists; SIMULATED only inside Demo Simulation), the ONE usage
+ * detail panel, and the ONE top-right notification host shared by every
+ * screen and fullscreen panel.
+ *
+ * The `rly-001` id remains the labeled design fixture (unchanged), so the
+ * approved screenshots keep working; created projects are `rly-002+` and are
+ * fully store-backed with live mission progression.
+ */
+
+export type PreviewRoute =
+  /** The public landing experience — the site's front door, at the bare URL. */
+  | { screen: 'landing' }
+  /** The Relay experience: Compound Agent creation with the persistent 3D Dog. */
+  | { screen: 'experience' }
+  | { screen: 'home' }
+  | { screen: 'settings'; projectId: string }
+  | { screen: 'console' }
+  | { screen: 'workspace'; projectId: string; terminal: boolean }
+  /** The Project Brain's own view, opened from the Brain in the workspace. */
+  | { screen: 'brain'; projectId: string }
+  /** Live Reach settings — integrations, not a project's configuration. */
+  | { screen: 'live-reach' };
+
+export function parsePreviewHash(hash: string): PreviewRoute {
+  const clean = hash.replace(/^#/, '');
+  const parts = clean.split('/').filter(Boolean);
+  // ANYTHING OUTSIDE `#/relay/*` IS THE LANDING, including the bare URL. The
+  // landing is the front door; `#/relay` remains the in-product Entry Home, so
+  // the C.A.R.D.-first flow is reached exactly as before and is not displaced.
+  if (parts[0] !== 'relay') return { screen: 'landing' };
+  // `#/relay` IS THE RELAY EXPERIENCE NOW.
+  //
+  // It used to be the Entry Home — the blue terminal shell with its tab bar,
+  // its project dashboard and its 2D WANDERING sprite. The founder superseded
+  // that as the post-ENTER-RELAY destination: entering Relay continues the same
+  // cinematic 3D language and begins Compound Agent creation.
+  //
+  // The old screen is not deleted — it still holds working product surfaces and
+  // its own tests — but it is OFF THE ONBOARDING PATH, reachable only at an
+  // explicit legacy route that nothing in the new flow links to.
+  if (parts.length === 1) return { screen: 'experience' };
+  if (parts[1] === 'home-legacy') return { screen: 'home' };
+  if (parts[1] === 'console') return { screen: 'console' };
+  // Back-compat: bare settings route resolves to the active project later.
+  if (parts[1] === 'live-reach') return { screen: 'live-reach' };
+  if (parts[1] === 'project-settings') return { screen: 'settings', projectId: '' };
+  if (parts[1] === 'project' && parts[2]) {
+    if (parts[3] === 'settings') return { screen: 'settings', projectId: parts[2] };
+    if (parts[3] === 'brain') return { screen: 'brain', projectId: parts[2] };
+    return { screen: 'workspace', projectId: parts[2], terminal: parts[3] === 'terminal' };
+  }
+  return { screen: 'home' };
+}
+
+function useHashRoute(): [PreviewRoute, (hash: string) => void] {
+  const [route, setRoute] = useState<PreviewRoute>(() =>
+    parsePreviewHash(typeof window !== 'undefined' ? window.location.hash : ''),
+  );
+  useEffect(() => {
+    const onHash = () => setRoute(parsePreviewHash(window.location.hash));
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  const navigate = useCallback((hash: string) => {
+    window.location.hash = hash;
+  }, []);
+  return [route, navigate];
+}
+
+let previewMessageSeq = 100;
+
+const isTerminalMissionState = (state: RelayMissionState) =>
+  state === 'verified_complete' || state === 'failed' || state === 'cancelled';
+
+/** Dev-only preview zoom levels — shrink the whole app to fit the full page on
+    screen at once. The value scales the app via CSS `zoom`; the fixed dev
+    controls live outside the scaled stage and stay full size. */
+const DEV_ZOOM_LEVELS = [100, 90, 75, 60, 50] as const;
+const DEV_ZOOM_KEY = 'sunday-relay.dev.zoom';
+
+function readDevZoom(): number {
+  if (typeof window === 'undefined') return 100;
+  try {
+    const raw = Number(window.localStorage.getItem(DEV_ZOOM_KEY));
+    return (DEV_ZOOM_LEVELS as readonly number[]).includes(raw) ? raw : 100;
+  } catch {
+    return 100;
+  }
+}
+
+function writeDevZoom(zoom: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(DEV_ZOOM_KEY, String(zoom));
+  } catch {
+    /* dev-only convenience — a storage failure must never break the app */
+  }
+}
+
+/**
+ * Which usage thresholds already notified, keyed per reset window — persisted
+ * so a browser refresh cannot fabricate a second threshold crossing. Storage
+ * failure degrades to session-only memory, never to a broken app.
+ */
+const USAGE_LATCH_KEY = 'sunday-relay.usage.notified-thresholds';
+
+function readUsageLatch(): RelayUsageLatch {
+  if (typeof window === 'undefined') return EMPTY_USAGE_LATCH;
+  try {
+    const raw = window.localStorage.getItem(USAGE_LATCH_KEY);
+    if (!raw) return EMPTY_USAGE_LATCH;
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((k) => typeof k === 'string')) {
+      return { keys: parsed };
+    }
+    return EMPTY_USAGE_LATCH;
+  } catch {
+    return EMPTY_USAGE_LATCH;
+  }
+}
+
+function writeUsageLatch(latch: RelayUsageLatch): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(USAGE_LATCH_KEY, JSON.stringify(latch.keys));
+  } catch {
+    /* memory-only fallback */
+  }
+}
+
+/** Role titles for the confirmation line. The strip's own labels. */
+const ROLE_TITLE_FOR_MESSAGE: Readonly<Record<WorkforceRole, string>> = Object.freeze({
+  prompt_architect: 'Prompt Architect',
+  coding_agent: 'Coding Agent',
+  reviewer: 'Reviewer',
+});
+
+/** The catalog name for a stored id. Unknown stays unknown — an id the catalog
+ *  does not have is not a name this surface may invent. */
+function agentNameFor(agentId: string): string {
+  return AGENT_OPTIONS.find((o) => o.id === agentId)?.name ?? agentId;
+}
+
+export function RelayPreviewApp() {
+  const store = useMemo(() => getRelayAppStore(), []);
+  /* Which machine this browser talks to. Build-time and constant for the
+     session, so it is resolved once — and `null` (no bridge) is a real answer
+     the workspace shows as UNKNOWN rather than as "runs nowhere". */
+  const deploymentKind = useMemo(() => configuredDeploymentKind(), []);
+  useEffect(() => {
+    store.init();
+  }, [store]);
+  const state = useRelayAppState(store);
+
+  const [route, navigate] = useHashRoute();
+  const demoSimulation = useRelayDemoSimulation();
+  const demoProjectIdRef = useRef<string | null>(null);
+  const [mobileFrame, setMobileFrame] = useState(false);
+  // Presentation-only local state: collapsing the developer panel must not
+  // alter routes, appearance, fixture state, or mission execution.
+  const [switcherOpen, setSwitcherOpen] = useState(true);
+  // Dev-only preview zoom: shrink the whole app to see the full page at once.
+  const [zoom, setZoom] = useState<number>(readDevZoom);
+  useEffect(() => {
+    writeDevZoom(zoom);
+  }, [zoom]);
+
+  // Appearance persists through the store (existing frontend appearance
+  // contract). Apply on every change and on first restore.
+  const colorway = state.colorway;
+  useEffect(() => {
+    applyRelayColorway(colorway, document.documentElement);
+  }, [colorway]);
+  const setColorway = (c: RelayColorway) => store.setColorway(c);
+
+  // The stage backdrop persists the same way, through the same store. Until
+  // now the picker changed the scene and a reload returned it to None.
+  const stageBackdrop = state.stageBackdrop;
+  const selectStageBackdrop = (id: RelayBackdropId) => store.setStageBackdrop(id);
+  /* Appearance, stored the same way and in the same place as the backdrop. */
+  const chakraTier = state.chakraTier;
+  const selectChakraTier = (tier: ChakraTier | null) => { store.setChakraTier(tier); };
+
+  /* -------- live mission driver: begin once + poll authoritative state ----- */
+  // The active non-demo mission id for the current workspace route. A stable
+  // string, so the effect below runs once per live mission (not per poll).
+  const liveMissionId = useMemo(() => {
+    if (route.screen !== 'workspace') return null;
+    const project = store.getProject(route.projectId);
+    const m = project?.activeMissionId ? store.getMission(project.activeMissionId) : null;
+    return m && !m.demo ? m.id : null;
+    // `state` dep: recompute after store commits so a newly-created mission is seen.
+  }, [route, store, state]);
+
+  useEffect(() => {
+    if (!liveMissionId) return;
+    const mission = store.getMission(liveMissionId);
+    if (!mission) return;
+
+    let stopped = false;
+    // Begin exactly once — never re-dispatch on refresh or route remount.
+    if (mission.state === 'configured' && store.getMissionEvents(liveMissionId).length === 0) {
+      void store.beginLiveMission(liveMissionId).then((r) => {
+        if (!r.ok && !stopped) {
+          setNotice(r.message);
+          setStartRefusal({ missionId: liveMissionId, reason: r.message });
+        }
+        if (r.ok && !stopped) setStartRefusal((cur) => (cur?.missionId === liveMissionId ? null : cur));
+      });
+    }
+    if (isTerminalMissionState(mission.state)) return;
+
+    const interval = window.setInterval(() => {
+      const m = store.getMission(liveMissionId);
+      if (!m || isTerminalMissionState(m.state)) {
+        window.clearInterval(interval);
+        return;
+      }
+      void store.pollLiveMission(liveMissionId).then((r) => {
+        if (!r.ok && !stopped) {
+          // Backend lost the mission (e.g. it restarted). Stop polling and say
+          // so honestly; the persisted last-known state stays on screen.
+          window.clearInterval(interval);
+          setNotice(r.message);
+        }
+      });
+    }, 1200);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+    };
+  }, [liveMissionId, store]);
+
+  /* --------------------- canonical usage + notifications -------------- */
+  /* ONE usage snapshot for the whole application. With no live usage source
+     the truthful snapshot is `offline` (everything unavailable — never 0%).
+     Only the founder-triggered Demo Simulation swaps in the SIMULATED
+     snapshot; ordinary navigation can never load it. */
+  const usageSnapshot = useMemo(
+    () =>
+      demoSimulation.state.active
+        ? demoUsageSnapshot({
+            stepIndex: demoSimulation.state.currentStepIndex,
+            nowIso: new Date().toISOString(),
+          })
+        : offlineUsageSnapshot(),
+    [demoSimulation.state.active, demoSimulation.state.currentStepIndex],
+  );
+  const [usageOpen, setUsageOpen] = useState(false);
+  const notificationCenter = useRelayNotificationCenter();
+  const usageLatchRef = useRef<RelayUsageLatch>(readUsageLatch());
+  const publishNotification = notificationCenter.publish;
+
+  /* Threshold crossings → top-right notifications, once per reset window.
+     The latch persists across refresh and routes, so neither can fabricate
+     a crossing; the dedupeKey suppresses same-render duplicates. */
+  useEffect(() => {
+    const derived = deriveUsageThresholdEvents(usageSnapshot, usageLatchRef.current);
+    if (derived.latch !== usageLatchRef.current) {
+      usageLatchRef.current = derived.latch;
+      writeUsageLatch(derived.latch);
+    }
+    for (const event of derived.events) {
+      publishNotification({
+        dedupeKey: event.key,
+        kind: event.kind,
+        title: event.title,
+        body: event.body,
+        simulated: usageSnapshot.provenance === 'simulated',
+        actions: [
+          { id: 'view-usage', label: 'VIEW USAGE', onSelect: () => setUsageOpen(true) },
+        ],
+      });
+    }
+  }, [usageSnapshot, publishNotification]);
+
+  const workspaceUsage: RelayWorkspaceUsage = useMemo(
+    () => ({
+      bar: projectUsageBar(usageSnapshot),
+      onOpenUsage: () => setUsageOpen(true),
+    }),
+    [usageSnapshot],
+  );
+  const usageDetailView = useMemo(
+    () => projectUsageDetail(usageSnapshot, new Date().toISOString()),
+    [usageSnapshot, usageOpen],
+  );
+
+  /* ------------------- durable mission persistence + recovery ---------- */
+  /* ONE durable store for the whole application. `runtimeAvailable` is FALSE
+     in this offline build, so recovery restores SAVED STATE and never claims
+     that an agent reconnected. */
+  const [inspectingRecovery, setInspectingRecovery] = useState(false);
+  const durable = useRelayDurableMission({
+    publish: notificationCenter.publish,
+    onViewRecovery: () => setInspectingRecovery(true),
+    runtimeAvailable: false,
+  });
+  const durableCheckpoint = durable.checkpoint;
+
+  /* CHECKPOINT AT SAFE BOUNDARIES ONLY. The effect depends on a boundary
+     IDENTITY string — mission id, state, phase, terminal status, line count,
+     finding count — so a keystroke, an animation frame or a stream of
+     terminal characters can never trigger a mission checkpoint. */
+  const checkpointMissionId =
+    route.screen === 'workspace'
+      ? store.getProject(route.projectId)?.activeMissionId ?? null
+      : null;
+  const checkpointMission = checkpointMissionId ? store.getMission(checkpointMissionId) : null;
+  const checkpointBoundary = checkpointMission === null
+    ? null
+    : [
+      checkpointMission.id,
+      checkpointMission.state,
+      checkpointMission.phase ?? '',
+      checkpointMission.terminal?.status ?? '',
+      String(checkpointMission.review?.findings.length ?? 0),
+    ].join('|');
+
+  useEffect(() => {
+    if (checkpointBoundary === null || checkpointMissionId === null) return;
+    const mission = store.getMission(checkpointMissionId);
+    const project = mission ? store.getProject(mission.projectId) : null;
+    if (mission === null || project === null) return;
+    void durableCheckpoint({
+      mission,
+      project,
+      settings: store.getSettings(project.id),
+      events: store.getMissionEvents(mission.id),
+      usage: usageSnapshot,
+      interruptionReason: null,
+    });
+  }, [checkpointBoundary, checkpointMissionId, store, usageSnapshot, durableCheckpoint]);
+
+  /* ---------------------- isolated mission worktree ------------------- */
+  /* THE STATIC DEPLOYMENT HAS NO NODE BRIDGE, so it cannot know whether a
+     local worktree exists — and it must not guess. `offline: true` renders
+     "Not available in offline demo"; Demo Simulation renders a SIMULATED
+     worktree under the existing disclosure. Neither ever names a real path. */
+  const worktreeView = useMemo(
+    () => projectMissionWorktree(null, {
+      offline: !demoSimulation.state.active,
+      simulated: demoSimulation.state.active,
+    }),
+    [demoSimulation.state.active],
+  );
+
+  /* Worktree notifications reuse the ONE host. Nothing announces success
+     here: with no bridge there is no worktree to be ready, so the only
+     truthful event is the absence itself, which the Environment row states
+     without a notification. */
+
+  /* THE CODING AGENT RUNTIME. The static deployment hosts no Relay Bridge,
+     so it can launch nothing and must not offer to: `bridgeAvailable: false`
+     renders "Relay Bridge required" and disables Start. */
+  const codingRuntimeView = useMemo(
+    () => projectCodingAgentRuntime(null, {
+      bridgeAvailable: false,
+      simulated: demoSimulation.state.active,
+    }),
+    [demoSimulation.state.active],
+  );
+
+  /* THE PROMPT ARCHITECT RUNTIME. The static deployment hosts no Relay
+     Bridge and must never call OpenAI from the browser, so it renders
+     "Relay Bridge required" and offers no Start. */
+  const architectRuntimeView = useMemo(
+    () => projectPromptArchitect(null, {
+      bridgeAvailable: false,
+      simulated: demoSimulation.state.active,
+    }),
+    [demoSimulation.state.active],
+  );
+
+  /* THE REVIEWER HARNESS. No catalog entry has an adapter yet and no bridge
+     is hosted, so nothing is startable and nothing may read as Connected. */
+  const reviewerHarnessView = useMemo(
+    () => projectReviewerHarness(null, {
+      bridgeAvailable: false,
+      simulated: demoSimulation.state.active,
+    }),
+    [demoSimulation.state.active],
+  );
+
+  /* Inspecting an unavailable harness may say so ONCE, through the same host
+     every other Relay notification uses. The catalog explains each row inline
+     as well, so this never becomes a stack of toasts, and it announces an
+     absence — it can never announce a connection. */
+  const onHarnessUnavailable = useCallback(() => {
+    publishNotification({
+      dedupeKey: 'reviewer-harness-unavailable',
+      kind: 'warning',
+      title: 'Reviewer harness unavailable',
+      body: 'This harness is not connected yet.',
+    });
+  }, [publishNotification]);
+
+  const recoveredMissionName = (() => {
+    const id = durable.discovered?.record?.missionId;
+    if (id === undefined) return 'Unfinished mission';
+    return store.getMission(id)?.title ?? id;
+  })();
+
+  /* ---------------- Entry Home host state (memory-only UI bits) ------- */
+  const [projectIdeaDraft, setProjectIdeaDraft] = useState('');
+  const [selectedRoute, setSelectedRoute] = useState<ProjectRouteDefinition | null>(null);
+  const [guideMessages, setGuideMessages] = useState<GuideMessage[]>(FIXTURE_GUIDE_MESSAGES);
+  const [recentPopulated, setRecentPopulated] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * The live mission start's last refusal, kept where the CONSOLE can render
+   * it. `setNotice` alone put the reason in a dismissible line at the bottom
+   * of the page while the console's empty state showed boilerplate — a
+   * founder stared at "activity will appear here" for an afternoon while the
+   * actual reason sat below the fold. Keyed by mission so a stale refusal
+   * never describes a different mission.
+   */
+  const [startRefusal, setStartRefusal] = useState<{ missionId: string; reason: string } | null>(null);
+  const [startInFlight, setStartInFlight] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  /* ---------------- workspace fixture-showcase state ------------------ */
+  const [fixtureKey, setFixtureKey] = useState<WorkspaceFixtureKey>('implementing');
+  const [extraWsMessages, setExtraWsMessages] = useState<ProjectMessage[]>([]);
+
+  /* -------------- Mission run controls (PAUSE / RESUME) -------------- */
+  /* The controls drive the REAL Milestone 2 command protocol over a loaded
+     mission context. The dev preview supplies the Mission Operations fixture
+     context; a signed-in application supplies the live one. Either way the
+     path is identical — interpret, validate, preview, checkpoint, execute. */
+  const missionCommandStore = useMemo(() => {
+    const store_ = new InMemoryMissionContextStore();
+    store_.save(createAuthMissionContext());
+    return store_;
+  }, []);
+  const missionCommandRepo = useMemo(() => new InMemoryMissionCommandRepository(), []);
+  const missionCommandSeq = useRef(0);
+  const missionRunDeps = useMemo(() => ({
+    interpreter: new DeterministicCommandInterpreter(),
+    repository: missionCommandRepo,
+    contextStore: missionCommandStore,
+    now: () => new Date().toISOString(),
+    requestId: () => `cmd-preview-${++missionCommandSeq.current}`,
+    actorUserId: 'user-founder',
+    projectId: 'project-sunday',
+    missionId: 'mission-auth',
+  }), [missionCommandRepo, missionCommandStore]);
+
+  /* ------------------ Agents -> Import PSP Agent -------------------- */
+  /* The dev preview exercises the real import flow against the DETERMINISTIC
+     DEVELOPMENT FIXTURE service: version-0 synthetic credentials, no
+     marketplace, no purchase, no trade, no payment provider. Ship on Sunday's
+     entitlement backend does not exist yet; the production adapter refuses
+     every credential rather than inventing one. */
+  const [importedAgents, setImportedAgents] = useState<PSPAgentImportRecord[]>([]);
+  const pspImportCounter = useRef(0);
+  const pspService = useMemo(() => createFixtureEntitlementService(), []);
+  const agentsPanel = useMemo(() => ({
+    workspace: {
+      workspaceId: 'ws-relay-preview',
+      userId: 'user-holder',
+      importAllowed: true,
+      relayVersion: '0.5.0',
+      grantablePermissions: [
+        'workspace.read', 'workspace.write', 'mission.run', 'mission.review',
+      ],
+      installedPspIds: importedAgents.map((agent) => agent.pspId),
+    },
+    service: pspService,
+    now: () => new Date().toISOString(),
+    importId: () => `imp-preview-${++pspImportCounter.current}`,
+    importedAgents,
+    onImported: (record: PSPAgentImportRecord) =>
+      setImportedAgents((current) => [...current, record]),
+  }), [importedAgents, pspService]);
+
+  // The active draft project's brief drives the Entry Home brief panel.
+  const activeProjectId = state.activeProjectId;
+  const activeBrief = activeProjectId ? store.getBrief(activeProjectId) : null;
+  const activeProject = activeProjectId ? store.getProject(activeProjectId) : null;
+  const homeBriefDraft: ProjectBriefDraft | null =
+    activeProject && activeProject.status === 'draft' && activeBrief ? activeBrief.draft : null;
+
+  const category = selectedRoute?.category ?? null;
+  const workforceRecommendation = useMemo(
+    () => buildWorkforceRecommendation(category, DEFAULT_CONNECTION_STATUSES),
+    [category],
+  );
+  const researchRecommendation = useMemo(() => buildResearchRecommendation(category), [category]);
+  const evidenceRecommendation = useMemo(() => buildEvidenceRecommendation(category), [category]);
+
+  const askRelay = (text: string) => {
+    previewMessageSeq += 1;
+    const developer: GuideMessage = {
+      messageId: `preview-dev-${previewMessageSeq}`,
+      author: 'developer',
+      text,
+      at: 'preview session',
+    };
+    const reply = fixtureGuideReply(text, previewMessageSeq);
+    setGuideMessages((m) => [...m, developer, reply]);
+  };
+
+  // Resolved once: where (if anywhere) the Alcatraz sibling-product control
+  // should take the user. Reading it here keeps the render pure.
+  const alcatraz = useMemo(() => siblingProductTarget(), []);
+
+  // Ask Relay → persisted project draft. Idempotent, guarded against
+  // duplicate submits, recovers with a simple message on failure.
+  const buildBrief = (objective: string) => {
+    const result = store.createDraftFromRequest(objective);
+    if (!result.ok) {
+      setNotice(result.message);
+      return;
+    }
+    setNotice(null);
+  };
+
+  const continueToSettings = (_draft: ProjectBriefDraft) => {
+    if (!activeProjectId) return;
+    store.approveBrief(activeProjectId);
+    navigate(`/relay/project/${activeProjectId}/settings`);
+  };
+
+  const openProjectSettings = () => {
+    if (activeProjectId) {
+      navigate(`/relay/project/${activeProjectId}/settings`);
+      return;
+    }
+    const result = store.createDraftFromRequest(
+      projectIdeaDraft.trim() || 'New Relay project',
+    );
+    if (!result.ok) {
+      setNotice(result.message);
+      return;
+    }
+    navigate(`/relay/project/${result.value.project.id}/settings`);
+  };
+
+  const copyBrief = (formatted: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard.writeText(formatted).catch(() => undefined);
+    }
+    setNotice('Draft copied (preview clipboard).');
+  };
+
+  const pushWsMessage = (author: ProjectMessage['author'], text: string) => {
+    previewMessageSeq += 1;
+    setExtraWsMessages((m) => [
+      ...m,
+      {
+        messageId: `preview-ws-${previewMessageSeq}`,
+        author,
+        text,
+        at: 'preview session',
+        fixture: author === 'relay',
+      },
+    ]);
+  };
+
+  /* ------------------------------------------------------------ Loops */
+  /* The website half of the ONE Loop grammar, wired to the real workspace.
+     `openLoopSurface` is a PURE function of the typed text: it parses, gates
+     and projects, and it is the only thing this host calls. Nothing here
+     starts a Loop, and nothing can — `start_loop` is permanently disabled in
+     the view model.
+
+     BE EXACT ABOUT WHY. It is not that no runtime exists: a single-Loop
+     runtime does, behind authenticated bridge routes. It is that THIS host has
+     no bridge session, no operator credential and no way to get one, so it can
+     neither start a Loop nor read one. Saying "there is no runtime" was true
+     when it was written and stopped being true three commits later, which is
+     how a comment becomes the thing that misleads the next reader.
+
+     Feature flags are `null`, which means every Loop feature is OFF. That is
+     the truthful value in this build: no code reads an environment variable
+     for them yet, so claiming otherwise here would make this host the place
+     the product starts lying about what it has shipped. The composer
+     therefore opens and reports NOT ENABLED with real blockers — which is
+     exactly what a user should see. */
+  const [loopSurfaceState, setLoopSurfaceState] = useState<RelayLoopSurfaceState | null>(null);
+  const openLoop = useCallback(
+    (text: string) => {
+      setLoopSurfaceState(
+        openLoopSurface(text, {
+          flags: null,
+          // No registry observation is available in the preview host. `null`
+          // renders as Unknown rather than as "no agents are available",
+          // which are different claims.
+          registry: null,
+          observedAt: new Date().toISOString(),
+          projectId: 'project-sunday',
+          workspaceId: 'ws-relay-preview',
+        }),
+      );
+    },
+    [],
+  );
+  const loopSurface: RelayLoopSurface = useMemo(
+    () => ({
+      state: loopSurfaceState,
+      onSlashCommand: openLoop,
+      onClose: () => setLoopSurfaceState(null),
+      onStartComposer: () => openLoop('/loop'),
+      onSaveDraft: () =>
+        setNotice('Loop drafts are not persisted yet. Nothing was saved and nothing was spent.'),
+      onContinueToPreflight: () =>
+        setNotice('Loop preflight is not implemented yet. No Loop was started.'),
+    }),
+    [loopSurfaceState, openLoop],
+  );
+
+  /* ------------------------------------------------------- Entry Home */
+  const home = (
+    <RelayEntryHome
+      productState={homeBriefDraft ? 'draft' : 'unconfigured'}
+      currentProject={null}
+      recentProjects={recentPopulated ? FIXTURE_RECENT_PROJECTS : []}
+      projectIdeaDraft={projectIdeaDraft}
+      projectBriefDraft={homeBriefDraft}
+      selectedRoute={selectedRoute}
+      workforceRecommendation={workforceRecommendation}
+      researchRecommendation={researchRecommendation}
+      evidenceRecommendation={evidenceRecommendation}
+      guideMessages={guideMessages}
+      guideStatus="idle"
+      suggestedQuestions={SUGGESTED_QUESTIONS}
+      dogState={projectIdeaDraft.trim() ? 'ready' : 'wandering'}
+      handoffNetworkState="standby"
+      entitlement="pro"
+      connectionStatuses={DEFAULT_CONNECTION_STATUSES}
+      // Sunday Alcatraz is an Aquala SIBLING PRODUCT, not a route of this
+      // application: `/` is Relay's own canonical entry, so the old
+      // `window.location.href = '/'` never reached Alcatraz. The control now
+      // navigates to a CONFIGURED external Alcatraz URL, and reports itself
+      // as unavailable when none is configured — never a broken link, and
+      // never a hardcoded domain this repository has no authority over.
+      onReturnToSunday={alcatraz.configured
+        ? () => { window.location.href = alcatraz.url; }
+        : undefined}
+      siblingProductUnavailableReason={alcatraz.configured ? undefined : alcatraz.reason}
+      onSelectProjectRoute={(r) => {
+        setSelectedRoute(r);
+        setProjectIdeaDraft(r.objectiveTemplate);
+      }}
+      onUpdateProjectIdea={setProjectIdeaDraft}
+      onBuildProjectBrief={buildBrief}
+      onConnectExistingProject={() => askRelay('Connect an existing project')}
+      onAskRelay={askRelay}
+      onSelectSuggestedQuestion={askRelay}
+      onUpdateProjectBriefDraft={(patch) => {
+        if (activeProjectId) store.updateBrief(activeProjectId, patch);
+      }}
+      onCopyProjectBrief={copyBrief}
+      onClearProjectBrief={() => {
+        if (activeProjectId) store.clearDraft(activeProjectId);
+      }}
+      onContinueToProjectSettings={continueToSettings}
+      onOpenRecentProject={(projectId) => navigate(`/relay/project/${projectId}`)}
+      onOpenProjectSettings={openProjectSettings}
+      onOpenTerminal={() => navigate('/relay/project/rly-001/terminal')}
+    />
+  );
+
+  /* ---------------------------------------------------- Project Settings */
+  const settingsProjectId =
+    route.screen === 'settings' ? route.projectId || activeProjectId || '' : '';
+  const settingsProject = settingsProjectId ? store.getProject(settingsProjectId) : null;
+  const settingsBrief = settingsProjectId ? store.getBrief(settingsProjectId) : null;
+  const storedSettings = settingsProjectId ? store.getSettings(settingsProjectId) : null;
+
+  /**
+   * MCP CONNECTIONS (section 14) — the browser's honest MCP state.
+   *
+   * The curated registry is the only MCP fact this bundle genuinely holds, and
+   * every entry in it is a simulation fixture that labels itself on its own
+   * row. There is NO connection, NO approval, NO capability snapshot and NO
+   * mission preflight here, so those are passed empty and null rather than
+   * populated with anything that would read as a live connector. That is not a
+   * gap being papered over — connections are opened by the host process
+   * through the server-only transports, which this bundle cannot reach.
+   */
+  const mcpSettings = useMemo(() => buildRelayMcpSettingsView(), []);
+
+  /**
+   * THE PROJECT BRAIN'S OWN VIEW.
+   *
+   * It reads the SAME state and document the workspace panel already read —
+   * there is one Brain and one source for it, and a second read model here
+   * would be a second answer to "what does Relay know about this project".
+   */
+  const brainProjectId = route.screen === 'brain' ? route.projectId : '';
+  /**
+   * THE BRAIN OF THE PROJECT THAT WAS OPENED, not of a fixture.
+   *
+   * This read `WORKSPACE_FIXTURES[fixtureKey]` regardless of which project the
+   * route named, so clicking the Brain in a real project showed the design
+   * showcase's Brain — sample counts and sample sections, presented as that
+   * project's recorded knowledge. It is the exact failure this product exists
+   * to refuse, arriving through a surface built to display honesty.
+   *
+   * The real project derives from the SAME projection the workspace beneath it
+   * uses, so the Brain view and the workspace can never disagree about what
+   * Relay knows. The labelled showcase project keeps its fixture, because
+   * there the fixture IS the subject.
+   */
+  const brainPresentation = (() => {
+    if (!brainProjectId) return null;
+    const project = store.getProject(brainProjectId);
+    if (!project) {
+      // The design showcase has no stored project and never will; anything
+      // else with no project is genuinely missing.
+      return brainProjectId === 'rly-001' ? WORKSPACE_FIXTURES[fixtureKey] : null;
+    }
+    const settings = store.getSettings(brainProjectId);
+    const mission = project.activeMissionId === null
+      ? null
+      : store.getMission(project.activeMissionId);
+    if (!settings || !mission) return null;
+    return deriveMissionProjection({
+      project,
+      settings,
+      brain: store.getProjectBrain(brainProjectId),
+      mission,
+      events: store.getMissionEvents(mission.id),
+    });
+  })();
+  /**
+   * The evidence references belonging to the project whose Brain is open.
+   *
+   * Read at render time from the store rather than captured, so a mission that
+   * retrieves while the Brain view is open shows it on the next update.
+   */
+  const brainEvidence = (() => {
+    if (!brainProjectId) return undefined;
+    const project = store.getProject(brainProjectId);
+    const missionId = project?.activeMissionId ?? null;
+    if (missionId === null) return undefined;
+    return store.getMission(missionId)?.evidence;
+  })();
+
+  const projectBrainView = brainPresentation ? (
+    <RelayProjectBrainView
+      state={brainPresentation.projectBrainState}
+      /**
+       * WHAT THE ACTIVE MISSION READ.
+       *
+       * From the STORE's mission record, which mirrors what the backend sent
+       * — not from the projection, which is about mission state rather than
+       * about what was observed. Absent when the project has no mission, or
+       * when the Mission was authorised to read nothing; the view renders
+       * those two differently from "authorised and retrieved none".
+       */
+      {...(brainEvidence === undefined ? {} : { evidence: brainEvidence })}
+      {...(brainPresentation.projectBrainDocument === undefined
+        ? {}
+        : { document: brainPresentation.projectBrainDocument })}
+      onClose={() => navigate(`/relay/project/${brainProjectId}`)}
+    />
+  ) : (
+    <SafeNotFound
+      title="Relay could not load this Project Brain."
+      detail="Open a project first."
+      onHome={() => navigate('/relay')}
+    />
+  );
+
+  /**
+   * LIVE REACH SETTINGS, on the real store.
+   *
+   * Every change goes through the DOMAIN's own transitions and is written
+   * whole, so the precedence rules exist in exactly one place and this screen
+   * cannot drift from the permission model that refuses a request.
+   *
+   * EACH HANDLER READS THE STORE, NOT THE RENDER SNAPSHOT. DISABLE ALL fires
+   * two transitions in a row — disable every source, then acknowledge the
+   * notice — and both derived from `state.liveReach` meant the second was
+   * computed from the value before the first, so acknowledging silently undid
+   * the disabling. Reading current state at call time fixes the class rather
+   * than that one pair.
+   */
+  const currentLiveReach = () => store.getState().liveReach;
+  const liveReachSettings = (
+    <RelayLiveReachSettings
+      settings={state.liveReach}
+      onSetCapability={(source, capability, enabled) => {
+        store.setLiveReach(setLiveReachCapability(currentLiveReach(), source, capability, enabled));
+      }}
+      onSetGroup={(source, group, enabled) => {
+        store.setLiveReach(setLiveReachGroup(currentLiveReach(), source, group, enabled));
+      }}
+      onDisableAll={() => {
+        store.setLiveReach(disableAllLiveReachSources(currentLiveReach(), [...LIVE_REACH_SOURCES]));
+      }}
+      onAcknowledgeGlobal={() => {
+        store.setLiveReach(acknowledgeLiveReachGlobal(currentLiveReach(), new Date().toISOString()));
+      }}
+      onAcknowledgeSource={(source) => {
+        store.setLiveReach(acknowledgeLiveReachSource(currentLiveReach(), source, new Date().toISOString()));
+      }}
+    />
+  );
+
+  const projectSettings = settingsProject ? (
+    <RelayProjectSettings
+      brief={settingsBrief?.draft ?? null}
+      agentOptions={AGENT_OPTIONS}
+      entitlement="pro"
+      initialDraft={
+        storedSettings?.draft ?? defaultSettingsForProject(store, settingsProject.id)
+      }
+      mcp={mcpSettings}
+      onSaveDraft={(d: ProjectSettingsDraft) => {
+        store.saveSettings(settingsProject.id, d);
+      }}
+      onStartProject={(d: ProjectSettingsDraft) => {
+        const result = store.startProject(settingsProject.id, d);
+        if (!result.ok) {
+          setNotice(result.message);
+          return;
+        }
+        setExtraWsMessages([]);
+        navigate(`/relay/project/${settingsProject.id}`);
+      }}
+      onConnectRepository={() => undefined}
+      /**
+       * BACK RETURNS WHERE THE USER CAME FROM.
+       *
+       * Settings is reachable from the Entry Home AND from inside a workspace,
+       * and Back went to the Home in both cases — so a founder who opened
+       * settings from their project lost the project by pressing Back, which
+       * is the same "sent toward the homepage" complaint from the other end.
+       * `onStartProject` already returns to the workspace; Back now agrees
+       * with it.
+       */
+      onBack={() => navigate(`/relay/project/${settingsProject.id}`)}
+      backLabel="← BACK TO PROJECT"
+    />
+  ) : (
+    <SafeNotFound
+      title="Relay could not load this project."
+      detail="Start a new project from the Relay Entry Home."
+      onHome={() => navigate('/relay')}
+    />
+  );
+
+  /* --------------------------------------------------- Active Workspace */
+  const workspace = renderWorkspace();
+
+  function renderWorkspace() {
+    if (route.screen !== 'workspace') return null;
+    return renderWorkspaceProject(route.projectId, route.terminal);
+  }
+
+  function renderWorkspaceProject(projectId: string, terminalOpen: boolean) {
+    // The labeled design fixture project stays available for the showcase.
+    if (projectId === 'rly-001' && !store.getProject('rly-001')) {
+      return renderFixtureWorkspace(terminalOpen);
+    }
+
+    const project = store.getProject(projectId);
+    if (!project) {
+      return (
+        <SafeNotFound
+          title="Relay could not load this project."
+          detail="It may have been reset. Start a new project from the Relay Entry Home."
+          onHome={() => navigate('/relay')}
+        />
+      );
+    }
+    // Draft projects have no mission yet — send the founder to finish settings.
+    if (project.status === 'draft' || !project.activeMissionId) {
+      return (
+        <SafeNotFound
+          title="Finish configuring this project."
+          detail="Choose the required roles in Project Settings to start the mission."
+          actionLabel="OPEN PROJECT SETTINGS"
+          onAction={() => navigate(`/relay/project/${projectId}/settings`)}
+          onHome={() => navigate('/relay')}
+        />
+      );
+    }
+
+    const settings = store.getSettings(projectId);
+    const mission = store.getMission(project.activeMissionId);
+    if (!settings || !mission) {
+      return (
+        <SafeNotFound
+          title="Relay could not load this mission."
+          detail="Start a new project from the Relay Entry Home."
+          onHome={() => navigate('/relay')}
+        />
+      );
+    }
+    const brain = store.getProjectBrain(projectId);
+    const events = store.getMissionEvents(mission.id);
+    const projection = deriveMissionProjection({ project, settings, brain, mission, events });
+    const presentation = demoSimulation.state.active
+      ? projectDemoSimulationIntoWorkspace(demoSimulation.state, projection)
+      : projection;
+
+    /**
+     * THE CONSOLE'S TRUTHFUL EMPTY STATE, and the manual dispatch.
+     *
+     * `canStart` mirrors the auto-start's own precondition. The button exists
+     * because every silent path found while a founder could not start a
+     * mission ended the same way: the page knew the state and offered no
+     * action. A click dispatches exactly what the auto-start dispatches and
+     * shows the outcome HERE.
+     */
+    const consoleIdle = mission.demo ? undefined : {
+      reason: startRefusal?.missionId === mission.id ? startRefusal.reason : null,
+      canStart: mission.state === 'configured' && events.length === 0,
+      starting: startInFlight === mission.id,
+      onStart: () => {
+        setStartInFlight(mission.id);
+        void store.beginLiveMission(mission.id).then((r) => {
+          setStartInFlight((cur) => (cur === mission.id ? null : cur));
+          if (!r.ok) {
+            setStartRefusal({ missionId: mission.id, reason: r.message });
+            return;
+          }
+          setStartRefusal((cur) => (cur?.missionId === mission.id ? null : cur));
+        });
+      },
+    };
+
+    const advance = () => {
+      setBusy(true);
+      const r = store.advanceMission(mission.id);
+      if (!r.ok) setNotice(r.message);
+      setBusy(false);
+    };
+    const restart = () => {
+      const r = store.restartDemoMission(mission.id);
+      if (!r.ok) setNotice(r.message);
+      setExtraWsMessages([]);
+    };
+
+    return (
+      <RelayProjectWorkspace
+        {...presentation}
+        agentsPanel={agentsPanel}
+        usage={workspaceUsage}
+        worktree={worktreeView}
+        codingRuntime={codingRuntimeView}
+        architectRuntime={architectRuntimeView}
+        reviewerHarness={reviewerHarnessView}
+        onHarnessUnavailable={onHarnessUnavailable}
+        consoleIdle={consoleIdle}
+        loopSurface={loopSurface}
+        stageBackdrop={stageBackdrop ?? undefined}
+        onSelectStageBackdrop={selectStageBackdrop}
+        chakraTier={chakraTier}
+        onSelectChakraTier={selectChakraTier}
+        projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
+        terminalOpen={terminalOpen}
+        terminalFullScreen
+        missionPlayback={
+          demoSimulation.state.active ? (
+            <RelayDemoMissionSummary state={demoSimulation.state} />
+          ) : mission.demo ? (
+            <RelayMissionPlayback
+              state={mission.state}
+              busy={busy}
+              onAdvance={advance}
+              onRestart={restart}
+            />
+          ) : (
+            <RelayLiveMissionControl
+              state={mission.state}
+              error={mission.error}
+              architectLabel={mission.handoff?.architectLabel}
+              busy={busy}
+              onStop={() => {
+                setBusy(true);
+                void store.cancelLiveMission(mission.id).then((r) => {
+                  if (!r.ok) setNotice(r.message);
+                  setBusy(false);
+                });
+              }}
+              onRetry={() => {
+                setBusy(true);
+                void store.retryLiveMission(mission.id).then((r) => {
+                  if (!r.ok) setNotice(r.message);
+                  setBusy(false);
+                });
+              }}
+              runControls={<RelayMissionRunControls deps={missionRunDeps} />}
+            />
+          )
+        }
+        onSendProjectMessage={(text) => {
+          pushWsMessage('developer', text);
+          pushWsMessage(
+            'relay',
+            'Relay answers from the current mission state. Use DEMO MISSION to step the sample mission.',
+          );
+        }}
+        onApproveDecision={(id) => pushWsMessage('relay', `Decision ${id} approval recorded.`)}
+        onRejectDecision={(id) => pushWsMessage('relay', `Decision ${id} rejection recorded.`)}
+        onOpenTerminal={() => navigate(`/relay/project/${projectId}/terminal`)}
+        onCloseTerminal={() => navigate(`/relay/project/${projectId}`)}
+        onOpenProjectSettings={() => navigate(`/relay/project/${projectId}/settings`)}
+        onOpenProjectBrain={() => navigate(`/relay/project/${projectId}/brain`)}
+        /* ROLE SWITCHING WRITES THE PROJECT'S REAL CONFIGURATION.
+           `saveSettings` is the SAME writer the 15-step Project Settings uses,
+           and the strip's names come back through the same projection, so the
+           workspace has no second copy of the stack to disagree with. The next
+           Mission reads this draft; a Mission already running keeps whatever it
+           actually used, because its record is not this draft. */
+        workforceSelection={settings.draft.workforce}
+        deployment={deploymentKind}
+        onSelectRoleOccupant={(role, agentId) => {
+          const field = role === 'prompt_architect'
+            ? 'promptArchitectId'
+            : role === 'coding_agent' ? 'codingAgentId' : 'reviewerId';
+          const next = {
+            ...settings.draft,
+            workforce: { ...settings.draft.workforce, [field]: agentId },
+          };
+          const saved = store.saveSettings(projectId, next);
+          // ANNOUNCE FACTS, NOT INTENTIONS. The confirmation names the role
+          // only after the durable write resolved, and a refusal is reported
+          // rather than swallowed into a surface that looks changed.
+          if (!saved.ok) {
+            setNotice(saved.message);
+            return;
+          }
+          pushWsMessage(
+            'relay',
+            `${ROLE_TITLE_FOR_MESSAGE[role]} set to ${agentNameFor(agentId)}. Missions started from now on use it; this mission keeps what it actually ran.`,
+          );
+        }}
+        onOpenManualTask={(id) => pushWsMessage('relay', `Opened Manual Task ${id}.`)}
+        onApproveManualTask={(id) => pushWsMessage('relay', `Manual Task ${id} approved.`)}
+        onRejectManualTask={(id) => pushWsMessage('relay', `Manual Task ${id} kept blocked.`)}
+        onRequestResearch={(topic) =>
+          pushWsMessage('relay', `Research request "${topic}" recorded.`)
+        }
+        onOpenFinding={(id) => pushWsMessage('relay', `Opened finding ${id}.`)}
+        onOpenRepair={(id) => pushWsMessage('relay', `Opened repair ${id}.`)}
+        onReturnHome={() => navigate('/relay')}
+      />
+    );
+  }
+
+  function renderFixtureWorkspace(terminalOpen: boolean) {
+    const fixture = WORKSPACE_FIXTURES[fixtureKey];
+    const presentation = demoSimulation.state.active
+      ? projectDemoSimulationIntoWorkspace(demoSimulation.state, fixture)
+      : fixture;
+    return (
+      <RelayProjectWorkspace
+        {...presentation}
+        agentsPanel={agentsPanel}
+        usage={workspaceUsage}
+        worktree={worktreeView}
+        codingRuntime={codingRuntimeView}
+        architectRuntime={architectRuntimeView}
+        reviewerHarness={reviewerHarnessView}
+        onHarnessUnavailable={onHarnessUnavailable}
+        loopSurface={loopSurface}
+        stageBackdrop={stageBackdrop ?? undefined}
+        onSelectStageBackdrop={selectStageBackdrop}
+        chakraTier={chakraTier}
+        onSelectChakraTier={selectChakraTier}
+        projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
+        terminalOpen={terminalOpen}
+        terminalFullScreen
+        missionPlayback={
+          demoSimulation.state.active
+            ? <RelayDemoMissionSummary state={demoSimulation.state} />
+            : undefined
+        }
+        onSendProjectMessage={(text) => {
+          pushWsMessage('developer', text);
+          pushWsMessage('relay', 'Fixture showcase — no mission is actually running.');
+        }}
+        onApproveDecision={(id) => pushWsMessage('relay', `Fixture: decision ${id} approved.`)}
+        onRejectDecision={(id) => pushWsMessage('relay', `Fixture: decision ${id} rejected.`)}
+        onOpenTerminal={() => navigate('/relay/project/rly-001/terminal')}
+        onCloseTerminal={() => navigate('/relay/project/rly-001')}
+        /**
+         * PROJECT SETTINGS OPENS SETTINGS, AND NEVER THE HOMEPAGE.
+         *
+         * This handler navigated to `/relay` — the Relay Entry Home — so
+         * asking for settings from inside the workspace threw the founder out
+         * of the project entirely. That is the reported defect.
+         *
+         * The obvious repair is wrong here: `rly-001` is the SHOWCASE FIXTURE
+         * and deliberately has no store project (see `renderWorkspaceProject`),
+         * so routing it to `/settings` lands on "Relay could not load this
+         * project" — trading a wrong destination for a dead end. A showcase has
+         * no configuration to edit, and saying so is the honest answer.
+         *
+         * When a real project IS active, its settings are what the founder
+         * meant, and that is where this goes.
+         */
+        onOpenProjectSettings={() => {
+          if (activeProjectId !== null && store.getProject(activeProjectId)) {
+            navigate(`/relay/project/${activeProjectId}/settings`);
+            return;
+          }
+          setNotice(
+            'This is the design showcase, which has no project to configure. '
+            + 'Open or create a project from the Relay Entry Home to edit its settings.',
+          );
+        }}
+        onOpenProjectBrain={() => navigate('/relay/project/rly-001/brain')}
+        onOpenManualTask={(id) => pushWsMessage('relay', `Fixture: opened Manual Task ${id}.`)}
+        onApproveManualTask={(id) => pushWsMessage('relay', `Fixture: Manual Task ${id} approved.`)}
+        onRejectManualTask={(id) => pushWsMessage('relay', `Fixture: Manual Task ${id} blocked.`)}
+        onRequestResearch={(t) => pushWsMessage('relay', `Fixture: research "${t}" recorded.`)}
+        onOpenFinding={(id) => pushWsMessage('relay', `Fixture: opened finding ${id}.`)}
+        onOpenRepair={(id) => pushWsMessage('relay', `Fixture: opened repair ${id}.`)}
+        onReturnHome={() => navigate('/relay')}
+      />
+    );
+  }
+
+  let screen: JSX.Element;
+  if (
+    demoSimulation.state.active &&
+    demoProjectIdRef.current &&
+    (route.screen === 'workspace' || route.screen === 'console')
+  ) {
+    screen = renderWorkspaceProject(
+      demoProjectIdRef.current,
+      route.screen === 'workspace' && route.terminal,
+    ) ?? home;
+  } else if (route.screen === 'console') screen = <MissionControl />;
+  else if (route.screen === 'brain') screen = projectBrainView;
+  else if (route.screen === 'live-reach') screen = liveReachSettings;
+  else if (route.screen === 'settings') screen = projectSettings;
+  else if (route.screen === 'workspace') screen = workspace ?? home;
+  else screen = home;
+
+  const demoProjectId =
+    state.projects.find((p) => p.status !== 'draft')?.id ?? activeProjectId ?? 'rly-001';
+  const playDemo = () => {
+    if (route.screen !== 'workspace') {
+      setNotice('Open the Relay Workspace before starting Demo Simulation.');
+      return;
+    }
+    const liveMission = liveMissionId ? store.getMission(liveMissionId) : null;
+    if (liveMission && !isTerminalMissionState(liveMission.state)) {
+      setNotice('Demo Simulation is unavailable while a live mission is running.');
+      return;
+    }
+    demoProjectIdRef.current = route.projectId;
+    demoSimulation.play();
+  };
+  const exitDemo = () => {
+    demoSimulation.exit();
+    demoProjectIdRef.current = null;
+  };
+
+  // The landing is a full-viewport experience with its own fixed canvas and
+  // its own chrome. It renders ALONE — wrapping it in the product shell would
+  // put a scrolling app frame around a page whose camera owns the viewport.
+  // ONE COMPONENT FOR BOTH ROUTES, and that is the mechanism rather than a
+  // tidiness choice: returning the same element type for the bare URL and for
+  // `#/relay` lets React reconcile it instead of remounting, so the canvas, the
+  // WebGL context, the Relay Dog and the camera all survive entering Relay.
+  // Returning two different components here is what made the transition a page
+  // navigation with a 3D costume on.
+  if (route.screen === 'landing' || route.screen === 'experience') {
+    return <RelayWorld initialStage={route.screen === 'experience' ? 'relay' : 'aquala'} />;
+  }
+
+  return (
+    <div className="rpv">
+      <div
+        className="rpv-stage"
+        style={zoom === 100 ? undefined : { zoom: zoom / 100 }}
+      >
+        {/* THE RECOVERY SURFACE — shown only when an incomplete mission was
+            actually discovered and validated. It sits above the screen so it
+            is the first thing seen, and it is rendered ONCE for the whole
+            application, never per screen. */}
+        {durable.discovered !== null && durable.discovered.classification !== 'completed' && (
+          <RelayMissionRecoveryPanel
+            assessment={durable.discovered}
+            missionName={recoveredMissionName}
+            runtimeAvailable={false}
+            inspecting={inspectingRecovery}
+            onResume={() => {
+              const id = durable.discovered?.record?.missionId;
+              if (id !== undefined) void durable.resume(id);
+            }}
+            onInspect={() => setInspectingRecovery((v) => !v)}
+            onStop={() => {
+              const id = durable.discovered?.record?.missionId;
+              if (id !== undefined) void durable.stop(id);
+              else durable.dismissDiscovered();
+            }}
+          />
+        )}
+        {mobileFrame && route.screen !== 'console' ? (
+          <div className="rpv-mobile-frame">
+            <div className="rpv-mobile-viewport">{screen}</div>
+          </div>
+        ) : (
+          screen
+        )}
+      </div>
+
+      {notice && (
+        <p className="rpv-notice" role="status">
+          {notice}{' '}
+          <button type="button" onClick={() => setNotice(null)}>
+            dismiss
+          </button>
+        </p>
+      )}
+
+      {/* THE ONE APPLICATION-LEVEL USAGE SURFACE + NOTIFICATION HOST.
+          Siblings of the stage: they exist exactly once across every route,
+          fullscreen panel and terminal view, are never duplicated by a
+          screen, and stay full-size outside the dev ZOOM stage. */}
+      <RelayUsageDetailPanel
+        open={usageOpen}
+        view={usageDetailView}
+        onClose={() => setUsageOpen(false)}
+      />
+      <RelayNotificationHost
+        notifications={notificationCenter.visible}
+        queuedCount={notificationCenter.queuedCount}
+        onDismiss={notificationCenter.dismiss}
+        onPause={notificationCenter.pauseTimers}
+        onResume={notificationCenter.resumeTimers}
+      />
+
+      {/* THE PREVIEW SWITCHER — DELIBERATELY SHIPPED.
+          This panel (routes, fixture states, Demo Simulation, appearance,
+          zoom, mobile frame) began as development-only tooling and was once
+          build-gated out of production. Founder direction (2026-07-31):
+          the deployed offline demo IS the walkable product tour, so the
+          switcher ships with it. It remains collapsible behind its handle,
+          drives only presentation and the explicitly labeled Demo
+          Simulation, and `production-entry.test.tsx` now asserts it is
+          PRESENT in the production bundle. */}
+      <>
+      <button
+        type="button"
+        className="rpv-devchip"
+        aria-expanded={switcherOpen}
+        aria-controls="relay-dev-preview-controls"
+        aria-label={`${switcherOpen ? 'Collapse' : 'Expand'} DEV PREVIEW controls`}
+        onClick={() => setSwitcherOpen((v) => !v)}
+      >
+        DEV PREVIEW <span aria-hidden="true">{switcherOpen ? '▾' : '▴'}</span>
+      </button>
+      <nav
+        id="relay-dev-preview-controls"
+        className={`rpv-switcher${switcherOpen ? ' rpv-switcher--open' : ''}`}
+        aria-label="Development preview switcher"
+      >
+        <button type="button" onClick={() => navigate('/relay')} aria-pressed={route.screen === 'home'}>
+          HOME
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate(`/relay/project/${demoProjectId}`)}
+          aria-pressed={route.screen === 'workspace'}
+        >
+          WORKSPACE
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/relay/console')}
+          aria-pressed={route.screen === 'console'}
+        >
+          CONSOLE
+        </button>
+        <button type="button" onClick={() => setMobileFrame((v) => !v)} aria-pressed={mobileFrame}>
+          {mobileFrame ? 'DESKTOP' : 'MOBILE'}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            store.resetAll();
+            setSelectedRoute(null);
+            setProjectIdeaDraft('');
+            setExtraWsMessages([]);
+            setNotice('Demo state reset.');
+            navigate('/relay');
+          }}
+        >
+          RESET
+        </button>
+        <RelayDemoSimulationControls
+          state={demoSimulation.state}
+          onPlay={playDemo}
+          onPause={demoSimulation.pause}
+          onResume={demoSimulation.resume}
+          onNext={demoSimulation.next}
+          onRestart={demoSimulation.restart}
+          onExit={exitDemo}
+          onSpeed={demoSimulation.setSpeed}
+        />
+        <span className="rpv-appearance" role="group" aria-label="Appearance">
+          <span className="rpv-switcher-tag">APPEARANCE</span>
+          {RELAY_COLORWAYS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              aria-pressed={colorway === c}
+              onClick={() => setColorway(c)}
+            >
+              {COLORWAY_LABEL[c]}
+            </button>
+          ))}
+        </span>
+        <span className="rpv-zoom" role="group" aria-label="Preview zoom">
+          <span className="rpv-switcher-tag">ZOOM</span>
+          {DEV_ZOOM_LEVELS.map((z) => (
+            <button
+              key={z}
+              type="button"
+              aria-pressed={zoom === z}
+              onClick={() => setZoom(z)}
+            >
+              {z}%
+            </button>
+          ))}
+        </span>
+        {route.screen === 'home' && (
+          <button
+            type="button"
+            onClick={() => setRecentPopulated((v) => !v)}
+            aria-pressed={recentPopulated}
+          >
+            {recentPopulated ? 'RECENT: FIXTURES' : 'RECENT: EMPTY'}
+          </button>
+        )}
+        {route.screen === 'workspace' && route.projectId === 'rly-001' && (
+          <span className="rpv-fixture-picker" role="group" aria-label="Workspace fixture state">
+            {WORKSPACE_FIXTURE_KEYS.map((k) => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={fixtureKey === k}
+                onClick={() => {
+                  setFixtureKey(k);
+                  setExtraWsMessages([]);
+                }}
+              >
+                {k.replace(/_/g, ' ').toUpperCase()}
+              </button>
+            ))}
+          </span>
+        )}
+      </nav>
+      </>
+    </div>
+  );
+}
+
+/** Safe not-found / redirect state — never exposes a stack trace. */
+function SafeNotFound({
+  title,
+  detail,
+  actionLabel,
+  onAction,
+  onHome,
+}: {
+  title: string;
+  detail: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  onHome: () => void;
+}) {
+  return (
+    <div className="rpv-notfound" role="alert">
+      <p className="rpv-notfound-title">{title}</p>
+      <p className="rpv-notfound-detail">{detail}</p>
+      <div className="rpv-notfound-actions">
+        {actionLabel && onAction && (
+          <button type="button" className="rpv-notfound-btn rpv-notfound-btn--primary" onClick={onAction}>
+            {actionLabel}
+          </button>
+        )}
+        <button type="button" className="rpv-notfound-btn" onClick={onHome}>
+          ← RELAY HOME
+        </button>
+      </div>
+    </div>
+  );
+}

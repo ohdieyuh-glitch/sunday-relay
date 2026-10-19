@@ -1,0 +1,4 @@
+provider_readiness provider=openai model=gpt-5.6-sol http=200 result=AUTHENTICATED_MODEL_AVAILABLE
+provider_readiness provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION method=oauth_token plan=absent result=SUBSCRIPTION_LOGIN_PRESENT
+provider_readiness provider=xai model=grok-build-0.1 http=200 result=AUTHENTICATED_MODEL_AVAILABLE
+provider_balance=UNKNOWN (no provider exposes a spend-free balance query; exhaustion surfaces as PROVIDER_BLOCKED when a provider refuses)

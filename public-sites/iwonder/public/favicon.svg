@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>i.Wonder</title>
+  <rect width="64" height="64" rx="14" fill="#05060a"/>
+  <circle cx="24.5" cy="16.5" r="4.4" fill="#f4efe3"/>
+  <path d="M17.5 25.5h10v19.5h4v3.5h-14.5v-3.5h4v-16h-3.5z" fill="#f4efe3"/>
+  <circle cx="40.5" cy="45.4" r="3.6" fill="#d8a83c"/>
+</svg>
