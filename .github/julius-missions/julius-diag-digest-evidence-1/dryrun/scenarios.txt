@@ -7,7 +7,8 @@ A partial: lone high at end and lone low fixed, the SWALLOWED NEXT CHARACTER lef
 B partial: only more than 30 s ahead rejected (1-29 s ahead stays live), with A fixed|fail|fix-a-utf8.py,fix-b-partial-30s.py
 # ALTERNATIVE VALID SOLUTIONS: none of these may be spec-red.
 A alternative: code-point loop rewrite of the encoder, with B fixed|pass|alt-a-forof.py,fix-b-age.py
-A alternative: String.prototype.toWellFormed pre-pass, with B fixed|pass|alt-a-towellformed.py,fix-b-age.py
+# REVIEWER CASE, NOT a valid alternative: String.prototype.toWellFormed is ES2024 and the repository's lib is ES2022, so the seeded spec accepts it but the repository typecheck refuses it (TS2550).
+REVIEWER CASE: toWellFormed pre-pass (spec-green, violates the repository typecheck: ES2022 lib), with B fixed|passspec_typered|alt-a-towellformed.py,fix-b-age.py
 A alternative: regex pre-pass replacing unpaired surrogates, with B fixed|pass|alt-a-regex.py,fix-b-age.py
 B alternative: rounding kept and NEGATIVE ZERO caught, with A fixed|pass|fix-a-utf8.py,fix-b-alt-negzero.py
 B alternative: direct instant comparison before rounding, with A fixed|pass|fix-a-utf8.py,alt-b-compare.py

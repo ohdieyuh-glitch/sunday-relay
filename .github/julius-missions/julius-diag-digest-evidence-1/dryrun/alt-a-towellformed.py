@@ -1,4 +1,4 @@
-"""DRY-RUN ONLY: an ALTERNATIVE correct fix for defect A: a one-line pre-pass with the built-in String.prototype.toWellFormed (unpaired surrogates become U+FFFD). Must PASS."""
+"""DRY-RUN ONLY: a REVIEWER CASE for defect A (NOT a valid alternative): a pre-pass with String.prototype.toWellFormed (ES2024). The seeded spec accepts it; the repository typecheck (lib ES2022) refuses it (TS2550). Must pass the SPEC and fail the TYPECHECK."""
 import pathlib
 
 path = pathlib.Path('src/relay/mission/durable/durable-digest.ts')
