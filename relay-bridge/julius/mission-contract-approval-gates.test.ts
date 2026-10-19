@@ -89,7 +89,10 @@ describe('V6 G-1: the approvalGates clause is parsed and sealed, or the contract
     // by pristine main 6402cb13's (same).
     const BEFORE: Readonly<Record<string, string>> = {
       'julius-continuous-1': 'sha256:e6814f7ce2167785052595c60f89aec2ea6bb84bf6f411105e86f317fe02d80a',
+      'julius-diag-audit-fixes-1': 'sha256:691f75dc35ffead7c719566425125e56109d1d2063e44a0bef2a91841e70a6ea',
+      'julius-diag-digest-evidence-1': 'sha256:d33ae451d09127b7f06f1faa60b9de2cd06b8dce2316208f27db7bad3153d5a4',
       'julius-diag-output-safety-1': 'sha256:7c12a6dfea7bfa3982380997be4da107e2a03c36fbaed59a1d86a0f93056e415',
+      'julius-diag-output-safety-2': 'sha256:dce4650e22fa1b192100ca135ee31ff2449e013bfd6bffc6681319bcc51ba664',
       'julius-first-live': 'sha256:f7f8c2fe683cba5819ecc9e71085228ce8bf82f3e1b7f9c2b6862f2e28346a56',
       'julius-learning-pair-1-with-1': 'sha256:6148c551c9fbaf79e85eaca6906fe5ce59afeb71e054dff6ba0955e472532774',
       'julius-learning-pair-1-with-2': 'sha256:6148c551c9fbaf79e85eaca6906fe5ce59afeb71e054dff6ba0955e472532774',
@@ -104,6 +107,8 @@ describe('V6 G-1: the approvalGates clause is parsed and sealed, or the contract
       'julius-live-mission-4': 'sha256:90967fc2b4726240de490d7bfd97a73a9398352fdf71e777a682abbfd3005ecc',
       'julius-live-mission-5': 'sha256:cecba99c779c967f128dd58c58de5d362e5da37afef2a7974f9fface4b44cc80',
       'julius-live-mission-6': 'sha256:efb6e20f0d11885bc5085a6835d5d27ef0441dfebf14480d0972fdee07ecf71b',
+      'julius-maxeffort-gauntlet-1': 'sha256:d1850ec77ab1e2ec0ba74d26d3e2a6d347c54e9ebd047077b789a07819642f38',
+      'julius-maxeffort-loop-1': 'sha256:cad6d6669fd00fa06a6823f70a888409aabf4d3ea0298ef8f12dea64f0a232df',
       'julius-option2-lab-1': 'sha256:ddcbc427835530b5b30b358114a67b046a55f83f965f22ebe79312aa248f1b33',
       'julius-unreal-mission-1': 'sha256:905815a6478f86c98d12fa2383ae2606f818e04697fbbc3ab44b5b0c8465cce0',
     };
