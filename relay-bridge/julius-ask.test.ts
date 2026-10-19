@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   ASK_ANSWER_MAX_CHARS, ASK_EFFORTS, ASK_EFFORT_LOW_MAX_CHARS, ASK_EFFORT_MEDIUM_MAX_CHARS, createAskLedger, createJuliusAsk,
-  handleJuliusAskRoute, isJuliusAskRoute, selectAskBudget,
-  type AskLedgerLine, type JuliusAskResult,
+  handleJuliusAskRoute, isJuliusAskRoute, markAskStoreDurable, reserveOverDurableLedger, selectAskBudget,
+  type AskLedgerLine, type AskStore, type JuliusAskResult,
 } from './julius-ask';
 import { readGptArchitectConfig } from '../src/relay/connectors/gpt-architect/config';
 import { runGptArchitect, type GptRunOutcome, type GptRunRequest } from '../src/relay/connectors/gpt-architect/gpt-runner';
@@ -62,6 +62,18 @@ interface Harness {
   setNow(ms: number): void;
 }
 
+/** A branded store (with an atomic reserve) whose commits fail while `isBroken()` is true. */
+function brokenStore(isBroken: () => boolean): AskStore {
+  const held: AskLedgerLine[] = [];
+  const store: AskStore = markAskStoreDurable({
+    durable: true as const,
+    reserve: (input) => reserveOverDurableLedger(store, input),
+    rows: async () => held.slice(),
+    append: async (line) => { if (isBroken()) throw new Error('down'); held.push(line); },
+  });
+  return store;
+}
+
 function harness(options: {
   env?: Record<string, string | undefined>;
   outcome?: () => GptRunOutcome | Promise<GptRunOutcome>;
@@ -72,21 +84,23 @@ function harness(options: {
   const lines: AskLedgerLine[] = [];
   const requests: GptRunRequest[] = [];
   let now = Date.UTC(2026, 9, 19, 12, 0, 0);
+  /* A player needs a branded store WITH an atomic reserve: the fake serialises its reservations the way the real store does. */
+  const store: AskStore = markAskStoreDurable({
+    durable: true as const,
+    reserve: (input) => reserveOverDurableLedger(store, input),
+    rows: async () => lines.slice(),
+    append: async (line) => {
+      events.push(`ledger:${String(line.phase)}`);
+      if (options.ledgerDelayMs !== undefined) await new Promise((r) => setTimeout(r, options.ledgerDelayMs));
+      if (options.ledgerFails === true) throw new Error('disk full');
+      lines.push(line);
+    },
+  });
   const ask = createJuliusAsk({
     env: options.env ?? baseEnv(),
     readConfig: readGptArchitectConfig,
     now: () => now,
-    /* A durable store (what a player ask requires): an AskLedger that also reads its rows back. */
-    ledger: {
-      durable: true as const,
-      rows: async () => lines.slice(),
-      append: async (line) => {
-        events.push(`ledger:${String(line.phase)}`);
-        if (options.ledgerDelayMs !== undefined) await new Promise((r) => setTimeout(r, options.ledgerDelayMs));
-        if (options.ledgerFails === true) throw new Error('disk full');
-        lines.push(line);
-      },
-    },
+    ledger: store,
     runArchitect: async (request) => {
       events.push('runArchitect');
       requests.push(request);
@@ -192,7 +206,7 @@ describe('ask Julius: the answer', () => {
     expect(request?.schema?.schema).toMatchObject({ required: ['answer'], properties: { answer: { type: 'string' } } });
     expect(request?.omitMaxOutputTokens).toBe(true);
     expect(request?.config.timeoutMs).toBeLessThanOrEqual(90_000);
-    expect(Object.keys(request ?? {}).sort()).toEqual(['apiKey', 'config', 'input', 'instructions', 'maxRetries', 'omitMaxOutputTokens', 'safetyIdentifier', 'schema']);
+    expect(Object.keys(request ?? {}).sort()).toEqual(['apiKey', 'config', 'input', 'instructions', 'maxRetries', 'omitMaxOutputTokens', 'schema']);
     expect(request?.instructions).toContain('no tools');
     /* One ask is at most one billed provider request. */
     expect(request?.maxRetries).toBe(0);
@@ -311,7 +325,7 @@ describe('ask Julius: the ledger', () => {
     const requests: GptRunRequest[] = [];
     const controller = createJuliusAsk({
       env: baseEnv(), readConfig: readGptArchitectConfig, now: () => 1,
-      ledger: { durable: true as const, rows: async () => [], append: () => { if (broken) throw new Error('down'); } },
+      ledger: brokenStore(() => broken),
       runArchitect: async (request) => { requests.push(request); return answered('after recovery'); },
     });
     const input = { question: 'q', idempotencyKey: GOOD_KEY, caller: 'player:p1' };
@@ -432,11 +446,11 @@ describe('ask Julius: the cap is reserved before the first await, and one ask is
       ledger: { append: async () => { await Promise.resolve(); if (broken) throw new Error('down'); } },
       runArchitect: async (request) => { requests.push(request); return answered('ok'); },
     });
-    expect(failure(await controller.handleAsk({ question: 'q', idempotencyKey: 'ledger-key-001', caller: 'c' })).code).toBe('julius_ask_ledger_unavailable');
+    expect(failure(await controller.handleAsk({ question: 'q', idempotencyKey: 'ledger-key-001', caller: 'operator' })).code).toBe('julius_ask_ledger_unavailable');
     broken = false;
-    success(await controller.handleAsk({ question: 'q', idempotencyKey: 'ledger-key-002', caller: 'c' }));
+    success(await controller.handleAsk({ question: 'q', idempotencyKey: 'ledger-key-002', caller: 'operator' }));
     expect(requests).toHaveLength(1);
-    expect(failure(await controller.handleAsk({ question: 'q', idempotencyKey: 'ledger-key-003', caller: 'c' })).code).toBe('julius_ask_cap_reached');
+    expect(failure(await controller.handleAsk({ question: 'q', idempotencyKey: 'ledger-key-003', caller: 'operator' })).code).toBe('julius_ask_cap_reached');
   });
 
   it('a provider failure keeps its cap slot (it may have been billed) and frees the concurrency slot', async () => {
@@ -466,7 +480,7 @@ describe('ask Julius: the cap is reserved before the first await, and one ask is
       env: baseEnv(), readConfig: readGptArchitectConfig, now: () => 1,
       ledger: { append: (line) => { lines.push(line); } }, runArchitect: runGptArchitect,
     });
-    const result = await controller.handleAsk({ question: 'q', idempotencyKey: 'e2e-key-0001', caller: 'c' });
+    const result = await controller.handleAsk({ question: 'q', idempotencyKey: 'e2e-key-0001', caller: 'operator' });
     expect(failure(result)).toEqual({ code: 'julius_ask_provider_failed', httpStatus: 502 });
     expect(sdk.creates).toBe(1);
     expect(sdk.constructed).toHaveLength(1);
@@ -668,7 +682,7 @@ describe('ask Julius: no route-imposed ceiling; the budget is chosen server-side
       ledger: { append: (line) => { events.push('ledger'); lines.push(line); } },
       runArchitect: async (request) => { requests.push(request); return answered('ok'); },
     });
-    success(await controller.handleAsk({ question: 'q', idempotencyKey: GOOD_KEY, caller: 'c' }));
+    success(await controller.handleAsk({ question: 'q', idempotencyKey: GOOD_KEY, caller: 'operator' }));
     expect(requests[0]?.config.maxOutputTokens).toBe(32000);
     expect(lines[0]).toMatchObject({ maxOutputTokensSent: 32000, budgetBasis: 'provider_max' });
   });
@@ -700,7 +714,7 @@ describe('ask Julius: no route-imposed ceiling; the budget is chosen server-side
 
   it('the controller accepts nothing but question, key and caller: extra fields on the input change nothing', async () => {
     const h = harness();
-    success(await h.ask.handleAsk({ question: 'hi', idempotencyKey: GOOD_KEY, caller: 'c', maxOutputTokens: 1e9, reasoningEffort: 'max' } as never));
+    success(await h.ask.handleAsk({ question: 'hi', idempotencyKey: GOOD_KEY, caller: 'operator', maxOutputTokens: 1e9, reasoningEffort: 'max' } as never));
     expect(h.requests[0]?.omitMaxOutputTokens).toBe(true);
     expect(h.requests[0]?.config.reasoningEffort).toBe('low');
   });
@@ -717,7 +731,7 @@ describe('ask Julius: no route-imposed ceiling; the budget is chosen server-side
       env: baseEnv(), readConfig: readGptArchitectConfig, now: () => 1,
       ledger: { append: (line) => { lines.push(line); } }, runArchitect: runGptArchitect,
     });
-    const result = success(await controller.handleAsk({ question: 'short question', idempotencyKey: 'omitted-cap-001', caller: 'c' }));
+    const result = success(await controller.handleAsk({ question: 'short question', idempotencyKey: 'omitted-cap-001', caller: 'operator' }));
     expect(Object.keys(lastBody())).not.toContain('max_output_tokens');
     expect(lastBody().reasoning).toEqual({ effort: 'low' });
     expect(result.usage).toEqual({ input: 11, cached: 1, output: 222, reasoning: 150, total: 233 });
@@ -734,7 +748,7 @@ describe('ask Julius: no route-imposed ceiling; the budget is chosen server-side
       env: baseEnv({ JULIUS_ASK_MAX_OUTPUT_TOKENS: '2500' }), readConfig: readGptArchitectConfig, now: () => 1,
       ledger: { append: () => undefined }, runArchitect: runGptArchitect,
     });
-    success(await controller.handleAsk({ question: 'q', idempotencyKey: 'override-key-1', caller: 'c' }));
+    success(await controller.handleAsk({ question: 'q', idempotencyKey: 'override-key-1', caller: 'operator' }));
     expect(lastBody().max_output_tokens).toBe(2500);
   });
 

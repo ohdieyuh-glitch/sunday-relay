@@ -89,6 +89,7 @@ import { createPostgresVoiceBindings } from '../src/relay/persistence/voice-bind
 import type { VoiceBindingStore } from '../src/relay/social/voice-binding';
 import { eosFromEnv } from './eos-voice';
 import { createAskLedger, createProductionJuliusAsk, handleJuliusAskRoute, isJuliusAskRoute } from './julius-ask';
+import { selectAskLedger } from './julius-ask-file-store';
 import type { SocialStore } from '../src/relay/social/social-store';
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -451,7 +452,8 @@ const juliusMissionPorts = (): JuliusMissionRoutePorts => {
 const headerValue = (value: string | string[] | undefined): string | undefined =>
   (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined);
 
-  const juliusAsk = createProductionJuliusAsk(createAskLedger(config.stateRoot === null ? null : join(config.stateRoot, 'julius-ask-ledger.jsonl')));
+  // JULIUS_ASK_STORE_FILE (operator env) wires the single-instance FILE store for the founder-only demo; absent = non-durable, players get 503.
+  const juliusAsk = createProductionJuliusAsk(selectAskLedger(process.env, createAskLedger(config.stateRoot === null ? null : join(config.stateRoot, 'julius-ask-ledger.jsonl'))));
   const pspStore = config.stateRoot === null ? null : createPspConfigStore({ root: config.stateRoot });
   // Read once: `/health` answers the same body for the life of the process.
   const health = healthBody(process.env);

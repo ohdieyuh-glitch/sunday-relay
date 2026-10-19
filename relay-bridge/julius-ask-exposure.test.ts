@@ -4,8 +4,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  ASK_EFFORTS, ASK_QUESTION_MAX_CHARS, createAskLedger, createJuliusAsk, handleJuliusAskRoute, selectAskBudget,
-  type AskLedger, type AskLedgerLine, type JuliusAskResult,
+  ASK_EFFORTS, ASK_QUESTION_MAX_CHARS, createAskLedger, createJuliusAsk, handleJuliusAskRoute, markAskStoreDurable, reserveOverDurableLedger, selectAskBudget,
+  type AskLedger, type AskLedgerLine, type AskStore, type JuliusAskResult,
 } from './julius-ask';
 import { readGptArchitectConfig } from '../src/relay/connectors/gpt-architect/config';
 import { runGptArchitect, type GptRunOutcome, type GptRunRequest } from '../src/relay/connectors/gpt-architect/gpt-runner';
@@ -110,9 +110,8 @@ const answered = (answer: string): GptRunOutcome => ({
 const timedOut = (): GptRunOutcome => ({ ok: false, failureClass: 'timeout', message: 'timed out', usage });
 
 /** An in-memory stand-in for the Postgres ledger: shared between instances (a restart or a replica), can be broken. */
-interface FakeDurableStore extends AskLedger {
+interface FakeDurableStore extends AskStore {
   readonly durable: true;
-  rows(): Promise<readonly AskLedgerLine[]>;
   readonly held: AskLedgerLine[];
   readonly events: string[];
   broken: boolean;
@@ -131,8 +130,11 @@ function durableStore(events: string[] = []): FakeDurableStore {
       held.push(line);
     },
     async rows() { return held.slice(); },
+    /* A player needs an atomic reserve (the rows-based path is operator-only): the fake serialises it like the real store. */
+    reserve: (input) => reserveOverDurableLedger(store, input),
   };
-  return store;
+  /* A plain {durable: true} object is no longer accepted: the store factory (here, the test's) brands its own store. */
+  return markAskStoreDurable(store);
 }
 
 /** The provider side, shared between instances so a restart cannot hide a second paid call. */
@@ -357,7 +359,7 @@ describe('INPUT POLICY (F7): what a player may send to the provider (see THE PRO
 
   it('REQUIRED (P6): every provider request carries a safetyIdentifier derived from the caller: stable, distinct, never the raw id', async () => {
     const p = provider();
-    const c = instance({ ledger: durableStore(), provider: p, env: env({ JULIUS_ASK_MAX_CONCURRENT: '4' }) });
+    const c = instance({ ledger: durableStore(), provider: p, env: env({ JULIUS_ASK_MAX_CONCURRENT: '4', JULIUS_ASK_SAFETY_SECRET: ['safety', 'secret', 'for', 'the', 'test', '0123456789'].join('-') }) });
     await ask(c, { caller: 'player:alpha-777', idempotencyKey: 'safety-key-0001' });
     await ask(c, { caller: 'player:alpha-777', idempotencyKey: 'safety-key-0002' });
     await ask(c, { caller: 'player:beta-888', idempotencyKey: 'safety-key-0003' });

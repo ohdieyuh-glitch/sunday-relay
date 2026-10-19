@@ -20,8 +20,9 @@ import { sessionTokenFrom } from './browser-session/routes';
  * never stored, logged, ledgered or returned; the question text is never ledgered either (its length is).
  *
  * PLAYER EXPOSURE (slices 1 and 2 of the F4-F8 plan): the LEDGER is the source of truth for the daily cap, the per-caller cap
- * and the idempotency key. A PLAYER ask requires a DURABLE store (`durable: true`); the operator may use a FILE ledger for a
- * local smoke, never stdout. The pre-call row is inserted by one atomic `reserve` step; when it cannot commit the route refuses
+ * and the idempotency key. A PLAYER ask requires a DURABLE store; durability is a property a store FACTORY brands (see
+ * `markAskStoreDurable`), never something an object or a request can declare. The operator may use a plain FILE ledger for a
+ * local smoke, never stdout. Callers are default-deny: only `player:<id>` and exactly `operator` are recognised. The pre-call row is inserted by one atomic `reserve` step; when it cannot commit the route refuses
  * (503) and makes no provider call. The in-process maps below are only an optimisation for concurrent same-key requests.
  */
 
@@ -29,6 +30,13 @@ export const ASK_QUESTION_MAX_CHARS = 2_000;
 export const ASK_ANSWER_MAX_CHARS = 8_000;
 export const ASK_DEFAULT_DAILY_CAP = 20;
 export const ASK_DEFAULT_MAX_CONCURRENT = 1;
+/**
+ * The in-process idempotency map (answer replay and same-key coalescing) holds at most this many SETTLED keys; beyond it the OLDEST
+ * settled entry is evicted (an in-flight key never is). Eviction loses nothing that matters: the daily caps are counted by the store
+ * (or the per-day counters), never by this map, and the ledger remains the record of every key, so an evicted key that comes back is
+ * answered by the store's named 409 (duplicate) instead of an in-memory replay. Without eviction the map grew for the life of the process.
+ */
+export const ASK_IDEMPOTENCY_MAP_MAX = 5_000;
 /** The provider call is bounded to this even when the architect timeout is longer (a request deadline, not a token or dollar ceiling). */
 export const ASK_MAX_TIMEOUT_MS = 90_000;
 /** Per-caller daily cap when JULIUS_ASK_CALLER_DAILY_CAP is unset: strictly below the global cap whenever the global cap is 3 or more. */
@@ -120,11 +128,11 @@ const INSTRUCTIONS =
 export type AskRunner = (request: GptRunRequest) => Promise<GptRunOutcome>;
 
 /** One ledger line. Never contains the question text, the key, or the raw provider response id. */
-export type AskLedgerLine = Readonly<Record<string, string | number | boolean | null | Readonly<Record<string, number | null>>>>;
+export type AskLedgerLine = Readonly<Record<string, string | number | boolean | null | Readonly<Record<string, string | number | null>>>>;
 export interface AskLedger {
   /** Set by the production stdout and file ledgers. A stdout ledger cannot fail closed and is refused for every caller. */
   readonly kind?: 'stdout' | 'file';
-  /** True only for a store whose pre-call write is durable and shared (a database). Players require it. */
+  /** Descriptive only. A store counts as durable ONLY when a store factory branded it (`markAskStoreDurable`); this flag alone is ignored. */
   readonly durable?: boolean;
   /** Rejects (or throws) when the line was NOT durably written; a pre-call failure then stops the call. */
   append(line: AskLedgerLine): void | Promise<void>;
@@ -134,13 +142,16 @@ export interface AskDurableLedger extends AskLedger {
   readonly durable: true;
   rows(): Promise<readonly AskLedgerLine[]>;
 }
+/** The stored form of the key-to-question binding: `v` is the MAC scheme version, `mac` the lowercase hex HMAC-SHA256. */
+export interface AskQuestionBinding { readonly v: number; readonly mac: string }
+export const ASK_BINDING_VERSION = 1;
 export interface AskReserveInput {
   /** The whole pre-call ledger line (never question text, answer text or a key). */
   readonly line: AskLedgerLine;
   readonly callerHash: string;
   readonly keyHash: string;
-  /** HMAC-SHA256(operator secret, question), or null when no secret is configured. Binds a key to one question across a restart. */
-  readonly questionMac: string | null;
+  /** Versioned, caller-bound HMAC of the question, or null when no (long enough) secret is configured. Binds a key to one question across a restart. */
+  readonly questionBinding: AskQuestionBinding | null;
   readonly utcDay: string;
   readonly globalCap: number;
   readonly callerCap: number;
@@ -149,7 +160,7 @@ export type AskReserveOutcome =
   | { readonly kind: 'reserved' }
   | { readonly kind: 'cap_reached' }
   | { readonly kind: 'caller_cap_reached' }
-  | { readonly kind: 'duplicate'; readonly askId: string; readonly questionMac: string | null; readonly result: AskLedgerLine | null };
+  | { readonly kind: 'duplicate'; readonly askId: string; readonly questionBinding: AskQuestionBinding | null; readonly result: AskLedgerLine | null };
 /**
  * A durable store with ONE atomic reservation step: count today's pre-call rows globally and for the caller, refuse when over,
  * and otherwise insert the pre-call row, so one (caller, key) pair means one billed attempt across restarts and replicas.
@@ -168,6 +179,8 @@ export interface JuliusAskDeps {
   readonly env: Record<string, string | undefined>;
   /** What is known about the configured model; defaults to this module's (empty) documented table. */
   readonly modelCapabilities?: (model: string | null) => AskModelCapabilities;
+  /** Overrides ASK_IDEMPOTENCY_MAP_MAX (tests). */
+  readonly idempotencyMapMax?: number;
 }
 
 export interface JuliusAskInput {
@@ -206,8 +219,10 @@ export type JuliusAskResult = JuliusAskSuccess | JuliusAskFailure;
 const NOT_ATTEMPTED: ReadonlySet<string> = new Set([
   'julius_ask_not_configured', 'julius_ask_cap_reached', 'julius_ask_caller_cap_reached', 'julius_ask_busy', 'julius_ask_ledger_unavailable',
   'julius_ask_already_answered', 'julius_ask_previous_attempt_failed', 'julius_ask_attempt_unknown', 'julius_ask_idempotency_key_reused',
+  'julius_ask_key_not_bound',
 ]);
 const fail = (code: string, httpStatus: number): JuliusAskFailure => ({ ok: false, code, httpStatus });
+/* 16 hex (64 bits) on purpose: the stored callerHash/keyHash width. A database column CHECK for these must allow 16 to 64 hex digits. */
 const sha = (value: string): string => createHash('sha256').update(value).digest('hex').slice(0, 16);
 const utcDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
@@ -241,15 +256,30 @@ export type AskInputPolicyResult =
   | { readonly ok: true; readonly question: string }
   | { readonly ok: false; readonly code: string; readonly httpStatus: number };
 
-/* Stripped, not refused: C0 controls except TAB and LF (so CR too), DEL, C1 controls, soft hyphen, Arabic letter mark, Mongolian
-   vowel separator, zero-width and bidi marks (U+200B-U+200F), U+2028/2029, bidi embeddings/overrides/isolates, word joiners and
-   the deprecated format characters (U+2060-U+206F), and the byte-order mark. */
+/* Stripped, not refused: C0 controls except TAB and LF (so CR too), DEL, C1 controls, soft hyphen, the combining grapheme joiner
+   (U+034F), Arabic letter mark, Mongolian vowel separator and free variation selectors, the Hangul fillers (U+115F, U+1160,
+   U+3164, U+FFA0), zero-width and bidi marks (U+200B-U+200F), U+2028/2029, bidi embeddings/overrides/isolates, word joiners and
+   the deprecated format characters (U+2060-U+206F), variation selectors (U+FE00-U+FE0F, U+E0100-U+E01EF), the byte-order mark,
+   and the TAG characters U+E0000-U+E007F (an invisible channel that can carry hidden text or split a secret shape). Everything
+   here is removed BEFORE the shape checks. The `u` flag makes the astral ranges match whole code points. */
 // eslint-disable-next-line no-control-regex
-const STRIP_CHARS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060-\u206f\ufeff]/g;
+const STRIP_CHARS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u180b-\u180f\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\u{e0000}-\u{e007f}\u{e0100}-\u{e01ef}]/gu;
+
+/** Any Unicode decimal digit (Arabic-Indic, fullwidth, mathematical, ...) as its ASCII digit. Nd characters come in contiguous runs of ten. */
+function foldDigits(text: string): string {
+  return text.replace(/\p{Nd}/gu, (ch) => {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (cp >= 0x30 && cp <= 0x39) return ch;
+    let runStart = cp;
+    while (runStart > 0 && /\p{Nd}/u.test(String.fromCodePoint(runStart - 1))) runStart -= 1;
+    return String((cp - runStart) % 10);
+  });
+}
 
 /* Refused, not redacted: a redacted question still carries the context the player did not mean to send. */
 const SECRET_SHAPES: readonly RegExp[] = [
   /\bsk-[A-Za-z0-9_-]{16,}/,
+  /\b[sr]k_(?:live|test)_[A-Za-z0-9]{10,}/,
   /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i,
   /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/,
   /\bgithub_pat_[A-Za-z0-9_]{20,}/,
@@ -259,14 +289,44 @@ const SECRET_SHAPES: readonly RegExp[] = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
   /\b(?:api[_-]?key|secret|token|password|passwd)\s*[:=]\s*\S{12,}/i,
 ];
-const EMAIL_SHAPE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/;
-const PHONE_RUN = /(?<![\w.])\+?\(?\d[\d\s().-]{6,22}\d(?!\w)/g;
+/* Letters and digits of any script, so an internationalised address is caught as well as an ASCII one. */
+const EMAIL_SHAPE = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/u;
+
+/* PHONE NUMBERS: a structure, not "any run of 10 to 15 digits" (that refused years, dates, coordinates and ids). Three shapes:
+   an international number (a leading +), a grouped North American style number (3-3-4 with a separator, or a bracketed area
+   code), and a digit run right after a phone word ("call me on 07911 123456"). A bare unseparated digit run is NOT a phone number. */
+const PHONE_INTERNATIONAL = /(?<![\w.])\+\d[\d\s().-]{6,20}\d(?!\w)/g;
+const PHONE_GROUPED = /(?<![\w.-])(?:\+?1[\s.-]?)?(?:\(\d{3}\)\s?|\d{3}[\s.-])\d{3}[\s.-]?\d{4}(?!\w|[.-]\d)/;
+const PHONE_AFTER_WORD = /\b(?:call|phone|tel(?:ephone)?|text|sms|whatsapp|mobile|cell|reach|contact|dial)\b[^\d\n]{0,25}?(\+?\(?\d[\d\s().-]{5,20}\d)/gi;
+const ISO_DATE_START = /^\d{4}-\d{2}-\d{2}/;
+
+function hasPhoneShape(text: string): boolean {
+  for (const m of text.matchAll(PHONE_INTERNATIONAL)) {
+    const digits = m[0].replace(/\D/g, '').length;
+    if (digits >= 8 && digits <= 15) return true;
+  }
+  if (PHONE_GROUPED.test(text)) return true;
+  for (const m of text.matchAll(PHONE_AFTER_WORD)) {
+    const run = m[1] ?? '';
+    const digits = run.replace(/\D/g, '').length;
+    const groups = run.split(/[\s().-]+/).filter((g) => g !== '');
+    const allYears = groups.length > 1 && groups.every((g) => /^(?:1\d{3}|20\d{2})$/.test(g));
+    if (digits >= 7 && digits <= 15 && !ISO_DATE_START.test(run) && !allYears) return true;
+  }
+  return false;
+}
+
+/* SELF-DECLARED AGE UNDER 13: a TEXT HEURISTIC, not an age control. It catches the common first-person phrasings ("I am 11 years
+   old", "I'm 9 and ...", "my age is 12", "age: 9", "I am aged 10", "I just turned 8") and lets an ordinary number through
+   ("I'm 5 minutes away", "I'm 3 and 0 in ranked", "I am 12 so close to the boss"). A child who does not say it, or says it
+   another way, is NOT caught: real age assurance has to come from the account, not from this text. */
 const AGE_NUMBER = '(\\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)';
 const AGE_SHAPES: readonly RegExp[] = [
   new RegExp(
-    `\\b(?:i\\s+am|i['\\u2019]m|im)\\s+(?:a\\s+|an\\s+|only\\s+|just\\s+|still\\s+)?${AGE_NUMBER}`
-    + '(?:[\\s-]*(?:years?|yrs?)[\\s-]*old|\\s*y\\/?o\\b|(?=\\s*(?:$|[.,;:!?]|(?:and|but|so|btw|can|how|what|why|do|does|where|who|is|please)\\b)))', 'i'),
-  new RegExp(`\\bmy\\s+age\\s+is\\s+${AGE_NUMBER}\\b`, 'i'),
+    `\\b(?:i\\s+am|i['\\u2019]m|im)\\s+(?:a\\s+|an\\s+|only\\s+|just\\s+|still\\s+)?(?:aged\\s+)?${AGE_NUMBER}`
+    + '(?:[\\s-]*(?:years?|yrs?)(?:[\\s-]*old\\b|(?=\\s*(?:$|[.,;:!?])))|\\s*y\\/?o\\b|(?=\\s*(?:$|[.,;:!?]|(?:and(?!\\s+\\d)|but|btw|can|how|what|why|do|does|where|who|is|please)\\b)))', 'i'),
+  new RegExp(`\\b(?:my\\s+)?age\\s*(?:is\\s+|[:=]\\s*)${AGE_NUMBER}\\b`, 'i'),
+  new RegExp(`\\baged\\s+${AGE_NUMBER}\\b`, 'i'),
   new RegExp(`\\bi\\s+(?:just\\s+)?turn(?:ed|ing|s)?\\s+${AGE_NUMBER}\\b`, 'i'),
 ];
 const NUMBER_WORDS: Readonly<Record<string, number>> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
@@ -282,21 +342,16 @@ function declaresAgeUnder13(text: string): boolean {
   return false;
 }
 
-function hasPhoneShape(text: string): boolean {
-  for (const m of text.matchAll(PHONE_RUN)) {
-    const digits = m[0].replace(/\D/g, '').length;
-    if ((digits >= 10 && digits <= 15) || (m[0].startsWith('+') && digits >= 8 && digits <= 15)) return true;
-  }
-  return false;
-}
-
 /**
- * The question policy, run BEFORE the idempotency-key step. It strips control, bidi and zero-width characters (the visible text is
- * kept), then REFUSES (4xx, so no slot is reserved and the provider is never contacted) a credential shape, an e-mail address, a
- * phone number, or a self-declared age under 13. Strip first, so hidden characters cannot be used to split a shape.
+ * The question policy, run BEFORE the idempotency-key step. It removes the invisible characters, applies Unicode NFKC (so a
+ * fullwidth or styled letter is its plain form) and folds every Unicode digit to ASCII, then strips again (the normalisation can
+ * produce a strippable character) and trims; the visible text is kept, and what the provider receives is this normalised
+ * question. It then REFUSES (4xx, so no slot is reserved and the provider is never contacted) a credential shape, an e-mail
+ * address, a phone number, or a self-declared age under 13. Strip and normalise first, so hidden or look-alike characters cannot
+ * be used to split or disguise a shape.
  */
 export function applyAskInputPolicy(question: string): AskInputPolicyResult {
-  const cleaned = question.replace(STRIP_CHARS, '').trim();
+  const cleaned = foldDigits(question.replace(STRIP_CHARS, '').normalize('NFKC')).replace(STRIP_CHARS, '').trim();
   if (cleaned.length < 1 || cleaned.length > ASK_QUESTION_MAX_CHARS) return { ok: false, code: 'julius_ask_question_invalid', httpStatus: 400 };
   if (SECRET_SHAPES.some((shape) => shape.test(cleaned))) return { ok: false, code: 'julius_ask_input_refused', httpStatus: 400 };
   if (EMAIL_SHAPE.test(cleaned) || hasPhoneShape(cleaned)) return { ok: false, code: 'julius_ask_input_refused', httpStatus: 400 };
@@ -304,9 +359,15 @@ export function applyAskInputPolicy(question: string): AskInputPolicyResult {
   return { ok: true, question: cleaned };
 }
 
-/** Stable, opaque, non-reversible per-caller id for the provider's abuse attribution; never the raw player id. */
-export function safetyIdentifierFor(callerHash: string): string {
-  return `jask_${createHash('sha256').update(`safety:${callerHash}`).digest('hex').slice(0, 32)}`;
+/**
+ * The provider's abuse-attribution id for one caller: an HMAC under an OPERATOR secret (JULIUS_ASK_SAFETY_SECRET, else
+ * JULIUS_ASK_BINDING_SECRET), so nobody without the secret can recompute it from a player id; opaque, stable per caller, never the
+ * raw id. With no usable secret (under 16 characters) it is null and NO safety_identifier is sent (the pre-call row says
+ * `safetyBasis: none`): an unsalted hash of a guessable id would only look like protection.
+ */
+export function safetyIdentifierFor(caller: string, secret: string): string | null {
+  if (secret.length < 16) return null;
+  return `jask_${createHmac('sha256', secret).update(`julius-ask-safety:v1:${caller}`, 'utf8').digest('hex').slice(0, 32)}`;
 }
 
 /* ------------------------------------------------------------------------------------------------------------------ */
@@ -321,6 +382,13 @@ function withReservationLock<T>(key: object, fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+/** The stored binding of a pre-call row, or null for a row without one (no secret was configured, or a legacy row with a bare MAC). */
+function bindingOf(row: AskLedgerLine): AskQuestionBinding | null {
+  const raw = row.questionBinding;
+  if (typeof raw !== 'object' || raw === null) return null;
+  return typeof raw.v === 'number' && typeof raw.mac === 'string' ? { v: raw.v, mac: raw.mac } : null;
+}
+
 /** Reserve over any durable ledger that can be read back: duplicate first, then the global cap, then the caller cap, then the insert. */
 async function reserveOverRows(ledger: AskDurableLedger, input: AskReserveInput): Promise<AskReserveOutcome> {
   const rows = await ledger.rows();
@@ -328,18 +396,29 @@ async function reserveOverRows(ledger: AskDurableLedger, input: AskReserveInput)
   const dup = pre.find((row) => row.callerHash === input.callerHash && row.keyHash === input.keyHash);
   if (dup !== undefined) {
     const result = rows.find((row) => row.phase === 'result' && row.askId === dup.askId) ?? null;
-    return { kind: 'duplicate', askId: String(dup.askId), questionMac: typeof dup.questionMac === 'string' ? dup.questionMac : null, result };
+    return { kind: 'duplicate', askId: String(dup.askId), questionBinding: bindingOf(dup), result };
   }
   const today = pre.filter((row) => String(row.at).slice(0, 10) === input.utcDay);
   if (today.length >= input.globalCap) return { kind: 'cap_reached' };
   if (today.filter((row) => row.callerHash === input.callerHash).length >= input.callerCap) return { kind: 'caller_cap_reached' };
   /* The commit of this append IS the durable pre-call write; a throw leaves nothing behind. */
-  await ledger.append(input.questionMac === null ? input.line : { ...input.line, questionMac: input.questionMac });
+  await ledger.append(input.questionBinding === null ? input.line : { ...input.line, questionBinding: { v: input.questionBinding.v, mac: input.questionBinding.mac } });
   return { kind: 'reserved' };
 }
 
+/**
+ * DURABILITY IS BRANDED, NOT DECLARED. A store counts as durable only if a store factory (createMemoryAskStore, the file store, the
+ * future Postgres store) registered the very object here. The registry is module-private, so a plain object carrying
+ * `durable: true`, a copy or a wrapper of a branded store, or anything built from a request is NOT durable and a player is refused.
+ */
+const durableBrand = new WeakSet<object>();
+/** Called by a store FACTORY on the store object it returns, never by the route or from request data. Returns the same object. */
+export function markAskStoreDurable<T extends AskDurableLedger>(store: T): T {
+  durableBrand.add(store);
+  return store;
+}
 const isDurableLedger = (ledger: AskLedger): ledger is AskDurableLedger =>
-  ledger.durable === true && typeof (ledger as Partial<AskDurableLedger>).rows === 'function';
+  durableBrand.has(ledger) && ledger.durable === true && typeof (ledger as Partial<AskDurableLedger>).rows === 'function';
 const isAskStore = (ledger: AskLedger): ledger is AskStore => isDurableLedger(ledger) && typeof (ledger as Partial<AskStore>).reserve === 'function';
 
 /**
@@ -357,22 +436,41 @@ export function createMemoryAskStore(options: { readonly failWrites?: () => bool
       held.push(line);
     },
     async rows() { return held.slice(); },
-    reserve(input) { return withReservationLock(store, () => reserveOverRows(store, input)); },
+    reserve(input) { return reserveOverDurableLedger(store, input); },
   };
-  return store;
+  return markAskStoreDurable(store);
+}
+
+/** Serialised (in this process) reservation over any durable ledger that can be read back; the building block of a single-instance store. */
+export function reserveOverDurableLedger(ledger: AskDurableLedger, input: AskReserveInput): Promise<AskReserveOutcome> {
+  return withReservationLock(ledger, () => reserveOverRows(ledger, input));
 }
 
 const ledgerRefOf = (askId: string): string => `julius-ask-ledger:${askId}`;
+/** Version 1: HMAC-SHA256 over a length-unambiguous JSON array of (scheme, caller, key, question). Null when the secret is too short. */
+export function bindQuestion(secret: string, caller: string, idempotencyKey: string, question: string): AskQuestionBinding | null {
+  if (secret.length < 16) return null;
+  const mac = createHmac('sha256', secret).update(JSON.stringify(['julius-ask-binding', ASK_BINDING_VERSION, caller, idempotencyKey, question]), 'utf8').digest('hex');
+  return { v: ASK_BINDING_VERSION, mac };
+}
 const macEqual = (a: string, b: string): boolean => {
   const x = Buffer.from(a, 'utf8');
   const y = Buffer.from(b, 'utf8');
   return x.length === y.length && timingSafeEqual(x, y);
 };
 
-/** The three named 409 states (plus key_reused when a MAC proves a different question) for a key that already has a pre-call row. */
-function duplicateFailure(dup: Extract<AskReserveOutcome, { kind: 'duplicate' }>, questionMac: string | null): JuliusAskFailure {
-  if (questionMac !== null && dup.questionMac !== null && !macEqual(questionMac, dup.questionMac)) return fail('julius_ask_idempotency_key_reused', 409);
+/**
+ * The named 409 states for a key that already has a pre-call row. FIRST the key must be BOUND: a stored binding of a known version
+ * must exist AND this request must carry one. Without both (no secret now or then, a legacy row, an unknown version) the route cannot
+ * tell whether this is the same question, so it answers `julius_ask_key_not_bound` and never the old answer digest. When both exist
+ * and differ the key is `julius_ask_idempotency_key_reused`; only a matching binding reaches the three states below.
+ */
+function duplicateFailure(dup: Extract<AskReserveOutcome, { kind: 'duplicate' }>, binding: AskQuestionBinding | null): JuliusAskFailure {
   const detail = { askId: dup.askId, ledgerRef: ledgerRefOf(dup.askId) };
+  if (binding === null || dup.questionBinding === null || dup.questionBinding.v !== binding.v) {
+    return { ok: false, code: 'julius_ask_key_not_bound', httpStatus: 409, detail };
+  }
+  if (!macEqual(binding.mac, dup.questionBinding.mac)) return fail('julius_ask_idempotency_key_reused', 409);
   if (dup.result === null) return { ok: false, code: 'julius_ask_attempt_unknown', httpStatus: 409, detail };
   if (dup.result.outcome === 'answered') {
     return { ok: false, code: 'julius_ask_already_answered', httpStatus: 409, detail: { ...detail, answerDigest: typeof dup.result.answerSha256 === 'string' ? dup.result.answerSha256 : null } };
@@ -388,6 +486,15 @@ function playerMaxEffort(raw: string | undefined): AskReasoningEffort {
 }
 
 interface AttemptInfo { askId: string | null; failureClass: string | null }
+
+/** Drops the oldest SETTLED entries (Map iteration is insertion order) until at most `max` remain; entries still in flight are kept. */
+function evictSettled(map: Map<string, { settled: JuliusAskResult | null }>, max: number): void {
+  if (map.size <= max) return;
+  for (const [slot, entry] of map) {
+    if (map.size <= max) break;
+    if (entry.settled !== null) map.delete(slot);
+  }
+}
 
 export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusAskInput): Promise<JuliusAskResult> } {
   /* Per-process state, deliberately: a restart resets it. The durable store (not these) is the record for players; for the
@@ -417,14 +524,25 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
     return { kind: 'reserved' };
   }
 
+  async function committedPreCall(askId: string): Promise<boolean> {
+    const { ledger } = deps;
+    if (!isDurableLedger(ledger)) return false;
+    try {
+      return (await ledger.rows()).some((row) => row.phase === 'pre_call' && row.askId === askId);
+    } catch {
+      return false;
+    }
+  }
+
   function reserve(input: AskReserveInput): Promise<AskReserveOutcome> {
     const { ledger } = deps;
     if (isAskStore(ledger)) return ledger.reserve(input);
-    if (isDurableLedger(ledger)) return withReservationLock(ledger, () => reserveOverRows(ledger, input));
+    /* Operator only (a player never reaches here without an AskStore): serialised per ledger OBJECT in this process. */
+    if (isDurableLedger(ledger)) return reserveOverDurableLedger(ledger, input);
     return reserveInMemory(input);
   }
 
-  async function runOnce(question: string, who: { callerHash: string; keyHash: string; questionMac: string | null; isPlayer: boolean }, info: AttemptInfo): Promise<JuliusAskResult> {
+  async function runOnce(question: string, who: { callerHash: string; keyHash: string; caller: string; questionBinding: AskQuestionBinding | null; isPlayer: boolean }, info: AttemptInfo): Promise<JuliusAskResult> {
     const { env } = deps;
     let reserved = false;
     let holdsSlot = false;
@@ -455,6 +573,7 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
       inFlight += 1;
       holdsSlot = true;
 
+      const safetyId = safetyIdentifierFor(who.caller, (env.JULIUS_ASK_SAFETY_SECRET ?? '').trim() || (env.JULIUS_ASK_BINDING_SECRET ?? '').trim());
       const askId = `ask_${randomUUID().replace(/-/g, '').slice(0, 20)}`;
       const ledgerRef = ledgerRefOf(askId);
       /* ONE atomic step: count the day globally and for the caller, and insert the pre-call row. The row is written BEFORE the
@@ -467,16 +586,20 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
             questionLength: question.length, model: config.model, maxAttempts: 1,
             /* The budget BASIS, honestly: the override or documented value, or null when max_output_tokens is omitted. */
             maxOutputTokensSent: budget.maxOutputTokens === null ? 'omitted' : budget.maxOutputTokens, budgetBasis: budget.basis,
-            reasoningEffortChosen: effort, effortBasis,
+            reasoningEffortChosen: effort, effortBasis, safetyBasis: safetyId === null ? 'none' : 'hmac',
           },
-          callerHash: who.callerHash, keyHash: who.keyHash, questionMac: who.questionMac, utcDay: today, globalCap: dailyCap, callerCap,
+          callerHash: who.callerHash, keyHash: who.keyHash, questionBinding: who.questionBinding, utcDay: today, globalCap: dailyCap, callerCap,
         });
       } catch {
+        /* A store can commit the pre-call row and THEN throw (a lost connection after COMMIT). When the ledger can be read back and
+           holds this attempt's row, a billed call is a possibility we must not invite a retry of: answer attempt_unknown NOW, the
+           same state every later retry of the key gets. Otherwise nothing was committed (or it cannot be told): 503, retry allowed. */
+        if (await committedPreCall(askId)) return { ok: false, code: 'julius_ask_attempt_unknown', httpStatus: 409, detail: { askId, ledgerRef } };
         return fail('julius_ask_ledger_unavailable', 503);
       }
       if (reservation.kind === 'cap_reached') return fail('julius_ask_cap_reached', 429);
       if (reservation.kind === 'caller_cap_reached') return fail('julius_ask_caller_cap_reached', 429);
-      if (reservation.kind === 'duplicate') return duplicateFailure(reservation, who.questionMac);
+      if (reservation.kind === 'duplicate') return duplicateFailure(reservation, who.questionBinding);
       reserved = true;
       info.askId = askId;
 
@@ -499,7 +622,7 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
           schema: SCHEMA,
           /* One ask is at most ONE billed provider request: no SDK retry. */
           maxRetries: 0,
-          safetyIdentifier: safetyIdentifierFor(who.callerHash),
+          ...(safetyId === null ? {} : { safetyIdentifier: safetyId }),
         });
       } catch {
         outcome = { ok: false, failureClass: 'provider_error', message: 'provider call threw' };
@@ -554,9 +677,13 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
       if (deps.env.JULIUS_ASK_ENABLED !== '1') return fail('julius_ask_disabled', 503);
       if (typeof input.caller !== 'string' || input.caller.trim() === '') return fail('julius_ask_caller_required', 401);
       const caller = input.caller.trim();
-      const isPlayer = caller.startsWith('player:');
-      /* A player needs the durable store; a stdout ledger cannot fail closed, so nobody may use it. */
-      if (isPlayer && !isDurableLedger(deps.ledger)) return fail('julius_ask_durable_ledger_required', 503);
+      /* DEFAULT-DENY: exactly `operator` or `player:<id>`; any other string is refused, never silently treated as the operator. */
+      const isPlayer = caller.length > 'player:'.length && caller.startsWith('player:');
+      if (!isPlayer && caller !== 'operator') return fail('julius_ask_caller_not_recognised', 403);
+      /* A player needs a branded store WITH an atomic reserve: a rows-based fallback over two ledger objects on one row set would
+         let a cap or a key be spent twice, so the rows-based path below is for the OPERATOR's smoke only. A stdout ledger cannot
+         fail closed, so nobody may use it. */
+      if (isPlayer && !isAskStore(deps.ledger)) return fail('julius_ask_durable_ledger_required', 503);
       if (!isPlayer && deps.ledger.kind === 'stdout') return fail('julius_ask_ledger_unavailable', 503);
       if (typeof input.question !== 'string') return fail('julius_ask_question_invalid', 400);
       const trimmed = input.question.trim();
@@ -572,10 +699,10 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
       const keyHash = sha(input.idempotencyKey);
       /* In memory only, never ledgered: it binds a key to ONE question inside this process. */
       const questionHash = createHash('sha256').update(question).digest('hex');
-      /* Across a restart the binding is an HMAC under an operator-held secret (never a plain hash, which a dictionary could
-         invert for a short question). Absent or too short a secret means NO durable question-derived value exists. */
-      const secret = (deps.env.JULIUS_ASK_BINDING_SECRET ?? '').trim();
-      const questionMac = secret.length >= 16 ? createHmac('sha256', secret).update(question, 'utf8').digest('hex') : null;
+      /* Across a restart the binding is a versioned HMAC under an operator-held secret (never a plain hash, which a dictionary could
+         invert for a short question), bound to the CALLER and the KEY as well as the question. Absent or too short a secret means
+         NO durable question-derived value exists, and a repeated key after a restart is then answered `julius_ask_key_not_bound`. */
+      const questionBinding = bindQuestion((deps.env.JULIUS_ASK_BINDING_SECRET ?? '').trim(), caller, input.idempotencyKey, question);
       /* Scoped to the caller, so one caller's key can never replay another's answer. The promise is stored BEFORE awaiting,
          so two concurrent requests with one key share one paid call. */
       const slot = `${callerHash}:${keyHash}`;
@@ -589,11 +716,12 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
         return existing.settled.ok ? existing.settled : failedBefore(existing.info);
       }
       const info: AttemptInfo = { askId: null, failureClass: null };
-      const pending = runOnce(question, { callerHash, keyHash, questionMac, isPlayer }, info);
+      const pending = runOnce(question, { callerHash, keyHash, caller, questionBinding, isPlayer }, info);
       const entry = { questionHash, pending, settled: null as JuliusAskResult | null, info };
       stored.set(slot, entry);
       const result = await pending;
       entry.settled = result;
+      evictSettled(stored, deps.idempotencyMapMax ?? ASK_IDEMPOTENCY_MAP_MAX);
       /* A refusal made BEFORE any provider contact (not configured, cap reached, busy, ledger down, or answered from the
          ledger by a named 409) bought nothing now, so it is not the key's outcome: the caller may retry once it clears. */
       if (!result.ok && NOT_ATTEMPTED.has(result.code)) stored.delete(slot);
