@@ -202,6 +202,20 @@ export function readReviewerKey(pem) {
   return { key };
 }
 
+/**
+ * THE PATHS A SIGNED LANDING MAY NOT CHANGE (d4b).
+ *
+ * A reviewer-signed tip can reach this gate WITHOUT the lander: there is no branch protection, so a hand-pushed commit that
+ * carries a genuine signed block is exactly as good as a landed one, unless the gate itself refuses what the lander would
+ * have refused. These two constants are a deliberate COPY of the lander's HARD_FORBIDDEN_PATH and EXCEPTION_ELIGIBLE (this
+ * file imports nothing from the lander it checks); a drift test keeps the copies equal. Founder-governed paths (workflows, the
+ * landing system and its key, this gate, approver files, migrations, package manifests...) are never provenant through a
+ * signature alone. The two exception-eligible files may change only when the SIGNED clearance names them exactly.
+ */
+const SIGNED_LANDING_HARD_FORBIDDEN = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
+const SIGNED_LANDING_EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
+export const SIGNED_LANDING_GOVERNED = Object.freeze({ HARD_FORBIDDEN: SIGNED_LANDING_HARD_FORBIDDEN, EXCEPTION_ELIGIBLE: SIGNED_LANDING_EXCEPTION_ELIGIBLE });
+
 const signedVerdict = (name, reason, extra = {}) => ({ state: 'decided', result: verdict(name, reason, { via: 'signed-landing', ...extra }) });
 
 /**
@@ -211,6 +225,8 @@ const signedVerdict = (name, reason, extra = {}) => ({ state: 'decided', result:
  * @param {unknown} input.reviewerKeyPem     The PEM committed at the parent.
  * @param {unknown} input.reviewerKeyAtSha   The commit that PEM was read at. Must be the tip's single parent.
  * @param {unknown} input.tipReviewerKeyPem  The same file read AT THE TIP: must be byte-identical to the parent's.
+ * @param {unknown} input.changedPaths       Every path (and previous path) the tip changes against its parent.
+ * @param {unknown} input.changedPathsComplete Strictly true: the list was read completely (fewer than 300 files, exactly one commit ahead).
  * @param {unknown} input.headCommit         `{ sha, authorLogin, treeSha }` of the commit the clearance names as `head`.
  */
 export function evaluateSignedLanding(input, tip) {
@@ -275,6 +291,17 @@ export function evaluateSignedLanding(input, tip) {
     return signedVerdict('unprovenanced',
       `the cleared head was authored by ${typeof head?.authorLogin === 'string' ? head.authorLogin : 'an unreadable identity'}, not the coding worker`, base);
   }
+  // WHAT THE TIP CHANGES AGAINST ITS PARENT (d4b): read completely, or the answer is indeterminate.
+  const changed = input?.changedPaths;
+  if (input?.changedPathsComplete !== true || !Array.isArray(changed) || changed.length === 0 || !changed.every((path) => typeof path === 'string' && path !== '')) {
+    return signedVerdict('indeterminate', 'the paths the signed tip changes against its parent could not be read completely', base);
+  }
+  const exceptions = clearance['governed-exceptions'] === '-' ? [] : clearance['governed-exceptions'].split(',');
+  const governed = changed.filter((path) => SIGNED_LANDING_HARD_FORBIDDEN.test(path)
+    || (SIGNED_LANDING_EXCEPTION_ELIGIBLE.some((file) => file.toLowerCase() === path.toLowerCase()) && !exceptions.includes(path)));
+  if (governed.length > 0) {
+    return signedVerdict('unprovenanced', `a signed landing may not change founder-governed paths: ${governed.slice(0, 5).join(', ')}`, base);
+  }
   return signedVerdict('provenant',
     `main ${mainSha} carries tree ${mainTreeSha} on base ${parentSha}, signed by the Independent Reviewer for pull request #${clearance.pr} (head ${clearance.head})`,
     { ...base, prNumber: Number(clearance.pr), reviewedHeadSha: clearance.head, approvedBy: [clearance.by] });
@@ -299,6 +326,8 @@ export function evaluateSignedLanding(input, tip) {
  * @param {unknown} [input.reviewerKeyPem] The reviewer public key committed at the parent.
  * @param {unknown} [input.reviewerKeyAtSha] The sha that key was read at.
  * @param {unknown} [input.tipReviewerKeyPem] The key file read at the tip itself (must equal the parent's).
+ * @param {unknown} [input.changedPaths] Paths the tip changes against its parent (signed landings are refused on governed paths).
+ * @param {unknown} [input.changedPathsComplete] Strictly true when that list is complete.
  * @param {unknown} [input.headCommit] `{ sha, authorLogin, treeSha }` of the commit the clearance names.
  */
 export function evaluateMainProvenance(input) {
@@ -586,6 +615,8 @@ async function main(argv) {
     let reviewerKeyPem;
     let reviewerKeyAtSha;
     let tipReviewerKeyPem;
+    let changedPaths;
+    let changedPathsComplete;
     let headCommit;
     const landingBlock = extractLandingBlock(mainCommitMessage);
     const parentOfTip = mainCommit?.parents?.[0]?.sha;
@@ -598,6 +629,12 @@ async function main(argv) {
       const tipKeyFile = gh(`repos/${repo}/contents/.github/julius-landing/reviewer-ed25519.pub?ref=${mainSha}`);
       if (tipKeyFile?.type === 'file' && tipKeyFile?.encoding === 'base64' && typeof tipKeyFile?.content === 'string') {
         tipReviewerKeyPem = Buffer.from(tipKeyFile.content, 'base64').toString('utf8');
+      }
+      // The compare API lists at most 300 files: a list that may be truncated, or a tip that is not exactly one commit ahead, stays incomplete.
+      const comparison = gh(`repos/${repo}/compare/${parentOfTip}...${mainSha}`);
+      if (Array.isArray(comparison?.files) && comparison.files.length < 300 && comparison?.ahead_by === 1 && comparison?.behind_by === 0) {
+        changedPaths = comparison.files.flatMap((file) => [file?.filename, file?.previous_filename].filter((path) => typeof path === 'string'));
+        changedPathsComplete = true;
       }
       const signedHead = parseSignedClearance(Buffer.from(landingBlock.clearanceB64, 'base64').toString('utf8')).fields.head;
       if (isSha(signedHead)) {
@@ -664,6 +701,8 @@ async function main(argv) {
       reviewerKeyPem,
       reviewerKeyAtSha,
       tipReviewerKeyPem,
+      changedPaths,
+      changedPathsComplete,
       headCommit,
     });
   } catch (error) {

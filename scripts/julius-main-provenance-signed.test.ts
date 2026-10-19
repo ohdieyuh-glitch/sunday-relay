@@ -13,6 +13,7 @@ import {
   evaluateMainProvenance,
   extractLandingBlock,
   parseSignedClearance,
+  SIGNED_LANDING_GOVERNED,
   readReviewerKey,
 } from './julius-main-provenance.mjs';
 
@@ -25,8 +26,10 @@ import {
  */
 
 // The lander has no declaration file (it is a plain .mjs under .github); the cross-check only needs this one function.
-const { parseClearance } = (await import(new URL('../.github/julius-landing/land-lib.mjs', import.meta.url).href)) as {
+const { parseClearance, HARD_FORBIDDEN_PATH, EXCEPTION_ELIGIBLE } = (await import(new URL('../.github/julius-landing/land-lib.mjs', import.meta.url).href)) as {
   parseClearance: (text: string) => { problems: string[] };
+  HARD_FORBIDDEN_PATH: RegExp;
+  EXCEPTION_ELIGIBLE: string[];
 };
 
 const MAIN = '1'.repeat(40);
@@ -75,6 +78,8 @@ const signedTip = (over: Record<string, unknown> = {}) => evaluateMainProvenance
   reviewerKeyPem: REVIEWER_PEM,
   reviewerKeyAtSha: PARENT,
   tipReviewerKeyPem: REVIEWER_PEM,
+  changedPaths: ['src/relay/ordinary.ts', '.github/julius-missions/julius-diag-digest-evidence-2/contract.json'],
+  changedPathsComplete: true,
   headCommit: { sha: HEAD, authorLogin: WORKER, treeSha: TREE },
   ...over,
 } as unknown as ProvenanceInput);
@@ -270,6 +275,52 @@ describe('a tip signed for by the Independent Reviewer', () => {
     expect(readReviewerKey(real).problem).toBeUndefined();
   });
 
+  it('12f. d4b: a signed tip may not change founder-governed paths, whoever signed it', () => {
+    const governed = [
+      '.github/workflows/julius-land.yml', '.github/julius-landing/reviewer-ed25519.pub', '.github/julius-landing/allowed-branches.txt', '.github/julius-landing/required-checks.txt',
+      'scripts/julius-main-provenance.mjs', 'scripts/julius-main-provenance-signed.test.ts', 'scripts/julius-review-currency.mjs', 'scripts/julius-landing.test.ts',
+      'scripts/relay-repository-boundary.mjs', 'scripts/export-julius-harness.mjs', '.github/actions/setup/action.yml', '.github/julius-live-gate.sh',
+      '.github/julius-mission-pins.txt', '.github/julius-approvers.json', 'CODEOWNERS', '.github/CODEOWNERS', 'CLAUDE.md', 'package.json', 'package-lock.json',
+      'src/relay/persistence/migrations/036_x.sql', 'migration/001.sql',
+      '.GITHUB/Julius-Landing/README.md', 'Scripts/Julius-Main-Provenance.MJS', '.github/WORKFLOWS/x.yml',
+    ];
+    for (const path of governed) {
+      expectVerdict(signedTip({ changedPaths: ['src/relay/ordinary.ts', path] }), 'unprovenanced', /founder-governed paths/u);
+    }
+    // a rename AWAY from a governed path lists the old name too: the caller (the CLI) passes both, and either one refuses
+    expectVerdict(signedTip({ changedPaths: ['docs/moved.md', '.github/workflows/old.yml'] }), 'unprovenanced', /founder-governed/u);
+    // ordinary work is provenant
+    expectVerdict(signedTip({ changedPaths: ['src/a.ts', 'relay-bridge/julius/x.ts', '.github/julius-missions/julius-diag-digest-evidence-2/dryrun/dryrun.sh', 'JULIUS_HARNESS_MANIFEST.md'] }), 'provenant');
+  });
+
+  it('12g. d4b: the two exception-eligible files change only when the SIGNED clearance names them exactly', () => {
+    const files = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
+    const signedFor = (list: string) => message(block({ text: clearanceText({ 'governed-exceptions': list }) }));
+    expectVerdict(signedTip({ changedPaths: files }), 'unprovenanced', /founder-governed/u);
+    expectVerdict(signedTip({ changedPaths: [files[0]!], mainCommitMessage: signedFor(files[1]!) }), 'unprovenanced', /founder-governed/u);
+    expectVerdict(signedTip({ changedPaths: files, mainCommitMessage: signedFor(files.slice().sort().join(',')) }), 'provenant');
+    expectVerdict(signedTip({ changedPaths: [files[0]!], mainCommitMessage: signedFor(files[0]!) }), 'provenant');
+    // a case variant is a different (never listed) name: refused even when the exact name is signed
+    expectVerdict(signedTip({ changedPaths: ['Relay-Bridge/Julius/role-effort.test.ts'], mainCommitMessage: signedFor(files[0]!) }), 'unprovenanced', /founder-governed/u);
+  });
+
+  it('12h. d4b: an unreadable, truncated or empty list of changed paths is never a pass', () => {
+    expectVerdict(signedTip({ changedPaths: undefined }), 'indeterminate', /could not be read completely/u);
+    expectVerdict(signedTip({ changedPathsComplete: undefined }), 'indeterminate', /could not be read completely/u);
+    expectVerdict(signedTip({ changedPathsComplete: 'true' }), 'indeterminate');
+    expectVerdict(signedTip({ changedPathsComplete: false }), 'indeterminate');
+    expectVerdict(signedTip({ changedPaths: [] }), 'indeterminate');
+    expectVerdict(signedTip({ changedPaths: ['src/a.ts', ''] }), 'indeterminate');
+    expectVerdict(signedTip({ changedPaths: ['src/a.ts', 42] }), 'indeterminate');
+    expectVerdict(signedTip({ changedPaths: 'src/a.ts' }), 'indeterminate');
+  });
+
+  it('12i. d4b DRIFT: the gate\'s copy of the lander\'s forbidden-path rules equals the lander\'s, to the byte', () => {
+    expect(SIGNED_LANDING_GOVERNED.HARD_FORBIDDEN.source).toBe(HARD_FORBIDDEN_PATH.source);
+    expect(SIGNED_LANDING_GOVERNED.HARD_FORBIDDEN.flags).toBe(HARD_FORBIDDEN_PATH.flags);
+    expect([...SIGNED_LANDING_GOVERNED.EXCEPTION_ELIGIBLE]).toEqual(EXCEPTION_ELIGIBLE);
+  });
+
   it('13. a tip that carries a block is judged by the block ALONE: a legitimate founder approval cannot rescue a bad block', () => {
     const founderStyle = {
       pullRequests: [{ number: 226, merged: true, mergeCommitSha: MAIN, authorLogin: WORKER, headSha: HEAD, baseRef: 'main' }],
@@ -357,6 +408,7 @@ describe('the CLI on a signed tip', () => {
     [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${PARENT}`]: keyFile,
     [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${MAIN}`]: keyFile,
     [`repos/${REPO}/commits/${HEAD}`]: { sha: HEAD, author: { login: WORKER }, commit: { tree: { sha: TREE } } },
+    [`repos/${REPO}/compare/${PARENT}...${MAIN}`]: { ahead_by: 1, behind_by: 0, files: [{ filename: 'src/relay/ordinary.ts' }] },
     ...over,
   });
 
@@ -443,6 +495,22 @@ describe('the CLI on a signed tip', () => {
     expect(wrongKey.stderr).toContain('does not verify');
   }, 60_000);
 
+  it('d4b: a governed path, a renamed-away governed path, a tip that is not exactly one commit ahead, 300 files or no compare answer is never a pass', () => {
+    const compare = (over: Record<string, unknown>) => routes({ [`repos/${REPO}/compare/${PARENT}...${MAIN}`]: { ahead_by: 1, behind_by: 0, files: [{ filename: 'src/relay/ordinary.ts' }], ...over } });
+    const governed = run(compare({ files: [{ filename: 'src/relay/ordinary.ts' }, { filename: '.github/julius-landing/land.mjs' }] }));
+    expect(governed.code).toBe(1);
+    expect(governed.stderr).toContain('founder-governed paths');
+    const renamed = run(compare({ files: [{ filename: 'docs/new.md', previous_filename: '.github/workflows/old.yml' }] }));
+    expect(renamed.code).toBe(1);
+    expect(renamed.stderr).toContain('founder-governed paths');
+    expect(run(compare({ ahead_by: 2 })).code).toBe(1);
+    expect(run(compare({ behind_by: 1 })).code).toBe(1);
+    expect(run(compare({ files: Array.from({ length: 300 }, (_, i) => ({ filename: `src/f${i}.ts` })) })).code).toBe(1);
+    expect(run(compare({ files: undefined })).code).toBe(1);
+    const noCompare = routes(); delete noCompare[`repos/${REPO}/compare/${PARENT}...${MAIN}`];
+    expect(run(noCompare).code).toBe(1);
+  }, 120_000);
+
   it('a tip without a block costs no extra reads: the old path answers exactly as before', () => {
     const legacy = routes({
       [`repos/${REPO}/commits/${MAIN}`]: { commit: { tree: { sha: TREE }, message: 'Julius: ordinary (#226)\n' }, parents: [{ sha: PARENT }] },
@@ -457,7 +525,8 @@ describe('the CLI on a signed tip', () => {
   it('an evidence file that omits any signed-path field can never pass', () => {
     const full = {
       mainSha: MAIN, mainShaAfter: MAIN, mainTreeSha: TREE, mainParents: [PARENT], mainCommitMessage: message(),
-      reviewerKeyPem: REVIEWER_PEM, reviewerKeyAtSha: PARENT, tipReviewerKeyPem: REVIEWER_PEM, headCommit: { sha: HEAD, authorLogin: WORKER, treeSha: TREE },
+      reviewerKeyPem: REVIEWER_PEM, reviewerKeyAtSha: PARENT, tipReviewerKeyPem: REVIEWER_PEM,
+      changedPaths: ['src/a.ts'], changedPathsComplete: true, headCommit: { sha: HEAD, authorLogin: WORKER, treeSha: TREE },
     };
     const runEvidence = (evidence: Record<string, unknown>) => {
       const directory = mkdtempSync(join(tmpdir(), 'julius-provenance-signed-evidence-'));
@@ -477,7 +546,7 @@ describe('the CLI on a signed tip', () => {
     const ok = runEvidence(full);
     expect(ok.code).toBe(0);
     expect(ok.stdout).toContain('provenance=provenant');
-    for (const field of ['mainCommitMessage', 'reviewerKeyPem', 'reviewerKeyAtSha', 'tipReviewerKeyPem', 'headCommit', 'mainParents', 'mainTreeSha'] as const) {
+    for (const field of ['mainCommitMessage', 'reviewerKeyPem', 'reviewerKeyAtSha', 'tipReviewerKeyPem', 'changedPaths', 'changedPathsComplete', 'headCommit', 'mainParents', 'mainTreeSha'] as const) {
       const { [field]: _omitted, ...trimmed } = full;
       const result = runEvidence(trimmed);
       expect(result.code, `omitting ${field} must not pass`).toBe(1);
