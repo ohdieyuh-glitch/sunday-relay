@@ -1,0 +1,17 @@
+# The first CONTINUOUS Julius qualification — reading an evidence bundle.
+#
+# THE DELIVERABLE. One real Sunday Relay file, sliced byte-identical, so the
+# diff this mission produces applies straight back to the repository. It is
+# pure: no Node, no clock, no filesystem, and no import of its own — so the
+# slice is closed at one file and the sandbox has nothing to resolve.
+src/relay/mission/julius/julius-bundle-cell.ts
+
+# WHAT IS DELIBERATELY NOT IN THE SLICE.
+#
+# `.github/julius-live-evidence-dump.sh` — the PRODUCER of the files this module
+# reads. It is the one thing that settles what a blank free-text cell means, and
+# the coder cannot see it. That is not an oversight and it is not a trick: the
+# question is genuinely about a component outside the unit of work, which is the
+# ordinary condition of real engineering and the condition Julius has never been
+# asked to work in. A coder that guesses will be wrong half the time; a coder
+# that asks will be right.
