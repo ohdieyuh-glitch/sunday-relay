@@ -8,6 +8,10 @@
 //   wl.Dev.Yaw <degrees>    face the controller (and so the walk) that way
 //   wl.Dev.Tp <x> <y> <z>   place the pawn (a teleport; the remote figure sees a normal report)
 //   wl.Dev.Social <operation> <subject>   the SAME action a hub button presses (UWonderlandUiSubsystem::RequestSocialAction: requests.send/accept/decline/cancel, friends.remove, blocks.add (the first press only warns, a second confirms a shared-party block), mutes.set, reports.file, presence.set, conversations.open ...)
+//   wl.Dev.Say <text>   submit a line to the Julius terminal exactly as typing it and pressing Enter does (UWonderlandUiSubsystem::SubmitTerminalLine): /social, /handoff, a Mission Contract ...
+//   wl.Dev.Go <id>   go where a nav-bar shortcut goes (NavigateTo: agent, missions, brain, commands, menu)
+//   wl.Dev.Voice <command> [subject]   the hub voice buttons' handler (connect, disconnect, mic.mute, local.mute ...)
+//   wl.Dev.Watch   the Missions panel WATCH A SIMULATED MISSION button's call (PlayScenario D, 10 s per event)
 //   wl.Dev.Pos              one log line: WLDEV pos x y z yaw
 // Everything is log-visible (WLDEV lines). A developer tool: not a gameplay path, no wire change.
 #include "CoreMinimal.h"
@@ -27,6 +31,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Serialization/Archive.h"
+#include "WonderlandMissionSubsystem.h"
 #include "WonderlandUiSubsystem.h"
 
 namespace WonderlandDevDriveDetail
@@ -336,6 +341,79 @@ namespace WonderlandDevDriveDetail
 			else
 			{
 				UE_LOG(LogTemp, Display, TEXT("WLDEV social: no UI subsystem"));
+			}
+		}));
+
+	UWonderlandUiSubsystem* DriveUi()
+	{
+		UWorld* World = DriveGameWorld();
+		ULocalPlayer* Player = World != nullptr ? World->GetFirstLocalPlayerFromController() : nullptr;
+		return Player != nullptr ? Player->GetSubsystem<UWonderlandUiSubsystem>() : nullptr;
+	}
+
+	FAutoConsoleCommand GDevSay(
+		TEXT("wl.Dev.Say"),
+		TEXT("DEV (-wldev): wl.Dev.Say <text> submits a line to the Julius terminal exactly as typing it and pressing Enter does."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			if (DriveRefused() || Args.Num() < 1)
+			{
+				return;
+			}
+			if (UWonderlandUiSubsystem* Ui = DriveUi())
+			{
+				const FString Text = FString::Join(Args, TEXT(" "));
+				UE_LOG(LogTemp, Display, TEXT("WLDEV say: %s"), *Text.Left(80));
+				Ui->SubmitTerminalLine(Text);
+			}
+		}));
+
+	FAutoConsoleCommand GDevGo(
+		TEXT("wl.Dev.Go"),
+		TEXT("DEV (-wldev): wl.Dev.Go <id> goes where a nav-bar shortcut goes (agent, missions, brain, commands, menu)."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			if (DriveRefused() || Args.Num() < 1)
+			{
+				return;
+			}
+			if (UWonderlandUiSubsystem* Ui = DriveUi())
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLDEV go %s: %s"), *Args[0], Ui->NavigateTo(FName(*Args[0])) ? TEXT("ok") : TEXT("unknown shortcut"));
+			}
+		}));
+
+	FAutoConsoleCommand GDevVoice(
+		TEXT("wl.Dev.Voice"),
+		TEXT("DEV (-wldev): wl.Dev.Voice <command> [subject] is the hub voice buttons' handler (connect, disconnect, mic.mute, local.mute ...)."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			if (DriveRefused() || Args.Num() < 1)
+			{
+				return;
+			}
+			if (UWonderlandUiSubsystem* Ui = DriveUi())
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLDEV voice %s"), *Args[0]);
+				Ui->HandleVoiceCommand(Args[0], Args.Num() > 1 ? Args[1] : FString());
+			}
+		}));
+
+	FAutoConsoleCommand GDevWatch(
+		TEXT("wl.Dev.Watch"),
+		TEXT("DEV (-wldev): wl.Dev.Watch is the Missions panel's WATCH A SIMULATED MISSION button (PlayScenario D, 10 s per event)."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>&)
+		{
+			if (DriveRefused())
+			{
+				return;
+			}
+			UWorld* World = DriveGameWorld();
+			ULocalPlayer* Player = World != nullptr ? World->GetFirstLocalPlayerFromController() : nullptr;
+			if (UWonderlandMissionSubsystem* Missions = Player != nullptr ? Player->GetSubsystem<UWonderlandMissionSubsystem>() : nullptr)
+			{
+				const bool bStarted = Missions->PlayScenario(FName(TEXT("D")), 10.0f);
+				UE_LOG(LogTemp, Display, TEXT("WLDEV watch: simulated mission %s"), bStarted ? TEXT("started") : TEXT("REFUSED"));
 			}
 		}));
 

@@ -1548,6 +1548,16 @@ void SWonderlandSocialHubPanel::ShowActionResult(const FString& Line)
 FString SWonderlandSocialHubPanel::Describe() const
 {
 	const TArray<FWonderlandSocialMessage>* History = Snapshot.Messages.Find(OpenConversationId);
+	// WDEV 10-19 (presence parts B19-B21): the line each friend row shows under the name (the same PresenceLine the row draws), so a log can prove a headline
+	// (AWAY, BUSY, IN PARTY ...) without a frame. Ids and headline words only.
+	FString Headlines;
+	{
+		using namespace WonderlandSocialHubLook;
+		for (const FWonderlandSocialPersonRow& Row : Snapshot.Friends)
+		{
+			Headlines += FString::Printf(TEXT("%s%s=%s"), Headlines.IsEmpty() ? TEXT("") : TEXT("; "), *Row.UserId, *PresenceLine(Row.Presence));
+		}
+	}
 	// THE LFF TAB adds its model's state: ids and states only, never a post's text (the 10-07 log rule)
 	const FString LffPart = Tab == ETab::Lff ? FString::Printf(TEXT(" | lff %s"), Lff.IsValid() ? *Lff->Describe() : TEXT("not available")) : FString();
 	return FString::Printf(TEXT("tab %s | %s | friends %d (%d on) | requests in %d out %d | party invites %d | recent %d | conversations %d (unread %d) | open %s (%d messages) | party %s (%d members%s) | visible parties %d | voice %s%s | rows %s | action: %s | signin %s%s%s"),
@@ -1560,7 +1570,7 @@ FString SWonderlandSocialHubPanel::Describe() const
 		Snapshot.VisibleParties.Num(), Voice.Connection.IsEmpty() ? TEXT("UNAVAILABLE") : *Voice.Connection,
 		VoiceLabel.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" [%s]"), *VoiceLabel), ShownRows.Num() > 0 ? *FString::Join(ShownRows, TEXT(",")) : TEXT("none"), *LastActionLine,
 		FWonderlandSocialSignIn::StateName(SignIn.State), SignIn.State == EWonderlandSignInState::Waiting ? *FString::Printf(TEXT(" (code %d chars)"), SignIn.UserCode.Len()) : TEXT(""),
-		*LffPart);
+		*LffPart) + (Headlines.IsEmpty() ? FString() : FString::Printf(TEXT(" | headlines %s"), *Headlines));
 }
 
 TArray<FWonderlandSocialPersonRow> WonderlandSocialBlocked::BlockedByViewer(const FWonderlandSocialSnapshot& Snapshot)
