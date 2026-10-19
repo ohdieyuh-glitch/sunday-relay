@@ -1,0 +1,18 @@
+import { describe, expect, it } from 'vitest';
+import type { Pool } from 'pg';
+import type { WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
+import { TransactionalWonderlandDatabase, type BudgetAmounts } from './wonderland-postgres';
+
+const amounts = (usdMicros:number):BudgetAmounts=>({inputTokens:0,cachedTokens:0,outputTokens:0,usdMicros,toolCalls:0,computeMs:0,runtimeMs:0,swarmWorkers:0});
+const session={executionId:'execution',budget:{inputTokens:10,cachedTokens:10,outputTokens:10,usdMicros:1_000_000,toolCalls:10,computeMs:10,runtimeMs:10,swarmConcurrency:2},usage:{inputTokens:0,cachedTokens:0,outputTokens:0,usdMicros:0,toolCalls:0,sandboxComputeMs:0,durationMs:0}} as WonderlandExecutionSession;
+class BudgetPool {
+  commands:string[]=[]; activeUsd=0; existing:Record<string,unknown>|null=null;
+  async query(){return{rows:[],rowCount:0};} async end(){}
+  async connect(){const self=this;return{async query(text:string,values?:readonly unknown[]){self.commands.push(text);if(text.startsWith('SELECT snapshot'))return{rows:[{snapshot:session}],rowCount:1};if(text.startsWith('SELECT * FROM relay_wonderland.budget_reservations WHERE execution_id'))return{rows:self.existing?[self.existing]:[],rowCount:self.existing?1:0};if(text.startsWith('SELECT COALESCE')||text.startsWith('SELECT COALESCE'))return{rows:[{input_tokens:'0',cached_tokens:'0',output_tokens:'0',usd_micros:String(self.activeUsd),tool_calls:'0',compute_ms:'0',runtime_ms:'0',swarm_workers:'0'}],rowCount:1};if(text.startsWith('INSERT INTO relay_wonderland.budget_reservations')){const state=String(values?.[5]);const row={reservation_id:values?.[0],execution_id:values?.[1],state,input_tokens:values?.[6],cached_tokens:values?.[7],output_tokens:values?.[8],usd_micros:values?.[9],tool_calls:values?.[10],compute_ms:values?.[11],runtime_ms:values?.[12],swarm_workers:values?.[13],expires_at:values?.[14],denial_reason:values?.[15],receipt_id:null,committed_amounts:null};self.existing=row;return{rows:[row],rowCount:1};}return{rows:[],rowCount:text.startsWith('UPDATE')?1:0};},release(){}};}
+}
+const request=(id:string,usdMicros:number)=>({reservationId:id,executionId:'execution',operationKey:'provider',idempotencyKey:id,requested:amounts(usdMicros),expiresAt:'2026-08-24T00:01:00Z',now:'2026-08-24T00:00:00Z'});
+describe('PostgreSQL budget reservation ledger',()=>{
+ it('locks the execution row before calculating and reserving spend',async()=>{const pool=new BudgetPool();const result=await new TransactionalWonderlandDatabase(pool as unknown as Pool).reserveBudget(request('one',1_000_000));expect(result.state).toBe('RESERVED');expect(pool.commands.some(command=>command.includes('execution_sessions WHERE execution_id=$1 FOR UPDATE'))).toBe(true);expect(pool.commands.at(-1)).toBe('COMMIT');});
+ it('denies a concurrent request when active reservations consume the remaining budget',async()=>{const pool=new BudgetPool();pool.activeUsd=1_000_000;const result=await new TransactionalWonderlandDatabase(pool as unknown as Pool).reserveBudget(request('two',1));expect(result.state).toBe('DENIED');expect(result.denialReason).toBe('usdMicros_budget_exhausted');});
+ it('returns the prior reservation for a retried idempotency key',async()=>{const pool=new BudgetPool();const db=new TransactionalWonderlandDatabase(pool as unknown as Pool);const first=await db.reserveBudget(request('same',10));const second=await db.reserveBudget(request('same',10));expect(second).toEqual(first);expect(pool.commands.filter(command=>command.startsWith('INSERT INTO relay_wonderland.budget_reservations'))).toHaveLength(1);});
+});
