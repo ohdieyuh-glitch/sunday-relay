@@ -1,0 +1,68 @@
+{
+  "missionId": "mission:julius-diag-audit-fixes-1",
+  "markerNamespace": "julius-diag-audit-fixes-1",
+  "projectId": "prj-julius-diag-audit-fixes-1",
+  "tenantId": "tenant",
+  "objective": "An audit of Relay found three independent latent defects, each in a small pure module whose own comments say what it intends and whose code does something else. Fix all three, in place, without changing anything else. (A) `projectReviewLedger` in `src/relay/mission/review-repair.ts`: the file header says a blocking finding is resolved only by supporting post-repair evidence PLUS a required re-review approval. The code computes one flag for the whole review sequence (is there any approving review after the first?) and applies it to every blocking finding wherever in the sequence it was raised, so an approval that came BEFORE a finding can mark that finding, and its repair, resolved, and the finding's `resolutionReviewId` comes out as the nonsense `rvw_0`. (B) `detectNoProgress` in `src/relay/recovery/detection.ts`: it appends `identical-diff`, `identical-failure` and `identical-report` with a bare `===`, so two attempts that BOTH LACK a fingerprint are reported as having an identical one, which puts evidence that does not exist into the decision record. (C) `acquireResourceClaim` in `src/relay/coordination/claims.ts`: a task that already holds an active claim on a resource is handed it back as `idempotent: true` whatever mode it asks for, so a task holding a SHARED claim that asks for EXCLUSIVE is told it has exclusivity while other tasks may still share the resource; its sibling `acquireFileClaim` in the same file already treats the mode correctly. `seed/src/relay/audit-fixes.test.ts` is already written and currently fails; it pins the main behaviours of each fix. The three modules do not depend on one another, so the fixes are independent. The files to edit exist and are tracked by git: edit them in place.",
+  "requirements": [
+    "A. In `projectReviewLedger`, a BLOCKING finding is resolved only when a repair was dispatched, there is at least one post-repair evidence id, AND there is an approving review that comes AFTER the review which raised that finding. An approving review that came before or at the finding's own review never resolves it. The decision is made per finding, from the finding's own position in the review sequence.",
+    "A. A resolved finding's `resolutionReviewId` is the id (`rvw_<n>`, one-based position) of the FIRST approving review after the review that raised it. An unresolved finding keeps `status` `in_repair` (blocking) or `open` (non-blocking), `resolvedAt` null, `resolutionReviewId` null and no resolution evidence ids. No finding ever gets `rvw_0`.",
+    "A. The repair linked to a finding follows that finding: it is `resolved` (with the same `resolvedAt` and the evidence ids) exactly when its finding is resolved; otherwise `claimed` if a repair was dispatched and `assigned` if not. Finding, repair and review ids and numbering, minor-finding handling, `repairIterationsUsed` and `limitExceeded` do not change.",
+    "B. In `detectNoProgress`, `identical-diff`, `identical-failure` and `identical-report` are reported only when that fingerprint is PRESENT (non-empty) on both attempts and equal. The order of the signals, the `only-unsupported-claims` signal, the `progress` and `insufficient_data` outcomes, the summaries and the comparability rule do not change. When no progress signal fires, the attempts are comparable and no identical signal is now reported (for example the two reports differ and nothing else is shared), the outcome stays `no_progress` with an EMPTY signal list and the unchanged summary text: that is the existing outcome rule and it is not to be changed.",
+    "C. In `acquireResourceClaim`, the task's own active, unexpired claim on the resource is returned as `idempotent: true` only when it already satisfies the request: the same mode, or an exclusive claim when shared is asked. When the task holds a SHARED claim and asks for EXCLUSIVE, the request goes through the same conflict check as any other request (other tasks' active, unexpired claims on the resource, of any mode, conflict with an exclusive request, in the existing error shape that names each holder); if it is clear, a NEW exclusive claim is returned with `idempotent: false`, and the task's shared claim is left exactly as it was (releasing it is the caller's business). The task's own claim is looked up by what satisfies the request, not by list position: if the task holds several own active, unexpired claims on the resource (for example a shared one and, after an upgrade, an exclusive one), the FIRST of them in list order that satisfies the request is returned as idempotent, and a new claim is minted only when none does.",
+    "No function outside these three fixes changes behaviour, including `acquireFileClaim` and the other claim functions."
+  ],
+  "constraints": [
+    "Edit `src/relay/mission/review-repair.ts`, `src/relay/recovery/detection.ts` and `src/relay/coordination/claims.ts` in place. `src/relay/protocol/errors.ts` is part of the workspace because `claims.ts` imports it; it is read-only. You have `Read`, `Glob`, `Grep` and `Edit`; you cannot create files or run commands, and you do not need to.",
+    "Do not edit `src/relay/audit-fixes.test.ts`. It is the specification you are implementing against, not part of the deliverable.",
+    "Use only what the files already import plus Node built-ins. Add no dependency and no import from outside this workspace: the sandbox that runs the test has no network access and no `node_modules`.",
+    "Do not change any exported name, signature or type, and do not mutate the inputs of the functions you change.",
+    "Do not reformat code you are not changing and do not make unrelated cleanups, however tempting; a change that is not one of the three fixes is out of scope. Do not touch `.julius/`."
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "criterion-ledger-resolution",
+      "text": "A blocking finding is resolved only when a repair was dispatched, post-repair evidence exists, and an approving review comes AFTER the review that raised it; a finding raised after the last approval stays unresolved, and the decision is made per finding.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-ledger-records",
+      "text": "A resolved finding names the first approving review after its own review (never `rvw_0`); an unresolved finding has null resolution fields; each linked repair mirrors its finding (resolved, claimed or assigned); ids, numbering, minor findings, iteration counts and limits are unchanged.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-no-progress-signals",
+      "text": "The three `identical-*` signals require the fingerprint to be present and equal on both attempts; signal order, the unsupported-claims signal, outcomes, summaries and comparability are unchanged.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-resource-claim-mode",
+      "text": "An own claim satisfying the requested mode (the first such in list order, wherever it sits) is returned idempotent and an own claim that does not satisfy it never is; a shared claim asking for exclusive goes through the normal conflict check and either fails naming the holders or yields a new exclusive claim, leaving the shared claim untouched.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-no-collateral-change",
+      "text": "No other function changes behaviour (including `acquireFileClaim`); no export, signature or type changes; inputs are not mutated; code outside the three fixes is not reformatted or cleaned up.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-scope",
+      "text": "Only `review-repair.ts`, `detection.ts` and `claims.ts` are changed, using no new dependency.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-test",
+      "text": "`node --import ./.julius/loader.mjs --test src/relay/audit-fixes.test.ts` exits zero.",
+      "blocking": true
+    }
+  ],
+  "testCommand": "node --import ./.julius/loader.mjs --test src/relay/audit-fixes.test.ts",
+  "workspacePath": "/tmp/julius-workspace/tenant/ws",
+  "limits": {
+    "spendUsd": 100,
+    "repairCycles": 3,
+    "architectMaxOutputTokens": 20000,
+    "architectEffort": "high",
+    "coderEffort": "high"
+  }
+}

@@ -1,0 +1,551 @@
+/**
+ * CLAUDE CODE, AS ONE IMPLEMENTATION OF THE JULIUS CODING AGENT PORT.
+ *
+ * Everything here is specific to the hosted Claude Agent SDK session: how it is
+ * launched, what its envelope is, how its outcomes and its runtime's failures
+ * read, and which structural facts its observation carries. Nothing here
+ * decides anything for Julius. It turns one governed request into one closed
+ * outcome, and the Julius side of the adapter does the rest — the executor
+ * evidence, the participation block, the failure disposition, the money.
+ *
+ * A Codex-shaped or Devin-shaped provider replaces THIS FILE and nothing else.
+ */
+
+import type { ClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
+import { classifyClaudeCodeResult } from '../../src/relay/connectors/claude-code/result-classification';
+import { classifyHostedFailure } from '../hosted-coding-agent/hosted-failure-reason';
+import { DEFAULT_HOSTED_LIMITS, hostedLimitsForAllocation, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
+import { dominantTurnModel, hostedServedModel, hostedServedModelVerdict, type HostedObservation } from '../hosted-coding-agent/hosted-observation';
+import {
+  loadHostedQuery,
+  runHostedCodingAgent,
+  loadHostedSdkHelpers,
+  type HostedEffort,
+  type HostedQueryFn,
+  type HostedSdkHelpers,
+  type HostedRunOutcome,
+} from '../hosted-coding-agent/hosted-runner';
+import {
+  juliusCodingAgentCharter,
+  renderJuliusCodingAgentPrompt,
+  type JuliusCodingAgentFailure,
+  type JuliusCodingAgentProvider,
+  type JuliusCodingAgentProviderOutcome,
+  type JuliusCodingAgentRequest,
+  type JuliusCodingAgentSession,
+} from '../../src/relay/mission/julius/julius-coding-agent';
+import {
+  JULIUS_PARTICIPATION_CHANNELS,
+  readJuliusParticipationBlock,
+  type JuliusParticipationReading,
+} from '../../src/relay/mission/julius/julius-worker-participation';
+
+export const CLAUDE_CODE_PROVIDER_KIND = 'claude-code-hosted' as const;
+
+/**
+ * WHAT ONE CODER DISPATCH COST, AND ON WHOSE AUTHORITY — ONE ANSWER FOR EVERY ENDING.
+ *
+ * The success ending used to price itself by hand while the failure endings went
+ * through the diagnostics, and only the diagnostics knew about the subscription. So
+ * a SUCCESSFUL subscription-backed dispatch settled the runtime's notional
+ * `total_cost_usd` as `PROVIDER_REPORTED` Anthropic API spend while every failure
+ * was right, and the test guarding it read the source text and was satisfied by the
+ * diagnostics lines alone. The Wonderland integration lane found it by reading the
+ * ledger path. Every ending now asks this function, so they cannot disagree again.
+ *
+ * TWO NUMBERS, BECAUSE THERE ARE TWO QUESTIONS.
+ *   - `costUsdMicros` is a BILL: what the provider charged, or null. Under a
+ *     subscription no per-request charge exists, so it is null and the basis is
+ *     `NOT_APPLICABLE` — never a recorded zero, never `UNKNOWN`.
+ *   - `executionCostUsdMicros` is what the runtime PRICED the work at when that
+ *     price is not a bill. It is the figure the runner already bounds every
+ *     dispatch with (`maxBudgetUsd`, `withinCostCeiling`), and it lets the mission's
+ *     execution budget consume a subscription dispatch exactly as it would an API
+ *     one — so the billing mode cannot change how much of the mission a later round
+ *     is granted. Null in API mode, where the bill already is that figure.
+ */
+export function hostedCoderCost(
+  authMode: ClaudeAuthMode | undefined,
+  observed: HostedObservation | null,
+): {
+  readonly costUsdMicros: number | null;
+  readonly costBasis: 'PROVIDER_REPORTED' | 'UNKNOWN' | 'NOT_APPLICABLE';
+  readonly executionCostUsdMicros: number | null;
+  /**
+   * HOW THE DISPATCH WAS PAID FOR, from the credential this provider resolved and
+   * never from an amount: the subscription login, or the API key. The ledger
+   * records it beside the basis so a reader never has to infer one from the other.
+   */
+  readonly billingPath: 'SUBSCRIPTION' | 'API_BILLED';
+} {
+  const figure = observed?.usage.totalCostUsd;
+  const micros = figure === null || figure === undefined ? null : Math.round(figure * 1_000_000);
+  const attested = observed?.usage.source === 'runtime_reported' && micros !== null;
+  if (authMode === 'CLAUDE_SUBSCRIPTION') {
+    return {
+      costUsdMicros: null,
+      costBasis: 'NOT_APPLICABLE',
+      // Only the runtime's own attested figure may bound the mission. Without one
+      // the execution cost is unknown, and the ledger holds the whole reservation —
+      // the conservative answer it already gives any silent dispatch.
+      executionCostUsdMicros: attested ? micros : null,
+      billingPath: 'SUBSCRIPTION',
+    };
+  }
+  return {
+    costUsdMicros: micros,
+    // `PROVIDER_REPORTED` requires BOTH the runtime's own attestation and a figure.
+    costBasis: attested ? 'PROVIDER_REPORTED' : 'UNKNOWN',
+    executionCostUsdMicros: null,
+    billingPath: 'API_BILLED',
+  };
+}
+
+/**
+ * THE CODER'S STRUCTURAL FACTS, ON BOTH ENDINGS, FROM ONE BUILDER.
+ *
+ * A success and a failure used to be described by two hand-built objects, and
+ * findings C and E were both a column present on one and absent on the other.
+ */
+export const hostedCoderDiagnostics = (input: {
+  readonly taskType: string | undefined;
+  /**
+   * Which credential the dispatch used. Absent means `ANTHROPIC_API`, unchanged.
+   * It reaches this builder because the BILLING BASIS depends on it: a
+   * subscription-backed dispatch has no API amount to report.
+   */
+  readonly authMode?: ClaudeAuthMode;
+  readonly requestedModel: string | null;
+  readonly observed: HostedObservation | null;
+  readonly limits: HostedLimits;
+  readonly outcome: 'succeeded' | 'failed';
+  /**
+   * The runner's own classification of the error it caught, when it caught one.
+   * It is strictly better evidence than the final text: on
+   * `coder_provider_error_after_init` the runtime threw INSTEAD of finishing,
+   * so the cause is in the thrown error and the final text is whatever the
+   * stream had managed to emit before it.
+   */
+  readonly failureReason?: string | null;
+}): Record<string, unknown> => {
+  const observed = input.observed;
+  const cost = hostedCoderCost(input.authMode, observed);
+  const served = observed === null ? null : hostedServedModel(observed);
+  /** The `modelUsage` entry at `index`, largest producer first. Null past the end, and when no result reported any. */
+  const usageEntry = (index: number) => observed?.resultModelUsage?.[index] ?? null;
+  /**
+   * WHETHER THE WORKER ASKED, ON BOTH ENDINGS. A dispatch with no observed final
+   * message never gave the worker a place to ask, so every field below is
+   * UNKNOWN rather than false: "did not ask" and "had no way to" are different
+   * facts and one column for both would erase the second.
+   */
+  const participation: JuliusParticipationReading | null =
+    observed === null || observed.finalText === null ? null : readJuliusParticipationBlock(observed.finalText);
+  const asked = (channel: (typeof JULIUS_PARTICIPATION_CHANNELS)[number]): boolean | null =>
+    participation === null ? null
+      : participation.present && participation.readable ? participation.channels.includes(channel)
+        : false;
+  return {
+    /** Stated, so a successful row is never read as a failure nobody classified. */
+    outcome: input.outcome,
+    /**
+     * WHY IT FAILED, in a closed vocabulary — never the runtime's own words.
+     * `classifyHostedFailure` MATCHES the runtime's final text and returns a
+     * constant; no substring of that text can reach this row. NULL ON SUCCESS:
+     * classifying a successful summary would read the word "error" in it as one.
+     */
+    failureReason: input.outcome === 'failed'
+      ? input.failureReason ?? classifyHostedFailure(observed?.finalText ?? null)
+      : null,
+    // THE ROUND THAT SPENT THE MONEY.
+    stage: input.taskType === 'repair:build' ? 'repair:build' : 'build',
+    transport: 'hosted',
+    provider: 'anthropic',
+    requestedModel: input.requestedModel,
+    /**
+     * WHAT SERVED, when the turns and the result's own `modelUsage` agree on one
+     * model. Never `init`'s announcement: attempt 1 recorded the announced model
+     * as served, and its only turn produced zero tokens. See `hostedServedModel`.
+     */
+    servedModel: served?.servedModel ?? null,
+    /** Why `servedModel` is what it is, from a closed set. Null only when nothing was observed. */
+    servedModelBasis: served?.basis ?? null,
+    /**
+     * THE RUNTIME'S OWN NAME FOR WHAT SERVED: the key and `canonicalModel` of the
+     * `modelUsage` entry that credited the served model. Comparing the served model
+     * with the requested one may use this mapping and nothing else, and never a
+     * string prefix. Null whenever nothing is attested.
+     */
+    servedModelUsageKey: served?.credit?.model ?? null,
+    servedModelUsageCanonical: served?.credit?.canonicalModel ?? null,
+    /**
+     * The THREE ACCOUNTS, SIDE BY SIDE, so a reader sees the distinction and not
+     * only the verdict. What `init` announced before any turn existed:
+     */
+    announcedModel: observed?.actualModel ?? null,
+    /** What the output-bearing turns named. The one that produced most, and how many distinct models there were. */
+    turnModel: observed === null ? null : dominantTurnModel(observed),
+    turnModelCount: observed === null ? null : observed.turnModels.length,
+    /**
+     * And the runtime's final accounting: how many models `modelUsage` named,
+     * then each of the first three, largest producer first. The count shows
+     * whether any entry was left out.
+     */
+    resultModelCount: observed?.resultModelUsage === null || observed === null ? null : observed.resultModelUsage.length,
+    resultModelFirst: usageEntry(0)?.model ?? null,
+    resultModelFirstInputTokens: usageEntry(0)?.inputTokens ?? null,
+    resultModelFirstOutputTokens: usageEntry(0)?.outputTokens ?? null,
+    resultModelSecond: usageEntry(1)?.model ?? null,
+    resultModelSecondInputTokens: usageEntry(1)?.inputTokens ?? null,
+    resultModelSecondOutputTokens: usageEntry(1)?.outputTokens ?? null,
+    resultModelThird: usageEntry(2)?.model ?? null,
+    resultModelThirdInputTokens: usageEntry(2)?.inputTokens ?? null,
+    resultModelThirdOutputTokens: usageEntry(2)?.outputTokens ?? null,
+    responseId: observed?.sessionId ?? null,
+    numTurns: observed?.numTurns ?? null,
+    // The effort option the runner handed the SDK (absent when it passed none); the runtime echoes nothing of it, so there is no `effortEchoed` for the coder.
+    ...(observed?.effortSent === undefined ? {} : { effortSent: observed.effortSent }),
+    // INVOCATIONS, not distinct names: `toolsUsed` deduplicates.
+    toolUseCount: observed?.toolInvocations ?? null,
+    /**
+     * ONLY WHEN A RESULT ARRIVED. `permissionDenials` is populated by the result
+     * message alone, so reporting it after a timeout would assert that no denial
+     * occurred on precisely the runs where the terminal data never came.
+     */
+    permissionDenials: observed?.resultSubtype === null || observed === null
+      ? null : observed.permissionDenials,
+    resultSubtype: observed?.resultSubtype ?? null,
+    isError: observed?.isError ?? null,
+    /** A member of the SDK's vocabulary, `unrecognised`, or null when none was sent. */
+    terminalReason: observed?.terminalReason ?? null,
+    /**
+     * WHAT THE RESULT MESSAGE AMOUNTED TO, read from every field of it. Null
+     * when nothing was observed; `NO_RESULT` when the stream ended without one.
+     */
+    resultClass: observed === null ? null : classifyClaudeCodeResult(observed),
+    // A COUNT of the runtime's final text, never the text.
+    outputBytesObserved: observed?.finalText === null || observed?.finalText === undefined
+      ? null : Buffer.byteLength(observed.finalText, 'utf8'),
+    /**
+     * AN OBSERVED SUCCESSFUL RESULT, not merely a runtime that started — and
+     * not merely `is_error: false` beside an error subtype. Unknown while no
+     * result arrived.
+     */
+    implementationPresent: observed === null || observed.resultSubtype === null
+      ? null : classifyClaudeCodeResult(observed) === 'SUCCESS',
+    /** THE MONEY, BESIDE THE REFUSAL. Unknown stays Unknown, never zero. */
+    /**
+     * UNDER A SUBSCRIPTION THERE IS NO API AMOUNT TO REPORT, so none is reported.
+     *
+     * The runtime may still state a `total_cost_usd`: that is a PRICED ESTIMATE of
+     * what the same work would have cost through the API, not a billing event that
+     * happened. Recording it here would classify subscription usage as Anthropic API
+     * spend, which is the one thing this must not do. The figure is not lost — the
+     * runner still bounds the run with it through `withinCostCeiling`, so a runaway
+     * dispatch is stopped exactly as before, and it travels as
+     * `executionCostUsdMicros` below for the mission's execution budget.
+     */
+    costUsdMicros: cost.costUsdMicros,
+    /**
+     * WHAT THE RUNTIME PRICED A SUBSCRIPTION DISPATCH AT, NAMED APART FROM A BILL.
+     * Null in API mode and whenever the runtime attested no figure; see
+     * `hostedCoderCost` for why the execution budget needs it.
+     */
+    executionCostUsdMicros: cost.executionCostUsdMicros,
+    /** `SUBSCRIPTION` or `API_BILLED`, from the credential — see `hostedCoderCost`. */
+    billingPath: cost.billingPath,
+    costCeilingUsdMicros: input.limits.maxCostCents * 10_000,
+    costSource: observed?.usage.source ?? null,
+    /** DID THE RUNTIME EVER START? A run that never launched billed nothing. */
+    runtimeStarted: observed?.initSeen ?? false,
+    /* ------------------------------- what the worker asked Julius for ---- */
+    participationPresent: participation === null ? null : participation.present,
+    participationReadable: participation === null || !participation.present ? null : participation.readable,
+    participationRefusal: participation !== null && participation.present && !participation.readable
+      ? participation.reasonCode : null,
+    participationAskedGuidance: asked('guidanceRequest'),
+    participationAskedResearch: asked('researchAsks'),
+    participationAskedResume: asked('segmentResume'),
+    participationAskedReport: asked('report'),
+    participationAskedObservations: asked('architectureObservations'),
+    /** `PROVIDER_REPORTED` requires BOTH the runtime's own attestation and an actual figure. */
+    costBasis: cost.costBasis,
+    inputTokens: observed?.usage.inputTokens ?? null,
+    outputTokens: observed?.usage.outputTokens ?? null,
+    /**
+     * AND WHAT THE STREAM SAID BEFORE IT WAS CUT OFF. A FLOOR, never the total,
+     * never a cost, and named apart so no reader can mistake one for the other.
+     */
+    streamUsageMessages: observed?.streamUsage.messages ?? null,
+    streamAbortedMessages: observed?.streamUsage.abortedMessages ?? null,
+    streamInputTokens: observed?.streamUsage.inputTokens ?? null,
+    streamOutputTokens: observed?.streamUsage.outputTokens ?? null,
+    streamCacheReadInputTokens: observed?.streamUsage.cacheReadInputTokens ?? null,
+    streamCacheCreationInputTokens: observed?.streamUsage.cacheCreationInputTokens ?? null,
+  };
+};
+
+/**
+ * THE RUNTIME'S CLASSIFIED REASON, AS A JULIUS FAILURE.
+ *
+ * Transient reasons become transient failures, so a 429, an overload, a 5xx or
+ * a dropped stream after launch is retried under the run's own retry policy
+ * instead of ending a paid mission. Exhausted credit and a rejected key become
+ * operator failures. Anything the classifier could not name stays UNCLASSIFIED,
+ * which is NOT transient: an unknown is not a reason to spend again.
+ */
+export function codingAgentFailureFromHostedReason(reason: string | null | undefined): JuliusCodingAgentFailure {
+  switch (reason) {
+    case 'rate_limited': return 'RATE_LIMITED';
+    case 'provider_overloaded':
+    case 'provider_server_error': return 'PROVIDER_UNAVAILABLE';
+    case 'stream_interrupted': return 'INTERRUPTED';
+    case 'context_length_exceeded': return 'CONTEXT_OVERFLOW';
+    case 'provider_auth_rejected': return 'AUTHENTICATION';
+    case 'credit_unavailable': return 'CREDIT_UNAVAILABLE';
+    // THE SUBSCRIPTION'S OWN LIMIT (audit F5): the account cannot be served until the limit resets or someone acts, the
+    // disposition CREDIT_UNAVAILABLE already names (never retried within the run, an operator's matter). The durable
+    // row still says which: `failureReason` is `usage_limit_reached`.
+    case 'usage_limit_reached': return 'CREDIT_UNAVAILABLE';
+    // The classifier already recognised a content filter or a safety refusal;
+    // mapping it to UNCLASSIFIED threw that recognition away.
+    case 'content_filtered': return 'CONTENT_REFUSED';
+    default: return 'UNCLASSIFIED';
+  }
+}
+
+/** One hosted outcome that did not complete, as the failure Julius reasons about. */
+export function codingAgentFailureFromHostedOutcome(
+  outcome: Exclude<HostedRunOutcome, { kind: 'completed' }>,
+  reason: string | null,
+): JuliusCodingAgentFailure {
+  switch (outcome.kind) {
+    case 'timed_out': return 'TIMEOUT';
+    case 'cancelled': return 'CANCELLED';
+    case 'launch_failed': {
+      const refined = codingAgentFailureFromHostedReason(reason);
+      return refined === 'AUTHENTICATION' || refined === 'CREDIT_UNAVAILABLE' ? refined : 'LAUNCH_FAILED';
+    }
+    case 'refused':
+      switch (outcome.refusalCode) {
+        case 'coder_cost_exceeded': return 'COST_CEILING_REACHED';
+        case 'coder_envelope_not_honoured': return 'ENVELOPE_NOT_HONOURED';
+        case 'coder_provider_error_after_init': return codingAgentFailureFromHostedReason(reason);
+        case 'coder_result_untrusted': {
+          // An untrusted result whose runtime said WHY — a rate limit, exhausted
+          // credit — is that failure. One that said nothing recognisable is a
+          // partial response: it ended without a result anyone can trust.
+          const refined = codingAgentFailureFromHostedReason(reason);
+          return refined === 'UNCLASSIFIED' ? 'PARTIAL_RESPONSE' : refined;
+        }
+        default: return 'UNCLASSIFIED';
+      }
+    default: return 'UNCLASSIFIED';
+  }
+}
+
+export function createClaudeCodeCodingAgentProvider(input: {
+  readonly apiKey: string;
+  readonly requestedModel: string;
+  readonly run?: typeof runHostedCodingAgent;
+  readonly queryLoader?: () => Promise<HostedQueryFn>;
+  /**
+   * Which credential the child may use. Absent means `ANTHROPIC_API`, unchanged.
+   * Forwarded to the runner, which omits the key from the child entirely under
+   * `CLAUDE_SUBSCRIPTION`.
+   */
+  readonly authMode?: ClaudeAuthMode;
+  /** The mission's declared coder effort; absent changes nothing. Forwarded to the runner. */
+  readonly effort?: HostedEffort;
+  /**
+   * The mission's declared coder SESSION limit in ms (`limits.coderRuntimeMinutes`), the runner's abort timer. Absent (the default)
+   * leaves `DEFAULT_HOSTED_LIMITS.maxRuntimeMs` exactly as it was. It never touches `maxCostCents`: the money bound is independent.
+   */
+  readonly maxRuntimeMs?: number;
+  /** Test seam for the SDK's tool helpers; production omits it. */
+  readonly sdkHelpersLoader?: () => Promise<HostedSdkHelpers>;
+}): JuliusCodingAgentProvider {
+  const run = input.run ?? runHostedCodingAgent;
+  const loadQuery = input.queryLoader ?? loadHostedQuery;
+  const nowIso = (): string => new Date().toISOString();
+  return {
+    providerKind: CLAUDE_CODE_PROVIDER_KIND,
+    async execute(request: JuliusCodingAgentRequest, signal?: AbortSignal, session?: JuliusCodingAgentSession): Promise<JuliusCodingAgentProviderOutcome> {
+      /**
+       * A DISPATCH CANCELLED BEFORE LAUNCH LAUNCHES NOTHING. The signal was
+       * dropped at this method's signature, so a deadline cut or a lost lease
+       * aborted Julius's side of the race while the paid session kept editing
+       * the workspace until its own timer fired — and a retry could start a
+       * second session on the same directory beside it.
+       */
+      const cancelledBeforeLaunch = (): JuliusCodingAgentProviderOutcome => ({
+        kind: 'failed', failure: 'CANCELLED', runtimeStarted: false, costUsdMicros: null,
+        safeMessage: 'The dispatch was cancelled before the hosted Coding Agent launched.',
+        providerFailureClass: 'coder_cancelled_before_launch', diagnostics: {},
+      });
+      // Read through a function: the signal changes under an await, and a narrowed property would not.
+      const aborted = (): boolean => signal?.aborted === true;
+      if (aborted()) return cancelledBeforeLaunch();
+      let queryFn: HostedQueryFn;
+      try { queryFn = await loadQuery(); } catch {
+        return {
+          kind: 'failed', failure: 'LAUNCH_FAILED', runtimeStarted: false, costUsdMicros: null,
+          safeMessage: 'The hosted Claude Agent SDK runtime is not installed.',
+          providerFailureClass: 'coder_runtime_not_installed', diagnostics: {},
+        };
+      }
+      /* THE SELF-TEST TOOL IS OFFERED ONLY WHEN THE MISSION DECLARED IT, and needs the SDK's tool helpers, loaded the same
+         way as `query`. A deployment that cannot load them fails to launch rather than quietly running without the tool the
+         contract said the coder had. */
+      let sdkHelpers: HostedSdkHelpers | undefined;
+      if (session?.selfTest !== undefined) {
+        try { sdkHelpers = await (input.sdkHelpersLoader ?? loadHostedSdkHelpers)(); } catch {
+          return {
+            kind: 'failed', failure: 'LAUNCH_FAILED', runtimeStarted: false, costUsdMicros: null,
+            safeMessage: 'The hosted Claude Agent SDK tool helpers are not available for the self-test tool.',
+            providerFailureClass: 'coder_self_test_helpers_unavailable', diagnostics: {},
+          };
+        }
+      }
+      /**
+       * THE MISSION'S ALLOCATION IS THE EXECUTION LIMIT. With no allocation — a
+       * composition without a policy — the envelope keeps its own conservative
+       * default; with one, the runtime is told to stop exactly there.
+       */
+      const baseLimits: HostedLimits = input.maxRuntimeMs === undefined
+        ? DEFAULT_HOSTED_LIMITS
+        : Object.freeze({ ...DEFAULT_HOSTED_LIMITS, maxRuntimeMs: input.maxRuntimeMs });
+      const limits: HostedLimits = request.budget.usdMicros === null
+        ? baseLimits
+        : hostedLimitsForAllocation(request.budget.usdMicros, baseLimits);
+      /** AN ALLOCATION BELOW ONE CENT BUYS NOTHING AND STILL BILLS a turn. Refused before launch. */
+      if (request.budget.usdMicros !== null && limits.maxCostCents < 1) {
+        return {
+          kind: 'failed', failure: 'COST_CEILING_REACHED', runtimeStarted: false, costUsdMicros: null,
+          safeMessage: 'The remaining mission budget is below one cent; the hosted Coding Agent was not dispatched.',
+          providerFailureClass: 'coder_allocation_below_one_cent', diagnostics: {},
+        };
+      }
+      if (aborted()) return cancelledBeforeLaunch();
+      /**
+       * THE ABORT REACHES THE SESSION. The runner already hands its own
+       * controller to the SDK; this connects Julius's signal to it, once, and
+       * detaches when the run is over. A second abort is a no-op on both sides.
+       */
+      let detach = (): void => undefined;
+      const outcome: HostedRunOutcome = await run({
+        queryFn,
+        prompt: renderJuliusCodingAgentPrompt(request, juliusCodingAgentCharter(session?.selfTest?.maxCalls)),
+        workspacePath: request.workspacePath,
+        apiKey: input.apiKey,
+        requestedModel: input.requestedModel,
+        ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
+        ...(input.effort === undefined ? {} : { effort: input.effort }),
+        ...(session?.selfTest === undefined || sdkHelpers === undefined ? {} : { selfTestTool: session.selfTest, sdkHelpers }),
+        limits,
+        now: nowIso,
+        ...(signal === undefined ? {} : {
+          onCancel: (cancel: () => void): void => {
+            if (signal.aborted) { cancel(); return; }
+            signal.addEventListener('abort', cancel, { once: true });
+            detach = () => signal.removeEventListener('abort', cancel);
+          },
+        }),
+      }).finally(() => detach());
+      /**
+       * AN ABORT THAT ARRIVED AS THE STREAM ENDED STILL ENDS THE DISPATCH.
+       * Whatever the session finished with, the dispatch it belonged to is over,
+       * so it is a cancellation — charged, because the session ran — and never
+       * a completed outcome anything could be minted from.
+       */
+      if (aborted() && outcome.kind === 'completed') {
+        const diagnostics = hostedCoderDiagnostics({
+          taskType: request.identity.taskType, requestedModel: input.requestedModel,
+          observed: outcome.observation, limits, ...(input.authMode === undefined ? {} : { authMode: input.authMode }), outcome: 'failed', failureReason: null,
+        });
+        return {
+          kind: 'failed', failure: 'CANCELLED', runtimeStarted: true,
+          costUsdMicros: typeof diagnostics.costUsdMicros === 'number' ? diagnostics.costUsdMicros : null,
+          safeMessage: 'Hosted Coding Agent run was cancelled.',
+          providerFailureClass: 'coder_cancelled', diagnostics,
+        };
+      }
+
+      const observed = 'observation' in outcome ? outcome.observation : null;
+      if (outcome.kind !== 'completed') {
+        const runnerReason = 'failureReason' in outcome ? outcome.failureReason ?? null : null;
+        const diagnostics = hostedCoderDiagnostics({
+          taskType: request.identity.taskType, requestedModel: input.requestedModel,
+          observed, limits, ...(input.authMode === undefined ? {} : { authMode: input.authMode }), outcome: 'failed', failureReason: runnerReason,
+        });
+        const reason = typeof diagnostics.failureReason === 'string' ? diagnostics.failureReason : null;
+        const failure = codingAgentFailureFromHostedOutcome(outcome, reason);
+        const providerFailureClass = outcome.kind === 'timed_out' ? 'coder_timed_out'
+          : outcome.kind === 'cancelled' ? 'coder_cancelled'
+            : outcome.kind === 'launch_failed' ? 'coder_launch_failed'
+              : outcome.kind === 'refused' ? outcome.refusalCode : 'coder_outcome_unrecognised';
+        const safeMessage = outcome.kind === 'timed_out' ? 'Hosted Coding Agent timed out.'
+          : outcome.kind === 'cancelled' ? 'Hosted Coding Agent run was cancelled.'
+            : outcome.kind === 'launch_failed' ? 'Hosted Coding Agent could not launch.'
+              : outcome.kind === 'refused' ? 'Hosted Coding Agent refused or failed after launch.'
+                : 'The hosted Coding Agent returned an unrecognised outcome.';
+        return {
+          kind: 'failed', failure, safeMessage, providerFailureClass,
+          runtimeStarted: observed?.initSeen ?? false,
+          costUsdMicros: typeof diagnostics.costUsdMicros === 'number' ? diagnostics.costUsdMicros : null,
+          diagnostics: outcome.kind === 'timed_out' ? { ...diagnostics, timedOut: true } : diagnostics,
+        };
+      }
+
+      /**
+       * THE MODEL THAT ANSWERED IS THE ONE ASKED FOR, OR THE DISPATCH STOPS
+       * (founder rule, 2026-09-30: no automatic downgrade; a STOP rather than a
+       * substitute). A finished session whose attested model is another, or
+       * whose model cannot be attested at all, is a failure the domain never
+       * retries and a person has to answer. Nothing it produced becomes a
+       * result. The session did run, so it is charged what it cost.
+       */
+      const verdict = hostedServedModelVerdict(hostedServedModel(outcome.observation), input.requestedModel);
+      if (verdict !== 'MATCH') {
+        const mismatch = verdict === 'MISMATCH';
+        return {
+          kind: 'failed',
+          failure: mismatch ? 'SERVED_MODEL_MISMATCH' : 'SERVED_MODEL_UNATTESTED',
+          runtimeStarted: true,
+          costUsdMicros: hostedCoderCost(input.authMode, outcome.observation).costUsdMicros,
+          safeMessage: mismatch
+            ? 'The hosted Coding Agent was answered by a model other than the one requested; the dispatch stops rather than accept a substitute.'
+            : 'The hosted Coding Agent finished without attesting which model answered; the dispatch stops rather than assume it.',
+          providerFailureClass: mismatch ? 'coder_served_model_mismatch' : 'coder_served_model_unattested',
+          diagnostics: hostedCoderDiagnostics({
+            taskType: request.identity.taskType, requestedModel: input.requestedModel,
+            observed: outcome.observation, limits, ...(input.authMode === undefined ? {} : { authMode: input.authMode }), outcome: 'failed', failureReason: null,
+          }),
+        };
+      }
+      const diagnostics = hostedCoderDiagnostics({
+        taskType: request.identity.taskType, requestedModel: input.requestedModel,
+        observed: outcome.observation, limits, ...(input.authMode === undefined ? {} : { authMode: input.authMode }), outcome: 'succeeded',
+      });
+      const usage = outcome.observation.usage;
+      // THE SAME ANSWER THE DIAGNOSTICS GAVE, from the same function. This ending
+      // priced itself by hand once, and a subscription success became API spend.
+      const cost = hostedCoderCost(input.authMode, outcome.observation);
+      return {
+        kind: 'completed',
+        finalText: outcome.observation.finalText,
+        observation: {
+          // THE ATTESTED MODEL, the same answer the diagnostics give. Null when the turns and the result did not agree.
+          providerModel: hostedServedModel(outcome.observation).servedModel,
+          turns: outcome.observation.numTurns ?? null,
+          toolInvocations: outcome.observation.toolInvocations ?? null,
+          inputTokens: usage.inputTokens ?? null,
+          outputTokens: usage.outputTokens ?? null,
+          costUsdMicros: cost.costUsdMicros,
+          costBasis: cost.costBasis,
+          diagnostics,
+        },
+      };
+    },
+  };
+}
