@@ -234,6 +234,15 @@ globalThis.fetch = async (url, init = {}) => {
   const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   // scenario.failGet: a regexp source; any GET whose path matches answers HTTP 500 (an API failure before anything is written)
   // scenario.echo: the failure text echoes the request's Authorization header and token-shaped strings, as a misbehaving proxy or API might
+  if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path) && scenario.echo === 'wrapped') {
+    const tok = String(init.headers?.Authorization ?? '').replace(/^Bearer /, '');
+    return reply(500, { message: 'upstream said: token ' + tok.slice(0, 20) + '\\n' + tok.slice(20) + ' and again Bearer ' + tok.slice(0, 14) + '\\r\\n ' + tok.slice(14) });
+  }
+  if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path) && scenario.echo === 'b64') {
+    const tok = String(init.headers?.Authorization ?? '').replace(/^Bearer /, '');
+    const b = (s) => Buffer.from(s).toString('base64');
+    return reply(500, { message: 'upstream said: ' + b(tok) + ' | ' + b('x-access-token:' + tok) + ' | ' + b('  ' + tok) + ' | ' + b(' ' + tok) + ' | ' + encodeURIComponent(tok) });
+  }
   if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path)) return reply(500, { message: scenario.echo ? 'upstream said: Authorization: ' + (init.headers?.Authorization ?? '') + ' also ghs_' + 'A'.repeat(36) + ' github_pat_' + 'B'.repeat(30) + ' ghp_' + 'C'.repeat(36) : 'the fake fails this read' });
   // b6: the nonce tag. scenario.spentTags = tag names that already exist; scenario.tagReadStatus / tagCreateStatus override the answers.
   if (method === 'GET' && /\\/git\\/ref\\/tags\\//.test(path)) {
@@ -1236,6 +1245,27 @@ describe('round 5 r5: nothing the lander prints carries a credential, whatever a
     const r = runLand({ token: 'plain-secret-value-123', scenario: { failGet: '/git/ref/heads/main', echo: true } });
     expect(r.out).not.toContain('plain-secret-value-123');
     expect(r.out).not.toMatch(/Authorization: Bearer/iu);
+  });
+});
+
+describe('v3.4 V-4: redaction also covers a token wrapped across a line break and its base64 forms', () => {
+  const TOKEN = 'ghs_' + 'abcdefghijklmnopqrstuvwxyz0123456789'.split('').reverse().join('');
+  const compact = (s: string) => s.replace(/\s+/g, '');
+  it('a token broken by a line break (LF, or CRLF plus a space) leaves no run of it in stdout or stderr', () => {
+    const r = runLand({ token: TOKEN, scenario: { failGet: '/pulls/7$', echo: 'wrapped' } });
+    expect(r.code, r.out).toBe(1);
+    const flat = compact(r.out);
+    for (const piece of [TOKEN, TOKEN.slice(4, 24), TOKEN.slice(10, 30), TOKEN.slice(20), TOKEN.slice(14)]) expect(flat, piece).not.toContain(piece);
+  });
+
+  it('the base64 forms of the token (alone, behind x-access-token:, at the three byte alignments) and its percent-encoding are not printed', () => {
+    const r = runLand({ token: TOKEN, scenario: { failGet: '/pulls/7$', echo: 'b64' } });
+    expect(r.code, r.out).toBe(1);
+    const b = (s: string) => Buffer.from(s).toString('base64');
+    for (const form of [b(TOKEN), b('x-access-token:' + TOKEN), b('  ' + TOKEN), b(' ' + TOKEN), encodeURIComponent(TOKEN)]) {
+      // the middle of each form, away from the padding and the unstable edge characters
+      expect(r.out, form).not.toContain(form.slice(8, form.length - 8));
+    }
   });
 });
 

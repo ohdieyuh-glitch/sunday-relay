@@ -14,11 +14,20 @@ const API = 'https://api.github.com';
 const SELF_CHECK = 'Land a cleared pull request';
 // r5: NOTHING this job prints may carry a credential, whatever an API, a proxy or a library echoes back into an error text. Every line goes through `summary`, which redacts the token
 // literal, GitHub token shapes (ghs_/ghp_/gho_/ghu_/ghr_/github_pat_), `Bearer <x>` and `Authorization: <x>` first. (The runner also masks GITHUB_TOKEN; this does not rely on it.)
+// V-4: the token is also redacted when a line break (or any whitespace) splits it, and in its base64 forms (alone, behind `x-access-token:`, at the three byte alignments) and percent-encoded.
+const b64Middles = (s) => [0, 1, 2].map((pad) => Buffer.from(' '.repeat(pad) + s).toString('base64')).map((e, pad) => e.slice(Math.ceil((pad * 8) / 6), Math.max(0, e.length - 4))).filter((m) => m.length >= 8);
 const redact = (text) => {
   let out = String(text);
-  if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) out = out.split(env.GH_TOKEN).join('***');
+  if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) {
+    out = out.split(env.GH_TOKEN).join('***');
+    const gap = '\\s*';
+    out = out.replace(new RegExp([...env.GH_TOKEN].map((c) => c.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join(gap), 'gu'), '***');
+    for (const form of [env.GH_TOKEN, `x-access-token:${env.GH_TOKEN}`, `${env.GH_TOKEN}:x-oauth-basic`]) for (const middle of b64Middles(form)) out = out.split(middle).join('***');
+    out = out.split(encodeURIComponent(env.GH_TOKEN)).join('***');
+  }
   return out
-    .replace(/\b(?:ghs|ghp|gho|ghu|ghr)_[A-Za-z0-9]{16,}/gu, '***').replace(/\bgithub_pat_[A-Za-z0-9_]{16,}/gu, '***')
+    .replace(/\b(?:ghs|ghp|gho|ghu|ghr)_(?:\s*[A-Za-z0-9]){16,}/gu, '***')
+    .replace(/\bgithub_pat_(?:\s*[A-Za-z0-9_]){16,}/gu, '***')
     .replace(/\bBearer\s+[^\s"',;]+/giu, 'Bearer ***').replace(/(authorization["']?\s*[:=]\s*)(?:(?:bearer|token|basic)\s+)?[^\s"',;]+/giu, '$1***');
 };
 const summary = (line) => { const safe = redact(line); console.log(safe); if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, safe + '\n'); };
