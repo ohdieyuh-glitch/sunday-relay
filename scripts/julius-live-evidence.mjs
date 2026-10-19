@@ -82,6 +82,14 @@ const ALLOWED = [
   /^LEARNING: delta dimension=[A-Za-z]+ verdict=(IMPROVED|NO_EFFECT|REGRESSED|UNMEASURABLE) without=(\d+(\.\d+)?|unknown) with=(\d+(\.\d+)?|unknown) bounded=(yes|no)$/u,
   /^LEARNING: decision=(PROMOTE|REFUSE reason=[a-z_]+) improved=([A-Za-z]+(,[A-Za-z]+)*|none) regressed=([A-Za-z]+(,[A-Za-z]+)*|none) marginal_value=(\d+(\.\d+)?(e-\d+)?|none) proposal=(PROMOTION_PROPOSED|NONE)$/u,
   /^LEARNING: NOT RECORDED — .+$/u,
+  // THE ACCOUNTING KEY AND ROLLUP (`liveAccountingLines`), printed after every line the gate reads by position:
+  // constant legend text, then closed tokens and numbers. `unknown` is a figure the rows did not carry, never zero.
+  /^ACCOUNTING: legend [a-z_]+ — .+$/u,
+  /^ACCOUNTING: role run=[\w:.-]+ role=[A-Z_]+ reservations=\d+ billed_known_usd_micros=\d+ billed_known_reservations=\d+ runtime_reported_usd_micros=\d+ runtime_reported_reservations=\d+ unknown_held_usd_micros=\d+ unknown_reservations=\d+ unsettled_usd_micros=\d+ unsettled_reservations=\d+ released_usd_micros=\d+$/u,
+  /^ACCOUNTING: pool run=[\w:.-]+ opening_usd_micros=(\d+|unknown) reserved_total_usd_micros=\d+ billed_known_usd_micros=\d+ runtime_reported_usd_micros=\d+ unknown_held_usd_micros=\d+ unsettled_usd_micros=\d+ released_usd_micros=\d+ final_remaining_usd_micros=(\d+|unknown) basis=slot_ledger_charge_rule$/u,
+  /^ACCOUNTING: NOT RECORDED — .+$/u,
+  // The preflight's statement of what the reviewer-key presence line does not say (`LIVE_REVIEWER_KEY_IDENTITY_LINE`).
+  /^  key identity: the XAI_API_KEY line above reports presence in this process only and does not identify the key the reviewer billed or the key the readiness probe tested; no key value, fragment or fingerprint is printed, so this bundle cannot tie them together$/u,
   /^julius_exit=\d+$/u,
   /^JULIUS LIVE PREFLIGHT — .+$/u,
   /^PREFLIGHT (OK|FAILED)(:.*)?$/u,

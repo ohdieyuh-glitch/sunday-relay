@@ -77,6 +77,7 @@ import { LocalJuliusArtifactStore } from '../src/relay/workspace/julius-tools/lo
 import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/julius-work-artifact-postgres';
 import { liveEvidenceLines } from './julius/live-evidence-lines';
 import {
+  liveAccountingLinesFor, LIVE_REVIEWER_KEY_IDENTITY_LINE,
   liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveLearningFailedLine, liveOneLine, liveResearchLines, liveTickAccountLine,
   liveTickBudgetLine, liveWorkersBlockedLines, liveStageDeadlineLine,
 } from './julius/live-report-lines';
@@ -675,6 +676,7 @@ async function main(argv: readonly string[]): Promise<number> {
   out(`  requested models: architect=${preflight.requested.architectModel ?? 'MISSING'} coder=${preflight.requested.codingModel ?? 'MISSING'} reviewer=${preflight.requested.reviewerProvider ?? 'MISSING'}/${preflight.requested.reviewerModel ?? 'MISSING'}`);
   for (const row of presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', CLAUDE_SUBSCRIPTION_TOKEN_ENV, 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV])) out(row);
   out('  note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.');
+  out(LIVE_REVIEWER_KEY_IDENTITY_LINE);
 
   /**
    * WHICH CREDENTIAL THE CODING AGENT WOULD USE, ANSWERED BEFORE ANYTHING RUNS.
@@ -1075,6 +1077,8 @@ async function main(argv: readonly string[]): Promise<number> {
     for (const line of liveEvidenceLines(evidence, tasks)) out(line);
     for (const finding of findings) out(`  finding ${finding.findingId} blocking=${finding.blocking} status=${finding.status} — ${finding.claim}`);
     out(`  verification decisions: ${decisions.map((decision) => decision.action).join(', ') || 'none'}`);
+    // AFTER every line the gate reads by position. Evidence only: it changes no limit, no verdict and no exit code.
+    for (const line of await liveAccountingLinesFor(handoffs.store, submitted.runId, contract.projectId)) out(line);
     return outcome.state === 'COMPLETED' && !learningUnrecorded ? 0 : 1;
   } finally {
     await pool.end().catch(() => undefined);

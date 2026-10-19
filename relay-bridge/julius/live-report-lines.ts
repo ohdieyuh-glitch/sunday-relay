@@ -16,6 +16,8 @@ import type { JuliusTickBudget } from '../../src/relay/mission/julius/julius-tic
 import type { JuliusLearningMetrics } from '../../src/relay/mission/julius/julius-learning-loop';
 import { juliusLearningProposal } from '../../src/relay/mission/julius/julius-learning-record';
 import type { LiveReachReadiness } from '../../src/relay/mission/live-reach';
+import { projectJuliusSlotLedger, type JuliusBudgetRow } from '../../src/relay/mission/julius/julius-slot-ledger';
+import type { JuliusTimelineReader } from '../../src/relay/mission/julius/julius-runtime-api';
 import type { DriveTickAccount, JuliusDriveDeadline, JuliusLearningOutcome } from './live-composition';
 
 /**
@@ -147,3 +149,113 @@ export function liveLearningLines(outcome: Omit<JuliusLearningOutcome, 'lines'>)
 export function liveLearningFailedLine(error: unknown): string {
   return `LEARNING: NOT RECORDED — ${error instanceof Error ? error.message.slice(0, 300) : 'unknown error'}`;
 }
+
+/* ------------------------------------------------- the accounting key and rollup */
+
+/**
+ * THE KEY TO THE BUNDLE'S MONEY AND TOKEN COLUMNS, AND THE ROLLUP THE SQL EXPORT CANNOT WRITE.
+ *
+ * Paid run 39202992515 was read by the Independent Reviewer, who found four things a reader could not settle from
+ * the bundle alone. The files themselves (`cost-accounting.tsv`, `budget.tsv`, `effort.tsv`) are written by SQL in
+ * `.github/julius-live-evidence-dump.sh`, which this change does not touch. So the same facts are said here, in
+ * the mission's own evidence, as `ACCOUNTING:` lines printed AFTER everything else (after the verification
+ * decisions), so no line the gate reads by position (`RESULT:` then `  run:`) moves:
+ *
+ *   1. A SUBSCRIPTION DISPATCH'S RUNTIME-REPORTED COST HAD NO AGGREGATE. `cost-accounting.tsv` counted the coder as
+ *      one UNKNOWN component with `known_usd_micros` 0 while `budget.tsv` settled the same coder `NOT_APPLICABLE` /
+ *      `SUBSCRIPTION` with a runtime-reported figure. The role lines below carry that figure as its OWN column,
+ *      `runtime_reported_usd_micros`. It is never added to `billed_known_usd_micros` (nobody was charged it), never
+ *      converted from tokens, and a settlement that carries neither a bill nor a runtime figure stays unknown.
+ *   2. THE POOL HAD NO FINAL ROW. `budget.tsv` `remaining_usd_micros` is the pool at the moment of each allocation, so it
+ *      reflects reservations only. The pool line states the pool after settlement, by the one charge rule the ledger
+ *      itself uses (`projectJuliusSlotLedger`): known at its bill, runtime-reported at its figure, unknown at what it
+ *      HELD. It is a report of that rule and enforces nothing; no limit, ceiling or allocation reads it.
+ *   3. THREE TOKEN INSTRUMENTS WERE NAMED NOWHERE. The legend defines them from the code that fills each column.
+ *   4. THE RESERVATION ROWS' TIMESTAMPS AND THE REVIEWER'S KEY LINE are explained, not changed.
+ */
+export const LIVE_ACCOUNTING_LEGEND: readonly string[] = Object.freeze([
+  "ACCOUNTING: legend money — billed_known_usd_micros is only a provider-reported or usage-measured amount, money someone was charged; runtime_reported_usd_micros is the runtime's own price for a subscription-backed dispatch (NOT_APPLICABLE basis), consumption and not a bill, never converted from tokens and never added to billed_known_usd_micros; unknown_held_usd_micros is what settlements reporting no amount HELD, which is not a cost of zero and not a cost of that amount",
+  "ACCOUNTING: legend tokens_ledger — input_tokens and output_tokens in effort and worker-diagnostics are the runtime result message's own top-level usage block as the Julius ledger recorded it, empty when the result carried none",
+  "ACCOUNTING: legend tokens_sdk_result — result_model_first_input_tokens, result_model_first_output_tokens and the second and third entries are the result message's modelUsage entries, one per model the runtime named, largest output first, exactly as the runtime keyed them",
+  'ACCOUNTING: legend tokens_stream_floor — stream_input_tokens, stream_output_tokens, stream_cache_read_input_tokens and stream_cache_creation_input_tokens are a sum over the assistant turns whose usage block was readable (stream_usage_messages of them), a floor and never a total or a cost',
+  'ACCOUNTING: legend tokens_reconciliation — the three token instruments are not reconciled with one another and none is a provider total; this harness does not state whether each counts cached input; no token figure is converted to money',
+  'ACCOUNTING: legend timing — started_at and process_started name the worker process start and provider_request_started is blank unless the adapter observed one; none of them is when a reservation was opened, which is occurred_at on its budget.reserved row',
+]);
+
+const accountingNumber = (value: number | null): string => (value === null ? 'unknown' : String(value));
+const accountingNum = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+/** A role printed in an allowlisted line is a closed token; anything else is named as unrecognised, never echoed. */
+const accountingRole = (role: string): string => (/^[A-Z][A-Z_]{0,39}$/u.test(role) ? role : 'UNRECOGNISED_ROLE');
+
+/**
+ * THE LEGEND, THEN ONE LINE PER ROLE THAT OPENED A RESERVATION, THEN THE POOL AFTER SETTLEMENT.
+ * Every figure comes from the run's own budget rows; a figure the rows do not carry is `unknown`, never zero.
+ */
+export function liveAccountingLines(runId: string, rows: readonly JuliusBudgetRow[]): string[] {
+  // The pool the run opened with: `remaining_usd_micros` on its FIRST allocation row, which is read before
+  // any reservation has been taken from it. No such row means the opening is unknown, and so is what remains.
+  const firstAllocation = rows.find((row) => row.type === 'budget.allocated');
+  const opening = firstAllocation === undefined ? null : accountingNum(firstAllocation.facts.remainingUsdMicros);
+  const ledger = projectJuliusSlotLedger({ runId, policy: null, policyVersion: 'accounting-report', ceilingUsdMicros: opening ?? 0, rows });
+  let reservedTotal = 0;
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (row.type !== 'budget.reserved') continue;
+    const id = typeof row.facts.reservationId === 'string' ? row.facts.reservationId : null;
+    const held = accountingNum(row.facts.usdMicros);
+    if (id === null || held === null || seen.has(id)) continue;
+    seen.add(id);
+    reservedTotal += held;
+  }
+  const lines = [...LIVE_ACCOUNTING_LEGEND];
+  const total = { known: 0, execution: 0, unknown: 0, outstanding: 0, released: 0 };
+  for (const slot of Object.keys(ledger.bySlot).sort()) {
+    const account = ledger.bySlot[slot]!;
+    if (account.reservationsOpened === 0) continue;
+    total.known += account.settledKnownUsdMicros;
+    total.execution += account.settledExecutionUsdMicros;
+    total.unknown += account.settledUnknownUsdMicros;
+    total.outstanding += account.outstandingUsdMicros;
+    total.released += account.releasedUsdMicros;
+    lines.push(`ACCOUNTING: role run=${runId} role=${accountingRole(slot)} reservations=${account.reservationsOpened} billed_known_usd_micros=${account.settledKnownUsdMicros} billed_known_reservations=${account.settledKnownCount} runtime_reported_usd_micros=${account.settledExecutionUsdMicros} runtime_reported_reservations=${account.settledExecutionCount} unknown_held_usd_micros=${account.settledUnknownUsdMicros} unknown_reservations=${account.settledUnknownCount} unsettled_usd_micros=${account.outstandingUsdMicros} unsettled_reservations=${account.outstandingCount} released_usd_micros=${account.releasedUsdMicros}`);
+  }
+  const remaining = opening === null ? null : ledger.unallocatedUsdMicros;
+  lines.push(`ACCOUNTING: pool run=${runId} opening_usd_micros=${accountingNumber(opening)} reserved_total_usd_micros=${reservedTotal} billed_known_usd_micros=${total.known} runtime_reported_usd_micros=${total.execution} unknown_held_usd_micros=${total.unknown} unsettled_usd_micros=${total.outstanding} released_usd_micros=${total.released} final_remaining_usd_micros=${accountingNumber(remaining)} basis=slot_ledger_charge_rule`);
+  return lines;
+}
+
+const ACCOUNTING_TIMELINE_PAGE = 500;
+
+/**
+ * THE RUN'S BUDGET ROWS, PAGED TO THE END, AS LINES. Evidence only: a reader that fails says so in one line and
+ * the mission's outcome and exit code are untouched, because nothing here is read by a limit or a gate's verdict.
+ */
+export async function liveAccountingLinesFor(reader: JuliusTimelineReader, runId: string, projectId: string): Promise<string[]> {
+  try {
+    const rows: JuliusBudgetRow[] = [];
+    let since = 0;
+    for (;;) {
+      const page = await reader.timeline({ runId, projectId, sinceSequence: since, limit: ACCOUNTING_TIMELINE_PAGE });
+      for (const entry of page.entries) {
+        since = Math.max(since, entry.sequence);
+        if (entry.type === 'budget.allocated' || entry.type === 'budget.reserved' || entry.type === 'budget.settled') {
+          rows.push({ type: entry.type, taskId: entry.taskId, facts: entry.facts });
+        }
+      }
+      if (!page.hasMore || page.entries.length === 0) break;
+    }
+    return liveAccountingLines(runId, rows);
+  } catch (error) {
+    return [`ACCOUNTING: NOT RECORDED — ${error instanceof Error ? error.message.slice(0, 300) : 'unknown error'}`];
+  }
+}
+
+/**
+ * WHAT THE PREFLIGHT'S PRESENCE REPORT DOES AND DOES NOT SAY ABOUT THE REVIEWER'S KEY. `XAI_API_KEY: MISSING` in
+ * the mission's evidence is this process's environment only; the Hermes reviewer reads its key from its own profile
+ * and the readiness probe tests the job's key. The bundle prints no key value, fragment or fingerprint (the
+ * codebase has no credential-fingerprint helper), so it cannot tie the billed key to the probe, and says so.
+ */
+export const LIVE_REVIEWER_KEY_IDENTITY_LINE =
+  '  key identity: the XAI_API_KEY line above reports presence in this process only and does not identify the key the reviewer billed or the key the readiness probe tested; no key value, fragment or fingerprint is printed, so this bundle cannot tie them together';

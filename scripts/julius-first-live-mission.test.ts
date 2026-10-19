@@ -8,6 +8,7 @@ import { liveBillingPaths, liveExecutionScope, parseLiveMissionContract } from '
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/executor-effects';
 import { LIVE_EVIDENCE_SUPERSEDED_LABEL, liveEvidenceLines } from '../relay-bridge/julius/live-evidence-lines';
 import {
+  LIVE_REVIEWER_KEY_IDENTITY_LINE, liveAccountingLines,
   liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveLearningFailedLine, liveLearningLines, liveOneLine, liveResearchLines,
   liveTickAccountLine, liveTickBudgetLine, liveWorkersBlockedLines,
 } from '../relay-bridge/julius/live-report-lines';
@@ -2239,6 +2240,48 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
       `${decisionLine} because the model said so`,
     ];
     expect(buildEvidence(strays.join('\n'))).toContain(`# 0 line(s) kept; ${String(strays.length)} unrecognised`);
+  });
+
+  it('keeps the accounting key, rollup and pool lines and the reviewer-key note, exactly as the printers write them', () => {
+    const run = 'run:691f75dc35ffead7c7195664';
+    const lines = [
+      LIVE_REVIEWER_KEY_IDENTITY_LINE,
+      ...liveAccountingLines(run, [
+        { type: 'budget.allocated', taskId: null, facts: { role: 'CODING_AGENT', remainingUsdMicros: 100_000_000 } },
+        { type: 'budget.reserved', taskId: 'build', facts: { role: 'CODING_AGENT', usdMicros: 300_000, reservationId: 'reservation:build' } },
+        { type: 'budget.settled', taskId: 'build', facts: { reservationId: 'reservation:build', costBasis: 'NOT_APPLICABLE', billingPath: 'SUBSCRIPTION', executionUsdMicros: 483_118 } },
+      ]),
+      // No opening pool in the rows: `unknown`, which the shapes must also keep.
+      ...liveAccountingLines(run, []).slice(-1),
+      'ACCOUNTING: NOT RECORDED — store_unreachable',
+    ];
+    expect(lines.filter((line) => line.startsWith('ACCOUNTING: legend ')), 'every legend line is exercised').toHaveLength(6);
+    const output = buildEvidence(lines.join('\n'));
+    for (const line of lines) expect(output, `withheld: ${line}`).toContain(`${line}\n`);
+    expect(output).toContain(`# ${String(lines.length)} line(s) kept; 0 unrecognised and 0 secret-shaped line(s) withheld.`);
+
+    const roleLine = lines.find((line) => line.startsWith('ACCOUNTING: role ')) ?? '';
+    const poolLine = lines.find((line) => line.startsWith('ACCOUNTING: pool ')) ?? '';
+    const strays = [
+      roleLine.replace('role=CODING_AGENT', 'role=coding agent'),
+      roleLine.replace('runtime_reported_usd_micros=483118', 'runtime_reported_usd_micros=about_483118'),
+      `${roleLine} converted_from_tokens=1`,
+      poolLine.replace('basis=slot_ledger_charge_rule', 'basis=guess'),
+      poolLine.replace('final_remaining_usd_micros=99516882', 'final_remaining_usd_micros=-5'),
+      'ACCOUNTING: total usd=1.23',
+    ];
+    expect(strays.every((line) => line !== roleLine && line !== poolLine)).toBe(true);
+    expect(buildEvidence(strays.join('\n'))).toContain(`# 0 line(s) kept; ${String(strays.length)} unrecognised`);
+  });
+
+  it('prints the accounting lines after the verification decisions and the key note straight after the presence note, at their call sites', () => {
+    const entry = read('relay-bridge/julius-live-mission.ts').replace(/\s+/gu, ' ');
+    const decisions = "out(`  verification decisions: ${decisions.map((decision) => decision.action).join(', ') || 'none'}`);".replace(/\s+/gu, ' ');
+    const accounting = 'for (const line of await liveAccountingLinesFor(handoffs.store, submitted.runId, contract.projectId)) out(line);';
+    expect(entry.split(`${decisions} // AFTER`).length - 1, 'the accounting call follows the last position-read line').toBe(1);
+    expect(entry.split(accounting).length - 1).toBe(1);
+    expect(entry.indexOf(accounting) - entry.indexOf(decisions), 'one comment line apart, nothing else between').toBeLessThan(decisions.length + 200);
+    expect(entry.split('XAI_API_KEY presence is reported for the record.\'); out(LIVE_REVIEWER_KEY_IDENTITY_LINE);').length - 1).toBe(1);
   });
 
   it('keeps the peer execution scope, the research lines and the refusals, exactly as the printers write them (P4)', () => {
