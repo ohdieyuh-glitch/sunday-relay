@@ -1,0 +1,5 @@
+# label|expect|fixes
+unfixed (as the repository is)|fail|
+fix A only (UTF-8 surrogates)|fail|fix-a-utf8.py
+fix B only (future publication)|fail|fix-b-age.py
+both fixes|pass|fix-a-utf8.py,fix-b-age.py

@@ -1,0 +1,12 @@
+# SPEC: src/relay/usage-fixes.test.ts
+# UNSCORED DIAGNOSTIC MISSION 4, CANDIDATE A: two latent defects in Relay's usage notifications and usage bar. Real tracked source, byte-identical to the repository's.
+#
+# NOT a Decision C arm, no readiness credit, lane lab, self-test OFF. The coder cannot run commands, so what it writes is judged by the independent reviewer against the
+# acceptance criteria as well as by the seeded specification, which pins the MAIN behaviours of each fix and deliberately not every wider invariant: those are the
+# criteria's job. Nothing here forces, injects or counts a reviewer finding: a repair is counted only if the reviewer finds a defect on its own.
+#
+# THE SLICE: the two modules to fix, plus `usage-contracts.ts`, the only file `usage-thresholds.ts` imports at run time (the threshold table; no imports of its own).
+# Every other import in these files is type-only and vanishes under Node's type stripping. Run-time import closure: 3 files.
+src/relay/usage/usage-thresholds.ts
+src/relay/usage/usage-contracts.ts
+src/relay/usage/usage-projection.ts

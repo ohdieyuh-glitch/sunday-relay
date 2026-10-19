@@ -1,0 +1,57 @@
+{
+  "missionId": "mission:julius-diag-architect-1",
+  "markerNamespace": "julius-diag-architect-1",
+  "projectId": "prj-julius-diag-architect-1",
+  "tenantId": "tenant",
+  "objective": "An audit of Relay found two independent latent defects in its Prompt Architect, each in a small pure module whose own comments say what it intends and whose code does something else. Fix both, in place, without changing anything else. (A) `buildArchitectContext` in `src/relay/mission/prompt-architect/prompt-architect-context.ts`: the `ContextBlock` interface says required blocks are never dropped and the build fails instead. The de-duplication keeps the first block seen for an id or for identical content whether or not it is required, so an optional block that comes first evicts a required block that duplicates it; the optional survivor can then be dropped for budget and the build still reports success without the required material. (B) `validateArchitectPlan` in `src/relay/mission/prompt-architect/prompt-architect-plan.ts`: the header says a malformed structure is rejected and never becomes a partial plan. The elements of `architectureDecisions` and `assumptions` are checked, but the elements of `unresolvedQuestions`, `requirements`, `implementationSteps` and `risks` are not: a null element throws a TypeError out of the validator, and a string element is accepted and normalized into a blank entry (a blocking question sent as a string becomes a non-blocking one). `seed/src/relay/architect-fixes.test.ts` is already written and currently fails; it pins the main behaviours of each fix. The two modules do not depend on one another, so the fixes are independent. The files to edit exist and are tracked by git: edit them in place.",
+  "requirements": [
+    "A. In `buildArchitectContext`, when two blocks collide (the same id, or the same kind and the same redacted text), the block that is kept is the REQUIRED one if either of them is required, with its own kind, text and id. Among colliding blocks of the same standing (both required or both optional) the first in input order is kept, as today. Blocks that do not collide are unaffected.",
+    "A. Everything after de-duplication is unchanged: required blocks first and in input order, then optional blocks in input order while the budget allows, `droppedOptional`, `refs`, `totalChars`, and the failed result when the required blocks alone exceed `maxChars`. Redaction is untouched and runs exactly as before.",
+    "B. In `validateArchitectPlan`, every element of `unresolvedQuestions`, `requirements`, `implementationSteps` and `risks` must be a non-null, non-array object; otherwise the plan is rejected with reason code `required_array_invalid` and `reasonField` set to the name of the array (the same code and field the validator already uses when one of those keys is not an array). The validator never throws for any input of these shapes.",
+    "B. Elements that are objects are accepted or rejected exactly as before, including objects with a missing text field (they are normalized as today). The checks and codes for `architectureDecisions`, `assumptions`, the string arrays and the handoff, the order in which problems are reported, and `normalizePlan` do not change.",
+    "No function outside these two fixes changes behaviour."
+  ],
+  "constraints": [
+    "Edit `src/relay/mission/prompt-architect/prompt-architect-context.ts` and `src/relay/mission/prompt-architect/prompt-architect-plan.ts` in place. You have `Read`, `Glob`, `Grep` and `Edit`; you cannot create files or run commands, and you do not need to. The redaction helpers in the context module are read-only: neither defect is in them.",
+    "Do not edit `src/relay/architect-fixes.test.ts`. It is the specification you are implementing against, not part of the deliverable.",
+    "Use only what the files already import plus Node built-ins. Add no dependency and no import from outside this workspace: the sandbox that runs the test has no network access and no `node_modules`.",
+    "Do not change any exported name, signature or type, and do not mutate the inputs of the functions you change.",
+    "Do not reformat code you are not changing and do not make unrelated cleanups, however tempting; a change that is not one of the two fixes is out of scope. Do not touch `.julius/`."
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "criterion-required-survives",
+      "text": "A required block is never lost to an optional duplicate, whatever the input order, for an id collision and for a content collision; when the required material cannot fit, the build fails instead of succeeding without it.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-context-unchanged",
+      "text": "Colliding blocks of the same standing keep the first; non-colliding blocks, ordering, budgeting, `droppedOptional`, `refs`, `totalChars` and redaction behave exactly as before.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-plan-elements",
+      "text": "A non-object element in any of the four arrays is rejected with `required_array_invalid` and the array's name, never thrown and never normalized into a blank entry; object elements and every other check behave exactly as before.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-scope",
+      "text": "Only `prompt-architect-context.ts` and `prompt-architect-plan.ts` are changed, using no new dependency; the inputs of the changed functions are not mutated.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-test",
+      "text": "`node --import ./.julius/loader.mjs --test src/relay/architect-fixes.test.ts` exits zero.",
+      "blocking": true
+    }
+  ],
+  "testCommand": "node --import ./.julius/loader.mjs --test src/relay/architect-fixes.test.ts",
+  "workspacePath": "/tmp/julius-workspace/tenant/ws",
+  "limits": {
+    "spendUsd": 100,
+    "repairCycles": 3,
+    "architectMaxOutputTokens": 20000,
+    "architectEffort": "high",
+    "coderEffort": "high"
+  }
+}

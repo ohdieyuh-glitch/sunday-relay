@@ -1,0 +1,5 @@
+# label|expect|fixes
+unfixed (as the repository is)|fail|
+fix A only (context dedupe)|fail|fix-a-context.py
+fix B only (plan elements)|fail|fix-b-plan.py
+both fixes|pass|fix-a-context.py,fix-b-plan.py

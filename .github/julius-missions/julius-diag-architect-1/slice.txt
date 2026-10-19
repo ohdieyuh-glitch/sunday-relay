@@ -1,0 +1,12 @@
+# SPEC: src/relay/architect-fixes.test.ts
+# UNSCORED DIAGNOSTIC MISSION 4, CANDIDATE B: two latent defects in Relay's Prompt Architect, in two independent pure modules. Real tracked source, byte-identical to the repository's.
+#
+# NOT a Decision C arm, no readiness credit, lane lab, self-test OFF. The coder cannot run commands, so what it writes is judged by the independent reviewer against the
+# acceptance criteria as well as by the seeded specification, which pins the MAIN behaviours of each fix and deliberately not every wider invariant: those are the
+# criteria's job. Nothing here forces, injects or counts a reviewer finding: a repair is counted only if the reviewer finds a defect on its own.
+#
+# THE SLICE: the two modules to fix. Neither has a run-time import (every import is type-only and vanishes under Node's type stripping). Run-time import closure: 2 files.
+# NOTE for the reviewer of the mission design: `prompt-architect-context.ts` also contains secret-redaction helpers. They are NOT part of either defect and the contract
+# names them read-only.
+src/relay/mission/prompt-architect/prompt-architect-context.ts
+src/relay/mission/prompt-architect/prompt-architect-plan.ts
