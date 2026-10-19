@@ -6,6 +6,9 @@
  */
 
 const SECRET_OUTPUT_PATTERNS: RegExp[] = [
+  // Vendor keys: legacy `sk-<alphanumerics>` AND the current OpenAI `sk-proj-` / `sk-svcacct-` / `sk-admin-` and Anthropic `sk-ant-api03-` shapes, which carry hyphens and underscores in the body.
+  // The legacy pattern below is unchanged. The new one is limited to the four known prefixes so ordinary hyphenated words (task-force-2024-q3, ask-me-later) are not redacted.
+  /sk-(?:proj|svcacct|admin|ant)-[A-Za-z0-9_-]{8,}/g,
   /sk-[A-Za-z0-9]{8,}/g,
   /AKIA[0-9A-Z]{12,}/g,
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,

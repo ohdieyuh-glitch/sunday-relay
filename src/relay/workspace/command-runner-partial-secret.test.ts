@@ -85,6 +85,7 @@ const sweepShapes = (): Shape[] => {
     mk('sk- key', rand(40), ''), mk('AKIA key', aws, ''), mk('github token', rand(36), ''), mk('slack token', rand(30), ''),
     mk('jwt', `${jwtHead}.${jwtPay}.${jwtSig}`, ''), mk('pem private key', pemBody, ''),
     mk('password=', rand(20), ''), mk('api_key:', rand(24), ''), mk('secret =', rand(22), ''), mk('TOKEN : ', rand(26), ''), mk('api-key=', rand(18), ''),
+    mk('sk-proj- key', `${rand(20)}-${rand(8)}_${rand(24)}`, ''), mk('sk-svcacct- key', `${rand(16)}_${rand(12)}-${rand(20)}`, ''), mk('sk-admin- key', `${rand(14)}-${rand(14)}_${rand(14)}`, ''), mk('sk-ant-api03- key', `${rand(30)}-${rand(10)}_${rand(10)}`, ''),
   ];
   const secrets: Record<string, string> = {
     'sk- key': `sk-${out[0].body}`,
@@ -98,6 +99,10 @@ const sweepShapes = (): Shape[] => {
     'secret =': `secret = ${out[8].body}`,
     'TOKEN : ': `TOKEN : ${out[9].body}`,
     'api-key=': `api-key=${out[10].body}`,
+    'sk-proj- key': `sk-proj-${out[11].body}`,
+    'sk-svcacct- key': `sk-svcacct-${out[12].body}`,
+    'sk-admin- key': `sk-admin-${out[13].body}`,
+    'sk-ant-api03- key': `sk-ant-api03-${out[14].body}`,
   };
   return out.map((s) => ({ ...s, secret: secrets[s.name] }));
 };
