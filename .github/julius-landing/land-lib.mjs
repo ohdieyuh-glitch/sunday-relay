@@ -106,10 +106,10 @@ export function checkPullRequest({ fields, now, pr, commit, files, fileRows, mai
   if (commit?.commit?.tree?.sha !== fields.tree) problems.push(`the head tree is ${commit?.commit?.tree?.sha}, the clearance names ${fields.tree}`);
   if (commit?.parents?.length !== 1 || commit.parents[0]?.sha !== fields.base) problems.push('the head is not one commit directly on the cleared base');
   if (commit?.commit?.author?.name !== APP_LOGIN || commit?.commit?.committer?.name !== APP_LOGIN) problems.push('the head commit is not authored and committed by the App');
-  // The git author NAME above is free text. The top-level `author` is the account GitHub resolved from the author email: when present it must be the App. It is null when the
-  // email maps to no account, so an unresolved author is NOT refused here (residual: such a commit is identified by the free-text name only). The top-level `committer` is not
-  // checked: commits created through the API often carry another committer login.
-  if (commit?.author != null && commit.author.login !== APP_LOGIN) problems.push(`the head commit's GitHub author is ${commit.author.login}, not ${APP_LOGIN}`);
+  // The git author NAME above is free text. The top-level `author` is the account GitHub resolved from the author email, and it MUST be the App: an UNRESOLVED author (null) is
+  // refused too, because the main-provenance gate judges exactly this login and would call the landed tip unprovenanced. The top-level `committer` is not checked: commits created
+  // through the API often carry another committer login.
+  if (commit?.author?.login !== APP_LOGIN) problems.push(`the head commit's GitHub author is ${commit?.author?.login ?? 'unresolved'}, not ${APP_LOGIN}`);
   if (!allowedBranches.includes(pr.head?.ref)) problems.push(`branch ${pr.head?.ref} is not in the founder's standing landing allowlist`);
   // `files` holds EVERY name GitHub reports for a changed file: `filename` and, for a rename or copy, `previous_filename` too (a workflow renamed out of .github/workflows is still a
   // workflow change). `fileRows` is how many file rows were actually read; it must equal the PR's own changed_files count, or the list was truncated and nothing is trusted.

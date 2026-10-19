@@ -48,7 +48,8 @@ const goodPr = () => ({
   number: 7, state: 'open', merged: false, draft: false, title: 'Julius: test landing', commits: 1, changed_files: 1,
   head: { sha: H, ref: BRANCH, repo: { full_name: REPO } }, base: { ref: 'main' }, user: { login: APP },
 });
-const goodCommit = () => ({ commit: { tree: { sha: T }, author: { name: APP }, committer: { name: APP } }, parents: [{ sha: B }] });
+// round 5 (c2): a head commit carries the top-level author account GitHub resolved; an unresolved (null) author is now refused
+const goodCommit = () => ({ commit: { tree: { sha: T }, author: { name: APP }, committer: { name: APP } }, author: { login: APP }, parents: [{ sha: B }] });
 const check = (over: Record<string, unknown> = {}) => lib.checkPullRequest({
   fields: lib.parseClearance(clearanceText()).fields, now: NOW, pr: goodPr(), commit: goodCommit(), files: ['.github/julius-missions/x/contract.json'], fileRows: 1, mainSha: B, allowedBranches: [BRANCH], digest: emptyDigest, ...over,
 }) as string[];
@@ -87,6 +88,8 @@ globalThis.fetch = async (url, init = {}) => {
   // HARNESS ADAPTATION (landing v3): the lander reads back the commit it created and requires the exact tree, single parent, message and identity, so the fake echoes what was POSTed.
   if (method === 'GET' && globalThis.__created && bare.endsWith('/commits/' + (scenario.createdSha ?? '8'.repeat(40)))) { const c = globalThis.__created; return reply(200, { sha: scenario.createdSha ?? '8'.repeat(40), parents: c.parents.map((sha) => ({ sha })), commit: { tree: { sha: c.tree }, message: c.message, author: c.author, committer: c.committer } }); }
   if (method === 'PATCH' && /\\/git\\/refs\\/heads\\/main$/.test(bare)) return scenario.mainMovedBeforeUpdate ? reply(422, { message: 'Update is not a fast forward' }) : reply(200, { object: { sha: scenario.createdSha ?? '8'.repeat(40) } });
+  // HARNESS ADAPTATION (round 5, b6): the lander spends the clearance nonce as a tag ref before the ref update; this fake never has a spent tag (GET falls through to 404 = unspent)
+  if (method === 'POST' && /\\/git\\/refs$/.test(bare)) return reply(201, {});
   if (method === 'PATCH' && /\\/pulls\\/\\d+$/.test(bare)) return reply(200, {});
   if (method === 'POST' && /\\/issues\\/\\d+\\/comments$/.test(bare)) return reply(201, {});
   if (bare.includes('/git/ref/heads/main')) { const n = bump('main'); const seq = scenario.mainSequence; return reply(200, { object: { sha: seq ? seq[Math.min(n - 1, seq.length - 1)] : scenario.main } }); }
@@ -214,7 +217,7 @@ describe('ATTACK (landing v3): CI changes after the wait, and main moves during 
     expect(r.code).toBe(1);
     expect(r.landings, 'one attempt').toHaveLength(1);
     expect(JSON.parse(r.landings[0]!.body ?? '{}')).toMatchObject({ force: false });
-    expect(r.calls.filter((c) => c.method !== 'GET').map((c) => c.method), 'only the commit creation and the one refused update').toEqual(['POST', 'PATCH']);
+    expect(r.calls.filter((c) => c.method !== 'GET').map((c) => c.method), 'only the commit creation and the one refused update').toEqual(['POST', 'POST', 'PATCH']);
   });
 
   it('ATK-14 the created commit is never advanced onto main unless it reads back as the cleared tree on the single cleared base', () => {

@@ -44,7 +44,8 @@ const goodPr = () => ({
   number: 7, state: 'open', merged: false, draft: false, title: 'Julius: test landing', commits: 1, changed_files: 1,
   head: { sha: H, ref: BRANCH, repo: { full_name: REPO } }, base: { ref: 'main' }, user: { login: 'julius-worker[bot]' },
 });
-const goodCommit = () => ({ commit: { tree: { sha: T }, author: { name: 'julius-worker[bot]' }, committer: { name: 'julius-worker[bot]' } }, parents: [{ sha: B }] });
+// round 5 (c2): the top-level author account GitHub resolved must be the App; an unresolved (null) author is refused
+const goodCommit = () => ({ commit: { tree: { sha: T }, author: { name: 'julius-worker[bot]' }, committer: { name: 'julius-worker[bot]' } }, author: { login: 'julius-worker[bot]' }, parents: [{ sha: B }] });
 const allowed = [BRANCH];
 const emptyDigest = createHash('sha256').update('').digest('hex');
 const check = (over: Record<string, unknown> = {}) => lib.checkPullRequest({
@@ -224,7 +225,20 @@ globalThis.fetch = async (url, init = {}) => {
   appendFileSync(calls, JSON.stringify({ method, path, body: init.body ?? null }) + '\\n');
   const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   // scenario.failGet: a regexp source; any GET whose path matches answers HTTP 500 (an API failure before anything is written)
-  if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path)) return reply(500, { message: 'the fake fails this read' });
+  // scenario.echo: the failure text echoes the request's Authorization header and token-shaped strings, as a misbehaving proxy or API might
+  if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path)) return reply(500, { message: scenario.echo ? 'upstream said: Authorization: ' + (init.headers?.Authorization ?? '') + ' also ghs_' + 'A'.repeat(36) + ' github_pat_' + 'B'.repeat(30) + ' ghp_' + 'C'.repeat(36) : 'the fake fails this read' });
+  // b6: the nonce tag. scenario.spentTags = tag names that already exist; scenario.tagReadStatus / tagCreateStatus override the answers.
+  if (method === 'GET' && /\\/git\\/ref\\/tags\\//.test(path)) {
+    const name = path.split('/git/ref/tags/')[1];
+    if (scenario.tagReadStatus) return reply(scenario.tagReadStatus, { message: 'tag read answered by the fake' });
+    return (scenario.spentTags ?? []).includes(name) ? reply(200, { ref: 'refs/tags/' + name }) : reply(404, { message: 'Not Found' });
+  }
+  if (method === 'POST' && /\\/git\\/refs$/.test(path)) {
+    const b = JSON.parse(init.body);
+    if (scenario.tagCreateStatus) return reply(scenario.tagCreateStatus, { message: 'tag creation answered by the fake' });
+    if ((scenario.spentTags ?? []).includes(b.ref.replace('refs/tags/', ''))) return reply(422, { message: 'Reference already exists' });
+    return reply(201, { ref: b.ref });
+  }
   // The landing writes (git data API; the merge endpoint is not modelled on purpose: a request to it is an unexpected path, 404).
   if (method === 'POST' && /\\/git\\/commits$/.test(path)) {
     globalThis.__created = JSON.parse(init.body);
@@ -237,6 +251,7 @@ globalThis.fetch = async (url, init = {}) => {
     // and a number = an HTTP status (5xx) sent back instead of the answer
     if (scenario.patchLost) {
       if (scenario.patchLost.applied) globalThis.__mainAfterPatch = b.sha;
+      if (scenario.patchLost.hang) return new Promise((_, reject) => { const keep = setTimeout(() => {}, 6000); init.signal?.addEventListener('abort', () => { clearTimeout(keep); reject(init.signal.reason); }); });
       if (scenario.patchLost.throw) throw new TypeError('fetch failed');
       return reply(scenario.patchLost.status, { message: 'the fake lost the answer' });
     }
@@ -281,7 +296,7 @@ globalThis.fetch = async (url, init = {}) => {
 `);
 
 let counter = 0;
-function runLand(over: { scenario?: Record<string, unknown>; text?: string; signature?: string; head?: string; pr?: string; dryRun?: string; ciWaitMs?: string; ref?: string; sha?: string; required?: string } = {}) {
+function runLand(over: { scenario?: Record<string, unknown>; text?: string; signature?: string; head?: string; pr?: string; dryRun?: string; ciWaitMs?: string; ref?: string; sha?: string; required?: string; token?: string; requestTimeoutMs?: string } = {}) {
   counter += 1;
   const requiredFile = join(landDir, 'required-checks.txt');
   if (over.required !== undefined) writeFileSync(requiredFile, over.required);
@@ -297,7 +312,7 @@ function runLand(over: { scenario?: Record<string, unknown>; text?: string; sign
   const r = spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, join(landDir, 'land.mjs')], {
     encoding: 'utf8', timeout: 25_000,
     env: {
-      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, GH_TOKEN: 'not-a-token', PR: over.pr ?? '7', HEAD: over.head ?? H,
+      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, GH_TOKEN: over.token ?? 'not-a-token', ...(over.requestTimeoutMs ? { LAND_REQUEST_TIMEOUT_MS: over.requestTimeoutMs } : {}), PR: over.pr ?? '7', HEAD: over.head ?? H,
       CLEARANCE_B64: Buffer.from(text, 'utf8').toString('base64'), SIGNATURE_B64: over.signature ?? sig(text), DRY_RUN: over.dryRun ?? 'false', LAND_CI_WAIT_MS: over.ciWaitMs ?? '0', GITHUB_REF: over.ref ?? 'refs/heads/main', GITHUB_SHA: over.sha ?? B,
     },
   });
@@ -534,17 +549,19 @@ describe('L3: the landing is a created commit plus a non-forced ref update (no m
   it('creates exactly the cleared tree with exactly one parent = the cleared base, authored by github-actions[bot], and updates main with force:false', () => {
     const r = runLand();
     expect(r.code, r.out).toBe(0);
-    expect(r.writes.map((c) => `${c.method} ${c.path.replace(REPO, 'R')}`)).toEqual(['POST /repos/R/git/commits', 'PATCH /repos/R/git/refs/heads/main', 'POST /repos/R/issues/7/comments', 'PATCH /repos/R/pulls/7']);
+    expect(r.writes.map((c) => `${c.method} ${c.path.replace(REPO, 'R')}`)).toEqual(['POST /repos/R/git/commits', 'POST /repos/R/git/refs', 'PATCH /repos/R/git/refs/heads/main', 'POST /repos/R/issues/7/comments', 'PATCH /repos/R/pulls/7']);
     const post = JSON.parse(r.writes[0]!.body ?? '{}') as { tree: string; parents: string[]; author: unknown; committer: unknown; message: string };
     expect(post.tree).toBe(T);
     expect(post.parents).toEqual([B]);
     expect(post.author).toEqual(IDENTITY);
     expect(post.committer).toEqual(IDENTITY);
     expect(lib.parseLandingCommitMessage(post.message, { expected: { pr: 7, head: H, tree: T, base: B }, publicKeyPem: publicPem }).problems).toEqual([]);
-    expect(JSON.parse(r.writes[1]!.body ?? '{}')).toEqual({ sha: '8'.repeat(40), force: false });
-    const comment = JSON.parse(r.writes[2]!.body ?? '{}') as { body: string };
+    // round 5 (b6): the nonce is spent as a tag at the created commit, after the read-back and before the ref update
+    expect(JSON.parse(r.writes[1]!.body ?? '{}')).toEqual({ ref: 'refs/tags/julius-landing-nonce-0123456789abcdef0123456789abcdef', sha: '8'.repeat(40) });
+    expect(JSON.parse(r.writes[2]!.body ?? '{}')).toEqual({ sha: '8'.repeat(40), force: false });
+    const comment = JSON.parse(r.writes[3]!.body ?? '{}') as { body: string };
     expect(comment.body).toContain('8'.repeat(40));
-    expect(JSON.parse(r.writes[3]!.body ?? '{}')).toEqual({ state: 'closed' });
+    expect(JSON.parse(r.writes[4]!.body ?? '{}')).toEqual({ state: 'closed' });
     // the read-back happened before the ref update
     const idx = (pred: (c: { method: string; path: string }) => boolean) => r.calls.findIndex(pred);
     expect(idx((c) => c.method === 'GET' && c.path.endsWith(`/commits/${'8'.repeat(40)}`))).toBeGreaterThan(idx((c) => c.method === 'POST' && c.path.endsWith('/git/commits')));
@@ -556,7 +573,7 @@ describe('L3: the landing is a created commit plus a non-forced ref update (no m
     expect(r.code).toBe(1);
     expect(r.out).toContain('the ref update was refused');
     expect(r.out).toContain('Nothing was landed');
-    expect(r.writes.map((c) => c.method)).toEqual(['POST', 'PATCH']);
+    expect(r.writes.map((c) => c.method)).toEqual(['POST', 'POST', 'PATCH']);
     expect(r.merges).toHaveLength(1);
     expect(JSON.parse(r.merges[0]!.body ?? '{}').force).toBe(false);
   });
@@ -766,7 +783,7 @@ describe('round 2: an ambiguous ref-update outcome is judged by re-reading main,
       expect(r.out, name).toContain('LANDED PR #7');
       expect(r.merges, `${name}: one attempt, no retry`).toHaveLength(1);
       expect(JSON.parse(r.merges[0]!.body ?? '{}').force, name).toBe(false);
-      expect(r.writes.map((c) => c.method), name).toEqual(['POST', 'PATCH', 'POST', 'PATCH']);
+      expect(r.writes.map((c) => c.method), name).toEqual(['POST', 'POST', 'PATCH', 'POST', 'PATCH']);
     }
   });
 
@@ -777,7 +794,7 @@ describe('round 2: an ambiguous ref-update outcome is judged by re-reading main,
       expect(r.out, name).toContain('Nothing was landed');
       expect(r.out, name).toContain('still the cleared base');
       expect(r.merges, name).toHaveLength(1);
-      expect(r.writes.map((c) => c.method), name).toEqual(['POST', 'PATCH']);
+      expect(r.writes.map((c) => c.method), name).toEqual(['POST', 'POST', 'PATCH']);
     }
   });
 
@@ -788,12 +805,12 @@ describe('round 2: an ambiguous ref-update outcome is judged by re-reading main,
       expect(r.code, `${name}: ${r.out}`).toBe(2);
       expect(r.out, name).toContain('ALERT AFTER AN AMBIGUOUS REF UPDATE');
       expect(r.out, name).toContain(other);
-      expect(r.writes.map((c) => c.method), name).toEqual(['POST', 'PATCH']);
+      expect(r.writes.map((c) => c.method), name).toEqual(['POST', 'POST', 'PATCH']);
     }
     const unreadable = runLand({ scenario: { patchLost: { status: 500, applied: false }, mainReadFails: true } });
     expect(unreadable.code).toBe(2);
     expect(unreadable.out).toContain('could not be read again');
-    expect(unreadable.writes.map((c) => c.method)).toEqual(['POST', 'PATCH']);
+    expect(unreadable.writes.map((c) => c.method)).toEqual(['POST', 'POST', 'PATCH']);
   });
 
   it('a clean 4xx refusal is NOT re-judged: it refuses at once and main is not even re-read', () => {
@@ -859,7 +876,7 @@ describe('round 3 R1: nothing after the ref update may exit 1 or die with a stac
     const r = runLand({ scenario: { mainReadFails: true } });
     expect(r.code, r.out).toBe(2);
     expect(r.out).toContain(`ALERT AFTER LANDING: main was updated to ${'8'.repeat(40)} but reading main back failed`);
-    expect(r.writes.map((c) => c.method), 'commit, ref update, comment, close').toEqual(['POST', 'PATCH', 'POST', 'PATCH']);
+    expect(r.writes.map((c) => c.method), 'commit, nonce tag, ref update, comment, close').toEqual(['POST', 'POST', 'PATCH', 'POST', 'PATCH']);
     expect(r.out).not.toMatch(/\n\s+at /u);
     expect(r.out).not.toContain('Nothing was landed');
   });
@@ -868,7 +885,7 @@ describe('round 3 R1: nothing after the ref update may exit 1 or die with a stac
     const comment = runLand({ scenario: { commentStatus: 500 } });
     expect(comment.code, comment.out).toBe(3);
     expect(comment.out).toContain('commenting on PR #7 failed');
-    expect(comment.writes.map((c) => c.method), 'the close is still attempted after a failed comment').toEqual(['POST', 'PATCH', 'POST', 'PATCH']);
+    expect(comment.writes.map((c) => c.method), 'the close is still attempted after a failed comment').toEqual(['POST', 'POST', 'PATCH', 'POST', 'PATCH']);
     const close = runLand({ scenario: { closeStatus: 500 } });
     expect(close.code, close.out).toBe(3);
     expect(close.out).toContain('closing PR #7 failed');
@@ -883,7 +900,7 @@ describe('round 3 R1: nothing after the ref update may exit 1 or die with a stac
   it('a main that is not the created commit after the update is still an ALERT (exit 2) and nothing is claimed in a PR comment', () => {
     const r = runLand({ scenario: { mainAfterOverride: 'f'.repeat(40) } });
     expect(r.code).toBe(2);
-    expect(r.writes.map((c) => c.method)).toEqual(['POST', 'PATCH']);
+    expect(r.writes.map((c) => c.method)).toEqual(['POST', 'POST', 'PATCH']);
   });
 });
 
@@ -1048,5 +1065,157 @@ describe('round 4: required-checks.txt has exactly one reader, the lander (via p
     const land = readFileSync(join(LANDING, 'land.mjs'), 'utf8');
     expect(land).toMatch(/parseRequiredChecks\(readFileSync\(join\(here, 'required-checks\.txt'\)/u);
     expect(land.match(/required-checks\.txt'/gu), 'land.mjs reads the file exactly once').toHaveLength(1);
+  });
+});
+
+/* ------------------------------------------------------------------------------------------------------------------ v3 round 5 (from juju2's attack): c2, b6, a10, r5, a9 */
+
+describe('round 5 c2: the head commit\'s resolved GitHub author must be the App; an unresolved author is refused', () => {
+  it('null, missing, another account and a bot look-alike are refused; the App passes', () => {
+    const withAuthor = (author: unknown) => ({ ...goodCommit(), author });
+    expect(check({ commit: goodCommit() })).toEqual([]);
+    expect(check({ commit: withAuthor({ login: 'julius-worker[bot]' }) })).toEqual([]);
+    expect(check({ commit: withAuthor(null) }).join(' ')).toContain('unresolved');
+    expect(check({ commit: withAuthor(undefined) }).join(' ')).toContain('unresolved');
+    expect(check({ commit: withAuthor({}) }).join(' ')).toContain('unresolved');
+    expect(check({ commit: withAuthor({ login: 'ohdieyuh-glitch' }) }).join(' ')).toContain('ohdieyuh-glitch');
+    expect(check({ commit: withAuthor({ login: 'julius-worker' }) }).length).toBeGreaterThan(0);
+    expect(check({ commit: withAuthor({ login: 'Julius-Worker[bot]' }) }).length).toBeGreaterThan(0);
+    const noAuthorKey = goodCommit() as Record<string, unknown>;
+    delete noAuthorKey.author;
+    expect(check({ commit: noAuthorKey }).join(' ')).toContain('unresolved');
+  });
+
+  it('end to end: a head whose author name is the App but whose account is unresolved never lands and nothing is written', () => {
+    const r = runLand({ scenario: { commit: { ...goodCommit(), author: null } } });
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toContain('unresolved');
+    expect(r.writes).toHaveLength(0);
+  });
+});
+
+describe('round 5 b6: the clearance nonce is spent as a tag, atomically, before main is touched', () => {
+  const TAG = 'julius-landing-nonce-0123456789abcdef0123456789abcdef';
+
+  it('order: commit created, read back, THEN the nonce tag, THEN the ref update, then comment and close', () => {
+    const r = runLand();
+    expect(r.code, r.out).toBe(0);
+    const at = (pred: (c: { method: string; path: string }) => boolean) => r.calls.findIndex(pred);
+    const created = at((c) => c.method === 'POST' && c.path.endsWith('/git/commits'));
+    const readBack = at((c) => c.method === 'GET' && c.path.endsWith(`/commits/${'8'.repeat(40)}`));
+    const tag = at((c) => c.method === 'POST' && c.path.endsWith('/git/refs'));
+    const patch = at((c) => c.method === 'PATCH' && c.path.endsWith('/git/refs/heads/main'));
+    expect([created, readBack, tag, patch].every((i) => i >= 0)).toBe(true);
+    expect(created).toBeLessThan(readBack);
+    expect(readBack).toBeLessThan(tag);
+    expect(tag).toBeLessThan(patch);
+    expect(JSON.parse(r.calls[tag]!.body ?? '{}')).toEqual({ ref: `refs/tags/${TAG}`, sha: '8'.repeat(40) });
+    expect(r.calls.some((c) => c.method === 'GET' && c.path.endsWith(`/git/ref/tags/${TAG}`)), 'the tag was READ first').toBe(true);
+  });
+
+  it('a spent tag refuses with zero writes, even when the nonce is no longer in the history window or the history never held it', () => {
+    const outOfWindow = Array.from({ length: 100 }, (_, i) => ({ commit: { message: `later commit ${i}` } }));
+    for (const history of [[{ commit: { message: 'an earlier landing' } }], outOfWindow]) {
+      const r = runLand({ scenario: { spentTags: [TAG], history } });
+      expect(r.code, r.out).toBe(1);
+      expect(r.out).toContain(`the nonce tag ${TAG} exists`);
+      expect(r.writes).toHaveLength(0);
+    }
+  });
+
+  it('a tag read that is not a clean 404 (403, 500) refuses with zero writes', () => {
+    for (const tagReadStatus of [403, 500, 502]) {
+      const r = runLand({ scenario: { tagReadStatus } });
+      expect(r.code, `${tagReadStatus}: ${r.out}`).toBe(1);
+      expect(r.writes, String(tagReadStatus)).toHaveLength(0);
+    }
+  });
+
+  it('a dry run only READS the tag (it refuses when spent, writes nothing when not)', () => {
+    const spent = runLand({ dryRun: 'true', scenario: { spentTags: [TAG] } });
+    expect(spent.code).toBe(1);
+    expect(spent.writes).toHaveLength(0);
+    const unspent = runLand({ dryRun: 'true' });
+    expect(unspent.code, unspent.out).toBe(0);
+    expect(unspent.writes).toHaveLength(0);
+    expect(unspent.calls.some((c) => c.method === 'GET' && c.path.endsWith(`/git/ref/tags/${TAG}`))).toBe(true);
+    expect(unspent.out).toContain(`refs/tags/${TAG}`);
+  });
+
+  it('a tag that cannot be created (422 already exists, 500) stops before main is touched, and says the clearance must not be reused', () => {
+    for (const tagCreateStatus of [422, 500]) {
+      const r = runLand({ scenario: { tagCreateStatus } });
+      expect(r.code, `${tagCreateStatus}: ${r.out}`).toBe(1);
+      expect(r.out).toContain(`the nonce tag ${TAG} could not be created`);
+      expect(r.out).toContain('must not be reused');
+      expect(r.merges, 'no ref update').toHaveLength(0);
+      expect(r.writes.map((c) => c.method)).toEqual(['POST', 'POST']);
+    }
+  });
+
+  it('a refusal AFTER the tag exists spends the clearance: the tag was created before the refused ref update', () => {
+    const r = runLand({ scenario: { patchStatus: 422 } });
+    expect(r.code).toBe(1);
+    expect(r.writes.map((c) => `${c.method} ${c.path.split('/git/')[1] ?? ''}`)).toEqual(['POST commits', 'POST refs', 'PATCH refs/heads/main']);
+  });
+
+  it('a commit that fails its read-back spends nothing: no tag is created', () => {
+    const r = runLand({ scenario: { readBack: { sha: '8'.repeat(40), parents: [{ sha: 'f'.repeat(40) }], commit: { tree: { sha: T }, message: 'x' } } } });
+    expect(r.code).toBe(1);
+    expect(r.writes.map((c) => c.method)).toEqual(['POST']);
+  });
+});
+
+describe('round 5 a10: every request has a deadline, so a hung connection after an applied ref update reaches the recovery re-read', () => {
+  it('a PATCH that hangs after being applied is recovered as LANDED; one that hangs unapplied is "Nothing was landed"; both within the deadline', () => {
+    const started = Date.now();
+    const applied = runLand({ requestTimeoutMs: '700', scenario: { patchLost: { hang: true, applied: true } } });
+    expect(applied.code, applied.out).toBe(0);
+    expect(applied.out).toContain('LANDED (the PATCH response was lost)');
+    expect(applied.merges, 'one attempt').toHaveLength(1);
+    const unapplied = runLand({ requestTimeoutMs: '700', scenario: { patchLost: { hang: true, applied: false } } });
+    expect(unapplied.code, unapplied.out).toBe(1);
+    expect(unapplied.out).toContain('Nothing was landed');
+    expect(unapplied.merges).toHaveLength(1);
+    expect(Date.now() - started, 'neither run waited for the fake\'s 6 s keep-alive each').toBeLessThan(20_000);
+  });
+
+  it('the default is 30 seconds, every request goes through the deadline, and the workflow never sets the test override', () => {
+    const land = readFileSync(join(LANDING, 'land.mjs'), 'utf8');
+    expect(land).toContain('env.LAND_REQUEST_TIMEOUT_MS ?? 30_000');
+    expect(land.match(/AbortSignal\.timeout\(REQUEST_TIMEOUT_MS\)/gu), 'exactly one place issues requests').toHaveLength(1);
+    expect(land.match(/\bfetch\(/gu), 'and it is the only fetch call').toHaveLength(1);
+    expect(WORKFLOW).not.toContain('LAND_REQUEST_TIMEOUT_MS');
+  });
+});
+
+describe('round 5 r5: nothing the lander prints carries a credential, whatever an error text echoes', () => {
+  it('an error that echoes the Authorization header, the token and token-shaped strings is printed redacted (stdout and stderr)', () => {
+    const token = `ghs_${'T'.repeat(36)}`;
+    const r = runLand({ token, scenario: { failGet: '/pulls/7$', echo: true } });
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toContain('REFUSED: unexpected error before anything was landed');
+    for (const secret of [token, 'T'.repeat(36), `ghs_${'A'.repeat(36)}`, `github_pat_${'B'.repeat(30)}`, `ghp_${'C'.repeat(36)}`, 'Bearer ghs']) expect(r.out, secret).not.toContain(secret);
+    expect(r.out).toContain('***');
+  });
+
+  it('the redaction also covers a plain token literal that is not token-shaped', () => {
+    const r = runLand({ token: 'plain-secret-value-123', scenario: { failGet: '/git/ref/heads/main', echo: true } });
+    expect(r.out).not.toContain('plain-secret-value-123');
+    expect(r.out).not.toMatch(/Authorization: Bearer/iu);
+  });
+});
+
+describe('round 5 a9: the docs say exactly what the non-forced ref update does and does not do', () => {
+  it('the README and land.mjs call it a fast-forward test, name the backward-reset residual, and say what the post-update read detects', () => {
+    const readme = readFileSync(join(LANDING, 'README.md'), 'utf8');
+    const land = readFileSync(join(LANDING, 'land.mjs'), 'utf8');
+    for (const [name, text] of [['README', readme], ['land.mjs', land]] as const) {
+      expect(text, name).toMatch(/fast-forward/iu);
+      expect(text, name).toMatch(/backward/iu);
+      expect(text, name).not.toMatch(/compare-and-swap that GitHub refuses unless/iu);
+    }
+    expect(readme).toContain('nonce tag');
+    expect(readme).toContain('by construction');
   });
 });

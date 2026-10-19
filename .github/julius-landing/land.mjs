@@ -1,6 +1,6 @@
 // Driver of the autonomous landing gate. Runs inside .github/workflows/julius-land.yml with the workflow's own token (identity: github-actions[bot]).
 // It reads GitHub, asks `land-lib.mjs` whether EVERY condition holds, and only then creates the landing commit (the cleared tree on the cleared base, the signed clearance in its
-// message) with the git data API and advances main with a NON-FORCED ref update (a compare-and-swap). It never uses the merge endpoint. Fail closed: any problem, any unexpected API
+// message) with the git data API, spends the clearance's nonce as a tag, and advances main with a NON-FORCED ref update (a fast-forward test). It never uses the merge endpoint. Fail closed: any problem, any unexpected API
 // answer and any timeout ends the job without a landing. DRY_RUN=true makes every read and every check and writes nothing.
 import { readFileSync, appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +12,16 @@ const here = dirname(fileURLToPath(import.meta.url));
 const env = process.env;
 const API = 'https://api.github.com';
 const SELF_CHECK = 'Land a cleared pull request';
-const summary = (line) => { console.log(line); if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, line + '\n'); };
+// r5: NOTHING this job prints may carry a credential, whatever an API, a proxy or a library echoes back into an error text. Every line goes through `summary`, which redacts the token
+// literal, GitHub token shapes (ghs_/ghp_/gho_/ghu_/ghr_/github_pat_), `Bearer <x>` and `Authorization: <x>` first. (The runner also masks GITHUB_TOKEN; this does not rely on it.)
+const redact = (text) => {
+  let out = String(text);
+  if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) out = out.split(env.GH_TOKEN).join('***');
+  return out
+    .replace(/\b(?:ghs|ghp|gho|ghu|ghr)_[A-Za-z0-9]{16,}/gu, '***').replace(/\bgithub_pat_[A-Za-z0-9_]{16,}/gu, '***')
+    .replace(/\bBearer\s+[^\s"',;]+/giu, 'Bearer ***').replace(/(authorization["']?\s*[:=]\s*)(?:(?:bearer|token|basic)\s+)?[^\s"',;]+/giu, '$1***');
+};
+const summary = (line) => { const safe = redact(line); console.log(safe); if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, safe + '\n'); };
 const fail = (problems) => { for (const p of problems) summary(`REFUSED: ${p}`); summary('Nothing was landed.'); process.exit(1); };
 // Any error nobody handled (an API answer that is not 2xx, a network failure, a malformed file) ends the job with ONE line, never a stack trace. Before the ref update is sent nothing has
 // landed: exit 1 ("REFUSED"). From the moment the ref update is sent main's state may have changed: exit 2 ("ALERT"), told apart so nobody reads "nothing landed" into it.
@@ -26,8 +35,15 @@ const onUnexpected = (e) => {
 process.on('uncaughtException', onUnexpected);
 process.on('unhandledRejection', onUnexpected);
 
+// a10: a DEADLINE on every request (abort covers the connection and the body). Without it a connection that hangs after an applied ref update would never reach the recovery re-read and
+// the job would sit until the workflow timeout with main already moved. An aborted request has no `.status`, so it is AMBIGUOUS like any lost answer. LAND_REQUEST_TIMEOUT_MS exists for
+// the tests only; the workflow never sets it (a test pins that), so production always uses 30 seconds.
+const REQUEST_TIMEOUT_MS = Number(env.LAND_REQUEST_TIMEOUT_MS ?? 30_000);
+async function ghRaw(path, init = {}) {
+  return fetch(`${API}${path}`, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(init.headers ?? {}) } });
+}
 async function gh(path, init = {}) {
-  const res = await fetch(`${API}${path}`, { ...init, headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(init.headers ?? {}) } });
+  const res = await ghRaw(path, init);
   const text = await res.text();
   let body; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
   if (!res.ok) throw Object.assign(new Error(`${init.method ?? 'GET'} ${path} -> ${res.status}: ${typeof body === 'string' ? body.slice(0, 200) : body?.message}`), { status: res.status });
@@ -87,6 +103,13 @@ if (runtimeProblems.length) fail(runtimeProblems);
 let s = await snapshot();
 const history = await gh(`/repos/${REPO}/commits?sha=main&per_page=100`);
 if (nonceUsed(history.map((c) => c.commit?.message ?? ''), fields.nonce)) fail(['this clearance nonce was already used by a landed commit on main (one use per clearance)']);
+// b6: the nonce history scan above cannot see a use while main == the cleared base (the landing is a CHILD of the base: a reset of main to the base would re-open the clearance), so each
+// landing also spends the nonce as a TAG, created before main is touched (step 7). A spent tag refuses here, whatever main's history is. 404 is the only "unspent" answer: anything
+// else (the tag exists, or the read failed) refuses. A dry run only READS this.
+const NONCE_TAG = `julius-landing-nonce-${fields.nonce}`;
+const tagRead = await ghRaw(`/repos/${REPO}/git/ref/tags/${NONCE_TAG}`);
+await tagRead.text().catch(() => '');
+if (tagRead.status !== 404) fail([`the nonce tag ${NONCE_TAG} exists or could not be read (HTTP ${tagRead.status}): this clearance was already used, or its use cannot be ruled out`]);
 const prProblems = checkPullRequest({ fields, now: Date.now(), pr: s.pr, commit: s.commit, files: s.files, fileRows: s.fileRows, mainSha: s.mainSha, allowedBranches, digest: s.digest });
 if (prProblems.length) fail(prProblems);
 summary(`Clearance verified: ${fields.kind} head ${head} tree ${fields.tree} base ${fields.base}, signed by the registered reviewer key; PR #${number} is the App's single commit, ${s.files.length} files, none founder-governed.`);
@@ -117,8 +140,8 @@ if (reparsed.problems.length) fail(reparsed.problems.map((p) => `the landing com
 const commitBody = { message, tree: fields.tree, parents: [fields.base], author: LANDER_IDENTITY, committer: LANDER_IDENTITY };
 const refBody = (sha) => ({ sha, force: false });
 
-// Main's tip, read ONE MORE TIME immediately before acting: if it moved since the checks, abort (the cleared base is no longer the tip). The ref update below is a compare-and-swap
-// on the same fact, so a move after this read is refused by GitHub, not merely noticed.
+// Main's tip, read ONE MORE TIME immediately before acting: if it moved since the checks, abort (the cleared base is no longer the tip). The ref update below is a fast-forward
+// test (see 7b): a main that moved FORWARD after this read is refused by GitHub, not merely noticed; a main reset backward after it is not caught.
 const tipNow = (await gh(`/repos/${REPO}/git/ref/heads/main`)).object.sha;
 if (tipNow !== fields.base) fail([`main moved to ${tipNow} immediately before the landing; the clearance names base ${fields.base}`]);
 
@@ -128,8 +151,9 @@ if (env.DRY_RUN !== 'false') {
   summary('DRY RUN: every gate holds. The live run would do exactly this, and nothing was written:');
   summary(`  1. POST /repos/${REPO}/git/commits ${JSON.stringify({ ...commitBody, message: '(below)' })}`);
   summary(`  2. read the created commit back and require tree ${fields.tree}, the single parent ${fields.base}, the exact message and the github-actions[bot] identity`);
-  summary(`  3. PATCH /repos/${REPO}/git/refs/heads/main ${JSON.stringify(refBody('<the created commit sha>'))} (not forced: fails if main is no longer ${fields.base})`);
-  summary(`  4. comment on PR #${number} naming the landed commit, then close the PR (it will not show as merged; that is expected)`);
+  summary(`  3. POST /repos/${REPO}/git/refs ${JSON.stringify({ ref: `refs/tags/${NONCE_TAG}`, sha: '<the created commit sha>' })} (spends the clearance; the tag does not exist now)`);
+  summary(`  4. PATCH /repos/${REPO}/git/refs/heads/main ${JSON.stringify(refBody('<the created commit sha>'))} (not forced: a fast-forward test, refused if main moved forward since the tip read)`);
+  summary(`  5. comment on PR #${number} naming the landed commit, then close the PR (it will not show as merged; that is expected)`);
   summary(`--- the landing commit message ---\n${message}--- end ---`);
   process.exit(0);
 }
@@ -141,8 +165,22 @@ const readBack = await gh(`/repos/${REPO}/commits/${newSha}`);
 const createdProblems = checkCreatedCommit({ created: readBack, sha: newSha, base: fields.base, tree: fields.tree, message });
 if (createdProblems.length) fail(createdProblems.map((p) => `created commit ${newSha}: ${p}`));
 
-// 7. Advance main. NOT forced: a non-forced ref update is a fast-forward compare-and-swap that GitHub refuses unless main is still the parent of the new commit. Any failure refuses
-// and reports; there is no retry and never a force.
+// 7a. SPEND THE NONCE, then advance main. Order: AFTER the commit was created and read back (a failed or lying creation spends nothing: main is untouched and the same clearance may be
+// used again) and BEFORE the ref update (the use is recorded before its effect: a crash or a failure after this line leaves the clearance spent with nothing landed, which fails CLOSED;
+// the other order could land twice if recording the use failed). Creating a ref is atomic and GitHub answers 422 when it exists, so two uses of one clearance cannot both pass this
+// line. A refusal from here on SPENDS the clearance: the reviewer signs a new one (new nonce). The tag points at the created commit; it never moves and is never deleted here.
+try {
+  await gh(`/repos/${REPO}/git/refs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: `refs/tags/${NONCE_TAG}`, sha: newSha }) });
+} catch (error) {
+  fail([`the nonce tag ${NONCE_TAG} could not be created (already used, or unknown): ${error instanceof Error ? error.message : String(error)}; main was not touched, and this clearance must not be reused without a new nonce`]);
+}
+
+// 7b. Advance main. NOT forced. What a non-forced ref update IS: GitHub accepts it iff the new commit is a FAST-FORWARD of main's value at that instant. So it refuses a main that moved
+// forward or sideways after the tip read above (the usual race). It does NOT compare against the tip read above: a main reset BACKWARD to an ancestor of the cleared base between that
+// read and this call is fast-forwarded over (that rollback is undone) and nothing here can tell. The post-update read below detects only that main is not the created commit (somebody
+// moved it again): if main IS the created commit, its parent is the cleared base by construction (the sha names the content, and the read-back checked tree and parent before this
+// call), so there is no state in which "main is the created commit but its parent is not the base". REST offers no expected-old-value parameter; closing the backward-reset window
+// would need a different primitive (not verified here). Any failure refuses and reports; there is no retry and never a force.
 refUpdateStarted = true;
 try {
   await gh(`/repos/${REPO}/git/refs/heads/main`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(refBody(newSha)) });
@@ -158,7 +196,7 @@ try {
     process.exit(2);
   }
   if (tipAfter === newSha) summary(`LANDED (the PATCH response was lost): ${text}; main is the created commit ${newSha}`);
-  else if (tipAfter === fields.base) fail([`the ref update outcome was ambiguous (${text}) and main is still the cleared base ${fields.base}; nothing landed, no retry`]);
+  else if (tipAfter === fields.base) fail([`the ref update outcome was ambiguous (${text}) and main is still the cleared base ${fields.base}; nothing landed, no retry (a request that timed out could still be applied late: check main again; this clearance is spent, sign a new one)`]);
   else { summary(`ALERT AFTER AN AMBIGUOUS REF UPDATE (${text}): main is ${tipAfter}, neither the created commit ${newSha} nor the cleared base ${fields.base}`); process.exit(2); }
 }
 summary(`LANDED PR #${number}: ${newSha}`);
