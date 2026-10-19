@@ -1,0 +1,5 @@
+run_id	sequence	task_id	event_type	rule	resolved_by	attributed_to	attempt	scope_checked	scope_violations	own_scope_violations	cleanliness	workspace_captured	attempt_captured	changed_paths	attempt_outcome	occurred_at
+run:efb6e20f0d11885bc5085a68	53	run:efb6e20f0d11885bc5085a68:build	julius.coder.attempt.workspace				1			0	OBSERVED_CHANGED		true		SUCCEEDED	2026-10-01 19:40:35.419+00
+run:efb6e20f0d11885bc5085a68	54	run:efb6e20f0d11885bc5085a68:build	julius.coder.report.refused													2026-10-01 19:40:35.422+00
+run:efb6e20f0d11885bc5085a68	55	run:efb6e20f0d11885bc5085a68:build	julius.coder.implementation.recorded					true	0	0	OBSERVED_CHANGED	true		1		2026-10-01 19:40:35.425+00
+(3 rows)
