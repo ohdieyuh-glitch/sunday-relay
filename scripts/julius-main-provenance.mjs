@@ -33,6 +33,8 @@
  * truncated or moving. Both block, and neither may be reported as approval.
  */
 
+import { createPublicKey, verify } from 'node:crypto';
+
 import {
   NON_ATTESTING_IDENTITIES,
   REVIEW_AUTHORITY_LOGINS,
@@ -62,6 +64,249 @@ const isSha = (value) => typeof value === 'string' && FULL_SHA.test(value);
 
 const verdict = (name, reason, extra = {}) => ({ verdict: name, reason, ...extra });
 
+/* ------------------------------------------------- SIGNED LANDING --- */
+
+/**
+ * A SECOND, INDEPENDENT WAY FOR A MAIN TIP TO BE PROVENANT: the Independent Reviewer signed it.
+ *
+ * The autonomous lander (github-actions[bot]) lands a commit whose MESSAGE carries the reviewer's ed25519
+ * clearance and signature. Such a commit is not the merge result of any pull request, so the founder-approval
+ * path above cannot see it. This path answers the same question from different facts: is the tree that main carries,
+ * on the base it was built on, exactly what the reviewer signed for, and was it authored by the coding worker?
+ *
+ * THE MESSAGE FORMAT (one block, the last lines of the message; nothing else in it names a marker):
+ *   -----BEGIN JULIUS LANDING-----
+ *   v: 1
+ *   clearance-nonce: <32 hex, equal to the nonce inside the clearance>
+ *   clearance-b64: <base64 of the EXACT signed clearance text, one line>
+ *   signature-b64: <base64 ed25519 signature over those exact bytes, one line>
+ *   -----END JULIUS LANDING-----
+ * The pr / head / tree / base are NOT repeated as free fields: they are read ONLY from the signed text.
+ *
+ * WHAT IT TRUSTS: the public key COMMITTED at the tip's single PARENT, passed in with the sha it was read at. Never a
+ * key from the message, never the tip's own copy (a landing that could replace the key could sign itself). WHAT IT
+ * DOES NOT JUDGE: time. A clearance proves that content was cleared over that base; clocks stay out of this gate, as
+ * in the rest of this file. Single use of a nonce is the lander's replay guard, not this one.
+ *
+ * FAIL CLOSED. No marker anywhere in the message: `absent`, and the founder-approval path decides, unchanged. Any
+ * marker at all and ANY defect (two blocks, a marker inline, text after the end, an extra or missing key, base64 that is
+ * not canonical, a clearance that does not parse, a signature that does not verify, a tree/base/head that does not
+ * match): the verdict is final and is NOT handed to the founder-approval path. Mixing a forged block with a
+ * legitimate approval would let each excuse the other.
+ */
+export const LANDING_BEGIN = '-----BEGIN JULIUS LANDING-----';
+export const LANDING_END = '-----END JULIUS LANDING-----';
+const LANDING_REPO = 'ohdieyuh-glitch/sunday-relay';
+const CLEARANCE_KEYS = ['pr', 'head', 'tree', 'base', 'kind', 'bot-comments-sha256', 'governed-exceptions', 'nonce', 'by', 'issued', 'expires'];
+const EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
+const CANONICAL_BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u;
+const isCanonicalBase64 = (text) => typeof text === 'string' && CANONICAL_BASE64.test(text)
+  && Buffer.from(text, 'base64').toString('base64') === text;
+
+/** @returns {{state:'absent'} | {state:'invalid', reason:string} | {state:'ok', nonce:string, clearanceB64:string, signatureB64:string}} */
+export function extractLandingBlock(message) {
+  // A message that was never supplied (an older evidence file, a caller that predates this path) leaves the founder-approval path exactly as it was.
+  // A message that WAS supplied but is not text is unreadable, and unreadable fails closed.
+  if (message === undefined) return { state: 'absent' };
+  if (typeof message !== 'string') return { state: 'invalid', reason: 'the commit message could not be read' };
+  const mentions = message.split('JULIUS LANDING').length - 1;
+  if (mentions === 0) return { state: 'absent' };
+  const bad = (reason) => ({ state: 'invalid', reason });
+  if (message.includes('\r')) return bad('the commit message carries a carriage return');
+  if (mentions !== 2 || message.split(LANDING_BEGIN).length - 1 !== 1 || message.split(LANDING_END).length - 1 !== 1) {
+    return bad('the commit message must contain exactly one BEGIN and one END landing marker and no other mention of them');
+  }
+  const lines = message.split('\n');
+  const begin = lines.indexOf(LANDING_BEGIN);
+  const end = lines.indexOf(LANDING_END);
+  if (begin < 0 || end < 0) return bad('a landing marker is not alone on its line');
+  if (end !== begin + 5) return bad('the landing block must hold exactly four lines between its markers');
+  const after = lines.slice(end + 1);
+  if (!(after.length === 0 || (after.length === 1 && after[0] === ''))) return bad('text follows the landing block');
+  const expect = [['v', /^1$/u], ['clearance-nonce', /^[0-9a-f]{32}$/u], ['clearance-b64', CANONICAL_BASE64], ['signature-b64', CANONICAL_BASE64]];
+  const values = {};
+  for (let i = 0; i < 4; i += 1) {
+    const [key, shape] = expect[i];
+    const line = lines[begin + 1 + i];
+    const prefix = `${key}: `;
+    if (!line.startsWith(prefix)) return bad(`line ${i + 1} of the landing block must start with "${prefix}"`);
+    const value = line.slice(prefix.length);
+    if (!shape.test(value)) return bad(`the ${key} value is malformed`);
+    values[key] = value;
+  }
+  if (!isCanonicalBase64(values['clearance-b64']) || !isCanonicalBase64(values['signature-b64'])) return bad('a base64 payload is not canonical');
+  return { state: 'ok', nonce: values['clearance-nonce'], clearanceB64: values['clearance-b64'], signatureB64: values['signature-b64'] };
+}
+
+/** The clearance text rules, restated here on purpose: this file imports nothing from the lander it is a check on. */
+export function parseSignedClearance(text) {
+  const problems = [];
+  const lines = String(text).split('\n');
+  if (lines[0] !== 'JULIUS-CLEARANCE-V1') problems.push('first line must be JULIUS-CLEARANCE-V1');
+  if (lines[1] !== `repo: ${LANDING_REPO}`) problems.push(`second line must be "repo: ${LANDING_REPO}"`);
+  const fields = {};
+  CLEARANCE_KEYS.forEach((key, i) => {
+    const line = lines[2 + i] ?? '';
+    const prefix = `${key}: `;
+    if (!line.startsWith(prefix)) problems.push(`line ${3 + i} must start with "${prefix}"`);
+    else fields[key] = line.slice(prefix.length);
+  });
+  if (lines.length !== 2 + CLEARANCE_KEYS.length + 1 || lines[lines.length - 1] !== '') problems.push('exactly one trailing newline and no extra lines');
+  for (const key of ['head', 'tree', 'base']) if (fields[key] !== undefined && !isSha(fields[key])) problems.push(`${key} must be a full 40-hex sha`);
+  if (fields.pr !== undefined && !/^[1-9][0-9]{0,6}$/u.test(fields.pr)) problems.push('pr must be a positive integer');
+  if (fields.kind !== undefined && !['CLEARED', 'CLEARED-TREE'].includes(fields.kind)) problems.push('kind must be CLEARED or CLEARED-TREE');
+  if (fields['governed-exceptions'] !== undefined) {
+    const value = fields['governed-exceptions'];
+    const list = value === '-' ? [] : value.split(',');
+    if (value !== '-' && (list.some((f) => !EXCEPTION_ELIGIBLE.includes(f)) || new Set(list).size !== list.length || [...list].sort().join(',') !== value)) {
+      problems.push('governed-exceptions must be "-" or a sorted comma list of eligible files');
+    }
+  }
+  if (fields.nonce !== undefined && !/^[0-9a-f]{32}$/u.test(fields.nonce)) problems.push('nonce must be 32 hex characters');
+  if (fields.by !== undefined && fields.by !== 'INDEPENDENT_REVIEW') problems.push('by must be INDEPENDENT_REVIEW');
+  if (fields['bot-comments-sha256'] !== undefined && !/^[0-9a-f]{64}$/u.test(fields['bot-comments-sha256'])) problems.push('bot-comments-sha256 must be 64 hex');
+  for (const key of ['issued', 'expires']) {
+    if (fields[key] !== undefined && !(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/u.test(fields[key]) && !Number.isNaN(Date.parse(fields[key])))) problems.push(`${key} must be a UTC timestamp`);
+  }
+  return { problems, fields };
+}
+
+/**
+ * THE KEY FILE IS EXACTLY ONE PUBLIC ED25519 KEY AND NOTHING ELSE.
+ *
+ * Node's createPublicKey is liberal: it will derive a public key from a PRIVATE key PEM and ignores whatever else a
+ * multi-block file carries. A key file that holds a private key, a second key, comments or trailing text is not the
+ * file the reviewer committed, so it is refused rather than interpreted. Returns the key object, or a reason.
+ */
+export function readReviewerKey(pem) {
+  if (typeof pem !== 'string' || pem === '') return { problem: 'the reviewer key could not be read' };
+  if (pem.includes('\r')) return { problem: 'the reviewer key file carries a carriage return' };
+  if (/PRIVATE KEY/u.test(pem)) return { problem: 'the reviewer key file holds a private key' };
+  if (pem.split('-----BEGIN ').length - 1 !== 1 || pem.split('-----END ').length - 1 !== 1) {
+    return { problem: 'the reviewer key file must hold exactly one PEM block' };
+  }
+  if (!/^-----BEGIN PUBLIC KEY-----\n[A-Za-z0-9+/=\n]+\n-----END PUBLIC KEY-----\n?$/u.test(pem)) {
+    return { problem: 'the reviewer key file must be exactly one SPKI PUBLIC KEY block and nothing else' };
+  }
+  let key;
+  try {
+    key = createPublicKey(pem);
+  } catch {
+    return { problem: 'the reviewer key is not a readable public key' };
+  }
+  if (key.asymmetricKeyType !== 'ed25519') return { problem: 'the reviewer key is not an ed25519 key' };
+  // Canonical form: what Node writes back for this key is what the file must already say (no padding games inside the base64).
+  if (String(key.export({ type: 'spki', format: 'pem' })).replace(/\n+$/u, '') !== pem.replace(/\n+$/u, '')) {
+    return { problem: 'the reviewer key file is not the canonical encoding of its key' };
+  }
+  return { key };
+}
+
+/**
+ * THE PATHS A SIGNED LANDING MAY NOT CHANGE (d4b).
+ *
+ * A reviewer-signed tip can reach this gate WITHOUT the lander: there is no branch protection, so a hand-pushed commit that
+ * carries a genuine signed block is exactly as good as a landed one, unless the gate itself refuses what the lander would
+ * have refused. These two constants are a deliberate COPY of the lander's HARD_FORBIDDEN_PATH and EXCEPTION_ELIGIBLE (this
+ * file imports nothing from the lander it checks); a drift test keeps the copies equal. Founder-governed paths (workflows, the
+ * landing system and its key, this gate, approver files, migrations, package manifests...) are never provenant through a
+ * signature alone. The two exception-eligible files may change only when the SIGNED clearance names them exactly.
+ */
+const SIGNED_LANDING_HARD_FORBIDDEN = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
+const SIGNED_LANDING_EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
+export const SIGNED_LANDING_GOVERNED = Object.freeze({ HARD_FORBIDDEN: SIGNED_LANDING_HARD_FORBIDDEN, EXCEPTION_ELIGIBLE: SIGNED_LANDING_EXCEPTION_ELIGIBLE });
+
+const signedVerdict = (name, reason, extra = {}) => ({ state: 'decided', result: verdict(name, reason, { via: 'signed-landing', ...extra }) });
+
+/**
+ * @returns {{state:'absent'} | {state:'decided', result: object}}
+ * @param {object} input
+ * @param {unknown} input.mainCommitMessage
+ * @param {unknown} input.reviewerKeyPem     The PEM committed at the parent.
+ * @param {unknown} input.reviewerKeyAtSha   The commit that PEM was read at. Must be the tip's single parent.
+ * @param {unknown} input.tipReviewerKeyPem  The same file read AT THE TIP: must be byte-identical to the parent's.
+ * @param {unknown} input.changedPaths       Every path (and previous path) the tip changes against its parent.
+ * @param {unknown} input.changedPathsComplete Strictly true: the list was read completely (fewer than 300 files, exactly one commit ahead).
+ * @param {unknown} input.headCommit         `{ sha, authorLogin, treeSha }` of the commit the clearance names as `head`.
+ */
+export function evaluateSignedLanding(input, tip) {
+  const block = extractLandingBlock(input?.mainCommitMessage);
+  if (block.state === 'absent') return { state: 'absent' };
+  const { mainSha, mainTreeSha, parentSha } = tip;
+  const base = { mainSha, mainTreeSha, parentSha };
+  if (block.state === 'invalid') return signedVerdict('indeterminate', `the landing block is not readable: ${block.reason}`, base);
+
+  const clearanceText = Buffer.from(block.clearanceB64, 'base64').toString('utf8');
+  if (Buffer.from(clearanceText, 'utf8').toString('base64') !== block.clearanceB64) {
+    return signedVerdict('indeterminate', 'the clearance payload is not valid UTF-8', base);
+  }
+  const parsed = parseSignedClearance(clearanceText);
+  if (parsed.problems.length > 0) {
+    return signedVerdict('indeterminate', `the signed clearance text is malformed: ${parsed.problems.join('; ')}`, base);
+  }
+  const clearance = parsed.fields;
+  if (clearance.nonce !== block.nonce) return signedVerdict('unprovenanced', 'the nonce in the landing block is not the nonce inside the signed clearance', base);
+
+  // THE KEY: committed at the parent, and proven to have been read there.
+  if (!isSha(input?.reviewerKeyAtSha) || input.reviewerKeyAtSha !== parentSha) {
+    return signedVerdict('indeterminate', 'the reviewer key was not read at the single parent of the tip', base);
+  }
+  const read = readReviewerKey(input?.reviewerKeyPem);
+  if (read.problem) return signedVerdict('indeterminate', `${read.problem} (as committed at the parent)`, base);
+  // DEFENCE IN DEPTH: the key file AT THE TIP must be byte-identical to the parent's. A squash that swaps the key
+  // (founder-approved, say) cannot then be dressed as a signed landing: the signature is checked against the parent's key,
+  // but a tip that changes the trust anchor is not provenant, whatever it is signed with.
+  if (typeof input?.tipReviewerKeyPem !== 'string') {
+    return signedVerdict('indeterminate', 'the reviewer key file at the tip could not be read', base);
+  }
+  if (input.tipReviewerKeyPem !== input.reviewerKeyPem) {
+    return signedVerdict('unprovenanced', 'the tip changes the reviewer key file; a landing that moves the trust anchor is not provenant', base);
+  }
+  const key = read.key;
+  const signature = Buffer.from(block.signatureB64, 'base64');
+  if (signature.length !== 64) return signedVerdict('unprovenanced', 'the landing signature is not 64 bytes', base);
+  let signatureOk = false;
+  try {
+    signatureOk = verify(null, Buffer.from(clearanceText, 'utf8'), key, signature);
+  } catch {
+    return signedVerdict('indeterminate', 'the landing signature could not be checked', base);
+  }
+  if (signatureOk !== true) return signedVerdict('unprovenanced', 'the landing signature does not verify against the reviewer key committed at the parent', base);
+
+  // WHAT WAS SIGNED must be what main carries, on the base it was built on.
+  if (clearance.tree !== mainTreeSha) {
+    return signedVerdict('unprovenanced', `the reviewer signed tree ${clearance.tree}, main carries ${mainTreeSha}`, base);
+  }
+  if (clearance.base !== parentSha) {
+    return signedVerdict('unprovenanced', `the reviewer signed base ${clearance.base}, the tip's parent is ${parentSha}`, base);
+  }
+  const head = input?.headCommit;
+  if (!isSha(head?.sha) || head.sha !== clearance.head || !isSha(head?.treeSha)) {
+    return signedVerdict('indeterminate', 'the cleared head commit could not be read as the commit the clearance names', base);
+  }
+  if (head.treeSha !== clearance.tree) {
+    return signedVerdict('unprovenanced', `the cleared head ${head.sha} carries tree ${head.treeSha}, not the signed tree ${clearance.tree}`, base);
+  }
+  if (!WORKER_AUTHOR_LOGINS.includes(head?.authorLogin)) {
+    return signedVerdict('unprovenanced',
+      `the cleared head was authored by ${typeof head?.authorLogin === 'string' ? head.authorLogin : 'an unreadable identity'}, not the coding worker`, base);
+  }
+  // WHAT THE TIP CHANGES AGAINST ITS PARENT (d4b): read completely, or the answer is indeterminate.
+  const changed = input?.changedPaths;
+  if (input?.changedPathsComplete !== true || !Array.isArray(changed) || changed.length === 0 || !changed.every((path) => typeof path === 'string' && path !== '')) {
+    return signedVerdict('indeterminate', 'the paths the signed tip changes against its parent could not be read completely', base);
+  }
+  const exceptions = clearance['governed-exceptions'] === '-' ? [] : clearance['governed-exceptions'].split(',');
+  const governed = changed.filter((path) => SIGNED_LANDING_HARD_FORBIDDEN.test(path)
+    || (SIGNED_LANDING_EXCEPTION_ELIGIBLE.some((file) => file.toLowerCase() === path.toLowerCase()) && !exceptions.includes(path)));
+  if (governed.length > 0) {
+    return signedVerdict('unprovenanced', `a signed landing may not change founder-governed paths: ${governed.slice(0, 5).join(', ')}`, base);
+  }
+  return signedVerdict('provenant',
+    `main ${mainSha} carries tree ${mainTreeSha} on base ${parentSha}, signed by the Independent Reviewer for pull request #${clearance.pr} (head ${clearance.head})`,
+    { ...base, prNumber: Number(clearance.pr), reviewedHeadSha: clearance.head, approvedBy: [clearance.by] });
+}
+
 /**
  * @param {object} input
  * @param {unknown} input.mainSha        `main`, read before the lookups.
@@ -77,6 +322,13 @@ const verdict = (name, reason, extra = {}) => ({ verdict: name, reason, ...extra
  * @param {unknown} input.parentContainedInReviewedHead Strictly true/false.
  * @param {unknown} input.baseRefChanged Strictly false. Whether the pull request was ever retargeted.
  * @param {unknown} [input.branch] The branch under verification. Defaults to `main`.
+ * @param {unknown} [input.mainCommitMessage] The tip's commit message (landing block, see above).
+ * @param {unknown} [input.reviewerKeyPem] The reviewer public key committed at the parent.
+ * @param {unknown} [input.reviewerKeyAtSha] The sha that key was read at.
+ * @param {unknown} [input.tipReviewerKeyPem] The key file read at the tip itself (must equal the parent's).
+ * @param {unknown} [input.changedPaths] Paths the tip changes against its parent (signed landings are refused on governed paths).
+ * @param {unknown} [input.changedPathsComplete] Strictly true when that list is complete.
+ * @param {unknown} [input.headCommit] `{ sha, authorLogin, treeSha }` of the commit the clearance names.
  */
 export function evaluateMainProvenance(input) {
   const branch = typeof input?.branch === 'string' && input.branch !== '' ? input.branch : 'main';
@@ -108,6 +360,12 @@ export function evaluateMainProvenance(input) {
     return verdict('indeterminate', `the commit on main has ${parents.length} parents; a squashed candidate has exactly one`);
   }
   const parentSha = parents[0];
+
+  /**
+   * A TIP THAT CARRIES A LANDING BLOCK IS JUDGED BY THE REVIEWER'S SIGNATURE AND BY NOTHING ELSE. No block: unchanged.
+   */
+  const signed = evaluateSignedLanding(input, { mainSha, mainTreeSha: input.mainTreeSha, parentSha });
+  if (signed.state === 'decided') return signed.result;
 
   if (!Array.isArray(input?.pullRequests)) {
     return verdict('indeterminate', 'the pull requests associated with this commit could not be read');
@@ -347,6 +605,43 @@ async function main(argv) {
   try {
     const mainSha = gh(`repos/${repo}/branches/${ref}`)?.commit?.sha;
     const mainCommit = gh(`repos/${repo}/commits/${mainSha}`);
+
+    /**
+     * ONLY A TIP THAT CARRIES A LANDING BLOCK costs the extra reads. The key is read AT THE PARENT (never at the tip, never
+     * from the message), the head commit is read by the sha the SIGNED text names, and every failure to read stays
+     * undefined so the rule answers indeterminate.
+     */
+    const mainCommitMessage = mainCommit?.commit?.message;
+    let reviewerKeyPem;
+    let reviewerKeyAtSha;
+    let tipReviewerKeyPem;
+    let changedPaths;
+    let changedPathsComplete;
+    let headCommit;
+    const landingBlock = extractLandingBlock(mainCommitMessage);
+    const parentOfTip = mainCommit?.parents?.[0]?.sha;
+    if (landingBlock.state === 'ok' && typeof parentOfTip === 'string') {
+      const keyFile = gh(`repos/${repo}/contents/.github/julius-landing/reviewer-ed25519.pub?ref=${parentOfTip}`);
+      if (keyFile?.type === 'file' && keyFile?.encoding === 'base64' && typeof keyFile?.content === 'string') {
+        reviewerKeyPem = Buffer.from(keyFile.content, 'base64').toString('utf8');
+        reviewerKeyAtSha = parentOfTip;
+      }
+      const tipKeyFile = gh(`repos/${repo}/contents/.github/julius-landing/reviewer-ed25519.pub?ref=${mainSha}`);
+      if (tipKeyFile?.type === 'file' && tipKeyFile?.encoding === 'base64' && typeof tipKeyFile?.content === 'string') {
+        tipReviewerKeyPem = Buffer.from(tipKeyFile.content, 'base64').toString('utf8');
+      }
+      // The compare API lists at most 300 files: a list that may be truncated, or a tip that is not exactly one commit ahead, stays incomplete.
+      const comparison = gh(`repos/${repo}/compare/${parentOfTip}...${mainSha}`);
+      if (Array.isArray(comparison?.files) && comparison.files.length < 300 && comparison?.ahead_by === 1 && comparison?.behind_by === 0) {
+        changedPaths = comparison.files.flatMap((file) => [file?.filename, file?.previous_filename].filter((path) => typeof path === 'string'));
+        changedPathsComplete = true;
+      }
+      const signedHead = parseSignedClearance(Buffer.from(landingBlock.clearanceB64, 'base64').toString('utf8')).fields.head;
+      if (isSha(signedHead)) {
+        const commit = gh(`repos/${repo}/commits/${signedHead}`);
+        headCommit = { sha: commit?.sha, authorLogin: commit?.author?.login, treeSha: commit?.commit?.tree?.sha };
+      }
+    }
     const pullRequests = ghAll(`repos/${repo}/commits/${mainSha}/pulls`).map((pull) => ({
       number: pull?.number,
       merged: typeof pull?.merged_at === 'string',
@@ -402,6 +697,13 @@ async function main(argv) {
       statuses,
       parentContainedInReviewedHead,
       baseRefChanged,
+      mainCommitMessage,
+      reviewerKeyPem,
+      reviewerKeyAtSha,
+      tipReviewerKeyPem,
+      changedPaths,
+      changedPathsComplete,
+      headCommit,
     });
   } catch (error) {
     // Unreadable metadata is not a passing gate.

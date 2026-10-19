@@ -48,7 +48,8 @@ const goodPr = () => ({
   number: 7, state: 'open', merged: false, draft: false, title: 'Julius: test landing', commits: 1, changed_files: 1,
   head: { sha: H, ref: BRANCH, repo: { full_name: REPO } }, base: { ref: 'main' }, user: { login: APP },
 });
-const goodCommit = () => ({ commit: { tree: { sha: T }, author: { name: APP }, committer: { name: APP } }, parents: [{ sha: B }] });
+// round 5 (c2): a head commit carries the top-level author account GitHub resolved; an unresolved (null) author is now refused
+const goodCommit = () => ({ commit: { tree: { sha: T }, author: { name: APP }, committer: { name: APP } }, author: { login: APP }, parents: [{ sha: B }] });
 const check = (over: Record<string, unknown> = {}) => lib.checkPullRequest({
   fields: lib.parseClearance(clearanceText()).fields, now: NOW, pr: goodPr(), commit: goodCommit(), files: ['.github/julius-missions/x/contract.json'], fileRows: 1, mainSha: B, allowedBranches: [BRANCH], digest: emptyDigest, ...over,
 }) as string[];
@@ -71,6 +72,11 @@ if (readsRequired && !existsSync(join(landDir, 'required-checks.txt'))) writeFil
 const preload = join(work, 'fake-github.mjs');
 writeFileSync(preload, `
 import { readFileSync, appendFileSync, writeFileSync, existsSync } from 'node:fs';
+// the child process runs on the FIXTURE clock (NOW, still ticking), not the day the suite happens to run: the clearance fixtures are issued at NOW and expire hours later, so on the real
+// clock every end-to-end case would fail once that expiry has passed. The shift is NOW minus the child's own start time, so it holds on any date.
+const clockShift = ${NOW} - Date.now();
+const realNow = Date.now.bind(Date);
+Date.now = () => realNow() + clockShift;
 const scenario = JSON.parse(readFileSync(process.env.FAKE_SCENARIO, 'utf8'));
 const calls = process.env.FAKE_CALLS;
 const counterFile = process.env.FAKE_COUNTERS;
@@ -83,13 +89,18 @@ globalThis.fetch = async (url, init = {}) => {
   appendFileSync(calls, JSON.stringify({ method, path, body: init.body ?? null }) + '\\n');
   const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   if (method === 'PUT' && /\\/pulls\\/\\d+\\/merge$/.test(bare)) return reply(200, { sha: scenario.mergedSha, merged: true });
-  if (method === 'POST' && /\\/git\\/commits$/.test(bare)) return reply(201, { sha: scenario.createdSha ?? '8'.repeat(40) });
+  if (method === 'POST' && /\\/git\\/commits$/.test(bare)) { globalThis.__created = JSON.parse(init.body); return reply(201, { sha: scenario.createdSha ?? '8'.repeat(40) }); }
+  // HARNESS ADAPTATION (landing v3): the lander reads back the commit it created and requires the exact tree, single parent, message and identity, so the fake echoes what was POSTed.
+  if (method === 'GET' && globalThis.__created && bare.endsWith('/commits/' + (scenario.createdSha ?? '8'.repeat(40)))) { const c = globalThis.__created; return reply(200, { sha: scenario.createdSha ?? '8'.repeat(40), parents: c.parents.map((sha) => ({ sha })), commit: { tree: { sha: c.tree }, message: c.message, author: c.author, committer: c.committer } }); }
   if (method === 'PATCH' && /\\/git\\/refs\\/heads\\/main$/.test(bare)) return scenario.mainMovedBeforeUpdate ? reply(422, { message: 'Update is not a fast forward' }) : reply(200, { object: { sha: scenario.createdSha ?? '8'.repeat(40) } });
+  // HARNESS ADAPTATION (round 5, b6): the lander spends the clearance nonce as a tag ref before the ref update; this fake never has a spent tag (GET falls through to 404 = unspent)
+  if (method === 'POST' && /\\/git\\/refs$/.test(bare)) return reply(201, {});
   if (method === 'PATCH' && /\\/pulls\\/\\d+$/.test(bare)) return reply(200, {});
   if (method === 'POST' && /\\/issues\\/\\d+\\/comments$/.test(bare)) return reply(201, {});
   if (bare.includes('/git/ref/heads/main')) { const n = bump('main'); const seq = scenario.mainSequence; return reply(200, { object: { sha: seq ? seq[Math.min(n - 1, seq.length - 1)] : scenario.main } }); }
   if (bare.includes('/commits') && path.includes('sha=main')) return reply(200, pageOf(scenario.history, url));
-  if (/\\/commits\\/[0-9a-f]{40}\\/check-runs$/.test(bare)) return reply(200, { total_count: scenario.checkRunsTotal ?? scenario.checkRuns.length, check_runs: pageOf(scenario.checkRuns, url) });
+  // HARNESS ADAPTATION (landing v3): scenario.checkRunsSeq = one full list per read (the last repeats), so CI can change between the wait and the final read.
+  if (/\\/commits\\/[0-9a-f]{40}\\/check-runs$/.test(bare)) { const seq = scenario.checkRunsSeq; const all = seq ? seq[Math.min(bump('ci'), seq.length) - 1] : scenario.checkRuns; return reply(200, { total_count: scenario.checkRunsTotal ?? all.length, check_runs: pageOf(all, url) }); }
   if (/\\/commits\\/[0-9a-f]{40}\\/status$/.test(bare)) return reply(200, { state: 'success', total_count: scenario.statusesTotal ?? scenario.statuses.length, statuses: pageOf(scenario.statuses, url) });
   if (bare.includes('/commits/' + scenario.mergedSha)) return reply(200, scenario.landed);
   if (/\\/commits\\/[0-9a-f]{40}$/.test(bare)) return reply(200, scenario.commit);
@@ -198,6 +209,33 @@ describe('ATTACK: ways past the gate', () => {
   });
 });
 
+describe('ATTACK (landing v3): CI changes after the wait, and main moves during the ref update', () => {
+  it('ATK-12 TOCTOU on CI: a check that fails or is added only AFTER the CI wait is seen by the final read', () => {
+    const ok = [green('Verify Relay'), SELF];
+    refused(runLand({ checkRunsSeq: [ok, [{ name: 'Verify Relay', status: 'completed', conclusion: 'failure' }, SELF]] }), 'the required check was re-run and failed');
+    refused(runLand({ checkRunsSeq: [ok, [...ok, { name: 'late-scan', status: 'completed', conclusion: 'failure' }]] }), 'a failing check appeared');
+    refused(runLand({ checkRunsSeq: [ok, [...ok, { name: 'late-scan', status: 'in_progress', conclusion: null }]] }), 'a pending check appeared');
+  });
+
+  it('ATK-13 main moves after the tip read: the non-forced update is refused, there is one attempt, never force:true, no PR comment or close', () => {
+    const r = runLand({ mainMovedBeforeUpdate: true });
+    expect(r.code).toBe(1);
+    expect(r.landings, 'one attempt').toHaveLength(1);
+    expect(JSON.parse(r.landings[0]!.body ?? '{}')).toMatchObject({ force: false });
+    expect(r.calls.filter((c) => c.method !== 'GET').map((c) => c.method), 'only the commit creation and the one refused update').toEqual(['POST', 'POST', 'PATCH']);
+  });
+
+  it('ATK-14 the created commit is never advanced onto main unless it reads back as the cleared tree on the single cleared base', () => {
+    const r = runLand({ createdSha: '7'.repeat(40) });
+    // (this fake's main does not move after the update, so the lander's final "main is now the created commit" check alerts with exit 2; the landing requests are what is judged here)
+    expect(r.landings, r.out).toHaveLength(1);
+    const post = r.calls.find((c) => c.method === 'POST' && c.path.endsWith('/git/commits'))!;
+    const sent = JSON.parse(post.body ?? '{}') as { tree: string; parents: string[] };
+    expect(sent).toMatchObject({ tree: T, parents: [B] });
+    expect(JSON.parse(r.landings[0]!.body ?? '{}')).toEqual({ sha: '7'.repeat(40), force: false });
+  });
+});
+
 describe('ATTACK: the reviewer tool and the lander must agree', () => {
   it('ATK-11 reviewer-tools `digest` reads ONE page; with more than 100 comments the digest the reviewer signs can never equal the lander\'s (the clearance is unusable)', () => {
     const comments = Array.from({ length: 105 }, (_, i) => ({ user: { login: 'bot' }, id: i + 1, updated_at: 't' }));
@@ -262,7 +300,11 @@ describe('REVIEWER ADDENDUM: duplicate check names and the squash title', () => 
     expect(typeof lib.squashTitle, 'land-lib exports squashTitle').toBe('function');
     expect(lib.squashTitle(7, H)).toBe(`Landed PR #7 (${H.slice(0, 12)})`);
     expect(lib.squashTitle.length, 'it takes (number, head) and nothing else: there is no way to pass the PR title').toBe(2);
-    expect(readFileSync(join(LANDING, 'land.mjs'), 'utf8'), 'land.mjs sends squashTitle(number, head) as the commit title').toContain('commit_title: squashTitle(number, head)');
+    // v3: there is no merge call and no commit_title; the landing message is built by land-lib from the signed clearance, whose first line is squashTitle(pr, head).
+    const msg = lib.buildLandingCommitMessage({ clearanceText: clearanceText(), signatureB64: sig(clearanceText()) }) as string;
+    expect(msg.split('\n')[0], 'the landing message starts with squashTitle(pr, head)').toBe(lib.squashTitle(7, H));
+    expect(readFileSync(join(LANDING, 'land.mjs'), 'utf8'), 'land.mjs builds the message with buildLandingCommitMessage').toContain('buildLandingCommitMessage({ clearanceText');
+    expect(readFileSync(join(LANDING, 'land.mjs'), 'utf8'), 'the merge endpoint is not used').not.toMatch(/\/merge`|merge_method/u);
     expect(readFileSync(join(LANDING, 'land.mjs'), 'utf8'), 'no PR title reaches the merge body').not.toMatch(/\.title\b/u);
   });
 });
