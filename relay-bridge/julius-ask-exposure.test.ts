@@ -4,9 +4,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  ASK_EFFORTS, ASK_QUESTION_MAX_CHARS, createAskLedger, createJuliusAsk, handleJuliusAskRoute, markAskStoreDurable, reserveOverDurableLedger, selectAskBudget,
-  type AskLedger, type AskLedgerLine, type AskStore, type JuliusAskResult,
+  ASK_EFFORTS, ASK_QUESTION_MAX_CHARS, createAskLedger, createJuliusAsk, createMemoryAskStore, handleJuliusAskRoute, markAskStoreDurable, reserveOverDurableLedger, selectAskBudget,
+  type AskLedger, type AskLedgerLine, type AskReserveInput, type AskStore, type JuliusAskResult,
 } from './julius-ask';
+import { createFileAskStore, type FileAskStore } from './julius-ask-file-store';
 import { readGptArchitectConfig } from '../src/relay/connectors/gpt-architect/config';
 import { runGptArchitect, type GptRunOutcome, type GptRunRequest } from '../src/relay/connectors/gpt-architect/gpt-runner';
 
@@ -28,6 +29,22 @@ vi.mock('openai', () => ({
     };
   },
 }));
+
+/* node:fs passes through unchanged, except that a test can make the NEXT fsync fail (EIO) to drive the file store's
+   durable-write failure path. Nothing else in node:fs is altered. */
+const fsFault = vi.hoisted(() => ({ failNextFsyncs: 0, fsyncCalls: 0 }));
+vi.mock('node:fs', async (importOriginal) => {
+  const real = await importOriginal<typeof import('node:fs')>();
+  const fsyncSync = (fd: number): void => {
+    fsFault.fsyncCalls += 1;
+    if (fsFault.failNextFsyncs > 0) {
+      fsFault.failNextFsyncs -= 1;
+      throw Object.assign(new Error('EIO: i/o error, fsync'), { code: 'EIO' });
+    }
+    real.fsyncSync(fd);
+  };
+  return { ...real, fsyncSync, default: { ...real, fsyncSync } };
+});
 
 /**
  * PLAYER-EXPOSURE NEGATIVE CONTROLS for the "ask Julius" route (reviewer findings F4-F8, threat review of fa35bc64,
@@ -728,5 +745,303 @@ describe('PROTECTIONS THAT STAY with no token ceiling', () => {
     expect(statuses).toEqual([401, 401, 401]);
     expect(p.requests).toHaveLength(0);
     expect(store.held).toHaveLength(0);
+  });
+});
+
+/* ===================================================================================================================== */
+/* ADDED by juju2 on 255e27bf (branch dev/ask-negative-controls-3): what slices 1-2 and the file store do NOT yet give.     */
+/* Every test named "REQUIRED (slice 3) ..." is expected to FAIL at 255e27bf with a message that names the missing          */
+/* behaviour, and to stay red until the Postgres slice 3 (or the store change it names) lands. Every "CONTROL (slice 3) ..." */
+/* passes at 255e27bf and shows the red test next to it cannot be turned green by refusing everything.                      */
+/* Production code is untouched; where a seam does not exist yet, the comment on the test names the seam it needs.          */
+
+const secretFrom = (label: string): string => ['ask', 'operator', label, '0123456789abcdef'].join('-');
+const gated = () => {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  return { gate, release: () => release() };
+};
+
+/**
+ * SLICE 3 SEAM: a store FACTORY that gives two independent AskStore objects over ONE backing row set (two replicas, or two
+ * processes, over one table). Today the only reservation building block is reserveOverDurableLedger, which createMemoryAskStore
+ * and createFileAskStore both use; its lock is keyed by the store OBJECT, so two objects mean two locks. Each replica below is a
+ * separate object with its own lock, exactly as two processes would be. The append takes 5 ms (a database round trip), so both
+ * replicas read the rows before either insert lands.
+ * SLICE 3 swaps THIS factory for two Postgres stores (two pools) over one throwaway database; only then can these tests go green.
+ * A green produced by a module-level (process-wide) lock would NOT be a fix: real replicas are separate processes.
+ */
+function replicaOver(backing: AskLedgerLine[]): AskStore {
+  const store: AskStore = {
+    durable: true,
+    async append(line) { await new Promise((resolve) => setTimeout(resolve, 5)); backing.push(line); },
+    async rows() { return backing.slice(); },
+    reserve: (input) => reserveOverDurableLedger(store, input),
+  };
+  return markAskStoreDurable(store);
+}
+
+describe('REPLICAS OVER ONE ROW SET (slice 3): the reserve is atomic across store instances, not only inside one object', () => {
+  it('CONTROL (slice 3): two replicas over one row set, asked ONE AFTER THE OTHER, share a daily cap of 1', async () => {
+    const backing: AskLedgerLine[] = [];
+    const p = provider();
+    const capped = env({ JULIUS_ASK_DAILY_CAP: '1' });
+    const first = await ask(instance({ ledger: replicaOver(backing), provider: p, env: capped }), { caller: 'player:r1', idempotencyKey: 'replica-seq-0001' });
+    const second = await ask(instance({ ledger: replicaOver(backing), provider: p, env: capped }), { caller: 'player:r2', idempotencyKey: 'replica-seq-0002' });
+    expect(first.ok, `the first replica answers: ${describeResult(first)}`).toBe(true);
+    expect(second).toMatchObject({ ok: false, code: 'julius_ask_cap_reached', httpStatus: 429 });
+    expect(p.requests).toHaveLength(1);
+  });
+
+  it('REQUIRED (slice 3): two replicas over one row set, asked AT THE SAME TIME, buy exactly ONE call under a daily cap of 1', async () => {
+    const backing: AskLedgerLine[] = [];
+    const p = provider();
+    const capped = env({ JULIUS_ASK_DAILY_CAP: '1' });
+    const [a, b] = await Promise.all([
+      ask(instance({ ledger: replicaOver(backing), provider: p, env: capped }), { caller: 'player:r1', idempotencyKey: 'replica-par-0001' }),
+      ask(instance({ ledger: replicaOver(backing), provider: p, env: capped }), { caller: 'player:r2', idempotencyKey: 'replica-par-0002' }),
+    ]);
+    expect(p.requests.length, `MISSING: two replicas each passed the count before either insert landed and bought ${p.requests.length} calls past a cap of 1 (${describeResult(a)} / ${describeResult(b)})`).toBe(1);
+    expect([a.ok, b.ok].filter((ok) => ok === true), 'exactly one of the two is answered (a store that refuses both is not a fix)').toHaveLength(1);
+    expect([a, b].find((r) => !r.ok)).toMatchObject({ ok: false, code: 'julius_ask_cap_reached', httpStatus: 429 });
+  });
+
+  it('REQUIRED (slice 3): one (caller, key) sent to two replicas AT THE SAME TIME is ONE billed call', async () => {
+    const backing: AskLedgerLine[] = [];
+    const p = provider();
+    const bound = env({ JULIUS_ASK_BINDING_SECRET: secretFrom('binding') });
+    const [a, b] = await Promise.all([
+      ask(instance({ ledger: replicaOver(backing), provider: p, env: bound }), { caller: 'player:same', idempotencyKey: 'replica-one-key-01' }),
+      ask(instance({ ledger: replicaOver(backing), provider: p, env: bound }), { caller: 'player:same', idempotencyKey: 'replica-one-key-01' }),
+    ]);
+    expect(p.requests.length, `MISSING: one idempotency key bought ${p.requests.length} billed calls on two replicas (${describeResult(a)} / ${describeResult(b)})`).toBe(1);
+    expect([a.ok, b.ok].filter((ok) => ok === true), 'exactly one of the two is answered').toHaveLength(1);
+    const refused = [a, b].find((r) => !r.ok);
+    expect(refused?.ok === false ? refused.httpStatus : 0, 'the other gets a named 409 for the key (attempt_unknown while the first is in flight)').toBe(409);
+    expect(backing.filter((row) => row.phase === 'pre_call'), 'one (caller, key) pair has ONE pre-call row (the unique index)').toHaveLength(1);
+  });
+});
+
+/* ===================================================================================================================== */
+/**
+ * A store that commits the pre-call row and THEN throws (a connection lost after COMMIT). It is branded because THIS factory
+ * built it. The provider is never contacted in this case: the reserve threw before the route reached the runner.
+ */
+function commitThenThrowStore(): AskStore & { readonly held: AskLedgerLine[] } {
+  const inner = createMemoryAskStore();
+  let throwAfterNextCommit = true;
+  const store: AskStore & { readonly held: AskLedgerLine[] } = {
+    durable: true,
+    held: inner.held,
+    append: (line) => inner.append(line),
+    rows: () => inner.rows(),
+    async reserve(input: AskReserveInput) {
+      const outcome = await inner.reserve(input);
+      if (throwAfterNextCommit && outcome.kind === 'reserved') { throwAfterNextCommit = false; throw new Error('connection reset after COMMIT'); }
+      return outcome;
+    },
+  };
+  return markAskStoreDurable(store);
+}
+
+describe('DURABLE-WRITE FAILURE (slice 3): a commit that fails holds nothing; a commit whose acknowledgement is lost wastes nothing', () => {
+  it('REQUIRED (slice 3): an fsync that FAILS in the file store is a 503 with no provider call, and the attempt holds no cap slot (after a restart too)', async () => {
+    /* Seam: createFileAskStore (the only branded store a player can reach today) plus a failing fsync from the node:fs mock.
+       Today writeDurably keeps a row whose fsync failed ("never under-counting a cap") and the route answers 409 attempt_unknown.
+       What this test requires: the store ROLLS BACK the unsynced append (truncate to the pre-write length and sync that) before
+       reporting "not committed", so the route answers 503 julius_ask_ledger_unavailable, buys nothing and spends no slot; if the
+       rollback itself cannot be made durable the store must close (every later ask 503), never keep serving. The Postgres
+       equivalent is a COMMIT that returns an error: the transaction is rolled back and the route answers 503. */
+    const dir = mkdtempSync(join(tmpdir(), 'julius-ask-exposure-fsync-'));
+    const file = join(dir, 'ask-store.jsonl');
+    let first: FileAskStore | null = null;
+    let reopened: FileAskStore | null = null;
+    try {
+      first = createFileAskStore({ file });
+      const p = provider();
+      const capped = env({ JULIUS_ASK_DAILY_CAP: '1' });
+      fsFault.failNextFsyncs = 1;
+      const fsyncsBefore = fsFault.fsyncCalls;
+      const refused = await ask(instance({ ledger: first, provider: p, env: capped }), { idempotencyKey: 'fsync-fail-0001' });
+      expect(fsFault.fsyncCalls, 'the injected fsync failure was reached').toBeGreaterThan(fsyncsBefore);
+      expect(p.requests, 'no provider call after a failed durable write').toHaveLength(0);
+      expect(refused, `MISSING: a pre-call row whose fsync FAILED was kept and answered as ${describeResult(refused)}; a failed commit must be 503 ledger_unavailable and hold nothing`).toEqual({ ok: false, code: 'julius_ask_ledger_unavailable', httpStatus: 503 });
+      first.close();
+      first = null;
+      reopened = createFileAskStore({ file });
+      expect((await reopened.rows()).filter((row) => row.phase === 'pre_call'), 'the failed attempt left no pre-call row in the file').toEqual([]);
+      const after = await ask(instance({ ledger: reopened, provider: p, env: capped }), { idempotencyKey: 'fsync-fail-0002' });
+      expect(after.ok, `the only slot under a cap of 1 was spent by an attempt that never committed: ${describeResult(after)}`).toBe(true);
+      expect(p.requests).toHaveLength(1);
+    } finally {
+      fsFault.failNextFsyncs = 0;
+      first?.close();
+      reopened?.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('REQUIRED (slice 3): a store that COMMITS THEN THROWS lets the SAME key retry and is answered, with no false "may have been billed" and no wasted slot', async () => {
+    /* The contract read here: the failure-states doc says a ledger_unavailable refusal means "nothing was sent to the provider and
+       nothing was spent" and the same key may be retried; attempt_unknown means "a billed call may have happened". In this case the
+       route KNOWS the provider was never contacted (the reserve threw before the runner), so attempt_unknown is false, and the dead
+       row must not spend the only slot. NOTE: the doc at 255e27bf (rows 16 and 22) now ALSO lists commit-then-throw under
+       attempt_unknown; this test pins the reviewer's F2 reading and disagrees with that new sentence, so one of the two must change.
+       Seam it needs: the route marks the attempt "not contacted" (for example a compensating result row) and the store neither
+       counts such a row against the caps nor treats its key as used. */
+    const store = commitThenThrowStore();
+    const p = provider();
+    const c = instance({ ledger: store, provider: p, env: env({ JULIUS_ASK_DAILY_CAP: '1', JULIUS_ASK_BINDING_SECRET: secretFrom('binding') }) });
+    const first = await ask(c, { idempotencyKey: 'commit-throw-0001' });
+    expect(p.requests, 'the provider was never contacted on the first attempt').toHaveLength(0);
+    expect(first.ok === false ? first.code : 'answered', `MISSING: a commit-then-throw that never reached the provider is answered ${describeResult(first)}, which tells the player a billed call may have happened`).not.toBe('julius_ask_attempt_unknown');
+    expect(first).toMatchObject({ ok: false, code: 'julius_ask_ledger_unavailable', httpStatus: 503 });
+    const retry = await ask(c, { idempotencyKey: 'commit-throw-0001' });
+    expect(retry.ok, `MISSING: the same key could not be retried after a 503 that bought nothing, and the only slot under a cap of 1 is spent: ${describeResult(retry)}`).toBe(true);
+    expect(p.requests, 'the retry is exactly one billed call').toHaveLength(1);
+  });
+});
+
+/* ===================================================================================================================== */
+describe('SECOND PROCESS ON ONE STORE FILE (slice 3): a second store over the same file is refused or serialised', () => {
+  it('CONTROL (slice 3): a RESTART (the first store closed, the file reopened) keeps the daily cap of 1 and the key', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'julius-ask-exposure-restart-'));
+    const file = join(dir, 'ask-store.jsonl');
+    let a: FileAskStore | null = null;
+    let b: FileAskStore | null = null;
+    try {
+      const p = provider();
+      const capped = env({ JULIUS_ASK_DAILY_CAP: '1' });
+      a = createFileAskStore({ file });
+      expect((await ask(instance({ ledger: a, provider: p, env: capped }), { idempotencyKey: 'file-restart-0001' })).ok).toBe(true);
+      a.close();
+      a = null;
+      b = createFileAskStore({ file });
+      expect(await ask(instance({ ledger: b, provider: p, env: capped }), { idempotencyKey: 'file-restart-0002' })).toMatchObject({ ok: false, code: 'julius_ask_cap_reached' });
+      expect(p.requests).toHaveLength(1);
+    } finally {
+      a?.close();
+      b?.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('REQUIRED (slice 3): while one store holds the file, a SECOND store over the same path is refused at open, or sees the first one\'s rows (cap 1 = 1 call, one key = 1 call)', async () => {
+    /* What is asserted, and why: two bridge processes started with the same JULIUS_ASK_STORE_FILE each load the rows ONCE at start
+       and lock only inside themselves, so the second never sees the first's inserts (the file store's own header says it is not
+       safe for two processes). Either of two fixes satisfies this test: (1) the second open FAILS (an exclusive lock on the file,
+       so selectAskLedger falls back and players get 503), or (2) every reserve re-reads and locks the FILE, so the two serialise
+       and the cap and the key hold. Two stores in one test process stand in for two processes (separate objects, separate
+       snapshots, separate locks). What is never acceptable is the outcome today: both open, both reserve, two calls. */
+    const dir = mkdtempSync(join(tmpdir(), 'julius-ask-exposure-second-'));
+    const file = join(dir, 'ask-store.jsonl');
+    let a: FileAskStore | null = null;
+    let b: FileAskStore | null = null;
+    try {
+      const p = provider();
+      const capped = env({ JULIUS_ASK_DAILY_CAP: '1', JULIUS_ASK_CALLER_DAILY_CAP: '1', JULIUS_ASK_BINDING_SECRET: secretFrom('binding') });
+      a = createFileAskStore({ file });
+      let secondOpenError: unknown = null;
+      try { b = createFileAskStore({ file }); } catch (error) { secondOpenError = error; }
+      if (b === null) {
+        /* Fix (1): the second open is refused. The first store must still serve, so a store that refuses everything does not pass. */
+        expect(secondOpenError, 'the second open was refused with an error').toBeInstanceOf(Error);
+        const served = await ask(instance({ ledger: a, provider: p, env: capped }), { caller: 'player:one', idempotencyKey: 'second-proc-0001' });
+        expect(served.ok, `the first process keeps serving after refusing the second: ${describeResult(served)}`).toBe(true);
+        expect(p.requests).toHaveLength(1);
+      } else {
+        /* Fix (2), or today: both opened, so the two must serialise over the file. */
+        const viaA = instance({ ledger: a, provider: p, env: capped });
+        const viaB = instance({ ledger: b, provider: p, env: capped });
+        const first = await ask(viaA, { caller: 'player:one', idempotencyKey: 'second-proc-0001' });
+        const sameKey = await ask(viaB, { caller: 'player:one', idempotencyKey: 'second-proc-0001' });
+        const otherKey = await ask(viaB, { caller: 'player:two', idempotencyKey: 'second-proc-0002' });
+        expect(first.ok, `the first process answers: ${describeResult(first)}`).toBe(true);
+        expect(p.requests.length, `MISSING: a second store opened the same file with a stale snapshot and bought ${p.requests.length} calls (same key: ${describeResult(sameKey)}; cap 1: ${describeResult(otherKey)})`).toBe(1);
+        expect(sameKey).toMatchObject({ ok: false, httpStatus: 409 });
+        expect(otherKey).toMatchObject({ ok: false, code: 'julius_ask_cap_reached', httpStatus: 429 });
+      }
+    } finally {
+      a?.close();
+      b?.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+/* ===================================================================================================================== */
+describe('FAIRNESS UNDER A SMALL CONCURRENCY POOL (slice 3): one player cannot hold every slot', () => {
+  it('CONTROL (slice 3): with 2 slots, two DIFFERENT players asking at once are both admitted and answered', async () => {
+    const { gate, release } = gated();
+    const p = provider([], async () => { await gate; return answered('fair'); });
+    const c = instance({ ledger: durableStore(), provider: p, env: env({ JULIUS_ASK_MAX_CONCURRENT: '2' }) });
+    const hog = ask(c, { caller: 'player:hog', idempotencyKey: 'fair-ctl-0001' });
+    const other = ask(c, { caller: 'player:fair', idempotencyKey: 'fair-ctl-0002' });
+    release();
+    const results = await Promise.all([hog, other]);
+    expect(results.map((r) => r.ok)).toEqual([true, true]);
+    expect(p.requests).toHaveLength(2);
+  });
+
+  it('REQUIRED (slice 3): a per-caller concurrency limit of 1: while a player has one ask in flight, its second is refused 429 and another player gets the free slot', async () => {
+    /* The property: no single caller may hold more than ONE in-flight ask, so with a pool of N >= 2 slots one player can never
+       starve every other caller. Today the pool is global only: the hog's two fresh keys take both slots and the next player gets
+       429 busy. (With the DEFAULT pool of 1 any one in-flight ask blocks every caller for up to ASK_MAX_TIMEOUT_MS; the default
+       pool size for player mode is a separate design decision, see F4_F8_SLICE3_DESIGN_DELTA.md.) Seam: none new; the in-flight
+       count per callerHash sits next to `inFlight` (and, across replicas, in the store). */
+    const { gate, release } = gated();
+    const p = provider([], async () => { await gate; return answered('fair'); });
+    const c = instance({ ledger: durableStore(), provider: p, env: env({ JULIUS_ASK_MAX_CONCURRENT: '2' }) });
+    const hog1 = ask(c, { caller: 'player:hog', idempotencyKey: 'fair-hog-0001' });
+    const hog2 = ask(c, { caller: 'player:hog', idempotencyKey: 'fair-hog-0002' });
+    const other = ask(c, { caller: 'player:fair', idempotencyKey: 'fair-oth-0001' });
+    release();
+    const [h1, h2, o] = await Promise.all([hog1, hog2, other]);
+    expect(o.ok, `MISSING: one player held every concurrency slot and the other player was refused: ${describeResult(o)} (hog's second ask: ${describeResult(h2)})`).toBe(true);
+    expect(h1.ok, 'the hog\'s first ask is answered').toBe(true);
+    expect(h2.ok === false && h2.httpStatus === 429 && /busy/.test(h2.code), `the hog's second concurrent ask is refused 429 (a per-caller busy code), got ${describeResult(h2)}`).toBe(true);
+    expect(p.requests).toHaveLength(2);
+  });
+});
+
+/* ===================================================================================================================== */
+describe('HASHES A DICTIONARY CANNOT INVERT (slice 3): operator secrets are in every caller-derived value', () => {
+  const firstPreCall = async (secrets: { safety: string; binding: string }, caller = 'player:12345', key = 'hash-key-000001') => {
+    const store = durableStore();
+    const p = provider();
+    await ask(instance({ ledger: store, provider: p, env: env({ JULIUS_ASK_SAFETY_SECRET: secrets.safety, JULIUS_ASK_BINDING_SECRET: secrets.binding }) }), { caller, idempotencyKey: key });
+    return { row: rowOf(store, 'pre_call'), safetyIdentifier: (p.requests[0] as unknown as { safetyIdentifier?: unknown } | undefined)?.safetyIdentifier };
+  };
+  const ONE = { safety: secretFrom('safety-one'), binding: secretFrom('binding-one') };
+  const TWO = { safety: secretFrom('safety-two'), binding: secretFrom('binding-two') };
+
+  it('CONTROL (slice 3): two operator secrets give two different safetyIdentifiers for the same caller (an HMAC, not a bare hash of the id)', async () => {
+    const one = await firstPreCall(ONE);
+    const two = await firstPreCall(TWO);
+    expect(typeof one.safetyIdentifier).toBe('string');
+    expect(two.safetyIdentifier, 'the safety identifier does not depend on the operator secret').not.toBe(one.safetyIdentifier);
+    expect(String(one.safetyIdentifier)).not.toContain('12345');
+  });
+
+  it('CONTROL (slice 3): with the SAME secrets the ledgered callerHash and keyHash are stable across a restart (the caps depend on it)', async () => {
+    const one = await firstPreCall(ONE);
+    const again = await firstPreCall(ONE);
+    expect(typeof one.row?.callerHash).toBe('string');
+    expect(again.row?.callerHash).toBe(one.row?.callerHash);
+    expect(again.row?.keyHash).toBe(one.row?.keyHash);
+  });
+
+  it('REQUIRED (slice 3): the ledgered callerHash and keyHash are KEYED by an operator secret, so a small player id cannot be recovered by enumeration', async () => {
+    /* ONE precise assertion, chosen over "wider than 16 hex": the stored hashes must CHANGE when the operator secret changes. A
+       wider unsalted sha256 is still reversible by enumerating small ids (the reviewer recovered player:12345 from ids 0..99999),
+       so width alone does not protect anything; a key does. Today sha() is sha256(value).slice(0, 16), the same for every server.
+       Seam: the route reads no ledger-hash secret today; this test sets the two operator secrets it does read. If slice 3 adds a
+       dedicated one (e.g. a ledger-hash secret), set it here as well, differently in ONE and TWO. Width stays 16 to 64 hex. */
+    const one = await firstPreCall(ONE);
+    const two = await firstPreCall(TWO);
+    const unsalted = sha256Hex('player:12345');
+    expect(two.row?.callerHash, `MISSING: the ledgered callerHash is ${String(one.row?.callerHash)} under both secrets; it is the first 16 hex of sha256("player:12345") (${unsalted.slice(0, 16)}), recoverable by enumerating ids`).not.toBe(one.row?.callerHash);
+    expect(two.row?.keyHash, 'MISSING: the ledgered keyHash does not depend on an operator secret').not.toBe(one.row?.keyHash);
+    expect(unsalted.startsWith(String(one.row?.callerHash)), 'the stored callerHash must not be a prefix of the unsalted sha256 of the caller').toBe(false);
   });
 });
