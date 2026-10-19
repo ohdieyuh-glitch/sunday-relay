@@ -72,6 +72,10 @@ if (readsRequired && !existsSync(join(landDir, 'required-checks.txt'))) writeFil
 const preload = join(work, 'fake-github.mjs');
 writeFileSync(preload, `
 import { readFileSync, appendFileSync, writeFileSync, existsSync } from 'node:fs';
+// the clearance fixtures are issued at ${NOW} and expire hours later: run the child process on that clock (still ticking) so the suite does not depend on the day it runs
+const clockShift = ${NOW} - Date.now();
+const realNow = Date.now.bind(Date);
+Date.now = () => realNow() + clockShift;
 const scenario = JSON.parse(readFileSync(process.env.FAKE_SCENARIO, 'utf8'));
 const calls = process.env.FAKE_CALLS;
 const counterFile = process.env.FAKE_COUNTERS;
