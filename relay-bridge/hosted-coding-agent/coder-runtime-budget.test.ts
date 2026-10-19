@@ -21,6 +21,7 @@ import {
 import { HOSTED_API_KEY_ENV } from './hosted-readiness';
 import { DEFAULT_HOSTED_LIMITS } from './hosted-envelope';
 import type { JuliusCodingAgentRequest } from '../../src/relay/mission/julius/julius-coding-agent';
+import { JULIUS_CONTEXT_COMPILER_VERSION, type JuliusContextSnapshot } from '../../src/relay/mission/julius';
 
 /**
  * THE OPT-IN, CONTRACT-SCOPED CODER SESSION BUDGET (`limits.coderRuntimeMinutes`) — DRAFT, founder policy + reviewer read.
@@ -440,6 +441,55 @@ describe('the composition carries the declared minutes into the coder worker, an
       const refusal = coderRuntimeBudgetRefusal({ env: BASE, coderRuntimeMinutes: bad, repairCycles: 1, approvalWaitMs: 0 });
       expect(refusal, String(bad)).toContain('coder_runtime_minutes_invalid');
     }
+  });
+
+  it('the declared minutes reach the RUNNER through the composition: the abort limit is the declared session, the default otherwise', async () => {
+    const snapshot = (): JuliusContextSnapshot => ({
+      contextId: 'ctx-1', runId: 'run-live', taskId: 'build-1', workerId: CODER_WORKER.workerId, workerRole: 'CODING_AGENT',
+      compilerVersion: JULIUS_CONTEXT_COMPILER_VERSION, missionContractRevision: 1, cardRevision: 'card-1', projectBrainRevision: 3,
+      taskContractRevision: 2, taskContractDigest: `sha256:${'b'.repeat(64)}`, sourceEntryIds: ['brain:objective'], dependencyTaskIds: [], evidenceIds: [], findingIds: [],
+      acceptanceCriterionIds: ['AC-1'], contentHash: 'sha256:test', characterCount: 40, redactionCount: 0, truncated: false,
+      integrityVersion: null, integrityConflicts: null, integrityExcludedEntryIds: null, integrityEvictedEntryIds: null,
+      packet: { missionId: 'mission-1', taskId: 'build-1', workerId: CODER_WORKER.workerId, sourceEntryIds: ['brain:objective'], blocks: [{ kind: 'OBJECTIVE', text: 'OBJECTIVE: normalize.' }], truncated: false },
+    } as never);
+    const charge = {
+      stage: 'build' as const,
+      binding: { contractId: 'contract:run-live:build-1', taskId: 'build-1', contractRevision: 2, bindingDigest: `sha256:${'b'.repeat(64)}` },
+      objective: 'Normalize the mission label.', responsibilityBoundary: 'Only the slug module.',
+      inScope: ['src/slug.ts'], outOfScope: ['src/persistence/'], permittedPaths: ['src/slug.ts'],
+      prohibitedActions: ['adding a dependency'], blockingCriteria: ['[AC-1] The slug test passes.'], contractReviewCriteria: ['AC-1 holds'],
+      requiredEvidence: ['TEST'] as const, requiredChecks: ['npm test'], failureConditions: ['AC-1 fails'], stoppingCondition: 'The suite is green.',
+    };
+    const dispatch = {
+      taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-1',
+      taskType: 'build', contract: charge, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' },
+    };
+    const limitsSeenBy = async (extra: Record<string, unknown>): Promise<Record<string, unknown>> => {
+      let seen: Record<string, unknown> | null = null;
+      const artifacts = createInMemoryArtifactExchange();
+      artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
+      const resolution = resolveLiveWorkers({
+        env: BASE, projectId: 'prj-crt', workspacePath: workspace, testCommand: 'npm test',
+        contexts: { snapshotFor: () => snapshot() }, artifacts, shell: createFakeExecutorShell({}), ...extra,
+        runners: {
+          coder: (async (input: { limits: Record<string, unknown> }) => { seen = input.limits; throw new Error('stop once the limits are captured'); }) as never,
+          queryLoader: async () => (() => (async function* () { /* none */ })()) as never,
+        },
+      } as never);
+      const coder = coderOf(resolution);
+      expect(coder, 'the coder must resolve').toBeDefined();
+      const outcome = await coder!.adapter.dispatch(dispatch as never).then((value) => value as unknown, (error: unknown) => error);
+      expect(seen, `the runner must have been called; the dispatch ended with ${JSON.stringify(outcome, (_k, v) => (v instanceof Error ? v.message : v)).slice(0, 600)}`).not.toBeNull();
+      return seen!;
+    };
+    const plain = await limitsSeenBy({});
+    expect(plain.maxRuntimeMs).toBe(DEFAULT_HOSTED_LIMITS.maxRuntimeMs);
+    const declared = await limitsSeenBy({ coderRuntimeMinutes: 30, repairCycles: 1 });
+    expect(declared.maxRuntimeMs).toBe(1_800_000);
+    // The money bound is the allocation's (2,000,000 micro-dollars = 200 cents), identical with and without the budget.
+    expect(declared.maxCostCents).toBe(plain.maxCostCents);
+    expect(declared.maxCostCents).toBe(200);
+    expect({ ...declared, maxRuntimeMs: plain.maxRuntimeMs }).toEqual(plain);
   });
 
   it('the stage deadline reads the declared worker: the coder stage bound grows with the minutes, the other roles do not', () => {
