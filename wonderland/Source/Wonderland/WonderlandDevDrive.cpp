@@ -7,6 +7,7 @@
 //   wl.Dev.Jump [seconds]   press jump and hold it that long (default 0.15, the hold-to-rise of the key)
 //   wl.Dev.Yaw <degrees>    face the controller (and so the walk) that way
 //   wl.Dev.Tp <x> <y> <z>   place the pawn (a teleport; the remote figure sees a normal report)
+//   wl.Dev.Social <operation> <subject>   the SAME action a hub button presses (UWonderlandUiSubsystem::RequestSocialAction: requests.send/accept/decline/cancel, friends.remove, blocks.add (the first press only warns, a second confirms a shared-party block), mutes.set, reports.file, presence.set, conversations.open ...)
 //   wl.Dev.Pos              one log line: WLDEV pos x y z yaw
 // Everything is log-visible (WLDEV lines). A developer tool: not a gameplay path, no wire change.
 #include "CoreMinimal.h"
@@ -14,6 +15,7 @@
 #if !UE_BUILD_SHIPPING
 #include "Containers/Ticker.h"
 #include "Engine/Engine.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
@@ -25,6 +27,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Serialization/Archive.h"
+#include "WonderlandUiSubsystem.h"
 
 namespace WonderlandDevDriveDetail
 {
@@ -310,6 +313,29 @@ namespace WonderlandDevDriveDetail
 			{
 				Dog->SetActorLocation(FVector(FCString::Atod(*Args[0]), FCString::Atod(*Args[1]), FCString::Atod(*Args[2])), false, nullptr, ETeleportType::TeleportPhysics);
 				UE_LOG(LogTemp, Display, TEXT("WLDEV tp %s %s %s"), *Args[0], *Args[1], *Args[2]);
+			}
+		}));
+
+	FAutoConsoleCommand GDevSocial(
+		TEXT("wl.Dev.Social"),
+		TEXT("DEV (-wldev): wl.Dev.Social <operation> <subject> presses the hub button's action (the real UI action path), e.g. wl.Dev.Social requests.decline <requestId>."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			if (DriveRefused() || Args.Num() < 1)
+			{
+				return;
+			}
+			UWorld* World = DriveGameWorld();
+			ULocalPlayer* Player = World != nullptr ? World->GetFirstLocalPlayerFromController() : nullptr;
+			UWonderlandUiSubsystem* Ui = Player != nullptr ? Player->GetSubsystem<UWonderlandUiSubsystem>() : nullptr;
+			if (Ui != nullptr)
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLDEV social %s %s"), *Args[0], Args.Num() > 1 ? *Args[1] : TEXT(""));
+				Ui->RequestSocialAction(Args[0], Args.Num() > 1 ? Args[1] : FString());
+			}
+			else
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLDEV social: no UI subsystem"));
 			}
 		}));
 
