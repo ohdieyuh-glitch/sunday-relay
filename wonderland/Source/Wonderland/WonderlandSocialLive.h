@@ -304,8 +304,18 @@ private:
 	void ScheduleAutoJoin(const FString& Target, const FString& Arg, bool bNow = false);
 	/** A join leaving (automatic or the player's own): it owns the in-flight flag, ends any planned retry, and takes the next number. */
 	int32 BeginJoin();
+	/** The 404 rejoin (r16reh16w: one place, run at once or when a join in flight has answered without placing the player). */
+	void PlanRejoinAfter404();
+	/** world.leave with one bounded retry on a transport failure (r16reh16w). */
+	void SendLeave(int32 Leave, bool bRetried);
+	int32 LeaveSeq = 0;
+	/** A 404 landed while a join was in flight: replanned when that join answers without placing the player (r16reh16w). */
+	bool bRejoin404Deferred = false;
+	/** Refusals of the same automatic join target in a row (an INVITE / PARTY target is asked for again, bounded, before the public world). */
+	FString RefusedTarget;
+	int32 TargetRefusals = 0;
 	/** A join's answer: only the LATEST join's moves anything; extracted from JoinWorldAs's callback so the QA can feed it. */
-	void HandleJoinAnswer(int32 Seq, const FString& Target, const FString& Arg, bool bAutomatic, const TSharedPtr<FJsonObject>& Data, const FString& Problem);
+	void HandleJoinAnswer(int32 Seq, const FString& Target, const FString& Arg, bool bAutomatic, const TSharedPtr<FJsonObject>& Data, const FString& Problem, int32 Status = 0);
 	/** Every join's number: only the LATEST join's answer moves anything (Second's review m1). */
 	int32 JoinSeq = 0;
 	/** The world a 404 rejoin must land back in; a FRIEND rejoin that lands elsewhere is not followed (m2). */
