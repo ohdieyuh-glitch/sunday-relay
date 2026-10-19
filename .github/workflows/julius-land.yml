@@ -1,0 +1,94 @@
+# LAND A CLEARED PULL REQUEST (autonomous, dispatch-only).
+#
+# AUTHORIZED by the founder (FOUNDER AUTHORIZATION - AUTONOMOUS MERGING AND EXPANDED LANDING QUEUE, 2026-10-19). Founder-governed file: this workflow refuses to land any change to itself.
+#
+# WHY THIS EXISTS. This repository is private on a plan that offers no branch protection and no rulesets (the API answers 403 "upgrade"), so GitHub itself enforces NOTHING
+# about approvals or checks on `main`: every control is ours. Until now the last step (an empty-body approval and a pinned squash merge) ran in the founder's own shell with the
+# founder's own login. That is slow, and it is not a separation of duties either: the founder's identity stood in for an approval that no rule required. This workflow replaces it
+# with an automation identity that is none of the three parties:
+#
+#   author   julius-worker[bot]   (the App; its single commit is the only thing that may land)
+#   clearer  the Independent Reviewer, who SIGNS a clearance with an ed25519 key it alone controls; only the PUBLIC key is in this repository
+#   merger   github-actions[bot] (this workflow's own token), acting only if every condition below holds
+#
+# THE TRUST ANCHOR IS THE SIGNATURE. A dispatcher, including a developer session, can hand this workflow a clearance but cannot make one: the clearance text names the pull
+# request, the exact head, tree and base, a digest of every bot comment, inline comment and review the reviewer saw, and it expires within 24 hours. Changing any byte
+# invalidates the signature. The public key, the branch allowlist (the founder's standing landing authorization, one branch per authorized workstream) and this workflow all live
+# under founder-governed paths that this workflow refuses to land: `.github/workflows/**` and `.github/julius-landing/**`.
+#
+# WHAT IT REFUSES (each refusal ends the job with no merge): a bad, forged or expired signature; a PR that is not open, not ready, not the App's single commit directly on the
+# cleared base; a base that is no longer main's tip; a tree other than the cleared one; a branch outside the allowlist; any changed file under a founder-governed path (workflows,
+# this system, the pins file, migrations); a failing or pending check after a bounded wait; any bot comment, inline comment or review that differs from what the reviewer saw. The
+# landing is a commit the lander creates itself (the cleared tree, one parent = the cleared base, the signed clearance in its message) and a NON-FORCED update of main (a
+# compare-and-swap, so a main that moved is refused); the merge endpoint is never used. The decision is taken from one final read that includes the whole CI state.
+#
+# `dry_run: true` (the default) runs every read and every check and writes nothing: it is how a new clearance, and this workflow itself, are proven before use.
+#
+# After a landing the dispatcher (MAIN JULIUS) runs accept-main, re-confirms the hold and prepares the next step, exactly as before. Nothing here dispatches those.
+
+name: Julius land
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'The pull request number.'
+        required: true
+        default: ''
+      head:
+        description: 'The exact 40-hex head commit the reviewer cleared.'
+        required: true
+        default: ''
+      clearance_b64:
+        description: 'The reviewer signed clearance text, base64.'
+        required: true
+        default: ''
+      signature_b64:
+        description: 'The reviewer ed25519 signature over the clearance text, base64.'
+        required: true
+        default: ''
+      dry_run:
+        description: 'Leave "true" to run every check and write nothing; type "false" to land.'
+        required: false
+        default: 'true'
+
+# `contents: write` is what the git data API (create the commit, update the ref) needs and `pull-requests: write` the PR comment and close; `checks`, `statuses` and `issues` are the READ side of the gates. `actions` is absent on
+# purpose (this workflow cannot delete a checkpoint) and so is `workflows`: GitHub refuses a GITHUB_TOKEN merge that would change a workflow file.
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+  issues: read
+
+concurrency:
+  group: julius-land
+  cancel-in-progress: false
+
+jobs:
+  land:
+    name: Land a cleared pull request
+    # A workflow_dispatch runs the workflow file of the SELECTED ref. Only the copy on main is trusted: a dispatch against any other ref (a branch carrying a modified copy of this
+    # file) does not even start the job. land.mjs checks the same fact again (GITHUB_REF and GITHUB_SHA against main's tip).
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: 'Gate and land'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+          HEAD: ${{ inputs.head }}
+          CLEARANCE_B64: ${{ inputs.clearance_b64 }}
+          SIGNATURE_B64: ${{ inputs.signature_b64 }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: node .github/julius-landing/land.mjs

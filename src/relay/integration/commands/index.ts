@@ -1,0 +1,31 @@
+export {
+  JULIUS_AUTONOMY_LEVELS,
+  OPERATION_REQUEST_BOUNDS,
+  RELAY_JULIUS_OPERATIONS,
+  RELAY_JULIUS_OPERATION_VERSION,
+  requestedAutonomyIsCoherent,
+  unwiredJuliusOperationPort,
+  type CancelRunRequest,
+  type JuliusAutonomyLevel,
+  type JuliusOperationPort,
+  type PauseRunRequest,
+  type RelayJuliusOperation,
+  type RelayJuliusOperationEnvelope,
+  type RelayJuliusOperationOutcome,
+  type RelayJuliusOperationRequest,
+  type RequestSubagentRequest,
+  type ResumeRunRequest,
+  type SetAutonomyModeRequest,
+  type StartGauntletRequest,
+  type SubmitApprovalRequest,
+} from './julius-operation-contracts';
+
+export {
+  COMMAND_REFUSALS,
+  RELAY_JULIUS_COMMANDS,
+  parseJuliusCommand,
+  type CommandContext,
+  type CommandParseResult,
+  type CommandProblem,
+  type CommandRefusal,
+} from './julius-command-parser';
