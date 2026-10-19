@@ -58,10 +58,10 @@
   "testCommand": "node --import ./.julius/loader.mjs --test src/relay/workspace/output-safety.test.ts",
   "workspacePath": "/tmp/julius-workspace/tenant/ws",
   "limits": {
-    "spendUsd": 5,
-    "repairCycles": 1,
+    "spendUsd": 100,
+    "repairCycles": 3,
     "architectMaxOutputTokens": 20000,
-    "architectEffort": "low",
-    "coderEffort": "low"
+    "architectEffort": "high",
+    "coderEffort": "max"
   }
 }
