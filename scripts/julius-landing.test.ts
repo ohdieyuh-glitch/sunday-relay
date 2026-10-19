@@ -1313,6 +1313,31 @@ describe('the evidence scrubber stays founder-governed', () => {
   });
 });
 
+describe('the real-infra workflow path filter covers the paths the landing steps touch (otherwise five required checks never appear)', () => {
+  const filter = (): string[] => {
+    const yml = readFileSync(join(LANDING, '..', 'workflows', 'julius-real-infra.yml'), 'utf8');
+    const m = /pull_request:\s*\n\s*paths: \[(.*)\]/u.exec(yml);
+    expect(m, 'the pull_request paths filter is present').not.toBeNull();
+    return (m as RegExpExecArray)[1].split(',').map((p) => p.trim().replace(/^'|'$/gu, ''));
+  };
+  // GitHub path-filter semantics: `*` matches within one path segment, `**` crosses segments
+  const matches = (pattern: string, file: string): boolean => new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/gu, '\\$&').replace(/\*\*/gu, '\u0000').replace(/\*/gu, '[^/]*').replace(/\u0000/gu, '.*')}$`, 'u').test(file);
+  const touched = [
+    'src/relay/workspace/command-runner.ts', 'src/relay/workspace/command-runner-partial-secret.test.ts', 'src/relay/workspace/output-sanitizer.ts', 'src/relay/workspace/output-sanitizer.test.ts',
+    '.github/julius-missions/julius-diag-digest-evidence-1/contract.json', '.github/julius-missions/julius-maxeffort-loop-1/dryrun/dryrun.sh',
+    '.github/julius-learning-registrations/julius-learning-pair-2.json', '.github/julius-mission-slice/loader.mjs', 'JULIUS_HARNESS_MANIFEST.md',
+    'relay-bridge/julius/live-composition.ts', 'scripts/julius-live-contract-check.mjs', 'src/relay/mission/julius/julius-policy.ts',
+  ];
+  it('every file a landing step has touched matches at least one filter entry', () => {
+    const patterns = filter();
+    for (const file of touched) expect(patterns.some((p) => matches(p, file)), file).toBe(true);
+  });
+  it('the matcher is not a blanket: unrelated paths still do not match', () => {
+    const patterns = filter();
+    for (const file of ['README.md', 'docs/relay/CURRENT_STATE.md', 'wonderland/Source/Wonderland/WonderlandX.cpp', 'src/relay/ui/app/RelayX.tsx']) expect(patterns.some((p) => matches(p, file)), file).toBe(false);
+  });
+});
+
 describe('v3.4 s3: scripts that required CI runs from the PR itself, and julius-paid-dispatch*, are founder-governed paths', () => {
   const S3 = [
     'scripts/relay-parity-gate.mjs', 'scripts/wonderland-beta-gate.mjs', 'scripts/wonderland-beta-gate.test.ts', 'scripts/julius-live-preflight-identity.test.ts', 'scripts/julius-derive-scoped-credentials.mjs',
