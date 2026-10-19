@@ -1298,6 +1298,13 @@ describe('v3.4 V-1: the README does not oversell the nonce tag', () => {
   });
 });
 
+describe('the evidence scrubber stays founder-governed', () => {
+  it('scripts/julius-live-evidence.mjs is hard-forbidden to the lander and is NOT eligible for a signed exception (REVIEW ruling: its allowed shapes change only through a governed install)', () => {
+    expect(lib.HARD_FORBIDDEN_PATH.test('scripts/julius-live-evidence.mjs')).toBe(true);
+    expect(lib.EXCEPTION_ELIGIBLE).toEqual(['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs']);
+  });
+});
+
 describe('v3.4 s3: scripts that required CI runs from the PR itself, and julius-paid-dispatch*, are founder-governed paths', () => {
   const S3 = [
     'scripts/relay-parity-gate.mjs', 'scripts/wonderland-beta-gate.mjs', 'scripts/wonderland-beta-gate.test.ts', 'scripts/julius-live-preflight-identity.test.ts', 'scripts/julius-derive-scoped-credentials.mjs',
