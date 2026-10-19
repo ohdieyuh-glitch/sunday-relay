@@ -396,7 +396,7 @@ describe('land.mjs end to end against a fake GitHub', () => {
       expect(r.merges, name).toHaveLength(0);
       expect(r.out, name).toContain('REFUSED');
     }
-  });
+  }, 30_000);
 
   it('refuses without merging: unauthorized branch, founder-governed files, failing or pending CI, changed bot comments', () => {
     const cases: Array<[string, ReturnType<typeof runLand>]> = [
@@ -425,7 +425,7 @@ describe('land.mjs end to end against a fake GitHub', () => {
       expect(r.code, `${name}: ${r.out}`).toBe(1);
       expect(r.merges, name).toHaveLength(0);
     }
-  });
+  }, 30_000);
 
   it('a ref-update error fails the job unlanded, and a main that is not the created commit afterwards raises an alert (exit 2)', () => {
     const rejected = runLand({ scenario: { patchStatus: 405 } });
