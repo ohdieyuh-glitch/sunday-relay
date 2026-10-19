@@ -79,6 +79,10 @@ export interface JuliusAskSuccess {
   readonly billingPath: 'API_BILLED';
   readonly responseId: string;
   readonly ledgerRef: string;
+  /** sha256 (hex) of the UTF-8 bytes of `answer` exactly as returned, so rendered text can be tied to this response and its ledger row. */
+  readonly answerDigest: string;
+  /** Length of `answer` in UTF-16 code units (JavaScript string length). */
+  readonly answerChars: number;
 }
 export interface JuliusAskFailure {
   readonly ok: false;
@@ -178,6 +182,9 @@ export function createJuliusAsk(deps: JuliusAskDeps): { handleAsk(input: JuliusA
           providerStatus: outcome.ok ? outcome.status : outcome.providerStatus ?? null,
           providerHttpStatus: outcome.ok ? null : outcome.providerHttpStatus ?? null,
           providerResponseId: outcome.responseId ?? null,
+          /* The digest and length of the RETURNED answer (never the text), null for a failure: ties rendered text to this row. */
+          answerSha256: result.ok ? result.answerDigest : null,
+          answerChars: result.ok ? result.answerChars : null,
           usage: usageOf(outcome.usage),
           model: outcome.actualModel ?? null,
           /* Exactly one, because the request carried maxRetries 0. */
@@ -241,6 +248,7 @@ function finish(outcome: GptRunOutcome, askId: string, ledgerRef: string, apiKey
     ok: true, askId, answer: clean, role: 'architect', provider: 'openai', model: outcome.actualModel,
     usage: usageOf(outcome.usage), costBasis: 'UNKNOWN', billingPath: 'API_BILLED',
     responseId: redactResponseId(outcome.responseId), ledgerRef,
+    answerDigest: createHash('sha256').update(clean, 'utf8').digest('hex'), answerChars: clean.length,
   };
 }
 

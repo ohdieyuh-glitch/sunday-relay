@@ -54,4 +54,4 @@ if (!response.ok || parsed?.data === undefined) {
 const d = parsed.data;
 console.log(d.answer);
 console.log(`\n[${d.role} ${d.provider} ${d.model}] tokens in=${d.usage.input} cached=${d.usage.cached} out=${d.usage.output} reasoning=${d.usage.reasoning} total=${d.usage.total}`);
-console.log(`[cost ${d.costBasis}, ${d.billingPath}] ask=${d.askId} response=${d.responseId} ledger=${d.ledgerRef}`);
+console.log(`[cost ${d.costBasis}, ${d.billingPath}] ask=${d.askId} response=${d.responseId} ledger=${d.ledgerRef} answer-sha256=${String(d.answerDigest).slice(0, 12)} chars=${d.answerChars}`);

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -489,7 +490,7 @@ describe('ask Julius: the result ledger row reconciles a billed call', () => {
     expect(h.lines[1]).toEqual({
       phase: 'result', askId: expect.any(String), at: expect.any(String), outcome: 'julius_ask_provider_failed',
       failureClass: 'incomplete_response', incompleteReason: 'max_output_tokens', providerStatus: 'incomplete',
-      providerHttpStatus: 200, providerResponseId: RAW_RESPONSE_ID, model: 'model-served', attempts: 1,
+      providerHttpStatus: 200, providerResponseId: RAW_RESPONSE_ID, model: 'model-served', attempts: 1, answerSha256: null, answerChars: null,
       usage: { input: 120, cached: 20, output: 80, reasoning: 30, total: 200 },
     });
     expect(JSON.stringify(h.lines)).not.toContain('cut off');
@@ -510,6 +511,73 @@ describe('ask Julius: the result ledger row reconciles a billed call', () => {
       providerResponseId: RAW_RESPONSE_ID, attempts: 1,
     });
     expect(JSON.stringify(h.lines)).not.toContain('a plain answer');
+  });
+});
+
+describe('ask Julius: the answer digest ties the rendered text to the provider answer and the ledger row', () => {
+  const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
+
+  it('answerDigest is the sha256 of the exact returned answer, answerChars its length, and the ledger row carries both without the text', async () => {
+    const question = 'a distinctive digest question';
+    const h = harness({ outcome: () => answered('The answer with unicode: café ☃') });
+    const result = success(await ask(h, { question }));
+    expect(result.answerDigest).toBe(sha256(result.answer));
+    expect(result.answerDigest).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.answerChars).toBe(result.answer.length);
+    expect(h.lines[1]).toMatchObject({ phase: 'result', answerSha256: result.answerDigest, answerChars: result.answer.length });
+    const dump = JSON.stringify(h.lines);
+    expect(dump).not.toContain('unicode');
+    expect(dump).not.toContain('distinctive');
+    expect(dump).not.toContain(CANARY);
+  });
+
+  it('the digest is of the SANITIZED text, not the provider text', async () => {
+    const h = harness({ outcome: () => answered(`secret ${CANARY} end`) });
+    const result = success(await ask(h));
+    expect(result.answer).not.toContain(CANARY);
+    expect(result.answerDigest).toBe(sha256(result.answer));
+    expect(result.answerDigest).not.toBe(sha256(`secret ${CANARY} end`));
+  });
+
+  it('the digest of a capped answer is the digest of the capped text', async () => {
+    const h = harness({ outcome: () => answered('word '.repeat(5000)) });
+    const result = success(await ask(h));
+    expect(result.answerChars).toBeLessThanOrEqual(ASK_ANSWER_MAX_CHARS);
+    expect(result.answerDigest).toBe(sha256(result.answer));
+    expect(h.lines[1]).toMatchObject({ answerSha256: sha256(result.answer), answerChars: result.answer.length });
+  });
+
+  it('a replay of the same key returns the same digest and writes no second row', async () => {
+    let n = 0;
+    const h = harness({ outcome: () => answered(`answer ${++n}`) });
+    const first = success(await ask(h));
+    const second = success(await ask(h));
+    expect(second.answerDigest).toBe(first.answerDigest);
+    expect(h.lines).toHaveLength(2);
+  });
+
+  it('a failure has no digest and no length in its ledger row, and none in the refusal', async () => {
+    const h = harness({ outcome: () => ({ ok: false, failureClass: 'timeout', message: 'slow', responseId: RAW_RESPONSE_ID }) });
+    const result = await ask(h);
+    expect(failure(result).httpStatus).toBe(502);
+    expect(Object.keys(result)).not.toContain('answerDigest');
+    expect(h.lines[1]).toMatchObject({ answerSha256: null, answerChars: null });
+  });
+
+  it('the HTTP success body carries answerDigest and answerChars', async () => {
+    const h = harness();
+    const live = { handleAsk: (input: Parameters<typeof h.ask.handleAsk>[0]) => h.ask.handleAsk(input) };
+    const response = await handleJuliusAskRoute(
+      {
+        method: 'POST', authorization: `Bearer ${OPERATOR}`, origin: undefined, rawBody: JSON.stringify({ question: 'hello' }),
+        idempotencyKey: GOOD_KEY, now: 1, operatorToken: OPERATOR,
+      },
+      { ask: live, verifyNativeSession: () => null },
+    );
+    const data = (response.body as { data: { answer: string; answerDigest: string; answerChars: number } }).data;
+    expect(response.status).toBe(200);
+    expect(data.answerDigest).toBe(sha256(data.answer));
+    expect(data.answerChars).toBe(data.answer.length);
   });
 });
 
