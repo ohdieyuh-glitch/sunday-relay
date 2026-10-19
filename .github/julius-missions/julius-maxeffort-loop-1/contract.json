@@ -1,0 +1,57 @@
+{
+  "missionId": "mission:julius-maxeffort-loop-1",
+  "markerNamespace": "julius-maxeffort-loop-1",
+  "projectId": "prj-julius-maxeffort-loop-1",
+  "tenantId": "tenant",
+  "objective": "An audit of Relay's Loop Engine found three related latent defects in three of its gates, each of which says more than it knows. All three are pure modules under `src/relay/mission/loop/` whose own headers state the rule they break. Fix all three, in place, without changing anything else. (A) COMPLETION. `evaluateLoopCompletion` (`loop-completion.ts`) documents that \"a Loop whose only shortfall is trust returns `claimed_complete`, not `incomplete`\", but its test for that (`onlyTrustIsMissing`) ignores the mission verdict, the independent review and the durability of the terminal write: with claim-only evidence it reports `claimed_complete` for a Loop whose independent review REJECTED the work, whose mission verdict is `failed` or Unknown, or whose terminal state was never durably written; and with claim-only evidence and no blocking criteria it reports `claimed_complete` when the ONLY failing check is durability. (B) PAUSE THRESHOLD. `authorizeScheduledSpend` (`cron/cron-budget.ts`) compares spend to the automatic pause fraction in whole parts per million, but converts the fraction with `Math.round`, so a fraction finer than one part per million can be rounded UP and the schedule keeps spending past the point it was told to pause (0.6666666 with 2 of 3 micros spent is authorized; so is 0.9999999 at 9999999 of 10000000) — the fail-open the module's own comments say review already removed once; and its configuration guard, which says a fraction below one part per million is refused, accepts 0.0000006 because it rounds to one. (C) INSTANTS. `readIsoInstantWithOffset` (`runtime/loop-scheduler.ts`) is the ONE reader of offset-carrying ISO-8601 instants that the scheduler and every cron module import (`cron-approvals.ts`, in this workspace, reads grant expiries with it; `planLoopPass`, in the same file, reads last-advanced stamps; outside this workspace `cron-missed.ts` reads occurrence instants and `cron-versioning.ts` and `cron-occurrences.ts` window bounds). It checks the text's shape with a regular expression and then hands it to `Date.parse`, which ROLLS an impossible calendar date forward: `2026-02-30T00:00:00Z` reads as 2026-03-02, `2026-02-29` in a common year as March 1, `2026-04-31` as May 1. So a recurring approval grant whose expiry names a day that does not exist authorizes an operation after the date it named, and a run stamped on such a day is planned as though the stamp were readable. `seed/src/relay/loop-fixes.test.ts` is already written and currently fails; it pins the main behaviours of each fix and deliberately not every wider invariant. The files to edit exist and are tracked by git: edit them in place.",
+  "requirements": [
+    "A. `evaluateLoopCompletion` returns `claimed_complete` only when the trust check (`blocking criteria supported by attested or verified evidence`) failed and nothing that is a FACT ABOUT THE WORK failed: no unconfirmable iteration, no open blocking finding, a mission verdict of `verified_complete` (or, only under design choice (2) below, `claimed_complete`), no independent review that ran and did not approve, and a durable terminal write. Otherwise a Loop that is not verified_complete is `incomplete`. Two cases are a genuine design choice and either answer is acceptable, applied consistently and stated in a code comment: (1) whether a REQUIRED review that has NOT RUN yet, or that approved but was NOT structurally independent, is missing corroboration (so `claimed_complete` remains possible) or a failed requirement (`incomplete`); (2) whether a MISSION verdict of `claimed_complete` (the verdict engine's own word for an implementer's claim) is a trust shortfall. A review that ran and did not approve is never a trust shortfall. When no review is required, the review flags (all false) play no part. The `checks`, `reasons` and `unsupportedBlockingCriterionIds` it reports, and the `verified_complete` path, are unchanged. The mission verdict values are `claimed_complete`, `reviewed`, `approved`, `verified_complete`, `partially_complete`, `blocked`, `failed`, `needs_human`, or `null` for Unknown.",
+    "B. `authorizeScheduledSpend` never applies the pause threshold LATER than configured: for a configured fraction f (0 < f <= 1), a window whose spent/cap is at or above f is never authorized. When f is a whole number of parts per million (at most six decimal places) the comparison stays EXACT: it pauses at spent/cap = f and does not pause one part per million below it (beware: `Math.floor(0.000249 * 1e6)` is 248, so a plain floor is not exact). For a finer fraction the decision may pause at most one part per million EARLY, or the fraction may be refused as `invalid_budget_configuration`; either is acceptable. A fraction below one part per million stays refused as configuration (the repository's own test pins 0.0000004), and no fraction ever makes a window that has spent nothing reach the pause threshold. The comparison stays exact integer (BigInt) arithmetic on the micros; every other check, refusal reason, detail sentence and the headroom are unchanged.",
+    "C. `readIsoInstantWithOffset` returns `null` for a text whose calendar date does not exist in the proleptic Gregorian calendar (day 29 of February in a common year, including century years not divisible by 400; day 30 or 31 of February; day 31 of April, June, September or November), judged on the date AS WRITTEN, in the text's own offset, not on the UTC date it would parse to. Every instant that exists reads exactly as it does today (the same epoch milliseconds as `Date.parse`), including leap days, the last millisecond of a month, nine-digit fractions and offsets that carry the instant across midnight; everything it refuses today stays refused. One literal is a genuine design choice: `T24:00` (exactly; `Date.parse` already refuses `T24:01`) may be refused or read as the next day's 00:00; state the choice in a code comment. Fix it in this one shared reader, not in its callers: `cron-approvals.ts` (read-only) and every other caller then refuse such a text by the reasons they already have (`unreadable_expiry`, `unreadable_timestamp`, `invalid_window`).",
+    "No function outside these three fixes changes behaviour, including `planLoopPass` beyond what the reader's fix implies, `trustSupportsCompletion`, `claimAloneCompletes`, the spend windows, the reviewer reservation, the concurrency and guard checks, and every exported name and type. `cron-approvals.ts` is read-only: it is one of the reader's consumers, and the specification runs against it."
+  ],
+  "constraints": [
+    "Edit `src/relay/mission/loop/loop-completion.ts`, `src/relay/mission/loop/cron/cron-budget.ts` and `src/relay/mission/loop/runtime/loop-scheduler.ts`, in place. `src/relay/mission/loop/cron/cron-approvals.ts` is part of the workspace for reading and is read-only. You have `Read`, `Glob`, `Grep` and `Edit`; you cannot create files or run commands, and you do not need to.",
+    "Do not edit `src/relay/loop-fixes.test.ts`. It is the specification you are implementing against, not part of the deliverable.",
+    "Use only what the files already import plus JavaScript built-ins. Add no dependency and no import: the sandbox that runs the test has no network access and no `node_modules`, and the type-only imports these files carry (`../trace/trace-types`, `../contracts`, `../../modes`) are not in the workspace and must stay type-only.",
+    "Do not change any exported name, signature or type, and do not mutate the inputs of the functions you change.",
+    "Do not reformat code you are not changing and do not make unrelated cleanups, however tempting; a change that is not one of the three fixes is out of scope. Do not touch `.julius/`."
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "criterion-completion",
+      "text": "`claimed_complete` is returned only when the trust check failed and no fact about the work failed (unconfirmable iteration, open blocking finding, a mission verdict other than verified_complete (or claimed_complete under the stated choice), a review that ran and did not approve, an undurable terminal write); the two stated design choices (an unrun or non-independent review; a claimed_complete mission verdict) are each answered one way, consistently, and stated in a comment; a Loop that needs no review is unaffected by the review flags; checks, reasons, unsupported ids and the verified path are unchanged.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-pause",
+      "text": "The pause threshold is never applied later than configured; a six-decimal fraction compares exactly (pauses at it, not one part per million below it); a finer fraction pauses at most one part per million early or is refused as configuration; a fraction below one part per million is refused; a zero-spend window never reaches the threshold; arithmetic on micros stays exact BigInt; every other refusal and the headroom are unchanged.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-instant",
+      "text": "`readIsoInstantWithOffset` refuses every calendar date that does not exist, judged as written in its own offset (leap years per the Gregorian rule, centuries included), reads every existing instant to the same milliseconds as before (offsets crossing midnight, fractions, month ends included), keeps every existing refusal, handles T24:00 one stated way, and is fixed in the shared reader so every caller inherits it through its existing refusal reasons.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-scope",
+      "text": "Only `loop-completion.ts`, `cron-budget.ts` and `loop-scheduler.ts` are changed, using no new dependency or import; `cron-approvals.ts` is untouched; no exported name, signature or type changes; inputs are not mutated; no unrelated reformatting.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-test",
+      "text": "`node --import ./.julius/loader.mjs --test src/relay/loop-fixes.test.ts` exits zero.",
+      "blocking": true
+    }
+  ],
+  "testCommand": "node --import ./.julius/loader.mjs --test src/relay/loop-fixes.test.ts",
+  "workspacePath": "/tmp/julius-workspace/tenant/ws",
+  "limits": {
+    "spendUsd": 100,
+    "repairCycles": 3,
+    "architectMaxOutputTokens": 20000,
+    "architectEffort": "high",
+    "coderEffort": "max",
+    "coderRuntimeMinutes": 23
+  }
+}

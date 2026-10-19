@@ -1,0 +1,25 @@
+# label|expect|fixes   (A completion verdict, B pause threshold, C instant reader)
+unfixed (as the repository is)|fail|
+A only|fail|fix-a-completion.py
+B only|fail|fix-b-pause.py
+C only|fail|fix-c-calendar.py
+everything but A|fail|fix-b-pause.py,fix-c-calendar.py
+everything but B|fail|fix-a-completion.py,fix-c-calendar.py
+everything but C|fail|fix-a-completion.py,fix-b-pause.py
+all three (the reference)|pass|fix-a-completion.py,fix-b-pause.py,fix-c-calendar.py
+# ALTERNATIVE VALID SOLUTIONS (a different RULE, or a different mechanism): none of these may be spec-red.
+A alternative: an unrun or non-independent review is missing corroboration|pass|alt-a-review-pending.py,fix-b-pause.py,fix-c-calendar.py
+A alternative: a claimed_complete MISSION verdict is a trust shortfall|pass|alt-a-mission-claim.py,fix-b-pause.py,fix-c-calendar.py
+B alternative: a finer-than-ppm fraction is REFUSED as configuration|pass|fix-a-completion.py,alt-b-refuse.py,fix-c-calendar.py
+B alternative: the fraction compared as an EXACT decimal rational|pass|fix-a-completion.py,alt-b-exact.py,fix-c-calendar.py
+C alternative: T24:00 kept as end-of-day midnight, date checked only|pass|fix-a-completion.py,fix-b-pause.py,alt-c-allow-2400.py
+C alternative: wall-clock round trip through Date.UTC|pass|fix-a-completion.py,fix-b-pause.py,alt-c-roundtrip.py
+first alternatives together|pass|alt-a-review-pending.py,alt-b-refuse.py,alt-c-allow-2400.py
+second alternatives together|pass|alt-a-mission-claim.py,alt-b-exact.py,alt-c-roundtrip.py
+# WRONG FIXES: each looks like a fix and still breaks a pinned behaviour.
+A wrong: raw review/durability flags instead of the checks' results|fail|bad-a-flags.py,fix-b-pause.py,fix-c-calendar.py
+A wrong: exactly one failure plus a claim|fail|bad-a-count.py,fix-b-pause.py,fix-c-calendar.py
+B wrong: plain Math.floor in both places|fail|fix-a-completion.py,bad-b-floor.py,fix-c-calendar.py
+B wrong: Math.floor in the numerator only|fail|fix-a-completion.py,bad-b-floor-numerator.py,fix-c-calendar.py
+C wrong: compares the date of the parsed UTC instant|fail|fix-a-completion.py,fix-b-pause.py,bad-c-utcdate.py
+C wrong: February always has 29 days|fail|fix-a-completion.py,fix-b-pause.py,bad-c-leap.py

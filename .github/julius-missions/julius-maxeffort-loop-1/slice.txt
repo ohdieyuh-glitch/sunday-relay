@@ -1,0 +1,21 @@
+# SPEC: src/relay/loop-fixes.test.ts
+# MAX-EFFORT MISSION DRAFT (SECOND JULIUS), CANDIDATE H: three latent defects in the Loop Engine's gates (completion verdict, scheduled-spend pause threshold, the shared instant reader),
+# found by READING production Relay code. Real tracked source, byte-identical to the repository's. A DRAFT for review: not registered (no MISSION_LIMITS, no role-effort line, no gate),
+# and it declares `limits.coderRuntimeMinutes`, so it needs the coder-runtime-budget layer (crt r2) to parse and its own clearance.
+#
+# The coder cannot run commands, so what it writes is judged by the independent reviewer against the acceptance criteria as well as by the seeded specification, which pins the MAIN
+# behaviours of each fix and deliberately not every wider invariant: those are the criteria's job. Nothing here forces, injects or counts a reviewer finding.
+#
+# THE SLICE: the completion gate (`loop-completion.ts`), the scheduled-spend gate (`cron-budget.ts`), the scheduler whose exported `readIsoInstantWithOffset` is the one instant rule every
+# cron module imports (`loop-scheduler.ts`), and one of those consumers, read-only (`cron-approvals.ts`). Run-time import closure of the spec: these 4 files; every other import in them
+# is type-only (`../trace/trace-types`, `../contracts`, `../../modes`) and vanishes under type stripping.
+# EDITABLE: loop-completion.ts, cron-budget.ts, loop-scheduler.ts. READ-ONLY: cron-approvals.ts.
+# DELIBERATELY UNPINNED by the seeded specification (the criteria and the reviewer judge them): whether a required review that has NOT RUN, or an approval by a reviewer that was NOT
+# independent, counts as missing corroboration (claimed_complete) or as a failed requirement (incomplete); whether a `claimed_complete` MISSION verdict counts as a trust shortfall; the
+# exact refusal reason of a fraction finer than one part per million (pause, or invalid_budget_configuration) and whether 0.0000006 is refused or accepted at a zero spend; whether
+# `T24:00` (exactly midnight at the end of a day) is refused or read as the next day's 00:00; that the reasons and checks lists are otherwise unchanged; collateral change; input mutation;
+# exported names and signatures; year 0000-0099 leap handling; what cron-approvals does (it is read-only for the coder).
+src/relay/mission/loop/loop-completion.ts
+src/relay/mission/loop/cron/cron-budget.ts
+src/relay/mission/loop/runtime/loop-scheduler.ts
+src/relay/mission/loop/cron/cron-approvals.ts
