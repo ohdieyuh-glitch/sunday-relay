@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -1061,7 +1061,20 @@ describe('round 4: required-checks.txt has exactly one reader, the lander (via p
     const candidates = [...listed('.github/workflows'), ...listed('scripts').filter((f) => /\.(mjs|ts|sh|js|cjs|mts)$/u.test(f)), ...listed('.github/julius-landing').filter((f) => /\.mjs$/u.test(f))];
     const readers = candidates.filter((f) => readFileSync(resolve(ROOT, f), 'utf8').includes('required-checks')).map((f) => f.replace(/\\/gu, '/')).sort();
     // the lander, the lander's library (documentation comment) and the two landing test files (which pin or rewrite the file)
-    expect(readers).toEqual(['.github/julius-landing/land-lib.mjs', '.github/julius-landing/land.mjs', 'scripts/julius-landing-attack.test.ts', 'scripts/julius-landing.test.ts']);
+    const expected = ['.github/julius-landing/land-lib.mjs', '.github/julius-landing/land.mjs', 'scripts/julius-landing-attack.test.ts', 'scripts/julius-landing.test.ts'];
+    // scripts/julius-main-provenance-signed.test.ts (the provenance gate's test, not present in every tree) mentions the path as TEST DATA only: a governed-paths list. It is expected
+    // when it exists, and then it must not READ the file.
+    const dataOnly = 'scripts/julius-main-provenance-signed.test.ts';
+    const dataOnlyPresent = existsSync(resolve(ROOT, dataOnly));
+    expect(readers).toEqual((dataOnlyPresent ? [...expected, dataOnly] : expected).sort());
+    if (dataOnlyPresent) {
+      const hits = readFileSync(resolve(ROOT, dataOnly), 'utf8').split('\n').filter((l) => l.includes('required-checks'));
+      expect(hits.length, 'it does mention the path').toBeGreaterThan(0);
+      for (const line of hits) {
+        expect(line, 'only the full governed path as a quoted string').toContain("'.github/julius-landing/required-checks.txt'");
+        expect(line, 'a mention, not a read').not.toMatch(/readFile|readdir|createReadStream|ghRaw|fetch\(|parseRequiredChecks|existsSync|spawn|exec/u);
+      }
+    }
     const land = readFileSync(join(LANDING, 'land.mjs'), 'utf8');
     expect(land).toMatch(/parseRequiredChecks\(readFileSync\(join\(here, 'required-checks\.txt'\)/u);
     expect(land.match(/required-checks\.txt'/gu), 'land.mjs reads the file exactly once').toHaveLength(1);
