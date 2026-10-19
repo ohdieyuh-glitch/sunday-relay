@@ -1,0 +1,8 @@
+# The founder's STANDING LANDING AUTHORIZATION, encoded: the ONLY branches the autonomous lander may land. One branch per line. Changing this file is a founder-governed change
+# (the lander refuses any PR that touches .github/julius-landing/**).
+relay/julius-diag-digest-evidence-1
+relay/julius-partial-secret-capture-fix
+relay/julius-coder-runtime-budget
+relay/julius-report-refused-reason
+relay/julius-v6-governance-pr-a
+relay/julius-v6-governance-pr-b
