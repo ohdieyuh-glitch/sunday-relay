@@ -119,7 +119,10 @@ describe('the pull request against the clearance', () => {
   it('a truncated, short or huge file list is refused: rows read must equal the PR changed_files, and 300 is the ceiling', () => {
     expect(check({ fileRows: 1, pr: { ...goodPr(), changed_files: 5 } }).join(' ')).toContain('incomplete');
     expect(check({ fileRows: 0, pr: { ...goodPr(), changed_files: 1 } }).join(' ')).toContain('incomplete');
-    expect(check({ files: ['a.ts'], fileRows: 301, pr: { ...goodPr(), changed_files: 301 } }).join(' ')).toContain('more than 300');
+    expect(check({ files: ['a.ts'], fileRows: 301, pr: { ...goodPr(), changed_files: 301 } }).join(' ')).toContain('300 or more');
+    const names = (n: number) => Array.from({ length: n }, (_, i) => `src/relay/x${i}.ts`);
+    expect(check({ files: names(300), fileRows: 300, pr: { ...goodPr(), changed_files: 300 } }).join(' '), 'exactly 300 is refused (the provenance gate needs fewer than 300)').toContain('300 or more');
+    expect(check({ files: names(299), fileRows: 299, pr: { ...goodPr(), changed_files: 299 } }), '299 passes').toEqual([]);
     expect(check({ pr: { ...goodPr(), changed_files: undefined } }).join(' ')).not.toBe('');
   });
 
@@ -690,7 +693,7 @@ describe('L4: every comment, inline comment and review row carries sha256(body) 
   it('identical input gives the same digest, in any order', () => {
     const a = base();
     expect(digest(a)).toBe(digest(base()));
-    const two = { ...a, issueComments: [...a.issueComments, { user: { login: 'w' }, id: 9, updated_at: 't9', body: 'b' }] };
+    const two = { ...a, issueComments: [...a.issueComments, { user: { login: 'w' }, id: 9, updated_at: 't9', created_at: 'c9', body: 'b' }] };
     expect(digest({ ...two, issueComments: [...two.issueComments].reverse() })).toBe(digest(two));
   });
 
