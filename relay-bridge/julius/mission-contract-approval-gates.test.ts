@@ -90,6 +90,7 @@ describe('V6 G-1: the approvalGates clause is parsed and sealed, or the contract
     const BEFORE: Readonly<Record<string, string>> = {
       'julius-continuous-1': 'sha256:e6814f7ce2167785052595c60f89aec2ea6bb84bf6f411105e86f317fe02d80a',
       'julius-diag-output-safety-1': 'sha256:7c12a6dfea7bfa3982380997be4da107e2a03c36fbaed59a1d86a0f93056e415',
+      'julius-diag-output-safety-2': 'sha256:dce4650e22fa1b192100ca135ee31ff2449e013bfd6bffc6681319bcc51ba664',
       'julius-first-live': 'sha256:f7f8c2fe683cba5819ecc9e71085228ce8bf82f3e1b7f9c2b6862f2e28346a56',
       'julius-learning-pair-1-with-1': 'sha256:6148c551c9fbaf79e85eaca6906fe5ce59afeb71e054dff6ba0955e472532774',
       'julius-learning-pair-1-with-2': 'sha256:6148c551c9fbaf79e85eaca6906fe5ce59afeb71e054dff6ba0955e472532774',
