@@ -299,6 +299,16 @@ private:
 	double NextWorldAt = 0.0;
 	/** WLREMOTE diagnostics only: when the last world report was sent. */
 	double LastWorldSentAt = 0.0;
+	/** MP-VIS-02: set when a server answers a report that carried the handoff fields with a 400 (a server that rejects them): they are not sent again this session,
+	 *  so a position report is never lost to a cosmetic. A server that merely ignores them never sets it. */
+	bool bHandoffWireRefused = false;
+	/** MP-VIS-02: what the WLHANDOFF send line last said (change-only). */
+	int32 LoggedHandoffSendKey = -1;
+	/** MP-VIS-02 REV2: the equipped form the previous report carried (an event is made on an EDGE), this launch's epoch, and the event being resent. */
+	WonderlandHandoffWire::EForm PrevHandoffForm = WonderlandHandoffWire::EForm::None;
+	int32 HandoffEpoch = 0;
+	int32 HandoffCounter = 0;
+	WonderlandHandoffWire::FOutgoingEvent OutgoingHandoffEvent;
 	/** Plans the next automatic join: at once the first time, then on a 2/5/15/30 s backoff until a world report is answered again.
 	 *  bNow: at once and no backoff step -- a planned move that is not a failure (a FRIEND rejoin that landed elsewhere). */
 	void ScheduleAutoJoin(const FString& Target, const FString& Arg, bool bNow = false);
