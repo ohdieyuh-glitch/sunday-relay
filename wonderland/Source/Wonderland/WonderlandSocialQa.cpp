@@ -925,6 +925,19 @@ namespace WonderlandSocialLiveQa
 		case 50:
 			if (S != nullptr && In >= 2.0)
 			{
+				{
+					// SETTLE, THEN JUDGE: a restarted backend and a loaded machine can make the first snapshot arrive late (a run under memory pressure read "in no party" 2 s
+					// after the start). The expected state is waited for up to 20 s; if it never arrives the Checks below record the FAIL as before.
+					FString Probe;
+					const FWonderlandSocialProfileView* Peer = S->Profiles.Find(PeerId);
+					const bool bReady = With(*S, PeerId) == nullptr && Friend(*S, PeerId) == nullptr
+						&& (IsBlocker(L) ? (Peer != nullptr && Peer->Relationship == TEXT("BLOCKED")) : Peer == nullptr)
+						&& MembershipRight(L, *S, PeerId, Probe);
+					if (!bReady && In < 20.0)
+					{
+						break;
+					}
+				}
 				const FWonderlandSocialConversationRow* C = With(*S, PeerId);
 				const TArray<FWonderlandSocialMessage>* History = C != nullptr ? S->Messages.Find(C->ConversationId) : nullptr;
 				TArray<FString> Bodies;
@@ -955,15 +968,28 @@ namespace WonderlandSocialLiveQa
 				Check(L, TEXT("LSQR3"), bMembership, FString::Printf(TEXT("party after the restart: %s (want %s)"), *What,
 					L.bA ? TEXT("A still leading, B not in it") : TEXT("B in no party")));
 				U->OpenSocialHub(TEXT("messages"));
+				Next(52);
+			}
+			break;
+		case 52:   // both clients have checked LSQR1-3 by now (they start within seconds of each other); only then does the blocker unblock (LSQR4)
+			if (In >= 10.0)
+			{
 				if (IsBlocker(L))
 				{
-					U->RequestSocialAction(TEXT("blocks.remove"), PeerId);   // LSQR4: the unblock (the blocker's own)
+					U->RequestSocialAction(TEXT("blocks.remove"), PeerId);
 				}
 				Next(51);
 			}
 			break;
-		case 51:
-			if (S != nullptr && In >= 4.0)
+		case 51:   // the BLOCKED player is sent no event when the block is lifted (nobody tells them), so its own view only changes when it asks again: the hub is opened (a refresh)
+			if (In >= (IsBlocker(L) ? 4.0 : 6.0))
+			{
+				U->OpenSocialHub(TEXT("messages"));
+				Next(53);
+			}
+			break;
+		case 53:
+			if (S != nullptr && In >= 3.0)
 			{
 				const FWonderlandSocialConversationRow* C = With(*S, PeerId);
 				const TArray<FWonderlandSocialMessage>* History = C != nullptr ? S->Messages.Find(C->ConversationId) : nullptr;
@@ -973,6 +999,17 @@ namespace WonderlandSocialLiveQa
 					Bodies.Add(M.Body);
 				}
 				const FString Want = FString::Printf(TEXT("hello from %s|hello back from %s"), L.bA ? *L.Me : *L.Peer, L.bA ? *L.Peer : *L.Me);
+				if (FString::Join(Bodies, TEXT("|")) != Want && In < 25.0)
+				{
+					// the unblock reaches the BLOCKED player only when it asks again: re-open the hub (a refresh) every ~4 s until the history is back, up to 25 s
+					static double LastAsk = 0.0;
+					if (Now() - LastAsk >= 4.0)
+					{
+						LastAsk = Now();
+						U->OpenSocialHub(TEXT("messages"));
+					}
+					break;
+				}
 				Check(L, TEXT("LSQR4"), FString::Join(Bodies, TEXT("|")) == Want,
 					FString::Printf(TEXT("conversation %s after the unblock, from the database: [%s] (want [%s])"), C != nullptr ? *C->ConversationId : TEXT("MISSING"), *FString::Join(Bodies, TEXT("|")), *Want));
 				Shot(L, TEXT("R_messages_after_restart"));
