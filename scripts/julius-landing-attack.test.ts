@@ -161,9 +161,9 @@ describe('ATTACK: ways past the gate', () => {
   });
 
   it('ATK-6 the founder-governed list misses the approver authority and CODEOWNERS, and is case-sensitive', () => {
-    for (const path of ['.github/julius-approvers.json', '.github/CODEOWNERS', '.GITHUB/julius-landing/allowed-branches.txt', '.github/Julius-Landing/reviewer-ed25519.pub', '.github/JULIUS-MISSION-PINS.txt']) {
-      expect(check({ files: ['ok.ts', path] }).join(' '), path).toContain('founder-governed');
-    }
+    const paths = ['.github/julius-approvers.json', '.github/CODEOWNERS', '.GITHUB/julius-landing/allowed-branches.txt', '.github/Julius-Landing/reviewer-ed25519.pub', '.github/JULIUS-MISSION-PINS.txt'];
+    const notRefused = paths.filter((path) => !check({ files: ['ok.ts', path] }).join(' ').includes('founder-governed'));
+    expect(notRefused, 'every one of these must be refused as founder-governed').toEqual([]);
   });
 
   it('ATK-7 the App identity is a commit AUTHOR NAME (free text): a commit whose GitHub-resolved author is someone else passes', () => {
