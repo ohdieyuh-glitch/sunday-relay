@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 
@@ -13,6 +13,7 @@ import {
   evaluateMainProvenance,
   extractLandingBlock,
   parseSignedClearance,
+  readReviewerKey,
 } from './julius-main-provenance.mjs';
 
 /**
@@ -73,9 +74,14 @@ const signedTip = (over: Record<string, unknown> = {}) => evaluateMainProvenance
   mainCommitMessage: message(),
   reviewerKeyPem: REVIEWER_PEM,
   reviewerKeyAtSha: PARENT,
+  tipReviewerKeyPem: REVIEWER_PEM,
   headCommit: { sha: HEAD, authorLogin: WORKER, treeSha: TREE },
   ...over,
 } as unknown as ProvenanceInput);
+
+const createPublicKeyEquals = (a: string, b: string) => {
+  try { return readReviewerKey(a).key !== undefined || Buffer.from(a.split('\n')[1]!, 'base64').equals(Buffer.from(b.split('\n')[1]!, 'base64')); } catch { return false; }
+};
 
 const expectVerdict = (result: { verdict: string; reason: string }, verdict: string, reason?: RegExp) => {
   expect(result.verdict, result.reason).toBe(verdict);
@@ -104,7 +110,7 @@ describe('a tip signed for by the Independent Reviewer', () => {
     expectVerdict(signedTip({ reviewerKeyAtSha: undefined }), 'indeterminate');
     expectVerdict(signedTip({ reviewerKeyPem: undefined }), 'indeterminate');
     expectVerdict(signedTip({ reviewerKeyPem: '' }), 'indeterminate', /could not be read/u);
-    expectVerdict(signedTip({ reviewerKeyPem: 'not a key' }), 'indeterminate', /not a readable public key/u);
+    expectVerdict(signedTip({ reviewerKeyPem: 'not a key' }), 'indeterminate', /exactly one PEM block/u);
   });
 
   it('3. a key that is not ed25519 is never used', () => {
@@ -217,6 +223,53 @@ describe('a tip signed for by the Independent Reviewer', () => {
     expectVerdict(signedTip({ mainCommitMessage: message(block({ signature: flipped })) }), 'indeterminate', /not canonical/u);
   });
 
+  it('12c. H1: the key file AT THE TIP must be byte-identical to the parent\'s', () => {
+    expectVerdict(signedTip({ tipReviewerKeyPem: pem(attacker.publicKey) }), 'unprovenanced', /changes the reviewer key file/u);
+    expectVerdict(signedTip({ tipReviewerKeyPem: `${REVIEWER_PEM}\n` }), 'unprovenanced', /changes the reviewer key file/u);
+    expectVerdict(signedTip({ tipReviewerKeyPem: REVIEWER_PEM.replace('-----BEGIN', ' -----BEGIN') }), 'unprovenanced', /changes the reviewer key file/u);
+    expectVerdict(signedTip({ tipReviewerKeyPem: undefined }), 'indeterminate', /at the tip could not be read/u);
+    expectVerdict(signedTip({ tipReviewerKeyPem: '' }), 'unprovenanced', /changes the reviewer key file/u);
+    expectVerdict(signedTip({ tipReviewerKeyPem: 42 }), 'indeterminate', /at the tip could not be read/u);
+  });
+
+  it('12d. H4: the key file is exactly one PUBLIC ed25519 SPKI block: a private key, two blocks, extra text or a padded encoding are refused', () => {
+    const privatePem = String(reviewer.privateKey.export({ type: 'pkcs8', format: 'pem' }));
+    const cases: Array<[string, string, RegExp]> = [
+      ['a private key', privatePem, /private key/u],
+      ['a private key before the public one', `${privatePem}${REVIEWER_PEM}`, /private key/u],
+      ['two public blocks', `${REVIEWER_PEM}${pem(attacker.publicKey)}`, /exactly one PEM block/u],
+      ['a comment line before the block', `# the reviewer key\n${REVIEWER_PEM}`, /exactly one SPKI PUBLIC KEY block/u],
+      ['trailing text after the block', `${REVIEWER_PEM}trailing\n`, /exactly one SPKI PUBLIC KEY block/u],
+      ['CRLF line ends', REVIEWER_PEM.replace(/\n/gu, '\r\n'), /carriage return/u],
+      ['an RSA public key', pem(rsa.publicKey), /not an ed25519 key|canonical/u],
+      ['an empty file', '', /could not be read/u],
+      ['a block with no body', '-----BEGIN PUBLIC KEY-----\n-----END PUBLIC KEY-----\n', /exactly one SPKI PUBLIC KEY block/u],
+    ];
+    for (const [name, text, reason] of cases) {
+      expect(readReviewerKey(text).problem, name).toMatch(reason);
+      expectVerdict(signedTip({ reviewerKeyPem: text, tipReviewerKeyPem: text }), 'indeterminate', reason);
+    }
+    // The encoding must be the canonical one: flip an unused padding bit of the base64 body (it decodes to the same key).
+    const lines = REVIEWER_PEM.split('\n');
+    const body = lines[1]!;
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const index = body.indexOf('=') > 0 ? body.indexOf('=') - 1 : -1;
+    expect(index, 'an SPKI ed25519 body ends in a padded base64 group').toBeGreaterThan(0);
+    if (index > 0) {
+      const flipped = `${body.slice(0, index)}${alphabet[alphabet.indexOf(body[index]!) ^ 1]}${body.slice(index + 1)}`;
+      const padded = [lines[0], flipped, ...lines.slice(2)].join('\n');
+      expect(createPublicKeyEquals(padded, REVIEWER_PEM), 'the variant must be the same key').toBe(true);
+      expect(readReviewerKey(padded).problem).toMatch(/canonical/u);
+    }
+    expect(readReviewerKey(REVIEWER_PEM).problem).toBeUndefined();
+    expect(readReviewerKey(`${REVIEWER_PEM}\n`).problem, 'a second trailing newline is not part of the one block').toMatch(/exactly one SPKI PUBLIC KEY block/u);
+  });
+
+  it('12e. the real reviewer key file committed in this repository is accepted by the key reader', () => {
+    const real = readFileSync(resolve(import.meta.dirname, '../.github/julius-landing/reviewer-ed25519.pub'), 'utf8');
+    expect(readReviewerKey(real).problem).toBeUndefined();
+  });
+
   it('13. a tip that carries a block is judged by the block ALONE: a legitimate founder approval cannot rescue a bad block', () => {
     const founderStyle = {
       pullRequests: [{ number: 226, merged: true, mergeCommitSha: MAIN, authorLogin: WORKER, headSha: HEAD, baseRef: 'main' }],
@@ -301,7 +354,8 @@ describe('the CLI on a signed tip', () => {
     [`repos/${REPO}/branches/main`]: { commit: { sha: MAIN } },
     [`repos/${REPO}/commits/${MAIN}`]: { commit: { tree: { sha: TREE }, message: message() }, parents: [{ sha: PARENT }] },
     [`repos/${REPO}/commits/${MAIN}/pulls`]: [],
-    [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub`]: keyFile,
+    [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${PARENT}`]: keyFile,
+    [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${MAIN}`]: keyFile,
     [`repos/${REPO}/commits/${HEAD}`]: { sha: HEAD, author: { login: WORKER }, commit: { tree: { sha: TREE } } },
     ...over,
   });
@@ -316,7 +370,7 @@ describe('the CLI on a signed tip', () => {
   copyFileSync(process.execPath, join(stubDirectory, stubName));
   afterAll(() => { rmSync(stubDirectory, { recursive: true, force: true }); });
 
-  const run = (table: Record<string, unknown>, expectedKeyRef: string = PARENT) => {
+  const run = (table: Record<string, unknown>) => {
     const directory = mkdtempSync(join(tmpdir(), 'julius-provenance-signed-'));
     try {
       const stub = join(directory, 'stub.cjs');
@@ -325,8 +379,9 @@ describe('the CLI on a signed tip', () => {
         'if (base === "gh" || base === "gh.exe") {',
         `  const table = ${JSON.stringify(table)};`,
         '  const full = process.argv[process.argv.length - 1] ?? "";',
-        '  const path = full.split("?")[0];',
-        `  if (path.includes("/contents/") && !full.endsWith("?ref=${expectedKeyRef}")) { process.stderr.write("stub: key read at the wrong ref: " + full + "\\n"); process.exit(1); }`,
+        '  const split = full.split("?");',
+        '  const ref = (split[1] ?? "").replace(/^ref=/, "");',
+        '  const path = split[0].includes("/contents/") ? split[0] + "@" + ref : split[0];',
         '  if (!(path in table)) { process.stderr.write("stub: no route for " + path + "\\n"); process.exit(1); }',
         '  process.stdout.write(JSON.stringify(table[path]));',
         '  process.exit(0);',
@@ -358,19 +413,32 @@ describe('the CLI on a signed tip', () => {
     expect(result.stdout).toContain('pr=381');
   }, 30_000);
 
-  it('a key read at any ref but the parent is an error, never a pass', () => {
-    expect(run(routes(), MAIN).code).toBe(1);
+  it('a key that exists only at the tip (never at the parent) is an error, never a pass', () => {
+    const onlyTip = routes(); delete onlyTip[`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${PARENT}`];
+    expect(run(onlyTip).code).toBe(1);
   }, 30_000);
 
+  it('a tip that changes the key file, or lacks it, is never a pass even when the parent key signs the block', () => {
+    const swapped = run(routes({ [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${MAIN}`]: { ...keyFile, content: Buffer.from(pem(attacker.publicKey), 'utf8').toString('base64') } }));
+    expect(swapped.code).toBe(1);
+    expect(swapped.stderr).toContain('changes the reviewer key file');
+    const noTip = routes(); delete noTip[`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${MAIN}`];
+    expect(run(noTip).code).toBe(1);
+  }, 60_000);
+
   it('a missing key, a missing head commit or a wrong head author is never a pass', () => {
-    const noKey = routes(); delete noKey[`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub`];
+    const noKey = routes(); delete noKey[`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${PARENT}`];
     expect(run(noKey).code).toBe(1);
     const noHead = routes(); delete noHead[`repos/${REPO}/commits/${HEAD}`];
     expect(run(noHead).code).toBe(1);
     const wrongAuthor = run(routes({ [`repos/${REPO}/commits/${HEAD}`]: { sha: HEAD, author: { login: 'a-passing-collaborator' }, commit: { tree: { sha: TREE } } } }));
     expect(wrongAuthor.code).toBe(1);
     expect(wrongAuthor.stderr).toContain('not the coding worker');
-    const wrongKey = run(routes({ [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub`]: { ...keyFile, content: Buffer.from(pem(attacker.publicKey), 'utf8').toString('base64') } }));
+    const attackerFile = { ...keyFile, content: Buffer.from(pem(attacker.publicKey), 'utf8').toString('base64') };
+    const wrongKey = run(routes({
+      [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${PARENT}`]: attackerFile,
+      [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${MAIN}`]: attackerFile,
+    }));
     expect(wrongKey.code).toBe(1);
     expect(wrongKey.stderr).toContain('does not verify');
   }, 60_000);
@@ -379,7 +447,8 @@ describe('the CLI on a signed tip', () => {
     const legacy = routes({
       [`repos/${REPO}/commits/${MAIN}`]: { commit: { tree: { sha: TREE }, message: 'Julius: ordinary (#226)\n' }, parents: [{ sha: PARENT }] },
     });
-    delete legacy[`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub`];
+    delete legacy[`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${PARENT}`];
+    delete legacy[`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${MAIN}`];
     const result = run(legacy);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain('no merged pull request records');
@@ -388,7 +457,7 @@ describe('the CLI on a signed tip', () => {
   it('an evidence file that omits any signed-path field can never pass', () => {
     const full = {
       mainSha: MAIN, mainShaAfter: MAIN, mainTreeSha: TREE, mainParents: [PARENT], mainCommitMessage: message(),
-      reviewerKeyPem: REVIEWER_PEM, reviewerKeyAtSha: PARENT, headCommit: { sha: HEAD, authorLogin: WORKER, treeSha: TREE },
+      reviewerKeyPem: REVIEWER_PEM, reviewerKeyAtSha: PARENT, tipReviewerKeyPem: REVIEWER_PEM, headCommit: { sha: HEAD, authorLogin: WORKER, treeSha: TREE },
     };
     const runEvidence = (evidence: Record<string, unknown>) => {
       const directory = mkdtempSync(join(tmpdir(), 'julius-provenance-signed-evidence-'));
@@ -408,7 +477,7 @@ describe('the CLI on a signed tip', () => {
     const ok = runEvidence(full);
     expect(ok.code).toBe(0);
     expect(ok.stdout).toContain('provenance=provenant');
-    for (const field of ['mainCommitMessage', 'reviewerKeyPem', 'reviewerKeyAtSha', 'headCommit', 'mainParents', 'mainTreeSha'] as const) {
+    for (const field of ['mainCommitMessage', 'reviewerKeyPem', 'reviewerKeyAtSha', 'tipReviewerKeyPem', 'headCommit', 'mainParents', 'mainTreeSha'] as const) {
       const { [field]: _omitted, ...trimmed } = full;
       const result = runEvidence(trimmed);
       expect(result.code, `omitting ${field} must not pass`).toBe(1);

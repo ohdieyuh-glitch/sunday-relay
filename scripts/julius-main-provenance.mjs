@@ -171,6 +171,37 @@ export function parseSignedClearance(text) {
   return { problems, fields };
 }
 
+/**
+ * THE KEY FILE IS EXACTLY ONE PUBLIC ED25519 KEY AND NOTHING ELSE.
+ *
+ * Node's createPublicKey is liberal: it will derive a public key from a PRIVATE key PEM and ignores whatever else a
+ * multi-block file carries. A key file that holds a private key, a second key, comments or trailing text is not the
+ * file the reviewer committed, so it is refused rather than interpreted. Returns the key object, or a reason.
+ */
+export function readReviewerKey(pem) {
+  if (typeof pem !== 'string' || pem === '') return { problem: 'the reviewer key could not be read' };
+  if (pem.includes('\r')) return { problem: 'the reviewer key file carries a carriage return' };
+  if (/PRIVATE KEY/u.test(pem)) return { problem: 'the reviewer key file holds a private key' };
+  if (pem.split('-----BEGIN ').length - 1 !== 1 || pem.split('-----END ').length - 1 !== 1) {
+    return { problem: 'the reviewer key file must hold exactly one PEM block' };
+  }
+  if (!/^-----BEGIN PUBLIC KEY-----\n[A-Za-z0-9+/=\n]+\n-----END PUBLIC KEY-----\n?$/u.test(pem)) {
+    return { problem: 'the reviewer key file must be exactly one SPKI PUBLIC KEY block and nothing else' };
+  }
+  let key;
+  try {
+    key = createPublicKey(pem);
+  } catch {
+    return { problem: 'the reviewer key is not a readable public key' };
+  }
+  if (key.asymmetricKeyType !== 'ed25519') return { problem: 'the reviewer key is not an ed25519 key' };
+  // Canonical form: what Node writes back for this key is what the file must already say (no padding games inside the base64).
+  if (String(key.export({ type: 'spki', format: 'pem' })).replace(/\n+$/u, '') !== pem.replace(/\n+$/u, '')) {
+    return { problem: 'the reviewer key file is not the canonical encoding of its key' };
+  }
+  return { key };
+}
+
 const signedVerdict = (name, reason, extra = {}) => ({ state: 'decided', result: verdict(name, reason, { via: 'signed-landing', ...extra }) });
 
 /**
@@ -179,6 +210,7 @@ const signedVerdict = (name, reason, extra = {}) => ({ state: 'decided', result:
  * @param {unknown} input.mainCommitMessage
  * @param {unknown} input.reviewerKeyPem     The PEM committed at the parent.
  * @param {unknown} input.reviewerKeyAtSha   The commit that PEM was read at. Must be the tip's single parent.
+ * @param {unknown} input.tipReviewerKeyPem  The same file read AT THE TIP: must be byte-identical to the parent's.
  * @param {unknown} input.headCommit         `{ sha, authorLogin, treeSha }` of the commit the clearance names as `head`.
  */
 export function evaluateSignedLanding(input, tip) {
@@ -203,16 +235,18 @@ export function evaluateSignedLanding(input, tip) {
   if (!isSha(input?.reviewerKeyAtSha) || input.reviewerKeyAtSha !== parentSha) {
     return signedVerdict('indeterminate', 'the reviewer key was not read at the single parent of the tip', base);
   }
-  if (typeof input?.reviewerKeyPem !== 'string' || input.reviewerKeyPem === '') {
-    return signedVerdict('indeterminate', 'the reviewer key committed at the parent could not be read', base);
+  const read = readReviewerKey(input?.reviewerKeyPem);
+  if (read.problem) return signedVerdict('indeterminate', `${read.problem} (as committed at the parent)`, base);
+  // DEFENCE IN DEPTH: the key file AT THE TIP must be byte-identical to the parent's. A squash that swaps the key
+  // (founder-approved, say) cannot then be dressed as a signed landing: the signature is checked against the parent's key,
+  // but a tip that changes the trust anchor is not provenant, whatever it is signed with.
+  if (typeof input?.tipReviewerKeyPem !== 'string') {
+    return signedVerdict('indeterminate', 'the reviewer key file at the tip could not be read', base);
   }
-  let key;
-  try {
-    key = createPublicKey(input.reviewerKeyPem);
-  } catch {
-    return signedVerdict('indeterminate', 'the reviewer key committed at the parent is not a readable public key', base);
+  if (input.tipReviewerKeyPem !== input.reviewerKeyPem) {
+    return signedVerdict('unprovenanced', 'the tip changes the reviewer key file; a landing that moves the trust anchor is not provenant', base);
   }
-  if (key.asymmetricKeyType !== 'ed25519') return signedVerdict('indeterminate', 'the reviewer key committed at the parent is not an ed25519 key', base);
+  const key = read.key;
   const signature = Buffer.from(block.signatureB64, 'base64');
   if (signature.length !== 64) return signedVerdict('unprovenanced', 'the landing signature is not 64 bytes', base);
   let signatureOk = false;
@@ -264,6 +298,7 @@ export function evaluateSignedLanding(input, tip) {
  * @param {unknown} [input.mainCommitMessage] The tip's commit message (landing block, see above).
  * @param {unknown} [input.reviewerKeyPem] The reviewer public key committed at the parent.
  * @param {unknown} [input.reviewerKeyAtSha] The sha that key was read at.
+ * @param {unknown} [input.tipReviewerKeyPem] The key file read at the tip itself (must equal the parent's).
  * @param {unknown} [input.headCommit] `{ sha, authorLogin, treeSha }` of the commit the clearance names.
  */
 export function evaluateMainProvenance(input) {
@@ -550,6 +585,7 @@ async function main(argv) {
     const mainCommitMessage = mainCommit?.commit?.message;
     let reviewerKeyPem;
     let reviewerKeyAtSha;
+    let tipReviewerKeyPem;
     let headCommit;
     const landingBlock = extractLandingBlock(mainCommitMessage);
     const parentOfTip = mainCommit?.parents?.[0]?.sha;
@@ -558,6 +594,10 @@ async function main(argv) {
       if (keyFile?.type === 'file' && keyFile?.encoding === 'base64' && typeof keyFile?.content === 'string') {
         reviewerKeyPem = Buffer.from(keyFile.content, 'base64').toString('utf8');
         reviewerKeyAtSha = parentOfTip;
+      }
+      const tipKeyFile = gh(`repos/${repo}/contents/.github/julius-landing/reviewer-ed25519.pub?ref=${mainSha}`);
+      if (tipKeyFile?.type === 'file' && tipKeyFile?.encoding === 'base64' && typeof tipKeyFile?.content === 'string') {
+        tipReviewerKeyPem = Buffer.from(tipKeyFile.content, 'base64').toString('utf8');
       }
       const signedHead = parseSignedClearance(Buffer.from(landingBlock.clearanceB64, 'base64').toString('utf8')).fields.head;
       if (isSha(signedHead)) {
@@ -623,6 +663,7 @@ async function main(argv) {
       mainCommitMessage,
       reviewerKeyPem,
       reviewerKeyAtSha,
+      tipReviewerKeyPem,
       headCommit,
     });
   } catch (error) {

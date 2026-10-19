@@ -68,6 +68,8 @@ export declare function evaluateMainProvenance(input: {
   readonly reviewerKeyPem?: unknown;
   /** The commit that key was read at: must be the parent. */
   readonly reviewerKeyAtSha?: unknown;
+  /** The same key file read AT THE TIP: must be byte-identical to the parent's. */
+  readonly tipReviewerKeyPem?: unknown;
   /** `{ sha, authorLogin, treeSha }` of the commit the signed clearance names as head. */
   readonly headCommit?: unknown;
 }): MainProvenanceResult;
@@ -86,3 +88,4 @@ export declare function evaluateSignedLanding(input: Record<string, unknown>, ti
   | { readonly state: 'absent' }
   | { readonly state: 'decided'; readonly result: MainProvenanceResult };
 
+export declare function readReviewerKey(pem: unknown): { readonly key: unknown; readonly problem?: undefined } | { readonly problem: string; readonly key?: undefined };
