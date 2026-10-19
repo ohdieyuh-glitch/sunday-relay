@@ -223,16 +223,41 @@ globalThis.fetch = async (url, init = {}) => {
   const method = init.method ?? 'GET';
   appendFileSync(calls, JSON.stringify({ method, path, body: init.body ?? null }) + '\\n');
   const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-  if (method === 'PUT' && /\\/pulls\\/\\d+\\/merge$/.test(path)) return scenario.mergeStatus === 200 ? reply(200, { sha: scenario.mergedSha, merged: true }) : reply(scenario.mergeStatus, { message: 'merge refused by the fake' });
+  // The landing writes (git data API; the merge endpoint is not modelled on purpose: a request to it is an unexpected path, 404).
+  if (method === 'POST' && /\\/git\\/commits$/.test(path)) {
+    globalThis.__created = JSON.parse(init.body);
+    return scenario.postStatus ? reply(scenario.postStatus, { message: 'commit creation refused by the fake' }) : reply(201, { sha: scenario.createdSha });
+  }
+  if (method === 'PATCH' && /\\/git\\/refs\\/heads\\/main$/.test(path)) {
+    const b = JSON.parse(init.body);
+    if (scenario.patchStatus) return reply(scenario.patchStatus, { message: 'ref update refused by the fake' });
+    // GitHub's rule for a NON-forced update: refused unless main is still the parent of the new commit. A forced update would overwrite whatever main became.
+    const mainNow = scenario.mainAtPatch ?? scenario.main;
+    if (b.force !== true && mainNow !== globalThis.__created.parents[0]) return reply(422, { message: 'Update is not a fast forward' });
+    globalThis.__mainAfterPatch = b.sha;
+    return reply(200, { object: { sha: b.sha } });
+  }
+  if (method === 'PATCH' && /\\/pulls\\/\\d+$/.test(path)) return scenario.closeStatus ? reply(scenario.closeStatus, { message: 'close refused by the fake' }) : reply(200, {});
+  if (method === 'POST' && /\\/issues\\/\\d+\\/comments$/.test(path)) return reply(201, {});
   if (path.includes('/git/ref/heads/main')) {
     const seq = scenario.mainSequence;
-    const sha = seq ? seq[Math.min(globalThis.__mainReads = (globalThis.__mainReads ?? 0) + 1, seq.length) - 1] : scenario.main;
+    let sha = seq ? seq[Math.min(globalThis.__mainReads = (globalThis.__mainReads ?? 0) + 1, seq.length) - 1] : scenario.main;
+    if (globalThis.__mainAfterPatch) sha = scenario.mainAfterOverride ?? globalThis.__mainAfterPatch;
     return reply(200, { object: { sha } });
   }
   if (path.includes('/commits?sha=main')) return reply(200, scenario.history);
-  if (/\\/commits\\/[0-9a-f]{40}\\/check-runs/.test(path)) return reply(200, { total_count: scenario.omitTotalCount ? undefined : scenario.checkRuns.length, check_runs: scenario.checkRuns });
+  // check runs: scenario.checkRunsSeq (one list per read, the last repeats) lets a test change CI between the reads
+  if (/\\/commits\\/[0-9a-f]{40}\\/check-runs/.test(path)) {
+    const seq = scenario.checkRunsSeq;
+    const rows = seq ? seq[Math.min(globalThis.__ciReads = (globalThis.__ciReads ?? 0) + 1, seq.length) - 1] : scenario.checkRuns;
+    return reply(200, { total_count: scenario.omitTotalCount ? undefined : rows.length, check_runs: rows });
+  }
   if (/\\/commits\\/[0-9a-f]{40}\\/status/.test(path)) return reply(200, { total_count: scenario.totalCountOverride ?? scenario.statuses.length, statuses: scenario.statuses });
-  if (path.includes('/commits/' + scenario.mergedSha)) return reply(200, scenario.landed);
+  // the read-back of the commit the lander created: it echoes what the lander POSTed unless the scenario supplies a tampered answer
+  if (method === 'GET' && path.endsWith('/commits/' + scenario.createdSha)) {
+    const c = globalThis.__created;
+    return reply(200, scenario.readBack ?? { sha: scenario.createdSha, parents: c.parents.map((sha) => ({ sha })), commit: { tree: { sha: c.tree }, message: c.message, author: c.author, committer: c.committer } });
+  }
   if (/\\/commits\\/[0-9a-f]{40}$/.test(path)) return reply(200, scenario.commit);
   if (/\\/pulls\\/\\d+\\/files/.test(path)) return reply(200, scenario.files.map((f) => (typeof f === 'string' ? { filename: f } : f)));
   if (/\\/issues\\/\\d+\\/comments/.test(path)) return reply(200, scenario.issueComments);
@@ -250,9 +275,9 @@ function runLand(over: { scenario?: Record<string, unknown>; text?: string; sign
   const callsFile = join(work, `calls-${counter}.log`);
   writeFileSync(callsFile, '');
   writeFileSync(scenarioFile, JSON.stringify({
-    main: B, mergedSha: '9'.repeat(40), mergeStatus: 200, pr: goodPr(), commit: goodCommit(), files: ['.github/julius-missions/x/contract.json'],
+    main: B, createdSha: '8'.repeat(40), pr: goodPr(), commit: goodCommit(), files: ['.github/julius-missions/x/contract.json'],
     checkRuns: [{ name: 'Verify Relay', status: 'completed', conclusion: 'success' }, { name: 'Land a cleared pull request', status: 'in_progress', conclusion: null }], statuses: [{ context: 'v', state: 'success' }],
-    issueComments: [], inlineComments: [], reviews: [], history: [{ commit: { message: 'an earlier landing' } }], landed: { parents: [{ sha: B }], commit: { tree: { sha: T } } }, ...(over.scenario ?? {}),
+    issueComments: [], inlineComments: [], reviews: [], history: [{ commit: { message: 'an earlier landing' } }], ...(over.scenario ?? {}),
   }));
   const text = over.text ?? clearanceText();
   const r = spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, join(landDir, 'land.mjs')], {
@@ -263,24 +288,25 @@ function runLand(over: { scenario?: Record<string, unknown>; text?: string; sign
     },
   });
   const calls = readFileSync(callsFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as { method: string; path: string; body: string | null });
-  return { code: r.status, out: `${r.stdout}${r.stderr}`, merges: calls.filter((c) => c.method === 'PUT'), calls };
+  // `merges` = every request that moves main (a ref update); `writes` = every request that is not a GET.
+  return { code: r.status, out: `${r.stdout}${r.stderr}`, merges: calls.filter((c) => c.method === 'PATCH' && /\/git\/refs\/heads\/main$/.test(c.path)), writes: calls.filter((c) => c.method !== 'GET'), calls };
 }
 
 describe('land.mjs end to end against a fake GitHub', () => {
-  it('merges exactly once, squash, pinned to the cleared head, and verifies the landed tree', () => {
+  it('lands exactly once: creates the cleared tree on the cleared base, advances main with a non-forced ref update, then closes the PR', () => {
     const r = runLand();
-    expect(r.out).toContain('MERGED PR #7');
+    expect(r.out).toContain('LANDED PR #7');
     expect(r.code).toBe(0);
     expect(r.merges).toHaveLength(1);
-    const body = JSON.parse(r.merges[0]!.body ?? '{}') as Record<string, string>;
-    expect(body.sha).toBe(H);
-    expect(body.merge_method).toBe('squash');
+    const body = JSON.parse(r.merges[0]!.body ?? '{}') as Record<string, unknown>;
+    expect(body).toEqual({ sha: '8'.repeat(40), force: false });
+    expect(r.calls.some((c) => c.method === 'PUT'), 'the merge endpoint is never used').toBe(false);
   });
 
   it('a signed governed exception lets exactly that file change', () => {
     const text = clearanceText({ 'governed-exceptions': 'scripts/julius-live-contract-check.mjs' });
     const r = runLand({ text, signature: sig(text), scenario: { files: ['.github/julius-missions/x/contract.json', 'scripts/julius-live-contract-check.mjs'], pr: { ...goodPr(), changed_files: 2 } } });
-    expect(r.out).toContain('MERGED PR #7');
+    expect(r.out).toContain('LANDED PR #7');
     expect(r.merges).toHaveLength(1);
     const other = runLand({ text, signature: sig(text), scenario: { files: ['.github/julius-missions/x/contract.json', 'scripts/julius-live-contract-check.mjs', 'relay-bridge/julius/role-effort.test.ts'], pr: { ...goodPr(), changed_files: 3 } } });
     expect(other.merges).toHaveLength(0);
@@ -344,13 +370,13 @@ describe('land.mjs end to end against a fake GitHub', () => {
     }
   });
 
-  it('a merge API error fails the job, and a landed tree that is not the cleared one raises an alert (exit 2)', () => {
-    const rejected = runLand({ scenario: { mergeStatus: 405 } });
+  it('a ref-update error fails the job unlanded, and a main that is not the created commit afterwards raises an alert (exit 2)', () => {
+    const rejected = runLand({ scenario: { patchStatus: 405 } });
     expect(rejected.code).not.toBe(0);
     expect(rejected.merges).toHaveLength(1);
-    const wrong = runLand({ scenario: { landed: { parents: [{ sha: B }], commit: { tree: { sha: 'f'.repeat(40) } } } } });
+    const wrong = runLand({ scenario: { mainAfterOverride: 'f'.repeat(40) } });
     expect(wrong.code).toBe(2);
-    expect(wrong.out).toContain('ALERT AFTER MERGE');
+    expect(wrong.out).toContain('ALERT AFTER LANDING');
   });
 });
 
@@ -398,5 +424,287 @@ describe('the workflow file is pinned', () => {
     for (const b of list) expect(b).toMatch(/^relay\/julius-[a-z0-9-]+$/u);
     expect(readFileSync(join(LANDING, 'reviewer-ed25519.pub'), 'utf8')).toContain('BEGIN PUBLIC KEY');
     expect(readFileSync(join(LANDING, 'reviewer-ed25519.pub'), 'utf8')).not.toMatch(/PRIVATE KEY/u);
+  });
+});
+
+/* ------------------------------------------------------------------------------------------------------------------ v3: L1 format, L2 final CI read, L3 no merge endpoint, L4 digest bodies */
+
+const goodSignature = (text = clearanceText()) => sig(text);
+const buildMessage = (text = clearanceText()) => lib.buildLandingCommitMessage({ clearanceText: text, signatureB64: goodSignature(text) }) as string;
+const IDENTITY = { name: 'github-actions[bot]', email: '41898282+github-actions[bot]@users.noreply.github.com' };
+
+describe('L1: the landing commit message carries the signed clearance in a fixed, parseable block', () => {
+  it('round-trips: the parser returns the exact clearance text, signature and nonce, and every field comes from the signed clearance', () => {
+    const text = clearanceText();
+    const msg = buildMessage(text);
+    expect(msg.endsWith('\n') && !msg.endsWith('\n\n')).toBe(true);
+    expect(msg.split('\n').slice(-7)).toEqual(['-----BEGIN JULIUS LANDING-----', 'v: 1', 'clearance-nonce: 0123456789abcdef0123456789abcdef', `clearance-b64: ${Buffer.from(text).toString('base64')}`, `signature-b64: ${goodSignature(text)}`, '-----END JULIUS LANDING-----', '']);
+    const parsed = lib.parseLandingCommitMessage(msg, { expected: { pr: 7, head: H, tree: T, base: B }, publicKeyPem: publicPem });
+    expect(parsed.problems).toEqual([]);
+    expect(parsed.fields.clearanceText).toBe(text);
+    expect(parsed.fields.signatureB64).toBe(goodSignature(text));
+    expect(parsed.fields.nonce).toBe('0123456789abcdef0123456789abcdef');
+    expect(parsed.fields.clearance).toMatchObject({ pr: '7', head: H, tree: T, base: B });
+    expect(parsed.fields.freeText.split('\n')[0]).toBe(lib.squashTitle(7, H));
+    expect(lib.nonceUsed([msg], '0123456789abcdef0123456789abcdef'), 'the replay guard reads the block').toBe(true);
+  });
+
+  it('the parser refuses a message whose signed clearance is for another tree, head, base or PR number, and a signature that does not verify', () => {
+    const msg = buildMessage();
+    for (const [name, expected] of [['tree', { tree: 'd'.repeat(40) }], ['head', { head: 'd'.repeat(40) }], ['base', { base: 'd'.repeat(40) }], ['pr', { pr: 8 }]] as const) {
+      expect(lib.parseLandingCommitMessage(msg, { expected }).problems.join(' '), name).toContain(`the signed clearance ${name}`);
+    }
+    // another PR's clearance swapped in: its own signature is fine but the PR/head/tree/base no longer match the commit
+    const other = clearanceText({ pr: '8', head: 'e'.repeat(40) });
+    expect(lib.parseLandingCommitMessage(buildMessage(other), { expected: { pr: 7, head: H }, publicKeyPem: publicPem }).problems.length).toBeGreaterThan(0);
+    // a tampered clearance with the old signature
+    const tampered = msg.replace(/clearance-b64: \S+/u, `clearance-b64: ${Buffer.from(clearanceText({ tree: 'd'.repeat(40) })).toString('base64')}`);
+    expect(lib.parseLandingCommitMessage(tampered, { publicKeyPem: publicPem }).problems.join(' ')).toContain('does not verify');
+    expect(lib.parseLandingCommitMessage(msg, { publicKeyPem: otherKeys.publicKey.export({ type: 'spki', format: 'pem' }).toString() }).problems.join(' ')).toContain('does not verify');
+    expect(lib.parseLandingCommitMessage(msg.replace(/nonce: 0123/u, 'nonce: 1123')).problems.join(' ')).toContain('differs from the signed clearance nonce');
+  });
+
+  it('the parser is strict: marker count, position, extra/missing/duplicate keys, trailing text, non-canonical base64, multi-line values, CR', () => {
+    const msg = buildMessage();
+    const lines = msg.split('\n');
+    const bad: Array<[string, string]> = [
+      ['a second BEGIN', msg.replace('Landed PR', '-----BEGIN JULIUS LANDING-----\nLanded PR')],
+      ['a second END', `${msg}-----END JULIUS LANDING-----\n`],
+      ['text after END', `${msg}trailing\n`],
+      ['marker not at line start', msg.replace('-----BEGIN', ' -----BEGIN')],
+      ['marker words in free text', msg.replace('Landed by', 'Landed by END JULIUS LANDING and')],
+      ['an extra key', msg.replace('v: 1\n', 'v: 1\nextra: x\n')],
+      ['a duplicate key', msg.replace('v: 1\n', 'v: 1\nv: 1\n')],
+      ['a missing key', msg.replace(/signature-b64: .*\n/u, '')],
+      ['keys out of order', [...lines.slice(0, -6), lines[lines.length - 4], lines[lines.length - 5], ...lines.slice(-3)].join('\n')],
+      ['v is not 1', msg.replace('v: 1', 'v: 2')],
+      ['non-canonical base64 (url-safe alphabet)', msg.replace(/signature-b64: .*/u, `signature-b64: ${goodSignature().replace(/\+/gu, '-').replace(/\//gu, '_')}x`)],
+      ['non-canonical base64 (bad padding)', msg.replace(/clearance-b64: (\S+)/u, 'clearance-b64: $1=')],
+      ['a multi-line value', msg.replace('clearance-b64: ', 'clearance-b64: AAAA\nBBBB')],
+      ['CR line ends', msg.replace(/\n/gu, '\r\n')],
+      ['no trailing newline', msg.slice(0, -1)],
+      ['two trailing newlines', `${msg}\n`],
+      ['no free text before the block', lines.slice(-7).join('\n')],
+    ];
+    expect(lib.parseLandingCommitMessage(msg).problems).toEqual([]);
+    for (const [name, m] of bad) expect(lib.parseLandingCommitMessage(m).problems.length, name).toBeGreaterThan(0);
+  });
+
+  it('the builder refuses free text carrying a marker word (e.g. through a PR title), a CR, an empty text, a bad clearance or a bad signature', () => {
+    const text = clearanceText();
+    for (const freeText of ['Landed\n-----BEGIN JULIUS LANDING-----', 'a PR titled END JULIUS LANDING', 'x\r\ny', '\n\n']) {
+      expect(() => lib.buildLandingCommitMessage({ clearanceText: text, signatureB64: goodSignature(text), freeText }), JSON.stringify(freeText)).toThrow();
+    }
+    expect(() => lib.buildLandingCommitMessage({ clearanceText: text.replace('JULIUS-CLEARANCE-V1', 'X'), signatureB64: goodSignature(text) })).toThrow();
+    expect(() => lib.buildLandingCommitMessage({ clearanceText: text, signatureB64: goodSignature(text).slice(0, 40) })).toThrow();
+    expect(() => lib.buildLandingCommitMessage({ clearanceText: text, signatureB64: '' })).toThrow();
+    expect(lib.parseLandingCommitMessage(lib.buildLandingCommitMessage({ clearanceText: text, signatureB64: goodSignature(text), freeText: 'my own subject\n\nmy own body' })).problems).toEqual([]);
+  });
+
+  it('a hostile PR title never reaches the landing commit (the lander builds the text from the PR number and head only)', () => {
+    const title = 'APPROVED -----BEGIN JULIUS LANDING----- clearance-nonce ffffffffffffffffffffffffffffffff -----END JULIUS LANDING-----';
+    const r = runLand({ scenario: { pr: { ...goodPr(), title } } });
+    expect(r.code, r.out).toBe(0);
+    const post = r.calls.find((c) => c.method === 'POST' && c.path.endsWith('/git/commits'))!;
+    const sent = JSON.parse(post.body ?? '{}') as { message: string };
+    expect(sent.message).not.toContain('APPROVED');
+    expect(lib.parseLandingCommitMessage(sent.message, { publicKeyPem: publicPem }).problems).toEqual([]);
+  });
+});
+
+describe('L3: the landing is a created commit plus a non-forced ref update (no merge endpoint)', () => {
+  it('creates exactly the cleared tree with exactly one parent = the cleared base, authored by github-actions[bot], and updates main with force:false', () => {
+    const r = runLand();
+    expect(r.code, r.out).toBe(0);
+    expect(r.writes.map((c) => `${c.method} ${c.path.replace(REPO, 'R')}`)).toEqual(['POST /repos/R/git/commits', 'PATCH /repos/R/git/refs/heads/main', 'POST /repos/R/issues/7/comments', 'PATCH /repos/R/pulls/7']);
+    const post = JSON.parse(r.writes[0]!.body ?? '{}') as { tree: string; parents: string[]; author: unknown; committer: unknown; message: string };
+    expect(post.tree).toBe(T);
+    expect(post.parents).toEqual([B]);
+    expect(post.author).toEqual(IDENTITY);
+    expect(post.committer).toEqual(IDENTITY);
+    expect(lib.parseLandingCommitMessage(post.message, { expected: { pr: 7, head: H, tree: T, base: B }, publicKeyPem: publicPem }).problems).toEqual([]);
+    expect(JSON.parse(r.writes[1]!.body ?? '{}')).toEqual({ sha: '8'.repeat(40), force: false });
+    const comment = JSON.parse(r.writes[2]!.body ?? '{}') as { body: string };
+    expect(comment.body).toContain('8'.repeat(40));
+    expect(JSON.parse(r.writes[3]!.body ?? '{}')).toEqual({ state: 'closed' });
+    // the read-back happened before the ref update
+    const idx = (pred: (c: { method: string; path: string }) => boolean) => r.calls.findIndex(pred);
+    expect(idx((c) => c.method === 'GET' && c.path.endsWith(`/commits/${'8'.repeat(40)}`))).toBeGreaterThan(idx((c) => c.method === 'POST' && c.path.endsWith('/git/commits')));
+    expect(idx((c) => c.method === 'GET' && c.path.endsWith(`/commits/${'8'.repeat(40)}`))).toBeLessThan(idx((c) => c.method === 'PATCH' && c.path.endsWith('/git/refs/heads/main')));
+  });
+
+  it('main moves between the tip read and the ref update: GitHub refuses the non-forced update, the lander refuses and reports, and writes nothing else', () => {
+    const r = runLand({ scenario: { mainAtPatch: 'f'.repeat(40) } });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('the ref update was refused');
+    expect(r.out).toContain('Nothing was landed');
+    expect(r.writes.map((c) => c.method)).toEqual(['POST', 'PATCH']);
+    expect(r.merges).toHaveLength(1);
+    expect(JSON.parse(r.merges[0]!.body ?? '{}').force).toBe(false);
+  });
+
+  it('a ref update refused with 422 or 409 is reported, never retried and never forced', () => {
+    for (const patchStatus of [422, 409]) {
+      const r = runLand({ scenario: { patchStatus } });
+      expect(r.code, String(patchStatus)).toBe(1);
+      expect(r.out).toContain(`${patchStatus}`);
+      expect(r.merges, 'exactly one attempt').toHaveLength(1);
+      for (const m of r.merges) expect(JSON.parse(m.body ?? '{}').force).toBe(false);
+      expect(r.writes.some((c) => c.path.includes('/issues/') || /\/pulls\/\d+$/.test(c.path)), 'no comment, no close').toBe(false);
+    }
+  });
+
+  it('a commit that cannot be created, or that reads back with another tree, parent, message or identity, is never put on main', () => {
+    const c = (over: Record<string, unknown>, parents = [{ sha: B }]) => ({ sha: '8'.repeat(40), parents, commit: { tree: { sha: T }, message: 'x', author: IDENTITY, committer: IDENTITY, ...over } });
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['the create call fails', { postStatus: 500 }],
+      ['another tree', { readBack: c({ tree: { sha: 'f'.repeat(40) } }) }],
+      ['another parent', { readBack: c({}, [{ sha: 'f'.repeat(40) }]) }],
+      ['two parents', { readBack: c({}, [{ sha: B }, { sha: H }]) }],
+      ['no parent', { readBack: c({}, []) }],
+      ['another message', { readBack: c({ message: 'something else' }) }],
+      ['another committer', { readBack: c({ committer: { name: 'julius-worker[bot]', email: 'x@y.z' } }) }],
+      ['another sha', { readBack: { ...c({}), sha: 'f'.repeat(40) } }],
+    ];
+    for (const [name, scenario] of cases) {
+      const r = runLand({ scenario });
+      expect(r.code, `${name}: ${r.out}`).toBe(1);
+      expect(r.merges, name).toHaveLength(0);
+      expect(r.writes.map((w) => w.method), name).toEqual(['POST']);
+    }
+  });
+
+  it('a PR that is closed after landing but cannot be closed is reported (exit 3) and the output names the landed commit', () => {
+    const r = runLand({ scenario: { closeStatus: 500 } });
+    expect(r.code).toBe(3);
+    expect(r.out).toContain('LANDED PR #7');
+    expect(r.out).toContain('closing PR #7 failed');
+  });
+
+  it('a replayed clearance for a different PR number is refused at the lander (dispatch inputs, and the live PR number)', () => {
+    const r8 = clearanceText({ pr: '8' });
+    const dispatchedAs7 = runLand({ text: r8, signature: sig(r8) });
+    expect(dispatchedAs7.code).toBe(1);
+    expect(dispatchedAs7.out).toContain('differ from the signed clearance');
+    const dispatchedAs8 = runLand({ text: r8, signature: sig(r8), pr: '8' });
+    expect(dispatchedAs8.code, 'pr 8 dispatched, but the PR object read is #7').toBe(1);
+    expect(dispatchedAs8.out).toContain('the clearance is for PR 8, not 7');
+    expect(dispatchedAs8.writes).toHaveLength(0);
+  });
+});
+
+describe('dry run writes nothing at all', () => {
+  it('performs the reads and the checks, computes the commit body, prints what it would do, and sends ZERO POST/PATCH/PUT/DELETE', () => {
+    for (const dryRun of ['true', '', 'False', 'no']) {
+      const r = runLand({ dryRun });
+      expect(r.code, dryRun).toBe(0);
+      expect(r.writes, `DRY_RUN=${JSON.stringify(dryRun)}`).toEqual([]);
+      expect(r.calls.some((c) => ['POST', 'PATCH', 'PUT', 'DELETE'].includes(c.method))).toBe(false);
+      expect(r.calls.filter((c) => c.path.includes('/check-runs')).length, 'the CI state was read').toBeGreaterThanOrEqual(2);
+      expect(r.out).toContain('POST /repos/ohdieyuh-glitch/sunday-relay/git/commits');
+      expect(r.out).toContain('"force":false');
+      expect(r.out).toContain('-----BEGIN JULIUS LANDING-----');
+    }
+  });
+});
+
+describe('L2: the final decision is taken from a final read that includes the CI state', () => {
+  const VR = (status: string, conclusion: string | null) => ({ name: 'Verify Relay', status, conclusion });
+  const SELF_RUN = { name: 'Land a cleared pull request', status: 'in_progress', conclusion: null };
+
+  it('a check that fails, re-runs, or is newly added after the CI wait is seen by the final read and refuses', () => {
+    const green = [VR('completed', 'success'), SELF_RUN];
+    const cases: Array<[string, unknown[][]]> = [
+      ['the required check was re-run and failed', [green, [VR('completed', 'failure'), SELF_RUN]]],
+      ['the required check was re-run and is pending again', [green, [VR('in_progress', null), SELF_RUN]]],
+      ['a new failing check appeared', [green, [...green, { name: 'extra-scan', status: 'completed', conclusion: 'failure' }]]],
+      ['a new pending check appeared', [green, [...green, { name: 'extra-scan', status: 'queued', conclusion: null }]]],
+      ['the required check disappeared', [green, [SELF_RUN, { name: 'Vercel', status: 'completed', conclusion: 'success' }]]],
+    ];
+    for (const [name, seq] of cases) {
+      const r = runLand({ scenario: { checkRunsSeq: seq } });
+      expect(r.code, `${name}: ${r.out}`).toBe(1);
+      expect(r.out, name).toContain('re-check before landing');
+      expect(r.merges, name).toHaveLength(0);
+      expect(r.writes, name).toHaveLength(0);
+    }
+    // the same lists, unchanged, land
+    expect(runLand({ scenario: { checkRunsSeq: [green, green] } }).code).toBe(0);
+  });
+
+  it('the final snapshot reads the CI state after it has re-read the PR, and does so on every run', () => {
+    const r = runLand();
+    const lastPr = r.calls.map((c, i) => (c.method === 'GET' && /\/pulls\/7$/.test(c.path) ? i : -1)).filter((i) => i >= 0).pop()!;
+    const ciReads = r.calls.map((c, i) => (c.path.includes('/check-runs') ? i : -1)).filter((i) => i >= 0);
+    const statusReads = r.calls.map((c, i) => (/\/commits\/[0-9a-f]{40}\/status/.test(c.path) ? i : -1)).filter((i) => i >= 0);
+    expect(ciReads.length, 'once in the wait, once in the final snapshot').toBe(2);
+    expect(statusReads.length).toBe(2);
+    expect(ciReads[ciReads.length - 1]).toBeGreaterThan(lastPr);
+    expect(statusReads[statusReads.length - 1]).toBeGreaterThan(lastPr);
+  });
+});
+
+describe('L4: every comment, inline comment and review row carries sha256(body) and its edit timestamp', () => {
+  const base = () => ({
+    issueComments: [{ user: { login: 'v' }, id: 1, updated_at: 't1', created_at: 'c1', body: 'looks fine' }],
+    inlineComments: [{ user: { login: 'c' }, id: 2, updated_at: 't2', body: 'nit' }],
+    reviews: [{ user: { login: 'r' }, id: 3, state: 'COMMENTED', commit_id: H, submitted_at: 's1', body: 'approve in spirit' }],
+  });
+  const digest = (v: ReturnType<typeof base>) => lib.botCommentsDigest(v) as string;
+
+  it('identical input gives the same digest, in any order', () => {
+    const a = base();
+    expect(digest(a)).toBe(digest(base()));
+    const two = { ...a, issueComments: [...a.issueComments, { user: { login: 'w' }, id: 9, updated_at: 't9', body: 'b' }] };
+    expect(digest({ ...two, issueComments: [...two.issueComments].reverse() })).toBe(digest(two));
+  });
+
+  it('an edited review body, issue comment body or inline comment body changes the digest even when every id and timestamp is unchanged', () => {
+    const a = base();
+    const review = { ...a, reviews: [{ ...a.reviews[0]!, body: 'changes requested' }] };
+    const issue = { ...a, issueComments: [{ ...a.issueComments[0]!, body: 'looks FINE' }] };
+    const inline = { ...a, inlineComments: [{ ...a.inlineComments[0]!, body: 'nit!' }] };
+    for (const [name, v] of [['review body', review], ['issue comment body', issue], ['inline comment body', inline]] as const) expect(digest(v), name).not.toBe(digest(a));
+    expect(digest({ ...a, reviews: [{ ...a.reviews[0]!, body: null as never }] }), 'null vs text').not.toBe(digest(a));
+  });
+
+  it('a new edit timestamp changes the digest even when the body is unchanged', () => {
+    const a = base();
+    expect(digest({ ...a, issueComments: [{ ...a.issueComments[0]!, updated_at: 't1b' }] })).not.toBe(digest(a));
+    expect(digest({ ...a, inlineComments: [{ ...a.inlineComments[0]!, updated_at: 't2b' }] })).not.toBe(digest(a));
+    expect(digest({ ...a, reviews: [{ ...a.reviews[0]!, submitted_at: 's2' }] })).not.toBe(digest(a));
+    expect(digest({ ...a, reviews: [{ ...a.reviews[0]!, state: 'APPROVED' }] })).not.toBe(digest(a));
+  });
+
+  it('end to end: an edited body (same id and timestamp) between the clearance and the landing refuses', () => {
+    const signedAgainst = base();
+    const text = clearanceText({ 'bot-comments-sha256': digest(signedAgainst) });
+    const ok = runLand({ text, signature: sig(text), scenario: signedAgainst });
+    expect(ok.code, ok.out).toBe(0);
+    const edited = runLand({ text, signature: sig(text), scenario: { ...signedAgainst, reviews: [{ ...signedAgainst.reviews[0]!, body: 'edited after the reviewer looked' }] } });
+    expect(edited.code).toBe(1);
+    expect(edited.out).toContain('differs from what the reviewer saw');
+    expect(edited.writes).toHaveLength(0);
+  });
+});
+
+describe('the provenance gate and the allowlist are founder-governed', () => {
+  it('a PR touching scripts/julius-main-provenance.mjs, its .d.mts or its test is refused, in any letter case, by the pure check and by the lander', () => {
+    for (const f of ['scripts/julius-main-provenance.mjs', 'scripts/julius-main-provenance.d.mts', 'scripts/julius-main-provenance.test.ts', 'Scripts/Julius-Main-Provenance.MJS']) {
+      expect(check({ files: ['ok.ts', f], fileRows: 2, pr: { ...goodPr(), changed_files: 2 } }).join(' '), f).toContain('founder-governed');
+      const r = runLand({ scenario: { files: ['ok.ts', f], pr: { ...goodPr(), changed_files: 2 } } });
+      expect(r.code, f).toBe(1);
+      expect(r.writes, f).toHaveLength(0);
+    }
+    expect(check({ files: ['scripts/julius-main-provenance-notes.md'] })).toEqual([]);
+  });
+
+  it('the shipped allowlist refuses the superseded Candidate C branch (evidence-1) and allows evidence-2', () => {
+    const list = readFileSync(join(LANDING, 'allowed-branches.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    expect(list).not.toContain('relay/julius-diag-digest-evidence-1');
+    expect(list).toContain('relay/julius-diag-digest-evidence-2');
+    const onBranch = (ref: string) => check({ allowedBranches: list, pr: { ...goodPr(), head: { ...goodPr().head, ref } } });
+    expect(onBranch('relay/julius-diag-digest-evidence-1').join(' ')).toContain('not in the founder');
+    expect(onBranch('relay/julius-diag-digest-evidence-2')).toEqual([]);
   });
 });
