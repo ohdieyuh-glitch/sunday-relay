@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { boundOutput, sanitizeOutput } from './output-sanitizer';
+import { boundOutput, REDACTION_MARK, sanitizeOutput } from './output-sanitizer';
 
 /**
  * Bounded process runner (Prompt 7). Executes an ALREADY-APPROVED command
@@ -44,6 +44,51 @@ export interface RunningCommandHandle {
 const KILL_GRACE_MS = 2_000;
 const CONFIRM_WAIT_MS = 5_000;
 
+/** The exact suffix `boundOutput` appends to text it cut. */
+const TRUNCATION_SUFFIX = /\n\[TRUNCATED: output limit reached\]$/;
+
+/**
+ * A stream that STOPPED EARLY (the cap cut it, a chunk was dropped, a timeout, a cancel or a kill) can end inside a secret. The sanitizer's patterns
+ * need a secret's WHOLE shape, so the surviving head of a cut secret is stored in clear. This withholds what such a stream cannot prove complete:
+ *  1. an UNTERMINATED private key block (a BEGIN header with no END after it): from the header to the end;
+ *  2. the TRAILING PARTIAL TOKEN: the last run of non-whitespace characters, when the text ends without whitespace.
+ * Only applied to a stream that stopped early; a stream that ended by itself is stored exactly as before. Sanitizer patterns are not changed.
+ */
+function withholdOpenSecret(text: string): { text: string; withheld: number } {
+  let out = text;
+  let withheld = 0;
+  const begins = [...out.matchAll(/BEGIN [A-Z ]*PRIVATE KEY/g)];
+  const last = begins[begins.length - 1];
+  if (last?.index !== undefined && !/END [A-Z ]*PRIVATE KEY/.test(out.slice(last.index))) {
+    let start = last.index;
+    while (start > 0 && out[start - 1] === '-') start -= 1;
+    out = `${out.slice(0, start)}${REDACTION_MARK}`;
+    withheld += 1;
+  }
+  if (!out.endsWith(REDACTION_MARK)) {
+    const tail = /\S+$/.exec(out);
+    if (tail !== null) {
+      out = `${out.slice(0, tail.index)}${REDACTION_MARK}`;
+      withheld += 1;
+    }
+  }
+  return { text: out, withheld };
+}
+
+function secureCapturedStream(
+  raw: string,
+  limitBytes: number,
+  stoppedEarly: boolean,
+): { text: string; truncated: boolean; redactions: number } {
+  const bounded = boundOutput(raw, limitBytes);
+  const suffix = bounded.truncated ? (TRUNCATION_SUFFIX.exec(bounded.text)?.[0] ?? '') : '';
+  let core = suffix === '' ? bounded.text : bounded.text.slice(0, bounded.text.length - suffix.length);
+  let withheld = 0;
+  if (bounded.truncated || stoppedEarly) ({ text: core, withheld } = withholdOpenSecret(core));
+  const clean = sanitizeOutput(core);
+  return { text: `${clean.text}${suffix}`, truncated: bounded.truncated, redactions: clean.redactions + withheld };
+}
+
 export function runBoundedCommand(
   request: BoundedRunRequest,
   now: () => string,
@@ -69,10 +114,10 @@ export function runBoundedCommand(
       clearTimeout(timeoutTimer);
       clearTimeout(escalateTimer);
       clearTimeout(confirmTimer);
-      const boundedOut = boundOutput(stdout, request.outputLimitBytes);
-      const boundedErr = boundOutput(stderr, request.outputLimitBytes);
-      const cleanOut = sanitizeOutput(boundedOut.text);
-      const cleanErr = sanitizeOutput(boundedErr.text);
+      // A stream the cap cut, or one that was stopped (cap hit, timeout, cancel, kill), may end inside a secret.
+      const stoppedEarly = killRequested || signal !== null;
+      const cleanOut = secureCapturedStream(stdout, request.outputLimitBytes, stoppedEarly);
+      const cleanErr = secureCapturedStream(stderr, request.outputLimitBytes, stoppedEarly);
       resolvePromise({
         exitCode,
         signal,
@@ -80,7 +125,7 @@ export function runBoundedCommand(
         stderr: cleanErr.text,
         timedOut,
         cancelled,
-        truncated: boundedOut.truncated || boundedErr.truncated || outputLimitHit,
+        truncated: cleanOut.truncated || cleanErr.truncated || outputLimitHit,
         outputLimitHit,
         termination,
         startedAt,
