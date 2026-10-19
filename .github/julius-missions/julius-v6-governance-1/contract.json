@@ -14,6 +14,7 @@
   "constraints": [
     "Edit `src/relay/mission/julius/julius-lifecycle-runtime.ts` in place. You have `Read`, `Glob`, `Grep` and `Edit`; you cannot create files or run commands, and you do not need to.",
     "Do not edit `src/relay/mission/julius/julius-approval-authority.test.ts`. It is the specification you are implementing against, not part of the deliverable.",
+    "The rest of the slice is read-only context that `julius-lifecycle-runtime.ts` is typed against: `julius-context-integrity.ts`, `julius-events.ts`, `julius-repair-lineage.ts`, `julius-runtime.ts`, `julius-segment-lineage.ts` and `julius-state-path.ts` in the same directory. Read them as you need; do not edit them.",
     "Change no exported name, type or signature, and add no import: the sandbox that runs the test has no network access and no `node_modules`.",
     "Do not reformat code you are not changing, and do not touch `.julius/`.",
     "Move or add checks only; do not weaken, remove or reorder the checks that exist for a live run."
