@@ -9,7 +9,9 @@
 # THE SLICE: the controller (`gauntlet-command.ts`, 498 lines), the pure state machine it drives (`gauntlet-machine.ts`), the deterministic in-memory store the specification runs against
 # (`gauntlet-memory-store.ts`, a test double), and the ports file the controller types against (`gauntlet-ports.ts`, types only). Run-time import closure: 2 files plus a type-only edge.
 # DELIBERATELY UNPINNED by the seeded specification (the criteria and the reviewer judge them): collateral change outside the four fixes; mutation of inputs; the HALTED-before-first-round
-# activation branch; the exact reason codes of a refused race; what the in-memory store does (it is read-only for the coder).
+# activation branch (a known fifth gap: its own save result is also ignored; out of scope); a second activation of a READY gauntlet above round 0 and the absence of a policy re-check on a
+# second activation (both out of scope); the value of `nextWorkId` on a redelivery (null or the deterministic successor id); the exact reason codes of a refused race; what the in-memory store
+# does (it is read-only for the coder).
 src/relay/mission/gauntlet/gauntlet-command.ts
 src/relay/mission/gauntlet/gauntlet-machine.ts
 src/relay/mission/gauntlet/gauntlet-memory-store.ts
