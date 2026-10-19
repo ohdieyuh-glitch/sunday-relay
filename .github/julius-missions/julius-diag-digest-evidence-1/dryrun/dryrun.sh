@@ -16,6 +16,8 @@
 #   pass                the spec passes AND the patched slice files add no type error (a VALID solution)
 #   fail                the spec fails (typecheck is not evaluated)
 #   passspec_typered    the spec passes BUT the patched slice files add a type error (a reviewer-visible case that is NOT a valid solution)
+#   passspec_judged     the spec passes and the typecheck is clean, but the patch decides a blocking criterion in a way the specification cannot see (e.g. the future-time test taken AFTER rounding,
+#                       via negative zero): behaviourally equivalent, NOT a claim that it is a valid solution; the Independent Reviewer judges it against the criterion
 # DRYRUN_TYPECHECK=0 skips the typecheck (then `pass` means the spec only and passspec_typered scenarios are reported as skipped).
 set -uo pipefail
 
@@ -56,8 +58,15 @@ typecheck() {
   "files": [$files]
 }
 EOF
-  ( cd "$dir" && node --max-old-space-size=1536 "$TSC" -p tsconfig.slice.json --pretty false > tsc.raw 2>&1 )
+  # tsc exits 0 (clean) or 1/2 (diagnostics printed). Any other exit (a kill at the heap cap, a crash), or a non-zero exit that printed no `error TS` line, means the slice was NOT checked:
+  # that must never read as "clean", so the function returns 1 and the caller treats the typecheck as INCOMPLETE. DRYRUN_TSC_HEAP_MB (default 1536) exists so this path can be exercised.
+  local rc=0
+  ( cd "$dir" && node --max-old-space-size="${DRYRUN_TSC_HEAP_MB:-1536}" "$TSC" -p tsconfig.slice.json --pretty false > tsc.raw 2>&1 ) || rc=$?
   sed -E 's/\([0-9]+,[0-9]+\)//' "$dir/tsc.raw" | grep -E "error TS[0-9]+" | sort > "$dir/tsc.diag"
+  if { [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ] && [ "$rc" -ne 2 ]; } || { [ "$rc" -ne 0 ] && [ ! -s "$dir/tsc.diag" ]; }; then
+    echo "    TYPECHECK DID NOT COMPLETE (node/tsc exit $rc): $(head -c 160 "$dir/tsc.raw" | tr '\n' ' ')" >&2
+    return 1
+  fi
 }
 
 # new_type_errors <baseline dir> <dir> -> prints the diagnostics present in <dir> beyond the baseline (multiset difference)
@@ -71,15 +80,17 @@ run() { # run <dir> <label> <expect>
   local got; [ "$code" -eq 0 ] && got=pass || got=fail
   local tcstate="skipped" newerr=""
   if [ "$TC" = 1 ] && [ "$got" = pass ]; then
-    typecheck "$dir"
-    newerr=$(new_type_errors "$base/baseline" "$dir")
-    if [ -z "$newerr" ]; then tcstate=clean; else tcstate=RED; fi
+    if typecheck "$dir"; then
+      newerr=$(new_type_errors "$base/baseline" "$dir")
+      if [ -z "$newerr" ]; then tcstate=clean; else tcstate=RED; fi
+    else tcstate=INCOMPLETE; fi
   fi
   local verdict
   case "$expect" in
     pass) if [ "$got" = pass ] && { [ "$tcstate" = clean ] || [ "$tcstate" = skipped ]; }; then verdict=ok; else verdict=bad; fi ;;
     fail) [ "$got" = fail ] && verdict=ok || verdict=bad ;;
     passspec_typered) if [ "$got" = pass ] && [ "$tcstate" = RED ]; then verdict=ok; elif [ "$tcstate" = skipped ] && [ "$got" = pass ]; then verdict=ok; else verdict=bad; fi ;;
+    passspec_judged) if [ "$got" = pass ] && { [ "$tcstate" = clean ] || [ "$tcstate" = skipped ]; }; then verdict=ok; else verdict=bad; fi ;;
     *) verdict=bad ;;
   esac
   printf '%-58s exit %d  %s  typecheck %s' "$label" "$code" "$got" "$tcstate"
@@ -96,7 +107,7 @@ ok=0
 n=0
 if [ "$TC" = 1 ]; then
   fresh "$base/baseline" || { echo "COULD NOT BUILD THE BASELINE WORKSPACE"; exit 2; }
-  typecheck "$base/baseline"
+  typecheck "$base/baseline" || { echo "THE BASELINE TYPECHECK DID NOT COMPLETE: no scenario can be judged against it"; exit 2; }
   echo "typecheck baseline (the unfixed slice): $(wc -l < "$base/baseline/tsc.diag" | tr -d ' ') pre-existing diagnostic(s), ignored"
 fi
 while IFS='|' read -r label expect fixes; do

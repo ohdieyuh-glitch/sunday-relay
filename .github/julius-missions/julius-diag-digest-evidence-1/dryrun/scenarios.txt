@@ -10,9 +10,9 @@ A alternative: code-point loop rewrite of the encoder, with B fixed|pass|alt-a-f
 # REVIEWER CASE, NOT a valid alternative: String.prototype.toWellFormed is ES2024 and the repository's lib is ES2022, so the seeded spec accepts it but the repository typecheck refuses it (TS2550).
 REVIEWER CASE: toWellFormed pre-pass (spec-green, violates the repository typecheck: ES2022 lib), with B fixed|passspec_typered|alt-a-towellformed.py,fix-b-age.py
 A alternative: regex pre-pass replacing unpaired surrogates, with B fixed|pass|alt-a-regex.py,fix-b-age.py
-B alternative: rounding kept and NEGATIVE ZERO caught, with A fixed|pass|fix-a-utf8.py,fix-b-alt-negzero.py
+B alternative: rounding kept and NEGATIVE ZERO caught (decides AFTER rounding: reviewer-judged), with A fixed|passspec_judged|fix-a-utf8.py,fix-b-alt-negzero.py
 B alternative: direct instant comparison before rounding, with A fixed|pass|fix-a-utf8.py,alt-b-compare.py
-every alternative together (code-point loop + negative-zero catch)|pass|alt-a-forof.py,fix-b-alt-negzero.py
+every alternative together (code-point loop + negative-zero catch; the latter is reviewer-judged)|passspec_judged|alt-a-forof.py,fix-b-alt-negzero.py
 # REVIEWER CASES: spec-green BY DESIGN (the spec deliberately does not pin them); only the independent reviewer can catch them against the constraint and criteria.
 REVIEWER CASE: Buffer-based encoder (a Node global), with B fixed|pass|reviewer-a-buffer.py,fix-b-age.py
 REVIEWER CASE: correct fix A plus a NEW exported helper, with B fixed|pass|reviewer-a-newexport.py,fix-b-age.py
