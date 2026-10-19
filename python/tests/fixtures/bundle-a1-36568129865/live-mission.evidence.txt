@@ -1,0 +1,30 @@
+# Julius live mission — evidence (allowlisted lines only)
+# 27 line(s) kept; 5 unrecognised and 0 secret-shaped line(s) withheld.
+
+JULIUS LIVE MISSION — preflight
+  mission: mission:julius-live-6 (project prj-julius-live-6)
+  requested models: architect=gpt-5.6-sol coder=claude-fable-5 reviewer=xai/grok-build-0.1
+  OPENAI_API_KEY: SET
+  ANTHROPIC_API_KEY: SET
+  XAI_API_KEY: MISSING
+  JULIUS_DATABASE_URL: MISSING
+  DATABASE_URL: SET
+  JULIUS_EXECUTOR_ENDPOINT: SET
+  JULIUS_SCOPED_CREDENTIALS: SET
+  EXECUTOR_KEY_ID: SET
+  JULIUS_PUBLIC_KEY_PATH: SET
+  JULIUS_CALLER_ID: SET
+  CLAUDE AUTH: API KEY provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=n/a api_key_used=true api_cost_applicable=true
+  billing paths: architect=API_BILLED coder=API_BILLED reviewer=API_BILLED
+  live_ledger: BOUND
+Run run:efb6e20f0d11885bc5085a68 accepted in state READY; driving the Julius run loop.
+  wall clock deadline: 2026-09-29T14:28:55.000Z
+RESULT: FAILED after 3 ticks
+  run: run:efb6e20f0d11885bc5085a68
+  task run:efb6e20f0d11885bc5085a68:plan [PROMPT_ARCHITECT/plan] → SUCCEEDED
+  task run:efb6e20f0d11885bc5085a68:build [CODING_AGENT/build] → FAILED
+  task run:efb6e20f0d11885bc5085a68:plan:review [INDEPENDENT_REVIEWER/review:plan] → SUCCEEDED
+  evidence run:efb6e20f0d11885bc5085a68:plan:1:0 [ARTIFACT/PASSED] Validated architect plan held for this run (15847 chars).
+  evidence run:efb6e20f0d11885bc5085a68:plan:review:1:0 [REVIEW_FINDING/PASSED] Independent review verdict approved with no blocking findings (served model grok-build-0.1).
+  evidence tool:run:efb6e20f0d11885bc5085a68:build:base:g1 [COMMAND_EXECUTION/PASSED] Executor ran a shell effect for run:efb6e20f0d11885bc5085a68:build: exit 0.
+  verification decisions: ACCEPT
