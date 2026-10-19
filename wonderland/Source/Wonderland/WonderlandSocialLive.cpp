@@ -114,6 +114,30 @@ namespace WonderlandSocialLiveDetail
 				A->TryGetNumberField(TEXT("ageMs"), Age);
 				A->TryGetStringField(TEXT("motion"), R.Motion);
 				A->TryGetStringField(TEXT("skinId"), R.SkinId);
+				// MP-VIS-02 REV2: the optional equipped-handoff enum and the optional latest event, each decoded against a WHITELIST (exact names, whole positive seq, a bounded age);
+				// absent (an older server) or anything else is None / no event. No string is ever kept, used as a name, a path or an asset.
+				FString HandoffWire;
+				if (A->TryGetStringField(TEXT("handoff"), HandoffWire))
+				{
+					R.Handoff = WonderlandHandoffWire::FromWire(HandoffWire);
+				}
+				const TSharedPtr<FJsonObject>* EventObject = nullptr;
+				if (A->TryGetObjectField(TEXT("handoffEvent"), EventObject) && EventObject != nullptr && (*EventObject).IsValid())
+				{
+					FString KindWire;
+					FString FormWire;
+					double SeqNumber = 0.0;
+					double EventAge = 0.0;
+					(*EventObject)->TryGetStringField(TEXT("kind"), KindWire);
+					(*EventObject)->TryGetStringField(TEXT("form"), FormWire);
+					(*EventObject)->TryGetNumberField(TEXT("seq"), SeqNumber);
+					(*EventObject)->TryGetNumberField(TEXT("ageMs"), EventAge);
+					R.HandoffEvent.Kind = WonderlandHandoffWire::KindFromWire(KindWire);
+					R.HandoffEvent.Form = WonderlandHandoffWire::FromWire(FormWire);
+					R.HandoffEvent.Seq = SeqNumber >= 1.0 && SeqNumber <= 2147483647.0 ? static_cast<int32>(SeqNumber) : 0;
+					R.HandoffEvent.AgeMs = FMath::Clamp(EventAge, 0.0, 60000.0);
+					R.HandoffEvent.bValid = R.HandoffEvent.Kind != WonderlandHandoffWire::EKind::None && R.HandoffEvent.Form != WonderlandHandoffWire::EForm::None && R.HandoffEvent.Seq > 0;
+				}
 				R.Location = FVector(X, Y, Z);
 				R.Yaw = static_cast<float>(Yaw);
 				R.Speed = static_cast<float>(Speed);
@@ -474,6 +498,78 @@ void FWonderlandSocialLiveService::TickWorld()
 	Body->SetNumberField(TEXT("speed"), Report.Speed);
 	Body->SetStringField(TEXT("motion"), Report.Motion);
 	Body->SetStringField(TEXT("skinId"), Report.SkinId);
+	// MP-VIS-02 REV2. THE EQUIPPED FORM goes ONLY while a form is equipped (absent = NONE on the server): a player who never hands off sends exactly the bytes they always did,
+	// to any server. THE ACTIVATION EVENT is made on an EDGE of that form and is resent with every report for ResendSeconds (the server keeps the first copy, ignores the rest, so a
+	// lost report loses nothing and a duplicate changes nothing). A restored HELD (the form is already equipped on the first report) makes NO event: nothing is replayed.
+	// Nothing goes once a server has refused it (bHandoffWireRefused).
+	{
+		using namespace WonderlandHandoffWire;
+		const double NowSeconds = FPlatformTime::Seconds();
+		if (HandoffEpoch == 0)
+		{
+			HandoffEpoch = FMath::RandRange(1, 2147483000);
+		}
+		if (Report.Handoff != PrevHandoffForm)
+		{
+			// how far into its own sequence the owner's state already is (a report that waited for the network may first see Transforming)
+			const double PhaseMs = static_cast<double>(Report.HandoffPhaseSeconds) * 1000.0;
+			double Elapsed = PhaseMs;
+			if (Report.HandoffLocalState == EWonderlandHandoffState::Transforming) { Elapsed += FWonderlandMissionHandoff::AcknowledgeSeconds * 1000.0; }
+			if (Report.HandoffLocalState == EWonderlandHandoffState::Delivering) { Elapsed += (FWonderlandMissionHandoff::AcknowledgeSeconds + FWonderlandMissionHandoff::TransformSeconds) * 1000.0; }
+			const bool bBegan = Report.Handoff == EForm::TwinSwords && (Report.HandoffLocalState == EWonderlandHandoffState::Acknowledged
+				|| Report.HandoffLocalState == EWonderlandHandoffState::Transforming || Report.HandoffLocalState == EWonderlandHandoffState::Delivering);
+			const bool bReturned = Report.Handoff == EForm::None && PrevHandoffForm == EForm::TwinSwords && Report.HandoffLocalState == EWonderlandHandoffState::Returning;
+			if (bBegan || bReturned)
+			{
+				OutgoingHandoffEvent.bActive = true;
+				OutgoingHandoffEvent.N = ++HandoffCounter;
+				OutgoingHandoffEvent.Kind = bBegan ? EKind::Activate : EKind::Deactivate;
+				OutgoingHandoffEvent.Form = EForm::TwinSwords;
+				OutgoingHandoffEvent.CreatedAt = NowSeconds;
+				OutgoingHandoffEvent.InitialSinceMs = bBegan ? Elapsed : PhaseMs;
+				UE_LOG(LogTemp, Display, TEXT("WLHANDOFF send event=%s epoch=%d n=%d sinceMs=%.0f"), KindToWire(OutgoingHandoffEvent.Kind), HandoffEpoch, OutgoingHandoffEvent.N, OutgoingHandoffEvent.InitialSinceMs);
+			}
+			PrevHandoffForm = Report.Handoff;
+		}
+	}
+	const bool bResendEvent = OutgoingHandoffEvent.bActive && FPlatformTime::Seconds() - OutgoingHandoffEvent.CreatedAt < WonderlandHandoffWire::ResendSeconds;
+	if (!bResendEvent)
+	{
+		OutgoingHandoffEvent.bActive = false;
+	}
+	const bool bSendHandoff = !bHandoffWireRefused && (Report.Handoff != WonderlandHandoffWire::EForm::None || bResendEvent);
+	if (bSendHandoff)
+	{
+		if (Report.Handoff != WonderlandHandoffWire::EForm::None)
+		{
+			Body->SetStringField(TEXT("handoff"), WonderlandHandoffWire::ToWire(Report.Handoff));
+		}
+		if (bResendEvent)
+		{
+			TSharedPtr<FJsonObject> Event = MakeShared<FJsonObject>();
+			Event->SetNumberField(TEXT("epoch"), HandoffEpoch);
+			Event->SetNumberField(TEXT("n"), OutgoingHandoffEvent.N);
+			Event->SetStringField(TEXT("kind"), WonderlandHandoffWire::KindToWire(OutgoingHandoffEvent.Kind));
+			Event->SetStringField(TEXT("form"), WonderlandHandoffWire::ToWire(OutgoingHandoffEvent.Form));
+			// the transition began this long ago: when it was made plus however long this copy has waited (the server clamps it to one second)
+			Event->SetNumberField(TEXT("sinceMs"), FMath::FloorToDouble(OutgoingHandoffEvent.InitialSinceMs + (FPlatformTime::Seconds() - OutgoingHandoffEvent.CreatedAt) * 1000.0));
+			Body->SetObjectField(TEXT("handoffEvent"), Event);
+		}
+	}
+	{
+		const int32 SendKey = (static_cast<int32>(Report.HandoffLocalState) << 4) | (bSendHandoff ? 1 : 0) | (bHandoffWireRefused ? 2 : 0);
+		if (SendKey != LoggedHandoffSendKey)
+		{
+			if (LoggedHandoffSendKey >= 0 || SendKey != 0)   // the first, idle line is not news
+			{
+				static const TCHAR* const StateNames[] = { TEXT("Idle"), TEXT("Acknowledged"), TEXT("Transforming"), TEXT("Delivering"), TEXT("Held"), TEXT("Returning") };
+				const int32 StateIndex = static_cast<int32>(Report.HandoffLocalState);
+				UE_LOG(LogTemp, Display, TEXT("WLHANDOFF send state=%s form=%s%s"), StateIndex >= 0 && StateIndex < 6 ? StateNames[StateIndex] : TEXT("?"),
+					bSendHandoff && Report.Handoff != WonderlandHandoffWire::EForm::None ? WonderlandHandoffWire::ToWire(Report.Handoff) : TEXT("(field omitted)"), bHandoffWireRefused ? TEXT(" server-refused") : TEXT(""));
+			}
+			LoggedHandoffSendKey = SendKey;
+		}
+	}
 	bWorldBusy = true;
 	// WLREMOTE: diagnostics only (one line per report: the soles sent, the round trip, the send period).
 	const double SentAt = FPlatformTime::Seconds();
@@ -484,9 +580,15 @@ void FWonderlandSocialLiveService::TickWorld()
 	UE_LOG(LogTemp, Display, TEXT("WLREMOTE send motion=%s z=%.1f vz=%.1f period=%.0fms"), *Report.Motion, Report.Location.Z, static_cast<double>(Report.VerticalSpeed), SentPeriodMs);
 	const float SentYaw = Report.Yaw;
 	// ONE CALL A TICK: the report answers with who else is here.
-	Call(TEXT("POST"), TEXT("/world/state"), Body, [this, SentAt, SentPeriodMs, SentSoles, SentYaw](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+	Call(TEXT("POST"), TEXT("/world/state"), Body, [this, SentAt, SentPeriodMs, SentSoles, SentYaw, bSendHandoff](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
 	{
 		bWorldBusy = false;
+		if (bSendHandoff && Status == 400 && !bHandoffWireRefused)
+		{
+			// DEGRADE, NEVER BREAK: a server that rejects the fields would otherwise cost this player every position report while the swords are out
+			bHandoffWireRefused = true;
+			UE_LOG(LogTemp, Warning, TEXT("WLHANDOFF send: the server refused the report that carried the handoff (HTTP 400); the fields are dropped for this session"));
+		}
 		UE_LOG(LogTemp, Display, TEXT("WLREMOTE send soles=(%.1f,%.1f,%.1f) rtt=%.0fms period=%.0fms status=%d yaw=%.2f"),
 			SentSoles.X, SentSoles.Y, SentSoles.Z, (FPlatformTime::Seconds() - SentAt) * 1000.0, SentPeriodMs, Status, static_cast<double>(SentYaw));
 		HandleWorldReport(Status, Data, Problem);

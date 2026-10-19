@@ -20,6 +20,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "WonderlandUiSubsystem.h"
+#include "WonderlandSidekicks.h"          // MP-VIS-02: the local Mission Handoff state
 #include "WonderlandJuliusStream.h"
 #include "WonderlandMissionSubsystem.h"   // R16 CF-1: IN MISSION, and whether that mission is simulated
 
@@ -400,6 +401,19 @@ bool UWonderlandSocialSubsystem::ReportLocalPlayer(FWonderlandAvatarReport& Out)
 		: Out.Speed < 10.0f ? TEXT("IDLE") : Out.Speed < 400.0f ? TEXT("WALK") : TEXT("RUN");
 	Out.VerticalSpeed = static_cast<float>(Velocity.Z);   // WLREMOTE diagnostics only; not sent
 	Out.SkinId = Dog->GetWornSkinId().IsNone() ? FString(TEXT("relay_og")) : Dog->GetWornSkinId().ToString();
+	// MP-VIS-02 REV2: THIS player's own equipped form, and the state and phase it came from, read from the local game instance exactly as the Dog's swords are. Only
+	// the closed values built from them leave (the form every report, an event on a transition); no mission id, mission state or approval.
+	if (WonderlandHandoffWire::IsReplicationOn())
+	{
+		UWonderlandSidekickSubsystem* Sidekicks = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSidekickSubsystem>() : nullptr;
+		if (Sidekicks != nullptr)
+		{
+			const FWonderlandMissionHandoff& Hand = Sidekicks->GetMissionHandoff();
+			Out.HandoffLocalState = Hand.GetState();
+			Out.HandoffPhaseSeconds = Hand.GetPhaseSeconds();
+			Out.Handoff = WonderlandHandoffWire::FromLocalState(Out.HandoffLocalState);
+		}
+	}
 	return true;
 }
 

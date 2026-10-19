@@ -12,6 +12,10 @@
 
 #include "CoreMinimal.h"
 #include "RelayDogStride.h"
+#include "WonderlandHandoffRemote.h"
+#include "WonderlandHandoffSwords.h"
+#include "WonderlandHandoffTransform.h"
+#include "WonderlandHandoffWire.h"
 
 class AWonderlandCompanionEmbodiment;
 class UTextRenderComponent;
@@ -29,6 +33,9 @@ struct FWonderlandRemoteAvatar
 	/** IDLE, WALK, RUN, JUMP, FALL, FLY */
 	FString Motion;
 	FString SkinId;
+	/** MP-VIS-02 REV2: the Mission Handoff form this player has equipped (None from a server or client that does not send it), and their latest activation event. */
+	WonderlandHandoffWire::EForm Handoff = WonderlandHandoffWire::EForm::None;
+	WonderlandHandoffWire::FWireEvent HandoffEvent;
 	/** How old the report was when the backend answered. */
 	double AgeMs = 0.0;
 };
@@ -68,6 +75,10 @@ struct FWonderlandAvatarReport
 	/** WLREMOTE diagnostics only (never sent): the sender's vertical speed, uu/s. */
 	float VerticalSpeed = 0.0f;
 	FString SkinId = TEXT("relay_og");
+	/** MP-VIS-02 REV2: this player's own equipped form, and the local state and phase it came from (the state decides when an EVENT is made; they are never sent). */
+	WonderlandHandoffWire::EForm Handoff = WonderlandHandoffWire::EForm::None;
+	EWonderlandHandoffState HandoffLocalState = EWonderlandHandoffState::Idle;
+	float HandoffPhaseSeconds = 0.0f;
 };
 
 /**
@@ -100,6 +111,15 @@ private:
 		float TargetYaw = 0.0f;
 		FString SkinId;
 		FString DisplayName;
+		// MP-VIS-02 REV2: what this player reports as equipped; what their figure's handoff is doing (pure, from the wire); and the SAME presentations the owner's Dog uses,
+		// built on first need on THIS figure: the swords and the transformation's light.
+		WonderlandHandoffWire::EForm Handoff = WonderlandHandoffWire::EForm::None;
+		WonderlandHandoffRemote::FTrack Track;
+		TSharedPtr<WonderlandHandoffSwords::FPresentation> Swords;
+		TSharedPtr<WonderlandHandoffTransform::FPresentation> Transform;
+		int32 LoggedHandoffKey = 0;   // WLHANDOFF recv is said on a change of this only
+		int32 LoggedPlayState = -1;   // WLHANDOFF play is said on a change of the state being drawn
+		double PlayLoggedFrom = 0.0;
 		// WLREMOTE diagnostics only: never read by the movement code.
 		FString Motion;   // the sender's motion label as last received (log only)
 		double LogNextAt = 0.0;
@@ -122,5 +142,9 @@ private:
 		bool bAnimConfigured = false;
 	};
 	void Remove(FRemote& Remote);
+	/** MP-VIS-02 REV2: draws this frame of the handoff on a remote figure from its Track: the owner's own swords and light, the final look and the whole sequence. */
+	void UpdateRemoteHandoff(const FString& UserId, FRemote& Remote, AWonderlandCompanionEmbodiment* Body, UWorld* World, float DeltaSeconds);
+	/** Removes the swords' components (the figure is going, or was rebuilt on a new skin whose joints they hung from). */
+	static void DropSwords(FRemote& Remote);
 	TMap<FString, FRemote> Remotes;
 };

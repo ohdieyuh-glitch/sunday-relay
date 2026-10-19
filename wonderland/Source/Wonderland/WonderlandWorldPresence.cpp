@@ -8,6 +8,7 @@
 #include "RelayDogCharacter.h"
 #include "RelayDogPresentation.h"
 #include "WonderlandCompanionEmbodiment.h"
+#include "WonderlandGrip.h"
 
 // Named, not anonymous: the module is one unity translation unit.
 namespace WonderlandWorldPresenceDetail
@@ -69,8 +70,21 @@ namespace WonderlandWorldPresenceDetail
 		TEXT("Remote players, Interp mode: 1 feeds the figure's gait speed from the speed the sender reported for the drawn moment (interpolated between the bracketing reports) instead of differentiating the eased position; 0 restores the measured displacement. Position is never affected."));
 	TAutoConsoleVariable<int32> CVarRemoteDogAnimator(TEXT("wl.Remote.DogAnimator"), 1,
 		TEXT("Remote players: 1 animates each remote figure with its own RelayDogStride::FDogAnimator (configured as the owner's Dog is) fed the sender's reported speed, and the figure wears that pose exactly as a worn skin does, so stride, duty, lean, arms-back and timing match the owner's Dog; 0 restores the figure's own simple gait (r16reh16q). Position is never affected."));
+	TAutoConsoleVariable<int32> CVarHandoffReplicate(TEXT("wl.Handoff.Replicate"), 1,
+		TEXT("MP-VIS-02: 1 sends this player's equipped Mission Handoff form and activation events with the world report and plays other players' on their figures; 0 does neither (rollback without a rebuild)."));
+	/** The companions' homes, in the pawn's yaw frame: WonderlandCompanionPreviewSettings LlmCompanionOffset / AgentOffset (WonderlandCompanionSubsystem.h:67,77 at 66ab070b).
+	 *  ASSUMPTION to verify on two-client frames: the owner's companions float relative to the pawn (capsule centre), a remote figure is placed at the soles. */
+	const FVector LlmCompanionHome(-40.0, -135.0, 0.0);
+	const FVector AgentCompanionHome(-40.0, 140.0, 0.0);
+	/** ASSUMPTION: the armed hold's third weight is the Dog's GaitWeight; a remote's is estimated from its reported speed. Dash and the fast hop are not replicated. */
+	constexpr float GaitFullSpeedUu = 200.0f;
 	TAutoConsoleVariable<float> CVarRemoteLogPeriod(TEXT("wl.Remote.LogPeriod"), 1.0f,
 		TEXT("Remote players: seconds between the per-figure WLREMOTE log lines (default 1; a dev measurement can set 0.1)."));
+}
+
+bool WonderlandHandoffWire::IsReplicationOn()
+{
+	return WonderlandWorldPresenceDetail::CVarHandoffReplicate.GetValueOnGameThread() != 0;
 }
 
 FWonderlandRemoteAvatars::~FWonderlandRemoteAvatars()
@@ -78,8 +92,21 @@ FWonderlandRemoteAvatars::~FWonderlandRemoteAvatars()
 	Clear();
 }
 
+void FWonderlandRemoteAvatars::DropSwords(FRemote& Remote)
+{
+	if (Remote.Swords.IsValid())
+	{
+		Remote.Swords->Destroy();   // the components belong to the figure; this removes what it made
+		Remote.Swords.Reset();
+	}
+	Remote.LoggedHandoffKey = 0;
+	Remote.LoggedPlayState = -1;
+}
+
 void FWonderlandRemoteAvatars::Remove(FRemote& Remote)
 {
+	DropSwords(Remote);   // before the figure: they hang from its forearms
+	Remote.Transform.Reset();   // its motes and shards are components of the figure and go with it
 	if (AWonderlandCompanionEmbodiment* Body = Remote.Body.Get())
 	{
 		Body->Destroy();
@@ -233,6 +260,23 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 		Remote.Target = A.Location;
 		Remote.TargetYaw = A.Yaw;
 		Remote.DisplayName = A.DisplayName;
+		// MP-VIS-02 REV2: the persistent form and the latest event decide the figure's handoff (WonderlandHandoffRemote::OnView: new seq only, from its age,
+		// settle when old, the form as the anchor). This view's arrival time is "now"; ageMs is the server's age of the event when it answered.
+		Remote.Handoff = A.Handoff;
+		{
+			const WonderlandHandoffRemote::EAction Did = WonderlandHandoffRemote::OnView(Remote.Track, A.Handoff, A.HandoffEvent, FPlatformTime::Seconds(), Remote.AdaptDelay);
+			if (Did != WonderlandHandoffRemote::EAction::None || A.HandoffEvent.bValid)
+			{
+				const int32 Key = static_cast<int32>(Did) | (A.HandoffEvent.Seq << 4);
+				if (Key != Remote.LoggedHandoffKey && Did != WonderlandHandoffRemote::EAction::IgnoredStale)
+				{
+					Remote.LoggedHandoffKey = Key;
+					static const TCHAR* const Actions[] = { TEXT("none"), TEXT("play"), TEXT("settle"), TEXT("ignored-stale") };
+					UE_LOG(LogTemp, Display, TEXT("WLHANDOFF recv fig=%s form=%s event=%s seq=%d ageMs=%.0f action=%s mode=%d"), *A.UserId, WonderlandHandoffWire::ToWire(A.Handoff),
+						WonderlandHandoffWire::KindToWire(A.HandoffEvent.Kind), A.HandoffEvent.Seq, A.HandoffEvent.AgeMs, Actions[static_cast<int32>(Did)], static_cast<int32>(Remote.Track.Mode));
+				}
+			}
+		}
 		AWonderlandCompanionEmbodiment* Body = Remote.Body.Get();
 		if (Body == nullptr)
 		{
@@ -282,6 +326,7 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 			if (!Figure.IsEmpty() && Body->LoadFigure(Figure))
 			{
 				Remote.SkinId = A.SkinId;
+				DropSwords(Remote);   // MP-VIS-02: a new figure has new forearm joints; the swords are rebuilt on them next frame (the Track is kept: the sequence goes on)
 			}
 			else
 			{
@@ -293,6 +338,129 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 		{
 			Label->SetText(FText::FromString(A.DisplayName));
 		}
+	}
+}
+
+// MP-VIS-02 REV2 (SPECIFICATION, NOT COMPILED). One frame of a remote figure's handoff. It drives the owner's OWN presentations (WonderlandHandoffSwords::FPresentation and
+// WonderlandHandoffTransform::FPresentation) with the (state, phase) the owner's own state machine would be in, from the Track decided by WonderlandHandoffRemote.
+//
+// What it does NOT do (each is a stated limitation, not an omission by accident): the owner's COMPANION BODIES are not in any other player's world, so there is nothing to veil
+// or to break into shards (Transform::Show runs with no companion actors: the swords form at the companions' home places, the energy stream is degenerate); no closed fist
+// (WonderlandHands) on the remote's hand; no armed-stance pose of the legs and arms, no dash, no fast hop; no mission act the owner leaves.
+void FWonderlandRemoteAvatars::UpdateRemoteHandoff(const FString& UserId, FRemote& R, AWonderlandCompanionEmbodiment* Body, UWorld* World, float DeltaSeconds)
+{
+	using namespace WonderlandHandoffRemote;
+	using namespace WonderlandWorldPresenceDetail;
+	const double Now = FPlatformTime::Seconds();
+	Advance(R.Track, Now, DeltaSeconds);
+	const bool bOn = WonderlandHandoffWire::IsReplicationOn();
+	const FPose Wanted = bOn ? PoseAt(R.Track, Now) : FPose();
+	const bool bShowing = (R.Swords.IsValid() && R.Swords->IsBuilt() && R.Swords->GetPresence() > 0.0f)
+		|| (R.Transform.IsValid() && (R.Transform->CountVisibleMotes() > 0 || R.Transform->CountVisibleShards() > 0));
+	if (Wanted.State == EWonderlandHandoffState::Idle && !bShowing)
+	{
+		if (R.LoggedPlayState > 0)
+		{
+			UE_LOG(LogTemp, Display, TEXT("WLHANDOFF play fig=%s state=Idle (ended)"), *UserId);
+			R.LoggedPlayState = 0;
+		}
+		return;   // NOTHING IS MADE for a player who never hands off
+	}
+	if (!R.Swords.IsValid())
+	{
+		R.Swords = MakeShared<WonderlandHandoffSwords::FPresentation>();
+	}
+	if (!R.Transform.IsValid())
+	{
+		R.Transform = MakeShared<WonderlandHandoffTransform::FPresentation>();
+	}
+	// The scale unit: the owner's Dog uses HeadWidthUU / 60 = 1 (HeadWidthUU is 60 and never written), and every figure is drawn at Relay OG's height.
+	constexpr float SwordScale = 1.0f;
+	R.Swords->Build(Body, SwordScale);
+	R.Transform->Build(Body);
+
+	// THE OBSERVER'S OWN CAMERA: a forming sword turns its broad face to whoever LOOKS, so each client sees the sequence from its own place. Nothing of the owner's camera is sent.
+	FVector ViewLocation = Body->GetActorLocation() - Body->GetActorForwardVector() * 400.0 + FVector(0.0, 0.0, 120.0);
+	if (const APlayerController* ViewPC = World != nullptr ? World->GetFirstPlayerController() : nullptr)
+	{
+		if (ViewPC->PlayerCameraManager != nullptr)
+		{
+			ViewLocation = ViewPC->PlayerCameraManager->GetCameraLocation();
+		}
+	}
+	const WonderlandGrip::FHold Hold = WonderlandGrip::CurrentHold();
+	// the held look at this moment: the armed charge hold eased in after HELD, and the walking weight estimated from the reported speed (ASSUMPTION; dash and fast hop are 0)
+	const float GaitWeight = R.Track.Armed * FMath::Clamp(R.DrSpeed / GaitFullSpeedUu, 0.0f, 1.0f);
+	const WonderlandGrip::FHold VHold = WonderlandGrip::WithDash(WonderlandGrip::WithCharge(Hold, R.Track.Armed), GaitWeight);
+	const FTransform BodyWorld = Body->GetActorTransform();
+	const FRotator YawOnly(0.0, Body->GetActorRotation().Yaw, 0.0);
+
+	WonderlandHandoffSwords::FShowInput In;
+	In.Scale = SwordScale;
+	In.TimeSeconds = World != nullptr ? World->GetTimeSeconds() : 0.0f;
+	In.DeltaSeconds = DeltaSeconds;
+	In.ViewLocation = ViewLocation;
+	In.bHoldWorldRotation = VHold.bBodyV;
+	In.LeftHoldRotation = WonderlandGrip::BodyVRotation(BodyWorld, true, VHold);
+	In.RightHoldRotation = WonderlandGrip::BodyVRotation(BodyWorld, false, VHold);
+	// where the companions WOULD float (the owner's, which no other player has): the swords form above these and return to them. ASSUMPTION: the pawn's centre is half a body above the soles.
+	const FVector Middle = Body->GetActorLocation() + FVector(0.0, 0.0, Body->TargetBodyHeightUU * 0.5f);
+	In.LeftCompanion = Middle + YawOnly.RotateVector(LlmCompanionHome) + FVector(0.0, 0.0, Body->HoverHeightUU);
+	In.RightCompanion = Middle + YawOnly.RotateVector(AgentCompanionHome) + FVector(0.0, 0.0, Body->HoverHeightUU);
+	bool bHands = true;
+	for (const bool bLeft : { true, false })
+	{
+		USceneComponent* Forearm = nullptr;
+		FVector Tip = FVector::ZeroVector;
+		// the Dog's LEFT hand is its -Y forearm (RelayDogCharacter VisibleForearm(!bLeft)); a worn figure faces +X with its joints at rest on the figure's axes
+		if (Body->GetHandFrame(!bLeft, Forearm, Tip) && Forearm != nullptr)
+		{
+			const FVector Forward = FVector::ForwardVector;
+			const FVector Along = Tip.IsNearlyZero() ? FVector(0.0, 0.0, -1.0) : Tip.GetSafeNormal();
+			const FVector Square = (Forward - Along * FVector::DotProduct(Forward, Along)).GetSafeNormal();
+			const FVector Centre = Tip - Along * Hold.IntoHandUU + Square * Hold.ForwardUU;   // no closed fist on a remote figure: the tip formula
+			const FTransform Local = WonderlandGrip::HandGripLocal(Tip, Centre, Forward, bLeft ? -1.0f : 1.0f, Hold);
+			// the grip in the world, with no scale (as GetHandoffGripWorld returns it): where the swords FLY TO while delivering and FLY FROM while returning
+			FTransform Grip(Forearm->GetComponentQuat() * Local.GetRotation(), Forearm->GetComponentTransform().TransformPosition(Local.GetLocation()));
+			if (VHold.bBodyV)
+			{
+				Grip.SetRotation(WonderlandGrip::BodyVRotation(BodyWorld, bLeft, VHold));
+			}
+			(bLeft ? In.LeftForearm : In.RightForearm) = Forearm;
+			(bLeft ? In.LeftGripLocal : In.RightGripLocal) = Local;
+			(bLeft ? In.LeftGrip : In.RightGrip) = Grip;
+		}
+		else
+		{
+			// NEVER AN ORIGIN ARTIFACT: with no hand joint yet (a figure still loading, or one without arms) the flight aims at a place beside the body, and HELD stays hidden
+			bHands = false;
+			(bLeft ? In.LeftGrip : In.RightGrip) = FTransform(YawOnly.Quaternion(), Middle + YawOnly.RotateVector(FVector(0.0, bLeft ? -45.0 : 45.0, 0.0)));
+		}
+	}
+	In.State = Wanted.State == EWonderlandHandoffState::Held && !bHands ? EWonderlandHandoffState::Idle : Wanted.State;
+	In.PhaseSeconds = Wanted.Phase;
+	R.Swords->Show(In);
+
+	// THE TRANSFORMATION'S LIGHT, as the owner's Dog drives it (RelayDogCharacter UpdateHandoffPresentation): into the middle of each blade, along each blade, with no companion bodies
+	WonderlandHandoffTransform::FShowInput Change;
+	Change.State = In.State;
+	Change.PhaseSeconds = In.PhaseSeconds;
+	Change.LeftSword = R.Swords->GetSwordWorld(true).TransformPosition(FVector(0.0f, 0.0f, 50.0f));
+	Change.RightSword = R.Swords->GetSwordWorld(false).TransformPosition(FVector(0.0f, 0.0f, 50.0f));
+	Change.LeftSwordAxis = R.Swords->GetSwordWorld(true).GetRotation().GetAxisZ();
+	Change.RightSwordAxis = R.Swords->GetSwordWorld(false).GetRotation().GetAxisZ();
+	Change.LeftSwordReach = 50.0f * static_cast<float>(R.Swords->GetSwordWorld(true).GetScale3D().GetAbsMax());
+	Change.RightSwordReach = 50.0f * static_cast<float>(R.Swords->GetSwordWorld(false).GetScale3D().GetAbsMax());
+	Change.TimeSeconds = In.TimeSeconds;
+	R.Transform->Show(Change);
+
+	// WLHANDOFF play: said when the state being DRAWN changes, with the time since the sequence began on this machine's clock (the measurement line for the offset to the owner's)
+	const int32 PlayState = 1 + static_cast<int32>(In.State) + (bHands ? 8 : 0);
+	if (PlayState != R.LoggedPlayState)
+	{
+		R.LoggedPlayState = PlayState;
+		UE_LOG(LogTemp, Display, TEXT("WLHANDOFF play fig=%s state=%s phase=%.2f sinceStartMs=%.0f hands=%d swords=%d armed=%.2f"), *UserId, FWonderlandMissionHandoff::StateName(In.State),
+			static_cast<double>(In.PhaseSeconds), (Now - R.Track.StartedAt) * 1000.0, bHands ? 1 : 0, R.Swords->CountVisibleBoxes(), static_cast<double>(R.Track.Armed));
 	}
 }
 
@@ -464,6 +632,7 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 		}
 		const FRotator Facing = FMath::RInterpTo(Body->GetActorRotation(), FRotator(0.0, R.TargetYaw, 0.0), DeltaSeconds, EaseRate);
 		Body->SetActorLocationAndRotation(Next, Facing);
+		UpdateRemoteHandoff(Pair.Key, R, Body, World, DeltaSeconds);
 		// THE OWNER'S DOG ANIMATOR, run for this figure (MP-ANIM-01 cause 2): the same arithmetic, configured the same way, fed the speed the sender
 		// reported for the drawn moment (the gait hint, 0 when standing), the same dt clamp and DistanceUU = speed x dt as ARelayDogCharacter::Tick; its pose
 		// is worn exactly as a skin worn by the Dog wears it. A figure is never airborne, on stairs or under a look target here: the Dog's other inputs stay at their rest values.
