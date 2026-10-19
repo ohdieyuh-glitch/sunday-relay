@@ -12,3 +12,8 @@ A alternative: regex pre-pass replacing unpaired surrogates, with B fixed|pass|a
 B alternative: rounding kept and NEGATIVE ZERO caught, with A fixed|pass|fix-a-utf8.py,fix-b-alt-negzero.py
 B alternative: direct instant comparison before rounding, with A fixed|pass|fix-a-utf8.py,alt-b-compare.py
 every alternative together (code-point loop + negative-zero catch)|pass|alt-a-forof.py,fix-b-alt-negzero.py
+# REVIEWER CASES: spec-green BY DESIGN (the spec deliberately does not pin them); only the independent reviewer can catch them against the constraint and criteria.
+REVIEWER CASE: Buffer-based encoder (a Node global), with B fixed|pass|reviewer-a-buffer.py,fix-b-age.py
+REVIEWER CASE: correct fix A plus a NEW exported helper, with B fixed|pass|reviewer-a-newexport.py,fix-b-age.py
+# WRONG FIX: B clamped to zero instead of unknown.
+B wrong: minutes clamped to 0 instead of unknown, with A fixed|fail|fix-a-utf8.py,bad-b-clamp.py
