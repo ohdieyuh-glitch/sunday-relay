@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **232 production files** across 20/20 subsystems (2 roots, 199 traced, 9 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **233 production files** across 20/20 subsystems (2 roots, 200 traced, 9 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -336,7 +336,8 @@ The durable lease protocol (generation fencing, heartbeat, expiry, admission), a
 
 | production source | role | reached from |
 | --- | --- | --- |
-| `relay-bridge/julius-approval-decide.ts` | not composed by the live root | — |
+| `relay-bridge/julius-approval-decide.ts` | traced | `relay-bridge/julius-approval-gw.ts` |
+| `relay-bridge/julius-approval-gw.ts` | not composed by the live root | — |
 | `relay-bridge/julius-lifecycle-routes.ts` | not composed by the live root | — |
 | `src/relay/mission/economics/cost-receipt-types.ts` | traced | `src/relay/shared/llmops/spend-citation.ts` |
 | `src/relay/mission/economics/economics-errors.ts` | traced | `src/relay/mission/economics/money.ts` |
@@ -499,6 +500,7 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `relay-bridge/julius-mission-routes.ts` | the bridge’s operator-only POST /julius/missions: the contract library’s own parser (julius/mission-contract.ts, shared with the job rather than imported from the job’s entry file, whose require.main guard is true inside the server bundle), the same compileBootstrapRequest and the same createLiveJuliusBootstrapPort the mission job uses, over the same PostgreSQL repositories — so a mission created here and one read from disk are one mission with one execution identity. Bootstrap only: it composes no provider, spends nothing and ticks nothing; the run lands durable in READY for the state routes to watch and the job to drive. Reached from the HTTP server, which is not a mission root |
 | `relay-bridge/julius-state-routes.ts` | the bridge’s READ-ONLY mount of JuliusRuntimeApi for Wonderland — /julius/runs/<id>/<run|slots|tasks|evidence|verification|timeline>, operator-only, composed over the SAME createJuliusPostgresRuntimeStore the mission job writes through so there is one state authority. Reached from the HTTP server, which is a Relay surface and not a mission root, and never from a mission; it computes nothing about a run, every answer is the API’s own. Also the first composition root for the subagent and lifecycle repositories |
 | `relay-bridge/julius-lifecycle-routes.ts` | the bridge’s operator-only POST /julius/runs/<id>/lifecycle {action: pause|resume|cancel, reason}: maps the action to JuliusRuntimeApi.pause/resume/cancel on the SAME api object the read routes serve (composeJuliusStateApi, over the same PostgreSQL store) and the kernel’s answer to a status. It records operator intent and drives nothing: no provider, no tick, no spend; the run loop in the mission job honours the recorded state. Reached from the HTTP server, which is not a mission root |
+| `relay-bridge/julius-approval-gw.ts` | V6 G-W: the logic behind the decide CLI’s `request` and `await-comment` subcommands: which issue comment may decide a held run’s approval (a real user on BOTH approver lists, created after GitHub’s own request stamp, never edited, one line naming THAT approval and citing the plan evidence id), the GET-only GitHub client and the bounded wait. The decide call, the clock, the sleep and the client are injected. It writes nothing itself, posts no comment and holds no provider credential. Imported only by the decide CLI, a separate process the workflow invokes, not reached from the mission root |
 | `relay-bridge/julius-approval-decide.ts` | V6 G-4: the decide CLI (`npm run relay:julius:decide:build`) the founder’s in-job approval step runs against the job’s own store: one held run’s ONE PENDING approval, decided through decideJuliusApproval under the committed approver authority (an approver on BOTH .github/julius-approvers.json and the workflow literal; empty refuses everyone), with the identity and authority judged before any store access. It composes no provider, spends nothing and ticks nothing. A separate process the workflow invokes, not reached from the mission root |
 
 ## External packages observed

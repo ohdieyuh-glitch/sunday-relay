@@ -37,11 +37,15 @@
  * at the store, never read as this caller's decision) or `APPROVAL_REFUSED reason=<code>`; exit 2 usage; exit 1 a
  * crash. The workflow continues ONLY on exit 0 with `decision=APPROVED run_state=READY`.
  *
- * NOT HERE (G-W's, with the founder's workflow commit): `request` and `await-comment`, the subcommands that print
- * the request and poll the pre-registered issue. They call this same `decideJuliusApprovalGuarded`.
+ * G-W's TWO SUBCOMMANDS (the rules live in `julius-approval-gw.ts`; the founder's workflow commit is what runs them):
+ *   request        --contract <file> --issue <n> --window-minutes <n> --stamp-out <path>
+ *   await-comment  --contract <file> --issue <n> --window-minutes <n> --stamp <path> [--approvers <login#id,...>]
+ * `request` prints the held run's one pending approval and records GitHub's clock; `await-comment` polls the
+ * pre-registered issue and ends in this same `decideJuliusApprovalGuarded`. They read GitHub with GET only,
+ * never post, and never write unless a validated founder comment is accepted.
  */
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { Pool } from 'pg';
@@ -59,6 +63,7 @@ import { JuliusLifecyclePostgresRepository } from '../src/relay/persistence/juli
 import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
 import { JULIUS_RUNTIME_DATABASE_ENV_NAMES, juliusRuntimeDatabaseUrl } from '../src/relay/persistence/julius-test-database';
+import { awaitApprovalComment, buildApprovalRequest, createGithubIssueClient, type RequestView } from './julius-approval-gw';
 import { compileBootstrapRequest, parseLiveMissionContract } from './julius/mission-contract';
 import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 
@@ -283,9 +288,134 @@ export function juliusRunIdForContract(raw: string): { ok: true; runId: string; 
 
 /* ------------------------------------------------------------------ main */
 
-const USAGE = 'Usage: julius-approval-decide decide --contract <file> --approval <id> --decision APPROVED|DENIED --approver github:<login>#<id> --reason-file <path> --comment-id <n>';
+/* ------------------------------------------------- G-W: request / await-comment */
+
+const GW_USAGE = 'Usage: julius-approval-decide request --contract <file> --issue <n> --window-minutes <n> --stamp-out <path> | await-comment --contract <file> --issue <n> --window-minutes <n> --stamp <path> [--approvers <login#id,...>]';
+
+/**
+ * WHAT THE REQUEST SHOWS AND THE WAIT CHECKS, read from the job's own store: the run must be BLOCKED, and its pending
+ * approvals, plan citation and hash come from the database, never from a file or a log. Reads only.
+ */
+export async function loadJuliusApprovalRequestView(
+  store: JuliusDecideStore,
+  rawContract: string,
+): Promise<{ ok: true; view: RequestView } | { ok: false; line: string }> {
+  const parsed = parseLiveMissionContract(rawContract);
+  const target = juliusRunIdForContract(rawContract);
+  if (!parsed.ok || !target.ok) return { ok: false, line: 'APPROVAL_REFUSED reason=CONTRACT_REFUSED' };
+  const run = await store.loadRun(target.runId, target.projectId);
+  if (run === null) return { ok: false, line: 'APPROVAL_REQUEST_REFUSED reason=RUN_NOT_FOUND' };
+  if (run.state !== 'BLOCKED') return { ok: false, line: 'APPROVAL_REQUEST_REFUSED reason=RUN_NOT_BLOCKED' };
+  const pending = await store.pendingApprovals(target.runId, target.projectId);
+  const tasks = await store.tasksForRun(target.runId, target.projectId);
+  const evidence = await store.evidenceForRun(target.runId, target.projectId);
+  const citation = juliusPlanCitation(tasks, evidence);
+  const planRow = citation === null ? undefined : (evidence.find((row) => row.evidenceId === citation) as { integrityHash?: string | null } | undefined);
+  return {
+    ok: true,
+    view: {
+      runId: target.runId,
+      pending: pending.map((gate) => ({ approvalId: gate.approvalId, taskId: gate.taskId, operation: gate.operation as string })),
+      taskType: (taskId: string | null) => tasks.find((task) => task.taskId === taskId)?.taskType ?? null,
+      citation,
+      planHash: planRow?.integrityHash ?? null,
+      contractId: parsed.contract.missionId,
+      binding: compileBootstrapRequest(parsed.contract, [], 'unused').missionBindingDigest,
+    },
+  };
+}
+
+/** Appends ONE regex-checked token line to $GITHUB_OUTPUT; nothing else ever reaches it. */
+function githubOutput(value: 'APPROVED' | 'DENIED' | 'NONE'): void {
+  const file = process.env.GITHUB_OUTPUT;
+  if (file === undefined || file === '') return;
+  try { appendFileSync(file, `decision=${value}\n`); } catch { /* the step's exit code is the authority, not this line */ }
+}
+
+async function mainGw(argv: readonly string[]): Promise<number> {
+  const out = (line: string): void => { process.stdout.write(`${line.replace(/[\r\n]/gu, ' ')}\n`); };
+  const option = (name: string): string | null => {
+    const index = argv.indexOf(`--${name}`);
+    return index >= 0 && argv[index + 1] !== undefined ? argv[index + 1]! : null;
+  };
+  const sub = argv[0] as 'request' | 'await-comment';
+  const required = sub === 'request' ? ['contract', 'issue', 'window-minutes', 'stamp-out'] : ['contract', 'issue', 'window-minutes', 'stamp'];
+  if (required.some((name) => option(name) === null)) { out(GW_USAGE); return 2; }
+  const issueText = option('issue')!;
+  const windowText = option('window-minutes')!;
+  if (!/^[1-9][0-9]{0,9}$/u.test(issueText) || !/^[1-9][0-9]{0,2}$/u.test(windowText)) { out('APPROVAL_REFUSED reason=ARGUMENT_INVALID'); return 4; }
+  const issue = Number(issueText);
+  const windowMinutes = Number(windowText);
+  let rawContract: string;
+  try { rawContract = readFileSync(option('contract')!, 'utf8'); } catch { out('APPROVAL_REFUSED reason=CONTRACT_UNREADABLE'); return 4; }
+  const parsedContract = parseLiveMissionContract(rawContract);
+  const target = juliusRunIdForContract(rawContract);
+  if (!parsedContract.ok || !target.ok) { out('APPROVAL_REFUSED reason=CONTRACT_REFUSED'); return 4; }
+  const databaseUrl = juliusRuntimeDatabaseUrl(process.env as Record<string, string | undefined>);
+  if (databaseUrl === null) { out(`APPROVAL_REFUSED reason=DATABASE_UNCONFIGURED (${JULIUS_RUNTIME_DATABASE_ENV_NAMES.join(' or ')})`); return 4; }
+  let client: ReturnType<typeof createGithubIssueClient>;
+  try {
+    client = createGithubIssueClient({
+      repository: process.env.GITHUB_REPOSITORY ?? '', token: process.env.GH_TOKEN ?? '',
+      fetch: (url, init) => fetch(url, init),
+    });
+  } catch { out('APPROVAL_REFUSED reason=GITHUB_UNCONFIGURED'); return 4; }
+
+  const pool = listenJuliusPool(new Pool({ connectionString: databaseUrl }), 'julius approval gw');
+  try {
+    const { store, events } = composeJuliusDecideStore(pool);
+    const loaded = await loadJuliusApprovalRequestView(store, rawContract);
+    if (!loaded.ok) { out(loaded.line); if (sub === 'await-comment') githubOutput('NONE'); return 4; }
+    const view = loaded.view;
+    const citation = view.citation;
+
+    if (sub === 'request') {
+      let stamp: string;
+      try { stamp = await client.serverTime(); } catch { out('APPROVAL_REQUEST_REFUSED reason=GITHUB_CLOCK_UNAVAILABLE'); return 4; }
+      const built = buildApprovalRequest(view, stamp, windowMinutes);
+      if (!built.ok) { out(built.line); return 4; }
+      writeFileSync(option('stamp-out')!, `${built.stamp}\n`);
+      for (const line of built.lines) out(line);
+      const summary = process.env.GITHUB_STEP_SUMMARY;
+      if (summary !== undefined && summary !== '') {
+        try { appendFileSync(summary, `${built.lines.map((line) => `    ${line}`).join('\n')}\n`); } catch { /* the log carries the same lines */ }
+      }
+      return 0;
+    }
+
+    /* await-comment: the approval and the citation are RE-DERIVED from the store, never read from the stamp file. */
+    if (view.pending.length !== 1 || citation === null) { out('APPROVAL_REFUSED reason=NOT_EXACTLY_ONE_PENDING_APPROVAL'); githubOutput('NONE'); return 4; }
+    let stamp: string;
+    try { stamp = readFileSync(option('stamp')!, 'utf8').trim(); } catch { out('APPROVAL_REFUSED reason=STAMP_UNREADABLE'); githubOutput('NONE'); return 4; }
+    if (Number.isNaN(Date.parse(stamp))) { out('APPROVAL_REFUSED reason=STAMP_INVALID'); githubOutput('NONE'); return 4; }
+    const authority = committedApproverAuthority({
+      file: parseJuliusApproverAllowlist(readJuliusApproverFile(process.cwd())),
+      workflow: parseJuliusWorkflowApprovers(option('approvers') ?? process.env.JULIUS_APPROVER_LOGINS),
+    });
+    const result = await awaitApprovalComment({
+      client, issue, windowMs: windowMinutes * 60_000, pollMs: 30_000,
+      now: () => Date.now(), sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      context: { approvalId: view.pending[0]!.approvalId, citation, stamp, listed: (id) => authority.listed(id) },
+      decide: (decision) => decideJuliusApprovalGuarded({
+        runId: target.runId, projectId: target.projectId, approvalId: decision.approvalId, decision: decision.decision,
+        approverId: decision.approverId, reason: decision.reason, commentId: decision.commentId,
+      }, {
+        store, events, authority, clock: { now: () => new Date().toISOString() }, ids: { next: (kind) => `${kind}:${randomUUID()}` },
+      }),
+    });
+    for (const line of result.lines) out(line);
+    out(`APPROVAL_AWAIT_END decision=${result.decision}`);
+    githubOutput(result.decision);
+    return result.exitCode;
+  } finally {
+    await pool.end().catch(() => undefined);
+  }
+}
+
+const USAGE ='Usage: julius-approval-decide decide --contract <file> --approval <id> --decision APPROVED|DENIED --approver github:<login>#<id> --reason-file <path> --comment-id <n>';
 
 async function main(argv: readonly string[]): Promise<number> {
+  if (argv[0] === 'request' || argv[0] === 'await-comment') return mainGw(argv);
   const out = (line: string): void => { process.stdout.write(`${line.replace(/[\r\n]/gu, ' ')}\n`); };
   const option = (name: string): string | null => {
     const index = argv.indexOf(`--${name}`);
