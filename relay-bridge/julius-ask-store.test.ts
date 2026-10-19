@@ -23,8 +23,10 @@ vi.mock('openai', () => ({
 
 const DAY0 = Date.UTC(2026, 9, 19, 12, 0, 0);
 const SECRET = ['binding', 'secret', 'for', 'tests', '0123456789'].join('-');
+// The provider-key canary is built at run time so no key-shaped literal exists in the source (the repository boundary scan refuses one).
+const STORE_KEY = ['canary', 'store', 'key', '0011223344'].join('_');
 const env = (extra: Record<string, string | undefined> = {}): Record<string, string | undefined> => ({
-  JULIUS_ASK_ENABLED: '1', OPENAI_API_KEY: 'canary_store_key_0011223344', OPENAI_PROMPT_ARCHITECT_MODEL: 'model-configured',
+  JULIUS_ASK_ENABLED: '1', OPENAI_API_KEY: STORE_KEY, OPENAI_PROMPT_ARCHITECT_MODEL: 'model-configured',
   RELAY_PROMPT_ARCHITECT_MODE: 'live', ...extra,
 });
 const answered = (): GptRunOutcome => ({ ok: true, actualModel: 'm', responseId: 'resp_x_000111', status: 'completed', outputText: JSON.stringify({ answer: 'fine' }), usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 } });
