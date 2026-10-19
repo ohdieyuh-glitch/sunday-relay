@@ -56,8 +56,15 @@ typecheck() {
   "files": [$files]
 }
 EOF
-  ( cd "$dir" && node --max-old-space-size=1536 "$TSC" -p tsconfig.slice.json --pretty false > tsc.raw 2>&1 )
+  # tsc exits 0 (clean) or non-zero WITH `error TS` lines (diagnostics). A non-zero exit WITHOUT any `error TS` line (killed at the heap cap, a crash) means the slice was NOT checked:
+  # that is an instrument failure and must never read as "clean" (returns 1; the caller fails the scenario).
+  local rc=0
+  ( cd "$dir" && node --max-old-space-size=1536 "$TSC" -p tsconfig.slice.json --pretty false > tsc.raw 2>&1 ) || rc=$?
   sed -E 's/\([0-9]+,[0-9]+\)//' "$dir/tsc.raw" | grep -E "error TS[0-9]+" | sort > "$dir/tsc.diag"
+  if [ "$rc" -ne 0 ] && [ ! -s "$dir/tsc.diag" ]; then
+    echo "    TYPECHECK INSTRUMENT FAILURE (node/tsc exit $rc, no error TS line): the slice was not checked" >&2
+    return 1
+  fi
 }
 
 # new_type_errors <baseline dir> <dir> -> prints the diagnostics present in <dir> beyond the baseline (multiset difference)
@@ -71,9 +78,10 @@ run() { # run <dir> <label> <expect>
   local got; [ "$code" -eq 0 ] && got=pass || got=fail
   local tcstate="skipped" newerr=""
   if [ "$TC" = 1 ] && [ "$got" = pass ]; then
-    typecheck "$dir"
-    newerr=$(new_type_errors "$base/baseline" "$dir")
-    if [ -z "$newerr" ]; then tcstate=clean; else tcstate=RED; fi
+    if typecheck "$dir"; then
+      newerr=$(new_type_errors "$base/baseline" "$dir")
+      if [ -z "$newerr" ]; then tcstate=clean; else tcstate=RED; fi
+    else tcstate=FAILED; fi
   fi
   local verdict
   case "$expect" in
@@ -96,7 +104,7 @@ ok=0
 n=0
 if [ "$TC" = 1 ]; then
   fresh "$base/baseline" || { echo "COULD NOT BUILD THE BASELINE WORKSPACE"; exit 2; }
-  typecheck "$base/baseline"
+  typecheck "$base/baseline" || { echo "THE BASELINE TYPECHECK DID NOT COMPLETE: no scenario can be judged against it"; exit 2; }
   echo "typecheck baseline (the unfixed slice): $(wc -l < "$base/baseline/tsc.diag" | tr -d ' ') pre-existing diagnostic(s), ignored"
 fi
 while IFS='|' read -r label expect fixes; do
