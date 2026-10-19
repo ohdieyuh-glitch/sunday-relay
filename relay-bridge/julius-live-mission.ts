@@ -84,7 +84,7 @@ import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
   driveJuliusRunToTerminal,
-  liveTickBudgetFor, liveStageDeadline, liveRunAttemptRefusal, JULIUS_LIVE_RATE_LIMIT_BACKOFF,
+  approvalWaitMsFor, liveTickBudgetFor, liveStageDeadline, liveRunAttemptRefusal, JULIUS_LIVE_RATE_LIMIT_BACKOFF,
   recordJuliusLearningOutcome,
   resolveLiveWorkers,
 } from './julius/live-composition';
@@ -668,6 +668,7 @@ async function main(argv: readonly string[]): Promise<number> {
     contexts: { snapshotFor: () => null }, artifacts, shell: null,
     architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
     architectEffort: contract.limits?.architectEffort, coderEffort: contract.limits?.coderEffort, coderSelfTestCalls: contract.limits?.coderSelfTestCalls,
+    coderRuntimeMinutes: contract.limits?.coderRuntimeMinutes, repairCycles: contract.limits?.repairCycles, approvalWaitMs: approvalWaitMsFor(contract),
   });
 
   out('JULIUS LIVE MISSION — preflight');
@@ -912,6 +913,7 @@ async function main(argv: readonly string[]): Promise<number> {
       testCommand: contract.testCommand, contexts: handoffs.contexts, artifacts: liveArtifacts, shell,
       architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
       architectEffort: contract.limits?.architectEffort, coderEffort: contract.limits?.coderEffort, coderSelfTestCalls: contract.limits?.coderSelfTestCalls,
+    coderRuntimeMinutes: contract.limits?.coderRuntimeMinutes, repairCycles: contract.limits?.repairCycles, approvalWaitMs: approvalWaitMsFor(contract),
       researchPolicyFor: researchPolicyOf,
     });
     if (!resolution.ok) {

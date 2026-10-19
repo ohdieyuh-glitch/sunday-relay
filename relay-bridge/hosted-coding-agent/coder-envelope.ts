@@ -311,3 +311,113 @@ export const coderAttemptDeadlineMs = (): number => resolveCoderEnvelope().attem
 
 /** Exported so a structural test can prove the shares fit the one job budget. */
 export const JOB_BUDGET_MS_FOR_SHARES = JOB_BUDGET_MS;
+
+/* ===================================================================================================================
+ * A CONTRACT-SCOPED, OPT-IN CODER SESSION BUDGET (`limits.coderRuntimeMinutes`) — DRAFT, founder policy + reviewer read.
+ *
+ * WHY. The envelope above is derived from observations that are ALL low-effort history, and it sits AT its own ceiling: the
+ * pace-implied session (26 turns x 23,538 ms x 1.2 = 734,386 ms) plus the executor allowances (45 s before, 420 s after) is
+ * 1,199,386 ms, against a per-attempt ceiling of 40 min / 2 attempts = 1,200,000 ms. There is no headroom to give, so a coder
+ * that legitimately needs longer (the diagnostic run 39182739862: maximum effort, cut three times at ~736 s) can only be
+ * helped by a bigger budget for THAT MISSION, never by a bigger global default.
+ *
+ * WHAT IT IS. A contract may declare the coder SESSION limit in whole minutes. Absent, nothing changes: `resolveCoderEnvelope`,
+ * `RECORDED_CODER_OBSERVATIONS` and `MAX_CODER_ATTEMPTS` are untouched and every existing contract is byte-identical (a control
+ * test pins every committed contract's binding digest). Present, it is bounded twice:
+ *   1. an ABSOLUTE range, refused by the parser and the checker alike (a contract cannot ask for an unbounded session);
+ *   2. a JOB FIT: the whole mission's worst case (every role, every repair cycle, any approval wait) must still fit the stage
+ *      deadline, because a session that wins its minutes by overrunning the job is the runaway this module exists to prevent.
+ * Money is unaffected: `maxCostCents` stays what Julius reserved for the dispatch.
+ *
+ * THE ARITHMETIC (all in ms; N = attempts per dispatch = MAX_CODER_ATTEMPTS = 2; A = session + pre + post allowances):
+ *   per coder dispatch           N x A
+ *   one repair cycle             N x A + reviewer per-attempt ceiling
+ *   worst case                   reviewer share + N x A + architect worst + infrastructure
+ *                                + R x (N x A + reviewer ceiling) + approval wait + stamp-lag reserve + after-LIVE reserve
+ *   must be <=                   JOB_BUDGET_MS
+ * With the committed figures (reviewer share 3,000,000; reviewer ceiling 1,000,000; architect 600,000; infrastructure 900,000;
+ * margins 120,000 + 300,000; job 18,000,000) the largest session that fits for each repair-cycle count R and approval wait W is
+ * a table the design record GENERATES BY COMMAND from `coderRuntimeJobFit` (never retyped), and a test pins the same arithmetic.
+ * =================================================================================================================== */
+
+/**
+ * The infrastructure allowance of the job-share model (image builds, PostgreSQL, Hermes, the evidence dump): the SAME 15 minutes
+ * `coder-envelope.test.ts` prices (a parity assertion there holds the two together), exported so the production fit uses it.
+ */
+export const CODER_FIT_INFRASTRUCTURE_ALLOWANCE_MS = 15 * 60_000;
+
+/** The smallest session a contract may declare: not less than the default envelope already grants (12.24 min -> 13). */
+export const CODER_CONTRACT_RUNTIME_MIN_MINUTES = 13;
+/** The largest, whatever the repair cycles: an explicit new hard cap, applied BEFORE and independent of the job fit. */
+export const CODER_CONTRACT_RUNTIME_MAX_MINUTES = 45;
+
+export class CoderRuntimeBudgetRefused extends Error {
+  readonly code: 'coder_runtime_minutes_invalid' | 'coder_runtime_budget_unfit';
+  constructor(code: 'coder_runtime_minutes_invalid' | 'coder_runtime_budget_unfit', message: string) {
+    super(`${code}: ${message}`);
+    this.name = 'CoderRuntimeBudgetRefused';
+    this.code = code;
+  }
+}
+
+/** The value, or null when it is well formed: whole minutes in [MIN, MAX]. */
+export function coderRuntimeMinutesProblem(value: unknown): string | null {
+  if (typeof value !== 'number' || !Number.isInteger(value)) return 'limits.coderRuntimeMinutes must be a whole number of minutes';
+  if (value < CODER_CONTRACT_RUNTIME_MIN_MINUTES || value > CODER_CONTRACT_RUNTIME_MAX_MINUTES) {
+    return `limits.coderRuntimeMinutes must be from ${CODER_CONTRACT_RUNTIME_MIN_MINUTES} to ${CODER_CONTRACT_RUNTIME_MAX_MINUTES}`;
+  }
+  return null;
+}
+
+export interface ContractCoderRuntime {
+  readonly coderRuntimeMinutes: number;
+  /** The session's own limit: what the runner's abort timer is armed with. */
+  readonly maxRuntimeMs: number;
+  /** What one attempt may take: the session plus the executor steps around it. The WORKER declares this. */
+  readonly attemptDeadlineMs: number;
+  /** Every attempt of one dispatch at its whole deadline. */
+  readonly worstCaseDispatchMs: number;
+}
+
+/** The contract's session budget as the runtime numbers. Pure; refuses a value outside the absolute range. */
+export function resolveContractCoderRuntime(coderRuntimeMinutes: unknown): ContractCoderRuntime {
+  const problem = coderRuntimeMinutesProblem(coderRuntimeMinutes);
+  if (problem !== null) throw new CoderRuntimeBudgetRefused('coder_runtime_minutes_invalid', problem);
+  const minutes = coderRuntimeMinutes as number;
+  const maxRuntimeMs = minutes * 60_000;
+  const attemptDeadlineMs = maxRuntimeMs + CODER_PRE_SESSION_ALLOWANCE_MS + CODER_POST_SESSION_ALLOWANCE_MS;
+  return { coderRuntimeMinutes: minutes, maxRuntimeMs, attemptDeadlineMs, worstCaseDispatchMs: attemptDeadlineMs * MAX_CODER_ATTEMPTS };
+}
+
+export interface CoderRuntimeFitInput {
+  readonly coderRuntimeMinutes: number;
+  readonly repairCycles: number;
+  /** The approval wait the job holds for a gated mission (window + step overhead), else 0. */
+  readonly approvalWaitMs: number;
+  readonly reviewerShareMs: number;
+  readonly reviewerCycleCeilingMs: number;
+  readonly architectWorstCaseMs: number;
+  readonly infrastructureMs: number;
+  /** Stamp-lag reserve + the reserve after LIVE: the margins the stage deadline keeps. */
+  readonly marginsMs: number;
+  readonly jobBudgetMs: number;
+}
+
+export interface CoderRuntimeFit {
+  readonly worstCaseMs: number;
+  readonly limitMs: number;
+  readonly headroomMs: number;
+  readonly fits: boolean;
+}
+
+/** The worst case of the WHOLE job under this session budget, and whether it fits. Pure arithmetic, shown in the design record. */
+export function coderRuntimeJobFit(input: CoderRuntimeFitInput): CoderRuntimeFit {
+  const runtime = resolveContractCoderRuntime(input.coderRuntimeMinutes);
+  if (!Number.isInteger(input.repairCycles) || input.repairCycles < 0) {
+    throw new CoderRuntimeBudgetRefused('coder_runtime_minutes_invalid', 'repairCycles must be a whole number of at least 0');
+  }
+  const cycleMs = runtime.worstCaseDispatchMs + input.reviewerCycleCeilingMs;
+  const worstCaseMs = input.reviewerShareMs + runtime.worstCaseDispatchMs + input.architectWorstCaseMs + input.infrastructureMs
+    + input.repairCycles * cycleMs + input.approvalWaitMs + input.marginsMs;
+  return { worstCaseMs, limitMs: input.jobBudgetMs, headroomMs: input.jobBudgetMs - worstCaseMs, fits: worstCaseMs <= input.jobBudgetMs };
+}

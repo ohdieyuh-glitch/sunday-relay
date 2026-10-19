@@ -46,8 +46,26 @@ const DEFAULT_LIMITS = Object.freeze({ spendUsd: 5, repairCycles: 1 });
 const ARCHITECT_OUTPUT_TOKEN_RESERVATION = 20_000;
 /** Mirrors `JULIUS_ROLE_EFFORT_LEVELS` and `JULIUS_LIMITS_KEYS` in relay-bridge/julius/mission-contract.ts; a test holds them equal. */
 const ROLE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
-const LIMITS_KEYS = ['spendUsd', 'repairCycles', 'architectMaxOutputTokens', 'architectEffort', 'coderEffort', 'coderSelfTestCalls'];
+const LIMITS_KEYS = ['spendUsd', 'repairCycles', 'architectMaxOutputTokens', 'architectEffort', 'coderEffort', 'coderSelfTestCalls', 'coderRuntimeMinutes'];
 const SELF_TEST_CALLS = { min: 1, max: 4 };
+/**
+ * THE CODER SESSION BUDGET (`limits.coderRuntimeMinutes`) AND ITS JOB FIT. Every figure MIRRORS a TypeScript constant in
+ * relay-bridge/hosted-coding-agent/coder-envelope.ts, relay-bridge/reviewer-deadline.ts or relay-bridge/julius/live-composition.ts;
+ * `relay-bridge/hosted-coding-agent/coder-runtime-budget.test.ts` holds each equal to its source, so this cannot drift quietly.
+ * The checker refuses a declared value outside the absolute range, and one whose whole-job worst case does not fit the job.
+ */
+const CODER_RUNTIME_MINUTES = { min: 13, max: 45 };
+const CODER_FIT = Object.freeze({
+  attemptsPerDispatch: 2, preSessionMs: 45_000, postSessionMs: 420_000,
+  reviewerShareMs: 3_000_000, reviewerCycleCeilingMs: 1_000_000, architectWorstCaseMs: 600_000, infrastructureMs: 900_000,
+  marginsMs: 420_000, gatedApprovalWaitMs: 2_100_000, jobBudgetMs: 18_000_000,
+});
+/** The whole-job worst case in ms for a declared session budget (the same formula as `coderRuntimeJobFit`). */
+const coderRuntimeWorstCaseMs = (minutes, repairCycles, approvalWaitMs) => {
+  const dispatchMs = CODER_FIT.attemptsPerDispatch * (minutes * 60_000 + CODER_FIT.preSessionMs + CODER_FIT.postSessionMs);
+  return CODER_FIT.reviewerShareMs + dispatchMs + CODER_FIT.architectWorstCaseMs + CODER_FIT.infrastructureMs
+    + repairCycles * (dispatchMs + CODER_FIT.reviewerCycleCeilingMs) + approvalWaitMs + CODER_FIT.marginsMs;
+};
 const MISSION_LIMITS = Object.freeze({
   // Founder decision, 2026-09-06: mission 2 gets a larger bounded budget for
   // its paid rerun. Its first paid attempt entered LIVE and did not complete,
@@ -407,6 +425,19 @@ if (limits === undefined || limits === null || typeof limits !== 'object') {
     && !(Number.isInteger(limits.coderSelfTestCalls) && limits.coderSelfTestCalls >= SELF_TEST_CALLS.min && limits.coderSelfTestCalls <= SELF_TEST_CALLS.max)) {
     refuse(`limits.coderSelfTestCalls must be an integer from ${SELF_TEST_CALLS.min} to ${SELF_TEST_CALLS.max} when declared`);
   }
+  if (limits.coderRuntimeMinutes !== undefined) {
+    const minutes = limits.coderRuntimeMinutes;
+    if (!(Number.isInteger(minutes) && minutes >= CODER_RUNTIME_MINUTES.min && minutes <= CODER_RUNTIME_MINUTES.max)) {
+      refuse(`limits.coderRuntimeMinutes must be a whole number of minutes from ${CODER_RUNTIME_MINUTES.min} to ${CODER_RUNTIME_MINUTES.max} when declared`);
+    } else if (Number.isInteger(limits.repairCycles) && limits.repairCycles >= 0) {
+      // THE JOB FIT: a session that wins its minutes by overrunning the job is the runaway this key must not become.
+      const wait = contract.approvalGates !== undefined ? CODER_FIT.gatedApprovalWaitMs : 0;
+      const worst = coderRuntimeWorstCaseMs(minutes, limits.repairCycles, wait);
+      if (worst > CODER_FIT.jobBudgetMs) {
+        refuse(`limits.coderRuntimeMinutes ${minutes} with ${limits.repairCycles} repair cycle(s)${wait > 0 ? ' and an approval wait' : ''} needs ${worst} ms of a ${CODER_FIT.jobBudgetMs} ms job (${worst - CODER_FIT.jobBudgetMs} ms over); lower the minutes or the repair cycles`);
+      }
+    }
+  }
 }
 
 /* ------------------------------------------------------- research authority */
@@ -511,6 +542,7 @@ out(`  repair ceiling: ${limits?.repairCycles ?? 'MISSING'} cycle(s)`);
 if (limits?.architectEffort !== undefined) out(`  architect effort: ${limits.architectEffort}`);
 if (limits?.coderEffort !== undefined) out(`  coder effort: ${limits.coderEffort}`);
 if (limits?.coderSelfTestCalls !== undefined) out(`  coder self-tests (diagnostic telemetry only): up to ${limits.coderSelfTestCalls}`);
+if (limits?.coderRuntimeMinutes !== undefined) out(`  coder session budget: ${limits.coderRuntimeMinutes} minute(s) (opt-in; default envelope otherwise)`);
 out(`  paid-run lanes: ${lanesFor(namespace).join(', ')}${claimedLane === null ? '' : ` (claimed: ${claimedLane})`}`);
 out(`  research: ${research === undefined
   ? 'NONE — every ask is refused research_not_authorized'
