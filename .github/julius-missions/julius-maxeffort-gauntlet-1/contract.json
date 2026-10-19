@@ -1,0 +1,64 @@
+{
+  "missionId": "mission:julius-maxeffort-gauntlet-1",
+  "markerNamespace": "julius-maxeffort-gauntlet-1",
+  "projectId": "prj-julius-maxeffort-gauntlet-1",
+  "tenantId": "tenant",
+  "objective": "An audit of Relay found four related latent defects in the /gauntletloop command controller (`src/relay/mission/gauntlet/gauntlet-command.ts`), a roughly 500-line module that drives a pure state machine (`gauntlet-machine.ts`) over an injected store. Fix all four, in place, without changing anything else. The controller's own siblings `advanceGauntletCommand` and `openNextGauntletRound` already show the intended behaviour when a compare-and-set loses a race: reload the stored gauntlet and report what is stored. (A) ACCOUNTING. `advanceGauntlet` in the machine ADDS the usage it is handed to the gauntlet's running totals, but `advanceGauntletCommand` hands it the SUM of every phase already settled in the current round, so the earlier phases of a round are counted again each time a later phase settles; a gauntlet halts with `budget_limit` or `duration_limit` on spend it never incurred. (B) CANCEL. `cancelGauntlet` ignores the result of its own compare-and-set `save`: when another writer has moved the gauntlet on first, it still cancels the outstanding work and reports CANCELLED, although the stored gauntlet is not cancelled. (C) ACTIVATE. `activateGauntlet` ignores the result of the compare-and-set that records the first round: when it loses, it still requests that round's work and reports a freshly started gauntlet at round 1 that is not what is stored. (D) RECOVERY. The module's header promises that a gauntlet that runs ten rounds does so across ten calls and that \"a process that dies between any two of them loses nothing\"; work ids are deterministic and the work port is idempotent by id, so a step may be REDELIVERED. But the controller saves the new state BEFORE it requests the successor work, so a crash in between strands the gauntlet: after a failed review the repair is never requested and a redelivery of the same settlement is an `invalid_gauntlet_transition` error; `openNextGauntletRound` on a round that is already RUNNING returns without requesting its review; and a second `/gauntletloop` that resumes a RUNNING gauntlet returns the first review's id without requesting it. The specification `src/relay/gauntlet-fixes.test.ts` is already in the workspace and currently fails; the acceptance test command runs it for you after your edits (you cannot run it yourself, so read it). It pins the main behaviours of each fix and deliberately not every wider invariant. The files to edit exist and are tracked by git: edit them in place.",
+  "requirements": [
+    "A. The gauntlet's `usedDurationMs` and `usedUsdMicros` are, at every moment, the sum of every usage report the gauntlet has settled, each counted exactly once. The ceilings (`duration_limit`, `budget_limit`) are checked against those totals: exactly at a ceiling is not over it, one unit over halts. The settled per-phase rows keep each phase's own usage, and a usage report is counted AS FIRST STORED: if the same phase is delivered again with different numbers, the stored numbers stand and the later report changes nothing. Nothing else about the machine's stopping rules, its transitions, its error messages or its exported signatures changes.",
+    "B. `cancelGauntlet`: when its compare-and-set save of the cancelled record is refused because the stored gauntlet changed, it cancels NO work and it does not report CANCELLED. It reports what is stored, in the shape its siblings use for a lost race (an `advanced: true` outcome carrying the stored state, activation, round and halt reason, with `nextWorkId: null`), or it refuses with a non-empty `reasonCode` and `safeMessage`; either is acceptable, but the outcome must not claim a cancellation that did not happen. When the save succeeds, behaviour is exactly as before: only the gauntlet's own outstanding (not completed) work is cancelled.",
+    "C. `activateGauntlet`: when the compare-and-set that records the first round is refused because the stored gauntlet changed, it requests NO work, records NO round row, and does not report a freshly started round 1. It reports the stored gauntlet as a resume (`activated: true`, `resumed: true`, the stored record, the work id of the stored round's review) or refuses with a non-empty `reasonCode` and `safeMessage`; either is acceptable. When the save succeeds, behaviour is exactly as before. This lost-race path requests NOTHING even when the stored gauntlet it finds is already RUNNING: the winner owns the scheduling of its own round (the resume rule in D applies to a LATER, ordinary second activation, never to a lost race); the same holds when the gauntlet CREATE itself is refused because another writer created it first.",
+    "D. A REDELIVERED step is an ordinary event, not an error. (1) `advanceGauntletCommand` called with a settlement the gauntlet is no longer waiting for (it already moved on because of that same settlement) changes nothing about the stored gauntlet (state, round, totals, version), writes no new row (except the missing successor's own row, below), and returns `advanced: true` with the stored state; and when that stored state is REPAIRING after a failed review it makes sure the repair work was requested (by the deterministic work id) and recorded, exactly once. A redelivery that arrives while the gauntlet is STILL waiting for that phase (the crash came before the state moved) is simply the settlement and is applied once. (2) `openNextGauntletRound` on a gauntlet whose round is already RUNNING makes sure that round's review was requested and recorded (once) and reports it, rather than returning without scheduling. (3) A second activation that resumes a RUNNING gauntlet makes sure its current round's review was requested and recorded (once). On a redelivery `nextWorkId` is NOT pinned: it may be the deterministic id of the successor work or null, but when it is non-null it must be that deterministic id. (4) A second activation that finds a gauntlet that was CREATED but never started (state READY, round 0, active; the process died between creating it and recording its first round) STARTS it exactly as a first activation would (round 1 RUNNING, its review requested and recorded once) instead of only reporting it. A cleared, halted or cancelled gauntlet, and a gauntlet waiting for its repair to settle, schedule nothing and make no requestWork call at all. Use the deterministic work ids; do not add state to the record or to the store interface. KNOWN LIMIT, deliberately out of scope and not to be \"fixed\": a redelivered settlement that arrives AFTER the gauntlet has moved on to a later round cannot be told apart from that later round's own settlement, because a settlement carries no round number and you may not change the step input's shape; treat it exactly as any settlement the gauntlet is waiting for.",
+    "OUT OF SCOPE, do not change: (i) a second activation of a gauntlet that is READY at a round above 0 (a repair completed and the next round not yet opened): the next-round call is the only path that opens a round; (ii) the policy and limits are not re-checked on a second activation, as today; (iii) the refused-before-first-round (HALTED) branch of `activateGauntlet`, which also ignores the result of its own save: a known fifth gap, deliberately left unfixed and not pinned.",
+    "No function outside these four fixes changes behaviour, including `openNextGauntletRound`, `runGauntletReview`, `advanceGauntletCommand`'s transition handling and every exported name and type. The in-memory store (`gauntlet-memory-store.ts`) is read-only: it is a test double the specification runs against."
+  ],
+  "constraints": [
+    "Edit `src/relay/mission/gauntlet/gauntlet-command.ts` and, only if the design needs it, `src/relay/mission/gauntlet/gauntlet-machine.ts`, in place. `gauntlet-memory-store.ts` and `gauntlet-ports.ts` are part of the workspace for reading and are read-only. You have `Read`, `Glob`, `Grep` and `Edit`; you cannot create files or run commands (the acceptance test command is run for you after your edits).",
+    "Do not edit `src/relay/gauntlet-fixes.test.ts`. It is the specification you are implementing against, not part of the deliverable.",
+    "Use only what the files already import plus Node built-ins. Add no dependency and no import from outside this workspace: the sandbox that runs the test has no network access and no `node_modules`. This module deliberately imports nothing of Julius; keep it so.",
+    "Do not change any exported name, signature or type, and do not mutate the inputs of the functions you change.",
+    "Comments inside the functions you change may and should be corrected where they describe the OLD behaviour as intended (for example the comment in `advanceGauntletCommand` that presents summing the round's phases as the design). Do not reformat code you are not changing and do not make unrelated cleanups, however tempting; a change that is not one of the four fixes (A to D) is out of scope. Do not touch `.julius/`."
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "criterion-accounting",
+      "text": "The running totals are the exact sum of every settled usage, each counted once, across reviews, repairs and rounds; the ceilings halt on the real total (at the ceiling is not over it), for both spend and duration; the per-phase rows keep their own usage; the machine's stopping rules are otherwise unchanged.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-cancel-race",
+      "text": "A cancel whose compare-and-set loses cancels no work and never reports CANCELLED; it reports the stored truth or refuses with a reason code; a successful cancel behaves exactly as before.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-activate-race",
+      "text": "An activation whose first-round compare-and-set loses requests no work, records no round row and never reports a fresh round 1; it reports the stored gauntlet as a resume or refuses with a reason code; a successful activation behaves exactly as before.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-recovery",
+      "text": "After a crash between a state change and the request of its successor work, a retry of the same call (a redelivered settlement, the next-round call, a second activation, including one that finds a gauntlet created but never started) requests the missing work or starts it and records its row exactly once, counts usage exactly once and reports advanced/resumed truthfully; a redelivery after everything succeeded changes nothing and is not an error; nothing is scheduled for a gauntlet that is cleared, halted, cancelled or waiting for a repair to settle; and the stated limit (a settlement redelivered after a LATER round opened is indistinguishable from that round's own) is neither worked around nor pinned by a changed input shape.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-scope",
+      "text": "Only `gauntlet-command.ts` (and, if needed, `gauntlet-machine.ts`) is changed, using no new dependency and no import of Julius; no exported name or signature changes and the store/port interfaces gain nothing; inputs are not mutated.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-test",
+      "text": "`node --import ./.julius/loader.mjs --test src/relay/gauntlet-fixes.test.ts` exits zero.",
+      "blocking": true
+    }
+  ],
+  "testCommand": "node --import ./.julius/loader.mjs --test src/relay/gauntlet-fixes.test.ts",
+  "workspacePath": "/tmp/julius-workspace/tenant/ws",
+  "limits": {
+    "spendUsd": 100,
+    "repairCycles": 3,
+    "architectMaxOutputTokens": 20000,
+    "architectEffort": "high",
+    "coderEffort": "max",
+    "coderRuntimeMinutes": 23
+  }
+}
