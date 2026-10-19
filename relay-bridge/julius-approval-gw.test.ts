@@ -18,6 +18,7 @@ import {
   type GithubIssueComment,
   type RequestView,
 } from './julius-approval-gw';
+import { juliusDecidePrecheck } from './julius-approval-decide';
 
 const APPROVAL = 'approval:run:abc:task-build:DISPATCH_WORKER:1';
 const CITATION = 'evidence:plan:7f3a';
@@ -321,5 +322,69 @@ describe('V6 G-W: the GitHub client is GET-only and keeps the token in the heade
     const client = createGithubIssueClient({ repository: 'o/r', token: 't', fetch: async () => response(null, { ok: false, status: 404 }) });
     await expect(client.listComments(0, STAMP)).rejects.toThrow();
     expect(await client.getComment(5)).toBeNull();
+  });
+});
+
+/* ------------------------------------------------- reviewer findings F-1 and A-2 */
+
+describe('V6 G-W review F-1: a comment the rules accept can never be refused by the decide precheck', () => {
+  const body = (reason: string) => `APPROVE ${APPROVAL} plan ${CITATION} ${reason}`;
+
+  it('refuses the reviewer\'s own example (a dollar sign in the reason) as REASON_UNSAFE', () => {
+    expect(evaluateApprovalComment(comment({ body: `APPROVE ${APPROVAL} plan ${CITATION} reviewed; cost is $5 fine` }), context())).toEqual({ ok: false, code: 'REASON_UNSAFE' });
+  });
+
+  it('refuses every character the decide CLI refuses, and anything that is not printable ASCII', () => {
+    const refused = ['`', '$', String.fromCharCode(92), '<', '>', '|', String.fromCharCode(0xe9), String.fromCharCode(0x2014), String.fromCodePoint(0x1f600), String.fromCharCode(9)];
+    for (const bad of refused) {
+      const verdict = evaluateApprovalComment(comment({ body: body(`reviewed ${bad} fine`) }), context());
+      expect(verdict, JSON.stringify(bad)).toEqual({ ok: false, code: 'REASON_UNSAFE' });
+    }
+  });
+
+  it('the wait CONTINUES past such a comment and decides on the next, correct one', async () => {
+    const unsafe = comment({ id: 31, created_at: '2026-10-19T01:05:00Z', updated_at: '2026-10-19T01:05:00Z', body: `APPROVE ${APPROVAL} plan ${CITATION} reviewed; cost is $5 fine` });
+    const good = comment({ id: 32, created_at: '2026-10-19T01:06:00Z', updated_at: '2026-10-19T01:06:00Z' });
+    const h = harness([[unsafe], [unsafe, good]]);
+    const result = await awaitApprovalComment(h.deps);
+    expect(result).toMatchObject({ exitCode: 0, decision: 'APPROVED' });
+    expect(result.lines).toContain('APPROVAL_COMMENT_REFUSED id=31 reason=REASON_UNSAFE');
+    expect(h.decided).toHaveLength(1);
+    expect(h.decided[0]).toMatchObject({ commentId: '32' });
+  });
+
+  it('PIN: every comment the rules accept passes juliusDecidePrecheck, and every REASON_UNSAFE precheck refusal is refused here first', () => {
+    const printable = Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i));
+    const reasons = [...printable.map((c) => `reviewed ${c} fine`), `reviewed ${String.fromCharCode(0xe9)} fine`, `reviewed ${String.fromCodePoint(0x1f600)} fine`, 'reviewed fine', 'reviewed; fine, ok. (yes) [ok] {ok} #1 @x %y ~z'];
+    let accepted = 0;
+    for (const reason of reasons) {
+      const verdict = evaluateApprovalComment(comment({ body: body(reason) }), context());
+      const precheck = juliusDecidePrecheck(
+        { runId: 'run:abc', projectId: 'prj', approvalId: APPROVAL, decision: 'APPROVED', approverId: 'github:ohdieyuh-glitch#424242', reason: `plan ${CITATION} ${reason}`, commentId: '1001' },
+        { listed: () => true },
+      );
+      if (verdict.ok) { accepted += 1; expect(precheck, JSON.stringify(reason)).toBeNull(); }
+      if (precheck?.line === 'APPROVAL_REFUSED reason=REASON_UNSAFE') expect(verdict, JSON.stringify(reason)).toEqual({ ok: false, code: 'REASON_UNSAFE' });
+    }
+    expect(accepted).toBeGreaterThan(60);
+  });
+});
+
+describe('V6 G-W review A-2: a comment created after the window\'s deadline decides nothing', () => {
+  it('refuses a comment created 40 minutes after a 30-minute window, and accepts one created exactly AT the deadline', () => {
+    const ctx = context({ deadline: '2026-10-19T01:30:00.000Z' });
+    expect(evaluateApprovalComment(comment({ created_at: '2026-10-19T01:40:00Z', updated_at: '2026-10-19T01:40:00Z' }), ctx)).toEqual({ ok: false, code: 'AFTER_DEADLINE' });
+    expect(evaluateApprovalComment(comment({ created_at: '2026-10-19T01:30:00Z', updated_at: '2026-10-19T01:30:00Z' }), ctx).ok).toBe(true);
+    expect(evaluateApprovalComment(comment({ created_at: '2026-10-19T01:30:01Z', updated_at: '2026-10-19T01:30:01Z' }), ctx)).toEqual({ ok: false, code: 'AFTER_DEADLINE' });
+    expect(evaluateApprovalComment(comment(), context({ deadline: 'not a date' }))).toEqual({ ok: false, code: 'MALFORMED' });
+  });
+
+  it('the wait derives the deadline from the stamp and its own window: a late comment listed by a poll inside the window is still refused', async () => {
+    const late = comment({ id: 41, created_at: '2026-10-19T01:40:00Z', updated_at: '2026-10-19T01:40:00Z' });
+    const h = harness([[late]]);
+    const result = await awaitApprovalComment(h.deps);
+    expect(result).toMatchObject({ exitCode: 1, decision: 'NONE' });
+    expect(result.lines).toContain('APPROVAL_COMMENT_REFUSED id=41 reason=AFTER_DEADLINE');
+    expect(h.decided).toHaveLength(0);
   });
 });

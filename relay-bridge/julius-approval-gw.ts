@@ -14,10 +14,12 @@
  *   - posted by a real user (`user.type == 'User'`), never a bot or an App;
  *   - login AND numeric id on BOTH approver lists (`authority.listed`);
  *   - CREATED strictly after the request stamp, on GitHub's clock (the approval id is predictable, so this, not
- *     the id, is what stops a comment staged in advance);
+ *     the id, is what stops a comment staged in advance), and NOT after the window's deadline (stamp + window);
  *   - never edited (`created_at == updated_at`), checked again on a re-read just before the decision;
  *   - ONE line `APPROVE|DENY <approvalId> <reason of 8-280 characters>`, naming THAT run's pending approval;
- *   - a reason that cites the plan evidence id the request printed.
+ *   - a reason that cites the plan evidence id the request printed, and that the guarded decide path will take: printable
+ *     ASCII without the characters the decide CLI refuses (the SAME rule, pinned by a test), so an accepted comment can
+ *     never be refused by the precheck and end the wait on the first comment.
  * The FIRST accepted comment decides; the store's `WHERE state='PENDING'` refuses a second. The window running out
  * with nothing accepted writes NOTHING: the run stays BLOCKED with its approval PENDING.
  *
@@ -38,7 +40,7 @@ export interface GithubIssueComment {
 
 export type CommentRefusal =
   | 'NOT_A_USER' | 'NOT_ON_BOTH_LISTS' | 'NOT_AFTER_REQUEST' | 'EDITED' | 'BAD_SHAPE'
-  | 'WRONG_APPROVAL' | 'REASON_UNCITED' | 'CHANGED_ON_REREAD' | 'MALFORMED';
+  | 'WRONG_APPROVAL' | 'REASON_UNCITED' | 'REASON_UNSAFE' | 'AFTER_DEADLINE' | 'CHANGED_ON_REREAD' | 'MALFORMED';
 
 export interface CommentContext {
   readonly approvalId: string;
@@ -46,6 +48,8 @@ export interface CommentContext {
   readonly citation: string;
   /** The request stamp, GitHub's clock, ISO. */
   readonly stamp: string;
+  /** The end of the window (stamp + window), ISO. A comment created after it decides nothing. Absent: no deadline check. */
+  readonly deadline?: string;
   readonly listed: (approverId: string) => boolean;
 }
 
@@ -54,6 +58,10 @@ export type CommentVerdict =
   | { readonly ok: false; readonly code: CommentRefusal };
 
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+
+/** The decide CLI's reason rules (`SAFE_REASON` / `UNSAFE_IN_REASON` in julius-approval-decide.ts); a test pins the two together. */
+const SAFE_REASON = /^[\x20-\x7E]+$/u;
+const UNSAFE_IN_REASON = /[`$\\<>|]/u;
 
 /** A body is ONE line; a single trailing line break (GitHub's CRLF included) is not a second line. */
 export function singleLineBody(body: string): string | null {
@@ -73,6 +81,11 @@ export function evaluateApprovalComment(comment: GithubIssueComment, context: Co
   const stamp = Date.parse(context.stamp);
   if (Number.isNaN(created) || Number.isNaN(updated) || Number.isNaN(stamp)) return refuse('MALFORMED');
   if (!(created > stamp)) return refuse('NOT_AFTER_REQUEST');
+  if (context.deadline !== undefined) {
+    const deadline = Date.parse(context.deadline);
+    if (Number.isNaN(deadline)) return refuse('MALFORMED');
+    if (created > deadline) return refuse('AFTER_DEADLINE');
+  }
   if (created !== updated) return refuse('EDITED');
   const line = typeof comment.body === 'string' ? singleLineBody(comment.body) : null;
   if (line === null) return refuse('BAD_SHAPE');
@@ -81,6 +94,7 @@ export function evaluateApprovalComment(comment: GithubIssueComment, context: Co
   if (generic === null) return refuse('BAD_SHAPE');
   if (generic[2] !== context.approvalId) return refuse('WRONG_APPROVAL');
   const reason = generic[3]!;
+  if (!SAFE_REASON.test(reason) || UNSAFE_IN_REASON.test(reason)) return refuse('REASON_UNSAFE');
   if (!new RegExp(escapeRegExp(context.citation), 'u').test(reason)) return refuse('REASON_UNCITED');
   return { ok: true, decision: generic[1] === 'APPROVE' ? 'APPROVED' : 'DENIED', reason, approverId };
 }
@@ -228,6 +242,11 @@ export async function awaitApprovalComment(deps: AwaitDeps): Promise<AwaitResult
   const refusedIds = new Set<number>();
   const started = deps.now();
   const log = (line: string): void => { lines.push(line); };
+  // The window's end on GitHub's clock (stamp + window): a comment created after it is refused even if the poll that lists it runs in time.
+  const stampMs = Date.parse(deps.context.stamp);
+  const context: CommentContext = Number.isNaN(stampMs) || deps.context.deadline !== undefined
+    ? deps.context
+    : { ...deps.context, deadline: new Date(stampMs + deps.windowMs).toISOString() };
   for (;;) {
     let comments: readonly GithubIssueComment[] = [];
     try {
@@ -239,14 +258,14 @@ export async function awaitApprovalComment(deps: AwaitDeps): Promise<AwaitResult
     const ordered = [...comments].sort((a, b) => (a.created_at === b.created_at ? a.id - b.id : a.created_at < b.created_at ? -1 : 1));
     for (const comment of ordered) {
       if (refusedIds.has(comment.id)) continue;
-      const verdict = evaluateApprovalComment(comment, deps.context);
+      const verdict = evaluateApprovalComment(comment, context);
       if (!verdict.ok) { refusedIds.add(comment.id); log(refusalLine(comment.id, verdict.code)); continue; }
       /* RE-READ once, immediately before deciding: an edit or deletion between the list and now refuses it. */
       let again: GithubIssueComment | null = null;
       try { again = await deps.client.getComment(comment.id); } catch { again = null; }
       const same = again !== null && again.body === comment.body && again.updated_at === comment.updated_at
         && again.created_at === comment.created_at && again.user?.id === comment.user?.id && again.user?.login === comment.user?.login;
-      const reverdict = same && again !== null ? evaluateApprovalComment(again, deps.context) : null;
+      const reverdict = same && again !== null ? evaluateApprovalComment(again, context) : null;
       if (reverdict === null || !reverdict.ok) {
         refusedIds.add(comment.id);
         log(refusalLine(comment.id, 'CHANGED_ON_REREAD'));
