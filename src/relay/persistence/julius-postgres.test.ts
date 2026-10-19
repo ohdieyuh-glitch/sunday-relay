@@ -1,0 +1,67 @@
+import{describe,expect,it}from'vitest';import type{Pool}from'pg';import{JuliusPostgresRepository}from'./julius-postgres';import{JULIUS_WRITE_LOCK,JULIUS_WRITE_UNLOCK}from'./julius-serializable';// H3 (row 13 (i) r5): the stub answers the write lock without recording it; julius-serializable.test.ts pins it
+class PoolStub{commands:string[]=[];rows:any[]=[];updateCount=1;async query(text:string){if(text===JULIUS_WRITE_LOCK||text===JULIUS_WRITE_UNLOCK)return{rows:[],rowCount:1};this.commands.push(text);if(text.includes('RETURNING t.task_id'))return{rows:this.rows,rowCount:this.rows.length};return{rows:[],rowCount:text.startsWith('UPDATE')?this.updateCount:0}}async connect(){const p=this;return{async query(text:string,values?:readonly unknown[]){if(text===JULIUS_WRITE_LOCK||text===JULIUS_WRITE_UNLOCK)return{rows:[],rowCount:1};p.commands.push(text);if(text.startsWith('SELECT response'))return{rows:[],rowCount:0};if(text.startsWith('SELECT * FROM relay_wonderland.julius_runs'))return{rows:[{run_id:'run',mission_id:'mission',project_id:'project',state:'CREATED',card_revision:'card-1',mission_contract_revision:'1',project_brain_revision:'0',version:'1'}],rowCount:1};if(text.includes('RETURNING next_sequence-1'))return{rows:[{sequence:'1'}],rowCount:1};if(text.includes('RETURNING *'))return{rows:[{run_id:'run',mission_id:'mission',project_id:'project',state:values?.[1],card_revision:'card-1',mission_contract_revision:'1',project_brain_revision:'0',version:'2'}],rowCount:1};return{rows:[],rowCount:text.startsWith('INSERT')||text.startsWith('UPDATE')?1:0}},release(){}}}async end(){}}
+const repo=(pool:PoolStub)=>new JuliusPostgresRepository(pool as unknown as Pool);
+describe('durable Julius repository',()=>{
+ it('creates a run, event and existing outbox record atomically',async()=>{const pool=new PoolStub();const run=await repo(pool).createRun({commandId:'create',runId:'run',missionId:'mission',projectId:'project',cardRevision:'card-1',missionContractRevision:1,projectBrainRevision:0,occurredAt:'2026-08-27T00:00:00Z'});expect(run.state).toBe('CREATED');expect(pool.commands[0]).toBe('BEGIN ISOLATION LEVEL SERIALIZABLE');expect(pool.commands.at(-1)).toBe('COMMIT');expect(pool.commands.some(sql=>sql.includes('relay_wonderland.events'))).toBe(true);expect(pool.commands.some(sql=>sql.includes('relay_wonderland.outbox'))).toBe(true);});
+ it('persists a validated CAS transition and timeline record with the outbox',async()=>{const pool=new PoolStub();const run=await repo(pool).transition({commandId:'plan',runId:'run',projectId:'project',expectedVersion:1,to:'PLANNING',reasonCode:'CONTRACT_ACCEPTED',safeSummary:'Planning started.',evidenceIds:[],occurredAt:'2026-08-27T00:00:01Z'});expect(run.state).toBe('PLANNING');expect(pool.commands.some(sql=>sql.includes('julius_transitions'))).toBe(true);expect(pool.commands.at(-1)).toBe('COMMIT');});
+ it('rolls back state when atomic event persistence fails',async()=>{const pool=new PoolStub();const original=pool.connect.bind(pool);pool.connect=async()=>{const client=await original();const query=client.query.bind(client);client.query=async(text:string,values?:readonly unknown[])=>{if(text.includes('relay_wonderland.events'))throw new Error('event_failed');return query(text,values)};return client};await expect(repo(pool).createRun({commandId:'create',runId:'run',missionId:'mission',projectId:'project',cardRevision:'card',missionContractRevision:1,projectBrainRevision:0,occurredAt:'now'})).rejects.toThrow('event_failed');expect(pool.commands.at(-1)).toBe('ROLLBACK');});
+ it('uses skip-locked claims, dependency gates and lease generations',async()=>{const pool=new PoolStub();pool.rows=[{task_id:'task',run_id:'run',role:'CODING_AGENT',task_type:'implementation',lease_generation:'3',attempt:'2'}];const claimed=await repo(pool).claimRunnable({owner:'scheduler-a',now:'now',leaseExpiresAt:'later',limit:10});expect(claimed[0].leaseGeneration).toBe(3);const sql=pool.commands[0];expect(sql).toContain('FOR UPDATE OF t SKIP LOCKED');expect(sql).toContain('julius_task_dependencies');expect(sql).toContain('lease_generation=t.lease_generation+1');});
+ it('rejects stale lease owners for heartbeat and completion',async()=>{const pool=new PoolStub();pool.updateCount=0;expect(await repo(pool).heartbeat({taskId:'task',owner:'old',leaseGeneration:1,now:'now',leaseExpiresAt:'later'})).toBe(false);expect(await repo(pool).finishTask({taskId:'task',owner:'old',leaseGeneration:1,state:'SUCCEEDED',now:'now'})).toBe(false);});
+});
+describe('DEFECT 4 — the claim offers RUNNABLE only, and a decision releases in its own transaction',()=>{
+ it('never offers a BLOCKED task, whatever its dependencies have done',async()=>{const pool=new PoolStub();await repo(pool).claimRunnable({owner:'scheduler-a',now:'now',leaseExpiresAt:'later',limit:10});const sql=pool.commands[0];expect(sql).toContain("t.state='RUNNABLE'");expect(sql).not.toContain("'BLOCKED'");expect(sql,'the dependency gate stays as a second gate').toContain('julius_task_dependencies');});
+ it('moves the released tasks to RUNNABLE inside the decision transaction, BLOCKED rows only',async()=>{const pool=new PoolStub();const recorded=await repo(pool).appendDecision({decisionId:'d1',runId:'run',taskId:'plan',policyRevision:'v1',idempotencyKey:'plan:ACCEPT:OK',occurredAt:'now',decision:{action:'ACCEPT',reasonCode:'OK',evidenceIds:[],safeSummary:'ok'},releaseTaskIds:['build','build']});expect(recorded).toBe(true);expect(pool.commands[0]).toBe('BEGIN ISOLATION LEVEL SERIALIZABLE');const insert=pool.commands.findIndex(sql=>sql.includes('julius_verification_decisions'));const release=pool.commands.findIndex(sql=>sql.includes("SET state='RUNNABLE'"));expect(insert).toBeGreaterThan(0);expect(release,'the release is written after the decision, before COMMIT').toBeGreaterThan(insert);expect(pool.commands[release]).toContain("state='BLOCKED'");expect(pool.commands[release]).toContain('run_id=$1');expect(pool.commands.at(-1)).toBe('COMMIT');});
+ it('releases nothing when there is nothing to release, and nothing on a duplicate decision',async()=>{const pool=new PoolStub();await repo(pool).appendDecision({decisionId:'d1',runId:'run',taskId:'plan',policyRevision:'v1',idempotencyKey:'k',occurredAt:'now',decision:{action:'REPAIR',reasonCode:'X',evidenceIds:[],safeSummary:'x'}});expect(pool.commands.some(sql=>sql.includes("SET state='RUNNABLE'"))).toBe(false);const dup=new PoolStub();const original=dup.connect.bind(dup);dup.connect=async()=>{const client=await original();const query=client.query.bind(client);client.query=async(text:string,values?:readonly unknown[])=>{if(text.includes('julius_verification_decisions'))return{rows:[],rowCount:0};return query(text,values)};return client};expect(await repo(dup).appendDecision({decisionId:'d2',runId:'run',taskId:'plan',policyRevision:'v1',idempotencyKey:'k',occurredAt:'now',decision:{action:'ACCEPT',reasonCode:'OK',evidenceIds:[],safeSummary:'ok'},releaseTaskIds:['build']})).toBe(false);expect(dup.commands.some(sql=>sql.includes("SET state='RUNNABLE'")),'a duplicate releases nothing').toBe(false);});
+});
+
+describe('the evidence announcement carries what the row carries', () => {
+  /**
+   * The `julius.evidence.recorded` event held the sentence and dropped both
+   * machine-readable fields, so the stream — which is what a projection, an
+   * eval and Project Brain read — was a weaker record than the row it
+   * announced. A reader could see that an artifact existed and never learn
+   * which bytes it was.
+   */
+  class CapturingPool extends PoolStub {
+    payloads: unknown[] = [];
+    override async connect() {
+      const client = await super.connect();
+      const query = client.query.bind(client);
+      const payloads = this.payloads;
+      client.query = async (text: string, values?: readonly unknown[]) => {
+        if (text.includes('INSERT INTO relay_wonderland.events')) payloads.push((JSON.parse(String(values?.[5])) as { payload: unknown }).payload);
+        return query(text, values);
+      };
+      return client;
+    }
+  }
+
+  const evidence = (over: Record<string, unknown> = {}) => ({
+    evidenceId: 'ev-1', taskId: 'task-1', workerId: 'worker-1', type: 'ARTIFACT' as const,
+    status: 'PASSED' as const, safeSummary: 'A plan.', artifactRef: null, integrityHash: null,
+    occurredAt: '2026-09-22T00:00:00Z', ...over,
+  });
+
+  it('announces the digest and the reference, not only the sentence', async () => {
+    const pool = new CapturingPool();
+    const digest = 'c'.repeat(64);
+    await repo(pool).appendEvidence({
+      runId: 'run', projectId: 'project', idempotencyKey: 'task-1:1:ev-1',
+      evidence: evidence({ integrityHash: digest, artifactRef: 'artifact:plan-1' }) as never,
+    });
+    const payload = pool.payloads[0] as Record<string, unknown>;
+    expect(payload.integrityHash, 'the digest travels with the announcement').toBe(digest);
+    expect(payload.artifactRef).toBe('artifact:plan-1');
+    expect(payload.evidenceId).toBe('ev-1');
+  });
+
+  it('announces null when the row holds null, rather than leaving the reader to guess', async () => {
+    const pool = new CapturingPool();
+    await repo(pool).appendEvidence({
+      runId: 'run', projectId: 'project', idempotencyKey: 'task-1:1:ev-1', evidence: evidence() as never,
+    });
+    const payload = pool.payloads[0] as Record<string, unknown>;
+    expect(payload).toHaveProperty('integrityHash', null);
+    expect(payload).toHaveProperty('artifactRef', null);
+  });
+});
