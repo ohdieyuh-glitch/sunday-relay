@@ -805,12 +805,14 @@ describe('round 2: an ambiguous ref-update outcome is judged by re-reading main,
     }
   });
 
-  it('main == the cleared base: nothing landed, reported, no retry, no comment or close', () => {
+  it('main == the cleared base: ALERT, state in doubt (exit 2), no retry, no comment or close', () => {
     for (const [name, lost] of cases) {
       const r = runLand({ scenario: { patchLost: { ...lost, applied: false } } });
-      expect(r.code, `${name}: ${r.out}`).toBe(1);
-      expect(r.out, name).toContain('Nothing was landed');
+      expect(r.code, `${name}: ${r.out}`).toBe(2);
+      expect(r.out, name).toContain('ALERT AFTER AN AMBIGUOUS REF UPDATE');
+      expect(r.out, name).toContain('state in doubt');
       expect(r.out, name).toContain('still the cleared base');
+      expect(r.out, name).not.toContain('Nothing was landed');
       expect(r.merges, name).toHaveLength(1);
       expect(r.writes.map((c) => c.method), name).toEqual(['POST', 'POST', 'PATCH']);
     }
@@ -1198,15 +1200,15 @@ describe('round 5 b6: the clearance nonce is spent as a tag, atomically, before 
 });
 
 describe('round 5 a10: every request has a deadline, so a hung connection after an applied ref update reaches the recovery re-read', () => {
-  it('a PATCH that hangs after being applied is recovered as LANDED; one that hangs unapplied is "Nothing was landed"; both within the deadline', () => {
+  it('a PATCH that hangs after being applied is recovered as LANDED; one that hangs unapplied is an ALERT (state in doubt); both within the deadline', () => {
     const started = Date.now();
     const applied = runLand({ requestTimeoutMs: '700', scenario: { patchLost: { hang: true, applied: true } } });
     expect(applied.code, applied.out).toBe(0);
     expect(applied.out).toContain('LANDED (the PATCH response was lost)');
     expect(applied.merges, 'one attempt').toHaveLength(1);
     const unapplied = runLand({ requestTimeoutMs: '700', scenario: { patchLost: { hang: true, applied: false } } });
-    expect(unapplied.code, unapplied.out).toBe(1);
-    expect(unapplied.out).toContain('Nothing was landed');
+    expect(unapplied.code, unapplied.out).toBe(2);
+    expect(unapplied.out).toContain('state in doubt');
     expect(unapplied.merges).toHaveLength(1);
     expect(Date.now() - started, 'neither run waited for the fake\'s 6 s keep-alive each').toBeLessThan(20_000);
   });
