@@ -158,6 +158,8 @@ const MISSION_LIMITS = Object.freeze({
   'julius-diag-output-safety-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
   // The re-run of that mission under a new namespace (its contract was spent by a coder timeout at effort max); same ceilings, same directive.
   'julius-diag-output-safety-2': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
+  // The third unscored diagnostic (three latent defects found by an audit in three pure modules); same ceilings, same permanent maximum-capability directive.
+  'julius-diag-audit-fixes-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
