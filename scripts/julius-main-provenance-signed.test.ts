@@ -179,6 +179,15 @@ describe('a tip signed for by the Independent Reviewer', () => {
     }
   });
 
+  it('10b. P2: the clearance repo line must equal the QUERIED repository as well as the landing repository', () => {
+    expectVerdict(signedTip({ repo: 'ohdieyuh-glitch/sunday-relay' }), 'provenant');
+    expectVerdict(signedTip(), 'provenant');
+    expectVerdict(signedTip({ repo: 'someone/else' }), 'indeterminate', /malformed.*queried repo/u);
+    expect(parseSignedClearance(clearanceText()).problems).toEqual([]);
+    expect(parseSignedClearance(clearanceText(), 'ohdieyuh-glitch/sunday-relay').problems).toEqual([]);
+    expect(parseSignedClearance(clearanceText(), 'someone/else').problems.join(';')).toMatch(/queried repo/u);
+  });
+
   it('11. injection through a title or body: any second mention of the marker words refuses the whole tip', () => {
     const legit = block();
     const cases = [
@@ -404,7 +413,7 @@ describe('the block parser and the restated clearance rules', () => {
 });
 
 describe('the CLI on a signed tip', () => {
-  const REPO = 'owner/repo';
+  const REPO = 'ohdieyuh-glitch/sunday-relay'; // P2: the queried repo must be the clearance's repo
   const keyFile = { type: 'file', encoding: 'base64', content: Buffer.from(REVIEWER_PEM, 'utf8').toString('base64') };
   const routes = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
     [`repos/${REPO}/branches/main`]: { commit: { sha: MAIN } },

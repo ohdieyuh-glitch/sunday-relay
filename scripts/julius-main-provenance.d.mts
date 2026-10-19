@@ -64,6 +64,7 @@ export declare function evaluateMainProvenance(input: {
   readonly branch?: unknown;
   /** The tip's commit message. A signed landing carries one JULIUS LANDING block; absent (undefined) leaves the founder-approval path alone. */
   readonly mainCommitMessage?: unknown;
+  readonly repo?: unknown;
   /** The reviewer public key COMMITTED at the tip's single parent. */
   readonly reviewerKeyPem?: unknown;
   /** The commit that key was read at: must be the parent. */
@@ -87,7 +88,7 @@ export type LandingBlock =
   | { readonly state: 'ok'; readonly nonce: string; readonly clearanceB64: string; readonly signatureB64: string };
 
 export declare function extractLandingBlock(message: unknown): LandingBlock;
-export declare function parseSignedClearance(text: string): { readonly problems: string[]; readonly fields: Record<string, string> };
+export declare function parseSignedClearance(text: string, queriedRepo?: string): { readonly problems: string[]; readonly fields: Record<string, string> };
 export declare function evaluateSignedLanding(input: Record<string, unknown>, tip: { readonly mainSha: string; readonly mainTreeSha: unknown; readonly parentSha: string }):
   | { readonly state: 'absent' }
   | { readonly state: 'decided'; readonly result: MainProvenanceResult };
