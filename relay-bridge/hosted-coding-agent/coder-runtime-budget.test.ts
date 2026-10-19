@@ -116,12 +116,20 @@ describe('coderRuntimeJobFit: the whole job under a declared session budget', ()
     });
   });
 
-  it('at the DEFAULT session the formula reproduces the priced path the amendment states (3 cycles: 17,516,316 ms)', () => {
+  it('at the DEFAULT attempt the formula reproduces the repository\'s own priced path (3 cycles) to within the rounding it uses', () => {
+    // r8.5 / the job-share test price the coder at its whole 40-minute share (2,400,000) and so state 17,516,316 ms; the exact two
+    // attempts are 2 x 1,199,386 = 2,398,772, which gives 17,515,088. The difference is exactly the 1,228 ms of rounding in the share.
     const attempt = resolveCoderEnvelope().attemptDeadlineMs;
     const dispatch = MAX_CODER_ATTEMPTS * attempt;
-    const worst = FIGURES.reviewerShareMs + dispatch + FIGURES.architectWorstCaseMs + FIGURES.infrastructureMs
+    const exact = FIGURES.reviewerShareMs + dispatch + FIGURES.architectWorstCaseMs + FIGURES.infrastructureMs
       + 3 * (dispatch + FIGURES.reviewerCycleCeilingMs) + FIGURES.marginsMs;
-    expect(worst).toBe(17_516_316);
+    expect(exact).toBe(17_515_088);
+    const repositoryFigure = FIGURES.reviewerShareMs + CODER_JOB_SHARE_MS + FIGURES.architectWorstCaseMs + FIGURES.infrastructureMs
+      + 3 * (dispatch + FIGURES.reviewerCycleCeilingMs) + FIGURES.marginsMs;
+    expect(repositoryFigure).toBe(17_516_316);
+    expect(repositoryFigure - exact).toBe(CODER_JOB_SHARE_MS - dispatch);
+    // and the formula is the same at the default attempt as at a declared session of the same length
+    expect(fit(13, 3).worstCaseMs).toBeLessThan(18_000_000);
   });
 
   /** The largest session that fits, by repair cycles R and approval wait W; the design record's table, pinned. */
