@@ -165,12 +165,12 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 								// HOW OLD the newest report was when its successor arrived = the draw delay that would just have avoided a hold. Measured here, at
 								// arrival, so a player who stands still (no new reports) does not inflate it; a stand/start gap (> 0.6 s) is not a delivery gap.
 								const double Avail = FPlatformTime::Seconds() - Last.T;
-								if (Avail > 0.0 && Avail <= 0.6)
+								if (Avail > 0.0 && (Avail <= 0.6 || (Last.V >= MinMovingSpeedUu && S.V >= MinMovingSpeedUu)))   // NETDEGRADE: a long gap between two MOVING reports is a delivery gap, not a stand/start gap
 								{
-									Remote.PeakAge = FMath::Max(Remote.PeakAge, Avail);
+									Remote.PeakAge = FMath::Max(Remote.PeakAge, FMath::Min(Avail, static_cast<double>(CVarRemoteInterpDelayMax.GetValueOnGameThread())));
 								}
 							}
-							if (S.Raw - Last.Raw > 0.4)
+							if (S.Raw - Last.Raw > 0.4 && (Last.V < MinMovingSpeedUu || S.V < MinMovingSpeedUu || S.Raw - Last.Raw > 0.8))   // NETDEGRADE: hold only if a report says the player stood (or the gap is an outage)
 							{
 								// stood still, then moved: hold the old place until just before the move, do not slide across the whole gap
 								FRemote::FSample Hold = Last;
