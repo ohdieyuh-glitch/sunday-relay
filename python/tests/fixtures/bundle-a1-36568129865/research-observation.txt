@@ -1,0 +1,1 @@
+research_not_granted: the contract has no research clause, so there is nothing to observe.
