@@ -65,6 +65,8 @@ struct FWonderlandAvatarReport
 	float Yaw = 0.0f;
 	float Speed = 0.0f;
 	FString Motion = TEXT("IDLE");
+	/** WLREMOTE diagnostics only (never sent): the sender's vertical speed, uu/s. */
+	float VerticalSpeed = 0.0f;
 	FString SkinId = TEXT("relay_og");
 };
 
@@ -99,6 +101,7 @@ private:
 		FString SkinId;
 		FString DisplayName;
 		// WLREMOTE diagnostics only: never read by the movement code.
+		FString Motion;   // the sender's motion label as last received (log only)
 		double LogNextAt = 0.0;
 		double RecvAt = 0.0;
 		float RecvAgeMs = 0.0f;
