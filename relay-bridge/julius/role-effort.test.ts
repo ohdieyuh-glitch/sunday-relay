@@ -105,6 +105,7 @@ describe('the contract: absent is today, declared is bound, bad is refused', () 
     const EFFORT_MISSIONS: Record<string, { architect: string; coder: string }> = {
       'julius-option2-lab-1': { architect: 'low', coder: 'low' },
       'julius-diag-output-safety-1': { architect: 'high', coder: 'max' },
+      'julius-diag-output-safety-2': { architect: 'high', coder: 'high' },
     };
     const names = readdirSync(MISSIONS).sort();
     let seen = 0;
