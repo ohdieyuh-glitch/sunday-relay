@@ -98,10 +98,14 @@ describe('the contract: absent is today, declared is bound, bad is refused', () 
   });
 
   it('no committed contract declares an effort or any limit this build does not read', () => {
-    // The ONLY committed contracts allowed to declare a per-role effort are the UNSCORED diagnostic missions named here, each pinned to low/low. No
+    // The ONLY committed contracts allowed to declare a per-role effort are the UNSCORED diagnostic missions named here, each pinned to the effort
+    // its reviewed contract declares (the first lab mission ran low/low; the second runs at the founder's maximum-capability setting). No
     // contract may declare the coder self-test at all: the Independent Reviewer's ruling A on PR #371 forbids it (scored or unscored) until the
     // output-cap defect is fixed in a reviewed delta and the workspace-copy bound is measured.
-    const EFFORT_MISSIONS = ['julius-option2-lab-1', 'julius-diag-output-safety-1'];
+    const EFFORT_MISSIONS: Record<string, { architect: string; coder: string }> = {
+      'julius-option2-lab-1': { architect: 'low', coder: 'low' },
+      'julius-diag-output-safety-1': { architect: 'high', coder: 'max' },
+    };
     const names = readdirSync(MISSIONS).sort();
     let seen = 0;
     const effortSeen: string[] = [];
@@ -111,17 +115,18 @@ describe('the contract: absent is today, declared is bound, bad is refused', () 
       const limits = (JSON.parse(readFileSync(file, 'utf8')) as { limits?: Record<string, unknown> }).limits ?? {};
       expect(Object.keys(limits).filter((key) => !(JULIUS_LIMITS_KEYS as readonly string[]).includes(key)), `${name}: unknown limits keys`).toEqual([]);
       expect('coderSelfTestCalls' in limits, `${name}: no contract may declare the coder self-test yet (ruling A on PR #371)`).toBe(false);
-      if (EFFORT_MISSIONS.includes(name)) {
-        expect(limits.architectEffort, `${name}: architect effort`).toBe('low');
-        expect(limits.coderEffort, `${name}: coder effort`).toBe('low');
+      const expected = EFFORT_MISSIONS[name];
+      if (expected !== undefined) {
+        expect(limits.architectEffort, `${name}: architect effort`).toBe(expected.architect);
+        expect(limits.coderEffort, `${name}: coder effort`).toBe(expected.coder);
         effortSeen.push(name);
       } else {
-        expect('architectEffort' in limits || 'coderEffort' in limits, `${name}: only ${EFFORT_MISSIONS.join(' and ')} may declare an effort`).toBe(false);
+        expect('architectEffort' in limits || 'coderEffort' in limits, `${name}: only ${Object.keys(EFFORT_MISSIONS).join(' and ')} may declare an effort`).toBe(false);
       }
       seen += 1;
     }
     expect(seen).toBeGreaterThanOrEqual(16);
-    expect(effortSeen.sort(), 'each named mission that exists declares its effort').toEqual(EFFORT_MISSIONS.filter((name) => existsSync(join(MISSIONS, name))).sort());
+    expect(effortSeen.sort(), 'each named mission that exists declares its effort').toEqual(Object.keys(EFFORT_MISSIONS).filter((name) => existsSync(join(MISSIONS, name))).sort());
   });
 });
 
