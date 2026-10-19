@@ -1,25 +1,39 @@
-# label|expect|fixes   (A completion verdict, B pause threshold, C instant reader)
+# label|expect|fixes   (A completion verdict, B pause threshold, C instant reader, D nothing supports completion)
 unfixed (as the repository is)|fail|
 A only|fail|fix-a-completion.py
 B only|fail|fix-b-pause.py
 C only|fail|fix-c-calendar.py
-everything but A|fail|fix-b-pause.py,fix-c-calendar.py
-everything but B|fail|fix-a-completion.py,fix-c-calendar.py
-everything but C|fail|fix-a-completion.py,fix-b-pause.py
-all three (the reference)|pass|fix-a-completion.py,fix-b-pause.py,fix-c-calendar.py
+D only|fail|fix-d-evidence.py
+everything but A|fail|fix-b-pause.py,fix-c-calendar.py,fix-d-evidence.py
+everything but B|fail|fix-a-completion.py,fix-c-calendar.py,fix-d-evidence.py
+everything but C|fail|fix-a-completion.py,fix-b-pause.py,fix-d-evidence.py
+everything but D|fail|fix-a-completion.py,fix-b-pause.py,fix-c-calendar.py
+all four (the reference)|pass|fix-a-completion.py,fix-b-pause.py,fix-c-calendar.py,fix-d-evidence.py
 # ALTERNATIVE VALID SOLUTIONS (a different RULE, or a different mechanism): none of these may be spec-red.
-A alternative: an unrun or non-independent review is missing corroboration|pass|alt-a-review-pending.py,fix-b-pause.py,fix-c-calendar.py
-A alternative: a claimed_complete MISSION verdict is a trust shortfall|pass|alt-a-mission-claim.py,fix-b-pause.py,fix-c-calendar.py
-B alternative: a finer-than-ppm fraction is REFUSED as configuration|pass|fix-a-completion.py,alt-b-refuse.py,fix-c-calendar.py
-B alternative: the fraction compared as an EXACT decimal rational|pass|fix-a-completion.py,alt-b-exact.py,fix-c-calendar.py
-C alternative: T24:00 kept as end-of-day midnight, date checked only|pass|fix-a-completion.py,fix-b-pause.py,alt-c-allow-2400.py
-C alternative: wall-clock round trip through Date.UTC|pass|fix-a-completion.py,fix-b-pause.py,alt-c-roundtrip.py
-first alternatives together|pass|alt-a-review-pending.py,alt-b-refuse.py,alt-c-allow-2400.py
-second alternatives together|pass|alt-a-mission-claim.py,alt-b-exact.py,alt-c-roundtrip.py
+A alternative: an unrun or non-independent review is missing corroboration|pass|alt-a-review-pending.py,fix-b-pause.py,fix-c-calendar.py,fix-d-evidence.py
+A alternative: the unverified mission-verdict ladder is a trust shortfall|pass|alt-a-mission-claim.py,fix-b-pause.py,fix-c-calendar.py,fix-d-evidence.py
+B alternative: a finer-than-ppm fraction is REFUSED as configuration|pass|fix-a-completion.py,alt-b-refuse.py,fix-c-calendar.py,fix-d-evidence.py
+B alternative: the fraction compared as an EXACT decimal rational|pass|fix-a-completion.py,alt-b-exact.py,fix-c-calendar.py,fix-d-evidence.py
+C alternative: T24:00 kept as end-of-day midnight, date checked only|pass|fix-a-completion.py,fix-b-pause.py,alt-c-allow-2400.py,fix-d-evidence.py
+C alternative: wall-clock round trip through Date.UTC|pass|fix-a-completion.py,fix-b-pause.py,alt-c-roundtrip.py,fix-d-evidence.py
+D alternative: no blocking criterion means not completable (incomplete)|pass|fix-a-completion.py,fix-b-pause.py,fix-c-calendar.py,alt-d-incomplete.py
+first alternatives together|pass|alt-a-review-pending.py,alt-b-refuse.py,alt-c-allow-2400.py,alt-d-incomplete.py
+second alternatives together|pass|alt-a-mission-claim.py,alt-b-exact.py,alt-c-roundtrip.py,fix-d-evidence.py
+third mix (ladder A with incomplete D)|pass|alt-a-mission-claim.py,alt-b-exact.py,alt-c-allow-2400.py,alt-d-incomplete.py
 # WRONG FIXES: each looks like a fix and still breaks a pinned behaviour.
-A wrong: raw review/durability flags instead of the checks' results|fail|bad-a-flags.py,fix-b-pause.py,fix-c-calendar.py
-A wrong: exactly one failure plus a claim|fail|bad-a-count.py,fix-b-pause.py,fix-c-calendar.py
-B wrong: plain Math.floor in both places|fail|fix-a-completion.py,bad-b-floor.py,fix-c-calendar.py
-B wrong: Math.floor in the numerator only|fail|fix-a-completion.py,bad-b-floor-numerator.py,fix-c-calendar.py
-C wrong: compares the date of the parsed UTC instant|fail|fix-a-completion.py,fix-b-pause.py,bad-c-utcdate.py
-C wrong: February always has 29 days|fail|fix-a-completion.py,fix-b-pause.py,bad-c-leap.py
+A wrong: raw review/durability flags instead of the checks' results|fail|bad-a-flags.py,fix-b-pause.py,fix-c-calendar.py,fix-d-evidence.py
+A wrong: only the review requirement added|fail|bad-a-review-only.py,fix-b-pause.py,fix-c-calendar.py,fix-d-evidence.py
+A alternative with D's trust-check fix: exactly one failure plus a claim|pass|bad-a-count.py,fix-b-pause.py,fix-c-calendar.py,fix-d-evidence.py
+B wrong: plain Math.floor in both places|fail|fix-a-completion.py,bad-b-floor.py,fix-c-calendar.py,fix-d-evidence.py
+B wrong: Math.floor in the numerator only|fail|fix-a-completion.py,bad-b-floor-numerator.py,fix-c-calendar.py,fix-d-evidence.py
+B wrong: float comparison of spent/cap with f|fail|fix-a-completion.py,bad-b-float.py,fix-c-calendar.py,fix-d-evidence.py
+B wrong: exact comparison with the binary double|fail|fix-a-completion.py,bad-b-binary.py,fix-c-calendar.py,fix-d-evidence.py
+B wrong: toFixed(6) cleanup then floor|fail|fix-a-completion.py,bad-b-tofixed6.py,fix-c-calendar.py,fix-d-evidence.py
+B wrong: toFixed(12) cleanup then floor|fail|fix-a-completion.py,bad-b-tofixed12.py,fix-c-calendar.py,fix-d-evidence.py
+C wrong: compares the date of the parsed UTC instant|fail|fix-a-completion.py,fix-b-pause.py,bad-c-utcdate.py,fix-d-evidence.py
+C wrong: February always has 29 days|fail|fix-a-completion.py,fix-b-pause.py,bad-c-leap.py,fix-d-evidence.py
+C wrong: month length from Date.UTC|fail|fix-a-completion.py,fix-b-pause.py,bad-c-dateutc.py,fix-d-evidence.py
+C wrong: the check in planLoopPass only|fail|fix-a-completion.py,fix-b-pause.py,bad-c-planonly.py,fix-d-evidence.py
+D wrong: refuses zero evidence only|fail|fix-a-completion.py,fix-b-pause.py,fix-c-calendar.py,bad-d-zero.py
+D wrong: only a claim is unsupporting|fail|fix-a-completion.py,fix-b-pause.py,fix-c-calendar.py,bad-d-claim.py
+D wrong: early claimed_complete before the other checks|fail|fix-a-completion.py,fix-b-pause.py,fix-c-calendar.py,bad-d-early.py
