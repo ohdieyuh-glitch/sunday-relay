@@ -107,6 +107,7 @@ describe('the contract: absent is today, declared is bound, bad is refused', () 
       'julius-diag-output-safety-1': { architect: 'high', coder: 'max' },
       'julius-diag-output-safety-2': { architect: 'high', coder: 'high' },
       'julius-diag-audit-fixes-1': { architect: 'high', coder: 'high' },
+      'julius-diag-digest-evidence-1': { architect: 'high', coder: 'high' },
     };
     const names = readdirSync(MISSIONS).sort();
     let seen = 0;
