@@ -174,6 +174,8 @@ const MISSION_LIMITS = Object.freeze({
   // allocation v3 divides it into each slot's protected floor, the shared pool and the repair reserve (see 'julius-continuous-1' above); the provider
   // balances and the providers' own limits are what bind. Three repair cycles, as the other raised missions. Unscored, lane lab (no money, no priority).
   'julius-diag-output-safety-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
+  // The re-run of that mission under a new namespace (its contract was spent by a coder timeout at effort max); same ceilings, same directive.
+  'julius-diag-output-safety-2': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
