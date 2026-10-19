@@ -7,7 +7,7 @@
 //                                                                                prints the clearance text and its signature as base64 (two labelled blocks) for the dispatcher.
 import { createPrivateKey, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { chmodSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { REPO, botCommentsDigest } from './land-lib.mjs';
+import { PER_PAGE, REPO, botCommentsDigest, readAllPages } from './land-lib.mjs';
 
 const [, , command, ...rest] = process.argv;
 const flag = (name) => { const i = rest.indexOf(name); return i >= 0 ? rest[i + 1] : undefined; };
@@ -27,7 +27,11 @@ if (command === 'keygen') {
 } else if (command === 'digest') {
   const pr = rest[0];
   const gh = async (p) => { const r = await fetch(`https://api.github.com${p}`, { headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json' } }); if (!r.ok) die(`${p} -> ${r.status}`); return r.json(); };
-  const [issueComments, inlineComments, reviews] = await Promise.all([gh(`/repos/${REPO}/issues/${pr}/comments?per_page=100`), gh(`/repos/${REPO}/pulls/${pr}/comments?per_page=100`), gh(`/repos/${REPO}/pulls/${pr}/reviews?per_page=100`)]);
+  // The SAME paging rule as the lander (readAllPages: every page, throw at the cap), or the digest signed here could never equal the one land.mjs computes.
+  const all = (path) => readAllPages((page) => gh(`${path}?per_page=${PER_PAGE}&page=${page}`));
+  let lists;
+  try { lists = await Promise.all([all(`/repos/${REPO}/issues/${pr}/comments`), all(`/repos/${REPO}/pulls/${pr}/comments`), all(`/repos/${REPO}/pulls/${pr}/reviews`)]); } catch (error) { die(`digest refused: ${error instanceof Error ? error.message : String(error)}`); }
+  const [issueComments, inlineComments, reviews] = lists;
   console.log(botCommentsDigest({ issueComments, inlineComments, reviews }));
 } else if (command === 'sign') {
   const [path, pr, head, tree, base, kind, digest, hours] = rest;

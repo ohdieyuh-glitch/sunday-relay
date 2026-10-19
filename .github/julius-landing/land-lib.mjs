@@ -9,7 +9,8 @@ const SHA = /^[0-9a-f]{40}$/u;
 
 // Paths an unattended lander must NEVER carry onto main: workflows (GitHub would refuse a GITHUB_TOKEN merge anyway, and workflow changes are founder-governed), this landing
 // system itself (its key, allowlist and code), the mission pins file, and migrations. Such changes land only through a founder-governed path.
-export const FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|.*\bmigrations?\/)/u;
+// Case-insensitive: a checkout on a case-insensitive filesystem (Windows, macOS) folds `.GITHUB/Julius-Landing/...` onto the governed file.
+export const FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|.*\bmigrations?\/)/iu;
 
 /** The canonical clearance text the reviewer signs. One `key: value` per line, fixed key order, LF line ends. */
 export const CLEARANCE_KEYS = ['pr', 'head', 'tree', 'base', 'kind', 'bot-comments-sha256', 'nonce', 'by', 'issued', 'expires'];
@@ -81,6 +82,10 @@ export function checkPullRequest({ fields, now, pr, commit, files, mainSha, allo
   if (commit?.commit?.tree?.sha !== fields.tree) problems.push(`the head tree is ${commit?.commit?.tree?.sha}, the clearance names ${fields.tree}`);
   if (commit?.parents?.length !== 1 || commit.parents[0]?.sha !== fields.base) problems.push('the head is not one commit directly on the cleared base');
   if (commit?.commit?.author?.name !== APP_LOGIN || commit?.commit?.committer?.name !== APP_LOGIN) problems.push('the head commit is not authored and committed by the App');
+  // The git author NAME above is free text. The top-level `author` is the account GitHub resolved from the author email: when present it must be the App. It is null when the
+  // email maps to no account, so an unresolved author is NOT refused here (residual: such a commit is identified by the free-text name only). The top-level `committer` is not
+  // checked: commits created through the API often carry another committer login.
+  if (commit?.author != null && commit.author.login !== APP_LOGIN) problems.push(`the head commit's GitHub author is ${commit.author.login}, not ${APP_LOGIN}`);
   if (!allowedBranches.includes(pr.head?.ref)) problems.push(`branch ${pr.head?.ref} is not in the founder's standing landing allowlist`);
   const forbidden = files.filter((f) => FORBIDDEN_PATH.test(f));
   if (forbidden.length > 0) problems.push(`the PR changes founder-governed paths: ${forbidden.slice(0, 5).join(', ')}`);
@@ -111,6 +116,21 @@ export function checkLanded({ landed, base, tree }) {
   if (landed?.parents?.length !== 1 || landed.parents[0]?.sha !== base) problems.push('the landed commit is not directly on the cleared base');
   if (landed?.commit?.tree?.sha !== tree) problems.push(`the landed tree is ${landed?.commit?.tree?.sha}, expected ${tree}`);
   return problems;
+}
+
+/** The paging rule shared by the lander and the reviewer tools, so both read the same set. `getPage(page)` returns that page's rows (per_page=100). A short page ends the
+ * read; a FULL page at the cap THROWS (fail closed): a silent stop would hide rows past the cap (a forbidden file, a failing check, a comment the digest must cover). */
+export const PER_PAGE = 100;
+export const MAX_PAGES = 10;
+export async function readAllPages(getPage) {
+  const all = [];
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const rows = await getPage(page);
+    if (!Array.isArray(rows)) throw new Error(`page ${page} is not a list`);
+    all.push(...rows);
+    if (rows.length < PER_PAGE) return all;
+  }
+  throw new Error(`more than ${MAX_PAGES * PER_PAGE} rows: refusing rather than reading a partial set`);
 }
 
 /** One use per nonce: a clearance whose nonce already appears in a commit message on main's recent history has been used. */
