@@ -77,6 +77,7 @@
 #include "WonderlandWallet.h"
 #include "WonderlandSocialHubPanel.h"
 #include "WonderlandSocialProfilePanel.h"
+#include "WonderlandSocialLive.h"
 #include "WonderlandSocialSubsystem.h"
 #include "WonderlandMissionBeat.h"
 #include "WonderlandHandoffDirector.h"
@@ -5323,6 +5324,17 @@ bool UWonderlandUiSubsystem::OpenSocialHub(const FString& TabName)
 	PendingHubTab = TabName.IsEmpty() ? FString(TEXT("friends")) : TabName;
 	bProfileFromHub = false;
 	OpenOverlay(EOverlay::Social);
+	// A PLAYER WHO HID FROM THIS ONE IS SENT NO EVENT (they cannot be seen), so Recent Players kept listing them until the 20 s resync (measured 10-19, B35 P2:
+	// the hub still said "recent 2" 8 s after the stranger hid). Reading the snapshot as the hub opens closes that window to the time of one request; a preview
+	// (no live service) has nothing to refresh.
+	{
+		const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+		UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+		if (FWonderlandSocialLiveService* Live = Social != nullptr ? Social->GetLive() : nullptr)
+		{
+			Live->Refresh();
+		}
+	}
 	if (Open == EOverlay::Social && SocialHubPanel.IsValid() && !PendingSocialNotice.IsEmpty())
 	{
 		SocialHubPanel->ShowActionResult(PendingSocialNotice);

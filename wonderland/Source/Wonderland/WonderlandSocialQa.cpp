@@ -933,8 +933,11 @@ namespace WonderlandSocialLiveQa
 					Bodies.Add(M.Body);
 				}
 				const FString Want = FString::Printf(TEXT("hello from %s|hello back from %s"), L.bA ? *L.Me : *L.Peer, L.bA ? *L.Peer : *L.Me);
-				Check(L, TEXT("LSQR1"), FString::Join(Bodies, TEXT("|")) == Want,
-					FString::Printf(TEXT("conversation %s after the restart: [%s] (want [%s])"), C != nullptr ? *C->ConversationId : TEXT("MISSING"), *FString::Join(Bodies, TEXT("|")), *Want));
+				// FOUNDER RULING (b), 2026-10-04 (social-conversations.ts): a block HIDES the pair's direct conversation from both, and an unblock brings it back
+				// unchanged. This run blocks before the restart, so the conversation must stay HIDDEN after it (LSQR1); LSQR4 then unblocks and proves the history
+				// came back unchanged from the database (the older assertion, "readable after the block", predated the ruling and is replaced, not loosened).
+				Check(L, TEXT("LSQR1"), C == nullptr && Bodies.Num() == 0,
+					FString::Printf(TEXT("conversation after the block and the restart: %s (want hidden, ruling (b))"), C != nullptr ? *FString::Printf(TEXT("%s [%s]"), *C->ConversationId, *FString::Join(Bodies, TEXT("|"))) : TEXT("hidden")));
 				// the BLOCKED player gets no profile of the blocker; the blocker still sees them, as BLOCKED (see the header)
 				const bool bNoFriend = Friend(*S, PeerId) == nullptr;
 				const FWonderlandSocialProfileView* PeerProfile = S->Profiles.Find(PeerId);
@@ -952,12 +955,26 @@ namespace WonderlandSocialLiveQa
 				Check(L, TEXT("LSQR3"), bMembership, FString::Printf(TEXT("party after the restart: %s (want %s)"), *What,
 					L.bA ? TEXT("A still leading, B not in it") : TEXT("B in no party")));
 				U->OpenSocialHub(TEXT("messages"));
+				if (IsBlocker(L))
+				{
+					U->RequestSocialAction(TEXT("blocks.remove"), PeerId);   // LSQR4: the unblock (the blocker's own)
+				}
 				Next(51);
 			}
 			break;
 		case 51:
-			if (In >= 2.0)
+			if (S != nullptr && In >= 4.0)
 			{
+				const FWonderlandSocialConversationRow* C = With(*S, PeerId);
+				const TArray<FWonderlandSocialMessage>* History = C != nullptr ? S->Messages.Find(C->ConversationId) : nullptr;
+				TArray<FString> Bodies;
+				for (const FWonderlandSocialMessage& M : History != nullptr ? *History : TArray<FWonderlandSocialMessage>())
+				{
+					Bodies.Add(M.Body);
+				}
+				const FString Want = FString::Printf(TEXT("hello from %s|hello back from %s"), L.bA ? *L.Me : *L.Peer, L.bA ? *L.Peer : *L.Me);
+				Check(L, TEXT("LSQR4"), FString::Join(Bodies, TEXT("|")) == Want,
+					FString::Printf(TEXT("conversation %s after the unblock, from the database: [%s] (want [%s])"), C != nullptr ? *C->ConversationId : TEXT("MISSING"), *FString::Join(Bodies, TEXT("|")), *Want));
 				Shot(L, TEXT("R_messages_after_restart"));
 				U->CloseOverlay();
 				Finish(L);
