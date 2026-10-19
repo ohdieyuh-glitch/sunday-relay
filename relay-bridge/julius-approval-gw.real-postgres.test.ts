@@ -92,7 +92,7 @@ suite('V6 G-W: request / await-comment over a held run', () => {
     getComment: async (commentId) => comments.find((row) => row.id === commentId) ?? null,
   });
 
-  async function awaitOn(held: { raw: string; contract: { projectId: string }; runId: string }, comments: GithubIssueComment[], windowMs = 60_000) {
+  async function awaitOn(held: { raw: string; contract: { projectId: string }; runId: string }, comments: GithubIssueComment[], windowMs = 30 * 60_000) {
     const { store, events } = composeJuliusDecideStore(pool);
     const loaded = await loadJuliusApprovalRequestView(store, held.raw);
     if (!loaded.ok) throw new Error(loaded.line);
@@ -191,7 +191,7 @@ suite('V6 G-W: request / await-comment over a held run', () => {
     const { store } = composeJuliusDecideStore(pool);
     const loaded = await loadJuliusApprovalRequestView(store, held.raw);
     if (!loaded.ok) throw new Error(loaded.line);
-    const result = await awaitOn(held, [commentFor(`APPROVE ${loaded.view.pending[0]!.approvalId} looks good to me, go ahead`)], 30_000);
+    const result = await awaitOn(held, [commentFor(`APPROVE ${loaded.view.pending[0]!.approvalId} looks good to me, go ahead`)], 30 * 60_000);
     expect(result.decision).toBe('NONE');
     expect(result.lines).toContain('APPROVAL_COMMENT_REFUSED id=5001 reason=REASON_UNCITED');
     const row = await pool.query('SELECT state FROM relay_wonderland.julius_approvals WHERE run_id=$1', [held.runId]);
