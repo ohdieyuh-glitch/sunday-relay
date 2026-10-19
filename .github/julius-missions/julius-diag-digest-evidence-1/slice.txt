@@ -7,5 +7,8 @@
 #
 # THE SLICE: the two modules to fix. Neither has a run-time import (every import is type-only and vanishes under Node's type stripping). Run-time import closure: 2 files.
 # The digest module is a hand-written SHA-256 whose only defect is in its UTF-8 encoder; nothing in it is about secrets or capture.
+# DELIBERATELY UNPINNED by the seeded specification (the criteria and the reviewer judge them, as in diagnostic 3): collateral change to anything outside the two
+# fixes, mutation of inputs, and the rule that `durable-digest.ts` must not gain a `TextEncoder` or a `node:` import. The spec also does not test lone surrogates
+# inside `stableSerialize`/`digestOf` (only `sha256Hex`), nor sub-millisecond or non-ISO date forms for `evidenceAge`.
 src/relay/mission/durable/durable-digest.ts
 src/relay/mission/evidence/evidence-contracts.ts

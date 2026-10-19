@@ -3,3 +3,6 @@ unfixed (as the repository is)|fail|
 fix A only (UTF-8 surrogates)|fail|fix-a-utf8.py
 fix B only (future publication)|fail|fix-b-age.py
 both fixes|pass|fix-a-utf8.py,fix-b-age.py
+A partial: lone high at end and lone low fixed, the SWALLOWED NEXT CHARACTER left, with B fixed|fail|fix-a-partial-swallow.py,fix-b-age.py
+B partial: only more than 30 s ahead rejected (1-29 s ahead stays live), with A fixed|fail|fix-a-utf8.py,fix-b-partial-30s.py
+B alternative: rounding kept and NEGATIVE ZERO caught, with A fixed|pass|fix-a-utf8.py,fix-b-alt-negzero.py

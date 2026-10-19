@@ -7,6 +7,8 @@
 #
 # THE SLICE: the two modules to fix, plus `usage-contracts.ts`, the only file `usage-thresholds.ts` imports at run time (the threshold table; no imports of its own).
 # Every other import in these files is type-only and vanishes under Node's type stripping. Run-time import closure: 3 files.
+# DELIBERATELY UNPINNED by the seeded specification (the criteria and the reviewer judge them): collateral change to anything outside the two fixes, mutation of the
+# inputs (snapshot, latch), and event text/ordering for sections the spec does not exercise (the Mission Contract `0 remaining` text, the 100% window text).
 src/relay/usage/usage-thresholds.ts
 src/relay/usage/usage-contracts.ts
 src/relay/usage/usage-projection.ts

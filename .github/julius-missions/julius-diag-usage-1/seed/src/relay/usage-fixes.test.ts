@@ -82,6 +82,20 @@ test('A: an unknown section does not disturb the other sections (their keys are 
   assert.deepEqual([...mixed.latch.keys], [`five_hour|70|${RESET}|live`], 'five-hour kept (unknown); weekly removed (known and below both thresholds)');
 });
 
+test('A: everything unknown with an empty latch produces no event and returns the very same empty latch object', () => {
+  const r = derive(snapshot({ missionContracts: contracts(null), fiveHour: win(null), weekly: win(null) }), EMPTY_USAGE_LATCH);
+  assert.deepEqual(r.events, []);
+  assert.equal(r.latch as unknown, EMPTY_USAGE_LATCH as unknown, 'nothing changed: the same latch object comes back');
+});
+
+test('A: carried keys count as unchanged: an unknown refresh over a latch that holds only the keys of that section returns the same latch object', () => {
+  const first = derive(snapshot({ fiveHour: win(92) }), EMPTY_USAGE_LATCH);
+  const unknown = derive(snapshot({ fiveHour: win(null) }), first.latch);
+  assert.equal(unknown.latch as unknown, first.latch as unknown);
+  const allUnknown = derive(snapshot({ missionContracts: contracts(null), fiveHour: win(null), weekly: win(null) }), first.latch);
+  assert.equal(allUnknown.latch as unknown, first.latch as unknown, 'all three sections unknown: every key carried, nothing changed');
+});
+
 /* -------------------------------------------------------------------------------------------------------------------------- B: the usage bar */
 
 test('B: when only the weekly window is known and it is fully used, the bar says UNAVAILABLE but its tone is critical', () => {

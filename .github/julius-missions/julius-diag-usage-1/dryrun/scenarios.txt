@@ -3,3 +3,4 @@ unfixed (as the repository is)|fail|
 fix A only (latch)|fail|fix-a-latch.py
 fix B only (bar tone)|fail|fix-b-tone.py
 both fixes|pass|fix-a-latch.py,fix-b-tone.py
+A partial: keys carried but a NEW latch object is always returned, with B fixed|fail|fix-a-partial-newobject.py,fix-b-tone.py
