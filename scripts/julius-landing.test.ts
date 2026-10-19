@@ -762,6 +762,14 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
     expect(check({ files: ['scripts/julius-main-notes.md'] })).toEqual([]);
   });
 
+  it('PIN: the shipped allowlist is EXACTLY this list (any change is a founder-governed update and must change this pin in the same commit; reuse of a landed name goes through retire + supersede, not through an extension)', () => {
+    const list = readFileSync(join(LANDING, 'allowed-branches.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    expect(list).toEqual([
+      'relay/julius-partial-secret-capture-fix', 'relay/julius-coder-runtime-budget', 'relay/julius-diag-digest-evidence-2', 'relay/julius-report-refused-reason', 'relay/julius-accounting-instruments',
+      'relay/julius-maxeffort-gauntlet-1', 'relay/julius-maxeffort-loop-1', 'relay/julius-ask-route',
+    ]);
+  });
+
   it('the shipped allowlist refuses the superseded Candidate C branch (evidence-1) and allows evidence-2', () => {
     const list = readFileSync(join(LANDING, 'allowed-branches.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
     expect(list).not.toContain('relay/julius-diag-digest-evidence-1');
