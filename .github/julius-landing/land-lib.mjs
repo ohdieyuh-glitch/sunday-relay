@@ -12,8 +12,12 @@ const SHA = /^[0-9a-f]{40}$/u;
 // CLAUDE.md, package manifests and the evidence dump. Such changes land only through a founder-governed path.
 // The main-provenance gate and the review-currency module it imports are PREFIX rules (any file whose path starts with scripts/julius-main-provenance or scripts/julius-review-currency):
 // editing either changes what the gate trusts, so no new sibling name can slip past an exact-name list.
+// Round 3 prefixes, for the gate and secret-handling scripts that workflows run (anything whose path STARTS with one of these, case-insensitive): scripts/julius-main-monotonicity,
+// scripts/julius-paid-slot, scripts/julius-subscription-check, scripts/julius-live-preflight-gates, scripts/julius-accept, scripts/relay-repository-boundary,
+// scripts/export-julius-harness, .github/julius-live- (the julius-live-*.sh boundary scripts and their helpers), .github/actions/, .github/julius-mission-slice/,
+// .github/julius-learning-registrations/. The mission directories (.github/julius-missions/**), relay-bridge/**, src/** and JULIUS_HARNESS_MANIFEST.md stay allowed.
 // Case-insensitive: a checkout on a case-insensitive filesystem (Windows, macOS) folds `.GITHUB/Julius-Landing/...` onto the governed file.
-export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
+export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
 // SIGNED-EXCEPTION: the spend ceilings and the effort tripwire live here. A PR may change them only if the reviewer's signed clearance lists the EXACT file in `governed-exceptions`.
 export const EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
 // Matched case-insensitively for the same reason as above; a case variant is never in the signed list (that list holds exact names only), so it is always refused.
@@ -123,22 +127,36 @@ export function checkPullRequest({ fields, now, pr, commit, files, fileRows, mai
 }
 
 /** Every check run and commit status on the head must have completed green. `self` is the name of this workflow's own check, ignored. */
+/** The lines of required-checks.txt (comments and blanks already removed) as `{ name, appId }`. A line is `Check name` (matched by name only) or `Check name @15368` (matched by name AND
+ * the GitHub App id that must have produced the check run). A malformed id is not guessed at: it stays part of the name, so the check can never be found and the landing refuses. */
+export function parseRequiredChecks(lines) {
+  return lines.map((line) => {
+    const m = /^(.*\S)\s+@([0-9]+)$/u.exec(line);
+    return m ? { name: m[1], appId: Number(m[2]) } : { name: line, appId: undefined };
+  });
+}
+
+/** `required` entries are names or `{ name, appId }`. With an appId the single run of that name must also carry `app.id` equal to it (the check-run API always sends `app`; absent = refused),
+ * so a look-alike check posted by another app under the same name cannot stand in for the real one. 'neutral' is NOT green: only 'success' is. */
 export function checkCi({ checkRuns, statuses, self, required = [] }) {
   const problems = [];
   const runs = checkRuns.filter((r) => r.name !== self);
+  const wanted = required.map((r) => (typeof r === 'string' ? { name: r, appId: undefined } : r));
+  const requiredNames = wanted.map((r) => r.name);
   // A founder-governed list of checks that MUST be present exactly once and green: a head on which the important check never ran cannot slip through behind other green checks.
-  for (const name of required) {
+  for (const { name, appId } of wanted) {
     const hits = runs.filter((r) => r.name === name);
     if (hits.length !== 1) problems.push(`required check "${name}" appears ${hits.length} times on the head (exactly 1 required)`);
+    else if (appId !== undefined && hits[0].app?.id !== appId) problems.push(`required check "${name}" was produced by app ${hits[0].app?.id ?? 'unknown'}, not the required app ${appId}`);
   }
   // Any OTHER name seen more than once is ambiguous too (two workflows can emit the same job name; which one is "the" check is unknowable here): refuse rather than guess.
   const seen = new Map();
   for (const r of runs) seen.set(r.name, (seen.get(r.name) ?? 0) + 1);
-  for (const [name, n] of seen) if (n > 1 && !required.includes(name)) problems.push(`check "${name}" appears ${n} times on the head (ambiguous)`);
+  for (const [name, n] of seen) if (n > 1 && !requiredNames.includes(name)) problems.push(`check "${name}" appears ${n} times on the head (ambiguous)`);
   if (runs.length === 0) problems.push('no check runs found on the head');
   for (const r of runs) {
     if (r.status !== 'completed') problems.push(`check "${r.name}" is ${r.status}`);
-    else if (!['success', 'neutral'].includes(r.conclusion)) problems.push(`check "${r.name}" concluded ${r.conclusion}`);
+    else if (r.conclusion !== 'success') problems.push(`check "${r.name}" concluded ${r.conclusion}`);
   }
   for (const s of statuses) if (s.state !== 'success') problems.push(`status "${s.context}" is ${s.state}`);
   return problems;

@@ -5,7 +5,7 @@
 import { readFileSync, appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { LANDER_IDENTITY, REPO, botCommentsDigest, buildLandingCommitMessage, checkCi, checkCreatedCommit, checkPullRequest, checkRuntime, ciIsPending, nonceUsed, parseClearance, parseLandingCommitMessage, verifyClearanceSignature } from './land-lib.mjs';
+import { LANDER_IDENTITY, REPO, botCommentsDigest, buildLandingCommitMessage, checkCi, checkCreatedCommit, checkPullRequest, checkRuntime, ciIsPending, nonceUsed, parseClearance, parseLandingCommitMessage, parseRequiredChecks, verifyClearanceSignature } from './land-lib.mjs';
 import { PER_PAGE, readAllPages } from './land-lib.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -14,6 +14,17 @@ const API = 'https://api.github.com';
 const SELF_CHECK = 'Land a cleared pull request';
 const summary = (line) => { console.log(line); if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, line + '\n'); };
 const fail = (problems) => { for (const p of problems) summary(`REFUSED: ${p}`); summary('Nothing was landed.'); process.exit(1); };
+// Any error nobody handled (an API answer that is not 2xx, a network failure, a malformed file) ends the job with ONE line, never a stack trace. Before the ref update is sent nothing has
+// landed: exit 1 ("REFUSED"). From the moment the ref update is sent main's state may have changed: exit 2 ("ALERT"), told apart so nobody reads "nothing landed" into it.
+let refUpdateStarted = false;
+const oneLine = (e) => (e instanceof Error ? e.message : String(e)).split('\n')[0].slice(0, 300);
+const onUnexpected = (e) => {
+  if (!refUpdateStarted) { summary(`REFUSED: unexpected error before anything was landed: ${oneLine(e)}`); summary('Nothing was landed.'); process.exit(1); }
+  summary(`ALERT AFTER LANDING: an unexpected error occurred after the ref update was sent: ${oneLine(e)}; check main by hand`);
+  process.exit(2);
+};
+process.on('uncaughtException', onUnexpected);
+process.on('unhandledRejection', onUnexpected);
 
 async function gh(path, init = {}) {
   const res = await fetch(`${API}${path}`, { ...init, headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(init.headers ?? {}) } });
@@ -49,7 +60,7 @@ if (sigProblems.length) fail(sigProblems);
 const { fields } = parsed;
 if (fields.pr !== number || fields.head !== head) fail([`the dispatch inputs (pr ${number}, head ${head}) differ from the signed clearance (pr ${fields.pr}, head ${fields.head})`]);
 const allowedBranches = readFileSync(join(here, 'allowed-branches.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
-const requiredChecks = readFileSync(join(here, 'required-checks.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+const requiredChecks = parseRequiredChecks(readFileSync(join(here, 'required-checks.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#')));
 if (requiredChecks.length === 0) fail(['required-checks.txt is empty: refusing to land without a required-check list']);
 
 async function snapshot() {
@@ -132,6 +143,7 @@ if (createdProblems.length) fail(createdProblems.map((p) => `created commit ${ne
 
 // 7. Advance main. NOT forced: a non-forced ref update is a fast-forward compare-and-swap that GitHub refuses unless main is still the parent of the new commit. Any failure refuses
 // and reports; there is no retry and never a force.
+refUpdateStarted = true;
 try {
   await gh(`/repos/${REPO}/git/refs/heads/main`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(refBody(newSha)) });
 } catch (error) {
@@ -152,14 +164,27 @@ try {
 summary(`LANDED PR #${number}: ${newSha}`);
 
 // 8. Verify main now is the created commit, then close the PR with a comment naming it. The PR does not show as merged (the landed commit is not the PR head); that is expected.
-const mainAfter = (await gh(`/repos/${REPO}/git/ref/heads/main`)).object.sha;
-if (mainAfter !== newSha) { summary(`ALERT AFTER LANDING: main is ${mainAfter}, expected ${newSha}`); process.exit(2); }
-summary(`Landed commit ${newSha}: parent ${fields.base}, tree ${fields.tree} (= the cleared tree).`);
-if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `landed=${newSha}\n`);
+// EVERYTHING from here on happens after the ref update was accepted (or may have been): nothing below may exit 1, print a bare stack trace, or stop before the PR is dealt with.
+// A failed read of main, a failed comment and a failed close are each reported on their own; the exit code is 2 for an ALERT (main's state is in doubt) and 3 for a failed comment
+// or close alone (the commit landed; do the housekeeping by hand).
+let exitCode = 0;
+const errText = (e) => (e instanceof Error ? e.message : String(e)).split('\n')[0].slice(0, 300);
+const alertLanding = (what) => { summary(`ALERT AFTER LANDING: main was updated to ${newSha} but ${what}`); exitCode = 2; };
+let mainAfter;
+try { mainAfter = (await gh(`/repos/${REPO}/git/ref/heads/main`)).object.sha; } catch (error) { alertLanding(`reading main back failed: ${errText(error)}`); }
+if (mainAfter !== undefined && mainAfter !== newSha) { summary(`ALERT AFTER LANDING: main is ${mainAfter}, expected ${newSha}`); process.exit(2); }
+if (mainAfter === newSha) summary(`Landed commit ${newSha}: parent ${fields.base}, tree ${fields.tree} (= the cleared tree).`);
+try { if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `landed=${newSha}\n`); } catch (error) { alertLanding(`writing the job output failed: ${errText(error)}`); }
 try {
   await gh(`/repos/${REPO}/issues/${number}/comments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: `Landed on main as ${newSha} (tree ${fields.tree}, parent ${fields.base}) by the Julius landing workflow. This pull request is closed, not merged: the landed commit is not the PR head, which is expected.` }) });
+} catch (error) {
+  summary(`WARNING: the commit landed but commenting on PR #${number} failed: ${errText(error)}. Comment by hand.`);
+  if (exitCode === 0) exitCode = 3;
+}
+try {
   await gh(`/repos/${REPO}/pulls/${number}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: 'closed' }) });
 } catch (error) {
-  summary(`WARNING: the commit landed but closing PR #${number} failed: ${error instanceof Error ? error.message : String(error)}. Close it by hand.`);
-  process.exit(3);
+  summary(`WARNING: the commit landed but closing PR #${number} failed: ${errText(error)}. Close it by hand.`);
+  if (exitCode === 0) exitCode = 3;
 }
+process.exit(exitCode);

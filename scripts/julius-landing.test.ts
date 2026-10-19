@@ -223,6 +223,8 @@ globalThis.fetch = async (url, init = {}) => {
   const method = init.method ?? 'GET';
   appendFileSync(calls, JSON.stringify({ method, path, body: init.body ?? null }) + '\\n');
   const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  // scenario.failGet: a regexp source; any GET whose path matches answers HTTP 500 (an API failure before anything is written)
+  if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path)) return reply(500, { message: 'the fake fails this read' });
   // The landing writes (git data API; the merge endpoint is not modelled on purpose: a request to it is an unexpected path, 404).
   if (method === 'POST' && /\\/git\\/commits$/.test(path)) {
     globalThis.__created = JSON.parse(init.body);
@@ -246,7 +248,7 @@ globalThis.fetch = async (url, init = {}) => {
     return reply(200, { object: { sha: b.sha } });
   }
   if (method === 'PATCH' && /\\/pulls\\/\\d+$/.test(path)) return scenario.closeStatus ? reply(scenario.closeStatus, { message: 'close refused by the fake' }) : reply(200, {});
-  if (method === 'POST' && /\\/issues\\/\\d+\\/comments$/.test(path)) return reply(201, {});
+  if (method === 'POST' && /\\/issues\\/\\d+\\/comments$/.test(path)) return scenario.commentStatus ? reply(scenario.commentStatus, { message: 'comment refused by the fake' }) : reply(201, {});
   if (path.includes('/git/ref/heads/main')) {
     const seq = scenario.mainSequence;
     let sha = seq ? seq[Math.min(globalThis.__mainReads = (globalThis.__mainReads ?? 0) + 1, seq.length) - 1] : scenario.main;
@@ -279,8 +281,10 @@ globalThis.fetch = async (url, init = {}) => {
 `);
 
 let counter = 0;
-function runLand(over: { scenario?: Record<string, unknown>; text?: string; signature?: string; head?: string; pr?: string; dryRun?: string; ciWaitMs?: string; ref?: string; sha?: string } = {}) {
+function runLand(over: { scenario?: Record<string, unknown>; text?: string; signature?: string; head?: string; pr?: string; dryRun?: string; ciWaitMs?: string; ref?: string; sha?: string; required?: string } = {}) {
   counter += 1;
+  const requiredFile = join(landDir, 'required-checks.txt');
+  if (over.required !== undefined) writeFileSync(requiredFile, over.required);
   const scenarioFile = join(work, `scenario-${counter}.json`);
   const callsFile = join(work, `calls-${counter}.log`);
   writeFileSync(callsFile, '');
@@ -297,6 +301,7 @@ function runLand(over: { scenario?: Record<string, unknown>; text?: string; sign
       CLEARANCE_B64: Buffer.from(text, 'utf8').toString('base64'), SIGNATURE_B64: over.signature ?? sig(text), DRY_RUN: over.dryRun ?? 'false', LAND_CI_WAIT_MS: over.ciWaitMs ?? '0', GITHUB_REF: over.ref ?? 'refs/heads/main', GITHUB_SHA: over.sha ?? B,
     },
   });
+  if (over.required !== undefined) writeFileSync(requiredFile, '# test list\nVerify Relay\n');
   const calls = readFileSync(callsFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as { method: string; path: string; body: string | null });
   // `merges` = every request that moves main (a ref update); `writes` = every request that is not a GET.
   return { code: r.status, out: `${r.stdout}${r.stderr}`, merges: calls.filter((c) => c.method === 'PATCH' && /\/git\/refs\/heads\/main$/.test(c.path)), writes: calls.filter((c) => c.method !== 'GET'), calls };
@@ -426,7 +431,10 @@ describe('the workflow file is pinned', () => {
     const list = readFileSync(join(LANDING, 'allowed-branches.txt'), 'utf8').split('\n').filter((l) => l.trim() && !l.startsWith('#'));
     expect(list.filter((b) => b.includes('v6'))).toEqual([]);
     const req = readFileSync(join(LANDING, 'required-checks.txt'), 'utf8').split('\n').filter((l) => l.trim() && !l.startsWith('#'));
-    expect(req).toEqual(['Verify Relay', 'real-infra-julius', 'learning-store-container', 'sibling-control-plane', 'first-live-topology (executor-private)', 'first-live-topology (host-visible)']);
+    // round 3: each entry also names the GitHub App (15368 = GitHub Actions) that must have produced the check run
+    const parsed = lib.parseRequiredChecks(req.map((l) => l.trim())) as Array<{ name: string; appId?: number }>;
+    expect(parsed.map((p) => p.name)).toEqual(['Verify Relay', 'real-infra-julius', 'learning-store-container', 'sibling-control-plane', 'first-live-topology (executor-private)', 'first-live-topology (host-visible)']);
+    expect(parsed.map((p) => p.appId)).toEqual([15368, 15368, 15368, 15368, 15368, 15368]);
   });
 
   it('the allowlist names only the authorized workstream branches and the committed key is a PEM public key or the shipped placeholder', () => {
@@ -841,5 +849,160 @@ describe('round 2: the phrase JULIUS LANDING (uppercase) appears exactly twice i
     const sent = JSON.parse(r.calls.find((c) => c.method === 'POST' && c.path.endsWith('/git/commits'))!.body ?? '{}') as { message: string };
     expect(sent.message).not.toContain('about');
     expect(sent.message.split('JULIUS LANDING').length - 1).toBe(2);
+  });
+});
+
+/* ------------------------------------------------------------------------------------------------------------------ v3 round 3: post-landing errors, more governed prefixes, check-run app id, no stack traces */
+
+describe('round 3 R1: nothing after the ref update may exit 1 or die with a stack trace', () => {
+  it('a failed read of main after the update is an ALERT (exit 2) naming the created commit, and the comment and the close are still attempted', () => {
+    const r = runLand({ scenario: { mainReadFails: true } });
+    expect(r.code, r.out).toBe(2);
+    expect(r.out).toContain(`ALERT AFTER LANDING: main was updated to ${'8'.repeat(40)} but reading main back failed`);
+    expect(r.writes.map((c) => c.method), 'commit, ref update, comment, close').toEqual(['POST', 'PATCH', 'POST', 'PATCH']);
+    expect(r.out).not.toMatch(/\n\s+at /u);
+    expect(r.out).not.toContain('Nothing was landed');
+  });
+
+  it('a failing comment and a failing close each keep exit 3, each is attempted on its own, and an ALERT outranks them', () => {
+    const comment = runLand({ scenario: { commentStatus: 500 } });
+    expect(comment.code, comment.out).toBe(3);
+    expect(comment.out).toContain('commenting on PR #7 failed');
+    expect(comment.writes.map((c) => c.method), 'the close is still attempted after a failed comment').toEqual(['POST', 'PATCH', 'POST', 'PATCH']);
+    const close = runLand({ scenario: { closeStatus: 500 } });
+    expect(close.code, close.out).toBe(3);
+    expect(close.out).toContain('closing PR #7 failed');
+    const both = runLand({ scenario: { commentStatus: 500, closeStatus: 500 } });
+    expect(both.code).toBe(3);
+    expect(both.out).toContain('commenting on PR #7 failed');
+    expect(both.out).toContain('closing PR #7 failed');
+    const alertAndComment = runLand({ scenario: { mainReadFails: true, commentStatus: 500 } });
+    expect(alertAndComment.code, 'an ALERT is not downgraded to 3').toBe(2);
+  });
+
+  it('a main that is not the created commit after the update is still an ALERT (exit 2) and nothing is claimed in a PR comment', () => {
+    const r = runLand({ scenario: { mainAfterOverride: 'f'.repeat(40) } });
+    expect(r.code).toBe(2);
+    expect(r.writes.map((c) => c.method)).toEqual(['POST', 'PATCH']);
+  });
+});
+
+describe('round 3 H3: an unexpected error before the ref update is one line and exit 1, never a stack trace', () => {
+  it('a failing read (pull request, CI, main, the created commit) or a failing commit creation ends with a single REFUSED line', () => {
+    const cases: Array<[string, Record<string, unknown>, string[]]> = [
+      ['the PR read fails', { failGet: '/pulls/7$' }, []],
+      ['the files read fails', { failGet: '/pulls/7/files' }, []],
+      ['the CI read fails', { failGet: '/check-runs' }, []],
+      ['the main read fails', { failGet: '/git/ref/heads/main' }, []],
+      ['the history read fails', { failGet: '/commits\\?sha=main' }, []],
+      ['the commit creation fails', { postStatus: 500 }, ['POST']],
+      ['the read-back of the created commit fails', { failGet: `/commits/${'8'.repeat(40)}$` }, ['POST']],
+    ];
+    for (const [name, scenario, writes] of cases) {
+      const r = runLand({ scenario });
+      expect(r.code, `${name}: ${r.out}`).toBe(1);
+      expect(r.out, name).toContain('REFUSED: unexpected error before anything was landed');
+      expect(r.out, name).toContain('Nothing was landed');
+      expect(r.out, name).not.toMatch(/\n\s+at /u);
+      expect(r.out, name).not.toContain('node:internal');
+      expect(r.out.trim().split('\n').filter((l) => l.startsWith('REFUSED')), name).toHaveLength(1);
+      expect(r.writes.map((c) => c.method), name).toEqual(writes);
+      expect(r.merges, name).toHaveLength(0);
+    }
+    const dry = runLand({ dryRun: 'true', scenario: { failGet: '/pulls/7$' } });
+    expect(dry.code).toBe(1);
+    expect(dry.out).not.toMatch(/\n\s+at /u);
+  });
+});
+
+describe('round 3 H2: a required check is matched by app id as well as name, and only success is green', () => {
+  const run = (name: string, conclusion: string | null, appId?: number) => ({ name, status: conclusion ? 'completed' : 'in_progress', conclusion, ...(appId === undefined ? {} : { app: { id: appId } }) });
+  const self = 'Land a cleared pull request';
+  const ci = (checkRuns: unknown[], required: unknown[]) => lib.checkCi({ checkRuns, statuses: [], self, required }) as string[];
+  const req = [{ name: 'Verify Relay', appId: 15368 }];
+
+  it('the entry parser: `Name @id` keeps the name and the id; anything else stays a plain name', () => {
+    expect(lib.parseRequiredChecks(['Verify Relay @15368', 'first-live-topology (host-visible) @15368', 'plain name'])).toEqual([
+      { name: 'Verify Relay', appId: 15368 }, { name: 'first-live-topology (host-visible)', appId: 15368 }, { name: 'plain name', appId: undefined },
+    ]);
+    for (const odd of ['x @abc', 'x@15368', 'x @']) expect(lib.parseRequiredChecks([odd])[0]).toEqual({ name: odd, appId: undefined });
+  });
+
+  it('the right app passes; another app under the same name, a missing app, or a second look-alike run are refused', () => {
+    expect(ci([run('Verify Relay', 'success', 15368)], req)).toEqual([]);
+    expect(ci([run('Verify Relay', 'success', 99)], req).join(' ')).toContain('not the required app 15368');
+    expect(ci([run('Verify Relay', 'success')], req).join(' ')).toContain('unknown');
+    expect(ci([run('Verify Relay', 'success', 15368), run('Verify Relay', 'success', 99)], req).join(' ')).toContain('2 times');
+    expect(ci([run('Verify Relay', 'success', 99)], ['Verify Relay']), 'a name-only entry still matches by name').toEqual([]);
+  });
+
+  it('neutral is NOT green, for a required and for any other check', () => {
+    expect(ci([run('Verify Relay', 'neutral', 15368)], req).join(' ')).toContain('concluded neutral');
+    expect(ci([run('Verify Relay', 'success', 15368), run('lint', 'neutral')], req).join(' ')).toContain('"lint" concluded neutral');
+    expect(ci([run('Verify Relay', 'success', 15368), run('lint', 'success')], req)).toEqual([]);
+  });
+
+  it('end to end: the lander reads the app id from required-checks.txt and refuses a look-alike check', () => {
+    const required = '# test\nVerify Relay @15368\n';
+    const selfRun = { name: 'Land a cleared pull request', status: 'in_progress', conclusion: null };
+    const good = runLand({ required, scenario: { checkRuns: [{ name: 'Verify Relay', status: 'completed', conclusion: 'success', app: { id: 15368 } }, selfRun] } });
+    expect(good.code, good.out).toBe(0);
+    for (const [name, rows] of [
+      ['another app', [{ name: 'Verify Relay', status: 'completed', conclusion: 'success', app: { id: 7 } }, selfRun]],
+      ['no app', [{ name: 'Verify Relay', status: 'completed', conclusion: 'success' }, selfRun]],
+      ['neutral', [{ name: 'Verify Relay', status: 'completed', conclusion: 'neutral', app: { id: 15368 } }, selfRun]],
+    ] as const) {
+      const r = runLand({ required, scenario: { checkRuns: rows } });
+      expect(r.code, `${name}: ${r.out}`).toBe(1);
+      expect(r.writes, name).toHaveLength(0);
+    }
+  });
+});
+
+describe('round 3 R2: the gate and secret-handling scripts workflows run are governed by prefix', () => {
+  const governed: Array<[string, string[]]> = [
+    ['scripts/julius-main-monotonicity', ['scripts/julius-main-monotonicity.mjs', 'scripts/julius-main-monotonicity.d.mts', 'scripts/julius-main-monotonicity.test.ts', 'scripts/julius-main-monotonicity2.mjs']],
+    ['scripts/julius-paid-slot', ['scripts/julius-paid-slot.mjs', 'scripts/julius-paid-slot.d.mts', 'scripts/julius-paid-slot.test.ts']],
+    ['scripts/julius-subscription-check', ['scripts/julius-subscription-check.mjs', 'scripts/julius-subscription-check.d.mts', 'scripts/julius-subscription-check.test.ts']],
+    ['scripts/julius-live-preflight-gates', ['scripts/julius-live-preflight-gates.mjs', 'scripts/julius-live-preflight-gates.d.mts', 'scripts/julius-live-preflight-gates.test.ts']],
+    ['scripts/julius-accept', ['scripts/julius-accept-main.mjs', 'scripts/julius-accept.mjs', 'scripts/julius-acceptance.ts']],
+    ['scripts/relay-repository-boundary', ['scripts/relay-repository-boundary.mjs', 'scripts/relay-repository-boundary2.mjs']],
+    ['scripts/export-julius-harness', ['scripts/export-julius-harness.mjs', 'scripts/export-julius-harness.test.ts']],
+    ['.github/julius-live-', ['.github/julius-live-executor.sh', '.github/julius-live-key-boundary.sh', '.github/julius-live-receipt-boundary.sh', '.github/julius-live-hermes-isolation/sitecustomize.py', '.github/julius-live-new-boundary.sh']],
+    ['.github/actions/', ['.github/actions/setup/action.yml', '.github/actions/x/y/z.js']],
+    ['.github/julius-mission-slice/', ['.github/julius-mission-slice/loader.mjs', '.github/julius-mission-slice/resolve.mjs', '.github/julius-mission-slice/README.md']],
+    ['.github/julius-learning-registrations/', ['.github/julius-learning-registrations/julius-learning-pair-1.json', '.github/julius-learning-registrations/new.json']],
+  ];
+
+  it('every file under each prefix is refused by the pure check, in any letter case', () => {
+    for (const [prefix, files] of governed) {
+      for (const f of files) {
+        for (const variant of [f, f.toUpperCase(), f.replace(/^./u, (c) => c.toUpperCase())]) {
+          expect(check({ files: ['ok.ts', variant], fileRows: 2, pr: { ...goodPr(), changed_files: 2 } }).join(' '), `${prefix}: ${variant}`).toContain('founder-governed');
+        }
+      }
+    }
+  });
+
+  it('end to end: a PR touching any one of them is refused and nothing is written', () => {
+    for (const [prefix, files] of governed) {
+      const f = files[0]!;
+      const r = runLand({ scenario: { files: ['ok.ts', f], pr: { ...goodPr(), changed_files: 2 } } });
+      expect(r.code, `${prefix}: ${f}: ${r.out}`).toBe(1);
+      expect(r.out).toContain('founder-governed');
+      expect(r.writes, `${prefix}: ${f}`).toHaveLength(0);
+    }
+  });
+
+  it('neighbours that must stay allowed are allowed (relay-bridge, src, the mission directories, the harness manifest, other scripts), and such a PR lands', () => {
+    const allowedFiles = [
+      'relay-bridge/julius/x.ts', 'src/relay/mission/julius/x.ts', '.github/julius-missions/julius-m/contract.json', 'JULIUS_HARNESS_MANIFEST.md',
+      'scripts/julius-paid-dispatch.mjs', 'scripts/julius-live-preflight.ts', 'scripts/julius-live-probe-file.ts', 'scripts/julius-mission-slice.test.ts', 'scripts/julius-evidence-bodies.mjs',
+      'scripts/julius-main-notes.md', '.github/workflows-notes.md', '.github/julius-missions/julius-live-m/contract.json', 'docs/actions/readme.md',
+    ];
+    for (const f of allowedFiles) expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(false);
+    expect(check({ files: allowedFiles, fileRows: allowedFiles.length, pr: { ...goodPr(), changed_files: allowedFiles.length } })).toEqual([]);
+    const r = runLand({ scenario: { files: allowedFiles.slice(0, 4), pr: { ...goodPr(), changed_files: 4 } } });
+    expect(r.code, r.out).toBe(0);
   });
 });
