@@ -76,7 +76,10 @@ function harness(options: {
     env: options.env ?? baseEnv(),
     readConfig: readGptArchitectConfig,
     now: () => now,
+    /* A durable store (what a player ask requires): an AskLedger that also reads its rows back. */
     ledger: {
+      durable: true as const,
+      rows: async () => lines.slice(),
       append: async (line) => {
         events.push(`ledger:${String(line.phase)}`);
         if (options.ledgerDelayMs !== undefined) await new Promise((r) => setTimeout(r, options.ledgerDelayMs));
@@ -189,7 +192,7 @@ describe('ask Julius: the answer', () => {
     expect(request?.schema?.schema).toMatchObject({ required: ['answer'], properties: { answer: { type: 'string' } } });
     expect(request?.omitMaxOutputTokens).toBe(true);
     expect(request?.config.timeoutMs).toBeLessThanOrEqual(90_000);
-    expect(Object.keys(request ?? {}).sort()).toEqual(['apiKey', 'config', 'input', 'instructions', 'maxRetries', 'omitMaxOutputTokens', 'schema']);
+    expect(Object.keys(request ?? {}).sort()).toEqual(['apiKey', 'config', 'input', 'instructions', 'maxRetries', 'omitMaxOutputTokens', 'safetyIdentifier', 'schema']);
     expect(request?.instructions).toContain('no tools');
     /* One ask is at most one billed provider request. */
     expect(request?.maxRetries).toBe(0);
@@ -242,10 +245,11 @@ describe('ask Julius: idempotency and the daily cap', () => {
     expect(a.askId).not.toBe(b.askId);
   });
 
-  it('stores a provider failure too, so a retry with the same key cannot buy a second call', async () => {
+  it('remembers a provider failure too, so a retry with the same key cannot buy a second call', async () => {
     const h = harness({ outcome: () => ({ ok: false, failureClass: 'timeout', message: 'timed out', usage }) });
     expect(failure(await ask(h)).httpStatus).toBe(502);
-    expect(failure(await ask(h)).httpStatus).toBe(502);
+    /* The retry is a NAMED refusal (409), not a replay of the 502, and still buys nothing. */
+    expect(failure(await ask(h))).toEqual({ code: 'julius_ask_previous_attempt_failed', httpStatus: 409 });
     expect(h.calls()).toBe(1);
   });
 
@@ -263,7 +267,8 @@ describe('ask Julius: idempotency and the daily cap', () => {
   });
 
   it('defaults the daily cap to 20', async () => {
-    const h = harness();
+    /* One caller asking 20 times: the per-caller cap (default 3) would stop it, so it is set to the global default here. */
+    const h = harness({ env: baseEnv({ JULIUS_ASK_CALLER_DAILY_CAP: '20' }) });
     for (let i = 0; i < 20; i += 1) success(await ask(h, { idempotencyKey: `key-number-${String(i).padStart(2, '0')}` }));
     expect(failure(await ask(h, { idempotencyKey: 'key-number-over' })).code).toBe('julius_ask_cap_reached');
     expect(h.calls()).toBe(20);
@@ -306,7 +311,7 @@ describe('ask Julius: the ledger', () => {
     const requests: GptRunRequest[] = [];
     const controller = createJuliusAsk({
       env: baseEnv(), readConfig: readGptArchitectConfig, now: () => 1,
-      ledger: { append: () => { if (broken) throw new Error('down'); } },
+      ledger: { durable: true as const, rows: async () => [], append: () => { if (broken) throw new Error('down'); } },
       runArchitect: async (request) => { requests.push(request); return answered('after recovery'); },
     });
     const input = { question: 'q', idempotencyKey: GOOD_KEY, caller: 'player:p1' };
@@ -628,7 +633,8 @@ describe('ask Julius: no route-imposed ceiling; the budget is chosen server-side
   it('chooses the effort from the question length through the whole controller', async () => {
     const cases: Array<[number, string]> = [[20, 'low'], [500, 'medium'], [1500, 'high']];
     for (const [length, effort] of cases) {
-      const h = harness();
+      /* Players are capped at 'medium' by default; this case lets them reach 'high' to pin the length-to-effort table itself. */
+      const h = harness({ env: baseEnv({ JULIUS_ASK_PLAYER_MAX_EFFORT: 'high' }) });
       success(await ask(h, { question: 'q'.repeat(length) }));
       expect(h.requests[0]?.config.reasoningEffort).toBe(effort);
       expect(h.lines[0]).toMatchObject({ reasoningEffortChosen: effort });

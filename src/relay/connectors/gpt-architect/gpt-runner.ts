@@ -56,6 +56,12 @@ export interface GptRunRequest {
    * `config.maxOutputTokens`, exactly as before this field existed, so no existing caller changes. Only the ask route sets it.
    */
   readonly omitMaxOutputTokens?: boolean;
+  /**
+   * The provider's abuse-attribution identifier (`safety_identifier`): a stable, opaque, NON-reversible per-end-user string.
+   * Absent means the field is not sent, exactly as before this field existed, so no existing caller changes. Only the ask
+   * route sets it (derived from the caller hash, never the raw player id).
+   */
+  readonly safetyIdentifier?: string;
 }
 
 /**
@@ -207,6 +213,7 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
         input: request.input,
         // Relay's persistence is the memory authority, not the provider's.
         store: false,
+        ...(request.safetyIdentifier === undefined ? {} : { safety_identifier: request.safetyIdentifier }),
         ...(request.omitMaxOutputTokens === true ? {} : { max_output_tokens: config.maxOutputTokens }),
         // Only when the mission declared it; absent sends the request exactly as it always was.
         ...(config.reasoningEffort === undefined ? {} : { reasoning: { effort: config.reasoningEffort } }),

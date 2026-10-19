@@ -649,7 +649,9 @@ describe('A CALLER CANNOT RAISE ITS OWN BUDGET (the route docs: only the trimmed
 
   it('CONTROL: the one caller lever is the documented one, the TRIMMED length: padding whitespace cannot raise the effort', async () => {
     const p = provider();
-    const c = instance({ ledger: durableStore(), provider: p });
+    /* The operator allows players up to 'high' here; with the default (JULIUS_ASK_PLAYER_MAX_EFFORT unset = 'medium') the third
+       question is capped to 'medium' (see julius-ask-store.test.ts). */
+    const c = instance({ ledger: durableStore(), provider: p, env: env({ JULIUS_ASK_PLAYER_MAX_EFFORT: 'high' }) });
     await ask(c, { question: `  hi${' '.repeat(1500)}`, idempotencyKey: 'lever-key-0001' });
     await ask(c, { question: 'a'.repeat(201), idempotencyKey: 'lever-key-0002' });
     await ask(c, { question: 'a'.repeat(801), idempotencyKey: 'lever-key-0003' });
