@@ -103,6 +103,39 @@ describe('a stream that stopped early never stores the head of a secret it was c
     }
   });
 
+  it('P7: a BARE end phrase (no dashes) after a private key header does not close the block: no body line is stored when the stream is cut by the byte cap', async () => {
+    const body = Array.from({ length: 6 }, () => rand(64)).join('\n');
+    const prefix = `${filler(40)}\n${PEM_HEAD}\n`;
+    const bare = `END ${'PRIVATE'} KEY`;
+    const r = await run({ stream: 'stdout', pieces: [`${prefix}${body}\n${bare}\n${filler(400)}`] }, prefix.length + body.length + bare.length + 12);
+    expect(r.truncated).toBe(true);
+    expect(leaked(r.stdout, body), `stored: ${JSON.stringify(r.stdout.slice(-120))}`).toBeNull();
+  });
+
+  it('P8: a dashed footer CUT inside its closing dashes does not close the block either (cap)', async () => {
+    const body = Array.from({ length: 6 }, () => rand(64)).join('\n');
+    const prefix = `${filler(40)}\n${PEM_HEAD}\n`;
+    const cutFoot = `${DASHES}END ${'PRIVATE'} KEY--`;
+    const r = await run({ stream: 'stdout', pieces: [`${prefix}${body}\n${cutFoot}\n${filler(400)}`] }, prefix.length + body.length + 1 + cutFoot.length);
+    expect(r.truncated).toBe(true);
+    expect(leaked(r.stdout, body), `stored: ${JSON.stringify(r.stdout.slice(-120))}`).toBeNull();
+  });
+
+  it('P9: a process killed by its timeout after a bare end phrase has the key body withheld too', async () => {
+    const body = Array.from({ length: 6 }, () => rand(64)).join('\n');
+    const r = await run({ stream: 'stdout', pieces: [`${PEM_HEAD}\n${body}\nEND ${'PRIVATE'} KEY`], hang: true }, 100_000, 1_500);
+    expect(r.timedOut).toBe(true);
+    expect(leaked(r.stdout, body), `stored: ${JSON.stringify(r.stdout.slice(-120))}`).toBeNull();
+  });
+
+  it('S6: a COMPLETE dashed footer still closes the block: a stream that stopped early after a whole key block keeps its redaction and nothing more is withheld than before', async () => {
+    const body = Array.from({ length: 4 }, () => rand(64)).join('\n');
+    const r = await run({ stream: 'stdout', pieces: [`${PEM_HEAD}\n${body}\n${PEM_FOOT}\nafter the key\n`], hang: true }, 100_000, 1_500);
+    expect(r.timedOut).toBe(true);
+    expect(leaked(r.stdout, body)).toBeNull();
+    expect(r.stdout).toContain('after the key');
+  });
+
   it('P5: a three-segment bearer token cut before its third segment is not stored', async () => {
     const head = `eyJ${rand(20)}`;
     const mid = `eyJ${rand(20)}`;

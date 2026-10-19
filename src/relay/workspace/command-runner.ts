@@ -59,7 +59,9 @@ function withholdOpenSecret(text: string): { text: string; withheld: number } {
   let withheld = 0;
   const begins = [...out.matchAll(/BEGIN [A-Z ]*PRIVATE KEY/g)];
   const last = begins[begins.length - 1];
-  if (last?.index !== undefined && !/END [A-Z ]*PRIVATE KEY/.test(out.slice(last.index))) {
+  // CLOSED means the sanitizer's own complete shape: the DASHED footer. A bare `END ... PRIVATE KEY` phrase, or a footer cut inside its dashes, is not a closed block: the sanitizer would redact only the
+  // header phrase and leave the body in clear.
+  if (last?.index !== undefined && !/-----END [A-Z ]*PRIVATE KEY-----/.test(out.slice(last.index))) {
     let start = last.index;
     while (start > 0 && out[start - 1] === '-') start -= 1;
     out = `${out.slice(0, start)}${REDACTION_MARK}`;
