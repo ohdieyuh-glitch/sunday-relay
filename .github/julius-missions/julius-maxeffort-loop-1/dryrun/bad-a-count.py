@@ -1,7 +1,7 @@
 """DRY-RUN ONLY: a WRONG fix for defect A: "exactly one requirement failed, and the evidence was a claim" stands in for "only trust failed". With claim-only
 evidence and no blocking criteria the UNFIXED trust check passes, so the one failure can be something else (durability) and is reported as a claim. Once
-D's reference fix makes that trust check fail too, this becomes equivalent to strict A (exactly one reason, and it is the trust shortfall), so the
-dry run lists it as an ALTERNATIVE with the D fix (pass), not as a wrong fix."""
+D's reference fix makes that trust check fail too, it agrees with strict A everywhere EXCEPT zero evidence with no blocking criteria: `anyClaimOnly` is
+false there, so zero evidence is incomplete while claim-only evidence is claimed_complete (r3's one-verdict pin). Must FAIL the spec (with the D fix)."""
 import pathlib
 
 path = pathlib.Path('src/relay/mission/loop/loop-completion.ts')

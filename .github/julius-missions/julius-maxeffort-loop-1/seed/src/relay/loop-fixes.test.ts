@@ -76,6 +76,7 @@ test('A: claim-only evidence with no blocking criteria and a non-durable termina
 /* ------------------------------------------------------------------------------------- D: nothing supports completion */
 
 test('D: with no blocking criteria, claim-only, observed-only or no evidence is never verified complete, and the verdict says why', () => {
+  const verdicts = new Set<string>();
   for (const acceptanceCriteria of [[], [{ id: 'c1', blocking: false }]]) {
     for (const evidence of [
       [{ evidenceId: 'e1', sourceTrust: 'claim', criterionIds: ['c1'] }],
@@ -86,8 +87,10 @@ test('D: with no blocking criteria, claim-only, observed-only or no evidence is 
       const label = `${JSON.stringify(acceptanceCriteria)} ${JSON.stringify(evidence)}`;
       assert.notEqual(r.verdict, 'verified_complete', label);
       assert.ok(r.reasons.length > 0, label);
+      verdicts.add(r.verdict);
     }
   }
+  assert.equal(verdicts.size, 1, `one shortfall, one verdict: ${[...verdicts].join(', ')}`);
 });
 
 test('D: control: a blocking criterion with attested evidence still verifies', () => {
@@ -128,6 +131,17 @@ test('B: a spend at or past a finer-than-ppm fraction never authorizes (the thre
   assert.equal(spend(0.1234566, '10000000', '1234567').kind, 'budget_blocked');
   assert.equal(spend(0.999999999999999, '1000000000000000', '999999999999999').kind, 'budget_blocked');
   assert.equal(spend(0.0000019999999999999, '10000000000000000000', '19999999999999').kind, 'budget_blocked');
+});
+
+test('B: a finer-than-ppm fraction never pauses more than one part per million early: below that bound it authorizes, unless the fraction is refused', () => {
+  for (const [fraction, cap, spent] of [
+    [0.6666666, '10000000', '6666655'], [0.9999999, '10000000', '9999988'], [0.1234566, '10000000', '1234555'], [0.0000015, '10000000', '4'],
+    [0.999999999999999, '1000000000000000', '999998999999998'], [0.0000019999999999999, '10000000000000000000', '9999999999998'],
+  ] as const) {
+    const d = spend(fraction, cap, spent);
+    const r = reasons(d);
+    assert.ok(d.kind === 'authorized' || (r.length === 1 && r[0] === 'invalid_budget_configuration'), `${fraction} at ${spent} of ${cap}: ${r.join(',')}`);
+  }
 });
 
 test('B: a window that has spent nothing never reaches the pause threshold, whatever the fraction', () => {

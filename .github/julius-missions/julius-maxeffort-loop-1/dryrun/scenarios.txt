@@ -20,16 +20,21 @@ D alternative: no blocking criterion means not completable (incomplete)|pass|fix
 first alternatives together|pass|alt-a-review-pending.py,alt-b-refuse.py,alt-c-allow-2400.py,alt-d-incomplete.py
 second alternatives together|pass|alt-a-mission-claim.py,alt-b-exact.py,alt-c-roundtrip.py,fix-d-evidence.py
 third mix (ladder A with incomplete D)|pass|alt-a-mission-claim.py,alt-b-exact.py,alt-c-allow-2400.py,alt-d-incomplete.py
+attack shape 1: widest ladder A + D claimed + exact BigInt B + wall-clock C|pass|alt-a-mission-claim.py,alt-b-exact.py,alt-c-roundtrip.py,fix-d-evidence.py
+attack shape 2: strictest A + D incomplete + refuse-finer B + table C keeping T24:00|pass|fix-a-completion.py,alt-b-refuse.py,alt-c-allow-2400.py,alt-d-incomplete.py
+attack shape 3: ladder approved/reviewed + D folded into trust + exact floor B + table C refusing T24:00|pass|alt-a-ladder2.py,alt-b-exactfloor.py,fix-c-calendar.py,fix-d-evidence.py
+B alternative: exact decimal floored to ppm|pass|fix-a-completion.py,alt-b-exactfloor.py,fix-c-calendar.py,fix-d-evidence.py
 # WRONG FIXES: each looks like a fix and still breaks a pinned behaviour.
 A wrong: raw review/durability flags instead of the checks' results|fail|bad-a-flags.py,fix-b-pause.py,fix-c-calendar.py,fix-d-evidence.py
 A wrong: only the review requirement added|fail|bad-a-review-only.py,fix-b-pause.py,fix-c-calendar.py,fix-d-evidence.py
-A alternative with D's trust-check fix: exactly one failure plus a claim|pass|bad-a-count.py,fix-b-pause.py,fix-c-calendar.py,fix-d-evidence.py
+A wrong with D's trust-check fix: exactly one failure plus a claim (zero vs claim-only evidence get different verdicts)|fail|bad-a-count.py,fix-b-pause.py,fix-c-calendar.py,fix-d-evidence.py
 B wrong: plain Math.floor in both places|fail|fix-a-completion.py,bad-b-floor.py,fix-c-calendar.py,fix-d-evidence.py
 B wrong: Math.floor in the numerator only|fail|fix-a-completion.py,bad-b-floor-numerator.py,fix-c-calendar.py,fix-d-evidence.py
 B wrong: float comparison of spent/cap with f|fail|fix-a-completion.py,bad-b-float.py,fix-c-calendar.py,fix-d-evidence.py
 B wrong: exact comparison with the binary double|fail|fix-a-completion.py,bad-b-binary.py,fix-c-calendar.py,fix-d-evidence.py
 B wrong: toFixed(6) cleanup then floor|fail|fix-a-completion.py,bad-b-tofixed6.py,fix-c-calendar.py,fix-d-evidence.py
 B wrong: toFixed(12) cleanup then floor|fail|fix-a-completion.py,bad-b-tofixed12.py,fix-c-calendar.py,fix-d-evidence.py
+B wrong: pauses up to two ppm early|fail|fix-a-completion.py,bad-b-early2.py,fix-c-calendar.py,fix-d-evidence.py
 C wrong: compares the date of the parsed UTC instant|fail|fix-a-completion.py,fix-b-pause.py,bad-c-utcdate.py,fix-d-evidence.py
 C wrong: February always has 29 days|fail|fix-a-completion.py,fix-b-pause.py,bad-c-leap.py,fix-d-evidence.py
 C wrong: month length from Date.UTC|fail|fix-a-completion.py,fix-b-pause.py,bad-c-dateutc.py,fix-d-evidence.py
@@ -37,3 +42,4 @@ C wrong: the check in planLoopPass only|fail|fix-a-completion.py,fix-b-pause.py,
 D wrong: refuses zero evidence only|fail|fix-a-completion.py,fix-b-pause.py,fix-c-calendar.py,bad-d-zero.py
 D wrong: only a claim is unsupporting|fail|fix-a-completion.py,fix-b-pause.py,fix-c-calendar.py,bad-d-claim.py
 D wrong: early claimed_complete before the other checks|fail|fix-a-completion.py,fix-b-pause.py,fix-c-calendar.py,bad-d-early.py
+D wrong: zero evidence and claim-only evidence get different verdicts|fail|fix-a-completion.py,fix-b-pause.py,fix-c-calendar.py,bad-d-split.py
