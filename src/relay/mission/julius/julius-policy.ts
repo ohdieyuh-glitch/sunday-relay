@@ -2,8 +2,22 @@ import type { JuliusWorker } from './julius-runtime';
 
 export type JuliusPolicyEffect='ALLOW'|'DENY'|'REQUIRE_APPROVAL'|'LIMITED';
 export type JuliusPolicyOperation='DISPATCH_WORKER'|'USE_CAPABILITY'|'USE_PROVIDER'|'USE_TOOL'|'READ_FILESYSTEM'|'EXECUTE_PROCESS'|'ACCESS_NETWORK'|'MUTATE_FILESYSTEM'|'SPAWN_SUBAGENT'|'CONTINUE_ITERATIVE_REVIEW'|'FALLBACK_PROVIDER'|'AUTOMATIC_RETRY'|'UNCHAINED_CONTINUATION';
-export interface JuliusCardPolicy {readonly revision:string;readonly autonomy:'SUPERVISED'|'AUTONOMOUS'|'UNCHAINED';readonly allowedProviders:readonly string[];readonly capabilities:readonly string[];readonly network:boolean;/** Defaults true for legacy C.A.R.D. records; new records persist it explicitly. */readonly filesystemRead?:boolean;readonly filesystemMutation:boolean;readonly fallback:boolean;readonly automaticRetry:boolean;readonly subagents:{readonly allowed:boolean;readonly maxDepth:number;readonly maxActive:number;readonly maxTotal:number};readonly iterativeReview:{readonly allowed:boolean;readonly maxRounds:number};readonly concurrency:number;readonly approvals:readonly JuliusPolicyOperation[];}
-export interface JuliusPolicyRequest {readonly operation:JuliusPolicyOperation;readonly providerId?:string;readonly capability?:string;readonly depth?:number;readonly active?:number;readonly total?:number;readonly round?:number;}
+/**
+ * V6 G-2: A C.A.R.D. GATE SCOPED TO ROLES AND TASK TYPES.
+ *
+ * `approvals` names an operation and nothing else, so a `DISPATCH_WORKER` gate holds every dispatch of the run:
+ * the plan, the build, every review and every repair. A scope holds only the dispatches whose role AND task type
+ * it names, so a mission can ask its governance owner to sign off ONE step (the Coding Agent's build, after the
+ * plan was reviewed) and nothing else.
+ *
+ * v1 HONOURS `DISPATCH_WORKER` ONLY. A `USE_CAPABILITY` scope would also reach the tool controller, which REFUSES
+ * on REQUIRE_APPROVAL rather than asking a person; a scope naming any other operation gates nothing. A request
+ * that carries no role or no task type cannot be evaluated against a scope, so it is HELD (fail closed); the only
+ * such caller is `workerAllowedByCard`, which acts on DENY alone.
+ */
+export interface JuliusApprovalScope {readonly operation:'DISPATCH_WORKER';readonly roles:readonly string[];readonly taskTypes:readonly string[];}
+export interface JuliusCardPolicy {readonly revision:string;readonly autonomy:'SUPERVISED'|'AUTONOMOUS'|'UNCHAINED';readonly allowedProviders:readonly string[];readonly capabilities:readonly string[];readonly network:boolean;/** Defaults true for legacy C.A.R.D. records; new records persist it explicitly. */readonly filesystemRead?:boolean;readonly filesystemMutation:boolean;readonly fallback:boolean;readonly automaticRetry:boolean;readonly subagents:{readonly allowed:boolean;readonly maxDepth:number;readonly maxActive:number;readonly maxTotal:number};readonly iterativeReview:{readonly allowed:boolean;readonly maxRounds:number};readonly concurrency:number;readonly approvals:readonly JuliusPolicyOperation[];/** V6 G-2: gates scoped to roles and task types (see `JuliusApprovalScope`). Absent or empty: none. */readonly approvalScopes?:readonly JuliusApprovalScope[];}
+export interface JuliusPolicyRequest {readonly operation:JuliusPolicyOperation;readonly providerId?:string;readonly capability?:string;readonly depth?:number;readonly active?:number;readonly total?:number;readonly round?:number;/** V6 G-2: who would be dispatched, and for what. A scoped gate that cannot read them holds the dispatch. */readonly role?:string;readonly taskType?:string;}
 export interface JuliusPolicyDecision {readonly effect:JuliusPolicyEffect;readonly reasonCode:string;readonly policyRevision:string;readonly limit:number|null;readonly safeRationale:string;}
 const decision=(policy:JuliusCardPolicy,effect:JuliusPolicyEffect,reasonCode:string,safeRationale:string,limit:number|null=null):JuliusPolicyDecision=>({effect,reasonCode,policyRevision:policy.revision,limit,safeRationale});
 
@@ -21,6 +35,7 @@ const decision=(policy:JuliusCardPolicy,effect:JuliusPolicyEffect,reasonCode:str
 export function evaluateJuliusPolicy(policy:JuliusCardPolicy,request:JuliusPolicyRequest):JuliusPolicyDecision{
  if(!policy.revision.trim())throw new Error('card_revision_required');
  if(policy.approvals.includes(request.operation)&&policy.autonomy!=='UNCHAINED')return decision(policy,'REQUIRE_APPROVAL','CARD_APPROVAL_REQUIRED','C.A.R.D. requires an authorized approval.');
+ if(policy.autonomy!=='UNCHAINED'&&request.operation==='DISPATCH_WORKER'&&(policy.approvalScopes??[]).some((scope)=>scope.operation==='DISPATCH_WORKER'&&(request.role===undefined||request.taskType===undefined||(scope.roles.includes(request.role)&&scope.taskTypes.includes(request.taskType)))))return decision(policy,'REQUIRE_APPROVAL','CARD_SCOPED_APPROVAL_REQUIRED','C.A.R.D. requires an authorized approval for this role and task type.');
  switch(request.operation){
   case'ACCESS_NETWORK':return decision(policy,policy.network?'ALLOW':'DENY',policy.network?'CARD_NETWORK_ALLOWED':'CARD_NETWORK_DENIED',policy.network?'Network access is allowed.':'Network access is denied by C.A.R.D.');
   case'MUTATE_FILESYSTEM':return decision(policy,policy.filesystemMutation?'ALLOW':'DENY',policy.filesystemMutation?'CARD_FILESYSTEM_ALLOWED':'CARD_FILESYSTEM_DENIED',policy.filesystemMutation?'Filesystem mutation is allowed.':'Filesystem mutation is denied by C.A.R.D.');

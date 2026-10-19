@@ -17,6 +17,8 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 
+import { approvalGateProblems } from './julius-approval-gates.mjs';
+
 /**
  * CEILINGS, PER MISSION, because a decision about one mission is not a decision
  * about the next one.
@@ -200,6 +202,11 @@ const MISSION_LIMITS = Object.freeze({
   // The second MAX-EFFORT unscored lab mission (four related latent defects in the Loop Engine's completion, budget-pause, instant-reader and no-blocking-criteria gates): declares
   // `limits.coderRuntimeMinutes` (23); same ceilings, same permanent maximum-capability directive. Lab only, never scored without its own registration.
   'julius-maxeffort-loop-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
+  // THE V6 GOVERNANCE MISSION (Row 2), a SCORED mission under the same standing maximum-capability directive: $100 is this schema's
+  // finite number, not a target. repairCycles is 2, NOT 3, on purpose: its approval wait (30 minutes + 5 of step overhead) fits the
+  // 300-minute job only with at most two repair cycles (amendment E10: 3 leaves 63,684 ms, 2 leaves 3,462,456 ms), and a structural
+  // test re-derives that at the landing head. It declares no effort control (see V6_PAID_APPROVAL_RUN_REQUIREMENTS section 2).
+  'julius-v6-governance-1': Object.freeze({ spendUsd: 100, repairCycles: 2 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
@@ -539,6 +546,18 @@ if (research !== undefined) {
   }
 }
 
+/* ------------------------------------------------- approval-gate authority */
+
+/**
+ * V6 G-1: A contract may declare an approval gate. It may not register its own.
+ *
+ * The gate is pre-registered per namespace in `julius-approval-gates.mjs` (the
+ * research grants' pattern above), and the clause must EQUAL the registration:
+ * a clause with no registration, a registration with no clause and an unequal
+ * clause are each refused.
+ */
+for (const problem of approvalGateProblems(namespace, contract.approvalGates)) refuse(problem);
+
 /* -------------------------------------------------- the workspace is not us */
 
 if (typeof contract.workspacePath === 'string' && contract.workspacePath.trim() !== '') {
@@ -586,6 +605,9 @@ out(`  paid-run lanes: ${lanesFor(namespace).join(', ')}${claimedLane === null ?
 out(`  research: ${research === undefined
   ? 'NONE — every ask is refused research_not_authorized'
   : `${Array.isArray(research.allowances) ? research.allowances.length : 0} allowance(s) for ${Array.isArray(research.roles) ? research.roles.join(', ') : 'no role'}`}`);
+out(`  approval gates: ${contract.approvalGates === undefined
+  ? 'NONE'
+  : `${Array.isArray(contract.approvalGates) ? contract.approvalGates.length : 'malformed'} declared`}`);
 
 if (problems.length > 0) {
   out('CONTRACT REFUSED:');

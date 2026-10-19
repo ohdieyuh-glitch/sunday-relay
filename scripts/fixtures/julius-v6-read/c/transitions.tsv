@@ -1,0 +1,10 @@
+run_id	sequence	from_state	to_state	reason_code	safe_summary	occurred_at	transition_id
+run:65bbe69f7725a5f0912acbac	1	CREATED	PLANNING	BOOTSTRAP	Mission bootstrap advanced the run to PLANNING.	2026-10-15 09:33:02.258-07	transition:bootstrap-planning:65bbe69f7725a5f0912acbac
+run:65bbe69f7725a5f0912acbac	2	PLANNING	READY	BOOTSTRAP	Mission bootstrap advanced the run to READY.	2026-10-15 09:33:02.261-07	transition:bootstrap-ready:65bbe69f7725a5f0912acbac
+run:65bbe69f7725a5f0912acbac	3	READY	EXECUTING	PASSED_THROUGH	Run passed through EXECUTING on the way to BLOCKED.	2026-10-15 09:33:03.084-07	transition:approval:approval:dispatch:run:65bbe69f7725a5f0912acbac:run:65bbe69f7725a5f0912acbac:build:DISPATCH_WORKER:card:julius-live:1:gate-78aeb72bcadb1fc3:3:EXECUTING
+run:65bbe69f7725a5f0912acbac	4	EXECUTING	BLOCKED	APPROVAL_REQUIRED	Waiting on an authorized approval for DISPATCH_WORKER.	2026-10-15 09:33:03.084-07	transition:approval:approval:dispatch:run:65bbe69f7725a5f0912acbac:run:65bbe69f7725a5f0912acbac:build:DISPATCH_WORKER:card:julius-live:1:gate-78aeb72bcadb1fc3:4:BLOCKED
+run:65bbe69f7725a5f0912acbac	5	BLOCKED	READY	APPROVAL_GRANTED	An authorized approver granted DISPATCH_WORKER.	2026-10-15 09:33:03.111-07	transition:lifecycle:run:65bbe69f7725a5f0912acbac:5:READY
+run:65bbe69f7725a5f0912acbac	6	READY	EXECUTING	PASSED_THROUGH	Run passed through EXECUTING on the way to COMPLETED.	2026-10-15 09:33:03.224-07	transition:advance:run:65bbe69f7725a5f0912acbac:6
+run:65bbe69f7725a5f0912acbac	7	EXECUTING	VERIFYING	PASSED_THROUGH	Run passed through VERIFYING on the way to COMPLETED.	2026-10-15 09:33:03.226-07	transition:advance:run:65bbe69f7725a5f0912acbac:7
+run:65bbe69f7725a5f0912acbac	8	VERIFYING	COMPLETED	MISSION_VERIFIED	Run advanced to COMPLETED because MISSION_VERIFIED.	2026-10-15 09:33:03.229-07	transition:advance:run:65bbe69f7725a5f0912acbac:8
+(8 rows)

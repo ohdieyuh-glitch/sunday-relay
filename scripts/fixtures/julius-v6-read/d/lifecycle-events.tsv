@@ -1,0 +1,8 @@
+run_id	sequence	task_id	event_type	approval_id	operation	decision	decided_by	reason_code	duplicate	worker_id	reservation_id	occurred_at
+run:65bbe69f7725a5f0912acbac	11	run:65bbe69f7725a5f0912acbac:plan	julius.worker.dispatched							prompt-architect-openai	reservation:run:65bbe69f7725a5f0912acbac:plan:1:1:budget	2026-10-15 09:33:02.366-07
+run:65bbe69f7725a5f0912acbac	24	run:65bbe69f7725a5f0912acbac:plan:review	julius.worker.dispatched							independent-reviewer-hermes	reservation:run:65bbe69f7725a5f0912acbac:plan:review:1:1:budget	2026-10-15 09:33:03.024-07
+run:65bbe69f7725a5f0912acbac	38	run:65bbe69f7725a5f0912acbac:build	julius.approval.requested	approval:dispatch:run:65bbe69f7725a5f0912acbac:run:65bbe69f7725a5f0912acbac:build:DISPATCH_WORKER:card:julius-live:1:gate-78aeb72bcadb1fc3	DISPATCH_WORKER			CARD_SCOPED_APPROVAL_REQUIRED	false			2026-10-15 09:33:03.093-07
+run:65bbe69f7725a5f0912acbac	39	run:65bbe69f7725a5f0912acbac:build	julius.approval.decided	approval:dispatch:run:65bbe69f7725a5f0912acbac:run:65bbe69f7725a5f0912acbac:build:DISPATCH_WORKER:card:julius-live:1:gate-78aeb72bcadb1fc3	DISPATCH_WORKER	APPROVED	github:founder#1001					2026-10-15 09:33:03.109-07
+run:65bbe69f7725a5f0912acbac	46	run:65bbe69f7725a5f0912acbac:build	julius.worker.dispatched							coding-agent-claude-hosted	reservation:run:65bbe69f7725a5f0912acbac:build:2:1:budget	2026-10-15 09:33:03.137-07
+run:65bbe69f7725a5f0912acbac	60	run:65bbe69f7725a5f0912acbac:build:review	julius.worker.dispatched							independent-reviewer-hermes	reservation:run:65bbe69f7725a5f0912acbac:build:review:1:1:budget	2026-10-15 09:33:03.186-07
+(6 rows)

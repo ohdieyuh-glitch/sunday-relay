@@ -1,0 +1,7 @@
+evidence_id	evidence_type	status	safe_summary	occurred_at	run_id	task_id	integrity_hash	artifact_ref
+run:65bbe69f7725a5f0912acbac:plan:1:0	ARTIFACT	PASSED	Plan written.	2026-10-15 09:33:02.37-07	run:65bbe69f7725a5f0912acbac	run:65bbe69f7725a5f0912acbac:plan		
+run:65bbe69f7725a5f0912acbac:plan:review:1:0	REVIEW_FINDING	PASSED	No blocking findings.	2026-10-15 09:33:03.026-07	run:65bbe69f7725a5f0912acbac	run:65bbe69f7725a5f0912acbac:plan:review		
+run:65bbe69f7725a5f0912acbac:build:2:0	TEST	PASSED	Suite green.	2026-10-15 09:33:03.14-07	run:65bbe69f7725a5f0912acbac	run:65bbe69f7725a5f0912acbac:build		
+run:65bbe69f7725a5f0912acbac:build:2:1	DIFF	PASSED	The change set.	2026-10-15 09:33:03.14-07	run:65bbe69f7725a5f0912acbac	run:65bbe69f7725a5f0912acbac:build		
+run:65bbe69f7725a5f0912acbac:build:review:1:0	REVIEW_FINDING	PASSED	No blocking findings.	2026-10-15 09:33:03.188-07	run:65bbe69f7725a5f0912acbac	run:65bbe69f7725a5f0912acbac:build:review		
+(5 rows)

@@ -334,6 +334,9 @@ describe('BYTE IDENTITY: no committed contract moves when the key is absent', ()
     'julius-live-mission-6': 'sha256:efb6e20f0d11885bc5085a6835d5d27ef0441dfebf14480d0972fdee07ecf71b',
     'julius-option2-lab-1': 'sha256:ddcbc427835530b5b30b358114a67b046a55f83f965f22ebe79312aa248f1b33',
     'julius-unreal-mission-1': 'sha256:905815a6478f86c98d12fa2383ae2606f818e04697fbbc3ab44b5b0c8465cce0',
+    // The V6 governance mission declares an approval gate, which pristine main's compiler does not bind, so this pin is the digest printed by the V6 tree's own mission-contract.ts WITHOUT
+    // the coder-runtime code (PR B head 38911261, no coderRuntimeMinutes code); the stacked tree with the coder-runtime code prints the same value (crt is neutral while the key is absent).
+    'julius-v6-governance-1': 'sha256:68be73c4a905fdb2f218c27204cb20be5695a13ec8c98a2b6dc924d187ddff7d',
   };
 
   /**

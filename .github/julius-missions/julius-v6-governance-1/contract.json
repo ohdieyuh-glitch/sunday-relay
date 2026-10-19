@@ -1,0 +1,69 @@
+{
+  "missionId": "mission:julius-v6-governance-1",
+  "markerNamespace": "julius-v6-governance-1",
+  "projectId": "prj-julius-v6-governance-1",
+  "tenantId": "tenant",
+  "objective": "In this workspace, `decideJuliusApproval` in `src/relay/mission/julius/julius-lifecycle-runtime.ts` records a human's answer to a held run's approval. An approval records WHO decided it, and the file's own comments say an approval nobody can be named for is not an approval. Today two of its branches act before the caller is checked: on a CANCELLED run it WRITES `decidedBy = <the caller>` and answers RUN_CANCELLED before the blank-identity and authority checks, and on an approval that is already decided it ANSWERS the caller with the decision and the run's state before the authority check. So an identity the approver authority refuses, or a blank one, can be recorded as the decider of an approval and can learn what was decided. Change the function so the caller is checked before any branch writes or reports anything, and keep everything an authorised caller gets exactly as it is.",
+  "requirements": [
+    "`decideJuliusApproval` refuses a blank `approverId` or blank `reason` with `APPROVER_REQUIRED` before any store write and before reporting any approval or run state, in every branch: a live run, a cancelled run, and an approval that is already decided.",
+    "`decideJuliusApproval` asks the approver authority (`deps.approvers.mayApprove`, with the approval's own operation) before any store write and before reporting any approval or run state; an identity it refuses receives `APPROVER_NOT_AUTHORIZED` in every branch, and learns neither the approval's state nor the run's.",
+    "An AUTHORISED decision behaves exactly as today: a cancelled run's approval is recorded CANCELLED with the authorised approver and `RUN_CANCELLED` is returned; an already-decided approval is absorbed as a duplicate without overwriting the first decision; a grant moves the run to READY only when no other approval is still pending; a denial fails the run.",
+    "`RUN_NOT_FOUND` and `APPROVAL_NOT_FOUND` keep their place and meaning: they are still answered first, even to an unauthorised or blank caller.",
+    "A refused call leaves the stored approval exactly as it was: no write at all."
+  ],
+  "constraints": [
+    "Edit `src/relay/mission/julius/julius-lifecycle-runtime.ts` in place. You have `Read`, `Glob`, `Grep` and `Edit`; you cannot create files or run commands, and you do not need to.",
+    "Do not edit `src/relay/mission/julius/julius-approval-authority.test.ts`. It is the specification you are implementing against, not part of the deliverable.",
+    "The rest of the slice is read-only context that `julius-lifecycle-runtime.ts` is typed against: `julius-context-integrity.ts`, `julius-events.ts`, `julius-repair-lineage.ts`, `julius-runtime.ts`, `julius-segment-lineage.ts` and `julius-state-path.ts` in the same directory. Read them as you need; do not edit them.",
+    "Change no exported name, type or signature, and add no import: the sandbox that runs the test has no network access and no `node_modules`.",
+    "Do not reformat code you are not changing, and do not touch `.julius/`.",
+    "Move or add checks only; do not weaken, remove or reorder the checks that exist for a live run."
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "criterion-blank-refused",
+      "text": "A blank approverId or reason is refused with APPROVER_REQUIRED before any write and before any state is reported, on a live run, a cancelled run and an already-decided approval.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-unauthorised-refused",
+      "text": "An identity the approver authority refuses receives APPROVER_NOT_AUTHORIZED in every branch, is never recorded as the decider of an approval, and learns neither the approval's decision nor the run's state.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-refusal-writes-nothing",
+      "text": "A refused call leaves the stored approval exactly as it was: no decideApproval call, no run transition.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-authorised-unchanged",
+      "text": "An authorised caller gets exactly what it got before in every branch: CANCELLED recorded with RUN_CANCELLED on a cancelled run, a duplicate absorbed without overwriting the first decision, a grant to READY, a denial to FAILED, and RUN_NOT_FOUND and APPROVAL_NOT_FOUND still answered first.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-scope",
+      "text": "Only julius-lifecycle-runtime.ts is changed, with no new import, no change to an exported name or signature, and no reformatting of code that did not need to change.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-test",
+      "text": "`node --experimental-transform-types --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-approval-authority.test.ts` exits zero.",
+      "blocking": true
+    }
+  ],
+  "testCommand": "node --experimental-transform-types --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-approval-authority.test.ts",
+  "workspacePath": "/tmp/julius-workspace/tenant/ws",
+  "limits": {
+    "spendUsd": 100,
+    "repairCycles": 2
+  },
+  "approvalGates": [
+    {
+      "id": "gate-approval-authority-build",
+      "operation": "DISPATCH_WORKER",
+      "roles": ["CODING_AGENT"],
+      "taskTypes": ["build"],
+      "reason": "A change to who may decide an approval needs the governance owner's sign-off on the reviewed plan before code is written."
+    }
+  ]
+}
