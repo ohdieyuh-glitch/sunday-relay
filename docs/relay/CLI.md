@@ -1,0 +1,278 @@
+# Sunday Relay CLI (Prompt 5) — simulation demo surface
+
+> **YC demo acceptance (Prompt 8.7, 2026-07-23):** two founder commands.
+> `npm run relay:yc-demo:check` (`relay yc check`) — the read-only demo
+> preflight: expected branch + checkpoint (`9f8075f` or newer), tree
+> status (dirty = WARN, never blocking or destructive), build/script/doc
+> availability, an in-process plain-demo proof (exit 0 + offline labels +
+> VERIFIED COMPLETE), terminal width/color/NO_COLOR, and truthfulness
+> statements; the browser frontend is always reported MANUAL VERIFICATION
+> REQUIRED and its worktree is never inspected. Exits 0 → `READY FOR
+> FOUNDER ACCEPTANCE`. `npm run relay:yc-demo:cli` (`relay yc demo`) —
+> prints an honesty notice, then starts EXACTLY the approved offline
+> simulation (`relay cli demo`; no second demo engine). Both make zero
+> provider calls, zero network calls, no repository or user-state writes
+> (the offline demo uses an isolated, self-deleting temp state root), no
+> push, no deployment. The engine lives in `src/relay/yc/` (leaf module;
+> only `node-deps.ts` may spawn, and only read-only git with a sanitized
+> env). See YC_DEMO_RUNBOOK.md.
+
+> **Terminal product shell (Prompt 8.6, 2026-07-22):** bare `relay` in a TTY
+> now opens the Relay PRODUCT shell (home, projects, drafts, the active
+> mission console with STREAM/PANELS views toggled by the corner `[>_]`
+> badge, Manual Tasks, findings, evidence, recovery). New commands: `relay
+> home|projects`, `relay project new|open|status|settings|workforce|
+> research|run|terminal|tasks|findings|evidence|history`, `relay recover
+> [<ref>]`, `relay cli demo` / `relay cli demo --plain` / `relay cli
+> contract-verify`; the legacy simulated session moved to `relay session`.
+> Every engineering command is unchanged. All rendering passes one safe
+> boundary (no hidden reasoning, raw streams, credentials, session ids,
+> or ANSI injection); non-TTY output is deterministic; `--reduced-motion`
+> and NO_COLOR are honored. See RELAY_CLI_PRODUCT.md.
+>
+> **Finalized 2026-07-23 (founder-approved).** `relay cli demo` is the OFFLINE
+> VISUAL SIMULATION: an activation splash steps (ENTER/P) into the live PANELS
+> console and plays the fixture mission in real time (P play/pause · N next · R
+> restart · 1/2/3 speed · slash-commands; ~42s at 1×) — zero provider/network
+> calls, no real file changes. The header dog is a four-legged side dog; gold is
+> restrained aged-brass. See SESSION_LOG for the exact hardening + visual passes.
+
+> **Durable persistence (Prompt 8.5, 2026-07-22):** `relay state doctor`,
+> `relay runs list`, `relay runs inspect --run <ref>`, `relay runs recover
+> --run <ref>` (validation + replay + workspace inspection + plan; ZERO
+> provider calls), `relay runs archive --run <ref>` (never deletes).
+> `npm run relay:persistence:contract-verify` — the 18-scenario offline
+> process-restart proof (65 checks, ~44 separate Node processes, no
+> provider call). `npm run relay:persistence:recovery-drill` — the
+> two-process crash-recovery drill ending `DURABLE LOCAL RECOVERY
+> VERIFIED`. Live supervised runs now persist durably to the local state
+> root; run references are shown, raw provider session ids are not. See
+> DURABLE_LOCAL_PERSISTENCE.md.
+
+> **Supervised workflow (Prompt 8.4, 2026-07-22):** `relay supervised
+> contract-verify` / `npm run relay:supervised:contract-verify` — Gate A, the
+> offline proof of the FULL supervised loop (live Claude implementation →
+> Relay inspection → Relay-controlled verification → live independent Codex
+> review → PATH A genuine approval / PATH B genuine finding → ONE bounded
+> exact-session Claude repair → Relay re-verification → exact-session Codex
+> re-review) via deterministic fake executables for BOTH agents — 47 checks,
+> no provider call, ends `READY FOR LIVE SUPERVISED WORKFLOW`. `relay
+> supervised run --fixture safe-edit --confirm-live` /
+> `npm run relay:supervised:live` — Gate B, the explicit REAL supervised loop
+> (FOUNDER-INITIATED ONLY; never in tests/CI; `--confirm-live` required;
+> 2 expected live calls, up to 4 with the single repair cycle). No fault is
+> ever injected and no verdict is ever forced — both paths are genuine.
+> **Gate B PASSED via PATH A (2026-07-22):** real Claude implemented the
+> fixture correctly first-pass, Relay verified, real Codex genuinely
+> APPROVED on first review — verified-complete, 0 repairs, exactly 2 live
+> calls, RELAY COMPLETE. The PATH-B repair/re-review branch remains offline
+> contract-proven only. See SUPERVISED_WORKFLOW.md.
+
+> **Codex reviewer (Prompt 8.3, 2026-07-22):** `relay codex doctor` — truthful
+> Codex capability + auth report (no model call, no secrets). `relay codex
+> contract-verify` / `npm run relay:codex:contract-verify` — the offline
+> reviewer pipeline proof via a deterministic fake Codex (58 checks including
+> the Gate-B login preflight — stderr + exit-0 recognition — no provider
+> call). `relay codex run --fixture review-defect --confirm-live` /
+> `npm run relay:codex:live` — the explicit REAL independent review (never in
+> tests/CI; `--confirm-live` required; approval never inferred from a TTY).
+> When Codex is not signed in, the live command stops with a "Sign in to Codex"
+> Manual Task and makes no call (and never asks for an API key). The successful
+> live review ends STOPPED SAFELY (exit 3) with a blocking finding — never
+> RELAY COMPLETE. See CODEX_REVIEWER_ADAPTER.md, LIVE_CODEX_REVIEW.md.
+
+> **Mission Control (Prompt 8.2, 2026-07-22):** `npm run relay:mission-control`
+> / `relay demo mission-control` renders the deterministic Mission Control
+> projection — the three operational modes + autonomous consent, the Relay Dog
+> activity states, the reviewer entitlement + release gate, the structured
+> live-terminal exchanges, and the secure-access summary (names/scopes, never
+> values) — at 80 columns, no ANSI, clean JSON, exit 0, no provider call. The
+> interactive session adds `/mode`, `/dog` (`motion on|off`), `/terminal`,
+> `/reviewer`, and `/access`. The Reviewer is labeled SIMULATED (external Codex
+> not active) and the terminal transport is in-process (production WebSocket
+> NOT implemented). See MISSION_CONTROL.md, MODES.md, RELAY_DOG.md,
+> LIVE_TERMINAL.md, REVIEWER_GATE.md.
+
+> **What is real:** the Relay Core workflow — protocol, run state machine,
+> ledger, ownership, eligibility, Handoff Compiler, Relay-controlled
+> verification, CompletionPolicy, claim promotion, Final Audit Report.
+> **What is simulated:** every agent (Architect / Coding Agent / Reviewer /
+> Verification runner). No repository file is read or modified, no real
+> command runs, no provider is called, nothing is billed. Every output is
+> labeled `SIMULATED`; the audit carries a mandatory simulation notice.
+> **Storage is VOLATILE:** state lives only while the CLI process runs.
+> There is no durable resume; the CLI never pretends otherwise.
+
+## Build & run
+
+```bash
+npm run relay:build          # esbuild → dist-relay/cli.cjs
+npm run relay -- help        # or: node dist-relay/cli.cjs help
+npm run relay -- demo repair
+npm run relay:test           # relay vitest suite
+```
+
+## Commands
+
+| Command | Purpose | Exit |
+| --- | --- | --- |
+| `relay` | interactive session (objective → run → step/continue) | 0 on /exit |
+| `relay demo <scenario>` | one deterministic scenario to its stop | final-state code |
+| `relay run --objective "<t>" [--scenario s] [--max-cost n] [--until-stopped] [--auto-accept-blueprint]` | custom displayed objective over a simulation profile | final-state code |
+| `relay doctor` | read-only truthful environment checks | 0 / 8 |
+| `relay workspace doctor` | isolated-worktree capability checks (live local) | 0 / 8 |
+| `relay workspace verify` | deterministic workspace security verification on a throwaway fixture repo | 0 / 8 |
+| `relay claude doctor` | truthful Claude Code capability + auth report (no model call) | 0 / 8 |
+| `relay claude contract-verify` | offline adapter proof against a fake Claude (no provider call) | 0 / 8 |
+| `relay claude run --fixture safe-edit --confirm-live` | REAL Claude Code live proof (explicit) | 0 / 3 / 5 |
+| `relay claude inspect` / `relay claude cancel` | live-run inspection / cancellation (volatile, process-local) | 0 |
+| `relay demo competitive` | Mission Contract + Claude Implementer + Codex Reviewer + finding + repair + verified completion (SIMULATED) | 0 |
+| `relay version` / `relay help` | identity / usage | 0 |
+
+Global options: `--json` (clean machine JSON, no ANSI, no mascot),
+`--no-color`, `--plain`, `--quiet`. `NO_COLOR` and non-TTY output disable
+color automatically; everything works in pure ASCII.
+
+Scenarios: `direct, repair, checkpoint, duplicate, stale, failure,
+budget-warning, budget-stop, pause-resume, cancel, manual, yc` (mapped 1:1
+onto the scenario configurations — the CLI holds no scenario logic).
+
+**Exit codes:** 0 completed · 1 internal · 2 usage · 3 failed · 4 blocked ·
+5 checkpoint_required · 6 cancelled · 7 budget stop · 8 doctor failure ·
+9 protocol failure. 0 is never used for incomplete work.
+
+## Interactive commands
+
+`/help /start /step /continue /status /events /project /task /ownership
+/blueprint /handoff /evidence /review /usage /checkpoint /manual /audit
+/approve /reject <reason> /done /manual-help /cannot-complete [note]
+/pause /resume /cancel /scenario [name] /mascot on|off
+/color on|off /json on|off /clear /exit` — plain text before a run starts
+becomes the objective. All state changes go through Relay Core commands;
+the CLI contains zero workflow logic (boundary-tested).
+
+**Blueprint approval (Guided Mode):** interactively, the Architect's
+blueprint stops the run with `AWAITING APPROVAL`; `/blueprint` shows it,
+`/approve` issues the canonical `accept-blueprint` command, `/reject
+<reason>` cancels the run canonically. `--auto-accept-blueprint` (and the
+demo commands) record a system-actor acceptance instead — honestly labeled.
+
+**Checkpoints:** `checkpoint_required` renders the reason and options;
+`/approve` / `/reject` issue the real `respond-checkpoint` command — Relay
+Core decides what approval permits.
+
+**Competitive proof (Prompt 8.1):** `npm run relay:competitive` (=
+`relay demo competitive`) runs the deterministic mission-control proof
+through the REAL orchestrator: Mission Contract locked (revision 1, 5
+requirements, 6 blocking criteria, Claude Implementer, Codex Independent
+Reviewer) → implementation CLAIMED COMPLETE → Relay verification → the
+independent Codex review finds the IPv6 /128 rotation bypass (CHANGES
+REQUIRED) → finding F-1 + repair R-1 (scope-locked) → repair claim (finding
+stays open) → Relay verification 6/6 PASS → Codex re-review approves → the
+completion engine reaches MISSION VERDICT: VERIFIED COMPLETE. The Claude
+Implementer and Codex Reviewer are deterministic SIMULATIONS in this
+presentation; no external Codex is connected; the real Claude path stays
+`npm run relay:claude:live`. Interactive inspection: `/mission`,
+`/attestation`, `/findings`, `/repairs`, `/verdict`, `/timeline`. JSON mode
+returns the serializable mission bundle (no ANSI/mascot/secrets). See
+MISSION_CONTRACT.md, EXECUTION_ATTESTATION.md, REVIEW_REPAIR_LEDGER.md,
+COMPETITIVE_FEATURE_COVERAGE.md.
+
+**Manual Tasks (Prompt 6.1):** when a validated checkpoint carries a Manual
+Task, the CLI shows it automatically (title · why Relay stopped · three-to-
+six simple steps · what Relay will do next). `/manual` re-displays it;
+`/done`, `/manual-help`, `/cannot-complete [note]` issue the real
+`respond-manual-task` command, and `/cancel` stays the canonical run
+cancellation. While the task prompt is active, the single letters `D` `H`
+`N` `C` answer it (inert everywhere else). Done is recorded as a claim;
+Relay runs the configured verification and Relay Core alone decides whether
+the run resumes. When no verification exists, the CLI says so and operator
+`/approve` confirms. JSON mode returns the serializable Manual Task read
+model (no ANSI, no mascot, no secret values).
+
+**Mascot:** a 3-line ASCII pixel dog whose label (`LISTENING`, `AGENT
+WORKING`, `CHECKPOINT`, `COMPLETE`, …) derives from the real run state;
+off in JSON/plain/non-TTY modes and via `/mascot off`.
+
+## YC presentation preset (Prompt 6)
+
+`npm run relay:yc` — the authoritative July 24 demonstration: the `yc`
+scenario (golden path, product-relevant presentation content) rendered in
+presentation mode (milestone frames, ~2.5 s pacing on a TTY, ~40 s total).
+`relay demo yc --presentation --pace <ms>` controls pacing; `--pace 0` for
+instant/CI runs; `--json` stays clean machine output. Presentation is
+RENDERER-ONLY: filtering and pacing never change state, sequencing,
+outcomes, or exit codes. `npm run relay:yc:verify` runs the bundled demo
+twice and checks semantic acceptance (completed, exit 0, exactly one
+repair, same-session resume, independent reviewer, audit + simulation
+notice, clean JSON, stable milestone ordering, no repo modifications).
+See YC_DEMO_RUNBOOK.md and YC_VIDEO_SCRIPT.md.
+
+## Manual Task demonstration (Prompt 6.1 — separate from the YC demo)
+
+`npm run relay:manual` (equivalently `relay demo manual`) — a deterministic
+Manual Task scenario through the REAL core: the simulated agent requests a
+protected-setting approval → Relay validates the untrusted request →
+`checkpoint_required` with a canonical Manual Task → simple instructions →
+demo choreography answers "Done" (honestly labeled) → Relay verification
+passes → the run resumes and completes (exit 0). Instant by default;
+`--pace 0` accepted. `npm run relay:manual:verify` runs it twice and checks
+semantic acceptance (completed, task completed + verified, 3–6 short steps,
+checkpoint association, no agent dispatch while stopped, event ordering,
+clean JSON, no secrets, no repo modifications). The main `npm run relay:yc`
+demonstration is unchanged.
+
+## Workspace foundation (Prompt 7 — live local, separate from the demos)
+
+`npm run relay:workspace:verify` (equivalently `relay workspace verify`)
+proves the isolated-worktree security foundation end to end against a
+throwaway fixture repository under the OS temp dir: pinned-revision
+worktree isolation, idempotent reuse, source-worktree immutability,
+allowlist-only shell-free command execution (push/shells rejected),
+claimed vs protected change detection, timeout + cancellation with honest
+termination reporting, conservative cleanup, live secret-free evidence,
+and full fixture removal. `relay workspace doctor` reports capabilities
+truthfully (agent execution and all provider adapters remain UNAVAILABLE).
+This is REAL local infrastructure (`provenance: live`) — it is not part of
+the recorded YC simulation and does not alter any demo scenario. See
+WORKSPACE_SECURITY.md.
+
+## Live Claude Code adapter (Prompt 8 — live local, explicit approval)
+
+`relay claude doctor` reports installed capabilities + a safe auth
+classification (no model call, no secrets). `npm run relay:claude:contract-
+verify` (= `relay claude contract-verify`) proves the ENTIRE adapter offline
+against a deterministic fake Claude — stream parsing, session capture +
+explicit resume, workspace inspection, Relay verification, cancellation,
+timeout, hidden-reasoning omission — with no provider call. `npm run
+relay:claude:live` (= `relay claude run --fixture safe-edit --confirm-live`)
+makes a REAL Claude Code call: it builds a throwaway fixture, runs Claude in
+an isolated worktree, inspects the result independently, runs `node --test`
+itself, and produces a live Final Audit ("Independent reviewer: not required
+by the low-risk policy" — never a Codex claim). The live command is NOT part
+of any test, build, doctor, verification, or CI, and requires
+`--confirm-live` (approval is never inferred from a TTY). Uses the local
+Claude subscription; never reads or stores credentials; strips API-key env.
+See CLAUDE_CODE_ADAPTER.md and LIVE_CLAUDE_DEMO.md.
+
+## July 24 demonstration sequence
+
+```bash
+npm run relay:yc                  # THE YC demo (presentation mode, exit 0)
+npm run relay:yc:verify           # acceptance verification (run before takes)
+npm run relay:manual              # supporting demo: Manual Task stop → Done → verified resume (exit 0)
+npm run relay -- demo repair      # golden path: 1 failing check → review →
+                                  # ONE same-session repair → approval → audit (exit 0)
+npm run relay -- demo checkpoint  # unsafe repair → Guided stop (exit 5)
+npm run relay -- demo duplicate   # equivalent task denied pre-dispatch, agent never invoked (exit 5)
+npm run relay -- doctor           # truthful capability report (DEFERRED items labeled)
+```
+
+Optionally: `demo failure` (honest failure — never completes), `demo
+budget-stop` (exit 7), and the interactive session for blueprint approval.
+
+## Exact next phase
+
+**Real Claude Code Local Adapter** — a live coding-agent adapter executing
+inside the Prompt-7 workspace boundary, per CURRENT_STATE.md. (Durable
+local persistence remains queued behind it.)
