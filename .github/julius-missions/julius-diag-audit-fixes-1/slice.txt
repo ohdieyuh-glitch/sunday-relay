@@ -1,0 +1,14 @@
+# UNSCORED DIAGNOSTIC MISSION 3: three latent defects found by an audit, in three independent pure Relay modules.
+#
+# NOT a Decision C arm, no readiness credit, lane lab, self-test OFF. Real tracked source, byte-identical to the repository's. The coder cannot run commands,
+# so what it writes is judged by the independent reviewer against the acceptance criteria as well as by the seeded specification, which pins the MAIN
+# behaviours of each fix and deliberately not every wider invariant (no purity check, no sibling-function check): those are the criteria's job. Nothing here
+# forces, injects or counts a reviewer finding: a repair is counted only if the reviewer finds a defect on its own. Every criterion was written to be
+# SATISFIABLE under the constraints (the lesson of the previous diagnostic).
+#
+# THE SLICE: three modules to fix plus the one file that `claims.ts` imports at run time (`errors.ts`, no imports of its own). Every other import in these
+# files is type-only and vanishes under Node's type stripping.
+src/relay/mission/review-repair.ts
+src/relay/recovery/detection.ts
+src/relay/coordination/claims.ts
+src/relay/protocol/errors.ts
