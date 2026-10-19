@@ -1,0 +1,118 @@
+/* ==========================================================================
+   RELAY WORLD — the one persistent scene, and the passage through it.
+
+   Aquala and Relay are two stages of a single mounted experience, so this sheet
+   owns the things that must not belong to either: the canvas, the transition
+   veil, and the two chrome layers that cross-fade over it.
+   ========================================================================== */
+
+.rw {
+  position: relative;
+  background: #05060a;
+}
+
+/* ONE canvas, fixed for the whole journey. It is never unmounted, so it is
+   never re-created, so there is no context loss to hide. */
+.rw-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  z-index: 0;
+  /* The artifact IS the control, so the cursor has to say so. The hit test runs
+     against real geometry each frame; this only reflects its answer. */
+  cursor: default;
+  touch-action: manipulation;
+}
+.rw[data-portal='hot'] .rw-canvas { cursor: pointer; }
+
+.rw-track {
+  position: relative;
+  width: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Chrome layers. Opacity only — the spatial motion belongs to the camera. */
+.rw-layer {
+  position: relative;
+  z-index: 2;
+}
+
+/* The passage's light. Aquala's baby-blue, radial from the portal, capped well
+   below opaque so the scene is continuously visible THROUGH it. A hard white
+   flash would be the cheap way to conceal a cut; there is no cut to conceal. */
+.rw-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 46%,
+      rgba(223, 242, 255, 0.92) 0%,
+      rgba(159, 216, 245, 0.6) 26%,
+      rgba(70, 132, 178, 0.24) 52%,
+      rgba(5, 6, 10, 0) 78%);
+  will-change: opacity;
+}
+
+/* During the passage the chrome is inert AND unclickable, so a stray tap
+   cannot reach a control that is fading out from under the pointer. */
+.rw[data-stage='transition'] .rw-layer { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rw-veil { transition: none; }
+}
+
+/* ---- BACK -----------------------------------------------------------------
+   The way home from Relay, IN THE BRAND ROW rather than on top of it.
+
+   THE DEFECT THIS REPLACES. This rule used to read `position: fixed; top: 22px;
+   left: 24px` — the same corner `.rx-brand` occupies at `top: var(--rx-pad);
+   left: var(--rx-pad)`. Both were present, both were visible, and they were
+   drawn over each other: measured on the deployed page, `.rw-back` sat at
+   (24, 22) 45x26 and the SUNDAY RELAY lockup at (24, 24) 143x16. The control
+   answered a hit test and a screen reader and could not be read by a person,
+   which is the one failure mode a Back control must not have.
+
+   WHY A ROW AND NOT A NEW COORDINATE. Every free coordinate near the top-left
+   is either occupied or conditionally occupied: directly below the lockup is
+   where `.rx-panel` rises to on a short desktop window (measured: top 72px at
+   1024x600), and the top-right belongs to `.rx-telemetry`, which moves there
+   outright below 860px. A sibling in the brand row cannot collide with the
+   lockup, needs no offset that must be kept in step with the wordmark's width,
+   and needs no second rule per breakpoint — the row reflows with the gutter.
+
+   THE REGISTER IS UNCHANGED: the same low-emphasis type the experience already
+   uses for its subordinate actions (`.rx-ghost`), never a mirror of `.rl3-cta`.
+   A pill-shaped gold control pointing backwards would read as a second primary
+   action. Now that it lives inside `.rx`, `--rx-dim` and `--rx-hairline` reach
+   it by inheritance, so it is the experience's own dim, not a copy of it. */
+.rw-back {
+  margin-left: 14px;
+  padding: 3px 0 3px 14px;
+  background: none;
+  border: 0;
+  border-left: 1px solid var(--rx-hairline, rgba(244, 239, 227, 0.14));
+  color: var(--rx-dim, #8f897b);
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 10px; letter-spacing: 0.16em; line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 240ms ease, transform 240ms ease;
+}
+.rw-back:hover, .rw-back:focus-visible {
+  color: var(--rx-gold, #d8a83c);
+  transform: translateX(-2px);
+}
+/* While a passage is flying, the chrome is inert and so is this: a Back pressed
+   mid-flight is the one click that could leave the camera between two stages.
+   The selector still reaches it — the control moved into `.rx`, and `.rx` has
+   always been a descendant of `.rw`. */
+.rw[data-stage='transition'] .rw-back { pointer-events: none; opacity: 0.35; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rw-back { transition: none; }
+  .rw-back:hover, .rw-back:focus-visible { transform: none; }
+}
