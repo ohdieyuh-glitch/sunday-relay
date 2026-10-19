@@ -1,0 +1,466 @@
+import { JOB_BUDGET_MS } from '../reviewer-deadline';
+
+/**
+ * THE ONE PLACE THAT DECIDES HOW MUCH WORK A CODING AGENT MAY DO.
+ *
+ * Paid Mission 5 (run 34485676189) reached the Coding Agent with everything
+ * upstream verified — architect accepted, plan independently reviewed, contract
+ * LOCKED — and then died on capacity twice:
+ *
+ *   attempt 1  timed_out=true, 12 tool calls   -> aborted at ~363 s
+ *   attempt 2  result_subtype=error_max_turns, num_turns=13, 16 tool calls
+ *
+ * It had already implemented the whole mission across all three real modules.
+ * The envelope stopped it, not the work. $2.936176 bought a diff nobody could
+ * verify.
+ *
+ * THREE NUMBERS, AND ONLY TWO OF THEM BOUND ANYTHING. `HostedLimits` declares
+ * `maxTurns`, `maxRuntimeMs` and `maxCostCents`. `hosted-runner.ts` enforces
+ * runtime (its abort timer) and cost (`maxBudgetUsd`), but the SDK's turn
+ * ceiling comes from `HostedEnvelope.maxTurns`, and `compileHostedEnvelope` was
+ * never handed the limits — it read `DEFAULT_HOSTED_LIMITS.maxTurns` directly.
+ * So `HostedLimits.maxTurns` was decorative: a caller could raise it to forty
+ * and the run would still stop at twelve. That is the third time this shape has
+ * appeared (`JuliusWorker.timeoutMs`, the coder's declared 600000, this), and
+ * it is why the fix is a canonical source rather than a bigger constant.
+ *
+ * WHAT THIS DOES NOT TOUCH. Cost. `maxCostCents` stays exactly what Julius
+ * reserved for the dispatch, and a bigger turn or runtime allowance can never
+ * raise it: the money is an INDEPENDENT hard bound, and it is what makes a
+ * generous turn allowance safe rather than reckless.
+ */
+
+export const CODER_ENVELOPE_POLICY_VERSION = 'julius-coder-envelope.v1' as const;
+
+/**
+ * WHAT A CODING AGENT WAS ACTUALLY WATCHED DOING, with its run.
+ *
+ * `outcome` carries the honesty. `COMPLETED` is a measurement. The other two
+ * are CENSORED: Relay or the SDK stopped the agent, so the work it still had to
+ * do was never observed and cannot be recovered. A censored sample bounds from
+ * BELOW and nothing more.
+ */
+export interface CoderRunObservation {
+  readonly runId: string;
+  readonly taskId: string;
+  readonly turns: number | null;
+  readonly toolCalls: number;
+  readonly elapsedMs: number;
+  readonly outcome: 'COMPLETED' | 'TURNS_EXHAUSTED' | 'RUNTIME_CUT_OFF';
+  /** Micro-dollars the runtime reported, or null when it reported nothing. */
+  readonly costUsdMicros: number | null;
+}
+
+/**
+ * EVERY CODING AGENT DISPATCH THIS REPOSITORY HAS PAID FOR.
+ *
+ * Appended to, never edited. Each row's run and task id are in the durable
+ * evidence bundle that produced it and can be read back.
+ */
+export const RECORDED_CODER_OBSERVATIONS: readonly CoderRunObservation[] = [
+  // Paid Mission 4. Completed the whole mission in 11 turns of a 12-turn
+  // ceiling: ONE turn of margin, which nobody could see until Mission 5 spent
+  // it. A measurement.
+  {
+    runId: '34470535718', taskId: 'run:c8910d0afb5608e0ea68aa72:build',
+    turns: 11, toolCalls: 10, elapsedMs: 134_000, outcome: 'COMPLETED', costUsdMicros: 1_390_954,
+  },
+  // Paid Mission 5 attempt 1. Relay's own abort timer fired at the 360000 ms
+  // runtime ceiling, and its COST is UNKNOWN: the runtime reports what it
+  // charged only in the terminal result message, which an aborted run never
+  // reaches, so this row stays null and always will.
+  //
+  // Its token usage was a different matter, and this row is the reason that is
+  // now past tense. Every assistant turn had reported its own usage the whole
+  // time and Relay read none of it, so the record said the run reported
+  // nothing when what it had was a parser that asked only the last message.
+  // `HostedStreamUsage` now folds the turns as they arrive, and a run cut off
+  // like this one carries a FLOOR — tokens, never dollars, never a cost basis.
+  // This row keeps its null because the instrumentation postdates it; there is
+  // no bundle to read the floor back out of.
+  {
+    runId: '34485676189', taskId: 'run:cecba99c779c967f128dd58c:build',
+    turns: null, toolCalls: 12, elapsedMs: 363_000, outcome: 'RUNTIME_CUT_OFF', costUsdMicros: null,
+  },
+  // Paid Mission 5 attempt 2. Hit the SDK's turn ceiling: error_max_turns at 13
+  // turns with 16 tool calls and implementation_present=false. The true turn
+  // requirement is ABOVE 13 and was never observed.
+  {
+    runId: '34485676189', taskId: 'run:cecba99c779c967f128dd58c:build',
+    turns: 13, toolCalls: 16, elapsedMs: 306_000, outcome: 'TURNS_EXHAUSTED', costUsdMicros: 2_936_176,
+  },
+];
+
+/**
+ * THE JOB IS THE CEILING FOR TIME, and the shares have to add up.
+ *
+ * `JOB_BUDGET_MS` is imported rather than restated — it is the reviewer
+ * policy's, and there is one job. `julius-first-live-mission.yml` is pinned to
+ * it by a test, and a second test proves the reviewer and coder shares fit
+ * inside it with room for the architect, the image builds and the evidence dump.
+ */
+export const CODER_JOB_SHARE_MS = 40 * 60_000;
+/** `CODER_WORKER.maxRetries` is 1, so a dispatch may burn two attempts. */
+export const MAX_CODER_ATTEMPTS = 2;
+
+/**
+ * THE EXECUTOR STEPS AROUND A CODING SESSION, each with the bound its command
+ * runs under — the ONE place the adapter reads them from.
+ *
+ * `CODER_WORKER.timeoutMs` was the session's own limit, `maxRuntimeMs`, while
+ * the dispatch it bounds also runs the base read before the session and the
+ * status, diff and test captures after it. A session that used its whole
+ * allowance left the evidence steps no time at all: the coordinator cut the
+ * dispatch while the tests ran, the attempt became a TIMEOUT retry, and the
+ * work the session had finished was never captured. The provider's deadline and
+ * the attempt's are different numbers, and the second is the first plus these.
+ */
+export const CODER_EXECUTOR_STEP_TIMEOUTS_MS = Object.freeze({
+  /**
+   * The start of the attempt: HEAD, the committed tree, the working tree, and
+   * the one undo Julius authorises. It reads a temporary index seeded from the
+   * repository's own, so the snapshot is a stat pass and not a rehash — but it
+   * is more work than the single `rev-parse` this used to be.
+   */
+  base: 30_000,
+  /** The close-out: the change set, the tree the attempt leaves, and the three attributions. */
+  status: 45_000,
+  diff: 30_000,
+  test: 300_000,
+} as const);
+
+/**
+ * AROUND EACH EFFECT'S COMMAND: sandbox creation, workspace preparation,
+ * teardown and settlement. An assumed bound, not a measurement — the executor
+ * has not been timed under paid load, so this is a stated allowance a live run
+ * must confirm (LIVE VALIDATION REQUIRED), and it is visible here rather than
+ * hidden inside a rounder number.
+ */
+export const CODER_EXECUTOR_EFFECT_OVERHEAD_MS = 15_000;
+
+/** Before the session: the base revision read. */
+export const CODER_PRE_SESSION_ALLOWANCE_MS = CODER_EXECUTOR_STEP_TIMEOUTS_MS.base + CODER_EXECUTOR_EFFECT_OVERHEAD_MS;
+
+/** After the session: the change set, the diff and the deterministic test run — bounded, and reserved. */
+export const CODER_POST_SESSION_ALLOWANCE_MS = CODER_EXECUTOR_STEP_TIMEOUTS_MS.status
+  + CODER_EXECUTOR_STEP_TIMEOUTS_MS.diff
+  + CODER_EXECUTOR_STEP_TIMEOUTS_MS.test
+  + 3 * CODER_EXECUTOR_EFFECT_OVERHEAD_MS;
+
+/**
+ * TURNS ARE BOUNDED ABSOLUTELY, NOT BY MONEY.
+ *
+ * A turn ceiling derived from spend would make the money the only stop, and one
+ * run's cost per turn is not a law. This is a flat backstop against a
+ * pathological loop that turns FASTER than it costs — many cheap turns that the
+ * runtime clock would not catch quickly enough. At the pace Mission 5 attempt 2
+ * actually ran, the clock binds first (see `observedMsPerTurn` below), so this
+ * is a guard for the case observation has not shown us, which is exactly what a
+ * hard bound is for.
+ */
+export const CODER_TURN_HARD_CEILING = 32;
+
+/**
+ * A CENSORED TURN OBSERVATION EARNS MORE HEADROOM THAN A MEASURED ONE.
+ *
+ * Mission 5 told us the coder needed MORE than 13 turns and nothing about how
+ * many more. Doubling is deliberate slack over a lower bound, and it is
+ * affordable precisely because `maxCostCents` is untouched by it: turns cannot
+ * spend money the reservation did not already allow.
+ */
+export const CODER_TURN_HEADROOM_RATIO = 1.0;
+export const CODER_RUNTIME_HEADROOM_RATIO = 0.2;
+
+export type CoderEnvelopeBasis = 'OBSERVED_COMPLETED' | 'OBSERVED_CENSORED';
+
+export interface CoderEnvelope {
+  readonly policyVersion: typeof CODER_ENVELOPE_POLICY_VERSION;
+  readonly maxTurns: number;
+  readonly maxRuntimeMs: number;
+  /** Largest turn count ever observed, or null when none was recorded. */
+  readonly observedTurnsHighWater: number | null;
+  readonly observedTurnsCensored: boolean;
+  readonly observedRuntimeHighWaterMs: number | null;
+  readonly observedRuntimeCensored: boolean;
+  readonly turnsFloor: number;
+  readonly runtimeFloorMs: number;
+  readonly turnsHardCeiling: number;
+  readonly runtimeHardCeilingMs: number;
+  readonly basis: CoderEnvelopeBasis;
+  /**
+   * ONE RUN'S PACE, reported because the two limits must not silently defeat
+   * each other — a turn ceiling the clock can never reach is not a ceiling.
+   * EVIDENCE, NOT A LAW: it is a single observation, it is never used to bound
+   * spend, and it only ever RAISES the runtime floor.
+   */
+  readonly observedMsPerTurn: number | null;
+  /** The executor steps before and after the session, reserved beside it. */
+  readonly preSessionAllowanceMs: number;
+  readonly postSessionAllowanceMs: number;
+  /**
+   * WHAT ONE ATTEMPT MAY TAKE: the session's own limit plus the executor steps
+   * around it. The worker declares this; the runtime still stops the session at
+   * `maxRuntimeMs`, so the evidence steps always have their allowance left.
+   */
+  readonly attemptDeadlineMs: number;
+  /** Every attempt, at its whole deadline. */
+  readonly worstCaseRuntimeSpendMs: number;
+}
+
+/**
+ * Refused rather than clamped. Somebody has to decide whether to widen the job,
+ * spend fewer attempts, or accept that a mission of this size is not affordable
+ * here — and none of those is a default.
+ */
+export class CoderEnvelopeUnsatisfiable extends Error {
+  readonly requiredMs: number;
+  readonly hardCeilingMs: number;
+  constructor(requiredMs: number, hardCeilingMs: number) {
+    super(
+      `coder_envelope_unsatisfiable: ${requiredMs} ms is required by the floor plus headroom `
+      + `and the executor allowance, but the job allows at most ${hardCeilingMs} ms per attempt `
+      + `(${CODER_JOB_SHARE_MS} ms of coder share / ${MAX_CODER_ATTEMPTS} attempts). `
+      + `Widen CODER_JOB_SHARE_MS and JOB_BUDGET_MS together, or lower MAX_CODER_ATTEMPTS.`,
+    );
+    this.name = 'CoderEnvelopeUnsatisfiable';
+    this.requiredMs = requiredMs;
+    this.hardCeilingMs = hardCeilingMs;
+  }
+}
+
+export const coderRuntimeHardCeilingMs = (): number =>
+  Math.floor(CODER_JOB_SHARE_MS / MAX_CODER_ATTEMPTS);
+
+/** DERIVE THE ENVELOPE. Pure, total, and a function of its inputs alone. */
+export function resolveCoderEnvelope(input: {
+  readonly observations?: readonly CoderRunObservation[];
+  readonly turnHeadroomRatio?: number;
+  readonly runtimeHeadroomRatio?: number;
+} = {}): CoderEnvelope {
+  const observations = input.observations ?? RECORDED_CODER_OBSERVATIONS;
+  const turnHeadroom = input.turnHeadroomRatio ?? CODER_TURN_HEADROOM_RATIO;
+  const runtimeHeadroom = input.runtimeHeadroomRatio ?? CODER_RUNTIME_HEADROOM_RATIO;
+  for (const [name, value] of [['turn', turnHeadroom], ['runtime', runtimeHeadroom]] as const) {
+    if (!Number.isFinite(value) || value < 0) throw new Error(`invalid_${name}_headroom_ratio`);
+  }
+
+  let turnsBest: CoderRunObservation | null = null;
+  let runtimeBest: CoderRunObservation | null = null;
+  for (const observation of observations) {
+    if (observation.turns !== null && (turnsBest === null || observation.turns > (turnsBest.turns ?? 0))) {
+      turnsBest = observation;
+    }
+    if (runtimeBest === null || observation.elapsedMs > runtimeBest.elapsedMs) runtimeBest = observation;
+  }
+
+  const observedTurnsHighWater = turnsBest?.turns ?? null;
+  const observedTurnsCensored = turnsBest !== null && turnsBest.outcome !== 'COMPLETED';
+  const observedRuntimeHighWaterMs = runtimeBest?.elapsedMs ?? null;
+  const observedRuntimeCensored = runtimeBest !== null && runtimeBest.outcome !== 'COMPLETED';
+
+  // A single run's pace, used ONLY to keep the turn ceiling reachable within
+  // the clock. Taken from the run that exhausted its turns, because that is the
+  // one that tells us what a turn costs in seconds when the agent is working.
+  const paceSource = observations.find((item) => item.outcome === 'TURNS_EXHAUSTED' && item.turns)
+    ?? observations.find((item) => item.outcome === 'COMPLETED' && item.turns) ?? null;
+  const observedMsPerTurn = paceSource && paceSource.turns
+    ? Math.round(paceSource.elapsedMs / paceSource.turns)
+    : null;
+
+  const turnsFloor = observedTurnsHighWater ?? 0;
+  const maxTurns = Math.min(Math.ceil(turnsFloor * (1 + turnHeadroom)), CODER_TURN_HARD_CEILING);
+
+  // The runtime floor is the worse of what was observed and what the granted
+  // turns would take at the observed pace. Without the second term a raised
+  // turn ceiling would be silently unreachable — the same class of defect this
+  // module exists to end.
+  const paceImpliedMs = observedMsPerTurn === null ? 0 : maxTurns * observedMsPerTurn;
+  const runtimeFloorMs = Math.max(observedRuntimeHighWaterMs ?? 0, paceImpliedMs);
+  const maxRuntimeMs = Math.ceil(runtimeFloorMs * (1 + runtimeHeadroom));
+  const attemptDeadlineMs = maxRuntimeMs + CODER_PRE_SESSION_ALLOWANCE_MS + CODER_POST_SESSION_ALLOWANCE_MS;
+  const runtimeHardCeilingMs = coderRuntimeHardCeilingMs();
+  // THE ATTEMPT has to fit, not only the session inside it.
+  if (attemptDeadlineMs > runtimeHardCeilingMs) throw new CoderEnvelopeUnsatisfiable(attemptDeadlineMs, runtimeHardCeilingMs);
+
+  return {
+    policyVersion: CODER_ENVELOPE_POLICY_VERSION,
+    maxTurns,
+    maxRuntimeMs,
+    observedTurnsHighWater,
+    observedTurnsCensored,
+    observedRuntimeHighWaterMs,
+    observedRuntimeCensored,
+    turnsFloor,
+    runtimeFloorMs,
+    turnsHardCeiling: CODER_TURN_HARD_CEILING,
+    runtimeHardCeilingMs,
+    basis: (observedTurnsCensored || observedRuntimeCensored) ? 'OBSERVED_CENSORED' : 'OBSERVED_COMPLETED',
+    observedMsPerTurn,
+    preSessionAllowanceMs: CODER_PRE_SESSION_ALLOWANCE_MS,
+    postSessionAllowanceMs: CODER_POST_SESSION_ALLOWANCE_MS,
+    attemptDeadlineMs,
+    worstCaseRuntimeSpendMs: attemptDeadlineMs * MAX_CODER_ATTEMPTS,
+  };
+}
+
+/** The two operative numbers, for callers that want nothing else. */
+export const coderMaxTurns = (): number => resolveCoderEnvelope().maxTurns;
+export const coderMaxRuntimeMs = (): number => resolveCoderEnvelope().maxRuntimeMs;
+/** The deadline a Coding Agent WORKER declares: the session plus its executor steps. */
+export const coderAttemptDeadlineMs = (): number => resolveCoderEnvelope().attemptDeadlineMs;
+
+/** Exported so a structural test can prove the shares fit the one job budget. */
+export const JOB_BUDGET_MS_FOR_SHARES = JOB_BUDGET_MS;
+
+/* ===================================================================================================================
+ * A CONTRACT-SCOPED, OPT-IN CODER SESSION BUDGET (`limits.coderRuntimeMinutes`) — DRAFT, founder policy + reviewer read.
+ *
+ * WHY. The envelope above is derived from observations that are ALL low-effort history, and it sits AT its own ceiling: the
+ * pace-implied session (26 turns x 23,538 ms x 1.2 = 734,386 ms) plus the executor allowances (45 s before, 420 s after) is
+ * 1,199,386 ms, against a per-attempt ceiling of 40 min / 2 attempts = 1,200,000 ms. There is no headroom to give, so a coder
+ * that legitimately needs longer (the diagnostic run 39182739862: maximum effort, cut three times at ~736 s) can only be
+ * helped by a bigger budget for THAT MISSION, never by a bigger global default.
+ *
+ * WHAT IT IS. A contract may declare the coder SESSION limit in whole minutes. Absent, nothing changes: `resolveCoderEnvelope`,
+ * `RECORDED_CODER_OBSERVATIONS` and `MAX_CODER_ATTEMPTS` are untouched and every existing contract is byte-identical (a control
+ * test pins every committed contract's binding digest). Present:
+ *   1. an ABSOLUTE range, refused by the parser and the checker alike (a contract cannot ask for an unbounded session);
+ *   2. the MAIN PATH must be feasible: plan, plan review, one build dispatch at its worst case (both attempts at their whole
+ *      deadline), build review, any approval wait, infrastructure and the stage-deadline margins must fit the job. Refused
+ *      (checker, composition) when they cannot: a mission that cannot finish a first pass by construction is not bounded.
+ *   3. REPAIR CYCLES ARE NEVER REDUCED BY THIS MECHANISM (founder decision, 2026-10-19). A declared `repairCycles` stays what
+ *      it was declared. The job's own clock governs them, as it always has: the run loop starts a stage only while
+ *      `now + stageBound(role) <= stagesEndByMs`, and a longer coder attempt lengthens exactly that role's stage bound (and the
+ *      lease, its renewal period and its hold bound, which all derive from the worker object the composition registers), so the
+ *      loop declines to START a repair it could not finish and ends the run FAILED with time left for its record, rather than
+ *      overrunning. What this module adds is HONESTY about it: `coderRuntimeSchedule` reports how many of the declared cycles are
+ *      GUARANTEED even if every attempt of every dispatch used its whole deadline, and how many would fit if each dispatch used
+ *      one full-length attempt; the preflight prints both beside the declared count. Nothing is removed and nothing is silent.
+ * Money is unaffected: `maxCostCents` stays what Julius reserved for the dispatch (no dollar logic lives here).
+ * The job itself is the one thing this cannot move: `JOB_BUDGET_MS` is the workflow's `timeout-minutes: 300` (a founder-governed
+ * file pinned to it by a test), and `CODER_JOB_SHARE_MS` only bounds the DEFAULT envelope; neither is scaled here.
+ *
+ * THE ARITHMETIC (all in ms; N = attempts per dispatch = MAX_CODER_ATTEMPTS = 2; A = session + pre + post allowances):
+ *   main path (worst)            reviewer share + N x A + architect worst + infrastructure + approval wait + margins
+ *   one repair cycle (worst)     N x A + reviewer per-attempt ceiling
+ *   guaranteed cycles            min(declared R, floor((JOB_BUDGET_MS - main path) / cycle))
+ *   one full attempt per dispatch: main path with A in place of N x A, cycle A + reviewer ceiling (the "plausible long" case)
+ * With the committed figures (reviewer share 3,000,000; reviewer ceiling 1,000,000; architect 600,000; infrastructure 900,000;
+ * margins 120,000 + 300,000; job 18,000,000) the tables in the design record are GENERATED BY COMMAND from `coderRuntimeSchedule`
+ * (never retyped), and a test pins the same arithmetic.
+ * =================================================================================================================== */
+
+/**
+ * The infrastructure allowance of the job-share model (image builds, PostgreSQL, Hermes, the evidence dump): the SAME 15 minutes
+ * `coder-envelope.test.ts` prices (a parity assertion there holds the two together), exported so the production fit uses it.
+ */
+export const CODER_FIT_INFRASTRUCTURE_ALLOWANCE_MS = 15 * 60_000;
+
+/** The smallest session a contract may declare: not less than the default envelope already grants (12.24 min -> 13). */
+export const CODER_CONTRACT_RUNTIME_MIN_MINUTES = 13;
+/** The largest, whatever the repair cycles: an explicit new hard cap, applied BEFORE and independent of the job fit. */
+export const CODER_CONTRACT_RUNTIME_MAX_MINUTES = 45;
+
+export class CoderRuntimeBudgetRefused extends Error {
+  readonly code: 'coder_runtime_minutes_invalid' | 'coder_runtime_budget_unfit';
+  constructor(code: 'coder_runtime_minutes_invalid' | 'coder_runtime_budget_unfit', message: string) {
+    super(`${code}: ${message}`);
+    this.name = 'CoderRuntimeBudgetRefused';
+    this.code = code;
+  }
+}
+
+/** The value, or null when it is well formed: whole minutes in [MIN, MAX]. */
+export function coderRuntimeMinutesProblem(value: unknown): string | null {
+  if (typeof value !== 'number' || !Number.isInteger(value)) return 'limits.coderRuntimeMinutes must be a whole number of minutes';
+  if (value < CODER_CONTRACT_RUNTIME_MIN_MINUTES || value > CODER_CONTRACT_RUNTIME_MAX_MINUTES) {
+    return `limits.coderRuntimeMinutes must be from ${CODER_CONTRACT_RUNTIME_MIN_MINUTES} to ${CODER_CONTRACT_RUNTIME_MAX_MINUTES}`;
+  }
+  return null;
+}
+
+export interface ContractCoderRuntime {
+  readonly coderRuntimeMinutes: number;
+  /** The session's own limit: what the runner's abort timer is armed with. */
+  readonly maxRuntimeMs: number;
+  /** What one attempt may take: the session plus the executor steps around it. The WORKER declares this. */
+  readonly attemptDeadlineMs: number;
+  /** Every attempt of one dispatch at its whole deadline. */
+  readonly worstCaseDispatchMs: number;
+}
+
+/** The contract's session budget as the runtime numbers. Pure; refuses a value outside the absolute range. */
+export function resolveContractCoderRuntime(coderRuntimeMinutes: unknown): ContractCoderRuntime {
+  const problem = coderRuntimeMinutesProblem(coderRuntimeMinutes);
+  if (problem !== null) throw new CoderRuntimeBudgetRefused('coder_runtime_minutes_invalid', problem);
+  const minutes = coderRuntimeMinutes as number;
+  const maxRuntimeMs = minutes * 60_000;
+  const attemptDeadlineMs = maxRuntimeMs + CODER_PRE_SESSION_ALLOWANCE_MS + CODER_POST_SESSION_ALLOWANCE_MS;
+  return { coderRuntimeMinutes: minutes, maxRuntimeMs, attemptDeadlineMs, worstCaseDispatchMs: attemptDeadlineMs * MAX_CODER_ATTEMPTS };
+}
+
+export interface CoderRuntimeScheduleInput {
+  readonly coderRuntimeMinutes: number;
+  readonly repairCycles: number;
+  /** The approval wait the job holds for a gated mission (window + step overhead), else 0. */
+  readonly approvalWaitMs: number;
+  readonly reviewerShareMs: number;
+  readonly reviewerCycleCeilingMs: number;
+  readonly architectWorstCaseMs: number;
+  readonly infrastructureMs: number;
+  /** Stamp-lag reserve + the reserve after LIVE: the margins the stage deadline keeps. */
+  readonly marginsMs: number;
+  readonly jobBudgetMs: number;
+}
+
+export interface CoderRuntimeSchedule {
+  readonly coderRuntimeMinutes: number;
+  /** The session's own limit and what one attempt may take (see `resolveContractCoderRuntime`). */
+  readonly maxRuntimeMs: number;
+  readonly attemptDeadlineMs: number;
+  readonly limitMs: number;
+  /** MAIN PATH at its worst case (no repair): both attempts of the build dispatch at their whole deadline. */
+  readonly mainPathWorstCaseMs: number;
+  readonly mainPathFits: boolean;
+  /** One repair cycle at its worst case: both attempts at their whole deadline plus the reviewer's per-attempt ceiling. */
+  readonly worstCycleMs: number;
+  /** The repair cycles the contract DECLARED. Never changed by this module. */
+  readonly declaredRepairCycles: number;
+  /** How many of them still fit if EVERY attempt of EVERY dispatch used its whole deadline (0 when the main path does not fit). */
+  readonly guaranteedRepairCycles: number;
+  readonly allDeclaredCyclesGuaranteed: boolean;
+  /** Worst case with ALL declared cycles at their worst, and its headroom (negative: not all are guaranteed). */
+  readonly worstCaseAtDeclaredMs: number;
+  readonly headroomAtDeclaredMs: number;
+  /** If each dispatch used ONE full-length attempt (no timeout retry): how many cycles fit, uncapped by the declared count. */
+  readonly singleAttemptCyclesThatFit: number;
+}
+
+/**
+ * THE SCHEDULE OF A DECLARED SESSION BUDGET, as arithmetic. Pure. It REFUSES nothing about repair cycles: it reports. The only
+ * thing that makes a caller refuse is `mainPathFits === false`.
+ */
+export function coderRuntimeSchedule(input: CoderRuntimeScheduleInput): CoderRuntimeSchedule {
+  const runtime = resolveContractCoderRuntime(input.coderRuntimeMinutes);
+  if (!Number.isInteger(input.repairCycles) || input.repairCycles < 0) {
+    throw new CoderRuntimeBudgetRefused('coder_runtime_minutes_invalid', 'repairCycles must be a whole number of at least 0');
+  }
+  const fixed = input.reviewerShareMs + input.architectWorstCaseMs + input.infrastructureMs + input.approvalWaitMs + input.marginsMs;
+  const mainPathWorstCaseMs = fixed + runtime.worstCaseDispatchMs;
+  const worstCycleMs = runtime.worstCaseDispatchMs + input.reviewerCycleCeilingMs;
+  const mainPathFits = mainPathWorstCaseMs <= input.jobBudgetMs;
+  const guaranteedRepairCycles = mainPathFits
+    ? Math.min(input.repairCycles, Math.floor((input.jobBudgetMs - mainPathWorstCaseMs) / worstCycleMs))
+    : 0;
+  const worstCaseAtDeclaredMs = mainPathWorstCaseMs + input.repairCycles * worstCycleMs;
+  const singleMainMs = fixed + runtime.attemptDeadlineMs;
+  const singleCycleMs = runtime.attemptDeadlineMs + input.reviewerCycleCeilingMs;
+  const singleAttemptCyclesThatFit = singleMainMs <= input.jobBudgetMs ? Math.floor((input.jobBudgetMs - singleMainMs) / singleCycleMs) : 0;
+  return {
+    coderRuntimeMinutes: runtime.coderRuntimeMinutes, maxRuntimeMs: runtime.maxRuntimeMs, attemptDeadlineMs: runtime.attemptDeadlineMs,
+    limitMs: input.jobBudgetMs, mainPathWorstCaseMs, mainPathFits, worstCycleMs,
+    declaredRepairCycles: input.repairCycles, guaranteedRepairCycles,
+    allDeclaredCyclesGuaranteed: mainPathFits && guaranteedRepairCycles === input.repairCycles,
+    worstCaseAtDeclaredMs, headroomAtDeclaredMs: input.jobBudgetMs - worstCaseAtDeclaredMs, singleAttemptCyclesThatFit,
+  };
+}
