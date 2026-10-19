@@ -1,0 +1,18 @@
+# label|expect|fixes
+unfixed (as the repository is)|fail|
+fix A only (UTF-8 surrogates)|fail|fix-a-utf8.py
+fix B only (future publication)|fail|fix-b-age.py
+both fixes (the reference)|pass|fix-a-utf8.py,fix-b-age.py
+A partial: lone high at end and lone low fixed, the SWALLOWED NEXT CHARACTER left, with B fixed|fail|fix-a-partial-swallow.py,fix-b-age.py
+B partial: only more than 30 s ahead rejected (1-29 s ahead stays live), with A fixed|fail|fix-a-utf8.py,fix-b-partial-30s.py
+# ALTERNATIVE VALID SOLUTIONS: none of these may be spec-red.
+A alternative: code-point loop rewrite of the encoder, with B fixed|pass|alt-a-forof.py,fix-b-age.py
+# REVIEWER CASE, NOT a valid alternative: String.prototype.toWellFormed is ES2024 and the repository's lib is ES2022, so the seeded spec accepts it but the repository typecheck refuses it (TS2550).
+REVIEWER CASE: toWellFormed pre-pass (spec-green, violates the repository typecheck: ES2022 lib), with B fixed|passspec_typered|alt-a-towellformed.py,fix-b-age.py
+A alternative: regex pre-pass replacing unpaired surrogates, with B fixed|pass|alt-a-regex.py,fix-b-age.py
+B alternative: direct instant comparison before rounding, with A fixed|pass|fix-a-utf8.py,alt-b-compare.py
+# REVIEWER CASES: spec-green BY DESIGN (the spec deliberately does not pin them); only the independent reviewer can catch them against the constraint and criteria.
+REVIEWER CASE: Buffer-based encoder (a Node global), with B fixed|pass|reviewer-a-buffer.py,fix-b-age.py
+REVIEWER CASE: correct fix A plus a NEW exported helper, with B fixed|pass|reviewer-a-newexport.py,fix-b-age.py
+# WRONG FIX: B clamped to zero instead of unknown.
+B wrong: minutes clamped to 0 instead of unknown, with A fixed|fail|fix-a-utf8.py,bad-b-clamp.py
