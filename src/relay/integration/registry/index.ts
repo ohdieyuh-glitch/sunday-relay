@@ -1,0 +1,15 @@
+export {
+  CAPABILITY_SOURCES,
+  COMPOUND_AGENT_SLOT_TO_ROLE_SLOT,
+  INTEGRATION_AVAILABILITIES,
+  RELAY_INTEGRATIONS,
+  ROLE_SLOT_TO_COMPOUND_AGENT_SLOT,
+  applyObservedAvailability,
+  createIntegrationDirectory,
+  findIntegration,
+  integrationsForSlot,
+  slotsWithNoEnabledIntegration,
+  type CapabilitySource,
+  type IntegrationAvailability,
+  type RelayIntegration,
+} from './integration-registry';

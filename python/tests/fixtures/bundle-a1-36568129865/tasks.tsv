@@ -1,0 +1,5 @@
+task_id	task_type	role	state	ordinal	parent_task_id
+run:efb6e20f0d11885bc5085a68:plan	plan	PROMPT_ARCHITECT	SUCCEEDED	0	
+run:efb6e20f0d11885bc5085a68:build	build	CODING_AGENT	FAILED	1	
+run:efb6e20f0d11885bc5085a68:plan:review	review:plan	INDEPENDENT_REVIEWER	SUCCEEDED	1	run:efb6e20f0d11885bc5085a68:plan
+(3 rows)
