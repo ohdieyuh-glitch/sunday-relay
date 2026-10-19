@@ -1,0 +1,254 @@
+/**
+ * SUNDAY RELAY — `/loop all`: STAFFING A RESOLVED TARGET WITH RUNS.
+ *
+ * `resolveLoopTarget` decides WHO. `confirmLoopRun` creates ONE run for one
+ * decision. This is the layer between them: a confirmed `/loop all` (or any
+ * multi-role target) becomes ONE RUN PER RESOLVED ROLE, all under one Loop.
+ * Until now the bridge created a single run and parked the other roles in a
+ * side map — a `/loop all` that says "the team is working" while one
+ * coding agent runs is exactly the requested-versus-actual collapse the
+ * target module's header forbids.
+ *
+ * WHAT THE FAN-OUT REFUSES.
+ *
+ * - **To staff anyone resolution did not.** `target.resolvedRoles` is the
+ *   whole guest list. Unavailable roles ride along VERBATIM in the report —
+ *   including `unknown`, which never staffs, because staffing a Loop on the
+ *   strength of a missing answer is how a slot appears to work when nothing
+ *   is there.
+ * - **To collapse two roles into one decision.** Each role's confirmation
+ *   derives its own request id (`<requestId>#<role>`) and therefore its own
+ *   idempotency key and its own derived run id. The store's invariant — one
+ *   key, one run — stays true, and a retry of the SAME decision converges to
+ *   the same runs as duplicates instead of minting a second team.
+ * - **To let one role's failure silently cancel the rest.** Each role is
+ *   confirmed independently; a failure is reported beside the successes, per
+ *   role, by name. Runs already created are NOT rolled back — they are
+ *   durable and idempotent, so the honest recovery is a retry that converges,
+ *   not a deletion that pretends the spend never happened.
+ * - **To pretend N budgets are one.** The budget in the input is PER RUN:
+ *   confirming three roles authorizes three of it. The report totals the
+ *   authorized spend caps, or says `null` when any cap is unbounded — a team
+ *   whose total cannot be bounded must not display a bounded-looking number.
+ */
+
+import { RELAY_AGENT_ROLES, type RelayAgentRole } from '../../agent-operating';
+import type { RelayLoopTarget, RelayLoopUnavailableRole } from '../loop-target';
+import {
+  confirmLoopRun,
+  loopConfirmationKey,
+  type LoopConfirmationInput,
+  type LoopOperationDeps,
+} from './loop-operations';
+import type { RelayLoopRun } from './loop-runtime-types';
+
+/** Everything shared by every role's confirmation. `runId` and the role-scoped
+ *  request id are derived per role, so they are deliberately absent. */
+export type TargetConfirmationBase = Omit<LoopConfirmationInput, 'runId'>;
+
+export interface TargetConfirmationInput {
+  /** The resolution, verbatim from `resolveLoopTarget`. The authority on WHO. */
+  readonly target: RelayLoopTarget;
+  readonly base: TargetConfirmationBase;
+  /**
+   * Derive the durable run id from a role-scoped confirmation key. The
+   * bridge's discipline, injected: a DERIVED id lands a retry on the same
+   * run; a minted one would create a second team on the second delivery.
+   */
+  readonly runIdFor: (confirmationKey: string) => string;
+}
+
+export interface StaffedRole {
+  readonly role: RelayAgentRole;
+  readonly run: RelayLoopRun;
+  /** True when this confirmation had already created the run. */
+  readonly duplicate: boolean;
+}
+
+export interface FailedRole {
+  readonly role: RelayAgentRole;
+  readonly status: number;
+  readonly kind: string;
+  readonly problem: string;
+}
+
+export interface TargetConfirmationReport {
+  /** One entry per resolved role that now has a run, in resolution order. */
+  readonly staffed: readonly StaffedRole[];
+  /** Resolved roles whose confirmation failed, each with the store's answer. */
+  readonly failed: readonly FailedRole[];
+  /** Requested roles resolution could not staff, verbatim — requested versus
+   *  actual, preserved rather than trimmed. */
+  readonly unstaffed: readonly RelayLoopUnavailableRole[];
+  /** How many runs this confirmation authorized (staffed, including
+   *  duplicates — a duplicate is an authorization that already existed). */
+  readonly runsAuthorized: number;
+  /**
+   * The SUM of the staffed runs' spend caps, in integer micros — or `null`
+   * when the total cannot truthfully be stated: any cap unbounded, or a
+   * duplicate run carrying a stored cap that is not canonical micros. Unknown
+   * is not zero, and a team total that cannot be computed must not render as
+   * a bounded-looking number.
+   */
+  readonly authorizedSpendMicrosTotal: string | null;
+}
+
+/** The role-scoped request id: one decision, N roles, N distinct keys. */
+export function roleConfirmationRequestId(
+  confirmationRequestId: string,
+  role: RelayAgentRole,
+): string {
+  return `${confirmationRequestId}#${role}`;
+}
+
+/**
+ * Which role a run was CREATED FOR, recovered from its durable idempotency
+ * key — the `#role` suffix `roleConfirmationRequestId` wrote there. Making
+ * the encoding a stated contract with a decoder is what keeps it from being
+ * an accident someone parses anyway.
+ *
+ * This is the confirmation's INTENT, not an observation: the run's observed
+ * role arrives only with `loop.agent_assigned`, and nothing here prefills it.
+ * `null` means the key names no known role — a single-role run confirmed
+ * before this layer existed, or a tampered suffix — and unknown is not
+ * guessed at. A non-null answer means the key ends in the RESERVED `#<role>`
+ * form: either this layer wrote it, or a caller minted an id in the reserved
+ * format at the raw `confirmLoopRun` layer — that caller opted into this
+ * contract and is taken at its word, which is why the reservation is stated
+ * on `LoopConfirmationInput` rather than implied here.
+ */
+export function staffedRoleOf(run: RelayLoopRun): RelayAgentRole | null {
+  const key = run.idempotencyKey;
+  const suffixAt = key.lastIndexOf('#');
+  if (suffixAt === -1) return null;
+  const suffix = key.slice(suffixAt + 1);
+  const role = RELAY_AGENT_ROLES.find((r) => r === suffix);
+  return role ?? null;
+}
+
+/** A canonical non-negative integer-micros string. `BigInt('abc')` THROWS, so
+ *  anything else must be refused before a run exists, not summed after. */
+const CANONICAL_MICROS = /^(0|[1-9]\d*)$/;
+
+/**
+ * Staff every resolved role of one confirmed target.
+ *
+ * Deterministic: roles are processed in resolution order (deduplicated — a
+ * resolver that repeated a role must not double-count an authorization), ids
+ * derive from content, and the same input converges to the same report.
+ *
+ * Total, in the order that makes totality TRUE: everything that could refuse
+ * the whole decision — a spend cap `BigInt` would throw on, a negative cap, a
+ * request id using the reserved `#` — is checked BEFORE any run is created,
+ * because a refusal after durable creation is a report that dies mid-way; and
+ * each role's confirmation is caught, so a throwing store backing is that
+ * role's named failure, not a lost report.
+ */
+export function confirmLoopRunsForTarget(
+  deps: LoopOperationDeps,
+  input: TargetConfirmationInput,
+): TargetConfirmationReport {
+  const roles = [...new Set(input.target.resolvedRoles)];
+
+  const refusal = refuseBase(input.base);
+  if (refusal !== null) {
+    return {
+      staffed: [],
+      failed: roles.map((role) => ({ role, ...refusal })),
+      unstaffed: input.target.unavailableRoles,
+      runsAuthorized: 0,
+      authorizedSpendMicrosTotal: '0',
+    };
+  }
+
+  const staffed: StaffedRole[] = [];
+  const failed: FailedRole[] = [];
+
+  for (const role of roles) {
+    const confirmationRequestId = roleConfirmationRequestId(
+      input.base.confirmationRequestId,
+      role,
+    );
+    const key = loopConfirmationKey({
+      principal: input.base.principal,
+      workspaceId: input.base.workspaceId,
+      projectId: input.base.projectId,
+      contractBindingDigest: input.base.contractBindingDigest,
+      confirmationRequestId,
+    });
+    let outcome: ReturnType<typeof confirmLoopRun>;
+    try {
+      outcome = confirmLoopRun(deps, {
+        ...input.base,
+        confirmationRequestId,
+        runId: input.runIdFor(key),
+      });
+    } catch (error) {
+      // A durable backing that throws mid-confirmation is THIS role's named
+      // failure. Letting it escape would lose the report for roles already
+      // staffed — spend authorized with nothing anywhere saying so.
+      failed.push({
+        role,
+        status: 500,
+        kind: 'store_failure',
+        problem: (error instanceof Error ? error.message : String(error)).slice(0, 200),
+      });
+      continue;
+    }
+    if (outcome.ok) {
+      staffed.push({ role, run: outcome.run, duplicate: outcome.duplicate });
+    } else {
+      failed.push({
+        role, status: outcome.status, kind: outcome.kind, problem: outcome.problem,
+      });
+    }
+  }
+
+  return {
+    staffed,
+    failed,
+    unstaffed: input.target.unavailableRoles,
+    runsAuthorized: staffed.length,
+    authorizedSpendMicrosTotal: totalSpendCap(staffed),
+  };
+}
+
+/** Why the WHOLE decision is refused before any run exists, or null. */
+function refuseBase(
+  base: TargetConfirmationBase,
+): Omit<FailedRole, 'role'> | null {
+  const cap = base.budget.maxSpendMicros;
+  if (cap !== null && !CANONICAL_MICROS.test(cap)) {
+    return {
+      status: 422,
+      kind: 'invalid_budget',
+      problem: `maxSpendMicros must be null or a canonical non-negative integer string; got ${JSON.stringify(cap)}. Nothing was created.`,
+    };
+  }
+  if (base.confirmationRequestId.includes('#')) {
+    return {
+      status: 422,
+      kind: 'reserved_request_id',
+      problem: 'The "#" character is reserved for role-scoped derivation; a request id carrying it could collide with a derived one. Nothing was created.',
+    };
+  }
+  return null;
+}
+
+/**
+ * Integer-micros sum of the staffed runs' spend caps, or `null` when the
+ * total cannot truthfully be stated: any cap unbounded, or a DUPLICATE run
+ * carrying a stored cap this validation never saw — `refuseBase` vets the
+ * base budget before creation, but a retry converges on runs whose budgets
+ * were stored earlier, possibly by the raw layer. A total that cannot be
+ * computed is answered as unknown, never thrown and never guessed.
+ */
+function totalSpendCap(staffed: readonly StaffedRole[]): string | null {
+  let total = 0n;
+  for (const { run } of staffed) {
+    const cap = run.budget.maxSpendMicros;
+    if (cap === null || !CANONICAL_MICROS.test(cap)) return null;
+    total += BigInt(cap);
+  }
+  return total.toString();
+}

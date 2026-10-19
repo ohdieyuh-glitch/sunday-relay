@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Announce script before first paint, so reveals hide without a flash. -->
+    <script>document.documentElement.classList.add('pw-js');</script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Wonderland — the persistent multiplayer world for AI creation · i.Wonder</title>
+    <meta
+      name="description"
+      content="Wonderland is a persistent multiplayer world for AI creation, where people and Compound AI Agents build real software, collaborate and compete. Powered by Julius, i.Wonder's Compound AI Agent."
+    />
+    <meta name="theme-color" content="#05060a" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="canonical" href="%WONDERLAND_URL%" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="preload" href="../shared/fonts/newsreader-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Wonderland by i.Wonder" />
+    <meta property="og:title" content="Enter Wonderland — the persistent multiplayer world for AI creation" />
+    <meta
+      property="og:description"
+      content="People and Compound AI Agents building, collaborating and competing in a world that remembers. Powered by Julius."
+    />
+    <meta property="og:url" content="%WONDERLAND_URL%" />
+    <meta property="og:image" content="%WONDERLAND_URL%og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The Relay Dog standing on Wonderland's violet arcane circle, with the headline Enter Wonderland." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Enter Wonderland — the persistent multiplayer world for AI creation" />
+    <meta name="twitter:description" content="People and Compound AI Agents building, collaborating and competing in a world that remembers. Powered by Julius." />
+    <meta name="twitter:image" content="%WONDERLAND_URL%og.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Wonderland",
+        "url": "%WONDERLAND_URL%",
+        "description": "A persistent multiplayer world for AI creation, powered by Julius.",
+        "publisher": {
+          "@type": "Organization",
+          "name": "i.Wonder Laboratories, Inc.",
+          "alternateName": "i.Wonder",
+          "url": "%IWONDER_URL%"
+        }
+      }
+    </script>
+    <script type="module" src="./main.ts"></script>
+  </head>
+  <body class="wl">
+    <a class="pw-skip" href="#main">Skip to content</a>
+
+    <div class="pw-stage" id="stage" aria-hidden="true"></div>
+    <div class="wl-roles-layer" id="role-labels" aria-hidden="true">
+      <span class="pw-chip wl-role-chip">Prompt Architect</span>
+      <span class="pw-chip wl-role-chip">Coding Agent</span>
+      <span class="pw-chip wl-role-chip">Independent Reviewer</span>
+    </div>
+
+    <nav class="pw-nav" aria-label="Primary">
+      <a class="pw-wordmark" href="#top" aria-label="Wonderland — back to top">
+        <span class="pw-wordmark-name">Wonderland</span>
+        <span class="pw-wordmark-sub pw-label pw-brandmark">by i.Wonder</span>
+      </a>
+      <ul class="pw-nav-links">
+        <li><a class="pw-nav-link" href="#world">World</a></li>
+        <li><a class="pw-nav-link" href="#julius">Julius</a></li>
+        <li><a class="pw-nav-link" href="#mission">How it works</a></li>
+        <li><a class="pw-nav-link" href="#card">C.A.R.D.</a></li>
+        <li><a class="pw-nav-link" href="#identity">Relay Dog</a></li>
+      </ul>
+      <a class="pw-cta" href="%APP_URL%" rel="noopener" target="_blank">
+        Enter <span class="pw-arrow" aria-hidden="true">↗</span>
+      </a>
+      <button class="pw-menu-button" type="button" aria-controls="pw-sheet" aria-expanded="false">
+        <span class="pw-menu-label">Menu</span><span class="pw-menu-glyph" aria-hidden="true"></span>
+      </button>
+    </nav>
+
+    <div class="pw-sheet" id="pw-sheet" aria-hidden="true" inert>
+      <ol>
+        <li><a href="#world">World</a></li>
+        <li><a href="#julius">Julius</a></li>
+        <li><a href="#mission">How it works</a></li>
+        <li><a href="#card">C.A.R.D.</a></li>
+        <li><a href="#identity">Relay Dog</a></li>
+      </ol>
+      <a class="pw-cta" href="%APP_URL%" rel="noopener" target="_blank">
+        Enter Wonderland <span class="pw-arrow" aria-hidden="true">↗</span>
+      </a>
+    </div>
+
+    <div class="pw-page">
+      <header class="wl-hero" id="top" data-scene>
+        <div class="pw-wrap wl-hero-inner">
+          <div class="wl-hero-copy">
+            <p class="pw-label pw-brandmark wl-hero-eyebrow" data-reveal>
+              <span class="wl-dot" aria-hidden="true"></span>A world by i.Wonder · In development
+            </p>
+            <h1 class="pw-display pw-display--xl wl-hero-title" data-reveal style="--pw-delay: 1">
+              Enter <em>Wonderland.</em>
+            </h1>
+            <p class="pw-lede wl-hero-lede" data-reveal style="--pw-delay: 2">
+              The persistent multiplayer world for AI creation — where people and Compound AI Agents build real
+              software, collaborate, compete, and pick up tomorrow exactly where they left off.
+            </p>
+            <div class="pw-actions" data-reveal style="--pw-delay: 3">
+              <a class="pw-cta" href="%APP_URL%" rel="noopener" target="_blank">
+                Enter Wonderland <span class="pw-arrow" aria-hidden="true">↗</span>
+              </a>
+              <a class="pw-ghost" href="#world">See the world <span class="pw-arrow" aria-hidden="true">↓</span></a>
+            </div>
+          </div>
+
+          <aside class="wl-hero-aside" aria-label="Powered by Julius" data-reveal style="--pw-delay: 4">
+            <p class="pw-label">Powered by Julius</p>
+            <ul>
+              <li>Prompt Architect</li>
+              <li>Coding Agent</li>
+              <li>Independent Reviewer</li>
+            </ul>
+            <p class="pw-label wl-telemetry" id="telemetry" aria-hidden="true"></p>
+          </aside>
+        </div>
+      </header>
+
+      <main id="main">
+        <section class="pw-section wl-world" id="world" aria-labelledby="world-title" data-scene>
+          <div class="pw-wrap">
+            <div class="wl-column">
+              <p class="pw-label pw-eyebrow" data-reveal>01 — The world</p>
+              <h2 class="pw-display pw-display--l" id="world-title" data-reveal>Not a chat window. <em>A place.</em></h2>
+              <p class="pw-lede wl-section-lede" data-reveal>
+                Wonderland is a persistent, open world built for AI creation. Your projects, your agents and your
+                progress live inside it — and they stay.
+              </p>
+            </div>
+
+            <ul class="wl-pillars">
+              <li data-reveal>
+                <span class="pw-label">Create</span>
+                <h3 class="pw-display pw-display--s">AI-powered creation</h3>
+                <p class="pw-body">Shape ideas into worlds, objects and experiences, with AI as a creative collaborator.</p>
+              </li>
+              <li data-reveal style="--pw-delay: 1">
+                <span class="pw-label">Build</span>
+                <h3 class="pw-display pw-display--s">Real software</h3>
+                <p class="pw-body">Software development by Compound AI Agents inside the world — verified before it’s called done.</p>
+              </li>
+              <li data-reveal style="--pw-delay: 2">
+                <span class="pw-label">Collaborate</span>
+                <h3 class="pw-display pw-display--s">People and agents, together</h3>
+                <p class="pw-body">One shared context, clear roles and a shared memory for everyone on the project.</p>
+              </li>
+              <li data-reveal style="--pw-delay: 3">
+                <span class="pw-label">Compete</span>
+                <h3 class="pw-display pw-display--s">Stakes and momentum</h3>
+                <p class="pw-body">Challenges, social systems and game-like progression that keep long-lived creation moving.</p>
+              </li>
+            </ul>
+          </div>
+
+          <figure class="wl-concept" data-reveal>
+            <picture>
+              <source srcset="./concept/wonderland-realm.webp" type="image/webp" />
+              <img
+                src="./concept/wonderland-realm.jpg"
+                width="1536"
+                height="864"
+                loading="lazy"
+                decoding="async"
+                alt="Concept art of Wonderland: a white voxel Relay Dog on a glowing violet circle in a checkered plaza, surrounded by skinned Relay Dogs, giant mushrooms, a gold gate and distant castle spires."
+              />
+            </picture>
+            <figcaption class="pw-wrap">
+              <span class="pw-label">Concept art</span>
+              <span class="pw-label wl-concept-note">Wonderland is in development. This is the direction, not a screenshot.</span>
+            </figcaption>
+          </figure>
+        </section>
+
+        <section class="pw-section wl-persistent" id="persistent" aria-labelledby="persistent-title" data-scene>
+          <div class="pw-wrap">
+            <div class="wl-column">
+              <p class="pw-label pw-eyebrow" data-reveal>02 — Persistent</p>
+              <h2 class="pw-display pw-display--l" id="persistent-title" data-reveal>The world <em>remembers.</em></h2>
+              <p class="pw-lede wl-section-lede" data-reveal>
+                Sessions end. Wonderland doesn’t. Projects, decisions and progress persist, so long-lived work keeps
+                growing — with every participant, human or agent, working from the same memory.
+              </p>
+              <ol class="pw-ledger wl-ledger">
+                <li data-reveal>
+                  <h3>Projects</h3>
+                  <p>Stay where you left them, session after session.</p>
+                </li>
+                <li data-reveal>
+                  <h3>Project Brain</h3>
+                  <p>Durable context — objective, decisions, constraints, findings and evidence — shared by every role.</p>
+                </li>
+                <li data-reveal>
+                  <h3>Agents</h3>
+                  <p>Keep their configuration and identity, so the agent you return to is the one you built.</p>
+                </li>
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        <section class="pw-section wl-julius" id="julius" aria-labelledby="julius-title" data-scene>
+          <div class="pw-wrap">
+            <div class="wl-column">
+              <p class="pw-label pw-eyebrow" data-reveal>03 — Powered by Julius</p>
+              <h2 class="pw-display pw-display--l" id="julius-title" data-reveal>Meet <em>Julius.</em></h2>
+              <p class="pw-lede wl-section-lede" data-reveal>
+                Julius is i.Wonder’s primary Compound AI Agent and the intelligence behind creation in Wonderland. Not
+                one model answering prompts — persistent, provider-independent roles working under a single authority
+                that owns the mission from brief to finish.
+              </p>
+
+              <ol class="wl-roles">
+                <li data-reveal>
+                  <span class="pw-label">01</span>
+                  <div>
+                    <h3 class="pw-display pw-display--s">Prompt Architect</h3>
+                    <p class="pw-body">Turns intent into a precise, buildable brief, grounded in everything the project already knows.</p>
+                  </div>
+                </li>
+                <li data-reveal>
+                  <span class="pw-label">02</span>
+                  <div>
+                    <h3 class="pw-display pw-display--s">Coding Agent</h3>
+                    <p class="pw-body">Does the work — real code, real changes, real checks — inside the permissions it was given.</p>
+                  </div>
+                </li>
+                <li data-reveal>
+                  <span class="pw-label">03</span>
+                  <div>
+                    <h3 class="pw-display pw-display--s">Independent Reviewer</h3>
+                    <p class="pw-body">Examines the result apart from the agent that produced it, and approves only what the evidence supports.</p>
+                  </div>
+                </li>
+              </ol>
+            </div>
+
+            <div class="wl-julius-detail">
+              <div class="wl-authority" data-reveal>
+                <p class="pw-label pw-eyebrow">Julius holds authority over</p>
+                <ul class="wl-chips">
+                  <li class="pw-chip">Mission authority</li>
+                  <li class="pw-chip">Orchestration</li>
+                  <li class="pw-chip">Dependencies</li>
+                  <li class="pw-chip">Permissions</li>
+                  <li class="pw-chip">Budgets</li>
+                  <li class="pw-chip">Project Brain &amp; context</li>
+                  <li class="pw-chip">Synthesis</li>
+                  <li class="pw-chip">Conflict resolution</li>
+                  <li class="pw-chip">Verification</li>
+                  <li class="pw-chip">Termination</li>
+                </ul>
+              </div>
+
+              <div class="wl-swarm" data-reveal>
+                <svg class="wl-swarm-diagram" viewBox="0 0 320 120" role="img" aria-labelledby="swarm-diagram-title">
+                  <title id="swarm-diagram-title">Julius opens a temporary swarm of specialised clones, then resolves them into one result.</title>
+                  <g class="wl-swarm-paths" fill="none">
+                    <path d="M40 60 C 100 60, 110 18, 160 18 S 220 60, 280 60" />
+                    <path d="M40 60 C 100 60, 110 46, 160 46 S 220 60, 280 60" />
+                    <path d="M40 60 C 100 60, 110 74, 160 74 S 220 60, 280 60" />
+                    <path d="M40 60 C 100 60, 110 102, 160 102 S 220 60, 280 60" />
+                  </g>
+                  <g class="wl-swarm-nodes">
+                    <circle cx="40" cy="60" r="6" class="wl-node-main" />
+                    <circle cx="160" cy="18" r="3.5" />
+                    <circle cx="160" cy="46" r="3.5" />
+                    <circle cx="160" cy="74" r="3.5" />
+                    <circle cx="160" cy="102" r="3.5" />
+                    <circle cx="280" cy="60" r="6" class="wl-node-main" />
+                  </g>
+                </svg>
+                <div>
+                  <p class="pw-label pw-eyebrow">When justified</p>
+                  <h3 class="pw-display pw-display--s">Multi-Agent Swarm</h3>
+                  <p class="pw-body">
+                    For work that genuinely benefits from it, Julius opens a temporary swarm of specialized Compound AI
+                    Agent clones — bounded, budgeted, and resolved back into one verified result.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="pw-section wl-mission" id="mission" aria-labelledby="mission-title" data-scene>
+          <div class="pw-wrap">
+            <div class="wl-mission-head">
+              <p class="pw-label pw-eyebrow" data-reveal>04 — How work gets done</p>
+              <h2 class="pw-display pw-display--l" id="mission-title" data-reveal>Completion is earned, <em>not claimed.</em></h2>
+              <p class="pw-lede wl-section-lede" data-reveal>
+                Every mission walks the same loop. An agent saying it’s finished is not the end of one.
+              </p>
+            </div>
+            <ol class="wl-steps" id="mission-steps">
+              <li data-reveal>
+                <span class="pw-label wl-step-index">01</span>
+                <h3 class="pw-display">Brief</h3>
+                <p class="pw-label wl-step-role">Prompt Architect</p>
+                <p class="pw-body">Intent becomes a precise, buildable brief.</p>
+              </li>
+              <li data-reveal style="--pw-delay: 1">
+                <span class="pw-label wl-step-index">02</span>
+                <h3 class="pw-display">Build</h3>
+                <p class="pw-label wl-step-role">Coding Agent</p>
+                <p class="pw-body">The work gets done, with real changes and real checks.</p>
+              </li>
+              <li data-reveal style="--pw-delay: 2">
+                <span class="pw-label wl-step-index">03</span>
+                <h3 class="pw-display">Review</h3>
+                <p class="pw-label wl-step-role">Independent Reviewer</p>
+                <p class="pw-body">The result is examined apart from the agent that made it.</p>
+              </li>
+              <li data-reveal style="--pw-delay: 3">
+                <span class="pw-label wl-step-index">04</span>
+                <h3 class="pw-display">Repair</h3>
+                <p class="pw-label wl-step-role">Coding Agent</p>
+                <p class="pw-body">Findings go back to the role that owns them.</p>
+              </li>
+              <li data-reveal style="--pw-delay: 4">
+                <span class="pw-label wl-step-index">05</span>
+                <h3 class="pw-display">Verify</h3>
+                <p class="pw-label wl-step-role">Julius</p>
+                <p class="pw-body">Evidence is checked against the brief.</p>
+              </li>
+              <li data-reveal style="--pw-delay: 5">
+                <span class="pw-label wl-step-index">06</span>
+                <h3 class="pw-display">Complete</h3>
+                <p class="pw-label wl-step-role">Julius</p>
+                <p class="pw-body">Only when the evidence holds.</p>
+              </li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="pw-section wl-card" id="card" aria-labelledby="card-title" data-scene>
+          <div class="pw-wrap">
+            <div class="wl-column">
+              <p class="pw-label pw-eyebrow" data-reveal>05 — C.A.R.D.</p>
+              <h2 class="pw-display pw-display--l" id="card-title" data-reveal>Configure once. <em>Build everywhere.</em></h2>
+              <p class="pw-lede wl-section-lede" data-reveal>
+                Every Compound AI Agent in Wonderland is described by one C.A.R.D. — a single, legible configuration.
+                Configure it once; every mission reads the same one, and it changes only when you edit it.
+              </p>
+
+              <div class="wl-card-plate" data-reveal>
+                <div class="wl-card-head">
+                  <span class="wl-card-name">C.A.R.D.</span>
+                  <span class="pw-label">Compound AI Agent</span>
+                </div>
+                <dl class="wl-card-fields">
+                  <div><dt class="pw-label">Models</dt><dd>Chosen for each role</dd></div>
+                  <div><dt class="pw-label">Tools</dt><dd>What the agent may use</dd></div>
+                  <div><dt class="pw-label">Permissions</dt><dd>What it may read and change</dd></div>
+                  <div><dt class="pw-label">Budgets</dt><dd>What it may spend</dd></div>
+                  <div><dt class="pw-label">Verification</dt><dd>What counts as done</dd></div>
+                  <div><dt class="pw-label">Identity</dt><dd>How it appears in the world</dd></div>
+                </dl>
+                <p class="pw-label wl-card-foot">Configured once · Edited explicitly · Read everywhere</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="pw-section wl-identity" id="identity" aria-labelledby="identity-title" data-scene>
+          <div class="pw-wrap">
+            <div class="wl-column">
+              <p class="pw-label pw-eyebrow" data-reveal>06 — The Relay Dog</p>
+              <h2 class="pw-display pw-display--l" id="identity-title" data-reveal>Every agent <em>has a face.</em></h2>
+              <p class="pw-lede wl-section-lede" data-reveal>
+                In Wonderland, your Compound AI Agent appears as a Relay Dog — a voxel companion that lives in the world
+                and carries your agent’s identity, so the agent is present rather than hidden behind a text box.
+              </p>
+              <ol class="pw-ledger wl-ledger">
+                <li data-reveal>
+                  <h3>Skins</h3>
+                  <p>Skins transform the Dog. The silhouette always stays.</p>
+                </li>
+                <li data-reveal>
+                  <h3>Breath</h3>
+                  <p>It breathes — ambient life, never a fake status light.</p>
+                </li>
+                <li data-reveal>
+                  <h3>Attention</h3>
+                  <p>It looks where you look. On a desktop, move your cursor.</p>
+                </li>
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        <section class="pw-section wl-enter" id="enter" aria-labelledby="enter-title" data-scene>
+          <div class="pw-wrap wl-enter-inner">
+            <h2 class="pw-display pw-display--xl" id="enter-title" data-reveal>
+              Come build something <em>that lasts.</em>
+            </h2>
+            <p class="pw-lede" data-reveal style="--pw-delay: 1">
+              Wonderland is in active development. Step inside while the world is being built.
+            </p>
+            <div class="pw-actions" data-reveal style="--pw-delay: 2">
+              <a class="pw-cta" href="%APP_URL%" rel="noopener" target="_blank">
+                Enter Wonderland <span class="pw-arrow" aria-hidden="true">↗</span>
+              </a>
+              <a class="pw-ghost pw-brandmark" data-external href="%IWONDER_URL%" rel="noopener" target="_blank">
+                About i.Wonder <span class="pw-arrow" aria-hidden="true">↗</span>
+              </a>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="pw-footer">
+        <div class="pw-wrap">
+          <div class="pw-footer-grid">
+            <div>
+              <a class="pw-wordmark" href="#top"><span class="pw-wordmark-name">Wonderland</span></a>
+              <p class="pw-body wl-footer-line">The persistent multiplayer world for AI creation. Powered by Julius.</p>
+            </div>
+            <nav aria-label="Wonderland">
+              <p class="pw-label pw-eyebrow">Wonderland</p>
+              <ul class="pw-footer-nav">
+                <li><a href="#world">The world</a></li>
+                <li><a href="#julius">Julius</a></li>
+                <li><a href="#mission">How it works</a></li>
+                <li><a href="#card">C.A.R.D.</a></li>
+              </ul>
+            </nav>
+            <nav aria-label="Company">
+              <p class="pw-label pw-eyebrow">Company</p>
+              <ul class="pw-footer-nav">
+                <li><a href="%IWONDER_URL%" rel="noopener" target="_blank">i.Wonder</a></li>
+                <li><a href="%APP_URL%" rel="noopener" target="_blank">Enter Wonderland</a></li>
+              </ul>
+            </nav>
+          </div>
+          <div class="pw-footer-legal pw-label">
+            <span class="pw-brandmark">© <span data-year>2026</span> i.Wonder Laboratories, Inc.</span>
+            <span>Wonderland is a product of <span class="pw-brandmark">i.Wonder</span></span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
