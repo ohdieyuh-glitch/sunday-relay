@@ -26,6 +26,8 @@ export interface MainProvenanceResult {
   readonly approvedBy?: readonly string[];
   /** The review-currency verdict, present only when approval is why this failed. */
   readonly reviewCurrency?: 'stale' | 'blocked' | 'indeterminate';
+  /** `signed-landing` when the verdict came from the reviewer's signature rather than a founder approval. */
+  readonly via?: 'signed-landing';
 }
 
 /**
@@ -60,4 +62,27 @@ export declare function evaluateMainProvenance(input: {
   readonly baseRefChanged: unknown;
   /** The branch under verification. Defaults to `main`. */
   readonly branch?: unknown;
+  /** The tip's commit message. A signed landing carries one JULIUS LANDING block; absent (undefined) leaves the founder-approval path alone. */
+  readonly mainCommitMessage?: unknown;
+  /** The reviewer public key COMMITTED at the tip's single parent. */
+  readonly reviewerKeyPem?: unknown;
+  /** The commit that key was read at: must be the parent. */
+  readonly reviewerKeyAtSha?: unknown;
+  /** `{ sha, authorLogin, treeSha }` of the commit the signed clearance names as head. */
+  readonly headCommit?: unknown;
 }): MainProvenanceResult;
+
+export declare const LANDING_BEGIN: string;
+export declare const LANDING_END: string;
+
+export type LandingBlock =
+  | { readonly state: 'absent' }
+  | { readonly state: 'invalid'; readonly reason: string }
+  | { readonly state: 'ok'; readonly nonce: string; readonly clearanceB64: string; readonly signatureB64: string };
+
+export declare function extractLandingBlock(message: unknown): LandingBlock;
+export declare function parseSignedClearance(text: string): { readonly problems: string[]; readonly fields: Record<string, string> };
+export declare function evaluateSignedLanding(input: Record<string, unknown>, tip: { readonly mainSha: string; readonly mainTreeSha: unknown; readonly parentSha: string }):
+  | { readonly state: 'absent' }
+  | { readonly state: 'decided'; readonly result: MainProvenanceResult };
+
