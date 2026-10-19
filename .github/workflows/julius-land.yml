@@ -19,9 +19,10 @@
 # WHAT IT REFUSES (each refusal ends the job with no merge): a bad, forged or expired signature; a PR that is not open, not ready, not the App's single commit directly on the
 # cleared base; a base that is no longer main's tip; a tree other than the cleared one; a branch outside the allowlist; any changed file under a founder-governed path (workflows,
 # this system, the pins file, migrations); a failing or pending check after a bounded wait; any bot comment, inline comment or review that differs from what the reviewer saw. The
-# merge is a squash pinned to the cleared head, and the landed commit is verified to be the cleared tree on the cleared base.
+# landing is a commit the lander creates itself (the cleared tree, one parent = the cleared base, the signed clearance in its message) and a NON-FORCED update of main (a
+# compare-and-swap, so a main that moved is refused); the merge endpoint is never used. The decision is taken from one final read that includes the whole CI state.
 #
-# `dry_run: true` (the default) runs every check and stops before the merge: it is how a new clearance, and this workflow itself, are proven before use.
+# `dry_run: true` (the default) runs every read and every check and writes nothing: it is how a new clearance, and this workflow itself, are proven before use.
 #
 # After a landing the dispatcher (MAIN JULIUS) runs accept-main, re-confirms the hold and prepares the next step, exactly as before. Nothing here dispatches those.
 
@@ -47,11 +48,11 @@ on:
         required: true
         default: ''
       dry_run:
-        description: 'Leave "true" to run every check and stop before the merge; type "false" to merge.'
+        description: 'Leave "true" to run every check and write nothing; type "false" to land.'
         required: false
         default: 'true'
 
-# `contents: write` is what the merge API needs and `pull-requests: write` the same call; `checks`, `statuses` and `issues` are the READ side of the gates. `actions` is absent on
+# `contents: write` is what the git data API (create the commit, update the ref) needs and `pull-requests: write` the PR comment and close; `checks`, `statuses` and `issues` are the READ side of the gates. `actions` is absent on
 # purpose (this workflow cannot delete a checkpoint) and so is `workflows`: GitHub refuses a GITHUB_TOKEN merge that would change a workflow file.
 permissions:
   contents: write
