@@ -1,13 +1,33 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  createAskLedger, createJuliusAsk, handleJuliusAskRoute,
+  ASK_EFFORTS, ASK_QUESTION_MAX_CHARS, createAskLedger, createJuliusAsk, handleJuliusAskRoute, selectAskBudget,
   type AskLedger, type AskLedgerLine, type JuliusAskResult,
 } from './julius-ask';
 import { readGptArchitectConfig } from '../src/relay/connectors/gpt-architect/config';
-import type { GptRunOutcome, GptRunRequest } from '../src/relay/connectors/gpt-architect/gpt-runner';
+import { runGptArchitect, type GptRunOutcome, type GptRunRequest } from '../src/relay/connectors/gpt-architect/gpt-runner';
+
+/* The SDK is mocked for the whole file so the real-runner tests can read the exact request body; nothing reaches a provider. */
+const sdk = vi.hoisted(() => ({
+  bodies: [] as Array<Record<string, unknown>>,
+  constructed: [] as Array<Record<string, unknown>>,
+  impl: null as null | (() => Promise<unknown>),
+}));
+vi.mock('openai', () => ({
+  default: class {
+    constructor(options: Record<string, unknown>) { sdk.constructed.push(options); }
+    responses = {
+      create: async (body: Record<string, unknown>) => {
+        sdk.bodies.push(body);
+        if (sdk.impl === null) throw new Error('no SDK behaviour configured');
+        return sdk.impl();
+      },
+    };
+  },
+}));
 
 /**
  * PLAYER-EXPOSURE NEGATIVE CONTROLS for the "ask Julius" route (reviewer findings F4-F8, threat review of fa35bc64,
@@ -17,8 +37,17 @@ import type { GptRunOutcome, GptRunRequest } from '../src/relay/connectors/gpt-a
  * and is expected to FAIL on 0ad05422 with an assertion message that names the missing behaviour. Every test named
  * "CONTROL ..." passes on 0ad05422 and shows the harness can tell a working control from a missing one.
  *
- * Everything goes through the exported API (createJuliusAsk, handleJuliusAskRoute, createAskLedger) and the route's
- * own dependency seams (runArchitect, readConfig, now, ledger, env). No network, no provider, no Postgres.
+ * Everything goes through the exported API (createJuliusAsk, handleJuliusAskRoute, createAskLedger, selectAskBudget) and
+ * the route's own dependency seams (runArchitect, readConfig, now, ledger, env, modelCapabilities). No network, no
+ * provider, no Postgres. The `openai` SDK is mocked so the real runner's request body can be read.
+ *
+ * REBASED onto 167a3581 (the FOUNDER no-artificial-token-caps head). This suite asserts NO numeric output-token ceiling
+ * of its own anywhere, and the blocks at the end pin, as CONTROLS: the route imposes no token ceiling (an operator
+ * override passes through unchanged at and around the removed 500/1200/1500/4000 values); the budget basis is one of
+ * operator_override | provider_max | omitted and is ledgered; the effort is the closed set low|medium|high; a caller
+ * cannot raise its own budget except through the documented lever (the trimmed question length); answerSha256 in the
+ * result row equals the sha256 of the exact UTF-8 bytes of the returned answer and the response carries it as answerDigest;
+ * and the protections that stay (daily call cap, concurrency, one billed call with maxRetries 0, authentication).
  *
  * ---------------------------------------------------------------------------------------------------------------------
  * THE PROPOSED SEAM (the route has no durable-store seam today; this is the smallest one these tests assume, AMENDABLE):
@@ -127,13 +156,16 @@ function instance(o: {
   env?: Record<string, string | undefined>;
   now?: () => number;
   readConfig?: (e: Record<string, string | undefined>) => ReturnType<typeof readGptArchitectConfig>;
+  modelCapabilities?: Parameters<typeof createJuliusAsk>[0]['modelCapabilities'];
+  runArchitect?: (request: GptRunRequest) => Promise<GptRunOutcome>;
 }) {
   return createJuliusAsk({
     env: o.env ?? env(),
     readConfig: o.readConfig ?? readGptArchitectConfig,
     now: o.now ?? (() => DAY0),
     ledger: o.ledger,
-    runArchitect: o.provider.run,
+    runArchitect: o.runArchitect ?? o.provider.run,
+    ...(o.modelCapabilities === undefined ? {} : { modelCapabilities: o.modelCapabilities }),
   });
 }
 
@@ -433,5 +465,264 @@ describe('KEY BINDING (F8, already fixed at 0ad05422)', () => {
     expect(first.ok).toBe(true);
     expect(await ask(c, { question: 'another question' })).toEqual({ ok: false, code: 'julius_ask_idempotency_key_reused', httpStatus: 409 });
     expect(p.requests).toHaveLength(1);
+  });
+});
+
+/* ===================================================================================================================== */
+/* Added on the rebase to 167a3581: the founder's no-artificial-token-caps directive and what must stay.                 */
+
+const sha256Hex = (data: string | Uint8Array): string => createHash('sha256').update(data).digest('hex');
+const sdkAnswer = (answer: string) => async () => ({
+  id: ['resp', 'sdk', '000222'].join('_'), model: 'model-served', status: 'completed', output: [],
+  output_text: JSON.stringify({ answer }), usage: { input_tokens: 3, output_tokens: 4, total_tokens: 7 },
+});
+const lastBody = (): Record<string, unknown> => sdk.bodies[sdk.bodies.length - 1] ?? {};
+const BASES: readonly string[] = ['operator_override', 'provider_max', 'omitted'];
+const rowOf = (store: FakeDurableStore, phase: string, askId?: string): AskLedgerLine | undefined =>
+  store.held.find((l) => l.phase === phase && (askId === undefined || l.askId === askId));
+
+describe('NO ROUTE TOKEN CEILING (founder directive): the provider\'s own limit applies unless the operator sets one', () => {
+  it('CONTROL: selectAskBudget, with no override and no documented maximum, omits max_output_tokens for EVERY allowed question length', () => {
+    const capped: number[] = [];
+    for (let n = 1; n <= ASK_QUESTION_MAX_CHARS; n += 1) {
+      const b = selectAskBudget({ questionChars: n });
+      if (b.maxOutputTokens !== null || b.basis !== 'omitted') capped.push(n);
+    }
+    expect(capped, 'a route-imposed output ceiling appeared for these question lengths').toEqual([]);
+  });
+
+  it('CONTROL: through the controller the runner is told to OMIT max_output_tokens and the pre-call row records "omitted"', async () => {
+    const store = durableStore();
+    const p = provider();
+    const c = instance({ ledger: store, provider: p });
+    const questions = ['short', 'm'.repeat(500), 'h'.repeat(ASK_QUESTION_MAX_CHARS)];
+    for (const [i, question] of questions.entries()) expect((await ask(c, { question, idempotencyKey: `omit-key-000${i}` })).ok).toBe(true);
+    expect(p.requests.map((r) => r.omitMaxOutputTokens), 'every ask must omit the output field').toEqual([true, true, true]);
+    const pre = store.held.filter((l) => l.phase === 'pre_call');
+    expect(pre.map((l) => [l.budgetBasis, l.maxOutputTokensSent])).toEqual([['omitted', 'omitted'], ['omitted', 'omitted'], ['omitted', 'omitted']]);
+  });
+
+  it('CONTROL: the real runner sends NO max_output_tokens field on the wire, for a short and a 2000-character question', async () => {
+    sdk.bodies.length = 0;
+    sdk.impl = sdkAnswer('wire answer');
+    const c = instance({ ledger: durableStore(), provider: provider(), runArchitect: runGptArchitect });
+    expect((await ask(c, { question: 'short', idempotencyKey: 'wire-key-0001' })).ok).toBe(true);
+    expect((await ask(c, { question: 'w'.repeat(ASK_QUESTION_MAX_CHARS), idempotencyKey: 'wire-key-0002' })).ok).toBe(true);
+    expect(sdk.bodies).toHaveLength(2);
+    expect(sdk.bodies.map((b) => Object.prototype.hasOwnProperty.call(b, 'max_output_tokens')), 'max_output_tokens reached the wire').toEqual([false, false]);
+  });
+
+  it('CONTROL: an operator override passes through UNCHANGED at and around the removed 500/1200/1500/4000 values (no clamp, no floor)', async () => {
+    sdk.impl = sdkAnswer('override answer');
+    const values = [1, 499, 500, 501, 1199, 1200, 1201, 1499, 1500, 1501, 3999, 4000, 4001, 32768, 1_000_000];
+    const wrong: string[] = [];
+    for (const v of values) {
+      sdk.bodies.length = 0;
+      const store = durableStore();
+      const c = instance({ ledger: store, provider: provider(), runArchitect: runGptArchitect, env: env({ JULIUS_ASK_MAX_OUTPUT_TOKENS: String(v) }) });
+      const result = await ask(c, { idempotencyKey: `override-key-${v}` });
+      const pre = rowOf(store, 'pre_call');
+      const sent = lastBody().max_output_tokens;
+      if (!result.ok || sent !== v || pre?.budgetBasis !== 'operator_override' || pre?.maxOutputTokensSent !== v) {
+        wrong.push(`${v}: ok=${String(result.ok)} sent=${String(sent)} basis=${String(pre?.budgetBasis)} ledgered=${String(pre?.maxOutputTokensSent)}`);
+      }
+    }
+    expect(wrong, 'an operator override was clamped, floored or mis-recorded').toEqual([]);
+  });
+
+  it('CONTROL: a documented provider maximum (the modelCapabilities seam) is sent as-is and recorded as provider_max', async () => {
+    const store = durableStore();
+    const p = provider();
+    const c = instance({ ledger: store, provider: p, modelCapabilities: () => ({ maxOutputTokens: 128_000 }) });
+    expect((await ask(c)).ok).toBe(true);
+    expect(p.requests[0]?.config.maxOutputTokens).toBe(128_000);
+    expect(p.requests[0]?.omitMaxOutputTokens).not.toBe(true);
+    expect(rowOf(store, 'pre_call')).toMatchObject({ budgetBasis: 'provider_max', maxOutputTokensSent: 128_000 });
+  });
+});
+
+describe('BUDGET BASIS AND EFFORT: closed sets, chosen server-side, ledgered', () => {
+  it('CONTROL: the basis is exactly one of operator_override | provider_max | omitted, ledgered for the askId, and matches what was sent', async () => {
+    const scenarios = [
+      { name: 'omitted', e: env(), caps: undefined },
+      { name: 'operator_override', e: env({ JULIUS_ASK_MAX_OUTPUT_TOKENS: '7777' }), caps: undefined },
+      { name: 'provider_max', e: env(), caps: () => ({ maxOutputTokens: 64_000 }) },
+    ];
+    for (const s of scenarios) {
+      const store = durableStore();
+      const result = await ask(instance({ ledger: store, provider: provider(), env: s.e, modelCapabilities: s.caps }));
+      expect(result.ok, s.name).toBe(true);
+      const pre = rowOf(store, 'pre_call');
+      expect(BASES, `basis ${String(pre?.budgetBasis)} is outside the closed set`).toContain(pre?.budgetBasis);
+      expect(pre?.budgetBasis).toBe(s.name);
+      expect(pre?.maxOutputTokensSent === 'omitted', `"omitted" is ledgered exactly when nothing was sent (${s.name})`).toBe(s.name === 'omitted');
+      expect(rowOf(store, 'result', String(pre?.askId)), 'the result row reconciles with the pre-call row by askId').toBeDefined();
+    }
+  });
+
+  it('CONTROL: ASK_EFFORTS is exactly low|medium|high and selectAskBudget never leaves it, for every length', () => {
+    expect([...ASK_EFFORTS]).toEqual(['low', 'medium', 'high']);
+    const outside: string[] = [];
+    for (let n = 0; n <= ASK_QUESTION_MAX_CHARS; n += 1) {
+      for (const caps of [{}, { supportsReasoningEffort: true }]) {
+        const effort = selectAskBudget({ questionChars: n, modelCapabilities: caps }).reasoningEffort;
+        if (effort === null || !ASK_EFFORTS.includes(effort)) outside.push(`${n}:${String(effort)}`);
+      }
+    }
+    expect(outside, 'an effort outside the closed set was chosen').toEqual([]);
+    expect(selectAskBudget({ questionChars: 50, modelCapabilities: { supportsReasoningEffort: false } }).reasoningEffort).toBeNull();
+  });
+
+  it('CONTROL: an unknown effort carried by the config never reaches the wire (refused, or replaced by the route\'s closed-set choice)', async () => {
+    sdk.impl = sdkAnswer('effort answer');
+    const leaked: string[] = [];
+    for (const bogus of ['xhigh', 'minimal', 'max', 'none', 'HIGH']) {
+      sdk.bodies.length = 0;
+      const c = instance({
+        ledger: durableStore(), provider: provider(), runArchitect: runGptArchitect,
+        readConfig: (e) => ({ ...readGptArchitectConfig(e), reasoningEffort: bogus as never }),
+      });
+      const result = await ask(c, { idempotencyKey: `effort-key-${bogus}` });
+      const effort = (lastBody().reasoning as { effort?: unknown } | undefined)?.effort;
+      const refusedBeforeWire = !result.ok && sdk.bodies.length === 0;
+      const closedOnWire = sdk.bodies.length === 1 && typeof effort === 'string' && (ASK_EFFORTS as readonly string[]).includes(effort);
+      if (!(refusedBeforeWire || closedOnWire)) leaked.push(`${bogus} -> ${String(effort)} (${result.ok ? 'answered' : result.code})`);
+    }
+    expect(leaked, 'an effort outside low|medium|high reached the provider').toEqual([]);
+  });
+
+  it('CONTROL: an unusable operator override is refused (503, fails closed, no provider call, no ledger row), never run uncapped', async () => {
+    const accepted: string[] = [];
+    for (const raw of ['abc', '0', '-5', '12.5', 'Infinity', 'NaN', '1e400']) {
+      const store = durableStore();
+      const p = provider();
+      const result = await ask(instance({ ledger: store, provider: p, env: env({ JULIUS_ASK_MAX_OUTPUT_TOKENS: raw }) }));
+      const refused = !result.ok && result.httpStatus === 503 && p.requests.length === 0 && store.held.length === 0;
+      if (!refused) accepted.push(`${raw}: ${result.ok ? 'answered' : `${result.httpStatus} ${result.code}`} calls=${p.requests.length}`);
+    }
+    expect(accepted, 'an unusable override was not refused').toEqual([]);
+  });
+
+  it('CONTROL: a model known to reject an effort gets none, and the pre-call row says not_sent', async () => {
+    const store = durableStore();
+    const p = provider();
+    expect((await ask(instance({ ledger: store, provider: p, modelCapabilities: () => ({ supportsReasoningEffort: false }) }))).ok).toBe(true);
+    expect(p.requests[0]?.config.reasoningEffort).toBeUndefined();
+    expect(rowOf(store, 'pre_call')).toMatchObject({ reasoningEffortChosen: null, effortBasis: 'not_sent' });
+  });
+});
+
+describe('A CALLER CANNOT RAISE ITS OWN BUDGET (the route docs: only the trimmed question length and the operator environment)', () => {
+  const pick = (r: GptRunRequest | undefined) => ({
+    omit: r?.omitMaxOutputTokens, max: r?.omitMaxOutputTokens === true ? 'omitted' : r?.config.maxOutputTokens,
+    effort: r?.config.reasoningEffort, timeoutMs: r?.config.timeoutMs, maxRetries: r?.maxRetries,
+  });
+
+  it('CONTROL: budget fields in the request BODY change nothing the runner receives or the ledger records (compared with a plain body)', async () => {
+    const run = async (body: Record<string, unknown>, key: string) => {
+      const store = durableStore();
+      const p = provider();
+      const response = await handleJuliusAskRoute({
+        method: 'POST', authorization: 'Relay-Session paired-token', origin: undefined, rawBody: JSON.stringify(body),
+        idempotencyKey: key, now: DAY0, operatorToken: OPERATOR,
+      }, { ask: instance({ ledger: store, provider: p }), verifyNativeSession: () => ({ playerId: 'raiser' }) });
+      const pre = rowOf(store, 'pre_call');
+      return { status: response.status, sent: pick(p.requests[0]), ledger: [pre?.budgetBasis, pre?.maxOutputTokensSent, pre?.reasoningEffortChosen] };
+    };
+    const plain = await run({ question: 'short question' }, 'raise-key-0001');
+    const raised = await run({
+      question: 'short question', max_output_tokens: 100_000, maxOutputTokens: 100_000, reasoningEffort: 'high', reasoning: { effort: 'high' },
+      budgetBasis: 'operator_override', maxRetries: 5, timeoutMs: 600_000, JULIUS_ASK_MAX_OUTPUT_TOKENS: '100000',
+    }, 'raise-key-0002');
+    expect(plain.status).toBe(200);
+    expect(raised, 'a caller-supplied budget field changed the request or the ledger').toEqual(plain);
+    expect(plain.sent).toMatchObject({ omit: true, effort: 'low', maxRetries: 0 });
+  });
+
+  it('CONTROL: extra fields on the controller input are ignored', async () => {
+    const p = provider();
+    const c = instance({ ledger: durableStore(), provider: p });
+    await c.handleAsk({ question: 'short question', idempotencyKey: 'extra-key-0001', caller: 'player:p1' });
+    await c.handleAsk({ question: 'short question', idempotencyKey: 'extra-key-0002', caller: 'player:p1', maxOutputTokens: 99_999, reasoningEffort: 'high', budget: { basis: 'operator_override' } } as never);
+    expect(pick(p.requests[1])).toEqual(pick(p.requests[0]));
+  });
+
+  it('CONTROL: the one caller lever is the documented one, the TRIMMED length: padding whitespace cannot raise the effort', async () => {
+    const p = provider();
+    const c = instance({ ledger: durableStore(), provider: p });
+    await ask(c, { question: `  hi${' '.repeat(1500)}`, idempotencyKey: 'lever-key-0001' });
+    await ask(c, { question: 'a'.repeat(201), idempotencyKey: 'lever-key-0002' });
+    await ask(c, { question: 'a'.repeat(801), idempotencyKey: 'lever-key-0003' });
+    /* The last two are the DOCUMENTED lever (effort by length), pinned so a change to it is visible; see the report's risk note. */
+    expect(p.requests.map((r) => r.config.reasoningEffort)).toEqual(['low', 'medium', 'high']);
+  });
+});
+
+describe('ANSWER DIGEST: the result row and the response tie the rendered text to one answer', () => {
+  it('CONTROL: answerSha256 in the result row is the sha256 of the exact UTF-8 bytes of the returned answer, and the response carries it as answerDigest', async () => {
+    const text = `caf${String.fromCodePoint(0xe9)} ${String.fromCodePoint(0x1f600)} and ${String.fromCodePoint(0x4e2d)} line`;
+    const store = durableStore();
+    const c = instance({ ledger: store, provider: provider([], () => answered(text)) });
+    const response = await handleJuliusAskRoute({
+      method: 'POST', authorization: `Bearer ${OPERATOR}`, origin: undefined, rawBody: JSON.stringify({ question: 'digest question' }),
+      idempotencyKey: 'digest-key-0001', now: DAY0, operatorToken: OPERATOR,
+    }, { ask: c, verifyNativeSession: () => null });
+    expect(response.status).toBe(200);
+    /* What a client sees: the body as bytes on the wire, decoded once. */
+    const wire = Buffer.from(JSON.stringify(response.body), 'utf8');
+    const data = (JSON.parse(wire.toString('utf8')) as { data: { answer: string; answerDigest: string; answerChars: number; askId: string } }).data;
+    const expected = sha256Hex(Buffer.from(data.answer, 'utf8'));
+    expect(data.answer).toBe(text);
+    expect(data.answerDigest, 'the response must carry the sha256 of the answer it returns').toBe(expected);
+    expect(data.answerChars).toBe(text.length);
+    expect(rowOf(store, 'result', data.askId), 'the result row must carry the same digest').toMatchObject({ answerSha256: expected, answerChars: text.length });
+    expect(JSON.stringify(store.held)).not.toContain('caf');
+  });
+});
+
+describe('PROTECTIONS THAT STAY with no token ceiling', () => {
+  it('CONTROL: one ask is exactly one billed request: maxRetries 0 on the SDK client and one SDK call, even when the provider fails', async () => {
+    sdk.bodies.length = 0;
+    sdk.constructed.length = 0;
+    sdk.impl = async () => { throw Object.assign(new Error('upstream unavailable'), { status: 503, name: 'InternalServerError' }); };
+    const store = durableStore();
+    const result = await ask(instance({ ledger: store, provider: provider(), runArchitect: runGptArchitect }));
+    expect(result).toEqual({ ok: false, code: 'julius_ask_provider_failed', httpStatus: 502 });
+    expect(sdk.bodies).toHaveLength(1);
+    expect(sdk.constructed.map((o) => o.maxRetries)).toEqual([0]);
+    expect(rowOf(store, 'result')).toMatchObject({ attempts: 1, failureClass: 'provider_error' });
+  });
+
+  it('CONTROL: the daily call cap and the concurrency limit still refuse (429) without a provider call', async () => {
+    const p = provider();
+    const c = instance({ ledger: durableStore(), provider: p, env: env({ JULIUS_ASK_DAILY_CAP: '2' }) });
+    await ask(c, { idempotencyKey: 'stay-cap-0001' });
+    await ask(c, { idempotencyKey: 'stay-cap-0002' });
+    expect(await ask(c, { idempotencyKey: 'stay-cap-0003' })).toEqual({ ok: false, code: 'julius_ask_cap_reached', httpStatus: 429 });
+    expect(p.requests).toHaveLength(2);
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const slow = provider([], async () => { await gate; return answered('slow'); });
+    const busy = instance({ ledger: durableStore(), provider: slow });
+    const first = ask(busy, { idempotencyKey: 'stay-busy-0001' });
+    expect(await ask(busy, { idempotencyKey: 'stay-busy-0002' })).toEqual({ ok: false, code: 'julius_ask_busy', httpStatus: 429 });
+    release();
+    expect((await first).ok).toBe(true);
+    expect(slow.requests).toHaveLength(1);
+  });
+
+  it('CONTROL: authentication: no credential, a wrong bearer, or a browser origin is refused 401 before the controller runs', async () => {
+    const store = durableStore();
+    const p = provider();
+    const c = instance({ ledger: store, provider: p });
+    const base = { method: 'POST', rawBody: JSON.stringify({ question: 'hello' }), idempotencyKey: 'auth-key-0001', now: DAY0, operatorToken: OPERATOR };
+    const statuses = [
+      await handleJuliusAskRoute({ ...base, authorization: undefined, origin: undefined }, { ask: c, verifyNativeSession: () => ({ playerId: 'x' }) }),
+      await handleJuliusAskRoute({ ...base, authorization: 'Bearer wrong-operator-value', origin: undefined }, { ask: c, verifyNativeSession: () => null }),
+      await handleJuliusAskRoute({ ...base, authorization: 'Relay-Session paired-token', origin: 'https://example.invalid' }, { ask: c, verifyNativeSession: () => ({ playerId: 'x' }) }),
+    ].map((r) => r.status);
+    expect(statuses).toEqual([401, 401, 401]);
+    expect(p.requests).toHaveLength(0);
+    expect(store.held).toHaveLength(0);
   });
 });
