@@ -344,6 +344,7 @@ describe('BYTE IDENTITY: no committed contract moves when the key is absent', ()
    */
   const REVIEWED_DECLARATIONS: Readonly<Record<string, { readonly minutes: number; readonly digest: string }>> = {
     'julius-maxeffort-gauntlet-1': { minutes: 23, digest: 'sha256:d1850ec77ab1e2ec0ba74d26d3e2a6d347c54e9ebd047077b789a07819642f38' },
+    'julius-maxeffort-loop-1': { minutes: 23, digest: 'sha256:cad6d6669fd00fa06a6823f70a888409aabf4d3ea0298ef8f12dea64f0a232df' },
   };
 
   it('every committed contract parses to the digest main printed, and none declares the key unless it is a reviewed exception (declaring it is a deliberate, reviewed edit)', () => {
