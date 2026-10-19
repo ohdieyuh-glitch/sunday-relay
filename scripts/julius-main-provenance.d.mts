@@ -1,0 +1,88 @@
+/**
+ * Type declarations for the dependency-light reviewed-main provenance gate.
+ *
+ * Authored as plain `.mjs` on purpose: the npm script runs it with `node` and
+ * no build step, and the TypeScript tests import the SAME function, so there is
+ * exactly one implementation of the rule.
+ */
+
+/** Identities that may never attest. Re-exported so a consumer needs one import. */
+export declare const NON_ATTESTING_IDENTITIES: readonly string[];
+/** Every identity whose review signal is read at all. */
+export declare const REVIEW_AUTHORITY_LOGINS: readonly string[];
+/** Who may have authored a landed candidate: the same set that may never attest. */
+export declare const WORKER_AUTHOR_LOGINS: readonly string[];
+export declare const PROVENANCE_VERDICTS: readonly ['provenant', 'unprovenanced', 'indeterminate'];
+
+export interface MainProvenanceResult {
+  readonly verdict: 'provenant' | 'unprovenanced' | 'indeterminate';
+  readonly reason: string;
+  readonly mainSha?: string;
+  readonly mainTreeSha?: string;
+  /** The commit the squash landed on. */
+  readonly parentSha?: string;
+  readonly prNumber?: number;
+  readonly reviewedHeadSha?: string;
+  readonly approvedBy?: readonly string[];
+  /** The review-currency verdict, present only when approval is why this failed. */
+  readonly reviewCurrency?: 'stale' | 'blocked' | 'indeterminate';
+  /** `signed-landing` when the verdict came from the reviewer's signature rather than a founder approval. */
+  readonly via?: 'signed-landing';
+}
+
+/**
+ * One pull request, RESHAPED from what `/commits/{sha}/pulls` returns: that
+ * endpoint has `merged_at`, `user.login`, `head.sha` and `base.ref`, and the CLI
+ * translates them into the fields below before the rule sees them.
+ */
+export interface AssociatedPullRequest {
+  readonly number?: unknown;
+  readonly merged?: unknown;
+  readonly mergeCommitSha?: unknown;
+  readonly authorLogin?: unknown;
+  readonly headSha?: unknown;
+  /** The branch the review was rendered against. */
+  readonly baseRef?: unknown;
+}
+
+export declare function evaluateMainProvenance(input: {
+  readonly mainSha: unknown;
+  readonly mainShaAfter: unknown;
+  readonly mainTreeSha: unknown;
+  readonly mainParents: unknown;
+  readonly pullRequests: unknown;
+  readonly reviewedTreeSha: unknown;
+  readonly reviewedHeadShaAfter: unknown;
+  readonly reviews: unknown;
+  readonly reviewComments: unknown;
+  readonly statuses?: unknown;
+  /** Strictly true/false. Anything else is unproven, not permission. */
+  readonly parentContainedInReviewedHead: unknown;
+  /** Strictly false. Whether the pull request was ever retargeted to another base. */
+  readonly baseRefChanged: unknown;
+  /** The branch under verification. Defaults to `main`. */
+  readonly branch?: unknown;
+  /** The tip's commit message. A signed landing carries one JULIUS LANDING block; absent (undefined) leaves the founder-approval path alone. */
+  readonly mainCommitMessage?: unknown;
+  /** The reviewer public key COMMITTED at the tip's single parent. */
+  readonly reviewerKeyPem?: unknown;
+  /** The commit that key was read at: must be the parent. */
+  readonly reviewerKeyAtSha?: unknown;
+  /** `{ sha, authorLogin, treeSha }` of the commit the signed clearance names as head. */
+  readonly headCommit?: unknown;
+}): MainProvenanceResult;
+
+export declare const LANDING_BEGIN: string;
+export declare const LANDING_END: string;
+
+export type LandingBlock =
+  | { readonly state: 'absent' }
+  | { readonly state: 'invalid'; readonly reason: string }
+  | { readonly state: 'ok'; readonly nonce: string; readonly clearanceB64: string; readonly signatureB64: string };
+
+export declare function extractLandingBlock(message: unknown): LandingBlock;
+export declare function parseSignedClearance(text: string): { readonly problems: string[]; readonly fields: Record<string, string> };
+export declare function evaluateSignedLanding(input: Record<string, unknown>, tip: { readonly mainSha: string; readonly mainTreeSha: unknown; readonly parentSha: string }):
+  | { readonly state: 'absent' }
+  | { readonly state: 'decided'; readonly result: MainProvenanceResult };
+
