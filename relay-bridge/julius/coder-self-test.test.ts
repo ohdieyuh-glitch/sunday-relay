@@ -682,6 +682,22 @@ describe('the self-test telemetry reaches the evidence bundle by exact name, and
     expect(line).toContain("'julius.coder.attempt.workspace'");
   });
 
+  it('coder.report.refused carries ONE bounded reason column: gated to that event type, 1-64 characters of [a-z0-9_], and sourced from the fact the pipeline writes', () => {
+    const dump = read('.github/julius-live-evidence-dump.sh');
+    const line = dump.split('\n').find((l) => l.includes('AS report_reason')) ?? '';
+    expect(line, 'the scope dump carries a report_reason column').not.toBe('');
+    expect(line).toContain("CASE WHEN e.event_type='julius.coder.report.refused'");
+    expect(line, 'bounded length').toContain("length(e.payload->'facts'->>'reasonCode') BETWEEN 1 AND 64");
+    expect(line, 'closed alphabet: anything outside [a-z0-9_] is dropped, never truncated or escaped').toContain("!~ '[^a-z0-9_]'");
+    expect(line).toContain("THEN e.payload->'facts'->>'reasonCode' END AS report_reason");
+    // it is the same SELECT as the scope facts, so the other three event types get an empty column, and the report text is never selected
+    expect(line).toContain("'julius.coder.scope.violated'");
+    expect(line).not.toMatch(/->'facts'->>'(report|summary|blockedReason|explanation)'/u);
+    const pipeline = read('src/relay/mission/julius/julius-task-pipeline.ts');
+    expect(pipeline.match(/'coder\.report\.refused'/gu)?.length, 'the pipeline emits it at three sites').toBe(3);
+    expect(pipeline.match(/facts: \{ reasonCode: /gu)?.length).toBeGreaterThanOrEqual(3);
+  });
+
   it('NO SCORER OR VERIFIER NAMES THE TELEMETRY: the readers of scope.tsv and the learning/repair/verification modules never mention it', () => {
     const scorers = [
       'scripts/wonderland-beta-gate.mjs', 'scripts/julius-carry-verify.ts',
