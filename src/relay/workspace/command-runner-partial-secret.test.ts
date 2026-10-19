@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { runBoundedCommand } from './command-runner';
+import { runBoundedCommand, secureCapturedStream } from './command-runner';
 
 /**
  * PARTIAL-SECRET DISCLOSURE AT THE CAPTURE CAP (security finding, independent reviewer MEDIUM / ADVISORY).
@@ -65,6 +65,91 @@ const filler = (bytes: number): string => {
   while (text.length < bytes) { text += `log line ${n}\n`; n += 1; }
   return text.slice(0, bytes);
 };
+
+/**
+ * THE SWEEP (REVIEW's ruling for the final cut). Every secret shape the sanitizer lists, in several surface forms, embedded in ordinary output; the stream is cut at EVERY byte offset, twice:
+ *  - CAP: `secureCapturedStream(stream, k, false)`: the runner's own bound (cut after k bytes, truncation line appended), withhold and sanitize;
+ *  - KILL: `secureCapturedStream(stream.slice(0, k), huge, true)`: a stream that stopped early (timeout, cancel, kill) after k bytes.
+ * For each cut, no 6-character window of the secret BODY may remain in the stored text. The window is taken over the body only (not over a fixed prefix or the keyword), so a cut that leaves
+ * fewer than 6 body characters is allowed to show them. The trailing-partial-token step is exercised by every cut that ends inside a token.
+ */
+interface Shape { readonly name: string; readonly body: string; readonly secret: string }
+const sweepShapes = (): Shape[] => {
+  const mk = (name: string, body: string, secret: string): Shape => ({ name, body, secret });
+  const pemBody = Array.from({ length: 3 }, () => rand(64)).join('\n');
+  const jwtHead = `eyJ${rand(20)}`;
+  const jwtPay = `eyJ${rand(30)}`;
+  const jwtSig = rand(24);
+  const aws = rand(16).toUpperCase().replace(/[^A-Z0-9]/g, 'Q');
+  const out: Shape[] = [
+    mk('sk- key', rand(40), ''), mk('AKIA key', aws, ''), mk('github token', rand(36), ''), mk('slack token', rand(30), ''),
+    mk('jwt', `${jwtHead}.${jwtPay}.${jwtSig}`, ''), mk('pem private key', pemBody, ''),
+    mk('password=', rand(20), ''), mk('api_key:', rand(24), ''), mk('secret =', rand(22), ''), mk('TOKEN : ', rand(26), ''), mk('api-key=', rand(18), ''),
+  ];
+  const secrets: Record<string, string> = {
+    'sk- key': `sk-${out[0].body}`,
+    'AKIA key': `AKIA${out[1].body}`,
+    'github token': `ghp_${out[2].body}`,
+    'slack token': `xoxb-${out[3].body}`,
+    jwt: out[4].body,
+    'pem private key': `${PEM_HEAD}\n${pemBody}\n${PEM_FOOT}`,
+    'password=': `password=${out[6].body}`,
+    'api_key:': `api_key: ${out[7].body}`,
+    'secret =': `secret = ${out[8].body}`,
+    'TOKEN : ': `TOKEN : ${out[9].body}`,
+    'api-key=': `api-key=${out[10].body}`,
+  };
+  return out.map((s) => ({ ...s, secret: secrets[s.name] }));
+};
+
+const TRAILS: Array<[string, string]> = [['lines', '\nnext line of output\ndone.\n'], ['none', ''], ['space', ' '], ['comma-word', ', and more']];
+const surround = (secret: string, lead: string, trail: string): string => `${lead}${secret}${trail}`;
+const LEADS: Array<[string, string]> = [['plain', 'ok line one\nstep two done '], ['multibyte', 'caf\u00e9 \u2713 ok line\nstep two done '], ['stream-start', ''], ['after-newline', 'a line\n']];
+
+describe('SWEEP: every secret shape, cut at every byte offset, by the byte cap and by a kill', () => {
+  it('no 6-character window of any secret body is stored, for any shape, any cut kind, any offset', () => {
+    const t0 = Date.now();
+    const failures: string[] = [];
+    let cuts = 0;
+    const table: string[] = [];
+    for (const shape of sweepShapes()) {
+      for (const [leadName, lead] of LEADS) for (const [trailName, trail] of TRAILS) {
+        const stream = surround(shape.secret, lead, trail);
+        let capCuts = 0;
+        let killCuts = 0;
+        for (let k = 0; k <= stream.length; k += 1) {
+          const cap = secureCapturedStream(stream, k, false);
+          capCuts += 1;
+          const capLeak = leaked(cap.text, shape.body);
+          if (capLeak !== null) failures.push(`CAP  ${shape.name}/${leadName}/${trailName} k=${k}: window ${JSON.stringify(capLeak)}  stored tail ${JSON.stringify(cap.text.slice(-70))}`);
+          const kill = secureCapturedStream(stream.slice(0, k), 1_000_000, true);
+          killCuts += 1;
+          const killLeak = leaked(kill.text, shape.body);
+          if (killLeak !== null) failures.push(`KILL ${shape.name}/${leadName}/${trailName} k=${k}: window ${JSON.stringify(killLeak)}  stored tail ${JSON.stringify(kill.text.slice(-70))}`);
+        }
+        cuts += capCuts + killCuts;
+        table.push(`${shape.name.padEnd(16)} ${leadName.padEnd(13)} ${trailName.padEnd(10)} stream ${String(stream.length).padStart(3)} chars   cap offsets 0..${stream.length} (${capCuts})   kill offsets 0..${stream.length} (${killCuts})`);
+      }
+    }
+    // eslint-disable-next-line no-console
+    console.log(`SWEEP coverage (${cuts} cuts in ${Date.now() - t0} ms):\n${table.join('\n')}`);
+    expect(failures.slice(0, 12), `${failures.length} leak(s); first ones`).toEqual([]);
+  });
+
+  it('the sweep can fail: against a runner that stores the stream with no withholding at all, it finds leaks (self-test of the control)', () => {
+    let leaks = 0;
+    for (const shape of sweepShapes()) {
+      const stream = surround(shape.secret, LEADS[0][1], TRAILS[0][1]);
+      for (let k = 0; k <= stream.length; k += 1) {
+        // a naive store: bound, then sanitize, no withholding
+        const bounded = stream.slice(0, k);
+        const sanitized = bounded.replace(/\bsk-[A-Za-z0-9]{8,}/g, '[R]');
+        if (leaked(sanitized, shape.body) !== null) leaks += 1;
+      }
+    }
+    expect(leaks).toBeGreaterThan(50);
+  });
+});
 
 describe('a stream that stopped early never stores the head of a secret it was cut inside', () => {
   it('P1: a vendor-prefixed key cut one character below the shape minimum is not stored', async () => {

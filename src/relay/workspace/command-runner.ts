@@ -53,8 +53,10 @@ const TRUNCATION_SUFFIX = /\n\[TRUNCATED: output limit reached\]$/;
  *  1. an UNTERMINATED private key block (a BEGIN header with no END after it): from the header to the end;
  *  2. the TRAILING PARTIAL TOKEN: the last run of non-whitespace characters, when the text ends without whitespace.
  * Only applied to a stream that stopped early; a stream that ended by itself is stored exactly as before. Sanitizer patterns are not changed.
+ * ORDER MATTERS: step 1 runs BEFORE the sanitizer, step 2 AFTER it. A complete secret at the very end (a whole dashed footer, say) must reach the sanitizer intact; step 2 would otherwise
+ * replace its last token and break the shape the sanitizer needs. After the sanitizer a complete secret is already a mark, and step 2 skips text that ends in one.
  */
-function withholdOpenSecret(text: string): { text: string; withheld: number } {
+function withholdOpenBlock(text: string): { text: string; withheld: number } {
   let out = text;
   let withheld = 0;
   const begins = [...out.matchAll(/BEGIN [A-Z ]*PRIVATE KEY/g)];
@@ -67,17 +69,18 @@ function withholdOpenSecret(text: string): { text: string; withheld: number } {
     out = `${out.slice(0, start)}${REDACTION_MARK}`;
     withheld += 1;
   }
-  if (!out.endsWith(REDACTION_MARK)) {
-    const tail = /\S+$/.exec(out);
-    if (tail !== null) {
-      out = `${out.slice(0, tail.index)}${REDACTION_MARK}`;
-      withheld += 1;
-    }
-  }
   return { text: out, withheld };
 }
 
-function secureCapturedStream(
+/** Step 2: the TRAILING PARTIAL TOKEN of the (already sanitized) text, when it ends without whitespace and not in a mark. */
+function withholdTrailingToken(text: string): { text: string; withheld: number } {
+  if (text.endsWith(REDACTION_MARK)) return { text, withheld: 0 };
+  const tail = /\S+$/.exec(text);
+  if (tail === null) return { text, withheld: 0 };
+  return { text: `${text.slice(0, tail.index)}${REDACTION_MARK}`, withheld: 1 };
+}
+
+export function secureCapturedStream(
   raw: string,
   limitBytes: number,
   stoppedEarly: boolean,
@@ -86,9 +89,16 @@ function secureCapturedStream(
   const suffix = bounded.truncated ? (TRUNCATION_SUFFIX.exec(bounded.text)?.[0] ?? '') : '';
   let core = suffix === '' ? bounded.text : bounded.text.slice(0, bounded.text.length - suffix.length);
   let withheld = 0;
-  if (bounded.truncated || stoppedEarly) ({ text: core, withheld } = withholdOpenSecret(core));
+  const early = bounded.truncated || stoppedEarly;
+  if (early) ({ text: core, withheld } = withholdOpenBlock(core));
   const clean = sanitizeOutput(core);
-  return { text: `${clean.text}${suffix}`, truncated: bounded.truncated, redactions: clean.redactions + withheld };
+  let stored = clean.text;
+  if (early) {
+    const tail = withholdTrailingToken(stored);
+    stored = tail.text;
+    withheld += tail.withheld;
+  }
+  return { text: `${stored}${suffix}`, truncated: bounded.truncated, redactions: clean.redactions + withheld };
 }
 
 export function runBoundedCommand(
