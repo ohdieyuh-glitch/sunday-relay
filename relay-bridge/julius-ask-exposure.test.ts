@@ -116,6 +116,9 @@ const env = (extra: Record<string, string | undefined> = {}): Record<string, str
   OPENAI_API_KEY: PROVIDER_KEY,
   OPENAI_PROMPT_ARCHITECT_MODEL: 'model-configured',
   RELAY_PROMPT_ARCHITECT_MODE: 'live',
+  /* Reviewer ruling (mailbox 4ce81b, item 1): a PLAYER ask with no safety secret is refused 503. Every test here therefore runs
+     WITH one by default; the tests about the no-secret case remove it explicitly (JULIUS_ASK_SAFETY_SECRET: undefined). */
+  JULIUS_ASK_SAFETY_SECRET: ['exposure', 'safety', 'default', '0123456789'].join('-'),
   ...extra,
 });
 
@@ -844,14 +847,12 @@ function commitThenThrowStore(): AskStore & { readonly held: AskLedgerLine[] } {
   return markAskStoreDurable(store);
 }
 
-describe('DURABLE-WRITE FAILURE (slice 3): a commit that fails holds nothing; a commit whose acknowledgement is lost wastes nothing', () => {
-  it('REQUIRED (slice 3): an fsync that FAILS in the file store is a 503 with no provider call, and the attempt holds no cap slot (after a restart too)', async () => {
-    /* Seam: createFileAskStore (the only branded store a player can reach today) plus a failing fsync from the node:fs mock.
-       Today writeDurably keeps a row whose fsync failed ("never under-counting a cap") and the route answers 409 attempt_unknown.
-       What this test requires: the store ROLLS BACK the unsynced append (truncate to the pre-write length and sync that) before
-       reporting "not committed", so the route answers 503 julius_ask_ledger_unavailable, buys nothing and spends no slot; if the
-       rollback itself cannot be made durable the store must close (every later ask 503), never keep serving. The Postgres
-       equivalent is a COMMIT that returns an error: the transaction is rolled back and the route answers 503. */
+describe('DURABLE-WRITE FAILURE (slice 3, reviewer ruling 4ce81b item 3): commit-then-throw on the player path, a crash mid-call, the demo file store', () => {
+  it('CONTROL (ruling 3): the demo FILE store keeps the documented 409 attempt_unknown when an fsync fails, and the row keeps its slot after a restart', async () => {
+    /* The ruling: "the demo FILE store keeps the documented attempt_unknown 409". The first version of this test (dfcf7109)
+       REQUIRED a 503 and a rollback here; the ruling overrides that, so it is now a control of today's behaviour: writeDurably
+       keeps a row whose bytes were written but whose fsync failed ("never under-counting a cap"), and the route answers
+       attempt_unknown. Seam: createFileAskStore plus a failing fsync from the node:fs mock. */
     const dir = mkdtempSync(join(tmpdir(), 'julius-ask-exposure-fsync-'));
     const file = join(dir, 'ask-store.jsonl');
     let first: FileAskStore | null = null;
@@ -859,20 +860,20 @@ describe('DURABLE-WRITE FAILURE (slice 3): a commit that fails holds nothing; a 
     try {
       first = createFileAskStore({ file });
       const p = provider();
-      const capped = env({ JULIUS_ASK_DAILY_CAP: '1' });
+      const capped = env({ JULIUS_ASK_DAILY_CAP: '1', JULIUS_ASK_BINDING_SECRET: secretFrom('binding') });
       fsFault.failNextFsyncs = 1;
       const fsyncsBefore = fsFault.fsyncCalls;
       const refused = await ask(instance({ ledger: first, provider: p, env: capped }), { idempotencyKey: 'fsync-fail-0001' });
       expect(fsFault.fsyncCalls, 'the injected fsync failure was reached').toBeGreaterThan(fsyncsBefore);
       expect(p.requests, 'no provider call after a failed durable write').toHaveLength(0);
-      expect(refused, `MISSING: a pre-call row whose fsync FAILED was kept and answered as ${describeResult(refused)}; a failed commit must be 503 ledger_unavailable and hold nothing`).toEqual({ ok: false, code: 'julius_ask_ledger_unavailable', httpStatus: 503 });
+      expect(refused).toMatchObject({ ok: false, code: 'julius_ask_attempt_unknown', httpStatus: 409 });
       first.close();
       first = null;
       reopened = createFileAskStore({ file });
-      expect((await reopened.rows()).filter((row) => row.phase === 'pre_call'), 'the failed attempt left no pre-call row in the file').toEqual([]);
-      const after = await ask(instance({ ledger: reopened, provider: p, env: capped }), { idempotencyKey: 'fsync-fail-0002' });
-      expect(after.ok, `the only slot under a cap of 1 was spent by an attempt that never committed: ${describeResult(after)}`).toBe(true);
-      expect(p.requests).toHaveLength(1);
+      const restarted = instance({ ledger: reopened, provider: p, env: capped });
+      expect(await ask(restarted, { idempotencyKey: 'fsync-fail-0001' }), 'the same key after a restart').toMatchObject({ ok: false, code: 'julius_ask_attempt_unknown', httpStatus: 409 });
+      expect(await ask(restarted, { idempotencyKey: 'fsync-fail-0002' }), 'the row keeps the only slot under a cap of 1').toMatchObject({ ok: false, code: 'julius_ask_cap_reached', httpStatus: 429 });
+      expect(p.requests).toHaveLength(0);
     } finally {
       fsFault.failNextFsyncs = 0;
       first?.close();
@@ -881,24 +882,88 @@ describe('DURABLE-WRITE FAILURE (slice 3): a commit that fails holds nothing; a 
     }
   });
 
-  it('REQUIRED (slice 3): a store that COMMITS THEN THROWS lets the SAME key retry and is answered, with no false "may have been billed" and no wasted slot', async () => {
-    /* The contract read here: the failure-states doc says a ledger_unavailable refusal means "nothing was sent to the provider and
-       nothing was spent" and the same key may be retried; attempt_unknown means "a billed call may have happened". In this case the
-       route KNOWS the provider was never contacted (the reserve threw before the runner), so attempt_unknown is false, and the dead
-       row must not spend the only slot. NOTE: the doc at 255e27bf (rows 16 and 22) now ALSO lists commit-then-throw under
-       attempt_unknown; this test pins the reviewer's F2 reading and disagrees with that new sentence, so one of the two must change.
-       Seam it needs: the route marks the attempt "not contacted" (for example a compensating result row) and the store neither
-       counts such a row against the caps nor treats its key as used. */
+  it('REQUIRED (slice 3, ruling 3): PLAYER + a store that commits then throws BEFORE the provider call: 503, a not_contacted result row, and the SAME key retried is answered with exactly one call under cap 1', async () => {
+    /* The ruling: on the PLAYER path, when the route KNOWS the provider was not contacted (the reserve threw before the call),
+       it answers 503 julius_ask_ledger_unavailable and writes a result row marking the attempt not_contacted; the SAME key then
+       retries and is answered, and the dead attempt spends no slot. Today the route reads its own row back and answers 409
+       attempt_unknown ("a billed call may have happened"), which is false here, and the row keeps the only slot.
+       Seam it needs: (i) the compensating result row (outcome not_contacted), and (ii) a reserve that neither counts a
+       not_contacted attempt against the caps nor treats its key as used. The demo FILE store is carved out by the same ruling
+       (control above), so the route needs to know which stores take the compensation; when that seam exists, THIS fake opts in. */
     const store = commitThenThrowStore();
     const p = provider();
     const c = instance({ ledger: store, provider: p, env: env({ JULIUS_ASK_DAILY_CAP: '1', JULIUS_ASK_BINDING_SECRET: secretFrom('binding') }) });
     const first = await ask(c, { idempotencyKey: 'commit-throw-0001' });
     expect(p.requests, 'the provider was never contacted on the first attempt').toHaveLength(0);
-    expect(first.ok === false ? first.code : 'answered', `MISSING: a commit-then-throw that never reached the provider is answered ${describeResult(first)}, which tells the player a billed call may have happened`).not.toBe('julius_ask_attempt_unknown');
-    expect(first).toMatchObject({ ok: false, code: 'julius_ask_ledger_unavailable', httpStatus: 503 });
+    expect(first, `MISSING (ruling 3): a commit-then-throw that never reached the provider was answered ${describeResult(first)}; required 503 ledger_unavailable`).toEqual({ ok: false, code: 'julius_ask_ledger_unavailable', httpStatus: 503 });
+    const pre = store.held.find((row) => row.phase === 'pre_call');
+    const mark = store.held.find((row) => row.phase === 'result' && row.askId === pre?.askId);
+    expect(String(mark?.outcome), 'MISSING (ruling 3): no result row marks the dead attempt not_contacted').toMatch(/not_contacted/);
     const retry = await ask(c, { idempotencyKey: 'commit-throw-0001' });
-    expect(retry.ok, `MISSING: the same key could not be retried after a 503 that bought nothing, and the only slot under a cap of 1 is spent: ${describeResult(retry)}`).toBe(true);
+    expect(retry.ok, `MISSING (ruling 3): the same key could not be retried after a 503 that bought nothing (cap 1): ${describeResult(retry)}`).toBe(true);
     expect(p.requests, 'the retry is exactly one billed call').toHaveLength(1);
+  });
+
+  it('CONTROL (ruling 3): a pre-call row with NO result row (a crash mid-call, the provider possibly contacted) still answers the same key 409 attempt_unknown after a restart', async () => {
+    /* The provider IS contacted here; the result row is lost because the store goes down during the call (the route swallows a
+       lost result row so a paid answer is not discarded). A restart then sees a pre-call row with no outcome. */
+    const store = durableStore();
+    const p = provider([], () => { store.broken = true; return answered('paid, then the store went down'); });
+    const bound = env({ JULIUS_ASK_BINDING_SECRET: secretFrom('binding') });
+    const first = await ask(instance({ ledger: store, provider: p, env: bound }), { idempotencyKey: 'crash-mid-0001' });
+    expect(first.ok, `the paid answer is still returned: ${describeResult(first)}`).toBe(true);
+    store.broken = false;
+    expect(store.held.filter((row) => row.phase === 'result'), 'the result row was lost').toHaveLength(0);
+    const afterRestart = await ask(instance({ ledger: store, provider: p, env: bound }), { idempotencyKey: 'crash-mid-0001' });
+    expect(afterRestart).toMatchObject({ ok: false, code: 'julius_ask_attempt_unknown', httpStatus: 409 });
+    expect(p.requests).toHaveLength(1);
+  });
+});
+
+/* ===================================================================================================================== */
+describe('SAFETY SECRET FOR PLAYERS (slice 3, reviewer ruling 4ce81b item 1)', () => {
+  it('REQUIRED (slice 3, ruling 1): a PLAYER ask with NO safety secret is refused 503 not-configured, with no provider call and no cap slot held', async () => {
+    /* The ruling: a player ask with no safety secret = 503 not-configured, no provider contact, no slot held. Today the route
+       sends no safety_identifier (safetyBasis none) and answers. BOTH operator secrets are removed here, because the route falls
+       back to JULIUS_ASK_BINDING_SECRET for the safety identifier (julius-ask.ts:576); whether that fallback counts as "a safety
+       secret" under the ruling is for the reviewer to say, and this test holds under either reading. */
+    const store = durableStore();
+    const p = provider();
+    const noSecret = env({ JULIUS_ASK_SAFETY_SECRET: undefined, JULIUS_ASK_BINDING_SECRET: undefined, JULIUS_ASK_DAILY_CAP: '1' });
+    const refused = await ask(instance({ ledger: store, provider: p, env: noSecret }), { idempotencyKey: 'no-safety-0001' });
+    expect(p.requests.length, `MISSING (ruling 1): a player ask with no safety secret reached the provider (${describeResult(refused)})`).toBe(0);
+    expect(refused.ok === false && refused.httpStatus === 503 && /not_configured/.test(refused.code), `MISSING (ruling 1): required 503 with a not-configured code, got ${describeResult(refused)}`).toBe(true);
+    expect(store.held, 'the refusal wrote no row, so it holds no cap slot').toHaveLength(0);
+    const configured = await ask(instance({ ledger: store, provider: p, env: env({ JULIUS_ASK_DAILY_CAP: '1' }) }), { idempotencyKey: 'no-safety-0002' });
+    expect(configured.ok, `with the secret set, the only slot under a cap of 1 is still free: ${describeResult(configured)}`).toBe(true);
+  });
+
+  it('CONTROL (ruling 1): an OPERATOR ask with no safety secret still works; no safety_identifier is sent and the pre-call row says safetyBasis none', async () => {
+    const store = durableStore();
+    const p = provider();
+    const noSecret = env({ JULIUS_ASK_SAFETY_SECRET: undefined, JULIUS_ASK_BINDING_SECRET: undefined });
+    const result = await ask(instance({ ledger: store, provider: p, env: noSecret }), { caller: 'operator', idempotencyKey: 'op-no-safety-01' });
+    expect(result.ok, `the operator works without a safety secret: ${describeResult(result)}`).toBe(true);
+    expect(p.requests).toHaveLength(1);
+    expect(Object.prototype.hasOwnProperty.call(p.requests[0] ?? {}, 'safetyIdentifier')).toBe(false);
+    expect(rowOf(store, 'pre_call')).toMatchObject({ safetyBasis: 'none' });
+  });
+});
+
+/* ===================================================================================================================== */
+describe('PLAYER DEFAULT EFFORT CAP (reviewer ruling 4ce81b item 2)', () => {
+  it('CONTROL (ruling 2): with JULIUS_ASK_PLAYER_MAX_EFFORT unset a player\'s long question is capped to medium and ledgered policy_capped; the operator is not capped', async () => {
+    const long = 'a'.repeat(801);
+    const playerStore = durableStore();
+    const pp = provider();
+    expect((await ask(instance({ ledger: playerStore, provider: pp }), { question: long, idempotencyKey: 'effort-cap-0001' })).ok).toBe(true);
+    expect(pp.requests[0]?.config.reasoningEffort).toBe('medium');
+    expect(rowOf(playerStore, 'pre_call')).toMatchObject({ reasoningEffortChosen: 'medium', effortBasis: 'policy_capped' });
+    const operatorStore = durableStore();
+    const op = provider();
+    expect((await ask(instance({ ledger: operatorStore, provider: op }), { question: long, caller: 'operator', idempotencyKey: 'effort-cap-0002' })).ok).toBe(true);
+    expect(op.requests[0]?.config.reasoningEffort).toBe('high');
+    expect(rowOf(operatorStore, 'pre_call')).toMatchObject({ reasoningEffortChosen: 'high', effortBasis: 'dynamic' });
   });
 });
 
