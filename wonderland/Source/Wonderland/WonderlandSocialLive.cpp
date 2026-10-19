@@ -8,6 +8,7 @@
 #include "Serialization/JsonWriter.h"
 #include "Misc/ScopeExit.h"
 #include "HAL/IConsoleManager.h"
+#include "WonderlandSocialReconnectPolicy.h"
 
 // Named, not anonymous: the module is one unity translation unit.
 namespace WonderlandSocialLiveDetail
@@ -28,6 +29,14 @@ namespace WonderlandSocialLiveDetail
 	constexpr double WorldSeconds = 0.1;
 	TAutoConsoleVariable<int32> CVarWorldFastTick(TEXT("wl.Remote.FastWorldTick"), 1,
 		TEXT("Social: 1 sends the world report from a dedicated 50 ms ticker (about 8 a second), 0 leaves it on the shared 0.25 s tick (4 a second, the old cadence)."));
+	/** r16reh16w reconnect fixes, each a rollback: 0 puts the old behaviour back. */
+	TAutoConsoleVariable<int32> CVarRejoin404Replan(TEXT("wl.Remote.Rejoin404Replan"), 1,
+		TEXT("Social: 1 plans the rejoin of a 404 that landed while a join was in flight once that join answers without placing the player, 0 drops it (the old behaviour)."));
+	TAutoConsoleVariable<int32> CVarRejoinKeepTarget(TEXT("wl.Remote.RejoinKeepTarget"), 1,
+		TEXT("Social: 1 says a refused INVITE or PARTY rejoin target and asks for it again (bounded) before the public world, 0 falls back to the public world at once and silently (the old behaviour)."));
+	TAutoConsoleVariable<int32> CVarLeaveRetry(TEXT("wl.Remote.LeaveRetry"), 1,
+		TEXT("Social: 1 sends world.leave once more, a second later, when the first never reached the server, 0 sends it once (the old behaviour)."));
+	constexpr double LeaveRetrySeconds = 1.0;
 	constexpr int64 MaxResponseBytes = 2 * 1024 * 1024;
 
 	const TCHAR* const Root = TEXT("/relay-api/wonderland/social");
@@ -504,13 +513,13 @@ void FWonderlandSocialLiveService::HandleWorldReport(int32 Status, const TShared
 			// player's own answer was dropped and they ended back where they had left.
 			if (!bJoinInFlight && !bAutoJoinPending)
 			{
-				UE_LOG(LogTemp, Display, TEXT("WLWORLD the server no longer holds this player's world (404): joining the same one again quietly"));
-				UE_LOG(LogTemp, Display, TEXT("WLREMOTE rejoin404 figures=%d context=%s"), WorldView.Avatars.Num(), *WorldView.ContextId);
-				RejoinContextId = WorldView.ContextId;   // a FRIEND rejoin must land in this same world, or the player is not moved (m2)
-				WorldView = FWonderlandWorldView();
-				NotePopulation();
-				WorldChanged.Broadcast();
-				ScheduleAutoJoin(WorldTarget, WorldArg);
+				PlanRejoinAfter404();
+			}
+			else if (bJoinInFlight && WonderlandSocialLiveDetail::CVarRejoin404Replan.GetValueOnGameThread() != 0)
+			{
+				// NOT LOST (r16reh16w): that join's answer decides, and if it does not place the player the rejoin is planned then
+				bRejoin404Deferred = true;
+				UE_LOG(LogTemp, Display, TEXT("WLSOCIAL rejoin404 deferred: a join is in flight, the rejoin is replanned when it answers"));
 			}
 		}
 		else if (Problem != LastError)
@@ -546,6 +555,18 @@ void FWonderlandSocialLiveService::HandleWorldReport(int32 Status, const TShared
 	}
 	NotePopulation();
 	WorldChanged.Broadcast();
+}
+
+void FWonderlandSocialLiveService::PlanRejoinAfter404()
+{
+	UE_LOG(LogTemp, Display, TEXT("WLWORLD the server no longer holds this player's world (404): joining the same one again quietly"));
+	UE_LOG(LogTemp, Display, TEXT("WLREMOTE rejoin404 figures=%d context=%s"), WorldView.Avatars.Num(), *WorldView.ContextId);
+	bRejoin404Deferred = false;
+	RejoinContextId = WorldView.ContextId;   // a FRIEND rejoin must land in this same world, or the player is not moved (m2)
+	WorldView = FWonderlandWorldView();
+	NotePopulation();
+	WorldChanged.Broadcast();
+	ScheduleAutoJoin(WorldTarget, WorldArg);
 }
 
 void FWonderlandSocialLiveService::ScheduleAutoJoin(const FString& Target, const FString& Arg, bool bNow)
@@ -597,13 +618,13 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::JoinWorldAs(const FS
 	else if (Target.Equals(TEXT("INVITE"), ESearchCase::IgnoreCase)) { Body->SetStringField(TEXT("inviteId"), Arg); }
 	Call(TEXT("POST"), TEXT("/world/join"), Body, [this, Target, Arg, bAutomatic, Seq](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
 	{
-		HandleJoinAnswer(Seq, Target, Arg, bAutomatic, Data, Problem);
+		HandleJoinAnswer(Seq, Target, Arg, bAutomatic, Data, Problem, Status);
 	});
 	return FWonderlandSocialActionResult{true, TEXT("Joining…"), true};
 }
 
 void FWonderlandSocialLiveService::HandleJoinAnswer(int32 Seq, const FString& Target, const FString& Arg, bool bAutomatic,
-	const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+	const TSharedPtr<FJsonObject>& Data, const FString& Problem, int32 Status)
 {
 	if (Seq != JoinSeq)
 	{
@@ -629,6 +650,8 @@ void FWonderlandSocialLiveService::HandleJoinAnswer(int32 Seq, const FString& Ta
 			return;
 		}
 		RejoinContextId.Reset();
+		bRejoin404Deferred = false;   // placed: the server holds this player again, whatever a 404 for the old world said
+		TargetRefusals = 0;
 		// PLACED: no automatic join planned while this one was in flight (a removal's way back) may move the player afterwards
 		bAutoJoinPending = false;
 		bWorldWanted = true;
@@ -650,7 +673,39 @@ void FWonderlandSocialLiveService::HandleJoinAnswer(int32 Seq, const FString& Ta
 			// nothing answered) -> again, on the backoff, until it takes or the player joins somewhere themselves
 			const bool bWasPublic = Target.Equals(TEXT("PUBLIC"), ESearchCase::IgnoreCase);
 			RejoinContextId.Reset();
-			ScheduleAutoJoin(bWasPublic ? Target : FString(TEXT("PUBLIC")), bWasPublic ? Arg : FString(TEXT("golden_arrival")));
+			// r16reh16w: an INVITE or PARTY target that is refused is SAID, and asked for again (bounded) before the public world
+			using namespace WonderlandSocialReconnectPolicy;
+			const EJoinKind Kind = bWasPublic ? EJoinKind::Public
+				: Target.Equals(TEXT("INVITE"), ESearchCase::IgnoreCase) ? EJoinKind::Invite
+				: Target.Equals(TEXT("PARTY"), ESearchCase::IgnoreCase) ? EJoinKind::Party
+				: Target.Equals(TEXT("FRIEND"), ESearchCase::IgnoreCase) ? EJoinKind::Friend : EJoinKind::Private;
+			const FString TargetKey = Target.ToUpper() + TEXT(":") + Arg;
+			TargetRefusals = TargetKey == RefusedTarget ? TargetRefusals + 1 : 1;
+			RefusedTarget = TargetKey;
+			const bool bKeepTarget = WonderlandSocialLiveDetail::CVarRejoinKeepTarget.GetValueOnGameThread() != 0;
+			const ERefusalAction Action = AfterAutomaticJoinRefused(Kind, TargetRefusals, bKeepTarget);
+			if (Action == ERefusalAction::RetrySameTarget)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL rejoin target %s refused (HTTP %d, refusal %d of %d): asking again before the public world"),
+					*Target.ToUpper(), Status, TargetRefusals, MaxTargetRefusals);
+				ScheduleAutoJoin(Target, Arg);
+			}
+			else
+			{
+				if (Kind == EJoinKind::Invite || Kind == EJoinKind::Party)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL rejoin target %s refused (HTTP %d) after %d refusals: the public world instead"),
+						*Target.ToUpper(), Status, TargetRefusals);
+				}
+				ScheduleAutoJoin(bWasPublic ? Target : FString(TEXT("PUBLIC")), bWasPublic ? Arg : FString(TEXT("golden_arrival")));
+			}
+		}
+		else if (WonderlandSocialReconnectPolicy::ShouldReplanDeferred404(bRejoin404Deferred, false, bAutomatic, bWorldWanted, bAutoJoinPending,
+			WonderlandSocialLiveDetail::CVarRejoin404Replan.GetValueOnGameThread() != 0))
+		{
+			// the 404 that landed while this join was in flight (r16reh16w): the join did not place the player, so the rejoin is planned now
+			UE_LOG(LogTemp, Display, TEXT("WLSOCIAL rejoin404 replanned: the join in flight answered without placing the player"));
+			PlanRejoinAfter404();
 		}
 	}
 	// AN AUTOMATIC JOIN ANSWERS NO SCREEN (Second's review M1): the player did not ask, and its "Done" must never overwrite a notice
@@ -667,7 +722,48 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::LeaveWorld()
 	WorldView = FWonderlandWorldView();
 	NotePopulation();
 	WorldChanged.Broadcast();
-	return Ask(TEXT("world.leave"), FString(), TEXT("POST"), TEXT("/world/leave"), MakeShared<FJsonObject>());
+	SendLeave(++LeaveSeq, false);
+	FWonderlandSocialActionResult Pending;
+	Pending.bOk = true;
+	Pending.bPending = true;
+	Pending.Reason = TEXT("Sending…");
+	return Pending;
+}
+
+void FWonderlandSocialLiveService::SendLeave(int32 Leave, bool bRetried)
+{
+	// ONE bounded retry (r16reh16w): a leave that never reached the server is sent once more a second later, from a ticker -- the game thread
+	// never waits -- and only if the player is still out (no newer leave, no join since)
+	const int32 JoinAtLeave = JoinSeq;
+	Call(TEXT("POST"), TEXT("/world/leave"), MakeShared<FJsonObject>(), [this, Leave, bRetried, JoinAtLeave](int32 Status, const TSharedPtr<FJsonObject>&, const FString& Problem)
+	{
+		const bool bStillOut = Leave == LeaveSeq && JoinAtLeave == JoinSeq && !bWorldWanted;
+		if (!Problem.IsEmpty() && bStillOut
+			&& WonderlandSocialReconnectPolicy::ShouldRetryLeave(Status, bRetried, WonderlandSocialLiveDetail::CVarLeaveRetry.GetValueOnGameThread() != 0))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live world.leave did not reach the server (%s): one more try in %.0f s"), *Problem, WonderlandSocialLiveDetail::LeaveRetrySeconds);
+			const TWeakPtr<bool> WeakAlive = Alive;
+			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([this, WeakAlive, Leave, JoinAtLeave](float)
+			{
+				if (WeakAlive.IsValid() && Leave == LeaveSeq && JoinAtLeave == JoinSeq && !bWorldWanted)
+				{
+					SendLeave(Leave, true);
+				}
+				return false;
+			}), static_cast<float>(WonderlandSocialLiveDetail::LeaveRetrySeconds));
+			return;
+		}
+		FWonderlandSocialActionResult Answer;
+		Answer.bOk = Problem.IsEmpty();
+		Answer.Reason = Problem;
+		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live world.leave : %s%s%s"), Answer.bOk ? TEXT("ok") : TEXT("refused"), bRetried ? TEXT(" (retry)") : TEXT(""),
+			Answer.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Answer.Reason));
+		Answered.Broadcast(TEXT("world.leave"), FString(), Answer);
+		if (Answer.bOk)
+		{
+			Refresh();
+		}
+	});
 }
 
 FWonderlandSocialActionResult FWonderlandSocialLiveService::InviteToWorld(const FString& UserId)
