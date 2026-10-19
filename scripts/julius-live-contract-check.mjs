@@ -163,6 +163,8 @@ const MISSION_LIMITS = Object.freeze({
   // 300-minute job only with at most two repair cycles (amendment E10: 3 leaves 63,684 ms, 2 leaves 3,462,456 ms), and a structural
   // test re-derives that at the landing head. It declares no effort control (see V6_PAID_APPROVAL_RUN_REQUIREMENTS section 2).
   'julius-v6-governance-1': Object.freeze({ spendUsd: 100, repairCycles: 2 }),
+  // The re-run of that mission under a new namespace (its contract was spent by a coder timeout at effort max); same ceilings, same directive.
+  'julius-diag-output-safety-2': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
