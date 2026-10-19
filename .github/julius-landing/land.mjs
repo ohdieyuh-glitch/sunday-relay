@@ -5,6 +5,7 @@ import { readFileSync, appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { REPO, botCommentsDigest, checkCi, checkLanded, checkPullRequest, checkRuntime, ciIsPending, nonceUsed, parseClearance, verifyClearanceSignature } from './land-lib.mjs';
+import { PER_PAGE, readAllPages, squashTitle } from './land-lib.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const env = process.env;
@@ -20,14 +21,17 @@ async function gh(path, init = {}) {
   if (!res.ok) throw new Error(`${init.method ?? 'GET'} ${path} -> ${res.status}: ${typeof body === 'string' ? body.slice(0, 200) : body?.message}`);
   return body;
 }
-async function paged(path) {
-  const all = [];
-  for (let page = 1; page <= 10; page += 1) {
-    const rows = await gh(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
-    all.push(...rows);
-    if (rows.length < 100) break;
-  }
-  return all;
+// Every list is read to its end; past the page cap readAllPages THROWS, which ends the job unmerged (fail closed).
+const pageUrl = (path, page) => `${path}${path.includes('?') ? '&' : '?'}per_page=${PER_PAGE}&page=${page}`;
+const paged = (path) => readAllPages((page) => gh(pageUrl(path, page)));
+/** A list wrapped in an object with `total_count` (check runs, combined status): all pages, and the rows read must equal the total GitHub reports. */
+async function pagedCounted(path, key) {
+  let total;
+  const rows = await readAllPages(async (page) => { const body = await gh(pageUrl(path, page)); total ??= body?.total_count; return body?.[key]; });
+  // total_count is REQUIRED (the documented API always sends it): absent, not an integer, or different from the rows read all refuse.
+  if (!Number.isInteger(total)) fail([`${path} sent no integer total_count; refusing to trust a list of unknown length`]);
+  if (total !== rows.length) fail([`${path} reports ${total} ${key} but ${rows.length} were read`]);
+  return rows;
 }
 
 const number = env.PR ?? '';
@@ -57,9 +61,9 @@ async function snapshot() {
   return { pr, commit, files: files.flatMap((f) => [f.filename, f.previous_filename].filter(Boolean)), fileRows: files.length, digest: botCommentsDigest({ issueComments, inlineComments, reviews }), mainSha: mainRef.object.sha };
 }
 async function ciState() {
-  const runs = await gh(`/repos/${REPO}/commits/${head}/check-runs?per_page=100`);
-  const combined = await gh(`/repos/${REPO}/commits/${head}/status`);
-  return { checkRuns: runs.check_runs, statuses: combined.statuses, self: SELF_CHECK };
+  const checkRuns = await pagedCounted(`/repos/${REPO}/commits/${head}/check-runs`, 'check_runs');
+  const statuses = await pagedCounted(`/repos/${REPO}/commits/${head}/status`, 'statuses');
+  return { checkRuns, statuses, self: SELF_CHECK };
 }
 
 // 1b. This job must be running the workflow as it is on main's tip (dispatch from another ref or commit is refused).
@@ -96,10 +100,11 @@ if (env.DRY_RUN !== 'false') { summary('DRY RUN: every gate holds; the squash me
 const tipNow = (await gh(`/repos/${REPO}/git/ref/heads/main`)).object.sha;
 if (tipNow !== fields.base) fail([`main moved to ${tipNow} immediately before the merge; the clearance names base ${fields.base}`]);
 
-// 5. The merge: squash, pinned to the cleared head (GitHub refuses if the head moved).
+// 5. The merge: squash, pinned to the cleared head (GitHub refuses if the head moved). The title is built here, never taken from the PR title: anyone with write access can edit
+// that, and it would land verbatim on main (claims of approval, another clearance's nonce). The message keeps `clearance-nonce <nonce>` exactly: nonceUsed reads it.
 const merge = await gh(`/repos/${REPO}/pulls/${number}/merge`, {
   method: 'PUT', headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ sha: head, merge_method: 'squash', commit_title: s.pr.title, commit_message: `Landed by the Julius landing workflow: reviewer clearance (${fields.kind}) issued ${fields.issued}, head ${head}, tree ${fields.tree}, base ${fields.base}. clearance-nonce ${fields.nonce}. Rollback: git revert of this commit.` }),
+  body: JSON.stringify({ sha: head, merge_method: 'squash', commit_title: squashTitle(number, head), commit_message: `Landed by the Julius landing workflow: reviewer clearance (${fields.kind}) issued ${fields.issued}, head ${head}, tree ${fields.tree}, base ${fields.base}. clearance-nonce ${fields.nonce}. Rollback: git revert of this commit.` }),
 });
 summary(`MERGED PR #${number}: ${merge.sha}`);
 

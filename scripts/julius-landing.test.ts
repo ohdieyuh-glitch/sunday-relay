@@ -137,6 +137,23 @@ describe('the pull request against the clearance', () => {
     expect(lib.parseClearance(clearanceText({ 'governed-exceptions': '.github/workflows/julius-land.yml' })).problems.length).toBeGreaterThan(0);
   });
 
+  it('reading pages is fail-closed: a full page at the cap throws after exactly the cap, a short page ends the read', async () => {
+    let calls = 0;
+    await expect(lib.readAllPages(async () => { calls += 1; return Array.from({ length: lib.PER_PAGE }, () => ({})); })).rejects.toThrow('refusing');
+    expect(calls).toBe(lib.MAX_PAGES);
+    let pages = 0;
+    const rows = await lib.readAllPages(async () => { pages += 1; return pages < 3 ? Array.from({ length: lib.PER_PAGE }, () => ({})) : [{}]; });
+    expect(rows).toHaveLength(2 * lib.PER_PAGE + 1);
+    expect(pages).toBe(3);
+    await expect(lib.readAllPages(async () => 'not a list')).rejects.toThrow('not a list');
+  });
+
+  it('governed paths are matched case-insensitively, including the exception-eligible files', () => {
+    for (const f of ['.GitHub/Workflows/x.yml', '.github/JULIUS-LANDING/land.mjs', 'Package.JSON', 'claude.md', 'Scripts/Julius-Live-Contract-Check.mjs', 'Relay-Bridge/Julius/Role-Effort.test.ts']) {
+      expect(check({ files: ['ok.ts', f], fileRows: 2, pr: { ...goodPr(), changed_files: 2 } }).join(' '), f).toContain('founder-governed');
+    }
+  });
+
   it('the runtime guard: the job must run from refs/heads/main at main\'s tip', () => {
     expect(lib.checkRuntime({ ref: 'refs/heads/main', sha: B, mainSha: B })).toEqual([]);
     expect(lib.checkRuntime({ ref: 'refs/heads/relay/rogue', sha: B, mainSha: B })).not.toEqual([]);
@@ -213,8 +230,8 @@ globalThis.fetch = async (url, init = {}) => {
     return reply(200, { object: { sha } });
   }
   if (path.includes('/commits?sha=main')) return reply(200, scenario.history);
-  if (/\\/commits\\/[0-9a-f]{40}\\/check-runs/.test(path)) return reply(200, { check_runs: scenario.checkRuns });
-  if (/\\/commits\\/[0-9a-f]{40}\\/status/.test(path)) return reply(200, { statuses: scenario.statuses });
+  if (/\\/commits\\/[0-9a-f]{40}\\/check-runs/.test(path)) return reply(200, { total_count: scenario.omitTotalCount ? undefined : scenario.checkRuns.length, check_runs: scenario.checkRuns });
+  if (/\\/commits\\/[0-9a-f]{40}\\/status/.test(path)) return reply(200, { total_count: scenario.totalCountOverride ?? scenario.statuses.length, statuses: scenario.statuses });
   if (path.includes('/commits/' + scenario.mergedSha)) return reply(200, scenario.landed);
   if (/\\/commits\\/[0-9a-f]{40}$/.test(path)) return reply(200, scenario.commit);
   if (/\\/pulls\\/\\d+\\/files/.test(path)) return reply(200, scenario.files.map((f) => (typeof f === 'string' ? { filename: f } : f)));
@@ -311,6 +328,8 @@ describe('land.mjs end to end against a fake GitHub', () => {
       ['the spend ceilings changed with no signed exception', runLand({ scenario: { files: ['scripts/julius-live-contract-check.mjs'] } })],
       ['the required check Verify Relay never ran', runLand({ scenario: { checkRuns: [{ name: 'Vercel', status: 'completed', conclusion: 'success' }] } })],
       ['Verify Relay ran twice', runLand({ scenario: { checkRuns: [{ name: 'Verify Relay', status: 'completed', conclusion: 'success' }, { name: 'Verify Relay', status: 'completed', conclusion: 'success' }] } })],
+      ['check runs sent without total_count', runLand({ scenario: { omitTotalCount: true } })],
+      ['statuses whose total_count differs from the rows', runLand({ scenario: { totalCountOverride: 5 } })],
       ['the workflow runs from another ref', runLand({ ref: 'refs/heads/relay/rogue' })],
       ['the workflow commit is not main\'s tip', runLand({ sha: 'e'.repeat(40) })],
       ['main moves between the final re-check and the merge', runLand({ scenario: { mainSequence: [B, B, B, 'f'.repeat(40)] } })],
