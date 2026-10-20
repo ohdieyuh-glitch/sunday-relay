@@ -422,6 +422,10 @@ namespace WonderlandDevDriveDetail
 		TEXT("DEV (-wldev): one log line with the pawn's position and facing."),
 		FConsoleCommandDelegate::CreateLambda([]()
 		{
+			if (DriveRefused())   // RV-DEV-F6: the same -wldev rule as every other wl.Dev.* command
+			{
+				return;
+			}
 			ACharacter* Dog = DriveLocalCharacter(DriveGameWorld());
 			if (Dog != nullptr)
 			{

@@ -197,6 +197,11 @@ void UWonderlandUiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UWonderlandUiSubsystem::Deinitialize()
 {
+	if (SocialGateTicker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(SocialGateTicker);
+		SocialGateTicker.Reset();
+	}
 	if (RoleTicker.IsValid())
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(RoleTicker);
@@ -951,6 +956,9 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		}
 		const TWeakObjectPtr<AWonderlandSkinStage> WeakStage(Stage);
 		SAssignNew(ProfilePanel, SWonderlandSocialProfilePanel)
+			// B35 (SC1): BUILT WITHHELD on a live service (its first paint shows nothing of the player; ArmSocialSurfaceGate reads them)
+			.bWithheld(SocialLive() != nullptr && !bPendingProfilePreview)
+			.WithheldLine(TEXT("Updating…"))
 			.View(PendingProfile.IsValid() ? *PendingProfile : FWonderlandSocialProfileView())
 			.NamesById(PendingProfileNames)
 			.SourceLine(PendingProfileSource)
@@ -990,6 +998,9 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 			Tab = SocialHubPanel->GetTab();   // back from a profile: the tab the player left
 		}
 		SAssignNew(SocialHubPanel, SWonderlandSocialHubPanel)
+			// B35 (SC1): BUILT WITHHELD on a live service, on EVERY path that opens it (this is the only place a hub is built): its first paint
+			// draws nobody from the cached snapshot; ArmSocialSurfaceGate below reads, and the gate judges every frame's worth of time after
+			.bAwaitingFresh(SocialLive() != nullptr)
 			.Snapshot(Snapshot != nullptr ? *Snapshot : FWonderlandSocialSnapshot())
 			.bConnected(Snapshot != nullptr)
 			.SourceLine(Social != nullptr ? Social->GetSourceLine() : FString())
@@ -1046,19 +1057,17 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		FrameBrainSculpture(true);
 	}
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI open %s (panels in viewport: %d)"), OverlayName(Which), OverlaysInViewport);
+	if (Which == EOverlay::Social || Which == EOverlay::Profile)
+	{
+		ArmSocialSurfaceGate();   // B35 (SC1): every way a social surface opens passes here
+	}
 }
 
 void UWonderlandUiSubsystem::CloseOverlay()
 {
-	if (Open == EOverlay::Social)
+	if (Open == EOverlay::Social || Open == EOverlay::Profile)
 	{
-		// B35: the hub's faster re-read period ends with the hub
-		const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
-		UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
-		if (FWonderlandSocialLiveService* Live = Social != nullptr ? Social->GetLive() : nullptr)
-		{
-			Live->SetSurfaceOpen(false);
-		}
+		DisarmSocialSurfaceGate();   // B35: the open period and the gate end with the surface (a next open arms its own)
 	}
 	// THE WARDROBE IS SHUT BEFORE THE BRAIN IS, AND THE PANEL IS LEFT REMEMBERING NOTHING.
 	//
@@ -5220,11 +5229,18 @@ void UWonderlandUiSubsystem::BindSocialEvents()
 
 void UWonderlandUiSubsystem::HandleSocialChanged()
 {
+	// B35 (SC1): a changed view (a read, a service adopted after a re-sign-in, a reachability flip) is judged by the gate first; a redraw of
+	// the same cache never drops it (the rule is the read's issue time, not that something changed)
+	if (Open == EOverlay::Profile)
+	{
+		JudgeSocialSurfaceGate();
+	}
 	// A LIVE VIEW CHANGED (a friend came online, a message arrived): the open hub redraws on the tab the player is on.
 	if (Open != EOverlay::Social || !SocialHubPanel.IsValid())
 	{
 		return;
 	}
+	JudgeSocialSurfaceGate();
 	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
 	const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
 	const FWonderlandSocialSnapshot* Snapshot = Social != nullptr ? Social->GetSnapshot() : nullptr;
@@ -5333,31 +5349,9 @@ bool UWonderlandUiSubsystem::OpenSocialHub(const FString& TabName)
 	BindSocialEvents();
 	PendingHubTab = TabName.IsEmpty() ? FString(TEXT("friends")) : TabName;
 	bProfileFromHub = false;
-	OpenOverlay(EOverlay::Social);
 	// A PLAYER WHO HID FROM THIS ONE IS SENT NO EVENT (they cannot be seen), so Recent Players kept listing them until the 20 s resync (measured 10-19, B35 P2:
-	// the hub still said "recent 2" 8 s after the stranger hid). Reading the snapshot as the hub opens closes that window to the time of one request; a preview
-	// (no live service) has nothing to refresh.
-	{
-		const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
-		UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
-		if (FWonderlandSocialLiveService* Live = Social != nullptr ? Social->GetLive() : nullptr)
-		{
-			// B35: Recent Players is withheld ("Updating") until a read issued after this open has landed, and the hub re-reads every few seconds while open
-			if (SocialHubPanel.IsValid())
-			{
-				SocialHubPanel->SetAwaitingFresh(true);
-			}
-			Live->SetSurfaceOpen(true);
-			const TWeakPtr<SWonderlandSocialHubPanel> WeakPanel = SocialHubPanel;
-			Live->RefreshThen([WeakPanel]()
-			{
-				if (const TSharedPtr<SWonderlandSocialHubPanel> Pinned = WeakPanel.Pin())
-				{
-					Pinned->SetAwaitingFresh(false);
-				}
-			});
-		}
-	}
+	// the hub still said "recent 2" 8 s after the stranger hid). B35 (SC1): OpenOverlay builds the hub withheld and arms the gate, as for every other way in.
+	OpenOverlay(EOverlay::Social);
 	if (Open == EOverlay::Social && SocialHubPanel.IsValid() && !PendingSocialNotice.IsEmpty())
 	{
 		SocialHubPanel->ShowActionResult(PendingSocialNotice);
@@ -5383,6 +5377,193 @@ void UWonderlandUiSubsystem::OpenSocialProfileById(const FString& UserId)
 	{
 		Social->OpenProfile(UserId);
 	}
+}
+
+/* ------------------------------------------------------------------ B35 (R16 privacy, SC1): the social surface gate */
+
+FWonderlandSocialLiveService* UWonderlandUiSubsystem::SocialLive() const
+{
+	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+	const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+	return Social != nullptr ? Social->GetLive() : nullptr;
+}
+
+void UWonderlandUiSubsystem::ArmSocialSurfaceGate()
+{
+	// THIS OPEN'S CLOCK. Whatever was read before this moment may predate a hide or a block, so it is never drawn (WonderlandSocialFreshness).
+	SocialSurfaceOpenedAt = FPlatformTime::Seconds();
+	++ProfileGateGeneration;   // a profile read made for an earlier open is ignored when it lands
+	bProfileGated = false;
+	bProfileReadInFlight = false;
+	ProfileReadIssuedAt = -1.0e12;
+	ProfileLandedIssuedAt = -1.0e12;
+	ProfileReadFailures = 0;
+	ProfileReadNotBefore = 0.0;
+	ProfileReadProblem.Reset();
+	bProfileNotAvailable = false;
+	ProfileLandedDigest.Reset();
+	ProfileShownDigest.Reset();
+	ProfileLandedView.Reset();
+	FWonderlandSocialLiveService* Live = SocialLive();
+	if (Live == nullptr)
+	{
+		return;   // a preview or no sign-in: no real person is listed, so nothing is withheld (the panels were built drawn)
+	}
+	if (Open == EOverlay::Social)
+	{
+		Live->SetSurfaceOpen(true);
+		// THE OPEN'S OWN READ, at once. One already in flight was issued before this open: it lands without clearing the gate, and Refresh
+		// asks for another as it lands (bRefreshAgain), issued after the open.
+		Live->Refresh();
+	}
+	else if (Open == EOverlay::Profile && ProfilePanel.IsValid() && PendingProfile.IsValid() && ProfilePanel->IsWithheld())
+	{
+		bProfileGated = true;
+		ProfileSubjectId = PendingProfile->Profile.UserId;
+		ReadOpenProfile();
+	}
+	if (!SocialGateTicker.IsValid())
+	{
+		SocialGateTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWonderlandUiSubsystem::TickSocialSurfaceGate), 0.05f);
+	}
+	UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL gate armed: %s%s (people only from a read issued since this open; re-read every %.2f s from the last issue; none older than %.2f s)"),
+		OverlayName(Open), bProfileGated ? *FString::Printf(TEXT(" %s"), *ProfileSubjectId) : TEXT(""), WonderlandSocialFreshness::OpenResyncSeconds,
+		WonderlandSocialFreshness::MaxShownAgeSeconds);
+	JudgeSocialSurfaceGate();
+}
+
+void UWonderlandUiSubsystem::DisarmSocialSurfaceGate()
+{
+	if (SocialGateTicker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(SocialGateTicker);
+		SocialGateTicker.Reset();
+	}
+	++ProfileGateGeneration;
+	bProfileGated = false;
+	bProfileReadInFlight = false;
+	if (FWonderlandSocialLiveService* Live = SocialLive())
+	{
+		Live->SetSurfaceOpen(false);
+	}
+}
+
+bool UWonderlandUiSubsystem::TickSocialSurfaceGate(float)
+{
+	// THE RULE IS ABOUT TIME: a surface whose reads stop landing withholds its people again, with no event to say so
+	JudgeSocialSurfaceGate();
+	return true;
+}
+
+void UWonderlandUiSubsystem::JudgeSocialSurfaceGate()
+{
+	FWonderlandSocialLiveService* Live = SocialLive();
+	const double Now = FPlatformTime::Seconds();
+	if (Open == EOverlay::Social && SocialHubPanel.IsValid())
+	{
+		if (Live == nullptr)
+		{
+			// NO LIVE SERVICE (a preview, or signed out after a 401): the gate is left as it is. A hub built without one was built drawn (the preview's
+			// synthetic people); a hub whose service went draws NOT CONNECTED (the same change replaces its view). Nothing here releases cached people.
+			return;
+		}
+		// a service adopted while the hub stays open (a sign-in again after a 401) reads on the open period too (RV-B35-08); a no-op otherwise
+		Live->SetSurfaceOpen(true);
+		const bool bMayDraw = WonderlandSocialFreshness::MayDraw(SocialSurfaceOpenedAt, Live->GetSnapshotIssuedAt(), Now);
+		SocialHubPanel->SetAwaitingFresh(!bMayDraw, bMayDraw ? FString() : Live->GetReadProblem());
+		return;
+	}
+	if (Open != EOverlay::Profile || !ProfilePanel.IsValid() || !bProfileGated)
+	{
+		return;
+	}
+	const FString Before = ProfilePanel->DescribeIdentityColumn();
+	if (Live == nullptr)
+	{
+		ProfilePanel->SetWithheld(TEXT("Updating…"));   // the live service went (a 401): nothing about the player until one reads again
+		ProfileShownDigest.Reset();
+	}
+	else
+	{
+		if (!bProfileReadInFlight && Now >= ProfileReadNotBefore && Now - ProfileReadIssuedAt >= WonderlandSocialFreshness::OpenResyncSeconds)
+		{
+			ReadOpenProfile();   // the open profile is read again on the hub's period, from the last issue
+		}
+		if (bProfileNotAvailable && ProfileLandedIssuedAt >= SocialSurfaceOpenedAt)
+		{
+			// THE AUTHORITY'S NOT-FOUND: hidden from this viewer, a block either way, or gone -- one generic line, which names none of them
+			ProfilePanel->SetWithheld(TEXT("This profile is not available."));
+			ProfileShownDigest.Reset();
+		}
+		else if (ProfileLandedView.IsValid() && WonderlandSocialFreshness::MayDraw(SocialSurfaceOpenedAt, ProfileLandedIssuedAt, Now))
+		{
+			if (ProfilePanel->IsWithheld() || ProfileShownDigest != ProfileLandedDigest)
+			{
+				PendingProfile = ProfileLandedView;   // a colour change re-shows the latest card, never the one the open started from
+				if (AWonderlandSkinStage* Stage = AWonderlandSkinStage::GetProfileStage(GetWorld()))
+				{
+					Stage->ShowSkin(FName(*ProfileLandedView->Profile.RelayDog.SkinId));
+				}
+				const UWonderlandRelaySkinSubsystem* Registry = RelaySkins();
+				const FWonderlandRelaySkin* Skin = Registry != nullptr ? Registry->Find(FName(*ProfileLandedView->Profile.RelayDog.SkinId)) : nullptr;
+				ProfilePanel->ShowView(*ProfileLandedView, Skin != nullptr ? Skin->DisplayName : FString());
+				ProfileShownDigest = ProfileLandedDigest;
+			}
+		}
+		else
+		{
+			ProfilePanel->SetWithheld(ProfileReadProblem.IsEmpty() ? FString(TEXT("Updating…")) : FString::Printf(TEXT("Updating… %s"), *ProfileReadProblem));
+			ProfileShownDigest.Reset();
+		}
+	}
+	const FString After = ProfilePanel->DescribeIdentityColumn();
+	if (After != Before)
+	{
+		UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL profile %s: user=%s | %s"), ProfilePanel->IsWithheld() ? TEXT("withheld") : TEXT("drawn"), *ProfileSubjectId, *After);
+	}
+}
+
+void UWonderlandUiSubsystem::ReadOpenProfile()
+{
+	FWonderlandSocialLiveService* Live = SocialLive();
+	if (Live == nullptr || ProfileSubjectId.IsEmpty() || bProfileReadInFlight)
+	{
+		return;
+	}
+	bProfileReadInFlight = true;
+	ProfileReadIssuedAt = FPlatformTime::Seconds();
+	const int32 Generation = ProfileGateGeneration;
+	const TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+	Live->ReadProfileForSurface(ProfileSubjectId, [WeakThis, Generation](const FWonderlandLffAnswer& Answer, const FWonderlandSocialProfileView& View, double IssuedAt, const FString& Digest)
+	{
+		UWonderlandUiSubsystem* Self = WeakThis.Get();
+		if (Self == nullptr || Generation != Self->ProfileGateGeneration)
+		{
+			return;   // a read for an earlier open (or a closed profile): it says nothing about the one on screen
+		}
+		Self->bProfileReadInFlight = false;
+		if (Answer.IsOk() || Answer.Status == 404)
+		{
+			Self->ProfileReadFailures = 0;
+			Self->ProfileReadNotBefore = 0.0;
+			Self->ProfileReadProblem.Reset();
+			Self->bProfileNotAvailable = !Answer.IsOk();
+			Self->ProfileLandedView = Answer.IsOk() ? MakeShared<FWonderlandSocialProfileView>(View) : TSharedPtr<FWonderlandSocialProfileView>();
+			Self->ProfileLandedDigest = Answer.IsOk() ? Digest : FString();
+			Self->ProfileLandedIssuedAt = IssuedAt;
+		}
+		else
+		{
+			// A FAILED READ keeps the profile withheld and is not repeated at the tick rate: a 429 waits its Retry-After, anything else a gap
+			// that doubles from the open period up to 8 s (as the snapshot's reads do)
+			Self->ProfileReadFailures = FMath::Min(Self->ProfileReadFailures + 1, 16);
+			const double Gap = Answer.Status == 429 ? FMath::Max(1.0, static_cast<double>(Answer.RetryAfterSeconds))
+				: FMath::Min(8.0, WonderlandSocialFreshness::OpenResyncSeconds * FMath::Pow(2.0, static_cast<double>(FMath::Min(Self->ProfileReadFailures - 1, 4))));
+			Self->ProfileReadNotBefore = FPlatformTime::Seconds() + Gap;
+			Self->ProfileReadProblem = Answer.Problem;
+		}
+		Self->JudgeSocialSurfaceGate();
+	});
 }
 
 const TCHAR* UWonderlandUiSubsystem::OverlayName(EOverlay Which)

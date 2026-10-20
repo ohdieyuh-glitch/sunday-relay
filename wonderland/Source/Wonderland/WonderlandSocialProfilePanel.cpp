@@ -229,10 +229,13 @@ void SWonderlandSocialProfilePanel::Construct(const FArguments& InArgs)
 	OnAction = InArgs._OnAction;
 	OnOpenProfile = InArgs._OnOpenProfile;
 	OnRequestClose = InArgs._OnRequestClose;
+	bWithheld = InArgs._bWithheld;
+	WithheldLine = InArgs._WithheldLine;
 	ScrimBrush.DrawAs = ESlateBrushDrawType::Image;
 	ScrimBrush.TintColor = FSlateColor(WonderlandUi::Srgb(3, 4, 8, 0.70f));
 	ButtonStyle = FButtonStyle().SetNormal(ButtonNormal).SetHovered(ButtonHovered).SetPressed(ButtonHovered).SetDisabled(ButtonDisabled)
 		.SetNormalPadding(FMargin(12.0f, 6.0f)).SetPressedPadding(FMargin(12.0f, 7.0f, 12.0f, 5.0f));
+	NoBrush.DrawAs = ESlateBrushDrawType::NoDrawType;
 
 	ChildSlot
 	[
@@ -274,34 +277,78 @@ void SWonderlandSocialProfilePanel::Construct(const FArguments& InArgs)
 						]
 						+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)
 						[
-							SNew(SHorizontalBox)
-							// ---- LEFT: the AI identity -- the Compound AI Agent above, the Relay Dog below
-							+ SHorizontalBox::Slot().AutoWidth()
-							[
-								SNew(SBox).WidthOverride(430.0f)
-								[
-									SNew(SVerticalBox)
-									+ SVerticalBox::Slot().FillHeight(0.46f)[MakeAgentCard()]
-									+ SVerticalBox::Slot().FillHeight(0.54f).Padding(0.0f, 12.0f, 0.0f, 0.0f)[MakeDogCard()]
-								]
-							]
-							// ---- RIGHT: the player
-							+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(20.0f, 0.0f, 0.0f, 0.0f)
-							[
-								SNew(SVerticalBox)
-								+ SVerticalBox::Slot().AutoHeight()[MakeHeader()]
-								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)[MakeProgressionTiles()]
-								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)[MakeLoadout()]
-								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)[MakeSocialStatus()]
-								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)[MakeActions()]
-								+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)[MakeStatsAndMutuals()]
-							]
+							SAssignNew(BodyHost, SBorder).BorderImage(&NoBrush).Padding(0.0f)
 						]
 					]
 				]
 			]
 		]
 	];
+	RebuildBody();
+}
+
+void SWonderlandSocialProfilePanel::RebuildBody()
+{
+	if (!BodyHost.IsValid())
+	{
+		return;
+	}
+	if (bWithheld)
+	{
+		// B35 (R16 privacy, SC1): NOTHING ABOUT THE PLAYER until a read made since this profile opened says what this viewer may see of them
+		// now (profile.read: their card, or not-found once they hid from or blocked this viewer). The bar and its CLOSE stay.
+		ActionLineText.Reset();
+		BodyHost->SetContent(
+			SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
+			[
+				SNew(STextBlock).Text(FText::FromString(WithheldLine.IsEmpty() ? FString(TEXT("Updating…")) : WithheldLine))
+				.Font(WonderlandUi::Sans(12, false, 40)).ColorAndOpacity(WonderlandUi::Cream(0.80f)).Justification(ETextJustify::Center).AutoWrapText(true)
+			]);
+		return;
+	}
+	BodyHost->SetContent(
+		SNew(SHorizontalBox)
+		// ---- LEFT: the AI identity -- the Compound AI Agent above, the Relay Dog below
+		+ SHorizontalBox::Slot().AutoWidth()
+		[
+			SNew(SBox).WidthOverride(430.0f)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().FillHeight(0.46f)[MakeAgentCard()]
+				+ SVerticalBox::Slot().FillHeight(0.54f).Padding(0.0f, 12.0f, 0.0f, 0.0f)[MakeDogCard()]
+			]
+		]
+		// ---- RIGHT: the player
+		+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(20.0f, 0.0f, 0.0f, 0.0f)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()[MakeHeader()]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)[MakeProgressionTiles()]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)[MakeLoadout()]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)[MakeSocialStatus()]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)[MakeActions()]
+			+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)[MakeStatsAndMutuals()]
+		]);
+}
+
+void SWonderlandSocialProfilePanel::SetWithheld(const FString& Line)
+{
+	if (bWithheld && WithheldLine == Line)
+	{
+		return;
+	}
+	bWithheld = true;
+	WithheldLine = Line;
+	RebuildBody();
+}
+
+void SWonderlandSocialProfilePanel::ShowView(const FWonderlandSocialProfileView& InView, const FString& InDogSkinName)
+{
+	View = InView;
+	DogSkinName = InDogSkinName;
+	bWithheld = false;
+	WithheldLine.Reset();
+	RebuildBody();
 }
 
 TSharedRef<SWidget> SWonderlandSocialProfilePanel::MakeAgentCard()
@@ -689,6 +736,10 @@ void SWonderlandSocialProfilePanel::ShowActionResult(const FString& Line)
 
 FString SWonderlandSocialProfilePanel::DescribeIdentityColumn() const
 {
+	if (bWithheld)
+	{
+		return FString::Printf(TEXT("withheld (%s)"), WithheldLine.IsEmpty() ? TEXT("Updating…") : *WithheldLine);   // B35: nothing of the player is drawn
+	}
 	const FWonderlandSocialProfile& P = View.Profile;
 	return FString::Printf(TEXT("agent=%s (%s) | dog=%s | dogRendered=%d | rank=%s | level=%s | companion=%s"),
 		P.bHasPrimaryAgent ? *P.PrimaryAgent.DisplayName : TEXT("none"), P.bHasPrimaryAgent ? *P.PrimaryAgent.Kind : TEXT("-"),

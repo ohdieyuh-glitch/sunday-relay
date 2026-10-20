@@ -6,7 +6,9 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
 #include "Misc/ScopeExit.h"
+#include "Misc/SecureHash.h"
 #include "HAL/IConsoleManager.h"
 #include "WonderlandSocialReconnectPolicy.h"
 
@@ -22,8 +24,38 @@ namespace WonderlandSocialLiveDetail
 	 * two-client run (10-02) left A's friend list showing B for minutes. The view is read again when it is this old.
 	 */
 	constexpr double ResyncSeconds = 20.0;
-	/** B35: the re-read period while a hub or profile is open. */
-	constexpr double OpenResyncSeconds = 4.0;
+	/** B35: the longest gap between periodic reads after failures while a surface is open (the surface withholds people meanwhile). */
+	constexpr double MaxReadBackoffSeconds = 8.0;
+
+	/** B35: the view's identity without its own clock (generatedAtIso is new on every read): equal digests = nothing to redraw. The server
+	 *  sends an online player's lastSeenAtIso as null (social-commands.ts, "steady"), so an unchanged view reads the same. SHA-1 of the
+	 *  condensed JSON, so a changed view is never mistaken for the old one. */
+	FString ViewDigest(const TSharedPtr<FJsonObject>& Data)
+	{
+		if (!Data.IsValid())
+		{
+			return FString();
+		}
+		const TSharedRef<FJsonObject> Copy = MakeShared<FJsonObject>(*Data);
+		Copy->RemoveField(TEXT("generatedAtIso"));
+		FString Canon;
+		const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Canon);
+		FJsonSerializer::Serialize(Copy, Writer);
+		FSHA1 Sha;
+		{
+			const FTCHARToUTF8 Utf8(*Canon);
+			Sha.Update(reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
+		}
+		Sha.Final();
+		uint8 Hash[FSHA1::DigestSize];
+		Sha.GetHash(Hash);
+		// the copy holds what the view holds (names, message bodies): zeroed like every answer this client reads (Call)
+		for (TCHAR& Character : Canon.GetCharArray())
+		{
+			Character = 0;
+		}
+		return BytesToHex(Hash, FSHA1::DigestSize);
+	}
 	/** The shared presence layer's report, each answered with the view. The gap AFTER an answer (so the period is round trip + this + tick rounding).
 	 *  r16reh16b: 0.2 -> 0.1 s. (Alone it changed nothing: the shared Tick runs every 0.25 s and gated the report; r16reh16c adds TickWorldFast, a 50 ms ticker.) Measured period 255 ms at 13 ms RTT; remote motion showed surge/stall at that rate. The server stores one report per 100 ms
 	 *  (WORLD_REPORT_MIN_INTERVAL_MS) and its `report` budget is a burst of 30 then one per 100 ms (SOCIAL_BUDGETS.report), so the period always stays above
@@ -359,28 +391,33 @@ void FWonderlandSocialLiveService::Call(const FString& Verb, const FString& Path
 	HttpRequest->ProcessRequest();
 }
 
-void FWonderlandSocialLiveService::RefreshThen(TFunction<void()> OnFresh)
+void FWonderlandSocialLiveService::SetSurfaceOpen(bool bOpen)
 {
-	if (bRefreshing)
+	if (bSurfaceOpen == bOpen)
 	{
-		FreshNext.Add(MoveTemp(OnFresh));   // the read in flight may predate the change: wait for the next one
+		return;
 	}
-	else
+	bSurfaceOpen = bOpen;
+	if (!bOpen)
 	{
-		FreshNow.Add(MoveTemp(OnFresh));
+		// back on the closed clock: the next periodic read is a full ResyncSeconds after the last one, and a failure's gap is forgotten
+		NextResyncAt = FMath::Max(NextResyncAt, LastReadIssuedAt + WonderlandSocialLiveDetail::ResyncSeconds);
+		ReadNotBefore = 0.0;
 	}
-	Refresh();
 }
 
 void FWonderlandSocialLiveService::Refresh()
 {
 	if (bRefreshing)
 	{
-		bRefreshAgain = true;   // a change arrived while reading: read once more when this read lands
+		bRefreshAgain = true;   // a change arrived while reading (or a surface opened): read once more when this read lands
 		return;
 	}
 	bRefreshing = true;
-	Call(TEXT("GET"), TEXT("/snapshot"), nullptr, [this](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+	// B35: THE ISSUE TIME is what freshness is judged by: the server answered with what it knew at or after this moment
+	const double IssuedAt = FPlatformTime::Seconds();
+	LastReadIssuedAt = IssuedAt;
+	Call(TEXT("GET"), TEXT("/snapshot"), nullptr, [this, IssuedAt](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
 	{
 		bRefreshing = false;
 		FWonderlandSocialSnapshot Parsed;
@@ -388,35 +425,39 @@ void FWonderlandSocialLiveService::Refresh()
 		if (!Problem.IsEmpty() || !WonderlandParseSocialView(Data, false, Parsed, ParseProblem))
 		{
 			LastError = Problem.IsEmpty() ? FString::Printf(TEXT("the live view was refused: %s"), *ParseProblem) : Problem;
-			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live snapshot failed: %s"), *LastError);
+			ReadProblem = LastError;
+			// B35: AN OPEN SURFACE KEEPS WITHHOLDING while reads fail (the UI's freshness rule), and is not asked again every tick: a 429 waits
+			// its Retry-After, anything else a gap that doubles from OpenResyncSeconds up to MaxReadBackoffSeconds
+			ReadFailures = FMath::Min(ReadFailures + 1, 16);
+			const double Gap = Status == 429 ? FMath::Max(1.0, static_cast<double>(LastRetryAfterSeconds))
+				: FMath::Min(WonderlandSocialLiveDetail::MaxReadBackoffSeconds, WonderlandSocialFreshness::OpenResyncSeconds * FMath::Pow(2.0, static_cast<double>(FMath::Min(ReadFailures - 1, 4))));
+			ReadNotBefore = FPlatformTime::Seconds() + Gap;
+			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live snapshot failed: %s (next periodic read in %.2f s)"), *LastError, Gap);
 		}
 		else
 		{
+			ReadFailures = 0;
+			ReadNotBefore = 0.0;
+			ReadProblem.Reset();
+			const FString Digest = WonderlandSocialLiveDetail::ViewDigest(Data);
+			const bool bViewChanged = !bHasSnapshot || Digest.IsEmpty() || Digest != SnapshotDigest;
 			Snapshot = MoveTemp(Parsed);
+			SnapshotDigest = Digest;
 			bHasSnapshot = true;
 			SnapshotAt = FPlatformTime::Seconds();
+			SnapshotIssuedAt = IssuedAt;
 			LastError.Reset();
-			UE_LOG(LogTemp, Log, TEXT("%s"), *WonderlandSocialSnapshotLine(Snapshot));
-			Changed.Broadcast();
-			TArray<TFunction<void()>> Landed = MoveTemp(FreshNow);
-			FreshNow.Reset();
-			for (const TFunction<void()>& Fn : Landed)
+			if (bViewChanged)
 			{
-				Fn();
+				UE_LOG(LogTemp, Log, TEXT("%s"), *WonderlandSocialSnapshotLine(Snapshot));
+				Changed.Broadcast();
 			}
+			ReadLanded.Broadcast();
 		}
-		// what was waiting for the NEXT read becomes the current one (on a failure too: it waits for a read that lands)
-		FreshNow.Append(MoveTemp(FreshNext));
-		FreshNext.Reset();
 		if (bRefreshAgain)
 		{
 			bRefreshAgain = false;
 			Refresh();
-		}
-		else if (FreshNow.Num() > 0 && Problem.IsEmpty() == false)
-		{
-			// a failed read with callbacks waiting: read again on the next resync (they stay queued, nothing is shown from the stale view)
-			NextResyncAt = FPlatformTime::Seconds();
 		}
 	});
 }
@@ -431,14 +472,26 @@ bool FWonderlandSocialLiveService::Tick(float)
 	{
 		PollEvents();
 	}
-	// At most one resync per ResyncSeconds, so a server that keeps failing is not asked again every tick.
-	if (bHasSnapshot && !bRefreshing && FPlatformTime::Seconds() >= NextResyncAt)
+	const double Now = FPlatformTime::Seconds();
+	if (!bRefreshing && Now >= ReadNotBefore)
 	{
-		const double Period = bSurfaceOpen ? WonderlandSocialLiveDetail::OpenResyncSeconds : WonderlandSocialLiveDetail::ResyncSeconds;
-		NextResyncAt = FPlatformTime::Seconds() + Period;
-		if (FPlatformTime::Seconds() - SnapshotAt >= Period || FreshNow.Num() > 0)
+		if (bSurfaceOpen)
 		{
-			Refresh();
+			// B35: AN OPEN SURFACE IS READ AGAIN OpenResyncSeconds AFTER THE LAST READ WAS ISSUED -- not after it landed, and not on the closed
+			// clock below (RV-B35-01: the open's own read left the next one waiting for a deadline set while the hub was closed, up to ~20 s)
+			if (Now - LastReadIssuedAt >= WonderlandSocialFreshness::OpenResyncSeconds)
+			{
+				Refresh();
+			}
+		}
+		// At most one resync per ResyncSeconds, so a server that keeps failing is not asked again every tick.
+		else if (bHasSnapshot && Now >= NextResyncAt)
+		{
+			NextResyncAt = Now + WonderlandSocialLiveDetail::ResyncSeconds;
+			if (Now - SnapshotAt >= WonderlandSocialLiveDetail::ResyncSeconds)
+			{
+				Refresh();
+			}
 		}
 	}
 	// AN AUTOMATIC JOIN THAT WAS REFUSED is tried again on its own clock (JoinWorldAs), never two at once -- and never while ANY join is in
@@ -567,7 +620,9 @@ void FWonderlandSocialLiveService::TickWorld()
 	{
 		OutgoingHandoffEvent.bActive = false;
 	}
-	const bool bSendHandoff = !bHandoffWireRefused && (Report.Handoff != WonderlandHandoffWire::EForm::None || bResendEvent);
+	// SC2: never with replication off -- the source already leaves the form at NONE then (WonderlandSocialSubsystem), and this also stops an event made
+	// before the switch was turned off from being resent
+	const bool bSendHandoff = WonderlandHandoffWire::IsReplicationOn() && !bHandoffWireRefused && (Report.Handoff != WonderlandHandoffWire::EForm::None || bResendEvent);
 	if (bSendHandoff)
 	{
 		if (Report.Handoff != WonderlandHandoffWire::EForm::None)
@@ -598,6 +653,18 @@ void FWonderlandSocialLiveService::TickWorld()
 					bSendHandoff && Report.Handoff != WonderlandHandoffWire::EForm::None ? WonderlandHandoffWire::ToWire(Report.Handoff) : TEXT("(field omitted)"), bHandoffWireRefused ? TEXT(" server-refused") : TEXT(""));
 			}
 			LoggedHandoffSendKey = SendKey;
+		}
+	}
+	{
+		// SC2 EVIDENCE: the NAMES of the fields this report carries (never their values), said once and again whenever the set changes, so a run log
+		// shows what leaves this machine at the build's defaults (r16reh16u: x,y,z,yaw,speed,motion,skinId)
+		TArray<FString> Keys;
+		Body->Values.GetKeys(Keys);
+		const FString KeyLine = FString::Join(Keys, TEXT(","));
+		if (KeyLine != LoggedReportKeys)
+		{
+			LoggedReportKeys = KeyLine;
+			UE_LOG(LogTemp, Display, TEXT("WLWORLD report fields: %s"), *KeyLine);
 		}
 	}
 	bWorldBusy = true;
@@ -1319,6 +1386,37 @@ void FWonderlandSocialLiveService::ReportLffPost(const FString& AuthorId, const 
 	TSharedPtr<FJsonObject> Body = Object(TEXT("reportedId"), AuthorId, TEXT("reason"), TEXT("OTHER"));
 	Body->SetStringField(TEXT("subjectRef"), PostId);
 	WriteLff(TEXT("reports.file"), PostId, TEXT("/reports"), Body, nullptr, MoveTemp(Done));
+}
+
+void FWonderlandSocialLiveService::ReadProfileForSurface(const FString& UserId,
+	TFunction<void(const FWonderlandLffAnswer&, const FWonderlandSocialProfileView&, double, const FString&)> Done)
+{
+	const double IssuedAt = FPlatformTime::Seconds();
+	if (!WonderlandSocialLiveDetail::SafeId(UserId))
+	{
+		Done(WonderlandSocialLiveDetail::LffRefusedHere(TEXT("That is not a valid player")), FWonderlandSocialProfileView(), IssuedAt, FString());
+		return;
+	}
+	// the same profile.read as ReadProfile (scope.ts): their card for this viewer, or not-found for a person they may not see
+	CallLff(TEXT("profile.read"), UserId, TEXT("GET"), FString::Printf(TEXT("/profiles/%s"), *UserId), nullptr,
+		[Done, IssuedAt](const FWonderlandLffAnswer& Answer, const TSharedPtr<FJsonObject>& Data)
+	{
+		FWonderlandLffAnswer Out = Answer;
+		FWonderlandSocialProfileView View;
+		FString Problem;
+		FString Digest;
+		if (Out.IsOk() && !WonderlandParseSocialProfileView(Data, View, Problem))
+		{
+			Out.Problem = TEXT("the profile was not readable");
+			View = FWonderlandSocialProfileView();
+			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live profile.read refused: the answer is not a profile this client reads"));
+		}
+		else if (Out.IsOk())
+		{
+			Digest = WonderlandSocialLiveDetail::ViewDigest(Data);
+		}
+		Done(Out, View, IssuedAt, Digest);
+	});
 }
 
 void FWonderlandSocialLiveService::ReadProfile(const FString& UserId, FWonderlandLffProfileDone Done)

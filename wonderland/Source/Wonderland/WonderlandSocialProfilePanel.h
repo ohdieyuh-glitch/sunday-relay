@@ -34,7 +34,7 @@ DECLARE_DELEGATE_OneParam(FOnWonderlandSocialOpenProfile, const FString& /*UserI
 class WONDERLAND_API SWonderlandSocialProfilePanel : public SCompoundWidget
 {
 public:
-	SLATE_BEGIN_ARGS(SWonderlandSocialProfilePanel) {}
+	SLATE_BEGIN_ARGS(SWonderlandSocialProfilePanel) : _bWithheld(false) {}
 		SLATE_ARGUMENT(FWonderlandSocialProfileView, View)
 		/** Display names for chips (mutual friends), by user id. */
 		SLATE_ARGUMENT(FWonderlandSocialNames, NamesById)
@@ -49,10 +49,21 @@ public:
 		SLATE_EVENT(FOnWonderlandSocialAction, OnAction)
 		SLATE_EVENT(FOnWonderlandSocialOpenProfile, OnOpenProfile)
 		SLATE_EVENT(FSimpleDelegate, OnRequestClose)
+		/** B35 (R16 privacy): built withheld -- the bar and CLOSE only, WithheldLine ("Updating…") where the player would be -- until a read
+		 *  made since the open says what this viewer may see of them now (ShowView). From the first frame: the first paint never shows a
+		 *  cached view. */
+		SLATE_ARGUMENT(bool, bWithheld)
+		SLATE_ARGUMENT(FString, WithheldLine)
 	SLATE_END_ARGS()
 
 	SWonderlandSocialProfilePanel();
 	void Construct(const FArguments& InArgs);
+
+	/** B35: withhold everything about the player (the line says why: "Updating…", or that the profile is not available to this viewer). */
+	void SetWithheld(const FString& Line);
+	/** B35: draw this view (a read made since the open), with their skin's name from the registry. */
+	void ShowView(const FWonderlandSocialProfileView& InView, const FString& InDogSkinName);
+	bool IsWithheld() const { return bWithheld; }
 
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
@@ -76,6 +87,12 @@ private:
 	TSharedRef<SWidget> MakeActions();
 	TSharedRef<SWidget> MakeStatsAndMutuals();
 	TSharedRef<SWidget> ActionButton(const FString& Label, const FString& OperationId, const FString& Subject, bool bAllowed);
+	/** The cards and columns, or the withheld line (B35). */
+	void RebuildBody();
+	TSharedPtr<class SBorder> BodyHost;
+	bool bWithheld = false;
+	FString WithheldLine;
+	FSlateBrush NoBrush;
 
 	FWonderlandSocialProfileView View;
 	TMap<FString, FString> NamesById;

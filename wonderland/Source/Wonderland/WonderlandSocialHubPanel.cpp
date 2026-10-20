@@ -222,6 +222,8 @@ void SWonderlandSocialHubPanel::Construct(const FArguments& InArgs)
 	SignIn = InArgs._SignIn;
 	Lff = InArgs._Lff;
 	OnOpenProfileView = InArgs._OnOpenProfileView;
+	bAwaitingFresh = InArgs._bAwaitingFresh;
+	bLogGateOnRebuild = bAwaitingFresh;   // B35: the open's first build says it is withheld
 	OpenConversationId = Snapshot.Conversations.Num() > 0 ? Snapshot.Conversations[0].ConversationId : FString();
 	ScrimBrush.DrawAs = ESlateBrushDrawType::Image;
 	ScrimBrush.TintColor = FSlateColor(WonderlandUi::Srgb(3, 4, 8, 0.70f));
@@ -413,8 +415,10 @@ void SWonderlandSocialHubPanel::Rebuild()
 		}
 		else
 		{
-			BodyHost->SetContent(Tab == ETab::Requests ? MakeRequests() : Tab == ETab::Recent ? MakeRecent() : Tab == ETab::Messages ? MakeMessages() : Tab == ETab::Party ? MakeParty()
-				: Tab == ETab::Lff ? MakeLff() : MakeFriends());
+			// B35 (SC1): EVERY TAB THAT LISTS PEOPLE is withheld while the gate is up (LFF keeps its own gate, in its model)
+			BodyHost->SetContent(Tab == ETab::Lff ? MakeLff() : bAwaitingFresh ? MakeWithheld()
+				: Tab == ETab::Requests ? MakeRequests() : Tab == ETab::Recent ? MakeRecent() : Tab == ETab::Messages ? MakeMessages() : Tab == ETab::Party ? MakeParty()
+				: MakeFriends());
 		}
 	}
 	if (ReplyBox.IsValid() && ReplyBox != OldReplyBox && KeptFor == OpenConversationId)
@@ -431,12 +435,22 @@ void SWonderlandSocialHubPanel::Rebuild()
 	ReplyDraftConversationId = OpenConversationId;
 	// R16 CF-2: what the player now SEES may be read (a conversation opened, a tab chosen, new messages landed in the open one)
 	MarkShownConversationRead();
+	// B35 (RV-B35-10): WHAT THIS REBUILD DRAWS -- the rows and every rail badge -- said when it differs from the last thing said: each gate change
+	// ("withheld" / "fresh") and each change of content while drawn ("drawn"). An unchanged re-read does not rebuild (the live service's
+	// digest), so this is a line per change, not per read.
+	const FString Drawn = Describe();
+	if (bLogGateOnRebuild || Drawn != LastLoggedDescribe)
+	{
+		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL hub %s: %s"), bLogGateOnRebuild ? (bAwaitingFresh ? TEXT("withheld") : TEXT("fresh")) : TEXT("drawn"), *Drawn);
+		bLogGateOnRebuild = false;
+		LastLoggedDescribe = Drawn;
+	}
 }
 
 void SWonderlandSocialHubPanel::MarkShownConversationRead()
 {
 	// ONLY A LIVE HUB, ON MESSAGES, SHOWING A CONVERSATION: the preview's people are not read, and a hidden tab is not looking
-	if (!bConnected || bDevelopmentPreview || Tab != ETab::Messages)
+	if (!bConnected || bDevelopmentPreview || Tab != ETab::Messages || bAwaitingFresh)   // B35: a withheld conversation is not on screen
 	{
 		return;
 	}
@@ -456,10 +470,42 @@ void SWonderlandSocialHubPanel::MarkShownConversationRead()
 	OnAction.ExecuteIfBound(TEXT("messages.read"), OpenConversationId);
 }
 
+FString SWonderlandSocialHubPanel::RailCount(ETab Which) const
+{
+	// B35 (SC1, RV-B35-04): WHILE WITHHELD THE RAIL COUNTS NOBODY -- a badge with the cached count would say how many people the list hides.
+	// The ONE source of each badge: MakeRail draws it and Describe logs it, so the log says what the rail paints (RV-B35-10).
+	if (!bConnected || bAwaitingFresh)
+	{
+		return FString();
+	}
+	const int32 Waiting = Snapshot.IncomingRequests.Num() + Snapshot.PartyInvites.Num();
+	switch (Which)
+	{
+	case ETab::Friends:  return FString::FromInt(Snapshot.Friends.Num());
+	case ETab::Party:    return Snapshot.bHasParty ? FString::FromInt(Snapshot.Party.Members.Num()) : FString();
+	case ETab::Messages: return CountUnread() > 0 ? FString::FromInt(CountUnread()) : FString();
+	case ETab::Requests: return Waiting > 0 ? FString::FromInt(Waiting) : FString();
+	case ETab::Recent:   return Snapshot.RecentPlayers.Num() > 0 ? FString::FromInt(Snapshot.RecentPlayers.Num()) : FString();
+	default:             return FString();   // LFF has no count (it is read only while it is shown)
+	}
+}
+
+FString SWonderlandSocialHubPanel::RailHeadline() const
+{
+	return !bConnected ? FString(TEXT("not connected")) : bAwaitingFresh ? FString(TEXT("Updating…"))
+		: FString::Printf(TEXT("%d of %d friends on"), CountOn(), Snapshot.Friends.Num());
+}
+
+FString SWonderlandSocialHubPanel::DescribeRail() const
+{
+	const auto Badge = [this](ETab Which) { const FString Count = RailCount(Which); return Count.IsEmpty() ? FString(TEXT("-")) : Count; };
+	return FString::Printf(TEXT("rail \"%s\" badges FRIENDS %s PARTY %s MESSAGES %s REQUESTS %s RECENT %s LFF %s"), *RailHeadline(),
+		*Badge(ETab::Friends), *Badge(ETab::Party), *Badge(ETab::Messages), *Badge(ETab::Requests), *Badge(ETab::Recent), *Badge(ETab::Lff));
+}
+
 TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeRail()
 {
 	using namespace WonderlandSocialHubLook;
-	const int32 Waiting = Snapshot.IncomingRequests.Num() + Snapshot.PartyInvites.Num();
 	// R16 CF-3: SHARED WORLD, beside YOUR STATUS and drawn by the same rule (a live sign-in only)
 	const EVisibility SignedInLive = bConnected && !bDevelopmentPreview && SignIn.State == EWonderlandSignInState::SignedIn ? EVisibility::Visible : EVisibility::Collapsed;
 	FString WorldLabel;
@@ -469,33 +515,33 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeRail()
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f, 2.0f, 4.0f, 12.0f)
 		[
-			SNew(STextBlock).Text(T(bConnected ? FString::Printf(TEXT("%d of %d friends on"), CountOn(), Snapshot.Friends.Num()) : FString(TEXT("not connected"))))
+			SNew(STextBlock).Text(T(RailHeadline()))
 			.Font(WonderlandUi::Sans(9, false, 60)).ColorAndOpacity(WonderlandUi::Dim())
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
 		[
-			MakeTabButton(ETab::Friends, TEXT("FRIENDS"), bConnected ? FString::FromInt(Snapshot.Friends.Num()) : FString())
+			MakeTabButton(ETab::Friends, TEXT("FRIENDS"), RailCount(ETab::Friends))
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
 		[
-			MakeTabButton(ETab::Party, TEXT("PARTY"), bConnected && Snapshot.bHasParty ? FString::FromInt(Snapshot.Party.Members.Num()) : FString())
+			MakeTabButton(ETab::Party, TEXT("PARTY"), RailCount(ETab::Party))
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
 		[
-			MakeTabButton(ETab::Messages, TEXT("MESSAGES"), bConnected && CountUnread() > 0 ? FString::FromInt(CountUnread()) : FString())
+			MakeTabButton(ETab::Messages, TEXT("MESSAGES"), RailCount(ETab::Messages))
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
 		[
-			MakeTabButton(ETab::Requests, TEXT("REQUESTS"), bConnected && Waiting > 0 ? FString::FromInt(Waiting) : FString())
+			MakeTabButton(ETab::Requests, TEXT("REQUESTS"), RailCount(ETab::Requests))
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
 		[
-			MakeTabButton(ETab::Recent, TEXT("RECENT PLAYERS"), bConnected && Snapshot.RecentPlayers.Num() > 0 ? FString::FromInt(Snapshot.RecentPlayers.Num()) : FString())
+			MakeTabButton(ETab::Recent, TEXT("RECENT PLAYERS"), RailCount(ETab::Recent))
 		]
 		// LFF, THE LOOKING FOR FEED: a sixth tab, last -- content in the existing hub, no count (it is read only while it is shown)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
 		[
-			MakeTabButton(ETab::Lff, TEXT("LFF"), FString())
+			MakeTabButton(ETab::Lff, TEXT("LFF"), RailCount(ETab::Lff))
 		]
 		// SIGNED IN AS A REAL PERSON: who, and the way out. Shown only for a live sign-in, never over the preview.
 		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f, 18.0f, 4.0f, 2.0f)
@@ -914,13 +960,6 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeRecent()
 {
 	using namespace WonderlandSocialHubLook;
 	TSharedRef<SScrollBox> List = SNew(SScrollBox);
-	if (bAwaitingFresh)
-	{
-		// B35: no row from a view that may predate a hide
-		List->AddSlot().Padding(0.0f, 0.0f, 0.0f, 6.0f)[MakeSectionTitle(TEXT("PLAYED WITH RECENTLY"), 0)];
-		List->AddSlot()[MakeEmpty(TEXT("Updating…"))];
-		return List;
-	}
 	List->AddSlot().Padding(0.0f, 0.0f, 0.0f, 6.0f)[MakeSectionTitle(TEXT("PLAYED WITH RECENTLY"), Snapshot.RecentPlayers.Num())];
 	if (Snapshot.RecentPlayers.Num() == 0)
 	{
@@ -1209,18 +1248,36 @@ void SWonderlandSocialHubPanel::SetSnapshot(const FWonderlandSocialSnapshot& InS
 	RequestRebuild();   // F-21: never at once from a refresh (FlushRebuild says why)
 }
 
-void SWonderlandSocialHubPanel::SetAwaitingFresh(bool bAwaiting)
+void SWonderlandSocialHubPanel::SetAwaitingFresh(bool bAwaiting, const FString& Line)
 {
-	if (bAwaitingFresh != bAwaiting)
+	if (bAwaitingFresh == bAwaiting && (!bAwaiting || AwaitingLine == Line))
 	{
-		bAwaitingFresh = bAwaiting;
-		RequestRebuild();
-		if (!bAwaiting)
-		{
-			// B35: the first line that describes the hub AFTER a read issued since the open has landed (the "hub opened" line is printed while the gate is still up, so it reads recent 0)
-			UE_LOG(LogTemp, Display, TEXT("WLSOCIAL hub fresh: %s"), *Describe());
-		}
+		return;
 	}
+	const bool bWas = bAwaitingFresh;
+	bAwaitingFresh = bAwaiting;
+	AwaitingLine = bAwaiting ? Line : FString();
+	RequestRebuild();   // F-21: on Slate's next pre-tick, before that frame's paint
+	if (bWas != bAwaiting)
+	{
+		// B35: each change of the gate is said once, by the rebuild that draws it (Rebuild), so the line lists the rows built for that frame,
+		// never the gate flag; the rebuild still waits for Slate's pre-tick (F-21: a rebuild at once from a refresh loses a click)
+		bLogGateOnRebuild = true;
+	}
+}
+
+TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeWithheld()
+{
+	using namespace WonderlandSocialHubLook;
+	const TCHAR* Title = Tab == ETab::Requests ? TEXT("REQUESTS") : Tab == ETab::Recent ? TEXT("PLAYED WITH RECENTLY") : Tab == ETab::Messages ? TEXT("MESSAGES")
+		: Tab == ETab::Party ? TEXT("PARTY") : TEXT("FRIENDS");
+	TSharedRef<SScrollBox> List = SNew(SScrollBox);
+	List->AddSlot().Padding(0.0f, 0.0f, 0.0f, 6.0f)
+	[
+		SNew(STextBlock).Text(T(Title)).Font(WonderlandUi::Sans(9, true, 220)).ColorAndOpacity(WonderlandUi::Gold(0.80f))
+	];
+	List->AddSlot()[MakeEmpty(AwaitingLine.IsEmpty() ? FString(TEXT("Updating…")) : FString::Printf(TEXT("Updating… %s"), *AwaitingLine))];
+	return List;
 }
 
 void SWonderlandSocialHubPanel::SetSignIn(const FWonderlandSignInView& InView)
@@ -1568,6 +1625,15 @@ void SWonderlandSocialHubPanel::ShowActionResult(const FString& Line)
 
 FString SWonderlandSocialHubPanel::Describe() const
 {
+	if (bAwaitingFresh && bConnected)
+	{
+		// B35: WHAT IS DRAWN while withheld: nobody, no count (the cached snapshot is not described, so a log never lists what the screen hid);
+		// on the LFF tab, what its own gated model draws
+		return FString::Printf(TEXT("tab %s | %s | gate UPDATING%s | %s | friends 0 (0 on) | requests in 0 out 0 | party invites 0 | recent 0 | conversations 0 (unread 0) | open none (0 messages) | party none (0 members) | visible parties 0 | voice %s | rows none | action: %s | signin %s%s"),
+			TabName(Tab), bDevelopmentPreview ? TEXT("DEVELOPMENT PREVIEW") : TEXT("connected"), AwaitingLine.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *AwaitingLine), *DescribeRail(),
+			Voice.Connection.IsEmpty() ? TEXT("UNAVAILABLE") : *Voice.Connection, *LastActionLine, FWonderlandSocialSignIn::StateName(SignIn.State),
+			Tab == ETab::Lff ? *FString::Printf(TEXT(" | lff %s"), Lff.IsValid() ? *Lff->Describe() : TEXT("not available")) : TEXT(""));
+	}
 	const TArray<FWonderlandSocialMessage>* History = Snapshot.Messages.Find(OpenConversationId);
 	// WDEV 10-19 (presence parts B19-B21): the line each friend row shows under the name (the same PresenceLine the row draws), so a log can prove a headline
 	// (AWAY, BUSY, IN PARTY ...) without a frame. Ids and headline words only.
@@ -1581,10 +1647,10 @@ FString SWonderlandSocialHubPanel::Describe() const
 	}
 	// THE LFF TAB adds its model's state: ids and states only, never a post's text (the 10-07 log rule)
 	const FString LffPart = Tab == ETab::Lff ? FString::Printf(TEXT(" | lff %s"), Lff.IsValid() ? *Lff->Describe() : TEXT("not available")) : FString();
-	return FString::Printf(TEXT("tab %s | %s | friends %d (%d on) | requests in %d out %d | party invites %d | recent %d | conversations %d (unread %d) | open %s (%d messages) | party %s (%d members%s) | visible parties %d | voice %s%s | rows %s | action: %s | signin %s%s%s"),
-		TabName(Tab), bConnected ? (bDevelopmentPreview ? TEXT("DEVELOPMENT PREVIEW") : TEXT("connected")) : TEXT("NOT CONNECTED"),
-		Snapshot.Friends.Num(), CountOn(), Snapshot.IncomingRequests.Num(), Snapshot.OutgoingRequests.Num(), Snapshot.PartyInvites.Num(),
-		bAwaitingFresh ? 0 : Snapshot.RecentPlayers.Num(), Snapshot.Conversations.Num(), CountUnread(), OpenConversationId.IsEmpty() ? TEXT("none") : *OpenConversationId,
+	return FString::Printf(TEXT("tab %s | %s | gate %s | %s | friends %d (%d on) | requests in %d out %d | party invites %d | recent %d | conversations %d (unread %d) | open %s (%d messages) | party %s (%d members%s) | visible parties %d | voice %s%s | rows %s | action: %s | signin %s%s%s"),
+		TabName(Tab), bConnected ? (bDevelopmentPreview ? TEXT("DEVELOPMENT PREVIEW") : TEXT("connected")) : TEXT("NOT CONNECTED"), bAwaitingFresh ? TEXT("UPDATING") : TEXT("fresh"),
+		*DescribeRail(), Snapshot.Friends.Num(), CountOn(), Snapshot.IncomingRequests.Num(), Snapshot.OutgoingRequests.Num(), Snapshot.PartyInvites.Num(),
+		Snapshot.RecentPlayers.Num(), Snapshot.Conversations.Num(), CountUnread(), OpenConversationId.IsEmpty() ? TEXT("none") : *OpenConversationId,
 		History != nullptr ? History->Num() : 0,
 		Snapshot.bHasParty ? *Snapshot.Party.Name : TEXT("none"), Snapshot.bHasParty ? Snapshot.Party.Members.Num() : 0,
 		Snapshot.bHasParty ? *FString::Printf(TEXT(", leader %s%s"), *Snapshot.Party.LeaderId, Snapshot.Party.bViewerIsLeader ? TEXT(" (you)") : TEXT("")) : TEXT(""),

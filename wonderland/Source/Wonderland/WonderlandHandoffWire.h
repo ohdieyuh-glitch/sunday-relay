@@ -79,6 +79,6 @@ namespace WonderlandHandoffWire
 	};
 	inline constexpr double ResendSeconds = 8.0;
 
-	/** wl.Handoff.Replicate (default 1): 0 sends nothing and draws nothing -- the rollback without a rebuild. */
+	/** wl.Handoff.Replicate (default 0 since SC2, 2026-10-20: MP-VIS-02 is deferred past the scored run): 0 sends nothing and draws nothing; 1 turns it on. */
 	WONDERLAND_API bool IsReplicationOn();
 }

@@ -66,6 +66,7 @@ class UWonderlandWonderWebBrowseSubsystem;
 class SWonderlandWalletPanel;
 class SWonderlandSocialProfilePanel;
 class SWonderlandSocialHubPanel;
+class FWonderlandSocialLiveService;
 struct FWonderlandSocialProfileView;
 class UInputComponent;
 class UWonderlandCommandPresetSubsystem;
@@ -1159,6 +1160,38 @@ private:
 	FString PendingSocialNotice;
 	bool bProfileFromHub = false;
 	bool bSocialBound = false;
+
+	/** B35 (R16 privacy, SC1): THE SOCIAL SURFACE GATE. The hub or a profile on screen draws other players only by
+	 *  WonderlandSocialFreshness::MayDraw: from a read issued at or after THIS open (SocialSurfaceOpenedAt), and never one older than
+	 *  MaxShownAgeSeconds while it stays open. Armed in OpenOverlay, which every path builds its panel through (the HUD and terminal hub,
+	 *  wl.Social.Hub/Profile, Esc back from a profile, the chrome rebuilt for a colour change, a profile from a hub row, a mutual-friend chip
+	 *  or an LFF card); each new panel is BUILT withheld, so its first paint shows nobody. Judged again by a 50 ms ticker while the surface is
+	 *  open and on every view change, always against the CURRENT panel (never a callback bound to an old one). The hub's people come from the
+	 *  snapshot (read at the open, then every OpenResyncSeconds from the last issue: Live->SetSurfaceOpen, re-asserted on every judgement so a
+	 *  new service after a re-sign-in gets it too); a profile's from the server's profile.read for that player, read at the open and on the
+	 *  same period (its not-found = they may no longer be seen: nothing about them is drawn). */
+	double SocialSurfaceOpenedAt = 0.0;
+	FTSTicker::FDelegateHandle SocialGateTicker;
+	void ArmSocialSurfaceGate();
+	void DisarmSocialSurfaceGate();
+	bool TickSocialSurfaceGate(float DeltaSeconds);
+	void JudgeSocialSurfaceGate();
+	FWonderlandSocialLiveService* SocialLive() const;
+	/** B35: the open profile's own reads (profile.read), for the gate. Generation: a read for an earlier open is ignored when it lands. */
+	bool bProfileGated = false;
+	int32 ProfileGateGeneration = 0;
+	FString ProfileSubjectId;
+	bool bProfileReadInFlight = false;
+	double ProfileReadIssuedAt = -1.0e12;
+	double ProfileLandedIssuedAt = -1.0e12;
+	int32 ProfileReadFailures = 0;
+	double ProfileReadNotBefore = 0.0;
+	FString ProfileReadProblem;
+	bool bProfileNotAvailable = false;
+	FString ProfileLandedDigest;
+	FString ProfileShownDigest;
+	TSharedPtr<FWonderlandSocialProfileView> ProfileLandedView;
+	void ReadOpenProfile();
 	/** The wallet above the mini-map: the top-right column as one piece, so its size is known when it is placed. */
 	TSharedPtr<SWidget> TopRightColumn;
 

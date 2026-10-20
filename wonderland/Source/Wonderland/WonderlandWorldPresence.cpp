@@ -70,8 +70,11 @@ namespace WonderlandWorldPresenceDetail
 		TEXT("Remote players, Interp mode: 1 feeds the figure's gait speed from the speed the sender reported for the drawn moment (interpolated between the bracketing reports) instead of differentiating the eased position; 0 restores the measured displacement. Position is never affected."));
 	TAutoConsoleVariable<int32> CVarRemoteDogAnimator(TEXT("wl.Remote.DogAnimator"), 1,
 		TEXT("Remote players: 1 animates each remote figure with its own RelayDogStride::FDogAnimator (configured as the owner's Dog is) fed the sender's reported speed, and the figure wears that pose exactly as a worn skin does, so stride, duty, lean, arms-back and timing match the owner's Dog; 0 restores the figure's own simple gait (r16reh16q). Position is never affected."));
-	TAutoConsoleVariable<int32> CVarHandoffReplicate(TEXT("wl.Handoff.Replicate"), 1,
-		TEXT("MP-VIS-02: 1 sends this player's equipped Mission Handoff form and activation events with the world report and plays other players' on their figures; 0 does neither (rollback without a rebuild)."));
+	// SC2 (the R16 reviewer's Stage 1 ruling Q6, 2026-10-20): OFF BY DEFAULT in the scored candidate. MP-VIS-02 is deferred until after the scored run (founder
+	// 10-18) and the backend that serves it (REV3) is held (founder 10-19T19:16:39Z), so at the default the world report carries exactly the r16reh16u fields
+	// (x, y, z, yaw, speed, motion, skinId; WonderlandSocialLive.cpp TickWorld logs them as "WLWORLD report fields") and no other figure's handoff is drawn.
+	TAutoConsoleVariable<int32> CVarHandoffReplicate(TEXT("wl.Handoff.Replicate"), 0,
+		TEXT("MP-VIS-02 (default 0, deferred): 1 sends this player's equipped Mission Handoff form and activation events with the world report and plays other players' on their figures; 0 does neither."));
 	/** The companions' homes, in the pawn's yaw frame: WonderlandCompanionPreviewSettings LlmCompanionOffset / AgentOffset (WonderlandCompanionSubsystem.h:67,77 at 66ab070b).
 	 *  ASSUMPTION to verify on two-client frames: the owner's companions float relative to the pawn (capsule centre), a remote figure is placed at the soles. */
 	const FVector LlmCompanionHome(-40.0, -135.0, 0.0);

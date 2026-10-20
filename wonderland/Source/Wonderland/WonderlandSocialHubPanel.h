@@ -64,7 +64,7 @@ class WONDERLAND_API SWonderlandSocialHubPanel : public SCompoundWidget
 public:
 	enum class ETab : uint8 { Friends, Requests, Recent, Messages, Party, Lff };
 
-	SLATE_BEGIN_ARGS(SWonderlandSocialHubPanel) : _bConnected(false), _bDevelopmentPreview(true), _InitialTab(ETab::Friends) {}
+	SLATE_BEGIN_ARGS(SWonderlandSocialHubPanel) : _bConnected(false), _bDevelopmentPreview(true), _InitialTab(ETab::Friends), _bAwaitingFresh(false) {}
 		SLATE_ARGUMENT(FWonderlandSocialSnapshot, Snapshot)
 		/** False when there is no social service at all: the hub says so and lists nobody. */
 		SLATE_ARGUMENT(bool, bConnected)
@@ -89,6 +89,8 @@ public:
 		SLATE_ARGUMENT(TSharedPtr<FWonderlandLffModel>, Lff)
 		/** LFF's PROFILE: the author's card from the LFF answer, through the existing profile panel. */
 		SLATE_EVENT(FOnWonderlandLffOpenProfileView, OnOpenProfileView)
+		/** B35 (R16 privacy, SC1): built withheld, so the FIRST paint never draws people from the cached view (see SetAwaitingFresh). */
+		SLATE_ARGUMENT(bool, bAwaitingFresh)
 	SLATE_END_ARGS()
 
 	SWonderlandSocialHubPanel();
@@ -111,10 +113,13 @@ public:
 	void SetSignIn(const FWonderlandSignInView& InView);
 	/** The service's view changed (a live update): redraw on the same tab, the same conversation if it is still there. */
 	void SetSnapshot(const FWonderlandSocialSnapshot& InSnapshot, bool bInConnected, const FString& InSourceLine, bool bInPreview);
-	/** B35 (R16 privacy): while true, rows that name OTHER players who are not already known friends (Recent Players) are not drawn from the
-	 *  cached snapshot, because a player who hid from this one is sent no event and the cache can still list them. Set when the hub opens,
-	 *  cleared when a read issued after the open has landed. Redraws. */
-	void SetAwaitingFresh(bool bAwaiting);
+	/** B35 (R16 privacy, SC1): while true, NO tab draws another player from the cached snapshot -- FRIENDS, REQUESTS, RECENT PLAYERS,
+	 *  MESSAGES and PARTY say "Updating…" (Line, when given, says why: a read that failed) -- and the rail's counts and "friends on" are
+	 *  not drawn, because a player who hid from this one or blocked them is sent no event and the cache can still list them. The owner
+	 *  (UWonderlandUiSubsystem) decides it by WonderlandSocialFreshness::MayDraw on every open path and while the hub stays open. The
+	 *  player's own controls (YOUR STATUS, SHARED WORLD, SIGN OUT) stay. LFF has its own gate (FWonderlandLffModel::BeginOpenGate).
+	 *  Redraws on Slate's next pre-tick (F-21). */
+	void SetAwaitingFresh(bool bAwaiting, const FString& Line = FString());
 	bool IsAwaitingFresh() const { return bAwaitingFresh; }
 
 	void ShowActionResult(const FString& Line);
@@ -206,6 +211,16 @@ private:
 	FString SourceLine;
 	bool bDevelopmentPreview = true;
 	bool bAwaitingFresh = false;
+	FString AwaitingLine;
+	/** B35: the next rebuild says the gate's new state in the log (SetAwaitingFresh), and the last line said (a change is said once). */
+	bool bLogGateOnRebuild = false;
+	FString LastLoggedDescribe;
+	/** B35 (RV-B35-04/-10): each rail badge and the "friends on" line, from ONE place for the rail and the log; empty while withheld. */
+	FString RailCount(ETab Which) const;
+	FString RailHeadline() const;
+	FString DescribeRail() const;
+	/** B35: the withheld body of a people tab: its title, no count, "Updating…" and why. */
+	TSharedRef<SWidget> MakeWithheld();
 	ETab Tab = ETab::Friends;
 	FOnWonderlandSocialAction OnAction;
 	FOnWonderlandSocialOpenProfile OnOpenProfile;

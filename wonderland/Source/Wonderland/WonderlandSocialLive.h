@@ -22,6 +22,26 @@
 
 class FJsonObject;
 
+// ---- B35 (R16 privacy, the reviewer's SC1): THE ONE RULE FOR DRAWING OTHER PLAYERS on a social surface (every hub tab, a profile). A player who
+// hides from this one (APPEAR OFFLINE, presence for friends only) or blocks them is sent NO event -- the server cannot tell the viewer anything
+// about a player they may no longer see -- so the client's cached view can still list them. The server filters every READ correctly. So a
+// surface draws people only from a read ISSUED after it opened (a read already in flight may predate the hide), and never from one older than
+// MaxShownAgeSeconds while it stays open; otherwise it says "Updating…". Applied on EVERY open path, because every path builds its panel through
+// UWonderlandUiSubsystem::OpenOverlay (the hub from the HUD, the terminal and wl.Social.Hub; Esc back from a profile; the chrome rebuilt for
+// a colour change; a profile from any of them).
+namespace WonderlandSocialFreshness
+{
+	/** The re-read period while a surface is open, counted from the last read's issue (the open reads at once). */
+	constexpr double OpenResyncSeconds = 0.75;
+	/** The oldest read an open surface may still draw people from: when reads stall or fail, the people are withheld again. */
+	constexpr double MaxShownAgeSeconds = 2.0;
+	/** A surface opened at OpenedAt may draw people from a view whose read was issued at ReadIssuedAt, now. */
+	inline bool MayDraw(double OpenedAt, double ReadIssuedAt, double Now)
+	{
+		return ReadIssuedAt >= OpenedAt && Now - ReadIssuedAt <= MaxShownAgeSeconds;
+	}
+}
+
 // ---- R16 CF-1: WHAT THIS PLAYER IS DOING, reported on CHANGE (sunday-relay src/relay/social/social-presence.ts deriveActivity: the
 // authority derives ONE activity from these signals, by one precedence -- a mission over creating over exploring over a party -- and
 // takes "in a party" from its own party record, never from the client: social-commands.ts updateOwnPresence / readSignals). The
@@ -155,17 +175,26 @@ public:
 	virtual void ActOnLff(const FString& OperationId, const FString& SubjectId, FWonderlandLffWriteDone Done) override;
 	virtual void ReportLffPost(const FString& AuthorId, const FString& PostId, FWonderlandLffWriteDone Done) override;
 	virtual void ReadProfile(const FString& UserId, FWonderlandLffProfileDone Done) override;
+	/** B35 (SC1): profile.read for an open profile surface: the card this viewer may see now (or the authority's not-found), the moment the
+	 *  read was ISSUED, and the answer's digest (equal digests = the same card, nothing to redraw). */
+	void ReadProfileForSurface(const FString& UserId, TFunction<void(const FWonderlandLffAnswer&, const FWonderlandSocialProfileView&, double /*IssuedAt*/, const FString& /*Digest*/)> Done);
 
 	/** True once the first snapshot has arrived. Until then the surfaces show an empty, connected view. */
 	bool HasSnapshot() const { return bHasSnapshot; }
 	/** Read the snapshot again now. */
 	void Refresh();
-	/** B35 (R16 privacy): read the snapshot and call OnFresh once a read ISSUED AFTER THIS CALL has landed (a read already in flight may
-	 *  predate a hide, so it is not enough). Not called if the read fails: the caller keeps withholding what could be stale. */
-	void RefreshThen(TFunction<void()> OnFresh);
-	/** B35: while a surface that lists other players is open, re-read every few seconds instead of every ResyncSeconds, because a player who
-	 *  hid from this one is sent no event. */
-	void SetSurfaceOpen(bool bOpen) { bSurfaceOpen = bOpen; }
+	/** B35 (R16 privacy, SC1): a surface that lists other players (the hub, a profile) opened or closed. While one is open the snapshot is
+	 *  read again WonderlandSocialFreshness::OpenResyncSeconds after the last read was ISSUED (the opener reads at once, so the period runs
+	 *  from the open), because a player who hid from this one, or blocked them, is sent no event. Closing goes back to ResyncSeconds. */
+	void SetSurfaceOpen(bool bOpen);
+	bool IsSurfaceOpen() const { return bSurfaceOpen; }
+	/** B35: when the read behind the current snapshot was ISSUED (FPlatformTime::Seconds); what the server answered is no older than this.
+	 *  A time long past when there is no snapshot. */
+	double GetSnapshotIssuedAt() const { return bHasSnapshot ? SnapshotIssuedAt : -1.0e12; }
+	/** B35: every read that lands, whether or not the view changed (OnChanged is broadcast only when it did). */
+	FSimpleMulticastDelegate& OnReadLanded() { return ReadLanded; }
+	/** B35: why the last read did not land, for a withheld surface to say; empty once a read lands. */
+	const FString& GetReadProblem() const { return ReadProblem; }
 	/** Report this player's own presence (the client's part of the presence authority's input): connected (and exploring, as on arrival),
 	 *  or leaving. What the player is DOING after that is reported on change from the activity source (SetActivitySource). */
 	void ReportPresence(bool bConnected);
@@ -276,9 +305,18 @@ private:
 	bool bRefreshing = false;
 	bool bRefreshAgain = false;
 	bool bSurfaceOpen = false;
-	/** B35: callbacks for the read in flight, and for the read that follows it (see RefreshThen). */
-	TArray<TFunction<void()>> FreshNow;
-	TArray<TFunction<void()>> FreshNext;
+	/** B35: when the current snapshot's read was issued, when the last read was issued, and the view's digest without its own clock (an
+	 *  unchanged view is not broadcast, so a 0.75 s re-read does not rebuild an open hub for nothing). */
+	double SnapshotIssuedAt = -1.0e12;
+	double LastReadIssuedAt = -1.0e12;
+	FString SnapshotDigest;
+	/** B35: failed reads in a row, the earliest next periodic read after them (a 429's Retry-After, else a growing gap), and the reason. */
+	int32 ReadFailures = 0;
+	double ReadNotBefore = 0.0;
+	FString ReadProblem;
+	FSimpleMulticastDelegate ReadLanded;
+	/** SC2: the field names of the last world report said in the log ("WLWORLD report fields"). */
+	FString LoggedReportKeys;
 	FTSTicker::FDelegateHandle TickerHandle;
 	/** r16reh16c: a dedicated 50 ms ticker for the world report only (the shared Tick runs every 0.25 s, which capped reports at 4 a second). */
 	FTSTicker::FDelegateHandle WorldTickerHandle;
