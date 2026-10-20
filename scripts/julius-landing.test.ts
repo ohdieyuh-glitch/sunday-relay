@@ -1485,6 +1485,73 @@ describe('v3.5c V-4 repair: percent-encoded echoes of the token are redacted byt
   });
 });
 
+describe('v3.5d shape gaps: a line break may split a GitHub token shape at ANY character, composed with percent escapes (Codex P1 on PR #391)', () => {
+  // The REAL redactor text of land.mjs, evaluated with a job token. (Through the end-to-end run the error line is cut at its first line, so a line break could never reach the output there.)
+  const redactorFor = (token: string): ((s: string) => string) => {
+    const land = readFileSync(join(LANDING, 'land.mjs'), 'utf8');
+    const from = land.indexOf('const b64Middles');
+    const to = land.indexOf('const summary = ');
+    expect(from, 'start marker').toBeGreaterThan(0);
+    expect(to, 'end marker').toBeGreaterThan(from);
+    return new Function('env', 'Buffer', land.slice(from, to) + '\nreturn redact;')({ GH_TOKEN: token }, Buffer) as (s: string) => string;
+  };
+  const JOB = 'Zq7LmP2vNd9RkT4wXy_8'; // NOT shaped like a GitHub token: only the foreign shapes below are under test
+  const redact = redactorFor(JOB);
+  const BODY = 'Ab3dE5gH7jK9mN1pQ3x';
+  const PREFIXES = ['ghs', 'ghp', 'gho', 'ghu', 'ghr', 'github_pat'];
+  const GAPS = ['\n', '\r\n', '\r\n ', '\r\n\t'];
+  // one entry per CHARACTER of the token; escaped = every character as %XX (hex case alternating), explicit hex, no encodeURIComponent
+  const units = (token: string, escaped: boolean) => [...token].map((c, i) => (escaped ? '%' + c.charCodeAt(0).toString(16).padStart(2, '0')[i % 2 === 0 ? 'toUpperCase' : 'toLowerCase']() : c));
+
+  it('SWEEP: 6 prefixes x plain and fully escaped x {LF, CRLF, CRLF+space, CRLF+tab} at EVERY character boundary: the whole token is hidden', () => {
+    const misses: string[] = [];
+    let cases = 0;
+    for (const prefix of PREFIXES) for (const escaped of [false, true]) {
+      const u = units(`${prefix}_${BODY}`, escaped);
+      for (const gap of GAPS) for (let at = 1; at < u.length; at += 1) {
+        cases += 1;
+        const text = 'said ' + u.slice(0, at).join('') + gap + u.slice(at).join('') + ' done';
+        const out = redact(text);
+        if (out !== 'said *** done') misses.push(`${prefix} escaped=${escaped} gap=${JSON.stringify(gap)} at=${at}: ${JSON.stringify(out)}`);
+      }
+    }
+    expect(cases).toBeGreaterThan(1000);
+    expect(misses.slice(0, 5), `${misses.length} of ${cases} cases left something visible`).toEqual([]);
+  });
+  it('two breaks in one token (any two kinds) are hidden', () => {
+    for (const prefix of PREFIXES) for (const escaped of [false, true]) {
+      const u = units(`${prefix}_${BODY}`, escaped);
+      for (const [g1, g2] of [['\n', '\r\n'], ['\r\n ', '\n'], ['\r\n\t', '\r\n']]) for (const [a, b] of [[2, u.length - 5], [1, 4], [prefix.length, prefix.length + 1]]) {
+        const text = 'x ' + u.slice(0, a).join('') + g1 + u.slice(a, b).join('') + g2 + u.slice(b).join('') + ' y';
+        expect(redact(text), `${prefix} ${escaped} ${a},${b}`).toBe('x *** y');
+      }
+    }
+  });
+  it('a PLAIN space is not a gap for a foreign shape: it is printed (documented residual), and the words after a whole token survive', () => {
+    const t = `ghp_${BODY}`;
+    for (const split of [`ghp_AbCdEfGhIj KlMnOpQrSt`, `gh p_${BODY}`, `ghp_ ${BODY}`, `${t.slice(0, 10)} ${t.slice(10)}`]) expect(redact(`see ${split} end`), split).toBe(`see ${split} end`);
+    expect(redact(`see ${t} merged PR number 12 into main`)).toBe('see *** merged PR number 12 into main');
+  });
+  it('a break or space INSIDE a %XX escape, and a lone CR, are not recognised (documented residuals)', () => {
+    expect(redact(`ghs%5\nF${BODY}`)).toContain(BODY);
+    expect(redact(`gh\rs_${BODY}`)).toContain(BODY);
+  });
+  it('Authorization values are hidden in plain, Bearer/Basic/token and QUOTED (JSON, single-quoted) forms', () => {
+    for (const [input, want] of [
+      ['Authorization: abc123 z', 'Authorization: *** z'],
+      ['AUTHORIZATION=token abc123 z', 'AUTHORIZATION=*** z'],
+      ['{"Authorization": "abc123"}', '{"Authorization": "***"}'],
+      ['{"Authorization":"Basic abc123"}', '{"Authorization":"***"}'],
+      ["{'authorization': 'abc123'}", "{'authorization': '***'}"],
+      ['h: Bearer abc.def-123 z', 'h: Bearer *** z'],
+    ]) expect(redact(input), input).toBe(want);
+  });
+  it('the README states the v3.5d coverage and every residual of this paragraph, and the claims are not stated more widely than the code', () => {
+    const readme = readFileSync(join(LANDING, 'README.md'), 'utf8');
+    for (const phrase of ['ANY two of its characters', 'A PLAIN space is NOT a gap', 'INSIDE a `%XX` escape', 'lone CR', 'U+2028', 'the value may be quoted', 'Only the job token is matched character by character', 'found by Codex on PR #391']) expect(readme, phrase).toContain(phrase);
+  });
+});
+
 describe('round 5 a9: the docs say exactly what the non-forced ref update does and does not do', () => {
   it('the README and land.mjs call it a fast-forward test, name the backward-reset residual, and say what the post-update read detects', () => {
     const readme = readFileSync(join(LANDING, 'README.md'), 'utf8');
