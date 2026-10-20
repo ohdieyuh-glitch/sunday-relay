@@ -14,19 +14,78 @@ const API = 'https://api.github.com';
 const SELF_CHECK = 'Land a cleared pull request';
 // r5: NOTHING this job prints may carry a credential, whatever an API, a proxy or a library echoes back into an error text. Every line goes through `summary`, which redacts the token
 // literal, GitHub token shapes (ghs_/ghp_/gho_/ghu_/ghr_/github_pat_), `Bearer <x>` and `Authorization: <x>` first. (The runner also masks GITHUB_TOKEN; this does not rely on it.)
+// V-4: the token is also redacted when a line break (or any whitespace) splits it, in its base64 forms (alone, behind `x-access-token:`, at the three byte alignments) and when ANY of its characters
+// is written as a percent escape (%XX, upper or lower hex, also escaped again as %25XX: up to three levels). v3.5c: v3.5b only compared against encodeURIComponent(token), which is the token itself for
+// the characters of a GitHub token, so a REAL percent-encoded echo (ghs%5F..., %67%68%73%5F...) was not hidden. Each character below matches itself OR its %XX, so partial encodings are covered.
+// v3.5d: a GitHub token SHAPE (any credential, not only the job token) is also hidden when a line break (LF or CRLF, then at most one space or tab) splits it at ANY character; a plain space is not a gap.
+// `Authorization: <x>` also covers a quoted value. v3.5e: the same line-break gap is also accepted INSIDE every %XX escape (between the %, the 25 levels and the two hex digits).
+// Every sentence of the README "Output redaction" paragraph is a probe run on this function; the residuals (plain space inside a foreign shape or inside an escape, a lone CR, ...) are listed there and pinned by tests.
+const b64Middles = (s) => [0, 1, 2].map((pad) => Buffer.from(' '.repeat(pad) + s).toString('base64')).map((e, pad) => e.slice(Math.ceil((pad * 8) / 6), Math.max(0, e.length - 4))).filter((m) => m.length >= 8);
+const reEscape = (c) => c.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+const LINE_BREAK_GAP = '(?:\\r?\\n[ \\t]?)?';
+// v3.5e: a percent escape is '%', up to three '25' levels and the two hex digits, and the line-break gap may sit between EVERY two of those atoms (the gap starts with CR or LF, so it never overlaps a hex digit: linear).
+const percentEscape = (hexPair) => `%${LINE_BREAK_GAP}(?:2${LINE_BREAK_GAP}5${LINE_BREAK_GAP}){0,3}${hexPair}`;
+/** One character as a pattern: itself, or %XX (either hex case), or the %XX escaped again (%25XX, at most three levels), a line-break gap allowed inside. Only single-byte characters have a %XX form here. */
+const charOrEscape = (c) => {
+  const code = c.codePointAt(0);
+  if (code > 0xff) return reEscape(c);
+  const digits = [...code.toString(16).padStart(2, '0')].map((d) => (/[a-f]/u.test(d) ? `[${d}${d.toUpperCase()}]` : d));
+  return `(?:${reEscape(c)}|${percentEscape(digits.join(LINE_BREAK_GAP))})`;
+};
+// the hex pairs of the ASCII letters and digits (30-39, 41-5A, 61-7A), the gap between their two digits
+const ALNUM_ESCAPED_PAIRS = ['3[0-9]', '4[1-9A-Fa-f]', '5[0-9Aa]', '6[1-9A-Fa-f]', '7[0-9Aa]'].map((pair) => `${pair[0]}${LINE_BREAK_GAP}${pair.slice(1)}`);
+const ALNUM_OR_ESCAPED = `(?:[A-Za-z0-9]|${percentEscape(`(?:${ALNUM_ESCAPED_PAIRS.join('|')})`)})`;
+const UNDERSCORE_OR_ESCAPED = charOrEscape('_');
+// v3.5d: the line-break gap sits between EVERY two characters of a shape (v3.5c allowed it only after the underscore): between the prefix letters, before the underscore, and between github / pat / the underscores.
+const word = (w) => [...w].map(charOrEscape).join(LINE_BREAK_GAP);
+const SHAPE_PREFIX_WORDS = ['ghs', 'ghp', 'gho', 'ghu', 'ghr'].map(word).join('|');
+const PAT_HEAD = `${word('github')}${LINE_BREAK_GAP}${UNDERSCORE_OR_ESCAPED}${LINE_BREAK_GAP}${word('pat')}${LINE_BREAK_GAP}${UNDERSCORE_OR_ESCAPED}`;
+const SHAPE_HEAD = `(?:(?:${SHAPE_PREFIX_WORDS})${LINE_BREAK_GAP}${UNDERSCORE_OR_ESCAPED}|${PAT_HEAD})`;
+// v3.5e (fresh adversarial pass): a run NEVER continues into the head of another shape (a token on the next line, or glued to this one, was swallowed and its own body printed), and a shape is recognised wherever
+// it starts (no lookbehind: a token behind letters, digits, an underscore or an escaped newline such as x%0Aghs_... was never matched; the cost is a possible over-redaction of a word that contains ghs_ + 16 letters).
+const shapeRun = (unit) => `(?:${LINE_BREAK_GAP}(?!${SHAPE_HEAD})${unit}){16,255}`;
+const SHAPE_PREFIXED = new RegExp(`(?:${SHAPE_PREFIX_WORDS})${LINE_BREAK_GAP}${UNDERSCORE_OR_ESCAPED}${shapeRun(ALNUM_OR_ESCAPED)}`, 'gu');
+const SHAPE_PAT = new RegExp(`${PAT_HEAD}${shapeRun(`(?:${ALNUM_OR_ESCAPED}|${UNDERSCORE_OR_ESCAPED})`)}`, 'gu');
+// base64 of the job token: each character as itself or its percent escape (= + / are escaped by URL encoders), the base64url alphabet accepted, a line break allowed between any two (base64 / openssl wrap at 76).
+const b64Char = (c) => (c === '+' ? `(?:${charOrEscape('+')}|${charOrEscape('-')})` : c === '/' ? `(?:${charOrEscape('/')}|${charOrEscape('_')})` : charOrEscape(c));
+let jobPatterns = null; // compiled once per job token (the token never changes inside the process)
+const jobTokenPatterns = (token) => {
+  if (jobPatterns !== null && jobPatterns.token === token) return jobPatterns;
+  // the elaborate patterns are built for a token of a realistic length only (a GitHub installation token is 40 characters); a longer one, or one whose pattern the engine refuses, keeps the exact-text match above
+  const build = (parts, glue) => { try { return new RegExp(parts.join(glue), 'gu'); } catch { return null; } };
+  const literal = token.length <= 256 ? build([...token].map(charOrEscape), '\\s*') : null;
+  const base64 = [];
+  if (token.length <= 256) for (const form of [token, `x-access-token:${token}`, `${token}:x-oauth-basic`]) for (const middle of b64Middles(form)) { const pattern = build([...middle].map(b64Char), LINE_BREAK_GAP); if (pattern !== null) base64.push(pattern); }
+  jobPatterns = { token, literal, base64 };
+  return jobPatterns;
+};
 const redact = (text) => {
   let out = String(text);
-  if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) out = out.split(env.GH_TOKEN).join('***');
+  if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) {
+    out = out.split(env.GH_TOKEN).join('***');
+    // every character of the token as itself or as a percent escape, whitespace allowed between characters (a split by a line break or a space)
+    const patterns = jobTokenPatterns(env.GH_TOKEN);
+    if (patterns.literal !== null) out = out.replace(patterns.literal, '***');
+    for (const pattern of patterns.base64) out = out.replace(pattern, '***');
+  }
   return out
-    .replace(/\b(?:ghs|ghp|gho|ghu|ghr)_[A-Za-z0-9]{16,}/gu, '***').replace(/\bgithub_pat_[A-Za-z0-9_]{16,}/gu, '***')
-    .replace(/\bBearer\s+[^\s"',;]+/giu, 'Bearer ***').replace(/(authorization["']?\s*[:=]\s*)(?:(?:bearer|token|basic)\s+)?[^\s"',;]+/giu, '$1***');
+    // only a LINE BREAK (LF or CRLF, then at most one space or tab) may split the run, never a plain space, so the words after a token survive; at most 255 characters; letters, digits and the
+    // underscore may be percent escapes (v3.5c).
+    .replace(SHAPE_PREFIXED, '***')
+    .replace(SHAPE_PAT, '***')
+    // v3.5e: `Bearer` takes a quoted value, or a word, after an optional `:` / `=`.
+    .replace(/\bBearer(?:\s*[:=]\s*|\s+)(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|["'][^\r\n]*|[^\s"',;]+)/giu, 'Bearer ***')
+    // `Authorization` + `:` or `=`: a quoted value (JSON, single quotes) is hidden alone, quotes kept; anything else hides the REST OF THE LINE (a scheme word, a value with spaces, `;` or `,`: Negotiate, Digest, AWS4-HMAC...).
+    .replace(/(authorization\\?["']?\s*[:=]\s*)(["'])(?:\\.|(?!\2)[^\\\r\n])*\2/giu, '$1$2***$2')
+    .replace(/(authorization\\?["']?\s*[:=])(?!\s*(["'])\*\*\*\2)(\s*)[^\r\n]+(?:\r?\n[ \t]+[^\r\n]*)*/giu, '$1$3***');
 };
 const summary = (line) => { const safe = redact(line); console.log(safe); if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, safe + '\n'); };
 const fail = (problems) => { for (const p of problems) summary(`REFUSED: ${p}`); summary('Nothing was landed.'); process.exit(1); };
 // Any error nobody handled (an API answer that is not 2xx, a network failure, a malformed file) ends the job with ONE line, never a stack trace. Before the ref update is sent nothing has
 // landed: exit 1 ("REFUSED"). From the moment the ref update is sent main's state may have changed: exit 2 ("ALERT"), told apart so nobody reads "nothing landed" into it.
 let refUpdateStarted = false;
-const oneLine = (e) => (e instanceof Error ? e.message : String(e)).split('\n')[0].slice(0, 300);
+// v3.5e: redact BEFORE the cut (a token that straddles the 300-character cut or the first line break used to leave its head visible)
+const oneLine = (e) => redact(e instanceof Error ? e.message : String(e)).split('\n')[0].slice(0, 300);
 const onUnexpected = (e) => {
   if (!refUpdateStarted) { summary(`REFUSED: unexpected error before anything was landed: ${oneLine(e)}`); summary('Nothing was landed.'); process.exit(1); }
   summary(`ALERT AFTER LANDING: an unexpected error occurred after the ref update was sent: ${oneLine(e)}; check main by hand`);
@@ -46,7 +105,7 @@ async function gh(path, init = {}) {
   const res = await ghRaw(path, init);
   const text = await res.text();
   let body; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
-  if (!res.ok) throw Object.assign(new Error(`${init.method ?? 'GET'} ${path} -> ${res.status}: ${typeof body === 'string' ? body.slice(0, 200) : body?.message}`), { status: res.status });
+  if (!res.ok) throw Object.assign(new Error(`${init.method ?? 'GET'} ${path} -> ${res.status}: ${typeof body === 'string' ? redact(body).slice(0, 200) : body?.message}`), { status: res.status });
   return body;
 }
 // Every list is read to its end; past the page cap readAllPages THROWS, which ends the job unmerged (fail closed).
@@ -196,7 +255,7 @@ try {
     process.exit(2);
   }
   if (tipAfter === newSha) summary(`LANDED (the PATCH response was lost): ${text}; main is the created commit ${newSha}`);
-  else if (tipAfter === fields.base) fail([`the ref update outcome was ambiguous (${text}) and main is still the cleared base ${fields.base}; nothing landed, no retry (a request that timed out could still be applied late: check main again; this clearance is spent, sign a new one)`]);
+  else if (tipAfter === fields.base) { summary(`ALERT AFTER AN AMBIGUOUS REF UPDATE (${text}): main is still the cleared base ${fields.base}, but the request could still be applied late; state in doubt. No retry, no force, no comment, PR left open. Check main before signing anything new; this clearance is spent`); process.exit(2); }
   else { summary(`ALERT AFTER AN AMBIGUOUS REF UPDATE (${text}): main is ${tipAfter}, neither the created commit ${newSha} nor the cleared base ${fields.base}`); process.exit(2); }
 }
 summary(`LANDED PR #${number}: ${newSha}`);
@@ -206,7 +265,7 @@ summary(`LANDED PR #${number}: ${newSha}`);
 // A failed read of main, a failed comment and a failed close are each reported on their own; the exit code is 2 for an ALERT (main's state is in doubt) and 3 for a failed comment
 // or close alone (the commit landed; do the housekeeping by hand).
 let exitCode = 0;
-const errText = (e) => (e instanceof Error ? e.message : String(e)).split('\n')[0].slice(0, 300);
+const errText = (e) => redact(e instanceof Error ? e.message : String(e)).split('\n')[0].slice(0, 300);
 const alertLanding = (what) => { summary(`ALERT AFTER LANDING: main was updated to ${newSha} but ${what}`); exitCode = 2; };
 let mainAfter;
 try { mainAfter = (await gh(`/repos/${REPO}/git/ref/heads/main`)).object.sha; } catch (error) { alertLanding(`reading main back failed: ${errText(error)}`); }
