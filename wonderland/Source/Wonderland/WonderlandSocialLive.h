@@ -359,6 +359,8 @@ private:
 	double NextWorldAt = 0.0;
 	/** WLREMOTE diagnostics only: when the last world report was sent. */
 	double LastWorldSentAt = 0.0;
+	/** B33 (wl.Remote.RttClock): the FLOOR of this client's world-report round trip, seconds (-1 = none answered yet); copied into each world view it takes. */
+	double WorldRttSmoothed = -1.0;
 	/** MP-VIS-02: set when a server answers a report that carried the handoff fields with a 400 (a server that rejects them): they are not sent again this session,
 	 *  so a position report is never lost to a cosmetic. A server that merely ignores them never sets it. */
 	bool bHandoffWireRefused = false;

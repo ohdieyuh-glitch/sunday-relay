@@ -63,6 +63,8 @@ struct FWonderlandWorldView
 	int32 Capacity = 0;
 	TArray<FWonderlandRemoteAvatar> Avatars;
 	TArray<FWonderlandWorldInviteRow> Invites;
+	/** B33 (wl.Remote.RttClock): THIS client's smoothed world-report round trip when the view was taken, seconds (0 = not known yet). Measured here, never sent by the server. */
+	double ReportRttSeconds = 0.0;
 };
 
 /** This client's own player, as it reports itself. */

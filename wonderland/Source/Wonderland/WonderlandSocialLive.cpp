@@ -732,8 +732,26 @@ void FWonderlandSocialLiveService::TickWorld()
 			bHandoffWireRefused = true;
 			UE_LOG(LogTemp, Warning, TEXT("WLHANDOFF send: the server refused the report that carried the handoff (HTTP 400); the fields are dropped for this session"));
 		}
+		const double RoundTrip = FPlatformTime::Seconds() - SentAt;
+		if (Problem.IsEmpty())
+		{
+			// B33 (wl.Remote.RttClock): the round trip's FLOOR, not its spikes -- half way down to a shorter trip at once, up by 5 % of a longer one per report
+			// (a spike counts at most +100 ms, so one slow answer moves the remote figures' sample clock by at most 5 ms)
+			if (WorldRttSmoothed < 0.0)
+			{
+				WorldRttSmoothed = RoundTrip;
+			}
+			else if (RoundTrip < WorldRttSmoothed)
+			{
+				WorldRttSmoothed += 0.5 * (RoundTrip - WorldRttSmoothed);
+			}
+			else
+			{
+				WorldRttSmoothed += 0.05 * (FMath::Min(RoundTrip, WorldRttSmoothed + 0.1) - WorldRttSmoothed);
+			}
+		}
 		UE_LOG(LogTemp, Display, TEXT("WLREMOTE send soles=(%.1f,%.1f,%.1f) rtt=%.0fms period=%.0fms status=%d yaw=%.2f"),
-			SentSoles.X, SentSoles.Y, SentSoles.Z, (FPlatformTime::Seconds() - SentAt) * 1000.0, SentPeriodMs, Status, static_cast<double>(SentYaw));
+			SentSoles.X, SentSoles.Y, SentSoles.Z, RoundTrip * 1000.0, SentPeriodMs, Status, static_cast<double>(SentYaw));
 		HandleWorldReport(Status, Data, Problem);
 	});
 }
@@ -786,6 +804,7 @@ void FWonderlandSocialLiveService::HandleWorldReport(int32 Status, const TShared
 	AutoJoinAttempts = 0;   // a report the server ANSWERED resets the backoff, never a join alone (m4)
 	const bool bWasPrivate = WorldView.bInWorld && WorldView.Kind == TEXT("PRIVATE_SERVER");
 	WorldView = WonderlandSocialLiveDetail::ParseWorldView(Data);
+	WorldView.ReportRttSeconds = FMath::Max(WorldRttSmoothed, 0.0);   // B33 wl.Remote.RttClock
 	if (bWasPrivate && !WorldView.bInWorld && bWorldWanted)
 	{
 		// TAKEN OUT OF A PRIVATE SERVER BY THE SERVER (founder P4/P5, 10-04: a block either way removes the member; the owner stays):
@@ -904,6 +923,7 @@ void FWonderlandSocialLiveService::HandleJoinAnswer(int32 Seq, const FString& Ta
 		bWorldWanted = true;
 		NextWorldAt = 0.0;
 		WorldView = Joined;
+		WorldView.ReportRttSeconds = FMath::Max(WorldRttSmoothed, 0.0);   // B33 wl.Remote.RttClock (0 until a world report has answered)
 		WorldTarget = Target.ToUpper();   // the world a forgotten player is put back into (the 404 path above)
 		WorldArg = Arg;
 		UE_LOG(LogTemp, Display, TEXT("WLWORLD joined %s (%s), %d of %d here%s"), *WorldView.ContextId, *WorldView.ServerName, WorldView.Population,
