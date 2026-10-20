@@ -64,6 +64,9 @@ public:
 	/** B35: draw this view (a read made since the open), with their skin's name from the registry. */
 	void ShowView(const FWonderlandSocialProfileView& InView, const FString& InDogSkinName);
 	bool IsWithheld() const { return bWithheld; }
+	/** QA (R2-23): every text the built profile holds, and the paints said so far. */
+	TArray<FString> QaBuiltTexts() const;
+	int32 QaPaintsNoted() const { return PaintsNoted; }
 
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
@@ -97,6 +100,7 @@ private:
 	FString WithheldLine;
 	FSlateBrush NoBrush;
 	mutable bool bPaintToNote = false;
+	mutable int32 PaintsNoted = 0;
 
 	FWonderlandSocialProfileView View;
 	TMap<FString, FString> NamesById;

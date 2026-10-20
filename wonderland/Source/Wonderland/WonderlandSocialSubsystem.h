@@ -68,6 +68,8 @@ public:
 	void ConnectDevSession(const FString& BaseUrl, const FString& Player);
 	/** The live service, if this session is live; null otherwise. */
 	class FWonderlandSocialLiveService* GetLive() const { return Live; }
+	/** Bumped for every live session (ConnectWith): a surface gate that saw generation N knows a later service is a different one (RV-B35-11). */
+	int32 GetLiveGeneration() const { return LiveGeneration; }
 
 	/** Whichever service is current changed its view, or a different service took over. */
 	FOnWonderlandSocialChanged& OnSocialChanged() { return SocialChanged; }

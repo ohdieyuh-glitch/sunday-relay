@@ -507,8 +507,9 @@ FString SWonderlandSocialHubPanel::RailHeadline() const
 
 FString SWonderlandSocialHubPanel::DescribeRail() const
 {
-	const auto Badge = [this](ETab Which) { const FString Count = RailCount(Which); return Count.IsEmpty() ? FString(TEXT("-")) : Count; };
-	return FString::Printf(TEXT("rail \"%s\" badges FRIENDS %s PARTY %s MESSAGES %s REQUESTS %s RECENT %s LFF %s"), *RailHeadline(),
+	// AS BUILT (R2-23): the strings the last MakeRail put on screen, never recomputed from the gate flag
+	const auto Badge = [this](ETab Which) { const FString& Count = BuiltBadges[static_cast<int32>(Which)]; return Count.IsEmpty() ? FString(TEXT("-")) : Count; };
+	return FString::Printf(TEXT("rail \"%s\" badges FRIENDS %s PARTY %s MESSAGES %s REQUESTS %s RECENT %s LFF %s"), *BuiltHeadline,
 		*Badge(ETab::Friends), *Badge(ETab::Party), *Badge(ETab::Messages), *Badge(ETab::Requests), *Badge(ETab::Recent), *Badge(ETab::Lff));
 }
 
@@ -524,7 +525,7 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeRail()
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f, 2.0f, 4.0f, 12.0f)
 		[
-			SNew(STextBlock).Text(T(RailHeadline()))
+			SNew(STextBlock).Text(T(BuiltHeadline = RailHeadline()))
 			.Font(WonderlandUi::Sans(9, false, 60)).ColorAndOpacity(WonderlandUi::Dim())
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f)
@@ -636,6 +637,7 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeTabButton(ETab Which, const F
 			]
 		];
 	TabButtonWidgets[static_cast<int32>(Which)] = TabButton;
+	BuiltBadges[static_cast<int32>(Which)] = Count;   // R2-23: the badge as BUILT, for Describe
 	return Made;
 }
 
@@ -1620,9 +1622,18 @@ int32 SWonderlandSocialHubPanel::OnPaint(const FPaintArgs& Args, const FGeometry
 	if (bPaintToNote)
 	{
 		bPaintToNote = false;
+		++PaintsNoted;
+		LastPaintedNote = PaintNote;
 		WonderlandSocialPaintLog::NotePainted(TEXT("hub"), PaintNote);
 	}
 	return Out;
+}
+
+TArray<FString> SWonderlandSocialHubPanel::QaBuiltTexts() const
+{
+	TArray<FString> Texts;
+	WonderlandSocialPaintLog::CollectBuiltTexts(ConstCastSharedRef<SWidget>(AsShared()), Texts);
+	return Texts;
 }
 
 namespace WonderlandSocialPaintLog
@@ -1652,26 +1663,77 @@ namespace WonderlandSocialPaintLog
 #endif
 	}
 
-	void CaptureAfterTick(float)
+	int32& Captures()
 	{
-		if (PendingFrames().Num() == 0)
-		{
-			return;
-		}
-		// ONE CAPTURE for this tick's paints: the window holds all of them now (the last paint's surface names the file)
-		const FPendingFrame Last = PendingFrames().Last();
-		const int32 Paints = PendingFrames().Num();
-		PendingFrames().Reset();
+		static int32 Count = 0;
+		return Count;
+	}
+
+	/** R-4 (RV-B35-13): the SECOND capture of a change, one tick after the first (a translucent panel shows a faint copy of whatever the capture
+	 *  surface held before; the reviewer judges the residue gone by the second frame). */
+	FPendingFrame& FollowUp()
+	{
+		static FPendingFrame Next;
+		return Next;
+	}
+
+	bool SaveCapture(const FPendingFrame& Of, int32 Paints, const TCHAR* Which)
+	{
 		static int32 Counter = 0;
 		const FString Path = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("WLFrames"),
-			FString::Printf(TEXT("%04d_f%llu_%s.png"), ++Counter, Last.Frame, *Last.Surface)));
+			FString::Printf(TEXT("%04d_f%llu_%s_%s.png"), ++Counter, Of.Frame, *Of.Surface, Which)));
 		const double StartedAt = FPlatformTime::Seconds();
 		int32 Width = 0;
 		int32 Height = 0;
 		const bool bSaved = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
-		UE_LOG(LogTemp, Display, TEXT("WLFRAME %s frame=%llu paints=%d %s %dx%d (began %.1f ms after the paint, took %.1f ms) %s | %s"), *Last.Surface, Last.Frame, Paints,
-			bSaved ? TEXT("saved") : TEXT("NOT saved"), Width, Height, (StartedAt - Last.PaintedAt) * 1000.0, (FPlatformTime::Seconds() - StartedAt) * 1000.0, *Path,
-			*WonderlandSocialFreshness::EventStamp());
+		Captures() += bSaved ? 1 : 0;
+		// R2-28: a capture that began more than 50 ms after its paint is flagged LATE (the window may already hold a later frame)
+		const double LateMs = (StartedAt - Of.PaintedAt) * 1000.0;
+		UE_LOG(LogTemp, Display, TEXT("WLFRAME %s frame=%llu paints=%d capture=%s %s %dx%d (began %.1f ms after the paint%s, took %.1f ms) %s | %s"), *Of.Surface, Of.Frame, Paints,
+			Which, bSaved ? TEXT("saved") : TEXT("NOT saved"), Width, Height, LateMs, LateMs > 50.0 ? TEXT(", LATE") : TEXT(""),
+			(FPlatformTime::Seconds() - StartedAt) * 1000.0, *Path, *WonderlandSocialFreshness::EventStamp());
+		return bSaved;
+	}
+
+	void CaptureAfterTick(float)
+	{
+		// THE SECOND CAPTURE of the previous tick's change (R-4), unless a new change replaces it
+		if (!FollowUp().Surface.IsEmpty() && PendingFrames().Num() == 0)
+		{
+			const FPendingFrame Second = FollowUp();
+			FollowUp() = FPendingFrame();
+			SaveCapture(Second, 0, TEXT("b"));
+		}
+		if (PendingFrames().Num() == 0)
+		{
+			return;
+		}
+		// ONE CAPTURE for this tick's paints: the window holds all of them now (the last paint's surface names the file); a second follows next tick
+		const FPendingFrame Last = PendingFrames().Last();
+		const int32 Paints = PendingFrames().Num();
+		PendingFrames().Reset();
+		SaveCapture(Last, Paints, TEXT("a"));
+		FollowUp() = Last;
+	}
+
+	int32 CaptureCount()
+	{
+		return Captures();
+	}
+
+	void CollectBuiltTexts(const TSharedRef<SWidget>& Root, TArray<FString>& Out)
+	{
+		if (Root->GetType() == FName(TEXT("STextBlock")))
+		{
+			Out.Add(StaticCastSharedRef<STextBlock>(Root)->GetText().ToString());
+		}
+		if (FChildren* Children = Root->GetChildren())
+		{
+			for (int32 Index = 0; Index < Children->Num(); ++Index)
+			{
+				CollectBuiltTexts(Children->GetChildAt(Index), Out);
+			}
+		}
 	}
 
 	void NotePainted(const TCHAR* Surface, const FString& Drawn)
@@ -1720,9 +1782,12 @@ FString SWonderlandSocialHubPanel::Describe() const
 	{
 		// B35: WHAT IS DRAWN while withheld: nobody, no count (the cached snapshot is not described, so a log never lists what the screen hid);
 		// on the LFF tab, what its own gated model draws
-		return FString::Printf(TEXT("tab %s | %s | gate UPDATING%s | %s | friends 0 (0 on) | requests in 0 out 0 | party invites 0 | recent 0 | conversations 0 (unread 0) | open none (0 messages) | party none (0 members) | visible parties 0 | voice %s | rows none | action: %s | signin %s%s"),
+		// R2-23: the rows and the rail AS BUILT by the last rebuild (ShownRows is filled by every person, conversation and party row a tab builds),
+		// so a widget that drew someone while the gate was up would show here; no count is taken from the cached snapshot
+		return FString::Printf(TEXT("tab %s | %s | gate UPDATING%s | %s | voice %s | rows %s | action: %s | signin %s%s"),
 			TabName(Tab), bDevelopmentPreview ? TEXT("DEVELOPMENT PREVIEW") : TEXT("connected"), AwaitingLine.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *AwaitingLine), *DescribeRail(),
-			Voice.Connection.IsEmpty() ? TEXT("UNAVAILABLE") : *Voice.Connection, *LastActionLine, FWonderlandSocialSignIn::StateName(SignIn.State),
+			Voice.Connection.IsEmpty() ? TEXT("UNAVAILABLE") : *Voice.Connection, ShownRows.Num() > 0 ? *FString::Join(ShownRows, TEXT(",")) : TEXT("none"),
+			*LastActionLine, FWonderlandSocialSignIn::StateName(SignIn.State),
 			Tab == ETab::Lff ? *FString::Printf(TEXT(" | lff %s"), Lff.IsValid() ? *Lff->Describe() : TEXT("not available")) : TEXT(""));
 	}
 	const TArray<FWonderlandSocialMessage>* History = Snapshot.Messages.Find(OpenConversationId);

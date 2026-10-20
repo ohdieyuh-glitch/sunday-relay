@@ -124,6 +124,8 @@ public:
 		return SocialHubPanel;
 	}
 	void RefreshOpenSocialHubForQa() { HandleSocialChanged(); }
+	/** QA (R2-23): the profile panel on screen as a widget (its built texts are judged), null when no profile is open. */
+	TSharedPtr<SWidget> GetOpenProfilePanelForQa() const;
 #if !UE_BUILD_SHIPPING
 	/** QA (wl.Qa.SocialGate): the open profile's profile.read answers as if a read ISSUED at IssuedAt had landed (200 with View, 404, or another
 	 *  status = a failure). False when no gated profile is open. */
@@ -1176,12 +1178,16 @@ private:
 	 *  new service after a re-sign-in gets it too); a profile's from the server's profile.read for that player, read at the open and on the
 	 *  same period (its not-found = they may no longer be seen: nothing about them is drawn). */
 	double SocialSurfaceOpenedAt = 0.0;
+	/** B35 (RV-B35-11): the live session the open surface was last judged with (the subsystem's generation; -1 = none); a different one means
+	 *  the service changed with the surface open (a sign-in from inside the hub, a 401 then a sign-in, SIGN OUT). */
+	int32 SocialGateLiveGeneration = -1;
 	FTSTicker::FDelegateHandle SocialGateTicker;
 	void ArmSocialSurfaceGate();
 	void DisarmSocialSurfaceGate();
 	bool TickSocialSurfaceGate(float DeltaSeconds);
 	void JudgeSocialSurfaceGate();
 	FWonderlandSocialLiveService* SocialLive() const;
+	int32 CurrentLiveGeneration() const;
 	/** B35: the open profile's own reads (profile.read), for the gate. Generation: a read for an earlier open is ignored when it lands. */
 	bool bProfileGated = false;
 	int32 ProfileGateGeneration = 0;

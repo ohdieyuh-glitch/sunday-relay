@@ -449,17 +449,22 @@ void FWonderlandSocialLiveService::Call(const FString& Verb, const FString& Path
 }
 
 #if !UE_BUILD_SHIPPING
-void FWonderlandSocialLiveService::QaLand(const FWonderlandSocialSnapshot& View, double IssuedAt)
+void FWonderlandSocialLiveService::QaLand(const FWonderlandSocialSnapshot& View, double IssuedAt, bool bBroadcast)
 {
 	static int32 QaLandings = 0;
 	Snapshot = View;
-	SnapshotDigest = FString::Printf(TEXT("qa-%d"), ++QaLandings);
+	// bBroadcast false = an UNCHANGED read (the same view again): it lands silently, as a real unchanged read does (no OnChanged)
+	SnapshotDigest = bBroadcast ? FString::Printf(TEXT("qa-%d"), ++QaLandings) : SnapshotDigest;
 	bHasSnapshot = true;
 	SnapshotAt = FPlatformTime::Seconds();
 	SnapshotIssuedAt = IssuedAt;
-	UE_LOG(LogTemp, Display, TEXT("WLSOCIAL QA landed a view issued %.3f s ago: %s"), FPlatformTime::Seconds() - IssuedAt, *WonderlandSocialSnapshotLine(Snapshot));
-	Changed.Broadcast();
-	ReadLanded.Broadcast();
+	UE_LOG(LogTemp, Display, TEXT("WLSOCIAL QA landed a view issued %.3f s ago (%s): %s"), FPlatformTime::Seconds() - IssuedAt,
+		bBroadcast ? TEXT("changed, broadcast") : TEXT("unchanged, silent"), *WonderlandSocialSnapshotLine(Snapshot));
+	if (bBroadcast)
+	{
+		Changed.Broadcast();
+		ReadLanded.Broadcast();
+	}
 }
 #endif
 
@@ -490,6 +495,11 @@ void FWonderlandSocialLiveService::Refresh()
 	const double IssuedAt = FPlatformTime::Seconds();
 	LastReadIssuedAt = IssuedAt;
 	++ReadsIssued;
+	ReadIssueTimes.Add(IssuedAt);
+	if (ReadIssueTimes.Num() > 64)
+	{
+		ReadIssueTimes.RemoveAt(0);
+	}
 	Call(TEXT("GET"), TEXT("/snapshot"), nullptr, [this, IssuedAt](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
 	{
 		bRefreshing = false;

@@ -724,9 +724,17 @@ int32 SWonderlandSocialProfilePanel::OnPaint(const FPaintArgs& Args, const FGeom
 	if (bPaintToNote)
 	{
 		bPaintToNote = false;
+		++PaintsNoted;
 		WonderlandSocialPaintLog::NotePainted(TEXT("profile"), FString::Printf(TEXT("user=%s | %s"), *View.Profile.UserId, *DescribeIdentityColumn()));
 	}
 	return Out;
+}
+
+TArray<FString> SWonderlandSocialProfilePanel::QaBuiltTexts() const
+{
+	TArray<FString> Texts;
+	WonderlandSocialPaintLog::CollectBuiltTexts(ConstCastSharedRef<SWidget>(AsShared()), Texts);
+	return Texts;
 }
 
 FReply SWonderlandSocialProfilePanel::OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent)

@@ -181,6 +181,8 @@ public:
 	bool IsInboxWithheld() const { return IsReadWithheld(EWonderlandLffRead::Inbox); }
 	/** B35: something the pane on screen would draw is withheld now ("Updating…"): its list, the open post, or the owner's inbox. */
 	bool IsGateUp() const;
+	/** B35 (RV-B35-12): whether an open gate is armed at all (Reset, on a service change, lowers it; the UI arms it again). */
+	bool IsOpenGateArmed() const { return Data.bOpenGate; }
 
 	// ---- panes and lists
 	EWonderlandLffPane GetPane() const { return Data.Pane; }

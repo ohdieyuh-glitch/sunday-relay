@@ -5387,6 +5387,11 @@ void UWonderlandUiSubsystem::OpenSocialProfileById(const FString& UserId)
 
 /* ------------------------------------------------------------------ B35 (R16 privacy, SC1): the social surface gate */
 
+TSharedPtr<SWidget> UWonderlandUiSubsystem::GetOpenProfilePanelForQa() const
+{
+	return Open == EOverlay::Profile ? StaticCastSharedPtr<SWidget>(ProfilePanel) : TSharedPtr<SWidget>();
+}
+
 FWonderlandSocialLiveService* UWonderlandUiSubsystem::SocialLive() const
 {
 	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
@@ -5410,10 +5415,21 @@ void UWonderlandUiSubsystem::ArmSocialSurfaceGate()
 	ProfileLandedDigest.Reset();
 	ProfileShownDigest.Reset();
 	ProfileLandedView.Reset();
+	// THE JUDGEMENT RUNS FOR EVERY OPEN (RV-B35-11): an open made with no live service (signed out, or the preview) is judged too, because the
+	// player can sign in from inside the hub and the service then arrives with the surface open. The rule is about time; an event may never come.
+	if (!SocialGateTicker.IsValid())
+	{
+		SocialGateTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWonderlandUiSubsystem::TickSocialSurfaceGate), 0.05f);
+	}
 	FWonderlandSocialLiveService* Live = SocialLive();
+	SocialGateLiveGeneration = CurrentLiveGeneration();
 	if (Live == nullptr)
 	{
-		return;   // a preview or no sign-in: no real person is listed, so nothing is withheld (the panels were built drawn)
+		// a preview or no sign-in: no real person is listed, so nothing is withheld now (the panels were built drawn); a service adopted later is
+		// judged by JudgeSocialSurfaceGate as a change of service
+		UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL gate armed: %s with no live service (judged from here on; a service adopted while it is open is gated) | %s"),
+			OverlayName(Open), *WonderlandSocialFreshness::EventStamp());
+		return;
 	}
 	if (Open == EOverlay::Social)
 	{
@@ -5427,10 +5443,6 @@ void UWonderlandUiSubsystem::ArmSocialSurfaceGate()
 		bProfileGated = true;
 		ProfileSubjectId = PendingProfile->Profile.UserId;
 		ReadOpenProfile();
-	}
-	if (!SocialGateTicker.IsValid())
-	{
-		SocialGateTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWonderlandUiSubsystem::TickSocialSurfaceGate), 0.05f);
 	}
 	UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL gate armed: %s%s (people only from a read issued since this open; re-read every %.2f s from the last issue; none older than %.2f s) | %s"),
 		OverlayName(Open), bProfileGated ? *FString::Printf(TEXT(" %s"), *ProfileSubjectId) : TEXT(""), WonderlandSocialFreshness::OpenResyncSeconds,
@@ -5461,10 +5473,50 @@ bool UWonderlandUiSubsystem::TickSocialSurfaceGate(float)
 	return true;
 }
 
+int32 UWonderlandUiSubsystem::CurrentLiveGeneration() const
+{
+	const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+	const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+	return Social != nullptr && Social->GetLive() != nullptr ? Social->GetLiveGeneration() : -1;
+}
+
 void UWonderlandUiSubsystem::JudgeSocialSurfaceGate()
 {
 	FWonderlandSocialLiveService* Live = SocialLive();
 	const double Now = FPlatformTime::Seconds();
+	// THE SERVICE CHANGED WITH A SURFACE OPEN (RV-B35-11/-12): a sign-in from inside the hub, a 401 then a sign-in, SIGN OUT. Nothing the old
+	// session read is drawn under the new one: the hub is judged against the new service's reads (all issued after this open); the profile's read
+	// in flight on the old service never answers, so it is forgotten and the profile is read again; LFF is armed again below.
+	if ((Open == EOverlay::Social || Open == EOverlay::Profile) && CurrentLiveGeneration() != SocialGateLiveGeneration)
+	{
+		UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL gate: the social service changed with %s open (live session %d -> %d) | %s"), OverlayName(Open),
+			SocialGateLiveGeneration, CurrentLiveGeneration(), *WonderlandSocialFreshness::EventStamp());
+		SocialGateLiveGeneration = CurrentLiveGeneration();
+		if (Open == EOverlay::Profile && bProfileGated)
+		{
+			++ProfileGateGeneration;
+			bProfileReadInFlight = false;
+			ProfileReadNotBefore = 0.0;
+			ProfileReadFailures = 0;
+			ProfileLandedView.Reset();
+			ProfileLandedDigest.Reset();
+			ProfileLandedIssuedAt = -1.0e12;
+			bProfileNotAvailable = false;
+		}
+	}
+	// LFF IS ARMED WHENEVER THE HUB IS OPEN ON A LIVE SERVICE (RV-B35-12): an adoption Resets the LFF model (UWonderlandSocialSubsystem::Adopt),
+	// which lowers its gate; arming it again here covers every order of events
+	if (Open == EOverlay::Social && Live != nullptr && !WonderlandSocialFreshness::IsGateMutatedOff())
+	{
+		const UGameInstance* LffInstance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+		const UWonderlandSocialSubsystem* LffSocial = LffInstance != nullptr ? LffInstance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+		const TSharedPtr<FWonderlandLffModel> Lff = LffSocial != nullptr ? LffSocial->GetLff() : TSharedPtr<FWonderlandLffModel>();
+		if (Lff.IsValid() && !Lff->IsOpenGateArmed())
+		{
+			Lff->BeginOpenGate(Now);
+			UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL gate: LFF armed again with the hub open (its model was reset) | %s"), *WonderlandSocialFreshness::EventStamp());
+		}
+	}
 	if (Open == EOverlay::Social && SocialHubPanel.IsValid())
 	{
 		if (Live == nullptr)

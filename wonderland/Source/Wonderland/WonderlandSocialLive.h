@@ -209,8 +209,10 @@ public:
 #if !UE_BUILD_SHIPPING
 	/** QA (wl.Qa.SocialGate): land this view as if a read ISSUED at IssuedAt had answered with it (always a change), and how many snapshot reads
 	 *  this service has issued. Developer builds only. */
-	void QaLand(const FWonderlandSocialSnapshot& View, double IssuedAt);
+	void QaLand(const FWonderlandSocialSnapshot& View, double IssuedAt, bool bBroadcast = true);
 	int32 QaReadsIssued() const { return ReadsIssued; }
+	/** QA (R2-25): when each snapshot read was issued (FPlatformTime), oldest first, the last 64. */
+	const TArray<double>& QaReadIssueTimes() const { return ReadIssueTimes; }
 #endif
 	/** Report this player's own presence (the client's part of the presence authority's input): connected (and exploring, as on arrival),
 	 *  or leaving. What the player is DOING after that is reported on change from the activity source (SetActivitySource). */
@@ -335,6 +337,7 @@ private:
 	/** SC2: the field names of the last world report said in the log ("WLWORLD report fields"). */
 	FString LoggedReportKeys;
 	int32 ReadsIssued = 0;
+	TArray<double> ReadIssueTimes;
 	FTSTicker::FDelegateHandle TickerHandle;
 	/** r16reh16c: a dedicated 50 ms ticker for the world report only (the shared Tick runs every 0.25 s, which capped reports at 4 a second). */
 	FTSTicker::FDelegateHandle WorldTickerHandle;

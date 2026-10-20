@@ -48,6 +48,10 @@ namespace WonderlandSocialBlocked
 namespace WonderlandSocialPaintLog
 {
 	void NotePainted(const TCHAR* Surface, const FString& Drawn);
+	/** R2-23 (the reviewer's instrument finding): every text a built widget tree holds (STextBlock), in tree order -- what QA judges, not a flag. */
+	void CollectBuiltTexts(const TSharedRef<SWidget>& Root, TArray<FString>& Out);
+	/** How many window captures were saved (-wlframes; QA proves a paint was captured). */
+	int32 CaptureCount();
 }
 
 /** The hub's own words for a person and for time (defined in WonderlandSocialHubPanel.cpp), shared with the LFF view so both say them alike. */
@@ -154,6 +158,10 @@ public:
 	/** QA (wl.Qa.SocialHubClicks): the centre of a tab's button as last painted, in DESKTOP space (where pointer events land); false
 	 *  when it has not been painted. */
 	bool QaTabCentre(ETab Which, FVector2D& OutScreen) const;
+	/** QA (R2-23): every text the BUILT hub holds (rail, tab body, foot), and the paints said so far with the last one's note. */
+	TArray<FString> QaBuiltTexts() const;
+	int32 QaPaintsNoted() const { return PaintsNoted; }
+	const FString& QaLastPaintedNote() const { return LastPaintedNote; }
 	/** QA: a rebuild AT ONCE, as SetSnapshot did before F-21 (the control that must lose a click). */
 	void QaRebuildNow() { Rebuild(); }
 	bool QaRebuildPending() const { return bRebuildPending; }
@@ -227,13 +235,18 @@ private:
 	/** B35: the next rebuild says the gate's new state in the log (SetAwaitingFresh), and the last line said (a change is said once). */
 	bool bLogGateOnRebuild = false;
 	FString LastLoggedDescribe;
-	/** B35 (M2 P6): what the last rebuild drew, said by the first paint after it. */
+	/** B35 (M2 P6): what the last rebuild drew, said by the first paint after it; QA counts those paints. */
 	mutable bool bPaintToNote = false;
 	FString PaintNote;
+	mutable int32 PaintsNoted = 0;
+	mutable FString LastPaintedNote;
 	/** B35 (RV-B35-04/-10): each rail badge and the "friends on" line, from ONE place for the rail and the log; empty while withheld. */
 	FString RailCount(ETab Which) const;
 	FString RailHeadline() const;
+	/** R2-23: the rail AS BUILT (the strings MakeRail handed to its widgets), not recomputed from the flag. */
 	FString DescribeRail() const;
+	FString BuiltHeadline;
+	FString BuiltBadges[6];
 	/** B35: the withheld body of a people tab: its title, no count, "Updating…" and why. */
 	TSharedRef<SWidget> MakeWithheld();
 	ETab Tab = ETab::Friends;
