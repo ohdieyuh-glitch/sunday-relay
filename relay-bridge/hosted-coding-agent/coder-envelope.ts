@@ -445,6 +445,15 @@ export function coderRuntimeSchedule(input: CoderRuntimeScheduleInput): CoderRun
   if (!Number.isInteger(input.repairCycles) || input.repairCycles < 0) {
     throw new CoderRuntimeBudgetRefused('coder_runtime_minutes_invalid', 'repairCycles must be a whole number of at least 0');
   }
+  // FAIL CLOSED ON THE FIGURES (adversarial finding, juju2 2026-10-20): every figure is a duration and must be a finite number of at least 0, the job budget one above 0. A NaN or an infinity made
+  // `guaranteedRepairCycles` NaN (Math.min(r, NaN)) and a negative wait let a main path 'fit' that did not. The committed figures are constants, so this guards a caller, not today's numbers.
+  for (const [name, value] of [['reviewerShareMs', input.reviewerShareMs], ['reviewerCycleCeilingMs', input.reviewerCycleCeilingMs], ['architectWorstCaseMs', input.architectWorstCaseMs],
+    ['infrastructureMs', input.infrastructureMs], ['approvalWaitMs', input.approvalWaitMs], ['marginsMs', input.marginsMs]] as const) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw new CoderRuntimeBudgetRefused('coder_runtime_budget_unfit', `${name} must be a finite number of milliseconds of at least 0`);
+  }
+  if (typeof input.jobBudgetMs !== 'number' || !Number.isFinite(input.jobBudgetMs) || input.jobBudgetMs <= 0) {
+    throw new CoderRuntimeBudgetRefused('coder_runtime_budget_unfit', 'jobBudgetMs must be a finite number of milliseconds above 0');
+  }
   const fixed = input.reviewerShareMs + input.architectWorstCaseMs + input.infrastructureMs + input.approvalWaitMs + input.marginsMs;
   const mainPathWorstCaseMs = fixed + runtime.worstCaseDispatchMs;
   const worstCycleMs = runtime.worstCaseDispatchMs + input.reviewerCycleCeilingMs;
