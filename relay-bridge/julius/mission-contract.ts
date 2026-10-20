@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { JULIUS_BOOTSTRAP_REQUEST_VERSION, type JuliusBootstrapRequest } from '../../src/relay/integration/julius/julius-port';
+import { coderRuntimeMinutesProblem } from '../hosted-coding-agent/coder-envelope';
 import {
   JULIUS_LEARNING_REGISTRATION_DIGEST,
   juliusLearningPolicyRefusal,
@@ -83,6 +84,13 @@ export interface LiveMissionContractFile {
      * of a registration carry the same one.
      */
     readonly coderSelfTestCalls?: number;
+    /**
+     * The Coding Agent's SESSION limit for THIS mission, in whole minutes (`CODER_CONTRACT_RUNTIME_MIN_MINUTES` to
+     * `CODER_CONTRACT_RUNTIME_MAX_MINUTES`). Absent (the default) leaves the observation-derived envelope exactly as it was, so an
+     * existing contract is byte-identical. Present, it is inside the binding digest, bounded by that range here and by the job
+     * fit in the contract checker and at composition (`coderRuntimeJobFit`). It never raises cost: money stays an independent bound.
+     */
+    readonly coderRuntimeMinutes?: number;
   };
   /**
    * THE MISSION'S RESEARCH AUTHORITY, SEALED BY THE CONTRACT THAT GRANTS IT.
@@ -227,7 +235,7 @@ export function sealLiveMissionResearchPolicy(
 export const JULIUS_ROLE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type JuliusRoleEffort = (typeof JULIUS_ROLE_EFFORT_LEVELS)[number];
 /** The only keys `limits` may hold. A key this build does not read would be a term nobody enforces. */
-export const JULIUS_LIMITS_KEYS = ['spendUsd', 'repairCycles', 'architectMaxOutputTokens', 'architectEffort', 'coderEffort', 'coderSelfTestCalls'] as const;
+export const JULIUS_LIMITS_KEYS = ['spendUsd', 'repairCycles', 'architectMaxOutputTokens', 'architectEffort', 'coderEffort', 'coderSelfTestCalls', 'coderRuntimeMinutes'] as const;
 /** The self-test call cap a contract may declare. */
 export const JULIUS_SELF_TEST_CALLS_RANGE = Object.freeze({ min: 1, max: 4 });
 
@@ -312,6 +320,12 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
     if (calls !== undefined && !(typeof calls === 'number' && Number.isInteger(calls)
       && calls >= JULIUS_SELF_TEST_CALLS_RANGE.min && calls <= JULIUS_SELF_TEST_CALLS_RANGE.max)) {
       return { ok: false, problem: `The contract's limits.coderSelfTestCalls must be an integer from ${JULIUS_SELF_TEST_CALLS_RANGE.min} to ${JULIUS_SELF_TEST_CALLS_RANGE.max}.` };
+    }
+    // THE CODER SESSION BUDGET IS BOUNDED HERE (the absolute range) AND AGAIN BY THE JOB FIT downstream: a session budget the
+    // parser let through unbounded would be a runaway the contract declared for itself.
+    if (declared.coderRuntimeMinutes !== undefined) {
+      const problem = coderRuntimeMinutesProblem(declared.coderRuntimeMinutes);
+      if (problem !== null) return { ok: false, problem: `The contract's ${problem}.` };
     }
   }
 
