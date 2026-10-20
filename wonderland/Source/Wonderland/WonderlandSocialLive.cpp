@@ -477,9 +477,13 @@ void FWonderlandSocialLiveService::SetSurfaceOpen(bool bOpen)
 	bSurfaceOpen = bOpen;
 	if (!bOpen)
 	{
-		// back on the closed clock: the next periodic read is a full ResyncSeconds after the last one, and a failure's gap is forgotten
+		// back on the closed clock: the next periodic read is a full ResyncSeconds after the last one. A failed read's wait (a 429's
+		// Retry-After, or the back-off) still holds every read until it ends (R6-05); with no failure there is no wait to keep
 		NextResyncAt = FMath::Max(NextResyncAt, LastReadIssuedAt + WonderlandSocialLiveDetail::ResyncSeconds);
-		ReadNotBefore = 0.0;
+		if (ReadFailures == 0)
+		{
+			ReadNotBefore = 0.0;
+		}
 	}
 }
 
@@ -521,7 +525,6 @@ void FWonderlandSocialLiveService::Refresh()
 			// B35: AN OPEN SURFACE KEEPS WITHHOLDING while reads fail (the UI's freshness rule), and is not asked again every tick: a 429 waits
 			// its Retry-After, anything else a gap that doubles from OpenResyncSeconds up to MaxReadBackoffSeconds
 			ReadFailures = FMath::Min(ReadFailures + 1, 16);
-			bLastReadWas429 = Status == 429;
 			const double Gap = Status == 429 ? FMath::Max(1.0, static_cast<double>(LastRetryAfterSeconds))
 				: FMath::Min(WonderlandSocialLiveDetail::MaxReadBackoffSeconds, WonderlandSocialFreshness::OpenResyncSeconds * FMath::Pow(2.0, static_cast<double>(FMath::Min(ReadFailures - 1, 4))));
 			ReadNotBefore = FPlatformTime::Seconds() + Gap;
@@ -538,7 +541,6 @@ void FWonderlandSocialLiveService::Refresh()
 		{
 			ReadFailures = 0;
 			ReadNotBefore = 0.0;
-			bLastReadWas429 = false;
 			ReadProblem.Reset();
 			const FString Digest = WonderlandSocialLiveDetail::ViewDigest(Data);
 			const bool bViewChanged = !bHasSnapshot || Digest.IsEmpty() || Digest != SnapshotDigest;

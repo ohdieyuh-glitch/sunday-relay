@@ -768,11 +768,13 @@ FString SWonderlandSocialProfilePanel::DescribeIdentityColumn() const
 	{
 		return FString::Printf(TEXT("withheld (%s)"), WithheldLine.IsEmpty() ? TEXT("Updating…") : *WithheldLine);   // B35: nothing of the player is drawn
 	}
+	// R6-01 (R1-05): ids and states only -- this text is LOGGED (the gate's "WLSOCIAL profile" line) in every session, and another player's
+	// agent and companion names are theirs, not the log's
 	const FWonderlandSocialProfile& P = View.Profile;
 	return FString::Printf(TEXT("agent=%s (%s) | dog=%s | dogRendered=%d | rank=%s | level=%s | companion=%s"),
-		P.bHasPrimaryAgent ? *P.PrimaryAgent.DisplayName : TEXT("none"), P.bHasPrimaryAgent ? *P.PrimaryAgent.Kind : TEXT("-"),
+		P.bHasPrimaryAgent ? *P.PrimaryAgent.AgentId : TEXT("none"), P.bHasPrimaryAgent ? *P.PrimaryAgent.Kind : TEXT("-"),
 		*P.RelayDog.SkinId, DogBrush != nullptr ? 1 : 0, *P.ProgressionSource, *P.ProgressionSource,
-		P.bHasActiveCompanion ? *P.ActiveCompanion.DisplayName : TEXT("none"));
+		P.bHasActiveCompanion ? *P.ActiveCompanion.CompanionId : TEXT("none"));
 }
 
 namespace WonderlandSocialProfileActionsQa

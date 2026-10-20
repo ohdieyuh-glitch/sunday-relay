@@ -5434,8 +5434,9 @@ void UWonderlandUiSubsystem::ArmSocialSurfaceGate()
 	if (Open == EOverlay::Social)
 	{
 		Live->SetSurfaceOpen(true);
-		// THE OPEN'S OWN READ, at once. One already in flight was issued before this open: it lands without clearing the gate, and Refresh
-		// asks for another as it lands (bRefreshAgain), issued after the open.
+		// THE OPEN'S OWN READ, at once -- unless a failed read's wait is running (R3-03/R6-04): then it is issued when the wait ends, and the
+		// surface stays "Updating…" until a read issued after this open lands. One already in flight was issued before this open: it lands
+		// without clearing the gate, and Refresh asks for another as it lands (bRefreshAgain), issued after the open.
 		Live->Refresh();
 	}
 	else if (Open == EOverlay::Profile && ProfilePanel.IsValid() && PendingProfile.IsValid() && ProfilePanel->IsWithheld())
