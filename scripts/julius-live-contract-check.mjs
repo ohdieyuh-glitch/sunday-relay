@@ -149,6 +149,9 @@ const MISSION_LIMITS = Object.freeze({
   // DECISION C, REGISTRATION 2 (founder, 2026-10-18: "Maximum spending remains $30 per arm, $120 total across four arms"). Same ceilings per arm as
   // registration 1; no MISSION_LANES entry (the default lab) and no MISSION_RESEARCH entry.
   'julius-learning-pair-2': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
+  // DECISION C REGISTRATION 3 (joint-1), the four shared P6 Unreal arms (design r1 3.8; DRAFT, OPEN Q6: $30 per arm is also what the Row 14 checker r5 hard-codes):
+  // founder 14a (10-07), up to $30 with up to 3 repair cycles per arm. No MISSION_LANES entry (the default lab: lanes grant no money).
+  'julius-joint-1': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
   // THE SECOND UNSCORED DIAGNOSTIC MISSION, under the founder's PERMANENT MAXIMUM-CAPABILITY LIVE-TESTING DIRECTIVE (2026-10-18): "remove the artificial $5
   // mission budget and any other discretionary dollar ceiling imposed on Julius's authorized paid live testing ... A mission costing $30, $40, or more is
   // acceptable. Do not artificially downgrade model capability, truncate meaningful testing, or terminate an authorized mission merely to meet a
