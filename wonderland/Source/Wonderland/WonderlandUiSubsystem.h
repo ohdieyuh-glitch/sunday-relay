@@ -1165,6 +1165,7 @@ private:
 	/** A server's notice for a player who had no social screen open (founder P4/P5: "You can't stay in this server."): shown on the hub's
 	 *  status line the next time it opens, once. */
 	FString PendingSocialNotice;
+	FString PendingSocialNoticeLog;   // C6 F-2: the notice as logged
 	bool bProfileFromHub = false;
 	bool bSocialBound = false;
 

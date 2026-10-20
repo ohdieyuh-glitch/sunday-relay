@@ -546,6 +546,9 @@ public:
 	/** The presentation name, e.g. "GPT 6 Astra". */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")
 	FString DisplayName;
+	/** C6 F-4: what its log lines call it (a remote player's id); empty = DisplayName (the local Dog's own companions). */
+	FString LogName;
+	const FString& NameForLog() const { return LogName.IsEmpty() ? DisplayName : LogName; }
 
 	/** What kind of import this is, e.g. "LLM COMPANION" or "JHINN AI AGENT". */
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")

@@ -29,6 +29,19 @@ class FJsonObject;
 // MaxShownAgeSeconds while it stays open; otherwise it says "Updating…". Applied on EVERY open path, because every path builds its panel through
 // UWonderlandUiSubsystem::OpenOverlay (the hub from the HUD, the terminal and wl.Social.Hub; Esc back from a profile; the chrome rebuilt for
 // a colour change; a profile from any of them).
+/** C6 F-2: a server refusal as LOGGED. The deployed backend's shared-party block refusal ("BLOCK_NEEDS_CONFIRMATION: Blocking <display name>
+ *  ...") names the other player; the player still reads it, every log line and logged description gets the subject's id instead. Any other
+ *  reason is logged as it came. */
+namespace WonderlandSocialLogSafe
+{
+	inline FString Reason(const FString& Reason, const FString& SubjectId)
+	{
+		return Reason.Contains(TEXT("BLOCK_NEEDS_CONFIRMATION"))
+			? FString::Printf(TEXT("BLOCK_NEEDS_CONFIRMATION for %s (the server's text names the player: not logged)"), SubjectId.IsEmpty() ? TEXT("-") : *SubjectId)
+			: Reason;
+	}
+}
+
 namespace WonderlandSocialFreshness
 {
 	/** The re-read period while a surface is open, counted from the last read's issue (the open reads at once). */

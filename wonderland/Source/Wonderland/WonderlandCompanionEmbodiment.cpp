@@ -720,7 +720,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		if (!FFileHelper::LoadFileToString(Text, *FilePath))
 		{
 			LastError = FString::Printf(TEXT("cannot read figure file %s"), *FilePath);
-			UE_LOG(LogWonderlandCompanion, Error, TEXT("WLCOMPANION %s: %s"), *DisplayName, *LastError);
+			UE_LOG(LogWonderlandCompanion, Error, TEXT("WLCOMPANION %s: %s"), *NameForLog(), *LastError);
 			return false;
 		}
 		TSharedRef<FWonderlandCompanionFigure> Parsed = MakeShared<FWonderlandCompanionFigure>();
@@ -728,7 +728,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		if (!FWonderlandCompanionFigure::Parse(Text, Parsed.Get(), ParseError))
 		{
 			LastError = FString::Printf(TEXT("%s: %s"), *FilePath, *ParseError);
-			UE_LOG(LogWonderlandCompanion, Error, TEXT("WLCOMPANION %s: figure refused, %s"), *DisplayName, *LastError);
+			UE_LOG(LogWonderlandCompanion, Error, TEXT("WLCOMPANION %s: figure refused, %s"), *NameForLog(), *LastError);
 			return false;
 		}
 		Shared = Parsed;
@@ -740,7 +740,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 	if (Cube == nullptr)
 	{
 		LastError = TEXT("the engine cube /Engine/BasicShapes/Cube did not load");
-		UE_LOG(LogWonderlandCompanion, Error, TEXT("WLCOMPANION %s: %s"), *DisplayName, *LastError);
+		UE_LOG(LogWonderlandCompanion, Error, TEXT("WLCOMPANION %s: %s"), *NameForLog(), *LastError);
 		return false;
 	}
 
@@ -1333,7 +1333,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 	}
 
 	UE_LOG(LogWonderlandCompanion, Log, TEXT("WLCOMPANION %s (%s) built from %s: %d boxes, %d parts, %d materials, %d components"),
-		*DisplayName, *ClassLabel, *FilePath, BoxCount, PartPivots.Num(), MaterialInstances.Num(), PartMeshes.Num());
+		*NameForLog(), *ClassLabel, *FilePath, BoxCount, PartPivots.Num(), MaterialInstances.Num(), PartMeshes.Num());
 	// A SHOWCASE FIGURE KEEPS ITS CHANNEL ACROSS A SKIN CHANGE. LoadFigure builds an entirely new set of
 	// components, and without this the first skin the founder clicks in the wardrobe would be lit by the
 	// stage and every one after it by the sun.
@@ -1376,7 +1376,7 @@ void AWonderlandCompanionEmbodiment::SetFormation(EWonderlandCompanionFormation 
 			if (bRoutingHome)
 			{
 				UE_LOG(LogWonderlandCompanion, Log, TEXT("WLCOMPANION %s goes home round the %s of the Dog"),
-					*DisplayName, HomeSide > 0.0 ? TEXT("front") : TEXT("back"));
+					*NameForLog(), HomeSide > 0.0 ? TEXT("front") : TEXT("back"));
 			}
 		}
 		// Spread around a shared circle rather than stacking: two companions in the same place is one

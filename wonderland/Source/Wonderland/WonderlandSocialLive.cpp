@@ -1169,8 +1169,9 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::Ask(const FString& O
 		FWonderlandSocialActionResult Answer;
 		Answer.bOk = Problem.IsEmpty();
 		Answer.Reason = Problem;
+		const FString ReasonForLog = WonderlandSocialLogSafe::Reason(Answer.Reason, SubjectId);   // C6 F-2 (the pinned form is unchanged)
 		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live %s %s: %s%s"), *OperationId, *SubjectId, Answer.bOk ? TEXT("ok") : TEXT("refused"),
-			Answer.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Answer.Reason));
+			ReasonForLog.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *ReasonForLog));
 		// G6: the line above is a pinned TF-4 r3.1 form and stays byte-identical; its event time is this companion line (Q-M1-1: the actor's OK answer)
 		UE_LOG(LogTemp, Display, TEXT("WLSTAMP answer %s %s %s | %s"), *OperationId, SubjectId.IsEmpty() ? TEXT("-") : *SubjectId, Answer.bOk ? TEXT("ok") : TEXT("refused"),
 			*WonderlandSocialFreshness::EventStamp());

@@ -5291,17 +5291,19 @@ void UWonderlandUiSubsystem::HandleSocialAnswered(const FString& OperationId, co
 		return;   // R16 CF-2: a read the hub made because the player was looking: no screen answers it (the live service logged it)
 	}
 	const FString Line = Answer.bOk ? FString(TEXT("Done")) : Answer.Reason;
+	const FString LineForLog = Answer.bOk ? Line : WonderlandSocialLogSafe::Reason(Answer.Reason, SubjectId);   // C6 F-2
 	if (Open == EOverlay::Social && SocialHubPanel.IsValid())
 	{
-		SocialHubPanel->ShowActionResult(Line);
+		SocialHubPanel->ShowActionResult(Line, LineForLog);
 	}
 	else if (Open == EOverlay::Profile && ProfilePanel.IsValid())
 	{
-		ProfilePanel->ShowActionResult(Line);
+		ProfilePanel->ShowActionResult(Line, LineForLog);
 	}
 	else if (OperationId == TEXT("world.removed"))
 	{
 		PendingSocialNotice = Line;   // no social screen is open: the hub says it when the player next opens it
+		PendingSocialNoticeLog = LineForLog;
 	}
 }
 
@@ -5364,8 +5366,9 @@ bool UWonderlandUiSubsystem::OpenSocialHub(const FString& TabName)
 	OpenOverlay(EOverlay::Social);
 	if (Open == EOverlay::Social && SocialHubPanel.IsValid() && !PendingSocialNotice.IsEmpty())
 	{
-		SocialHubPanel->ShowActionResult(PendingSocialNotice);
+		SocialHubPanel->ShowActionResult(PendingSocialNotice, PendingSocialNoticeLog);
 		PendingSocialNotice.Reset();
+		PendingSocialNoticeLog.Reset();
 	}
 	return Open == EOverlay::Social;
 }

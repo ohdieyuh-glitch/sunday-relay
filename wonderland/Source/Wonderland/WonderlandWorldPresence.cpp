@@ -316,6 +316,7 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 				continue;
 			}
 			Body->DisplayName = A.DisplayName;
+			Body->LogName = A.UserId;   // C6 F-4: its log lines name the player's id, never their display name
 			Body->ClassLabel = TEXT("WONDERLAND PLAYER");
 			// THE MASCOT, as every player's Dog is: its colourway, its gait, Relay OG's height (the HARD rule).
 			Body->SetBodyRole(EWonderlandBodyRole::Mascot);
@@ -337,7 +338,8 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 			Remote.Label = Label;
 			Remote.SkinId.Reset();
 			// R16 EVIDENCE: another player's Dog drawn in this player's world, said once, by id and place.
-			UE_LOG(LogTemp, Display, TEXT("WLWORLD player %s (%s) appeared at (%.0f, %.0f, %.0f)"), *A.UserId, *A.DisplayName,
+			// C6 F-3: the pinned L-APP shape (TF-4 r3.1 reads the id) with no display name in the log
+			UE_LOG(LogTemp, Display, TEXT("WLWORLD player %s (%s) appeared at (%.0f, %.0f, %.0f)"), *A.UserId, TEXT("name not logged"),
 				A.Location.X, A.Location.Y, A.Location.Z);
 		}
 		// THEIR SKIN, THROUGH THE REGISTRY: a skin this build does not know keeps the figure it has.

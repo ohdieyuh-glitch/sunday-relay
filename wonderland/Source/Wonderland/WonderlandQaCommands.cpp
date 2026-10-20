@@ -2877,6 +2877,12 @@ namespace
 		TEXT("close head shot) with the other figures standing and the HUD hidden, into Saved/Screenshots/WLFACES as <SetName>_<who>_<local|remote>_yaw<NN>.png; does not quit."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
+			// C6 F-5: it photographs and logs OTHER players (their names in lines and file names): a developer session only (-wldev)
+			if (!WonderlandBeta::IsDeveloperSession())
+			{
+				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES refused: wl.Qa.RemoteFaces needs a developer session (-wldev)"));
+				return;
+			}
 			if (GQaRemoteFaces.IsValid())
 			{
 				UE_LOG(LogWonderlandQa, Display, TEXT("WLFACES RemoteFaces is already running"));
