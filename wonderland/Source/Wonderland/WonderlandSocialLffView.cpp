@@ -551,9 +551,9 @@ void FWonderlandLffModel::NoteLanded(EWonderlandLffRead Read, double AskedAt)
 	People.Remove(FString());
 	TArray<FString> PeopleSorted = People.Array();
 	PeopleSorted.Sort();
-	UE_LOG(LogTemp, Display, TEXT("WLSOCIAL lff read landed: %s asked %.0f ms ago, posts %s, people %s | %s"), Kind, (FPlatformTime::Seconds() - AskedAt) * 1000.0,
-		Posts.Num() > 0 ? *FString::Join(Posts, TEXT(",")) : TEXT("none"), PeopleSorted.Num() > 0 ? *FString::Join(PeopleSorted, TEXT(",")) : TEXT("none"),
-		*WonderlandSocialFreshness::EventStamp());
+	LastLandedNote = FString::Printf(TEXT("%s asked %.0f ms ago, posts %s, people %s"), Kind, (FPlatformTime::Seconds() - AskedAt) * 1000.0,
+		Posts.Num() > 0 ? *FString::Join(Posts, TEXT(",")) : TEXT("none"), PeopleSorted.Num() > 0 ? *FString::Join(PeopleSorted, TEXT(",")) : TEXT("none"));
+	UE_LOG(LogTemp, Display, TEXT("WLSOCIAL lff read landed: %s | %s"), *LastLandedNote, *WonderlandSocialFreshness::EventStamp());
 }
 
 void FWonderlandLffModel::NoteAnswer(const FWonderlandLffAnswer& Answer, EWonderlandLffBudget Kind)
@@ -775,9 +775,6 @@ void FWonderlandLffModel::ReadFeed(bool bMore, bool bPeriodic)
 				D.Feed.Reset();
 				D.FeedPages = 0;
 				D.bFeedNews = false;
-				// B35: page 1 REPLACES the feed, so the feed is as fresh as this read. A further page (bMore) joins pages already held and
-				// never lifts the gate: those pages may predate the open.
-				Self->NoteLanded(EWonderlandLffRead::Feed, AskedAt);
 			}
 			for (const FWonderlandLffPost& Post : Page.Posts)
 			{
@@ -786,6 +783,12 @@ void FWonderlandLffModel::ReadFeed(bool bMore, bool bPeriodic)
 				{
 					D.Feed.Add(Post);
 				}
+			}
+			if (!bMore)
+			{
+				// B35: page 1 REPLACES the feed, so the feed is as fresh as this read. A further page (bMore) joins pages already held and
+				// never lifts the gate: those pages may predate the open. Noted AFTER the page's posts are in (R3-01: the line lists them).
+				Self->NoteLanded(EWonderlandLffRead::Feed, AskedAt);
 			}
 			D.FeedCursor = Page.NextCursor;
 			D.FeedPages += 1;
@@ -844,7 +847,6 @@ void FWonderlandLffModel::ReadMine(bool bMore, bool bPeriodic)
 			if (!bMore)
 			{
 				D.MyPosts.Reset();
-				Self->NoteLanded(EWonderlandLffRead::Mine, AskedAt);   // B35: the first page replaces the list; a further one never lifts the gate
 			}
 			for (const FWonderlandLffPost& Post : Page.Posts)
 			{
@@ -852,6 +854,10 @@ void FWonderlandLffModel::ReadMine(bool bMore, bool bPeriodic)
 				{
 					D.MyPosts.Add(Post);
 				}
+			}
+			if (!bMore)
+			{
+				Self->NoteLanded(EWonderlandLffRead::Mine, AskedAt);   // B35: the first page replaces the list (noted after it is in, R3-01); a further one never lifts the gate
 			}
 			D.MineCursor = Page.NextCursor;
 			D.MineLoad = EWonderlandLffLoad::Loaded;

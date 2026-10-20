@@ -524,6 +524,13 @@ void FWonderlandSocialLiveService::Refresh()
 			const double Gap = Status == 429 ? FMath::Max(1.0, static_cast<double>(LastRetryAfterSeconds))
 				: FMath::Min(WonderlandSocialLiveDetail::MaxReadBackoffSeconds, WonderlandSocialFreshness::OpenResyncSeconds * FMath::Pow(2.0, static_cast<double>(FMath::Min(ReadFailures - 1, 4))));
 			ReadNotBefore = FPlatformTime::Seconds() + Gap;
+#if !UE_BUILD_SHIPPING
+			ReadFailureLog.Add({FPlatformTime::Seconds(), Gap, ReadFailures, Status == 429});
+			if (ReadFailureLog.Num() > 64)
+			{
+				ReadFailureLog.RemoveAt(0);
+			}
+#endif
 			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live snapshot failed: %s (next periodic read in %.2f s)"), *LastError, Gap);
 		}
 		else

@@ -102,6 +102,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool CaptureGameViewport(const FString& FilePath, int32& OutWidth, int32& OutHeight);
 
+	/** CaptureGameViewport's read-back on the game thread, its PNG encoded and written on a worker (R3-04: the game thread is held only for the
+	 *  read-back). True when the pixels were read; the write logs "WLFRAME written <path> ok|FAILED" when it ends. */
+	static bool GrabGameViewportWriteAsync(const FString& FilePath, int32& OutWidth, int32& OutHeight);
+
 	/**
 	 * Push a canonical usage scene through the real subsystem, marked Simulated.
 	 * Scenes: typical, nearly_spent, untouched. bLargeTier picks the longer tier.

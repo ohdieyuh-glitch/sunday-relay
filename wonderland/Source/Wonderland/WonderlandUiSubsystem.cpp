@@ -5503,6 +5503,26 @@ void UWonderlandUiSubsystem::JudgeSocialSurfaceGate()
 			ProfileLandedIssuedAt = -1.0e12;
 			bProfileNotAvailable = false;
 		}
+		else if (Open == EOverlay::Profile && Live != nullptr && ProfilePanel.IsValid() && PendingProfile.IsValid())
+		{
+			// R3-06: A PROFILE OPENED WITH NO SERVICE (drawn from the preview) is gated from the adoption on: withheld, and drawn only from its own
+			// read on the new service
+			++ProfileGateGeneration;
+			bProfileGated = true;
+			ProfileSubjectId = PendingProfile->Profile.UserId;
+			bProfileReadInFlight = false;
+			ProfileReadIssuedAt = -1.0e12;
+			ProfileReadNotBefore = 0.0;
+			ProfileReadFailures = 0;
+			ProfileLandedView.Reset();
+			ProfileLandedDigest.Reset();
+			ProfileShownDigest.Reset();
+			ProfileLandedIssuedAt = -1.0e12;
+			bProfileNotAvailable = false;
+			ProfilePanel->SetWithheld(TEXT("Updating…"));
+			UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL gate: the profile opened with no service is gated now (%s) | %s"), *ProfileSubjectId,
+				*WonderlandSocialFreshness::EventStamp());
+		}
 	}
 	// LFF IS ARMED WHENEVER THE HUB IS OPEN ON A LIVE SERVICE (RV-B35-12): an adoption Resets the LFF model (UWonderlandSocialSubsystem::Adopt),
 	// which lowers its gate; arming it again here covers every order of events

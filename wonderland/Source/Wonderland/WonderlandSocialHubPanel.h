@@ -50,8 +50,10 @@ namespace WonderlandSocialPaintLog
 	void NotePainted(const TCHAR* Surface, const FString& Drawn);
 	/** R2-23 (the reviewer's instrument finding): every text a built widget tree holds (STextBlock), in tree order -- what QA judges, not a flag. */
 	void CollectBuiltTexts(const TSharedRef<SWidget>& Root, TArray<FString>& Out);
-	/** How many window captures were saved (-wlframes; QA proves a paint was captured). */
+	/** How many window captures were taken (-wlframes; QA proves a paint was captured). */
 	int32 CaptureCount();
+	/** -wlframes in a developer session (never Shipping). */
+	bool FramesWanted();
 }
 
 /** The hub's own words for a person and for time (defined in WonderlandSocialHubPanel.cpp), shared with the LFF view so both say them alike. */

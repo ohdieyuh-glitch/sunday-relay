@@ -17,6 +17,7 @@
 //             Describe) until a read ASKED after it lands (LG1, LG3); a read asked before that lands after never lifts it (LG2); a failed
 //             read keeps it withheld and says why (LG4); a further page never lifts it and LOAD MORE asks nothing (LG5); the open post,
 //             the owner's inbox and a requester's card (LG6); as built by the view: no post card, no person row (LG7)
+//   LG14      R3-01 the "lff read landed" line lists the post a feed page fed and its author
 //   LG8-LG13  B35 the open surface's period and age: a read asked 4.5 s ago is withheld, 3.0 s ago drawn (LG8); re-read 2.0 s after the
 //             last ask, one at a time (LG9); a failed read backs off and a 429 holds every periodic read, the part withheld (LG10); two
 //             feed pages fold to page 1 on the period (LG11); the open post on the period, never replacing an inbox read on its way
@@ -1037,6 +1038,11 @@ namespace WonderlandSocialLffQa
 				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), Cached);
 				const FString BeforeOpen = Model->Describe();
 				const bool bListedBefore = BeforeOpen.Contains(TEXT("lffp_70")) && BeforeOpen.Contains(TEXT("| gate none")) && !Model->IsPaneWithheld(EWonderlandLffPane::Feed);
+				// LG14 (R3-01): the feed read's landed line lists the post it fed and that post's author (written after the page is in)
+				const FString FedNote = Model->GetLastLandedNote();
+				const FString FedAuthor = PostOf(TEXT("lffp_70")).Author.UserId;
+				Check(TEXT("LG14"), FedNote.StartsWith(TEXT("feed ")) && FedNote.Contains(TEXT("posts lffp_70")) && !FedAuthor.IsEmpty() && FedNote.Contains(FedAuthor),
+					FString::Printf(TEXT("the landed feed line lists the fed post and its author (%s): %s"), *FedAuthor, *FedNote));
 				Svc->Forget();
 				Model->BeginOpenGate(LffQaLater());
 				const FString AfterOpen = Model->Describe();

@@ -61,6 +61,12 @@ namespace WonderlandSocialGateQa
 		FString TabLog;
 		bool bProfileDrawn = false;
 		double AdoptedAt = 0.0;
+		double HubOpenedAt = 0.0;
+		/** R3-02: every SocialChanged broadcast while the run lasts, and the count when the release settled */
+		int32 Broadcasts = 0;
+		int32 BroadcastsAtRelease = 0;
+		FDelegateHandle ChangedHandle;
+		TWeakObjectPtr<UWonderlandSocialSubsystem> Social;
 	};
 	TSharedPtr<FRun> GRun;
 
@@ -238,6 +244,10 @@ namespace WonderlandSocialGateQa
 		const auto Next = [&R](int32 Phase) { R.Phase = Phase; R.At = Now(); };
 		const auto Finish = [&R]()
 		{
+			if (UWonderlandSocialSubsystem* Bound = R.Social.Get())
+			{
+				Bound->OnSocialChanged().Remove(R.ChangedHandle);
+			}
 			UE_LOG(LogTemp, Display, TEXT("WLSOCIALGATEQA SUMMARY %d passed, %d failed -- %s"), R.Pass, R.Fail, R.Fail == 0 ? TEXT("ALL PASS") : TEXT("FAILURES"));
 			GRun.Reset();
 			FPlatformMisc::RequestExit(false);
@@ -262,7 +272,10 @@ namespace WonderlandSocialGateQa
 			{
 				U->DismissWelcome();
 				U->CloseOverlay();
+				R.Social = Social;
+				R.ChangedHandle = Social->OnSocialChanged().AddLambda([]() { if (GRun.IsValid()) { ++GRun->Broadcasts; } });
 				// SG0: no live service: the hub is built without the gate (this harness's preview carries nobody)
+				R.HubOpenedAt = Now();
 				U->OpenSocialHub(TEXT("recent"));
 				const FString Shown = U->DescribeOpenSocialHub();
 				Check(R, TEXT("SG0"), Live == nullptr && Shown.Contains(TEXT("gate fresh")), FString::Printf(TEXT("no live service, hub built without the gate: %s"), *Shown.Left(300)));
@@ -270,6 +283,11 @@ namespace WonderlandSocialGateQa
 				R.AdoptedAt = Now();
 				Social->ConnectLive(TEXT("http://127.0.0.1:9"), TEXT("qa-socialgate-dead-port"));
 				R.OpenedAt = Now();
+				// R3-07: the adopted service holds PEOPLE at once, from a read issued before the hub opened (so SGA0's "built nobody" is not vacuous)
+				if (FWonderlandSocialLiveService* Adopted = Social->GetLive())
+				{
+					Adopted->QaLand(View(true), R.HubOpenedAt - 0.2);
+				}
 				Next(1);
 			}
 			break;
@@ -277,7 +295,9 @@ namespace WonderlandSocialGateQa
 			if (In >= 0.3)
 			{
 				const bool bWithheld = HubWithheld(U, Why);
-				Check(R, TEXT("SGA0"), Live != nullptr && bWithheld, FString::Printf(TEXT("adopted with the hub open: %s"), *Why));
+				const bool bHeldPeople = Live != nullptr && WonderlandSocialSnapshotLine(Live->GetSnapshot()).Contains(TEXT("usr_qasy"));
+				Check(R, TEXT("SGA0"), Live != nullptr && bWithheld && bHeldPeople, FString::Printf(TEXT("adopted with the hub open, the service holding people read before the open (%s): %s"),
+					bHeldPeople ? TEXT("yes") : TEXT("NO"), *Why));
 				Check(R, TEXT("SGA3"), Lff.IsValid() && Lff->IsOpenGateArmed() && Lff->IsGateUp(), FString::Printf(TEXT("LFF gate after the adoption reset it: armed %s, up %s"),
 					Lff.IsValid() && Lff->IsOpenGateArmed() ? TEXT("yes") : TEXT("NO"), Lff.IsValid() && Lff->IsGateUp() ? TEXT("yes") : TEXT("NO")));
 				if (Live == nullptr)
@@ -286,7 +306,20 @@ namespace WonderlandSocialGateQa
 					Finish();
 					return false;
 				}
+				Next(12);
+			}
+			break;
+		case 12:
+			// R3-02: the release waits until the dead port has been FOUND unreachable (its one state change and broadcast are over), so nothing but
+			// the ticker can withhold the released hub inside SGA1's window
+			if (Live->IsUnreachable() && Live->QaReadFailures().Num() >= 1 && In >= 0.3)
+			{
 				Live->QaLand(View(true), Now());   // a read issued after the open (broadcast)
+				Next(2);
+			}
+			else if (In >= 15.0)
+			{
+				Check(R, TEXT("SGA1"), false, TEXT("instrument: the dead port was never found unreachable within 15 s"));
 				Next(2);
 			}
 			break;
@@ -295,16 +328,18 @@ namespace WonderlandSocialGateQa
 			{
 				const FString Released = U->DescribeOpenSocialHub();
 				R.bProfileDrawn = Released.Contains(TEXT("gate fresh")) && Released.Contains(TEXT("usr_qasy"));
+				R.BroadcastsAtRelease = R.Broadcasts;
 				Next(3);
 			}
 			break;
 		case 3:
 			if (In >= WonderlandSocialFreshness::MaxShownAgeSeconds + 0.6)
 			{
-				// SGA1: released by a post-open read, then NO read for longer than MaxShownAge, NO broadcast: the ticker withholds it
+				// SGA1: released by a post-open read, then NO read for longer than MaxShownAge and NO broadcast (counted, R3-02): the ticker withholds it
 				const bool bWithheld = HubWithheld(U, Why);
-				Check(R, TEXT("SGA1"), R.bProfileDrawn && bWithheld, FString::Printf(TEXT("released after the adoption: %s; %.1f s later with no read and no broadcast: %s"),
-					R.bProfileDrawn ? TEXT("yes") : TEXT("NO"), In, *Why));
+				const int32 InWindow = R.Broadcasts - R.BroadcastsAtRelease;
+				Check(R, TEXT("SGA1"), R.bProfileDrawn && bWithheld && InWindow == 0, FString::Printf(TEXT("released after the adoption: %s; %.1f s later with no read and %d broadcasts (must be 0): %s"),
+					R.bProfileDrawn ? TEXT("yes") : TEXT("NO"), In, InWindow, *Why));
 				Live->QaLand(View(true), Now(), false);   // SGA2: the SAME view again, landing silently (an unchanged read after an outage)
 				Next(4);
 			}
@@ -320,27 +355,41 @@ namespace WonderlandSocialGateQa
 		case 41:
 			if (Now() - R.AdoptedAt >= 14.0)
 			{
-				// SG8 (R2-25): with the hub open and every read failing (the dead port), the new service's snapshot reads since the adoption are issued
-				// further and further apart (0.75 s doubling after each failure, plus the failure's own time), never at the 0.25 s tick
+				// SG8 (R2-25, R3-03): THE BACK-OFF SEQUENCE. With the hub open and every read failing (the dead port), the n-th consecutive failure
+				// schedules exactly min(8, 0.75 * 2^(n-1)) s, and no snapshot read is issued before that wait ends
+				const TArray<FWonderlandSocialLiveService::FQaReadFailure>& Failures = Live->QaReadFailures();
 				const TArray<double>& Issued = Live->QaReadIssueTimes();
-				TArray<double> Gaps;
-				for (int32 Index = 1; Index < Issued.Num(); ++Index)
+				bool bExact = true;
+				bool bWaited = true;
+				int32 Counted = 0;
+				int32 Expected = 1;
+				FString Line;
+				for (const FWonderlandSocialLiveService::FQaReadFailure& F : Failures)
 				{
-					if (Issued[Index - 1] >= R.AdoptedAt - 0.01)
+					if (F.FailedAt < R.AdoptedAt)
 					{
-						Gaps.Add(Issued[Index] - Issued[Index - 1]);
+						continue;
 					}
+					const double Want = FMath::Min(8.0, WonderlandSocialFreshness::OpenResyncSeconds * FMath::Pow(2.0, static_cast<double>(FMath::Min(F.Failures - 1, 4))));
+					double NextIssue = -1.0;
+					for (const double At : Issued)
+					{
+						if (At > F.FailedAt)
+						{
+							NextIssue = At;
+							break;
+						}
+					}
+					const bool bThisWaited = NextIssue < 0.0 || NextIssue >= F.FailedAt + F.Gap - 0.001;
+					bExact &= !F.b429 && F.Failures == Expected && FMath::Abs(F.Gap - Want) < 1.0e-6;
+					bWaited &= bThisWaited;
+					Line += FString::Printf(TEXT("[#%d scheduled %.3f (want %.3f), next issue after %s] "), F.Failures, F.Gap, Want,
+						NextIssue < 0.0 ? TEXT("none yet") : *FString::Printf(TEXT("%.3f s%s"), NextIssue - F.FailedAt, bThisWaited ? TEXT("") : TEXT(" EARLY")));
+					++Expected;
+					++Counted;
 				}
-				bool bBackoff = Gaps.Num() >= 2;
-				FString GapLine;
-				for (int32 Index = 0; Index < Gaps.Num(); ++Index)
-				{
-					GapLine += FString::Printf(TEXT("%.2f "), Gaps[Index]);
-					bBackoff &= Gaps[Index] >= 0.70 && (Index == 0 || Gaps[Index] > Gaps[Index - 1] - 0.30);
-				}
-				const bool bGrew = Gaps.Num() >= 2 && Gaps.Last() > Gaps[0] + 0.5;
-				Check(R, TEXT("SG8"), bBackoff && bGrew, FString::Printf(TEXT("issue gaps of the failing reads in %.1f s since the adoption: %s(each >= 0.70 s, never shrinking by more than a tick, the last > the first + 0.5 s)"),
-					Now() - R.AdoptedAt, *GapLine));
+				Check(R, TEXT("SG8"), Counted >= 3 && bExact && bWaited, FString::Printf(TEXT("%d failed reads in %.1f s since the adoption: %s(each the exact doubling from 0.75 s, capped at 8, and waited out)"),
+					Counted, Now() - R.AdoptedAt, *Line));
 				U->CloseOverlay();
 				Next(5);
 			}
@@ -385,7 +434,7 @@ namespace WonderlandSocialGateQa
 					&& Hub->QaLastPaintedNote().StartsWith(FString::Printf(TEXT("tab %s"), SWonderlandSocialHubPanel::TabName(GTabs[R.TabIndex])));
 				const bool bCaptured = WonderlandSocialPaintLog::CaptureCount() > R.CapturesBefore;
 				const bool bWithheld = HubWithheld(U, Why);
-				R.bAllTabsOk &= bPainted && bWithheld;
+				R.bAllTabsOk &= bPainted && bWithheld && (bCaptured || !WonderlandSocialPaintLog::FramesWanted());   // R3-05: captured when frames are on
 				R.TabLog += FString::Printf(TEXT("[%s painted %s captured %s withheld %s] "), SWonderlandSocialHubPanel::TabName(GTabs[R.TabIndex]),
 					bPainted ? TEXT("yes") : TEXT("NO"), bCaptured ? TEXT("yes") : TEXT("no(-wlframes off?)"), bWithheld ? TEXT("yes") : *FString::Printf(TEXT("NO %s"), *Why));
 				++R.TabIndex;
@@ -548,7 +597,8 @@ namespace WonderlandSocialGateQa
 				U->CloseOverlay();
 				U->OpenSocialHub(TEXT("recent"));
 				const bool bRestored = HubWithheld(U, Why);
-				Check(R, TEXT("SG10"), WonderlandBeta::IsDeveloperSession() && MutantPeople.Contains(TEXT("QXXan")) && bPaintedLeak && bRestored,
+				Check(R, TEXT("SG10"), WonderlandBeta::IsDeveloperSession() && MutantPeople.Contains(TEXT("QXXan")) && bPaintedLeak && bRestored
+					&& (bCaptured || !WonderlandSocialPaintLog::FramesWanted()),   // R3-05
 					FString::Printf(TEXT("gate OFF (mutant, must leak): built [%s], painted with usr_qasx %s, captured %s | gate ON again: %s"), *MutantPeople,
 						bPaintedLeak ? TEXT("yes") : TEXT("NO"), bCaptured ? TEXT("yes") : TEXT("no(-wlframes off?)"), *Why));
 				Shot(R, TEXT("5_mutation_restored_withheld"));

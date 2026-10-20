@@ -27,6 +27,7 @@
 #include "HAL/FileManager.h"
 #include "ImageCore.h"
 #include "ImageUtils.h"
+#include "Async/Async.h"   // R3-04: frames written off the game thread
 #include "Misc/DateTime.h"
 #include "Misc/Paths.h"
 #include "Slate/SGameLayerManager.h"
@@ -222,6 +223,49 @@ bool UWonderlandUiTestLibrary::CaptureGameViewport(const FString& FilePath, int3
 	}
 	OutWidth = Size.X;
 	OutHeight = Size.Y;
+	return true;
+}
+
+bool UWonderlandUiTestLibrary::GrabGameViewportWriteAsync(const FString& FilePath, int32& OutWidth, int32& OutHeight)
+{
+	OutWidth = 0;
+	OutHeight = 0;
+	if (!FSlateApplication::IsInitialized() || GEngine == nullptr || GEngine->GameViewport == nullptr || FilePath.IsEmpty())
+	{
+		return false;
+	}
+	TSharedPtr<SWidget> Target;
+	if (TSharedPtr<IGameLayerManager> Layers = GEngine->GameViewport->GetGameLayerManager())
+	{
+		Target = StaticCastSharedPtr<SGameLayerManager>(Layers);
+	}
+	if (!Target.IsValid())
+	{
+		Target = GEngine->GameViewport->GetGameViewportWidget();
+	}
+	if (!Target.IsValid())
+	{
+		return false;
+	}
+	TArray<FColor> Pixels;
+	FIntVector Size;
+	if (!FSlateApplication::Get().TakeScreenshot(Target.ToSharedRef(), Pixels, Size) || Size.X <= 0 || Size.Y <= 0
+		|| Pixels.Num() != Size.X * Size.Y)
+	{
+		return false;
+	}
+	OutWidth = Size.X;
+	OutHeight = Size.Y;
+	Async(EAsyncExecution::ThreadPool, [FilePath, Pixels = MoveTemp(Pixels), Size]() mutable
+	{
+		for (FColor& Pixel : Pixels)
+		{
+			Pixel.A = 255;   // the back buffer's alpha is not coverage; a PNG would read it as transparency
+		}
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(FilePath), true);
+		const bool bWritten = FImageUtils::SaveImageByExtension(*FilePath, FImageView(Pixels.GetData(), Size.X, Size.Y));
+		UE_LOG(LogTemp, Display, TEXT("WLFRAME written %s %s"), *FilePath, bWritten ? TEXT("ok") : TEXT("FAILED"));
+	});
 	return true;
 }
 

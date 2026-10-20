@@ -183,6 +183,8 @@ public:
 	bool IsGateUp() const;
 	/** B35 (RV-B35-12): whether an open gate is armed at all (Reset, on a service change, lowers it; the UI arms it again). */
 	bool IsOpenGateArmed() const { return Data.bOpenGate; }
+	/** R3-01 (QA): the last "lff read landed" note (kind, age, the post ids and people ids that read landed), as logged. */
+	const FString& GetLastLandedNote() const { return LastLandedNote; }
 
 	// ---- panes and lists
 	EWonderlandLffPane GetPane() const { return Data.Pane; }
@@ -393,6 +395,7 @@ private:
 
 	TFunction<IWonderlandSocialService*()> ServiceOf;
 	FData Data;
+	FString LastLandedNote;
 	/** Bumped by Reset: an answer asked before it is dropped. */
 	int32 Generation = 0;
 	int32 TextRevision = 0;

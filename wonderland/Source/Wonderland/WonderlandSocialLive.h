@@ -213,6 +213,15 @@ public:
 	int32 QaReadsIssued() const { return ReadsIssued; }
 	/** QA (R2-25): when each snapshot read was issued (FPlatformTime), oldest first, the last 64. */
 	const TArray<double>& QaReadIssueTimes() const { return ReadIssueTimes; }
+	/** QA (R3-03): each failed snapshot read: when it failed, the wait it scheduled, the consecutive failure count, whether it was a 429. */
+	struct FQaReadFailure
+	{
+		double FailedAt = 0.0;
+		double Gap = 0.0;
+		int32 Failures = 0;
+		bool b429 = false;
+	};
+	const TArray<FQaReadFailure>& QaReadFailures() const { return ReadFailureLog; }
 #endif
 	/** Report this player's own presence (the client's part of the presence authority's input): connected (and exploring, as on arrival),
 	 *  or leaving. What the player is DOING after that is reported on change from the activity source (SetActivitySource). */
@@ -341,6 +350,9 @@ private:
 	FString LoggedReportKeys;
 	int32 ReadsIssued = 0;
 	TArray<double> ReadIssueTimes;
+#if !UE_BUILD_SHIPPING
+	TArray<FQaReadFailure> ReadFailureLog;
+#endif
 	FTSTicker::FDelegateHandle TickerHandle;
 	/** r16reh16c: a dedicated 50 ms ticker for the world report only (the shared Tick runs every 0.25 s, which capped reports at 4 a second). */
 	FTSTicker::FDelegateHandle WorldTickerHandle;

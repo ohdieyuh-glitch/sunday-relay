@@ -14,6 +14,9 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
+#include "Widgets/Input/SEditableText.h"
+#include "Widgets/Text/SMultiLineEditableText.h"
+#include "Widgets/IToolTip.h"
 #include "WonderlandSocialLive.h"   // D3 (b) QA: UNBLOCK's operation through the real dispatcher
 #include "Dom/JsonObject.h"        // R16 CF-1 QA: the presence body is read back
 #include "WonderlandWonderWeb.h"     // R16 CF-1 r2 QA: what counts as creating (WonderlandWonderWebShowsOwnCreation)
@@ -1685,14 +1688,15 @@ namespace WonderlandSocialPaintLog
 		const double StartedAt = FPlatformTime::Seconds();
 		int32 Width = 0;
 		int32 Height = 0;
-		const bool bSaved = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
+		// R3-04: the window is read back here (the frame as painted); the PNG is encoded and written off the game thread
+		const bool bSaved = UWonderlandUiTestLibrary::GrabGameViewportWriteAsync(Path, Width, Height);
 		Captures() += bSaved ? 1 : 0;
 		// R2-28: capture a that began more than 50 ms after its paint is flagged LATE (the window may already hold a later frame); capture b is one tick
 		// later BY DESIGN (R-4), so it is never flagged
 		const double LateMs = (StartedAt - Of.PaintedAt) * 1000.0;
 		const bool bLate = FCString::Strcmp(Which, TEXT("a")) == 0 && LateMs > 50.0;
-		UE_LOG(LogTemp, Display, TEXT("WLFRAME %s frame=%llu paints=%d capture=%s %s %dx%d (began %.1f ms after the paint%s, took %.1f ms) %s | %s"), *Of.Surface, Of.Frame, Paints,
-			Which, bSaved ? TEXT("saved") : TEXT("NOT saved"), Width, Height, LateMs, bLate ? TEXT(", LATE") : TEXT(""),
+		UE_LOG(LogTemp, Display, TEXT("WLFRAME %s frame=%llu paints=%d capture=%s %s %dx%d (began %.1f ms after the paint%s, game thread held %.1f ms) %s | %s"), *Of.Surface, Of.Frame, Paints,
+			Which, bSaved ? TEXT("grabbed") : TEXT("NOT grabbed"), Width, Height, LateMs, bLate ? TEXT(", LATE") : TEXT(""),
 			(FPlatformTime::Seconds() - StartedAt) * 1000.0, *Path, *WonderlandSocialFreshness::EventStamp());
 		return bSaved;
 	}
@@ -1725,9 +1729,27 @@ namespace WonderlandSocialPaintLog
 
 	void CollectBuiltTexts(const TSharedRef<SWidget>& Root, TArray<FString>& Out)
 	{
-		if (Root->GetType() == FName(TEXT("STextBlock")))
+		const FName Type = Root->GetType();
+		if (Type == FName(TEXT("STextBlock")))
 		{
 			Out.Add(StaticCastSharedRef<STextBlock>(Root)->GetText().ToString());
+		}
+		// R3-07: an editable field's text and hint ("Message <title>") and every tooltip are drawn words too
+		else if (Type == FName(TEXT("SEditableText")))
+		{
+			const TSharedRef<SEditableText> Field = StaticCastSharedRef<SEditableText>(Root);
+			Out.Add(Field->GetText().ToString());
+			Out.Add(Field->GetHintText().ToString());
+		}
+		else if (Type == FName(TEXT("SMultiLineEditableText")))
+		{
+			const TSharedRef<SMultiLineEditableText> Field = StaticCastSharedRef<SMultiLineEditableText>(Root);
+			Out.Add(Field->GetText().ToString());
+			Out.Add(Field->GetHintText().ToString());
+		}
+		if (const TSharedPtr<IToolTip> Tip = Root->GetToolTip(); Tip.IsValid() && !Tip->IsEmpty())
+		{
+			CollectBuiltTexts(Tip->GetContentWidget(), Out);
 		}
 		if (FChildren* Children = Root->GetChildren())
 		{
