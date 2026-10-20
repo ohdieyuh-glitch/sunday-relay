@@ -5098,7 +5098,7 @@ FString UWonderlandUiSubsystem::DescribeOpenProfile() const
 		return FString();
 	}
 	return FString::Printf(TEXT("user=%s | %s | action: %s"), *ProfilePanel->GetView().Profile.UserId, *ProfilePanel->DescribeIdentityColumn(),
-		*ProfilePanel->GetLastActionLine());
+		*ProfilePanel->GetLastActionLogLine());
 }
 
 void UWonderlandUiSubsystem::HandleSocialAction(const FString& OperationId, const FString& SubjectId)
@@ -5147,6 +5147,7 @@ void UWonderlandUiSubsystem::HandleSocialAction(const FString& OperationId, cons
 	// refuses an unconfirmed shared-party block anyway, so no surface can skip the warning.
 	FString Operation = OperationId;
 	FString Warning;
+	FString WarningForLog;   // F-1: the warning as logged (the player id, never the name)
 	if (OperationId == TEXT("blocks.add") && Service != nullptr && !Service->IsDevelopmentPreview())
 	{
 		const FWonderlandSocialSnapshot& Snap = Service->GetSnapshot();
@@ -5161,9 +5162,10 @@ void UWonderlandUiSubsystem::HandleSocialAction(const FString& OperationId, cons
 				PendingBlockAt = Now;
 				const FString* Name = Snap.NamesById.Find(SubjectId);
 				const FString Who = Name != nullptr ? *Name : SubjectId;
-				Warning = Snap.Party.bViewerIsLeader
-					? FString::Printf(TEXT("Blocking %s will also remove them from your party. Choose BLOCK again to confirm."), *Who)
-					: FString::Printf(TEXT("Blocking %s will cause you to leave this party. Choose BLOCK again to confirm."), *Who);
+				const TCHAR* Consequence = Snap.Party.bViewerIsLeader ? TEXT("will also remove them from your party") : TEXT("will cause you to leave this party");
+				Warning = FString::Printf(TEXT("Blocking %s %s. Choose BLOCK again to confirm."), *Who, Consequence);
+				// F-1 (C6): the player reads the NAME; every log line and logged description gets the same words with the player's id
+				WarningForLog = FString::Printf(TEXT("Blocking %s %s. Choose BLOCK again to confirm."), *SubjectId, Consequence);
 				UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL block needs confirmation: %s in party %s (%s); nothing changed yet"), *SubjectId,
 					*Snap.Party.PartyId, Snap.Party.bViewerIsLeader ? TEXT("you lead: they will be removed") : TEXT("you will leave"));
 			}
@@ -5177,17 +5179,19 @@ void UWonderlandUiSubsystem::HandleSocialAction(const FString& OperationId, cons
 	const FWonderlandSocialActionResult Result = !Warning.IsEmpty() ? FWonderlandSocialActionResult{false, Warning}
 		: Service != nullptr ? Service->Request(Operation, SubjectId)
 		: FWonderlandSocialActionResult{false, TEXT("Social is not available in this build")};
+	const FString ReasonForLog = !Warning.IsEmpty() ? WarningForLog : Result.Reason;
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL action %s on %s: %s%s | %s"), *Operation, *SubjectId, Result.bOk ? TEXT("ok") : TEXT("refused"),
-		Result.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Result.Reason), *WonderlandSocialFreshness::EventStamp());
+		ReasonForLog.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *ReasonForLog), *WonderlandSocialFreshness::EventStamp());
 	// THE ANSWER GOES TO THE SURFACE THAT ASKED: the open one. A server's answer comes later (HandleSocialAnswered).
 	const FString Line = Result.bPending ? FString(TEXT("Sending…")) : Result.bOk ? FString(TEXT("Done")) : Result.Reason;
+	const FString LineForLog = !Warning.IsEmpty() ? WarningForLog : Line;
 	if (Open == EOverlay::Social && SocialHubPanel.IsValid())
 	{
-		SocialHubPanel->ShowActionResult(Line);
+		SocialHubPanel->ShowActionResult(Line, LineForLog);
 	}
 	else if (ProfilePanel.IsValid())
 	{
-		ProfilePanel->ShowActionResult(Line);
+		ProfilePanel->ShowActionResult(Line, LineForLog);
 	}
 }
 

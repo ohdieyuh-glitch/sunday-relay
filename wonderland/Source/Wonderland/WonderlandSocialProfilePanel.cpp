@@ -753,9 +753,10 @@ FReply SWonderlandSocialProfilePanel::OnKeyDown(const FGeometry& MyGeometry, con
 	return SCompoundWidget::OnKeyDown(MyGeometry, InKeyEvent);
 }
 
-void SWonderlandSocialProfilePanel::ShowActionResult(const FString& Line)
+void SWonderlandSocialProfilePanel::ShowActionResult(const FString& Line, const FString& LogLine)
 {
 	LastActionLine = Line;
+	LastActionLogLine = LogLine.IsEmpty() ? Line : LogLine;
 	if (ActionLineText.IsValid())
 	{
 		ActionLineText->SetText(FText::FromString(Line));

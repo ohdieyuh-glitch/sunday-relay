@@ -39,6 +39,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
+#include "WonderlandBeta.h"   // C6: wl.Qa.SocialLive refuses without -wldev
 #include "Misc/Paths.h"
 #include "WonderlandSkinStage.h"
 #include "WonderlandSocialLive.h"
@@ -1030,6 +1031,12 @@ namespace WonderlandSocialLiveQa
 		TEXT("(LSQ1-LSQ11: the world, and F1's confirmed block -- B blocks by default, A the leader with `leaderblocks`); quits."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
+			// C6 (Q6 analog): a QA loop that acts on the live social service runs in a DEVELOPER session only (-wldev), whatever reaches it
+			if (!WonderlandBeta::IsDeveloperSession())
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLSOCIALLIVE refused: wl.Qa.SocialLive needs a developer session (-wldev)"));
+				return;
+			}
 			if (GLive.IsValid() || Args.Num() < 3)
 			{
 				UE_LOG(LogTemp, Display, TEXT("WLSOCIALLIVE usage: wl.Qa.SocialLive <me> <peer> <a|b> [url]"));

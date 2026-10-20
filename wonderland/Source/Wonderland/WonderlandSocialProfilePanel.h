@@ -76,8 +76,10 @@ public:
 
 	/** The status line under the actions: the last refusal or confirmation, for a person and for QA. */
 	FString GetLastActionLine() const { return LastActionLine; }
+	/** F-1: the action line as described/logged (another player's id, never their name). */
+	FString GetLastActionLogLine() const { return LastActionLogLine; }
 	/** The social service's answer to an action this panel asked for, shown under the actions. */
-	void ShowActionResult(const FString& Line);
+	void ShowActionResult(const FString& Line, const FString& LogLine = FString());
 	const FWonderlandSocialProfileView& GetView() const { return View; }
 
 	/** What the panel shows in its identity column, for QA: "<agent> | <dog skin>". */
@@ -113,6 +115,7 @@ private:
 	FOnWonderlandSocialOpenProfile OnOpenProfile;
 	FSimpleDelegate OnRequestClose;
 	FString LastActionLine;
+	FString LastActionLogLine;
 	TSharedPtr<class STextBlock> ActionLineText;
 
 	// Built once, as the other panels' are (see SWonderlandWalletPanel).

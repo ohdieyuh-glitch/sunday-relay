@@ -1791,9 +1791,10 @@ FReply SWonderlandSocialHubPanel::OnKeyDown(const FGeometry& MyGeometry, const F
 	return SCompoundWidget::OnKeyDown(MyGeometry, InKeyEvent);
 }
 
-void SWonderlandSocialHubPanel::ShowActionResult(const FString& Line)
+void SWonderlandSocialHubPanel::ShowActionResult(const FString& Line, const FString& LogLine)
 {
 	LastActionLine = Line;
+	LastActionLogLine = LogLine.IsEmpty() ? Line : LogLine;
 	if (ActionLineText.IsValid())
 	{
 		ActionLineText->SetText(FText::FromString(Line));
@@ -1811,7 +1812,7 @@ FString SWonderlandSocialHubPanel::Describe() const
 		return FString::Printf(TEXT("tab %s | %s | gate UPDATING%s | %s | voice %s | rows %s | action: %s | signin %s%s"),
 			TabName(Tab), bDevelopmentPreview ? TEXT("DEVELOPMENT PREVIEW") : TEXT("connected"), AwaitingLine.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (%s)"), *AwaitingLine), *DescribeRail(),
 			Voice.Connection.IsEmpty() ? TEXT("UNAVAILABLE") : *Voice.Connection, ShownRows.Num() > 0 ? *FString::Join(ShownRows, TEXT(",")) : TEXT("none"),
-			*LastActionLine, FWonderlandSocialSignIn::StateName(SignIn.State),
+			*LastActionLogLine, FWonderlandSocialSignIn::StateName(SignIn.State),
 			Tab == ETab::Lff ? *FString::Printf(TEXT(" | lff %s"), Lff.IsValid() ? *Lff->Describe() : TEXT("not available")) : TEXT(""));
 	}
 	const TArray<FWonderlandSocialMessage>* History = Snapshot.Messages.Find(OpenConversationId);
@@ -1840,7 +1841,7 @@ FString SWonderlandSocialHubPanel::Describe() const
 		Snapshot.bHasParty ? *Snapshot.Party.Name : TEXT("none"), Snapshot.bHasParty ? Snapshot.Party.Members.Num() : 0,
 		Snapshot.bHasParty ? *FString::Printf(TEXT(", leader %s%s"), *Snapshot.Party.LeaderId, Snapshot.Party.bViewerIsLeader ? TEXT(" (you)") : TEXT("")) : TEXT(""),
 		Snapshot.VisibleParties.Num(), Voice.Connection.IsEmpty() ? TEXT("UNAVAILABLE") : *Voice.Connection,
-		VoiceLabel.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" [%s]"), *VoiceLabel), ShownRows.Num() > 0 ? *FString::Join(ShownRows, TEXT(",")) : TEXT("none"), *LastActionLine,
+		VoiceLabel.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" [%s]"), *VoiceLabel), ShownRows.Num() > 0 ? *FString::Join(ShownRows, TEXT(",")) : TEXT("none"), *LastActionLogLine,
 		FWonderlandSocialSignIn::StateName(SignIn.State), SignIn.State == EWonderlandSignInState::Waiting ? *FString::Printf(TEXT(" (code %d chars)"), SignIn.UserCode.Len()) : TEXT(""),
 		*LffPart) + (Headlines.IsEmpty() ? FString() : FString::Printf(TEXT(" | headlines %s"), *Headlines));
 }

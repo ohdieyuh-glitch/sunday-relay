@@ -140,7 +140,8 @@ public:
 	void SetAwaitingFresh(bool bAwaiting, const FString& Line = FString());
 	bool IsAwaitingFresh() const { return bAwaitingFresh; }
 
-	void ShowActionResult(const FString& Line);
+	/** Line is what the player reads; LogLine (default: Line) is what Describe and every log line say -- F-1: never another player's name. */
+	void ShowActionResult(const FString& Line, const FString& LogLine = FString());
 	FString GetLastActionLine() const { return LastActionLine; }
 	/** "DEVELOPMENT PREVIEW · …" or the live service's line, as last set. */
 	const FString& GetSourceLine() const { return SourceLine; }
@@ -262,6 +263,7 @@ private:
 	FString VoiceLabel;
 	FOnWonderlandVoiceCommand OnVoice;
 	FString LastActionLine;
+	FString LastActionLogLine;
 	FWonderlandSignInView SignIn;
 	TSharedPtr<FWonderlandLffModel> Lff;
 	FOnWonderlandLffOpenProfileView OnOpenProfileView;
