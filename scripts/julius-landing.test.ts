@@ -1532,23 +1532,162 @@ describe('v3.5d shape gaps: a line break may split a GitHub token shape at ANY c
     for (const split of [`ghp_AbCdEfGhIj KlMnOpQrSt`, `gh p_${BODY}`, `ghp_ ${BODY}`, `${t.slice(0, 10)} ${t.slice(10)}`]) expect(redact(`see ${split} end`), split).toBe(`see ${split} end`);
     expect(redact(`see ${t} merged PR number 12 into main`)).toBe('see *** merged PR number 12 into main');
   });
-  it('a break or space INSIDE a %XX escape, and a lone CR, are not recognised (documented residuals)', () => {
-    expect(redact(`ghs%5\nF${BODY}`)).toContain(BODY);
+  it('a lone CR, and a PLAIN space inside an escape or between its hex digits, are not recognised (documented residuals)', () => {
     expect(redact(`gh\rs_${BODY}`)).toContain(BODY);
+    expect(redact(`ghs%5 F${BODY}`)).toContain(BODY);
+    expect(redact(`ghs% 5F${BODY}`)).toContain(BODY);
+  });
+  // v3.5e (REVIEW N-1 remainder, JUDEV decision): the line-break gap is also allowed INSIDE every %XX escape: between the % and its two hex digits, and at every level of %25XX.
+  // One entry per ATOM of the escaped token ('%', hex digit, hex digit, and for a double escape '%', '2', '5', '%', ...): a gap at every atom boundary.
+  const atoms = (token: string, depth: number): string[] => [...token].flatMap((c, i) => {
+    const hex = c.charCodeAt(0).toString(16).padStart(2, '0')[i % 2 === 0 ? 'toUpperCase' : 'toLowerCase']();
+    return ['%', ...'25'.repeat(depth).split(''), hex[0], hex[1]];
+  });
+  it('ESCAPE-INTERNAL SWEEP: 6 prefixes x escaped at depth 0 and 1 x {LF, CRLF, CRLF+space, CRLF+tab} at EVERY atom boundary (before the %, between % and each hex digit, between the 25 levels): the whole token is hidden', () => {
+    const misses: string[] = [];
+    let cases = 0;
+    for (const prefix of PREFIXES) for (const depth of [0, 1]) {
+      const a = atoms(`${prefix}_${BODY}`, depth);
+      for (const gap of GAPS) for (let at = 1; at < a.length; at += 1) {
+        cases += 1;
+        const out = redact('said ' + a.slice(0, at).join('') + gap + a.slice(at).join('') + ' done');
+        if (out !== 'said *** done') misses.push(`${prefix} depth=${depth} gap=${JSON.stringify(gap)} at=${at}: ${JSON.stringify(out)}`);
+      }
+    }
+    expect(cases).toBeGreaterThan(4000);
+    expect(misses.slice(0, 5), `${misses.length} of ${cases} cases left something visible`).toEqual([]);
+  });
+  it('the JOB token (any shape) with a line break inside its escapes, and several breaks at once, is hidden', () => {
+    const job = 'Zq7LmP2vNd9RkT4wXy_8abcdEFGH12';
+    const redactJob = redactorFor(job);
+    const a = atoms(job, 0);
+    for (const gap of GAPS) for (let at = 1; at < a.length; at += 1) expect(redactJob('a ' + a.slice(0, at).join('') + gap + a.slice(at).join('') + ' b'), `at=${at} gap=${JSON.stringify(gap)}`).toBe('a *** b');
+    expect(redactJob('a ' + a.map((x, i) => (i % 2 === 1 ? '\r\n ' : '') + x).join('') + ' b')).toBe('a *** b');
+  });
+  it('two breaks inside escapes plus one between characters are hidden, and a break inside an escape does not eat the words after the token', () => {
+    const a = atoms(`ghp_${BODY}`, 0);
+    expect(redact('x ' + a.slice(0, 2).join('') + '\n' + a.slice(2, 30).join('') + '\r\n\t' + a.slice(30).join('') + ' y')).toBe('x *** y');
+    expect(redact('see ' + a.slice(0, 1).join('') + '\r\n' + a.slice(1).join('') + ' merged PR number 12 into main')).toBe('see *** merged PR number 12 into main');
   });
   it('Authorization values are hidden in plain, Bearer/Basic/token and QUOTED (JSON, single-quoted) forms', () => {
     for (const [input, want] of [
-      ['Authorization: abc123 z', 'Authorization: *** z'],
-      ['AUTHORIZATION=token abc123 z', 'AUTHORIZATION=*** z'],
+      ['Authorization: abc123 z', 'Authorization: ***'],
+      ['AUTHORIZATION=token abc123 z', 'AUTHORIZATION=***'],
       ['{"Authorization": "abc123"}', '{"Authorization": "***"}'],
       ['{"Authorization":"Basic abc123"}', '{"Authorization":"***"}'],
       ["{'authorization': 'abc123'}", "{'authorization': '***'}"],
       ['h: Bearer abc.def-123 z', 'h: Bearer *** z'],
     ]) expect(redact(input), input).toBe(want);
   });
+  // ---- v3.5e: findings of a FRESH adversarial pass (a subagent that saw only land.mjs and the README paragraph)
+  it('FINDING 1: a token on the next line, or glued to the previous one, is hidden too (a run never continues into another shape head)', () => {
+    for (const a of PREFIXES) for (const b of PREFIXES) for (const sep of ['\n', '\r\n', '\r\n ', '\r\n\t', '', ' ', '|']) {
+      const out = redact(`${a}_${BODY}${sep}${b}_${BODY}`);
+      expect(out.includes(BODY), `${a} ${b} ${JSON.stringify(sep)}: ${JSON.stringify(out)}`).toBe(false);
+    }
+    expect(redact(`ghs_${BODY}\nghp_${BODY}`)).toBe('***\n***');
+    expect(redact(`ghs_${BODY}\r\ngho_${BODY}\r\nghu_${BODY}`)).toBe('***\r\n***\r\n***');
+  });
+  it('FINDING 2/3: a shape is recognised behind letters, digits, an underscore and an escaped newline (no lookbehind)', () => {
+    for (const lead of ['x', 'a_', '1', 'TOKEN_', 'ghs_', 'x%0A', 'x%0D%0A', 'line\\n', '=', '"', ':']) expect(redact(`${lead}ghs_${BODY}`).includes(BODY), lead).toBe(false);
+  });
+  it('FINDING 4/5: Bearer / Authorization hide quoted values, values with spaces, ; and ,, other schemes, and Bearer: / Bearer= forms', () => {
+    const SECRET = 'SECRETVALUE1234';
+    for (const input of [
+      `Bearer "${SECRET}"`, `Bearer '${SECRET}'`, `Bearer: ${SECRET}`, `Bearer=${SECRET}`, `Authorization: Bearer "${SECRET}"`, `Authorization: "abc def ${SECRET}"`, `Authorization: abcd;${SECRET}`,
+      `Authorization: Bearer abcd,${SECRET}`, `Authorization: Negotiate ${SECRET}`, `Authorization: Digest username="u", response="${SECRET}"`, `authorization = AWS4-HMAC-SHA256 Credential=${SECRET}/x`,
+      `{"Authorization":"${SECRET}"}`, `{'Authorization': '${SECRET}', 'x': 1}`, `Authorization:\n${SECRET}`,
+    ]) expect(redact(input).includes(SECRET), input).toBe(false);
+    expect(redact('{"Authorization": "abc123", "other": "kept"}')).toBe('{"Authorization": "***", "other": "kept"}');
+  });
+  it('base64 of the job token wrapped at any width (LF or CRLF), percent-encoded (= + /) or in the base64url alphabet is hidden', () => {
+    const job = 'Zq7LmP2vNd9RkT4wXy_8abcdEFGH12';
+    const redactJob = redactorFor(job);
+    const b64 = (s: string) => Buffer.from(s).toString('base64');
+    const windows = [0, 1, 2].flatMap((pad) => { const e = b64(' '.repeat(pad) + job); const mid = e.slice(Math.ceil((pad * 8) / 6), Math.max(0, e.length - 4)); return Array.from({ length: mid.length - 11 }, (_, i) => mid.slice(i, i + 12)); });
+    const clean = (o: string) => { const flat = o.replace(/\r?\n/g, '').replace(/%3D|%2B|%2F/gi, ''); return windows.every((w) => !flat.includes(w)); };
+    for (const form of [job, `x-access-token:${job}`, `${job}:x-oauth-basic`]) {
+      for (const width of [8, 20, 33, 76]) for (const eol of ['\n', '\r\n']) {
+        const wrapped = (b64(form).match(new RegExp(`.{1,${width}}`, 'g')) ?? []).join(eol);
+        expect(clean(redactJob(wrapped)), `${form.slice(0, 12)} width ${width} ${JSON.stringify(eol)}`).toBe(true);
+      }
+    }
+    expect(clean(redactJob(encodeURIComponent(b64(`  ${job}x?>?`))))).toBe(true);
+    expect(clean(redactJob(Buffer.from(`${job}??>>`).toString('base64url')))).toBe(true);
+  });
+  it('base64 whose MIDDLE contains + and / (the characters URL encoders escape and base64url replaces): percent-encoded, url-safe and wrapped forms leave only the documented head / tail', () => {
+    const job = 'Zq7LmP2v>>>???Nd9RkT4wXy_8abcdEFGH12';
+    const redactJob = redactorFor(job);
+    const plain = Buffer.from(job).toString('base64');
+    expect(plain.slice(8, plain.length - 8)).toMatch(/[+/]/); // the property the case is built on
+    const visible = (o: string) => o.replace(/\*+/g, '').replace(/\r?\n/g, '').length;
+    const bound = plain.length / 3; // head / tail: far less than the whole text
+    expect(redactJob(plain)).toContain('***');
+    expect(visible(redactJob(plain))).toBeLessThan(bound);
+    expect(visible(redactJob(encodeURIComponent(plain))), 'percent-encoded base64').toBeLessThan(bound + 8);
+    expect(visible(redactJob(Buffer.from(job).toString('base64url'))), 'base64url').toBeLessThan(bound);
+    expect(visible(redactJob((plain.match(/.{1,16}/g) ?? []).join('\r\n'))), 'wrapped').toBeLessThan(bound);
+    expect(visible(redactJob((encodeURIComponent(plain).match(/.{1,16}/g) ?? []).join('\n'))), 'wrapped and percent-encoded').toBeLessThan(bound + 8);
+  });
+  it('the 255-unit bound: a longer shaped token leaves exactly the tail past 255 visible (documented residual)', () => {
+    expect(redact(`ghs_${'A'.repeat(300)}`)).toBe(`***${'A'.repeat(45)}`);
+    expect(redact(`ghs_${'A'.repeat(255)}`)).toBe('***');
+    expect(redact(`ghs_${'A'.repeat(15)}`)).toBe(`ghs_${'A'.repeat(15)}`);
+    expect(redact(`ghs_${'A'.repeat(16)}`)).toBe('***');
+  });
+  // ---- v3.5e: findings of the SECOND fresh adversarial pass
+  it('PASS-2 #1: no quadratic time after Bearer / Authorization (40 000 spaces, tabs or line breaks)', () => {
+    for (const ws of [' ', '\n', '\t']) for (const head of ['Bearer', 'Authorization:', 'authorization"']) {
+      const t0 = Date.now();
+      redact(head + ws.repeat(40_000));
+      expect(Date.now() - t0, `${head} ${JSON.stringify(ws)}`).toBeLessThan(500);
+    }
+  });
+  it('PASS-2 #2: a very long job token neither throws nor is slow, and its exact text is still hidden (the elaborate patterns are for tokens up to 256 characters)', () => {
+    for (const len of [8, 40, 300, 1400, 2000]) {
+      const job = 'Aa1'.repeat(Math.ceil(len / 3)).slice(0, len);
+      const t0 = Date.now();
+      const out = redactorFor(job)(`x ${job} y`);
+      expect(out, String(len)).toBe('x *** y');
+      expect(Date.now() - t0, `length ${len}`).toBeLessThan(len > 256 ? 2500 : 8000);
+    }
+  });
+  it('PASS-2 #3-#6: escaped quotes inside a quoted value, unterminated quotes, a JSON-in-JSON key and folded headers are hidden', () => {
+    const S = 'deadbeefcafe';
+    for (const input of [
+      `{"Authorization":"Digest username=\\"u\\", response=\\"${S}\\""}`, `Authorization:"x\\"${S}"`, `Authorization: "Basic ${S}`, `Authorization: "unterminated ${S}`,
+      `Bearer "abc\\"${S}"`, `Bearer "unterminated ${S}`, `Bearer 'unterminated ${S}`, `{\\"Authorization\\":\\"Basic ${S}\\"}`,
+      `Authorization: Digest a=1,\r\n response=${S}`, `Authorization: Basic\n ${S}`, `Authorization: Digest a=1,\n\t${S}`,
+    ]) expect(redact(input).includes(S), input).toBe(false);
+    expect(redact('{"Authorization": "abc", "other": "kept"}')).toBe('{"Authorization": "***", "other": "kept"}');
+  });
+  it('PASS-2 #10 (structural): every place that cuts error text to a length or a first line redacts it first', () => {
+    const land = readFileSync(join(LANDING, 'land.mjs'), 'utf8');
+    for (const name of ['oneLine', 'errText']) expect(land, name).toMatch(new RegExp(`const ${name} = \\(e\\) => redact\\(e instanceof Error \\? e\\.message : String\\(e\\)\\)\\.split\\(`));
+    expect(land).toContain("typeof body === 'string' ? redact(body).slice(0, 200)");
+    expect(land.match(/\.slice\(0, (200|300)\)/g)?.length, 'no other cut of printed text appears without a review').toBe(3);
+  });
+  it('PASS-2 #10: a token that straddles the 300-character cut of an error line, or its first line break, leaves no head behind (the text is redacted BEFORE it is cut)', () => {
+    const tok = 'ghs_' + 'Zq7LmP2vNd9RkT4wXyAbCdEfGhIj0123';
+    for (let pad = 150; pad <= 290; pad += 1) {
+      const r = runLand({ token: tok, scenario: { failGet: '/pulls/7$', echo: 'text', echoText: `${'y'.repeat(pad)} ${tok}` } });
+      expect(r.out.includes('ghs_Zq7'), `pad ${pad}`).toBe(false);
+      expect(r.out.includes('Zq7LmP'), `pad ${pad}`).toBe(false);
+    }
+    const wrapped = runLand({ token: tok, scenario: { failGet: '/pulls/7$', echo: 'text', echoText: `see ${tok.slice(0, 12)}\n${tok.slice(12)} end` } });
+    expect(wrapped.out.includes('ghs_Zq7'), 'a token split by the first line break').toBe(false);
+  }, 120_000);
+  it('RESIDUALS pinned: a blank line or lone CR inside a shape, upper-case prefixes, a quoted value with a line break, a percent-encoded or Bearer-prefixed-by-a-letter header are NOT hidden', () => {
+    expect(redact(`ghs_\n\n${BODY}`)).toContain(BODY);
+    expect(redact(`ghs_\r\r\n${BODY}`)).toContain(BODY);
+    expect(redact(`GHS_${BODY} GITHUB_PAT_${BODY}`)).toContain(BODY);
+    expect(redact('Authorization: "a\nb deadbeefcafe"')).toContain('deadbeefcafe');
+    expect(redact('authorization%3A%20Basic%20deadbeefcafe')).toContain('deadbeefcafe');
+    expect(redact('xBearer deadbeefcafe')).toContain('deadbeefcafe');
+  });
   it('the README states the v3.5d coverage and every residual of this paragraph, and the claims are not stated more widely than the code', () => {
     const readme = readFileSync(join(LANDING, 'README.md'), 'utf8');
-    for (const phrase of ['ANY two of its characters', 'A PLAIN space is NOT a gap', 'INSIDE a `%XX` escape', 'lone CR', 'U+2028', 'the value may be quoted', 'Only the job token is matched character by character', 'found by Codex on PR #391']) expect(readme, phrase).toContain(phrase);
+    for (const phrase of ['ANY two of its characters', 'A PLAIN space is NOT a gap', 'inside a `%XX` escape', 'between the `%` and its hex digits', 'REST OF THE LINE', 'FOLDED header', 'BEFORE they are cut', 'WRAPPED', 'a second token on the next line', 'a blank line', 'lone CR', 'U+2028', 'the value may be quoted', 'Only the job token is matched character by character', 'found by Codex on PR #391']) expect(readme, phrase).toContain(phrase);
   });
 });
 
