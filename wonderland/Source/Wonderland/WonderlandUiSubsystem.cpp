@@ -5177,8 +5177,8 @@ void UWonderlandUiSubsystem::HandleSocialAction(const FString& OperationId, cons
 	const FWonderlandSocialActionResult Result = !Warning.IsEmpty() ? FWonderlandSocialActionResult{false, Warning}
 		: Service != nullptr ? Service->Request(Operation, SubjectId)
 		: FWonderlandSocialActionResult{false, TEXT("Social is not available in this build")};
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL action %s on %s: %s%s"), *Operation, *SubjectId, Result.bOk ? TEXT("ok") : TEXT("refused"),
-		Result.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Result.Reason));
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL action %s on %s: %s%s | %s"), *Operation, *SubjectId, Result.bOk ? TEXT("ok") : TEXT("refused"),
+		Result.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Result.Reason), *WonderlandSocialFreshness::EventStamp());
 	// THE ANSWER GOES TO THE SURFACE THAT ASKED: the open one. A server's answer comes later (HandleSocialAnswered).
 	const FString Line = Result.bPending ? FString(TEXT("Sending…")) : Result.bOk ? FString(TEXT("Done")) : Result.Reason;
 	if (Open == EOverlay::Social && SocialHubPanel.IsValid())
@@ -5432,9 +5432,9 @@ void UWonderlandUiSubsystem::ArmSocialSurfaceGate()
 	{
 		SocialGateTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWonderlandUiSubsystem::TickSocialSurfaceGate), 0.05f);
 	}
-	UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL gate armed: %s%s (people only from a read issued since this open; re-read every %.2f s from the last issue; none older than %.2f s)"),
+	UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL gate armed: %s%s (people only from a read issued since this open; re-read every %.2f s from the last issue; none older than %.2f s) | %s"),
 		OverlayName(Open), bProfileGated ? *FString::Printf(TEXT(" %s"), *ProfileSubjectId) : TEXT(""), WonderlandSocialFreshness::OpenResyncSeconds,
-		WonderlandSocialFreshness::MaxShownAgeSeconds);
+		WonderlandSocialFreshness::MaxShownAgeSeconds, *WonderlandSocialFreshness::EventStamp());
 	JudgeSocialSurfaceGate();
 }
 
@@ -5525,7 +5525,8 @@ void UWonderlandUiSubsystem::JudgeSocialSurfaceGate()
 	const FString After = ProfilePanel->DescribeIdentityColumn();
 	if (After != Before)
 	{
-		UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL profile %s: user=%s | %s"), ProfilePanel->IsWithheld() ? TEXT("withheld") : TEXT("drawn"), *ProfileSubjectId, *After);
+		UE_LOG(LogWonderlandUi, Display, TEXT("WLSOCIAL profile %s: user=%s | %s | %s"), ProfilePanel->IsWithheld() ? TEXT("withheld") : TEXT("drawn"), *ProfileSubjectId, *After,
+			*WonderlandSocialFreshness::EventStamp());
 	}
 }
 

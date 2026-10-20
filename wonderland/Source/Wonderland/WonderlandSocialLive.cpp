@@ -10,6 +10,7 @@
 #include "Misc/ScopeExit.h"
 #include "Misc/SecureHash.h"
 #include "Misc/CommandLine.h"
+#include "Misc/DateTime.h"
 #include "Misc/Parse.h"
 #include "HAL/IConsoleManager.h"
 #include "WonderlandSocialReconnectPolicy.h"
@@ -20,6 +21,11 @@ namespace WonderlandSocialFreshness
 	{
 		static bool bOff = false;
 		return bOff;
+	}
+
+	FString EventStamp()
+	{
+		return FString::Printf(TEXT("t=%s"), *FDateTime::UtcNow().ToIso8601());
 	}
 
 	bool IsGateMutatedOff()
@@ -492,8 +498,8 @@ void FWonderlandSocialLiveService::Refresh()
 			LastError.Reset();
 			// B35 (M2 P9): EVERY landed read, changed or not, with how long ago it was issued -- a diagnostic proves "no read landed between the
 			// hide and the open" from these lines (an unchanged read is otherwise silent)
-			UE_LOG(LogTemp, Display, TEXT("WLSOCIAL read landed: issued %.0f ms ago, view %s, surface %s"), (FPlatformTime::Seconds() - IssuedAt) * 1000.0,
-				bViewChanged ? TEXT("changed") : TEXT("unchanged"), bSurfaceOpen ? TEXT("open") : TEXT("closed"));
+			UE_LOG(LogTemp, Display, TEXT("WLSOCIAL read landed: issued %.0f ms ago, view %s, surface %s | %s"), (FPlatformTime::Seconds() - IssuedAt) * 1000.0,
+				bViewChanged ? TEXT("changed") : TEXT("unchanged"), bSurfaceOpen ? TEXT("open") : TEXT("closed"), *WonderlandSocialFreshness::EventStamp());
 			if (bViewChanged)
 			{
 				UE_LOG(LogTemp, Log, TEXT("%s"), *WonderlandSocialSnapshotLine(Snapshot));
@@ -1100,8 +1106,8 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::Ask(const FString& O
 		FWonderlandSocialActionResult Answer;
 		Answer.bOk = Problem.IsEmpty();
 		Answer.Reason = Problem;
-		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live %s %s: %s%s"), *OperationId, *SubjectId, Answer.bOk ? TEXT("ok") : TEXT("refused"),
-			Answer.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Answer.Reason));
+		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live %s %s: %s%s | %s"), *OperationId, *SubjectId, Answer.bOk ? TEXT("ok") : TEXT("refused"),
+			Answer.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Answer.Reason), *WonderlandSocialFreshness::EventStamp());
 		Answered.Broadcast(OperationId, SubjectId, Answer);
 		if (Answer.bOk)
 		{
@@ -1275,8 +1281,8 @@ void FWonderlandSocialLiveService::CallLff(const FString& OperationId, const FSt
 		Answer.RetryAfterSeconds = Status == 429 ? FMath::Max(1, LastRetryAfterSeconds) : 0;
 		// THE OPERATION, THE ID AND THE STATUS ONLY: a post's text is the player's, never the log's (the 10-07 log-injection rule). The
 		// server's refusals name fields, never their values (social-commands.ts onlyFields / lffText).
-		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live %s %s: %s (HTTP %d)%s"), *OperationId, SubjectId.IsEmpty() ? TEXT("-") : *SubjectId,
-			Problem.IsEmpty() ? TEXT("ok") : TEXT("refused"), Status, Problem.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Problem));
+		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live %s %s: %s (HTTP %d)%s | %s"), *OperationId, SubjectId.IsEmpty() ? TEXT("-") : *SubjectId,
+			Problem.IsEmpty() ? TEXT("ok") : TEXT("refused"), Status, Problem.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Problem), *WonderlandSocialFreshness::EventStamp());
 		Done(Answer, Data);
 	});
 }

@@ -38,6 +38,9 @@ namespace WonderlandSocialFreshness
 	/** THE MUTATION CONTROL (the reviewer's M2 P8(c)): a diagnostic must show its instrument FAILS when this gate is off. Only a developer session
 	 *  can turn it off (wl.Dev.MutateSocialGate, refused without -wldev; SetGateMutatedOff ignores anything else); never in Shipping. False in
 	 *  every player's session. */
+	/** "t=<UTC ISO-8601 with ms>" of this moment, appended to the B35 evidence lines: the log file's own stamps are written later and compress
+	 *  under load (measured 10-20: one line per ~11 ms whatever happened), so an event's time is taken when it happens. */
+	WONDERLAND_API FString EventStamp();
 	WONDERLAND_API bool IsGateMutatedOff();
 	WONDERLAND_API void SetGateMutatedOff(bool bOff);
 	/** A surface opened at OpenedAt may draw people from a view whose read was issued at ReadIssuedAt, now. */

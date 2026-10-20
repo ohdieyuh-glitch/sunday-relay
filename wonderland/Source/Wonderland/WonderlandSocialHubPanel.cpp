@@ -448,7 +448,8 @@ void SWonderlandSocialHubPanel::Rebuild()
 	PaintNote = Drawn;
 	if (bLogGateOnRebuild || Drawn != LastLoggedDescribe)
 	{
-		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL hub %s: %s"), bLogGateOnRebuild ? (bAwaitingFresh ? TEXT("withheld") : TEXT("fresh")) : TEXT("drawn"), *Drawn);
+		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL hub %s: %s | %s"), bLogGateOnRebuild ? (bAwaitingFresh ? TEXT("withheld") : TEXT("fresh")) : TEXT("drawn"), *Drawn,
+			*WonderlandSocialFreshness::EventStamp());
 		bLogGateOnRebuild = false;
 		LastLoggedDescribe = Drawn;
 	}
@@ -1665,13 +1666,14 @@ namespace WonderlandSocialPaintLog
 		int32 Width = 0;
 		int32 Height = 0;
 		const bool bSaved = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
-		UE_LOG(LogTemp, Display, TEXT("WLFRAME %s frame=%llu paints=%d %s %dx%d (began %.1f ms after the paint, took %.1f ms) %s"), *Last.Surface, Last.Frame, Paints,
-			bSaved ? TEXT("saved") : TEXT("NOT saved"), Width, Height, (StartedAt - Last.PaintedAt) * 1000.0, (FPlatformTime::Seconds() - StartedAt) * 1000.0, *Path);
+		UE_LOG(LogTemp, Display, TEXT("WLFRAME %s frame=%llu paints=%d %s %dx%d (began %.1f ms after the paint, took %.1f ms) %s | %s"), *Last.Surface, Last.Frame, Paints,
+			bSaved ? TEXT("saved") : TEXT("NOT saved"), Width, Height, (StartedAt - Last.PaintedAt) * 1000.0, (FPlatformTime::Seconds() - StartedAt) * 1000.0, *Path,
+			*WonderlandSocialFreshness::EventStamp());
 	}
 
 	void NotePainted(const TCHAR* Surface, const FString& Drawn)
 	{
-		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL painted %s frame=%llu: %s"), Surface, static_cast<uint64>(GFrameCounter), *Drawn);
+		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL painted %s frame=%llu: %s | %s"), Surface, static_cast<uint64>(GFrameCounter), *Drawn, *WonderlandSocialFreshness::EventStamp());
 		if (!FramesWanted() || !FSlateApplication::IsInitialized())
 		{
 			return;
