@@ -113,6 +113,8 @@ describe('A. boundary and malformed values: the parser and the checker CLI must 
   });
 });
 
+const refusedCode = (fn: () => unknown): string => { try { fn(); return 'NO_THROW'; } catch (error) { return error instanceof CoderRuntimeBudgetRefused ? error.code : `OTHER:${String(error)}`; } };
+
 describe('B. the schedule arithmetic against a brute-force oracle over the WHOLE declarable grid', () => {
   const WAITS = [0, 2_100_000];
   it('guaranteed cycles = the largest g <= declared with main + g*cycle <= job, found by counting (not by the production division)', () => {
@@ -168,15 +170,15 @@ describe('B. the schedule arithmetic against a brute-force oracle over the WHOLE
     for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1]) {
       for (const field of ['reviewerShareMs', 'architectWorstCaseMs', 'infrastructureMs', 'marginsMs', 'approvalWaitMs', 'reviewerCycleCeilingMs'] as const) {
         const input = { coderRuntimeMinutes: 20, repairCycles: 1, approvalWaitMs: 0, ...FIGURES, [field]: bad };
-        expect(() => coderRuntimeSchedule(input), `${field}=${bad}`).toThrow(CoderRuntimeBudgetRefused);
+        expect(refusedCode(() => coderRuntimeSchedule(input)), `${field}=${bad}`).toBe('coder_runtime_budget_unfit');
       }
     }
     for (const bad of [Number.NaN, 0, -5, Number.POSITIVE_INFINITY]) {
-      expect(() => coderRuntimeSchedule({ coderRuntimeMinutes: 20, repairCycles: 1, approvalWaitMs: 0, ...FIGURES, jobBudgetMs: bad }), `jobBudgetMs=${bad}`).toThrow(CoderRuntimeBudgetRefused);
+      expect(refusedCode(() => coderRuntimeSchedule({ coderRuntimeMinutes: 20, repairCycles: 1, approvalWaitMs: 0, ...FIGURES, jobBudgetMs: bad })), `jobBudgetMs=${bad}`).toBe('coder_runtime_budget_unfit');
     }
   });
   it('a NEGATIVE approval wait (a caller that trusts nothing) cannot make a 45-minute main path fit: it is refused', () => {
-    expect(() => coderRuntimeSchedule({ coderRuntimeMinutes: 45, repairCycles: 1, approvalWaitMs: -10_000_000, ...FIGURES })).toThrow(CoderRuntimeBudgetRefused);
+    expect(refusedCode(() => coderRuntimeSchedule({ coderRuntimeMinutes: 45, repairCycles: 1, approvalWaitMs: -10_000_000, ...FIGURES }))).toBe('coder_runtime_budget_unfit');
   });
   it('resolveContractCoderRuntime refuses by CODE for every non-integer-in-range input, including coercible ones, and never clamps', () => {
     for (const bad of [12, 46, 13.5, '13', null, undefined, Number.NaN, Number.POSITIVE_INFINITY, -0.0001, 0, true, [13], {}, 13n]) {
