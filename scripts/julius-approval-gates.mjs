@@ -12,15 +12,25 @@
  *   - a registration whose contract lacks the clause is refused (a registered gate cannot be dropped);
  *   - a clause that differs from its registration in anything (id, roles, task types, reason, count) is refused.
  *
- * THE TABLE IS EMPTY. No mission has been registered for an approval gate. Registering one is a deliberate,
- * reviewed edit that names the mission and its exact gate; `scripts/julius-approval-gate-grant.test.ts` holds a
- * tripwire on the list of names.
+ * THE TABLE HOLDS ONE MISSION: the V6 governance mission (Row 2). Registering one is a deliberate, reviewed edit that names
+ * the mission and its exact gate; `scripts/julius-approval-gate-grant.test.ts` holds a tripwire on the list of names.
  *
  * Pure: no filesystem, no process, no network. `julius-live-contract-check.mjs` and the test import the SAME
  * function, so the rule the checker applies and the rule the test pins cannot be computed two ways.
  */
 
-export const MISSION_APPROVAL_GATES = Object.freeze({});
+export const MISSION_APPROVAL_GATES = Object.freeze({
+  // The build of a change to who may decide an approval waits for the governance owner's sign-off on the reviewed plan. ONE gate,
+  // at the FIRST claim of the run's build task; `repair:build` is deliberately not gated (the grant covers implementing the
+  // approved plan). It must equal the contract's clause exactly (checked in both directions).
+  'julius-v6-governance-1': Object.freeze([Object.freeze({
+    id: 'gate-approval-authority-build',
+    operation: 'DISPATCH_WORKER',
+    roles: Object.freeze(['CODING_AGENT']),
+    taskTypes: Object.freeze(['build']),
+    reason: 'A change to who may decide an approval needs the governance owner\'s sign-off on the reviewed plan before code is written.',
+  })]),
+});
 
 /** JSON with every object's keys sorted: the comparison does not depend on how a contract orders its keys. */
 const stable = (value) => (value === null || typeof value !== 'object'

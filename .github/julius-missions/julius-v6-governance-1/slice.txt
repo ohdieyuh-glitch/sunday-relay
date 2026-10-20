@@ -1,0 +1,15 @@
+# V6 GOVERNANCE MISSION (Row 2): a real, latent defect in Julius's own approval-decision code.
+#
+# NOT a Decision C arm, no readiness credit by itself. The gate (the founder's sign-off on the reviewed plan before the build is
+# dispatched) is declared in the contract; the TASK is natural: `decideJuliusApproval` acts on a cancelled run and answers a decided
+# approval BEFORE it checks who is asking. The coder cannot run commands; the reviewer judges what it writes against the criteria.
+#
+# THE SLICE IS THE VALUE-IMPORT CLOSURE OF julius-lifecycle-runtime.ts (7 files, 124,115 bytes), byte-identical to the repository's.
+# Plus the seeded node:test specification (seed/) and the slice harness (.julius/).
+src/relay/mission/julius/julius-context-integrity.ts
+src/relay/mission/julius/julius-events.ts
+src/relay/mission/julius/julius-lifecycle-runtime.ts
+src/relay/mission/julius/julius-repair-lineage.ts
+src/relay/mission/julius/julius-runtime.ts
+src/relay/mission/julius/julius-segment-lineage.ts
+src/relay/mission/julius/julius-state-path.ts

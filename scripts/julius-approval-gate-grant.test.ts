@@ -66,8 +66,8 @@ describe('V6 G-1: the approval-gate grant, both directions', () => {
     expect(problemsOf('julius-governance-1', reordered, GRANTS)).toEqual([]);
   });
 
-  it('TRIPWIRE: no mission is registered for an approval gate yet; registering one is a deliberate, reviewed edit', () => {
-    expect(Object.keys(MISSION_APPROVAL_GATES)).toEqual([]);
+  it('TRIPWIRE: exactly one mission is registered for an approval gate (the V6 governance mission); registering another is a deliberate, reviewed edit', () => {
+    expect(Object.keys(MISSION_APPROVAL_GATES)).toEqual(['julius-v6-governance-1']);
     expect(Object.isFrozen(MISSION_APPROVAL_GATES), 'the table cannot be widened at run time').toBe(true);
   });
 

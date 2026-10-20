@@ -165,6 +165,11 @@ const MISSION_LIMITS = Object.freeze({
   // The fourth unscored diagnostic (two latent defects found by reading two independent pure domain modules: a hand-written SHA-256's UTF-8 encoder and an evidence age
   // calculation); same ceilings, same permanent maximum-capability directive.
   'julius-diag-digest-evidence-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
+  // THE V6 GOVERNANCE MISSION (Row 2), a SCORED mission under the same standing maximum-capability directive: $100 is this schema's
+  // finite number, not a target. repairCycles is 2, NOT 3, on purpose: its approval wait (30 minutes + 5 of step overhead) fits the
+  // 300-minute job only with at most two repair cycles (amendment E10: 3 leaves 63,684 ms, 2 leaves 3,462,456 ms), and a structural
+  // test re-derives that at the landing head. It declares no effort control (see V6_PAID_APPROVAL_RUN_REQUIREMENTS section 2).
+  'julius-v6-governance-1': Object.freeze({ spendUsd: 100, repairCycles: 2 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
