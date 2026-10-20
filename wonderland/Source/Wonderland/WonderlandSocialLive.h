@@ -200,6 +200,12 @@ public:
 	FSimpleMulticastDelegate& OnReadLanded() { return ReadLanded; }
 	/** B35: why the last read did not land, for a withheld surface to say; empty once a read lands. */
 	const FString& GetReadProblem() const { return ReadProblem; }
+#if !UE_BUILD_SHIPPING
+	/** QA (wl.Qa.SocialGate): land this view as if a read ISSUED at IssuedAt had answered with it (always a change), and how many snapshot reads
+	 *  this service has issued. Developer builds only. */
+	void QaLand(const FWonderlandSocialSnapshot& View, double IssuedAt);
+	int32 QaReadsIssued() const { return ReadsIssued; }
+#endif
 	/** Report this player's own presence (the client's part of the presence authority's input): connected (and exploring, as on arrival),
 	 *  or leaving. What the player is DOING after that is reported on change from the activity source (SetActivitySource). */
 	void ReportPresence(bool bConnected);
@@ -322,6 +328,7 @@ private:
 	FSimpleMulticastDelegate ReadLanded;
 	/** SC2: the field names of the last world report said in the log ("WLWORLD report fields"). */
 	FString LoggedReportKeys;
+	int32 ReadsIssued = 0;
 	FTSTicker::FDelegateHandle TickerHandle;
 	/** r16reh16c: a dedicated 50 ms ticker for the world report only (the shared Tick runs every 0.25 s, which capped reports at 4 a second). */
 	FTSTicker::FDelegateHandle WorldTickerHandle;

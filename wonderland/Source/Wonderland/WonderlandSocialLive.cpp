@@ -418,6 +418,21 @@ void FWonderlandSocialLiveService::Call(const FString& Verb, const FString& Path
 	HttpRequest->ProcessRequest();
 }
 
+#if !UE_BUILD_SHIPPING
+void FWonderlandSocialLiveService::QaLand(const FWonderlandSocialSnapshot& View, double IssuedAt)
+{
+	static int32 QaLandings = 0;
+	Snapshot = View;
+	SnapshotDigest = FString::Printf(TEXT("qa-%d"), ++QaLandings);
+	bHasSnapshot = true;
+	SnapshotAt = FPlatformTime::Seconds();
+	SnapshotIssuedAt = IssuedAt;
+	UE_LOG(LogTemp, Display, TEXT("WLSOCIAL QA landed a view issued %.3f s ago: %s"), FPlatformTime::Seconds() - IssuedAt, *WonderlandSocialSnapshotLine(Snapshot));
+	Changed.Broadcast();
+	ReadLanded.Broadcast();
+}
+#endif
+
 void FWonderlandSocialLiveService::SetSurfaceOpen(bool bOpen)
 {
 	if (bSurfaceOpen == bOpen)
@@ -444,6 +459,7 @@ void FWonderlandSocialLiveService::Refresh()
 	// B35: THE ISSUE TIME is what freshness is judged by: the server answered with what it knew at or after this moment
 	const double IssuedAt = FPlatformTime::Seconds();
 	LastReadIssuedAt = IssuedAt;
+	++ReadsIssued;
 	Call(TEXT("GET"), TEXT("/snapshot"), nullptr, [this, IssuedAt](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
 	{
 		bRefreshing = false;
@@ -686,7 +702,10 @@ void FWonderlandSocialLiveService::TickWorld()
 		// SC2 EVIDENCE: the NAMES of the fields this report carries (never their values), said once and again whenever the set changes, so a run log
 		// shows what leaves this machine at the build's defaults (r16reh16u: x,y,z,yaw,speed,motion,skinId)
 		TArray<FString> Keys;
-		Body->Values.GetKeys(Keys);
+		for (const auto& Field : Body->Values)
+		{
+			Keys.Add(FString(*Field.Key));   // FString or UE 5.8's FSharedString key: both give their characters by operator*
+		}
 		const FString KeyLine = FString::Join(Keys, TEXT(","));
 		if (KeyLine != LoggedReportKeys)
 		{
