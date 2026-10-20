@@ -238,6 +238,9 @@ globalThis.fetch = async (url, init = {}) => {
     const tok = String(init.headers?.Authorization ?? '').replace(/^Bearer /, '');
     return reply(500, { message: 'upstream said: token ' + tok.slice(0, 20) + '\\n' + tok.slice(20) + ' and again Bearer ' + tok.slice(0, 14) + '\\r\\n ' + tok.slice(14) });
   }
+  if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path) && scenario.echo === 'follow') {
+    return reply(500, { message: 'upstream said: ghs_' + 'A'.repeat(36) + ' merged PR number 12 into main; also ghp_' + 'C'.repeat(36) + ' kept going, github_pat_' + 'B'.repeat(30) + ' done' });
+  }
   if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path) && scenario.echo === 'b64') {
     const tok = String(init.headers?.Authorization ?? '').replace(/^Bearer /, '');
     const b = (s) => Buffer.from(s).toString('base64');
@@ -1361,6 +1364,16 @@ describe('v3.4 s3: scripts that required CI runs from the PR itself, and julius-
 
   it('near neighbours stay allowed (the rule is not a blanket on scripts/ or .github/)', () => {
     for (const f of ['scripts/julius-evidence-bodies.mjs', 'scripts/relay-notes.md', '.github/julius-learning-notes.md', '.github/phase-notes.sh', 'docs/julius-paid-dispatch.md']) expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(false);
+  });
+});
+
+describe('v3.5b S-4: the token-shape redaction no longer eats the words that follow a token', () => {
+  it('a token-shaped string on one line leaves the words after it (they were swallowed by the whitespace-tolerant run)', () => {
+    const r = runLand({ token: 'plain-secret-value-123', scenario: { failGet: '/pulls/7$', echo: 'follow' } });
+    expect(r.out).not.toMatch(/ghs_A{8}|ghp_C{8}|github_pat_B{8}/u);
+    expect(r.out).toContain('merged PR number 12 into main');
+    expect(r.out).toContain('kept going');
+    expect(r.out).toContain('done');
   });
 });
 

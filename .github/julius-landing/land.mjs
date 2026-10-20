@@ -26,8 +26,9 @@ const redact = (text) => {
     out = out.split(encodeURIComponent(env.GH_TOKEN)).join('***');
   }
   return out
-    .replace(/\b(?:ghs|ghp|gho|ghu|ghr)_(?:\s*[A-Za-z0-9]){16,}/gu, '***')
-    .replace(/\bgithub_pat_(?:\s*[A-Za-z0-9_]){16,}/gu, '***')
+    // v3.5b S-4: only a LINE BREAK (LF or CRLF, then at most one space or tab) may split the run, never a plain space, so the words after a token survive; at most 255 characters.
+    .replace(/\b(?:ghs|ghp|gho|ghu|ghr)_(?:(?:\r?\n[ \t]?)?[A-Za-z0-9]){16,255}/gu, '***')
+    .replace(/\bgithub_pat_(?:(?:\r?\n[ \t]?)?[A-Za-z0-9_]){16,255}/gu, '***')
     .replace(/\bBearer\s+[^\s"',;]+/giu, 'Bearer ***').replace(/(authorization["']?\s*[:=]\s*)(?:(?:bearer|token|basic)\s+)?[^\s"',;]+/giu, '$1***');
 };
 const summary = (line) => { const safe = redact(line); console.log(safe); if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, safe + '\n'); };
