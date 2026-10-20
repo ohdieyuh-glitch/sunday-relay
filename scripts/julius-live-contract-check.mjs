@@ -197,6 +197,9 @@ const MISSION_LIMITS = Object.freeze({
   // The first MAX-EFFORT unscored lab mission (four related latent defects in the /gauntletloop command controller): the first contract that declares `limits.coderRuntimeMinutes` (23),
   // so the coder session budget of the crt layer is exercised for real; same ceilings, same permanent maximum-capability directive. Lab only, never scored without its own registration.
   'julius-maxeffort-gauntlet-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
+  // The second MAX-EFFORT unscored lab mission (four related latent defects in the Loop Engine's completion, budget-pause, instant-reader and no-blocking-criteria gates): declares
+  // `limits.coderRuntimeMinutes` (23); same ceilings, same permanent maximum-capability directive. Lab only, never scored without its own registration.
+  'julius-maxeffort-loop-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
