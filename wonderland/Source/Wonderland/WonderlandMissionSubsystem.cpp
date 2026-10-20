@@ -1527,6 +1527,7 @@ bool UWonderlandMissionSubsystem::StepFixture(float DeltaSeconds)
 		{
 			UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION fixture '%s' finished | %s"),
 				*Playing->Id.ToString(), *WonderlandDescribeFold(Fold));
+			UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLSTAMP mission finished %s | %s"), *Playing->Id.ToString(), *WonderlandSocialFreshness::EventStamp());   // G3
 			// Back to rest, which dismisses the contract. This is one of the three beats Julius cannot
 			// emit, and the world taking itself back to idle is exactly the gap that records.
 			ShowBeat(EWonderlandMissionBeat::Idle);

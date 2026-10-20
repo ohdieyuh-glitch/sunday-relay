@@ -1802,6 +1802,11 @@ FString SWonderlandSocialHubPanel::Describe() const
 		{
 			Headlines += FString::Printf(TEXT("%s%s=%s"), Headlines.IsEmpty() ? TEXT("") : TEXT("; "), *Row.UserId, *PresenceLine(Row.Presence));
 		}
+		// G4 (B14/B18 R5-e): a STRANGER's headline as RECENT draws it (ids and headline words only)
+		for (const FWonderlandSocialRecentRow& Row : Snapshot.RecentPlayers)
+		{
+			Headlines += FString::Printf(TEXT("%srecent %s=%s"), Headlines.IsEmpty() ? TEXT("") : TEXT("; "), *Row.Person.UserId, *PresenceLine(Row.Person.Presence));
+		}
 	}
 	// THE LFF TAB adds its model's state: ids and states only, never a post's text (the 10-07 log rule)
 	const FString LffPart = Tab == ETab::Lff ? FString::Printf(TEXT(" | lff %s"), Lff.IsValid() ? *Lff->Describe() : TEXT("not available")) : FString();

@@ -249,6 +249,7 @@ void SWonderlandMissionsPanel::Construct(const FArguments& InArgs)
 				{
 					const bool bStarted = Subsystem->PlayScenario(FName(TEXT("D")), 10.0f);
 					UE_LOG(LogTemp, Display, TEXT("WLMISSION simulated mission from the Missions panel: %s"), bStarted ? TEXT("started") : TEXT("REFUSED"));
+					UE_LOG(LogTemp, Display, TEXT("WLSTAMP mission watch %s | %s"), bStarted ? TEXT("started") : TEXT("REFUSED"), *WonderlandSocialFreshness::EventStamp());   // G3
 					if (bStarted)
 					{
 						OnRequestClose.ExecuteIfBound();

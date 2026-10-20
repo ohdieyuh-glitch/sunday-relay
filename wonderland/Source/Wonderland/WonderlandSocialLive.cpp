@@ -1067,7 +1067,8 @@ void FWonderlandSocialLiveService::SendLeave(int32 Leave, bool bRetried)
 		if (!Problem.IsEmpty() && bStillOut
 			&& WonderlandSocialReconnectPolicy::ShouldRetryLeave(Status, bRetried, WonderlandSocialLiveDetail::CVarLeaveRetry.GetValueOnGameThread() != 0))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL live world.leave did not reach the server (%s): one more try in %.0f s"), *Problem, WonderlandSocialLiveDetail::LeaveRetrySeconds);
+			// G6: not under the pinned "WLSOCIAL live" prefix (TF-4 r3.1 reads every line starting with it)
+			UE_LOG(LogTemp, Warning, TEXT("WLSOCIAL leave retry: world.leave did not reach the server (%s): one more try in %.0f s"), *Problem, WonderlandSocialLiveDetail::LeaveRetrySeconds);
 			const TWeakPtr<bool> WeakAlive = Alive;
 			FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([this, WeakAlive, Leave, JoinAtLeave](float)
 			{
@@ -1082,8 +1083,11 @@ void FWonderlandSocialLiveService::SendLeave(int32 Leave, bool bRetried)
 		FWonderlandSocialActionResult Answer;
 		Answer.bOk = Problem.IsEmpty();
 		Answer.Reason = Problem;
-		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live world.leave : %s%s%s"), Answer.bOk ? TEXT("ok") : TEXT("refused"), bRetried ? TEXT(" (retry)") : TEXT(""),
+		// G6: the r2.11 S24 form "WLSOCIAL live world.leave : ok" stays byte-identical; whether this answer was the retry is a companion line
+		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live world.leave : %s%s"), Answer.bOk ? TEXT("ok") : TEXT("refused"),
 			Answer.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Answer.Reason));
+		UE_LOG(LogTemp, Display, TEXT("WLSTAMP world.leave %s%s | %s"), Answer.bOk ? TEXT("ok") : TEXT("refused"), bRetried ? TEXT(" (retry)") : TEXT(" (first try)"),
+			*WonderlandSocialFreshness::EventStamp());
 		Answered.Broadcast(TEXT("world.leave"), FString(), Answer);
 		if (Answer.bOk)
 		{
@@ -1155,8 +1159,11 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::Ask(const FString& O
 		FWonderlandSocialActionResult Answer;
 		Answer.bOk = Problem.IsEmpty();
 		Answer.Reason = Problem;
-		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live %s %s: %s%s | %s"), *OperationId, *SubjectId, Answer.bOk ? TEXT("ok") : TEXT("refused"),
-			Answer.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Answer.Reason), *WonderlandSocialFreshness::EventStamp());
+		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live %s %s: %s%s"), *OperationId, *SubjectId, Answer.bOk ? TEXT("ok") : TEXT("refused"),
+			Answer.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Answer.Reason));
+		// G6: the line above is a pinned TF-4 r3.1 form and stays byte-identical; its event time is this companion line (Q-M1-1: the actor's OK answer)
+		UE_LOG(LogTemp, Display, TEXT("WLSTAMP answer %s %s %s | %s"), *OperationId, SubjectId.IsEmpty() ? TEXT("-") : *SubjectId, Answer.bOk ? TEXT("ok") : TEXT("refused"),
+			*WonderlandSocialFreshness::EventStamp());
 		Answered.Broadcast(OperationId, SubjectId, Answer);
 		if (Answer.bOk)
 		{
@@ -1331,8 +1338,10 @@ void FWonderlandSocialLiveService::CallLff(const FString& OperationId, const FSt
 		Answer.RetryAfterSeconds = Status == 429 ? FMath::Max(1, LastRetryAfterSeconds) : 0;
 		// THE OPERATION, THE ID AND THE STATUS ONLY: a post's text is the player's, never the log's (the 10-07 log-injection rule). The
 		// server's refusals name fields, never their values (social-commands.ts onlyFields / lffText).
-		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live %s %s: %s (HTTP %d)%s, issued %.0f ms ago | %s"), *OperationId, SubjectId.IsEmpty() ? TEXT("-") : *SubjectId,
-			Problem.IsEmpty() ? TEXT("ok") : TEXT("refused"), Status, Problem.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Problem),
+		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live %s %s: %s (HTTP %d)%s"), *OperationId, SubjectId.IsEmpty() ? TEXT("-") : *SubjectId,
+			Problem.IsEmpty() ? TEXT("ok") : TEXT("refused"), Status, Problem.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Problem));
+		// G6: the pinned TF-4 LFF_FORM line above stays byte-identical; the issue time and the event time are this companion line (Q-M1-1 item 4)
+		UE_LOG(LogTemp, Display, TEXT("WLSTAMP call %s %s HTTP %d, issued %.0f ms ago | %s"), *OperationId, SubjectId.IsEmpty() ? TEXT("-") : *SubjectId, Status,
 			(FPlatformTime::Seconds() - IssuedAt) * 1000.0, *WonderlandSocialFreshness::EventStamp());
 		Done(Answer, Data);
 	});
@@ -1585,6 +1594,9 @@ void FWonderlandSocialLiveService::SendPresence(bool bConnected, const FWonderla
 	// THE SIGNALS AND WHETHER THERE IS A PARTY, ONE TOKEN (the operation-line form every "WLSOCIAL live <op> <subject>: ok" reader takes);
 	// the detail is the client's own fixed words, never a player's text
 	const FString Said = FString::Printf(TEXT("%s,connected=%d,party=%s"), *Signals.Describe(), bConnected ? 1 : 0, PartyKey.IsEmpty() ? TEXT("no") : TEXT("yes"));
+	// G3 (B14/B18 R5-d): the actor's enter/exit of an activity, timed when the report is SENT (the pinned "WLSOCIAL live presence.update_self" line
+	// below is written on the answer and stays byte-identical)
+	UE_LOG(LogTemp, Display, TEXT("WLSTAMP presence.update_self send %s | %s"), *Said, *WonderlandSocialFreshness::EventStamp());
 	Call(TEXT("POST"), TEXT("/presence"), WonderlandPresenceBody(bConnected, Signals), [this, Said](int32 Status, const TSharedPtr<FJsonObject>&, const FString& Problem)
 	{
 		// no answer (status 0) or a 5xx: the outcome is unknown, so the reporter sends the current state again (r2, F3)
@@ -1601,6 +1613,7 @@ void FWonderlandSocialLiveService::SendPresence(bool bConnected, const FWonderla
 		}
 		PresenceProblem.Reset();
 		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live presence.update_self %s: ok"), *Said);
+		UE_LOG(LogTemp, Display, TEXT("WLSTAMP presence.update_self ok | %s"), *WonderlandSocialFreshness::EventStamp());
 	});
 }
 
