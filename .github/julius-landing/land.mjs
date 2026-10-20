@@ -14,12 +14,42 @@ const API = 'https://api.github.com';
 const SELF_CHECK = 'Land a cleared pull request';
 // r5: NOTHING this job prints may carry a credential, whatever an API, a proxy or a library echoes back into an error text. Every line goes through `summary`, which redacts the token
 // literal, GitHub token shapes (ghs_/ghp_/gho_/ghu_/ghr_/github_pat_), `Bearer <x>` and `Authorization: <x>` first. (The runner also masks GITHUB_TOKEN; this does not rely on it.)
+// V-4: the token is also redacted when a line break (or any whitespace) splits it, in its base64 forms (alone, behind `x-access-token:`, at the three byte alignments) and when ANY of its characters
+// is written as a percent escape (%XX, upper or lower hex, also escaped again as %25XX: up to three levels). v3.5c: v3.5b only compared against encodeURIComponent(token), which is the token itself for
+// the characters of a GitHub token, so a REAL percent-encoded echo (ghs%5F..., %67%68%73%5F...) was not hidden. Each character below matches itself OR its %XX, so partial encodings are covered.
+// v3.5d: a GitHub token SHAPE (any credential, not only the job token) is also hidden when a line break (LF or CRLF, then at most one space or tab) splits it at ANY character; a plain space is not a gap.
+// `Authorization: <x>` also covers a quoted value. Every sentence of the README "Output redaction" paragraph is a probe run on this function; the residuals (plain space inside a foreign shape, a break inside
+// a %XX escape, ...) are listed there and pinned by tests.
+const b64Middles = (s) => [0, 1, 2].map((pad) => Buffer.from(' '.repeat(pad) + s).toString('base64')).map((e, pad) => e.slice(Math.ceil((pad * 8) / 6), Math.max(0, e.length - 4))).filter((m) => m.length >= 8);
+const reEscape = (c) => c.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+/** One character as a pattern: itself, or %XX (either hex case), or the %XX escaped again (%25XX, at most three levels). Only single-byte characters have a %XX form here. */
+const charOrEscape = (c) => {
+  const code = c.codePointAt(0);
+  if (code > 0xff) return reEscape(c);
+  return `(?:${reEscape(c)}|%(?:25){0,3}${[...code.toString(16).padStart(2, '0')].map((d) => (/[a-f]/u.test(d) ? `[${d}${d.toUpperCase()}]` : d)).join('')})`;
+};
+const ALNUM_OR_ESCAPED = '(?:[A-Za-z0-9]|%(?:25){0,3}(?:3[0-9]|4[1-9A-Fa-f]|5[0-9Aa]|6[1-9A-Fa-f]|7[0-9Aa]))';
+const UNDERSCORE_OR_ESCAPED = charOrEscape('_');
+const LINE_BREAK_GAP = '(?:\\r?\\n[ \\t]?)?';
+const shapeRun = (unit) => `(?:${LINE_BREAK_GAP}${unit}){16,255}`;
+// v3.5d: the line-break gap sits between EVERY two characters of a shape (v3.5c allowed it only after the underscore): between the prefix letters, before the underscore, and between github / pat / the underscores.
+const word = (w) => [...w].map(charOrEscape).join(LINE_BREAK_GAP);
+const SHAPE_PREFIXED = new RegExp(`(?<![A-Za-z0-9_])(?:${['ghs', 'ghp', 'gho', 'ghu', 'ghr'].map(word).join('|')})${LINE_BREAK_GAP}${UNDERSCORE_OR_ESCAPED}${shapeRun(ALNUM_OR_ESCAPED)}`, 'gu');
+const SHAPE_PAT = new RegExp(`(?<![A-Za-z0-9_])${word('github')}${LINE_BREAK_GAP}${UNDERSCORE_OR_ESCAPED}${LINE_BREAK_GAP}${word('pat')}${LINE_BREAK_GAP}${UNDERSCORE_OR_ESCAPED}${shapeRun(`(?:${ALNUM_OR_ESCAPED}|${UNDERSCORE_OR_ESCAPED})`)}`, 'gu');
 const redact = (text) => {
   let out = String(text);
-  if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) out = out.split(env.GH_TOKEN).join('***');
+  if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) {
+    out = out.split(env.GH_TOKEN).join('***');
+    // every character of the token as itself or as a percent escape, whitespace allowed between characters (a split by a line break or a space)
+    out = out.replace(new RegExp([...env.GH_TOKEN].map(charOrEscape).join('\\s*'), 'gu'), '***');
+    for (const form of [env.GH_TOKEN, `x-access-token:${env.GH_TOKEN}`, `${env.GH_TOKEN}:x-oauth-basic`]) for (const middle of b64Middles(form)) out = out.split(middle).join('***');
+  }
   return out
-    .replace(/\b(?:ghs|ghp|gho|ghu|ghr)_[A-Za-z0-9]{16,}/gu, '***').replace(/\bgithub_pat_[A-Za-z0-9_]{16,}/gu, '***')
-    .replace(/\bBearer\s+[^\s"',;]+/giu, 'Bearer ***').replace(/(authorization["']?\s*[:=]\s*)(?:(?:bearer|token|basic)\s+)?[^\s"',;]+/giu, '$1***');
+    // only a LINE BREAK (LF or CRLF, then at most one space or tab) may split the run, never a plain space, so the words after a token survive; at most 255 characters; letters, digits and the
+    // underscore may be percent escapes (v3.5c).
+    .replace(SHAPE_PREFIXED, '***')
+    .replace(SHAPE_PAT, '***')
+    .replace(/\bBearer\s+[^\s"',;]+/giu, 'Bearer ***').replace(/(authorization["']?\s*[:=]\s*["']?)(?:(?:bearer|token|basic)\s+)?[^\s"',;]+/giu, '$1***');
 };
 const summary = (line) => { const safe = redact(line); console.log(safe); if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, safe + '\n'); };
 const fail = (problems) => { for (const p of problems) summary(`REFUSED: ${p}`); summary('Nothing was landed.'); process.exit(1); };
@@ -196,7 +226,7 @@ try {
     process.exit(2);
   }
   if (tipAfter === newSha) summary(`LANDED (the PATCH response was lost): ${text}; main is the created commit ${newSha}`);
-  else if (tipAfter === fields.base) fail([`the ref update outcome was ambiguous (${text}) and main is still the cleared base ${fields.base}; nothing landed, no retry (a request that timed out could still be applied late: check main again; this clearance is spent, sign a new one)`]);
+  else if (tipAfter === fields.base) { summary(`ALERT AFTER AN AMBIGUOUS REF UPDATE (${text}): main is still the cleared base ${fields.base}, but the request could still be applied late; state in doubt. No retry, no force, no comment, PR left open. Check main before signing anything new; this clearance is spent`); process.exit(2); }
   else { summary(`ALERT AFTER AN AMBIGUOUS REF UPDATE (${text}): main is ${tipAfter}, neither the created commit ${newSha} nor the cleared base ${fields.base}`); process.exit(2); }
 }
 summary(`LANDED PR #${number}: ${newSha}`);

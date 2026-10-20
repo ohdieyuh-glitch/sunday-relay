@@ -59,6 +59,10 @@ const ALLOWED = [
   /^  wall clock deadline: (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z|UNKNOWN)$/u,
   // The stage deadline the drive enforces (`liveStageDeadlineLine`, audit F3): instants and numbers only.
   /^  stage deadline: (every stage must end by \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \(job limit \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z; reserve_after_live_ms=\d+; stage_bounds_ms=([A-Z_]+:\d+(,[A-Z_]+:\d+)*|none)\)|UNKNOWN \(no job start recorded; not enforced\))$/u,
+  // The opt-in coder session budget (`liveCoderRuntimeBudgetLines`): numbers and one closed token only, printed ONLY when the
+  // contract declares `limits.coderRuntimeMinutes`, so every existing contract's artifact is unchanged.
+  /^  coder session budget: minutes=\d+ attempt_deadline_ms=\d+ repair_cycles_declared=\d+ repair_cycles_guaranteed_at_worst_case=\d+ repair_cycles_if_one_full_attempt_per_dispatch=\d+ main_path_worst_case_ms=\d+ job_limit_ms=\d+ repair_cycles_reduced=no$/u,
+  /^  coder session budget notice: repair cycles beyond the worst-case guarantee start only while the stage stop line allows; none is removed$/u,
   /^  ticks: consumed=\d+ allowance=\d+ remaining=\d+ beyond_main_path=\d+ disagreement=\d+ architecture=\d+ retries=\d+ exhausted=(yes|no)$/u,
   // Which workflow attempt the run's peer records are scoped to (`liveExecutionScope`).
   /^  peer execution scope: (gh-\d{1,20}\.\d{1,4}|local)$/u,
