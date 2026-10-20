@@ -13,6 +13,10 @@
 //             create / request / delete / accept (LS8-LS12), DECLINE (LS13), CLOSE (LS14), a 409 in the server's sentence (LS15), EDIT
 //             (LS16), LOAD MORE (LS17), a 429 holding only its own kind (LS18, LS18B), MY POSTS open-only + paging (LS19), a requester's PROFILE
 //             (LS20), REQUEST AGAIN after a decline (LS21), LEAVE with confirm (LS22), no fold of loaded pages on a change (LS23)
+//   LG1-LG7   B35 (R16 privacy, SC1) the open gate: after BeginOpenGate a list read before the open is withheld ("Updating", no id in
+//             Describe) until a read ASKED after it lands (LG1, LG3); a read asked before that lands after never lifts it (LG2); a failed
+//             read keeps it withheld and says why (LG4); a further page never lifts it and LOAD MORE asks nothing (LG5); the open post,
+//             the owner's inbox and a requester's card (LG6); as built by the view: no post card, no person row (LG7)
 //   LH1-LH7   the hub: a draft survives a live refresh and the view's own rebuild IN A BOX PLACED IN THE NEW LAYOUT (LHC: the placement
 //             check can fail), text typed through the widget itself survives (LH7), a reopened hub (the model's draft) with a fresh model
 //             as the control; the sixth tab's name; the preview's honest state as BUILT, with a live control; REQUEST AGAIN as drawn (LH8);
@@ -135,6 +139,14 @@ namespace WonderlandSocialLffQa
 			FWonderlandLffPostDone Done = MoveTemp(Posts[Index]);
 			Posts.RemoveAt(Index);
 			if (Done) { Done(Answer, Detail); }
+			return true;
+		}
+		bool AnswerInbox(int32 Index, const FWonderlandLffAnswer& Answer, const FWonderlandLffPostRequests& Inbox)
+		{
+			if (!Inboxes.IsValidIndex(Index)) return false;
+			FWonderlandLffPostRequestsDone Done = MoveTemp(Inboxes[Index]);
+			Inboxes.RemoveAt(Index);
+			if (Done) { Done(Answer, Inbox); }
 			return true;
 		}
 		bool AnswerMine(int32 Index, const FWonderlandLffAnswer& Answer, const FWonderlandLffMyRequests& Mine)
@@ -309,6 +321,19 @@ namespace WonderlandSocialLffQa
 			Out += Piece;
 		}
 		return Out;
+	}
+
+	/** B35: a time strictly after every FPlatformTime read made before this call (spins at most one clock tick): an open stamped with it is
+	 *  AFTER a read asked just before, whatever the clock's resolution. */
+	double LffQaLater()
+	{
+		const double Before = FPlatformTime::Seconds();
+		double Now = FPlatformTime::Seconds();
+		while (Now <= Before)
+		{
+			Now = FPlatformTime::Seconds();
+		}
+		return Now;
 	}
 
 	FString CodePoint(uint32 Code)
@@ -988,6 +1013,136 @@ namespace WonderlandSocialLffQa
 				Model->Reset();
 			}
 
+			// ======================================================================================== LG: B35, the open gate (R16 privacy, SC1)
+			{
+				TUniquePtr<FLffQaService> Fake = MakeUnique<FLffQaService>();
+				FLffQaService* Svc = Fake.Get();
+				const TSharedRef<FWonderlandLffModel> Model = MakeShared<FWonderlandLffModel>([Svc]() -> IWonderlandSocialService* { return Svc; });
+				const FString Updating = TEXT("Updating…");
+				// LG1: A FEED READ BEFORE THE OPEN is withheld from the open on: "Updating…", Describe names no post and states the gate; the tab
+				// was on screen, so the read after the open went at once. Controls: before the open the same model listed the post (gate none),
+				// and after it the model still HOLDS it (only drawing waits)
+				Model->NoteOnScreen(FPlatformTime::Seconds());
+				FWonderlandLffFeedPage Cached;
+				Cached.Posts = {PostOf(TEXT("lffp_70"))};
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), Cached);
+				const FString BeforeOpen = Model->Describe();
+				const bool bListedBefore = BeforeOpen.Contains(TEXT("lffp_70")) && BeforeOpen.Contains(TEXT("| gate none")) && !Model->IsPaneWithheld(EWonderlandLffPane::Feed);
+				Svc->Forget();
+				Model->BeginOpenGate(LffQaLater());
+				const FString AfterOpen = Model->Describe();
+				const bool bWithheld = Model->IsPaneWithheld(EWonderlandLffPane::Feed) && Model->IsGateUp() && Model->PaneLine(EWonderlandLffPane::Feed) == Updating
+					&& !AfterOpen.Contains(TEXT("lffp_70")) && AfterOpen.Contains(TEXT("| gate UPDATING (FEED)"));
+				Check(TEXT("LG1"), bListedBefore && bWithheld && Model->GetFeed().Num() == 1 && Svc->Calls.Contains(TEXT("feed")),
+					FString::Printf(TEXT("after the open a feed read before it is withheld: 'Updating', no id in Describe, the gate stated (%s), and a read asked at once (%s); controls: listed before the open (%s), still held by the model (%d)"),
+						bWithheld ? TEXT("yes") : TEXT("NO"), Svc->Calls.Contains(TEXT("feed")) ? TEXT("yes") : TEXT("NO"), bListedBefore ? TEXT("yes") : TEXT("NO"), Model->GetFeed().Num()));
+				// LG3: THE READ ASKED AFTER THE OPEN LANDS: the gate lifts, the new page is listed
+				FWonderlandLffFeedPage FreshPage;
+				FreshPage.Posts = {PostOf(TEXT("lffp_71"))};
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), FreshPage);
+				const FString Lifted = Model->Describe();
+				Check(TEXT("LG3"), !Model->IsPaneWithheld(EWonderlandLffPane::Feed) && !Model->IsGateUp() && Lifted.Contains(TEXT("lffp_71")) && Lifted.Contains(TEXT("| gate fresh"))
+					&& Model->PaneLine(EWonderlandLffPane::Feed).IsEmpty(),
+					TEXT("a read asked after the open lands: the feed is listed again and the gate reads fresh"));
+				// LG2: A READ ASKED BEFORE THE OPEN THAT LANDS AFTER IT never lifts the gate (it may predate a block); control: the read the next
+				// NoteOnScreen asks does
+				Svc->Forget();
+				Model->NoteOnScreen(FPlatformTime::Seconds() - 10.0);   // last drawn ten seconds ago: the hub is closed
+				Model->Reload();                                        // a read on its way while the hub is closed
+				Model->BeginOpenGate(LffQaLater());                     // not on screen: nothing more is asked
+				const int32 AskedByOpen = Svc->Calls.Num();
+				FWonderlandLffFeedPage LatePage;
+				LatePage.Posts = {PostOf(TEXT("lffp_72"))};
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), LatePage);
+				const bool bLateWithheld = Model->GetFeed().Num() == 1 && Model->GetFeed()[0].PostId == TEXT("lffp_72") && Model->IsPaneWithheld(EWonderlandLffPane::Feed)
+					&& Model->PaneLine(EWonderlandLffPane::Feed) == Updating && !Model->Describe().Contains(TEXT("lffp_72"));
+				Model->NoteOnScreen(FPlatformTime::Seconds());
+				const bool bAskedAgain = Svc->Calls.Num() == 2;
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), LatePage);
+				const bool bLiftedAgain = !Model->IsPaneWithheld(EWonderlandLffPane::Feed) && Model->Describe().Contains(TEXT("lffp_72"));
+				Check(TEXT("LG2"), AskedByOpen == 1 && bLateWithheld && bAskedAgain && bLiftedAgain,
+					FString::Printf(TEXT("a read asked before the open lands after it and the feed stays withheld (%s); control: the read asked when the tab is next shown (%s) lifts it (%s)"),
+						bLateWithheld ? TEXT("yes") : TEXT("NO"), bAskedAgain ? TEXT("yes") : TEXT("NO"), bLiftedAgain ? TEXT("yes") : TEXT("NO")));
+				// LG4: THE READ AFTER THE OPEN FAILS: still withheld, the failure said -- never a fall back to what was read before; control: REFRESH
+				Svc->Forget();
+				Model->BeginOpenGate(LffQaLater());   // on screen (just shown): asked at once
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerRefused(503, TEXT("Wonderland social is unavailable")), FWonderlandLffFeedPage());
+				const FString FailedLine = Model->PaneLine(EWonderlandLffPane::Feed);
+				const FString FailedSaid = Model->Describe();
+				const bool bFailWithheld = Model->IsPaneWithheld(EWonderlandLffPane::Feed) && FailedLine.Contains(TEXT("unavailable")) && Model->GetFeed().Num() == 1
+					&& !FailedSaid.Contains(TEXT("lffp_72")) && FailedSaid.Contains(TEXT("feed WITHHELD (failed)"));
+				Model->Reload();
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), LatePage);
+				Check(TEXT("LG4"), bFailWithheld && !Model->IsPaneWithheld(EWonderlandLffPane::Feed),
+					FString::Printf(TEXT("a failed read after the open keeps the feed withheld and says why (%s); control: REFRESH's read lifts it"), bFailWithheld ? TEXT("yes") : TEXT("NO")));
+				// LG5: A FURTHER PAGE never lifts the gate (earlier pages may predate the open), and LOAD MORE asks nothing while withheld;
+				// control: LOAD MORE was offered before the open
+				Model->Reset();
+				Svc->Forget();
+				Model->NoteOnScreen(FPlatformTime::Seconds());
+				FWonderlandLffFeedPage PageOne;
+				PageOne.Posts = {PostOf(TEXT("lffp_73"))};
+				PageOne.NextCursor = TEXT("1760259600000.3");
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), PageOne);
+				const bool bMoreBefore = Model->CanLoadMore();
+				Model->LoadMore();                                      // asked before the open
+				Model->NoteOnScreen(FPlatformTime::Seconds() - 10.0);   // the hub closed
+				Model->BeginOpenGate(LffQaLater());
+				FWonderlandLffFeedPage PageTwo;
+				PageTwo.Posts = {PostOf(TEXT("lffp_74"))};
+				PageTwo.NextCursor = TEXT("1760259600000.2");
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), PageTwo);
+				const bool bPageTwoWithheld = Model->GetFeed().Num() == 2 && Model->IsPaneWithheld(EWonderlandLffPane::Feed);
+				Svc->Forget();
+				Model->LoadMore();
+				const bool bNoMore = !Model->CanLoadMore() && Svc->Calls.Num() == 0;
+				Check(TEXT("LG5"), bMoreBefore && bPageTwoWithheld && bNoMore,
+					FString::Printf(TEXT("a further page landing after the open keeps the feed withheld (%s); LOAD MORE asks nothing while withheld (%s); control: offered before the open (%s)"),
+						bPageTwoWithheld ? TEXT("yes") : TEXT("NO"), bNoMore ? TEXT("yes") : TEXT("NO"), bMoreBefore ? TEXT("yes") : TEXT("NO")));
+				// LG6: THE OPEN POST, ITS OWNER'S INBOX AND A REQUESTER'S CARD read before the open: withheld (no post id, no request id), the card
+				// asked before it opens nothing; control: the reads the next NoteOnScreen asks lift both, and a card asked after opens
+				Model->Reset();
+				Svc->Forget();
+				Model->OpenPost(TEXT("lffp_80"));
+				FWonderlandLffPostDetail Own;
+				Own.Post = PostOf(TEXT("lffp_80"), true);
+				Svc->AnswerPost(Svc->Posts.Num() - 1, AnswerOk(), Own);
+				FWonderlandLffIncomingRequest Asked;
+				Asked.RequestId = TEXT("lffr_80");
+				Asked.Status = TEXT("PENDING");
+				Asked.Requester = Own.Post.Author;
+				FWonderlandLffPostRequests Inbox;
+				Inbox.PostId = TEXT("lffp_80");
+				Inbox.Requests = {Asked};
+				Svc->AnswerInbox(Svc->Inboxes.Num() - 1, AnswerOk(), Inbox);
+				const FString BeforeGate = Model->Describe();
+				const bool bShownBefore = BeforeGate.Contains(TEXT("lffp_80")) && BeforeGate.Contains(TEXT("lffr_80")) && !Model->IsDetailWithheld();
+				FString CardOpened;
+				Model->ReadProfile(TEXT("usr_qa_nova"), [&CardOpened](const FWonderlandSocialProfileView& OpenedCard) { CardOpened = OpenedCard.Profile.UserId; });
+				Model->BeginOpenGate(LffQaLater());   // never shown since the reset: nothing asked
+				FWonderlandSocialProfileView NovaCard;
+				NovaCard.Profile.UserId = TEXT("usr_qa_nova");
+				Svc->AnswerProfile(Svc->Profiles.Num() - 1, AnswerOk(), NovaCard);
+				const FString WhileGated = Model->Describe();
+				const bool bPostWithheld = Model->HasDetail() && Model->IsDetailWithheld() && Model->IsInboxWithheld() && Model->DetailLine() == Updating
+					&& Model->InboxLine() == Updating && !WhileGated.Contains(TEXT("lffp_80")) && !WhileGated.Contains(TEXT("lffr_80"))
+					&& WhileGated.Contains(TEXT("| gate UPDATING (FEED, POST)")) && CardOpened.IsEmpty();
+				Svc->Forget();
+				Model->NoteOnScreen(FPlatformTime::Seconds());
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), FWonderlandLffFeedPage());
+				Svc->AnswerPost(Svc->Posts.Num() - 1, AnswerOk(), Own);
+				Svc->AnswerInbox(Svc->Inboxes.Num() - 1, AnswerOk(), Inbox);
+				const FString AfterReads = Model->Describe();
+				Model->ReadProfile(TEXT("usr_qa_nova"), [&CardOpened](const FWonderlandSocialProfileView& OpenedCard) { CardOpened = OpenedCard.Profile.UserId; });
+				Svc->AnswerProfile(Svc->Profiles.Num() - 1, AnswerOk(), NovaCard);
+				const bool bPostFresh = !Model->IsDetailWithheld() && !Model->IsInboxWithheld() && AfterReads.Contains(TEXT("lffp_80")) && AfterReads.Contains(TEXT("lffr_80"))
+					&& AfterReads.Contains(TEXT("| gate fresh")) && CardOpened == TEXT("usr_qa_nova");
+				Check(TEXT("LG6"), bShownBefore && bPostWithheld && bPostFresh,
+					FString::Printf(TEXT("an open post, its inbox and a requester's card read before the open are withheld and open nothing (%s); controls: shown before (%s), shown again and a card opens after reads asked after the open (%s)"),
+						bPostWithheld ? TEXT("yes") : TEXT("NO"), bShownBefore ? TEXT("yes") : TEXT("NO"), bPostFresh ? TEXT("yes") : TEXT("NO")));
+				Model->Reset();
+			}
+
 			// ======================================================================================== LH: the hub, drafts across refreshes
 			{
 				SWonderlandSocialHubPanel::ETab Parsed = SWonderlandSocialHubPanel::ETab::Friends;
@@ -1201,6 +1356,42 @@ namespace WonderlandSocialLffQa
 						FString::Printf(TEXT("a requester's card is kept by the answer, not opened (%s), and opens at the next pre-tick while the hub is on screen (%s); controls: a not-found opens nothing (%s), a card arriving after the hub closed opens nothing (%s), a view never drawn opens nothing (%s) [engine frame %llu]"),
 							bQueued ? TEXT("yes") : TEXT("NO"), bOpenedAtPreTick ? TEXT("yes") : TEXT("NO"), bNotFoundNothing ? TEXT("yes") : TEXT("NO"),
 							bClosedNothing ? TEXT("yes") : TEXT("NO"), bNeverDrawnNothing ? TEXT("yes") : TEXT("NO"), GFrameCounter));
+					// LG7 (B35): AS BUILT -- an off-screen hub whose model holds a feed and an open post read BEFORE the open builds no post card
+					// and no person row and says "Updating"; controls: the same view built them before the open, and builds them again once the
+					// reads asked after it have landed
+					TUniquePtr<FLffQaService> GateFake = MakeUnique<FLffQaService>();
+					FLffQaService* GateSvc = GateFake.Get();
+					const TSharedRef<FWonderlandLffModel> GateModel = MakeShared<FWonderlandLffModel>([GateSvc]() -> IWonderlandSocialService* { return GateSvc; });
+					const TSharedRef<SWonderlandSocialHubPanel> GateHub = SNew(SWonderlandSocialHubPanel)
+						.Snapshot(Fed).bConnected(true).bDevelopmentPreview(false).InitialTab(SWonderlandSocialHubPanel::ETab::Lff).Lff(GateModel);
+					const TSharedPtr<SWonderlandSocialLffView> GateView = GateHub->QaLffView();
+					bool bGateBefore = false;
+					bool bGateWithheld = false;
+					bool bGateFresh = false;
+					if (GateView.IsValid())
+					{
+						FWonderlandLffFeedPage GatePage;
+						GatePage.Posts = {PostOf(TEXT("lffp_90"))};
+						GateSvc->AnswerFeed(GateSvc->Feeds.Num() - 1, AnswerOk(), GatePage);   // the hub's first build asked it
+						GateModel->OpenPost(TEXT("lffp_90"));
+						FWonderlandLffPostDetail GateDetail;
+						GateDetail.Post = PostOf(TEXT("lffp_90"));
+						GateSvc->AnswerPost(GateSvc->Posts.Num() - 1, AnswerOk(), GateDetail);
+						GateView->FlushRebuild();
+						bGateBefore = GateView->QaBuiltPostCards() == 1 && GateView->QaBuiltPersonRows() >= 1;
+						GateSvc->Forget();
+						GateModel->BeginOpenGate(LffQaLater());
+						GateModel->NoteOnScreen(FPlatformTime::Seconds());   // as the reopened tab's tick: asks now unless the open already did
+						GateView->FlushRebuild();
+						bGateWithheld = GateView->QaBuiltPostCards() == 0 && GateView->QaBuiltPersonRows() == 0 && GateView->QaLines().Contains(TEXT("Updating"));
+						GateSvc->AnswerFeed(GateSvc->Feeds.Num() - 1, AnswerOk(), GatePage);
+						GateSvc->AnswerPost(GateSvc->Posts.Num() - 1, AnswerOk(), GateDetail);
+						GateView->FlushRebuild();
+						bGateFresh = GateView->QaBuiltPostCards() == 1 && GateView->QaBuiltPersonRows() >= 1 && !GateView->QaLines().Contains(TEXT("Updating"));
+					}
+					Check(TEXT("LG7"), bGateBefore && bGateWithheld && bGateFresh,
+						FString::Printf(TEXT("after the open the view built no post card and no person row and says Updating (%s); controls: built before the open (%s), and again after reads asked after it landed (%s)"),
+							bGateWithheld ? TEXT("yes") : TEXT("NO"), bGateBefore ? TEXT("yes") : TEXT("NO"), bGateFresh ? TEXT("yes") : TEXT("NO")));
 				}
 			}
 

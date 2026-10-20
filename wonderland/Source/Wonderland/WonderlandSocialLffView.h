@@ -18,6 +18,11 @@
 // It decides nothing (WonderlandSocialTypes.h): the server filters the feed, owns every rule, and answers a post the viewer may not see
 // as missing. LFF GRANTS NOTHING: after an accept, the two people connect through the EXISTING Add Friend / Message / Invite actions, each
 // with its own checks. The preview has no LFF people and no posts: it says LFF needs a live connection. No post text is ever logged.
+//
+// B35 (R16 privacy, the independent reviewer's SC1): THE OPEN GATE. The model outlives the hub, so what it holds may predate a block or a
+// hide (the server filters at read time; this cache does not, and a hide sends this viewer no event). Every hub open calls BeginOpenGate:
+// from then on no list naming other players -- the feed, MY POSTS, MY REQUESTS, the open post's author, card and accepted people, the
+// owner's requesters -- is drawn, counted or described until a read ASKED after the open has landed for it; the tab says "Updating…".
 #pragma once
 
 #include "CoreMinimal.h"
@@ -48,6 +53,12 @@ enum class EWonderlandLffProblem : uint8 { None, NeedsLive, RefusedHere, Unreach
  * stops REFRESH, a pane switch or a withdraw.
  */
 enum class EWonderlandLffBudget : uint8 { Read, Write, Post, Invitation, Count };
+/**
+ * B35 (R16 privacy): the reads whose answers list OTHER people, their posts or their cards -- the feed, the viewer's own posts (kept with
+ * them: one rule for every pane), the viewer's requests (other people's posts), the open post's detail (its author, card and accepted
+ * people) and the owner's inbox (its requesters). Each one's freshness is judged against the open gate (FWonderlandLffModel::BeginOpenGate).
+ */
+enum class EWonderlandLffRead : uint8 { Feed, Mine, Requests, Detail, Inbox, Count };
 
 /** The create/edit form as the player is typing it. */
 struct FWonderlandLffDraft
@@ -119,6 +130,28 @@ public:
 	void NoteOnScreen(double NowSeconds);
 	bool IsOnScreen(double NowSeconds) const { return LastOnScreen > 0.0 && NowSeconds - LastOnScreen < 1.0; }
 
+	// ---- B35 (R16 privacy, the independent reviewer's SC1): the open gate
+	/**
+	 * A SOCIAL SURFACE WAS JUST OPENED (the hub, at NowSeconds = FPlatformTime::Seconds()). This model outlives the hub: what it holds was
+	 * read on an EARLIER visit, and a player who blocked the viewer or hid from them since can still be in it (the server filters at read
+	 * time; a cache does not, and a hide sends this viewer no event). From here, nothing a read lists is drawn until a read ASKED at or after
+	 * NowSeconds has landed for it -- an answer to a read asked before (one in flight may predate the block) never lifts the gate. The data
+	 * is marked stale: read now if the tab is on screen, else at the next NoteOnScreen; a 429 still waiting holds the reads as everywhere
+	 * else (MayAsk / HeldLine). Drafts, filters, the open post's id and the pane are kept. A Reset lowers the gate with everything else (the
+	 * model is empty then: whatever it lists later was read after it).
+	 */
+	void BeginOpenGate(double NowSeconds);
+	/** B35: a gate is up and this read's last LANDED answer was asked before it (or none landed): what it holds is not drawn. */
+	bool IsReadWithheld(EWonderlandLffRead Read) const;
+	/** B35: the list this pane shows is withheld (the form lists nobody: never). */
+	bool IsPaneWithheld(EWonderlandLffPane Pane) const;
+	/** B35: the open post's detail (its author, the author's card, the accepted people) is withheld. False with no post open. */
+	bool IsDetailWithheld() const { return !Data.OpenPostId.IsEmpty() && IsReadWithheld(EWonderlandLffRead::Detail); }
+	/** B35: the owner's inbox (its requesters) is withheld. */
+	bool IsInboxWithheld() const { return IsReadWithheld(EWonderlandLffRead::Inbox); }
+	/** B35: something the pane on screen would draw is withheld now ("Updating…"): its list, the open post, or the owner's inbox. */
+	bool IsGateUp() const;
+
 	// ---- panes and lists
 	EWonderlandLffPane GetPane() const { return Data.Pane; }
 	/** Show a pane (FEED, MY POSTS, MY REQUESTS); its list is read again. */
@@ -134,13 +167,14 @@ public:
 	/** The filters the feed on screen was read with. */
 	bool HasAppliedFilters() const { return !Data.AppliedProject.IsEmpty() || !Data.AppliedSkill.IsEmpty(); }
 	const TArray<FWonderlandLffPost>& GetFeed() const { return Data.Feed; }
-	bool CanLoadMore() const { return !Data.FeedCursor.IsEmpty() && Data.FeedLoad != EWonderlandLffLoad::Loading; }
+	/** B35: never while the feed is withheld -- a further page would join pages read before the open. */
+	bool CanLoadMore() const { return !Data.FeedCursor.IsEmpty() && Data.FeedLoad != EWonderlandLffLoad::Loading && !IsReadWithheld(EWonderlandLffRead::Feed); }
 	/** LOAD MORE: the next page, with the same category and filters. */
 	void LoadMore();
 	/** An LFF change arrived while more than one feed page was shown: REFRESH reads it (the pages are not folded under the player). */
 	bool HasFeedNews() const { return Data.bFeedNews; }
 	const TArray<FWonderlandLffPost>& GetMyPosts() const { return Data.MyPosts; }
-	bool CanLoadMoreMine() const { return !Data.MineCursor.IsEmpty() && Data.MineLoad != EWonderlandLffLoad::Loading; }
+	bool CanLoadMoreMine() const { return !Data.MineCursor.IsEmpty() && Data.MineLoad != EWonderlandLffLoad::Loading && !IsReadWithheld(EWonderlandLffRead::Mine); }
 	/** LOAD MORE on MY POSTS: a player's CLOSED and EXPIRED posts stay until they delete them, so their list pages too (m9). */
 	void LoadMoreMine();
 	/** MY POSTS' "open only" filter: the server's hasOpenSlots (the general feed is OPEN-only already). */
@@ -232,6 +266,8 @@ private:
 	void ReadInbox(const FString& PostId);
 	/** Every answer passes here: a preview's "needs live", a 429's wait for its own kind of call. */
 	void NoteAnswer(const FWonderlandLffAnswer& Answer, EWonderlandLffBudget Kind);
+	/** B35: a read asked at AskedAt landed (ok) and REPLACED what it lists: that list is as fresh as AskedAt (the open gate compares it). */
+	void NoteLanded(EWonderlandLffRead Read, double AskedAt);
 	/** A post this viewer can no longer see (a 404): gone from every list, the detail says so. */
 	void ForgetPost(const FString& PostId);
 	void SendWithdraw(const FString& RequestId, const FString& OkLine);
@@ -299,6 +335,11 @@ private:
 		bool bStale = true;
 		/** Each kind's 429 wait, in FPlatformTime seconds (EWonderlandLffBudget order). */
 		double NotBefore[static_cast<int32>(EWonderlandLffBudget::Count)] = {0.0, 0.0, 0.0, 0.0};
+		/** B35: an open gate is up (BeginOpenGate since the last reset), and when the surface was opened, in FPlatformTime seconds. */
+		bool bOpenGate = false;
+		double OpenGateSeconds = 0.0;
+		/** B35: when the read whose answer last LANDED (ok, replacing its list) was ASKED, per read (EWonderlandLffRead order); -1 for none. */
+		double LandedAskedAt[static_cast<int32>(EWonderlandLffRead::Count)] = {-1.0, -1.0, -1.0, -1.0, -1.0};
 	};
 
 	TFunction<IWonderlandSocialService*()> ServiceOf;
@@ -349,6 +390,9 @@ public:
 	/** QA: what the last build drew -- the needs-live body, and how many post cards. */
 	bool QaBuiltNeedsLive() const { return bBuiltNeedsLive; }
 	int32 QaBuiltPostCards() const { return BuiltPostCards; }
+	/** QA (B35): how many person rows (an author, an accepted player, a requester) and request rows (live or vanished) the last build drew. */
+	int32 QaBuiltPersonRows() const { return BuiltPersonRows; }
+	int32 QaBuiltRequestRows() const { return BuiltRequestRows; }
 	/** QA: the lines this view draws now (the pane's, the detail's, the action line), joined. Never logged by the view itself. */
 	FString QaLines() const;
 	/** QA: the label of the ask-to-join button the last build drew ("REQUEST TO JOIN", "REQUEST AGAIN"), empty when it drew none. */
@@ -420,6 +464,8 @@ private:
 	int32 SeenTextRevision = -1;
 	bool bBuiltNeedsLive = false;
 	int32 BuiltPostCards = 0;
+	int32 BuiltPersonRows = 0;
+	int32 BuiltRequestRows = 0;
 	FString BuiltAskLabel;
 	/** A requester's card that profile.read answered, waiting for the next pre-tick to open (F-21). */
 	bool bProfileOpenPending = false;
