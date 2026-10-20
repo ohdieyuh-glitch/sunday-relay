@@ -1,0 +1,8 @@
+run_id	sequence	task_id	event_type	role	allocated_usd_micros	allocation_basis	share_usd_micros	remaining_usd_micros	allocation_policy	settled_usd_micros	cost_basis	estimated_usd_micros	billing_path	execution_usd_micros	reason	slot_refusal	reservation_id	occurred_at
+run:f8467a9f4fe40e275496b86e	8	run:f8467a9f4fe40e275496b86e:plan	julius.budget.allocated	PROMPT_ARCHITECT	700000	SHARED_POOL	500000	2000000	julius-allocation.v3									2026-10-15 09:33:16.928-07
+run:f8467a9f4fe40e275496b86e	10	run:f8467a9f4fe40e275496b86e:plan	julius.budget.reserved	PROMPT_ARCHITECT						300000							reservation:run:f8467a9f4fe40e275496b86e:plan:1:1:budget	2026-10-15 09:33:16.932-07
+run:f8467a9f4fe40e275496b86e	13	run:f8467a9f4fe40e275496b86e:plan	julius.budget.settled	PROMPT_ARCHITECT							UNKNOWN						reservation:run:f8467a9f4fe40e275496b86e:plan:1:1:budget	2026-10-15 09:33:16.942-07
+run:f8467a9f4fe40e275496b86e	21	run:f8467a9f4fe40e275496b86e:plan:review	julius.budget.allocated	INDEPENDENT_REVIEWER	700000	SHARED_POOL	500000	1700000	julius-allocation.v3									2026-10-15 09:33:17.175-07
+run:f8467a9f4fe40e275496b86e	23	run:f8467a9f4fe40e275496b86e:plan:review	julius.budget.reserved	INDEPENDENT_REVIEWER						300000							reservation:run:f8467a9f4fe40e275496b86e:plan:review:1:1:budget	2026-10-15 09:33:17.18-07
+run:f8467a9f4fe40e275496b86e	26	run:f8467a9f4fe40e275496b86e:plan:review	julius.budget.settled	INDEPENDENT_REVIEWER							UNKNOWN						reservation:run:f8467a9f4fe40e275496b86e:plan:review:1:1:budget	2026-10-15 09:33:17.187-07
+(6 rows)

@@ -53,6 +53,7 @@ import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
 import { JULIUS_RUNTIME_DATABASE_ENV_NAMES, juliusRuntimeDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
+import { JuliusLifecyclePostgresRepository } from '../src/relay/persistence/julius-lifecycle-postgres';
 import { JuliusContractPostgresRepository } from '../src/relay/persistence/julius-contract-postgres';
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
 import { JuliusToolSettlementPostgresRepository } from '../src/relay/persistence/julius-tool-settlement-postgres';
@@ -60,7 +61,9 @@ import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/
 import type { ExecutorOperation } from '../src/relay/workspace/julius-tools/executor-operation-request';
 import { type JuliusBootstrapRequest } from '../src/relay/integration/julius/julius-port';
 import {
+  approvalScopesOf,
   compileBootstrapRequest,
+  gatedCardRevision,
   parseLiveMissionContract,
   sealLiveMissionResearchPolicy,
   type LiveMissionContractFile,
@@ -77,8 +80,9 @@ import { LocalJuliusArtifactStore } from '../src/relay/workspace/julius-tools/lo
 import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/julius-work-artifact-postgres';
 import { liveEvidenceLines } from './julius/live-evidence-lines';
 import {
-  liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveLearningFailedLine, liveOneLine, liveResearchLines, liveTickAccountLine,
-  liveTickBudgetLine, liveWorkersBlockedLines, liveStageDeadlineLine,
+  JULIUS_EXIT_HELD_FOR_APPROVAL, liveApprovalGatesLine, liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveHeldForApprovalLines,
+  liveLearningFailedLine, liveOneLine, liveResearchLines, liveTickAccountLine, liveTickBudgetLine, liveWorkersBlockedLines,
+  liveStageDeadlineLine,
 } from './julius/live-report-lines';
 import {
   assembleLiveJuliusRuntime,
@@ -617,7 +621,9 @@ async function main(argv: readonly string[]): Promise<number> {
   const contract = parsedContract.contract;
 
   const env = process.env as Record<string, string | undefined>;
-  const cardRevision = env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1';
+  // V6 G-1: a gated contract runs under its own card revision (the base plus the clause's digest), so its
+  // approvals are keyed to the gate it declared; an ungated contract's revision is exactly the base.
+  const cardRevision = gatedCardRevision(env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1', contract.approvalGates);
 
   /**
    * THE OPERATOR'S OBSERVATIONS, CHECKED BEFORE ANYTHING IS SUBMITTED.
@@ -672,6 +678,9 @@ async function main(argv: readonly string[]): Promise<number> {
 
   out('JULIUS LIVE MISSION — preflight');
   out(`  mission: ${contract.missionId} (project ${contract.projectId})`);
+  // V6 G-1: what the contract holds for a person, before anything is submitted. No clause, no line.
+  const gatesLine = liveApprovalGatesLine(contract.approvalGates);
+  if (gatesLine !== null) out(gatesLine);
   out(`  requested models: architect=${preflight.requested.architectModel ?? 'MISSING'} coder=${preflight.requested.codingModel ?? 'MISSING'} reviewer=${preflight.requested.reviewerProvider ?? 'MISSING'}/${preflight.requested.reviewerModel ?? 'MISSING'}`);
   for (const row of presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', CLAUDE_SUBSCRIPTION_TOKEN_ENV, 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV])) out(row);
   out('  note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.');
@@ -997,6 +1006,9 @@ async function main(argv: readonly string[]): Promise<number> {
         researchPolicyFor: researchPolicyOf,
         researchProbes: observed.probes,
       }),
+      // V6 G-1: the contract's gate, SCOPED (G-2) to its roles and task types; never the unscoped list, which
+      // would hold every dispatch. No clause, no key: an ungated mission composes the card it always did.
+      ...(contract.approvalGates === undefined ? {} : { approvalScopes: approvalScopesOf(contract.approvalGates) }),
     });
     /* WHAT THE CLAUSE CAN ACTUALLY REACH, said before the money is spent
        rather than discovered one refusal at a time in the evidence. */
@@ -1059,6 +1071,20 @@ async function main(argv: readonly string[]): Promise<number> {
     const evidence = await handoffs.store.evidenceForRun(submitted.runId, contract.projectId);
     const findings = await handoffs.store.findingsForRun(submitted.runId, contract.projectId);
     const decisions = await handoffs.store.decisionsForRun(submitted.runId, contract.projectId);
+    /*
+     * V6 G-3: A RUN HELD ON ITS DECLARED GATE EXITS HELD, NOT FAILED. The PENDING approvals are read only for a
+     * gated contract whose drive says the run is held for an approval; the held report is then HELD_FOR_APPROVAL
+     * lines and NO RESULT, and the exit is JULIUS_EXIT_HELD_FOR_APPROVAL (3), at this one site. Every other case
+     * (`liveHeldForApprovalLines` is null) prints below exactly the report this entrypoint always printed.
+     */
+    const pending = contract.approvalGates !== undefined && outcome.heldForApproval
+      ? await new JuliusLifecyclePostgresRepository(pool).pendingApprovals(submitted.runId, contract.projectId)
+      : [];
+    const held = liveHeldForApprovalLines({ outcome, runId: submitted.runId, gated: contract.approvalGates !== undefined, pending, tasks });
+    if (held !== null) {
+      for (const line of held) out(line);
+      return JULIUS_EXIT_HELD_FOR_APPROVAL;
+    }
     /*
      * THE RUN IS NAMED DIRECTLY UNDER ITS RESULT, then the details (JUJU's review of ef0c09c3, F10).
      * The gate credits a RESULT only to a `  run:` line at most three lines below it. With the cause

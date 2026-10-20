@@ -1,0 +1,4 @@
+run_id	sequence	task_id	event_type	reason_code	disposition	evaluator_id	evidence_count	evidence_ids	contract_task_id	contract_id	contract_revision	binding_digest	recorded_revision	current_revision	review_revision	implementation_revision	role	occurred_at
+run:f8467a9f4fe40e275496b86e	30	run:f8467a9f4fe40e275496b86e:plan	julius.contract.disposition	TASK_VERIFIED	NO_CHALLENGE	independent-reviewer-hermes	0		run:f8467a9f4fe40e275496b86e:build	contract:run:f8467a9f4fe40e275496b86e:build	1							2026-10-15 09:33:17.203-07
+run:f8467a9f4fe40e275496b86e	31	run:f8467a9f4fe40e275496b86e:build	julius.contract.locked						run:f8467a9f4fe40e275496b86e:build	contract:run:f8467a9f4fe40e275496b86e:build	1	sha256:8fe42feca2870cf2286414ec274a0983b2cdea3d546f7d3a962db8f1002366d0						2026-10-15 09:33:17.208-07
+(2 rows)

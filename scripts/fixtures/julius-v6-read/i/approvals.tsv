@@ -1,0 +1,3 @@
+approval_id	run_id	task_id	operation	policy_revision	reason_code	state	requested_at	decided_at	decided_by	decision_reason	idempotency_key
+approval:dispatch:run:f8467a9f4fe40e275496b86e:run:f8467a9f4fe40e275496b86e:build:DISPATCH_WORKER:card:julius-live:1:gate-78aeb72bcadb1fc3	run:f8467a9f4fe40e275496b86e	run:f8467a9f4fe40e275496b86e:build	DISPATCH_WORKER	card:julius-live:1:gate-78aeb72bcadb1fc3	CARD_SCOPED_APPROVAL_REQUIRED	PENDING	2026-10-15 09:33:17.237-07				approval:dispatch:run:f8467a9f4fe40e275496b86e:run:f8467a9f4fe40e275496b86e:build:DISPATCH_WORKER:card:julius-live:1:gate-78aeb72bcadb1fc3
+(1 row)

@@ -1,0 +1,3 @@
+approval_id	run_id	task_id	operation	policy_revision	reason_code	state	requested_at	decided_at	decided_by	decision_reason	idempotency_key
+approval:dispatch:run:65bbe69f7725a5f0912acbac:run:65bbe69f7725a5f0912acbac:build:DISPATCH_WORKER:card:julius-live:1:gate-78aeb72bcadb1fc3	run:65bbe69f7725a5f0912acbac	run:65bbe69f7725a5f0912acbac:build	DISPATCH_WORKER	card:julius-live:1:gate-78aeb72bcadb1fc3	CARD_SCOPED_APPROVAL_REQUIRED	APPROVED	2026-10-15 09:33:03.084-07	2026-10-15 09:33:03.108-07	github:mallory#999	Plan run:65bbe69f7725a5f0912acbac:plan:1:0 reviewed; build approved.	approval:dispatch:run:65bbe69f7725a5f0912acbac:run:65bbe69f7725a5f0912acbac:build:DISPATCH_WORKER:card:julius-live:1:gate-78aeb72bcadb1fc3
+(1 row)

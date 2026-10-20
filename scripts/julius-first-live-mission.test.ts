@@ -1141,8 +1141,9 @@ describe('the evidence dump names only tables and columns the migrations create'
   const queries = (): Array<{ file: string; table: string; columns: string[]; orderBy: string[] }> => {
     const script = read('.github/julius-live-evidence-dump.sh');
     const found: Array<{ file: string; table: string; columns: string[]; orderBy: string[] }> = [];
-    for (const match of script.matchAll(/dump "SELECT ([a-z_,]+) FROM relay_wonderland\.([a-z_]+)(?: ORDER BY ([a-z_,]+))?" ([a-z-]+\.tsv)/gu)) {
-      found.push({ file: match[4], table: match[2], columns: match[1].split(','), orderBy: match[3] ? match[3].split(',') : [] });
+    for (const match of script.matchAll(/dump "SELECT ((?:left\([a-z_]+,\d+\) AS [a-z_]+|[a-z_]+)(?:,(?:left\([a-z_]+,\d+\) AS [a-z_]+|[a-z_]+))*) FROM relay_wonderland\.([a-z_]+)(?: ORDER BY ([a-z_,]+))?" ([a-z-]+\.tsv)/gu)) {
+      // `left(col,N) AS col` is a bounded column: the migration check looks through it to `col`.
+      found.push({ file: match[4], table: match[2], columns: match[1].split(/,(?![0-9]+\))/u).map((item) => /^left\(([a-z_]+),/u.exec(item)?.[1] ?? item), orderBy: match[3] ? match[3].split(',') : [] });
     }
     return found;
   };
@@ -1192,8 +1193,8 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'carry-copies.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'knowledge-carry.tsv', 'learning.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
-    expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'work-artifacts.tsv']);
+      .toEqual(['approvals.tsv', 'budget.tsv', 'carry-copies.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'finding-status.tsv', 'findings.tsv', 'knowledge-carry.tsv', 'learning.tsv', 'lifecycle-events.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'scope.tsv', 'sessions.tsv', 'settlement-integrity.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'transitions.tsv', 'work-artifacts.tsv', 'worker-diagnostics.tsv']);
+    expect(dumps.map((dump) => dump.file).sort()).toEqual(['approvals.tsv', 'decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'transitions.tsv', 'work-artifacts.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
       expect(columns, `${dump.file} reads relay_wonderland.${dump.table}, which no migration creates`).toBeDefined();
@@ -3529,8 +3530,7 @@ describe('the event dumps are ordered by the ledger position, not by the wall cl
 
   it('covers every chronological event dump, so a new one cannot arrive unordered', () => {
     expect(eventDumps().map(named).sort())
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'effort.tsv', 'failures.tsv', 'finding-lifecycle.tsv',
-        'knowledge-carry.tsv', 'learning.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'effort.tsv', 'failures.tsv', 'finding-lifecycle.tsv', 'knowledge-carry.tsv', 'learning.tsv', 'lifecycle-events.tsv', 'participation.tsv', 'research.tsv', 'scope.tsv', 'worker-diagnostics.tsv']);
   });
 
   it('carries the position the ledger allocated, and the stream it is a position within', () => {

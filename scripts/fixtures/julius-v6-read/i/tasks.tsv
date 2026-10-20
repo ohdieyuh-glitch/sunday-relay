@@ -1,0 +1,5 @@
+task_id	task_type	role	state	ordinal	parent_task_id	run_id
+run:f8467a9f4fe40e275496b86e:plan	plan	PROMPT_ARCHITECT	SUCCEEDED	0		run:f8467a9f4fe40e275496b86e
+run:f8467a9f4fe40e275496b86e:build	build	CODING_AGENT	RUNNABLE	1		run:f8467a9f4fe40e275496b86e
+run:f8467a9f4fe40e275496b86e:plan:review	review:plan	INDEPENDENT_REVIEWER	SUCCEEDED	1	run:f8467a9f4fe40e275496b86e:plan	run:f8467a9f4fe40e275496b86e
+(3 rows)

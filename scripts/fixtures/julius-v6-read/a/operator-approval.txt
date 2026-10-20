@@ -1,0 +1,8 @@
+SYNTHETIC=1
+comment_id=42
+author_login=founder
+author_id=1001
+created_at=2026-10-15T16:33:03.105Z
+updated_at=2026-10-15T16:33:03.105Z
+request_stamp=2026-10-15T16:33:02.084Z
+approval_id=approval:dispatch:run:65bbe69f7725a5f0912acbac:run:65bbe69f7725a5f0912acbac:build:DISPATCH_WORKER:card:julius-live:1:gate-78aeb72bcadb1fc3

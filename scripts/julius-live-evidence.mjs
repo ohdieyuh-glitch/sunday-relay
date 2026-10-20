@@ -49,6 +49,9 @@ const ALLOWED = [
   // subject to the secret rejectors below, like every other kept line.
   /^RESULT: [A-Z_]+( at bootstrap)? — .+$/u,
   /^JULIUS LIVE MISSION crashed: .+$/u,
+  // V6 G-3: a run held on its declared approval gate (`liveHeldForApprovalLines`), exit 3 and NO RESULT line.
+  // Identifiers and closed tokens only; a free suffix is not this shape and is dropped.
+  /^HELD_FOR_APPROVAL: run [\w:.-]+ approval [\w:.-]+ operation [A-Z_]+ task [\w:.-]+$/u,
   /^  cause: .+$/u,
   // The tick account: what the mission's structure permitted, before the first
   // dispatch, and what the run consumed. Closed tokens and numbers only, EXACTLY
@@ -67,6 +70,9 @@ const ALLOWED = [
   // `(none)`: a sealed clause that names no role grants nobody anything, and says so (F4).
   /^  research: authorised for ([A-Z_]+(, [A-Z_]+)*|\(none\)) across \d+ allowance\(s\); \d+ observed backend\(s\)$/u,
   /^    [a-z_]+\/[a-z_]+: [a-z_]+( — retrieval will be refused)?$/u,
+  // V6 G-1: the dispatches the contract's approvalGates clause holds for a person (`liveApprovalGatesLine`):
+  // closed tokens, 1 or 2 gates, no free text.
+  /^  approval gates: [12] \(DISPATCH_WORKER role=[A-Z_:a-z0-9-]+(,[A-Z_:a-z0-9-]+)* task=[a-z0-9:_-]+(,[a-z0-9:_-]+)*(; DISPATCH_WORKER role=[A-Z_:a-z0-9-]+(,[A-Z_:a-z0-9-]+)* task=[a-z0-9:_-]+(,[a-z0-9:_-]+)*)?\)$/u,
   /^Run [\w:.-]+ accepted in state [A-Z_]+; driving the Julius run loop\.$/u,
   /^  run: [\w:.-]+$/u,
   /^  task [\w:.-]+ \[[\w:.-]+\/[\w:.-]+\] → [A-Z_]+$/u,
