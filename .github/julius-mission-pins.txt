@@ -43,3 +43,11 @@ julius-learning-pair-2-without-1 .github/julius-missions/julius-learning-pair-2-
 julius-learning-pair-2-with-1 .github/julius-missions/julius-learning-pair-2-with-1 cf7b41fffd62e2aa417ba66cd9d04a16d9c0a0f7
 julius-learning-pair-2-without-2 .github/julius-missions/julius-learning-pair-2-without-2 5bc6f3e62e3f269f34c922acc32a4acc35eff5b6
 julius-learning-pair-2-with-2 .github/julius-missions/julius-learning-pair-2-with-2 0d81a0c6a176cec14a495810f7bceacc760befcd
+#
+# Decision C REGISTRATION 3 (joint-1), the four shared P6 Unreal arms: DRAFT, NOT FROZEN. The tree ids below were measured on the PLACEHOLDER registrationDigest
+# (all zeros) and WILL CHANGE when the freeze writes the real digest; they are refreshed then, never before REVIEW. Each arm is a throwaway tree,
+# so one pin, its directory, holds the contract and every seeded byte; the four contracts differ only inside their learningPair clause.
+julius-joint-1-without-1 .github/julius-missions/julius-joint-1-without-1 088534a03b3b24f29c2fc8171bf3af89ee89d2b0
+julius-joint-1-with-1 .github/julius-missions/julius-joint-1-with-1 1b09c81dfc71375f170c516da140dde5f9c7b781
+julius-joint-1-without-2 .github/julius-missions/julius-joint-1-without-2 52dd3ad06310177471c8c33cfb60334a5fa4f641
+julius-joint-1-with-2 .github/julius-missions/julius-joint-1-with-2 dd2713af57111e564de837c4d7d88e5717677640

@@ -52,7 +52,8 @@ describe('the frozen pins hold, and a drifted pin refuses', () => {
       counts.set(name, (counts.get(name) ?? 0) + 1);
     }
     const pairArms = ['julius-learning-pair-1-without-1', 'julius-learning-pair-1-with-1', 'julius-learning-pair-1-without-2', 'julius-learning-pair-1-with-2',
-      'julius-learning-pair-2-without-1', 'julius-learning-pair-2-with-1', 'julius-learning-pair-2-without-2', 'julius-learning-pair-2-with-2'];
+      'julius-learning-pair-2-without-1', 'julius-learning-pair-2-with-1', 'julius-learning-pair-2-without-2', 'julius-learning-pair-2-with-2',
+      'julius-joint-1-without-1', 'julius-joint-1-with-1', 'julius-joint-1-without-2', 'julius-joint-1-with-2'];
     expect([...counts.keys()].sort()).toEqual([...pairArms, 'julius-live-mission-2', 'julius-live-mission-3', 'julius-live-mission-5', 'julius-live-mission-6', 'julius-unreal-mission-1'].sort());
     expect(counts.get('julius-live-mission-5'), 'Mission 5 is a throwaway tree: its directory is its one pin').toBe(1);
     expect(counts.get('julius-unreal-mission-1'), 'row 14-Unreal is a throwaway tree: its directory is its one pin').toBe(1);
