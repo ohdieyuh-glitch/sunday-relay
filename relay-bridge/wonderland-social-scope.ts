@@ -100,6 +100,23 @@ export const SOCIAL_OPERATIONS: readonly SocialOperation[] = Object.freeze([
   { id: 'world.leave', method: 'POST', pattern: p('/world/leave'), template: '/world/leave', writes: true },
   { id: 'world.state', method: 'POST', pattern: p('/world/state'), template: '/world/state', writes: true },
   { id: 'world.invite', method: 'POST', pattern: p('/world/invites'), template: '/world/invites', writes: true },
+  // LFF, THE LOOKING FOR FEED (private-Alpha launch gate, founder 2026-10-12; _qa_handoff/lff/LFF_ALPHA_CONTRACT_r1_20261012.md):
+  // posts, and requests to join them, always as the session's own player. Its own bounded reads, never part of snapshot.read. A
+  // post or request that is missing, not the actor's, or behind a block either way is ONE 404 (social-lff.ts lffNotFound). Ids:
+  // the post's for get / edit / close / delete / requests; the request's for withdraw / accept / decline. The feed's filters
+  // travel in the query, read whole or refused (wonderland-social-routes.ts lffQueryOf).
+  { id: 'lff.feed.list', method: 'GET', pattern: p('/lff/posts'), template: '/lff/posts', writes: false },
+  { id: 'lff.post.get', method: 'GET', pattern: p('/lff/posts/:id'), template: '/lff/posts/:id', writes: false },
+  { id: 'lff.requests.forPost', method: 'GET', pattern: p('/lff/posts/:id/requests'), template: '/lff/posts/:id/requests', writes: false },
+  { id: 'lff.requests.mine', method: 'GET', pattern: p('/lff/requests'), template: '/lff/requests', writes: false },
+  { id: 'lff.post.create', method: 'POST', pattern: p('/lff/posts'), template: '/lff/posts', writes: true },
+  { id: 'lff.post.edit', method: 'POST', pattern: p('/lff/posts/:id/edit'), template: '/lff/posts/:id/edit', writes: true },
+  { id: 'lff.post.close', method: 'POST', pattern: p('/lff/posts/:id/close'), template: '/lff/posts/:id/close', writes: true },
+  { id: 'lff.post.delete', method: 'POST', pattern: p('/lff/posts/:id/delete'), template: '/lff/posts/:id/delete', writes: true },
+  { id: 'lff.request.create', method: 'POST', pattern: p('/lff/posts/:id/requests'), template: '/lff/posts/:id/requests', writes: true },
+  { id: 'lff.request.withdraw', method: 'POST', pattern: p('/lff/requests/:id/withdraw'), template: '/lff/requests/:id/withdraw', writes: true },
+  { id: 'lff.request.accept', method: 'POST', pattern: p('/lff/requests/:id/accept'), template: '/lff/requests/:id/accept', writes: true },
+  { id: 'lff.request.decline', method: 'POST', pattern: p('/lff/requests/:id/decline'), template: '/lff/requests/:id/decline', writes: true },
 ]);
 
 /** What the authorisation needs of a verified session; the same fields grants.ts already holds, plus the capability list. */

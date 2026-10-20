@@ -82,7 +82,20 @@ export type SocialOperationId =
   | 'world.join'
   | 'world.leave'
   | 'world.state'
-  | 'world.invite';
+  | 'world.invite'
+  // LFF, the Looking For Feed (social-lff.ts): its own bounded reads and its writes, never part of the snapshot
+  | 'lff.feed.list'
+  | 'lff.post.get'
+  | 'lff.post.create'
+  | 'lff.post.edit'
+  | 'lff.post.close'
+  | 'lff.post.delete'
+  | 'lff.request.create'
+  | 'lff.request.withdraw'
+  | 'lff.request.accept'
+  | 'lff.request.decline'
+  | 'lff.requests.mine'
+  | 'lff.requests.forPost';
 
 /* --------------------------------------------------------------- presence */
 
