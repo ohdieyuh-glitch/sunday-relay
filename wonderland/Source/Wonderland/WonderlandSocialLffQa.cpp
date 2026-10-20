@@ -17,6 +17,10 @@
 //             Describe) until a read ASKED after it lands (LG1, LG3); a read asked before that lands after never lifts it (LG2); a failed
 //             read keeps it withheld and says why (LG4); a further page never lifts it and LOAD MORE asks nothing (LG5); the open post,
 //             the owner's inbox and a requester's card (LG6); as built by the view: no post card, no person row (LG7)
+//   LG8-LG13  B35 the open surface's period and age: a read asked 4.5 s ago is withheld, 3.0 s ago drawn (LG8); re-read 2.0 s after the
+//             last ask, one at a time (LG9); a failed read backs off and a 429 holds every periodic read, the part withheld (LG10); two
+//             feed pages fold to page 1 on the period (LG11); the open post on the period, never replacing an inbox read on its way
+//             (LG12); as built: an expired age alone rebuilds the view to no card and no person row, the scroll kept (LG13)
 //   LH1-LH7   the hub: a draft survives a live refresh and the view's own rebuild IN A BOX PLACED IN THE NEW LAYOUT (LHC: the placement
 //             check can fail), text typed through the widget itself survives (LH7), a reopened hub (the model's draft) with a fresh model
 //             as the control; the sixth tab's name; the preview's honest state as BUILT, with a live control; REQUEST AGAIN as drawn (LH8);
@@ -1140,6 +1144,114 @@ namespace WonderlandSocialLffQa
 				Check(TEXT("LG6"), bShownBefore && bPostWithheld && bPostFresh,
 					FString::Printf(TEXT("an open post, its inbox and a requester's card read before the open are withheld and open nothing (%s); controls: shown before (%s), shown again and a card opens after reads asked after the open (%s)"),
 						bPostWithheld ? TEXT("yes") : TEXT("NO"), bShownBefore ? TEXT("yes") : TEXT("NO"), bPostFresh ? TEXT("yes") : TEXT("NO")));
+				// LG8: THE AGE RULE -- a feed whose landed read was asked 4.5 s ago is withheld (no answer, no 429 needed); control: at 3.0 s it
+				// is drawn. QaShiftClock moves every kept time back, as if that long had passed (nothing is read meanwhile: no NoteOnScreen)
+				Model->Reset();
+				Svc->Forget();
+				Model->BeginOpenGate(LffQaLater());
+				Model->NoteOnScreen(FPlatformTime::Seconds());
+				FWonderlandLffFeedPage AgedPage;
+				AgedPage.Posts = {PostOf(TEXT("lffp_100"))};
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), AgedPage);
+				const bool bFreshLanded = !Model->IsPaneWithheld(EWonderlandLffPane::Feed);
+				Model->QaShiftClock(3.0);
+				const FString AtThree = Model->Describe();
+				const bool bDrawsAtThree = !Model->IsPaneWithheld(EWonderlandLffPane::Feed) && AtThree.Contains(TEXT("lffp_100")) && AtThree.Contains(TEXT("| gate fresh"));
+				Model->QaShiftClock(1.5);
+				const FString AtFourHalf = Model->Describe();
+				const bool bWithheldAtFourHalf = Model->IsPaneWithheld(EWonderlandLffPane::Feed) && Model->PaneLine(EWonderlandLffPane::Feed) == Updating
+					&& !AtFourHalf.Contains(TEXT("lffp_100")) && AtFourHalf.Contains(TEXT("| gate UPDATING (FEED)")) && Model->GetFeed().Num() == 1;
+				Check(TEXT("LG8"), bFreshLanded && bDrawsAtThree && bWithheldAtFourHalf,
+					FString::Printf(TEXT("a feed read asked 4.5 s ago is withheld, held by the model but not drawn or described (%s); control: asked 3.0 s ago it is drawn (%s)"),
+						bWithheldAtFourHalf ? TEXT("yes") : TEXT("NO"), bDrawsAtThree ? TEXT("yes") : TEXT("NO")));
+				// LG9: THE PERIOD -- on screen, a part is asked again 2.0 s after its last ask, ONE at a time; control: not at 1.0 s
+				Svc->Forget();
+				Model->NoteOnScreen(FPlatformTime::Seconds());   // 4.5 s since asked: due
+				const bool bAskedOnce = Svc->Calls.Num() == 1 && Svc->Calls[0] == TEXT("feed");
+				Model->NoteOnScreen(FPlatformTime::Seconds());   // that read on its way: nothing more
+				const bool bOneAtATime = Svc->Calls.Num() == 1;
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), AgedPage);
+				const bool bFreshAgain = !Model->IsPaneWithheld(EWonderlandLffPane::Feed);
+				Svc->Forget();
+				Model->QaShiftClock(1.0);
+				Model->NoteOnScreen(FPlatformTime::Seconds());
+				const bool bNotEarly = Svc->Calls.Num() == 0;
+				Model->QaShiftClock(1.1);
+				Model->NoteOnScreen(FPlatformTime::Seconds());
+				const bool bDueAtTwo = Svc->Calls.Num() == 1 && Svc->Calls[0] == TEXT("feed");
+				Check(TEXT("LG9"), bAskedOnce && bOneAtATime && bFreshAgain && bNotEarly && bDueAtTwo,
+					FString::Printf(TEXT("an expired feed is asked again at once (%s) and only once while on its way (%s), its answer shows it (%s); asked again 2.1 s after (%s); control: not at 1.0 s (%s)"),
+						bAskedOnce ? TEXT("yes") : TEXT("NO"), bOneAtATime ? TEXT("yes") : TEXT("NO"), bFreshAgain ? TEXT("yes") : TEXT("NO"), bDueAtTwo ? TEXT("yes") : TEXT("NO"),
+						bNotEarly ? TEXT("yes") : TEXT("NO")));
+				// LG10: A FAILED READ BACKS OFF (never once a frame): after a 503 nothing at 2.1 s, one at 4.1 s; a 429 holds every periodic read
+				// while it waits and the feed stays withheld by its age, saying why -- never the old rows
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerRefused(503, TEXT("Wonderland social is unavailable")), FWonderlandLffFeedPage());
+				Svc->Forget();
+				Model->QaShiftClock(2.1);
+				Model->NoteOnScreen(FPlatformTime::Seconds());
+				const bool bBackedOff = Svc->Calls.Num() == 0;
+				Model->QaShiftClock(2.0);
+				Model->NoteOnScreen(FPlatformTime::Seconds());
+				const bool bRetried = Svc->Calls.Num() == 1;
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerRefused(429, TEXT("Too many requests; try again in 60 s."), 60), FWonderlandLffFeedPage());
+				Svc->Forget();
+				Model->QaShiftClock(8.5);   // past the back-off (8 s after two failures), well inside the 429's 60 s
+				Model->NoteOnScreen(FPlatformTime::Seconds());
+				const bool bHeld = Svc->Calls.Num() == 0 && Model->IsPaneWithheld(EWonderlandLffPane::Feed)
+					&& Model->PaneLine(EWonderlandLffPane::Feed).Contains(TEXT("Too many requests")) && !Model->Describe().Contains(TEXT("lffp_100"));
+				Check(TEXT("LG10"), bBackedOff && bRetried && bHeld,
+					FString::Printf(TEXT("after a failed read nothing is asked at 2.1 s (%s), one read at 4.1 s (%s); a 429 asks nothing while it waits and the feed is withheld, saying why (%s)"),
+						bBackedOff ? TEXT("yes") : TEXT("NO"), bRetried ? TEXT("yes") : TEXT("NO"), bHeld ? TEXT("yes") : TEXT("NO")));
+				// LG11: MORE THAN ONE PAGE: the period reads page 1 again (no cursor) and the further page folds -- privacy over m10; control:
+				// both pages were shown before
+				Model->Reset();
+				Svc->Forget();
+				Model->BeginOpenGate(LffQaLater());
+				Model->NoteOnScreen(FPlatformTime::Seconds());
+				FWonderlandLffFeedPage FirstOfTwo;
+				FirstOfTwo.Posts = {PostOf(TEXT("lffp_110"))};
+				FirstOfTwo.NextCursor = TEXT("1760259600000.9");
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), FirstOfTwo);
+				Model->LoadMore();
+				FWonderlandLffFeedPage SecondOfTwo;
+				SecondOfTwo.Posts = {PostOf(TEXT("lffp_111"))};
+				SecondOfTwo.NextCursor = TEXT("1760259600000.8");
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), SecondOfTwo);
+				const bool bTwoPages = Model->GetFeed().Num() == 2 && !Model->IsPaneWithheld(EWonderlandLffPane::Feed);
+				Svc->Forget();
+				Model->QaShiftClock(2.1);
+				Model->NoteOnScreen(FPlatformTime::Seconds());
+				const bool bPageOneAsked = Svc->Calls.Num() == 1 && Svc->LastQuery.Cursor.IsEmpty();
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), FirstOfTwo);
+				const bool bFolded = Model->GetFeed().Num() == 1 && Model->GetFeed()[0].PostId == TEXT("lffp_110") && !Model->IsPaneWithheld(EWonderlandLffPane::Feed);
+				Check(TEXT("LG11"), bTwoPages && bPageOneAsked && bFolded,
+					FString::Printf(TEXT("with two pages shown the period asks page 1 (%s) and the second page folds (%s); control: two pages before (%s)"),
+						bPageOneAsked ? TEXT("yes") : TEXT("NO"), bFolded ? TEXT("yes") : TEXT("NO"), bTwoPages ? TEXT("yes") : TEXT("NO")));
+				// LG12: THE OPEN POST IS READ ON THE PERIOD too, and its periodic answer never replaces an inbox read still on its way (a slow inbox
+				// would never land); that inbox, landing, shows the requesters
+				Model->Reset();
+				Svc->Forget();
+				Model->BeginOpenGate(LffQaLater());
+				Model->OpenPost(TEXT("lffp_120"));
+				Model->NoteOnScreen(FPlatformTime::Seconds());   // stale since the reset: the feed and the post
+				FWonderlandLffPostDetail OwnTwelve;
+				OwnTwelve.Post = PostOf(TEXT("lffp_120"), true);
+				Svc->AnswerFeed(Svc->Feeds.Num() - 1, AnswerOk(), FWonderlandLffFeedPage());
+				Svc->AnswerPost(Svc->Posts.Num() - 1, AnswerOk(), OwnTwelve);   // its inbox is asked, and left on its way
+				const int32 InboxesOnTheirWay = Svc->Inboxes.Num();
+				const int32 PostsBefore = Svc->Posts.Num();
+				Model->QaShiftClock(2.1);
+				Model->NoteOnScreen(FPlatformTime::Seconds());
+				const bool bPostReread = Svc->Posts.Num() == PostsBefore + 1;
+				Svc->AnswerPost(Svc->Posts.Num() - 1, AnswerOk(), OwnTwelve);
+				const bool bInboxNotReplaced = InboxesOnTheirWay == 1 && Svc->Inboxes.Num() == 1;
+				FWonderlandLffPostRequests TwelveInbox;
+				TwelveInbox.PostId = TEXT("lffp_120");
+				Svc->AnswerInbox(0, AnswerOk(), TwelveInbox);
+				const bool bInboxLanded = !Model->IsInboxWithheld() && !Model->IsDetailWithheld();
+				Check(TEXT("LG12"), bPostReread && bInboxNotReplaced && bInboxLanded,
+					FString::Printf(TEXT("the open post is read on the period (%s); its answer leaves the inbox read on its way alone (%s), which lands (%s)"),
+						bPostReread ? TEXT("yes") : TEXT("NO"), bInboxNotReplaced ? TEXT("yes") : TEXT("NO"), bInboxLanded ? TEXT("yes") : TEXT("NO")));
 				Model->Reset();
 			}
 
@@ -1392,6 +1504,29 @@ namespace WonderlandSocialLffQa
 					Check(TEXT("LG7"), bGateBefore && bGateWithheld && bGateFresh,
 						FString::Printf(TEXT("after the open the view built no post card and no person row and says Updating (%s); controls: built before the open (%s), and again after reads asked after it landed (%s)"),
 							bGateWithheld ? TEXT("yes") : TEXT("NO"), bGateBefore ? TEXT("yes") : TEXT("NO"), bGateFresh ? TEXT("yes") : TEXT("NO")));
+					// LG13 (B35): THE AGE RULE AS BUILT -- the same view, its reads 4.5 s old with no answer and no broadcast, rebuilds by itself
+					// (the pre-tick's withheld check) to no post card and no person row; controls: a rebuild at 3.0 s still builds them, with the
+					// list's scroll offset kept across that rebuild
+					bool bAgeDrawnAtThree = false;
+					bool bAgeScrollKept = false;
+					bool bAgeWithheld = false;
+					if (GateView.IsValid() && bGateFresh)
+					{
+						GateView->QaSetListScrollOffset(37.0f);
+						GateModel->QaShiftClock(3.0);
+						GateModel->AdjustSlots(0);   // a change that alters nothing drawn: only to rebuild at 3.0 s
+						GateView->FlushRebuild();
+						bAgeDrawnAtThree = GateView->QaBuiltPostCards() == 1 && GateView->QaBuiltPersonRows() >= 1;
+						bAgeScrollKept = FMath::IsNearlyEqual(GateView->QaListScrollOffset(), 37.0f, 0.5f);
+						GateModel->QaShiftClock(1.5);
+						const bool bNothingAsked = !GateView->QaRebuildPending();
+						GateView->FlushRebuild();
+						bAgeWithheld = bNothingAsked && GateView->QaBuiltPostCards() == 0 && GateView->QaBuiltPersonRows() == 0
+							&& GateView->QaLines().Contains(TEXT("Updating"));
+					}
+					Check(TEXT("LG13"), bAgeDrawnAtThree && bAgeScrollKept && bAgeWithheld,
+						FString::Printf(TEXT("reads 4.5 s old: the view rebuilt by itself to no card and no person row (%s); controls: at 3.0 s a rebuild still drew them (%s), the list's scroll kept across it (%s)"),
+							bAgeWithheld ? TEXT("yes") : TEXT("NO"), bAgeDrawnAtThree ? TEXT("yes") : TEXT("NO"), bAgeScrollKept ? TEXT("yes") : TEXT("NO")));
 				}
 			}
 

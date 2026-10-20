@@ -323,6 +323,91 @@ void FWonderlandLffModel::NoteOnScreen(double NowSeconds)
 		Data.bStale = false;
 		Reload();
 	}
+	if (Data.bOpenGate)
+	{
+		RereadOpenSurface(NowSeconds);
+	}
+}
+
+void FWonderlandLffModel::RereadOpenSurface(double NowSeconds)
+{
+	// B35 (R16 privacy, SC1): AN OPEN SURFACE NEVER DRAWS AN OLD VIEW. What the tab shows is read again OpenRereadSeconds after its last read
+	// was asked, so a player who hid from the viewer (no event reaches it) leaves the screen within one read; a part not read in time is
+	// withheld by its age (IsReadWithheld). Nothing while a 429 waits (the parts age out and are withheld, never drawn stale); nothing on
+	// the form (it lists nobody); the preview has nothing to read.
+	if (Service() == nullptr || Data.bNeedsLive || Data.Pane == EWonderlandLffPane::Form || !MayAsk(EWonderlandLffBudget::Read))
+	{
+		return;
+	}
+	switch (Data.Pane)
+	{
+	case EWonderlandLffPane::Feed:
+		// MORE THAN ONE PAGE: page 1 is read again all the same and the further pages fold (privacy wins over m10: pages older than the age
+		// rule are never kept on screen, and a re-read of page 1 alone cannot vouch for them)
+		if (IsRereadDue(EWonderlandLffRead::Feed, NowSeconds))
+		{
+			ReadFeed(false, true);
+		}
+		break;
+	case EWonderlandLffPane::MyPosts:
+		if (IsRereadDue(EWonderlandLffRead::Mine, NowSeconds))
+		{
+			ReadMine(false, true);
+		}
+		break;
+	case EWonderlandLffPane::MyRequests:
+		if (IsRereadDue(EWonderlandLffRead::Requests, NowSeconds))
+		{
+			ReadRequests(true);
+		}
+		break;
+	default:
+		break;
+	}
+	// THE OPEN POST (and, through its answer, its owner's inbox)
+	if (!Data.OpenPostId.IsEmpty() && IsRereadDue(EWonderlandLffRead::Detail, NowSeconds))
+	{
+		ReadDetail(Data.OpenPostId, true);
+	}
+}
+
+EWonderlandLffLoad FWonderlandLffModel::LoadOfRead(EWonderlandLffRead Read) const
+{
+	switch (Read)
+	{
+	case EWonderlandLffRead::Feed:     return Data.FeedLoad;
+	case EWonderlandLffRead::Mine:     return Data.MineLoad;
+	case EWonderlandLffRead::Requests: return Data.RequestsLoad;
+	case EWonderlandLffRead::Detail:   return Data.DetailLoad;
+	case EWonderlandLffRead::Inbox:    return Data.InboxLoad;
+	default:                           return EWonderlandLffLoad::Idle;
+	}
+}
+
+bool FWonderlandLffModel::IsRereadDue(EWonderlandLffRead Read, double NowSeconds) const
+{
+	// ONE AT A TIME: a read still on its way is never replaced by the period (a slow server would otherwise never land one); the part it
+	// shows ages out and is withheld meanwhile
+	if (LoadOfRead(Read) == EWonderlandLffLoad::Loading)
+	{
+		return false;
+	}
+	// A FAILED READ BACKS OFF: 2 s, then 4, 8, 16 s ... at most 30 s after it was asked -- never once a frame
+	const int32 Index = WonderlandLffModelDetail::ReadIndex(Read);
+	const int32 Fails = FMath::Clamp(Data.FailedReads[Index], 0, 8);
+	const double Wait = FMath::Min(WonderlandLff::OpenRereadSeconds * static_cast<double>(1 << Fails), WonderlandLff::OpenRetryMaxSeconds);
+	return NowSeconds - Data.LastAskedAt[Index] >= Wait;
+}
+
+void FWonderlandLffModel::NoteAsked(EWonderlandLffRead Read, double AskedAt)
+{
+	Data.LastAskedAt[WonderlandLffModelDetail::ReadIndex(Read)] = AskedAt;
+}
+
+void FWonderlandLffModel::NoteReadFailed(EWonderlandLffRead Read)
+{
+	int32& Fails = Data.FailedReads[WonderlandLffModelDetail::ReadIndex(Read)];
+	Fails = FMath::Min(Fails + 1, 8);
 }
 
 void FWonderlandLffModel::BeginOpenGate(double NowSeconds)
@@ -349,9 +434,67 @@ void FWonderlandLffModel::BeginOpenGate(double NowSeconds)
 
 bool FWonderlandLffModel::IsReadWithheld(EWonderlandLffRead Read) const
 {
+	return IsReadWithheldAt(Read, FPlatformTime::Seconds());
+}
+
+bool FWonderlandLffModel::IsReadWithheldAt(EWonderlandLffRead Read, double NowSeconds) const
+{
+	if (!Data.bOpenGate)
+	{
+		return false;
+	}
 	// ASKED BEFORE THE OPEN, OR NEVER LANDED: withheld. Not withheld from the same instant on (">="): FPlatformTime is monotonic, so a read
 	// asked after BeginOpenGate returned (or inside it) is stamped at or after the open. One asked before it never counts, even landing after.
-	return Data.bOpenGate && Data.LandedAskedAt[WonderlandLffModelDetail::ReadIndex(Read)] < Data.OpenGateSeconds;
+	const double AskedAt = Data.LandedAskedAt[WonderlandLffModelDetail::ReadIndex(Read)];
+	if (AskedAt < Data.OpenGateSeconds)
+	{
+		return true;
+	}
+	// TOO OLD (the age rule): asked longer ago than OpenMaxAgeSeconds -- judged OpenAgeMarginSeconds early, so the frame built from this
+	// answer is painted before it is that old. A read held by a 429, late or failed leaves the part withheld, never drawn stale.
+	return NowSeconds - AskedAt > WonderlandLff::OpenMaxAgeSeconds - WonderlandLff::OpenAgeMarginSeconds;
+}
+
+uint8 FWonderlandLffModel::GetWithheldMask() const
+{
+	const double Now = FPlatformTime::Seconds();
+	uint8 Mask = 0;
+	for (int32 Index = 0; Index < static_cast<int32>(EWonderlandLffRead::Count); ++Index)
+	{
+		if (IsReadWithheldAt(static_cast<EWonderlandLffRead>(Index), Now))
+		{
+			Mask |= static_cast<uint8>(1u << Index);
+		}
+	}
+	return Mask;
+}
+
+void FWonderlandLffModel::QaShiftClock(double Seconds)
+{
+	// AS IF SECONDS HAD PASSED: every kept time moves back (a sentinel -1, "never", stays); nothing is read or broadcast
+	Data.OpenGateSeconds -= Seconds;
+	for (int32 Index = 0; Index < static_cast<int32>(EWonderlandLffRead::Count); ++Index)
+	{
+		if (Data.LandedAskedAt[Index] >= 0.0)
+		{
+			Data.LandedAskedAt[Index] -= Seconds;
+		}
+		if (Data.LastAskedAt[Index] >= 0.0)
+		{
+			Data.LastAskedAt[Index] -= Seconds;
+		}
+	}
+	for (int32 Index = 0; Index < static_cast<int32>(EWonderlandLffBudget::Count); ++Index)
+	{
+		if (Data.NotBefore[Index] > 0.0)
+		{
+			Data.NotBefore[Index] -= Seconds;
+		}
+	}
+	if (LastOnScreen > 0.0)
+	{
+		LastOnScreen -= Seconds;
+	}
 }
 
 bool FWonderlandLffModel::IsPaneWithheld(EWonderlandLffPane Pane) const
@@ -383,6 +526,7 @@ void FWonderlandLffModel::NoteLanded(EWonderlandLffRead Read, double AskedAt)
 {
 	double& Landed = Data.LandedAskedAt[WonderlandLffModelDetail::ReadIndex(Read)];
 	Landed = FMath::Max(Landed, AskedAt);
+	Data.FailedReads[WonderlandLffModelDetail::ReadIndex(Read)] = 0;   // the back-off ends with an answer
 }
 
 void FWonderlandLffModel::NoteAnswer(const FWonderlandLffAnswer& Answer, EWonderlandLffBudget Kind)
@@ -547,7 +691,7 @@ void FWonderlandLffModel::SetMineOpenOnly(bool bOpenOnly)
 	Changed.Broadcast();
 }
 
-void FWonderlandLffModel::ReadFeed(bool bMore)
+void FWonderlandLffModel::ReadFeed(bool bMore, bool bPeriodic)
 {
 	IWonderlandSocialService* Svc = Service();
 	if (Svc == nullptr)
@@ -563,8 +707,15 @@ void FWonderlandLffModel::ReadFeed(bool bMore)
 	const int32 Seq = ++Data.FeedSeq;
 	const int32 Gen = Generation;
 	const double AskedAt = FPlatformTime::Seconds();   // B35: the open gate compares the time a read was ASKED, never when it landed
+	if (!bMore)
+	{
+		NoteAsked(EWonderlandLffRead::Feed, AskedAt);   // B35: the period counts from here (a further page never resets it)
+	}
 	Data.FeedLoad = EWonderlandLffLoad::Loading;
-	Changed.Broadcast();
+	if (!bPeriodic)
+	{
+		Changed.Broadcast();   // B35: the period's own ask rebuilds nothing; its answer does
+	}
 	const TWeakPtr<FWonderlandLffModel> Weak = AsShared();
 	Svc->ReadLffFeed(Query, [Weak, Gen, Seq, bMore, AskedAt](const FWonderlandLffAnswer& Answer, const FWonderlandLffFeedPage& Page)
 	{
@@ -577,6 +728,10 @@ void FWonderlandLffModel::ReadFeed(bool bMore)
 		Self->NoteAnswer(Answer, EWonderlandLffBudget::Read);
 		if (!Answer.IsOk())
 		{
+			if (!bMore)
+			{
+				Self->NoteReadFailed(EWonderlandLffRead::Feed);   // B35: the next periodic ask backs off
+			}
 			D.FeedLoad = EWonderlandLffLoad::Failed;
 			D.FeedAnswer = Answer;
 			if (Answer.bNeedsLive)
@@ -614,7 +769,7 @@ void FWonderlandLffModel::ReadFeed(bool bMore)
 	});
 }
 
-void FWonderlandLffModel::ReadMine(bool bMore)
+void FWonderlandLffModel::ReadMine(bool bMore, bool bPeriodic)
 {
 	IWonderlandSocialService* Svc = Service();
 	if (Svc == nullptr)
@@ -629,8 +784,15 @@ void FWonderlandLffModel::ReadMine(bool bMore)
 	const int32 Seq = ++Data.MineSeq;
 	const int32 Gen = Generation;
 	const double AskedAt = FPlatformTime::Seconds();   // B35
+	if (!bMore)
+	{
+		NoteAsked(EWonderlandLffRead::Mine, AskedAt);
+	}
 	Data.MineLoad = EWonderlandLffLoad::Loading;
-	Changed.Broadcast();
+	if (!bPeriodic)
+	{
+		Changed.Broadcast();
+	}
 	const TWeakPtr<FWonderlandLffModel> Weak = AsShared();
 	Svc->ReadLffFeed(Query, [Weak, Gen, Seq, bMore, AskedAt](const FWonderlandLffAnswer& Answer, const FWonderlandLffFeedPage& Page)
 	{
@@ -643,6 +805,10 @@ void FWonderlandLffModel::ReadMine(bool bMore)
 		Self->NoteAnswer(Answer, EWonderlandLffBudget::Read);
 		if (!Answer.IsOk())
 		{
+			if (!bMore)
+			{
+				Self->NoteReadFailed(EWonderlandLffRead::Mine);
+			}
 			D.MineLoad = EWonderlandLffLoad::Failed;
 			D.MineAnswer = Answer;
 		}
@@ -668,7 +834,7 @@ void FWonderlandLffModel::ReadMine(bool bMore)
 	});
 }
 
-void FWonderlandLffModel::ReadRequests()
+void FWonderlandLffModel::ReadRequests(bool bPeriodic)
 {
 	IWonderlandSocialService* Svc = Service();
 	if (Svc == nullptr)
@@ -678,8 +844,12 @@ void FWonderlandLffModel::ReadRequests()
 	const int32 Seq = ++Data.RequestsSeq;
 	const int32 Gen = Generation;
 	const double AskedAt = FPlatformTime::Seconds();   // B35
+	NoteAsked(EWonderlandLffRead::Requests, AskedAt);
 	Data.RequestsLoad = EWonderlandLffLoad::Loading;
-	Changed.Broadcast();
+	if (!bPeriodic)
+	{
+		Changed.Broadcast();
+	}
 	const TWeakPtr<FWonderlandLffModel> Weak = AsShared();
 	Svc->ReadLffMyRequests([Weak, Gen, Seq, AskedAt](const FWonderlandLffAnswer& Answer, const FWonderlandLffMyRequests& Listed)
 	{
@@ -692,6 +862,7 @@ void FWonderlandLffModel::ReadRequests()
 		Self->NoteAnswer(Answer, EWonderlandLffBudget::Read);
 		if (!Answer.IsOk())
 		{
+			Self->NoteReadFailed(EWonderlandLffRead::Requests);
 			D.RequestsLoad = EWonderlandLffLoad::Failed;
 			D.RequestsAnswer = Answer;
 			Self->Changed.Broadcast();
@@ -727,7 +898,7 @@ void FWonderlandLffModel::ReadRequests()
 	});
 }
 
-void FWonderlandLffModel::ReadDetail(const FString& PostId)
+void FWonderlandLffModel::ReadDetail(const FString& PostId, bool bPeriodic)
 {
 	IWonderlandSocialService* Svc = Service();
 	if (Svc == nullptr || PostId.IsEmpty())
@@ -737,14 +908,18 @@ void FWonderlandLffModel::ReadDetail(const FString& PostId)
 	const int32 Seq = ++Data.DetailSeq;
 	const int32 Gen = Generation;
 	const double AskedAt = FPlatformTime::Seconds();   // B35
+	NoteAsked(EWonderlandLffRead::Detail, AskedAt);
 	if (Data.Detail.Post.PostId != PostId)
 	{
 		Data.Detail = FWonderlandLffPostDetail();   // another post's detail never shows under this one while it loads
 	}
 	Data.DetailLoad = EWonderlandLffLoad::Loading;
-	Changed.Broadcast();
+	if (!bPeriodic)
+	{
+		Changed.Broadcast();
+	}
 	const TWeakPtr<FWonderlandLffModel> Weak = AsShared();
-	Svc->ReadLffPost(PostId, [Weak, Gen, Seq, PostId, AskedAt](const FWonderlandLffAnswer& Answer, const FWonderlandLffPostDetail& Detail)
+	Svc->ReadLffPost(PostId, [Weak, Gen, Seq, PostId, AskedAt, bPeriodic](const FWonderlandLffAnswer& Answer, const FWonderlandLffPostDetail& Detail)
 	{
 		const TSharedPtr<FWonderlandLffModel> Self = Weak.Pin();
 		if (!Self.IsValid() || Self->Generation != Gen || Self->Data.DetailSeq != Seq || Self->Data.OpenPostId != PostId)
@@ -786,7 +961,15 @@ void FWonderlandLffModel::ReadDetail(const FString& PostId)
 			}
 			if (Detail.Post.bViewerIsOwner)
 			{
-				Self->ReadInbox(PostId);
+				// B35: THE PERIOD'S DETAIL never replaces an inbox read still on its way (a slow inbox would never land), and a failing inbox
+				// backs off like every other read; any other detail read (an accept, a decline, an open) reads the inbox at once, as before
+				const int32 InboxIndex = static_cast<int32>(EWonderlandLffRead::Inbox);
+				const bool bInboxDue = !bPeriodic || (D.InboxLoad != EWonderlandLffLoad::Loading
+					&& (D.FailedReads[InboxIndex] == 0 || Self->IsRereadDue(EWonderlandLffRead::Inbox, FPlatformTime::Seconds())));
+				if (bInboxDue)
+				{
+					Self->ReadInbox(PostId);
+				}
 			}
 			else
 			{
@@ -796,11 +979,13 @@ void FWonderlandLffModel::ReadDetail(const FString& PostId)
 		}
 		else if (WonderlandLff::ProblemOf(Answer) == EWonderlandLffProblem::NotFound)
 		{
+			Self->NoteReadFailed(EWonderlandLffRead::Detail);   // B35: a post gone is asked again only as the back-off allows
 			Self->ForgetPost(PostId);
 			D.DetailAnswer = Answer;
 		}
 		else
 		{
+			Self->NoteReadFailed(EWonderlandLffRead::Detail);
 			D.DetailLoad = EWonderlandLffLoad::Failed;
 			D.DetailAnswer = Answer;
 			if (D.Detail.Post.PostId == PostId)
@@ -822,6 +1007,7 @@ void FWonderlandLffModel::ReadInbox(const FString& PostId)
 	const int32 Seq = ++Data.InboxSeq;
 	const int32 Gen = Generation;
 	const double AskedAt = FPlatformTime::Seconds();   // B35
+	NoteAsked(EWonderlandLffRead::Inbox, AskedAt);
 	if (Data.Inbox.PostId != PostId)
 	{
 		Data.Inbox = FWonderlandLffPostRequests();
@@ -846,6 +1032,7 @@ void FWonderlandLffModel::ReadInbox(const FString& PostId)
 		}
 		else
 		{
+			Self->NoteReadFailed(EWonderlandLffRead::Inbox);
 			D.InboxLoad = EWonderlandLffLoad::Failed;
 			D.InboxAnswer = Answer;
 		}
@@ -1704,10 +1891,7 @@ void SWonderlandSocialLffView::SetContext(const FString& InViewerId, bool bInDev
 
 void SWonderlandSocialLffView::HandleSlatePreTick(float DeltaTime)
 {
-	if (bRebuildPending)
-	{
-		Rebuild();
-	}
+	RebuildIfDue();
 	// A REQUESTER'S CARD THAT ARRIVED IN AN ANSWER opens here, after the frame's input and before its layout (F-21), never in the answer --
 	// and only while this view is ON SCREEN (drawn in the previous frame): a late answer after the hub closed opens nothing over the world.
 	// DRAWN AT ALL is its own flag: frame 0 is a real frame (GFrameCounter is 0 all through the engine's first one), not "never drawn".
@@ -1726,9 +1910,33 @@ void SWonderlandSocialLffView::HandleSlatePreTick(float DeltaTime)
 
 void SWonderlandSocialLffView::FlushRebuild()
 {
+	RebuildIfDue();
+}
+
+void SWonderlandSocialLffView::RebuildIfDue()
+{
+	// B35: AN AGE RUNS OUT WITH NO ANSWER AND NO BROADCAST (a read late, held by a 429, or failing): what the model withholds NOW is compared
+	// with what the last build saw, at every pre-tick -- before the frame's layout and paint -- so rows past their age are never painted
+	if (Model.IsValid() && Model->GetWithheldMask() != BuiltWithheldMask)
+	{
+		bRebuildPending = true;
+	}
 	if (bRebuildPending)
 	{
 		Rebuild();
+	}
+}
+
+float SWonderlandSocialLffView::QaListScrollOffset() const
+{
+	return ListScroll.IsValid() ? ListScroll->GetScrollOffset() : -1.0f;
+}
+
+void SWonderlandSocialLffView::QaSetListScrollOffset(float Offset)
+{
+	if (ListScroll.IsValid())
+	{
+		ListScroll->SetScrollOffset(Offset);
 	}
 }
 
@@ -1802,7 +2010,34 @@ void SWonderlandSocialLffView::Rebuild()
 	BuiltPersonRows = 0;
 	BuiltRequestRows = 0;
 	BuiltAskLabel.Reset();
+	// B35: WHAT IS WITHHELD, READ BEFORE BUILDING: should an age run out while this build runs, the next pre-tick sees a difference and builds
+	// again (read after, a part built just before its age ran out would stay on screen)
+	BuiltWithheldMask = Model.IsValid() ? Model->GetWithheldMask() : 0;
+	// B35: THE SCROLL STAYS for the same pane and the same open post (the open surface's period rebuilds every few seconds; a list snapped
+	// back to its top each time could not be read). Another pane, another post or the form starts at the top.
+	const EWonderlandLffPane Pane = Model.IsValid() ? Model->GetPane() : EWonderlandLffPane::Feed;
+	const FString OpenPostId = Model.IsValid() ? Model->GetOpenPostId() : FString();
+	const float ListOffset = ListScroll.IsValid() && ListScrollPane == Pane ? ListScroll->GetScrollOffset() : 0.0f;
+	const float DetailOffset = DetailScroll.IsValid() && DetailScrollPostId == OpenPostId ? DetailScroll->GetScrollOffset() : 0.0f;
+	const float FormOffset = FormScroll.IsValid() ? FormScroll->GetScrollOffset() : 0.0f;
+	ListScroll.Reset();
+	DetailScroll.Reset();
+	FormScroll.Reset();
 	ContentHost->SetContent(MakeContent());
+	if (ListScroll.IsValid())
+	{
+		ListScroll->SetScrollOffset(ListOffset);
+	}
+	if (DetailScroll.IsValid())
+	{
+		DetailScroll->SetScrollOffset(DetailOffset);
+	}
+	if (FormScroll.IsValid())
+	{
+		FormScroll->SetScrollOffset(FormOffset);
+	}
+	ListScrollPane = Pane;
+	DetailScrollPostId = OpenPostId;
 	if (Focused.IsValid() && PlacedBoxes.Contains(Focused) && FSlateApplication::IsInitialized())
 	{
 		FSlateApplication::Get().SetKeyboardFocus(Focused, EFocusCause::SetDirectly);
@@ -2061,6 +2296,7 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeFeedList()
 		Categories->AddSlot()[MakeButton(WonderlandLffCategoryLabel(Category).ToUpper(), true, Current != Category, [this, Category]() { Model->SetCategory(Category); })];
 	}
 	TSharedRef<SScrollBox> List = SNew(SScrollBox);
+	ListScroll = List;   // B35: its offset is kept across rebuilds (Rebuild)
 	const FString PaneLine = Model->PaneLine(EWonderlandLffPane::Feed);
 	if (!PaneLine.IsEmpty())
 	{
@@ -2103,6 +2339,7 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeMyPostsList()
 	// B35: withheld until a read after the open lands -- no card, no count (one rule for every pane)
 	const bool bWithheld = Model->IsPaneWithheld(EWonderlandLffPane::MyPosts);
 	TSharedRef<SScrollBox> List = SNew(SScrollBox);
+	ListScroll = List;
 	List->AddSlot().Padding(0.0f, 0.0f, 0.0f, 6.0f)
 	[
 		SNew(SHorizontalBox)
@@ -2136,6 +2373,7 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeMyPostsList()
 TSharedRef<SWidget> SWonderlandSocialLffView::MakeMyRequestsList()
 {
 	TSharedRef<SScrollBox> List = SNew(SScrollBox);
+	ListScroll = List;
 	// B35: each row names another player's post (its title, its state): withheld until a read after the open lands -- no row, no tombstone,
 	// no count; the pane line says "Updating…" (or why the read failed)
 	const bool bWithheld = Model->IsPaneWithheld(EWonderlandLffPane::MyRequests);
@@ -2371,6 +2609,7 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeDetail()
 	const FWonderlandLffPostDetail& Detail = Model->GetDetail();
 	const FWonderlandLffPost& Post = Detail.Post;
 	TSharedRef<SScrollBox> Body = SNew(SScrollBox);
+	DetailScroll = Body;
 	Body->AddSlot()
 	[
 		SNew(STextBlock).Text(WonderlandLffLook::LffText(Post.Title)).Font(WonderlandUi::Sans(15, true)).ColorAndOpacity(WonderlandUi::Cream()).AutoWrapText(true)
@@ -2613,6 +2852,7 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeForm()
 	}
 	const TWeakPtr<FWonderlandLffModel> WeakModel = Model;
 	TSharedRef<SScrollBox> Form = SNew(SScrollBox);
+	FormScroll = Form;
 	Form->AddSlot()[MakeTitle(bEditing ? TEXT("EDIT YOUR POST") : TEXT("CREATE A POST"))];
 	Form->AddSlot().Padding(0.0f, 4.0f, 0.0f, 10.0f)
 	[
