@@ -144,7 +144,9 @@ export function parseSignedClearance(text, queriedRepo) {
   const lines = String(text).split('\n');
   if (lines[0] !== 'JULIUS-CLEARANCE-V1') problems.push('first line must be JULIUS-CLEARANCE-V1');
   if (lines[1] !== `repo: ${LANDING_REPO}`) problems.push(`second line must be "repo: ${LANDING_REPO}"`);
-  else if (typeof queriedRepo === 'string' && queriedRepo !== LANDING_REPO) problems.push(`the clearance is for ${LANDING_REPO}, not the queried repo ${queriedRepo}`);
+  // v3.5b S-3: the queried repository is REQUIRED (library, GitHub mode and --evidence mode); GitHub repository names are case-insensitive.
+  if (typeof queriedRepo !== 'string' || queriedRepo === '') problems.push('the queried repository is required');
+  else if (lines[1] === `repo: ${LANDING_REPO}` && queriedRepo.toLowerCase() !== LANDING_REPO.toLowerCase()) problems.push(`the clearance is for ${LANDING_REPO}, not the queried repo ${queriedRepo}`);
   const fields = {};
   CLEARANCE_KEYS.forEach((key, i) => {
     const line = lines[2 + i] ?? '';
@@ -241,7 +243,7 @@ export function evaluateSignedLanding(input, tip) {
   if (Buffer.from(clearanceText, 'utf8').toString('base64') !== block.clearanceB64) {
     return signedVerdict('indeterminate', 'the clearance payload is not valid UTF-8', base);
   }
-  const parsed = parseSignedClearance(clearanceText, typeof input?.repo === 'string' ? input.repo : undefined);
+  const parsed = parseSignedClearance(clearanceText, input?.repo);
   if (parsed.problems.length > 0) {
     return signedVerdict('indeterminate', `the signed clearance text is malformed: ${parsed.problems.join('; ')}`, base);
   }
@@ -584,7 +586,7 @@ async function main(argv) {
   if (typeof evidencePath === 'string') {
     let evaluated;
     try {
-      evaluated = evaluateMainProvenance({ ...(await fromEvidenceFile(evidencePath)), branch });
+      evaluated = evaluateMainProvenance({ ...(await fromEvidenceFile(evidencePath)), branch, repo }); // v3.5b S-3: the command line's repository, never the file's
     } catch (error) {
       process.stderr.write(`main_provenance_indeterminate: ${error instanceof Error ? error.message : 'evidence unreadable'}\n`);
       return 1;
@@ -637,7 +639,7 @@ async function main(argv) {
         changedPaths = comparison.files.flatMap((file) => [file?.filename, file?.previous_filename].filter((path) => typeof path === 'string'));
         changedPathsComplete = true;
       }
-      const signedHead = parseSignedClearance(Buffer.from(landingBlock.clearanceB64, 'base64').toString('utf8')).fields.head;
+      const signedHead = parseSignedClearance(Buffer.from(landingBlock.clearanceB64, 'base64').toString('utf8'), repo).fields.head;
       if (isSha(signedHead)) {
         const commit = gh(`repos/${repo}/commits/${signedHead}`);
         headCommit = { sha: commit?.sha, authorLogin: commit?.author?.login, treeSha: commit?.commit?.tree?.sha };
