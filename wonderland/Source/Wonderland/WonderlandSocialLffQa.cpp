@@ -362,6 +362,11 @@ namespace WonderlandSocialLffQa
 		TEXT("its states, and drafts surviving a hub refresh; fed answers and off-screen hubs, with fail-capable controls. WLQA LFF lines."),
 		FConsoleCommandDelegate::CreateLambda([]()
 		{
+			if (!WonderlandBeta::IsDeveloperSession())   // the reviewer's R2-09: QA fakes never run in a player's session (the candidate is Development)
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLQA LFF refused: needs a developer session (-wldev)"));
+				return;
+			}
 			int32 Passed = 0;
 			int32 Failed = 0;
 			// THE WHAT NEVER CARRIES A POST'S TEXT: ids, counts and states (the 10-07 log rule holds for QA lines too)
@@ -1806,6 +1811,11 @@ namespace WonderlandSocialLffQa
 		TEXT("Slate's default jumps). Synthetic Slate events only; no OS input; does not quit. WLQA LFFSCREEN lines."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
+			if (!WonderlandBeta::IsDeveloperSession())   // the reviewer's R2-09
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLQA LFFSCREEN refused: needs a developer session (-wldev)"));
+				return;
+			}
 			if (GLffScreenRun.IsValid())
 			{
 				return;

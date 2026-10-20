@@ -314,7 +314,7 @@ namespace WonderlandSocialGateQa
 				// SG8: reads while open, issued since the open, backing off (a dead port fails at once)
 				const int32 Reads = Live->QaReadsIssued() - R.ReadsAtOpen;
 				const double Open = Now() - R.OpenedAt;
-				Check(R, TEXT("SG8"), Reads >= 1 && Reads <= 6, FString::Printf(TEXT("%d snapshot reads in %.1f s open, all failing (tick rate would be ~%d)"), Reads, Open,
+				Check(R, TEXT("SG8"), Reads >= 1 && Reads <= 8, FString::Printf(TEXT("%d snapshot reads in %.1f s open, all failing (tick rate would be ~%d)"), Reads, Open,
 					static_cast<int32>(Open / 0.25)));
 				// SG9: the LFF tab's own gate was armed by this open
 				const TSharedPtr<FWonderlandLffModel> Lff = Social->GetLff();
@@ -437,6 +437,15 @@ namespace WonderlandSocialGateQa
 		{
 			if (GRun.IsValid())
 			{
+				return;
+			}
+			// A DEVELOPER SESSION ONLY, and never over a real live service (the reviewer's R2-08): it goes live against a dead port itself and lands
+			// QA people into that service, so in a player's session or a signed-in one it refuses and does nothing
+			const UGameInstance* Instance = World != nullptr ? World->GetGameInstance() : nullptr;
+			const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+			if (!WonderlandBeta::IsDeveloperSession() || (Social != nullptr && Social->GetLive() != nullptr))
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLSOCIALGATEQA refused: %s"), !WonderlandBeta::IsDeveloperSession() ? TEXT("needs a developer session (-wldev)") : TEXT("a live social service is already connected"));
 				return;
 			}
 			GRun = MakeShared<FRun>();

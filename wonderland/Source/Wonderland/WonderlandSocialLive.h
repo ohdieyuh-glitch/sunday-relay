@@ -33,14 +33,17 @@ namespace WonderlandSocialFreshness
 {
 	/** The re-read period while a surface is open, counted from the last read's issue (the open reads at once). */
 	constexpr double OpenResyncSeconds = 0.75;
-	/** The oldest read an open surface may still draw people from: when reads stall or fail, the people are withheld again. */
-	constexpr double MaxShownAgeSeconds = 2.0;
-	/** THE MUTATION CONTROL (the reviewer's M2 P8(c)): a diagnostic must show its instrument FAILS when this gate is off. Only a developer session
-	 *  can turn it off (wl.Dev.MutateSocialGate, refused without -wldev; SetGateMutatedOff ignores anything else); never in Shipping. False in
-	 *  every player's session. */
+	/** The oldest read an open surface may still draw people from: when reads stall or fail, the people are withheld again. 3.0 s (was 2.0, the
+	 *  reviewer's R2-12): one failed, slow or 429'd read no longer blanks an open hub, and a hidden player still leaves an open surface before the
+	 *  frozen ">= 4 s" judging point (RP L463; Q-M1-1: T0 = the actor's send) even when reads stop: last read issued <= T0, drawn until <= T0 + 3.0 s
+	 *  + one 50 ms judgement + one frame. Reads that keep landing remove the player within the 0.75 s period + a round trip. */
+	constexpr double MaxShownAgeSeconds = 3.0;
 	/** "t=<UTC ISO-8601 with ms>" of this moment, appended to the B35 evidence lines: the log file's own stamps are written later and compress
 	 *  under load (measured 10-20: one line per ~11 ms whatever happened), so an event's time is taken when it happens. */
 	WONDERLAND_API FString EventStamp();
+	/** THE MUTATION CONTROL (the reviewer's M2 P8(c)): a diagnostic must show its instrument FAILS when this gate is off. Only a developer session
+	 *  can turn it off (wl.Dev.MutateSocialGate, refused without -wldev; SetGateMutatedOff ignores anything else); never in Shipping. False in
+	 *  every player's session. */
 	WONDERLAND_API bool IsGateMutatedOff();
 	WONDERLAND_API void SetGateMutatedOff(bool bOff);
 	/** A surface opened at OpenedAt may draw people from a view whose read was issued at ReadIssuedAt, now. */

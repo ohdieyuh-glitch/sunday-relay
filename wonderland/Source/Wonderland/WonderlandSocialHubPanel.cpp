@@ -29,6 +29,7 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "WonderlandUiTestLibrary.h"
+#include "WonderlandBeta.h"
 
 // Named, not anonymous: the module is one unity translation unit.
 namespace WonderlandSocialHubLook
@@ -1644,7 +1645,9 @@ namespace WonderlandSocialPaintLog
 #if UE_BUILD_SHIPPING
 		return false;
 #else
-		static const bool bWanted = FParse::Param(FCommandLine::Get(), TEXT("wlframes"));
+		// a DEVELOPER session only (the reviewer's R2-07): the candidate is a Development build, so non-Shipping protects nothing, and a player's
+		// session must never write pictures of other players' names to disk
+		static const bool bWanted = FParse::Param(FCommandLine::Get(), TEXT("wlframes")) && WonderlandBeta::IsDeveloperSession();
 		return bWanted;
 #endif
 	}
