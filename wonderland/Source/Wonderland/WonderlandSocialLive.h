@@ -332,6 +332,9 @@ private:
 	/** B35: failed reads in a row, the earliest next periodic read after them (a 429's Retry-After, else a growing gap), and the reason. */
 	int32 ReadFailures = 0;
 	double ReadNotBefore = 0.0;
+	/** R2-15: the last failed read was a 429 (its wait holds every read), and a read was asked during that wait. */
+	bool bLastReadWas429 = false;
+	bool bReadDeferred = false;
 	FString ReadProblem;
 	FSimpleMulticastDelegate ReadLanded;
 	/** SC2: the field names of the last world report said in the log ("WLWORLD report fields"). */

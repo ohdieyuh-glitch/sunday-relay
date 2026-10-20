@@ -1687,10 +1687,12 @@ namespace WonderlandSocialPaintLog
 		int32 Height = 0;
 		const bool bSaved = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
 		Captures() += bSaved ? 1 : 0;
-		// R2-28: a capture that began more than 50 ms after its paint is flagged LATE (the window may already hold a later frame)
+		// R2-28: capture a that began more than 50 ms after its paint is flagged LATE (the window may already hold a later frame); capture b is one tick
+		// later BY DESIGN (R-4), so it is never flagged
 		const double LateMs = (StartedAt - Of.PaintedAt) * 1000.0;
+		const bool bLate = FCString::Strcmp(Which, TEXT("a")) == 0 && LateMs > 50.0;
 		UE_LOG(LogTemp, Display, TEXT("WLFRAME %s frame=%llu paints=%d capture=%s %s %dx%d (began %.1f ms after the paint%s, took %.1f ms) %s | %s"), *Of.Surface, Of.Frame, Paints,
-			Which, bSaved ? TEXT("saved") : TEXT("NOT saved"), Width, Height, LateMs, LateMs > 50.0 ? TEXT(", LATE") : TEXT(""),
+			Which, bSaved ? TEXT("saved") : TEXT("NOT saved"), Width, Height, LateMs, bLate ? TEXT(", LATE") : TEXT(""),
 			(FPlatformTime::Seconds() - StartedAt) * 1000.0, *Path, *WonderlandSocialFreshness::EventStamp());
 		return bSaved;
 	}

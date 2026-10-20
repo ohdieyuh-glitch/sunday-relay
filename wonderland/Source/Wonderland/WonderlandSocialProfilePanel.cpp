@@ -725,7 +725,12 @@ int32 SWonderlandSocialProfilePanel::OnPaint(const FPaintArgs& Args, const FGeom
 	{
 		bPaintToNote = false;
 		++PaintsNoted;
-		WonderlandSocialPaintLog::NotePainted(TEXT("profile"), FString::Printf(TEXT("user=%s | %s"), *View.Profile.UserId, *DescribeIdentityColumn()));
+		// R1-05: ids and states only in the log (a player's agent and companion names are theirs, not the log's)
+		const FWonderlandSocialProfile& P = View.Profile;
+		WonderlandSocialPaintLog::NotePainted(TEXT("profile"), bWithheld
+			? FString::Printf(TEXT("user=%s | withheld (%s)"), *P.UserId, WithheldLine.IsEmpty() ? TEXT("Updating…") : *WithheldLine)
+			: FString::Printf(TEXT("user=%s | drawn | agent %s (%s) | dog %s | companion %s"), *P.UserId, P.bHasPrimaryAgent ? *P.PrimaryAgent.AgentId : TEXT("none"),
+				P.bHasPrimaryAgent ? *P.PrimaryAgent.Kind : TEXT("-"), *P.RelayDog.SkinId, P.bHasActiveCompanion ? *P.ActiveCompanion.CompanionId : TEXT("none")));
 	}
 	return Out;
 }

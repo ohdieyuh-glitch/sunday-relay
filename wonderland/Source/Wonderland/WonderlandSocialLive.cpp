@@ -485,6 +485,14 @@ void FWonderlandSocialLiveService::SetSurfaceOpen(bool bOpen)
 
 void FWonderlandSocialLiveService::Refresh()
 {
+	// R2-15: A 429's Retry-After holds EVERY snapshot read (events, an action's refresh, a coalesced re-read), not only the periodic one; the read
+	// is deferred to the moment the wait ends (Tick), so nothing asked is lost
+	if (bLastReadWas429 && FPlatformTime::Seconds() < ReadNotBefore)
+	{
+		bReadDeferred = true;
+		return;
+	}
+	bReadDeferred = false;
 	if (bRefreshing)
 	{
 		bRefreshAgain = true;   // a change arrived while reading (or a surface opened): read once more when this read lands
@@ -512,6 +520,7 @@ void FWonderlandSocialLiveService::Refresh()
 			// B35: AN OPEN SURFACE KEEPS WITHHOLDING while reads fail (the UI's freshness rule), and is not asked again every tick: a 429 waits
 			// its Retry-After, anything else a gap that doubles from OpenResyncSeconds up to MaxReadBackoffSeconds
 			ReadFailures = FMath::Min(ReadFailures + 1, 16);
+			bLastReadWas429 = Status == 429;
 			const double Gap = Status == 429 ? FMath::Max(1.0, static_cast<double>(LastRetryAfterSeconds))
 				: FMath::Min(WonderlandSocialLiveDetail::MaxReadBackoffSeconds, WonderlandSocialFreshness::OpenResyncSeconds * FMath::Pow(2.0, static_cast<double>(FMath::Min(ReadFailures - 1, 4))));
 			ReadNotBefore = FPlatformTime::Seconds() + Gap;
@@ -521,6 +530,7 @@ void FWonderlandSocialLiveService::Refresh()
 		{
 			ReadFailures = 0;
 			ReadNotBefore = 0.0;
+			bLastReadWas429 = false;
 			ReadProblem.Reset();
 			const FString Digest = WonderlandSocialLiveDetail::ViewDigest(Data);
 			const bool bViewChanged = !bHasSnapshot || Digest.IsEmpty() || Digest != SnapshotDigest;
@@ -561,6 +571,10 @@ bool FWonderlandSocialLiveService::Tick(float)
 		PollEvents();
 	}
 	const double Now = FPlatformTime::Seconds();
+	if (bReadDeferred && !bRefreshing && Now >= ReadNotBefore)
+	{
+		Refresh();   // R2-15: a read asked during a 429's wait, now
+	}
 	if (!bRefreshing && Now >= ReadNotBefore)
 	{
 		if (bSurfaceOpen)

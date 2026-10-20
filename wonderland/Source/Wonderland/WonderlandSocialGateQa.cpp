@@ -409,7 +409,8 @@ namespace WonderlandSocialGateQa
 		case 13:
 			if (In >= 0.3)
 			{
-				Check(R, TEXT("SG3"), HubWithheld(U, Why), FString::Printf(TEXT("a read issued 0.1 s before the open landed after it: %s"), *Why));
+				const bool bSg3 = HubWithheld(U, Why);   // first: Check's arguments are evaluated in no fixed order
+				Check(R, TEXT("SG3"), bSg3, FString::Printf(TEXT("a read issued 0.1 s before the open landed after it: %s"), *Why));
 				Live->QaLand(View(true), Now());   // SG4: issued now (QXXan hid: not in it)
 				Next(14);
 			}
