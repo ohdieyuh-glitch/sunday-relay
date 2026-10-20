@@ -352,7 +352,7 @@ export const JOB_BUDGET_MS_FOR_SHARES = JOB_BUDGET_MS;
 
 /**
  * The infrastructure allowance of the job-share model (image builds, PostgreSQL, Hermes, the evidence dump): the SAME 15 minutes
- * `coder-envelope.test.ts` prices (a parity assertion there holds the two together), exported so the production fit uses it.
+ * `coder-envelope.test.ts` prices (a parity assertion in `coder-runtime-budget.test.ts`, which reads that file, holds the two together), exported so the production fit uses it.
  */
 export const CODER_FIT_INFRASTRUCTURE_ALLOWANCE_MS = 15 * 60_000;
 
@@ -446,7 +446,9 @@ export function coderRuntimeSchedule(input: CoderRuntimeScheduleInput): CoderRun
     throw new CoderRuntimeBudgetRefused('coder_runtime_minutes_invalid', 'repairCycles must be a whole number of at least 0');
   }
   // FAIL CLOSED ON THE FIGURES (adversarial finding, juju2 2026-10-20): every figure is a duration and must be a finite number of at least 0, the job budget one above 0. A NaN or an infinity made
-  // `guaranteedRepairCycles` NaN (Math.min(r, NaN)) and a negative wait let a main path 'fit' that did not. The committed figures are constants, so this guards a caller, not today's numbers.
+  // `guaranteedRepairCycles` NaN (Math.min(r, NaN)) and a negative wait let a main path 'fit' that did not (with tighter figures than today's). Every figure is a constant except the architect worst case, which
+  // `coderRuntimeScheduleFor` derives from RELAY_PROMPT_ARCHITECT_TIMEOUT_MS in the job environment; that derivation is itself sanitised (an odd value falls back to 600000), so today's figures are finite and
+  // non-negative and this guards a caller that passes something else.
   for (const [name, value] of [['reviewerShareMs', input.reviewerShareMs], ['reviewerCycleCeilingMs', input.reviewerCycleCeilingMs], ['architectWorstCaseMs', input.architectWorstCaseMs],
     ['infrastructureMs', input.infrastructureMs], ['approvalWaitMs', input.approvalWaitMs], ['marginsMs', input.marginsMs]] as const) {
     if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw new CoderRuntimeBudgetRefused('coder_runtime_budget_unfit', `${name} must be a finite number of milliseconds of at least 0`);
