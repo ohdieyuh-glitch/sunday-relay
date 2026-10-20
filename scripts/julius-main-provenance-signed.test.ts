@@ -70,6 +70,7 @@ const message = (blockText = block()) => `Julius: land the cleared tree (#381)\n
 /** The passing shape for the SIGNED path. No pull request, no approval record: none is needed and none is read. */
 type ProvenanceInput = Parameters<typeof evaluateMainProvenance>[0];
 const signedTip = (over: Record<string, unknown> = {}) => evaluateMainProvenance({
+  repo: 'ohdieyuh-glitch/sunday-relay',
   mainSha: MAIN,
   mainShaAfter: MAIN,
   mainTreeSha: TREE,
@@ -177,6 +178,14 @@ describe('a tip signed for by the Independent Reviewer', () => {
     for (const text of bad) {
       expectVerdict(signedTip({ mainCommitMessage: message(block({ text, nonce: NONCE })) }), 'indeterminate', /malformed/u);
     }
+  });
+
+  it('10b. P2: the clearance repo line must equal the QUERIED repository as well as the landing repository', () => {
+    expectVerdict(signedTip({ repo: 'ohdieyuh-glitch/sunday-relay' }), 'provenant');
+    expectVerdict(signedTip(), 'provenant');
+    expectVerdict(signedTip({ repo: 'someone/else' }), 'indeterminate', /malformed.*queried repo/u);
+    expect(parseSignedClearance(clearanceText(), 'ohdieyuh-glitch/sunday-relay').problems).toEqual([]);
+    expect(parseSignedClearance(clearanceText(), 'someone/else').problems.join(';')).toMatch(/queried repo/u);
   });
 
   it('11. injection through a title or body: any second mention of the marker words refuses the whole tip', () => {
@@ -394,7 +403,7 @@ describe('the block parser and the restated clearance rules', () => {
     corpus.add(clearanceText({ issued: '2026-13-45T00:00:00Z' }));
     let compared = 0;
     for (const text of corpus) {
-      const mine = parseSignedClearance(text).problems.length === 0;
+      const mine = parseSignedClearance(text, 'ohdieyuh-glitch/sunday-relay').problems.length === 0;
       const theirs = parseClearance(text).problems.length === 0;
       expect(mine, `the two parsers disagree on: ${JSON.stringify(text)}`).toBe(theirs);
       compared += 1;
@@ -404,7 +413,7 @@ describe('the block parser and the restated clearance rules', () => {
 });
 
 describe('the CLI on a signed tip', () => {
-  const REPO = 'owner/repo';
+  const REPO = 'ohdieyuh-glitch/sunday-relay'; // P2: the queried repo must be the clearance's repo
   const keyFile = { type: 'file', encoding: 'base64', content: Buffer.from(REVIEWER_PEM, 'utf8').toString('base64') };
   const routes = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
     [`repos/${REPO}/branches/main`]: { commit: { sha: MAIN } },
@@ -557,5 +566,50 @@ describe('the CLI on a signed tip', () => {
       expect(result.code, `omitting ${field} must not pass`).toBe(1);
       expect(result.stdout).not.toContain('provenance=provenant');
     }
+  }, 90_000);
+});
+
+describe('v3.5b S-3: the queried repository is REQUIRED (library, GitHub mode and --evidence mode) and compared case-insensitively', () => {
+  const R = 'ohdieyuh-glitch/sunday-relay';
+  it('a missing repo is refused, in the parser and in the verdict (it was silently skipped)', () => {
+    expect(parseSignedClearance(clearanceText()).problems.join(';')).toMatch(/queried repository is required/u);
+    expect(parseSignedClearance(clearanceText(), undefined).problems.join(';')).toMatch(/queried repository is required/u);
+    expectVerdict(signedTip({ repo: undefined }), 'indeterminate', /malformed.*queried repository is required/u);
+    expectVerdict(signedTip({ repo: 42 }), 'indeterminate', /queried repository is required/u);
+  });
+  it('a mixed-case spelling of the landing repository is accepted; another repository is not', () => {
+    expect(parseSignedClearance(clearanceText(), 'Ohdieyuh-Glitch/Sunday-Relay').problems).toEqual([]);
+    expectVerdict(signedTip({ repo: 'OHDIEYUH-GLITCH/SUNDAY-RELAY' }), 'provenant');
+    expectVerdict(signedTip({ repo: 'ohdieyuh-glitch/sunday-relay2' }), 'indeterminate', /queried repo/u);
+  });
+  it('--evidence mode uses the repository on the command line (the file cannot supply or omit it)', () => {
+    const full = {
+      mainSha: MAIN, mainShaAfter: MAIN, mainTreeSha: TREE, mainParents: [PARENT], mainCommitMessage: message(),
+      reviewerKeyPem: REVIEWER_PEM, reviewerKeyAtSha: PARENT, tipReviewerKeyPem: REVIEWER_PEM,
+      changedPaths: ['src/a.ts'], changedPathsComplete: true, headCommit: { sha: HEAD, authorLogin: WORKER, treeSha: TREE },
+    };
+    const run = (repoArg: string, evidence: Record<string, unknown>) => {
+      const directory = mkdtempSync(join(tmpdir(), 'julius-provenance-s3-'));
+      const file = join(directory, 'evidence.json');
+      try {
+        writeFileSync(file, JSON.stringify(evidence));
+        try {
+          return { code: 0, stdout: execFileSync(process.execPath, [resolve(import.meta.dirname, 'julius-main-provenance.mjs'), repoArg, 'main', '--evidence', file], { encoding: 'utf8', stdio: 'pipe' }) };
+        } catch (error) {
+          return { code: (error as { status?: number }).status ?? -1, stdout: String((error as { stdout?: string }).stdout ?? '') + String((error as { stderr?: string }).stderr ?? '') };
+        }
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    };
+    expect(run(R, full).stdout).toContain('provenance=provenant');
+    expect(run('Ohdieyuh-Glitch/Sunday-Relay', full).stdout).toContain('provenance=provenant');
+    const other = run('someone/else', full);
+    expect(other.code).toBe(1);
+    expect(other.stdout).not.toContain('provenance=provenant');
+    expect(other.stdout).toMatch(/queried repo/u);
+    // a file that carries its OWN repo cannot override the command line
+    const lying = run('someone/else', { ...full, repo: R });
+    expect(lying.stdout).not.toContain('provenance=provenant');
   }, 90_000);
 });
