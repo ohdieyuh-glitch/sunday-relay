@@ -13,6 +13,7 @@
 #include "Widgets/Text/STextBlock.h"
 #include "WonderlandSocialHubPanel.h"   // the hub's own words for presence and time (WonderlandSocialHubLook), so both say them alike
 #include "WonderlandUiStyle.h"
+#include "WonderlandSocialLive.h"   // B35: WonderlandSocialFreshness::EventStamp for the LFF read lines
 
 /* ================================================================================================ the checks and the words */
 
@@ -527,6 +528,32 @@ void FWonderlandLffModel::NoteLanded(EWonderlandLffRead Read, double AskedAt)
 	double& Landed = Data.LandedAskedAt[WonderlandLffModelDetail::ReadIndex(Read)];
 	Landed = FMath::Max(Landed, AskedAt);
 	Data.FailedReads[WonderlandLffModelDetail::ReadIndex(Read)] = 0;   // the back-off ends with an answer
+	// B35 (the reviewer's Q-M1-1 item 4): what this read lists -- the posts and the OTHER players in it -- with when it was asked, so a diagnostic
+	// can tell whether a read asked after a hide/block still listed that player. Ids only (never a title, a description or a note).
+	TArray<FString> Posts;
+	TSet<FString> People;
+	const auto AddPost = [&Posts, &People](const FWonderlandLffPost& P) { Posts.Add(P.PostId); People.Add(P.Author.UserId); };
+	const TCHAR* Kind = TEXT("?");
+	switch (Read)
+	{
+	case EWonderlandLffRead::Feed:     Kind = TEXT("feed");     for (const FWonderlandLffPost& P : Data.Feed) { AddPost(P); } break;
+	case EWonderlandLffRead::Mine:     Kind = TEXT("mine");     for (const FWonderlandLffPost& P : Data.MyPosts) { AddPost(P); } break;
+	case EWonderlandLffRead::Requests: Kind = TEXT("requests"); for (const FWonderlandLffMyRequest& R : Data.MyRequests) { if (R.bHasPost) { AddPost(R.Post); } } break;
+	case EWonderlandLffRead::Detail:
+		Kind = TEXT("detail");
+		AddPost(Data.Detail.Post);
+		if (Data.Detail.bHasAuthorProfile) { People.Add(Data.Detail.AuthorProfile.Profile.UserId); }
+		for (const FWonderlandSocialPersonRow& A : Data.Detail.Accepted) { People.Add(A.UserId); }
+		break;
+	case EWonderlandLffRead::Inbox:    Kind = TEXT("inbox");    for (const FWonderlandLffIncomingRequest& R : Data.Inbox.Requests) { People.Add(R.Requester.UserId); } break;
+	default: break;
+	}
+	People.Remove(FString());
+	TArray<FString> PeopleSorted = People.Array();
+	PeopleSorted.Sort();
+	UE_LOG(LogTemp, Display, TEXT("WLSOCIAL lff read landed: %s asked %.0f ms ago, posts %s, people %s | %s"), Kind, (FPlatformTime::Seconds() - AskedAt) * 1000.0,
+		Posts.Num() > 0 ? *FString::Join(Posts, TEXT(",")) : TEXT("none"), PeopleSorted.Num() > 0 ? *FString::Join(PeopleSorted, TEXT(",")) : TEXT("none"),
+		*WonderlandSocialFreshness::EventStamp());
 }
 
 void FWonderlandLffModel::NoteAnswer(const FWonderlandLffAnswer& Answer, EWonderlandLffBudget Kind)

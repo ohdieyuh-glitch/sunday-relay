@@ -60,6 +60,30 @@ namespace WonderlandSocialLiveDetail
 	/** B35: the longest gap between periodic reads after failures while a surface is open (the surface withholds people meanwhile). */
 	constexpr double MaxReadBackoffSeconds = 8.0;
 
+	/** B35 (the reviewer's Q-M1-1 item 4): every OTHER player a view names anywhere -- friends, requests both ways, recent players, party invites,
+	 *  conversations and their senders, the party and the visible parties, profiles and names -- sorted, so a diagnostic can tell whether a read
+	 *  ISSUED after a hide/block still listed that player (it must not: the server filters at read). Ids only. */
+	FString PeopleIdsOf(const FWonderlandSocialSnapshot& View)
+	{
+		TSet<FString> Ids;
+		for (const FWonderlandSocialPersonRow& R : View.Friends) { Ids.Add(R.UserId); }
+		for (const FWonderlandSocialRequestRow& R : View.IncomingRequests) { Ids.Add(R.Person.UserId); }
+		for (const FWonderlandSocialRequestRow& R : View.OutgoingRequests) { Ids.Add(R.Person.UserId); }
+		for (const FWonderlandSocialRecentRow& R : View.RecentPlayers) { Ids.Add(R.Person.UserId); }
+		for (const FWonderlandSocialPartyInviteRow& R : View.PartyInvites) { Ids.Add(R.From.UserId); }
+		for (const FWonderlandSocialConversationRow& R : View.Conversations) { Ids.Add(R.OtherUserId); }
+		for (const TPair<FString, TArray<FWonderlandSocialMessage>>& C : View.Messages) { for (const FWonderlandSocialMessage& M : C.Value) { Ids.Add(M.SenderId); } }
+		for (const FWonderlandSocialPartyMember& M : View.Party.Members) { Ids.Add(M.UserId); }
+		for (const FWonderlandSocialParty& P : View.VisibleParties) { for (const FWonderlandSocialPartyMember& M : P.Members) { Ids.Add(M.UserId); } }
+		for (const TPair<FString, FWonderlandSocialProfileView>& P : View.Profiles) { Ids.Add(P.Key); }
+		for (const TPair<FString, FString>& N : View.NamesById) { Ids.Add(N.Key); }
+		Ids.Remove(View.ViewerId);
+		Ids.Remove(FString());
+		TArray<FString> Sorted = Ids.Array();
+		Sorted.Sort();
+		return Sorted.Num() > 0 ? FString::Join(Sorted, TEXT(",")) : FString(TEXT("none"));
+	}
+
 	/** B35: the view's identity without its own clock (generatedAtIso is new on every read): equal digests = nothing to redraw. The server
 	 *  sends an online player's lastSeenAtIso as null (social-commands.ts, "steady"), so an unchanged view reads the same. SHA-1 of the
 	 *  condensed JSON, so a changed view is never mistaken for the old one. */
@@ -498,8 +522,9 @@ void FWonderlandSocialLiveService::Refresh()
 			LastError.Reset();
 			// B35 (M2 P9): EVERY landed read, changed or not, with how long ago it was issued -- a diagnostic proves "no read landed between the
 			// hide and the open" from these lines (an unchanged read is otherwise silent)
-			UE_LOG(LogTemp, Display, TEXT("WLSOCIAL read landed: issued %.0f ms ago, view %s, surface %s | %s"), (FPlatformTime::Seconds() - IssuedAt) * 1000.0,
-				bViewChanged ? TEXT("changed") : TEXT("unchanged"), bSurfaceOpen ? TEXT("open") : TEXT("closed"), *WonderlandSocialFreshness::EventStamp());
+			UE_LOG(LogTemp, Display, TEXT("WLSOCIAL read landed: issued %.0f ms ago, view %s, surface %s, lists %s | %s"), (FPlatformTime::Seconds() - IssuedAt) * 1000.0,
+				bViewChanged ? TEXT("changed") : TEXT("unchanged"), bSurfaceOpen ? TEXT("open") : TEXT("closed"), *WonderlandSocialLiveDetail::PeopleIdsOf(Snapshot),
+				*WonderlandSocialFreshness::EventStamp());
 			if (bViewChanged)
 			{
 				UE_LOG(LogTemp, Log, TEXT("%s"), *WonderlandSocialSnapshotLine(Snapshot));
@@ -1273,7 +1298,8 @@ namespace WonderlandSocialLiveDetail
 void FWonderlandSocialLiveService::CallLff(const FString& OperationId, const FString& SubjectId, const FString& Verb, const FString& Path,
 	const TSharedPtr<FJsonObject>& Body, TFunction<void(const FWonderlandLffAnswer&, const TSharedPtr<FJsonObject>&)> Done)
 {
-	Call(Verb, Path, Body, [this, OperationId, SubjectId, Done](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+	const double IssuedAt = FPlatformTime::Seconds();   // B35 (Q-M1-1 item 4): each LFF / profile read's issue time, in its answer line
+	Call(Verb, Path, Body, [this, OperationId, SubjectId, Done, IssuedAt](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
 	{
 		FWonderlandLffAnswer Answer;
 		Answer.Status = Status;
@@ -1281,8 +1307,9 @@ void FWonderlandSocialLiveService::CallLff(const FString& OperationId, const FSt
 		Answer.RetryAfterSeconds = Status == 429 ? FMath::Max(1, LastRetryAfterSeconds) : 0;
 		// THE OPERATION, THE ID AND THE STATUS ONLY: a post's text is the player's, never the log's (the 10-07 log-injection rule). The
 		// server's refusals name fields, never their values (social-commands.ts onlyFields / lffText).
-		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live %s %s: %s (HTTP %d)%s | %s"), *OperationId, SubjectId.IsEmpty() ? TEXT("-") : *SubjectId,
-			Problem.IsEmpty() ? TEXT("ok") : TEXT("refused"), Status, Problem.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Problem), *WonderlandSocialFreshness::EventStamp());
+		UE_LOG(LogTemp, Log, TEXT("WLSOCIAL live %s %s: %s (HTTP %d)%s, issued %.0f ms ago | %s"), *OperationId, SubjectId.IsEmpty() ? TEXT("-") : *SubjectId,
+			Problem.IsEmpty() ? TEXT("ok") : TEXT("refused"), Status, Problem.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Problem),
+			(FPlatformTime::Seconds() - IssuedAt) * 1000.0, *WonderlandSocialFreshness::EventStamp());
 		Done(Answer, Data);
 	});
 }
