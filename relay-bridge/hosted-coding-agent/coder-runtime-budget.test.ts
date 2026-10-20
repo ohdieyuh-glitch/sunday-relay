@@ -312,6 +312,9 @@ describe('BYTE IDENTITY: no committed contract moves when the key is absent', ()
   /** Printed by pristine main 6402cb13's own mission-contract.ts (no coderRuntimeMinutes code), never retyped. */
   const BEFORE: Readonly<Record<string, string>> = {
     'julius-continuous-1': 'sha256:e6814f7ce2167785052595c60f89aec2ea6bb84bf6f411105e86f317fe02d80a',
+    // added to main after dda2ed37 (PR #375); digests printed by PRISTINE main 2528ac5c's own mission-contract.ts (juju2, 2026-10-20), never retyped:
+    'julius-diag-audit-fixes-1': 'sha256:691f75dc35ffead7c719566425125e56109d1d2063e44a0bef2a91841e70a6ea',
+    'julius-diag-digest-evidence-1': 'sha256:d33ae451d09127b7f06f1faa60b9de2cd06b8dce2316208f27db7bad3153d5a4',
     'julius-diag-output-safety-1': 'sha256:7c12a6dfea7bfa3982380997be4da107e2a03c36fbaed59a1d86a0f93056e415',
     'julius-diag-output-safety-2': 'sha256:dce4650e22fa1b192100ca135ee31ff2449e013bfd6bffc6681319bcc51ba664',
     'julius-first-live': 'sha256:f7f8c2fe683cba5819ecc9e71085228ce8bf82f3e1b7f9c2b6862f2e28346a56',
