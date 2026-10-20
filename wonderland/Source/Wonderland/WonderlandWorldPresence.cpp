@@ -58,8 +58,24 @@ namespace WonderlandWorldPresenceDetail
 		TEXT("Remote players: fraction of the (arrival - age) clock error pulled back into a re-timed sample (keeps the timeline from drifting)."));
 	TAutoConsoleVariable<float> CVarRemoteInterpExtrap(TEXT("wl.Remote.InterpExtrap"), 0.2f,
 		TEXT("Remote players: in Interp mode, seconds a figure may continue at the last segment's velocity when it has caught up with its newest report (0 = hold)."));
-	TAutoConsoleVariable<float> CVarRemoteInterpEaseZ(TEXT("wl.Remote.InterpEaseZ"), 30.0f,
-		TEXT("Remote players: chase rate of the height (floor contact) in Interp mode; XY uses wl.Remote.InterpEase."));
+	// B33 (r16reh16w): 30 -> 120. At 30 the height lagged the interpolated arc by tau = 33 ms (10-14 uu on a 300-420 uu/s jump, b33a); at 120 tau is 8 ms. The height
+	// between two reports is already the straight line between them, so the ease only softens a step INSIDE a frame (a late report's catch-up).
+	TAutoConsoleVariable<float> CVarRemoteInterpEaseZ(TEXT("wl.Remote.InterpEaseZ"), 120.0f,
+		TEXT("Remote players: chase rate of the height (floor contact) in Interp mode; XY uses wl.Remote.InterpEase. 120 is the COMPILED DEFAULT since B33 r16reh16w (no launch-time setting is needed); 30 restores the r16reh16u behaviour (never 0: 0 freezes the height)."));
+	// B33 (r16reh16w): A STANDING PLAYER STILL REPORTS. Only a changed position used to be a new sample, so while the other player stood still no sample arrived, the
+	// adaptive delay forgot how late reports come (PeakAge decays, the delay slews down to InterpDelayMin 0.12 s) and their next move -- a jump from standing -- was drawn
+	// past the newest report and HELD (b33a: delay 120 ms at takeoff while the newest report was up to 270-330 ms old; height error -45.6 uu).
+	TAutoConsoleVariable<int32> CVarRemoteReportTimeSamples(TEXT("wl.Remote.ReportTimeSamples"), 1,
+		TEXT("Remote players, Interp mode: 1 stores a report that repeats a STANDING player's position (reported speed under 10 uu/s) as a new sample when it is a NEWER report (its time is more than 60 ms after the newest sample's; the server stores at most one report per 100 ms), so the adaptive draw delay keeps measuring delivery while they stand and their next move starts from their real last report; 0 = only a changed position is a new sample (the r16reh16u behaviour)."));
+	// B33 (r16reh16w): THE SAMPLE CLOCK. arrival - ageMs dates a report LATE by its upload to the server plus this client's download of the answer (ageMs is the server's
+	// age at answer time): b33a measured +18.3 ms mean (SD 12.5) against the sender's own send stamps, at an 11-15 ms round trip on loopback.
+	TAutoConsoleVariable<int32> CVarRemoteRttClock(TEXT("wl.Remote.RttClock"), 1,
+		TEXT("Remote players, Interp mode: 1 dates each report at arrival - ageMs - this client's own smoothed world-report round trip (an estimate of the report's upload plus the answer's download, which ageMs does not contain; at most 0.25 s), 0 = arrival - ageMs (the r16reh16u clock)."));
+	/** B33: a report dated more than this after the newest sample is a NEWER report (the server stores at most one per 100 ms; the same report seen twice differs only
+	 *  by this client's delivery jitter). */
+	constexpr double NewerReportSeconds = 0.06;
+	/** B33: the most the sample clock is moved back for the round trip. */
+	constexpr double MaxRttClockSeconds = 0.25;
 	TAutoConsoleVariable<float> CVarRemoteEaseRate(TEXT("wl.Remote.EaseRate"), 9.0f,
 		TEXT("Remote players: chase rate toward the report / dead-reckoned point when Interp is 0."));
 	TAutoConsoleVariable<float> CVarRemoteDrCap(TEXT("wl.Remote.DrCap"), 0.3f,
@@ -166,8 +182,15 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 		}
 		{
 			using namespace WonderlandWorldPresenceDetail;
-			// A view that repeats the last position is not a new report (it must not restart the extrapolation clock).
-			const bool bMoved = !Remote.bDrHasReport || !A.Location.Equals(Remote.Target, 0.5);
+			// THE REPORT'S TIME on this machine's clock: arrival minus the backend's age, and (B33 wl.Remote.RttClock) minus this client's smoothed round trip.
+			const double RttClock = CVarRemoteRttClock.GetValueOnGameThread() != 0 ? FMath::Clamp(View.ReportRttSeconds, 0.0, MaxRttClockSeconds) : 0.0;
+			const double ReportRaw = FPlatformTime::Seconds() - A.AgeMs * 0.001 - RttClock;
+			// B33 (wl.Remote.ReportTimeSamples): a STANDING player's newer report is a new sample though its position repeats. Only for a report that says standing,
+			// so a moving player's repeated view (the same report answered twice) is never a sample, and the steady-motion retime below never sees one.
+			const bool bNewerStandingReport = CVarRemoteReportTimeSamples.GetValueOnGameThread() != 0 && Remote.Samples.Num() > 0 && A.Speed < MinMovingSpeedUu
+				&& ReportRaw - Remote.Samples.Last().Raw > NewerReportSeconds;
+			// A view that repeats the last position is not a new report (it must not restart the extrapolation clock) -- unless it is a standing player's newer one.
+			const bool bMoved = !Remote.bDrHasReport || !A.Location.Equals(Remote.Target, 0.5) || bNewerStandingReport;
 			if (bMoved)
 			{
 				if (Remote.bDrHasReport)
@@ -179,9 +202,9 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 					}
 				}
 				{
-					// the sender's time of this report: arrival here minus the backend's age; kept strictly increasing
+					// the sender's time of this report: arrival here minus the backend's age (minus the round trip, wl.Remote.RttClock); kept strictly increasing
 					FRemote::FSample S;
-					S.Raw = FPlatformTime::Seconds() - A.AgeMs * 0.001;
+					S.Raw = ReportRaw;
 					S.T = S.Raw;
 					S.V = FMath::Clamp(A.Speed, 0.0f, MaxTrustedSpeedUu);
 					S.P = A.Location;
