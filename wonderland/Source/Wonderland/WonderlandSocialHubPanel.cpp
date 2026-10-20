@@ -1215,6 +1215,11 @@ void SWonderlandSocialHubPanel::SetAwaitingFresh(bool bAwaiting)
 	{
 		bAwaitingFresh = bAwaiting;
 		RequestRebuild();
+		if (!bAwaiting)
+		{
+			// B35: the first line that describes the hub AFTER a read issued since the open has landed (the "hub opened" line is printed while the gate is still up, so it reads recent 0)
+			UE_LOG(LogTemp, Display, TEXT("WLSOCIAL hub fresh: %s"), *Describe());
+		}
 	}
 }
 
