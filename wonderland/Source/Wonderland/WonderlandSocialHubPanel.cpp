@@ -24,6 +24,11 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "WonderlandUiSubsystem.h"
+// B35 M2 P6: the first painted frame of each change (WonderlandSocialPaintLog)
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "Misc/Paths.h"
+#include "WonderlandUiTestLibrary.h"
 
 // Named, not anonymous: the module is one unity translation unit.
 namespace WonderlandSocialHubLook
@@ -439,6 +444,8 @@ void SWonderlandSocialHubPanel::Rebuild()
 	// ("withheld" / "fresh") and each change of content while drawn ("drawn"). An unchanged re-read does not rebuild (the live service's
 	// digest), so this is a line per change, not per read.
 	const FString Drawn = Describe();
+	bPaintToNote = true;   // M2 P6: the first paint of this rebuild says what it drew
+	PaintNote = Drawn;
 	if (bLogGateOnRebuild || Drawn != LastLoggedDescribe)
 	{
 		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL hub %s: %s"), bLogGateOnRebuild ? (bAwaitingFresh ? TEXT("withheld") : TEXT("fresh")) : TEXT("drawn"), *Drawn);
@@ -1602,6 +1609,85 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeLff()
 	// THE TAB IS BEING SHOWN: its first read (or one it missed while hidden) starts now, not only at the view's first tick
 	Lff->NoteOnScreen(FPlatformTime::Seconds());
 	return LffView.ToSharedRef();
+}
+
+int32 SWonderlandSocialHubPanel::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
+	FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const
+{
+	const int32 Out = SCompoundWidget::OnPaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
+	if (bPaintToNote)
+	{
+		bPaintToNote = false;
+		WonderlandSocialPaintLog::NotePainted(TEXT("hub"), PaintNote);
+	}
+	return Out;
+}
+
+namespace WonderlandSocialPaintLog
+{
+	struct FPendingFrame
+	{
+		FString Surface;
+		uint64 Frame = 0;
+		double PaintedAt = 0.0;
+	};
+
+	TArray<FPendingFrame>& PendingFrames()
+	{
+		static TArray<FPendingFrame> Pending;
+		return Pending;
+	}
+
+	bool FramesWanted()
+	{
+#if UE_BUILD_SHIPPING
+		return false;
+#else
+		static const bool bWanted = FParse::Param(FCommandLine::Get(), TEXT("wlframes"));
+		return bWanted;
+#endif
+	}
+
+	void CaptureAfterTick(float)
+	{
+		if (PendingFrames().Num() == 0)
+		{
+			return;
+		}
+		// ONE CAPTURE for this tick's paints: the window holds all of them now (the last paint's surface names the file)
+		const FPendingFrame Last = PendingFrames().Last();
+		const int32 Paints = PendingFrames().Num();
+		PendingFrames().Reset();
+		static int32 Counter = 0;
+		const FString Path = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("WLFrames"),
+			FString::Printf(TEXT("%04d_f%llu_%s.png"), ++Counter, Last.Frame, *Last.Surface)));
+		const double StartedAt = FPlatformTime::Seconds();
+		int32 Width = 0;
+		int32 Height = 0;
+		const bool bSaved = UWonderlandUiTestLibrary::CaptureGameViewport(Path, Width, Height);
+		UE_LOG(LogTemp, Display, TEXT("WLFRAME %s frame=%llu paints=%d %s %dx%d (began %.1f ms after the paint, took %.1f ms) %s"), *Last.Surface, Last.Frame, Paints,
+			bSaved ? TEXT("saved") : TEXT("NOT saved"), Width, Height, (StartedAt - Last.PaintedAt) * 1000.0, (FPlatformTime::Seconds() - StartedAt) * 1000.0, *Path);
+	}
+
+	void NotePainted(const TCHAR* Surface, const FString& Drawn)
+	{
+		UE_LOG(LogTemp, Display, TEXT("WLSOCIAL painted %s frame=%llu: %s"), Surface, static_cast<uint64>(GFrameCounter), *Drawn);
+		if (!FramesWanted() || !FSlateApplication::IsInitialized())
+		{
+			return;
+		}
+		static FDelegateHandle PostTickHandle;
+		if (!PostTickHandle.IsValid())
+		{
+			// after the tick's windows are drawn (FSlateApplication::TickAndDrawWidgets broadcasts PostTick last)
+			PostTickHandle = FSlateApplication::Get().OnPostTick().AddStatic(&CaptureAfterTick);
+		}
+		FPendingFrame Frame;
+		Frame.Surface = Surface;
+		Frame.Frame = static_cast<uint64>(GFrameCounter);
+		Frame.PaintedAt = FPlatformTime::Seconds();
+		PendingFrames().Add(Frame);
+	}
 }
 
 FReply SWonderlandSocialHubPanel::OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent)

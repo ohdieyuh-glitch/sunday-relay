@@ -35,10 +35,15 @@ namespace WonderlandSocialFreshness
 	constexpr double OpenResyncSeconds = 0.75;
 	/** The oldest read an open surface may still draw people from: when reads stall or fail, the people are withheld again. */
 	constexpr double MaxShownAgeSeconds = 2.0;
+	/** THE MUTATION CONTROL (the reviewer's M2 P8(c)): a diagnostic must show its instrument FAILS when this gate is off. Only a developer session
+	 *  can turn it off (wl.Dev.MutateSocialGate, refused without -wldev; SetGateMutatedOff ignores anything else); never in Shipping. False in
+	 *  every player's session. */
+	WONDERLAND_API bool IsGateMutatedOff();
+	WONDERLAND_API void SetGateMutatedOff(bool bOff);
 	/** A surface opened at OpenedAt may draw people from a view whose read was issued at ReadIssuedAt, now. */
 	inline bool MayDraw(double OpenedAt, double ReadIssuedAt, double Now)
 	{
-		return ReadIssuedAt >= OpenedAt && Now - ReadIssuedAt <= MaxShownAgeSeconds;
+		return IsGateMutatedOff() || (ReadIssuedAt >= OpenedAt && Now - ReadIssuedAt <= MaxShownAgeSeconds);
 	}
 }
 

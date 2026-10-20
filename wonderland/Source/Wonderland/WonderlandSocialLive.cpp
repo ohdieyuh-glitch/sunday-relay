@@ -9,8 +9,35 @@
 #include "Policies/CondensedJsonPrintPolicy.h"
 #include "Misc/ScopeExit.h"
 #include "Misc/SecureHash.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "HAL/IConsoleManager.h"
 #include "WonderlandSocialReconnectPolicy.h"
+
+namespace WonderlandSocialFreshness
+{
+	bool& GateMutatedOffFlag()
+	{
+		static bool bOff = false;
+		return bOff;
+	}
+
+	bool IsGateMutatedOff()
+	{
+		return GateMutatedOffFlag();
+	}
+
+	void SetGateMutatedOff(bool bOff)
+	{
+#if UE_BUILD_SHIPPING
+		(void)bOff;   // never in a shipped build
+#else
+		// a developer session only (-wldev), whoever asks: a player's session can never turn the privacy gate off
+		GateMutatedOffFlag() = bOff && FParse::Param(FCommandLine::Get(), TEXT("wldev"));
+		UE_LOG(LogTemp, Warning, TEXT("WLDEV MUTATION social gate %s"), GateMutatedOffFlag() ? TEXT("OFF (control: cached people are drawn on open, as before SC1)") : TEXT("ON"));
+#endif
+	}
+}
 
 // Named, not anonymous: the module is one unity translation unit.
 namespace WonderlandSocialLiveDetail

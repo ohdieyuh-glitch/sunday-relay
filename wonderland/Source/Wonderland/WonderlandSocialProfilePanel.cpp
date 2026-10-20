@@ -14,6 +14,7 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
+#include "WonderlandSocialHubPanel.h"   // B35 M2 P6: WonderlandSocialPaintLog
 #include "WonderlandSocialLive.h"   // the profile-actions QA: every offered operation through the real dispatcher
 #include "WonderlandUiStyle.h"
 
@@ -293,6 +294,7 @@ void SWonderlandSocialProfilePanel::RebuildBody()
 	{
 		return;
 	}
+	bPaintToNote = true;   // M2 P6: the first paint of this body says what it drew
 	if (bWithheld)
 	{
 		// B35 (R16 privacy, SC1): NOTHING ABOUT THE PLAYER until a read made since this profile opened says what this viewer may see of them
@@ -713,6 +715,18 @@ TSharedRef<SWidget> SWonderlandSocialProfilePanel::MakeStatsAndMutuals()
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)[Mutuals]
 			]
 		];
+}
+
+int32 SWonderlandSocialProfilePanel::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
+	FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const
+{
+	const int32 Out = SCompoundWidget::OnPaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
+	if (bPaintToNote)
+	{
+		bPaintToNote = false;
+		WonderlandSocialPaintLog::NotePainted(TEXT("profile"), FString::Printf(TEXT("user=%s | %s"), *View.Profile.UserId, *DescribeIdentityColumn()));
+	}
+	return Out;
 }
 
 FReply SWonderlandSocialProfilePanel::OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent)

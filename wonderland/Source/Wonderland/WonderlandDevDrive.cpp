@@ -32,6 +32,7 @@
 #include "Misc/Parse.h"
 #include "Serialization/Archive.h"
 #include "WonderlandMissionSubsystem.h"
+#include "WonderlandSocialLive.h"
 #include "WonderlandUiSubsystem.h"
 
 namespace WonderlandDevDriveDetail
@@ -415,6 +416,18 @@ namespace WonderlandDevDriveDetail
 				const bool bStarted = Missions->PlayScenario(FName(TEXT("D")), 10.0f);
 				UE_LOG(LogTemp, Display, TEXT("WLDEV watch: simulated mission %s"), bStarted ? TEXT("started") : TEXT("REFUSED"));
 			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GDevMutateSocialGate(
+		TEXT("wl.Dev.MutateSocialGate"),
+		TEXT("DEV (-wldev) MUTATION CONTROL: 1 turns the B35 social surface gate OFF (cached people drawn on open, as before SC1), 0 back ON. For a diagnostic's must-fail control only."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld*)
+		{
+			if (DriveRefused())
+			{
+				return;
+			}
+			WonderlandSocialFreshness::SetGateMutatedOff(Args.Num() > 0 && Args[0] == TEXT("1"));
 		}));
 
 	FAutoConsoleCommand GDevPos(

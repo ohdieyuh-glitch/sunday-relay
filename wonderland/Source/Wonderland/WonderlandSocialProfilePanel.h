@@ -67,6 +67,9 @@ public:
 
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
+	/** B35 (M2 P6): the first paint after each body rebuild is said in the log (WonderlandSocialPaintLog). */
+	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
+		FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
 	/** The status line under the actions: the last refusal or confirmation, for a person and for QA. */
 	FString GetLastActionLine() const { return LastActionLine; }
@@ -93,6 +96,7 @@ private:
 	bool bWithheld = false;
 	FString WithheldLine;
 	FSlateBrush NoBrush;
+	mutable bool bPaintToNote = false;
 
 	FWonderlandSocialProfileView View;
 	TMap<FString, FString> NamesById;

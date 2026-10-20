@@ -41,6 +41,15 @@ namespace WonderlandSocialBlocked
 	TArray<FWonderlandSocialPersonRow> BlockedByViewer(const FWonderlandSocialSnapshot& Snapshot);
 }
 
+/** B35 (the reviewer's M2 P6/P7): THE FIRST PAINT after each change of a social surface (an open, the gate's release or return, new content),
+ *  said in the log with what that paint drew -- every row id and every rail badge ("WLSOCIAL painted <surface> frame=<n>: ..."). In a developer
+ *  build launched with -wlframes the game window is also captured at the end of the same Slate tick, after its windows were drawn (the content
+ *  that frame presented), as Saved/WLFrames/<n>_f<frame>_<surface>.png ("WLFRAME" lines). Logging only: nothing drawn or sent changes. */
+namespace WonderlandSocialPaintLog
+{
+	void NotePainted(const TCHAR* Surface, const FString& Drawn);
+}
+
 /** The hub's own words for a person and for time (defined in WonderlandSocialHubPanel.cpp), shared with the LFF view so both say them alike. */
 namespace WonderlandSocialHubLook
 {
@@ -99,6 +108,9 @@ public:
 
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
+	/** B35 (M2 P6): the first paint after each rebuild is said in the log (WonderlandSocialPaintLog). */
+	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
+		FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
 	void SetTab(ETab Tab);
 	ETab GetTab() const { return Tab; }
@@ -215,6 +227,9 @@ private:
 	/** B35: the next rebuild says the gate's new state in the log (SetAwaitingFresh), and the last line said (a change is said once). */
 	bool bLogGateOnRebuild = false;
 	FString LastLoggedDescribe;
+	/** B35 (M2 P6): what the last rebuild drew, said by the first paint after it. */
+	mutable bool bPaintToNote = false;
+	FString PaintNote;
 	/** B35 (RV-B35-04/-10): each rail badge and the "friends on" line, from ONE place for the rail and the log; empty while withheld. */
 	FString RailCount(ETab Which) const;
 	FString RailHeadline() const;

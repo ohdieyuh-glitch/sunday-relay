@@ -957,7 +957,7 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		const TWeakObjectPtr<AWonderlandSkinStage> WeakStage(Stage);
 		SAssignNew(ProfilePanel, SWonderlandSocialProfilePanel)
 			// B35 (SC1): BUILT WITHHELD on a live service (its first paint shows nothing of the player; ArmSocialSurfaceGate reads them)
-			.bWithheld(SocialLive() != nullptr && !bPendingProfilePreview)
+			.bWithheld(SocialLive() != nullptr && !bPendingProfilePreview && !WonderlandSocialFreshness::IsGateMutatedOff())
 			.WithheldLine(TEXT("Updating…"))
 			.View(PendingProfile.IsValid() ? *PendingProfile : FWonderlandSocialProfileView())
 			.NamesById(PendingProfileNames)
@@ -997,10 +997,16 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		{
 			Tab = SocialHubPanel->GetTab();   // back from a profile: the tab the player left
 		}
+		// B35 (SC1): THE LFF TAB'S OWN GATE, armed by the same open (its model outlives this panel and holds the earlier visit's feed): nothing
+		// listing another player is drawn from it until an LFF read asked after this moment has landed
+		if (SocialLive() != nullptr && !WonderlandSocialFreshness::IsGateMutatedOff() && Social != nullptr && Social->GetLff().IsValid())
+		{
+			Social->GetLff()->BeginOpenGate(FPlatformTime::Seconds());
+		}
 		SAssignNew(SocialHubPanel, SWonderlandSocialHubPanel)
 			// B35 (SC1): BUILT WITHHELD on a live service, on EVERY path that opens it (this is the only place a hub is built): its first paint
 			// draws nobody from the cached snapshot; ArmSocialSurfaceGate below reads, and the gate judges every frame's worth of time after
-			.bAwaitingFresh(SocialLive() != nullptr)
+			.bAwaitingFresh(SocialLive() != nullptr && !WonderlandSocialFreshness::IsGateMutatedOff())
 			.Snapshot(Snapshot != nullptr ? *Snapshot : FWonderlandSocialSnapshot())
 			.bConnected(Snapshot != nullptr)
 			.SourceLine(Social != nullptr ? Social->GetSourceLine() : FString())
