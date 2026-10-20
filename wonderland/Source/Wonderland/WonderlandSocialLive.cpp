@@ -485,9 +485,10 @@ void FWonderlandSocialLiveService::SetSurfaceOpen(bool bOpen)
 
 void FWonderlandSocialLiveService::Refresh()
 {
-	// R2-15: A 429's Retry-After holds EVERY snapshot read (events, an action's refresh, a coalesced re-read), not only the periodic one; the read
-	// is deferred to the moment the wait ends (Tick), so nothing asked is lost
-	if (bLastReadWas429 && FPlatformTime::Seconds() < ReadNotBefore)
+	// R2-15 / R3-03: AFTER A FAILED READ, ITS WAIT HOLDS EVERY SNAPSHOT READ (a 429's Retry-After, or the doubling back-off): events, an action's
+	// refresh, a surface's open and the coalesced re-read alike, not only the periodic one. The read is deferred to the moment the wait ends
+	// (Tick), so nothing asked is lost. Withholding is by time (the UI's freshness rule), so a held read only keeps a surface withheld longer.
+	if (ReadFailures > 0 && FPlatformTime::Seconds() < ReadNotBefore)
 	{
 		bReadDeferred = true;
 		return;
@@ -580,7 +581,7 @@ bool FWonderlandSocialLiveService::Tick(float)
 	const double Now = FPlatformTime::Seconds();
 	if (bReadDeferred && !bRefreshing && Now >= ReadNotBefore)
 	{
-		Refresh();   // R2-15: a read asked during a 429's wait, now
+		Refresh();   // R2-15 / R3-03: a read asked during a failure's wait, now
 	}
 	if (!bRefreshing && Now >= ReadNotBefore)
 	{

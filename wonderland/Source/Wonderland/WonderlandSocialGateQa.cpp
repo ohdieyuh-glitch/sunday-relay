@@ -295,7 +295,12 @@ namespace WonderlandSocialGateQa
 			if (In >= 0.3)
 			{
 				const bool bWithheld = HubWithheld(U, Why);
-				const bool bHeldPeople = Live != nullptr && WonderlandSocialSnapshotLine(Live->GetSnapshot()).Contains(TEXT("usr_qasy"));
+				bool bHeldPeople = false;
+				if (Live != nullptr)
+				{
+					for (const FWonderlandSocialPersonRow& Row : Live->GetSnapshot().Friends) { bHeldPeople |= Row.UserId == TEXT("usr_qafa"); }
+					for (const FWonderlandSocialRecentRow& Row : Live->GetSnapshot().RecentPlayers) { bHeldPeople |= Row.Person.UserId == TEXT("usr_qasy"); }
+				}
 				Check(R, TEXT("SGA0"), Live != nullptr && bWithheld && bHeldPeople, FString::Printf(TEXT("adopted with the hub open, the service holding people read before the open (%s): %s"),
 					bHeldPeople ? TEXT("yes") : TEXT("NO"), *Why));
 				Check(R, TEXT("SGA3"), Lff.IsValid() && Lff->IsOpenGateArmed() && Lff->IsGateUp(), FString::Printf(TEXT("LFF gate after the adoption reset it: armed %s, up %s"),
