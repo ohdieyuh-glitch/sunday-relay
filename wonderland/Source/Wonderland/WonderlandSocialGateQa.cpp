@@ -146,6 +146,17 @@ namespace WonderlandSocialGateQa
 			S.Profiles.Add(F.UserId, P);
 			S.NamesById.Add(F.UserId, F.DisplayName);
 		}
+		// BLOCKED BY YOU: the viewer's own block (the server sends it so the viewer can unblock); drawn on FRIENDS once fresh (E19)
+		{
+			FWonderlandSocialProfileView Blocked;
+			Blocked.Profile.UserId = TEXT("usr_qabk");
+			Blocked.Profile.DisplayName = TEXT("Bix");
+			Blocked.Relationship = TEXT("BLOCKED");
+			Blocked.Presence.UserId = TEXT("usr_qabk");
+			Blocked.Presence.RestrictedReason = TEXT("BLOCKED");
+			S.Profiles.Add(TEXT("usr_qabk"), Blocked);
+			S.NamesById.Add(TEXT("usr_qabk"), TEXT("Bix"));
+		}
 		S.NamesById.Add(TEXT("usr_qasx"), TEXT("Xan"));
 		S.NamesById.Add(TEXT("usr_qasy"), TEXT("Yu"));
 		S.NamesById.Add(TEXT("usr_qasz"), TEXT("Cy"));
@@ -224,8 +235,9 @@ namespace WonderlandSocialGateQa
 				// SG0: the preview (no live service) draws its people
 				U->OpenSocialHub(TEXT("friends"));
 				const FString Shown = U->DescribeOpenSocialHub();
-				Check(R, TEXT("SG0"), Live == nullptr && Shown.Contains(TEXT("DEVELOPMENT PREVIEW")) && Shown.Contains(TEXT("gate fresh")) && !Shown.Contains(TEXT("| rows none |")),
-					FString::Printf(TEXT("no live service, preview hub drawn: %s"), *Shown.Left(400)));
+				// (this harness's preview carries nobody, so the over-filter control of drawn people is SG4/SG4b on the live service)
+				Check(R, TEXT("SG0"), Live == nullptr && Shown.Contains(TEXT("gate fresh")) && !Shown.Contains(TEXT("gate UPDATING")),
+					FString::Printf(TEXT("no live service: the hub is built without the gate: %s"), *Shown.Left(400)));
 				Shot(R, TEXT("0_preview_hub"));
 				U->CloseOverlay();
 				const bool bLive = Social->ConnectLive(TEXT("http://127.0.0.1:9"), TEXT("qa-socialgate-dead-port"));
@@ -279,6 +291,15 @@ namespace WonderlandSocialGateQa
 				Check(R, TEXT("SG4"), Shown.Contains(TEXT("gate fresh")) && Shown.Contains(TEXT("usr_qasy")) && !Shown.Contains(TEXT("usr_qasx"))
 					&& Shown.Contains(TEXT("RECENT 1")), FString::Printf(TEXT("a read issued after the open: %s"), *Shown.Left(500)));
 				Shot(R, TEXT("2_fresh_drawn"));
+				// SG4b: no over-filter on FRIENDS: both friends and the viewer's own BLOCKED BY YOU row are drawn once fresh
+				if (const TSharedPtr<SWonderlandSocialHubPanel> Hub = U->GetOpenSocialHubForQa())
+				{
+					Hub->SetTab(SWonderlandSocialHubPanel::ETab::Friends);
+					const FString Friends = U->DescribeOpenSocialHub();
+					Check(R, TEXT("SG4b"), Friends.Contains(TEXT("usr_qafa")) && Friends.Contains(TEXT("usr_qafb")) && Friends.Contains(TEXT("usr_qabk")) && Friends.Contains(TEXT("gate fresh")),
+						FString::Printf(TEXT("fresh FRIENDS (both friends + BLOCKED BY YOU): %s"), *Friends.Left(500)));
+					Hub->SetTab(SWonderlandSocialHubPanel::ETab::Recent);
+				}
 				Next(5);
 			}
 			break;
@@ -318,6 +339,40 @@ namespace WonderlandSocialGateQa
 				const FString Profile = U->DescribeOpenProfile();
 				Live->QaLand(View(true), Now());   // a fresh SNAPSHOT changes nothing for the profile: it is withheld until ITS profile.read lands
 				const FString Profile2 = U->DescribeOpenProfile();
+				Check(R, TEXT("SG6a"), Profile.Contains(TEXT("withheld")) && Profile2.Contains(TEXT("withheld")),
+					FString::Printf(TEXT("a profile from the hub, before its own read: %s | after a fresh snapshot: %s"), *Profile, *Profile2));
+				// SG11: its own profile.read, issued after the open, lands: the card is drawn
+				FWonderlandSocialProfileView Ann;
+				Ann.Profile.UserId = TEXT("usr_qafa");
+				Ann.Profile.DisplayName = TEXT("Ann");
+				Ann.Profile.RelayDog.SkinId = TEXT("relay_og");
+				Ann.Presence = Person(TEXT("usr_qafa"), TEXT("Ann")).Presence;
+				Ann.Relationship = TEXT("FRIEND");
+				const bool bLanded = U->QaProfileReadLanded(200, Ann, Now(), TEXT("qa-ann-1"));
+				const FString Drawn = U->DescribeOpenProfile();
+				Check(R, TEXT("SG11"), bLanded && Drawn.Contains(TEXT("user=usr_qafa")) && !Drawn.Contains(TEXT("withheld")),
+					FString::Printf(TEXT("a profile.read issued after the open landed: %s"), *Drawn));
+				Shot(R, TEXT("4a_profile_drawn"));
+				// SG12: the authority's not-found (the subject hid from or blocked the viewer): nothing about them, one generic line
+				U->QaProfileReadLanded(404, FWonderlandSocialProfileView(), Now(), FString());
+				const FString Gone = U->DescribeOpenProfile();
+				Check(R, TEXT("SG12"), Gone.Contains(TEXT("This profile is not available.")) && Gone.Contains(TEXT("withheld")),
+					FString::Printf(TEXT("profile.read answered not-found: %s"), *Gone));
+				Shot(R, TEXT("4b_profile_not_available"));
+				// SG13 (next phase): drawn again, then no read lands for longer than the age limit
+				U->QaProfileReadLanded(200, Ann, Now(), TEXT("qa-ann-2"));
+				R.ReadsAtOpen = U->DescribeOpenProfile().Contains(TEXT("withheld")) ? -1 : 0;
+				Next(70);
+			}
+			break;
+		case 70:
+			if (In >= WonderlandSocialFreshness::MaxShownAgeSeconds + 0.6)
+			{
+				const FString Aged = U->DescribeOpenProfile();
+				Check(R, TEXT("SG13"), R.ReadsAtOpen == 0 && Aged.Contains(TEXT("withheld")),
+					FString::Printf(TEXT("drawn after a fresh read: %s; %.1f s with no landed read: %s"), R.ReadsAtOpen == 0 ? TEXT("yes") : TEXT("NO"), In, *Aged));
+				const FString Profile = Aged;
+				const FString Profile2 = Aged;
 				U->BackFromProfile();                      // what Esc and CLOSE on the profile call
 				const FString Back = U->DescribeOpenSocialHub();
 				Check(R, TEXT("SG6"), Profile.Contains(TEXT("withheld")) && Profile2.Contains(TEXT("withheld")) && Withheld(Back),

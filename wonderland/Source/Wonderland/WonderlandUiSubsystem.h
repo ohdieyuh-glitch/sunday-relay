@@ -124,6 +124,11 @@ public:
 		return SocialHubPanel;
 	}
 	void RefreshOpenSocialHubForQa() { HandleSocialChanged(); }
+#if !UE_BUILD_SHIPPING
+	/** QA (wl.Qa.SocialGate): the open profile's profile.read answers as if a read ISSUED at IssuedAt had landed (200 with View, 404, or another
+	 *  status = a failure). False when no gated profile is open. */
+	bool QaProfileReadLanded(int32 Status, const FWonderlandSocialProfileView& View, double IssuedAt, const FString& Digest);
+#endif
 	/** A social action asked of the service, its answer shown on the open hub or profile: exactly what their buttons call. */
 	void RequestSocialAction(const FString& OperationId, const FString& SubjectId) { HandleSocialAction(OperationId, SubjectId); }
 	/** QA: the player whose BLOCK is waiting for its confirmation (F1: a shared-party block is warned first), or empty. */
@@ -1192,6 +1197,8 @@ private:
 	FString ProfileShownDigest;
 	TSharedPtr<FWonderlandSocialProfileView> ProfileLandedView;
 	void ReadOpenProfile();
+	/** B35: the open profile's profile.read answered (ok, the authority's not-found 404, or a failure), then the gate is judged. */
+	void HandleOpenProfileRead(const struct FWonderlandLffAnswer& Answer, const FWonderlandSocialProfileView& View, double IssuedAt, const FString& Digest);
 	/** The wallet above the mini-map: the top-right column as one piece, so its size is known when it is placed. */
 	TSharedPtr<SWidget> TopRightColumn;
 

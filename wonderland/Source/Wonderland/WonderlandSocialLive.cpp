@@ -490,6 +490,10 @@ void FWonderlandSocialLiveService::Refresh()
 			SnapshotAt = FPlatformTime::Seconds();
 			SnapshotIssuedAt = IssuedAt;
 			LastError.Reset();
+			// B35 (M2 P9): EVERY landed read, changed or not, with how long ago it was issued -- a diagnostic proves "no read landed between the
+			// hide and the open" from these lines (an unchanged read is otherwise silent)
+			UE_LOG(LogTemp, Display, TEXT("WLSOCIAL read landed: issued %.0f ms ago, view %s, surface %s"), (FPlatformTime::Seconds() - IssuedAt) * 1000.0,
+				bViewChanged ? TEXT("changed") : TEXT("unchanged"), bSurfaceOpen ? TEXT("open") : TEXT("closed"));
 			if (bViewChanged)
 			{
 				UE_LOG(LogTemp, Log, TEXT("%s"), *WonderlandSocialSnapshotLine(Snapshot));

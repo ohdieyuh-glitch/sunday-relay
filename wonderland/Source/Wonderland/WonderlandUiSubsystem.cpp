@@ -5547,30 +5547,50 @@ void UWonderlandUiSubsystem::ReadOpenProfile()
 		{
 			return;   // a read for an earlier open (or a closed profile): it says nothing about the one on screen
 		}
-		Self->bProfileReadInFlight = false;
-		if (Answer.IsOk() || Answer.Status == 404)
-		{
-			Self->ProfileReadFailures = 0;
-			Self->ProfileReadNotBefore = 0.0;
-			Self->ProfileReadProblem.Reset();
-			Self->bProfileNotAvailable = !Answer.IsOk();
-			Self->ProfileLandedView = Answer.IsOk() ? MakeShared<FWonderlandSocialProfileView>(View) : TSharedPtr<FWonderlandSocialProfileView>();
-			Self->ProfileLandedDigest = Answer.IsOk() ? Digest : FString();
-			Self->ProfileLandedIssuedAt = IssuedAt;
-		}
-		else
-		{
-			// A FAILED READ keeps the profile withheld and is not repeated at the tick rate: a 429 waits its Retry-After, anything else a gap
-			// that doubles from the open period up to 8 s (as the snapshot's reads do)
-			Self->ProfileReadFailures = FMath::Min(Self->ProfileReadFailures + 1, 16);
-			const double Gap = Answer.Status == 429 ? FMath::Max(1.0, static_cast<double>(Answer.RetryAfterSeconds))
-				: FMath::Min(8.0, WonderlandSocialFreshness::OpenResyncSeconds * FMath::Pow(2.0, static_cast<double>(FMath::Min(Self->ProfileReadFailures - 1, 4))));
-			Self->ProfileReadNotBefore = FPlatformTime::Seconds() + Gap;
-			Self->ProfileReadProblem = Answer.Problem;
-		}
-		Self->JudgeSocialSurfaceGate();
+		Self->HandleOpenProfileRead(Answer, View, IssuedAt, Digest);
 	});
 }
+
+void UWonderlandUiSubsystem::HandleOpenProfileRead(const FWonderlandLffAnswer& Answer, const FWonderlandSocialProfileView& View, double IssuedAt, const FString& Digest)
+{
+	bProfileReadInFlight = false;
+	if (Answer.IsOk() || Answer.Status == 404)
+	{
+		ProfileReadFailures = 0;
+		ProfileReadNotBefore = 0.0;
+		ProfileReadProblem.Reset();
+		bProfileNotAvailable = !Answer.IsOk();
+		ProfileLandedView = Answer.IsOk() ? MakeShared<FWonderlandSocialProfileView>(View) : TSharedPtr<FWonderlandSocialProfileView>();
+		ProfileLandedDigest = Answer.IsOk() ? Digest : FString();
+		ProfileLandedIssuedAt = IssuedAt;
+	}
+	else
+	{
+		// A FAILED READ keeps the profile withheld and is not repeated at the tick rate: a 429 waits its Retry-After, anything else a gap
+		// that doubles from the open period up to 8 s (as the snapshot's reads do)
+		ProfileReadFailures = FMath::Min(ProfileReadFailures + 1, 16);
+		const double Gap = Answer.Status == 429 ? FMath::Max(1.0, static_cast<double>(Answer.RetryAfterSeconds))
+			: FMath::Min(8.0, WonderlandSocialFreshness::OpenResyncSeconds * FMath::Pow(2.0, static_cast<double>(FMath::Min(ProfileReadFailures - 1, 4))));
+		ProfileReadNotBefore = FPlatformTime::Seconds() + Gap;
+		ProfileReadProblem = Answer.Problem;
+	}
+	JudgeSocialSurfaceGate();
+}
+
+#if !UE_BUILD_SHIPPING
+bool UWonderlandUiSubsystem::QaProfileReadLanded(int32 Status, const FWonderlandSocialProfileView& View, double IssuedAt, const FString& Digest)
+{
+	if (Open != EOverlay::Profile || !bProfileGated)
+	{
+		return false;
+	}
+	FWonderlandLffAnswer Answer;
+	Answer.Status = Status;
+	Answer.Problem = Status == 200 ? FString() : FString::Printf(TEXT("QA answer HTTP %d"), Status);
+	HandleOpenProfileRead(Answer, View, IssuedAt, Digest);
+	return true;
+}
+#endif
 
 const TCHAR* UWonderlandUiSubsystem::OverlayName(EOverlay Which)
 {
