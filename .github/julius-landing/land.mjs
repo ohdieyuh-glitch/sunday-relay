@@ -14,11 +14,21 @@ const API = 'https://api.github.com';
 const SELF_CHECK = 'Land a cleared pull request';
 // r5: NOTHING this job prints may carry a credential, whatever an API, a proxy or a library echoes back into an error text. Every line goes through `summary`, which redacts the token
 // literal, GitHub token shapes (ghs_/ghp_/gho_/ghu_/ghr_/github_pat_), `Bearer <x>` and `Authorization: <x>` first. (The runner also masks GITHUB_TOKEN; this does not rely on it.)
+// V-4: the token is also redacted when a line break (or any whitespace) splits it, and in its base64 forms (alone, behind `x-access-token:`, at the three byte alignments) and percent-encoded.
+const b64Middles = (s) => [0, 1, 2].map((pad) => Buffer.from(' '.repeat(pad) + s).toString('base64')).map((e, pad) => e.slice(Math.ceil((pad * 8) / 6), Math.max(0, e.length - 4))).filter((m) => m.length >= 8);
 const redact = (text) => {
   let out = String(text);
-  if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) out = out.split(env.GH_TOKEN).join('***');
+  if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) {
+    out = out.split(env.GH_TOKEN).join('***');
+    const gap = '\\s*';
+    out = out.replace(new RegExp([...env.GH_TOKEN].map((c) => c.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join(gap), 'gu'), '***');
+    for (const form of [env.GH_TOKEN, `x-access-token:${env.GH_TOKEN}`, `${env.GH_TOKEN}:x-oauth-basic`]) for (const middle of b64Middles(form)) out = out.split(middle).join('***');
+    out = out.split(encodeURIComponent(env.GH_TOKEN)).join('***');
+  }
   return out
-    .replace(/\b(?:ghs|ghp|gho|ghu|ghr)_[A-Za-z0-9]{16,}/gu, '***').replace(/\bgithub_pat_[A-Za-z0-9_]{16,}/gu, '***')
+    // v3.5b S-4: only a LINE BREAK (LF or CRLF, then at most one space or tab) may split the run, never a plain space, so the words after a token survive; at most 255 characters.
+    .replace(/\b(?:ghs|ghp|gho|ghu|ghr)_(?:(?:\r?\n[ \t]?)?[A-Za-z0-9]){16,255}/gu, '***')
+    .replace(/\bgithub_pat_(?:(?:\r?\n[ \t]?)?[A-Za-z0-9_]){16,255}/gu, '***')
     .replace(/\bBearer\s+[^\s"',;]+/giu, 'Bearer ***').replace(/(authorization["']?\s*[:=]\s*)(?:(?:bearer|token|basic)\s+)?[^\s"',;]+/giu, '$1***');
 };
 const summary = (line) => { const safe = redact(line); console.log(safe); if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, safe + '\n'); };
@@ -196,7 +206,7 @@ try {
     process.exit(2);
   }
   if (tipAfter === newSha) summary(`LANDED (the PATCH response was lost): ${text}; main is the created commit ${newSha}`);
-  else if (tipAfter === fields.base) fail([`the ref update outcome was ambiguous (${text}) and main is still the cleared base ${fields.base}; nothing landed, no retry (a request that timed out could still be applied late: check main again; this clearance is spent, sign a new one)`]);
+  else if (tipAfter === fields.base) { summary(`ALERT AFTER AN AMBIGUOUS REF UPDATE (${text}): main is still the cleared base ${fields.base}, but the request could still be applied late; state in doubt. No retry, no force, no comment, PR left open. Check main before signing anything new; this clearance is spent`); process.exit(2); }
   else { summary(`ALERT AFTER AN AMBIGUOUS REF UPDATE (${text}): main is ${tipAfter}, neither the created commit ${newSha} nor the cleared base ${fields.base}`); process.exit(2); }
 }
 summary(`LANDED PR #${number}: ${newSha}`);
