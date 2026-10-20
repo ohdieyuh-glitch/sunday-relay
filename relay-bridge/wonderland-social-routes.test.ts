@@ -251,6 +251,81 @@ describe('BF-2 through the real routes: the profile Relay Dog follows the worn s
   });
 });
 
+describe('MP-VIS-02 through the real routes: the equipped Mission Handoff reaches the other player in the world view, and only those who may see the figure', () => {
+  const tick = (extra: Record<string, unknown> = {}) => ({ x: 1, y: 2, z: 3, yaw: 0, speed: 0, motion: 'IDLE', skinId: 'relay_og', ...extra });
+  const handoffSeen = async (who: { get: (path: string) => Promise<{ body: { data?: any } }> }, id: string) =>
+    ((await who.get('/world')).body.data?.avatars as { userId: string; handoff?: string }[] | undefined)?.find((a) => a.userId === id)?.handoff;
+
+  it('an old client (field omitted) still gets 200 and reads NONE; TWIN_SWORDS is returned on /world and on the answer to /world/state; an unknown or mistyped value is a 200 that reads NONE', async () => {
+    const w = await friendsOn(createInMemorySocialStore());
+    expect((await w.kai.post('/world/join', { target: 'PUBLIC' })).status).toBe(200);
+    expect((await w.nova.post('/world/join', { target: 'PUBLIC' })).status).toBe(200);
+    expect((await w.kai.post('/world/state', tick())).status).toBe(200);
+    expect(await handoffSeen(w.nova, 'usr_kai')).toBe('NONE');
+    expect((await w.kai.post('/world/state', tick({ handoff: 'TWIN_SWORDS' }))).status).toBe(200);
+    expect(await handoffSeen(w.nova, 'usr_kai')).toBe('TWIN_SWORDS');
+    const answered = await w.nova.post('/world/state', tick());
+    expect((answered.body.data.avatars as { userId: string; handoff: string }[]).find((a) => a.userId === 'usr_kai')?.handoff).toBe('TWIN_SWORDS');
+    expect((await w.kai.post('/world/state', tick({ handoff: 'NOT_A_FORM' }))).status).toBe(200);
+    expect(await handoffSeen(w.nova, 'usr_kai')).toBe('NONE');
+    expect((await w.kai.post('/world/state', tick({ handoff: 'TWIN_SWORDS' }))).status).toBe(200);
+    expect((await w.kai.post('/world/state', tick({ handoff: 12 }))).status).toBe(200);
+    expect(await handoffSeen(w.nova, 'usr_kai')).toBe('NONE');
+  });
+
+  it('a stranger who may not see Kai (presence FRIENDS) and a player Kai blocked see no figure, so no handoff; a friend still does', async () => {
+    const w = await friendsOn(createInMemorySocialStore());
+    await w.vega.get('/snapshot');
+    for (const p of [w.kai, w.nova, w.vega]) expect((await p.post('/world/join', { target: 'PUBLIC' })).status).toBe(200);
+    expect((await w.kai.post('/world/state', tick({ handoff: 'TWIN_SWORDS' }))).status).toBe(200);
+    expect(await handoffSeen(w.vega, 'usr_kai'), 'presence EVERYONE by default').toBe('TWIN_SWORDS');
+    expect((await w.kai.post('/privacy', { presenceVisibility: 'FRIENDS' })).status).toBe(200);
+    expect(await handoffSeen(w.vega, 'usr_kai')).toBeUndefined();
+    expect(await handoffSeen(w.nova, 'usr_kai')).toBe('TWIN_SWORDS');
+    expect((await w.kai.post('/privacy', { presenceVisibility: 'EVERYONE' })).status).toBe(200);
+    expect((await w.kai.post('/blocks', { targetId: 'usr_vega' })).status).toBe(200);
+    expect(await handoffSeen(w.vega, 'usr_kai')).toBeUndefined();
+    expect(await handoffSeen(w.nova, 'usr_kai')).toBe('TWIN_SWORDS');
+  });
+});
+
+describe('MP-VIS-02 REV2 through the real routes: the activation event reaches the other player once, in order, and never more than the closed fields', () => {
+  const tick = (extra: Record<string, unknown> = {}) => ({ x: 1, y: 2, z: 3, yaw: 0, speed: 0, motion: 'IDLE', skinId: 'relay_og', ...extra });
+  const eventSeen = async (who: { get: (path: string) => Promise<{ body: { data?: any } }> }, id: string) =>
+    ((await who.get('/world')).body.data?.avatars as { userId: string; handoffEvent?: any }[] | undefined)?.find((a) => a.userId === id)?.handoffEvent;
+
+  it('an old client (no event) is unchanged; ACTIVATE then DEACTIVATE are returned with a server seq and an age; resends and garbage change nothing and are still 200', async () => {
+    const w = await friendsOn(createInMemorySocialStore());
+    expect((await w.kai.post('/world/join', { target: 'PUBLIC' })).status).toBe(200);
+    expect((await w.nova.post('/world/join', { target: 'PUBLIC' })).status).toBe(200);
+    expect((await w.kai.post('/world/state', tick())).status).toBe(200);
+    expect(await eventSeen(w.nova, 'usr_kai')).toBeUndefined();
+    const act = { epoch: 11, n: 1, kind: 'ACTIVATE', form: 'TWIN_SWORDS', sinceMs: 100 };
+    expect((await w.kai.post('/world/state', tick({ handoff: 'TWIN_SWORDS', handoffEvent: act }))).status).toBe(200);
+    const first = await eventSeen(w.nova, 'usr_kai');
+    expect(first).toMatchObject({ seq: 1, kind: 'ACTIVATE', form: 'TWIN_SWORDS' });
+    expect(Object.keys(first).sort()).toEqual(['ageMs', 'form', 'kind', 'seq']);
+    expect((await w.kai.post('/world/state', tick({ handoff: 'TWIN_SWORDS', handoffEvent: act }))).status).toBe(200);
+    expect((await eventSeen(w.nova, 'usr_kai')).seq).toBe(1);
+    expect((await w.kai.post('/world/state', tick({ handoff: 'TWIN_SWORDS', handoffEvent: { ...act, n: 2, kind: 'DANCE' } }))).status).toBe(200);
+    expect((await w.kai.post('/world/state', tick({ handoff: 'TWIN_SWORDS', handoffEvent: 'ACTIVATE' }))).status).toBe(200);
+    expect((await eventSeen(w.nova, 'usr_kai')).seq).toBe(1);
+    expect((await w.kai.post('/world/state', tick({ handoff: 'NONE', handoffEvent: { ...act, n: 2, kind: 'DEACTIVATE' } }))).status).toBe(200);
+    expect(await eventSeen(w.nova, 'usr_kai')).toMatchObject({ seq: 2, kind: 'DEACTIVATE' });
+  });
+
+  it('a stranger the player hides from, and a player they blocked, are given no event', async () => {
+    const w = await friendsOn(createInMemorySocialStore());
+    await w.vega.get('/snapshot');
+    for (const p of [w.kai, w.nova, w.vega]) expect((await p.post('/world/join', { target: 'PUBLIC' })).status).toBe(200);
+    expect((await w.kai.post('/world/state', tick({ handoff: 'TWIN_SWORDS', handoffEvent: { epoch: 3, n: 1, kind: 'ACTIVATE', form: 'TWIN_SWORDS', sinceMs: 0 } }))).status).toBe(200);
+    expect(await eventSeen(w.vega, 'usr_kai')).toMatchObject({ seq: 1 });
+    expect((await w.kai.post('/privacy', { presenceVisibility: 'FRIENDS' })).status).toBe(200);
+    expect(await eventSeen(w.vega, 'usr_kai')).toBeUndefined();
+    expect(await eventSeen(w.nova, 'usr_kai')).toMatchObject({ seq: 1 });
+  });
+});
+
 /** Kai and Nova, friends, on a given store. */
 async function friendsOn(store: SocialStore) {
   const w = world(store);

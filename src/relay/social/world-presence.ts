@@ -35,6 +35,90 @@ const WORLD_COORD_LIMIT = 10_000_000;
 export const WORLD_MOTIONS = ['IDLE', 'WALK', 'RUN', 'JUMP', 'FALL', 'FLY'] as const;
 export type WorldMotion = (typeof WORLD_MOTIONS)[number];
 
+/**
+ * MP-VIS-02: the Mission Handoff form a player has EQUIPPED, as a closed enum -- cosmetic and fixed-size. It is NOT the mission:
+ * no mission id, state or approval is ever carried (that stays on the owner's machine). NONE = no handoff shown. A later form
+ * is added to this list, never sent as free text. The server only transports the value the owner's own client reports, as it
+ * does for skinId; it grants nothing and checks no rule of play.
+ */
+export const WORLD_HANDOFFS = ['NONE', 'TWIN_SWORDS'] as const;
+export type WorldHandoff = (typeof WORLD_HANDOFFS)[number];
+
+/**
+ * MP-VIS-02 REV2: THE ACTIVATION EVENT. The equipped form alone cannot reproduce the activation the owner sees (forming, flight to the
+ * hands, the return), so the owner's client also reports ONE sequenced event, closed in every field: a kind, a form, a per-launch
+ * epoch and a counter. The server keeps only the LATEST accepted event per player (constant size, memory only), gives it its own
+ * per-player sequence number and a server timestamp, and returns it to permitted viewers as { seq, kind, form, ageMs } while it is young.
+ * A viewer plays it from its age; an old event is never played (the persistent `handoff` says what is equipped NOW). No animation id,
+ * duration, asset, position or mission datum is ever carried: the viewer's own build owns what each form looks like.
+ */
+export const WORLD_HANDOFF_KINDS = ['ACTIVATE', 'DEACTIVATE'] as const;
+export type WorldHandoffKind = (typeof WORLD_HANDOFF_KINDS)[number];
+/** Accepted events closer together than this are dropped (the local sequence cannot produce two within 1.4 s). */
+export const WORLD_HANDOFF_EVENT_MIN_INTERVAL_MS = 750;
+/** How long the latest event is returned in a view. Longer than the longest sequence (3.3 s) plus a late join's slack. */
+export const WORLD_HANDOFF_EVENT_RETAIN_MS = 10_000;
+/** The owner may say its transition began this long before the report that carries it (the report waits for the next tick). Clamped. */
+export const WORLD_HANDOFF_SINCE_MAX_MS = 1_000;
+const WORLD_HANDOFF_COUNTER_LIMIT = 2_147_483_647;
+
+export interface HandoffEventReport {
+  /** A number the client draws once per launch: a new launch restarts `n` without being mistaken for a duplicate. */
+  readonly epoch: number;
+  /** Increases by one per event within an epoch. A resend of the same event repeats (epoch, n). */
+  readonly n: number;
+  readonly kind: WorldHandoffKind;
+  readonly form: WorldHandoff;
+  readonly sinceMs: number;
+}
+
+export interface StoredHandoffEvent {
+  /** Server-assigned, per player, +1 per accepted event. The ordering viewers trust. */
+  readonly seq: number;
+  readonly epoch: number;
+  readonly n: number;
+  readonly kind: WorldHandoffKind;
+  readonly form: WorldHandoff;
+  /** Server time the transition began (receipt time less the clamped `sinceMs`). */
+  readonly atMs: number;
+  readonly receivedAtMs: number;
+}
+
+/** Total: anything that is not exactly a well-formed event is undefined (the report itself is unaffected). */
+export function parseHandoffEvent(value: unknown): HandoffEventReport | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const v = value as Record<string, unknown>;
+  const whole = (x: unknown, lo: number, hi: number): x is number => typeof x === 'number' && Number.isInteger(x) && x >= lo && x <= hi;
+  if (!whole(v.epoch, 0, WORLD_HANDOFF_COUNTER_LIMIT) || !whole(v.n, 1, WORLD_HANDOFF_COUNTER_LIMIT)) return undefined;
+  if (typeof v.kind !== 'string' || !(WORLD_HANDOFF_KINDS as readonly string[]).includes(v.kind)) return undefined;
+  if (typeof v.form !== 'string' || v.form === 'NONE' || !(WORLD_HANDOFFS as readonly string[]).includes(v.form)) return undefined;
+  const since = v.sinceMs === undefined ? 0 : v.sinceMs;
+  if (typeof since !== 'number' || !Number.isFinite(since)) return undefined;
+  return { epoch: v.epoch, n: v.n, kind: v.kind as WorldHandoffKind, form: v.form as WorldHandoff, sinceMs: Math.min(WORLD_HANDOFF_SINCE_MAX_MS, Math.max(0, Math.floor(since))) };
+}
+
+/**
+ * The latest accepted event after this report: unchanged unless the incoming one is NEW (a different epoch, or a larger n), not too soon
+ * after the last, legal for what the player had equipped, and consistent with the equipped form this same report states.
+ */
+function acceptHandoffEvent(prevHandoff: WorldHandoff, prev: StoredHandoffEvent | undefined, incoming: HandoffEventReport | undefined, handoffNow: WorldHandoff, nowMs: number): StoredHandoffEvent | undefined {
+  if (incoming === undefined) return prev;
+  if (prev !== undefined && incoming.epoch === prev.epoch && incoming.n <= prev.n) return prev; // a resend, a duplicate, or out of order
+  if (prev !== undefined && nowMs - prev.receivedAtMs < WORLD_HANDOFF_EVENT_MIN_INTERVAL_MS) return prev;
+  if (incoming.kind === 'ACTIVATE' && !(prevHandoff === 'NONE' && handoffNow === incoming.form)) return prev;
+  if (incoming.kind === 'DEACTIVATE' && !(prevHandoff !== 'NONE' && handoffNow === 'NONE')) return prev;
+  return { seq: (prev?.seq ?? 0) + 1, epoch: incoming.epoch, n: incoming.n, kind: incoming.kind, form: incoming.form, atMs: nowMs - incoming.sinceMs, receivedAtMs: nowMs };
+}
+
+/**
+ * Any value that is not a known handoff reads as NONE: absent (an older client), null, a wrong type, or a form this build does
+ * not know (a NEWER client on this older server). A cosmetic must never cost a player their position report, so it is coerced,
+ * never refused (motion and skinId, which the figure cannot be drawn without, are refused instead).
+ */
+export function coerceWorldHandoff(value: unknown): WorldHandoff {
+  return typeof value === 'string' && (WORLD_HANDOFFS as readonly string[]).includes(value) ? (value as WorldHandoff) : 'NONE';
+}
+
 export interface WorldContext {
   readonly contextId: string;
   readonly kind: SocialServerKind;
@@ -60,6 +144,10 @@ export interface AvatarState {
   readonly speed: number;
   readonly motion: WorldMotion;
   readonly skinId: string;
+  /** MP-VIS-02: the equipped Mission Handoff form (NONE when absent from the report). Returned to every permitted viewer. */
+  readonly handoff: WorldHandoff;
+  /** MP-VIS-02 REV2: the latest accepted activation event (see StoredHandoffEvent). */
+  readonly handoffEvent?: StoredHandoffEvent;
   readonly reportedAtMs: number;
 }
 
@@ -307,6 +395,10 @@ export interface AvatarReport {
   readonly speed: number;
   readonly motion: WorldMotion;
   readonly skinId: string;
+  /** Optional: an older client omits it, which reads as NONE. Anything unknown is coerced to NONE (coerceWorldHandoff). */
+  readonly handoff?: WorldHandoff;
+  /** MP-VIS-02 REV2: optional; re-validated here (parseHandoffEvent) whatever the caller did. */
+  readonly handoffEvent?: unknown;
 }
 
 /** The actor's own representation, as their client reports it. Only ever their own; only inside their context. */
@@ -320,6 +412,9 @@ export function reportAvatar(world: WorldState, actorId: SocialUserId, report: A
   if (!/^[a-z0-9_]{1,40}$/.test(report.skinId)) return fail('validation-failed', 'unknown skin');
   const last = world.avatars[actorId];
   if (last !== undefined && last.contextId === context.contextId && nowMs - last.reportedAtMs < WORLD_REPORT_MIN_INTERVAL_MS) return { ok: true, value: world };
+  const prev = last !== undefined && last.contextId === context.contextId ? last : undefined;
+  const handoff = coerceWorldHandoff(report.handoff);
+  const handoffEvent = acceptHandoffEvent(prev?.handoff ?? 'NONE', prev?.handoffEvent, parseHandoffEvent(report.handoffEvent), handoff, nowMs);
   const avatar: AvatarState = {
     userId: actorId,
     contextId: context.contextId,
@@ -330,15 +425,27 @@ export function reportAvatar(world: WorldState, actorId: SocialUserId, report: A
     speed: Math.max(0, report.speed),
     motion: report.motion,
     skinId: report.skinId,
+    handoff,
+    ...(handoffEvent === undefined ? {} : { handoffEvent }),
     reportedAtMs: nowMs,
   };
   return { ok: true, value: { ...world, avatars: { ...world.avatars, [actorId]: avatar } } };
 }
 
+/**
+ * One other player as a viewer sees them. The latest handoff event is returned only while young, WITHOUT the client's epoch and counter
+ * (those are the server's dedup keys, not the viewer's): { seq, kind, form, ageMs }.
+ */
+export type WorldAvatarView = Omit<AvatarState, 'handoffEvent'> & {
+  readonly displayName: string;
+  readonly ageMs: number;
+  readonly handoffEvent?: { readonly seq: number; readonly kind: WorldHandoffKind; readonly form: WorldHandoff; readonly ageMs: number };
+};
+
 /** What one viewer sees of their context: who is there and where, minus anyone either side has blocked. */
 export interface WorldView {
   readonly context: { readonly contextId: string; readonly kind: SocialServerKind; readonly serverName: string; readonly authority: WorldContext['authority']; readonly population: number; readonly capacity: number } | null;
-  readonly avatars: readonly (AvatarState & { readonly displayName: string; readonly ageMs: number })[];
+  readonly avatars: readonly WorldAvatarView[];
   /** Invitations into a world waiting for this viewer. */
   readonly invites: readonly { readonly inviteId: string; readonly fromUserId: SocialUserId; readonly fromName: string; readonly serverName: string; readonly expiresInMs: number }[];
 }
@@ -357,7 +464,16 @@ export function worldViewFor(world: WorldState, social: SocialState, viewerId: S
           .filter(visible)
           .map((id) => world.avatars[id])
           .filter((a): a is AvatarState => a !== undefined && nowMs - a.reportedAtMs <= WORLD_AVATAR_STALE_MS && a.contextId === context.contextId)
-          .map((a) => ({ ...a, displayName: userById(social, a.userId)?.profile.displayName ?? 'Player', ageMs: nowMs - a.reportedAtMs }));
+          .map((a): WorldAvatarView => {
+            const { handoffEvent, ...rest } = a;
+            const young = handoffEvent !== undefined && nowMs - handoffEvent.atMs <= WORLD_HANDOFF_EVENT_RETAIN_MS;
+            return {
+              ...rest,
+              displayName: userById(social, a.userId)?.profile.displayName ?? 'Player',
+              ageMs: nowMs - a.reportedAtMs,
+              ...(young ? { handoffEvent: { seq: handoffEvent.seq, kind: handoffEvent.kind, form: handoffEvent.form, ageMs: Math.max(0, nowMs - handoffEvent.atMs) } } : {}),
+            };
+          });
   const invites = world.invites
     .filter((i) => i.toUserId === viewerId && i.expiresAtMs > nowMs && unwalled(i.fromUserId) && world.contexts[i.contextId] !== undefined && !walledFromOwner(social, world.contexts[i.contextId], viewerId))
     .map((i) => ({

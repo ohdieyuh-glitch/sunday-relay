@@ -78,6 +78,7 @@ import { buildSocialView } from './social-preview';
 import { areFriends, blockedEitherWay, conversationById, friendIdsOf, messagesOf, partyById, partyOf, presenceHiddenFrom, userById, type SocialState } from './social-state';
 import {
   WORLD_MOTIONS,
+  coerceWorldHandoff,
   contextOf,
   emptyWorldState,
   inviteToWorld,
@@ -747,7 +748,7 @@ function applyOne(
       const reported = reportAvatar(
         world,
         actorId,
-        { x: num('x'), y: num('y'), z: num('z'), yaw: num('yaw'), speed: num('speed'), motion: (motion as { value: WorldMotion }).value, skinId: (skin as { value: string }).value },
+        { x: num('x'), y: num('y'), z: num('z'), yaw: num('yaw'), speed: num('speed'), motion: (motion as { value: WorldMotion }).value, skinId: (skin as { value: string }).value, handoff: coerceWorldHandoff(body.handoff), handoffEvent: body.handoffEvent },
         nowMs,
       );
       if (!reported.ok) return worldFail(reported);
