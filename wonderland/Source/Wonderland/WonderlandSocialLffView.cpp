@@ -250,6 +250,14 @@ namespace WonderlandLffModelDetail
 	{
 		return FMath::Clamp(static_cast<int32>(Kind), 0, static_cast<int32>(EWonderlandLffBudget::Count) - 1);
 	}
+
+	int32 ReadIndex(EWonderlandLffRead Read)
+	{
+		return FMath::Clamp(static_cast<int32>(Read), 0, static_cast<int32>(EWonderlandLffRead::Count) - 1);
+	}
+
+	/** B35: what a withheld list says -- the hub's own word for Recent Players while it waits for a read after the open. */
+	const TCHAR* const UpdatingLine = TEXT("Updating…");
 }
 
 FWonderlandLffModel::FWonderlandLffModel(TFunction<IWonderlandSocialService*()> InServiceOf)
@@ -292,8 +300,9 @@ void FWonderlandLffModel::HandleServerChange()
 	}
 	Data.bStale = false;
 	// MORE THAN ONE FEED PAGE ON SCREEN: re-reading page 1 would fold away the pages the player loaded (m10); it says so instead, and the
-	// open post (the one the player is looking at) is read again
-	if (Data.Pane == EWonderlandLffPane::Feed && Data.FeedPages > 1)
+	// open post (the one the player is looking at) is read again. B35: pages WITHHELD by the open gate are not on screen -- nothing to keep,
+	// and only a first-page read lifts the gate -- so the feed is read again from page 1 then.
+	if (Data.Pane == EWonderlandLffPane::Feed && Data.FeedPages > 1 && !IsReadWithheld(EWonderlandLffRead::Feed))
 	{
 		Data.bFeedNews = true;
 		if (!Data.OpenPostId.IsEmpty())
@@ -314,6 +323,66 @@ void FWonderlandLffModel::NoteOnScreen(double NowSeconds)
 		Data.bStale = false;
 		Reload();
 	}
+}
+
+void FWonderlandLffModel::BeginOpenGate(double NowSeconds)
+{
+	// B35 (R16 privacy, SC1): THE HUB WAS OPENED. Everything this model holds was read before this moment, so nothing listing another player
+	// is drawn until a read asked from now on has landed for it (IsReadWithheld). The data itself is kept (drafts, filters, the open post's
+	// id, the requests it knew: the vanished check needs them); only DRAWING it waits.
+	Data.bOpenGate = true;
+	Data.OpenGateSeconds = NowSeconds;
+	Data.bStale = true;
+	if (IsOnScreen(NowSeconds))
+	{
+		// THE TAB IS ON SCREEN ALREADY (the hub reopened within a second, or opened again while open): its reads go now. A 429 still waiting
+		// holds them as everywhere else: Reload says how long and leaves the data stale, so the first NoteOnScreen after the wait reads.
+		Data.bStale = !MayAsk(EWonderlandLffBudget::Read);
+		Reload();
+	}
+	else if (Service() != nullptr && !MayAsk(EWonderlandLffBudget::Read))
+	{
+		Data.ActionLine = HeldLine(EWonderlandLffBudget::Read);   // the tab will say "Updating…": this says why it may take a while
+	}
+	Changed.Broadcast();
+}
+
+bool FWonderlandLffModel::IsReadWithheld(EWonderlandLffRead Read) const
+{
+	// ASKED BEFORE THE OPEN, OR NEVER LANDED: withheld. Not withheld from the same instant on (">="): FPlatformTime is monotonic, so a read
+	// asked after BeginOpenGate returned (or inside it) is stamped at or after the open. One asked before it never counts, even landing after.
+	return Data.bOpenGate && Data.LandedAskedAt[WonderlandLffModelDetail::ReadIndex(Read)] < Data.OpenGateSeconds;
+}
+
+bool FWonderlandLffModel::IsPaneWithheld(EWonderlandLffPane Pane) const
+{
+	switch (Pane)
+	{
+	case EWonderlandLffPane::Feed:       return IsReadWithheld(EWonderlandLffRead::Feed);
+	case EWonderlandLffPane::MyPosts:    return IsReadWithheld(EWonderlandLffRead::Mine);
+	case EWonderlandLffPane::MyRequests: return IsReadWithheld(EWonderlandLffRead::Requests);
+	default:                             return false;   // the form: the player's own draft, nobody else
+	}
+}
+
+bool FWonderlandLffModel::IsGateUp() const
+{
+	if (!Data.bOpenGate || Data.Pane == EWonderlandLffPane::Form)
+	{
+		return false;   // no gate begun; or the form, which draws only the player's own draft
+	}
+	if (IsPaneWithheld(Data.Pane) || IsDetailWithheld())
+	{
+		return true;
+	}
+	// THE OWNER'S INBOX counts only where it is drawn: under the viewer's own post, its detail drawn
+	return !Data.OpenPostId.IsEmpty() && Data.Detail.Post.PostId == Data.OpenPostId && Data.Detail.Post.bViewerIsOwner && IsInboxWithheld();
+}
+
+void FWonderlandLffModel::NoteLanded(EWonderlandLffRead Read, double AskedAt)
+{
+	double& Landed = Data.LandedAskedAt[WonderlandLffModelDetail::ReadIndex(Read)];
+	Landed = FMath::Max(Landed, AskedAt);
 }
 
 void FWonderlandLffModel::NoteAnswer(const FWonderlandLffAnswer& Answer, EWonderlandLffBudget Kind)
@@ -493,10 +562,11 @@ void FWonderlandLffModel::ReadFeed(bool bMore)
 	Query.Cursor = bMore ? Data.FeedCursor : FString();
 	const int32 Seq = ++Data.FeedSeq;
 	const int32 Gen = Generation;
+	const double AskedAt = FPlatformTime::Seconds();   // B35: the open gate compares the time a read was ASKED, never when it landed
 	Data.FeedLoad = EWonderlandLffLoad::Loading;
 	Changed.Broadcast();
 	const TWeakPtr<FWonderlandLffModel> Weak = AsShared();
-	Svc->ReadLffFeed(Query, [Weak, Gen, Seq, bMore](const FWonderlandLffAnswer& Answer, const FWonderlandLffFeedPage& Page)
+	Svc->ReadLffFeed(Query, [Weak, Gen, Seq, bMore, AskedAt](const FWonderlandLffAnswer& Answer, const FWonderlandLffFeedPage& Page)
 	{
 		const TSharedPtr<FWonderlandLffModel> Self = Weak.Pin();
 		if (!Self.IsValid() || Self->Generation != Gen || Self->Data.FeedSeq != Seq)
@@ -523,6 +593,9 @@ void FWonderlandLffModel::ReadFeed(bool bMore)
 				D.Feed.Reset();
 				D.FeedPages = 0;
 				D.bFeedNews = false;
+				// B35: page 1 REPLACES the feed, so the feed is as fresh as this read. A further page (bMore) joins pages already held and
+				// never lifts the gate: those pages may predate the open.
+				Self->NoteLanded(EWonderlandLffRead::Feed, AskedAt);
 			}
 			for (const FWonderlandLffPost& Post : Page.Posts)
 			{
@@ -555,10 +628,11 @@ void FWonderlandLffModel::ReadMine(bool bMore)
 	Query.Cursor = bMore ? Data.MineCursor : FString();
 	const int32 Seq = ++Data.MineSeq;
 	const int32 Gen = Generation;
+	const double AskedAt = FPlatformTime::Seconds();   // B35
 	Data.MineLoad = EWonderlandLffLoad::Loading;
 	Changed.Broadcast();
 	const TWeakPtr<FWonderlandLffModel> Weak = AsShared();
-	Svc->ReadLffFeed(Query, [Weak, Gen, Seq, bMore](const FWonderlandLffAnswer& Answer, const FWonderlandLffFeedPage& Page)
+	Svc->ReadLffFeed(Query, [Weak, Gen, Seq, bMore, AskedAt](const FWonderlandLffAnswer& Answer, const FWonderlandLffFeedPage& Page)
 	{
 		const TSharedPtr<FWonderlandLffModel> Self = Weak.Pin();
 		if (!Self.IsValid() || Self->Generation != Gen || Self->Data.MineSeq != Seq)
@@ -577,6 +651,7 @@ void FWonderlandLffModel::ReadMine(bool bMore)
 			if (!bMore)
 			{
 				D.MyPosts.Reset();
+				Self->NoteLanded(EWonderlandLffRead::Mine, AskedAt);   // B35: the first page replaces the list; a further one never lifts the gate
 			}
 			for (const FWonderlandLffPost& Post : Page.Posts)
 			{
@@ -602,10 +677,11 @@ void FWonderlandLffModel::ReadRequests()
 	}
 	const int32 Seq = ++Data.RequestsSeq;
 	const int32 Gen = Generation;
+	const double AskedAt = FPlatformTime::Seconds();   // B35
 	Data.RequestsLoad = EWonderlandLffLoad::Loading;
 	Changed.Broadcast();
 	const TWeakPtr<FWonderlandLffModel> Weak = AsShared();
-	Svc->ReadLffMyRequests([Weak, Gen, Seq](const FWonderlandLffAnswer& Answer, const FWonderlandLffMyRequests& Listed)
+	Svc->ReadLffMyRequests([Weak, Gen, Seq, AskedAt](const FWonderlandLffAnswer& Answer, const FWonderlandLffMyRequests& Listed)
 	{
 		const TSharedPtr<FWonderlandLffModel> Self = Weak.Pin();
 		if (!Self.IsValid() || Self->Generation != Gen || Self->Data.RequestsSeq != Seq)
@@ -646,6 +722,7 @@ void FWonderlandLffModel::ReadRequests()
 		D.bRequestsTruncated = Listed.bTruncated;
 		D.RequestsLoad = EWonderlandLffLoad::Loaded;
 		D.RequestsAnswer = FWonderlandLffAnswer();
+		Self->NoteLanded(EWonderlandLffRead::Requests, AskedAt);   // B35: the whole list replaced (its tombstones judged by this read)
 		Self->Changed.Broadcast();
 	});
 }
@@ -659,6 +736,7 @@ void FWonderlandLffModel::ReadDetail(const FString& PostId)
 	}
 	const int32 Seq = ++Data.DetailSeq;
 	const int32 Gen = Generation;
+	const double AskedAt = FPlatformTime::Seconds();   // B35
 	if (Data.Detail.Post.PostId != PostId)
 	{
 		Data.Detail = FWonderlandLffPostDetail();   // another post's detail never shows under this one while it loads
@@ -666,7 +744,7 @@ void FWonderlandLffModel::ReadDetail(const FString& PostId)
 	Data.DetailLoad = EWonderlandLffLoad::Loading;
 	Changed.Broadcast();
 	const TWeakPtr<FWonderlandLffModel> Weak = AsShared();
-	Svc->ReadLffPost(PostId, [Weak, Gen, Seq, PostId](const FWonderlandLffAnswer& Answer, const FWonderlandLffPostDetail& Detail)
+	Svc->ReadLffPost(PostId, [Weak, Gen, Seq, PostId, AskedAt](const FWonderlandLffAnswer& Answer, const FWonderlandLffPostDetail& Detail)
 	{
 		const TSharedPtr<FWonderlandLffModel> Self = Weak.Pin();
 		if (!Self.IsValid() || Self->Generation != Gen || Self->Data.DetailSeq != Seq || Self->Data.OpenPostId != PostId)
@@ -680,6 +758,7 @@ void FWonderlandLffModel::ReadDetail(const FString& PostId)
 			D.Detail = Detail;
 			D.DetailLoad = EWonderlandLffLoad::Loaded;
 			D.DetailAnswer = FWonderlandLffAnswer();
+			Self->NoteLanded(EWonderlandLffRead::Detail, AskedAt);   // B35: the author, their card and the accepted people, as of this read
 			// THE LISTS SHOW THE FRESHER VIEW of the same post; the feed lists OPEN posts only (r2), so a post closed or filled leaves it
 			// (m14), and "open only" MY POSTS likewise
 			const bool bOpen = Detail.Post.Status == TEXT("OPEN");
@@ -742,13 +821,14 @@ void FWonderlandLffModel::ReadInbox(const FString& PostId)
 	}
 	const int32 Seq = ++Data.InboxSeq;
 	const int32 Gen = Generation;
+	const double AskedAt = FPlatformTime::Seconds();   // B35
 	if (Data.Inbox.PostId != PostId)
 	{
 		Data.Inbox = FWonderlandLffPostRequests();
 	}
 	Data.InboxLoad = EWonderlandLffLoad::Loading;
 	const TWeakPtr<FWonderlandLffModel> Weak = AsShared();
-	Svc->ReadLffPostRequests(PostId, [Weak, Gen, Seq, PostId](const FWonderlandLffAnswer& Answer, const FWonderlandLffPostRequests& Inbox)
+	Svc->ReadLffPostRequests(PostId, [Weak, Gen, Seq, PostId, AskedAt](const FWonderlandLffAnswer& Answer, const FWonderlandLffPostRequests& Inbox)
 	{
 		const TSharedPtr<FWonderlandLffModel> Self = Weak.Pin();
 		if (!Self.IsValid() || Self->Generation != Gen || Self->Data.InboxSeq != Seq || Self->Data.OpenPostId != PostId)
@@ -762,6 +842,7 @@ void FWonderlandLffModel::ReadInbox(const FString& PostId)
 			D.Inbox = Inbox;
 			D.InboxLoad = EWonderlandLffLoad::Loaded;
 			D.InboxAnswer = FWonderlandLffAnswer();
+			Self->NoteLanded(EWonderlandLffRead::Inbox, AskedAt);   // B35: the requesters, as of this read
 		}
 		else
 		{
@@ -813,6 +894,15 @@ FString FWonderlandLffModel::PaneLine(EWonderlandLffPane Pane) const
 	if (Data.bNeedsLive)
 	{
 		return FWonderlandSocialPreviewService::LffNeedsLive().Problem;
+	}
+	// B35: A WITHHELD LIST says "Updating…" -- never its rows, its count, "new activity" or "empty" (each describes what was read before the
+	// open). A read that FAILED says why, and the list stays withheld: nothing falls back to what was read before.
+	if (IsPaneWithheld(Pane))
+	{
+		const EWonderlandLffLoad Load = GetLoad(Pane);
+		const FWonderlandLffAnswer& LastAnswer = Pane == EWonderlandLffPane::Feed ? Data.FeedAnswer
+			: Pane == EWonderlandLffPane::MyPosts ? Data.MineAnswer : Data.RequestsAnswer;
+		return Load == EWonderlandLffLoad::Failed ? WonderlandLff::ProblemLine(LastAnswer) : FString(WonderlandLffModelDetail::UpdatingLine);
 	}
 	switch (Pane)
 	{
@@ -905,6 +995,11 @@ FString FWonderlandLffModel::DetailLine() const
 	{
 		return TEXT("Choose a post to see it here.");
 	}
+	// B35: THE DETAIL ON HAND WAS READ BEFORE THE OPEN (or none yet): "Updating…", or why its read failed -- never the old detail
+	if (IsDetailWithheld() && Data.DetailLoad != EWonderlandLffLoad::Failed)
+	{
+		return WonderlandLffModelDetail::UpdatingLine;
+	}
 	if (Data.DetailLoad == EWonderlandLffLoad::Failed)
 	{
 		return WonderlandLff::ProblemOf(Data.DetailAnswer) == EWonderlandLffProblem::NotFound ? FString(TEXT("This post is no longer available."))
@@ -918,6 +1013,11 @@ FString FWonderlandLffModel::InboxLine() const
 	if (Data.InboxLoad == EWonderlandLffLoad::Failed)
 	{
 		return WonderlandLff::ProblemLine(Data.InboxAnswer);
+	}
+	// B35: requesters read before the open are not listed, and neither is "no requests" (also a statement about other people)
+	if (IsInboxWithheld())
+	{
+		return WonderlandLffModelDetail::UpdatingLine;
 	}
 	if (Data.Inbox.PostId == Data.OpenPostId && Data.Inbox.Requests.Num() > 0)
 	{
@@ -1341,7 +1441,8 @@ void FWonderlandLffModel::ReadProfile(const FString& UserId, TFunction<void(cons
 	}
 	const TWeakPtr<FWonderlandLffModel> Weak = AsShared();
 	const int32 Gen = Generation;
-	Svc->ReadProfile(UserId, [Weak, Gen, OnCard](const FWonderlandLffAnswer& Answer, const FWonderlandSocialProfileView& Card)
+	const double AskedAt = FPlatformTime::Seconds();   // B35
+	Svc->ReadProfile(UserId, [Weak, Gen, OnCard, AskedAt](const FWonderlandLffAnswer& Answer, const FWonderlandSocialProfileView& Card)
 	{
 		const TSharedPtr<FWonderlandLffModel> Self = Weak.Pin();
 		if (!Self.IsValid() || Self->Generation != Gen)
@@ -1349,6 +1450,11 @@ void FWonderlandLffModel::ReadProfile(const FString& UserId, TFunction<void(cons
 			return;
 		}
 		Self->NoteAnswer(Answer, EWonderlandLffBudget::Read);
+		// B35: A CARD ASKED BEFORE THE HUB WAS OPENED AGAIN opens nothing: the person may have blocked the viewer or hidden from them since
+		if (Self->Data.bOpenGate && AskedAt < Self->Data.OpenGateSeconds)
+		{
+			return;
+		}
 		if (Answer.IsOk())
 		{
 			if (OnCard)
@@ -1387,33 +1493,91 @@ FString FWonderlandLffModel::Describe() const
 		default:                             return TEXT("FEED");
 		}
 	};
-	TArray<FString> FeedIds;
-	for (const FWonderlandLffPost& Post : Data.Feed)
+	// B35: A WITHHELD LIST IS SAID AS WITHHELD -- no id, no count, no state of anyone in it (what was read before the open is not described
+	// either); the gate itself is stated: "none" (no surface opened since the last reset), "fresh", or "UPDATING" with the withheld parts.
+	const auto Withheld = [&LoadName](EWonderlandLffLoad Load) { return FString::Printf(TEXT("WITHHELD (%s)"), LoadName(Load)); };
+	FString FeedPart;
+	if (IsReadWithheld(EWonderlandLffRead::Feed))
 	{
-		FeedIds.Add(Post.PostId);
+		FeedPart = Withheld(Data.FeedLoad);
 	}
-	TArray<FString> RequestRows;
-	for (const FWonderlandLffMyRequest& Request : Data.MyRequests)
+	else
 	{
-		RequestRows.Add(FString::Printf(TEXT("%s:%s"), *Request.RequestId, *Request.Status));
+		TArray<FString> FeedIds;
+		for (const FWonderlandLffPost& Post : Data.Feed)
+		{
+			FeedIds.Add(Post.PostId);
+		}
+		FeedPart = FString::Printf(TEXT("%s %d [%s]%s pages %d%s"), LoadName(Data.FeedLoad), Data.Feed.Num(), *FString::Join(FeedIds, TEXT(",")),
+			Data.FeedCursor.IsEmpty() ? TEXT("") : TEXT(" +more"), Data.FeedPages, Data.bFeedNews ? TEXT(" news") : TEXT(""));
 	}
-	TArray<FString> InboxRows;
-	for (const FWonderlandLffIncomingRequest& Request : Data.Inbox.Requests)
+	const FString MinePart = IsReadWithheld(EWonderlandLffRead::Mine) ? Withheld(Data.MineLoad)
+		: FString::Printf(TEXT("%s %d%s%s"), LoadName(Data.MineLoad), Data.MyPosts.Num(), Data.bMineOpenOnly ? TEXT(" open-only") : TEXT(""),
+			Data.MineCursor.IsEmpty() ? TEXT("") : TEXT(" +more"));
+	FString RequestsPart;
+	if (IsReadWithheld(EWonderlandLffRead::Requests))
 	{
-		InboxRows.Add(FString::Printf(TEXT("%s:%s"), *Request.RequestId, *Request.Status));
+		RequestsPart = Withheld(Data.RequestsLoad);
 	}
-	const FWonderlandLffPost& Open = Data.Detail.Post;
-	const FString OpenState = HasDetail() ? FString::Printf(TEXT("%s%s%s"), *Open.Status, Open.bViewerIsOwner ? TEXT(" owner") : TEXT(""),
-		Open.bHasViewerRequest ? *FString::Printf(TEXT(" request %s:%s"), *Open.ViewerRequestId, *Open.ViewerRequestStatus) : TEXT("")) : FString(LoadName(Data.DetailLoad));
+	else
+	{
+		TArray<FString> RequestRows;
+		for (const FWonderlandLffMyRequest& Request : Data.MyRequests)
+		{
+			RequestRows.Add(FString::Printf(TEXT("%s:%s"), *Request.RequestId, *Request.Status));
+		}
+		RequestsPart = FString::Printf(TEXT("%s [%s] vanished %d"), LoadName(Data.RequestsLoad), *FString::Join(RequestRows, TEXT(",")), Data.Vanished.Num());
+	}
+	FString OpenPart;
+	if (Data.OpenPostId.IsEmpty())
+	{
+		OpenPart = FString::Printf(TEXT("none %s"), LoadName(Data.DetailLoad));
+	}
+	else if (IsDetailWithheld())
+	{
+		OpenPart = Withheld(Data.DetailLoad);
+	}
+	else
+	{
+		const FWonderlandLffPost& Open = Data.Detail.Post;
+		const FString OpenState = HasDetail() ? FString::Printf(TEXT("%s%s%s"), *Open.Status, Open.bViewerIsOwner ? TEXT(" owner") : TEXT(""),
+			Open.bHasViewerRequest ? *FString::Printf(TEXT(" request %s:%s"), *Open.ViewerRequestId, *Open.ViewerRequestStatus) : TEXT("")) : FString(LoadName(Data.DetailLoad));
+		OpenPart = FString::Printf(TEXT("%s %s"), *Data.OpenPostId, *OpenState);
+	}
+	FString InboxPart;
+	if (IsInboxWithheld())
+	{
+		InboxPart = Withheld(Data.InboxLoad);
+	}
+	else
+	{
+		TArray<FString> InboxRows;
+		for (const FWonderlandLffIncomingRequest& Request : Data.Inbox.Requests)
+		{
+			InboxRows.Add(FString::Printf(TEXT("%s:%s"), *Request.RequestId, *Request.Status));
+		}
+		InboxPart = FString::Printf(TEXT("%s [%s]"), LoadName(Data.InboxLoad), *FString::Join(InboxRows, TEXT(",")));
+	}
+	FString GatePart = TEXT("none");
+	if (Data.bOpenGate)
+	{
+		TArray<FString> Up;
+		if (IsGateUp())
+		{
+			if (IsPaneWithheld(Data.Pane)) Up.Add(PaneName(Data.Pane));
+			if (IsDetailWithheld()) Up.Add(TEXT("POST"));
+			if (!IsDetailWithheld() && IsInboxWithheld() && HasDetail() && Data.Detail.Post.bViewerIsOwner) Up.Add(TEXT("INBOX"));
+		}
+		GatePart = Up.Num() > 0 ? FString::Printf(TEXT("UPDATING (%s)"), *FString::Join(Up, TEXT(", "))) : FString(TEXT("fresh"));
+	}
+	// THE CONFIRM'S SUBJECT is an id of the post or request it acts on: not named while the gate is up
+	const FString ConfirmSubject = Data.ConfirmSubject.IsEmpty() ? FString(TEXT("-")) : IsGateUp() ? FString(TEXT("(withheld)")) : Data.ConfirmSubject;
 	const FString Form = Data.bEditingForm ? FString::Printf(TEXT("editing %s"), *Data.EditDraft.EditingPostId) : FString(TEXT("new"));
-	return FString::Printf(TEXT("pane %s | category %s | filters %s | feed %s %d [%s]%s pages %d%s | mine %s %d%s%s | requests %s [%s] vanished %d | open %s %s | inbox %s [%s] | form %s | confirm %d %s | writing %s | needs live %s | stale %s | line: %s"),
+	return FString::Printf(TEXT("pane %s | category %s | filters %s | feed %s | mine %s | requests %s | open %s | inbox %s | form %s | confirm %d %s | writing %s | needs live %s | stale %s | gate %s | line: %s"),
 		PaneName(Data.Pane), Data.Category.IsEmpty() ? TEXT("ALL") : *Data.Category, HasAppliedFilters() ? TEXT("on") : TEXT("off"),
-		LoadName(Data.FeedLoad), Data.Feed.Num(), *FString::Join(FeedIds, TEXT(",")), Data.FeedCursor.IsEmpty() ? TEXT("") : TEXT(" +more"), Data.FeedPages,
-		Data.bFeedNews ? TEXT(" news") : TEXT(""), LoadName(Data.MineLoad), Data.MyPosts.Num(), Data.bMineOpenOnly ? TEXT(" open-only") : TEXT(""),
-		Data.MineCursor.IsEmpty() ? TEXT("") : TEXT(" +more"), LoadName(Data.RequestsLoad), *FString::Join(RequestRows, TEXT(",")), Data.Vanished.Num(),
-		Data.OpenPostId.IsEmpty() ? TEXT("none") : *Data.OpenPostId, *OpenState, LoadName(Data.InboxLoad), *FString::Join(InboxRows, TEXT(",")),
-		*Form, static_cast<int32>(Data.Confirm), Data.ConfirmSubject.IsEmpty() ? TEXT("-") : *Data.ConfirmSubject,
-		Data.bWriting ? TEXT("yes") : TEXT("no"), Data.bNeedsLive ? TEXT("yes") : TEXT("no"), Data.bStale ? TEXT("yes") : TEXT("no"), *Data.ActionLine);
+		*FeedPart, *MinePart, *RequestsPart, *OpenPart, *InboxPart,
+		*Form, static_cast<int32>(Data.Confirm), *ConfirmSubject,
+		Data.bWriting ? TEXT("yes") : TEXT("no"), Data.bNeedsLive ? TEXT("yes") : TEXT("no"), Data.bStale ? TEXT("yes") : TEXT("no"), *GatePart, *Data.ActionLine);
 }
 
 /* ================================================================================================ the view */
@@ -1635,6 +1799,8 @@ void SWonderlandSocialLffView::Rebuild()
 	PlacedBoxes.Reset();
 	bBuiltNeedsLive = false;
 	BuiltPostCards = 0;
+	BuiltPersonRows = 0;
+	BuiltRequestRows = 0;
 	BuiltAskLabel.Reset();
 	ContentHost->SetContent(MakeContent());
 	if (Focused.IsValid() && PlacedBoxes.Contains(Focused) && FSlateApplication::IsInitialized())
@@ -1900,11 +2066,15 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeFeedList()
 	{
 		List->AddSlot()[MakeLine(PaneLine, Model->GetLoad(EWonderlandLffPane::Feed) == EWonderlandLffLoad::Failed)];
 	}
-	for (const FWonderlandLffPost& Post : Model->GetFeed())
+	// B35: NO POST CARD (a title, an author's name) from a feed read before the hub was opened: the pane line says "Updating…" instead
+	if (!Model->IsPaneWithheld(EWonderlandLffPane::Feed))
 	{
-		List->AddSlot()[MakePostCard(Post)];
+		for (const FWonderlandLffPost& Post : Model->GetFeed())
+		{
+			List->AddSlot()[MakePostCard(Post)];
+		}
 	}
-	if (Model->CanLoadMore())
+	if (Model->CanLoadMore())   // never while withheld (CanLoadMore)
 	{
 		List->AddSlot().Padding(0.0f, 6.0f)[MakeButton(TEXT("LOAD MORE"), true, true, [this]() { Model->LoadMore(); })];
 	}
@@ -1930,11 +2100,16 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeFeedList()
 TSharedRef<SWidget> SWonderlandSocialLffView::MakeMyPostsList()
 {
 	const bool bOpenOnly = Model->IsMineOpenOnly();
+	// B35: withheld until a read after the open lands -- no card, no count (one rule for every pane)
+	const bool bWithheld = Model->IsPaneWithheld(EWonderlandLffPane::MyPosts);
 	TSharedRef<SScrollBox> List = SNew(SScrollBox);
 	List->AddSlot().Padding(0.0f, 0.0f, 0.0f, 6.0f)
 	[
 		SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[MakeTitle(FString::Printf(TEXT("YOUR POSTS  —  %d"), Model->GetMyPosts().Num()))]
+		+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+		[
+			MakeTitle(bWithheld ? FString(TEXT("YOUR POSTS")) : FString::Printf(TEXT("YOUR POSTS  —  %d"), Model->GetMyPosts().Num()))
+		]
 		// THE OPEN-SLOTS FILTER (the server's hasOpenSlots): ALL, or OPEN ONLY
 		+ SHorizontalBox::Slot().AutoWidth()[MakeButton(TEXT("ALL"), true, bOpenOnly, [this]() { Model->SetMineOpenOnly(false); })]
 		+ SHorizontalBox::Slot().AutoWidth()[MakeButton(TEXT("OPEN ONLY"), true, !bOpenOnly, [this]() { Model->SetMineOpenOnly(true); })]
@@ -1944,11 +2119,14 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeMyPostsList()
 	{
 		List->AddSlot()[MakeLine(PaneLine, Model->GetLoad(EWonderlandLffPane::MyPosts) == EWonderlandLffLoad::Failed)];
 	}
-	for (const FWonderlandLffPost& Post : Model->GetMyPosts())
+	if (!bWithheld)
 	{
-		List->AddSlot()[MakePostCard(Post)];
+		for (const FWonderlandLffPost& Post : Model->GetMyPosts())
+		{
+			List->AddSlot()[MakePostCard(Post)];
+		}
 	}
-	if (Model->CanLoadMoreMine())
+	if (Model->CanLoadMoreMine())   // never while withheld (CanLoadMoreMine)
 	{
 		List->AddSlot().Padding(0.0f, 6.0f)[MakeButton(TEXT("LOAD MORE"), true, true, [this]() { Model->LoadMoreMine(); })];
 	}
@@ -1958,11 +2136,21 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeMyPostsList()
 TSharedRef<SWidget> SWonderlandSocialLffView::MakeMyRequestsList()
 {
 	TSharedRef<SScrollBox> List = SNew(SScrollBox);
-	List->AddSlot().Padding(0.0f, 0.0f, 0.0f, 6.0f)[MakeTitle(FString::Printf(TEXT("YOUR REQUESTS  —  %d"), Model->GetMyRequests().Num()))];
+	// B35: each row names another player's post (its title, its state): withheld until a read after the open lands -- no row, no tombstone,
+	// no count; the pane line says "Updating…" (or why the read failed)
+	const bool bWithheld = Model->IsPaneWithheld(EWonderlandLffPane::MyRequests);
+	List->AddSlot().Padding(0.0f, 0.0f, 0.0f, 6.0f)
+	[
+		MakeTitle(bWithheld ? FString(TEXT("YOUR REQUESTS")) : FString::Printf(TEXT("YOUR REQUESTS  —  %d"), Model->GetMyRequests().Num()))
+	];
 	const FString PaneLine = Model->PaneLine(EWonderlandLffPane::MyRequests);
 	if (!PaneLine.IsEmpty())
 	{
 		List->AddSlot()[MakeLine(PaneLine, Model->GetLoad(EWonderlandLffPane::MyRequests) == EWonderlandLffLoad::Failed)];
+	}
+	if (bWithheld)
+	{
+		return List;
 	}
 	const bool bIdle = !Model->IsWriting();
 	for (const FWonderlandLffMyRequest& Request : Model->GetMyRequests())
@@ -1989,6 +2177,7 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeMyRequestsList()
 		const FString When = WonderlandSocialHubLook::Ago(Request.UpdatedAtIso);
 		const FString Title = Request.bHasPost ? Request.Post.Title : FString(TEXT("A post you can no longer see"));
 		const bool bConfirming = Model->GetConfirm() == EWonderlandLffConfirm::Leave && Model->GetConfirmSubject() == RequestId;
+		BuiltRequestRows += 1;
 		List->AddSlot().Padding(0.0f, 3.0f)
 		[
 			SNew(SBorder).BorderImage(PostId == Model->GetOpenPostId() ? &RowSelectedBrush : &RowBrush).Padding(FMargin(10.0f, 8.0f))
@@ -2017,6 +2206,7 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeMyRequestsList()
 	for (const FString& Gone : Model->GetVanished())
 	{
 		const FString RequestId = Gone;
+		BuiltRequestRows += 1;
 		List->AddSlot().Padding(0.0f, 3.0f)
 		[
 			SNew(SBorder).BorderImage(&RowBrush).Padding(FMargin(10.0f, 8.0f))
@@ -2110,6 +2300,7 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakePerson(const FWonderlandSocial
 	// THE HUB'S PERSON ROW, smaller: avatar, name and handle, presence as the authority sent it, a second line, the actions
 	const FWonderlandSocialPresence& P = Person.Presence;
 	const FString Handle = Person.Handle.IsEmpty() || Person.Handle.StartsWith(TEXT("@")) ? Person.Handle : FString::Printf(TEXT("@%s"), *Person.Handle);
+	BuiltPersonRows += 1;
 	return SNew(SBox).Padding(FMargin(0.0f, 3.0f))
 		[
 			SNew(SBorder).BorderImage(&RowBrush).Padding(FMargin(10.0f, 7.0f))
@@ -2166,12 +2357,15 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeConnectActions(const FWonderla
 
 TSharedRef<SWidget> SWonderlandSocialLffView::MakeDetail()
 {
-	if (!Model->HasDetail())
+	// B35: A DETAIL READ BEFORE THE HUB WAS OPENED is not drawn -- not its author, the author's card (PROFILE), the accepted people or the
+	// owner's requesters: the line says "Updating…", or why the read after the open failed
+	if (!Model->HasDetail() || Model->IsDetailWithheld())
 	{
 		const FString Line = Model->DetailLine();
+		const bool bWaiting = Line.StartsWith(TEXT("Loading")) || Line.Equals(WonderlandLffModelDetail::UpdatingLine, ESearchCase::CaseSensitive);
 		return SNew(SBorder).BorderImage(&PaneBrush).Padding(14.0f)
 			[
-				MakeLine(Line, !Model->GetOpenPostId().IsEmpty() && !Line.StartsWith(TEXT("Loading")))
+				MakeLine(Line, !Model->GetOpenPostId().IsEmpty() && !bWaiting)
 			];
 	}
 	const FWonderlandLffPostDetail& Detail = Model->GetDetail();
@@ -2231,8 +2425,18 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeDetail()
 	// THE AUTHOR, always (a post is shown only to a viewer who may see its author): their card through the existing profile panel, and
 	// REPORT through the existing report flow (the post as its subject)
 	TSharedRef<SHorizontalBox> AuthorActions = SNew(SHorizontalBox);
-	const FWonderlandSocialProfileView Card = Detail.AuthorProfile;
-	AuthorActions->AddSlot().AutoWidth()[MakeButton(TEXT("PROFILE"), Detail.bHasAuthorProfile, false, [this, Card]() { OnOpenProfileView.ExecuteIfBound(Card); })];
+	const FString AuthorPostId = Post.PostId;
+	AuthorActions->AddSlot().AutoWidth()[MakeButton(TEXT("PROFILE"), Detail.bHasAuthorProfile, false, [this, AuthorPostId]()
+	{
+		// B35: THE CARD AS THE MODEL HOLDS IT AT THE PRESS (never one kept in this button), and only while that post's detail is not withheld:
+		// a gate begun after this button was built, before the view's rebuild, opens no card
+		if (Model.IsValid() && Model->HasDetail() && !Model->IsDetailWithheld() && Model->GetDetail().Post.PostId == AuthorPostId
+			&& Model->GetDetail().bHasAuthorProfile)
+		{
+			const FWonderlandSocialProfileView Card = Model->GetDetail().AuthorProfile;   // a copy: opening the card may change what the model holds
+			OnOpenProfileView.ExecuteIfBound(Card);
+		}
+	})];
 	if (!Post.bViewerIsOwner)
 	{
 		AuthorActions->AddSlot().AutoWidth()[MakeButton(TEXT("REPORT"), Post.Author.Presence.Can.bReport && !Model->IsWriting(), true, [this]() { Model->ReportOpenPost(); })];
@@ -2278,13 +2482,19 @@ TSharedRef<SWidget> SWonderlandSocialLffView::MakeOwnerSection(const FWonderland
 	// THE INBOX: pending requests to accept or decline, accepted people to connect with (through the existing actions); each requester's
 	// PROFILE through the existing profile.read (m4)
 	const FWonderlandLffPostRequests& Inbox = Model->GetInbox();
-	Section->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 4.0f)[MakeTitle(FString::Printf(TEXT("REQUESTS  —  %d"), Inbox.PostId == Post.PostId ? Inbox.Requests.Num() : 0))];
+	// B35: REQUESTERS READ BEFORE THE HUB WAS OPENED are not listed (a requester may have blocked the owner since): no row, no count
+	const bool bInboxWithheld = Model->IsInboxWithheld();
+	Section->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 4.0f)
+	[
+		MakeTitle(bInboxWithheld ? FString(TEXT("REQUESTS"))
+			: FString::Printf(TEXT("REQUESTS  —  %d"), Inbox.PostId == Post.PostId ? Inbox.Requests.Num() : 0))
+	];
 	const FString InboxLine = Model->InboxLine();
 	if (!InboxLine.IsEmpty())
 	{
 		Section->AddSlot().AutoHeight()[MakeLine(InboxLine)];
 	}
-	if (Inbox.PostId == Post.PostId)
+	if (!bInboxWithheld && Inbox.PostId == Post.PostId)
 	{
 		for (const FWonderlandLffIncomingRequest& Request : Inbox.Requests)
 		{
