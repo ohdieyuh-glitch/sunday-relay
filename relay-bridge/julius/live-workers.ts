@@ -2017,6 +2017,8 @@ export function createLiveHostedCodingAdapter(input: {
   readonly effort?: HostedEffort;
   /** The mission's declared self-test cap; absent offers the coder no test tool. Diagnostic telemetry only. */
   readonly selfTestCalls?: number;
+  /** The mission's declared coder SESSION limit in ms (`limits.coderRuntimeMinutes`); absent keeps the envelope's own. */
+  readonly maxRuntimeMs?: number;
   /** Test seam for the SDK's tool helpers; production omits it. */
   readonly sdkHelpersLoader?: () => Promise<HostedSdkHelpers>;
 }): JuliusProviderAdapter {
@@ -2041,6 +2043,7 @@ export function createLiveHostedCodingAdapter(input: {
       apiKey: input.apiKey, requestedModel: input.requestedModel,
       ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
       ...(input.effort === undefined ? {} : { effort: input.effort }),
+      ...(input.maxRuntimeMs === undefined ? {} : { maxRuntimeMs: input.maxRuntimeMs }),
       ...(input.sdkHelpersLoader === undefined ? {} : { sdkHelpersLoader: input.sdkHelpersLoader }),
       ...(input.run === undefined ? {} : { run: input.run }),
       ...(input.queryLoader === undefined ? {} : { queryLoader: input.queryLoader }),
