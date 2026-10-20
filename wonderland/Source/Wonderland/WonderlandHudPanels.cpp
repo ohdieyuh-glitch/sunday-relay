@@ -16,6 +16,7 @@
 #include "WonderlandMascotStyle.h"
 #include "WonderlandCursor.h"
 #include "WonderlandBeta.h"
+#include "WonderlandSocialLive.h"   // G3: WonderlandSocialFreshness::EventStamp
 #include "Engine/Engine.h"
 #include "GameFramework/GameUserSettings.h"
 #include "HAL/IConsoleManager.h"

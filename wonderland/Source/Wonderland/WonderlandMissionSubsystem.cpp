@@ -2,6 +2,7 @@
 #include "WonderlandMissionTasks.h"
 #include "WonderlandBeta.h"
 #include "WonderlandSidekicks.h"
+#include "WonderlandSocialLive.h"   // G3: WonderlandSocialFreshness::EventStamp
 #include "Engine/GameInstance.h"
 
 #include "Engine/GameViewportClient.h"
