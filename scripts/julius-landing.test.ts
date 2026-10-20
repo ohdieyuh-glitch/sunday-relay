@@ -241,10 +241,8 @@ globalThis.fetch = async (url, init = {}) => {
   if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path) && scenario.echo === 'follow') {
     return reply(500, { message: 'upstream said: ghs_' + 'A'.repeat(36) + ' merged PR number 12 into main; also ghp_' + 'C'.repeat(36) + ' kept going, github_pat_' + 'B'.repeat(30) + ' done' });
   }
-  if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path) && scenario.echo === 'b64') {
-    const tok = String(init.headers?.Authorization ?? '').replace(/^Bearer /, '');
-    const b = (s) => Buffer.from(s).toString('base64');
-    return reply(500, { message: 'upstream said: ' + b(tok) + ' | ' + b('x-access-token:' + tok) + ' | ' + b('  ' + tok) + ' | ' + b(' ' + tok) + ' | ' + encodeURIComponent(tok) });
+  if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path) && scenario.echo === 'text') {
+    return reply(500, { message: scenario.echoText });
   }
   if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path)) return reply(500, { message: scenario.echo ? 'upstream said: Authorization: ' + (init.headers?.Authorization ?? '') + ' also ghs_' + 'A'.repeat(36) + ' github_pat_' + 'B'.repeat(30) + ' ghp_' + 'C'.repeat(36) : 'the fake fails this read' });
   // b6: the nonce tag. scenario.spentTags = tag names that already exist; scenario.tagReadStatus / tagCreateStatus override the answers.
@@ -1412,14 +1410,78 @@ describe('v3.4 V-4: redaction also covers a token wrapped across a line break an
     for (const piece of [TOKEN, TOKEN.slice(4, 24), TOKEN.slice(10, 30), TOKEN.slice(20), TOKEN.slice(14)]) expect(flat, piece).not.toContain(piece);
   });
 
-  it('the base64 forms of the token (alone, behind x-access-token:, at the three byte alignments) and its percent-encoding are not printed', () => {
-    const r = runLand({ token: TOKEN, scenario: { failGet: '/pulls/7$', echo: 'b64' } });
-    expect(r.code, r.out).toBe(1);
+  it('the base64 forms of the token (alone, behind x-access-token:, at the three byte alignments) are not printed', () => {
+    // the failure line is cut at 300 characters: v3.5b echoed all four forms in one message, so the fourth never reached the output and the check on it was vacuous. Two forms per run, each shown hidden.
     const b = (s: string) => Buffer.from(s).toString('base64');
-    for (const form of [b(TOKEN), b('x-access-token:' + TOKEN), b('  ' + TOKEN), b(' ' + TOKEN), encodeURIComponent(TOKEN)]) {
-      // the middle of each form, away from the padding and the unstable edge characters
-      expect(r.out, form).not.toContain(form.slice(8, form.length - 8));
+    for (const forms of [[b(TOKEN), b('x-access-token:' + TOKEN)], [b('  ' + TOKEN), b(' ' + TOKEN)]]) {
+      const r = runLand({ token: TOKEN, scenario: { failGet: '/pulls/7$', echo: 'text', echoText: forms.map((f, i) => `F${i}:${f};`).join(' ') } });
+      expect(r.code, r.out).toBe(1);
+      forms.forEach((form, i) => {
+        expect(r.out, `form ${i} is shown as a hidden value`).toMatch(new RegExp(`F${i}:[^;]*\\*\\*\\*`));
+        // the middle of each form, away from the padding and the unstable edge characters
+        expect(r.out, form).not.toContain(form.slice(8, form.length - 8));
+      });
     }
+  });
+});
+
+describe('v3.5c V-4 repair: percent-encoded echoes of the token are redacted byte by byte (REVIEW/Codex P1: encodeURIComponent is a no-op for ghs_/ghp_ tokens)', () => {
+  // The echoed text reaches stdout inside ONE error line cut at 300 characters, so every run carries a few short forms; each is labelled so a survivor is pinned to its form.
+  const LIT = 'Zq7LmP2vNd9RkT4wXy_8'; // the job token is NOT shaped like a GitHub token here: only the literal-token rules can hide it
+  const hex = (c: string, lower: boolean) => { const h = c.charCodeAt(0).toString(16).padStart(2, '0'); return lower ? h : h.toUpperCase(); };
+  const enc = (s: string, lower = false, depth = 0) => [...s].map((c) => '%' + '25'.repeat(depth) + hex(c, lower)).join('');
+  const one = (s: string, i: number, lower = false) => s.slice(0, i) + '%' + hex(s[i], lower) + s.slice(i + 1);
+  const echoRun = (token: string, forms: string[]) => {
+    const r = runLand({ token, scenario: { failGet: '/pulls/7$', echo: 'text', echoText: forms.map((f, i) => `F${i}:${f};`).join(' ') } });
+    expect(r.code, r.out).toBe(1);
+    return r.out;
+  };
+  const allHidden = (out: string, n: number) => { for (let i = 0; i < n; i += 1) expect(out, `form ${i}`).toContain(`F${i}:***;`); };
+
+  it('the job token written as %XX for every byte (upper and lower hex) is hidden', () => {
+    // form 0 is the plain token: a CONTROL that the label/cut mechanics of this harness show a hidden token as F0:***; (so a survivor is the redactor's, not the harness's)
+    allHidden(echoRun(LIT, [LIT, enc(LIT), enc(LIT, true)]), 3);
+  });
+  it('a MIXED form (some bytes upper hex, some lower, some plain) is hidden', () => {
+    const mixed = [...LIT].map((c, i) => (i % 3 === 0 ? c : '%' + hex(c, i % 2 === 0))).join('');
+    allHidden(echoRun(LIT, [mixed]), 1);
+  });
+  it('the underscore alone as %5F / %5f, and the token with only some bytes encoded, is hidden', () => {
+    allHidden(echoRun(LIT, [LIT.replace('_', '%5F'), LIT.replace('_', '%5f'), enc(LIT.slice(0, 5)) + LIT.slice(5), LIT.slice(0, 10) + enc(LIT.slice(10))]), 4);
+  });
+  it('double (and triple) encoding of every byte is hidden', () => {
+    // one form per run: the whole error line is cut at 300 characters
+    allHidden(echoRun(LIT, [enc(LIT, false, 1)]), 1);
+    allHidden(echoRun(LIT, [enc(LIT, true, 2)]), 1);
+  });
+  it('a SINGLE encoded position, swept over the whole token (upper and lower hex), is hidden', () => {
+    const forms = [...LIT].flatMap((_, i) => [one(LIT, i), one(LIT, i, true)]);
+    for (let at = 0; at < forms.length; at += 6) allHidden(echoRun(LIT, forms.slice(at, at + 6)), Math.min(6, forms.length - at));
+  });
+  it('a space inside a partly encoded token is hidden (the whitespace-gap rule composes with the escapes)', () => {
+    allHidden(echoRun(LIT, [enc(LIT.slice(0, 8)) + ' ' + LIT.slice(8), LIT.slice(0, 6) + ' ' + enc(LIT.slice(6, 9)) + ' ' + LIT.slice(9)]), 2);
+  });
+  it('a GitHub-shaped token (ghs_/ghp_/github_pat_) written with encoded letters, underscore and digits is hidden, and the words after it survive', () => {
+    const shaped = 'ghs_' + 'Ab3dE5gH7jK9mN1pQ3';
+    const pat = 'github_pat_' + 'Ab3dE5gH7jK9mN1pQ3';
+    allHidden(echoRun('not-a-token', [shaped, enc(shaped), enc(shaped, true), shaped.replace('_', '%5F')]), 4);
+    allHidden(echoRun('not-a-token', [enc(pat.slice(0, 11)) + pat.slice(11), pat.replace('_pat_', '%5Fpat%5f')]), 2);
+    allHidden(echoRun('not-a-token', [enc(shaped, false, 1)]), 1);
+    const r = runLand({ token: 'not-a-token', scenario: { failGet: '/pulls/7$', echo: 'text', echoText: 'said ' + shaped.replace('_', '%5F') + ' merged PR number 12 into main' } });
+    expect(r.out).toContain('merged PR number 12 into main');
+    expect(r.out).not.toContain('Ab3dE5gH7jK9mN1pQ3');
+    expect(r.out).not.toContain('%5F');
+  });
+  it('the README and land.mjs state the percent-escape rule and its residuals, and land.mjs no longer compares against encodeURIComponent(token)', () => {
+    const readme = readFileSync(join(LANDING, 'README.md'), 'utf8');
+    const land = readFileSync(join(LANDING, 'land.mjs'), 'utf8');
+    for (const phrase of ['`%XX`', '`%25XX`', '`ghs%5F...`', 'longer than 255', 'was false until v3.5c']) expect(readme, phrase).toContain(phrase);
+    expect(land).not.toContain('encodeURIComponent(env.GH_TOKEN)');
+    expect(land).toContain('charOrEscape');
+  });
+  it('a harmless percent-encoded sentence is left alone', () => {
+    const r = runLand({ token: LIT, scenario: { failGet: '/pulls/7$', echo: 'text', echoText: 'see 100%25 done%20now and ghs%20 not a token' } });
+    expect(r.out).toContain('100%25 done%20now and ghs%20 not a token');
   });
 });
 

@@ -14,21 +14,38 @@ const API = 'https://api.github.com';
 const SELF_CHECK = 'Land a cleared pull request';
 // r5: NOTHING this job prints may carry a credential, whatever an API, a proxy or a library echoes back into an error text. Every line goes through `summary`, which redacts the token
 // literal, GitHub token shapes (ghs_/ghp_/gho_/ghu_/ghr_/github_pat_), `Bearer <x>` and `Authorization: <x>` first. (The runner also masks GITHUB_TOKEN; this does not rely on it.)
-// V-4: the token is also redacted when a line break (or any whitespace) splits it, and in its base64 forms (alone, behind `x-access-token:`, at the three byte alignments) and percent-encoded.
+// V-4: the token is also redacted when a line break (or any whitespace) splits it, in its base64 forms (alone, behind `x-access-token:`, at the three byte alignments) and when ANY of its characters
+// is written as a percent escape (%XX, upper or lower hex, also escaped again as %25XX: up to three levels). v3.5c: v3.5b only compared against encodeURIComponent(token), which is the token itself for
+// the characters of a GitHub token, so a REAL percent-encoded echo (ghs%5F..., %67%68%73%5F...) was not hidden. Each character below matches itself OR its %XX, so partial encodings are covered.
+// Accepted residuals: README, "Output redaction".
 const b64Middles = (s) => [0, 1, 2].map((pad) => Buffer.from(' '.repeat(pad) + s).toString('base64')).map((e, pad) => e.slice(Math.ceil((pad * 8) / 6), Math.max(0, e.length - 4))).filter((m) => m.length >= 8);
+const reEscape = (c) => c.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+/** One character as a pattern: itself, or %XX (either hex case), or the %XX escaped again (%25XX, at most three levels). Only single-byte characters have a %XX form here. */
+const charOrEscape = (c) => {
+  const code = c.codePointAt(0);
+  if (code > 0xff) return reEscape(c);
+  return `(?:${reEscape(c)}|%(?:25){0,3}${[...code.toString(16).padStart(2, '0')].map((d) => (/[a-f]/u.test(d) ? `[${d}${d.toUpperCase()}]` : d)).join('')})`;
+};
+const ALNUM_OR_ESCAPED = '(?:[A-Za-z0-9]|%(?:25){0,3}(?:3[0-9]|4[1-9A-Fa-f]|5[0-9Aa]|6[1-9A-Fa-f]|7[0-9Aa]))';
+const UNDERSCORE_OR_ESCAPED = charOrEscape('_');
+const LINE_BREAK_GAP = '(?:\\r?\\n[ \\t]?)?';
+const shapeRun = (unit) => `(?:${LINE_BREAK_GAP}${unit}){16,255}`;
+const word = (w) => [...w].map(charOrEscape).join('');
+const SHAPE_PREFIXED = new RegExp(`(?<![A-Za-z0-9_])(?:${['ghs', 'ghp', 'gho', 'ghu', 'ghr'].map(word).join('|')})${UNDERSCORE_OR_ESCAPED}${shapeRun(ALNUM_OR_ESCAPED)}`, 'gu');
+const SHAPE_PAT = new RegExp(`(?<![A-Za-z0-9_])${word('github')}${UNDERSCORE_OR_ESCAPED}${word('pat')}${UNDERSCORE_OR_ESCAPED}${shapeRun(`(?:${ALNUM_OR_ESCAPED}|${UNDERSCORE_OR_ESCAPED})`)}`, 'gu');
 const redact = (text) => {
   let out = String(text);
   if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) {
     out = out.split(env.GH_TOKEN).join('***');
-    const gap = '\\s*';
-    out = out.replace(new RegExp([...env.GH_TOKEN].map((c) => c.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join(gap), 'gu'), '***');
+    // every character of the token as itself or as a percent escape, whitespace allowed between characters (a split by a line break or a space)
+    out = out.replace(new RegExp([...env.GH_TOKEN].map(charOrEscape).join('\\s*'), 'gu'), '***');
     for (const form of [env.GH_TOKEN, `x-access-token:${env.GH_TOKEN}`, `${env.GH_TOKEN}:x-oauth-basic`]) for (const middle of b64Middles(form)) out = out.split(middle).join('***');
-    out = out.split(encodeURIComponent(env.GH_TOKEN)).join('***');
   }
   return out
-    // v3.5b S-4: only a LINE BREAK (LF or CRLF, then at most one space or tab) may split the run, never a plain space, so the words after a token survive; at most 255 characters.
-    .replace(/\b(?:ghs|ghp|gho|ghu|ghr)_(?:(?:\r?\n[ \t]?)?[A-Za-z0-9]){16,255}/gu, '***')
-    .replace(/\bgithub_pat_(?:(?:\r?\n[ \t]?)?[A-Za-z0-9_]){16,255}/gu, '***')
+    // only a LINE BREAK (LF or CRLF, then at most one space or tab) may split the run, never a plain space, so the words after a token survive; at most 255 characters; letters, digits and the
+    // underscore may be percent escapes (v3.5c).
+    .replace(SHAPE_PREFIXED, '***')
+    .replace(SHAPE_PAT, '***')
     .replace(/\bBearer\s+[^\s"',;]+/giu, 'Bearer ***').replace(/(authorization["']?\s*[:=]\s*)(?:(?:bearer|token|basic)\s+)?[^\s"',;]+/giu, '$1***');
 };
 const summary = (line) => { const safe = redact(line); console.log(safe); if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, safe + '\n'); };
