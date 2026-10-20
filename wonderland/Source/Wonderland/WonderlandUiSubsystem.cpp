@@ -1050,6 +1050,16 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 
 void UWonderlandUiSubsystem::CloseOverlay()
 {
+	if (Open == EOverlay::Social)
+	{
+		// B35: the hub's faster re-read period ends with the hub
+		const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+		UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+		if (FWonderlandSocialLiveService* Live = Social != nullptr ? Social->GetLive() : nullptr)
+		{
+			Live->SetSurfaceOpen(false);
+		}
+	}
 	// THE WARDROBE IS SHUT BEFORE THE BRAIN IS, AND THE PANEL IS LEFT REMEMBERING NOTHING.
 	//
 	// Closing the Project Brain while the wardrobe stood open left bSkinsOpen TRUE on the widget, because nothing
@@ -5332,7 +5342,20 @@ bool UWonderlandUiSubsystem::OpenSocialHub(const FString& TabName)
 		UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
 		if (FWonderlandSocialLiveService* Live = Social != nullptr ? Social->GetLive() : nullptr)
 		{
-			Live->Refresh();
+			// B35: Recent Players is withheld ("Updating") until a read issued after this open has landed, and the hub re-reads every few seconds while open
+			if (SocialHubPanel.IsValid())
+			{
+				SocialHubPanel->SetAwaitingFresh(true);
+			}
+			Live->SetSurfaceOpen(true);
+			const TWeakPtr<SWonderlandSocialHubPanel> WeakPanel = SocialHubPanel;
+			Live->RefreshThen([WeakPanel]()
+			{
+				if (const TSharedPtr<SWonderlandSocialHubPanel> Pinned = WeakPanel.Pin())
+				{
+					Pinned->SetAwaitingFresh(false);
+				}
+			});
 		}
 	}
 	if (Open == EOverlay::Social && SocialHubPanel.IsValid() && !PendingSocialNotice.IsEmpty())

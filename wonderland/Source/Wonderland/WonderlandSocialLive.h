@@ -160,6 +160,12 @@ public:
 	bool HasSnapshot() const { return bHasSnapshot; }
 	/** Read the snapshot again now. */
 	void Refresh();
+	/** B35 (R16 privacy): read the snapshot and call OnFresh once a read ISSUED AFTER THIS CALL has landed (a read already in flight may
+	 *  predate a hide, so it is not enough). Not called if the read fails: the caller keeps withholding what could be stale. */
+	void RefreshThen(TFunction<void()> OnFresh);
+	/** B35: while a surface that lists other players is open, re-read every few seconds instead of every ResyncSeconds, because a player who
+	 *  hid from this one is sent no event. */
+	void SetSurfaceOpen(bool bOpen) { bSurfaceOpen = bOpen; }
 	/** Report this player's own presence (the client's part of the presence authority's input): connected (and exploring, as on arrival),
 	 *  or leaving. What the player is DOING after that is reported on change from the activity source (SetActivitySource). */
 	void ReportPresence(bool bConnected);
@@ -269,6 +275,10 @@ private:
 	bool bPolling = false;
 	bool bRefreshing = false;
 	bool bRefreshAgain = false;
+	bool bSurfaceOpen = false;
+	/** B35: callbacks for the read in flight, and for the read that follows it (see RefreshThen). */
+	TArray<TFunction<void()>> FreshNow;
+	TArray<TFunction<void()>> FreshNext;
 	FTSTicker::FDelegateHandle TickerHandle;
 	/** r16reh16c: a dedicated 50 ms ticker for the world report only (the shared Tick runs every 0.25 s, which capped reports at 4 a second). */
 	FTSTicker::FDelegateHandle WorldTickerHandle;

@@ -914,6 +914,13 @@ TSharedRef<SWidget> SWonderlandSocialHubPanel::MakeRecent()
 {
 	using namespace WonderlandSocialHubLook;
 	TSharedRef<SScrollBox> List = SNew(SScrollBox);
+	if (bAwaitingFresh)
+	{
+		// B35: no row from a view that may predate a hide
+		List->AddSlot().Padding(0.0f, 0.0f, 0.0f, 6.0f)[MakeSectionTitle(TEXT("PLAYED WITH RECENTLY"), 0)];
+		List->AddSlot()[MakeEmpty(TEXT("Updating…"))];
+		return List;
+	}
 	List->AddSlot().Padding(0.0f, 0.0f, 0.0f, 6.0f)[MakeSectionTitle(TEXT("PLAYED WITH RECENTLY"), Snapshot.RecentPlayers.Num())];
 	if (Snapshot.RecentPlayers.Num() == 0)
 	{
@@ -1200,6 +1207,15 @@ void SWonderlandSocialHubPanel::SetSnapshot(const FWonderlandSocialSnapshot& InS
 		OpenConversationId = Snapshot.Conversations.Num() > 0 ? Snapshot.Conversations[0].ConversationId : FString();
 	}
 	RequestRebuild();   // F-21: never at once from a refresh (FlushRebuild says why)
+}
+
+void SWonderlandSocialHubPanel::SetAwaitingFresh(bool bAwaiting)
+{
+	if (bAwaitingFresh != bAwaiting)
+	{
+		bAwaitingFresh = bAwaiting;
+		RequestRebuild();
+	}
 }
 
 void SWonderlandSocialHubPanel::SetSignIn(const FWonderlandSignInView& InView)
@@ -1563,7 +1579,7 @@ FString SWonderlandSocialHubPanel::Describe() const
 	return FString::Printf(TEXT("tab %s | %s | friends %d (%d on) | requests in %d out %d | party invites %d | recent %d | conversations %d (unread %d) | open %s (%d messages) | party %s (%d members%s) | visible parties %d | voice %s%s | rows %s | action: %s | signin %s%s%s"),
 		TabName(Tab), bConnected ? (bDevelopmentPreview ? TEXT("DEVELOPMENT PREVIEW") : TEXT("connected")) : TEXT("NOT CONNECTED"),
 		Snapshot.Friends.Num(), CountOn(), Snapshot.IncomingRequests.Num(), Snapshot.OutgoingRequests.Num(), Snapshot.PartyInvites.Num(),
-		Snapshot.RecentPlayers.Num(), Snapshot.Conversations.Num(), CountUnread(), OpenConversationId.IsEmpty() ? TEXT("none") : *OpenConversationId,
+		bAwaitingFresh ? 0 : Snapshot.RecentPlayers.Num(), Snapshot.Conversations.Num(), CountUnread(), OpenConversationId.IsEmpty() ? TEXT("none") : *OpenConversationId,
 		History != nullptr ? History->Num() : 0,
 		Snapshot.bHasParty ? *Snapshot.Party.Name : TEXT("none"), Snapshot.bHasParty ? Snapshot.Party.Members.Num() : 0,
 		Snapshot.bHasParty ? *FString::Printf(TEXT(", leader %s%s"), *Snapshot.Party.LeaderId, Snapshot.Party.bViewerIsLeader ? TEXT(" (you)") : TEXT("")) : TEXT(""),

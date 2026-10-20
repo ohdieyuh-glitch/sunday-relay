@@ -111,7 +111,12 @@ public:
 	void SetSignIn(const FWonderlandSignInView& InView);
 	/** The service's view changed (a live update): redraw on the same tab, the same conversation if it is still there. */
 	void SetSnapshot(const FWonderlandSocialSnapshot& InSnapshot, bool bInConnected, const FString& InSourceLine, bool bInPreview);
-	/** The social service's answer to an action this hub asked for, shown at the foot. */
+	/** B35 (R16 privacy): while true, rows that name OTHER players who are not already known friends (Recent Players) are not drawn from the
+	 *  cached snapshot, because a player who hid from this one is sent no event and the cache can still list them. Set when the hub opens,
+	 *  cleared when a read issued after the open has landed. Redraws. */
+	void SetAwaitingFresh(bool bAwaiting);
+	bool IsAwaitingFresh() const { return bAwaitingFresh; }
+
 	void ShowActionResult(const FString& Line);
 	FString GetLastActionLine() const { return LastActionLine; }
 	/** "DEVELOPMENT PREVIEW · …" or the live service's line, as last set. */
@@ -200,6 +205,7 @@ private:
 	bool bConnected = false;
 	FString SourceLine;
 	bool bDevelopmentPreview = true;
+	bool bAwaitingFresh = false;
 	ETab Tab = ETab::Friends;
 	FOnWonderlandSocialAction OnAction;
 	FOnWonderlandSocialOpenProfile OnOpenProfile;

@@ -22,6 +22,8 @@ namespace WonderlandSocialLiveDetail
 	 * two-client run (10-02) left A's friend list showing B for minutes. The view is read again when it is this old.
 	 */
 	constexpr double ResyncSeconds = 20.0;
+	/** B35: the re-read period while a hub or profile is open. */
+	constexpr double OpenResyncSeconds = 4.0;
 	/** The shared presence layer's report, each answered with the view. The gap AFTER an answer (so the period is round trip + this + tick rounding).
 	 *  r16reh16b: 0.2 -> 0.1 s. (Alone it changed nothing: the shared Tick runs every 0.25 s and gated the report; r16reh16c adds TickWorldFast, a 50 ms ticker.) Measured period 255 ms at 13 ms RTT; remote motion showed surge/stall at that rate. The server stores one report per 100 ms
 	 *  (WORLD_REPORT_MIN_INTERVAL_MS) and its `report` budget is a burst of 30 then one per 100 ms (SOCIAL_BUDGETS.report), so the period always stays above
@@ -357,6 +359,19 @@ void FWonderlandSocialLiveService::Call(const FString& Verb, const FString& Path
 	HttpRequest->ProcessRequest();
 }
 
+void FWonderlandSocialLiveService::RefreshThen(TFunction<void()> OnFresh)
+{
+	if (bRefreshing)
+	{
+		FreshNext.Add(MoveTemp(OnFresh));   // the read in flight may predate the change: wait for the next one
+	}
+	else
+	{
+		FreshNow.Add(MoveTemp(OnFresh));
+	}
+	Refresh();
+}
+
 void FWonderlandSocialLiveService::Refresh()
 {
 	if (bRefreshing)
@@ -383,11 +398,25 @@ void FWonderlandSocialLiveService::Refresh()
 			LastError.Reset();
 			UE_LOG(LogTemp, Log, TEXT("%s"), *WonderlandSocialSnapshotLine(Snapshot));
 			Changed.Broadcast();
+			TArray<TFunction<void()>> Landed = MoveTemp(FreshNow);
+			FreshNow.Reset();
+			for (const TFunction<void()>& Fn : Landed)
+			{
+				Fn();
+			}
 		}
+		// what was waiting for the NEXT read becomes the current one (on a failure too: it waits for a read that lands)
+		FreshNow.Append(MoveTemp(FreshNext));
+		FreshNext.Reset();
 		if (bRefreshAgain)
 		{
 			bRefreshAgain = false;
 			Refresh();
+		}
+		else if (FreshNow.Num() > 0 && Problem.IsEmpty() == false)
+		{
+			// a failed read with callbacks waiting: read again on the next resync (they stay queued, nothing is shown from the stale view)
+			NextResyncAt = FPlatformTime::Seconds();
 		}
 	});
 }
@@ -405,8 +434,9 @@ bool FWonderlandSocialLiveService::Tick(float)
 	// At most one resync per ResyncSeconds, so a server that keeps failing is not asked again every tick.
 	if (bHasSnapshot && !bRefreshing && FPlatformTime::Seconds() >= NextResyncAt)
 	{
-		NextResyncAt = FPlatformTime::Seconds() + WonderlandSocialLiveDetail::ResyncSeconds;
-		if (FPlatformTime::Seconds() - SnapshotAt >= WonderlandSocialLiveDetail::ResyncSeconds)
+		const double Period = bSurfaceOpen ? WonderlandSocialLiveDetail::OpenResyncSeconds : WonderlandSocialLiveDetail::ResyncSeconds;
+		NextResyncAt = FPlatformTime::Seconds() + Period;
+		if (FPlatformTime::Seconds() - SnapshotAt >= Period || FreshNow.Num() > 0)
 		{
 			Refresh();
 		}
