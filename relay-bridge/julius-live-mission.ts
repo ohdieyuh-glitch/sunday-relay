@@ -78,13 +78,13 @@ import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/j
 import { liveEvidenceLines } from './julius/live-evidence-lines';
 import {
   liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveLearningFailedLine, liveOneLine, liveResearchLines, liveTickAccountLine,
-  liveTickBudgetLine, liveWorkersBlockedLines, liveStageDeadlineLine,
+  liveTickBudgetLine, liveWorkersBlockedLines, liveStageDeadlineLine, liveCoderRuntimeBudgetLines,
 } from './julius/live-report-lines';
 import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
   driveJuliusRunToTerminal,
-  liveTickBudgetFor, liveStageDeadline, liveRunAttemptRefusal, JULIUS_LIVE_RATE_LIMIT_BACKOFF,
+  approvalWaitMsFor, coderRuntimeScheduleOfContract, liveTickBudgetFor, liveStageDeadline, liveRunAttemptRefusal, JULIUS_LIVE_RATE_LIMIT_BACKOFF,
   recordJuliusLearningOutcome,
   resolveLiveWorkers,
 } from './julius/live-composition';
@@ -668,6 +668,7 @@ async function main(argv: readonly string[]): Promise<number> {
     contexts: { snapshotFor: () => null }, artifacts, shell: null,
     architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
     architectEffort: contract.limits?.architectEffort, coderEffort: contract.limits?.coderEffort, coderSelfTestCalls: contract.limits?.coderSelfTestCalls,
+    coderRuntimeMinutes: contract.limits?.coderRuntimeMinutes, repairCycles: contract.limits?.repairCycles, approvalWaitMs: approvalWaitMsFor(contract),
   });
 
   out('JULIUS LIVE MISSION — preflight');
@@ -675,6 +676,7 @@ async function main(argv: readonly string[]): Promise<number> {
   out(`  requested models: architect=${preflight.requested.architectModel ?? 'MISSING'} coder=${preflight.requested.codingModel ?? 'MISSING'} reviewer=${preflight.requested.reviewerProvider ?? 'MISSING'}/${preflight.requested.reviewerModel ?? 'MISSING'}`);
   for (const row of presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', CLAUDE_SUBSCRIPTION_TOKEN_ENV, 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV])) out(row);
   out('  note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.');
+  for (const line of liveCoderRuntimeBudgetLines(coderRuntimeScheduleOfContract(env, contract))) out(line);
 
   /**
    * WHICH CREDENTIAL THE CODING AGENT WOULD USE, ANSWERED BEFORE ANYTHING RUNS.
@@ -912,6 +914,7 @@ async function main(argv: readonly string[]): Promise<number> {
       testCommand: contract.testCommand, contexts: handoffs.contexts, artifacts: liveArtifacts, shell,
       architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
       architectEffort: contract.limits?.architectEffort, coderEffort: contract.limits?.coderEffort, coderSelfTestCalls: contract.limits?.coderSelfTestCalls,
+    coderRuntimeMinutes: contract.limits?.coderRuntimeMinutes, repairCycles: contract.limits?.repairCycles, approvalWaitMs: approvalWaitMsFor(contract),
       researchPolicyFor: researchPolicyOf,
     });
     if (!resolution.ok) {
@@ -1019,6 +1022,7 @@ async function main(argv: readonly string[]): Promise<number> {
        code TIMEOUT) through its ordinary path, so its learning record below is written and the evidence steps run. */
     const stageDeadline = liveStageDeadline({ jobStartedAt: env.JULIUS_JOB_STARTED_AT, workers: resolution.entries.map((entry) => entry.worker) });
     out(liveStageDeadlineLine(stageDeadline));
+    for (const line of liveCoderRuntimeBudgetLines(coderRuntimeScheduleOfContract(env, contract))) out(line);
     out(liveExecutionScopeLine(liveExecutionScope(env)));
     const outcome = await driveJuliusRunToTerminal({
       loop: runtime.loop, store: handoffs.store,
