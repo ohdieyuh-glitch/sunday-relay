@@ -61,3 +61,7 @@ signature-b64: <standard base64, padded, ONE line, of the 64-byte ed25519 signat
 8. Run founder-credential scripts by pasting the bash command into Git Bash. Do not wrap them in PowerShell, and do not route around the permission classifier.
 9. The host clock can be about 80 s behind GitHub: order events against GitHub timestamps.
 10. Any fixture with an expiry needs the clock pin used in the landing suites; long end-to-end cases carry an explicit test timeout.
+
+## Output redaction (what the job's printed text hides, and what it does not)
+Every printed line goes through one redactor. It hides: the job token's literal text, with any whitespace between its characters; the token in base64 (alone, behind `x-access-token:`, and at the three byte alignments) and percent-encoded; GitHub token shapes (`ghs_`, `ghp_`, `gho_`, `ghu_`, `ghr_`, `github_pat_`) when a line break (LF or CRLF, then at most one space or tab) splits them, never when a plain space follows (so the words after a token survive); `Bearer <x>` and `Authorization: <x>`.
+Accepted residuals, stated so nobody relies on more: the base64 form leaves about four characters of its tail visible; a JSON-escaped newline (`\n` as two characters) inside a token, a hex form, a zero-width character inside a token, and a reversed form are not recognised; the first word of the line after a token that ended its line may be redacted with it. The runner's own masking of the job token remains a second layer, not a reason to print one.

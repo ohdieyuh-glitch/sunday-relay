@@ -1377,6 +1377,14 @@ describe('v3.5b S-4: the token-shape redaction no longer eats the words that fol
   });
 });
 
+describe('v3.5b S-4b: the README states what the output redaction covers and its accepted residuals', () => {
+  it('names the covered forms and every accepted residual', () => {
+    const readme = readFileSync(join(LANDING, 'README.md'), 'utf8');
+    expect(readme).toMatch(/## Output redaction/u);
+    for (const word of ['line break', 'base64', 'percent-encoded', 'JSON-escaped', 'hex', 'zero-width', 'reversed', 'about four characters']) expect(readme, word).toContain(word);
+  });
+});
+
 describe('v3.5b S-2: the executor / reviewer-isolation / preflight / usage-limit / pins-check scripts are founder-governed paths', () => {
   const S2 = [
     '.github/julius-mission-pins.sh', '.github/julius-executor-entrypoint.sh', 'scripts/julius-docker-executor.sh', 'scripts/julius-executor-ready.mjs',
