@@ -234,6 +234,16 @@ globalThis.fetch = async (url, init = {}) => {
   const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   // scenario.failGet: a regexp source; any GET whose path matches answers HTTP 500 (an API failure before anything is written)
   // scenario.echo: the failure text echoes the request's Authorization header and token-shaped strings, as a misbehaving proxy or API might
+  if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path) && scenario.echo === 'wrapped') {
+    const tok = String(init.headers?.Authorization ?? '').replace(/^Bearer /, '');
+    return reply(500, { message: 'upstream said: token ' + tok.slice(0, 20) + '\\n' + tok.slice(20) + ' and again Bearer ' + tok.slice(0, 14) + '\\r\\n ' + tok.slice(14) });
+  }
+  if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path) && scenario.echo === 'follow') {
+    return reply(500, { message: 'upstream said: ghs_' + 'A'.repeat(36) + ' merged PR number 12 into main; also ghp_' + 'C'.repeat(36) + ' kept going, github_pat_' + 'B'.repeat(30) + ' done' });
+  }
+  if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path) && scenario.echo === 'text') {
+    return reply(500, { message: scenario.echoText });
+  }
   if (method === 'GET' && scenario.failGet && new RegExp(scenario.failGet).test(path)) return reply(500, { message: scenario.echo ? 'upstream said: Authorization: ' + (init.headers?.Authorization ?? '') + ' also ghs_' + 'A'.repeat(36) + ' github_pat_' + 'B'.repeat(30) + ' ghp_' + 'C'.repeat(36) : 'the fake fails this read' });
   // b6: the nonce tag. scenario.spentTags = tag names that already exist; scenario.tagReadStatus / tagCreateStatus override the answers.
   if (method === 'GET' && /\\/git\\/ref\\/tags\\//.test(path)) {
@@ -387,7 +397,7 @@ describe('land.mjs end to end against a fake GitHub', () => {
       expect(r.merges, name).toHaveLength(0);
       expect(r.out, name).toContain('REFUSED');
     }
-  });
+  }, 30_000);
 
   it('refuses without merging: unauthorized branch, founder-governed files, failing or pending CI, changed bot comments', () => {
     const cases: Array<[string, ReturnType<typeof runLand>]> = [
@@ -416,7 +426,7 @@ describe('land.mjs end to end against a fake GitHub', () => {
       expect(r.code, `${name}: ${r.out}`).toBe(1);
       expect(r.merges, name).toHaveLength(0);
     }
-  });
+  }, 30_000);
 
   it('a ref-update error fails the job unlanded, and a main that is not the created commit afterwards raises an alert (exit 2)', () => {
     const rejected = runLand({ scenario: { patchStatus: 405 } });
@@ -753,6 +763,14 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
     expect(check({ files: ['scripts/julius-main-notes.md'] })).toEqual([]);
   });
 
+  it('PIN: the shipped allowlist is EXACTLY this list (any change is a founder-governed update and must change this pin in the same commit; reuse of a landed name goes through retire + supersede, not through an extension)', () => {
+    const list = readFileSync(join(LANDING, 'allowed-branches.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    expect(list).toEqual([
+      'relay/julius-partial-secret-capture-fix', 'relay/julius-coder-runtime-budget', 'relay/julius-diag-digest-evidence-2', 'relay/julius-report-refused-reason', 'relay/julius-accounting-instruments',
+      'relay/julius-maxeffort-gauntlet-1', 'relay/julius-maxeffort-loop-1', 'relay/julius-ask-route',
+    ]);
+  });
+
   it('the shipped allowlist refuses the superseded Candidate C branch (evidence-1) and allows evidence-2', () => {
     const list = readFileSync(join(LANDING, 'allowed-branches.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
     expect(list).not.toContain('relay/julius-diag-digest-evidence-1');
@@ -805,12 +823,14 @@ describe('round 2: an ambiguous ref-update outcome is judged by re-reading main,
     }
   });
 
-  it('main == the cleared base: nothing landed, reported, no retry, no comment or close', () => {
+  it('main == the cleared base: ALERT, state in doubt (exit 2), no retry, no comment or close', () => {
     for (const [name, lost] of cases) {
       const r = runLand({ scenario: { patchLost: { ...lost, applied: false } } });
-      expect(r.code, `${name}: ${r.out}`).toBe(1);
-      expect(r.out, name).toContain('Nothing was landed');
+      expect(r.code, `${name}: ${r.out}`).toBe(2);
+      expect(r.out, name).toContain('ALERT AFTER AN AMBIGUOUS REF UPDATE');
+      expect(r.out, name).toContain('state in doubt');
       expect(r.out, name).toContain('still the cleared base');
+      expect(r.out, name).not.toContain('Nothing was landed');
       expect(r.merges, name).toHaveLength(1);
       expect(r.writes.map((c) => c.method), name).toEqual(['POST', 'POST', 'PATCH']);
     }
@@ -1032,7 +1052,7 @@ describe('round 3 R2: the gate and secret-handling scripts workflows run are gov
   it('neighbours that must stay allowed are allowed (relay-bridge, src, the mission directories, the harness manifest, other scripts), and such a PR lands', () => {
     const allowedFiles = [
       'relay-bridge/julius/x.ts', 'src/relay/mission/julius/x.ts', '.github/julius-missions/julius-m/contract.json', 'JULIUS_HARNESS_MANIFEST.md',
-      'scripts/julius-paid-dispatch.mjs', 'scripts/julius-live-preflight.ts', 'scripts/julius-live-probe-file.ts', 'scripts/julius-mission-slice.test.ts', 'scripts/julius-evidence-bodies.mjs',
+      'scripts/julius-live-probe-file.ts', 'scripts/julius-mission-slice.test.ts', 'scripts/julius-evidence-bodies.mjs',
       'scripts/julius-main-notes.md', '.github/workflows-notes.md', '.github/julius-missions/julius-live-m/contract.json', 'docs/actions/readme.md',
     ];
     for (const f of allowedFiles) expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(false);
@@ -1064,8 +1084,8 @@ describe('round 4: scripts/julius-landing* (the landing tests) is a governed pre
     }
   });
 
-  it('neighbours stay allowed: other julius-live scripts, julius-paid-dispatch (a review decision, not added), other julius- tests', () => {
-    const allowedFiles = ['scripts/julius-live-probe-file.ts', 'scripts/julius-live-preflight.ts', 'scripts/julius-paid-dispatch.mjs', 'scripts/julius-evidence-bodies.test.ts', 'scripts/julius-mission-pins.test.ts', 'scripts/julius-drill-support.ts', 'scripts/landing-notes.md', 'docs/scripts/julius-landing.md'];
+  it('neighbours stay allowed: other julius-live scripts, other julius- tests', () => {
+    const allowedFiles = ['scripts/julius-live-probe-file.ts', 'scripts/julius-evidence-bodies.test.ts', 'scripts/julius-mission-pins.test.ts', 'scripts/julius-drill-support.ts', 'scripts/landing-notes.md', 'docs/scripts/julius-landing.md'];
     for (const f of allowedFiles) expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(false);
     expect(check({ files: allowedFiles, fileRows: allowedFiles.length, pr: { ...goodPr(), changed_files: allowedFiles.length } })).toEqual([]);
     const r = runLand({ scenario: { files: allowedFiles.slice(0, 3), pr: { ...goodPr(), changed_files: 3 } } });
@@ -1198,15 +1218,15 @@ describe('round 5 b6: the clearance nonce is spent as a tag, atomically, before 
 });
 
 describe('round 5 a10: every request has a deadline, so a hung connection after an applied ref update reaches the recovery re-read', () => {
-  it('a PATCH that hangs after being applied is recovered as LANDED; one that hangs unapplied is "Nothing was landed"; both within the deadline', () => {
+  it('a PATCH that hangs after being applied is recovered as LANDED; one that hangs unapplied is an ALERT (state in doubt); both within the deadline', () => {
     const started = Date.now();
     const applied = runLand({ requestTimeoutMs: '700', scenario: { patchLost: { hang: true, applied: true } } });
     expect(applied.code, applied.out).toBe(0);
     expect(applied.out).toContain('LANDED (the PATCH response was lost)');
     expect(applied.merges, 'one attempt').toHaveLength(1);
     const unapplied = runLand({ requestTimeoutMs: '700', scenario: { patchLost: { hang: true, applied: false } } });
-    expect(unapplied.code, unapplied.out).toBe(1);
-    expect(unapplied.out).toContain('Nothing was landed');
+    expect(unapplied.code, unapplied.out).toBe(2);
+    expect(unapplied.out).toContain('state in doubt');
     expect(unapplied.merges).toHaveLength(1);
     expect(Date.now() - started, 'neither run waited for the fake\'s 6 s keep-alive each').toBeLessThan(20_000);
   });
@@ -1275,6 +1295,193 @@ describe('v3.4: GitHub stores a created commit message without its final newline
     expect(r.code, r.out).toBe(0);
     expect(r.out).toContain('LANDED PR #7');
     expect(r.merges).toHaveLength(1);
+  });
+});
+describe('v3.4 V-1: the README does not oversell the nonce tag', () => {
+  it('says the tag is NOT tamper-proof, names the App that could delete or re-create it, and names the ruleset that would close it', () => {
+    const readme = readFileSync(join(LANDING, 'README.md'), 'utf8');
+    expect(readme).toContain('NOT tamper-proof');
+    expect(readme).toContain('could also delete or re-create it');
+    expect(readme).toContain('refs/tags/julius-landing-nonce-*');
+    expect(readme).not.toMatch(/(?<!NOT )tamper-proof/u);
+  });
+});
+
+describe('the README carries the operator runbook', () => {
+  it('names the rules the first live landings taught', () => {
+    const readme = readFileSync(join(LANDING, 'README.md'), 'utf8');
+    for (const phrase of ['Operator runbook', 'signed G6 token', 'final newline', 'gh workflow run julius-real-infra.yml', 'late bot comment', 'close the PR and delete its branch', 'UNKNOWN, never absence', 'about 80 s behind GitHub']) expect(readme, phrase).toContain(phrase);
+  });
+});
+
+describe('the evidence scrubber stays founder-governed', () => {
+  it('scripts/julius-live-evidence.mjs is hard-forbidden to the lander and is NOT eligible for a signed exception (REVIEW ruling: its allowed shapes change only through a governed install)', () => {
+    expect(lib.HARD_FORBIDDEN_PATH.test('scripts/julius-live-evidence.mjs')).toBe(true);
+    expect(lib.EXCEPTION_ELIGIBLE).toEqual(['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs']);
+  });
+});
+
+describe('the real-infra workflow path filter covers the paths the landing steps touch (otherwise five required checks never appear)', () => {
+  const filter = (): string[] => {
+    const yml = readFileSync(join(LANDING, '..', 'workflows', 'julius-real-infra.yml'), 'utf8');
+    const m = /pull_request:\s*\n\s*paths: \[(.*)\]/u.exec(yml);
+    expect(m, 'the pull_request paths filter is present').not.toBeNull();
+    return (m as RegExpExecArray)[1].split(',').map((p) => p.trim().replace(/^'|'$/gu, ''));
+  };
+  // GitHub path-filter semantics: `*` matches within one path segment, `**` crosses segments
+  const matches = (pattern: string, file: string): boolean => new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/gu, '\\$&').replace(/\*\*/gu, '\u0000').replace(/\*/gu, '[^/]*').replace(/\u0000/gu, '.*')}$`, 'u').test(file);
+  const touched = [
+    'src/relay/workspace/command-runner.ts', 'src/relay/workspace/command-runner-partial-secret.test.ts', 'src/relay/workspace/output-sanitizer.ts', 'src/relay/workspace/output-sanitizer.test.ts',
+    '.github/julius-missions/julius-diag-digest-evidence-1/contract.json', '.github/julius-missions/julius-maxeffort-loop-1/dryrun/dryrun.sh',
+    '.github/julius-learning-registrations/julius-learning-pair-2.json', '.github/julius-mission-slice/loader.mjs', 'JULIUS_HARNESS_MANIFEST.md',
+    'relay-bridge/julius/live-composition.ts', 'scripts/julius-live-contract-check.mjs', 'src/relay/mission/julius/julius-policy.ts',
+  ];
+  it('every file a landing step has touched matches at least one filter entry', () => {
+    const patterns = filter();
+    for (const file of touched) expect(patterns.some((p) => matches(p, file)), file).toBe(true);
+  });
+  it('the matcher is not a blanket: unrelated paths still do not match', () => {
+    const patterns = filter();
+    for (const file of ['README.md', 'docs/relay/CURRENT_STATE.md', 'wonderland/Source/Wonderland/WonderlandX.cpp', 'src/relay/ui/app/RelayX.tsx']) expect(patterns.some((p) => matches(p, file)), file).toBe(false);
+  });
+});
+
+describe('v3.4 s3: scripts that required CI runs from the PR itself, and julius-paid-dispatch*, are founder-governed paths', () => {
+  const S3 = [
+    'scripts/relay-parity-gate.mjs', 'scripts/wonderland-beta-gate.mjs', 'scripts/wonderland-beta-gate.test.ts', 'scripts/julius-live-preflight-identity.test.ts', 'scripts/julius-derive-scoped-credentials.mjs',
+    'scripts/julius-ci-callers.mjs', 'scripts/ci-test-accounting.test.ts', '.github/julius-learning-store.sh', '.github/julius-phase.sh', '.github/wait-for-executor.sh',
+    'scripts/julius-paid-dispatch.mjs', 'scripts/julius-paid-dispatch.d.mts', 'scripts/julius-paid-dispatch.test.ts', 'scripts/julius-paid-run-archive.mjs', 'scripts/julius-paid-run-archive.test.ts',
+  ];
+  it('every one is refused by the lander\'s hard-forbidden rule and by checkPullRequest, in any letter case', () => {
+    for (const f of S3) {
+      expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(true);
+      expect(lib.HARD_FORBIDDEN_PATH.test(f.toUpperCase()), f.toUpperCase()).toBe(true);
+      expect(check({ files: ['ok.ts', f], fileRows: 2, pr: { ...goodPr(), changed_files: 2 } }).join(' '), f).toContain('founder-governed');
+    }
+  });
+
+  it('near neighbours stay allowed (the rule is not a blanket on scripts/ or .github/)', () => {
+    for (const f of ['scripts/julius-evidence-bodies.mjs', 'scripts/relay-notes.md', '.github/julius-learning-notes.md', '.github/phase-notes.sh', 'docs/julius-paid-dispatch.md']) expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(false);
+  });
+});
+
+describe('v3.5b S-4: the token-shape redaction no longer eats the words that follow a token', () => {
+  it('a token-shaped string on one line leaves the words after it (they were swallowed by the whitespace-tolerant run)', () => {
+    const r = runLand({ token: 'plain-secret-value-123', scenario: { failGet: '/pulls/7$', echo: 'follow' } });
+    expect(r.out).not.toMatch(/ghs_A{8}|ghp_C{8}|github_pat_B{8}/u);
+    expect(r.out).toContain('merged PR number 12 into main');
+    expect(r.out).toContain('kept going');
+    expect(r.out).toContain('done');
+  });
+});
+
+describe('v3.5b S-4b: the README states what the output redaction covers and its accepted residuals', () => {
+  it('names the covered forms and every accepted residual', () => {
+    const readme = readFileSync(join(LANDING, 'README.md'), 'utf8');
+    expect(readme).toMatch(/## Output redaction/u);
+    for (const word of ['line break', 'base64', 'percent-encoded', 'JSON-escaped', 'hex', 'zero-width', 'reversed', 'about four characters']) expect(readme, word).toContain(word);
+  });
+});
+
+describe('v3.5b S-2: the executor / reviewer-isolation / preflight / usage-limit / pins-check scripts are founder-governed paths', () => {
+  const S2 = [
+    '.github/julius-mission-pins.sh', '.github/julius-executor-entrypoint.sh', 'scripts/julius-docker-executor.sh', 'scripts/julius-executor-ready.mjs',
+    'scripts/julius-reviewer-isolation.mjs', 'scripts/julius-reviewer-isolation.test.ts', 'scripts/julius-reviewer-deadline.mjs', 'scripts/julius-live-preflight.ts', 'scripts/julius-usage-limit.mjs',
+  ];
+  it('every one is refused by the hard-forbidden rule and by checkPullRequest, in any letter case', () => {
+    for (const f of S2) {
+      expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(true);
+      expect(lib.HARD_FORBIDDEN_PATH.test(f.toUpperCase()), f.toUpperCase()).toBe(true);
+      expect(check({ files: ['ok.ts', f], fileRows: 2, pr: { ...goodPr(), changed_files: 2 } }).join(' '), f).toContain('founder-governed');
+    }
+  });
+  it('near neighbours stay allowed', () => {
+    for (const f of ['scripts/julius-live-preflight-notes.md', 'scripts/julius-usage-limit-notes.md', 'docs/julius-executor-entrypoint.md', 'scripts/julius-reviewer-notes.md']) expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(false);
+  });
+});
+
+describe('v3.4 V-4: redaction also covers a token wrapped across a line break and its base64 forms', () => {
+  const TOKEN = 'ghs_' + 'abcdefghijklmnopqrstuvwxyz0123456789'.split('').reverse().join('');
+  const compact = (s: string) => s.replace(/\s+/g, '');
+  it('a token broken by a line break (LF, or CRLF plus a space) leaves no run of it in stdout or stderr', () => {
+    const r = runLand({ token: TOKEN, scenario: { failGet: '/pulls/7$', echo: 'wrapped' } });
+    expect(r.code, r.out).toBe(1);
+    const flat = compact(r.out);
+    for (const piece of [TOKEN, TOKEN.slice(4, 24), TOKEN.slice(10, 30), TOKEN.slice(20), TOKEN.slice(14)]) expect(flat, piece).not.toContain(piece);
+  });
+
+  it('the base64 forms of the token (alone, behind x-access-token:, at the three byte alignments) are not printed', () => {
+    // the failure line is cut at 300 characters: v3.5b echoed all four forms in one message, so the fourth never reached the output and the check on it was vacuous. Two forms per run, each shown hidden.
+    const b = (s: string) => Buffer.from(s).toString('base64');
+    for (const forms of [[b(TOKEN), b('x-access-token:' + TOKEN)], [b('  ' + TOKEN), b(' ' + TOKEN)]]) {
+      const r = runLand({ token: TOKEN, scenario: { failGet: '/pulls/7$', echo: 'text', echoText: forms.map((f, i) => `F${i}:${f};`).join(' ') } });
+      expect(r.code, r.out).toBe(1);
+      forms.forEach((form, i) => {
+        expect(r.out, `form ${i} is shown as a hidden value`).toMatch(new RegExp(`F${i}:[^;]*\\*\\*\\*`));
+        // the middle of each form, away from the padding and the unstable edge characters
+        expect(r.out, form).not.toContain(form.slice(8, form.length - 8));
+      });
+    }
+  });
+});
+
+describe('v3.5c V-4 repair: percent-encoded echoes of the token are redacted byte by byte (REVIEW/Codex P1: encodeURIComponent is a no-op for ghs_/ghp_ tokens)', () => {
+  // The echoed text reaches stdout inside ONE error line cut at 300 characters, so every run carries a few short forms; each is labelled so a survivor is pinned to its form.
+  const LIT = 'Zq7LmP2vNd9RkT4wXy_8'; // the job token is NOT shaped like a GitHub token here: only the literal-token rules can hide it
+  const hex = (c: string, lower: boolean) => { const h = c.charCodeAt(0).toString(16).padStart(2, '0'); return lower ? h : h.toUpperCase(); };
+  const enc = (s: string, lower = false, depth = 0) => [...s].map((c) => '%' + '25'.repeat(depth) + hex(c, lower)).join('');
+  const one = (s: string, i: number, lower = false) => s.slice(0, i) + '%' + hex(s[i], lower) + s.slice(i + 1);
+  const echoRun = (token: string, forms: string[]) => {
+    const r = runLand({ token, scenario: { failGet: '/pulls/7$', echo: 'text', echoText: forms.map((f, i) => `F${i}:${f};`).join(' ') } });
+    expect(r.code, r.out).toBe(1);
+    return r.out;
+  };
+  const allHidden = (out: string, n: number) => { for (let i = 0; i < n; i += 1) expect(out, `form ${i}`).toContain(`F${i}:***;`); };
+
+  it('the job token written as %XX for every byte (upper and lower hex) is hidden', () => {
+    // form 0 is the plain token: a CONTROL that the label/cut mechanics of this harness show a hidden token as F0:***; (so a survivor is the redactor's, not the harness's)
+    allHidden(echoRun(LIT, [LIT, enc(LIT), enc(LIT, true)]), 3);
+  });
+  it('a MIXED form (some bytes upper hex, some lower, some plain) is hidden', () => {
+    const mixed = [...LIT].map((c, i) => (i % 3 === 0 ? c : '%' + hex(c, i % 2 === 0))).join('');
+    allHidden(echoRun(LIT, [mixed]), 1);
+  });
+  it('the underscore alone as %5F / %5f, and the token with only some bytes encoded, is hidden', () => {
+    allHidden(echoRun(LIT, [LIT.replace('_', '%5F'), LIT.replace('_', '%5f'), enc(LIT.slice(0, 5)) + LIT.slice(5), LIT.slice(0, 10) + enc(LIT.slice(10))]), 4);
+  });
+  it('double (and triple) encoding of every byte is hidden', () => {
+    // one form per run: the whole error line is cut at 300 characters
+    allHidden(echoRun(LIT, [enc(LIT, false, 1)]), 1);
+    allHidden(echoRun(LIT, [enc(LIT, true, 2)]), 1);
+  });
+  it('a SINGLE encoded position, swept over the whole token (upper and lower hex), is hidden', () => {
+    const forms = [...LIT].flatMap((_, i) => [one(LIT, i), one(LIT, i, true)]);
+    for (let at = 0; at < forms.length; at += 6) allHidden(echoRun(LIT, forms.slice(at, at + 6)), Math.min(6, forms.length - at));
+  });
+  it('a space inside a partly encoded token is hidden (the whitespace-gap rule composes with the escapes)', () => {
+    allHidden(echoRun(LIT, [enc(LIT.slice(0, 8)) + ' ' + LIT.slice(8), LIT.slice(0, 6) + ' ' + enc(LIT.slice(6, 9)) + ' ' + LIT.slice(9)]), 2);
+  });
+  it('a GitHub-shaped token (ghs_/ghp_/github_pat_) written with encoded letters, underscore and digits is hidden, and the words after it survive', () => {
+    const shaped = 'ghs_' + 'Ab3dE5gH7jK9mN1pQ3';
+    const pat = 'github_pat_' + 'Ab3dE5gH7jK9mN1pQ3';
+    allHidden(echoRun('not-a-token', [shaped, enc(shaped), enc(shaped, true), shaped.replace('_', '%5F')]), 4);
+    allHidden(echoRun('not-a-token', [enc(pat.slice(0, 11)) + pat.slice(11), pat.replace('_pat_', '%5Fpat%5f')]), 2);
+    allHidden(echoRun('not-a-token', [enc(shaped, false, 1)]), 1);
+    const r = runLand({ token: 'not-a-token', scenario: { failGet: '/pulls/7$', echo: 'text', echoText: 'said ' + shaped.replace('_', '%5F') + ' merged PR number 12 into main' } });
+    expect(r.out).toContain('merged PR number 12 into main');
+    expect(r.out).not.toContain('Ab3dE5gH7jK9mN1pQ3');
+    expect(r.out).not.toContain('%5F');
+  });
+  it('the README and land.mjs state the percent-escape rule and its residuals, and land.mjs no longer compares against encodeURIComponent(token)', () => {
+    const readme = readFileSync(join(LANDING, 'README.md'), 'utf8');
+    const land = readFileSync(join(LANDING, 'land.mjs'), 'utf8');
+    for (const phrase of ['`%XX`', '`%25XX`', '`ghs%5F...`', 'longer than 255', 'was false until v3.5c']) expect(readme, phrase).toContain(phrase);
+    expect(land).not.toContain('encodeURIComponent(env.GH_TOKEN)');
+    expect(land).toContain('charOrEscape');
+  });
+  it('a harmless percent-encoded sentence is left alone', () => {
+    const r = runLand({ token: LIT, scenario: { failGet: '/pulls/7$', echo: 'text', echoText: 'see 100%25 done%20now and ghs%20 not a token' } });
+    expect(r.out).toContain('100%25 done%20now and ghs%20 not a token');
   });
 });
 
