@@ -23,6 +23,8 @@
 // hide (the server filters at read time; this cache does not, and a hide sends this viewer no event). Every hub open calls BeginOpenGate:
 // from then on no list naming other players -- the feed, MY POSTS, MY REQUESTS, the open post's author, card and accepted people, the
 // owner's requesters -- is drawn, counted or described until a read ASKED after the open has landed for it; the tab says "Updating…".
+// While the tab stays on screen each part is read again every 2.0 s (from its last ask), and a part whose last landed read was asked more
+// than 4.0 s ago is withheld again (judged 0.25 s early, at every pre-tick): an open surface never draws an old view (WonderlandLff::Open*).
 #pragma once
 
 #include "CoreMinimal.h"
@@ -36,6 +38,7 @@
 
 class SBorder;
 class SEditableTextBox;
+class SScrollBox;
 
 /** Which part of the LFF tab is showing. */
 enum class EWonderlandLffPane : uint8 { Feed, MyPosts, MyRequests, Form };
@@ -90,6 +93,18 @@ namespace WonderlandLff
 	/** A feed page as asked for (LFF_FEED_PAGE_MAX). */
 	constexpr int32 PageLimit = 50;
 
+	// B35 (R16 privacy, SC1): AN OPEN SURFACE IS KEPT FRESH, never drawn from an old read (the hub's snapshot rule is 0.75 s / 2.0 s; LFF's
+	// reads are heavier, so it has its own). All in FPlatformTime seconds, measured from when a read was ASKED.
+	/** While the tab is on screen and the open gate is up, each part shown is read again this long after its last read was asked. */
+	constexpr double OpenRereadSeconds = 2.0;
+	/** A part whose last landed read was asked longer ago than this is withheld ("Updating…"), held by a 429 or not. */
+	constexpr double OpenMaxAgeSeconds = 4.0;
+	/** The age rule is applied this much EARLY: the age is judged at Slate's pre-tick and that frame is painted a moment later, so a frame
+	 *  never shows a read older than OpenMaxAgeSeconds (withheld from 3.75 s on). */
+	constexpr double OpenAgeMarginSeconds = 0.25;
+	/** A failed read backs off: asked again OpenRereadSeconds x 2^failures after it was asked (4, 8, 16 s...), never later than this. */
+	constexpr double OpenRetryMaxSeconds = 30.0;
+
 	/** Code points, a surrogate pair counted once (an emoji is one character, as the server counts it). */
 	int32 CodePoints(const FString& Text);
 	/** C0, DEL, C1 (U+0080-U+009F), U+2028 and U+2029: what the server refuses in every LFF field (displayText + C1). */
@@ -124,9 +139,15 @@ public:
 	/**
 	 * The server told this viewer of an LFF change (an lff.* event, a block, a reset): read again now if on screen, else when next shown.
 	 * A feed showing more than its first page is NOT folded back to page 1 (the r1 review's m10): it says there is new activity instead.
+	 * B35: with the open gate up, the open surface's period re-reads page 1 anyway, folding the further pages -- privacy wins over m10:
+	 * pages read longer ago than the age rule allows are never kept on screen.
 	 */
 	void HandleServerChange();
-	/** A view drew the LFF tab: the first time, or after a change it was told of while hidden, the showing lists are read. */
+	/**
+	 * A view drew the LFF tab: the first time, or after a change it was told of while hidden, the showing lists are read. B35: with the open
+	 * gate up it also keeps what is on screen fresh -- each part is read again WonderlandLff::OpenRereadSeconds after its last read was asked
+	 * (one at a time, a failed one backing off, nothing while a 429 waits). Called at every drawn frame (the view's Tick).
+	 */
 	void NoteOnScreen(double NowSeconds);
 	bool IsOnScreen(double NowSeconds) const { return LastOnScreen > 0.0 && NowSeconds - LastOnScreen < 1.0; }
 
@@ -141,8 +162,17 @@ public:
 	 * model is empty then: whatever it lists later was read after it).
 	 */
 	void BeginOpenGate(double NowSeconds);
-	/** B35: a gate is up and this read's last LANDED answer was asked before it (or none landed): what it holds is not drawn. */
+	/**
+	 * B35: a gate is up and this read's last LANDED answer was asked before it (or none landed), or longer ago than the age rule allows
+	 * (WonderlandLff::OpenMaxAgeSeconds, applied OpenAgeMarginSeconds early): what it holds is not drawn.
+	 */
 	bool IsReadWithheld(EWonderlandLffRead Read) const;
+	/** B35: one bit per read (EWonderlandLffRead order) that IsReadWithheld now. The view compares it at every pre-tick: an age that runs
+	 *  out with no answer and no broadcast still rebuilds it before that frame is painted. */
+	uint8 GetWithheldMask() const;
+	/** QA (B35): as if Seconds had passed -- the open, every read's asking and landing, a 429's wait and the last frame on screen move that
+	 *  far into the past. Nothing is read and nothing is broadcast (the view must notice an expired age by itself). */
+	void QaShiftClock(double Seconds);
 	/** B35: the list this pane shows is withheld (the form lists nobody: never). */
 	bool IsPaneWithheld(EWonderlandLffPane Pane) const;
 	/** B35: the open post's detail (its author, the author's card, the accepted people) is withheld. False with no post open. */
@@ -259,11 +289,25 @@ public:
 private:
 	IWonderlandSocialService* Service() const { return ServiceOf ? ServiceOf() : nullptr; }
 	FString HeldLine(EWonderlandLffBudget Kind) const;
-	void ReadFeed(bool bMore);
-	void ReadMine(bool bMore);
-	void ReadRequests();
-	void ReadDetail(const FString& PostId);
+	/**
+	 * The reads. bPeriodic (B35): the open surface's own re-read -- nothing is broadcast when it is ASKED (only its answer rebuilds the view:
+	 * drafts, the caret and the scroll stay; fewer rebuilds), and a detail asked so chains its inbox only when no inbox read is on its way.
+	 */
+	void ReadFeed(bool bMore, bool bPeriodic = false);
+	void ReadMine(bool bMore, bool bPeriodic = false);
+	void ReadRequests(bool bPeriodic = false);
+	void ReadDetail(const FString& PostId, bool bPeriodic = false);
 	void ReadInbox(const FString& PostId);
+	/** B35: the open surface's period (NoteOnScreen): every part on screen whose re-read is due is asked again. */
+	void RereadOpenSurface(double NowSeconds);
+	/** B35: due -- not already on its way, and OpenRereadSeconds (x 2^failures after a failure, at most OpenRetryMaxSeconds) since asked. */
+	bool IsRereadDue(EWonderlandLffRead Read, double NowSeconds) const;
+	EWonderlandLffLoad LoadOfRead(EWonderlandLffRead Read) const;
+	bool IsReadWithheldAt(EWonderlandLffRead Read, double NowSeconds) const;
+	/** B35: a list-replacing read was ASKED now (the period counts from here). */
+	void NoteAsked(EWonderlandLffRead Read, double AskedAt);
+	/** B35: a list-replacing read FAILED: the next periodic ask backs off. */
+	void NoteReadFailed(EWonderlandLffRead Read);
 	/** Every answer passes here: a preview's "needs live", a 429's wait for its own kind of call. */
 	void NoteAnswer(const FWonderlandLffAnswer& Answer, EWonderlandLffBudget Kind);
 	/** B35: a read asked at AskedAt landed (ok) and REPLACED what it lists: that list is as fresh as AskedAt (the open gate compares it). */
@@ -340,6 +384,9 @@ private:
 		double OpenGateSeconds = 0.0;
 		/** B35: when the read whose answer last LANDED (ok, replacing its list) was ASKED, per read (EWonderlandLffRead order); -1 for none. */
 		double LandedAskedAt[static_cast<int32>(EWonderlandLffRead::Count)] = {-1.0, -1.0, -1.0, -1.0, -1.0};
+		/** B35: when each list-replacing read was last ASKED (the period's clock), and how many in a row failed (the back-off). */
+		double LastAskedAt[static_cast<int32>(EWonderlandLffRead::Count)] = {-1.0, -1.0, -1.0, -1.0, -1.0};
+		int32 FailedReads[static_cast<int32>(EWonderlandLffRead::Count)] = {0, 0, 0, 0, 0};
 	};
 
 	TFunction<IWonderlandSocialService*()> ServiceOf;
@@ -377,7 +424,7 @@ public:
 
 	/** The hub's view changed (a live refresh): who the viewer is, whether this is a preview. Redraws only if either changed. */
 	void SetContext(const FString& InViewerId, bool bInDevelopmentPreview);
-	/** F-21: run a rebuild a change asked for, now (QA; Slate's pre-tick runs it otherwise). */
+	/** F-21: run a rebuild a change asked for, now (QA; Slate's pre-tick runs it otherwise). B35: also one an expired age asks for. */
 	void FlushRebuild();
 	bool QaRebuildPending() const { return bRebuildPending; }
 	/** QA: a field's box as it stands (empty when the box is not built), and typing into it as a player would. */
@@ -393,6 +440,9 @@ public:
 	/** QA (B35): how many person rows (an author, an accepted player, a requester) and request rows (live or vanished) the last build drew. */
 	int32 QaBuiltPersonRows() const { return BuiltPersonRows; }
 	int32 QaBuiltRequestRows() const { return BuiltRequestRows; }
+	/** QA (B35): the pane list's scroll offset as built, and setting it as a player's scrolling would (-1 when no list is built). */
+	float QaListScrollOffset() const;
+	void QaSetListScrollOffset(float Offset);
 	/** QA: the lines this view draws now (the pane's, the detail's, the action line), joined. Never logged by the view itself. */
 	FString QaLines() const;
 	/** QA: the label of the ask-to-join button the last build drew ("REQUEST TO JOIN", "REQUEST AGAIN"), empty when it drew none. */
@@ -418,6 +468,8 @@ public:
 private:
 	void Rebuild();
 	void RequestRebuild() { bRebuildPending = true; }
+	/** The pre-tick's rebuild: one a change asked for, or (B35) one the model's withheld parts ask for -- an age that ran out. */
+	void RebuildIfDue();
 	void HandleSlatePreTick(float DeltaTime);
 	/** The box for a field (built once, in Construct). */
 	TSharedPtr<SEditableTextBox> BoxOf(EWonderlandLffField Field) const;
@@ -467,6 +519,17 @@ private:
 	int32 BuiltPersonRows = 0;
 	int32 BuiltRequestRows = 0;
 	FString BuiltAskLabel;
+	/** B35: the model's withheld parts (GetWithheldMask) as the last build saw them, read BEFORE it built: a change rebuilds at the pre-tick. */
+	uint8 BuiltWithheldMask = 0;
+	/**
+	 * B35: THE SCROLL STAYS across rebuilds (the open surface's period rebuilds the view every few seconds): each build's scroll boxes, and
+	 * what the list's and the detail's were built for -- the same pane, the same post keep their offset; another starts at the top.
+	 */
+	TSharedPtr<SScrollBox> ListScroll;
+	TSharedPtr<SScrollBox> DetailScroll;
+	TSharedPtr<SScrollBox> FormScroll;
+	EWonderlandLffPane ListScrollPane = EWonderlandLffPane::Feed;
+	FString DetailScrollPostId;
 	/** A requester's card that profile.read answered, waiting for the next pre-tick to open (F-21). */
 	bool bProfileOpenPending = false;
 	FWonderlandSocialProfileView PendingProfileCard;
