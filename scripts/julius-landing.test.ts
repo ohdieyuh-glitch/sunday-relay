@@ -1051,7 +1051,7 @@ describe('round 3 R2: the gate and secret-handling scripts workflows run are gov
   it('neighbours that must stay allowed are allowed (relay-bridge, src, the mission directories, the harness manifest, other scripts), and such a PR lands', () => {
     const allowedFiles = [
       'relay-bridge/julius/x.ts', 'src/relay/mission/julius/x.ts', '.github/julius-missions/julius-m/contract.json', 'JULIUS_HARNESS_MANIFEST.md',
-      'scripts/julius-live-preflight.ts', 'scripts/julius-live-probe-file.ts', 'scripts/julius-mission-slice.test.ts', 'scripts/julius-evidence-bodies.mjs',
+      'scripts/julius-live-probe-file.ts', 'scripts/julius-mission-slice.test.ts', 'scripts/julius-evidence-bodies.mjs',
       'scripts/julius-main-notes.md', '.github/workflows-notes.md', '.github/julius-missions/julius-live-m/contract.json', 'docs/actions/readme.md',
     ];
     for (const f of allowedFiles) expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(false);
@@ -1084,7 +1084,7 @@ describe('round 4: scripts/julius-landing* (the landing tests) is a governed pre
   });
 
   it('neighbours stay allowed: other julius-live scripts, other julius- tests', () => {
-    const allowedFiles = ['scripts/julius-live-probe-file.ts', 'scripts/julius-live-preflight.ts', 'scripts/julius-evidence-bodies.test.ts', 'scripts/julius-mission-pins.test.ts', 'scripts/julius-drill-support.ts', 'scripts/landing-notes.md', 'docs/scripts/julius-landing.md'];
+    const allowedFiles = ['scripts/julius-live-probe-file.ts', 'scripts/julius-evidence-bodies.test.ts', 'scripts/julius-mission-pins.test.ts', 'scripts/julius-drill-support.ts', 'scripts/landing-notes.md', 'docs/scripts/julius-landing.md'];
     for (const f of allowedFiles) expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(false);
     expect(check({ files: allowedFiles, fileRows: allowedFiles.length, pr: { ...goodPr(), changed_files: allowedFiles.length } })).toEqual([]);
     const r = runLand({ scenario: { files: allowedFiles.slice(0, 3), pr: { ...goodPr(), changed_files: 3 } } });
@@ -1360,7 +1360,24 @@ describe('v3.4 s3: scripts that required CI runs from the PR itself, and julius-
   });
 
   it('near neighbours stay allowed (the rule is not a blanket on scripts/ or .github/)', () => {
-    for (const f of ['scripts/julius-live-preflight.ts', 'scripts/julius-evidence-bodies.mjs', 'scripts/relay-notes.md', '.github/julius-learning-notes.md', '.github/phase-notes.sh', 'docs/julius-paid-dispatch.md']) expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(false);
+    for (const f of ['scripts/julius-evidence-bodies.mjs', 'scripts/relay-notes.md', '.github/julius-learning-notes.md', '.github/phase-notes.sh', 'docs/julius-paid-dispatch.md']) expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(false);
+  });
+});
+
+describe('v3.5b S-2: the executor / reviewer-isolation / preflight / usage-limit / pins-check scripts are founder-governed paths', () => {
+  const S2 = [
+    '.github/julius-mission-pins.sh', '.github/julius-executor-entrypoint.sh', 'scripts/julius-docker-executor.sh', 'scripts/julius-executor-ready.mjs',
+    'scripts/julius-reviewer-isolation.mjs', 'scripts/julius-reviewer-isolation.test.ts', 'scripts/julius-reviewer-deadline.mjs', 'scripts/julius-live-preflight.ts', 'scripts/julius-usage-limit.mjs',
+  ];
+  it('every one is refused by the hard-forbidden rule and by checkPullRequest, in any letter case', () => {
+    for (const f of S2) {
+      expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(true);
+      expect(lib.HARD_FORBIDDEN_PATH.test(f.toUpperCase()), f.toUpperCase()).toBe(true);
+      expect(check({ files: ['ok.ts', f], fileRows: 2, pr: { ...goodPr(), changed_files: 2 } }).join(' '), f).toContain('founder-governed');
+    }
+  });
+  it('near neighbours stay allowed', () => {
+    for (const f of ['scripts/julius-live-preflight-notes.md', 'scripts/julius-usage-limit-notes.md', 'docs/julius-executor-entrypoint.md', 'scripts/julius-reviewer-notes.md']) expect(lib.HARD_FORBIDDEN_PATH.test(f), f).toBe(false);
   });
 });
 
