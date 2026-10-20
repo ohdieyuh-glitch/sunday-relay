@@ -16,6 +16,7 @@ import type { JuliusTickBudget } from '../../src/relay/mission/julius/julius-tic
 import type { JuliusLearningMetrics } from '../../src/relay/mission/julius/julius-learning-loop';
 import { juliusLearningProposal } from '../../src/relay/mission/julius/julius-learning-record';
 import type { LiveReachReadiness } from '../../src/relay/mission/live-reach';
+import type { CoderRuntimeSchedule } from '../hosted-coding-agent/coder-envelope';
 import type { DriveTickAccount, JuliusDriveDeadline, JuliusLearningOutcome } from './live-composition';
 
 /**
@@ -57,6 +58,29 @@ export function liveStageDeadlineLine(deadline: JuliusDriveDeadline | null): str
   if (deadline === null) return '  stage deadline: UNKNOWN (no job start recorded; not enforced)';
   const bounds = Object.entries(deadline.stageBoundMs).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([role, ms]) => `${role}:${ms}`).join(',');
   return `  stage deadline: every stage must end by ${new Date(deadline.stagesEndByMs).toISOString()} (job limit ${new Date(deadline.hardLimitAtMs).toISOString()}; reserve_after_live_ms=${deadline.reserveAfterLiveMs}; stage_bounds_ms=${bounds || 'none'})`;
+}
+
+/**
+ * THE OPT-IN CODER SESSION BUDGET, said before the first dispatch beside the stage deadline it lengthens. Nothing at all for a
+ * contract that declares none (so every existing contract's report is what it always was). Closed tokens and numbers only, and the
+ * evidence allowlist keeps exactly these shapes.
+ *
+ * `repair_cycles_reduced=no` is a fact, not a setting: the mechanism never lowers a declared cycle count. When fewer cycles are
+ * GUARANTEED at worst case than were declared, a second line says so plainly, and says what governs the rest (the stage stop line,
+ * which starts a repair only while it can still end before the job's limit).
+ */
+export function liveCoderRuntimeBudgetLines(schedule: CoderRuntimeSchedule | null): string[] {
+  if (schedule === null) return [];
+  const lines = [
+    `  coder session budget: minutes=${schedule.coderRuntimeMinutes} attempt_deadline_ms=${schedule.attemptDeadlineMs}`
+    + ` repair_cycles_declared=${schedule.declaredRepairCycles} repair_cycles_guaranteed_at_worst_case=${schedule.guaranteedRepairCycles}`
+    + ` repair_cycles_if_one_full_attempt_per_dispatch=${schedule.singleAttemptCyclesThatFit}`
+    + ` main_path_worst_case_ms=${schedule.mainPathWorstCaseMs} job_limit_ms=${schedule.limitMs} repair_cycles_reduced=no`,
+  ];
+  if (!schedule.allDeclaredCyclesGuaranteed) {
+    lines.push('  coder session budget notice: repair cycles beyond the worst-case guarantee start only while the stage stop line allows; none is removed');
+  }
+  return lines;
 }
 
 /** What the run consumed. The entrypoint prints it between RESULT (and its cause) and the `run:` line. */

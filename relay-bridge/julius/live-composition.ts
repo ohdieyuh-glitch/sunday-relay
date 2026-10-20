@@ -17,10 +17,13 @@
  * is no partial composition and no fallback worker.
  */
 
-import { coderAttemptDeadlineMs } from '../hosted-coding-agent/coder-envelope';
+import {
+  CODER_FIT_INFRASTRUCTURE_ALLOWANCE_MS, CoderRuntimeBudgetRefused, coderAttemptDeadlineMs, coderRuntimeSchedule, resolveContractCoderRuntime,
+  type CoderRuntimeSchedule,
+} from '../hosted-coding-agent/coder-envelope';
 import { architectOperativeTimeoutMs, type ArchitectReasoningEffort } from '../../src/relay/connectors/gpt-architect/config';
 import type { HostedEffort, HostedSdkHelpers } from '../hosted-coding-agent/hosted-runner';
-import { JOB_BUDGET_MS, reviewerOperativeTimeoutMs } from '../reviewer-deadline';
+import { JOB_BUDGET_MS, REVIEWER_JOB_SHARE_MS, reviewerDeadlineHardCeilingMs, reviewerOperativeTimeoutMs } from '../reviewer-deadline';
 import { randomUUID } from 'node:crypto';
 import {
   JuliusProviderHealthRegistry,
@@ -285,6 +288,87 @@ export const CODER_WORKER: JuliusWorker = {
   concurrencyLimit: 1, timeoutMs: coderAttemptDeadlineMs(), maxRetries: 1, status: 'AVAILABLE',
 };
 
+/**
+ * THE CODING AGENT'S WORKER UNDER A CONTRACT-SCOPED SESSION BUDGET (`limits.coderRuntimeMinutes`). A COPY, never a mutation:
+ * `CODER_WORKER` and every contract that declares nothing keep `coderAttemptDeadlineMs()` exactly. Only the declared deadline
+ * differs (the session's minutes plus the executor steps around it), and the execution coordinator, the lease keeper and the
+ * stage deadline all read it from the worker object, so ONE object has to carry it into the entries.
+ */
+export function coderWorkerForRuntime(coderRuntimeMinutes: number): JuliusWorker {
+  return { ...CODER_WORKER, timeoutMs: resolveContractCoderRuntime(coderRuntimeMinutes).attemptDeadlineMs };
+}
+
+/**
+ * THE APPROVAL WAIT A CONTRACT HOLDS THE JOB FOR, for the session-budget fit: nothing for a contract with no `approvalGates`
+ * clause, else the registered window (30 minutes) plus the wait step's 5 minutes of overhead. Takes `object` and reads the clause
+ * by name so it is correct both before the approval-gate clause exists in the contract type and after it does.
+ */
+export const CODER_FIT_GATED_APPROVAL_WAIT_MS = 35 * 60_000;
+export const approvalWaitMsFor = (contract: object): number =>
+  (contract as { readonly approvalGates?: unknown }).approvalGates === undefined ? 0 : CODER_FIT_GATED_APPROVAL_WAIT_MS;
+
+/**
+ * THE SCHEDULE OF A DECLARED SESSION BUDGET, from the REAL figures of this composition (the architect's worst case from the job
+ * environment, the reviewer's share and ceiling, the stage-deadline margins, the job). Pure; throws `CoderRuntimeBudgetRefused`
+ * only for a value outside the absolute range or a bad cycle count.
+ */
+export function coderRuntimeScheduleFor(input: {
+  readonly env: Record<string, string | undefined>;
+  readonly coderRuntimeMinutes: number;
+  readonly repairCycles: number;
+  readonly approvalWaitMs: number;
+}): CoderRuntimeSchedule {
+  return coderRuntimeSchedule({
+    coderRuntimeMinutes: input.coderRuntimeMinutes, repairCycles: input.repairCycles, approvalWaitMs: input.approvalWaitMs,
+    reviewerShareMs: REVIEWER_JOB_SHARE_MS, reviewerCycleCeilingMs: reviewerDeadlineHardCeilingMs(),
+    architectWorstCaseMs: architectWorstCaseSpendMs(input.env), infrastructureMs: CODER_FIT_INFRASTRUCTURE_ALLOWANCE_MS,
+    marginsMs: JULIUS_JOB_STAMP_LAG_RESERVE_MS + JULIUS_RESERVE_AFTER_LIVE_MS, jobBudgetMs: JOB_BUDGET_MS,
+  });
+}
+
+/**
+ * The schedule of a CONTRACT, for the report: null when it declares no `coderRuntimeMinutes` (nothing is printed) or declares one the
+ * absolute range refuses (the refusal is reported by the preflight's own problem, not by a second line here).
+ */
+export function coderRuntimeScheduleOfContract(
+  env: Record<string, string | undefined>,
+  contract: { readonly limits?: { readonly coderRuntimeMinutes?: number; readonly repairCycles?: number } },
+): CoderRuntimeSchedule | null {
+  const minutes = contract.limits?.coderRuntimeMinutes;
+  if (minutes === undefined) return null;
+  try {
+    return coderRuntimeScheduleFor({
+      env, coderRuntimeMinutes: minutes, repairCycles: contract.limits?.repairCycles ?? 1, approvalWaitMs: approvalWaitMsFor(contract),
+    });
+  } catch (error) {
+    if (error instanceof CoderRuntimeBudgetRefused) return null;
+    throw error;
+  }
+}
+
+/**
+ * WHAT IS REFUSED, AND ONLY THAT: a value outside the absolute range, or a MAIN PATH that cannot fit the job even once (so the
+ * mission could not finish a first pass by construction). Null otherwise. It never refuses, and never lowers, a declared number of
+ * repair cycles: those are reported by `coderRuntimeScheduleFor` and governed at run time by the stage stop line. The refusal is
+ * printed by the preflight before anything is dispatched. Zero spend.
+ */
+export function coderRuntimeBudgetRefusal(input: {
+  readonly env: Record<string, string | undefined>;
+  readonly coderRuntimeMinutes: number;
+  readonly repairCycles: number;
+  readonly approvalWaitMs: number;
+}): string | null {
+  try {
+    const schedule = coderRuntimeScheduleFor(input);
+    return schedule.mainPathFits ? null
+      : `coder_runtime_budget_unfit: limits.coderRuntimeMinutes ${input.coderRuntimeMinutes} cannot complete even the main path (no repair) in the job: `
+        + `${schedule.mainPathWorstCaseMs} ms at worst case against ${schedule.limitMs} ms (${schedule.mainPathWorstCaseMs - schedule.limitMs} ms over); lower the minutes.`;
+  } catch (error) {
+    if (error instanceof CoderRuntimeBudgetRefused) return `${error.code}: ${error.message}`;
+    throw error;
+  }
+}
+
 export const reviewerWorker = (providerId: string): JuliusWorker => ({
   workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
   adapterId: 'hermes-local-live', providerId,
@@ -361,6 +445,15 @@ export function resolveLiveWorkers(options: {
   readonly coderEffort?: HostedEffort | null;
   /** The mission contract's `limits.coderSelfTestCalls`, when it declares one; absent changes nothing. Diagnostic telemetry only. */
   readonly coderSelfTestCalls?: number | null;
+  /**
+   * The mission contract's `limits.coderRuntimeMinutes`, when it declares one; absent changes nothing (the coder keeps the
+   * observation-derived envelope, byte for byte). Present, it must fit the job: see `coderRuntimeBudgetRefusal`.
+   */
+  readonly coderRuntimeMinutes?: number | null;
+  /** The contract's `limits.repairCycles`, the fit's input when a session budget is declared (the contract default is 1). */
+  readonly repairCycles?: number | null;
+  /** The approval wait a gated mission holds the job for (window + step overhead); 0 or absent for an ungated one. */
+  readonly approvalWaitMs?: number;
   /**
    * The mission's sealed research policy, handed to every worker so each is TOLD
    * what it may ask for. The entrypoint passes the same function to the research
@@ -471,14 +564,28 @@ export function resolveLiveWorkers(options: {
   // here was the third of three guards that made Julius coding-only on the live
   // path; the field is still required to be a string by the contract parser.
   if (typeof options.testCommand !== 'string') codingMissing.push('mission testCommand');
+  // A DECLARED SESSION BUDGET MUST FIT THE JOB BEFORE ANYTHING IS DISPATCHED: refused here, in the preflight's own resolution,
+  // so an unfit contract costs nothing. Absent (the default) adds nothing and changes nothing.
+  const declaredRuntimeMinutes = options.coderRuntimeMinutes ?? null;
+  if (declaredRuntimeMinutes !== null) {
+    const refusal = coderRuntimeBudgetRefusal({
+      env: options.env, coderRuntimeMinutes: declaredRuntimeMinutes, repairCycles: options.repairCycles ?? 1,
+      approvalWaitMs: options.approvalWaitMs ?? 0,
+    });
+    if (refusal !== null) codingMissing.push(refusal);
+  }
   if (options.shell === null) codingMissing.push('executor shell port (JULIUS_EXECUTOR_ENDPOINT and its material)');
   if (codingMissing.length > 0) {
     problems.push({ role: 'CODING_AGENT', reason: 'live_config_missing', missing: codingMissing });
   } else {
+    // ONE worker object for the registration and the adapter. Declared minutes -> a COPY carrying the longer attempt deadline;
+    // none -> CODER_WORKER itself, untouched.
+    const coderWorker = declaredRuntimeMinutes === null ? CODER_WORKER : coderWorkerForRuntime(declaredRuntimeMinutes);
     entries.push({
-      worker: CODER_WORKER,
+      worker: coderWorker,
       adapter: createLiveHostedCodingAdapter({
-        worker: CODER_WORKER, contexts: options.contexts, artifacts: options.artifacts,
+        worker: coderWorker, contexts: options.contexts, artifacts: options.artifacts,
+        ...(declaredRuntimeMinutes === null ? {} : { maxRuntimeMs: resolveContractCoderRuntime(declaredRuntimeMinutes).maxRuntimeMs }),
         projectId: options.projectId,
         // In subscription mode this is the empty string and is never placed in the
         // child's environment; `hostedChildEnv` omits the variable entirely.
