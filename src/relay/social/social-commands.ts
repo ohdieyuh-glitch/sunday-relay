@@ -78,6 +78,7 @@ import { buildSocialView } from './social-preview';
 import { areFriends, blockedEitherWay, conversationById, friendIdsOf, messagesOf, partyById, partyOf, presenceHiddenFrom, userById, type SocialState } from './social-state';
 import {
   WORLD_MOTIONS,
+  clearTrailsWhereAudienceMoved,
   contextOf,
   emptyWorldState,
   inviteToWorld,
@@ -356,12 +357,25 @@ export function applySocialOperation(
   nowIso: string,
   world: WorldState = emptyWorldState(),
 ): RelayResult<SocialCommandOutcome> {
-  const outcome = applyOne(reconcileBlockedParties(state), op, actorId, input, nowIso, world);
-  if (!outcome.ok || outcome.value.audience.length === 0) return outcome;
+  const applied = applyOne(reconcileBlockedParties(state), op, actorId, input, nowIso, world);
+  if (!applied.ok) return applied;
+  const outcome = { ok: true as const, value: withTrailsCleared(state, applied.value, world) };
+  if (outcome.value.audience.length === 0) return outcome;
   const after = outcome.value.state;
   const exempt = new Set(outcome.value.floorExempt ?? []);
   const audience = outcome.value.audience.filter((id) => id === actorId || exempt.has(id) || !blockedEitherWay(after, actorId, id));
   return { ok: true, value: { ...outcome.value, audience } };
+}
+
+/**
+ * THE TRANSPORT RING'S LEADING INVARIANT (r16reh18 prototype): whatever the operation -- and the reconciliation before it -- changed
+ * about who may see a player in the world, that player's ring is cleared in the same step, so the store adopts the change and the
+ * clear together (world-presence.ts clearTrailsWhereAudienceMoved). The outcome is untouched when no ring moved.
+ */
+function withTrailsCleared(before: SocialState, outcome: SocialCommandOutcome, world: WorldState): SocialCommandOutcome {
+  const base = outcome.world ?? world;
+  const cleared = clearTrailsWhereAudienceMoved(base, before, outcome.state);
+  return cleared === base ? outcome : { ...outcome, world: cleared };
 }
 
 function applyOne(
@@ -740,10 +754,14 @@ function applyOne(
       const skin = str(body, 'skinId', 40);
       for (const c of [motion, skin]) if (!c.ok) return invalid(c.message);
       const num = (field: string) => (typeof body[field] === 'number' ? (body[field] as number) : Number.NaN);
+      // THE TRANSPORT RING'S CURSOR (r16reh18 prototype; PROVISIONAL name): the `asOfMs` of this client's previous answer, echoed.
+      // Only a finite number counts; anything else -- absent, null, a string, a boolean -- is ignored and the answer is today's,
+      // byte for byte. Never an error: a bad cursor must not cost the player their position report. worldViewFor bounds it.
+      const sinceMs = typeof body.sinceMs === 'number' && Number.isFinite(body.sinceMs) ? body.sinceMs : undefined;
       // SEPARATED BY A BLOCK (P4/P5): the removed player's own tick is ANSWERED with a view that has no context -- the client's
       // sign of a removal (CORE's client contract: it had a private server, now none, while it wanted to stay -> "You can't stay
       // in this server." and back to the public world). An answer, never an error, and it names nothing.
-      if (recentlyRemoved(world, actorId, nowMs)) return { ok: true, value: { state, data: worldViewFor(world, state, actorId, nowMs), audience: [] } };
+      if (recentlyRemoved(world, actorId, nowMs)) return { ok: true, value: { state, data: worldViewFor(world, state, actorId, nowMs, sinceMs), audience: [] } };
       const reported = reportAvatar(
         world,
         actorId,
@@ -758,7 +776,7 @@ function applyOne(
       const worn = recordWornSkin(state, actorId, reported.value.avatars[actorId]?.skinId);
       const audience = worn === state ? [] : [actorId, ...viewMoved(state, worn, actorId, [...friendIdsOf(state, actorId), ...partyMembers(state, actorId)])];
       // ONE CALL A TICK: the report answers with the view, so a client reporting ~5 a second needs nothing else to see the others.
-      return { ok: true, value: { state: worn, world: reported.value, data: worldViewFor(reported.value, worn, actorId, nowMs), audience } };
+      return { ok: true, value: { state: worn, world: reported.value, data: worldViewFor(reported.value, worn, actorId, nowMs, sinceMs), audience } };
     }
     case 'world.invite': {
       const to = str(body, 'toUserId', MAX_LABEL);

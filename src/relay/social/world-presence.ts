@@ -20,7 +20,7 @@
 
 import type { SocialServerKind, SocialUserId } from './social-contracts';
 import { resolvePresenceFor } from './social-presence';
-import { hasBlocked, hasUser, partyOf, presenceHiddenFrom, userById, type SocialState } from './social-state';
+import { friendIdsOf, hasBlocked, hasUser, partyOf, presenceHiddenFrom, userById, type SocialState } from './social-state';
 
 export const WORLD_PUBLIC_CAPACITY = 32;
 export const WORLD_PRIVATE_CAPACITY = 16;
@@ -82,6 +82,112 @@ export interface WorldState {
    * server." -- instead of refused with "Join a world first". Never names a block.
    */
   readonly removals?: Readonly<Record<SocialUserId, number>>;
+  /**
+   * THE TRANSPORT RING (r16reh18 PROTOTYPE, before the reviewer's T1 ruling; the T1 design doc governs). Per player, the last
+   * accepted position reports, oldest first, so a viewer whose polls are slower than the reports, or who lost one, can be served
+   * the reports between two of its views instead of only the newest. In memory only, like the avatar it belongs to: dropped with
+   * it, and a restart empties it. Absent until somebody reports.
+   *
+   * THE LEADING PRIVACY INVARIANT: every entry in a player's ring was stored under the audience that player has NOW. The ring is
+   * cleared by every change that could alter who may see the player in the world (see clearTrailsWhereAudienceMoved, withMember,
+   * withoutMember), and is served only beside the player's own figure, to a viewer today's filter already shows it to.
+   */
+  readonly trails?: Readonly<Record<SocialUserId, readonly TrailSample[]>>;
+}
+
+/** The ring keeps at most this many accepted reports per player (at the 100 ms store floor, at least 0.8 s of movement). */
+export const WORLD_TRAIL_MAX_ENTRIES = 8;
+/** ...and none older than this: an entry this old is dropped when the next report is stored, and is never served. */
+export const WORLD_TRAIL_MAX_AGE_MS = 2_000;
+
+/**
+ * ONE ACCEPTED REPORT IN A PLAYER'S RING: exactly the position fields the stored report already carries, and when the server stored
+ * it. `contextId` is where it was stored: it is checked again for every entry at serve time and is never served.
+ */
+export interface TrailSample {
+  readonly contextId: string;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly yaw: number;
+  readonly speed: number;
+  readonly motion: WorldMotion;
+  readonly reportedAtMs: number;
+}
+
+/** One entry of a served trail: the position fields of the figure's own entry, and how old it is. No id, name or skin. */
+export interface TrailPoint {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly yaw: number;
+  readonly speed: number;
+  readonly motion: WorldMotion;
+  readonly ageMs: number;
+}
+
+/**
+ * A REPORT ENTERS THE RING ONCE, AND IN ORDER. Stored reports are stamped by the server's clock and are at least the 100 ms floor
+ * apart, so a resent report is a later, separate report or is not stored at all; this holds the ring to that whatever the caller:
+ * a sample not strictly newer than the ring's newest (a duplicate, or out of order) is never admitted. Then the ring keeps only the
+ * last WORLD_TRAIL_MAX_ENTRIES within WORLD_TRAIL_MAX_AGE_MS of the newest.
+ */
+export function appendToTrail(trail: readonly TrailSample[] | undefined, sample: TrailSample): readonly TrailSample[] {
+  const ring = trail ?? [];
+  const newest = ring[ring.length - 1];
+  if (newest !== undefined && sample.reportedAtMs <= newest.reportedAtMs) return ring;
+  return [...ring, sample].filter((e) => sample.reportedAtMs - e.reportedAtMs <= WORLD_TRAIL_MAX_AGE_MS).slice(-WORLD_TRAIL_MAX_ENTRIES);
+}
+
+/** The world with these players' rings emptied; the same object when none of them held an entry. */
+export function clearTrails(world: WorldState, userIds: Iterable<SocialUserId>): WorldState {
+  const trails = world.trails;
+  if (trails === undefined) return world;
+  const drop = new Set<SocialUserId>();
+  for (const id of userIds) if (Object.hasOwn(trails, id)) drop.add(id);
+  if (drop.size === 0) return world;
+  return { ...world, trails: Object.fromEntries(Object.entries(trails).filter(([id]) => !drop.has(id))) };
+}
+
+/**
+ * EVERYTHING ABOUT A PLAYER THAT DECIDES WHO MAY SEE THEM IN THE WORLD, as one comparable value. worldViewFor shows subject S to
+ * viewer V when they share a context and visible(V, S): no block either way between them, and not presenceHiddenFrom(V, S). Every
+ * input of that test that concerns S is here:
+ *   - whether S has a record at all (a missing record is hidden);
+ *   - S's availability (APPEAR_OFFLINE) and whether S is connected (a sign-out);
+ *   - S's privacy settings (presenceVisibility decides the audience; the others are kept too, so any visibility change counts);
+ *   - S's friends (a FRIENDS audience); every party that lists S, and its members (a PARTY audience) -- every one, not partyOf's
+ *     first: carried-in data could list a player twice, and sharePartyWith asks from the VIEWER's party;
+ *   - every block with S on EITHER side.
+ * Shared context is the world layer's, and its changes clear rings there (withMember, withoutMember).
+ */
+export function worldAudienceKey(social: SocialState, userId: SocialUserId): string {
+  const user = userById(social, userId);
+  const parties = Object.values(social.parties)
+    .filter((p) => p.members.some((m) => m.userId === userId))
+    .map((p) => `${p.partyId}:${p.members.map((m) => m.userId).sort().join(',')}`)
+    .sort();
+  return JSON.stringify([
+    user === undefined ? null : user.presence.connected,
+    user === undefined ? null : user.presence.availability,
+    user === undefined ? null : user.privacy,
+    friendIdsOf(social, userId),
+    parties,
+    social.blocks.filter((b) => b.blockerId === userId || b.blockedId === userId).map((b) => `${b.blockerId}>${b.blockedId}`).sort(),
+  ]);
+}
+
+/**
+ * THE RING'S LEADING INVARIANT, FOR EVERY SOCIAL CHANGE. Any operation (and the party reconciliation that runs before each) that
+ * changed anything worldAudienceKey reads for a player -- a presence or visibility change, appearing offline and back, a sign-out,
+ * a block added or removed with them on either side, a friendship made or ended, a party joined, left or split, a record removed --
+ * clears that player's ring, whichever side acted. So no entry stored under an earlier audience is ever served under a later one:
+ * nothing stored while they were hidden or blocked is replayed when they show again. The same world when nothing moved.
+ */
+export function clearTrailsWhereAudienceMoved(world: WorldState, before: SocialState, after: SocialState): WorldState {
+  if (before === after || world.trails === undefined) return world;
+  const moved = Object.keys(world.trails).filter((id) => worldAudienceKey(before, id) !== worldAudienceKey(after, id));
+  return clearTrails(world, moved);
 }
 
 /**
@@ -113,14 +219,19 @@ function withoutMember(world: WorldState, userId: SocialUserId): WorldState {
     contexts[c.contextId] = members.length === c.memberIds.length ? c : { ...c, memberIds: members };
   }
   const { [userId]: _gone, ...avatars } = world.avatars;
-  return { ...world, contexts, avatars };
+  // THE RING GOES WITH THE AVATAR (a leave, a move to another context, the stale sweep, a block's removal from a private server, a
+  // sign-out's leave): positions stored in one context are never served in another.
+  return clearTrails({ ...world, contexts, avatars }, [userId]);
 }
 
 function withMember(world: WorldState, context: WorldContext, userId: SocialUserId): WorldState {
   const moved = world.removals?.[userId] === undefined ? world : { ...world, removals: Object.fromEntries(Object.entries(world.removals ?? {}).filter(([id]) => id !== userId)) };
   const left = withoutMember(moved, userId);
   const current = left.contexts[context.contextId] ?? context;
-  return { ...left, contexts: { ...left.contexts, [context.contextId]: { ...current, memberIds: [...current.memberIds, userId] } } };
+  // AN ARRIVAL WIDENS EVERY MEMBER'S AUDIENCE: the newcomer was not there when the members' rings were stored, so they are cleared,
+  // and the newcomer is never served where somebody was before they arrived, whatever cursor they send.
+  const arrived = clearTrails(left, current.memberIds);
+  return { ...arrived, contexts: { ...arrived.contexts, [context.contextId]: { ...current, memberIds: [...current.memberIds, userId] } } };
 }
 
 /** Members who are still reporting (or just joined and have not reported yet). */
@@ -332,18 +443,47 @@ export function reportAvatar(world: WorldState, actorId: SocialUserId, report: A
     skinId: report.skinId,
     reportedAtMs: nowMs,
   };
-  return { ok: true, value: { ...world, avatars: { ...world.avatars, [actorId]: avatar } } };
+  // the accepted report also enters the player's ring (a report inside the floor above was not accepted, so it never does); named
+  // field by field, so a field added to the avatar one day does not enter the ring with it
+  const sample: TrailSample = { contextId: avatar.contextId, x: avatar.x, y: avatar.y, z: avatar.z, yaw: avatar.yaw, speed: avatar.speed, motion: avatar.motion, reportedAtMs: avatar.reportedAtMs };
+  const trail = appendToTrail(world.trails?.[actorId], sample);
+  return { ok: true, value: { ...world, avatars: { ...world.avatars, [actorId]: avatar }, trails: { ...(world.trails ?? {}), [actorId]: trail } } };
 }
 
 /** What one viewer sees of their context: who is there and where, minus anyone either side has blocked. */
 export interface WorldView {
   readonly context: { readonly contextId: string; readonly kind: SocialServerKind; readonly serverName: string; readonly authority: WorldContext['authority']; readonly population: number; readonly capacity: number } | null;
-  readonly avatars: readonly (AvatarState & { readonly displayName: string; readonly ageMs: number })[];
+  /** `trail` only when the viewer asked with a cursor and the ring holds reports for them (see worldViewFor). */
+  readonly avatars: readonly (AvatarState & { readonly displayName: string; readonly ageMs: number; readonly trail?: readonly TrailPoint[] })[];
   /** Invitations into a world waiting for this viewer. */
   readonly invites: readonly { readonly inviteId: string; readonly fromUserId: SocialUserId; readonly fromName: string; readonly serverName: string; readonly expiresInMs: number }[];
+  /** Only when the viewer asked with a cursor: the server time of this answer, which the client sends back as its next `sinceMs`. */
+  readonly asOfMs?: number;
 }
 
-export function worldViewFor(world: WorldState, social: SocialState, viewerId: SocialUserId, nowMs: number): WorldView {
+/**
+ * THE TRAIL OF ONE FIGURE THE VIEWER IS ALREADY SHOWN (r16reh18 prototype). From the figure's ring, oldest first, the entries:
+ *   - stored in the viewer's context (checked for every entry; the ring is also dropped on any move);
+ *   - strictly after the cursor, which is the client's echoed `sinceMs`, never earlier than WORLD_TRAIL_MAX_AGE_MS ago -- so a
+ *     cursor of 0, a negative or a forged old one reaches no further back than the bounded ring, and a future one reaches nothing;
+ *   - strictly before the figure's own entry, which already carries the newest report.
+ * Each entry carries only the position fields of the figure's own entry, and its age.
+ */
+function trailFor(world: WorldState, contextId: string, figure: AvatarState, sinceMs: number, nowMs: number): TrailPoint[] {
+  const cursor = Math.max(Math.floor(sinceMs), nowMs - WORLD_TRAIL_MAX_AGE_MS);
+  return (world.trails?.[figure.userId] ?? [])
+    .filter((e) => e.contextId === contextId)
+    .filter((e) => e.reportedAtMs > cursor && e.reportedAtMs < figure.reportedAtMs)
+    .map((e) => ({ x: e.x, y: e.y, z: e.z, yaw: e.yaw, speed: e.speed, motion: e.motion, ageMs: nowMs - e.reportedAtMs }));
+}
+
+/**
+ * `sinceMs` (r16reh18 prototype, PROVISIONAL name): absent, the answer is today's, byte for byte -- no `asOfMs`, no `trail`. Present
+ * (a finite number; the operation ignores anything else), the answer adds `asOfMs`, and each figure the viewer is shown -- through
+ * exactly today's filter, nothing else -- carries a `trail` when its ring holds reports after the cursor (trailFor). No figure the
+ * viewer is not shown carries anything: the trail rides on the figure's own entry. Nothing here keeps per-viewer state.
+ */
+export function worldViewFor(world: WorldState, social: SocialState, viewerId: SocialUserId, nowMs: number, sinceMs?: number): WorldView {
   const context = contextOf(world, viewerId);
   const unwalled = (id: SocialUserId) => id !== viewerId && !hasBlocked(social, id, viewerId) && !hasBlocked(social, viewerId, id);
   // WHO IS SEEN IN THE WORLD (the founder, 10-04, P1): a player hiding their presence from this viewer -- appearing offline, or a
@@ -357,7 +497,12 @@ export function worldViewFor(world: WorldState, social: SocialState, viewerId: S
           .filter(visible)
           .map((id) => world.avatars[id])
           .filter((a): a is AvatarState => a !== undefined && nowMs - a.reportedAtMs <= WORLD_AVATAR_STALE_MS && a.contextId === context.contextId)
-          .map((a) => ({ ...a, displayName: userById(social, a.userId)?.profile.displayName ?? 'Player', ageMs: nowMs - a.reportedAtMs }));
+          .map((a) => {
+            const entry = { ...a, displayName: userById(social, a.userId)?.profile.displayName ?? 'Player', ageMs: nowMs - a.reportedAtMs };
+            if (sinceMs === undefined) return entry;
+            const trail = trailFor(world, context.contextId, a, sinceMs, nowMs);
+            return trail.length === 0 ? entry : { ...entry, trail };
+          });
   const invites = world.invites
     .filter((i) => i.toUserId === viewerId && i.expiresAtMs > nowMs && unwalled(i.fromUserId) && world.contexts[i.contextId] !== undefined && !walledFromOwner(social, world.contexts[i.contextId], viewerId))
     .map((i) => ({
@@ -370,7 +515,7 @@ export function worldViewFor(world: WorldState, social: SocialState, viewerId: S
   // THE COUNT IS A ROSTER TOO: only the viewer and the live members they may see. Counting a member behind the viewer's wall
   // told them somebody hidden was there -- and that member leaving or arriving moved it (Second's R16 run, 10-04).
   const population = context === undefined ? 0 : liveMembers(world, { ...context, memberIds: context.memberIds.filter((id) => id === viewerId || visible(id)) }, nowMs);
-  return {
+  const view: WorldView = {
     context:
       context === undefined
         ? null
@@ -378,4 +523,5 @@ export function worldViewFor(world: WorldState, social: SocialState, viewerId: S
     avatars,
     invites,
   };
+  return sinceMs === undefined ? view : { ...view, asOfMs: nowMs };
 }
