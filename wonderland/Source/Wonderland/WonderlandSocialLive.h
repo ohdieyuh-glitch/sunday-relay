@@ -370,8 +370,21 @@ private:
 	FTSTicker::FDelegateHandle WorldTickerHandle;
 	bool TickWorldFast(float DeltaSeconds);
 	void TickWorld();
-	/** A world report's answer: a 404 rejoins quietly, any other refusal stays, a private server's no-context ok is a removal. */
-	void HandleWorldReport(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem);
+	/** A world report's answer: a 404 rejoins quietly, any other refusal stays, a private server's no-context ok is a removal.
+	 *  r16reh18 TRANSPORT RING: SentSinceMs is the cursor that report sent (-1 = none: the answer is read as today's single report), SentCursorEpoch the
+	 *  cursor's epoch when it left (INDEX_NONE = the current one, for the QA feed). */
+	void HandleWorldReport(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem, double SentSinceMs = -1.0, int32 SentCursorEpoch = INDEX_NONE);
+	/** r16reh18 TRANSPORT RING (PROTOTYPE; the wire names are provisional until the T1 design doc): the last world answer's asOfMs, sent back as the next
+	 *  report's sinceMs (-1 = none: the next answer is today's single report). Dropped by a join that places the player, a leave, a 404 and its rejoin,
+	 *  an answer in another context, and an answer with no asOfMs or no context; an answer to a report sent before a drop never sets it. */
+	double WorldCursorMs = -1.0;
+	/** Moves on every drop of the cursor, so an answer to a report sent before the drop is known. */
+	int32 WorldCursorEpoch = 0;
+	void DropWorldCursor();
+	/** Set when a server answers a report that carried sinceMs with a 400: the cursor is not sent again this session (a report is never lost to it). */
+	bool bWorldCursorRefused = false;
+	/** What the "WLREMOTE ring sinceMs=" line last said: 0 off (the start, not said), 1 on, 2 refused. */
+	int32 LoggedCursorState = 0;
 	TFunction<bool(FWonderlandAvatarReport&)> AvatarSource;
 	/** R16 CF-1: sample the activity, and report it when the reporter says it is due. */
 	void TickActivity();

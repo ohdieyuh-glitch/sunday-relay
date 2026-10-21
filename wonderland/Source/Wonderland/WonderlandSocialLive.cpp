@@ -163,6 +163,70 @@ namespace WonderlandSocialLiveDetail
 		return true;
 	}
 
+	/** r16reh18 TRANSPORT RING (PROTOTYPE; the wire names are provisional until the T1 design doc): the most trail points read per figure (the server's
+	 *  ring keeps 8); of a longer trail, the NEWEST are kept. */
+	constexpr int32 MaxTrailPoints = 16;
+	/** A trail point older than this is no movement report (the server forgets a silent player after 15 s, WORLD_AVATAR_STALE_MS). */
+	constexpr double MaxTrailAgeMs = 15000.0;
+	/** Coordinates beyond this are not a place in Wonderland (the server's own WORLD_COORD_LIMIT). */
+	constexpr double MaxTrailCoordUu = 10000000.0;
+
+	/** The ring's fields are read STRICTLY: a JSON number, and finite (never a string read as a number). */
+	bool StrictNumber(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, double& Out)
+	{
+		const TSharedPtr<FJsonValue> Value = Object.IsValid() ? Object->TryGetField(Key) : nullptr;
+		if (!Value.IsValid() || Value->Type != EJson::Number)
+		{
+			return false;
+		}
+		const double Number = Value->AsNumber();
+		if (!FMath::IsFinite(Number))
+		{
+			return false;
+		}
+		Out = Number;
+		return true;
+	}
+
+	/** One trail point: every field present and in range, its motion one of the wire's six (WORLD_MOTIONS); anything else is no point. */
+	bool ParseTrailPoint(const TSharedPtr<FJsonObject>& Entry, FWonderlandTrailPoint& Out)
+	{
+		double X = 0.0, Y = 0.0, Z = 0.0, Yaw = 0.0, Speed = 0.0, Age = 0.0;
+		FString Motion;
+		if (!Entry.IsValid() || !StrictNumber(Entry, TEXT("x"), X) || !StrictNumber(Entry, TEXT("y"), Y) || !StrictNumber(Entry, TEXT("z"), Z)
+			|| !StrictNumber(Entry, TEXT("yaw"), Yaw) || !StrictNumber(Entry, TEXT("speed"), Speed) || !StrictNumber(Entry, TEXT("ageMs"), Age)
+			|| !Entry->TryGetStringField(TEXT("motion"), Motion))
+		{
+			return false;
+		}
+		static const TCHAR* const Motions[] = { TEXT("IDLE"), TEXT("WALK"), TEXT("RUN"), TEXT("JUMP"), TEXT("FALL"), TEXT("FLY") };
+		bool bKnownMotion = false;
+		for (const TCHAR* Known : Motions)
+		{
+			bKnownMotion = bKnownMotion || Motion.Equals(Known, ESearchCase::CaseSensitive);
+		}
+		if (!bKnownMotion || FMath::Abs(X) > MaxTrailCoordUu || FMath::Abs(Y) > MaxTrailCoordUu || FMath::Abs(Z) > MaxTrailCoordUu
+			|| Speed < 0.0 || Age < 0.0 || Age > MaxTrailAgeMs)
+		{
+			return false;
+		}
+		Out.Location = FVector(X, Y, Z);
+		Out.Yaw = static_cast<float>(Yaw);
+		Out.Speed = static_cast<float>(Speed);
+		Out.Motion = Motion;
+		Out.AgeMs = Age;
+		return true;
+	}
+
+	/** r16reh18 TRANSPORT RING: a view read as today's single report (no trail on any figure). */
+	void DropTrails(FWonderlandWorldView& View)
+	{
+		for (FWonderlandRemoteAvatar& Avatar : View.Avatars)
+		{
+			Avatar.Trail.Reset();
+		}
+	}
+
 	/** worldViewFor's answer (src/relay/social/world-presence.ts). */
 	FWonderlandWorldView ParseWorldView(const TSharedPtr<FJsonObject>& Data)
 	{
@@ -182,6 +246,12 @@ namespace WonderlandSocialLiveDetail
 			double N = 0.0;
 			View.Population = (*Context)->TryGetNumberField(TEXT("population"), N) ? static_cast<int32>(N) : 0;
 			View.Capacity = (*Context)->TryGetNumberField(TEXT("capacity"), N) ? static_cast<int32>(N) : 0;
+		}
+		// r16reh18 TRANSPORT RING: the server's time of this answer, which the next report sends back as sinceMs (absent from an older server: -1)
+		double AsOf = 0.0;
+		if (StrictNumber(Data, TEXT("asOfMs"), AsOf) && AsOf >= 0.0)
+		{
+			View.AsOfMs = AsOf;
 		}
 		const TArray<TSharedPtr<FJsonValue>>* Avatars = nullptr;
 		if (Data->TryGetArrayField(TEXT("avatars"), Avatars) && Avatars != nullptr)
@@ -233,6 +303,26 @@ namespace WonderlandSocialLiveDetail
 				R.Yaw = static_cast<float>(Yaw);
 				R.Speed = static_cast<float>(Speed);
 				R.AgeMs = Age;
+				// r16reh18 TRANSPORT RING: the entry's own server time (every server version sends it; read only to tell a held trail point from a new one)
+				double ReportedAt = 0.0;
+				if (StrictNumber(A, TEXT("reportedAtMs"), ReportedAt) && ReportedAt >= 0.0)
+				{
+					R.ReportedAtMs = ReportedAt;
+				}
+				// and the reports stored since this client's previous view, OLDEST FIRST (the newest MaxTrailPoints of a longer one); a malformed point is dropped
+				const TArray<TSharedPtr<FJsonValue>>* TrailValues = nullptr;
+				if (A->TryGetArrayField(TEXT("trail"), TrailValues) && TrailValues != nullptr)
+				{
+					for (int32 K = FMath::Max(0, TrailValues->Num() - MaxTrailPoints); K < TrailValues->Num(); ++K)
+					{
+						const TSharedPtr<FJsonObject>* PointObject = nullptr;
+						FWonderlandTrailPoint Point;
+						if ((*TrailValues)[K].IsValid() && (*TrailValues)[K]->TryGetObject(PointObject) && PointObject != nullptr && ParseTrailPoint(*PointObject, Point))
+						{
+							R.Trail.Add(MoveTemp(Point));
+						}
+					}
+				}
 				if (!R.UserId.IsEmpty())
 				{
 					View.Avatars.Add(MoveTemp(R));
@@ -782,6 +872,24 @@ void FWonderlandSocialLiveService::TickWorld()
 			UE_LOG(LogTemp, Display, TEXT("WLWORLD report fields: %s"), *KeyLine);
 		}
 	}
+	// r16reh18 TRANSPORT RING (PROTOTYPE; the T1 design doc governs): the last answer's asOfMs goes back as sinceMs. It is added AFTER the line above,
+	// which names this player's REPORT (exactly the seven at the defaults; B35's R-8 reads it): sinceMs carries no player data, only the server's own
+	// clock echoed. It is said by name on its own line, never its value, whenever it starts or stops going (or a server has refused it).
+	const double SinceMs = bWorldCursorRefused ? -1.0 : WorldCursorMs;
+	const int32 CursorEpoch = WorldCursorEpoch;
+	if (SinceMs >= 0.0)
+	{
+		Body->SetNumberField(TEXT("sinceMs"), SinceMs);
+	}
+	{
+		const int32 CursorState = bWorldCursorRefused ? 2 : (SinceMs >= 0.0 ? 1 : 0);
+		if (CursorState != LoggedCursorState)
+		{
+			LoggedCursorState = CursorState;
+			static const TCHAR* const CursorStates[] = { TEXT("off"), TEXT("on"), TEXT("refused") };
+			UE_LOG(LogTemp, Display, TEXT("WLREMOTE ring sinceMs=%s"), CursorStates[CursorState]);
+		}
+	}
 	bWorldBusy = true;
 	// WLREMOTE: diagnostics only (one line per report: the soles sent, the round trip, the send period).
 	const double SentAt = FPlatformTime::Seconds();
@@ -792,7 +900,7 @@ void FWonderlandSocialLiveService::TickWorld()
 	UE_LOG(LogTemp, Display, TEXT("WLREMOTE send motion=%s z=%.1f vz=%.1f period=%.0fms"), *Report.Motion, Report.Location.Z, static_cast<double>(Report.VerticalSpeed), SentPeriodMs);
 	const float SentYaw = Report.Yaw;
 	// ONE CALL A TICK: the report answers with who else is here.
-	Call(TEXT("POST"), TEXT("/world/state"), Body, [this, SentAt, SentPeriodMs, SentSoles, SentYaw, bSendHandoff](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+	Call(TEXT("POST"), TEXT("/world/state"), Body, [this, SentAt, SentPeriodMs, SentSoles, SentYaw, bSendHandoff, SinceMs, CursorEpoch](int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
 	{
 		bWorldBusy = false;
 		if (bSendHandoff && Status == 400 && !bHandoffWireRefused)
@@ -800,6 +908,13 @@ void FWonderlandSocialLiveService::TickWorld()
 			// DEGRADE, NEVER BREAK: a server that rejects the fields would otherwise cost this player every position report while the swords are out
 			bHandoffWireRefused = true;
 			UE_LOG(LogTemp, Warning, TEXT("WLHANDOFF send: the server refused the report that carried the handoff (HTTP 400); the fields are dropped for this session"));
+		}
+		if (SinceMs >= 0.0 && Status == 400 && !bWorldCursorRefused)
+		{
+			// r16reh18 TRANSPORT RING, DEGRADE, NEVER BREAK (as the handoff fields): a server that rejects the cursor would otherwise cost this player every
+			// position report; it is not sent again this session (the next report says "WLREMOTE ring sinceMs=refused")
+			bWorldCursorRefused = true;
+			DropWorldCursor();
 		}
 		const double RoundTrip = FPlatformTime::Seconds() - SentAt;
 		if (Problem.IsEmpty())
@@ -821,11 +936,17 @@ void FWonderlandSocialLiveService::TickWorld()
 		}
 		UE_LOG(LogTemp, Display, TEXT("WLREMOTE send soles=(%.1f,%.1f,%.1f) rtt=%.0fms period=%.0fms status=%d yaw=%.2f"),
 			SentSoles.X, SentSoles.Y, SentSoles.Z, RoundTrip * 1000.0, SentPeriodMs, Status, static_cast<double>(SentYaw));
-		HandleWorldReport(Status, Data, Problem);
+		HandleWorldReport(Status, Data, Problem, SinceMs, CursorEpoch);
 	});
 }
 
-void FWonderlandSocialLiveService::HandleWorldReport(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem)
+void FWonderlandSocialLiveService::DropWorldCursor()
+{
+	WorldCursorMs = -1.0;
+	WorldCursorEpoch = (WorldCursorEpoch + 1) & 0x3fffffff;   // never INDEX_NONE, never an overflow
+}
+
+void FWonderlandSocialLiveService::HandleWorldReport(int32 Status, const TSharedPtr<FJsonObject>& Data, const FString& Problem, double SentSinceMs, int32 SentCursorEpoch)
 {
 	NextWorldAt = FPlatformTime::Seconds() + (Problem.IsEmpty() ? WonderlandSocialLiveDetail::WorldSeconds : WonderlandSocialLiveDetail::RetrySeconds);
 	// R16 CF-3 r2 (the correctness review's F1): A REPORT SENT BEFORE LEAVE SHARED WORLD answers about a world the player chose to leave.
@@ -840,6 +961,7 @@ void FWonderlandSocialLiveService::HandleWorldReport(int32 Status, const TShared
 		// A REFUSAL IS NEVER A REMOVAL (Second's review of 4d31c524: since b7dd6eae the server answers a removal 200 with no context).
 		if (Status == 404 && bWorldWanted)
 		{
+			DropWorldCursor();   // r16reh18 TRANSPORT RING: forgotten by the server; the first answer after the rejoin is today's single report
 			// 404 "Join a world first": the server's sweep forgot this player (silent for 15 s -- a hitch, a modal, sleep). The figures
 			// shown are stale now, so they go (Second's review m5), and the SAME world is joined again quietly -- on the backoff, so a
 			// server that keeps forgetting is not asked several times a second (m4). NOT while ANY join is in flight (Second's review of
@@ -872,8 +994,31 @@ void FWonderlandSocialLiveService::HandleWorldReport(int32 Status, const TShared
 	}
 	AutoJoinAttempts = 0;   // a report the server ANSWERED resets the backoff, never a join alone (m4)
 	const bool bWasPrivate = WorldView.bInWorld && WorldView.Kind == TEXT("PRIVATE_SERVER");
+	const FString CursorContext = WorldView.bInWorld ? WorldView.ContextId : FString();   // r16reh18 TRANSPORT RING
 	WorldView = WonderlandSocialLiveDetail::ParseWorldView(Data);
 	WorldView.ReportRttSeconds = FMath::Max(WorldRttSmoothed, 0.0);   // B33 wl.Remote.RttClock
+	{
+		// r16reh18 TRANSPORT RING (PROTOTYPE; the T1 design doc governs). A trail is read only in the answer to a report that sent the CURRENT cursor,
+		// in the same context: any other answer is today's single report. The cursor then follows this answer's asOfMs, or is dropped (no asOfMs, no
+		// context, another context). An answer to a report sent before a drop leaves the cursor as the drop left it.
+		const bool bCursorCurrent = SentCursorEpoch == INDEX_NONE || SentCursorEpoch == WorldCursorEpoch;
+		const bool bSameContext = WorldView.bInWorld && !CursorContext.IsEmpty() && WorldView.ContextId == CursorContext;
+		if (SentSinceMs < 0.0 || !bCursorCurrent || !bSameContext)
+		{
+			WonderlandSocialLiveDetail::DropTrails(WorldView);
+		}
+		if (bCursorCurrent)
+		{
+			if (bSameContext && WorldView.AsOfMs >= 0.0)
+			{
+				WorldCursorMs = FMath::FloorToDouble(WorldView.AsOfMs);
+			}
+			else
+			{
+				DropWorldCursor();
+			}
+		}
+	}
 	if (bWasPrivate && !WorldView.bInWorld && bWorldWanted)
 	{
 		// TAKEN OUT OF A PRIVATE SERVER BY THE SERVER (founder P4/P5, 10-04: a block either way removes the member; the owner stays):
@@ -899,6 +1044,7 @@ void FWonderlandSocialLiveService::PlanRejoinAfter404()
 	bRejoin404Deferred = false;
 	RejoinContextId = WorldView.ContextId;   // a FRIEND rejoin must land in this same world, or the player is not moved (m2)
 	WorldView = FWonderlandWorldView();
+	DropWorldCursor();   // r16reh18 TRANSPORT RING: the rejoin's first answer is today's single report
 	NotePopulation();
 	WorldChanged.Broadcast();
 	ScheduleAutoJoin(WorldTarget, WorldArg);
@@ -993,6 +1139,9 @@ void FWonderlandSocialLiveService::HandleJoinAnswer(int32 Seq, const FString& Ta
 		NextWorldAt = 0.0;
 		WorldView = Joined;
 		WorldView.ReportRttSeconds = FMath::Max(WorldRttSmoothed, 0.0);   // B33 wl.Remote.RttClock (0 until a world report has answered)
+		// r16reh18 TRANSPORT RING: placed (again): a join is asked with no cursor, so its view is today's single report, and so is the first report's answer
+		WonderlandSocialLiveDetail::DropTrails(WorldView);
+		DropWorldCursor();
 		WorldTarget = Target.ToUpper();   // the world a forgotten player is put back into (the 404 path above)
 		WorldArg = Arg;
 		UE_LOG(LogTemp, Display, TEXT("WLWORLD joined %s (%s), %d of %d here%s"), *WorldView.ContextId, *WorldView.ServerName, WorldView.Population,
@@ -1056,6 +1205,7 @@ FWonderlandSocialActionResult FWonderlandSocialLiveService::LeaveWorld()
 	bJoinInFlight = false;
 	++JoinSeq;                  // nor does a join still in flight: its answer is now an earlier join's
 	WorldView = FWonderlandWorldView();
+	DropWorldCursor();          // r16reh18 TRANSPORT RING
 	NotePopulation();
 	WorldChanged.Broadcast();
 	SendLeave(++LeaveSeq, false);
@@ -1739,6 +1889,7 @@ void FWonderlandSocialLiveService::QaSetWorld(const FWonderlandWorldView& View, 
 	bJoinInFlight = false;
 	AutoJoinAttempts = 0;
 	RejoinContextId.Reset();
+	DropWorldCursor();   // r16reh18 TRANSPORT RING: a view set from outside starts with no cursor
 }
 
 namespace WonderlandSocialLiveDetail
