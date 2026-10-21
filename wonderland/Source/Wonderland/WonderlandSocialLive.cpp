@@ -170,7 +170,8 @@ namespace WonderlandSocialLiveDetail
 	constexpr double MaxTrailMagnitude = 10000000.0;
 	/** A trail point's ageMs is at most this in absolute value. */
 	constexpr double MaxTrailAgeMs = 60000.0;
-	/** asOfMs is a whole number of milliseconds in [0, this]. */
+	/** asOfMs is a whole number of milliseconds in [0, this): at most 15 digits, so the echo always meets the server's cursor grammar ^[0-9]{1,15}$
+	 *  (T1 v1 section 2.5; reviewer 23dee6 NIT). */
 	constexpr double MaxAsOfMs = 1.0e15;
 
 	/** The ring's fields are read STRICTLY: a JSON number, and finite (never a string read as a number). */
@@ -242,9 +243,9 @@ namespace WonderlandSocialLiveDetail
 			View.Capacity = (*Context)->TryGetNumberField(TEXT("capacity"), N) ? static_cast<int32>(N) : 0;
 		}
 		// r16reh18 TRANSPORT RING: the server's time of this answer, which the next report echoes as ?sinceMs= (T1 v1 section 4.1: a finite whole
-		// number in [0, 1e15], else absent = -1; an older server never sends it)
+		// number in [0, 1e15), at most 15 digits, else absent = -1; an older server never sends it)
 		double AsOf = 0.0;
-		if (StrictNumber(Data, TEXT("asOfMs"), AsOf) && AsOf >= 0.0 && AsOf <= MaxAsOfMs && FMath::FloorToDouble(AsOf) == AsOf)
+		if (StrictNumber(Data, TEXT("asOfMs"), AsOf) && AsOf >= 0.0 && AsOf < MaxAsOfMs && FMath::FloorToDouble(AsOf) == AsOf)
 		{
 			View.AsOfMs = AsOf;
 		}
@@ -970,8 +971,9 @@ void FWonderlandSocialLiveService::HandleWorldReport(int32 Status, const TShared
 	const FString CursorContext = WorldView.bInWorld ? WorldView.ContextId : FString();   // r16reh18 TRANSPORT RING
 	WorldView = WonderlandSocialLiveDetail::ParseWorldView(Data);
 	WorldView.ReportRttSeconds = FMath::Max(WorldRttSmoothed, 0.0);   // B33 wl.Remote.RttClock
-	// r16reh18 TRANSPORT RING (T1 v1 section 4.1): the cursor follows this answer's asOfMs. None, no context (a removal), or another context than the one
-	// the report was sent from: reset, so the next report asks with ?sinceMs=0. A transport failure keeps it (the lost answer's reports come next time).
+	// r16reh18 TRANSPORT RING (T1 v1 section 4.1): the cursor follows this answer's asOfMs. None, no context (a removal), or a context other than the one
+	// this client is in when the answer is HANDLED (CursorContext, read just above, before the answer is parsed): reset, so the next report asks with
+	// ?sinceMs=0. A transport failure keeps it (the lost answer's reports come next time).
 	WorldCursorMs = WorldView.bInWorld && WorldView.AsOfMs >= 0.0 && WorldView.ContextId == CursorContext ? static_cast<int64>(WorldView.AsOfMs) : -1;
 	if (bWasPrivate && !WorldView.bInWorld && bWorldWanted)
 	{
