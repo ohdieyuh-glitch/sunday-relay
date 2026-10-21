@@ -41,7 +41,7 @@ async function relay(pool: Pool) {
   const report = (who: string, ms: number) => apply(who, 'world.state', ms, pos(ms));
   /** Kai's answer with a cursor of 0: Nova's figure as [x, trail x's], or null. */
   const kaiSeesNova = async (ms: number) => {
-    const r = await apply(KAI, 'world.state', ms, { ...pos(1), sinceMs: 0 });
+    const r = await store.apply('world.state', KAI, { ids: [], body: pos(1), query: { sinceMs: '0' } }, new Date(T0 + ms).toISOString());
     if (!r.ok) throw new Error(r.error.message);
     const nova = (r.value as WorldView).avatars.find((a) => a.userId === NOVA);
     return nova === undefined ? null : [nova.x, (nova.trail ?? []).map((p) => p.x)];
