@@ -172,9 +172,9 @@ namespace WonderlandSocialLiveDetail
 	constexpr double MaxTrailCoordUu = 10000000.0;
 
 	/** The ring's fields are read STRICTLY: a JSON number, and finite (never a string read as a number). */
-	bool StrictNumber(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, double& Out)
+	bool StrictNumber(const TSharedPtr<FJsonObject>& From, const TCHAR* Key, double& Out)
 	{
-		const TSharedPtr<FJsonValue> Value = Object.IsValid() ? Object->TryGetField(Key) : nullptr;
+		const TSharedPtr<FJsonValue> Value = From.IsValid() ? From->TryGetField(Key) : nullptr;
 		if (!Value.IsValid() || Value->Type != EJson::Number)
 		{
 			return false;
