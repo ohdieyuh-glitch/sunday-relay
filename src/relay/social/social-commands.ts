@@ -78,6 +78,7 @@ import { buildSocialView } from './social-preview';
 import { areFriends, blockedEitherWay, conversationById, friendIdsOf, messagesOf, partyById, partyOf, presenceHiddenFrom, userById, type SocialState } from './social-state';
 import {
   WORLD_MOTIONS,
+  noteAudienceChange,
   contextOf,
   emptyWorldState,
   inviteToWorld,
@@ -356,12 +357,31 @@ export function applySocialOperation(
   nowIso: string,
   world: WorldState = emptyWorldState(),
 ): RelayResult<SocialCommandOutcome> {
-  const outcome = applyOne(reconcileBlockedParties(state), op, actorId, input, nowIso, world);
-  if (!outcome.ok || outcome.value.audience.length === 0) return outcome;
+  const applied = applyOne(reconcileBlockedParties(state), op, actorId, input, nowIso, world);
+  if (!applied.ok) return applied;
+  const { viewRequest, ...done } = applied.value;
+  // THE TRANSPORT RING'S PAIR GATE, ONCE, OVER THE WHOLE OPERATION -- its reconciliation and its own change (T1 v2 section 3, P7):
+  // wherever whether one player's position may be shown to another changed, that pair is floored here, in the same step, so the store
+  // adopts the change and the floors together (world-presence.ts noteAudienceChange). Join epochs were set inside the operation.
+  const base = done.world ?? world;
+  const gated = noteAudienceChange(base, state, done.state);
+  // THE VIEW IS BUILT LAST (ruling d63c15 P2-2): from the operation's final world and state, after its floors and epoch, so no view
+  // can serve what this very operation has just made servable from before it. The same two objects today's view was built from,
+  // plus internal maps a cursor-less view never reads: without a cursor, today's bytes.
+  const data = viewRequest === undefined ? done.data : worldViewFor(gated, done.state, viewRequest.viewerId, viewRequest.nowMs, viewRequest.sinceMs);
+  const outcome = { ok: true as const, value: { ...done, data, ...(gated === world && done.world === undefined ? {} : { world: gated }) } };
+  if (outcome.value.audience.length === 0) return outcome;
   const after = outcome.value.state;
   const exempt = new Set(outcome.value.floorExempt ?? []);
   const audience = outcome.value.audience.filter((id) => id === actorId || exempt.has(id) || !blockedEitherWay(after, actorId, id));
   return { ok: true, value: { ...outcome.value, audience } };
+}
+
+/** A world operation's answer, built by applySocialOperation LAST, after the operation's floors and epoch (T1 v2 section 3). */
+interface ViewRequest {
+  readonly viewerId: SocialUserId;
+  readonly nowMs: number;
+  readonly sinceMs?: number;
 }
 
 function applyOne(
@@ -371,7 +391,7 @@ function applyOne(
   input: SocialCommandInput,
   nowIso: string,
   world: WorldState,
-): RelayResult<SocialCommandOutcome> {
+): RelayResult<SocialCommandOutcome & { readonly viewRequest?: ViewRequest }> {
   const { ids, body } = input;
   const nowMs = Date.parse(nowIso);
   const worldFail = (r: { code: string; message: string }): RelayResult<never> => ({
@@ -668,7 +688,7 @@ function applyOne(
     }
     /* ---- MULTIPLAYER PHASE 1: the shared presence layer (world-presence.ts) */
     case 'world.read':
-      return { ok: true, value: { state, world, data: worldViewFor(world, state, actorId, nowMs), audience: [] } };
+      return { ok: true, value: { state, world, data: null, viewRequest: { viewerId: actorId, nowMs }, audience: [] } };
     case 'world.join': {
       const kind = oneOf(body, 'target', ['PUBLIC', 'PRIVATE', 'FRIEND', 'INVITE', 'PARTY'] as const);
       if (!kind.ok) return invalid(kind.message);
@@ -717,7 +737,8 @@ function applyOne(
         value: {
           state: met,
           world: joined.value.world,
-          data: worldViewFor(joined.value.world, met, actorId, nowMs),
+          data: null,
+          viewRequest: { viewerId: actorId, nowMs },
           // told only to whoever may see the actor (the founder, 10-04, P1): a hidden arrival moves nobody's view, so nobody is told
           // (M3, 10-07) the people IN the world see the arrival through worldViewFor (P1-filtered); a friend elsewhere is told
           // only when their view of the actor moved -- one who may not see the actor's location learns no move from its timing
@@ -740,10 +761,16 @@ function applyOne(
       const skin = str(body, 'skinId', 40);
       for (const c of [motion, skin]) if (!c.ok) return invalid(c.message);
       const num = (field: string) => (typeof body[field] === 'number' ? (body[field] as number) : Number.NaN);
+      // THE TRANSPORT RING'S CURSOR (T1 v1 section 2.5, P1): the URL QUERY's `sinceMs` -- the `asOfMs` of this client's previous
+      // answer, echoed -- NEVER a body field: the body stays the seven report fields (the registered void2 scan reads their names).
+      // Only a whole number of 1-15 digits counts; anything else, a body field of that name included, is ABSENT and the answer is
+      // today's, byte for byte. Never an error: a bad cursor must not cost the player their position report. worldViewFor bounds it.
+      const rawSince = Object.hasOwn(input.query, 'sinceMs') ? input.query.sinceMs : undefined;
+      const sinceMs = rawSince !== undefined && /^[0-9]{1,15}$/.test(rawSince) ? Number(rawSince) : undefined;
       // SEPARATED BY A BLOCK (P4/P5): the removed player's own tick is ANSWERED with a view that has no context -- the client's
       // sign of a removal (CORE's client contract: it had a private server, now none, while it wanted to stay -> "You can't stay
       // in this server." and back to the public world). An answer, never an error, and it names nothing.
-      if (recentlyRemoved(world, actorId, nowMs)) return { ok: true, value: { state, data: worldViewFor(world, state, actorId, nowMs), audience: [] } };
+      if (recentlyRemoved(world, actorId, nowMs)) return { ok: true, value: { state, data: null, viewRequest: { viewerId: actorId, nowMs, sinceMs }, audience: [] } };
       const reported = reportAvatar(
         world,
         actorId,
@@ -758,7 +785,7 @@ function applyOne(
       const worn = recordWornSkin(state, actorId, reported.value.avatars[actorId]?.skinId);
       const audience = worn === state ? [] : [actorId, ...viewMoved(state, worn, actorId, [...friendIdsOf(state, actorId), ...partyMembers(state, actorId)])];
       // ONE CALL A TICK: the report answers with the view, so a client reporting ~5 a second needs nothing else to see the others.
-      return { ok: true, value: { state: worn, world: reported.value, data: worldViewFor(reported.value, worn, actorId, nowMs), audience } };
+      return { ok: true, value: { state: worn, world: reported.value, data: null, viewRequest: { viewerId: actorId, nowMs, sinceMs }, audience } };
     }
     case 'world.invite': {
       const to = str(body, 'toUserId', MAX_LABEL);
