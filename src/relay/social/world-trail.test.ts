@@ -165,6 +165,38 @@ describe('the ring: what is stored, and for how long', () => {
     const empty = emptyWorldState();
     expect([empty.trails, empty.floors, empty.joinedSeq, empty.seq]).toEqual([undefined, undefined, undefined, undefined]);
   });
+
+  it('RING-S07 prototype-safe (T2 R2): players named __proto__, constructor, toString and hasOwnProperty get rings, floors and epochs as OWN entries, no prototype is touched, and the gate holds for them', () => {
+    const hostile = ['__proto__', 'constructor', 'toString', 'hasOwnProperty'];
+    let s = emptySocialState();
+    [SAM, ...hostile].forEach((id, i) => {
+      s = ensureSocialUser(s, { userId: id, displayName: `p${i}`, handle: `@hostile${i}` }, at(-1000));
+    });
+    const g: World = { s, w: emptyWorldState() };
+    for (const id of [SAM, ...hostile]) {
+      apply(g, id, 'presence.update_self', { connected: true }, -900);
+      apply(g, id, 'world.join', { target: 'PUBLIC' }, -500);
+    }
+    reports(g, SAM, [100, 200, 300]);
+    for (const id of hostile) reports(g, id, [110, 210, 310]);
+    for (const id of hostile) {
+      apply(g, id, 'blocks.add', { targetId: SAM }, 320);
+      apply(g, id, 'blocks.remove', {}, 330, [SAM]);
+    }
+    for (const map of [g.w.floors, g.w.floors?.[SAM], g.w.joinedSeq, g.w.trails]) expect(Object.getPrototypeOf(map)).toBe(Object.prototype);
+    for (const id of hostile) {
+      expect(Object.hasOwn(g.w.floors ?? {}, id), `floors on ${id}`).toBe(true);
+      expect(Object.hasOwn(g.w.floors?.[SAM] ?? {}, id), `Sam's floor for ${id}`).toBe(true);
+      expect(Object.hasOwn(g.w.joinedSeq ?? {}, id), `epoch of ${id}`).toBe(true);
+      expect(Object.hasOwn(g.w.trails ?? {}, id), `ring of ${id}`).toBe(true);
+    }
+    expect(({} as { toString: unknown }).toString).toBe(Object.prototype.toString);
+    // the gate holds for them: nothing from before the block's end, then the next report
+    report(g, SAM, 400);
+    for (const id of hostile) expect(trailTimes(g, id, SAM, 450), id).toEqual([]);
+    report(g, SAM, 500);
+    for (const id of hostile) expect(trailTimes(g, id, SAM, 550), id).toEqual([400]);
+  });
 });
 
 /* -------------------------------------------------------------------------------------------------------------- serve */
@@ -317,6 +349,14 @@ describe('serving: a cursor, oldest first, at least once, nothing older than the
     reports(c, SAM, [100, 200, 300]);
     expect((apply(c, VAL, 'world.state', pos(1), 350, [], { sinceMs: '0' }).data as WorldView).asOfMs).toBe(T0 + 350);
     expect((apply(c, VAL, 'world.state', pos(1), 450, [], { sinceMs: '000000000000000' }).data as WorldView).asOfMs).toBe(T0 + 450);
+  });
+
+  it('RING-V12 the 2 s window is exact (NB, T2 R1): an entry stored at exactly nowMs - 2000 is not served; one at nowMs - 1999 is', () => {
+    const g = together();
+    reports(g, SAM, [1000, 1100, 1200]);
+    expect(trailTimes(g, VAL, SAM, 3000)).toEqual([1100]);   // 1000 = 3000 - 2000: out
+    expect(trailTimes(g, VAL, SAM, 2999)).toEqual([1000, 1100]);   // 1000 = 2999 - 1999: in
+    expect(trailTimes(g, VAL, SAM, 3000, 950)).toEqual([1100]);   // with a cursor whose slack reaches below the window too
   });
 
   it('R02 no served object carries an internal key: no trails, seq, joinedSeq or floors anywhere; no contextId, reportedAtMs or seq in a trail entry', () => {

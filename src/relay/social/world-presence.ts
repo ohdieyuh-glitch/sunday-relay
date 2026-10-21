@@ -83,8 +83,8 @@ export interface WorldState {
    */
   readonly removals?: Readonly<Record<SocialUserId, number>>;
   /**
-   * THE TRANSPORT RING (r16reh18; TRANSPORT_RING_DESIGN_T1_v1.md 0a710c29 governs; this code is still a PROTOTYPE until the
-   * reviewer's T1 ruling). Per player, the last accepted position reports, oldest first, so a viewer whose polls are slower than the
+   * THE TRANSPORT RING (r16reh18). Governed by TRANSPORT_RING_DESIGN_T1_v1.md (0a710c29) and v2 (c72f1ea8), as the reviewer ruled
+   * them: T1 d63c15 (APPROVED WITH REQUIRED CHANGES) and T2 d786aa (PASS subject to the T2a delta made here). Per player, the last accepted position reports, oldest first, so a viewer whose polls are slower than the
    * reports, or who lost an answer, can be served the reports between two of its views instead of only the newest. In memory only,
    * like the avatar it belongs to: dropped with it, and a restart empties it. Absent until somebody reports.
    */
@@ -142,8 +142,11 @@ export interface TrailPoint {
   readonly ageMs: number;
 }
 
-/** The next internal serial number. Taken inside the store's one-at-a-time queue, never from a clock. */
-function nextSerial(world: WorldState): number {
+/**
+ * The ring's next internal serial number (world.seq). Taken inside the store's one-at-a-time queue, never from a clock. Not to be
+ * confused with WorldState.nextSerial, the invitation-id counter (winv_<n>), which this does not touch.
+ */
+function nextRingSeq(world: WorldState): number {
   return (world.seq ?? 0) + 1;
 }
 
@@ -264,9 +267,13 @@ export function noteAudienceChange(world: WorldState, before: SocialState, after
     }
   }
   if (changed.size === 0) return world;
-  const fresh = nextSerial(world);
-  const floors: Record<SocialUserId, Record<SocialUserId, number>> = { ...(world.floors ?? {}) };
-  for (const [subjectId, viewerId] of changed.values()) floors[subjectId] = { ...(own(floors, subjectId) ?? {}), [viewerId]: fresh };
+  const fresh = nextRingSeq(world);
+  // PROTOTYPE-SAFE (T2 d786aa R2): player ids are keys, so every map is built with Object.fromEntries or a computed-key literal --
+  // both define OWN properties, so an id such as __proto__ is a floor like any other -- never by assignment, which would set the
+  // object's prototype instead.
+  const rows = new Map<SocialUserId, Record<SocialUserId, number>>();
+  for (const [subjectId, viewerId] of changed.values()) rows.set(subjectId, { ...(rows.get(subjectId) ?? own(world.floors, subjectId) ?? {}), [viewerId]: fresh });
+  const floors = Object.fromEntries([...Object.entries(world.floors ?? {}), ...rows]);
   return { ...world, seq: fresh, floors };
 }
 
@@ -332,7 +339,7 @@ function withMember(world: WorldState, context: WorldContext, userId: SocialUser
   // THE ARRIVING VIEWER'S EPOCH (K3, P2): an arrival changes what the newcomer may see of every member already there, with no act of
   // theirs, so nothing stored before it is ever served to the NEWCOMER, whatever cursor they send. Nobody else's answer moves: a
   // hidden arrival stays untold (P1; clearing the members' rings would show every member the moment somebody arrived, K12).
-  const epoch = nextSerial(left);
+  const epoch = nextRingSeq(left);
   return {
     ...left,
     seq: epoch,
@@ -552,7 +559,7 @@ export function reportAvatar(world: WorldState, actorId: SocialUserId, report: A
   };
   // the accepted report also enters the player's ring (a report inside the floor above was not accepted, so it never does); named
   // field by field, so a field added to the avatar one day does not enter the ring with it
-  const seq = nextSerial(world);
+  const seq = nextRingSeq(world);
   const sample: TrailSample = { contextId: avatar.contextId, x: avatar.x, y: avatar.y, z: avatar.z, yaw: avatar.yaw, speed: avatar.speed, motion: avatar.motion, reportedAtMs: avatar.reportedAtMs, seq };
   const trail = appendToTrail(own(world.trails, actorId), sample);
   // floors on this player that exclude nothing any more go (at most one per co-member is ever left)
