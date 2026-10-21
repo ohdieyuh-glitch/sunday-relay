@@ -134,8 +134,15 @@ private:
 		double DrReceivedAt = 0.0;                 // FPlatformTime::Seconds() of the last report that moved the figure's target
 		float DrAgeSeconds = 0.0f;                 // the backend's ageMs for that report
 		// r16reh16d snapshot interpolation: reports with the SENDER's time (arrival minus the backend's ageMs); drawn InterpDelay in the past.
-		struct FSample { double T = 0.0; double Raw = 0.0; float V = 0.0f; FVector P = FVector::ZeroVector; };   // T = timeline used, Raw = arrival - age, V = reported speed
+		// B33 LOST-CORNER (r16reh16za): bAir = the report's motion was airborne; Corner = for the span ENDING at this sample, 0 when it is a normal span, else the least
+		// time (Raw clock) from the span's AIR end at which a report lost inside it can lie (WonderlandWorldPresence.cpp, LostCornerSecondsFor).
+		struct FSample { double T = 0.0; double Raw = 0.0; float V = 0.0f; FVector P = FVector::ZeroVector; bool bAir = false; double Corner = 0.0; };   // T = timeline used, Raw = arrival - age, V = reported speed
 		TArray<FSample> Samples;
+		// B33 LOST-CORNER (r16reh16za): the Raw-clock spacing of the latest pairs of consecutive stored reports (never a stand/start gap: its Hold is synthetic), each
+		// marked when it was judged a possible loss. The median reads them all (robust to a loss now and then, and it follows a change of period); the largest
+		// NORMAL spacing reads only the unmarked ones.
+		struct FSpacing { double Seconds = 0.0; bool bPossibleLoss = false; };
+		TArray<FSpacing> Spacings;
 		// r16reh16i adaptive draw delay: the recent worst-case age of the newest report, and the delay actually used (slewed).
 		double PeakAge = 0.0;
 		double AdaptDelay = -1.0;

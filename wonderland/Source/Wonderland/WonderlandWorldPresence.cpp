@@ -76,6 +76,56 @@ namespace WonderlandWorldPresenceDetail
 	constexpr double NewerReportSeconds = 0.06;
 	/** B33: the most the sample clock is moved back for the round trip. */
 	constexpr double MaxRttClockSeconds = 0.25;
+	/** A gap between two reports longer than this is a stand, then a move (the Hold sample below), not a delivery gap. */
+	constexpr double StandGapSeconds = 0.4;
+	// B33 LOST-CORNER (r16reh16za): A LOST REPORT CUTS A VERTICAL CORNER. The server keeps ONE report per player and answers each view with it (sunday-relay
+	// world-presence.ts:321-335, 346-360), so a report the sender stores and overwrites between two of this client's views never reaches this client (whenever
+	// one of this client's view intervals spans two of the sender's stores). The height is drawn as the straight line between the reports that DID arrive: when
+	// the lost one is the touchdown report, or the last ground report before a take-off, that line cuts the corner and the figure is drawn above the player
+	// (about h/2 at the lost report, h = the air report's height) for up to a report period.
+	// A span is a POSSIBLE LOSS only when it is long against THIS player's own stored spacing (so the rule is the same at any round trip) AND long enough to hold
+	// two store intervals; then, on an air/ground pair only, the height turns the corner where the lost report can earliest (landing) / latest (take-off) be.
+	// A normal span is drawn exactly as before.
+	/** The server stores at most one report per player per this (WORLD_REPORT_MIN_INTERVAL_MS = 100, world-presence.ts:29-30, :322); the sender's own period is
+	 *  longer still (WorldSeconds 0.1 s after each answer, WonderlandSocialLive.cpp). A lost report lies at least this far from both stored neighbours. */
+	constexpr double StoreFloorSeconds = 0.1;
+	/** How much SHORTER the spacing of two stored reports can read on this client's Raw clock (arrival - ageMs - RTT clock) than on the server's:
+	 *  - the first arrival read up to one frame late and the second on time (the HTTP answer is handled on the game thread, once a frame; 1/30 s is the settings
+	 *    page's lowest frame-rate cap);
+	 *  - the RTT clock rising between the two (at most 5 ms per answer: 5 % of at most +100 ms, WonderlandSocialLive.cpp; answers are >= WorldSeconds 0.1 s
+	 *    apart, so at most two fall across a 0.2 s span);
+	 *  - ageMs in whole milliseconds (under 1 ms at each end).
+	 *  The 50 ms report ticker is not a term (ageMs is measured at the answer, so WHEN this client asked cancels out), and a slow link's download jitter is
+	 *  covered by the period itself (a loss needs two sender periods, each >= 0.1 s + the sender's round trip). Derived from the code, never from a run. */
+	constexpr double LostCornerJitterSeconds = 1.0 / 30.0 + 2.0 * 0.005 + 2.0 * 0.001;
+	/** One report lost makes the span two periods: a span at least this many times the player's median stored spacing is a possible loss (the midpoint
+	 *  between one period and two). */
+	constexpr double LostCornerSpanRatio = 1.5;
+	/** The spacings kept per player (two thirds of the 24 kept samples), and the fewest that must be known before any span is judged. */
+	constexpr int32 LostCornerHistory = 16;
+	constexpr int32 LostCornerMinHistory = 4;
+	/** The sender's airborne motions: ReportLocalPlayer (WonderlandSocialSubsystem.cpp) sends JUMP or FALL exactly while its CharacterMovement IsFalling();
+	 *  FLY is the wire's third off-the-ground motion (WORLD_MOTIONS, world-presence.ts:35), never sent by this build. */
+	inline bool IsAirborneMotion(const FString& Motion)
+	{
+		return Motion.Equals(TEXT("JUMP"), ESearchCase::CaseSensitive) || Motion.Equals(TEXT("FALL"), ESearchCase::CaseSensitive)
+			|| Motion.Equals(TEXT("FLY"), ESearchCase::CaseSensitive);
+	}
+	/** B33 LOST-CORNER: 0 when the Raw span between two consecutive stored reports is NORMAL; else (a possible loss) the least time from its AIR end at which a
+	 *  report lost inside it can lie. With one report lost the span is two sender periods, each >= StoreFloorSeconds. The period between the lost report and
+	 *  the GROUND end is a normal one: when it is no longer than Largest (the largest normal spacing known), the lost report lies at least Span - Largest from
+	 *  the air end. So the corner is max(StoreFloor, Span - Largest), and never nearer than StoreFloor to the ground end either. A span read under two floors
+	 *  (the jitter allowance lets it in) splits evenly. */
+	inline double LostCornerSecondsFor(int32 Count, double Median, double Largest, double Span)
+	{
+		if (Count < LostCornerMinHistory || Span < 2.0 * StoreFloorSeconds - LostCornerJitterSeconds || Span < LostCornerSpanRatio * Median)
+		{
+			return 0.0;
+		}
+		const double Lo = FMath::Min(StoreFloorSeconds, 0.5 * Span);
+		const double Hi = FMath::Max(Span - StoreFloorSeconds, 0.5 * Span);
+		return FMath::Clamp(Span - Largest, Lo, Hi);
+	}
 	TAutoConsoleVariable<float> CVarRemoteEaseRate(TEXT("wl.Remote.EaseRate"), 9.0f,
 		TEXT("Remote players: chase rate toward the report / dead-reckoned point when Interp is 0."));
 	TAutoConsoleVariable<float> CVarRemoteDrCap(TEXT("wl.Remote.DrCap"), 0.3f,
@@ -208,6 +258,7 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 					S.T = S.Raw;
 					S.V = FMath::Clamp(A.Speed, 0.0f, MaxTrustedSpeedUu);
 					S.P = A.Location;
+					S.bAir = IsAirborneMotion(A.Motion);   // B33 LOST-CORNER
 					if (Remote.Samples.Num() > 0)
 					{
 						const FRemote::FSample Last = Remote.Samples.Last();   // a COPY: Samples grows below
@@ -227,12 +278,42 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 									Remote.PeakAge = FMath::Max(Remote.PeakAge, Avail);
 								}
 							}
-							if (S.Raw - Last.Raw > 0.4)
+							// B33 LOST-CORNER (r16reh16za): judge this span against the player's own stored spacing, then remember it. A stand/start gap is
+							// neither judged nor remembered (the Hold below makes its spans).
+							if (DRaw <= StandGapSeconds)
+							{
+								TArray<double, TInlineAllocator<LostCornerHistory>> Sorted;
+								double Largest = 0.0;
+								for (const FRemote::FSpacing& Known : Remote.Spacings)
+								{
+									Sorted.Add(Known.Seconds);
+									if (!Known.bPossibleLoss)
+									{
+										Largest = FMath::Max(Largest, Known.Seconds);
+									}
+								}
+								Sorted.Sort();
+								const int32 N = Sorted.Num();
+								const double Median = N == 0 ? 0.0 : (N % 2 == 1 ? Sorted[N / 2] : 0.5 * (Sorted[N / 2 - 1] + Sorted[N / 2]));
+								// the median is a normal period too, so it bounds the largest from below: after a change of period the unmarked spacings can all
+								// be older and shorter. A possible loss still counts in the median, or a longer period would lock itself out of the history.
+								S.Corner = LostCornerSecondsFor(N, Median, FMath::Max(Largest, Median), DRaw);
+								FRemote::FSpacing Spacing;
+								Spacing.Seconds = DRaw;
+								Spacing.bPossibleLoss = S.Corner > 0.0;
+								Remote.Spacings.Add(Spacing);
+								if (Remote.Spacings.Num() > LostCornerHistory)
+								{
+									Remote.Spacings.RemoveAt(0, Remote.Spacings.Num() - LostCornerHistory, EAllowShrinking::No);
+								}
+							}
+							if (S.Raw - Last.Raw > StandGapSeconds)
 							{
 								// stood still, then moved: hold the old place until just before the move, do not slide across the whole gap
 								FRemote::FSample Hold = Last;
 								Hold.T = S.T - 0.1;
 								Hold.Raw = S.Raw - 0.1;
+								Hold.Corner = 0.0;   // B33 LOST-CORNER: a synthetic sample ends no real span (it keeps Last's bAir)
 								Remote.Samples.Add(Hold);
 							}
 							else if (CVarRemoteRetime.GetValueOnGameThread() != 0 && DRaw > 0.02)
@@ -593,6 +674,18 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 				const double Span = Ss[I + 1].T - Ss[I].T;
 				const double F = Span > 1e-6 ? FMath::Clamp((RT - Ss[I].T) / Span, 0.0, 1.0) : 1.0;
 				Aim = FMath::Lerp(Ss[I].P, Ss[I + 1].P, F);
+				// B33 LOST-CORNER (r16reh16za): a span that may hide a lost report (Corner > 0) between an air and a ground report turns its HEIGHT's corner where
+				// the lost report can be: a landing reaches the ground Corner after the air report and stays there, a take-off holds the ground until Corner
+				// before the air report. The landing class is then drawn at the ground whenever that lost report is the touchdown or the last ground report.
+				// XY and every other span are as before. The corner keeps its fraction of the span on the drawn clock (the steady-motion re-time can stretch or
+				// squeeze T but moves both ends), so it always falls inside it.
+				const double RawSpan = Ss[I + 1].Raw - Ss[I].Raw;
+				if (Ss[I + 1].Corner > 0.0 && Ss[I].bAir != Ss[I + 1].bAir && Span > 1e-6 && RawSpan > 1e-6)
+				{
+					const double Corner = Span * FMath::Clamp(Ss[I + 1].Corner / RawSpan, 0.0, 1.0);
+					const double Into = Ss[I].bAir ? (RT - Ss[I].T) / Corner : (RT - (Ss[I + 1].T - Corner)) / Corner;
+					Aim.Z = FMath::Lerp(Ss[I].P.Z, Ss[I + 1].P.Z, FMath::Clamp(Into, 0.0, 1.0));
+				}
 			}
 			Rate = CVarRemoteInterpEase.GetValueOnGameThread();
 			bInterp = true;
