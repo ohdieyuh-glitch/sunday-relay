@@ -357,6 +357,11 @@ export function createClaudeCodeCodingAgentProvider(input: {
   readonly authMode?: ClaudeAuthMode;
   /** The mission's declared coder effort; absent changes nothing. Forwarded to the runner. */
   readonly effort?: HostedEffort;
+  /**
+   * The mission's declared coder SESSION limit in ms (`limits.coderRuntimeMinutes`), the runner's abort timer. Absent (the default)
+   * leaves `DEFAULT_HOSTED_LIMITS.maxRuntimeMs` exactly as it was. It never touches `maxCostCents`: the money bound is independent.
+   */
+  readonly maxRuntimeMs?: number;
   /** Test seam for the SDK's tool helpers; production omits it. */
   readonly sdkHelpersLoader?: () => Promise<HostedSdkHelpers>;
 }): JuliusCodingAgentProvider {
@@ -407,9 +412,12 @@ export function createClaudeCodeCodingAgentProvider(input: {
        * composition without a policy — the envelope keeps its own conservative
        * default; with one, the runtime is told to stop exactly there.
        */
-      const limits: HostedLimits = request.budget.usdMicros === null
+      const baseLimits: HostedLimits = input.maxRuntimeMs === undefined
         ? DEFAULT_HOSTED_LIMITS
-        : hostedLimitsForAllocation(request.budget.usdMicros);
+        : Object.freeze({ ...DEFAULT_HOSTED_LIMITS, maxRuntimeMs: input.maxRuntimeMs });
+      const limits: HostedLimits = request.budget.usdMicros === null
+        ? baseLimits
+        : hostedLimitsForAllocation(request.budget.usdMicros, baseLimits);
       /** AN ALLOCATION BELOW ONE CENT BUYS NOTHING AND STILL BILLS a turn. Refused before launch. */
       if (request.budget.usdMicros !== null && limits.maxCostCents < 1) {
         return {
