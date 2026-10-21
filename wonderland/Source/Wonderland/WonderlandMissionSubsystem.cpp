@@ -1755,9 +1755,16 @@ FString UWonderlandMissionSubsystem::GetProvenanceBadge() const
 	// NO LAYOUT MOVES. The founder's standing rule is that a content request is not a licence to redesign the
 	// HUD, so the badge keeps its row, its position, its colour and its neighbours; only the number of
 	// characters in it changes.
+	//
+	// THE PREVIEW HAD THE SAME FAULT (the B14/B18 real-input rehearsal, 2026-10-20): the whole banner,
+	// "DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION" (48 characters), clipped the subtitle at "running.".
+	// Its badge is now the short spelling of the SAME TWO CLAIMS -- a development preview, and simulated --
+	// 31 characters, eight fewer than the live badge above that already fits ("JULIUS LIVE · RUN run:b0f61d6d… ·
+	// READY", 39). It can never read as live: no JULIUS LIVE, no run, and the coral colour of a preview. The
+	// banner keeps the whole sentence, and the strip and the terminal still draw it.
 	if (IsDevelopmentPreview())
 	{
-		return GetProvenanceBanner();
+		return TEXT("DEVELOPMENT PREVIEW · SIMULATED");
 	}
 	const FString Run = GetFollowedRunId();
 	const FString Said = GetFollowedJuliusState();

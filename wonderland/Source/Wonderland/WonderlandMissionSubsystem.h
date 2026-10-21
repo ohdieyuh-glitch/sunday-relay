@@ -151,6 +151,7 @@ public:
 	 * id cut that subtitle off mid-word in another lane's acceptance photograph. The full id stays in the
 	 * contract body directly below, in the strip, in the terminal and in GetProvenanceBanner itself -- which
 	 * the Julius acceptance suite asserts contains the whole run id. Use the BANNER everywhere else.
+	 * In a development preview it is "DEVELOPMENT PREVIEW · SIMULATED": both claims, without the banner's length.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
 	FString GetProvenanceBadge() const;
