@@ -4,6 +4,8 @@
 #include "Components/TextRenderComponent.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "RelayDogCharacter.h"
 #include "RelayDogPresentation.h"
@@ -84,8 +86,9 @@ namespace WonderlandWorldPresenceDetail
 	// the lost one is the touchdown report, or the last ground report before a take-off, that line cuts the corner and the figure is drawn above the player
 	// (about h/2 at the lost report, h = the air report's height) for up to a report period.
 	// A span is a POSSIBLE LOSS only when it is long against THIS player's own stored spacing (so the rule is the same at any round trip) AND long enough to hold
-	// two store intervals; then, on an air/ground pair only, the height turns the corner where the lost report can earliest (landing) / latest (take-off) be.
-	// A normal span is drawn exactly as before.
+	// two store intervals; then, on an air/ground pair only, the height turns the corner where the lost report can earliest (landing) / latest (take-off) be,
+	// unless the product's own ballistics show the lost report was airborne (then the stored reports bracket the corner: today's line) or place the touchdown /
+	// take-off inside the span (then the corner is there): Tick, B33 BALLISTIC GATE. A normal span is drawn exactly as before.
 	/** The server stores at most one report per player per this (WORLD_REPORT_MIN_INTERVAL_MS = 100, world-presence.ts:29-30, :322); the sender's own period is
 	 *  longer still (WorldSeconds 0.1 s after each answer, WonderlandSocialLive.cpp). A lost report lies at least this far from both stored neighbours. */
 	constexpr double StoreFloorSeconds = 0.1;
@@ -104,12 +107,12 @@ namespace WonderlandWorldPresenceDetail
 	/** The spacings kept per player (two thirds of the 24 kept samples), and the fewest that must be known before any span is judged. */
 	constexpr int32 LostCornerHistory = 16;
 	constexpr int32 LostCornerMinHistory = 4;
-	/** The sender's airborne motions: ReportLocalPlayer (WonderlandSocialSubsystem.cpp) sends JUMP or FALL exactly while its CharacterMovement IsFalling();
-	 *  FLY is the wire's third off-the-ground motion (WORLD_MOTIONS, world-presence.ts:35), never sent by this build. */
-	inline bool IsAirborneMotion(const FString& Motion)
+	/** The sender's airborne motions: ReportLocalPlayer (WonderlandSocialSubsystem.cpp) sends JUMP (rising) or FALL exactly while its CharacterMovement
+	 *  IsFalling(); FLY is the wire's third off-the-ground motion (WORLD_MOTIONS, world-presence.ts:35), never sent by this build. 0 = on the ground. */
+	inline uint8 AirKindOf(const FString& Motion)
 	{
-		return Motion.Equals(TEXT("JUMP"), ESearchCase::CaseSensitive) || Motion.Equals(TEXT("FALL"), ESearchCase::CaseSensitive)
-			|| Motion.Equals(TEXT("FLY"), ESearchCase::CaseSensitive);
+		return Motion.Equals(TEXT("JUMP"), ESearchCase::CaseSensitive) ? 1 : Motion.Equals(TEXT("FALL"), ESearchCase::CaseSensitive) ? 2
+			: Motion.Equals(TEXT("FLY"), ESearchCase::CaseSensitive) ? 3 : 0;
 	}
 	/** B33 LOST-CORNER: 0 when the Raw span between two consecutive stored reports is NORMAL; else (a possible loss) the least time from its AIR end at which a
 	 *  report lost inside it can lie. With one report lost the span is two sender periods, each >= StoreFloorSeconds. The period between the lost report and
@@ -258,7 +261,7 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 					S.T = S.Raw;
 					S.V = FMath::Clamp(A.Speed, 0.0f, MaxTrustedSpeedUu);
 					S.P = A.Location;
-					S.bAir = IsAirborneMotion(A.Motion);   // B33 LOST-CORNER
+					S.Air = AirKindOf(A.Motion);   // B33 LOST-CORNER
 					if (Remote.Samples.Num() > 0)
 					{
 						const FRemote::FSample Last = Remote.Samples.Last();   // a COPY: Samples grows below
@@ -313,7 +316,7 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 								FRemote::FSample Hold = Last;
 								Hold.T = S.T - 0.1;
 								Hold.Raw = S.Raw - 0.1;
-								Hold.Corner = 0.0;   // B33 LOST-CORNER: a synthetic sample ends no real span (it keeps Last's bAir)
+								Hold.Corner = 0.0;   // B33 LOST-CORNER: a synthetic sample ends no real span (it keeps Last's Air)
 								Remote.Samples.Add(Hold);
 							}
 							else if (CVarRemoteRetime.GetValueOnGameThread() != 0 && DRaw > 0.02)
@@ -580,6 +583,12 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 	const FVector Camera = PC != nullptr && PC->PlayerCameraManager != nullptr ? PC->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector;
 	const double NowSeconds = FPlatformTime::Seconds();
 	const bool bDeadReckon = CVarRemoteDeadReckon.GetValueOnGameThread() != 0;
+	// B33 BALLISTIC GATE: every player is the same Dog, so this player's own CharacterMovement says how any of them falls (GetGravityZ = the world's gravity x
+	// GravityScale) and how fast a jump leaves the ground (JumpZVelocity; JumpMaxHoldTime 0: one impulse). No Dog: the world's gravity, and no take-off speed.
+	const ACharacter* LocalCharacter = PC != nullptr ? Cast<ACharacter>(PC->GetPawn()) : nullptr;
+	const UCharacterMovementComponent* LocalMove = LocalCharacter != nullptr ? LocalCharacter->GetCharacterMovement() : nullptr;
+	const double GravityUu = LocalMove != nullptr ? -static_cast<double>(LocalMove->GetGravityZ()) : (World != nullptr ? -static_cast<double>(World->GetGravityZ()) : 0.0);
+	const double JumpSpeedUu = LocalMove != nullptr ? static_cast<double>(LocalMove->JumpZVelocity) : 0.0;
 	for (TPair<FString, FRemote>& Pair : Remotes)
 	{
 		FRemote& R = Pair.Value;
@@ -680,11 +689,71 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 				// XY and every other span are as before. The corner keeps its fraction of the span on the drawn clock (the steady-motion re-time can stretch or
 				// squeeze T but moves both ends), so it always falls inside it.
 				const double RawSpan = Ss[I + 1].Raw - Ss[I].Raw;
-				if (Ss[I + 1].Corner > 0.0 && Ss[I].bAir != Ss[I + 1].bAir && Span > 1e-6 && RawSpan > 1e-6)
+				const bool bAirFirst = Ss[I].Air != 0;
+				if (Ss[I + 1].Corner > 0.0 && bAirFirst != (Ss[I + 1].Air != 0) && Span > 1e-6 && RawSpan > 1e-6)
 				{
-					const double Corner = Span * FMath::Clamp(Ss[I + 1].Corner / RawSpan, 0.0, 1.0);
-					const double Into = Ss[I].bAir ? (RT - Ss[I].T) / Corner : (RT - (Ss[I + 1].T - Corner)) / Corner;
-					Aim.Z = FMath::Lerp(Ss[I].P.Z, Ss[I + 1].P.Z, FMath::Clamp(Into, 0.0, 1.0));
+					// B33 BALLISTIC GATE (r16reh16za): WAS THE LOST REPORT ON THE GROUND? It lies d from the air end, d in [Corner, RawSpan - Corner], and it was a
+					// ground report exactly when d >= Tau: the time from the air report to the touchdown (landing) or from the take-off to the air report (take-off),
+					// by the product's own ballistics. Tau <= Corner: ground whatever d is (the rule as above). Tau >= RawSpan - Corner: airborne whatever d is, so
+					// the stored reports already bracket the corner and today's straight line is kept. Between: the corner AT Tau, where the body met the ground
+					// (a ground lost report lies at or after it, so the landing class stays at the ground). No ballistics (FLY, one air sample, no root): the rule.
+					double Tau = -1.0;
+					if (GravityUu > 0.0 && bAirFirst)
+					{
+						// LANDING: the air run's last (up to 4) stored samples ending at the air one, fitted on the report clock with g known (least squares of
+						// z + g t^2 / 2 = Z0 + V0 t); the touchdown is the later root at the ground sample's height
+						int32 Count = 0;
+						double St = 0.0, Sy = 0.0, Stt = 0.0, Sty = 0.0;
+						for (int32 K = I; K >= 0 && Count < 4 && (Ss[K].Air == 1 || Ss[K].Air == 2) && (K == I || Ss[K].Raw < Ss[K + 1].Raw - 1e-6); --K)
+						{
+							const double Tk = Ss[K].Raw - Ss[I].Raw;
+							const double Yk = Ss[K].P.Z + 0.5 * GravityUu * Tk * Tk;
+							St += Tk;
+							Sy += Yk;
+							Stt += Tk * Tk;
+							Sty += Tk * Yk;
+							++Count;
+						}
+						const double Den = static_cast<double>(Count) * Stt - St * St;
+						if (Count >= 2 && Den > 1e-9)
+						{
+							const double V0 = (static_cast<double>(Count) * Sty - St * Sy) / Den;
+							const double Z0 = (Sy - V0 * St) / static_cast<double>(Count);
+							const double Disc = V0 * V0 + 2.0 * GravityUu * (Z0 - Ss[I + 1].P.Z);
+							Tau = Disc >= 0.0 ? (V0 + FMath::Sqrt(Disc)) / GravityUu : -1.0;
+						}
+					}
+					else if (GravityUu > 0.0)
+					{
+						// TAKE-OFF, from the air report alone (the next one is rarely here yet, and the decision must not change mid-span), h above the ground report:
+						// JUMP = a jump at JumpZVelocity, still rising; FALL at or above = the same jump, past its top; FALL below = a walk-off from rest (a jump down
+						// would put the take-off >= 2 x JumpZVelocity / g back, longer than any one-loss span)
+						const double H = Ss[I + 1].P.Z - Ss[I].P.Z;
+						const double D = JumpSpeedUu * JumpSpeedUu - 2.0 * GravityUu * H;
+						if (Ss[I + 1].Air == 1 && JumpSpeedUu > 0.0 && H >= 0.0 && D >= 0.0)
+						{
+							Tau = (JumpSpeedUu - FMath::Sqrt(D)) / GravityUu;
+						}
+						else if (Ss[I + 1].Air == 2 && H >= 0.0 && JumpSpeedUu > 0.0 && D >= 0.0)
+						{
+							Tau = (JumpSpeedUu + FMath::Sqrt(D)) / GravityUu;
+						}
+						else if (Ss[I + 1].Air == 2 && H < 0.0)
+						{
+							Tau = FMath::Sqrt(-2.0 * H / GravityUu);
+						}
+					}
+					double CornerRaw = Ss[I + 1].Corner;
+					if (Tau > CornerRaw)
+					{
+						CornerRaw = Tau >= RawSpan - CornerRaw ? 0.0 : Tau;
+					}
+					if (CornerRaw > 0.0)
+					{
+						const double Corner = Span * FMath::Clamp(CornerRaw / RawSpan, 0.0, 1.0);
+						const double Into = bAirFirst ? (RT - Ss[I].T) / Corner : (RT - (Ss[I + 1].T - Corner)) / Corner;
+						Aim.Z = FMath::Lerp(Ss[I].P.Z, Ss[I + 1].P.Z, FMath::Clamp(Into, 0.0, 1.0));
+					}
 				}
 			}
 			Rate = CVarRemoteInterpEase.GetValueOnGameThread();
