@@ -2020,6 +2020,45 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     { input: log, encoding: 'utf8', cwd: ROOT },
   );
 
+  // The coder session budget lines (`liveCoderRuntimeBudgetLines`): numbers and one closed token only. They are printed only when the contract declares `limits.coderRuntimeMinutes`.
+  const BUDGET = '  coder session budget: minutes=13 attempt_deadline_ms=1245000 repair_cycles_declared=3 repair_cycles_guaranteed_at_worst_case=3 repair_cycles_if_one_full_attempt_per_dispatch=3 main_path_worst_case_ms=5850000 job_limit_ms=18000000 repair_cycles_reduced=no';
+  const NOTICE = '  coder session budget notice: repair cycles beyond the worst-case guarantee start only while the stage stop line allows; none is removed';
+
+  it('keeps the two coder session budget lines byte for byte', () => {
+    const kept = buildEvidence(`JULIUS LIVE MISSION \u2014 preflight\n${BUDGET}\n${NOTICE}\n`);
+    expect(kept).toContain(`${BUDGET}\n`);
+    expect(kept).toContain(`${NOTICE}\n`);
+  });
+
+  it('keeps NOTHING shaped otherwise: letters in a number field, a secret-shaped token in or after a field, a changed closed token, extra text, a different indent', () => {
+    const secretish = ['sk-' + 'a'.repeat(20), 'ghp_' + 'b'.repeat(30), 'AKIA' + 'C'.repeat(16)];
+    const bad = [
+      BUDGET.replace('minutes=13', 'minutes=13abc'),
+      BUDGET.replace('minutes=13', `minutes=${secretish[0]}`),
+      BUDGET.replace('repair_cycles_reduced=no', 'repair_cycles_reduced=yes'),
+      `${BUDGET} ${secretish[1]}`,
+      `${BUDGET}, note ${secretish[2]}`,
+      BUDGET.replace('job_limit_ms=18000000', 'job_limit_ms=18000000 extra=1'),
+      BUDGET.replace('  coder', '    coder'),
+      `prefix ${BUDGET}`,
+      `${NOTICE} ${secretish[0]}`,
+      NOTICE.replace('none is removed', 'none is removed; token=' + secretish[1]),
+      NOTICE.replace('repair cycles beyond', 'repair cycles beyond ALL'),
+    ];
+    for (const line of bad) {
+      const kept = buildEvidence(`JULIUS LIVE MISSION \u2014 preflight\n${line}\n`);
+      expect(kept, JSON.stringify(line)).not.toContain(line);
+      for (const secret of secretish) expect(kept, JSON.stringify(line)).not.toContain(secret);
+    }
+  });
+
+  it('secret-shaped content stays scrubbed next to the new lines', () => {
+    const secret = 'sk-' + 'd'.repeat(24);
+    const kept = buildEvidence(`JULIUS LIVE MISSION \u2014 preflight\n${BUDGET}\ncause: ${secret}\n  cause: token ${secret}\n`);
+    expect(kept).not.toContain(secret);
+    expect(kept).toContain(BUDGET);
+  });
+
   it('never copies a raw log into the uploaded evidence', () => {
     expect(workflow, 'tee writes raw bytes to disk; ::add-mask:: only redacts the console')
       .not.toMatch(/cp\s+\S*\.log\s+julius-live-evidence/u);

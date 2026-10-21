@@ -1,7 +1,7 @@
 name: Julius real sibling infrastructure
 on:
   pull_request:
-    paths: ['src/relay/mission/julius/**','src/relay/persistence/**','relay-bridge/**','src/relay/workspace/julius-tools/**','scripts/julius-*','.github/julius-*','.github/wait-for-executor.sh','.github/workflows/julius-real-infra.yml','.github/workflows/julius-first-live-mission.yml','package*.json']
+    paths: ['src/relay/mission/julius/**','src/relay/persistence/**','relay-bridge/**','src/relay/workspace/julius-tools/**','scripts/julius-*','.github/julius-*','.github/wait-for-executor.sh','.github/workflows/julius-real-infra.yml','.github/workflows/julius-first-live-mission.yml','package*.json','src/relay/workspace/**','.github/julius-missions/**','.github/julius-learning-registrations/**','.github/julius-mission-slice/**','JULIUS_HARNESS_MANIFEST.md']
   workflow_dispatch:
 permissions:
   contents: read
