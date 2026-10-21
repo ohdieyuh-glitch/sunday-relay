@@ -143,6 +143,7 @@ private:
 		// NORMAL spacing reads only the unmarked ones.
 		struct FSpacing { double Seconds = 0.0; bool bPossibleLoss = false; };
 		TArray<FSpacing> Spacings;
+		double SpacingMedian = 0.0;   // B33 P2 (r16reh16za): the median of Spacings, kept at each insertion (the adaptive delay's cap reads it)
 		// r16reh16i adaptive draw delay: the recent worst-case age of the newest report, and the delay actually used (slewed).
 		double PeakAge = 0.0;
 		double AdaptDelay = -1.0;

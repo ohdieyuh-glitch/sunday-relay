@@ -78,8 +78,11 @@ namespace WonderlandWorldPresenceDetail
 	constexpr double NewerReportSeconds = 0.06;
 	/** B33: the most the sample clock is moved back for the round trip. */
 	constexpr double MaxRttClockSeconds = 0.25;
-	/** A gap between two reports longer than this is a stand, then a move (the Hold sample below), not a delivery gap. */
+	/** A gap between two reports longer than this AFTER A STANDING REPORT is a stand, then a move (the Hold sample below), not a delivery gap. */
 	constexpr double StandGapSeconds = 0.4;
+	/** B33 P2 (r16reh16za): the adaptive delay may rise to this many times the player's own median stored spacing where that is above InterpDelayMax: the newest
+	 *  report's age when the next one arrives is about one sender period + one of this client's periods + the trip, three spacings on matched cadences. */
+	constexpr double DelayCapSpacings = 3.0;
 	// B33 LOST-CORNER (r16reh16za): A LOST REPORT CUTS A VERTICAL CORNER. The server keeps ONE report per player and answers each view with it (sunday-relay
 	// world-presence.ts:321-335, 346-360), so a report the sender stores and overwrites between two of this client's views never reaches this client (whenever
 	// one of this client's view intervals spans two of the sender's stores). The height is drawn as the straight line between the reports that DID arrive: when
@@ -107,6 +110,11 @@ namespace WonderlandWorldPresenceDetail
 	/** The spacings kept per player (two thirds of the 24 kept samples), and the fewest that must be known before any span is judged. */
 	constexpr int32 LostCornerHistory = 16;
 	constexpr int32 LostCornerMinHistory = 4;
+	inline double MedianOfSorted(TArrayView<const double> Sorted)
+	{
+		const int32 N = Sorted.Num();
+		return N == 0 ? 0.0 : (N % 2 == 1 ? Sorted[N / 2] : 0.5 * (Sorted[N / 2 - 1] + Sorted[N / 2]));
+	}
 	/** The sender's airborne motions: ReportLocalPlayer (WonderlandSocialSubsystem.cpp) sends JUMP (rising) or FALL exactly while its CharacterMovement
 	 *  IsFalling(); FLY is the wire's third off-the-ground motion (WORLD_MOTIONS, world-presence.ts:35), never sent by this build. 0 = on the ground. */
 	inline uint8 AirKindOf(const FString& Motion)
@@ -272,18 +280,23 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 						else
 						{
 							const double DRaw = S.Raw - Last.Raw;
+							// B33 P1 (r16reh16za): A STAND IS SAID BY THE REPORT, NOT BY THE GAP. Only a gap after a STANDING report (on the ground, speed under
+							// MinMovingSpeedUu) is a stand, then a move. On a hosted link a 0.4 s gap is usually a lost report after a moving or airborne one (two
+							// periods of 0.22 s), and holding THAT report for the gap hung a landing figure in the air; with ReportTimeSamples a real stand makes no gap.
+							const bool bStandGap = DRaw > StandGapSeconds && Last.Air == 0 && Last.V < MinMovingSpeedUu;
 							{
 								// HOW OLD the newest report was when its successor arrived = the draw delay that would just have avoided a hold. Measured here, at
-								// arrival, so a player who stands still (no new reports) does not inflate it; a stand/start gap (> 0.6 s) is not a delivery gap.
+								// arrival, so a player who stands still (no new reports) does not inflate it; a stand/start gap is not a delivery gap. B33 P2: every
+								// other arrival counts however old (on a hosted link 5 % are over 0.6 s, and dropping them left the figure drawn past its newest report).
 								const double Avail = FPlatformTime::Seconds() - Last.T;
-								if (Avail > 0.0 && Avail <= 0.6)
+								if (Avail > 0.0 && !bStandGap)
 								{
 									Remote.PeakAge = FMath::Max(Remote.PeakAge, Avail);
 								}
 							}
 							// B33 LOST-CORNER (r16reh16za): judge this span against the player's own stored spacing, then remember it. A stand/start gap is
 							// neither judged nor remembered (the Hold below makes its spans).
-							if (DRaw <= StandGapSeconds)
+							if (!bStandGap)
 							{
 								TArray<double, TInlineAllocator<LostCornerHistory>> Sorted;
 								double Largest = 0.0;
@@ -297,7 +310,7 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 								}
 								Sorted.Sort();
 								const int32 N = Sorted.Num();
-								const double Median = N == 0 ? 0.0 : (N % 2 == 1 ? Sorted[N / 2] : 0.5 * (Sorted[N / 2 - 1] + Sorted[N / 2]));
+								const double Median = MedianOfSorted(Sorted);
 								// the median is a normal period too, so it bounds the largest from below: after a change of period the unmarked spacings can all
 								// be older and shorter. A possible loss still counts in the median, or a longer period would lock itself out of the history.
 								S.Corner = LostCornerSecondsFor(N, Median, FMath::Max(Largest, Median), DRaw);
@@ -309,8 +322,15 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 								{
 									Remote.Spacings.RemoveAt(0, Remote.Spacings.Num() - LostCornerHistory, EAllowShrinking::No);
 								}
+								Sorted.Reset();
+								for (const FRemote::FSpacing& Known : Remote.Spacings)
+								{
+									Sorted.Add(Known.Seconds);
+								}
+								Sorted.Sort();
+								Remote.SpacingMedian = MedianOfSorted(Sorted);   // B33 P2
 							}
-							if (S.Raw - Last.Raw > StandGapSeconds)
+							if (bStandGap)
 							{
 								// stood still, then moved: hold the old place until just before the move, do not slide across the whole gap
 								FRemote::FSample Hold = Last;
@@ -624,8 +644,11 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 				// It RISES at most 10 percent of real time and FALLS at most 5 percent, so a change never reads as a speed change.
 				const double Dt = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.25);
 				R.PeakAge = FMath::Max(0.0, R.PeakAge - 0.05 * Dt);   // raised on report arrival (see the sample insertion); only decays here
+				// B33 P2 (r16reh16za): the cap is InterpDelayMax, raised to three of this player's own median stored spacings where those are longer (a hosted link)
+				const double DelayCap = FMath::Max(static_cast<double>(CVarRemoteInterpDelayMax.GetValueOnGameThread()),
+					R.Spacings.Num() >= LostCornerMinHistory ? DelayCapSpacings * R.SpacingMedian : 0.0);
 				const double Target = FMath::Clamp(R.PeakAge + static_cast<double>(CVarRemoteInterpMargin.GetValueOnGameThread()),
-					static_cast<double>(CVarRemoteInterpDelayMin.GetValueOnGameThread()), static_cast<double>(CVarRemoteInterpDelayMax.GetValueOnGameThread()));
+					static_cast<double>(CVarRemoteInterpDelayMin.GetValueOnGameThread()), DelayCap);
 				if (R.AdaptDelay < 0.0)
 				{
 					R.AdaptDelay = FMath::Max(Delay, Target);   // start safe: the fixed delay, or more if the first reports are already older
