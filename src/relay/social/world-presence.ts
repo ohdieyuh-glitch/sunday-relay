@@ -82,6 +82,220 @@ export interface WorldState {
    * server." -- instead of refused with "Join a world first". Never names a block.
    */
   readonly removals?: Readonly<Record<SocialUserId, number>>;
+  /**
+   * THE TRANSPORT RING (r16reh18). Governed by TRANSPORT_RING_DESIGN_T1_v1.md (0a710c29) and v2 (c72f1ea8), as the reviewer ruled
+   * them: T1 d63c15 (APPROVED WITH REQUIRED CHANGES) and T2 d786aa (PASS subject to the T2a delta made here). Per player, the last accepted position reports, oldest first, so a viewer whose polls are slower than the
+   * reports, or who lost an answer, can be served the reports between two of its views instead of only the newest. In memory only,
+   * like the avatar it belongs to: dropped with it, and a restart empties it. Absent until somebody reports.
+   */
+  readonly trails?: Readonly<Record<SocialUserId, readonly TrailSample[]>>;
+  /**
+   * PAIR FLOORS (T1 v1 section 2.2): floors[S][V] = the serial number of the last change to whether S's position may be shown to V.
+   * None of S's ring entries at or below it is ever served to V. Set only for the (viewer, subject) pairs whose answer changed, so no
+   * other viewer's answer moves (K13). Pruned below the oldest kept entry; dropped with either player's membership.
+   */
+  readonly floors?: Readonly<Record<SocialUserId, Readonly<Record<SocialUserId, number>>>>;
+  /** JOIN EPOCHS (K3): joinedSeq[V] = the serial number of V's arrival in their current context. Nothing older is served to V. */
+  readonly joinedSeq?: Readonly<Record<SocialUserId, number>>;
+  /**
+   * THE INTERNAL SERIAL NUMBER (K4, P6): the last one issued. Ring entries, floors and epochs are ordered by it, never by time:
+   * request times are stamped at arrival, but operations run later, one at a time. Never served, never stored.
+   */
+  readonly seq?: number;
+}
+
+/** The ring keeps at most this many accepted reports per player (at the 100 ms store floor, at least 0.8 s of movement). */
+export const WORLD_TRAIL_MAX_ENTRIES = 8;
+/** ...and none older than this: an entry this old is dropped when the next report is stored, and is never served. */
+export const WORLD_TRAIL_MAX_AGE_MS = 2_000;
+/**
+ * AT-LEAST-ONCE (T1 v1 section 2.5, P4): entries stored up to this long before the client's cursor are served again, so a report
+ * stored in the cursor's millisecond, or one whose request arrived before the view's but ran after it, is not lost. Stored reports
+ * are at least the 100 ms floor apart, so that is at most one repeat per figure; the client drops it by (userId, asOfMs - ageMs).
+ */
+export const WORLD_TRAIL_SLACK_MS = 100;
+
+/**
+ * ONE ACCEPTED REPORT IN A PLAYER'S RING: exactly the position fields the stored report already carries, when the server stored it,
+ * where (`contextId`, checked again for every entry at serve time) and its serial number (`seq`). Neither of the last two is served.
+ */
+export interface TrailSample {
+  readonly contextId: string;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly yaw: number;
+  readonly speed: number;
+  readonly motion: WorldMotion;
+  readonly reportedAtMs: number;
+  readonly seq: number;
+}
+
+/** One entry of a served trail: the position fields of the figure's own entry, and how old it is. No id, name, skin or serial. */
+export interface TrailPoint {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly yaw: number;
+  readonly speed: number;
+  readonly motion: WorldMotion;
+  readonly ageMs: number;
+}
+
+/**
+ * The ring's next internal serial number (world.seq). Taken inside the store's one-at-a-time queue, never from a clock. Not to be
+ * confused with WorldState.nextSerial, the invitation-id counter (winv_<n>), which this does not touch.
+ */
+function nextRingSeq(world: WorldState): number {
+  return (world.seq ?? 0) + 1;
+}
+
+/** An own-key read of a per-player map (the SS:83-90 rule: a plain object answers for keys it never stored). */
+function own<T>(map: Readonly<Record<string, T>> | undefined, key: string): T | undefined {
+  return map !== undefined && Object.hasOwn(map, key) ? map[key] : undefined;
+}
+
+/**
+ * A REPORT ENTERS THE RING ONCE, AND IN ORDER. Stored reports are stamped by the server's clock and are at least the 100 ms floor
+ * apart, so a resent report is a later, separate report or is not stored at all; this holds the ring to that whatever the caller:
+ * a sample not strictly newer than the ring's newest (a duplicate, or out of order) is never admitted. Then the ring keeps only the
+ * last WORLD_TRAIL_MAX_ENTRIES within WORLD_TRAIL_MAX_AGE_MS of the newest.
+ */
+export function appendToTrail(trail: readonly TrailSample[] | undefined, sample: TrailSample): readonly TrailSample[] {
+  const ring = trail ?? [];
+  const newest = ring[ring.length - 1];
+  if (newest !== undefined && sample.reportedAtMs <= newest.reportedAtMs) return ring;
+  return [...ring, sample].filter((e) => sample.reportedAtMs - e.reportedAtMs <= WORLD_TRAIL_MAX_AGE_MS).slice(-WORLD_TRAIL_MAX_ENTRIES);
+}
+
+/**
+ * THE ONE DECISION whether a subject's position may be shown to a viewer who shares their context (WP:348-352, extracted unchanged):
+ * not themself, no block either way, and not hidden by the subject's own presence choice (P1). worldViewFor serves figures by it, and
+ * the pair floors are set wherever an operation changed its answer, so the two can never disagree.
+ */
+export function positionVisibleTo(social: SocialState, viewerId: SocialUserId, subjectId: SocialUserId): boolean {
+  return subjectId !== viewerId && !hasBlocked(social, subjectId, viewerId) && !hasBlocked(social, viewerId, subjectId) && !presenceHiddenFrom(social, viewerId, subjectId);
+}
+
+/**
+ * TEST-ONLY COUNTERS of one noteAudienceChange (T1 v2 section 4, R38): what the change cost. Never read by the server.
+ *   membersCompared: user-record reference compares; rowsScanned: friendship and block rows and party records looked at;
+ *   pairEvaluations: (viewer, subject) pairs whose answer was computed before and after; keyComputations: per-player audience keys
+ *   (always 0: v2 computes none -- the prototype's key diff did, over every ring holder, on every state change).
+ */
+export interface AudienceChangeStats {
+  membersCompared: number;
+  rowsScanned: number;
+  pairEvaluations: number;
+  keyComputations: number;
+}
+
+/**
+ * THE TOUCHED SET, FROM THE RECORDS THAT CHANGED (T1 v2 section 2; ruling d63c15 P2-1, P2-3). positionVisibleTo(V, S) reads only:
+ * S's user record (whether it exists, its availability, its presence audience), the friendship between V and S, partyOf(V) and that
+ * party's members (partyOf asks for a player's FIRST party, by insertion order), and the blocks between them. So a pair's answer can
+ * change only if one of its two players is in this set:
+ *   - U_users: every player whose user record OBJECT changed (created, removed, presence or privacy) -- among `among` when given (the
+ *     members of the contexts: a non-member is in no pair), else among every record;
+ *   - U_friend, U_block: both ends of every friendship and every block row added or removed;
+ *   - U_party: every member, before AND after, of every party whose record changed, was created or was removed.
+ * Ring or no ring: a viewer who has not reported yet is touched as much as anyone (the P2-1 back-fill). The cost is the change's: an
+ * operation that leaves the users, friendships, blocks and parties containers as they were costs four reference compares.
+ */
+export function touchedPlayers(before: SocialState, after: SocialState, among?: Iterable<SocialUserId>, stats?: AudienceChangeStats): Set<SocialUserId> {
+  const touched = new Set<SocialUserId>();
+  if (before === after) return touched;
+  if (before.users !== after.users) {
+    const ids = among ?? new Set([...Object.keys(before.users), ...Object.keys(after.users)]);
+    for (const id of ids) {
+      if (stats !== undefined) stats.membersCompared += 1;
+      if (own(before.users, id) !== own(after.users, id)) touched.add(id);
+    }
+  }
+  const ends = <T>(was: readonly T[], now: readonly T[], key: (x: T) => string, pair: (x: T) => readonly [SocialUserId, SocialUserId]) => {
+    if (was === now) return;
+    if (stats !== undefined) stats.rowsScanned += was.length + now.length;
+    const a = new Set(was.map(key));
+    const b = new Set(now.map(key));
+    for (const x of was) if (!b.has(key(x))) pair(x).forEach((id) => touched.add(id));
+    for (const x of now) if (!a.has(key(x))) pair(x).forEach((id) => touched.add(id));
+  };
+  ends(before.friendships, after.friendships, (f) => `${f.userA}|${f.userB}`, (f) => [f.userA, f.userB]);
+  ends(before.blocks, after.blocks, (b) => `${b.blockerId}>${b.blockedId}`, (b) => [b.blockerId, b.blockedId]);
+  if (before.parties !== after.parties) {
+    for (const id of new Set([...Object.keys(before.parties), ...Object.keys(after.parties)])) {
+      if (stats !== undefined) stats.rowsScanned += 1;
+      const was = own(before.parties, id);
+      const now = own(after.parties, id);
+      if (was === now) continue;
+      for (const m of [...(was?.members ?? []), ...(now?.members ?? [])]) touched.add(m.userId);
+    }
+  }
+  return touched;
+}
+
+/**
+ * THE PAIR GATE, ONCE PER OPERATION (T1 v1 section 2.2, P3; v2 sections 2-4). With `before` the store's state before the operation's
+ * reconciliation and `after` its outcome state, every touched player P in a context and every other member M there are checked both
+ * ways (M sees P, P sees M): where positionVisibleTo changed either way, the subject's ring is floored FOR that viewer at a fresh
+ * serial number, so nothing the subject stored before the change is ever served to that viewer. Nobody else's answer moves, so no
+ * third party can time the change (K13). A change that moves no pair's answer floors nothing. No clock is read: serial order only (K4).
+ * Cost: touchedPlayers' plus at most 2(c - 1) pair evaluations per touched member (c <= 32). Only a world is returned: the social
+ * state, the audience told and eventOp are never touched. The same world when no pair changed.
+ */
+export function noteAudienceChange(world: WorldState, before: SocialState, after: SocialState, stats?: AudienceChangeStats): WorldState {
+  // O(1) when no audience collection changed (a mute, a message, a read, a request): not a single context, ring or player is looked at
+  if (before === after || (before.users === after.users && before.friendships === after.friendships && before.blocks === after.blocks && before.parties === after.parties)) return world;
+  const contexts = Object.values(world.contexts);
+  const members = before.users === after.users ? undefined : contexts.flatMap((c) => c.memberIds);
+  const touched = touchedPlayers(before, after, members ?? [], stats);
+  if (touched.size === 0) return world;
+  const changed = new Map<string, readonly [SocialUserId, SocialUserId]>();
+  const check = (viewerId: SocialUserId, subjectId: SocialUserId) => {
+    // a floor only gates entries that exist: anything the subject stores later takes a larger serial number
+    if ((own(world.trails, subjectId) ?? []).length === 0) return;
+    if (stats !== undefined) stats.pairEvaluations += 1;
+    if (positionVisibleTo(before, viewerId, subjectId) !== positionVisibleTo(after, viewerId, subjectId)) changed.set(`${subjectId}<-${viewerId}`, [subjectId, viewerId]);
+  };
+  for (const playerId of touched) {
+    const context = contexts.find((c) => c.memberIds.includes(playerId));
+    if (context === undefined) continue;
+    for (const memberId of context.memberIds) {
+      if (memberId === playerId) continue;
+      check(memberId, playerId);
+      check(playerId, memberId);
+    }
+  }
+  if (changed.size === 0) return world;
+  const fresh = nextRingSeq(world);
+  // PROTOTYPE-SAFE (T2 d786aa R2): player ids are keys, so every map is built with Object.fromEntries or a computed-key literal --
+  // both define OWN properties, so an id such as __proto__ is a floor like any other -- never by assignment, which would set the
+  // object's prototype instead.
+  const rows = new Map<SocialUserId, Record<SocialUserId, number>>();
+  for (const [subjectId, viewerId] of changed.values()) rows.set(subjectId, { ...(rows.get(subjectId) ?? own(world.floors, subjectId) ?? {}), [viewerId]: fresh });
+  const floors = Object.fromEntries([...Object.entries(world.floors ?? {}), ...rows]);
+  return { ...world, seq: fresh, floors };
+}
+
+/** Floors of `subjectId` that exclude nothing any more (below the oldest entry it keeps) are dropped. */
+function pruneFloors(floors: WorldState['floors'], subjectId: SocialUserId, oldestSeq: number): WorldState['floors'] {
+  const mine = own(floors, subjectId);
+  if (floors === undefined || mine === undefined) return floors;
+  return { ...floors, [subjectId]: Object.fromEntries(Object.entries(mine).filter(([, f]) => f >= oldestSeq)) };
+}
+
+/** This player's ring, their floors (as subject AND as viewer) and their join epoch, gone: they left their context. */
+function withoutRing(world: WorldState, userId: SocialUserId): WorldState {
+  const strip = <T>(map: Readonly<Record<SocialUserId, T>> | undefined): Readonly<Record<SocialUserId, T>> | undefined =>
+    map === undefined || !Object.hasOwn(map, userId) ? map : Object.fromEntries(Object.entries(map).filter(([id]) => id !== userId));
+  if (world.trails === undefined && world.floors === undefined && world.joinedSeq === undefined) return world;
+  const floors = world.floors === undefined ? undefined : Object.fromEntries(Object.entries(world.floors).filter(([id]) => id !== userId).map(([id, row]) => [id, strip(row) ?? {}]));
+  return {
+    ...world,
+    ...(world.trails === undefined ? {} : { trails: strip(world.trails) }),
+    ...(floors === undefined ? {} : { floors }),
+    ...(world.joinedSeq === undefined ? {} : { joinedSeq: strip(world.joinedSeq) }),
+  };
 }
 
 /**
@@ -113,14 +327,25 @@ function withoutMember(world: WorldState, userId: SocialUserId): WorldState {
     contexts[c.contextId] = members.length === c.memberIds.length ? c : { ...c, memberIds: members };
   }
   const { [userId]: _gone, ...avatars } = world.avatars;
-  return { ...world, contexts, avatars };
+  // THE RING GOES WITH THE AVATAR (a leave, a move to another context, the stale sweep, a block's removal from a private server, a
+  // sign-out's leave), with the player's floors and join epoch: positions stored in one stay are never served in another.
+  return withoutRing({ ...world, contexts, avatars }, userId);
 }
 
 function withMember(world: WorldState, context: WorldContext, userId: SocialUserId): WorldState {
   const moved = world.removals?.[userId] === undefined ? world : { ...world, removals: Object.fromEntries(Object.entries(world.removals ?? {}).filter(([id]) => id !== userId)) };
   const left = withoutMember(moved, userId);
   const current = left.contexts[context.contextId] ?? context;
-  return { ...left, contexts: { ...left.contexts, [context.contextId]: { ...current, memberIds: [...current.memberIds, userId] } } };
+  // THE ARRIVING VIEWER'S EPOCH (K3, P2): an arrival changes what the newcomer may see of every member already there, with no act of
+  // theirs, so nothing stored before it is ever served to the NEWCOMER, whatever cursor they send. Nobody else's answer moves: a
+  // hidden arrival stays untold (P1; clearing the members' rings would show every member the moment somebody arrived, K12).
+  const epoch = nextRingSeq(left);
+  return {
+    ...left,
+    seq: epoch,
+    joinedSeq: { ...(left.joinedSeq ?? {}), [userId]: epoch },
+    contexts: { ...left.contexts, [context.contextId]: { ...current, memberIds: [...current.memberIds, userId] } },
+  };
 }
 
 /** Members who are still reporting (or just joined and have not reported yet). */
@@ -332,24 +557,63 @@ export function reportAvatar(world: WorldState, actorId: SocialUserId, report: A
     skinId: report.skinId,
     reportedAtMs: nowMs,
   };
-  return { ok: true, value: { ...world, avatars: { ...world.avatars, [actorId]: avatar } } };
+  // the accepted report also enters the player's ring (a report inside the floor above was not accepted, so it never does); named
+  // field by field, so a field added to the avatar one day does not enter the ring with it
+  const seq = nextRingSeq(world);
+  const sample: TrailSample = { contextId: avatar.contextId, x: avatar.x, y: avatar.y, z: avatar.z, yaw: avatar.yaw, speed: avatar.speed, motion: avatar.motion, reportedAtMs: avatar.reportedAtMs, seq };
+  const trail = appendToTrail(own(world.trails, actorId), sample);
+  // floors on this player that exclude nothing any more go (at most one per co-member is ever left)
+  const floors = pruneFloors(world.floors, actorId, trail[0].seq);
+  return { ok: true, value: { ...world, seq, avatars: { ...world.avatars, [actorId]: avatar }, trails: { ...(world.trails ?? {}), [actorId]: trail }, ...(floors === undefined ? {} : { floors }) } };
 }
 
 /** What one viewer sees of their context: who is there and where, minus anyone either side has blocked. */
 export interface WorldView {
   readonly context: { readonly contextId: string; readonly kind: SocialServerKind; readonly serverName: string; readonly authority: WorldContext['authority']; readonly population: number; readonly capacity: number } | null;
-  readonly avatars: readonly (AvatarState & { readonly displayName: string; readonly ageMs: number })[];
+  /** `trail` only when the viewer asked with a cursor and the ring holds reports for them (see worldViewFor). */
+  readonly avatars: readonly (AvatarState & { readonly displayName: string; readonly ageMs: number; readonly trail?: readonly TrailPoint[] })[];
   /** Invitations into a world waiting for this viewer. */
   readonly invites: readonly { readonly inviteId: string; readonly fromUserId: SocialUserId; readonly fromName: string; readonly serverName: string; readonly expiresInMs: number }[];
+  /** Only when the viewer asked with a cursor: the server time of this answer, which the client sends back as its next `sinceMs`. */
+  readonly asOfMs?: number;
 }
 
-export function worldViewFor(world: WorldState, social: SocialState, viewerId: SocialUserId, nowMs: number): WorldView {
+/**
+ * THE TRAIL OF ONE FIGURE THE VIEWER IS ALREADY SHOWN (T1 v1 section 2.4). From the figure's ring, oldest first, the entries:
+ *   - (b, c) after the GATE: S's floor for this viewer and the viewer's own join epoch, in serial order -- nothing stored before the
+ *     last change to whether S may be shown to V, or before V arrived (no epoch: nothing at all);
+ *   - (d) stored in the viewer's context (checked for every entry; the ring is also dropped on any move);
+ *   - (e) newer than the client's echoed cursor less WORLD_TRAIL_SLACK_MS (at least once), and never older than
+ *     WORLD_TRAIL_MAX_AGE_MS -- so a cursor of 0 or a forged old one reaches no further back than the bounded ring, and a future one
+ *     reaches nothing -- and older than the figure's own entry, which already carries the newest report.
+ * Each entry carries only the position fields of the figure's own entry, and its age. Privacy rests on the gate, never on the cursor.
+ */
+function trailFor(world: WorldState, contextId: string, viewerId: SocialUserId, figure: AvatarState, sinceMs: number, nowMs: number): TrailPoint[] {
+  const epoch = own(world.joinedSeq, viewerId) ?? Number.POSITIVE_INFINITY;
+  const floor = own(own(world.floors, figure.userId), viewerId) ?? 0;
+  const gate = Math.max(epoch, floor);
+  const lower = Math.max(sinceMs - WORLD_TRAIL_SLACK_MS, nowMs - WORLD_TRAIL_MAX_AGE_MS);
+  return (own(world.trails, figure.userId) ?? [])
+    .filter((e) => e.seq > gate)
+    .filter((e) => e.contextId === contextId)
+    .filter((e) => e.reportedAtMs > lower && e.reportedAtMs < figure.reportedAtMs)
+    .map((e) => ({ x: e.x, y: e.y, z: e.z, yaw: e.yaw, speed: e.speed, motion: e.motion, ageMs: nowMs - e.reportedAtMs }));
+}
+
+/**
+ * `sinceMs` (T1 v1 section 3; the world.state operation reads it from the URL query, a whole number): absent, or the viewer in no
+ * context (the removal answer, P5), the answer is today's, byte for byte -- no `asOfMs`, no `trail`. Otherwise the answer adds
+ * `asOfMs`, and each figure the viewer is shown -- through exactly today's decision, positionVisibleTo, nothing else -- carries a
+ * `trail` when its gated ring holds reports after the cursor (trailFor). No figure the viewer is not shown carries anything: the
+ * trail rides on the figure's own entry. A view writes nothing: no ring, floor, epoch or serial number moves.
+ */
+export function worldViewFor(world: WorldState, social: SocialState, viewerId: SocialUserId, nowMs: number, sinceMs?: number): WorldView {
   const context = contextOf(world, viewerId);
   const unwalled = (id: SocialUserId) => id !== viewerId && !hasBlocked(social, id, viewerId) && !hasBlocked(social, viewerId, id);
   // WHO IS SEEN IN THE WORLD (the founder, 10-04, P1): a player hiding their presence from this viewer -- appearing offline, or a
   // presence audience that leaves the viewer out -- is not shown: no figure, no name, not counted. Friends follow the player's own
   // settings, through the one presence rule. An invitation is the sender's own act, so it is judged by the wall alone.
-  const visible = (id: SocialUserId) => unwalled(id) && !presenceHiddenFrom(social, viewerId, id);
+  const visible = (id: SocialUserId) => positionVisibleTo(social, viewerId, id);
   const avatars =
     context === undefined
       ? []
@@ -357,7 +621,12 @@ export function worldViewFor(world: WorldState, social: SocialState, viewerId: S
           .filter(visible)
           .map((id) => world.avatars[id])
           .filter((a): a is AvatarState => a !== undefined && nowMs - a.reportedAtMs <= WORLD_AVATAR_STALE_MS && a.contextId === context.contextId)
-          .map((a) => ({ ...a, displayName: userById(social, a.userId)?.profile.displayName ?? 'Player', ageMs: nowMs - a.reportedAtMs }));
+          .map((a) => {
+            const entry = { ...a, displayName: userById(social, a.userId)?.profile.displayName ?? 'Player', ageMs: nowMs - a.reportedAtMs };
+            if (sinceMs === undefined) return entry;
+            const trail = trailFor(world, context.contextId, viewerId, a, sinceMs, nowMs);
+            return trail.length === 0 ? entry : { ...entry, trail };
+          });
   const invites = world.invites
     .filter((i) => i.toUserId === viewerId && i.expiresAtMs > nowMs && unwalled(i.fromUserId) && world.contexts[i.contextId] !== undefined && !walledFromOwner(social, world.contexts[i.contextId], viewerId))
     .map((i) => ({
@@ -370,7 +639,7 @@ export function worldViewFor(world: WorldState, social: SocialState, viewerId: S
   // THE COUNT IS A ROSTER TOO: only the viewer and the live members they may see. Counting a member behind the viewer's wall
   // told them somebody hidden was there -- and that member leaving or arriving moved it (Second's R16 run, 10-04).
   const population = context === undefined ? 0 : liveMembers(world, { ...context, memberIds: context.memberIds.filter((id) => id === viewerId || visible(id)) }, nowMs);
-  return {
+  const view: WorldView = {
     context:
       context === undefined
         ? null
@@ -378,4 +647,5 @@ export function worldViewFor(world: WorldState, social: SocialState, viewerId: S
     avatars,
     invites,
   };
+  return sinceMs === undefined || context === undefined ? view : { ...view, asOfMs: nowMs };
 }
