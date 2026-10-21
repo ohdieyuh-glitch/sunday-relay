@@ -492,6 +492,8 @@ void FWonderlandSocialLiveService::Call(const FString& Verb, const FString& Path
 			bSessionEnded = true;
 			LastError = TEXT("the server ended this session");
 			UE_LOG(LogTemp, Display, TEXT("WLSOCIAL live: HTTP 401 -- the server ended this session"));
+			UE_LOG(LogTemp, Display, TEXT("WLSTAMP mark=401 viewer=%s | %s"), bHasSnapshot && !Snapshot.ViewerId.IsEmpty() ? *Snapshot.ViewerId : TEXT("-"),
+				*WonderlandSocialFreshness::EventStamp());   // r16reh18 Q-T1 (A): companion stamp (log only): the viewer's own id (the server's viewerId), "-" before any snapshot
 			SessionEndedEvent.Broadcast();
 		}
 		FString Text = Response->GetContentAsString();
@@ -756,6 +758,7 @@ void FWonderlandSocialLiveService::NotePopulation()
 	LastPopulationLine = FString::Printf(TEXT("WLWORLD population %d in %s (%s)"), WorldView.Population, *WorldView.ContextId, *WorldView.ServerName);
 	PopulationLineCount += 1;
 	UE_LOG(LogTemp, Display, TEXT("%s"), *LastPopulationLine);
+	UE_LOG(LogTemp, Display, TEXT("WLSTAMP mark=pop context=%s | %s"), *WorldView.ContextId, *WonderlandSocialFreshness::EventStamp());   // r16reh18 Q-T1 (A): companion stamp (log only)
 }
 
 void FWonderlandSocialLiveService::TickWorld()
@@ -1095,6 +1098,7 @@ void FWonderlandSocialLiveService::HandleJoinAnswer(int32 Seq, const FString& Ta
 		WorldArg = Arg;
 		UE_LOG(LogTemp, Display, TEXT("WLWORLD joined %s (%s), %d of %d here%s"), *WorldView.ContextId, *WorldView.ServerName, WorldView.Population,
 			WorldView.Capacity, bAutomatic ? TEXT(" (automatically)") : TEXT(""));
+		UE_LOG(LogTemp, Display, TEXT("WLSTAMP mark=join context=%s | %s"), *WorldView.ContextId, *WonderlandSocialFreshness::EventStamp());   // r16reh18 Q-T1 (A): companion stamp (log only)
 		NotePopulation();
 		WorldChanged.Broadcast();
 	}

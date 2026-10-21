@@ -11,6 +11,7 @@
 #include "RelayDogPresentation.h"
 #include "WonderlandCompanionEmbodiment.h"
 #include "WonderlandGrip.h"
+#include "WonderlandSocialLive.h"   // r16reh18 Q-T1 (A): WonderlandSocialFreshness::EventStamp
 
 // Named, not anonymous: the module is one unity translation unit.
 namespace WonderlandWorldPresenceDetail
@@ -379,6 +380,7 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 			// R16 EVIDENCE: a figure leaving this player's world is said once, by id (a leave, a silence, or a block).
 			UE_LOG(LogTemp, Display, TEXT("WLWORLD player %s left this view (%s)"), *It.Key(),
 				Present.Contains(It.Key()) ? TEXT("figure lost") : TEXT("no longer in the view"));
+			UE_LOG(LogTemp, Display, TEXT("WLSTAMP mark=left player=%s | %s"), *It.Key(), *WonderlandSocialFreshness::EventStamp());   // r16reh18 Q-T1 (A): companion stamp (log only)
 			Remove(It.Value());
 			It.RemoveCurrent();
 		}
@@ -517,6 +519,7 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 			// C6 F-3: the pinned L-APP shape (TF-4 r3.1 reads the id) with no display name in the log
 			UE_LOG(LogTemp, Display, TEXT("WLWORLD player %s (%s) appeared at (%.0f, %.0f, %.0f)"), *A.UserId, TEXT("name not logged"),
 				A.Location.X, A.Location.Y, A.Location.Z);
+			UE_LOG(LogTemp, Display, TEXT("WLSTAMP mark=app player=%s | %s"), *A.UserId, *WonderlandSocialFreshness::EventStamp());   // r16reh18 Q-T1 (A): companion stamp (log only)
 		}
 		// THEIR SKIN, THROUGH THE REGISTRY: a skin this build does not know keeps the figure it has.
 		if (Remote.SkinId != A.SkinId)

@@ -5713,12 +5713,36 @@ TSharedPtr<SWidget> UWonderlandUiSubsystem::OverlayWidget(EOverlay Which) const
 	return nullptr;
 }
 
+namespace WonderlandUiStampDetail
+{
+	/** r16reh18 Q-T1 (A): the viewer's own id for the quit line's companion stamp, an id only (never a name or a login): the live session's viewerId
+	 *  (as the 401 companion), else the signed-in participant id (as the SIGNED_IN companion), else "-". Reads only; changes nothing. */
+	FString ViewerIdForStamp(const ULocalPlayer* Player)
+	{
+		const UGameInstance* Instance = Player != nullptr ? Player->GetGameInstance() : nullptr;
+		const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+		if (Social == nullptr)
+		{
+			return TEXT("-");
+		}
+		const FWonderlandSocialSnapshot* Snapshot = Social->GetSnapshot();
+		if (Snapshot != nullptr && !Snapshot->ViewerId.IsEmpty() && Social->GetService() != nullptr && !Social->GetService()->IsDevelopmentPreview())
+		{
+			return Snapshot->ViewerId;
+		}
+		const FString& Participant = Social->GetSignInView().ParticipantId;
+		return Participant.IsEmpty() ? FString(TEXT("-")) : Participant;
+	}
+}
+
 void UWonderlandUiSubsystem::QuitWonderland()
 {
 	// A GRACEFUL EXIT, the same one the window's X takes: the engine flushes the player's config (settings, colours)
 	// on the way out. Every other save in Wonderland is already on disk -- contracts, skin, territories are written
 	// the moment they change -- so there is nothing to ask the player to save first.
 	UE_LOG(LogWonderlandUi, Display, TEXT("WLUI quit chosen from the menu"));
+	UE_LOG(LogWonderlandUi, Display, TEXT("WLSTAMP mark=quit viewer=%s | %s"), *WonderlandUiStampDetail::ViewerIdForStamp(GetLocalPlayer<ULocalPlayer>()),
+		*WonderlandSocialFreshness::EventStamp());   // r16reh18 Q-T1 (A): companion stamp (log only)
 	if (APlayerController* Controller = BoundController.Get())
 	{
 		Controller->ConsoleCommand(TEXT("quit"));

@@ -2,6 +2,7 @@
 
 #include "WonderlandBeta.h"
 #include "WonderlandJuliusStream.h"
+#include "WonderlandSocialLive.h"   // r16reh18 Q-T1 (A): WonderlandSocialFreshness::EventStamp
 
 #include "Dom/JsonObject.h"
 #include "HAL/IConsoleManager.h"
@@ -156,6 +157,12 @@ void FWonderlandSocialSignIn::SetState(EWonderlandSignInState State, const FStri
 		View.bTestIdentity = false;
 	}
 	UE_LOG(LogTemp, Display, TEXT("WLSOCIAL signin %s"), *Describe());
+	if (View.State == EWonderlandSignInState::SignedIn)
+	{
+		// r16reh18 Q-T1 (A): the SIGNED_IN line's companion stamp (log only): the participant id of the line above, never the @login (OBS-1)
+		UE_LOG(LogTemp, Display, TEXT("WLSTAMP mark=signin viewer=%s | %s"), View.ParticipantId.IsEmpty() ? TEXT("-") : *View.ParticipantId,
+			*WonderlandSocialFreshness::EventStamp());
+	}
 	Changed.Broadcast();
 }
 
