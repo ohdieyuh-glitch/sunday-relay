@@ -21,8 +21,8 @@ class AWonderlandCompanionEmbodiment;
 class UTextRenderComponent;
 class UWorld;
 
-/** r16reh18 TRANSPORT RING (PROTOTYPE; the wire names are provisional until the T1 design doc): one report the server stored for a player
- *  between two of this client's views, which the view's own entry no longer carries. Position fields only: no id, name or skin. */
+/** r16reh18 TRANSPORT RING (T1 v1 section 3 and 4.1; the T1 design doc governs): one report the server stored for a player between two of this
+ *  client's views, other than the one the avatar's own entry carries. Exactly the entry's position fields: no id, name or skin. */
 struct FWonderlandTrailPoint
 {
 	FVector Location = FVector::ZeroVector;
@@ -30,7 +30,7 @@ struct FWonderlandTrailPoint
 	float Speed = 0.0f;
 	/** IDLE, WALK, RUN, JUMP, FALL, FLY (anything else is never parsed into a point) */
 	FString Motion;
-	/** How old the report was when the backend answered (the same clock as the entry's AgeMs). */
+	/** How old the report was when the backend answered: the entry's clock (asOfMs - AgeMs = the point's server time, the repeat key). */
 	double AgeMs = 0.0;
 };
 
@@ -51,11 +51,8 @@ struct FWonderlandRemoteAvatar
 	WonderlandHandoffWire::FWireEvent HandoffEvent;
 	/** How old the report was when the backend answered. */
 	double AgeMs = 0.0;
-	/** r16reh18 TRANSPORT RING: the server's time of this report (the entry's reportedAtMs, which every server version sends; -1 = absent). Used only
-	 *  to tell a trail point already held from a new one; never drawn. */
-	double ReportedAtMs = -1.0;
-	/** r16reh18 TRANSPORT RING: the reports stored between this client's previous view and this one, OLDEST FIRST, at most 16 (empty from a server
-	 *  without the ring, and whenever this client sent no cursor). */
+	/** r16reh18 TRANSPORT RING: the reports stored since this client's cursor, OLDEST FIRST, each older than the entry (empty from a server without the
+	 *  ring, or when none was lost). */
 	TArray<FWonderlandTrailPoint> Trail;
 };
 
@@ -84,7 +81,7 @@ struct FWonderlandWorldView
 	TArray<FWonderlandWorldInviteRow> Invites;
 	/** B33 (wl.Remote.RttClock): THIS client's smoothed world-report round trip when the view was taken, seconds (0 = not known yet). Measured here, never sent by the server. */
 	double ReportRttSeconds = 0.0;
-	/** r16reh18 TRANSPORT RING: the server's time of this answer (asOfMs), the cursor the next world report sends back as sinceMs (-1 = absent). */
+	/** r16reh18 TRANSPORT RING: the server's time of this answer (asOfMs), which the next world report echoes as ?sinceMs= (-1 = absent). */
 	double AsOfMs = -1.0;
 };
 
@@ -171,15 +168,16 @@ private:
 		// r16reh16r: the SAME animator the owner's Dog runs (RelayDogStride::FDogAnimator), configured as the Dog configures it, one per figure; its pose is worn by the figure.
 		RelayDogStride::FDogAnimator Anim;
 		bool bAnimConfigured = false;
-		// r16reh18 TRANSPORT RING: the server's time (ms) of the newest report this figure was fed (its entry or a trail point), -1 = not known. A trail
-		// point at or before it is already held, or out of order, and is dropped. Never read by the movement code.
+		// r16reh18 TRANSPORT RING: the newest server time (asOfMs - ageMs, ms) of a report this figure was fed, its entry or a trail point (-1 = none yet).
+		// A trail point at or before it is a repeat and is skipped. Never read by the movement code.
 		double LastServerMs = -1.0;
 	};
 	void Remove(FRemote& Remote);
-	/** THE ONE SAMPLE INSERTION (r16reh18: factored out of Apply with no change): one report -- the view's own entry, or a transport-ring trail point
-	 *  before it -- is judged against the figure's newest report (Target) and, when it is a new report, stored as its newest sample. bTrail says which
-	 *  WLREMOTE line is written: "rep" (the entry, as before) or "trail" (ids and counts only). True when a sample was stored. */
-	static bool InsertReport(const FString& UserId, FRemote& Remote, const FVector& Location, float Speed, const FString& Motion, double AgeMs, double RttClock, bool bTrail);
+	/** THE ONE SAMPLE INSERTION (r16reh18, T1 v1 section 4.2): one report -- the view's own entry, or a transport-ring trail point before it -- is judged
+	 *  against the report before it (PrevReport; the entry passes Remote.Target / bDrHasReport, as before) and, when it is a new report, stored as the figure's
+	 *  newest sample. bTrail: the line said is "WLREMOTE trail ... k=K/Count" instead of the entry's "WLREMOTE rep". True when a sample was stored. */
+	static bool InsertReportSample(FRemote& Remote, const FString& FigId, const FVector& Location, float Speed, const FString& Motion, double AgeMs,
+		double RttClock, const FVector& PrevReport, bool bHasPrevReport, bool bTrail, int32 K, int32 Count);
 	/** MP-VIS-02 REV2: draws this frame of the handoff on a remote figure from its Track: the owner's own swords and light, the final look and the whole sequence. */
 	void UpdateRemoteHandoff(const FString& UserId, FRemote& Remote, AWonderlandCompanionEmbodiment* Body, UWorld* World, float DeltaSeconds);
 	/** Removes the swords' components (the figure is going, or was rebuilt on a new skin whose joints they hung from). */

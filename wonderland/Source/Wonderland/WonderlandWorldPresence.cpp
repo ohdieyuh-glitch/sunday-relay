@@ -215,9 +215,11 @@ void FWonderlandRemoteAvatars::Clear()
 	Remotes.Reset();
 }
 
-// THE ONE SAMPLE INSERTION (r16reh18 transport ring). Moved out of Apply UNCHANGED: the only edits are the entry's fields named by parameter
-// (A.Location -> Location, A.Speed -> Speed, A.Motion -> Motion, A.AgeMs -> AgeMs, A.UserId -> UserId) and, for a trail point only, the WLREMOTE line.
-bool FWonderlandRemoteAvatars::InsertReport(const FString& UserId, FRemote& Remote, const FVector& Location, float Speed, const FString& Motion, double AgeMs, double RttClock, bool bTrail)
+// THE ONE SAMPLE INSERTION (r16reh18 transport ring; T1 v1 section 4.2). 667cfe5b's Apply l.259-265 and l.276-391, MOVED: the only edits are the
+// entry's fields named by parameter (A.Location, A.Speed, A.Motion, A.AgeMs, A.UserId), Remote.Target / Remote.bDrHasReport as PrevReport / bHasPrevReport
+// (the entry passes exactly those), and, for a trail point only, the WLREMOTE line. Returns "moved": a sample was stored.
+bool FWonderlandRemoteAvatars::InsertReportSample(FRemote& Remote, const FString& FigId, const FVector& Location, float Speed, const FString& Motion, double AgeMs,
+	double RttClock, const FVector& PrevReport, bool bHasPrevReport, bool bTrail, int32 K, int32 Count)
 {
 	using namespace WonderlandWorldPresenceDetail;
 	const double ReportRaw = FPlatformTime::Seconds() - AgeMs * 0.001 - RttClock;
@@ -226,153 +228,132 @@ bool FWonderlandRemoteAvatars::InsertReport(const FString& UserId, FRemote& Remo
 	const bool bNewerStandingReport = CVarRemoteReportTimeSamples.GetValueOnGameThread() != 0 && Remote.Samples.Num() > 0 && Speed < MinMovingSpeedUu
 		&& ReportRaw - Remote.Samples.Last().Raw > NewerReportSeconds;
 	// A view that repeats the last position is not a new report (it must not restart the extrapolation clock) -- unless it is a standing player's newer one.
-	const bool bMoved = !Remote.bDrHasReport || !Location.Equals(Remote.Target, 0.5) || bNewerStandingReport;
+	const bool bMoved = !bHasPrevReport || !Location.Equals(PrevReport, 0.5) || bNewerStandingReport;
 	if (bMoved)
 	{
-		if (Remote.bDrHasReport)
+		// the sender's time of this report: arrival here minus the backend's age (minus the round trip, wl.Remote.RttClock); kept strictly increasing
+		FRemote::FSample S;
+		S.Raw = ReportRaw;
+		S.T = S.Raw;
+		S.V = FMath::Clamp(Speed, 0.0f, MaxTrustedSpeedUu);
+		S.P = Location;
+		S.Air = AirKindOf(Motion);   // B33 LOST-CORNER
+		if (Remote.Samples.Num() > 0)
 		{
-			const FVector Step(Location.X - Remote.Target.X, Location.Y - Remote.Target.Y, 0.0);
-			if (Step.Size() >= MinHeadingStepUu)
+			const FRemote::FSample Last = Remote.Samples.Last();   // a COPY: Samples grows below
+			if (FVector::Dist(Last.P, S.P) > SnapDistanceUu)
 			{
-				Remote.DrHeading = Step.GetSafeNormal();
-			}
-		}
-		{
-			// the sender's time of this report: arrival here minus the backend's age (minus the round trip, wl.Remote.RttClock); kept strictly increasing
-			FRemote::FSample S;
-			S.Raw = ReportRaw;
-			S.T = S.Raw;
-			S.V = FMath::Clamp(Speed, 0.0f, MaxTrustedSpeedUu);
-			S.P = Location;
-			S.Air = AirKindOf(Motion);   // B33 LOST-CORNER
-			if (Remote.Samples.Num() > 0)
-			{
-				const FRemote::FSample Last = Remote.Samples.Last();   // a COPY: Samples grows below
-				if (FVector::Dist(Last.P, S.P) > SnapDistanceUu)
-				{
-					Remote.Samples.Reset();   // a teleport is placed, never swept across
-				}
-				else
-				{
-					const double DRaw = S.Raw - Last.Raw;
-					// B33 P1 (r16reh16za): A STAND IS SAID BY THE REPORT, NOT BY THE GAP. Only a gap after a STANDING report (on the ground, speed under
-					// MinMovingSpeedUu) is a stand, then a move. On a hosted link a 0.4 s gap is usually a lost report after a moving or airborne one (two
-					// periods of 0.22 s), and holding THAT report for the gap hung a landing figure in the air; with ReportTimeSamples a real stand makes no gap.
-					const bool bStandGap = DRaw > StandGapSeconds && Last.Air == 0 && Last.V < MinMovingSpeedUu;
-					// HOW OLD the newest report was when its successor arrived = the draw delay that would just have avoided a hold. Measured here, at
-					// arrival, so a player who stands still (no new reports) does not inflate it; a stand/start gap is not a delivery gap. B33 P2: every
-					// other arrival counts (on a hosted link 5 % are over 0.6 s, and dropping them left the figure drawn past its newest report), up to
-					// the cap (R9-02), once this span is in the history below.
-					const double Avail = FPlatformTime::Seconds() - Last.T;
-					// B33 LOST-CORNER (r16reh16za): judge this span against the player's own stored spacing, then remember it. A stand/start gap is
-					// neither judged nor remembered (the Hold below makes its spans).
-					if (!bStandGap)
-					{
-						TArray<double, TInlineAllocator<LostCornerHistory>> Sorted;
-						double Largest = 0.0;
-						for (const FRemote::FSpacing& Known : Remote.Spacings)
-						{
-							Sorted.Add(Known.Seconds);
-							if (!Known.bPossibleLoss)
-							{
-								Largest = FMath::Max(Largest, Known.Seconds);
-							}
-						}
-						Sorted.Sort();
-						const int32 N = Sorted.Num();
-						const double Median = MedianOfSorted(Sorted);
-						// the median is a normal period too, so it bounds the largest from below: after a change of period the unmarked spacings can all
-						// be older and shorter. A possible loss still counts in the median, or a longer period would lock itself out of the history.
-						S.Corner = LostCornerSecondsFor(N, Median, FMath::Max(Largest, Median), DRaw);
-						// R9-04: two stored reports are at least StoreFloorSeconds apart on the server, so a spacing that reads shorter than that less the
-						// reading allowance is this client's dating noise, not a period, and is not remembered
-						if (DRaw >= StoreFloorSeconds - LostCornerJitterSeconds)
-						{
-							FRemote::FSpacing Spacing;
-							Spacing.Seconds = DRaw;
-							Spacing.bPossibleLoss = S.Corner > 0.0;
-							Remote.Spacings.Add(Spacing);
-							if (Remote.Spacings.Num() > LostCornerHistory)
-							{
-								Remote.Spacings.RemoveAt(0, Remote.Spacings.Num() - LostCornerHistory, EAllowShrinking::No);
-							}
-							Sorted.Reset();
-							for (const FRemote::FSpacing& Known : Remote.Spacings)
-							{
-								Sorted.Add(Known.Seconds);
-							}
-							Sorted.Sort();
-							Remote.SpacingMedian = MedianOfSorted(Sorted);   // B33 P2
-						}
-						if (Avail > 0.0)
-						{
-							Remote.PeakAge = FMath::Max(Remote.PeakAge, FMath::Min(Avail, DrawDelayCap(Remote.Spacings.Num(), Remote.SpacingMedian)));   // R9-02
-						}
-					}
-					if (bStandGap)
-					{
-						// stood still, then moved: hold the old place until just before the move, do not slide across the whole gap
-						FRemote::FSample Hold = Last;
-						Hold.T = S.T - 0.1;
-						Hold.Raw = S.Raw - 0.1;
-						Hold.Corner = 0.0;   // B33 LOST-CORNER: a synthetic sample ends no real span (it keeps Last's Air)
-						Remote.Samples.Add(Hold);
-					}
-					else if (CVarRemoteRetime.GetValueOnGameThread() != 0 && DRaw > 0.02)
-					{
-						// STEADY MOTION: the time between two reports is the distance covered over the reported speed. Delivery jitter (frames, HTTP)
-						// moves arrival - age by tens of ms but cannot change this. Not for a stop, a start or a turn (the speed does not describe
-						// the displacement there): those keep the measured time. Bounded to [0.5, 1.7] x the measured gap, then pulled to the clock.
-						const FVector2D Seg(S.P.X - Last.P.X, S.P.Y - Last.P.Y);
-						const double Dist = Seg.Size();
-						const double VAvg = 0.5 * (static_cast<double>(Last.V) + static_cast<double>(S.V));
-						bool bSteady = VAvg >= MinMovingSpeedUu && Dist >= MinHeadingStepUu && Last.V >= MinMovingSpeedUu && S.V >= MinMovingSpeedUu
-							&& FMath::Abs(static_cast<double>(S.V) - static_cast<double>(Last.V)) <= 0.25 * VAvg;
-						if (bSteady && Remote.Samples.Num() >= 2)
-						{
-							const FVector2D Prev(Last.P.X - Remote.Samples[Remote.Samples.Num() - 2].P.X, Last.P.Y - Remote.Samples[Remote.Samples.Num() - 2].P.Y);
-							bSteady = Prev.Size() >= MinHeadingStepUu && (Prev.GetSafeNormal() | Seg.GetSafeNormal()) > 0.8;   // within ~37 deg: not a turn
-						}
-						if (bSteady)
-						{
-							const double DUse = FMath::Clamp(Dist / VAvg, 0.5 * DRaw, 1.7 * DRaw);
-							S.T = Last.T + DUse;
-							S.T += static_cast<double>(CVarRemoteRetimePull.GetValueOnGameThread()) * (S.Raw - S.T);
-						}
-					}
-					if (S.T <= Last.T)
-					{
-						S.T = Last.T + 0.001;
-					}
-				}
-			}
-			Remote.Samples.Add(S);
-			if (bTrail)
-			{
-				// r16reh18 TRANSPORT RING: a trail point's sample is said by id and count only (C6). The "rep" line stays one per entry, as before.
-				UE_LOG(LogTemp, Display, TEXT("WLREMOTE trail fig=%s n=%d"), *UserId, Remote.Samples.Num());
+				Remote.Samples.Reset();   // a teleport is placed, never swept across
 			}
 			else
 			{
-				UE_LOG(LogTemp, Display, TEXT("WLREMOTE rep fig=%s p=(%.1f,%.1f,%.1f) age=%.0fms n=%d v=%.0f retimeShiftMs=%.0f"), *UserId, Location.X, Location.Y, Location.Z, static_cast<double>(AgeMs), Remote.Samples.Num(), static_cast<double>(S.V), (S.T - S.Raw) * 1000.0);
-			}
-			if (Remote.Samples.Num() > 24)
-			{
-				Remote.Samples.RemoveAt(0, Remote.Samples.Num() - 24, EAllowShrinking::No);
+				const double DRaw = S.Raw - Last.Raw;
+				// B33 P1 (r16reh16za): A STAND IS SAID BY THE REPORT, NOT BY THE GAP. Only a gap after a STANDING report (on the ground, speed under
+				// MinMovingSpeedUu) is a stand, then a move. On a hosted link a 0.4 s gap is usually a lost report after a moving or airborne one (two
+				// periods of 0.22 s), and holding THAT report for the gap hung a landing figure in the air; with ReportTimeSamples a real stand makes no gap.
+				const bool bStandGap = DRaw > StandGapSeconds && Last.Air == 0 && Last.V < MinMovingSpeedUu;
+				// HOW OLD the newest report was when its successor arrived = the draw delay that would just have avoided a hold. Measured here, at
+				// arrival, so a player who stands still (no new reports) does not inflate it; a stand/start gap is not a delivery gap. B33 P2: every
+				// other arrival counts (on a hosted link 5 % are over 0.6 s, and dropping them left the figure drawn past its newest report), up to
+				// the cap (R9-02), once this span is in the history below.
+				const double Avail = FPlatformTime::Seconds() - Last.T;
+				// B33 LOST-CORNER (r16reh16za): judge this span against the player's own stored spacing, then remember it. A stand/start gap is
+				// neither judged nor remembered (the Hold below makes its spans).
+				if (!bStandGap)
+				{
+					TArray<double, TInlineAllocator<LostCornerHistory>> Sorted;
+					double Largest = 0.0;
+					for (const FRemote::FSpacing& Known : Remote.Spacings)
+					{
+						Sorted.Add(Known.Seconds);
+						if (!Known.bPossibleLoss)
+						{
+							Largest = FMath::Max(Largest, Known.Seconds);
+						}
+					}
+					Sorted.Sort();
+					const int32 N = Sorted.Num();
+					const double Median = MedianOfSorted(Sorted);
+					// the median is a normal period too, so it bounds the largest from below: after a change of period the unmarked spacings can all
+					// be older and shorter. A possible loss still counts in the median, or a longer period would lock itself out of the history.
+					S.Corner = LostCornerSecondsFor(N, Median, FMath::Max(Largest, Median), DRaw);
+					// R9-04: two stored reports are at least StoreFloorSeconds apart on the server, so a spacing that reads shorter than that less the
+					// reading allowance is this client's dating noise, not a period, and is not remembered
+					if (DRaw >= StoreFloorSeconds - LostCornerJitterSeconds)
+					{
+						FRemote::FSpacing Spacing;
+						Spacing.Seconds = DRaw;
+						Spacing.bPossibleLoss = S.Corner > 0.0;
+						Remote.Spacings.Add(Spacing);
+						if (Remote.Spacings.Num() > LostCornerHistory)
+						{
+							Remote.Spacings.RemoveAt(0, Remote.Spacings.Num() - LostCornerHistory, EAllowShrinking::No);
+						}
+						Sorted.Reset();
+						for (const FRemote::FSpacing& Known : Remote.Spacings)
+						{
+							Sorted.Add(Known.Seconds);
+						}
+						Sorted.Sort();
+						Remote.SpacingMedian = MedianOfSorted(Sorted);   // B33 P2
+					}
+					if (Avail > 0.0)
+					{
+						Remote.PeakAge = FMath::Max(Remote.PeakAge, FMath::Min(Avail, DrawDelayCap(Remote.Spacings.Num(), Remote.SpacingMedian)));   // R9-02
+					}
+				}
+				if (bStandGap)
+				{
+					// stood still, then moved: hold the old place until just before the move, do not slide across the whole gap
+					FRemote::FSample Hold = Last;
+					Hold.T = S.T - 0.1;
+					Hold.Raw = S.Raw - 0.1;
+					Hold.Corner = 0.0;   // B33 LOST-CORNER: a synthetic sample ends no real span (it keeps Last's Air)
+					Remote.Samples.Add(Hold);
+				}
+				else if (CVarRemoteRetime.GetValueOnGameThread() != 0 && DRaw > 0.02)
+				{
+					// STEADY MOTION: the time between two reports is the distance covered over the reported speed. Delivery jitter (frames, HTTP)
+					// moves arrival - age by tens of ms but cannot change this. Not for a stop, a start or a turn (the speed does not describe
+					// the displacement there): those keep the measured time. Bounded to [0.5, 1.7] x the measured gap, then pulled to the clock.
+					const FVector2D Seg(S.P.X - Last.P.X, S.P.Y - Last.P.Y);
+					const double Dist = Seg.Size();
+					const double VAvg = 0.5 * (static_cast<double>(Last.V) + static_cast<double>(S.V));
+					bool bSteady = VAvg >= MinMovingSpeedUu && Dist >= MinHeadingStepUu && Last.V >= MinMovingSpeedUu && S.V >= MinMovingSpeedUu
+						&& FMath::Abs(static_cast<double>(S.V) - static_cast<double>(Last.V)) <= 0.25 * VAvg;
+					if (bSteady && Remote.Samples.Num() >= 2)
+					{
+						const FVector2D Prev(Last.P.X - Remote.Samples[Remote.Samples.Num() - 2].P.X, Last.P.Y - Remote.Samples[Remote.Samples.Num() - 2].P.Y);
+						bSteady = Prev.Size() >= MinHeadingStepUu && (Prev.GetSafeNormal() | Seg.GetSafeNormal()) > 0.8;   // within ~37 deg: not a turn
+					}
+					if (bSteady)
+					{
+						const double DUse = FMath::Clamp(Dist / VAvg, 0.5 * DRaw, 1.7 * DRaw);
+						S.T = Last.T + DUse;
+						S.T += static_cast<double>(CVarRemoteRetimePull.GetValueOnGameThread()) * (S.Raw - S.T);
+					}
+				}
+				if (S.T <= Last.T)
+				{
+					S.T = Last.T + 0.001;
+				}
 			}
 		}
-		Remote.bDrHasReport = true;
-		Remote.DrReceivedAt = FPlatformTime::Seconds();
-		Remote.DrAgeSeconds = static_cast<float>(AgeMs * 0.001);
+		Remote.Samples.Add(S);
+		if (bTrail)
+		{
+			// r16reh18 TRANSPORT RING: a trail point's sample is said by id and counts only (C6). The "rep" line stays one per entry, byte for byte.
+			UE_LOG(LogTemp, Display, TEXT("WLREMOTE trail fig=%s k=%d/%d ins=1 n=%d"), *FigId, K, Count, Remote.Samples.Num());
+		}
+		else
+		{
+			UE_LOG(LogTemp, Display, TEXT("WLREMOTE rep fig=%s p=(%.1f,%.1f,%.1f) age=%.0fms n=%d v=%.0f retimeShiftMs=%.0f"), *FigId, Location.X, Location.Y, Location.Z, static_cast<double>(AgeMs), Remote.Samples.Num(), static_cast<double>(S.V), (S.T - S.Raw) * 1000.0);
+		}
+		if (Remote.Samples.Num() > 24)
+		{
+			Remote.Samples.RemoveAt(0, Remote.Samples.Num() - 24, EAllowShrinking::No);
+		}
 	}
-	else if (Remote.Samples.Num() > 0 && Remote.Samples.Last().V >= MinMovingSpeedUu && Speed < MinMovingSpeedUu)
-	{
-		// STOPPED ON THE SPOT (r16reh16s): the view repeats the last position, so it is not a new report -- but its SPEED has changed. Stopping against a wall or a step
-		// ends on the position of the last moving report; dropping that report left the stale running speed in the newest sample and the extrapolation carry held for
-		// ever (measured r16reh16r, automated session: 19.6 uu parked past the sender for 5 s). Only the speed of the newest sample is corrected.
-		Remote.Samples.Last().V = FMath::Clamp(Speed, 0.0f, MaxTrustedSpeedUu);
-	}
-	Remote.DrSpeed = FMath::Clamp(Speed, 0.0f, MaxTrustedSpeedUu);
 	return bMoved;
 }
 
@@ -417,37 +398,62 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 			using namespace WonderlandWorldPresenceDetail;
 			// THE REPORT'S TIME on this machine's clock: arrival minus the backend's age, and (B33 wl.Remote.RttClock) minus this client's smoothed round trip.
 			const double RttClock = CVarRemoteRttClock.GetValueOnGameThread() != 0 ? FMath::Clamp(View.ReportRttSeconds, 0.0, MaxRttClockSeconds) : 0.0;
-			// r16reh18 TRANSPORT RING: the server's time of the entry's report (asOfMs - ageMs, or the entry's own reportedAtMs; -1 = neither known).
-			const double EntryServerMs = View.AsOfMs >= 0.0 ? View.AsOfMs - A.AgeMs : A.ReportedAtMs;
-			// r16reh18 TRANSPORT RING (PROTOTYPE; the T1 design doc governs): the reports the server stored for this player between this client's previous
-			// view and this one, OLDEST FIRST, each through the SAME insertion as the entry, then the entry. A point is stored only when it is strictly older
-			// than the entry and strictly newer than every report this figure was already fed (on the server's clock; with no server time held, newer than
-			// the newest sample by NewerReportSeconds on this client's clock, as the standing rule reads a newer report): a duplicate or an out-of-order
-			// point is dropped. Target follows each point, so the entry is judged against the report just before it; target, yaw, skin, label and
-			// handoff are the entry's (below). NO TRAIL (an older server, no cursor sent, an empty trail): this block does nothing.
+			// r16reh18 TRANSPORT RING (T1 v1 section 4.2; the T1 design doc governs): the reports the server stored for this player between this client's
+			// previous view and this one, OLDEST FIRST (ParseWorldView sorted them and kept only points older than the entry), each through the SAME
+			// insertion, judged against the point before it. A point at or before the newest server time this figure was already fed is a repeat
+			// (the server's 100 ms slack, a lost answer, a cursor reset): said with ins=0 and skipped. Target, the DR state, yaw, skin, label and
+			// handoff stay the entry's. NO TRAIL (an older server, no loss): this block does nothing.
 			if (A.Trail.Num() > 0 && View.AsOfMs >= 0.0)
 			{
-				for (const FWonderlandTrailPoint& P : A.Trail)
+				FVector PrevReport = Remote.Target;
+				bool bHasPrevReport = Remote.bDrHasReport;
+				const int32 Count = A.Trail.Num();
+				for (int32 K = 0; K < Count; ++K)
 				{
+					const FWonderlandTrailPoint& P = A.Trail[K];
 					const double PointServerMs = View.AsOfMs - P.AgeMs;
-					if (PointServerMs >= EntryServerMs || (Remote.LastServerMs >= 0.0 && PointServerMs <= Remote.LastServerMs))
+					bool bInserted = false;
+					if (PointServerMs > Remote.LastServerMs)
 					{
-						continue;
+						bInserted = InsertReportSample(Remote, A.UserId, P.Location, P.Speed, P.Motion, P.AgeMs, RttClock, PrevReport, bHasPrevReport, true, K + 1, Count);
+						PrevReport = P.Location;
+						bHasPrevReport = true;
+						Remote.LastServerMs = PointServerMs;
 					}
-					if (Remote.LastServerMs < 0.0 && Remote.Samples.Num() > 0
-						&& (FPlatformTime::Seconds() - P.AgeMs * 0.001 - RttClock) - Remote.Samples.Last().Raw <= NewerReportSeconds)
+					if (!bInserted)
 					{
-						continue;
+						UE_LOG(LogTemp, Display, TEXT("WLREMOTE trail fig=%s k=%d/%d ins=0 n=%d"), *A.UserId, K + 1, Count, Remote.Samples.Num());
 					}
-					InsertReport(A.UserId, Remote, P.Location, P.Speed, P.Motion, P.AgeMs, RttClock, true);
-					Remote.Target = P.Location;
-					Remote.LastServerMs = PointServerMs;
 				}
 			}
-			InsertReport(A.UserId, Remote, A.Location, A.Speed, A.Motion, A.AgeMs, RttClock, false);
-			if (EntryServerMs >= 0.0)
+			// THE ENTRY, today's path: the insertion against Remote.Target / bDrHasReport, then (below, unchanged) the DR heading, the DR stamps, the
+			// stop-on-the-spot fix and DrSpeed
+			const bool bMoved = InsertReportSample(Remote, A.UserId, A.Location, A.Speed, A.Motion, A.AgeMs, RttClock, Remote.Target, Remote.bDrHasReport, false, 0, 0);
+			if (bMoved)
 			{
-				Remote.LastServerMs = FMath::Max(Remote.LastServerMs, EntryServerMs);   // bookkeeping for the next trail only: nothing drawn reads it
+				if (Remote.bDrHasReport)
+				{
+					const FVector Step(A.Location.X - Remote.Target.X, A.Location.Y - Remote.Target.Y, 0.0);
+					if (Step.Size() >= MinHeadingStepUu)
+					{
+						Remote.DrHeading = Step.GetSafeNormal();
+					}
+				}
+				Remote.bDrHasReport = true;
+				Remote.DrReceivedAt = FPlatformTime::Seconds();
+				Remote.DrAgeSeconds = static_cast<float>(A.AgeMs * 0.001);
+			}
+			else if (Remote.Samples.Num() > 0 && Remote.Samples.Last().V >= MinMovingSpeedUu && A.Speed < MinMovingSpeedUu)
+			{
+				// STOPPED ON THE SPOT (r16reh16s): the view repeats the last position, so it is not a new report -- but its SPEED has changed. Stopping against a wall or a step
+				// ends on the position of the last moving report; dropping that report left the stale running speed in the newest sample and the extrapolation carry held for
+				// ever (measured r16reh16r, automated session: 19.6 uu parked past the sender for 5 s). Only the speed of the newest sample is corrected.
+				Remote.Samples.Last().V = FMath::Clamp(A.Speed, 0.0f, MaxTrustedSpeedUu);
+			}
+			Remote.DrSpeed = FMath::Clamp(A.Speed, 0.0f, MaxTrustedSpeedUu);
+			if (View.AsOfMs >= 0.0)
+			{
+				Remote.LastServerMs = FMath::Max(Remote.LastServerMs, View.AsOfMs - A.AgeMs);   // r16reh18 TRANSPORT RING: bookkeeping for the next trail only
 			}
 		}
 		Remote.Target = A.Location;
