@@ -88,7 +88,7 @@ export interface LiveMissionContractFile {
      * The Coding Agent's SESSION limit for THIS mission, in whole minutes (`CODER_CONTRACT_RUNTIME_MIN_MINUTES` to
      * `CODER_CONTRACT_RUNTIME_MAX_MINUTES`). Absent (the default) leaves the observation-derived envelope exactly as it was, so an
      * existing contract is byte-identical. Present, it is inside the binding digest, bounded by that range here and by the job
-     * fit in the contract checker and at composition (`coderRuntimeJobFit`). It never raises cost: money stays an independent bound.
+     * fit of its MAIN PATH in the contract checker (scripts/julius-live-contract-check.mjs) and at composition (`coderRuntimeBudgetRefusal`). It never raises cost: money stays an independent bound.
      */
     readonly coderRuntimeMinutes?: number;
   };
