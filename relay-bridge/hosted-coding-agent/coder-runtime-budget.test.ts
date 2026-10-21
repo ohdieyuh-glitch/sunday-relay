@@ -336,7 +336,17 @@ describe('BYTE IDENTITY: no committed contract moves when the key is absent', ()
     'julius-unreal-mission-1': 'sha256:905815a6478f86c98d12fa2383ae2606f818e04697fbbc3ab44b5b0c8465cce0',
   };
 
-  it('every committed contract parses to the digest main printed, and none declares the key (declaring it is a deliberate, reviewed edit)', () => {
+  /**
+   * THE REVIEWED EXCEPTIONS: the only committed contracts that DECLARE a coder session budget. Each is a deliberate, reviewed edit of this table (the reviewer's protocol term: the first
+   * mission that declares the key gets its own clearance, and a scored or preregistered use must state the minutes and the guaranteed-versus-declared repair cycles). A declaring
+   * contract cannot have a pristine-main digest (main has no such key), so its digest is pinned here as printed by THIS tree's own mission-contract.ts, by a throwaway test
+   * that is not committed (maxeffort_gauntlet_juju2_20261019/pin_print.log); any change to the contract moves it.
+   */
+  const REVIEWED_DECLARATIONS: Readonly<Record<string, { readonly minutes: number; readonly digest: string }>> = {
+    'julius-maxeffort-gauntlet-1': { minutes: 23, digest: 'sha256:d1850ec77ab1e2ec0ba74d26d3e2a6d347c54e9ebd047077b789a07819642f38' },
+  };
+
+  it('every committed contract parses to the digest main printed, and none declares the key unless it is a reviewed exception (declaring it is a deliberate, reviewed edit)', () => {
     const seen: string[] = [];
     for (const name of readdirSync(MISSIONS).sort()) {
       let raw: string;
@@ -344,11 +354,18 @@ describe('BYTE IDENTITY: no committed contract moves when the key is absent', ()
       const parsed = parseLiveMissionContract(raw);
       expect(parsed.ok, `${name} parses`).toBe(true);
       if (!parsed.ok) throw new Error(parsed.problem);
-      expect('coderRuntimeMinutes' in (parsed.contract.limits ?? {}), `${name}: no committed contract declares a coder session budget yet`).toBe(false);
-      expect(compileBootstrapRequest(parsed.contract, [], 'card:julius-live:1').missionBindingDigest, `${name}: the same digest as before`).toBe(BEFORE[name]);
+      const digest = compileBootstrapRequest(parsed.contract, [], 'card:julius-live:1').missionBindingDigest;
+      const exception = REVIEWED_DECLARATIONS[name];
+      if (exception === undefined) {
+        expect('coderRuntimeMinutes' in (parsed.contract.limits ?? {}), `${name}: no committed contract declares a coder session budget unless it is a reviewed exception`).toBe(false);
+        expect(digest, `${name}: the same digest as before`).toBe(BEFORE[name]);
+      } else {
+        expect(parsed.contract.limits?.coderRuntimeMinutes, `${name}: the reviewed exception declares exactly its reviewed minutes`).toBe(exception.minutes);
+        expect(digest, `${name}: the reviewed exception's pinned digest`).toBe(exception.digest);
+      }
       seen.push(name);
     }
-    expect(seen, 'every committed contract is covered, and no literal is stale').toEqual(Object.keys(BEFORE).sort());
+    expect(seen, 'every committed contract is covered, and no literal is stale').toEqual([...Object.keys(BEFORE), ...Object.keys(REVIEWED_DECLARATIONS)].sort());
   });
 });
 
