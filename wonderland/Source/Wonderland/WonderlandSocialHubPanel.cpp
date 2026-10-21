@@ -327,6 +327,13 @@ const TCHAR* SWonderlandSocialHubPanel::TabName(ETab Which)
 	}
 }
 
+FString SWonderlandSocialHubPanel::StampViewerId() const
+{
+	// r16reh18 Q-T3: the viewer's own id for the hub-tab companion stamp (ids only), from the UI subsystem's read-only source; "-" without one
+	const FString Id = StampViewerIdSource ? StampViewerIdSource() : FString();
+	return Id.IsEmpty() ? FString(TEXT("-")) : Id;
+}
+
 bool SWonderlandSocialHubPanel::ParseTab(const FString& Text, ETab& Out)
 {
 	if (Text.Equals(TEXT("friends"), ESearchCase::IgnoreCase)) { Out = ETab::Friends; return true; }
@@ -343,6 +350,7 @@ void SWonderlandSocialHubPanel::SetTab(ETab Which)
 	// A PLAYER'S TAB CHANGE, said once (CORE 10-06, R7 on the final RC): only the hub's own buttons call this, so a real-input drive
 	// proves each tab click by the game's own line ("WLSOCIAL hub tab PARTY"), not by a frame alone.
 	UE_LOG(LogTemp, Display, TEXT("WLSOCIAL hub tab %s"), TabName(Which));
+	UE_LOG(LogTemp, Display, TEXT("WLSTAMP mark=hubtab viewer=%s | %s"), *StampViewerId(), *WonderlandSocialFreshness::EventStamp());   // r16reh18 Q-T3 (2abf1a): companion stamp (log only)
 	Tab = Which;
 	Rebuild();
 }

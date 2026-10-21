@@ -126,6 +126,8 @@ public:
 	bool SendReply(const FString& Body);
 	/** The voice service's state changed (a command, a provider event, the preview's stepper): redraw the voice column. */
 	void SetVoice(const FWonderlandVoiceState& State, const FString& Label);
+	/** r16reh18 Q-T3: where the hub-tab companion stamp reads the viewer's own id (ids only; read at log time). Log only. */
+	void SetStampViewerIdSource(TFunction<FString()> Source) { StampViewerIdSource = MoveTemp(Source); }
 	/** The sign-in changed (a code arrived, it was approved, it failed, the session ended). Stored only: the caller's
 	 *  SetSnapshot, which always follows it, redraws once. */
 	void SetSignIn(const FWonderlandSignInView& InView);
@@ -231,6 +233,8 @@ private:
 
 	FWonderlandSocialSnapshot Snapshot;
 	bool bConnected = false;
+	TFunction<FString()> StampViewerIdSource;   // r16reh18 Q-T3: companion stamps only
+	FString StampViewerId() const;
 	FString SourceLine;
 	bool bDevelopmentPreview = true;
 	bool bAwaitingFresh = false;

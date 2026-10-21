@@ -118,6 +118,11 @@ namespace WonderWebWorkspaceTuning
 		TEXT("Julius Connect: bring the Connections window forward when Julius starts waiting on the user (1) or not (0)."));
 }
 
+namespace WonderlandUiStampDetail
+{
+	FString ViewerIdForStamp(const ULocalPlayer* Player);   // r16reh18 Q-T1 (A) / Q-T3: defined beside QuitWonderland
+}
+
 namespace WonderlandUiHitTest
 {
 	/**
@@ -1034,6 +1039,10 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 			})
 			.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
 		Panel = SocialHubPanel;
+		SocialHubPanel->SetStampViewerIdSource([WeakThis]()   // r16reh18 Q-T3: the hub-tab companion's id (log only)
+		{
+			return WeakThis.IsValid() ? WonderlandUiStampDetail::ViewerIdForStamp(WeakThis->GetLocalPlayer<ULocalPlayer>()) : FString(TEXT("-"));
+		});
 		Focus = SocialHubPanel;
 		ZOrder = 59;
 	}
@@ -5339,6 +5348,12 @@ void UWonderlandUiSubsystem::HandleVoiceCommand(const FString& Command, const FS
 	}
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLSOCIAL voice %s %s: %s%s"), *Command, *SubjectUserId, Result.bOk ? TEXT("ok") : TEXT("refused"),
 		Result.Reason.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- %s"), *Result.Reason));
+	if (Command == TEXT("connect"))
+	{
+		// r16reh18 Q-T3 (2abf1a): the VOICE-CONNECT line's companion stamp (log only): the party id of the line above (its subject), "-" if none
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLSTAMP mark=voice party=%s | %s"), SubjectUserId.IsEmpty() ? TEXT("-") : *SubjectUserId,
+			*WonderlandSocialFreshness::EventStamp());
+	}
 	if (SocialHubPanel.IsValid())
 	{
 		if (Voice != nullptr)
