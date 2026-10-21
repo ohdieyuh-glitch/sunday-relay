@@ -329,6 +329,9 @@ describe('F4: a refused re-run RETURNS 1 from the entrypoint, and reaches nothin
       wallClockDeadline: () => 'faked',
       liveStageDeadline: () => null,
       liveStageDeadlineLine: () => '  stage deadline: faked',
+      // The opt-in coder session budget's report lines (a contract with no `coderRuntimeMinutes` prints nothing).
+      coderRuntimeScheduleOfContract: () => null,
+      liveCoderRuntimeBudgetLines: () => [],
       liveExecutionScopeLine: () => '  execution scope: faked',
       JULIUS_LIVE_RATE_LIMIT_BACKOFF,
       driveJuliusRunToTerminal: async (input: Record<string, unknown>) => { calls.drive += 1; driveInput = input; throw new Error(DRIVE_REACHED); },
