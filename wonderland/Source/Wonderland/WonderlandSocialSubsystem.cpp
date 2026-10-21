@@ -73,6 +73,11 @@ void UWonderlandSocialSubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
+FString UWonderlandSocialSubsystem::GetLastSignedInParticipantId() const
+{
+	return SignIn.IsValid() ? SignIn->GetLastSignedInParticipantId() : FString();
+}
+
 const FWonderlandSignInView& UWonderlandSocialSubsystem::GetSignInView() const
 {
 	static const FWonderlandSignInView None;
@@ -280,6 +285,7 @@ bool UWonderlandSocialSubsystem::ConnectWith(const FString& BaseUrl, const FStri
 	Voice = MakeUnique<FWonderlandVoiceUnavailable>();   // a real provider is the founder's choice; until then, honestly pending
 	TUniquePtr<FWonderlandSocialLiveService> Connected = MakeUnique<FWonderlandSocialLiveService>(BaseUrl, Token);
 	Live = Connected.Get();
+	Connected->SetStampViewerId(GetLastSignedInParticipantId());   // r16reh18 Q-T1 (A) ruling fad186 (1): the 401 companion's id before any snapshot (log only)
 	++LiveGeneration;   // every live session its own number: late answers for an earlier one are recognized and dropped
 	Scene = TEXT("live");
 	// R16 REAL VOICE (founder, 10-04: EOS Voice). A developer's -WLEosConfig file first; else THE SHIPPED PATH (founder 10-04: "the

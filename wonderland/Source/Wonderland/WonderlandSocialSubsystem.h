@@ -55,6 +55,8 @@ public:
 	// ---- SIGN IN (R16): GitHub's device flow through the main-line bridge; see WonderlandSocialSignIn.h
 	/** Never null after Initialize. */
 	const FWonderlandSignInView& GetSignInView() const;
+	/** r16reh18 Q-T1 (A), ruling fad186 (1): the participant id this client was last signed in as (empty if never); companion stamps only. */
+	FString GetLastSignedInParticipantId() const;
 	/** SIGN IN WITH GITHUB: a code to enter at github.com/login/device; live once the player approves it. */
 	void StartSignIn();
 	void CancelSignIn();

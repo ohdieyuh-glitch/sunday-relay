@@ -85,6 +85,9 @@ public:
 	/** For QA and the log: "WAITING code 9 chars, 812 s left" -- never the token, never the code. */
 	FString Describe() const;
 	static const TCHAR* StateName(EWonderlandSignInState State);
+	/** r16reh18 Q-T1 (A), ruling fad186 (1): the participant id this client was LAST signed in as (kept after a sign-out or a 401; empty only if never
+	 *  signed in). For the companion stamp lines only: never shown, never sent. */
+	const FString& GetLastSignedInParticipantId() const { return LastSignedInParticipantId; }
 
 private:
 	void SetState(EWonderlandSignInState State, const FString& Message);
@@ -96,6 +99,7 @@ private:
 
 	TFunction<FString(FString&)> BaseUrlSource;
 	FWonderlandSignInView View;
+	FString LastSignedInParticipantId;   // r16reh18 Q-T1 (A) ruling fad186 (1): companion stamps only
 	FString BaseUrl;
 	FString Handle;
 	FString Token;

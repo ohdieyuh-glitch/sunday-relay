@@ -492,8 +492,8 @@ void FWonderlandSocialLiveService::Call(const FString& Verb, const FString& Path
 			bSessionEnded = true;
 			LastError = TEXT("the server ended this session");
 			UE_LOG(LogTemp, Display, TEXT("WLSOCIAL live: HTTP 401 -- the server ended this session"));
-			UE_LOG(LogTemp, Display, TEXT("WLSTAMP mark=401 viewer=%s | %s"), bHasSnapshot && !Snapshot.ViewerId.IsEmpty() ? *Snapshot.ViewerId : TEXT("-"),
-				*WonderlandSocialFreshness::EventStamp());   // r16reh18 Q-T1 (A): companion stamp (log only): the viewer's own id (the server's viewerId), "-" before any snapshot
+			UE_LOG(LogTemp, Display, TEXT("WLSTAMP mark=401 viewer=%s | %s"), bHasSnapshot && !Snapshot.ViewerId.IsEmpty() ? *Snapshot.ViewerId
+				: (!StampViewerId.IsEmpty() ? *StampViewerId : TEXT("-")), *WonderlandSocialFreshness::EventStamp());   // r16reh18 Q-T1 (A): companion stamp (log only): the server's viewerId, else the signed-in participant id (ruling fad186 (1)), "-" only if never signed in
 			SessionEndedEvent.Broadcast();
 		}
 		FString Text = Response->GetContentAsString();

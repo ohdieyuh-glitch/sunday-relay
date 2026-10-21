@@ -5716,7 +5716,8 @@ TSharedPtr<SWidget> UWonderlandUiSubsystem::OverlayWidget(EOverlay Which) const
 namespace WonderlandUiStampDetail
 {
 	/** r16reh18 Q-T1 (A): the viewer's own id for the quit line's companion stamp, an id only (never a name or a login): the live session's viewerId
-	 *  (as the 401 companion), else the signed-in participant id (as the SIGNED_IN companion), else "-". Reads only; changes nothing. */
+	 *  (as the 401 companion), else the participant id this client was last signed in as (ruling fad186 (1): kept after a sign-out or a 401), else
+	 *  "-" (never signed in). Reads only; changes nothing. */
 	FString ViewerIdForStamp(const ULocalPlayer* Player)
 	{
 		const UGameInstance* Instance = Player != nullptr ? Player->GetGameInstance() : nullptr;
@@ -5730,7 +5731,7 @@ namespace WonderlandUiStampDetail
 		{
 			return Snapshot->ViewerId;
 		}
-		const FString& Participant = Social->GetSignInView().ParticipantId;
+		const FString Participant = Social->GetLastSignedInParticipantId();
 		return Participant.IsEmpty() ? FString(TEXT("-")) : Participant;
 	}
 }

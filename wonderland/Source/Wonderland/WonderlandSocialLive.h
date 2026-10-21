@@ -205,6 +205,9 @@ public:
 
 	/** True once the first snapshot has arrived. Until then the surfaces show an empty, connected view. */
 	bool HasSnapshot() const { return bHasSnapshot; }
+	/** r16reh18 Q-T1 (A), ruling fad186 (1): the participant id this client was last signed in as when this service was made (empty if never); the
+	 *  401 companion stamp's id when no snapshot has named the viewer yet. Log only. */
+	void SetStampViewerId(const FString& Id) { StampViewerId = Id; }
 	/** Read the snapshot again now. */
 	void Refresh();
 	/** B35 (R16 privacy, SC1): a surface that lists other players (the hub, a profile) opened or closed. While one is open the snapshot is
@@ -335,6 +338,7 @@ private:
 	FString Token;
 	FWonderlandSocialSnapshot Snapshot;
 	bool bHasSnapshot = false;
+	FString StampViewerId;   // r16reh18 Q-T1 (A) ruling fad186 (1): companion stamps only
 	double SnapshotAt = 0.0;
 	FString LastError;
 	int64 LatestEvent = 0;

@@ -162,6 +162,10 @@ void FWonderlandSocialSignIn::SetState(EWonderlandSignInState State, const FStri
 		// r16reh18 Q-T1 (A): the SIGNED_IN line's companion stamp (log only): the participant id of the line above, never the @login (OBS-1)
 		UE_LOG(LogTemp, Display, TEXT("WLSTAMP mark=signin viewer=%s | %s"), View.ParticipantId.IsEmpty() ? TEXT("-") : *View.ParticipantId,
 			*WonderlandSocialFreshness::EventStamp());
+		if (!View.ParticipantId.IsEmpty())
+		{
+			LastSignedInParticipantId = View.ParticipantId;   // ruling fad186 (1): the 401 / quit companions' id when no snapshot names the viewer
+		}
 	}
 	Changed.Broadcast();
 }
