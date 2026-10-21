@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createInMemorySocialStore } from '../src/relay/social/social-store';
 import { handleSocialRoute, type SocialRouteDeps, type SocialSessionFacts } from './wonderland-social-routes';
@@ -110,7 +110,7 @@ export async function runGoldenScenario(calls: readonly GoldenCall[] = GOLDEN_CA
   return lines;
 }
 
-const FIXTURE = fileURLToPath(new URL('./wonderland-social-world-golden.fixture.txt', import.meta.url));
+const FIXTURE = join(__dirname, 'wonderland-social-world-golden.fixture.txt');
 
 describe("today's world answers, byte for byte (recorded on 2528ac5c before the transport ring)", () => {
   it('every answer of the scenario is exactly the recorded bytes', async () => {
