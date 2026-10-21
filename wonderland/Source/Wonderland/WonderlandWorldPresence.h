@@ -175,7 +175,8 @@ private:
 	void Remove(FRemote& Remote);
 	/** THE ONE SAMPLE INSERTION (r16reh18, T1 v1 section 4.2): one report -- the view's own entry, or a transport-ring trail point before it -- is judged
 	 *  against the report before it (PrevReport; the entry passes Remote.Target / bDrHasReport, as before) and, when it is a new report, stored as the figure's
-	 *  newest sample. bTrail: the line said is "WLREMOTE trail ... k=K/Count" instead of the entry's "WLREMOTE rep". True when a sample was stored. */
+	 *  newest sample. bTrail: the line said is "WLREMOTE trail fig= p= age= k=K/Count ins=1 n=" (T1 v1 section 4.3) instead of the entry's
+	 *  "WLREMOTE rep". True when a sample was stored. */
 	static bool InsertReportSample(FRemote& Remote, const FString& FigId, const FVector& Location, float Speed, const FString& Motion, double AgeMs,
 		double RttClock, const FVector& PrevReport, bool bHasPrevReport, bool bTrail, int32 K, int32 Count);
 	/** MP-VIS-02 REV2: draws this frame of the handoff on a remote figure from its Track: the owner's own swords and light, the final look and the whole sequence. */

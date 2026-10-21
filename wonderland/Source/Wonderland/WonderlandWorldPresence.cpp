@@ -342,8 +342,10 @@ bool FWonderlandRemoteAvatars::InsertReportSample(FRemote& Remote, const FString
 		Remote.Samples.Add(S);
 		if (bTrail)
 		{
-			// r16reh18 TRANSPORT RING: a trail point's sample is said by id and counts only (C6). The "rep" line stays one per entry, byte for byte.
-			UE_LOG(LogTemp, Display, TEXT("WLREMOTE trail fig=%s k=%d/%d ins=1 n=%d"), *FigId, K, Count, Remote.Samples.Num());
+			// r16reh18 TRANSPORT RING (T1 v1 section 4.3): a trail point's sample, by user id (C6: never a display name), in the rep line's formats. The "rep"
+			// line stays one per entry, byte for byte.
+			UE_LOG(LogTemp, Display, TEXT("WLREMOTE trail fig=%s p=(%.1f,%.1f,%.1f) age=%.0fms k=%d/%d ins=1 n=%d"), *FigId, Location.X, Location.Y, Location.Z,
+				static_cast<double>(AgeMs), K, Count, Remote.Samples.Num());
 		}
 		else
 		{
@@ -422,7 +424,8 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 					}
 					if (!bInserted)
 					{
-						UE_LOG(LogTemp, Display, TEXT("WLREMOTE trail fig=%s k=%d/%d ins=0 n=%d"), *A.UserId, K + 1, Count, Remote.Samples.Num());
+						UE_LOG(LogTemp, Display, TEXT("WLREMOTE trail fig=%s p=(%.1f,%.1f,%.1f) age=%.0fms k=%d/%d ins=0 n=%d"), *A.UserId, P.Location.X, P.Location.Y,
+							P.Location.Z, static_cast<double>(P.AgeMs), K + 1, Count, Remote.Samples.Num());
 					}
 				}
 			}
