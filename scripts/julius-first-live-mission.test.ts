@@ -1608,6 +1608,9 @@ describe('the evidence dump names only tables and columns the migrations create'
       expect(catalogue, `${type} must be a real event type`).toContain(`'${type}'`);
     }
     // What the Beta Gate's PERMISSIONS row reads: the checked flag and both capture flags, beside the counts.
+    // WHY the report was refused. The event carries `facts.reasonCode` (a source literal), but the dump used to omit it, so scope.tsv listed the refusal with every field blank
+    // and the analysis printed 'NOT exported by the dump' (scope.tsv seq 54 of run 36915013287, seq 56 of the later run).
+    expect(scope, 'the scope dump selects the refusal reason as a named column').toContain("e.payload->'facts'->>'reasonCode' AS reason_code");
     for (const key of ['rule', 'scopeChecked', 'scopeViolations', 'ownScopeViolations', 'workspaceCaptured', 'captured']) expect(scope).toContain(`'${key}'`);
     for (const text of ["'path'", "'paths'", "'own'", "'inherited'"]) {
       expect(scope.includes(text), `the scope dump must not export ${text}, which a coder's changes wrote`).toBe(false);
