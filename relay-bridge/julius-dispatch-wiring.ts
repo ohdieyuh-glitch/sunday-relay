@@ -3,8 +3,7 @@ import { createHash } from 'node:crypto';
 import type { runGptArchitect } from '../src/relay/connectors/gpt-architect';
 import type { GptArchitectConfig } from '../src/relay/connectors/gpt-architect/config';
 import type { JuliusCodingAgentProvider } from '../src/relay/mission/julius/julius-coding-agent';
-import type { JuliusApiIdentity, JuliusApiResult, JuliusRunView } from '../src/relay/mission/julius/julius-runtime-api';
-import { assertContractBinding, createJ1ProductionComposition, createJuliusRunLookup } from './julius-dispatch-adapters';
+import { createFrozenRunLookup, createJ1ProductionComposition } from './julius-dispatch-adapters';
 import {
   createJuliusDispatch, createUncomposedJuliusDispatch, frozenMissionProblems,
   type DispatchInput, type DispatchLedger, type DispatchOutcome, type FrozenMission, type JuliusDispatchController,
@@ -41,14 +40,8 @@ export interface J1WiringDeps {
   /** The real architect runner; the adapter's own default is used when absent. */
   readonly architectRun?: typeof runGptArchitect;
   /** Builds the coding provider for ONE attempt from the allow-listed env. Null = not available = refuse. */
-  readonly coderProviderFor: ((env: Readonly<Record<string, string>>) => JuliusCodingAgentProvider) | null;
+  readonly coderProviderFor: ((env: Readonly<Record<string, string>>, ctx: { readonly requestedModel: string }) => JuliusCodingAgentProvider) | null;
   readonly shell: ShellEffectPort | null;
-  /** The Julius run store port set the run lookup needs. Null = not available = refuse. */
-  readonly runStore: {
-    readonly api: { inspectRun(identity: JuliusApiIdentity, runId: string): Promise<JuliusApiResult<JuliusRunView>> };
-    readonly identityFor: (projectId: string) => JuliusApiIdentity;
-    readonly contractSha256Of: (input: { readonly projectId: string; readonly runId: string; readonly missionId: string }) => Promise<string | null>;
-  } | null;
   readonly now: () => number;
   readonly newId?: () => string;
   /** Safe lines only. */
@@ -110,9 +103,9 @@ function build(read: () => J1Env, deps: J1WiringDeps): J1WiringResult {
   };
 
   /* Dependencies that cannot be proven here are required, never defaulted. */
-  if (deps.coderProviderFor === null) throw new Refuse('dep_coder_provider_absent');
+  const coderProviderFor = deps.coderProviderFor;
+  if (coderProviderFor === null) throw new Refuse('dep_coder_provider_absent');
   if (deps.shell === null) throw new Refuse('dep_shell_absent');
-  if (deps.runStore === null) throw new Refuse('dep_run_store_absent');
 
   /* 1. Configuration the controller itself will demand (checked now so a live object never starts half-configured). */
   need('JULIUS_J1_FOUNDER_PLAYER_ID');
@@ -140,12 +133,10 @@ function build(read: () => J1Env, deps: J1WiringDeps): J1WiringResult {
   if (fileSha(ledgerSeedPath, 'pin_seed_ledger') !== ledgerSeedSha) throw new Refuse('pin_seed_ledger_file_mismatch');
   if (fileSha(postsSeedPath, 'pin_seed_posts') !== postsSeedSha) throw new Refuse('pin_seed_posts_file_mismatch');
   const readContractBytes = (): Uint8Array => deps.readFileSync(contractPath);
-  try {
-    assertContractBinding({ contractSha256Of: deps.runStore.contractSha256Of, preregContractSha256: contractSha, readContractBytes });
-  } catch (error) {
-    throw new Refuse(`pin_${error instanceof Error && TOKEN.test(error.message) ? error.message : 'contract_binding_failed'}`);
-  }
-  const brief = Buffer.from(readContractBytes()).toString('utf8');
+  let contractBytes: Uint8Array;
+  try { contractBytes = readContractBytes(); } catch { throw new Refuse('pin_contract_unreadable'); }
+  if (sha256Hex(contractBytes) !== contractSha) throw new Refuse('pin_contract_sha256_mismatch');
+  const brief = Buffer.from(contractBytes).toString('utf8');
 
   /* 3. The frozen mission record (attestations are compared by the controller; shape verified here). */
   const frozen: FrozenMission = {
@@ -178,13 +169,11 @@ function build(read: () => J1Env, deps: J1WiringDeps): J1WiringResult {
   const providers = createJ1ProductionComposition({
     env, brief, fetchImpl: deps.fetchImpl,
     architect: { config: architectConfig, keyEnv: architectKeyEnv, servedModelAllow: architectServedAllow, ...(deps.architectRun === undefined ? {} : { run: deps.architectRun }) },
-    coder: { providerFor: deps.coderProviderFor, shell: deps.shell, projectId, workerId, workspacePath, model: coderModel, servedModelAllow: coderServedAllow, permittedPaths, keyEnv: null, secretKeyEnvs: [] },
+    coder: { providerFor: (childEnv) => coderProviderFor(childEnv, { requestedModel: coderModel }), shell: deps.shell, projectId, workerId, workspacePath, model: coderModel, servedModelAllow: coderServedAllow, permittedPaths, keyEnv: null, secretKeyEnvs: [] },
     reviewer: { model: reviewerModel, keyEnv: reviewerKeyEnv, servedModelAllow },
   });
-  const runs = createJuliusRunLookup({
-    api: deps.runStore.api, identityFor: deps.runStore.identityFor, contractSha256Of: deps.runStore.contractSha256Of,
-    contractBinding: { preregContractSha256: contractSha, readContractBytes },
-  });
+  /* J1 creates its own run, so the lookup answers with the FROZEN record for the one configured project. */
+  const runs = createFrozenRunLookup({ projectId, frozen });
   const checker = createFrozenReviewerChecker({
     nodePath, checkerPath, checkerSha256: checkerSha, ledgerPath: ledgerSeedPath, ledgerSha256: ledgerSeedSha, postsPath: postsSeedPath, postsSha256: postsSeedSha,
     readFileBytes: async (path) => deps.readFileSync(path), writeArtifact: deps.writeArtifact, run: deps.runProcess,

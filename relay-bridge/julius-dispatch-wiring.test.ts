@@ -6,8 +6,9 @@ import { describe, expect, it } from 'vitest';
 
 import type { GptRunOutcome } from '../src/relay/connectors/gpt-architect';
 import type { JuliusCodingAgentProvider, JuliusCodingAgentProviderOutcome } from '../src/relay/mission/julius/julius-coding-agent';
-import type { JuliusApiIdentity, JuliusRunView } from '../src/relay/mission/julius/julius-runtime-api';
 import { createMemoryDispatchLedger } from './julius-dispatch';
+import { createCoderRoleProvider, createFrozenRunLookup } from './julius-dispatch-adapters';
+import { buildJ1CoderProviderFor, J1_CODER_AUTH_MODE, J1_SHELL_PORT_MISSING, realJ1WiringDeps } from './julius-dispatch-wiring-real';
 import { createJ1LiveDispatchFromEnv, J1_PINNED_CHECKER_SHA256, J1_PINNED_CONTRACT_SHA256, type J1WiringDeps } from './julius-dispatch-wiring';
 import type { ShellEffectPort } from './julius/executor-effects';
 
@@ -44,12 +45,6 @@ const goodEnv = (over: Record<string, string | undefined> = {}): Record<string, 
   ...over,
 });
 
-const identity: JuliusApiIdentity = { tenantId: 't', projectId: 'proj-1', actorId: 'bridge', scopes: ['run:read'] };
-const view = (): JuliusRunView => ({
-  runId: 'run:1', missionId: 'mission-1', state: 'READY', revision: 1, cardRevision: 'c', missionContractRevision: 1, projectBrainRevision: 1,
-  taskCounts: {} as never, activeTasks: 0, pendingApprovals: 0,
-});
-
 const ARTIFACT = '{"normalized":true}';
 const HEAD = 'a'.repeat(40);
 const completed = (): JuliusCodingAgentProviderOutcome => ({
@@ -84,7 +79,6 @@ function makeDeps(over: Partial<J1WiringDeps> = {}, files: Record<string, string
     architectRun: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: { inputTokens: 5, cachedInputTokens: null, outputTokens: 7, reasoningTokens: null, totalTokens: 12 } }) as GptRunOutcome,
     coderProviderFor: () => fakeCoder(),
     shell: fakeShell(),
-    runStore: { api: { inspectRun: async () => ({ ok: true, value: view() }) }, identityFor: () => identity, contractSha256Of: async () => PIN.contractSha256 },
     now: () => (clock += 1000),
     log: (line) => probe.logs.push(line),
     pinned: PIN,
@@ -123,10 +117,9 @@ describe('J1 live wiring (fakes only)', () => {
     }
   });
 
-  it('a missing dependency refuses (coder provider, shell, run store)', () => {
+  it('a missing dependency refuses (coder provider, shell)', () => {
     expect(createJ1LiveDispatchFromEnv(goodEnv(), makeDeps({ coderProviderFor: null }).deps)).toMatchObject({ live: false, reason: 'dep_coder_provider_absent' });
     expect(createJ1LiveDispatchFromEnv(goodEnv(), makeDeps({ shell: null }).deps)).toMatchObject({ live: false, reason: 'dep_shell_absent' });
-    expect(createJ1LiveDispatchFromEnv(goodEnv(), makeDeps({ runStore: null }).deps)).toMatchObject({ live: false, reason: 'dep_run_store_absent' });
   });
 
   it('a mismatched checker sha refuses: the env value, or the file on disk', async () => {
@@ -212,5 +205,64 @@ describe('J1 live wiring (fakes only)', () => {
       const code = readFileSync(join(__dirname, file), 'utf8').split('\n').filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l));
       expect(code.filter((l) => /process\.env|process\['env'\]|process\[\"env\"\]/.test(l)), file).toEqual([]);
     }
+  });
+});
+
+describe('Part B: the real builders are construct-only', () => {
+  const frozen = { missionId: 'mission-1', contractSha256: 'a'.repeat(64) };
+
+  it('the frozen run lookup answers for the configured project only, with the frozen record in state READY', async () => {
+    const lookup = createFrozenRunLookup({ projectId: 'proj-1', frozen });
+    expect(await lookup.lookup({ projectId: 'proj-1', runId: 'run:new' })).toEqual({ missionId: 'mission-1', contractSha256: 'a'.repeat(64), state: 'READY' });
+    expect(await lookup.lookup({ projectId: 'proj-2', runId: 'run:new' })).toBeNull();
+    expect(() => createFrozenRunLookup({ projectId: 'proj-1', frozen: { missionId: 'm', contractSha256: 'nothex' } })).toThrow('frozen_run_lookup_invalid');
+  });
+
+  it('realJ1WiringDeps supplies the coder builder, no shell, no run store, and performs no effect when constructed', () => {
+    const logs: string[] = [];
+    const deps = realJ1WiringDeps((l) => logs.push(l));
+    expect(deps.coderProviderFor).not.toBeNull();
+    expect(deps.shell).toBeNull();
+    expect('runStore' in deps).toBe(false);
+    expect(logs).toEqual([]);
+    expect(J1_SHELL_PORT_MISSING.length).toBeGreaterThan(0);
+    // a complete env still refuses on the shell, with the reason code
+    const { deps: fakes } = makeDeps({ coderProviderFor: deps.coderProviderFor, shell: null });
+    expect(createJ1LiveDispatchFromEnv(goodEnv(), fakes)).toMatchObject({ live: false, reason: 'dep_shell_absent' });
+  });
+
+  it('the real coder builder passes NO provider key, the subscription auth mode and the requested model to the hosted runner', async () => {
+    const seen: { apiKey: string; authMode: unknown; requestedModel: unknown; workspacePath: string }[] = [];
+    const build = buildJ1CoderProviderFor({
+      queryLoader: async () => (async function* () { /* never iterated */ }) as never,
+      run: (async (input: { apiKey: string; authMode?: unknown; requestedModel: string | null; workspacePath: string }) => {
+        seen.push({ apiKey: input.apiKey, authMode: input.authMode, requestedModel: input.requestedModel, workspacePath: input.workspacePath });
+        throw new Error('stop here: fake run');
+      }) as never,
+    });
+    const provider = build({ PATH: '/bin' }, { requestedModel: 'claude-test-model' });
+    expect(provider.providerKind).toBe('claude-code-hosted');
+    const role = createCoderRoleProvider({ providerFor: (env) => build(env, { requestedModel: 'claude-test-model' }), shell: fakeShell(), projectId: 'proj-1', workerId: 'w', workspacePath: '/work', brief: 'B', model: 'claude-test-model', keyEnv: null, permittedPaths: ['out/normalized.json'] });
+    const out = await role.call({ role: 'coder', runId: 'run:1', dispatchId: 'd1', missionId: 'mission-1', apiKey: '', architectText: 'PLAN', coderArtifact: null, coderEvidence: null });
+    expect(out).toMatchObject({ ok: false, failureClass: 'provider_error' });
+    expect(seen).toEqual([{ apiKey: '', authMode: J1_CODER_AUTH_MODE, requestedModel: 'claude-test-model', workspacePath: '/work' }]);
+    expect(J1_CODER_AUTH_MODE).toBe('CLAUDE_SUBSCRIPTION');
+  });
+
+  it('the real coder builder refuses a key-like env name and an absent model', () => {
+    const build = buildJ1CoderProviderFor();
+    expect(() => build({ ANTHROPIC_API_KEY: 'x' }, { requestedModel: 'm' })).toThrow('coder_env_contains_secret_name');
+    expect(() => build({ PATH: '/bin' }, { requestedModel: ' ' })).toThrow('coder_requested_model_absent');
+  });
+
+  it('the wiring hands the coder builder the requested model from the env, and the composed chain uses the frozen lookup (no run store)', async () => {
+    const asked: string[] = [];
+    const { deps } = makeDeps({ coderProviderFor: (_env, ctx) => { asked.push(ctx.requestedModel); return fakeCoder(); } });
+    const r = createJ1LiveDispatchFromEnv(goodEnv(), deps);
+    expect(r.live).toBe(true);
+    expect(await r.controller.dispatch(dispatchInput)).toMatchObject({ ok: true });
+    await r.controller.whenIdle();
+    expect(asked).toEqual(['claude-test-model']);
+    expect(await r.controller.dispatch({ ...dispatchInput, projectId: 'proj-other', idempotencyKey: 'key-0000002' })).toMatchObject({ ok: false });
   });
 });

@@ -167,6 +167,8 @@ export function coderEvidenceText(changes: readonly { readonly path: string; rea
 export const J1_CODER_ENV_DEFAULT_ALLOW: readonly string[] = Object.freeze(['PATH', 'Path', 'SystemRoot', 'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'LANG']);
 /** Names that can never be allow-listed for the coder, whatever the caller says. */
 const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|BEARER)/iu;
+/** True when a variable NAME looks like a credential. Exported so the real coder builder applies the same test to the env it is handed. */
+export const isSecretLikeEnvName = (name: string): boolean => SECRET_NAME.test(name);
 
 /**
  * The environment the coder session is HANDED (handed to `providerFor`, because the real `execute` has no env argument). Built from an explicit allow-list over an
@@ -487,6 +489,23 @@ export function createJuliusRunLookup(input: RunLookupInput): RunLookup {
       const { missionId, state } = result.value;
       const contractSha256 = await input.contractSha256Of({ projectId, runId, missionId });
       return { missionId, contractSha256: nonEmpty(contractSha256) ? contractSha256 : '', state };
+    },
+  };
+}
+
+/**
+ * THE FROZEN RUN LOOKUP. J1 creates its own run (the controller writes `run_created`), so there is no Julius store row to read.
+ * The lookup answers, for the ONE configured project, with the frozen mission record (mission id and contract sha256 from the
+ * prereg-pinned environment) in state READY; any other project is "no such run". It proves nothing about the run id; the
+ * controller's own run-creator, key-reuse and per-mission run caps bound that.
+ */
+export function createFrozenRunLookup(input: { readonly projectId: string; readonly frozen: { readonly missionId: string; readonly contractSha256: string } }): RunLookup {
+  if (!nonEmpty(input.projectId) || !nonEmpty(input.frozen.missionId) || !/^[0-9a-f]{64}$/u.test(input.frozen.contractSha256)) throw new Error('frozen_run_lookup_invalid');
+  const { projectId, frozen } = input;
+  return {
+    async lookup(query) {
+      if (query.projectId !== projectId) return null;
+      return { missionId: frozen.missionId, contractSha256: frozen.contractSha256, state: 'READY' };
     },
   };
 }
