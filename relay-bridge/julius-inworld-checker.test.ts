@@ -74,6 +74,42 @@ describe('julius-inworld-data-1 hidden checker', () => {
     });
   }
 
+  it('pins the tightened contract rules with unit inputs (parsers imported from the oracle)', async () => {
+    const o = (await import(resolve(MISSION, 'checker', 'oracle.mjs'))) as {
+      parseQty(s: string): number | null; parsePrice(s: string): number | null; parseTs(s: string): string | null;
+      normalize(csv: string, posts: unknown[]): Doc;
+    };
+    // R4: single U+0020 only, no-space pcs ok, leading zeros decimal
+    expect(o.parseQty('12pcs')).toBe(12);
+    expect(o.parseQty('12 pcs')).toBe(12);
+    expect(o.parseQty('12' + String.fromCharCode(9) + 'pcs')).toBeNull();
+    expect(o.parseQty('12  pcs')).toBeNull();
+    expect(o.parseQty('x 2')).toBeNull();
+    expect(o.parseQty('007')).toBe(7);
+    expect(o.parseQty('x03')).toBe(3);
+    expect(o.parseQty('00')).toBeNull();
+    // R5: zero or one space, leading zeros
+    expect(o.parsePrice('12.5cr')).toBe(1250);
+    expect(o.parsePrice('12.5  cr')).toBeNull();
+    expect(o.parsePrice('007.5 cr')).toBe(750);
+    expect(o.parsePrice('0,005 cr')).toBe(500);
+    // R6: offset ranges, seconds, case
+    expect(o.parseTs('2026-03-01T00:00:00+23:59')).toBe('2026-02-28T00:01:00Z');
+    expect(o.parseTs('2026-03-01T00:00:00-00:00')).toBe('2026-03-01T00:00:00Z');
+    expect(o.parseTs('2026-03-01T00:00:00+24:00')).toBeNull();
+    expect(o.parseTs('2026-03-01T00:00:00+05:60')).toBeNull();
+    expect(o.parseTs('2026-03-01T00:00:60Z')).toBeNull();
+    expect(o.parseTs('2026-03-01t00:00:00Z')).toBeNull();
+    expect(o.parseTs('2026-03-01T00:00:00z')).toBeNull();
+    // R1/R7: empty item allowed, short rows read missing fields as empty, 'settled' accepted
+    const posts = [{ id: 'p1', name: 'One', aliases: [] }];
+    const csv = ['h', 'AA-0001,one,,1,1 cr,2026-01-01T00:00:00Z,settled', 'AA-0002,one', ''].join(String.fromCharCode(10));
+    const doc = o.normalize(csv, posts);
+    expect(doc.records).toHaveLength(1);
+    expect(doc.records[0]).toMatchObject({ item: '', status: 'settled' });
+    expect(doc.rejects).toEqual([{ line_no: 2, txn_id: 'AA-0002', reason: 'bad_qty' }]);
+  });
+
   it('refuses non-JSON, fenced JSON, arrays, empty and over-long artifacts', async () => {
     const { checkArtifact, expectedDocument } = await loadCheck();
     const good = JSON.stringify(expectedDocument());
