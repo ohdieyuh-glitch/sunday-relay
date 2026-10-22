@@ -1,9 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 import { createMemoryDispatchLedger } from './julius-dispatch';
+import { closureOf } from './julius-dispatch-source-scan';
 import { createJ1LiveDispatchWithPins } from './julius-dispatch-wiring-core';
 import { createCoderRoleProvider, createFrozenRunLookup } from './julius-dispatch-adapters';
 import { buildJ1CoderProviderFor, J1_CODER_AUTH_MODE, J1_SHELL_PORT_MISSING, realJ1WiringDeps } from './julius-dispatch-wiring-real';
@@ -192,25 +193,18 @@ describe('Part B: the real builders are construct-only', () => {
 
 describe('C1: the test pins cannot reach production code', () => {
   const root = __dirname;
-  const importsOf = (file: string): string[] => {
-    const src = readFileSync(file, 'utf8');
-    const out: string[] = [];
-    for (const m of src.matchAll(/(?:from|import)\s*\(?\s*['"](\.{1,2}\/[^'"]+)['"]/gu)) {
-      const base = resolve(dirname(file), m[1]!);
-      for (const cand of [`${base}.ts`, join(base, 'index.ts'), base]) if (existsSync(cand) && /\.ts$/u.test(cand)) { out.push(cand); break; }
-    }
-    return out;
-  };
+  const io = { read: (p: string): string => readFileSync(p, 'utf8'), exists: (p: string): boolean => existsSync(p) && statSync(p).isFile() };
+  /* D3: resolves .js-suffixed specifiers, index files, require() and import() with a string literal; an unresolvable relative specifier or a
+     non-literal dynamic import anywhere in the closure FAILS (a closure that cannot be proven is not clean). */
   const closure = (start: readonly string[]): string[] => {
-    const seen = new Set<string>();
-    const queue = [...start];
-    while (queue.length > 0) {
-      const f = queue.pop()!;
-      if (seen.has(f) || /\.test\.ts$/u.test(f)) continue;
-      seen.add(f);
-      queue.push(...importsOf(f));
-    }
-    return [...seen];
+    const c = closureOf(start, io);
+    /* The ONE known false positive: fixture.ts holds the text of a stub source file in a template string (`from '../src/normalize.js'` is data, not an import). */
+    const unresolved = c.unresolved.filter((u) => !(/claude-code.fixture.ts$/u.test(u.from) && u.spec === '../src/normalize.js'));
+    expect(unresolved, 'unresolvable relative import in the closure').toEqual([]);
+    /* NAMED ALLOWANCE (reviewable): hosted-runner.ts loads the Agent SDK with `new Function('id', 'return import(id)')` where id is the constant HOSTED_SDK_PACKAGE. It is shared hosted code. Any OTHER non-literal dynamic import fails. */
+    const nonLiteral = c.nonLiteralDynamic.filter((f) => !/hosted-coding-agent.hosted-runner.ts$/u.test(f));
+    expect(nonLiteral, 'non-literal dynamic import in the closure').toEqual([]);
+    return c.files;
   };
   const code = (file: string): string => readFileSync(file, 'utf8').split(/\r?\n/u).filter((l) => !/^\s*(\*|\/\/|\/\*)/u.test(l)).join(' ');
 
@@ -285,5 +279,32 @@ describe('C3/C4 at the wiring', () => {
     const rows = await probe.ledgers[0]!.rows();
     expect(rows.find((row) => row.phase === 'result' && row.role === 'coder')).toMatchObject({ outcome: 'workspace_scope_violation' });
     expect(rows.some((row) => row.phase === 'pre_call' && row.role === 'reviewer')).toBe(false);
+  });
+  it('D1 END TO END (fakes): the coder result row holds the list hashes and a bundle_lists row holds the FULL before and after lists', async () => {
+    const { deps, probe } = makeDeps();
+    const r = createJ1LiveForTest(goodEnv(), deps);
+    const before = { ...probe.workspace };
+    await r.controller.dispatch(await echoed(r.controller));
+    await r.controller.whenIdle();
+    const rows = await probe.ledgers[0]!.rows();
+    const coder = rows.find((row) => row.phase === 'result' && row.role === 'coder')!;
+    const lists = rows.find((row) => row.phase === 'bundle_lists' && row.role === 'coder')!;
+    const hashes = (m: Record<string, string>): Record<string, string> => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, sha(v)]));
+    const listSha = (m: Record<string, string>): string => sha(JSON.stringify(Object.entries(m).sort()));
+    expect(lists.beforeList).toEqual(hashes(before));
+    expect(lists.afterList).toEqual(hashes({ ...before, 'out/normalized.json': ARTIFACT }));
+    expect(coder).toMatchObject({ beforeListSha256: listSha(hashes(before)), afterListSha256: listSha(hashes({ ...before, 'out/normalized.json': ARTIFACT })) });
+    expect(lists).toMatchObject({ beforeListSha256: coder.beforeListSha256, afterListSha256: coder.afterListSha256 });
+  });
+  it('D2 END TO END (fakes): a coder that writes under node_modules/ fails workspace_scope_violation; the lists are still recorded', async () => {
+    const { deps, probe } = makeDeps();
+    probe.workspace['out/normalized.json'] = 'stale';
+    const cheat = { providerKind: 'fake-coding', async execute() { probe.workspace['node_modules/evil/index.js'] = 'x'; return fakeCoder(probe.workspace).execute({} as never); } };
+    const r = createJ1LiveForTest(goodEnv(), { ...deps, coderProviderFor: () => cheat as never });
+    await r.controller.dispatch(await echoed(r.controller));
+    await r.controller.whenIdle();
+    const rows = await probe.ledgers[0]!.rows();
+    expect(rows.find((row) => row.phase === 'result' && row.role === 'coder')).toMatchObject({ outcome: 'workspace_scope_violation' });
+    expect(rows.find((row) => row.phase === 'bundle_lists')!.afterList).toHaveProperty(['node_modules/evil/index.js']);
   });
 });

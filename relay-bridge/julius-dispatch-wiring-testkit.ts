@@ -85,7 +85,7 @@ export function makeDeps(over: Partial<J1WiringDeps> = {}, files: Record<string,
     coderProviderFor: () => fakeCoder(probe.workspace),
     shell: fakeShell(),
     workspaceFs: () => ({
-      listFiles: async () => Object.keys(probe.workspace),
+      listEntries: async () => Object.keys(probe.workspace).map((path) => ({ path, kind: 'file' as const })),
       readFile: async (p) => { const v = probe.workspace[p]; if (v === undefined) throw new Error('enoent'); return new TextEncoder().encode(v); },
     }),
     now: () => (clock += 1000),

@@ -79,7 +79,14 @@ export interface RoleCallOutput {
   /** CODER: bounded executor evidence (diff or changed-file contents, or a labelled path list) shown to the reviewer. Null/absent = none. */
   readonly evidence?: string | null;
   /** CODER bundle step: sha256 of the trimmed final message and of the trimmed out/normalized.json bytes (null = no file), and the workspace paths that changed. */
-  readonly bundle?: { readonly judgedSha256: string; readonly fileSha256: string | null; readonly changedPaths: readonly string[] };
+  readonly bundle?: {
+    readonly judgedSha256: string; readonly fileSha256: string | null; readonly changedPaths: readonly string[];
+    /** M3 D1: the FULL workspace hash lists before and after the session, and their sha256 (the lists go to a `bundle_lists` ledger row). */
+    readonly beforeList: Readonly<Record<string, string>>; readonly afterList: Readonly<Record<string, string>>;
+    readonly beforeListSha256: string; readonly afterListSha256: string;
+    /** M3 D2: the git directory's own tree hash before and after (null = no git directory named) and the named exclusions in force. */
+    readonly gitTreeSha256Before: string | null; readonly gitTreeSha256After: string | null; readonly excluded: readonly string[];
+  };
   /** REVIEWER: sha256 over everything the reviewer was shown, so a verdict can be tied to what was judged. Present on a failed leg that got that far. */
   readonly shownSha256?: string | null;
   /** REVIEWER: the verdict the reviewer returned. */
@@ -522,6 +529,11 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         artifactJudgedSha256: role === 'coder' ? (out.bundle?.judgedSha256 ?? null) : null,
         artifactFileSha256: role === 'coder' ? (out.bundle?.fileSha256 ?? null) : null,
         workspaceChangedPaths: role === 'coder' && out.bundle !== undefined ? out.bundle.changedPaths.join(',') : null,
+        beforeListSha256: role === 'coder' ? (out.bundle?.beforeListSha256 ?? null) : null,
+        afterListSha256: role === 'coder' ? (out.bundle?.afterListSha256 ?? null) : null,
+        gitTreeSha256Before: role === 'coder' ? (out.bundle?.gitTreeSha256Before ?? null) : null,
+        gitTreeSha256After: role === 'coder' ? (out.bundle?.gitTreeSha256After ?? null) : null,
+        workspaceExcluded: role === 'coder' && out.bundle !== undefined ? out.bundle.excluded.join(',') : null,
         evidenceSha256: role === 'coder' && evidence !== null ? sha256(evidence) : null,
         evidenceChars: role === 'coder' && evidence !== null ? evidence.length : null,
         shownSha256: role === 'reviewer' ? (out.shownSha256 ?? null) : null,
@@ -529,7 +541,13 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         attempts: 1,
       };
       let resultWritten = true;
-      try { await deps.ledger.append(resultRow); } catch { resultWritten = false; }
+      /* M3 D1: the full lists go to their own row BEFORE the result row, so a result row never exists without its lists. */
+      if (role === 'coder' && out.bundle !== undefined) {
+        try {
+          await deps.ledger.append({ phase: 'bundle_lists', ...base, role, at: resultRow.at, beforeListSha256: out.bundle.beforeListSha256, afterListSha256: out.bundle.afterListSha256, beforeList: { ...out.bundle.beforeList }, afterList: { ...out.bundle.afterList } });
+        } catch { resultWritten = false; }
+      }
+      if (resultWritten) { try { await deps.ledger.append(resultRow); } catch { resultWritten = false; } }
       emit(rec, {
         type: roleFailure === null ? 'role.completed' : 'role.failed', role, phase: roleFailure === null ? 'done' : 'refused', outcome,
         responseIdTail: tailOf(responseId), responseIdSha16: responseId === null ? null : sha16(responseId),

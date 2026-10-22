@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -91,7 +91,7 @@ export function realJ1WiringDeps(log: (line: string) => void, now: () => number 
     openLedger: (file) => createFileDispatchLedger({ file }),
     coderProviderFor: buildJ1CoderProviderFor(),
     shell: null,
-    workspaceFs: (root) => createLocalWorkspaceFs(root, { readdirSync: (p, o) => readdirSync(p, o), readFileSync: (p) => readFileSync(p) }),
+    workspaceFs: (root) => createLocalWorkspaceFs(root, { readdirSync: (p, o) => readdirSync(p, o), readlinkSync: (p) => readlinkSync(p), readFileSync: (p) => readFileSync(p) }),
     now,
     log,
   };

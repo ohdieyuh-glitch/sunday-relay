@@ -262,7 +262,7 @@ export interface CoderRoleInput {
   /** Files the coder may read (a recorded request field). Default none recorded. */
   readonly readPaths?: readonly string[];
   /** The bundle step: the workspace before/after hash lists and the judged-message-against-file comparison. Absent = no bundle step. */
-  readonly bundle?: { readonly fs: WorkspaceFs; readonly artifactPath: string };
+  readonly bundle?: { readonly fs: WorkspaceFs; readonly artifactPath: string; /** '.git' when the bridge made a repository in the workspace: its own tree hash, named exclusions recorded. Absent = nothing excluded. */ readonly gitDir?: '.git' | null };
   readonly budgetUsdMicros?: number | null;
   /** Called with the executor record for every attempt that reached the close-out, for the composition to ledger or log. */
   readonly onExecutorRecord?: (record: CoderExecutorRecord, call: RoleCallInput) => void;
@@ -317,7 +317,7 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
       /* THE WORKSPACE BEFORE THE SESSION (bundle step). A workspace that cannot be hashed means no session was launched. */
       let beforeHashes;
       if (input.bundle !== undefined) {
-        try { beforeHashes = await hashWorkspace(input.bundle.fs); } catch {
+        try { beforeHashes = await hashWorkspace(input.bundle.fs, { gitDir: input.bundle.gitDir ?? null }); } catch {
           return { ok: false, text: '', responseId: null, model: null, failureClass: 'workspace_snapshot_unavailable', providerContacted: false };
         }
       }
@@ -366,11 +366,17 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
       let bundle: RoleCallOutput['bundle'];
       if (input.bundle !== undefined && beforeHashes !== undefined) {
         try {
-          const after = await hashWorkspace(input.bundle.fs);
+          const after = await hashWorkspace(input.bundle.fs, { gitDir: input.bundle.gitDir ?? null });
           let fileBytes: Uint8Array | null = null;
-          if (input.bundle.artifactPath in after) fileBytes = await input.bundle.fs.readFile(input.bundle.artifactPath);
+          const artifactValue = after.files[input.bundle.artifactPath];
+          /* A symlink standing in for the artifact is never read (it could point at a key file): the scope check fails it. */
+          if (artifactValue !== undefined && !artifactValue.startsWith('symlink:') && !artifactValue.startsWith('special:')) fileBytes = await input.bundle.fs.readFile(input.bundle.artifactPath);
           const step = bundleStep({ judgedMessage: outcome.finalText ?? '', before: beforeHashes, after, fileBytes, artifactPath: input.bundle.artifactPath });
-          bundle = { judgedSha256: step.judgedSha256, fileSha256: step.fileSha256, changedPaths: step.changedPaths };
+          bundle = {
+            judgedSha256: step.judgedSha256, fileSha256: step.fileSha256, changedPaths: step.changedPaths,
+            beforeList: step.beforeList, afterList: step.afterList, beforeListSha256: step.beforeListSha256, afterListSha256: step.afterListSha256,
+            gitTreeSha256Before: step.gitTreeSha256Before, gitTreeSha256After: step.gitTreeSha256After, excluded: step.excluded,
+          };
           if (!step.ok) return { ok: false, text: '', responseId: sessionResponseId, model: observation.providerModel, usage, failureClass: step.failureClass ?? 'artifact_file_mismatch', bundle };
         } catch {
           return { ok: false, text: '', responseId: sessionResponseId, model: observation.providerModel, usage, failureClass: 'workspace_snapshot_unavailable' };

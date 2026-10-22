@@ -186,7 +186,7 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   const providers = createJ1ProductionComposition({
     env, brief, fetchImpl: deps.fetchImpl,
     architect: { config: architectConfig, keyEnv: architectKeyEnv, servedModelAllow: architectServedAllow, ...(deps.architectRun === undefined ? {} : { run: deps.architectRun }) },
-    coder: { providerFor: (childEnv) => coderProviderFor(childEnv, { requestedModel: coderModel }), shell: deps.shell, projectId, workerId, workspacePath, model: coderModel, servedModelAllow: coderServedAllow, permittedPaths, readPaths: J1_CODER_READ_PATHS, bundle: { fs: workspaceFs(workspacePath), artifactPath: J1_ARTIFACT_FILE }, keyEnv: null, secretKeyEnvs: [] },
+    coder: { providerFor: (childEnv) => coderProviderFor(childEnv, { requestedModel: coderModel }), shell: deps.shell, projectId, workerId, workspacePath, model: coderModel, servedModelAllow: coderServedAllow, permittedPaths, readPaths: J1_CODER_READ_PATHS, bundle: { fs: workspaceFs(workspacePath), artifactPath: J1_ARTIFACT_FILE, gitDir: '.git' }, keyEnv: null, secretKeyEnvs: [] },
     reviewer: { model: reviewerModel, keyEnv: reviewerKeyEnv, servedModelAllow },
   });
   /* J1 creates its own run, so the lookup answers with the FROZEN record for the one configured project. */

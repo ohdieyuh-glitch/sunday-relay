@@ -521,7 +521,7 @@ describe('C4 the coder leg runs the bundle step when a workspace fs is injected'
   /** A workspace whose contents the (fake) session mutates when it executes. */
   function world(afterSession: Record<string, string>) {
     let files: Record<string, string> = { ...BASE_FILES };
-    const fs = { listFiles: async () => Object.keys(files), readFile: async (p: string) => { const v = files[p]; if (v === undefined) throw new Error('enoent'); return enc(v); } };
+    const fs = { listEntries: async () => Object.keys(files).map((path) => ({ path, kind: 'file' as const })), readFile: async (p: string) => { const v = files[p]; if (v === undefined) throw new Error('enoent'); return enc(v); } };
     const provider: JuliusCodingAgentProvider = { providerKind: 'fake-coding', async execute() { files = { ...files, ...afterSession }; return completed({ finalText: '{"a":1}\n' }); } };
     return { fs, provider };
   }
@@ -546,7 +546,7 @@ describe('C4 the coder leg runs the bundle step when a workspace fs is injected'
   });
   it('a workspace that cannot be listed before the session means no session: pre-contact failure', async () => {
     const provider = fakeCoding(completed());
-    const role = createCoderRoleProvider({ providerFor: () => provider, shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null, permittedPaths: ['out/normalized.json'], bundle: { fs: { listFiles: async () => { throw new Error('x'); }, readFile: async () => enc('') }, artifactPath: 'out/normalized.json' } });
+    const role = createCoderRoleProvider({ providerFor: () => provider, shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null, permittedPaths: ['out/normalized.json'], bundle: { fs: { listEntries: async () => { throw new Error('x'); }, readFile: async () => enc('') }, artifactPath: 'out/normalized.json' } });
     expect(await role.call(call({ role: 'coder', architectText: 'P' }))).toMatchObject({ ok: false, failureClass: 'workspace_snapshot_unavailable', providerContacted: false });
     expect(provider.requests).toHaveLength(0);
   });
