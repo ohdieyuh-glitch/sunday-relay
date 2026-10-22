@@ -163,6 +163,11 @@ const MISSION_LIMITS = Object.freeze({
   // The fourth unscored diagnostic (two latent defects found by reading two independent pure domain modules: a hand-written SHA-256's UTF-8 encoder and an evidence age
   // calculation); same ceilings, same permanent maximum-capability directive.
   'julius-diag-digest-evidence-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
+  // THE FIRST IN-WORLD PAID MISSION (DRAFT, NOT GRANTED UNTIL A REVIEWER-APPROVED PREREG AND A NAMED EDIT): a data-only normalization of a legacy ledger (29 rows, 13 rules),
+  // run once from inside a packaged Wonderland client through the local J1 dispatch route, and once more as the repeat. Unscored, lane lab. $30 / 3 is the finite figure the schema
+  // needs (allocation v3), the same as the learning pairs and mission 5; it is a BOUND, not a forecast: the founder's permanent maximum-capability directive (2026-10-18) removes
+  // discretionary dollar ceilings, and the provider balances bind. The J1 route enforces its own per-leg estimate (JULIUS_J1_LEG_ESTIMATE_USD) and run caps separately.
+  'julius-inworld-data-1': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
