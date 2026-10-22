@@ -264,8 +264,20 @@ export interface ChainEvent {
   readonly failure?: string | null;
   readonly resultSha256?: string;
 }
-export type ChainState = 'ACCEPTED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'HALTED' | 'ORPHANED';
-const TERMINAL: readonly ChainState[] = ['COMPLETED', 'FAILED', 'HALTED', 'ORPHANED'];
+/** UNRECORDED = the chain ended but its FINAL ledger row could not be written: the run has no sealed record (a restart will orphan it). */
+export type ChainState = 'ACCEPTED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'HALTED' | 'ORPHANED' | 'UNRECORDED';
+const TERMINAL: readonly ChainState[] = ['COMPLETED', 'FAILED', 'HALTED', 'ORPHANED', 'UNRECORDED'];
+
+/**
+ * RESTART LIMITS, stated. The ledger survives a restart (caps, one-run-once, run creator); process memory does not. In particular
+ * the second-pairing bind (`boundSession`) lives in memory only: after a restart the first session id seen binds again, so a
+ * different session can dispatch a NEW run. A repeat dispatch of a run already in the ledger is refused from the ledger.
+ */
+export const J1_RESTART_LIMITS = Object.freeze({
+  boundSessionSurvivesRestart: false,
+  ledgerRefusesRepeatRunAfterRestart: true,
+  statement: 'The second-pairing bind (boundSession) is in-memory and resets on restart; run, key and creator checks are read from the ledger and survive it.',
+});
 
 export type DispatchMode = 'live' | 'fake';
 
@@ -526,6 +538,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
     const resultSha256 = sha256(resultText);
     rec.resultText = resultText;
     rec.resultSha256 = resultSha256;
+    let finalRowWritten = true;
     try {
       /* THE FINAL ROW (role=final), shaped for the reviewer's crosscheck: resultSha256 and the checker's output hash. */
       await deps.ledger.append({
@@ -533,7 +546,14 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         resultSha256, resultChars: resultText.length, checkerOutputSha256, spendUnknownLegs: unknownSpendLegs, orderOk,
       });
     } catch {
-      /* Terminal anyway; the roles' own rows already stand. A missing final row makes the run an orphan at the next start. */
+      /* NOT swallowed: the roles' own rows stand, but the run has no sealed record. It surfaces as UNRECORDED (a restart orphans it). */
+      finalRowWritten = false;
+    }
+    if (!finalRowWritten) {
+      rec.state = 'UNRECORDED';
+      emit(rec, { type: 'chain.final_row_failed', outcome: 'UNRECORDED', failure: 'ledger_write_failed_final_row', resultSha256 });
+      log(`chain UNRECORDED final_row_unwritten run=${sha16(rec.runId)} dispatch=${rec.dispatchId} result=${resultSha256.slice(0, 16)}`);
+      return;
     }
     rec.state = state;
     emit(rec, { type: state === 'COMPLETED' ? 'chain.completed' : 'chain.failed', outcome: state, failure, resultSha256 });
@@ -691,6 +711,9 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       }
       if (rec.state === 'ORPHANED') {
         return { status: 409, body: { error: { kind: 'julius_dispatch_run_orphaned', message: 'The bridge restarted during this run; it is not resumed.' } } };
+      }
+      if (rec.state === 'UNRECORDED') {
+        return { status: 409, body: { error: { kind: 'julius_dispatch_final_row_unwritten', message: 'The chain ended but its final ledger row could not be written.', detail: { resultSha256: rec.resultSha256 } } } };
       }
       if (rec.resultText === null && rec.resultSha256 !== null) {
         return { status: 410, body: { error: { kind: 'julius_dispatch_result_lost_on_restart', message: 'The result text did not survive a restart.', detail: { resultSha256: rec.resultSha256 } } } };

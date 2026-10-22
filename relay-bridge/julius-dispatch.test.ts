@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   verifyRunOrdering,
-  createFileDispatchLedger, createJuliusDispatch, createMemoryDispatchLedger, createUncomposedJuliusDispatch,
+  J1_RESTART_LIMITS, createFileDispatchLedger, createJuliusDispatch, createMemoryDispatchLedger, createUncomposedJuliusDispatch,
   frozenMissionProblems, handleJuliusDispatchRoute, isLoopbackPeer,
   type DispatchLedger, type DispatchProviders, type DispatchRow, type FrozenMission, type JuliusDispatchController,
   type JuliusDispatchRouteRequest, type RoleCallInput, type RoleCallOutput, type RoleProvider,
@@ -580,6 +580,38 @@ describe('J1 reviewer acceptance protocol (D1-D12) controls', () => {
     const h = harness({ ledger: createMemoryDispatchLedger({ failWrites: () => true }) });
     expect(await h.controller.dispatch(input())).toMatchObject({ status: 503 });
     expect(h.calls).toHaveLength(0);
+  });
+});
+
+describe('G3-6 final-row failure and restart are explicit, not swallowed', () => {
+  it('a ledger that fails the FINAL row surfaces state UNRECORDED on events, a named result refusal with the hash, a ledger event and a log line', async () => {
+    const h = harness({ ledger: createMemoryDispatchLedger({ failWrites: (r) => r.phase === 'result' && r.role === 'final' }) });
+    await h.controller.dispatch(input());
+    await h.controller.whenIdle();
+    const ev = (h.controller.events({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER, cursor: 0 }).body as { data: { state: string; terminal: boolean; events: { type: string; failure?: string }[] } }).data;
+    expect(ev.state).toBe('UNRECORDED');
+    expect(ev.terminal).toBe(true);
+    expect(ev.events[ev.events.length - 1]).toMatchObject({ type: 'chain.final_row_failed', failure: 'ledger_write_failed_final_row' });
+    const res = h.controller.result({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER });
+    expect(res.status).toBe(409);
+    expect(JSON.stringify(res.body)).toContain('julius_dispatch_final_row_unwritten');
+    expect(JSON.stringify(res.body)).toMatch(/[0-9a-f]{64}/);
+    expect(h.logs.join(' ')).toContain('final_row_unwritten');
+    expect((await rowsOf(h)).some((r) => r.role === 'final')).toBe(false);
+  });
+  it('RESTART LIMIT (stated): the in-memory pairing bind resets, but a repeat dispatch of the same run is still refused from the ledger', async () => {
+    expect(J1_RESTART_LIMITS.boundSessionSurvivesRestart).toBe(false);
+    expect(J1_RESTART_LIMITS.statement).toMatch(/boundSession/);
+    const ledger = createMemoryDispatchLedger();
+    const first = harness({ ledger, env: { JULIUS_J1_DAILY_CAP: '10', JULIUS_J1_MAX_RUNS_PER_MISSION: '10' } });
+    await first.controller.dispatch(input());
+    await first.controller.whenIdle();
+    const second = harness({ ledger, env: { JULIUS_J1_DAILY_CAP: '10', JULIUS_J1_MAX_RUNS_PER_MISSION: '10' } });
+    expect(await second.controller.dispatch(input())).toMatchObject({ status: 409, code: 'julius_dispatch_already_dispatched' });
+    expect(await second.controller.dispatch(input({ idempotencyKey: 'key-0000099' }))).toMatchObject({ status: 403, code: 'julius_dispatch_run_creator_mismatch' });
+    expect(second.calls).toHaveLength(0);
+    // the limit itself: a NEW session pairing on a NEW run is not blocked by the first process's bound session
+    expect(await second.controller.dispatch(input({ runId: 'run:next', sessionId: 'sess-other', idempotencyKey: 'key-0000002' }))).toMatchObject({ ok: true });
   });
 });
 
