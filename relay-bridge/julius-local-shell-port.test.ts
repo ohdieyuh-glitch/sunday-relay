@@ -171,6 +171,32 @@ describe('J1 workspace seeding (done by the port at the start of every attempt)'
   });
 });
 
+describe('D-1 the ownership marker is written BEFORE anything else, so a failed seed does not strand the workspace', () => {
+  it('a seed that fails after files were written leaves the marker; the next attempt reseeds and succeeds', async () => {
+    const w = world();
+    let failSeed = true;
+    const { spawn } = spawnFake((c) => (c === J1_SEED_COMMAND && failSeed ? { exitCode: 1, stderr: 'git init failed' } : undefined));
+    const port = mk(w, spawn);
+    expect(await port.run(input(juliusAttemptStartCommand(null)))).toMatchObject({ status: 'FAILED', stderr: 'refused:seed_failed' });
+    expect(w.files.has(`${CWD}/data/posts.json`)).toBe(true);            // files WERE written before the seed command failed
+    expect(w.files.has(`${CWD}/.git/j1-bridge-workspace`)).toBe(true);   // and the marker is there
+    failSeed = false;
+    const next = await port.run(input(juliusAttemptStartCommand(null)));
+    expect(next.status).toBe('SUCCEEDED');
+  });
+  it('the marker is the FIRST file written in a seed', async () => {
+    const w = world(); const { spawn } = spawnFake();
+    await mk(w, spawn).run(input(juliusAttemptStartCommand(null)));
+    expect(w.order[0]).toBe('write:.git/j1-bridge-workspace');
+  });
+  it('a foreign non-empty directory is still refused untouched (no marker is written into it)', async () => {
+    const foreign = world({ 'precious.txt': 'keep me' }); const f = spawnFake();
+    await mk(foreign, f.spawn).run(input(juliusAttemptStartCommand(null)));
+    expect(foreign.files.has(`${CWD}/.git/j1-bridge-workspace`)).toBe(false);
+    expect(foreign.files.has(`${CWD}/precious.txt`)).toBe(true);
+  });
+});
+
 describe('the coder leg runs its start and close commands through the local port (fakes)', () => {
   it('end to end: seed, start, session (fake), close; only generated forms were spawned', async () => {
     const w = world(); const { spawn, calls } = spawnFake();

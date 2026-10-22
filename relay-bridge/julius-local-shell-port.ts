@@ -110,6 +110,9 @@ export function createLocalShellPort(input: {
     const entries = input.fs.listDir(cwd);
     if (entries.length > 0 && !input.fs.exists(`${cwd}/${MARKER}`)) return 'workspace_not_bridge_owned';
     for (const entry of entries) input.fs.removeRecursive(`${cwd}/${entry}`);
+    /* D-1: the ownership marker goes in FIRST, so a seed that fails part-way leaves a directory the next attempt may reseed. */
+    input.fs.mkdirp(`${cwd}/.git`);
+    input.fs.writeFile(`${cwd}/${MARKER}`, new Uint8Array(0));
     for (const f of input.seedFiles) {
       const dir = f.name.includes('/') ? f.name.slice(0, f.name.lastIndexOf('/')) : '';
       if (dir !== '') input.fs.mkdirp(`${cwd}/${dir}`);
@@ -119,8 +122,6 @@ export function createLocalShellPort(input: {
     input.fs.writeFile(`${cwd}/${J1_ARTIFACT_RELATIVE}`, new TextEncoder().encode(J1_PLACEHOLDER));
     const r = await exec(J1_SEED_COMMAND, timeoutMs);
     if (r.status !== 'SUCCEEDED' || !/^SEEDED [0-9a-f]{40}$/mu.test(r.stdout)) return 'seed_failed';
-    input.fs.mkdirp(`${cwd}/.git`);
-    input.fs.writeFile(`${cwd}/${MARKER}`, new Uint8Array(0));
     return null;
   };
 
