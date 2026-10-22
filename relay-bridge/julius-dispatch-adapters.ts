@@ -297,10 +297,18 @@ function hermesUsage(usage: { readonly inputTokens: number | null; readonly outp
 /* ---------------------------------------------------------------------------------------------------------------- */
 /* Composition helper                                                                                               */
 
-/** Refuses a composition whose three providers are not three different independence groups. */
+/** The lower-case leading letters of a model name (`gpt-5.6-sol` -> `gpt`, `grok-4` -> `grok`). An empty or letterless name gives '' and collides, so it is refused. */
+export function modelFamily(model: string): string {
+  return (/^[a-z]+/.exec(model.trim().toLowerCase()) ?? [''])[0];
+}
+
+/** Refuses a composition whose three providers are not three different independence groups, or whose three models are not three different families. */
 export function composeRoleProviders(providers: { readonly architect: RoleProvider; readonly coder: RoleProvider; readonly reviewer: RoleProvider }): typeof providers {
   const ids = [providers.architect.providerId, providers.coder.providerId, providers.reviewer.providerId];
   if (new Set(ids).size !== 3) throw new Error('role_providers_not_independent');
+  // Independence is provider AND model family (review F3): a provider string alone can change without changing the model behind it.
+  const families = [providers.architect.model, providers.coder.model, providers.reviewer.model].map(modelFamily);
+  if (new Set(families).size !== 3) throw new Error('role_models_not_independent_families');
   if (new Set([providers.architect.fake, providers.coder.fake, providers.reviewer.fake]).size !== 1) throw new Error('role_providers_mixed_fake_and_real');
   return providers;
 }

@@ -9,21 +9,24 @@ const callIn = (over: Partial<RoleCallInput> = {}): RoleCallInput => ({
 });
 const ok = (body: unknown, status = 200) => async () => ({ ok: status < 300, status, text: async () => (typeof body === 'string' ? body : JSON.stringify(body)) });
 const good = {
-  id: 'resp_abc123', model: 'grok-served-1', usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+  id: 'resp_abc123', model: 'grok-requested', usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
   output: [{ type: 'message', content: [{ type: 'output_text', text: '{"verdict":"approve","summary":"matches the brief"}' }] }],
 };
 const make = (fetchImpl: Parameters<typeof createXaiDirectReviewerRoleProvider>[0]['fetchImpl'], over = {}) =>
   createXaiDirectReviewerRoleProvider({ model: 'grok-requested', keyEnv: 'XAI_API_KEY', brief: 'brief', fetchImpl, ...over });
 
 describe('direct xAI reviewer adapter (fake fetch only)', () => {
-  it('returns the provider response id, the SERVED model, usage and exactly one request', async () => {
+  it('returns the provider response id, the model FROM THE BODY, usage and exactly one request', async () => {
     const r = await make(ok(good)).call(callIn());
-    expect(r).toMatchObject({ ok: true, responseId: 'resp_abc123', model: 'grok-served-1', verdict: 'approve', requests: 1, usage: { input: 10, output: 5, total: 15 } });
+    expect(r).toMatchObject({ ok: true, responseId: 'resp_abc123', model: 'grok-requested', verdict: 'approve', requests: 1, usage: { input: 10, output: 5, total: 15 } });
   });
-  it('never reports the requested model when the response names none', async () => {
-    const r = await make(ok({ ...good, model: undefined })).call(callIn());
-    expect(r.ok).toBe(true);
-    expect(r.model).toBeNull();
+  it('fails the leg when the body has no id (unattested), no served model, or a different model; mismatch is recorded', async () => {
+    const noId = await make(ok({ ...good, id: undefined })).call(callIn());
+    expect(noId).toMatchObject({ ok: false, failureClass: 'xai_response_id_missing', responseId: null });
+    const noModel = await make(ok({ ...good, model: undefined })).call(callIn());
+    expect(noModel).toMatchObject({ ok: false, failureClass: 'xai_served_model_missing', model: null });
+    const other = await make(ok({ ...good, model: 'grok-other' })).call(callIn());
+    expect(other).toMatchObject({ ok: false, failureClass: 'xai_model_mismatch', responseId: 'resp_abc123', model: 'grok-other' });
   });
   it('sends the key only in the Authorization header and never in the body or output', async () => {
     let seen: { url: string; headers: Record<string, string>; body: string } | null = null;

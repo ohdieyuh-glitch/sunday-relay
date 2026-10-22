@@ -84,6 +84,11 @@ export function createXaiDirectReviewerRoleProvider(input: XaiDirectReviewerInpu
       }
       const responseId = nonEmpty(body.id) ? body.id : null;
       const servedModel = nonEmpty(body.model) ? body.model : null;
+      // Attestation (review F1): the id and the served model come from the response BODY only. No id = unattested = the leg fails.
+      if (responseId === null) return { ...refuse('xai_response_id_missing'), model: servedModel };
+      // A served model that differs from the requested one is a mismatch, recorded (id + served model returned) and failing.
+      if (servedModel !== null && servedModel !== input.model) return { ...refuse('xai_model_mismatch', responseId), model: servedModel };
+      if (servedModel === null) return refuse('xai_served_model_missing', responseId);
       const text = extractText(body);
       if (text === null) return refuse('xai_response_unreadable', responseId);
       let verdict: 'approve' | 'reject';

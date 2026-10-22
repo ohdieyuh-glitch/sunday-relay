@@ -5,7 +5,7 @@ import type { JuliusCodingAgentProvider, JuliusCodingAgentProviderOutcome, Juliu
 import type { JuliusApiIdentity, JuliusApiResult, JuliusRunView } from '../src/relay/mission/julius/julius-runtime-api';
 import type { HermesConfig, HermesOutcome, ReviewPacket } from './hermes-reviewer';
 import {
-  composeRoleProviders, createArchitectRoleProvider, createCoderRoleProvider, createJuliusRunLookup, createReviewerRoleProvider,
+  composeRoleProviders, modelFamily, createArchitectRoleProvider, createCoderRoleProvider, createJuliusRunLookup, createReviewerRoleProvider,
   deriveCoderToolCalls, type CoderExecutorRecord,
 } from './julius-dispatch-adapters';
 import { createJuliusDispatch, createMemoryDispatchLedger, type FrozenMission, type RoleCallInput } from './julius-dispatch';
@@ -290,5 +290,15 @@ describe('composed through the J1 controller (fakes only)', () => {
     expect(() => composeRoleProviders({ architect: a, coder: c, reviewer: { ...a } })).toThrow('role_providers_not_independent');
     const r = createReviewerRoleProvider({ config: hermesConfig, brief: 'B', keyEnv: 'K', responseIdOf: () => null, fake: true });
     expect(() => composeRoleProviders({ architect: a, coder: c, reviewer: r })).toThrow('role_providers_mixed_fake_and_real');
+
+  });
+
+  it('composeRoleProviders refuses three providers whose models share a family (provider AND model family)', () => {
+    const a = createArchitectRoleProvider({ config: gptConfig, brief: 'B', keyEnv: 'K', run: async () => { throw new Error('x'); } });
+    const same = createCoderRoleProvider({ provider: fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: `${a.model}-other`, keyEnv: null });
+    const r = createReviewerRoleProvider({ config: hermesConfig, brief: 'B', keyEnv: 'K', responseIdOf: () => null });
+    expect(() => composeRoleProviders({ architect: a, coder: same, reviewer: r })).toThrow('role_models_not_independent_families');
+    expect(modelFamily('GPT-5.6-sol')).toBe('gpt');
+    expect(modelFamily('')).toBe('');
   });
 });
