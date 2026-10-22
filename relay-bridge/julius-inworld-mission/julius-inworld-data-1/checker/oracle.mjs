@@ -1,6 +1,10 @@
 // REFERENCE IMPLEMENTATION of the julius-inworld-data-1 rules (contract.json requirements R1-R13). HIDDEN: never part of the coder's workspace.
 // Node built-ins only. Decimal arithmetic is done on digit strings, never on floats.
 export const SCHEMA = 'inworld-ledger.v1';
+export const MAX_SAFE = 9007199254740991n;
+// ASCII-only case folding (contract R1): only a-z / A-Z change case, so a non-ASCII letter never becomes an ASCII one.
+const asciiUpper = (s) => s.replace(/[a-z]/g, (c) => c.toUpperCase());
+const asciiLower = (s) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
 
 export function parseCsv(text) {
   const rows = [];
@@ -78,7 +82,7 @@ export function parsePrice(raw) {
   const frac = m[2] ?? '';
   let cc = BigInt(whole) * 100n + BigInt((frac + '00').slice(0, 2));
   if (frac.length > 2 && frac[2] >= '5') cc += 1n;
-  if (cc <= 0n) return null;
+  if (cc <= 0n || cc > MAX_SAFE) return null;
   return Number(cc);
 }
 
@@ -94,33 +98,40 @@ const STATUS = new Map([
   ['void', 'void'], ['voided', 'void'], ['cancelled', 'void'], ['pending', 'pending'], ['hold', 'pending'],
 ]);
 
+// Totals are exact integers with no upper limit (contract R12). This reference produces JS numbers, so a total above the safe range is REFUSED loudly instead of rounded; the seed data cannot reach it.
+function exactSum(values) {
+  const sum = values.reduce((acc, v) => acc + BigInt(v), 0n);
+  if (sum > MAX_SAFE) throw new RangeError('total_exceeds_safe_integer_range');
+  return Number(sum);
+}
+
 export function normalize(csvText, posts) {
   const table = parseCsv(csvText);
   const dataRows = table.slice(1);
   const lookup = new Map();
   for (const p of posts) {
-    lookup.set(p.name.toLowerCase(), p.id);
-    for (const a of p.aliases) lookup.set(a.toLowerCase(), p.id);
+    for (const n of [p.name, ...p.aliases]) { const k = asciiLower(n); if (!lookup.has(k)) lookup.set(k, p.id); } // first post in file order wins
   }
   const valid = [];
   const rejects = [];
   dataRows.forEach((cells, index) => {
     const lineNo = index + 1;
     const [idRaw, postRaw, itemRaw, qtyRaw, priceRaw, tsRaw, statusRaw] = [0, 1, 2, 3, 4, 5, 6].map((i) => (cells[i] ?? '').trim());
-    const txnId = idRaw.toUpperCase();
+    const txnId = asciiUpper(idRaw);
     const reject = (reason) => { rejects.push({ line_no: lineNo, txn_id: idRaw, reason }); };
     if (!/^[A-Z]{2}-\d{4}$/.test(txnId)) return reject('bad_txn_id');
-    const post = lookup.get(postRaw.toLowerCase());
+    const post = lookup.get(asciiLower(postRaw));
     if (post === undefined) return reject('unknown_post');
     const qty = parseQty(qtyRaw);
     if (qty === null) return reject('bad_qty');
     const price = parsePrice(priceRaw);
     if (price === null) return reject('bad_price');
+    if (BigInt(qty) * BigInt(price) > MAX_SAFE) return reject('bad_qty');
     const ts = parseTs(tsRaw);
     if (ts === null) return reject('bad_ts');
-    const status = STATUS.get(statusRaw.toLowerCase());
+    const status = STATUS.get(asciiLower(statusRaw));
     if (status === undefined) return reject('bad_status');
-    valid.push({ lineNo, idRaw, record: { txn_id: txnId, post, item: itemRaw, qty, unit_price_cc: price, ts, status, line_total_cc: qty * price } });
+    valid.push({ lineNo, idRaw, record: { txn_id: txnId, post, item: itemRaw, qty, unit_price_cc: price, ts, status, line_total_cc: Number(BigInt(qty) * BigInt(price)) } });
     return undefined;
   });
   const winners = new Map();
@@ -137,13 +148,13 @@ export function normalize(csvText, posts) {
   rejects.sort((a, b) => a.line_no - b.line_no);
   const byPost = posts.map((p) => {
     const settled = records.filter((r) => r.post === p.id && r.status === 'settled');
-    return { post: p.id, settled_count: settled.length, settled_total_cc: settled.reduce((t, r) => t + r.line_total_cc, 0) };
+    return { post: p.id, settled_count: settled.length, settled_total_cc: exactSum(settled.map((r) => r.line_total_cc)) };
   });
   return {
     schema: SCHEMA,
     records,
     rejects,
-    totals: { by_post: byPost, grand_total_cc: byPost.reduce((t, p) => t + p.settled_total_cc, 0) },
+    totals: { by_post: byPost, grand_total_cc: exactSum(byPost.map((p) => p.settled_total_cc)) },
     counts: { input_rows: dataRows.length, records: records.length, rejects: rejects.length },
   };
 }

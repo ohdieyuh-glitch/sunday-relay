@@ -119,6 +119,20 @@ describe('julius-inworld-data-1 hidden checker', () => {
     expect(o.parseTs('2026-03-01T00:00:60Z')).toBeNull();
     expect(o.parseTs('2026-03-01t00:00:00Z')).toBeNull();
     expect(o.parseTs('2026-03-01T00:00:00z')).toBeNull();
+    // v4: ASCII-only folding, safe-integer limits, product limit order, whitespace-only line
+    const posts4 = [{ id: 'dock', name: 'Dock', aliases: ['pier'] }];
+    const rowOf = (id: string, post: string, qty: string, price: string, ts = '2026-01-01T00:00:00Z') => `${id},${post},item,${qty},${price},${ts},ok`;
+    const run4 = (...rows: string[]) => o.normalize(['txn_id,post,item,qty,unit_price,ts,status', ...rows].join('\n'), posts4);
+    expect(run4(rowOf('ab-0001', 'dock', '1', '1 cr')).records).toHaveLength(1);
+    expect(run4(rowOf('ſb-0001', 'dock', '1', '1 cr')).rejects[0].reason).toBe('bad_txn_id');
+    expect(run4(rowOf('ab-0001', 'Kock', '1', '1 cr')).rejects[0].reason).toBe('unknown_post');
+    expect(run4(rowOf('ab-0001', 'dock', '9007199254740992', '1 cr')).rejects[0].reason).toBe('bad_qty');
+    expect(run4(rowOf('ab-0001', 'dock', '9007199254740991', '0.01 cr')).records).toHaveLength(1);
+    expect(run4(rowOf('ab-0001', 'dock', '9007199254740991', '0.02 cr')).rejects[0].reason).toBe('bad_qty');
+    expect(run4(rowOf('ab-0001', 'dock', '1', '90071992547409.92 cr')).rejects[0].reason).toBe('bad_price');
+    expect(run4(rowOf('ab-0001', 'dock', '9007199254740991', '0.02 cr', 'bad')).rejects[0].reason).toBe('bad_qty');
+    expect(run4('   ,,,,,,', '', rowOf('ab-0002', 'dock', '1', '1 cr')).rejects).toEqual([{ line_no: 1, txn_id: '', reason: 'bad_txn_id' }]);
+    expect(run4(rowOf('ab-0003', 'pier', '1', '1 cr')).records[0].post).toBe('dock');
     // R1/R7: empty item allowed, short rows read missing fields as empty, 'settled' accepted
     const posts = [{ id: 'p1', name: 'One', aliases: [] }];
     const csv = ['h', 'AA-0001,one,,1,1 cr,2026-01-01T00:00:00Z,settled', 'AA-0002,one', ''].join(String.fromCharCode(10));
