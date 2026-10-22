@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -8,7 +10,7 @@ import type { JuliusApiIdentity, JuliusApiResult, JuliusRunView } from '../src/r
 import type { HermesConfig, HermesOutcome, ReviewPacket } from './hermes-reviewer';
 import {
   composeRoleProviders, modelVendor, assertContractBinding, createArchitectRoleProvider, createCoderRoleProvider, createJuliusRunLookup, createReviewerRoleProvider,
-  deriveCoderChangedPaths, type CoderExecutorRecord, assertCoderRequestEnvelope, J1_CODER_ENVELOPE_LIMITS,
+  deriveCoderChangedPaths, type CoderExecutorRecord, assertCoderRequestEnvelope, J1_CODER_ENVELOPE_LIMITS, createJ1ProductionComposition,
 } from './julius-dispatch-adapters';
 import { createJuliusDispatch, createMemoryDispatchLedger, type FrozenMission, type RoleCallInput, type RoleProvider } from './julius-dispatch';
 import type { ShellEffectInput, ShellEffectPort, ShellEffectResult } from './julius/executor-effects';
@@ -93,7 +95,7 @@ function fakeCoding(outcome: JuliusCodingAgentProviderOutcome | (() => never)): 
   return { providerKind: 'fake-coding', requests, async execute(request) { requests.push(request); return typeof outcome === 'function' ? outcome() : outcome; } };
 }
 const coder = (provider: JuliusCodingAgentProvider, shell: ShellEffectPort, extra: { onExecutorRecord?: (r: CoderExecutorRecord) => void } = {}) =>
-  createCoderRoleProvider({ provider, shell, projectId: 'proj-1', workerId: 'w-coder', workspacePath: '/work', brief: 'BRIEF', model: 'claude-requested', keyEnv: null, permittedPaths: ['src/'], ...extra });
+  createCoderRoleProvider({ providerFor: () => provider, shell, projectId: 'proj-1', workerId: 'w-coder', workspacePath: '/work', brief: 'BRIEF', model: 'claude-requested', keyEnv: null, permittedPaths: ['src/'], ...extra });
 
 describe('G3-2 spend and response ids survive post-response failures', () => {
   it('a failed coder session keeps the session id and reports usage as explicitly unknown when the runtime started', async () => {
@@ -123,9 +125,57 @@ describe('G3-2 spend and response ids survive post-response failures', () => {
   });
 });
 
+describe('G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts)', () => {
+  const sha = 'c'.repeat(64);
+  const frozen: FrozenMission = { missionId: 'mission-1', contractSha256: sha, checkerSha256: 'd'.repeat(64), missionAuthor: 'a', checkerAuthor: 'b', seededDefect: false, preregId: 'p' };
+  const xaiBody = { id: 'resp_xai_0011223344', model: 'grok-requested', usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 }, output: [{ content: [{ text: '{"verdict":"approve","summary":"fine"}' }] }] };
+  const env = { OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai, PATH: '/bin' };
+  const build = (fetched: { url: string; auth: string }[], over: Record<string, unknown> = {}) => createJ1ProductionComposition({
+    env, brief: 'BRIEF', fake: true,
+    fetchImpl: async (url, init) => { fetched.push({ url, auth: init.headers.authorization ?? '' }); return { ok: true, status: 200, text: async () => JSON.stringify(xaiBody) }; },
+    architect: { config: gptConfig, keyEnv: 'OPENAI_API_KEY', run: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: gptUsage }) as GptRunOutcome },
+    coder: { providerFor: () => fakeCoding(completed()), shell: fakeShell(), projectId: 'proj-1', workerId: 'w', workspacePath: '/w', model: 'claude-requested', permittedPaths: ['src/'] },
+    reviewer: { model: 'grok-requested', keyEnv: 'XAI_API_KEY' },
+    ...over,
+  });
+  it('composes architect + coder + direct xAI reviewer through composeRoleProviders and runs a fake chain through the controller', async () => {
+    const fetched: { url: string; auth: string }[] = [];
+    const providers = build(fetched);
+    expect([providers.architect.providerId, providers.coder.providerId, providers.reviewer.providerId]).toEqual(['openai', 'anthropic', 'xai']);
+    expect([providers.architect.fake, providers.coder.fake, providers.reviewer.fake]).toEqual([true, true, true]);
+    let clock = Date.parse('2026-10-22T12:00:00Z');
+    const ledger = createMemoryDispatchLedger();
+    const controller = createJuliusDispatch({
+      providers, ledger, env: () => ({ JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: 'founder', JULIUS_J1_PROJECT_ID: 'proj-1', JULIUS_J1_REVIEWER_PROVIDER: 'xai', JULIUS_J1_BUDGET_CAP_USD: '10', JULIUS_J1_LEG_ESTIMATE_USD: '1', ...env }),
+      now: () => (clock += 1000), frozen, checker: { check: async () => ({ pass: true }) },
+      runs: { lookup: async () => ({ missionId: 'mission-1', contractSha256: sha, state: 'READY' }) },
+    });
+    expect(await controller.dispatch({ projectId: 'proj-1', runId: 'run:1', callerPlayerId: 'founder', sessionId: 's1', idempotencyKey: 'key-0000001', clientTriggerId: 'trig-00000001', clientLogSha256: 'e'.repeat(64), clientUiActionUtc: '2026-10-22T11:59:30.000Z' })).toMatchObject({ ok: true, mode: 'fake' });
+    await controller.whenIdle();
+    expect((await ledger.rows()).find((r) => r.role === 'final')).toMatchObject({ state: 'COMPLETED' });
+    expect(fetched).toHaveLength(1);
+    expect(fetched[0]!.auth).toBe(`Bearer ${KEY.xai}`);
+  });
+  it('refuses shared model families and a mixed fake/real build through composeRoleProviders', () => {
+    expect(() => build([], { reviewer: { model: 'gpt-grok-like', keyEnv: 'XAI_API_KEY' } })).toThrow();
+    expect(() => build([], { coder: { providerFor: () => fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', model: 'gpt-5', permittedPaths: ['src/'] } })).toThrow('role_models_not_independent_families');
+  });
+  it('the coder env is derived from the injected env (no key), and no adapter source line reads process.env', async () => {
+    const seen: Array<Readonly<Record<string, string>>> = [];
+    const providerFor = (env: Readonly<Record<string, string>>): JuliusCodingAgentProvider => { seen.push(env); return fakeCoding(completed()); };
+    const providers = build([], { coder: { providerFor, shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', model: 'claude-requested', permittedPaths: ['src/'] } });
+    await providers.coder.call(call({ role: 'coder', architectText: 'P' }));
+    expect(seen[0]).toEqual({ PATH: '/bin' });
+    for (const file of ['julius-dispatch-adapters.ts', 'julius-xai-direct-reviewer.ts', 'julius-role-compose.ts']) {
+      const code = readFileSync(join(__dirname, file), 'utf8').split('\n').filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l));
+      expect(code.filter((l) => /process\.env/.test(l))).toEqual([]);
+    }
+  });
+});
+
 describe('G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT', () => {
   it('permittedPaths is required and non-empty at construction (no default [])', () => {
-    const base = { provider: fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null };
+    const base = { providerFor: () => fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null };
     expect(() => createCoderRoleProvider(base)).toThrow('coder_role_requires_permitted_paths');
     expect(() => createCoderRoleProvider({ ...base, permittedPaths: [] })).toThrow('coder_role_requires_permitted_paths');
     expect(() => createCoderRoleProvider({ ...base, permittedPaths: [' '] })).toThrow('coder_role_requires_permitted_paths');
@@ -152,15 +202,14 @@ describe('G3-5 the coder envelope: request fields are stated, their enforcement 
 
 describe('G3-1 coder key isolation: an env allow-list, never provider keys', () => {
   const parent = { PATH: '/bin', HOME: '/h', OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai, ANTHROPIC_API_KEY: canary('anthropic'), SOME_TOKEN: 't', LEAKY: `x-${KEY.xai}-y` };
-  const envSpy = (): { provider: JuliusCodingAgentProvider; seen: Array<Readonly<Record<string, string>> | undefined> } => {
-    const seen: Array<Readonly<Record<string, string>> | undefined> = [];
-    const provider = { providerKind: 'fake-coding', async execute(_request: JuliusCodingAgentRequest, ctx?: { readonly env: Readonly<Record<string, string>> }) { seen.push(ctx?.env); return completed(); } };
-    return { provider, seen };
+  const envSpy = (): { providerFor: (env: Readonly<Record<string, string>>) => JuliusCodingAgentProvider; seen: Array<Readonly<Record<string, string>>> } => {
+    const seen: Array<Readonly<Record<string, string>>> = [];
+    return { providerFor: (env) => { seen.push(env); return fakeCoding(completed()); }, seen };
   };
   it('the session gets an env snapshot with only allow-listed variables: no provider key reaches execute', async () => {
-    const { provider, seen } = envSpy();
+    const { providerFor, seen } = envSpy();
     const out = await createCoderRoleProvider({
-      provider, shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null,
+      providerFor, shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null,
       permittedPaths: ['src/'], envSnapshot: parent, secretValues: [KEY.openai, KEY.xai, canary('anthropic')],
     }).call(call({ role: 'coder', architectText: 'P' }));
     expect(out.ok).toBe(true);
@@ -172,12 +221,12 @@ describe('G3-1 coder key isolation: an env allow-list, never provider keys', () 
     expect(JSON.stringify(env)).not.toContain(KEY.xai);
   });
   it('an allow-list naming a key-like variable or the role keyEnv is refused; a variable holding a secret value is dropped', async () => {
-    const base = { provider: envSpy().provider, shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', permittedPaths: ['src/'], envSnapshot: parent };
+    const base = { providerFor: envSpy().providerFor, shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', permittedPaths: ['src/'], envSnapshot: parent };
     expect(() => createCoderRoleProvider({ ...base, keyEnv: null, envAllowList: ['PATH', 'OPENAI_API_KEY'] })).toThrow('coder_env_allowlist_contains_secret_name');
     expect(() => createCoderRoleProvider({ ...base, keyEnv: null, envAllowList: ['SOME_TOKEN'] })).toThrow('coder_env_allowlist_contains_secret_name');
     expect(() => createCoderRoleProvider({ ...base, keyEnv: 'CODER_CRED', envAllowList: ['CODER_CRED'] })).toThrow('coder_env_allowlist_contains_secret_name');
     const spy = envSpy();
-    await createCoderRoleProvider({ ...base, provider: spy.provider, keyEnv: null, envAllowList: ['PATH', 'LEAKY'], secretValues: [KEY.xai] }).call(call({ role: 'coder', architectText: 'P' }));
+    await createCoderRoleProvider({ ...base, providerFor: spy.providerFor, keyEnv: null, envAllowList: ['PATH', 'LEAKY'], secretValues: [KEY.xai] }).call(call({ role: 'coder', architectText: 'P' }));
     expect(Object.keys(spy.seen[0]!)).toEqual(['PATH']);
   });
 });
@@ -361,7 +410,7 @@ describe('composed through the J1 controller (fakes only)', () => {
   function run(responseIdOf: () => string | null, coderShell: ShellEffectPort = fakeShell()) {
     const providers = composeRoleProviders({
       architect: createArchitectRoleProvider({ config: gptConfig, brief: 'B', keyEnv: 'OPENAI_API_KEY', fake: true, run: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: gptUsage }) as GptRunOutcome }),
-      coder: createCoderRoleProvider({ provider: fakeCoding(completed()), shell: coderShell, projectId: 'proj-1', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null, permittedPaths: ['src/'], fake: true }),
+      coder: createCoderRoleProvider({ providerFor: () => fakeCoding(completed()), shell: coderShell, projectId: 'proj-1', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null, permittedPaths: ['src/'], fake: true }),
       reviewer: createReviewerRoleProvider({ config: hermesConfig, brief: 'B', keyEnv: 'XAI_API_KEY', responseIdOf, fake: true, run: (async () => reviewed('approved')) as never }),
     });
     const env = { JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: 'founder', JULIUS_J1_PROJECT_ID: 'proj-1', JULIUS_J1_REVIEWER_PROVIDER: 'xai', JULIUS_J1_BUDGET_CAP_USD: '10', JULIUS_J1_LEG_ESTIMATE_USD: '1', OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai };
@@ -406,7 +455,7 @@ describe('composed through the J1 controller (fakes only)', () => {
 
   it('composeRoleProviders refuses duplicate independence groups and a fake/real mix', () => {
     const a = createArchitectRoleProvider({ config: gptConfig, brief: 'B', keyEnv: 'K', run: async () => { throw new Error('x'); } });
-    const c = createCoderRoleProvider({ provider: fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-x', keyEnv: null, permittedPaths: ['src/'] });
+    const c = createCoderRoleProvider({ providerFor: () => fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-x', keyEnv: null, permittedPaths: ['src/'] });
     expect(() => composeRoleProviders({ architect: a, coder: c, reviewer: { ...a } })).toThrow('role_providers_not_independent');
     const r = createReviewerRoleProvider({ config: hermesConfig, brief: 'B', keyEnv: 'K', responseIdOf: () => null, fake: true });
     expect(() => composeRoleProviders({ architect: a, coder: c, reviewer: r })).toThrow('role_providers_mixed_fake_and_real');
@@ -415,7 +464,7 @@ describe('composed through the J1 controller (fakes only)', () => {
 
   it('composeRoleProviders refuses three providers whose models share a family (provider AND model family)', () => {
     const a = createArchitectRoleProvider({ config: gptConfig, brief: 'B', keyEnv: 'K', run: async () => { throw new Error('x'); } });
-    const same = createCoderRoleProvider({ provider: fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: `${a.model}-other`, keyEnv: null, permittedPaths: ['src/'] });
+    const same = createCoderRoleProvider({ providerFor: () => fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: `${a.model}-other`, keyEnv: null, permittedPaths: ['src/'] });
     const r = createReviewerRoleProvider({ config: hermesConfig, brief: 'B', keyEnv: 'K', responseIdOf: () => null });
     expect(() => composeRoleProviders({ architect: a, coder: same, reviewer: r })).toThrow('role_models_not_independent_families');
   });

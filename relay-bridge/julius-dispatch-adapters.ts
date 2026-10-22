@@ -15,6 +15,8 @@ import { runHermesReview, type HermesConfig, type HermesOutcome, type ReviewPack
 import type { RoleCallInput, RoleCallOutput, RoleProvider, RoleUsage, RunLookup } from './julius-dispatch';
 import { juliusAttemptCloseCommand, juliusAttemptStartCommand, parseJuliusAttemptClose, parseJuliusAttemptStart } from './julius/coder-workspace';
 import type { ShellEffectPort } from './julius/executor-effects';
+import { composeRoleProviders } from './julius-role-compose';
+import { createXaiDirectReviewerRoleProvider, type XaiDirectReviewerInput } from './julius-xai-direct-reviewer';
 
 /**
  * J1 PRODUCTION ADAPTERS behind the `RoleProvider` / `RunLookup` ports of `julius-dispatch.ts`.
@@ -145,7 +147,7 @@ export const J1_CODER_ENV_DEFAULT_ALLOW: readonly string[] = Object.freeze(['PAT
 const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|BEARER)/iu;
 
 /**
- * The environment the coder session is HANDED (the second argument of `execute`). Built from an explicit allow-list over an
+ * The environment the coder session is HANDED (handed to `providerFor`, because the real `execute` has no env argument). Built from an explicit allow-list over an
  * injected snapshot; a variable whose value contains any known secret value is dropped even if its name is allowed. The adapter
  * never reads `process.env`; what the real session process inherits beyond this is the provider implementation's concern (LIMIT:
  * this file can hand the snapshot, it cannot inspect a spawned process or the workspace for keys).
@@ -159,12 +161,6 @@ export function buildCoderChildEnv(snapshot: Readonly<Record<string, string | un
     out[name] = value;
   }
   return Object.freeze(out);
-}
-
-/** A coding provider that may take the session environment as a second argument (a one-argument provider is assignable). */
-export interface CoderExecutePort {
-  readonly providerKind: string;
-  execute(request: JuliusCodingAgentRequest, context: { readonly env: Readonly<Record<string, string>> }): ReturnType<JuliusCodingAgentProvider['execute']>;
 }
 
 /**
@@ -193,7 +189,14 @@ export function assertCoderRequestEnvelope(request: JuliusCodingAgentRequest): {
 
 export interface CoderRoleInput {
   /** The port implementation, e.g. `createClaudeCodeCodingAgentProvider(...)`. Built by the composition. */
-  readonly provider: CoderExecutePort;
+  /**
+   * BUILDS the coding provider for ONE attempt, handed the allow-listed environment. The real `JuliusCodingAgentProvider.execute`
+   * takes (request, signal, session) and has no environment argument, so the environment can only be applied where the provider
+   * is constructed: the composition returns a provider whose session process gets exactly this env. A plain provider object is
+   * deliberately not accepted, so there is no path that skips the allow-list. LIMIT: whether the real Claude Code provider can be
+   * built with an explicit env is NOT shown here (its constructor has no env option today).
+   */
+  readonly providerFor: (env: Readonly<Record<string, string>>) => JuliusCodingAgentProvider;
   /** Injected parent environment snapshot the allow-list filters. Absent = the session gets an EMPTY environment. */
   readonly envSnapshot?: Readonly<Record<string, string | undefined>>;
   /** Variable names the session may see. Default J1_CODER_ENV_DEFAULT_ALLOW. A key-like name or the role keyEnv is refused at construction. */
@@ -263,7 +266,8 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
       let outcome;
       try {
         // Built at call time from the injected snapshot: the secret values the composition lists are read when the leg runs.
-        outcome = await input.provider.execute(request, { env: buildCoderChildEnv(input.envSnapshot ?? {}, envAllow, [...(input.secretValues ?? []), call.apiKey]) });
+        const childEnv = buildCoderChildEnv(input.envSnapshot ?? {}, envAllow, [...(input.secretValues ?? []), call.apiKey]);
+        outcome = await input.providerFor(childEnv).execute(request);
       } catch {
         return { ok: false, text: '', responseId: null, model: null, failureClass: 'provider_error' };
       }
@@ -459,4 +463,38 @@ export function createJuliusRunLookup(input: RunLookupInput): RunLookup {
       return { missionId, contractSha256: nonEmpty(contractSha256) ? contractSha256 : '', state };
     },
   };
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Production composition (NOT wired into server.ts)                                                                */
+
+export interface J1ProductionCompositionInput {
+  /** The environment SNAPSHOT the composition derives the coder env and the secret list from. Injected; nothing here reads process.env. */
+  readonly env: Readonly<Record<string, string | undefined>>;
+  /** Injected transport for the direct xAI reviewer. */
+  readonly fetchImpl: XaiDirectReviewerInput['fetchImpl'];
+  /** The frozen mission's brief, fixed by the composition. */
+  readonly brief: string;
+  /** True for the zero-spend rehearsal build: stamps every adapter fake (composeRoleProviders refuses a mix). */
+  readonly fake?: boolean;
+  readonly architect: Omit<ArchitectRoleInput, 'brief' | 'fake'>;
+  readonly coder: Omit<CoderRoleInput, 'brief' | 'fake' | 'keyEnv' | 'envSnapshot' | 'secretValues'> & { readonly keyEnv?: string | null; readonly secretKeyEnvs?: readonly string[] };
+  readonly reviewer: Omit<XaiDirectReviewerInput, 'brief' | 'fake' | 'fetchImpl'>;
+}
+
+/**
+ * THE J1 LIVE COMPOSITION: GPT architect + coder session + DIRECT xAI reviewer (the path that returns a provider response id),
+ * composed through `composeRoleProviders`. Everything is injected (env snapshot, fetch, runners, shell); no adapter reads the
+ * process environment and this function opens nothing. It is deliberately NOT referenced from server.ts: the bridge still ships
+ * `createUncomposedJuliusDispatch` until a reviewed composition replaces it.
+ */
+export function createJ1ProductionComposition(input: J1ProductionCompositionInput): { readonly architect: RoleProvider; readonly coder: RoleProvider; readonly reviewer: RoleProvider } {
+  const fake = input.fake === true;
+  const keyEnvs = [input.architect.keyEnv, input.reviewer.keyEnv, ...(input.coder.secretKeyEnvs ?? [])];
+  const secretValues = keyEnvs.map((name) => (input.env[name] ?? '').trim()).filter((v) => v !== '');
+  return composeRoleProviders({
+    architect: createArchitectRoleProvider({ ...input.architect, brief: input.brief, fake }),
+    coder: createCoderRoleProvider({ ...input.coder, keyEnv: input.coder.keyEnv ?? null, brief: input.brief, fake, envSnapshot: input.env, secretValues }),
+    reviewer: createXaiDirectReviewerRoleProvider({ ...input.reviewer, brief: input.brief, fetchImpl: input.fetchImpl, fake }),
+  });
 }
