@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -108,6 +108,19 @@ describe('2b(b) the PreToolUse authority denies a canary file outside the worksp
     if (existsSync(fileLink)) for (const [tool, input] of Object.entries(probes(fileLink))) { expect(denied(await call(tool, input)), `${tool} via file link`).toBe(true); ran += 1; }
     if (existsSync(dirLink)) for (const [tool, input] of Object.entries(probes(join(dirLink, 'XAI_API_KEY')))) { expect(denied(await call(tool, input)), `${tool} via dir link`).toBe(true); ran += 1; }
     expect(ran, 'at least one link kind was actually created and probed').toBeGreaterThanOrEqual(4);
+  });
+  it('N-gap: link/../x is denied by the explicit ".." guard ALONE (lexical resolution says inside, realpath containment would allow it)', async (ctx) => {
+    const sub = join(outside, 'sub');
+    mkdirSync(sub, { recursive: true });
+    writeFileSync(join(outside, 'secret.txt'), CANARY);           // the kernel's answer to link/../secret.txt
+    const link = join(work, 'dirlink');
+    try { symlinkSync(sub, link, process.platform === 'win32' ? 'junction' : 'dir'); } catch { ctx.skip(); }
+    const spelled = `${work}/dirlink/../secret.txt`;
+    // the isolating facts: the lexical answer is a path inside the workspace that does not exist, so real-path containment alone would accept it
+    expect(resolve(spelled).startsWith(resolve(work))).toBe(true);
+    expect(existsSync(resolve(spelled))).toBe(false);
+    for (const [tool, input] of Object.entries(probes(spelled))) expect(denied(await call(tool, input)), tool).toBe(true);
+    expect(denied(await call('Glob', { pattern: 'dirlink/../*' }))).toBe(true);
   });
   it('MUTANT: an authority that allows everything would NOT deny the key file, so the assertions above would fail against it', async () => {
     const allowAll = async (): Promise<HostedHookOutput> => ({});
