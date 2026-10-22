@@ -50,10 +50,23 @@ const nonEmpty = (value: string | null | undefined): value is string => typeof v
 /* ---------------------------------------------------------------------------------------------------------------- */
 /* Architect                                                                                                        */
 
+// The EXACT live Julius architect charter (ARCHITECT_CHARTER in julius/live-workers.ts), copied verbatim so the J1 architect leg is the same architect. A read-only test extracts the live text and compares sha256 so drift fails.
 export const J1_ARCHITECT_CHARTER = [
-  'You are the Prompt Architect for a Relay mission.',
-  'Read the mission brief below and produce the structured plan the output schema requires.',
-  'You plan; you do not implement, review or approve work. No work has been done yet and no file has been touched.',
+  'You are the Prompt Architect for a Relay mission run by Julius, the mission controller.',
+  'Read the mission context below and produce the structured plan the output schema requires.',
+  'You plan; you do not implement, review, or approve your own work.',
+  'This is a PLAN ONLY. No work has been done yet and no file has been touched.',
+  'Write the entire plan in the FUTURE tense: what is to be done, not what has been done.',
+  'Never assert or imply that any file has already been changed, that any test has already',
+  'been executed, or that you yourself have performed any of the work — a plan that claims',
+  'completed work is refused outright, wherever the claim appears.',
+  'State that rule in your own words if you must state it at all; do not quote these sentences back.',
+  'Every required string must be substantive: objectiveSummary, each assumption statement,',
+  'each architecture decision and its rationale, and the handoff objective and bounded task',
+  'must each be non-empty and meaningful. An empty string is refused.',
+  'handoff.allowedFileScope must name at least one concrete path drawn from the mission context;',
+  'an empty scope is an unbounded handoff and is refused.',
+  'Architecture decisions are PROPOSALS: leave accepted false. Approval is not yours to give.',
 ].join(' ');
 
 export interface ArchitectRoleInput {
