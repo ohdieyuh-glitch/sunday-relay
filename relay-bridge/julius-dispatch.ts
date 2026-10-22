@@ -385,7 +385,9 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       } finally {
         if (timer !== undefined) clearTimeout(timer);
       }
-      const text = scrubKeys(out.text, secrets);
+      // The coder's final message is trimmed ONCE, here: the checker judges, the ledger hashes (outputSha256, artifactSha256) and the result bytes carry exactly these trimmed bytes (contract v2 artifact policy).
+      const scrubbed = scrubKeys(out.text, secrets);
+      const text = role === 'coder' ? scrubbed.trim() : scrubbed;
       const responseId = out.responseId === null ? null : scrubKeys(out.responseId, secrets);
       const echoedModel = out.model === null ? null : scrubKeys(out.model, secrets);
       let roleFailure: string | null = null;

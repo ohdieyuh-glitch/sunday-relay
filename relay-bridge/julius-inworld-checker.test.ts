@@ -93,6 +93,24 @@ describe('julius-inworld-data-1 hidden checker', () => {
     expect(o.parsePrice('12.5  cr')).toBeNull();
     expect(o.parsePrice('007.5 cr')).toBe(750);
     expect(o.parsePrice('0,005 cr')).toBe(500);
+    expect(o.parsePrice('12.5' + String.fromCharCode(9) + 'cr')).toBeNull();
+    expect(o.parsePrice('12.5' + String.fromCharCode(160) + 'cr')).toBeNull();
+    expect(o.parsePrice('0.004 cr')).toBeNull();
+    expect(o.parsePrice('0.005 cr')).toBe(1);
+    // R6 v2: years are written as given (no two-digit mapping), Gregorian leap years, out-of-range after the offset
+    expect(o.parseTs('0050-06-15T12:00:00Z')).toBe('0050-06-15T12:00:00Z');
+    expect(o.parseTs('01/01/0050 00:00')).toBe('0050-01-01T00:00:00Z');
+    expect(o.parseTs('0000-01-01T00:00:00Z')).toBeNull();
+    expect(o.parseTs('0001-01-01T00:00:00+01:00')).toBeNull();
+    expect(o.parseTs('9999-12-31T23:59:59-01:00')).toBeNull();
+    expect(o.parseTs('1900-02-29T00:00:00Z')).toBeNull();
+    expect(o.parseTs('1900-02-28T00:00:00Z')).toBe('1900-02-28T00:00:00Z');
+    expect(o.parseTs('2000-02-29T00:00:00Z')).toBe('2000-02-29T00:00:00Z');
+    expect(o.parseTs('2100-02-29T00:00:00Z')).toBeNull();
+    expect(o.parseTs('2024-02-29T00:00:00Z')).toBe('2024-02-29T00:00:00Z');
+    expect(o.parseTs('0004-02-29T00:00:00Z')).toBe('0004-02-29T00:00:00Z');
+    expect(o.parseTs('0100-02-29T00:00:00Z')).toBeNull();
+    expect(o.parseTs('0000000000')).toBe('1970-01-01T00:00:00Z');
     // R6: offset ranges, seconds, case
     expect(o.parseTs('2026-03-01T00:00:00+23:59')).toBe('2026-02-28T00:01:00Z');
     expect(o.parseTs('2026-03-01T00:00:00-00:00')).toBe('2026-03-01T00:00:00Z');

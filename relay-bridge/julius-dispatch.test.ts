@@ -121,6 +121,25 @@ describe('J1 chain, fake providers', () => {
     expect(result.roles[0].responseIdSha16).toBe(sha('resp_architect_00112233445566').slice(0, 16));
   });
 
+  it('trims the coder final message ONCE: the reviewer, the ledger hashes and the result bytes all carry the trimmed artifact', async () => {
+    const bare = '{"records":[]}';
+    const h = harness({ behave: { coder: () => ({ ok: true, responseId: 'resp_coder_00112233445566', model: 'anthropic-model', usage: { input: 1, output: 2, total: 3 }, text: `
+  ${bare}  
+
+`, changedPaths: 1 }) } });
+    await h.controller.dispatch(input());
+    await h.controller.whenIdle();
+    expect(h.calls[2].coderArtifact).toBe(bare);
+    const rows = await rowsOf(h);
+    const coderResult = rows.find((r) => r.phase === 'result' && r.role === 'coder');
+    expect(coderResult).toMatchObject({ outputSha256: sha(bare), outputChars: bare.length });
+    const data = (h.controller.result({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER }).body as { data: { resultText: string; resultSha256: string } }).data;
+    const result = JSON.parse(data.resultText) as { artifactText: string; artifactSha256: string };
+    expect(result.artifactText).toBe(bare);
+    expect(result.artifactSha256).toBe(sha(bare));
+    expect(data.resultSha256).toBe(sha(data.resultText));
+  });
+
   it('rows hold ids, hashes and counts, never the plan, the artifact or the review text', async () => {
     const h = harness();
     await h.controller.dispatch(input());

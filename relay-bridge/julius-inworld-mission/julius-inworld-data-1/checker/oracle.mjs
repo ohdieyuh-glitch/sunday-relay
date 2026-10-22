@@ -32,10 +32,17 @@ const iso = (ms) => {
   const d = new Date(ms);
   return `${pad(d.getUTCFullYear(), 4)}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}Z`;
 };
+// Gregorian calendar by rule (divisible by 4, except centuries unless divisible by 400); never the JS two-digit-year mapping of Date.UTC.
+const isLeap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+const daysIn = (y, mo) => (mo === 2 ? (isLeap(y) ? 29 : 28) : [4, 6, 9, 11].includes(mo) ? 30 : 31);
 const validParts = (y, mo, d, h, mi, s) => {
-  if (mo < 1 || mo > 12 || d < 1 || h > 23 || mi > 59 || s > 59) return false;
-  return d <= new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  if (y < 1 || y > 9999 || mo < 1 || mo > 12 || d < 1 || h > 23 || mi > 59 || s > 59) return false;
+  return d <= daysIn(y, mo);
 };
+// Epoch ms of a validated UTC wall time; setUTCFullYear keeps years 1..99 as written.
+const utcMs = (y, mo, d, h, mi, s) => { const dt = new Date(0); dt.setUTCFullYear(y, mo - 1, d); dt.setUTCHours(h, mi, s, 0); return dt.getTime(); };
+// A converted time outside year 0001..9999 is not representable in the output shape.
+const inRange = (ms) => { const y = new Date(ms).getUTCFullYear(); return y >= 1 && y <= 9999; };
 
 export function parseTs(raw) {
   let m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(Z|[+-]\d{2}:\d{2})$/.exec(raw);
@@ -50,13 +57,14 @@ export function parseTs(raw) {
       if (oh > 23 || om > 59) return null;
       offsetMin = sign * (oh * 60 + om);
     }
-    return iso(Date.UTC(y, mo - 1, d, h, mi, s) - offsetMin * 60000);
+    const ms = utcMs(y, mo, d, h, mi, s) - offsetMin * 60000;
+    return inRange(ms) ? iso(ms) : null;
   }
   m = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/.exec(raw);
   if (m) {
     const [d, mo, y, h, mi] = m.slice(1, 6).map(Number);
     if (!validParts(y, mo, d, h, mi, 0)) return null;
-    return iso(Date.UTC(y, mo - 1, d, h, mi, 0));
+    return iso(utcMs(y, mo, d, h, mi, 0));
   }
   if (/^\d{10}$/.test(raw)) return iso(Number(raw) * 1000);
   return null;
@@ -64,7 +72,7 @@ export function parseTs(raw) {
 
 /** Price string -> integer hundredths of a credit, half-up on the digits past the second decimal; null when malformed or zero. */
 export function parsePrice(raw) {
-  const m = /^(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?\s?cr$/i.exec(raw);
+  const m = /^(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))? ?cr$/i.exec(raw);
   if (!m) return null;
   const whole = m[1].replace(/,/g, '');
   const frac = m[2] ?? '';
