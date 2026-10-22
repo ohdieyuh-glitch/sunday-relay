@@ -191,3 +191,63 @@ describe('MUTANTS: each guard test fails when its guard is broken', () => {
     expect(await missedHiddenWrites(without((e) => e.path.startsWith('.git/')))).toEqual(['dot-git hook planted']);
   });
 });
+
+/* R2: only .git/objects/ and .git/index may be excluded; config, hooks, info and every ref are INSIDE the hashed set. */
+describe('R2 the git tree hash covers config, hooks, info and refs', () => {
+  const BASE_GIT: Tree = {
+    ...CLEAN,
+    '/w/.git': [
+      { name: 'HEAD', kind: 'file' }, { name: 'config', kind: 'file' }, { name: 'index', kind: 'file' }, { name: 'objects', kind: 'dir' },
+      { name: 'hooks', kind: 'dir' }, { name: 'info', kind: 'dir' }, { name: 'refs', kind: 'dir' },
+    ],
+    '/w/.git/hooks': [{ name: 'pre-commit', kind: 'file' }],
+    '/w/.git/info': [{ name: 'exclude', kind: 'file' }],
+    '/w/.git/refs': [{ name: 'heads', kind: 'dir' }],
+    '/w/.git/refs/heads': [{ name: 'main', kind: 'file' }],
+  };
+  const ROUTES: Record<string, string> = {
+    'git config edit': '/w/.git/config', 'hook file edit': '/w/.git/hooks/pre-commit', 'info/exclude edit': '/w/.git/info/exclude', 'ref edit': '/w/.git/refs/heads/main',
+  };
+  const AFTER_CONTENT = { '/w/out/normalized.json': 'art' };
+  const ledger = async (makeFs: (t: Tree, c?: Record<string, string>) => WorkspaceFs, changed: string | null) => {
+    const before = await hashWorkspace(makeFs(BASE_GIT, { '/w/out/normalized.json': '{}' }), OPTS);
+    const after = await hashWorkspace(makeFs(BASE_GIT, { ...AFTER_CONTENT, ...(changed === null ? {} : { [changed]: 'CHANGED' }) }), OPTS);
+    return { before, after, step: bundleStep({ judgedMessage: 'x', before, after, fileBytes: enc('x') }) };
+  };
+  /** The GUARD as a predicate: returns the routes whose change did NOT yield workspace_scope_violation. */
+  async function missedGitRoutes(makeFs: (t: Tree, c?: Record<string, string>) => WorkspaceFs): Promise<string[]> {
+    const missed: string[] = [];
+    for (const [name, path] of Object.entries(ROUTES)) { const r = await ledger(makeFs, path); if (r.step.failureClass !== 'workspace_scope_violation') missed.push(name); }
+    return missed;
+  }
+  const real = (t: Tree, c?: Record<string, string>): WorkspaceFs => createLocalWorkspaceFs('/w', treeFs(t, c));
+
+  it('the exclusion list is EXACTLY .git/objects/ and .git/index, and it is returned in the bundle row', async () => {
+    expect([...GIT_DIR_NAMED_EXCLUSIONS]).toEqual(['.git/objects/', '.git/index']);
+    expect((await ledger(real, null)).step.excluded).toEqual(['.git/objects/', '.git/index']);
+  });
+  it('a change to .git/config, to a hook file, to .git/info/exclude and to a ref each yields workspace_scope_violation (and .git in the changed set)', async () => {
+    for (const [name, path] of Object.entries(ROUTES)) {
+      const r = await ledger(real, path);
+      expect(r.step, name).toMatchObject({ ok: false, failureClass: 'workspace_scope_violation' });
+      expect(r.step.changedPaths, name).toContain('.git');
+      expect(r.step.gitTreeSha256Before, name).not.toBe(r.step.gitTreeSha256After);
+    }
+    expect(await missedGitRoutes(real)).toEqual([]);
+  });
+  it('the two named exclusions stay unhashed: a change to .git/index or a new object does not move the tree hash', async () => {
+    expect((await ledger(real, '/w/.git/index')).step.gitTreeSha256Before).toBe((await ledger(real, '/w/.git/index')).step.gitTreeSha256After);
+    expect((await ledger(real, '/w/.git/objects/aa')).step.gitTreeSha256Before).toBe((await ledger(real, '/w/.git/objects/aa')).step.gitTreeSha256After);
+  });
+  it('MUTANT walker that excludes all of .git is caught on every route', async () => {
+    const noGit = (t: Tree, c?: Record<string, string>): WorkspaceFs => ({ ...real(t, c), listEntries: async () => (await real(t, c).listEntries()).filter((e) => !e.path.startsWith('.git/')) });
+    expect(await missedGitRoutes(noGit)).toEqual(Object.keys(ROUTES));
+  });
+  it('MUTANT walkers that also drop only config, hooks, info or refs are each caught on their own route', async () => {
+    const dropping = (prefix: string) => (t: Tree, c?: Record<string, string>): WorkspaceFs => ({ ...real(t, c), listEntries: async () => (await real(t, c).listEntries()).filter((e) => !e.path.startsWith(prefix)) });
+    expect(await missedGitRoutes(dropping('.git/config'))).toEqual(['git config edit']);
+    expect(await missedGitRoutes(dropping('.git/hooks/'))).toEqual(['hook file edit']);
+    expect(await missedGitRoutes(dropping('.git/info/'))).toEqual(['info/exclude edit']);
+    expect(await missedGitRoutes(dropping('.git/refs/'))).toEqual(['ref edit']);
+  });
+});

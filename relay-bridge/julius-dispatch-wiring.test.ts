@@ -304,6 +304,14 @@ describe('C3/C4 at the wiring', () => {
     expect(coder).toMatchObject({ beforeListSha256: listSha(hashes(before)), afterListSha256: listSha(hashes({ ...before, 'out/normalized.json': ARTIFACT })) });
     expect(lists).toMatchObject({ beforeListSha256: coder.beforeListSha256, afterListSha256: coder.afterListSha256 });
   });
+  it('R2 END TO END (fakes): the coder result row ledgers the exclusion list, exactly .git/objects/ and .git/index', async () => {
+    const { deps, probe } = makeDeps();
+    const r = createJ1LiveForTest(goodEnv(), deps);
+    await r.controller.dispatch(await echoed(r.controller));
+    await r.controller.whenIdle();
+    const coder = (await probe.ledgers[0]!.rows()).find((row) => row.phase === 'result' && row.role === 'coder')!;
+    expect(coder.workspaceExcluded).toBe('.git/objects/,.git/index');
+  });
   it('D2 END TO END (fakes): a coder that writes under node_modules/ fails workspace_scope_violation; the lists are still recorded', async () => {
     const { deps, probe } = makeDeps();
     probe.workspace['out/normalized.json'] = 'stale';
