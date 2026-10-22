@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  verifyRunOrdering,
   createFileDispatchLedger, createJuliusDispatch, createMemoryDispatchLedger, createUncomposedJuliusDispatch,
   frozenMissionProblems, handleJuliusDispatchRoute, isLoopbackPeer,
   type DispatchLedger, type DispatchProviders, type DispatchRow, type FrozenMission, type JuliusDispatchController,
@@ -23,6 +24,8 @@ const FROZEN: FrozenMission = {
 const FOUNDER = 'player-founder';
 const PROJECT = 'proj-1';
 const RUN = 'run:abc123';
+/** The UI-action time the game client reports: before the test clock's first tick (2026-10-22T12:00:01Z). */
+const UI_UTC = '2026-10-22T11:59:30.000Z';
 
 interface Harness {
   readonly env: Record<string, string | undefined>;
@@ -87,7 +90,7 @@ function harness(options: {
 
 const input = (over: Partial<Parameters<JuliusDispatchController['dispatch']>[0]> = {}) => ({
   projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER, sessionId: 'sess-1', idempotencyKey: 'key-0000001',
-  clientTriggerId: 'trig-00000001', clientLogSha256: sha('client line'), ...over,
+  clientTriggerId: 'trig-00000001', clientLogSha256: sha('client line'), clientUiActionUtc: UI_UTC, ...over,
 });
 const rowsOf = async (h: Harness): Promise<readonly DispatchRow[]> => h.ledger.rows();
 const phases = (rows: readonly DispatchRow[]): string[] => rows.map((r) => (r.phase === 'pre_call' || r.phase === 'result' ? `${String(r.phase)}:${String(r.role)}` : String(r.phase)));
@@ -100,11 +103,11 @@ describe('J1 chain, fake providers', () => {
     await h.controller.whenIdle();
     expect(h.calls.map((c) => c.role)).toEqual(['architect', 'coder', 'reviewer']);
     expect(phases(await rowsOf(h))).toEqual([
-      'run_start', 'pre_call:architect', 'result:architect', 'pre_call:coder', 'result:coder',
+      'run_created', 'run_start', 'pre_call:architect', 'result:architect', 'pre_call:coder', 'result:coder',
       'pre_call:reviewer', 'result:reviewer', 'checker', 'result:final',
     ]);
     const rows = await rowsOf(h);
-    expect(rows[0]).toMatchObject({ clientLogSha256: sha('client line'), clientTriggerId: 'trig-00000001', runOrdinal: 1, reviewerProvider: 'xai' });
+    expect(rows[1]).toMatchObject({ clientLogSha256: sha('client line'), clientTriggerId: 'trig-00000001', runOrdinal: 1, reviewerProvider: 'xai' });
     const results = rows.filter((r) => r.phase === 'result' && r.role !== 'final');
     expect(results.map((r) => r.providerResponseId)).toEqual(['resp_architect_00112233445566', 'resp_coder_00112233445566', 'resp_reviewer_00112233445566']);
     expect(results[1]).toMatchObject({ changedPaths: 3, outputChars: 'function add(a,b){return a+b}'.length });
@@ -401,7 +404,7 @@ describe('J1 negative controls', () => {
     await h.controller.dispatch(input());
     await h.controller.whenIdle();
     expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, status: 200, replayed: true });
-    expect(await h.controller.dispatch(input({ idempotencyKey: 'key-0000099' }))).toMatchObject({ status: 409, code: 'julius_dispatch_already_dispatched' });
+    expect(await h.controller.dispatch(input({ idempotencyKey: 'key-0000099' }))).toMatchObject({ status: 403, code: 'julius_dispatch_run_creator_mismatch' });
     expect(h.calls).toHaveLength(3);
     expect((await rowsOf(h)).filter((r) => r.phase === 'run_start')).toHaveLength(1);
   });
@@ -436,7 +439,7 @@ describe('J1 reviewer acceptance protocol (D1-D12) controls', () => {
     await h.controller.dispatch(input());
     await h.controller.whenIdle();
     const rows = await rowsOf(h);
-    expect(rows[0]).toMatchObject({
+    expect(rows[1]).toMatchObject({
       phase: 'run_start', runId: RUN, missionId: FROZEN.missionId, frozenSha256: FROZEN.contractSha256, budgetCapUsd: 10,
       authorizedPlayerHash: sha(FOUNDER).slice(0, 16), keyHash: sha('key-0000001').slice(0, 16), mode: 'fake',
     });
@@ -452,7 +455,7 @@ describe('J1 reviewer acceptance protocol (D1-D12) controls', () => {
     expect(final).toMatchObject({ phase: 'result', role: 'final', mode: 'fake' });
     expect(final.checkerOutputSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(final.resultSha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(String(pre[0].at) > String(rows[0].at)).toBe(true);
+    expect(String(pre[0].at) > String(rows[1].at)).toBe(true);
     expect(JSON.stringify(rows)).not.toMatch(/seeded|forcedCatch/);
   });
 
@@ -521,7 +524,7 @@ describe('J1 reviewer acceptance protocol (D1-D12) controls', () => {
     await h.controller.dispatch(input());
     await h.controller.whenIdle();
     expect(h.calls).toHaveLength(0);
-    expect(phases(await rowsOf(h))).toEqual(['run_start', 'budget_refused', 'result:final']);
+    expect(phases(await rowsOf(h))).toEqual(['run_created', 'run_start', 'budget_refused', 'result:final']);
     const two = harness({ env: { JULIUS_J1_BUDGET_CAP_USD: '2', JULIUS_J1_LEG_ESTIMATE_USD: '1' } });
     await two.controller.dispatch(input());
     await two.controller.whenIdle();
@@ -557,7 +560,7 @@ describe('J1 reviewer acceptance protocol (D1-D12) controls', () => {
     await second.controller.recover();
     expect((await ledger.rows()).length).toBe(countAfterRecover);
     expect(await second.controller.dispatch(input({ runId: 'run:dead', idempotencyKey: 'key-0000077' }))).toMatchObject({ ok: true, replayed: true, state: 'ORPHANED' });
-    expect(await second.controller.dispatch(input({ runId: 'run:dead', idempotencyKey: 'key-0000078' }))).toMatchObject({ status: 409 });
+    expect(await second.controller.dispatch(input({ runId: 'run:dead', idempotencyKey: 'key-0000078' }))).toMatchObject({ status: 403, code: 'julius_dispatch_run_creator_mismatch' });
     expect(second.controller.result({ projectId: PROJECT, runId: 'run:dead', callerPlayerId: FOUNDER }).status).toBe(409);
     const ev = second.controller.events({ projectId: PROJECT, runId: 'run:dead', callerPlayerId: FOUNDER, cursor: 0 }).body as { data: { state: string; terminal: boolean } };
     expect(ev.data).toMatchObject({ state: 'ORPHANED', terminal: true });
@@ -573,6 +576,58 @@ describe('J1 reviewer acceptance protocol (D1-D12) controls', () => {
     const h = harness({ ledger: createMemoryDispatchLedger({ failWrites: () => true }) });
     expect(await h.controller.dispatch(input())).toMatchObject({ status: 503 });
     expect(h.calls).toHaveLength(0);
+  });
+});
+
+describe('G3-3 the run creator and the ordering evidence are recorded and enforced', () => {
+  it('dispatch creates the run itself in one authenticated flow: run_created carries creator hashes, UI utc and the ledger time, and precedes run_start and every pre_call', async () => {
+    const h = harness();
+    await h.controller.dispatch(input());
+    await h.controller.whenIdle();
+    const rows = await rowsOf(h);
+    const created = rows.find((r) => r.phase === 'run_created');
+    expect(created).toMatchObject({ runId: RUN, creatorPlayerHash: sha(FOUNDER).slice(0, 16), creatorKeyHash: sha('key-0000001').slice(0, 16), uiActionUtc: UI_UTC, clientLogSha256: sha('client line') });
+    expect(rows.indexOf(created!)).toBeLessThan(rows.findIndex((r) => r.phase === 'run_start'));
+    expect(Date.parse(String(created!.uiActionUtc))).toBeLessThan(Date.parse(String(created!.at)));
+    expect(verifyRunOrdering(rows, RUN)).toEqual({ ok: true });
+    expect(rows.find((r) => r.role === 'final')).toMatchObject({ orderOk: true });
+  });
+  it('a UI-action time at or after the ledger run_created time, in the future, missing or unparsable is run_order_violation with no row and no call', async () => {
+    for (const bad of ['2026-10-22T13:00:00.000Z', '2026-10-22T12:00:01.000Z', 'soon', '', undefined]) {
+      const h = harness();
+      const out = await h.controller.dispatch(input({ clientUiActionUtc: bad as string }));
+      expect(out).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_run_order_violation' });
+      expect(h.calls).toHaveLength(0);
+      expect(await rowsOf(h)).toHaveLength(0);
+    }
+  });
+  it('a run whose ledger creator is another player or another key is run_creator_mismatch; the same creator is only already_dispatched', async () => {
+    const ledger = createMemoryDispatchLedger();
+    const created = (over: Record<string, string>): DispatchRow => ({ phase: 'run_created', runId: RUN, creatorPlayerHash: sha(FOUNDER).slice(0, 16), creatorKeyHash: sha('key-0000001').slice(0, 16), uiActionUtc: UI_UTC, at: '2026-10-22T11:59:40.000Z', ...over });
+    await ledger.append(created({ creatorPlayerHash: sha('someone-else').slice(0, 16) }));
+    const h = harness({ ledger });
+    expect(await h.controller.dispatch(input())).toMatchObject({ status: 403, code: 'julius_dispatch_run_creator_mismatch' });
+    const other = createMemoryDispatchLedger();
+    await other.append(created({ creatorKeyHash: sha('key-0000042').slice(0, 16) }));
+    expect(await harness({ ledger: other }).controller.dispatch(input())).toMatchObject({ status: 403, code: 'julius_dispatch_run_creator_mismatch' });
+    const same = createMemoryDispatchLedger();
+    await same.append(created({}));
+    expect(await harness({ ledger: same }).controller.dispatch(input())).toMatchObject({ status: 409, code: 'julius_dispatch_already_dispatched' });
+    expect(h.calls).toHaveLength(0);
+  });
+  it('verifyRunOrdering fails a ledger whose order or times break UI-action < run_created <= pre_call <= result', () => {
+    const base: DispatchRow[] = [
+      { phase: 'run_created', runId: RUN, uiActionUtc: UI_UTC, at: '2026-10-22T12:00:01.000Z' },
+      { phase: 'run_start', runId: RUN, at: '2026-10-22T12:00:01.000Z' },
+      { phase: 'pre_call', runId: RUN, role: 'architect', at: '2026-10-22T12:00:02.000Z' },
+      { phase: 'result', runId: RUN, role: 'architect', at: '2026-10-22T12:00:03.000Z' },
+    ];
+    expect(verifyRunOrdering(base, RUN)).toEqual({ ok: true });
+    expect(verifyRunOrdering([base[1], base[0], base[2], base[3]], RUN)).toMatchObject({ ok: false });
+    expect(verifyRunOrdering([base[0], base[1], { ...base[2], at: '2026-10-22T12:00:00.500Z' }, base[3]], RUN)).toMatchObject({ ok: false });
+    expect(verifyRunOrdering([{ ...base[0], uiActionUtc: '2026-10-22T12:00:01.000Z' }, ...base.slice(1)], RUN)).toMatchObject({ ok: false });
+    expect(verifyRunOrdering([base[0], base[1], base[3], base[2]], RUN)).toMatchObject({ ok: false });
+    expect(verifyRunOrdering(base.slice(1), RUN)).toMatchObject({ ok: false });
   });
 });
 
@@ -625,7 +680,7 @@ describe('J1 HTTP edge', () => {
     elsewhere: { playerId: FOUNDER, projectId: 'proj-2', sessionId: 'sess-3' },
   };
   const ports = (h: Harness) => ({ dispatch: h.controller, verifyNativeSession: ({ token }: { token: string }) => TOKENS[token] ?? null });
-  const body = (over: Record<string, unknown> = {}): string => JSON.stringify({ runId: RUN, clientTriggerId: 'trig-00000001', clientLogSha256: sha('client line'), ...over });
+  const body = (over: Record<string, unknown> = {}): string => JSON.stringify({ runId: RUN, clientTriggerId: 'trig-00000001', clientLogSha256: sha('client line'), clientUiActionUtc: UI_UTC, ...over });
   const post = (over: Partial<JuliusDispatchRouteRequest> = {}): JuliusDispatchRouteRequest => ({
     method: 'POST', path: '/wonderland/julius/dispatch', url: `/wonderland/julius/dispatch?projectId=${PROJECT}`,
     authorization: 'Relay-Session founder', origin: undefined, rawBody: body(), idempotencyKey: 'key-0000001', now: 1,
@@ -705,7 +760,7 @@ describe('J1 HTTP edge', () => {
   it('no client log binding, no dispatch: missing or malformed clientLogSha256 / clientTriggerId / key / runId', async () => {
     for (const over of [
       { rawBody: body({ clientLogSha256: undefined }) }, { rawBody: body({ clientLogSha256: 'abc' }) }, { rawBody: body({ clientLogSha256: sha('x').toUpperCase() }) },
-      { rawBody: body({ clientTriggerId: 'short' }) }, { rawBody: body({ runId: '../x' }) }, { rawBody: 'not json' }, { rawBody: undefined },
+      { rawBody: body({ clientTriggerId: 'short' }) }, { rawBody: body({ clientUiActionUtc: undefined }) }, { rawBody: body({ clientUiActionUtc: 'yesterday' }) }, { rawBody: body({ runId: '../x' }) }, { rawBody: 'not json' }, { rawBody: undefined },
       { idempotencyKey: undefined }, { idempotencyKey: 'k' },
     ]) {
       const h = harness();

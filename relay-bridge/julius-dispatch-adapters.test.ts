@@ -346,7 +346,7 @@ describe('composed through the J1 controller (fakes only)', () => {
     });
     return { controller, ledger };
   }
-  const dispatchInput = { projectId: 'proj-1', runId: 'run:1', callerPlayerId: 'founder', sessionId: 's1', idempotencyKey: 'key-0000001', clientTriggerId: 'trig-00000001', clientLogSha256: 'e'.repeat(64) };
+  const dispatchInput = { projectId: 'proj-1', runId: 'run:1', callerPlayerId: 'founder', sessionId: 's1', idempotencyKey: 'key-0000001', clientTriggerId: 'trig-00000001', clientLogSha256: 'e'.repeat(64), clientUiActionUtc: '2026-10-22T11:59:30.000Z' };
 
   it('completes, with a response id and a served model on every leg and the coder tool count from the executor', async () => {
     const h = run(() => 'xai-resp-0011223344');

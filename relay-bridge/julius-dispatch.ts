@@ -214,6 +214,35 @@ export function createFileDispatchLedger(options: { readonly file: string }): Fi
   };
 }
 
+/**
+ * THE ORDERING RULE: UI-action < run_created <= first pre_call <= result (and every row of the run after run_created in ledger
+ * order). Checked against the ledger itself, so a reviewer-run replay can re-verify it. The UI-action time is the CLIENT's claim
+ * (the bridge cannot read the client log); what it proves is that the claim precedes the bridge's own clock reading.
+ */
+export function verifyRunOrdering(rows: readonly DispatchRow[], runId: string): { readonly ok: true } | { readonly ok: false; readonly violation: string } {
+  const mine = rows.filter((r) => r.runId === runId);
+  const created = mine.find((r) => r.phase === 'run_created');
+  if (created === undefined) return { ok: false, violation: 'run_created_missing' };
+  const ui = Date.parse(String(created.uiActionUtc));
+  const createdAt = Date.parse(String(created.at));
+  if (!Number.isFinite(ui) || !Number.isFinite(createdAt)) return { ok: false, violation: 'timestamp_unparsable' };
+  if (!(ui < createdAt)) return { ok: false, violation: 'ui_action_not_before_run_created' };
+  const createdIndex = mine.indexOf(created);
+  let floor = createdAt;
+  const firstPre = mine.findIndex((r) => r.phase === 'pre_call');
+  const firstResult = mine.findIndex((r) => r.phase === 'result');
+  if (firstPre !== -1 && firstResult !== -1 && firstResult < firstPre) return { ok: false, violation: 'result_before_pre_call' };
+  for (const [index, row] of mine.entries()) {
+    if (index === createdIndex) continue;
+    if (index < createdIndex) return { ok: false, violation: 'row_before_run_created' };
+    const at = Date.parse(String(row.at));
+    if (!Number.isFinite(at)) return { ok: false, violation: 'timestamp_unparsable' };
+    if (at < floor) return { ok: false, violation: `${String(row.phase)}_before_earlier_row` };
+    floor = at;
+  }
+  return { ok: true };
+}
+
 /* ---------------------------------------------------------------------------------------------------------------- */
 /* Events and result. NOTHING on this wire names a provider or a model: the provider-name ban is enforced HERE, at the */
 /* source, not only in the client. Provider ids and models live in the ledger and the config only.                  */
@@ -252,6 +281,7 @@ interface RunRecord {
   resultSha256: string | null;
 }
 
+const UTC_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/u;
 const sha256 = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex');
 const sha16 = (value: string): string => sha256(value).slice(0, 16);
 const utcDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
@@ -292,6 +322,8 @@ export interface DispatchInput {
   readonly idempotencyKey: string;
   readonly clientTriggerId: string;
   readonly clientLogSha256: string;
+  /** When the player's UI action happened, UTC ISO-8601, from the game client log line the hash binds. Must precede the ledger run_created time. */
+  readonly clientUiActionUtc: string;
 }
 export type DispatchOutcome =
   | { readonly ok: true; readonly status: 202 | 200; readonly dispatchId: string; readonly runId: string; readonly state: ChainState; readonly replayed: boolean; readonly ledgerRef: string; readonly mode: DispatchMode }
@@ -473,6 +505,10 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       if (failure === null && !checkerPass) failure = 'checker_failed';
     }
 
+    /* The ordering rule is verified against the ledger before the verdict is sealed. */
+    let orderOk = false;
+    try { orderOk = verifyRunOrdering(await deps.ledger.rows(), rec.runId).ok; } catch { orderOk = false; }
+    if (!orderOk && failure === null) { failure = 'run_order_violation'; halted = true; }
     const state: ChainState = failure === null ? 'COMPLETED' : halted ? 'HALTED' : 'FAILED';
     const result = {
       runId: rec.runId, dispatchId: rec.dispatchId, missionId: ctx.missionId, mode: deps.mode, state, failure,
@@ -488,7 +524,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       /* THE FINAL ROW (role=final), shaped for the reviewer's crosscheck: resultSha256 and the checker's output hash. */
       await deps.ledger.append({
         phase: 'result', role: 'final', ...base, at: new Date(deps.now()).toISOString(), state, failure, mode: deps.mode,
-        resultSha256, resultChars: resultText.length, checkerOutputSha256, spendUnknownLegs: unknownSpendLegs,
+        resultSha256, resultChars: resultText.length, checkerOutputSha256, spendUnknownLegs: unknownSpendLegs, orderOk,
       });
     } catch {
       /* Terminal anyway; the roles' own rows already stand. A missing final row makes the run an orphan at the next start. */
@@ -556,7 +592,8 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         if (existing.callerHash === callerHash && existing.keyHash === keyHash) {
           return { ok: true, status: 200, dispatchId: existing.dispatchId, runId: existing.runId, state: existing.state, replayed: true, ledgerRef: `julius-j1-ledger:${existing.dispatchId}`, mode: deps.mode };
         }
-        return refuse(409, 'julius_dispatch_already_dispatched');
+        /* The CREATOR of a run is the (player, key) that created it; anyone else is refused by name. */
+        return refuse(403, 'julius_dispatch_run_creator_mismatch');
       }
       /* D7: a key already used by ANOTHER run (a different mission instance) is refused, whatever the run id. */
       for (const rec of records.values()) if (rec.keyHash === keyHash) return refuse(409, 'julius_dispatch_key_reused');
@@ -576,12 +613,24 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         const missionCap = positiveInt(env.JULIUS_J1_MAX_RUNS_PER_MISSION, J1_DEFAULT_MAX_RUNS_PER_MISSION);
         const dispatchId = newId();
         const at = deps.now();
+        /* UI-action < run_created: the client's claimed UI time must parse, and must precede the bridge's own clock reading. */
+        const uiMs = UTC_ISO.test(input.clientUiActionUtc ?? '') ? Date.parse(input.clientUiActionUtc) : Number.NaN;
+        if (!Number.isFinite(uiMs) || !(uiMs < at)) return refuse(409, 'julius_dispatch_run_order_violation');
         const reserved = await locked(async (): Promise<DispatchOutcome | 'reserved'> => {
-          const rows = (await deps.ledger.rows()).filter((row) => row.phase === 'run_start');
-          if (rows.some((row) => row.runId === input.runId)) return refuse(409, 'julius_dispatch_already_dispatched');
+          const allRows = await deps.ledger.rows();
+          const createdRow = allRows.find((row) => row.phase === 'run_created' && row.runId === input.runId);
+          if (createdRow !== undefined && (createdRow.creatorPlayerHash !== callerHash || createdRow.creatorKeyHash !== keyHash)) return refuse(403, 'julius_dispatch_run_creator_mismatch');
+          const rows = allRows.filter((row) => row.phase === 'run_start');
+          if (createdRow !== undefined || rows.some((row) => row.runId === input.runId)) return refuse(409, 'julius_dispatch_already_dispatched');
           if (rows.some((row) => row.keyHash === keyHash)) return refuse(409, 'julius_dispatch_key_reused');
           if (rows.filter((row) => String(row.at).slice(0, 10) === utcDay(at)).length >= dailyCap) return refuse(429, 'julius_dispatch_cap_reached');
           if (rows.filter((row) => row.missionId === frozen.missionId).length >= missionCap) return refuse(429, 'julius_dispatch_mission_cap_reached');
+          /* RUN_CREATED: this route creates the run's dispatch in ONE authenticated flow (there is no separate creator route in this
+             branch), so the creator is this caller; the row pins the creator hashes, the client UI time and the bridge clock. */
+          await deps.ledger.append({
+            phase: 'run_created', runId: input.runId, dispatchId, creatorPlayerHash: callerHash, creatorKeyHash: keyHash,
+            uiActionUtc: input.clientUiActionUtc, clientTriggerId: input.clientTriggerId, clientLogSha256: input.clientLogSha256, at: new Date(at).toISOString(),
+          });
           /* THE RUN_START ROW precedes every pre_call row. Its write is the commit point. */
           await deps.ledger.append({
             phase: 'run_start', dispatchId, runId: input.runId, missionId: frozen.missionId, frozenSha256: frozen.contractSha256,
@@ -728,18 +777,19 @@ export async function handleJuliusDispatchRoute(
 
   if (request.method !== 'POST') return err(405, 'method_not_allowed', 'Dispatch is a POST.');
   if (request.idempotencyKey === undefined || !KEY.test(request.idempotencyKey)) return err(400, 'julius_dispatch_idempotency_key_invalid', 'x-relay-idempotency-key is required.');
-  let body: { runId?: unknown; clientTriggerId?: unknown; clientLogSha256?: unknown } | null = null;
+  let body: { runId?: unknown; clientTriggerId?: unknown; clientLogSha256?: unknown; clientUiActionUtc?: unknown } | null = null;
   try { body = JSON.parse(request.rawBody ?? '') as typeof body; } catch { body = null; }
   if (body === null || typeof body !== 'object') return err(400, 'julius_dispatch_body_invalid', 'The body must be JSON.');
-  const { runId, clientTriggerId, clientLogSha256 } = body;
+  const { runId, clientTriggerId, clientLogSha256, clientUiActionUtc } = body;
   if (typeof runId !== 'string' || !RUN_ID.test(runId)) return err(400, 'julius_dispatch_run_invalid', 'runId is required.');
   /* THE GAME-ORIGIN BINDING: no hash of a client log line, no dispatch. */
-  if (typeof clientTriggerId !== 'string' || !TRIGGER_ID.test(clientTriggerId) || typeof clientLogSha256 !== 'string' || !HEX64.test(clientLogSha256)) {
-    return err(400, 'julius_dispatch_client_log_binding_required', 'clientTriggerId and clientLogSha256 (the hash of the client log line written before this request) are required.');
+  if (typeof clientTriggerId !== 'string' || !TRIGGER_ID.test(clientTriggerId) || typeof clientLogSha256 !== 'string' || !HEX64.test(clientLogSha256)
+    || typeof clientUiActionUtc !== 'string' || !UTC_ISO.test(clientUiActionUtc) || !Number.isFinite(Date.parse(clientUiActionUtc))) {
+    return err(400, 'julius_dispatch_client_log_binding_required', 'clientTriggerId, clientLogSha256 (the hash of the client log line written before this request) and clientUiActionUtc are required.');
   }
   const outcome = await ports.dispatch.dispatch({
     projectId, runId, callerPlayerId: native.playerId, sessionId: native.sessionId,
-    idempotencyKey: request.idempotencyKey, clientTriggerId, clientLogSha256,
+    idempotencyKey: request.idempotencyKey, clientTriggerId, clientLogSha256, clientUiActionUtc,
   });
   if (!outcome.ok) return err(outcome.status, outcome.code, 'Julius could not dispatch this run.');
   return {
