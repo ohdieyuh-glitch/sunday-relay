@@ -190,6 +190,41 @@ describe('J1 chain, fake providers', () => {
     expect(row).toMatchObject({ outcome: 'xai_verdict_unreadable', providerResponseId: 'resp_paid_00112233', model: 'grok-served', requests: 1, usage: { input: 10, output: null, total: null }, shownSha256: 'a'.repeat(64) });
   });
 
+  it('G3-2: a leg with no usage (throw, timeout, empty usage) carries an explicit spend_unknown marker, never null-as-zero, and the unknown is counted not priced', async () => {
+    const h = harness({ behave: { coder: () => ({ ok: false, text: '', responseId: 'sess_paid_0011', model: null, failureClass: 'coder_timed_out', usage: { input: null, output: null, total: null } }) } });
+    await h.controller.dispatch(input());
+    await h.controller.whenIdle();
+    const rows = await rowsOf(h);
+    const arch = rows.find((r) => r.phase === 'result' && r.role === 'architect');
+    const coder = rows.find((r) => r.phase === 'result' && r.role === 'coder');
+    expect(arch).toMatchObject({ spend: 'usage_reported', spendUnknown: false });
+    expect(coder).toMatchObject({ spend: 'spend_unknown', spendUnknown: true, providerResponseId: 'sess_paid_0011' });
+    expect(coder).not.toHaveProperty('costUsd');
+    const thrown = harness({ behave: { architect: () => { throw new Error('boom'); } } });
+    await thrown.controller.dispatch(input());
+    await thrown.controller.whenIdle();
+    const trows = await rowsOf(thrown);
+    expect(trows.find((r) => r.phase === 'result' && r.role === 'architect')).toMatchObject({ spend: 'spend_unknown', spendUnknown: true, usage: null });
+    expect(trows.find((r) => r.role === 'final')).toMatchObject({ spendUnknownLegs: 1 });
+    const result = JSON.parse((thrown.controller.result({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER }).body as { data: { resultText: string } }).data.resultText) as { spendUnknownLegs: number; roles: { spend: string }[] };
+    expect(result.spendUnknownLegs).toBe(1);
+    expect(result.roles[0].spend).toBe('spend_unknown');
+  });
+
+  it('G3-2: an adapter that says the provider was never contacted is not_contacted, and a later budget_refused row records unknown legs', async () => {
+    const h = harness({
+      env: { JULIUS_J1_BUDGET_CAP_USD: '2', JULIUS_J1_LEG_ESTIMATE_USD: '1' },
+      behave: { architect: () => ({ ok: false, text: '', responseId: null, model: null, failureClass: 'key_missing', providerContacted: false }) },
+    });
+    await h.controller.dispatch(input());
+    await h.controller.whenIdle();
+    expect((await rowsOf(h)).find((r) => r.phase === 'result' && r.role === 'architect')).toMatchObject({ spend: 'not_contacted', spendUnknown: false });
+    const two = harness({ env: { JULIUS_J1_BUDGET_CAP_USD: '2', JULIUS_J1_LEG_ESTIMATE_USD: '1' }, behave: { architect: () => ({ ok: true, text: 'plan', responseId: 'resp_a_00112233', model: 'm' }) } });
+    await two.controller.dispatch(input());
+    await two.controller.whenIdle();
+    expect((await rowsOf(two)).find((r) => r.phase === 'budget_refused')).toMatchObject({ unknownSpendLegs: 1, role: 'reviewer' });
+  });
+
   it('changedPaths and toolInvocations are ledgered separately; unknown stays null and is never 0', async () => {
     const h = harness({ behave: { coder: () => ({ ok: true, text: 'art', responseId: 'resp_c_0011223344', model: 'm', changedPaths: 2, toolInvocations: null, evidence: 'EVIDENCE TEXT' }) } });
     await h.controller.dispatch(input());

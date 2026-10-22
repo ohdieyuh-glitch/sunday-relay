@@ -204,16 +204,16 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
   return {
     providerId: J1_CODER_PROVIDER_ID, model: input.model, fake: input.fake ?? false, keyEnv: input.keyEnv,
     async call(call: RoleCallInput): Promise<RoleCallOutput> {
-      if (!nonEmpty(call.architectText)) return { ok: false, text: '', responseId: null, model: null, failureClass: 'architect_plan_absent' };
+      if (!nonEmpty(call.architectText)) return { ok: false, text: '', responseId: null, model: null, failureClass: 'architect_plan_absent', providerContacted: false };
       const scope = { runId: call.runId, projectId: input.projectId, workerId: input.workerId, taskId: `${call.dispatchId}:coder` };
       /* BEFORE THE SESSION: where this attempt starts. A refusal here means no session was launched. */
       let start;
       try {
         const before = await input.shell.run({ ...scope, invocationKey: `${scope.taskId}:base`, command: juliusAttemptStartCommand(null), timeoutMs: timeouts.base });
-        if (before.status !== 'SUCCEEDED') return { ok: false, text: '', responseId: null, model: null, failureClass: 'executor_start_refused' };
+        if (before.status !== 'SUCCEEDED') return { ok: false, text: '', responseId: null, model: null, failureClass: 'executor_start_refused', providerContacted: false };
         start = { invocationId: before.invocationId, ...parseJuliusAttemptStart(before.stdout, null) };
       } catch {
-        return { ok: false, text: '', responseId: null, model: null, failureClass: 'executor_start_unavailable' };
+        return { ok: false, text: '', responseId: null, model: null, failureClass: 'executor_start_unavailable', providerContacted: false };
       }
       const request: JuliusCodingAgentRequest = Object.freeze({
         version: JULIUS_CODING_AGENT_CONTRACT_VERSION,
@@ -242,11 +242,18 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
       }
       if (outcome.kind === 'failed') {
         const sessionId = outcome.diagnostics.responseId;
+        /* A runtime that never launched spent nothing. One that did has an UNKNOWN amount: the usage is reported as explicit nulls (never 0). */
+        if (!outcome.runtimeStarted) return { ok: false, text: '', responseId: null, model: null, failureClass: outcome.providerFailureClass ?? juliusCodingAgentFailureClass(outcome.failure), providerContacted: false };
         return {
           ok: false, text: '', responseId: typeof sessionId === 'string' && sessionId !== '' ? sessionId : null, model: null,
+          usage: { input: null, output: null, total: null }, costUsdMicros: outcome.costUsdMicros,
           failureClass: outcome.providerFailureClass ?? juliusCodingAgentFailureClass(outcome.failure),
         };
       }
+      const observation = outcome.observation;
+      const sessionId = observation.diagnostics.responseId;
+      const usage: RoleUsage = { input: observation.inputTokens, output: observation.outputTokens, total: observation.inputTokens !== null && observation.outputTokens !== null ? observation.inputTokens + observation.outputTokens : null };
+      const sessionResponseId = typeof sessionId === 'string' && sessionId !== '' ? sessionId : null;
       /* AFTER THE SESSION: what the executor itself saw. This is the only source of `changedPaths`. */
       let record: CoderExecutorRecord;
       try {
@@ -262,17 +269,15 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
           evidence: close.status.captured ? coderEvidenceText(close.own !== null ? close.own : close.status.changes, close.truncated) : null,
         };
       } catch {
-        return { ok: false, text: '', responseId: null, model: null, failureClass: 'executor_close_unavailable' };
+        /* The session already ran and may be billed: its id, model and usage are kept on this failure. */
+        return { ok: false, text: '', responseId: sessionResponseId, model: observation.providerModel, usage, failureClass: 'executor_close_unavailable' };
       }
       try { input.onExecutorRecord?.(record, call); } catch { /* a record sink must not break the leg */ }
-      const observation = outcome.observation;
-      const sessionId = observation.diagnostics.responseId;
-      const usage: RoleUsage = { input: observation.inputTokens, output: observation.outputTokens, total: observation.inputTokens !== null && observation.outputTokens !== null ? observation.inputTokens + observation.outputTokens : null };
       return {
         ok: true,
         // THE ARTIFACT IS THE SESSION'S FINAL MESSAGE (the hidden checker reads exactly this).
         text: outcome.finalText ?? '',
-        responseId: typeof sessionId === 'string' && sessionId !== '' ? sessionId : null,
+        responseId: sessionResponseId,
         // Attested served model, or null (the controller then refuses the leg).
         model: observation.providerModel,
         usage,
@@ -315,7 +320,7 @@ export function createReviewerRoleProvider(input: ReviewerRoleInput): RoleProvid
   return {
     providerId: J1_REVIEWER_PROVIDER_ID, model: config.model, fake: input.fake ?? false, keyEnv: input.keyEnv,
     async call(call: RoleCallInput): Promise<RoleCallOutput> {
-      if (!nonEmpty(call.architectText) || !nonEmpty(call.coderArtifact)) return { ok: false, text: '', responseId: null, model: null, failureClass: 'review_inputs_absent' };
+      if (!nonEmpty(call.architectText) || !nonEmpty(call.coderArtifact)) return { ok: false, text: '', responseId: null, model: null, failureClass: 'review_inputs_absent', providerContacted: false };
       const evidence = nonEmpty(call.coderEvidence) ? call.coderEvidence : '';
       // sha256 over everything shown: brief, plan, artifact and executor evidence, length-framed as a JSON array so the parts cannot blur.
       const shownSha256 = sha256(JSON.stringify([input.brief, call.architectText, call.coderArtifact, evidence]));
@@ -334,12 +339,13 @@ export function createReviewerRoleProvider(input: ReviewerRoleInput): RoleProvid
       } catch {
         return { ok: false, text: '', responseId: null, model: null, failureClass: 'provider_error' };
       }
+      const idOf = (o: Extract<HermesOutcome, { kind: 'reviewed' }>): string | null => { try { const id = input.responseIdOf(o, call); return nonEmpty(id) ? id : null; } catch { return null; } };
       if (outcome.kind === 'launch_failed') return { ok: false, text: '', responseId: null, model: null, failureClass: 'reviewer_launch_failed', shownSha256 };
       if (outcome.kind === 'review_incomplete') {
         return { ok: false, text: '', responseId: null, model: null, failureClass: outcome.shape, shownSha256, ...(outcome.usage === undefined ? {} : { usage: hermesUsage(outcome.usage), requests: outcome.usage.apiCalls }) };
       }
       if (outcome.result.verdict === 'unable_to_review') {
-        return { ok: false, text: '', responseId: null, model: nonEmpty(outcome.servedModel) ? outcome.servedModel : null, usage: hermesUsage(outcome.usage), requests: outcome.usage.apiCalls, failureClass: 'reviewer_unable_to_review', shownSha256 };
+        return { ok: false, text: '', responseId: idOf(outcome), model: nonEmpty(outcome.servedModel) ? outcome.servedModel : null, usage: hermesUsage(outcome.usage), requests: outcome.usage.apiCalls, failureClass: 'reviewer_unable_to_review', shownSha256 };
       }
       let responseId: string | null = null;
       try { responseId = input.responseIdOf(outcome, call); } catch { responseId = null; }

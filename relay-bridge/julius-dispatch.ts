@@ -83,6 +83,19 @@ export interface RoleCallOutput {
   readonly verdict?: 'approve' | 'reject';
   /** How many provider HTTP requests sit behind THIS response id (a Hermes tool loop can be several). Null/absent = adapter cannot say. Ledgered for the console request-count check (xAI 12 vs 3). */
   readonly requests?: number | null;
+  /** False = the adapter refused BEFORE any request left (nothing could have been billed). Absent = unknown/contacted. */
+  readonly providerContacted?: false;
+  /** Provider- or session-reported cost in USD micros, when it gave one. Never inferred, never a price list. */
+  readonly costUsdMicros?: number | null;
+}
+
+/** The spend marker on every result row: usage the provider reported, an explicit unknown, or a leg that never reached the provider. */
+export type SpendMarker = 'usage_reported' | 'spend_unknown' | 'not_contacted';
+export function spendMarkerOf(out: Pick<RoleCallOutput, 'usage' | 'providerContacted' | 'costUsdMicros'>): SpendMarker {
+  if (out.providerContacted === false) return 'not_contacted';
+  const u = out.usage;
+  const hasTokens = u !== undefined && (u.input !== null || u.output !== null || u.total !== null);
+  return hasTokens || (typeof out.costUsdMicros === 'number') ? 'usage_reported' : 'spend_unknown';
 }
 export interface RoleProvider {
   /** The provider's independence group: the three roles must differ. Ledger and config only: it NEVER goes to the client. */
@@ -348,6 +361,8 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
     let failure: string | null = null;
     let halted = false;
     let legsStarted = 0;
+    /** Legs whose spend the provider did not report. COUNTED, never priced: the console read is the measurement. */
+    let unknownSpendLegs = 0;
     rec.state = 'RUNNING';
 
     for (const role of DISPATCH_ROLES) {
@@ -356,7 +371,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       /* BUDGET: a leg that could take the run's ESTIMATED spend over the cap is refused BEFORE its pre_call. The estimate is an
          operator number (JULIUS_J1_LEG_ESTIMATE_USD), not a measurement; the console read is the measurement. */
       if ((legsStarted + 1) * ctx.legEstimateUsd > ctx.budgetCapUsd) {
-        try { await deps.ledger.append({ phase: 'budget_refused', ...base, role, at: new Date(deps.now()).toISOString(), budgetCapUsd: ctx.budgetCapUsd, legEstimateUsd: ctx.legEstimateUsd, legsStarted }); } catch { /* refusing anyway */ }
+        try { await deps.ledger.append({ phase: 'budget_refused', ...base, role, at: new Date(deps.now()).toISOString(), budgetCapUsd: ctx.budgetCapUsd, legEstimateUsd: ctx.legEstimateUsd, legsStarted, unknownSpendLegs }); } catch { /* refusing anyway */ }
         emit(rec, { type: 'chain.refused', role, phase: 'refused', failure: 'budget_refused' });
         failure = 'budget_refused'; halted = true; break;
       }
@@ -400,12 +415,15 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       else if (role === 'reviewer' && out.verdict !== 'approve' && out.verdict !== 'reject') roleFailure = 'verdict_missing';
       const evidence = out.evidence === undefined || out.evidence === null || out.evidence === '' ? null : scrubKeys(out.evidence, secrets);
       const outcome = roleFailure === null ? 'ok' : roleFailure;
+      const spend = spendMarkerOf(out);
+      if (spend === 'spend_unknown') unknownSpendLegs += 1;
       const resultRow: DispatchRow = {
         phase: 'result', ...base, role, provider: provider.providerId, at: new Date(deps.now()).toISOString(), outcome,
         /* The FULL response id lives in the ledger only: the founder reads the provider console by it. */
         providerResponseId: responseId, model: echoedModel, mode: deps.mode,
         usage: out.usage === undefined ? null : { input: out.usage.input, output: out.usage.output, total: out.usage.total },
         requests: out.requests ?? null,
+        spend, spendUnknown: spend === 'spend_unknown', costUsdMicros: out.costUsdMicros ?? null,
         outputSha256: text === '' ? null : sha256(text), outputChars: text.length,
         changedPaths: role === 'coder' ? (out.changedPaths ?? null) : null,
         toolInvocations: role === 'coder' ? (out.toolInvocations ?? null) : null,
@@ -424,7 +442,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       });
       summaries.push({
         role, outcome, responseIdTail: tailOf(responseId), responseIdSha16: responseId === null ? null : sha16(responseId),
-        usage: out.usage ?? null, outputSha256: text === '' ? null : sha256(text), outputChars: text.length,
+        usage: out.usage ?? null, spend, outputSha256: text === '' ? null : sha256(text), outputChars: text.length,
         changedPaths: role === 'coder' ? (out.changedPaths ?? null) : null, toolInvocations: role === 'coder' ? (out.toolInvocations ?? null) : null,
         shownSha256: role === 'reviewer' ? (out.shownSha256 ?? null) : null,
       });
@@ -458,7 +476,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
     const state: ChainState = failure === null ? 'COMPLETED' : halted ? 'HALTED' : 'FAILED';
     const result = {
       runId: rec.runId, dispatchId: rec.dispatchId, missionId: ctx.missionId, mode: deps.mode, state, failure,
-      roles: summaries, reviewerVerdict: verdict, checkerPass,
+      roles: summaries, spendUnknownLegs: unknownSpendLegs, reviewerVerdict: verdict, checkerPass,
       artifactSha256: coderArtifact === null ? null : sha256(coderArtifact), artifactText: coderArtifact,
     };
     /* The result bytes are EXACTLY this string; the client hashes the string it receives. */
@@ -470,7 +488,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       /* THE FINAL ROW (role=final), shaped for the reviewer's crosscheck: resultSha256 and the checker's output hash. */
       await deps.ledger.append({
         phase: 'result', role: 'final', ...base, at: new Date(deps.now()).toISOString(), state, failure, mode: deps.mode,
-        resultSha256, resultChars: resultText.length, checkerOutputSha256,
+        resultSha256, resultChars: resultText.length, checkerOutputSha256, spendUnknownLegs: unknownSpendLegs,
       });
     } catch {
       /* Terminal anyway; the roles' own rows already stand. A missing final row makes the run an orphan at the next start. */

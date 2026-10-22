@@ -56,8 +56,8 @@ export function createXaiDirectReviewerRoleProvider(input: XaiDirectReviewerInpu
   return {
     providerId: J1_XAI_REVIEWER_PROVIDER_ID, model: input.model, fake: input.fake ?? false, keyEnv: input.keyEnv,
     async call(call: RoleCallInput): Promise<RoleCallOutput> {
-      if (!nonEmpty(call.apiKey)) return refuse('xai_key_missing');
-      if (!nonEmpty(call.architectText) || !nonEmpty(call.coderArtifact)) return refuse('review_inputs_absent');
+      if (!nonEmpty(call.apiKey)) return { ...refuse('xai_key_missing'), providerContacted: false };
+      if (!nonEmpty(call.architectText) || !nonEmpty(call.coderArtifact)) return { ...refuse('review_inputs_absent'), providerContacted: false };
       const evidence = nonEmpty(call.coderEvidence) ? call.coderEvidence : null;
       const userText = [
         `MISSION BRIEF:\n${input.brief}`,

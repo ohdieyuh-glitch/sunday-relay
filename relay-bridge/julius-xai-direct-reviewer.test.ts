@@ -18,6 +18,14 @@ const make = (fetchImpl: Parameters<typeof createXaiDirectReviewerRoleProvider>[
   createXaiDirectReviewerRoleProvider({ model: 'grok-requested', keyEnv: 'XAI_API_KEY', brief: 'brief', fetchImpl, ...over });
 
 describe('direct xAI reviewer adapter (fake fetch only)', () => {
+  it('G3-2: pre-contact refusals (no key, no inputs) say the provider was not contacted; a post-200 failure does not', async () => {
+    let fetched = 0;
+    const f = async () => { fetched += 1; return { ok: true, status: 200, text: async () => '{}' }; };
+    expect(await make(f).call(callIn({ apiKey: '' }))).toMatchObject({ ok: false, failureClass: 'xai_key_missing', providerContacted: false });
+    expect(await make(f).call(callIn({ coderArtifact: null }))).toMatchObject({ failureClass: 'review_inputs_absent', providerContacted: false });
+    expect(fetched).toBe(0);
+    expect((await make(ok('not json')).call(callIn())).providerContacted).toBeUndefined();
+  });
   it('returns the provider response id, the model FROM THE BODY, usage and exactly one request', async () => {
     const r = await make(ok(good)).call(callIn());
     expect(r).toMatchObject({ ok: true, responseId: 'resp_abc123', model: 'grok-requested', verdict: 'approve', requests: 1, usage: { input: 10, output: 5, total: 15 } });

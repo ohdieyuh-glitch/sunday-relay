@@ -95,6 +95,34 @@ function fakeCoding(outcome: JuliusCodingAgentProviderOutcome | (() => never)): 
 const coder = (provider: JuliusCodingAgentProvider, shell: ShellEffectPort, extra: { onExecutorRecord?: (r: CoderExecutorRecord) => void } = {}) =>
   createCoderRoleProvider({ provider, shell, projectId: 'proj-1', workerId: 'w-coder', workspacePath: '/work', brief: 'BRIEF', model: 'claude-requested', keyEnv: null, ...extra });
 
+describe('G3-2 spend and response ids survive post-response failures', () => {
+  it('a failed coder session keeps the session id and reports usage as explicitly unknown when the runtime started', async () => {
+    const provider = fakeCoding({ kind: 'failed', failure: 'TIMEOUT', runtimeStarted: true, costUsdMicros: 1234, safeMessage: 'x', providerFailureClass: 'coder_timed_out', diagnostics: { responseId: 'session-failed-1' } });
+    const out = await coder(provider, fakeShell()).call(call({ role: 'coder', architectText: 'PLAN' }));
+    expect(out).toMatchObject({ ok: false, responseId: 'session-failed-1', usage: { input: null, output: null, total: null }, costUsdMicros: 1234 });
+    const notStarted = fakeCoding({ kind: 'failed', failure: 'TIMEOUT', runtimeStarted: false, costUsdMicros: null, safeMessage: 'x', providerFailureClass: null, diagnostics: {} });
+    expect(await coder(notStarted, fakeShell()).call(call({ role: 'coder', architectText: 'PLAN' }))).toMatchObject({ ok: false, providerContacted: false });
+  });
+  it('a close-out that fails AFTER a completed session still returns the session id, model and usage', async () => {
+    const out = await coder(fakeCoding(completed()), fakeShell({ throwOn: 'close' })).call(call({ role: 'coder', architectText: 'P' }));
+    expect(out).toMatchObject({ ok: false, failureClass: 'executor_close_unavailable', responseId: 'session-0011223344', model: 'claude-served', usage: { input: 100, output: 50, total: 150 } });
+  });
+  it('pre-contact refusals say so; a thrown architect runner leaves usage absent (the controller marks it unknown)', async () => {
+    expect(await coder(fakeCoding(completed()), fakeShell()).call(call({ role: 'coder' }))).toMatchObject({ providerContacted: false });
+    expect(await coder(fakeCoding(completed()), fakeShell({ throwOn: 'start' })).call(call({ role: 'coder', architectText: 'P' }))).toMatchObject({ providerContacted: false });
+    const arch = createArchitectRoleProvider({ config: gptConfig, brief: 'B', keyEnv: 'K', run: async () => { throw new Error('x'); } });
+    const out = await arch.call(call());
+    expect(out.usage).toBeUndefined();
+    expect(out.providerContacted).toBeUndefined();
+  });
+  it('reviewer failure paths keep the response id the injected port gives, with usage and request count', async () => {
+    const unable = await reviewer(async () => reviewed('unable_to_review')).call(rcall);
+    expect(unable).toMatchObject({ ok: false, failureClass: 'reviewer_unable_to_review', responseId: 'xai-resp-0011223344', usage: { input: 20, output: 30, total: 50 }, requests: 3 });
+    const incomplete = { kind: 'review_incomplete', safeMessage: 'm', shape: 'review_timeout', diagnostics: {}, startedAt: 'a', completedAt: 'b', usage } as unknown as HermesOutcome;
+    expect(await reviewer(async () => incomplete).call(rcall)).toMatchObject({ ok: false, usage: { input: 20 }, requests: 3 });
+  });
+});
+
 describe('G3-1 coder key isolation: an env allow-list, never provider keys', () => {
   const parent = { PATH: '/bin', HOME: '/h', OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai, ANTHROPIC_API_KEY: canary('anthropic'), SOME_TOKEN: 't', LEAKY: `x-${KEY.xai}-y` };
   const envSpy = (): { provider: JuliusCodingAgentProvider; seen: Array<Readonly<Record<string, string>> | undefined> } => {
