@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { XAI_DEFAULT_BASE_URL } from './reviewer-harness/hermes/xai-models';
-import type { RoleCallInput, RoleCallOutput, RoleProvider } from './julius-dispatch';
+import type { RoleCallInput, RoleCallOutput, RoleProvider, RoleUsage } from './julius-dispatch';
 
 /**
  * J1 REVIEWER, DIRECT xAI PATH. An alternative to the Hermes reviewer adapter for one reason: Hermes reports no provider response id
@@ -30,6 +30,11 @@ export interface XaiDirectReviewerInput {
   readonly keyEnv: string;
   readonly brief: string;
   readonly fetchImpl: (url: string, init: { method: 'POST'; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
+  /**
+   * The served-model strings the body may carry. DEFAULT [model]: strict equality with the requested model. A dated alias is accepted
+   * only when listed here by name; the strict check is never loosened implicitly (review F2).
+   */
+  readonly servedModelAllow?: readonly string[];
   readonly baseUrl?: string;
   readonly timeoutMs?: number;
   readonly fake?: boolean;
@@ -39,10 +44,13 @@ const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.trim() 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 const refuse = (failureClass: string, responseId: string | null = null): RoleCallOutput => ({ ok: false, text: '', responseId, model: null, failureClass });
+const sha256 = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex');
 
 export function createXaiDirectReviewerRoleProvider(input: XaiDirectReviewerInput): RoleProvider {
   if (!nonEmpty(input.model)) throw new Error('xai_reviewer_requires_model');
   if (!nonEmpty(input.keyEnv)) throw new Error('xai_reviewer_requires_key_env');
+  const allow: readonly string[] = input.servedModelAllow ?? [input.model];
+  if (allow.length === 0 || allow.some((m) => !nonEmpty(m))) throw new Error('xai_reviewer_served_model_allow_invalid');
   const base = (input.baseUrl ?? XAI_DEFAULT_BASE_URL).replace(/\/+$/, '');
   if (!/^https:\/\//.test(base)) throw new Error('xai_reviewer_requires_https');
   return {
@@ -50,11 +58,15 @@ export function createXaiDirectReviewerRoleProvider(input: XaiDirectReviewerInpu
     async call(call: RoleCallInput): Promise<RoleCallOutput> {
       if (!nonEmpty(call.apiKey)) return refuse('xai_key_missing');
       if (!nonEmpty(call.architectText) || !nonEmpty(call.coderArtifact)) return refuse('review_inputs_absent');
+      const evidence = nonEmpty(call.coderEvidence) ? call.coderEvidence : null;
       const userText = [
         `MISSION BRIEF:\n${input.brief}`,
         `ARCHITECT PLAN:\n${call.architectText}`,
-        `CODER ARTIFACT (sha256 ${createHash('sha256').update(call.coderArtifact, 'utf8').digest('hex')}):\n${call.coderArtifact}`,
+        `CODER ARTIFACT (exact bytes, sha256 ${sha256(call.coderArtifact)}):\n${call.coderArtifact}`,
+        ...(evidence === null ? [] : [`EXECUTOR EVIDENCE (exact bytes, sha256 ${sha256(evidence)}):\n${evidence}`]),
       ].join('\n\n');
+      /* sha256 over EVERYTHING the reviewer was shown (the exact user message). Ledgered on every leg that sent it. */
+      const shownSha256 = sha256(userText);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), input.timeoutMs ?? 600_000);
       let status = 0;
@@ -68,48 +80,52 @@ export function createXaiDirectReviewerRoleProvider(input: XaiDirectReviewerInpu
         });
         status = res.status;
         raw = await res.text();
-        if (!res.ok) return refuse(status === 401 || status === 403 ? 'xai_unauthorized' : status === 429 ? 'xai_rate_limited' : 'xai_http_error');
+        if (!res.ok) return { ...refuse(status === 401 || status === 403 ? 'xai_unauthorized' : status === 429 ? 'xai_rate_limited' : 'xai_http_error'), shownSha256 };
       } catch {
-        return refuse('xai_transport_error');
+        return { ...refuse('xai_transport_error'), shownSha256 };
       } finally {
         clearTimeout(timer);
       }
+      /* From here a 200 body HAS ARRIVED: the request was made and may be billed. EVERY failure below returns what the body gave (id,
+         served model, usage if present, null where absent: UNKNOWN is never zero), requests: 1 and the shown digest (review F1). */
+      const paid = (failureClass: string, o: { responseId?: string | null; model?: string | null; usage?: RoleUsage } = {}): RoleCallOutput => ({
+        ok: false, text: '', responseId: o.responseId ?? null, model: o.model ?? null, failureClass, requests: 1, shownSha256,
+        usage: o.usage ?? { input: null, output: null, total: null },
+      });
       let body: Record<string, unknown>;
       try {
         const parsed: unknown = JSON.parse(raw);
-        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return refuse('xai_response_unreadable');
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return paid('xai_response_unreadable');
         body = parsed as Record<string, unknown>;
       } catch {
-        return refuse('xai_response_unreadable');
+        return paid('xai_response_unreadable');
       }
       const responseId = nonEmpty(body.id) ? body.id : null;
       const servedModel = nonEmpty(body.model) ? body.model : null;
+      const usageRaw = (body.usage !== null && typeof body.usage === 'object' && !Array.isArray(body.usage) ? body.usage : {}) as Record<string, unknown>;
+      const inTok = num(usageRaw.input_tokens);
+      const outTok = num(usageRaw.output_tokens);
+      const usage: RoleUsage = { input: inTok, output: outTok, total: num(usageRaw.total_tokens) ?? (inTok !== null && outTok !== null ? inTok + outTok : null) };
+      const carried = { responseId, model: servedModel, usage };
       // Attestation (review F1): the id and the served model come from the response BODY only. No id = unattested = the leg fails.
-      if (responseId === null) return { ...refuse('xai_response_id_missing'), model: servedModel };
-      // A served model that differs from the requested one is a mismatch, recorded (id + served model returned) and failing.
-      if (servedModel !== null && servedModel !== input.model) return { ...refuse('xai_model_mismatch', responseId), model: servedModel };
-      if (servedModel === null) return refuse('xai_served_model_missing', responseId);
+      if (responseId === null) return paid('xai_response_id_missing', carried);
+      if (servedModel === null) return paid('xai_served_model_missing', carried);
+      // F2: the body model must be in the explicit allow list (default: the requested model only).
+      if (!allow.includes(servedModel)) return paid('xai_model_mismatch', carried);
       const text = extractText(body);
-      if (text === null) return refuse('xai_response_unreadable', responseId);
+      if (text === null) return paid('xai_response_unreadable', carried);
       let verdict: 'approve' | 'reject';
       let summary: string;
       try {
         const v: unknown = JSON.parse(text.trim());
         const o = v as { verdict?: unknown; summary?: unknown };
-        if (v === null || typeof v !== 'object' || (o.verdict !== 'approve' && o.verdict !== 'reject') || !nonEmpty(o.summary)) return refuse('xai_verdict_unreadable', responseId);
+        if (v === null || typeof v !== 'object' || (o.verdict !== 'approve' && o.verdict !== 'reject') || !nonEmpty(o.summary)) return paid('xai_verdict_unreadable', carried);
         verdict = o.verdict;
         summary = o.summary;
       } catch {
-        return refuse('xai_verdict_unreadable', responseId);
+        return paid('xai_verdict_unreadable', carried);
       }
-      const usage = (body.usage ?? {}) as Record<string, unknown>;
-      const inTok = num(usage.input_tokens);
-      const outTok = num(usage.output_tokens);
-      return {
-        ok: true, text: summary, responseId, model: servedModel,
-        usage: { input: inTok, output: outTok, total: num(usage.total_tokens) ?? (inTok !== null && outTok !== null ? inTok + outTok : null) },
-        requests: 1, verdict,
-      };
+      return { ok: true, text: summary, responseId, model: servedModel, usage, requests: 1, verdict, shownSha256 };
     },
   };
 }

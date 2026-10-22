@@ -59,6 +59,8 @@ export interface RoleCallInput {
   /** The earlier roles' scrubbed outputs (the architect's plan for the coder; both for the reviewer). */
   readonly architectText: string | null;
   readonly coderArtifact: string | null;
+  /** REVIEWER: the bounded executor evidence the coder leg returned (changed-path list or diff text), scrubbed. Null/absent = the executor gave none. */
+  readonly coderEvidence?: string | null;
 }
 export interface RoleCallOutput {
   readonly ok: boolean;
@@ -69,8 +71,14 @@ export interface RoleCallOutput {
   readonly usage?: RoleUsage;
   /** Failure class only, never a provider message (a message can echo a key or a prompt). */
   readonly failureClass?: string;
-  /** CODER: how many real tool executions the adapter performed. A coder that executed none cannot complete the chain. */
-  readonly toolCalls?: number;
+  /** CODER: how many paths the EXECUTOR observed changed in the workspace. Null/absent = the executor did not capture (UNKNOWN, never 0). A coder that changed none cannot complete the chain. */
+  readonly changedPaths?: number | null;
+  /** CODER: how many command invocations the executor itself mediated for the session. Null/absent = the executor cannot say; never 0 by default. Ledgered, not gated. */
+  readonly toolInvocations?: number | null;
+  /** CODER: bounded executor evidence (diff or changed-file contents, or a labelled path list) shown to the reviewer. Null/absent = none. */
+  readonly evidence?: string | null;
+  /** REVIEWER: sha256 over everything the reviewer was shown, so a verdict can be tied to what was judged. Present on a failed leg that got that far. */
+  readonly shownSha256?: string | null;
   /** REVIEWER: the verdict the reviewer returned. */
   readonly verdict?: 'approve' | 'reject';
   /** How many provider HTTP requests sit behind THIS response id (a Hermes tool loop can be several). Null/absent = adapter cannot say. Ledgered for the console request-count check (xAI 12 vs 3). */
@@ -335,6 +343,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
     const summaries: Record<string, unknown>[] = [];
     let architectText: string | null = null;
     let coderArtifact: string | null = null;
+    let coderEvidence: string | null = null;
     let verdict: 'approve' | 'reject' | null = null;
     let failure: string | null = null;
     let halted = false;
@@ -368,7 +377,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         out = await Promise.race([
-          provider.call({ role, runId: rec.runId, dispatchId: rec.dispatchId, missionId: ctx.missionId, apiKey, architectText, coderArtifact }),
+          provider.call({ role, runId: rec.runId, dispatchId: rec.dispatchId, missionId: ctx.missionId, apiKey, architectText, coderArtifact, coderEvidence }),
           new Promise<RoleCallOutput>((_, reject) => { timer = setTimeout(() => reject(new Error('role timeout')), timeoutMs); }),
         ]);
       } catch (error) {
@@ -385,8 +394,9 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
          console row and is not accepted (the reviewer found response_id empty on every INDEPENDENT_REVIEWER row). */
       else if (responseId === null || responseId.trim() === '' || echoedModel === null || echoedModel.trim() === '') roleFailure = 'response_identity_missing';
       else if (text.trim() === '') roleFailure = 'empty_output';
-      else if (role === 'coder' && (out.toolCalls ?? 0) < 1) roleFailure = 'no_tool_execution';
+      else if (role === 'coder' && (out.changedPaths ?? 0) < 1) roleFailure = 'no_workspace_change';
       else if (role === 'reviewer' && out.verdict !== 'approve' && out.verdict !== 'reject') roleFailure = 'verdict_missing';
+      const evidence = out.evidence === undefined || out.evidence === null || out.evidence === '' ? null : scrubKeys(out.evidence, secrets);
       const outcome = roleFailure === null ? 'ok' : roleFailure;
       const resultRow: DispatchRow = {
         phase: 'result', ...base, role, provider: provider.providerId, at: new Date(deps.now()).toISOString(), outcome,
@@ -395,7 +405,11 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         usage: out.usage === undefined ? null : { input: out.usage.input, output: out.usage.output, total: out.usage.total },
         requests: out.requests ?? null,
         outputSha256: text === '' ? null : sha256(text), outputChars: text.length,
-        toolCalls: role === 'coder' ? (out.toolCalls ?? 0) : null,
+        changedPaths: role === 'coder' ? (out.changedPaths ?? null) : null,
+        toolInvocations: role === 'coder' ? (out.toolInvocations ?? null) : null,
+        evidenceSha256: role === 'coder' && evidence !== null ? sha256(evidence) : null,
+        evidenceChars: role === 'coder' && evidence !== null ? evidence.length : null,
+        shownSha256: role === 'reviewer' ? (out.shownSha256 ?? null) : null,
         verdict: role === 'reviewer' ? (out.verdict ?? null) : null,
         attempts: 1,
       };
@@ -408,7 +422,9 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       });
       summaries.push({
         role, outcome, responseIdTail: tailOf(responseId), responseIdSha16: responseId === null ? null : sha16(responseId),
-        usage: out.usage ?? null, outputSha256: text === '' ? null : sha256(text), outputChars: text.length, toolCalls: role === 'coder' ? (out.toolCalls ?? 0) : null,
+        usage: out.usage ?? null, outputSha256: text === '' ? null : sha256(text), outputChars: text.length,
+        changedPaths: role === 'coder' ? (out.changedPaths ?? null) : null, toolInvocations: role === 'coder' ? (out.toolInvocations ?? null) : null,
+        shownSha256: role === 'reviewer' ? (out.shownSha256 ?? null) : null,
       });
       if (!resultWritten) {
         /* The call happened and cannot be recorded: stop the chain here; the id is in the event above for a console reconcile. */
@@ -416,7 +432,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       }
       if (roleFailure !== null) { failure = `${role}_${roleFailure}`; break; }
       if (role === 'architect') architectText = text;
-      if (role === 'coder') coderArtifact = text;
+      if (role === 'coder') { coderArtifact = text; coderEvidence = evidence; }
       if (role === 'reviewer') verdict = out.verdict ?? null;
     }
 

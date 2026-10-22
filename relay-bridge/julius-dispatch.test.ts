@@ -42,7 +42,7 @@ function fakeProvider(role: 'architect' | 'coder' | 'reviewer', providerId: stri
       if (behave !== undefined) return behave(input);
       const base = { ok: true, responseId: `resp_${role}_00112233445566`, model: `${providerId}-model`, usage: { input: 10, output: 20, total: 30 } };
       if (role === 'architect') return { ...base, text: 'PLAN: write add(a,b)' };
-      if (role === 'coder') return { ...base, text: 'function add(a,b){return a+b}', toolCalls: 3 };
+      if (role === 'coder') return { ...base, text: 'function add(a,b){return a+b}', changedPaths: 3 };
       return { ...base, text: 'looks right', verdict: 'approve' };
     },
   };
@@ -107,7 +107,7 @@ describe('J1 chain, fake providers', () => {
     expect(rows[0]).toMatchObject({ clientLogSha256: sha('client line'), clientTriggerId: 'trig-00000001', runOrdinal: 1, reviewerProvider: 'xai' });
     const results = rows.filter((r) => r.phase === 'result' && r.role !== 'final');
     expect(results.map((r) => r.providerResponseId)).toEqual(['resp_architect_00112233445566', 'resp_coder_00112233445566', 'resp_reviewer_00112233445566']);
-    expect(results[1]).toMatchObject({ toolCalls: 3, outputChars: 'function add(a,b){return a+b}'.length });
+    expect(results[1]).toMatchObject({ changedPaths: 3, outputChars: 'function add(a,b){return a+b}'.length });
     // the coder saw the plan, the reviewer saw both
     expect(h.calls[1].architectText).toBe('PLAN: write add(a,b)');
     expect(h.calls[2].coderArtifact).toBe('function add(a,b){return a+b}');
@@ -156,11 +156,40 @@ describe('J1 chain, fake providers', () => {
   });
 
   it('a coder that executed no tool cannot complete the chain; the reviewer is then never called', async () => {
-    const h = harness({ behave: { coder: () => ({ ok: true, text: 'prose only', responseId: 'resp_c', model: 'm', toolCalls: 0 }) } });
+    const h = harness({ behave: { coder: () => ({ ok: true, text: 'prose only', responseId: 'resp_c', model: 'm', changedPaths: 0 }) } });
     await h.controller.dispatch(input());
     await h.controller.whenIdle();
     expect(h.calls.map((c) => c.role)).toEqual(['architect', 'coder']);
-    expect(JSON.parse(((h.controller.result({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER }).body as { data: { resultText: string } }).data.resultText))).toMatchObject({ state: 'FAILED', failure: 'coder_no_tool_execution' });
+    expect(JSON.parse(((h.controller.result({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER }).body as { data: { resultText: string } }).data.resultText))).toMatchObject({ state: 'FAILED', failure: 'coder_no_workspace_change' });
+  });
+
+  it('a failed leg that has id, model, usage and requests keeps all of them in the ledger row (paid-leg row)', async () => {
+    const h = harness({ behave: { reviewer: () => ({ ok: false, text: '', responseId: 'resp_paid_00112233', model: 'grok-served', usage: { input: 10, output: null, total: null }, requests: 1, failureClass: 'xai_verdict_unreadable', shownSha256: 'a'.repeat(64) }) } });
+    await h.controller.dispatch(input());
+    await h.controller.whenIdle();
+    const row = (await rowsOf(h)).find((r) => r.phase === 'result' && r.role === 'reviewer');
+    expect(row).toMatchObject({ outcome: 'xai_verdict_unreadable', providerResponseId: 'resp_paid_00112233', model: 'grok-served', requests: 1, usage: { input: 10, output: null, total: null }, shownSha256: 'a'.repeat(64) });
+  });
+
+  it('changedPaths and toolInvocations are ledgered separately; unknown stays null and is never 0', async () => {
+    const h = harness({ behave: { coder: () => ({ ok: true, text: 'art', responseId: 'resp_c_0011223344', model: 'm', changedPaths: 2, toolInvocations: null, evidence: 'EVIDENCE TEXT' }) } });
+    await h.controller.dispatch(input());
+    await h.controller.whenIdle();
+    const coderRow = (await rowsOf(h)).find((r) => r.phase === 'result' && r.role === 'coder');
+    expect(coderRow).toMatchObject({ changedPaths: 2, toolInvocations: null, evidenceSha256: sha('EVIDENCE TEXT'), evidenceChars: 13 });
+    expect(coderRow).not.toHaveProperty('toolCalls');
+    const none = harness({ behave: { coder: () => ({ ok: true, text: 'art', responseId: 'resp_c_0011223344', model: 'm' }) } });
+    await none.controller.dispatch(input());
+    await none.controller.whenIdle();
+    expect((await rowsOf(none)).find((r) => r.phase === 'result' && r.role === 'coder')).toMatchObject({ outcome: 'no_workspace_change', changedPaths: null, toolInvocations: null });
+  });
+
+  it('hands the coder evidence to the reviewer and ledgers the reviewer shown digest', async () => {
+    const h = harness({ behave: { coder: () => ({ ok: true, text: 'art', responseId: 'resp_c_0011223344', model: 'm', changedPaths: 1, evidence: 'M\tsrc/a.js' }), reviewer: () => ({ ok: true, text: 'fine', responseId: 'resp_r_0011223344', model: 'g', verdict: 'approve', shownSha256: sha('shown') }) } });
+    await h.controller.dispatch(input());
+    await h.controller.whenIdle();
+    expect(h.calls[2]).toMatchObject({ coderArtifact: 'art', coderEvidence: 'M\tsrc/a.js' });
+    expect((await rowsOf(h)).find((r) => r.phase === 'result' && r.role === 'reviewer')).toMatchObject({ shownSha256: sha('shown') });
   });
 
   it('a provider that throws or times out is a failure class, not the provider message', async () => {
@@ -254,7 +283,7 @@ describe('J1 negative controls', () => {
   it('the key never appears in rows, events, results, logs or the route body, even when a provider echoes it', async () => {
     const echo = (role: string): Behaviour => (i) => ({
       ok: true, responseId: `resp_${role}_${i.apiKey}_tail`, model: 'm',
-      text: `echo ${i.apiKey} and ${Object.values(KEYS).join(' ')}`, toolCalls: 1, verdict: 'approve', usage: { input: 1, output: 1, total: 2 },
+      text: `echo ${i.apiKey} and ${Object.values(KEYS).join(' ')}`, changedPaths: 1, verdict: 'approve', usage: { input: 1, output: 1, total: 2 },
     });
     const h = harness({ behave: { architect: echo('a'), coder: echo('c'), reviewer: echo('r') } });
     await h.controller.dispatch(input());

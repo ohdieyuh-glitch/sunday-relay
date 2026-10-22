@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
 import type { GptArchitectConfig, GptRunOutcome, GptRunRequest } from '../src/relay/connectors/gpt-architect';
@@ -5,10 +7,10 @@ import type { JuliusCodingAgentProvider, JuliusCodingAgentProviderOutcome, Juliu
 import type { JuliusApiIdentity, JuliusApiResult, JuliusRunView } from '../src/relay/mission/julius/julius-runtime-api';
 import type { HermesConfig, HermesOutcome, ReviewPacket } from './hermes-reviewer';
 import {
-  composeRoleProviders, modelFamily, createArchitectRoleProvider, createCoderRoleProvider, createJuliusRunLookup, createReviewerRoleProvider,
-  deriveCoderToolCalls, type CoderExecutorRecord,
+  composeRoleProviders, modelVendor, assertContractBinding, createArchitectRoleProvider, createCoderRoleProvider, createJuliusRunLookup, createReviewerRoleProvider,
+  deriveCoderChangedPaths, type CoderExecutorRecord,
 } from './julius-dispatch-adapters';
-import { createJuliusDispatch, createMemoryDispatchLedger, type FrozenMission, type RoleCallInput } from './julius-dispatch';
+import { createJuliusDispatch, createMemoryDispatchLedger, type FrozenMission, type RoleCallInput, type RoleProvider } from './julius-dispatch';
 import type { ShellEffectInput, ShellEffectPort, ShellEffectResult } from './julius/executor-effects';
 
 const canary = (name: string): string => ['canary', name, 'ZZ9', 'x7Q2m4k8w1'].join('_');
@@ -93,36 +95,39 @@ function fakeCoding(outcome: JuliusCodingAgentProviderOutcome | (() => never)): 
 const coder = (provider: JuliusCodingAgentProvider, shell: ShellEffectPort, extra: { onExecutorRecord?: (r: CoderExecutorRecord) => void } = {}) =>
   createCoderRoleProvider({ provider, shell, projectId: 'proj-1', workerId: 'w-coder', workspacePath: '/work', brief: 'BRIEF', model: 'claude-requested', keyEnv: null, ...extra });
 
-describe('coder adapter: toolCalls come from the executor record', () => {
+describe('coder adapter: changedPaths come from the executor record', () => {
   it('counts the paths the executor saw changed, not the session invocation count', async () => {
     const provider = fakeCoding(completed({ toolInvocations: 99 }));
     const shell = fakeShell();
     const records: CoderExecutorRecord[] = [];
     const out = await coder(provider, shell, { onExecutorRecord: (r) => records.push(r) }).call(call({ role: 'coder', architectText: 'PLAN' }));
-    expect(out).toMatchObject({ ok: true, text: '{"artifact":true}', responseId: 'session-0011223344', model: 'claude-served', toolCalls: 2, usage: { input: 100, output: 50, total: 150 } });
+    expect(out).toMatchObject({ ok: true, text: '{"artifact":true}', responseId: 'session-0011223344', model: 'claude-served', changedPaths: 2, toolInvocations: null, usage: { input: 100, output: 50, total: 150 } });
     expect(records).toHaveLength(1);
+    expect(out.evidence).toContain('EXECUTOR-OBSERVED CHANGE SET');
+    expect(out.evidence).toContain('a.js');
+    expect(out).not.toHaveProperty('toolCalls');
     expect(records[0]).toMatchObject({ captured: true, changedPaths: 2, closeInvocationId: 'inv_close', startInvocationId: 'inv_start' });
     // Both executor steps went through the port, scoped to this run and dispatch.
     expect(shell.inputs.map((i) => i.invocationKey)).toEqual(['disp_1:coder:base', 'disp_1:coder:status']);
     expect(shell.inputs[0]).toMatchObject({ runId: 'run:1', projectId: 'proj-1', workerId: 'w-coder' });
   });
 
-  it('a session that says it ran tools but left the workspace untouched reports ZERO', async () => {
+  it('a session that says it ran tools but left the workspace untouched reports ZERO changed paths and null invocations', async () => {
     const out = await coder(fakeCoding(completed({ toolInvocations: 10 })), fakeShell({ close: { status: 'SUCCEEDED', exitCode: 0, stdout: '', stderr: '', invocationId: 'inv_c' } }))
       .call(call({ role: 'coder', architectText: 'PLAN' }));
-    expect(out).toMatchObject({ ok: true, toolCalls: 0 });
+    expect(out).toMatchObject({ ok: true, changedPaths: 0, toolInvocations: null });
   });
 
-  it('a close-out the executor did not capture reports zero, whatever the session claims', async () => {
+  it('a close-out the executor did not capture reports UNKNOWN (null, never 0), whatever the session claims', async () => {
     const out = await coder(fakeCoding(completed({ toolInvocations: 10 })), fakeShell({ close: { status: 'FAILED', exitCode: 1, stdout: ' M a.js\u0000', stderr: '', invocationId: 'inv_c' } }))
       .call(call({ role: 'coder', architectText: 'PLAN' }));
-    expect(out).toMatchObject({ ok: true, toolCalls: 0 });
+    expect(out).toMatchObject({ ok: true, changedPaths: null, toolInvocations: null, evidence: null });
   });
 
-  it('deriveCoderToolCalls ignores uncaptured records', () => {
-    const base: CoderExecutorRecord = { startInvocationId: null, closeInvocationId: 'i', captured: true, changedPaths: 3, baseTree: null, endTree: null };
-    expect(deriveCoderToolCalls(base)).toBe(3);
-    expect(deriveCoderToolCalls({ ...base, captured: false })).toBe(0);
+  it('deriveCoderChangedPaths is null for uncaptured records', () => {
+    const base: CoderExecutorRecord = { startInvocationId: null, closeInvocationId: 'i', captured: true, changedPaths: 3, baseTree: null, endTree: null, evidence: null };
+    expect(deriveCoderChangedPaths(base)).toBe(3);
+    expect(deriveCoderChangedPaths({ ...base, captured: false })).toBeNull();
   });
 
   it('a session that attests no model reports null, so the controller refuses the leg', async () => {
@@ -174,7 +179,19 @@ describe('reviewer adapter (xAI through Hermes)', () => {
     const packets: ReviewPacket[] = [];
     const out = await reviewer(async ({ packet }) => { packets.push(packet); return reviewed('approved'); }).call(rcall);
     expect(out).toMatchObject({ ok: true, verdict: 'approve', responseId: 'xai-resp-0011223344', model: 'grok-served', usage: { input: 20, output: 30, total: 50 }, requests: 3 });
-    expect(packets[0]).toMatchObject({ missionId: 'mission-1', handoffJson: 'PLAN', changedFileContents: '{"artifact":true}' });
+    expect(packets[0]).toMatchObject({ missionId: 'mission-1', handoffJson: 'PLAN', changedFileContents: '{"artifact":true}', unifiedDiff: '' });
+    expect(out.shownSha256).toBe(createHash('sha256').update(JSON.stringify(['BRIEF', 'PLAN', '{"artifact":true}', '']), 'utf8').digest('hex'));
+  });
+
+  it('e: executor evidence goes in the packet and changes the shown digest; a failed leg still carries the digest', async () => {
+    const packets: ReviewPacket[] = [];
+    const withEvidence = call({ role: 'reviewer', architectText: 'PLAN', coderArtifact: '{"artifact":true}', coderEvidence: 'M\ta.js' });
+    const out = await reviewer(async ({ packet }) => { packets.push(packet); return reviewed('approved'); }).call(withEvidence);
+    expect(packets[0]).toMatchObject({ unifiedDiff: 'M\ta.js', changedFileContents: '{"artifact":true}', artifactDigest: createHash('sha256').update('{"artifact":true}', 'utf8').digest('hex') });
+    expect(out.shownSha256).toBe(createHash('sha256').update(JSON.stringify(['BRIEF', 'PLAN', '{"artifact":true}', 'M\ta.js']), 'utf8').digest('hex'));
+    const failed = await reviewer(async () => reviewed('unable_to_review')).call(withEvidence);
+    expect(failed).toMatchObject({ ok: false, failureClass: 'reviewer_unable_to_review', requests: 3, usage: { input: 20, output: 30, total: 50 } });
+    expect(failed.shownSha256).toBe(out.shownSha256);
   });
 
   it('changes_required is reject; unable_to_review is a failure, not a verdict', async () => {
@@ -217,8 +234,11 @@ const view = (over: Partial<JuliusRunView> = {}): JuliusRunView => ({
   runId: 'run:1', missionId: 'mission-1', state: 'READY', revision: 1, cardRevision: 'c', missionContractRevision: 1, projectBrainRevision: 1,
   taskCounts: {} as never, activeTasks: 0, pendingApprovals: 0, ...over,
 });
+const CONTRACT_BYTES = Buffer.from('exact contract file bytes\r\n', 'utf8');
+const CONTRACT_SHA = createHash('sha256').update(CONTRACT_BYTES).digest('hex');
+const BINDING = { preregContractSha256: CONTRACT_SHA, readContractBytes: () => CONTRACT_BYTES };
 const lookupWith = (result: JuliusApiResult<JuliusRunView>, sha: string | null = 'f'.repeat(64)) =>
-  createJuliusRunLookup({ api: { inspectRun: async () => result }, identityFor: () => identity, contractSha256Of: async () => sha });
+  createJuliusRunLookup({ api: { inspectRun: async () => result }, identityFor: () => identity, contractSha256Of: async () => sha, contractBinding: BINDING });
 
 describe('RunLookup adapter', () => {
   it('reads mission id and state from inspectRun and the contract sha256 from the injected source', async () => {
@@ -228,6 +248,18 @@ describe('RunLookup adapter', () => {
     expect(await lookupWith({ ok: false, reason: 'run_not_found', safeMessage: '' }).lookup({ projectId: 'proj-1', runId: 'r' })).toBeNull();
     expect(await lookupWith({ ok: false, reason: 'not_authorized_for_project', safeMessage: '' }).lookup({ projectId: 'proj-1', runId: 'r' })).toBeNull();
     await expect(lookupWith({ ok: false, reason: 'scope_missing', safeMessage: '' }).lookup({ projectId: 'proj-1', runId: 'r' })).rejects.toThrow('run_lookup_scope_missing');
+  });
+  it('b: composition refuses an absent contractSha256Of port, a mismatched file hash, an unreadable file and a malformed prereg value', () => {
+    const base = { contractSha256Of: async () => 'x', preregContractSha256: CONTRACT_SHA, readContractBytes: () => CONTRACT_BYTES };
+    expect(assertContractBinding(base)).toBe(CONTRACT_SHA);
+    expect(() => assertContractBinding({ ...base, contractSha256Of: undefined })).toThrow('contract_sha256_port_absent');
+    expect(() => assertContractBinding({ ...base, readContractBytes: () => Buffer.from('exact contract file bytes\n') })).toThrow('contract_sha256_mismatch');
+    expect(() => assertContractBinding({ ...base, preregContractSha256: 'f'.repeat(64) })).toThrow('contract_sha256_mismatch');
+    expect(() => assertContractBinding({ ...base, readContractBytes: () => { throw new Error('ENOENT'); } })).toThrow('contract_bytes_unreadable');
+    expect(() => assertContractBinding({ ...base, preregContractSha256: 'ABC' })).toThrow('prereg_contract_sha256_invalid');
+    const lookup = { api: { inspectRun: async () => ({ ok: true as const, value: view() }) }, identityFor: () => identity };
+    expect(() => createJuliusRunLookup({ ...lookup, contractBinding: BINDING } as never)).toThrow('contract_sha256_port_absent');
+    expect(() => createJuliusRunLookup({ ...lookup, contractSha256Of: async () => 'f'.repeat(64), contractBinding: { ...BINDING, preregContractSha256: 'f'.repeat(64) } })).toThrow('contract_sha256_mismatch');
   });
   it('an unrecorded contract hash becomes an empty string, which the controller can never match', async () => {
     expect(await lookupWith({ ok: true, value: view() }, null).lookup({ projectId: 'proj-1', runId: 'r' })).toMatchObject({ contractSha256: '' });
@@ -250,7 +282,7 @@ describe('composed through the J1 controller (fakes only)', () => {
     const ledger = createMemoryDispatchLedger();
     const controller = createJuliusDispatch({
       providers, ledger, mode: 'fake', env: () => env, now: () => (clock += 1000), frozen, checker: { check: async () => ({ pass: true }) },
-      runs: createJuliusRunLookup({ api: { inspectRun: async () => ({ ok: true, value: view() }) }, identityFor: () => identity, contractSha256Of: async () => sha }),
+      runs: createJuliusRunLookup({ api: { inspectRun: async () => ({ ok: true, value: view() }) }, identityFor: () => identity, contractSha256Of: async () => sha, contractBinding: BINDING }),
     });
     return { controller, ledger };
   }
@@ -263,7 +295,8 @@ describe('composed through the J1 controller (fakes only)', () => {
     const results = (await h.ledger.rows()).filter((r) => r.phase === 'result' && r.role !== 'final');
     expect(results.map((r) => [r.role, r.provider, r.outcome])).toEqual([['architect', 'openai', 'ok'], ['coder', 'anthropic', 'ok'], ['reviewer', 'xai', 'ok']]);
     for (const row of results) { expect(String(row.providerResponseId).length).toBeGreaterThan(8); expect(row.model).not.toBeNull(); }
-    expect(results[1]).toMatchObject({ toolCalls: 2 });
+    expect(results[1]).toMatchObject({ changedPaths: 2, toolInvocations: null });
+    expect(results[2]).toMatchObject({ shownSha256: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(results[2]).toMatchObject({ requests: 3 });
     expect((await h.ledger.rows()).find((r) => r.role === 'final')).toMatchObject({ state: 'COMPLETED' });
   });
@@ -281,12 +314,12 @@ describe('composed through the J1 controller (fakes only)', () => {
     const h = run(() => 'xai-resp-0011223344', fakeShell({ close: { status: 'SUCCEEDED', exitCode: 0, stdout: '', stderr: '', invocationId: 'i' } }));
     await h.controller.dispatch(dispatchInput);
     await h.controller.whenIdle();
-    expect((await h.ledger.rows()).find((r) => r.role === 'final')).toMatchObject({ state: 'FAILED', failure: 'coder_no_tool_execution' });
+    expect((await h.ledger.rows()).find((r) => r.role === 'final')).toMatchObject({ state: 'FAILED', failure: 'coder_no_workspace_change' });
   });
 
   it('composeRoleProviders refuses duplicate independence groups and a fake/real mix', () => {
     const a = createArchitectRoleProvider({ config: gptConfig, brief: 'B', keyEnv: 'K', run: async () => { throw new Error('x'); } });
-    const c = createCoderRoleProvider({ provider: fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'm', keyEnv: null });
+    const c = createCoderRoleProvider({ provider: fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-x', keyEnv: null });
     expect(() => composeRoleProviders({ architect: a, coder: c, reviewer: { ...a } })).toThrow('role_providers_not_independent');
     const r = createReviewerRoleProvider({ config: hermesConfig, brief: 'B', keyEnv: 'K', responseIdOf: () => null, fake: true });
     expect(() => composeRoleProviders({ architect: a, coder: c, reviewer: r })).toThrow('role_providers_mixed_fake_and_real');
@@ -298,7 +331,22 @@ describe('composed through the J1 controller (fakes only)', () => {
     const same = createCoderRoleProvider({ provider: fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: `${a.model}-other`, keyEnv: null });
     const r = createReviewerRoleProvider({ config: hermesConfig, brief: 'B', keyEnv: 'K', responseIdOf: () => null });
     expect(() => composeRoleProviders({ architect: a, coder: same, reviewer: r })).toThrow('role_models_not_independent_families');
-    expect(modelFamily('GPT-5.6-sol')).toBe('gpt');
-    expect(modelFamily('')).toBe('');
+  });
+
+  it('F3: explicit vendor map: o3 vs gpt-5 same vendor refused; routed anthropic/claude-x vs claude-y refused; unmapped fails closed', () => {
+    expect(modelVendor('o3')).toBe('openai');
+    expect(modelVendor('o4-mini')).toBe('openai');
+    expect(modelVendor('gpt-5')).toBe('openai');
+    expect(modelVendor('GPT-5.6-sol')).toBe('openai');
+    expect(modelVendor('claude-sonnet-5')).toBe('anthropic');
+    expect(modelVendor('anthropic/claude-x')).toBe('anthropic');
+    expect(modelVendor('openrouter/x-ai/grok-4')).toBe('xai');
+    expect(modelVendor('grok-4')).toBe('xai');
+    for (const bad of ['', 'm', 'llama-3', 'ollama', 'openai/claude-x', 'anthropic/gpt-5', 'gptx', 'omega']) expect(modelVendor(bad)).toBeNull();
+    const mk = (p: 'architect' | 'coder' | 'reviewer', model: string): RoleProvider => ({ providerId: `${p}-id`, model, fake: true, keyEnv: null, call: async () => { throw new Error('unused'); } });
+    expect(() => composeRoleProviders({ architect: mk('architect', 'o3'), coder: mk('coder', 'claude-x'), reviewer: mk('reviewer', 'gpt-5') })).toThrow('role_models_not_independent_families');
+    expect(() => composeRoleProviders({ architect: mk('architect', 'gpt-5'), coder: mk('coder', 'anthropic/claude-x'), reviewer: mk('reviewer', 'claude-y') })).toThrow('role_models_not_independent_families');
+    expect(() => composeRoleProviders({ architect: mk('architect', 'gpt-5'), coder: mk('coder', 'claude-x'), reviewer: mk('reviewer', 'mystery-1') })).toThrow('role_model_vendor_unmapped');
+    expect(() => composeRoleProviders({ architect: mk('architect', 'o4-mini'), coder: mk('coder', 'anthropic/claude-x'), reviewer: mk('reviewer', 'x-ai/grok-4') })).not.toThrow();
   });
 });

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
 import type { RoleCallInput } from './julius-dispatch';
@@ -27,6 +29,47 @@ describe('direct xAI reviewer adapter (fake fetch only)', () => {
     expect(noModel).toMatchObject({ ok: false, failureClass: 'xai_served_model_missing', model: null });
     const other = await make(ok({ ...good, model: 'grok-other' })).call(callIn());
     expect(other).toMatchObject({ ok: false, failureClass: 'xai_model_mismatch', responseId: 'resp_abc123', model: 'grok-other' });
+  });
+  it('F1: every failure after a 200 body keeps id, served model, usage (null when absent), requests 1 and the shown digest', async () => {
+    const usageOnly = { usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 } };
+    const cases: [string, unknown, Record<string, unknown>][] = [
+      ['xai_model_mismatch', { ...good, model: 'grok-other' }, { responseId: 'resp_abc123', model: 'grok-other', usage: { input: 10, output: 5, total: 15 } }],
+      ['xai_verdict_unreadable', { ...good, output: [{ content: [{ text: 'nope' }] }] }, { responseId: 'resp_abc123', model: 'grok-requested', usage: { input: 10, output: 5, total: 15 } }],
+      ['xai_response_unreadable', { ...good, output: undefined }, { responseId: 'resp_abc123', model: 'grok-requested', usage: { input: 10, output: 5, total: 15 } }],
+      ['xai_served_model_missing', { ...good, model: undefined }, { responseId: 'resp_abc123', model: null, usage: { input: 10, output: 5, total: 15 } }],
+      ['xai_response_id_missing', { ...good, id: undefined }, { responseId: null, model: 'grok-requested', usage: { input: 10, output: 5, total: 15 } }],
+      ['xai_response_id_missing', { model: 'grok-requested', ...usageOnly, id: undefined }, { responseId: null, usage: { input: 10, output: 5, total: 15 } }],
+      ['xai_model_mismatch', { id: 'resp_x', model: 'grok-other' }, { responseId: 'resp_x', usage: { input: null, output: null, total: null } }],
+      ['xai_response_unreadable', 'not json', { responseId: null, model: null, usage: { input: null, output: null, total: null } }],
+    ];
+    for (const [cls, body, expected] of cases) {
+      const r = await make(ok(body)).call(callIn());
+      expect(r).toMatchObject({ ok: false, failureClass: cls, requests: 1, ...expected });
+      expect(r.shownSha256).toMatch(/^[0-9a-f]{64}$/);
+    }
+  });
+  it('F2: a dated alias is rejected by default and accepted only when listed in servedModelAllow', async () => {
+    const dated = { ...good, model: 'grok-requested-20261001' };
+    expect(await make(ok(dated)).call(callIn())).toMatchObject({ ok: false, failureClass: 'xai_model_mismatch', model: 'grok-requested-20261001' });
+    expect(await make(ok(dated), { servedModelAllow: ['grok-requested-20261001'] }).call(callIn())).toMatchObject({ ok: true, model: 'grok-requested-20261001' });
+    // An explicit list REPLACES the default: the requested name itself is then only accepted if listed.
+    expect(await make(ok(good), { servedModelAllow: ['grok-requested-20261001'] }).call(callIn())).toMatchObject({ ok: false, failureClass: 'xai_model_mismatch' });
+    expect(() => make(ok(good), { servedModelAllow: [] })).toThrow('xai_reviewer_served_model_allow_invalid');
+    expect(() => make(ok(good), { servedModelAllow: [' '] })).toThrow('xai_reviewer_served_model_allow_invalid');
+  });
+  it('e: the reviewer sees the exact artifact bytes, their sha256 and the executor evidence; shownSha256 is the hash of the exact message', async () => {
+    let body = '';
+    const art = 'ARTIFACT \u00e9 bytes\n';
+    const ev = 'M\tsrc/a.js';
+    const r = await make(async (_u, init) => { body = init.body; return ok(good)(); }).call(callIn({ coderArtifact: art, coderEvidence: ev }));
+    const msg = (JSON.parse(body) as { input: { role: string; content: string }[] }).input[1].content;
+    expect(msg).toContain(art);
+    expect(msg).toContain(`sha256 ${createHash('sha256').update(art, 'utf8').digest('hex')}`);
+    expect(msg).toContain(ev);
+    expect(msg).toContain(`sha256 ${createHash('sha256').update(ev, 'utf8').digest('hex')}`);
+    expect(r.shownSha256).toBe(createHash('sha256').update(msg, 'utf8').digest('hex'));
+    const without = await make(ok(good)).call(callIn({ coderArtifact: art }));
+    expect(without.shownSha256).not.toBe(r.shownSha256);
   });
   it('sends the key only in the Authorization header and never in the body or output', async () => {
     let seen: { url: string; headers: Record<string, string>; body: string } | null = null;
