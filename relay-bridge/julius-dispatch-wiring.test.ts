@@ -278,6 +278,21 @@ describe('C3/C4 at the wiring', () => {
     const coder = (await probe.ledgers[0]!.rows()).find((row) => row.phase === 'result' && row.role === 'coder');
     expect(coder).toMatchObject({ outcome: 'ok', artifactJudgedSha256: sha(ARTIFACT), artifactFileSha256: sha(ARTIFACT), workspaceChangedPaths: 'out/normalized.json' });
   });
+  it('the artifact hash the CLIENT receives (result JSON artifactSha256, over artifactText) equals the ledger coder row artifactJudgedSha256 and the sha256 of the trimmed artifact', async () => {
+    const { deps, probe } = makeDeps();
+    const r = createJ1LiveForTest(goodEnv(), deps);
+    await r.controller.dispatch(await echoed(r.controller));
+    await r.controller.whenIdle();
+    const coder = (await probe.ledgers[0]!.rows()).find((row) => row.phase === 'result' && row.role === 'coder');
+    const res = r.controller.result({ projectId: dispatchInput.projectId, runId: dispatchInput.runId, callerPlayerId: dispatchInput.callerPlayerId });
+    const data = (res.body as { data: { resultText: string } }).data;
+    const result = JSON.parse(data.resultText) as { artifactText: string; artifactSha256: string };
+    expect(result.artifactSha256).toBe(sha(result.artifactText.trim()));
+    expect(result.artifactSha256).toBe(coder!.artifactJudgedSha256);
+    expect(result.artifactSha256).toBe(sha(ARTIFACT));
+    // a mutant that hashes the whole result instead of the artifact would not equal the ledger field
+    expect(sha(data.resultText)).not.toBe(coder!.artifactJudgedSha256);
+  });
   it('END TO END (fakes): a coder that also edits an input file fails workspace_scope_violation and the chain stops before the reviewer', async () => {
     const { deps, probe } = makeDeps();
     probe.workspace['out/normalized.json'] = 'stale';
