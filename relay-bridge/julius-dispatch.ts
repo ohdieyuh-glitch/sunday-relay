@@ -351,7 +351,7 @@ export interface JuliusDispatchDeps {
   /**
    * WHERE THE PROVIDER KEYS COME FROM. When given, every key is read from this port at CALL time (one read per leg, dropped when the leg ends)
    * and `env` is NEVER consulted for a key: the keyEnv names are logical key names only. The production wiring always supplies it.
-   * Absent = the legacy env read, kept ONLY for fake-mode controllers and unit tests.
+   * Absent = the legacy env read, kept ONLY for fake-mode controllers and unit tests. REQUIRED when the derived mode is live (503 julius_dispatch_key_store_required).
    */
   readonly keyStore?: KeyStore;
   readonly now: () => number;
@@ -705,6 +705,8 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       try { composeRoleProviders(providers); } catch { return refuse(503, 'julius_dispatch_providers_not_composed'); }
       if (frozenMissionProblems(frozen).length > 0) return refuse(503, 'julius_dispatch_mission_not_frozen');
       if (deps.briefSha256 === undefined ? mode === 'live' : deps.briefSha256 !== frozen.contractSha256) return refuse(503, 'julius_dispatch_brief_not_frozen_contract');
+      /* R3: in live mode the KeyStore is the only key source; the legacy env read is never reachable. Refused here, before any ledger row or provider call. */
+      if (mode === 'live' && deps.keyStore === undefined) return refuse(503, 'julius_dispatch_key_store_required');
 
       const callerHash = sha16(input.callerPlayerId);
       const keyHash = sha16(input.idempotencyKey);

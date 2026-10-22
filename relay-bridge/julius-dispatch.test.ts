@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import type { KeyStore } from './julius-key-store';
+
 import {
   verifyRunOrdering,
   J1_RESTART_LIMITS, createFileDispatchLedger, createJuliusDispatch, createMemoryDispatchLedger, createUncomposedJuliusDispatch,
@@ -54,6 +56,8 @@ function fakeProvider(role: 'architect' | 'coder' | 'reviewer', providerId: stri
   };
 }
 
+const storeOver = (keys: Record<string, string>): KeyStore => ({ getKey: (n) => { const v = keys[n]; if (v === undefined) throw new Error('absent'); return v; }, has: (n) => keys[n] !== undefined });
+
 function harness(options: {
   readonly ledger?: DispatchLedger & { readonly held?: DispatchRow[] };
   readonly behave?: Partial<Record<'architect' | 'coder' | 'reviewer', Behaviour>>;
@@ -66,6 +70,8 @@ function harness(options: {
   readonly mode?: 'live' | 'fake';
   readonly omitMode?: boolean;
   readonly models?: Partial<Record<'architect' | 'coder' | 'reviewer', string>>;
+  /** R3: undefined = a store over KEYS for mode live and none for fake; null = none; a store = that store. */
+  readonly keyStore?: KeyStore | null;
 } = {}): Harness {
   const env: Record<string, string | undefined> = {
     JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: FOUNDER, JULIUS_J1_PROJECT_ID: PROJECT, JULIUS_J1_REVIEWER_PROVIDER: (options.providerIds ?? ['openai', 'anthropic', 'xai'])[2], JULIUS_J1_BUDGET_CAP_USD: '10', JULIUS_J1_LEG_ESTIMATE_USD: '1', ...KEYS, ...options.env,
@@ -80,12 +86,13 @@ function harness(options: {
   };
   for (const role of ['architect', 'coder', 'reviewer'] as const) if (options.models?.[role] !== undefined) (providers[role] as { model: string }).model = options.models[role]!;
   const ledger = options.ledger ?? createMemoryDispatchLedger();
+  const keyStore: KeyStore | null = options.keyStore !== undefined ? options.keyStore : options.mode === 'live' ? storeOver(KEYS) : null;
   let clock = Date.parse('2026-10-22T12:00:00Z');
   let n = 0;
   const controller = options.providers === null
     ? createUncomposedJuliusDispatch(() => env, () => clock)
     : createJuliusDispatch({
-      providers, ledger, ...(options.mode === 'live' ? { briefSha256: (options.frozen ?? FROZEN).contractSha256 } : {}), ...(options.omitMode === true ? {} : { mode: options.mode ?? 'fake' }), env: () => env, now: () => (clock += 1000), log: (line) => logs.push(line),
+      providers, ledger, ...(keyStore === null ? {} : { keyStore }), ...(options.mode === 'live' ? { briefSha256: (options.frozen ?? FROZEN).contractSha256 } : {}), ...(options.omitMode === true ? {} : { mode: options.mode ?? 'fake' }), env: () => env, now: () => (clock += 1000), log: (line) => logs.push(line),
       newId: () => `disp_${(n += 1)}`,
       frozen: options.frozen ?? FROZEN,
       checker: { check: async () => ({ pass: options.checkerPass ?? true }) },
@@ -1090,5 +1097,37 @@ describe('C2: the brief hash equals the frozen contract hash, is recorded in run
     const fake = withBrief(undefined, 'fake');
     expect(await fake.controller.dispatch(input())).toMatchObject({ ok: true });
     await fake.controller.whenIdle();
+  });
+});
+
+describe('R3 the KeyStore is REQUIRED in live mode (the controller itself refuses, before any ledger row or provider call)', () => {
+  const live = (over: Parameters<typeof harness>[0] = {}) => {
+    const h = harness({ mode: 'live', env: { JULIUS_J1_DAILY_CAP: '5' }, ...over });
+    for (const role of ['architect', 'coder', 'reviewer'] as const) (h.providers[role] as { fake: boolean }).fake = false;
+    return h;
+  };
+  const liveInput = (h: Harness) => { const e = h.controller.issueEcho({ projectId: PROJECT, callerPlayerId: FOUNDER }); if (!e.ok) throw new Error('echo'); return input({ clientBridgeUtcEcho: e.bridgeUtc, clientEchoId: e.echoId } as never); };
+  it('derived live with NO keyStore dep: 503 julius_dispatch_key_store_required, zero ledger rows, zero provider calls', async () => {
+    const h = live({ keyStore: null });
+    const out = await h.controller.dispatch(liveInput(h));
+    expect(out).toMatchObject({ ok: false, status: 503, code: 'julius_dispatch_key_store_required' });
+    expect(await h.ledger.rows()).toEqual([]);
+    expect(h.calls).toHaveLength(0);
+  });
+  it('the env key is NOT a fallback in live: the canary keys sit in the env and the refusal still happens', async () => {
+    const h = live({ keyStore: null });
+    expect(h.env.OPENAI_API_KEY).toBeDefined();
+    expect(await h.controller.dispatch(liveInput(h))).toMatchObject({ code: 'julius_dispatch_key_store_required' });
+  });
+  it('derived live WITH a keyStore passes this gate (no key_store_required)', async () => {
+    const h = live();
+    const out = await h.controller.dispatch(liveInput(h));
+    expect(out).not.toMatchObject({ code: 'julius_dispatch_key_store_required' });
+  });
+  it('fake mode keeps the legacy env read: no keyStore, the chain runs and reads the keys from the env', async () => {
+    const h = harness();
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, status: 202 });
+    await h.controller.whenIdle();
+    expect(h.calls.map((c) => c.role)).toEqual(['architect', 'coder', 'reviewer']);
   });
 });
