@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { createCoderRoleProvider } from './julius-dispatch-adapters';
 import { buildJ1CoderProviderFor } from './julius-dispatch-wiring-real';
 import { fakeShell } from './julius-dispatch-wiring-testkit';
+import { createLocalShellPort, J1_SEED_COMMAND, type J1SeedFile, type LocalSeedFs, type LocalSpawn } from './julius-local-shell-port';
+import { juliusAttemptStartCommand } from './julius/coder-workspace';
 import { CLAUDE_SUBSCRIPTION_TOKEN_ENV, CODER_CLAUDE_EXECUTABLE_ENV } from './hosted-coding-agent/hosted-auth';
 import { juliusHostedToolAuthority, type HostedHookOutput } from './hosted-coding-agent/hosted-tool-authority';
 
@@ -120,5 +122,54 @@ describe('2b(b) the PreToolUse authority denies a canary file outside the worksp
 describe('2b the pre-seeded placeholder is exactly the two bytes {} (no trailing newline)', () => {
   it('sha256 of the placeholder', () => {
     expect(createHash('sha256').update('{}').digest('hex')).toBe('44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a');
+  });
+});
+
+describe('R4 the SDK cwd equals the shell port workspace (real J1 coder path, fake query, no SDK, nothing spawned)', () => {
+  const enc = (v: string): Uint8Array => new TextEncoder().encode(v);
+  const sha = (v: string): string => createHash('sha256').update(v).digest('hex');
+  const norm = (p: string): string => p.split(String.fromCharCode(92)).join('/').replace(/\/+$/u, '').toLowerCase();
+  const SEEDS: J1SeedFile[] = [
+    { name: 'data/legacy_ledger.csv', bytes: enc('a,b'), sha256: sha('a,b') },
+    { name: 'data/posts.json', bytes: enc('[]'), sha256: sha('[]') },
+    { name: 'format.test.mjs', bytes: enc('test'), sha256: sha('test') },
+  ];
+  it('the options the real runner hands the query have cwd == the port workspace, tools Read/Glob/Grep/Edit, and Write disallowed', async () => {
+    const WS = join(tmpdir(), 'j1-r4-workspace');
+    const files = new Set<string>(); const dirs = new Set<string>([WS]);
+    const fs: LocalSeedFs = {
+      listDir: () => [], exists: (p) => files.has(p) || dirs.has(p), removeRecursive: () => undefined, mkdirp: (p) => { dirs.add(p); }, writeFile: (p) => { files.add(p); },
+    };
+    const spawnCwds: string[] = [];
+    const spawn: LocalSpawn = async (_file, args, opts) => {
+      spawnCwds.push(opts.cwd);
+      const command = args[1] ?? '';
+      const stdout = command === J1_SEED_COMMAND ? `SEEDED ${'a'.repeat(40)}
+` : command === juliusAttemptStartCommand(null) ? `HEAD ${'a'.repeat(40)}
+BASE ${'b'.repeat(40)}
+START ${'c'.repeat(40)}
+` : '';
+      return { exitCode: 0, stdout, stderr: '', timedOut: false };
+    };
+    const port = createLocalShellPort({ cwd: WS, spawn, fs, seedFiles: SEEDS, baseEnv: { PATH: '/bin' } });
+    const captured: Record<string, unknown>[] = [];
+    const build = buildJ1CoderProviderFor({
+      queryLoader: async () => (params: { prompt: string; options: Record<string, unknown> }) => { captured.push(params.options); return (async function* () { /* no messages */ })(); },
+    });
+    const role = createCoderRoleProvider({
+      providerFor: (env) => build(env, { requestedModel: 'claude-test-model' }), shell: port, projectId: 'p', workerId: 'w', workspacePath: WS, brief: 'B',
+      model: 'claude-test-model', keyEnv: null, permittedPaths: ['out/normalized.json'], envSnapshot: { PATH: '/bin' },
+    });
+    await role.call({ role: 'coder', runId: 'run:1', dispatchId: 'd1', missionId: 'm1', apiKey: '', architectText: 'PLAN', coderArtifact: null, coderEvidence: null });
+    expect(captured).toHaveLength(1);
+    expect(spawnCwds.length).toBeGreaterThan(0);
+    for (const c of spawnCwds) expect(norm(String(captured[0]!.cwd))).toBe(norm(c));
+    expect(norm(String(captured[0]!.cwd))).toBe(norm(WS));
+    expect([...(captured[0]!.allowedTools as string[])].sort()).toEqual(['Edit', 'Glob', 'Grep', 'Read']);
+    expect(captured[0]!.disallowedTools as string[]).toContain('Write');
+    expect(captured[0]!.allowedTools as string[]).not.toContain('Write');
+  });
+  it('MUTANT: a different SDK cwd would be caught by the same comparison', () => {
+    expect(norm('/other/dir')).not.toBe(norm(join(tmpdir(), 'j1-r4-workspace')));
   });
 });
