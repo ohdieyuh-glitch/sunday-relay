@@ -23,7 +23,7 @@ describe.skipIf(process.env.J1_REAL_SMOKE !== '1')('local shell port: real bash 
     const out: string[] = [];
     try {
       const deps = realJ1WiringDeps((l) => out.push(l), Date.now, { PATH: process.env.PATH });
-      const port = deps.shellFor!({ workspacePath: cwd, seedFiles: [seed('data/legacy_ledger.csv', 'seed/data/legacy_ledger.csv'), seed('data/posts.json', 'seed/data/posts.json'), seed('format.test.mjs', 'seed/format.test.mjs')] });
+      const port = deps.shellFor!({ workspacePath: cwd, bashPath: process.env.J1_BASH_PATH ?? 'C:/Program Files/Git/bin/bash.exe', seedFiles: [seed('data/legacy_ledger.csv', 'seed/data/legacy_ledger.csv'), seed('data/posts.json', 'seed/data/posts.json'), seed('format.test.mjs', 'seed/format.test.mjs')] });
       const req = (command: string) => ({ runId: 'r', projectId: 'p', taskId: 't', workerId: 'w', invocationKey: `k${Math.random()}`, command, timeoutMs: 60_000 });
       const start = await port.run(req(juliusAttemptStartCommand(null)));
       out.push(`START status=${start.status} exit=${String(start.exitCode)} stdout=${JSON.stringify(start.stdout.slice(0, 200))} stderr=${JSON.stringify(start.stderr.slice(0, 300))}`);

@@ -164,7 +164,7 @@ START ${'c'.repeat(40)}
 ` : '';
       return { exitCode: 0, stdout, stderr: '', timedOut: false };
     };
-    const port = createLocalShellPort({ cwd: WS, spawn, fs, seedFiles: SEEDS, baseEnv: { PATH: '/bin' } });
+    const port = createLocalShellPort({ cwd: WS, bashPath: '/opt/git/usr/bin/bash', spawn, fs, seedFiles: SEEDS, baseEnv: { PATH: '/bin' } });
     const captured: Record<string, unknown>[] = [];
     const build = buildJ1CoderProviderFor({
       queryLoader: async () => (params: { prompt: string; options: Record<string, unknown> }) => { captured.push(params.options); return (async function* () { /* no messages */ })(); },

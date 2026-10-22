@@ -13,7 +13,7 @@ import { createFrozenReviewerChecker, type FrozenCheckerRun } from './julius-fro
 import type { XaiDirectReviewerInput } from './julius-xai-direct-reviewer';
 import type { ShellEffectPort } from './julius/executor-effects';
 import { assertNoProviderKeysInEnv, type KeyStore } from './julius-key-store';
-import type { J1SeedFile } from './julius-local-shell-port';
+import { isAbsoluteBashPath, type J1SeedFile } from './julius-local-shell-port';
 
 /**
  * J1 LIVE WIRING CORE (no pin values live here). Builds the real composition (GPT architect + Claude Code coder + direct xAI reviewer + reviewer-frozen checker +
@@ -58,7 +58,9 @@ export interface J1WiringDeps {
    * Builds the shell for the CONFIGURED coder workspace and the three pinned, re-hashed seed files (the local J1 port). Used only when `shell` is null.
    * Construct-only: building it spawns and writes nothing. Null/absent with `shell` null = refuse (dep_shell_absent).
    */
-  readonly shellFor?: ((ctx: { readonly workspacePath: string; readonly seedFiles: readonly J1SeedFile[] }) => ShellEffectPort) | null;
+  readonly shellFor?: ((ctx: { readonly workspacePath: string; readonly bashPath: string; readonly seedFiles: readonly J1SeedFile[] }) => ShellEffectPort) | null;
+  /** D-2: whether an absolute path exists (the real one is existsSync). Null = not available = refuse (dep_path_exists_absent). */
+  readonly pathExists: ((path: string) => boolean) | null;
   /** Builds the key store for a private key directory (JULIUS_J1_KEY_DIR). Null = not available = refuse. May throw (a bad directory). */
   readonly keyStoreFor: ((dir: string) => KeyStore) | null;
   /** Builds the workspace file-system port the bundle step reads (before/after hash lists, the artifact file). Null = not available = refuse. */
@@ -127,6 +129,8 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   if (deps.shell === null && (deps.shellFor === undefined || deps.shellFor === null)) throw new Refuse('dep_shell_absent');
   const keyStoreFor = deps.keyStoreFor;
   if (keyStoreFor === null) throw new Refuse('dep_key_store_absent');
+  const pathExists = deps.pathExists;
+  if (pathExists === null || pathExists === undefined) throw new Refuse('dep_path_exists_absent');
   const workspaceFs = deps.workspaceFs;
   if (workspaceFs === null) throw new Refuse('dep_workspace_fs_absent');
 
@@ -151,6 +155,12 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   const formatTestPath = need('JULIUS_J1_SEED_FORMAT_TEST_PATH');
   const formatTestSha = needHex('JULIUS_J1_SEED_FORMAT_TEST_SHA256');
   const nodePath = need('JULIUS_J1_NODE_PATH');
+  /* D-2: bash is an absolute pinned path that exists; PATH is never searched. */
+  const bashPath = need('JULIUS_J1_BASH_PATH');
+  if (!isAbsoluteBashPath(bashPath)) throw new Refuse('config_invalid_julius_j1_bash_path');
+  let bashThere = false;
+  try { bashThere = pathExists(bashPath); } catch { bashThere = false; }
+  if (!bashThere) throw new Refuse('bash_path_not_found');
   const fileSha = (path: string, code: string): string => {
     try { return sha256Hex(deps.readFileSync(path)); } catch { throw new Refuse(`${code}_unreadable`); }
   };
@@ -203,7 +213,7 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   const ledgerFile = need('JULIUS_J1_LEDGER_FILE');
   /* The shell for THIS workspace: the supplied one, else built from the configured path and the pinned seed files (bytes read now, hashes re-checked by the port). */
   const shell: ShellEffectPort = deps.shell ?? deps.shellFor!({
-    workspacePath,
+    workspacePath, bashPath,
     seedFiles: [
       { name: 'data/legacy_ledger.csv', bytes: deps.readFileSync(ledgerSeedPath), sha256: ledgerSeedSha },
       { name: 'data/posts.json', bytes: deps.readFileSync(postsSeedPath), sha256: postsSeedSha },

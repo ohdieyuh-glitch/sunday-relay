@@ -97,8 +97,8 @@ export function realJ1WiringDeps(log: (line: string) => void, now: () => number 
     coderProviderFor: buildJ1CoderProviderFor(),
     shell: null,
     /* The LOCAL port (julius-local-shell-port.ts): bridge-generated attempt commands only, in the configured private workspace. Construct-only. */
-    shellFor: ({ workspacePath, seedFiles }) => createLocalShellPort({
-      cwd: workspacePath, seedFiles, baseEnv: checkerBaseEnv,
+    shellFor: ({ workspacePath, bashPath, seedFiles }) => createLocalShellPort({
+      cwd: workspacePath, bashPath, seedFiles, baseEnv: checkerBaseEnv,
       fs: {
         listDir: (p) => readdirSync(p), exists: (p) => existsSync(p), removeRecursive: (p) => rmSync(p, { recursive: true, force: true }),
         mkdirp: (p) => { mkdirSync(p, { recursive: true }); }, writeFile: (p, bytes) => writeFileSync(p, bytes),
@@ -111,6 +111,7 @@ export function realJ1WiringDeps(log: (line: string) => void, now: () => number 
       }),
     }),
     keyStoreFor: (dir) => createFileKeyStore({ dir, fs: { readFileSync: (p) => readFileSync(p, 'utf8'), statSync: (p) => statSync(p) }, platform: process.platform, repoRoot: keyDirForbiddenUnder }),
+    pathExists: (p) => existsSync(p),
     workspaceFs: (root) => createLocalWorkspaceFs(root, { readdirSync: (p, o) => readdirSync(p, o), readlinkSync: (p) => readlinkSync(p), readFileSync: (p) => readFileSync(p) }),
     now,
     log,

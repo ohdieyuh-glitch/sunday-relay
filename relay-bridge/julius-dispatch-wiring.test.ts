@@ -381,6 +381,17 @@ describe('C3/C4 at the wiring', () => {
       { name: 'format.test.mjs', text: FILES['/pins/format.test.mjs'], sha256: sha(FILES['/pins/format.test.mjs']!) },
     ] }]);
   });
+  it('D-2: JULIUS_J1_BASH_PATH is required, must be absolute and must exist (injected pathExists); PATH is never searched; it reaches shellFor', () => {
+    expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_BASH_PATH: undefined }), makeDeps().deps)).toMatchObject({ live: false, reason: 'config_missing_julius_j1_bash_path' });
+    for (const bad of ['bash', 'bash.exe', 'bin/bash']) expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_BASH_PATH: bad }), makeDeps().deps), bad).toMatchObject({ live: false, reason: 'config_invalid_julius_j1_bash_path' });
+    expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_BASH_PATH: '/nowhere/bash' }), makeDeps({ pathExists: () => false }).deps)).toMatchObject({ live: false, reason: 'bash_path_not_found' });
+    expect(createJ1LiveForTest(goodEnv(), makeDeps({ pathExists: null }).deps)).toMatchObject({ live: false, reason: 'dep_path_exists_absent' });
+    const asked: string[] = []; const seen: string[] = [];
+    const { deps } = makeDeps({ shell: null, pathExists: (p) => { asked.push(p); return true; }, shellFor: (ctx) => { seen.push(ctx.bashPath); return fakeShell(); } });
+    expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_BASH_PATH: '/opt/git/usr/bin/bash' }), deps)).toMatchObject({ live: true });
+    expect(asked).toEqual(['/opt/git/usr/bin/bash']);
+    expect(seen).toEqual(['/opt/git/usr/bin/bash']);
+  });
   it('PART 3: the format test seed pin is required and must match its file', () => {
     expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_SEED_FORMAT_TEST_PATH: undefined }), makeDeps().deps)).toMatchObject({ live: false, reason: 'config_missing_julius_j1_seed_format_test_path' });
     expect(createJ1LiveForTest(goodEnv(), makeDeps({}, { ...FILES, '/pins/format.test.mjs': 'other' }).deps)).toMatchObject({ live: false, reason: 'pin_seed_format_test_file_mismatch' });

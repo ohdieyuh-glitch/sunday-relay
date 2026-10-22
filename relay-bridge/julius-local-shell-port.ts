@@ -64,9 +64,17 @@ export interface LocalSeedFs {
 const sha256 = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
 const FAILED = (code: string): ShellEffectResult => ({ status: 'FAILED', exitCode: null, stdout: '', stderr: `refused:${code}`, invocationId: `local:refused:${code}` });
 
+/** True for a POSIX-absolute, drive-absolute or UNC path with no `..` segment. A bare name (which a PATH search would resolve) is false. */
+export function isAbsoluteBashPath(p: string): boolean {
+  if (!(/^\//u.test(p) || /^[A-Za-z]:[\\/]/u.test(p) || /^\\\\/u.test(p))) return false;
+  return !p.split(/[\\/]+/u).includes('..');
+}
+
 export function createLocalShellPort(input: {
   /** The private temp workspace (created by an injected function). Commands run here and seeding writes here. */
   readonly cwd: string;
+  /** D-2: the ABSOLUTE path of the bash to run (never found by searching PATH; a bare name is refused at construction). */
+  readonly bashPath: string;
   readonly spawn: LocalSpawn;
   readonly fs: LocalSeedFs;
   readonly seedFiles: readonly J1SeedFile[];
@@ -75,6 +83,7 @@ export function createLocalShellPort(input: {
 }): ShellEffectPort {
   const names = input.seedFiles.map((f) => f.name).sort();
   if (names.length !== SEED_NAMES.length || names.some((n, i) => n !== [...SEED_NAMES].sort()[i])) throw new Error('local_shell_seed_names_invalid');
+  if (!isAbsoluteBashPath(input.bashPath)) throw new Error('local_shell_bash_path_invalid');
   const cwd = input.cwd.replace(/[\\/]+$/u, '');
   if (cwd === '') throw new Error('local_shell_cwd_invalid');
   const childEnv: Readonly<Record<string, string>> = Object.freeze({
@@ -92,7 +101,7 @@ export function createLocalShellPort(input: {
     counter += 1;
     const invocationId = `local:${sha256(`${counter}:${command}`).slice(0, 16)}`;
     try {
-      const r = await input.spawn('bash', ['-c', command], { cwd, env: childEnv, timeoutMs: Math.max(1, Math.min(Math.floor(timeoutMs), MAX_TIMEOUT_MS)) });
+      const r = await input.spawn(input.bashPath, ['-c', command], { cwd, env: childEnv, timeoutMs: Math.max(1, Math.min(Math.floor(timeoutMs), MAX_TIMEOUT_MS)) });
       return {
         status: r.exitCode === 0 && !r.timedOut ? 'SUCCEEDED' : 'FAILED', exitCode: r.exitCode,
         stdout: r.stdout.slice(0, MAX_OUTPUT_CHARS), stderr: r.stderr.slice(0, MAX_OUTPUT_CHARS), invocationId,

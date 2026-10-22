@@ -56,7 +56,8 @@ function spawnFake(over: (command: string) => Partial<LocalSpawnResult> | undefi
 }
 
 const input = (command: string, key = 't:base'): ShellEffectInput => ({ runId: 'r', projectId: 'p', taskId: 't', workerId: 'w', invocationKey: key, command, timeoutMs: 60_000 });
-const mk = (w: World, spawn: LocalSpawn, over: { baseEnv?: Record<string, string> } = {}) => createLocalShellPort({ cwd: CWD, spawn, fs: w.fs, seedFiles: SEEDS, baseEnv: over.baseEnv ?? { PATH: '/usr/bin' } });
+const BASH = '/opt/git/usr/bin/bash';
+const mk = (w: World, spawn: LocalSpawn, over: { baseEnv?: Record<string, string> } = {}) => createLocalShellPort({ cwd: CWD, bashPath: BASH, spawn, fs: w.fs, seedFiles: SEEDS, baseEnv: over.baseEnv ?? { PATH: '/usr/bin' } });
 
 describe('local ShellEffectPort: allow-list by exact string match', () => {
   it('REFUSES anything that is not exactly one of the generated forms, and spawns nothing for it', async () => {
@@ -101,11 +102,11 @@ describe('local ShellEffectPort: allow-list by exact string match', () => {
 describe('local ShellEffectPort: how it spawns', () => {
   it('bash -c in the private workspace, with a minimal env (no parent variable, no key), a git config pin and a bounded timeout', async () => {
     const w = world(); const { spawn, calls } = spawnFake();
-    const port = createLocalShellPort({ cwd: CWD, spawn, fs: w.fs, seedFiles: SEEDS, baseEnv: { PATH: '/usr/bin', OPENAI_API_KEY: CANARY, XAI_API_KEY: CANARY, DATABASE_URL: CANARY, ANYTHING: CANARY } });
+    const port = createLocalShellPort({ cwd: CWD, bashPath: BASH, spawn, fs: w.fs, seedFiles: SEEDS, baseEnv: { PATH: '/usr/bin', OPENAI_API_KEY: CANARY, XAI_API_KEY: CANARY, DATABASE_URL: CANARY, ANYTHING: CANARY } });
     await port.run({ ...input(juliusAttemptStartCommand(null)), timeoutMs: 999_999_999 });
     expect(calls.length).toBeGreaterThanOrEqual(2);
     for (const c of calls) {
-      expect(c.file).toBe('bash'); expect(c.args[0]).toBe('-c'); expect(c.cwd).toBe(CWD);
+      expect(c.file).toBe(BASH); expect(c.args[0]).toBe('-c'); expect(c.cwd).toBe(CWD);
       expect(Object.keys(c.env).sort()).toEqual(['GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_NOSYSTEM', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_VALUE_1', 'GIT_TERMINAL_PROMPT', 'HOME', 'LANG', 'PATH']);
       expect(JSON.stringify(c.env)).not.toContain(CANARY);
       expect(c.env.GIT_CONFIG_KEY_0).toBe('core.fsmonitor'); expect(c.env.GIT_CONFIG_VALUE_0).toBe('false');
@@ -144,14 +145,14 @@ describe('J1 workspace seeding (done by the port at the start of every attempt)'
   });
   it('re-hashes each seed file against its pin first: a mismatch writes nothing and spawns nothing', async () => {
     const w = world(); const { spawn, calls } = spawnFake();
-    const port = createLocalShellPort({ cwd: CWD, spawn, fs: w.fs, baseEnv: { PATH: '/bin' }, seedFiles: [SEEDS[0]!, { ...SEEDS[1]!, bytes: enc('[1]') }, SEEDS[2]!] });
+    const port = createLocalShellPort({ cwd: CWD, bashPath: BASH, spawn, fs: w.fs, baseEnv: { PATH: '/bin' }, seedFiles: [SEEDS[0]!, { ...SEEDS[1]!, bytes: enc('[1]') }, SEEDS[2]!] });
     expect(await port.run(input(juliusAttemptStartCommand(null)))).toMatchObject({ status: 'FAILED', stderr: 'refused:seed_file_hash_mismatch' });
     expect(calls).toHaveLength(0); expect(w.files.size).toBe(0);
   });
   it('seeds only the three expected names; a seed set with any other name is refused at construction', () => {
     const w = world();
-    expect(() => createLocalShellPort({ cwd: CWD, spawn: spawnFake().spawn, fs: w.fs, baseEnv: {}, seedFiles: [...SEEDS, { name: 'secrets.txt' as never, bytes: enc('x'), sha256: sha('x') }] })).toThrow('local_shell_seed_names_invalid');
-    expect(() => createLocalShellPort({ cwd: CWD, spawn: spawnFake().spawn, fs: w.fs, baseEnv: {}, seedFiles: SEEDS.slice(0, 2) })).toThrow('local_shell_seed_names_invalid');
+    expect(() => createLocalShellPort({ cwd: CWD, bashPath: BASH, spawn: spawnFake().spawn, fs: w.fs, baseEnv: {}, seedFiles: [...SEEDS, { name: 'secrets.txt' as never, bytes: enc('x'), sha256: sha('x') }] })).toThrow('local_shell_seed_names_invalid');
+    expect(() => createLocalShellPort({ cwd: CWD, bashPath: BASH, spawn: spawnFake().spawn, fs: w.fs, baseEnv: {}, seedFiles: SEEDS.slice(0, 2) })).toThrow('local_shell_seed_names_invalid');
   });
   it('never wipes a directory the bridge did not make: a non-empty directory without the marker is refused untouched; one with the marker is reseeded', async () => {
     const foreign = world({ 'precious.txt': 'keep me' }); const f = spawnFake();
@@ -167,6 +168,26 @@ describe('J1 workspace seeding (done by the port at the start of every attempt)'
       const w = world(); const { spawn, calls } = spawnFake((c) => (c === J1_SEED_COMMAND ? bad : undefined));
       expect(await mk(w, spawn).run(input(juliusAttemptStartCommand(null)))).toMatchObject({ status: 'FAILED', stderr: 'refused:seed_failed' });
       expect(calls.map((c) => c.args[1])).toEqual([J1_SEED_COMMAND]);
+    }
+  });
+});
+
+describe('D-2 bash is an ABSOLUTE pinned path, never found by searching PATH', () => {
+  it('every spawn uses exactly the configured absolute path, even when PATH is empty or names another bash', async () => {
+    for (const PATH of ['', 'C:\\Windows\\System32', '/usr/bin']) {
+      const w = world(); const { spawn, calls } = spawnFake();
+      await createLocalShellPort({ cwd: CWD, bashPath: BASH, spawn, fs: w.fs, seedFiles: SEEDS, baseEnv: { PATH } }).run(input(juliusAttemptStartCommand(null)));
+      expect(calls.length).toBeGreaterThan(0);
+      for (const c of calls) expect(c.file).toBe(BASH);
+    }
+  });
+  it('a bash path that is not absolute (a bare name, a relative path, empty, with ..) is refused at construction', () => {
+    const w = world();
+    for (const bad of ['bash', 'bash.exe', './bash', 'usr/bin/bash', '', '/opt/../bin/bash']) {
+      expect(() => createLocalShellPort({ cwd: CWD, bashPath: bad, spawn: spawnFake().spawn, fs: w.fs, baseEnv: {}, seedFiles: SEEDS }), bad).toThrow('local_shell_bash_path_invalid');
+    }
+    for (const good of ['/usr/bin/bash', 'C:\\Program Files\\Git\\bin\\bash.exe', 'C:/Program Files/Git/bin/bash.exe']) {
+      expect(() => createLocalShellPort({ cwd: CWD, bashPath: good, spawn: spawnFake().spawn, fs: w.fs, baseEnv: {}, seedFiles: SEEDS }), good).not.toThrow();
     }
   });
 });
