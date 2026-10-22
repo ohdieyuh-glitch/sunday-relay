@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
@@ -356,13 +356,27 @@ export interface DispatchInput {
   readonly clientLogSha256: string;
   /** When the player's UI action happened, UTC ISO-8601, from the game client log line the hash binds. Must precede the ledger run_created time. */
   readonly clientUiActionUtc: string;
+  /** Client clock minus bridge clock, measured against a GET /echo reading. REQUIRED when the composition is live; optional in code. */
+  readonly clientOffsetMs?: number;
+  /** The echoId issued by GET /echo that the offset was measured against. REQUIRED when live. */
+  readonly echoId?: string;
 }
+export type EchoOutcome =
+  | { readonly ok: true; readonly bridgeUtc: string; readonly echoId: string }
+  | { readonly ok: false; readonly status: number; readonly code: string };
+
+/** Largest |clientOffsetMs| the bridge accepts, and how long an issued echoId is remembered (in memory only). */
+export const J1_MAX_CLOCK_OFFSET_MS = 1000;
+export const J1_ECHO_TTL_MS = 120_000;
+const J1_ECHO_MAX_OUTSTANDING = 32;
 export type DispatchOutcome =
   | { readonly ok: true; readonly status: 202 | 200; readonly dispatchId: string; readonly runId: string; readonly state: ChainState; readonly replayed: boolean; readonly ledgerRef: string; readonly mode: DispatchMode }
   | { readonly ok: false; readonly status: number; readonly code: string };
 
 export interface JuliusDispatchController {
   dispatch(input: DispatchInput): Promise<DispatchOutcome>;
+  /** Issues { bridgeUtc, echoId } for the client's clock-offset measurement; the echoId is remembered for 120 s and is single use. */
+  issueEcho(input: { readonly projectId: string; readonly callerPlayerId: string }): EchoOutcome;
   events(input: { readonly projectId: string; readonly runId: string; readonly callerPlayerId: string; readonly cursor: number }): { readonly status: number; readonly body: unknown };
   result(input: { readonly projectId: string; readonly runId: string; readonly callerPlayerId: string }): { readonly status: number; readonly body: unknown };
   /**
@@ -397,6 +411,12 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
   const log = (line: string): void => { try { deps.log?.(`[julius-j1] ${line}`); } catch { /* a log sink must not break the chain */ } };
   const newId = deps.newId ?? ((): string => `disp_${sha256(`${deps.now()}:${Math.random()}`).slice(0, 20)}`);
   const killSwitchOn = (): boolean => deps.env().JULIUS_J1_ENABLED === '1';
+  /* echoId -> expiry (ms). In memory only: a restart forgets every echo, so a pre-restart echo is unknown (refused). */
+  const echoes = new Map<string, number>();
+  const pruneEchoes = (at: number): void => {
+    for (const [id, expiry] of echoes) if (expiry <= at) echoes.delete(id);
+    while (echoes.size >= J1_ECHO_MAX_OUTSTANDING) { const oldest = echoes.keys().next(); if (oldest.done === true) break; echoes.delete(oldest.value); }
+  };
 
   const locked = <T>(fn: () => Promise<T>): Promise<T> => {
     const run = reservationChain.then(fn, fn);
@@ -589,6 +609,19 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
     killSwitchOn,
     whenIdle: () => running,
 
+    issueEcho(echoInput) {
+      const env = deps.env();
+      if (!killSwitchOn()) return { ok: false, status: 503, code: 'julius_dispatch_disabled' };
+      const founder = (env.JULIUS_J1_FOUNDER_PLAYER_ID ?? '').trim();
+      if (founder === '' || echoInput.callerPlayerId !== founder) return { ok: false, status: 403, code: 'julius_dispatch_founder_only' };
+      if (echoInput.projectId !== (env.JULIUS_J1_PROJECT_ID ?? '').trim()) return { ok: false, status: 403, code: 'julius_dispatch_wrong_project' };
+      const at = deps.now();
+      pruneEchoes(at);
+      const echoId = `echo_${randomBytes(18).toString('hex')}`;
+      echoes.set(echoId, at + J1_ECHO_TTL_MS);
+      return { ok: true, bridgeUtc: new Date(at).toISOString(), echoId };
+    },
+
     async recover() {
       const rows = await deps.ledger.rows();
       const orphaned: string[] = [];
@@ -680,13 +713,35 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
           const rows = allRows.filter((row) => row.phase === 'run_start');
           if (createdRow !== undefined || rows.some((row) => row.runId === input.runId)) return refuse(409, 'julius_dispatch_already_dispatched');
           if (rows.some((row) => row.keyHash === keyHash)) return refuse(409, 'julius_dispatch_key_reused');
-          if (rows.filter((row) => String(row.at).slice(0, 10) === utcDay(at)).length >= dailyCap) return refuse(429, 'julius_dispatch_cap_reached');
+          /* A REFUSED attempt (run_refused) counts against the daily cap exactly like a started run. */
+          const dayCount = allRows.filter((row) => (row.phase === 'run_start' || row.phase === 'run_refused') && String(row.at).slice(0, 10) === utcDay(at)).length;
+          if (dayCount >= dailyCap) return refuse(429, 'julius_dispatch_cap_reached');
           if (rows.filter((row) => row.missionId === frozen.missionId).length >= missionCap) return refuse(429, 'julius_dispatch_mission_cap_reached');
+          /* CLOCK BINDING: the echo is single use (consumed here whatever the verdict), unexpired and one this bridge issued. */
+          const offsetOk = typeof input.clientOffsetMs === 'number' && Number.isFinite(input.clientOffsetMs);
+          const echoGiven = typeof input.echoId === 'string' && input.echoId !== '';
+          const expiry = echoGiven ? echoes.get(input.echoId as string) : undefined;
+          if (echoGiven) echoes.delete(input.echoId as string);
+          const echoLive = expiry !== undefined && expiry > at;
+          const clockRefusal: { status: number; code: string } | null =
+            mode === 'live' && (!offsetOk || !echoGiven) ? { status: 400, code: 'julius_dispatch_clock_binding_required' }
+              : echoGiven && !echoLive ? { status: 409, code: 'julius_dispatch_clock_echo_unknown' }
+                : offsetOk && Math.abs(input.clientOffsetMs as number) > J1_MAX_CLOCK_OFFSET_MS ? { status: 409, code: 'julius_dispatch_clock_offset_out_of_range' }
+                  : null;
+          if (clockRefusal !== null) {
+            await deps.ledger.append({
+              phase: 'run_refused', status: 'REFUSED', code: clockRefusal.code, runId: input.runId, dispatchId, mode, creatorPlayerHash: callerHash, creatorKeyHash: keyHash,
+              clientOffsetMs: offsetOk ? (input.clientOffsetMs as number) : null, echoId: echoGiven ? (input.echoId as string) : null, at: new Date(at).toISOString(),
+            });
+            log(`refused run=${sha16(input.runId)} code=${clockRefusal.code} mode=${mode}`);
+            return refuse(clockRefusal.status, clockRefusal.code);
+          }
           /* RUN_CREATED: this route creates the run's dispatch in ONE authenticated flow (there is no separate creator route in this
              branch), so the creator is this caller; the row pins the creator hashes, the client UI time and the bridge clock. */
           await deps.ledger.append({
             phase: 'run_created', runId: input.runId, dispatchId, creatorPlayerHash: callerHash, creatorKeyHash: keyHash,
             uiActionUtc: input.clientUiActionUtc, clientTriggerId: input.clientTriggerId, clientLogSha256: input.clientLogSha256, at: new Date(at).toISOString(),
+            clientOffsetMs: offsetOk ? (input.clientOffsetMs as number) : null, echoId: echoGiven ? (input.echoId as string) : null,
           });
           /* THE RUN_START ROW precedes every pre_call row. Its write is the commit point. */
           await deps.ledger.append({
@@ -758,8 +813,9 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
 export const JULIUS_DISPATCH_PATH = '/wonderland/julius/dispatch';
 export const JULIUS_DISPATCH_EVENTS_PATH = '/wonderland/julius/dispatch/events';
 export const JULIUS_DISPATCH_RESULT_PATH = '/wonderland/julius/dispatch/result';
+export const JULIUS_DISPATCH_ECHO_PATH = '/wonderland/julius/dispatch/echo';
 export const isJuliusDispatchRoute = (path: string): boolean =>
-  path === JULIUS_DISPATCH_PATH || path === JULIUS_DISPATCH_EVENTS_PATH || path === JULIUS_DISPATCH_RESULT_PATH;
+  path === JULIUS_DISPATCH_PATH || path === JULIUS_DISPATCH_EVENTS_PATH || path === JULIUS_DISPATCH_RESULT_PATH || path === JULIUS_DISPATCH_ECHO_PATH;
 
 export interface JuliusDispatchRouteRequest {
   readonly method: string;
@@ -824,6 +880,10 @@ export async function handleJuliusDispatchRoute(
 
   if (!isDispatch) {
     if (request.method !== 'GET') return err(405, 'method_not_allowed', 'Reading a dispatched run is a GET.');
+    if (request.path === JULIUS_DISPATCH_ECHO_PATH) {
+      const echo = ports.dispatch.issueEcho({ projectId, callerPlayerId: native.playerId });
+      return echo.ok ? { status: 200, body: { data: { bridgeUtc: echo.bridgeUtc, echoId: echo.echoId } } } : err(echo.status, echo.code, 'Julius could not issue a clock echo.');
+    }
     const runId = query.get('runId') ?? '';
     if (!RUN_ID.test(runId)) return err(400, 'julius_dispatch_run_invalid', 'runId is required.');
     if (request.path === JULIUS_DISPATCH_RESULT_PATH) {
@@ -837,19 +897,24 @@ export async function handleJuliusDispatchRoute(
 
   if (request.method !== 'POST') return err(405, 'method_not_allowed', 'Dispatch is a POST.');
   if (request.idempotencyKey === undefined || !KEY.test(request.idempotencyKey)) return err(400, 'julius_dispatch_idempotency_key_invalid', 'x-relay-idempotency-key is required.');
-  let body: { runId?: unknown; clientTriggerId?: unknown; clientLogSha256?: unknown; clientUiActionUtc?: unknown } | null = null;
+  let body: { runId?: unknown; clientTriggerId?: unknown; clientLogSha256?: unknown; clientUiActionUtc?: unknown; clientOffsetMs?: unknown; echoId?: unknown } | null = null;
   try { body = JSON.parse(request.rawBody ?? '') as typeof body; } catch { body = null; }
   if (body === null || typeof body !== 'object') return err(400, 'julius_dispatch_body_invalid', 'The body must be JSON.');
-  const { runId, clientTriggerId, clientLogSha256, clientUiActionUtc } = body;
+  const { runId, clientTriggerId, clientLogSha256, clientUiActionUtc, clientOffsetMs, echoId } = body;
   if (typeof runId !== 'string' || !RUN_ID.test(runId)) return err(400, 'julius_dispatch_run_invalid', 'runId is required.');
   /* THE GAME-ORIGIN BINDING: no hash of a client log line, no dispatch. */
   if (typeof clientTriggerId !== 'string' || !TRIGGER_ID.test(clientTriggerId) || typeof clientLogSha256 !== 'string' || !HEX64.test(clientLogSha256)
     || typeof clientUiActionUtc !== 'string' || !UTC_ISO.test(clientUiActionUtc) || !Number.isFinite(Date.parse(clientUiActionUtc))) {
     return err(400, 'julius_dispatch_client_log_binding_required', 'clientTriggerId, clientLogSha256 (the hash of the client log line written before this request) and clientUiActionUtc are required.');
   }
+  /* Optional in code, required in live (the controller decides by mode); a present value must still have the right type. */
+  if ((clientOffsetMs !== undefined && (typeof clientOffsetMs !== 'number' || !Number.isFinite(clientOffsetMs))) || (echoId !== undefined && (typeof echoId !== 'string' || (echoId as string).length > 128))) {
+    return err(400, 'julius_dispatch_clock_binding_invalid', 'clientOffsetMs must be a number and echoId a string.');
+  }
   const outcome = await ports.dispatch.dispatch({
     projectId, runId, callerPlayerId: native.playerId, sessionId: native.sessionId,
     idempotencyKey: request.idempotencyKey, clientTriggerId, clientLogSha256, clientUiActionUtc,
+    ...(clientOffsetMs === undefined ? {} : { clientOffsetMs }), ...(echoId === undefined ? {} : { echoId }),
   });
   if (!outcome.ok) return err(outcome.status, outcome.code, 'Julius could not dispatch this run.');
   return {

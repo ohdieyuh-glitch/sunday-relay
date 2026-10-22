@@ -99,3 +99,10 @@ export const dispatchInput = { projectId: 'proj-1', runId: 'run:1', callerPlayer
 
 /** The live factory with the TEST pins. The production factory (`createJ1LiveDispatchFromEnv`) has no such parameter. */
 export const createJ1LiveForTest = (env: J1Env | (() => J1Env), deps: J1WiringDeps): J1WiringResult => createJ1LiveDispatchWithPins(env, deps, PIN);
+
+/** The live composition REQUIRES the clock binding: fetch an echo from the controller and return the dispatch input carrying it (offset 0). */
+export async function echoed(controller: { issueEcho: (i: { projectId: string; callerPlayerId: string }) => { ok: boolean; echoId?: string } }): Promise<typeof dispatchInput & { clientOffsetMs: number; echoId: string }> {
+  const e = controller.issueEcho({ projectId: dispatchInput.projectId, callerPlayerId: dispatchInput.callerPlayerId });
+  if (!e.ok || e.echoId === undefined) throw new Error('echo_refused');
+  return { ...dispatchInput, clientOffsetMs: 0, echoId: e.echoId };
+}

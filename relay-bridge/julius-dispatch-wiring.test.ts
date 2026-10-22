@@ -9,7 +9,7 @@ import { createCoderRoleProvider, createFrozenRunLookup } from './julius-dispatc
 import { buildJ1CoderProviderFor, J1_CODER_AUTH_MODE, J1_SHELL_PORT_MISSING, realJ1WiringDeps } from './julius-dispatch-wiring-real';
 import { createJ1LiveDispatchFromEnv, J1_PINNED_CHECKER_SHA256, J1_PINNED_CONTRACT_SHA256 } from './julius-dispatch-wiring';
 import {
-  ARTIFACT, createJ1LiveForTest, dispatchInput, fakeCoder, fakeShell, FILES, goodEnv, KEY, makeDeps, PIN, sha,
+  ARTIFACT, createJ1LiveForTest, dispatchInput, echoed, fakeCoder, fakeShell, FILES, goodEnv, KEY, makeDeps, PIN, sha,
 } from './julius-dispatch-wiring-testkit';
 
 
@@ -102,7 +102,7 @@ describe('J1 live wiring (fakes only)', () => {
     const { deps, probe } = makeDeps();
     const r = createJ1LiveForTest(goodEnv(), deps);
     expect(r.live).toBe(true);
-    expect(await r.controller.dispatch(dispatchInput)).toMatchObject({ ok: true, mode: 'live' });
+    expect(await r.controller.dispatch(await echoed(r.controller))).toMatchObject({ ok: true, mode: 'live' });
     await r.controller.whenIdle();
     const rows = await probe.ledgers[0]!.rows();
     expect(rows.find((row) => row.role === 'final')).toMatchObject({ state: 'COMPLETED' });
@@ -183,7 +183,7 @@ describe('Part B: the real builders are construct-only', () => {
     const { deps } = makeDeps({ coderProviderFor: (_env, ctx) => { asked.push(ctx.requestedModel); return fakeCoder(); } });
     const r = createJ1LiveForTest(goodEnv(), deps);
     expect(r.live).toBe(true);
-    expect(await r.controller.dispatch(dispatchInput)).toMatchObject({ ok: true });
+    expect(await r.controller.dispatch(await echoed(r.controller))).toMatchObject({ ok: true });
     await r.controller.whenIdle();
     expect(asked).toEqual(['claude-test-model']);
     expect(await r.controller.dispatch({ ...dispatchInput, projectId: 'proj-other', idempotencyKey: 'key-0000002' })).toMatchObject({ ok: false });
@@ -250,7 +250,7 @@ describe('C2 at the wiring: the brief the roles get is the exact contract bytes'
   it('a live dispatch records the brief hash (= the contract hash) in run_start', async () => {
     const { deps, probe } = makeDeps();
     const r = createJ1LiveForTest(goodEnv(), deps);
-    await r.controller.dispatch(dispatchInput);
+    await r.controller.dispatch(await echoed(r.controller));
     await r.controller.whenIdle();
     const start = (await probe.ledgers[0]!.rows()).find((row) => row.phase === 'run_start');
     expect(start).toMatchObject({ briefSha256: sha(FILES['/pins/contract.json']!), contractSha256: sha(FILES['/pins/contract.json']!) });
@@ -270,7 +270,7 @@ describe('C3/C4 at the wiring', () => {
   it('END TO END (fakes): the coder result row carries both artifact hashes and the single changed path', async () => {
     const { deps, probe } = makeDeps();
     const r = createJ1LiveForTest(goodEnv(), deps);
-    await r.controller.dispatch(dispatchInput);
+    await r.controller.dispatch(await echoed(r.controller));
     await r.controller.whenIdle();
     const coder = (await probe.ledgers[0]!.rows()).find((row) => row.phase === 'result' && row.role === 'coder');
     expect(coder).toMatchObject({ outcome: 'ok', artifactJudgedSha256: sha(ARTIFACT), artifactFileSha256: sha(ARTIFACT), workspaceChangedPaths: 'out/normalized.json' });
@@ -280,7 +280,7 @@ describe('C3/C4 at the wiring', () => {
     probe.workspace['out/normalized.json'] = 'stale';
     const cheat = { providerKind: 'fake-coding', async execute() { probe.workspace['out/normalized.json'] = ARTIFACT; probe.workspace['data/posts.json'] = 'tampered'; return fakeCoder(probe.workspace).execute({} as never); } };
     const r = createJ1LiveForTest(goodEnv(), { ...deps, coderProviderFor: () => cheat as never });
-    await r.controller.dispatch(dispatchInput);
+    await r.controller.dispatch(await echoed(r.controller));
     await r.controller.whenIdle();
     const rows = await probe.ledgers[0]!.rows();
     expect(rows.find((row) => row.phase === 'result' && row.role === 'coder')).toMatchObject({ outcome: 'workspace_scope_violation' });

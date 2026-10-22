@@ -218,6 +218,7 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
       if ((await ready()) === null) return { ok: false, status: 503, code: 'julius_dispatch_ledger_unavailable' };
       return inner.dispatch(input);
     },
+    issueEcho: (i) => inner.issueEcho(i),
     events: (i) => inner.events(i),
     result: (i) => inner.result(i),
     async recover() {

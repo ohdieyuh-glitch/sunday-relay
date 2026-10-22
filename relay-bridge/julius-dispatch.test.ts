@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   verifyRunOrdering,
   J1_RESTART_LIMITS, createFileDispatchLedger, createJuliusDispatch, createMemoryDispatchLedger, createUncomposedJuliusDispatch,
-  frozenMissionProblems, handleJuliusDispatchRoute, isLoopbackPeer,
+  frozenMissionProblems, handleJuliusDispatchRoute, isJuliusDispatchRoute, isLoopbackPeer,
   type DispatchLedger, type DispatchProviders, type DispatchRow, type FrozenMission, type JuliusDispatchController,
   type JuliusDispatchRouteRequest, type RoleCallInput, type RoleCallOutput, type RoleProvider,
 } from './julius-dispatch';
@@ -85,7 +85,7 @@ function harness(options: {
   const controller = options.providers === null
     ? createUncomposedJuliusDispatch(() => env, () => clock)
     : createJuliusDispatch({
-      providers, ledger, ...(options.omitMode === true ? {} : { mode: options.mode ?? 'fake' }), env: () => env, now: () => (clock += 1000), log: (line) => logs.push(line),
+      providers, ledger, ...(options.mode === 'live' ? { briefSha256: (options.frozen ?? FROZEN).contractSha256 } : {}), ...(options.omitMode === true ? {} : { mode: options.mode ?? 'fake' }), env: () => env, now: () => (clock += 1000), log: (line) => logs.push(line),
       newId: () => `disp_${(n += 1)}`,
       frozen: options.frozen ?? FROZEN,
       checker: { check: async () => ({ pass: options.checkerPass ?? true }) },
@@ -707,6 +707,119 @@ describe('G3-3 the run creator and the ordering evidence are recorded and enforc
     expect(verifyRunOrdering([{ ...base[0], uiActionUtc: '2026-10-22T12:00:01.000Z' }, ...base.slice(1)], RUN)).toMatchObject({ ok: false });
     expect(verifyRunOrdering([base[0], base[1], base[3], base[2]], RUN)).toMatchObject({ ok: false });
     expect(verifyRunOrdering(base.slice(1), RUN)).toMatchObject({ ok: false });
+  });
+});
+
+describe('Part 2: bridge echo and clock offset (REQUIRED in live, optional in code)', () => {
+  const fakeH = (over: Parameters<typeof harness>[0] = {}) => harness({ mode: 'fake', env: { JULIUS_J1_DAILY_CAP: '2' }, ...over });
+  /** Same harness with the three adapters flipped to real (fake:false): the controller derives mode live. No provider is ever reached in these tests. */
+  const liveH = (over: Parameters<typeof harness>[0] = {}) => {
+    const h = harness({ mode: 'live', env: { JULIUS_J1_DAILY_CAP: '5' }, ...over });
+    for (const role of ['architect', 'coder', 'reviewer'] as const) (h.providers[role] as { fake: boolean }).fake = false;
+    return h;
+  };
+  const echoOf = (h: Harness): { bridgeUtc: string; echoId: string } => {
+    const e = h.controller.issueEcho({ projectId: PROJECT, callerPlayerId: FOUNDER });
+    if (!e.ok) throw new Error('echo refused');
+    return { bridgeUtc: e.bridgeUtc, echoId: e.echoId };
+  };
+
+  it('issueEcho returns the bridge UTC (ISO) and an opaque nonce, founder and project only, and a kill switch off issues nothing', () => {
+    const h = fakeH();
+    const e = echoOf(h);
+    expect(e.bridgeUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/u);
+    expect(e.echoId.length).toBeGreaterThanOrEqual(16);
+    expect(echoOf(h).echoId).not.toBe(e.echoId);
+    expect(h.controller.issueEcho({ projectId: PROJECT, callerPlayerId: 'someone' })).toMatchObject({ ok: false, status: 403, code: 'julius_dispatch_founder_only' });
+    expect(h.controller.issueEcho({ projectId: 'proj-9', callerPlayerId: FOUNDER })).toMatchObject({ ok: false, status: 403, code: 'julius_dispatch_wrong_project' });
+    const off = harness({ env: { JULIUS_J1_ENABLED: '0' } });
+    expect(off.controller.issueEcho({ projectId: PROJECT, callerPlayerId: FOUNDER })).toMatchObject({ ok: false, status: 503, code: 'julius_dispatch_disabled' });
+  });
+  it('a valid echo and an offset within +-1000 ms dispatches, and run_created records clientOffsetMs and echoId', async () => {
+    const h = liveH();
+    const e = echoOf(h);
+    expect(await h.controller.dispatch(input({ clientOffsetMs: -1000, echoId: e.echoId }))).toMatchObject({ ok: true, status: 202 });
+    await h.controller.whenIdle();
+    expect((await rowsOf(h)).find((r) => r.phase === 'run_created')).toMatchObject({ clientOffsetMs: -1000, echoId: e.echoId });
+  });
+  it('|offset| > 1000 is 409 julius_dispatch_clock_offset_out_of_range, recorded REFUSED, no provider call, and counts against the daily cap', async () => {
+    const h = fakeH();
+    for (const [i, off] of [1001, -1001].entries()) {
+      const e = echoOf(h);
+      expect(await h.controller.dispatch(input({ runId: `run:r${i}`, idempotencyKey: `key-000000${i + 1}`, clientOffsetMs: off, echoId: e.echoId }))).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_clock_offset_out_of_range' });
+    }
+    const rows = await rowsOf(h);
+    expect(rows.filter((r) => r.phase === 'run_refused')).toHaveLength(2);
+    expect(rows.find((r) => r.phase === 'run_refused')).toMatchObject({ status: 'REFUSED', code: 'julius_dispatch_clock_offset_out_of_range', clientOffsetMs: 1001 });
+    expect(rows.some((r) => r.phase === 'run_start' || r.phase === 'run_created')).toBe(false);
+    expect(h.calls).toHaveLength(0);
+    const e3 = echoOf(h);
+    expect(await h.controller.dispatch(input({ runId: 'run:r3', idempotencyKey: 'key-0000003', clientOffsetMs: 0, echoId: e3.echoId }))).toMatchObject({ ok: false, status: 429, code: 'julius_dispatch_cap_reached' });
+    expect(h.calls).toHaveLength(0);
+  });
+  it('an unknown, expired or reused echoId is 409 julius_dispatch_clock_echo_unknown, recorded REFUSED, no provider call; the echo lives 120 s', async () => {
+    const h = fakeH();
+    expect(await h.controller.dispatch(input({ clientOffsetMs: 0, echoId: 'never-issued-0000000000' }))).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_clock_echo_unknown' });
+    expect((await rowsOf(h)).filter((r) => r.phase === 'run_refused')).toHaveLength(1);
+    const used = fakeH({ env: { JULIUS_J1_DAILY_CAP: '5' } });
+    const e = echoOf(used);
+    expect(await used.controller.dispatch(input({ clientOffsetMs: 0, echoId: e.echoId }))).toMatchObject({ ok: true });
+    await used.controller.whenIdle();
+    expect(await used.controller.dispatch(input({ runId: 'run:2', idempotencyKey: 'key-0000002', clientOffsetMs: 0, echoId: e.echoId }))).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_clock_echo_unknown' });
+    /* the harness clock advances 1 s per reading: issue an echo, then burn more than 120 readings */
+    const old = fakeH({ env: { JULIUS_J1_DAILY_CAP: '5' } });
+    const oe = echoOf(old);
+    for (let i = 0; i < 130; i += 1) old.controller.issueEcho({ projectId: PROJECT, callerPlayerId: FOUNDER });
+    expect(await old.controller.dispatch(input({ clientOffsetMs: 0, echoId: oe.echoId }))).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_clock_echo_unknown' });
+    expect(h.calls).toHaveLength(0);
+    expect(old.calls).toHaveLength(0);
+  });
+  it('an offset-out-of-range request consumes its echo (it cannot be retried with the same echo)', async () => {
+    const h = fakeH({ env: { JULIUS_J1_DAILY_CAP: '5' } });
+    const e = echoOf(h);
+    await h.controller.dispatch(input({ clientOffsetMs: 5000, echoId: e.echoId }));
+    expect(await h.controller.dispatch(input({ clientOffsetMs: 0, echoId: e.echoId }))).toMatchObject({ ok: false, code: 'julius_dispatch_clock_echo_unknown' });
+  });
+  it('LIVE requires both fields (missing or non-numeric offset, missing echo: refused, recorded, no call); the fake label does not require them', async () => {
+    const live = liveH();
+    const e = echoOf(live);
+    expect(await live.controller.dispatch(input({ echoId: e.echoId }))).toMatchObject({ ok: false, status: 400, code: 'julius_dispatch_clock_binding_required' });
+    expect(await live.controller.dispatch(input({ runId: 'run:b', idempotencyKey: 'key-0000002', clientOffsetMs: 0 }))).toMatchObject({ ok: false, status: 400, code: 'julius_dispatch_clock_binding_required' });
+    expect(await live.controller.dispatch(input({ runId: 'run:c', idempotencyKey: 'key-0000003', clientOffsetMs: Number.NaN, echoId: e.echoId }))).toMatchObject({ ok: false, status: 400, code: 'julius_dispatch_clock_binding_required' });
+    expect((await rowsOf(live)).filter((r) => r.phase === 'run_refused')).toHaveLength(3);
+    expect(live.calls).toHaveLength(0);
+    const fake = fakeH({ env: { JULIUS_J1_DAILY_CAP: '5' } });
+    expect(await fake.controller.dispatch(input())).toMatchObject({ ok: true });
+  });
+  it('the route: GET /echo is loopback, paired and founder-only like the other GETs, and POST passes clientOffsetMs and echoId through', async () => {
+    const h = fakeH({ env: { JULIUS_J1_DAILY_CAP: '5' } });
+    const TOK = { founder: { playerId: FOUNDER, projectId: PROJECT, sessionId: 'sess-1' } } as Record<string, { playerId: string; projectId: string; sessionId: string }>;
+    const ports = { dispatch: h.controller, verifyNativeSession: ({ token }: { token: string }) => TOK[token] ?? null };
+    const req = (over: Partial<JuliusDispatchRouteRequest> = {}): JuliusDispatchRouteRequest => ({
+      method: 'GET', path: '/wonderland/julius/dispatch/echo', url: `/wonderland/julius/dispatch/echo?projectId=${PROJECT}`,
+      authorization: 'Relay-Session founder', origin: undefined, rawBody: undefined, idempotencyKey: undefined, now: 1,
+      operatorToken: 'operator-secret-value', remoteAddress: '127.0.0.1', host: '127.0.0.1:8787', forwarded: false, ...over,
+    });
+    expect(isJuliusDispatchRoute('/wonderland/julius/dispatch/echo')).toBe(true);
+    const res = await handleJuliusDispatchRoute(req(), ports);
+    expect(res.status).toBe(200);
+    const data = (res.body as { data: { bridgeUtc: string; echoId: string } }).data;
+    expect(Object.keys(data).sort()).toEqual(['bridgeUtc', 'echoId']);
+    expect((await handleJuliusDispatchRoute(req({ remoteAddress: '10.0.0.5' }), ports)).status).toBe(403);
+    expect((await handleJuliusDispatchRoute(req({ authorization: undefined }), ports)).status).toBe(401);
+    expect((await handleJuliusDispatchRoute(req({ method: 'POST' }), ports)).status).toBe(405);
+    const post = await handleJuliusDispatchRoute(req({
+      method: 'POST', path: '/wonderland/julius/dispatch', url: `/wonderland/julius/dispatch?projectId=${PROJECT}`, idempotencyKey: 'key-0000001',
+      rawBody: JSON.stringify({ runId: RUN, clientTriggerId: 'trig-00000001', clientLogSha256: sha('client line'), clientUiActionUtc: UI_UTC, clientOffsetMs: 12, echoId: data.echoId }),
+    }), ports);
+    expect(post.status).toBe(202);
+    await h.controller.whenIdle();
+    expect((await rowsOf(h)).find((r) => r.phase === 'run_created')).toMatchObject({ clientOffsetMs: 12, echoId: data.echoId });
+    const bad = await handleJuliusDispatchRoute(req({
+      method: 'POST', path: '/wonderland/julius/dispatch', url: `/wonderland/julius/dispatch?projectId=${PROJECT}`, idempotencyKey: 'key-0000002',
+      rawBody: JSON.stringify({ runId: 'run:x', clientTriggerId: 'trig-00000001', clientLogSha256: sha('client line'), clientUiActionUtc: UI_UTC, clientOffsetMs: 'twelve', echoId: 7 }),
+    }), ports);
+    expect(bad.status).toBe(400);
   });
 });
 
