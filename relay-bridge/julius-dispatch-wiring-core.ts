@@ -12,6 +12,7 @@ import {
 import { createFrozenReviewerChecker, type FrozenCheckerRun } from './julius-frozen-checker';
 import type { XaiDirectReviewerInput } from './julius-xai-direct-reviewer';
 import type { ShellEffectPort } from './julius/executor-effects';
+import { assertNoProviderKeysInEnv, type KeyStore } from './julius-key-store';
 
 /**
  * J1 LIVE WIRING CORE (no pin values live here). Builds the real composition (GPT architect + Claude Code coder + direct xAI reviewer + reviewer-frozen checker +
@@ -52,6 +53,8 @@ export interface J1WiringDeps {
   /** Builds the coding provider for ONE attempt from the allow-listed env. Null = not available = refuse. */
   readonly coderProviderFor: ((env: Readonly<Record<string, string>>, ctx: { readonly requestedModel: string }) => JuliusCodingAgentProvider) | null;
   readonly shell: ShellEffectPort | null;
+  /** Builds the key store for a private key directory (JULIUS_J1_KEY_DIR). Null = not available = refuse. May throw (a bad directory). */
+  readonly keyStoreFor: ((dir: string) => KeyStore) | null;
   /** Builds the workspace file-system port the bundle step reads (before/after hash lists, the artifact file). Null = not available = refuse. */
   readonly workspaceFs: ((root: string) => WorkspaceFs) | null;
   readonly now: () => number;
@@ -116,6 +119,8 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   const coderProviderFor = deps.coderProviderFor;
   if (coderProviderFor === null) throw new Refuse('dep_coder_provider_absent');
   if (deps.shell === null) throw new Refuse('dep_shell_absent');
+  const keyStoreFor = deps.keyStoreFor;
+  if (keyStoreFor === null) throw new Refuse('dep_key_store_absent');
   const workspaceFs = deps.workspaceFs;
   if (workspaceFs === null) throw new Refuse('dep_workspace_fs_absent');
 
@@ -171,8 +176,14 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   const architectServedAllow = needList('JULIUS_J1_ARCHITECT_SERVED_MODEL_ALLOW');
   const coderServedAllow = needList('JULIUS_J1_CODER_SERVED_MODEL_ALLOW');
   const servedModelAllow = needList('JULIUS_J1_REVIEWER_SERVED_MODEL_ALLOW');
+  /* PROVIDER KEYS NEVER LIVE IN process.env: the coder session inherits this env. Refuse if either logical key name is in it, then build the store. */
+  const keyDir = need('JULIUS_J1_KEY_DIR');
+  if (!assertNoProviderKeysInEnv(env, [architectKeyEnv, reviewerKeyEnv]).ok) throw new Refuse('provider_key_in_env');
+  let keyStore: KeyStore;
+  try { keyStore = keyStoreFor(keyDir); } catch { throw new Refuse('key_store_unavailable'); }
+  if (!keyStore.has(architectKeyEnv) || !keyStore.has(reviewerKeyEnv)) throw new Refuse('key_store_key_unavailable');
   const architectConfig: GptArchitectConfig = {
-    apiKeyPresent: (env[architectKeyEnv] ?? '').trim() !== '', model: architectModel, liveMode: true,
+    apiKeyPresent: true, model: architectModel, liveMode: true,
     maxOutputTokens: needPositive('JULIUS_J1_ARCHITECT_MAX_OUTPUT_TOKENS', true), timeoutMs: needPositive('JULIUS_J1_ARCHITECT_TIMEOUT_MS', true), unusable: [],
   };
   const permittedPaths = needList('JULIUS_J1_CODER_PERMITTED_PATHS');
@@ -200,7 +211,7 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   try { ledger = deps.openLedger(ledgerFile); } catch { throw new Refuse('ledger_open_failed'); }
 
   const inner = createJuliusDispatch({
-    providers, runs, frozen, checker, ledger, mode: 'live', briefSha256, env: () => ({ ...read() }), now: deps.now,
+    providers, runs, frozen, checker, ledger, mode: 'live', briefSha256, env: () => ({ ...read() }), keyStore, now: deps.now,
     ...(deps.newId === undefined ? {} : { newId: deps.newId }),
     ...(deps.log === undefined ? {} : { log: deps.log }),
   });

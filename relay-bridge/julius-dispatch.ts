@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { bearerMatches } from './bearer-auth';
 import { sessionTokenFrom } from './browser-session/routes';
 import { composeRoleProviders } from './julius-role-compose';
+import type { KeyStore } from './julius-key-store';
 
 /**
  * J1: THE IN-GAME MISSION DISPATCH ROUTE. Flag-gated, loopback-only, founder-only.
@@ -347,6 +348,12 @@ export interface JuliusDispatchDeps {
   readonly briefSha256?: string;
   /** Read at every use: the kill switch is re-read before every role, so flipping it halts a running chain at the next role. */
   readonly env: () => Record<string, string | undefined>;
+  /**
+   * WHERE THE PROVIDER KEYS COME FROM. When given, every key is read from this port at CALL time (one read per leg, dropped when the leg ends)
+   * and `env` is NEVER consulted for a key: the keyEnv names are logical key names only. The production wiring always supplies it.
+   * Absent = the legacy env read, kept ONLY for fake-mode controllers and unit tests.
+   */
+  readonly keyStore?: KeyStore;
   readonly now: () => number;
   /** Safe lines only (ids, hashes, codes). Never a key, a body or provider text. */
   readonly log?: (line: string) => void;
@@ -439,9 +446,12 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
     const providers = deps.providers as DispatchProviders;
     const base = { dispatchId: rec.dispatchId, runId: rec.runId };
     const env = deps.env();
-    const secrets = DISPATCH_ROLES.map((role) => {
+    /** Every key in play, read NOW for one leg's scrub (the store is read again each time; nothing is kept between legs). */
+    const keysInPlay = (): string[] => DISPATCH_ROLES.map((role) => {
       const name = providers[role].keyEnv;
-      return name === null ? '' : (env[name] ?? '').trim();
+      if (name === null) return '';
+      if (deps.keyStore !== undefined) { try { return deps.keyStore.getKey(name).trim(); } catch { return ''; } }
+      return (deps.env()[name] ?? '').trim();
     }).filter((value) => value !== '');
     const timeoutMs = positiveInt(env.JULIUS_J1_ROLE_TIMEOUT_MS, J1_DEFAULT_ROLE_TIMEOUT_MS);
     const summaries: Record<string, unknown>[] = [];
@@ -466,7 +476,10 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         emit(rec, { type: 'chain.refused', role, phase: 'refused', failure: 'budget_refused' });
         failure = 'budget_refused'; halted = true; break;
       }
-      const apiKey = provider.keyEnv === null ? '' : (deps.env()[provider.keyEnv] ?? '').trim();
+      let apiKey = '';
+      if (provider.keyEnv !== null) {
+        if (deps.keyStore !== undefined) { try { apiKey = deps.keyStore.getKey(provider.keyEnv).trim(); } catch { apiKey = ''; } } else apiKey = (deps.env()[provider.keyEnv] ?? '').trim();
+      }
       if (provider.keyEnv !== null && apiKey === '') { failure = 'provider_key_missing'; break; }
       /* THE ROW BEFORE THE CALL, fsynced by the ledger. A pre_call row that cannot be written means NO provider call. */
       try {
@@ -499,6 +512,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         if (timer !== undefined) clearTimeout(timer);
       }
       // The coder's final message is trimmed ONCE, here: the checker judges, the ledger hashes (outputSha256, artifactSha256) and the result bytes carry exactly these trimmed bytes (contract v2 artifact policy).
+      const secrets = keysInPlay();
       const scrubbed = scrubKeys(out.text, secrets);
       const text = role === 'coder' ? scrubbed.trim() : scrubbed;
       const responseId = out.responseId === null ? null : scrubKeys(out.responseId, secrets);

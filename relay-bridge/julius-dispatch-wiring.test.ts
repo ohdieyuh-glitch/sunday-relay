@@ -10,7 +10,7 @@ import { createCoderRoleProvider, createFrozenRunLookup } from './julius-dispatc
 import { buildJ1CoderProviderFor, J1_CODER_AUTH_MODE, J1_SHELL_PORT_MISSING, realJ1WiringDeps } from './julius-dispatch-wiring-real';
 import { createJ1LiveDispatchFromEnv, J1_PINNED_CHECKER_SHA256, J1_PINNED_CONTRACT_SHA256 } from './julius-dispatch-wiring';
 import {
-  ARTIFACT, createJ1LiveForTest, dispatchInput, echoed, fakeCoder, fakeShell, FILES, goodEnv, KEY, makeDeps, PIN, sha,
+  ARTIFACT, createJ1LiveForTest, dispatchInput, echoed, fakeCoder, fakeShell, FILES, goodEnv, KEY, KEY_DIR, makeDeps, PIN, sha,
 } from './julius-dispatch-wiring-testkit';
 
 
@@ -306,5 +306,53 @@ describe('C3/C4 at the wiring', () => {
     const rows = await probe.ledgers[0]!.rows();
     expect(rows.find((row) => row.phase === 'result' && row.role === 'coder')).toMatchObject({ outcome: 'workspace_scope_violation' });
     expect(rows.find((row) => row.phase === 'bundle_lists')!.afterList).toHaveProperty(['node_modules/evil/index.js']);
+  });
+  it('PART 2: provider keys never live in process.env: a logical key name present in the env refuses at composition (reason code only)', () => {
+    for (const over of [{ XAI_API_KEY: KEY.xai }, { OPENAI_API_KEY: KEY.openai }, { XAI_API_KEY: '' }]) {
+      const { deps, probe } = makeDeps();
+      const r = createJ1LiveForTest(goodEnv(over), deps);
+      expect(r).toMatchObject({ live: false, reason: 'provider_key_in_env' });
+      expect(probe.ledgers).toHaveLength(0);
+      expect(probe.logs.join('\n')).not.toMatch(/canary_|ZZ9/);
+    }
+  });
+  it('PART 2: JULIUS_J1_KEY_DIR is required; a missing key-store dependency or an unreadable key refuses', () => {
+    expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_KEY_DIR: undefined }), makeDeps().deps)).toMatchObject({ live: false, reason: 'config_missing_julius_j1_key_dir' });
+    expect(createJ1LiveForTest(goodEnv(), makeDeps({ keyStoreFor: null }).deps)).toMatchObject({ live: false, reason: 'dep_key_store_absent' });
+    const absent = makeDeps({ keyStoreFor: () => ({ has: (n: string) => n !== 'XAI_API_KEY', getKey: () => { throw new Error('key_file_absent'); } }) });
+    expect(createJ1LiveForTest(goodEnv(), absent.deps)).toMatchObject({ live: false, reason: 'key_store_key_unavailable' });
+    const ctor = makeDeps({ keyStoreFor: () => { throw new Error('key_dir_inside_repo'); } });
+    expect(createJ1LiveForTest(goodEnv(), ctor.deps)).toMatchObject({ live: false, reason: 'key_store_unavailable' });
+    expect(absent.probe.logs.join('\n')).not.toContain(KEY_DIR);
+  });
+  it('PART 2 END TO END: the key is read from the store at CALL time (not at composition), the env is never consulted, and no key or key path reaches a row or a log', async () => {
+    const { deps, probe } = makeDeps();
+    const r = createJ1LiveForTest(goodEnv(), deps);
+    expect(r.live).toBe(true);
+    expect(probe.keyDirs).toEqual([KEY_DIR]);
+    expect(probe.keyReads).toEqual([]);
+    expect(await r.controller.dispatch(await echoed(r.controller))).toMatchObject({ ok: true });
+    await r.controller.whenIdle();
+    expect(probe.keyReads.length).toBeGreaterThanOrEqual(2);
+    expect(probe.fetched[0]!.auth).toBe(`Bearer ${KEY.xai}`);
+    const everything = JSON.stringify(await probe.ledgers[0]!.rows()) + probe.logs.join('\n');
+    for (const secret of [KEY.openai, KEY.xai, KEY_DIR, 'ZZ9']) expect(everything).not.toContain(secret);
+    const readsAfterFirst = probe.keyReads.length;
+    await r.controller.dispatch({ ...(await echoed(r.controller)), runId: 'run:2', idempotencyKey: 'key-0000009', clientTriggerId: 'trig-00000009' });
+    await r.controller.whenIdle();
+    expect(probe.keyReads.length).toBeGreaterThan(readsAfterFirst);
+  });
+  it('PART 2: a key the store cannot give at call time stops the leg with provider_key_missing and calls no provider', async () => {
+    let live = true;
+    const { deps, probe } = makeDeps({ keyStoreFor: () => ({ has: () => true, getKey: () => { if (live) throw new Error('key_file_absent'); return 'x'; } }) });
+    const r = createJ1LiveForTest(goodEnv(), deps);
+    expect(r.live).toBe(true);
+    await r.controller.dispatch(await echoed(r.controller));
+    await r.controller.whenIdle();
+    const rows = await probe.ledgers[0]!.rows();
+    expect(rows.find((row) => row.role === 'final')).toMatchObject({ failure: 'provider_key_missing' });
+    expect(rows.some((row) => row.phase === 'pre_call')).toBe(false);
+    expect(probe.fetched).toHaveLength(0);
+    live = false;
   });
 });

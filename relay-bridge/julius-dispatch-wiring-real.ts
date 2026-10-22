@@ -1,11 +1,12 @@
 import { execFile } from 'node:child_process';
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { JuliusCodingAgentProvider } from '../src/relay/mission/julius/julius-coding-agent';
 import { createFileDispatchLedger } from './julius-dispatch';
 import { createLocalWorkspaceFs } from './julius-dispatch-bundle';
+import { createFileKeyStore } from './julius-key-store';
 import { isSecretLikeEnvName } from './julius-dispatch-adapters';
 import type { J1WiringDeps } from './julius-dispatch-wiring';
 import { createClaudeCodeCodingAgentProvider } from './julius/claude-code-coding-provider';
@@ -59,7 +60,8 @@ export function buildJ1CoderProviderFor(options: {
   };
 }
 
-export function realJ1WiringDeps(log: (line: string) => void, now: () => number = Date.now, checkerBaseEnv: Readonly<Record<string, string | undefined>> = {}): J1WiringDeps {
+/** keyDirForbiddenUnder: a key directory inside this path (default: the bridge's working directory, i.e. the repository) is refused. */
+export function realJ1WiringDeps(log: (line: string) => void, now: () => number = Date.now, checkerBaseEnv: Readonly<Record<string, string | undefined>> = {}, keyDirForbiddenUnder: string = process.cwd()): J1WiringDeps {
   return {
     readFileSync: (path) => readFileSync(path),
     fetchImpl: async (url, init) => {
@@ -91,6 +93,7 @@ export function realJ1WiringDeps(log: (line: string) => void, now: () => number 
     openLedger: (file) => createFileDispatchLedger({ file }),
     coderProviderFor: buildJ1CoderProviderFor(),
     shell: null,
+    keyStoreFor: (dir) => createFileKeyStore({ dir, fs: { readFileSync: (p) => readFileSync(p, 'utf8'), statSync: (p) => statSync(p) }, platform: process.platform, repoRoot: keyDirForbiddenUnder }),
     workspaceFs: (root) => createLocalWorkspaceFs(root, { readdirSync: (p, o) => readdirSync(p, o), readlinkSync: (p) => readlinkSync(p), readFileSync: (p) => readFileSync(p) }),
     now,
     log,

@@ -18,6 +18,8 @@ export const sha = (v: string | Uint8Array): string => createHash('sha256').upda
 export const canary = (name: string): string => ['canary', name, 'ZZ9', 'x7Q2m4k8w1'].join('_');
 export const KEY = { openai: canary('openai'), xai: canary('xai') };
 
+/** The private key directory the fake key store answers for. A canary: it must never reach a ledger row or a log. */
+export const KEY_DIR = '/private-keys-ZZ9-dir';
 export const FILES: Record<string, string> = {
   '/pins/contract.json': '{"fake":"contract bytes"}\n',
   '/pins/checker.mjs': 'fake checker bytes',
@@ -41,7 +43,7 @@ export const goodEnv = (over: Record<string, string | undefined> = {}): Record<s
   JULIUS_J1_ARCHITECT_MAX_OUTPUT_TOKENS: '4000', JULIUS_J1_ARCHITECT_TIMEOUT_MS: '60000',
   JULIUS_J1_CODER_PERMITTED_PATHS: 'out/normalized.json', JULIUS_J1_CODER_WORKSPACE_PATH: '/work', JULIUS_J1_CODER_WORKER_ID: 'w-coder',
   JULIUS_J1_LEDGER_FILE: '/ledger/j1.jsonl',
-  OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai, PATH: '/bin',
+  JULIUS_J1_KEY_DIR: KEY_DIR, PATH: '/bin',
   ...over,
 });
 
@@ -61,10 +63,10 @@ export const fakeShell = (): ShellEffectPort => ({
   },
 });
 
-export interface Probe { readonly logs: string[]; readonly spawned: { command: string; args: readonly string[] }[]; readonly fetched: { url: string; auth: string }[]; readonly ledgers: ReturnType<typeof createMemoryDispatchLedger>[]; readonly artifacts: Map<string, string>; readonly workspace: Record<string, string> }
+export interface Probe { readonly logs: string[]; readonly spawned: { command: string; args: readonly string[] }[]; readonly fetched: { url: string; auth: string }[]; readonly ledgers: ReturnType<typeof createMemoryDispatchLedger>[]; readonly artifacts: Map<string, string>; readonly workspace: Record<string, string>; readonly keyReads: string[]; readonly keyDirs: string[] }
 
 export function makeDeps(over: Partial<J1WiringDeps> = {}, files: Record<string, string> = FILES): { deps: J1WiringDeps; probe: Probe } {
-  const probe: Probe = { logs: [], spawned: [], fetched: [], ledgers: [], artifacts: new Map(), workspace: { 'data/legacy_ledger.csv': 'a,b', 'data/posts.json': '[]', 'format.test.mjs': 't' } };
+  const probe: Probe = { logs: [], spawned: [], fetched: [], ledgers: [], artifacts: new Map(), keyReads: [], keyDirs: [], workspace: { 'data/legacy_ledger.csv': 'a,b', 'data/posts.json': '[]', 'format.test.mjs': 't' } };
   let clock = Date.parse('2026-10-22T12:00:00Z');
   const xaiBody = { id: 'resp_xai_0011223344', model: 'grok-test-model', usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 }, output: [{ content: [{ text: '{"verdict":"approve","summary":"fine"}' }] }] };
   const deps: J1WiringDeps = {
@@ -84,6 +86,11 @@ export function makeDeps(over: Partial<J1WiringDeps> = {}, files: Record<string,
     architectRun: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: { inputTokens: 5, cachedInputTokens: null, outputTokens: 7, reasoningTokens: null, totalTokens: 12 } }) as GptRunOutcome,
     coderProviderFor: () => fakeCoder(probe.workspace),
     shell: fakeShell(),
+    keyStoreFor: (dir) => {
+      probe.keyDirs.push(dir);
+      const held: Record<string, string> = { OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai };
+      return { has: (name) => name in held, getKey: (name) => { probe.keyReads.push(name); const v = held[name]; if (v === undefined) throw new Error('key_file_absent'); return v; } };
+    },
     workspaceFs: () => ({
       listEntries: async () => Object.keys(probe.workspace).map((path) => ({ path, kind: 'file' as const })),
       readFile: async (p) => { const v = probe.workspace[p]; if (v === undefined) throw new Error('enoent'); return new TextEncoder().encode(v); },
