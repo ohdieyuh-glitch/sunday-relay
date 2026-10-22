@@ -154,3 +154,19 @@ describe('S-1: private-key header shapes are scanned in linear time (worker outp
     expect(sanitizeOutput(`${one}${one.replace('-----BEGIN', '--BEGIN')}`).text).not.toContain(b);
   });
 });
+
+describe('private_key as a name (reviewer condition on the residual list)', () => {
+  it('redacts `private_key: <x>` and `PRIVATE-KEY=<x>`', () => {
+    const b = rand(24);
+    for (const text of [`private_key: ${b}`, `PRIVATE-KEY=${b}`]) {
+      const stored = sanitizeOutput(text).text;
+      expect(stored, text).toContain(REDACTION_MARK);
+      expect(stored, text).not.toContain(b.slice(0, 12));
+    }
+  });
+  it('leaves `private_key_path: x` and `private_keys: x` unchanged (the colon must follow `key` directly)', () => {
+    for (const plain of ['private_key_path: /home/user/.ssh/id_ed25519_long_name', 'private_keys: /home/user/.ssh/keys_directory_name']) {
+      expect(sanitizeOutput(plain).text, plain).toBe(plain);
+    }
+  });
+});

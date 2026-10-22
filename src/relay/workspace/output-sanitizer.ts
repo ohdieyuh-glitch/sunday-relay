@@ -29,7 +29,7 @@ const SECRET_OUTPUT_PATTERNS: RegExp[] = [
   /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g,
   // `name: value` / `name=value`; also a JSON-quoted name (`"token": "..."`), an env-style name (`OPENAI_API_KEY=`, no word boundary before API), `secret_key` / `aws_secret_access_key`, `passwd`,
   // a quoted value that contains spaces, and JSON inside a JSON string (`{\"password\":\"...\"}`: any run of backslashes before a quote).
-  /(?:api[-_]?key|secret(?:[-_](?:access[-_])?key)?|passw(?:or)?d|token)\\*["']?\s*[:=]\s*(?:\\*"[^"\n]{8,}"|\\*'[^'\n]{8,}'|\S{8,})/gi,
+  /(?:api[-_]?key|private[-_]?key|secret(?:[-_](?:access[-_])?key)?|passw(?:or)?d|token)\\*["']?\s*[:=]\s*(?:\\*"[^"\n]{8,}"|\\*'[^'\n]{8,}'|\S{8,})/gi,
 ];
 
 export const REDACTION_MARK = '[REDACTED:secret-shape]';
