@@ -110,7 +110,7 @@ export function realJ1WiringDeps(log: (line: string) => void, now: () => number 
         });
       }),
     }),
-    keyStoreFor: (dir) => createFileKeyStore({ dir, fs: { readFileSync: (p) => readFileSync(p, 'utf8'), statSync: (p) => statSync(p) }, platform: process.platform, repoRoot: keyDirForbiddenUnder }),
+    keyStoreFor: (dir) => createFileKeyStore({ dir, fs: { readFileSync: (p) => readFileSync(p, 'utf8'), statSync: (p) => statSync(p) }, platform: process.platform, repoRoot: keyDirForbiddenUnder, realpath: (p) => realpathSync(p) }),
     pathExists: (p) => existsSync(p),
     workspaceFs: (root) => createLocalWorkspaceFs(root, { readdirSync: (p, o) => readdirSync(p, o), readlinkSync: (p) => readlinkSync(p), readFileSync: (p) => readFileSync(p) }),
     now,

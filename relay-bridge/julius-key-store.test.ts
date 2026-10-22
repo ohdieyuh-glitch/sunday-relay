@@ -57,9 +57,26 @@ describe('KeyStore (file per key, private path outside the repo)', () => {
     expect(fs.reads).toEqual([]);
   });
   it('a key directory inside the repository is refused at construction', () => {
-    expect(codeOf(() => createFileKeyStore({ dir: '/repo/relay-bridge/keys', fs: fakeFs({}), platform: 'linux', repoRoot: '/repo' }))).toBe('key_dir_inside_repo');
-    expect(codeOf(() => createFileKeyStore({ dir: '/repo/../private', fs: fakeFs({}), platform: 'linux', repoRoot: '/repo' }))).toBe('no_throw');
+    expect(codeOf(() => createFileKeyStore({ dir: '/repo/relay-bridge/keys', fs: fakeFs({}), platform: 'linux', repoRoot: '/repo', realpath: (p) => p }))).toBe('key_dir_inside_repo');
+    expect(codeOf(() => createFileKeyStore({ dir: '/repo/../private', fs: fakeFs({}), platform: 'linux', repoRoot: '/repo', realpath: (p) => p }))).toBe('no_throw');
     expect(codeOf(() => createFileKeyStore({ dir: '', fs: fakeFs({}), platform: 'linux' }))).toBe('key_dir_invalid');
+  });
+  it('D-3 a key directory that is a LINK into the repository is refused (injected realpath, both sides resolved)', () => {
+    const map = (m: Record<string, string>) => (p: string): string => m[p] ?? p;
+    // a link outside the repo whose target is inside it
+    expect(codeOf(() => createFileKeyStore({ dir: '/home/u/keylink', fs: fakeFs({}), platform: 'linux', repoRoot: '/repo', realpath: map({ '/home/u/keylink': '/repo/secrets' }) }))).toBe('key_dir_inside_repo');
+    // the repo root itself reached through a link
+    expect(codeOf(() => createFileKeyStore({ dir: '/repo/keys', fs: fakeFs({}), platform: 'linux', repoRoot: '/repolink', realpath: map({ '/repolink': '/repo' }) }))).toBe('key_dir_inside_repo');
+    expect(codeOf(() => createFileKeyStore({ dir: '/mnt/alias/keys', fs: fakeFs({}), platform: 'linux', repoRoot: '/repolink', realpath: map({ '/repolink': '/repo', '/mnt/alias/keys': '/repo/keys' }) }))).toBe('key_dir_inside_repo');
+    // a real private directory, even through a link, is accepted
+    expect(codeOf(() => createFileKeyStore({ dir: '/home/u/keylink', fs: fakeFs({}), platform: 'linux', repoRoot: '/repo', realpath: map({ '/home/u/keylink': '/private/keys' }) }))).toBe('no_throw');
+    // the lexical check still applies when the real path happens to look fine
+    expect(codeOf(() => createFileKeyStore({ dir: '/repo/keys', fs: fakeFs({}), platform: 'linux', repoRoot: '/repo', realpath: map({ '/repo/keys': '/private/keys' }) }))).toBe('key_dir_inside_repo');
+  });
+  it('D-3 fails closed: a realpath that throws, or a repoRoot without a realpath, refuses with key_dir_invalid', () => {
+    const boom = (): string => { throw new Error('EACCES'); };
+    expect(codeOf(() => createFileKeyStore({ dir: '/private/keys', fs: fakeFs({}), platform: 'linux', repoRoot: '/repo', realpath: boom }))).toBe('key_dir_invalid');
+    expect(codeOf(() => createFileKeyStore({ dir: '/private/keys', fs: fakeFs({}), platform: 'linux', repoRoot: '/repo' }))).toBe('key_dir_invalid');
   });
   it('has() answers presence without returning or caching the value', () => {
     const fs = fakeFs({ [`${DIR}/XAI_API_KEY`]: { text: SECRET } });

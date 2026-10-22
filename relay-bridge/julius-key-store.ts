@@ -51,12 +51,17 @@ export function createFileKeyStore(input: {
   readonly platform: string;
   /** The repository root: a key directory inside it is refused. */
   readonly repoRoot?: string;
+  /** D-3: resolves links (fs.realpathSync). REQUIRED with repoRoot: the check is made on the real paths AND the lexical ones; a throw refuses (key_dir_invalid). */
+  readonly realpath?: (path: string) => string;
 }): KeyStore {
   if (typeof input.dir !== 'string' || input.dir.trim() === '') throw new KeyStoreError('key_dir_invalid');
   if (input.repoRoot !== undefined) {
-    const dir = resolveSegments(input.dir);
-    const root = resolveSegments(input.repoRoot);
-    if (dir === root || dir.startsWith(`${root}/`)) throw new KeyStoreError('key_dir_inside_repo');
+    const inside = (d: string, r: string): boolean => d === r || d.startsWith(`${r}/`);
+    if (inside(resolveSegments(input.dir), resolveSegments(input.repoRoot))) throw new KeyStoreError('key_dir_inside_repo');
+    if (input.realpath === undefined) throw new KeyStoreError('key_dir_invalid');
+    let realDir: string; let realRoot: string;
+    try { realDir = resolveSegments(input.realpath(input.dir)); realRoot = resolveSegments(input.realpath(input.repoRoot)); } catch { throw new KeyStoreError('key_dir_invalid'); }
+    if (inside(realDir, realRoot)) throw new KeyStoreError('key_dir_inside_repo');
   }
   const dir = slashes(input.dir).replace(/\/+$/u, '');
   const pathOf = (name: string): string => {
