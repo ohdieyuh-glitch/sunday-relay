@@ -436,6 +436,13 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       } catch {
         failure = 'ledger_write_failed'; halted = true; break;
       }
+      /* KILL SWITCH, THE LAST LOOK: re-read immediately before the provider call, after the (awaited) pre_call row. A flip during
+         that write stops THIS call. The pre_call row stands, so a call_not_made row says the call did not happen. */
+      if (!killSwitchOn()) {
+        try { await deps.ledger.append({ phase: 'call_not_made', ...base, role, reason: 'kill_switch_flipped_before_call', at: new Date(deps.now()).toISOString() }); } catch { /* halting anyway */ }
+        emit(rec, { type: 'chain.refused', role, phase: 'refused', failure: 'kill_switch_flipped' });
+        failure = 'kill_switch_flipped'; halted = true; break;
+      }
       legsStarted += 1;
       emit(rec, { type: 'role.started', role, phase: 'started' });
       let out: RoleCallOutput;

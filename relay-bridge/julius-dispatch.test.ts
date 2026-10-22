@@ -286,6 +286,20 @@ describe('J1 negative controls', () => {
     expect(final).toMatchObject({ state: 'HALTED', failure: 'kill_switch_flipped' });
   });
 
+  it('G3-8: flipping the kill switch AFTER the role loop check, while the pre_call row is being written, stops THAT call', async () => {
+    // eslint-disable-next-line prefer-const
+    let h: Harness;
+    const ledger = createMemoryDispatchLedger({ failWrites: (r) => { if (r.phase === 'pre_call' && r.role === 'coder') h.env.JULIUS_J1_ENABLED = '0'; return false; } });
+    h = harness({ ledger });
+    await h.controller.dispatch(input());
+    await h.controller.whenIdle();
+    expect(h.calls.map((c) => c.role)).toEqual(['architect']);
+    const rows = await rowsOf(h);
+    expect(rows.find((r) => r.phase === 'call_not_made')).toMatchObject({ role: 'coder', reason: 'kill_switch_flipped_before_call' });
+    expect(rows.find((r) => r.phase === 'result' && r.role === 'coder')).toBeUndefined();
+    expect(rows.find((r) => r.role === 'final')).toMatchObject({ state: 'HALTED', failure: 'kill_switch_flipped' });
+  });
+
   it('ledger write failure on the acceptance row refuses and calls nothing', async () => {
     const h = harness({ ledger: createMemoryDispatchLedger({ failWrites: (r) => r.phase === 'run_start' }) });
     const out = await h.controller.dispatch(input());
