@@ -25,6 +25,7 @@ export const FILES: Record<string, string> = {
   '/pins/checker.mjs': 'fake checker bytes',
   '/pins/ledger.csv': 'fake seed ledger',
   '/pins/posts.json': '[]',
+  '/pins/format.test.mjs': 'fake format test bytes',
 };
 export const PIN = { contractSha256: sha(FILES['/pins/contract.json']!), checkerSha256: sha(FILES['/pins/checker.mjs']!) };
 
@@ -36,6 +37,7 @@ export const goodEnv = (over: Record<string, string | undefined> = {}): Record<s
   JULIUS_J1_CHECKER_PATH: '/pins/checker.mjs', JULIUS_J1_CHECKER_SHA256: PIN.checkerSha256, JULIUS_J1_NODE_PATH: 'node',
   JULIUS_J1_SEED_LEDGER_PATH: '/pins/ledger.csv', JULIUS_J1_SEED_LEDGER_SHA256: sha(FILES['/pins/ledger.csv']!),
   JULIUS_J1_SEED_POSTS_PATH: '/pins/posts.json', JULIUS_J1_SEED_POSTS_SHA256: sha(FILES['/pins/posts.json']!),
+  JULIUS_J1_SEED_FORMAT_TEST_PATH: '/pins/format.test.mjs', JULIUS_J1_SEED_FORMAT_TEST_SHA256: sha(FILES['/pins/format.test.mjs']!),
   JULIUS_J1_ARCHITECT_MODEL: 'gpt-test-model', JULIUS_J1_CODER_MODEL: 'claude-test-model', JULIUS_J1_REVIEWER_MODEL: 'grok-test-model',
   JULIUS_J1_ARCHITECT_KEY_ENV: 'OPENAI_API_KEY', JULIUS_J1_REVIEWER_KEY_ENV: 'XAI_API_KEY',
   JULIUS_J1_REVIEWER_SERVED_MODEL_ALLOW: 'grok-test-model,grok-test-model-20260101',

@@ -147,12 +147,17 @@ describe('Part B: the real builders are construct-only', () => {
     const deps = realJ1WiringDeps((l) => logs.push(l));
     expect(deps.coderProviderFor).not.toBeNull();
     expect(deps.shell).toBeNull();
+    expect(deps.shellFor).not.toBeNull();
     expect('runStore' in deps).toBe(false);
     expect(logs).toEqual([]);
     expect(J1_SHELL_PORT_MISSING.length).toBeGreaterThan(0);
-    // a complete env still refuses on the shell, with the reason code
+    // with neither a shell nor a shellFor the composition still refuses, with the reason code
     const { deps: fakes } = makeDeps({ coderProviderFor: deps.coderProviderFor, shell: null });
     expect(createJ1LiveForTest(goodEnv(), fakes)).toMatchObject({ live: false, reason: 'dep_shell_absent' });
+    // with the real shellFor (construct-only: it spawns and writes nothing) the composition no longer refuses dep_shell_absent
+    const { deps: withLocal, probe } = makeDeps({ coderProviderFor: deps.coderProviderFor, shell: null, shellFor: deps.shellFor });
+    expect(createJ1LiveForTest(goodEnv(), withLocal)).toMatchObject({ live: true, reason: null });
+    expect(probe.spawned).toHaveLength(0);
   });
 
   it('the real coder builder passes NO provider key, the subscription auth mode and the requested model to the hosted runner', async () => {
@@ -354,5 +359,19 @@ describe('C3/C4 at the wiring', () => {
     expect(rows.some((row) => row.phase === 'pre_call')).toBe(false);
     expect(probe.fetched).toHaveLength(0);
     live = false;
+  });
+  it('PART 3: a shellFor dependency supplies the shell: it is given the configured workspace path and the three pinned seed files (re-hashed), nothing else', () => {
+    const seen: { workspacePath: string; files: { name: string; text: string; sha256: string }[] }[] = [];
+    const { deps } = makeDeps({ shell: null, shellFor: (ctx) => { seen.push({ workspacePath: ctx.workspacePath, files: ctx.seedFiles.map((f) => ({ name: f.name, text: new TextDecoder().decode(f.bytes), sha256: f.sha256 })) }); return fakeShell(); } });
+    expect(createJ1LiveForTest(goodEnv(), deps)).toMatchObject({ live: true, reason: null });
+    expect(seen).toEqual([{ workspacePath: '/work', files: [
+      { name: 'data/legacy_ledger.csv', text: FILES['/pins/ledger.csv'], sha256: sha(FILES['/pins/ledger.csv']!) },
+      { name: 'data/posts.json', text: FILES['/pins/posts.json'], sha256: sha(FILES['/pins/posts.json']!) },
+      { name: 'format.test.mjs', text: FILES['/pins/format.test.mjs'], sha256: sha(FILES['/pins/format.test.mjs']!) },
+    ] }]);
+  });
+  it('PART 3: the format test seed pin is required and must match its file', () => {
+    expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_SEED_FORMAT_TEST_PATH: undefined }), makeDeps().deps)).toMatchObject({ live: false, reason: 'config_missing_julius_j1_seed_format_test_path' });
+    expect(createJ1LiveForTest(goodEnv(), makeDeps({}, { ...FILES, '/pins/format.test.mjs': 'other' }).deps)).toMatchObject({ live: false, reason: 'pin_seed_format_test_file_mismatch' });
   });
 });

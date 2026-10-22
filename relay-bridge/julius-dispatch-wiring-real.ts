@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,6 +7,7 @@ import type { JuliusCodingAgentProvider } from '../src/relay/mission/julius/juli
 import { createFileDispatchLedger } from './julius-dispatch';
 import { createLocalWorkspaceFs } from './julius-dispatch-bundle';
 import { createFileKeyStore } from './julius-key-store';
+import { createLocalShellPort } from './julius-local-shell-port';
 import { isSecretLikeEnvName } from './julius-dispatch-adapters';
 import type { J1WiringDeps } from './julius-dispatch-wiring';
 import { createClaudeCodeCodingAgentProvider } from './julius/claude-code-coding-provider';
@@ -28,13 +29,15 @@ import { createClaudeCodeCodingAgentProvider } from './julius/claude-code-coding
  */
 export const J1_CODER_AUTH_MODE = 'CLAUDE_SUBSCRIPTION' as const;
 
-/** What stops a real ShellEffectPort for J1 (read from executor-effects.ts and julius-live-mission.ts). Not a TODO list to guess at. */
+/**
+ * WHAT IS STILL OPEN ABOUT THE J1 SHELL (the executor-based port, createExecutorShellPort, is NOT used: it needs a Julius store, task rows and a
+ * remote sandbox that J1 does not have). The local port (julius-local-shell-port.ts) runs only the bridge's generated attempt commands.
+ */
 export const J1_SHELL_PORT_MISSING: readonly string[] = Object.freeze([
-  'createExecutorShellPort needs a PostgreSQL Pool, JuliusToolPostgresRepository and JuliusToolSettlementPostgresRepository (a Julius store); J1 has none by design.',
-  'It needs a TaskClaimSource: claims are recorded by the Julius run loop, which J1 does not run; with none every effect throws executor_claim_missing.',
-  'It UPDATEs relay_wonderland.julius_tasks and INSERTs budget_reservations for the task and execution; J1 creates no task rows, so the outbox claim cannot match (executor_dispatch_unclaimed).',
-  'It needs a RemoteExecutorControlPlane (JULIUS_EXECUTOR_ENDPOINT, JULIUS_SCOPED_CREDENTIALS, EXECUTOR_KEY_ID, JULIUS_PUBLIC_KEY_PATH, JULIUS_CALLER_ID) and a running sandbox executor; none is verified here.',
-  'The workspace the executor sees is prepared from workspaceSourceRef (a git source); who creates the J1 workspace with data/legacy_ledger.csv, data/posts.json and format.test.mjs is undecided.',
+  'The local port runs bash on the bridge host as the bridge user (no sandbox): its safety is the exact-string allow-list, the minimal env and the git config pin; it is not the PR #208 executor.',
+  'The attempt commands use the fixed path /tmp/julius-attempt-index for their temporary index: single-writer only (one J1 attempt at a time on the host).',
+  'The configured JULIUS_J1_CODER_WORKSPACE_PATH is reseeded at the start of EVERY attempt, and only if it is empty or carries the bridge marker (.git/j1-bridge-workspace); an existing non-empty directory must be removed by the operator once.',
+  'The hosted coder session is told the workspace path by the request (workspacePath = the configured path): nothing here proves the real SDK session runs with that cwd until a paid run.',
 ]);
 
 /**
@@ -93,6 +96,20 @@ export function realJ1WiringDeps(log: (line: string) => void, now: () => number 
     openLedger: (file) => createFileDispatchLedger({ file }),
     coderProviderFor: buildJ1CoderProviderFor(),
     shell: null,
+    /* The LOCAL port (julius-local-shell-port.ts): bridge-generated attempt commands only, in the configured private workspace. Construct-only. */
+    shellFor: ({ workspacePath, seedFiles }) => createLocalShellPort({
+      cwd: workspacePath, seedFiles, baseEnv: checkerBaseEnv,
+      fs: {
+        listDir: (p) => readdirSync(p), exists: (p) => existsSync(p), removeRecursive: (p) => rmSync(p, { recursive: true, force: true }),
+        mkdirp: (p) => { mkdirSync(p, { recursive: true }); }, writeFile: (p, bytes) => writeFileSync(p, bytes),
+      },
+      spawn: (file, args, options) => new Promise((resolve) => {
+        execFile(file, [...args], { cwd: options.cwd, env: { ...options.env }, timeout: options.timeoutMs, windowsHide: true, maxBuffer: 8 * 1024 * 1024, encoding: 'utf8' }, (error, stdout, stderr) => {
+          const e = error as (NodeJS.ErrnoException & { killed?: boolean; code?: unknown }) | null;
+          resolve({ exitCode: e === null ? 0 : typeof e.code === 'number' ? e.code : null, stdout: typeof stdout === 'string' ? stdout : '', stderr: typeof stderr === 'string' ? stderr : '', timedOut: e !== null && e.killed === true });
+        });
+      }),
+    }),
     keyStoreFor: (dir) => createFileKeyStore({ dir, fs: { readFileSync: (p) => readFileSync(p, 'utf8'), statSync: (p) => statSync(p) }, platform: process.platform, repoRoot: keyDirForbiddenUnder }),
     workspaceFs: (root) => createLocalWorkspaceFs(root, { readdirSync: (p, o) => readdirSync(p, o), readlinkSync: (p) => readlinkSync(p), readFileSync: (p) => readFileSync(p) }),
     now,

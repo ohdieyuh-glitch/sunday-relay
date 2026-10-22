@@ -13,6 +13,7 @@ import { createFrozenReviewerChecker, type FrozenCheckerRun } from './julius-fro
 import type { XaiDirectReviewerInput } from './julius-xai-direct-reviewer';
 import type { ShellEffectPort } from './julius/executor-effects';
 import { assertNoProviderKeysInEnv, type KeyStore } from './julius-key-store';
+import type { J1SeedFile } from './julius-local-shell-port';
 
 /**
  * J1 LIVE WIRING CORE (no pin values live here). Builds the real composition (GPT architect + Claude Code coder + direct xAI reviewer + reviewer-frozen checker +
@@ -53,6 +54,11 @@ export interface J1WiringDeps {
   /** Builds the coding provider for ONE attempt from the allow-listed env. Null = not available = refuse. */
   readonly coderProviderFor: ((env: Readonly<Record<string, string>>, ctx: { readonly requestedModel: string }) => JuliusCodingAgentProvider) | null;
   readonly shell: ShellEffectPort | null;
+  /**
+   * Builds the shell for the CONFIGURED coder workspace and the three pinned, re-hashed seed files (the local J1 port). Used only when `shell` is null.
+   * Construct-only: building it spawns and writes nothing. Null/absent with `shell` null = refuse (dep_shell_absent).
+   */
+  readonly shellFor?: ((ctx: { readonly workspacePath: string; readonly seedFiles: readonly J1SeedFile[] }) => ShellEffectPort) | null;
   /** Builds the key store for a private key directory (JULIUS_J1_KEY_DIR). Null = not available = refuse. May throw (a bad directory). */
   readonly keyStoreFor: ((dir: string) => KeyStore) | null;
   /** Builds the workspace file-system port the bundle step reads (before/after hash lists, the artifact file). Null = not available = refuse. */
@@ -118,7 +124,7 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   /* Dependencies that cannot be proven here are required, never defaulted. */
   const coderProviderFor = deps.coderProviderFor;
   if (coderProviderFor === null) throw new Refuse('dep_coder_provider_absent');
-  if (deps.shell === null) throw new Refuse('dep_shell_absent');
+  if (deps.shell === null && (deps.shellFor === undefined || deps.shellFor === null)) throw new Refuse('dep_shell_absent');
   const keyStoreFor = deps.keyStoreFor;
   if (keyStoreFor === null) throw new Refuse('dep_key_store_absent');
   const workspaceFs = deps.workspaceFs;
@@ -142,6 +148,8 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   const ledgerSeedSha = needHex('JULIUS_J1_SEED_LEDGER_SHA256');
   const postsSeedPath = need('JULIUS_J1_SEED_POSTS_PATH');
   const postsSeedSha = needHex('JULIUS_J1_SEED_POSTS_SHA256');
+  const formatTestPath = need('JULIUS_J1_SEED_FORMAT_TEST_PATH');
+  const formatTestSha = needHex('JULIUS_J1_SEED_FORMAT_TEST_SHA256');
   const nodePath = need('JULIUS_J1_NODE_PATH');
   const fileSha = (path: string, code: string): string => {
     try { return sha256Hex(deps.readFileSync(path)); } catch { throw new Refuse(`${code}_unreadable`); }
@@ -149,6 +157,7 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   if (fileSha(checkerPath, 'pin_checker') !== checkerSha) throw new Refuse('pin_checker_file_mismatch');
   if (fileSha(ledgerSeedPath, 'pin_seed_ledger') !== ledgerSeedSha) throw new Refuse('pin_seed_ledger_file_mismatch');
   if (fileSha(postsSeedPath, 'pin_seed_posts') !== postsSeedSha) throw new Refuse('pin_seed_posts_file_mismatch');
+  if (fileSha(formatTestPath, 'pin_seed_format_test') !== formatTestSha) throw new Refuse('pin_seed_format_test_file_mismatch');
   const readContractBytes = (): Uint8Array => deps.readFileSync(contractPath);
   let contractBytes: Uint8Array;
   try { contractBytes = readContractBytes(); } catch { throw new Refuse('pin_contract_unreadable'); }
@@ -192,12 +201,21 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   const workspacePath = need('JULIUS_J1_CODER_WORKSPACE_PATH');
   const workerId = need('JULIUS_J1_CODER_WORKER_ID');
   const ledgerFile = need('JULIUS_J1_LEDGER_FILE');
+  /* The shell for THIS workspace: the supplied one, else built from the configured path and the pinned seed files (bytes read now, hashes re-checked by the port). */
+  const shell: ShellEffectPort = deps.shell ?? deps.shellFor!({
+    workspacePath,
+    seedFiles: [
+      { name: 'data/legacy_ledger.csv', bytes: deps.readFileSync(ledgerSeedPath), sha256: ledgerSeedSha },
+      { name: 'data/posts.json', bytes: deps.readFileSync(postsSeedPath), sha256: postsSeedSha },
+      { name: 'format.test.mjs', bytes: deps.readFileSync(formatTestPath), sha256: formatTestSha },
+    ],
+  });
 
   /* 5. Compose. Pure construction; the ledger is opened last, only after every pin held. */
   const providers = createJ1ProductionComposition({
     env, brief, fetchImpl: deps.fetchImpl,
     architect: { config: architectConfig, keyEnv: architectKeyEnv, servedModelAllow: architectServedAllow, ...(deps.architectRun === undefined ? {} : { run: deps.architectRun }) },
-    coder: { providerFor: (childEnv) => coderProviderFor(childEnv, { requestedModel: coderModel }), shell: deps.shell, projectId, workerId, workspacePath, model: coderModel, servedModelAllow: coderServedAllow, permittedPaths, readPaths: J1_CODER_READ_PATHS, bundle: { fs: workspaceFs(workspacePath), artifactPath: J1_ARTIFACT_FILE, gitDir: '.git' }, keyEnv: null, secretKeyEnvs: [] },
+    coder: { providerFor: (childEnv) => coderProviderFor(childEnv, { requestedModel: coderModel }), shell, projectId, workerId, workspacePath, model: coderModel, servedModelAllow: coderServedAllow, permittedPaths, readPaths: J1_CODER_READ_PATHS, bundle: { fs: workspaceFs(workspacePath), artifactPath: J1_ARTIFACT_FILE, gitDir: '.git' }, keyEnv: null, secretKeyEnvs: [] },
     reviewer: { model: reviewerModel, keyEnv: reviewerKeyEnv, servedModelAllow },
   });
   /* J1 creates its own run, so the lookup answers with the FROZEN record for the one configured project. */
