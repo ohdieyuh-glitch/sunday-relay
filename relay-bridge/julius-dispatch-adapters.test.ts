@@ -133,8 +133,8 @@ describe('G3-7 createJ1ProductionComposition (injected env and fetch; not wired 
   const build = (fetched: { url: string; auth: string }[], over: Record<string, unknown> = {}) => createJ1ProductionComposition({
     env, brief: 'BRIEF', fake: true,
     fetchImpl: async (url, init) => { fetched.push({ url, auth: init.headers.authorization ?? '' }); return { ok: true, status: 200, text: async () => JSON.stringify(xaiBody) }; },
-    architect: { config: gptConfig, keyEnv: 'OPENAI_API_KEY', run: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: gptUsage }) as GptRunOutcome },
-    coder: { providerFor: () => fakeCoding(completed()), shell: fakeShell(), projectId: 'proj-1', workerId: 'w', workspacePath: '/w', model: 'claude-requested', permittedPaths: ['src/'] },
+    architect: { config: gptConfig, keyEnv: 'OPENAI_API_KEY', servedModelAllow: ['gpt-served'], run: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: gptUsage }) as GptRunOutcome },
+    coder: { providerFor: () => fakeCoding(completed()), shell: fakeShell(), projectId: 'proj-1', workerId: 'w', workspacePath: '/w', model: 'claude-requested', servedModelAllow: ['claude-served'], permittedPaths: ['src/'] },
     reviewer: { model: 'grok-requested', keyEnv: 'XAI_API_KEY' },
     ...over,
   });
@@ -409,9 +409,9 @@ describe('composed through the J1 controller (fakes only)', () => {
   const frozen: FrozenMission = { missionId: 'mission-1', contractSha256: sha, checkerSha256: 'd'.repeat(64), missionAuthor: 'a', checkerAuthor: 'b', seededDefect: false, preregId: 'p' };
   function run(responseIdOf: () => string | null, coderShell: ShellEffectPort = fakeShell()) {
     const providers = composeRoleProviders({
-      architect: createArchitectRoleProvider({ config: gptConfig, brief: 'B', keyEnv: 'OPENAI_API_KEY', fake: true, run: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: gptUsage }) as GptRunOutcome }),
-      coder: createCoderRoleProvider({ providerFor: () => fakeCoding(completed()), shell: coderShell, projectId: 'proj-1', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null, permittedPaths: ['src/'], fake: true }),
-      reviewer: createReviewerRoleProvider({ config: hermesConfig, brief: 'B', keyEnv: 'XAI_API_KEY', responseIdOf, fake: true, run: (async () => reviewed('approved')) as never }),
+      architect: createArchitectRoleProvider({ config: gptConfig, brief: 'B', keyEnv: 'OPENAI_API_KEY', servedModelAllow: ['gpt-served'], fake: true, run: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: gptUsage }) as GptRunOutcome }),
+      coder: createCoderRoleProvider({ providerFor: () => fakeCoding(completed()), shell: coderShell, projectId: 'proj-1', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', servedModelAllow: ['claude-served'], keyEnv: null, permittedPaths: ['src/'], fake: true }),
+      reviewer: createReviewerRoleProvider({ config: hermesConfig, brief: 'B', keyEnv: 'XAI_API_KEY', servedModelAllow: ['grok-served'], responseIdOf, fake: true, run: (async () => reviewed('approved')) as never }),
     });
     const env = { JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: 'founder', JULIUS_J1_PROJECT_ID: 'proj-1', JULIUS_J1_REVIEWER_PROVIDER: 'xai', JULIUS_J1_BUDGET_CAP_USD: '10', JULIUS_J1_LEG_ESTIMATE_USD: '1', OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai };
     let clock = Date.parse('2026-10-22T12:00:00Z');

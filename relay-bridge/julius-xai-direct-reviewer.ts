@@ -54,7 +54,7 @@ export function createXaiDirectReviewerRoleProvider(input: XaiDirectReviewerInpu
   const base = (input.baseUrl ?? XAI_DEFAULT_BASE_URL).replace(/\/+$/, '');
   if (!/^https:\/\//.test(base)) throw new Error('xai_reviewer_requires_https');
   return {
-    providerId: J1_XAI_REVIEWER_PROVIDER_ID, model: input.model, fake: input.fake ?? false, keyEnv: input.keyEnv,
+    providerId: J1_XAI_REVIEWER_PROVIDER_ID, model: input.model, fake: input.fake ?? false, keyEnv: input.keyEnv, servedModelAllow: allow,
     async call(call: RoleCallInput): Promise<RoleCallOutput> {
       if (!nonEmpty(call.apiKey)) return { ...refuse('xai_key_missing'), providerContacted: false };
       if (!nonEmpty(call.architectText) || !nonEmpty(call.coderArtifact)) return { ...refuse('review_inputs_absent'), providerContacted: false };

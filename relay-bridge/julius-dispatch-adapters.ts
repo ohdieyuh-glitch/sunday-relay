@@ -75,6 +75,8 @@ export interface ArchitectRoleInput {
   readonly brief: string;
   /** The environment variable the controller reads the key from. Required: no default is guessed. */
   readonly keyEnv: string;
+  /** Echoed-model strings the controller accepts for this role. Default [config.model]. */
+  readonly servedModelAllow?: readonly string[];
   readonly instructions?: string;
   /** Injectable for offline tests; defaults to the real connector. */
   readonly run?: typeof runGptArchitect;
@@ -87,7 +89,7 @@ export function createArchitectRoleProvider(input: ArchitectRoleInput): RoleProv
   const run = input.run ?? runGptArchitect;
   const model = input.config.model;
   return {
-    providerId: J1_ARCHITECT_PROVIDER_ID, model, fake: input.fake ?? false, keyEnv: input.keyEnv,
+    providerId: J1_ARCHITECT_PROVIDER_ID, model, fake: input.fake ?? false, keyEnv: input.keyEnv, servedModelAllow: servedAllowOf(input.servedModelAllow, model),
     async call(call: RoleCallInput): Promise<RoleCallOutput> {
       let outcome: GptRunOutcome;
       try {
@@ -113,6 +115,13 @@ export function createArchitectRoleProvider(input: ArchitectRoleInput): RoleProv
       };
     },
   };
+}
+
+/** A role's served-model list: the explicit list (non-empty, no blanks) or exactly [requested model]. */
+function servedAllowOf(list: readonly string[] | undefined, model: string): readonly string[] {
+  const allow = list ?? [model];
+  if (allow.length === 0 || allow.some((m) => !nonEmpty(m))) throw new Error('served_model_allow_invalid');
+  return Object.freeze([...allow]);
 }
 
 function gptUsage(usage: { readonly inputTokens: number | null; readonly outputTokens: number | null; readonly totalTokens: number | null }): RoleUsage {
@@ -225,6 +234,8 @@ export interface CoderRoleInput {
   readonly model: string;
   /** Null for a subscription coder (no key); otherwise the variable the controller reads. Required: no default is guessed. */
   readonly keyEnv: string | null;
+  /** Echoed-model strings the controller accepts for the coder (the session's attested provider model). Default [model]. */
+  readonly servedModelAllow?: readonly string[];
   /** REQUIRED and non-empty: there is no default scope. A request field only (see J1_CODER_ENVELOPE_LIMITS). */
   readonly permittedPaths?: readonly string[];
   readonly budgetUsdMicros?: number | null;
@@ -244,7 +255,7 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
   const envAllow = input.envAllowList ?? J1_CODER_ENV_DEFAULT_ALLOW;
   if (envAllow.some((name) => SECRET_NAME.test(name) || name === input.keyEnv)) throw new Error('coder_env_allowlist_contains_secret_name');
   return {
-    providerId: J1_CODER_PROVIDER_ID, model: input.model, fake: input.fake ?? false, keyEnv: input.keyEnv,
+    providerId: J1_CODER_PROVIDER_ID, model: input.model, fake: input.fake ?? false, keyEnv: input.keyEnv, servedModelAllow: servedAllowOf(input.servedModelAllow, input.model),
     async call(call: RoleCallInput): Promise<RoleCallOutput> {
       if (!nonEmpty(call.architectText)) return { ok: false, text: '', responseId: null, model: null, failureClass: 'architect_plan_absent', providerContacted: false };
       const scope = { runId: call.runId, projectId: input.projectId, workerId: input.workerId, taskId: `${call.dispatchId}:coder` };
@@ -343,6 +354,8 @@ export interface ReviewerRoleInput {
   readonly brief: string;
   /** The variable the controller reads the key from. Required: whether Hermes' own profile or this variable holds the credential is not resolvable from the code. */
   readonly keyEnv: string;
+  /** Echoed-model strings the controller accepts for the Hermes reviewer. Default [config.model]. */
+  readonly servedModelAllow?: readonly string[];
   /**
    * WHERE THE PROVIDER RESPONSE ID COMES FROM. The Hermes outcome carries none, so this is a required port with no default.
    * It receives the completed outcome; a null or empty answer makes the leg report no response id, which the controller refuses.
@@ -362,7 +375,7 @@ export function createReviewerRoleProvider(input: ReviewerRoleInput): RoleProvid
   if (!nonEmpty(input.keyEnv)) throw new Error('reviewer_role_requires_key_env');
   const run = input.run ?? runHermesReview;
   return {
-    providerId: J1_REVIEWER_PROVIDER_ID, model: config.model, fake: input.fake ?? false, keyEnv: input.keyEnv,
+    providerId: J1_REVIEWER_PROVIDER_ID, model: config.model, fake: input.fake ?? false, keyEnv: input.keyEnv, servedModelAllow: servedAllowOf(input.servedModelAllow, config.model),
     async call(call: RoleCallInput): Promise<RoleCallOutput> {
       if (!nonEmpty(call.architectText) || !nonEmpty(call.coderArtifact)) return { ok: false, text: '', responseId: null, model: null, failureClass: 'review_inputs_absent', providerContacted: false };
       const evidence = nonEmpty(call.coderEvidence) ? call.coderEvidence : '';

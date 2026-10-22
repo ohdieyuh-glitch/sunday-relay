@@ -36,11 +36,13 @@ interface Harness {
   readonly providers: DispatchProviders;
 }
 
+/** Every echoed model string the pre-existing fake behaviours use; the Part A tests below replace this per provider. */
+const FAKE_ECHOES: readonly string[] = ['m', 'g', 'echo-m', 'grok-served', 'xai-model', 'openai-model', 'anthropic-model', 'gpt-fake', 'claude-fake', 'grok-fake'];
 type Behaviour = (input: RoleCallInput) => Promise<RoleCallOutput> | RoleCallOutput;
 const FAKE_MODEL = { architect: 'gpt-fake', coder: 'claude-fake', reviewer: 'grok-fake' } as const;
 function fakeProvider(role: 'architect' | 'coder' | 'reviewer', providerId: string, keyEnv: string | null, calls: RoleCallInput[], behave?: Behaviour): RoleProvider {
   return {
-    providerId, keyEnv, model: FAKE_MODEL[role], fake: true,
+    providerId, keyEnv, model: FAKE_MODEL[role], fake: true, servedModelAllow: FAKE_ECHOES,
     async call(input) {
       calls.push(input);
       if (behave !== undefined) return behave(input);
@@ -872,5 +874,68 @@ describe('J1 HTTP edge', () => {
     release();
     await h.controller.whenIdle();
     expect((await read('founder', RUN)).status).toBe(200);
+  });
+});
+
+describe('Part A: the served-model allow-list is checked by the CONTROLLER for every role', () => {
+  const okCoder = (model: string): Behaviour => () => ({ ok: true, text: 'art', responseId: 'resp_c_0011223344', model, usage: { input: 11, output: 22, total: 33 }, requests: 2, changedPaths: 1 });
+  const lastResult = async (h: Harness, role: string): Promise<DispatchRow> => (await h.ledger.rows()).filter((r) => r.phase === 'result' && r.role === role)[0]!;
+  const strict = (h: Harness, role: 'architect' | 'coder' | 'reviewer', allow?: readonly string[]): void => {
+    (h.providers[role] as { servedModelAllow?: readonly string[] }).servedModelAllow = allow;
+  };
+
+  it('architect: an echoed model outside the role list fails the leg, keeping id, model, usage and requests in the result row', async () => {
+    const h = harness({ behave: { architect: () => ({ ok: true, text: 'plan', responseId: 'resp_a_0011223344', model: 'gpt-other', usage: { input: 5, output: 6, total: 11 }, requests: 1 }) } });
+    strict(h, 'architect', ['gpt-fake']);
+    await h.controller.dispatch(input());
+    await h.controller.whenIdle();
+    expect(h.calls.map((c) => c.role)).toEqual(['architect']);
+    expect(await lastResult(h, 'architect')).toMatchObject({ outcome: 'served_model_mismatch', providerResponseId: 'resp_a_0011223344', model: 'gpt-other', usage: { input: 5, output: 6, total: 11 }, requests: 1, spend: 'usage_reported' });
+  });
+
+  it('coder: an echoed model outside the role list fails the leg and the chain stops before the reviewer', async () => {
+    const h = harness({ behave: { coder: okCoder('claude-surprise') } });
+    strict(h, 'coder', ['claude-fake']);
+    await h.controller.dispatch(input());
+    await h.controller.whenIdle();
+    expect(h.calls.map((c) => c.role)).toEqual(['architect', 'coder']);
+    expect(await lastResult(h, 'coder')).toMatchObject({ outcome: 'served_model_mismatch', providerResponseId: 'resp_c_0011223344', model: 'claude-surprise', usage: { input: 11, output: 22, total: 33 }, requests: 2 });
+    const r = await h.controller.result({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER });
+    expect(JSON.stringify(r)).toContain('coder_served_model_mismatch');
+  });
+
+  it('reviewer: an echoed model outside the role list fails the leg (the controller check, independent of the adapter)', async () => {
+    const h = harness({ behave: { reviewer: () => ({ ok: true, text: 'fine', responseId: 'resp_r_0011223344', model: 'grok-other', verdict: 'approve', usage: { input: 1, output: 2, total: 3 }, requests: 1 }) } });
+    strict(h, 'reviewer', ['grok-fake']);
+    await h.controller.dispatch(input());
+    await h.controller.whenIdle();
+    expect(await lastResult(h, 'reviewer')).toMatchObject({ outcome: 'served_model_mismatch', model: 'grok-other', usage: { input: 1, output: 2, total: 3 } });
+  });
+
+  it('with no list the default is exactly [requested model]: strict equality, never loosened implicitly', async () => {
+    const h = harness({ behave: { architect: () => ({ ok: true, text: 'plan', responseId: 'resp_a_0011223344', model: 'gpt-fake-20260101' }) } });
+    strict(h, 'architect', undefined);
+    await h.controller.dispatch(input());
+    await h.controller.whenIdle();
+    expect(await lastResult(h, 'architect')).toMatchObject({ outcome: 'served_model_mismatch' });
+    const same = harness({ behave: { architect: () => ({ ok: true, text: 'plan', responseId: 'resp_a_0011223344', model: 'gpt-fake' }) } });
+    strict(same, 'architect', undefined);
+    await same.controller.dispatch(input());
+    await same.controller.whenIdle();
+    expect(await lastResult(same, 'architect')).toMatchObject({ outcome: 'ok' });
+  });
+
+  it('an alias is accepted only when it is listed by name', async () => {
+    const alias = 'claude-fake-20260101';
+    const listed = harness({ behave: { coder: okCoder(alias) } });
+    strict(listed, 'coder', ['claude-fake', alias]);
+    await listed.controller.dispatch(input());
+    await listed.controller.whenIdle();
+    expect(await lastResult(listed, 'coder')).toMatchObject({ outcome: 'ok', model: alias });
+    const unlisted = harness({ behave: { coder: okCoder(alias) } });
+    strict(unlisted, 'coder', ['claude-fake']);
+    await unlisted.controller.dispatch(input());
+    await unlisted.controller.whenIdle();
+    expect(await lastResult(unlisted, 'coder')).toMatchObject({ outcome: 'served_model_mismatch' });
   });
 });

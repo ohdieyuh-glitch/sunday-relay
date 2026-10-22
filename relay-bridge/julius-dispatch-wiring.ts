@@ -161,6 +161,9 @@ function build(read: () => J1Env, deps: J1WiringDeps): J1WiringResult {
   const reviewerModel = need('JULIUS_J1_REVIEWER_MODEL');
   const architectKeyEnv = need('JULIUS_J1_ARCHITECT_KEY_ENV');
   const reviewerKeyEnv = need('JULIUS_J1_REVIEWER_KEY_ENV');
+  /* Per-role served-model lists: REQUIRED, no implicit default in live mode. */
+  const architectServedAllow = needList('JULIUS_J1_ARCHITECT_SERVED_MODEL_ALLOW');
+  const coderServedAllow = needList('JULIUS_J1_CODER_SERVED_MODEL_ALLOW');
   const servedModelAllow = needList('JULIUS_J1_REVIEWER_SERVED_MODEL_ALLOW');
   const architectConfig: GptArchitectConfig = {
     apiKeyPresent: (env[architectKeyEnv] ?? '').trim() !== '', model: architectModel, liveMode: true,
@@ -174,8 +177,8 @@ function build(read: () => J1Env, deps: J1WiringDeps): J1WiringResult {
   /* 5. Compose. Pure construction; the ledger is opened last, only after every pin held. */
   const providers = createJ1ProductionComposition({
     env, brief, fetchImpl: deps.fetchImpl,
-    architect: { config: architectConfig, keyEnv: architectKeyEnv, ...(deps.architectRun === undefined ? {} : { run: deps.architectRun }) },
-    coder: { providerFor: deps.coderProviderFor, shell: deps.shell, projectId, workerId, workspacePath, model: coderModel, permittedPaths, keyEnv: null, secretKeyEnvs: [] },
+    architect: { config: architectConfig, keyEnv: architectKeyEnv, servedModelAllow: architectServedAllow, ...(deps.architectRun === undefined ? {} : { run: deps.architectRun }) },
+    coder: { providerFor: deps.coderProviderFor, shell: deps.shell, projectId, workerId, workspacePath, model: coderModel, servedModelAllow: coderServedAllow, permittedPaths, keyEnv: null, secretKeyEnvs: [] },
     reviewer: { model: reviewerModel, keyEnv: reviewerKeyEnv, servedModelAllow },
   });
   const runs = createJuliusRunLookup({

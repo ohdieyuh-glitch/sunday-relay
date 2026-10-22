@@ -103,6 +103,12 @@ export interface RoleProvider {
   readonly providerId: string;
   /** The model the adapter is configured to request (ledgered in pre_call; the provider-echoed model comes back in the output and is REQUIRED). */
   readonly model: string;
+  /**
+   * The provider-echoed model strings this role's response may carry. DEFAULT (absent) = [model]: strict equality with the requested model.
+   * Checked by the CONTROLLER after every successful call (failure class `served_model_mismatch`); an alias is accepted only when listed.
+   * The response id, echoed model, usage and requests stay in the result row of a mismatched leg (spend is recorded, never dropped).
+   */
+  readonly servedModelAllow?: readonly string[];
   /** True for a fake adapter. A fake adapter in live mode, or a real one in fake mode, is refused. */
   readonly fake: boolean;
   /** The environment variable the key is read from, or null for a role with no key. */
@@ -467,6 +473,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       /* THE IDENTITY OF EVERY LEG: a successful leg with no provider response id or no provider-echoed model cannot be tied to a
          console row and is not accepted (the reviewer found response_id empty on every INDEPENDENT_REVIEWER row). */
       else if (responseId === null || responseId.trim() === '' || echoedModel === null || echoedModel.trim() === '') roleFailure = 'response_identity_missing';
+      else if (!(provider.servedModelAllow ?? [provider.model]).includes(echoedModel)) roleFailure = 'served_model_mismatch';
       else if (text.trim() === '') roleFailure = 'empty_output';
       else if (role === 'coder' && (out.changedPaths ?? 0) < 1) roleFailure = 'no_workspace_change';
       else if (role === 'reviewer' && out.verdict !== 'approve' && out.verdict !== 'reject') roleFailure = 'verdict_missing';
