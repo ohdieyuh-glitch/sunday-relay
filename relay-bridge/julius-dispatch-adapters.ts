@@ -167,6 +167,30 @@ export interface CoderExecutePort {
   execute(request: JuliusCodingAgentRequest, context: { readonly env: Readonly<Record<string, string>> }): ReturnType<JuliusCodingAgentProvider['execute']>;
 }
 
+/**
+ * WHAT THE CODER ENVELOPE IS AND IS NOT. `mayRunCommands:false`, `mayUseNetwork:false` and `permittedPaths` are FIELDS ON THE
+ * REQUEST this adapter builds and checks (`assertCoderRequestEnvelope`). This adapter has no tool envelope: it does not intercept
+ * the session's tools, does not recompute the touched paths against `permittedPaths`, and the post-session change set is
+ * evidence for the reviewer, not a scope check. Enforcement, if any, is the provider implementation's. Do not cite these fields
+ * as enforcement.
+ */
+export const J1_CODER_ENVELOPE_LIMITS = Object.freeze({
+  requestFieldsChecked: true,
+  toolEnvelopeEnforcedByThisAdapter: false,
+  scopeRecomputedFromWorkspace: false,
+  statement: 'mayRunCommands/mayUseNetwork/permittedPaths are request fields only; they are NOT enforced by this adapter (no tool envelope, no scope recompute).',
+});
+
+/** Checks the request this adapter is about to send carries the stated envelope. Says nothing about what the session then does. */
+export function assertCoderRequestEnvelope(request: JuliusCodingAgentRequest): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
+  const p = (request as { permissions?: { mayRunCommands?: unknown; mayUseNetwork?: unknown; permittedPaths?: unknown } }).permissions;
+  if (p === undefined || p === null) return { ok: false, reason: 'permissions_absent' };
+  if (p.mayRunCommands !== false) return { ok: false, reason: 'mayRunCommands_not_false' };
+  if (p.mayUseNetwork !== false) return { ok: false, reason: 'mayUseNetwork_not_false' };
+  if (!Array.isArray(p.permittedPaths) || p.permittedPaths.length === 0 || p.permittedPaths.some((x) => !nonEmpty(x as string))) return { ok: false, reason: 'permittedPaths_empty' };
+  return { ok: true };
+}
+
 export interface CoderRoleInput {
   /** The port implementation, e.g. `createClaudeCodeCodingAgentProvider(...)`. Built by the composition. */
   readonly provider: CoderExecutePort;
@@ -185,6 +209,7 @@ export interface CoderRoleInput {
   readonly model: string;
   /** Null for a subscription coder (no key); otherwise the variable the controller reads. Required: no default is guessed. */
   readonly keyEnv: string | null;
+  /** REQUIRED and non-empty: there is no default scope. A request field only (see J1_CODER_ENVELOPE_LIMITS). */
   readonly permittedPaths?: readonly string[];
   readonly budgetUsdMicros?: number | null;
   /** Called with the executor record for every attempt that reached the close-out, for the composition to ledger or log. */
@@ -198,6 +223,7 @@ const DEFAULT_STEP_TIMEOUTS = Object.freeze({ base: 60_000, status: 60_000 });
 export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
   if (!nonEmpty(input.model)) throw new Error('coder_role_requires_model');
   if (!nonEmpty(input.workspacePath)) throw new Error('coder_role_requires_workspace');
+  if (!Array.isArray(input.permittedPaths) || input.permittedPaths.length === 0 || input.permittedPaths.some((x) => !nonEmpty(x))) throw new Error('coder_role_requires_permitted_paths');
   const timeouts = input.timeouts ?? DEFAULT_STEP_TIMEOUTS;
   const envAllow = input.envAllowList ?? J1_CODER_ENV_DEFAULT_ALLOW;
   if (envAllow.some((name) => SECRET_NAME.test(name) || name === input.keyEnv)) throw new Error('coder_env_allowlist_contains_secret_name');
@@ -227,12 +253,13 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
         }),
         permissions: Object.freeze({
           mayEditFiles: true as const, mayRunCommands: false as const, mayUseNetwork: false as const,
-          permittedPaths: Object.freeze([...(input.permittedPaths ?? [])]), outOfScope: Object.freeze([]), prohibitedActions: Object.freeze([]),
+          permittedPaths: Object.freeze([...input.permittedPaths!]), outOfScope: Object.freeze([]), prohibitedActions: Object.freeze([]),
         }),
         requiredEvidence: Object.freeze([]),
         budget: Object.freeze({ usdMicros: input.budgetUsdMicros ?? null }),
         protocol: Object.freeze({ participation: juliusParticipationProtocol(), researchAuthority: RESEARCH_AUTHORITY_NOT_STATED }),
       });
+      if (!assertCoderRequestEnvelope(request).ok) return { ok: false, text: '', responseId: null, model: null, failureClass: 'coder_request_envelope_invalid', providerContacted: false };
       let outcome;
       try {
         // Built at call time from the injected snapshot: the secret values the composition lists are read when the leg runs.

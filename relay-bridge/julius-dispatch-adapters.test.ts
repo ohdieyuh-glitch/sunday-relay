@@ -8,7 +8,7 @@ import type { JuliusApiIdentity, JuliusApiResult, JuliusRunView } from '../src/r
 import type { HermesConfig, HermesOutcome, ReviewPacket } from './hermes-reviewer';
 import {
   composeRoleProviders, modelVendor, assertContractBinding, createArchitectRoleProvider, createCoderRoleProvider, createJuliusRunLookup, createReviewerRoleProvider,
-  deriveCoderChangedPaths, type CoderExecutorRecord,
+  deriveCoderChangedPaths, type CoderExecutorRecord, assertCoderRequestEnvelope, J1_CODER_ENVELOPE_LIMITS,
 } from './julius-dispatch-adapters';
 import { createJuliusDispatch, createMemoryDispatchLedger, type FrozenMission, type RoleCallInput, type RoleProvider } from './julius-dispatch';
 import type { ShellEffectInput, ShellEffectPort, ShellEffectResult } from './julius/executor-effects';
@@ -93,7 +93,7 @@ function fakeCoding(outcome: JuliusCodingAgentProviderOutcome | (() => never)): 
   return { providerKind: 'fake-coding', requests, async execute(request) { requests.push(request); return typeof outcome === 'function' ? outcome() : outcome; } };
 }
 const coder = (provider: JuliusCodingAgentProvider, shell: ShellEffectPort, extra: { onExecutorRecord?: (r: CoderExecutorRecord) => void } = {}) =>
-  createCoderRoleProvider({ provider, shell, projectId: 'proj-1', workerId: 'w-coder', workspacePath: '/work', brief: 'BRIEF', model: 'claude-requested', keyEnv: null, ...extra });
+  createCoderRoleProvider({ provider, shell, projectId: 'proj-1', workerId: 'w-coder', workspacePath: '/work', brief: 'BRIEF', model: 'claude-requested', keyEnv: null, permittedPaths: ['src/'], ...extra });
 
 describe('G3-2 spend and response ids survive post-response failures', () => {
   it('a failed coder session keeps the session id and reports usage as explicitly unknown when the runtime started', async () => {
@@ -120,6 +120,33 @@ describe('G3-2 spend and response ids survive post-response failures', () => {
     expect(unable).toMatchObject({ ok: false, failureClass: 'reviewer_unable_to_review', responseId: 'xai-resp-0011223344', usage: { input: 20, output: 30, total: 50 }, requests: 3 });
     const incomplete = { kind: 'review_incomplete', safeMessage: 'm', shape: 'review_timeout', diagnostics: {}, startedAt: 'a', completedAt: 'b', usage } as unknown as HermesOutcome;
     expect(await reviewer(async () => incomplete).call(rcall)).toMatchObject({ ok: false, usage: { input: 20 }, requests: 3 });
+  });
+});
+
+describe('G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT', () => {
+  it('permittedPaths is required and non-empty at construction (no default [])', () => {
+    const base = { provider: fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null };
+    expect(() => createCoderRoleProvider(base)).toThrow('coder_role_requires_permitted_paths');
+    expect(() => createCoderRoleProvider({ ...base, permittedPaths: [] })).toThrow('coder_role_requires_permitted_paths');
+    expect(() => createCoderRoleProvider({ ...base, permittedPaths: [' '] })).toThrow('coder_role_requires_permitted_paths');
+  });
+  it('the request handed to the provider carries mayRunCommands:false, mayUseNetwork:false and the non-empty permitted paths', async () => {
+    const provider = fakeCoding(completed());
+    await coder(provider, fakeShell(), { permittedPaths: ['src/a.js', 'src/b.js'] } as never).call(call({ role: 'coder', architectText: 'P' }));
+    const permissions = provider.requests[0]!.permissions;
+    expect(permissions).toMatchObject({ mayEditFiles: true, mayRunCommands: false, mayUseNetwork: false });
+    expect(permissions.permittedPaths).toEqual(['src/a.js', 'src/b.js']);
+    expect(assertCoderRequestEnvelope(provider.requests[0]!)).toEqual({ ok: true });
+  });
+  it('assertCoderRequestEnvelope refuses a request that drops a field, and the LIMIT constant says nothing is enforced here', () => {
+    const good = { permissions: { mayEditFiles: true, mayRunCommands: false, mayUseNetwork: false, permittedPaths: ['src/'] } } as unknown as JuliusCodingAgentRequest;
+    const bad = (over: Record<string, unknown>): JuliusCodingAgentRequest => ({ permissions: { ...good.permissions, ...over } }) as unknown as JuliusCodingAgentRequest;
+    expect(assertCoderRequestEnvelope(bad({ mayRunCommands: true }))).toMatchObject({ ok: false });
+    expect(assertCoderRequestEnvelope(bad({ mayUseNetwork: true }))).toMatchObject({ ok: false });
+    expect(assertCoderRequestEnvelope(bad({ permittedPaths: [] }))).toMatchObject({ ok: false });
+    expect(assertCoderRequestEnvelope({} as JuliusCodingAgentRequest)).toMatchObject({ ok: false });
+    expect(J1_CODER_ENVELOPE_LIMITS).toMatchObject({ requestFieldsChecked: true, toolEnvelopeEnforcedByThisAdapter: false, scopeRecomputedFromWorkspace: false });
+    expect(J1_CODER_ENVELOPE_LIMITS.statement).toMatch(/NOT enforced/);
   });
 });
 
@@ -334,7 +361,7 @@ describe('composed through the J1 controller (fakes only)', () => {
   function run(responseIdOf: () => string | null, coderShell: ShellEffectPort = fakeShell()) {
     const providers = composeRoleProviders({
       architect: createArchitectRoleProvider({ config: gptConfig, brief: 'B', keyEnv: 'OPENAI_API_KEY', fake: true, run: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: gptUsage }) as GptRunOutcome }),
-      coder: createCoderRoleProvider({ provider: fakeCoding(completed()), shell: coderShell, projectId: 'proj-1', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null, fake: true }),
+      coder: createCoderRoleProvider({ provider: fakeCoding(completed()), shell: coderShell, projectId: 'proj-1', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null, permittedPaths: ['src/'], fake: true }),
       reviewer: createReviewerRoleProvider({ config: hermesConfig, brief: 'B', keyEnv: 'XAI_API_KEY', responseIdOf, fake: true, run: (async () => reviewed('approved')) as never }),
     });
     const env = { JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: 'founder', JULIUS_J1_PROJECT_ID: 'proj-1', JULIUS_J1_REVIEWER_PROVIDER: 'xai', JULIUS_J1_BUDGET_CAP_USD: '10', JULIUS_J1_LEG_ESTIMATE_USD: '1', OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai };
@@ -379,7 +406,7 @@ describe('composed through the J1 controller (fakes only)', () => {
 
   it('composeRoleProviders refuses duplicate independence groups and a fake/real mix', () => {
     const a = createArchitectRoleProvider({ config: gptConfig, brief: 'B', keyEnv: 'K', run: async () => { throw new Error('x'); } });
-    const c = createCoderRoleProvider({ provider: fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-x', keyEnv: null });
+    const c = createCoderRoleProvider({ provider: fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-x', keyEnv: null, permittedPaths: ['src/'] });
     expect(() => composeRoleProviders({ architect: a, coder: c, reviewer: { ...a } })).toThrow('role_providers_not_independent');
     const r = createReviewerRoleProvider({ config: hermesConfig, brief: 'B', keyEnv: 'K', responseIdOf: () => null, fake: true });
     expect(() => composeRoleProviders({ architect: a, coder: c, reviewer: r })).toThrow('role_providers_mixed_fake_and_real');
@@ -388,7 +415,7 @@ describe('composed through the J1 controller (fakes only)', () => {
 
   it('composeRoleProviders refuses three providers whose models share a family (provider AND model family)', () => {
     const a = createArchitectRoleProvider({ config: gptConfig, brief: 'B', keyEnv: 'K', run: async () => { throw new Error('x'); } });
-    const same = createCoderRoleProvider({ provider: fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: `${a.model}-other`, keyEnv: null });
+    const same = createCoderRoleProvider({ provider: fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: `${a.model}-other`, keyEnv: null, permittedPaths: ['src/'] });
     const r = createReviewerRoleProvider({ config: hermesConfig, brief: 'B', keyEnv: 'K', responseIdOf: () => null });
     expect(() => composeRoleProviders({ architect: a, coder: same, reviewer: r })).toThrow('role_models_not_independent_families');
   });
