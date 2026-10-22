@@ -64,3 +64,39 @@ export function closureOf(start: readonly string[], io: ScanIo): Closure {
   }
   return { files: [...seen], unresolved, nonLiteralDynamic };
 }
+
+/** The ONLY specifier the hosted runner may load through its Function-wrapped dynamic import. */
+export const HOSTED_RUNNER_ALLOWED_SPECIFIER = '@anthropic-ai/claude-agent-sdk';
+/** The exact number of call sites in hosted-runner.ts (loadHostedQuery, loadHostedSdkHelpers). */
+const HOSTED_RUNNER_SITES = 2;
+
+/**
+ * R1 NAMED ALLOWANCE, tied to the call site and not to the file. Returns the problems (empty = the file is exactly the known shape):
+ * the comment-stripped runner text must contain exactly {@link HOSTED_RUNNER_SITES} occurrences of `new Function('id', 'return import(id)')`
+ * and no other `import(`, `eval(` or `new Function(`; every call of the wrapped function must pass exactly `HOSTED_SDK_PACKAGE` and there
+ * must be one such call per site; and hosted-readiness.ts must define `HOSTED_SDK_PACKAGE` as exactly the allowed specifier string.
+ */
+export function checkHostedRunnerDynamicImports(runnerSource: string, readinessSource: string): readonly string[] {
+  const problems: string[] = [];
+  const src = stripComments(runnerSource);
+  const siteRe = /new Function\(\s*'id'\s*,\s*'return import\(id\)'\s*\)/gu;
+  const sites = [...src.matchAll(siteRe)].length;
+  if (sites !== HOSTED_RUNNER_SITES) problems.push(`expected ${HOSTED_RUNNER_SITES} Function-wrapped import sites, found ${sites}`);
+  const withoutSites = src.replace(siteRe, ' ');
+  const other = [...withoutSites.matchAll(/(?<![.\w$])import\s*\(/gu)].length;
+  if (other > 0) problems.push(`${other} other dynamic import call(s)`);
+  if (/(?<![.\w$])eval\s*\(/u.test(src)) problems.push('eval call');
+  if ([...src.matchAll(/new Function\s*\(/gu)].length !== sites) problems.push('a Function constructor that is not the exact allowed shape');
+  const vars = [...src.matchAll(/const\s+(\w+)\s*=\s*new Function\(\s*'id'\s*,\s*'return import\(id\)'\s*\)/gu)].map((m) => m[1]!);
+  if (vars.length !== sites || new Set(vars).size !== 1) problems.push('the wrapped function is not bound to one name');
+  else {
+    const name = vars[0]!;
+    const calls = [...withoutSites.matchAll(new RegExp(String.raw`(?<![.\w$])` + name + String.raw`[ \t]*[(]([^)]*)[)]`, 'gu'))].map((m) => m[1]!.trim());
+    if (calls.length !== sites) problems.push(`expected ${sites} calls of ${name}, found ${calls.length}`);
+    for (const arg of calls) if (arg !== 'HOSTED_SDK_PACKAGE') problems.push(`call passes "${arg}", not HOSTED_SDK_PACKAGE`);
+  }
+  if (!/import\s*\{[^}]*\bHOSTED_SDK_PACKAGE\b[^}]*\}\s*from\s*'\.\/hosted-readiness'/u.test(src)) problems.push('HOSTED_SDK_PACKAGE is not imported from ./hosted-readiness');
+  const defs = [...stripComments(readinessSource).matchAll(/export const HOSTED_SDK_PACKAGE\s*=\s*(['"`])([^'"`]*)\1\s*;/gu)];
+  if (defs.length !== 1 || defs[0]![2] !== HOSTED_RUNNER_ALLOWED_SPECIFIER) problems.push('HOSTED_SDK_PACKAGE is not exactly the allowed specifier');
+  return problems;
+}

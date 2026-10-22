@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 import { createMemoryDispatchLedger } from './julius-dispatch';
-import { closureOf } from './julius-dispatch-source-scan';
+import { checkHostedRunnerDynamicImports, closureOf } from './julius-dispatch-source-scan';
 import { createJ1LiveDispatchWithPins } from './julius-dispatch-wiring-core';
 import { createCoderRoleProvider, createFrozenRunLookup } from './julius-dispatch-adapters';
 import { buildJ1CoderProviderFor, J1_CODER_AUTH_MODE, J1_SHELL_PORT_MISSING, realJ1WiringDeps } from './julius-dispatch-wiring-real';
@@ -206,8 +206,11 @@ describe('C1: the test pins cannot reach production code', () => {
     /* The ONE known false positive: fixture.ts holds the text of a stub source file in a template string (`from '../src/normalize.js'` is data, not an import). */
     const unresolved = c.unresolved.filter((u) => !(/claude-code.fixture.ts$/u.test(u.from) && u.spec === '../src/normalize.js'));
     expect(unresolved, 'unresolvable relative import in the closure').toEqual([]);
-    /* NAMED ALLOWANCE (reviewable): hosted-runner.ts loads the Agent SDK with `new Function('id', 'return import(id)')` where id is the constant HOSTED_SDK_PACKAGE. It is shared hosted code. Any OTHER non-literal dynamic import fails. */
-    const nonLiteral = c.nonLiteralDynamic.filter((f) => !/hosted-coding-agent.hosted-runner.ts$/u.test(f));
+    /* NAMED ALLOWANCE (reviewable, tied to the exact call site): hosted-runner.ts loads the Agent SDK with `new Function('id', 'return import(id)')` where id is the constant HOSTED_SDK_PACKAGE. It is shared hosted code. Any OTHER non-literal dynamic import fails. */
+    /* R1: the allowance is the EXACT call-site shape and specifier constant (checkHostedRunnerDynamicImports), not the file: a second import of any kind in that file, or a changed specifier, fails here. */
+    const runner = c.nonLiteralDynamic.filter((f) => /hosted-coding-agent.hosted-runner.ts$/u.test(f));
+    for (const f of runner) expect(checkHostedRunnerDynamicImports(io.read(f), io.read(join(dirname(f), 'hosted-readiness.ts'))), 'hosted-runner dynamic import is not the exact allowed shape').toEqual([]);
+    const nonLiteral = c.nonLiteralDynamic.filter((f) => !runner.includes(f));
     expect(nonLiteral, 'non-literal dynamic import in the closure').toEqual([]);
     return c.files;
   };
