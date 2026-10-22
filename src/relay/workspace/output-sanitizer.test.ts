@@ -137,3 +137,20 @@ describe('residual shapes, second round: glued tokens, glued key blocks, more ve
     }
   });
 });
+
+describe('S-1: private-key header shapes are scanned in linear time (worker output is untrusted)', () => {
+  const timed = (input: string): number => { const t0 = performance.now(); sanitizeOutput(input); return performance.now() - t0; };
+  it('20000 repeated bare headers, 5000 repeated full headers and 5000 unterminated blocks finish fast', () => {
+    expect(timed('BEGIN PRIVATE KEY '.repeat(20000))).toBeLessThan(250);
+    expect(timed('-----BEGIN PRIVATE KEY-----'.repeat(5000))).toBeLessThan(250);
+    expect(timed('-----END PRIVATE KEY-----' + '-----BEGIN PRIVATE KEY-----'.repeat(5000))).toBeLessThan(250);
+    expect(timed('-----BEGIN PRIVATE KEY-----'.repeat(5000) + 'END PRIVATE KEY')).toBeLessThan(250);
+    expect(timed('-----BEGIN RSA PRIVATE KEY-----\nMIIEabc\n'.repeat(5000))).toBeLessThan(250);
+  });
+  it('a real block and two glued blocks are still redacted whole', () => {
+    const b = 'A'.repeat(64);
+    const one = `-----BEGIN RSA PRIVATE KEY-----\n${b}\n-----END RSA PRIVATE KEY-----`;
+    expect(sanitizeOutput(`x ${one} y`).text).not.toContain(b);
+    expect(sanitizeOutput(`${one}${one.replace('-----BEGIN', '--BEGIN')}`).text).not.toContain(b);
+  });
+});
