@@ -16,6 +16,7 @@ import type { RoleCallInput, RoleCallOutput, RoleProvider, RoleUsage, RunLookup 
 import { juliusAttemptCloseCommand, juliusAttemptStartCommand, parseJuliusAttemptClose, parseJuliusAttemptStart } from './julius/coder-workspace';
 import type { ShellEffectPort } from './julius/executor-effects';
 import { composeRoleProviders } from './julius-role-compose';
+import { bundleStep, hashWorkspace, J1_ARTIFACT_FILE, type WorkspaceFs } from './julius-dispatch-bundle';
 import { createXaiDirectReviewerRoleProvider, type XaiDirectReviewerInput } from './julius-xai-direct-reviewer';
 
 /**
@@ -201,13 +202,31 @@ export const J1_CODER_ENVELOPE_LIMITS = Object.freeze({
   statement: 'mayRunCommands/mayUseNetwork/permittedPaths are request fields only; they are NOT enforced by this adapter (no tool envelope, no scope recompute).',
 });
 
+/** The files the J1 coder may READ. A recorded request field, not enforcement. */
+export const J1_CODER_READ_PATHS: readonly string[] = Object.freeze(['data/legacy_ledger.csv', 'data/posts.json', 'format.test.mjs']);
+/** The only file the J1 coder may WRITE. */
+export const J1_CODER_WRITE_PATHS: readonly string[] = Object.freeze([J1_ARTIFACT_FILE]);
+/** The coder tool envelope as a RECORDED request field: Read, Write, Edit only; no Bash, no Web, no Task, no network. NOT enforced by this adapter. */
+export const J1_CODER_TOOL_ENVELOPE = Object.freeze({
+  allowedTools: Object.freeze(['Read', 'Write', 'Edit']),
+  disallowedTools: Object.freeze(['Bash', 'WebFetch', 'WebSearch', 'Task']),
+  recordedRequestFieldOnly: true as const,
+});
+
 /** Checks the request this adapter is about to send carries the stated envelope. Says nothing about what the session then does. */
 export function assertCoderRequestEnvelope(request: JuliusCodingAgentRequest): { readonly ok: true } | { readonly ok: false; readonly reason: string } {
-  const p = (request as { permissions?: { mayRunCommands?: unknown; mayUseNetwork?: unknown; permittedPaths?: unknown } }).permissions;
+  const p = (request as { permissions?: { mayRunCommands?: unknown; mayUseNetwork?: unknown; permittedPaths?: unknown; readPaths?: unknown; toolEnvelope?: { allowedTools?: unknown; disallowedTools?: unknown } } }).permissions;
   if (p === undefined || p === null) return { ok: false, reason: 'permissions_absent' };
   if (p.mayRunCommands !== false) return { ok: false, reason: 'mayRunCommands_not_false' };
   if (p.mayUseNetwork !== false) return { ok: false, reason: 'mayUseNetwork_not_false' };
   if (!Array.isArray(p.permittedPaths) || p.permittedPaths.length === 0 || p.permittedPaths.some((x) => !nonEmpty(x as string))) return { ok: false, reason: 'permittedPaths_empty' };
+  if (!Array.isArray(p.readPaths) || p.readPaths.some((x) => !nonEmpty(x as string))) return { ok: false, reason: 'readPaths_absent' };
+  const tools = p.toolEnvelope;
+  if (tools === undefined || tools === null) return { ok: false, reason: 'tool_envelope_absent' };
+  const allowed = Array.isArray(tools.allowedTools) ? [...(tools.allowedTools as unknown[])].sort().join(',') : null;
+  if (allowed !== 'Edit,Read,Write') return { ok: false, reason: 'tool_envelope_allowed_tools_wrong' };
+  const disallowed = Array.isArray(tools.disallowedTools) ? (tools.disallowedTools as unknown[]) : [];
+  if (!['Bash', 'WebFetch', 'WebSearch', 'Task'].every((t) => disallowed.includes(t))) return { ok: false, reason: 'tool_envelope_disallowed_tools_incomplete' };
   return { ok: true };
 }
 
@@ -240,6 +259,10 @@ export interface CoderRoleInput {
   readonly servedModelAllow?: readonly string[];
   /** REQUIRED and non-empty: there is no default scope. A request field only (see J1_CODER_ENVELOPE_LIMITS). */
   readonly permittedPaths?: readonly string[];
+  /** Files the coder may read (a recorded request field). Default none recorded. */
+  readonly readPaths?: readonly string[];
+  /** The bundle step: the workspace before/after hash lists and the judged-message-against-file comparison. Absent = no bundle step. */
+  readonly bundle?: { readonly fs: WorkspaceFs; readonly artifactPath: string };
   readonly budgetUsdMicros?: number | null;
   /** Called with the executor record for every attempt that reached the close-out, for the composition to ledger or log. */
   readonly onExecutorRecord?: (record: CoderExecutorRecord, call: RoleCallInput) => void;
@@ -283,12 +306,21 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
         permissions: Object.freeze({
           mayEditFiles: true as const, mayRunCommands: false as const, mayUseNetwork: false as const,
           permittedPaths: Object.freeze([...input.permittedPaths!]), outOfScope: Object.freeze([]), prohibitedActions: Object.freeze([]),
+          // RECORDED request fields (see J1_CODER_ENVELOPE_LIMITS): the read set and the tool envelope. Not enforcement.
+          readPaths: Object.freeze([...(input.readPaths ?? [])]), toolEnvelope: J1_CODER_TOOL_ENVELOPE,
         }),
         requiredEvidence: Object.freeze([]),
         budget: Object.freeze({ usdMicros: input.budgetUsdMicros ?? null }),
         protocol: Object.freeze({ participation: juliusParticipationProtocol(), researchAuthority: RESEARCH_AUTHORITY_NOT_STATED }),
       });
       if (!assertCoderRequestEnvelope(request).ok) return { ok: false, text: '', responseId: null, model: null, failureClass: 'coder_request_envelope_invalid', providerContacted: false };
+      /* THE WORKSPACE BEFORE THE SESSION (bundle step). A workspace that cannot be hashed means no session was launched. */
+      let beforeHashes;
+      if (input.bundle !== undefined) {
+        try { beforeHashes = await hashWorkspace(input.bundle.fs); } catch {
+          return { ok: false, text: '', responseId: null, model: null, failureClass: 'workspace_snapshot_unavailable', providerContacted: false };
+        }
+      }
       let outcome;
       try {
         // Built at call time from the injected snapshot: the secret values the composition lists are read when the leg runs.
@@ -330,8 +362,23 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
         return { ok: false, text: '', responseId: sessionResponseId, model: observation.providerModel, usage, failureClass: 'executor_close_unavailable' };
       }
       try { input.onExecutorRecord?.(record, call); } catch { /* a record sink must not break the leg */ }
+      /* THE BUNDLE STEP: only the artifact file changed, and the final judged message IS that file (trimmed bytes). Both hashes are kept. */
+      let bundle: RoleCallOutput['bundle'];
+      if (input.bundle !== undefined && beforeHashes !== undefined) {
+        try {
+          const after = await hashWorkspace(input.bundle.fs);
+          let fileBytes: Uint8Array | null = null;
+          if (input.bundle.artifactPath in after) fileBytes = await input.bundle.fs.readFile(input.bundle.artifactPath);
+          const step = bundleStep({ judgedMessage: outcome.finalText ?? '', before: beforeHashes, after, fileBytes, artifactPath: input.bundle.artifactPath });
+          bundle = { judgedSha256: step.judgedSha256, fileSha256: step.fileSha256, changedPaths: step.changedPaths };
+          if (!step.ok) return { ok: false, text: '', responseId: sessionResponseId, model: observation.providerModel, usage, failureClass: step.failureClass ?? 'artifact_file_mismatch', bundle };
+        } catch {
+          return { ok: false, text: '', responseId: sessionResponseId, model: observation.providerModel, usage, failureClass: 'workspace_snapshot_unavailable' };
+        }
+      }
       return {
         ok: true,
+        ...(bundle === undefined ? {} : { bundle }),
         // THE ARTIFACT IS THE SESSION'S FINAL MESSAGE (the hidden checker reads exactly this).
         text: outcome.finalText ?? '',
         responseId: sessionResponseId,

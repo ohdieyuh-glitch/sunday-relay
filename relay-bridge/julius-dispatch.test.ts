@@ -939,3 +939,43 @@ describe('Part A: the served-model allow-list is checked by the CONTROLLER for e
     expect(await lastResult(unlisted, 'coder')).toMatchObject({ outcome: 'served_model_mismatch' });
   });
 });
+
+describe('C2: the brief hash equals the frozen contract hash, is recorded in run_start, and a mismatch refuses before any provider call', () => {
+  const withBrief = (briefSha256: string | undefined, mode: 'fake' | 'live' = 'fake'): Harness => {
+    const h = harness();
+    if (mode === 'live') for (const role of ['architect', 'coder', 'reviewer'] as const) (h.providers[role] as { fake: boolean }).fake = false;
+    const ids = (() => { let n = 0; return () => `disp_${(n += 1)}`; })();
+    let clock = Date.parse('2026-10-22T12:00:00Z');
+    const controller = createJuliusDispatch({
+      providers: h.providers, ledger: h.ledger, mode, env: () => h.env, now: () => (clock += 1000), newId: ids, frozen: FROZEN,
+      ...(briefSha256 === undefined ? {} : { briefSha256 }),
+      checker: { check: async () => ({ pass: true }) },
+      runs: { lookup: async () => ({ missionId: FROZEN.missionId, contractSha256: FROZEN.contractSha256, state: 'READY' }) },
+    });
+    return { ...h, controller };
+  };
+
+  it('a matching brief hash is recorded in the run_start row', async () => {
+    const h = withBrief(FROZEN.contractSha256);
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: true });
+    await h.controller.whenIdle();
+    expect((await rowsOf(h)).find((r) => r.phase === 'run_start')).toMatchObject({ briefSha256: FROZEN.contractSha256, contractSha256: FROZEN.contractSha256 });
+  });
+
+  it('a different brief hash refuses with no ledger row and no provider call', async () => {
+    const h = withBrief(sha('some other brief'));
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: false, status: 503, code: 'julius_dispatch_brief_not_frozen_contract' });
+    await h.controller.whenIdle();
+    expect(h.calls).toHaveLength(0);
+    expect(await rowsOf(h)).toHaveLength(0);
+  });
+
+  it('live mode with no brief hash at all refuses (no implicit default); fake mode may omit it', async () => {
+    const live = withBrief(undefined, 'live');
+    expect(await live.controller.dispatch(input())).toMatchObject({ ok: false, code: 'julius_dispatch_brief_not_frozen_contract' });
+    expect(live.calls).toHaveLength(0);
+    const fake = withBrief(undefined, 'fake');
+    expect(await fake.controller.dispatch(input())).toMatchObject({ ok: true });
+    await fake.controller.whenIdle();
+  });
+});

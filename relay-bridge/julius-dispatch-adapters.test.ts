@@ -189,7 +189,7 @@ describe('G3-5 the coder envelope: request fields are stated, their enforcement 
     expect(assertCoderRequestEnvelope(provider.requests[0]!)).toEqual({ ok: true });
   });
   it('assertCoderRequestEnvelope refuses a request that drops a field, and the LIMIT constant says nothing is enforced here', () => {
-    const good = { permissions: { mayEditFiles: true, mayRunCommands: false, mayUseNetwork: false, permittedPaths: ['src/'] } } as unknown as JuliusCodingAgentRequest;
+    const good = { permissions: { mayEditFiles: true, mayRunCommands: false, mayUseNetwork: false, permittedPaths: ['src/'], readPaths: [], toolEnvelope: { allowedTools: ['Read', 'Write', 'Edit'], disallowedTools: ['Bash', 'WebFetch', 'WebSearch', 'Task'] } } } as unknown as JuliusCodingAgentRequest;
     const bad = (over: Record<string, unknown>): JuliusCodingAgentRequest => ({ permissions: { ...good.permissions, ...over } }) as unknown as JuliusCodingAgentRequest;
     expect(assertCoderRequestEnvelope(bad({ mayRunCommands: true }))).toMatchObject({ ok: false });
     expect(assertCoderRequestEnvelope(bad({ mayUseNetwork: true }))).toMatchObject({ ok: false });
@@ -484,5 +484,70 @@ describe('composed through the J1 controller (fakes only)', () => {
     expect(() => composeRoleProviders({ architect: mk('architect', 'gpt-5'), coder: mk('coder', 'anthropic/claude-x'), reviewer: mk('reviewer', 'claude-y') })).toThrow('role_models_not_independent_families');
     expect(() => composeRoleProviders({ architect: mk('architect', 'gpt-5'), coder: mk('coder', 'claude-x'), reviewer: mk('reviewer', 'mystery-1') })).toThrow('role_model_vendor_unmapped');
     expect(() => composeRoleProviders({ architect: mk('architect', 'o4-mini'), coder: mk('coder', 'anthropic/claude-x'), reviewer: mk('reviewer', 'x-ai/grok-4') })).not.toThrow();
+  });
+});
+
+describe('C3 the coder request records the read/write paths and the Read/Write/Edit-only tool envelope', () => {
+  const base = { providerFor: () => fakeCoding(completed()), shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null, permittedPaths: ['out/normalized.json'] };
+  it('the request carries writePaths, readPaths and toolEnvelope as RECORDED fields, and the check passes', async () => {
+    const provider = fakeCoding(completed());
+    await createCoderRoleProvider({ ...base, providerFor: () => provider, readPaths: ['data/legacy_ledger.csv', 'data/posts.json', 'format.test.mjs'] }).call(call({ role: 'coder', architectText: 'P' }));
+    const permissions = provider.requests[0]!.permissions as unknown as Record<string, unknown>;
+    expect(permissions.permittedPaths).toEqual(['out/normalized.json']);
+    expect(permissions.readPaths).toEqual(['data/legacy_ledger.csv', 'data/posts.json', 'format.test.mjs']);
+    expect(permissions.toolEnvelope).toMatchObject({ allowedTools: ['Read', 'Write', 'Edit'], recordedRequestFieldOnly: true });
+    expect(assertCoderRequestEnvelope(provider.requests[0]!)).toEqual({ ok: true });
+    expect(J1_CODER_ENVELOPE_LIMITS.statement).toMatch(/NOT enforced/);
+  });
+  const good = (over: Record<string, unknown>): JuliusCodingAgentRequest => ({ permissions: {
+    mayEditFiles: true, mayRunCommands: false, mayUseNetwork: false, permittedPaths: ['out/normalized.json'], readPaths: ['data/posts.json'],
+    toolEnvelope: { allowedTools: ['Read', 'Write', 'Edit'], disallowedTools: ['Bash', 'WebFetch', 'WebSearch', 'Task'], recordedRequestFieldOnly: true }, ...over,
+  } }) as unknown as JuliusCodingAgentRequest;
+  it('assertCoderRequestEnvelope refuses Bash, Web, Task, a missing or extra tool, absent readPaths, and an absent envelope', () => {
+    expect(assertCoderRequestEnvelope(good({}))).toEqual({ ok: true });
+    for (const extra of ['Bash', 'WebFetch', 'WebSearch', 'Task', 'Glob']) {
+      expect(assertCoderRequestEnvelope(good({ toolEnvelope: { allowedTools: ['Read', 'Write', 'Edit', extra], disallowedTools: ['Bash', 'WebFetch', 'WebSearch', 'Task'] } })), extra).toMatchObject({ ok: false, reason: 'tool_envelope_allowed_tools_wrong' });
+    }
+    expect(assertCoderRequestEnvelope(good({ toolEnvelope: { allowedTools: ['Read', 'Edit'], disallowedTools: ['Bash', 'WebFetch', 'WebSearch', 'Task'] } }))).toMatchObject({ ok: false });
+    expect(assertCoderRequestEnvelope(good({ toolEnvelope: { allowedTools: ['Read', 'Write', 'Edit'], disallowedTools: ['Bash'] } }))).toMatchObject({ ok: false, reason: 'tool_envelope_disallowed_tools_incomplete' });
+    expect(assertCoderRequestEnvelope(good({ toolEnvelope: undefined }))).toMatchObject({ ok: false, reason: 'tool_envelope_absent' });
+    expect(assertCoderRequestEnvelope(good({ readPaths: undefined }))).toMatchObject({ ok: false, reason: 'readPaths_absent' });
+  });
+});
+
+describe('C4 the coder leg runs the bundle step when a workspace fs is injected', () => {
+  const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
+  const BASE_FILES = { 'data/posts.json': '[]', 'format.test.mjs': 't' };
+  /** A workspace whose contents the (fake) session mutates when it executes. */
+  function world(afterSession: Record<string, string>) {
+    let files: Record<string, string> = { ...BASE_FILES };
+    const fs = { listFiles: async () => Object.keys(files), readFile: async (p: string) => { const v = files[p]; if (v === undefined) throw new Error('enoent'); return enc(v); } };
+    const provider: JuliusCodingAgentProvider = { providerKind: 'fake-coding', async execute() { files = { ...files, ...afterSession }; return completed({ finalText: '{"a":1}\n' }); } };
+    return { fs, provider };
+  }
+  const run = async (afterSession: Record<string, string>) => {
+    const w = world(afterSession);
+    const role = createCoderRoleProvider({ providerFor: () => w.provider, shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', servedModelAllow: ['claude-served'], keyEnv: null, permittedPaths: ['out/normalized.json'], bundle: { fs: w.fs, artifactPath: 'out/normalized.json' } });
+    return role.call(call({ role: 'coder', architectText: 'P' }));
+  };
+  it('file equals the final message and only it changed: ok, hashes recorded', async () => {
+    const out = await run({ 'out/normalized.json': '{"a":1}' });
+    const h = createHash('sha256').update('{"a":1}').digest('hex');
+    expect(out).toMatchObject({ ok: true, bundle: { judgedSha256: h, fileSha256: h, changedPaths: ['out/normalized.json'] } });
+  });
+  it('file differs from the final message: artifact_file_mismatch, session id, model and usage kept', async () => {
+    const out = await run({ 'out/normalized.json': '{"a":2}' });
+    expect(out).toMatchObject({ ok: false, failureClass: 'artifact_file_mismatch', responseId: 'session-0011223344', model: 'claude-served', usage: { input: 100, output: 50, total: 150 }, bundle: { changedPaths: ['out/normalized.json'] } });
+    expect(out.bundle!.judgedSha256).not.toBe(out.bundle!.fileSha256);
+  });
+  it('another file changed: workspace_scope_violation; no artifact file at all: also refused, with a null file hash', async () => {
+    expect(await run({ 'out/normalized.json': '{"a":1}', 'data/posts.json': 'tampered' })).toMatchObject({ ok: false, failureClass: 'workspace_scope_violation' });
+    expect(await run({})).toMatchObject({ ok: false, failureClass: 'workspace_scope_violation', bundle: { fileSha256: null } });
+  });
+  it('a workspace that cannot be listed before the session means no session: pre-contact failure', async () => {
+    const provider = fakeCoding(completed());
+    const role = createCoderRoleProvider({ providerFor: () => provider, shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null, permittedPaths: ['out/normalized.json'], bundle: { fs: { listFiles: async () => { throw new Error('x'); }, readFile: async () => enc('') }, artifactPath: 'out/normalized.json' } });
+    expect(await role.call(call({ role: 'coder', architectText: 'P' }))).toMatchObject({ ok: false, failureClass: 'workspace_snapshot_unavailable', providerContacted: false });
+    expect(provider.requests).toHaveLength(0);
   });
 });

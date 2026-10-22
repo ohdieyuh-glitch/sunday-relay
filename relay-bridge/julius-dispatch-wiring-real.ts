@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { JuliusCodingAgentProvider } from '../src/relay/mission/julius/julius-coding-agent';
 import { createFileDispatchLedger } from './julius-dispatch';
+import { createLocalWorkspaceFs } from './julius-dispatch-bundle';
 import { isSecretLikeEnvName } from './julius-dispatch-adapters';
 import type { J1WiringDeps } from './julius-dispatch-wiring';
 import { createClaudeCodeCodingAgentProvider } from './julius/claude-code-coding-provider';
@@ -80,6 +81,7 @@ export function realJ1WiringDeps(log: (line: string) => void, now: () => number 
     openLedger: (file) => createFileDispatchLedger({ file }),
     coderProviderFor: buildJ1CoderProviderFor(),
     shell: null,
+    workspaceFs: (root) => createLocalWorkspaceFs(root, { readdirSync: (p, o) => readdirSync(p, o), readFileSync: (p) => readFileSync(p) }),
     now,
     log,
   };

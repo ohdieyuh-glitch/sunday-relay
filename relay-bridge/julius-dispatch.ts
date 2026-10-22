@@ -78,6 +78,8 @@ export interface RoleCallOutput {
   readonly toolInvocations?: number | null;
   /** CODER: bounded executor evidence (diff or changed-file contents, or a labelled path list) shown to the reviewer. Null/absent = none. */
   readonly evidence?: string | null;
+  /** CODER bundle step: sha256 of the trimmed final message and of the trimmed out/normalized.json bytes (null = no file), and the workspace paths that changed. */
+  readonly bundle?: { readonly judgedSha256: string; readonly fileSha256: string | null; readonly changedPaths: readonly string[] };
   /** REVIEWER: sha256 over everything the reviewer was shown, so a verdict can be tied to what was judged. Present on a failed leg that got that far. */
   readonly shownSha256?: string | null;
   /** REVIEWER: the verdict the reviewer returned. */
@@ -330,6 +332,12 @@ export interface JuliusDispatchDeps {
    * one is refused `julius_dispatch_mode_mismatch`. Fake = the zero-spend rehearsal build on the IDENTICAL code path (D11).
    */
   readonly mode?: DispatchMode;
+  /**
+   * sha256 of the exact UTF-8 bytes of the brief the roles are given. REQUIRED in live mode and, whenever present, must EQUAL the frozen
+   * contract sha256: a mismatch is refused (`julius_dispatch_brief_not_frozen_contract`) BEFORE any ledger row or provider call. Recorded
+   * in the run_start row.
+   */
+  readonly briefSha256?: string;
   /** Read at every use: the kill switch is re-read before every role, so flipping it halts a running chain at the next role. */
   readonly env: () => Record<string, string | undefined>;
   readonly now: () => number;
@@ -491,6 +499,9 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         outputSha256: text === '' ? null : sha256(text), outputChars: text.length,
         changedPaths: role === 'coder' ? (out.changedPaths ?? null) : null,
         toolInvocations: role === 'coder' ? (out.toolInvocations ?? null) : null,
+        artifactJudgedSha256: role === 'coder' ? (out.bundle?.judgedSha256 ?? null) : null,
+        artifactFileSha256: role === 'coder' ? (out.bundle?.fileSha256 ?? null) : null,
+        workspaceChangedPaths: role === 'coder' && out.bundle !== undefined ? out.bundle.changedPaths.join(',') : null,
         evidenceSha256: role === 'coder' && evidence !== null ? sha256(evidence) : null,
         evidenceChars: role === 'coder' && evidence !== null ? evidence.length : null,
         shownSha256: role === 'reviewer' ? (out.shownSha256 ?? null) : null,
@@ -628,6 +639,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       /* G3-4: the composition checks are REQUIRED here, not left to the caller (independent groups AND model families, models mappable). */
       try { composeRoleProviders(providers); } catch { return refuse(503, 'julius_dispatch_providers_not_composed'); }
       if (frozenMissionProblems(frozen).length > 0) return refuse(503, 'julius_dispatch_mission_not_frozen');
+      if (deps.briefSha256 === undefined ? mode === 'live' : deps.briefSha256 !== frozen.contractSha256) return refuse(503, 'julius_dispatch_brief_not_frozen_contract');
 
       const callerHash = sha16(input.callerPlayerId);
       const keyHash = sha16(input.idempotencyKey);
@@ -679,7 +691,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
           /* THE RUN_START ROW precedes every pre_call row. Its write is the commit point. */
           await deps.ledger.append({
             phase: 'run_start', dispatchId, runId: input.runId, missionId: frozen.missionId, frozenSha256: frozen.contractSha256,
-            contractSha256: frozen.contractSha256, checkerSha256: frozen.checkerSha256, preregId: frozen.preregId,
+            contractSha256: frozen.contractSha256, briefSha256: deps.briefSha256 ?? null, checkerSha256: frozen.checkerSha256, preregId: frozen.preregId,
             budgetCapUsd, legEstimateUsd, authorizedPlayerHash: callerHash, mode, at: new Date(at).toISOString(),
             projectHash: sha16(input.projectId), sessionHash: sha16(input.sessionId), keyHash,
             clientTriggerId: input.clientTriggerId, clientLogSha256: input.clientLogSha256,
