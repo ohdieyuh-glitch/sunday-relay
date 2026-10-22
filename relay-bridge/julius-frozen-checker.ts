@@ -15,7 +15,10 @@ import type { HiddenChecker } from './julius-dispatch';
  * Nothing here opens a socket; the process runner, the file reader and the temp writer are injected.
  */
 
-export interface FrozenCheckerRun { readonly exitCode: number | null; readonly stdout: string }
+export interface FrozenCheckerRun { readonly exitCode: number | null; readonly stdout: string; readonly stderr?: string }
+
+/** The only environment variable names a checker child may see. No provider key, token or HOME. */
+export const CHECKER_ENV_ALLOW_LIST: readonly string[] = Object.freeze(['PATH', 'SystemRoot', 'TEMP']);
 
 export interface FrozenReviewerCheckerInput {
   /** Path of node (or the command that runs ES modules). */
@@ -28,11 +31,19 @@ export interface FrozenReviewerCheckerInput {
   readonly postsPath: string;
   readonly postsSha256: string;
   readonly readFileBytes: (path: string) => Promise<Uint8Array>;
+  /** Copies the named bytes into a FRESH private directory (restrictive permissions where supported); returns the staged paths in order. */
+  readonly stage: (files: readonly { readonly name: string; readonly bytes: Uint8Array }[]) => Promise<{ readonly paths: readonly string[]; readonly cleanup: () => Promise<void> }>;
+  /** Reads a staged file back (to re-hash after the run). */
+  readonly readStagedBytes: (path: string) => Promise<Uint8Array>;
+  /** Absolute, symlink-resolved path (the checker only runs its main block when argv[1] matches import.meta.url). */
+  readonly realpath: (path: string) => Promise<string>;
+  /** The environment to filter; only CHECKER_ENV_ALLOW_LIST names are passed to the child. */
+  readonly baseEnv: Readonly<Record<string, string | undefined>>;
   /** Writes the artifact text (UTF-8) to a fresh temp file and returns its path and a cleanup. */
   readonly writeArtifact: (text: string) => Promise<{ readonly path: string; readonly cleanup: () => Promise<void> }>;
-  readonly run: (command: string, args: readonly string[]) => Promise<FrozenCheckerRun>;
+  readonly run: (command: string, args: readonly string[], env: Readonly<Record<string, string>>) => Promise<FrozenCheckerRun>;
   /** Receives the exit code and the full stdout of every run, for the run bundle. */
-  readonly record?: (entry: { readonly runId: string; readonly exitCode: number | null; readonly stdout: string }) => void;
+  readonly record?: (entry: { readonly runId: string; readonly exitCode: number | null; readonly stdout: string; readonly stderr: string }) => void;
 }
 
 const sha256Hex = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
@@ -51,16 +62,36 @@ export function createFrozenReviewerChecker(input: FrozenReviewerCheckerInput): 
         if (sha256Hex(bytes) !== want) return { pass: false, output: `frozen_checker_${what}_pin_mismatch` };
       }
       const judged = sha256Hex(artifactText.trim());
+      const bytesOf: Uint8Array[] = [];
+      for (const [, path] of pins) bytesOf.push(await input.readFileBytes(path));
+      let stage: Awaited<ReturnType<FrozenReviewerCheckerInput['stage']>>;
+      try {
+        stage = await input.stage([{ name: 'checker.mjs', bytes: bytesOf[0]! }, { name: 'ledger.csv', bytes: bytesOf[1]! }, { name: 'posts.json', bytes: bytesOf[2]! }]);
+      } catch { return { pass: false, output: 'frozen_checker_stage_failed' }; }
+      const env: Record<string, string> = {};
+      for (const name of CHECKER_ENV_ALLOW_LIST) { const v = input.baseEnv[name]; if (typeof v === 'string') env[name] = v; }
       const file = await input.writeArtifact(artifactText);
       let result: FrozenCheckerRun;
       try {
-        result = await input.run(input.nodePath, [input.checkerPath, file.path, input.ledgerPath, input.postsPath, '--expect-self-sha256', input.checkerSha256]);
-      } catch {
-        return { pass: false, output: 'frozen_checker_run_failed' };
+        let staged: string[];
+        try { staged = await Promise.all(stage.paths.map((p) => input.realpath(p))); } catch { return { pass: false, output: 'frozen_checker_realpath_failed' }; }
+        if (staged.length !== 3) return { pass: false, output: 'frozen_checker_stage_failed' };
+        try {
+          result = await input.run(input.nodePath, [staged[0]!, file.path, staged[1]!, staged[2]!, '--expect-self-sha256', input.checkerSha256], env);
+        } catch {
+          return { pass: false, output: 'frozen_checker_run_failed' };
+        }
+        for (let i = 0; i < 3; i += 1) {
+          let after: Uint8Array;
+          try { after = await input.readStagedBytes(staged[i]!); } catch { return { pass: false, output: 'frozen_checker_staged_file_changed' }; }
+          if (sha256Hex(after) !== pins[i]![2]) return { pass: false, output: 'frozen_checker_staged_file_changed' };
+        }
       } finally {
         await file.cleanup().catch(() => undefined);
+        await stage.cleanup().catch(() => undefined);
       }
-      input.record?.({ runId, exitCode: result.exitCode, stdout: result.stdout });
+      const stderr = result.stderr ?? '';
+      input.record?.({ runId, exitCode: result.exitCode, stdout: result.stdout, stderr });
       const lines = result.stdout.split(/\r?\n/).filter((l) => l !== '');
       const field = (key: string): string | null => {
         const line = lines.find((l) => l.startsWith(`${key}=`));
@@ -70,7 +101,7 @@ export function createFrozenReviewerChecker(input: FrozenReviewerCheckerInput): 
         && lines[lines.length - 1] === 'PASS'
         && field('checker_sha256') === input.checkerSha256
         && field('judged_trimmed_sha256') === judged;
-      return { pass, output: `exit=${String(result.exitCode)}\n${result.stdout}` };
+      return { pass, output: `exit=${String(result.exitCode)}\n${result.stdout}${stderr === '' ? '' : `\nSTDERR:\n${stderr}`}` };
     },
   };
 }

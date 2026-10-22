@@ -456,7 +456,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
   // J1: default OFF. Only JULIUS_J1_ENABLED=1 even attempts the live composition; any missing pin or dependency falls back to the
   // same refuse-only controller as before (reason code logged). The route stays loopback-only and founder-only.
   const juliusDispatch = process.env.JULIUS_J1_ENABLED === '1'
-    ? createJ1LiveDispatchFromEnv(() => process.env, realJ1WiringDeps((line) => console.warn(line))).controller
+    ? createJ1LiveDispatchFromEnv(() => process.env, realJ1WiringDeps((line) => console.warn(line), Date.now, process.env)).controller
     : createUncomposedJuliusDispatch(() => process.env);
   const pspStore = config.stateRoot === null ? null : createPspConfigStore({ root: config.stateRoot });
   // Read once: `/health` answers the same body for the life of the process.

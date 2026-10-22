@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -59,19 +59,29 @@ export function buildJ1CoderProviderFor(options: {
   };
 }
 
-export function realJ1WiringDeps(log: (line: string) => void, now: () => number = Date.now): J1WiringDeps {
+export function realJ1WiringDeps(log: (line: string) => void, now: () => number = Date.now, checkerBaseEnv: Readonly<Record<string, string | undefined>> = {}): J1WiringDeps {
   return {
     readFileSync: (path) => readFileSync(path),
     fetchImpl: async (url, init) => {
       const res = await fetch(url, { method: init.method, headers: init.headers, body: init.body, ...(init.signal === undefined ? {} : { signal: init.signal }) });
       return { ok: res.ok, status: res.status, text: () => res.text() };
     },
-    runProcess: (command, args) => new Promise((resolve) => {
-      execFile(command, [...args], { timeout: 120_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024, encoding: 'utf8' }, (error, stdout) => {
+    /* The child gets EXACTLY the env the adapter built (allow-list); never the parent's. */
+    runProcess: (command, args, env) => new Promise((resolve) => {
+      execFile(command, [...args], { timeout: 120_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024, encoding: 'utf8', env: { ...env } }, (error, stdout, stderr) => {
         const code = error === null ? 0 : (error as NodeJS.ErrnoException & { code?: unknown }).code;
-        resolve({ exitCode: typeof code === 'number' ? code : error === null ? 0 : null, stdout: typeof stdout === 'string' ? stdout : '' });
+        resolve({ exitCode: typeof code === 'number' ? code : error === null ? 0 : null, stdout: typeof stdout === 'string' ? stdout : '', stderr: typeof stderr === 'string' ? stderr : '' });
       });
     }),
+    stageFiles: async (files) => {
+      const dir = mkdtempSync(join(tmpdir(), 'j1-checker-stage-'));
+      try { chmodSync(dir, 0o700); } catch { /* platform without POSIX modes: mkdtemp already gave a fresh user-private temp dir */ }
+      const paths = files.map((f) => { const p = join(dir, f.name); writeFileSync(p, f.bytes, { mode: 0o600 }); return p; });
+      return { paths, cleanup: async () => { rmSync(dir, { recursive: true, force: true }); } };
+    },
+    readStagedFile: async (path) => readFileSync(path),
+    realpath: async (path) => realpathSync.native(path),
+    checkerBaseEnv,
     writeArtifact: async (text) => {
       const dir = mkdtempSync(join(tmpdir(), 'j1-artifact-'));
       const path = join(dir, 'artifact.txt');

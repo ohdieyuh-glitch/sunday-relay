@@ -75,6 +75,10 @@ export function makeDeps(over: Partial<J1WiringDeps> = {}, files: Record<string,
       const judged = sha((probe.artifacts.get(args[1]!) ?? '').trim());
       return { exitCode: 0, stdout: `checker_sha256=${PIN.checkerSha256}\njudged_trimmed_sha256=${judged}\nPASS\n` };
     },
+    stageFiles: async (files) => ({ paths: files.map((f) => `/stage/${f.name}`), cleanup: async () => undefined }),
+    readStagedFile: async (path) => { const name = path.replace('/stage/', ''); const v = files[name === 'checker.mjs' ? '/pins/checker.mjs' : name === 'ledger.csv' ? '/pins/ledger.csv' : '/pins/posts.json']; return new TextEncoder().encode(v ?? ''); },
+    realpath: async (p) => p,
+    checkerBaseEnv: { PATH: '/bin', OPENAI_API_KEY: 'must-not-reach-child' },
     writeArtifact: async (text) => { const path = `/tmp/art-${probe.artifacts.size}.txt`; probe.artifacts.set(path, text); return { path, cleanup: async () => undefined }; },
     openLedger: () => { const l = createMemoryDispatchLedger(); probe.ledgers.push(l); return l; },
     architectRun: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: { inputTokens: 5, cachedInputTokens: null, outputTokens: 7, reasoningTokens: null, totalTokens: 12 } }) as GptRunOutcome,

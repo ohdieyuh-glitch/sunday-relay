@@ -36,7 +36,14 @@ export interface J1WiringDeps {
   readonly readFileSync: (path: string) => Uint8Array;
   readonly fetchImpl: XaiDirectReviewerInput['fetchImpl'];
   /** Runs a command with args, no shell; resolves with the exit code and full stdout. The real one spawns a child. */
-  readonly runProcess: (command: string, args: readonly string[]) => Promise<FrozenCheckerRun>;
+  readonly runProcess: (command: string, args: readonly string[], env: Readonly<Record<string, string>>) => Promise<FrozenCheckerRun>;
+  /** Stages bytes into a fresh private directory (mode 0700 where supported). */
+  readonly stageFiles: (files: readonly { readonly name: string; readonly bytes: Uint8Array }[]) => Promise<{ readonly paths: readonly string[]; readonly cleanup: () => Promise<void> }>;
+  /** Reads a staged file back (re-hash after the run). */
+  readonly readStagedFile: (path: string) => Promise<Uint8Array>;
+  readonly realpath: (path: string) => Promise<string>;
+  /** The environment the checker child's allow-list is drawn from (the real one passes process.env; nothing else is passed on). */
+  readonly checkerBaseEnv: Readonly<Record<string, string | undefined>>;
   readonly writeArtifact: (text: string) => Promise<{ readonly path: string; readonly cleanup: () => Promise<void> }>;
   /** Opens the append-only dispatch ledger at the path (the real one is `createFileDispatchLedger`). May throw. */
   readonly openLedger: (file: string) => DispatchLedger;
@@ -51,7 +58,7 @@ export interface J1WiringDeps {
   readonly newId?: () => string;
   /** Safe lines only. */
   readonly log?: (line: string) => void;
-  readonly recordChecker?: (entry: { readonly runId: string; readonly exitCode: number | null; readonly stdout: string }) => void;
+  readonly recordChecker?: (entry: { readonly runId: string; readonly exitCode: number | null; readonly stdout: string; readonly stderr: string }) => void;
 }
 
 export type J1WiringResult =
@@ -186,7 +193,7 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   const runs = createFrozenRunLookup({ projectId, frozen });
   const checker = createFrozenReviewerChecker({
     nodePath, checkerPath, checkerSha256: checkerSha, ledgerPath: ledgerSeedPath, ledgerSha256: ledgerSeedSha, postsPath: postsSeedPath, postsSha256: postsSeedSha,
-    readFileBytes: async (path) => deps.readFileSync(path), writeArtifact: deps.writeArtifact, run: deps.runProcess,
+    readFileBytes: async (path) => deps.readFileSync(path), stage: deps.stageFiles, readStagedBytes: deps.readStagedFile, realpath: deps.realpath, baseEnv: deps.checkerBaseEnv, writeArtifact: deps.writeArtifact, run: deps.runProcess,
     ...(deps.recordChecker === undefined ? {} : { record: deps.recordChecker }),
   });
   let ledger: DispatchLedger;
