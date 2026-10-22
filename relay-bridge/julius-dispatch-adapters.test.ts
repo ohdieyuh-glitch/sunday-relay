@@ -95,6 +95,38 @@ function fakeCoding(outcome: JuliusCodingAgentProviderOutcome | (() => never)): 
 const coder = (provider: JuliusCodingAgentProvider, shell: ShellEffectPort, extra: { onExecutorRecord?: (r: CoderExecutorRecord) => void } = {}) =>
   createCoderRoleProvider({ provider, shell, projectId: 'proj-1', workerId: 'w-coder', workspacePath: '/work', brief: 'BRIEF', model: 'claude-requested', keyEnv: null, ...extra });
 
+describe('G3-1 coder key isolation: an env allow-list, never provider keys', () => {
+  const parent = { PATH: '/bin', HOME: '/h', OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai, ANTHROPIC_API_KEY: canary('anthropic'), SOME_TOKEN: 't', LEAKY: `x-${KEY.xai}-y` };
+  const envSpy = (): { provider: JuliusCodingAgentProvider; seen: Array<Readonly<Record<string, string>> | undefined> } => {
+    const seen: Array<Readonly<Record<string, string>> | undefined> = [];
+    const provider = { providerKind: 'fake-coding', async execute(_request: JuliusCodingAgentRequest, ctx?: { readonly env: Readonly<Record<string, string>> }) { seen.push(ctx?.env); return completed(); } };
+    return { provider, seen };
+  };
+  it('the session gets an env snapshot with only allow-listed variables: no provider key reaches execute', async () => {
+    const { provider, seen } = envSpy();
+    const out = await createCoderRoleProvider({
+      provider, shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', keyEnv: null,
+      permittedPaths: ['src/'], envSnapshot: parent, secretValues: [KEY.openai, KEY.xai, canary('anthropic')],
+    }).call(call({ role: 'coder', architectText: 'P' }));
+    expect(out.ok).toBe(true);
+    expect(seen).toHaveLength(1);
+    const env = seen[0]!;
+    expect(env).toBeDefined();
+    expect(Object.keys(env).sort()).toEqual(['HOME', 'PATH']);
+    expect(JSON.stringify(env)).not.toContain(KEY.openai);
+    expect(JSON.stringify(env)).not.toContain(KEY.xai);
+  });
+  it('an allow-list naming a key-like variable or the role keyEnv is refused; a variable holding a secret value is dropped', async () => {
+    const base = { provider: envSpy().provider, shell: fakeShell(), projectId: 'p', workerId: 'w', workspacePath: '/w', brief: 'B', model: 'claude-requested', permittedPaths: ['src/'], envSnapshot: parent };
+    expect(() => createCoderRoleProvider({ ...base, keyEnv: null, envAllowList: ['PATH', 'OPENAI_API_KEY'] })).toThrow('coder_env_allowlist_contains_secret_name');
+    expect(() => createCoderRoleProvider({ ...base, keyEnv: null, envAllowList: ['SOME_TOKEN'] })).toThrow('coder_env_allowlist_contains_secret_name');
+    expect(() => createCoderRoleProvider({ ...base, keyEnv: 'CODER_CRED', envAllowList: ['CODER_CRED'] })).toThrow('coder_env_allowlist_contains_secret_name');
+    const spy = envSpy();
+    await createCoderRoleProvider({ ...base, provider: spy.provider, keyEnv: null, envAllowList: ['PATH', 'LEAKY'], secretValues: [KEY.xai] }).call(call({ role: 'coder', architectText: 'P' }));
+    expect(Object.keys(spy.seen[0]!)).toEqual(['PATH']);
+  });
+});
+
 describe('coder adapter: changedPaths come from the executor record', () => {
   it('counts the paths the executor saw changed, not the session invocation count', async () => {
     const provider = fakeCoding(completed({ toolInvocations: 99 }));

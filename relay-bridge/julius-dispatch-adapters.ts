@@ -139,9 +139,43 @@ export function coderEvidenceText(changes: readonly { readonly path: string; rea
   return text.length <= J1_CODER_EVIDENCE_MAX_CHARS ? text : `${text.slice(0, J1_CODER_EVIDENCE_MAX_CHARS)}\n(evidence cut at ${J1_CODER_EVIDENCE_MAX_CHARS} chars)`;
 }
 
+/** Default coder child-process environment: process plumbing only. NEVER a provider key. */
+export const J1_CODER_ENV_DEFAULT_ALLOW: readonly string[] = Object.freeze(['PATH', 'Path', 'SystemRoot', 'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'LANG']);
+/** Names that can never be allow-listed for the coder, whatever the caller says. */
+const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|BEARER)/iu;
+
+/**
+ * The environment the coder session is HANDED (the second argument of `execute`). Built from an explicit allow-list over an
+ * injected snapshot; a variable whose value contains any known secret value is dropped even if its name is allowed. The adapter
+ * never reads `process.env`; what the real session process inherits beyond this is the provider implementation's concern (LIMIT:
+ * this file can hand the snapshot, it cannot inspect a spawned process or the workspace for keys).
+ */
+export function buildCoderChildEnv(snapshot: Readonly<Record<string, string | undefined>>, allow: readonly string[], secretValues: readonly string[]): Readonly<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const name of allow) {
+    const value = snapshot[name];
+    if (typeof value !== 'string') continue;
+    if (secretValues.some((secret) => secret.length >= 8 && value.includes(secret))) continue;
+    out[name] = value;
+  }
+  return Object.freeze(out);
+}
+
+/** A coding provider that may take the session environment as a second argument (a one-argument provider is assignable). */
+export interface CoderExecutePort {
+  readonly providerKind: string;
+  execute(request: JuliusCodingAgentRequest, context: { readonly env: Readonly<Record<string, string>> }): ReturnType<JuliusCodingAgentProvider['execute']>;
+}
+
 export interface CoderRoleInput {
   /** The port implementation, e.g. `createClaudeCodeCodingAgentProvider(...)`. Built by the composition. */
-  readonly provider: JuliusCodingAgentProvider;
+  readonly provider: CoderExecutePort;
+  /** Injected parent environment snapshot the allow-list filters. Absent = the session gets an EMPTY environment. */
+  readonly envSnapshot?: Readonly<Record<string, string | undefined>>;
+  /** Variable names the session may see. Default J1_CODER_ENV_DEFAULT_ALLOW. A key-like name or the role keyEnv is refused at construction. */
+  readonly envAllowList?: readonly string[];
+  /** Every provider key value in play (the composition passes them); a variable holding one is dropped. */
+  readonly secretValues?: readonly string[];
   /** The independent executor. The adapter never runs a command anywhere else. */
   readonly shell: ShellEffectPort;
   readonly projectId: string;
@@ -165,6 +199,8 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
   if (!nonEmpty(input.model)) throw new Error('coder_role_requires_model');
   if (!nonEmpty(input.workspacePath)) throw new Error('coder_role_requires_workspace');
   const timeouts = input.timeouts ?? DEFAULT_STEP_TIMEOUTS;
+  const envAllow = input.envAllowList ?? J1_CODER_ENV_DEFAULT_ALLOW;
+  if (envAllow.some((name) => SECRET_NAME.test(name) || name === input.keyEnv)) throw new Error('coder_env_allowlist_contains_secret_name');
   return {
     providerId: J1_CODER_PROVIDER_ID, model: input.model, fake: input.fake ?? false, keyEnv: input.keyEnv,
     async call(call: RoleCallInput): Promise<RoleCallOutput> {
@@ -199,7 +235,8 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
       });
       let outcome;
       try {
-        outcome = await input.provider.execute(request);
+        // Built at call time from the injected snapshot: the secret values the composition lists are read when the leg runs.
+        outcome = await input.provider.execute(request, { env: buildCoderChildEnv(input.envSnapshot ?? {}, envAllow, [...(input.secretValues ?? []), call.apiKey]) });
       } catch {
         return { ok: false, text: '', responseId: null, model: null, failureClass: 'provider_error' };
       }
