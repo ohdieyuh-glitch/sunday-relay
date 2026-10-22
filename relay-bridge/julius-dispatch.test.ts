@@ -37,9 +37,10 @@ interface Harness {
 }
 
 type Behaviour = (input: RoleCallInput) => Promise<RoleCallOutput> | RoleCallOutput;
+const FAKE_MODEL = { architect: 'gpt-fake', coder: 'claude-fake', reviewer: 'grok-fake' } as const;
 function fakeProvider(role: 'architect' | 'coder' | 'reviewer', providerId: string, keyEnv: string | null, calls: RoleCallInput[], behave?: Behaviour): RoleProvider {
   return {
-    providerId, keyEnv, model: `${providerId}-requested`, fake: true,
+    providerId, keyEnv, model: FAKE_MODEL[role], fake: true,
     async call(input) {
       calls.push(input);
       if (behave !== undefined) return behave(input);
@@ -61,6 +62,8 @@ function harness(options: {
   readonly checkerPass?: boolean;
   readonly providers?: null;
   readonly mode?: 'live' | 'fake';
+  readonly omitMode?: boolean;
+  readonly models?: Partial<Record<'architect' | 'coder' | 'reviewer', string>>;
 } = {}): Harness {
   const env: Record<string, string | undefined> = {
     JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: FOUNDER, JULIUS_J1_PROJECT_ID: PROJECT, JULIUS_J1_REVIEWER_PROVIDER: (options.providerIds ?? ['openai', 'anthropic', 'xai'])[2], JULIUS_J1_BUDGET_CAP_USD: '10', JULIUS_J1_LEG_ESTIMATE_USD: '1', ...KEYS, ...options.env,
@@ -73,13 +76,14 @@ function harness(options: {
     coder: fakeProvider('coder', ids[1], 'ANTHROPIC_API_KEY', calls, options.behave?.coder),
     reviewer: fakeProvider('reviewer', ids[2], 'XAI_API_KEY', calls, options.behave?.reviewer),
   };
+  for (const role of ['architect', 'coder', 'reviewer'] as const) if (options.models?.[role] !== undefined) (providers[role] as { model: string }).model = options.models[role]!;
   const ledger = options.ledger ?? createMemoryDispatchLedger();
   let clock = Date.parse('2026-10-22T12:00:00Z');
   let n = 0;
   const controller = options.providers === null
     ? createUncomposedJuliusDispatch(() => env, () => clock)
     : createJuliusDispatch({
-      providers, ledger, mode: options.mode ?? 'fake', env: () => env, now: () => (clock += 1000), log: (line) => logs.push(line),
+      providers, ledger, ...(options.omitMode === true ? {} : { mode: options.mode ?? 'fake' }), env: () => env, now: () => (clock += 1000), log: (line) => logs.push(line),
       newId: () => `disp_${(n += 1)}`,
       frozen: options.frozen ?? FROZEN,
       checker: { check: async () => ({ pass: options.checkerPass ?? true }) },
@@ -446,7 +450,7 @@ describe('J1 reviewer acceptance protocol (D1-D12) controls', () => {
     const pre = rows.filter((r) => r.phase === 'pre_call');
     expect(pre.map((r) => r.role)).toEqual(['architect', 'coder', 'reviewer']);
     for (const r of pre) expect(r).toMatchObject({ runId: RUN, keyHash: sha('key-0000001').slice(0, 16), playerHash: sha(FOUNDER).slice(0, 16), mode: 'fake' });
-    expect(pre[2]).toMatchObject({ provider: 'xai', model: 'xai-requested' });
+    expect(pre[2]).toMatchObject({ provider: 'xai', model: 'grok-fake' });
     expect(pre.every((r) => typeof r.at === 'string' && typeof r.model === 'string')).toBe(true);
     const results = rows.filter((r) => r.phase === 'result' && r.role !== 'final');
     expect(results.every((r) => typeof r.providerResponseId === 'string' && r.providerResponseId !== '' && typeof r.model === 'string' && r.usage !== null)).toBe(true);
@@ -576,6 +580,33 @@ describe('J1 reviewer acceptance protocol (D1-D12) controls', () => {
     const h = harness({ ledger: createMemoryDispatchLedger({ failWrites: () => true }) });
     expect(await h.controller.dispatch(input())).toMatchObject({ status: 503 });
     expect(h.calls).toHaveLength(0);
+  });
+});
+
+describe('G3-4 the mode is DERIVED from the composed adapters, and composeRoleProviders is required', () => {
+  it('with no declared mode, all-fake adapters stamp fake on rows, events and results; the controller does not need to be told', async () => {
+    const h = harness({ omitMode: true });
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, mode: 'fake' });
+    await h.controller.whenIdle();
+    const rows = await rowsOf(h);
+    expect(rows.filter((r) => r.mode !== undefined).every((r) => r.mode === 'fake')).toBe(true);
+    expect(rows.find((r) => r.phase === 'run_start')).toMatchObject({ mode: 'fake' });
+    expect(rows.find((r) => r.role === 'final')).toMatchObject({ mode: 'fake' });
+  });
+  it('a declared mode that contradicts the adapters is refused; mixed fake/real adapters are refused', async () => {
+    expect(await harness({ mode: 'live' }).controller.dispatch(input())).toMatchObject({ code: 'julius_dispatch_mode_mismatch' });
+    const mixed = harness({ omitMode: true });
+    (mixed.providers.reviewer as { fake: boolean }).fake = false;
+    expect(await mixed.controller.dispatch(input())).toMatchObject({ code: 'julius_dispatch_mode_mismatch' });
+    expect(mixed.calls).toHaveLength(0);
+  });
+  it('the controller itself requires composeRoleProviders: shared model families or an unmappable model are refused before any row', async () => {
+    const shared = harness({ omitMode: true, models: { coder: 'gpt-other' } });
+    expect(await shared.controller.dispatch(input())).toMatchObject({ status: 503, code: 'julius_dispatch_providers_not_composed' });
+    const unmapped = harness({ omitMode: true, models: { reviewer: 'mystery-1' } });
+    expect(await unmapped.controller.dispatch(input())).toMatchObject({ status: 503, code: 'julius_dispatch_providers_not_composed' });
+    expect(shared.calls).toHaveLength(0);
+    expect(await rowsOf(shared)).toHaveLength(0);
   });
 });
 

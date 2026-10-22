@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 
 import { bearerMatches } from './bearer-auth';
 import { sessionTokenFrom } from './browser-session/routes';
+import { composeRoleProviders } from './julius-role-compose';
 
 /**
  * J1: THE IN-GAME MISSION DISPATCH ROUTE. Flag-gated, loopback-only, founder-only.
@@ -275,6 +276,7 @@ interface RunRecord {
   readonly callerHash: string;
   readonly keyHash: string;
   readonly missionId: string;
+  readonly mode: DispatchMode;
   state: ChainState;
   readonly events: ChainEvent[];
   resultText: string | null;
@@ -304,8 +306,12 @@ export interface JuliusDispatchDeps {
   readonly frozen: FrozenMission;
   readonly checker: HiddenChecker;
   readonly ledger: DispatchLedger;
-  /** `fake` = the zero-spend rehearsal build on the IDENTICAL code path (D11); labelled in every row and on the wire, never countable. */
-  readonly mode: DispatchMode;
+  /**
+   * OPTIONAL CLAIM, never the source. The mode stamped on rows and on the wire is DERIVED from the composed adapters (every
+   * adapter's `fake` flag: all fake = 'fake', all real = 'live', a mix is refused). A declared mode that contradicts the derived
+   * one is refused `julius_dispatch_mode_mismatch`. Fake = the zero-spend rehearsal build on the IDENTICAL code path (D11).
+   */
+  readonly mode?: DispatchMode;
   /** Read at every use: the kill switch is re-read before every role, so flipping it halts a running chain at the next role. */
   readonly env: () => Record<string, string | undefined>;
   readonly now: () => number;
@@ -376,7 +382,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
     rec.events.push({ sequence: rec.events.length + 1, at: new Date(deps.now()).toISOString(), ...event });
   };
 
-  async function runChain(rec: RunRecord, ctx: { readonly missionId: string; readonly budgetCapUsd: number; readonly legEstimateUsd: number }): Promise<void> {
+  async function runChain(rec: RunRecord, ctx: { readonly missionId: string; readonly budgetCapUsd: number; readonly legEstimateUsd: number; readonly mode: DispatchMode }): Promise<void> {
     const providers = deps.providers as DispatchProviders;
     const base = { dispatchId: rec.dispatchId, runId: rec.runId };
     const env = deps.env();
@@ -413,7 +419,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       try {
         await deps.ledger.append({
           phase: 'pre_call', ...base, role, provider: provider.providerId, model: provider.model, keyHash: rec.keyHash, playerHash: rec.callerHash,
-          mode: deps.mode, attempt: 1, at: new Date(deps.now()).toISOString(),
+          mode: ctx.mode, attempt: 1, at: new Date(deps.now()).toISOString(),
         });
       } catch {
         failure = 'ledger_write_failed'; halted = true; break;
@@ -452,7 +458,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       const resultRow: DispatchRow = {
         phase: 'result', ...base, role, provider: provider.providerId, at: new Date(deps.now()).toISOString(), outcome,
         /* The FULL response id lives in the ledger only: the founder reads the provider console by it. */
-        providerResponseId: responseId, model: echoedModel, mode: deps.mode,
+        providerResponseId: responseId, model: echoedModel, mode: ctx.mode,
         usage: out.usage === undefined ? null : { input: out.usage.input, output: out.usage.output, total: out.usage.total },
         requests: out.requests ?? null,
         spend, spendUnknown: spend === 'spend_unknown', costUsdMicros: out.costUsdMicros ?? null,
@@ -511,7 +517,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
     if (!orderOk && failure === null) { failure = 'run_order_violation'; halted = true; }
     const state: ChainState = failure === null ? 'COMPLETED' : halted ? 'HALTED' : 'FAILED';
     const result = {
-      runId: rec.runId, dispatchId: rec.dispatchId, missionId: ctx.missionId, mode: deps.mode, state, failure,
+      runId: rec.runId, dispatchId: rec.dispatchId, missionId: ctx.missionId, mode: ctx.mode, state, failure,
       roles: summaries, spendUnknownLegs: unknownSpendLegs, reviewerVerdict: verdict, checkerPass,
       artifactSha256: coderArtifact === null ? null : sha256(coderArtifact), artifactText: coderArtifact,
     };
@@ -523,7 +529,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
     try {
       /* THE FINAL ROW (role=final), shaped for the reviewer's crosscheck: resultSha256 and the checker's output hash. */
       await deps.ledger.append({
-        phase: 'result', role: 'final', ...base, at: new Date(deps.now()).toISOString(), state, failure, mode: deps.mode,
+        phase: 'result', role: 'final', ...base, at: new Date(deps.now()).toISOString(), state, failure, mode: ctx.mode,
         resultSha256, resultChars: resultText.length, checkerOutputSha256, spendUnknownLegs: unknownSpendLegs, orderOk,
       });
     } catch {
@@ -531,7 +537,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
     }
     rec.state = state;
     emit(rec, { type: state === 'COMPLETED' ? 'chain.completed' : 'chain.failed', outcome: state, failure, resultSha256 });
-    log(`chain ${state} run=${sha16(rec.runId)} dispatch=${rec.dispatchId} result=${resultSha256.slice(0, 16)} mode=${deps.mode}`);
+    log(`chain ${state} run=${sha16(rec.runId)} dispatch=${rec.dispatchId} result=${resultSha256.slice(0, 16)} mode=${ctx.mode}`);
   }
 
   return {
@@ -549,7 +555,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         const orphanRow = rows.find((row) => row.phase === 'orphaned' && row.runId === runId);
         const rec: RunRecord = {
           runId, dispatchId: String(start.dispatchId), projectHash: String(start.projectHash), callerHash: String(start.authorizedPlayerHash),
-          keyHash: String(start.keyHash), missionId: String(start.missionId), state: 'ORPHANED', events: [], resultText: null,
+          keyHash: String(start.keyHash), missionId: String(start.missionId), mode: start.mode === 'live' ? 'live' : 'fake', state: 'ORPHANED', events: [], resultText: null,
           resultSha256: final === undefined ? null : String(final.resultSha256),
         };
         if (final !== undefined) { rec.state = String(final.state) as ChainState; finished.push(runId); }
@@ -581,7 +587,12 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       const ids = [providers.architect.providerId, providers.coder.providerId, providers.reviewer.providerId];
       if (new Set(ids).size !== 3) return refuse(503, 'julius_dispatch_reviewer_not_independent');
       /* D11: one code path, two labels. A fake adapter can never run live, and a real one can never run under the fake label. */
-      if (DISPATCH_ROLES.some((role) => providers[role].fake !== (deps.mode === 'fake'))) return refuse(503, 'julius_dispatch_mode_mismatch');
+      const fakeFlags = DISPATCH_ROLES.map((role) => providers[role].fake === true);
+      if (fakeFlags.some((f) => f) && !fakeFlags.every((f) => f)) return refuse(503, 'julius_dispatch_mode_mismatch');
+      const mode: DispatchMode = fakeFlags.every((f) => f) ? 'fake' : 'live';
+      if (deps.mode !== undefined && deps.mode !== mode) return refuse(503, 'julius_dispatch_mode_mismatch');
+      /* G3-4: the composition checks are REQUIRED here, not left to the caller (independent groups AND model families, models mappable). */
+      try { composeRoleProviders(providers); } catch { return refuse(503, 'julius_dispatch_providers_not_composed'); }
       if (frozenMissionProblems(frozen).length > 0) return refuse(503, 'julius_dispatch_mission_not_frozen');
 
       const callerHash = sha16(input.callerPlayerId);
@@ -590,7 +601,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       const existing = records.get(input.runId);
       if (existing !== undefined) {
         if (existing.callerHash === callerHash && existing.keyHash === keyHash) {
-          return { ok: true, status: 200, dispatchId: existing.dispatchId, runId: existing.runId, state: existing.state, replayed: true, ledgerRef: `julius-j1-ledger:${existing.dispatchId}`, mode: deps.mode };
+          return { ok: true, status: 200, dispatchId: existing.dispatchId, runId: existing.runId, state: existing.state, replayed: true, ledgerRef: `julius-j1-ledger:${existing.dispatchId}`, mode: existing.mode };
         }
         /* The CREATOR of a run is the (player, key) that created it; anyone else is refused by name. */
         return refuse(403, 'julius_dispatch_run_creator_mismatch');
@@ -635,7 +646,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
           await deps.ledger.append({
             phase: 'run_start', dispatchId, runId: input.runId, missionId: frozen.missionId, frozenSha256: frozen.contractSha256,
             contractSha256: frozen.contractSha256, checkerSha256: frozen.checkerSha256, preregId: frozen.preregId,
-            budgetCapUsd, legEstimateUsd, authorizedPlayerHash: callerHash, mode: deps.mode, at: new Date(at).toISOString(),
+            budgetCapUsd, legEstimateUsd, authorizedPlayerHash: callerHash, mode, at: new Date(at).toISOString(),
             projectHash: sha16(input.projectId), sessionHash: sha16(input.sessionId), keyHash,
             clientTriggerId: input.clientTriggerId, clientLogSha256: input.clientLogSha256,
             runOrdinal: rows.filter((row) => row.missionId === frozen.missionId).length + 1,
@@ -647,17 +658,17 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
 
         boundSession = input.sessionId;
         const rec: RunRecord = {
-          runId: input.runId, dispatchId, projectHash: sha16(input.projectId), callerHash, keyHash, missionId: frozen.missionId, state: 'ACCEPTED',
+          runId: input.runId, dispatchId, projectHash: sha16(input.projectId), callerHash, keyHash, missionId: frozen.missionId, mode, state: 'ACCEPTED',
           events: [], resultText: null, resultSha256: null,
         };
         records.set(input.runId, rec);
         emit(rec, { type: 'chain.accepted' });
-        log(`accepted run=${sha16(input.runId)} dispatch=${dispatchId} key=${keyHash} mode=${deps.mode} reviewer=${providers.reviewer.providerId}`);
+        log(`accepted run=${sha16(input.runId)} dispatch=${dispatchId} key=${keyHash} mode=${mode} reviewer=${providers.reviewer.providerId}`);
         started = true;
-        running = runChain(rec, { missionId: frozen.missionId, budgetCapUsd, legEstimateUsd })
+        running = runChain(rec, { missionId: frozen.missionId, budgetCapUsd, legEstimateUsd, mode })
           .catch(() => { rec.state = 'FAILED'; emit(rec, { type: 'chain.failed', outcome: 'FAILED', failure: 'internal_error' }); })
           .finally(() => { inFlight = false; });
-        return { ok: true, status: 202, dispatchId, runId: input.runId, state: 'ACCEPTED', replayed: false, ledgerRef: `julius-j1-ledger:${dispatchId}`, mode: deps.mode };
+        return { ok: true, status: 202, dispatchId, runId: input.runId, state: 'ACCEPTED', replayed: false, ledgerRef: `julius-j1-ledger:${dispatchId}`, mode };
       } finally {
         if (!started) inFlight = false;
       }
@@ -670,7 +681,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       }
       const page = rec.events.filter((event) => event.sequence > input.cursor).slice(0, J1_EVENTS_PAGE_LIMIT);
       const nextCursor = page.length === 0 ? input.cursor : page[page.length - 1].sequence;
-      return { status: 200, body: { data: { runId: rec.runId, state: rec.state, mode: deps.mode, events: page, nextCursor, terminal: TERMINAL.includes(rec.state) && nextCursor >= rec.events.length } } };
+      return { status: 200, body: { data: { runId: rec.runId, state: rec.state, mode: rec.mode, events: page, nextCursor, terminal: TERMINAL.includes(rec.state) && nextCursor >= rec.events.length } } };
     },
 
     result(input) {
@@ -687,7 +698,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       if (rec.resultText === null || rec.resultSha256 === null) {
         return { status: 409, body: { error: { kind: 'julius_dispatch_result_not_ready', message: 'The chain has not finished.' } } };
       }
-      return { status: 200, body: { data: { runId: rec.runId, state: rec.state, mode: deps.mode, resultText: rec.resultText, resultSha256: rec.resultSha256 } } };
+      return { status: 200, body: { data: { runId: rec.runId, state: rec.state, mode: rec.mode, resultText: rec.resultText, resultSha256: rec.resultSha256 } } };
     },
   };
 }
@@ -811,7 +822,6 @@ export function createUncomposedJuliusDispatch(env: () => Record<string, string 
     frozen: { missionId: '', contractSha256: '', checkerSha256: '', missionAuthor: '', checkerAuthor: '', seededDefect: false, preregId: '' },
     checker: { check: unavailable },
     ledger: { append: unavailable, rows: unavailable },
-    mode: 'live',
     env,
     now,
   });
