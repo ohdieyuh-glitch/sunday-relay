@@ -345,11 +345,13 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
       const sessionResponseId = typeof sessionId === 'string' && sessionId !== '' ? sessionId : null;
       /* AFTER THE SESSION: what the executor itself saw. This is the only source of `changedPaths`. */
       let record: CoderExecutorRecord;
+      let closeRefusal = '';
       try {
         const status = await input.shell.run({
           ...scope, invocationKey: `${scope.taskId}:status`, timeoutMs: timeouts.status,
           command: juliusAttemptCloseCommand(start.baseTree !== null && start.startTree !== null ? { baseTree: start.baseTree, startTree: start.startTree } : null),
         });
+        closeRefusal = status.status === 'SUCCEEDED' ? '' : status.stderr;
         const close = parseJuliusAttemptClose(status.stdout, status.status === 'SUCCEEDED');
         record = {
           startInvocationId: start.invocationId, closeInvocationId: status.invocationId, captured: close.status.captured,
@@ -362,6 +364,15 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
         return { ok: false, text: '', responseId: sessionResponseId, model: observation.providerModel, usage, failureClass: 'executor_close_unavailable' };
       }
       try { input.onExecutorRecord?.(record, call); } catch { /* a record sink must not break the leg */ }
+      /* D-5 / real child PATH: what the local port observed (index hashes around the attempt, the pinned bash). A shell without it records none. */
+      let shellEvidence: { indexSha256AfterStart: string | null; indexSha256BeforeClose: string | null; bashSha256: string | null } | undefined;
+      try {
+        const ev = (input.shell as { evidence?: () => { indexSha256AfterStart: string | null; indexSha256BeforeClose: string | null; bashSha256: string | null } }).evidence?.();
+        if (ev !== undefined) shellEvidence = { indexSha256AfterStart: ev.indexSha256AfterStart, indexSha256BeforeClose: ev.indexSha256BeforeClose, bashSha256: ev.bashSha256 };
+      } catch { shellEvidence = undefined; }
+      const evidenceField = shellEvidence === undefined ? {} : { shellEvidence };
+      /* D-5: a close the port REFUSED because the shared index file changed (or could not be verified) ends the leg; the session already ran, so its id and usage are kept. */
+      if (/^refused:index_file_/u.test(closeRefusal)) return { ok: false, text: '', responseId: sessionResponseId, model: observation.providerModel, usage, failureClass: closeRefusal.slice('refused:'.length), ...evidenceField };
       /* THE BUNDLE STEP: only the artifact file changed, and the final judged message IS that file (trimmed bytes). Both hashes are kept. */
       let bundle: RoleCallOutput['bundle'];
       if (input.bundle !== undefined && beforeHashes !== undefined) {
@@ -377,7 +388,7 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
             beforeList: step.beforeList, afterList: step.afterList, beforeListSha256: step.beforeListSha256, afterListSha256: step.afterListSha256,
             gitTreeSha256Before: step.gitTreeSha256Before, gitTreeSha256After: step.gitTreeSha256After, excluded: step.excluded,
           };
-          if (!step.ok) return { ok: false, text: '', responseId: sessionResponseId, model: observation.providerModel, usage, failureClass: step.failureClass ?? 'artifact_file_mismatch', bundle };
+          if (!step.ok) return { ok: false, text: '', responseId: sessionResponseId, model: observation.providerModel, usage, failureClass: step.failureClass ?? 'artifact_file_mismatch', bundle, ...evidenceField };
         } catch {
           return { ok: false, text: '', responseId: sessionResponseId, model: observation.providerModel, usage, failureClass: 'workspace_snapshot_unavailable' };
         }
@@ -385,6 +396,7 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
       return {
         ok: true,
         ...(bundle === undefined ? {} : { bundle }),
+        ...evidenceField,
         // THE ARTIFACT IS THE SESSION'S FINAL MESSAGE (the hidden checker reads exactly this).
         text: outcome.finalText ?? '',
         responseId: sessionResponseId,

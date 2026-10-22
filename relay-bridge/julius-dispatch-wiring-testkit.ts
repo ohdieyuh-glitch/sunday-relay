@@ -26,6 +26,7 @@ export const FILES: Record<string, string> = {
   '/pins/ledger.csv': 'fake seed ledger',
   '/pins/posts.json': '[]',
   '/pins/format.test.mjs': 'fake format test bytes',
+  '/opt/git/usr/bin/bash': 'fake git bash bytes',
 };
 export const PIN = { contractSha256: sha(FILES['/pins/contract.json']!), checkerSha256: sha(FILES['/pins/checker.mjs']!) };
 
@@ -35,6 +36,7 @@ export const goodEnv = (over: Record<string, string | undefined> = {}): Record<s
   JULIUS_J1_MISSION_ID: 'mission-1', JULIUS_J1_MISSION_AUTHOR: 'judev', JULIUS_J1_CHECKER_AUTHOR: 'reviewdev', JULIUS_J1_PREREG_ID: 'prereg-1',
   JULIUS_J1_CONTRACT_PATH: '/pins/contract.json', JULIUS_J1_CONTRACT_SHA256: PIN.contractSha256,
   JULIUS_J1_CHECKER_PATH: '/pins/checker.mjs', JULIUS_J1_CHECKER_SHA256: PIN.checkerSha256, JULIUS_J1_NODE_PATH: 'node', JULIUS_J1_BASH_PATH: '/opt/git/usr/bin/bash',
+  JULIUS_J1_BASH_SHA256: sha(FILES['/opt/git/usr/bin/bash']!), JULIUS_J1_GIT_DIR: '/opt/git/cmd',
   JULIUS_J1_SEED_LEDGER_PATH: '/pins/ledger.csv', JULIUS_J1_SEED_LEDGER_SHA256: sha(FILES['/pins/ledger.csv']!),
   JULIUS_J1_SEED_POSTS_PATH: '/pins/posts.json', JULIUS_J1_SEED_POSTS_SHA256: sha(FILES['/pins/posts.json']!),
   JULIUS_J1_SEED_FORMAT_TEST_PATH: '/pins/format.test.mjs', JULIUS_J1_SEED_FORMAT_TEST_SHA256: sha(FILES['/pins/format.test.mjs']!),
@@ -88,7 +90,7 @@ export function makeDeps(over: Partial<J1WiringDeps> = {}, files: Record<string,
     architectRun: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: { inputTokens: 5, cachedInputTokens: null, outputTokens: 7, reasoningTokens: null, totalTokens: 12 } }) as GptRunOutcome,
     coderProviderFor: () => fakeCoder(probe.workspace),
     shell: fakeShell(),
-    pathExists: (p) => p === '/opt/git/usr/bin/bash',
+    pathExists: (p) => p === '/opt/git/usr/bin/bash' || p === '/opt/git/cmd',
     keyStoreFor: (dir) => {
       probe.keyDirs.push(dir);
       const held: Record<string, string> = { OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai };

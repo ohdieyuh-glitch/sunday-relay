@@ -156,7 +156,8 @@ describe('Part B: the real builders are construct-only', () => {
     expect(createJ1LiveForTest(goodEnv(), fakes)).toMatchObject({ live: false, reason: 'dep_shell_absent' });
     // with the real shellFor (construct-only: it spawns and writes nothing) the composition no longer refuses dep_shell_absent
     const { deps: withLocal, probe } = makeDeps({ coderProviderFor: deps.coderProviderFor, shell: null, shellFor: deps.shellFor });
-    expect(createJ1LiveForTest(goodEnv(), withLocal)).toMatchObject({ live: true, reason: null });
+    // the REAL shellFor re-reads and re-hashes the bash through the real file system: the fake path is unreadable, so the port refuses at construction (fail closed)
+    expect(createJ1LiveForTest(goodEnv(), withLocal)).toMatchObject({ live: false, reason: 'composition_refused_local_shell_bash_unreadable' });
     expect(probe.spawned).toHaveLength(0);
   });
 
@@ -389,8 +390,50 @@ describe('C3/C4 at the wiring', () => {
     const asked: string[] = []; const seen: string[] = [];
     const { deps } = makeDeps({ shell: null, pathExists: (p) => { asked.push(p); return true; }, shellFor: (ctx) => { seen.push(ctx.bashPath); return fakeShell(); } });
     expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_BASH_PATH: '/opt/git/usr/bin/bash' }), deps)).toMatchObject({ live: true });
-    expect(asked).toEqual(['/opt/git/usr/bin/bash']);
+    expect(asked).toEqual(['/opt/git/usr/bin/bash', '/opt/git/cmd']);
     expect(seen).toEqual(['/opt/git/usr/bin/bash']);
+  });
+  it('real child PATH: JULIUS_J1_BASH_SHA256 and JULIUS_J1_GIT_DIR are required; the bash bytes must hash to the pin; the git directory must be absolute and exist; both reach shellFor', () => {
+    expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_BASH_SHA256: undefined }), makeDeps().deps)).toMatchObject({ live: false, reason: 'config_missing_julius_j1_bash_sha256' });
+    expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_BASH_SHA256: 'abc' }), makeDeps().deps)).toMatchObject({ live: false, reason: 'config_invalid_julius_j1_bash_sha256' });
+    expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_BASH_SHA256: 'f'.repeat(64) }), makeDeps().deps)).toMatchObject({ live: false, reason: 'pin_bash_sha256_mismatch' });
+    expect(createJ1LiveForTest(goodEnv(), makeDeps({}, { ...FILES, '/opt/git/usr/bin/bash': 'a wsl bash' }).deps)).toMatchObject({ live: false, reason: 'pin_bash_sha256_mismatch' });
+    const noBash = { ...FILES }; delete noBash['/opt/git/usr/bin/bash'];
+    expect(createJ1LiveForTest(goodEnv(), makeDeps({}, noBash).deps)).toMatchObject({ live: false, reason: 'pin_bash_unreadable' });
+    expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_GIT_DIR: undefined }), makeDeps().deps)).toMatchObject({ live: false, reason: 'config_missing_julius_j1_git_dir' });
+    expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_GIT_DIR: 'git/cmd' }), makeDeps().deps)).toMatchObject({ live: false, reason: 'config_invalid_julius_j1_git_dir' });
+    expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_GIT_DIR: '/nowhere/cmd' }), makeDeps().deps)).toMatchObject({ live: false, reason: 'git_dir_not_found' });
+    const seen: { bashSha256: string; gitDir: string }[] = [];
+    const { deps } = makeDeps({ shell: null, shellFor: (ctx) => { seen.push({ bashSha256: ctx.bashSha256, gitDir: ctx.gitDir }); return fakeShell(); } });
+    expect(createJ1LiveForTest(goodEnv(), deps)).toMatchObject({ live: true });
+    expect(seen).toEqual([{ bashSha256: sha(FILES['/opt/git/usr/bin/bash']!), gitDir: '/opt/git/cmd' }]);
+  });
+  it('D-4 a provider key injected into the env accessor BETWEEN composition and dispatch refuses 503 julius_dispatch_provider_key_in_env: no ledger row, no provider call, no key read', async () => {
+    for (const name of ['OPENAI_API_KEY', 'XAI_API_KEY']) {
+      const { deps, probe } = makeDeps();
+      const live: Record<string, string | undefined> = goodEnv();
+      const r = createJ1LiveForTest(() => live, deps);
+      expect(r).toMatchObject({ live: true });
+      const input = await echoed(r.controller);
+      live[name] = KEY.openai;                                 // appears AFTER composition
+      const out = await r.controller.dispatch(input);
+      expect(out, name).toMatchObject({ ok: false, status: 503, code: 'julius_dispatch_provider_key_in_env' });
+      await r.controller.whenIdle();
+      expect(await probe.ledgers[0]!.rows(), name).toEqual([]);
+      expect(probe.fetched, name).toHaveLength(0);
+      expect(probe.keyReads, name).toEqual([]);
+      expect(JSON.stringify(out) + probe.logs.join('\n')).not.toContain(KEY.openai);
+    }
+  });
+  it('D-5 / PATH evidence: the shell port evidence (indexSha256AfterStart, indexSha256BeforeClose, bashSha256) reaches the coder result row', async () => {
+    const ev = { indexSha256AfterStart: 'a'.repeat(64), indexSha256BeforeClose: 'a'.repeat(64), bashSha256: 'b'.repeat(64) };
+    const shell = { ...fakeShell(), evidence: () => ev };
+    const { deps, probe } = makeDeps({ shell });
+    const r = createJ1LiveForTest(goodEnv(), deps);
+    await r.controller.dispatch(await echoed(r.controller));
+    await r.controller.whenIdle();
+    const coder = (await probe.ledgers[0]!.rows()).find((row) => row.phase === 'result' && row.role === 'coder')!;
+    expect(coder).toMatchObject(ev);
   });
   it('PART 3: the format test seed pin is required and must match its file', () => {
     expect(createJ1LiveForTest(goodEnv({ JULIUS_J1_SEED_FORMAT_TEST_PATH: undefined }), makeDeps().deps)).toMatchObject({ live: false, reason: 'config_missing_julius_j1_seed_format_test_path' });

@@ -19,6 +19,15 @@ import type { ShellEffectInput, ShellEffectPort, ShellEffectResult } from './jul
  * config `core.fsmonitor=false` and `core.hooksPath=/dev/null`, which outranks the repository's own config, so a planted `.git/config`
  * cannot make the bridge's `git add`/`git status` run a command.
  *
+ * D-5 (the shared index file): the generated attempt commands use the fixed path /tmp/julius-attempt-index. IMMEDIATELY after the start
+ * command, and again BEFORE each close, this module runs {@link J1_INDEX_HASH_COMMAND} (one more exact string, issued only here) and records
+ * the sha256 of that file (`ABSENT` when it does not exist, which is its normal state: the commands remove it on the way out; `SYMLINK`
+ * for a link). A close is REFUSED when the two differ (`index_file_changed_between_start_and_close`) or when either could not be read
+ * (`index_file_unverified`). Both values are returned by `evidence()`.
+ *
+ * REAL CHILD PATH: the bash is an absolute pinned path whose sha256 must equal the pin (read through the injected `readFileBytes` at
+ * construction), and the child PATH is EXACTLY the bash directory plus the git directory: the parent PATH is never read.
+ *
  * SEEDING (at the start of EVERY attempt, before the start command): the three pinned files are re-hashed against their pins, the
  * workspace is emptied (only if it is empty already or carries the bridge's marker; a foreign directory is never wiped), the files are
  * written, `out/normalized.json` is PRE-SEEDED with the placeholder `{}` (the hosted coder can Edit but not Write; prereg addendum B),
@@ -31,6 +40,13 @@ export const J1_ARTIFACT_RELATIVE = 'out/normalized.json';
 /** Inside .git, so the marker is part of the git tree hash and not of the workspace file list. */
 const MARKER = '.git/j1-bridge-workspace';
 const SEED_NAMES: readonly string[] = Object.freeze(['data/legacy_ledger.csv', 'data/posts.json', 'format.test.mjs']);
+/** D-5: hashes the shared index file. One fixed string; only this module issues it (a caller's copy is refused like any other command). */
+export const J1_INDEX_HASH_COMMAND = [
+  'if [ -L /tmp/julius-attempt-index ]; then echo SYMLINK;',
+  'elif [ -e /tmp/julius-attempt-index ]; then sha256sum < /tmp/julius-attempt-index | cut -d" " -f1;',
+  'else echo ABSENT; fi',
+].join(' ');
+const INDEX_VALUE = /^(ABSENT|SYMLINK|[0-9a-f]{64})$/mu;
 const MAX_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_CHARS = 4 * 1024 * 1024;
 
@@ -45,6 +61,14 @@ export const J1_SEED_COMMAND = [
   'git commit -q -m j1-seed',
   "printf 'SEEDED %s\\n' \"$(git rev-parse HEAD)\"",
 ].join('\n');
+
+/** What the port observed, for the bundle / ledger. The index hashes are null until the corresponding step has run (or could not be read). */
+export interface LocalShellEvidence {
+  readonly indexSha256AfterStart: string | null;
+  readonly indexSha256BeforeClose: string | null;
+  readonly bashSha256: string;
+}
+export type LocalShellPort = ShellEffectPort & { evidence(): LocalShellEvidence };
 
 export interface J1SeedFile { readonly name: 'data/legacy_ledger.csv' | 'data/posts.json' | 'format.test.mjs'; readonly bytes: Uint8Array; readonly sha256: string }
 
@@ -70,30 +94,50 @@ export function isAbsoluteBashPath(p: string): boolean {
   return !p.split(/[\\/]+/u).includes('..');
 }
 
+/** The directory part of an absolute path (either separator). */
+const dirOf = (p: string): string => p.replace(/[\\/]+[^\\/]*$/u, '');
+
 export function createLocalShellPort(input: {
   /** The private temp workspace (created by an injected function). Commands run here and seeding writes here. */
   readonly cwd: string;
   /** D-2: the ABSOLUTE path of the bash to run (never found by searching PATH; a bare name is refused at construction). */
   readonly bashPath: string;
+  /** Required: the sha256 the bash file must have (JULIUS_J1_BASH_SHA256). Verified at construction through `readFileBytes`. */
+  readonly bashSha256: string;
+  readonly readFileBytes: (path: string) => Uint8Array;
+  /** Required: the ABSOLUTE directory holding git (JULIUS_J1_GIT_DIR); it must exist. The child PATH is bash's directory plus this one. */
+  readonly gitDir: string;
   readonly spawn: LocalSpawn;
   readonly fs: LocalSeedFs;
   readonly seedFiles: readonly J1SeedFile[];
-  /** Only `PATH` is taken from this; nothing else is ever passed to a child. */
-  readonly baseEnv: Readonly<Record<string, string | undefined>>;
-}): ShellEffectPort {
+  /** Accepted for call-site compatibility and NEVER READ: no parent variable (not even PATH) reaches a child. */
+  readonly baseEnv?: Readonly<Record<string, string | undefined>>;
+}): LocalShellPort {
   const names = input.seedFiles.map((f) => f.name).sort();
   if (names.length !== SEED_NAMES.length || names.some((n, i) => n !== [...SEED_NAMES].sort()[i])) throw new Error('local_shell_seed_names_invalid');
   if (!isAbsoluteBashPath(input.bashPath)) throw new Error('local_shell_bash_path_invalid');
+  if (!/^[0-9a-f]{64}$/u.test(input.bashSha256)) throw new Error('local_shell_bash_sha256_invalid');
+  let bashBytes: Uint8Array;
+  try { bashBytes = input.readFileBytes(input.bashPath); } catch { throw new Error('local_shell_bash_unreadable'); }
+  if (sha256(bashBytes) !== input.bashSha256) throw new Error('local_shell_bash_sha256_mismatch');
+  if (!isAbsoluteBashPath(input.gitDir)) throw new Error('local_shell_git_dir_invalid');
+  if (!input.fs.exists(input.gitDir)) throw new Error('local_shell_git_dir_not_found');
+  /* Windows-style bash path (drive or UNC) = ';' separator; POSIX = ':'. */
+  const pathSep = /^\//u.test(input.bashPath) ? ':' : ';';
+  const childPath = [dirOf(input.bashPath), input.gitDir.replace(/[\\/]+$/u, '')].filter((v, i, a) => a.indexOf(v) === i).join(pathSep);
   const cwd = input.cwd.replace(/[\\/]+$/u, '');
   if (cwd === '') throw new Error('local_shell_cwd_invalid');
   const childEnv: Readonly<Record<string, string>> = Object.freeze({
-    PATH: input.baseEnv.PATH ?? '', HOME: `${cwd}.home`, LANG: 'C', GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1',
+    PATH: childPath, HOME: `${cwd}.home`, LANG: 'C', GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1',
     GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'core.fsmonitor', GIT_CONFIG_VALUE_0: 'false', GIT_CONFIG_KEY_1: 'core.hooksPath', GIT_CONFIG_VALUE_1: '/dev/null',
   });
   const START = juliusAttemptStartCommand(null);
   const CLOSE_PLAIN = juliusAttemptCloseCommand(null);
   /** The close command for the trees the last start reported. Null until a start has run. */
   let closeForTrees: string | null = null;
+  /** D-5: the index file hashes. Null = not read (yet). */
+  let indexAfterStart: string | null = null;
+  let indexBeforeClose: string | null = null;
   let counter = 0;
   let chain: Promise<unknown> = Promise.resolve();
 
@@ -110,6 +154,14 @@ export function createLocalShellPort(input: {
       /* the platform's message names paths and may name more: only a code leaves */
       return { status: 'FAILED', exitCode: null, stdout: '', stderr: 'refused:spawn_failed', invocationId };
     }
+  };
+
+  /** The sha256 (or ABSENT / SYMLINK) of the shared index file, or null when it could not be read. */
+  const readIndex = async (timeoutMs: number): Promise<string | null> => {
+    const r = await exec(J1_INDEX_HASH_COMMAND, timeoutMs);
+    if (r.status !== 'SUCCEEDED') return null;
+    const m = INDEX_VALUE.exec(r.stdout);
+    return m === null ? null : m[1]!;
   };
 
   /** Returns a refusal code, or null when the workspace was seeded. */
@@ -137,7 +189,7 @@ export function createLocalShellPort(input: {
   const handle = async (request: ShellEffectInput): Promise<ShellEffectResult> => {
     const command = request.command;
     if (command === START) {
-      closeForTrees = null;
+      closeForTrees = null; indexAfterStart = null; indexBeforeClose = null;
       const refusal = await seed(request.timeoutMs);
       if (refusal !== null) return FAILED(refusal);
       const r = await exec(START, request.timeoutMs);
@@ -145,13 +197,21 @@ export function createLocalShellPort(input: {
         const trees = parseJuliusAttemptStart(r.stdout, null);
         if (trees.baseTree !== null && trees.startTree !== null) closeForTrees = juliusAttemptCloseCommand({ baseTree: trees.baseTree, startTree: trees.startTree });
       }
+      /* D-5: immediately after the start command, whatever its outcome */
+      indexAfterStart = await readIndex(request.timeoutMs);
       return r;
     }
-    if (command === CLOSE_PLAIN || (closeForTrees !== null && command === closeForTrees)) return exec(command, request.timeoutMs);
+    if (command === CLOSE_PLAIN || (closeForTrees !== null && command === closeForTrees)) {
+      indexBeforeClose = await readIndex(request.timeoutMs);
+      if (indexAfterStart === null || indexBeforeClose === null) return FAILED('index_file_unverified');
+      if (indexAfterStart !== indexBeforeClose) return FAILED('index_file_changed_between_start_and_close');
+      return exec(command, request.timeoutMs);
+    }
     return FAILED('command_not_allowed');
   };
 
   return {
+    evidence: () => ({ indexSha256AfterStart: indexAfterStart, indexSha256BeforeClose: indexBeforeClose, bashSha256: input.bashSha256 }),
     run(request) {
       /* one command at a time: the seed, the start and the close of an attempt never interleave */
       const next = chain.then(() => handle(request));

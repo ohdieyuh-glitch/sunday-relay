@@ -58,7 +58,7 @@ export interface J1WiringDeps {
    * Builds the shell for the CONFIGURED coder workspace and the three pinned, re-hashed seed files (the local J1 port). Used only when `shell` is null.
    * Construct-only: building it spawns and writes nothing. Null/absent with `shell` null = refuse (dep_shell_absent).
    */
-  readonly shellFor?: ((ctx: { readonly workspacePath: string; readonly bashPath: string; readonly seedFiles: readonly J1SeedFile[] }) => ShellEffectPort) | null;
+  readonly shellFor?: ((ctx: { readonly workspacePath: string; readonly bashPath: string; readonly bashSha256: string; readonly gitDir: string; readonly seedFiles: readonly J1SeedFile[] }) => ShellEffectPort) | null;
   /** D-2: whether an absolute path exists (the real one is existsSync). Null = not available = refuse (dep_path_exists_absent). */
   readonly pathExists: ((path: string) => boolean) | null;
   /** Builds the key store for a private key directory (JULIUS_J1_KEY_DIR). Null = not available = refuse. May throw (a bad directory). */
@@ -161,6 +161,16 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   let bashThere = false;
   try { bashThere = pathExists(bashPath); } catch { bashThere = false; }
   if (!bashThere) throw new Refuse('bash_path_not_found');
+  /* The bash must be the pinned file (not a WSL bash.exe or a look-alike), and the child PATH is its directory plus the git directory. */
+  const bashSha256 = needHex('JULIUS_J1_BASH_SHA256');
+  let bashBytes: Uint8Array;
+  try { bashBytes = deps.readFileSync(bashPath); } catch { throw new Refuse('pin_bash_unreadable'); }
+  if (sha256Hex(bashBytes) !== bashSha256) throw new Refuse('pin_bash_sha256_mismatch');
+  const gitDir = need('JULIUS_J1_GIT_DIR');
+  if (!isAbsoluteBashPath(gitDir)) throw new Refuse('config_invalid_julius_j1_git_dir');
+  let gitThere = false;
+  try { gitThere = pathExists(gitDir); } catch { gitThere = false; }
+  if (!gitThere) throw new Refuse('git_dir_not_found');
   const fileSha = (path: string, code: string): string => {
     try { return sha256Hex(deps.readFileSync(path)); } catch { throw new Refuse(`${code}_unreadable`); }
   };
@@ -213,7 +223,7 @@ function build(read: () => J1Env, deps: J1WiringDeps, pins: J1Pins): J1WiringRes
   const ledgerFile = need('JULIUS_J1_LEDGER_FILE');
   /* The shell for THIS workspace: the supplied one, else built from the configured path and the pinned seed files (bytes read now, hashes re-checked by the port). */
   const shell: ShellEffectPort = deps.shell ?? deps.shellFor!({
-    workspacePath, bashPath,
+    workspacePath, bashPath, bashSha256, gitDir,
     seedFiles: [
       { name: 'data/legacy_ledger.csv', bytes: deps.readFileSync(ledgerSeedPath), sha256: ledgerSeedSha },
       { name: 'data/posts.json', bytes: deps.readFileSync(postsSeedPath), sha256: postsSeedSha },

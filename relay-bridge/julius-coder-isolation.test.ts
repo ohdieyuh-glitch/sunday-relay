@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { createCoderRoleProvider } from './julius-dispatch-adapters';
 import { buildJ1CoderProviderFor } from './julius-dispatch-wiring-real';
 import { fakeShell } from './julius-dispatch-wiring-testkit';
-import { createLocalShellPort, J1_SEED_COMMAND, type J1SeedFile, type LocalSeedFs, type LocalSpawn } from './julius-local-shell-port';
+import { createLocalShellPort, J1_INDEX_HASH_COMMAND, J1_SEED_COMMAND, type J1SeedFile, type LocalSeedFs, type LocalSpawn } from './julius-local-shell-port';
 import { juliusAttemptStartCommand } from './julius/coder-workspace';
 import { CLAUDE_SUBSCRIPTION_TOKEN_ENV, CODER_CLAUDE_EXECUTABLE_ENV } from './hosted-coding-agent/hosted-auth';
 import { juliusHostedToolAuthority, type HostedHookOutput } from './hosted-coding-agent/hosted-tool-authority';
@@ -149,7 +149,7 @@ describe('R4 the SDK cwd equals the shell port workspace (real J1 coder path, fa
   ];
   it('the options the real runner hands the query have cwd == the port workspace, tools Read/Glob/Grep/Edit, and Write disallowed', async () => {
     const WS = join(tmpdir(), 'j1-r4-workspace');
-    const files = new Set<string>(); const dirs = new Set<string>([WS]);
+    const files = new Set<string>(); const dirs = new Set<string>([WS, '/opt/git/cmd']);
     const fs: LocalSeedFs = {
       listDir: () => [], exists: (p) => files.has(p) || dirs.has(p), removeRecursive: () => undefined, mkdirp: (p) => { dirs.add(p); }, writeFile: (p) => { files.add(p); },
     };
@@ -157,14 +157,14 @@ describe('R4 the SDK cwd equals the shell port workspace (real J1 coder path, fa
     const spawn: LocalSpawn = async (_file, args, opts) => {
       spawnCwds.push(opts.cwd);
       const command = args[1] ?? '';
-      const stdout = command === J1_SEED_COMMAND ? `SEEDED ${'a'.repeat(40)}
+      const stdout = command === J1_INDEX_HASH_COMMAND ? 'ABSENT' : command === J1_SEED_COMMAND ? `SEEDED ${'a'.repeat(40)}
 ` : command === juliusAttemptStartCommand(null) ? `HEAD ${'a'.repeat(40)}
 BASE ${'b'.repeat(40)}
 START ${'c'.repeat(40)}
 ` : '';
       return { exitCode: 0, stdout, stderr: '', timedOut: false };
     };
-    const port = createLocalShellPort({ cwd: WS, bashPath: '/opt/git/usr/bin/bash', spawn, fs, seedFiles: SEEDS, baseEnv: { PATH: '/bin' } });
+    const port = createLocalShellPort({ cwd: WS, bashPath: '/opt/git/usr/bin/bash', bashSha256: sha('git bash'), readFileBytes: () => enc('git bash'), gitDir: '/opt/git/cmd', spawn, fs, seedFiles: SEEDS, baseEnv: { PATH: '/bin' } });
     const captured: Record<string, unknown>[] = [];
     const build = buildJ1CoderProviderFor({
       queryLoader: async () => (params: { prompt: string; options: Record<string, unknown> }) => { captured.push(params.options); return (async function* () { /* no messages */ })(); },

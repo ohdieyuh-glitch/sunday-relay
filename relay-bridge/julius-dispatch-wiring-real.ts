@@ -97,8 +97,8 @@ export function realJ1WiringDeps(log: (line: string) => void, now: () => number 
     coderProviderFor: buildJ1CoderProviderFor(),
     shell: null,
     /* The LOCAL port (julius-local-shell-port.ts): bridge-generated attempt commands only, in the configured private workspace. Construct-only. */
-    shellFor: ({ workspacePath, bashPath, seedFiles }) => createLocalShellPort({
-      cwd: workspacePath, bashPath, seedFiles, baseEnv: checkerBaseEnv,
+    shellFor: ({ workspacePath, bashPath, bashSha256, gitDir, seedFiles }) => createLocalShellPort({
+      cwd: workspacePath, bashPath, bashSha256, gitDir, seedFiles, readFileBytes: (p) => readFileSync(p),
       fs: {
         listDir: (p) => readdirSync(p), exists: (p) => existsSync(p), removeRecursive: (p) => rmSync(p, { recursive: true, force: true }),
         mkdirp: (p) => { mkdirSync(p, { recursive: true }); }, writeFile: (p, bytes) => writeFileSync(p, bytes),

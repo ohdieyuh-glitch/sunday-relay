@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { juliusAttemptCloseCommand, juliusAttemptStartCommand, parseJuliusAttemptClose, parseJuliusAttemptStart } from './julius/coder-workspace';
 import { realJ1WiringDeps } from './julius-dispatch-wiring-real';
+import type { LocalShellPort } from './julius-local-shell-port';
 
 /** NO-SPEND REAL-SPAWN SMOKE of the local shell port: bash + git only, in a temp dir, no provider, no network. */
 const MISSION = resolve(__dirname, 'julius-inworld-mission', 'julius-inworld-data-1');
@@ -23,7 +24,10 @@ describe.skipIf(process.env.J1_REAL_SMOKE !== '1')('local shell port: real bash 
     const out: string[] = [];
     try {
       const deps = realJ1WiringDeps((l) => out.push(l), Date.now, { PATH: process.env.PATH });
-      const port = deps.shellFor!({ workspacePath: cwd, bashPath: process.env.J1_BASH_PATH ?? 'C:/Program Files/Git/bin/bash.exe', seedFiles: [seed('data/legacy_ledger.csv', 'seed/data/legacy_ledger.csv'), seed('data/posts.json', 'seed/data/posts.json'), seed('format.test.mjs', 'seed/format.test.mjs')] });
+      const bashPath = process.env.J1_BASH_PATH ?? 'C:/Program Files/Git/bin/bash.exe';
+      const gitDir = process.env.J1_GIT_DIR ?? 'C:/Program Files/Git/cmd';
+      const bashSha256 = sha(new Uint8Array(readFileSync(bashPath)));
+      const port = deps.shellFor!({ workspacePath: cwd, bashPath, bashSha256, gitDir, seedFiles: [seed('data/legacy_ledger.csv', 'seed/data/legacy_ledger.csv'), seed('data/posts.json', 'seed/data/posts.json'), seed('format.test.mjs', 'seed/format.test.mjs')] }) as LocalShellPort;
       const req = (command: string) => ({ runId: 'r', projectId: 'p', taskId: 't', workerId: 'w', invocationKey: `k${Math.random()}`, command, timeoutMs: 60_000 });
       const start = await port.run(req(juliusAttemptStartCommand(null)));
       out.push(`START status=${start.status} exit=${String(start.exitCode)} stdout=${JSON.stringify(start.stdout.slice(0, 200))} stderr=${JSON.stringify(start.stderr.slice(0, 300))}`);
@@ -40,6 +44,22 @@ describe.skipIf(process.env.J1_REAL_SMOKE !== '1')('local shell port: real bash 
       const parsed = parseJuliusAttemptClose(close.stdout, true);
       out.push(`CLOSE parsed changes=${JSON.stringify(parsed.status.changes)}`);
       expect(parsed.status.changes.length).toBe(1);
+      const ev = port.evidence();
+      out.push(`EVIDENCE ${JSON.stringify(ev)}`);
+      expect(ev.indexSha256AfterStart).toBe(ev.indexSha256BeforeClose);
+      expect(ev.bashSha256).toBe(bashSha256);
+      // D-5 tamper step: a second attempt; the shared index file is planted between start and close, and the close is refused (never run)
+      const start2 = await port.run(req(juliusAttemptStartCommand(null)));
+      expect(start2.status).toBe('SUCCEEDED');
+      const trees2 = parseJuliusAttemptStart(start2.stdout, null);
+      const indexFile = join(tmpdir(), 'julius-attempt-index');   // /tmp in Git bash is the Windows temp dir
+      writeFileSync(indexFile, 'tampered');
+      try {
+        const refused = await port.run(req(juliusAttemptCloseCommand({ baseTree: trees2.baseTree!, startTree: trees2.startTree! })));
+        out.push(`TAMPER status=${refused.status} stderr=${refused.stderr} evidence=${JSON.stringify(port.evidence())}`);
+        expect(refused).toMatchObject({ status: 'FAILED', stderr: 'refused:index_file_changed_between_start_and_close' });
+        expect(port.evidence().indexSha256AfterStart).not.toBe(port.evidence().indexSha256BeforeClose);
+      } finally { rmSync(indexFile, { force: true }); }
       // an arbitrary command is refused and nothing runs
       const bad = await port.run(req('echo hello > /tmp/j1-should-not-exist'));
       out.push(`REFUSE status=${bad.status} stderr=${bad.stderr}`);

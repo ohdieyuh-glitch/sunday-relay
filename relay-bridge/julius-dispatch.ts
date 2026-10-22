@@ -79,6 +79,8 @@ export interface RoleCallOutput {
   readonly toolInvocations?: number | null;
   /** CODER: bounded executor evidence (diff or changed-file contents, or a labelled path list) shown to the reviewer. Null/absent = none. */
   readonly evidence?: string | null;
+  /** CODER, D-5 / real child PATH: the shared index file's sha256 right after the start and right before the close, and the pinned bash's sha256. Absent = the shell did not say. */
+  readonly shellEvidence?: { readonly indexSha256AfterStart: string | null; readonly indexSha256BeforeClose: string | null; readonly bashSha256: string | null };
   /** CODER bundle step: sha256 of the trimmed final message and of the trimmed out/normalized.json bytes (null = no file), and the workspace paths that changed. */
   readonly bundle?: {
     readonly judgedSha256: string; readonly fileSha256: string | null; readonly changedPaths: readonly string[];
@@ -548,6 +550,9 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         gitTreeSha256Before: role === 'coder' ? (out.bundle?.gitTreeSha256Before ?? null) : null,
         gitTreeSha256After: role === 'coder' ? (out.bundle?.gitTreeSha256After ?? null) : null,
         workspaceExcluded: role === 'coder' && out.bundle !== undefined ? out.bundle.excluded.join(',') : null,
+        indexSha256AfterStart: role === 'coder' ? (out.shellEvidence?.indexSha256AfterStart ?? null) : null,
+        indexSha256BeforeClose: role === 'coder' ? (out.shellEvidence?.indexSha256BeforeClose ?? null) : null,
+        bashSha256: role === 'coder' ? (out.shellEvidence?.bashSha256 ?? null) : null,
         evidenceSha256: role === 'coder' && evidence !== null ? sha256(evidence) : null,
         evidenceChars: role === 'coder' && evidence !== null ? evidence.length : null,
         shownSha256: role === 'reviewer' ? (out.shownSha256 ?? null) : null,
