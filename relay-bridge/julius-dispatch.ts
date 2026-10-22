@@ -707,6 +707,8 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       if (deps.briefSha256 === undefined ? mode === 'live' : deps.briefSha256 !== frozen.contractSha256) return refuse(503, 'julius_dispatch_brief_not_frozen_contract');
       /* R3: in live mode the KeyStore is the only key source; the legacy env read is never reachable. Refused here, before any ledger row or provider call. */
       if (mode === 'live' && deps.keyStore === undefined) return refuse(503, 'julius_dispatch_key_store_required');
+      /* D-4: the composition-time check is not enough; ask the env accessor AGAIN before anything is written or called. Any value, even empty, is a key present. */
+      if (mode === 'live' && DISPATCH_ROLES.some((role) => { const name = providers[role].keyEnv; return name !== null && env[name] !== undefined; })) return refuse(503, 'julius_dispatch_provider_key_in_env');
 
       const callerHash = sha16(input.callerPlayerId);
       const keyHash = sha16(input.idempotencyKey);

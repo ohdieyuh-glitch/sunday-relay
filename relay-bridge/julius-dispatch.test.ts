@@ -74,7 +74,7 @@ function harness(options: {
   readonly keyStore?: KeyStore | null;
 } = {}): Harness {
   const env: Record<string, string | undefined> = {
-    JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: FOUNDER, JULIUS_J1_PROJECT_ID: PROJECT, JULIUS_J1_REVIEWER_PROVIDER: (options.providerIds ?? ['openai', 'anthropic', 'xai'])[2], JULIUS_J1_BUDGET_CAP_USD: '10', JULIUS_J1_LEG_ESTIMATE_USD: '1', ...KEYS, ...options.env,
+    JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: FOUNDER, JULIUS_J1_PROJECT_ID: PROJECT, JULIUS_J1_REVIEWER_PROVIDER: (options.providerIds ?? ['openai', 'anthropic', 'xai'])[2], JULIUS_J1_BUDGET_CAP_USD: '10', JULIUS_J1_LEG_ESTIMATE_USD: '1', ...(options.mode === 'live' && options.keyStore !== null ? {} : KEYS), ...options.env,
   };
   const calls: RoleCallInput[] = [];
   const logs: string[] = [];
@@ -1123,6 +1123,26 @@ describe('R3 the KeyStore is REQUIRED in live mode (the controller itself refuse
     const h = live();
     const out = await h.controller.dispatch(liveInput(h));
     expect(out).not.toMatchObject({ code: 'julius_dispatch_key_store_required' });
+  });
+  it('D-4 a provider key that APPEARS in the env after composition refuses the dispatch (clear code, no row, no provider call)', async () => {
+    const h = live();
+    expect(h.env.OPENAI_API_KEY).toBeUndefined();
+    const ok = await h.controller.dispatch(liveInput(h));
+    expect(ok).not.toMatchObject({ code: 'julius_dispatch_provider_key_in_env' });
+    for (const name of ['OPENAI_API_KEY', 'XAI_API_KEY']) {
+      const g = live();
+      g.env[name] = '';                                        // any value, even empty, counts as present
+      const out = await g.controller.dispatch(liveInput(g));
+      expect(out, name).toMatchObject({ ok: false, status: 503, code: 'julius_dispatch_provider_key_in_env' });
+      expect(await g.ledger.rows(), name).toEqual([]);
+      expect(g.calls, name).toHaveLength(0);
+      expect(JSON.stringify(out)).not.toContain(KEYS.OPENAI_API_KEY);
+    }
+  });
+  it('D-4 does not apply to fake mode (the legacy env read is how fake mode gets its keys)', async () => {
+    const h = harness();
+    expect(h.env.OPENAI_API_KEY).toBeDefined();
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: true });
   });
   it('fake mode keeps the legacy env read: no keyStore, the chain runs and reads the keys from the env', async () => {
     const h = harness();
