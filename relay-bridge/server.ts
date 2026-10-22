@@ -79,6 +79,7 @@ import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-ba
 import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
+import { createUncomposedJuliusDispatch, handleJuliusDispatchRoute, isJuliusDispatchRoute } from './julius-dispatch';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
 import { WonderlandMembershipPostgres } from '../src/relay/persistence/wonderland-membership-postgres';
 import { createPendingSignInStore, handleNativeSignInRoute, isNativeSignInRoute, SIGNIN_START_RATE } from './wonderland-native-signin-routes';
@@ -450,6 +451,7 @@ const juliusMissionPorts = (): JuliusMissionRoutePorts => {
 const headerValue = (value: string | string[] | undefined): string | undefined =>
   (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined);
 
+  const juliusDispatch = createUncomposedJuliusDispatch(() => process.env);
   const pspStore = config.stateRoot === null ? null : createPspConfigStore({ root: config.stateRoot });
   // Read once: `/health` answers the same body for the life of the process.
   const health = healthBody(process.env);
@@ -775,6 +777,30 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             tap: socialTap,
           });
           if (socialResult !== null) send(res, socialResult.status, socialResult.body, { ...cors, ...(socialResult.headers ?? {}) });
+          return;
+        }
+
+        /**
+         * J1 IN-GAME MISSION DISPATCH (flag-gated, loopback-only, founder-only), in front of every `/wonderland/` route.
+         * Off unless JULIUS_J1_ENABLED=1; as shipped it is UNCOMPOSED (no providers), so it can only refuse. See julius-dispatch.ts.
+         */
+        if (isJuliusDispatchRoute(path.replace('/relay-api', ''))) {
+          const fwd = (name: string): boolean => req.headers[name] !== undefined;
+          const j1Result = await handleJuliusDispatchRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            url: (req.url ?? '/').replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+            origin,
+            rawBody: method === 'POST' ? await readRawBody(req) : undefined,
+            idempotencyKey: headerValue(req.headers['x-relay-idempotency-key']),
+            now: Date.now(),
+            operatorToken: process.env.RELAY_BRIDGE_API_TOKEN,
+            remoteAddress: req.socket.remoteAddress,
+            host: typeof req.headers.host === 'string' ? req.headers.host : undefined,
+            forwarded: fwd('x-forwarded-for') || fwd('x-forwarded-host') || fwd('forwarded') || fwd('x-real-ip'),
+          }, { dispatch: juliusDispatch, verifyNativeSession: nativeSessionVerifier(browserSessions) });
+          send(res, j1Result.status, j1Result.body, cors);
           return;
         }
 
