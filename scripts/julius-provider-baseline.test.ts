@@ -1,8 +1,34 @@
+import { createRequire } from 'node:module';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { collectProviderBaseline } from './julius-provider-baseline.mjs';
+/**
+ * The baseline is plain JavaScript so a runner can execute it without a build.
+ * The scripts typecheck does not compile `.mjs`, so the test names the return
+ * shape here instead of importing an untyped module.
+ */
+interface ProviderBaselineRow {
+  readonly timestamp: string;
+  readonly provider: string;
+  readonly status: string;
+  readonly unknownReason: string | null;
+  readonly organizationId: string | null;
+  readonly projectIds: readonly string[] | null;
+  readonly teamId: string | null;
+  readonly cost: unknown;
+  readonly usage: unknown;
+  readonly sourceEndpoints: readonly string[];
+  readonly balance: { readonly status: string; readonly reason: string };
+}
+
+const { collectProviderBaseline } = createRequire(import.meta.url)('./julius-provider-baseline.mjs') as {
+  collectProviderBaseline: (input: {
+    readonly env: Readonly<Record<string, string | undefined>>;
+    readonly fetchImpl: typeof fetch;
+    readonly now?: () => string;
+  }) => Promise<readonly ProviderBaselineRow[]>;
+};
 
 const OPENAI_KEY = 'sk-admin-FAKETESTNOTREAL';
 const ANTHROPIC_KEY = 'sk-ant-FAKETESTNOTREAL';
