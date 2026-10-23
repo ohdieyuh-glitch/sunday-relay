@@ -45,19 +45,36 @@
 //   P2 THE SERVER RUN ID IS PINNED at the first Accepted answer. It must match ^run:[0-9a-f]{24}$ and data.runId must
 //      be this client's wlj_ run id, or the state is AnswerInvalid. Every later answer that names a run must name the
 //      same two ids; a different serverRunId (or data.runId) is RunIdMismatch. Both are fail-closed terminals.
+//      KEYED ONLY ON serverRunId: a status is applied only when the run id it names is the pinned serverRunId,
+//      byte for byte. There is no fallback to any other id (Julius's own run:<idempotencyKey> name included): a
+//      status naming any other id is never applied and ends the watch as RunIdMismatch.
 //   P3 TERMINALS ARE STICKY. Succeeded, Failed, Refused, DispatchFailed, RunIdMismatch, AnswerInvalid and
 //      PollLimitReached never change again; every later answer is traced as ignored and changes nothing.
 //   P4 POLLING NEVER DISPATCHES. A poll that fails (no answer, a bare 5xx, an error object, no data, no run id) is
-//      counted against the poll budget and changes no state. It never leads to a resend or a fresh pair.
-//   P5 THE POLL SCHEDULE IS BOUNDED. NextPoll: PollBaseDelayMs doubling to PollMaxDelayMs, at most PollMaxCount polls
-//      and never a wait past PollMaxTotalWatchMs since the first Accepted answer. Then PollLimitReached, which is
-//      terminal: stop polling and say so. Running out of patience is NOT a failure: the run may still be going.
+//      counted and changes no state. It never leads to a resend or a fresh pair. A poll before the first Accepted
+//      answer is not counted (PollsRecorded() stays 0).
+//   P5 THE POLL SCHEDULE IS BOUNDED BY TIME, IN TWO PHASES. There is no poll-count cap. The ADMISSION phase runs from
+//      the first Accepted answer until the first JuliusRun status is applied, and lasts at most PollAdmissionWatchMs
+//      (360 min): longer than julius-first-live-mission.yml's paid-slot job (timeout-minutes: 350), a legal wait for
+//      a paid slot before anything is spent. The first JuliusRun status opens a fresh RUN phase of at most
+//      PollRunWatchMs (330 min): longer than the first-live-mission job (timeout-minutes: 300, sized for the measured
+//      291.9 min worst case with 3 repair cycles). The run phase starts at the first NextPollStep after that status
+//      (the wrapper asks right after recording each answer), so it never starts early. In each phase the delay is
+//      PollBaseDelayMs doubling to PollMaxDelayMs, and PollSlowDelayMs once the phase is PollSlowAfterMs (30 min)
+//      old. When the next wait would pass the phase's budget: PollLimitReached, which is terminal: stop polling and
+//      say so. Running out of patience is NOT a failure: the run may still be going. Both budgets are pinned to the
+//      workflow's timeout-minutes by wonderland-j1-progress.test.ts, so the workflow cannot outgrow them silently.
 //   P6 NO SPEND, NO PASS. The display words never claim money was spent, never say PASS, qualifying or verified.
 //      Succeeded only means "the status said COMPLETED": the result still goes through r2's ClassifyResultEnvelope,
 //      ClassifyFinishedResult and the R4-F judge before anything is shown as an outcome.
 //   P7 A 202 IS NOT A RUNNING MISSION. An Admission-vocabulary answer can only ever give AdmittedHeld, Waiting or
 //      DispatchFailed. Only a JuliusRun-vocabulary status can say Dispatched or Running, so ADMISSION_HELD with
 //      dispatched:false shows "Admitted -- waiting for the paid run", never "running".
+//   P8 JULIUS OUTRANKS ADMISSION. Once any JuliusRun status has been applied (JuliusStatusSeen()), an Admission-
+//      vocabulary answer (a poll or a late replay of the dispatch) is only traced (admission_answer_logged) and
+//      changes nothing: it can never move the state back to AdmittedHeld or Waiting, and never to DispatchFailed.
+//      So DispatchFailed is reachable only before any Julius status: at the first Accepted answer itself, or from
+//      AdmittedHeld or Waiting. A run-id mismatch is still checked first and still fails closed (P2).
 //
 // WHAT IS NOT HERE: no HTTP, no JSON parsing, no logging sink, no clock, no Unreal. The wrapper measures WatchedMs,
 // parses the answer into FStatusAnswer and writes the trace lines (FormatProgressTrace) to its own log.
@@ -95,7 +112,10 @@ namespace WonderlandJuliusMissionLogic
 		Failed,
 		/** Terminal. The dispatch POST itself was refused (r2 Refused) before any Accepted answer. */
 		Refused,
-		/** Terminal. Admission state INTERRUPTED or FAILED: the bridge ended the admission (markTerminal). */
+		/**
+		 * Terminal. Admission state INTERRUPTED or FAILED: the bridge ended the admission (markTerminal). Reachable only
+		 * before any JuliusRun status was applied (P8).
+		 */
 		DispatchFailed,
 		/** Terminal, fail closed. An answer named a different serverRunId or client run id than the pinned ones. */
 		RunIdMismatch,
@@ -159,6 +179,8 @@ namespace WonderlandJuliusMissionLogic
 		LateDispatchAnswerIgnored,
 		/** A readable status answer for the pinned run; the state follows the status. */
 		StatusApplied,
+		/** P8: an Admission-vocabulary answer after a JuliusRun status was applied. Traced; the state does not change. */
+		AdmissionAnswerLogged,
 		/** A poll with no usable answer: counted, no state change, never a resend. */
 		PollFailed,
 		/** An answer named a run other than the pinned one. */
@@ -192,8 +214,26 @@ namespace WonderlandJuliusMissionLogic
 	inline constexpr std::uint32_t PollBaseDelayMs = 5000;
 	inline constexpr std::uint32_t PollGrowthFactor = 2;
 	inline constexpr std::uint32_t PollMaxDelayMs = 60000;
-	inline constexpr std::uint32_t PollMaxCount = 240;
-	inline constexpr std::uint64_t PollMaxTotalWatchMs = 10800000;
+	/** Once a phase is this old (30 min), every wait is PollSlowDelayMs. */
+	inline constexpr std::uint64_t PollSlowAfterMs = 1800000;
+	inline constexpr std::uint32_t PollSlowDelayMs = 120000;
+	/**
+	 * 360 min from the first Accepted answer while no JuliusRun status has been applied. Must stay >= the paid-slot
+	 * job's timeout-minutes: 350 in .github/workflows/julius-first-live-mission.yml (pinned by the .ts test).
+	 */
+	inline constexpr std::uint64_t PollAdmissionWatchMs = 21600000;
+	/**
+	 * 330 min from the first JuliusRun status. Must stay >= the first-live-mission job's timeout-minutes: 300 (worst
+	 * case 291.9 min with 3 repair cycles) in .github/workflows/julius-first-live-mission.yml (pinned by the .ts test).
+	 */
+	inline constexpr std::uint64_t PollRunWatchMs = 19800000;
+
+	/** P5: which budget applies. Admission until the first JuliusRun status is applied, then Run. */
+	enum class EPollPhase : std::uint8_t
+	{
+		Admission,
+		Run,
+	};
 
 	enum class EPollStep : std::uint8_t
 	{
@@ -211,12 +251,14 @@ namespace WonderlandJuliusMissionLogic
 	};
 
 	/**
-	 * Pure and deterministic, like r2's NextResend. PollsSent: polls already sent for this run. WatchedMs: wall time
-	 * since the first Accepted answer, as the wrapper measured it. The delay before poll N (from 0) is
-	 * min(PollBaseDelayMs * PollGrowthFactor^N, PollMaxDelayMs): 5,000, 10,000, 20,000, 40,000 ms, then 60,000 ms.
-	 * Stop once PollsSent reaches PollMaxCount or the wait would take WatchedMs past PollMaxTotalWatchMs.
+	 * Pure and deterministic, like r2's NextResend. PollsSent: polls already sent for this run. PhaseWatchedMs: wall
+	 * time since the phase began (Admission: the first Accepted answer; Run: the first JuliusRun status), as the
+	 * wrapper measured it. The delay before poll N (from 0) is min(PollBaseDelayMs * PollGrowthFactor^N,
+	 * PollMaxDelayMs): 5,000, 10,000, 20,000, 40,000 ms, then 60,000 ms; PollSlowDelayMs once PhaseWatchedMs reaches
+	 * PollSlowAfterMs. Stop when the wait would take PhaseWatchedMs past the phase's budget (PollAdmissionWatchMs or
+	 * PollRunWatchMs). There is no count cap.
 	 */
-	FPollDecision NextPoll(std::uint32_t PollsSent, std::uint64_t WatchedMs);
+	FPollDecision NextPoll(std::uint32_t PollsSent, EPollPhase Phase, std::uint64_t PhaseWatchedMs);
 
 	/* ---------------------------------------------------------------- the state machine */
 
@@ -236,8 +278,10 @@ namespace WonderlandJuliusMissionLogic
 		EMissionProgress RecordPollAnswer(const FStatusAnswer& Fields);
 
 		/**
-		 * Whether to poll, and after what wait. Stop in AwaitingDispatchAnswer and in every terminal state. When the
-		 * budget is spent it moves to PollLimitReached (traced) and answers Stop from then on.
+		 * Whether to poll, and after what wait. WatchedMs: wall time since the first Accepted answer. Stop in
+		 * AwaitingDispatchAnswer and in every terminal state. The first call after a JuliusRun status was applied
+		 * starts the Run phase at WatchedMs (P5). When the phase's budget is spent it moves to PollLimitReached
+		 * (traced) and answers Stop from then on.
 		 */
 		FPollDecision NextPollStep(std::uint64_t WatchedMs);
 
@@ -247,15 +291,23 @@ namespace WonderlandJuliusMissionLogic
 		EMissionProgress Current() const { return State; }
 		const std::string& PinnedServerRunId() const { return ServerRunId; }
 		std::uint32_t PollsRecorded() const { return PollsSent; }
+		/** P8: true once any JuliusRun status has been applied for the pinned run. */
+		bool JuliusStatusSeen() const { return bJuliusStatusSeen; }
+		EPollPhase PollPhase() const { return bJuliusStatusSeen ? EPollPhase::Run : EPollPhase::Admission; }
 		const std::vector<FProgressTrace>& Trace() const { return Events; }
 
 	private:
 		EMissionProgress Move(EProgressEvent Event, EMissionProgress To, const FStatusAnswer* Fields);
+		/** An Admission-vocabulary status for the pinned run: applied before any Julius status, logged after (P8). */
+		EMissionProgress ApplyAdmission(EProgressEvent Event, const FStatusAnswer& Fields);
 
 		std::string ClientRunId;
 		std::string ServerRunId;
 		EMissionProgress State = EMissionProgress::AwaitingDispatchAnswer;
 		std::uint32_t PollsSent = 0;
+		bool bJuliusStatusSeen = false;
+		bool bRunPhaseStarted = false;
+		std::uint64_t RunPhaseStartMs = 0;
 		std::vector<FProgressTrace> Events;
 	};
 

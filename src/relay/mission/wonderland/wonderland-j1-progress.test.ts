@@ -18,7 +18,10 @@ import { describe, expect, it } from 'vitest';
  *      (#407 dd0153a0, src/relay/integration/wonderland-admission/admission-store.ts) is restated here and compared
  *      with that file whenever it is on the tree.
  *   3. Checks that the scripts cover every transition out of every non-terminal state, every terminal against every
- *      kind of later answer, the run-id mismatch, no dispatch after Accepted and the poll cap.
+ *      kind of later answer, the run-id mismatch, no dispatch after Accepted, the two-phase poll budget, and that an
+ *      Admission answer after a Julius status is only logged (P8).
+ *   3a. Reads .github/workflows/julius-first-live-mission.yml on this tree and fails if either poll budget is
+ *      shorter than the workflow job it waits on (paid-slot, first-live-mission).
  *   4. Compiles and runs the C++ KAT with -Werror when a C++ compiler is present. CI (ubuntu-latest) has one; a CI run
  *      without one FAILS rather than reporting a pass for C++ it never ran.
  */
@@ -29,6 +32,7 @@ const PROGRESS_H = join(CPP_DIR, 'WonderlandJuliusMissionProgress.h');
 const PROGRESS_CPP = join(CPP_DIR, 'WonderlandJuliusMissionProgress.cpp');
 const LOGIC_CPP = join(CPP_DIR, 'WonderlandJuliusMissionLogic.cpp');
 const KAT = join(ROOT, 'wonderland', 'Tools', 'j1_progress_kat.cpp');
+const LIVE_WORKFLOW = join(ROOT, '.github', 'workflows', 'julius-first-live-mission.yml');
 const JULIUS_RUNTIME = join(ROOT, 'src', 'relay', 'mission', 'julius', 'julius-runtime.ts');
 const ADMISSION_STORE = join(ROOT, 'src', 'relay', 'integration', 'wonderland-admission', 'admission-store.ts');
 
@@ -71,7 +75,7 @@ function table(name: string): string[][] {
   for (const line of section(name).split('\n')) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('{ ')) continue;
-    const cells = [...trimmed.matchAll(/"((?:[^"\\]|\\.)*)"|E(?:MissionProgress|StatusVocabulary|PollStep)::(\w+)|\b(\d+)\b/gu)]
+    const cells = [...trimmed.matchAll(/"((?:[^"\\]|\\.)*)"|E(?:MissionProgress|StatusVocabulary|PollStep|PollPhase)::(\w+)|\b(\d+)\b/gu)]
       .map((match) => (match[1] !== undefined ? cString(match[1]) : (match[2] ?? match[3] ?? '')));
     rows.push(cells);
   }
@@ -122,18 +126,20 @@ function referenceAnswer(status: number, hasError: boolean, kind: string): 'Acce
   return 'NoAnswer';
 }
 
-const POLL = { base: 5000, factor: 2, cap: 60000, maxCount: 240, maxTotal: 10_800_000 } as const;
-function referencePoll(sent: number, watched: number): [string, number] {
-  if (sent >= POLL.maxCount) return ['Stop', 0];
-  const delay = Math.min(POLL.base * POLL.factor ** Math.min(sent, 10), POLL.cap);
-  if (watched > POLL.maxTotal || delay > POLL.maxTotal - watched) return ['Stop', 0];
+const POLL = { base: 5000, factor: 2, cap: 60000, slowAfter: 1_800_000, slow: 120_000, admission: 21_600_000, run: 19_800_000 } as const;
+/** P5 restated: two time budgets, no count cap. */
+function referencePoll(sent: number, phase: string, watched: number): [string, number] {
+  const budget = phase === 'Run' ? POLL.run : POLL.admission;
+  const delay = watched >= POLL.slowAfter ? POLL.slow : Math.min(POLL.base * POLL.factor ** Math.min(sent, 10), POLL.cap);
+  if (watched > budget || delay > budget - watched) return ['Stop', 0];
   return ['WaitThenPoll', delay];
 }
 
 const CLIENT_OK = 'wlj_0b1f3c2a-5d4e-4f60-8a71-92b3c4d5e6f7';
 const CLIENT_OTHER = 'wlj_7e6d5c4b-3a29-4180-9f7e-6d5c4b3a2918';
 const SERVER: Readonly<Record<string, string>> = {
-  S1: 'run:0123456789abcdef01234567', S2: 'run:89abcdef0123456789abcdef', bad: 'run:0123456789ABCDEF01234567', short: 'run:0123', none: '',
+  S1: 'run:0123456789abcdef01234567', S2: 'run:89abcdef0123456789abcdef', bad: 'run:0123456789ABCDEF01234567', short: 'run:0123',
+  jkey: 'run:6c2d9e1f-3a4b-4c5d-9e6f-7a8b9c0d1e2f', none: '',
 };
 const SERVER_RUN_ID = /^run:[0-9a-f]{24}$/u;
 
@@ -152,10 +158,17 @@ function parseAnswer(fields: string[], vocab: string): Answer {
 const NO_ANSWER: Answer = { http: 0, hasError: false, kind: '', hasData: false, vocab: 'Unknown', client: '', server: '', status: '' };
 
 /** The tracker, restated from the header's P1-P7. Returns every step, like the C++ trace. */
-function referenceRun(script: string): { state: State; pinned: string; polls: number; steps: Step[] } {
+function referenceRun(script: string): { state: State; pinned: string; polls: number; julius: boolean; steps: Step[] } {
   let state: State = 'AwaitingDispatchAnswer';
   let pinned = '';
   let polls = 0;
+  let julius = false;
+  let runStart: number | null = null;
+  // P8: an Admission status applies only before any Julius status; after one it is logged and moves nothing.
+  const admission = (event: string, status: string, kind: string) => {
+    if (julius) move('admission_answer_logged', state, kind);
+    else move(event, referenceStatus('Admission', status), kind);
+  };
   const steps: Step[] = [{ from: state, to: state, event: 'started', kind: 'start' }];
   const move = (event: string, to: State, kind: string) => { steps.push({ from: state, to, event, kind }); state = to; };
   const mismatched = (answer: Answer) => (answer.server !== '' && answer.server !== pinned) || (answer.client !== '' && answer.client !== CLIENT_OK);
@@ -174,25 +187,32 @@ function referenceRun(script: string): { state: State; pinned: string; polls: nu
       } else if (verdict !== 'Accepted') move('late_dispatch_answer_ignored', state, 'late');
       else if (mismatched(answer)) move('run_id_mismatched', 'RunIdMismatch', 'late');
       else if (!answer.hasData || answer.server === '' || answer.client === '') move('late_dispatch_answer_ignored', state, 'late');
-      else move('dispatch_replayed', referenceStatus('Admission', answer.status), 'late');
+      else admission('dispatch_replayed', answer.status, 'late');
     } else if (token === 'P0' || fields[0] === 'P') {
       const answer = token === 'P0' ? NO_ANSWER : parseAnswer([fields[1] ?? '', fields[2] ?? '', ...fields.slice(4)], { A: 'Admission', J: 'JuliusRun' }[fields[3] ?? ''] ?? 'Unknown');
       if (state === 'AwaitingDispatchAnswer') { move('poll_failed', state, 'poll'); continue; }
-      polls = Math.min(polls + 1, POLL.maxCount);
+      polls += 1;
       const readable = answer.http >= 200 && answer.http <= 299 && !answer.hasError && answer.kind === '' && answer.hasData;
       if (TERMINAL.includes(state)) move('ignored_after_terminal', state, 'poll');
       else if (!readable) move('poll_failed', state, 'poll');
       else if (mismatched(answer)) move('run_id_mismatched', 'RunIdMismatch', 'poll');
       else if (answer.server === '' || (answer.vocab === 'Admission' && answer.client === '')) move('poll_failed', state, 'poll');
-      else move('status_applied', referenceStatus(answer.vocab, answer.status), 'poll');
+      else if (answer.vocab === 'Admission') admission('status_applied', answer.status, 'poll');
+      else {
+        if (answer.vocab === 'JuliusRun') julius = true;
+        move('status_applied', referenceStatus(answer.vocab, answer.status), 'poll');
+      }
     } else if (fields[0] === 'N' && fields.length === 2) {
       if (state === 'AwaitingDispatchAnswer' || TERMINAL.includes(state)) continue;
-      if (referencePoll(polls, Number(fields[1]))[0] === 'Stop') move('poll_limit_reached', 'PollLimitReached', 'next');
+      const watched = Number(fields[1]);
+      if (julius && runStart === null) runStart = watched;
+      const phaseWatched = julius ? Math.max(0, watched - (runStart ?? 0)) : watched;
+      if (referencePoll(polls, julius ? 'Run' : 'Admission', phaseWatched)[0] === 'Stop') move('poll_limit_reached', 'PollLimitReached', 'next');
     } else {
       throw new Error(`malformed script step ${token}`);
     }
   }
-  return { state, pinned, polls, steps };
+  return { state, pinned, polls, julius, steps };
 }
 
 /* ------------------------------------------------------------------ the tests */
@@ -251,32 +271,68 @@ describe('J1 progress logic: the words on screen claim nothing', () => {
 
 describe('J1 progress logic: polling is bounded and never dispatches (P4, P5)', () => {
   it('every poll row expects the restated schedule, and the header states the same constants', () => {
-    for (const [label, sent, watched, step, delay] of table('KAT-POLL')) {
-      expect([step, Number(delay)], label).toEqual(referencePoll(Number(sent), Number(watched)));
+    for (const [label, sent, phase, watched, step, delay] of table('KAT-POLL')) {
+      expect([step, Number(delay)], label).toEqual(referencePoll(Number(sent), phase ?? '', Number(watched)));
     }
     const header = source(PROGRESS_H);
     expect(header).toContain(`PollBaseDelayMs = ${POLL.base};`);
     expect(header).toContain(`PollGrowthFactor = ${POLL.factor};`);
     expect(header).toContain(`PollMaxDelayMs = ${POLL.cap};`);
-    expect(header).toContain(`PollMaxCount = ${POLL.maxCount};`);
-    expect(header).toContain(`PollMaxTotalWatchMs = ${POLL.maxTotal};`);
+    expect(header).toContain(`PollSlowAfterMs = ${POLL.slowAfter};`);
+    expect(header).toContain(`PollSlowDelayMs = ${POLL.slow};`);
+    expect(header).toContain(`PollAdmissionWatchMs = ${POLL.admission};`);
+    expect(header).toContain(`PollRunWatchMs = ${POLL.run};`);
+    expect(header, 'no poll-count cap').not.toMatch(/PollMaxCount|PollMaxTotalWatchMs/u);
+    expect(source(PROGRESS_CPP), 'no poll-count cap').not.toMatch(/PollMaxCount|PollMaxTotalWatchMs/u);
+  });
+
+  it("both budgets are at least the paid workflow's own job timeouts, read from the workflow on this tree (M-1)", () => {
+    const lines = source(LIVE_WORKFLOW).split('\n');
+    /** The timeout-minutes of a top-level job: the first one between `  <job>:` and the next job. */
+    const jobTimeout = (job: string): { minutes: number; line: number } => {
+      const start = lines.findIndex((line) => line === `  ${job}:`);
+      expect(start, `job ${job}`).toBeGreaterThanOrEqual(0);
+      for (let index = start + 1; index < lines.length; index += 1) {
+        const line = lines[index] ?? '';
+        if (/^  [a-z0-9_-]+:\s*$/u.test(line)) break;
+        const match = /^    timeout-minutes: (\d+)\s*$/u.exec(line);
+        if (match) return { minutes: Number(match[1]), line: index + 1 };
+      }
+      throw new Error(`job ${job} has no timeout-minutes`);
+    };
+    const paidSlot = jobTimeout('paid-slot');
+    const live = jobTimeout('first-live-mission');
+    // The workflow's own measured worst case for the live job (3 repair cycles plus the entrypoint's margins).
+    const worst = /^\s*#.*= (\d+)\s+\((\d+(?:\.\d+)?) min\)\s*$/u;
+    const worstCases = lines.map((line) => worst.exec(line)).filter((match): match is RegExpExecArray => match !== null).map((match) => Number(match[1]));
+    expect(worstCases.length, 'the live job states its measured worst case').toBeGreaterThan(0);
+    const worstMs = Math.max(...worstCases);
+    expect(worstMs, 'the stated worst case fits the live job').toBeLessThanOrEqual(live.minutes * 60_000);
+    expect(POLL.admission, `admission budget vs paid-slot timeout-minutes ${paidSlot.minutes} (line ${paidSlot.line})`).toBeGreaterThanOrEqual(paidSlot.minutes * 60_000);
+    expect(POLL.run, `run budget vs first-live-mission timeout-minutes ${live.minutes} (line ${live.line})`).toBeGreaterThanOrEqual(live.minutes * 60_000);
+    expect(POLL.run, `run budget vs the live job's worst case ${worstMs} ms`).toBeGreaterThanOrEqual(worstMs);
+    // Values as reviewed at d35faa39's tree; if the workflow moves, this names the change instead of passing silently.
+    expect([paidSlot.minutes, live.minutes, worstMs]).toEqual([350, 300, 17_516_316]);
   });
 
   it('every poll-run row reaches the limit after exactly the restated number of polls', () => {
     const rows = table('KAT-POLL-RUN');
-    for (const [label, answer, requestMs, polls, watchedMs] of rows) {
+    for (const [label, , requestMs, juliusFrom, polls, watchedMs] of rows) {
       let sent = 0;
       let watched = 0;
+      let runStart: number | null = null;
       for (;;) {
-        const [step, delay] = referencePoll(sent, watched);
+        const julius = Number(juliusFrom) !== 0 && sent >= Number(juliusFrom);
+        if (julius && runStart === null) runStart = watched;
+        const [step, delay] = referencePoll(sent, julius ? 'Run' : 'Admission', julius ? watched - (runStart ?? 0) : watched);
         if (step === 'Stop') break;
-        if (answer !== 'frozen') watched += delay + Number(requestMs);
+        watched += delay + Number(requestMs);
         sent += 1;
       }
       expect([sent, watched], label).toEqual([Number(polls), Number(watchedMs)]);
     }
-    expect(rows.some((row) => row[1] === 'frozen' && row[3] === String(POLL.maxCount)), 'the count cap is reached').toBe(true);
     expect(rows.some((row) => row[1] === 'fail'), 'failing polls are run').toBe(true);
+    expect(rows.some((row) => Number(row[3]) > 0 && Number(row[5]) > POLL.admission), 'a run phase outlasts the admission budget').toBe(true);
   });
 });
 
@@ -288,17 +344,30 @@ describe('J1 progress logic: the state machine (P1, P2, P3)', () => {
     for (const { row, run } of runs) {
       const [label, , final, lastEvent, pinned, send] = row;
       expect(run.state, `${label} state`).toBe(final);
+      if (run.state === 'AwaitingDispatchAnswer') expect(run.polls, `${label} no poll counted before Accepted`).toBe(0);
       expect(run.steps.at(-1)?.event, `${label} last event`).toBe(lastEvent);
       expect(run.pinned, `${label} pinned`).toBe(SERVER[pinned ?? ''] ?? '');
       expect(send, `${label} send allowed`).toBe(run.state === 'AwaitingDispatchAnswer' ? '1' : '0');
     }
   });
 
+  it('a poll before the first Accepted answer is not counted (P4, mutant S22)', () => {
+    const entry = runs.find(({ row }) => row[0] === 'poll_before_accepted');
+    expect(entry?.run.polls).toBe(0);
+    expect(source(KAT)).toContain('Tracker.PollsRecorded() == 0, "P4 polls before Accepted are not counted');
+  });
+
   it('every transition out of every non-terminal state is exercised', () => {
     const seen = new Set(runs.flatMap(({ run }) => run.steps.map((step) => `${step.from}>${step.to}`)));
     const targets: State[] = ['AdmittedHeld', 'Dispatched', 'Running', 'Paused', 'Waiting', 'Succeeded', 'Failed', 'DispatchFailed', 'RunIdMismatch', 'PollLimitReached'];
+    // P8: Dispatched, Running and Paused are only reached by a Julius status, so from them an Admission answer can
+    // never lead back to AdmittedHeld nor to DispatchFailed.
+    const juliusOnly: readonly State[] = ['Dispatched', 'Running', 'Paused'];
     for (const from of NON_TERMINAL_AFTER_ACCEPT) {
-      for (const to of targets) expect(seen.has(`${from}>${to}`), `${from} -> ${to}`).toBe(true);
+      for (const to of targets) {
+        const impossible = juliusOnly.includes(from) && (to === 'AdmittedHeld' || to === 'DispatchFailed');
+        expect(seen.has(`${from}>${to}`), `${from} -> ${to}`).toBe(!impossible);
+      }
     }
     for (const to of ['AwaitingDispatchAnswer', 'Refused', 'AdmittedHeld', 'Waiting', 'DispatchFailed', 'AnswerInvalid', 'RunIdMismatch']) {
       expect(seen.has(`AwaitingDispatchAnswer>${to}`), `AwaitingDispatchAnswer -> ${to}`).toBe(true);
@@ -341,10 +410,63 @@ describe('J1 progress logic: the state machine (P1, P2, P3)', () => {
     }
   });
 
+  it('after a Julius status an Admission answer is only logged, and DispatchFailed is reached only before one (M-2)', () => {
+    for (const { row, run } of runs) {
+      let julius = false;
+      // Re-run prefix by prefix so each step knows whether a Julius status had applied before it.
+      const tokens = (row[1] ?? '') === '' ? [] : (row[1] ?? '').split(' ');
+      for (let count = 1; count <= tokens.length; count += 1) {
+        const before = referenceRun(tokens.slice(0, count - 1).join(' '));
+        const after = referenceRun(tokens.slice(0, count).join(' '));
+        julius = before.julius;
+        for (const step of after.steps.slice(before.steps.length)) {
+          if (step.to === 'DispatchFailed' && step.from !== 'DispatchFailed') {
+            expect(julius, `${row[0]} DispatchFailed after Julius`).toBe(false);
+            expect(['AwaitingDispatchAnswer', 'AdmittedHeld', 'Waiting'], `${row[0]}`).toContain(step.from);
+          }
+          if (step.event === 'admission_answer_logged') {
+            expect(julius, `${row[0]} logged before Julius`).toBe(true);
+            expect(step.to, `${row[0]}`).toBe(step.from);
+          }
+          if (julius) expect(step.to, `${row[0]} back to admitted`).not.toBe('AdmittedHeld');
+        }
+      }
+      expect(run.steps.length, `${row[0]}`).toBeGreaterThan(0);
+    }
+    for (const label of ['m2_running_admission_poll_no_regression', 'm2_running_admission_poll_no_dispatch_failed_interrupted',
+      'm2_running_late_replay_no_dispatch_failed_interrupted', 'running_to_held_admission', 'running_to_dispatch_failed_interrupted',
+      'running_late_replay_interrupted']) {
+      const row = rows.find((candidate) => candidate[0] === label);
+      expect(row?.[2], label).toBe('Running');
+      expect(row?.[3], label).toBe('admission_answer_logged');
+    }
+    for (const label of ['m2_pre_julius_waiting_to_dispatch_failed', 'm2_pre_julius_waiting_late_replay_dispatch_failed', 'held_to_dispatch_failed_interrupted']) {
+      expect(rows.find((candidate) => candidate[0] === label)?.[2], label).toBe('DispatchFailed');
+    }
+    expect(table('KAT-PROGRESS-DISPLAY').find((row) => row[1] === 'DispatchFailed')?.[2]).toBe('The bridge ended this request before Julius reported a run');
+  });
+
+  it('keyed only on serverRunId: a status naming any other run id is never applied and fails closed (P2)', () => {
+    for (const label of ['runid_julius_own_name_is_not_applied', 'runid_julius_own_name_while_running']) {
+      const entry = runs.find(({ row }) => row[0] === label);
+      expect(entry, label).toBeDefined();
+      const { row, run } = entry as (typeof runs)[number];
+      expect(row[1], label).toContain(',jkey,');
+      expect(run.state, label).toBe('RunIdMismatch');
+      expect(run.pinned, label).toBe(SERVER.S1);
+      const last = run.steps.at(-1);
+      expect(last?.event, label).toBe('run_id_mismatched');
+      // The status the foreign id reported (COMPLETED / FAILED) was not applied.
+      expect(run.steps.some((step) => step.to === 'Succeeded' || step.to === 'Failed'), label).toBe(false);
+    }
+    expect(SERVER_RUN_ID.test(SERVER.jkey ?? ''), "Julius's own run name is not a serverRunId").toBe(false);
+  });
+
   it('the header states the rules the scripts pin', () => {
     const header = source(PROGRESS_H);
     for (const text of ['P1 NO SECOND DISPATCH', 'P2 THE SERVER RUN ID IS PINNED', 'P3 TERMINALS ARE STICKY', 'P4 POLLING NEVER DISPATCHES',
-      'P5 THE POLL SCHEDULE IS BOUNDED', 'P6 NO SPEND, NO PASS', 'P7 A 202 IS NOT A RUNNING MISSION', '#407 defines NO status endpoint',
+      'P5 THE POLL SCHEDULE IS BOUNDED BY TIME, IN TWO PHASES', 'P6 NO SPEND, NO PASS', 'P7 A 202 IS NOT A RUNNING MISSION',
+      'P8 JULIUS OUTRANKS ADMISSION', 'KEYED ONLY ON serverRunId', '#407 defines NO status endpoint',
       'dd0153a0d8c362283224d388390e822b13c3b2d6', 'ONE TRACKER PER TRIGGER']) {
       expect(header).toContain(text);
     }
