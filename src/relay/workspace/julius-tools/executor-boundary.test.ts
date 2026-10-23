@@ -2,9 +2,12 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { join } from 'node:path';
+import { hermeticGitEnv, installHermeticGitHome } from '../git-fixture-env';
 
-const root=execFileSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'}).trim();
-const tracked=execFileSync('git',['ls-files','*.ts','*.tsx','*.mts','*.cts'],{cwd:root,encoding:'utf8'}).split('\n').filter(Boolean);
+installHermeticGitHome();
+const gitEnv = hermeticGitEnv();
+const root=execFileSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8', env: gitEnv}).trim();
+const tracked=execFileSync('git',['ls-files','*.ts','*.tsx','*.mts','*.cts'],{cwd:root,encoding:'utf8', env: gitEnv}).split('\n').filter(Boolean);
 const production=tracked.filter(file=>!/\.test\.tsx?$/.test(file)&&!file.includes('/testing/')&&!file.endsWith('-fixtures.ts'));
 const sourceOf=(file:string)=>readFileSync(join(root,file),'utf8');
 

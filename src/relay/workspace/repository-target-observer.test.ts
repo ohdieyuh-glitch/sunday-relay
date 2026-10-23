@@ -4,6 +4,9 @@ import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, readFileSyn
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { hermeticGitEnv, installHermeticGitHome } from './git-fixture-env';
+
+installHermeticGitHome();
 
 import {
   REPOSITORY_GIT_ALLOWLIST,
@@ -1117,7 +1120,7 @@ describe('the remote subcommand cannot mutate where the repository points', () =
    * whatever origin happened to exist, and failed in a checkout with none.
    */
   const MUTATING = ['set-url', 'add', 'remove', 'rename', 'prune', 'update'];
-  const gitEnv = (root: string) => ({ PATH: process.env.PATH ?? '', HOME: root });
+  const gitEnv = (root: string) => hermeticGitEnv({ HOME: root });
 
   function throwawayRepo(): string {
     const root = mkdtempSync(join(tmpdir(), 'relay-remote-probe-'));
@@ -1178,7 +1181,7 @@ describe('git branch cannot create, rename or delete a ref', () => {
   function branchProbeRepo(): string {
     const root = mkdtempSync(join(tmpdir(), 'relay-branch-probe-'));
     temporaries.push(root);
-    const env = { PATH: process.env.PATH ?? '', HOME: root };
+    const env = hermeticGitEnv({ HOME: root });
     execFileSync('git', ['init', '--quiet', '--initial-branch=main'], { cwd: root, env });
     writeFileSync(join(root, 'f.txt'), 'x\n');
     execFileSync('git', ['add', '--', '.'], { cwd: root, env });
@@ -1191,7 +1194,7 @@ describe('git branch cannot create, rename or delete a ref', () => {
 
   it('refuses a positional branch name, and creates no ref', () => {
     const root = branchProbeRepo();
-    const env = { PATH: process.env.PATH ?? '', HOME: root };
+    const env = hermeticGitEnv({ HOME: root });
     const result = runRepositoryGit(['branch', 'relay-sneaky'], root);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.message).toContain('outside Relay');

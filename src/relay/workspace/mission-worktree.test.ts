@@ -3,6 +3,9 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, w
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { hermeticGitEnv, installHermeticGitHome } from './git-fixture-env';
+
+installHermeticGitHome();
 import {
   assertNotPrimaryCheckout,
   evaluateWorktreeCleanup,
@@ -46,15 +49,12 @@ const git = (args: string[], cwd: string): string =>
   execFileSync('git', args, {
     cwd,
     encoding: 'utf8',
-    env: {
-      PATH: process.env.PATH ?? '',
-      HOME: process.env.HOME ?? '',
-      GIT_TERMINAL_PROMPT: '0',
+    env: hermeticGitEnv({
       GIT_AUTHOR_NAME: 'Relay Test',
       GIT_AUTHOR_EMAIL: 'test@example.com',
       GIT_COMMITTER_NAME: 'Relay Test',
       GIT_COMMITTER_EMAIL: 'test@example.com',
-    },
+    }),
   });
 
 /** A disposable repository with one commit, inside its own container so the

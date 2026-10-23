@@ -6,6 +6,7 @@ import type { ProjectId, RunId, TaskId } from '../protocol/ids';
 import { createWorkspaceService } from './index';
 import type { WorkspacePolicyInput } from './contracts';
 import { DEFAULT_WORKSPACE_COMMAND_POLICY } from './command-policy';
+import { hermeticGitEnv, installHermeticGitHome } from './git-fixture-env';
 
 /**
  * Deterministic workspace verification harness (Prompt 7) — proves the
@@ -30,10 +31,11 @@ const FIXTURE_ENV = {
 const fixtureGit = (args: string[], cwd: string): string =>
   execFileSync('git', args, {
     cwd, encoding: 'utf8', timeout: 15_000,
-    env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...FIXTURE_ENV },
+    env: hermeticGitEnv(FIXTURE_ENV),
   });
 
 export async function runWorkspaceVerification(): Promise<{ checks: VerificationCheckResult[]; failures: number }> {
+  installHermeticGitHome();
   const checks: VerificationCheckResult[] = [];
   const check = (name: string, ok: boolean, detail = '') => checks.push({ name, ok, detail });
 

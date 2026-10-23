@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createWorkspaceService } from './index';
+import { hermeticGitEnv, installHermeticGitHome } from './git-fixture-env';
 import { validateSourceRepository } from './repository-inspector';
 import type { WorkspacePolicyInput, WorkspaceService } from './contracts';
 import type { ProjectId, RunId, TaskId } from '../protocol/ids';
@@ -16,6 +17,8 @@ import { deterministicIds, testClock } from '../testing/factories';
  * untouched throughout.
  */
 
+installHermeticGitHome();
+
 const FIXTURE_ENV = {
   GIT_AUTHOR_NAME: 'Relay Test', GIT_AUTHOR_EMAIL: 'test@relay.local',
   GIT_COMMITTER_NAME: 'Relay Test', GIT_COMMITTER_EMAIL: 'test@relay.local',
@@ -24,7 +27,7 @@ const FIXTURE_ENV = {
 const git = (args: string[], cwd: string): string =>
   execFileSync('git', args, {
     cwd, encoding: 'utf8', timeout: 15_000,
-    env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...FIXTURE_ENV },
+    env: hermeticGitEnv(FIXTURE_ENV),
   });
 
 let fixtureRoot: string;
