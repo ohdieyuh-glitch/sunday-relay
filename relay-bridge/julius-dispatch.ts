@@ -109,8 +109,12 @@ export interface RoleCallOutput {
   readonly requests?: number | null;
   /** False = the adapter refused BEFORE any request left (nothing could have been billed). Absent = unknown/contacted. */
   readonly providerContacted?: false;
-  /** Provider- or session-reported cost in USD micros, when it gave one. Never inferred, never a price list. */
+  /** Provider- or session-reported cost in USD micros, when it gave one. Never inferred, never a price list. Copied on success and on failure. */
   readonly costUsdMicros?: number | null;
+  /** Set once a provider was contacted. The bill is not settled in this process. */
+  readonly billing?: 'PENDING';
+  /** The provider request id used to trace the bill. Null when the provider did not return one of the accepted shapes. */
+  readonly traceId?: string | null;
   /** xAI `usage.cost_in_usd_ticks` that `costUsdMicros` was rounded up from. Present only beside that receipt. */
   readonly costUsdTicksRaw?: number | null;
 }
@@ -588,6 +592,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         usage: out.usage === undefined ? null : { input: out.usage.input, output: out.usage.output, total: out.usage.total },
         requests: out.requests ?? null,
         spend, spendUnknown: spend === 'spend_unknown', costUsdMicros: out.costUsdMicros ?? null, costUsdTicksRaw: out.costUsdTicksRaw ?? null,
+        billing: out.billing ?? null, traceId: out.traceId ?? null,
         outputSha256: text === '' ? null : sha256(text), outputChars: text.length,
         changedPaths: role === 'coder' ? (out.changedPaths ?? null) : null,
         toolInvocations: role === 'coder' ? (out.toolInvocations ?? null) : null,
