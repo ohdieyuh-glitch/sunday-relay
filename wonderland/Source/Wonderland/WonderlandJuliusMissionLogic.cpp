@@ -346,10 +346,12 @@ namespace WonderlandJuliusMissionLogic
 
 	EDispatchAnswer ClassifyDispatchAnswer(int HttpStatus, bool bHasError, std::string_view ErrorKind)
 	{
-		// Any error object, any kind, any status, is a refusal; so is any status outside 2xx, error object or not.
-		if (bHasError || !ErrorKind.empty()) { return EDispatchAnswer::Refused; }
-		if (HttpStatus < 200 || HttpStatus > 299) { return EDispatchAnswer::Refused; }
-		return EDispatchAnswer::Accepted;
+		// The rule in the header: only a J1-shaped refusal is conclusive; anything inconclusive keeps the pair open.
+		const bool bNoError = !bHasError && ErrorKind.empty();
+		const bool bErrorWithKind = bHasError && !ErrorKind.empty();
+		if (HttpStatus >= 200 && HttpStatus <= 299 && bNoError) { return EDispatchAnswer::Accepted; }
+		if (HttpStatus >= 400 && HttpStatus <= 599 && bErrorWithKind) { return EDispatchAnswer::Refused; }
+		return EDispatchAnswer::NoAnswer;
 	}
 
 	namespace
@@ -467,8 +469,36 @@ namespace WonderlandJuliusMissionLogic
 			return Signals.bScrubMarker || Signals.bAtCutLimit ? EArtifactQualification::TransformedUnverified
 				: EArtifactQualification::NoTransformSignal;
 		}
+		std::string Digest12;
 		const bool bConsistent = Evidence.bIndependentlyVerified && IsLowerHex64(Evidence.OriginalArtifactSha256)
-			&& IsLowerHex64(ArtifactSha256) && Evidence.TransformedArtifactSha256 == ArtifactSha256;
+			&& IsLowerHex64(ArtifactSha256) && Evidence.TransformedArtifactSha256 == ArtifactSha256
+			&& CheckArtifactDigest(ArtifactText, ArtifactSha256, Digest12);
 		return bConsistent ? EArtifactQualification::TransformedVerified : EArtifactQualification::EvidenceInconsistent;
+	}
+
+	EQualificationDisplay DisplayQualification(EArtifactQualification Qualification)
+	{
+		switch (Qualification)
+		{
+		case EArtifactQualification::NoTransformSignal: return EQualificationDisplay::PendingJudge;
+		case EArtifactQualification::TransformedVerified: return EQualificationDisplay::PendingJudge;
+		case EArtifactQualification::TransformedUnverified: return EQualificationDisplay::Unverified;
+		case EArtifactQualification::NotCompleted:
+		case EArtifactQualification::EvidenceInconsistent:
+		case EArtifactQualification::Unreadable:
+			return EQualificationDisplay::NotQualifying;
+		}
+		return EQualificationDisplay::NotQualifying;
+	}
+
+	const char* QualificationDisplayLabel(EQualificationDisplay Display)
+	{
+		switch (Display)
+		{
+		case EQualificationDisplay::PendingJudge: return "pending judge";
+		case EQualificationDisplay::Unverified: return "unverified";
+		case EQualificationDisplay::NotQualifying: return "not qualifying";
+		}
+		return "not qualifying";
 	}
 }

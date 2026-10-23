@@ -79,7 +79,7 @@ function table(name: string): string[][] {
   const rows = section(source(KAT_CPP), name)
     .split('\n')
     .filter((line) => /^\s*\{.*\},\s*$/u.test(line))
-    .map((line) => [...line.matchAll(/"([^"]*)"|E(?:ResultEnvelope|FinishedResult|DispatchAnswer|AttemptVerdict|ArtifactQualification|MintResult)::(\w+)|(-?\d+)/gu)]
+    .map((line) => [...line.matchAll(/"([^"]*)"|E(?:ResultEnvelope|FinishedResult|DispatchAnswer|AttemptVerdict|ArtifactQualification|MintResult|QualificationDisplay)::(\w+)|(-?\d+)/gu)]
       .map((m) => m[1] ?? m[2] ?? m[3] ?? ''));
   expect(rows.length, `${name} has rows`).toBeGreaterThan(0);
   return rows;
@@ -325,11 +325,15 @@ describe('J1 client logic: a failed random source refuses the attempt (YUJI requ
   });
 });
 
-/** The answer rule: any error object or kind, or any status outside 2xx, is a refusal. Kinds are never listed. */
+/**
+ * The answer rule (RID-1): 2xx with no error object and no kind is Accepted; 4xx/5xx with an error object that has a
+ * kind (J1's own refusal shape, :952) is Refused; anything else, a bare 5xx included, is NoAnswer. Kinds are never listed.
+ */
 function referenceAnswer(status: number, hasError: boolean, kind: string, noAnswer: boolean): string {
   if (noAnswer) return 'NoAnswer';
-  if (hasError || kind !== '' || status < 200 || status > 299) return 'Refused';
-  return 'Accepted';
+  if (status >= 200 && status <= 299 && !hasError && kind === '') return 'Accepted';
+  if (status >= 400 && status <= 599 && hasError && kind !== '') return 'Refused';
+  return 'NoAnswer';
 }
 
 /** The fresh-after-refusal rule: an answered pair is spent in either role; an unanswered one may only be resent whole. */
@@ -361,13 +365,37 @@ describe('J1 client logic: a fresh run id and key after every refusal (ruling (c
     expect(byName.get('repeat_already_used_409_none')?.slice(1, 4)).toEqual(['409', '1', 'julius_dispatch_repeat_already_used']);
     expect(byName.get('cap_reached_429_none')?.slice(1, 4)).toEqual(['429', '1', 'julius_dispatch_cap_reached']);
     expect(byName.get('mission_cap_reached_429_none')?.slice(1, 4)).toEqual(['429', '1', 'julius_dispatch_mission_cap_reached']);
-    for (const required of ['unknown_kind_on_200_none', 'kind_without_flag_on_202_none', 'flag_without_kind_on_200_none', 'status_500_no_error_none', 'status_302_no_error_none']) {
+    for (const required of ['unknown_kind_on_200_none', 'kind_without_flag_on_202_none', 'flag_without_kind_on_200_none', 'status_500_no_error_none',
+      'status_302_no_error_none', 'status_503_no_error_none', 'status_503_no_error_key_as_run', 'status_502_no_error_none',
+      'status_404_no_error_none', 'status_0_no_error_none', 'disabled_503_none', 'ledger_unavailable_503_none', 'flag_without_kind_on_503_none',
+      'kind_without_flag_on_409_none', 'error_on_status_600_none']) {
       expect(labels, required).toContain(required);
     }
+    // RID-1: a bare 5xx never spends the pair, so it never leads to a fresh one; J1's own 503 refusals still do.
+    for (const row of rows) {
+      const status = Number(row[1]);
+      if (status >= 500 && status <= 599 && row[2] === '0') {
+        expect(row[6], `${row[0]} answer`).toBe('NoAnswer');
+        if (row[5] === 'none') expect(row[7], `${row[0]} fresh pair`).toBe('PreviousAttemptUnanswered');
+      }
+    }
+    expect(byName.get('disabled_503_none')?.slice(6)).toEqual(['Refused', 'Admitted']);
+    expect(byName.get('ledger_unavailable_503_none')?.slice(6)).toEqual(['Refused', 'Admitted']);
+    expect(byName.get('status_503_no_error_both')?.slice(6)).toEqual(['NoAnswer', 'Admitted']);
     // After any refusal, reusing either value is never admitted.
     for (const row of rows) {
       if (row[6] === 'Refused' && row[5] !== 'none') expect(row[7], `${row[0]}`).not.toBe('Admitted');
     }
+  });
+
+  it('the header states the exact classification rule, and that only a conclusive refusal calls for a fresh pair', () => {
+    const header = source(LOGIC_H);
+    expect(header).toContain('THE CLASSIFICATION RULE');
+    expect(header).toContain('1. 200-299, no error object and no kind');
+    expect(header).toContain('2. 400-599, an error object WITH a non-empty kind');
+    expect(header).toContain('3. everything else');
+    expect(header).toContain('only a CONCLUSIVE refusal calls for a fresh pair');
+    expect(header).not.toContain('or any non-2xx status (409');
   });
 
   it('the header documents the CSPRNG duty, and the logic itself draws no randomness', () => {
@@ -377,6 +405,7 @@ describe('J1 client logic: a fresh run id and key after every refusal (ruling (c
     expect(header).toContain('CreateRandomBytes');
     expect(header).toContain('OpenSSL\n//      RAND_bytes');
     expect(header).toContain('NEVER FGuid::NewGuid');
+    expect(header).toContain('CreateRandomBytes, never CreatePseudoRandomBytes');
     expect(header).toContain('there is NO fallback to any other source');
     expect(header).toContain('af3c105f:docs/C2_J1_RESOLUTIONS_20261023.md, blob cf528758');
     expect(header).not.toContain('still the founder');
@@ -401,7 +430,7 @@ function referenceQualification(row: string[]): { verdict: string; scrub: boolea
     return { verdict: signals.scrub || signals.atLimit ? 'TransformedUnverified' : 'NoTransformSignal', ...signals };
   }
   const consistent = verified === '1' && LOWER_HEX_64.test(original ?? '') && LOWER_HEX_64.test(artifactSha ?? '')
-    && transformed === artifactSha;
+    && transformed === artifactSha && sha256(Buffer.from(text.trim(), 'utf8')) === artifactSha;
   return { verdict: consistent ? 'TransformedVerified' : 'EvidenceInconsistent', ...signals };
 }
 
@@ -427,6 +456,10 @@ describe('J1 client logic: scrubbed or cut results never qualify without evidenc
       expect(rows.get(label)?.[10], label).toBe('EvidenceInconsistent');
     }
     expect(rows.get('marker_with_verified_evidence')?.[10]).toBe('TransformedVerified');
+    expect(rows.get('verified_evidence_sha_not_of_text')?.[10]).toBe('EvidenceInconsistent');
+    // RID-2: the trim hides a scrub as well as a cut; both come out as NoTransformSignal, which is only "pending judge".
+    expect(rows.get('trim_hid_scrub_partial_marker')?.[10]).toBe('NoTransformSignal');
+    expect(rows.get('trim_hid_cut')?.[10]).toBe('NoTransformSignal');
     // Restated from julius-dispatch.ts at 31bfc58b (:333-337, :530): the scrub writes exactly '[redacted]', then the cut.
     const scrubKeys = (text: string, keys: readonly string[]): string => {
       let out = text;
@@ -438,6 +471,33 @@ describe('J1 client logic: scrubbed or cut results never qualify without evidenc
     expect(scrubKeys(`${'x'.repeat(7_995)}sk-0123456789`, ['sk-0123456789']).trim().endsWith('[reda')).toBe(true);
     // The limit of what the client can see: a cut that the trim hid leaves fewer than 8,000 units and no marker.
     expect(scrubKeys(`${' '.repeat(10)}${'x'.repeat(9_000)}`, []).trim().length).toBe(7_990);
+    // ... and a scrub the trim hid: no full marker, fewer than 8,000 units (Skywalker's RID-2 repro).
+    const hiddenScrub = scrubKeys(` ${'x'.repeat(7_994)}sk-0123456789`, ['sk-0123456789']).trim();
+    expect([hiddenScrub.length, hiddenScrub.includes('[redacted]'), hiddenScrub.endsWith('x[reda')]).toEqual([7_999, false, true]);
+    expect(hiddenScrub).toBe(utf8OrNull(fromHex(`${'78'.repeat(7_994)}5b72656461`)));
+    const hiddenCut = scrubKeys(`\n${'y'.repeat(9_000)}`, []).trim();
+    expect(hiddenCut).toBe('y'.repeat(7_999));
+  });
+
+  it('every qualification is shown as pending judge, unverified or not qualifying, and nothing as qualifying', () => {
+    const reference: Record<string, [string, string]> = {
+      NotCompleted: ['NotQualifying', 'not qualifying'], NoTransformSignal: ['PendingJudge', 'pending judge'],
+      TransformedUnverified: ['Unverified', 'unverified'], TransformedVerified: ['PendingJudge', 'pending judge'],
+      EvidenceInconsistent: ['NotQualifying', 'not qualifying'], Unreadable: ['NotQualifying', 'not qualifying'],
+    };
+    const rows = table('KAT-DISPLAY');
+    expect(rows.map((row) => row[1]).sort()).toEqual(Object.keys(reference).sort());
+    for (const [label, qualification, display, words] of rows) {
+      expect([display, words], `${label}`).toEqual(reference[qualification ?? '']);
+      expect(words, `${label}`).not.toMatch(/^(qualif|eligible|pass)/u);
+    }
+    expect(byLabel(rows).get('no_transform_signal')?.slice(2)).toEqual(['PendingJudge', 'pending judge']);
+    const header = source(LOGIC_H);
+    expect(header).toContain('TRIMMING CAN HIDE A SCRUB AS WELL AS A CUT');
+    expect(header).toContain('only the\n//      independent judge can pass anything under R4-F');
+    expect(header).toContain('Shown as "pending judge", NEVER as qualifying or');
+    expect(header).not.toContain('May be shown as eligible');
+    expect(header).not.toContain('may be shown as eligible');
   });
 
   it('the header records that the bridge carries no transform evidence, so the wrapper passes none', () => {
@@ -558,7 +618,7 @@ describe('J1 client logic: the C++ itself', () => {
           + `digest_cut=${String(table('KAT-DIGEST-CUT').length)} `
           + `uuid_format=${String(table('KAT-UUID-FORMAT').length)} key=${String(table('KAT-KEY').length)} `
           + `attempt=${String(table('KAT-ATTEMPT').length)} minted=2000 qualification=${String(table('KAT-QUALIFICATION').length)} `
-          + `mint=${String(table('KAT-MINT').length)}\n`);
+          + `mint=${String(table('KAT-MINT').length)} display=${String(table('KAT-DISPLAY').length)}\n`);
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }

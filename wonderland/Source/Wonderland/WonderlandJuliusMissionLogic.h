@@ -58,22 +58,38 @@
 //   4. A CSPRNG BEHIND IRandomBytes16 (YUJI's client requirement). In production the 16 bytes come ONLY from
 //      Unreal's IPlatformCrypto (the PlatformCrypto plugin's encryption context, CreateRandomBytes) or from OpenSSL
 //      RAND_bytes, and Fill returns true only when that call reported success (EPlatformCryptoResult::Success, or
-//      RAND_bytes returning 1). On any failure Fill returns false and MintAttempt answers RandomUnavailable: the
-//      attempt is REFUSED, no id is produced, and there is NO fallback to any other source. NEVER FGuid::NewGuid or
+//      RAND_bytes returning 1). CreateRandomBytes, never CreatePseudoRandomBytes. The production source and the
+//      PlatformCrypto or OpenSSL dependency in Wonderland.Build.cs are wrapper work with their own review. On any
+//      failure Fill returns false and MintAttempt answers RandomUnavailable: the attempt is REFUSED, no id is
+//      produced, and there is NO fallback to any other source. NEVER FGuid::NewGuid or
 //      FPlatformMisc::CreateGuid (not a documented CSPRNG, and FGuid's text layout reorders digits), and never
 //      FMath::Rand, FRandomStream, std::rand, std::mt19937, std::random_device, a timestamp or a counter. This
 //      supersedes the BCryptGenRandom wording of docs/j1_client_plan.md 5a. Run ids and keys carry nothing derived:
 //      no player, session, mission, machine, time or counter.
 //   5. ONE TRACKER PER SESSION, AND ITS VERDICT IS FINAL. Every dispatch POST goes through
 //      FDispatchAttemptTracker::BeginAttempt, and every answer, or the lack of one, goes back through RecordAnswer.
-//      A verdict other than Admitted means nothing is sent; the wrapper logs one refused line and mints again.
+//      A verdict other than Admitted means nothing is sent; the wrapper logs one refused line. After
+//      PreviousAttemptUnanswered it resends only the open pair; after any other verdict it mints again.
+//      Every HTTP answer goes through ClassifyDispatchAnswer; only a CONCLUSIVE refusal calls for a fresh pair.
+//      The tracker lives in memory: an attempt still unanswered when the session ends is forgotten, and the next
+//      session's fresh pair may meet a chain the first one started. While an attempt stays unanswered, no new
+//      attempt is admitted; the wrapper shows that as its own state ("waiting for the bridge; resending the same
+//      request"), never as a refusal. Persisting the open pair across sessions is wrapper work, not done here.
 //   6. NO TRANSFORM EVIDENCE EXISTS YET (ruling R4-F). At 31bfc58b neither resultText (:624-628) nor the result body
 //      (:913) carries anything that confirms the ORIGINAL artifact or the exact scrub-cut-trim transformation: the
 //      roles summaries hold outputSha256/outputChars of the text AFTER that transformation (:586-590), and the pre-
 //      transformation evidence (artifactJudgedSha256 and the like, :556) lives in the ledger only. So the wrapper
 //      passes an EMPTY FTransformEvidence until a reviewed contract change carries evidence the client can
 //      authenticate, and a scrubbed or cut artifact is therefore never shown as qualifying. A flag the client cannot
-//      authenticate is spoofable and does not count as evidence.
+//      authenticate is spoofable and does not count as evidence. FTransformEvidence is CALLER-ASSERTED: wiring any
+//      value into it needs an authenticated evidence format whose verification lives in this logic, reviewed as a
+//      contract change. Until then it stays empty.
+//   7. TRIMMING CAN HIDE A SCRUB AS WELL AS A CUT. J1 cuts at 8,000 units (:337) and then trims (:530), so leading or
+//      trailing whitespace can leave fewer than 8,000 units, and a cut can leave only part of the [redacted]
+//      marker. Example: " " + 7,994 x + a key gives 7,999 units ending "x[reda": no marker, under the limit. The
+//      client can detect neither, so NoTransformSignal never proves that nothing was scrubbed or cut, and only the
+//      independent judge can pass anything under R4-F. The wrapper shows NoTransformSignal as "pending judge"
+//      (QualificationDisplayLabel), never as qualifying or eligible.
 #pragma once
 
 #include <array>
@@ -246,15 +262,29 @@ namespace WonderlandJuliusMissionLogic
 		RandomRepeated,
 	};
 
-	/** How the bridge answered one dispatch POST. The error kind is never matched against a list. */
+	/**
+	 * How the bridge answered one dispatch POST. The error kind is never matched against a list.
+	 *
+	 * THE CLASSIFICATION RULE (bHasError: the body has an error object; ErrorKind: its kind, empty when absent):
+	 *   1. 200-299, no error object and no kind ............................................. Accepted
+	 *   2. 400-599, an error object WITH a non-empty kind ...................................... Refused
+	 *   3. everything else ................................................................... NoAnswer
+	 * J1 sends every refusal as {error:{kind,message}} with a 4xx or 5xx status (:952 err, refuse), including its
+	 * own 503s (julius_dispatch_disabled, julius_dispatch_ledger_unavailable, ...), so rule 2 is conclusive. A bare
+	 * 5xx, any status with no error object outside 2xx (3xx, 4xx, 1xx, 0), an error object without a kind, a kind
+	 * without an error object, an error on a 2xx, a status outside 100-599, a transport failure or a timeout does not
+	 * say whether J1 refused or started the run: it may already have reserved the run, so minting a fresh pair could
+	 * start a second paid chain. Those are NoAnswer: the attempt stays open, only the identical pair may be resent,
+	 * and J1 answers that resend with a replay (200, :743-745) or a conclusive refusal.
+	 */
 	enum class EDispatchAnswer : std::uint8_t
 	{
-		/** Any error object, whatever its kind and status, or any non-2xx status (409 repeat_already_used, 429
-		 *  cap_reached, 429 mission_cap_reached, 403 run_creator_mismatch, a kind nobody has named yet, ...). */
+		/** Rule 2: 409 repeat_already_used, 429 cap_reached, 429 mission_cap_reached, 403 run_creator_mismatch,
+		 *  503 julius_dispatch_disabled, a kind nobody has named yet, ... Both values are spent; mint a fresh pair. */
 		Refused,
-		/** 2xx with no error object: 202 accepted, or 200 replayed. */
+		/** Rule 1: 202 accepted, or 200 replayed. Both values are spent. */
 		Accepted,
-		/** No HTTP answer at all (transport failure, timeout). The bridge may or may not have the run. */
+		/** Rule 3, or no HTTP answer at all. The bridge may or may not have the run; resend only the identical pair. */
 		NoAnswer,
 	};
 
@@ -324,16 +354,18 @@ namespace WonderlandJuliusMissionLogic
 	};
 
 	/**
-	 * False on malformed UTF-8 (then Out is all false/zero). A cut followed by the trim (:530) can leave fewer than
-	 * 8,000 units, for example when the cut text ended in whitespace or began with it, so NO signal is never proof
-	 * that nothing was cut: the client cannot tell, only the independent judge with the ledger can.
+	 * False on malformed UTF-8 (then Out is all false/zero). Trimming can hide a scrub as well as a cut (wrapper note
+	 * 7): a cut followed by the trim (:530) can leave fewer than 8,000 units, for example when the cut text ended in
+	 * whitespace or began with it, and the cut can leave only part of the [redacted] marker. So NO signal is never
+	 * proof that nothing was scrubbed or cut: the client cannot tell, only the independent judge with the ledger can.
 	 */
 	bool DetectTransformSignals(std::string_view ArtifactText, FTransformSignals& Out);
 
 	/**
 	 * Evidence from an INDEPENDENT verifier that it confirmed the original protected artifact and the exact
 	 * scrub-cut-trim transformation to this artifactSha256. The bridge carries none today (wrapper note 6), so
-	 * production passes it empty. Present means every field is set; anything else is inconsistent.
+	 * production passes it empty. Present means every field is set; anything else is inconsistent. It is
+	 * caller-asserted: nothing here authenticates it, which is why production must not fill it yet.
 	 */
 	struct FTransformEvidence
 	{
@@ -349,13 +381,14 @@ namespace WonderlandJuliusMissionLogic
 	{
 		/** The finished result was not Completed: never qualifying. */
 		NotCompleted,
-		/** Completed, no scrub or cut signal, no evidence. May be shown as eligible, pending the independent judge
-		 *  (a cut that the trim hid cannot be seen by the client; see DetectTransformSignals). */
+		/** Completed, no visible scrub or cut signal, no evidence. Shown as "pending judge", NEVER as qualifying or
+		 *  eligible: the trim can hide a scrub as well as a cut (wrapper note 7), and only the judge can pass it. */
 		NoTransformSignal,
 		/** Completed, but the text shows a scrub marker or sits at the cut limit, and no evidence: shown as
 		 *  "unverified", NEVER as qualifying. A [redacted] marker or 8,000 units of text alone proves nothing. */
 		TransformedUnverified,
-		/** Completed, with present, complete and consistent independent evidence. Eligible, pending the judge. */
+		/** Completed, with present, complete and consistent independent evidence whose transformed hash is the
+		 *  artifactSha256 that the artifact text itself hashes to. Shown as "pending judge", never as qualifying. */
 		TransformedVerified,
 		/** Evidence fields set without bPresent, present but incomplete or not matching artifactSha256, or text over
 		 *  the cut limit: missing, inconsistent or spoofable evidence never qualifies. */
@@ -366,9 +399,27 @@ namespace WonderlandJuliusMissionLogic
 
 	/**
 	 * R4-F, fail closed. Call with the EFinishedResult ClassifyFinishedResult returned and the same artifact fields.
-	 * Only NoTransformSignal and TransformedVerified may be shown as eligible; every other value is shown as
-	 * unverified and non-qualifying. No value here is a PASS: qualifying is decided by the independent judge.
+	 * No value here is a PASS: qualifying is decided by the independent judge. Show each value only through
+	 * DisplayQualification: NoTransformSignal and TransformedVerified are "pending judge", TransformedUnverified is
+	 * "unverified", and every other value is "not qualifying". Evidence counts only when sha256(JS-trim(ArtifactText))
+	 * is ArtifactSha256 as well.
 	 */
 	EArtifactQualification ClassifyArtifactQualification(EFinishedResult Finished, std::string_view ArtifactText,
 		std::string_view ArtifactSha256, const FTransformEvidence& Evidence);
+
+	/** How the game shows a qualification. There is deliberately no "qualifying" or "eligible" value. */
+	enum class EQualificationDisplay : std::uint8_t
+	{
+		/** "pending judge": NoTransformSignal or TransformedVerified. Only the independent judge can pass it. */
+		PendingJudge,
+		/** "unverified": TransformedUnverified. A visible scrub or cut with no evidence the client can check. */
+		Unverified,
+		/** "not qualifying": NotCompleted, EvidenceInconsistent, Unreadable. */
+		NotQualifying,
+	};
+
+	EQualificationDisplay DisplayQualification(EArtifactQualification Qualification);
+
+	/** The exact words shown: "pending judge", "unverified" or "not qualifying". */
+	const char* QualificationDisplayLabel(EQualificationDisplay Display);
 }

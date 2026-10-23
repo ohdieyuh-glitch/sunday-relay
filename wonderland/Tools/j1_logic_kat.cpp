@@ -290,26 +290,26 @@ namespace
 	{ "key_invalid_400_run", 400, 1, "julius_dispatch_idempotency_key_invalid", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
 	{ "key_invalid_400_key", 400, 1, "julius_dispatch_idempotency_key_invalid", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
 	{ "key_invalid_400_both", 400, 1, "julius_dispatch_idempotency_key_invalid", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
-	{ "unknown_kind_on_200_none", 200, 1, "julius_dispatch_kind_nobody_has_named", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
-	{ "unknown_kind_on_200_run", 200, 1, "julius_dispatch_kind_nobody_has_named", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
-	{ "unknown_kind_on_200_key", 200, 1, "julius_dispatch_kind_nobody_has_named", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
-	{ "unknown_kind_on_200_both", 200, 1, "julius_dispatch_kind_nobody_has_named", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
-	{ "flag_without_kind_on_200_none", 200, 1, "", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
-	{ "flag_without_kind_on_200_run", 200, 1, "", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
-	{ "flag_without_kind_on_200_key", 200, 1, "", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
-	{ "flag_without_kind_on_200_both", 200, 1, "", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
-	{ "kind_without_flag_on_202_none", 202, 0, "julius_dispatch_kind_nobody_has_named", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
-	{ "kind_without_flag_on_202_run", 202, 0, "julius_dispatch_kind_nobody_has_named", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
-	{ "kind_without_flag_on_202_key", 202, 0, "julius_dispatch_kind_nobody_has_named", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
-	{ "kind_without_flag_on_202_both", 202, 0, "julius_dispatch_kind_nobody_has_named", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
-	{ "status_500_no_error_none", 500, 0, "", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
-	{ "status_500_no_error_run", 500, 0, "", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
-	{ "status_500_no_error_key", 500, 0, "", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
-	{ "status_500_no_error_both", 500, 0, "", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
-	{ "status_302_no_error_none", 302, 0, "", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
-	{ "status_302_no_error_run", 302, 0, "", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
-	{ "status_302_no_error_key", 302, 0, "", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
-	{ "status_302_no_error_both", 302, 0, "", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "unknown_kind_on_200_none", 200, 1, "julius_dispatch_kind_nobody_has_named", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "unknown_kind_on_200_run", 200, 1, "julius_dispatch_kind_nobody_has_named", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "unknown_kind_on_200_key", 200, 1, "julius_dispatch_kind_nobody_has_named", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "unknown_kind_on_200_both", 200, 1, "julius_dispatch_kind_nobody_has_named", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "flag_without_kind_on_200_none", 200, 1, "", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "flag_without_kind_on_200_run", 200, 1, "", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "flag_without_kind_on_200_key", 200, 1, "", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "flag_without_kind_on_200_both", 200, 1, "", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "kind_without_flag_on_202_none", 202, 0, "julius_dispatch_kind_nobody_has_named", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "kind_without_flag_on_202_run", 202, 0, "julius_dispatch_kind_nobody_has_named", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "kind_without_flag_on_202_key", 202, 0, "julius_dispatch_kind_nobody_has_named", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "kind_without_flag_on_202_both", 202, 0, "julius_dispatch_kind_nobody_has_named", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "status_500_no_error_none", 500, 0, "", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_500_no_error_run", 500, 0, "", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_500_no_error_key", 500, 0, "", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_500_no_error_both", 500, 0, "", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "status_302_no_error_none", 302, 0, "", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_302_no_error_run", 302, 0, "", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_302_no_error_key", 302, 0, "", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_302_no_error_both", 302, 0, "", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
 	{ "accepted_202_none", 202, 0, "", 0, "none", EDispatchAnswer::Accepted, EAttemptVerdict::Admitted },
 	{ "accepted_202_run", 202, 0, "", 0, "run", EDispatchAnswer::Accepted, EAttemptVerdict::RunIdReused },
 	{ "accepted_202_key", 202, 0, "", 0, "key", EDispatchAnswer::Accepted, EAttemptVerdict::KeyReused },
@@ -328,6 +328,54 @@ namespace
 	{ "no_answer_both", 0, 0, "", 1, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
 	{ "no_answer_key_as_run", 0, 0, "", 1, "key_as_run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
 	{ "no_answer_run_as_key", 0, 0, "", 1, "run_as_key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_503_no_error_none", 503, 0, "", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_503_no_error_run", 503, 0, "", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_503_no_error_key", 503, 0, "", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_503_no_error_both", 503, 0, "", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "status_503_no_error_key_as_run", 503, 0, "", 0, "key_as_run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_503_no_error_run_as_key", 503, 0, "", 0, "run_as_key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_502_no_error_none", 502, 0, "", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_502_no_error_run", 502, 0, "", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_502_no_error_key", 502, 0, "", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_502_no_error_both", 502, 0, "", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "status_404_no_error_none", 404, 0, "", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_404_no_error_run", 404, 0, "", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_404_no_error_key", 404, 0, "", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_404_no_error_both", 404, 0, "", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "status_0_no_error_none", 0, 0, "", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_0_no_error_run", 0, 0, "", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_0_no_error_key", 0, 0, "", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_0_no_error_both", 0, 0, "", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "status_101_no_error_none", 101, 0, "", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_101_no_error_run", 101, 0, "", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_101_no_error_key", 101, 0, "", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_101_no_error_both", 101, 0, "", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "disabled_503_none", 503, 1, "julius_dispatch_disabled", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "disabled_503_run", 503, 1, "julius_dispatch_disabled", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "disabled_503_key", 503, 1, "julius_dispatch_disabled", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "disabled_503_both", 503, 1, "julius_dispatch_disabled", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "ledger_unavailable_503_none", 503, 1, "julius_dispatch_ledger_unavailable", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "ledger_unavailable_503_run", 503, 1, "julius_dispatch_ledger_unavailable", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "ledger_unavailable_503_key", 503, 1, "julius_dispatch_ledger_unavailable", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "ledger_unavailable_503_both", 503, 1, "julius_dispatch_ledger_unavailable", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "ledger_unavailable_503_key_as_run", 503, 1, "julius_dispatch_ledger_unavailable", 0, "key_as_run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "ledger_unavailable_503_run_as_key", 503, 1, "julius_dispatch_ledger_unavailable", 0, "run_as_key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "sign_in_required_401_none", 401, 1, "sign_in_required", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "sign_in_required_401_run", 401, 1, "sign_in_required", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "sign_in_required_401_key", 401, 1, "sign_in_required", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "sign_in_required_401_both", 401, 1, "sign_in_required", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "flag_without_kind_on_503_none", 503, 1, "", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "flag_without_kind_on_503_run", 503, 1, "", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "flag_without_kind_on_503_key", 503, 1, "", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "flag_without_kind_on_503_both", 503, 1, "", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "kind_without_flag_on_409_none", 409, 0, "julius_dispatch_already_dispatched", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "kind_without_flag_on_409_run", 409, 0, "julius_dispatch_already_dispatched", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "kind_without_flag_on_409_key", 409, 0, "julius_dispatch_already_dispatched", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "kind_without_flag_on_409_both", 409, 0, "julius_dispatch_already_dispatched", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "error_on_status_600_none", 600, 1, "julius_dispatch_kind_nobody_has_named", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "error_on_status_600_run", 600, 1, "julius_dispatch_kind_nobody_has_named", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "error_on_status_600_key", 600, 1, "julius_dispatch_kind_nobody_has_named", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "error_on_status_600_both", 600, 1, "julius_dispatch_kind_nobody_has_named", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
 	// KAT-ATTEMPT-END
 	};
 
@@ -342,30 +390,46 @@ namespace
 	const FQualificationRow QualificationRows[] = {
 	// KAT-QUALIFICATION-BEGIN
 	{ "plain_short", "782079", 1, "", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::NoTransformSignal, 0, 0, 0, 3 },
-	{ "x_7999_under_limit", "78", 7999, "", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::NoTransformSignal, 0, 0, 0, 7999 },
-	{ "x_8000_at_limit", "78", 8000, "", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedUnverified, 0, 1, 0, 8000 },
-	{ "cut_split_pair_ufffd_at_limit", "78", 7999, "efbfbd", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedUnverified, 0, 1, 0, 8000 },
-	{ "pair_fits_at_limit", "78", 7998, "f09f9880", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedUnverified, 0, 1, 0, 8000 },
-	{ "over_limit_never_from_bridge", "78", 7999, "f09f9880", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 0, 0, 1, 8001 },
-	{ "over_limit_even_with_evidence", "78", 8001, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 0, 0, 1, 8001 },
-	{ "redacted_marker_short", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedUnverified, 1, 0, 0, 10 },
-	{ "redacted_marker_spoofed_by_coder", "616e73776572", 1, "5b72656461637465645d", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedUnverified, 1, 0, 0, 16 },
-	{ "uppercase_marker_is_not_scrub", "5b52454441435445445d", 1, "", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::NoTransformSignal, 0, 0, 0, 10 },
-	{ "partial_marker_cut_at_limit", "78", 7995, "5b72656461", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedUnverified, 0, 1, 0, 8000 },
-	{ "marker_with_verified_evidence", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedVerified, 1, 0, 0, 10 },
-	{ "at_limit_with_verified_evidence", "78", 8000, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedVerified, 0, 1, 0, 8000 },
-	{ "evidence_not_independently_verified", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 0, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
-	{ "evidence_transformed_hash_mismatch", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
-	{ "evidence_missing_original", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
-	{ "evidence_uppercase_original", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "A8100AE6AA1940D0B663BB31CD466142EBBDBD5187131B92D93818987832EB89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
+	{ "x_7999_under_limit", "78", 7999, "", EFinishedResult::Completed, 0, 0, "", "", "73567ed88956e8bcdfd402c9fee6e0c901b4da3411a176ec411e8f0a1333d553", EArtifactQualification::NoTransformSignal, 0, 0, 0, 7999 },
+	{ "x_8000_at_limit", "78", 8000, "", EFinishedResult::Completed, 0, 0, "", "", "606023a37d97fcdf274ba51ba151162099d397bbe006fcff0868b348c950f51c", EArtifactQualification::TransformedUnverified, 0, 1, 0, 8000 },
+	{ "cut_split_pair_ufffd_at_limit", "78", 7999, "efbfbd", EFinishedResult::Completed, 0, 0, "", "", "b4296284858e3171fbd96d387db64fa551a4173aed40e5ea9bf8dc273465d933", EArtifactQualification::TransformedUnverified, 0, 1, 0, 8000 },
+	{ "pair_fits_at_limit", "78", 7998, "f09f9880", EFinishedResult::Completed, 0, 0, "", "", "4222777fbde458ad9b9910df41e08b29f483fe60e0d03f62ec95ed3faf98ae49", EArtifactQualification::TransformedUnverified, 0, 1, 0, 8000 },
+	{ "over_limit_never_from_bridge", "78", 7999, "f09f9880", EFinishedResult::Completed, 0, 0, "", "", "dfe7ec2caffe73954698fc78ed6f5a794f73e8acac847473305b5a7b6e0b2eb7", EArtifactQualification::EvidenceInconsistent, 0, 0, 1, 8001 },
+	{ "over_limit_even_with_evidence", "78", 8001, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "6ee9494a9027b9a16e91218594b26ddd379b65f9e6d1739877be658bf2cc6f1e", "6ee9494a9027b9a16e91218594b26ddd379b65f9e6d1739877be658bf2cc6f1e", EArtifactQualification::EvidenceInconsistent, 0, 0, 1, 8001 },
+	{ "redacted_marker_short", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 0, 0, "", "", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", EArtifactQualification::TransformedUnverified, 1, 0, 0, 10 },
+	{ "redacted_marker_spoofed_by_coder", "616e73776572", 1, "5b72656461637465645d", EFinishedResult::Completed, 0, 0, "", "", "05748f94376a80e8eb9f3afbe161e8e56bf260144cea5120bc44be43e5b644ca", EArtifactQualification::TransformedUnverified, 1, 0, 0, 16 },
+	{ "uppercase_marker_is_not_scrub", "5b52454441435445445d", 1, "", EFinishedResult::Completed, 0, 0, "", "", "e54b74eb9192b48055c48d2062bffdd23469ef7d70f960ff1293a47f86c8eba2", EArtifactQualification::NoTransformSignal, 0, 0, 0, 10 },
+	{ "partial_marker_cut_at_limit", "78", 7995, "5b72656461", EFinishedResult::Completed, 0, 0, "", "", "00a5ecf9595444194fc494970a115b97cc7c2543de88fec0d82343b520de4247", EArtifactQualification::TransformedUnverified, 0, 1, 0, 8000 },
+	{ "marker_with_verified_evidence", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", EArtifactQualification::TransformedVerified, 1, 0, 0, 10 },
+	{ "at_limit_with_verified_evidence", "78", 8000, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "606023a37d97fcdf274ba51ba151162099d397bbe006fcff0868b348c950f51c", "606023a37d97fcdf274ba51ba151162099d397bbe006fcff0868b348c950f51c", EArtifactQualification::TransformedVerified, 0, 1, 0, 8000 },
+	{ "evidence_not_independently_verified", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 0, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
+	{ "evidence_transformed_hash_mismatch", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
+	{ "evidence_missing_original", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
+	{ "evidence_uppercase_original", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "A8100AE6AA1940D0B663BB31CD466142EBBDBD5187131B92D93818987832EB89", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
 	{ "evidence_short_transformed", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c1", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c1", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
-	{ "verified_flag_without_present", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 0, 1, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
+	{ "verified_flag_without_present", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 0, 1, "", "", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
 	{ "hashes_without_present", "782079", 1, "", EFinishedResult::Completed, 0, 0, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 0, 0, 0, 3 },
 	{ "not_completed_failure", "5b72656461637465645d", 1, "", EFinishedResult::FailureOutcome, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::NotCompleted, 1, 0, 0, 10 },
 	{ "not_completed_damaged", "782079", 1, "", EFinishedResult::Damaged, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::NotCompleted, 0, 0, 0, 3 },
 	{ "not_completed_no_artifact", "", 1, "", EFinishedResult::NoArtifact, 0, 0, "", "", "", EArtifactQualification::NotCompleted, 0, 0, 0, 0 },
 	{ "malformed_utf8_unreadable", "78", 7999, "eda0bd", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::Unreadable, 0, 0, 0, 0 },
+	{ "trim_hid_scrub_partial_marker", "78", 7994, "5b72656461", EFinishedResult::Completed, 0, 0, "", "", "bec1a4213b1c245b3be26dc882621bb69a0f1a9579121a21721f8668beb9fa91", EArtifactQualification::NoTransformSignal, 0, 0, 0, 7999 },
+	{ "trim_hid_cut", "79", 7999, "", EFinishedResult::Completed, 0, 0, "", "", "5d4cf6d2f04ba905e83644eb987ccd3e34acece56dd83d1c2061e253f41525a6", EArtifactQualification::NoTransformSignal, 0, 0, 0, 7999 },
+	{ "verified_evidence_sha_not_of_text", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
 	// KAT-QUALIFICATION-END
+	};
+
+	// Every qualification and how the game shows it. There is no qualifying value to show.
+	struct FDisplayRow { const char* Label; EArtifactQualification Qualification; EQualificationDisplay Expected; const char* Words; };
+	const FDisplayRow DisplayRows[] = {
+	// KAT-DISPLAY-BEGIN
+	{ "not_completed", EArtifactQualification::NotCompleted, EQualificationDisplay::NotQualifying, "not qualifying" },
+	{ "no_transform_signal", EArtifactQualification::NoTransformSignal, EQualificationDisplay::PendingJudge, "pending judge" },
+	{ "transformed_unverified", EArtifactQualification::TransformedUnverified, EQualificationDisplay::Unverified, "unverified" },
+	{ "transformed_verified", EArtifactQualification::TransformedVerified, EQualificationDisplay::PendingJudge, "pending judge" },
+	{ "evidence_inconsistent", EArtifactQualification::EvidenceInconsistent, EQualificationDisplay::NotQualifying, "not qualifying" },
+	{ "unreadable", EArtifactQualification::Unreadable, EQualificationDisplay::NotQualifying, "not qualifying" },
+	// KAT-DISPLAY-END
 	};
 
 	// The source hands out Available of the two blocks, then reports failure. A failure is a refusal: no id at all.
@@ -675,6 +739,35 @@ int main()
 		}
 	}
 
+	for (const FDisplayRow& Row : DisplayRows)
+	{
+		const EQualificationDisplay Got = DisplayQualification(Row.Qualification);
+		Expect(Got == Row.Expected, std::string("display ") + Row.Label);
+		Expect(std::string(QualificationDisplayLabel(Got)) == Row.Words, std::string("display words ") + Row.Label);
+	}
+
+	{
+		// RID-1: a bare 5xx is not a refusal. The pair stays open, no fresh pair is admitted, and only the identical
+		// pair is resent until J1 answers it conclusively.
+		FDispatchAttemptTracker Tracker;
+		const FDispatchAttempt First{ "wlj_ba7816bf-8f01-4fea-8141-40de5dae2223", "00010203-0405-4607-8809-0a0b0c0d0e0f" };
+		const FDispatchAttempt Second{ "wlj_ffffffff-ffff-4fff-bfff-ffffffffffff", "cafebabe-dead-4eef-8afe-babedeadbeef" };
+		const FDispatchAttempt Third{ "wlj_11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222" };
+		Expect(Tracker.BeginAttempt(First) == EAttemptVerdict::Admitted, "bare 5xx: first pair admitted");
+		Expect(ClassifyDispatchAnswer(503, false, "") == EDispatchAnswer::NoAnswer, "a bare 503 is no answer");
+		Expect(ClassifyDispatchAnswer(500, false, "") == EDispatchAnswer::NoAnswer, "a bare 500 is no answer");
+		Expect(Tracker.RecordAnswer(ClassifyDispatchAnswer(502, false, "")) && Tracker.HasOpenAttempt(), "a bare 502 keeps it open");
+		Expect(Tracker.BeginAttempt(Second) == EAttemptVerdict::PreviousAttemptUnanswered, "no fresh pair after a bare 5xx");
+		Expect(Tracker.BeginAttempt(First) == EAttemptVerdict::Admitted, "the identical pair is resent after a bare 5xx");
+		Expect(Tracker.RecordAnswer(ClassifyDispatchAnswer(200, false, "")) && !Tracker.HasOpenAttempt(), "the replay closes it");
+		Expect(Tracker.BeginAttempt(First) == EAttemptVerdict::RunIdReused, "the replayed pair is spent");
+		Expect(Tracker.BeginAttempt(Second) == EAttemptVerdict::Admitted, "a fresh pair after the replay");
+		Expect(Tracker.RecordAnswer(ClassifyDispatchAnswer(503, true, "julius_dispatch_ledger_unavailable")), "J1's own 503");
+		Expect(!Tracker.HasOpenAttempt(), "a J1 503 with a kind is a conclusive refusal");
+		Expect(Tracker.BeginAttempt(Second) == EAttemptVerdict::RunIdReused, "the refused pair is spent");
+		Expect(Tracker.BeginAttempt(Third) == EAttemptVerdict::Admitted, "a fresh pair after a conclusive refusal");
+	}
+
 	for (const FQualificationRow& Row : QualificationRows)
 	{
 		std::string Artifact;
@@ -703,9 +796,9 @@ int main()
 		return 1;
 	}
 	std::printf("J1 LOGIC KAT PASS sha256=%zu trim=%zu digest=%zu runid_format=%zu runid_strict=%zu generated=%zu envelope=%zu result=%zu digest_cut=%zu"
-		" uuid_format=%zu key=%zu attempt=%zu minted=%zu qualification=%zu mint=%zu\n",
+		" uuid_format=%zu key=%zu attempt=%zu minted=%zu qualification=%zu mint=%zu display=%zu\n",
 		CountOf(ShaRows), CountOf(TrimRows), CountOf(DigestRows), CountOf(RunFormatRows), CountOf(RunStrictRows),
 		Generated.size(), CountOf(EnvelopeRows), CountOf(ResultRows), CountOf(DigestCutRows),
-		CountOf(UuidFormatRows), CountOf(KeyRows), CountOf(AttemptRows), MintedValues.size(), CountOf(QualificationRows), CountOf(MintRows));
+		CountOf(UuidFormatRows), CountOf(KeyRows), CountOf(AttemptRows), MintedValues.size(), CountOf(QualificationRows), CountOf(MintRows), CountOf(DisplayRows));
 	return 0;
 }
