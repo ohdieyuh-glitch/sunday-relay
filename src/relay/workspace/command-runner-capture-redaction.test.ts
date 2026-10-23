@@ -99,6 +99,15 @@ describe('runBoundedCommand decodes, redacts, then bounds', () => {
     expect(outcome.outputLimitHit).toBe(false);
   });
 
+  it('flushes a trailing incomplete UTF-8 sequence instead of dropping the bytes', async () => {
+    // First two bytes of € (U+20AC is E2 82 AC). The process ends before the character is complete.
+    const script = 'process.stdout.write(Buffer.from([0xE2, 0x82]));';
+    const outcome = await run(script, 1_000);
+    expect(outcome.exitCode).toBe(0);
+    expect(outcome.stdout).toBe('�');
+    expect(outcome.stderr).toBe('');
+  });
+
   it('reassembles a multi-byte character split across reads, on stdout and stderr', async () => {
     const script = "const euro = Buffer.from('€'); process.stdout.write(euro.subarray(0, 2)); process.stderr.write(euro.subarray(0, 1));"
       + " setTimeout(() => { process.stdout.write(euro.subarray(2)); process.stderr.write(euro.subarray(1)); }, 150);";
