@@ -58,8 +58,8 @@ re-read line by line before writing. Corrections to earlier citations are listed
    - [FR-1] Approved by the founder (7:27 AM PT ruling) to land at exact head `32c5a2be10c60a3a4c7de7741a98bf3ce63c4f5c`,
      tree `bcbefd01`, base `689d2be9`, through the existing Julius installer.
    - Skywalker verifies the exact head, tree, base, CI and settled review evidence, then produces the legitimate signed
-     G6 clearance with the authorized Ed25519 key. The founder does not hold that key. A candidate signing environment
-     is under verification, not yet confirmed (open item h). No agent forges G6, bypasses validation or weakens a landing gate.
+     G6 clearance with the authorized Ed25519 key. The founder does not hold that key. The reviewer key on Kaisin is
+     confirmed, but no installer exists yet that can land #395 (open item h). No agent forges G6, bypasses validation or weakens a landing gate.
    - [R2-2] `32c5a2be` is a merge commit with two parents, `2dbe6430` and `689d2be9`. So `689d2be9` is a parent of the
      head as well as the merge base.
    - Then the existing Julius installer runs.
@@ -327,9 +327,22 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
   - Skywalker verifies head, tree, base, CI and settled review evidence, then produces the signed G6 clearance with the
     authorized Ed25519 key.
   - **Blocker: G6 still pending.** The founder does not hold the key, and no file names its holder (section 7).
-  - [R5-3] At 07:33 PT, YUJI reported a candidate reviewer key on Kaisin. Skywalker's fingerprint check of its public
-    half against `b0b8e29b` (`.github/julius-landing/reviewer-ed25519.pub`) has not confirmed it yet. It is a candidate
-    under verification, not a located signing environment.
+  - [R5-3] **Key: CONFIRMED** (Skywalker, 7:45 AM PT; source `/workspace/g6-395/REPORT_kaisin.md`). YUJI reported the
+    candidate reviewer key on Kaisin at 07:33 PT. Skywalker checked its public half only: ed25519, fingerprint
+    `b0b8e29b3eff…d13a`, matching `.github/julius-landing/reviewer-ed25519.pub`, the signing folder's README and mailbox
+    note `f3047c`. No key bytes were printed, copied or moved.
+  - **#395 still passes** at head `32c5a2be`, tree `bcbefd01`, base `689d2be9` (live main), with 7/7 check runs green.
+  - **G6 BLOCKED: no installer can land #395.** The only reviewer-cleared installer, v3.5i pkg2
+    `FOUNDER_INSTALL_LANDING_V3.sh` (sha256 `978a475d…`):
+    - is pinned to base `3f20fc1a` and tree `710da65c` (its L89-91) and stops once main has moved (L244);
+    - takes no arguments, so it has no mode for an existing PR (L50);
+    - rebuilds the signed G6 fields from its own pins and byte-compares them (L316-343), so a token for PR 395 can
+      never match.
+    The v35j and v35k packages are also pinned to `3f20fc1a` and were never cleared. (Installer line numbers are from
+    Skywalker's report, not from main's tree.)
+  - **What unblocks it:** YUJI writes a pkg3 installer for the existing PR 395, pinning `32c5a2be` / `bcbefd01` /
+    `689d2be9`, with the G6 block unchanged. Skywalker clears that exact file, then signs on Kaisin just before the
+    installer's "G6 token:" prompt, because the token is valid for at most 2 hours.
   - Until a legitimate G6 exists, nothing lands on main (1.1).
   - Then the installer runs, #393 is closed and `relay/julius-landing-system-v35i-pkg2` is deleted (1.1 point 1).
 - **(i) [FR-3] REAL BLOCKER: exact-head approval.** The ruling says "no repeated founder approval", but review currency
@@ -390,9 +403,11 @@ shifts inside this document move none of them.
   required inputs at `:72-80` checked at `:116-123` and `:141-145`, and the App's 403 at `:17-18`. Starting a run is not
   an approval (`julius-main-provenance.mjs:663-665`). Step 4 notes that Cosmo's founder-account scope (R2-3) does not
   include this workflow. Steps 7 and item e point to step 8.
-- **[R5-3] (info)** Open item h and 1.1 point 1: YUJI's 07:33 PT candidate reviewer key on Kaisin is recorded as a
-  candidate under verification. Skywalker's public-half fingerprint check against `b0b8e29b` has not confirmed it, and
-  G6 is still pending.
+- **[R5-3] (info)** Open item h and 1.1 point 1 now record Skywalker's 7:45 AM PT result
+  (`/workspace/g6-395/REPORT_kaisin.md`): the Kaisin reviewer key is confirmed against `b0b8e29b` (public half only), and
+  #395 still passes. G6 is blocked because no cleared installer can land #395. The unblock is a pkg3 installer for
+  PR 395 written by YUJI and cleared by Skywalker. (Superseded wording from the first rev 6 commit `5007db7a`: "candidate
+  under verification".)
 - **[R5-4] (info)** New [FR-6] in section 1 lists the founder's 7:27 #396 ruling.
 - **Item a:** YUJI holds the App credential. Updated in section 2's trust statement, step 7 and items a and e.
 - **Item b:** YUJI owns the identity-hardening follow-up (`julius-main-provenance.mjs:290-292`, `land-lib.mjs:108`,
