@@ -98,7 +98,7 @@ So `total_cost_usd` is an **estimate under both subscription and API key**. Even
 ## Deliverable B: governed capture of one real xAI `/v1/responses` receipt (PLAN ONLY, NOT RUN)
 
 ### B.1 Existing entrypoint
-- **Pin:** `31bfc58b` on `judev/j1-combined-ceiling`. The live run records the exact adapter commit SHA at run time (`adapter_commit` in `summary.json`), and Skywalker diffs that SHA against `31bfc58b` before accepting (any change to `julius-xai-direct-reviewer.ts`, `julius-dispatch-repeat-ceiling.ts` or `julius-dispatch.ts` must be reviewed first). Line numbers below are the same at 22a0a9cb and 31bfc58b; only the prompt text at :29 changed.
+- **Pin:** `31bfc58b` (full SHA `31bfc58b89de137670e5dbaf752c3328b31163f7`, read from GitHub) on `judev/j1-combined-ceiling`. **Before the API key is read and before any network call**, the probe verifies the checkout and refuses unless it is clean and at the pin, or descends from it with evidence-only changes (B-3 checkout gate, B.2). The live run records the exact adapter commit SHA at run time (`adapter_commit` in `summary.json`), and Skywalker diffs that SHA against `31bfc58b` before accepting (any change to `julius-xai-direct-reviewer.ts`, `julius-dispatch-repeat-ceiling.ts` or `julius-dispatch.ts` must be reviewed first). Line numbers below are the same at 22a0a9cb and 31bfc58b; only the prompt text at :29 changed.
 - **There is no standalone xAI probe or live test at 31bfc58b.** `julius-xai-direct-reviewer.test.ts` uses a fake fetch only. I checked `scripts/julius-live-preflight.ts`, `scripts/julius-paid-dispatch.mjs` and `scripts/julius-live-probe-file.ts`, and none calls xAI `/responses`. The `package.json` scripts are `relay:julius:mission` and `relay:julius:preflight`. `xai-models.ts` does only a zero-token `GET /models` listing.
 - The only real caller is the full J1 dispatch, which pays all three legs. It is not suitable for a one-call probe.
 - The adapter's request shape to copy exactly is in `julius-xai-direct-reviewer.ts:95-100`: `POST {base}/responses`, base `https://api.x.ai/v1` (`xai-models.ts`), header `authorization: Bearer <key>`, and body `{"model":M,"store":false,"input":[{"role":"system","content":J1_XAI_REVIEW_INSTRUCTIONS},{"role":"user","content":<text>}]}`. Parsing is at :124-151 and ticks→micros (ceil, BigInt) at :56-64.
@@ -109,20 +109,55 @@ So `total_cost_usd` is an **estimate under both subscription and API key**. Even
 Prerequisites:
 - the founder approves this one paid call;
 - an xAI console spend limit is set;
-- `JULIUS_J1_REPO_DIR` points at the sunday-relay checkout that J1 runs from (used only to record its HEAD SHA);
+- `JULIUS_J1_REPO_DIR` points at the sunday-relay checkout that J1 runs from. The probe gates on it before reading the key (see the B-3 checkout gate below);
 - `JULIUS_J1_KEY_DIR`, `JULIUS_J1_REVIEWER_KEY_ENV` (the key *file name*, e.g. `XAI_API_KEY`) and `JULIUS_J1_REVIEWER_MODEL` are already set the way J1 uses them;
-- no transcript is running (`Stop-Transcript` if unsure).
+- no transcript is running (`Stop-Transcript` if unsure);
+- the block is saved as a file (e.g. `j1-xai-probe.ps1`) and run with `powershell -NoProfile -ExecutionPolicy Bypass -File .\j1-xai-probe.ps1`, so a refusal exits non-zero without closing the founder's shell.
+
+**B-3 checkout gate (runs FIRST: before the key file is read and before any network call).** The probe exits with a non-zero code (3) and reads no key and makes no call unless all of these hold:
+1. `git -C $env:JULIUS_J1_REPO_DIR status --porcelain --untracked-files=no` prints nothing (tracked and staged changes are clean).
+2. HEAD is exactly the pinned full SHA `31bfc58b89de137670e5dbaf752c3328b31163f7`, **or** `git merge-base --is-ancestor 31bfc58b89de137670e5dbaf752c3328b31163f7 HEAD` succeeds **and** every path from `git diff --name-only --no-renames 31bfc58b89de137670e5dbaf752c3328b31163f7 HEAD` is an evidence path.
+   - **Evidence paths** are defined by a fixed prefix list, `$EvidencePrefixes = @('.github/julius-missions/review-evidence/j1-combined-ceiling/31bfc58b/')`. This is the only directory touched by the evidence-only commits `1254b0d1` and `71d9f6f8` on `judev/j1-combined-ceiling`. Each path is normalised to forward slashes and accepted only by a full-path prefix test, `$p.StartsWith($prefix, [StringComparison]::Ordinal)`. Substring, `-like` and `-match` tests are never used. `--no-renames` makes a rename out of a code path show the old path too.
+   - **Empty diff output is accepted only when HEAD equals the pinned full SHA exactly.** If HEAD differs from the pin and the diff is empty, the probe refuses.
+3. **Fail closed on git failures:** `$LASTEXITCODE` is checked after every git call. The probe refuses on any non-zero exit, and on any output it can't parse: an empty line, a line containing NUL, or a line that isn't a relative path (absolute, drive-qualified, quoted or containing `..` segments).
+4. `summary.json` records `adapter_commit` (full HEAD SHA), `pinned_commit` (full pin SHA), `git_dirty` (always `false`, because a dirty tree is refused), `repo_toplevel` (`git rev-parse --show-toplevel`) and `evidence_paths_diffed` (the list, empty when HEAD equals the pin).
 
 ```powershell
 # J1 xAI receipt probe. FOUNDER-RUN ON KAISIN ONLY, after approval. Exactly ONE paid call. Never echoes the key.
 $ErrorActionPreference = 'Stop'; Set-StrictMode -Version Latest
-$keyDir = $env:JULIUS_J1_KEY_DIR; $keyName = $env:JULIUS_J1_REVIEWER_KEY_ENV; $model = $env:JULIUS_J1_REVIEWER_MODEL
-if (-not $keyDir -or -not $keyName -or -not $model -or -not $env:JULIUS_J1_REPO_DIR) { throw 'probe_env_missing' }
-$adapterCommit = (git -C $env:JULIUS_J1_REPO_DIR rev-parse HEAD).Trim()   # exact adapter commit at run time; Skywalker diffs it against 31bfc58b
+function Stop-Probe([string]$why) { [Console]::Error.WriteLine('PROBE REFUSED: ' + $why); exit 3 }
+$keyDir = $env:JULIUS_J1_KEY_DIR; $keyName = $env:JULIUS_J1_REVIEWER_KEY_ENV; $model = $env:JULIUS_J1_REVIEWER_MODEL; $repoDir = $env:JULIUS_J1_REPO_DIR
+if (-not $keyDir -or -not $keyName -or -not $model -or -not $repoDir) { Stop-Probe 'probe_env_missing' }
+# ---- B-3 checkout gate: runs BEFORE the key is read and BEFORE any network call. Fails closed. ----
+$PinnedFull = '31bfc58b89de137670e5dbaf752c3328b31163f7'
+$EvidencePrefixes = @('.github/julius-missions/review-evidence/j1-combined-ceiling/31bfc58b/')
+$env:GIT_OPTIONAL_LOCKS = '0'
+function Test-RelPath([string]$p) { return ($p -and ($p.IndexOf([char]0) -lt 0) -and -not $p.StartsWith('/') -and -not $p.StartsWith('"') -and ($p -notmatch '^[A-Za-z]:') -and (('/' + $p + '/').IndexOf('/../') -lt 0)) }
+if (-not (Test-Path -LiteralPath $repoDir -PathType Container -ErrorAction Stop)) { Stop-Probe 'probe_repo_missing' }
+$top = @(git -C $repoDir rev-parse --show-toplevel); if ($LASTEXITCODE -ne 0 -or $top.Count -ne 1 -or -not $top[0]) { Stop-Probe 'probe_repo_not_git' }
+$repoTop = $top[0].Trim()
+$dirty = @(git -C $repoDir status --porcelain --untracked-files=no); if ($LASTEXITCODE -ne 0) { Stop-Probe 'probe_git_status_failed' }
+if ($dirty.Count -gt 0) { Stop-Probe 'probe_repo_dirty' }
+$headOut = @(git -C $repoDir rev-parse --verify HEAD); if ($LASTEXITCODE -ne 0 -or $headOut.Count -ne 1) { Stop-Probe 'probe_head_unreadable' }
+$adapterCommit = $headOut[0].Trim(); if ($adapterCommit -notmatch '^[0-9a-f]{40}$') { Stop-Probe 'probe_head_unparseable' }
+$evidencePaths = @()
+if ($adapterCommit -ne $PinnedFull) {
+  git -C $repoDir merge-base --is-ancestor $PinnedFull $adapterCommit; if ($LASTEXITCODE -ne 0) { Stop-Probe 'probe_head_not_descendant_of_pin' }
+  $diffOut = @(git -C $repoDir -c core.quotepath=off diff --name-only --no-renames $PinnedFull $adapterCommit); if ($LASTEXITCODE -ne 0) { Stop-Probe 'probe_diff_failed' }
+  if ($diffOut.Count -eq 0) { Stop-Probe 'probe_empty_diff_but_head_differs' }
+  foreach ($line in $diffOut) {
+    if (-not (Test-RelPath $line)) { Stop-Probe 'probe_diff_unparseable' }
+    $norm = $line.Replace('\', '/')
+    $ok = $false; foreach ($prefix in $EvidencePrefixes) { if ($norm.StartsWith($prefix, [StringComparison]::Ordinal)) { $ok = $true } }
+    if (-not $ok) { Stop-Probe 'probe_head_has_non_evidence_changes' }
+    $evidencePaths += $norm
+  }
+}
+# ---- gate passed: only now locate the key file and make the one call ----
 $keyPath = Join-Path $keyDir $keyName
-if (-not (Test-Path -LiteralPath $keyPath -PathType Leaf)) { throw 'probe_key_file_missing' }
+if (-not (Test-Path -LiteralPath $keyPath -PathType Leaf -ErrorAction Stop)) { Stop-Probe 'probe_key_file_missing' }
 $out = Join-Path $env:USERPROFILE ('julius-xai-probe-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-New-Item -ItemType Directory -Path $out | Out-Null
+New-Item -ItemType Directory -Path $out -ErrorAction Stop | Out-Null
 $utf8 = New-Object System.Text.UTF8Encoding $false
 # System text = J1_XAI_REVIEW_INSTRUCTIONS verbatim at 31bfc58b (julius-xai-direct-reviewer.ts:28-32, "Julius mission")
 $sys  = 'You are the independent Reviewer for a Julius mission. You are shown the mission brief, the architect plan and the coder artifact. You did not write any of them. Judge whether the artifact satisfies the brief. Reply with ONE JSON object and nothing else: {"verdict":"approve"|"reject","summary":"<short reasons>"}.'
@@ -153,7 +188,8 @@ $summary = [ordered]@{
   cost_usd_micros_ceil = if ($micros -ne $null) { $micros.ToString() } else { $null }
   sha256_response_raw = (Get-FileHash -Algorithm SHA256 -LiteralPath $raw).Hash.ToLower()
   sha256_request = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $out 'request.json')).Hash.ToLower()
-  adapter_commit = $adapterCommit; pinned_commit = '31bfc58b'
+  adapter_commit = $adapterCommit; pinned_commit = $PinnedFull; git_dirty = $false; repo_toplevel = $repoTop
+  evidence_paths_diffed = [string[]]$evidencePaths
 }
 $summary | ConvertTo-Json | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $out 'summary.json')
 $summary | Format-List   # prints ids/ticks/hashes only, never the key
@@ -162,6 +198,7 @@ $summary | Format-List   # prints ids/ticks/hashes only, never the key
 Notes:
 - The key is read from the existing J1 key-store file (the same store `createFileKeyStore` reads, `relay-bridge/julius-key-store.ts`). It is never typed, pasted, logged, put in history or written to disk elsewhere. The request headers aren't saved, and the response body has no secret, but it is scanned anyway.
 - If the response has no integer `cost_in_usd_ticks`, the founder reports that. It means the adapter's assumption (`julius-xai-direct-reviewer.ts:15-17`, "UNVERIFIED") is false, and J1 must not run.
+- The checkout gate runs **before** the key file is read and before the call. A refusal exits with code 3, reads no key and makes no network request.
 - Running it once means **one** call. On an error, do not retry without new approval.
 
 ### B.3 Expected cost (xAI published prices)
@@ -175,19 +212,20 @@ Notes:
 ### B.4 What to record (hand-off bundle; the founder copies the folder to the box or repo evidence only after the secret scan passes)
 - `response.raw.json`: raw response bytes, unmodified. They contain no secret, and nothing is stripped, so the hash stays meaningful. If the scan ever flagged something, stop and do not share.
 - `request.json`: the exact request body, which contains no secret.
-- `summary.json`: capture time (PT and UTC), HTTP status, `id` (response id), requested and served model, tokens, **`cost_in_usd_ticks` (integer)**, **micros = ceil(ticks/10,000)**, SHA-256 of the raw response and the request, the exact `adapter_commit` recorded at run time, and the pin `31bfc58b`.
+- `summary.json`: capture time (PT and UTC), HTTP status, `id` (response id), requested and served model, tokens, **`cost_in_usd_ticks` (integer)**, **micros = ceil(ticks/10,000)**, SHA-256 of the raw response and the request, and the checkout-gate fields: `adapter_commit` (full HEAD SHA at run time), `pinned_commit` (full `31bfc58b` SHA), `git_dirty` (`false`), `repo_toplevel` and `evidence_paths_diffed`. Evidence paths are those matching the fixed prefix list `$EvidencePrefixes` by full-path ordinal prefix test after normalising to forward slashes. Git failures or unparseable git output refuse the probe. An empty diff is valid only when `adapter_commit == pinned_commit`.
 - A screenshot or CSV line from the xAI console's usage for that time window, if one is available.
 
 ### B.5 What Skywalker verifies
 1. `sha256(response.raw.json)` equals `summary.sha256_response_raw`, and likewise for `request.json`.
 2. `usage.cost_in_usd_ticks` is present, a JSON **integer** (no decimal point or exponent) and ≥ 0.
 3. `cost_usd_micros_ceil == ceil(ticks / 10000)` in integer arithmetic. Spot-check the boundary: 158,500 ticks gives 16 micros.
-4. **Offline adapter replay at the recorded `adapter_commit`**, after Skywalker diffs it against `31bfc58b` and accepts the diff: call `createXaiDirectReviewerRoleProvider({...}).call()` with a fake `fetchImpl` that returns exactly the bytes of `response.raw.json` with the captured status, a dummy non-empty `apiKey`, and the model and served-model allow-list from the probe. Check that the result has `providerResponseId == summary.response_id`, `costUsdMicros == cost_usd_micros_ceil` and `costUsdTicksRaw == ticks`. Then run `legMicros`/`verifyRun1Spend` on that leg and check that it gives the integer, not `unknown_spend`. Use no network and no real key.
-5. The request body matches the adapter's shape (`model`, `store:false`, system plus user input), and the system text equals `J1_XAI_REVIEW_INSTRUCTIONS` at `31bfc58b` byte for byte ("…Reviewer for a Julius mission. …"). Windows PowerShell 5.1 `ConvertTo-Json` escapes `<` and `>` as `\u003c` / `\u003e` (the prompt contains `<short reasons>`), so compare the **JSON-decoded** `input[0].content` string, not the raw `request.json` bytes. The raw bytes are still hashed for item 1.
-6. The served model is in `JULIUS_J1_REVIEWER_SERVED_MODEL_ALLOW`.
-7. The bundle has no secret (a pattern scan for `xai-…` and `Bearer`), and it was produced by one call (one response id).
-8. The tick total is plausible against the published price × token counts, and matches the console usage if available. This is a sanity check only, never a substitute for the receipt.
-9. Skywalker's verdict covers only "the live xAI path returns an integer billed-cost field that the adapter converts correctly". It does **not** cover the architect or coder legs, and readiness stays at 94.520% until the founder decides those legs and they are implemented and verified.
+4. **Checkout gate fields:** `pinned_commit == 31bfc58b89de137670e5dbaf752c3328b31163f7` and `git_dirty == false`. Either `adapter_commit == pinned_commit` with `evidence_paths_diffed` empty, or `adapter_commit` descends from the pin, `evidence_paths_diffed` is non-empty and equals Skywalker's own `git diff --name-only --no-renames <pin> <adapter_commit>`, and every entry passes `StartsWith('.github/julius-missions/review-evidence/j1-combined-ceiling/31bfc58b/', Ordinal)`. A different `adapter_commit` with an empty list is a FAIL. `repo_toplevel` is the checkout J1 runs from.
+5. **Offline adapter replay at the recorded `adapter_commit`**, after Skywalker diffs it against `31bfc58b` and accepts the diff: call `createXaiDirectReviewerRoleProvider({...}).call()` with a fake `fetchImpl` that returns exactly the bytes of `response.raw.json` with the captured status, a dummy non-empty `apiKey`, and the model and served-model allow-list from the probe. Check that the result has `providerResponseId == summary.response_id`, `costUsdMicros == cost_usd_micros_ceil` and `costUsdTicksRaw == ticks`. Then run `legMicros`/`verifyRun1Spend` on that leg and check that it gives the integer, not `unknown_spend`. Use no network and no real key.
+6. The request body matches the adapter's shape (`model`, `store:false`, system plus user input), and the system text equals `J1_XAI_REVIEW_INSTRUCTIONS` at `31bfc58b` byte for byte ("…Reviewer for a Julius mission. …"). Windows PowerShell 5.1 `ConvertTo-Json` escapes `<` and `>` as `\u003c` / `\u003e` (the prompt contains `<short reasons>`), so compare the **JSON-decoded** `input[0].content` string, not the raw `request.json` bytes. The raw bytes are still hashed for item 1.
+7. The served model is in `JULIUS_J1_REVIEWER_SERVED_MODEL_ALLOW`.
+8. The bundle has no secret (a pattern scan for `xai-…` and `Bearer`), and it was produced by one call (one response id).
+9. The tick total is plausible against the published price × token counts, and matches the console usage if available. This is a sanity check only, never a substitute for the receipt.
+10. Skywalker's verdict covers only "the live xAI path returns an integer billed-cost field that the adapter converts correctly". It does **not** cover the architect or coder legs, and readiness stays at 94.520% until the founder decides those legs and they are implemented and verified.
 
 ### B.6 Founder decisions needed (Deliverable B)
 1. Approve exactly one paid xAI call (expected < $0.05) and set an xAI spend limit of $1 or less.
