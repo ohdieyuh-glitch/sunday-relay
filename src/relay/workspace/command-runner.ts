@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
 import { boundOutput, REDACTION_MARK, sanitizeOutput } from './output-sanitizer';
 
 /**
@@ -44,9 +45,6 @@ export interface RunningCommandHandle {
 const KILL_GRACE_MS = 2_000;
 const CONFIRM_WAIT_MS = 5_000;
 
-/** The exact suffix `boundOutput` appends to text it cut. */
-const TRUNCATION_SUFFIX = /\n\[TRUNCATED: output limit reached\]$/;
-
 /**
  * A stream that STOPPED EARLY (the cap cut it, a chunk was dropped, a timeout, a cancel or a kill) can end inside a secret. The sanitizer's patterns
  * need a secret's WHOLE shape, so the surviving head of a cut secret is stored in clear. This withholds what such a stream cannot prove complete:
@@ -89,21 +87,21 @@ export function secureCapturedStream(
   limitBytes: number,
   stoppedEarly: boolean,
 ): { text: string; truncated: boolean; redactions: number } {
-  const bounded = boundOutput(raw, limitBytes);
-  const suffix = bounded.truncated ? (TRUNCATION_SUFFIX.exec(bounded.text)?.[0] ?? '') : '';
-  let core = suffix === '' ? bounded.text : bounded.text.slice(0, bounded.text.length - suffix.length);
-  let withheld = 0;
-  const early = bounded.truncated || stoppedEarly;
+  // Redact the captured text, then bound it. Bounding first cuts a secret into a shape no pattern matches and
+  // stores the head in the clear; redacting a short secret also lengthens it, so the byte bound has to be last.
   // Step 1 applies to EVERY stream: a private key header with no complete dashed footer after it at the end of the output is a partial key whether or not the runner cut the stream (`head -c 500 key.pem`, a crash).
+  let withheld = 0;
+  let core = raw;
   ({ text: core, withheld } = withholdOpenBlock(core));
   const clean = sanitizeOutput(core);
   let stored = clean.text;
-  if (early) {
+  if (stoppedEarly) {
     const tail = withholdTrailingToken(stored);
     stored = tail.text;
     withheld += tail.withheld;
   }
-  return { text: `${stored}${suffix}`, truncated: bounded.truncated, redactions: clean.redactions + withheld };
+  const bounded = boundOutput(stored, limitBytes);
+  return { text: bounded.text, truncated: bounded.truncated, redactions: clean.redactions + withheld };
 }
 
 export function runBoundedCommand(
@@ -124,6 +122,8 @@ export function runBoundedCommand(
     let killRequested = false;
     let settled = false;
     let child: ChildProcess;
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
 
     const finish = (exitCode: number | null, signal: string | null, termination: BoundedRunOutcome['termination'], spawnError?: string) => {
       if (settled) return;
@@ -131,6 +131,9 @@ export function runBoundedCommand(
       clearTimeout(timeoutTimer);
       clearTimeout(escalateTimer);
       clearTimeout(confirmTimer);
+      // Flush a character whose bytes were split across reads. A chunk decoded on its own would replace it.
+      stdout += stdoutDecoder.end();
+      stderr += stderrDecoder.end();
       // A stream the cap cut, or one that was stopped (cap hit, timeout, cancel, kill), may end inside a secret.
       const stoppedEarly = killRequested || signal !== null;
       const cleanOut = secureCapturedStream(stdout, request.outputLimitBytes, stoppedEarly);
@@ -200,16 +203,18 @@ export function runBoundedCommand(
     });
 
     child.stdout?.on('data', (chunk: Buffer) => {
+      if (settled) return;
       stdoutBytes += chunk.byteLength;
-      if (stdoutBytes <= request.outputLimitBytes * 2) stdout += chunk.toString('utf8');
+      if (stdoutBytes <= request.outputLimitBytes * 2) stdout += stdoutDecoder.write(chunk);
       if (stdoutBytes > request.outputLimitBytes && !killRequested) {
         outputLimitHit = true;
         requestKill();
       }
     });
     child.stderr?.on('data', (chunk: Buffer) => {
+      if (settled) return;
       stderrBytes += chunk.byteLength;
-      if (stderrBytes <= request.outputLimitBytes * 2) stderr += chunk.toString('utf8');
+      if (stderrBytes <= request.outputLimitBytes * 2) stderr += stderrDecoder.write(chunk);
       if (stderrBytes > request.outputLimitBytes && !killRequested) {
         outputLimitHit = true;
         requestKill();

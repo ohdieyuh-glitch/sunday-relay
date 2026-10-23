@@ -33,17 +33,16 @@ export function sanitizeOutput(text: string): { text: string; redactions: number
   return { text: sanitized, redactions };
 }
 
-/** Bound a captured stream to a byte budget (UTF-8), marking truncation. */
+/** Bound a captured stream to an exact UTF-8 byte budget, never splitting a character. */
 export function boundOutput(text: string, limitBytes: number): { text: string; truncated: boolean } {
+  if (Buffer.byteLength(text, 'utf8') <= limitBytes) return { text, truncated: false };
   let bytes = 0;
-  let end = text.length;
-  for (let i = 0; i < text.length; i++) {
-    bytes += text.charCodeAt(i) < 0x80 ? 1 : 3; // conservative UTF-8 estimate
-    if (bytes > limitBytes) {
-      end = i;
-      break;
-    }
+  let end = 0;
+  for (const ch of text) {
+    const size = Buffer.byteLength(ch, 'utf8');
+    if (bytes + size > limitBytes) break;
+    bytes += size;
+    end += ch.length;
   }
-  if (end >= text.length) return { text, truncated: false };
   return { text: `${text.slice(0, end)}\n[TRUNCATED: output limit reached]`, truncated: true };
 }
