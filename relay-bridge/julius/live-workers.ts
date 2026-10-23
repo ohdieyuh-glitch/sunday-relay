@@ -585,6 +585,22 @@ const reviewerDiagnostics = (input: {
      * not draw. Null when the engine wrote no usage report.
      */
     engineApiCalls: input.usage?.apiCalls ?? null,
+    /**
+     * THE PROVIDER REQUEST ID, from the usage file only. Absent, unreadable,
+     * credential-shaped, or simply not in the file stays null, with
+     * `UNAVAILABLE` on its own field. The status word is not an id, and
+     * Hermes' session id is not copied into one.
+     */
+    providerRequestId: input.usage?.providerRequestAvailability === 'CAPTURED'
+      ? input.usage.providerRequestId
+      : null,
+    providerRequestAvailability: input.usage?.providerRequestAvailability ?? 'UNAVAILABLE',
+    providerRequestUnavailableReason: input.usage?.providerRequestAvailability === 'CAPTURED'
+      ? null
+      : input.usage?.providerRequestUnavailableReason ?? 'provider_request_id_not_reported',
+    responseId: input.usage?.providerRequestAvailability === 'CAPTURED'
+      ? input.usage.providerRequestId
+      : null,
     reviewReaskShape: input.reviewReaskShape,
     ...(input.startedAt === undefined ? {} : { startedAt: input.startedAt }),
     ...(input.completedAt === undefined ? {} : { completedAt: input.completedAt }),

@@ -1308,7 +1308,12 @@ describe('the evidence dump names only tables and columns the migrations create'
       'terminalReason', 'resultClass',
       // The Prompt Architect half. Paid attempt #3 failed here and the artifact
       // could not say which rule refused the plan.
-      'requestedModel', 'responseId', 'validationPassed', 'validationReasonCode', 'validationField',
+      'requestedModel', 'responseId',
+      // The reviewer's provider request id, from the Hermes usage file. The
+      // status and the reason are their own columns; the id stays null when
+      // the file did not carry a safe one.
+      'providerRequestId', 'providerRequestAvailability', 'providerRequestUnavailableReason',
+      'validationPassed', 'validationReasonCode', 'validationField',
       // Paid runs 34185920678 and 34186711214 recorded `plan_false_work_claim`
       // with an empty field and no phrase, twice. The path says where and this
       // says which of the four phrases fired.
