@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { bearerMatches } from './bearer-auth';
 import { sessionTokenFrom } from './browser-session/routes';
 import { isAdmittedRunId, type AdmissionClaimStore, type AdmittedRecord } from './julius-dispatch-admission';
+import { runJuliusCompanionSlot, type JuliusCompanionBinding } from './julius-companion-slot';
 import { preSpendDecision, spendRefusalCode, type JuliusSpendLedgerPort } from './julius-dispatch-spend';
 import { composeRoleProviders } from './julius-role-compose';
 import type { KeyStore } from './julius-key-store';
@@ -304,6 +305,10 @@ export interface ChainEvent {
   readonly usage?: RoleUsage | null;
   readonly failure?: string | null;
   readonly resultSha256?: string;
+  /** Companion evidence only: a scrubbed wake id, the body digest, and artifact hashes. Never a task body. */
+  readonly wakeId?: string | null;
+  readonly bodyDigest?: string | null;
+  readonly artifactHashes?: readonly string[];
 }
 /** UNRECORDED = the chain ended but its FINAL ledger row could not be written: the run has no sealed record (a restart will orphan it). */
 export type ChainState = 'ACCEPTED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'HALTED' | 'ORPHANED' | 'UNRECORDED';
@@ -408,6 +413,12 @@ export interface JuliusDispatchDeps {
   readonly claims?: AdmissionClaimStore;
   /** The durable spend ledger #404 reads. Settlements recorded here are the facts `authorizeJuliusLiveSpend` folds. */
   readonly spendLedger?: JuliusSpendLedgerPort;
+  /**
+   * Optional companion slot. Absent means the chain never wakes one. When present, Julius hands at most one
+   * companion task to `port` after the architect and does not call a provider for it. A timeout, failure,
+   * or rejection does not stop the coder. No spend row is written for the slot.
+   */
+  readonly companion?: JuliusCompanionBinding;
   readonly now: () => number;
   /** Safe lines only (ids, hashes, codes). Never a key, a body or provider text. */
   readonly log?: (line: string) => void;
@@ -512,6 +523,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
     let architectText: string | null = null;
     let coderArtifact: string | null = null;
     let coderEvidence: string | null = null;
+    let companionArtifactSha: string | null = null;
     let verdict: 'approve' | 'reject' | null = null;
     let failure: string | null = null;
     let halted = false;
@@ -649,8 +661,49 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         failure = 'ledger_write_failed_after_call'; halted = true; break;
       }
       if (roleFailure !== null) { failure = `${role}_${roleFailure}`; break; }
-      if (role === 'architect') architectText = text;
-      if (role === 'coder') { coderArtifact = text; coderEvidence = evidence; }
+      if (role === 'architect') {
+        architectText = text;
+        const binding = deps.companion;
+        if (binding !== undefined) {
+          try {
+            const slot = await runJuliusCompanionSlot({
+              plan: text,
+              serverRunId: rec.serverRunId,
+              deadlineMs: binding.deadlineMs,
+              port: binding.port,
+              clock: binding.clock,
+              integrate: binding.integrate,
+              validate: binding.validate,
+              review: {
+                review: async (artifact) => {
+                  const verdict = await binding.review.review(artifact);
+                  if (verdict.verdict === 'approve') companionArtifactSha = artifact.sha256;
+                  return verdict;
+                },
+              },
+            });
+            emit(rec, {
+              type: 'companion.recorded',
+              outcome: slot.evidence.disposition,
+              failure: slot.evidence.reason,
+              resultSha256: slot.evidence.bodyDigest ?? undefined,
+              wakeId: slot.evidence.wakeId,
+              bodyDigest: slot.evidence.bodyDigest,
+              artifactHashes: slot.evidence.artifactHashes,
+            });
+          } catch {
+            emit(rec, { type: 'companion.recorded', outcome: 'failed', failure: 'companion_slot_failed' });
+          }
+        }
+      }
+      if (role === 'coder') {
+        coderArtifact = text;
+        coderEvidence = evidence;
+        if (companionArtifactSha !== null) {
+          const note = `untrusted_companion_sha256=${companionArtifactSha}`;
+          coderEvidence = coderEvidence === null || coderEvidence === '' ? note : `${coderEvidence}\n${note}`;
+        }
+      }
       if (role === 'reviewer') verdict = out.verdict ?? null;
     }
 

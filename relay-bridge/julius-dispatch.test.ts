@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createMemoryAdmissionStore, isClientRunId, isServerRunId, type AdmittedRecord } from './julius-dispatch-admission';
+import type { JuliusCompanionBinding } from './julius-companion-slot';
 import { createSharedSpendLedger, type JuliusSpendLedgerPort } from './julius-dispatch-spend';
 import { authorizeJuliusLiveSpend } from '../src/relay/mission/julius/julius-spend-ceiling';
 import type { KeyStore } from './julius-key-store';
@@ -103,6 +104,7 @@ function harness(options: {
   readonly claims?: ReturnType<typeof createMemoryAdmissionStore>;
   readonly autoAdmit?: boolean;
   readonly spendLedger?: JuliusSpendLedgerPort;
+  readonly companion?: JuliusCompanionBinding;
 } = {}): Harness {
   const env: Record<string, string | undefined> = {
     JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: FOUNDER, JULIUS_J1_PROJECT_ID: PROJECT, JULIUS_J1_REVIEWER_PROVIDER: (options.providerIds ?? ['openai', 'anthropic', 'xai'])[2], JULIUS_J1_BUDGET_CAP_USD: '10', JULIUS_J1_LEG_ESTIMATE_USD: '1', ...(options.mode === 'live' && options.keyStore !== null ? {} : KEYS), ...options.env,
@@ -124,7 +126,7 @@ function harness(options: {
   const built = options.providers === null
     ? createUncomposedJuliusDispatch(() => env, () => clock)
     : createJuliusDispatch({
-      providers, ledger, claims, ...(options.spendLedger === undefined ? {} : { spendLedger: options.spendLedger }), ...(keyStore === null ? {} : { keyStore }), ...(options.mode === 'live' ? { briefSha256: (options.frozen ?? FROZEN).contractSha256 } : {}), ...(options.omitMode === true ? {} : { mode: options.mode ?? 'fake' }), env: () => env, now: () => (clock += 1000), log: (line) => logs.push(line),
+      providers, ledger, claims, ...(options.spendLedger === undefined ? {} : { spendLedger: options.spendLedger }), ...(options.companion === undefined ? {} : { companion: options.companion }), ...(keyStore === null ? {} : { keyStore }), ...(options.mode === 'live' ? { briefSha256: (options.frozen ?? FROZEN).contractSha256 } : {}), ...(options.omitMode === true ? {} : { mode: options.mode ?? 'fake' }), env: () => env, now: () => (clock += 1000), log: (line) => logs.push(line),
       newId: () => `disp_${(n += 1)}`,
       frozen: options.frozen ?? FROZEN,
       checker: { check: async () => ({ pass: options.checkerPass ?? true }) },
@@ -1285,6 +1287,46 @@ describe('the durable cap is authorizeJuliusLiveSpend, in both directions', () =
     })).toMatchObject({ authorized: true, spendCeilingUsdMicros: 30_000_000 });
   });
 });
+
+describe('companion slot beside the chain', () => {
+  it('hands one task to the port, shows the artifact hash to the reviewer, and adds no spend row', async () => {
+    const serverRunId = `run:${sha(RUN).slice(0, 24)}`;
+    const bytes = new TextEncoder().encode('companion fixture');
+    const artifactSha = createHash('sha256').update(bytes).digest('hex');
+    const wakes: string[] = [];
+    const planText = JSON.stringify({
+      objectiveSummary: 'Plan the fixture.',
+      companion_task: { subtask: 'Add the companion note.', acceptanceCriteria: ['The note is present.'] },
+    });
+    const h = harness({
+      behave: { architect: () => ({ ok: true, text: planText, responseId: 'resp_a_0011223344', model: 'm' }) },
+      companion: {
+        deadlineMs: 1_000,
+        port: { async wake(request) { wakes.push(request.serverRunId); return { wakeId: 'wake_01ABCDEF', outcome: 'posted', artifact: { bytes } }; } },
+        clock: { after: laterUnref },
+        integrate: { async submit() { return { accepted: true, reason: null }; } },
+        validate: { validate: () => ({ ok: true, reason: null }) },
+        review: { review: async () => ({ verdict: 'approve' }) },
+      },
+    });
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, status: 202 });
+    await h.controller.whenIdle();
+    expect(h.calls.map((call) => call.role)).toEqual(['architect', 'coder', 'reviewer']);
+    expect(wakes).toEqual([serverRunId]);
+    expect(h.calls[2]?.coderEvidence).toContain(`untrusted_companion_sha256=${artifactSha}`);
+    const events = h.controller.events({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER, cursor: 0 });
+    const body = events.body as { data: { state: string; events: { type: string; wakeId?: string | null; bodyDigest?: string | null; artifactHashes?: string[]; outcome?: string }[] } };
+    expect(body.data.state).toBe('COMPLETED');
+    const recorded = body.data.events.find((event) => event.type === 'companion.recorded');
+    expect(recorded).toMatchObject({ outcome: 'integrated', wakeId: 'wake_01ABCDEF', artifactHashes: [artifactSha] });
+    expect(recorded?.bodyDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(JSON.stringify(recorded)).not.toContain('Add the companion note');
+    const roles = (await rowsOf(h)).filter((row) => row.phase === 'result').map((row) => row.role);
+    expect(roles).toEqual(['architect', 'coder', 'reviewer', 'final']);
+  });
+});
+
+const laterUnref = (): Promise<void> => new Promise((resolve) => { const timer = setTimeout(resolve, 30_000); timer.unref(); });
 
 describe('SOURCE SCAN: the controller reads keys only through the store', () => {
   const source = readFileSync(join(__dirname, 'julius-dispatch.ts'), 'utf8').split(/\r?\n/u).filter((line) => !/^\s*(\*|\/\/|\/\*)/u.test(line)).join('\n');
