@@ -12,11 +12,11 @@ function pool(handler: (sql: string, values: readonly unknown[] | undefined) => 
 }
 
 describe('prior spend is read from the durable ledger or reported unreadable', () => {
-  it('an empty mission is a successful read of no prior run', async () => {
+  it('an empty local database is an absent durable record, not a verified zero', async () => {
     const result = await readJuliusPriorRunSpend(pool(() => ({ rows: [] })), {
       missionId: 'julius-live-mission-5', projectId: 'project-1',
     });
-    expect(result).toEqual({ readable: true, priorRuns: [] });
+    expect(result).toEqual({ readable: true, priorRuns: [], durableRecord: 'ABSENT' });
   });
 
   it('folds settled API bills and leaves a run with no settlements unverified', async () => {

@@ -55,6 +55,7 @@ const REQUEST = () => compileBootstrapRequest({
   requirements: ['Run the migration first.'], constraints: ['Touch only scripts/.'],
   acceptanceCriteria: [{ id: 'AC-1', text: 'The release script deploys after migrating.', blocking: true }],
   testCommand: 'npm test', workspacePath: '/workspace/carry',
+  limits: { spendUsd: 5, repairCycles: 1 },
 }, [
   { role: 'PROMPT_ARCHITECT', integrationId: 'a', adapterId: 'openai-architect-live', independenceGroup: 'openai', requiredCapabilities: ['plan'] },
   { role: 'CODING_AGENT', integrationId: 'b', adapterId: 'claude-agent-sdk-hosted-live', independenceGroup: 'anthropic', requiredCapabilities: ['implement'] },

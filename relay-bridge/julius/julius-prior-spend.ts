@@ -1,10 +1,13 @@
 /**
- * PRIOR RUNS OF THIS MISSION, FROM THE DURABLE LEDGER.
+ * PRIOR RUNS OF THIS MISSION, FROM THIS JOB'S DATABASE.
  *
- * The qualifying-pair cap is a fact about runs that already exist in this
- * store, not about a marker counted in GitHub. A query that throws is
- * unreadable. An empty result is a successful read of no prior run, which is
- * a different answer and is not invented here.
+ * A query that throws is unreadable. Rows that come back are this database's
+ * rows only. They are not the durable cross-job record, so every successful
+ * read is marked `durableRecord: 'ABSENT'`.
+ *
+ * TODO(single-spend): replace this read, for qualifying-pair authorization,
+ * with the `julius-run-spent-<id>` tag and ledger. Until that lands, an empty
+ * result is absent prior-spend, not a verified zero.
  */
 
 import {
@@ -53,7 +56,7 @@ export async function readJuliusPriorRunSpend(
       [input.missionId, input.projectId, input.excludeRunId ?? ''],
     );
     const runIds = runs.rows.map((row) => row.run_id).filter((id) => typeof id === 'string' && id !== '');
-    if (runIds.length === 0) return { readable: true, priorRuns: [] };
+    if (runIds.length === 0) return { readable: true, priorRuns: [], durableRecord: 'ABSENT' };
     const settled = await pool.query<{ run_id: string; task_id: string | null; facts: unknown }>(
       `SELECT stream_id AS run_id, payload->>'taskId' AS task_id, payload->'facts' AS facts
          FROM relay_wonderland.events
@@ -77,7 +80,7 @@ export async function readJuliusPriorRunSpend(
       });
     }
     const priorRuns = runIds.map((runId) => summarizeJuliusPriorRunSpend(runId, byRun.get(runId) ?? []));
-    return { readable: true, priorRuns };
+    return { readable: true, priorRuns, durableRecord: 'ABSENT' };
   } catch {
     return { readable: false };
   }

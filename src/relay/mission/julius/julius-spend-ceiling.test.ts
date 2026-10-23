@@ -11,7 +11,8 @@ import {
   type JuliusSpendLedgerRead,
 } from './julius-spend-ceiling';
 
-const emptyLedger: JuliusSpendLedgerRead = { readable: true, priorRuns: [] };
+const emptyLedger: JuliusSpendLedgerRead = { readable: true, priorRuns: [], durableRecord: 'ABSENT' };
+const durableEmpty: JuliusSpendLedgerRead = { readable: true, priorRuns: [], durableRecord: 'PRESENT' };
 const unreadable: JuliusSpendLedgerRead = { readable: false };
 
 const verified = (runId: string, knownUsdMicros: number): JuliusPriorRunSpend => ({
@@ -30,9 +31,31 @@ describe('the runtime refuses a contract above its namespace ceiling', () => {
     expect(result.safeMessage).toContain('no provider balance was verified');
   });
 
-  it('accepts mission 5 at its $30 and 3-cycle grant', () => {
+  it('ignores local rows when the read is not the durable record', () => {
+    const result = authorizeJuliusLiveSpend({
+      namespace: 'julius-unreal-mission-1', spendUsd: 30, repairCycles: 3,
+      ledger: { readable: true, priorRuns: [verified('run-1', 1)] },
+    });
+    expect(result.authorized).toBe(false);
+    if (result.authorized) return;
+    expect(result.reasonCode).toBe('qualifying_pair_spend_absent');
+  });
+
+  it('refuses mission 5 when prior-spend facts are absent, and does not treat that as zero', () => {
     const result = authorizeJuliusLiveSpend({
       namespace: 'julius-live-mission-5', spendUsd: 30, repairCycles: 3, ledger: emptyLedger,
+    });
+    expect(result.authorized).toBe(false);
+    if (result.authorized) return;
+    expect(result.reasonCode).toBe('qualifying_pair_spend_absent');
+    expect(result.safeMessage).toContain('julius-run-spent-');
+    expect(result.safeMessage).toContain('not treated as zero');
+    expect(result.safeMessage).toContain('no provider balance was verified');
+  });
+
+  it('authorizes mission 5 at its own $30 grant only when a durable record says there is no prior run', () => {
+    const result = authorizeJuliusLiveSpend({
+      namespace: 'julius-live-mission-5', spendUsd: 30, repairCycles: 3, ledger: durableEmpty,
     });
     expect(result).toEqual({ authorized: true, spendCeilingUsdMicros: 30_000_000, maxRepairRounds: 3 });
   });
@@ -61,11 +84,11 @@ describe('the runtime refuses a contract above its namespace ceiling', () => {
   });
 });
 
-describe('the qualifying pair is initial plus one repeat, inside $60 of known spend', () => {
+describe('a durable prior-spend record can be compared with the $60 figure', () => {
   it('refuses a repeat whose known prior spend plus the new ceiling exceeds $60', () => {
     const result = authorizeJuliusLiveSpend({
       namespace: 'julius-live-mission-5', spendUsd: 30, repairCycles: 3,
-      ledger: { readable: true, priorRuns: [verified('run-1', 30_000_001)] },
+      ledger: { readable: true, durableRecord: 'PRESENT', priorRuns: [verified('run-1', 30_000_001)] },
     });
     expect(result.authorized).toBe(false);
     if (result.authorized) return;
@@ -76,7 +99,7 @@ describe('the qualifying pair is initial plus one repeat, inside $60 of known sp
   it('allows a repeat that lands exactly on $60', () => {
     const result = authorizeJuliusLiveSpend({
       namespace: 'julius-unreal-mission-1', spendUsd: 30, repairCycles: 3,
-      ledger: { readable: true, priorRuns: [verified('run-1', 30_000_000)] },
+      ledger: { readable: true, durableRecord: 'PRESENT', priorRuns: [verified('run-1', 30_000_000)] },
     });
     expect(result).toMatchObject({ authorized: true, spendCeilingUsdMicros: 30_000_000 });
   });
@@ -84,7 +107,7 @@ describe('the qualifying pair is initial plus one repeat, inside $60 of known sp
   it('refuses a third run even when the known spend is inside the cap', () => {
     const result = authorizeJuliusLiveSpend({
       namespace: 'julius-live-mission-5', spendUsd: 1, repairCycles: 0,
-      ledger: { readable: true, priorRuns: [verified('run-1', 1), verified('run-2', 1)] },
+      ledger: { readable: true, durableRecord: 'PRESENT', priorRuns: [verified('run-1', 1), verified('run-2', 1)] },
     });
     expect(result.authorized).toBe(false);
     if (result.authorized) return;
@@ -102,6 +125,7 @@ describe('the qualifying pair is initial plus one repeat, inside $60 of known sp
       namespace: 'julius-live-mission-5', spendUsd: 30, repairCycles: 3,
       ledger: {
         readable: true,
+        durableRecord: 'PRESENT',
         priorRuns: [{ runId: 'run-1', knownUsdMicros: 0, unknownCostComponents: 1, unverifiableApiSpend: false, spendVerified: false }],
       },
     });
@@ -117,7 +141,7 @@ describe('the qualifying pair is initial plus one repeat, inside $60 of known sp
     expect(subscription.knownUsdMicros).toBe(0);
     const refused = authorizeJuliusLiveSpend({
       namespace: 'julius-live-mission-5', spendUsd: 30, repairCycles: 3,
-      ledger: { readable: true, priorRuns: [subscription] },
+      ledger: { readable: true, durableRecord: 'PRESENT', priorRuns: [subscription] },
     });
     expect(refused.authorized).toBe(false);
     if (!refused.authorized) {

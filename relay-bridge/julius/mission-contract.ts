@@ -397,8 +397,8 @@ export function compileBootstrapRequest(contract: LiveMissionContractFile, worke
     completionRule: 'all_blocking_criteria_and_independent_review',
     limits: {
       runtimeMinutes: 60, agentCalls: 24,
-      spendUsd: contract.limits?.spendUsd ?? 5,
-      reviewCycles: 3, repairCycles: contract.limits?.repairCycles ?? 1,
+      spendUsd: contract.limits?.spendUsd ?? null,
+      reviewCycles: 3, repairCycles: contract.limits?.repairCycles ?? null,
     },
     missionRevision: 1,
     missionBindingDigest: `sha256:${bindingDigest}`,

@@ -579,6 +579,7 @@ const BOOTSTRAP_REQUEST = () => compileBootstrapRequest({
   requirements: ['Normalize a mission label.'], constraints: ['Touch only the fixture.'],
   acceptanceCriteria: [{ id: 'AC-1', text: 'The fixture test passes.', blocking: true }],
   testCommand: 'npm run mission-test', workspacePath: '/workspace/mission',
+  limits: { spendUsd: 5, repairCycles: 1 },
 }, [
   { role: 'PROMPT_ARCHITECT', integrationId: 'a', adapterId: 'openai-architect-live', independenceGroup: 'openai', requiredCapabilities: ['plan'] },
   { role: 'CODING_AGENT', integrationId: 'b', adapterId: 'claude-agent-sdk-hosted-live', independenceGroup: 'anthropic', requiredCapabilities: ['implement'] },
@@ -1898,6 +1899,8 @@ describe('the live mission contract file', () => {
     const second = compileBootstrapRequest(contract, [], 'card-test-1');
     expect(first.idempotencyKey).toBe(second.idempotencyKey);
     expect(first.completionRule).toBe('all_blocking_criteria_and_independent_review');
+    expect(first.limits.spendUsd).toBeNull();
+    expect(first.limits.repairCycles).toBeNull();
     expect(JSON.stringify(first)).not.toContain('API_KEY');
   });
 

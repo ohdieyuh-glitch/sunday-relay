@@ -856,12 +856,14 @@ async function main(argv: readonly string[]): Promise<number> {
       return 1;
     }
     /**
-     * THE NAMESPACE CEILING AND THE $60 QUALIFYING PAIR, before a run row exists
-     * and before a provider can be asked. A contract above its namespace grant
-     * is refused here even if the check script was not the thing that launched
-     * this process. An unreadable prior ledger fails closed for the pair; it
-     * is not read as zero, and a refusal never claims the provider balance
-     * was verified.
+     * THE NAMESPACE CEILING, before a run row exists and before a provider can
+     * be asked. A contract above its namespace grant is refused here even if
+     * the check script was not the thing that launched this process. A
+     * qualifying-pair namespace is also refused when prior-spend facts are
+     * absent, unverified, or unreadable. This job's database is not that
+     * durable record (see the TODO on `readJuliusPriorRunSpend`), so the
+     * refusal is not a combined-cap enforcement and it never claims a provider
+     * balance was verified.
      */
     const spendLedger = await readJuliusPriorRunSpend(pool, {
       missionId: contract.missionId, projectId: contract.projectId,
