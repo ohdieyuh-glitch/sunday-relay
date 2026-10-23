@@ -2378,7 +2378,8 @@ export function createLiveHermesReviewerAdapter(input: {
          */
         const reviewerServed = typeof outcome.servedModel === 'string' && outcome.servedModel.trim() !== ''
           ? outcome.servedModel : null;
-        const reviewerVerdict = juliusServedModelVerdict(input.config.model, reviewerServed);
+        // HermesConfig.model is optional. Absent is null, which the verdict treats as unattested.
+        const reviewerVerdict = juliusServedModelVerdict(input.config.model ?? null, reviewerServed);
         if (reviewerVerdict !== 'MATCH') {
           const reviewerHaltClass = reviewerVerdict === 'MISMATCH'
             ? 'reviewer_served_model_mismatch' : 'reviewer_served_model_unattested';
