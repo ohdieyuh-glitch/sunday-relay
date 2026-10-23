@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import {
   JULIUS_SCHEMA_MIGRATIONS_BY_NAME, JULIUS_SCHEMA_MIGRATION_REASONS, NON_JULIUS_MIGRATION_DESCRIPTIONS,
   describeNonJuliusMigrations, isJuliusSchemaMigration, juliusSchemaListProblems,
@@ -50,6 +51,64 @@ interface JsonReport {
   files: { path: string; subsystem: string; role: string; lines: number; bytes: number; sha256: string }[];
   subsystems: { name: string; files: number }[];
   totals: { files: number; lines: number; bytes: number };
+  kernelDependants: string[];
+}
+
+/** J1 dispatch files that import the kernel and must stay off both production roots. */
+const J1_OFF_LIVE_GRAPH = [
+  ['relay-bridge/julius-dispatch-adapters.ts', 'gated workflow adapter', 'the J1 role adapters over the architect, coder and direct reviewer. Tests inject fakes; a live dispatch returns before provider.call, and paid execution stays the gated workflow. The live mission root does not import this file'],
+  ['relay-bridge/julius-dispatch-wiring-core.ts', 'gated workflow wiring', 'the J1 live-wiring core. It builds a controller from injected pins and dependencies, or a refuse-only controller, and it is not a live-mission export'],
+  ['relay-bridge/julius-dispatch-wiring-real.ts', 'gated workflow wiring', 'the real file, fetch, key-store and coder-provider builders for the J1 wiring. Constructing them spends nothing, and they are not exportable onto the live mission import graph'],
+  ['relay-bridge/julius-dispatch-wiring-testkit.ts', 'test kit', 'fakes and test pins for the J1 wiring tests. Production code does not import it, and the live mission root must not'],
+] as const;
+
+const LIVE_ROOTS = [
+  'relay-bridge/julius-live-mission.ts',
+  'src/relay/workspace/julius-tools/executor-control-plane-main.ts',
+];
+const SOURCE_EXTS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs'];
+const ts = createRequire(__filename)('typescript') as typeof import('typescript');
+
+/** The same static import closure the generator traces from the production roots. */
+function importClosure(roots: readonly string[]): Set<string> {
+  const seen = new Set<string>();
+  const pending = [...roots];
+  const resolveSpec = (fromRel: string, spec: string): string | null => {
+    if (!spec.startsWith('./') && !spec.startsWith('../')) return null;
+    const base = resolve(dirname(join(REPO_ROOT, fromRel)), spec);
+    const candidates = [base];
+    if (/\.[cm]?js$/.test(base)) candidates.push(base.replace(/\.([cm]?)js$/, '.$1ts'));
+    for (const ext of SOURCE_EXTS) candidates.push(base + ext);
+    for (const ext of SOURCE_EXTS) candidates.push(resolve(base, `index${ext}`));
+    for (const candidate of candidates) {
+      if (existsSync(candidate) && statSync(candidate).isFile()) return relative(REPO_ROOT, candidate).split(sep).join('/');
+    }
+    return null;
+  };
+  while (pending.length > 0) {
+    const path = pending.pop();
+    if (path === undefined || seen.has(path) || !existsSync(join(REPO_ROOT, path))) continue;
+    seen.add(path);
+    const text = readFileSync(join(REPO_ROOT, path), 'utf8');
+    const kind = path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+    const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kind);
+    const specs: string[] = [];
+    const visit = (node: import('typescript').Node): void => {
+      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) specs.push(node.moduleSpecifier.text);
+      else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) specs.push(node.moduleSpecifier.text);
+      else if (ts.isCallExpression(node) && node.arguments.length > 0 && ts.isStringLiteralLike(node.arguments[0])) {
+        const callee = node.expression;
+        if (callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === 'require')) specs.push(node.arguments[0].text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    for (const spec of specs) {
+      const resolved = resolveSpec(path, spec);
+      if (resolved !== null) pending.push(resolved);
+    }
+  }
+  return seen;
 }
 
 function run(args: string[]): Run {
@@ -162,6 +221,24 @@ describe('export-julius-harness generates the Julius harness export from the liv
     expect(committed, 'regenerate with: node scripts/export-julius-harness.mjs').toBe(generated);
     expect(committed).toContain('## Production composition roots');
     for (const name of REQUIRED_SUBSYSTEMS) expect(committed).toContain(` ${name}\n`);
+  });
+
+  it('excludes the J1 dispatch adapters and wiring and keeps them off the live-mission import graph', () => {
+    const source = readFileSync(GENERATOR, 'utf8');
+    const blockStart = source.indexOf('const KERNEL_DEPENDANT_EXCLUSIONS = [');
+    const blockEnd = source.indexOf('\n];', blockStart);
+    const block = source.slice(blockStart, blockEnd);
+    expect(source).toContain('excluded as a kernel dependant but reached by the trace — reclassify');
+    const reached = importClosure(LIVE_ROOTS);
+    const included = report.files.map((file) => file.path);
+    for (const [path, category, reason] of J1_OFF_LIVE_GRAPH) {
+      expect(reason.includes('\n'), path).toBe(false);
+      expect(block.split(`path: '${path}'`).length - 1, path).toBe(1);
+      expect(block).toContain(`{ path: '${path}', category: '${category}', reason: '${reason}' }`);
+      expect(reached.has(path), path).toBe(false);
+      expect(included).not.toContain(path);
+      if (existsSync(join(REPO_ROOT, path))) expect(report.kernelDependants).toContain(path);
+    }
   });
 });
 
