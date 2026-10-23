@@ -49,6 +49,12 @@ export const JULIUS_NAMESPACE_CEILINGS: Readonly<Record<string, JuliusNamespaceC
   'julius-diag-output-safety-2': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
   'julius-diag-audit-fixes-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
   'julius-diag-digest-evidence-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
+  /**
+   * The in-world mission's own grant: $30 and 3 repairs. The contract-check
+   * script does not list it yet (founder-governed). The parity test names that
+   * gap. It is not a second ceiling.
+   */
+  'julius-inworld-data-1': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
 });
 
 /**
@@ -58,6 +64,7 @@ export const JULIUS_NAMESPACE_CEILINGS: Readonly<Record<string, JuliusNamespaceC
 export const JULIUS_QUALIFYING_PAIR_NAMESPACES: readonly string[] = Object.freeze([
   'julius-live-mission-5',
   'julius-unreal-mission-1',
+  'julius-inworld-data-1',
 ]);
 
 /** $60, in USD micros. Equality is inside the cap; one micro over is not. */

@@ -5,6 +5,7 @@ import {
   JULIUS_DEFAULT_NAMESPACE_CEILING,
   JULIUS_NAMESPACE_CEILINGS,
   JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS,
+  JULIUS_QUALIFYING_PAIR_NAMESPACES,
   authorizeJuliusLiveSpend,
   summarizeJuliusPriorRunSpend,
   type JuliusPriorRunSpend,
@@ -149,7 +150,13 @@ describe('the runtime table matches the contract-check script', () => {
     for (const match of source.matchAll(/'([a-z0-9-]+)': Object\.freeze\(\{ spendUsd: (\d+), repairCycles: (\d+) \}\)/gu)) {
       found.set(match[1] as string, { spendUsd: Number(match[2]), repairCycles: Number(match[3]) });
     }
-    expect([...found.keys()].sort()).toEqual(Object.keys(JULIUS_NAMESPACE_CEILINGS).sort());
+    const installerGap = ['julius-inworld-data-1'];
+    expect(source).not.toContain('julius-inworld-data-1');
+    expect([...found.keys()].sort()).toEqual(
+      Object.keys(JULIUS_NAMESPACE_CEILINGS).filter((namespace) => !installerGap.includes(namespace)).sort(),
+    );
+    expect(JULIUS_NAMESPACE_CEILINGS['julius-inworld-data-1']).toEqual({ spendUsd: 30, repairCycles: 3 });
+    expect(JULIUS_QUALIFYING_PAIR_NAMESPACES).toContain('julius-inworld-data-1');
     for (const [namespace, ceiling] of found) {
       expect(JULIUS_NAMESPACE_CEILINGS[namespace], namespace).toEqual(ceiling);
     }
