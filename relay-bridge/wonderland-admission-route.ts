@@ -238,7 +238,7 @@ function juliusLoopbackGuard(
     return err(503, 'julius_dispatch_disabled', 'Mission dispatch is switched off.');
   }
   if (!ports.admissionStoreReady) {
-    return Promise.resolve(err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.'));
+    return err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.');
   }
   if (request.origin !== undefined) {
     return err(403, 'julius_dispatch_browser_refused', 'Only the paired game client may use this route.');
