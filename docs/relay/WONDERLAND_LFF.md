@@ -127,6 +127,25 @@ Each criterion names the test that proves it.
     Proved by `AC-14 the domain module does not define a readiness score` and
     `AC-14 the contract doc is marked PROPOSED and claims no readiness change`.
 
+15. **A restart keeps the board.** Listings and connect-requests are written to
+    `board.json` under the store root, with `board.previous.json` kept beside
+    it, using the existing atomic file write. A new board opened on that
+    directory sees the same rows. A read at `expiresAt` still marks a listing
+    expired, and that expired status is what the next board reads. A snapshot
+    that does not parse is `store_corrupt`. It is not treated as an empty board,
+    and it is not overwritten while it is the only copy.
+    Proved by `AC-15 a restarted file store still has listings and requests, and expiry still holds`
+    and `AC-15 a corrupt snapshot is not loaded as an empty board` in
+    `src/relay/persistence/wonderland-lff-file-store.test.ts`.
+
+16. **The desktop client at f1fbb264 can call the same paths.** That view's live
+    service sends the bodies and reads the `data` objects described in
+    "Desktop client contract" below. A v1 caller still receives `result` and
+    still receives HTTP 201 when it creates with `displayName`. A desktop
+    create, which sends no `displayName`, receives HTTP 200 and `data.postId`.
+    Proved by `AC-18 the f1fbb264 desktop client can post, filter, request, and read its own shapes`
+    in `relay-bridge/wonderland-lff-routes.test.ts`.
+
 ## Data model
 
 Schema `relay-wonderland-lff.v1`.
@@ -147,9 +166,10 @@ A connect request stores `requestId`, `listingId`, `requesterId`,
 `accepted`, `declined`). Its view copies the listing's current contact fields
 so both sides still see how to connect.
 
-The store is one `WonderlandLffBoard` in memory. Every player who is handed that
-instance sees the same rows. A process restart clears them. There is no SQL
-migration in this change.
+The default store is memory. `createWonderlandLffFileStore` writes the same
+snapshot under `<root>/wonderland-lff/board.json` and keeps the previous file.
+There is no SQL migration in this change. Two players see the same rows when
+they are handed one board, including a board opened later on the same directory.
 
 ## API
 
@@ -193,5 +213,187 @@ returned; the C++ predicate is the same open-feed rule for a local row.
 
 It does not implement private servers or GVE. It does not mint a party. It does
 not change a readiness percentage or a scorecard. It does not mount the handler
-on the running bridge, and it does not persist the board across a restart.
-Unreal Engine was not available to compile or run the client.
+on the running bridge. It does not serve `POST /reports`. It does not apply a
+block list. The desktop author row's presence is a stand-in, not a live
+presence. Unreal Engine was not available to compile the client. The client
+view itself is not in this branch: it lives on
+`backup/wonderland/r16reh16w-aa930c26` at `f1fbb264f1936924ce685a4b0234df3dc28fcae5`,
+which is contained in tip `aa930c269c43a52fc31c785f7bdcc231c8af6cf0`.
+
+## Desktop client contract
+
+Source of truth for the client:
+`wonderland/Source/Wonderland/WonderlandSocialLffView.cpp` and
+`WonderlandSocialLffView.h` as of `f1fbb264f1936924ce685a4b0234df3dc28fcae5`
+on `backup/wonderland/r16reh16w-aa930c26`. Those two files are unchanged
+between that commit and the branch tip `aa930c269c43a52fc31c785f7bdcc231c8af6cf0`.
+The view calls `IWonderlandSocialService`. The HTTP paths and JSON bodies are
+the ones `WonderlandSocialLive.cpp` on that same commit sends for those calls.
+The URL is `baseUrl + "/relay-api/wonderland/social" + path`.
+
+The paths match. Both sides use:
+
+- `GET /lff/posts`
+- `POST /lff/posts`
+- `GET /lff/posts/:id`
+- `POST /lff/posts/:id/edit`
+- `POST /lff/posts/:id/close`
+- `POST /lff/posts/:id/delete`
+- `GET /lff/posts/:id/requests`
+- `POST /lff/posts/:id/requests`
+- `GET /lff/requests`
+- `POST /lff/requests/:id/withdraw`
+- `POST /lff/requests/:id/accept`
+- `POST /lff/requests/:id/decline`
+
+Mismatches between that view and `relay-wonderland-lff.v1`, and what this
+handler does about each one:
+
+1. The view treats every status other than 200 as failure, and reads the object
+   `data`. v1 answers `{ ok, result }` and uses 201 for create. A desktop
+   create (no `displayName`, no `body`, no `contactMethod`) is HTTP 200 with
+   `data.postId` and still carries `result` for v1. A v1 create stays 201.
+   A desktop join request (no `displayName`) is HTTP 200 with `data.requestId`.
+   A v1 request that sends `displayName` stays 201. Reads are 200 and carry
+   both `result` and `data`.
+
+2. The view's categories are `TEAMS`, `BUILDERS`, `AI_ENGINEERS`, `DESIGNERS`,
+   `COMPETITORS`, `COLLABORATORS`. Its labels are "Teams", "Builders",
+   "AI engineers", "Designers", "Competitors", "Collaborators". v1 stores
+   `teams`, `builders`, `ai_engineers`, `designers`, `competitors` and the
+   "Looking for …" labels, and does not name collaborators. Both spellings of
+   the five are accepted. `COLLABORATORS` is stored as `collaborators`.
+   `data.category` is the view's token and `data.categoryLabel` is the view's
+   label. `result.category` stays the stored spelling.
+
+3. The view's create and edit body is `category`, `title`, `description`
+   (empty allowed, at most 1000), `projectLabel` (empty allowed, at most 80),
+   `skills` (at most 8 strings, each at most 32), `openSlots` (1 to 20).
+   v1 create requires `body` (at most 400), `displayName`, and a contact pair.
+   The desktop fields are stored. A missing display name and contact are filled
+   from the caller id so the v1 row still has them. A v1 body still validates
+   as before.
+
+4. The view's feed query is `limit` (1 to 50), `category`, `projectLabel`
+   (substring), `skill` (one whole skill), `mine=1`, `hasOpenSlots=1`, and
+   `cursor` as `<milliseconds>.<serial>`. v1's query is `category` only.
+   `data` is `{ posts, nextCursor }` newest first, one page, `nextCursor` null
+   on the last page. `result` stays the unpaged v1 open feed.
+
+5. The view's post object uses `postId`, `description`, `projectLabel`,
+   `skills`, `openSlots`, `availableSlots` (a number for the owner, null for
+   everyone else), `status` of `OPEN`, `CLOSED`, or `EXPIRED`, `createdAtIso`,
+   `updatedAtIso`, `expiresAtIso`, `version`, `author` (a person row whose
+   `presence` has `userId`, `onlineState`, and a non-empty `headline`),
+   `viewerIsOwner`, and `viewerRequest` (null, or `{ requestId, status }` of
+   `PENDING`, `ACCEPTED`, `DECLINED`, `NO_LONGER_AVAILABLE`). v1 uses
+   `listingId`, `body`, `authorId`, `authorDisplayName`, the contact fields,
+   and `open`, `withdrawn`, `expired`. `data` uses the view's names.
+   `withdrawn` is `CLOSED` in `data` and `withdrawn` in `result`.
+
+6. Detail adds `authorProfile` and `accepted`. This board has no profile
+   card, so `authorProfile` is null. `accepted` is the accepted people for the
+   owner and for a player who was accepted, and null otherwise.
+
+7. `GET /lff/requests` for the view is the caller's own requests, with `post`
+   null once the listing is not open, a pending request on that listing shown
+   as `NO_LONGER_AVAILABLE`, and a withdrawn request left out. `truncated` is
+   true when the list was cut at 100. v1 `result.requests` is unchanged and
+   still includes requests the caller is a party to.
+
+8. `GET /lff/posts/:id/requests` for the view is `{ postId, requests }` and
+   lists only `PENDING` and `ACCEPTED`, each with a `requester` person row.
+   v1 `result` still includes a declined request and is still readable by the
+   requester. `data.requests` is that inbox for the owner, and empty when the
+   caller is the requester rather than the owner.
+
+9. Close is the same path. The view calls it `lff.post.close` with an empty
+   object and then shows `CLOSED`. The stored status remains `withdrawn`.
+
+10. The view's report is `POST /reports` with `reportedId` set to the author,
+    `reason` set to `OTHER`, and `subjectRef` set to the post id. That is the
+    social reports route, not this handler.
+
+11. The view drops a post whose author it may not see, and drops a request a
+    block crossed. This board has no block list, so it does not do that.
+
+12. The view's author presence comes from the social presence authority. The
+    `data.author.presence` on this board is a stand-in: `onlineState` is
+    `OFFLINE` and `headline` is the display name. It is enough for the view's
+    parser and it is not a live presence.
+
+13. Filling every `openSlots` does not by itself close the post. `availableSlots`
+    counts acceptances for the owner. Close, delete, and expiry are unchanged.
+
+`POST /lff/posts/:id/edit`, `delete`, and the three request decisions stay on
+the same paths. The view sends an empty object for close, delete, withdraw,
+accept, and decline, and does not read those success bodies beyond HTTP 200.
+
+## Mount, not applied
+
+`handleLffHttp` is not called from `relay-bridge/server.ts` in this change.
+`isSocialRoute` matches every `/wonderland/social` path, so a later handler
+would never see `/wonderland/social/lff`. The block below is the one to place
+immediately before `if (isSocialRoute(path.replace('/relay-api', '')))`. It is
+not applied here. The query decoder keeps a decoded `projectLabel` and `skill`,
+including spaces, and leaves a plus sign as a plus sign. One decode only.
+
+```typescript
+import { createWonderlandLffFileStore } from '../src/relay/persistence/wonderland-lff-file-store';
+import { WonderlandLffBoard } from '../src/relay/mission/wonderland/wonderland-lff';
+import { handleLffHttp } from './wonderland-lff-routes';
+
+const lffBoard = new WonderlandLffBoard(
+  () => `lff_${randomUUID().replace(/-/g, '')}`,
+  createWonderlandLffFileStore({ root: process.env.WONDERLAND_LFF_DIR?.trim() || '/data/wonderland-lff' }),
+);
+
+const lffPath = (req.url ?? '/').replace(/^\/relay-api/, '');
+const lffPathname = lffPath.split('?')[0] ?? lffPath;
+if (lffPathname === '/wonderland/social/lff' || lffPathname.startsWith('/wonderland/social/lff/')) {
+  if (!socialEnabled) {
+    send(res, 503, { error: { kind: 'social_unavailable', message: 'Social is not available on this server.' } }, cors);
+    return;
+  }
+  if (origin !== undefined && origin !== '') {
+    send(res, 403, { error: { code: 'desktop_only', message: 'Wonderland social is reached from the Wonderland desktop client.' } }, cors);
+    return;
+  }
+  const lffHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+  const lffToken = lffHeader?.match(/^Relay-Session\s+(.+)$/i)?.[1] ?? null;
+  const lffFacts = lffToken === null ? null : browserSessions.verifyNativeSocialSession({ token: lffToken, now: Date.now() });
+  if (lffFacts === null || !lffFacts.ok) {
+    send(res, 401, { error: { code: 'session_required', message: 'Sign in to Wonderland to use social.' } }, cors);
+    return;
+  }
+  const lffQuery: Record<string, string | undefined> = {};
+  const lffSearch = lffPath.split('?')[1] ?? '';
+  for (const pair of lffSearch.split('&')) {
+    if (pair.length === 0) continue;
+    const at = pair.indexOf('=');
+    const rawKey = at < 0 ? pair : pair.slice(0, at);
+    const rawValue = at < 0 ? '' : pair.slice(at + 1);
+    const decode = (text: string): string | null => {
+      try { return decodeURIComponent(text.replace(/\+/g, '%2B')); }
+      catch { return null; }
+    };
+    const key = decode(rawKey);
+    const value = decode(rawValue);
+    if (key === null || value === null) continue;
+    if (!['limit', 'category', 'projectLabel', 'skill', 'mine', 'hasOpenSlots', 'cursor'].includes(key)) continue;
+    if (key.length > 32 || value.length > 200) continue;
+    if (/[\u0000-\u001f\u007f]/.test(key) || /[\u0000-\u001f\u007f]/.test(value)) continue;
+    lffQuery[key] = value;
+  }
+  const lffResult = handleLffHttp(lffBoard, {
+    method,
+    path: lffPathname,
+    actorId: lffFacts.participantId,
+    body: method === 'POST' ? await readBody(req) : undefined,
+    query: lffQuery,
+    nowIso: new Date().toISOString(),
+  });
+  send(res, lffResult.status, lffResult.body, { ...cors, 'cache-control': 'no-store' });
+  return;
+}
+```

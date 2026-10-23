@@ -129,6 +129,91 @@ describe('Looking for Feed routes', () => {
     expect(call(feed, 'GET', `/lff/posts/${secondId}`, 'ada', undefined, undefined, expiresAt).status).toBe(404);
   });
 
+  it('AC-18 the f1fbb264 desktop client can post, filter, request, and read its own shapes', () => {
+    const feed = board();
+    const created = call(feed, 'POST', '/lff/posts', 'ada', {
+      category: 'TEAMS',
+      title: 'Need a team',
+      description: 'Sunday build.',
+      projectLabel: 'Wonder Web+',
+      skills: ['C++'],
+      openSlots: 2,
+    });
+    expect(created.status).toBe(200);
+    if (!created.body.ok) throw new Error('desktop create failed');
+    expect(created.body.data).toEqual({ postId: 'lff_1' });
+    expect((created.body.result as { listingId: string }).listingId).toBe('lff_1');
+
+    const listed = call(feed, 'GET', '/lff/posts', 'bao', undefined, {
+      limit: '50',
+      category: 'TEAMS',
+      projectLabel: 'Wonder Web+',
+      skill: 'C++',
+    });
+    expect(listed.status).toBe(200);
+    if (!listed.body.ok) throw new Error('desktop feed failed');
+    const page = listed.body.data as { posts: Record<string, unknown>[]; nextCursor: string | null };
+    expect(page.nextCursor).toBeNull();
+    expect(page.posts).toHaveLength(1);
+    expect(page.posts[0]).toMatchObject({
+      postId: 'lff_1',
+      category: 'TEAMS',
+      categoryLabel: 'Teams',
+      title: 'Need a team',
+      description: 'Sunday build.',
+      projectLabel: 'Wonder Web+',
+      skills: ['C++'],
+      openSlots: 2,
+      availableSlots: null,
+      status: 'OPEN',
+      viewerIsOwner: false,
+      viewerRequest: null,
+    });
+    const author = page.posts[0]?.author as { userId: string; presence: { userId: string; onlineState: string; headline: string } };
+    expect(author.userId).toBe('ada');
+    expect(author.presence.userId).toBe('ada');
+    expect(author.presence.onlineState.length).toBeGreaterThan(0);
+    expect(author.presence.headline.length).toBeGreaterThan(0);
+
+    const asked = call(feed, 'POST', '/lff/posts/lff_1/requests', 'bao', { message: 'I can play.' });
+    expect(asked.status).toBe(200);
+    if (!asked.body.ok) throw new Error('desktop request failed');
+    expect(asked.body.data).toEqual({ requestId: 'lff_2' });
+
+    const mine = call(feed, 'GET', '/lff/requests', 'bao');
+    if (!mine.body.ok) throw new Error('desktop mine failed');
+    expect(mine.body.data).toMatchObject({
+      truncated: false,
+      requests: [{ requestId: 'lff_2', postId: 'lff_1', status: 'PENDING', message: 'I can play.' }],
+    });
+    const inbox = call(feed, 'GET', '/lff/posts/lff_1/requests', 'ada');
+    if (!inbox.body.ok) throw new Error('desktop inbox failed');
+    expect(inbox.body.data).toMatchObject({
+      postId: 'lff_1',
+      requests: [{ requestId: 'lff_2', status: 'PENDING' }],
+    });
+
+    expect(call(feed, 'POST', '/lff/posts/lff_1/close', 'ada', {}).status).toBe(200);
+    const closed = call(feed, 'GET', '/lff/posts/lff_1', 'ada');
+    if (!closed.body.ok) throw new Error('desktop detail failed');
+    expect(closed.body.data).toMatchObject({ postId: 'lff_1', status: 'CLOSED', viewerIsOwner: true, authorProfile: null });
+    expect((closed.body.result as { status: string }).status).toBe('withdrawn');
+
+    const collaborators = call(feed, 'POST', '/lff/posts', 'cam', {
+      category: 'COLLABORATORS',
+      title: 'Need collaborators',
+      description: '',
+      projectLabel: '',
+      skills: [],
+      openSlots: 1,
+    });
+    expect(collaborators.status).toBe(200);
+    const own = call(feed, 'GET', '/lff/posts', 'cam', undefined, { limit: '50', mine: '1', hasOpenSlots: '1' });
+    if (!own.body.ok) throw new Error('mine failed');
+    expect((own.body.data as { posts: { category: string }[] }).posts.map((row) => row.category)).toEqual(['COLLABORATORS']);
+    expect(call(feed, 'GET', '/lff/posts', 'bao', undefined, { cursor: 'nope' }).status).toBe(400);
+  });
+
   it('AC-10 a mismatched actor is refused on the route', () => {
     const response = call(board(), 'POST', '/lff/posts', 'ada', { ...post, authorId: 'bao' });
     expect(response.status).toBe(403);

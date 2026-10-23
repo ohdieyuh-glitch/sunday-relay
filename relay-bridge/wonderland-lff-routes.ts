@@ -26,7 +26,9 @@ export interface LffHttpRequest {
 
 export interface LffHttpResponse {
   readonly status: number;
-  readonly body: { readonly ok: true; readonly result: unknown } | { readonly ok: false; readonly error: { readonly code: string; readonly message: string } };
+  readonly body:
+    | { readonly ok: true; readonly result: unknown; readonly data?: unknown }
+    | { readonly ok: false; readonly error: { readonly code: string; readonly message: string } };
 }
 
 interface LffPattern {
@@ -77,6 +79,8 @@ const HTTP_STATUS: Readonly<Record<LffErrorCode, number>> = {
   cannot_request_own: 403,
   not_requester: 403,
   request_not_open: 409,
+  store_corrupt: 500,
+  store_unavailable: 500,
 };
 
 const httpFail = (status: number, code: string, message: string): LffHttpResponse => ({
@@ -84,10 +88,18 @@ const httpFail = (status: number, code: string, message: string): LffHttpRespons
   body: { ok: false, error: { code, message } },
 });
 
-const httpOk = (status: number, result: unknown): LffHttpResponse => ({
+const httpOk = (status: number, result: unknown, data?: unknown): LffHttpResponse => ({
   status,
-  body: { ok: true, result },
+  body: data === undefined ? { ok: true, result } : { ok: true, result, data },
 });
+
+function desktopCreate(body: unknown): boolean {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return false;
+  const record = body as Record<string, unknown>;
+  if ('displayName' in record || 'contactMethod' in record || 'body' in record) return false;
+  return 'description' in record || 'projectLabel' in record || 'skills' in record || 'openSlots' in record
+    || (typeof record.category === 'string' && record.category === record.category.toUpperCase() && record.category !== record.category.toLowerCase());
+}
 
 function fromBoard(result: LffResult<unknown>, success: number): LffHttpResponse {
   if (!result.ok) return httpFail(HTTP_STATUS[result.code], result.code, result.message);
@@ -124,12 +136,34 @@ export function handleLffHttp(board: WonderlandLffBoard, request: LffHttpRequest
     case '/lff/posts':
       if (hit.method === 'GET') {
         const category = query.category === undefined || query.category === '' ? undefined : query.category;
-        if (query.category === '') return httpFail(400, 'invalid_category', 'category must be one of the five Looking for Feed categories');
-        return fromBoard(board.list(actorId, category, nowIso), 200);
+        if (query.category === '') return httpFail(400, 'invalid_category', 'category must be one of the Looking for Feed categories');
+        const listed = board.list(actorId, category, nowIso);
+        if (!listed.ok) return fromBoard(listed, 200);
+        const page = board.desktopFeed(actorId, {
+          category: query.category,
+          projectLabel: query.projectLabel,
+          skill: query.skill,
+          mine: query.mine === '1',
+          hasOpenSlots: query.hasOpenSlots === '1',
+          cursor: query.cursor,
+          limit: query.limit,
+        }, nowIso);
+        if (!page.ok) return fromBoard(page, 200);
+        return httpOk(200, listed.value, page.value);
       }
-      return fromBoard(board.create(actorId, body, nowIso), 201);
+      {
+        const created = board.create(actorId, body, nowIso);
+        if (!created.ok) return fromBoard(created, 201);
+        return httpOk(desktopCreate(body) ? 200 : 201, created.value, { postId: created.value.listingId });
+      }
     case '/lff/posts/:id':
-      return fromBoard(board.get(actorId, id ?? '', nowIso), 200);
+      {
+        const seen = board.get(actorId, id ?? '', nowIso);
+        if (!seen.ok) return fromBoard(seen, 200);
+        const detail = board.desktopPost(actorId, id ?? '', nowIso);
+        if (!detail.ok) return fromBoard(detail, 200);
+        return httpOk(200, seen.value, detail.value);
+      }
     case '/lff/posts/:id/edit':
       return fromBoard(board.edit(actorId, id ?? '', body, nowIso), 200);
     case '/lff/posts/:id/close':
@@ -137,10 +171,28 @@ export function handleLffHttp(board: WonderlandLffBoard, request: LffHttpRequest
     case '/lff/posts/:id/delete':
       return fromBoard(board.delete(actorId, id ?? '', body, nowIso), 200);
     case '/lff/posts/:id/requests':
-      if (hit.method === 'GET') return fromBoard(board.listPostRequests(actorId, id ?? '', nowIso), 200);
-      return fromBoard(board.createRequest(actorId, id ?? '', body, nowIso), 201);
+      if (hit.method === 'GET') {
+        const inbox = board.listPostRequests(actorId, id ?? '', nowIso);
+        if (!inbox.ok) return fromBoard(inbox, 200);
+        const desktop = board.desktopInbox(actorId, id ?? '', nowIso);
+        const data = desktop.ok ? desktop.value : { postId: id ?? '', requests: [] };
+        return httpOk(200, inbox.value, data);
+      }
+      {
+        const asked = board.createRequest(actorId, id ?? '', body, nowIso);
+        if (!asked.ok) return fromBoard(asked, 201);
+        const record = body !== null && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {};
+        const status = 'displayName' in record ? 201 : 200;
+        return httpOk(status, asked.value, { requestId: asked.value.requestId });
+      }
     case '/lff/requests':
-      return fromBoard(board.listRequests(actorId, nowIso), 200);
+      {
+        const mine = board.listRequests(actorId, nowIso);
+        if (!mine.ok) return fromBoard(mine, 200);
+        const desktop = board.desktopMine(actorId, nowIso);
+        if (!desktop.ok) return fromBoard(desktop, 200);
+        return httpOk(200, mine.value, desktop.value);
+      }
     case '/lff/requests/:id/withdraw':
       return fromBoard(board.withdrawRequest(actorId, id ?? '', body, nowIso), 200);
     case '/lff/requests/:id/accept':

@@ -10,14 +10,193 @@
  * listing withdraws it. A read at or after `expiresAt` expires it. Neither
  * outcome is a match, a private server, or a GVE session.
  *
- * The board is in memory on purpose. A restart drops it. Durable storage would
- * be a migration, and this change does not add one.
+ * The board talks to an {@link LffBoardStore}. The default store is memory.
+ * A file store in `src/relay/persistence/wonderland-lff-file-store.ts` keeps
+ * the same snapshot across a process restart. There is no SQL migration.
  */
 
 export const LFF_SCHEMA_V1 = 'relay-wonderland-lff.v1' as const;
 
 export const LFF_CATEGORIES = ['teams', 'builders', 'ai_engineers', 'designers', 'competitors'] as const;
 export type LffCategory = (typeof LFF_CATEGORIES)[number];
+
+/**
+ * The desktop client at f1fbb264 sends these tokens (social-lff.ts LFF_CATEGORIES).
+ * The first five are the v1 categories under different spelling. COLLABORATORS is the sixth.
+ */
+export const LFF_DESKTOP_CATEGORY_TOKENS = ['TEAMS', 'BUILDERS', 'AI_ENGINEERS', 'DESIGNERS', 'COMPETITORS', 'COLLABORATORS'] as const;
+export type LffDesktopCategoryToken = (typeof LFF_DESKTOP_CATEGORY_TOKENS)[number];
+export type LffStoredCategory = LffCategory | 'collaborators';
+
+export const LFF_DESKTOP_CATEGORY_BY_TOKEN: Readonly<Record<LffDesktopCategoryToken, LffStoredCategory>> = Object.freeze({
+  TEAMS: 'teams',
+  BUILDERS: 'builders',
+  AI_ENGINEERS: 'ai_engineers',
+  DESIGNERS: 'designers',
+  COMPETITORS: 'competitors',
+  COLLABORATORS: 'collaborators',
+});
+
+/** Labels the f1fbb264 view shows (WonderlandLffCategoryLabel). */
+export const LFF_DESKTOP_CATEGORY_LABELS: Readonly<Record<LffStoredCategory, string>> = Object.freeze({
+  teams: 'Teams',
+  builders: 'Builders',
+  ai_engineers: 'AI engineers',
+  designers: 'Designers',
+  competitors: 'Competitors',
+  collaborators: 'Collaborators',
+});
+
+const DESKTOP_TOKEN_OF: Readonly<Record<LffStoredCategory, LffDesktopCategoryToken>> = Object.freeze({
+  teams: 'TEAMS',
+  builders: 'BUILDERS',
+  ai_engineers: 'AI_ENGINEERS',
+  designers: 'DESIGNERS',
+  competitors: 'COMPETITORS',
+  collaborators: 'COLLABORATORS',
+});
+
+export interface LffDesktopPerson {
+  readonly userId: string;
+  readonly displayName: string;
+  readonly handle: string;
+  readonly avatarRef: string;
+  readonly presence: {
+    readonly userId: string;
+    readonly onlineState: string;
+    readonly availability: string;
+    readonly headline: string;
+    readonly partyId: string;
+    readonly lastSeenAtIso: string;
+    readonly restrictedReason: string;
+  };
+}
+
+export interface LffDesktopPost {
+  readonly postId: string;
+  readonly category: LffDesktopCategoryToken;
+  readonly categoryLabel: string;
+  readonly title: string;
+  readonly description: string;
+  readonly projectLabel: string;
+  readonly skills: readonly string[];
+  readonly openSlots: number;
+  readonly availableSlots: number | null;
+  readonly status: 'OPEN' | 'CLOSED' | 'EXPIRED';
+  readonly createdAtIso: string;
+  readonly updatedAtIso: string;
+  readonly expiresAtIso: string;
+  readonly version: number;
+  readonly author: LffDesktopPerson;
+  readonly viewerIsOwner: boolean;
+  readonly viewerRequest: { readonly requestId: string; readonly status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'NO_LONGER_AVAILABLE' } | null;
+}
+
+export interface LffDesktopPostDetail extends LffDesktopPost {
+  readonly authorProfile: null;
+  readonly accepted: readonly LffDesktopPerson[] | null;
+}
+
+export interface LffDesktopFeedQuery {
+  readonly category?: string;
+  readonly projectLabel?: string;
+  readonly skill?: string;
+  readonly mine?: boolean;
+  readonly hasOpenSlots?: boolean;
+  readonly cursor?: string;
+  readonly limit?: string;
+}
+
+export interface LffDesktopFeedPage {
+  readonly posts: readonly LffDesktopPost[];
+  readonly nextCursor: string | null;
+}
+
+export interface LffDesktopMyRequests {
+  readonly requests: readonly {
+    readonly requestId: string;
+    readonly postId: string;
+    readonly status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'NO_LONGER_AVAILABLE';
+    readonly message: string;
+    readonly createdAtIso: string;
+    readonly updatedAtIso: string;
+    readonly post: LffDesktopPost | null;
+  }[];
+  readonly truncated: boolean;
+}
+
+export interface LffDesktopInbox {
+  readonly postId: string;
+  readonly requests: readonly {
+    readonly requestId: string;
+    readonly status: 'PENDING' | 'ACCEPTED';
+    readonly message: string;
+    readonly createdAtIso: string;
+    readonly updatedAtIso: string;
+    readonly requester: LffDesktopPerson;
+  }[];
+}
+
+function desktopPerson(userId: string, displayName: string): LffDesktopPerson {
+  const headline = displayName.length > 0 ? displayName : 'Offline';
+  return {
+    userId,
+    displayName,
+    handle: '',
+    avatarRef: '',
+    presence: {
+      userId,
+      onlineState: 'OFFLINE',
+      availability: '',
+      headline,
+      partyId: '',
+      lastSeenAtIso: '',
+      restrictedReason: '',
+    },
+  };
+}
+
+function desktopRequesterStatus(
+  request: { status: LffRequestStatus },
+  row: { status: LffListingStatus },
+): 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'NO_LONGER_AVAILABLE' | null {
+  if (request.status === 'withdrawn') return null;
+  if (request.status === 'accepted') return 'ACCEPTED';
+  if (request.status === 'declined') return 'DECLINED';
+  return row.status === 'open' ? 'PENDING' : 'NO_LONGER_AVAILABLE';
+}
+
+function newestFirst(a: ListingRecord, b: ListingRecord): number {
+  const byTime = b.createdAt.localeCompare(a.createdAt);
+  if (byTime !== 0) return byTime;
+  return b.serial - a.serial;
+}
+
+function desktopCursorOf(row: ListingRecord): string {
+  return `${parseLffUtc(row.createdAt) ?? 0}.${row.serial}`;
+}
+
+function isOlderThanCursor(row: ListingRecord, cursor: { ms: number; serial: number }): boolean {
+  const ms = parseLffUtc(row.createdAt) ?? 0;
+  if (ms < cursor.ms) return true;
+  if (ms > cursor.ms) return false;
+  return row.serial < cursor.serial;
+}
+
+function parseDesktopCursor(value: string | undefined): LffResult<{ ms: number; serial: number } | null> {
+  if (value === undefined || value === '') return pass(null);
+  const match = /^(\d{1,15})\.(\d{1,15})$/.exec(value);
+  if (match === null) return fail('invalid_body', 'cursor must be the feed position the server returned');
+  return pass({ ms: Number(match[1]), serial: Number(match[2]) });
+}
+
+function parseDesktopLimit(value: string | undefined): LffResult<number> {
+  if (value === undefined || value === '') return pass(20);
+  if (!/^\d{1,2}$/.test(value)) return fail('invalid_body', 'limit must be a whole number from 1 to 50');
+  const limit = Number(value);
+  if (limit < 1 || limit > 50) return fail('invalid_body', 'limit must be a whole number from 1 to 50');
+  return pass(limit);
+}
 
 export const LFF_CATEGORY_LABELS: Readonly<Record<LffCategory, string>> = Object.freeze({
   teams: 'Looking for Teams',
@@ -74,6 +253,8 @@ export const LFF_ERROR_CODES = [
   'cannot_request_own',
   'not_requester',
   'request_not_open',
+  'store_corrupt',
+  'store_unavailable',
 ] as const;
 export type LffErrorCode = (typeof LFF_ERROR_CODES)[number];
 
@@ -85,8 +266,8 @@ const PLAYER_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const GENERATED_ID = /^[A-Za-z0-9_-]{1,80}$/;
 const OUT_OF_SCOPE_KEYS = ['privateServer', 'privateServerId', 'gve', 'gveId', 'serverKind', 'serverId'] as const;
 const ACTOR_KEYS = ['actorId', 'authorId', 'fromUserId', 'ownerId', 'posterId', 'requesterId'] as const;
-const CREATE_KEYS = ['title', 'body', 'category', 'displayName', 'contactMethod', 'contactValue', 'lifetimeHours'] as const;
-const EDIT_KEYS = ['title', 'body', 'category', 'displayName', 'contactMethod', 'contactValue', 'lifetimeHours'] as const;
+const CREATE_KEYS = ['title', 'body', 'category', 'displayName', 'contactMethod', 'contactValue', 'lifetimeHours', 'description', 'projectLabel', 'skills', 'openSlots'] as const;
+const EDIT_KEYS = ['title', 'body', 'category', 'displayName', 'contactMethod', 'contactValue', 'lifetimeHours', 'description', 'projectLabel', 'skills', 'openSlots'] as const;
 const REQUEST_KEYS = ['message', 'displayName'] as const;
 
 export type LffListingStatus = 'open' | 'withdrawn' | 'expired';
@@ -95,7 +276,7 @@ export type LffRequestStatus = 'open' | 'withdrawn' | 'accepted' | 'declined';
 export interface LffListingView {
   readonly schemaVersion: typeof LFF_SCHEMA_V1;
   readonly listingId: string;
-  readonly category: LffCategory;
+  readonly category: LffStoredCategory;
   readonly categoryLabel: string;
   readonly title: string;
   readonly body: string;
@@ -112,7 +293,7 @@ export interface LffListingView {
 
 export interface LffFeed {
   readonly schemaVersion: typeof LFF_SCHEMA_V1;
-  readonly category: LffCategory | null;
+  readonly category: LffStoredCategory | null;
   readonly listings: readonly LffListingView[];
 }
 
@@ -120,7 +301,7 @@ export interface LffRequestView {
   readonly schemaVersion: typeof LFF_SCHEMA_V1;
   readonly requestId: string;
   readonly listingId: string;
-  readonly category: LffCategory;
+  readonly category: LffStoredCategory;
   readonly categoryLabel: string;
   readonly listingTitle: string;
   readonly authorId: string;
@@ -146,11 +327,201 @@ export interface LffDeleted {
   readonly deleted: true;
 }
 
+export interface LffStoredListing {
+  readonly listingId: string;
+  readonly category: LffStoredCategory;
+  readonly title: string;
+  readonly body: string;
+  readonly description: string;
+  readonly projectLabel: string;
+  readonly skills: readonly string[];
+  readonly openSlots: number;
+  readonly serial: number;
+  readonly version: number;
+  readonly authorId: string;
+  readonly authorDisplayName: string;
+  readonly contactMethod: LffContactMethod;
+  readonly contactValue: string;
+  readonly status: LffListingStatus;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly expiresAt: string;
+}
+
+export interface LffStoredRequest {
+  readonly requestId: string;
+  readonly listingId: string;
+  readonly requesterId: string;
+  readonly requesterDisplayName: string;
+  readonly message: string;
+  readonly status: LffRequestStatus;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface LffBoardSnapshot {
+  readonly schemaVersion: typeof LFF_SCHEMA_V1;
+  readonly listings: readonly LffStoredListing[];
+  readonly requests: readonly LffStoredRequest[];
+}
+
+export type LffStoreLoad =
+  | { readonly status: 'empty' }
+  | { readonly status: 'ok'; readonly snapshot: LffBoardSnapshot }
+  | { readonly status: 'corrupt'; readonly reason: string };
+
+/** What the board reads and writes. Memory is the default. A file store is the durable one. */
+export interface LffBoardStore {
+  load(): LffStoreLoad;
+  save(snapshot: LffBoardSnapshot): void;
+}
+
+export class MemoryLffBoardStore implements LffBoardStore {
+  private snapshot: LffBoardSnapshot | null = null;
+
+  load(): LffStoreLoad {
+    if (this.snapshot === null) return { status: 'empty' };
+    return { status: 'ok', snapshot: structuredClone(this.snapshot) };
+  }
+
+  save(snapshot: LffBoardSnapshot): void {
+    this.snapshot = structuredClone(snapshot);
+  }
+}
+
+function isListingStatus(value: unknown): value is LffListingStatus {
+  return value === 'open' || value === 'withdrawn' || value === 'expired';
+}
+
+function isRequestStatus(value: unknown): value is LffRequestStatus {
+  return value === 'open' || value === 'withdrawn' || value === 'accepted' || value === 'declined';
+}
+
+function isContactMethod(value: unknown): value is LffContactMethod {
+  return typeof value === 'string' && (LFF_CONTACT_METHODS as readonly string[]).includes(value);
+}
+
+function storedText(value: unknown, max: number): string | null {
+  if (typeof value !== 'string' || value.length === 0 || value.length > max || hasControl(value) || value.trim() !== value) return null;
+  return value;
+}
+
+function storedTime(value: unknown): string | null {
+  if (typeof value !== 'string' || parseLffUtc(value) === null) return null;
+  return value;
+}
+
+function storedCategory(value: unknown): LffStoredCategory | null {
+  if (value === 'collaborators') return 'collaborators';
+  return isLffCategory(value) ? value : null;
+}
+
+function storedPlain(value: unknown, max: number, fallback: string | undefined): string | null {
+  if (value === undefined) return fallback === undefined ? null : fallback;
+  if (typeof value !== 'string' || value.length > max || hasControl(value) || value.trim() !== value) return null;
+  return value;
+}
+
+function storedSkills(value: unknown): string[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 8) return null;
+  const skills: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string' || item.length === 0 || item.length > 32 || hasControl(item) || item.trim() !== item) return null;
+    skills.push(item);
+  }
+  return skills;
+}
+
+function storedWhole(value: unknown, fallback: number, max: number): number | null {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > max) return null;
+  return value;
+}
+
+function parseStoredListing(value: unknown): LffStoredListing | null {
+  if (value === null || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  const category = storedCategory(row.category);
+  if (category === null || !isContactMethod(row.contactMethod) || !isListingStatus(row.status)) return null;
+  const listingId = storedText(row.listingId, 80);
+  const title = storedText(row.title, LFF_LIMITS.titleMax);
+  const body = storedText(row.body, LFF_LIMITS.bodyMax);
+  const authorId = typeof row.authorId === 'string' && PLAYER_ID.test(row.authorId) ? row.authorId : null;
+  const authorDisplayName = storedText(row.authorDisplayName, LFF_LIMITS.displayNameMax);
+  const contactValue = storedText(row.contactValue, LFF_LIMITS.contactValueMax);
+  const createdAt = storedTime(row.createdAt);
+  const updatedAt = storedTime(row.updatedAt);
+  const expiresAt = storedTime(row.expiresAt);
+  const description = storedPlain(row.description, 1000, body ?? undefined);
+  const projectLabel = storedPlain(row.projectLabel, 80, '');
+  const skills = storedSkills(row.skills);
+  const openSlots = storedWhole(row.openSlots, 1, 20);
+  const serial = storedWhole(row.serial, 0, 1_000_000_000);
+  const version = storedWhole(row.version, 1, 1_000_000_000);
+  if (listingId === null || title === null || body === null || authorId === null || authorDisplayName === null
+    || contactValue === null || createdAt === null || updatedAt === null || expiresAt === null
+    || description === null || projectLabel === null || skills === null || openSlots === null
+    || openSlots < 1 || serial === null || version === null || version < 1) return null;
+  if (row.contactMethod === 'profile' && contactValue !== authorId) return null;
+  return {
+    listingId, category, title, body, description, projectLabel, skills, openSlots, serial, version,
+    authorId, authorDisplayName, contactMethod: row.contactMethod, contactValue, status: row.status,
+    createdAt, updatedAt, expiresAt,
+  };
+}
+
+function parseStoredRequest(value: unknown): LffStoredRequest | null {
+  if (value === null || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  if (!isRequestStatus(row.status)) return null;
+  const requestId = storedText(row.requestId, 80);
+  const listingId = storedText(row.listingId, 80);
+  const requesterId = typeof row.requesterId === 'string' && PLAYER_ID.test(row.requesterId) ? row.requesterId : null;
+  const requesterDisplayName = storedText(row.requesterDisplayName, LFF_LIMITS.displayNameMax);
+  const message = storedPlain(row.message, LFF_LIMITS.requestMessageMax, undefined);
+  const createdAt = storedTime(row.createdAt);
+  const updatedAt = storedTime(row.updatedAt);
+  if (requestId === null || listingId === null || requesterId === null || requesterDisplayName === null
+    || message === null || createdAt === null || updatedAt === null) return null;
+  return { requestId, listingId, requesterId, requesterDisplayName, message, status: row.status, createdAt, updatedAt };
+}
+
+/** A snapshot the board can load. Anything doubtful is rejected whole, not treated as empty. */
+export function parseLffBoardSnapshot(value: unknown): LffBoardSnapshot | null {
+  if (value === null || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  if (record.schemaVersion !== LFF_SCHEMA_V1 || !Array.isArray(record.listings) || !Array.isArray(record.requests)) return null;
+  const listings: LffStoredListing[] = [];
+  const requests: LffStoredRequest[] = [];
+  const listingIds = new Set<string>();
+  const requestIds = new Set<string>();
+  for (const item of record.listings) {
+    const listing = parseStoredListing(item);
+    if (listing === null || listingIds.has(listing.listingId)) return null;
+    listingIds.add(listing.listingId);
+    listings.push(listing);
+  }
+  for (const item of record.requests) {
+    const request = parseStoredRequest(item);
+    if (request === null || requestIds.has(request.requestId) || !listingIds.has(request.listingId)) return null;
+    requestIds.add(request.requestId);
+    requests.push(request);
+  }
+  return { schemaVersion: LFF_SCHEMA_V1, listings, requests };
+}
+
 interface ListingRecord {
   listingId: string;
-  category: LffCategory;
+  category: LffStoredCategory;
   title: string;
   body: string;
+  description: string;
+  projectLabel: string;
+  skills: string[];
+  openSlots: number;
+  serial: number;
+  version: number;
   authorId: string;
   authorDisplayName: string;
   contactMethod: LffContactMethod;
@@ -274,9 +645,59 @@ function readLifetime(value: unknown, fallback: number): LffResult<number> {
   return pass(value);
 }
 
-function readCategory(value: unknown): LffResult<LffCategory> {
-  if (!isLffCategory(value)) return fail('invalid_category', 'category must be one of the five Looking for Feed categories');
+function readCategory(value: unknown): LffResult<LffStoredCategory> {
+  if (typeof value === 'string' && Object.prototype.hasOwnProperty.call(LFF_DESKTOP_CATEGORY_BY_TOKEN, value)) {
+    return pass(LFF_DESKTOP_CATEGORY_BY_TOKEN[value as LffDesktopCategoryToken]);
+  }
+  if (value === 'collaborators') return pass('collaborators');
+  if (!isLffCategory(value)) return fail('invalid_category', 'category must be one of the Looking for Feed categories');
   return pass(value);
+}
+
+function categoryLabel(category: LffStoredCategory): string {
+  if (category === 'collaborators') return 'Looking for Collaborators';
+  return LFF_CATEGORY_LABELS[category];
+}
+
+function readOptionalText(field: string, value: unknown, max: number): LffResult<string> {
+  if (typeof value !== 'string') return fail('invalid_text', `${field} must be a string`);
+  if (value.length > LFF_LIMITS.maxTextUnits) return fail('invalid_text', `${field} is too long`);
+  if (hasControl(value)) return fail('invalid_text', `${field} must not contain a control character or a line break`);
+  const trimmed = value.trim();
+  if (trimmed.length > max) return fail('invalid_text', `${field} must be at most ${max} characters`);
+  return pass(trimmed);
+}
+
+function readDesktopFields(
+  record: Record<string, unknown>,
+  prior?: { description: string; projectLabel: string; skills: readonly string[]; openSlots: number },
+): LffResult<{ description: string; projectLabel: string; skills: string[]; openSlots: number }> {
+  const description = record.description === undefined
+    ? pass(prior?.description ?? '')
+    : readOptionalText('description', record.description, 1000);
+  if (!description.ok) return description;
+  const projectLabel = record.projectLabel === undefined
+    ? pass(prior?.projectLabel ?? '')
+    : readOptionalText('projectLabel', record.projectLabel, 80);
+  if (!projectLabel.ok) return projectLabel;
+  let skills: string[];
+  if (record.skills === undefined) skills = prior ? [...prior.skills] : [];
+  else if (!Array.isArray(record.skills) || record.skills.length > 8) return fail('invalid_body', 'skills must be a list of at most 8 strings');
+  else {
+    skills = [];
+    for (const item of record.skills) {
+      const skill = readOptionalText('skill', item, 32);
+      if (!skill.ok) return skill;
+      if (skill.value.length === 0) return fail('invalid_text', 'skill must not be blank');
+      skills.push(skill.value);
+    }
+  }
+  let openSlots: number;
+  if (record.openSlots === undefined) openSlots = prior?.openSlots ?? 1;
+  else if (typeof record.openSlots !== 'number' || !Number.isInteger(record.openSlots) || record.openSlots < 1 || record.openSlots > 20) {
+    return fail('invalid_body', 'openSlots must be a whole number from 1 to 20');
+  } else openSlots = record.openSlots;
+  return pass({ description: description.value, projectLabel: projectLabel.value, skills, openSlots });
 }
 
 function readContact(value: unknown): LffResult<LffContactMethod> {
@@ -291,7 +712,7 @@ function listingView(row: ListingRecord): LffListingView {
     schemaVersion: LFF_SCHEMA_V1,
     listingId: row.listingId,
     category: row.category,
-    categoryLabel: LFF_CATEGORY_LABELS[row.category],
+    categoryLabel: categoryLabel(row.category),
     title: row.title,
     body: row.body,
     authorId: row.authorId,
@@ -313,8 +734,25 @@ function listingView(row: ListingRecord): LffListingView {
 export class WonderlandLffBoard {
   private readonly listings = new Map<string, ListingRecord>();
   private readonly requests = new Map<string, RequestRecord>();
+  private readonly store: LffBoardStore;
+  private readonly loadFailure: LffErrorCode | null;
+  private serialCounter = 1;
 
-  constructor(private readonly newId: () => string) {}
+  constructor(private readonly newId: () => string, store?: LffBoardStore) {
+    this.store = store ?? new MemoryLffBoardStore();
+    const loaded = this.store.load();
+    if (loaded.status === 'corrupt') {
+      this.loadFailure = 'store_corrupt';
+      return;
+    }
+    this.loadFailure = null;
+    if (loaded.status === 'empty') return;
+    for (const row of loaded.snapshot.listings) {
+      this.listings.set(row.listingId, { ...row, skills: [...row.skills] });
+      if (row.serial >= this.serialCounter) this.serialCounter = row.serial + 1;
+    }
+    for (const row of loaded.snapshot.requests) this.requests.set(row.requestId, { ...row });
+  }
 
   create(actorId: string, body: unknown, nowIso: string): LffResult<LffListingView> {
     const ready = this.prepare(actorId, body, nowIso, CREATE_KEYS);
@@ -323,11 +761,19 @@ export class WonderlandLffBoard {
     if (!category.ok) return category;
     const title = readText('title', ready.value.record.title, LFF_LIMITS.titleMax);
     if (!title.ok) return title;
-    const text = readText('body', ready.value.record.body, LFF_LIMITS.bodyMax);
+    const desktop = readDesktopFields(ready.value.record);
+    if (!desktop.ok) return desktop;
+    const text = ready.value.record.body === undefined
+      ? pass(desktop.value.description.length > 0 ? desktop.value.description.slice(0, LFF_LIMITS.bodyMax) : title.value)
+      : readText('body', ready.value.record.body, LFF_LIMITS.bodyMax);
     if (!text.ok) return text;
-    const displayName = readText('displayName', ready.value.record.displayName, LFF_LIMITS.displayNameMax);
+    const displayName = ready.value.record.displayName === undefined
+      ? pass(actorId.slice(0, LFF_LIMITS.displayNameMax))
+      : readText('displayName', ready.value.record.displayName, LFF_LIMITS.displayNameMax);
     if (!displayName.ok) return displayName;
-    const contact = this.readContactPair(actorId, ready.value.record.contactMethod, ready.value.record.contactValue);
+    const contact = ready.value.record.contactMethod === undefined && ready.value.record.contactValue === undefined
+      ? pass({ method: 'in_world_message' as const, value: actorId.slice(0, LFF_LIMITS.contactValueMax) })
+      : this.readContactPair(actorId, ready.value.record.contactMethod, ready.value.record.contactValue);
     if (!contact.ok) return contact;
     const lifetime = readLifetime(ready.value.record.lifetimeHours, LFF_LIMITS.defaultLifetimeHours);
     if (!lifetime.ok) return lifetime;
@@ -346,6 +792,14 @@ export class WonderlandLffBoard {
       body: text.value,
       authorId: actorId,
       authorDisplayName: displayName.value,
+      description: ready.value.record.description === undefined && ready.value.record.body !== undefined
+        ? text.value
+        : desktop.value.description,
+      projectLabel: desktop.value.projectLabel,
+      skills: desktop.value.skills,
+      openSlots: desktop.value.openSlots,
+      serial: this.serialCounter++,
+      version: 1,
       contactMethod: contact.value.method,
       contactValue: contact.value.value,
       status: 'open',
@@ -354,7 +808,7 @@ export class WonderlandLffBoard {
       expiresAt: formatUtc(ready.value.nowMs + lifetime.value * 60 * 60 * 1000),
     };
     this.listings.set(row.listingId, row);
-    return pass(listingView(row));
+    return this.saved(listingView(row));
   }
 
   list(actorId: string, category: unknown, nowIso: string): LffResult<LffFeed> {
@@ -362,13 +816,14 @@ export class WonderlandLffBoard {
     if (!player.ok) return player;
     const clock = readClock(nowIso);
     if (!clock.ok) return clock;
-    let selected: LffCategory | null = null;
+    let selected: LffStoredCategory | null = null;
     if (category !== undefined && category !== null) {
       const parsed = readCategory(category);
       if (!parsed.ok) return parsed;
       selected = parsed.value;
     }
-    this.settle(clock.value, nowIso);
+    const settled = this.persistSettle(clock.value, nowIso);
+    if (!settled.ok) return settled;
     const listings = [...this.listings.values()]
       .filter((row) => row.status === 'open' && (selected === null || row.category === selected))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.listingId.localeCompare(b.listingId))
@@ -381,7 +836,8 @@ export class WonderlandLffBoard {
     if (!player.ok) return player;
     const clock = readClock(nowIso);
     if (!clock.ok) return clock;
-    this.settle(clock.value, nowIso);
+    const settled = this.persistSettle(clock.value, nowIso);
+    if (!settled.ok) return settled;
     const row = this.listings.get(listingId);
     if (!row || (row.status !== 'open' && row.authorId !== actorId)) return fail('not_found', 'listing not found');
     return pass(listingView(row));
@@ -428,8 +884,20 @@ export class WonderlandLffBoard {
       row.contactValue = contact.value;
     }
     if (lifetime !== null && lifetime.ok) row.expiresAt = formatUtc(ready.value.nowMs + lifetime.value * 60 * 60 * 1000);
+    const desktop = readDesktopFields(record, row);
+    if (!desktop.ok) return desktop;
+    if (record.description !== undefined || record.projectLabel !== undefined || record.skills !== undefined || record.openSlots !== undefined) {
+      row.description = desktop.value.description;
+      row.projectLabel = desktop.value.projectLabel;
+      row.skills = desktop.value.skills;
+      row.openSlots = desktop.value.openSlots;
+      if (record.body === undefined && record.description !== undefined) {
+        row.body = desktop.value.description.length > 0 ? desktop.value.description.slice(0, LFF_LIMITS.bodyMax) : row.title;
+      }
+    }
+    row.version += 1;
     row.updatedAt = nowIso;
-    return pass(listingView(row));
+    return this.saved(listingView(row));
   }
 
   /** Author withdraw. The route that calls this is POST /lff/posts/:id/close. */
@@ -440,7 +908,7 @@ export class WonderlandLffBoard {
     if (!open.ok) return open;
     open.value.status = 'withdrawn';
     open.value.updatedAt = nowIso;
-    return pass(listingView(open.value));
+    return this.saved(listingView(open.value));
   }
 
   delete(actorId: string, listingId: string, body: unknown, nowIso: string): LffResult<LffDeleted> {
@@ -454,7 +922,7 @@ export class WonderlandLffBoard {
     for (const [requestId, request] of this.requests) {
       if (request.listingId === listingId) this.requests.delete(requestId);
     }
-    return pass({ schemaVersion: LFF_SCHEMA_V1, listingId, deleted: true });
+    return this.saved({ schemaVersion: LFF_SCHEMA_V1, listingId, deleted: true });
   }
 
   createRequest(actorId: string, listingId: string, body: unknown, nowIso: string): LffResult<LffRequestView> {
@@ -463,9 +931,13 @@ export class WonderlandLffBoard {
     const open = this.requireOpen(listingId, ready.value.nowMs, nowIso);
     if (!open.ok) return open;
     if (open.value.authorId === actorId) return fail('cannot_request_own', 'the author connects through the listing contact');
-    const message = readText('message', ready.value.record.message, LFF_LIMITS.requestMessageMax);
+    const message = ready.value.record.message === undefined
+      ? pass('')
+      : readText('message', ready.value.record.message, LFF_LIMITS.requestMessageMax);
     if (!message.ok) return message;
-    const displayName = readText('displayName', ready.value.record.displayName, LFF_LIMITS.displayNameMax);
+    const displayName = ready.value.record.displayName === undefined
+      ? pass(actorId.slice(0, LFF_LIMITS.displayNameMax))
+      : readText('displayName', ready.value.record.displayName, LFF_LIMITS.displayNameMax);
     if (!displayName.ok) return displayName;
     if (this.openRequestFrom(listingId, actorId)) return fail('request_exists', 'this player already has an open request on the listing');
     if (this.openRequestCount(actorId) >= LFF_LIMITS.maxOpenRequestsPerPlayer) {
@@ -484,7 +956,7 @@ export class WonderlandLffBoard {
       updatedAt: nowIso,
     };
     this.requests.set(request.requestId, request);
-    return pass(this.requestView(request, open.value));
+    return this.saved(this.requestView(request, open.value));
   }
 
   listPostRequests(actorId: string, listingId: string, nowIso: string): LffResult<LffRequestList> {
@@ -492,7 +964,8 @@ export class WonderlandLffBoard {
     if (!player.ok) return player;
     const clock = readClock(nowIso);
     if (!clock.ok) return clock;
-    this.settle(clock.value, nowIso);
+    const settled = this.persistSettle(clock.value, nowIso);
+    if (!settled.ok) return settled;
     const row = this.listings.get(listingId);
     if (!row) return fail('not_found', 'listing not found');
     const own = this.requestsFor(listingId).filter((request) => row.authorId === actorId || request.requesterId === actorId);
@@ -508,7 +981,8 @@ export class WonderlandLffBoard {
     if (!player.ok) return player;
     const clock = readClock(nowIso);
     if (!clock.ok) return clock;
-    this.settle(clock.value, nowIso);
+    const settled = this.persistSettle(clock.value, nowIso);
+    if (!settled.ok) return settled;
     const requests = [...this.requests.values()]
       .filter((request) => {
         const row = this.listings.get(request.listingId);
@@ -531,6 +1005,147 @@ export class WonderlandLffBoard {
     return this.decideRequest(actorId, requestId, body, nowIso, 'author', 'declined', false);
   }
 
+  /** The feed page the f1fbb264 desktop client reads (`data.posts` / `data.nextCursor`). */
+  desktopFeed(actorId: string, query: LffDesktopFeedQuery, nowIso: string): LffResult<LffDesktopFeedPage> {
+    const player = readPlayer(actorId);
+    if (!player.ok) return player;
+    const clock = readClock(nowIso);
+    if (!clock.ok) return clock;
+    const settled = this.persistSettle(clock.value, nowIso);
+    if (!settled.ok) return settled;
+    const category = query.category === undefined || query.category === ''
+      ? pass(null)
+      : readCategory(query.category);
+    if (!category.ok) return category;
+    const project = query.projectLabel === undefined ? pass('') : readOptionalText('projectLabel', query.projectLabel, 80);
+    if (!project.ok) return project;
+    const skill = query.skill === undefined ? pass('') : readOptionalText('skill', query.skill, 32);
+    if (!skill.ok) return skill;
+    const cursor = parseDesktopCursor(query.cursor);
+    if (!cursor.ok) return cursor;
+    const limit = parseDesktopLimit(query.limit);
+    if (!limit.ok) return limit;
+    const projectNeedle = project.value.toLowerCase();
+    const skillNeedle = skill.value.toLowerCase();
+    const matching = [...this.listings.values()].filter((row) => {
+      if (query.mine) {
+        if (row.authorId !== actorId) return false;
+      } else if (row.status !== 'open') return false;
+      if (query.hasOpenSlots && row.status !== 'open') return false;
+      if (category.value !== null && row.category !== category.value) return false;
+      if (projectNeedle.length > 0 && !row.projectLabel.toLowerCase().includes(projectNeedle)) return false;
+      if (skillNeedle.length > 0 && !row.skills.some((item) => item.toLowerCase() === skillNeedle)) return false;
+      return cursor.value === null || isOlderThanCursor(row, cursor.value);
+    }).sort(newestFirst);
+    const page = matching.slice(0, limit.value);
+    const last = page[page.length - 1];
+    return pass({
+      posts: page.map((row) => this.desktopPostView(row, actorId)),
+      nextCursor: matching.length > limit.value && last !== undefined ? desktopCursorOf(last) : null,
+    });
+  }
+
+  /** One post as the desktop detail read (`data` of GET /lff/posts/:id). */
+  desktopPost(actorId: string, listingId: string, nowIso: string): LffResult<LffDesktopPostDetail> {
+    const seen = this.get(actorId, listingId, nowIso);
+    if (!seen.ok) return seen;
+    const row = this.listings.get(listingId);
+    if (!row) return fail('not_found', 'listing not found');
+    const accepted = this.acceptedPeople(row, actorId);
+    return pass({ ...this.desktopPostView(row, actorId), authorProfile: null, accepted });
+  }
+
+  /** GET /lff/requests as the desktop client parses it. */
+  desktopMine(actorId: string, nowIso: string): LffResult<LffDesktopMyRequests> {
+    const player = readPlayer(actorId);
+    if (!player.ok) return player;
+    const clock = readClock(nowIso);
+    if (!clock.ok) return clock;
+    const settled = this.persistSettle(clock.value, nowIso);
+    if (!settled.ok) return settled;
+    const mine = [...this.requests.values()]
+      .filter((request) => request.requesterId === actorId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.requestId.localeCompare(a.requestId));
+    const visible = mine.flatMap((request) => {
+      const row = this.listings.get(request.listingId);
+      if (!row) return [];
+      const status = desktopRequesterStatus(request, row);
+      if (status === null) return [];
+      const post = row.status === 'open' ? this.desktopPostView(row, actorId) : null;
+      return [{
+        requestId: request.requestId,
+        postId: request.listingId,
+        status,
+        message: request.message,
+        createdAtIso: request.createdAt,
+        updatedAtIso: request.updatedAt,
+        post,
+      }];
+    });
+    const capped = visible.slice(0, 100);
+    return pass({ requests: capped, truncated: visible.length > 100 });
+  }
+
+  /** GET /lff/posts/:id/requests as the owner's inbox. */
+  desktopInbox(actorId: string, listingId: string, nowIso: string): LffResult<LffDesktopInbox> {
+    const listed = this.listPostRequests(actorId, listingId, nowIso);
+    if (!listed.ok) return listed;
+    const row = this.listings.get(listingId);
+    if (!row || row.authorId !== actorId) return fail('not_author', 'only the player who posted can read these requests');
+    const requests = this.requestsFor(listingId)
+      .filter((request) => request.status === 'open' || request.status === 'accepted')
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.requestId.localeCompare(b.requestId))
+      .map((request) => ({
+        requestId: request.requestId,
+        status: request.status === 'accepted' ? 'ACCEPTED' as const : 'PENDING' as const,
+        message: request.message,
+        createdAtIso: request.createdAt,
+        updatedAtIso: request.updatedAt,
+        requester: desktopPerson(request.requesterId, request.requesterDisplayName),
+      }));
+    return pass({ postId: listingId, requests });
+  }
+
+  private desktopPostView(row: ListingRecord, actorId: string): LffDesktopPost {
+    const owner = row.authorId === actorId;
+    const accepted = this.requestsFor(row.listingId).filter((request) => request.status === 'accepted').length;
+    return {
+      postId: row.listingId,
+      category: DESKTOP_TOKEN_OF[row.category],
+      categoryLabel: LFF_DESKTOP_CATEGORY_LABELS[row.category],
+      title: row.title,
+      description: row.description,
+      projectLabel: row.projectLabel,
+      skills: [...row.skills],
+      openSlots: row.openSlots,
+      availableSlots: owner ? Math.max(0, row.openSlots - accepted) : null,
+      status: row.status === 'open' ? 'OPEN' : row.status === 'expired' ? 'EXPIRED' : 'CLOSED',
+      createdAtIso: row.createdAt,
+      updatedAtIso: row.updatedAt,
+      expiresAtIso: row.expiresAt,
+      version: row.version,
+      author: desktopPerson(row.authorId, row.authorDisplayName),
+      viewerIsOwner: owner,
+      viewerRequest: owner ? null : this.viewerRequest(row, actorId),
+    };
+  }
+
+  private viewerRequest(row: ListingRecord, actorId: string): LffDesktopPost['viewerRequest'] {
+    const theirs = this.requestsFor(row.listingId).filter((request) => request.requesterId === actorId);
+    const pick = theirs.find((request) => request.status === 'open' || request.status === 'accepted')
+      ?? [...theirs].reverse().find((request) => request.status === 'declined');
+    if (pick === undefined) return null;
+    const status = desktopRequesterStatus(pick, row);
+    return status === null ? null : { requestId: pick.requestId, status };
+  }
+
+  private acceptedPeople(row: ListingRecord, actorId: string): readonly LffDesktopPerson[] | null {
+    const accepted = this.requestsFor(row.listingId).filter((request) => request.status === 'accepted');
+    const viewerAccepted = accepted.some((request) => request.requesterId === actorId);
+    if (row.authorId !== actorId && !viewerAccepted) return null;
+    return accepted.map((request) => desktopPerson(request.requesterId, request.requesterDisplayName));
+  }
+
   private prepare(
     actorId: string,
     body: unknown,
@@ -547,7 +1162,8 @@ export class WonderlandLffBoard {
     if (!actor.ok) return actor;
     const fields = onlyKeys(record.value, keys);
     if (!fields.ok) return fields;
-    this.settle(clock.value, nowIso);
+    const settled = this.persistSettle(clock.value, nowIso);
+    if (!settled.ok) return settled;
     return pass({ nowMs: clock.value, record: record.value });
   }
 
@@ -570,17 +1186,59 @@ export class WonderlandLffBoard {
     return pass(id);
   }
 
-  private settle(nowMs: number, nowIso: string): void {
+  private settle(nowMs: number, nowIso: string): boolean {
+    let changed = false;
     for (const row of this.listings.values()) {
       const expires = parseLffUtc(row.expiresAt);
       if (row.status === 'open' && (expires === null || expires <= nowMs)) {
         row.status = 'expired';
         row.updatedAt = nowIso;
+        changed = true;
       }
+    }
+    return changed;
+  }
+
+  private blocked(): LffResult<never> | null {
+    if (this.loadFailure === null) return null;
+    return fail(this.loadFailure, 'the looking for feed store could not be read');
+  }
+
+  private toSnapshot(): LffBoardSnapshot {
+    const listings = [...this.listings.values()]
+      .map((row) => ({ ...row }))
+      .sort((a, b) => a.listingId.localeCompare(b.listingId));
+    const requests = [...this.requests.values()]
+      .map((row) => ({ ...row }))
+      .sort((a, b) => a.requestId.localeCompare(b.requestId));
+    return { schemaVersion: LFF_SCHEMA_V1, listings, requests };
+  }
+
+  private checkpoint(): LffResult<true> {
+    try {
+      this.store.save(this.toSnapshot());
+      return pass(true);
+    } catch {
+      return fail('store_unavailable', 'the looking for feed store could not be written');
     }
   }
 
-  private openListings(actorId: string, category?: LffCategory): ListingRecord[] {
+  private persistSettle(nowMs: number, nowIso: string): LffResult<true> {
+    const blocked = this.blocked();
+    if (blocked !== null) return blocked;
+    if (!this.settle(nowMs, nowIso)) return pass(true);
+    return this.checkpoint();
+  }
+
+  private saved<T>(value: T): LffResult<T> {
+    const blocked = this.blocked();
+    if (blocked !== null) return blocked;
+    const wrote = this.checkpoint();
+    if (!wrote.ok) return wrote;
+    return pass(value);
+  }
+
+  private openListings(actorId: string, category?: LffStoredCategory): ListingRecord[] {
     return [...this.listings.values()].filter((row) =>
       row.status === 'open' && row.authorId === actorId && (category === undefined || row.category === category));
   }
@@ -629,7 +1287,7 @@ export class WonderlandLffBoard {
       requestId: request.requestId,
       listingId: request.listingId,
       category: row.category,
-      categoryLabel: LFF_CATEGORY_LABELS[row.category],
+      categoryLabel: categoryLabel(row.category),
       listingTitle: row.title,
       authorId: row.authorId,
       requesterId: request.requesterId,
@@ -667,6 +1325,6 @@ export class WonderlandLffBoard {
     if (listingMustBeOpen && row.status !== 'open') return fail('not_open', 'the listing is not open');
     request.status = next;
     request.updatedAt = nowIso;
-    return pass(this.requestView(request, row));
+    return this.saved(this.requestView(request, row));
   }
 }
