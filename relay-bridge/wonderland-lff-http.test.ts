@@ -1,20 +1,25 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createServer, request as httpRequest } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createBridgeServer } from './server';
+import { createBridgeServer, serveMountedLff } from './server';
 import { loadBridgeConfig } from './config';
 import { betaWaveZeroState } from './beta-routes';
 import { createBetaEnrolmentStore } from '../src/relay/persistence';
+import { createWonderlandLffFileStore } from '../src/relay/persistence/wonderland-lff-file-store';
+import { WonderlandLffBoard } from '../src/relay/mission/wonderland/wonderland-lff';
 
 /**
  * LOOKING FOR FEED on the real bridge, 127.0.0.1.
  *
  * A native social session is minted only by the desktop sign-in, and that
- * path needs a database. This file does not mint one and does not invent a
- * session back door. The handler's own post is AC-18 in
- * wonderland-lff-routes.test.ts.
+ * path needs a database. createBridgeServer does not expose the session
+ * store, so this file cannot mint one. The oversized-body case reaches the
+ * size check through serveMountedLff, the same function the bridge calls,
+ * with a verifier that accepts one fixed token. The handler's own post is
+ * AC-18 in wonderland-lff-routes.test.ts.
  */
 
 const ORIGIN = 'https://sunday-relay.vercel.app';
@@ -130,21 +135,140 @@ describe('Looking for Feed on the bridge', () => {
     expect(feed.body).toEqual({ error: { code: 'session_required', message: 'Sign in to Wonderland to use social.' } });
   });
 
-  it('returns 400 for a malformed body and for an oversized body, and keeps answering', async () => {
+  it('answers 401 from the LFF block when the path has a query and no session', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'relay-lff-dir-'));
+    roots.push(dir);
+    const base = await boot({ ...ON, WONDERLAND_LFF_DIR: dir });
+    const got = await call(base, 'GET', '/relay-api/wonderland/social/lff?limit=5');
+    expect(got).toEqual({
+      status: 401,
+      body: { error: { code: 'session_required', message: 'Sign in to Wonderland to use social.' } },
+    });
+    const beside = await call(base, 'GET', '/relay-api/wonderland/social/lffx?limit=5');
+    expect(beside).toEqual({
+      status: 401,
+      body: { error: { kind: 'session_required', message: 'Sign in to Wonderland to use social.' } },
+    });
+  });
+
+  it('keeps the LFF 503 and 403 when the path has a query', async () => {
+    const off = await boot({ WONDERLAND_SOCIAL_ENABLED: '1' });
+    const disabled = await call(off, 'GET', '/relay-api/wonderland/social/lff/posts?limit=5');
+    expect(disabled).toEqual({
+      status: 503,
+      body: { error: { kind: 'lff_unavailable', message: 'Looking for Feed is not enabled on this server.' } },
+    });
+    const dir = mkdtempSync(join(tmpdir(), 'relay-lff-dir-'));
+    roots.push(dir);
+    const on = await boot({ ...ON, WONDERLAND_LFF_DIR: dir });
+    const desktop = await call(on, 'GET', '/relay-api/wonderland/social/lff/posts?limit=5', { origin: ORIGIN });
+    expect(desktop).toEqual({
+      status: 403,
+      body: { error: { code: 'desktop_only', message: 'Wonderland social is reached from the Wonderland desktop client.' } },
+    });
+  });
+
+  it('answers 401 for bad JSON when no session is presented', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'relay-lff-dir-'));
     roots.push(dir);
     const base = await boot({ ...ON, WONDERLAND_LFF_DIR: dir });
     const malformed = await call(base, 'POST', '/relay-api/wonderland/social/lff/posts', { body: '{' });
     expect(malformed).toEqual({
-      status: 400,
-      body: { ok: false, error: { code: 'invalid_body', message: 'request body is not valid JSON' } },
+      status: 401,
+      body: { error: { code: 'session_required', message: 'Sign in to Wonderland to use social.' } },
     });
-    const oversized = await call(base, 'POST', '/relay-api/wonderland/social/lff/posts', { body: 'x'.repeat(64 * 1024 + 1) });
-    expect(oversized.status).toBe(400);
-    expect(oversized.body).toEqual({ ok: false, error: { code: 'body_too_large', message: 'request body is too large' } });
-    const readable = await call(base, 'POST', '/relay-api/wonderland/social/lff/posts', { body: '{}' });
-    expect(readable.status).toBe(401);
     const health = await realFetch(`${base}/health`);
     expect(health.status).toBe(200);
   });
+
+  it('closes the socket after 400 body_too_large when the session hop accepts the caller', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'relay-lff-dir-'));
+    roots.push(dir);
+    const board = new WonderlandLffBoard(
+      () => 'lff_stub',
+      createWonderlandLffFileStore({ root: dir }),
+    );
+    const server = createServer((req, res) => {
+      void serveMountedLff({
+        req,
+        res,
+        method: req.method ?? 'GET',
+        url: req.url ?? '/',
+        origin: undefined,
+        cors: {},
+        lffEnabled: true,
+        socialEnabled: true,
+        board,
+        verifySession: (token) => (token === 'lff-test-session' ? { participantId: 'ada' } : null),
+      });
+    });
+    servers.push(server);
+    const base = await new Promise<string>((resolve) => {
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address();
+        const port = address !== null && typeof address === 'object' ? address.port : 0;
+        resolve(`http://127.0.0.1:${port}`);
+      });
+    });
+    const oversized = await postBytes(base, '/relay-api/wonderland/social/lff/posts', Buffer.alloc(1024 * 1024, 0x78), {
+      authorization: 'Relay-Session lff-test-session',
+      'content-type': 'application/json',
+    });
+    expect(oversized.status).toBe(400);
+    expect(oversized.body).toEqual({ ok: false, error: { code: 'body_too_large', message: 'request body is too large' } });
+    expect(oversized.connection).toBe('close');
+    expect(oversized.socketClosed).toBe(true);
+    const again = await call(base, 'GET', '/relay-api/wonderland/social/lff/posts?limit=5', { token: 'lff-test-session' });
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ ok: true });
+  });
 });
+
+function postBytes(
+  base: string,
+  path: string,
+  body: Buffer,
+  headers: Record<string, string>,
+): Promise<{ status: number; body: unknown; connection: string | undefined; socketClosed: boolean }> {
+  const url = new URL(base);
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({
+      hostname: url.hostname,
+      port: url.port,
+      path,
+      method: 'POST',
+      headers: { ...headers, 'content-length': String(body.length) },
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      res.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8');
+        let parsed: unknown = text;
+        try { parsed = JSON.parse(text); } catch { /* leave the text */ }
+        const socket = res.socket;
+        const done = (socketClosed: boolean) => resolve({
+          status: res.statusCode ?? 0,
+          body: parsed,
+          connection: typeof res.headers.connection === 'string' ? res.headers.connection : undefined,
+          socketClosed,
+        });
+        if (socket === null || socket.destroyed) {
+          done(true);
+          return;
+        }
+        const timer = setTimeout(() => done(socket.destroyed), 1000);
+        socket.once('close', () => {
+          clearTimeout(timer);
+          done(true);
+        });
+      });
+    });
+    req.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'ECONNRESET' || err.code === 'EPIPE') {
+        return;
+      }
+      reject(err);
+    });
+    req.end(body);
+  });
+}

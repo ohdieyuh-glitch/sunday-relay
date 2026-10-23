@@ -172,9 +172,9 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 
 /**
  * Looking for Feed's body. A parse failure or an over-limit body is a 400,
- * never a throw. The shared reader destroys the socket as it rejects an
- * over-limit body, which drops the 400. This reader keeps the socket open
- * long enough for the route to answer.
+ * never a throw. Past the limit this reader stops: it pauses the request so
+ * an authenticated sender cannot keep streaming. The route then answers 400
+ * and destroys the socket once that response has finished.
  */
 function readLffRawBody(req: IncomingMessage): Promise<string | undefined> {
   return new Promise((resolve, reject) => {
@@ -186,10 +186,14 @@ function readLffRawBody(req: IncomingMessage): Promise<string | undefined> {
       settled = true;
       fn();
     };
+    const stop = () => {
+      req.pause();
+    };
     req.on('data', (chunk: Buffer) => {
       if (settled) return;
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
+        stop();
         finish(() => reject(new Error('request body too large')));
         return;
       }
@@ -246,6 +250,103 @@ function lffSearchQuery(url: string): Record<string, string | undefined> {
     lffQuery[key] = value;
   }
   return lffQuery;
+}
+
+/** Pathname of a request URL. The query, if any, starts at the first `?`. */
+function lffPathname(url: string): string {
+  const pathname = url.split('?')[0];
+  return pathname.replace(/\/+$/, '') || '/';
+}
+
+/**
+ * Looking for Feed's route, from the pathname only. `/relay-api` is removed
+ * when it is the leading prefix, and nowhere else.
+ */
+function lffRouteOf(url: string): string {
+  const pathname = lffPathname(url);
+  if (!pathname.startsWith('/relay-api')) return pathname;
+  const rest = pathname.slice('/relay-api'.length);
+  return rest === '' ? '/' : rest;
+}
+
+function lffIsMountPath(route: string): boolean {
+  return route === '/wonderland/social/lff' || route.startsWith('/wonderland/social/lff/');
+}
+
+export interface MountedLffSession {
+  readonly participantId: string;
+}
+
+/**
+ * The mounted Looking for Feed block. Returns false when the pathname is not
+ * one of its routes, so `/wonderland/social/lffx` (with or without a query)
+ * falls through. A session is required before a POST body is read.
+ */
+export async function serveMountedLff(input: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  method: string;
+  url: string;
+  origin: string | undefined;
+  cors: Record<string, string>;
+  lffEnabled: boolean;
+  socialEnabled: boolean;
+  board: WonderlandLffBoard | null;
+  verifySession: (token: string, now: number) => MountedLffSession | null;
+}): Promise<boolean> {
+  const route = lffRouteOf(input.url);
+  if (!lffIsMountPath(route)) return false;
+  const headers = { ...input.cors, 'cache-control': 'no-store' };
+  if (!input.lffEnabled) {
+    send(input.res, 503, { error: { kind: 'lff_unavailable', message: 'Looking for Feed is not enabled on this server.' } }, headers);
+    return true;
+  }
+  if (input.board === null) {
+    send(input.res, 503, { error: { kind: 'lff_unavailable', message: 'Looking for Feed storage is not configured. Set WONDERLAND_LFF_DIR.' } }, headers);
+    return true;
+  }
+  if (!input.socialEnabled) {
+    send(input.res, 503, { error: { kind: 'social_unavailable', message: 'Social is not available on this server.' } }, headers);
+    return true;
+  }
+  if (input.origin !== undefined && input.origin !== '') {
+    send(input.res, 403, { error: { code: 'desktop_only', message: 'Wonderland social is reached from the Wonderland desktop client.' } }, headers);
+    return true;
+  }
+  const lffHeader = typeof input.req.headers.authorization === 'string' ? input.req.headers.authorization : undefined;
+  const lffToken = lffHeader?.match(/^Relay-Session\s+(.+)$/i)?.[1] ?? null;
+  const lffFacts = lffToken === null ? null : input.verifySession(lffToken, Date.now());
+  if (lffFacts === null) {
+    send(input.res, 401, { error: { code: 'session_required', message: 'Sign in to Wonderland to use social.' } }, headers);
+    return true;
+  }
+  let lffBody: unknown;
+  if (input.method === 'POST') {
+    const read = await readLffBody(input.req);
+    if (!read.ok) {
+      if (read.code === 'body_too_large') {
+        input.req.pause();
+        input.res.on('finish', () => {
+          input.req.destroy();
+        });
+        send(input.res, 400, { ok: false, error: { code: read.code, message: read.message } }, { ...headers, connection: 'close' });
+        return true;
+      }
+      send(input.res, 400, { ok: false, error: { code: read.code, message: read.message } }, headers);
+      return true;
+    }
+    lffBody = read.body;
+  }
+  const lffResult = handleLffHttp(input.board, {
+    method: input.method,
+    path: route,
+    actorId: lffFacts.participantId,
+    body: lffBody,
+    query: lffSearchQuery(input.url),
+    nowIso: new Date().toISOString(),
+  });
+  send(input.res, lffResult.status, lffResult.body, headers);
+  return true;
 }
 
 export function createBridgeServer(
@@ -840,53 +941,21 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
         /**
          * LOOKING FOR FEED, in front of the social family. `isSocialRoute` matches every
          * `/wonderland/social` path, so `/wonderland/social/lff` would never reach a later handler.
+         * The match uses the request URL's pathname (split at the first `?`).
          * `/wonderland/social/lffx` does not match this block and falls through.
          */
-        const lffRoute = path.replace('/relay-api', '');
-        if (lffRoute === '/wonderland/social/lff' || lffRoute.startsWith('/wonderland/social/lff/')) {
-          if (!lffEnabled) {
-            send(res, 503, { error: { kind: 'lff_unavailable', message: 'Looking for Feed is not enabled on this server.' } }, { ...cors, 'cache-control': 'no-store' });
-            return;
-          }
-          if (lffBoard === null) {
-            send(res, 503, { error: { kind: 'lff_unavailable', message: 'Looking for Feed storage is not configured. Set WONDERLAND_LFF_DIR.' } }, { ...cors, 'cache-control': 'no-store' });
-            return;
-          }
-          if (!socialEnabled) {
-            send(res, 503, { error: { kind: 'social_unavailable', message: 'Social is not available on this server.' } }, { ...cors, 'cache-control': 'no-store' });
-            return;
-          }
-          if (origin !== undefined && origin !== '') {
-            send(res, 403, { error: { code: 'desktop_only', message: 'Wonderland social is reached from the Wonderland desktop client.' } }, { ...cors, 'cache-control': 'no-store' });
-            return;
-          }
-          let lffBody: unknown;
-          if (method === 'POST') {
-            const read = await readLffBody(req);
-            if (!read.ok) {
-              send(res, 400, { ok: false, error: { code: read.code, message: read.message } }, { ...cors, 'cache-control': 'no-store' });
-              return;
-            }
-            lffBody = read.body;
-          }
-          const lffHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
-          const lffToken = lffHeader?.match(/^Relay-Session\s+(.+)$/i)?.[1] ?? null;
-          const lffFacts = lffToken === null ? null : lffSession.verifySession(lffToken, Date.now());
-          if (lffFacts === null) {
-            send(res, 401, { error: { code: 'session_required', message: 'Sign in to Wonderland to use social.' } }, { ...cors, 'cache-control': 'no-store' });
-            return;
-          }
-          const lffResult = handleLffHttp(lffBoard, {
-            method,
-            path: lffRoute,
-            actorId: lffFacts.participantId,
-            body: lffBody,
-            query: lffSearchQuery(req.url ?? '/'),
-            nowIso: new Date().toISOString(),
-          });
-          send(res, lffResult.status, lffResult.body, { ...cors, 'cache-control': 'no-store' });
-          return;
-        }
+        if (await serveMountedLff({
+          req,
+          res,
+          method,
+          url: req.url ?? '/',
+          origin,
+          cors,
+          lffEnabled,
+          socialEnabled,
+          board: lffBoard,
+          verifySession: (token, now) => lffSession.verifySession(token, now),
+        })) return;
 
         /**
          * WONDERLAND SOCIAL (R16), in front of the Wonderland family, which claims every `/wonderland/` path. The path is

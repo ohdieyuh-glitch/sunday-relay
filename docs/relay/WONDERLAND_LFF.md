@@ -150,9 +150,12 @@ Each criterion names the test that proves it.
     off, and those paths answer 503 `lff_unavailable`. With the flag set to `1`
     and `WONDERLAND_LFF_DIR` unset or empty, the board is not built and the
     paths answer 503. There is no default directory. Social must also be on.
-    A non-empty Origin is 403. No native social session is 401.
-    `/wonderland/social/lffx` is not this route. A POST body that is not JSON,
-    or is over the body limit, is 400.
+    A non-empty Origin is 403. No native social session is 401. The session is
+    checked before a POST body is read, so bad JSON with no session is 401.
+    `/wonderland/social/lffx` is not this route, with or without a query. The
+    match uses the pathname, split at the first `?`. A POST body that is not
+    JSON is 400 once a session is present. A body over the limit is 400
+    `body_too_large`, and that response closes the connection.
     Proved by `relay-bridge/wonderland-lff-http.test.ts`.
 
 ## Data model
@@ -358,7 +361,19 @@ because that check matches every `/wonderland/social` path.
 Unset or empty fails closed with 503 and does not use a default path. Social
 must also be enabled. A non-empty Origin is 403 `desktop_only`. No native
 social session is 401 `session_required`. The session check uses the same hop
-as the social routes. A POST body that is not JSON, or is over the body limit,
-is 400 from this block. `/wonderland/social/lffx` does not enter the block.
-The query decoder keeps a decoded `projectLabel` and `skill`, including
-spaces, and leaves a plus sign as a plus sign. One decode only.
+as the social routes, and it runs before the body is read. A POST body that is
+not JSON is 400 once that session is present. A body over the limit is 400
+`body_too_large` with `connection: close`; the reader pauses, and the request
+socket is destroyed after the response finishes. The route is the URL's
+pathname, split at the first `?`, so a query does not miss the block.
+`/relay-api` is removed only when it is the leading prefix of that pathname.
+`/wonderland/social/lffx` does not enter the block. The query decoder keeps a
+decoded `projectLabel` and `skill`, including spaces, and leaves a plus sign
+as a plus sign. One decode only.
+
+Error bodies on this mount are not one shape, and that mix is left as it is.
+503 uses `error.kind` (`lff_unavailable`, and `social_unavailable` when social
+is off). 401 and 403 use `error.code` (`session_required`, `desktop_only`).
+A refused POST uses `{ ok: false, error: { code, message } }`. The social
+catch-all's 401 uses `error.kind` instead. A query that misses this block is
+told apart from one this block answers by that `kind` / `code` difference.
