@@ -1,7 +1,9 @@
 # Wonderland landing route (2026-10-23)
 
 Author: Cosmo (Wonderland dev agent). Status: proposal for Skywalker's exact-head review.
-Revision 3: fixes [R2-1]..[R2-4] from Skywalker's PASS WITH FINDING of rev 2 `aa7a5188` (see section 8.1).
+Revision 4: fixes [R3-1]..[R3-4] and the re-run answer [RR] from Skywalker's PASS WITH FINDING of rev 3 `cb68c692`, plus his
+no-branch-protection note [BP] (see section 8.0).
+Revision 3 fixed [R2-1]..[R2-4] from Skywalker's PASS WITH FINDING of rev 2 `aa7a5188` (section 8.1).
 Revision 2 fixed [RD-1]..[RD-6] from Skywalker's FAIL of rev 1 `f3d6ebc7` (section 8.2). [RD-7] spoofing content is unchanged.
 Every citation is `file:line` at main `689d2be92c3158ba4a59883ed4f6cc02f700660b` (tree `ecfe4f5c`, parent `3f20fc1a`),
 re-read line by line before writing. Corrections to earlier citations are listed in section 7.
@@ -15,7 +17,7 @@ re-read line by line before writing. Corrections to earlier citations are listed
   - exactly one merged PR records the tip as its merge result (`:388-401`), base `main` (`:417-421`), base never changed (`:441-448`);
   - the PR opener is a worker login (`:450-454`; opener read from `pull.user.login` at `:649`).
     [RD-4] `WORKER_AUTHOR_LOGINS` at `:57` is only an alias. The list is defined at `scripts/julius-review-currency.mjs:38` as `NON_ATTESTING_IDENTITIES = ['julius-worker[bot]']`;
-  - exact-head approval (review currency, `:469-481`);
+  - exact-head approval with no blocking finding on that head (review currency, `:469-481`; what it reads is in section 2, [R3-4]);
   - main's tree equals the reviewed head's tree (`:491-495`);
   - the pre-merge parent is contained in the reviewed head (`:506-516`).
 - Governance: "Source changes go through the worker and are approved by the founder at an exact sha"
@@ -26,6 +28,10 @@ re-read line by line before writing. Corrections to earlier citations are listed
   - **No paid or live runs.** The live preflight requires `provenant` for the frozen main sha
     (`scripts/julius-live-preflight-gates.mjs:31`, enforced at `:193-194`).
   - **No new acceptance checkpoint.** `.github/workflows/julius-accept-main.yml:148-155` runs the provenance gate and fails.
+- [BP] **No branch protection.** Skywalker reported that main has no GitHub branch protection. The repository is private on a
+  plan with no branch protection and no rulesets (the API answers 403 "upgrade", `.github/workflows/julius-land.yml:5-6`;
+  also `julius-main-provenance.mjs:208`). GitHub refuses nothing on main; only the landing checks guard it. The provenance
+  gate judges main's tip after it moves, so it reports a bad landing rather than preventing one.
 
 ### 1.1 Ordering on main (normative) [RD-1]
 
@@ -59,6 +65,19 @@ re-read line by line before writing. Corrections to earlier citations are listed
   - `scripts/julius-review-currency.mjs:269-272` (`commit_id === headSha`, authority check);
   - the approver list is at `:59`;
   - the approver may be neither a non-attesting (bot) identity nor the PR author (`:246-252`).
+  - [R3-4] Review currency also reads blocking findings on the head, and they win over any approval
+    (`julius-review-currency.mjs:274-283`, `:316-324`):
+    - a `CHANGES_REQUESTED` review at the head (`:284-287`);
+    - a review body at the head: on an approval only an explicit marker (`P1`, Critical, High; `:130`) blocks; on any other
+      review an unclassifiable body blocks too (`:132-136`, `:302-309`);
+    - a line comment written against the head (`original_commit_id`, `:310-313`) whose body is blocking or unclassifiable.
+  - Commit statuses are also read, as an alternative SHA-bound approval on context `julius/independent-review`
+    (`:100`, `:184-201`, `:326-329`), not as findings. Nothing publishes that status today (`:94`).
+  - Only `ohdieyuh-glitch` has standing to approve or block (`:59`, `:78`, `:264-265`); other logins' reviews and comments
+    are read past (`:67-69`). The gate fetches reviews, line comments and statuses (`julius-main-provenance.mjs:663-665`),
+    not issue comments.
+  - So a blocking or unclassifiable review body or line comment posted as `ohdieyuh-glitch` on the head fails the gate even
+    next to an approval. That is one more reason agents post nothing through the founder's account.
 
 **Never checked on this route:** the commit author field, `merged_by`, the ed25519 reviewer key, and `allowed-branches.txt`.
 - The commit author is set by `--amend --reset-author` (`docs/JULIUS_WORKER_PR_RUNBOOK.md:79-82`). That is the same
@@ -112,12 +131,19 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
      - **none ran:** dispatch `julius-real-infra.yml` once by `workflow_dispatch` (`:5`);
      - **some ran:** stop and ask Skywalker, because a dispatch would duplicate check names;
      - **ran with a failure:** re-run only the failed job(s) in that same workflow run (`gh run rerun <run-id> --failed`,
-       or "Re-run failed jobs" in the Actions UI). Never a new dispatch.
+       or "Re-run failed jobs" in the Actions UI). Never a new dispatch, and no re-cut (counting rule below).
      - The path filter applies to the whole workflow, and a dispatch runs every job, so in practice it is all-or-none.
      - The same re-run rule applies to a run that was itself started by the one dispatch.
-     - Open question for Skywalker: the "exactly once" count below assumes a re-run attempt supersedes the failed attempt
-       for the same check name on that head (check-runs API default `filter=latest`). If Skywalker counts all attempts,
-       a failed real-infra job needs a re-cut instead.
+   - **Re-runs [RR].** Re-running needs Actions: write. The worker App's installation has only `actions=read`
+     (`RUNBOOK:11-13`), so the founder's connected account is required, for re-running failed jobs only. A re-run is a new
+     attempt with new check-run ids; the failed attempt's check runs are kept (they show with `filter=all`).
+   - **Counting rule [R3-3]** (replaces rev 3's open question). Count check runs on the head the way the lander reads them:
+     - `land.mjs:92` reads `/commits/{head}/check-runs` with no `filter` parameter; `pageUrl` (`land.mjs:53`) adds only
+       `per_page` and `page`. So GitHub's default `filter=latest` applies: one run per check name, the latest attempt.
+     - After a re-run, each required name appears once, so the exactly-once test passes (`land-lib.mjs:148-152`, count at
+       `:150`), and so does the duplicate-name test (`:153-156`).
+     - Skywalker confirmed this on `e90eb92a`: 7 check runs with `filter=latest` against 16 with `filter=all`.
+     - So a failed real-infra job needs a re-run, not a re-cut. Whoever checks this step counts with `filter=latest`.
    - **Dispatcher [R2-3]:** Cosmo, acting through the founder's connected GitHub account (write access). Through that
      account Cosmo may only:
      - dispatch main's unmodified `julius-real-infra.yml` by `workflow_dispatch` (`:5`) on the worker branch at the exact
@@ -126,7 +152,8 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
 
      Through that account Cosmo never opens, reviews, approves or merges a PR, and changes nothing in the repository.
      - Skywalker agreed that dispatching unmodified checks is operational.
-     - The worker App holds only `actions=read` (`RUNBOOK:13`); its dispatch is refused (403).
+     - The worker App holds only `actions=read` (`RUNBOOK:11-13`). Its dispatch is refused (403), and it cannot re-run
+       either, because both need Actions: write [RR].
      - The PR does not touch `.github/workflows/**`, and the dispatcher confirms that the workflow's blob at the head
        equals main's blob before dispatching.
    - All 6 required checks (`.github/julius-landing/required-checks.txt:4-9`) must each appear exactly once,
@@ -137,8 +164,8 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
      - `real-infra-julius`: `julius-real-infra.yml:456`.
      - `learning-store-container`: `julius-real-infra.yml:513`.
    - The provenance gate itself does not check CI. Green CI is a runbook rule (`RUNBOOK:147-148`), and there is no
-     branch protection (`julius-main-provenance.mjs:208`; `.github/workflows/julius-land.yml:5-6`). This route
-     makes the 6 checks a hard precondition of steps 5 and 6.
+     branch protection (`julius-main-provenance.mjs:208`; `.github/workflows/julius-land.yml:5-6`; confirmed on GitHub by
+     Skywalker, section 1 [BP]). This route makes the 6 checks a hard precondition of steps 5 and 6.
 5. **Exact-head PASS.** Skywalker verifies `head^{tree}` == the cleared tree, then posts a fresh PASS pinned to that head.
 6. **Founder approval: the founder in person, not Cosmo.** [R2-3]
    - The founder personally approves as `ohdieyuh-glitch` on GitHub at that exact head (`RUNBOOK:145-155`). The review's
@@ -147,9 +174,23 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
    - No agent submits the exact-head approval through the founder's connected account; the founder clicks it in person.
      Why: otherwise an agent could approve as `ohdieyuh-glitch`, and review-currency `:270-271` would pass with no human
      involved. That check sees only the review's `commit_id` and login (plus its state at `:272`), not who pressed the button.
-7. **Squash with a SHA guard (the founder, per `RUNBOOK:145` and `:151-155`).** Run
-   `gh pr merge <n> --squash --match-head-commit <head>`. Cosmo does not merge through the founder's account (R2-3).
-   If main moved first, re-cut on the new main, re-run CI, and get a fresh PASS and a re-approval (`RUNBOOK:170-176`).
+7. **Squash with a SHA guard.** [R3-1] **Who merges is a PENDING founder ruling. Until the founder rules, option A applies.**
+   - The command is the same for both options: `gh pr merge <n> --squash --match-head-commit <head>` (`RUNBOOK:151-155`).
+   - **Option A (default):** the founder clicks the squash in person, as `RUNBOOK:145` and `:151-155` say.
+     Cosmo does not merge through the founder's account (R2-3).
+   - **Option B (only if the founder rules that "merge automatically" covers it):** after Skywalker's exact-head PASS
+     (step 5) and the founder's in-person exact-head approval (step 6), the `julius-worker` App merges with an
+     installation token handled as in step 3, with the same SHA guard.
+     - Technically possible: the installation has `contents=write` (`RUNBOOK:11-13`), which is what a merge needs, and the
+       provenance gate never checks who merged: to decide a PR merged it reads only `merged_at` and `merge_commit_sha`
+       (`julius-main-provenance.mjs:645-652`, used at `:388-389`), never `merged_by`.
+     - **Untested.** Skywalker has not tried an App merge on this repository.
+   - **Not an option: the lander.** It never uses the merge endpoint (`land.mjs:3`; `julius-land.yml:22-23`), so it cannot
+     merge this route's PR. It lands only by its own route (section 4).
+   - [R3-2] `RUNBOOK:13-14` says the installation is "deliberately not enough to merge". Given `contents=write`, that is
+     inaccurate. This doc does not edit the runbook; fixing it needs its own approved change. Until then, option B
+     also contradicts the runbook text.
+   - If main moved first, re-cut on the new main, re-run CI, and get a fresh PASS and a re-approval (`RUNBOOK:170-176`).
 8. **Verify the landing.**
    - The new main's tree equals the reviewed tree, with exactly one parent (`RUNBOOK:157-164`).
    - The pre-merge parent is contained in the reviewed head.
@@ -201,6 +242,14 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
   - Each squash lands on current main, and the pre-merge parent must be contained in the reviewed head (`julius-main-provenance.mjs:506-516`).
   - So Wonderland re-cuts serialize with Julius landings, and any main move forces a re-cut, a fresh PASS and a re-approval (`RUNBOOK:170-176`).
   - Julius landings take priority near live runs.
+- **(e) [R3-1] PENDING founder ruling: who does the step 7 squash?**
+  - Option A (default): the founder clicks it in person.
+  - Option B: the worker App merges after the founder's in-person exact-head approval.
+  - The question is whether the 4:10 ruling's "merge automatically" covers an App merge. Until the founder rules, option A applies.
+- **(f) [R3-2] `RUNBOOK:13-14` is inaccurate.** It says the installation is "deliberately not enough to merge", but it has
+  `contents=write`. This doc does not edit the runbook; correcting it needs its own approved change.
+- **(g) [BP] Branch protection.** Skywalker suggested turning it on. `julius-land.yml:5` records that this plan answered
+  403 "upgrade", so it may need a plan change. That is the founder's call; this route does not depend on it.
 
 ## 6. Status
 
@@ -225,6 +274,8 @@ No readiness change. Wonderland verified readiness stays at 56.25%.
 
   `:518-527` is the `provenant` return.
 - **Review-currency exact head** is `julius-review-currency.mjs:269-272`; the predicate lines are `:270-271`.
+- [RR] **The App's `actions=read`** sits in the permission list at `RUNBOOK:11-13`, not `:13` alone. The "not enough to
+  merge" claim is `:13-14` ([R3-2]).
 - **These held as given:**
   - `julius-real-infra.yml:4` (filter) and `:5` (`workflow_dispatch`);
   - `julius-main-provenance.mjs:215`, `:450-454` and `:649`;
@@ -238,6 +289,41 @@ No readiness change. Wonderland verified readiness stays at 56.25%.
 
 Every changed citation was re-read at `689d2be9`. Citations point into other files at that fixed main, so the line
 shifts inside this document move none of them.
+
+### 8.0 Revision 4 (fixes to rev 3 `cb68c692`, after Skywalker's PASS WITH FINDING)
+
+- **[RR] Re-runs** (Skywalker's answer 1). Section 3, step 4 (re-run bullet and dispatcher bullet) now says:
+  - re-running needs Actions: write, and the worker App's installation has only `actions=read` (`RUNBOOK:11-13`);
+  - so the founder's connected account is needed, for re-running failed jobs only;
+  - a re-run is a new attempt with new check-run ids, and the old check runs stay.
+- **[R3-3]** Step 4 now states the counting rule, and rev 3's open question (rev 3 `:118-120`) is removed:
+  - `land.mjs:92` reads check runs with no `filter` parameter (`pageUrl` at `land.mjs:53` adds only `per_page` and `page`),
+    so GitHub's default `filter=latest` applies. After a re-run there is one run per check name, and the exactly-once
+    test (`land-lib.mjs:150`) passes.
+  - Skywalker's evidence on `e90eb92a`: 7 runs with `filter=latest` against 16 with `filter=all`.
+  - So a failed job needs a re-run, not a re-cut.
+- **[R3-1] (MEDIUM)** Step 7 now states both options explicitly and marks the choice as a PENDING founder ruling
+  (also open item e):
+  - Option A, the default until the founder rules: the founder clicks the squash in person (`RUNBOOK:145-155`).
+  - Option B: a worker-App merge after the founder's in-person exact-head approval. Technically possible (the
+    installation has `contents=write`; the gate reads `merged_at` and `merge_commit_sha`, never `merged_by`,
+    `julius-main-provenance.mjs:645-652`, `:388-389`), but untested.
+  - The lander is not an option: it never uses the merge endpoint (`land.mjs:3`; `julius-land.yml:22-23`).
+- **[R3-2] (MEDIUM)** Noted at step 7 and open item f: `RUNBOOK:13-14` ("deliberately not enough to merge") is
+  inaccurate. The runbook is not edited here; fixing it needs its own approved change.
+- **[R3-4] (info)** Section 2 now lists what review currency reads besides the approval (`julius-review-currency.mjs`):
+  `CHANGES_REQUESTED` reviews (`:284-287`), review bodies (`:302-309`) and line comments (`:310-313`), all decided before
+  approval (`:316-324`), plus commit statuses (`:184-201`, `:329`). The gate fetches all three at
+  `julius-main-provenance.mjs:663-665`.
+  - Precision from the code: statuses are read as an alternative SHA-bound approval on context
+    `julius/independent-review` (`:100`), not as blocking findings. Blocking findings come from reviews and line
+    comments. Issue (conversation) comments are not fetched by the gate.
+- **[BP]** Section 1 now notes that main has no GitHub branch protection (reported by Skywalker), so only the landing
+  checks guard it (`julius-land.yml:5-6`; `julius-main-provenance.mjs:208`). Also open item g.
+- **Citations re-checked at `689d2be9`:** `land.mjs:3`, `:53`, `:56-63`, `:92`; `land-lib.mjs:148-156`;
+  `julius-review-currency.mjs:59`, `:67-69`, `:78`, `:94`, `:100`, `:130-136`, `:184-201`, `:264-265`, `:284-324`, `:329`;
+  `julius-main-provenance.mjs:208`, `:388-389`, `:469-476`, `:645-652`, `:663-665`; `julius-land.yml:5-6`, `:22-23`;
+  `RUNBOOK:11-14`, `:145-155`. None of rev 3's citations shifted; `RUNBOOK:13` for `actions=read` is widened to `:11-13`.
 
 ### 8.1 Revision 3 (fixes to rev 2 `aa7a5188`, after Skywalker's PASS WITH FINDING)
 
