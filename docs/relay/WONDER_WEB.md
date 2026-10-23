@@ -136,8 +136,28 @@ output.
 
 - No live Julius integration. Creations arrive through a deterministic fixture,
   which is what let the pipeline be proven without a paid provider.
-- No Unreal surface. The projection is serializable and substrate-neutral so an
-  in-world renderer can consume the same `WonderWebSurface`, but no C++ struct or
-  parity entry exists for it yet.
+- No bridge to the Unreal client. The client has a Wonder Web surface, but it is
+  not on main. It lives on the client line (`backup/wonderland/r16reh16w-aa930c26`,
+  commit `aa930c26`, under `wonderland/Source/Wonderland/`), and nothing feeds it
+  from this repository:
+  - `WonderlandWonderWeb.h` mirrors the projection as C++ (`FWonderWebSurface`,
+    line 115, read by `UWonderlandWonderWebSubsystem`, line 164). It is labelled a
+    development preview (line 15). Its surfaces come from the simulated
+    `wonderland/UiArt/WonderWeb/wonder-web-preview.json`, not from a bridge. The
+    header keeps it out of the parity table on purpose (line 10), so there is
+    still no parity entry for it.
+  - `WonderlandWonderWebScreen.h` has the in-world windows:
+    `AWonderlandWonderWebWorkspace` (line 35) and `AWonderlandWonderWebScreen`
+    (line 60). `WonderlandWonderWebPanel.h` and
+    `WonderlandWonderWebBrowserPanel.h` hold the window content.
+  - `WonderlandWonderWebLive.h` has a live-page client
+    (`UWonderlandWonderWebLiveSubsystem`, line 67). It polls frames over
+    loopback HTTP only (`WonderlandWonderWebLive.cpp`, `BaseUrl`). The server
+    it talks to is not in this repository.
+  - The real-web browser mode is off by default (`wl.WonderWeb.Real` = 0,
+    `WonderlandWonderWebBrowse.cpp`).
+- No VM. Neither this repository nor the client has any VM, container or
+  remote-desktop code. A Wonder Web window shows a sample page or a host-local
+  browser page, never a virtual machine.
 - Rebuild-on-source-change, creation deletion, and multi-creation tabs within one
   user's view are not implemented.
