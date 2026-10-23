@@ -10,7 +10,8 @@ import { createLocalShellPort } from './julius-local-shell-port';
 import { isSecretLikeEnvName } from './julius-dispatch-adapters';
 import type { J1WiringDeps } from './julius-dispatch-wiring';
 import { J1_ANTHROPIC_ORIGIN, J1_OPENAI_ORIGIN, J1_XAI_ORIGIN, pinnedProviderUrl } from './julius-xai-direct-reviewer';
-import { createClaudeCodeCodingAgentProvider, type JuliusCodingAgentProvider } from './julius/claude-code-coding-provider';
+import type { JuliusCodingAgentProvider } from '../src/relay/mission/julius/julius-coding-agent';
+import { createClaudeCodeCodingAgentProvider } from './julius/claude-code-coding-provider';
 
 /**
  * The REAL effects for `createJ1LiveDispatchFromEnv`: file reads, one child process, global fetch, the file ledger, a temp file.

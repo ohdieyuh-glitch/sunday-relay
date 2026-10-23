@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import type { runGptArchitect } from '../src/relay/connectors/gpt-architect';
 import type { GptArchitectConfig } from '../src/relay/connectors/gpt-architect/config';
-import type { JuliusCodingAgentProvider } from './julius/claude-code-coding-provider';
+import type { JuliusCodingAgentProvider } from '../src/relay/mission/julius/julius-coding-agent';
 import { J1_ARTIFACT_FILE, type WorkspaceFs } from './julius-dispatch-bundle';
 import { createFrozenRunLookup, createJ1ProductionComposition, J1_CODER_MODEL, J1_CODER_READ_PATHS, J1_CODER_WRITE_PATHS } from './julius-dispatch-adapters';
 import type { AdmissionClaimStore } from './julius-dispatch-admission';

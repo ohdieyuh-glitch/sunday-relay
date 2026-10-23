@@ -34,8 +34,6 @@ import {
   type JuliusCodingAgentRequest,
   type JuliusCodingAgentSession,
 } from '../../src/relay/mission/julius/julius-coding-agent';
-
-export type { JuliusCodingAgentProvider, JuliusCodingAgentProviderOutcome };
 import {
   JULIUS_PARTICIPATION_CHANNELS,
   readJuliusParticipationBlock,

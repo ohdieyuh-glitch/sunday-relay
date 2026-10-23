@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import type { GptRunOutcome } from '../src/relay/connectors/gpt-architect';
-import type { JuliusCodingAgentProvider, JuliusCodingAgentProviderOutcome } from './julius/claude-code-coding-provider';
+import type { JuliusCodingAgentProvider, JuliusCodingAgentProviderOutcome } from '../src/relay/mission/julius/julius-coding-agent';
 import { J1_CODER_MODEL } from './julius-dispatch-adapters';
 import { createMemoryDispatchLedger } from './julius-dispatch';
 import { createJ1LiveDispatchWithPins, type J1Env, type J1WiringDeps, type J1WiringResult } from './julius-dispatch-wiring-core';
