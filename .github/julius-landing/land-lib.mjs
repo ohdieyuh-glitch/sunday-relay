@@ -18,6 +18,7 @@ const SHA = /^[0-9a-f]{40}$/u;
 // .github/julius-learning-registrations/, and scripts/julius-landing (the landing system's own tests, scripts/julius-landing*.test.ts: a PR must not be able to weaken the tests that
 // pin the lander). The mission directories (.github/julius-missions/**), relay-bridge/**, src/** and JULIUS_HARNESS_MANIFEST.md stay allowed.
 // Case-insensitive: a checkout on a case-insensitive filesystem (Windows, macOS) folds `.GITHUB/Julius-Landing/...` onto the governed file.
+// `.github/julius-landing/checkpoints/` is inside the second alternative. A pull request cannot add or replace a checkpoint attestation.
 export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|scripts\/relay-parity-gate|scripts\/wonderland-beta-gate|scripts\/julius-live-preflight-identity|scripts\/julius-derive-scoped-credentials|scripts\/julius-ci-callers|scripts\/ci-test-accounting|scripts\/julius-paid-dispatch|scripts\/julius-paid-run-archive|\.github\/julius-mission-pins\.sh$|\.github\/julius-executor-entrypoint\.sh$|scripts\/julius-docker-executor\.sh$|scripts\/julius-executor-ready\.mjs$|scripts\/julius-reviewer-isolation|scripts\/julius-reviewer-deadline\.mjs$|scripts\/julius-live-preflight\.ts$|scripts\/julius-usage-limit\.mjs$|\.github\/julius-learning-store\.sh$|\.github\/julius-phase\.sh$|\.github\/wait-for-executor\.sh$|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
 // SIGNED-EXCEPTION: the spend ceilings and the effort tripwire live here. A PR may change them only if the reviewer's signed clearance lists the EXACT file in `governed-exceptions`.
 export const EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
@@ -68,7 +69,15 @@ export const PINNED_REVIEWER_SPKI_SHA256 = 'b0b8e29b3efff5936dd51a54617ca8bda1b9
 export const PINNED_REVIEWER_RAW_KEY = 'ed738f419234d621fbfc3028c934e2a75b6bd62e02bd83a11e74e9bb6ad222b3';
 export const EXTERNAL_ANCHOR_VARIABLE = 'JULIUS_REVIEWER_KEY_SHA256';
 
-function reviewerKeyMaterialProblems(publicKeyPem) {
+/** Full-length equality of the SPKI SHA-256 and the raw 32-byte key. An 8-hex prefix is not a match. */
+export function exactPinnedFingerprint(spkiSha256, rawHex) {
+  return typeof spkiSha256 === 'string' && typeof rawHex === 'string'
+    && spkiSha256.length === 64 && rawHex.length === 64
+    && spkiSha256 === PINNED_REVIEWER_SPKI_SHA256
+    && rawHex === PINNED_REVIEWER_RAW_KEY;
+}
+
+export function reviewerKeyMaterialProblems(publicKeyPem) {
   try {
     const key = createPublicKey(publicKeyPem);
     if (key.asymmetricKeyType !== 'ed25519') return ['the committed reviewer key is not an ed25519 key'];
@@ -76,7 +85,7 @@ function reviewerKeyMaterialProblems(publicKeyPem) {
     if (der.length < 32) return ['the reviewer key fingerprint could not be read'];
     const spkiSha256 = createHash('sha256').update(der).digest('hex');
     const rawHex = der.subarray(der.length - 32).toString('hex');
-    if (spkiSha256.length !== 64 || spkiSha256 !== PINNED_REVIEWER_SPKI_SHA256 || rawHex !== PINNED_REVIEWER_RAW_KEY) {
+    if (!exactPinnedFingerprint(spkiSha256, rawHex)) {
       return [`the reviewer key is not the pinned reviewer key ${PINNED_REVIEWER_SPKI_SHA256}`];
     }
     return [];
@@ -85,10 +94,9 @@ function reviewerKeyMaterialProblems(publicKeyPem) {
   }
 }
 
-function externalAnchorProblems() {
-  const external = process.env[EXTERNAL_ANCHOR_VARIABLE];
+export function externalAnchorProblems(external = process.env[EXTERNAL_ANCHOR_VARIABLE]) {
   if (typeof external === 'string' && external.length === 64 && external === PINNED_REVIEWER_SPKI_SHA256) return [];
-  if (external === undefined || external === '') return [`${EXTERNAL_ANCHOR_VARIABLE} is unset`];
+  if (external === undefined || external === null || external === '') return [`${EXTERNAL_ANCHOR_VARIABLE} is unset`];
   return [`${EXTERNAL_ANCHOR_VARIABLE} does not match the pinned reviewer key ${PINNED_REVIEWER_SPKI_SHA256}`];
 }
 
@@ -106,7 +114,7 @@ export function verifyClearanceSignature(text, signatureB64, publicKeyPem) {
       return ['the signature does not verify against the committed reviewer key'];
     }
     if (material.length > 0) return material;
-    return externalAnchorProblems();
+    return externalAnchorProblems(process.env[EXTERNAL_ANCHOR_VARIABLE]);
   } catch (error) {
     return [`signature check failed: ${error instanceof Error ? error.message : String(error)}`];
   }

@@ -2,6 +2,14 @@
 
 Everything in this directory, and `.github/workflows/julius-land.yml`, is founder-governed: the lander refuses to land any PR that touches it. The main-provenance gate and the module it imports are also hard-forbidden by PREFIX, case-insensitively: any path starting with `scripts/julius-main-provenance` or `scripts/julius-review-currency` (the `.mjs`, `.d.mts`, test, and any sibling name). An autonomous landing can never change what the gate trusts. The same prefix rule covers the gate and secret-handling scripts that workflows run: `scripts/julius-main-monotonicity`, `scripts/julius-paid-slot`, `scripts/julius-subscription-check`, `scripts/julius-live-preflight-gates`, `scripts/julius-accept`, `scripts/relay-repository-boundary`, `scripts/export-julius-harness`, `.github/julius-live-` (the `julius-live-*.sh` boundary scripts and helpers), `.github/actions/`, `.github/julius-mission-slice/` and `.github/julius-learning-registrations/` and `scripts/julius-landing` (the landing system's own tests, `scripts/julius-landing*.test.ts`). `relay-bridge/**`, `src/**`, the mission directories (`.github/julius-missions/**`), `JULIUS_HARNESS_MANIFEST.md` and every other path stay allowed.
 
+## Checkpoint attestation (installer-1)
+
+The live gates trust a signed `JULIUS-CHECKPOINT-V1` file at `.github/julius-landing/checkpoints/<checkpoint>.txt` with a sibling `.sig`. `HARD_FORBIDDEN_PATH` matches that directory, and so does the provenance gate's byte copy of the same expression, so no App pull request can add or swap one. Accept-main compares those files to `HEAD` and the verifier compares every trusted file to the hashes inside the signed text.
+
+These gates require that attestation to be on main already, so they cannot land the first one. The founder installer-1 commit is made outside the lander. Its parent is the attested checkpoint. That commit lands this verifier together with the attestation file and its `.sig`. There is no bypass flag, and the first run does not trust an unsigned tree. Do not squash that commit onto an older main: the named checkpoint would not be an ancestor and the gate fails closed.
+
+RECOVERY: no signed checkpoint attestation is on main. The founder installer-1 commit lands this verifier and .github/julius-landing/checkpoints/<checkpoint>.txt together with its .sig, in one governed commit whose parent is the attested checkpoint, outside the lander. There is no bypass and the first run does not trust an unsigned tree.
+
 Operation: the Independent Reviewer signs a clearance (`reviewer-tools.mjs sign`), MAIN JULIUS dispatches `Julius land` with the clearance and signature. The job verifies the clearance, waits for CI, then performs ONE FINAL READ (PR, files, bot-comment digest, main's tip and the whole CI state, all paginated fail-closed) and decides from that read alone. `dry_run` defaults to true; only the exact string `false` lands.
 
 ## How a landing happens (no merge endpoint)

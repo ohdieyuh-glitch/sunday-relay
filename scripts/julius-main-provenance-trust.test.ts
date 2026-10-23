@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -8,8 +9,12 @@ import { describe, expect, it } from 'vitest';
 
 import { evaluateMainProvenance } from './julius-main-provenance.mjs';
 import {
+  ATTESTATION_EXPIRES,
+  ATTESTATION_ISSUED,
   CHECKPOINT_HEADER,
   EXTERNAL_ANCHOR_VARIABLE,
+  HISTORICAL_TCB,
+  INSTALLER_RECOVERY,
   LANDING_REPO,
   PINNED_REVIEWER_RAW_KEY,
   PINNED_REVIEWER_SPKI_SHA256,
@@ -18,12 +23,16 @@ import {
   TRUSTED_CHECKPOINT_HEAD,
   TRUSTED_CHECKPOINT_SHA,
   TRUSTED_CHECKPOINT_TREE,
+  TRUSTED_COMPUTING_BASE,
+  attestationNonce,
+  attestationNonceProblems,
   canonicalCheckpointAttestation,
   classifyCommit,
   classifyRecordedRange,
   commitsMatch,
   evaluateTrustChain,
   exactFingerprintMatch,
+  judgeAttestationWindow,
   parseCheckpointAttestation,
   requireTrustedVerifier,
   reviewerKeyPinRefusal,
@@ -153,6 +162,11 @@ describe('JULIUS-CHECKPOINT-V1', () => {
     const otherRepo = text.replace(`repo: ${LANDING_REPO}`, 'repo: someone/else');
     expect(parseCheckpointAttestation(otherRepo).problems.join(' ')).toContain('someone/else');
     expect(parseCheckpointAttestation(text.replace('repo: ohdieyuh-glitch/sunday-relay', 'repo: OHDIEYUH-GLITCH/sunday-relay')).problems).toEqual([]);
+    expect(parseCheckpointAttestation(text).fields.tcb.map((row) => row.path)).toEqual(HISTORICAL_TCB.map((row) => row.path));
+    expect(attestationNonceProblems(parseCheckpointAttestation(text).fields)).toBeNull();
+    const rebound = text.replace(`nonce: ${attestationNonce(RECORDED_RANGE, HISTORICAL_TCB)}`, `nonce: ${'ab'.repeat(16)}`);
+    expect(parseCheckpointAttestation(rebound).problems).toEqual([]);
+    expect(attestationNonceProblems(parseCheckpointAttestation(rebound).fields)).toContain('does not bind');
   });
 
   it('the unsigned file does not make f539cab2 provenant', () => {
@@ -314,18 +328,93 @@ describe('adversarial refusals', () => {
 
 describe('the checkpoint workflow and the working tree', () => {
   const workflow = readFileSync(join(ROOT, '.github/workflows/julius-accept-main.yml'), 'utf8');
+  const land = readFileSync(join(ROOT, '.github/workflows/julius-land.yml'), 'utf8');
 
-  it('runs the verifier from the checkpoint copy and refuses the tip copy when the trusted files differ', () => {
-    expect(workflow).toContain(`ref: ${TRUSTED_CHECKPOINT_SHA}`);
-    expect(workflow).toContain('working-directory: checkpoint-verifier');
-    expect(workflow).toContain('does not execute the tip verifier');
-    expect(workflow).toContain(PIN);
+  it('runs the attested verifier and cmps the attestation files to HEAD', () => {
+    expect(workflow).not.toContain('working-directory: checkpoint-verifier');
+    expect(workflow).not.toContain('path: checkpoint-verifier');
+    expect(workflow).toContain('node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier');
+    expect(workflow).toContain('cmp -s');
+    expect(workflow).toContain('.github/julius-landing/checkpoints/');
+    expect(workflow).toContain('was swapped and does not match HEAD');
     expect(workflow).toContain(EXTERNAL_ANCHOR_VARIABLE);
+    expect(land.indexOf('actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510')).toBeGreaterThan(land.indexOf('--require-trusted-verifier'));
+    const heredoc = workflow.split("done <<'EOF'\n")[1]?.split('\n          EOF')[0] ?? '';
+    const listed = heredoc.split('\n').map((line) => line.trim()).filter((line) => line !== '');
+    expect(listed).toEqual([...TRUSTED_COMPUTING_BASE]);
+    expect(TRUSTED_COMPUTING_BASE).toContain('.github/julius-landing/reviewer-ed25519.pub');
+    expect(TRUSTED_COMPUTING_BASE).toContain('scripts/julius-main-provenance-trust.mjs');
+    expect(TRUSTED_COMPUTING_BASE).toContain('scripts/julius-main-provenance-trust.d.mts');
   });
 
-  it('this working tree is not a trusted verifier', async () => {
-    const result = await requireTrustedVerifier({ ...process.env, [EXTERNAL_ANCHOR_VARIABLE]: PIN });
+  it('this working tree is not a trusted verifier, and an env attestation is not a substitute', async () => {
+    const result = await requireTrustedVerifier({
+      ...process.env,
+      [EXTERNAL_ANCHOR_VARIABLE]: PIN,
+      JULIUS_CHECKPOINT_ATTESTATIONS: unsignedText,
+      JULIUS_CHECKPOINT_ATTESTATION_SIGNATURE: Buffer.alloc(64, 9).toString('base64'),
+    });
     expect(result.ok).toBe(false);
+    expect(result.reason).toContain('unsigned');
+    expect(result.reason).toContain(INSTALLER_RECOVERY);
+    expect(readFileSync(join(ROOT, '.github/julius-landing/README.md'), 'utf8')).toContain(INSTALLER_RECOVERY);
+    const checkpoint = '10aedd11643a1d717311b5824d54e863aa94d763';
+    const livePath = join(ROOT, `.github/julius-landing/checkpoints/${checkpoint}.txt`);
+    const live = parseCheckpointAttestation(readFileSync(livePath, 'utf8'));
+    expect(live.problems).toEqual([]);
+    expect(live.fields.checkpoint).toBe(checkpoint);
+    expect(live.fields.tcb.map((row) => row.path)).toEqual([...TRUSTED_COMPUTING_BASE]);
+    for (const row of live.fields.tcb) {
+      const actual = createHash('sha256').update(readFileSync(join(ROOT, row.path!))).digest('hex');
+      expect(actual, row.path).toBe(row.sha256);
+    }
+    expect(attestationNonceProblems(live.fields)).toBeNull();
+    expect(existsSync(livePath.replace(/\.txt$/u, '.sig'))).toBe(false);
+    expect(git(['rev-parse', 'HEAD']).trim() === checkpoint || git(['rev-parse', 'HEAD^']).trim() === checkpoint).toBe(true);
+  });
+});
+
+describe('attestation lifetime', () => {
+  const fields = { issued: ATTESTATION_ISSUED, expires: ATTESTATION_EXPIRES };
+
+  it('accepts the closed window and refuses expired, not-yet-valid, and a 2020 attestation', () => {
+    expect(judgeAttestationWindow(fields, Date.parse(ATTESTATION_ISSUED))).toBeNull();
+    expect(judgeAttestationWindow(fields, Date.parse(ATTESTATION_EXPIRES))).toBeNull();
+    expect(judgeAttestationWindow(fields, Date.parse(ATTESTATION_ISSUED) - 1000)).toContain('not yet valid');
+    expect(judgeAttestationWindow(fields, Date.parse(ATTESTATION_EXPIRES) + 1000)).toContain('expired');
+    expect(judgeAttestationWindow({ issued: '2020-01-01T00:00:00Z', expires: '2020-01-02T00:00:00Z' }, Date.parse('2026-10-23T18:30:00Z'))).toContain('expired');
+  });
+});
+
+describe('the lander pin compare, against the real module', () => {
+  it('refuses a prefix, a prefix padded with zeros, uppercase, a missing anchor, and the wrong key', async () => {
+    const land = await import(pathToFileURL(join(ROOT, '.github/julius-landing/land-lib.mjs')).href) as {
+      exactPinnedFingerprint: (spki: string, raw: string) => boolean;
+      reviewerKeyMaterialProblems: (pem: string) => string[];
+      externalAnchorProblems: (external?: string) => string[];
+      verifyClearanceSignature: (text: string, signature: string, pem: string) => string[];
+      PINNED_REVIEWER_SPKI_SHA256: string;
+      PINNED_REVIEWER_RAW_KEY: string;
+    };
+    const pin = land.PINNED_REVIEWER_SPKI_SHA256;
+    const raw = land.PINNED_REVIEWER_RAW_KEY;
+    expect(land.exactPinnedFingerprint(pin, raw)).toBe(true);
+    expect(land.exactPinnedFingerprint(pin.slice(0, 8), raw)).toBe(false);
+    expect(land.exactPinnedFingerprint(`${pin.slice(0, 8)}${'0'.repeat(56)}`, raw)).toBe(false);
+    expect(land.exactPinnedFingerprint(pin.toUpperCase(), raw)).toBe(false);
+    expect(land.exactPinnedFingerprint(pin, '0'.repeat(64))).toBe(false);
+    expect(land.reviewerKeyMaterialProblems(REAL_PEM)).toEqual([]);
+    expect(land.reviewerKeyMaterialProblems(attackerPem).join(' ')).toContain(`not the pinned reviewer key ${pin}`);
+    expect(land.externalAnchorProblems(undefined)).toEqual([`${EXTERNAL_ANCHOR_VARIABLE} is unset`]);
+    expect(land.externalAnchorProblems('')).toEqual([`${EXTERNAL_ANCHOR_VARIABLE} is unset`]);
+    expect(land.externalAnchorProblems(pin.slice(0, 8)).join(' ')).toContain('does not match');
+    expect(land.externalAnchorProblems(`${pin.slice(0, 8)}${'0'.repeat(56)}`).join(' ')).toContain('does not match');
+    expect(land.externalAnchorProblems(pin.toUpperCase()).join(' ')).toContain('does not match');
+    expect(land.externalAnchorProblems(pin)).toEqual([]);
+    const bad = Buffer.alloc(64, 3).toString('base64');
+    expect(land.verifyClearanceSignature('not a clearance\n', bad, REAL_PEM).join(' ')).toContain('does not verify');
+    expect(land.verifyClearanceSignature('not a clearance\n', bad, attackerPem).join(' ')).toContain(`not the pinned reviewer key ${pin}`);
+    expect(land.verifyClearanceSignature('not a clearance\n', bad, attackerPem).join(' ')).not.toContain('does not verify');
   });
 });
 
@@ -377,5 +466,52 @@ describe('mutation of the pin comparison and the chain comparison', () => {
       try { await killed(name, transform); } catch (error) { survivors.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
     }
     expect(survivors, `surviving mutants: ${survivors.join('; ')}`).toEqual([]);
+  });
+});
+
+describe('mutation of the lander pin compare', () => {
+  const source = readFileSync(join(ROOT, '.github/julius-landing/land-lib.mjs'), 'utf8');
+  const driver = (mod: {
+    exactPinnedFingerprint: (spki: string, raw: string) => boolean;
+    externalAnchorProblems: (external?: string) => string[];
+    PINNED_REVIEWER_SPKI_SHA256: string;
+    PINNED_REVIEWER_RAW_KEY: string;
+  }) => {
+    const pin = mod.PINNED_REVIEWER_SPKI_SHA256;
+    const raw = mod.PINNED_REVIEWER_RAW_KEY;
+    if (!mod.exactPinnedFingerprint(pin, raw)) throw new Error('real pin must match');
+    if (mod.exactPinnedFingerprint(`${pin.slice(0, 8)}${'0'.repeat(56)}`, raw)) throw new Error('prefix must not match');
+    if (mod.exactPinnedFingerprint(pin.slice(0, 8), raw)) throw new Error('short must not match');
+    if (mod.exactPinnedFingerprint(pin, '00'.repeat(32))) throw new Error('raw key must not be ignored');
+    if (mod.externalAnchorProblems(`${pin.slice(0, 8)}${'0'.repeat(56)}`).length === 0) throw new Error('anchor prefix must not match');
+    if (mod.externalAnchorProblems(pin.slice(0, 8)).length === 0) throw new Error('short anchor must not match');
+    if (mod.externalAnchorProblems(undefined).length === 0) throw new Error('unset anchor must not match');
+  };
+
+  it('kills an 8-hex pin compare, an ignored raw key, and an 8-hex external anchor', async () => {
+    const cases: Array<[string, (text: string) => string]> = [
+      ['prefix fingerprint', (text) => text.replace('spkiSha256 === PINNED_REVIEWER_SPKI_SHA256', 'spkiSha256.slice(0, 8) === PINNED_REVIEWER_SPKI_SHA256.slice(0, 8)')],
+      ['raw key ignored', (text) => text.replace('&& rawHex === PINNED_REVIEWER_RAW_KEY', '&& true')],
+      ['prefix anchor', (text) => text.replace('external.length === 64 && external === PINNED_REVIEWER_SPKI_SHA256', 'typeof external === \'string\' && external.slice(0, 8) === PINNED_REVIEWER_SPKI_SHA256.slice(0, 8)')],
+    ];
+    const survivors: string[] = [];
+    for (const [name, transform] of cases) {
+      const directory = mkdtempSync(join(tmpdir(), 'julius-land-pin-'));
+      const file = join(directory, 'land-lib.mjs');
+      const next = transform(source);
+      try {
+        if (next === source) throw new Error(`${name} did not change the source`);
+        writeFileSync(file, next);
+        const mod = await import(pathToFileURL(file).href);
+        let failed = false;
+        try { driver(mod); } catch { failed = true; }
+        if (!failed) throw new Error(`${name} survived`);
+      } catch (error) {
+        survivors.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    }
+    expect(survivors, survivors.join('; ')).toEqual([]);
   });
 });

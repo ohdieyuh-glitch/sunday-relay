@@ -83,6 +83,13 @@ jobs:
         with:
           node-version: 22
 
+      - name: Require the checkpoint verifier
+        env:
+          JULIUS_REVIEWER_KEY_SHA256: ${{ vars.JULIUS_REVIEWER_KEY_SHA256 }}
+        run: node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier
+
+      # The App token is minted only after the verifier has passed. A failing
+      # attestation does not receive contents: write.
       # vars.JULIUS_LANDER_APP_ID only feeds this step. land.mjs fails closed unless it equals the pinned constant 5444986.
       # The bot login, user id, and author email are constants in land-lib.mjs. No login variable is read.
       - name: Mint the lander app token
@@ -93,11 +100,6 @@ jobs:
           private-key: ${{ secrets.JULIUS_LANDER_PRIVATE_KEY }}
           repositories: sunday-relay
           permission-contents: write
-
-      - name: Require the checkpoint verifier
-        env:
-          JULIUS_REVIEWER_KEY_SHA256: ${{ vars.JULIUS_REVIEWER_KEY_SHA256 }}
-        run: node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier
 
       - name: 'Gate and land'
         env:

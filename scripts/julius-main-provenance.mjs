@@ -45,7 +45,9 @@ import {
   EXTERNAL_ANCHOR_VARIABLE,
   TRUSTED_CHECKPOINT_SHA,
   applyTrustChain,
+  attestedCheckpointFloor,
   evaluateTrustChain,
+  readCheckpointAttestation,
   reviewerKeyPinRefusal,
 } from './julius-main-provenance-trust.mjs';
 
@@ -348,19 +350,21 @@ function withTrustChain(single, source) {
     externalAnchor: source && Object.prototype.hasOwnProperty.call(source, 'externalReviewerKeySha256')
       ? source.externalReviewerKeySha256
       : process.env[EXTERNAL_ANCHOR_VARIABLE],
+    now: source?.now,
   });
   return applyTrustChain(single, chain);
 }
 
-function readFirstParentChain(gh, repo, tipSha) {
-  if (tipSha === TRUSTED_CHECKPOINT_SHA) return [];
+function readFirstParentChain(gh, repo, tipSha, floorSha = TRUSTED_CHECKPOINT_SHA) {
+  if (tipSha === floorSha) return [];
   const reversed = [];
   let sha = tipSha;
-  for (let i = 0; i < 30 && typeof sha === 'string' && sha !== TRUSTED_CHECKPOINT_SHA; i += 1) {
+  for (let i = 0; i < 30 && typeof sha === 'string' && sha !== floorSha; i += 1) {
     const commit = gh(`repos/${repo}/commits/${sha}`);
-    reversed.push({ sha: commit?.sha, tree: commit?.commit?.tree?.sha });
+    const paths = Array.isArray(commit?.files) ? commit.files.map((file) => file?.filename).filter((path) => typeof path === 'string') : undefined;
+    reversed.push({ sha: commit?.sha, tree: commit?.commit?.tree?.sha, paths });
     const parent = commit?.parents?.[0]?.sha;
-    if (parent === TRUSTED_CHECKPOINT_SHA) return reversed.reverse();
+    if (parent === floorSha) return reversed.reverse();
     sha = parent;
   }
   return null;
@@ -768,8 +772,10 @@ async function main(argv) {
     });
     let chainCommits;
     let chainProblem = null;
+    const attested = attestedCheckpointFloor(process.cwd());
+    const floor = attested ?? TRUSTED_CHECKPOINT_SHA;
     try {
-      chainCommits = readFirstParentChain(gh, repo, mainSha);
+      chainCommits = readFirstParentChain(gh, repo, mainSha, floor);
       if (chainCommits === null) chainProblem = 'the first-parent chain does not reach the trusted checkpoint';
     } catch {
       chainProblem = 'the trust chain from the trusted checkpoint could not be read';
@@ -779,14 +785,21 @@ async function main(argv) {
     } else if (!chainProblem) {
       let chainKeyPem = reviewerKeyPem;
       try {
-        const keyFile = gh(`repos/${repo}/contents/.github/julius-landing/reviewer-ed25519.pub?ref=${TRUSTED_CHECKPOINT_SHA}`);
+        const keyFile = gh(`repos/${repo}/contents/.github/julius-landing/reviewer-ed25519.pub?ref=${floor}`);
         if (keyFile?.type === 'file' && keyFile?.encoding === 'base64' && typeof keyFile?.content === 'string') {
           chainKeyPem = Buffer.from(keyFile.content, 'base64').toString('utf8');
         }
       } catch {
         // A missing checkpoint key fails closed inside the chain pin.
       }
-      result = withTrustChain(result, { chainCommits, reviewerKeyPem: chainKeyPem });
+      const disk = attested ? readCheckpointAttestation(process.cwd()) : null;
+      result = withTrustChain(result, {
+        chainCommits,
+        reviewerKeyPem: chainKeyPem,
+        attestationText: disk?.text,
+        attestationSignatureB64: disk?.signatureB64 ?? undefined,
+        now: attested ? Date.now() : undefined,
+      });
     }
   } catch (error) {
     // Unreadable metadata is not a passing gate.

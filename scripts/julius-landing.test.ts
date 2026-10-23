@@ -475,6 +475,19 @@ describe('land.mjs end to end against a fake GitHub', () => {
     }
   }, 30_000);
 
+  it('a pull request that touches the checkpoint attestation path is refused by the lander', () => {
+    const txt = `.github/julius-landing/checkpoints/${'a'.repeat(40)}.txt`;
+    const sig = `.github/julius-landing/checkpoints/${'b'.repeat(40)}.sig`;
+    expect(lib.HARD_FORBIDDEN_PATH.test(txt)).toBe(true);
+    expect(lib.HARD_FORBIDDEN_PATH.test(sig)).toBe(true);
+    for (const file of [txt, sig]) {
+      const refused = runLand({ scenario: { files: [file] } });
+      expect(refused.code, refused.out).toBe(1);
+      expect(refused.out).toContain('founder-governed');
+      expect(refused.merges).toHaveLength(0);
+    }
+  });
+
   it('a ref-update error fails the job unlanded, and a main that is not the created commit afterwards raises an alert (exit 2)', () => {
     const rejected = runLand({ scenario: { patchStatus: 405 } });
     expect(rejected.code).not.toBe(0);
@@ -498,6 +511,8 @@ describe('the workflow file is pinned', () => {
     expect(WORKFLOW).not.toContain('JULIUS_LANDER_BOT_LOGIN');
     expect(WORKFLOW).not.toContain('174560476');
     expect(WORKFLOW).toContain('actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510');
+    expect(WORKFLOW.indexOf('actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510')).toBeGreaterThan(WORKFLOW.indexOf('node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier'));
+    expect(WORKFLOW.indexOf('node .github/julius-landing/land.mjs')).toBeGreaterThan(WORKFLOW.indexOf('actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510'));
     expect(WORKFLOW).not.toMatch(/\n\s+(actions|workflows|id-token|packages|deployments):\s/u);
   });
 
