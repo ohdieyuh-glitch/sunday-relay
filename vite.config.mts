@@ -31,7 +31,14 @@ export default defineConfig({
      * They are executed deliberately, by `julius-first-live-mission.test.ts`,
      * which asserts they FAIL. Nothing else should run them.
      */
-    exclude: ['**/node_modules/**', '**/dist/**', '.github/julius-missions/**'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '.github/julius-missions/**',
+      // The in-world seed is a node:test the coder runs inside its workspace.
+      // Vitest must not adopt format.test.mjs; it reads an artifact that is not in the repo.
+      'relay-bridge/julius-inworld-mission/**',
+    ],
   },
   envPrefix: ['VITE_', 'RELAY_PUBLIC_'],
   build: {
