@@ -256,10 +256,14 @@ Option (a), where the client mints the runId, versus option (b) **still awaits t
 
 **Test (offline, in `wl.Qa.JuliusMission`)**
 - **Positive:** generate 10,000 real ids with the production function. All must pass the strict regex and the bridge regex, with ZERO duplicates (set size == 10,000).
-- **Negative, primary:** format `FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower)` and assert that the strict regex REJECTS it.
-  - Because that layout reorders bytes, a random FGuid string matches the strict regex by chance about 1 time in 64 (version and variant positions land on random nibbles).
-  - My reading of the FGuid byte layout was not re-checked against UE 5.8 source in this pass.
-- **Negative, fallback:** if the FGuid string happens to match, the test logs that fact and instead asserts rejection of a fixed known-bad id in that layout: `0b7a1c2e-4f3d-9a6b-1c2d-3e4f5a6b7c8d` (third group starts with `9`, not `4`).
+- **Negative, deterministic (always run, no randomness):** the strict regex must REJECT both fixed known-bad ids:
+  - `0b7a1c2e-4f3d-9a6b-1c2d-3e4f5a6b7c8d`;
+  - `wlj_0b7a1c2e-4f3d-9a6b-1c2d-3e4f5a6b7c8d`.
+  - In each, the third group starts with `9`, not the version nibble `4`.
+  - The test has no FGuid-dependent branch, so its outcome cannot vary from run to run.
+- **Informational only (non-asserting):** an `FGuid::ToString(EGuidFormats::DigitsWithHyphensLower)` string may be logged with its strict-regex verdict.
+  - Because that layout reorders bytes, a random one matches about 1 time in 64. That is a box simulation of my reading of the layout, not re-checked against UE 5.8 source.
+  - It never affects PASS/FAIL.
 - **Other negatives:** an uppercase hex id, a wrong prefix (`wlx_…`), and a 129-character id must all be rejected.
 
 **Acceptance record** must state verbatim: "run lookup is a frozen stub; run existence is not evidence of mission creation".

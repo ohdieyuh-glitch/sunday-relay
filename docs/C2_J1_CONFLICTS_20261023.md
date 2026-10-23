@@ -2,6 +2,8 @@
 
 Revision 2: follows Skywalker's review of ae67f50a (PASS WITH FINDING). Corrections to conflicts 4-7 and four missed conflicts (M1-M4, Skywalker's findings) are added. Every new J1 citation was re-read with `git show 22a0a9cb:<path>`.
 
+Revision 3: follows Skywalker's review of rev 2 at ab26e15e (PASS WITH FINDING, minor). It fixes the M3 SPEC line (171) and gives a per-kind reachability statement, removes an unresolved label from M4 and cites J1:29-35 and :782-826 directly, and closes the 1254b0d1 open item per Skywalker.
+
 Status: documentation only. Changes nothing, awards nothing, makes no readiness claim (readiness stays 56.25% verified; R16 credit 0 of 18.75). No criterion is weakened here; every resolution is a PROPOSAL for the protocol owner (JUDEV2/C2) and the client owner (WDEV) to accept or reject.
 
 Line numbers are 1-based and were read from the exact bytes whose sha256 is listed below. Quotes are short excerpts.
@@ -22,7 +24,7 @@ Notes on the sources:
 - **Path discrepancy.** The protocol is NOT under `...\inworld_missions_20261022\`. That folder holds only `j1\` and the PLAN addendum. The protocol was found at the PROT path above (mtime 2026-10-22 01:05 PT). SPEC line 372 (U10) also records that a filename search under `_qa_handoff` did not find it.
 - The PLAN addendum lives one level above `j1\`, not inside it. Its title calls it an addendum to SPEC r1, so it is cited and copied. The `PREREG_v*_ADDENDUM_*_DRAFT.md` files in `j1\` are pre-registration addenda. None of the 7 conflicts depends on them, so they are neither cited nor copied.
 - Precedence: ECHO line 1 says "Where it differs from spec r1 and from ADDENDUM_1_to_PLAN_r3_and_SPEC_r1.md, THIS wins." So the order is ECHO > PLANADD > SPEC.
-- Commit 22a0a9cb (committer time 2026-10-23 01:09 PT) is contained in the remote-tracking branch `origin/judev/j1-combined-ceiling` (`git branch -a --contains`). There is no local branch of that name. **The tip in rev 1 is stale.** The local remote-tracking ref shows `126b3713`, but `git ls-remote` (2026-10-23 ~01:5x PT) shows origin `judev/j1-combined-ceiling` = `1254b0d1fee745ea5998898e4d0f111c5cf74558`. That object is not in the local repo (no fetch was done), so whether 1254b0d1 still contains 22a0a9cb is UNCONFIRMED.
+- Commit 22a0a9cb (committer time 2026-10-23 01:09 PT) is contained in the remote-tracking branch `origin/judev/j1-combined-ceiling` (`git branch -a --contains`). There is no local branch of that name. **The tip in rev 1 is stale.** The local remote-tracking ref shows `126b3713`, but `git ls-remote` (2026-10-23 ~01:5x PT) shows origin `judev/j1-combined-ceiling` = `1254b0d1fee745ea5998898e4d0f111c5cf74558`. That object is not in the local repo (no fetch was done). **Rev 3:** per Skywalker, 1254b0d1 builds on 22a0a9cb. It is 4 commits ahead and 0 behind, with linear history, and the 4 commits touch only the reviewer prompt and evidence. Cosmo did not re-verify this locally, because the object is absent and fetching was out of scope.
 - ECHO line 1 says its bridge contract was read at `judev/inworld-dispatch` tip 2f8c346a. The `run_created` code cited here comes from a different branch/commit (22a0a9cb). Which bridge tip will run is still unconfirmed.
 
 ## Conflict 1: log prefix `WLMISSION` vs `WLJMISSION`
@@ -169,21 +171,27 @@ Notes on the sources:
   - `cursor_invalid`, `final_row_unwritten`, `key_store_required`, `mode_mismatch`, `provider_key_in_env`;
   - `repeat_above_per_run`, `repeat_already_used`, `repeat_combined_ceiling`, `repeat_receipt_missing`, `repeat_spend_unknown`;
   - `result_lost_on_restart`, `reviewer_config_mismatch`, `run_creator_mismatch`, `run_order_violation`, `run_orphaned`.
-  - Not every one was individually traced to an HTTP response. Some may be ledger-only or startup-only: UNCONFIRMED per kind.
-  - Several are certainly HTTP refusals: the `repeat_*` kinds (J1:797-814 `refuse(status, code)`) and `run_creator_mismatch` (J1:748).
+  - **Rev 3: all 21 are code-confirmed, not run-confirmed.** Each reaches an HTTP response through one of three paths, each re-read at 22a0a9cb.
+  - **Path 1: `refuse()` → J1:1027.** `refuse()` (J1:420, `({ ok: false, status, code })`) and `refuseRepeat()` (J1:789-796, which calls `refuse`) return an outcome. J1:1027 turns it into `err(outcome.status, outcome.code, ...)`.
+    - `brief_not_frozen_contract` (J1:733), `key_store_required` (J1:735), `mode_mismatch` (J1:727, :729), `provider_key_in_env` (J1:737), `reviewer_config_mismatch` (J1:722), `run_creator_mismatch` (J1:748, :774), `run_order_violation` (J1:770).
+    - The clock kinds `clock_binding_required`, `clock_echo_unknown` and `clock_offset_out_of_range` (J1:834-836, returned at J1:844).
+    - `repeat_already_used` (J1:797), `repeat_receipt_missing` / `repeat_spend_unknown` (J1:799), and `repeat_above_per_run` / `repeat_combined_ceiling` (J1:811-814).
+  - **Path 2: `err()` directly** (J1:952): `body_invalid` (J1:1010), `cursor_invalid` (J1:1002), `clock_binding_invalid` (J1:1020).
+  - **Path 3: direct `{ error: { kind, ... } }` bodies:** `run_orphaned` (J1:902), `final_row_unwritten` (J1:905), `result_lost_on_restart` (J1:908).
+  - None of these has been observed in a real run.
 - **Lazy recovery:** J1W:256-270. "recover() must finish before the first dispatch (OPEN_ITEMS 21). A failed recovery refuses every dispatch". `ready()` runs `inner.recover()` lazily on the first `dispatch` (J1W:258-264). If recovery fails, every dispatch returns `503 julius_dispatch_ledger_unavailable` (J1W:267).
-  - SPEC:170 does list `julius_dispatch_ledger_unavailable` as "Try again in a moment", which is misleading when recovery has permanently failed for that process.
-- **Status:** CONFIRMED (code), with the per-kind HTTP reachability caveat above.
+  - SPEC:171 (rev 2 said :170; corrected and re-checked) does list `julius_dispatch_ledger_unavailable` as "Try again in a moment", which is misleading when recovery has permanently failed for that process.
+- **Status:** CONFIRMED (code-confirmed, not run-confirmed).
 
 ### M4: ACCEPT needs run 2, but J1 refuses a repeat without run-1 receipts
 - PROT:71/:74 require run 2 to pass C0-C12 for ACCEPT-FOR-ROW-12.
+- J1:29-35 (header): "julius-inworld-data-1 also refuses a repeat unless run-1 has a verified provider dollar receipt ... The wired coder is CLAUDE_SUBSCRIPTION and does not produce a dollar receipt, so a real-shaped repeat stays refused."
 - J1:782-826 "COMBINED CEILING: a repeat of julius-inworld-data-1 reads run-1's provider receipts. Fail closed." It refuses with:
   - `julius_dispatch_repeat_receipt_missing` / `_spend_unknown` (J1:798-799), when run-1 spend is unverified;
   - `julius_dispatch_repeat_already_used` (J1:797);
   - `_repeat_above_per_run` / `_repeat_combined_ceiling` (J1:810-814).
 - **Conflict:** run 2 is blocked unless run-1 provider receipts reach the ledger. The protocol does not list this precondition, and a refused run 2 means no ACCEPT.
 - **Status:** CONFIRMED.
-- "F1" in Skywalker's note: SPEC:312 F1 is the unrelated `local_off` control. I could not confirm what "F1" refers to here: UNCONFIRMED (label only).
 
 ### Low: N5 idempotency semantics (Skywalker)
 - PROT:64 N5 "reuse same key, different mission | 409-style refusal; same key + same mission returns stored result without a new pre_call".
@@ -195,7 +203,7 @@ Notes on the sources:
 - **Status:** CONFIRMED, low severity.
 
 ### Low: stale bridge tip
-- The rev 1 tip `126b3713` is stale. Origin is now `1254b0d1` (see Sources).
+- The rev 1 tip `126b3713` is stale. Origin is now `1254b0d1`. Per Skywalker it builds linearly on 22a0a9cb: 4 ahead, 0 behind, touching only the reviewer prompt and evidence (see Sources). CLOSED.
 
 ## Also noticed (not one of the 7; not counted)
 - PROT:60 N1 expects `kind=unauthorized`, but ECHO:16 says `refused (code only)`. This is the same field-name question as in conflict 6.
@@ -229,5 +237,5 @@ Option (a) vs (b) is pending the founder's ruling. **Rev 2:** the run-id FORMAT 
 - The protocol is not at the user-stated folder (see Sources). It was cited from the actual path.
 - PROT:5 refers to "section 6 of REPORT_C2" for the format spec. It was not read and is not cited.
 - "j1 OPEN_ITEMS 8" (PLANADD:12), "j1 DESIGN 5.5" and `wt_j1` are referenced by the sources but were not opened. They are cited only through the quoting source.
-- Bridge tip actually to be run: unconfirmed (ECHO:1 cites 2f8c346a; J1 citations are at 22a0a9cb; origin tip is now 1254b0d1, not present locally).
-- Rev 2: whether 1254b0d1 still contains 22a0a9cb is UNCONFIRMED. So is per-kind HTTP reachability in M3, and the meaning of "F1" in M4.
+- Bridge tip actually to be run: unconfirmed (ECHO:1 cites 2f8c346a; J1 citations are at 22a0a9cb; origin tip is now 1254b0d1, which per Skywalker builds on 22a0a9cb).
+- Rev 3: CLOSED. Per Skywalker, 1254b0d1 builds on 22a0a9cb (4 ahead, 0 behind, linear; touches only reviewer prompt + evidence). This was not re-verified locally because the object is absent. M3 per-kind reachability is now code-confirmed (not run-confirmed).
