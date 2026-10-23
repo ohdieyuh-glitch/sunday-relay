@@ -244,6 +244,12 @@ lives only in the admission store. YUJI's paid-dispatch and bootstrap will
 later refuse anything that does not match an admitted pair. That refusal goes
 through G6 after #404 and the migration, and it is not in this change.
 
+**Skywalker's ruling.** `julius-first-live-mission.yml` plus
+`scripts/julius-paid-slot.mjs` is the only thing that can spend. Admission
+later hands that pair off to that workflow. The relay holds no provider keys
+and does not run paid roles in-process. How the handoff is triggered is an
+open question for Gatekeeper and YUJI.
+
 ## Deployment topology
 
 Admission is loopback-only. `isLoopbackPeer` requires the peer address to be

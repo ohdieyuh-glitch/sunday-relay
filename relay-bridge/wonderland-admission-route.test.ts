@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { subscribe as subscribeDiagnostic, unsubscribe as unsubscribeDiagnostic } from 'node:diagnostics_channel';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { classifyDispatchAnswer, errorKindOf } from '../src/relay/integration/wonderland-admission';
-import type { AdmissionLedger } from '../src/relay/integration/wonderland-admission';
+import type { AdmissionLedger, AdmissionLedgerRow } from '../src/relay/integration/wonderland-admission';
 import { createBrowserSessionStore } from './browser-session/grants';
 import { handleJuliusMissionRoute, isJuliusMissionRoute } from './julius-mission-routes';
 import {
@@ -368,6 +369,180 @@ describe('mission-handler wiring', () => {
       cardRevision: 'card:julius-live:1',
     });
     expect(unwired).toBeNull();
+  });
+});
+
+const SENTINELS = {
+  OPENAI_API_KEY: 'sentinel-openai-wonderland-admission',
+  ANTHROPIC_API_KEY: 'sentinel-anthropic-wonderland-admission',
+  XAI_API_KEY: 'sentinel-xai-wonderland-admission',
+  GITHUB_TOKEN: 'sentinel-github-wonderland-admission',
+} as const;
+
+function assertNoSentinel(value: unknown): void {
+  const text = JSON.stringify(value);
+  for (const sentinel of Object.values(SENTINELS)) expect(text).not.toContain(sentinel);
+}
+
+const NETWORK_CHANNELS = [
+  'http.client.request.start',
+  'net.client.socket',
+  'undici:request:create',
+  'undici:client:beforeConnect',
+  'child_process',
+] as const;
+
+function armIsolation(): { hits: string[]; restore: () => void } {
+  const hits: string[] = [];
+  const listeners = NETWORK_CHANNELS.map((name) => {
+    const listener = () => { hits.push(name); };
+    subscribeDiagnostic(name, listener);
+    return { name, listener };
+  });
+  const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((() => {
+    hits.push('fetch');
+    throw new Error('admission must not call fetch');
+  }) as typeof fetch);
+  return {
+    hits,
+    restore() {
+      fetchSpy.mockRestore();
+      for (const { name, listener } of listeners) unsubscribeDiagnostic(name, listener);
+    },
+  };
+}
+
+describe('admission holds no provider keys and runs no paid role', () => {
+  it('admit, resend, cap, and failure neither call out nor copy the sentinels', async () => {
+    const isolation = armIsolation();
+    const recorded: AdmissionLedgerRow[] = [];
+    const ledger: AdmissionLedger = {
+      async rows() { return recorded.slice(); },
+      async append(row) { recorded.push(row); },
+    };
+    const failedWrites: AdmissionLedgerRow[] = [];
+    const failingLedger: AdmissionLedger = {
+      async rows() { return []; },
+      async append(row) {
+        failedWrites.push(row);
+        throw new Error('ledger down');
+      },
+    };
+    const withKeys = {
+      ...env({ JULIUS_J1_DAILY_CAP: '1' }),
+      ...SENTINELS,
+    };
+    try {
+      const ports = createWonderlandAdmissionService({
+        env: withKeys,
+        operatorToken: 'operator-token',
+        verifyNativeSession: ({ token }) => token === 'native-token'
+          ? { playerId: 'founder', projectId: 'project-1', sessionId: 'sess-1' }
+          : null,
+        readWorkflowText: () => null,
+        ledger,
+      });
+      const admitted = await handleWonderlandAdmissionRoute(request(), ports);
+      const resent = await handleWonderlandAdmissionRoute(request(), ports);
+      const capped = await handleWonderlandAdmissionRoute(request({
+        idempotencyKey: '99999999-8888-4777-a666-555555555555',
+        rawBody: JSON.stringify({
+          runId: 'wlj_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+          clientTriggerId: 'trigger_02',
+          clientLogSha256: LOG,
+          clientUiActionUtc: WHEN,
+        }),
+      }), ports);
+      const failed = await handleWonderlandAdmissionRoute(request({ nowIso: 'not-a-time' }), ports);
+      const failingPorts = createWonderlandAdmissionService({
+        env: withKeys,
+        operatorToken: 'operator-token',
+        verifyNativeSession: () => ({ playerId: 'founder', projectId: 'project-1', sessionId: 'sess-1' }),
+        readWorkflowText: () => null,
+        ledger: failingLedger,
+      });
+      const unwritten = await handleWonderlandAdmissionRoute(request({
+        idempotencyKey: '22222222-3333-4444-8555-666666666666',
+        rawBody: JSON.stringify({
+          runId: 'wlj_bbbbbbbb-cccc-4ddd-8eee-ffffffffffff',
+          clientTriggerId: 'trigger_03',
+          clientLogSha256: LOG,
+          clientUiActionUtc: WHEN,
+        }),
+      }), failingPorts);
+
+      expect(admitted?.status).toBe(202);
+      expect(resent?.status).toBe(200);
+      expect(capped?.status).toBe(429);
+      expect(kind(capped?.body)).toBe('julius_dispatch_cap_reached');
+      expect(failed).toEqual({ status: 500, body: {} });
+      expect(unwritten?.status).toBe(202);
+      expect((unwritten?.body as { data: { state: string; dispatched: boolean } }).data.state).toBe('LEDGER_UNWRITTEN');
+      expect((admitted?.body as { data: { dispatched: boolean; confirmLive: string } }).data).toMatchObject({
+        dispatched: false,
+        confirmLive: '',
+      });
+      const bodies = [admitted?.body, resent?.body, capped?.body, failed?.body, unwritten?.body];
+      for (const body of bodies) assertNoSentinel(body);
+      expect(recorded).toHaveLength(1);
+      expect(failedWrites).toHaveLength(1);
+      assertNoSentinel(recorded);
+      assertNoSentinel(failedWrites);
+      expect(isolation.hits).toEqual([]);
+    } finally {
+      isolation.restore();
+    }
+  });
+});
+
+const ADMISSION_SOURCES = [
+  ...readdirSync(join(__dirname, '../src/relay/integration/wonderland-admission'))
+    .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
+    .map((name) => join(__dirname, '../src/relay/integration/wonderland-admission', name)),
+  join(__dirname, 'wonderland-admission-route.ts'),
+];
+
+const ALLOWED_ENV_READS = new Set([
+  'JULIUS_J1_PROJECT_ID',
+  'JULIUS_J1_FOUNDER_PLAYER_ID',
+  'JULIUS_WONDERLAND_MISSION',
+  'JULIUS_J1_DAILY_CAP',
+  'JULIUS_J1_MAX_RUNS_PER_MISSION',
+]);
+
+const FORBIDDEN_IMPORT = /(?:^|\/)julius(?:\/|$)|julius-dispatch|child_process|(?:^|:)(?:http2?|https|net|tls|dgram)$|undici|node-fetch|(?:^|\/)axios(?:\/|$)|(?:^|\/)openai(?:\/|$)|@anthropic|@ai-sdk|(?:^|\/)xai(?:\/|$)/u;
+
+describe('admission sources import no provider, process, or secret', () => {
+  it('imports nothing that can spend, and reads no provider or dispatch secret', () => {
+    expect(ADMISSION_SOURCES.length).toBeGreaterThanOrEqual(4);
+    for (const file of ADMISSION_SOURCES) {
+      const source = readFileSync(file, 'utf8');
+      const specifiers = [
+        ...source.matchAll(/^\s*(?:import|export)[^;]*?\bfrom\s+['"]([^'"]+)['"]/gmu),
+        ...source.matchAll(/\b(?:import|require)\s*\(\s*['"]([^'"]+)['"]\s*\)/gu),
+      ].map((match) => match[1]);
+      for (const specifier of specifiers) {
+        expect(FORBIDDEN_IMPORT.test(specifier), `${file} imports ${specifier}`).toBe(false);
+      }
+      expect(source, file).not.toMatch(/\bprocess\.env\b/);
+      expect(source, file).not.toMatch(/_API_KEY/);
+      expect(source, file).not.toMatch(/\bGITHUB_TOKEN\b/);
+      expect(source, file).not.toMatch(/\bGH_TOKEN\b/);
+      expect(source, file).not.toMatch(/\bchild_process\b/);
+      expect(source, file).not.toMatch(/\bfetch\s*\(/);
+      expect(source, file).not.toMatch(/\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\(/);
+      expect(source, file).not.toMatch(/\bhttps?\.(?:request|get)\s*\(/);
+      expect(source, file).not.toMatch(/github\.event/);
+      const withoutGateLabel = source.split('workflow_dispatch is the only trigger').join('');
+      expect(withoutGateLabel, file).not.toMatch(/workflow_dispatch/);
+      const envReads = [
+        ...source.matchAll(/\benv(?:\?\.)?\.([A-Za-z0-9_]+)/gu),
+        ...source.matchAll(/\benv\s*\[\s*['"]([A-Za-z0-9_]+)['"]\s*\]/gu),
+      ].map((match) => match[1]);
+      for (const name of envReads) {
+        expect(ALLOWED_ENV_READS.has(name), `${file} reads env ${name}`).toBe(true);
+      }
+    }
   });
 });
 
