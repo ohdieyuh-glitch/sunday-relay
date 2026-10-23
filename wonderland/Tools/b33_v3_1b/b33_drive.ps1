@@ -114,7 +114,9 @@
 #   -DryRun sends NOTHING: a kinematic model (b33_native.cs B33.Sim, terrain MODEL from the route file) replaces the game and every input is
 #   printed and written to the timeline instead (offline check of the plan logic; the model is not the game).
 # Run (real) : powershell -NoProfile -ExecutionPolicy Bypass -File b33_drive.ps1 -Run <run folder> -Mode jumps
-# Run (dry)  : powershell -NoProfile -ExecutionPolicy Bypass -File b33_drive.ps1 -Run <scratch folder> -Mode m4 -DryRun
+# Run (dry)  : powershell -NoProfile -ExecutionPolicy Bypass -File b33_drive.ps1 -Run <scratch folder> -Mode m4 -DryRun -SimAccel 900
+#   (2026-10-23: -SimAccel 900 = the Dog's NormalAcceleration, as tests\test_drive_and_stop.ps1 uses. The default -SimAccel 0 is instant
+#   acceleration: on route v11 it overshoots the standing corner at (85;4375) and aborts OFF-PATH, a model artefact, not a route fault)
 param(
   [Parameter(Mandatory)][string]$Run,
   [ValidateSet('jumps', 'm4', 'survey', 'calibrate', 'all')][string]$Mode = 'jumps',

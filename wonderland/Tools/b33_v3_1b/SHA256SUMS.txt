@@ -1,4 +1,5 @@
 # tools/b33_v3_1b files, sha256, written 2026-10-21 by WONDERLAND_DEV (DIAGNOSTIC tools; offline build, no run; reviewer message 30877f). Copy of tools/b33_v3_1a (75cbc30d) except CANDIDATE.json and RELAY_PIN.json; plus DELTA, DIFF, README_b33_v3_1b.md. Check with: sha256sum -c SHA256SUMS.txt (SHA256SUMS.txt itself excluded).
+# 2026-10-23 (D-1, Cosmo): regenerated from the files in this folder after 73c46791 (W1/W3 wording fix), the D-2 slice logs and the 2026-10-23 tooling fixes; what changed is listed in TOOLING_FIXES_20261023.md. Check with: sha256sum -c SHA256SUMS.txt
 f4521fbbc738f7bb166cee776feac932d59c4bf04ad368ca84aaa3cbbc754930 *./CANDIDATE.json
 b86ad5717c594da2ab81c7e62fc527f380a2d423c86d0e8d670917a5808aa9b7 *./DELTA_b33_v3_1_to_b33_v3_1a.md
 ee549a9675dceecf40a1ebf1bafe37dfbde98c2c4e7710e96164c132db373571 *./DELTA_b33_v3_1a_to_b33_v3_1b.md
@@ -9,20 +10,21 @@ fa86aefa55af0a71ab6b559e541e85dea5b59058a3b188487fb8fa67b9d2f3d3 *./README_b33_v
 23db9a357dea05ad204921d2899ba874e0035a6cac3556b79628dedcb287acd5 *./REHEARSAL_FINDINGS.md
 0dca429651ee2aa99a3af69ce1b47b6ab935ff967341060c87a740468b92b51c *./RELAY_PIN.json
 311fee13c16463424311e38d4cd4391dd28b7a9bcd6a9eb14483d3552bead71f *./ROUTE_PIN.json
+9f877b3f11c703f3e357899640a3b6dcb9a4e912e3611dc8176f4df8ff0d8d15 *./TOOLING_FIXES_20261023.md
 11aaabe4fc8bfb5d70e0e67a0242ea3bea0ed12a365c318eadd284914f56a0e3 *./b33_analyser/MOTION_DIAG_W2_DIFF.md
 748e12d87a8db699e934dbcf4255305720316df35e67e1c0483c359fb055fca7 *./b33_analyser/PROVENANCE_motion_diag.md
 4dee34d04a36ae0f9a8e0e7f5f925fa4eca371ce498927c1cce16b1d27f8ad29 *./b33_analyser/motion_diag.py
 4ac2d19587c6dc7466e32a3d100e6c2e46ad9daab29d23826eafde1483edccff *./b33_analyser/motion_diag_w2.diff
 176e273ae38e51e6fd58cc428def1a1c18c3ba2e5e306403cc69fad8efd60f1b *./b33_analyser/motion_diag_w2.py
-a1fa03037b05c639fabce276b3154a9b4b664633ae99e0083f57efc840456b8a *./b33_drive.ps1
+123170fecd1a15bd6fd5a67f576eefbea6a6c5a59bd933766b9c621877715c0b *./b33_drive.ps1
 3779dcaf0e96ffbd155da56c72bf9691fe9bb674066df8b55c50415c643ed1a6 *./b33_frames.ps1
 4caddf0b34b74c9457b730ccdf2e2d1bab0fecbe51a51637dc34e53b4f80d0ec *./b33_judge.py
-f20b5fb52cf2f4c2ae34990df5c60be25fd7a7fc3d8760779c7ebb152f6175fe *./b33_launch.ps1
+beb4ed60bd4d549278dcf0a2a55c88db9e54cb473b9669d9c249c2dac0953d35 *./b33_launch.ps1
 08132896a49c931b32e70ce9a0acf1831ae7c7319a6aa74b0a91622a601e35ec *./b33_layout.ps1
 4283fed15e2f3d628471905216663272665a43405658747f9975993782190714 *./b33_native.cs
 5997f82c5493f58bc7ce221e1e7a826fa772bf5ae90264dbc7f07fe6d6b59b0a *./b33_slicer.py
 c30f3b80348e1d1ef42335f81800ef2d013d7d03af6721c1a3f839366bc8e2e3 *./b33_stop.ps1
-c2adf105ba1d0783ed4cd6914ec89150aa5e828055a5921f5ba70c730aef0b3e *./b33_survey_record.py
+3cb23e3cbeb7bb50cdd9e5780a27913337a4619970108a77b568136688fa5c55 *./b33_survey_record.py
 c7460ebad73b0c9e0ca48647a5cde88f64eac320dbeb55538e9947c559eb4f40 *./b6_b33a_reanalysis/B6_RECORD.md
 79d05e6c32f91d6bf7d9c4893d04ca6119f80e2d0ca6f47db1fac97b0c9f21b8 *./b6_b33a_reanalysis/JUDGE_b33a.json
 5a7687fac76e47a4e586e926fc308d45367e9fcf2f7a4556f37c720198248ca6 *./b6_b33a_reanalysis/JUDGE_b33a.txt
@@ -62,6 +64,11 @@ b766c47e52415e9002e578c28bb6e8f5063dd18134c8ebe490f9cc65b3fd9891 *./server_check
 88798fd6f63bcbad5cd62d3a2658795da4820b07cea7b4f908e7b70c6e18d330 *./server_check/import_closure_cbe584be.txt
 5d08d2aebb3c587212eaab9fd2615a9b6c4b22830aa7674ac1ecbd0b7d9fab9d *./tests/TEST_OUTPUT_powershell.txt
 b5667b1b26e05213ad61db05b19b3230c869dc9054a64211c941c6b21c3c16f6 *./tests/TEST_OUTPUT_python.txt
+89c5281ba2faa6c585dc0ddeddd6248774e45a4c213e42e849867af4c1ffb80b *./tests/TEST_OUTPUT_v3_1b_box_linux_20261023.txt
 4784b7e85a806731b39308801383a470b584778208984a915182389cbe668053 *./tests/b33_synth.py
-9d00b9c1fee53bdc109d27489457cf7f138b0ef48339862f15b7c5d6a42c24f5 *./tests/test_b33.py
+7de04985b6db89989b5ed8063972c2b143f3c45b4be8577d8c3b9917c390405b *./tests/fixtures/T091807Z_aborted_survey/drive_survey_20261023T092018Z/route.json
+4b73e90cd2df48e14fb35f2b3af194b7499e3f7a37470d2f497695d3805fd202 *./tests/fixtures/T091807Z_aborted_survey/drive_survey_20261023T092018Z/timeline.csv
+38ca7e3f23d9a84fd1be869bb0b8a56d0bd3821db8ac75c7dde9bca23c34fdcf *./tests/test_b33.py
+ad4d4a83fe1677832b1730ad3776afdb095ce832588c29acabd4d4d9d048ece1 *./tests/test_b33_tooling_fixes.py
+b2d39246c59bea0e69f3574fdf84d9fc352bb202f88b618d99983fc4e77f1601 *./tests/test_b33_wording.py
 ddeadc7e4181737b32537a185a3d0945fd6fd932a1a62d56e517cb1da8c6b13a *./tests/test_drive_and_stop.ps1

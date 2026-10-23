@@ -12,6 +12,9 @@ dist-relay-executor
 .relay/
 coverage
 *.log
+# B33 v3.1b tool import (D-2, 2026-10-23): the six b6_b33a_reanalysis slice logs are listed in that folder's
+# SHA256SUMS.txt files and are tool inputs, not run output; only these are re-included.
+!wonderland/Tools/b33_v3_1b/b6_b33a_reanalysis/slices/*.log
 
 # card-seam browser harness live-mode bundle
 dist-live/

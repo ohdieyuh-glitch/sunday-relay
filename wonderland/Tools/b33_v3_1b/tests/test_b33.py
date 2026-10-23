@@ -962,8 +962,11 @@ class QB332PerAttemptSinking(unittest.TestCase):
 class Pins(unittest.TestCase):
     """v3.1: the shipped slots are PENDING and refuse a counted run (the judge VOIDs); a PINNED slot that does not match VOIDs too."""
 
-    def test_shipped_candidate_relay_and_route_slots_are_pending(self):
-        for f, key in ((SHIPPED_CANDIDATE, "status"), (SHIPPED_RELAY_PIN, "status"), (SHIPPED_ROUTE_PIN, "status")):
+    def test_shipped_candidate_ready_relay_and_route_slots_pending(self):
+        # D-7 (2026-10-23): v3.1b ships CANDIDATE.json READY (r16reh18, reviewer 30877f); the relay and route pins stay PENDING
+        with open(SHIPPED_CANDIDATE, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh)["status"], "READY")
+        for f, key in ((SHIPPED_RELAY_PIN, "status"), (SHIPPED_ROUTE_PIN, "status")):
             with open(f, encoding="utf-8") as fh:
                 d = json.load(fh)
             self.assertTrue(str(d[key]).startswith("PENDING"), (f, d[key]))

@@ -16,7 +16,8 @@
 #   v3.1a RAM (ruling 7a7faf P2-4): the lease gate is enforced at >= 5.0 GB (-LeaseGb below 5.0 is refused, as v3); RUN.json records
 #      lease_gb and the free-RAM readings at the start; the IN-RUN GUARD (-InRunGuardGb, default 1.1 GB, the B35 pattern) reads free RAM
 #      every 3 s while the run is up and, below it, writes RAM_GUARD_TRIP.txt and stops the run (a STOP, never a verdict: the blocks that
-#      did not end are INCOMPLETE under the frozen rules); RAM_LOG.json (min free, readings, the guard and whether it tripped) is written
+#      did not end are INCOMPLETE under the frozen rules); RAM_LOG.json (min free, readings, the guard and whether it tripped; D-5: plus the name
+#      and sha256 of RAM_TRACE.csv, one row per 3 s reading) is written
 #      before the close and the judge copies it into its report. 6.5 GB free at the queue is PRACTICE, not a criterion.
 #      (B33 v3.1, tools\b33_v3_1: the counted naming; the rehearsal copy's DIAGNOSTIC_NOTPREREG_b33_* naming (8805ec) is copy-only and is
 #      NOT promoted)
@@ -159,7 +160,8 @@ else { $run = Join-Path $RunsRoot ("DIAGNOSTIC_b33_{0}_{1}" -f $tag, $utc) }
 New-Item -ItemType Directory -Force $run | Out-Null
 $LL = Join-Path $run 'LAUNCH_LOG.txt'
 function Say([string]$t) { $l = "$((Get-Date).ToUniversalTime().ToString('o')) $t"; Add-Content -Path $LL -Value $l -Encoding utf8; Write-Host $l }
-Say ("B33 launcher (W2DEV) DIAGNOSTIC, dev loopback, dev identities: never scoring evidence. role={0} scenario={1}" -f $(if ($Control) { 'CONTROL (must-fail control, never a judged run)' } else { 'JUDGED' }), $Scenario)
+# D-4 (2026-10-23): the logged role is $runRole (JUDGED / SURVEY / REHEARSAL_NOT_PREREG), the same value RUN.json and DRYCHECKS.json record
+Say ("B33 launcher (W2DEV) DIAGNOSTIC, dev loopback, dev identities: never scoring evidence. role={0} scenario={1}" -f $(if ($Control) { 'CONTROL (must-fail control, never a judged run)' } else { $runRole }), $Scenario)
 if (Get-Process -Name Wonderland -ErrorAction SilentlyContinue) { if ($DryChecks) { Say 'DRYCHECKS note: a Wonderland.exe is running (a real launch would refuse)' } else { Say 'RESULT refused: a Wonderland.exe is already running'; exit 2 } }
 if (Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue) { if ($DryChecks) { Say "DRYCHECKS note: port $Port is in use (a real launch would refuse)" } else { Say "RESULT refused: port $Port is in use"; exit 2 } }
 Say "CANDIDATE $($candRec.label) ($CandidateFile sha256 $($candRec.file_sha256)$(if (-not $candIsDefault) { ', NOT the default file: TEST ONLY' }))"
@@ -301,6 +303,14 @@ function RamGuardTrips([double]$freeGb, [double]$guardGb) {
   # v3.1a (7a7faf P2-4): the in-run guard trips when free RAM is BELOW the guard (a stop; it never decides a verdict); 0 disables it
   return ($guardGb -gt 0 -and $freeGb -lt $guardGb)
 }
+function RamTraceRow([datetime]$utc, [double]$elapsedS, $freeGb, [double]$guardGb) {
+  # D-5 (2026-10-23): one row of RAM_TRACE.csv per in-run reading (utc,elapsed_s,free_gb,below_guard); a failed read keeps its row with
+  # free_gb empty. Descriptive only, like RAM_LOG.json: it never decides a verdict
+  $inv = [Globalization.CultureInfo]::InvariantCulture
+  $f = $(if ($null -eq $freeGb) { '' } else { ([double]$freeGb).ToString('0.000', $inv) })
+  $b = $(if ($null -ne $freeGb -and (RamGuardTrips ([double]$freeGb) $guardGb)) { 1 } else { 0 })
+  return ('{0},{1},{2},{3}' -f $utc.ToUniversalTime().ToString('o', $inv), $elapsedS.ToString('0.0', $inv), $f, $b)
+}
 function WatchFirewall([double]$sec) {
   $t = Get-Date
   while (((Get-Date) - $t).TotalSeconds -lt $sec) {
@@ -436,9 +446,12 @@ try {
   # ---- 7. conductor wait (v3.1a: with the in-run RAM guard; a STOP, never a verdict)
   $t0 = Get-Date
   $ramMin = $freeGb; $ramN = 0; $ramTrip = $null
+  $ramTrace = Join-Path $run 'RAM_TRACE.csv'   # D-5: the per-sample trace (a write failure never stops the run)
+  try { Set-Content -Path $ramTrace -Value 'utc,elapsed_s,free_gb,below_guard' -Encoding ascii } catch { }
   while ($true) {
     Start-Sleep -Seconds 3
     try { $fr = [Math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB, 3); $ramN++; if ($fr -lt $ramMin) { $ramMin = $fr } } catch { $fr = $null }
+    try { Add-Content -Path $ramTrace -Value (RamTraceRow (Get-Date) ((Get-Date) - $t0).TotalSeconds $fr $InRunGuardGb) -Encoding ascii } catch { }
     if ($null -ne $fr -and (RamGuardTrips $fr $InRunGuardGb)) {
       $ramTrip = (Get-Date).ToUniversalTime().ToString('o')
       Set-Content -Path (Join-Path $run 'RAM_GUARD_TRIP.txt') -Value ("{0} free {1} GB < in-run guard {2} GB: the run is STOPPED (never a verdict; unfinished blocks are INCOMPLETE)" -f $ramTrip, $fr, $InRunGuardGb) -Encoding ascii
@@ -453,7 +466,8 @@ try {
   }
   # v3.1a: the RAM record, written before the close so the stop hashes it (descriptive: the judge copies it; it decides nothing)
   [ordered]@{ lease_gb = $LeaseGb; ram_free_gb_at_start = $freeGb; ram_available_mb_at_start = $availMb; in_run_guard_gb = $InRunGuardGb
-    in_run_min_free_gb = $ramMin; in_run_readings = $ramN; in_run_interval_s = 3; guard_tripped = ($null -ne $ramTrip); guard_trip_utc = $ramTrip } |
+    in_run_min_free_gb = $ramMin; in_run_readings = $ramN; in_run_interval_s = 3; guard_tripped = ($null -ne $ramTrip); guard_trip_utc = $ramTrip
+    in_run_trace_file = 'RAM_TRACE.csv'; in_run_trace_sha256 = $(try { (Get-FileHash $ramTrace -Algorithm SHA256).Hash.ToLower() } catch { $null }) } |
     ConvertTo-Json | Set-Content -Path (Join-Path $run 'RAM_LOG.json') -Encoding utf8
 } catch {
   Say ("LAUNCH ERROR: {0}" -f $_.Exception.Message); $exitCode = 3

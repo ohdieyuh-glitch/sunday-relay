@@ -1,0 +1,57 @@
+[2026.10.20-07.23.03:734][790]LogTemp: Display: WLREMOTE send motion=WALK z=20.1 vz=0.0 period=169ms
+[2026.10.20-07.23.03:748][791]LogTemp: Display: WLREMOTE send soles=(502.0,692.2,20.1) rtt=14ms period=169ms status=200 yaw=56.00
+[2026.10.20-07.23.03:804][796]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=572341ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=11.0 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.03:808][797]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.03:907][805]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=572444ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=10.0 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.03:916][806]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.03:927][807]LogTemp: Display: WLREMOTE send motion=JUMP z=71.3 vz=275.9 period=173ms
+[2026.10.20-07.23.03:938][808]LogTemp: Display: WLREMOTE send soles=(524.1,724.9,71.3) rtt=18ms period=173ms status=200 yaw=56.00
+[2026.10.20-07.23.04:015][815]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=572553ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=11.8 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.04:025][815]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.04:069][819]LogTemp: Display: WLREMOTE send motion=JUMP z=103.2 vz=116.5 period=162ms
+[2026.10.20-07.23.04:081][820]LogTemp: Display: WLREMOTE send soles=(545.0,755.9,103.2) rtt=12ms period=162ms status=200 yaw=56.00
+[2026.10.20-07.23.04:118][823]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=572655ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=10.9 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.04:123][824]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.04:194][829]LogTemp: Display: WLREMOTE send motion=FALL z=110.1 vz=-2.7 period=125ms
+[2026.10.20-07.23.04:208][830]LogTemp: Display: WLREMOTE send soles=(560.6,779.1,110.1) rtt=14ms period=125ms status=200 yaw=56.00
+[2026.10.20-07.23.04:219][832]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=572755ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=14.1 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.04:230][833]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.04:311][839]LogTemp: Display: WLREMOTE send motion=FALL z=102.9 vz=-119.0 period=116ms
+[2026.10.20-07.23.04:323][840]LogTemp: Display: WLREMOTE send soles=(575.9,801.7,102.9) rtt=12ms period=116ms status=200 yaw=56.00
+[2026.10.20-07.23.04:326][841]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=572860ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=12.1 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.04:337][842]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.04:433][849]LogTemp: WLSOCIAL live snapshot: usr_wlautoa, 0 friends, 0 requests in, 0 conversations, party none | recent 1
+[2026.10.20-07.23.04:443][851]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=572970ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=11.5 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.04:453][851]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.04:479][853]LogTemp: Display: WLREMOTE send motion=FALL z=68.3 vz=-286.2 period=169ms
+[2026.10.20-07.23.04:492][854]LogTemp: Display: WLREMOTE send soles=(597.8,834.2,68.3) rtt=13ms period=169ms status=200 yaw=56.00
+[2026.10.20-07.23.04:542][858]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=573078ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=11.0 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.04:551][859]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.04:597][864]LogTemp: Display: WLREMOTE send motion=WALK z=85.0 vz=0.0 period=118ms
+[2026.10.20-07.23.04:608][864]LogTemp: Display: WLREMOTE send soles=(612.8,856.4,85.0) rtt=11ms period=118ms status=200 yaw=56.00
+[2026.10.20-07.23.04:637][867]LogTemp: WLDOG Jog speed=229 uu/s stride=108 duty=0.45 lift=8.7 lean=7.9 armsback=0.00 hipL=29.2 kneeL=94.4 shoulderL=19.9 elbowL=38.2 head=(-2.3,4.5) weight=1.00
+[2026.10.20-07.23.04:646][868]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=573181ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=11.9 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.04:657][868]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.04:668][870]LogTemp: WLDOG Jog speed=222 uu/s stride=104 duty=0.46 lift=8.4 lean=7.9 armsback=0.00 hipL=26.1 kneeL=90.7 shoulderL=19.8 elbowL=36.7 head=(-2.3,4.5) weight=1.00
+[2026.10.20-07.23.04:680][870]LogTemp: WLDOG Jog speed=216 uu/s stride=101 duty=0.46 lift=8.2 lean=8.0 armsback=0.00 hipL=25.4 kneeL=89.3 shoulderL=19.7 elbowL=36.2 head=(-2.3,4.5) weight=1.00
+[2026.10.20-07.23.04:751][876]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=573288ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=11.2 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.04:763][877]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.04:775][878]LogTemp: Display: WLREMOTE send motion=IDLE z=85.2 vz=0.0 period=168ms
+[2026.10.20-07.23.04:786][879]LogTemp: Display: WLREMOTE send soles=(621.8,863.2,85.2) rtt=12ms period=168ms status=200 yaw=56.00
+[2026.10.20-07.23.04:861][885]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=573398ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=11.7 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.04:870][886]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.04:888][887]LogTemp: Display: WLREMOTE send motion=IDLE z=85.2 vz=0.0 period=124ms
+[2026.10.20-07.23.04:900][888]LogTemp: Display: WLREMOTE send soles=(621.8,863.2,85.2) rtt=11ms period=124ms status=200 yaw=56.00
+[2026.10.20-07.23.04:968][893]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=573505ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=10.5 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.04:979][895]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.05:048][900]LogTemp: Display: WLREMOTE send motion=IDLE z=85.2 vz=0.0 period=159ms
+[2026.10.20-07.23.05:062][902]LogTemp: Display: WLREMOTE send soles=(621.8,863.2,85.2) rtt=14ms period=159ms status=200 yaw=56.00
+[2026.10.20-07.23.05:073][902]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=573609ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=13.5 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.05:075][903]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.05:163][909]LogTemp: Display: WLREMOTE send motion=IDLE z=85.2 vz=0.0 period=115ms
+[2026.10.20-07.23.05:176][910]LogTemp: Display: WLREMOTE send soles=(621.8,863.2,85.2) rtt=13ms period=115ms status=200 yaw=56.00
+[2026.10.20-07.23.05:182][911]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=573713ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=12.8 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.05:193][912]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.05:289][919]LogTemp: Display: WLREMOTE fig=usr_wlautob recv=(-330.0,-650.0,22.0) age=573826ms applied=(-330.0,-650.0,22.0) lagUu=0.0 lagXYUu=0.0 worn=0 floatZ=0.00 lowestUu=-0.29 aim=(-330.0,-650.0) dtMs=12.6 nowXY=(-330.0,-650.0) interp=1 delayMs=120 yaw=56.00 tyaw=56.00 idleFreeze=1.000 gaitW=0.000 gSpd=0.0 gPh=6.8558 actPh=31.1628 dogAnim=0 dStride=0.0 dDuty=0.62 dLean=0.0 dArms=0.00 dCps=0.00
+[2026.10.20-07.23.05:299][920]LogTemp: Display: WLREMOTE motion fig=usr_wlautob motion=IDLE z=21.76
+[2026.10.20-07.23.05:327][922]LogTemp: Display: WLREMOTE send motion=IDLE z=85.2 vz=0.0 period=164ms
