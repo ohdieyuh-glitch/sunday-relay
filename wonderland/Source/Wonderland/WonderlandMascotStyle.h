@@ -383,6 +383,26 @@ namespace WonderlandMascotStyle
 	WONDERLAND_API FString DescribeSmokeLook();
 
 	/**
+	 * EACH COMPANION TERMINAL'S OWN OUTLINE COLOUR (founder, 2026-10-23: a Wonder Web VM window's outline is its PARENT
+	 * terminal's own custom colour, and companion terminals must be told apart).
+	 *
+	 * Indexed by companion terminal, 0 .. MaxCompanionTerminals() - 1. A terminal nobody has picked a colour for wears the
+	 * shared companion colour (WonderlandUi::CompanionAccent: the shared pick, else the theme), so every install and every
+	 * save made before this existed looks exactly as it did.
+	 *
+	 * KEPT IN Saved/Wonderland/CompanionTerminalAccents.txt, NOT AS CONFIG PROPERTIES on the settings above: a new reflected
+	 * name shifts the FName table Niagara hashes (WonderlandBeta.h), the rule the flame and strip colours already follow.
+	 */
+	WONDERLAND_API int32 MaxCompanionTerminals();
+	WONDERLAND_API bool HasCompanionTerminalAccent(int32 TerminalIndex);
+	/** Terminal TerminalIndex's outline: its own pick, else the shared companion colour. Any index is safe to ask. */
+	WONDERLAND_API FLinearColor CompanionTerminalAccentFor(int32 TerminalIndex);
+	/** Pick terminal TerminalIndex's own colour: saved whole the moment it is picked, then SaveAndApply. False when out of range. */
+	WONDERLAND_API bool PickCompanionTerminalAccent(int32 TerminalIndex, const FLinearColor& Colour);
+	/** Back to the shared companion colour for that terminal. False when out of range. */
+	WONDERLAND_API bool ClearCompanionTerminalAccent(int32 TerminalIndex);
+
+	/**
 	 * SAVE, AND MAKE IT TRUE EVERYWHERE, NOW.
 	 *
 	 * The founder's rule for these controls is that the Wardrobe and the Menu are one system: "Changing the

@@ -120,7 +120,8 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 28.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(INVTEXT("WONDER WEB")).Font(WonderWebLook::Sans(26, true, 160)).ColorAndOpacity(WonderWebLook::Line())
+							// "<agent> — Wonder Web VM <N>" over the parent's name, or WONDER WEB as it always was.
+							WonderlandWonderWebWindowLook::MakeTitleBlock([this]() { return &Look; })
 						]
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom)
 						[
@@ -275,6 +276,14 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 		]
 	];
 	Rebuild();
+}
+
+void SWonderlandWonderWebBrowserPanel::SetWindowLook(const FWonderWebWindowLook& InLook)
+{
+	Look = InLook;
+	// ONLY THE OUTLINE TAKES THE PARENT'S COLOUR. The border holds this brush by address: rebuilt in place, it repaints.
+	WindowBrush = FSlateRoundedBoxBrush(WonderWebLook::Ink(), 22.0f, Look.OutlineOr(WonderWebLook::Line()), 3.0f);
+	Invalidate(EInvalidateWidgetReason::Paint);
 }
 
 TSharedRef<SWidget> SWonderlandWonderWebBrowserPanel::Probe(FName Id, TSharedRef<SWidget> Content)

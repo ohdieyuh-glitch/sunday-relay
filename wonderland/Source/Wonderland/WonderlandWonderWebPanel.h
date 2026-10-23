@@ -18,6 +18,7 @@
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/SLeafWidget.h"
 #include "WonderlandUiStyle.h"
+#include "WonderlandWonderWebWindowLook.h"
 
 class SBox;
 class SEditableText;
@@ -161,6 +162,13 @@ public:
 	/** The terminal line's text, for tests. */
 	FString GetTerminalInput() const;
 
+	/**
+	 * THE VM WINDOW'S LOOK (WonderlandWonderWebWindowLook.h): its title and parent line in the title bar, and its outline in
+	 * the parent terminal's colour. Unset -- the default, and what every window had before -- is WONDER WEB in yellow.
+	 */
+	void SetWindowLook(const FWonderWebWindowLook& InLook);
+	const FWonderWebWindowLook& GetWindowLook() const { return Look; }
+
 private:
 	void Rebuild();
 	TSharedRef<SWidget> MakeTabs(const FWonderWebSurface& Surface);
@@ -195,6 +203,8 @@ private:
 	int32 ScrollTerminalIn = 0;
 
 	FSlateBrush WindowBrush;
+	/** The look this window is drawn with; unset is the legacy Wonder Web. */
+	FWonderWebWindowLook Look;
 	FSlateBrush LineBrush;
 	FSlateBrush AddressBrush;
 	FSlateBrush TabBrush;
