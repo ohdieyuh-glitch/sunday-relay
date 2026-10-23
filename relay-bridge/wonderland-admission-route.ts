@@ -27,6 +27,7 @@ import {
   CANONICAL_UUID_V4,
   CLIENT_TRIGGER_ID,
   J1_IDEMPOTENCY_KEY,
+  JULIUS_BOOTSTRAP_RUN_ID,
   MISSION_SLUG,
   SHA256_HEX,
   createWonderlandAdmissionStore,
@@ -40,10 +41,17 @@ import {
   AdmissionFileClosedError,
   createFileAdmissionLedger,
   isAdmissionFileClosed,
+  isLocalStorePath,
+  readAdmissionDocument,
+  recordAdmissionOwner,
   resolveAdmissionStorePath,
+  type ClaimEvent,
+  type OperatorDocument,
+  type StoredAdmission,
 } from '../src/relay/integration/wonderland-admission/admission-file';
 
 export const WONDERLAND_ADMISSION_PATH = '/wonderland/julius/dispatch';
+export const WONDERLAND_STATUS_PATH = '/wonderland/julius/status';
 export const WONDERLAND_ADMISSION_FLAG = 'JULIUS_WONDERLAND_ADMISSION';
 export const WONDERLAND_ADMISSION_STORE = 'JULIUS_WONDERLAND_ADMISSION_STORE';
 
@@ -65,6 +73,10 @@ export function wonderlandAdmissionPathname(path: string): string {
 
 export function isWonderlandAdmissionRoute(path: string): boolean {
   return wonderlandAdmissionPathname(path) === WONDERLAND_ADMISSION_PATH;
+}
+
+export function isWonderlandStatusRoute(path: string): boolean {
+  return wonderlandAdmissionPathname(path) === WONDERLAND_STATUS_PATH;
 }
 
 /** Map a mission-handler request onto this route. The raw key is hashed later. */
@@ -95,6 +107,29 @@ export function wonderlandAdmissionRequestFrom(request: {
     forwarded: request.forwarded ?? true,
     nowIso: request.nowIso ?? '',
     nowMs: request.nowMs ?? Number.NaN,
+  };
+}
+
+export function createWonderlandStatusBridge(ports: WonderlandAdmissionRoutePorts): {
+  readonly path: string;
+  handle(request: {
+    readonly method: string;
+    readonly path: string;
+    readonly url?: string | undefined;
+    readonly authorization?: string | undefined;
+    readonly origin?: string | undefined;
+    readonly body?: string | undefined;
+    readonly idempotencyKey?: string | undefined;
+    readonly remoteAddress?: string | undefined;
+    readonly host?: string | undefined;
+    readonly forwarded?: boolean | undefined;
+    readonly nowIso?: string | undefined;
+    readonly nowMs?: number | undefined;
+  }): Promise<{ status: number; body: unknown } | null>;
+} {
+  return {
+    path: WONDERLAND_STATUS_PATH,
+    handle: (request) => handleWonderlandStatusRoute(wonderlandAdmissionRequestFrom(request), ports),
   };
 }
 
@@ -165,6 +200,7 @@ export interface WonderlandAdmissionRoutePorts {
     readonly clientUiActionUtc: string;
     readonly receivedAt: string;
     readonly modelPins: ReviewedModelPins;
+    readonly ownerPlayerId?: string;
   }) => Promise<AdmissionOutcome>;
   /** False when caps or the mission slug could not be read. No store exists. */
   readonly configured: boolean;
@@ -179,34 +215,41 @@ export interface WonderlandAdmissionRoutePorts {
 
 const err = (status: number, kind: string, message: string) => ({ status, body: { error: { kind, message } } });
 
-export function handleWonderlandAdmissionRoute(
+const STATUS_NOT_FOUND = {
+  status: 404,
+  body: { error: { kind: 'not_found', message: 'Not found.' } },
+} as const;
+
+/**
+ * The guards shared with admission. A status read uses this function and then
+ * only reads the admission file. It does not admit, claim, or start a process.
+ */
+function juliusLoopbackGuard(
   request: WonderlandAdmissionRouteRequest,
   ports: WonderlandAdmissionRoutePorts,
-): Promise<{ status: number; body: unknown } | null> {
-  if (!isWonderlandAdmissionRoute(request.path)) return Promise.resolve(null);
+): { readonly native: WonderlandNativeSession } | { readonly status: number; readonly body: unknown } {
   if (!isLoopbackPeer(request.remoteAddress, request.host, request.forwarded)) {
-    return Promise.resolve(err(403, 'julius_dispatch_not_loopback', 'Mission dispatch is only served to the same machine.'));
+    return err(403, 'julius_dispatch_not_loopback', 'Mission dispatch is only served to the same machine.');
   }
   if (ports.env[WONDERLAND_ADMISSION_FLAG] !== '1') {
-    return Promise.resolve(err(503, 'julius_dispatch_disabled', 'Mission dispatch is switched off.'));
+    return err(503, 'julius_dispatch_disabled', 'Mission dispatch is switched off.');
   }
   if (!ports.admissionStoreReady) {
     return Promise.resolve(err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.'));
   }
   if (request.origin !== undefined) {
-    return Promise.resolve(err(403, 'julius_dispatch_browser_refused', 'Only the paired game client may use this route.'));
+    return err(403, 'julius_dispatch_browser_refused', 'Only the paired game client may use this route.');
   }
   if (bearerMatches(request.authorization, ports.operatorToken)) {
-    return Promise.resolve(err(403, 'julius_dispatch_operator_is_not_the_game', 'The in-game trigger must come from the paired game client.'));
+    return err(403, 'julius_dispatch_operator_is_not_the_game', 'The in-game trigger must come from the paired game client.');
   }
   const token = sessionTokenFrom(request.authorization);
   const native = token === null ? null : ports.verifyNativeSession({ token, now: request.nowMs });
-  if (native === null) return Promise.resolve(err(401, 'sign_in_required', 'Mission dispatch needs a paired Wonderland session.'));
-
+  if (native === null) return err(401, 'sign_in_required', 'Mission dispatch needs a paired Wonderland session.');
   const project = (ports.env.JULIUS_J1_PROJECT_ID ?? '').trim();
   const founder = (ports.env.JULIUS_J1_FOUNDER_PLAYER_ID ?? '').trim();
   if (!ports.configured || project === '' || founder === '') {
-    return Promise.resolve(err(503, 'julius_dispatch_not_configured', 'Wonderland admission is not configured. Nothing was reserved.'));
+    return err(503, 'julius_dispatch_not_configured', 'Wonderland admission is not configured. Nothing was reserved.');
   }
   let projectId = '';
   try {
@@ -215,11 +258,27 @@ export function handleWonderlandAdmissionRoute(
     projectId = '';
   }
   if (projectId === '' || native.projectId !== projectId || projectId !== project) {
-    return Promise.resolve(err(403, 'julius_dispatch_wrong_project', 'This session was not paired for that project.'));
+    return err(403, 'julius_dispatch_wrong_project', 'This session was not paired for that project.');
   }
   if (native.playerId !== founder) {
-    return Promise.resolve(err(403, 'julius_dispatch_founder_only', 'Only the founder player may admit a Wonderland mission.'));
+    return err(403, 'julius_dispatch_founder_only', 'Only the founder player may admit a Wonderland mission.');
   }
+  return { native };
+}
+
+function guardPassed(
+  result: { readonly native: WonderlandNativeSession } | { readonly status: number; readonly body: unknown },
+): result is { readonly native: WonderlandNativeSession } {
+  return 'native' in result;
+}
+
+export function handleWonderlandAdmissionRoute(
+  request: WonderlandAdmissionRouteRequest,
+  ports: WonderlandAdmissionRoutePorts,
+): Promise<{ status: number; body: unknown } | null> {
+  if (!isWonderlandAdmissionRoute(request.path)) return Promise.resolve(null);
+  const guarded = juliusLoopbackGuard(request, ports);
+  if (!guardPassed(guarded)) return Promise.resolve(guarded);
   if (request.method !== 'POST') return Promise.resolve(err(405, 'method_not_allowed', 'Dispatch is a POST.'));
   if (request.idempotencyKey === undefined || !J1_IDEMPOTENCY_KEY.test(request.idempotencyKey) || !CANONICAL_UUID_V4.test(request.idempotencyKey)) {
     return Promise.resolve(err(400, 'julius_dispatch_idempotency_key_invalid', 'x-relay-idempotency-key is required.'));
@@ -263,11 +322,86 @@ export function handleWonderlandAdmissionRoute(
     clientUiActionUtc,
     receivedAt: request.nowIso,
     modelPins: readPins(ports.readWorkflowText),
-  }).then(toHttp, (error: unknown) => (
+    ownerPlayerId: guarded.native.playerId,
+  }).then((outcome) => {
+    if (outcome.ok) {
+      recordAdmissionOwner(ports.env.JULIUS_WONDERLAND_ADMISSION_STORE, outcome.run.serverRunId, guarded.native.playerId);
+    }
+    return toHttp(outcome);
+  }, (error: unknown) => (
     isAdmissionFileClosed(error)
       ? err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.')
       : { status: 500, body: {} }
   ));
+}
+
+/**
+ * GET /wonderland/julius/status?runId=<run:24hex>&projectId=
+ * Reads the admission file. A missing file is an unknown run. A held row
+ * stays held. Progress is returned only when the file already holds it.
+ */
+export function handleWonderlandStatusRoute(
+  request: WonderlandAdmissionRouteRequest,
+  ports: WonderlandAdmissionRoutePorts,
+): Promise<{ status: number; body: unknown } | null> {
+  if (!isWonderlandStatusRoute(request.path)) return Promise.resolve(null);
+  const guarded = juliusLoopbackGuard(request, ports);
+  if (!guardPassed(guarded)) return Promise.resolve(guarded);
+  if (request.method !== 'GET') return Promise.resolve(err(405, 'method_not_allowed', 'Status is a GET.'));
+  const storePath = (ports.env.JULIUS_WONDERLAND_ADMISSION_STORE ?? '').trim();
+  if (storePath === '' || !isLocalStorePath(storePath)) {
+    return Promise.resolve(err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.'));
+  }
+  let runId = '';
+  try {
+    runId = new URL(request.url, 'http://relay.invalid').searchParams.get('runId') ?? '';
+  } catch {
+    runId = '';
+  }
+  if (!JULIUS_BOOTSTRAP_RUN_ID.test(runId)) return Promise.resolve(STATUS_NOT_FOUND);
+  let document: OperatorDocument;
+  try {
+    document = readAdmissionDocument(storePath);
+  } catch (error) {
+    if (isAdmissionFileClosed(error)) {
+      return Promise.resolve(err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.'));
+    }
+    return Promise.resolve({ status: 500, body: {} });
+  }
+  const admission = document.admissions.find((row) => row.serverRunId === runId) ?? null;
+  if (admission === null) return Promise.resolve(STATUS_NOT_FOUND);
+  const owner = admission.ownerPlayerId ?? (ports.env.JULIUS_J1_FOUNDER_PLAYER_ID ?? '').trim();
+  if (owner === '' || owner !== guarded.native.playerId) return Promise.resolve(STATUS_NOT_FOUND);
+  const view = statusView(admission, document, runId);
+  if (view === null) return Promise.resolve(STATUS_NOT_FOUND);
+  return Promise.resolve({ status: 200, body: view });
+}
+
+function statusView(admission: StoredAdmission, document: OperatorDocument, serverRunId: string): Record<string, string> | null {
+  const progress = [...(document.progress ?? [])].reverse().find((note) => note.serverRunId === serverRunId) ?? null;
+  if (progress !== null) return statusBody(admission.runId, serverRunId, progress.state, progress.cause, progress.updatedAt);
+  const claim = [...document.claims].reverse().find((event) => event.serverRunId === serverRunId && event.wonderlandRunId === admission.runId) ?? null;
+  if (claim !== null) return statusBody(admission.runId, serverRunId, claim.state, claimCause(claim), claim.at);
+  if (admission.admissionState !== 'ADMISSION_HELD') return null;
+  return statusBody(admission.runId, serverRunId, 'held', null, admission.receivedAt);
+}
+
+function claimCause(claim: ClaimEvent): string | null {
+  if (claim.halt !== null) return claim.halt;
+  return claim.dispatchError;
+}
+
+function statusBody(
+  wljRunId: string,
+  serverRunId: string,
+  state: string,
+  cause: string | null,
+  updatedAt: string,
+): Record<string, string> {
+  const body: Record<string, string> = { wljRunId, serverRunId, state };
+  if (cause !== null && cause !== '') body.cause = cause;
+  body.updatedAt = updatedAt;
+  return body;
 }
 
 export function toHttp(outcome: AdmissionOutcome): { status: number; body: unknown } {

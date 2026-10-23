@@ -505,6 +505,7 @@ function appendClaim(document: OperatorDocument, event: ClaimEvent): OperatorDoc
     revision: document.revision + 1,
     admissions: document.admissions,
     claims: [...document.claims, event],
+    progress: document.progress ?? [],
   };
 }
 

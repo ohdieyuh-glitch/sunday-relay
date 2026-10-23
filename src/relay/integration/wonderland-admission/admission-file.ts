@@ -303,7 +303,11 @@ const CLAIM_STATES = ['dispatched', 'dispatch_failed', 'already_spent'] as const
 const SPENT_TAG_STATES = ['unknown', 'present', 'absent'] as const;
 const WORKFLOW_HALTS = ['RUN_ID_ALREADY_SPENT', 'SPENT_TAG_UNVERIFIED'] as const;
 const DISPATCH_ERRORS = ['gh_workflow_run_failed', 'SPENT_TAG_UNVERIFIED'] as const;
-const JOURNAL_KEYS = ['schemaVersion', 'revision', 'claims'] as const;
+const JOURNAL_KEYS = ['schemaVersion', 'revision', 'claims', 'progress', 'owners'] as const;
+const OWNER_ID = /^[A-Za-z0-9_-]{1,128}$/;
+/** A stored progress token. The status route accepts it only when it matches; the journal only bounds the text. */
+const PROGRESS_STATE = /^[a-z][a-z0-9_]{0,63}$/;
+const PROGRESS_CAUSE = /^[\x20-\x7e]{1,200}$/;
 const CLAIM_KEYS = [
   'wonderlandRunId', 'serverRunId', 'state', 'spentTag', 'spentTagState', 'at',
   'dispatchAttempted', 'dispatchError', 'halt',
@@ -331,11 +335,19 @@ export interface ClaimEvent {
   readonly halt: WorkflowHalt | null;
 }
 
+export interface StoredProgress {
+  readonly serverRunId: string;
+  readonly state: string;
+  readonly cause: string | null;
+  readonly updatedAt: string;
+}
+
 export interface OperatorDocument {
   readonly version: 1;
   readonly revision: number;
   readonly admissions: readonly StoredAdmission[];
   readonly claims: readonly ClaimEvent[];
+  readonly progress: readonly StoredProgress[];
 }
 
 export interface AdmissionFileIo {
@@ -353,6 +365,8 @@ interface OperatorJournal {
   readonly schemaVersion: typeof ADMISSION_FILE_SCHEMA_VERSION;
   readonly revision: number;
   readonly claims: readonly ClaimEvent[];
+  readonly progress: readonly StoredProgress[];
+  readonly owners: Readonly<Record<string, string>>;
 }
 
 const tails = new Map<string, Promise<void>>();
@@ -370,7 +384,7 @@ export function isLocalStorePath(storePath: string): boolean {
 }
 
 export function emptyOperatorDocument(): OperatorDocument {
-  return { version: 1, revision: 0, admissions: [], claims: [] };
+  return { version: 1, revision: 0, admissions: [], claims: [], progress: [] };
 }
 
 export function operatorJournalPath(storePath: string): string {
@@ -438,17 +452,42 @@ function composeDocument(path: string): OperatorDocument {
   return {
     version: 1,
     revision: journal.revision,
-    admissions: readRows(path).map(toStoredAdmission),
+    admissions: readRows(path).map((row) => toStoredAdmission(row, journal.owners[row.serverRunId])),
     claims: journal.claims,
+    progress: journal.progress,
   };
 }
 
-function toStoredAdmission(row: AdmissionLedgerRow): StoredAdmission {
-  return { ...row, admissionState: 'ADMISSION_HELD' };
+function toStoredAdmission(row: AdmissionLedgerRow, ownerPlayerId: string | undefined): StoredAdmission {
+  return {
+    ...row,
+    admissionState: 'ADMISSION_HELD',
+    ...(ownerPlayerId === undefined ? {} : { ownerPlayerId }),
+  };
+}
+
+/**
+ * Record the player who admitted a row. The admission document itself stays
+ * `{ schemaVersion, rows }`. This does not take the lock: the bridge already
+ * holds it, and a path that is not a local store is ignored.
+ */
+export function recordAdmissionOwner(storePath: string | undefined, serverRunId: string, playerId: string): void {
+  const located = resolveAdmissionStorePath(storePath);
+  if (!located.ok || !JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId) || !OWNER_ID.test(playerId)) return;
+  const current = readJournal(operatorJournalPath(located.path));
+  writeJournalBytes(located.path, {
+    schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
+    revision: current.revision,
+    claims: current.claims,
+    progress: current.progress,
+    owners: { ...current.owners, [serverRunId]: playerId },
+  });
 }
 
 function readJournal(journalPath: string): OperatorJournal {
-  if (!existsSync(journalPath)) return { schemaVersion: ADMISSION_FILE_SCHEMA_VERSION, revision: 0, claims: [] };
+  if (!existsSync(journalPath)) {
+    return { schemaVersion: ADMISSION_FILE_SCHEMA_VERSION, revision: 0, claims: [], progress: [], owners: {} };
+  }
   let text: string;
   try {
     text = readFileSync(journalPath, 'utf8');
@@ -472,16 +511,61 @@ function readJournal(journalPath: string): OperatorJournal {
   if (typeof doc.revision !== 'number' || !Number.isInteger(doc.revision) || doc.revision < 0) {
     throw new AdmissionFileClosedError('corrupt');
   }
-  if (!Array.isArray(doc.claims)) throw new AdmissionFileClosedError('corrupt');
-  return { schemaVersion: ADMISSION_FILE_SCHEMA_VERSION, revision: doc.revision, claims: doc.claims.map(parseClaim) };
+  if (!Array.isArray(doc.claims) || !Array.isArray(doc.progress)) throw new AdmissionFileClosedError('corrupt');
+  if (doc.owners === null || typeof doc.owners !== 'object' || Array.isArray(doc.owners)) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  const owners: Record<string, string> = {};
+  for (const [serverRunId, playerId] of Object.entries(doc.owners as Record<string, unknown>)) {
+    if (!JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId) || typeof playerId !== 'string' || !OWNER_ID.test(playerId)) {
+      throw new AdmissionFileClosedError('corrupt');
+    }
+    owners[serverRunId] = playerId;
+  }
+  return {
+    schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
+    revision: doc.revision,
+    claims: doc.claims.map(parseClaim),
+    progress: doc.progress.map(parseProgress),
+    owners,
+  };
+}
+
+function parseProgress(value: unknown): StoredProgress {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new AdmissionFileClosedError('corrupt');
+  const note = value as Record<string, unknown>;
+  const keys = Object.keys(note);
+  if (keys.length !== 4 || !['serverRunId', 'state', 'cause', 'updatedAt'].every((key) => Object.hasOwn(note, key))) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof note.serverRunId !== 'string' || !JULIUS_BOOTSTRAP_RUN_ID.test(note.serverRunId)) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof note.state !== 'string' || !PROGRESS_STATE.test(note.state)) throw new AdmissionFileClosedError('corrupt');
+  if (note.cause !== null && (typeof note.cause !== 'string' || !PROGRESS_CAUSE.test(note.cause))) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof note.updatedAt !== 'string' || !RECEIVED_AT.test(note.updatedAt)) throw new AdmissionFileClosedError('corrupt');
+  return {
+    serverRunId: note.serverRunId,
+    state: note.state,
+    cause: note.cause,
+    updatedAt: note.updatedAt,
+  };
 }
 
 function writeJournal(path: string, document: OperatorDocument): void {
-  const body = {
+  const current = readJournal(operatorJournalPath(path));
+  writeJournalBytes(path, {
     schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
     revision: document.revision,
     claims: document.claims.map(parseClaim),
-  };
+    progress: (document.progress ?? []).map(parseProgress),
+    owners: current.owners,
+  });
+}
+
+function writeJournalBytes(path: string, body: OperatorJournal): void {
   try {
     writeAdmissionFileAtomic(operatorJournalPath(path), `${JSON.stringify(body)}\n`);
   } catch (error) {

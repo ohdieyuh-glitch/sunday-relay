@@ -393,7 +393,7 @@ describe('admission path exclusion is exact', () => {
     expect(isWonderlandRoute(WONDERLAND_ADMISSION_PATH)).toBe(false);
     expect(isWonderlandAdmissionRoute(WONDERLAND_ADMISSION_PATH)).toBe(true);
     const exact = classifyWonderlandDispatchPath(WONDERLAND_ADMISSION_PATH, WONDERLAND_ADMISSION_PATH);
-    expect(exact).toEqual({ catchAllPath: null, exactAdmission: true });
+    expect(exact).toEqual({ catchAllPath: null, exactAdmission: true, exactStatus: false });
   });
 
   it('a query on the admission pathname is admission', () => {
@@ -403,6 +403,7 @@ describe('admission path exclusion is exact', () => {
     expect(classifyWonderlandDispatchPath(WONDERLAND_ADMISSION_PATH, queried)).toEqual({
       catchAllPath: null,
       exactAdmission: true,
+      exactStatus: false,
     });
   });
 
@@ -759,5 +760,8 @@ describe('the route does not gain a spend path', () => {
     expect(source).not.toContain('api.x.ai');
     expect(source).not.toContain('julius_dispatch_busy');
     expect(source).not.toContain('--confirm-live');
+    expect(source).not.toContain('child_process');
+    expect(source).not.toContain('operator-claim');
+    expect(source).not.toMatch(/\bgh\b/);
   });
 });

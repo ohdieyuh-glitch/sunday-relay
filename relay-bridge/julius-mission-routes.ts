@@ -128,6 +128,14 @@ export interface JuliusMissionRoutePorts {
     readonly path: string;
     handle(request: JuliusMissionRouteRequest): Promise<JuliusMissionRouteResult | null>;
   };
+  /**
+   * Wonderland status, one exact path, injected the same way as admission.
+   * This file does not import the admission module.
+   */
+  readonly wonderlandStatusBridge?: {
+    readonly path: string;
+    handle(request: JuliusMissionRouteRequest): Promise<JuliusMissionRouteResult | null>;
+  };
 }
 
 /** The three worker requests, from the same definitions the live composition dispatches. */
@@ -168,6 +176,9 @@ export async function handleJuliusMissionRoute(
   request: JuliusMissionRouteRequest,
   ports: JuliusMissionRoutePorts,
 ): Promise<JuliusMissionRouteResult | null> {
+  if (ports.wonderlandStatusBridge !== undefined && request.path === ports.wonderlandStatusBridge.path) {
+    return ports.wonderlandStatusBridge.handle(request);
+  }
   if (ports.wonderlandAdmissionBridge !== undefined && request.path === ports.wonderlandAdmissionBridge.path) {
     return ports.wonderlandAdmissionBridge.handle(request);
   }

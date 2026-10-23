@@ -2,7 +2,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { BrowserSessionStore } from './browser-session/grants';
 import { sessionTokenFrom } from './browser-session/routes';
 import { WonderlandBackend, type WonderlandExecutor } from '../src/relay/mission/wonderland/wonderland-backend';
-import { WONDERLAND_ADMISSION_PATH, isWonderlandAdmissionRoute, wonderlandAdmissionPathname } from './wonderland-admission-route';
+import {
+  WONDERLAND_ADMISSION_PATH,
+  WONDERLAND_STATUS_PATH,
+  isWonderlandAdmissionRoute,
+  isWonderlandStatusRoute,
+  wonderlandAdmissionPathname,
+} from './wonderland-admission-route';
 
 export interface WonderlandRouteRequest {
   readonly method: string; readonly path: string; readonly url: string;
@@ -14,18 +20,19 @@ const asRecord = (value: unknown): Record<string, unknown> => value !== null && 
 const text = (body: Record<string, unknown>, key: string): string => { const value = body[key]; if (typeof value !== 'string' || value.trim() === '') throw new Error(`invalid_${key}`); return value; };
 
 /**
- * Every `/wonderland/` path except the Julius admission pathname. A query on
- * that pathname is admission, because the handler reads `projectId` from it.
- * A trailing slash, a child segment, or a different case stays here. This
- * catch-all refuses a native session before it reads the path, so admission
- * cannot be served from inside it.
+ * Every `/wonderland/` path except the Julius admission and status pathnames.
+ * A query on either pathname stays on that route, because the handler reads
+ * `projectId` from it. A trailing slash, a child segment, or a different case
+ * stays here. This catch-all refuses a native session before it reads the
+ * path, so admission and status cannot be served from inside it.
  */
 export function isWonderlandRoute(path: string): boolean {
   const pathname = wonderlandAdmissionPathname(path);
-  if (pathname === WONDERLAND_ADMISSION_PATH) return false;
+  if (pathname === WONDERLAND_ADMISSION_PATH || pathname === WONDERLAND_STATUS_PATH) return false;
   if (pathname === '/wonderland' || pathname.startsWith('/wonderland/')) return true;
   const folded = pathname.toLowerCase();
-  return folded === WONDERLAND_ADMISSION_PATH || folded.startsWith(`${WONDERLAND_ADMISSION_PATH}/`);
+  return folded === WONDERLAND_ADMISSION_PATH || folded.startsWith(`${WONDERLAND_ADMISSION_PATH}/`)
+    || folded === WONDERLAND_STATUS_PATH || folded.startsWith(`${WONDERLAND_STATUS_PATH}/`);
 }
 
 /**
@@ -40,14 +47,17 @@ export function isWonderlandRoute(path: string): boolean {
 export function classifyWonderlandDispatchPath(bridgePath: string, rawPath: string): {
   readonly catchAllPath: string | null;
   readonly exactAdmission: boolean;
+  readonly exactStatus: boolean;
 } {
-  if (isWonderlandAdmissionRoute(rawPath)) return { catchAllPath: null, exactAdmission: true };
-  const candidate = bridgePath === WONDERLAND_ADMISSION_PATH || (!isWonderlandRoute(bridgePath) && isWonderlandRoute(rawPath))
+  if (isWonderlandAdmissionRoute(rawPath)) return { catchAllPath: null, exactAdmission: true, exactStatus: false };
+  if (isWonderlandStatusRoute(rawPath)) return { catchAllPath: null, exactAdmission: false, exactStatus: true };
+  const candidate = bridgePath === WONDERLAND_ADMISSION_PATH || bridgePath === WONDERLAND_STATUS_PATH
+    || (!isWonderlandRoute(bridgePath) && isWonderlandRoute(rawPath))
     ? rawPath
     : bridgePath;
   return isWonderlandRoute(candidate)
-    ? { catchAllPath: candidate, exactAdmission: false }
-    : { catchAllPath: null, exactAdmission: false };
+    ? { catchAllPath: candidate, exactAdmission: false, exactStatus: false }
+    : { catchAllPath: null, exactAdmission: false, exactStatus: false };
 }
 
 export async function handleWonderlandRoute(input: WonderlandRouteRequest, deps: {

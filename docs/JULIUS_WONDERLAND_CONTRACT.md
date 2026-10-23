@@ -229,10 +229,10 @@ catch-all and is refused as that catch-all refuses every other unknown
 `/wonderland/` path.
 A **202** whose `state` is `ADMISSION_HELD` and whose body has no error closes
 the pair. `ClassifyDispatchAnswer` reads that 2xx as Accepted. The client then
-tracks progress by polling status. It does not resend the pair. Until a status
-answer says providers are running, the client shows **admitted, waiting for
-the paid run**. `dispatched: false` on that 202 is the fact that no provider
-is running yet.
+tracks progress by polling `GET /relay-api/wonderland/julius/status`. It does
+not resend the pair. Until a status answer says providers are running, the
+client shows **admitted, waiting for the paid run**. `dispatched: false` on
+that 202 is the fact that no provider is running yet.
 
 **Server run id.** That reservation also mints one server run id and keeps it
 with the pair. The shape is the Julius bootstrap run id: `run:` plus 24
@@ -269,9 +269,50 @@ that fails leaves the pair reserved in that process with state
 `LEDGER_UNWRITTEN`, does not publish a row, and does not try the write again.
 A resend in that process returns the same `serverRunId`.
 
-`dispatched` stays false in this change by design. The founder operator claim
-tool is the only writer of the dispatched transition. This admission file
-does not claim a row.
+`dispatched` stays false on an admission row. The founder operator claim tool
+is the only writer of the dispatched transition. That transition, and later
+progress, are written to the operator journal beside the admission file
+(`<store>.operator.json`), with the same schema version, atomic write, lock,
+and fail-closed rule. The admission document stays `{ schemaVersion, rows }`.
+
+## Status
+
+`GET /relay-api/wonderland/julius/status?runId=<run:24hex>&projectId=` is a
+read of the local admission file. The pathname match is the same rule as
+admission: a query stays on the route, and a trailing slash, a different case,
+or a child path stays on the Wonderland catch-all.
+
+The guards are the admission guards: loopback peer and Host, no forwarding
+header, a native session, the founder player, and the paired project. The
+route then reads the file and returns `{ wljRunId, serverRunId, state, cause?,
+updatedAt }`. `state` is `held`, `dispatched`, `dispatch_failed`, or
+`already_spent`. A later progress token is returned only when that file
+already holds it. The route does not call the operator tool, does not run
+`gh`, does not read a credential, and does not spawn a process.
+
+A run is visible to the player who owns the stored row. A different player, a
+`runId` that is not `run:` plus 24 lowercase hex, and an unknown `runId` each
+receive the same 404 body. The file is not modified by any of these answers.
+
+## Durability
+
+- After a restart, a held record stays held. Opening the admission file does
+  not dispatch and does not mint a new server run id.
+- Replaying the same `wlj_` returns the stored state and the stored
+  `serverRunId`. The replay does not create a fresh pair.
+- If the ledger write fails, the answer is fail-closed `LEDGER_UNWRITTEN`.
+  The pair stays reserved. A resend returns that same pair, and the run id is
+  not freed for a second admission.
+- A write is atomic: the new document is written to a temp file, `fsync`ed,
+  then renamed over the store. A reader sees the previous document or the
+  complete next one.
+
+## Progress source
+
+The operator tool's future `status --watch` is the only writer of later
+progress. It would read the run with the founder's own `gh` and append that
+progress onto the admission record. That command is not implemented here. The
+relay only reads the record the tool has already written.
 
 **Skywalker's ruling.** `julius-first-live-mission.yml` plus
 `scripts/julius-paid-slot.mjs` is the only thing that can spend. Admission
