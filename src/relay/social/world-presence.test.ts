@@ -341,6 +341,19 @@ describe('MP-VIS-02 REV2: the activation event is sequenced by the server, idemp
     expect(seen(w, s, 9100)?.handoffEvent).toMatchObject({ seq: 3, kind: 'ACTIVATE' });
   });
 
+  it('W14-1: a stale same-epoch ACTIVATE replayed after a DEACTIVATE, past the interval and while the stale report re-equips, is still ignored (the (epoch, n) guard alone stops it)', () => {
+    const { s, w: w0 } = joined();
+    let w = w0;
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(1, 'ACTIVATE') }, 1000));
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'NONE', handoffEvent: ev(2, 'DEACTIVATE') }, 3000));
+    expect(seen(w, s, 3100)?.handoffEvent).toMatchObject({ seq: 2, kind: 'DEACTIVATE' });
+    // the client's resend of the first report (TWIN_SWORDS + ACTIVATE n=1) arrives late, reordered by HTTP: more than the minimum interval
+    // after the DEACTIVATE, and legal on its face (NONE -> TWIN_SWORDS), so only the (epoch, n) guard tells it is not new
+    expect(5000 - 3000).toBeGreaterThan(WORLD_HANDOFF_EVENT_MIN_INTERVAL_MS);
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(1, 'ACTIVATE') }, 5000));
+    expect(seen(w, s, 5100)?.handoffEvent, 'the activation is not replayed').toMatchObject({ seq: 2, kind: 'DEACTIVATE' });
+  });
+
   it('is bounded: a second NEW event within the minimum interval is dropped, and is not revived later by a resend (its report already stated the new equipped state)', () => {
     const { s, w: w0 } = joined();
     let w = w0;

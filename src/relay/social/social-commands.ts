@@ -763,7 +763,10 @@ function applyOne(
       for (const c of [motion, skin]) if (!c.ok) return invalid(c.message);
       const num = (field: string) => (typeof body[field] === 'number' ? (body[field] as number) : Number.NaN);
       // THE TRANSPORT RING'S CURSOR (T1 v1 section 2.5, P1): the URL QUERY's `sinceMs` -- the `asOfMs` of this client's previous
-      // answer, echoed -- NEVER a body field: the body stays the seven report fields (the registered void2 scan reads their names).
+      // answer, echoed -- NEVER a body field. The body is the seven report fields (x, y, z, yaw, speed, motion, skinId) plus, only from a
+      // client with wl.Handoff.Replicate on (default 0), the optional MP-VIS-02 `handoff` and `handoffEvent` read below. The registered void2
+      // scan (B_WLWORLD_FIELDS) reads the client's "WLWORLD report fields" log line, not this server, and at the client's default that line
+      // names exactly the seven; a cursor in the body would add an eighth name to it, so `sinceMs` stays in the query.
       // Only a whole number of 1-15 digits counts; anything else, a body field of that name included, is ABSENT and the answer is
       // today's, byte for byte. Never an error: a bad cursor must not cost the player their position report. worldViewFor bounds it.
       const rawSince = Object.hasOwn(input.query, 'sinceMs') ? input.query.sinceMs : undefined;
