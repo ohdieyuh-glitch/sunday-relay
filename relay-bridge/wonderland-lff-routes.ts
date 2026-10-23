@@ -1,6 +1,7 @@
 /**
- * LOOKING FOR FEED routes. Not mounted on the bridge server by this change:
- * a composition root calls `handleLffHttp` with the session's own player.
+ * LOOKING FOR FEED routes. `createBridgeServer` calls `handleLffHttp` when
+ * `WONDERLAND_LFF=1` and `WONDERLAND_LFF_DIR` names a store root. The session's
+ * player is the actor. Off, or with no directory, the bridge answers 503.
  *
  * Paths are the LFF 037 list named in
  * wonderland/Tools/b33_v3_1b/server_check/ROUTES_cbe584be_vs_client_1e7cdebb.md.

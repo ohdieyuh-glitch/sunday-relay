@@ -146,6 +146,15 @@ Each criterion names the test that proves it.
     Proved by `AC-18 the f1fbb264 desktop client can post, filter, request, and read its own shapes`
     in `relay-bridge/wonderland-lff-routes.test.ts`.
 
+17. **The bridge mounts the routes only when asked.** `WONDERLAND_LFF` defaults
+    off, and those paths answer 503 `lff_unavailable`. With the flag set to `1`
+    and `WONDERLAND_LFF_DIR` unset or empty, the board is not built and the
+    paths answer 503. There is no default directory. Social must also be on.
+    A non-empty Origin is 403. No native social session is 401.
+    `/wonderland/social/lffx` is not this route. A POST body that is not JSON,
+    or is over the body limit, is 400.
+    Proved by `relay-bridge/wonderland-lff-http.test.ts`.
+
 ## Data model
 
 Schema `relay-wonderland-lff.v1`.
@@ -174,9 +183,13 @@ they are handed one board, including a board opened later on the same directory.
 ## API
 
 `handleLffHttp` in `relay-bridge/wonderland-lff-routes.ts` takes the board, the
-caller id, the method, the path, a JSON body, a query map, and `nowIso`. It is
-not registered on `server.ts` or in `SOCIAL_OPERATIONS` here, so the live bridge
-does not answer these paths until a composition root calls the handler.
+caller id, the method, the path, a JSON body, a query map, and `nowIso`.
+`createBridgeServer` builds one board beside the browser sessions and calls
+that handler for `/wonderland/social/lff` and `/wonderland/social/lff/`. The
+flag `WONDERLAND_LFF` defaults off. With the flag set to `1`,
+`WONDERLAND_LFF_DIR` must name the store root; an unset or empty value does
+not select a default directory, and the routes answer 503. Social must also
+be enabled. The routes are not added to `SOCIAL_OPERATIONS`.
 
 Success answers are `{ ok: true, result }` with HTTP 201 for create and 200
 otherwise. Failures are `{ ok: false, error: { code, message } }`.
@@ -212,13 +225,17 @@ returned; the C++ predicate is the same open-feed rule for a local row.
 ## What this change does not do
 
 It does not implement private servers or GVE. It does not mint a party. It does
-not change a readiness percentage or a scorecard. It does not mount the handler
-on the running bridge. It does not serve `POST /reports`. It does not apply a
-block list. The desktop author row's presence is a stand-in, not a live
-presence. Unreal Engine was not available to compile the client. The client
-view itself is not in this branch: it lives on
+not change a readiness percentage or a scorecard. The handler is mounted on
+`createBridgeServer` and stays off unless `WONDERLAND_LFF=1` and
+`WONDERLAND_LFF_DIR` is set. It does not serve `POST /reports`. It does not
+apply a block list. The desktop author row's presence is a stand-in, not a
+live presence. Unreal Engine was not available to compile the client. The
+client view itself is not in this branch: it lives on
 `backup/wonderland/r16reh16w-aa930c26` at `f1fbb264f1936924ce685a4b0234df3dc28fcae5`,
 which is contained in tip `aa930c269c43a52fc31c785f7bdcc231c8af6cf0`.
+The desktop sign-in that mints a native social session needs a database, so
+the HTTP tests do not post a listing through a live session. That post is
+proved on the handler by AC-18.
 
 ## Desktop client contract
 
@@ -329,71 +346,19 @@ handler does about each one:
 the same paths. The view sends an empty object for close, delete, withdraw,
 accept, and decline, and does not read those success bodies beyond HTTP 200.
 
-## Mount, not applied
+## Mount
 
-`handleLffHttp` is not called from `relay-bridge/server.ts` in this change.
-`isSocialRoute` matches every `/wonderland/social` path, so a later handler
-would never see `/wonderland/social/lff`. The block below is the one to place
-immediately before `if (isSocialRoute(path.replace('/relay-api', '')))`. It is
-not applied here. The query decoder keeps a decoded `projectLabel` and `skill`,
-including spaces, and leaves a plus sign as a plus sign. One decode only.
+`handleLffHttp` is called from `createBridgeServer` in `relay-bridge/server.ts`.
+The board is built once, next to the browser sessions, not inside the request.
+The block sits immediately before `if (isSocialRoute(path.replace('/relay-api', '')))`,
+because that check matches every `/wonderland/social` path.
 
-```typescript
-import { createWonderlandLffFileStore } from '../src/relay/persistence/wonderland-lff-file-store';
-import { WonderlandLffBoard } from '../src/relay/mission/wonderland/wonderland-lff';
-import { handleLffHttp } from './wonderland-lff-routes';
-
-const lffBoard = new WonderlandLffBoard(
-  () => `lff_${randomUUID().replace(/-/g, '')}`,
-  createWonderlandLffFileStore({ root: process.env.WONDERLAND_LFF_DIR?.trim() || '/data/wonderland-lff' }),
-);
-
-const lffPath = (req.url ?? '/').replace(/^\/relay-api/, '');
-const lffPathname = lffPath.split('?')[0] ?? lffPath;
-if (lffPathname === '/wonderland/social/lff' || lffPathname.startsWith('/wonderland/social/lff/')) {
-  if (!socialEnabled) {
-    send(res, 503, { error: { kind: 'social_unavailable', message: 'Social is not available on this server.' } }, cors);
-    return;
-  }
-  if (origin !== undefined && origin !== '') {
-    send(res, 403, { error: { code: 'desktop_only', message: 'Wonderland social is reached from the Wonderland desktop client.' } }, cors);
-    return;
-  }
-  const lffHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
-  const lffToken = lffHeader?.match(/^Relay-Session\s+(.+)$/i)?.[1] ?? null;
-  const lffFacts = lffToken === null ? null : browserSessions.verifyNativeSocialSession({ token: lffToken, now: Date.now() });
-  if (lffFacts === null || !lffFacts.ok) {
-    send(res, 401, { error: { code: 'session_required', message: 'Sign in to Wonderland to use social.' } }, cors);
-    return;
-  }
-  const lffQuery: Record<string, string | undefined> = {};
-  const lffSearch = lffPath.split('?')[1] ?? '';
-  for (const pair of lffSearch.split('&')) {
-    if (pair.length === 0) continue;
-    const at = pair.indexOf('=');
-    const rawKey = at < 0 ? pair : pair.slice(0, at);
-    const rawValue = at < 0 ? '' : pair.slice(at + 1);
-    const decode = (text: string): string | null => {
-      try { return decodeURIComponent(text.replace(/\+/g, '%2B')); }
-      catch { return null; }
-    };
-    const key = decode(rawKey);
-    const value = decode(rawValue);
-    if (key === null || value === null) continue;
-    if (!['limit', 'category', 'projectLabel', 'skill', 'mine', 'hasOpenSlots', 'cursor'].includes(key)) continue;
-    if (key.length > 32 || value.length > 200) continue;
-    if (/[\u0000-\u001f\u007f]/.test(key) || /[\u0000-\u001f\u007f]/.test(value)) continue;
-    lffQuery[key] = value;
-  }
-  const lffResult = handleLffHttp(lffBoard, {
-    method,
-    path: lffPathname,
-    actorId: lffFacts.participantId,
-    body: method === 'POST' ? await readBody(req) : undefined,
-    query: lffQuery,
-    nowIso: new Date().toISOString(),
-  });
-  send(res, lffResult.status, lffResult.body, { ...cors, 'cache-control': 'no-store' });
-  return;
-}
-```
+`WONDERLAND_LFF` defaults off. Off, `/wonderland/social/lff` answers 503
+`lff_unavailable`. On, `WONDERLAND_LFF_DIR` must be a non-empty directory.
+Unset or empty fails closed with 503 and does not use a default path. Social
+must also be enabled. A non-empty Origin is 403 `desktop_only`. No native
+social session is 401 `session_required`. The session check uses the same hop
+as the social routes. A POST body that is not JSON, or is over the body limit,
+is 400 from this block. `/wonderland/social/lffx` does not enter the block.
+The query decoder keeps a decoded `projectLabel` and `skill`, including
+spaces, and leaves a plus sign as a plus sign. One decode only.
