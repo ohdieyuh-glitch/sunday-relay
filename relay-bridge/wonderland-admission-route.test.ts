@@ -193,6 +193,46 @@ describe('POST /wonderland/julius/dispatch', () => {
     expect(classifyDispatchAnswer(429, true, kind(other?.body))).toBe('Refused');
   });
 
+  it('a non-founder native session is founder_only', async () => {
+    const ports = createWonderlandAdmissionService({
+      env: env(),
+      operatorToken: 'operator-token',
+      verifyNativeSession: ({ token }) => token === 'other-token'
+        ? { playerId: 'other-player', projectId: 'project-1', sessionId: 'sess-2' }
+        : null,
+      readWorkflowText: () => null,
+    });
+    const result = await handleWonderlandAdmissionRoute(request({
+      authorization: 'Relay-Session other-token',
+    }), ports);
+    expect(result?.status).toBe(403);
+    expect(kind(result?.body)).toBe('julius_dispatch_founder_only');
+  });
+
+  it('anything isLoopbackPeer rejects is not_loopback', async () => {
+    const ports = service();
+    const cases: Array<Partial<WonderlandAdmissionRouteRequest>> = [
+      { forwarded: true },
+      { remoteAddress: '8.8.8.8' },
+      { remoteAddress: undefined },
+      { host: 'example.com' },
+      { host: undefined },
+      { host: '127.0.0.1.example' },
+    ];
+    for (const over of cases) {
+      const result = await handleWonderlandAdmissionRoute(request(over), ports);
+      expect(result?.status, JSON.stringify(over)).toBe(403);
+      expect(kind(result?.body), JSON.stringify(over)).toBe('julius_dispatch_not_loopback');
+    }
+  });
+
+  it('a queried path still reaches the admission handler', async () => {
+    const queried = `${WONDERLAND_ADMISSION_PATH}?projectId=project-1`;
+    const result = await handleWonderlandAdmissionRoute(request({ path: queried, url: queried }), service());
+    expect(result?.status).toBe(202);
+    expect((result?.body as { data: { state: string } }).data.state).toBe('ADMISSION_HELD');
+  });
+
   it('refuses the operator credential, a browser origin, and a missing session with the J1 kinds', async () => {
     const ports = service();
     const operator = await handleWonderlandAdmissionRoute(request({ authorization: 'Bearer operator-token' }), ports);
@@ -230,7 +270,6 @@ describe('admission path exclusion is exact', () => {
     '/wonderland/julius/dispatch/',
     '/Wonderland/Julius/Dispatch',
     '/wonderland/julius/dispatch/x',
-    '/wonderland/julius/dispatch?x=1',
   ] as const;
   const CONTROL = '/wonderland/no-such-route';
 
@@ -274,7 +313,17 @@ describe('admission path exclusion is exact', () => {
     expect(exact).toEqual({ catchAllPath: null, exactAdmission: true });
   });
 
-  it('sends slash, case, child, and query variants through the catch-all refusal', async () => {
+  it('a query on the admission pathname is admission', () => {
+    const queried = `${WONDERLAND_ADMISSION_PATH}?projectId=project-1`;
+    expect(isWonderlandAdmissionRoute(queried)).toBe(true);
+    expect(isWonderlandRoute(queried)).toBe(false);
+    expect(classifyWonderlandDispatchPath(WONDERLAND_ADMISSION_PATH, queried)).toEqual({
+      catchAllPath: null,
+      exactAdmission: true,
+    });
+  });
+
+  it('sends slash, case, and child variants through the catch-all refusal', async () => {
     const signedOut = await catchAll(CONTROL);
     const signedIn = await catchAll(CONTROL, playerToken);
     expect(signedOut).toEqual({ status: 401, body: { error: 'authenticated player identity required' } });

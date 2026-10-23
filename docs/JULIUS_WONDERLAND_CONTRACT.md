@@ -221,9 +221,12 @@ and it is not taken here.
 `julius-first-live-mission.yml`, and does not retry. See
 `docs/integration/bridge-audit-2026-10-23.md`.
 
-**Wrapper contract for that 202.** The path is exact: a trailing slash, a
-different case, a child path, or a query is still the Wonderland catch-all and
-is refused as that catch-all refuses every other unknown `/wonderland/` path.
+**Wrapper contract for that 202.** The match is the pathname
+`/wonderland/julius/dispatch`. A query on that pathname, including
+`projectId`, is still admission: the handler reads the project from it. A
+trailing slash, a different case, or a child path is still the Wonderland
+catch-all and is refused as that catch-all refuses every other unknown
+`/wonderland/` path.
 A **202** whose `state` is `ADMISSION_HELD` and whose body has no error closes
 the pair. `ClassifyDispatchAnswer` reads that 2xx as Accepted. The client then
 tracks progress by polling status. It does not resend the pair. Until a status

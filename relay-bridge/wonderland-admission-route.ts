@@ -38,8 +38,20 @@ const EMPTY_PINS: ReviewedModelPins = {
   architectModel: null, codingModel: null, reviewerProvider: null, reviewerModel: null,
 };
 
+/**
+ * Pathname of a bridge path. A query is not part of the route. A trailing
+ * slash is, so `/wonderland/julius/dispatch/` is not this route.
+ */
+export function wonderlandAdmissionPathname(path: string): string {
+  try {
+    return new URL(path, 'http://relay.invalid').pathname;
+  } catch {
+    return path.split('?')[0] || '/';
+  }
+}
+
 export function isWonderlandAdmissionRoute(path: string): boolean {
-  return path === WONDERLAND_ADMISSION_PATH;
+  return wonderlandAdmissionPathname(path) === WONDERLAND_ADMISSION_PATH;
 }
 
 /** Map a mission-handler request onto this route. The raw key is hashed later. */
