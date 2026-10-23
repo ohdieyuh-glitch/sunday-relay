@@ -1205,7 +1205,7 @@ describe('the evidence dump names only tables and columns the migrations create'
       // The Prompt Architect half. Paid attempt #3 failed here and the artifact
       // could not say which rule refused the plan.
       'requestedModel', 'responseId',
-      // The Coding Agent's Anthropic API request id and message id. The runtime session id is not either of them.
+      // The Coding Agent's Anthropic API request id and message id, and the reviewer's usage-file request id on the same columns. The runtime session id is not either of them. A message id does not fill responseId.
       'providerRequestId', 'providerMessageId', 'providerRequestAvailability', 'providerRequestUnavailableReason',
       'validationPassed', 'validationReasonCode', 'validationField',
       // Paid runs 34185920678 and 34186711214 recorded `plan_false_work_claim`
