@@ -9,6 +9,16 @@ not evidence by itself. Run: python -I -B tests/test_b33_tooling_fixes.py   (D-4
   R2 b33_judge.py stays byte-identical (sha256 4caddf0b...).
   R3 DRIVE_RECORD.txt logs sim_accel (the -SimAccel default stays 0).
   R4 b6_b33a_reanalysis/SHA256SUMS.txt fails exactly its 2 documented v3.1 entries, which equal the JUDGE_b33a_v3_1.* hashes.
+  Skywalker's review of e1285752 (2026-10-23):
+  FA RUN_CLOSE.json optional_close_files: the optional close files expected, found and missing (all missing still leaves a record).
+  FE RAM_GUARD_TRIP.txt and STOP_LOG.txt are hashed at close when present and skipped when missing.
+  OBSERVER_FOLLOW.md launcher half (2026-10-23):
+  OF1 -ObserverFollow is refused (exit 2, before anything is made) unless the role is SURVEY or REHEARSAL_NOT_PREREG. Values (FORGE #416
+      024a0d57: the client reads only the first token): whitespace, a quote, a semicolon or a comma is refused with a pointer to the user
+      id; 'off' is refused at launch (the observer starts unfollowed); empty, other characters or > 64 refused; first / names / ids pass.
+  OF2 without -ObserverFollow the client arguments and the disclosed block are byte-identical to e1285752's (its frozen fragment).
+  OF3 with it, the observer's -ExecCmds ends with wl.Qa.FollowRemote <who>, disclosed (qa_cmds_observer, observer_follow) and logged;
+      DRIVE_RECORD.txt copies it from RUN.json; the client command itself is not added here (FORGE #416).
 """
 import hashlib, json, os, re, shutil, subprocess, tempfile, unittest
 
@@ -153,7 +163,7 @@ def ps_file(script, args):
 class StopHashesRam(unittest.TestCase):
     """R1: b33_stop.ps1 -FromLauncher on a fixture run folder with no processes and no lease"""
 
-    def close(self, ram_log, ram_trace):
+    def close(self, ram_log, ram_trace, guard_trip=False, stop_log=False):
         run = tempfile.mkdtemp(prefix="b33stop_")
         self.addCleanup(shutil.rmtree, run, True)
         with open(os.path.join(run, "RUN.json"), "w", encoding="utf-8") as f:
@@ -165,6 +175,12 @@ class StopHashesRam(unittest.TestCase):
         if ram_trace:
             with open(os.path.join(run, "RAM_TRACE.csv"), "w", encoding="ascii", newline="") as f:
                 f.write("utc,elapsed_s,free_gb,below_guard\r\n2026-10-23T09:36:05.0000000Z,3.0,2.229,0\r\n")
+        if guard_trip:
+            with open(os.path.join(run, "RAM_GUARD_TRIP.txt"), "w", encoding="ascii") as f:
+                f.write("2026-10-23T09:40:00.0000000Z free 1.05 GB < in-run guard 1.1 GB: the run is STOPPED\n")
+        if stop_log:
+            with open(os.path.join(run, "STOP_LOG.txt"), "w", encoding="utf-8") as f:
+                f.write("2026-10-23T09:41:00.0000000Z stop: an earlier stop report (fixture)\n")
         rc, out = ps_file(os.path.join(ROOT, "b33_stop.ps1"), ["-Run", run, "-FromLauncher"])
         with open(os.path.join(run, "RUN_CLOSE.json"), encoding="utf-8-sig") as f:
             close = json.load(f)
@@ -200,6 +216,50 @@ class StopHashesRam(unittest.TestCase):
         src = launch_src()
         self.assertNotIn("written before the close so the stop hashes it", src)
         self.assertIn("b33_stop.ps1\n  # hashes RAM_LOG.json and RAM_TRACE.csv", src)
+
+
+class StopOptionalCloseFiles(unittest.TestCase):
+    """Skywalker's e1285752 review: F-A (RUN_CLOSE.json records the optional close files expected / found / missing) and F-E
+    (RAM_GUARD_TRIP.txt and STOP_LOG.txt hashed at close when present, skipped when missing)"""
+    ALL = ["RAM_LOG.json", "RAM_TRACE.csv", "RAM_GUARD_TRIP.txt", "STOP_LOG.txt"]
+
+    def close(self, *a, **k):
+        return StopHashesRam.close(self, *a, **k)
+
+    def test_FA_all_missing_still_leaves_a_record(self):
+        run, close, sums, out = self.close(False, False)
+        self.assertEqual(close["close_errors"] or [], [], out)
+        opt = close["optional_close_files"]
+        self.assertEqual(opt["expected"], self.ALL)
+        self.assertEqual(opt["found"] or [], [])
+        self.assertEqual(opt["missing"], self.ALL)
+
+    def test_FA_found_and_missing_split(self):
+        run, close, sums, out = self.close(True, False, guard_trip=True)
+        opt = close["optional_close_files"]
+        self.assertEqual(opt["found"], ["RAM_LOG.json", "RAM_GUARD_TRIP.txt"])
+        self.assertEqual(opt["missing"], ["RAM_TRACE.csv", "STOP_LOG.txt"])
+
+    def test_FA_all_found(self):
+        run, close, sums, out = self.close(True, True, guard_trip=True, stop_log=True)
+        opt = close["optional_close_files"]
+        self.assertEqual(opt["found"], self.ALL)
+        self.assertEqual(opt["missing"] or [], [])
+
+    def test_FE_guard_trip_and_stop_log_hashed_when_present(self):
+        run, close, sums, out = self.close(True, True, guard_trip=True, stop_log=True)
+        self.assertEqual(close["close_errors"] or [], [], out)
+        for n in self.ALL + ["RUN.json"]:
+            self.assertEqual(sums.get(n), sha256(os.path.join(run, n)), (n, sums))
+        with open(os.path.join(run, "SHA256SUMS_AT_CLOSE.txt"), "rb") as f:
+            self.assertEqual(close["sums_sha256"], hashlib.sha256(f.read()).hexdigest())
+
+    def test_FE_guard_trip_and_stop_log_skipped_when_missing(self):
+        run, close, sums, out = self.close(True, True)
+        self.assertEqual(close["close_errors"] or [], [], out)
+        self.assertNotIn("RAM_GUARD_TRIP.txt", sums)
+        self.assertNotIn("STOP_LOG.txt", sums)
+        self.assertEqual(sums.get("RAM_LOG.json"), sha256(os.path.join(run, "RAM_LOG.json")))
 
 
 class JudgeUnchanged(unittest.TestCase):
@@ -247,6 +307,247 @@ class B6ExpectedFailures(unittest.TestCase):
         for k, h in failed.items():
             self.assertIn(k, note)
             self.assertIn(h, note)
+
+
+# ---- OBSERVER_FOLLOW.md, the launcher half (2026-10-23)
+# e1285752's b33_launch.ps1, from '$logCvars = @("wl.Remote.LogPeriod' up to '$PREREG_RENDER = @(' (sha256 below): the client arguments and
+# the disclosed block exactly as they were before -ObserverFollow existed. OF2 runs it and the current launcher side by side.
+OLD_ARGS_FRAGMENT_E1285752 = r"""$logCvars = @("wl.Remote.LogPeriod $LogPeriod")
+function ClientArgs([string]$ud, [int]$winX, [string]$ident, [string[]]$extra) {
+  # empty entries dropped: an empty [string[]] argument can arrive as one '' (that was the trailing comma on the observer's -ExecCmds)
+  $cmds = @(@("wl.Social.Dev $ident http://127.0.0.1:$Port") + $logCvars + $RenderCvars + $extra | Where-Object { $_ -and $_.Trim() })
+  $flush = $(if ($ForceLogFlush) { ' -forcelogflush' } else { '' })
+  return "-userdir=`"$ud`" -windowed -ResX=$ResX -ResY=$ResY -WinX=$winX -WinY=$WinY -wldev$flush -ExecCmds=`"$($cmds -join ',')`""   # no -wlframes (M2 B-5)
+}
+$udS = Join-Path $run 'sender'; $udO = Join-Path $run 'observer'
+$argS = ClientArgs $udS $SenderX $SenderName @()
+$obsExtra = @(); if ($Control) { $obsExtra = $CONTROL_CVARS }   # an explicit array: $(if ... else { @() }) gives $null, i.e. one '' entry
+$argO = ClientArgs $udO $ObserverX $ObserverName $obsExtra
+$disclosed = [ordered]@{
+  logging_cvars = $logCvars; render_cvars = @($RenderCvars); control_cvars_observer = @($obsExtra)
+  switches = @('-wldev (needed by wl.Social.Dev)', "-windowed -ResX=$ResX -ResY=$ResY -WinX/-WinY (ignored by the client; the launcher places the windows)") + $(if ($ForceLogFlush) { @('-forcelogflush') } else { @() })
+  # THE EXACT LAUNCH SWITCH LIST (M2 ruling B-5): the judge VOIDs any switch in a client's own LogInit Command Line that is not in this list
+  launch_switches = @('-userdir', '-windowed', '-ResX', '-ResY', '-WinX', '-WinY', '-wldev', '-ExecCmds') + $(if ($ForceLogFlush) { @('-forcelogflush') } else { @() })
+  gameplay_cvars = @()
+}
+"""
+OLD_ARGS_FRAGMENT_SHA256 = "43d99e857335882679f257c967b022ce9520b90b7fc5f255528bc48f04318108"
+CONTROL_CVARS = "@('wl.Remote.InterpEaseZ 30', 'wl.Remote.ReportTimeSamples 0', 'wl.Remote.RttClock 0')"
+
+
+def ps_rc(cmd):
+    p = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd], capture_output=True, text=True)
+    return p.returncode, (p.stdout + p.stderr).strip()
+
+
+def between(src, start, end):
+    i = src.index(start)
+    return src[i:src.index(end, i)]
+
+
+def role_line():
+    lines = [l for l in launch_src().splitlines() if l.startswith("$runRole = $(if ($Control)")]
+    assert len(lines) == 1, lines
+    return lines[0]
+
+
+def follow_gate():
+    # the -ObserverFollow refusal block of the current launcher (from "$followCmd = ''" up to the -NotCountedRoot default)
+    return between(launch_src(), "$followCmd = ''", "if (-not $NotCountedRoot)")
+
+
+def setup(control, scenario, relay_source, server_tree, render, flush):
+    return ("$Control = $%s; $Scenario = '%s'; $RelaySource = '%s'; $ServerTree = '%s'; $Port = 8796; $LogPeriod = 0.1; "
+            "$RenderCvars = @(%s); $ForceLogFlush = $%s; $ResX = 940; $ResY = 1031; $WinY = 0; $SenderX = 0; $ObserverX = 960; "
+            "$SenderName = 'wlautoA'; $ObserverName = 'wlautoB'; $run = 'C:\\runs\\R'; $CONTROL_CVARS = %s\n" % (
+                "true" if control else "false", scenario, relay_source, server_tree, ", ".join("'%s'" % r for r in render),
+                "true" if flush else "false", CONTROL_CVARS))
+
+
+OUT = ("\nWrite-Output ('ARGS=' + $argS); Write-Output ('ARGO=' + $argO); "
+       "Write-Output ('DISC=' + ($disclosed | ConvertTo-Json -Depth 6 -Compress))\n")
+REFUSE0 = 'function Refuse0([string]$why) { Write-Output "RESULT refused (candidate check, nothing made): $why"; exit 2 }\n'
+
+
+def run_new(cfg, follow=None):
+    # the CURRENT launcher's role line, -ObserverFollow gate and argument/disclosed fragment, in a script block with the launcher's own
+    # parameter (so $PSBoundParameters is real: an explicit -ObserverFollow '' counts as given)
+    frag = between(launch_src(), '$logCvars = @("wl.Remote.LogPeriod', "$PREREG_RENDER = @(")
+    body = REFUSE0 + setup(*cfg) + role_line() + "\n" + follow_gate() + frag + OUT
+    call = "& { param([string]$ObserverFollow = '')\n" + body + "}" + ("" if follow is None else " -ObserverFollow " + ps_str(follow))
+    return ps_rc(call)
+
+
+def ps_str(v):
+    # any value as a PowerShell expression built from char codes (no quoting problems in argv on Windows or Linux)
+    if v == "":
+        return "''"
+    return "(-join [char[]]@(%s))" % ",".join(str(ord(c)) for c in v)
+
+
+def run_old(cfg):
+    return ps_rc(setup(*cfg) + OLD_ARGS_FRAGMENT_E1285752 + OUT)
+
+
+def parse(out):
+    d = {}
+    for l in out.splitlines():
+        for k in ("ARGS=", "ARGO=", "DISC="):
+            if l.startswith(k):
+                d[k[:-1]] = l[len(k):]
+    return d
+
+
+# (control, scenario, relay_source, server_tree, render cvars, forcelogflush)
+NO_FLAG_CFGS = [
+    (False, "all", "", "", ["scalability 0"], False),            # the PREREG judged launch
+    (True, "all", "", "", ["scalability 0"], False),             # CONTROL
+    (False, "survey", "", "", ["scalability 0"], False),         # SURVEY
+    (False, "jumps", r"C:\dev\iwonder\_wdev_r18_ring_relay", "", [], False),   # REHEARSAL_NOT_PREREG
+    (False, "m4", "", r"C:\x", ["scalability 0", "r.VSync 0"], True),
+]
+
+
+class ObserverFollowLauncher(unittest.TestCase):
+    def test_OF0_frozen_fragment_is_e1285752s(self):
+        self.assertEqual(hashlib.sha256(OLD_ARGS_FRAGMENT_E1285752.encode("utf-8")).hexdigest(), OLD_ARGS_FRAGMENT_SHA256)
+
+    def test_OF1_refused_for_a_judged_run(self):
+        rc, out = run_new((False, "all", "", "", ["scalability 0"], False), "first")
+        self.assertEqual(rc, 2, out)
+        self.assertIn("-ObserverFollow is refused for role JUDGED", out)
+        self.assertNotIn("ARGO=", out)
+
+    def test_OF1_refused_for_a_control_run(self):
+        rc, out = run_new((True, "jumps", "", "", ["scalability 0"], False), "first")
+        self.assertEqual(rc, 2, out)
+        self.assertIn("-ObserverFollow is refused for role CONTROL", out)
+
+    def test_OF1_refused_when_given_empty_on_a_judged_run(self):
+        rc, out = run_new((False, "m4", "", "", ["scalability 0"], False), "")
+        self.assertEqual(rc, 2, out)
+        self.assertIn("refused for role JUDGED", out)
+
+    SURVEY = (False, "survey", "", "", ["scalability 0"], False)
+
+    def test_OF1_empty_value_refused_on_a_survey(self):
+        rc, out = run_new(self.SURVEY, "")
+        self.assertEqual(rc, 2, out)
+        self.assertIn("-ObserverFollow is empty", out)
+
+    def test_OF1_whitespace_quote_semicolon_comma_refused_with_the_user_id_pointer(self):
+        # FORGE #416 024a0d57: wl.Qa.FollowRemote reads only the first token; -ExecCmds splits on commas
+        for bad in ("two words", "a\tb", " lead", "trail ", 'dq"x', "sq'x", "semi;colon", "a,b", "back`tick", "Wl Auto B"):
+            rc, out = run_new(self.SURVEY, bad)
+            self.assertEqual(rc, 2, (bad, out))
+            self.assertIn("contains whitespace, a quote, a semicolon or a comma", out, bad)
+            self.assertIn("pass the player's user id instead", out, bad)
+            self.assertNotIn("ARGO=", out, bad)
+
+    def test_OF1_off_is_refused_at_launch_in_any_case(self):
+        for off in ("off", "OFF", "Off"):
+            rc, out = run_new(self.SURVEY, off)
+            self.assertEqual(rc, 2, (off, out))
+            self.assertIn("-ObserverFollow off is refused at launch", out, off)
+            self.assertIn("omit -ObserverFollow", out, off)
+
+    def test_OF1_other_characters_or_too_long_refused_with_the_user_id_pointer(self):
+        for bad in ("x" * 65, "na\u00efve", "a/b", "a+b"):
+            rc, out = run_new(self.SURVEY, bad)
+            self.assertEqual(rc, 2, (bad, out))
+            self.assertIn("is not first, a display name or a user id", out, bad)
+            self.assertIn("pass the player's user id instead", out, bad)
+
+    def test_OF1_first_display_names_and_user_ids_pass_unchanged(self):
+        for good in ("first", "First", "wlautoA", "WLAUTOA", "steam:76561198000000001", "0f3c9a2e-41b7-4c55-9d1e-7a0b6c2d9e10",
+                     "a.b@c_d", "x" * 64):
+            rc, out = run_new(self.SURVEY, good)
+            self.assertEqual(rc, 0, (good, out))
+            self.assertIn("wl.Qa.FollowRemote " + good, parse(out)["ARGO"], (good, out))
+            self.assertEqual(json.loads(parse(out)["DISC"])["qa_cmds_observer"], ["wl.Qa.FollowRemote " + good])
+
+    def test_OF1_refusal_comes_before_anything_is_made(self):
+        src = launch_src()
+        gate = src.index("-ObserverFollow is refused for role")
+        self.assertLess(gate, src.index("New-Item -ItemType Directory -Force $run"))
+        self.assertLess(src.index("$runRole = $(if ($Control)"), gate)
+        self.assertIn("Refuse0 \"-ObserverFollow is refused for role ${runRole}", src)
+
+    def test_OF2_without_the_flag_the_arguments_and_disclosed_block_are_byte_identical(self):
+        for cfg in NO_FLAG_CFGS:
+            rc_n, out_n = run_new(cfg)
+            rc_o, out_o = run_old(cfg)
+            self.assertEqual((rc_n, rc_o), (0, 0), (cfg, out_n, out_o))
+            n, o = parse(out_n), parse(out_o)
+            self.assertEqual(sorted(n), ["ARGO", "ARGS", "DISC"], out_n)
+            self.assertEqual(n, o, cfg)
+            self.assertNotIn("FollowRemote", out_n)
+
+    def test_OF2_the_flag_is_off_by_default(self):
+        self.assertIn("[string]$ObserverFollow = ''", launch_src())
+
+    def test_OF3_survey_follow_appends_last_to_the_observer_only_and_discloses(self):
+        cfg = (False, "survey", "", "", ["scalability 0"], False)
+        rc, out = run_new(cfg, "first")
+        self.assertEqual(rc, 0, out)
+        n, o = parse(out), parse(run_old(cfg)[1])
+        self.assertEqual(n["ARGS"], o["ARGS"])
+        self.assertTrue(o["ARGO"].endswith('"'))
+        self.assertEqual(n["ARGO"], o["ARGO"][:-1] + ',wl.Qa.FollowRemote first"')
+        self.assertTrue(n["ARGO"].endswith('-ExecCmds="wl.Social.Dev wlautoB http://127.0.0.1:8796,wl.Remote.LogPeriod 0.1,scalability 0,wl.Qa.FollowRemote first"'), n["ARGO"])
+        dn, do = json.loads(n["DISC"]), json.loads(o["DISC"])
+        self.assertEqual(dn["qa_cmds_observer"], ["wl.Qa.FollowRemote first"])
+        self.assertEqual(dn["observer_follow"]["who"], "first")
+        self.assertIs(dn["observer_follow"]["counted"], False)
+        self.assertEqual(dn["control_cvars_observer"], [])
+        for k in ("qa_cmds_observer", "observer_follow"):
+            dn.pop(k)
+        self.assertEqual(dn, do)
+
+    def test_OF3_rehearsal_follow_by_user_id_is_accepted(self):
+        rc, out = run_new((False, "jumps", "", r"C:\x", [], False), "dev-wlautoA_01")
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(parse(out)["ARGO"].endswith(',wl.Qa.FollowRemote dev-wlautoA_01"'), out)
+
+    def test_OF3_logged_and_not_a_prereg_launch(self):
+        src = launch_src()
+        self.assertIn("-and (-not $ForceLogFlush) -and (-not $followCmd)", src)
+        say = src.index('if ($followCmd) { Say ("OBSERVER FOLLOW: -ObserverFollow')
+        self.assertLess(say, src.index('Say "planned OBSERVER args: $argO"'))
+        self.assertLess(say, src.index("if ($DryChecks) {\n  # every input check above passed"))
+
+    def test_OF3_the_client_command_is_not_added_here(self):
+        # FORGE adds wl.Qa.FollowRemote to the client in PR #416; these tools only pass it on
+        src_root = os.path.normpath(os.path.join(ROOT, "..", "..", "Source"))
+        if os.path.isdir(src_root):
+            for d, _, fs in os.walk(src_root):
+                for f in fs:
+                    if f.endswith((".cpp", ".h")):
+                        with open(os.path.join(d, f), encoding="utf-8", errors="replace") as fh:
+                            self.assertNotIn("wl.Qa.FollowRemote", fh.read(), f)
+
+
+class DriveRecordObserverFollow(unittest.TestCase):
+    def record(self, disclosed):
+        run = tempfile.mkdtemp(prefix="b33drvof_")
+        self.addCleanup(shutil.rmtree, run, True)
+        if disclosed is not None:
+            with open(os.path.join(run, "RUN.json"), "w", encoding="utf-8") as f:
+                json.dump({"run_id": "of_fixture", "role": "SURVEY", "disclosed": disclosed}, f)
+        rc, out = ps_file(os.path.join(ROOT, "b33_drive.ps1"), ["-Run", run, "-Mode", "calibrate", "-DryRun"])
+        recs = [os.path.join(d, f) for d, _, fs in os.walk(run) for f in fs if f == "DRIVE_RECORD.txt"]
+        self.assertEqual(len(recs), 1, out)
+        with open(recs[0], encoding="utf-8-sig") as f:
+            return f.read()
+
+    def test_OF4_drive_record_copies_the_disclosed_follow(self):
+        rec = self.record({"render_cvars": ["scalability 0"], "qa_cmds_observer": ["wl.Qa.FollowRemote first"],
+                           "observer_follow": {"who": "first", "command": "wl.Qa.FollowRemote first", "counted": False}})
+        self.assertIn("observer_follow=first qa_cmds_observer=wl.Qa.FollowRemote first source=RUN.json", rec)
+
+    def test_OF4_drive_record_unchanged_without_it(self):
+        self.assertNotIn("observer_follow", self.record({"render_cvars": ["scalability 0"]}))
+        self.assertNotIn("observer_follow", self.record(None))
 
 
 if __name__ == "__main__":

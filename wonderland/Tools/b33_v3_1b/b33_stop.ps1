@@ -4,7 +4,10 @@
 #   1. kills ONLY the processes recorded in RUN.json (frames capture, both clients, the dev server), each verified by pid AND process start time
 #      (a pid that was reused by another program is never touched); anything else is left alone
 #   2. after they are gone, hashes every log and record of the run (SHA256SUMS_AT_CLOSE.txt; C0.3: logs hashed after the run closes),
-#      including RAM_LOG.json and RAM_TRACE.csv when they exist (2026-10-23)
+#      including RAM_LOG.json and RAM_TRACE.csv when they exist (2026-10-23), and RAM_GUARD_TRIP.txt and STOP_LOG.txt when they exist
+#      (2026-10-23, Skywalker F-E on e1285752); RUN_CLOSE.json optional_close_files records which of these four were expected, found and
+#      missing at close (F-A: a run with all of them missing still leaves a record). STOP_LOG.txt is normally MISSING at close: the
+#      conductor writes it from this script's own output after the close.
 #   3. releases the shared lease (heavy-lease.py release --lease <id>) and writes RUN_CLOSE.json
 # Inputs : -Run <run folder>. Outputs: RUN_CLOSE.json, SHA256SUMS_AT_CLOSE.txt (the dev-social.mjs bundle is hashed in RUN.json and removed).
 # Run:  powershell -NoProfile -ExecutionPolicy Bypass -File b33_stop.ps1 -Run <run folder>
@@ -74,11 +77,17 @@ while ((Get-Date) - $t0 -lt [TimeSpan]::FromSeconds(30)) {
 Start-Sleep -Seconds 1
 # ---- 2. hash after close (P62: in its own try)
 $sums = @(); $logSha = [ordered]@{}; $nFrames = 0
+# 2026-10-23 (Skywalker F-A on e1285752): which optional close files were expected, found and missing; written to RUN_CLOSE.json, so an
+# absence is itself recorded (a missing file is still never a close error). Descriptive only: no verdict reads it
+$optExpected = @('RAM_LOG.json', 'RAM_TRACE.csv', 'RAM_GUARD_TRIP.txt', 'STOP_LOG.txt')
+$optFound = @(); $optMissing = @()
+foreach ($o in $optExpected) { $present = $false; try { $present = [bool](Test-Path -LiteralPath (Join-Path $Run $o)) } catch { }; if ($present) { $optFound += $o } else { $optMissing += $o } }
 try {
 $files = @()
 # 2026-10-23 (Skywalker ruling 1 on 3c040da4, F1): RAM_LOG.json and RAM_TRACE.csv (D-5) are hashed too; like every entry here, a missing
 # file is skipped (Test-Path), never a close error
-foreach ($rel in 'RUN.json', 'LAUNCH_LOG.txt', 'srv_out.txt', 'srv_err.txt', 'sender\Saved\Logs\Wonderland.log', 'observer\Saved\Logs\Wonderland.log', 'frames\index.csv', 'frames\frames.log', 'RAM_LOG.json', 'RAM_TRACE.csv') {
+# 2026-10-23 (Skywalker F-E on e1285752): RAM_GUARD_TRIP.txt and STOP_LOG.txt too, skipped the same way when missing
+foreach ($rel in 'RUN.json', 'LAUNCH_LOG.txt', 'srv_out.txt', 'srv_err.txt', 'sender\Saved\Logs\Wonderland.log', 'observer\Saved\Logs\Wonderland.log', 'frames\index.csv', 'frames\frames.log', 'RAM_LOG.json', 'RAM_TRACE.csv', 'RAM_GUARD_TRIP.txt', 'STOP_LOG.txt') {
   $f = Join-Path $Run $rel; if (Test-Path $f) { $files += Get-Item $f }
 }
 $files += @(Get-ChildItem -Path $Run -Recurse -File -Include 'timeline.csv', 'drive.log', 'DRIVE_RECORD.txt', 'route.json' -ErrorAction SilentlyContinue)
@@ -98,7 +107,9 @@ try { if ($R.lease_id) { $relOut = (& python -I $leaseTool release --lease $R.le
 $closeRec = [ordered]@{ closed_utc = (Get-Date).ToUniversalTime().ToString('o'); by = $(if ($FromLauncher) { 'conductor' } else { 'b33_stop.ps1' })
   killed = $killed; skipped = $skipped; log_sha256 = $logSha; frames_jpg = $nFrames; lease_id = $R.lease_id; lease_release = $relOut
   sums_file = 'SHA256SUMS_AT_CLOSE.txt'; sums_sha256 = $(try { (Get-FileHash (Join-Path $Run 'SHA256SUMS_AT_CLOSE.txt') -Algorithm SHA256).Hash.ToLower() } catch { '' })
-  close_errors = $closeErrors }
+  close_errors = $closeErrors
+  optional_close_files = [ordered]@{ expected = @($optExpected); found = @($optFound); missing = @($optMissing)
+    note = 'hashed into SHA256SUMS_AT_CLOSE.txt when found; missing = absent at close (never a close error). RAM_GUARD_TRIP.txt exists only after a guard trip; STOP_LOG.txt is normally written by the conductor after the close' } }
 try { $closeRec | ConvertTo-Json -Depth 4 | Set-Content -Path $close -Encoding utf8 } catch { Write-Output "RUN_CLOSE.json could not be written: $($_.Exception.Message)" }
 foreach ($e in $closeErrors) { Write-Output "CLOSE ERROR $e" }
 Write-Output ("closed: killed {0}, skipped {1}, lease release: {2}" -f $killed.Count, $skipped.Count, $relOut)

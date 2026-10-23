@@ -54,6 +54,15 @@
 #      -forcelogflush (default OFF: with it every log line is flushed and the file stamps fell up to 70 s behind at boot in b33a).
 #      -Control (M1 ruling R-5, R2-19 must-fail control): the OBSERVER also gets exactly "wl.Remote.InterpEaseZ 30,wl.Remote.ReportTimeSamples 0,
 #      wl.Remote.RttClock 0" (the r16reh16u values), disclosed, the run folder and RUN.json are labelled CONTROL: never a judged run.
+#      -ObserverFollow <first|displayName|userId> (2026-10-23, OBSERVER_FOLLOW.md; default OFF): the OBSERVER's -ExecCmds also ends with
+#      "wl.Qa.FollowRemote <who>" (the dev-only client command of FORGE's #416: it views the sender through a QA camera and never moves the
+#      observer pawn). REFUSED (exit 2, before anything is made) unless the run's role is SURVEY or REHEARSAL_NOT_PREREG: the judge VOIDs
+#      any extra observer command, so a follow run is never counted. Disclosed in RUN.json / DRYCHECKS.json (disclosed.qa_cmds_observer,
+#      disclosed.observer_follow), logged in LAUNCH_LOG.txt, and b33_drive.ps1 copies it into DRIVE_RECORD.txt. Without it the launch is
+#      byte-identical to before (no key, no line, the same client arguments).
+#      Values (FORGE #416 024a0d57: the client reads only the FIRST token; first|<displayName>|<userId>|off, first/off and display names
+#      case-insensitive, user id exact): passed through unchanged; whitespace, a quote, a semicolon or a comma is REFUSED with a pointer to
+#      the user id; 'off' is REFUSED at launch (the observer starts unfollowed, so it would change nothing: omit the flag).
 #   5. waits for "WLWORLD joined" in both logs, watches for a Windows Defender Firewall prompt ("Windows Security Alert") and, if one shows,
 #      says a PERSON must close it with X (never Allow); it never touches it
 #   5b. WINDOW LAYOUT (the packaged clients IGNORE -ResX/-ResY: lead, B35 v4 shakedown 10-20, client areas came up 1600x1000): finds each
@@ -93,7 +102,8 @@ param(
   [switch]$NoFrames, [double]$Fps = 5,
   [switch]$DryChecks,
   [string]$CandidateFile = '',  # '' = CANDIDATE.json beside this launcher, THE pinned candidate; another file only with -DryChecks (tests)
-  [string]$RelayPinFile = ''    # v3.1: '' = RELAY_PIN.json beside this launcher, THE relay pin; another file only with -DryChecks (tests)
+  [string]$RelayPinFile = '',   # v3.1: '' = RELAY_PIN.json beside this launcher, THE relay pin; another file only with -DryChecks (tests)
+  [string]$ObserverFollow = ''  # 2026-10-23 (OBSERVER_FOLLOW.md): '' = OFF; first|displayName|userId -> wl.Qa.FollowRemote <who> (SURVEY / REHEARSAL_NOT_PREREG only)
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -Path (Join-Path $PSScriptRoot 'b33_native.cs')
@@ -150,6 +160,20 @@ $tag = $(if ($Control) { "CONTROL_$Scenario" } else { $Scenario })
 $notCounted = ($Scenario -eq 'survey') -or [bool]$RelaySource -or [bool]$ServerTree
 $runRole = $(if ($Control) { 'CONTROL' } elseif ($RelaySource -or $ServerTree) { 'REHEARSAL_NOT_PREREG' } elseif ($Scenario -eq 'survey') { 'SURVEY' } else { 'JUDGED' })
 if ($Control -and $notCounted) { Refuse0 "-Control runs are counted CONTROL runs: not with -Scenario survey, -RelaySource or -ServerTree" }
+# 2026-10-23 (OBSERVER_FOLLOW.md): -ObserverFollow only for runs that are never counted (the judge VOIDs any extra observer ExecCmds entry)
+$followCmd = ''
+if ($PSBoundParameters.ContainsKey('ObserverFollow') -or $ObserverFollow) {
+  if ($runRole -cne 'SURVEY' -and $runRole -cne 'REHEARSAL_NOT_PREREG') { Refuse0 "-ObserverFollow is refused for role ${runRole}: only a SURVEY (-Scenario survey) or REHEARSAL_NOT_PREREG (-RelaySource / -ServerTree) run may add wl.Qa.FollowRemote (the judge VOIDs any extra observer command; a follow run is never counted)" }
+  # FORGE #416 024a0d57: wl.Qa.FollowRemote reads only the FIRST token and accepts first|<displayName>|<userId>|off ('first' and 'off'
+  # case-insensitive, display name case-insensitive, user id exact). A value with whitespace, a quote, a semicolon or a comma would be
+  # cut at the first token or break -ExecCmds, so it is refused here with a pointer to the user id. 'off' is REFUSED at launch: the
+  # observer starts unfollowed, so 'off' would change nothing; omit -ObserverFollow instead.
+  if ($ObserverFollow -eq '') { Refuse0 "-ObserverFollow is empty: give first, a display name or a user id, or omit the flag (default OFF)" }
+  if ($ObserverFollow -match '[\s"''`;,]') { Refuse0 "-ObserverFollow '$ObserverFollow' contains whitespace, a quote, a semicolon or a comma: wl.Qa.FollowRemote reads only the first token and -ExecCmds splits on commas, so pass the player's user id instead (e.g. -ObserverFollow <userId>)" }
+  if ($ObserverFollow -ieq 'off') { Refuse0 "-ObserverFollow off is refused at launch: the observer starts unfollowed, so off would change nothing; omit -ObserverFollow (default OFF)" }
+  if ($ObserverFollow -cnotmatch '^[A-Za-z0-9_.@:-]{1,64}$') { Refuse0 "-ObserverFollow '$ObserverFollow' is not first, a display name or a user id this launcher passes (1-64 of A-Z a-z 0-9 _ . @ : -): pass the player's user id instead" }
+  $followCmd = "wl.Qa.FollowRemote $ObserverFollow"
+}
 if (-not $NotCountedRoot) { $NotCountedRoot = Join-Path (Split-Path ([IO.Path]::GetFullPath($RunsRoot).TrimEnd('\')) -Parent) 'NOT_COUNTED_b33' }
 $rrFull = [IO.Path]::GetFullPath($RunsRoot).TrimEnd('\') + '\'; $ncFull = [IO.Path]::GetFullPath($NotCountedRoot).TrimEnd('\') + '\'
 if ($ncFull.StartsWith($rrFull, [StringComparison]::OrdinalIgnoreCase) -or $rrFull.StartsWith($ncFull, [StringComparison]::OrdinalIgnoreCase)) { Refuse0 "-NotCountedRoot $NotCountedRoot must be OUTSIDE the counted-runs folder $RunsRoot (and not contain it)" }
@@ -228,17 +252,26 @@ function ClientArgs([string]$ud, [int]$winX, [string]$ident, [string[]]$extra) {
 $udS = Join-Path $run 'sender'; $udO = Join-Path $run 'observer'
 $argS = ClientArgs $udS $SenderX $SenderName @()
 $obsExtra = @(); if ($Control) { $obsExtra = $CONTROL_CVARS }   # an explicit array: $(if ... else { @() }) gives $null, i.e. one '' entry
+$obsControl = @($obsExtra)                                       # the CONTROL values only (disclosed as control_cvars_observer)
+if ($followCmd) { $obsExtra = @($obsExtra) + @($followCmd) }     # -ObserverFollow: appended LAST (never with -Control: refused above)
 $argO = ClientArgs $udO $ObserverX $ObserverName $obsExtra
 $disclosed = [ordered]@{
-  logging_cvars = $logCvars; render_cvars = @($RenderCvars); control_cvars_observer = @($obsExtra)
+  logging_cvars = $logCvars; render_cvars = @($RenderCvars); control_cvars_observer = @($obsControl)
   switches = @('-wldev (needed by wl.Social.Dev)', "-windowed -ResX=$ResX -ResY=$ResY -WinX/-WinY (ignored by the client; the launcher places the windows)") + $(if ($ForceLogFlush) { @('-forcelogflush') } else { @() })
   # THE EXACT LAUNCH SWITCH LIST (M2 ruling B-5): the judge VOIDs any switch in a client's own LogInit Command Line that is not in this list
   launch_switches = @('-userdir', '-windowed', '-ResX', '-ResY', '-WinX', '-WinY', '-wldev', '-ExecCmds') + $(if ($ForceLogFlush) { @('-forcelogflush') } else { @() })
   gameplay_cvars = @()
 }
+if ($followCmd) {
+  # added ONLY with -ObserverFollow: without it the disclosed block (RUN.json / DRYCHECKS.json) is unchanged
+  $disclosed.qa_cmds_observer = @($followCmd)
+  $disclosed.observer_follow = [ordered]@{ who = $ObserverFollow; command = $followCmd; client = "FORGE #416 wl.Qa.FollowRemote (dev-only; logs WLFOLLOW; never moves the observer pawn)"
+    counted = $false; note = 'OBSERVER_FOLLOW.md: visual evidence only; frame time and figure animation can differ from a no-follow run, so do not mix them in a timing comparison' }
+}
 $PREREG_RENDER = @('scalability 0')   # PREREG B33 v3 judged launch (the judge's PREREG_RENDER_CVARS is authoritative; this only prints the NOTE)
-$preregLaunch = $serverPrereg -and ((@($RenderCvars) -join '|') -ceq ($PREREG_RENDER -join '|')) -and ($LogPeriod -eq 0.1) -and (-not $ForceLogFlush)
+$preregLaunch = $serverPrereg -and ((@($RenderCvars) -join '|') -ceq ($PREREG_RENDER -join '|')) -and ($LogPeriod -eq 0.1) -and (-not $ForceLogFlush) -and (-not $followCmd)
 if (-not $preregLaunch) { Say "NOTE: NOT the PREREG B33 v3 judged launch (-RenderCvars 'scalability 0', -LogPeriod 0.1, no -ForceLogFlush, cbe584be server): the judge VOIDs this run" }
+if ($followCmd) { Say ("OBSERVER FOLLOW: -ObserverFollow {0}: the observer's -ExecCmds ends with '{1}' (role {2}, never counted; disclosed.qa_cmds_observer)" -f $ObserverFollow, $followCmd, $runRole) }
 Say "planned SENDER args: $argS"
 Say "planned OBSERVER args: $argO"
 if ($DryChecks) {

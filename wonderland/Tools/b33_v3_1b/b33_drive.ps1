@@ -99,6 +99,8 @@
 # Inputs : <Run>\RUN.json (sender pids + log), the route file (default routes\b33_route_v1.json), the live sender log.
 # Outputs: <Run>\drive_<mode>_<utc>\timeline.csv (UTC ms per step: every key down/up, mouse move, click, block begin/end, abort), drive.log,
 #          DRIVE_RECORD.txt (hashes of the drive, native code, route; parameters). It toggles <Run>\frames\CAPTURE around blocks (b33_frames.ps1).
+#          2026-10-23 (OBSERVER_FOLLOW.md): when <Run>\RUN.json (or DRYCHECKS.json) discloses the launcher's -ObserverFollow
+#          (disclosed.qa_cmds_observer), DRIVE_RECORD.txt gets one more line, observer_follow=<who> ...; otherwise it is unchanged.
 # SAFETY (memory core-drive-real-input-harness): low-level keyboard+mouse hooks on their own thread; every event of ours carries a marker, so
 #   ANY other key/mouse event (a person = HARDWARE, or other software = FOREIGN injected) aborts at once and releases our keys; a hook positive
 #   control (+1/-1 px) must be seen first; QuietSec of silence before the first input; the foreground window's pid is checked before EVERY
@@ -976,6 +978,17 @@ function Do-M4([bool]$survey, [bool]$finalReturn = $false) {
 $hashes = foreach ($f in @($MyInvocation.MyCommand.Path, (Join-Path $PSScriptRoot 'b33_native.cs'), $Route)) { "{0}  {1}" -f (Get-FileHash $f -Algorithm SHA256).Hash.ToLower(), $f }
 $rec = @("B33 DRIVE (W2DEV b33_drive.ps1) DIAGNOSTIC tool, W2DEV, not evidence by itself", "mode=$Mode dry=$([bool]$DryRun) run=$Run utc=$utc",
          "stand=$StandJumps walk=$WalkJumps run=$RunJumps m4=$M4Repeats quiet_s=$QuietSec cpd_param=$CountsPerDeg skipcal=$([bool]$SkipCalibration) noclick=$([bool]$NoClick) turn_stop_deg=$TurnStopDeg drop_abort_uu=$DropAbortUu precise_uu=$PreciseUu floor_tol_uu=$FloorTolUu cal_passes=$CalPasses cal_cpd_range=$CalMinCpd..$CalMaxCpd cal_warmup_counts=$CalWarmupCounts mouse_chunk=$MouseChunk mouse_interval_ms=$MouseIntervalMs sim_actor_turn_rate=$SimActorTurnRate sim_key_up_lag_ms=$SimKeyUpLagMs corner_probe_ms=$CornerProbeMs walkoff_taps=$WalkOffTaps mount_tol_uu=$MountTolUu walkoff_probes=$WalkOffProbes walkoff_probe_ms=$WalkOffProbeMs walkoff_tol_deg=$WalkOffTolDeg sim_lag_ms=$SimLagMs sim_accel=$SimAccel") + $hashes
+# 2026-10-23 (OBSERVER_FOLLOW.md): the launcher's -ObserverFollow, read from the run's disclosed block; a missing or unreadable file adds nothing
+try {
+  foreach ($jf in 'RUN.json', 'DRYCHECKS.json') {
+    $jp = Join-Path $Run $jf
+    if (Test-Path -LiteralPath $jp) {
+      $jd = (Get-Content -Raw -LiteralPath $jp | ConvertFrom-Json).disclosed
+      if ($jd -and $jd.qa_cmds_observer) { $rec += ("observer_follow={0} qa_cmds_observer={1} source={2} (launcher -ObserverFollow; never counted)" -f [string]$jd.observer_follow.who, (@($jd.qa_cmds_observer) -join '|'), $jf) }
+      break
+    }
+  }
+} catch { }
 [IO.File]::WriteAllLines((Join-Path $Out 'DRIVE_RECORD.txt'), [string[]]$rec, $U8)
 Copy-Item $Route (Join-Path $Out 'route.json')
 Row 'START' ("mode={0} dry={1}" -f $Mode, [bool]$DryRun)

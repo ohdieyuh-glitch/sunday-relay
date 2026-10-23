@@ -1,0 +1,140 @@
+B33 v3.1b -ObserverFollow + Skywalker F-A/F-D/F-E/F-F test runs (on e1285752), 2026-10-23, Cosmo, on a Linux box (NOT Windows)
+Host: Linux box, Python 3.13.5, PowerShell 7.4.6 (pwsh, invoked as `powershell`). Scratch copies of this tree; nothing launched, no client, no build.
+Limits: the same as TEST_OUTPUT_v3_1b_box_linux_20261023_followup.txt. test_b33.py shows the same 25 path-separator failures on POSIX (judge :339);
+  the judge is NOT changed (sha256 4caddf0b...); the "shim" run applies .replace("\\", os.sep) to a SCRATCH copy only. test_drive_and_stop.ps1
+  stops at the Win32 ClipRect call (:415 now) on Linux, before the C tests, so its new C13 runs only on Windows (Kaisin run reported outside the commit).
+
+Summary
+  tests/test_b33_tooling_fixes.py      42 run, 42 OK   (23 new: OF0-OF4 -ObserverFollow, FA x3, FE x2; on the e1285752 tools 19 of the 23 fail;
+                                                         OF0, OF3 no-client-command, OF4 without a follow and FE skipped-when-missing pass there by design)
+  tests/test_b33_wording.py             5 run,  5 OK
+  tests/test_b33.py (unmodified)       99 run, 72 OK, 25 failed, 2 skipped (the same 25 failures as at e1285752)
+  tests/test_b33.py (scratch shim)     99 run, 97 OK, 0 failed, 2 skipped
+  tests/test_drive_and_stop.ps1        30 OK, then stops at :415 (ClipRect); C13 is not reached on Linux
+  PowerShell parse errors (all *.ps1)   0
+  sha256sum -c SHA256SUMS.txt          75 OK, 0 FAILED (checked after the final regeneration; this file's own entry included)
+  b33_judge.py sha256                  4caddf0b34b74c9457b730ccdf2e2d1bab0fecbe51a51637dc34e53b4f80d0ec (unchanged)
+
+---- tests/test_b33_tooling_fixes.py -v
+test_R4_exactly_the_two_documented_v31_entries_fail_and_match_the_b6_judge_record (__main__.B6ExpectedFailures.test_R4_exactly_the_two_documented_v31_entries_fail_and_match_the_b6_judge_record) ... ok
+test_OF4_drive_record_copies_the_disclosed_follow (__main__.DriveRecordObserverFollow.test_OF4_drive_record_copies_the_disclosed_follow) ... ok
+test_OF4_drive_record_unchanged_without_it (__main__.DriveRecordObserverFollow.test_OF4_drive_record_unchanged_without_it) ... ok
+test_R3_default_sim_accel_is_logged_as_0 (__main__.DriveRecordSimAccel.test_R3_default_sim_accel_is_logged_as_0) ... ok
+test_R3_explicit_sim_accel_is_logged (__main__.DriveRecordSimAccel.test_R3_explicit_sim_accel_is_logged) ... ok
+test_R2_judge_is_byte_identical (__main__.JudgeUnchanged.test_R2_judge_is_byte_identical) ... ok
+test_D4_control_wording_unchanged (__main__.LaunchRole.test_D4_control_wording_unchanged) ... ok
+test_D4_counted_run_still_logged_as_judged (__main__.LaunchRole.test_D4_counted_run_still_logged_as_judged) ... ok
+test_D4_prereg_survey_is_logged_as_survey (__main__.LaunchRole.test_D4_prereg_survey_is_logged_as_survey) ... ok
+test_D4_relay_source_survey_is_logged_as_rehearsal (__main__.LaunchRole.test_D4_relay_source_survey_is_logged_as_rehearsal) ... ok
+test_D4_server_tree_jumps_is_logged_as_rehearsal (__main__.LaunchRole.test_D4_server_tree_jumps_is_logged_as_rehearsal) ... ok
+test_D1_every_entry_matches_and_every_tool_file_is_listed (__main__.Manifest.test_D1_every_entry_matches_and_every_tool_file_is_listed) ... ok
+test_D2_slice_logs_present_and_match_both_manifests (__main__.Manifest.test_D2_slice_logs_present_and_match_both_manifests) ... ok
+test_OF0_frozen_fragment_is_e1285752s (__main__.ObserverFollowLauncher.test_OF0_frozen_fragment_is_e1285752s) ... ok
+test_OF1_empty_value_refused_on_a_survey (__main__.ObserverFollowLauncher.test_OF1_empty_value_refused_on_a_survey) ... ok
+test_OF1_first_display_names_and_user_ids_pass_unchanged (__main__.ObserverFollowLauncher.test_OF1_first_display_names_and_user_ids_pass_unchanged) ... ok
+test_OF1_off_is_refused_at_launch_in_any_case (__main__.ObserverFollowLauncher.test_OF1_off_is_refused_at_launch_in_any_case) ... ok
+test_OF1_other_characters_or_too_long_refused_with_the_user_id_pointer (__main__.ObserverFollowLauncher.test_OF1_other_characters_or_too_long_refused_with_the_user_id_pointer) ... ok
+test_OF1_refusal_comes_before_anything_is_made (__main__.ObserverFollowLauncher.test_OF1_refusal_comes_before_anything_is_made) ... ok
+test_OF1_refused_for_a_control_run (__main__.ObserverFollowLauncher.test_OF1_refused_for_a_control_run) ... ok
+test_OF1_refused_for_a_judged_run (__main__.ObserverFollowLauncher.test_OF1_refused_for_a_judged_run) ... ok
+test_OF1_refused_when_given_empty_on_a_judged_run (__main__.ObserverFollowLauncher.test_OF1_refused_when_given_empty_on_a_judged_run) ... ok
+test_OF1_whitespace_quote_semicolon_comma_refused_with_the_user_id_pointer (__main__.ObserverFollowLauncher.test_OF1_whitespace_quote_semicolon_comma_refused_with_the_user_id_pointer) ... ok
+test_OF2_the_flag_is_off_by_default (__main__.ObserverFollowLauncher.test_OF2_the_flag_is_off_by_default) ... ok
+test_OF2_without_the_flag_the_arguments_and_disclosed_block_are_byte_identical (__main__.ObserverFollowLauncher.test_OF2_without_the_flag_the_arguments_and_disclosed_block_are_byte_identical) ... ok
+test_OF3_logged_and_not_a_prereg_launch (__main__.ObserverFollowLauncher.test_OF3_logged_and_not_a_prereg_launch) ... ok
+test_OF3_rehearsal_follow_by_user_id_is_accepted (__main__.ObserverFollowLauncher.test_OF3_rehearsal_follow_by_user_id_is_accepted) ... ok
+test_OF3_survey_follow_appends_last_to_the_observer_only_and_discloses (__main__.ObserverFollowLauncher.test_OF3_survey_follow_appends_last_to_the_observer_only_and_discloses) ... ok
+test_OF3_the_client_command_is_not_added_here (__main__.ObserverFollowLauncher.test_OF3_the_client_command_is_not_added_here) ... ok
+test_D5_failed_read_keeps_its_row (__main__.RamTrace.test_D5_failed_read_keeps_its_row) ... ok
+test_D5_loop_writes_a_row_per_reading_and_ram_log_names_the_trace (__main__.RamTrace.test_D5_loop_writes_a_row_per_reading_and_ram_log_names_the_trace) ... ok
+test_D5_row_above_the_guard (__main__.RamTrace.test_D5_row_above_the_guard) ... ok
+test_D5_row_below_the_guard_is_flagged (__main__.RamTrace.test_D5_row_below_the_guard_is_flagged) ... ok
+test_R1_both_missing_skipped_cleanly (__main__.StopHashesRam.test_R1_both_missing_skipped_cleanly) ... ok
+test_R1_both_present_both_hashed (__main__.StopHashesRam.test_R1_both_present_both_hashed) ... ok
+test_R1_launcher_comment_no_longer_claims_an_unhashed_record (__main__.StopHashesRam.test_R1_launcher_comment_no_longer_claims_an_unhashed_record) ... ok
+test_R1_trace_missing_log_still_hashed (__main__.StopHashesRam.test_R1_trace_missing_log_still_hashed) ... ok
+test_FA_all_found (__main__.StopOptionalCloseFiles.test_FA_all_found) ... ok
+test_FA_all_missing_still_leaves_a_record (__main__.StopOptionalCloseFiles.test_FA_all_missing_still_leaves_a_record) ... ok
+test_FA_found_and_missing_split (__main__.StopOptionalCloseFiles.test_FA_found_and_missing_split) ... ok
+test_FE_guard_trip_and_stop_log_hashed_when_present (__main__.StopOptionalCloseFiles.test_FE_guard_trip_and_stop_log_hashed_when_present) ... ok
+test_FE_guard_trip_and_stop_log_skipped_when_missing (__main__.StopOptionalCloseFiles.test_FE_guard_trip_and_stop_log_skipped_when_missing) ... ok
+
+----------------------------------------------------------------------
+Ran 42 tests in 33.360s
+
+OK
+
+---- tests/test_b33_wording.py -v
+test_W3_prereg_server_label_unchanged (__main__.LaunchLabel.test_W3_prereg_server_label_unchanged) ... ok
+test_W3_relay_source_run_is_labelled_relay_source (__main__.LaunchLabel.test_W3_relay_source_run_is_labelled_relay_source) ... ok
+test_W3_server_tree_run_keeps_the_server_tree_label (__main__.LaunchLabel.test_W3_server_tree_run_keeps_the_server_tree_label) ... ok
+test_W1_aborted_survey_return_run_is_not_called_a_run_without_survey_return (__main__.SurveyRecordWording.test_W1_aborted_survey_return_run_is_not_called_a_run_without_survey_return) ... ok
+test_W2_completed_survey_without_walkoff_keeps_the_old_wording (__main__.SurveyRecordWording.test_W2_completed_survey_without_walkoff_keeps_the_old_wording) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.689s
+
+OK
+
+---- tests/test_b33.py (unmodified): the 25 FAIL names
+  test_B10_control_vs_three_conditions
+  test_B2_registered_fail_with_w2_pass_is_fail
+  test_B3_bar_fail_under_a_backlog_is_fail
+  test_B4_no_timeline_is_inconclusive
+  test_B6_m4_needs_five_falls_in_both_runs
+  test_R7_04_control_needs_a_registered_bar_fail
+  test_R7_05_p7a_approval_rejection_invalid
+  test_R7_06_echoes
+  test_R8_05_close_hashes
+  test_deliberate_fail_air
+  test_deliberate_fail_sinking
+  test_deliberate_inconclusive_counts
+  test_exact_prereg_set_accepted_in_any_order
+  test_missing_command_line_is_inconclusive
+  test_next_block_input_0_1_s_after_end_is_inconclusive
+  test_other_cause_attempt_count_is_not_replaceable
+  test_p78_contamination_is_not_replaceable
+  test_pair_rules
+  test_perfect_passes
+  test_ready_candidate_is_the_source_of_the_expected_exe
+  test_record_rules
+  test_replaceable_cause_fewer_than_5_qualifying
+  test_survey_and_rehearsal_folders_beside_two_pass_runs_do_not_refuse_the_record
+  test_undisclosed_render_cvar_voids_disclosed_does_not
+  test_zero_qualifying_is_the_same_cause
+FAILED (failures=25, skipped=2)
+
+---- tests/test_b33.py (scratch shim): last line
+OK (skipped=2)
+
+---- tests/test_drive_and_stop.ps1: OK lines
+OK   D1 calibrate cpd=4.6 inp=0
+OK   D2 jumps B33 SLICER (W2DEV b33_slicer.py) sender samples 1190; counted jumps STANDING 12 WALKING 12 RUNNING 12; unclassified 0; walk-off falls 0; teleports 0
+OK   D3 m4: EXACTLY 10 attempts by default (Q-M2c-5) qualifying falls 10
+OK   D4 inverted mouse aborts at calibration B33ABORT: CAL: a 168 count move turned the walk the WRONG way (-36.5 deg): sign wrong; no further input
+OK   D5 wrong kerb box: MOUNT-FAILED (or v3.1e MOUNT-DOWN), no walk-off B33ABORT: MOUNT-DOWN: a mount tap took the Dog DOWN from z 96.0 to 1.7 at (137.6;4510.6): not the way onto the kerb; no further taps
+OK   D6 -Mode all: STAND, WALK, RUN and 10 M4 blocks (Q-M2c-5) in ONE drive timeline (R7-01), the last one followed by its return blocks: STAND,WALK,RUN,M4_1,M4_2,M4_3,M4_4,M4_5,M4_6,M4_7,M4_8,M4_9,M4_10
+OK   D7 route v2 survey + return dry run: runway, CORNER stops, mount, walk-off, return onto the kerb corners 12; on_kerb 2
+OK   D8 v1 waypoints on the model terrain reach the kerb with the v3.1 rules (rule-off outcome printed: the v3.1b line-following alone now holds this corner in the model; D11 tests the guard) rule off: exit 1 B33ABORT: LEFT-THE-PATH: z fell 105 uu (92.8 -> -11.8) within 1 s at (315;3572) on the leg to (180;4380): the route leaves walkable ground here | rule on: exit 0
+OK   D9 route v9 survey + return (late reports, acceleration): calibration, precise arrivals, the step onto the strip, the mount north on it, the walk-off heading by displacement, a qualifying walk-off, return, re-mount precise 17; on_kerb 2; last walk-off probe: WALKOFF-HEADING: round 1: moved 6.7 uu from (152.7;4451.1) to (159.4;4451.0) at heading -0.9 (the camera); wanted 0.0; error 0.9 deg; first fall: 1 | 113.0 (5) / 113.0 | -7.0 | 120.0 / 120.0 | 120.0 | YES |
+OK   D10 calibration is a starting gain: an asymmetry gives separate +/- gains, a first-pass outlier gives the median; neither stops the run asym: passes measured 3 of 3 (4.600 / 5.520 / 4.600); spread 20.0% (logged; not a gate); gains + 4.600 / - 5.520 (clamped 3.5..9); counts_per_deg=4.600 | outlier: passes measured 3 of 3 (5.000 / 6.000 / 6.000); spread 16.7% (logged; not a gate); gains + 5.500 / - 6.000 (clamped 3.5..9); counts_per_deg=6.000
+OK   D11 a gentle descent (~23 uu/s, invisible to the 1-s drop guard) aborts OFF-PATH; with the floor guard off it does not on: B33ABORT: OFF-PATH on the leg to (600;1000): z -5.6 is 16 uu below this leg's highest z 10.0 at (356;991): the route leaves the walkable surface here | off: B33ABORT: MOUNT-FAILED: not on the kerb (z -31.0 at (610.1;1098.9))
+OK   D12 heading drift 10 %: the probes turn the > 5 deg errors out (corners or walk-off); both walk-offs leave within 5 deg and qualify probes 39 (errors > 5: 22); last walk-off errors 0.0 / 0.0; qualifying falls 2
+OK   D14 jumps with counts/deg 20 % off after calibration: still >= 12 standing / walking / running jumps (no fine heading needed) STANDING 12 WALKING 12 RUNNING 12
+OK   D15 rehearsal 4's abort: a pass blocked after its turn is still measured (actor yaw) and the run goes on; a walled-in spawn stops it blocked after the turn: pass 3: counts=168 actor yaw 56.0->92.5 turned 36.5 deg (position heading n/a; moved 170 uu after the turn) counts_per_deg=4.600 | walled in: B33ABORT: CAL: no pass could be measured (the Dog was blocked in every pass): no further input
+OK   D13 rehearsal 3's F-A in the model: edge mount + drift, no probe -> the walk-off lands short of 100 (excluded); with the v3.1e displacement probe -> the error is turned out and the walk-off qualifies (or a refusal) no probe: 1 | 113.0 (5) / 113.0 | 27.5 | 85.5 / 85.5 | 85.5 | no | drop 85.5 < 100.0 uu: listed, excluded by the 100.0 rule only | probe: walk-off round errors 6.8 / -0.9; 1 | 113.0 (5) / 113.0 | -11.8 | 124.8 / 124.8 | 124.8 | YES |
+OK   D16 rehearsal 5's trough: route v4 stops at it (no mount, no walk-off); route v9 steps onto the strip and walks off qualifying v4: B33ABORT: MOUNT-DOWN: a mount tap took the Dog DOWN from z 96.0 to 51.0 at (118.0;4468.7): not the way onto the kerb; no further taps | v5: 1 | 113.0 (5) / 113.0 | -7.0 | 120.0 / 120.0 | 120.0 | YES |
+OK   D17 rehearsal 6's return in the model: v5's return cannot leave the landing (the wall east of it, as in the game); v6 without its declared descent stops at the terrace stairs (the guards still hold) v5: B33ABORT: PRECISE: could not close to (380;4455) with taps: d=72 at (308;4456) | v6 no 'down': B33ABORT: OFF-PATH during the taps to (334;4138): z -11.8 is 47 uu below this leg's highest z 35.6 at (315;4163): the route leaves the walkable surface here
+OK   D18 rehearsal 9b's stairs in the model: v7 meets the slab's west side and stops; v9 (D9) climbs the upper flight from the terrace with three tight (<= 12 uu) arrivals v7: B33ABORT: PRECISE: could not close to (284;3490) with taps: d=73 at (307;3559) | v9 tight arrivals: (255;3475) d=6 precise, (230;3462) d=9 precise, (205;3456) d=9 precise
+OK   D20 survey 11's 2.4-s log burst in the model: (0,3300) is reached by the burst's nearest sample (P75) and v10 survey + return re-mounts exit 0; (0;3300) d=17 (nearest sample of a burst at (-5;3284); newest d=459)
+OK   D22 composition 3's MOUNT-FAILED on the kerb: the newest report with only its motion line yet is skipped (P77); a WALK among the newest three, an older report without a position, or a low z still fail results: True,False,False,False,True
+OK   D23 route v11 = v10 + the one z hint (20.0 at (0,2908)) and its survey + return re-mounts; P80: an aborted live drive writes STOP_REQUEST (a dry run never does) v11 changed return index 9; survey exit 0; dry abort exit 1; finally block 1422 chars
+OK   D24 P78: every block end is followed by >= 1.601 s without input or BLOCK_BEGIN and 2 fresh IDLE reports (13 of 13); a 0.1 s gap FAILs the checker; composition 5's timeline (old drive) shows the overlap; P81 lets the descent's corner stop pass ends 13, gaps 13, violations 0; fixture: STAND END + 100 ms: KEY_DOWN W (fixture: a 0.1 s gap); composition 5: 0 violation(s), first -
+OK   D21 composition 2's miss: a pass-through waypoint passed within -PassLatUu (100) of its leg line is reached (P76); short of it, too far aside, or with the rule off it is not; precise legs never use it results: True,False,False,False,False
+OK   D19 route v10 in the model: survey + return re-mounts (tight corner (240;2935)); -Mode all sustains 10 attempts with returns; v9 on v10's terrain stops at the upper flight survey: exit 0, corner (240;2935) d=12 precise | all: exit 0, M4 falls YES 10, model loop s 64.8,67.9,61,67.2,62.4,65.6,65.4,68.1,67 | v9: B33ABORT: PRECISE: could not close to (175;3448) with taps: d=66 at (238;3468)
+OK   D25 v3.1 route pin: the shipped PENDING slot refuses -Mode all / m4; survey and jumps need none; a v10 test pin accepts v10 and refuses v11; nothing made ROUTE PIN: REFUSED: ROUTE_PIN.json (<scratch>/runps/ROUTE_PIN.json) is not PINNED with a 64-hex route_sha256 (status 'PENDING'): the counted M4 route is chosen on a survey before data | ROUTE PIN: not needed: -Mode survey | ROUTE PIN: OK: the pinned route 589c57fcc6ba15d33b8ff4a7d98e28140af8a9999c5e64301eefa2fe79efd731 | ROUTE PIN: REFUSED: -Route <scratch>/runps/routes/b33_route_v11.json (sha256 7de04985b6db89989b5ed8063972c2b143f3c45b4be8577d8c3b9917c390405b) is not the pinned route 589c57fcc6ba15d33b8ff4a7d98e28140af8a9999c5e64301eefa2fe79efd731
+OK   L1 2 px tolerance 
+OK   L2 touching frames do not overlap; 1 px does 
+OK   L3 layout check: the verified 960x1080 split passes; the unplaced 1600x1000 windows and a 3 px offset are refused ok=[] big=[sender frame (0,0)-(1616,1039) 1616x1039 is not within 2 px of the target (0,0)-(960,1080) 960x1080;observer frame (960,0)-(2576,1039) 1616x1039 is not within 2 px of the target (960,0)-(1920,1080) 960x1080;the frames overlap: (0,0)-(1616,1039) 1616x1039 and (960,0)-(2576,1039) 1616x1039;the client areas overlap: (8,31)-(1608,1031) 1600x1000 and (968,31)-(2568,1031) 1600x1000] off=[sender frame (3,0)-(963,1080) 960x1080 is not within 2 px of the target (0,0)-(960,1080) 960x1080;the frames overlap: (3,0)-(963,1080) 960x1080 and (960,0)-(1920,1080) 960x1080]
+OK   L4 click point from the re-read client rect (480;783)
+OK   L7 clip decision: the B35 clip vs the sender click point -> release; inside -> none; edges exclusive; whole desktop -> none True,True,True,True,True,True,True,True

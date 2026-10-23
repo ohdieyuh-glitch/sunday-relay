@@ -26,6 +26,8 @@
 #        wl.Remote.LogPeriod 0.1,scalability 0", RUN.json's disclosed.render_cvars is ["scalability 0"] and prereg_launch is true (false + NOTE
 #        without it); -Control appends exactly the three old values on the observer only; no client's -ExecCmds has an empty command (the
 #        observer's used to end in a trailing comma: $(if ... else { @() }) passed one '' entry)
+#  C13 (2026-10-23) -ObserverFollow: wl.Qa.FollowRemote <who> appended last to the observer's -ExecCmds for SURVEY / REHEARSAL_NOT_PREREG
+#        runs only, disclosed and logged; JUDGED / CONTROL / a bad value refused before anything is made; without it nothing changes
 #  C9 launcher -> judge: a synthetic run whose Command Lines are C8's planned arguments PASSES the judge's launch checks; the same with one
 #        more observer command (wl.Remote.RttClock 1, r.ScreenPercentage 50) is VOID; C1's launch without 'scalability 0' is VOID
 #  V1-V3 B-9: the route survey record (ROUTE OK; the SURVEY_WALKOFF fall printed, never counted); a proposed route changing kerb_z REFUSED; a
@@ -585,6 +587,33 @@ $c8ok = $c8.code -eq 0 -and $c8.dc.planned.sender.args.EndsWith($wantS) -and $c8
         $c8c.code -eq 0 -and $c8c.dc.planned.sender.args.EndsWith($wantS) -and $c8c.dc.planned.observer.args.EndsWith($wantOc) -and
         @(@($c1, $c8, $c8c) | ForEach-Object { $_.dc.planned.sender.args, $_.dc.planned.observer.args } | Where-Object { $_ -match ',"$|,,|="",|ExecCmds=","' }).Count -eq 0   # no empty command (the old trailing comma)
 Check "C8 -RenderCvars 'scalability 0': the planned ExecCmds and RUN.json's disclosed render_cvars are exactly the prereg set" $c8ok ("sender: {0} | observer: {1} | control observer: {2}" -f $c8.dc.planned.sender.args, $c8.dc.planned.observer.args, $c8c.dc.planned.observer.args)
+# C13 (2026-10-23, OBSERVER_FOLLOW.md) -ObserverFollow: a survey (and a -ServerTree rehearsal) under -DryChecks plans the observer's
+#     -ExecCmds with wl.Qa.FollowRemote <who> appended LAST, the sender unchanged, disclosed.qa_cmds_observer / observer_follow, the LAUNCH_LOG
+#     line and prereg_launch false; refused (exit 2, no run folder) for a JUDGED run, a -Control run, a comma, 'Off' and a space; without it a survey's
+#     planned arguments are exactly C8's and its disclosed block has no follow keys
+$c13a = DryLaunch @('-Scenario', 'survey', '-RenderCvars', 'scalability 0', '-ObserverFollow', 'first')
+$c13n = DryLaunch @('-Scenario', 'survey', '-RenderCvars', 'scalability 0')
+$c13b = DryLaunch @('-ServerTree', 'C:\dev\iwonder\wonderland-integration-sprint', '-ObserverFollow', 'wlautoA')
+$c13c = DryLaunch @('-RenderCvars', 'scalability 0', '-ObserverFollow', 'first')
+$c13d = DryLaunch @('-RenderCvars', 'scalability 0', '-Control', '-ObserverFollow', 'first')
+$c13e = DryLaunch @('-Scenario', 'survey', '-ObserverFollow', 'a,b')
+$c13f = DryLaunch @('-Scenario', 'survey', '-ObserverFollow', 'Off')          # FORGE #416 024a0d57: 'off' is refused at launch (meaningless)
+$c13g = DryLaunch @('-Scenario', 'survey', '-ObserverFollow', 'two words')    # the client reads only the first token: pass the user id
+$wantOf = '-wldev -ExecCmds="wl.Social.Dev wlautoB http://127.0.0.1:8796,wl.Remote.LogPeriod 0.1,scalability 0,wl.Qa.FollowRemote first"'
+$ok13 = $c13a.code -eq 0 -and $c13a.dc.role -eq 'SURVEY' -and $c13a.dc.planned.observer.args.EndsWith($wantOf) -and $c13a.dc.planned.sender.args.EndsWith($wantS) -and
+        (@($c13a.dc.disclosed.qa_cmds_observer) -join '|') -ceq 'wl.Qa.FollowRemote first' -and $c13a.dc.disclosed.observer_follow.who -ceq 'first' -and
+        $c13a.dc.disclosed.observer_follow.counted -eq $false -and @($c13a.dc.disclosed.control_cvars_observer).Count -eq 0 -and $c13a.dc.prereg_launch -eq $false -and
+        $c13a.log -like '*OBSERVER FOLLOW: -ObserverFollow first*' -and
+        $c13n.code -eq 0 -and $c13n.dc.planned.observer.args.EndsWith($wantO) -and $c13n.dc.planned.sender.args.EndsWith($wantS) -and
+        $null -eq $c13n.dc.disclosed.qa_cmds_observer -and $null -eq $c13n.dc.disclosed.observer_follow -and $c13n.log -notlike '*OBSERVER FOLLOW*' -and
+        ($c13a.dc.planned.observer.args -replace [regex]::Escape($c13a.dir), 'RUN') -ceq (($c13n.dc.planned.observer.args -replace [regex]::Escape($c13n.dir), 'RUN').TrimEnd('"') + ',wl.Qa.FollowRemote first"') -and
+        $c13b.code -eq 0 -and $c13b.dc.role -eq 'REHEARSAL_NOT_PREREG' -and $c13b.dc.planned.observer.args.EndsWith(',wl.Qa.FollowRemote wlautoA"') -and
+        $c13c.code -eq 2 -and $c13c.out -like '*-ObserverFollow is refused for role JUDGED*' -and $c13c.newDirs -eq 0 -and
+        $c13d.code -eq 2 -and $c13d.out -like '*-ObserverFollow is refused for role CONTROL*' -and $c13d.newDirs -eq 0 -and
+        $c13e.code -eq 2 -and $c13e.out -like '*contains whitespace, a quote, a semicolon or a comma*user id instead*' -and $c13e.newDirs -eq 0 -and
+        $c13f.code -eq 2 -and $c13f.out -like '*-ObserverFollow off is refused at launch*' -and $c13f.newDirs -eq 0 -and
+        $c13g.code -eq 2 -and $c13g.out -like '*contains whitespace, a quote, a semicolon or a comma*user id instead*' -and $c13g.newDirs -eq 0
+Check 'C13 -ObserverFollow: survey / rehearsal append wl.Qa.FollowRemote <who> last on the observer only, disclosed + logged; JUDGED, CONTROL, a comma, off and a space refused before anything is made; absent = unchanged' $ok13 ("follow: {0} | none: {1} | rehearsal: {2} | refusals {3}/{4}/{5}/{6}/{7}: {8} || {9} || {10} || {11} || {12}" -f $c13a.dc.planned.observer.args, $c13n.dc.planned.observer.args, $c13b.dc.planned.observer.args, $c13c.code, $c13d.code, $c13e.code, $c13f.code, $c13g.code, $c13c.out.Trim(), $c13d.out.Trim(), $c13e.out.Trim(), $c13f.out.Trim(), $c13g.out.Trim())
 # C9 launcher -> judge on a synthetic run whose Command Lines are the launcher's planned arguments
 function JudgeFromDry([string]$name, [string]$dcPath, [string]$append) {
   $rd = Join-Path $lf ("synth_" + $name)

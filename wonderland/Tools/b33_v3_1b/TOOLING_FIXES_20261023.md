@@ -76,3 +76,42 @@ Box results are in `tests/TEST_OUTPUT_v3_1b_box_linux_20261023_followup.txt`. A 
 - `TOOLING_FIXES_20261023.md`: changed (this section)
 - added: `b6_b33a_reanalysis/SHA256SUMS_EXPECTED_FAILURES.md` `379b5c36cc0eb1c6`, `tests/TEST_OUTPUT_v3_1b_box_linux_20261023_followup.txt` `330584ab1bc5c78f`
 - removed: none. The new total is 74 entries.
+
+## Follow-up 2: -ObserverFollow (OBSERVER_FOLLOW.md, launcher half) and Skywalker's e1285752 findings (2026-10-23)
+Skywalker's review of e1285752 gave PASS WITH FINDINGS. This commit adds the launcher half of OBSERVER_FOLLOW.md and fixes findings F-A, F-D, F-E and F-F. `b33_judge.py` is byte-identical (sha256 `4caddf0b…`, blob `651e33e9`). CANDIDATE, RELAY_PIN and ROUTE_PIN are unchanged, and readiness is unchanged. The client command `wl.Qa.FollowRemote` is FORGE's (#416, `024a0d57`) and is not added here.
+
+| Item | Change here |
+|---|---|
+| OBSERVER_FOLLOW.md | `b33_launch.ps1 -ObserverFollow <first\|displayName\|userId>`, default OFF. When given, the OBSERVER's `-ExecCmds` ends with `wl.Qa.FollowRemote <who>`; the sender is unchanged. It is disclosed in RUN.json / DRYCHECKS.json as `disclosed.qa_cmds_observer` and `disclosed.observer_follow` (`counted=false`), logged as an `OBSERVER FOLLOW:` line in LAUNCH_LOG.txt, and makes `prereg_launch` false. `b33_drive.ps1` copies it into DRIVE_RECORD.txt as an `observer_follow=<who> qa_cmds_observer=<cmds> source=<file>` line. Without the flag, nothing changes: no key, no line, and the same client arguments (proved against e1285752's frozen fragment). |
+| Role gate | The flag is REFUSED (exit 2, before any run folder is made) unless the role is SURVEY or REHEARSAL_NOT_PREREG. The judge's `exec_exact` VOIDs any extra observer command, so a follow run is never counted. JUDGED and CONTROL are refused. |
+| Values (FORGE #416 `024a0d57`) | The client reads only the FIRST token and accepts first\|<displayName>\|<userId>\|off (`first` and `off` case-insensitive, display name case-insensitive, user id exact). The launcher passes the value through unchanged. A value with whitespace, a quote, a semicolon or a comma (which would be cut at the first token or break `-ExecCmds`) is REFUSED, and the error tells the user to pass the player's user id instead. **`off` is REFUSED at launch, in any case:** the observer starts unfollowed, so `off` would change nothing, and the error says to omit the flag. Empty values, any other character outside `A-Z a-z 0-9 _ . @ : -`, and values over 64 characters are refused, also pointing to the user id. |
+| F-A | `b33_stop.ps1` writes `optional_close_files` = {expected, found, missing, note} to RUN_CLOSE.json for `RAM_LOG.json`, `RAM_TRACE.csv`, `RAM_GUARD_TRIP.txt` and `STOP_LOG.txt`. It is computed with Test-Path before hashing, so a run with all of them missing still leaves a record. A missing file is never a close error. This is descriptive only: the judge reads only `sums_sha256` from RUN_CLOSE.json. |
+| F-E | `RAM_GUARD_TRIP.txt` and `STOP_LOG.txt` join the stop script's fixed close-hash list and are skipped when missing, like the RAM files. `RAM_GUARD_TRIP.txt` exists only after a guard trip. `STOP_LOG.txt` is normally **missing** at close, because the conductor writes it from the stop script's own output after the close. It is hashed only if an earlier stop already left one, and `optional_close_files.missing` records its absence. |
+| F-D | `tests/TEST_OUTPUT_v3_1b_box_linux_20261023_followup.txt`: the `sha256sum -c` line now reads 74 OK at e1285752, with a one-line note that the old 73 was counted before the file's own entry was added. Box results for this head are in the new `tests/TEST_OUTPUT_v3_1b_box_linux_20261023_observer_follow.txt`. Its `sha256sum -c` count (75) was checked after the final regeneration. |
+| F-F | The SHA256SUMS.txt header line 2 now names every 2026-10-23 regeneration: D-1, e1285752 and this head. Line 1 (the original 2026-10-21 header) is kept. |
+
+New tests:
+- `tests/test_b33_tooling_fixes.py` (now 42 tests):
+  - OF0 pins e1285752's frozen fragment.
+  - OF1 (9 tests): refusal for JUDGED, CONTROL, and empty on JUDGED; refusal comes before New-Item; an empty value; whitespace, quotes, semicolons and commas get the user-id pointer; off/OFF/Off are refused at launch; other characters or more than 64 characters get the user-id pointer; first, display names and user ids pass unchanged.
+  - OF2 (2 tests): byte-identical arguments and disclosed block across 5 configs; off by default.
+  - OF3: survey, rehearsal user id, logged and not prereg, no client command.
+  - OF4 (2 tests): DRIVE_RECORD with and without a follow.
+  - FA (3 tests): all missing, a found/missing split, all found.
+  - FE (2 tests): hashed when present, skipped when missing.
+- `tests/test_drive_and_stop.ps1` C13 (end to end under `-DryChecks`):
+  - Survey with `first`, survey without the flag (exactly C8's arguments), and a `-ServerTree` rehearsal with `wlautoA`.
+  - Refusals for JUDGED, CONTROL, `a,b`, `Off` and `two words`.
+
+Box results are in `tests/TEST_OUTPUT_v3_1b_box_linux_20261023_observer_follow.txt`. On Linux, test_drive_and_stop.ps1 stops at the Win32 ClipRect call before C13, so C13 runs only on Windows. The Kaisin run of this head (a clean `git archive`, `python -I -B`, no client, no build) happens after the commit exists, so its outputs are reported outside the commit.
+
+**SHA256SUMS changes (follow-up 2), old listed -> new:**
+- `b33_launch.ps1`: `5ddab9455f036793` -> `a8161cab25477c7d` (-ObserverFollow)
+- `b33_drive.ps1`: `b928139a464a3318` -> `6d2f6ecc2a0767b1` (DRIVE_RECORD observer_follow line)
+- `b33_stop.ps1`: `8cad9b31087cbb5b` -> `36030f9934650168` (F-A, F-E)
+- `tests/test_b33_tooling_fixes.py`: `252c062e763dbc0d` -> `61b23480d1c49e45`
+- `tests/test_drive_and_stop.ps1`: `ddeadc7e4181737b` -> `dd87a5d6f4a25c66` (C13)
+- `tests/TEST_OUTPUT_v3_1b_box_linux_20261023_followup.txt`: `330584ab1bc5c78f` -> `eb84f407e526b8dc` (F-D)
+- `TOOLING_FIXES_20261023.md`: changed (this section)
+- added: `tests/TEST_OUTPUT_v3_1b_box_linux_20261023_observer_follow.txt` `2cc8e21f838c104a`
+- removed: none. The new total is 75 entries.

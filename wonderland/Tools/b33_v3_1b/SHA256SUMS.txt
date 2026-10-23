@@ -1,5 +1,5 @@
 # tools/b33_v3_1b files, sha256, written 2026-10-21 by WONDERLAND_DEV (DIAGNOSTIC tools; offline build, no run; reviewer message 30877f). Copy of tools/b33_v3_1a (75cbc30d) except CANDIDATE.json and RELAY_PIN.json; plus DELTA, DIFF, README_b33_v3_1b.md. Check with: sha256sum -c SHA256SUMS.txt (SHA256SUMS.txt itself excluded).
-# 2026-10-23 (D-1, Cosmo): regenerated from the files in this folder after 73c46791 (W1/W3 wording fix), the D-2 slice logs and the 2026-10-23 tooling fixes; what changed is listed in TOOLING_FIXES_20261023.md. Check with: sha256sum -c SHA256SUMS.txt
+# 2026-10-23 (Cosmo): regenerated from the files in this folder at each 2026-10-23 head: D-1 (after 73c46791 W1/W3 wording, the D-2 slice logs and the tooling fixes), e1285752 (Skywalker rulings 1-4) and the -ObserverFollow + Skywalker F-A/F-D/F-E/F-F head; every change is listed in TOOLING_FIXES_20261023.md. Check with: sha256sum -c SHA256SUMS.txt
 f4521fbbc738f7bb166cee776feac932d59c4bf04ad368ca84aaa3cbbc754930 *./CANDIDATE.json
 b86ad5717c594da2ab81c7e62fc527f380a2d423c86d0e8d670917a5808aa9b7 *./DELTA_b33_v3_1_to_b33_v3_1a.md
 ee549a9675dceecf40a1ebf1bafe37dfbde98c2c4e7710e96164c132db373571 *./DELTA_b33_v3_1a_to_b33_v3_1b.md
@@ -10,20 +10,20 @@ fa86aefa55af0a71ab6b559e541e85dea5b59058a3b188487fb8fa67b9d2f3d3 *./README_b33_v
 23db9a357dea05ad204921d2899ba874e0035a6cac3556b79628dedcb287acd5 *./REHEARSAL_FINDINGS.md
 0dca429651ee2aa99a3af69ce1b47b6ab935ff967341060c87a740468b92b51c *./RELAY_PIN.json
 311fee13c16463424311e38d4cd4391dd28b7a9bcd6a9eb14483d3552bead71f *./ROUTE_PIN.json
-daf7a4bca98b0a088a056923dbfe3830fab5734dca13b8128caba18f8cadb930 *./TOOLING_FIXES_20261023.md
+08d3f0ea03d99111aee0f0c3cae3eaaec521eef92db09ac1d56107f6a4ee5a25 *./TOOLING_FIXES_20261023.md
 11aaabe4fc8bfb5d70e0e67a0242ea3bea0ed12a365c318eadd284914f56a0e3 *./b33_analyser/MOTION_DIAG_W2_DIFF.md
 748e12d87a8db699e934dbcf4255305720316df35e67e1c0483c359fb055fca7 *./b33_analyser/PROVENANCE_motion_diag.md
 4dee34d04a36ae0f9a8e0e7f5f925fa4eca371ce498927c1cce16b1d27f8ad29 *./b33_analyser/motion_diag.py
 4ac2d19587c6dc7466e32a3d100e6c2e46ad9daab29d23826eafde1483edccff *./b33_analyser/motion_diag_w2.diff
 176e273ae38e51e6fd58cc428def1a1c18c3ba2e5e306403cc69fad8efd60f1b *./b33_analyser/motion_diag_w2.py
-b928139a464a33181108387eb6ef7894eb50b51ba98bae7445a3bb37ed7f112f *./b33_drive.ps1
+6d2f6ecc2a0767b1a4894fbf96c0dd3f3a7ffe37ae0053601603125da553fc99 *./b33_drive.ps1
 3779dcaf0e96ffbd155da56c72bf9691fe9bb674066df8b55c50415c643ed1a6 *./b33_frames.ps1
 4caddf0b34b74c9457b730ccdf2e2d1bab0fecbe51a51637dc34e53b4f80d0ec *./b33_judge.py
-5ddab9455f0367938e22bdac5843764901a7cd7e2537ee73354e33b4f11e7dd6 *./b33_launch.ps1
+a8161cab25477c7da3e7b40c20013547f12bc72495364a515beae3f30e432460 *./b33_launch.ps1
 08132896a49c931b32e70ce9a0acf1831ae7c7319a6aa74b0a91622a601e35ec *./b33_layout.ps1
 4283fed15e2f3d628471905216663272665a43405658747f9975993782190714 *./b33_native.cs
 5997f82c5493f58bc7ce221e1e7a826fa772bf5ae90264dbc7f07fe6d6b59b0a *./b33_slicer.py
-8cad9b31087cbb5bd824bda42c2066e4873cc25cacc9fcd1586b7a97b2da2377 *./b33_stop.ps1
+36030f9934650168d54cc83868712b9f766e13cb3af889e70694864e4bf5eabb *./b33_stop.ps1
 3cb23e3cbeb7bb50cdd9e5780a27913337a4619970108a77b568136688fa5c55 *./b33_survey_record.py
 c7460ebad73b0c9e0ca48647a5cde88f64eac320dbeb55538e9947c559eb4f40 *./b6_b33a_reanalysis/B6_RECORD.md
 79d05e6c32f91d6bf7d9c4893d04ca6119f80e2d0ca6f47db1fac97b0c9f21b8 *./b6_b33a_reanalysis/JUDGE_b33a.json
@@ -66,11 +66,12 @@ b766c47e52415e9002e578c28bb6e8f5063dd18134c8ebe490f9cc65b3fd9891 *./server_check
 5d08d2aebb3c587212eaab9fd2615a9b6c4b22830aa7674ac1ecbd0b7d9fab9d *./tests/TEST_OUTPUT_powershell.txt
 b5667b1b26e05213ad61db05b19b3230c869dc9054a64211c941c6b21c3c16f6 *./tests/TEST_OUTPUT_python.txt
 89c5281ba2faa6c585dc0ddeddd6248774e45a4c213e42e849867af4c1ffb80b *./tests/TEST_OUTPUT_v3_1b_box_linux_20261023.txt
-330584ab1bc5c78fe523a352e1bfc305f0c6eaf52cfa0547f848c718b2d855c7 *./tests/TEST_OUTPUT_v3_1b_box_linux_20261023_followup.txt
+eb84f407e526b8dc487a65003ae360c31c951011f8bb37aff2aaf71bcf65b938 *./tests/TEST_OUTPUT_v3_1b_box_linux_20261023_followup.txt
+2cc8e21f838c104a132127bfb84f50d45316912b4a9983d1d30966886a109165 *./tests/TEST_OUTPUT_v3_1b_box_linux_20261023_observer_follow.txt
 4784b7e85a806731b39308801383a470b584778208984a915182389cbe668053 *./tests/b33_synth.py
 7de04985b6db89989b5ed8063972c2b143f3c45b4be8577d8c3b9917c390405b *./tests/fixtures/T091807Z_aborted_survey/drive_survey_20261023T092018Z/route.json
 4b73e90cd2df48e14fb35f2b3af194b7499e3f7a37470d2f497695d3805fd202 *./tests/fixtures/T091807Z_aborted_survey/drive_survey_20261023T092018Z/timeline.csv
 38ca7e3f23d9a84fd1be869bb0b8a56d0bd3821db8ac75c7dde9bca23c34fdcf *./tests/test_b33.py
-252c062e763dbc0df50fdc00ba1ecf3665b0c99fbc2c8f474b0ea1809d22c8b1 *./tests/test_b33_tooling_fixes.py
+61b23480d1c49e45875abe861543de0be233e26fce336b9f89fd335778fc4b08 *./tests/test_b33_tooling_fixes.py
 b2d39246c59bea0e69f3574fdf84d9fc352bb202f88b618d99983fc4e77f1601 *./tests/test_b33_wording.py
-ddeadc7e4181737b32537a185a3d0945fd6fd932a1a62d56e517cb1da8c6b13a *./tests/test_drive_and_stop.ps1
+dd87a5d6f4a25c666b39a5194d1cdbf5f0f4a6f1dd4d19f06c4e26654aba7711 *./tests/test_drive_and_stop.ps1

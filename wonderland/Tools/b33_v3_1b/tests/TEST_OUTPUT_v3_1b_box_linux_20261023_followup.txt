@@ -12,7 +12,8 @@ Summary
   tests/test_b33.py (scratch shim)     99 run, 97 OK, 0 failed, 2 skipped
   tests/test_drive_and_stop.ps1        30 OK, then stops at :413 (ClipRect); the 30 OK lines equal those at 3c040da4 (scratch paths aside)
   PowerShell parse errors (all *.ps1)   0
-  sha256sum -c SHA256SUMS.txt          73 OK, 0 FAILED
+  sha256sum -c SHA256SUMS.txt          74 OK, 0 FAILED at e1285752 (corrected 2026-10-23, Skywalker F-D: this line first said 73,
+                                        counted before this file's own entry was added to SHA256SUMS.txt; 74/74 is the head count)
   b33_judge.py sha256                  4caddf0b34b74c9457b730ccdf2e2d1bab0fecbe51a51637dc34e53b4f80d0ec (unchanged)
 
 ---- tests/test_b33_tooling_fixes.py -v
