@@ -1728,6 +1728,55 @@ describe('v3.5d shape gaps: a line break may split a GitHub token shape at ANY c
     const readme = readFileSync(join(LANDING, 'README.md'), 'utf8');
     for (const phrase of ['ANY two of its characters', 'A PLAIN space is NOT a gap', 'inside a `%XX` escape', 'between the `%` and its hex digits', 'REST OF THE LINE', 'FOLDED header', 'BEFORE they are cut', 'WRAPPED', 'a second token on the next line', 'a blank line', 'lone CR', 'U+2028', 'the value may be quoted', 'Only the job token is matched character by character', 'found by Codex on PR #391']) expect(readme, phrase).toContain(phrase);
   });
+  it('Codex P1 on PR #391: a line break inside the token prefix (gh\\ns_ and ghs\\n_) hides the whole shape', () => {
+    expect(redact(`gh\ns_${BODY}`)).toBe('***');
+    expect(redact(`ghs\n_${BODY}`)).toBe('***');
+    expect(redact(`see gh\ns_${BODY} merged PR number 12 into main`)).toBe('see *** merged PR number 12 into main');
+    expect(redact(`see ghs\n_${BODY} merged PR number 12 into main`)).toBe('see *** merged PR number 12 into main');
+    expect(redact(`gh\r\ns_${BODY}`)).toBe('***');
+    expect(redact(`ghs\r\n _${BODY}`)).toBe('***');
+  });
+});
+
+describe('v3.5i pkg3: the runbook matches the installer and the ambiguous-update exit', () => {
+  const readme = () => readFileSync(join(LANDING, 'README.md'), 'utf8');
+  it('the installer prompt takes the reviewer\'s signed G6 token, not a typed PR number', () => {
+    const text = readme();
+    expect(text).toContain('signed G6 token');
+    expect(text).toMatch(/paste the reviewer's signed G6 token/u);
+    expect(text).not.toMatch(/type the PR number/u);
+  });
+  it('an ambiguous update that still sees the cleared base is an ALERT (exit 2), not "Nothing was landed"', () => {
+    const text = readme();
+    expect(text).toContain('main == the cleared base is an ALERT, exit 2');
+    expect(text).not.toContain('main == the cleared base is "Nothing was landed"');
+    expect(text).not.toContain('after "Nothing was landed" from an ambiguous update');
+    expect(text).toContain('the outcome of an ambiguous update was the cleared base (state in doubt: the request may still be applied late; the clearance is spent) or neither the created commit nor the base');
+  });
+  it('a fresh process redacts a 40-character job token on the first call without a slow per-token expression', () => {
+    const token = `ghs_${'Zq7LmP2vNd9RkT4wXyAbCdEfGhIj01234567'}`;
+    expect(token.length).toBe(40);
+    const script = `
+      import { readFileSync } from 'node:fs';
+      import { performance } from 'node:perf_hooks';
+      const land = readFileSync(${JSON.stringify(join(LANDING, 'land.mjs'))}, 'utf8');
+      const from = land.indexOf('const b64Middles');
+      const to = land.indexOf('const summary = ');
+      const token = ${JSON.stringify(token)};
+      const redact = new Function('env', 'Buffer', land.slice(from, to) + '\\nreturn redact;')({ GH_TOKEN: token }, Buffer);
+      const t0 = performance.now();
+      const out = redact('y'.repeat(220) + ' ' + token);
+      const ms = performance.now() - t0;
+      if (out.includes(token)) { console.error('token survived'); process.exit(2); }
+      console.log(ms.toFixed(1));
+    `;
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      encoding: 'utf8', timeout: 15_000,
+      env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
+    });
+    expect(r.status, r.stderr).toBe(0);
+    expect(Number(r.stdout.trim()), `first redaction took ${r.stdout.trim()} ms`).toBeLessThan(250);
+  });
 });
 
 describe('round 5 a9: the docs say exactly what the non-forced ref update does and does not do', () => {
