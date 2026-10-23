@@ -373,6 +373,7 @@ describe('the CLI, against a stubbed GitHub', () => {
     [`repos/${REPO}/issues/226/timeline`]: [{ event: 'reviewed' }, { event: 'merged' }],
     [`repos/${REPO}/pulls/226/reviews`]: [approval()],
     [`repos/${REPO}/pulls/226/comments`]: [],
+    [`repos/${REPO}/issues/226/comments`]: [],
     [`repos/${REPO}/commits/${HEAD}`]: { commit: { tree: { sha: TREE } } },
     [`repos/${REPO}/commits/${HEAD}/statuses`]: [],
     [`repos/${REPO}/compare/${PARENT}...${HEAD}`]: { merge_base_commit: { sha: PARENT } },

@@ -26,8 +26,8 @@ export interface MainProvenanceResult {
   readonly approvedBy?: readonly string[];
   /** The review-currency verdict, present only when approval is why this failed. */
   readonly reviewCurrency?: 'stale' | 'blocked' | 'indeterminate';
-  /** `signed-landing` when the verdict came from the reviewer's signature rather than a founder approval. */
-  readonly via?: 'signed-landing';
+  /** `signed-landing` for a landing-block tip. `worker-clearance` for a worker-PR squash cleared by a signed JULIUS-CLEARANCE-V1. */
+  readonly via?: 'signed-landing' | 'worker-clearance';
 }
 
 /**
@@ -82,6 +82,12 @@ export declare function evaluateMainProvenance(input: {
    * Present-and-wrong fails closed. Omitted reads the process environment.
    */
   readonly externalReviewerKeySha256?: unknown;
+  /**
+   * Signed worker-PR squash offers.
+   * Absent leaves the founder-approval path unchanged. Present and invalid fails closed.
+   * Accepted only when review currency is `stale` and the pull request was opened by the coding worker.
+   */
+  readonly workerClearance?: unknown;
 }): MainProvenanceResult;
 
 export declare const LANDING_BEGIN: string;
@@ -99,4 +105,7 @@ export declare function evaluateSignedLanding(input: Record<string, unknown>, ti
   | { readonly state: 'decided'; readonly result: MainProvenanceResult };
 
 export declare function readReviewerKey(pem: unknown): { readonly key: unknown; readonly problem?: undefined } | { readonly problem: string; readonly key?: undefined };
+
+/** Reviewer-tools `CLEARANCE_B64` / `SIGNATURE_B64` pairs found in one comment or pull-request body. */
+export declare function extractClearanceOffers(text: unknown): readonly { readonly text: string | undefined; readonly signatureB64: string | undefined }[];
 export declare const SIGNED_LANDING_GOVERNED: { readonly HARD_FORBIDDEN: RegExp; readonly EXCEPTION_ELIGIBLE: readonly string[] };
