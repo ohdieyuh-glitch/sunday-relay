@@ -1,0 +1,6 @@
+OK   perfect viewer passes, zero gap {'n_air': 11, 'n_land': 5, 'air_p95_abs': 8.416163802849042e-05, 'land_p95_abs': 0.0, 'air_episodes_x3': 1, 'PASS': True}
+OK   4 uu air offset reported ~4, passes {'n_air': 11, 'n_land': 5, 'air_p95_abs': 4.000079393273268, 'land_p95_abs': 0.0, 'air_episodes_x3': 1, 'PASS': True}
+OK   12 uu air offset fails air bar {'n_air': 11, 'n_land': 5, 'air_p95_abs': 12.000079393273268, 'land_p95_abs': 0.0, 'air_episodes_x3': 1, 'PASS': False}
+OK   3 uu post-landing offset fails landing bar {'n_air': 11, 'n_land': 5, 'air_p95_abs': 8.416163802849042e-05, 'land_p95_abs': 3.0, 'air_episodes_x3': 1, 'PASS': False}
+ALL OK
+registered selftest exit 0
