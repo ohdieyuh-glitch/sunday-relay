@@ -79,7 +79,10 @@
 //      RESEND BACKOFF (RID-6): the wrapper WAITS before each resend of the open pair, with a growing delay and a cap,
 //      never in a tight loop. A 429 julius_dispatch_busy lasts while J1 is still writing the first request's ledger
 //      rows or a chain is running (:760-761, :879), so resending at once only meets it again. Only the identical
-//      pair is ever resent; the wait never ends in a fresh pair.
+//      pair is ever resent; the wait never ends in a fresh pair. The numbers are NextResend (RID-7) below: 2 s
+//      doubling to a 30 s cap per wait, at most 8 resends and 180 s in all. Then it answers StillWaiting, which is
+//      terminal: nothing more is sent, the pair stays open, the wrapper shows "still waiting for the bridge", and
+//      nothing is minted.
 //   6. NO TRANSFORM EVIDENCE EXISTS YET (ruling R4-F). At 31bfc58b neither resultText (:624-628) nor the result body
 //      (:913) carries anything that confirms the ORIGINAL artifact or the exact scrub-cut-trim transformation: the
 //      roles summaries hold outputSha256/outputChars of the text AFTER that transformation (:586-590), and the pre-
@@ -357,6 +360,51 @@ namespace WonderlandJuliusMissionLogic
 		FDispatchAttempt Open;
 		bool bOpen = false;
 	};
+
+	/* ---------------------------------------------------------------- the resend schedule, RID-7 */
+
+	/**
+	 * THE RESEND SCHEDULE (RID-7). After NoAnswer the wrapper resends ONLY the open pair, and only on this schedule.
+	 * NextResend is pure and deterministic: it reads no clock, never sleeps and draws no randomness. The wrapper
+	 * measures the time itself and passes it in:
+	 *   ResendsSent  resends of the open pair already sent (0 when the first send has just gone unanswered);
+	 *   WaitedMs     wall time since the open pair was FIRST sent, as the wrapper measured it, including the time the
+	 *                requests themselves took and every wait so far.
+	 * The delay before resend N (counted from 0) is min(ResendBaseDelayMs * ResendGrowthFactor^N, ResendMaxDelayMs):
+	 * 2,000, 4,000, 8,000 and 16,000 ms, then 30,000 ms (the per-wait cap) for every later resend. There are at most
+	 * ResendMaxCount = 8 resends, and never a wait that would take WaitedMs past ResendMaxTotalWaitMs = 180,000 ms.
+	 * WaitThenResend: wait DelayMs, then send the identical pair through BeginAttempt again.
+	 * StillWaiting (DelayMs 0): THE LIMIT IS SPENT, AND THIS IS TERMINAL.
+	 * Send nothing more for this pair and keep it open; the wrapper shows "still waiting for the bridge"
+	 * (StillWaitingLabel) and leaves the rest to a person or the judge. Running out of patience is not a refusal: the
+	 * first chain may still be running. Exhaustion NEVER mints and never admits a new pair: the pair stays open, and
+	 * for the rest of the session the tracker answers any fresh pair with PreviousAttemptUnanswered. No step mints.
+	 */
+	inline constexpr std::uint32_t ResendBaseDelayMs = 2000;
+	inline constexpr std::uint32_t ResendGrowthFactor = 2;
+	inline constexpr std::uint32_t ResendMaxDelayMs = 30000;
+	inline constexpr std::uint32_t ResendMaxCount = 8;
+	inline constexpr std::uint64_t ResendMaxTotalWaitMs = 180000;
+
+	enum class EResendStep : std::uint8_t
+	{
+		/** Wait DelayMs, then resend the identical open pair. */
+		WaitThenResend,
+		/** Terminal: the limit is spent. Send nothing more, keep the pair open, show "still waiting for the bridge". */
+		StillWaiting,
+	};
+
+	struct FResendDecision
+	{
+		EResendStep Step = EResendStep::StillWaiting;
+		/** The wait before the resend; 0 when Step is StillWaiting. */
+		std::uint32_t DelayMs = 0;
+	};
+
+	FResendDecision NextResend(std::uint32_t ResendsSent, std::uint64_t WaitedMs);
+
+	/** "still waiting for the bridge": the words the wrapper shows once NextResend answers StillWaiting. */
+	const char* StillWaitingLabel();
 
 	/* ---------------------------------------------------------------- result qualification, ruling R4-F */
 

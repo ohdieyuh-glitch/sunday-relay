@@ -465,6 +465,45 @@ namespace
 	// KAT-MINT-END
 	};
 
+	// RID-7: NextResend(ResendsSent, WaitedMs). Expected values follow the header rule; the vitest file re-derives them.
+	struct FResendRow { const char* Label; std::uint32_t ResendsSent; std::uint64_t WaitedMs; EResendStep Expected; std::uint32_t DelayMs; };
+	const FResendRow ResendRows[] = {
+	// KAT-RESEND-BEGIN
+	{ "schedule_0", 0, 0, EResendStep::WaitThenResend, 2000 },
+	{ "schedule_1", 1, 0, EResendStep::WaitThenResend, 4000 },
+	{ "schedule_2", 2, 0, EResendStep::WaitThenResend, 8000 },
+	{ "schedule_3", 3, 0, EResendStep::WaitThenResend, 16000 },
+	{ "cap_reached_4", 4, 0, EResendStep::WaitThenResend, 30000 },
+	{ "cap_holds_5", 5, 0, EResendStep::WaitThenResend, 30000 },
+	{ "cap_holds_7", 7, 0, EResendStep::WaitThenResend, 30000 },
+	{ "count_exhausted_8", 8, 0, EResendStep::StillWaiting, 0 },
+	{ "count_exhausted_9", 9, 0, EResendStep::StillWaiting, 0 },
+	{ "count_exhausted_far", 4294967295, 0, EResendStep::StillWaiting, 0 },
+	{ "total_fits_exactly", 0, 178000, EResendStep::WaitThenResend, 2000 },
+	{ "total_would_overrun", 0, 178001, EResendStep::StillWaiting, 0 },
+	{ "total_reached", 3, 180000, EResendStep::StillWaiting, 0 },
+	{ "total_far_past", 1, 4294967295000, EResendStep::StillWaiting, 0 },
+	{ "cap_with_time_left", 5, 150000, EResendStep::WaitThenResend, 30000 },
+	{ "cap_would_overrun", 5, 150001, EResendStep::StillWaiting, 0 },
+	{ "last_resend_allowed", 7, 100000, EResendStep::WaitThenResend, 30000 },
+	{ "count_and_total_both_spent", 8, 180000, EResendStep::StillWaiting, 0 },
+	// KAT-RESEND-END
+	};
+
+	// RID-7: a wrapper that sends, waits NextResend's delay and resends the open pair, where every request takes
+	// RequestMs and goes unanswered (429 busy or a timeout). It must stop with StillWaiting after exactly these resends.
+	struct FResendRunRow { const char* Label; std::uint32_t RequestMs; std::uint32_t ExpectedResends; std::uint64_t ExpectedWaitedMs; };
+	const FResendRunRow ResendRunRows[] = {
+	// KAT-RESEND-RUN-BEGIN
+	{ "instant_no_answer_count_exhausted", 0, 8, 150000 },
+	{ "one_second_requests_count_exhausted", 1000, 8, 159000 },
+	{ "timeout_15s_total_exhausted", 15000, 6, 195000 },
+	{ "timeout_30s_total_exhausted", 30000, 4, 180000 },
+	{ "timeout_60s_total_exhausted", 60000, 2, 186000 },
+	{ "first_send_took_the_whole_wait", 180000, 0, 180000 },
+	// KAT-RESEND-RUN-END
+	};
+
 	/** A scripted byte source: hands out the given 16-byte blocks in order, then fails. Never an RNG. */
 	class FScriptedBytes final : public IRandomBytes16
 	{
@@ -757,6 +796,69 @@ int main()
 			"rid6 a fresh pair after the conclusive refusal");
 	}
 
+	for (const FResendRow& Row : ResendRows)
+	{
+		const FResendDecision Got = NextResend(Row.ResendsSent, Row.WaitedMs);
+		Expect(Got.Step == Row.Expected && Got.DelayMs == Row.DelayMs,
+			std::string("resend ") + Row.Label + ": got " + std::to_string(static_cast<int>(Got.Step)) + " " + std::to_string(Got.DelayMs));
+	}
+	Expect(std::string(StillWaitingLabel()) == "still waiting for the bridge", "resend still-waiting words");
+
+	for (const FResendRunRow& Row : ResendRunRows)
+	{
+		// RID-7: the wait is bounded, it ends in StillWaiting, and exhaustion never mints or admits a fresh pair.
+		const std::string Label = Row.Label;
+		FDispatchAttemptTracker Tracker;
+		FScriptedBytes Source;
+		PushSeed(Source, "rid7-" + Label);
+		PushSeed(Source, "rid7-fresh-" + Label);
+		FDispatchAttempt Open;
+		Expect(Tracker.MintAttempt(Source, Open) == EMintResult::Minted && Tracker.BeginAttempt(Open) == EAttemptVerdict::Admitted,
+			"resend run first send " + Label);
+		Expect(Tracker.RecordAnswer(ClassifyDispatchAnswer(429, true, "julius_dispatch_busy")) && Tracker.HasOpenAttempt(),
+			"resend run first send unanswered " + Label);
+		std::uint64_t Waited = Row.RequestMs;
+		std::uint32_t Resends = 0;
+		bool bStopped = false;
+		for (int Guard = 0; Guard < 1000 && !bStopped; ++Guard)
+		{
+			const FResendDecision Next = NextResend(Resends, Waited);
+			if (Next.Step == EResendStep::WaitThenResend)
+			{
+				Expect(Next.DelayMs >= ResendBaseDelayMs && Next.DelayMs <= ResendMaxDelayMs, "resend run delay in bounds " + Label);
+				Waited += Next.DelayMs;
+				Expect(Tracker.BeginAttempt(Open) == EAttemptVerdict::Admitted, "resend run identical pair resent " + Label);
+				Waited += Row.RequestMs;
+				++Resends;
+				Expect(Tracker.RecordAnswer(EDispatchAnswer::NoAnswer) && Tracker.HasOpenAttempt(), "resend run still open " + Label);
+			}
+			else if (Next.Step == EResendStep::StillWaiting)
+			{
+				Expect(Next.DelayMs == 0, "resend run still waiting has no delay " + Label);
+				bStopped = true;
+			}
+			else
+			{
+				// There is no other step. A wrapper that minted here would only meet PreviousAttemptUnanswered below.
+				Expect(false, "resend run " + Label + ": a step that is neither WaitThenResend nor StillWaiting");
+				bStopped = true;
+			}
+		}
+		Expect(bStopped, "resend run ends " + Label);
+		Expect(Resends == Row.ExpectedResends && Waited == Row.ExpectedWaitedMs,
+			"resend run " + Label + ": resends " + std::to_string(Resends) + " waited " + std::to_string(Waited));
+		Expect(Resends <= ResendMaxCount, "resend run within the count " + Label);
+		// Exhaustion is terminal: StillWaiting stays StillWaiting however long the wrapper waits after it.
+		Expect(NextResend(Resends, Waited).Step == EResendStep::StillWaiting
+			&& NextResend(Resends, Waited + 3600000).Step == EResendStep::StillWaiting, "resend run stays still waiting " + Label);
+		// And it never mints: the pair stays open, and a fresh pair is refused.
+		Expect(Tracker.HasOpenAttempt(), "resend run pair stays open after exhaustion " + Label);
+		FDispatchAttempt Fresh;
+		Expect(Tracker.MintAttempt(Source, Fresh) == EMintResult::Minted, "resend run fresh mint " + Label);
+		Expect(Tracker.BeginAttempt(Fresh) == EAttemptVerdict::PreviousAttemptUnanswered, "resend run no fresh pair after exhaustion " + Label);
+		Expect(Tracker.HasOpenAttempt(), "resend run the open pair is unchanged " + Label);
+	}
+
 	// 1,000 refusals in a row, each followed by a fresh mint: every attempt admitted, all 2,000 values distinct.
 	std::set<std::string> MintedValues;
 	{
@@ -851,9 +953,10 @@ int main()
 		return 1;
 	}
 	std::printf("J1 LOGIC KAT PASS sha256=%zu trim=%zu digest=%zu runid_format=%zu runid_strict=%zu generated=%zu envelope=%zu result=%zu digest_cut=%zu"
-		" uuid_format=%zu key=%zu attempt=%zu minted=%zu qualification=%zu mint=%zu display=%zu\n",
+		" uuid_format=%zu key=%zu attempt=%zu minted=%zu qualification=%zu mint=%zu display=%zu resend=%zu resend_run=%zu\n",
 		CountOf(ShaRows), CountOf(TrimRows), CountOf(DigestRows), CountOf(RunFormatRows), CountOf(RunStrictRows),
 		Generated.size(), CountOf(EnvelopeRows), CountOf(ResultRows), CountOf(DigestCutRows),
-		CountOf(UuidFormatRows), CountOf(KeyRows), CountOf(AttemptRows), MintedValues.size(), CountOf(QualificationRows), CountOf(MintRows), CountOf(DisplayRows));
+		CountOf(UuidFormatRows), CountOf(KeyRows), CountOf(AttemptRows), MintedValues.size(), CountOf(QualificationRows), CountOf(MintRows), CountOf(DisplayRows),
+		CountOf(ResendRows), CountOf(ResendRunRows));
 	return 0;
 }

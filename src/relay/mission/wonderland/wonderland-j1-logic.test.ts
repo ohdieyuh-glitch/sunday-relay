@@ -79,7 +79,7 @@ function table(name: string): string[][] {
   const rows = section(source(KAT_CPP), name)
     .split('\n')
     .filter((line) => /^\s*\{.*\},\s*$/u.test(line))
-    .map((line) => [...line.matchAll(/"([^"]*)"|E(?:ResultEnvelope|FinishedResult|DispatchAnswer|AttemptVerdict|ArtifactQualification|MintResult|QualificationDisplay)::(\w+)|(-?\d+)/gu)]
+    .map((line) => [...line.matchAll(/"([^"]*)"|E(?:ResultEnvelope|FinishedResult|DispatchAnswer|AttemptVerdict|ArtifactQualification|MintResult|QualificationDisplay|ResendStep)::(\w+)|(-?\d+)/gu)]
       .map((m) => m[1] ?? m[2] ?? m[3] ?? ''));
   expect(rows.length, `${name} has rows`).toBeGreaterThan(0);
   return rows;
@@ -639,6 +639,99 @@ function cxxCompiler(): string | null {
   return null;
 }
 
+/** RID-7, restated: the resend schedule's limits, pinned here and compared with the header constants. */
+const RESEND = { base: 2000, factor: 2, cap: 30000, maxCount: 8, maxTotal: 180000 } as const;
+
+function referenceResend(sent: number, waited: number): [string, number] {
+  if (sent >= RESEND.maxCount) return ['StillWaiting', 0];
+  let delay: number = RESEND.base;
+  for (let index = 0; index < sent && delay < RESEND.cap; index += 1) delay *= RESEND.factor;
+  delay = Math.min(delay, RESEND.cap);
+  if (waited >= RESEND.maxTotal || delay > RESEND.maxTotal - waited) return ['StillWaiting', 0];
+  return ['WaitThenResend', delay];
+}
+
+describe('J1 client logic: the resend wait is bounded and never mints (RID-7)', () => {
+  it('the header constants are the stated limits', () => {
+    const header = source(LOGIC_H);
+    const constant = (name: string): number => {
+      const match = new RegExp(`inline constexpr std::uint(?:32|64)_t ${name} = (\\d+);`, 'u').exec(header);
+      expect(match, name).not.toBeNull();
+      return Number(match?.[1]);
+    };
+    expect(constant('ResendBaseDelayMs')).toBe(RESEND.base);
+    expect(constant('ResendGrowthFactor')).toBe(RESEND.factor);
+    expect(constant('ResendMaxDelayMs')).toBe(RESEND.cap);
+    expect(constant('ResendMaxCount')).toBe(RESEND.maxCount);
+    expect(constant('ResendMaxTotalWaitMs')).toBe(RESEND.maxTotal);
+  });
+
+  it('every schedule row expects what the stated rule gives, and the required cases are present', () => {
+    const rows = table('KAT-RESEND');
+    for (const [label, sent, waited, step, delay] of rows) {
+      expect([step, Number(delay)], label).toEqual(referenceResend(Number(sent), Number(waited)));
+    }
+    const labels = new Set(rows.map((row) => row[0]));
+    for (const label of ['schedule_0', 'schedule_1', 'schedule_2', 'schedule_3', 'cap_reached_4', 'cap_holds_7',
+      'count_exhausted_8', 'count_exhausted_far', 'total_fits_exactly', 'total_would_overrun', 'total_reached',
+      'total_far_past', 'cap_with_time_left', 'cap_would_overrun', 'last_resend_allowed']) {
+      expect(labels.has(label), label).toBe(true);
+    }
+    const fresh = rows.filter((row) => row[2] === '0' && Number(row[1]) < RESEND.maxCount)
+      .sort((a, b) => Number(a[1]) - Number(b[1])).map((row) => Number(row[4]));
+    expect(fresh.slice(0, 5), 'the delays grow, then hold at the cap').toEqual([2000, 4000, 8000, 16000, 30000]);
+    for (const row of rows) {
+      expect(Number(row[4]), `${row[0] ?? ''} never above the cap`).toBeLessThanOrEqual(RESEND.cap);
+      if (Number(row[1]) >= RESEND.maxCount) expect(row[3], `${row[0] ?? ''} count spent`).toBe('StillWaiting');
+      if (Number(row[2]) >= RESEND.maxTotal) expect(row[3], `${row[0] ?? ''} time spent`).toBe('StillWaiting');
+      if (row[3] === 'StillWaiting') expect(row[4], `${row[0] ?? ''} no delay`).toBe('0');
+    }
+  });
+
+  it('every wrapper run stops in StillWaiting after the stated resends, and then no fresh pair is admitted', () => {
+    const rows = table('KAT-RESEND-RUN');
+    for (const [label, requestMs, resends, waitedMs] of rows) {
+      let sent = 0;
+      let waited = Number(requestMs);
+      for (;;) {
+        const [step, delay] = referenceResend(sent, waited);
+        if (step === 'StillWaiting') break;
+        waited += delay + Number(requestMs);
+        sent += 1;
+        expect(sent, `${label ?? ''} within the count`).toBeLessThanOrEqual(RESEND.maxCount);
+      }
+      expect([sent, waited], label).toEqual([Number(resends), Number(waitedMs)]);
+      expect(referenceResend(sent, waited + 3_600_000)[0], `${label ?? ''} stays still waiting`).toBe('StillWaiting');
+      // The last answer was NoAnswer, so the open pair stays open and a fresh pair is refused.
+      expect(referenceVerdict('NoAnswer', 'none'), `${label ?? ''} no fresh pair after exhaustion`).toBe('PreviousAttemptUnanswered');
+    }
+    const labels = new Set(rows.map((row) => row[0]));
+    expect(labels.has('instant_no_answer_count_exhausted')).toBe(true);
+    expect(labels.has('timeout_15s_total_exhausted')).toBe(true);
+    expect(rows.some((row) => row[2] === String(RESEND.maxCount)), 'a run spends the count').toBe(true);
+    expect(rows.some((row) => Number(row[2]) < RESEND.maxCount), 'a run spends the total wait').toBe(true);
+    const kat = source(KAT_CPP);
+    expect(kat).toContain('EAttemptVerdict::PreviousAttemptUnanswered, "resend run no fresh pair after exhaustion " + Label');
+    expect(kat).toContain('Expect(Tracker.HasOpenAttempt(), "resend run pair stays open after exhaustion " + Label);');
+  });
+
+  it('the header documents the terminal state, and the schedule has no mint step and no clock', () => {
+    const header = source(LOGIC_H);
+    expect(header).toContain('THE RESEND SCHEDULE (RID-7)');
+    expect(header).toContain('it reads no clock, never sleeps and draws no randomness');
+    expect(header).toContain('StillWaiting (DelayMs 0): THE LIMIT IS SPENT, AND THIS IS TERMINAL.');
+    expect(header).toContain('Exhaustion NEVER mints and never admits a new pair');
+    expect(header).toContain('for the rest of the session the tracker answers any fresh pair with PreviousAttemptUnanswered');
+    expect(header).toContain('the wrapper shows "still waiting for the bridge"');
+    const body = /enum class EResendStep : std::uint8_t\s*\{([\s\S]*?)\};/u.exec(header)?.[1] ?? '';
+    const steps = body.replace(/\/\*[\s\S]*?\*\//gu, '').split(',').map((step) => step.trim()).filter((step) => step !== '');
+    expect(steps, 'the only resend steps').toEqual(['WaitThenResend', 'StillWaiting']);
+    const cpp = source(LOGIC_CPP);
+    expect(cpp).toContain('const char* StillWaitingLabel() { return "still waiting for the bridge"; }');
+    expect(cpp).not.toMatch(/\b(chrono|sleep_for|sleep_until|this_thread|steady_clock|system_clock|Sleep|usleep|nanosleep)\b/u);
+  });
+});
+
 describe('J1 client logic: the C++ itself', () => {
   it('compiles with -Werror and passes every known answer', () => {
     expect(existsSync(LOGIC_CPP), 'the implementation exists').toBe(true);
@@ -663,7 +756,8 @@ describe('J1 client logic: the C++ itself', () => {
           + `digest_cut=${String(table('KAT-DIGEST-CUT').length)} `
           + `uuid_format=${String(table('KAT-UUID-FORMAT').length)} key=${String(table('KAT-KEY').length)} `
           + `attempt=${String(table('KAT-ATTEMPT').length)} minted=2000 qualification=${String(table('KAT-QUALIFICATION').length)} `
-          + `mint=${String(table('KAT-MINT').length)} display=${String(table('KAT-DISPLAY').length)}\n`);
+          + `mint=${String(table('KAT-MINT').length)} display=${String(table('KAT-DISPLAY').length)} `
+          + `resend=${String(table('KAT-RESEND').length)} resend_run=${String(table('KAT-RESEND-RUN').length)}\n`);
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }

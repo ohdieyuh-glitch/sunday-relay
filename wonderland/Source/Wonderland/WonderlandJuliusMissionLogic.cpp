@@ -451,6 +451,21 @@ namespace WonderlandJuliusMissionLogic
 		return true;
 	}
 
+	FResendDecision NextResend(std::uint32_t ResendsSent, std::uint64_t WaitedMs)
+	{
+		FResendDecision Out;
+		if (ResendsSent >= ResendMaxCount) { return Out; }
+		std::uint32_t Delay = ResendBaseDelayMs;
+		for (std::uint32_t Index = 0; Index < ResendsSent && Delay < ResendMaxDelayMs; ++Index) { Delay *= ResendGrowthFactor; }
+		if (Delay > ResendMaxDelayMs) { Delay = ResendMaxDelayMs; }
+		if (WaitedMs >= ResendMaxTotalWaitMs || Delay > ResendMaxTotalWaitMs - WaitedMs) { return Out; }
+		Out.Step = EResendStep::WaitThenResend;
+		Out.DelayMs = Delay;
+		return Out;
+	}
+
+	const char* StillWaitingLabel() { return "still waiting for the bridge"; }
+
 	bool DetectTransformSignals(std::string_view ArtifactText, FTransformSignals& Out)
 	{
 		Out = FTransformSignals{};
