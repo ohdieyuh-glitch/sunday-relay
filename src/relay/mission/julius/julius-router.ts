@@ -214,11 +214,11 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
  const providerRequestId=safeResponseId(v.providerRequestId);
  const providerMessageId=safeResponseId(v.providerMessageId);
  const statedRequestAvailability=safeEnum(v.providerRequestAvailability,['CAPTURED','UNAVAILABLE'] as const);
- const captured=providerRequestId!==null||providerMessageId!==null;
+ // A message id is not a request id. CAPTURED requires the request id itself.
+ const captured=providerRequestId!==null;
  const providerRequestAvailability=statedRequestAvailability==='CAPTURED'&&!captured?'UNAVAILABLE':statedRequestAvailability;
  const statedRequestReason=safeToken(v.providerRequestUnavailableReason);
- const credentialShapedRequest=(typeof v.providerRequestId==='string'&&CREDENTIAL_SHAPED.test(v.providerRequestId))
-  ||(providerRequestId===null&&typeof v.providerMessageId==='string'&&CREDENTIAL_SHAPED.test(v.providerMessageId));
+ const credentialShapedRequest=typeof v.providerRequestId==='string'&&CREDENTIAL_SHAPED.test(v.providerRequestId);
  const providerRequestUnavailableReason=captured?null:statedRequestReason??(credentialShapedRequest?'provider_request_id_credential_shaped':statedRequestAvailability==='CAPTURED'?'provider_request_id_unusable':null);
  return Object.freeze({
   stage:safeEnum(v.stage,['plan','build','repair:plan','repair:build'] as const),
@@ -321,14 +321,16 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   requestedModel:safeModel(v.requestedModel),
   responseId:safeResponseId(v.responseId),
   /**
-   * THE PROVIDER REQUEST OR MESSAGE ID, for the Coding Agent's Anthropic API call.
+   * THE PROVIDER REQUEST ID. The coder also keeps the message id beside it.
    *
-   * `responseId` is that id when one was safe to keep, never the runtime session
-   * id. `providerRequestId` is the API `request_id`. `providerMessageId` is the
-   * Messages API `message.id`, and it is not a substitute for a request id that
-   * was present but refused. `CAPTURED` survives only when one of those ids
-   * survives {@link safeResponseId}. The status word is never written into
-   * `responseId`.
+   * `providerRequestId` is the Anthropic API `request_id`, the same kind of id
+   * the reviewer reads from Hermes' usage file. `responseId` is that request
+   * id when one was safe to keep, never a runtime session id and never
+   * `message.id`. `providerMessageId` is the Messages API `message.id`. It is
+   * an extra field. It does not make the leg `CAPTURED`, and it is not a
+   * substitute for a request id that was present but refused. `CAPTURED`
+   * survives only when the request id survives {@link safeResponseId}. The
+   * status word is never written into `responseId`.
    */
   providerRequestId:providerRequestId,
   providerMessageId:providerMessageId,

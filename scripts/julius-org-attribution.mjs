@@ -78,6 +78,7 @@ export async function probeAnthropicOrganization(input) {
   try {
     response = await fetchImpl(`https://api.anthropic.com/v1/models/${encodeURIComponent(model)}`, {
       method: 'GET',
+      redirect: 'error',
       headers: {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',

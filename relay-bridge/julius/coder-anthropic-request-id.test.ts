@@ -58,10 +58,41 @@ describe('a coder dispatch records the Anthropic API id, not the runtime session
     });
     expect(diagnostics.responseId).toBeNull();
     expect(diagnostics.providerRequestId).toBeNull();
-    expect(diagnostics.providerMessageId).toBeNull();
+    expect(diagnostics.providerMessageId).toBe('msg_01ABCDEFGHIJKLMNOP');
     expect(diagnostics.providerRequestAvailability).toBe('UNAVAILABLE');
     expect(diagnostics.providerRequestUnavailableReason).toBe('provider_request_id_credential_shaped');
     expect(JSON.stringify(diagnostics)).not.toContain('FAKETESTNOTREAL');
+    const safe = safeReviewDiagnostics(diagnostics);
+    expect(safe?.responseId).toBeNull();
+    expect(safe?.providerRequestAvailability).toBe('UNAVAILABLE');
+    expect(safe?.providerMessageId).toBe('msg_01ABCDEFGHIJKLMNOP');
+  });
+
+  it('a message id alone is not CAPTURED and does not become the request id', () => {
+    const observed = observeHostedMessages([
+      { type: 'system', subtype: 'init', model: REQUESTED, session_id: 'sess-only' },
+      {
+        type: 'assistant',
+        message: { id: 'msg_01ABCDEFGHIJKLMNOP', model: REQUESTED, usage: { input_tokens: 11, output_tokens: 7 } },
+      },
+    ]);
+    const diagnostics = hostedCoderDiagnostics({
+      taskType: 'build', authMode: 'ANTHROPIC_API', requestedModel: REQUESTED,
+      observed, limits: LIMITS, outcome: 'failed',
+    });
+    expect(diagnostics.responseId).toBeNull();
+    expect(diagnostics.providerRequestId).toBeNull();
+    expect(diagnostics.providerMessageId).toBe('msg_01ABCDEFGHIJKLMNOP');
+    expect(diagnostics.providerRequestAvailability).toBe('UNAVAILABLE');
+    expect(diagnostics.providerRequestUnavailableReason).toBe('provider_request_id_not_reported');
+    const statedCaptured = safeReviewDiagnostics({
+      ...diagnostics,
+      providerRequestAvailability: 'CAPTURED',
+    });
+    expect(statedCaptured?.providerRequestAvailability).toBe('UNAVAILABLE');
+    expect(statedCaptured?.providerRequestId).toBeNull();
+    expect(statedCaptured?.providerMessageId).toBe('msg_01ABCDEFGHIJKLMNOP');
+    expect(statedCaptured?.responseId).toBeNull();
   });
 
   it('with no assistant message the id is unavailable, not the session id', () => {

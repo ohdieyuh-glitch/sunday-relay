@@ -60,7 +60,7 @@ const READY_RIG: Record<string, string> = Object.freeze({
   OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-5.6-sol',
   RELAY_PROMPT_ARCHITECT_MODE: 'live',
   ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic',
-  RELAY_HOSTED_CODING_MODEL: 'claude-fable-5',
+  RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5',
   RELAY_HERMES_PROVIDER: 'xai',
   RELAY_HERMES_MODEL: 'grok-build-0.1',
   RELAY_HERMES_EXECUTABLE: '/usr/bin/true',

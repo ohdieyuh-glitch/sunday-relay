@@ -102,11 +102,12 @@ export function hostedCoderCost(
 }
 
 /**
- * THE ANTHROPIC API ID FOR THIS DISPATCH, NEVER THE RUNTIME SESSION ID.
+ * THE ANTHROPIC API REQUEST ID FOR THIS DISPATCH, NEVER THE RUNTIME SESSION ID.
  *
- * `request_id` wins when it was safe to keep. A request id that was present but
- * refused does not fall through to `message.id`. With neither, the id is null
- * and the reason says so. `sessionId` is not consulted.
+ * Console reconciliation needs `request_id`. `CAPTURED` is that id, and only
+ * that id. `message.id` is kept beside it and never promotes a leg to
+ * `CAPTURED`, never fills `responseId`, and never replaces a request id that
+ * was present but refused. `sessionId` is not consulted.
  */
 function anthropicProviderIds(observed: HostedObservation | null): {
   readonly responseId: string | null;
@@ -115,14 +116,15 @@ function anthropicProviderIds(observed: HostedObservation | null): {
   readonly providerRequestAvailability: 'CAPTURED' | 'UNAVAILABLE';
   readonly providerRequestUnavailableReason: string | null;
 } {
-  const unavailable = (reason: string) => ({
-    responseId: null,
-    providerRequestId: null,
-    providerMessageId: null,
-    providerRequestAvailability: 'UNAVAILABLE' as const,
-    providerRequestUnavailableReason: reason,
-  });
-  if (observed === null) return unavailable('provider_request_id_not_reported');
+  if (observed === null) {
+    return {
+      responseId: null,
+      providerRequestId: null,
+      providerMessageId: null,
+      providerRequestAvailability: 'UNAVAILABLE',
+      providerRequestUnavailableReason: 'provider_request_id_not_reported',
+    };
+  }
   const requestId = observed.anthropicRequestId ?? null;
   const messageId = observed.anthropicMessageId ?? null;
   if (requestId !== null) {
@@ -134,18 +136,13 @@ function anthropicProviderIds(observed: HostedObservation | null): {
       providerRequestUnavailableReason: null,
     };
   }
-  if (observed.anthropicRequestRejection) return unavailable(observed.anthropicRequestRejection);
-  if (messageId !== null) {
-    return {
-      responseId: messageId,
-      providerRequestId: null,
-      providerMessageId: messageId,
-      providerRequestAvailability: 'CAPTURED',
-      providerRequestUnavailableReason: null,
-    };
-  }
-  if (observed.anthropicMessageRejection) return unavailable(observed.anthropicMessageRejection);
-  return unavailable('provider_request_id_not_reported');
+  return {
+    responseId: null,
+    providerRequestId: null,
+    providerMessageId: messageId,
+    providerRequestAvailability: 'UNAVAILABLE',
+    providerRequestUnavailableReason: observed.anthropicRequestRejection ?? 'provider_request_id_not_reported',
+  };
 }
 
 /**

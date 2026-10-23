@@ -66,6 +66,22 @@ describe('Anthropic organization attribution is spend-free and fail-closed', () 
     expect(line).not.toContain(KEY);
   });
 
+  it('the probe sets redirect to error so a redirect is not followed', async () => {
+    let redirect: RequestRedirect | undefined;
+    const line = await probeAnthropicOrganization({
+      apiKey: KEY, expectedOrganizationId: 'org_recorded', model: MODEL,
+      fetchImpl: async (_url, init) => {
+        redirect = init?.redirect;
+        return {
+          status: 200,
+          headers: { get: (name: string) => name.toLowerCase() === 'anthropic-organization-id' ? 'org_recorded' : null },
+        };
+      },
+    });
+    expect(redirect).toBe('error');
+    expect(line).toContain('result=VERIFIED');
+  });
+
   it('a mismatch names both organization ids and not the key', async () => {
     const line = await probeAnthropicOrganization({
       apiKey: KEY, expectedOrganizationId: 'org_recorded', model: MODEL,
