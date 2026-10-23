@@ -7,23 +7,24 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { REVIEW_AUTHORITY_LOGINS } from './julius-review-currency.mjs';
+import { PINNED_REVIEWER_SPKI_SHA256 } from './julius-main-provenance-trust.mjs';
 import {
   WORKER_AUTHOR_LOGINS,
+  WORKER_SQUASH_HEADER,
   evaluateMainProvenance,
   extractClearanceOffers,
+  parseSignedClearance,
+  parseWorkerSquashClearance,
   readReviewerKey,
+  workerSquashCommentsDigest,
 } from './julius-main-provenance.mjs';
 
 /**
- * A worker-PR squash may be provenant because the allowlisted reviewer key signed
- * a JULIUS-CLEARANCE-V1 for that exact head and tree. The keys in this file are
- * generated here. The committed reviewer key is only fingerprinted, never used
- * to sign.
+ * A worker-PR squash is a JULIUS-WORKER-SQUASH-V1, not a landing clearance.
+ * The keys in this file are generated here. A generated key is not the pinned
+ * reviewer key, so it cannot make a squash provenant. The committed reviewer
+ * key is only fingerprinted, never used to sign.
  */
-
-const { verifyClearanceSignature } = (await import(new URL('../.github/julius-landing/land-lib.mjs', import.meta.url).href)) as {
-  verifyClearanceSignature: (text: string, signatureB64: string, publicKeyPem: string) => string[];
-};
 
 const MAIN = '1'.repeat(40);
 const PARENT = '2'.repeat(40);
@@ -41,13 +42,15 @@ const pem = (key: { export(options: { type: 'spki'; format: 'pem' }): string | B
 const REVIEWER_PEM = pem(reviewer.publicKey);
 const ATTACKER_PEM = pem(attacker.publicKey);
 
+const EMPTY_COMMENTS = { issueComments: [] as unknown[], inlineComments: [] as unknown[], reviews: [] as unknown[] };
+const DIGEST = workerSquashCommentsDigest(EMPTY_COMMENTS);
 const clearanceText = (over: Record<string, string> = {}) => {
   const fields: Record<string, string> = {
     pr: '226', head: HEAD, tree: TREE, base: PARENT, kind: 'CLEARED',
-    'bot-comments-sha256': 'c'.repeat(64), 'governed-exceptions': '-', nonce: NONCE, by: 'INDEPENDENT_REVIEW',
-    issued: '2026-10-23T11:00:00Z', expires: '2026-10-23T15:00:00Z', ...over,
+    'bot-comments-sha256': DIGEST, 'governed-exceptions': '-', nonce: NONCE, by: 'INDEPENDENT_REVIEW',
+    issued: '2026-10-23T11:00:00Z', expires: '2026-10-23T12:30:00Z', ...over,
   };
-  return ['JULIUS-CLEARANCE-V1', 'repo: ohdieyuh-glitch/sunday-relay',
+  return [WORKER_SQUASH_HEADER, 'repo: ohdieyuh-glitch/sunday-relay',
     ...['pr', 'head', 'tree', 'base', 'kind', 'bot-comments-sha256', 'governed-exceptions', 'nonce', 'by', 'issued', 'expires'].map((key) => `${key}: ${fields[key]}`),
     ''].join('\n');
 };
@@ -60,7 +63,6 @@ const packet = (over: Record<string, unknown> = {}) => ({
   offers: [offer()],
   reviewerKeyPem: REVIEWER_PEM,
   reviewerKeyAtSha: PARENT,
-  now: NOW,
   ...over,
 });
 
@@ -78,22 +80,50 @@ const provenance = (over: Record<string, unknown> = {}) => evaluateMainProvenanc
   parentContainedInReviewedHead: true,
   baseRefChanged: false,
   repo: 'ohdieyuh-glitch/sunday-relay',
+  now: NOW,
+  issueComments: [],
+  changedPaths: ['src/relay/example.ts'],
+  changedPathsComplete: true,
+  externalReviewerKeySha256: PINNED_REVIEWER_SPKI_SHA256,
   workerClearance: packet(),
   ...over,
-});
+} as Parameters<typeof evaluateMainProvenance>[0]);
 
 const expectVerdict = (result: { verdict: string; reason: string }, verdict: string, reason?: RegExp) => {
   expect(result.verdict, result.reason).toBe(verdict);
   if (reason) expect(result.reason).toMatch(reason);
 };
 
-describe('a worker-PR squash cleared by JULIUS-CLEARANCE-V1', () => {
-  it('is provenant with no GitHub APPROVED review, and names the clearance rather than a new approver', () => {
+describe('a worker-PR squash cleared by JULIUS-WORKER-SQUASH-V1', () => {
+  it('a generated key that signs its own clearance is refused by the pin and is not reclassified as provenant', () => {
     const result = provenance();
-    expectVerdict(result, 'provenant', /JULIUS-CLEARANCE-V1/u);
-    expect(result).toMatchObject({ via: 'worker-clearance', approvedBy: ['INDEPENDENT_REVIEW'], reviewedHeadSha: HEAD, prNumber: 226 });
-    expect(result.approvedBy).not.toContain(WORKER);
+    expectVerdict(result, 'unprovenanced', /not the pinned reviewer key/u);
+    expect(result.reason).not.toMatch(/does not verify/u);
+    expect(result.via).toBeUndefined();
     expect(REVIEW_AUTHORITY_LOGINS).toEqual(['ohdieyuh-glitch']);
+  });
+
+  it('a landing clearance is not a worker squash, and a worker squash is not a landing clearance', () => {
+    const worker = clearanceText();
+    const landing = worker.replace(WORKER_SQUASH_HEADER, 'JULIUS-CLEARANCE-V1');
+    expect(parseWorkerSquashClearance(landing, 'ohdieyuh-glitch/sunday-relay').problems.join(' ')).toContain('JULIUS-WORKER-SQUASH-V1');
+    expect(parseSignedClearance(worker, 'ohdieyuh-glitch/sunday-relay').problems.join(' ')).toContain('JULIUS-CLEARANCE-V1');
+  });
+
+  it('refuses a governed path, a short lifetime overflow, a duplicate-distinct offer, and a clock stored on the packet', () => {
+    expectVerdict(provenance({ changedPaths: ['scripts/julius-main-provenance.mjs'] }), 'unprovenanced', /founder-governed paths/u);
+    expectVerdict(provenance({
+      workerClearance: packet({ offers: [offer(clearanceText({ issued: '2026-10-22T10:00:00Z', expires: '2026-10-23T12:00:00Z' }))] }),
+    }), 'unprovenanced', /2 hours/u);
+    const other = clearanceText({ nonce: 'cd'.repeat(16) });
+    expectVerdict(provenance({
+      workerClearance: packet({ offers: [offer(), offer(other)] }),
+    }), 'indeterminate', /more than one signed clearance/u);
+    const stalePacketNow = packet();
+    expectVerdict(provenance({
+      now: NOW,
+      workerClearance: { ...stalePacketNow, now: Date.parse('2026-10-23T18:00:00Z') },
+    }), 'unprovenanced', /not the pinned reviewer key/u);
   });
 
   it('the founder APPROVED review still suffices, and a bad clearance beside it does not revoke it', () => {
@@ -121,7 +151,7 @@ describe('a worker-PR squash cleared by JULIUS-CLEARANCE-V1', () => {
       pullRequests: [{ number: 226, merged: true, mergeCommitSha: MAIN, authorLogin: APPROVER, headSha: HEAD, baseRef: 'main' }],
     });
     expectVerdict(founderAuthored, 'unprovenanced', /not the coding worker/u);
-    expect(founderAuthored.reason).not.toMatch(/JULIUS-CLEARANCE-V1 clears/u);
+    expect(founderAuthored.reason).not.toMatch(/JULIUS-WORKER-SQUASH-V1 clears/u);
   });
 
   it('does not override a block or an unreadable review', () => {
@@ -133,23 +163,26 @@ describe('a worker-PR squash cleared by JULIUS-CLEARANCE-V1', () => {
     expectVerdict(moving, 'indeterminate', /head moved/u);
   });
 
-  it('a wrong key, a flipped signature, an expired clearance, a future clearance, and a too-long lifetime fail closed', () => {
-    expectVerdict(provenance({ workerClearance: packet({ reviewerKeyPem: ATTACKER_PEM }) }), 'unprovenanced', /does not verify/u);
+  it('a wrong key, a flipped signature, an expired clearance, and a future clearance fail closed', () => {
+    const attackerSigned = offer(clearanceText(), attacker.privateKey);
+    expectVerdict(provenance({
+      workerClearance: packet({ reviewerKeyPem: ATTACKER_PEM, offers: [attackerSigned] }),
+    }), 'unprovenanced', /not the pinned reviewer key/u);
+    expect(provenance({
+      workerClearance: packet({ reviewerKeyPem: ATTACKER_PEM, offers: [attackerSigned] }),
+    }).reason).not.toMatch(/does not verify/u);
     const text = clearanceText();
     const flipped = Buffer.from(signWith(reviewer.privateKey, text), 'base64');
     flipped[0] = (flipped[0]! ^ 1);
     expectVerdict(provenance({
       workerClearance: packet({ offers: [{ text, signatureB64: flipped.toString('base64') }] }),
-    }), 'unprovenanced', /does not verify/u);
+    }), 'unprovenanced', /not the pinned reviewer key/u);
     expectVerdict(provenance({
       workerClearance: packet({ offers: [offer(clearanceText({ expires: '2026-10-23T11:30:00Z' }))] }),
     }), 'unprovenanced', /expired/u);
     expectVerdict(provenance({
       workerClearance: packet({ offers: [offer(clearanceText({ issued: '2026-10-23T18:00:00Z', expires: '2026-10-23T20:00:00Z' }))] }),
     }), 'unprovenanced', /future/u);
-    expectVerdict(provenance({
-      workerClearance: packet({ offers: [offer(clearanceText({ issued: '2026-10-22T10:00:00Z', expires: '2026-10-23T15:00:00Z' }))] }),
-    }), 'unprovenanced', /24 hours/u);
   });
 
   it('a mismatched head, tree, pull request, or base fails closed', () => {
@@ -168,7 +201,7 @@ describe('a worker-PR squash cleared by JULIUS-CLEARANCE-V1', () => {
   });
 
   it('a missing clock, a missing key, a key read at the wrong commit, and a malformed clearance fail closed', () => {
-    expectVerdict(provenance({ workerClearance: packet({ now: undefined }) }), 'indeterminate', /no time was supplied/u);
+    expectVerdict(provenance({ now: undefined }), 'indeterminate', /no time was supplied/u);
     expectVerdict(provenance({ workerClearance: packet({ reviewerKeyPem: undefined }) }), 'indeterminate', /could not be read/u);
     expectVerdict(provenance({ workerClearance: packet({ reviewerKeyAtSha: MAIN }) }), 'indeterminate', /parent of the squash/u);
     expectVerdict(provenance({ workerClearance: packet({ offers: [] }) }), 'indeterminate', /without a clearance body/u);
@@ -183,18 +216,19 @@ describe('a worker-PR squash cleared by JULIUS-CLEARANCE-V1', () => {
     expectVerdict(provenance({ parentContainedInReviewedHead: false }), 'unprovenanced', /was not contained/u);
   });
 
-  it('agrees with the landing verifier, and the committed key is the allowlisted fingerprint', () => {
-    const text = clearanceText();
-    const signature = signWith(reviewer.privateKey, text);
-    expect(verifyClearanceSignature(text, signature, REVIEWER_PEM)).toEqual([]);
-    expect(verifyClearanceSignature(text, signature, ATTACKER_PEM).length).toBeGreaterThan(0);
-    expectVerdict(provenance({ workerClearance: packet({ offers: [{ text, signatureB64: signature }] }) }), 'provenant');
+  it('the committed key is the full pin, and a real key with a bad signature still says the signature does not verify', () => {
     const real = readFileSync(resolve(import.meta.dirname, '../.github/julius-landing/reviewer-ed25519.pub'), 'utf8');
     expect(readReviewerKey(real).problem).toBeUndefined();
     const der = createPublicKey(real).export({ type: 'spki', format: 'der' });
-    expect(createHash('sha256').update(der).digest('hex')).toMatch(/^b0b8e29b/u);
-    const throwaway = createHash('sha256').update(createPublicKey(REVIEWER_PEM).export({ type: 'spki', format: 'der' })).digest('hex');
-    expect(throwaway.startsWith('b0b8e29b')).toBe(false);
+    expect(createHash('sha256').update(der).digest('hex')).toBe(PINNED_REVIEWER_SPKI_SHA256);
+    expect(PINNED_REVIEWER_SPKI_SHA256.startsWith('b0b8e29b')).toBe(true);
+    expect(PINNED_REVIEWER_SPKI_SHA256).not.toBe('b0b8e29b');
+    const text = clearanceText();
+    const signature = signWith(reviewer.privateKey, text);
+    expect(parseSignedClearance(text, 'ohdieyuh-glitch/sunday-relay').problems.join(' ')).toContain('JULIUS-CLEARANCE-V1');
+    expectVerdict(provenance({
+      workerClearance: packet({ reviewerKeyPem: real, offers: [{ text, signatureB64: signature }] }),
+    }), 'unprovenanced', /does not verify/u);
   });
 });
 
@@ -227,17 +261,18 @@ describe('the CLI accepts a worker-PR clearance from a comment', () => {
     [`repos/${REPO}/commits/${MAIN}`]: { commit: { tree: { sha: TREE }, message: 'Julius: squash (#226)\n' }, parents: [{ sha: PARENT }] },
     [`repos/${REPO}/commits/${MAIN}/pulls`]: [{
       number: 226, merged_at: '2026-10-23T12:00:00Z', merge_commit_sha: MAIN,
-      user: { login: WORKER }, head: { sha: HEAD }, base: { ref: 'main' }, body: '',
+      user: { login: WORKER }, head: { sha: HEAD }, base: { ref: 'main' }, body: comment,
     }],
     [`repos/${REPO}/pulls/226`]: { head: { sha: HEAD } },
     [`repos/${REPO}/issues/226/timeline`]: [{ event: 'merged' }],
-    [`repos/${REPO}/issues/226/comments`]: [{ body: comment }],
+    [`repos/${REPO}/issues/226/comments`]: [],
     [`repos/${REPO}/pulls/226/reviews`]: [],
     [`repos/${REPO}/pulls/226/comments`]: [],
     [`repos/${REPO}/commits/${HEAD}`]: { commit: { tree: { sha: TREE } } },
     [`repos/${REPO}/commits/${HEAD}/statuses`]: [],
     [`repos/${REPO}/compare/${PARENT}...${HEAD}`]: { merge_base_commit: { sha: PARENT } },
-    [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub`]: keyFile,
+    [`repos/${REPO}/compare/${PARENT}...${MAIN}`]: { files: [{ filename: 'src/relay/example.ts' }], ahead_by: 1, behind_by: 0 },
+    [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${PARENT}`]: keyFile,
     ...over,
   });
 
@@ -247,7 +282,10 @@ describe('the CLI accepts a worker-PR clearance from a comment', () => {
       writeFileSync(join(directory, 'gh'), [
         '#!/usr/bin/env node',
         `const table = ${JSON.stringify(table)};`,
-        "const path = (process.argv[3] ?? '').split('?')[0];",
+        "const full = process.argv[3] ?? '';",
+        "const split = full.split('?');",
+        "const ref = (split[1] ?? '').replace(/^ref=/, '');",
+        "const path = split[0].includes('/contents/') ? split[0] + '@' + ref : split[0];",
         'if (!(path in table)) { process.stderr.write(`stub: no route for ${path}\\n`); process.exit(1); }',
         'process.stdout.write(JSON.stringify(table[path]));',
       ].join('\n'), { mode: 0o755 });
@@ -266,21 +304,28 @@ describe('the CLI accepts a worker-PR clearance from a comment', () => {
     }
   };
 
-  it('a comment carrying a valid clearance makes the squash provenant', () => {
+  it('a comment carrying a generated-key clearance is refused by the pin and is not reclassified as provenant', () => {
     const result = run(routes());
-    expect(result.code, result.stderr).toBe(0);
-    expect(result.stdout).toContain('provenance=provenant');
-    expect(result.stdout).toContain('approved_by=INDEPENDENT_REVIEW');
+    expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(1);
+    expect(`${result.stdout}\n${result.stderr}`).toContain('not the pinned reviewer key');
+    expect(`${result.stdout}\n${result.stderr}`).not.toContain('provenance=provenant');
   }, 30_000);
 
-  it('the same comment signed under a different key does not', () => {
+  it('the same comment signed under a different key is refused because that key is not pinned', () => {
+    const attackerSignature = signWith(attacker.privateKey, text);
+    const attackerComment = `CLEARANCE_B64=${Buffer.from(text, 'utf8').toString('base64')}\nSIGNATURE_B64=${attackerSignature}\n`;
     const result = run(routes({
-      [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub`]: {
+      [`repos/${REPO}/commits/${MAIN}/pulls`]: [{
+        number: 226, merged_at: '2026-10-23T12:00:00Z', merge_commit_sha: MAIN,
+        user: { login: WORKER }, head: { sha: HEAD }, base: { ref: 'main' }, body: attackerComment,
+      }],
+      [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${PARENT}`]: {
         ...keyFile, content: Buffer.from(ATTACKER_PEM, 'utf8').toString('base64'),
       },
     }));
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain('does not verify');
+    expect(result.stderr).toContain('not the pinned reviewer key');
+    expect(result.stderr).not.toContain('does not verify');
     expect(result.stdout).not.toContain('provenance=provenant');
   }, 30_000);
 });

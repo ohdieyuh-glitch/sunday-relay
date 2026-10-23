@@ -26,7 +26,7 @@ export interface MainProvenanceResult {
   readonly approvedBy?: readonly string[];
   /** The review-currency verdict, present only when approval is why this failed. */
   readonly reviewCurrency?: 'stale' | 'blocked' | 'indeterminate';
-  /** `signed-landing` for a landing-block tip. `worker-clearance` for a worker-PR squash cleared by a signed JULIUS-CLEARANCE-V1. */
+  /** `signed-landing` for a landing-block tip. `worker-clearance` for a worker-PR squash cleared by a signed JULIUS-WORKER-SQUASH-V1. */
   readonly via?: 'signed-landing' | 'worker-clearance';
 }
 
@@ -77,18 +77,26 @@ export declare function evaluateMainProvenance(input: {
   readonly changedPathsComplete?: unknown;
   /** `{ sha, authorLogin, treeSha }` of the commit the signed clearance names as head. */
   readonly headCommit?: unknown;
+  /** Merge-gate evaluation clock for a worker-PR squash clearance. */
+  readonly now?: unknown;
+  /** Issue comments at evaluation, for the worker-squash bot-comments digest. */
+  readonly issueComments?: unknown;
   /**
    * External fingerprint of the pinned reviewer key (`JULIUS_REVIEWER_KEY_SHA256`).
    * Present-and-wrong fails closed. Omitted reads the process environment.
    */
   readonly externalReviewerKeySha256?: unknown;
   /**
-   * Signed worker-PR squash offers.
+   * Signed JULIUS-WORKER-SQUASH-V1 offers for a worker-PR squash.
    * Absent leaves the founder-approval path unchanged. Present and invalid fails closed.
-   * Accepted only when review currency is `stale` and the pull request was opened by the coding worker.
+   * Accepted only when review currency is `stale` and the pull request was opened by the coding worker,
+   * and only when the key read at the parent is the pinned reviewer key.
    */
   readonly workerClearance?: unknown;
 }): MainProvenanceResult;
+
+/** Header of a worker-PR squash approval. Not a landing clearance. */
+export declare const WORKER_SQUASH_HEADER: 'JULIUS-WORKER-SQUASH-V1';
 
 export declare const LANDING_BEGIN: string;
 export declare const LANDING_END: string;
@@ -100,6 +108,8 @@ export type LandingBlock =
 
 export declare function extractLandingBlock(message: unknown): LandingBlock;
 export declare function parseSignedClearance(text: string, queriedRepo?: string): { readonly problems: string[]; readonly fields: Record<string, string> };
+export declare function parseWorkerSquashClearance(text: string, queriedRepo?: string): { readonly problems: string[]; readonly fields: Record<string, string> };
+export declare function workerSquashCommentsDigest(input: { readonly issueComments: readonly unknown[]; readonly inlineComments: readonly unknown[]; readonly reviews: readonly unknown[] }): string;
 export declare function evaluateSignedLanding(input: Record<string, unknown>, tip: { readonly mainSha: string; readonly mainTreeSha: unknown; readonly parentSha: string }):
   | { readonly state: 'absent' }
   | { readonly state: 'decided'; readonly result: MainProvenanceResult };
