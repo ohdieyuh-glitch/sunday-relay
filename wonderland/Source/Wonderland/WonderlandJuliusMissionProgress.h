@@ -27,6 +27,15 @@
 //     JULIUS_TERMINAL_MISSION_STATES). That route is operator-Bearer only (docs/JULIUS_WONDERLAND_CONTRACT.md), and
 //     the admission route refuses an operator Bearer from the game, so the game cannot reach it today; and nobody has
 //     confirmed that serverRunId IS that Julius runId (YUJI, #407 "confirm bootstrap will require this id").
+//   - BRIDGE'S STATUS ROUTE (branch bridge/wonderland-julius-status-20261023, a427eac7, NOT pushed as of this
+//     commit, so not read from its source) is confirmed by BRIDGE in the team room, 2026-10-23 about 11:38 PT:
+//     before the operator claim the admission is in its own bounded state data.state "awaiting_operator", with its
+//     own expiry whose end cause is data.cause "operator_window_expired" (unpaid; the run was never started). The
+//     operator claim moves it to data.state "dispatched" and sets data.dispatchedAt once (UTC ISO-8601, never
+//     rewritten; updatedAt is NOT used, it changes on every transition). After dispatch, INTERRUPTED or FAILED is
+//     never written. These three words are single constants below (BridgeAwaitingOperatorState,
+//     BridgeDispatchedState, BridgeOperatorWindowExpiredCause) and MUST BE RE-PINNED to BRIDGE's closed state and
+//     cause sets once BRIDGE posts them with commit SHAs.
 //   So the wrapper tags every status answer with the vocabulary it came from (EStatusVocabulary): Admission for an
 //   answer shaped like the dispatch data object, JuliusRun for a JuliusRunView, Unknown for anything else. Every
 //   status string is matched by its exact bytes inside its own vocabulary, never by case-folding, prefix or free
@@ -48,35 +57,53 @@
 //      KEYED ONLY ON serverRunId: a status is applied only when the run id it names is the pinned serverRunId,
 //      byte for byte. There is no fallback to any other id (Julius's own run:<idempotencyKey> name included): a
 //      status naming any other id is never applied and ends the watch as RunIdMismatch.
-//   P3 TERMINALS ARE STICKY. Succeeded, Failed, Refused, DispatchFailed, RunIdMismatch, AnswerInvalid and
-//      PollLimitReached never change again; every later answer is traced as ignored and changes nothing.
+//   P3 TERMINALS ARE STICKY. Succeeded, Failed, Refused, DispatchFailed, NotStarted, RunIdMismatch, AnswerInvalid
+//      and PollLimitReached never change again; every later answer is traced as ignored and changes nothing.
 //   P4 POLLING NEVER DISPATCHES. A poll that fails (no answer, a bare 5xx, an error object, no data, no run id) is
 //      counted and changes no state. It never leads to a resend or a fresh pair. A poll before the first Accepted
 //      answer is not counted (PollsRecorded() stays 0).
-//   P5 THE POLL SCHEDULE IS BOUNDED BY TIME, IN TWO PHASES. There is no poll-count cap. The ADMISSION phase runs from
-//      the first Accepted answer until the first JuliusRun status is applied, and lasts at most PollAdmissionWatchMs
-//      (360 min): longer than julius-first-live-mission.yml's paid-slot job (timeout-minutes: 350), a legal wait for
-//      a paid slot before anything is spent. The first JuliusRun status opens a fresh RUN phase of at most
+//   P5 THE POLL SCHEDULE IS BOUNDED BY TIME, IN THREE PHASES. There is no poll-count cap. The HOLD phase runs from
+//      the first Accepted answer while the bridge has not reported the operator's dispatch, and lasts at most
+//      PollHoldWatchMs: the wait for the manual operator claim, shown as "Waiting for the operator to start the
+//      run". When it runs out in AdmittedHeld the watch ends NotStarted (neutral, never DispatchFailed); in any other
+//      state it ends PollLimitReached. The DISPATCH phase starts at the dispatch time the bridge recorded
+//      (data.dispatchedAt of a "dispatched" answer, P9), not at Accepted, so the operator hold never eats into it,
+//      and lasts at most PollDispatchWatchMs (360 min): longer than julius-first-live-mission.yml's paid-slot job
+//      (timeout-minutes: 350), a legal wait for a paid slot before anything is spent, plus the measured ~4 min from
+//      the slot to the first Julius status. The first JuliusRun status opens a fresh RUN phase of at most
 //      PollRunWatchMs (330 min): longer than the first-live-mission job (timeout-minutes: 300 on the #421 line, sized for
 //      the measured 291.9 min worst case with 3 repair cycles; 120 in this client line's copy of the workflow). The run phase starts at the first NextPollStep after that status
 //      (the wrapper asks right after recording each answer), so it never starts early. In each phase the delay is
 //      PollBaseDelayMs doubling to PollMaxDelayMs, and PollSlowDelayMs once the phase is PollSlowAfterMs (30 min)
 //      old. When the next wait would pass the phase's budget: PollLimitReached, which is terminal: stop polling and
-//      say so. Running out of patience is NOT a failure: the run may still be going. On this client line both budgets are
-//      pinned as constants by the KAT (paid-slot timeout-minutes: 350 at line 132 and first-live-mission
-//      timeout-minutes: 120 at line 226 of .github/workflows/julius-first-live-mission.yml here; the KAT also
-//      requires >= the #421 line's 300 min and 291.9 min worst case). No test on this line reads the workflow file.
+//      say so. Running out of patience is NOT a failure: the run may still be going. On this client line the dispatch
+//      and run budgets are pinned as constants by the KAT (paid-slot timeout-minutes: 350 at line 132 and
+//      first-live-mission timeout-minutes: 120 at line 226 of .github/workflows/julius-first-live-mission.yml here; the
+//      KAT also requires >= the #421 line's 300 min and 291.9 min worst case). No test on this line reads the workflow file.
 //   P6 NO SPEND, NO PASS. The display words never claim money was spent, never say PASS, qualifying or verified.
 //      Succeeded only means "the status said COMPLETED": the result still goes through r2's ClassifyResultEnvelope,
 //      ClassifyFinishedResult and the R4-F judge before anything is shown as an outcome.
-//   P7 A 202 IS NOT A RUNNING MISSION. An Admission-vocabulary answer can only ever give AdmittedHeld, Waiting or
-//      DispatchFailed. Only a JuliusRun-vocabulary status can say Dispatched or Running, so ADMISSION_HELD with
-//      dispatched:false shows "Admitted -- waiting for the paid run", never "running".
+//   P7 A 202 IS NOT A RUNNING MISSION. An Admission-vocabulary answer can only ever give AdmittedHeld,
+//      OperatorStarted, DispatchUnconfirmed, NotStarted, Waiting or DispatchFailed. Only a JuliusRun-vocabulary status
+//      can say Dispatched or Running, so ADMISSION_HELD with dispatched:false shows "Waiting for the operator to start
+//      the run", never "running".
 //   P8 JULIUS OUTRANKS ADMISSION. Once any JuliusRun status has been applied (JuliusStatusSeen()), an Admission-
 //      vocabulary answer (a poll or a late replay of the dispatch) is only traced (admission_answer_logged) and
 //      changes nothing: it can never move the state back to AdmittedHeld or Waiting, and never to DispatchFailed.
 //      So DispatchFailed is reachable only before any Julius status: at the first Accepted answer itself, or from
 //      AdmittedHeld or Waiting. A run-id mismatch is still checked first and still fails closed (P2).
+//   P9 THE DISPATCH TIME IS THE BRIDGE'S, AND IT IS SET ONCE. Before any Julius status, an Admission answer with
+//      data.state == BridgeDispatchedState is the operator's dispatch. Its data.dispatchedAt must parse strictly as
+//      UTC ISO-8601 (YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DDTHH:MM:SS.sssZ, ParseBridgeUtcTimestampMs); then the state is
+//      OperatorStarted and the dispatch window is armed once, at the first NextPollStep after it, backdated by how
+//      long before the answer's ReceivedUtcMs the dispatch was recorded (never before the first Accepted answer;
+//      0 when the wrapper gave no ReceivedUtcMs or its clock is behind). A missing or unparseable dispatchedAt FAILS
+//      CLOSED: DispatchUnconfirmed ("Can't confirm..."), no window is started and the hold window keeps running;
+//      a later "dispatched" answer with a good dispatchedAt confirms it. Once dispatched has been reported, no
+//      Admission answer can move the state back to AdmittedHeld, nor to NotStarted or DispatchFailed: it is only
+//      traced (admission_answer_logged), and a later dispatchedAt never restarts the window. data.cause ==
+//      BridgeOperatorWindowExpiredCause (before any dispatch or Julius status) is NotStarted, whatever data.state
+//      says, so the operator window's expiry is never shown as DispatchFailed.
 //
 // WHAT IS NOT HERE: no HTTP, no JSON parsing, no logging sink, no clock, no Unreal. The wrapper measures WatchedMs,
 // parses the answer into FStatusAnswer and writes the trace lines (FormatProgressTrace) to its own log.
@@ -94,12 +121,35 @@ namespace WonderlandJuliusMissionLogic
 	/** ^run:[0-9a-f]{24}$, JULIUS_BOOTSTRAP_RUN_ID in #407's admission-contract.ts. */
 	bool IsServerRunId(std::string_view ServerRunId);
 
+	/* ---------------------------------------------------------------- BRIDGE's status route words (re-pin, see top) */
+
+	/** data.state while the admission waits for the manual operator claim (BRIDGE, room 2026-10-23 11:38 PT). */
+	inline constexpr std::string_view BridgeAwaitingOperatorState = "awaiting_operator";
+	/** data.state once the operator claim dispatched the paid workflow; carries data.dispatchedAt (P9). */
+	inline constexpr std::string_view BridgeDispatchedState = "dispatched";
+	/** data.cause when the awaiting_operator window expired: unpaid, never started. Shown as NotStarted. */
+	inline constexpr std::string_view BridgeOperatorWindowExpiredCause = "operator_window_expired";
+
+	/**
+	 * P9: strict UTC ISO-8601, "YYYY-MM-DDTHH:MM:SSZ" or "YYYY-MM-DDTHH:MM:SS.sssZ" (exactly 3 fraction digits, the
+	 * form JavaScript's Date.prototype.toISOString writes), years 1970-9999, real calendar dates, no leap second, no
+	 * offset other than Z. On success writes milliseconds since 1970-01-01T00:00:00Z. Anything else is false.
+	 */
+	bool ParseBridgeUtcTimestampMs(std::string_view Text, std::uint64_t& OutMs);
+
 	enum class EMissionProgress : std::uint8_t
 	{
 		/** Before the first Accepted answer. r2's resend rules apply; the only state that allows a dispatch POST. */
 		AwaitingDispatchAnswer,
-		/** Admission state RESERVED, ADMISSION_HELD or LEDGER_UNWRITTEN: the pair is admitted, no paid run yet. */
+		/**
+		 * Admission state RESERVED, ADMISSION_HELD, LEDGER_UNWRITTEN or BRIDGE's awaiting_operator: the pair is admitted
+		 * and waits for the manual operator claim; no paid run yet. Bounded by the hold window (P5).
+		 */
 		AdmittedHeld,
+		/** BRIDGE's "dispatched" with a well-formed dispatchedAt: the operator started the run; no Julius status yet. */
+		OperatorStarted,
+		/** BRIDGE's "dispatched" with a missing or unparseable dispatchedAt: fail closed, no dispatch window (P9). */
+		DispatchUnconfirmed,
 		/** Julius run state CREATED, PLANNING or READY: Julius holds the run, nothing has started it. */
 		Dispatched,
 		/** Julius run state EXECUTING, WAITING, REVIEWING, REPAIRING or VERIFYING. */
@@ -119,6 +169,11 @@ namespace WonderlandJuliusMissionLogic
 		 * before any JuliusRun status was applied (P8).
 		 */
 		DispatchFailed,
+		/**
+		 * Terminal, neutral. The operator never started the run: BRIDGE's operator_window_expired cause, or the client's
+		 * hold window ran out while AdmittedHeld (P5). Never DispatchFailed, never a failure.
+		 */
+		NotStarted,
 		/** Terminal, fail closed. An answer named a different serverRunId or client run id than the pinned ones. */
 		RunIdMismatch,
 		/** Terminal, fail closed. The first Accepted answer had no well-formed serverRunId or not this client's run id. */
@@ -142,8 +197,8 @@ namespace WonderlandJuliusMissionLogic
 
 	/**
 	 * The exact-bytes map from a status string to a progress state. Never returns AwaitingDispatchAnswer, Refused,
-	 * RunIdMismatch, AnswerInvalid or PollLimitReached; an unrecognised string, a case variant, padding or an empty
-	 * string is Waiting.
+	 * DispatchUnconfirmed, NotStarted, RunIdMismatch, AnswerInvalid or PollLimitReached (those need more than the
+	 * status string); an unrecognised string, a case variant, padding or an empty string is Waiting.
 	 */
 	EMissionProgress ProgressFromStatus(EStatusVocabulary Vocabulary, std::string_view Status);
 
@@ -162,6 +217,12 @@ namespace WonderlandJuliusMissionLogic
 		std::string_view ServerRunId;
 		/** data.state / JuliusRunView.state. */
 		std::string_view Status;
+		/** data.dispatchedAt on BRIDGE's status answer (UTC ISO-8601); empty when absent (P9). */
+		std::string_view DispatchedAt;
+		/** data.cause on BRIDGE's status answer; empty when absent. */
+		std::string_view Cause;
+		/** The wrapper's own UTC clock (ms since 1970) when this answer arrived; 0 when unknown (P9). */
+		std::uint64_t ReceivedUtcMs = 0;
 	};
 
 	/** What a recorded answer did. Every value is traced; none of them sends anything. */
@@ -193,6 +254,8 @@ namespace WonderlandJuliusMissionLogic
 		IgnoredAfterTerminal,
 		/** NextPollStep ran out of budget. */
 		PollLimitReached,
+		/** NextPollStep ran out of the hold window while AdmittedHeld: NotStarted (P5). */
+		HoldWindowExpired,
 	};
 
 	struct FProgressTrace
@@ -207,7 +270,7 @@ namespace WonderlandJuliusMissionLogic
 		int HttpStatus = 0;
 		/** Polls recorded so far, this one included. */
 		std::uint32_t PollIndex = 0;
-		/** The status string as received when it is 1-32 characters of [A-Z_]; otherwise "-" (never free text). */
+		/** The status string as received when it is 1-32 characters of [A-Za-z_]; otherwise "-" (never free text). */
 		std::string Status;
 	};
 
@@ -220,11 +283,17 @@ namespace WonderlandJuliusMissionLogic
 	inline constexpr std::uint64_t PollSlowAfterMs = 1800000;
 	inline constexpr std::uint32_t PollSlowDelayMs = 120000;
 	/**
-	 * 360 min from the first Accepted answer while no JuliusRun status has been applied. Must stay >= the paid-slot
-	 * job's timeout-minutes: 350 in .github/workflows/julius-first-live-mission.yml (line 132 on this client line;
+	 * 180 min from the first Accepted answer while the bridge has not reported the operator's dispatch (P5). PROVISIONAL:
+	 * BRIDGE has not posted the awaiting_operator expiry yet; re-pin to at least that expiry plus one slow wait
+	 * (PollSlowDelayMs), so the client sees BRIDGE's operator_window_expired before its own window ends.
+	 */
+	inline constexpr std::uint64_t PollHoldWatchMs = 10800000;
+	/**
+	 * 360 min from BRIDGE's recorded dispatchedAt while no JuliusRun status has been applied. Must stay >= the
+	 * paid-slot job's timeout-minutes: 350 in .github/workflows/julius-first-live-mission.yml (line 132 on this client line;
 	 * pinned as a KAT constant here, by the .ts test on the #421 line).
 	 */
-	inline constexpr std::uint64_t PollAdmissionWatchMs = 21600000;
+	inline constexpr std::uint64_t PollDispatchWatchMs = 21600000;
 	/**
 	 * 330 min from the first JuliusRun status. Must stay >= the first-live-mission job's timeout-minutes: 300 (worst
 	 * case 291.9 min with 3 repair cycles) in the #421 line's .github/workflows/julius-first-live-mission.yml. This
@@ -232,10 +301,11 @@ namespace WonderlandJuliusMissionLogic
 	 */
 	inline constexpr std::uint64_t PollRunWatchMs = 19800000;
 
-	/** P5: which budget applies. Admission until the first JuliusRun status is applied, then Run. */
+	/** P5: which budget applies. Hold until dispatch is confirmed, Dispatch until the first JuliusRun status, then Run. */
 	enum class EPollPhase : std::uint8_t
 	{
-		Admission,
+		Hold,
+		Dispatch,
 		Run,
 	};
 
@@ -256,11 +326,11 @@ namespace WonderlandJuliusMissionLogic
 
 	/**
 	 * Pure and deterministic, like r2's NextResend. PollsSent: polls already sent for this run. PhaseWatchedMs: wall
-	 * time since the phase began (Admission: the first Accepted answer; Run: the first JuliusRun status), as the
-	 * wrapper measured it. The delay before poll N (from 0) is min(PollBaseDelayMs * PollGrowthFactor^N,
+	 * time since the phase began (Hold: the first Accepted answer; Dispatch: BRIDGE's dispatchedAt; Run: the first
+	 * JuliusRun status), as the wrapper measured it. The delay before poll N (from 0) is min(PollBaseDelayMs * PollGrowthFactor^N,
 	 * PollMaxDelayMs): 5,000, 10,000, 20,000, 40,000 ms, then 60,000 ms; PollSlowDelayMs once PhaseWatchedMs reaches
-	 * PollSlowAfterMs. Stop when the wait would take PhaseWatchedMs past the phase's budget (PollAdmissionWatchMs or
-	 * PollRunWatchMs). There is no count cap.
+	 * PollSlowAfterMs. Stop when the wait would take PhaseWatchedMs past the phase's budget (PollHoldWatchMs,
+	 * PollDispatchWatchMs or PollRunWatchMs). There is no count cap.
 	 */
 	FPollDecision NextPoll(std::uint32_t PollsSent, EPollPhase Phase, std::uint64_t PhaseWatchedMs);
 
@@ -283,9 +353,10 @@ namespace WonderlandJuliusMissionLogic
 
 		/**
 		 * Whether to poll, and after what wait. WatchedMs: wall time since the first Accepted answer. Stop in
-		 * AwaitingDispatchAnswer and in every terminal state. The first call after a JuliusRun status was applied
-		 * starts the Run phase at WatchedMs (P5). When the phase's budget is spent it moves to PollLimitReached
-		 * (traced) and answers Stop from then on.
+		 * AwaitingDispatchAnswer and in every terminal state. The first call after a confirmed dispatch starts the
+		 * Dispatch phase at WatchedMs minus the dispatch's age (P9); the first call after a JuliusRun status was applied
+		 * starts the Run phase at WatchedMs (P5). When the phase's budget is spent it moves to PollLimitReached, or
+		 * to NotStarted when the hold window runs out in AdmittedHeld (traced), and answers Stop from then on.
 		 */
 		FPollDecision NextPollStep(std::uint64_t WatchedMs);
 
@@ -297,12 +368,22 @@ namespace WonderlandJuliusMissionLogic
 		std::uint32_t PollsRecorded() const { return PollsSent; }
 		/** P8: true once any JuliusRun status has been applied for the pinned run. */
 		bool JuliusStatusSeen() const { return bJuliusStatusSeen; }
-		EPollPhase PollPhase() const { return bJuliusStatusSeen ? EPollPhase::Run : EPollPhase::Admission; }
+		/** P9: true once BRIDGE reported "dispatched" (with or without a usable dispatchedAt). */
+		bool DispatchReported() const { return bDispatchReported; }
+		/** P9: true once a "dispatched" answer carried a well-formed dispatchedAt. */
+		bool DispatchConfirmed() const { return bDispatchConfirmed; }
+		EPollPhase PollPhase() const
+		{
+			return bJuliusStatusSeen ? EPollPhase::Run : bDispatchConfirmed ? EPollPhase::Dispatch : EPollPhase::Hold;
+		}
 		const std::vector<FProgressTrace>& Trace() const { return Events; }
 
 	private:
 		EMissionProgress Move(EProgressEvent Event, EMissionProgress To, const FStatusAnswer* Fields);
-		/** An Admission-vocabulary status for the pinned run: applied before any Julius status, logged after (P8). */
+		/**
+		 * An Admission-vocabulary status for the pinned run: applied before any Julius status and before a reported
+		 * dispatch, logged after (P8, P9); "dispatched" and the operator-window cause are handled here (P9).
+		 */
 		EMissionProgress ApplyAdmission(EProgressEvent Event, const FStatusAnswer& Fields);
 
 		std::string ClientRunId;
@@ -312,6 +393,11 @@ namespace WonderlandJuliusMissionLogic
 		bool bJuliusStatusSeen = false;
 		bool bRunPhaseStarted = false;
 		std::uint64_t RunPhaseStartMs = 0;
+		bool bDispatchReported = false;
+		bool bDispatchConfirmed = false;
+		bool bDispatchPhaseStarted = false;
+		std::uint64_t DispatchAgeAtReportMs = 0;
+		std::uint64_t DispatchPhaseStartMs = 0;
 		std::vector<FProgressTrace> Events;
 	};
 
