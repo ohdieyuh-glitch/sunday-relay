@@ -245,6 +245,11 @@ export type ScriptedOutcome =
      * without it answers nothing — which is the silence Julius refuses.
      */
     readonly answerFindings?: 'RESOLVED' | 'OPEN';
+    /**
+     * Adapter diagnostics, the same object a live worker puts on a successful
+     * result. Julius allowlists and `diag_`-prefixes them before the ledger.
+     */
+    readonly diagnostics?: unknown;
   }
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
   | {
@@ -369,6 +374,7 @@ export function scriptedAdapter(
         ...(step.consistency === undefined ? {} : { consistency: step.consistency }),
         ...(step.implementation === undefined ? {} : { implementation: step.implementation }),
         ...(step.architectureObservations === undefined ? {} : { architectureObservations: step.architectureObservations }),
+        ...(step.diagnostics === undefined ? {} : { diagnostics: step.diagnostics }),
       };
       return result;
     },

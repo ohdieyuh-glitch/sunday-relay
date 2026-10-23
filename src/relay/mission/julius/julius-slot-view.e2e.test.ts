@@ -4,7 +4,7 @@ import { JuliusRunLoop } from './julius-run-loop';
 import { JuliusRuntimeApi, projectJuliusSlotViews, type JuliusApiIdentity } from './julius-runtime-api';
 import {
   cardPolicy, createJuliusHarness, seedTaskContractInto, task, verificationPolicy, worker,
-  type JuliusHarness,
+  type JuliusHarness, type ScriptedOutcome,
 } from './julius-runtime-fixtures';
 import type { JuliusRunRow } from './julius-runtime-ports';
 
@@ -64,7 +64,7 @@ const BUILD_PRICED = {
 };
 const PRICELESS = { kind: 'succeed' as const, usdMicros: null };
 
-function build(coder: readonly { kind: 'succeed' }[] = [BUILD_PRICED]): JuliusHarness {
+function build(coder: readonly ScriptedOutcome[] = [BUILD_PRICED]): JuliusHarness {
   const harness = createJuliusHarness({
     workers: [
       { worker: ARCHITECT, script: [{ ...PLAN_OK, ...PRICELESS }] },
@@ -171,7 +171,45 @@ describe('the three peer slots, read through the authoritative API', () => {
       // of the gap paid run 34414726976's bundle recorded for two of three legs.
       expect(slot.servedModel, `${slot.role}: silence is null`).toBeNull();
       expect(slot.requestedModel).toBeNull();
+      expect(slot.providerResponseId, `${slot.role}: no response id is null`).toBeNull();
     }
+  });
+
+  it('projects a live completion’s diag_ facts onto the slot, including the provider response id', async () => {
+    const harness = build([{
+      ...BUILD_PRICED,
+      diagnostics: {
+        provider: 'anthropic',
+        requestedModel: 'claude-opus-5-5',
+        servedModel: 'claude-opus-5-5',
+        responseId: 'msg_01ABCDEFGHIJKLMNOPQRSTUV',
+      },
+    }]);
+    await drain(harness.loop);
+    const coder = (await slotsOf(harness)).get('CODING_AGENT')!;
+    expect(coder.providerId).toBe('anthropic');
+    expect(coder.requestedModel).toBe('claude-opus-5-5');
+    expect(coder.servedModel).toBe('claude-opus-5-5');
+    expect(coder.providerResponseId).toBe('msg_01ABCDEFGHIJKLMNOPQRSTUV');
+  });
+
+  it('leaves a credential-shaped response id off the slot', async () => {
+    const secret = 'sk-ant-api03-FAKETESTNOTREAL';
+    const harness = build([{
+      ...BUILD_PRICED,
+      diagnostics: {
+        provider: 'anthropic',
+        requestedModel: 'claude-opus-5-5',
+        servedModel: 'claude-opus-5-5',
+        responseId: secret,
+      },
+    }]);
+    await drain(harness.loop);
+    const coder = (await slotsOf(harness)).get('CODING_AGENT')!;
+    expect(coder.servedModel).toBe('claude-opus-5-5');
+    expect(coder.providerResponseId).toBeNull();
+    expect(JSON.stringify(coder)).not.toContain(secret);
+    expect(JSON.stringify(coder)).not.toContain('sk-ant');
   });
 
   it('calls a slot that never ran NEVER_DISPATCHED rather than idle', async () => {
@@ -285,6 +323,31 @@ describe('the slot projection itself', () => {
     expect(reviewer.requestedModel).toBe('grok-build-0.1');
     expect(reviewer.servedModel).toBe('grok-build-0.1');
     expect(reviewer.providerId).toBe('xai');
+    expect(reviewer.providerResponseId).toBeNull();
+  });
+
+  it('reads live diag_ facts, and a credential-shaped or empty id does not erase a prior one', () => {
+    const at = '2026-09-10T02:00:00.000Z';
+    const secret = 'sk-ant-api03-FAKETESTNOTREAL';
+    const views = projectJuliusSlotViews([
+      { eventId: 'e1', sequence: 1, type: 'worker.completed', taskId: 'b', workerId: 'coder', occurredAt: at,
+        facts: {
+          role: 'CODING_AGENT',
+          requestedModel: 'ignored-unprefixed',
+          diag_provider: 'anthropic',
+          diag_requestedModel: 'claude-opus-5-5',
+          diag_servedModel: 'claude-opus-5-5',
+          diag_responseId: 'msg_01LIVE',
+        } },
+      { eventId: 'e2', sequence: 2, type: 'evidence.recorded', taskId: 'b', workerId: 'coder', occurredAt: at,
+        facts: { role: 'CODING_AGENT', diag_responseId: secret, diag_servedModel: null, diag_requestedModel: '' } },
+    ]);
+    const coder = views.find((slot) => slot.role === 'CODING_AGENT')!;
+    expect(coder.providerId).toBe('anthropic');
+    expect(coder.requestedModel).toBe('claude-opus-5-5');
+    expect(coder.servedModel).toBe('claude-opus-5-5');
+    expect(coder.providerResponseId).toBe('msg_01LIVE');
+    expect(JSON.stringify(coder)).not.toContain(secret);
   });
 
   /**
