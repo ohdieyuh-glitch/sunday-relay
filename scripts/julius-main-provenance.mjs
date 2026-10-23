@@ -139,11 +139,14 @@ export function extractLandingBlock(message) {
 }
 
 /** The clearance text rules, restated here on purpose: this file imports nothing from the lander it is a check on. */
-export function parseSignedClearance(text) {
+export function parseSignedClearance(text, queriedRepo) {
   const problems = [];
   const lines = String(text).split('\n');
   if (lines[0] !== 'JULIUS-CLEARANCE-V1') problems.push('first line must be JULIUS-CLEARANCE-V1');
   if (lines[1] !== `repo: ${LANDING_REPO}`) problems.push(`second line must be "repo: ${LANDING_REPO}"`);
+  // v3.5b S-3: the queried repository is REQUIRED (library, GitHub mode and --evidence mode); GitHub repository names are case-insensitive.
+  if (typeof queriedRepo !== 'string' || queriedRepo === '') problems.push('the queried repository is required');
+  else if (lines[1] === `repo: ${LANDING_REPO}` && queriedRepo.toLowerCase() !== LANDING_REPO.toLowerCase()) problems.push(`the clearance is for ${LANDING_REPO}, not the queried repo ${queriedRepo}`);
   const fields = {};
   CLEARANCE_KEYS.forEach((key, i) => {
     const line = lines[2 + i] ?? '';
@@ -212,7 +215,7 @@ export function readReviewerKey(pem) {
  * landing system and its key, this gate, approver files, migrations, package manifests...) are never provenant through a
  * signature alone. The two exception-eligible files may change only when the SIGNED clearance names them exactly.
  */
-const SIGNED_LANDING_HARD_FORBIDDEN = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
+const SIGNED_LANDING_HARD_FORBIDDEN = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|scripts\/relay-parity-gate|scripts\/wonderland-beta-gate|scripts\/julius-live-preflight-identity|scripts\/julius-derive-scoped-credentials|scripts\/julius-ci-callers|scripts\/ci-test-accounting|scripts\/julius-paid-dispatch|scripts\/julius-paid-run-archive|\.github\/julius-mission-pins\.sh$|\.github\/julius-executor-entrypoint\.sh$|scripts\/julius-docker-executor\.sh$|scripts\/julius-executor-ready\.mjs$|scripts\/julius-reviewer-isolation|scripts\/julius-reviewer-deadline\.mjs$|scripts\/julius-live-preflight\.ts$|scripts\/julius-usage-limit\.mjs$|\.github\/julius-learning-store\.sh$|\.github\/julius-phase\.sh$|\.github\/wait-for-executor\.sh$|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
 const SIGNED_LANDING_EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
 export const SIGNED_LANDING_GOVERNED = Object.freeze({ HARD_FORBIDDEN: SIGNED_LANDING_HARD_FORBIDDEN, EXCEPTION_ELIGIBLE: SIGNED_LANDING_EXCEPTION_ELIGIBLE });
 
@@ -240,7 +243,7 @@ export function evaluateSignedLanding(input, tip) {
   if (Buffer.from(clearanceText, 'utf8').toString('base64') !== block.clearanceB64) {
     return signedVerdict('indeterminate', 'the clearance payload is not valid UTF-8', base);
   }
-  const parsed = parseSignedClearance(clearanceText);
+  const parsed = parseSignedClearance(clearanceText, input?.repo);
   if (parsed.problems.length > 0) {
     return signedVerdict('indeterminate', `the signed clearance text is malformed: ${parsed.problems.join('; ')}`, base);
   }
@@ -583,7 +586,7 @@ async function main(argv) {
   if (typeof evidencePath === 'string') {
     let evaluated;
     try {
-      evaluated = evaluateMainProvenance({ ...(await fromEvidenceFile(evidencePath)), branch });
+      evaluated = evaluateMainProvenance({ ...(await fromEvidenceFile(evidencePath)), branch, repo }); // v3.5b S-3: the command line's repository, never the file's
     } catch (error) {
       process.stderr.write(`main_provenance_indeterminate: ${error instanceof Error ? error.message : 'evidence unreadable'}\n`);
       return 1;
@@ -636,7 +639,7 @@ async function main(argv) {
         changedPaths = comparison.files.flatMap((file) => [file?.filename, file?.previous_filename].filter((path) => typeof path === 'string'));
         changedPathsComplete = true;
       }
-      const signedHead = parseSignedClearance(Buffer.from(landingBlock.clearanceB64, 'base64').toString('utf8')).fields.head;
+      const signedHead = parseSignedClearance(Buffer.from(landingBlock.clearanceB64, 'base64').toString('utf8'), repo).fields.head;
       if (isSha(signedHead)) {
         const commit = gh(`repos/${repo}/commits/${signedHead}`);
         headCommit = { sha: commit?.sha, authorLogin: commit?.author?.login, treeSha: commit?.commit?.tree?.sha };
@@ -698,6 +701,7 @@ async function main(argv) {
       parentContainedInReviewedHead,
       baseRefChanged,
       mainCommitMessage,
+      repo,
       reviewerKeyPem,
       reviewerKeyAtSha,
       tipReviewerKeyPem,

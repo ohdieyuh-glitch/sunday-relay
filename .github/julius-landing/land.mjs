@@ -14,19 +14,224 @@ const API = 'https://api.github.com';
 const SELF_CHECK = 'Land a cleared pull request';
 // r5: NOTHING this job prints may carry a credential, whatever an API, a proxy or a library echoes back into an error text. Every line goes through `summary`, which redacts the token
 // literal, GitHub token shapes (ghs_/ghp_/gho_/ghu_/ghr_/github_pat_), `Bearer <x>` and `Authorization: <x>` first. (The runner also masks GITHUB_TOKEN; this does not rely on it.)
+// V-4: the token is also redacted when a line break (or any whitespace) splits it, in its base64 forms (alone, behind `x-access-token:`, at the three byte alignments) and when ANY of its characters
+// is written as a percent escape (%XX, upper or lower hex, also escaped again as %25XX: up to three levels). v3.5c: v3.5b only compared against encodeURIComponent(token), which is the token itself for
+// the characters of a GitHub token, so a REAL percent-encoded echo (ghs%5F..., %67%68%73%5F...) was not hidden. Each character below matches itself OR its %XX, so partial encodings are covered.
+// v3.5d: a GitHub token SHAPE (any credential, not only the job token) is also hidden when a line break (LF or CRLF, then at most one space or tab) splits it at ANY character; a plain space is not a gap.
+// `Authorization: <x>` also covers a quoted value. v3.5e: the same line-break gap is also accepted INSIDE every %XX escape (between the %, the 25 levels and the two hex digits).
+// Every sentence of the README "Output redaction" paragraph is a probe run on this function; the residuals (plain space inside a foreign shape or inside an escape, a lone CR, ...) are listed there and pinned by tests.
+const b64Middles = (s) => [0, 1, 2].map((pad) => Buffer.from(' '.repeat(pad) + s).toString('base64')).map((e, pad) => e.slice(Math.ceil((pad * 8) / 6), Math.max(0, e.length - 4))).filter((m) => m.length >= 8);
+// A direct scan, not a per-token expression. The expression this replaced was compiled on the first call and cost about half a second for a
+// 40-character token, so every fresh process (one per end-to-end case) missed its deadline. Behaviour is the same: each character is itself or
+// its %XX / %25XX form (at most three levels), a line-break gap may sit inside an escape, and the words after a token survive.
+const WS = /\s/u;
+const hexVal = (c) => {
+  const x = c === undefined ? -1 : c.charCodeAt(0);
+  if (x >= 48 && x <= 57) return x - 48;
+  if (x >= 65 && x <= 70) return x - 55;
+  if (x >= 97 && x <= 102) return x - 87;
+  return -1;
+};
+// (?:\r?\n[ \t]?)? taken greedily. The atom after a gap is never CR, LF, space or tab, so failing to take the gap cannot succeed either.
+const readGap = (s, i) => {
+  let j = i;
+  const a = s.charCodeAt(j);
+  if (a === 13 && s.charCodeAt(j + 1) === 10) j += 2;
+  else if (a === 10) j += 1;
+  else return i;
+  const b = s.charCodeAt(j);
+  if (b === 32 || b === 9) j += 1;
+  return j;
+};
+const skipWs = (s, i) => {
+  let j = i;
+  while (j < s.length) {
+    const cp = s.codePointAt(j);
+    const ch = String.fromCodePoint(cp);
+    if (!WS.test(ch)) break;
+    j += ch.length;
+  }
+  return j;
+};
+// '%' , a gap, ('2' gap '5' gap){0,3} greedy, then two hex digits with a gap between them. accept(byte) chooses the payload.
+const matchPercentByte = (s, i, accept) => {
+  if (s.charCodeAt(i) !== 37) return -1;
+  for (let depth = 3; depth >= 0; depth -= 1) {
+    let j = readGap(s, i + 1);
+    let ok = true;
+    for (let d = 0; d < depth; d += 1) {
+      if (s.charCodeAt(j) !== 50) { ok = false; break; }
+      j = readGap(s, j + 1);
+      if (s.charCodeAt(j) !== 53) { ok = false; break; }
+      j = readGap(s, j + 1);
+    }
+    if (!ok) continue;
+    const h1 = hexVal(s[j]);
+    if (h1 < 0) continue;
+    j = readGap(s, j + 1);
+    const h2 = hexVal(s[j]);
+    if (h2 < 0) continue;
+    if (accept((h1 << 4) | h2)) return j + 1;
+  }
+  return -1;
+};
+/** One character at i: itself, or %XX (either hex case), or that %XX escaped again (%25XX, at most three levels), a line-break gap allowed inside. Only a byte has a %XX form. Returns the index after the match, or -1. */
+const charOrEscape = (s, i, ch) => {
+  if (s.startsWith(ch, i)) return i + ch.length;
+  const code = ch.codePointAt(0);
+  if (code > 0xff) return -1;
+  return matchPercentByte(s, i, (b) => b === code);
+};
+const matchSequence = (s, i, chars, matchOne) => {
+  let j = i;
+  for (let c = 0; c < chars.length; c += 1) {
+    if (c > 0) j = readGap(s, j);
+    const n = matchOne(s, j, chars[c]);
+    if (n < 0) return -1;
+    j = n;
+  }
+  return j;
+};
+// Whitespace between the characters of a job token that does not itself contain whitespace. Greedy, and no backtrack: a token character is not whitespace, so giving a space back cannot help it match.
+const matchJobAt = (s, i, chars) => {
+  let j = i;
+  for (let c = 0; c < chars.length; c += 1) {
+    if (c > 0) j = skipWs(s, j);
+    const n = charOrEscape(s, j, chars[c]);
+    if (n < 0) return -1;
+    j = n;
+  }
+  return j > i ? j : -1;
+};
+const replaceLeftmost = (s, chars, matchAt, canStart) => {
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    if (canStart(s, i, chars)) {
+      const end = matchAt(s, i, chars);
+      if (end > i) { out += '***'; i = end; continue; }
+    }
+    out += s[i];
+    i += 1;
+  }
+  return out;
+};
+const jobCanStart = (s, i, chars) => s.startsWith(chars[0], i) || s.charCodeAt(i) === 37;
+// base64url writes '+' as '-' and '/' as '_', and either may be the first character of a middle.
+const b64CanStart = (s, i, chars) => {
+  if (jobCanStart(s, i, chars)) return true;
+  const ch = chars[0];
+  if (ch === '+' && s.startsWith('-', i)) return true;
+  if (ch === '/' && s.startsWith('_', i)) return true;
+  return false;
+};
+const b64One = (s, i, ch) => {
+  const alts = ch === '+' ? ['+', '-'] : ch === '/' ? ['/', '_'] : [ch];
+  for (const a of alts) {
+    const n = charOrEscape(s, i, a);
+    if (n >= 0) return n;
+  }
+  return -1;
+};
+const isAlnumByte = (b) => (b >= 48 && b <= 57) || (b >= 65 && b <= 90) || (b >= 97 && b <= 122);
+const SHAPE_PREFIXES = ['ghs', 'ghp', 'gho', 'ghu', 'ghr'];
+const matchPrefixedHead = (s, i) => {
+  for (const w of SHAPE_PREFIXES) {
+    const end = matchSequence(s, i, [...`${w}_`], charOrEscape);
+    if (end >= 0) return end;
+  }
+  return -1;
+};
+const matchPatHead = (s, i) => matchSequence(s, i, [...'github_pat_'], charOrEscape);
+const matchShapeHead = (s, i) => {
+  const a = matchPrefixedHead(s, i);
+  if (a >= 0) return a;
+  return matchPatHead(s, i);
+};
+const matchUnit = (s, i, pat) => {
+  const ch = s[i];
+  if (ch !== undefined && (pat ? /[A-Za-z0-9_]/u : /[A-Za-z0-9]/u).test(ch)) return i + 1;
+  return matchPercentByte(s, i, (b) => (pat ? isAlnumByte(b) || b === 0x5f : isAlnumByte(b)));
+};
+const matchShapeAt = (s, i, pat) => {
+  const head = pat ? matchPatHead(s, i) : matchPrefixedHead(s, i);
+  if (head < 0) return -1;
+  let j = head;
+  let units = 0;
+  while (units < 255) {
+    const at = readGap(s, j);
+    if (matchShapeHead(s, at) >= 0) break;
+    const n = matchUnit(s, at, pat);
+    if (n < 0) break;
+    j = n;
+    units += 1;
+  }
+  return units >= 16 ? j : -1;
+};
+const replaceShapes = (s, pat) => {
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    // every shape head starts with 'g', or with a percent escape of 'g'
+    const c = s.charCodeAt(i);
+    if (c === 103 || c === 37) {
+      const end = matchShapeAt(s, i, pat);
+      if (end > i) { out += '***'; i = end; continue; }
+    }
+    out += s[i];
+    i += 1;
+  }
+  return out;
+};
+// Only a job token that itself contains whitespace still needs an expression: `\s*` between its characters has to backtrack through that token's own whitespace. A GitHub token has none.
+const GAP_SRC = '(?:\\r?\\n[ \\t]?)?';
+const reEscape = (c) => c.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+const percentSrc = (hexPair) => `%${GAP_SRC}(?:2${GAP_SRC}5${GAP_SRC}){0,3}${hexPair}`;
+const charPattern = (c) => {
+  const code = c.codePointAt(0);
+  if (code > 0xff) return reEscape(c);
+  const digits = [...code.toString(16).padStart(2, '0')].map((d) => (/[a-f]/u.test(d) ? `[${d}${d.toUpperCase()}]` : d));
+  return `(?:${reEscape(c)}|${percentSrc(digits.join(GAP_SRC))})`;
+};
+let jobScan = null;
+const jobScanFor = (token) => {
+  if (jobScan !== null && jobScan.token === token) return jobScan;
+  const chars = token.length <= 256 ? [...token] : null;
+  const hasWs = chars !== null && chars.some((c) => WS.test(c));
+  const middles = chars === null ? [] : [token, `x-access-token:${token}`, `${token}:x-oauth-basic`].flatMap((form) => b64Middles(form).map((m) => [...m]));
+  let literal = null;
+  if (hasWs) { try { literal = new RegExp(chars.map(charPattern).join('\\s*'), 'gu'); } catch { literal = null; } }
+  jobScan = { token, chars, hasWs, middles, literal };
+  return jobScan;
+};
 const redact = (text) => {
   let out = String(text);
-  if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) out = out.split(env.GH_TOKEN).join('***');
+  if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) {
+    out = out.split(env.GH_TOKEN).join('***');
+    const scan = jobScanFor(env.GH_TOKEN);
+    if (scan.chars !== null) {
+      if (scan.hasWs) { if (scan.literal !== null) out = out.replace(scan.literal, '***'); }
+      else out = replaceLeftmost(out, scan.chars, matchJobAt, jobCanStart);
+      for (const middle of scan.middles) out = replaceLeftmost(out, middle, (s, i, cs) => matchSequence(s, i, cs, b64One), b64CanStart);
+    }
+  }
+  out = replaceShapes(out, false);
+  out = replaceShapes(out, true);
   return out
-    .replace(/\b(?:ghs|ghp|gho|ghu|ghr)_[A-Za-z0-9]{16,}/gu, '***').replace(/\bgithub_pat_[A-Za-z0-9_]{16,}/gu, '***')
-    .replace(/\bBearer\s+[^\s"',;]+/giu, 'Bearer ***').replace(/(authorization["']?\s*[:=]\s*)(?:(?:bearer|token|basic)\s+)?[^\s"',;]+/giu, '$1***');
+    // v3.5e: `Bearer` takes a quoted value, or a word, after an optional `:` / `=`. v3.5h: the quotes may be backslash-escaped (JSON inside JSON: \" ... \"; the closing run of backslashes equals the
+    // opening run and is not itself preceded by a backslash, so an escaped quote of a deeper level inside the value does not end it); an unterminated escaped quote hides the rest of the line.
+    .replace(/\bBearer(?:\s*[:=]\s*|\s+)(?:(\\+)(["'])[^\r\n]*?(?<!\\)\1\2|\\+["'][^\r\n]*|"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|["'][^\r\n]*|[^\s"',;]+)/giu, 'Bearer ***')
+    // `Authorization` + `:` or `=`: a quoted value (JSON, single quotes) is hidden alone, quotes kept; anything else hides the REST OF THE LINE (a scheme word, a value with spaces, `;` or `,`: Negotiate, Digest, AWS4-HMAC...).
+    .replace(/(authorization\\*["']?\s*[:=]\s*)(["'])(?:\\.|(?!\2)[^\\\r\n])*\2/giu, '$1$2***$2')
+    .replace(/(authorization\\*["']?\s*[:=])(?!\s*(["'])\*\*\*\2)(\s*)[^\r\n]+(?:\r?\n[ \t]+[^\r\n]*)*/giu, '$1$3***');
 };
 const summary = (line) => { const safe = redact(line); console.log(safe); if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, safe + '\n'); };
 const fail = (problems) => { for (const p of problems) summary(`REFUSED: ${p}`); summary('Nothing was landed.'); process.exit(1); };
 // Any error nobody handled (an API answer that is not 2xx, a network failure, a malformed file) ends the job with ONE line, never a stack trace. Before the ref update is sent nothing has
 // landed: exit 1 ("REFUSED"). From the moment the ref update is sent main's state may have changed: exit 2 ("ALERT"), told apart so nobody reads "nothing landed" into it.
 let refUpdateStarted = false;
-const oneLine = (e) => (e instanceof Error ? e.message : String(e)).split('\n')[0].slice(0, 300);
+// v3.5e: redact BEFORE the cut (a token that straddles the 300-character cut or the first line break used to leave its head visible)
+const oneLine = (e) => redact(e instanceof Error ? e.message : String(e)).split('\n')[0].slice(0, 300);
 const onUnexpected = (e) => {
   if (!refUpdateStarted) { summary(`REFUSED: unexpected error before anything was landed: ${oneLine(e)}`); summary('Nothing was landed.'); process.exit(1); }
   summary(`ALERT AFTER LANDING: an unexpected error occurred after the ref update was sent: ${oneLine(e)}; check main by hand`);
@@ -46,7 +251,7 @@ async function gh(path, init = {}) {
   const res = await ghRaw(path, init);
   const text = await res.text();
   let body; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
-  if (!res.ok) throw Object.assign(new Error(`${init.method ?? 'GET'} ${path} -> ${res.status}: ${typeof body === 'string' ? body.slice(0, 200) : body?.message}`), { status: res.status });
+  if (!res.ok) throw Object.assign(new Error(`${init.method ?? 'GET'} ${path} -> ${res.status}: ${typeof body === 'string' ? redact(body).slice(0, 200) : body?.message}`), { status: res.status });
   return body;
 }
 // Every list is read to its end; past the page cap readAllPages THROWS, which ends the job unmerged (fail closed).
@@ -196,7 +401,7 @@ try {
     process.exit(2);
   }
   if (tipAfter === newSha) summary(`LANDED (the PATCH response was lost): ${text}; main is the created commit ${newSha}`);
-  else if (tipAfter === fields.base) fail([`the ref update outcome was ambiguous (${text}) and main is still the cleared base ${fields.base}; nothing landed, no retry (a request that timed out could still be applied late: check main again; this clearance is spent, sign a new one)`]);
+  else if (tipAfter === fields.base) { summary(`ALERT AFTER AN AMBIGUOUS REF UPDATE (${text}): main is still the cleared base ${fields.base}, but the request could still be applied late; state in doubt. No retry, no force, no comment, PR left open. Check main before signing anything new; this clearance is spent`); process.exit(2); }
   else { summary(`ALERT AFTER AN AMBIGUOUS REF UPDATE (${text}): main is ${tipAfter}, neither the created commit ${newSha} nor the cleared base ${fields.base}`); process.exit(2); }
 }
 summary(`LANDED PR #${number}: ${newSha}`);
@@ -206,7 +411,7 @@ summary(`LANDED PR #${number}: ${newSha}`);
 // A failed read of main, a failed comment and a failed close are each reported on their own; the exit code is 2 for an ALERT (main's state is in doubt) and 3 for a failed comment
 // or close alone (the commit landed; do the housekeeping by hand).
 let exitCode = 0;
-const errText = (e) => (e instanceof Error ? e.message : String(e)).split('\n')[0].slice(0, 300);
+const errText = (e) => redact(e instanceof Error ? e.message : String(e)).split('\n')[0].slice(0, 300);
 const alertLanding = (what) => { summary(`ALERT AFTER LANDING: main was updated to ${newSha} but ${what}`); exitCode = 2; };
 let mainAfter;
 try { mainAfter = (await gh(`/repos/${REPO}/git/ref/heads/main`)).object.sha; } catch (error) { alertLanding(`reading main back failed: ${errText(error)}`); }
