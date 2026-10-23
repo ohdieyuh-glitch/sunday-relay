@@ -1,0 +1,16 @@
+HOME=$(mktemp -d) GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+npx vitest run --reporter=default --reporter=json --outputFile=/tmp/j1-14-31bfc58b.json \
+  relay-bridge/julius-dispatch.test.ts \
+  relay-bridge/julius-dispatch-adapters.test.ts \
+  relay-bridge/julius-dispatch-wiring.test.ts \
+  relay-bridge/julius-dispatch-repeat-ceiling.test.ts \
+  relay-bridge/julius-dispatch-bundle.test.ts \
+  relay-bridge/julius-dispatch-source-scan.test.ts \
+  relay-bridge/julius-xai-direct-reviewer.test.ts \
+  relay-bridge/julius-frozen-checker.test.ts \
+  relay-bridge/julius-inworld-checker.test.ts \
+  relay-bridge/julius-key-store.test.ts \
+  relay-bridge/julius-architect-charter-parity.test.ts \
+  relay-bridge/julius-coder-isolation.test.ts \
+  relay-bridge/julius-local-shell-port.test.ts \
+  relay-bridge/julius-local-shell-port.smoke.test.ts
