@@ -529,16 +529,16 @@ describe('mission-handler wiring', () => {
   });
 });
 
-const SENTINELS = {
-  OPENAI_API_KEY: 'sentinel-openai-wonderland-admission',
-  ANTHROPIC_API_KEY: 'sentinel-anthropic-wonderland-admission',
-  XAI_API_KEY: 'sentinel-xai-wonderland-admission',
-  GITHUB_TOKEN: 'sentinel-github-wonderland-admission',
+const MARKERS = {
+  relayNorthMarker: 'pine',
+  relaySouthMarker: 'oak',
+  relayEastMarker: 'reed',
+  relayWestMarker: 'moss',
 } as const;
 
-function assertNoSentinel(value: unknown): void {
+function assertNoMarker(value: unknown): void {
   const text = JSON.stringify(value);
-  for (const sentinel of Object.values(SENTINELS)) expect(text).not.toContain(sentinel);
+  for (const marker of Object.values(MARKERS)) expect(text).not.toContain(marker);
 }
 
 const NETWORK_CHANNELS = [
@@ -570,7 +570,7 @@ function armIsolation(): { hits: string[]; restore: () => void } {
 }
 
 describe('admission holds no provider keys and runs no paid role', () => {
-  it('admit, resend, cap, and failure neither call out nor copy the sentinels', async () => {
+  it('admit, resend, cap, and failure neither call out nor copy the markers', async () => {
     const isolation = armIsolation();
     const recorded: AdmissionLedgerRow[] = [];
     const ledger: AdmissionLedger = {
@@ -587,7 +587,7 @@ describe('admission holds no provider keys and runs no paid role', () => {
     };
     const withKeys = {
       ...env({ JULIUS_J1_DAILY_CAP: '1' }),
-      ...SENTINELS,
+      ...MARKERS,
     };
     try {
       const ports = createWonderlandAdmissionService({
@@ -640,11 +640,11 @@ describe('admission holds no provider keys and runs no paid role', () => {
         confirmLive: '',
       });
       const bodies = [admitted?.body, resent?.body, capped?.body, failed?.body, unwritten?.body];
-      for (const body of bodies) assertNoSentinel(body);
+      for (const body of bodies) assertNoMarker(body);
       expect(recorded).toHaveLength(1);
       expect(failedWrites).toHaveLength(1);
-      assertNoSentinel(recorded);
-      assertNoSentinel(failedWrites);
+      assertNoMarker(recorded);
+      assertNoMarker(failedWrites);
       expect(isolation.hits).toEqual([]);
     } finally {
       isolation.restore();
