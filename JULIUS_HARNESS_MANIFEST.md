@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **231 production files** across 20/20 subsystems (2 roots, 199 traced, 8 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **235 production files** across 20/20 subsystems (2 roots, 203 traced, 8 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -57,7 +57,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | persistence (src/relay/persistence/) | Project Brain (src/relay/mission/project-brain/) | 6 | 0 |
 | Project Brain (src/relay/mission/project-brain/) | kernel (src/relay/mission/julius/) | 1 | 1 |
 | Relay↔Julius port (src/relay/integration/julius/) | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | 2 | 1 |
-| Relay↔Julius port (src/relay/integration/julius/) | kernel (src/relay/mission/julius/) | 1 | 1 |
+| Relay↔Julius port (src/relay/integration/julius/) | kernel (src/relay/mission/julius/) | 4 | 3 |
 | Relay↔Julius port (src/relay/integration/julius/) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
 
 - **entrypoint (relay-bridge/julius-live-mission.ts)** depends on: bridge provider stacks (hosted Claude, Hermes, redaction); connectors (gpt-architect, prompt-architect contracts); executor + tool substrate (src/relay/workspace/julius-tools/); kernel (src/relay/mission/julius/); live composition (relay-bridge/julius/); other; persistence (src/relay/persistence/); Relay↔Julius port (src/relay/integration/julius/).
@@ -91,6 +91,10 @@ How an authorized Mission Contract becomes a durable Julius run: the contract sh
 | `relay-bridge/julius/mission-seed.ts` | traced | `relay-bridge/julius/bootstrap.ts` |
 | `src/relay/integration/julius/index.ts` | not composed by the live root | — |
 | `src/relay/integration/julius/julius-port.ts` | traced | `relay-bridge/julius-live-mission.ts` |
+| `src/relay/integration/julius/julius-wonder-web-vm-authorization.ts` | traced | `src/relay/integration/julius/index.ts` |
+| `src/relay/integration/julius/julius-wonder-web-vm-orchestrator.ts` | traced | `src/relay/integration/julius/index.ts` |
+| `src/relay/integration/julius/julius-wonder-web-vm-port.ts` | traced | `src/relay/integration/julius/index.ts` |
+| `src/relay/integration/julius/julius-wonder-web-vm-types.ts` | traced | `src/relay/integration/julius/index.ts` |
 | `src/relay/integration/julius/mission-bootstrap-adapter.ts` | not composed by the live root | — |
 | `src/relay/mission/contracts.ts` | traced | `src/relay/integration/julius/mission-bootstrap-adapter.ts` |
 
