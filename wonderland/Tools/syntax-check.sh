@@ -42,6 +42,8 @@ status=0
 # unparsed until the baseline above was added. So enumerate the directory and
 # require every unit to be listed. Adding a name is the sanctioned fix; being
 # forgotten is not an option this script leaves open.
+# WonderlandWonderWebQaDescribe.cpp: these stubs have no Engine/Engine.h, so g++ stops at one error.
+BASELINE="$BASELINE WonderlandWonderWebQaDescribe.cpp:1"
 for path in "$SRC"/*.h "$SRC"/*.cpp; do
   unit="$(basename "$path")"
   case " $HEADER_BASELINE $BASELINE " in
