@@ -117,6 +117,8 @@ Prerequisites:
 **B-3 checkout gate (runs FIRST: before the key file is read and before any network call).** The probe exits with a non-zero code (3) and reads no key and makes no call unless all of these hold:
 0. **Git override env vars are cleared before any git call.** The probe runs `Remove-Item Env:X -ErrorAction SilentlyContinue` for `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_NAMESPACE`, `GIT_CEILING_DIRECTORIES` and `GIT_DISCOVERY_ACROSS_FILESYSTEM`. The names that were present (names only, never values) are recorded as `cleared_git_env`.
    - **Config-injection env vars are refused, not cleared.** If `GIT_CONFIG_PARAMETERS` or `GIT_CONFIG_COUNT` is set, the probe refuses (`probe_git_config_env_present`, exit 3) before any git call. It does not silently clear them, because they show the shell was set up to inject config (e.g. a `core.fsmonitor` hook). Recorded as `git_config_env_present = false`.
+   - **`GIT_EXEC_PATH` is refused the same way** (`probe_git_exec_path_present`), and recorded as `git_exec_path_present = false`.
+   - **Which git runs is recorded, not defended.** `git_source` is `(Get-Command git -CommandType Application | Select-Object -First 1).Source` (refuses `probe_git_not_found` if there is none), and `git_version` is the `git --version` output. Apart from refusing `GIT_EXEC_PATH`, the probe does **not** defend against a hostile `PATH` order or a substituted git binary. The founder's shell is trusted for that, and Skywalker checks `git_source`/`git_version` after the run.
    - **Replace objects are disabled.** The probe sets `$env:GIT_NO_REPLACE_OBJECTS = '1'`, and `Invoke-GateGit` passes `--no-replace-objects` as the first argument of every gate git call.
 1. **Toplevel match.** `git rev-parse --show-toplevel` must equal the checkout named by `$env:JULIUS_J1_REPO_DIR`, with this exact normalisation of both sides:
    - `$repoDir` is resolved with `(Resolve-Path -LiteralPath $repoDir).ProviderPath`, then `[IO.Path]::GetFullPath(...)`;
@@ -128,7 +130,12 @@ Prerequisites:
      - any component of the resolved path that is a reparse point (symlink or junction) refuses (`probe_repo_path_has_reparse_point`);
      - on Windows, a drive listed by `subst.exe` refuses (`probe_repo_on_subst_drive`);
      - a path that git reports differently fails the comparison above.
-     A checkout inside a OneDrive folder (itself a reparse point) is also refused, which is intended, since builds must not run in OneDrive.
+     - if the attributes of any path component can't be read (exception, missing, or `-1`), the probe refuses with `probe_path_attr_unreadable` (exit 3, never exit 1). The walk calls the getter methods (`get_Exists()`, `get_Attributes()`, `get_Parent()`) inside `try`/`catch`, because PowerShell silently turns an exception thrown by a .NET *property* getter into `$null` (which would read as "no attributes" and pass). Method calls propagate the exception to the `catch`.
+   - **Never inside OneDrive.** Not every OneDrive folder is a reparse point, so the probe also refuses (`probe_repo_under_onedrive`, exit 3, before the key read) when the resolved repo path equals or lies under `$env:OneDrive`, `$env:OneDriveCommercial` or `$env:OneDriveConsumer`.
+     - A variable counts only if it is non-empty.
+     - Both sides use the normalisation above (GetFullPath, forward slashes, trailing slash trimmed) and are compared with OrdinalIgnoreCase.
+     - "Under" requires a separator boundary (`StartsWith(od + '/')`), so `C:/Users/K/OneDriveX/repo` is **not** a match for `C:/Users/K/OneDrive`.
+     This is intended, since builds must not run in OneDrive.
 1a. **No history rewriting or partial repos.**
    - `git rev-parse --is-shallow-repository` must print exactly `false` (`probe_repo_shallow`).
    - `git for-each-ref refs/replace/` must print nothing (`probe_replace_refs_present`).
@@ -149,6 +156,7 @@ Prerequisites:
    - `git_dirty` (always `false`, because a dirty tree is refused);
    - `repo_toplevel` (normalised as in 1) and `toplevel_match` (`true`);
    - `cleared_git_env` (names only);
+   - `git_exec_path_present` (`false`), `git_source` and `git_version`;
    - `git_config_env_present` (`false`), `replace_refs` (`0`), `grafts` (`false`), `shallow` (`false`) and `sparse` (`false`);
    - `evidence_paths_diffed` (empty when HEAD equals the pin).
 
@@ -168,6 +176,10 @@ foreach ($gv in $GitOverrideVars) { if (Test-Path -LiteralPath ('Env:' + $gv)) {
 # Config injection via env is REFUSED (never silently cleared), before any git call
 foreach ($cv in @('GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT')) { if (Test-Path -LiteralPath ('Env:' + $cv)) { Stop-Probe ('probe_git_config_env_present: ' + $cv) } }
 $gitConfigEnvPresent = $false
+if (Test-Path -LiteralPath 'Env:GIT_EXEC_PATH') { Stop-Probe 'probe_git_exec_path_present' }
+$gitExecPathPresent = $false
+try { $gitSource = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source } catch { Stop-Probe 'probe_git_not_found' }
+if (-not $gitSource) { Stop-Probe 'probe_git_not_found' }
 $env:GIT_OPTIONAL_LOCKS = '0'
 $env:GIT_NO_REPLACE_OBJECTS = '1'
 function Invoke-GateGit([string[]]$GitArgs, [string]$why) {
@@ -194,9 +206,28 @@ function ConvertTo-CmpPath([string]$p) { return [IO.Path]::GetFullPath($p).Repla
 try { $resolvedRepo = (Resolve-Path -LiteralPath $repoDir -ErrorAction Stop).ProviderPath } catch { Stop-Probe 'probe_repo_missing' }
 $resolvedFull = [IO.Path]::GetFullPath($resolvedRepo)
 $wantTop = ConvertTo-CmpPath $resolvedRepo
+# Never inside OneDrive (not every OneDrive folder is a reparse point): equal-to or under, separator boundary
+foreach ($odName in @('OneDrive', 'OneDriveCommercial', 'OneDriveConsumer')) {
+  $odVal = [Environment]::GetEnvironmentVariable($odName)
+  if ([string]::IsNullOrEmpty($odVal)) { continue }
+  $odCmp = $null; try { $odCmp = ConvertTo-CmpPath $odVal } catch { Stop-Probe ('probe_onedrive_env_unparseable: ' + $odName) }
+  if ([string]::Equals($wantTop, $odCmp, [StringComparison]::OrdinalIgnoreCase) -or $wantTop.StartsWith($odCmp + '/', [StringComparison]::OrdinalIgnoreCase)) { Stop-Probe ('probe_repo_under_onedrive: ' + $odName) }
+}
 # Real path only: no symlink/junction in any component, no subst drive
 $walk = New-Object IO.DirectoryInfo($resolvedFull)
-while ($walk -ne $null) { if (($walk.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { Stop-Probe 'probe_repo_path_has_reparse_point' }; $walk = $walk.Parent }
+while ($walk -ne $null) {
+  $attrBad = $false; $isReparse = $false
+  try {
+    # explicit getter METHODS: PowerShell swallows exceptions thrown by .NET property getters (returns $null); method calls propagate them
+    $walk.Refresh()
+    if (-not $walk.get_Exists()) { $attrBad = $true }
+    else { $attrInt = [int]$walk.get_Attributes(); if ($attrInt -eq -1) { $attrBad = $true } else { $isReparse = (($attrInt -band [int][IO.FileAttributes]::ReparsePoint) -ne 0) } }
+    $walkParent = $walk.get_Parent()
+  } catch { $attrBad = $true }
+  if ($attrBad) { Stop-Probe 'probe_path_attr_unreadable' }
+  if ($isReparse) { Stop-Probe 'probe_repo_path_has_reparse_point' }
+  $walk = $walkParent
+}
 if ($env:OS -eq 'Windows_NT') {
   $drv = [IO.Path]::GetPathRoot($resolvedFull)
   if ($drv -match '^[A-Za-z]:') {
@@ -209,6 +240,9 @@ $top = Invoke-GateGit @('-C', $repoDir, 'rev-parse', '--show-toplevel') 'probe_r
 if ($top.Count -ne 1 -or -not $top[0].Trim()) { Stop-Probe 'probe_toplevel_unparseable' }
 $repoTop = ConvertTo-CmpPath $top[0].Trim()
 if (-not [string]::Equals($repoTop, $wantTop, [StringComparison]::OrdinalIgnoreCase)) { Stop-Probe 'probe_toplevel_mismatch' }
+$gitVersionOut = Invoke-GateGit @('--version') 'probe_git_version_failed'
+if ($gitVersionOut.Count -ne 1 -or -not $gitVersionOut[0].Trim()) { Stop-Probe 'probe_git_version_unparseable' }
+$gitVersion = $gitVersionOut[0].Trim()
 # 1a. No shallow, replace refs, grafts or sparse checkout
 $shallowOut = Invoke-GateGit @('-C', $repoDir, 'rev-parse', '--is-shallow-repository') 'probe_shallow_check_failed'
 if ($shallowOut.Count -ne 1 -or $shallowOut[0].Trim() -cne 'false') { Stop-Probe 'probe_repo_shallow' }
@@ -284,7 +318,8 @@ $summary = [ordered]@{
   sha256_response_raw = (Get-FileHash -Algorithm SHA256 -LiteralPath $raw).Hash.ToLower()
   sha256_request = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $out 'request.json')).Hash.ToLower()
   adapter_commit = $adapterCommit; pinned_commit = $PinnedFull; git_dirty = $false; repo_toplevel = $repoTop; toplevel_match = $true
-  cleared_git_env = [string[]]$clearedGitEnv; git_config_env_present = $gitConfigEnvPresent
+  cleared_git_env = [string[]]$clearedGitEnv; git_config_env_present = $gitConfigEnvPresent; git_exec_path_present = $gitExecPathPresent
+  git_source = $gitSource; git_version = $gitVersion
   replace_refs = $replaceOut.Count; grafts = $false; shallow = $false; sparse = $false
   evidence_paths_diffed = [string[]]$evidencePaths
 }
@@ -309,14 +344,14 @@ Notes:
 ### B.4 What to record (hand-off bundle; the founder copies the folder to the box or repo evidence only after the secret scan passes)
 - `response.raw.json`: raw response bytes, unmodified. They contain no secret, and nothing is stripped, so the hash stays meaningful. If the scan ever flagged something, stop and do not share.
 - `request.json`: the exact request body, which contains no secret.
-- `summary.json`: capture time (PT and UTC), HTTP status, `id` (response id), requested and served model, tokens, **`cost_in_usd_ticks` (integer)**, **micros = ceil(ticks/10,000)**, SHA-256 of the raw response and the request, and the checkout-gate fields: `adapter_commit` (full HEAD SHA at run time), `pinned_commit` (full `31bfc58b` SHA), `git_dirty` (`false`), `repo_toplevel` (normalised: Resolve-Path → GetFullPath → forward slashes → trailing slash trimmed), `toplevel_match` (`true`, compared OrdinalIgnoreCase), `cleared_git_env` (names of the git override env vars that were present and removed before any git call; names only), `git_config_env_present` (`false`; `GIT_CONFIG_PARAMETERS`/`GIT_CONFIG_COUNT` refuse rather than being cleared), `replace_refs` (`0`), `grafts` (`false`), `shallow` (`false`), `sparse` (`false`) and `evidence_paths_diffed`. Every gate git call runs with `--no-replace-objects` (and `GIT_NO_REPLACE_OBJECTS=1`). `status` and `ls-files` run with `-c core.fsmonitor=false -c core.untrackedCache=false`. The repo path must be the real path: symlinks, junctions and subst drives are refused. The gate also refuses assume-unchanged/skip-worktree entries (`git ls-files -v`) and any git stderr or non-zero exit. Paths are listed with `core.quotepath=on`, so non-ASCII evidence paths are quoted and refused (intended fail-closed). Evidence paths are those matching the fixed prefix list `$EvidencePrefixes` by full-path ordinal prefix test after normalising to forward slashes. Git failures or unparseable git output refuse the probe. An empty diff is valid only when `adapter_commit == pinned_commit`.
+- `summary.json`: capture time (PT and UTC), HTTP status, `id` (response id), requested and served model, tokens, **`cost_in_usd_ticks` (integer)**, **micros = ceil(ticks/10,000)**, SHA-256 of the raw response and the request, and the checkout-gate fields: `adapter_commit` (full HEAD SHA at run time), `pinned_commit` (full `31bfc58b` SHA), `git_dirty` (`false`), `repo_toplevel` (normalised: Resolve-Path → GetFullPath → forward slashes → trailing slash trimmed), `toplevel_match` (`true`, compared OrdinalIgnoreCase), `cleared_git_env` (names of the git override env vars that were present and removed before any git call; names only), `git_config_env_present` (`false`; `GIT_CONFIG_PARAMETERS`/`GIT_CONFIG_COUNT` refuse rather than being cleared), `replace_refs` (`0`), `grafts` (`false`), `shallow` (`false`), `sparse` (`false`) and `evidence_paths_diffed`. Every gate git call runs with `--no-replace-objects` (and `GIT_NO_REPLACE_OBJECTS=1`). `status` and `ls-files` run with `-c core.fsmonitor=false -c core.untrackedCache=false`. The repo path must be the real path: symlinks, junctions and subst drives are refused, as is any unreadable path component (`probe_path_attr_unreadable`) and any path equal to or under `$env:OneDrive`, `$env:OneDriveCommercial` or `$env:OneDriveConsumer` (separator boundary, OrdinalIgnoreCase). Also recorded: `git_exec_path_present` (`false`; `GIT_EXEC_PATH` refuses), `git_source` (resolved git binary path) and `git_version` (`git --version`). PATH order and the git binary itself are not otherwise defended. The gate also refuses assume-unchanged/skip-worktree entries (`git ls-files -v`) and any git stderr or non-zero exit. Paths are listed with `core.quotepath=on`, so non-ASCII evidence paths are quoted and refused (intended fail-closed). Evidence paths are those matching the fixed prefix list `$EvidencePrefixes` by full-path ordinal prefix test after normalising to forward slashes. Git failures or unparseable git output refuse the probe. An empty diff is valid only when `adapter_commit == pinned_commit`.
 - A screenshot or CSV line from the xAI console's usage for that time window, if one is available.
 
 ### B.5 What Skywalker verifies
 1. `sha256(response.raw.json)` equals `summary.sha256_response_raw`, and likewise for `request.json`.
 2. `usage.cost_in_usd_ticks` is present, a JSON **integer** (no decimal point or exponent) and ≥ 0.
 3. `cost_usd_micros_ceil == ceil(ticks / 10000)` in integer arithmetic. Spot-check the boundary: 158,500 ticks gives 16 micros.
-4. **Checkout gate fields:** `pinned_commit == 31bfc58b89de137670e5dbaf752c3328b31163f7` and `git_dirty == false`. Either `adapter_commit == pinned_commit` with `evidence_paths_diffed` empty, or `adapter_commit` descends from the pin, `evidence_paths_diffed` is non-empty and equals Skywalker's own `git diff --name-only --no-renames <pin> <adapter_commit>`, and every entry passes `StartsWith('.github/julius-missions/review-evidence/j1-combined-ceiling/31bfc58b/', Ordinal)`. A different `adapter_commit` with an empty list is a FAIL. `repo_toplevel` is the checkout J1 runs from, and `toplevel_match == true`. `cleared_git_env` is present (an array of names only; it may be empty). If it is non-empty, Skywalker notes which overrides were set in the founder's shell and confirms the gate ran after they were removed. No `ls-files -v` refusal reason or stderr refusal appears in the run output. `git_config_env_present == false`, `replace_refs == 0`, `grafts == false`, `shallow == false` and `sparse == false`. Any other value, or a missing field, is a FAIL. Skywalker also confirms on its own copy at `adapter_commit` that `git for-each-ref refs/replace/` is empty.
+4. **Checkout gate fields:** `pinned_commit == 31bfc58b89de137670e5dbaf752c3328b31163f7` and `git_dirty == false`. Either `adapter_commit == pinned_commit` with `evidence_paths_diffed` empty, or `adapter_commit` descends from the pin, `evidence_paths_diffed` is non-empty and equals Skywalker's own `git diff --name-only --no-renames <pin> <adapter_commit>`, and every entry passes `StartsWith('.github/julius-missions/review-evidence/j1-combined-ceiling/31bfc58b/', Ordinal)`. A different `adapter_commit` with an empty list is a FAIL. `repo_toplevel` is the checkout J1 runs from, and `toplevel_match == true`. `cleared_git_env` is present (an array of names only; it may be empty). If it is non-empty, Skywalker notes which overrides were set in the founder's shell and confirms the gate ran after they were removed. No `ls-files -v` refusal reason or stderr refusal appears in the run output. `git_config_env_present == false`, `replace_refs == 0`, `grafts == false`, `shallow == false` and `sparse == false`. Any other value, or a missing field, is a FAIL. Skywalker also confirms on its own copy at `adapter_commit` that `git for-each-ref refs/replace/` is empty. `git_exec_path_present == false`. `git_source` is present and is the expected Git for Windows binary (e.g. under `C:\Program Files\Git\`). `git_version` is present and starts with `git version `. `repo_toplevel` is not under any OneDrive folder.
 5. **Offline adapter replay at the recorded `adapter_commit`**, after Skywalker diffs it against `31bfc58b` and accepts the diff: call `createXaiDirectReviewerRoleProvider({...}).call()` with a fake `fetchImpl` that returns exactly the bytes of `response.raw.json` with the captured status, a dummy non-empty `apiKey`, and the model and served-model allow-list from the probe. Check that the result has `providerResponseId == summary.response_id`, `costUsdMicros == cost_usd_micros_ceil` and `costUsdTicksRaw == ticks`. Then run `legMicros`/`verifyRun1Spend` on that leg and check that it gives the integer, not `unknown_spend`. Use no network and no real key.
 6. The request body matches the adapter's shape (`model`, `store:false`, system plus user input), and the system text equals `J1_XAI_REVIEW_INSTRUCTIONS` at `31bfc58b` byte for byte ("…Reviewer for a Julius mission. …"). Windows PowerShell 5.1 `ConvertTo-Json` escapes `<` and `>` as `\u003c` / `\u003e` (the prompt contains `<short reasons>`), so compare the **JSON-decoded** `input[0].content` string, not the raw `request.json` bytes. The raw bytes are still hashed for item 1.
 7. The served model is in `JULIUS_J1_REVIEWER_SERVED_MODEL_ALLOW`.
