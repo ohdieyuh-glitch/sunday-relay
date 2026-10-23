@@ -12,7 +12,7 @@
 
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -150,9 +150,20 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
   };
 }
 
-/** A child process that prints one answer and exits, for the REAL runner. */
+/**
+ * A child process that prints one answer and exits, for the REAL runner.
+ *
+ * When the runner passes `--usage-file`, the child writes the usage report
+ * Hermes would have written, naming `grok-build-0.1`. A reviewed answer with
+ * no served model is an unattested halt. A child that never exits writes
+ * nothing: the hang fixture does not use this function, and a kill before
+ * close leaves the file unwritten.
+ */
 function spawnEmitting(stdout: string, code = 0) {
-  return () => {
+  // `typeof spawn` overloads the second argument as options. This fake only
+  // implements the argv form the runner calls; the cast is the same one
+  // `spawnWith` uses so the overload does not reject the fixture.
+  return ((_executable: string, args: readonly string[] = []) => {
     const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: Readable; kill: () => boolean };
     child.stdout = new Readable({ read() { /* pushed below */ } });
     child.stderr = new Readable({ read() { /* never surfaced */ } });
@@ -161,15 +172,23 @@ function spawnEmitting(stdout: string, code = 0) {
        the process running models a reviewer this repository has never met —
        `hermes-reviewer-lifecycle.test.ts` owns the cases where one does — and
        makes every timeout case here wait out the escalation grace instead. */
-    child.kill = () => { child.emit('close', null); return true; };
+    let closed = false;
+    child.kill = () => { closed = true; child.emit('close', null); return true; };
     setTimeout(() => {
-      if (stdout !== '') child.stdout.push(Buffer.from(stdout, 'utf8'));
-      child.stdout.push(null);
-      child.stderr.push(null);
-      child.emit('close', code);
+      if (!closed) {
+        const at = args.indexOf('--usage-file');
+        const usagePath = at >= 0 ? args[at + 1] : undefined;
+        if (typeof usagePath === 'string' && usagePath !== '') {
+          writeFileSync(usagePath, JSON.stringify({ model: 'grok-build-0.1', input_tokens: 24, output_tokens: 8 }));
+        }
+        if (stdout !== '') child.stdout.push(Buffer.from(stdout, 'utf8'));
+        child.stdout.push(null);
+        child.stderr.push(null);
+        child.emit('close', code);
+      }
     }, 0);
     return child as never;
-  };
+  }) as never;
 }
 
 /**
@@ -1434,6 +1453,69 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
     await expect(unable.dispatch({ taskId: 'build-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' }))
       .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', safeMessage: expect.stringContaining('unable to review') });
   });
+
+  it('halts a reviewed answer whose served model is a substitute or a dashed snapshot, and an absent model is unattested', async () => {
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
+    const worker = {
+      workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER' as const,
+      adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+      taskTypes: ['review:plan'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE' as const,
+    };
+    const reviewed = (servedModel: string | null): HermesOutcome => ({
+      kind: 'reviewed',
+      result: { verdict: 'approved', summary: 'No blocking findings.', findings: [], requirementsChecked: [], parseRepaired: false },
+      startedAt: '2026-09-09T23:03:10.000Z', completedAt: '2026-09-09T23:03:11.000Z',
+      requestedModel: 'grok-build-0.1', servedModel, provider: 'xai',
+      diagnostics: reviewDiagnostics({ transport: 'local', shape: null, outcome: 'succeeded', servedModel }),
+      usage: UNKNOWN_USAGE,
+    });
+    const dispatchOf = (servedModel: string | null) => createLiveHermesReviewerAdapter({
+      worker, contexts, artifacts, config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test', run: (async () => reviewed(servedModel)) as never,
+    }).dispatch({
+      taskId: 'plan-1:review', attempt: { leaseGeneration: 1 },
+      reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } },
+      contextId: 'ctx-resume-1', taskType: 'review:plan',
+    });
+    const mismatch = await dispatchOf('grok-4').then(() => null, (error: { failureClass: string; diagnostics: Record<string, unknown> }) => error);
+    expect(mismatch?.failureClass).toBe('reviewer_served_model_mismatch');
+    expect(mismatch?.diagnostics).toMatchObject({ requestedModel: 'grok-build-0.1', servedModel: 'grok-4' });
+    const dashed = await dispatchOf('grok-build-0.1-2026-08-01').then(() => null, (error: { failureClass: string; diagnostics: Record<string, unknown> }) => error);
+    expect(dashed?.failureClass).toBe('reviewer_served_model_mismatch');
+    expect(dashed?.diagnostics.servedModel).toBe('grok-build-0.1-2026-08-01');
+    const silent = await dispatchOf(null).then(() => null, (error: { failureClass: string; diagnostics: Record<string, unknown> }) => error);
+    expect(silent?.failureClass).toBe('reviewer_served_model_unattested');
+    expect(silent?.diagnostics.servedModel).toBeNull();
+    const dated = await dispatchOf('grok-build-0.1-20260801');
+    expect(dated.status).toBe('SUCCEEDED');
+  });
+
+  it('a review timeout stays a timeout, and is not reclassified as an unattested model', async () => {
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
+    const worker = {
+      workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER' as const,
+      adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+      taskTypes: ['review:plan'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 0, status: 'AVAILABLE' as const,
+    };
+    const adapter = createLiveHermesReviewerAdapter({
+      worker, contexts, artifacts, config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test', transientReaskLimit: 0,
+      run: (async () => ({
+        kind: 'review_incomplete', shape: 'review_timeout', safeMessage: 'timed out',
+        startedAt: '2026-09-09T23:03:10.000Z', completedAt: '2026-09-09T23:03:11.000Z',
+        diagnostics: reviewDiagnostics({ transport: 'local', shape: 'review_timeout', outcome: 'failed' }),
+        usage: UNKNOWN_USAGE,
+      })) as never,
+    });
+    const error = await adapter.dispatch({
+      taskId: 'plan-1:review', attempt: { leaseGeneration: 1 },
+      reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } },
+      contextId: 'ctx-resume-1', taskType: 'review:plan',
+    }).then(() => null, (raised: { failureClass: string }) => raised);
+    expect(error?.failureClass).toBe('review_timeout');
+  });
 });
 
 describe('the durable completion rule after a repair', () => {
@@ -2031,7 +2113,7 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
       calls += 1;
       if (calls === 1) {
         // Answered and billed: the provider's own usage, and nothing parseable in it.
-        return { ok: true, actualModel: 'gpt-drill', responseId: 'resp-billed', status: 'completed', outputText: 'not a plan',
+        return { ok: true, actualModel: 'gpt-5.6-sol', responseId: 'resp-billed', status: 'completed', outputText: 'not a plan',
           usage: { inputTokens: 1_200, cachedInputTokens: 0, outputTokens: 300, reasoningTokens: 0, totalTokens: 1_500 } };
       }
       return { ok: false, failureClass: 'rate_limited', message: 'safe provider message' };
@@ -2398,7 +2480,10 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
         return jsonRes({ accepted: true, runId: 'run-live' });
       }
       const text = texts[Math.min(Math.ceil(call / 2) - 1, texts.length - 1)]!;
-      return jsonRes({ runId: 'run-live', status: 'completed', reviewText: text });
+      return jsonRes({
+        runId: 'run-live', status: 'completed', reviewText: text,
+        usage: { model: 'grok-build-0.1', inputTokens: 20, outputTokens: 8 },
+      });
     });
     return { prompts, fetchImpl };
   };
@@ -2822,6 +2907,60 @@ describe('a refused plan names the rule it broke', () => {
       expect(durable, `"${secret}" must not reach the durable record`).not.toContain(secret);
     }
     expect(facts.diag_validationReasonCode).toBe('objective_summary_empty');
+  });
+});
+
+describe('a successful architect answer that is not the requested model halts the run', () => {
+  const answered = (actualModel: string): (() => Promise<GptRunOutcome>) => async () => ({
+    ok: true, status: 'completed', outputText: JSON.stringify(VALID_PLAN), actualModel, responseId: 'resp_halt',
+    usage: { inputTokens: 10, cachedInputTokens: 0, outputTokens: 4, reasoningTokens: 0, totalTokens: 14 },
+  });
+
+  it('a substitute halts the run and records requested and served separately', async () => {
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, answered('gpt-4o'));
+    expect(outcome.state).toBe('FAILED');
+    const facts = memory.events().filter((event) => event.type === 'task.failed').at(-1)!.facts as Record<string, unknown>;
+    expect(facts.failureClass).toBe('architect_served_model_mismatch');
+    expect(facts.errorRetryable).toBe(false);
+    expect(facts.diag_requestedModel).toBe('gpt-5.6-sol');
+    expect(facts.diag_servedModel).toBe('gpt-4o');
+    expect(facts.diag_costBasis).toBe('UNKNOWN');
+    expect(memory.taskRow('build-1')?.state).not.toBe('SUCCEEDED');
+    expect(memory.events().some((event) => event.type === 'run.failed' && event.facts.reasonCode === 'architect_served_model_mismatch')).toBe(true);
+  });
+
+  it('an OpenAI dated snapshot of the same id does not halt, and a year-month or other base does', async () => {
+    for (const actualModel of ['gpt-5.6-sol-2026-08-01', 'gpt-5.6-sol-20260801']) {
+      const { memory } = await driveLiveMission(['approved'], undefined, answered(actualModel));
+      const halted = memory.events().some((event) =>
+        event.facts.failureClass === 'architect_served_model_mismatch'
+        || event.facts.reasonCode === 'architect_served_model_mismatch');
+      expect(halted, actualModel).toBe(false);
+    }
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, answered('gpt-5.6-sol-2026-04'));
+    expect(outcome.state).toBe('FAILED');
+    const facts = memory.events().filter((event) => event.type === 'task.failed').at(-1)!.facts as Record<string, unknown>;
+    expect(facts.failureClass).toBe('architect_served_model_mismatch');
+    expect(facts.diag_servedModel).toBe('gpt-5.6-sol-2026-04');
+    expect(facts.diag_requestedModel).toBe('gpt-5.6-sol');
+  });
+
+  it('a successful answer that names no model is unattested, and a provider failure keeps its own class', async () => {
+    const silent = await driveLiveMission(['approved'], undefined, (async () => ({
+      ok: true, status: 'completed', outputText: JSON.stringify(VALID_PLAN), actualModel: '   ', responseId: 'resp_blank',
+      usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 },
+    })) as () => Promise<GptRunOutcome>);
+    expect(silent.outcome.state).toBe('FAILED');
+    const silentFacts = silent.memory.events().filter((event) => event.type === 'task.failed').at(-1)!.facts as Record<string, unknown>;
+    expect(silentFacts.failureClass).toBe('architect_served_model_unattested');
+    expect(silentFacts.diag_servedModel).toBeNull();
+    expect(silentFacts.diag_requestedModel).toBe('gpt-5.6-sol');
+
+    const refused = await driveLiveMission(['approved'], undefined, (async () => ({
+      ok: false, failureClass: 'rate_limited', message: 'slow down',
+    })) as () => Promise<GptRunOutcome>);
+    const refusedFacts = refused.memory.events().filter((event) => event.type === 'task.failed').at(-1)!.facts as Record<string, unknown>;
+    expect(refusedFacts.failureClass).toBe('rate_limited');
   });
 });
 
