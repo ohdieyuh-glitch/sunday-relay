@@ -24,10 +24,12 @@ name: Julius first live mission
 # migrations, the independent executor, receipt attestation, scoped
 # credentials, the sandbox ceiling, in-sandbox git, the Hermes profile, that
 # all three roles resolve to the expected models, that each provider accepts
-# its credential and serves the pinned model, and that the research the
-# contract grants is reachable — without spending anything. The provider check
-# reads model METADATA only (`GET /v1/models/<id>`), which generates no tokens
-# and bills nothing; no completion is ever requested before the LIVE step.
+# its credential and serves the pinned model, that the Anthropic key bills the
+# expected organization, and that the research the contract grants is
+# reachable — without spending anything. The provider check reads model
+# METADATA only (`GET /v1/models/<id>`), which generates no tokens and bills
+# nothing; the Coding Agent's check keeps only the `anthropic-organization-id`
+# response header. No completion is ever requested before the LIVE step.
 
 # THE RUN'S TITLE IS A MACHINE-READABLE CLAIM, parsed by the paid-slot queue.
 #
@@ -64,10 +66,6 @@ on:
         default: 'julius-first-live'
       lane:
         description: 'Paid-run queue lane: qualification, qualification-repair, lab or regression. Required for a paid run and checked against the mission''s grant; may be empty for a preflight.'
-        required: false
-        default: ''
-      subscription_smoke:
-        description: 'Type "RUN SUBSCRIPTION SMOKE" to send ONE tiny `claude -p` request on the Coding Agent''s Claude subscription token (a trivial amount of subscription usage, never API credit). A paid run (confirm_live) always runs this smoke first and spends nothing unless it passes, so type this only for a smoke on its own; leave empty otherwise.'
         required: false
         default: ''
       dispatch_key:
@@ -293,11 +291,9 @@ jobs:
       # resolves anything other than these.
       RELAY_PROMPT_ARCHITECT_MODE: live
       OPENAI_PROMPT_ARCHITECT_MODEL: gpt-5.6-sol
-      # THE CODING AGENT IS CLAUDE OPUS 5.5 (founder decision, 2026-09-30), on the
-      # founder's Claude Max subscription. The smoke and the paid run use this one pin,
-      # so the model a smoke qualifies is the model the paid run uses. No other model
-      # is acceptable, and none is a fallback: the smoke's verdict and the coder's
-      # dispatch must refuse any other SERVED model, and a paid run needs both.
+      # THE CODING AGENT IS CLAUDE OPUS 5.5 (founder decision, 2026-09-30), billed
+      # to ANTHROPIC_API_KEY. No other model is acceptable, and none is a fallback:
+      # the coder's dispatch refuses any other SERVED model.
       RELAY_HOSTED_CODING_MODEL: claude-opus-5-5
       RELAY_HERMES_PROVIDER: xai
       RELAY_HERMES_MODEL: grok-build-0.1
@@ -708,78 +704,6 @@ jobs:
       - name: Install
         run: npm ci
 
-      # THE SUBSCRIPTION SMOKE — ON ITS OWN WHEN ASKED, BEFORE EVERY PAID RUN, AND NEVER API CREDIT.
-      #
-      # A PAID RUN QUALIFIES ITS CODER FIRST (Codex review of #302, P1). The readiness
-      # check below proves a LOGIN, not that the pinned model is served: a paid run
-      # that skipped this step could pay the Prompt Architect and the plan review
-      # before learning the coder's model was unavailable or substituted. So
-      # `confirm_live` runs this step too, and the attempt marker, its upload and the
-      # LIVE step each require its `success` by id. The zero-dispatch preflight (no
-      # `confirm_live`, no `subscription_smoke`) still sends nothing.
-      #
-      # The Coding Agent authenticates with the founder's Claude Max subscription
-      # through a `claude setup-token` token (CLAUDE_CODE_OAUTH_TOKEN). The free
-      # readiness check below proves the PATH (`auth status` in the child's own
-      # environment); only a real request proves the token is live and the pinned
-      # model is served on the subscription. This sends exactly one: "Reply with
-      # exactly OK", one turn, in an empty temporary directory (no project
-      # settings, no CLAUDE.md), with the Agent SDK's own bundled CLI for this
-      # runner (ubuntu x64) run as a LITERAL command under `env -i`: its
-      # environment is built from nothing but PATH, a fresh HOME, CI/NO_COLOR/TERM,
-      # the token and the CLI's two small-model slots pinned to the Coding Agent's
-      # own model, so no Anthropic API variable can reach it and no other model can
-      # answer: a housekeeping call the CLI makes lands on the pinned model too, and
-      # the smoke's served-model check may then require that EVERY model that
-      # produced output is the one asked for. No Anthropic API
-      # key exists in this step either, and `env-check` refuses outright if any
-      # variable that outranks the token is present. The CLI's output goes to
-      # files the check script judges; stderr is discarded; only closed tokens
-      # are printed. There is no fallback: anything but a subscription is FAIL.
-      - name: 'Subscription smoke: one tiny request on the Coding Agent''s subscription'
-        id: subscription_smoke
-        if: success() && (inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE' || inputs.confirm_live == 'RUN LIVE MISSION')
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          set -uo pipefail
-          # THE STEP ALWAYS REACHES ITS VERDICT. GitHub runs this under `bash -e`, which
-          # `set -uo pipefail` does not clear, so a CLI that exited non-zero (as it does
-          # on an error reply) aborted the step before smoke-verdict read its JSON; with
-          # stderr discarded, run 36685079176 failed and left no reason behind. Errexit
-          # is off for this step only. Every outcome below is still decided explicitly,
-          # and the step still fails closed: only a PASS verdict line lets it succeed.
-          # BOTH EXITS DECIDE TOO (Codex review of #302, P2): each is kept in a variable on
-          # the line straight after its call, handed to smoke-verdict, and required to be
-          # 0 below, so JSON that reads OK from a CLI that then exited non-zero is a FAIL.
-          set +e
-          sub=$(mktemp -d)
-          mkdir "$sub/home" "$sub/work"
-          : > subscription-smoke.log
-          status=1
-          auth_exit=none
-          cli_exit=none
-          if node scripts/julius-subscription-check.mjs env-check --for smoke --model "$RELAY_HOSTED_CODING_MODEL" | tee -a subscription-smoke.log; then
-            env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb ANTHROPIC_DEFAULT_HAIKU_MODEL="$RELAY_HOSTED_CODING_MODEL" ANTHROPIC_SMALL_FAST_MODEL="$RELAY_HOSTED_CODING_MODEL" CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
-              "$PWD/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude" auth status --json > "$sub/status.json" 2>/dev/null
-            auth_exit=$?
-            echo "subscription_smoke_auth_exit=$auth_exit" | tee -a subscription-smoke.log
-            if node scripts/julius-subscription-check.mjs status-verdict --for smoke --model "$RELAY_HOSTED_CODING_MODEL" < "$sub/status.json" | tee -a subscription-smoke.log; then
-              env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb ANTHROPIC_DEFAULT_HAIKU_MODEL="$RELAY_HOSTED_CODING_MODEL" ANTHROPIC_SMALL_FAST_MODEL="$RELAY_HOSTED_CODING_MODEL" CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
-                "$PWD/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude" -p 'Reply with exactly OK' --max-turns 1 --output-format json --model "$RELAY_HOSTED_CODING_MODEL" --setting-sources user --strict-mcp-config --no-session-persistence > "$sub/smoke.json" 2>/dev/null
-              cli_exit=$?
-              echo "subscription_smoke_cli_exit=$cli_exit" | tee -a subscription-smoke.log
-              node scripts/julius-subscription-check.mjs smoke-verdict --model "$RELAY_HOSTED_CODING_MODEL" --status-file "$sub/status.json" --auth-exit "$auth_exit" --cli-exit "$cli_exit" < "$sub/smoke.json" | tee -a subscription-smoke.log
-              status=${PIPESTATUS[0]}
-            fi
-          fi
-          rm -rf "$sub"
-          grep -qE '^subscription_smoke provider=anthropic .* auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\.ai) reply=OK result=PASS$' subscription-smoke.log \
-            || { echo 'subscription_smoke_failed: no PASS on the pinned model; the log above says why; nothing else was attempted' >&2; exit 1; }
-          [ "$auth_exit" = 0 ] && [ "$cli_exit" = 0 ] \
-            || { echo "subscription_smoke_failed: a PASS needs both CLI exits to be 0 (auth status: $auth_exit, request: $cli_exit)" >&2; exit 1; }
-          exit "$status"
-
       - name: Build the executor, the preflight probe and the live entrypoint
         run: |
           npm run relay:executor:build
@@ -1007,45 +931,44 @@ jobs:
             exit 1
           fi
 
-      # EACH PROVIDER ACCEPTS ITS KEY AND SERVES THE PINNED MODEL — CHECKED FOR FREE.
+      # EACH PROVIDER ACCEPTS ITS CREDENTIAL AND SERVES THE PINNED MODEL — CHECKED FOR FREE.
       #
       # Before this, a revoked key, an unfunded account's auth refusal or a model
       # id the provider does not serve surfaced only inside the LIVE step, after
       # the attempt marker was recorded and often after an earlier worker had
       # already been paid. Each provider exposes a model-metadata read that
       # generates nothing and bills nothing, so it is asked here, before the
-      # paid queue can admit the run to spend.
+      # attempt marker can be written.
       #
-      # THE KEY NEVER TOUCHES ARGV OR THE LOG. It reaches curl as a `--config`
-      # file on stdin, written by `printf` — a bash builtin, so no process is
-      # started with the key in its arguments — and only the HTTP status is
-      # kept. No response body is read, stored or printed.
+      # THE KEY NEVER TOUCHES ARGV OR THE LOG. OpenAI and xAI reach curl as a
+      # `--config` file on stdin, written by `printf` — a bash builtin, so no
+      # process is started with the key in its arguments — and only the HTTP
+      # status is kept. No response body is read, stored or printed.
+      #
+      # THE CODING AGENT IS API-BILLED. Its key is the Anthropic API key from
+      # the julius-live-validation environment. The same spend-free models read
+      # returns `anthropic-organization-id`
+      # (https://platform.claude.com/docs/en/api/overview). The attribution
+      # script keeps that one header and compares it with
+      # JULIUS_EXPECTED_ANTHROPIC_ORG_ID, an environment variable rather than a
+      # secret. The key is an environment entry for that process, never an
+      # argument and never printed. A missing key, a missing or different
+      # organization id, or any probe that is not VERIFIED is
+      # ORG_ATTRIBUTION_UNVERIFIED, and this step fails before the attempt
+      # marker exists. No completion is requested.
       #
       # BALANCE IS UNKNOWN, AND SAYING SO IS THE CHECK. No provider exposes a
       # spend-free balance query, so this step cannot know whether an account can
       # afford the mission. It says `provider_balance=UNKNOWN` rather than
       # implying "sufficient"; an exhausted balance surfaces as a provider refusal
       # during the run, and the queue report classifies it PROVIDER_BLOCKED.
-      #
-      # THE CODING AGENT IS NOT AN API-KEY PROVIDER (founder rule, 2026-09-29). It
-      # authenticates with the founder's Claude Max subscription via a
-      # `claude setup-token` token, so the Anthropic `GET /v1/models` key probe is
-      # gone: it could only ever prove an API key, and paid attempt 1 (run
-      # 36568129865) died on exactly that key (`credit_unavailable`). In its place,
-      # a ZERO-GENERATION subscription check: `auth status --json` with the Agent
-      # SDK's own CLI, in an environment holding nothing but PATH, a fresh HOME and
-      # the token, asserting a logged-in, first-party subscription path with no
-      # API-key source (`scripts/julius-subscription-check.mjs status-verdict`,
-      # which only judges the CLI's JSON and starts no process). It writes
-      # the anthropic readiness line itself, as SUBSCRIPTION_LOGIN_PRESENT — NOT
-      # AUTHENTICATED_MODEL_AVAILABLE, because `auth status` cannot see whether the
-      # model is served; the optional subscription smoke above is what proves that.
-      # OpenAI and xAI stay API-billed and keep their key probes unchanged.
       - name: 'Preflight: each provider accepts its credential and serves the pinned model, nothing generated'
+        id: provider_readiness
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          JULIUS_EXPECTED_ANTHROPIC_ORG_ID: ${{ vars.JULIUS_EXPECTED_ANTHROPIC_ORG_ID }}
         run: |
           set -uo pipefail
           : > provider-readiness.log
@@ -1055,7 +978,8 @@ jobs:
           # probe runs at the end of a pipeline, which bash executes in a
           # subshell, so a `failed=1` set inside it would vanish — and a refused
           # credential would pass this gate. Every probe writes its result line;
-          # the step fails unless every line says AUTHENTICATED_MODEL_AVAILABLE.
+          # the step fails unless both API lines say AUTHENTICATED_MODEL_AVAILABLE
+          # and the organization line says VERIFIED.
           probe() {
             local provider=$1 model=$2 url=$3 config code=000 attempt result
             config=$(cat)
@@ -1072,31 +996,15 @@ jobs:
             esac
             echo "provider_readiness provider=$provider model=$model http=$code result=$result" | tee -a provider-readiness.log
           }
-          [ -n "$OPENAI_API_KEY" ] && [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -n "$XAI_API_KEY" ] || {
-            echo 'provider_credentials_missing: a provider credential is not set in the julius-live-validation environment' >&2; exit 1; }
+          [ -n "$OPENAI_API_KEY" ] && [ -n "$ANTHROPIC_API_KEY" ] && [ -n "$XAI_API_KEY" ] && [ -n "$JULIUS_EXPECTED_ANTHROPIC_ORG_ID" ] || {
+            echo 'provider_credentials_missing: a provider credential or the expected organization id is not set in the julius-live-validation environment' >&2; exit 1; }
           printf 'header = "Authorization: Bearer %s"\n' "$OPENAI_API_KEY" \
             | probe openai "$OPENAI_PROMPT_ARCHITECT_MODEL" "https://api.openai.com/v1/models/$OPENAI_PROMPT_ARCHITECT_MODEL"
-          # The Coding Agent: its SUBSCRIPTION, never an API key. `env-check`
-          # refuses a step holding any variable that outranks the token; then the
-          # Agent SDK's bundled CLI for this runner (ubuntu x64) runs as a literal
-          # command under `env -i`, from an empty directory, so nothing but the
-          # allow-listed names can reach it. Its JSON goes to a file the check
-          # script judges; stderr is discarded; only closed tokens are printed.
-          sub=$(mktemp -d)
-          mkdir "$sub/home" "$sub/work"
-          if node scripts/julius-subscription-check.mjs env-check --model "$RELAY_HOSTED_CODING_MODEL" | tee -a provider-readiness.log; then
-            # Errexit is off for these two, as it is for the roles preflight: under this
-            # step's `bash -e`, a non-zero `auth status` or a not-ready verdict would end
-            # the step before the reviewer is probed and before the count below. The
-            # count is the gate, and it still fails closed.
-            set +e
-            env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb ANTHROPIC_DEFAULT_HAIKU_MODEL="$RELAY_HOSTED_CODING_MODEL" ANTHROPIC_SMALL_FAST_MODEL="$RELAY_HOSTED_CODING_MODEL" CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
-              "$PWD/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude" auth status --json > "$sub/status.json" 2>/dev/null
-            node scripts/julius-subscription-check.mjs status-verdict --model "$RELAY_HOSTED_CODING_MODEL" < "$sub/status.json" \
-              | tee -a provider-readiness.log
-            set -e
-          fi
-          rm -rf "$sub"
+          # Spend-free models read. The script prints one closed line and never the key.
+          # Errexit is off so a non-zero still reaches the reviewer probe and the count.
+          set +e
+          node scripts/julius-org-attribution.mjs | tee -a provider-readiness.log
+          set -e
           if [ "$RELAY_HERMES_PROVIDER" = 'xai' ]; then
             printf 'header = "Authorization: Bearer %s"\n' "$XAI_API_KEY" \
               | probe xai "$RELAY_HERMES_MODEL" "https://api.x.ai/v1/models/$RELAY_HERMES_MODEL"
@@ -1104,27 +1012,22 @@ jobs:
             echo "provider_readiness provider=$RELAY_HERMES_PROVIDER model=$RELAY_HERMES_MODEL http=none result=UNCHECKED" | tee -a provider-readiness.log
           fi
           echo 'provider_balance=UNKNOWN (no provider exposes a spend-free balance query; exhaustion surfaces as PROVIDER_BLOCKED when a provider refuses)' | tee -a provider-readiness.log
-          # THREE PROVIDERS READY, AND EACH READY IN ITS OWN SENSE: the two API-billed
-          # providers by key + pinned model (AUTHENTICATED_MODEL_AVAILABLE), the
-          # Coding Agent by a subscription path with no API key in play
-          # (SUBSCRIPTION_LOGIN_PRESENT). Counted per provider, so a subscription
-          # line can never stand in for an API one or the other way round.
           probed=$(grep -c '^provider_readiness ' provider-readiness.log || true)
           api_ready=$(grep -cE '^provider_readiness provider=(openai|xai) .* result=AUTHENTICATED_MODEL_AVAILABLE$' provider-readiness.log || true)
-          subscription_ready=$(grep -cE '^provider_readiness provider=anthropic .* auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\.ai) .* result=SUBSCRIPTION_LOGIN_PRESENT$' provider-readiness.log || true)
-          ready=$((api_ready + subscription_ready))
-          if [ "$probed" -ne 3 ] || [ "$api_ready" -ne 2 ] || [ "$subscription_ready" -ne 1 ] || [ "$ready" -ne 3 ]; then
-            echo 'provider_not_ready: an API provider refused its credential, does not serve the pinned model, or could not be reached, or the Coding Agent has no subscription path free of an API key; nothing was spent' >&2
+          org_verified=$(grep -cE '^org_attribution provider=anthropic model=[A-Za-z0-9._-]+ http=200 result=VERIFIED organization_id=[A-Za-z0-9_-]+$' provider-readiness.log || true)
+          if [ "$probed" -ne 2 ] || [ "$api_ready" -ne 2 ] || [ "$org_verified" -ne 1 ]; then
+            echo 'provider_not_ready: an API provider refused its credential, does not serve the pinned model, or could not be reached, or the Coding Agent organization attribution is ORG_ATTRIBUTION_UNVERIFIED; nothing was spent' >&2
             exit 1
           fi
 
       - name: 'Preflight: all three roles resolve to the expected models, nothing dispatched'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          # The Coding Agent runs on the founder's Claude subscription, never on an
-          # Anthropic API key: the key is deliberately NOT passed to this step.
-          JULIUS_CLAUDE_AUTH: CLAUDE_SUBSCRIPTION
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The Coding Agent is API-billed. The key comes from the
+          # julius-live-validation environment. The subscription token is not
+          # passed: API mode takes the API key alone, and a missing key fails closed.
+          JULIUS_CLAUDE_AUTH: ANTHROPIC_API
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           JULIUS_SCOPED_CREDENTIALS: ${{ steps.identity.outputs.scoped }}
           RELAY_HERMES_EXECUTABLE: /tmp/julius-hermes-bin/hermes
         run: |
@@ -1154,21 +1057,21 @@ jobs:
           # coder stopped after two turns). The entrypoint prints the answer from
           # the store it will actually use; nothing but BOUND is accepted.
           grep -qx '  live_ledger: BOUND' preflight-roles.log || { echo 'live_ledger_unbound: allocation would fall back to a flat estimate' >&2; exit 1; }
-          for name in OPENAI_API_KEY CLAUDE_CODE_OAUTH_TOKEN DATABASE_URL JULIUS_EXECUTOR_ENDPOINT JULIUS_SCOPED_CREDENTIALS EXECUTOR_KEY_ID JULIUS_PUBLIC_KEY_PATH JULIUS_CALLER_ID; do
+          for name in OPENAI_API_KEY ANTHROPIC_API_KEY DATABASE_URL JULIUS_EXECUTOR_ENDPOINT JULIUS_SCOPED_CREDENTIALS EXECUTOR_KEY_ID JULIUS_PUBLIC_KEY_PATH JULIUS_CALLER_ID; do
             grep -q "^  $name: SET$" preflight-roles.log || { echo "preflight_variable_not_set:$name" >&2; exit 1; }
           done
           # HOW EACH ROLE IS PAID FOR, AS THE ENTRYPOINT RESOLVED IT, OR NO PAID RUN.
-          # Paid attempt 1 (run 36568129865) ran the Coding Agent on an API key and
-          # died on `credit_unavailable`. The founder's rule: the Coding Agent is
-          # the Claude subscription, the architect and reviewer are API-billed.
-          grep -qx '  ANTHROPIC_API_KEY: MISSING' preflight-roles.log || { echo 'coder_api_key_present: the entrypoint saw an Anthropic API key' >&2; exit 1; }
-          grep -qE '^  CLAUDE AUTH: SUBSCRIPTION provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=[a-z]+ api_key_used=false api_cost_applicable=false$' preflight-roles.log \
-            || { echo 'coder_auth_not_subscription: the Coding Agent did not resolve to the Claude subscription' >&2; exit 1; }
-          grep -qx '  claude auth source: subscription_oauth_token' preflight-roles.log \
-            || { echo 'coder_auth_source_unexpected: the Coding Agent is not on the setup-token subscription token' >&2; exit 1; }
-          grep -qx '  billing paths: architect=API_BILLED coder=SUBSCRIPTION reviewer=API_BILLED' preflight-roles.log \
-            || { echo 'billing_paths_unexpected: expected architect=API_BILLED coder=SUBSCRIPTION reviewer=API_BILLED' >&2; exit 1; }
-          echo 'PREFLIGHT OK: three roles resolved, every variable present, coder on the Claude subscription, no provider contacted.'
+          # The Coding Agent is Anthropic API billing. A missing key fails closed
+          # inside the entrypoint (`api_key_missing`). A subscription token beside
+          # the key is also a refusal: API mode takes the key alone.
+          grep -qx '  CLAUDE_CODE_OAUTH_TOKEN: MISSING' preflight-roles.log || { echo 'coder_subscription_token_present: API mode takes the API key alone' >&2; exit 1; }
+          grep -qx '  CLAUDE AUTH: API KEY provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=n/a api_key_used=true api_cost_applicable=true' preflight-roles.log \
+            || { echo 'coder_auth_not_api_key: the Coding Agent did not resolve to the Anthropic API key' >&2; exit 1; }
+          grep -qx '  claude auth source: anthropic_api_key' preflight-roles.log \
+            || { echo 'coder_auth_source_unexpected: the Coding Agent is not on the Anthropic API key' >&2; exit 1; }
+          grep -qx '  billing paths: architect=API_BILLED coder=API_BILLED reviewer=API_BILLED' preflight-roles.log \
+            || { echo 'billing_paths_unexpected: expected architect=API_BILLED coder=API_BILLED reviewer=API_BILLED' >&2; exit 1; }
+          echo 'PREFLIGHT OK: three roles resolved, every variable present, coder on the Anthropic API key, entrypoint contacted no provider.'
 
       - name: 'Preflight complete — stopping here (no confirm_live given)'
         if: inputs.confirm_live != 'RUN LIVE MISSION'
@@ -1178,13 +1081,14 @@ jobs:
 
       # ----------------------------------------------------------------- LIVE
 
-      # THE LAST FREE STEP. Everything above proved the rig without spending
-      # anything billable (a paid run's subscription smoke is one tiny request on
-      # the coder's subscription, never API credit); the entrypoint below can
-      # contact a provider on its first tick. The attempt is recorded HERE, in
-      # between, so a run that dies mid-mission still leaves the durable fact that
-      # a paid run was entered. No paid step runs unless that smoke PASSED in this
-      # job: each names `steps.subscription_smoke.outcome == 'success'`.
+      # THE LAST FREE STEP. Everything above proved the rig without a completion
+      # (the provider check reads model metadata and one organization header).
+      # The entrypoint below can contact a provider on its first tick. The
+      # attempt is recorded HERE, in between, so a run that dies mid-mission
+      # still leaves the durable fact that a paid run was entered. No paid step
+      # runs unless provider readiness PASSED in this job, including a VERIFIED
+      # organization attribution: each names
+      # `steps.provider_readiness.outcome == 'success'`.
       #
       # ORDERING IS THE SEMANTIC. The marker means "authorized and about to
       # start", not "a provider was billed" — a claim this job could never
@@ -1193,7 +1097,7 @@ jobs:
       # behind for the next dispatch to find.
       - name: 'Record that a paid mission was attempted (before any provider can be reached)'
         id: attempt_marker
-        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.subscription_smoke.outcome == 'success'
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.provider_readiness.outcome == 'success'
         env:
           MARKER_DIR: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted
         run: |
@@ -1216,7 +1120,7 @@ jobs:
           } > "$MARKER_DIR/marker.txt"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.subscription_smoke.outcome == 'success'
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.provider_readiness.outcome == 'success'
         with:
           name: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted
           path: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted
@@ -1238,14 +1142,16 @@ jobs:
       # obvious mistake instead of a subtle one — and the contract test pins it.
       - name: 'LIVE: run the first real Julius mission'
         id: live_mission
-        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.subscription_smoke.outcome == 'success'
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.provider_readiness.outcome == 'success'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          # The Coding Agent on the founder's Claude subscription. No Anthropic API
-          # key reaches this step; `hostedChildEnv` admits the token into the
-          # Coding Agent's child under CLAUDE_SUBSCRIPTION only.
-          JULIUS_CLAUDE_AUTH: CLAUDE_SUBSCRIPTION
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The Coding Agent on the Anthropic API key. The subscription token is
+          # not passed. The entrypoint compares anthropic-organization-id with
+          # JULIUS_EXPECTED_ANTHROPIC_ORG_ID and halts ORG_ATTRIBUTION_UNVERIFIED
+          # before it submits a run.
+          JULIUS_CLAUDE_AUTH: ANTHROPIC_API
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          JULIUS_EXPECTED_ANTHROPIC_ORG_ID: ${{ vars.JULIUS_EXPECTED_ANTHROPIC_ORG_ID }}
           JULIUS_SCOPED_CREDENTIALS: ${{ steps.identity.outputs.scoped }}
           # The reviewer is spawned through a wrapper that sets HOME to the
           # ephemeral profile for ITSELF ALONE. Setting HOME on this step
@@ -1435,22 +1341,17 @@ jobs:
           grep -E '^(research_observation source=[a-z]+ capability=[a-z_]+ host=[a-z0-9*.-]+ backend=[a-z_]+ result=(observed|unreachable|throttled|unauthenticated|unconfigured)|research_observation_summary observed=[0-9]+ of=[0-9]+|JULIUS_RESEARCH_OBSERVED_BACKENDS=[a-z_]+:[a-z_]+(,[a-z_]+:[a-z_]+)*|research_not_granted: the contract has no research clause, so there is nothing to observe\.|research_unobservable: no backend was observed serving any of the [0-9]+ research probe\(s\) the contract grants; refusing to dispatch a mission whose research would all be refused\.)$' research-observation.log \
             > julius-live-evidence/research-observation.txt 2>/dev/null || true
           # WHETHER EACH PROVIDER WAS READY, by the same allowlist rule: only the
-          # exact lines the readiness step prints — provider, model, status, result
-          # — and the balance disclaimer. Never a header, never a body.
-          # The Coding Agent's subscription line has closed fields of its own.
-          grep -E '^(provider_readiness provider=[a-z]+ model=[A-Za-z0-9._:/-]+ http=([0-9]{3}|none) result=(AUTHENTICATED_MODEL_AVAILABLE|UNAUTHENTICATED|MODEL_NOT_FOUND|UNREACHABLE|UNEXPECTED_STATUS|UNCHECKED)|provider_readiness provider=anthropic model=[A-Za-z0-9._-]+ http=none auth=CLAUDE_SUBSCRIPTION (method=(oauth_token|claude\.ai) plan=(max|pro|team|enterprise|absent)|reason=[A-Z_+]+) result=(SUBSCRIPTION_LOGIN_PRESENT|SUBSCRIPTION_NOT_READY)|provider_balance=UNKNOWN .*)$' provider-readiness.log \
+          # exact lines the readiness step prints — provider, model, status, result —
+          # the organization-attribution line, and the balance disclaimer.
+          # Never a header, never a body, never a key.
+          grep -E '^(provider_readiness provider=[a-z]+ model=[A-Za-z0-9._:/-]+ http=([0-9]{3}|none) result=(AUTHENTICATED_MODEL_AVAILABLE|UNAUTHENTICATED|MODEL_NOT_FOUND|UNREACHABLE|UNEXPECTED_STATUS|UNCHECKED)|org_attribution provider=anthropic model=[A-Za-z0-9._-]+ http=(none|[0-9]{3}) result=(VERIFIED organization_id=[A-Za-z0-9_-]+|ORG_ATTRIBUTION_UNVERIFIED reason=[a-z_]+( organization_id=[A-Za-z0-9_-]+ expected_organization_id=[A-Za-z0-9_-]+)?)|provider_balance=UNKNOWN .*)$' provider-readiness.log \
             > julius-live-evidence/provider-readiness.txt 2>/dev/null || true
-          # The subscription smoke (on its own, or before a paid run), when it ran: closed tokens only.
-          if [ -f subscription-smoke.log ]; then
-            grep -E '^(subscription_smoke_auth provider=anthropic model=[A-Za-z0-9._-]+ http=none auth=CLAUDE_SUBSCRIPTION (method=(oauth_token|claude\.ai) plan=(max|pro|team|enterprise|absent)|reason=[A-Z_+]+) result=(SUBSCRIPTION_LOGIN_PRESENT|SUBSCRIPTION_NOT_READY)|subscription_smoke provider=anthropic model=[A-Za-z0-9._-]+ auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\.ai|none) reply=(OK|UNEXPECTED|ERROR|UNREADABLE|NO_SUBSCRIPTION_STATUS) result=(PASS|FAIL)|subscription_smoke_(auth|cli)_exit=[0-9]{1,3}|subscription_smoke_served provider=anthropic requested=[A-Za-z0-9._-]{1,64} served=(none|[A-Za-z0-9._-]{1,64}(,[A-Za-z0-9._-]{1,64}){0,7}) match=(EXACT|DATED_BUILD|MISMATCH|NONE)|subscription_smoke_reason provider=anthropic model=[A-Za-z0-9._-]{1,64} reason=(MODEL_NOT_ENTITLED_OR_NOT_FOUND|AUTH|USAGE_LIMIT|RATE_LIMITED|OVERLOADED|MAX_TURNS|UNEXPECTED_REPLY|UNREADABLE|SERVED_MODEL_MISMATCH|SERVED_MODEL_UNATTESTED|EXIT_UNREPORTED|AUTH_EXIT_NONZERO|CLI_EXIT_NONZERO|OTHER) http=([1-5][0-9]{2}|none) subtype=([a-z_]{1,40}|none))$' subscription-smoke.log \
-              > julius-live-evidence/subscription-smoke.txt 2>/dev/null || true
-          fi
 
           # Only safe columns, from one script the `first-live-topology` job also
           # runs against a freshly migrated database — dry runs #1 and #2 uploaded
           # `unavailable` for two tables because the inline queries named a
           # column and a table the migrations never created.
-          # A job that ended before the identity step (a refused smoke, an early gate)
+          # A job that ended before the identity step (a refused readiness check, an early gate)
           # never generated a database password, so no database was started and there
           # is nothing to dump. It says so, instead of failing this always-run step on
           # the dump's own PGPASSWORD guard and reading as a second failure (run

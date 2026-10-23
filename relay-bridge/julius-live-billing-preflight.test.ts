@@ -60,7 +60,7 @@ const READY_RIG: Record<string, string> = Object.freeze({
   OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-5.6-sol',
   RELAY_PROMPT_ARCHITECT_MODE: 'live',
   ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic',
-  RELAY_HOSTED_CODING_MODEL: 'claude-fable-5',
+  RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5',
   RELAY_HERMES_PROVIDER: 'xai',
   RELAY_HERMES_MODEL: 'grok-build-0.1',
   RELAY_HERMES_EXECUTABLE: '/usr/bin/true',
@@ -203,13 +203,11 @@ describe('every reader of the preflight finds its own line', () => {
     expect(loop, 'the loop the workflow runs, read from the workflow').not.toBeNull();
     const names = loop![1]!.trim().split(/\s+/u);
     expect(names.length).toBeGreaterThanOrEqual(5);
-    // THE TOPOLOGY THE PAID WORKFLOW RUNS: its Coding Agent is the Claude subscription,
-    // so its loop asks for CLAUDE_CODE_OAUTH_TOKEN and not ANTHROPIC_API_KEY. A preflight
-    // driven in API mode would answer a loop this workflow no longer runs.
-    const { ANTHROPIC_API_KEY: _key, ...withoutKey } = READY_RIG;
+    // THE TOPOLOGY THE PAID WORKFLOW RUNS: the Coding Agent is on the Anthropic
+    // API key, and the loop asks for ANTHROPIC_API_KEY. The subscription token
+    // is not one of those names; the workflow greps it as MISSING on its own.
     const run = preflight({
-      ...withoutKey, HOME: dir, JULIUS_CLAUDE_AUTH: 'CLAUDE_SUBSCRIPTION', RELAY_HERMES_BILLING_MODE: 'api_billed',
-      CLAUDE_CODE_OAUTH_TOKEN: TOKEN_SENTINEL,
+      ...READY_RIG, HOME: dir, JULIUS_CLAUDE_AUTH: 'ANTHROPIC_API', RELAY_HERMES_BILLING_MODE: 'api_billed',
     });
     expect(run.code).toBe(5);
     for (const name of names) expect(physical(run.output), name).toContain(`  ${name}: SET`);

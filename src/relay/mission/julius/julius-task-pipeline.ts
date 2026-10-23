@@ -806,8 +806,8 @@ const APPROVAL_REQUEST_RETRY_MS = 5_000;
  *    reaches here, and a denial ends the run (`advanceRun`, APPROVAL_DENIED).
  *    This boundary used to check PENDING only, so that work was dispatched.
  *  - A run-ending failure class recorded on the run
- *    (`JULIUS_RUN_HALTING_FAILURE_CLASSES`: a coder answered by a model it did
- *    not ask for), on a run that has not reached FAILED yet: the task ends
+ *    (`JULIUS_RUN_HALTING_FAILURE_CLASSES`: a peer answered by a model it did
+ *    not ask for, or that it could not attest), on a run that has not reached FAILED yet: the task ends
  *    FAILED and is never dispatched. `advanceRun` fails the run only after the
  *    tick, and the claim query does not read this class. So a sibling claimed
  *    in the same tick, or while that move lost a race, is stopped here, before

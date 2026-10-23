@@ -36,6 +36,12 @@ export const DEFAULT_RUN_LIMITS: HermesRunLimits = Object.freeze({
   maxPromptBytes: 256 * 1024,
 });
 
+/**
+ * Whether a provider request/response id was read from Hermes' usage file.
+ * `UNAVAILABLE` is this status. It is never stored in the id field.
+ */
+export type ProviderRequestAvailability = 'CAPTURED' | 'UNAVAILABLE';
+
 /** Usage as Hermes reports it in `--usage-file`. Unknown stays null. */
 export interface HermesUsage {
   readonly inputTokens: number | null;
@@ -46,11 +52,23 @@ export interface HermesUsage {
   readonly costMicros: string | null;
   readonly currency: string | null;
   readonly source: 'harness_reported' | 'unavailable';
+  /**
+   * The provider request or response id, when the usage file carried a safe
+   * one. Hermes' `session_id` is the engine session and is never copied here.
+   * Stdout is never scraped for one. Null when none was captured.
+   */
+  readonly providerRequestId: string | null;
+  readonly providerRequestAvailability: ProviderRequestAvailability;
+  /** A lower-case token. Null only when an id was captured. */
+  readonly providerRequestUnavailableReason: string | null;
 }
 
 export const UNKNOWN_USAGE: HermesUsage = Object.freeze({
   inputTokens: null, outputTokens: null, totalTokens: null, model: null,
   apiCalls: null, costMicros: null, currency: null, source: 'unavailable',
+  providerRequestId: null,
+  providerRequestAvailability: 'UNAVAILABLE',
+  providerRequestUnavailableReason: 'provider_request_id_not_reported',
 });
 
 export type HermesRunOutcome =
@@ -83,16 +101,89 @@ export type HermesRunOutcome =
     readonly usage: HermesUsage;
   };
 
-/** Parses Hermes' usage report. Absent or malformed → Unknown, never zero. */
+/**
+ * The same bound `safeResponseId` applies in the mission allowlist. Duplicated
+ * here because this runner must not import the mission barrel. A credential-shaped
+ * value is refused rather than stored.
+ */
+const CREDENTIAL_SHAPED = /(?:^(?:sk|xai|ghp|gho|ghu|ghs|ghr|pk|api)[-_])|bearer|authorization|private[-_ ]?key|begin [a-z ]*private/i;
+const SAFE_PROVIDER_REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+/** Usage-file keys that may carry an xAI request or response id. `session_id` is not one of them. */
+const PROVIDER_REQUEST_KEYS = [
+  'provider_request_id', 'xai_request_id', 'request_id', 'provider_response_id', 'response_id',
+] as const;
+
+function unavailableUsage(reason: string): HermesUsage {
+  return {
+    inputTokens: null, outputTokens: null, totalTokens: null, model: null,
+    apiCalls: null, costMicros: null, currency: null, source: 'unavailable',
+    providerRequestId: null,
+    providerRequestAvailability: 'UNAVAILABLE',
+    providerRequestUnavailableReason: reason,
+  };
+}
+
+/**
+ * The first present provider-request key wins. A credential-shaped or unusable
+ * value stops the search: a later safe key is not a substitute for it.
+ * `session_id` is never read.
+ */
+function providerRequestFromRecord(record: Record<string, unknown>): Pick<
+  HermesUsage, 'providerRequestId' | 'providerRequestAvailability' | 'providerRequestUnavailableReason'
+> {
+  let found: unknown;
+  let present = false;
+  for (const key of PROVIDER_REQUEST_KEYS) {
+    if (record[key] !== undefined && record[key] !== null) {
+      found = record[key];
+      present = true;
+      break;
+    }
+  }
+  if (!present) {
+    return {
+      providerRequestId: null,
+      providerRequestAvailability: 'UNAVAILABLE',
+      providerRequestUnavailableReason: 'hermes_usage_file_has_no_provider_request_id',
+    };
+  }
+  if (typeof found === 'string' && CREDENTIAL_SHAPED.test(found)) {
+    return {
+      providerRequestId: null,
+      providerRequestAvailability: 'UNAVAILABLE',
+      providerRequestUnavailableReason: 'provider_request_id_credential_shaped',
+    };
+  }
+  if (typeof found === 'string' && SAFE_PROVIDER_REQUEST_ID.test(found)) {
+    return {
+      providerRequestId: found,
+      providerRequestAvailability: 'CAPTURED',
+      providerRequestUnavailableReason: null,
+    };
+  }
+  return {
+    providerRequestId: null,
+    providerRequestAvailability: 'UNAVAILABLE',
+    providerRequestUnavailableReason: 'provider_request_id_unusable',
+  };
+}
+
+/**
+ * Parses Hermes' usage report. Absent or malformed → Unknown, never zero.
+ * The provider request id is read only from this JSON. Stdout is not consulted,
+ * and Hermes' session id is not treated as an xAI request id.
+ */
 export function parseUsageFile(path: string): HermesUsage {
-  if (!existsSync(path)) return UNKNOWN_USAGE;
+  if (!existsSync(path)) return unavailableUsage('hermes_usage_file_absent');
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(path, 'utf8'));
   } catch {
-    return UNKNOWN_USAGE;
+    return unavailableUsage('hermes_usage_file_unreadable');
   }
-  if (raw === null || typeof raw !== 'object') return UNKNOWN_USAGE;
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return unavailableUsage('hermes_usage_file_unreadable');
+  }
   const o = raw as Record<string, unknown>;
   const num = (v: unknown): number | null =>
     typeof v === 'number' && Number.isFinite(v) ? v : null;
@@ -113,6 +204,7 @@ export function parseUsageFile(path: string): HermesUsage {
     currency: typeof cost === 'number' ? 'USD' : null,
     source: input === null && output === null && typeof o.model !== 'string'
       ? 'unavailable' : 'harness_reported',
+    ...providerRequestFromRecord(o),
   };
 }
 

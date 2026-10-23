@@ -19,7 +19,7 @@ export type {
 } from './role-slot-contracts';
 
 export {
-  DEVELOPMENT_DEFAULT_OCCUPANTS, ROLE_OCCUPANTS, findOccupant, occupantsForRole,
+  DEVELOPMENT_DEFAULT_OCCUPANTS, JULIUS_LIVE_REQUESTED_MODELS, ROLE_OCCUPANTS, findOccupant, occupantsForRole,
   juliusProviderQualification,
   registryIsComplete,
 } from './role-slot-registry';
