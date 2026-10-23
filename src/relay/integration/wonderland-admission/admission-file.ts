@@ -19,7 +19,7 @@ import {
 import { dirname, isAbsolute, resolve } from 'node:path';
 
 import { JULIUS_BOOTSTRAP_RUN_ID, SHA256_HEX, WONDERLAND_RUN_ID } from './admission-contract';
-import type { AdmissionLedger, AdmissionLedgerRow } from './admission-store';
+import type { AdmissionLedger, AdmissionLedgerRow, AdmissionState } from './admission-store';
 
 export const ADMISSION_FILE_SCHEMA_VERSION = 1;
 
@@ -289,5 +289,233 @@ function parseRow(value: unknown): AdmissionLedgerRow {
     receivedAt: row.receivedAt,
     ledgerRef: row.ledgerRef,
     resultSha256: null,
+  };
+}
+
+/**
+ * Operator claims live beside the admission document, not inside it.
+ * The admission file stays `{ schemaVersion, rows }`. `dispatched` is not a
+ * row field. The journal uses the same atomic write, the same lock file, and
+ * the same fail-closed errors. A held lock, a corrupt journal, or an unknown
+ * schema version leaves both files as they are.
+ */
+const CLAIM_STATES = ['dispatched', 'dispatch_failed', 'already_spent'] as const;
+const SPENT_TAG_STATES = ['unknown', 'present', 'absent'] as const;
+const JOURNAL_KEYS = ['schemaVersion', 'revision', 'claims'] as const;
+const CLAIM_KEYS = [
+  'wonderlandRunId', 'serverRunId', 'state', 'spentTag', 'spentTagState', 'at', 'dispatchAttempted', 'dispatchError',
+] as const;
+
+export type OperatorClaimState = (typeof CLAIM_STATES)[number];
+export type SpentTagState = (typeof SPENT_TAG_STATES)[number];
+
+export interface StoredAdmission extends AdmissionLedgerRow {
+  readonly admissionState: AdmissionState;
+}
+
+export interface ClaimEvent {
+  readonly wonderlandRunId: string;
+  readonly serverRunId: string;
+  readonly state: OperatorClaimState;
+  readonly spentTag: string;
+  readonly spentTagState: SpentTagState;
+  readonly at: string;
+  readonly dispatchAttempted: boolean;
+  readonly dispatchError: 'gh_workflow_run_failed' | null;
+}
+
+export interface OperatorDocument {
+  readonly version: 1;
+  readonly revision: number;
+  readonly admissions: readonly StoredAdmission[];
+  readonly claims: readonly ClaimEvent[];
+}
+
+export interface AdmissionFileIo {
+  read(): OperatorDocument;
+  write(document: OperatorDocument): void;
+}
+
+export interface AdmissionFile {
+  readonly path: string;
+  readonly ledger: AdmissionLedger;
+  exclusive<T>(job: (io: AdmissionFileIo) => Promise<T>): Promise<T>;
+}
+
+interface OperatorJournal {
+  readonly schemaVersion: typeof ADMISSION_FILE_SCHEMA_VERSION;
+  readonly revision: number;
+  readonly claims: readonly ClaimEvent[];
+}
+
+const tails = new Map<string, Promise<void>>();
+
+function enqueue<T>(key: string, job: () => Promise<T>): Promise<T> {
+  const previous = tails.get(key) ?? Promise.resolve();
+  const run = previous.then(job, job);
+  tails.set(key, run.then(() => undefined, () => undefined));
+  return run;
+}
+
+/** Absolute local path whose parent #407's resolver will accept. A URL is not a store. */
+export function isLocalStorePath(storePath: string): boolean {
+  return resolveAdmissionStorePath(storePath).ok;
+}
+
+export function emptyOperatorDocument(): OperatorDocument {
+  return { version: 1, revision: 0, admissions: [], claims: [] };
+}
+
+export function operatorJournalPath(storePath: string): string {
+  return `${storePath}.operator.json`;
+}
+
+/** Read rows and the journal. Does not take the lock and does not write. */
+export function readAdmissionDocument(storePath: string): OperatorDocument {
+  const located = resolveAdmissionStorePath(storePath);
+  if (!located.ok) throw new AdmissionFileClosedError('unwritable');
+  return composeDocument(located.path);
+}
+
+export function openAdmissionFile(storePath: string): AdmissionFile {
+  const located = resolveAdmissionStorePath(storePath);
+  if (!located.ok) throw new AdmissionFileClosedError('unwritable');
+  const path = located.path;
+  const lockPath = `${path}.lock`;
+  const exclusive = <T>(job: (io: AdmissionFileIo) => Promise<T>): Promise<T> => enqueue(path, async () => {
+    acquireLock(lockPath);
+    try {
+      let document = composeDocument(path);
+      return await job({
+        read: () => document,
+        write: (next) => {
+          writeJournal(path, next);
+          document = composeDocument(path);
+        },
+      });
+    } finally {
+      releaseLock(lockPath);
+    }
+  });
+  const ledger: AdmissionLedger = {
+    async rows() {
+      return enqueue(path, async () => {
+        acquireLock(lockPath);
+        try {
+          return readRows(path).map((row) => ({ ...row }));
+        } finally {
+          releaseLock(lockPath);
+        }
+      });
+    },
+    async append(row) {
+      await enqueue(path, async () => {
+        acquireLock(lockPath);
+        try {
+          const current = readRows(path);
+          if (current.some((held) => held.runId === row.runId || held.serverRunId === row.serverRunId || held.keyHash === row.keyHash)) {
+            throw new Error('admission_file_duplicate');
+          }
+          writeAdmissionFileAtomic(path, documentText([...current, row]));
+        } finally {
+          releaseLock(lockPath);
+        }
+      });
+    },
+  };
+  return { path, ledger, exclusive };
+}
+
+function composeDocument(path: string): OperatorDocument {
+  const journal = readJournal(operatorJournalPath(path));
+  return {
+    version: 1,
+    revision: journal.revision,
+    admissions: readRows(path).map(toStoredAdmission),
+    claims: journal.claims,
+  };
+}
+
+function toStoredAdmission(row: AdmissionLedgerRow): StoredAdmission {
+  return { ...row, admissionState: 'ADMISSION_HELD' };
+}
+
+function readJournal(journalPath: string): OperatorJournal {
+  if (!existsSync(journalPath)) return { schemaVersion: ADMISSION_FILE_SCHEMA_VERSION, revision: 0, claims: [] };
+  let text: string;
+  try {
+    text = readFileSync(journalPath, 'utf8');
+  } catch {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (text.trim() === '') throw new AdmissionFileClosedError('corrupt');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new AdmissionFileClosedError('corrupt');
+  const doc = parsed as Record<string, unknown>;
+  const keys = Object.keys(doc);
+  if (keys.length !== JOURNAL_KEYS.length || JOURNAL_KEYS.some((key) => !Object.hasOwn(doc, key))) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (doc.schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION) throw new AdmissionFileClosedError('corrupt');
+  if (typeof doc.revision !== 'number' || !Number.isInteger(doc.revision) || doc.revision < 0) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (!Array.isArray(doc.claims)) throw new AdmissionFileClosedError('corrupt');
+  return { schemaVersion: ADMISSION_FILE_SCHEMA_VERSION, revision: doc.revision, claims: doc.claims.map(parseClaim) };
+}
+
+function writeJournal(path: string, document: OperatorDocument): void {
+  const body = {
+    schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
+    revision: document.revision,
+    claims: document.claims.map(parseClaim),
+  };
+  try {
+    writeAdmissionFileAtomic(operatorJournalPath(path), `${JSON.stringify(body)}\n`);
+  } catch (error) {
+    if (isAdmissionFileClosed(error)) throw error;
+    throw new AdmissionFileClosedError('unwritten');
+  }
+}
+
+function parseClaim(value: unknown): ClaimEvent {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new AdmissionFileClosedError('corrupt');
+  const claim = value as Record<string, unknown>;
+  if (Object.keys(claim).length !== CLAIM_KEYS.length || CLAIM_KEYS.some((key) => !Object.hasOwn(claim, key))) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof claim.wonderlandRunId !== 'string' || !WONDERLAND_RUN_ID.test(claim.wonderlandRunId)) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof claim.serverRunId !== 'string' || !JULIUS_BOOTSTRAP_RUN_ID.test(claim.serverRunId)) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof claim.state !== 'string' || !CLAIM_STATES.includes(claim.state as OperatorClaimState)) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  const hex = claim.serverRunId.slice('run:'.length);
+  if (claim.spentTag !== `julius-run-spent-${hex}`) throw new AdmissionFileClosedError('corrupt');
+  if (typeof claim.spentTagState !== 'string' || !SPENT_TAG_STATES.includes(claim.spentTagState as SpentTagState)) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof claim.at !== 'string' || !RECEIVED_AT.test(claim.at)) throw new AdmissionFileClosedError('corrupt');
+  if (typeof claim.dispatchAttempted !== 'boolean') throw new AdmissionFileClosedError('corrupt');
+  if (claim.dispatchError !== null && claim.dispatchError !== 'gh_workflow_run_failed') {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  return {
+    wonderlandRunId: claim.wonderlandRunId,
+    serverRunId: claim.serverRunId,
+    state: claim.state as OperatorClaimState,
+    spentTag: `julius-run-spent-${hex}`,
+    spentTagState: claim.spentTagState as SpentTagState,
+    at: claim.at,
+    dispatchAttempted: claim.dispatchAttempted,
+    dispatchError: claim.dispatchError,
   };
 }

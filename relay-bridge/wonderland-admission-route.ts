@@ -10,6 +10,11 @@
  *
  * This is not the paid workflow. confirmLive is empty, submitted is false,
  * and no provider, GitHub dispatch, or retry is reachable from here.
+ *
+ * JULIUS_WONDERLAND_ADMISSION_STORE, when set, is a file on this machine.
+ * A URL is not a store: admission stays unconfigured and reserves nothing.
+ * The operator claim tool reads that same file. This route does not start
+ * a paid run.
  */
 
 import { createHash, randomBytes } from 'node:crypto';
