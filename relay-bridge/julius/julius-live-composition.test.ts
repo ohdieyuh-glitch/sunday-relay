@@ -160,7 +160,10 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
  * close leaves the file unwritten.
  */
 function spawnEmitting(stdout: string, code = 0) {
-  return (_executable: string, args: readonly string[] = []) => {
+  // `typeof spawn` overloads the second argument as options. This fake only
+  // implements the argv form the runner calls; the cast is the same one
+  // `spawnWith` uses so the overload does not reject the fixture.
+  return ((_executable: string, args: readonly string[] = []) => {
     const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: Readable; kill: () => boolean };
     child.stdout = new Readable({ read() { /* pushed below */ } });
     child.stderr = new Readable({ read() { /* never surfaced */ } });
@@ -185,7 +188,7 @@ function spawnEmitting(stdout: string, code = 0) {
       }
     }, 0);
     return child as never;
-  };
+  }) as never;
 }
 
 /**
