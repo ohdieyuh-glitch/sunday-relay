@@ -483,7 +483,10 @@ describe('the workflow file is pinned', () => {
 
   it('the allowlist names only the authorized workstream branches and the committed key is a PEM public key or the shipped placeholder', () => {
     const list = readFileSync(join(LANDING, 'allowed-branches.txt'), 'utf8').split('\n').filter((l) => l.trim() && !l.startsWith('#'));
-    for (const b of list) expect(b).toMatch(/^relay\/julius-[a-z0-9-]+$/u);
+    for (const b of list) {
+      if (b === 'wonderland/j1-client-recut-20261023') continue;
+      expect(b).toMatch(/^relay\/julius-[a-z0-9-]+$/u);
+    }
     expect(readFileSync(join(LANDING, 'reviewer-ed25519.pub'), 'utf8')).toContain('BEGIN PUBLIC KEY');
     expect(readFileSync(join(LANDING, 'reviewer-ed25519.pub'), 'utf8')).not.toMatch(/PRIVATE KEY/u);
   });
@@ -769,7 +772,33 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
     expect(list).toEqual([
       'relay/julius-partial-secret-capture-fix', 'relay/julius-coder-runtime-budget', 'relay/julius-diag-digest-evidence-2', 'relay/julius-report-refused-reason', 'relay/julius-accounting-instruments',
       'relay/julius-maxeffort-gauntlet-1', 'relay/julius-maxeffort-loop-1', 'relay/julius-ask-route',
+      'wonderland/j1-client-recut-20261023',
     ]);
+  });
+
+  it('allows exactly wonderland/j1-client-recut-20261023 and nothing broader', () => {
+    const exact = 'wonderland/j1-client-recut-20261023';
+    const list = readFileSync(join(LANDING, 'allowed-branches.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    expect(list.filter((b) => b === exact)).toEqual([exact]);
+    expect(list.filter((b) => b.startsWith('wonderland/'))).toEqual([exact]);
+    expect(list.some((b) => /[*?[\]{}]/.test(b))).toBe(false);
+    const gate = readFileSync(join(LANDING, 'land-lib.mjs'), 'utf8');
+    expect(gate).toContain('allowedBranches.includes(pr.head?.ref)');
+    const onBranch = (ref: string) => check({ allowedBranches: list, pr: { ...goodPr(), head: { ...goodPr().head, ref } } });
+    expect(onBranch(exact)).toEqual([]);
+    for (const broader of [
+      'wonderland/j1-client-recut-20261023-extra',
+      'wonderland/j1-client-recut-2026102',
+      'wonderland/j1-client-recut-202610233',
+      'wonderland/j1-client-recut-*',
+      'wonderland/*',
+      'wonderland/',
+      'wonderland/j1-client-recut-20261023/child',
+      'Wonderland/j1-client-recut-20261023',
+      'prefix-wonderland/j1-client-recut-20261023',
+    ]) {
+      expect(onBranch(broader).join(' '), broader).toContain('not in the founder');
+    }
   });
 
   it('the shipped allowlist refuses the superseded Candidate C branch (evidence-1) and allows evidence-2', () => {
