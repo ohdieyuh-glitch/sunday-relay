@@ -166,6 +166,27 @@ describe('direct xAI reviewer adapter (fake fetch only)', () => {
       expect(r.costUsdMicros ?? null).toBeNull();
       expect(r.costUsdTicksRaw ?? null).toBeNull();
     }
+    const unsafeInteger = await leg(withTicks(1e16));
+    expect(unsafeInteger.ok).toBe(true);
+    expect(unsafeInteger.costUsdMicros ?? null).toBeNull();
+    expect(unsafeInteger.costUsdTicksRaw ?? null).toBeNull();
+  });
+
+  it('a refused 200 still carries costUsdMicros and costUsdTicksRaw when the ticks were valid', async () => {
+    const ticks = 158_500;
+    const usage = { input_tokens: 10, output_tokens: 5, total_tokens: 15, cost_in_usd_ticks: ticks };
+    const cases: ReadonlyArray<readonly [string, unknown]> = [
+      ['xai_response_id_missing', { ...good, id: undefined, usage }],
+      ['xai_model_mismatch', { ...good, model: 'grok-other', usage }],
+      ['xai_verdict_unreadable', { ...good, usage, output: [{ content: [{ text: 'nope' }] }] }],
+    ];
+    for (const [failureClass, body] of cases) {
+      const r = await leg(body);
+      expect(r).toMatchObject({
+        ok: false, failureClass, requests: 1, costUsdMicros: 16, costUsdTicksRaw: ticks,
+        usage: { input: 10, output: 5, total: 15 },
+      });
+    }
   });
 
   it('over-states a safe tick count by less than one micro and never rounds down', async () => {

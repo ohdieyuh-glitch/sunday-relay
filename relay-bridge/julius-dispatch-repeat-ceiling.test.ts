@@ -114,12 +114,39 @@ describe('combined initial+repeat ceiling for julius-inworld-data-1', () => {
     }
     // 1.5 + 2.5 would be the integer 4. The running-sum check still refuses it after the
     // first add, so this fixture does not kill a mutant that deletes only the per-leg
-    // conjunct. Deleting both safe-integer checks would verify it as 4.
+    // conjunct. The cases that do are the safe-integer-first pairs below.
     expect(verifyRun1Spend({
       sealed: true, orderOk: true, spendUnknownLegs: 0, openedRoles: ['architect', 'coder'],
       legs: [
         { role: 'architect', spend: 'usage_reported', costUsdMicros: 1.5, providerResponseId: 'resp_a' },
         { role: 'coder', spend: 'usage_reported', costUsdMicros: 2.5, providerResponseId: 'resp_c' },
+      ],
+    })).toEqual({ verified: false, reason: 'unknown_spend' });
+  });
+
+  it('refuses a non-integer leg when the total of the legs is still a safe integer', () => {
+    // Safe integer first. 30000000 + 1e-10 and 1 + Number.MIN_VALUE both collapse to a
+    // safe integer, so the running-sum check does not refuse them. Only the per-leg
+    // Number.isSafeInteger conjunct does. A 1.5 + 2.5 pair does not kill that mutant.
+    const pair = (costs: readonly [number, number]) => verifyRun1Spend({
+      sealed: true, orderOk: true, spendUnknownLegs: 0, openedRoles: ['architect', 'coder'],
+      legs: [
+        { role: 'architect', spend: 'usage_reported', costUsdMicros: costs[0], providerResponseId: 'resp_a' },
+        { role: 'coder', spend: 'usage_reported', costUsdMicros: costs[1], providerResponseId: 'resp_c' },
+      ],
+    });
+    expect(pair([30000000, 1e-10])).toEqual({ verified: false, reason: 'unknown_spend' });
+    expect(pair([1, Number.MIN_VALUE])).toEqual({ verified: false, reason: 'unknown_spend' });
+  });
+
+  it('refuses two Number.MAX_SAFE_INTEGER legs because their sum is not a safe integer', () => {
+    // Each leg is a safe integer, so the per-leg check accepts it. The running-sum
+    // check is what refuses. Deleting only that check verifies the sum 18014398509481982.
+    expect(verifyRun1Spend({
+      sealed: true, orderOk: true, spendUnknownLegs: 0, openedRoles: ['architect', 'coder'],
+      legs: [
+        { role: 'architect', spend: 'usage_reported', costUsdMicros: Number.MAX_SAFE_INTEGER, providerResponseId: 'resp_a' },
+        { role: 'coder', spend: 'usage_reported', costUsdMicros: Number.MAX_SAFE_INTEGER, providerResponseId: 'resp_c' },
       ],
     })).toEqual({ verified: false, reason: 'unknown_spend' });
   });
