@@ -114,7 +114,8 @@ function tickOverrideOf(value: string | null): { readonly ok: true; readonly ove
   if (!/^[1-9][0-9]{0,5}$/u.test(value)) return { ok: false };
   return { ok: true, override: Number(value) };
 }
-import { noJuliusResearch, type JuliusResearchPolicy } from '../src/relay/mission/julius';
+import { authorizeJuliusLiveSpend, noJuliusResearch, type JuliusResearchPolicy } from '../src/relay/mission/julius';
+import { readJuliusPriorRunSpend } from './julius/julius-prior-spend';
 import {
   LIVE_REACH_ACTION_CAPABILITIES,
   LIVE_REACH_READ_CAPABILITIES,
@@ -854,6 +855,27 @@ async function main(argv: readonly string[]): Promise<number> {
       out('RESULT: BLOCKED — live_ledger_unbound: the composed store serves no timeline, so allocation would fall back to a flat estimate. Nothing was submitted and no provider was contacted.');
       return 1;
     }
+    /**
+     * THE NAMESPACE CEILING AND THE $60 QUALIFYING PAIR, before a run row exists
+     * and before a provider can be asked. A contract above its namespace grant
+     * is refused here even if the check script was not the thing that launched
+     * this process. An unreadable prior ledger fails closed for the pair; it
+     * is not read as zero, and a refusal never claims the provider balance
+     * was verified.
+     */
+    const spendLedger = await readJuliusPriorRunSpend(pool, {
+      missionId: contract.missionId, projectId: contract.projectId,
+    });
+    const spendAuthorization = authorizeJuliusLiveSpend({
+      namespace: contract.markerNamespace,
+      spendUsd: contract.limits?.spendUsd ?? null,
+      repairCycles: contract.limits?.repairCycles ?? null,
+      ledger: spendLedger,
+    });
+    if (!spendAuthorization.authorized) {
+      out(`RESULT: BLOCKED — ${spendAuthorization.reasonCode}: ${spendAuthorization.safeMessage}`);
+      return 1;
+    }
     const executionId = `execution:julius-live:${contract.missionId}`;
     const shell = createExecutorShellPort({
       pool,
@@ -990,8 +1012,8 @@ async function main(argv: readonly string[]): Promise<number> {
       store: handoffs.store,
       entries: resolution.entries,
       cardRevision,
-      spendCeilingUsdMicros: Math.round((contract.limits?.spendUsd ?? 5) * 1_000_000),
-      maxRepairRounds: contract.limits?.repairCycles ?? 1,
+      spendCeilingUsdMicros: spendAuthorization.spendCeilingUsdMicros,
+      maxRepairRounds: spendAuthorization.maxRepairRounds,
       executionScope: liveExecutionScope(env),
       ...(researchClause === undefined ? {} : {
         researchPolicyFor: researchPolicyOf,

@@ -1,6 +1,7 @@
 export * from './julius-runtime';
 export * from './julius-policy';
 export * from './julius-cost-accounting';
+export * from './julius-spend-ceiling';
 export * from './julius-contract-disposition';
 export * from './julius-memory-trust';
 export * from './julius-context-integrity';
