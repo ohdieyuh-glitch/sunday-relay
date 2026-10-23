@@ -1,6 +1,6 @@
 #include "WonderlandJuliusMissionSubsystem.h"
 
-#include "WonderlandJuliusMissionClient.h"
+#include "Wonderland/WonderlandJuliusMissionClient.h"
 #include "WonderlandJuliusRandomBytes.h"
 
 #include "HttpModule.h"

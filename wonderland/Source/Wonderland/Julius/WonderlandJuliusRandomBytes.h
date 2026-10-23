@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "WonderlandJuliusMissionLogic.h"
+#include "Wonderland/WonderlandJuliusMissionLogic.h"
 
 class FWonderlandJuliusPlatformCryptoRandom final : public WonderlandJuliusMissionLogic::IRandomBytes16
 {

@@ -1,21 +1,26 @@
 // WONDERLAND -- J1 client wrapper known-answer tests. No Unreal, no network, no secrets that leave the process.
 //
-//   g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I wonderland/Source/Wonderland
+//   g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I wonderland/Source/Wonderland -I wonderland/Source
 //       wonderland/Tools/j1_wrapper_kat.cpp
 //       wonderland/Source/Wonderland/WonderlandJuliusMissionClient.cpp
 //       wonderland/Source/Wonderland/WonderlandJuliusMissionLogic.cpp
 //       -o j1_wrapper_kat && ./j1_wrapper_kat
 //
-//   cl /std:c++17 /EHsc /W4 /WX /I wonderland\Source\Wonderland
+//   cl /std:c++17 /EHsc /W4 /WX /I wonderland\Source\Wonderland /I wonderland\Source
 //       wonderland\Tools\j1_wrapper_kat.cpp
 //       wonderland\Source\Wonderland\WonderlandJuliusMissionClient.cpp
 //       wonderland\Source\Wonderland\WonderlandJuliusMissionLogic.cpp
+//
+// -I wonderland/Source is the Unreal include root. Julius/ names a module-root header as
+// Wonderland/<Header>.h, so this file includes those paths too and the check below rejects a bare name.
 //
 // The scratch directory uses std::filesystem, std::chrono and std::thread. Those three cover
 // POSIX and Windows, so this file has no unistd.h, no direct _WIN32 branch, and no mkdir.
 //
 // Each Expect name is the test the presentation spec cites.
 #include "WonderlandJuliusMissionClient.h"
+#include "Wonderland/WonderlandJuliusMissionClient.h"
+#include "Wonderland/Julius/WonderlandJuliusRandomBytes.h"
 
 #include <array>
 #include <chrono>
@@ -233,6 +238,76 @@ namespace
 		Result.bTransportError = bTransport;
 		Result.LatencyMs = 15;
 		return Result;
+	}
+
+	// Quoted include of a header that lives directly in Source/Wonderland. A slash is a path
+	// (Wonderland/<Header>.h). Angle-bracket includes are the engine or the standard library.
+	bool JuliusBareModuleRootInclude(std::string_view Line, std::string& Header)
+	{
+		std::size_t Start = 0;
+		while (Start < Line.size() && (Line[Start] == ' ' || Line[Start] == '\t')) { ++Start; }
+		const std::string_view Rest = Line.substr(Start);
+		const std::string_view Key = "#include";
+		if (Rest.size() < Key.size() || Rest.substr(0, Key.size()) != Key) { return false; }
+		std::size_t Cursor = Key.size();
+		while (Cursor < Rest.size() && (Rest[Cursor] == ' ' || Rest[Cursor] == '\t')) { ++Cursor; }
+		if (Cursor >= Rest.size() || Rest[Cursor] != '"') { return false; }
+		++Cursor;
+		const std::size_t End = Rest.find('"', Cursor);
+		if (End == std::string_view::npos) { return false; }
+		const std::string_view Name = Rest.substr(Cursor, End - Cursor);
+		if (Name.empty() || Name.find('/') != std::string_view::npos || Name.find('\\') != std::string_view::npos)
+		{
+			return false;
+		}
+		Header.assign(Name.begin(), Name.end());
+		return true;
+	}
+
+	bool CheckJuliusModuleRootIncludes()
+	{
+		namespace fs = std::filesystem;
+		fs::path Root;
+		for (fs::path Dir = fs::current_path();; Dir = Dir.parent_path())
+		{
+			if (fs::is_directory(Dir / "wonderland/Source/Wonderland/Julius"))
+			{
+				Root = Dir;
+				break;
+			}
+			if (!Dir.has_parent_path() || Dir.parent_path() == Dir) { break; }
+		}
+		if (Root.empty())
+		{
+			std::printf("JULIUS INCLUDE CHECK FAIL: wonderland/Source/Wonderland/Julius not found from the working directory\n");
+			return false;
+		}
+		const fs::path Module = Root / "wonderland/Source/Wonderland";
+		int Bad = 0;
+		for (const fs::directory_entry& Entry : fs::directory_iterator(Module / "Julius"))
+		{
+			if (!Entry.is_regular_file()) { continue; }
+			const std::string Ext = Entry.path().extension().string();
+			if (Ext != ".h" && Ext != ".cpp") { continue; }
+			std::ifstream In(Entry.path());
+			std::string Line;
+			int Number = 0;
+			while (std::getline(In, Line))
+			{
+				++Number;
+				std::string Header;
+				if (!JuliusBareModuleRootInclude(Line, Header)) { continue; }
+				std::error_code Exists;
+				if (!fs::is_regular_file(Module / Header, Exists)) { continue; }
+				const fs::path Shown = fs::relative(Entry.path(), Root);
+				std::printf("JULIUS INCLUDE CHECK FAIL %s:%d includes module-root header \"%s\" by bare name\n",
+					Shown.generic_string().c_str(), Number, Header.c_str());
+				++Bad;
+			}
+		}
+		if (Bad != 0) { return false; }
+		std::printf("JULIUS INCLUDE CHECK PASS\n");
+		return true;
 	}
 }
 
@@ -760,6 +835,8 @@ int main()
 		Expect(!Session.Dispatch("other-mission", "").bSent, "trace_write_failure_does_not_mint");
 		Expect(Random.Fills == Fills, "trace_write_failure_fill_count");
 	}
+
+	Expect(CheckJuliusModuleRootIncludes(), "julius_no_bare_module_root_include");
 
 	if (Failures == 0)
 	{
