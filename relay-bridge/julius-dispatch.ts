@@ -29,7 +29,10 @@ import type { KeyStore } from './julius-key-store';
  *   7. caps (daily, per-mission runs, one run once) and concurrency (exactly one chain at a time).
  *      julius-inworld-data-1 also refuses a repeat unless run-1 has a verified provider dollar receipt
  *      at or under the frozen per-run ceiling, and that actual plus the repeat's worst-case bound is at
- *      or under the frozen combined ceiling. Env may lower those ceilings. It cannot raise them.
+ *      or under the frozen combined ceiling. The worst-case bound is the per-run cap, so at the frozen
+ *      $30/$60 figures the combined refusal is reached only when env has lowered the combined cap.
+ *      Env may lower those ceilings. It cannot raise them. The wired coder is CLAUDE_SUBSCRIPTION and
+ *      does not produce a dollar receipt, so a real-shaped repeat stays refused.
  *   8. a ledger that cannot be written: the acceptance row, every pre_call row. NO row = NO provider call.
  *
  * THE TRIGGER ORIGINATES IN THE GAME. The dispatch body must carry `clientLogSha256`: the sha256 of the exact client log line

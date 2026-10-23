@@ -153,8 +153,12 @@ const nonNegativeInt = (value: number): boolean => Number.isSafeInteger(value) &
 const positiveInt = (value: number): boolean => Number.isSafeInteger(value) && value > 0;
 
 /**
- * Pure admit/refuse for one repeat. `$30.00` actual passes the per-run check; `$30.01` does not.
- * Actual plus the repeat worst-case bound at exactly the combined ceiling passes; one cent over does not.
+ * Pure admit/refuse for one repeat. The per-run check runs first: an actual of exactly the per-run
+ * cap passes, and any larger actual returns `run1_actual_above_per_run` without evaluating the sum.
+ * `repeatWorstCaseUsdMicros` returns that same per-run cap, so at the frozen $30/$60 figures an
+ * admitted actual plus the worst case is at most $60 and this function does not return
+ * `combined_ceiling_exceeded`. That reason is reached when the caller supplies a worst case above
+ * the per-run cap, or when the combined cap has been lowered below actual plus the per-run cap.
  */
 export function decideCombinedCeiling(input: {
   readonly actualUsdMicros: number;

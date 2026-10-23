@@ -68,19 +68,19 @@ describe('combined initial+repeat ceiling for julius-inworld-data-1', () => {
     expect(repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_RUN_USD_MICROS, legEstimateUsd: 1, roleCount: 0 })).toBeNull();
   });
 
-  it('$30.00 of verified run-1 actual is admitted', () => {
+  it('decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro', () => {
     expect(decideCombinedCeiling({ actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: 1, ...caps })).toEqual({
       admit: true, actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: 1, ...caps,
     });
   });
 
-  it('$30.01 of verified run-1 actual is refused', () => {
+  it('decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison', () => {
     expect(decideCombinedCeiling({ actualUsdMicros: PER_RUN_USD_MICROS + CENT_USD_MICROS, repeatWorstCaseUsdMicros: 1, ...caps })).toEqual({
       admit: false, reason: 'run1_actual_above_per_run',
     });
   });
 
-  it('run-1 actual plus the repeat worst-case bound of exactly $60 is admitted', () => {
+  it('decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns', () => {
     expect(decideCombinedCeiling({
       actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: PER_RUN_USD_MICROS, ...caps,
     })).toEqual({
@@ -88,7 +88,7 @@ describe('combined initial+repeat ceiling for julius-inworld-data-1', () => {
     });
   });
 
-  it('run-1 actual plus the repeat worst-case bound of $60.01 is refused', () => {
+  it('decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return', () => {
     expect(decideCombinedCeiling({
       actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: PER_RUN_USD_MICROS + CENT_USD_MICROS, ...caps,
     })).toEqual({ admit: false, reason: 'combined_ceiling_exceeded' });
@@ -172,6 +172,27 @@ describe('combined initial+repeat ceiling for julius-inworld-data-1', () => {
         { role: 'coder', spend: 'not_contacted', costUsdMicros: null, providerResponseId: null },
       ],
     })).toEqual({ verified: true, actualUsdMicros: 12_000_000 });
+  });
+
+  it('admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run', () => {
+    const worst = repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_RUN_USD_MICROS, legEstimateUsd: 1, roleCount: 3 });
+    expect(worst).toBe(PER_RUN_USD_MICROS);
+    expect(decideCombinedCeiling({ actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: worst!, ...caps })).toMatchObject({ admit: true });
+    expect(decideCombinedCeiling({ actualUsdMicros: PER_RUN_USD_MICROS + 1, repeatWorstCaseUsdMicros: worst!, ...caps })).toEqual({
+      admit: false, reason: 'run1_actual_above_per_run',
+    });
+  });
+
+  it('reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case', () => {
+    const worst = repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_RUN_USD_MICROS, legEstimateUsd: 1, roleCount: 3 });
+    expect(decideCombinedCeiling({
+      actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: worst!,
+      perRunCapUsdMicros: PER_RUN_USD_MICROS, combinedCapUsdMicros: COMBINED_USD_MICROS,
+    })).toMatchObject({ admit: true });
+    expect(decideCombinedCeiling({
+      actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: worst!,
+      perRunCapUsdMicros: PER_RUN_USD_MICROS, combinedCapUsdMicros: 50_000_000,
+    })).toEqual({ admit: false, reason: 'combined_ceiling_exceeded' });
   });
 
   it('reads run-1 from ledger rows and refuses a second prior run', () => {
@@ -272,7 +293,7 @@ describe('J1 route admits a repeat only under the frozen ceiling', () => {
     expect(start).toMatchObject({ budgetCapUsd: 30, perRunCapUsdMicros: PER_RUN_USD_MICROS, combinedCapUsdMicros: COMBINED_USD_MICROS, run1ActualUsdMicros: null });
   });
 
-  it('admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00', async () => {
+  it('admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00', async () => {
     const h = routeHarness({
       missionId: MISSION, costUsdMicros: [10_000_000, 10_000_000, 10_000_000],
       env: { JULIUS_J1_BUDGET_CAP_USD: '30', JULIUS_J1_LEG_ESTIMATE_USD: '1', JULIUS_J1_DAILY_CAP: '10', JULIUS_J1_MAX_RUNS_PER_MISSION: '10' },
@@ -289,7 +310,7 @@ describe('J1 route admits a repeat only under the frozen ceiling', () => {
     expect(h.calls).toHaveLength(6);
   });
 
-  it('refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain', async () => {
+  it('refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain', async () => {
     const above = routeHarness({
       missionId: MISSION, costUsdMicros: [10_000_000, 10_000_000, 10_010_000],
       env: { JULIUS_J1_BUDGET_CAP_USD: '100', JULIUS_J1_DAILY_CAP: '10' },
@@ -317,7 +338,7 @@ describe('J1 route admits a repeat only under the frozen ceiling', () => {
     expect(missing.calls).toHaveLength(3);
   });
 
-  it('refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60', async () => {
+  it('reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap', async () => {
     const lowered = routeHarness({
       missionId: MISSION, costUsdMicros: [10_000_000, 10_000_000, 10_000_000],
       env: { JULIUS_J1_BUDGET_CAP_USD: '30', JULIUS_J1_COMBINED_CAP_USD: '50', JULIUS_J1_DAILY_CAP: '10' },
