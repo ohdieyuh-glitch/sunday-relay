@@ -849,6 +849,7 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
       'relay/julius-wonder-web-stream-20261023',
       'relay/julius-wonder-web-vm-tools-20261023',
       'relay/julius-wonder-web-vm-tools-live-20261023',
+      'relay/julius-run-id-adoption-20261023',
     ]);
   });
 
@@ -908,6 +909,7 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
     'relay/julius-wonder-web-stream-20261023',
     'relay/julius-wonder-web-vm-tools-20261023',
     'relay/julius-wonder-web-vm-tools-live-20261023',
+    'relay/julius-run-id-adoption-20261023',
   ];
   const provisional = [
     'relay/julius-wonderland-mp-reliability-20261023',
@@ -957,6 +959,8 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
     expect(text).toContain('# Cosmo.');
     expect(text).toContain('# BRIDGE.');
     expect(text).toContain('# YUJI.');
+    const adoption = raw.findIndex((line) => line.trim() === 'relay/julius-run-id-adoption-20261023');
+    expect(raw[adoption - 1]).toBe('# Julius bootstrap adopts the admission-minted server_run_id. Retire this entry after it lands.');
   });
 
   it('the shipped allowlist refuses the superseded Candidate C branch (evidence-1) and allows evidence-2', () => {
