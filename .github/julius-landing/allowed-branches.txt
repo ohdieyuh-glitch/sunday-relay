@@ -11,5 +11,53 @@ relay/julius-accounting-instruments
 relay/julius-maxeffort-gauntlet-1
 relay/julius-maxeffort-loop-1
 relay/julius-ask-route
-# Wonderland J1 client re-cut (20261023). The branch the App pushes; the source branch is not listed.
+# Wonderland. #396 J1 client re-cut. The App pushes this branch. Retire this entry after it lands.
 relay/julius-wonderland-j1-client-recut-20261023
+# Wonderland. #414 Wonderland handoff backend. Retire this entry after it lands.
+relay/julius-wonderland-handoff-backend-20261023
+# Wonderland. Wonderland B33 tooling fixes. Retire this entry after it lands.
+relay/julius-wonderland-b33-tooling-fixes-20261023
+# #404 namespace spend ceilings. Retire this entry after it lands.
+relay/julius-aggregate-spend-cap-20261023
+# #409 J1 file key store. Retire this entry after it lands.
+relay/julius-j1-route-keystore-20261023
+# #413 J1 dispatch route. Retire this entry after it lands.
+relay/julius-j1-route-dispatch-20261023
+# #410 J1 in-world mission. Retire this entry after it lands.
+relay/julius-j1-route-inworld-data-20261023
+# #412 J1 role adapters. Retire this entry after it lands.
+relay/julius-j1-route-adapters-20261023
+# #411 J1 local shell port. Retire this entry after it lands.
+relay/julius-j1-route-shell-port-20261023
+# #405 spend-free provider usage baseline. Retire this entry after it lands.
+relay/julius-provider-baseline-20261023
+# #399 slot-view diagnostic facts. Retire this entry after it lands.
+relay/julius-slot-view-diag-20261023
+# #401 served-model halt. Retire this entry after it lands.
+relay/julius-served-model-halt-20261023
+# #403 reviewer provider request id. Retire this entry after it lands.
+relay/julius-reviewer-request-id-20261023
+# #407 BRIDGE flag-off Wonderland mission admission. Retire this entry after it lands.
+relay/julius-bridge-mission-adapter-20261023
+# MISSION_LIMITS julius-inworld-data-1 in scripts/julius-live-contract-check.mjs. Retire this entry after it lands.
+relay/julius-inworld-data-limits-20261023
+# FORGE. Retire each entry after it lands.
+relay/julius-wonderland-lff-20261023
+relay/julius-wonder-web-windows-20261023
+# FORGE. PROVISIONAL. Retire this entry after it lands.
+relay/julius-wonderland-mp-reliability-20261023
+# Cosmo. Retire each entry after it lands.
+relay/julius-wonderland-j1-progress-20261023
+relay/julius-wonderland-docs-20261023
+# Cosmo. PROVISIONAL. Retire this entry after it lands.
+relay/julius-wonder-web-unreal-20261023
+# BRIDGE. Retire each entry after it lands.
+relay/julius-bridge-operator-claim-20261023
+relay/julius-wonderland-j1-wrapper-20261023
+relay/julius-wonder-web-sessions-20261023
+# BRIDGE. PROVISIONAL. Retire this entry after it lands.
+relay/julius-wonder-web-stream-20261023
+# YUJI. Retire each entry after it lands.
+relay/julius-wonder-web-vm-tools-20261023
+# YUJI. PROVISIONAL. Retire this entry after it lands.
+relay/julius-wonder-web-vm-tools-live-20261023
