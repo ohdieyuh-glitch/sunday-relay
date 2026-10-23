@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { JuliusMissionState, JuliusTaskState } from '../../mission/julius/julius-runtime';
-import { JuliusWonderWebVmOrchestrator } from './julius-wonder-web-vm-orchestrator';
+import { JuliusWonderWebVmOrchestrator, type JuliusVmOrchestratorDeps } from './julius-wonder-web-vm-orchestrator';
 import type {
   JuliusIssuedTaskSource,
   JuliusVmRegistryPort,
@@ -16,7 +16,7 @@ import type {
   JuliusVmSpendAuthorization,
   JuliusVmSpendCapPort,
 } from './julius-wonder-web-vm-port';
-import { JULIUS_TERMINAL_ACCENT_TOKEN } from './julius-wonder-web-vm-types';
+import { JULIUS_TERMINAL_ACCENT_TOKEN, JULIUS_VM_END_CAUSES } from './julius-wonder-web-vm-types';
 
 const SECRET = 'sk-test-credential-should-not-leak';
 const NOW = '2026-10-23T17:00:00.000Z';
@@ -45,9 +45,15 @@ class FakePorts implements JuliusVmRegistryPort, JuliusVmSessionPort, JuliusVmSp
   readonly agentIds = new Map<string, string>();
   denyReserve = false;
   failOpen = false;
+  failCommit = false;
+  failNavigate = false;
+  failAct = false;
+  failScreenshot = false;
   failTerminate = false;
+  readonly failTerminateSessionIds = new Set<string>();
   /** What the session service reports back. Julius still sends owner_terminated. */
   reportedEndCause = 'owner_terminated';
+  hardTtlAt = HARD;
   holdOpen: (() => Promise<void>) | null = null;
   private sessions = 0;
 
@@ -68,6 +74,7 @@ class FakePorts implements JuliusVmRegistryPort, JuliusVmSessionPort, JuliusVmSp
 
   async commit(input: Parameters<JuliusVmSpendCapPort['commit']>[0]) {
     this.calls.push({ op: 'commit', body: input });
+    if (this.failCommit) throw new Error('fake_commit_failed');
   }
 
   async release(input: Parameters<JuliusVmSpendCapPort['release']>[0]) {
@@ -81,7 +88,7 @@ class FakePorts implements JuliusVmRegistryPort, JuliusVmSessionPort, JuliusVmSp
     this.sessions += 1;
     return {
       vmSessionId: `fake-session-${this.sessions}`,
-      hardTtlAt: HARD,
+      hardTtlAt: this.hardTtlAt,
       idleTtlAt: IDLE,
       providerResponseId: `fake-response-open-${this.sessions}`,
     };
@@ -89,16 +96,19 @@ class FakePorts implements JuliusVmRegistryPort, JuliusVmSessionPort, JuliusVmSp
 
   async navigate(input: Parameters<JuliusVmSessionPort['navigate']>[0]) {
     this.calls.push({ op: 'navigate', body: input });
+    if (this.failNavigate) throw new Error('fake_navigate_failed');
     return { providerResponseId: 'fake-response-navigate' };
   }
 
   async act(input: Parameters<JuliusVmSessionPort['act']>[0]) {
     this.calls.push({ op: 'act', body: input });
+    if (this.failAct) throw new Error('fake_act_failed');
     return { providerResponseId: 'fake-response-act' };
   }
 
   async screenshot(input: Parameters<JuliusVmSessionPort['screenshot']>[0]) {
     this.calls.push({ op: 'screenshot', body: input });
+    if (this.failScreenshot) throw new Error('fake_screenshot_failed');
     return { providerResponseId: 'fake-response-screenshot', streamRef: 'fake-stream-ref' };
   }
 
@@ -109,7 +119,7 @@ class FakePorts implements JuliusVmRegistryPort, JuliusVmSessionPort, JuliusVmSp
 
   async terminate(input: Parameters<JuliusVmSessionPort['terminate']>[0]) {
     this.calls.push({ op: 'terminate', body: input });
-    if (this.failTerminate) throw new Error('fake_terminate_failed');
+    if (this.failTerminate || this.failTerminateSessionIds.has(input.vmSessionId)) throw new Error('fake_terminate_failed');
     return { providerResponseId: 'fake-response-terminate', endCause: this.reportedEndCause };
   }
 
@@ -122,16 +132,22 @@ function task(taskId: string, state: JuliusTaskState = 'ACTIVE'): TaskRow {
   return { taskId, missionId: 'mission', state, taskType: 'plan', role: 'PROMPT_ARCHITECT' };
 }
 
-function harness(tasks: TaskRow[] = [task('run:one:plan')]) {
+function harness(
+  tasks: TaskRow[] = [task('run:one:plan')],
+  options: { readonly maxLifetimeMs?: number; readonly omitMaxLifetime?: boolean } = {},
+) {
   const issued = new Issued();
   issued.tasks.push(...tasks);
   const fake = new FakePorts();
   let n = 0;
   const clock = { now: () => NOW };
   const ids = { next: (kind: string) => `${kind}-${++n}` };
-  const orch = new JuliusWonderWebVmOrchestrator({
+  const maxLifetimeMs = options.omitMaxLifetime ? undefined : (options.maxLifetimeMs ?? 3_600_000);
+  const deps = {
     tasks: issued, registry: fake, sessions: fake, spend: fake, clock, ids,
-  });
+    ...(maxLifetimeMs === undefined ? {} : { maxLifetimeMs }),
+  };
+  const orch = new JuliusWonderWebVmOrchestrator(deps as JuliusVmOrchestratorDeps);
   return { issued, fake, orch, clock };
 }
 
@@ -179,6 +195,49 @@ describe('Julius Wonder Web VM orchestration', () => {
     const registration = fake.ops('register')[0] as object;
     expect(registration).not.toHaveProperty('agentDisplayName');
     expect(JSON.stringify(registration)).not.toContain('a'.repeat(64));
+    expect(JSON.stringify(registration)).not.toContain('Plan');
+    expect(fake.ops('open')).toHaveLength(1);
+  });
+
+  it('sends a trimmed label of 64 code points, including emoji', async () => {
+    const label = '😀'.repeat(64);
+    expect(label.length).toBe(128);
+    const { orch, fake } = harness();
+    const opened = await orch.open({ ...openInput, cardLabel: `  ${label}  ` });
+    expect(opened.ok).toBe(true);
+    expect(opened.trace.note).toBeNull();
+    const registration = fake.ops('register')[0] as { agentDisplayName?: string };
+    expect(registration.agentDisplayName).toBe(label);
+    expect(fake.ops('open')).toHaveLength(1);
+  });
+
+  it('omits 65 code points, including emoji, and does not truncate', async () => {
+    const label = '😀'.repeat(65);
+    expect(Array.from(label)).toHaveLength(65);
+    const { orch, fake } = harness();
+    const opened = await orch.open({ ...openInput, cardLabel: label });
+    expect(opened.ok).toBe(true);
+    expect(opened.vmSessionId).toBe('fake-session-1');
+    expect(opened.trace.note).toBe('label_omitted:too_long');
+    const registration = fake.ops('register')[0] as object;
+    expect(registration).not.toHaveProperty('agentDisplayName');
+    expect(JSON.stringify(registration)).not.toContain('😀'.repeat(64));
+    expect(fake.ops('open')).toHaveLength(1);
+  });
+
+  it.each([
+    ['U+0085', 'Plan\u0085ner'],
+    ['U+2028', 'Plan\u2028ner'],
+    ['U+2029', 'Plan\u2029ner'],
+    ['a lone surrogate', 'Plan\uD800ner'],
+  ] as const)('omits %s, records the trace note, and still opens the VM', async (_label, cardLabel) => {
+    const { orch, fake } = harness();
+    const opened = await orch.open({ ...openInput, cardLabel });
+    expect(opened.ok).toBe(true);
+    expect(opened.vmSessionId).toBe('fake-session-1');
+    expect(opened.trace.note).toBe('label_omitted:control_character');
+    const registration = fake.ops('register')[0] as object;
+    expect(registration).not.toHaveProperty('agentDisplayName');
     expect(JSON.stringify(registration)).not.toContain('Plan');
     expect(fake.ops('open')).toHaveLength(1);
   });
@@ -289,14 +348,60 @@ describe('Julius Wonder Web VM orchestration', () => {
   });
 
   it('closing a window does not terminate the session', async () => {
-    const { orch, fake } = harness();
+    // wonder-web-vm-session.v1: closing a window is not an end cause.
+    // A paid action stays allowed while the session is live, owned by the
+    // same authenticated agent, and authorized by the spend-cap port.
+    const { orch, fake } = harness([task('run:one:plan'), task('run:one:build')]);
+    fake.agentIds.set('run:one:plan', 'agent-plan');
+    fake.agentIds.set('run:one:build', 'agent-build');
     const opened = await orch.open(openInput);
+    const build = await orch.open({ ...openInput, taskId: 'run:one:build', cardLabel: 'Builder' });
     const closed = await orch.closeWindow({
       runId: 'run:one', projectId: 'project', taskId: 'run:one:plan', vmSessionId: opened.vmSessionId!,
     });
     expect(closed.reasonCode).toBe('window_closed');
+    expect(closed.endCause).toBeNull();
     expect(fake.ops('terminate')).toHaveLength(0);
     expect(fake.ops('close-window')).toHaveLength(1);
+    const before = fake.calls.length;
+    const steered = await orch.navigate({
+      ...openInput, vmSessionId: opened.vmSessionId!, url: 'https://allowed.example/',
+    });
+    expect(steered.ok).toBe(true);
+    expect(steered.reasonCode).toBe('acted');
+    expect(steered.endCause).toBeNull();
+    expect(fake.calls.slice(before).map((call) => call.op)).toEqual(['reserve', 'navigate', 'commit']);
+    expect(fake.ops('terminate')).toHaveLength(0);
+    const other = await orch.navigate({
+      ...openInput, taskId: 'run:one:build', vmSessionId: opened.vmSessionId!, url: 'https://allowed.example/',
+    });
+    expect(other.reasonCode).toBe('session_not_owned');
+    expect(build.agentId).toBe('agent-build');
+    expect(fake.ops('navigate')).toHaveLength(1);
+  });
+
+  it.each(JULIUS_VM_END_CAUSES)('refuses a paid action once the session has end cause %s', async (endCause) => {
+    const { orch, fake } = harness();
+    const opened = await orch.open(openInput);
+    await orch.closeWindow({
+      runId: 'run:one', projectId: 'project', taskId: 'run:one:plan', vmSessionId: opened.vmSessionId!,
+    });
+    expect(fake.ops('terminate')).toHaveLength(0);
+    const noted = await orch.notePortEnd({
+      runId: 'run:one', projectId: 'project', taskId: 'run:one:plan', vmSessionId: opened.vmSessionId!, endCause,
+    });
+    expect(noted.endCause).toBe(endCause);
+    const reserves = fake.ops('reserve').length;
+    const denied = await orch.navigate({
+      ...openInput, vmSessionId: opened.vmSessionId!, url: 'https://allowed.example/',
+    });
+    expect(denied.ok).toBe(false);
+    expect(denied.reasonCode).toBe('session_not_open');
+    expect(denied.endCause).toBe(endCause);
+    expect(denied.trace.spend.state).toBe('NOT_SPENT');
+    expect(fake.ops('navigate')).toHaveLength(0);
+    expect(fake.ops('reserve')).toHaveLength(reserves);
+    expect(fake.ops('terminate')).toHaveLength(0);
   });
 
   it.each(['SUCCEEDED', 'FAILED', 'CANCELLED'] as const)('terminates when the card ends %s', async (state) => {
@@ -403,13 +508,21 @@ describe('Julius Wonder Web VM orchestration', () => {
     expect(JSON.stringify(registration).toLowerCase()).not.toContain('browserbase');
   });
 
-  it('does not reserve a second time for the same open session', async () => {
+  it('dedupes an open for the same task while the session is open or the window is closed', async () => {
     const { orch, fake } = harness();
     const first = await orch.open(openInput);
     const second = await orch.open(openInput);
     expect(second.vmSessionId).toBe(first.vmSessionId);
+    expect(second.reasonCode).toBe('session_open');
+    await orch.closeWindow({
+      runId: 'run:one', projectId: 'project', taskId: 'run:one:plan', vmSessionId: first.vmSessionId!,
+    });
+    const third = await orch.open(openInput);
+    expect(third.vmSessionId).toBe(first.vmSessionId);
+    expect(third.reasonCode).toBe('session_open');
     expect(fake.ops('open')).toHaveLength(1);
     expect(fake.ops('reserve')).toHaveLength(1);
+    expect(fake.ops('terminate')).toHaveLength(0);
   });
 
   it('kills a mutant that accepts a caller-supplied agent id', async () => {
@@ -476,6 +589,7 @@ describe('Julius Wonder Web VM orchestration', () => {
       const source = readFileSync(new URL(`./${file}`, import.meta.url), 'utf8');
       expect(source, file).not.toMatch(/\bvmNumber\s*[:=]/);
       expect(source, file).not.toContain('windowTitle');
+      expect(source, file).not.toMatch(/maxLifetimeMs\s*(?:=|\?\?)\s*\d/);
     }
   });
 
@@ -523,7 +637,310 @@ describe('Julius Wonder Web VM orchestration', () => {
     expect(fake.ops('terminate')).toHaveLength(0);
     expect(fake.ops('reserve')).toHaveLength(reserves);
   });
+
+  it.each(['navigate', 'act', 'screenshot'] as const)(
+    'kills a mutant that skips spend.reserve before %s',
+    async (operation) => {
+      const { orch, fake } = harness();
+      const opened = await orch.open(openInput);
+      const before = fake.calls.length;
+      const result = await runPaid(orch, operation, opened.vmSessionId!);
+      expect(result.ok).toBe(true);
+      expect(result.reasonCode).toBe('acted');
+      expect(result.trace.spend.state).toBe('COMMITTED');
+      expect(fake.calls.slice(before).map((call) => call.op)).toEqual(['reserve', operation, 'commit']);
+      const reserved = fake.ops('reserve').at(-1) as { reservationId: string };
+      const port = fake.ops(operation).at(-1) as { reservationId: string };
+      expect(port.reservationId).toBe(reserved.reservationId);
+    },
+  );
+
+  it.each(['navigate', 'act', 'screenshot'] as const)(
+    'kills a mutant that drops the authorized check before %s',
+    async (operation) => {
+      const { orch, fake } = harness();
+      const opened = await orch.open(openInput);
+      const reserves = fake.ops('reserve').length;
+      const denied = await runPaid(orch, operation, opened.vmSessionId!, {
+        authorization: { authorized: false, reasonCode: 'namespace_spend_ceiling_exceeded', spendCeilingUsdMicros: 1_000_000 },
+      });
+      expect(denied.ok).toBe(false);
+      expect(denied.reasonCode).toBe('namespace_spend_ceiling_exceeded');
+      expect(denied.trace.spend.state).toBe('DENIED');
+      expect(denied.trace.spend.reservationId).toBeNull();
+      expect(fake.ops('reserve')).toHaveLength(reserves);
+      expect(fake.ops(operation)).toHaveLength(0);
+    },
+  );
+
+  it.each([
+    ['navigate', 'failNavigate'],
+    ['act', 'failAct'],
+    ['screenshot', 'failScreenshot'],
+  ] as const)('kills a mutant that does not release after a failed %s', async (operation, flag) => {
+    const { orch, fake } = harness();
+    const opened = await orch.open(openInput);
+    fake[flag] = true;
+    const failed = await runPaid(orch, operation, opened.vmSessionId!);
+    expect(failed.reasonCode).toBe('action_failed');
+    expect(failed.trace.spend.state).toBe('RELEASED');
+    expect(fake.ops('release')).toEqual([expect.objectContaining({ reason: 'action_failed' })]);
+    fake[flag] = false;
+    const again = await runPaid(orch, operation, opened.vmSessionId!);
+    expect(again.reasonCode).toBe('acted');
+    expect(again.trace.spend.state).toBe('COMMITTED');
+  });
+
+  it('kills a mutant that acts on a session whose terminate failed', async () => {
+    const { orch, fake } = harness();
+    const opened = await orch.open(openInput);
+    const reserves = fake.ops('reserve').length;
+    fake.failTerminate = true;
+    const ended = await orch.requestTerminate({
+      runId: 'run:one', projectId: 'project', taskId: 'run:one:plan', vmSessionId: opened.vmSessionId!,
+    });
+    expect(ended.reasonCode).toBe('terminate_left_to_server_ttl');
+    for (const operation of ['navigate', 'act', 'screenshot'] as const) {
+      const denied = await runPaid(orch, operation, opened.vmSessionId!);
+      expect(denied.reasonCode).toBe('terminate_left_to_server_ttl');
+      expect(denied.trace.spend.state).toBe('NOT_SPENT');
+      expect(fake.ops(operation)).toHaveLength(0);
+    }
+    const closed = await orch.closeWindow({
+      runId: 'run:one', projectId: 'project', taskId: 'run:one:plan', vmSessionId: opened.vmSessionId!,
+    });
+    const noted = await orch.notePortEnd({
+      runId: 'run:one', projectId: 'project', taskId: 'run:one:plan', vmSessionId: opened.vmSessionId!, endCause: 'idle_timeout',
+    });
+    const again = await orch.open(openInput);
+    expect(closed.reasonCode).toBe('terminate_left_to_server_ttl');
+    expect(noted.reasonCode).toBe('terminate_left_to_server_ttl');
+    expect(noted.endCause).toBeNull();
+    expect(again.reasonCode).toBe('terminate_left_to_server_ttl');
+    expect(fake.ops('close-window')).toHaveLength(0);
+    expect(fake.ops('terminate')).toHaveLength(1);
+    expect(fake.ops('reserve')).toHaveLength(reserves);
+    expect(fake.ops('open')).toHaveLength(1);
+    expect(fake.calls.some((call) => call.op === 'extend')).toBe(false);
+  });
+
+  it('terminates when commit throws after the VM opened, and releases only if that terminate is confirmed', async () => {
+    const { orch, fake } = harness();
+    fake.failCommit = true;
+    const failed = await orch.open(openInput);
+    expect(failed.ok).toBe(false);
+    expect(failed.reasonCode).toBe('session_commit_failed_terminated');
+    expect(failed.trace.spend.state).toBe('RELEASED');
+    expect(fake.ops('terminate')).toEqual([{
+      vmSessionId: 'fake-session-1', agentId: 'fake-agent-1', endCause: 'owner_terminated',
+    }]);
+    expect(fake.ops('commit')).toHaveLength(1);
+    expect(fake.ops('release')).toHaveLength(1);
+    const again = await orch.open(openInput);
+    const steered = await orch.navigate({
+      ...openInput, vmSessionId: 'fake-session-1', url: 'https://allowed.example/',
+    });
+    expect(again.reasonCode).toBe('session_not_open');
+    expect(steered.reasonCode).toBe('session_not_open');
+    expect(fake.ops('open')).toHaveLength(1);
+    expect(fake.ops('reserve')).toHaveLength(1);
+    expect(fake.ops('terminate')).toHaveLength(1);
+  });
+
+  it('holds the reservation when terminate fails after a commit failure on open', async () => {
+    const { orch, fake } = harness();
+    fake.failCommit = true;
+    fake.failTerminate = true;
+    const failed = await orch.open(openInput);
+    expect(failed.reasonCode).toBe('session_commit_failed_terminate_failed');
+    expect(failed.trace.spend.state).toBe('UNRECONCILED');
+    expect(fake.ops('release')).toHaveLength(0);
+    expect(fake.ops('terminate')).toHaveLength(1);
+    const again = await orch.open(openInput);
+    const steered = await orch.navigate({
+      ...openInput, vmSessionId: failed.vmSessionId!, url: 'https://allowed.example/',
+    });
+    expect(again.reasonCode).toBe('terminate_left_to_server_ttl');
+    expect(steered.reasonCode).toBe('terminate_left_to_server_ttl');
+    expect(steered.trace.spend.state).toBe('NOT_SPENT');
+    expect(fake.ops('open')).toHaveLength(1);
+    expect(fake.ops('reserve')).toHaveLength(1);
+    expect(fake.ops('navigate')).toHaveLength(0);
+    expect(fake.ops('terminate')).toHaveLength(1);
+    expect(fake.ops('release')).toHaveLength(0);
+  });
+
+  it.each(['navigate', 'act', 'screenshot'] as const)(
+    'holds an unreconciled reservation when commit throws after %s',
+    async (operation) => {
+      const { orch, fake } = harness();
+      const opened = await orch.open(openInput);
+      fake.failCommit = true;
+      const failed = await runPaid(orch, operation, opened.vmSessionId!);
+      expect(failed.ok).toBe(false);
+      expect(failed.reasonCode).toBe('action_commit_failed');
+      expect(failed.trace.spend.state).toBe('UNRECONCILED');
+      expect(failed.providerResponseId).toBe(`fake-response-${operation}`);
+      expect(fake.ops('release')).toHaveLength(0);
+      expect(fake.ops(operation)).toHaveLength(1);
+      const reserves = fake.ops('reserve').length;
+      const again = await runPaid(orch, 'navigate', opened.vmSessionId!);
+      expect(again.reasonCode).toBe('spend_unreconciled');
+      expect(again.trace.spend.state).toBe('NOT_SPENT');
+      expect(fake.ops('reserve')).toHaveLength(reserves);
+      expect(fake.ops('navigate')).toHaveLength(operation === 'navigate' ? 1 : 0);
+    },
+  );
+
+  it.each([0, -1] as const)('refuses usdMicros %s before reserve', async (usdMicros) => {
+    const { orch, fake } = harness();
+    const denied = await orch.open({ ...openInput, usdMicros });
+    expect(denied.reasonCode).toBe('spend_amount_invalid');
+    expect(denied.trace.spend.state).toBe('NOT_SPENT');
+    expect(fake.ops('reserve')).toHaveLength(0);
+    expect(fake.ops('open')).toHaveLength(0);
+    const opened = await orch.open(openInput);
+    const steered = await orch.navigate({
+      ...openInput, vmSessionId: opened.vmSessionId!, url: 'https://allowed.example/', usdMicros,
+    });
+    expect(steered.reasonCode).toBe('spend_amount_invalid');
+    expect(steered.trace.spend.state).toBe('NOT_SPENT');
+    expect(fake.ops('navigate')).toHaveLength(0);
+    expect(fake.ops('reserve')).toHaveLength(1);
+  });
+
+  it.each([
+    ['missing', { omitMaxLifetime: true }],
+    ['zero', { maxLifetimeMs: 0 }],
+    ['negative', { maxLifetimeMs: -1 }],
+    ['NaN', { maxLifetimeMs: Number.NaN }],
+    ['Infinity', { maxLifetimeMs: Number.POSITIVE_INFINITY }],
+  ] as const)('refuses the open when maxLifetimeMs is %s', async (_label, options) => {
+    const { orch, fake } = harness(undefined, options);
+    const denied = await orch.open(openInput);
+    expect(denied.ok).toBe(false);
+    expect(denied.reasonCode).toBe('max_lifetime_unconfigured');
+    expect(denied.trace.spend.state).toBe('NOT_SPENT');
+    expect(fake.ops('register')).toHaveLength(0);
+    expect(fake.ops('reserve')).toHaveLength(0);
+    expect(fake.ops('open')).toHaveLength(0);
+  });
+
+  it('rejects hardTtlAt past now plus the injected maxLifetimeMs', async () => {
+    const { orch, fake } = harness();
+    fake.hardTtlAt = '2026-10-23T18:00:00.001Z';
+    const denied = await orch.open(openInput);
+    expect(denied.ok).toBe(false);
+    expect(denied.reasonCode).toBe('hard_ttl_beyond_maximum');
+    expect(denied.trace.spend.state).toBe('RELEASED');
+    expect(fake.ops('commit')).toHaveLength(0);
+    expect(fake.ops('terminate')).toEqual([{
+      vmSessionId: 'fake-session-1', agentId: 'fake-agent-1', endCause: 'owner_terminated',
+    }]);
+    expect(fake.ops('release')).toHaveLength(1);
+    fake.hardTtlAt = HARD;
+    const opened = await orch.open(openInput);
+    expect(opened.reasonCode).toBe('session_open');
+    expect(opened.vmSessionId).toBe('fake-session-2');
+  });
+
+  it('accepts a hardTtlAt equal to now plus maxLifetimeMs', async () => {
+    const { orch } = harness(undefined, { maxLifetimeMs: 3_600_000 });
+    const opened = await orch.open(openInput);
+    expect(opened.reasonCode).toBe('session_open');
+    expect(opened.vmSessionId).toBe('fake-session-1');
+  });
+
+  it('marks the session terminated locally after owner terminate', async () => {
+    const { orch, fake } = harness();
+    const opened = await orch.open(openInput);
+    const ended = await orch.requestTerminate({
+      runId: 'run:one', projectId: 'project', taskId: 'run:one:plan', vmSessionId: opened.vmSessionId!,
+    });
+    expect(ended.reasonCode).toBe('session_terminated');
+    expect(ended.endCause).toBe('owner_terminated');
+    const steered = await orch.navigate({
+      ...openInput, vmSessionId: opened.vmSessionId!, url: 'https://allowed.example/',
+    });
+    expect(steered.reasonCode).toBe('session_not_open');
+    expect(steered.endCause).toBe('owner_terminated');
+    expect(steered.trace.spend.state).toBe('NOT_SPENT');
+    expect(fake.ops('terminate')).toHaveLength(1);
+    expect(fake.ops('navigate')).toHaveLength(0);
+    expect(fake.ops('reserve')).toHaveLength(1);
+  });
+
+  it('checks the card and the run state before open and before end', async () => {
+    const { orch, fake, issued } = harness();
+    issued.tasks[0]!.state = 'SKIPPED';
+    const skipped = await orch.open(openInput);
+    expect(skipped.reasonCode).toBe('card_not_working');
+    issued.tasks[0]!.state = 'ACTIVE';
+    const working = await orch.onTaskEnded({ runId: 'run:one', projectId: 'project', taskId: 'run:one:plan' });
+    expect(working.reasonCode).toBe('card_still_working');
+    issued.run = 'COMPLETED';
+    const endedRun = await orch.open(openInput);
+    expect(endedRun.reasonCode).toBe('run_already_ended');
+    issued.run = 'EXECUTING';
+    const stillOpen = await orch.onRunEnded({ runId: 'run:one', projectId: 'project' });
+    expect(stillOpen.reasonCode).toBe('run_still_open');
+    issued.run = null;
+    const missing = await orch.open(openInput);
+    expect(missing.reasonCode).toBe('run_not_issued');
+    expect(fake.ops('register')).toHaveLength(0);
+    expect(fake.ops('terminate')).toHaveLength(0);
+    expect(fake.ops('reserve')).toHaveLength(0);
+  });
+
+  it('releases the reservation when open fails and does not keep a session', async () => {
+    const { orch, fake } = harness();
+    fake.failOpen = true;
+    const failed = await orch.open(openInput);
+    expect(failed.reasonCode).toBe('session_open_failed');
+    expect(failed.trace.spend.state).toBe('RELEASED');
+    expect(fake.ops('open')).toHaveLength(1);
+    expect(fake.ops('commit')).toHaveLength(0);
+    expect(fake.ops('terminate')).toHaveLength(0);
+    expect(fake.ops('release')).toEqual([expect.objectContaining({ reason: 'session_open_failed' })]);
+    fake.failOpen = false;
+    const opened = await orch.open(openInput);
+    expect(opened.reasonCode).toBe('session_open');
+    expect(opened.vmSessionId).toBe('fake-session-1');
+    expect(fake.ops('open')).toHaveLength(2);
+  });
+
+  it('surfaces an earlier terminate failure when the run ends', async () => {
+    const { orch, fake, issued } = harness([task('run:one:plan'), task('run:one:build')]);
+    const plan = await orch.open(openInput);
+    const build = await orch.open({ ...openInput, taskId: 'run:one:build', cardLabel: 'Builder' });
+    fake.failTerminateSessionIds.add(plan.vmSessionId!);
+    issued.run = 'FAILED';
+    const ended = await orch.onRunEnded({ runId: 'run:one', projectId: 'project' });
+    expect(ended.ok).toBe(false);
+    expect(ended.reasonCode).toBe('terminate_left_to_server_ttl');
+    expect(ended.vmSessionId).toBe(plan.vmSessionId);
+    expect(fake.ops('terminate')).toEqual([
+      { vmSessionId: plan.vmSessionId, agentId: plan.agentId, endCause: 'owner_terminated' },
+      { vmSessionId: build.vmSessionId, agentId: build.agentId, endCause: 'owner_terminated' },
+    ]);
+    const second = await orch.onRunEnded({ runId: 'run:one', projectId: 'project' });
+    expect(second.reasonCode).toBe('terminate_left_to_server_ttl');
+    expect(fake.ops('terminate')).toHaveLength(2);
+    expect(fake.ops('reserve')).toHaveLength(2);
+  });
 });
+
+async function runPaid(
+  orch: JuliusWonderWebVmOrchestrator,
+  operation: 'navigate' | 'act' | 'screenshot',
+  vmSessionId: string,
+  extra: { readonly authorization?: JuliusVmSpendAuthorization; readonly usdMicros?: number } = {},
+) {
+  const input = { ...openInput, vmSessionId, ...extra };
+  if (operation === 'navigate') return orch.navigate({ ...input, url: 'https://allowed.example/' });
+  if (operation === 'act') return orch.act({ ...input, actionName: 'click' });
+  return orch.screenshot(input);
+}
 
 function recordKeys(value: unknown, found: string[] = []): string[] {
   if (value === null || typeof value !== 'object') return found;

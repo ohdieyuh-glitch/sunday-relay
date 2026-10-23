@@ -55,8 +55,10 @@ export function workingCardIdProblem(taskId: string): 'task_not_issued' | 'loado
 /**
  * The name Julius may send to BRIDGE's registry.
  *
- * The registry accepts a present name only when it is non-empty after trim,
- * at most 64 characters, and free of control characters. Anything else is
+ * Trim with `String.prototype.trim` first. The registry accepts that string
+ * only when it is non-empty, at most 64 Unicode code points, and free of
+ * C0 (U+0000–U+001F), U+007F, C1 (U+0080–U+009F), U+2028, U+2029, and lone
+ * surrogates. Code points are counted, not UTF-16 units. Anything else is
  * omitted, and the card still gets its VM. The trimmed label is sent as-is.
  * It is never truncated and never replaced. A provider label is never sent.
  */
@@ -67,14 +69,68 @@ export function registrationDisplayName(label: string | null | undefined): {
   if (label == null) return { agentDisplayName: undefined, note: 'label_omitted:missing' };
   const trimmed = label.trim();
   if (trimmed === '') return { agentDisplayName: undefined, note: 'label_omitted:blank' };
-  if (/[\u0000-\u001f\u007f]/u.test(trimmed)) return { agentDisplayName: undefined, note: 'label_omitted:control_character' };
-  if (trimmed.length > 64) return { agentDisplayName: undefined, note: 'label_omitted:too_long' };
+  if (hasRejectedNameCharacter(trimmed)) return { agentDisplayName: undefined, note: 'label_omitted:control_character' };
+  if (codePointLength(trimmed) > 64) return { agentDisplayName: undefined, note: 'label_omitted:too_long' };
   if (PROVIDER_LABELS.has(trimmed.toLowerCase())) return { agentDisplayName: undefined, note: 'label_omitted:provider_label' };
   return { agentDisplayName: trimmed, note: null };
 }
 
+/** C0, DEL, C1, line and paragraph separators. Lone surrogates are separate. */
+const REJECTED_NAME_CHARS = /[\u0000-\u001F\u007F\u0080-\u009F\u2028\u2029]/;
+
+function hasRejectedNameCharacter(value: string): boolean {
+  if (REJECTED_NAME_CHARS.test(value)) return true;
+  for (let i = 0; i < value.length; i += 1) {
+    const unit = value.charCodeAt(i);
+    if (unit < 0xD800 || unit > 0xDFFF) continue;
+    const next = i + 1 < value.length ? value.charCodeAt(i + 1) : -1;
+    if (unit <= 0xDBFF && next >= 0xDC00 && next <= 0xDFFF) {
+      i += 1;
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+/** Unicode code points, matching `for...of` on a string. Not UTF-16 units. */
+function codePointLength(value: string): number {
+  return Array.from(value).length;
+}
+
 export function spendAmountProblem(usdMicros: number): 'spend_amount_invalid' | null {
-  if (typeof usdMicros !== 'number' || !Number.isSafeInteger(usdMicros) || usdMicros < 0) return 'spend_amount_invalid';
+  if (typeof usdMicros !== 'number' || !Number.isSafeInteger(usdMicros) || usdMicros <= 0) return 'spend_amount_invalid';
+  return null;
+}
+
+/**
+ * `maxLifetimeMs` is injected. The number comes from BRIDGE's wonder-web-vm
+ * session-layer constant once that module lands. This package does not import
+ * that module and does not keep a number of its own. Missing, non-finite, and
+ * non-positive values refuse the open.
+ */
+export function maxLifetimeProblem(maxLifetimeMs: unknown): 'max_lifetime_unconfigured' | null {
+  if (typeof maxLifetimeMs !== 'number' || !Number.isFinite(maxLifetimeMs) || maxLifetimeMs <= 0) {
+    return 'max_lifetime_unconfigured';
+  }
+  return null;
+}
+
+/**
+ * `hard_ttl_beyond_maximum` when `hardTtlAt` is strictly after `now` plus the
+ * injected span. An unreadable timestamp is not treated as inside the span.
+ */
+export function hardTtlProblem(
+  now: string,
+  hardTtlAt: string,
+  maxLifetimeMs: number,
+): 'hard_ttl_unreadable' | 'hard_ttl_beyond_maximum' | null {
+  if (maxLifetimeProblem(maxLifetimeMs)) return 'hard_ttl_unreadable';
+  if (!UTC_ISO.test(now) || !UTC_ISO.test(hardTtlAt)) return 'hard_ttl_unreadable';
+  const nowMs = Date.parse(now);
+  const hardMs = Date.parse(hardTtlAt);
+  if (!Number.isFinite(nowMs) || !Number.isFinite(hardMs)) return 'hard_ttl_unreadable';
+  if (hardMs > nowMs + maxLifetimeMs) return 'hard_ttl_beyond_maximum';
   return null;
 }
 

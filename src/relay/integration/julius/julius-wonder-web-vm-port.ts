@@ -92,9 +92,13 @@ export interface JuliusVmRegistryPort {
  * BRIDGE's session service. There is no extend operation: Julius cannot push
  * a session past the hard TTL the service returned.
  *
- * `closeWindow` does not end the session. `terminate` is the owner-only end.
- * Terminate does not take a spend reservation; a failure leaves the session
- * to the service's TTL.
+ * Idle TTL, hard TTL, and the orphan sweep stay on that service. They are
+ * charged to PR #404. This port does not implement them.
+ *
+ * `closeWindow` does not end the session and is not an end cause.
+ * `terminate` is the owner-only end. Terminate does not take a spend
+ * reservation. A failure leaves the session to the service's TTL and is not
+ * retried.
  */
 export interface JuliusVmSessionPort {
   openSession(input: {

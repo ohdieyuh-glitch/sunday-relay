@@ -58,6 +58,8 @@ export type JuliusVmSessionState = 'OPEN' | 'WINDOW_CLOSED' | 'TERMINATED' | 'TE
  * `mechanism` names PR #404 (`authorizeJuliusLiveSpend`) together with
  * `JuliusBudgetPort`. This module does not apply a second ceiling. A null
  * measured amount is unknown, not zero: the reservation stands.
+ * `UNRECONCILED` means the provider did the work and commit did not finish.
+ * That reservation stays held. It is not released and it is not a measured zero.
  */
 export interface JuliusVmSpendRecord {
   readonly mechanism: 'pr-404-julius-spend-ceiling';
@@ -66,7 +68,7 @@ export interface JuliusVmSpendRecord {
   readonly vmSessionId: string | null;
   readonly reservedUsdMicros: number | null;
   readonly measuredUsdMicros: number | null;
-  readonly state: 'RESERVED' | 'COMMITTED' | 'RELEASED' | 'DENIED' | 'NOT_SPENT';
+  readonly state: 'RESERVED' | 'COMMITTED' | 'RELEASED' | 'DENIED' | 'NOT_SPENT' | 'UNRECONCILED';
   readonly denialReason: string | null;
 }
 

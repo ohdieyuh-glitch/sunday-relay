@@ -21,7 +21,9 @@ import {
   JULIUS_VM_CARD_END_STATES,
   JULIUS_VM_WORKING_TASK_STATES,
   callerSuppliedIdentityField,
+  hardTtlProblem,
   hostOnAllowlist,
+  maxLifetimeProblem,
   navigationTarget,
   registrationDisplayName,
   sessionOwnedByAgent,
@@ -57,6 +59,14 @@ export interface JuliusVmOrchestratorDeps {
   readonly spend: JuliusVmSpendCapPort;
   readonly clock: JuliusVmClock;
   readonly ids: JuliusVmIds;
+  /**
+   * Maximum hard TTL, in milliseconds, measured from `clock.now()`.
+   * The value comes from BRIDGE's wonder-web-vm session-layer constant once
+   * that module lands. This package does not import that module and does not
+   * substitute a number. Missing, non-finite, or non-positive values refuse
+   * the open.
+   */
+  readonly maxLifetimeMs: number;
 }
 
 interface OpenInput {
@@ -84,6 +94,8 @@ interface PaidInput extends SessionInput {
 interface StoredSession extends JuliusVmOwnedSession {
   state: JuliusVmSessionState;
   endCause: string | null;
+  /** A paid commit failed after the port acted. Further paid actions stop. */
+  spendUnreconciled: boolean;
 }
 
 const notSpent = (agentId: string | null, vmSessionId: string | null): JuliusVmSpendRecord => ({
@@ -95,6 +107,23 @@ const notSpent = (agentId: string | null, vmSessionId: string | null): JuliusVmS
   measuredUsdMicros: null,
   state: 'NOT_SPENT',
   denialReason: null,
+});
+
+const heldSpend = (
+  agentId: string,
+  reservationId: string,
+  vmSessionId: string,
+  reservedUsdMicros: number,
+  denialReason: string,
+): JuliusVmSpendRecord => ({
+  mechanism: 'pr-404-julius-spend-ceiling',
+  agentId,
+  reservationId,
+  vmSessionId,
+  reservedUsdMicros,
+  measuredUsdMicros: null,
+  state: 'UNRECONCILED',
+  denialReason,
 });
 
 export class JuliusWonderWebVmOrchestrator {
@@ -162,7 +191,10 @@ export class JuliusWonderWebVmOrchestrator {
     });
   }
 
-  /** Hides the window. The session stays, and terminate is not called. */
+  /**
+   * Hides the window. `wonder-web-vm-session.v1`: closing a window is not an
+   * end cause. The session stays live for paid actions. Terminate is not called.
+   */
   async closeWindow(input: SessionInput): Promise<JuliusVmResult> {
     const ready = await this.readySession(input, 'close-window', false);
     if (!ready.ok) return ready.result;
@@ -217,8 +249,13 @@ export class JuliusWonderWebVmOrchestrator {
       .filter((session) => session.runId === input.runId && session.projectId === input.projectId)
       .sort((a, b) => a.vmSessionId.localeCompare(b.vmSessionId));
     let last: JuliusVmResult = this.answer({ ...input, taskId: null }, 'terminate', 'nothing_to_terminate', null, null, notSpent(null, null));
-    for (const session of sessions) last = await this.terminateOwned(session, session.taskId);
-    return last;
+    let failure: JuliusVmResult | null = null;
+    for (const session of sessions) {
+      const result = await this.terminateOwned(session, session.taskId);
+      last = result;
+      if (result.reasonCode === 'terminate_left_to_server_ttl' && failure === null) failure = result;
+    }
+    return failure ?? last;
   }
 
   private async openNew(input: OpenInput, key: string): Promise<JuliusVmResult> {
@@ -233,6 +270,8 @@ export class JuliusWonderWebVmOrchestrator {
       return this.answer(input, 'open', 'card_not_working', null, null, notSpent(null, null));
     }
     const named = registrationDisplayName(input.cardLabel);
+    const lifetime = maxLifetimeProblem(this.deps.maxLifetimeMs);
+    if (lifetime) return this.answer(input, 'open', lifetime, null, null, notSpent(null, null));
     if (input.authorization.authorized !== true) {
       return this.answer(input, 'open', input.authorization.reasonCode ?? 'spend_cap_denied', null, null, {
         ...notSpent(null, null), state: 'DENIED', denialReason: input.authorization.reasonCode ?? 'spend_cap_denied',
@@ -257,24 +296,13 @@ export class JuliusWonderWebVmOrchestrator {
       });
     }
     const allowlistHosts = [...new Set(input.allowlistHosts.map((host) => host.toLowerCase()))];
+    let opened: Awaited<ReturnType<JuliusVmSessionPort['openSession']>>;
     try {
-      const opened = await this.deps.sessions.openSession({
+      opened = await this.deps.sessions.openSession({
         agentId, accentColourToken: JULIUS_TERMINAL_ACCENT_TOKEN,
         allowlistHosts, reservationId,
       });
       if (opened.vmSessionId.trim() === '') throw new Error('vm_session_not_issued');
-      const session: StoredSession = {
-        vmSessionId: opened.vmSessionId, agentId, taskId: input.taskId, runId: input.runId, projectId: input.projectId,
-        agentDisplayName: named.agentDisplayName ?? null, accentColourToken: JULIUS_TERMINAL_ACCENT_TOKEN,
-        endCause: null, hardTtlAt: opened.hardTtlAt, idleTtlAt: opened.idleTtlAt, allowlistHosts, state: 'OPEN',
-      };
-      this.byTask.set(key, session);
-      this.bySession.set(session.vmSessionId, session);
-      await this.deps.spend.commit({ agentId, reservationId, measuredUsdMicros: null, now: this.deps.clock.now() });
-      return this.answer(input, 'open', 'session_open', agentId, session, {
-        mechanism: 'pr-404-julius-spend-ceiling', agentId, reservationId, vmSessionId: session.vmSessionId,
-        reservedUsdMicros: input.usdMicros, measuredUsdMicros: null, state: 'COMMITTED', denialReason: null,
-      }, opened.providerResponseId, null, named.note);
     } catch {
       await this.deps.spend.release({ agentId, reservationId, reason: 'session_open_failed', now: this.deps.clock.now() });
       return this.answer(input, 'open', 'session_open_failed', agentId, null, {
@@ -282,6 +310,27 @@ export class JuliusWonderWebVmOrchestrator {
         reservedUsdMicros: input.usdMicros, measuredUsdMicros: null, state: 'RELEASED', denialReason: 'session_open_failed',
       }, null, null, named.note);
     }
+    const ttlProblem = hardTtlProblem(this.deps.clock.now(), opened.hardTtlAt, this.deps.maxLifetimeMs);
+    if (ttlProblem) {
+      return this.rejectOpenedSession(input, key, agentId, reservationId, allowlistHosts, opened, ttlProblem, named);
+    }
+    const session: StoredSession = {
+      vmSessionId: opened.vmSessionId, agentId, taskId: input.taskId, runId: input.runId, projectId: input.projectId,
+      agentDisplayName: named.agentDisplayName ?? null, accentColourToken: JULIUS_TERMINAL_ACCENT_TOKEN,
+      endCause: null, hardTtlAt: opened.hardTtlAt, idleTtlAt: opened.idleTtlAt, allowlistHosts, state: 'OPEN',
+      spendUnreconciled: false,
+    };
+    this.byTask.set(key, session);
+    this.bySession.set(session.vmSessionId, session);
+    try {
+      await this.deps.spend.commit({ agentId, reservationId, measuredUsdMicros: null, now: this.deps.clock.now() });
+    } catch {
+      return this.terminateAfterFailedCommit(session, reservationId, input.usdMicros, named.note);
+    }
+    return this.answer(input, 'open', 'session_open', agentId, session, {
+      mechanism: 'pr-404-julius-spend-ceiling', agentId, reservationId, vmSessionId: session.vmSessionId,
+      reservedUsdMicros: input.usdMicros, measuredUsdMicros: null, state: 'COMMITTED', denialReason: null,
+    }, opened.providerResponseId, null, named.note);
   }
 
   private async gatePaid(
@@ -290,6 +339,9 @@ export class JuliusWonderWebVmOrchestrator {
   ): Promise<{ readonly ok: true; readonly session: StoredSession } | { readonly ok: false; readonly result: JuliusVmResult }> {
     const ready = await this.readySession(input, operation, false);
     if (!ready.ok) return ready;
+    if (ready.session.spendUnreconciled) {
+      return { ok: false, result: this.unspent(input, operation, 'spend_unreconciled', ready.session) };
+    }
     const ttl = this.ttlRefusal(ready.session);
     if (ttl) return { ok: false, result: this.unspent(input, operation, ttl, ready.session) };
     if (input.authorization.authorized !== true) {
@@ -325,16 +377,9 @@ export class JuliusWonderWebVmOrchestrator {
         state: 'DENIED', denialReason,
       });
     }
+    let done: { readonly providerResponseId: string; readonly streamRef: string | null };
     try {
-      const done = await effect(reservationId);
-      await this.deps.spend.commit({
-        agentId: session.agentId, reservationId, measuredUsdMicros: null, now: this.deps.clock.now(),
-      });
-      return this.answer(input, operation, 'acted', session.agentId, session, {
-        mechanism: 'pr-404-julius-spend-ceiling', agentId: session.agentId, reservationId,
-        vmSessionId: session.vmSessionId, reservedUsdMicros: input.usdMicros, measuredUsdMicros: null,
-        state: 'COMMITTED', denialReason: null,
-      }, done.providerResponseId, done.streamRef);
+      done = await effect(reservationId);
     } catch {
       await this.deps.spend.release({ agentId: session.agentId, reservationId, reason: 'action_failed', now: this.deps.clock.now() });
       return this.answer(input, operation, 'action_failed', session.agentId, session, {
@@ -343,6 +388,23 @@ export class JuliusWonderWebVmOrchestrator {
         state: 'RELEASED', denialReason: 'action_failed',
       });
     }
+    try {
+      await this.deps.spend.commit({
+        agentId: session.agentId, reservationId, measuredUsdMicros: null, now: this.deps.clock.now(),
+      });
+    } catch {
+      session.spendUnreconciled = true;
+      return this.answer(input, operation, 'action_commit_failed', session.agentId, session, {
+        mechanism: 'pr-404-julius-spend-ceiling', agentId: session.agentId, reservationId,
+        vmSessionId: session.vmSessionId, reservedUsdMicros: input.usdMicros, measuredUsdMicros: null,
+        state: 'UNRECONCILED', denialReason: 'action_commit_failed',
+      }, done.providerResponseId, done.streamRef);
+    }
+    return this.answer(input, operation, 'acted', session.agentId, session, {
+      mechanism: 'pr-404-julius-spend-ceiling', agentId: session.agentId, reservationId,
+      vmSessionId: session.vmSessionId, reservedUsdMicros: input.usdMicros, measuredUsdMicros: null,
+      state: 'COMMITTED', denialReason: null,
+    }, done.providerResponseId, done.streamRef);
   }
 
   private unspent(input: PaidInput, operation: JuliusVmOperation, reasonCode: string, session: StoredSession): JuliusVmResult {
@@ -364,10 +426,103 @@ export class JuliusWonderWebVmOrchestrator {
     if (!issuedAgentId || !sessionOwnedByAgent({ issuedAgentId, sessionAgentId: session.agentId }) || session.taskId !== input.taskId) {
       return { ok: false, result: this.answer(input, operation, 'session_not_owned', issuedAgentId ?? null, null, notSpent(issuedAgentId ?? null, input.vmSessionId)) };
     }
-    if (!allowEnded && (session.state === 'TERMINATED' || session.state === 'TERMINATE_FAILED')) {
+    if (session.state === 'TERMINATE_FAILED') {
+      return { ok: false, result: this.answer(input, operation, 'terminate_left_to_server_ttl', session.agentId, session, notSpent(session.agentId, session.vmSessionId)) };
+    }
+    if (!allowEnded && session.state === 'TERMINATED') {
       return { ok: false, result: this.answer(input, operation, 'session_not_open', session.agentId, session, notSpent(session.agentId, session.vmSessionId)) };
     }
     return { ok: true, session };
+  }
+
+  /**
+   * The VM exists and Julius will not keep it. Terminate with
+   * `owner_terminated`. Release the reservation only when that terminate is
+   * confirmed. A failed terminate poisons the task so a later open does not
+   * start a second VM, and the reservation stays held.
+   */
+  private async rejectOpenedSession(
+    input: OpenInput,
+    key: string,
+    agentId: string,
+    reservationId: string,
+    allowlistHosts: readonly string[],
+    opened: { readonly vmSessionId: string; readonly hardTtlAt: string; readonly idleTtlAt: string },
+    reason: string,
+    named: { readonly agentDisplayName: string | undefined; readonly note: string | null },
+  ): Promise<JuliusVmResult> {
+    try {
+      const response = await this.deps.sessions.terminate({
+        vmSessionId: opened.vmSessionId, agentId, endCause: 'owner_terminated',
+      });
+      try {
+        await this.deps.spend.release({ agentId, reservationId, reason, now: this.deps.clock.now() });
+      } catch {
+        const session = this.remember(input, key, agentId, allowlistHosts, opened, named.agentDisplayName ?? null, 'TERMINATED', response.endCause, true);
+        return this.answer(input, 'open', reason, agentId, session, heldSpend(agentId, reservationId, session.vmSessionId, input.usdMicros, reason), response.providerResponseId, null, named.note);
+      }
+      return this.answer(input, 'open', reason, agentId, null, {
+        mechanism: 'pr-404-julius-spend-ceiling', agentId, reservationId, vmSessionId: opened.vmSessionId,
+        reservedUsdMicros: input.usdMicros, measuredUsdMicros: null, state: 'RELEASED', denialReason: reason,
+      }, response.providerResponseId, null, named.note);
+    } catch {
+      const session = this.remember(input, key, agentId, allowlistHosts, opened, named.agentDisplayName ?? null, 'TERMINATE_FAILED', null, true);
+      return this.answer(input, 'open', reason, agentId, session, heldSpend(agentId, reservationId, session.vmSessionId, input.usdMicros, reason), null, null, named.note);
+    }
+  }
+
+  /** Commit threw after the VM was stored. The reservation stays held unless terminate is confirmed. */
+  private async terminateAfterFailedCommit(
+    session: StoredSession,
+    reservationId: string,
+    usdMicros: number,
+    note: string | null,
+  ): Promise<JuliusVmResult> {
+    const input = { runId: session.runId, projectId: session.projectId, taskId: session.taskId };
+    try {
+      const response = await this.deps.sessions.terminate({
+        vmSessionId: session.vmSessionId, agentId: session.agentId, endCause: 'owner_terminated',
+      });
+      session.state = 'TERMINATED';
+      session.endCause = response.endCause;
+      try {
+        await this.deps.spend.release({
+          agentId: session.agentId, reservationId, reason: 'session_commit_failed', now: this.deps.clock.now(),
+        });
+      } catch {
+        session.spendUnreconciled = true;
+        return this.answer(input, 'open', 'session_commit_failed_terminated', session.agentId, session, heldSpend(session.agentId, reservationId, session.vmSessionId, usdMicros, 'session_commit_failed'), response.providerResponseId, null, note);
+      }
+      return this.answer(input, 'open', 'session_commit_failed_terminated', session.agentId, session, {
+        mechanism: 'pr-404-julius-spend-ceiling', agentId: session.agentId, reservationId, vmSessionId: session.vmSessionId,
+        reservedUsdMicros: usdMicros, measuredUsdMicros: null, state: 'RELEASED', denialReason: 'session_commit_failed',
+      }, response.providerResponseId, null, note);
+    } catch {
+      session.state = 'TERMINATE_FAILED';
+      session.spendUnreconciled = true;
+      return this.answer(input, 'open', 'session_commit_failed_terminate_failed', session.agentId, session, heldSpend(session.agentId, reservationId, session.vmSessionId, usdMicros, 'session_commit_failed'), null, null, note);
+    }
+  }
+
+  private remember(
+    input: OpenInput,
+    key: string,
+    agentId: string,
+    allowlistHosts: readonly string[],
+    opened: { readonly vmSessionId: string; readonly hardTtlAt: string; readonly idleTtlAt: string },
+    agentDisplayName: string | null,
+    state: JuliusVmSessionState,
+    endCause: string | null,
+    spendUnreconciled: boolean,
+  ): StoredSession {
+    const session: StoredSession = {
+      vmSessionId: opened.vmSessionId, agentId, taskId: input.taskId, runId: input.runId, projectId: input.projectId,
+      agentDisplayName, accentColourToken: JULIUS_TERMINAL_ACCENT_TOKEN, endCause, hardTtlAt: opened.hardTtlAt,
+      idleTtlAt: opened.idleTtlAt, allowlistHosts, state, spendUnreconciled,
+    };
+    this.byTask.set(key, session);
+    this.bySession.set(session.vmSessionId, session);
+    return session;
   }
 
   private async terminateOwned(session: StoredSession, taskId: string): Promise<JuliusVmResult> {
