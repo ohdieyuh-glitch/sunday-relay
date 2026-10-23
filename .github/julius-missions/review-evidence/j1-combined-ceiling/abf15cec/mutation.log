@@ -1,0 +1,1935 @@
+
+===== M1-per-run-env-can-raise expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 6ms
+   → expected { applicable: true, …(3) } to deeply equal { applicable: true, …(3) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 4ms
+   → expected { phase: 'run_start', …(26) } to match object { budgetCapUsd: 30, …(3) }
+(23 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 2ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 1ms
+   → expected { ok: false, status: 409, …(1) } to match object { status: 409, …(1) }
+(1 matching property omitted from actual)
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 1ms
+   → expected { ok: false, status: 409, …(1) } to match object { ok: true }
+(2 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 18 passed (22)
+   Start at  07:28:28
+   Duration  285ms (transform 142ms, setup 0ms, import 170ms, tests 24ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them
+AssertionError: expected { applicable: true, …(3) } to deeply equal { applicable: true, …(3) }
+
+- Expected
++ Received
+
+  {
+    "applicable": true,
+    "combinedUsdMicros": 60000000,
+    "invalidEnv": false,
+-   "perRunUsdMicros": 30000000,
++   "perRunUsdMicros": 100000000,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:50:107
+     48|
+     49|   it('env may lower the frozen ceilings and may not raise them', () =>…
+     50|     expect(resolveMissionCeilings(MISSION, { perRunUsd: 100, combinedU…
+       |                                                                                                           ^
+     51|       applicable: true, invalidEnv: false, perRunUsdMicros: PER_RUN_US…
+     52|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run
+AssertionError: expected { phase: 'run_start', …(26) } to match object { budgetCapUsd: 30, …(3) }
+(23 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "budgetCapUsd": 30,
++   "budgetCapUsd": 100,
+    "combinedCapUsdMicros": 60000000,
+-   "perRunCapUsdMicros": 30000000,
++   "perRunCapUsdMicros": 100000000,
+    "run1ActualUsdMicros": null,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:295:19
+    293|     await h.controller.whenIdle();
+    294|     const start = (await h.ledger.rows()).find((row) => row.phase === …
+    295|     expect(start).toMatchObject({ budgetCapUsd: 30, perRunCapUsdMicros…
+       |                   ^
+    296|   });
+    297|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { status: 409, …(1) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "julius_dispatch_repeat_above_per_run",
++   "code": "julius_dispatch_repeat_combined_ceiling",
+    "status": 409,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:322:58
+    320|     expect(await above.dispatch('run:1', 'key-0000001')).toMatchObject…
+    321|     await above.controller.whenIdle();
+    322|     expect(await above.dispatch('run:2', 'key-0000002')).toMatchObject…
+       |                                                          ^
+    323|     expect(above.calls).toHaveLength(3);
+    324|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { ok: true }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
++   "ok": false,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:358:59
+    356|     expect(await raised.dispatch('run:1', 'key-0000001')).toMatchObjec…
+    357|     await raised.controller.whenIdle();
+    358|     expect(await raised.dispatch('run:2', 'key-0000002')).toMatchObjec…
+       |                                                           ^
+    359|     const start = (await raised.ledger.rows()).filter((row) => row.pha…
+    360|     expect(start).toMatchObject({ combinedCapUsdMicros: COMBINED_USD_M…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+===== M2-combined-env-can-raise expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 7ms
+   → expected { applicable: true, …(3) } to deeply equal { applicable: true, …(3) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 2ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 2ms
+   → expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 20 passed (22)
+   Start at  07:28:28
+   Duration  288ms (transform 141ms, setup 0ms, import 169ms, tests 24ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them
+AssertionError: expected { applicable: true, …(3) } to deeply equal { applicable: true, …(3) }
+
+- Expected
++ Received
+
+  {
+    "applicable": true,
+-   "combinedUsdMicros": 60000000,
++   "combinedUsdMicros": 100000000,
+    "invalidEnv": false,
+    "perRunUsdMicros": 30000000,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:50:107
+     48|
+     49|   it('env may lower the frozen ceilings and may not raise them', () =>…
+     50|     expect(resolveMissionCeilings(MISSION, { perRunUsd: 100, combinedU…
+       |                                                                                                           ^
+     51|       applicable: true, invalidEnv: false, perRunUsdMicros: PER_RUN_US…
+     52|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap
+AssertionError: expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "julius_dispatch_repeat_combined_ceiling",
+-   "status": 409,
++   "status": 202,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:350:60
+    348|     expect(await lowered.dispatch('run:1', 'key-0000001')).toMatchObje…
+    349|     await lowered.controller.whenIdle();
+    350|     expect(await lowered.dispatch('run:2', 'key-0000002')).toMatchObje…
+       |                                                            ^
+    351|
+    352|     const raised = routeHarness({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+===== M3-worst-case-is-estimate-envelope expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 5ms
+   → expected 30000 to be 30000000 // Object.is equality
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 1ms
+   → expected 3000000 to be 30000000 // Object.is equality
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 2ms
+   → expected { admit: true, …(4) } to deeply equal { admit: false, …(1) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 3ms
+   → expected { phase: 'run_start', …(26) } to match object { run1ActualUsdMicros: 30000000, …(2) }
+(24 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 2ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 1ms
+   → expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 2ms
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 17 passed (22)
+   Start at  07:28:29
+   Duration  290ms (transform 140ms, setup 0ms, import 168ms, tests 27ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it
+AssertionError: expected 30000 to be 30000000 // Object.is equality
+
+- Expected
++ Received
+
+- 30000000
++ 30000
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:64:118
+     62|
+     63|   it('the repeat worst-case bound is the per-run cap; leg estimates ca…
+     64|     expect(repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_RUN_USD_…
+       |                                                                                                                      ^
+     65|     expect(repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_RUN_USD_…
+     66|     expect(repeatWorstCaseUsdMicros({ perRunCapUsdMicros: 10_000_000, …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run
+AssertionError: expected 3000000 to be 30000000 // Object.is equality
+
+- Expected
++ Received
+
+- 30000000
++ 3000000
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:181:19
+    179|   it('admits exactly $30.00 with the production worst case and refuses…
+    180|     const worst = repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_R…
+    181|     expect(worst).toBe(PER_RUN_USD_MICROS);
+       |                   ^
+    182|     expect(decideCombinedCeiling({ actualUsdMicros: PER_RUN_USD_MICROS…
+    183|     expect(decideCombinedCeiling({ actualUsdMicros: PER_RUN_USD_MICROS…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case
+AssertionError: expected { admit: true, …(4) } to deeply equal { admit: false, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "admit": false,
+-   "reason": "combined_ceiling_exceeded",
++   "actualUsdMicros": 30000000,
++   "admit": true,
++   "combinedCapUsdMicros": 50000000,
++   "perRunCapUsdMicros": 30000000,
++   "repeatWorstCaseUsdMicros": 3000000,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:197:9
+    195|       actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: w…
+    196|       perRunCapUsdMicros: PER_RUN_USD_MICROS, combinedCapUsdMicros: 50…
+    197|     })).toEqual({ admit: false, reason: 'combined_ceiling_exceeded' });
+       |         ^
+    198|   });
+    199|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00
+AssertionError: expected { phase: 'run_start', …(26) } to match object { run1ActualUsdMicros: 30000000, …(2) }
+(24 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "combinedCapUsdMicros": 60000000,
+-   "repeatWorstCaseUsdMicros": 30000000,
++   "repeatWorstCaseUsdMicros": 3000000,
+    "run1ActualUsdMicros": 30000000,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:309:23
+    307|     const starts = (await h.ledger.rows()).filter((row) => row.phase =…
+    308|     expect(starts).toHaveLength(2);
+    309|     expect(starts[1]).toMatchObject({
+       |                       ^
+    310|       run1ActualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicro…
+    311|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap
+AssertionError: expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "julius_dispatch_repeat_combined_ceiling",
+-   "status": 409,
++   "status": 202,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:350:60
+    348|     expect(await lowered.dispatch('run:1', 'key-0000001')).toMatchObje…
+    349|     await lowered.controller.whenIdle();
+    350|     expect(await lowered.dispatch('run:2', 'key-0000002')).toMatchObje…
+       |                                                            ^
+    351|
+    352|     const raised = routeHarness({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+===== M4-exact-per-run-refused expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 6ms
+   → expected { admit: false, …(1) } to deeply equal { admit: true, …(4) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 2ms
+   → expected { admit: false, …(1) } to deeply equal { admit: true, …(4) }
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 1ms
+   → expected { admit: false, …(1) } to deeply equal { admit: false, …(1) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 1ms
+   → expected { admit: false, …(1) } to match object { admit: true }
+(1 matching property omitted from actual)
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 1ms
+   → expected { admit: false, …(1) } to match object { admit: true }
+(1 matching property omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 1ms
+   → expected { ok: false, status: 409, …(1) } to match object { ok: true, status: 202 }
+(1 matching property omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 3ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 1ms
+   → expected { ok: false, status: 409, …(1) } to match object { status: 409, …(1) }
+(1 matching property omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  7 failed | 15 passed (22)
+   Start at  07:28:30
+   Duration  293ms (transform 141ms, setup 0ms, import 169ms, tests 27ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro
+AssertionError: expected { admit: false, …(1) } to deeply equal { admit: true, …(4) }
+
+- Expected
++ Received
+
+  {
+-   "actualUsdMicros": 30000000,
+-   "admit": true,
+-   "combinedCapUsdMicros": 60000000,
+-   "perRunCapUsdMicros": 30000000,
+-   "repeatWorstCaseUsdMicros": 1,
++   "admit": false,
++   "reason": "run1_actual_above_per_run",
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:72:114
+     70|
+     71|   it('decideCombinedCeiling admits an actual of exactly $30.00 when th…
+     72|     expect(decideCombinedCeiling({ actualUsdMicros: PER_RUN_USD_MICROS…
+       |                                                                                                                  ^
+     73|       admit: true, actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCas…
+     74|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns
+AssertionError: expected { admit: false, …(1) } to deeply equal { admit: true, …(4) }
+
+- Expected
++ Received
+
+  {
+-   "actualUsdMicros": 30000000,
+-   "admit": true,
+-   "combinedCapUsdMicros": 60000000,
+-   "perRunCapUsdMicros": 30000000,
+-   "repeatWorstCaseUsdMicros": 30000000,
++   "admit": false,
++   "reason": "run1_actual_above_per_run",
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:86:9
+     84|     expect(decideCombinedCeiling({
+     85|       actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: P…
+     86|     })).toEqual({
+       |         ^
+     87|       admit: true, actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCas…
+     88|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return
+AssertionError: expected { admit: false, …(1) } to deeply equal { admit: false, …(1) }
+
+- Expected
++ Received
+
+  {
+    "admit": false,
+-   "reason": "combined_ceiling_exceeded",
++   "reason": "run1_actual_above_per_run",
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:94:9
+     92|     expect(decideCombinedCeiling({
+     93|       actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: P…
+     94|     })).toEqual({ admit: false, reason: 'combined_ceiling_exceeded' });
+       |         ^
+     95|   });
+     96|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run
+AssertionError: expected { admit: false, …(1) } to match object { admit: true }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "admit": true,
++   "admit": false,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:182:119
+    180|     const worst = repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_R…
+    181|     expect(worst).toBe(PER_RUN_USD_MICROS);
+    182|     expect(decideCombinedCeiling({ actualUsdMicros: PER_RUN_USD_MICROS…
+       |                                                                                                                       ^
+    183|     expect(decideCombinedCeiling({ actualUsdMicros: PER_RUN_USD_MICROS…
+    184|       admit: false, reason: 'run1_actual_above_per_run',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case
+AssertionError: expected { admit: false, …(1) } to match object { admit: true }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "admit": true,
++   "admit": false,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:193:9
+    191|       actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: w…
+    192|       perRunCapUsdMicros: PER_RUN_USD_MICROS, combinedCapUsdMicros: CO…
+    193|     })).toMatchObject({ admit: true });
+       |         ^
+    194|     expect(decideCombinedCeiling({
+    195|       actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: w…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { ok: true, status: 202 }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
+-   "status": 202,
++   "ok": false,
++   "status": 409,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:305:54
+    303|     expect(await h.dispatch('run:1', 'key-0000001')).toMatchObject({ o…
+    304|     await h.controller.whenIdle();
+    305|     expect(await h.dispatch('run:2', 'key-0000002')).toMatchObject({ o…
+       |                                                      ^
+    306|     await h.controller.whenIdle();
+    307|     const starts = (await h.ledger.rows()).filter((row) => row.phase =…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { status: 409, …(1) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "julius_dispatch_repeat_combined_ceiling",
++   "code": "julius_dispatch_repeat_above_per_run",
+    "status": 409,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:350:60
+    348|     expect(await lowered.dispatch('run:1', 'key-0000001')).toMatchObje…
+    349|     await lowered.controller.whenIdle();
+    350|     expect(await lowered.dispatch('run:2', 'key-0000002')).toMatchObje…
+       |                                                            ^
+    351|
+    352|     const raised = routeHarness({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+===== M5-spend-unknown-count-ignored expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 6ms
+   → expected { verified: true, actualUsdMicros: 1 } to deeply equal { verified: false, …(1) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 21 passed (22)
+   Start at  07:28:30
+   Duration  283ms (transform 144ms, setup 0ms, import 173ms, tests 23ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt
+AssertionError: expected { verified: true, actualUsdMicros: 1 } to deeply equal { verified: false, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "reason": "unknown_spend",
+-   "verified": false,
++   "actualUsdMicros": 1,
++   "verified": true,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:101:9
+     99|       sealed: true, orderOk: true, spendUnknownLegs: 1, openedRoles: […
+    100|       legs: [{ role: 'architect', spend: 'usage_reported', costUsdMicr…
+    101|     })).toEqual({ verified: false, reason: 'unknown_spend' });
+       |         ^
+    102|   });
+    103|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+===== M6-exact-combined-refused expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 7ms
+   → expected { admit: false, …(1) } to deeply equal { admit: true, …(4) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 2ms
+   → expected { admit: false, …(1) } to match object { admit: true }
+(1 matching property omitted from actual)
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 1ms
+   → expected { admit: false, …(1) } to match object { admit: true }
+(1 matching property omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 1ms
+   → expected { ok: false, status: 409, …(1) } to match object { ok: true, status: 202 }
+(1 matching property omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 2ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 1ms
+   → expected { ok: false, status: 409, …(1) } to match object { ok: true }
+(2 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 17 passed (22)
+   Start at  07:28:31
+   Duration  290ms (transform 141ms, setup 0ms, import 169ms, tests 25ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns
+AssertionError: expected { admit: false, …(1) } to deeply equal { admit: true, …(4) }
+
+- Expected
++ Received
+
+  {
+-   "actualUsdMicros": 30000000,
+-   "admit": true,
+-   "combinedCapUsdMicros": 60000000,
+-   "perRunCapUsdMicros": 30000000,
+-   "repeatWorstCaseUsdMicros": 30000000,
++   "admit": false,
++   "reason": "combined_ceiling_exceeded",
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:86:9
+     84|     expect(decideCombinedCeiling({
+     85|       actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: P…
+     86|     })).toEqual({
+       |         ^
+     87|       admit: true, actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCas…
+     88|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run
+AssertionError: expected { admit: false, …(1) } to match object { admit: true }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "admit": true,
++   "admit": false,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:182:119
+    180|     const worst = repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_R…
+    181|     expect(worst).toBe(PER_RUN_USD_MICROS);
+    182|     expect(decideCombinedCeiling({ actualUsdMicros: PER_RUN_USD_MICROS…
+       |                                                                                                                       ^
+    183|     expect(decideCombinedCeiling({ actualUsdMicros: PER_RUN_USD_MICROS…
+    184|       admit: false, reason: 'run1_actual_above_per_run',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case
+AssertionError: expected { admit: false, …(1) } to match object { admit: true }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "admit": true,
++   "admit": false,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:193:9
+    191|       actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: w…
+    192|       perRunCapUsdMicros: PER_RUN_USD_MICROS, combinedCapUsdMicros: CO…
+    193|     })).toMatchObject({ admit: true });
+       |         ^
+    194|     expect(decideCombinedCeiling({
+    195|       actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: w…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { ok: true, status: 202 }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
+-   "status": 202,
++   "ok": false,
++   "status": 409,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:305:54
+    303|     expect(await h.dispatch('run:1', 'key-0000001')).toMatchObject({ o…
+    304|     await h.controller.whenIdle();
+    305|     expect(await h.dispatch('run:2', 'key-0000002')).toMatchObject({ o…
+       |                                                      ^
+    306|     await h.controller.whenIdle();
+    307|     const starts = (await h.ledger.rows()).filter((row) => row.phase =…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { ok: true }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
++   "ok": false,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:358:59
+    356|     expect(await raised.dispatch('run:1', 'key-0000001')).toMatchObjec…
+    357|     await raised.controller.whenIdle();
+    358|     expect(await raised.dispatch('run:2', 'key-0000002')).toMatchObjec…
+       |                                                           ^
+    359|     const start = (await raised.ledger.rows()).filter((row) => row.pha…
+    360|     expect(start).toMatchObject({ combinedCapUsdMicros: COMBINED_USD_M…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+===== M7-missing-cost-counts-as-zero expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 6ms
+   → expected { verified: true, actualUsdMicros: +0 } to deeply equal { verified: false, …(1) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 1ms
+   → expected { verified: true, actualUsdMicros: +0 } to deeply equal { verified: false, …(1) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 2ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 3ms
+   → expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 19 passed (22)
+   Start at  07:28:32
+   Duration  282ms (transform 139ms, setup 0ms, import 166ms, tests 24ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero
+AssertionError: expected { verified: true, actualUsdMicros: +0 } to deeply equal { verified: false, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "reason": "unknown_spend",
+-   "verified": false,
++   "actualUsdMicros": 0,
++   "verified": true,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:113:25
+    111|     });
+    112|     for (const cost of [1.5, Number.NaN, Number.POSITIVE_INFINITY, Num…
+    113|       expect(one(cost)).toEqual({ verified: false, reason: 'unknown_sp…
+       |                         ^
+    114|     }
+    115|     // 1.5 + 2.5 would be the integer 4. The running-sum check still r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt
+AssertionError: expected { verified: true, actualUsdMicros: +0 } to deeply equal { verified: false, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "reason": "unknown_spend",
+-   "verified": false,
++   "actualUsdMicros": 0,
++   "verified": true,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:143:9
+    141|       sealed: true, orderOk: true, spendUnknownLegs: 0, openedRoles: o…
+    142|       legs: [{ role: 'architect', spend: 'usage_reported', costUsdMicr…
+    143|     })).toEqual({ verified: false, reason: 'unknown_spend' });
+       |         ^
+    144|     expect(verifyRun1Spend({
+    145|       sealed: true, orderOk: true, spendUnknownLegs: 0, openedRoles: o…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain
+AssertionError: expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "julius_dispatch_repeat_spend_unknown",
+-   "status": 409,
++   "status": 202,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:328:60
+    326|     expect(await unknown.dispatch('run:1', 'key-0000001')).toMatchObje…
+    327|     await unknown.controller.whenIdle();
+    328|     expect(await unknown.dispatch('run:2', 'key-0000002')).toMatchObje…
+       |                                                            ^
+    329|     expect(unknown.calls).toHaveLength(3);
+    330|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+===== M8a-per-leg-safe-integer-removed expect=survived actual=survived exit=0 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 passed (1)
+      Tests  22 passed (22)
+   Start at  07:28:32
+   Duration  269ms (transform 141ms, setup 0ms, import 168ms, tests 16ms, environment 0ms)
+
+
+===== M8b-both-safe-integer-checks-removed expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 6ms
+   → expected { Object (verified, actualUsdMicros) } to deeply equal { verified: false, …(1) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 5ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 21 passed (22)
+   Start at  07:28:33
+   Duration  285ms (transform 144ms, setup 0ms, import 171ms, tests 23ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero
+AssertionError: expected { Object (verified, actualUsdMicros) } to deeply equal { verified: false, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "reason": "unknown_spend",
+-   "verified": false,
++   "actualUsdMicros": 1.5,
++   "verified": true,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:113:25
+    111|     });
+    112|     for (const cost of [1.5, Number.NaN, Number.POSITIVE_INFINITY, Num…
+    113|       expect(one(cost)).toEqual({ verified: false, reason: 'unknown_sp…
+       |                         ^
+    114|     }
+    115|     // 1.5 + 2.5 would be the integer 4. The running-sum check still r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+===== M9-zero-role-count-still-bounds expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 4ms
+   → expected 30000000 to be null
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 4ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 21 passed (22)
+   Start at  07:28:34
+   Duration  281ms (transform 148ms, setup 0ms, import 175ms, tests 20ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it
+AssertionError: expected 30000000 to be null
+
+- Expected:
+null
+
++ Received:
+30000000
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:68:115
+     66|     expect(repeatWorstCaseUsdMicros({ perRunCapUsdMicros: 10_000_000, …
+     67|     expect(repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_RUN_USD_…
+     68|     expect(repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_RUN_USD_…
+       |                                                                                                                   ^
+     69|   });
+     70|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+===== M10-not-contacted-null-is-unknown expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 6ms
+   → expected { verified: false, …(1) } to deeply equal { verified: true, …(1) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 4ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 21 passed (22)
+   Start at  07:28:34
+   Duration  278ms (transform 141ms, setup 0ms, import 168ms, tests 23ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero
+AssertionError: expected { verified: false, …(1) } to deeply equal { verified: true, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "actualUsdMicros": 12000000,
+-   "verified": true,
++   "reason": "unknown_spend",
++   "verified": false,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:176:9
+    174|         { role: 'coder', spend: 'not_contacted', costUsdMicros: null, …
+    175|       ],
+    176|     })).toEqual({ verified: true, actualUsdMicros: 12_000_000 });
+       |         ^
+    177|   });
+    178|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+===== M11-sealed-check-removed expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 6ms
+   → expected { verified: true, actualUsdMicros: 1 } to deeply equal { verified: false, …(1) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 21 passed (22)
+   Start at  07:28:35
+   Duration  282ms (transform 144ms, setup 0ms, import 172ms, tests 22ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid
+AssertionError: expected { verified: true, actualUsdMicros: 1 } to deeply equal { verified: false, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "reason": "missing_receipt",
+-   "verified": false,
++   "actualUsdMicros": 1,
++   "verified": true,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:131:9
+    129|       sealed: false, orderOk: true, spendUnknownLegs: 0, openedRoles: …
+    130|       legs: [{ role: 'architect', spend: 'usage_reported', costUsdMicr…
+    131|     })).toEqual({ verified: false, reason: 'missing_receipt' });
+       |         ^
+    132|   });
+    133|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+===== M12-second-prior-run-allowed expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 7ms
+   → expected { kind: 'unverified', …(1) } to deeply equal { kind: 'repeat_already_used' }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 2ms
+   → expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 20 passed (22)
+   Start at  07:28:36
+   Duration  291ms (transform 152ms, setup 0ms, import 179ms, tests 24ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run
+AssertionError: expected { kind: 'unverified', …(1) } to deeply equal { kind: 'repeat_already_used' }
+
+- Expected
++ Received
+
+  {
+-   "kind": "repeat_already_used",
++   "kind": "unverified",
++   "reason": "missing_receipt",
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:222:18
+    220|       { phase: 'run_start', missionId: MISSION, runId: 'run-1' },
+    221|       { phase: 'run_start', missionId: MISSION, runId: 'run-2' },
+    222|     ], MISSION)).toEqual({ kind: 'repeat_already_used' });
+       |                  ^
+    223|     expect(priorSpendFromLedger([
+    224|       { phase: 'run_start', missionId: 'mission-j1-frozen', runId: 'ru…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher
+AssertionError: expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "julius_dispatch_repeat_already_used",
+-   "status": 409,
++   "status": 202,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:372:54
+    370|     expect(await h.dispatch('run:2', 'key-0000002')).toMatchObject({ o…
+    371|     await h.controller.whenIdle();
+    372|     expect(await h.dispatch('run:3', 'key-0000003')).toMatchObject({ s…
+       |                                                      ^
+    373|     expect(h.calls).toHaveLength(6);
+    374|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+===== M13-other-mission-uses-frozen-ceiling expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 6ms
+   → expected { applicable: true, …(3) } to deeply equal { applicable: false }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits an actual of exactly $30.00 when the supplied worst case is 1 micro 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses an actual of $30.01 as run1_actual_above_per_run before the combined comparison 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling admits actual $30 plus a supplied worst case of $30, the value repeatWorstCaseUsdMicros returns 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > decideCombinedCeiling refuses combined_ceiling_exceeded for a supplied worst case of $30.01, which repeatWorstCaseUsdMicros does not return 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > spendUnknownLegs above zero refuses even when every leg has a valid integer receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > an unsealed run is refused even when orderOk is true and every receipt is valid 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > admits exactly $30.00 with the production worst case and refuses one micro-dollar over as above_per_run 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reaches combined_ceiling_exceeded only when the combined cap is lowered below actual plus the per-run worst case 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 4ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits a repeat when injected receipts are $10 + $10 + $10 and the per-run worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses injected receipts of $30.01 as repeat_above_per_run, and refuses unknown spend and a missing receipt, with no second chain 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > reaches repeat_combined_ceiling only after env lowers the combined cap, and ignores env values that would raise either cap 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 2ms
+   → expected { ok: false, status: 409, …(1) } to match object { ok: true }
+(2 matching properties omitted from actual)
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 20 passed (22)
+   Start at  07:28:36
+   Duration  279ms (transform 138ms, setup 0ms, import 166ms, tests 23ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them
+AssertionError: expected { applicable: true, …(3) } to deeply equal { applicable: false }
+
+- Expected
++ Received
+
+  {
+-   "applicable": false,
++   "applicable": true,
++   "combinedUsdMicros": 60000000,
++   "invalidEnv": false,
++   "perRunUsdMicros": 30000000,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:59:119
+     57|       applicable: true, invalidEnv: false, perRunUsdMicros: 10_000_000…
+     58|     });
+     59|     expect(resolveMissionCeilings('mission-j1-frozen', { perRunUsd: 10…
+       |                                                                                                                       ^
+     60|     expect(resolveMissionCeilings(MISSION, { perRunUsd: 10, combinedUs…
+     61|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { ok: true }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
++   "ok": false,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:380:54
+    378|     expect(await h.dispatch('run:1', 'key-0000001')).toMatchObject({ o…
+    379|     await h.controller.whenIdle();
+    380|     expect(await h.dispatch('run:2', 'key-0000002')).toMatchObject({ o…
+       |                                                      ^
+    381|     await h.controller.whenIdle();
+    382|     expect(h.calls).toHaveLength(6);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+===== F1-success-omits-tick-receipt expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > G3-2: pre-contact refusals (no key, no inputs) say the provider was not contacted; a post-200 failure does not 3ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > returns the provider response id, the model FROM THE BODY, usage and exactly one request 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > fails the leg when the body has no id (unattested), no served model, or a different model; mismatch is recorded 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F1: every failure after a 200 body keeps id, served model, usage (null when absent), requests 1 and the shown digest 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F2: a dated alias is rejected by default and accepted only when listed in servedModelAllow 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > e: the reviewer sees the exact artifact bytes, their sha256 and the executor evidence; shownSha256 is the hash of the exact message 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > sends the key only in the Authorization header and never in the body or output 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > maps rejects and unreadable verdicts; a bad verdict keeps the response id 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > failure classes carry no provider text 2ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > refuses without a key, without inputs, and at construction without model, key env or https 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > has the xai independence group and honours the fake flag 1ms
+ × relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > a successful leg copies integer costUsdMicros from usage.cost_in_usd_ticks and does not price the token counts 6ms
+   → expected { ok: true, …(7) } to match object { ok: true, …(2) }
+(6 matching properties omitted from actual)
+ × relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > keeps an explicit zero tick count and leaves a missing or unusable tick count absent, never zero 1ms
+   → expected undefined to be +0 // Object.is equality
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > wraps the runner: key, brief and instructions go in; the response id and the PROVIDER-echoed model come out 3ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > a failed call reports a class only, keeps a response id if the provider gave one, and never a message 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > a thrown runner is provider_error; a non-live config or a missing model is refused at construction 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > a failed coder session keeps the session id and reports usage as explicitly unknown when the runtime started 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > a close-out that fails AFTER a completed session still returns the session id, model and usage 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > pre-contact refusals say so; a thrown architect runner leaves usage absent (the controller marks it unknown) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > reviewer failure paths keep the response id the injected port gives, with usage and request count 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > composes architect + coder + direct xAI reviewer through composeRoleProviders and runs a fake chain through the controller 4ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > refuses shared model families and a mixed fake/real build through composeRoleProviders 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > the coder env is derived from the injected env (no key), and no adapter source line reads process.env 1ms
+ × relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > a real-shaped chain records only the xAI tick receipt, and the repeat stays spend_unknown 10ms
+   → expected { phase: 'result', …(34) } to match object { costUsdMicros: 10000, …(1) }
+(36 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > permittedPaths is required and non-empty at construction (no default []) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > the request handed to the provider carries mayRunCommands:false, mayUseNetwork:false and the non-empty permitted paths 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > assertCoderRequestEnvelope refuses a request that drops a field, and the LIMIT constant says nothing is enforced here 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-1 coder key isolation: an env allow-list, never provider keys > the session gets an env snapshot with only allow-listed variables: no provider key reaches execute 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-1 coder key isolation: an env allow-list, never provider keys > an allow-list naming a key-like variable or the role keyEnv is refused; a variable holding a secret value is dropped 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > counts the paths the executor saw changed, not the session invocation count 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a session that says it ran tools but left the workspace untouched reports ZERO changed paths and null invocations 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a close-out the executor did not capture reports UNKNOWN (null, never 0), whatever the session claims 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > deriveCoderChangedPaths is null for uncaptured records 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a session that attests no model reports null, so the controller refuses the leg 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a failed session returns the provider failure class and runs no close-out 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > refuses without a plan, and refuses when the executor start or close is unavailable 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > the request carries the brief and plan, forbids commands and network, and is scoped to the workspace 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > maps approved to approve and carries the injected response id, served model, tokens and the Hermes request count 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > e: executor evidence goes in the packet and changes the shown digest; a failed leg still carries the digest 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > changes_required is reject; unable_to_review is a failure, not a verdict 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > the served model is never filled from the request, and a missing response id stays null 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > incomplete and launch failures are classes only 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > refuses without the plan or the artifact, and refuses a non-xai Hermes provider at construction 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > reads mission id and state from inspectRun and the contract sha256 from the injected source 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > unknown run or another project is null; a lookup the identity cannot make throws 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > b: composition refuses an absent contractSha256Of port, a mismatched file hash, an unreadable file and a malformed prereg value 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > an unrecorded contract hash becomes an empty string, which the controller can never match 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > completes, with a response id and a served model on every leg and the coder tool count from the executor 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > a reviewer leg with no response id is refused by the controller, so the chain cannot complete on it 3ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > a coder that changed nothing is refused as no_tool_execution 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > composeRoleProviders refuses duplicate independence groups and a fake/real mix 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > composeRoleProviders refuses three providers whose models share a family (provider AND model family) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > F3: explicit vendor map: o3 vs gpt-5 same vendor refused; routed anthropic/claude-x vs claude-y refused; unmapped fails closed 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C3 the coder request records the read/write paths and the Read/Write/Edit-only tool envelope > the request carries writePaths, readPaths and toolEnvelope as RECORDED fields, and the check passes 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C3 the coder request records the read/write paths and the Read/Write/Edit-only tool envelope > assertCoderRequestEnvelope refuses Bash, Web, Task, a missing or extra tool, absent readPaths, and an absent envelope 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > file equals the final message and only it changed: ok, hashes recorded 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > file differs from the final message: artifact_file_mismatch, session id, model and usage kept 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > another file changed: workspace_scope_violation; no artifact file at all: also refused, with a null file hash 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > a workspace that cannot be listed before the session means no session: pre-contact failure 0ms
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 56 passed (59)
+   Start at  07:28:37
+   Duration  535ms (transform 411ms, setup 0ms, import 517ms, tests 59ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > a real-shaped chain records only the xAI tick receipt, and the repeat stays spend_unknown
+AssertionError: expected { phase: 'result', …(34) } to match object { costUsdMicros: 10000, …(1) }
+(36 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "costUsdMicros": 10000,
++   "costUsdMicros": null,
+    "providerResponseId": "resp_xai_0011223344",
+  }
+
+ ❯ relay-bridge/julius-dispatch-adapters.test.ts:208:60
+    206|     expect(results.find((row) => row.role === 'architect')).toMatchObj…
+    207|     expect(results.find((row) => row.role === 'coder')).toMatchObject(…
+    208|     expect(results.find((row) => row.role === 'reviewer')).toMatchObje…
+       |                                                            ^
+    209|     expect(await dispatch('run:2', 'key-0000002')).toMatchObject({ sta…
+    210|     expect(fetched).toHaveLength(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > a successful leg copies integer costUsdMicros from usage.cost_in_usd_ticks and does not price the token counts
+AssertionError: expected { ok: true, …(7) } to match object { ok: true, …(2) }
+(6 matching properties omitted from actual)
+
+- Expected
++ Received
+
+@@ -1,7 +1,6 @@
+  {
+-   "costUsdMicros": 10000,
+    "ok": true,
+    "usage": {
+      "input": 10,
+      "output": 5,
+      "total": 15,
+
+ ❯ relay-bridge/julius-xai-direct-reviewer.test.ts:127:15
+    125|     const body = { ...good, usage: { input_tokens: 10, output_tokens: …
+    126|     const r = await make(ok(body)).call(callIn());
+    127|     expect(r).toMatchObject({ ok: true, usage: { input: 10, output: 5,…
+       |               ^
+    128|   });
+    129|   it('keeps an explicit zero tick count and leaves a missing or unusab…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > keeps an explicit zero tick count and leaves a missing or unusable tick count absent, never zero
+AssertionError: expected undefined to be +0 // Object.is equality
+
+- Expected:
+0
+
++ Received:
+undefined
+
+ ❯ relay-bridge/julius-xai-direct-reviewer.test.ts:131:32
+    129|   it('keeps an explicit zero tick count and leaves a missing or unusab…
+    130|     const zero = await make(ok({ ...good, usage: { ...good.usage, cost…
+    131|     expect(zero.costUsdMicros).toBe(0);
+       |                                ^
+    132|     expect((await make(ok(good)).call(callIn())).costUsdMicros ?? null…
+    133|     // 158_500 ticks is the provider's own example shape and is not a …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+===== F1-missing-ticks-become-zero expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > G3-2: pre-contact refusals (no key, no inputs) say the provider was not contacted; a post-200 failure does not 3ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > returns the provider response id, the model FROM THE BODY, usage and exactly one request 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > fails the leg when the body has no id (unattested), no served model, or a different model; mismatch is recorded 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F1: every failure after a 200 body keeps id, served model, usage (null when absent), requests 1 and the shown digest 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F2: a dated alias is rejected by default and accepted only when listed in servedModelAllow 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > e: the reviewer sees the exact artifact bytes, their sha256 and the executor evidence; shownSha256 is the hash of the exact message 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > sends the key only in the Authorization header and never in the body or output 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > maps rejects and unreadable verdicts; a bad verdict keeps the response id 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > failure classes carry no provider text 2ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > refuses without a key, without inputs, and at construction without model, key env or https 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > has the xai independence group and honours the fake flag 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > a successful leg copies integer costUsdMicros from usage.cost_in_usd_ticks and does not price the token counts 0ms
+ × relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > keeps an explicit zero tick count and leaves a missing or unusable tick count absent, never zero 6ms
+   → expected +0 to be null
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > wraps the runner: key, brief and instructions go in; the response id and the PROVIDER-echoed model come out 3ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > a failed call reports a class only, keeps a response id if the provider gave one, and never a message 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > a thrown runner is provider_error; a non-live config or a missing model is refused at construction 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > a failed coder session keeps the session id and reports usage as explicitly unknown when the runtime started 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > a close-out that fails AFTER a completed session still returns the session id, model and usage 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > pre-contact refusals say so; a thrown architect runner leaves usage absent (the controller marks it unknown) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > reviewer failure paths keep the response id the injected port gives, with usage and request count 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > composes architect + coder + direct xAI reviewer through composeRoleProviders and runs a fake chain through the controller 4ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > refuses shared model families and a mixed fake/real build through composeRoleProviders 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > the coder env is derived from the injected env (no key), and no adapter source line reads process.env 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > a real-shaped chain records only the xAI tick receipt, and the repeat stays spend_unknown 2ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > permittedPaths is required and non-empty at construction (no default []) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > the request handed to the provider carries mayRunCommands:false, mayUseNetwork:false and the non-empty permitted paths 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > assertCoderRequestEnvelope refuses a request that drops a field, and the LIMIT constant says nothing is enforced here 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-1 coder key isolation: an env allow-list, never provider keys > the session gets an env snapshot with only allow-listed variables: no provider key reaches execute 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-1 coder key isolation: an env allow-list, never provider keys > an allow-list naming a key-like variable or the role keyEnv is refused; a variable holding a secret value is dropped 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > counts the paths the executor saw changed, not the session invocation count 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a session that says it ran tools but left the workspace untouched reports ZERO changed paths and null invocations 2ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a close-out the executor did not capture reports UNKNOWN (null, never 0), whatever the session claims 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > deriveCoderChangedPaths is null for uncaptured records 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a session that attests no model reports null, so the controller refuses the leg 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a failed session returns the provider failure class and runs no close-out 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > refuses without a plan, and refuses when the executor start or close is unavailable 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > the request carries the brief and plan, forbids commands and network, and is scoped to the workspace 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > maps approved to approve and carries the injected response id, served model, tokens and the Hermes request count 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > e: executor evidence goes in the packet and changes the shown digest; a failed leg still carries the digest 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > changes_required is reject; unable_to_review is a failure, not a verdict 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > the served model is never filled from the request, and a missing response id stays null 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > incomplete and launch failures are classes only 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > refuses without the plan or the artifact, and refuses a non-xai Hermes provider at construction 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > reads mission id and state from inspectRun and the contract sha256 from the injected source 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > unknown run or another project is null; a lookup the identity cannot make throws 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > b: composition refuses an absent contractSha256Of port, a mismatched file hash, an unreadable file and a malformed prereg value 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > an unrecorded contract hash becomes an empty string, which the controller can never match 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > completes, with a response id and a served model on every leg and the coder tool count from the executor 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > a reviewer leg with no response id is refused by the controller, so the chain cannot complete on it 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > a coder that changed nothing is refused as no_tool_execution 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > composeRoleProviders refuses duplicate independence groups and a fake/real mix 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > composeRoleProviders refuses three providers whose models share a family (provider AND model family) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > F3: explicit vendor map: o3 vs gpt-5 same vendor refused; routed anthropic/claude-x vs claude-y refused; unmapped fails closed 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C3 the coder request records the read/write paths and the Read/Write/Edit-only tool envelope > the request carries writePaths, readPaths and toolEnvelope as RECORDED fields, and the check passes 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C3 the coder request records the read/write paths and the Read/Write/Edit-only tool envelope > assertCoderRequestEnvelope refuses Bash, Web, Task, a missing or extra tool, absent readPaths, and an absent envelope 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > file equals the final message and only it changed: ok, hashes recorded 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > file differs from the final message: artifact_file_mismatch, session id, model and usage kept 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > another file changed: workspace_scope_violation; no artifact file at all: also refused, with a null file hash 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > a workspace that cannot be listed before the session means no session: pre-contact failure 0ms
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 58 passed (59)
+   Start at  07:28:38
+   Duration  542ms (transform 418ms, setup 0ms, import 538ms, tests 50ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > keeps an explicit zero tick count and leaves a missing or unusable tick count absent, never zero
+AssertionError: expected +0 to be null
+
+- Expected:
+null
+
++ Received:
+0
+
+ ❯ relay-bridge/julius-xai-direct-reviewer.test.ts:132:73
+    130|     const zero = await make(ok({ ...good, usage: { ...good.usage, cost…
+    131|     expect(zero.costUsdMicros).toBe(0);
+    132|     expect((await make(ok(good)).call(callIn())).costUsdMicros ?? null…
+       |                                                                         ^
+    133|     // 158_500 ticks is the provider's own example shape and is not a …
+    134|     const fractional = await make(ok({ ...good, usage: { ...good.usage…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+===== F1-cost-taken-from-input-tokens expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > G3-2: pre-contact refusals (no key, no inputs) say the provider was not contacted; a post-200 failure does not 3ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > returns the provider response id, the model FROM THE BODY, usage and exactly one request 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > fails the leg when the body has no id (unattested), no served model, or a different model; mismatch is recorded 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F1: every failure after a 200 body keeps id, served model, usage (null when absent), requests 1 and the shown digest 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F2: a dated alias is rejected by default and accepted only when listed in servedModelAllow 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > e: the reviewer sees the exact artifact bytes, their sha256 and the executor evidence; shownSha256 is the hash of the exact message 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > sends the key only in the Authorization header and never in the body or output 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > maps rejects and unreadable verdicts; a bad verdict keeps the response id 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > failure classes carry no provider text 2ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > refuses without a key, without inputs, and at construction without model, key env or https 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > has the xai independence group and honours the fake flag 0ms
+ × relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > a successful leg copies integer costUsdMicros from usage.cost_in_usd_ticks and does not price the token counts 6ms
+   → expected { ok: true, …(8) } to match object { ok: true, …(2) }
+(6 matching properties omitted from actual)
+ × relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > keeps an explicit zero tick count and leaves a missing or unusable tick count absent, never zero 1ms
+   → expected 10 to be +0 // Object.is equality
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > wraps the runner: key, brief and instructions go in; the response id and the PROVIDER-echoed model come out 2ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > a failed call reports a class only, keeps a response id if the provider gave one, and never a message 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > a thrown runner is provider_error; a non-live config or a missing model is refused at construction 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > a failed coder session keeps the session id and reports usage as explicitly unknown when the runtime started 2ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > a close-out that fails AFTER a completed session still returns the session id, model and usage 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > pre-contact refusals say so; a thrown architect runner leaves usage absent (the controller marks it unknown) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > reviewer failure paths keep the response id the injected port gives, with usage and request count 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > composes architect + coder + direct xAI reviewer through composeRoleProviders and runs a fake chain through the controller 4ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > refuses shared model families and a mixed fake/real build through composeRoleProviders 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > the coder env is derived from the injected env (no key), and no adapter source line reads process.env 1ms
+ × relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > a real-shaped chain records only the xAI tick receipt, and the repeat stays spend_unknown 10ms
+   → expected { phase: 'result', …(34) } to match object { costUsdMicros: 10000, …(1) }
+(36 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > permittedPaths is required and non-empty at construction (no default []) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > the request handed to the provider carries mayRunCommands:false, mayUseNetwork:false and the non-empty permitted paths 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > assertCoderRequestEnvelope refuses a request that drops a field, and the LIMIT constant says nothing is enforced here 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-1 coder key isolation: an env allow-list, never provider keys > the session gets an env snapshot with only allow-listed variables: no provider key reaches execute 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-1 coder key isolation: an env allow-list, never provider keys > an allow-list naming a key-like variable or the role keyEnv is refused; a variable holding a secret value is dropped 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > counts the paths the executor saw changed, not the session invocation count 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a session that says it ran tools but left the workspace untouched reports ZERO changed paths and null invocations 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a close-out the executor did not capture reports UNKNOWN (null, never 0), whatever the session claims 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > deriveCoderChangedPaths is null for uncaptured records 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a session that attests no model reports null, so the controller refuses the leg 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a failed session returns the provider failure class and runs no close-out 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > refuses without a plan, and refuses when the executor start or close is unavailable 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > the request carries the brief and plan, forbids commands and network, and is scoped to the workspace 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > maps approved to approve and carries the injected response id, served model, tokens and the Hermes request count 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > e: executor evidence goes in the packet and changes the shown digest; a failed leg still carries the digest 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > changes_required is reject; unable_to_review is a failure, not a verdict 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > the served model is never filled from the request, and a missing response id stays null 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > incomplete and launch failures are classes only 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > refuses without the plan or the artifact, and refuses a non-xai Hermes provider at construction 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > reads mission id and state from inspectRun and the contract sha256 from the injected source 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > unknown run or another project is null; a lookup the identity cannot make throws 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > b: composition refuses an absent contractSha256Of port, a mismatched file hash, an unreadable file and a malformed prereg value 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > an unrecorded contract hash becomes an empty string, which the controller can never match 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > completes, with a response id and a served model on every leg and the coder tool count from the executor 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > a reviewer leg with no response id is refused by the controller, so the chain cannot complete on it 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > a coder that changed nothing is refused as no_tool_execution 3ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > composeRoleProviders refuses duplicate independence groups and a fake/real mix 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > composeRoleProviders refuses three providers whose models share a family (provider AND model family) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > F3: explicit vendor map: o3 vs gpt-5 same vendor refused; routed anthropic/claude-x vs claude-y refused; unmapped fails closed 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C3 the coder request records the read/write paths and the Read/Write/Edit-only tool envelope > the request carries writePaths, readPaths and toolEnvelope as RECORDED fields, and the check passes 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C3 the coder request records the read/write paths and the Read/Write/Edit-only tool envelope > assertCoderRequestEnvelope refuses Bash, Web, Task, a missing or extra tool, absent readPaths, and an absent envelope 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > file equals the final message and only it changed: ok, hashes recorded 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > file differs from the final message: artifact_file_mismatch, session id, model and usage kept 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > another file changed: workspace_scope_violation; no artifact file at all: also refused, with a null file hash 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > a workspace that cannot be listed before the session means no session: pre-contact failure 0ms
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 56 passed (59)
+   Start at  07:28:39
+   Duration  538ms (transform 413ms, setup 0ms, import 521ms, tests 58ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > a real-shaped chain records only the xAI tick receipt, and the repeat stays spend_unknown
+AssertionError: expected { phase: 'result', …(34) } to match object { costUsdMicros: 10000, …(1) }
+(36 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "costUsdMicros": 10000,
++   "costUsdMicros": 10,
+    "providerResponseId": "resp_xai_0011223344",
+  }
+
+ ❯ relay-bridge/julius-dispatch-adapters.test.ts:208:60
+    206|     expect(results.find((row) => row.role === 'architect')).toMatchObj…
+    207|     expect(results.find((row) => row.role === 'coder')).toMatchObject(…
+    208|     expect(results.find((row) => row.role === 'reviewer')).toMatchObje…
+       |                                                            ^
+    209|     expect(await dispatch('run:2', 'key-0000002')).toMatchObject({ sta…
+    210|     expect(fetched).toHaveLength(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > a successful leg copies integer costUsdMicros from usage.cost_in_usd_ticks and does not price the token counts
+AssertionError: expected { ok: true, …(8) } to match object { ok: true, …(2) }
+(6 matching properties omitted from actual)
+
+- Expected
++ Received
+
+@@ -1,7 +1,7 @@
+  {
+-   "costUsdMicros": 10000,
++   "costUsdMicros": 10,
+    "ok": true,
+    "usage": {
+      "input": 10,
+      "output": 5,
+      "total": 15,
+
+ ❯ relay-bridge/julius-xai-direct-reviewer.test.ts:127:15
+    125|     const body = { ...good, usage: { input_tokens: 10, output_tokens: …
+    126|     const r = await make(ok(body)).call(callIn());
+    127|     expect(r).toMatchObject({ ok: true, usage: { input: 10, output: 5,…
+       |               ^
+    128|   });
+    129|   it('keeps an explicit zero tick count and leaves a missing or unusab…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > keeps an explicit zero tick count and leaves a missing or unusable tick count absent, never zero
+AssertionError: expected 10 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 10
+
+ ❯ relay-bridge/julius-xai-direct-reviewer.test.ts:131:32
+    129|   it('keeps an explicit zero tick count and leaves a missing or unusab…
+    130|     const zero = await make(ok({ ...good, usage: { ...good.usage, cost…
+    131|     expect(zero.costUsdMicros).toBe(0);
+       |                                ^
+    132|     expect((await make(ok(good)).call(callIn())).costUsdMicros ?? null…
+    133|     // 158_500 ticks is the provider's own example shape and is not a …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+===== F1-fractional-ticks-are-rounded expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > G3-2: pre-contact refusals (no key, no inputs) say the provider was not contacted; a post-200 failure does not 3ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > returns the provider response id, the model FROM THE BODY, usage and exactly one request 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > fails the leg when the body has no id (unattested), no served model, or a different model; mismatch is recorded 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F1: every failure after a 200 body keeps id, served model, usage (null when absent), requests 1 and the shown digest 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F2: a dated alias is rejected by default and accepted only when listed in servedModelAllow 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > e: the reviewer sees the exact artifact bytes, their sha256 and the executor evidence; shownSha256 is the hash of the exact message 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > sends the key only in the Authorization header and never in the body or output 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > maps rejects and unreadable verdicts; a bad verdict keeps the response id 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > failure classes carry no provider text 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > refuses without a key, without inputs, and at construction without model, key env or https 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > has the xai independence group and honours the fake flag 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > a successful leg copies integer costUsdMicros from usage.cost_in_usd_ticks and does not price the token counts 0ms
+ × relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > keeps an explicit zero tick count and leaves a missing or unusable tick count absent, never zero 4ms
+   → expected 16 to be null
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > wraps the runner: key, brief and instructions go in; the response id and the PROVIDER-echoed model come out 3ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > a failed call reports a class only, keeps a response id if the provider gave one, and never a message 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > a thrown runner is provider_error; a non-live config or a missing model is refused at construction 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > a failed coder session keeps the session id and reports usage as explicitly unknown when the runtime started 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > a close-out that fails AFTER a completed session still returns the session id, model and usage 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > pre-contact refusals say so; a thrown architect runner leaves usage absent (the controller marks it unknown) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > reviewer failure paths keep the response id the injected port gives, with usage and request count 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > composes architect + coder + direct xAI reviewer through composeRoleProviders and runs a fake chain through the controller 4ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > refuses shared model families and a mixed fake/real build through composeRoleProviders 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > the coder env is derived from the injected env (no key), and no adapter source line reads process.env 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > a real-shaped chain records only the xAI tick receipt, and the repeat stays spend_unknown 2ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > permittedPaths is required and non-empty at construction (no default []) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > the request handed to the provider carries mayRunCommands:false, mayUseNetwork:false and the non-empty permitted paths 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > assertCoderRequestEnvelope refuses a request that drops a field, and the LIMIT constant says nothing is enforced here 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-1 coder key isolation: an env allow-list, never provider keys > the session gets an env snapshot with only allow-listed variables: no provider key reaches execute 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-1 coder key isolation: an env allow-list, never provider keys > an allow-list naming a key-like variable or the role keyEnv is refused; a variable holding a secret value is dropped 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > counts the paths the executor saw changed, not the session invocation count 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a session that says it ran tools but left the workspace untouched reports ZERO changed paths and null invocations 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a close-out the executor did not capture reports UNKNOWN (null, never 0), whatever the session claims 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > deriveCoderChangedPaths is null for uncaptured records 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a session that attests no model reports null, so the controller refuses the leg 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a failed session returns the provider failure class and runs no close-out 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > refuses without a plan, and refuses when the executor start or close is unavailable 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > the request carries the brief and plan, forbids commands and network, and is scoped to the workspace 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > maps approved to approve and carries the injected response id, served model, tokens and the Hermes request count 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > e: executor evidence goes in the packet and changes the shown digest; a failed leg still carries the digest 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > changes_required is reject; unable_to_review is a failure, not a verdict 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > the served model is never filled from the request, and a missing response id stays null 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > incomplete and launch failures are classes only 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > refuses without the plan or the artifact, and refuses a non-xai Hermes provider at construction 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > reads mission id and state from inspectRun and the contract sha256 from the injected source 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > unknown run or another project is null; a lookup the identity cannot make throws 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > b: composition refuses an absent contractSha256Of port, a mismatched file hash, an unreadable file and a malformed prereg value 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > an unrecorded contract hash becomes an empty string, which the controller can never match 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > completes, with a response id and a served model on every leg and the coder tool count from the executor 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > a reviewer leg with no response id is refused by the controller, so the chain cannot complete on it 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > a coder that changed nothing is refused as no_tool_execution 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > composeRoleProviders refuses duplicate independence groups and a fake/real mix 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > composeRoleProviders refuses three providers whose models share a family (provider AND model family) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > F3: explicit vendor map: o3 vs gpt-5 same vendor refused; routed anthropic/claude-x vs claude-y refused; unmapped fails closed 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C3 the coder request records the read/write paths and the Read/Write/Edit-only tool envelope > the request carries writePaths, readPaths and toolEnvelope as RECORDED fields, and the check passes 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C3 the coder request records the read/write paths and the Read/Write/Edit-only tool envelope > assertCoderRequestEnvelope refuses Bash, Web, Task, a missing or extra tool, absent readPaths, and an absent envelope 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > file equals the final message and only it changed: ok, hashes recorded 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > file differs from the final message: artifact_file_mismatch, session id, model and usage kept 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > another file changed: workspace_scope_violation; no artifact file at all: also refused, with a null file hash 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > a workspace that cannot be listed before the session means no session: pre-contact failure 0ms
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 58 passed (59)
+   Start at  07:28:40
+   Duration  535ms (transform 405ms, setup 0ms, import 524ms, tests 46ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > keeps an explicit zero tick count and leaves a missing or unusable tick count absent, never zero
+AssertionError: expected 16 to be null
+
+- Expected:
+null
+
++ Received:
+16
+
+ ❯ relay-bridge/julius-xai-direct-reviewer.test.ts:136:46
+    134|     const fractional = await make(ok({ ...good, usage: { ...good.usage…
+    135|     expect(fractional.ok).toBe(true);
+    136|     expect(fractional.costUsdMicros ?? null).toBeNull();
+       |                                              ^
+    137|     for (const ticks of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY…
+    138|       const r = await make(ok({ ...good, usage: { ...good.usage, cost_…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+===== F1-negative-ticks-become-zero expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > G3-2: pre-contact refusals (no key, no inputs) say the provider was not contacted; a post-200 failure does not 3ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > returns the provider response id, the model FROM THE BODY, usage and exactly one request 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > fails the leg when the body has no id (unattested), no served model, or a different model; mismatch is recorded 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F1: every failure after a 200 body keeps id, served model, usage (null when absent), requests 1 and the shown digest 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F2: a dated alias is rejected by default and accepted only when listed in servedModelAllow 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > e: the reviewer sees the exact artifact bytes, their sha256 and the executor evidence; shownSha256 is the hash of the exact message 1ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > sends the key only in the Authorization header and never in the body or output 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > maps rejects and unreadable verdicts; a bad verdict keeps the response id 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > failure classes carry no provider text 2ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > refuses without a key, without inputs, and at construction without model, key env or https 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > has the xai independence group and honours the fake flag 0ms
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > a successful leg copies integer costUsdMicros from usage.cost_in_usd_ticks and does not price the token counts 0ms
+ × relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > keeps an explicit zero tick count and leaves a missing or unusable tick count absent, never zero 4ms
+   → expected +0 to be null
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > wraps the runner: key, brief and instructions go in; the response id and the PROVIDER-echoed model come out 3ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > a failed call reports a class only, keeps a response id if the provider gave one, and never a message 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > architect adapter > a thrown runner is provider_error; a non-live config or a missing model is refused at construction 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > a failed coder session keeps the session id and reports usage as explicitly unknown when the runtime started 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > a close-out that fails AFTER a completed session still returns the session id, model and usage 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > pre-contact refusals say so; a thrown architect runner leaves usage absent (the controller marks it unknown) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-2 spend and response ids survive post-response failures > reviewer failure paths keep the response id the injected port gives, with usage and request count 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > composes architect + coder + direct xAI reviewer through composeRoleProviders and runs a fake chain through the controller 4ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > refuses shared model families and a mixed fake/real build through composeRoleProviders 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > the coder env is derived from the injected env (no key), and no adapter source line reads process.env 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-7 createJ1ProductionComposition (injected env and fetch; not wired into server.ts) > a real-shaped chain records only the xAI tick receipt, and the repeat stays spend_unknown 2ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > permittedPaths is required and non-empty at construction (no default []) 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > the request handed to the provider carries mayRunCommands:false, mayUseNetwork:false and the non-empty permitted paths 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT > assertCoderRequestEnvelope refuses a request that drops a field, and the LIMIT constant says nothing is enforced here 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-1 coder key isolation: an env allow-list, never provider keys > the session gets an env snapshot with only allow-listed variables: no provider key reaches execute 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > G3-1 coder key isolation: an env allow-list, never provider keys > an allow-list naming a key-like variable or the role keyEnv is refused; a variable holding a secret value is dropped 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > counts the paths the executor saw changed, not the session invocation count 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a session that says it ran tools but left the workspace untouched reports ZERO changed paths and null invocations 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a close-out the executor did not capture reports UNKNOWN (null, never 0), whatever the session claims 2ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > deriveCoderChangedPaths is null for uncaptured records 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a session that attests no model reports null, so the controller refuses the leg 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > a failed session returns the provider failure class and runs no close-out 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > refuses without a plan, and refuses when the executor start or close is unavailable 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > coder adapter: changedPaths come from the executor record > the request carries the brief and plan, forbids commands and network, and is scoped to the workspace 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > maps approved to approve and carries the injected response id, served model, tokens and the Hermes request count 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > e: executor evidence goes in the packet and changes the shown digest; a failed leg still carries the digest 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > changes_required is reject; unable_to_review is a failure, not a verdict 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > the served model is never filled from the request, and a missing response id stays null 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > incomplete and launch failures are classes only 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > reviewer adapter (xAI through Hermes) > refuses without the plan or the artifact, and refuses a non-xai Hermes provider at construction 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > reads mission id and state from inspectRun and the contract sha256 from the injected source 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > unknown run or another project is null; a lookup the identity cannot make throws 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > b: composition refuses an absent contractSha256Of port, a mismatched file hash, an unreadable file and a malformed prereg value 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > RunLookup adapter > an unrecorded contract hash becomes an empty string, which the controller can never match 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > completes, with a response id and a served model on every leg and the coder tool count from the executor 2ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > a reviewer leg with no response id is refused by the controller, so the chain cannot complete on it 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > a coder that changed nothing is refused as no_tool_execution 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > composeRoleProviders refuses duplicate independence groups and a fake/real mix 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > composeRoleProviders refuses three providers whose models share a family (provider AND model family) 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > composed through the J1 controller (fakes only) > F3: explicit vendor map: o3 vs gpt-5 same vendor refused; routed anthropic/claude-x vs claude-y refused; unmapped fails closed 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C3 the coder request records the read/write paths and the Read/Write/Edit-only tool envelope > the request carries writePaths, readPaths and toolEnvelope as RECORDED fields, and the check passes 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C3 the coder request records the read/write paths and the Read/Write/Edit-only tool envelope > assertCoderRequestEnvelope refuses Bash, Web, Task, a missing or extra tool, absent readPaths, and an absent envelope 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > file equals the final message and only it changed: ok, hashes recorded 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > file differs from the final message: artifact_file_mismatch, session id, model and usage kept 1ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > another file changed: workspace_scope_violation; no artifact file at all: also refused, with a null file hash 0ms
+ ✓ relay-bridge/julius-dispatch-adapters.test.ts > C4 the coder leg runs the bundle step when a workspace fs is injected > a workspace that cannot be listed before the session means no session: pre-contact failure 0ms
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 58 passed (59)
+   Start at  07:28:41
+   Duration  549ms (transform 423ms, setup 0ms, import 542ms, tests 49ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > keeps an explicit zero tick count and leaves a missing or unusable tick count absent, never zero
+AssertionError: expected +0 to be null
+
+- Expected:
+null
+
++ Received:
+0
+
+ ❯ relay-bridge/julius-xai-direct-reviewer.test.ts:132:73
+    130|     const zero = await make(ok({ ...good, usage: { ...good.usage, cost…
+    131|     expect(zero.costUsdMicros).toBe(0);
+    132|     expect((await make(ok(good)).call(callIn())).costUsdMicros ?? null…
+       |                                                                         ^
+    133|     // 158_500 ticks is the provider's own example shape and is not a …
+    134|     const fractional = await make(ok({ ...good, usage: { ...good.usage…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+MUTANTS 19/19 MATCHED EXPECTATION
+SOURCE relay-bridge/julius-dispatch-repeat-ceiling.ts sha256 cc0c42c7c0f7a4fd6e28dbb9587cb3cc64b30d9019b7061275623798dd177dcb
+SOURCE relay-bridge/julius-xai-direct-reviewer.ts sha256 f0fbe997c9d356022a2ac04ecef458b498a866c4f82cb4fec0b8066f82842f29
+EXIT:0
