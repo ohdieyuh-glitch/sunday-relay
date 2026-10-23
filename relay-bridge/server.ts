@@ -77,7 +77,7 @@ import {
 import type { MissionOwnershipScope } from './mission';
 import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
 import { classifyWonderlandDispatchPath, handleWonderlandRoute } from './wonderland-routes';
-import { createWonderlandAdmissionService, isWonderlandAdmissionRoute, type WonderlandAdmissionRoutePorts } from './wonderland-admission-route';
+import { createWonderlandAdmissionBridge, createWonderlandAdmissionService, isWonderlandAdmissionRoute, type WonderlandAdmissionRoutePorts } from './wonderland-admission-route';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
@@ -456,7 +456,7 @@ const juliusMissionPorts = (wonderlandAdmission: WonderlandAdmissionRoutePorts):
       cardRevision: process.env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1',
     };
   }
-  return { ...juliusMissionCache, wonderlandAdmission };
+  return { ...juliusMissionCache, wonderlandAdmissionBridge: createWonderlandAdmissionBridge(wonderlandAdmission) };
 };
 
 const headerValue = (value: string | string[] | undefined): string | undefined =>

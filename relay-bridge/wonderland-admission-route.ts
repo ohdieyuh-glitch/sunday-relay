@@ -42,6 +42,60 @@ export function isWonderlandAdmissionRoute(path: string): boolean {
   return path === WONDERLAND_ADMISSION_PATH;
 }
 
+/** Map a mission-handler request onto this route. The raw key is hashed later. */
+export function wonderlandAdmissionRequestFrom(request: {
+  readonly method: string;
+  readonly path: string;
+  readonly url?: string | undefined;
+  readonly authorization?: string | undefined;
+  readonly origin?: string | undefined;
+  readonly body?: string | undefined;
+  readonly idempotencyKey?: string | undefined;
+  readonly remoteAddress?: string | undefined;
+  readonly host?: string | undefined;
+  readonly forwarded?: boolean | undefined;
+  readonly nowIso?: string | undefined;
+  readonly nowMs?: number | undefined;
+}): WonderlandAdmissionRouteRequest {
+  return {
+    method: request.method,
+    path: request.path,
+    url: request.url ?? '',
+    authorization: request.authorization,
+    origin: request.origin,
+    rawBody: request.body,
+    idempotencyKey: request.idempotencyKey,
+    remoteAddress: request.remoteAddress,
+    host: request.host,
+    forwarded: request.forwarded ?? true,
+    nowIso: request.nowIso ?? '',
+    nowMs: request.nowMs ?? Number.NaN,
+  };
+}
+
+export function createWonderlandAdmissionBridge(ports: WonderlandAdmissionRoutePorts): {
+  readonly path: string;
+  handle(request: {
+    readonly method: string;
+    readonly path: string;
+    readonly url?: string | undefined;
+    readonly authorization?: string | undefined;
+    readonly origin?: string | undefined;
+    readonly body?: string | undefined;
+    readonly idempotencyKey?: string | undefined;
+    readonly remoteAddress?: string | undefined;
+    readonly host?: string | undefined;
+    readonly forwarded?: boolean | undefined;
+    readonly nowIso?: string | undefined;
+    readonly nowMs?: number | undefined;
+  }): Promise<{ status: number; body: unknown } | null>;
+} {
+  return {
+    path: WONDERLAND_ADMISSION_PATH,
+    handle: (request) => handleWonderlandAdmissionRoute(wonderlandAdmissionRequestFrom(request), ports),
+  };
+}
+
 export function isLoopbackPeer(remoteAddress: string | undefined, host: string | undefined, forwarded: boolean): boolean {
   if (forwarded) return false;
   if (remoteAddress !== '127.0.0.1' && remoteAddress !== '::1' && remoteAddress !== '::ffff:127.0.0.1') return false;

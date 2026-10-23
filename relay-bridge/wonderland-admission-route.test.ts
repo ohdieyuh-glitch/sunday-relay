@@ -8,6 +8,7 @@ import type { AdmissionLedger } from '../src/relay/integration/wonderland-admiss
 import { createBrowserSessionStore } from './browser-session/grants';
 import { handleJuliusMissionRoute, isJuliusMissionRoute } from './julius-mission-routes';
 import {
+  createWonderlandAdmissionBridge,
   createWonderlandAdmissionService,
   handleWonderlandAdmissionRoute,
   isWonderlandAdmissionRoute,
@@ -293,7 +294,7 @@ describe('mission-handler wiring', () => {
       missingConfig: ['JULIUS_DATABASE_URL'],
       reviewerProvider: null,
       cardRevision: 'card:julius-live:1',
-      wonderlandAdmission: ports,
+      wonderlandAdmissionBridge: createWonderlandAdmissionBridge(ports),
     });
     expect(admitted?.status).toBe(202);
     expect(admitted?.body).not.toHaveProperty('error');
@@ -315,7 +316,7 @@ describe('mission-handler wiring', () => {
       missingConfig: ['JULIUS_DATABASE_URL'],
       reviewerProvider: null,
       cardRevision: 'card:julius-live:1',
-      wonderlandAdmission: ports,
+      wonderlandAdmissionBridge: createWonderlandAdmissionBridge(ports),
     });
     expect(again?.status).toBe(200);
     const unwired = await handleJuliusMissionRoute({
@@ -334,8 +335,7 @@ describe('mission-handler wiring', () => {
       reviewerProvider: 'xai',
       cardRevision: 'card:julius-live:1',
     });
-    expect(unwired?.status).toBe(503);
-    expect(kind(unwired?.body)).toBe('julius_dispatch_disabled');
+    expect(unwired).toBeNull();
   });
 });
 
@@ -343,7 +343,9 @@ describe('the route does not gain a spend path', () => {
   it('does not dispatch, retry, or name a provider endpoint', () => {
     const source = readFileSync(join(__dirname, 'wonderland-admission-route.ts'), 'utf8');
     const server = readFileSync(join(__dirname, 'server.ts'), 'utf8');
+    const mission = readFileSync(join(__dirname, 'julius-mission-routes.ts'), 'utf8');
     expect(server).not.toContain('handleWonderlandAdmissionRoute');
+    expect(mission).not.toContain('wonderland-admission-route');
     expect(source).not.toContain('workflow_dispatch');
     expect(source).not.toContain('setTimeout');
     expect(source).not.toContain('setInterval');
