@@ -86,7 +86,11 @@ describe('direct xAI reviewer adapter (fake fetch only)', () => {
     expect(seen!.headers.authorization).toBe(`Bearer ${KEY}`);
     expect(seen!.body).not.toContain(KEY);
     expect(JSON.stringify(r)).not.toContain(KEY);
-    expect(JSON.parse(seen!.body).store).toBe(false);
+    const sent = JSON.parse(seen!.body) as Record<string, unknown>;
+    expect(sent.store).toBe(false);
+    expect(Object.keys(sent).sort()).toEqual(['input', 'model', 'store']);
+    expect(sent.stream).toBeUndefined();
+    expect(sent.stream_options).toBeUndefined();
   });
   it('maps rejects and unreadable verdicts; a bad verdict keeps the response id', async () => {
     const rej = await make(ok({ ...good, output: [{ content: [{ text: '{"verdict":"reject","summary":"wrong totals"}' }] }] })).call(callIn());
@@ -120,24 +124,91 @@ describe('direct xAI reviewer adapter (fake fetch only)', () => {
     expect(make(ok(good)).providerId).toBe('xai');
     expect(make(ok(good), { fake: true }).fake).toBe(true);
   });
-  it('a successful leg copies integer costUsdMicros from usage.cost_in_usd_ticks and does not price the token counts', async () => {
-    // 100_000_000 ticks = $0.01 exactly. 1 USD = 10_000_000_000 ticks, so 10_000 ticks = 1 micro-USD.
-    const body = { ...good, usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15, cost_in_usd_ticks: 100_000_000 } };
-    const r = await make(ok(body)).call(callIn());
-    expect(r).toMatchObject({ ok: true, usage: { input: 10, output: 5, total: 15 }, costUsdMicros: 10_000 });
+  const withTicks = (ticks: unknown) => ({ ...good, usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15, cost_in_usd_ticks: ticks } });
+  const leg = (body: unknown) => make(ok(body)).call(callIn());
+
+  it('rounds cost_in_usd_ticks up to integer micros, keeps the raw ticks, and does not price token counts', async () => {
+    // k * 10_000 and one tick above it, k = 900_719_925_474. Both are safe integers.
+    // Plain correctness checks beside Number.MAX_SAFE_INTEGER. Float Math.ceil(t/10000)
+    // agrees with this ceiling for every safe integer; these values are not a counterexample.
+    const exactNearMax = 9_007_199_254_740_000;
+    const oneTickOverNearMax = 9_007_199_254_740_001;
+    const cases: ReadonlyArray<readonly [number, number]> = [
+      [158_500, 16],
+      [160_000, 16],
+      [150_001, 16],
+      [159_999, 16],
+      [160_001, 17],
+      [1, 1],
+      [9_999, 1],
+      [10_000, 1],
+      [10_001, 2],
+      [0, 0],
+      [100_000_000, 10_000],
+      [exactNearMax, 900_719_925_474],
+      [oneTickOverNearMax, 900_719_925_475],
+      [Number.MAX_SAFE_INTEGER, 900_719_925_475],
+    ];
+    for (const [ticks, micros] of cases) {
+      expect(Number.isSafeInteger(ticks)).toBe(true);
+      const r = await leg(withTicks(ticks));
+      expect(r).toMatchObject({ ok: true, usage: { input: 10, output: 5, total: 15 }, costUsdMicros: micros, costUsdTicksRaw: ticks });
+    }
   });
-  it('keeps an explicit zero tick count and leaves a missing or unusable tick count absent, never zero', async () => {
-    const zero = await make(ok({ ...good, usage: { ...good.usage, cost_in_usd_ticks: 0 } })).call(callIn());
-    expect(zero.costUsdMicros).toBe(0);
-    expect((await make(ok(good)).call(callIn())).costUsdMicros ?? null).toBeNull();
-    // 158_500 ticks is the provider's own example shape and is not a whole number of micros.
-    const fractional = await make(ok({ ...good, usage: { ...good.usage, cost_in_usd_ticks: 158_500 } })).call(callIn());
-    expect(fractional.ok).toBe(true);
-    expect(fractional.costUsdMicros ?? null).toBeNull();
-    for (const ticks of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '100000000']) {
-      const r = await make(ok({ ...good, usage: { ...good.usage, cost_in_usd_ticks: ticks } })).call(callIn());
+
+  it('refuses a missing, null, negative, non-integer, or non-safe tick count and does not store zero', async () => {
+    expect(await leg(good)).toMatchObject({ ok: true, usage: { input: 10, output: 5, total: 15 } });
+    expect((await leg(good)).costUsdMicros ?? null).toBeNull();
+    expect((await leg(good)).costUsdTicksRaw ?? null).toBeNull();
+    for (const ticks of [null, -1, -10_000, 1.5, '158500', Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1]) {
+      const r = await leg(withTicks(ticks));
       expect(r.ok).toBe(true);
       expect(r.costUsdMicros ?? null).toBeNull();
+      expect(r.costUsdTicksRaw ?? null).toBeNull();
     }
+  });
+
+  it('over-states a safe tick count by less than one micro and never rounds down', async () => {
+    const max = BigInt(Number.MAX_SAFE_INTEGER);
+    let state = 0xC0FFEE;
+    const next32 = (): number => {
+      state = Math.imul(state ^ (state >>> 15), state | 1) + 0x6d2b79f5;
+      return state >>> 0;
+    };
+    const samples = [0, Number.MAX_SAFE_INTEGER, 9_007_199_254_740_000, 9_007_199_254_740_001];
+    for (let i = 0; i < 200; i += 1) {
+      const hi = BigInt(next32() & 0x1f_ffff);
+      const lo = BigInt(next32());
+      samples.push(Number(((hi << 32n) | lo) % (max + 1n)));
+    }
+    for (const ticks of samples) {
+      const r = await leg(withTicks(ticks));
+      expect(r.ok).toBe(true);
+      expect(r.costUsdTicksRaw).toBe(ticks);
+      const micros = r.costUsdMicros;
+      expect(Number.isSafeInteger(micros)).toBe(true);
+      const m = BigInt(micros as number);
+      const t = BigInt(ticks);
+      expect(m * 10_000n >= t).toBe(true);
+      expect((m - 1n) * 10_000n < t).toBe(true);
+    }
+  });
+
+  it('a streaming body or a body with no top-level usage produces no dollar receipt', async () => {
+    const sse = [
+      'data: {"type":"response.output_text.delta","delta":"hi"}',
+      '',
+      'data: {"type":"response.completed","response":{"id":"resp_abc123","model":"grok-requested","usage":{"cost_in_usd_ticks":158500}}}',
+      '',
+    ].join('\n');
+    const streamed = await leg(sse);
+    expect(streamed).toMatchObject({ ok: false, failureClass: 'xai_response_unreadable' });
+    expect(streamed.costUsdMicros ?? null).toBeNull();
+    expect(streamed.costUsdTicksRaw ?? null).toBeNull();
+    const noUsage = { id: good.id, model: good.model, output: good.output };
+    const bare = await leg(noUsage);
+    expect(bare).toMatchObject({ ok: true, responseId: 'resp_abc123', model: 'grok-requested' });
+    expect(bare.costUsdMicros ?? null).toBeNull();
+    expect(bare.costUsdTicksRaw ?? null).toBeNull();
   });
 });

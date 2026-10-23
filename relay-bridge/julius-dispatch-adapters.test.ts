@@ -203,11 +203,50 @@ describe('G3-7 createJ1ProductionComposition (injected env and fetch; not wired 
     expect(await dispatch('run:1', 'key-0000001')).toMatchObject({ ok: true });
     await controller.whenIdle();
     const results = (await ledger.rows()).filter((row) => row.phase === 'result' && row.role !== 'final');
-    expect(results.find((row) => row.role === 'architect')).toMatchObject({ costUsdMicros: null });
-    expect(results.find((row) => row.role === 'coder')).toMatchObject({ costUsdMicros: null });
-    expect(results.find((row) => row.role === 'reviewer')).toMatchObject({ costUsdMicros: 10_000, providerResponseId: 'resp_xai_0011223344' });
+    expect(results.find((row) => row.role === 'architect')).toMatchObject({ costUsdMicros: null, costUsdTicksRaw: null });
+    expect(results.find((row) => row.role === 'coder')).toMatchObject({ costUsdMicros: null, costUsdTicksRaw: null });
+    expect(results.find((row) => row.role === 'reviewer')).toMatchObject({ costUsdMicros: 10_000, costUsdTicksRaw: 100_000_000, providerResponseId: 'resp_xai_0011223344' });
     expect(await dispatch('run:2', 'key-0000002')).toMatchObject({ status: 409, code: 'julius_dispatch_repeat_spend_unknown' });
     expect(fetched).toHaveLength(1);
+  });
+  it('rounds a 158_500 tick response up to 16 micros on the ledger, and usage with no ticks stays spend_unknown', async () => {
+    const run = async (reviewerBody: unknown) => {
+      const providers = createJ1ProductionComposition({
+        env, brief: 'BRIEF', fake: true,
+        fetchImpl: async () => ({ ok: true, status: 200, text: async () => JSON.stringify(reviewerBody) }),
+        architect: { config: gptConfig, keyEnv: 'OPENAI_API_KEY', servedModelAllow: ['gpt-served'], run: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: gptUsage }) as GptRunOutcome },
+        coder: { providerFor: () => fakeCoding(completed()), shell: fakeShell(), projectId: 'proj-1', workerId: 'w', workspacePath: '/w', model: 'claude-requested', servedModelAllow: ['claude-served'], permittedPaths: ['src/'] },
+        reviewer: { model: 'grok-requested', keyEnv: 'XAI_API_KEY' },
+      });
+      const missionId = 'julius-inworld-data-1';
+      let clock = Date.parse('2026-10-22T12:00:00Z');
+      const ledger = createMemoryDispatchLedger();
+      const controller = createJuliusDispatch({
+        providers, ledger,
+        env: () => ({
+          JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: 'founder', JULIUS_J1_PROJECT_ID: 'proj-1', JULIUS_J1_REVIEWER_PROVIDER: 'xai',
+          JULIUS_J1_BUDGET_CAP_USD: '30', JULIUS_J1_LEG_ESTIMATE_USD: '1', JULIUS_J1_DAILY_CAP: '10', JULIUS_J1_MAX_RUNS_PER_MISSION: '10', ...env,
+        }),
+        now: () => (clock += 1000), frozen: { ...frozen, missionId }, checker: { check: async () => ({ pass: true }) },
+        runs: { lookup: async () => ({ missionId, contractSha256: sha, state: 'READY' }) },
+      });
+      const dispatch = (runId: string, key: string) => controller.dispatch({
+        projectId: 'proj-1', runId, callerPlayerId: 'founder', sessionId: 's1', idempotencyKey: key,
+        clientTriggerId: 'trig-00000001', clientLogSha256: 'e'.repeat(64), clientUiActionUtc: '2026-10-22T11:59:30.000Z',
+      });
+      return { ledger, controller, dispatch };
+    };
+    const rounded = await run({ ...xaiBody, usage: { ...xaiBody.usage, cost_in_usd_ticks: 158_500 } });
+    expect(await rounded.dispatch('run:1', 'key-0000001')).toMatchObject({ ok: true });
+    await rounded.controller.whenIdle();
+    const roundedReviewer = (await rounded.ledger.rows()).find((row) => row.phase === 'result' && row.role === 'reviewer');
+    expect(roundedReviewer).toMatchObject({ costUsdMicros: 16, costUsdTicksRaw: 158_500, providerResponseId: 'resp_xai_0011223344' });
+    const unticked = await run(xaiBody);
+    expect(await unticked.dispatch('run:1', 'key-0000001')).toMatchObject({ ok: true });
+    await unticked.controller.whenIdle();
+    const untickedReviewer = (await unticked.ledger.rows()).find((row) => row.phase === 'result' && row.role === 'reviewer');
+    expect(untickedReviewer).toMatchObject({ costUsdMicros: null, costUsdTicksRaw: null });
+    expect(await unticked.dispatch('run:2', 'key-0000002')).toMatchObject({ status: 409, code: 'julius_dispatch_repeat_spend_unknown' });
   });
 });
 
