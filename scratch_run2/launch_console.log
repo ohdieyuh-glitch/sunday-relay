@@ -1,0 +1,26 @@
+2026-10-23T09:36:02.0866761Z B33 launcher (W2DEV) DIAGNOSTIC, dev loopback, dev identities: never scoring evidence. role=JUDGED scenario=survey
+2026-10-23T09:36:02.7973095Z CANDIDATE 0.1.0-r16reh18 (C:\dev\iwonder\_qa_handoff\integration\r16reh16w_submission_20261020\tools\b33_v3_1b\CANDIDATE.json sha256 f4521fbbc738f7bb166cee776feac932d59c4bf04ad368ca84aaa3cbbc754930)
+2026-10-23T09:36:02.8005311Z package C:\dev\iwonder\_wonderland_beta_release\Wonderland_PrivateBeta_0.1.0-r16reh18 boot sha256 aca06a168f64470e24473b05257ee81d1b546d58282b8e273418a59d9cbb1edd game exe sha256 df6b70c832f8983a30d09d814092d7839df467232f760694e2723987669b658d commit aa930c26 (both exes = the candidate's)
+2026-10-23T09:36:02.9779546Z server: RING RELAY -RelaySource C:\dev\iwonder\_b33_relay_wt_3f20fc1a_20261023 at 3f20fc1ace7b157d4ff2673959c98998564ef43b (tree 75a61ea2721429a4c7f0849ecc6fffec9e8f6e7f); worktree HEAD 3f20fc1ace7b157d4ff2673959c98998564ef43b (HEAD), HEAD is the commit: True, clean: True -- NOT-PREREG
+2026-10-23T09:36:03.0899519Z server: ring relay 3f20fc1ace7b157d4ff2673959c98998564ef43b (tree 75a61ea2721429a4c7f0849ecc6fffec9e8f6e7f); package-lock blob c44cfffc91a81cc639b9d527e919a127bfd83c38 identical in C:\dev\iwonder\_r16fix_relay_pristine_20261020
+2026-10-23T09:36:03.1029548Z NOTE: NOT the PREREG B33 v3 judged launch (-RenderCvars 'scalability 0', -LogPeriod 0.1, no -ForceLogFlush, cbe584be server): the judge VOIDs this run
+2026-10-23T09:36:03.1199536Z planned SENDER args: -userdir="C:\dev\iwonder\_qa_handoff\integration\r16reh16w_submission_20261020\NOT_COUNTED_b33\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z\sender" -windowed -ResX=940 -ResY=1031 -WinX=0 -WinY=0 -wldev -ExecCmds="wl.Social.Dev wlautoA http://127.0.0.1:8796,wl.Remote.LogPeriod 0.1,scalability 0"
+2026-10-23T09:36:03.1500490Z planned OBSERVER args: -userdir="C:\dev\iwonder\_qa_handoff\integration\r16reh16w_submission_20261020\NOT_COUNTED_b33\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z\observer" -windowed -ResX=940 -ResY=1031 -WinX=960 -WinY=0 -wldev -ExecCmds="wl.Social.Dev wlautoB http://127.0.0.1:8796,wl.Remote.LogPeriod 0.1,scalability 0"
+2026-10-23T09:36:04.9033185Z lease b281d10ef98d; RAM free at start 6.981 GB (Win32_OperatingSystem.FreePhysicalMemory), Available MBytes 7132
+2026-10-23T09:36:08.9309946Z dev server pid 47580 on 127.0.0.1:8796 from RING RELAY C:\dev\iwonder\_b33_relay_wt_3f20fc1a_20261023 3f20fc1ace7b157d4ff2673959c98998564ef43b (NOT-PREREG) (bundle sha256 d3c69da9719ae6ce746876cfd4be259838be75b6ea28fc4ddd45f0ef23b3f9fe)
+2026-10-23T09:36:08.9349801Z launch SENDER: C:\dev\iwonder\_wonderland_beta_release\Wonderland_PrivateBeta_0.1.0-r16reh18\Wonderland.exe -userdir="C:\dev\iwonder\_qa_handoff\integration\r16reh16w_submission_20261020\NOT_COUNTED_b33\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z\sender" -windowed -ResX=940 -ResY=1031 -WinX=0 -WinY=0 -wldev -ExecCmds="wl.Social.Dev wlautoA http://127.0.0.1:8796,wl.Remote.LogPeriod 0.1,scalability 0"
+2026-10-23T09:36:32.7857094Z launch OBSERVER: C:\dev\iwonder\_wonderland_beta_release\Wonderland_PrivateBeta_0.1.0-r16reh18\Wonderland.exe -userdir="C:\dev\iwonder\_qa_handoff\integration\r16reh16w_submission_20261020\NOT_COUNTED_b33\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z\observer" -windowed -ResX=940 -ResY=1031 -WinX=960 -WinY=0 -wldev -ExecCmds="wl.Social.Dev wlautoB http://127.0.0.1:8796,wl.Remote.LogPeriod 0.1,scalability 0"
+2026-10-23T09:36:57.2924532Z joined: sender True observer True (log file stamps may lag the game at boot; the drive waits for a fresh log)
+2026-10-23T09:36:58.0682585Z game pids: sender 42320, observer 47696; per-monitor-v2 thread context available: True
+2026-10-23T09:37:00.2664096Z client rects before placement (physical px): sender (0,0)-(1600,1000) 1600x1000, observer (1200,0)-(2800,1000) 1600x1000
+2026-10-23T09:37:03.9712533Z layout try 1: sender frame (0,0)-(960,1080) 960x1080 client (10,39)-(950,1070) 940x1031; observer frame (960,0)-(1920,1080) 960x1080 client (970,39)-(1910,1070) 940x1031; OK
+2026-10-23T09:37:04.0439073Z frames capture pid 7180 (captures only while the drive's CAPTURE flag exists)
+2026-10-23T09:37:04.2585148Z READY: RUN.json written. Next: b33_drive.ps1 -Run "C:\dev\iwonder\_qa_handoff\integration\r16reh16w_submission_20261020\NOT_COUNTED_b33\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z" -Mode <jumps|m4>, then b33_stop.ps1 -Run "C:\dev\iwonder\_qa_handoff\integration\r16reh16w_submission_20261020\NOT_COUNTED_b33\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z", then b33_judge.py "C:\dev\iwonder\_qa_handoff\integration\r16reh16w_submission_20261020\NOT_COUNTED_b33\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z"
+2026-10-23T09:42:15.3283822Z STOP_REQUEST seen
+2026-10-23T09:42:21.9200158Z stop: closed: killed 5, skipped 1, lease release: RELEASED
+2026-10-23T09:42:21.9200158Z stop: killed sender pid 48772 (Wonderland)
+2026-10-23T09:42:21.9200158Z stop: killed sender pid 42320 (Wonderland)
+2026-10-23T09:42:21.9200158Z stop: killed observer pid 45480 (Wonderland)
+2026-10-23T09:42:21.9200158Z stop: killed observer pid 47696 (Wonderland)
+2026-10-23T09:42:21.9200158Z stop: killed server pid 47580 (node)
+2026-10-23T09:42:21.9200158Z stop: skipped frames pid 7180: already gone

@@ -1,0 +1,5 @@
+B33 SURVEY r18 -- NOT LAUNCHED (STOP: founder RAM condition) 2026-10-23T02:10:13.7180106-07:00
+Founder condition: >= 6.5 GB available RAM before launch. Measured 02:07:51-02:09:44 PDT (ram_precheck.tsv): FreePhysicalMemory 5.83-5.97 GB, Available MBytes 5850-6108. NOT MET.
+No git push running (backup_state_before_pause.txt) -> nothing to pause/free there.
+Passed: worktree created (worktree.txt), package 91/91 vs baseline 775ce9a5, exe hashes match CANDIDATE.json, b33_launch -DryChecks exit 0 (drychecks.log). C: free 28.78 GB.
+No lease taken, no client launched, nothing killed.

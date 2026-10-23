@@ -1,0 +1,26 @@
+﻿{
+    "closed_utc":  "2026-10-23T09:42:21.9030144Z",
+    "by":  "conductor",
+    "killed":  [
+                   "sender pid 48772 (Wonderland)",
+                   "sender pid 42320 (Wonderland)",
+                   "observer pid 45480 (Wonderland)",
+                   "observer pid 47696 (Wonderland)",
+                   "server pid 47580 (node)"
+               ],
+    "skipped":  [
+                    "frames pid 7180: already gone"
+                ],
+    "log_sha256":  {
+                       "sender\\Saved\\Logs\\Wonderland.log":  "a5b9aee8553eae24810d5a820423092ee293e2190a3155c773486223250031c5",
+                       "observer\\Saved\\Logs\\Wonderland.log":  "98d68418f9f2bd8cff43a089a47701916937fe24c931e19bf2934454f472f1c2"
+                   },
+    "frames_jpg":  141,
+    "lease_id":  "b281d10ef98d",
+    "lease_release":  "RELEASED",
+    "sums_file":  "SHA256SUMS_AT_CLOSE.txt",
+    "sums_sha256":  "705502ecf56a949b06edd2b3fc621236c02814fb40b07acf3a8fd28a1b414f20",
+    "close_errors":  [
+
+                     ]
+}

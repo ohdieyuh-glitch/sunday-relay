@@ -1,0 +1,7 @@
+﻿2026-10-23T09:42:21.9200158Z stop: closed: killed 5, skipped 1, lease release: RELEASED
+2026-10-23T09:42:21.9200158Z stop: killed sender pid 48772 (Wonderland)
+2026-10-23T09:42:21.9200158Z stop: killed sender pid 42320 (Wonderland)
+2026-10-23T09:42:21.9200158Z stop: killed observer pid 45480 (Wonderland)
+2026-10-23T09:42:21.9200158Z stop: killed observer pid 47696 (Wonderland)
+2026-10-23T09:42:21.9200158Z stop: killed server pid 47580 (node)
+2026-10-23T09:42:21.9200158Z stop: skipped frames pid 7180: already gone

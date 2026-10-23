@@ -1,0 +1,6 @@
+▲ [WARNING] Cannot find base config file "../tsconfig.json" [tsconfig.json]
+
+    relay-bridge/tsconfig.json:2:13:
+      2 │   "extends": "../tsconfig.json",
+        ╵              ~~~~~~~~~~~~~~~~~~
+

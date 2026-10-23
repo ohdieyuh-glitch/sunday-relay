@@ -1,0 +1,94 @@
+﻿{
+    "drychecks":  true,
+    "role":  "REHEARSAL_NOT_PREREG",
+    "counted":  false,
+    "run_folder":  "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\NOT_COUNTED_b33\\REHEARSAL_NOT_PREREG_b33_survey_20261023T090738Z",
+    "lease_gb":  5,
+    "in_run_guard_gb":  1.1,
+    "utc":  "2026-10-23T09:07:39.5964721Z",
+    "exe_sha256":  "df6b70c832f8983a30d09d814092d7839df467232f760694e2723987669b658d",
+    "boot_sha256":  "aca06a168f64470e24473b05257ee81d1b546d58282b8e273418a59d9cbb1edd",
+    "commit":  "aa930c26",
+    "prereg_server":  false,
+    "candidate":  {
+                      "file":  "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\tools\\b33_v3_1b\\CANDIDATE.json",
+                      "file_sha256":  "f4521fbbc738f7bb166cee776feac932d59c4bf04ad368ca84aaa3cbbc754930",
+                      "default":  true,
+                      "status":  "READY",
+                      "label":  "0.1.0-r16reh18",
+                      "commit":  "aa930c269c43a52fc31c785f7bdcc231c8af6cf0",
+                      "game_exe_sha256":  "df6b70c832f8983a30d09d814092d7839df467232f760694e2723987669b658d",
+                      "boot_exe_sha256":  "aca06a168f64470e24473b05257ee81d1b546d58282b8e273418a59d9cbb1edd",
+                      "package_folder":  "C:\\dev\\iwonder\\_wonderland_beta_release\\Wonderland_PrivateBeta_0.1.0-r16reh18"
+                  },
+    "prereg_launch":  false,
+    "server_port":  8796,
+    "disclosed":  {
+                      "logging_cvars":  [
+                                            "wl.Remote.LogPeriod 0.1"
+                                        ],
+                      "render_cvars":  [
+                                           "scalability 0"
+                                       ],
+                      "control_cvars_observer":  [
+
+                                                 ],
+                      "switches":  [
+                                       "-wldev (needed by wl.Social.Dev)",
+                                       "-windowed -ResX=940 -ResY=1031 -WinX/-WinY (ignored by the client; the launcher places the windows)"
+                                   ],
+                      "launch_switches":  [
+                                              "-userdir",
+                                              "-windowed",
+                                              "-ResX",
+                                              "-ResY",
+                                              "-WinX",
+                                              "-WinY",
+                                              "-wldev",
+                                              "-ExecCmds"
+                                          ],
+                      "gameplay_cvars":  [
+
+                                         ]
+                  },
+    "planned":  {
+                    "sender":  {
+                                   "identity":  "wlautoA",
+                                   "args":  "-userdir=\"C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\NOT_COUNTED_b33\\REHEARSAL_NOT_PREREG_b33_survey_20261023T090738Z\\sender\" -windowed -ResX=940 -ResY=1031 -WinX=0 -WinY=0 -wldev -ExecCmds=\"wl.Social.Dev wlautoA http://127.0.0.1:8796,wl.Remote.LogPeriod 0.1,scalability 0\"",
+                                   "cmdline":  "C:\\dev\\iwonder\\_wonderland_beta_release\\Wonderland_PrivateBeta_0.1.0-r16reh18\\Wonderland.exe -userdir=\"C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\NOT_COUNTED_b33\\REHEARSAL_NOT_PREREG_b33_survey_20261023T090738Z\\sender\" -windowed -ResX=940 -ResY=1031 -WinX=0 -WinY=0 -wldev -ExecCmds=\"wl.Social.Dev wlautoA http://127.0.0.1:8796,wl.Remote.LogPeriod 0.1,scalability 0\""
+                               },
+                    "observer":  {
+                                     "identity":  "wlautoB",
+                                     "args":  "-userdir=\"C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\NOT_COUNTED_b33\\REHEARSAL_NOT_PREREG_b33_survey_20261023T090738Z\\observer\" -windowed -ResX=940 -ResY=1031 -WinX=960 -WinY=0 -wldev -ExecCmds=\"wl.Social.Dev wlautoB http://127.0.0.1:8796,wl.Remote.LogPeriod 0.1,scalability 0\"",
+                                     "cmdline":  "C:\\dev\\iwonder\\_wonderland_beta_release\\Wonderland_PrivateBeta_0.1.0-r16reh18\\Wonderland.exe -userdir=\"C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\NOT_COUNTED_b33\\REHEARSAL_NOT_PREREG_b33_survey_20261023T090738Z\\observer\" -windowed -ResX=940 -ResY=1031 -WinX=960 -WinY=0 -wldev -ExecCmds=\"wl.Social.Dev wlautoB http://127.0.0.1:8796,wl.Remote.LogPeriod 0.1,scalability 0\""
+                                 }
+                },
+    "server":  {
+                   "prereg":  false,
+                   "repo":  "C:\\dev\\iwonder\\_b33_relay_wt_3f20fc1a_20261023",
+                   "commit":  "3f20fc1ace7b157d4ff2673959c98998564ef43b",
+                   "tree":  "75a61ea2721429a4c7f0849ecc6fffec9e8f6e7f",
+                   "ring":  {
+                                "relay_source":  "C:\\dev\\iwonder\\_b33_relay_wt_3f20fc1a_20261023",
+                                "relay_commit_given":  "3f20fc1ace7b157d4ff2673959c98998564ef43b",
+                                "commit":  "3f20fc1ace7b157d4ff2673959c98998564ef43b",
+                                "tree":  "75a61ea2721429a4c7f0849ecc6fffec9e8f6e7f",
+                                "worktree_head":  "3f20fc1ace7b157d4ff2673959c98998564ef43b",
+                                "worktree_branch":  "HEAD",
+                                "head_is_relay_commit":  true,
+                                "worktree_clean":  true,
+                                "worktree_status_lines":  0,
+                                "worktree_status_file":  "relay_worktree_status.txt",
+                                "runs_from":  "git archive of the COMMIT (relay-bridge, src, package.json), never the working files",
+                                "prereg":  false,
+                                "note":  "NOT-PREREG ring relay (transport ring rehearsal, r16reh18): the judge VOIDs the run and still prints every scenario (R7-08)"
+                            },
+                   "relay_pin":  null,
+                   "package_lock_blob_commit":  "c44cfffc91a81cc639b9d527e919a127bfd83c38",
+                   "package_lock_blob_node_modules":  "c44cfffc91a81cc639b9d527e919a127bfd83c38",
+                   "package_lock_identical":  true,
+                   "node_modules_from":  "C:\\dev\\iwonder\\_r16fix_relay_pristine_20261020",
+                   "archive_files":  1799,
+                   "archive_file_list_sha256":  "04e0db0e66c4f17faf46842d0b31ce311b31c37b10a7f34e17a3f52391b31f18"
+               }
+}

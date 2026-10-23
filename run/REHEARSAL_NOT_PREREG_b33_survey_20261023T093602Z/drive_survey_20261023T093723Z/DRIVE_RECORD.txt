@@ -1,0 +1,6 @@
+B33 DRIVE (W2DEV b33_drive.ps1) DIAGNOSTIC tool, W2DEV, not evidence by itself
+mode=survey dry=False run=C:\dev\iwonder\_qa_handoff\integration\r16reh16w_submission_20261020\NOT_COUNTED_b33\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z utc=20261023T093723Z
+stand=12 walk=12 run=12 m4=10 quiet_s=60 cpd_param=0 skipcal=False noclick=False turn_stop_deg=35 drop_abort_uu=40 precise_uu=120 floor_tol_uu=15 cal_passes=3 cal_cpd_range=3.5..9 cal_warmup_counts=200 mouse_chunk=1 mouse_interval_ms=2 sim_actor_turn_rate=260 sim_key_up_lag_ms=19 corner_probe_ms=60 walkoff_taps=3 mount_tol_uu=15 walkoff_probes=3 walkoff_probe_ms=30 walkoff_tol_deg=5 sim_lag_ms=0
+a1fa03037b05c639fabce276b3154a9b4b664633ae99e0083f57efc840456b8a  C:\dev\iwonder\_qa_handoff\integration\r16reh16w_submission_20261020\tools\b33_v3_1b\b33_drive.ps1
+4283fed15e2f3d628471905216663272665a43405658747f9975993782190714  C:\dev\iwonder\_qa_handoff\integration\r16reh16w_submission_20261020\tools\b33_v3_1b\b33_native.cs
+7de04985b6db89989b5ed8063972c2b143f3c45b4be8577d8c3b9917c390405b  routes\b33_route_v11.json

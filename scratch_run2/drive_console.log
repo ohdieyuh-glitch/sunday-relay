@@ -1,0 +1,13 @@
+09:37:24.479 waiting for a fresh sender log (the file stamps lag at boot)
+09:37:25.449 PRESENCE GATE: waiting for 60 s with no key or mouse event from anyone (hands off the keyboard and mouse)
+09:38:27.922 CALIBRATE: 3 pass(es) +/- out and back: walk 1.2 s, turn 40 deg by mouse (prior 4.207 counts/deg), walk 1.4 s; actor yaw; a starting gain, not a gate
+09:38:47.076 CALIBRATED counts/deg = 7.226 (+ 7.117 / - 7.226; spread 3.7%, logged)
+09:38:53.556 BEGIN SURVEY_RUNWAY
+09:39:19.195 END SURVEY_RUNWAY
+09:40:05.352 SURVEY: on the kerb
+09:40:05.413 BEGIN SURVEY_WALKOFF
+09:40:11.581 END SURVEY_WALKOFF
+09:41:15.764 SURVEY: return route verified
+09:41:15.778 DONE
+09:41:15.835 timeline: C:\dev\iwonder\_qa_handoff\integration\r16reh16w_submission_20261020\NOT_COUNTED_b33\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z\drive_survey_20261023T093723Z\timeline.csv
+EXIT=0 

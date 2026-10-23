@@ -1,0 +1,374 @@
+{
+ "tool": "b33_judge.py v3.1 (W2DEV)",
+ "run": "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\NOT_COUNTED_b33\\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z",
+ "verdict_analyser": "both (registered = the bar; W2 may only add FAIL/INCONCLUSIVE)",
+ "overrides": [],
+ "frames_required": true,
+ "expected_exe": "df6b70c832f8983a30d09d814092d7839df467232f760694e2723987669b658d",
+ "candidate": {
+  "file": "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\tools\\b33_v3_1b\\CANDIDATE.json",
+  "file_sha256": "f4521fbbc738f7bb166cee776feac932d59c4bf04ad368ca84aaa3cbbc754930",
+  "status": "READY",
+  "label": "0.1.0-r16reh18",
+  "commit": "aa930c269c43a52fc31c785f7bdcc231c8af6cf0",
+  "game_exe_sha256": "df6b70c832f8983a30d09d814092d7839df467232f760694e2723987669b658d",
+  "boot_exe_sha256": "aca06a168f64470e24473b05257ee81d1b546d58282b8e273418a59d9cbb1edd",
+  "expect_exe_override": null
+ },
+ "inputs": {
+  "sender_log": "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\NOT_COUNTED_b33\\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z\\sender\\Saved\\Logs\\Wonderland.log",
+  "viewer_log": "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\NOT_COUNTED_b33\\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z\\observer\\Saved\\Logs\\Wonderland.log",
+  "timelines": [
+   "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\NOT_COUNTED_b33\\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z\\drive_survey_20261023T093723Z\\timeline.csv"
+  ],
+  "frames_dir": "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\NOT_COUNTED_b33\\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z\\frames",
+  "fig": "usr_wlautoa"
+ },
+ "hashes": {
+  "sender_log": "a5b9aee8553eae24810d5a820423092ee293e2190a3155c773486223250031c5",
+  "viewer_log": "98d68418f9f2bd8cff43a089a47701916937fe24c931e19bf2934454f472f1c2",
+  "timeline_0": "19d60bf06a86e545d2a6ce6c228855edc9cecf7520ddc85ce0f00190d4d6764a",
+  "b33_analyser/motion_diag.py": "4dee34d04a36ae0f9a8e0e7f5f925fa4eca371ce498927c1cce16b1d27f8ad29",
+  "b33_analyser/motion_diag_w2.py": "176e273ae38e51e6fd58cc428def1a1c18c3ba2e5e306403cc69fad8efd60f1b",
+  "b33_slicer.py": "5997f82c5493f58bc7ce221e1e7a826fa772bf5ae90264dbc7f07fe6d6b59b0a",
+  "b33_judge.py": "4caddf0b34b74c9457b730ccdf2e2d1bab0fecbe51a51637dc34e53b4f80d0ec"
+ },
+ "meta": {
+  "exe_sha256": "df6b70c832f8983a30d09d814092d7839df467232f760694e2723987669b658d",
+  "commit": "aa930c26",
+  "ram_free_gb_at_start": 6.981,
+  "label": "DIAGNOSTIC B33 NOT-PREREG (server override -ServerTree; dev loopback; never scoring evidence)",
+  "run_id": "REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z"
+ },
+ "registered_analyser_identical": true,
+ "clients": {
+  "sender": [
+   48772,
+   42320
+  ],
+  "observer": [
+   45480,
+   47696
+  ]
+ },
+ "slicer": {
+  "counts": {
+   "STANDING": 0,
+   "WALKING": 0,
+   "RUNNING": 0
+  },
+  "unclassified": 0,
+  "jumps": []
+ },
+ "blocks": [
+  {
+   "name": "SURVEY_RUNWAY",
+   "begin_utc": "09:38:53.464",
+   "end_utc": "09:39:19.131",
+   "complete": true
+  },
+  {
+   "name": "SURVEY_WALKOFF",
+   "begin_utc": "09:40:05.401",
+   "end_utc": "09:40:11.557",
+   "complete": true
+  }
+ ],
+ "historical": false,
+ "void_lines_sender": [],
+ "void_lines_observer": [],
+ "teleports": [],
+ "role": "REHEARSAL_NOT_PREREG",
+ "switches_disclosed": [
+  "-userdir",
+  "-windowed",
+  "-ResX",
+  "-ResY",
+  "-WinX",
+  "-WinY",
+  "-wldev",
+  "-ExecCmds"
+ ],
+ "switches_run_json": [
+  "-userdir",
+  "-windowed",
+  "-ResX",
+  "-ResY",
+  "-WinX",
+  "-WinY",
+  "-wldev",
+  "-ExecCmds"
+ ],
+ "launch": [
+  {
+   "client": "sender",
+   "cmdline_found": true,
+   "switches": [
+    "-userdir",
+    "-windowed",
+    "-ResX",
+    "-ResY",
+    "-WinX",
+    "-WinY",
+    "-wldev",
+    "-ExecCmds"
+   ],
+   "bad_switches": [],
+   "commands": [
+    "wl.Social.Dev wlautoA http://127.0.0.1:8796",
+    "wl.Remote.LogPeriod 0.1",
+    "scalability 0"
+   ],
+   "control_cvars": [],
+   "render_cvars": [
+    "scalability 0"
+   ],
+   "dev_cmds": [
+    "wl.Social.Dev wlautoA http://127.0.0.1:8796"
+   ],
+   "log_period_cmds": [
+    "wl.Remote.LogPeriod 0.1"
+   ],
+   "not_allowed": [],
+   "ini_wl_lines": [],
+   "empty_tokens": 0
+  },
+  {
+   "client": "observer",
+   "cmdline_found": true,
+   "switches": [
+    "-userdir",
+    "-windowed",
+    "-ResX",
+    "-ResY",
+    "-WinX",
+    "-WinY",
+    "-wldev",
+    "-ExecCmds"
+   ],
+   "bad_switches": [],
+   "commands": [
+    "wl.Social.Dev wlautoB http://127.0.0.1:8796",
+    "wl.Remote.LogPeriod 0.1",
+    "scalability 0"
+   ],
+   "control_cvars": [],
+   "render_cvars": [
+    "scalability 0"
+   ],
+   "dev_cmds": [
+    "wl.Social.Dev wlautoB http://127.0.0.1:8796"
+   ],
+   "log_period_cmds": [
+    "wl.Remote.LogPeriod 0.1"
+   ],
+   "not_allowed": [],
+   "ini_wl_lines": [],
+   "empty_tokens": 0
+  }
+ ],
+ "report_time_samples_check": {
+  "repeated_rep_lines": 1660,
+  "sender_longest_idle_s": 133.62299990653992
+ },
+ "echoes": {
+  "sender": [
+   [
+    5397,
+    "wl.Remote.LogPeriod",
+    "0.1"
+   ]
+  ],
+  "observer": [
+   [
+    5397,
+    "wl.Remote.LogPeriod",
+    "0.1"
+   ]
+  ]
+ },
+ "close_check": {
+  "sums_file": "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\NOT_COUNTED_b33\\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z\\SHA256SUMS_AT_CLOSE.txt",
+  "sums_sha256": "705502ecf56a949b06edd2b3fc621236c02814fb40b07acf3a8fd28a1b414f20",
+  "checked": {
+   "run.json": "91be911a4391b32768f22ac902589ab23e57372357bbb3f990f6e20e2192ff30",
+   "sender\\saved\\logs\\wonderland.log": "a5b9aee8553eae24810d5a820423092ee293e2190a3155c773486223250031c5",
+   "observer\\saved\\logs\\wonderland.log": "98d68418f9f2bd8cff43a089a47701916937fe24c931e19bf2934454f472f1c2",
+   "drive_survey_20261023t093723z\\timeline.csv": "19d60bf06a86e545d2a6ce6c228855edc9cecf7520ddc85ce0f00190d4d6764a",
+   "frames\\index.csv": "d04e37bf2ee89506388360359370e91de5a38d9cd9a6e7785939e9f1ee6f7273"
+  }
+ },
+ "exec_cmds_prereg": {
+  "render_cvars": [
+   "scalability 0"
+  ],
+  "log_period": 0.1,
+  "checked": true
+ },
+ "server": {
+  "prereg": false,
+  "kind": "NOT-PREREG RING RELAY (-RelaySource): 3f20fc1ace7b157d4ff2673959c98998564ef43b's relay-bridge/dev-social-server.ts from C:\\dev\\iwonder\\_b33_relay_wt_3f20fc1a_20261023, unchanged (dev sessions, in-memory store, loopback)",
+  "repo": "C:\\dev\\iwonder\\_b33_relay_wt_3f20fc1a_20261023",
+  "commit": "3f20fc1ace7b157d4ff2673959c98998564ef43b",
+  "tree": "75a61ea2721429a4c7f0849ecc6fffec9e8f6e7f",
+  "archive_files": 1799,
+  "archive_file_list_sha256": "04e0db0e66c4f17faf46842d0b31ce311b31c37b10a7f34e17a3f52391b31f18",
+  "package_lock_identical": true,
+  "bundle_sha256": "d3c69da9719ae6ce746876cfd4be259838be75b6ea28fc4ddd45f0ef23b3f9fe",
+  "tree_dir": null,
+  "head": null
+ },
+ "relay_pin": {
+  "file": "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\tools\\b33_v3_1b\\RELAY_PIN.json",
+  "file_sha256": "0dca429651ee2aa99a3af69ce1b47b6ab935ff967341060c87a740468b92b51c",
+  "status": "PENDING",
+  "commit": "3f20fc1ace7b157d4ff2673959c98998564ef43b",
+  "tree": "75a61ea2721429a4c7f0849ecc6fffec9e8f6e7f"
+ },
+ "route_pin": {
+  "file": "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\tools\\b33_v3_1b\\ROUTE_PIN.json",
+  "file_sha256": "311fee13c16463424311e38d4cd4391dd28b7a9bcd6a9eb14483d3552bead71f",
+  "status": "PENDING",
+  "route_sha256": "",
+  "drive_routes": [
+   [
+    "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\NOT_COUNTED_b33\\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z\\drive_survey_20261023T093723Z\\route.json",
+    "7de04985b6db89989b5ed8063972c2b143f3c45b4be8577d8c3b9917c390405b"
+   ]
+  ],
+  "checked": false
+ },
+ "ram": {
+  "lease_gb": 5,
+  "lease_gate_enforced_gb": 5.0,
+  "ram_free_gb_at_start": 6.981,
+  "ram_available_mb_at_start": 7132,
+  "in_run_guard_gb": 1.1,
+  "in_run": {
+   "lease_gb": 5,
+   "ram_free_gb_at_start": 6.981,
+   "ram_available_mb_at_start": 7132,
+   "in_run_guard_gb": 1.1,
+   "in_run_min_free_gb": 2.229,
+   "in_run_readings": 90,
+   "in_run_interval_s": 3,
+   "guard_tripped": false,
+   "guard_trip_utc": null
+  },
+  "descriptive_only": true
+ },
+ "launch_inconclusive": [],
+ "scenarios": {
+  "STANDING": {
+   "scenario": "STANDING",
+   "ranges": [],
+   "verdict": "INCONCLUSIVE",
+   "why": [
+    "no drive block of this scenario",
+    "counted STANDING jumps 0 < 7"
+   ],
+   "post_window_inputs": [],
+   "counted_jumps": 0,
+   "other_jumps_in_block": [],
+   "blocks": 0
+  },
+  "WALKING": {
+   "scenario": "WALKING",
+   "ranges": [],
+   "verdict": "INCONCLUSIVE",
+   "why": [
+    "no drive block of this scenario",
+    "counted WALKING jumps 0 < 7"
+   ],
+   "post_window_inputs": [],
+   "counted_jumps": 0,
+   "other_jumps_in_block": [],
+   "blocks": 0
+  },
+  "RUNNING": {
+   "scenario": "RUNNING",
+   "ranges": [],
+   "verdict": "INCONCLUSIVE",
+   "why": [
+    "no drive block of this scenario",
+    "counted RUNNING jumps 0 < 7"
+   ],
+   "post_window_inputs": [],
+   "counted_jumps": 0,
+   "other_jumps_in_block": [],
+   "blocks": 0
+  },
+  "M4": {
+   "scenario": "M4",
+   "ranges": [],
+   "verdict": "INCONCLUSIVE",
+   "why": [
+    "no drive block of this scenario",
+    "qualifying walked falls 0 < 5",
+    "M4 attempts 0, not the pre-stated 10 (Q-M2c-5: exactly 10 per counted run, no selection)"
+   ],
+   "falls_listed": [
+    {
+     "k0": 1687,
+     "k1": 1689,
+     "n_air": 3,
+     "labels": "FFF",
+     "t_takeoff": 1792748409.1419997,
+     "t_touchdown": 1792748409.5559998,
+     "stamp_takeoff": 1792748409.144,
+     "line_takeoff": 15737,
+     "kind": "FALL",
+     "pre_label": "WALK",
+     "pre_dt": 0.11699986457824707,
+     "z_pre": 96.8,
+     "z_max": 81.8,
+     "z_land": -11.9,
+     "xy_takeoff": [
+      235.5,
+      4448.0
+     ],
+     "air_hspeed_med": 225.4595462867346,
+     "rise": -15.0,
+     "class": "FALL",
+     "reason": "no JUMP label (a walk-off fall, M4 rules)",
+     "start_z": 96.8,
+     "start_z_median": 96.8,
+     "start_z_last": 96.8,
+     "start_n": 1,
+     "landing_z": -11.9,
+     "drop": 108.7,
+     "drop_median": 108.7,
+     "drop_last": 108.7,
+     "qualifies": true,
+     "note": "",
+     "lip_xy": [
+      209.1,
+      4447.5
+     ],
+     "land_xy": [
+      307.4,
+      4449.9
+     ],
+     "settle_range_uu": 0.0,
+     "fall_s": 0.4140000343322754,
+     "in_m4_block": false
+    }
+   ],
+   "candidates": 0,
+   "qualifying": 0,
+   "space_presses_in_m4": 0,
+   "timeline_m4_blocks": 0,
+   "attempts": [],
+   "attempts_pre_stated": 10,
+   "attempts_judged_under_bars": 0
+  }
+ },
+ "result": "VOID",
+ "analysis_result_if_not_void": "INCONCLUSIVE",
+ "analysis_why_if_not_void": [],
+ "result_why": [
+  "RUN.json prereg_launch is false: the launch is not the PREREG B33 v3.1 launch (b33_launch.ps1 printed a NOTE; R7-03)",
+  "NOT-PREREG server (b33_launch.ps1 -ServerTree / -RelaySource): the loopback server is not the pinned relay's own dev-social-server.ts",
+  "RELAY_PIN.json (C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\tools\\b33_v3_1b\\RELAY_PIN.json) is not PINNED with a 40-hex commit and tree (status 'PENDING'): no run is judged against a pending relay pin"
+ ]
+}

@@ -1,0 +1,11 @@
+﻿{
+    "lease_gb":  5,
+    "ram_free_gb_at_start":  6.981,
+    "ram_available_mb_at_start":  7132,
+    "in_run_guard_gb":  1.1,
+    "in_run_min_free_gb":  2.229,
+    "in_run_readings":  90,
+    "in_run_interval_s":  3,
+    "guard_tripped":  false,
+    "guard_trip_utc":  null
+}
