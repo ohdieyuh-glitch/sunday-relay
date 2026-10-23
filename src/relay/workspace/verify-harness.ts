@@ -6,7 +6,7 @@ import type { ProjectId, RunId, TaskId } from '../protocol/ids';
 import { createWorkspaceService } from './index';
 import type { WorkspacePolicyInput } from './contracts';
 import { DEFAULT_WORKSPACE_COMMAND_POLICY } from './command-policy';
-import { hermeticGitEnv, installHermeticGitHome } from './git-fixture-env';
+import { hermeticGitEnv, withSerializedHermeticGitEnv } from './git-fixture-env';
 
 /**
  * Deterministic workspace verification harness (Prompt 7) — proves the
@@ -14,6 +14,13 @@ import { hermeticGitEnv, installHermeticGitHome } from './git-fixture-env';
  * repository under the OS temp dir (never the real Sunday repository).
  * Every fixture path is created here and removed at the end; the harness
  * asserts the source repo stays untouched throughout.
+ *
+ * For the duration of the call the process HOME is a private temp directory,
+ * and GIT_CONFIG_GLOBAL, GIT_CONFIG_SYSTEM, GIT_CONFIG_NOSYSTEM, and
+ * GIT_TERMINAL_PROMPT point at an empty git config. All five are restored
+ * when the call returns or rejects, including variables that were unset, and
+ * the temp HOME is removed. Overlapping calls are serialized and do not share
+ * that HOME. A call must not invoke another verification before it returns.
  */
 
 export interface VerificationCheckResult {
@@ -34,8 +41,17 @@ const fixtureGit = (args: string[], cwd: string): string =>
     env: hermeticGitEnv(FIXTURE_ENV),
   });
 
-export async function runWorkspaceVerification(): Promise<{ checks: VerificationCheckResult[]; failures: number }> {
-  installHermeticGitHome();
+export async function runWorkspaceVerification(hooks?: {
+  /** Runs after the process git env is isolated. A throw rejects the call and still restores that env. */
+  beforeChecks?: () => void;
+}): Promise<{ checks: VerificationCheckResult[]; failures: number }> {
+  return withSerializedHermeticGitEnv(async () => {
+    hooks?.beforeChecks?.();
+    return executeWorkspaceVerification();
+  });
+}
+
+async function executeWorkspaceVerification(): Promise<{ checks: VerificationCheckResult[]; failures: number }> {
   const checks: VerificationCheckResult[] = [];
   const check = (name: string, ok: boolean, detail = '') => checks.push({ name, ok, detail });
 

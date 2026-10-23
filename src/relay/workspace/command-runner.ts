@@ -50,7 +50,7 @@ const CONFIRM_WAIT_MS = 5_000;
  * need a secret's WHOLE shape, so the surviving head of a cut secret is stored in clear. This withholds what such a stream cannot prove complete:
  *  1. an UNTERMINATED private key block (a BEGIN header with no END after it): from the header to the end;
  *  2. the TRAILING PARTIAL TOKEN: the last run of non-whitespace characters, when the text ends without whitespace.
- * Step 1 is applied to EVERY stream; step 2 applies when the stored text is cut or the stream stopped early (a stream that ended by itself, inside the bound, stores its last token verbatim). Sanitizer patterns are not changed.
+ * Step 1 is applied to EVERY stream; step 2 applies when the stored text is cut or the stream stopped early (a stream that ended by itself, inside the bound, stores its last token verbatim). A stopped stream that already ends on the truncation line keeps an ordinary last token such as hello, and still withholds a secret-shaped token sitting against that line. Sanitizer patterns are not changed.
  * ORDER MATTERS: step 1 runs BEFORE the sanitizer, step 2 AFTER it. A complete secret at the very end (a whole dashed footer, say) must reach the sanitizer intact; step 2 would otherwise
  * replace its last token and break the shape the sanitizer needs. After the sanitizer a complete secret is already a mark, and step 2 skips text that ends in one.
  */
@@ -84,6 +84,17 @@ function withholdTrailingToken(text: string): { text: string; withheld: number }
 
 const TRUNCATION_SUFFIX = '\n[TRUNCATED: output limit reached]';
 
+/** A trailing token that is secret-shaped even when it is shorter than a sanitizer match. */
+function trailingTokenLooksSecret(token: string): boolean {
+  return /(?:api[-_]?key|secret|password|token)\s*[:=]/i.test(token)
+    || /sk-[A-Za-z0-9]/.test(token)
+    || /AKIA[0-9A-Z]/.test(token)
+    || /gh[pousr]_/.test(token)
+    || /xox[baprs]-/.test(token)
+    || /eyJ[A-Za-z0-9_-]/.test(token)
+    || /BEGIN [A-Z ]*PRIVATE KEY/.test(token);
+}
+
 export function secureCapturedStream(
   raw: string,
   limitBytes: number,
@@ -103,12 +114,23 @@ export function secureCapturedStream(
   if (bounded.truncated || stoppedEarly) {
     const hadSuffix = bounded.text.endsWith(TRUNCATION_SUFFIX);
     const body = hadSuffix ? bounded.text.slice(0, -TRUNCATION_SUFFIX.length) : bounded.text;
-    const tail = withholdTrailingToken(body);
-    withheld += tail.withheld;
-    if (Buffer.byteLength(tail.text, 'utf8') > limitBytes) {
-      bounded = boundOutput(tail.text, limitBytes);
+    // The truncation line already in a stopped stream consumed the newline, so an ordinary last
+    // word is a finished token. A secret-shaped token against that line is still withheld. A cut
+    // this bound just made, or a stop that did not end on the truncation line, withholds whatever
+    // the last token is.
+    const suffixWasAlreadyThere = hadSuffix && !bounded.truncated;
+    const tailToken = /\S+$/.exec(body);
+    const withhold = tailToken !== null && (!suffixWasAlreadyThere || trailingTokenLooksSecret(tailToken[0]));
+    let next = body;
+    if (withhold) {
+      const tail = withholdTrailingToken(body);
+      next = tail.text;
+      withheld += tail.withheld;
+    }
+    if (Buffer.byteLength(next, 'utf8') > limitBytes) {
+      bounded = boundOutput(next, limitBytes);
     } else {
-      bounded = { text: hadSuffix ? `${tail.text}${TRUNCATION_SUFFIX}` : tail.text, truncated: hadSuffix };
+      bounded = { text: hadSuffix ? `${next}${TRUNCATION_SUFFIX}` : next, truncated: bounded.truncated };
     }
   }
   return { text: bounded.text, truncated: bounded.truncated, redactions: clean.redactions + withheld };
