@@ -231,6 +231,21 @@ answer says providers are running, the client shows **admitted, waiting for
 the paid run**. `dispatched: false` on that 202 is the fact that no provider
 is running yet.
 
+## Deployment topology
+
+Admission is loopback-only. `isLoopbackPeer` requires the peer address to be
+`127.0.0.1`, `::1`, or `::ffff:127.0.0.1`, and `Host` to be `localhost`,
+`127.0.0.1`, or `[::1]`. Any forwarding header fails closed. A hosted or
+proxied relay cannot admit a mission.
+
+The supported topology for the first founder-only mission is the Wonderland
+client calling a `relay-bridge` process on the same machine, at that process's
+configured listen port, with no proxy. That process must have
+`JULIUS_WONDERLAND_ADMISSION=1` and `JULIUS_WONDERLAND_MISSION` set to the
+reviewed slug.
+
+Admitting from a non-loopback or hosted client is out of scope. It would need
+a separate reviewed auth design.
 
 **A browser session cannot read it yet.** The operator credential governs this
 surface because it already governs everything that spends money; which fields a
