@@ -3151,13 +3151,21 @@ describe('the trust gate runs before anything the candidate controls', () => {
   });
 
   it('the verifier is a SEPARATE checkout from the candidate', () => {
-    // Two checkouts PER JOB, and only the verifier carries a pinned ref and a
-    // path. The `paid-slot` admission job proves the same commit the same way
-    // before it runs its queue script, so the file holds two pairs.
+    // Two checkouts PER JOB that runs repository code, and only the verifier
+    // carries a pinned ref and a path. The `paid-slot` admission job proves
+    // the same commit the same way before it runs its queue script, so those
+    // two jobs are two pairs. `spend-tag` adds one candidate checkout, with
+    // credentials dropped, and reads the committed contract as data. It does
+    // not check out the verifier and it does not run a repository script.
     const checkouts = workflow.split('- uses: actions/checkout').length - 1;
-    expect(checkouts, 'the candidate and the verifier are two different checkouts, in each of the two jobs').toBe(4);
+    expect(checkouts, 'two verifier pairs, plus the spend-tag checkout that only reads the committed contract').toBe(5);
     const pinned = workflow.split('ref: f131098cc4e8f35d7231cf2e9693b83c05dab75c').length - 1;
-    expect(pinned, 'each job checks out the pinned verifier exactly once').toBe(2);
+    expect(pinned, 'each job that runs repository code checks out the pinned verifier exactly once').toBe(2);
+    const spendTag = workflow.slice(workflow.indexOf('\n  spend-tag:\n'), workflow.indexOf('\n  paid-slot:\n'));
+    expect(spendTag.split('- uses: actions/checkout').length - 1).toBe(1);
+    expect(spendTag).toContain('persist-credentials: false');
+    expect(spendTag).not.toContain('.julius-trusted-verifier');
+    expect(spendTag).not.toMatch(/\n\s+ref:/u);
     expect(verifierCheckout()).toContain('path: .julius-trusted-verifier');
     expect(verifierCheckout(), 'a token in the verifier checkout would ride into the container')
       .toContain('persist-credentials: false');
