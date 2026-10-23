@@ -4,6 +4,9 @@ import { dirname, resolve } from 'node:path';
 
 import { bearerMatches } from './bearer-auth';
 import { sessionTokenFrom } from './browser-session/routes';
+import {
+  decideCombinedCeiling, priorSpendFromLedger, repeatWorstCaseUsdMicros, resolveMissionCeilings,
+} from './julius-dispatch-repeat-ceiling';
 import { composeRoleProviders } from './julius-role-compose';
 import type { KeyStore } from './julius-key-store';
 
@@ -23,7 +26,10 @@ import type { KeyStore } from './julius-key-store';
  *   4. a native session that is not the ONE founder player, for the ONE configured project
  *   5. a second pairing (a different session id after the first accepted dispatch) 403 julius_dispatch_second_pairing
  *   6. a run that is not READY in the frozen mission, or a mission that is not frozen/independent/unseeded
- *   7. caps (daily, per-mission runs, one run once) and concurrency (exactly one chain at a time)
+ *   7. caps (daily, per-mission runs, one run once) and concurrency (exactly one chain at a time).
+ *      julius-inworld-data-1 also refuses a repeat unless run-1 has a verified provider dollar receipt
+ *      at or under the frozen per-run ceiling, and that actual plus the repeat's worst-case bound is at
+ *      or under the frozen combined ceiling. Env may lower those ceilings. It cannot raise them.
  *   8. a ledger that cannot be written: the acceptance row, every pre_call row. NO row = NO provider call.
  *
  * THE TRIGGER ORIGINATES IN THE GAME. The dispatch body must carry `clientLogSha256`: the sha256 of the exact client log line
@@ -690,13 +696,23 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       const founder = (env.JULIUS_J1_FOUNDER_PLAYER_ID ?? '').trim();
       const project = (env.JULIUS_J1_PROJECT_ID ?? '').trim();
       const reviewerConfigured = (env.JULIUS_J1_REVIEWER_PROVIDER ?? '').trim();
-      const budgetCapUsd = positiveNumber(env.JULIUS_J1_BUDGET_CAP_USD);
+      let budgetCapUsd = positiveNumber(env.JULIUS_J1_BUDGET_CAP_USD);
       const legEstimateUsd = positiveNumber(env.JULIUS_J1_LEG_ESTIMATE_USD);
       if (founder === '' || project === '' || reviewerConfigured === '' || budgetCapUsd === null || legEstimateUsd === null) return refuse(503, 'julius_dispatch_not_configured');
       if (input.callerPlayerId !== founder) return refuse(403, 'julius_dispatch_founder_only');
       if (input.projectId !== project) return refuse(403, 'julius_dispatch_wrong_project');
       if (boundSession !== null && boundSession !== input.sessionId) return refuse(403, 'julius_dispatch_second_pairing');
       const { providers, frozen } = deps;
+      const combinedRaw = env.JULIUS_J1_COMBINED_CAP_USD;
+      const combinedProvided = combinedRaw !== undefined && combinedRaw.trim() !== '';
+      const ceilings = resolveMissionCeilings(frozen.missionId, {
+        perRunUsd: budgetCapUsd,
+        combinedUsd: combinedProvided ? positiveNumber(combinedRaw) : null,
+        combinedProvided,
+      });
+      if (ceilings.applicable && ceilings.invalidEnv) return refuse(503, 'julius_dispatch_not_configured');
+      const missionCeilings = ceilings.applicable ? ceilings : null;
+      if (missionCeilings !== null) budgetCapUsd = missionCeilings.perRunUsdMicros / 1_000_000;
       /* D6: the reviewer provider is READ FROM CONFIG; the composed adapter must be that provider, and differ from both others. */
       if (providers.reviewer.providerId !== reviewerConfigured) return refuse(503, 'julius_dispatch_reviewer_config_mismatch');
       const ids = [providers.architect.providerId, providers.coder.providerId, providers.reviewer.providerId];
@@ -758,6 +774,51 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
           const dayCount = allRows.filter((row) => (row.phase === 'run_start' || row.phase === 'run_refused') && String(row.at).slice(0, 10) === utcDay(at)).length;
           if (dayCount >= dailyCap) return refuse(429, 'julius_dispatch_cap_reached');
           if (rows.filter((row) => row.missionId === frozen.missionId).length >= missionCap) return refuse(429, 'julius_dispatch_mission_cap_reached');
+          /* COMBINED CEILING: a repeat of julius-inworld-data-1 reads run-1's provider receipts. Fail closed. */
+          let ceilingFields: {
+            readonly perRunCapUsdMicros: number; readonly combinedCapUsdMicros: number;
+            readonly run1ActualUsdMicros: number | null; readonly repeatWorstCaseUsdMicros: number | null;
+          } | null = null;
+          if (missionCeilings !== null) {
+            const prior = priorSpendFromLedger(allRows, frozen.missionId);
+            const refuseRepeat = async (status: number, code: string): Promise<DispatchOutcome> => {
+              await deps.ledger.append({
+                phase: 'run_refused', status: 'REFUSED', code, runId: input.runId, dispatchId, mode,
+                creatorPlayerHash: callerHash, creatorKeyHash: keyHash, at: new Date(at).toISOString(),
+              });
+              log(`refused run=${sha16(input.runId)} code=${code} mode=${mode}`);
+              return refuse(status, code);
+            };
+            if (prior.kind === 'repeat_already_used') return refuseRepeat(409, 'julius_dispatch_repeat_already_used');
+            if (prior.kind === 'unverified') {
+              return refuseRepeat(409, prior.reason === 'unknown_spend' ? 'julius_dispatch_repeat_spend_unknown' : 'julius_dispatch_repeat_receipt_missing');
+            }
+            if (prior.kind === 'verified') {
+              const worst = repeatWorstCaseUsdMicros({
+                perRunCapUsdMicros: missionCeilings.perRunUsdMicros, legEstimateUsd, roleCount: DISPATCH_ROLES.length,
+              });
+              if (worst === null) return refuseRepeat(503, 'julius_dispatch_not_configured');
+              const decision = decideCombinedCeiling({
+                actualUsdMicros: prior.actualUsdMicros, repeatWorstCaseUsdMicros: worst,
+                perRunCapUsdMicros: missionCeilings.perRunUsdMicros, combinedCapUsdMicros: missionCeilings.combinedUsdMicros,
+              });
+              if (!decision.admit) {
+                const code = decision.reason === 'run1_actual_above_per_run' ? 'julius_dispatch_repeat_above_per_run'
+                  : decision.reason === 'combined_ceiling_exceeded' ? 'julius_dispatch_repeat_combined_ceiling'
+                    : 'julius_dispatch_not_configured';
+                return refuseRepeat(code === 'julius_dispatch_not_configured' ? 503 : 409, code);
+              }
+              ceilingFields = {
+                perRunCapUsdMicros: decision.perRunCapUsdMicros, combinedCapUsdMicros: decision.combinedCapUsdMicros,
+                run1ActualUsdMicros: decision.actualUsdMicros, repeatWorstCaseUsdMicros: decision.repeatWorstCaseUsdMicros,
+              };
+            } else {
+              ceilingFields = {
+                perRunCapUsdMicros: missionCeilings.perRunUsdMicros, combinedCapUsdMicros: missionCeilings.combinedUsdMicros,
+                run1ActualUsdMicros: null, repeatWorstCaseUsdMicros: null,
+              };
+            }
+          }
           /* CLOCK BINDING: the echo is single use (consumed here whatever the verdict), unexpired and one this bridge issued. */
           const offsetOk = typeof input.clientOffsetMs === 'number' && Number.isFinite(input.clientOffsetMs);
           const echoGiven = typeof input.echoId === 'string' && input.echoId !== '';
@@ -789,6 +850,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
             phase: 'run_start', dispatchId, runId: input.runId, missionId: frozen.missionId, frozenSha256: frozen.contractSha256,
             contractSha256: frozen.contractSha256, briefSha256: deps.briefSha256 ?? null, checkerSha256: frozen.checkerSha256, preregId: frozen.preregId,
             budgetCapUsd, legEstimateUsd, authorizedPlayerHash: callerHash, mode, at: new Date(at).toISOString(),
+            ...(ceilingFields ?? {}),
             projectHash: sha16(input.projectId), sessionHash: sha16(input.sessionId), keyHash,
             clientTriggerId: input.clientTriggerId, clientLogSha256: input.clientLogSha256,
             runOrdinal: rows.filter((row) => row.missionId === frozen.missionId).length + 1,

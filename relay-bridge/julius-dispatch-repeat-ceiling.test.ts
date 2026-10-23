@@ -178,13 +178,15 @@ const baseFrozen = (missionId: string): FrozenMission => ({
   missionAuthor: 'author-a', checkerAuthor: 'author-b', seededDefect: false, preregId: 'prereg-1',
 });
 
+const ROLE_MODEL = { architect: 'gpt-fake', coder: 'claude-fake', reviewer: 'grok-fake' } as const;
 function provider(role: 'architect' | 'coder' | 'reviewer', providerId: string, calls: RoleCallInput[], costUsdMicros: number | null): RoleProvider {
+  const model = ROLE_MODEL[role];
   return {
-    providerId, keyEnv: null, model: 'm', fake: true, servedModelAllow: ['m'],
+    providerId, keyEnv: null, model, fake: true, servedModelAllow: [model],
     async call(input) {
       calls.push(input);
       const common: RoleCallOutput = {
-        ok: true, responseId: `resp_${role}_00112233445566`, model: 'm', usage: { input: 1, output: 1, total: 2 },
+        ok: true, responseId: `resp_${role}_00112233445566`, model, usage: { input: 1, output: 1, total: 2 },
         ...(costUsdMicros === null ? {} : { costUsdMicros }),
       };
       if (role === 'architect') return { ...common, text: 'PLAN' };
