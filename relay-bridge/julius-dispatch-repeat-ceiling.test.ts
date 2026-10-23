@@ -17,7 +17,6 @@ import {
   type DispatchProviders,
   type FrozenMission,
   type RoleCallInput,
-  type RoleCallOutput,
   type RoleProvider,
 } from './julius-dispatch';
 
@@ -44,7 +43,7 @@ describe('combined initial+repeat ceiling for julius-inworld-data-1', () => {
     });
     expect(Object.isFrozen(J1_MISSION_SPEND_CEILINGS)).toBe(true);
     expect(Object.isFrozen(J1_MISSION_SPEND_CEILINGS[MISSION])).toBe(true);
-    expect(J1_MISSION_SPEND_CEILINGS['mission-j1-frozen']).toBeUndefined();
+    expect(Object.hasOwn(J1_MISSION_SPEND_CEILINGS, 'mission-j1-frozen')).toBe(false);
   });
 
   it('env may lower the frozen ceilings and may not raise them', () => {
@@ -185,8 +184,8 @@ function provider(role: 'architect' | 'coder' | 'reviewer', providerId: string, 
     providerId, keyEnv: null, model, fake: true, servedModelAllow: [model],
     async call(input) {
       calls.push(input);
-      const common: RoleCallOutput = {
-        ok: true, responseId: `resp_${role}_00112233445566`, model, usage: { input: 1, output: 1, total: 2 },
+      const common = {
+        ok: true as const, responseId: `resp_${role}_00112233445566`, model, usage: { input: 1, output: 1, total: 2 },
         ...(costUsdMicros === null ? {} : { costUsdMicros }),
       };
       if (role === 'architect') return { ...common, text: 'PLAN' };

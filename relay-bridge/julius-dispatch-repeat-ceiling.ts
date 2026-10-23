@@ -51,8 +51,8 @@ function usdToMicros(usd: number): number | null {
 
 /** Frozen ceilings for this mission, lowered by env when the env figure is smaller. Other missions are not applicable. */
 export function resolveMissionCeilings(missionId: string, env: CeilingEnv): MissionCeilings {
-  const frozen = J1_MISSION_SPEND_CEILINGS[missionId];
-  if (frozen === undefined) return { applicable: false };
+  if (missionId !== J1_INWORLD_DATA_1_MISSION_ID) return { applicable: false };
+  const frozen = J1_MISSION_SPEND_CEILINGS[J1_INWORLD_DATA_1_MISSION_ID];
   const envPer = env.perRunUsd === null ? null : usdToMicros(env.perRunUsd);
   if (envPer === null) return { applicable: true, invalidEnv: true };
   let combined = frozen.combinedInitialRepeatUsdMicros;
