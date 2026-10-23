@@ -1,0 +1,10 @@
+{ "extends": "./tsconfig.json", "include": [], "files": [
+  "./src/relay/mission/julius/julius-coding-agent.ts",
+  "./src/relay/mission/julius/julius-execution-coordinator.ts",
+  "./src/relay/mission/julius/julius-memory-store.ts",
+  "./src/relay/mission/julius/julius-run-loop.ts",
+  "./src/relay/mission/julius/julius-runtime-ports.ts",
+  "./src/relay/mission/julius/julius-task-pipeline.ts",
+  "./src/relay/persistence/julius-read-postgres.ts",
+  "./src/relay/persistence/julius-store-conformance.test.ts"
+] }

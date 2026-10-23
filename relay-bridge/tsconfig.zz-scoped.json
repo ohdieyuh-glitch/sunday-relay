@@ -1,0 +1,13 @@
+{ "extends": "./tsconfig.json", "include": [], "files": [
+  "./hosted-coding-agent/hosted-observation.ts",
+  "./hosted-coding-agent/hosted-served-model.test.ts",
+  "./julius-served-model-halt.real-postgres.test.ts",
+  "./julius/claude-code-coding-provider.ts",
+  "./julius/coder-served-model-guard.test.ts",
+  "./julius/coder-served-model-halt.runtime.test.ts",
+  "./julius/coding-agent-attempt-truth.test.ts",
+  "./julius/coding-agent-port.test.ts",
+  "./julius/julius-peer-qualification.e2e.test.ts",
+  "./julius/postgres-store.ts",
+  "./julius/subscription-settlement.runtime.test.ts"
+] }

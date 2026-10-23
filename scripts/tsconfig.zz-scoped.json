@@ -1,0 +1,6 @@
+{ "extends": "./tsconfig.json", "include": [], "files": [
+  "./julius-first-live-mission.test.ts",
+  "./julius-paid-workflow.test.ts",
+  "./julius-subscription-check.d.mts",
+  "./julius-subscription-check.test.ts"
+] }
