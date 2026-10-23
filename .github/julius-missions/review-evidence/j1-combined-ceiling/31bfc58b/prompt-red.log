@@ -1,0 +1,47 @@
+
+ RUN  v4.1.10 /workspace
+
+ × relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > the system prompt says Julius mission and does not contain the word Relay 7ms
+   → expected 'You are the independent Reviewer for …' to contain 'Julius mission'
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > G3-2: pre-contact refusals (no key, no inputs) say the provider was not contacted; a post-200 failure does not
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > returns the provider response id, the model FROM THE BODY, usage and exactly one request
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > fails the leg when the body has no id (unattested), no served model, or a different model; mismatch is recorded
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F1: every failure after a 200 body keeps id, served model, usage (null when absent), requests 1 and the shown digest
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F2: a dated alias is rejected by default and accepted only when listed in servedModelAllow
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > e: the reviewer sees the exact artifact bytes, their sha256 and the executor evidence; shownSha256 is the hash of the exact message
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > sends the key only in the Authorization header and never in the body or output
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > maps rejects and unreadable verdicts; a bad verdict keeps the response id
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > failure classes carry no provider text
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > refuses without a key, without inputs, and at construction without model, key env or https
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > has the xai independence group and honours the fake flag
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > rounds cost_in_usd_ticks up to integer micros, keeps the raw ticks, and does not price token counts
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > refuses a missing, null, negative, non-integer, or non-safe tick count and does not store zero
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > a refused 200 still carries costUsdMicros and costUsdTicksRaw when the ticks were valid
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > over-states a safe tick count by less than one micro and never rounds down
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > a streaming body or a body with no top-level usage produces no dollar receipt
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > the system prompt says Julius mission and does not contain the word Relay
+AssertionError: expected 'You are the independent Reviewer for …' to contain 'Julius mission'
+
+Expected: "Julius mission"
+Received: "You are the independent Reviewer for a Relay mission. You are shown the mission brief, the architect plan and the coder artifact. You did not write any of them. Judge whether the artifact satisfies the brief. Reply with ONE JSON object and nothing else: {"verdict":"approve"|"reject","summary":"<short reasons>"}."
+
+ ❯ relay-bridge/julius-xai-direct-reviewer.test.ts:22:40
+     20| describe('direct xAI reviewer adapter (fake fetch only)', () => {
+     21|   it('the system prompt says Julius mission and does not contain the w…
+     22|     expect(J1_XAI_REVIEW_INSTRUCTIONS).toContain('Julius mission');
+       |                                        ^
+     23|     expect(J1_XAI_REVIEW_INSTRUCTIONS).not.toMatch(/\bRelay\b/);
+     24|     let body = '';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 16 skipped (17)
+   Start at  08:35:10
+   Duration  249ms (transform 108ms, setup 0ms, import 124ms, tests 8ms, environment 0ms)
+
+EXIT:1

@@ -1,0 +1,27 @@
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > the system prompt says Julius mission and does not contain the word Relay 3ms
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > G3-2: pre-contact refusals (no key, no inputs) say the provider was not contacted; a post-200 failure does not
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > returns the provider response id, the model FROM THE BODY, usage and exactly one request
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > fails the leg when the body has no id (unattested), no served model, or a different model; mismatch is recorded
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F1: every failure after a 200 body keeps id, served model, usage (null when absent), requests 1 and the shown digest
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > F2: a dated alias is rejected by default and accepted only when listed in servedModelAllow
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > e: the reviewer sees the exact artifact bytes, their sha256 and the executor evidence; shownSha256 is the hash of the exact message
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > sends the key only in the Authorization header and never in the body or output
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > maps rejects and unreadable verdicts; a bad verdict keeps the response id
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > failure classes carry no provider text
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > refuses without a key, without inputs, and at construction without model, key env or https
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > has the xai independence group and honours the fake flag
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > rounds cost_in_usd_ticks up to integer micros, keeps the raw ticks, and does not price token counts
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > refuses a missing, null, negative, non-integer, or non-safe tick count and does not store zero
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > a refused 200 still carries costUsdMicros and costUsdTicksRaw when the ticks were valid
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > over-states a safe tick count by less than one micro and never rounds down
+ ↓ relay-bridge/julius-xai-direct-reviewer.test.ts > direct xAI reviewer adapter (fake fetch only) > a streaming body or a body with no top-level usage produces no dollar receipt
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 16 skipped (17)
+   Start at  08:36:52
+   Duration  183ms (transform 76ms, setup 0ms, import 93ms, tests 4ms, environment 0ms)
+
+EXIT:0
