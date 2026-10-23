@@ -12,7 +12,7 @@
 
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -150,9 +150,17 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
   };
 }
 
-/** A child process that prints one answer and exits, for the REAL runner. */
+/**
+ * A child process that prints one answer and exits, for the REAL runner.
+ *
+ * When the runner passes `--usage-file`, the child writes the usage report
+ * Hermes would have written, naming `grok-build-0.1`. A reviewed answer with
+ * no served model is an unattested halt. A child that never exits writes
+ * nothing: the hang fixture does not use this function, and a kill before
+ * close leaves the file unwritten.
+ */
 function spawnEmitting(stdout: string, code = 0) {
-  return () => {
+  return (_executable: string, args: readonly string[] = []) => {
     const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: Readable; kill: () => boolean };
     child.stdout = new Readable({ read() { /* pushed below */ } });
     child.stderr = new Readable({ read() { /* never surfaced */ } });
@@ -161,8 +169,15 @@ function spawnEmitting(stdout: string, code = 0) {
        the process running models a reviewer this repository has never met —
        `hermes-reviewer-lifecycle.test.ts` owns the cases where one does — and
        makes every timeout case here wait out the escalation grace instead. */
-    child.kill = () => { child.emit('close', null); return true; };
+    let closed = false;
+    child.kill = () => { closed = true; child.emit('close', null); return true; };
     setTimeout(() => {
+      if (closed) return;
+      const at = args.indexOf('--usage-file');
+      const usagePath = at >= 0 ? args[at + 1] : undefined;
+      if (typeof usagePath === 'string' && usagePath !== '') {
+        writeFileSync(usagePath, JSON.stringify({ model: 'grok-build-0.1', input_tokens: 24, output_tokens: 8 }));
+      }
       if (stdout !== '') child.stdout.push(Buffer.from(stdout, 'utf8'));
       child.stdout.push(null);
       child.stderr.push(null);
@@ -2461,7 +2476,10 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
         return jsonRes({ accepted: true, runId: 'run-live' });
       }
       const text = texts[Math.min(Math.ceil(call / 2) - 1, texts.length - 1)]!;
-      return jsonRes({ runId: 'run-live', status: 'completed', reviewText: text });
+      return jsonRes({
+        runId: 'run-live', status: 'completed', reviewText: text,
+        usage: { model: 'grok-build-0.1', inputTokens: 20, outputTokens: 8 },
+      });
     });
     return { prompts, fetchImpl };
   };
