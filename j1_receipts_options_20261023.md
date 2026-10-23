@@ -115,12 +115,28 @@ Prerequisites:
 - the block is saved as a file (e.g. `j1-xai-probe.ps1`) and run with `powershell -NoProfile -ExecutionPolicy Bypass -File .\j1-xai-probe.ps1`, so a refusal exits non-zero without closing the founder's shell.
 
 **B-3 checkout gate (runs FIRST: before the key file is read and before any network call).** The probe exits with a non-zero code (3) and reads no key and makes no call unless all of these hold:
-1. `git -C $env:JULIUS_J1_REPO_DIR status --porcelain --untracked-files=no` prints nothing (tracked and staged changes are clean).
-2. HEAD is exactly the pinned full SHA `31bfc58b89de137670e5dbaf752c3328b31163f7`, **or** `git merge-base --is-ancestor 31bfc58b89de137670e5dbaf752c3328b31163f7 HEAD` succeeds **and** every path from `git diff --name-only --no-renames 31bfc58b89de137670e5dbaf752c3328b31163f7 HEAD` is an evidence path.
-   - **Evidence paths** are defined by a fixed prefix list, `$EvidencePrefixes = @('.github/julius-missions/review-evidence/j1-combined-ceiling/31bfc58b/')`. This is the only directory touched by the evidence-only commits `1254b0d1` and `71d9f6f8` on `judev/j1-combined-ceiling`. Each path is normalised to forward slashes and accepted only by a full-path prefix test, `$p.StartsWith($prefix, [StringComparison]::Ordinal)`. Substring, `-like` and `-match` tests are never used. `--no-renames` makes a rename out of a code path show the old path too.
+0. **Git override env vars are cleared before any git call.** The probe runs `Remove-Item Env:X -ErrorAction SilentlyContinue` for `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_NAMESPACE`, `GIT_CEILING_DIRECTORIES` and `GIT_DISCOVERY_ACROSS_FILESYSTEM`. The names that were present (names only, never values) are recorded as `cleared_git_env`.
+1. **Toplevel match.** `git rev-parse --show-toplevel` must equal the checkout named by `$env:JULIUS_J1_REPO_DIR`, with this exact normalisation of both sides:
+   - `$repoDir` is resolved with `(Resolve-Path -LiteralPath $repoDir).ProviderPath`, then `[IO.Path]::GetFullPath(...)`;
+   - git's toplevel goes through `[IO.Path]::GetFullPath(...)`;
+   - both are converted to forward slashes (`.Replace('\','/')`) and the trailing slash is trimmed (`.TrimEnd('/')`);
+   - they are compared with `[string]::Equals(a, b, [StringComparison]::OrdinalIgnoreCase)`, so `C:/x/y` from git matches `c:\x\y\`.
+   A mismatch refuses. The normalised path is recorded as `repo_toplevel`, and `toplevel_match` is `true`.
+2. `git status --porcelain --untracked-files=no` prints nothing (tracked and staged changes are clean).
+3. **No hidden index flags.** `git ls-files -v`: any line whose tag is lowercase (assume-unchanged) or `S` (skip-worktree) refuses, as does any line that can't be parsed.
+4. HEAD is exactly the pinned full SHA `31bfc58b89de137670e5dbaf752c3328b31163f7`, **or** `git merge-base --is-ancestor 31bfc58b89de137670e5dbaf752c3328b31163f7 HEAD` succeeds **and** every path from `git diff --name-only --no-renames 31bfc58b89de137670e5dbaf752c3328b31163f7 HEAD` is an evidence path.
+   - **Evidence paths** are defined by a fixed prefix list, `$EvidencePrefixes = @('.github/julius-missions/review-evidence/j1-combined-ceiling/31bfc58b/')`. This is the only directory touched by the evidence-only commits `1254b0d1` and `71d9f6f8` on `judev/j1-combined-ceiling`. Each path is accepted only by a full-path prefix test, `$p.StartsWith($prefix, [StringComparison]::Ordinal)`. Substring, `-like` and `-match` tests are never used. `--no-renames` makes a rename out of a code path show the old path too.
    - **Empty diff output is accepted only when HEAD equals the pinned full SHA exactly.** If HEAD differs from the pin and the diff is empty, the probe refuses.
-3. **Fail closed on git failures:** `$LASTEXITCODE` is checked after every git call. The probe refuses on any non-zero exit, and on any output it can't parse: an empty line, a line containing NUL, or a line that isn't a relative path (absolute, drive-qualified, quoted or containing `..` segments).
-4. `summary.json` records `adapter_commit` (full HEAD SHA), `pinned_commit` (full pin SHA), `git_dirty` (always `false`, because a dirty tree is refused), `repo_toplevel` (`git rev-parse --show-toplevel`) and `evidence_paths_diffed` (the list, empty when HEAD equals the pin).
+5. **Path output is deterministic.** Every git call that lists paths (`status`, `ls-files`, `diff`) passes `-c core.quotepath=on`, so any non-ASCII path comes back quoted.
+   - Each listed path is first normalised (backslashes to forward slashes). Only then is it checked: an empty line, a NUL, a leading `"` (quoted), a leading `/`, a drive prefix (`X:`) or any `..` segment refuses.
+   - **Because core.quotepath=on is used, any non-ASCII path under the evidence prefix is quoted by git and therefore refused. That is an intended fail-closed outcome.**
+6. **Fail closed on git failures, including stderr.** Every gate git call goes through `Invoke-GateGit`. It sets `$ErrorActionPreference = 'Continue'` locally, runs `git ... 2>&1`, reads `$LASTEXITCODE`, splits `ErrorRecord` (stderr) from string output, and restores the preference in `finally`. A non-zero exit **or any stderr line** goes through `Stop-Probe` with the reason (exit 3), so stderr can never become an unhandled terminating `NativeCommandError`.
+7. `summary.json` records:
+   - `adapter_commit` (full HEAD SHA) and `pinned_commit` (full pin SHA);
+   - `git_dirty` (always `false`, because a dirty tree is refused);
+   - `repo_toplevel` (normalised as in 1) and `toplevel_match` (`true`);
+   - `cleared_git_env` (names only);
+   - `evidence_paths_diffed` (empty when HEAD equals the pin).
 
 ```powershell
 # J1 xAI receipt probe. FOUNDER-RUN ON KAISIN ONLY, after approval. Exactly ONE paid call. Never echoes the key.
@@ -131,19 +147,55 @@ if (-not $keyDir -or -not $keyName -or -not $model -or -not $repoDir) { Stop-Pro
 # ---- B-3 checkout gate: runs BEFORE the key is read and BEFORE any network call. Fails closed. ----
 $PinnedFull = '31bfc58b89de137670e5dbaf752c3328b31163f7'
 $EvidencePrefixes = @('.github/julius-missions/review-evidence/j1-combined-ceiling/31bfc58b/')
+# 0. Clear git override env vars before ANY git call (names recorded, values never read or printed)
+$GitOverrideVars = @('GIT_DIR','GIT_WORK_TREE','GIT_INDEX_FILE','GIT_COMMON_DIR','GIT_OBJECT_DIRECTORY','GIT_ALTERNATE_OBJECT_DIRECTORIES','GIT_NAMESPACE','GIT_CEILING_DIRECTORIES','GIT_DISCOVERY_ACROSS_FILESYSTEM')
+$clearedGitEnv = @()
+foreach ($gv in $GitOverrideVars) { if (Test-Path -LiteralPath ('Env:' + $gv)) { $clearedGitEnv += $gv }; Remove-Item -LiteralPath ('Env:' + $gv) -ErrorAction SilentlyContinue }
 $env:GIT_OPTIONAL_LOCKS = '0'
-function Test-RelPath([string]$p) { return ($p -and ($p.IndexOf([char]0) -lt 0) -and -not $p.StartsWith('/') -and -not $p.StartsWith('"') -and ($p -notmatch '^[A-Za-z]:') -and (('/' + $p + '/').IndexOf('/../') -lt 0)) }
-if (-not (Test-Path -LiteralPath $repoDir -PathType Container -ErrorAction Stop)) { Stop-Probe 'probe_repo_missing' }
-$top = @(git -C $repoDir rev-parse --show-toplevel); if ($LASTEXITCODE -ne 0 -or $top.Count -ne 1 -or -not $top[0]) { Stop-Probe 'probe_repo_not_git' }
-$repoTop = $top[0].Trim()
-$dirty = @(git -C $repoDir status --porcelain --untracked-files=no); if ($LASTEXITCODE -ne 0) { Stop-Probe 'probe_git_status_failed' }
+function Invoke-GateGit([string[]]$GitArgs, [string]$why) {
+  $prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { $all = @(& git @GitArgs 2>&1); $code = $LASTEXITCODE } finally { $ErrorActionPreference = $prevEap }
+  $errLines = @($all | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
+  $outLines = @($all | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | ForEach-Object { [string]$_ })
+  if ($code -ne 0) { Stop-Probe ($why + ': git exit ' + $code) }
+  if ($errLines.Count -gt 0) { Stop-Probe ($why + ': git wrote ' + $errLines.Count + ' stderr line(s)') }
+  return ,$outLines
+}
+function Test-RelPath([string]$p) {
+  if (-not $p) { return $false }
+  if ($p.IndexOf([char]0) -ge 0) { return $false }
+  $n = $p.Replace('\', '/')                     # normalise FIRST, then check
+  if ($n.StartsWith('"') -or $n.StartsWith('/')) { return $false }
+  if ($n.Length -ge 2 -and $n[1] -eq ':') { return $false }
+  if (('/' + $n + '/').IndexOf('/../', [StringComparison]::Ordinal) -ge 0) { return $false }
+  return $true
+}
+function ConvertTo-CmpPath([string]$p) { return [IO.Path]::GetFullPath($p).Replace('\', '/').TrimEnd('/') }
+# 1. Toplevel match
+try { $resolvedRepo = (Resolve-Path -LiteralPath $repoDir -ErrorAction Stop).ProviderPath } catch { Stop-Probe 'probe_repo_missing' }
+$wantTop = ConvertTo-CmpPath $resolvedRepo
+$top = Invoke-GateGit @('-C', $repoDir, 'rev-parse', '--show-toplevel') 'probe_repo_not_git'
+if ($top.Count -ne 1 -or -not $top[0].Trim()) { Stop-Probe 'probe_toplevel_unparseable' }
+$repoTop = ConvertTo-CmpPath $top[0].Trim()
+if (-not [string]::Equals($repoTop, $wantTop, [StringComparison]::OrdinalIgnoreCase)) { Stop-Probe 'probe_toplevel_mismatch' }
+# 2. Clean tracked/staged state
+$dirty = Invoke-GateGit @('-C', $repoDir, '-c', 'core.quotepath=on', 'status', '--porcelain', '--untracked-files=no') 'probe_git_status_failed'
 if ($dirty.Count -gt 0) { Stop-Probe 'probe_repo_dirty' }
-$headOut = @(git -C $repoDir rev-parse --verify HEAD); if ($LASTEXITCODE -ne 0 -or $headOut.Count -ne 1) { Stop-Probe 'probe_head_unreadable' }
-$adapterCommit = $headOut[0].Trim(); if ($adapterCommit -notmatch '^[0-9a-f]{40}$') { Stop-Probe 'probe_head_unparseable' }
+# 3. No assume-unchanged / skip-worktree entries
+$lsf = Invoke-GateGit @('-C', $repoDir, '-c', 'core.quotepath=on', 'ls-files', '-v') 'probe_ls_files_failed'
+foreach ($lf in $lsf) {
+  if ($lf.Length -lt 3 -or $lf[1] -ne ' ' -or -not (Test-RelPath $lf.Substring(2))) { Stop-Probe 'probe_ls_files_unparseable' }
+  $tag = $lf[0]
+  if ([char]::IsLower($tag) -or $tag -ceq [char]'S') { Stop-Probe 'probe_assume_unchanged_or_skip_worktree' }
+}
+# 4. HEAD at the pin, or evidence-only descendant
+$headOut = Invoke-GateGit @('-C', $repoDir, 'rev-parse', '--verify', 'HEAD') 'probe_head_unreadable'
+if ($headOut.Count -ne 1) { Stop-Probe 'probe_head_unparseable' }
+$adapterCommit = $headOut[0].Trim(); if ($adapterCommit -cnotmatch '^[0-9a-f]{40}$') { Stop-Probe 'probe_head_unparseable' }
 $evidencePaths = @()
 if ($adapterCommit -ne $PinnedFull) {
-  git -C $repoDir merge-base --is-ancestor $PinnedFull $adapterCommit; if ($LASTEXITCODE -ne 0) { Stop-Probe 'probe_head_not_descendant_of_pin' }
-  $diffOut = @(git -C $repoDir -c core.quotepath=off diff --name-only --no-renames $PinnedFull $adapterCommit); if ($LASTEXITCODE -ne 0) { Stop-Probe 'probe_diff_failed' }
+  [void](Invoke-GateGit @('-C', $repoDir, 'merge-base', '--is-ancestor', $PinnedFull, $adapterCommit) 'probe_head_not_descendant_of_pin')
+  $diffOut = Invoke-GateGit @('-C', $repoDir, '-c', 'core.quotepath=on', 'diff', '--name-only', '--no-renames', $PinnedFull, $adapterCommit) 'probe_diff_failed'
   if ($diffOut.Count -eq 0) { Stop-Probe 'probe_empty_diff_but_head_differs' }
   foreach ($line in $diffOut) {
     if (-not (Test-RelPath $line)) { Stop-Probe 'probe_diff_unparseable' }
@@ -188,8 +240,8 @@ $summary = [ordered]@{
   cost_usd_micros_ceil = if ($micros -ne $null) { $micros.ToString() } else { $null }
   sha256_response_raw = (Get-FileHash -Algorithm SHA256 -LiteralPath $raw).Hash.ToLower()
   sha256_request = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $out 'request.json')).Hash.ToLower()
-  adapter_commit = $adapterCommit; pinned_commit = $PinnedFull; git_dirty = $false; repo_toplevel = $repoTop
-  evidence_paths_diffed = [string[]]$evidencePaths
+  adapter_commit = $adapterCommit; pinned_commit = $PinnedFull; git_dirty = $false; repo_toplevel = $repoTop; toplevel_match = $true
+  cleared_git_env = [string[]]$clearedGitEnv; evidence_paths_diffed = [string[]]$evidencePaths
 }
 $summary | ConvertTo-Json | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $out 'summary.json')
 $summary | Format-List   # prints ids/ticks/hashes only, never the key
@@ -212,14 +264,14 @@ Notes:
 ### B.4 What to record (hand-off bundle; the founder copies the folder to the box or repo evidence only after the secret scan passes)
 - `response.raw.json`: raw response bytes, unmodified. They contain no secret, and nothing is stripped, so the hash stays meaningful. If the scan ever flagged something, stop and do not share.
 - `request.json`: the exact request body, which contains no secret.
-- `summary.json`: capture time (PT and UTC), HTTP status, `id` (response id), requested and served model, tokens, **`cost_in_usd_ticks` (integer)**, **micros = ceil(ticks/10,000)**, SHA-256 of the raw response and the request, and the checkout-gate fields: `adapter_commit` (full HEAD SHA at run time), `pinned_commit` (full `31bfc58b` SHA), `git_dirty` (`false`), `repo_toplevel` and `evidence_paths_diffed`. Evidence paths are those matching the fixed prefix list `$EvidencePrefixes` by full-path ordinal prefix test after normalising to forward slashes. Git failures or unparseable git output refuse the probe. An empty diff is valid only when `adapter_commit == pinned_commit`.
+- `summary.json`: capture time (PT and UTC), HTTP status, `id` (response id), requested and served model, tokens, **`cost_in_usd_ticks` (integer)**, **micros = ceil(ticks/10,000)**, SHA-256 of the raw response and the request, and the checkout-gate fields: `adapter_commit` (full HEAD SHA at run time), `pinned_commit` (full `31bfc58b` SHA), `git_dirty` (`false`), `repo_toplevel` (normalised: Resolve-Path → GetFullPath → forward slashes → trailing slash trimmed), `toplevel_match` (`true`, compared OrdinalIgnoreCase), `cleared_git_env` (names of the git override env vars that were present and removed before any git call; names only) and `evidence_paths_diffed`. The gate also refuses assume-unchanged/skip-worktree entries (`git ls-files -v`) and any git stderr or non-zero exit. Paths are listed with `core.quotepath=on`, so non-ASCII evidence paths are quoted and refused (intended fail-closed). Evidence paths are those matching the fixed prefix list `$EvidencePrefixes` by full-path ordinal prefix test after normalising to forward slashes. Git failures or unparseable git output refuse the probe. An empty diff is valid only when `adapter_commit == pinned_commit`.
 - A screenshot or CSV line from the xAI console's usage for that time window, if one is available.
 
 ### B.5 What Skywalker verifies
 1. `sha256(response.raw.json)` equals `summary.sha256_response_raw`, and likewise for `request.json`.
 2. `usage.cost_in_usd_ticks` is present, a JSON **integer** (no decimal point or exponent) and ≥ 0.
 3. `cost_usd_micros_ceil == ceil(ticks / 10000)` in integer arithmetic. Spot-check the boundary: 158,500 ticks gives 16 micros.
-4. **Checkout gate fields:** `pinned_commit == 31bfc58b89de137670e5dbaf752c3328b31163f7` and `git_dirty == false`. Either `adapter_commit == pinned_commit` with `evidence_paths_diffed` empty, or `adapter_commit` descends from the pin, `evidence_paths_diffed` is non-empty and equals Skywalker's own `git diff --name-only --no-renames <pin> <adapter_commit>`, and every entry passes `StartsWith('.github/julius-missions/review-evidence/j1-combined-ceiling/31bfc58b/', Ordinal)`. A different `adapter_commit` with an empty list is a FAIL. `repo_toplevel` is the checkout J1 runs from.
+4. **Checkout gate fields:** `pinned_commit == 31bfc58b89de137670e5dbaf752c3328b31163f7` and `git_dirty == false`. Either `adapter_commit == pinned_commit` with `evidence_paths_diffed` empty, or `adapter_commit` descends from the pin, `evidence_paths_diffed` is non-empty and equals Skywalker's own `git diff --name-only --no-renames <pin> <adapter_commit>`, and every entry passes `StartsWith('.github/julius-missions/review-evidence/j1-combined-ceiling/31bfc58b/', Ordinal)`. A different `adapter_commit` with an empty list is a FAIL. `repo_toplevel` is the checkout J1 runs from, and `toplevel_match == true`. `cleared_git_env` is present (an array of names only; it may be empty). If it is non-empty, Skywalker notes which overrides were set in the founder's shell and confirms the gate ran after they were removed. No `ls-files -v` refusal reason or stderr refusal appears in the run output.
 5. **Offline adapter replay at the recorded `adapter_commit`**, after Skywalker diffs it against `31bfc58b` and accepts the diff: call `createXaiDirectReviewerRoleProvider({...}).call()` with a fake `fetchImpl` that returns exactly the bytes of `response.raw.json` with the captured status, a dummy non-empty `apiKey`, and the model and served-model allow-list from the probe. Check that the result has `providerResponseId == summary.response_id`, `costUsdMicros == cost_usd_micros_ceil` and `costUsdTicksRaw == ticks`. Then run `legMicros`/`verifyRun1Spend` on that leg and check that it gives the integer, not `unknown_spend`. Use no network and no real key.
 6. The request body matches the adapter's shape (`model`, `store:false`, system plus user input), and the system text equals `J1_XAI_REVIEW_INSTRUCTIONS` at `31bfc58b` byte for byte ("…Reviewer for a Julius mission. …"). Windows PowerShell 5.1 `ConvertTo-Json` escapes `<` and `>` as `\u003c` / `\u003e` (the prompt contains `<short reasons>`), so compare the **JSON-decoded** `input[0].content` string, not the raw `request.json` bytes. The raw bytes are still hashed for item 1.
 7. The served model is in `JULIUS_J1_REVIEWER_SERVED_MODEL_ALLOW`.
