@@ -30,7 +30,9 @@ import {
   JULIUS_BOOTSTRAP_RUN_ID,
   MISSION_SLUG,
   SHA256_HEX,
+  applyWonderlandStatusTransition,
   createWonderlandAdmissionStore,
+  evaluateWonderlandAdmissionClock,
   parseWorkflowModelPins,
   projectWonderlandStatus,
   wonderlandStatusStateFromAdmission,
@@ -376,18 +378,27 @@ export function handleWonderlandStatusRoute(
   if (admission === null) return Promise.resolve(STATUS_NOT_FOUND);
   const owner = admission.ownerPlayerId ?? (ports.env.JULIUS_J1_FOUNDER_PLAYER_ID ?? '').trim();
   if (owner === '' || owner !== guarded.native.playerId) return Promise.resolve(STATUS_NOT_FOUND);
-  return Promise.resolve({ status: 200, body: statusView(admission, document, runId) });
+  return Promise.resolve({ status: 200, body: statusView(admission, document, runId, request.nowMs) });
 }
 
-function statusView(admission: StoredAdmission, document: OperatorDocument, serverRunId: string): Record<string, string> {
+function statusView(
+  admission: StoredAdmission,
+  document: OperatorDocument,
+  serverRunId: string,
+  nowMs: number,
+): Record<string, string> {
+  const dispatched = document.claims.some((event) =>
+    event.serverRunId === serverRunId
+    && event.wonderlandRunId === admission.runId
+    && (event.state === 'dispatched' || event.dispatchAttempted));
   const progress = [...(document.progress ?? [])].reverse().find((note) => note.serverRunId === serverRunId) ?? null;
   if (progress !== null) {
-    return statusBody(
-      admission.runId,
-      serverRunId,
-      projectWonderlandStatus({ state: progress.state, cause: progress.cause }),
-      progress.updatedAt,
-    );
+    const decision = applyWonderlandStatusTransition({
+      dispatched,
+      proposedState: progress.state,
+      proposedCause: progress.cause,
+    });
+    if (decision.ok) return statusBody(admission.runId, serverRunId, decision.projection, progress.updatedAt);
   }
   const claim = [...document.claims].reverse().find((event) => event.serverRunId === serverRunId && event.wonderlandRunId === admission.runId) ?? null;
   if (claim !== null) {
@@ -398,6 +409,10 @@ function statusView(admission: StoredAdmission, document: OperatorDocument, serv
       claim.at,
     );
   }
+  if (admission.admissionState === 'ADMISSION_HELD') {
+    const phase = heldPhase(admission, nowMs);
+    return statusBody(admission.runId, serverRunId, phase.projection, phase.updatedAt);
+  }
   return statusBody(
     admission.runId,
     serverRunId,
@@ -407,6 +422,29 @@ function statusView(admission: StoredAdmission, document: OperatorDocument, serv
     }),
     admission.receivedAt,
   );
+}
+
+/** The held phase before the claim. Reads the clock. Does not write the file. */
+function heldPhase(admission: StoredAdmission, nowMs: number): { projection: WonderlandStatusProjection; updatedAt: string } {
+  const acceptedAtMs = Date.parse(admission.receivedAt);
+  const phase = evaluateWonderlandAdmissionClock({
+    acceptedAtMs,
+    nowMs,
+    dispatchedAtMs: null,
+  });
+  if (phase.kind === 'awaiting_operator') {
+    return { projection: { state: 'awaiting_operator' }, updatedAt: admission.receivedAt };
+  }
+  if (phase.kind === 'operator_expired') {
+    return { projection: phase.projection, updatedAt: new Date(phase.expiredAtMs).toISOString() };
+  }
+  return {
+    projection: projectWonderlandStatus({
+      state: wonderlandStatusStateFromAdmission(admission.admissionState),
+      cause: null,
+    }),
+    updatedAt: admission.receivedAt,
+  };
 }
 
 function claimCause(claim: ClaimEvent): string | null {

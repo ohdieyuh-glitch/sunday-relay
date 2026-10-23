@@ -298,6 +298,7 @@ a credential, and does not spawn a process.
 export const WONDERLAND_STATUS_STATES = [
   'held',
   'reserved',
+  'awaiting_operator',
   'ledger_unwritten',
   'interrupted',
   'failed',
@@ -317,28 +318,57 @@ export const WONDERLAND_STATUS_CAUSES = [
   'RUN_ID_ALREADY_SPENT',
   'SPENT_TAG_UNVERIFIED',
   'gh_workflow_run_failed',
+  'AWAITING_OPERATOR_EXPIRED',
 ] as const;
 
 export type WonderlandStatusCause = (typeof WONDERLAND_STATUS_CAUSES)[number];
 ```
 
-The admission store's `ADMISSION_HELD` is `held`. `RESERVED` is `reserved`.
-`LEDGER_UNWRITTEN` is `ledger_unwritten`. `INTERRUPTED` is `interrupted`.
-`FAILED` is `failed`. The operator claim writes `dispatched`,
+The admission store's `ADMISSION_HELD` is `held`. While that row is still
+waiting for the operator claim, and the awaiting-operator window has not
+elapsed, the status route spells it `awaiting_operator`. `RESERVED` is
+`reserved`. `LEDGER_UNWRITTEN` is `ledger_unwritten`. `INTERRUPTED` is
+`interrupted`. `FAILED` is `failed`. The operator claim writes `dispatched`,
 `dispatch_failed`, and `already_spent`, with a cause of `RUN_ID_ALREADY_SPENT`,
 `SPENT_TAG_UNVERIFIED`, or `gh_workflow_run_failed` when it has one.
 `status --watch` may write only a state from that list other than `unknown`,
-and only a cause from the cause list. It is not implemented in this change.
+and only a cause from the cause list, and only through
+`applyWonderlandStatusTransition`. It is not implemented in this change.
+
+```ts
+export const GITHUB_HOSTED_JOB_CAP_MS = 360 * 60_000;
+export const PAID_SLOT_WINDOW_MS = 350 * 60_000;
+export const AWAITING_OPERATOR_WINDOW_MS = GITHUB_HOSTED_JOB_CAP_MS;
+```
+
+`AWAITING_OPERATOR_WINDOW_MS` starts at Accepted (`receivedAt`). It is the
+held phase before the claim. `PAID_SLOT_WINDOW_MS` starts at the recorded
+dispatch time, not at Accepted. `GITHUB_HOSTED_JOB_CAP_MS` is the same
+length as the awaiting-operator window and is a different clock: it bounds
+the hosted job that starts at that dispatch. A 360-minute admission window
+that started at Accepted had to cover the manual claim and the 350-minute
+slot wait, which left about 5 minutes.
 
 Terminal states, the ones a record does not leave:
 
 - `ledger_unwritten` — the ledger write is not retried and the pair is not released
 - `interrupted` — admission `INTERRUPTED`
-- `failed` — admission `FAILED`
+- `failed` — admission `FAILED`, or `awaiting_operator` elapsed with cause `AWAITING_OPERATOR_EXPIRED`
 - `dispatch_failed` — the claim is not retried and is not returned to admitted
 - `already_spent` — the claim is not retried and is not returned to admitted
 
-`held`, `reserved`, and `dispatched` are not terminal. `unknown` is not terminal.
+`AWAITING_OPERATOR_EXPIRED` is the non-paid terminal cause of the held phase.
+The workflow was not started and nothing was spent. It is not a slot outcome
+and not a spent-tag outcome.
+
+Once the operator claim has recorded `dispatched`, `applyWonderlandStatusTransition`
+refuses every write of `INTERRUPTED` or `FAILED`, the status spellings
+`interrupted` or `failed`, and a cause of those names. After that dispatch,
+the only terminal outcomes are the ones the slot and the spent-tag path
+report: `dispatch_failed` and `already_spent`.
+
+`held`, `reserved`, `awaiting_operator`, and `dispatched` are not terminal.
+`unknown` is not terminal.
 
 A run is visible to the player recorded for that server run id in the operator
 journal. When the journal has no owner, the founder id is the owner. A different player, a
