@@ -111,7 +111,7 @@ describe('names, titles, and the parent accent', () => {
     expect(formatWindowTitle('Dot', 3)).not.toContain('grok');
   });
 
-  it('rejects an empty or control-character name and falls back to Agent, not a provider', () => {
+  it('rejects an empty or control-character name and falls back to Unnamed agent, not a provider', () => {
     const state = manager();
     const rejected = openWindow(state, session({ vmSessionId: 'sess-empty', agentDisplayName: '' }), CTX);
     expect(rejected.ok).toBe(false);
@@ -120,13 +120,39 @@ describe('names, titles, and the parent accent', () => {
       expect(rejected.error.fallback).toBe(AGENT_DISPLAY_NAME_FALLBACK);
     }
     expect(state.windows).toHaveLength(0);
-    expect(formatWindowTitle('\nDot', 1)).toBe('Agent \u2014 Wonder Web VM 1');
-    expect(formatWindowTitle('   ', 1)).toBe('Agent \u2014 Wonder Web VM 1');
+    expect(AGENT_DISPLAY_NAME_FALLBACK).toBe('Unnamed agent');
+    expect(formatWindowTitle('\nDot', 1)).toBe('Unnamed agent \u2014 Wonder Web VM 1');
+    expect(formatWindowTitle('   ', 1)).toBe('Unnamed agent \u2014 Wonder Web VM 1');
+    expect(formatWindowTitle(undefined as unknown as string, 4)).toBe('Unnamed agent \u2014 Wonder Web VM 4');
     const fallback = AGENT_DISPLAY_NAME_FALLBACK.toLowerCase();
     for (const label of ['grok', 'openai', 'julius', 'chatgpt', 'claude', 'gpt', 'hermes', 'grok_bot_group', 'openai_companion']) {
       expect(fallback).not.toBe(label);
     }
     expect(formatWindowTitle('ドット', 2)).toBe('ドット \u2014 Wonder Web VM 2');
+  });
+
+  it('composes the title from agentDisplayName and vmNumber and ignores a title on the record', () => {
+    const opened = must(openWindow(manager(), session({ vmSessionId: 'sess-1', vmNumber: 3, agentDisplayName: 'Dot' }), CTX));
+    const bait = {
+      ...session({ vmSessionId: 'sess-1', vmNumber: 3, agentDisplayName: 'Ignored Name' }),
+      title: 'Registry title that must not be used',
+      windowTitle: 'browser-3',
+      label: 'Julius — Wonder Web',
+    } as unknown as WonderWebVmSessionRecord;
+    const view = observerView(opened.value, bait);
+    expect(view.title).toBe('Dot \u2014 Wonder Web VM 3');
+    expect(view.ownerName).toBe('Dot');
+    const blob = JSON.stringify(view);
+    expect(blob).not.toContain('Registry title that must not be used');
+    expect(blob).not.toContain('browser-3');
+    expect(blob).not.toContain('Julius — Wonder Web');
+    expect(blob).not.toContain('Ignored Name');
+    const unnamed = must(deserializeWindows(
+      serializeWindows(opened.state).replace('"agentDisplayName":"Dot"', '"agentDisplayName":""'),
+    ));
+    const emptyView = observerView(unnamed.state.windows[0]!, bait);
+    expect(emptyView.title).toBe('Unnamed agent \u2014 Wonder Web VM 3');
+    expect(emptyView.ownerName).toBe('');
   });
 
   it('does not invent a number when the session record has none', () => {

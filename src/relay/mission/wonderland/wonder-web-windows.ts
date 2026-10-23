@@ -98,8 +98,8 @@ export const DEFAULT_SHOWN_WINDOW_CAP = 6;
 export const DEFAULT_IDLE_AUTO_MINIMIZE_MS = 60_000;
 export const DEFAULT_SURFACE_RATE_LIMIT_MS = 5_000;
 
-/** Used only when a display name is rejected. Deliberately not a provider or terminal name. */
-export const AGENT_DISPLAY_NAME_FALLBACK = 'Agent';
+/** Used only when a display name is missing or rejected. The same string Cosmo's client shows. Not a provider or terminal name. */
+export const AGENT_DISPLAY_NAME_FALLBACK = 'Unnamed agent';
 
 export const TITLE_SEPARATOR = ' \u2014 ';
 
@@ -378,9 +378,10 @@ export function resolveAgentDisplayName(
 }
 
 /**
- * Title is the agent name and the session's number. A rejected name becomes
- * `Agent`, never the terminal kind or a provider label. An unusable number
- * yields null rather than a stand-in.
+ * Title is the agent display name and the session's number. A missing or
+ * rejected name becomes `Unnamed agent`, never the terminal kind, a provider
+ * label, or any title field on the session record. An unusable number yields
+ * null rather than a stand-in.
  */
 export function formatWindowTitle(agentDisplayName: string, vmNumber: number): string | null {
   if (!isUsableVmNumber(vmNumber)) return null;

@@ -48,7 +48,7 @@ inline constexpr std::size_t kSessionEndCauseCount = sizeof(kSessionEndCauses) /
 inline constexpr int kDefaultShownWindowCap = 6;
 inline constexpr double kDefaultIdleAutoMinimizeMs = 60000.0;
 inline constexpr double kDefaultSurfaceRateLimitMs = 5000.0;
-inline constexpr char kAgentDisplayNameFallback[] = "Agent";
+inline constexpr char kAgentDisplayNameFallback[] = "Unnamed agent";
 inline constexpr char kClientRole[] = "presentational";
 
 struct SessionRecord {

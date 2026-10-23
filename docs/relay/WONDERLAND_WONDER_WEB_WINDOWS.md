@@ -38,13 +38,17 @@ terminal's `displayName`. The kind on the session record is BRIDGE's
 `grok_bot_group | openai_companion | julius`. There is no bot / Dot / Card
 enum. Dot and Card are customized display names.
 
-The title is `<agent customized name> — Wonder Web VM <N>` (em dash). `N` is
+The title is always `<agentDisplayName> — Wonder Web VM <N>` (em dash). `N` is
 `vmNumber` from the session record, display only. This module does not choose,
 store, or address by a number. The only place a number is chosen is BRIDGE's
 session service under `src/relay/integration/wonder-web-vm/` (that directory
-is not created here). An empty or control-character name is rejected. The
-fallback string is `Agent`, which is not a provider or terminal label. A
-custom name that happens to be "Grok" is the user's name and is kept.
+is not created here). The registry record carries no title. A `title`,
+`windowTitle`, or any other title-like field on the session record is ignored.
+An empty or control-character name is rejected for open. When the display
+name is missing or empty, the composed title and `observerView` title use
+`Unnamed agent`, the same string Cosmo's client shows. That fallback is not
+a provider or terminal label. A custom name that happens to be "Grok" is the
+user's name and is kept.
 
 Parent identity (`terminalId`, `kind`, `displayName`) is secondary metadata.
 It is not the title and it is not an authorization key.
