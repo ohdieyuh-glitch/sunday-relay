@@ -2,8 +2,10 @@
 //
 // FOUNDER, 2026-10-23: one VM per individual AGENT (each Grok Bot in a group chat, each Dot, each Julius working card).
 // A window's title is "<agent's custom name> — Wonder Web VM <N>", N scoped to the parent terminal and reusable behind a
-// stable internal session id; the parent companion is SECONDARY metadata; a provider label never replaces the name; the
-// outline is the PARENT terminal's own custom outline colour.
+// stable internal session id; the parent companion is SECONDARY metadata; the outline is the PARENT terminal's own custom
+// outline colour. TEAM DECISION, 2026-10-23 (BRIDGE, FORGE, YUJI): the registry stores only a name the owner or Julius
+// actually registered, else null, so this file shows ANY agentDisplayName exactly as given ("Grok" is "Grok — Wonder Web
+// VM 3") and keeps no provider-word filter of its own.
 //
 // THIS FILE DECIDES HOW A WINDOW LOOKS, NEVER WHAT A WINDOW IS. Which windows exist, their numbers, which one gets the
 // camera and when one closes are the window manager's (FORGE: WonderlandWonderWebWindows / WonderlandWonderWebWindowLogic).
@@ -34,10 +36,11 @@
 // adapter: FString in, FLinearColor out, the Slate title block and the VM ENDED veil. Nothing here is compiled against
 // Unreal on the box this was written on; the Unreal half is unbuilt until an Unreal build runs it.
 //
-// NO SECRET, NO PROVIDER, NO URL ever reaches a title. The name is sanitised (controls, bidi overrides and zero-width
-// characters removed, length-capped on a code point boundary); a name that is missing, or that is only a provider label
-// ("OpenAI", "claude-code" ...), is shown as the neutral "Unnamed agent" and logged by session id -- never replaced by
-// the provider's name.
+// THE TITLE IS BUILT ONLY FROM agentDisplayName AND vmNumber. FIdentityInput has no title field, so a `title` or
+// `windowTitle` on the record can never reach it. The name is sanitised for drawing only (controls, bidi overrides and
+// zero-width characters removed, length-capped on a code point boundary), never filtered by what word it is. A name that
+// is missing or null is shown as the neutral "Unnamed agent" and logged by session id. Upstream refuses an empty or
+// whitespace-only name, so one never arrives in production; if one does, it gets the same fallback and nothing fails.
 #pragma once
 
 #include <cstddef>
@@ -140,10 +143,10 @@ namespace WonderlandWonderWebWindowLook
 	enum class ENameIssue : std::uint8_t
 	{
 		None,
-		/** Empty (or nothing printable) after sanitising. */
+		/** Present but empty (or nothing printable) after sanitising. Upstream refuses this; the look falls back, never fails. */
 		Empty,
-		/** Only a provider label or provider id, which must never stand in for an agent's name. */
-		ProviderLabel,
+		/** Missing or null on the wire (the registry stores null for a card with no label). */
+		Missing,
 	};
 
 	/** A linear colour, 0..1 per channel. */
@@ -157,8 +160,10 @@ namespace WonderlandWonderWebWindowLook
 	/** Everything the window manager knows about the window, as UTF-8. */
 	struct FIdentityInput
 	{
-		/** The agent's own custom name (the bot, the Dot, the Julius card). */
+		/** The agent's own custom name (the bot, the Dot, the Julius card), shown exactly as given once sanitised. */
 		std::string AgentDisplayName;
+		/** False when agentDisplayName is missing or null: the title is "Unnamed agent — Wonder Web VM <N>". */
+		bool bHasAgentDisplayName = true;
 		/** N in "Wonder Web VM <N>": scoped to the parent terminal, 1 or more. Anything else shows no number. */
 		int VmNumber = 0;
 		/** The parent companion terminal's (or Julius's) custom name: secondary metadata. */
@@ -166,8 +171,6 @@ namespace WonderlandWonderWebWindowLook
 		bool bHasParentAccent = false;
 		FRgb ParentAccent;
 		ESessionState State = ESessionState::Unknown;
-		/** The provider behind the agent, if known. Used ONLY to refuse it as a name; never shown. */
-		std::string ProviderLabel;
 	};
 
 	/** What the window wears. */
@@ -175,7 +178,7 @@ namespace WonderlandWonderWebWindowLook
 	{
 		/** "<name> — Wonder Web VM <N>" (U+2014 EM DASH between spaces). */
 		std::string Title;
-		/** The name as shown: the sanitised agent name, or "Unnamed agent". */
+		/** The name as shown: the sanitised agent name (any word, provider names included), or "Unnamed agent". */
 		std::string Name;
 		/** The parent terminal's name, sanitised; empty when there is none to show. */
 		std::string Metadata;
@@ -286,16 +289,13 @@ namespace WonderlandWonderWebWindowLook
 	 */
 	std::string SanitizeName(const std::string& Utf8, std::size_t MaxBytes = MaxNameBytes);
 
-	/** True when Name (already sanitised) is only a provider label or id -- the fixed list, or the given ProviderLabel. ASCII case-insensitive. */
-	bool IsProviderLabel(const std::string& Name, const std::string& ProviderLabel);
-
 	/** N as shown: the decimal number for 1..9999, otherwise empty (no number is better than a wrong one). */
 	std::string FormatVmNumber(int VmNumber);
 
 	/** "<Name> — Wonder Web VM <N>", or "<Name> — Wonder Web VM" when N is not shown. Name is used as given. */
 	std::string MakeTitle(const std::string& Name, int VmNumber);
 
-	/** The whole look for one window. Pure: the caller logs NameIssue. */
+	/** The whole look for one window. Pure: the caller logs NameIssue. The title comes from the name and N alone. */
 	FResolvedLook Resolve(const FIdentityInput& Input);
 
 	/** The intent contract, as data. */
@@ -395,13 +395,13 @@ enum class EWonderWebParentKind : uint8
 struct FWonderWebWindowIdentity
 {
 	FString AgentDisplayName;
+	/** False when agentDisplayName is missing or null on the wire: the window shows "Unnamed agent". */
+	bool bHasAgentDisplayName = true;
 	int32 VmNumber = 0;
 	FString ParentTerminalName;
 	bool bHasParentAccent = false;
 	FLinearColor ParentAccent = FLinearColor::Transparent;
 	WonderlandWonderWebWindowLook::ESessionState State = WonderlandWonderWebWindowLook::ESessionState::Unknown;
-	/** Used only to refuse it as a name. Never shown, never logged. */
-	FString ProviderLabel;
 	/** The stable internal session id: what a missing name is logged against. Opaque; never a credential. */
 	FString VmSessionId;
 	/** BRIDGE's endCause, read with ParseEndCause; counts only when State is Ended or Failed. */
@@ -430,7 +430,7 @@ struct FWonderWebObserverLook
 
 namespace WonderlandWonderWebWindowLook
 {
-	/** The whole look, as Unreal types. A missing or provider-only name is logged once per session id (LogWonderlandWonderWebLook). */
+	/** The whole look, as Unreal types. A missing (or, defensively, empty) name is logged once per session id (LogWonderlandWonderWebLook). */
 	WONDERLAND_API FWonderWebWindowLook ResolveLook(const FWonderWebWindowIdentity& Identity);
 
 	/** The parent terminal's outline: the Julius Live Terminal's accent, or companion terminal Index's own colour. */

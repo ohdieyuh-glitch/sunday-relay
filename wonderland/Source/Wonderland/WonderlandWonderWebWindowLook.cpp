@@ -2,7 +2,6 @@
 #include "WonderlandWonderWebWindowLook.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 
 namespace WonderlandWonderWebWindowLook
@@ -77,26 +76,6 @@ namespace WonderlandWonderWebWindowLook
 			return Text.substr(First, Last - First + 1);
 		}
 
-		std::string LowerAscii(const std::string& Text)
-		{
-			std::string Out = Text;
-			for (char& Character : Out)
-			{
-				Character = static_cast<char>(std::tolower(static_cast<unsigned char>(Character)));
-			}
-			return Out;
-		}
-
-		/** Provider labels and the provider ids the client already uses ("dev-companion" is the Dev companion's provider id). */
-		const char* const ProviderLabels[] = {
-			"openai", "open ai", "chatgpt", "chat gpt", "gpt", "codex", "openai codex",
-			"anthropic", "claude", "claude code", "claude-code", "claude_code",
-			"xai", "x.ai", "x ai", "grok",
-			"google", "gemini", "google gemini", "deepmind",
-			"cursor", "meta", "llama", "mistral", "deepseek", "qwen", "perplexity", "copilot", "github copilot",
-			"dev-companion", "dev_companion", "dev-single-agent", "dev_single_agent",
-		};
-
 		float Clamp01(float Value)
 		{
 			return Value != Value ? 0.0f : std::min(1.0f, std::max(0.0f, Value));
@@ -143,24 +122,6 @@ namespace WonderlandWonderWebWindowLook
 		return Trim(Clean);
 	}
 
-	bool IsProviderLabel(const std::string& Name, const std::string& ProviderLabel)
-	{
-		const std::string Lower = LowerAscii(Trim(Name));
-		if (Lower.empty())
-		{
-			return false;
-		}
-		for (const char* Label : ProviderLabels)
-		{
-			if (Lower == Label)
-			{
-				return true;
-			}
-		}
-		const std::string Given = LowerAscii(SanitizeName(ProviderLabel));
-		return !Given.empty() && Lower == Given;
-	}
-
 	std::string FormatVmNumber(int VmNumber)
 	{
 		return VmNumber >= 1 && VmNumber <= 9999 ? std::to_string(VmNumber) : std::string();
@@ -182,16 +143,18 @@ namespace WonderlandWonderWebWindowLook
 	FResolvedLook Resolve(const FIdentityInput& Input)
 	{
 		FResolvedLook Look;
-		const std::string Name = SanitizeName(Input.AgentDisplayName);
-		if (Name.empty())
+		// THE NAME AS GIVEN: any word, provider names included ("Grok", "Claude", "OpenAI"). The registry holds only a name
+		// the owner or Julius registered, else null; this side only makes it safe to draw and never judges the word.
+		const std::string Name = Input.bHasAgentDisplayName ? SanitizeName(Input.AgentDisplayName) : std::string();
+		if (!Input.bHasAgentDisplayName)
 		{
-			Look.NameIssue = ENameIssue::Empty;
+			Look.NameIssue = ENameIssue::Missing;
 			Look.Name = UnnamedAgent;
 		}
-		else if (IsProviderLabel(Name, Input.ProviderLabel))
+		else if (Name.empty())
 		{
-			// NEVER THE PROVIDER IN THE NAME'S PLACE: a neutral word, and the window manager logs why.
-			Look.NameIssue = ENameIssue::ProviderLabel;
+			// UPSTREAM REFUSES THIS (agent_display_name_rejected); if one slips through, the same neutral fallback, no failure.
+			Look.NameIssue = ENameIssue::Empty;
 			Look.Name = UnnamedAgent;
 		}
 		else
@@ -199,17 +162,13 @@ namespace WonderlandWonderWebWindowLook
 			Look.Name = Name;
 		}
 		Look.bNumberShown = !FormatVmNumber(Input.VmNumber).empty();
+		// ONLY agentDisplayName AND vmNumber: there is no title field to read.
 		Look.Title = MakeTitle(Look.Name, Input.VmNumber);
 
 		const std::string Parent = SanitizeName(Input.ParentTerminalName);
 		if (Parent.empty())
 		{
 			Look.ParentIssue = ENameIssue::Empty;
-		}
-		else if (IsProviderLabel(Parent, Input.ProviderLabel))
-		{
-			// THE PARENT LINE IS METADATA, NOT A PROVIDER LABEL: a terminal named only for its provider shows no line.
-			Look.ParentIssue = ENameIssue::ProviderLabel;
 		}
 		else
 		{
@@ -536,7 +495,8 @@ namespace WonderlandWonderWebWindowLook
 	FObserverLook ResolveObserver(const FObserverViewInput& View)
 	{
 		FObserverLook Look;
-		// FORGE NAMED THE OWNER (its fallback is "Agent"); this side only makes the text safe to draw.
+		// FORGE NAMED THE OWNER (its fallback is "Unnamed agent"); this side only makes the text safe to draw, and draws any
+		// name as given -- no provider-word filter. FORGE built the title from agentDisplayName and vmNumber; it is drawn as sent.
 		Look.OwnerName = SanitizeName(View.OwnerName);
 		if (Look.OwnerName.empty())
 		{
@@ -617,20 +577,20 @@ namespace WonderlandWonderWebWindowLook
 	{
 		FIdentityInput Input;
 		Input.AgentDisplayName = ToUtf8(Identity.AgentDisplayName);
+		Input.bHasAgentDisplayName = Identity.bHasAgentDisplayName;
 		Input.VmNumber = Identity.VmNumber;
 		Input.ParentTerminalName = ToUtf8(Identity.ParentTerminalName);
 		Input.bHasParentAccent = Identity.bHasParentAccent;
 		Input.ParentAccent = FRgb{ Identity.ParentAccent.R, Identity.ParentAccent.G, Identity.ParentAccent.B };
 		Input.State = Identity.State;
-		Input.ProviderLabel = ToUtf8(Identity.ProviderLabel);
 		const FResolvedLook Resolved = Resolve(Input);
 
 		if (Resolved.NameIssue != ENameIssue::None && FirstReportFor(Identity.VmSessionId))
 		{
-			// THE SESSION ID AND THE REASON, never the provider and never the rejected text.
+			// THE SESSION ID AND THE REASON, never the rejected text.
 			UE_LOG(LogWonderlandWonderWebLook, Warning, TEXT("WLWONDERWEB window for session '%s' has %s agent name; shown as \"%s\""),
 				*Identity.VmSessionId.Left(64),
-				Resolved.NameIssue == ENameIssue::Empty ? TEXT("no") : TEXT("only a provider label as its"),
+				Resolved.NameIssue == ENameIssue::Missing ? TEXT("no") : TEXT("an empty"),
 				UTF8_TO_TCHAR(UnnamedAgent));
 		}
 

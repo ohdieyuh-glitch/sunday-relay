@@ -87,7 +87,8 @@ changes. Do not run it every frame; a missing name is logged once per session id
 
 ```cpp
 FWonderWebWindowIdentity Identity;
-Identity.AgentDisplayName = /* the agent's custom name (bot, Dot, Julius card) */;
+Identity.AgentDisplayName = /* the agent's custom name (bot, Dot, Julius card), exactly as the registry holds it */;
+Identity.bHasAgentDisplayName = /* false when agentDisplayName is missing or null on the record */;
 Identity.VmNumber = /* N, per parent terminal, reusable */;
 Identity.ParentTerminalName = /* the parent companion's (or Julius's) custom name */;
 Identity.bHasParentAccent = true;
@@ -95,7 +96,6 @@ Identity.ParentAccent = WonderlandWonderWebWindowLook::ParentTerminalOutline(
 	bJuliusCard ? EWonderWebParentKind::Julius : EWonderWebParentKind::CompanionTerminal, CompanionTerminalIndex);
 Identity.State = /* WonderlandWonderWebWindowLook::ParseSessionState(session.state) */;
 Identity.EndCause = /* WonderlandWonderWebWindowLook::ParseEndCause(session.endCause), counted only for ended/failed */;
-Identity.ProviderLabel = /* used only to refuse it as a name; never shown or logged */;
 Identity.VmSessionId = /* stable internal id */;
 const FWonderWebWindowLook Look = WonderlandWonderWebWindowLook::ResolveLook(Identity);
 Screen->SetWindowLook(Look);          // outline for the VM ENDED badge; State Ended/Failed also turns VM ENDED on
@@ -105,8 +105,15 @@ Panel->SetWindowLook(Look);           // SWonderlandWonderWebPanel or SWonderlan
 - `FWonderWebWindow::Content` is a `TSharedPtr<SWidget>`, so the typed panel is only known at creation
   (`SAssignNew(WonderWebPanel, ...)` :160, `SAssignNew(Panel, SWonderlandWonderWebBrowserPanel)` :193 in #420). Keep a typed
   weak pointer in the record (a header change, FORGE's), or call `SetWindowLook` right there.
-- The title is `<name> — Wonder Web VM <N>` (U+2014). A missing name, or one that is only a provider label, shows
-  `Unnamed agent`. N outside 1..9999 shows no number.
+- The title is `<name> — Wonder Web VM <N>` (U+2014), built only from `agentDisplayName` and `vmNumber`.
+  `FWonderWebWindowIdentity` has no title field, so never copy a record's `title` or `windowTitle` into it (the KAT pins
+  that `FIdentityInput` has neither).
+- Any name is shown exactly as given (sanitised for drawing only): `Grok` is `Grok — Wonder Web VM 3`, and `Claude` and
+  `OpenAI` are names too. There is no provider-word filter (team decision 2026-10-23, BRIDGE/FORGE/YUJI). A missing or null
+  name (`bHasAgentDisplayName = false`) shows `Unnamed agent — Wonder Web VM <N>`, matching FORGE's #426. An empty or
+  whitespace-only name is refused upstream (`agent_display_name_rejected`); if one ever arrives it gets the same fallback
+  and nothing fails. N outside 1..9999 shows no number.
+- `FWonderWebWindowIdentity::ProviderLabel` is **removed**. If any wiring sets it, delete that line.
 - Only the window's outline is recoloured. The Wonder Web's other line work stays `#FFD400`.
 
 ## 4. Per-terminal colour API (`WonderlandMascotStyle.h`)
@@ -143,10 +150,11 @@ SNew(SWonderWebObserverCard).View(View)   // or Card->SetView(View) on a change
 ```
 
 - The outline resolves only from `#RRGGBB` (sRGB, as `FColor`). Anything else, or null, draws a neutral grey, never `#FFD400`.
-- An empty owner name shows `Unnamed agent`. FORGE's own fallback is `Agent`, which passes through as given.
+- The owner name is drawn as given, with no provider-word filter (`Grok`, `Claude`, `OpenAI` stay). An empty owner name
+  shows `Unnamed agent`, the same word as FORGE's fallback on #426.
 - The title is sanitised and capped at 160 bytes. A null title collapses its line.
-- Open points for FORGE: the token format is unspecified in v1 (this reads `#RRGGBB` only). FORGE keeps a custom name
-  `Grok` as given, while the window title (section 3) refuses a provider label as a name. The card shows whatever FORGE sends.
+- The title is FORGE's, built from `agentDisplayName` and `vmNumber`; the card draws it as sent.
+- Open point for FORGE: the token format is unspecified in v1 (this reads `#RRGGBB` only).
 
 ## 7. API added in this commit (no renames)
 
@@ -158,3 +166,19 @@ SNew(SWonderWebObserverCard).View(View)   // or Card->SetView(View) on a change
 `VmEndedBadgeText`, `SWonderWebObserverCard`, `SWonderWebVmEndedVeil::Label`, `AWonderlandWonderWebScreen::ApplyCue`,
 `ApplyIntent(EVisualIntent, EEndCause)`, `PresentQueuedChip`, `HasLeft`, `GetEndCause`, cvar `wl.WonderWeb.VmEndedHoldSeconds`.
 Every name listed in sections 1 to 5 of the first commit is unchanged.
+
+## 8. Second commit on this PR: the provider-word filter is gone
+
+Team decision 2026-10-23 (BRIDGE, FORGE, YUJI): the registry stores only a name the owner or Julius registered, else null,
+so the look shows any `agentDisplayName` as given.
+- Removed: `IsProviderLabel`, the provider word list, `ENameIssue::ProviderLabel`, `FIdentityInput::ProviderLabel` and
+  `FWonderWebWindowIdentity::ProviderLabel`. The parent line no longer drops a terminal named for a provider either.
+- Added: `ENameIssue::Missing`, `FIdentityInput::bHasAgentDisplayName` and `FWonderWebWindowIdentity::bHasAgentDisplayName`
+  (default `true`). The log line says "no agent name" for missing/null and "an empty agent name" for the defensive case.
+- KAT: rows `Grok`, `Claude`, `OpenAI` and missing/null added. Of the nine rows that expected the filter, eight now expect
+  the name as given, and `provider_passed` is gone with the `ProviderLabel` input it tested. The parent row `Claude Code`
+  now expects the name as metadata. Every word the old list refused is checked to show as given, and the parent line and
+  the observer card's owner are checked with `Grok`, `Claude` and `OpenAI`.
+- Mutation check: `bash wonderland/Tools/wonder_web_window_look_mutants.sh` re-adds a provider-word filter to a scratch
+  copy, in the title, the observer card's owner and the parent line, one at a time, and requires the KAT to fail on each.
+- Nothing here was compiled against Unreal, and no VM exists.

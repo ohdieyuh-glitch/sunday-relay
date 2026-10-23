@@ -7,20 +7,24 @@
 //   (one command line, wrapped here)
 //   ./wonder_web_window_look_kat   -> prints "WONDER WEB WINDOW LOOK KAT PASS ..." and exits 0, or names every failure and exits 1.
 //
-// WHAT IT PINS (founder, 2026-10-23): the title "<agent's custom name> — Wonder Web VM <N>"; the parent terminal as
-// metadata only; a provider label never standing in for a name (a missing name is the neutral "Unnamed agent"); the
-// VM number as shown; the outline colour and its fall back to the legacy #FFD400; the per-terminal companion colour's
+// WHAT IT PINS (founder, 2026-10-23): the title "<agent's custom name> — Wonder Web VM <N>", built only from
+// agentDisplayName and vmNumber; any name shown exactly as given, provider words included ("Grok" is "Grok — Wonder Web
+// VM 3": team decision, BRIDGE/FORGE/YUJI 2026-10-23, no provider-word filter); a missing or null name as the neutral
+// "Unnamed agent"; the parent terminal as metadata only; the VM number as shown; the outline colour and its fall back to the legacy #FFD400; the per-terminal companion colour's
 // fall back to the shared colour and then the theme; and the visual-intent contract the window manager drives.
 // ALIGNED WITH FORGE (wonderland-wonder-web-windows.v1 at 46383abe) AND BRIDGE (wonder-web-vm-session.v1): KAT-MAP pins
 // every FORGE animation intent to this file's EVisualIntent one to one; KAT-CAUSE pins BRIDGE's six end causes to their
 // badges, with the neutral "VM ended" for none or anything unknown; KAT-ADMIT the over-cap chip; KAT-OBSERVER the
 // observerView card's four fields.
+// MUTATION CHECK: wonderland/Tools/wonder_web_window_look_mutants.sh re-adds a provider-word filter (to the title, the
+// observer card's owner, and the parent line) one at a time and requires this KAT to FAIL on each.
 // Inputs with non-ASCII bytes are written as escapes; "\xE2\x80\x94" is U+2014 EM DASH.
 #include "WonderlandWonderWebWindowLook.h"
 
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <type_traits>
 
 namespace
 {
@@ -49,47 +53,64 @@ namespace
 
 	const std::string Dash = "\xE2\x80\x94";
 
+	// THE TITLE HAS ONE SOURCE: FIdentityInput carries no title-like field, so a record's `title` or `windowTitle` has
+	// nowhere to land. Checked at compile time: adding such a field breaks this build.
+	template <typename T, typename = void> struct THasTitle : std::false_type {};
+	template <typename T> struct THasTitle<T, std::void_t<decltype(&T::Title)>> : std::true_type {};
+	template <typename T, typename = void> struct THasWindowTitle : std::false_type {};
+	template <typename T> struct THasWindowTitle<T, std::void_t<decltype(&T::WindowTitle)>> : std::true_type {};
+	static_assert(!THasTitle<FIdentityInput>::value, "the title is built from agentDisplayName + vmNumber only");
+	static_assert(!THasWindowTitle<FIdentityInput>::value, "the title is built from agentDisplayName + vmNumber only");
+
 	struct FTitleRow
 	{
 		const char* Label;
+		/** nullptr: agentDisplayName missing or null on the wire. */
 		const char* Name;
 		int Number;
-		const char* Provider;
 		const char* ExpectedTitle;
 		ENameIssue ExpectedIssue;
 	};
 
-	// KAT-TITLE: the name as given (sanitised), the number as shown, the neutral word for a missing or provider-only name.
+	// KAT-TITLE: the name exactly as given (sanitised for drawing only), the number as shown, and "Unnamed agent" only for a
+	// missing/null name (or, defensively, one that is empty after sanitising). No word is refused: provider names are names.
 	const FTitleRow TitleRows[] = {
-		{ "plain",              "Fable",                    1,   "",          "Fable \xE2\x80\x94 Wonder Web VM 1",                 ENameIssue::None },
-		{ "two_words",          "Grok Bot",                 2,   "xai",       "Grok Bot \xE2\x80\x94 Wonder Web VM 2",              ENameIssue::None },
-		{ "dot",                "Dot 3",                    3,   "",          "Dot 3 \xE2\x80\x94 Wonder Web VM 3",                 ENameIssue::None },
-		{ "julius_card",        "Julius: ship landing page",12,  "",          "Julius: ship landing page \xE2\x80\x94 Wonder Web VM 12", ENameIssue::None },
-		{ "custom_with_brand",  "Claude Code Fable 5",      4,   "anthropic", "Claude Code Fable 5 \xE2\x80\x94 Wonder Web VM 4",   ENameIssue::None },
-		{ "trimmed",            "   Astra   ",              1,   "",          "Astra \xE2\x80\x94 Wonder Web VM 1",                 ENameIssue::None },
-		{ "collapsed_ws",       "Astra\t\t  Two",           1,   "",          "Astra Two \xE2\x80\x94 Wonder Web VM 1",             ENameIssue::None },
-		{ "newline_is_space",   "Astra\nTwo",               1,   "",          "Astra Two \xE2\x80\x94 Wonder Web VM 1",             ENameIssue::None },
-		{ "utf8_kept",          "Zo\xC3\xAB \xF0\x9F\x90\xB6", 7, "",         "Zo\xC3\xAB \xF0\x9F\x90\xB6 \xE2\x80\x94 Wonder Web VM 7", ENameIssue::None },
-		{ "bidi_dropped",       "Ast\xE2\x80\xAEra",        1,   "",          "Astra \xE2\x80\x94 Wonder Web VM 1",                 ENameIssue::None },
-		{ "zero_width_dropped", "A\xE2\x80\x8B" "stra",     1,   "",          "Astra \xE2\x80\x94 Wonder Web VM 1",                 ENameIssue::None },
-		{ "bad_utf8_dropped",   "As\xFFtra\xC3",            1,   "",          "Astra \xE2\x80\x94 Wonder Web VM 1",                 ENameIssue::None },
-		{ "overlong_dropped",   "A\xC0\xAFstra",            1,   "",          "Astra \xE2\x80\x94 Wonder Web VM 1",                 ENameIssue::None },
-		{ "empty",              "",                         1,   "",          "Unnamed agent \xE2\x80\x94 Wonder Web VM 1",         ENameIssue::Empty },
-		{ "only_spaces",        " \t\r\n ",                 2,   "",          "Unnamed agent \xE2\x80\x94 Wonder Web VM 2",         ENameIssue::Empty },
-		{ "only_invisible",     "\xE2\x80\x8B\xEF\xBB\xBF", 2,   "",          "Unnamed agent \xE2\x80\x94 Wonder Web VM 2",         ENameIssue::Empty },
-		{ "provider_openai",    "OpenAI",                   1,   "",          "Unnamed agent \xE2\x80\x94 Wonder Web VM 1",         ENameIssue::ProviderLabel },
-		{ "provider_chatgpt",   "chatgpt",                  1,   "",          "Unnamed agent \xE2\x80\x94 Wonder Web VM 1",         ENameIssue::ProviderLabel },
-		{ "provider_claude",    "Claude",                   1,   "",          "Unnamed agent \xE2\x80\x94 Wonder Web VM 1",         ENameIssue::ProviderLabel },
-		{ "provider_cc_id",     "claude-code",              3,   "",          "Unnamed agent \xE2\x80\x94 Wonder Web VM 3",         ENameIssue::ProviderLabel },
-		{ "provider_grok_caps", "  GROK ",                  1,   "",          "Unnamed agent \xE2\x80\x94 Wonder Web VM 1",         ENameIssue::ProviderLabel },
-		{ "provider_gemini",    "Gemini",                   1,   "",          "Unnamed agent \xE2\x80\x94 Wonder Web VM 1",         ENameIssue::ProviderLabel },
-		{ "provider_dev_id",    "dev-companion",            1,   "",          "Unnamed agent \xE2\x80\x94 Wonder Web VM 1",         ENameIssue::ProviderLabel },
-		{ "provider_passed",    "Acme Models",              1,   "acme models", "Unnamed agent \xE2\x80\x94 Wonder Web VM 1",       ENameIssue::ProviderLabel },
-		{ "provider_zw_hidden", "Ope\xE2\x80\x8BnAI",       1,   "",          "Unnamed agent \xE2\x80\x94 Wonder Web VM 1",         ENameIssue::ProviderLabel },
-		{ "no_number_zero",     "Fable",                    0,   "",          "Fable \xE2\x80\x94 Wonder Web VM",                   ENameIssue::None },
-		{ "no_number_negative", "Fable",                    -2,  "",          "Fable \xE2\x80\x94 Wonder Web VM",                   ENameIssue::None },
-		{ "no_number_huge",     "Fable",                    10000, "",        "Fable \xE2\x80\x94 Wonder Web VM",                   ENameIssue::None },
-		{ "number_max",         "Fable",                    9999, "",         "Fable \xE2\x80\x94 Wonder Web VM 9999",              ENameIssue::None },
+		{ "plain",              "Fable",                       1,     "Fable \xE2\x80\x94 Wonder Web VM 1",                       ENameIssue::None },
+		{ "two_words",          "Grok Bot",                    2,     "Grok Bot \xE2\x80\x94 Wonder Web VM 2",                    ENameIssue::None },
+		{ "dot",                "Dot 3",                       3,     "Dot 3 \xE2\x80\x94 Wonder Web VM 3",                       ENameIssue::None },
+		{ "julius_card",        "Julius: ship landing page",   12,    "Julius: ship landing page \xE2\x80\x94 Wonder Web VM 12",  ENameIssue::None },
+		{ "custom_with_brand",  "Claude Code Fable 5",         4,     "Claude Code Fable 5 \xE2\x80\x94 Wonder Web VM 4",         ENameIssue::None },
+		{ "trimmed",            "   Astra   ",                 1,     "Astra \xE2\x80\x94 Wonder Web VM 1",                       ENameIssue::None },
+		{ "collapsed_ws",       "Astra\t\t  Two",              1,     "Astra Two \xE2\x80\x94 Wonder Web VM 1",                   ENameIssue::None },
+		{ "newline_is_space",   "Astra\nTwo",                  1,     "Astra Two \xE2\x80\x94 Wonder Web VM 1",                   ENameIssue::None },
+		{ "utf8_kept",          "Zo\xC3\xAB \xF0\x9F\x90\xB6", 7,     "Zo\xC3\xAB \xF0\x9F\x90\xB6 \xE2\x80\x94 Wonder Web VM 7", ENameIssue::None },
+		{ "bidi_dropped",       "Ast\xE2\x80\xAEra",           1,     "Astra \xE2\x80\x94 Wonder Web VM 1",                       ENameIssue::None },
+		{ "zero_width_dropped", "A\xE2\x80\x8B" "stra",        1,     "Astra \xE2\x80\x94 Wonder Web VM 1",                       ENameIssue::None },
+		{ "bad_utf8_dropped",   "As\xFFtra\xC3",               1,     "Astra \xE2\x80\x94 Wonder Web VM 1",                       ENameIssue::None },
+		{ "overlong_dropped",   "A\xC0\xAFstra",               1,     "Astra \xE2\x80\x94 Wonder Web VM 1",                       ENameIssue::None },
+		// TEAM DECISION 2026-10-23: a provider word IS the agent's custom name when that is what was registered.
+		{ "name_grok",          "Grok",                        3,     "Grok \xE2\x80\x94 Wonder Web VM 3",                        ENameIssue::None },
+		{ "name_claude",        "Claude",                      1,     "Claude \xE2\x80\x94 Wonder Web VM 1",                      ENameIssue::None },
+		{ "name_openai",        "OpenAI",                      2,     "OpenAI \xE2\x80\x94 Wonder Web VM 2",                      ENameIssue::None },
+		// FLIPPED: these rows expected "Unnamed agent" while the filter existed; now each shows its name as given.
+		{ "was_filtered_chatgpt", "chatgpt",                   1,     "chatgpt \xE2\x80\x94 Wonder Web VM 1",                     ENameIssue::None },
+		{ "was_filtered_cc_id", "claude-code",                 3,     "claude-code \xE2\x80\x94 Wonder Web VM 3",                 ENameIssue::None },
+		{ "was_filtered_grok_caps", "  GROK ",                 1,     "GROK \xE2\x80\x94 Wonder Web VM 1",                        ENameIssue::None },
+		{ "was_filtered_gemini", "Gemini",                     1,     "Gemini \xE2\x80\x94 Wonder Web VM 1",                      ENameIssue::None },
+		{ "was_filtered_dev_id", "dev-companion",              1,     "dev-companion \xE2\x80\x94 Wonder Web VM 1",               ENameIssue::None },
+		{ "was_filtered_zw",    "Ope\xE2\x80\x8BnAI",          1,     "OpenAI \xE2\x80\x94 Wonder Web VM 1",                      ENameIssue::None },
+		// MISSING OR NULL: the only production path to the fallback.
+		{ "missing_or_null",    nullptr,                       1,     "Unnamed agent \xE2\x80\x94 Wonder Web VM 1",               ENameIssue::Missing },
+		{ "missing_or_null_n5", nullptr,                       5,     "Unnamed agent \xE2\x80\x94 Wonder Web VM 5",               ENameIssue::Missing },
+		{ "missing_no_number",  nullptr,                       0,     "Unnamed agent \xE2\x80\x94 Wonder Web VM",                 ENameIssue::Missing },
+		// EMPTY OR WHITESPACE-ONLY: refused upstream, never in production; if one arrives, the fallback and no failure.
+		{ "empty",              "",                            1,     "Unnamed agent \xE2\x80\x94 Wonder Web VM 1",               ENameIssue::Empty },
+		{ "only_spaces",        " \t\r\n ",                    2,     "Unnamed agent \xE2\x80\x94 Wonder Web VM 2",               ENameIssue::Empty },
+		{ "only_invisible",     "\xE2\x80\x8B\xEF\xBB\xBF",    2,     "Unnamed agent \xE2\x80\x94 Wonder Web VM 2",               ENameIssue::Empty },
+		{ "no_number_zero",     "Fable",                       0,     "Fable \xE2\x80\x94 Wonder Web VM",                         ENameIssue::None },
+		{ "no_number_negative", "Fable",                       -2,    "Fable \xE2\x80\x94 Wonder Web VM",                         ENameIssue::None },
+		{ "no_number_huge",     "Fable",                       10000, "Fable \xE2\x80\x94 Wonder Web VM",                         ENameIssue::None },
+		{ "number_max",         "Fable",                       9999,  "Fable \xE2\x80\x94 Wonder Web VM 9999",                    ENameIssue::None },
 	};
 
 	struct FNumberRow
@@ -205,6 +226,10 @@ namespace
 		{ "null title",       true,  "#112233", "Fable", false, "",                              "live",      true,  "Fable",         false, "",                                "Live" },
 		{ "empty owner",      true,  "#112233", "  ",    true,  "t",                             "live",      true,  "Unnamed agent", true,  "t",                               "Live" },
 		{ "unknown status",   true,  "#112233", "Fable", true,  "t",                             "paused",    true,  "Fable",         true,  "t",                               "Unknown" },
+		{ "owner Grok",       true,  "#3FA7FF", "Grok",   true, "Grok \xE2\x80\x94 Wonder Web VM 3",   "live",    true,  "Grok",          true,  "Grok \xE2\x80\x94 Wonder Web VM 3",   "Live" },
+		{ "owner Claude",     true,  "#3FA7FF", "Claude", true, "Claude \xE2\x80\x94 Wonder Web VM 1", "focused", true,  "Claude",        true,  "Claude \xE2\x80\x94 Wonder Web VM 1", "Focused" },
+		{ "owner OpenAI",     true,  "#3FA7FF", "OpenAI", true, "OpenAI \xE2\x80\x94 Wonder Web VM 2", "live",    true,  "OpenAI",        true,  "OpenAI \xE2\x80\x94 Wonder Web VM 2", "Live" },
+		{ "owner unnamed",    true,  "#3FA7FF", "Unnamed agent", true, "Unnamed agent \xE2\x80\x94 Wonder Web VM 4", "live", true, "Unnamed agent", true, "Unnamed agent \xE2\x80\x94 Wonder Web VM 4", "Live" },
 		{ "hostile title",    true,  "#112233", "Fa\xE2\x80\xAE" "ble", true, "a\x1B[2Jb\nc",        "live",      true,  "Fable",         true,  "a [2Jb c",                        "Live" },
 	};
 
@@ -224,17 +249,30 @@ int main()
 	for (const FTitleRow& Row : TitleRows)
 	{
 		FIdentityInput Input;
-		Input.AgentDisplayName = Row.Name;
+		Input.bHasAgentDisplayName = Row.Name != nullptr;
+		Input.AgentDisplayName = Row.Name != nullptr ? Row.Name : "";
 		Input.VmNumber = Row.Number;
-		Input.ProviderLabel = Row.Provider;
 		const FResolvedLook Look = Resolve(Input);
 		Expect(Look.Title == Row.ExpectedTitle, std::string("title ") + Row.Label + ": got [" + Look.Title + "]");
 		Expect(Look.NameIssue == Row.ExpectedIssue, std::string("name issue ") + Row.Label);
-		// THE PROVIDER NEVER APPEARS IN A TITLE IT WAS REFUSED FROM.
-		if (Row.ExpectedIssue == ENameIssue::ProviderLabel)
-		{
-			Expect(Look.Name == UnnamedAgent, std::string("provider refused ") + Row.Label);
-		}
+		// THE TITLE IS THE SHOWN NAME AND N, NOTHING ELSE.
+		Expect(Look.Title == MakeTitle(Look.Name, Row.Number), std::string("title from name + number only ") + Row.Label);
+		// THE FALLBACK ONLY WHEN THERE IS NO NAME TO SHOW.
+		Expect((Look.Name == UnnamedAgent) == (Row.ExpectedIssue != ENameIssue::None), std::string("fallback only without a name ") + Row.Label);
+	}
+	{
+		// MISSING WINS OVER STALE TEXT: a null name never shows whatever string the struct still holds.
+		FIdentityInput Input;
+		Input.bHasAgentDisplayName = false;
+		Input.AgentDisplayName = "Grok";
+		Input.VmNumber = 3;
+		const FResolvedLook Look = Resolve(Input);
+		Expect(Look.Title == std::string("Unnamed agent ") + Dash + " Wonder Web VM 3" && Look.NameIssue == ENameIssue::Missing, "null name ignores stale text");
+	}
+	{
+		// A DEFAULT INPUT IS A PRESENT-BUT-EMPTY NAME (bHasAgentDisplayName defaults true): the fallback, flagged Empty, no failure.
+		const FResolvedLook Look = Resolve(FIdentityInput{});
+		Expect(Look.Name == UnnamedAgent && Look.NameIssue == ENameIssue::Empty, "default input falls back");
 	}
 	// THE EXACT BYTES OF THE JOIN: space, U+2014 (E2 80 94), space, "Wonder Web VM", space, N.
 	Expect(MakeTitle("A", 1) == std::string("A ") + Dash + " Wonder Web VM 1", "title join bytes");
@@ -254,11 +292,26 @@ int main()
 		Expect(SanitizeName(Spaced) == std::string(63, 'a'), "cap then trim");
 		Expect(SanitizeName("\xF0\x9F\x90\xB6\xF0\x9F\x90\xB6", 6) == "\xF0\x9F\x90\xB6", "cap four-byte");
 	}
-	// A CUSTOM NAME THAT CONTAINS A PROVIDER WORD IS STILL THE AGENT'S NAME.
-	Expect(!IsProviderLabel("Claude Code Fable 5", ""), "brand inside a name is allowed");
-	Expect(!IsProviderLabel("Grok Bot", "xai"), "Grok Bot is a name");
-	Expect(IsProviderLabel("grok", ""), "grok alone is a label");
-	Expect(!IsProviderLabel("", "openai"), "empty is not a label");
+	// NO WORD IS REFUSED: every provider word the old filter listed is shown as the name, in any case.
+	{
+		const char* const FormerlyFiltered[] = {
+			"openai", "open ai", "chatgpt", "chat gpt", "gpt", "codex", "openai codex",
+			"anthropic", "claude", "claude code", "claude-code", "claude_code",
+			"xai", "x.ai", "x ai", "grok", "Grok", "GROK", "Claude", "OpenAI",
+			"google", "gemini", "google gemini", "deepmind",
+			"cursor", "meta", "llama", "mistral", "deepseek", "qwen", "perplexity", "copilot", "github copilot",
+			"dev-companion", "dev_companion", "dev-single-agent", "dev_single_agent",
+		};
+		for (const char* Word : FormerlyFiltered)
+		{
+			FIdentityInput Input;
+			Input.AgentDisplayName = Word;
+			Input.VmNumber = 3;
+			const FResolvedLook Look = Resolve(Input);
+			Expect(Look.Name == Word && Look.NameIssue == ENameIssue::None && Look.Title == std::string(Word) + " " + Dash + " Wonder Web VM 3",
+				std::string("shown as given: ") + Word);
+		}
+	}
 
 	// --------------------------------------------------------------------------------------- KAT-METADATA
 	{
@@ -276,7 +329,16 @@ int main()
 		Input.AgentDisplayName = "Fable";
 		Input.ParentTerminalName = "Claude Code";
 		const FResolvedLook Look = Resolve(Input);
-		Expect(Look.Metadata.empty() && Look.ParentIssue == ENameIssue::ProviderLabel, "provider-only parent shows no metadata");
+		// FLIPPED: a parent terminal named "Claude Code" is shown as its name (it used to be dropped as a provider label).
+		Expect(Look.Metadata == "Claude Code" && Look.ParentIssue == ENameIssue::None, "provider-word parent shown as given");
+	}
+	for (const char* Parent : { "Grok", "Claude", "OpenAI" })
+	{
+		FIdentityInput Input;
+		Input.AgentDisplayName = "Fable";
+		Input.ParentTerminalName = Parent;
+		const FResolvedLook Look = Resolve(Input);
+		Expect(Look.Metadata == Parent && Look.ParentIssue == ENameIssue::None, std::string("parent shown as given: ") + Parent);
 	}
 	{
 		FIdentityInput Input;
@@ -285,14 +347,14 @@ int main()
 		Expect(Look.Metadata.empty() && Look.ParentIssue == ENameIssue::Empty, "missing parent shows no metadata");
 	}
 	{
-		// A MISSING NAME IS NOT FILLED FROM THE PARENT OR THE PROVIDER.
+		// A MISSING NAME IS NOT FILLED FROM THE PARENT.
 		FIdentityInput Input;
+		Input.bHasAgentDisplayName = false;
 		Input.ParentTerminalName = "Astra";
-		Input.ProviderLabel = "openai";
 		Input.VmNumber = 1;
 		const FResolvedLook Look = Resolve(Input);
-		Expect(Look.Name == UnnamedAgent && Look.Metadata == "Astra", "missing name stays neutral");
-		Expect(Look.Title.find("openai") == std::string::npos && Look.Title.find("Astra") == std::string::npos, "nothing borrowed");
+		Expect(Look.Name == UnnamedAgent && Look.Metadata == "Astra" && Look.NameIssue == ENameIssue::Missing, "missing name stays neutral");
+		Expect(Look.Title.find("Astra") == std::string::npos, "nothing borrowed");
 	}
 
 	// ----------------------------------------------------------------------------------------- KAT-NUMBER
