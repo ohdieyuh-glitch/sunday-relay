@@ -1,0 +1,31 @@
+=== stream / stream_options in julius-xai-direct-reviewer.ts ===
+NO_MATCH
+=== Math.round / Math.floor / Math.ceil / toFixed in julius-xai-direct-reviewer.ts ===
+NO_MATCH
+=== /responses and body keys ===
+16: * `output[].content[].text`, `usage.input_tokens`). `usage.cost_in_usd_ticks` is UNVERIFIED on a live call: no real response
+19: * DOLLAR RECEIPT. xAI puts the billed amount on `usage.cost_in_usd_ticks` (1 USD = 10_000_000_000 ticks, so one micro-USD
+21: * (`micros = q + (r > 0 ? 1 : 0)`), and keeps the provider's tick count on `costUsdTicksRaw`. Token counts are not a
+23: * non-streaming POST: the body is `{ model, store: false, input }` and `usage` is read from that JSON object.
+56:function costUsdMicrosFromXaiTicks(ticks: unknown): { readonly costUsdMicros: number; readonly costUsdTicksRaw: number } | null {
+63:  return { costUsdMicros: Number(micros), costUsdTicksRaw: ticks };
+95:        const res = await input.fetchImpl(`${base}/responses`, {
+98:          body: JSON.stringify({ model: input.model, store: false, input: [{ role: 'system', content: J1_XAI_REVIEW_INSTRUCTIONS }, { role: 'user', content: userText }] }),
+111:      const paid = (failureClass: string, o: { responseId?: string | null; model?: string | null; usage?: RoleUsage; costUsdMicros?: number; costUsdTicksRaw?: number } = {}): RoleCallOutput => ({
+114:        ...(typeof o.costUsdMicros === 'number' ? { costUsdMicros: o.costUsdMicros, costUsdTicksRaw: o.costUsdTicksRaw } : {}),
+130:      const receipt = costUsdMicrosFromXaiTicks(usageRaw.cost_in_usd_ticks);
+131:      const costFields = receipt === null ? {} : { costUsdMicros: receipt.costUsdMicros, costUsdTicksRaw: receipt.costUsdTicksRaw };
+=== UNVERIFIED live tick field ===
+15: * UNVERIFIED against the live service: the request and response field names follow the Responses-API shape (`id`, `model`,
+16: * `output[].content[].text`, `usage.input_tokens`). `usage.cost_in_usd_ticks` is UNVERIFIED on a live call: no real response
+=== server.ts composition hop ===
+82:import { createUncomposedJuliusDispatch, handleJuliusDispatchRoute, isJuliusDispatchRoute } from './julius-dispatch';
+83:import { createJ1LiveDispatchFromEnv } from './julius-dispatch-wiring';
+456:  // J1: default OFF. Only JULIUS_J1_ENABLED=1 even attempts the live composition; any missing pin or dependency falls back to the
+458:  const juliusDispatch = process.env.JULIUS_J1_ENABLED === '1'
+459:    ? createJ1LiveDispatchFromEnv(() => process.env, realJ1WiringDeps((line) => console.warn(line), Date.now, process.env)).controller
+460:    : createUncomposedJuliusDispatch(() => process.env);
+791:         * Off unless JULIUS_J1_ENABLED=1; as shipped it is UNCOMPOSED (no providers), so it can only refuse. See julius-dispatch.ts.
+relay-bridge/julius-dispatch-adapters.ts:608:export function createJ1ProductionComposition(input: J1ProductionCompositionInput): { readonly architect: RoleProvider; readonly coder: RoleProvider; readonly reviewer: RoleProvider } {
+relay-bridge/julius-dispatch-wiring-core.ts:7:import { createFrozenRunLookup, createJ1ProductionComposition, J1_CODER_READ_PATHS, J1_CODER_WRITE_PATHS } from './julius-dispatch-adapters';
+relay-bridge/julius-dispatch-wiring-core.ts:235:  const providers = createJ1ProductionComposition({
