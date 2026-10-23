@@ -302,8 +302,8 @@ describe('the checkpoint workflow and the working tree', () => {
     expect(workflow).toContain(EXTERNAL_ANCHOR_VARIABLE);
   });
 
-  it('this working tree is not a trusted verifier', () => {
-    const result = requireTrustedVerifier({ ...process.env, [EXTERNAL_ANCHOR_VARIABLE]: PIN });
+  it('this working tree is not a trusted verifier', async () => {
+    const result = await requireTrustedVerifier({ ...process.env, [EXTERNAL_ANCHOR_VARIABLE]: PIN });
     expect(result.ok).toBe(false);
   });
 });

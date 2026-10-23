@@ -26,7 +26,6 @@
  */
 
 import { createHash, createPublicKey, verify } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
@@ -384,19 +383,22 @@ export function classifyRecordedRange() {
   return RECORDED_RANGE.map((row) => classifyCommit(row));
 }
 
-function gitShow(spec) {
-  return execFileSync('git', ['show', spec], { encoding: 'utf8' });
+/** Read-only git. Loaded here, as the other provenance scripts load it, because the ref is a commit id. */
+async function git(args, encoding) {
+  const { execFileSync } = await import('node:child_process');
+  const stdio = ['ignore', 'pipe', 'pipe'];
+  return encoding ? execFileSync('git', args, { encoding, stdio }) : execFileSync('git', args, { stdio });
 }
 
 /** Exit 0 only when the working tree's trusted files match the checkpoint, or a signed attestation covers the difference. */
-export function requireTrustedVerifier(env = process.env) {
-  const pin = reviewerKeyPinRefusal(gitShow(`${TRUSTED_CHECKPOINT_SHA}:.github/julius-landing/reviewer-ed25519.pub`), env[EXTERNAL_ANCHOR_VARIABLE]);
+export async function requireTrustedVerifier(env = process.env) {
+  const pin = reviewerKeyPinRefusal(await git(['show', `${TRUSTED_CHECKPOINT_SHA}:.github/julius-landing/reviewer-ed25519.pub`], 'utf8'), env[EXTERNAL_ANCHOR_VARIABLE]);
   if (pin) return { ok: false, reason: pin.reason };
   const differed = [];
   for (const path of TRUSTED_COMPUTING_BASE) {
     let checkpointBytes;
     try {
-      checkpointBytes = execFileSync('git', ['show', `${TRUSTED_CHECKPOINT_SHA}:${path}`], { stdio: ['ignore', 'pipe', 'pipe'] });
+      checkpointBytes = await git(['show', `${TRUSTED_CHECKPOINT_SHA}:${path}`]);
     } catch {
       checkpointBytes = null;
     }
@@ -416,7 +418,7 @@ export function requireTrustedVerifier(env = process.env) {
     commits: RECORDED_RANGE,
     attestationText: env.JULIUS_CHECKPOINT_ATTESTATIONS,
     signatureB64: env.JULIUS_CHECKPOINT_ATTESTATION_SIGNATURE,
-    reviewerKeyPem: gitShow(`${TRUSTED_CHECKPOINT_SHA}:.github/julius-landing/reviewer-ed25519.pub`),
+    reviewerKeyPem: await git(['show', `${TRUSTED_CHECKPOINT_SHA}:.github/julius-landing/reviewer-ed25519.pub`], 'utf8'),
     externalAnchor: env[EXTERNAL_ANCHOR_VARIABLE],
   });
   if (chain.accepted !== true) {
@@ -429,13 +431,13 @@ export function requireTrustedVerifier(env = process.env) {
   const parsed = typeof env.JULIUS_CHECKPOINT_ATTESTATIONS === 'string' ? parseCheckpointAttestation(env.JULIUS_CHECKPOINT_ATTESTATIONS) : { fields: {} };
   const attested = parsed.fields?.checkpoint;
   let head = '';
-  try { head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(); } catch { head = ''; }
+  try { head = String(await git(['rev-parse', 'HEAD'], 'utf8')).trim(); } catch { head = ''; }
   if (head !== attested) {
     return { ok: false, reason: `unprovenanced: HEAD ${head || 'unreadable'} is not the attested checkpoint ${attested ?? 'none'}` };
   }
   for (const path of differed) {
     let attestedBytes = null;
-    try { attestedBytes = execFileSync('git', ['show', `${attested}:${path}`], { stdio: ['ignore', 'pipe', 'pipe'] }); } catch { attestedBytes = null; }
+    try { attestedBytes = await git(['show', `${attested}:${path}`]); } catch { attestedBytes = null; }
     let tipBytes = null;
     try { tipBytes = readFileSync(path); } catch { tipBytes = null; }
     const same = Buffer.isBuffer(attestedBytes) && Buffer.isBuffer(tipBytes) && attestedBytes.equals(tipBytes);
@@ -450,7 +452,7 @@ const entrypoint = (() => {
 })();
 
 if (entrypoint !== null && import.meta.url === entrypoint && process.argv.includes('--require-trusted-verifier')) {
-  const result = requireTrustedVerifier();
+  const result = await requireTrustedVerifier();
   const stream = result.ok ? process.stdout : process.stderr;
   stream.write(`${result.reason}\n`);
   process.exitCode = result.ok ? 0 : 1;

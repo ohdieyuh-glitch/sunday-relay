@@ -108,4 +108,4 @@ export declare function evaluateTrustChain(input: {
 }): TrustChainResult;
 
 export declare function applyTrustChain<T extends { readonly verdict?: string; readonly reason?: string }>(single: T, chain: TrustChainResult): T;
-export declare function requireTrustedVerifier(env?: NodeJS.ProcessEnv): { readonly ok: boolean; readonly reason: string };
+export declare function requireTrustedVerifier(env?: NodeJS.ProcessEnv): Promise<{ readonly ok: boolean; readonly reason: string }>;
