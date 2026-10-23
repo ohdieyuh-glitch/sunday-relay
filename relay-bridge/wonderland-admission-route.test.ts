@@ -1,18 +1,21 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import { classifyDispatchAnswer, errorKindOf } from '../src/relay/integration/wonderland-admission';
 import type { AdmissionLedger } from '../src/relay/integration/wonderland-admission';
+import { createBrowserSessionStore } from './browser-session/grants';
 import { handleJuliusMissionRoute, isJuliusMissionRoute } from './julius-mission-routes';
 import {
   createWonderlandAdmissionService,
   handleWonderlandAdmissionRoute,
+  isWonderlandAdmissionRoute,
   WONDERLAND_ADMISSION_PATH,
   type WonderlandAdmissionRouteRequest,
 } from './wonderland-admission-route';
-import { isWonderlandRoute } from './wonderland-routes';
+import { classifyWonderlandDispatchPath, handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
+import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
 
 const RUN = 'wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d';
 const KEY = '11111111-2222-4333-8444-555555555555';
@@ -183,6 +186,85 @@ describe('POST /wonderland/julius/dispatch', () => {
       reviewerProvider: 'xai',
       reviewerModel: 'grok-build-0.1',
     });
+  });
+});
+
+describe('admission path exclusion is exact', () => {
+  const ORIGIN = 'https://sunday-relay.vercel.app';
+  const NOW = 1_700_000_000_000;
+  const VARIANTS = [
+    '/wonderland/julius/dispatch/',
+    '/Wonderland/Julius/Dispatch',
+    '/wonderland/julius/dispatch/x',
+    '/wonderland/julius/dispatch?x=1',
+  ] as const;
+  const CONTROL = '/wonderland/no-such-route';
+
+  function bridgePath(raw: string): string {
+    return raw.split('?')[0].replace(/\/+$/, '') || '/';
+  }
+
+  async function catchAll(path: string, authorization?: string) {
+    return handleWonderlandRoute({
+      method: 'POST',
+      path,
+      url: path,
+      authorization,
+      origin: authorization === undefined ? undefined : ORIGIN,
+      body: {},
+      now: NOW,
+    }, {
+      backend: WonderlandBackend.empty(),
+      sessions: sessions,
+      response: {} as never,
+      request: {} as never,
+    });
+  }
+
+  let sessions = createBrowserSessionStore();
+  let playerToken = '';
+
+  beforeAll(() => {
+    sessions = createBrowserSessionStore();
+    const minted = sessions.mintIdentitySession({
+      origin: ORIGIN, now: NOW, participantId: 'founder', scope: 'browser_control',
+    });
+    if (!minted.ok) throw new Error('session mint failed');
+    playerToken = `Relay-Session ${minted.session.token}`;
+  });
+
+  it('excludes only the exact admission path', () => {
+    expect(isWonderlandRoute(WONDERLAND_ADMISSION_PATH)).toBe(false);
+    expect(isWonderlandAdmissionRoute(WONDERLAND_ADMISSION_PATH)).toBe(true);
+    const exact = classifyWonderlandDispatchPath(WONDERLAND_ADMISSION_PATH, WONDERLAND_ADMISSION_PATH);
+    expect(exact).toEqual({ catchAllPath: null, exactAdmission: true });
+  });
+
+  it('sends slash, case, child, and query variants through the catch-all refusal', async () => {
+    const signedOut = await catchAll(CONTROL);
+    const signedIn = await catchAll(CONTROL, playerToken);
+    expect(signedOut).toEqual({ status: 401, body: { error: 'authenticated player identity required' } });
+    expect(signedIn).toEqual({ status: 404, body: { error: 'Wonderland route not found' } });
+    for (const raw of VARIANTS) {
+      const classified = classifyWonderlandDispatchPath(bridgePath(raw), raw);
+      expect(classified.exactAdmission, raw).toBe(false);
+      expect(classified.catchAllPath, raw).not.toBeNull();
+      expect(isWonderlandAdmissionRoute(raw), raw).toBe(false);
+      expect(isWonderlandRoute(classified.catchAllPath ?? ''), raw).toBe(true);
+      expect(await catchAll(classified.catchAllPath ?? '')).toEqual(signedOut);
+      expect(await catchAll(classified.catchAllPath ?? '', playerToken)).toEqual(signedIn);
+      expect(await handleJuliusMissionRoute({
+        method: 'POST',
+        path: raw,
+        operator: true,
+        body: '{}',
+      }, {
+        bootstrap: () => { throw new Error('create path must not run'); },
+        missingConfig: [],
+        reviewerProvider: 'xai',
+        cardRevision: 'card:julius-live:1',
+      })).toBeNull();
+    }
   });
 });
 

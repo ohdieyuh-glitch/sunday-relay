@@ -76,7 +76,7 @@ import {
 } from './browser-session/routes';
 import type { MissionOwnershipScope } from './mission';
 import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
-import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
+import { classifyWonderlandDispatchPath, handleWonderlandRoute } from './wonderland-routes';
 import { createWonderlandAdmissionService, isWonderlandAdmissionRoute, type WonderlandAdmissionRoutePorts } from './wonderland-admission-route';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
@@ -840,10 +840,13 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
           return;
         }
 
-        if (isWonderlandRoute(path.replace('/relay-api', ''))) {
+        const wonderlandBridgePath = path.replace('/relay-api', '');
+        const wonderlandRawPath = (req.url ?? '/').replace('/relay-api', '');
+        const wonderlandDispatch = classifyWonderlandDispatchPath(wonderlandBridgePath, wonderlandRawPath);
+        if (wonderlandDispatch.catchAllPath !== null) {
           const wonderlandResult = await handleWonderlandRoute({
             method,
-            path: path.replace('/relay-api', ''),
+            path: wonderlandDispatch.catchAllPath,
             url: (req.url ?? '/').replace('/relay-api', ''),
             authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
             origin,
@@ -1048,7 +1051,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
          * bootstrap a run and does not start the paid workflow.
          */
         const missionPath = path.replace('/relay-api', '');
-        if (isJuliusMissionRoute(missionPath) || isWonderlandAdmissionRoute(missionPath)) {
+        if (isJuliusMissionRoute(missionPath) || (wonderlandDispatch.exactAdmission && isWonderlandAdmissionRoute(missionPath))) {
           const missionAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
           const missionResult = await handleJuliusMissionRoute({
             method,

@@ -221,6 +221,16 @@ and it is not taken here.
 `julius-first-live-mission.yml`, and does not retry. See
 `docs/integration/bridge-audit-2026-10-23.md`.
 
+**Wrapper contract for that 202.** The path is exact: a trailing slash, a
+different case, a child path, or a query is still the Wonderland catch-all and
+is refused as that catch-all refuses every other unknown `/wonderland/` path.
+A **202** whose `state` is `ADMISSION_HELD` and whose body has no error closes
+the pair. `ClassifyDispatchAnswer` reads that 2xx as Accepted. The client then
+tracks progress by polling status. It does not resend the pair. Until a status
+answer says providers are running, the client shows **admitted, waiting for
+the paid run**. `dispatched: false` on that 202 is the fact that no provider
+is running yet.
+
 
 **A browser session cannot read it yet.** The operator credential governs this
 surface because it already governs everything that spends money; which fields a

@@ -205,7 +205,7 @@ The 429s this adapter returns are the existing J1 count caps: `JULIUS_J1_DAILY_C
 
 Flag `JULIUS_WONDERLAND_ADMISSION=1`. Default off (`503 julius_dispatch_disabled`).
 
-`POST /relay-api/wonderland/julius/dispatch` is served by `handleJuliusMissionRoute`, on the existing mission registration in `server.ts`. `isWonderlandRoute` returns false for this path, so the catch-all does not answer it. There is no second `if` beside that catch-all (FORGE #406 will mount there). The create branch of the mission handler is not on this path:
+`POST /relay-api/wonderland/julius/dispatch` is served by `handleJuliusMissionRoute`, on the existing mission registration in `server.ts`. The exclusion is that exact path. A trailing slash, a different case, a child segment, or a query stays on the Wonderland catch-all and is refused as every other unknown `/wonderland/` path is refused. `isWonderlandRoute` returns false for the exact path, so the catch-all does not answer it. There is no second `if` beside that catch-all (FORGE #406 will mount there). The create branch of the mission handler is not on this path:
 
 1. Loopback, no browser origin, no operator bearer, native session, founder, project. Same kinds as 31bfc58b.
 2. Synchronously reserve one run for `(runId, sha256(idempotency key))` **before** `ledger.append`.

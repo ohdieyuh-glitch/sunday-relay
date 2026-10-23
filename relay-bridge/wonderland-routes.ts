@@ -14,13 +14,39 @@ const asRecord = (value: unknown): Record<string, unknown> => value !== null && 
 const text = (body: Record<string, unknown>, key: string): string => { const value = body[key]; if (typeof value !== 'string' || value.trim() === '') throw new Error(`invalid_${key}`); return value; };
 
 /**
- * Every `/wonderland/` path except Julius admission. That URL is handled by
- * `handleJuliusMissionRoute`. This catch-all refuses a native session before
- * it reads the path, so admission cannot be served from inside it.
+ * Every `/wonderland/` path except the exact Julius admission URL. That one
+ * path is handled by `handleJuliusMissionRoute`. A trailing slash, a query, a
+ * child segment, or a different case stays here. This catch-all refuses a
+ * native session before it reads the path, so admission cannot be served
+ * from inside it.
  */
 export function isWonderlandRoute(path: string): boolean {
+  const pathname = path.split('?')[0];
   if (path === WONDERLAND_ADMISSION_PATH) return false;
-  return path === '/wonderland' || path.startsWith('/wonderland/');
+  if (pathname === '/wonderland' || pathname.startsWith('/wonderland/')) return true;
+  const folded = pathname.toLowerCase();
+  return folded === WONDERLAND_ADMISSION_PATH || folded.startsWith(`${WONDERLAND_ADMISSION_PATH}/`);
+}
+
+/**
+ * Which path the catch-all should see.
+ *
+ * `bridgePath` is the bridge's normalized path: `/relay-api` removed, the
+ * query removed, trailing slashes removed. `rawPath` keeps case, the query,
+ * and trailing slashes. Normalization would otherwise turn a slash or a query
+ * into the exact admission URL.
+ */
+export function classifyWonderlandDispatchPath(bridgePath: string, rawPath: string): {
+  readonly catchAllPath: string | null;
+  readonly exactAdmission: boolean;
+} {
+  if (rawPath === WONDERLAND_ADMISSION_PATH) return { catchAllPath: null, exactAdmission: true };
+  const candidate = bridgePath === WONDERLAND_ADMISSION_PATH || (!isWonderlandRoute(bridgePath) && isWonderlandRoute(rawPath))
+    ? rawPath
+    : bridgePath;
+  return isWonderlandRoute(candidate)
+    ? { catchAllPath: candidate, exactAdmission: false }
+    : { catchAllPath: null, exactAdmission: false };
 }
 
 export async function handleWonderlandRoute(input: WonderlandRouteRequest, deps: {
