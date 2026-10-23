@@ -60,9 +60,15 @@ accentColorRef,
 sessionState: provisioning | running | paused | ended | failed
 ```
 
-`endCause` is an optional addition: `idle_timeout | max_lifetime |
-explicit_stop | failure`, or null. Omit it rather than inventing one. An
-unknown string is `invalid_end_cause`.
+`endCause` is BRIDGE contract `wonder-web-vm-session.v1`. It is set only
+when `sessionState` is `ended` or `failed`, and it is this closed set:
+
+`owner_terminated`, `idle_timeout`, `max_lifetime`, `provider_failed`,
+`cap_exhausted`, `authorization_revoked`.
+
+Omit it rather than inventing one. An unknown value, and any `endCause` on
+`provisioning`, `running`, or `paused`, is `unsupported_contract`. Closing
+a window is never an end cause: `close_anim` carries `endCause: null`.
 
 ---
 
@@ -86,11 +92,13 @@ unknown string is `invalid_end_cause`.
    minimized. The two intents are never substituted for each other.
    `minimize_fold` is only a fold to a chip.
 
-4. **Camera intents are scarce.** `cinematic_closeup` plays only when the
-   window being shown is the only held window. `spawn_inline` plays when
-   another window is already held. Neither intent fires for a cap-queued
-   chip. `camera_return` plays only when the last held window leaves and the
-   camera was in the close-up.
+4. **Camera rule for PILOT.** Chips count as held. `cinematic_closeup` plays
+   only when the window being shown is the only held window. An open while
+   every other window is a chip is `spawn_inline`, not a camera move. The
+   last shown window leaving while a chip remains does not emit
+   `camera_return`. `camera_return` plays only when the last held window
+   leaves and the camera was already in the close-up. A cap-queued chip
+   emits neither open intent.
 
 5. **A seventh session keeps running.** The shown-window cap is an input,
    default 6. Past the cap the new window is a minimized chip
@@ -137,15 +145,25 @@ distinct on purpose. The module does not emit durations.
 | Intent | When |
 |---|---|
 | `cinematic_closeup` | First held window opens. Sets `cameraInCloseup`. |
-| `spawn_inline` | A later window opens while another is held. Camera flag unchanged. |
+| `spawn_inline` | A later window opens while another is held, including when the others are only chips. Camera flag unchanged. |
 | `minimize_fold` | User minimize, or idle auto-minimize of an unpinned shown window. |
 | `restore_unfold` | A chip is shown again (user focus, or an urgent / allowed surface). |
 | `close_anim` | User panel close. Session state unchanged. |
 | `vm_ended_anim` | Session `ended` or `failed` while the window is shown or minimized. `endCause` is copied from the record, or null. |
-| `camera_return` | After the transition, nothing is held, and the camera was in the close-up. |
+| `camera_return` | The last held window leaves (shown or chip) and the camera was in the close-up. A remaining chip blocks it. |
 
-Causes on `vm_ended_anim`: `idle_timeout`, `max_lifetime`, `explicit_stop`,
-`failure`.
+### PILOT camera rule
+
+Held means shown or minimized. A chip is held.
+
+- All chips, then a new open: `spawn_inline`. The camera stays where it is.
+- The last shown window leaves while any chip remains: no `camera_return`.
+- `camera_return` only when that departure drops the held count to zero and
+  `cameraInCloseup` was already true.
+
+Causes on `vm_ended_anim`, from `wonder-web-vm-session.v1`:
+`owner_terminated`, `idle_timeout`, `max_lifetime`, `provider_failed`,
+`cap_exhausted`, `authorization_revoked`. A panel close does not use one.
 
 A cap-queued open emits `ww_window_opened` and `ww_window_minimized` and no
 animation. The window never stood, so it does not fold.
@@ -251,11 +269,16 @@ Publish the session record above from the session service. Numbering stays
 in `src/relay/integration/wonder-web-vm/` only. This module will follow a
 rename of that contract; it does not define a second one.
 
-When the server ends a VM, send `sessionState: ended | failed` and, when
-the server knows it, `endCause`. The window manager will close the panel
-with `vm_ended_anim`. It will not send a keepalive, and it must not be
-asked to. Idle timeout and hard TTL remain server-side. A browser session
-being open, focused, or pinned is not a reason to extend the VM.
+When the server ends a VM, send `sessionState: ended | failed` and
+`endCause` from `wonder-web-vm-session.v1` (`owner_terminated`,
+`idle_timeout`, `max_lifetime`, `provider_failed`, `cap_exhausted`,
+`authorization_revoked`). The window manager will close the panel with
+`vm_ended_anim` and copy that cause. It will refuse any other cause, and
+any cause on a session that is still live, as `unsupported_contract`. It
+will not send a keepalive, and it must not be asked to. Idle timeout and
+hard TTL remain server-side. A browser session being open, focused, or
+pinned is not a reason to extend the VM. Closing the panel is not an end
+cause.
 
 Do not put stream, frame, URL, page, or action on anything an observer can
 read. `observerView` drops them even if they arrive.

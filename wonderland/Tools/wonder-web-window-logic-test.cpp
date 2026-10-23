@@ -216,6 +216,43 @@ int main() {
 	std::vector<std::string> observerKeys = {"outlineColorToken", "ownerName", "status", "title"};
 	std::sort(observerKeys.begin(), observerKeys.end());
 
+	std::vector<std::string> acceptedCauses;
+	for (const char* cause : Logic::kSessionEndCauses) {
+		const std::string id = std::string("cause-") + cause;
+		const Logic::WindowResult causeOpen = Logic::OpenWindow(created.state, Live(id, 1), ctx);
+		if (!causeOpen.ok) return Fail("cause-open", causeOpen) ? 0 : 1;
+		const Logic::WindowResult causeSettled = Logic::SettleOpening(causeOpen.state, Live(id, 1), ctx);
+		if (!causeSettled.ok) return Fail("cause-settle", causeSettled) ? 0 : 1;
+		const Logic::WindowResult causeEnded = Logic::ApplySession(
+			causeSettled.state,
+			GoldenSession(id, 1, "Dot", "auth-dot", "ended", Logic::SessionRecord::CauseField::Value, cause),
+			ctx);
+		if (!causeEnded.ok) return Fail("cause-end", causeEnded) ? 0 : 1;
+		if (causeEnded.animations.empty() || causeEnded.animations[0].intent != "vm_ended_anim") {
+			std::cerr << "cause-intent " << cause << "\n";
+			return 1;
+		}
+		if (!causeEnded.animations[0].endCause || *causeEnded.animations[0].endCause != cause) {
+			std::cerr << "cause-value " << cause << "\n";
+			return 1;
+		}
+		for (const Logic::AnimationCue& cue : causeEnded.animations) {
+			if (cue.intent == "close_anim") {
+				std::cerr << "cause-close " << cause << "\n";
+				return 1;
+			}
+		}
+		acceptedCauses.push_back(causeEnded.animations[0].endCause.value_or(""));
+	}
+	const Logic::WindowResult unknownCause = Logic::ApplySession(
+		endSettled.state,
+		GoldenSession("sess-end", 1, "Dot", "auth-dot", "ended", Logic::SessionRecord::CauseField::Value, "explicit_stop"),
+		ctx);
+	const Logic::WindowResult runningCause = Logic::ApplySession(
+		endSettled.state,
+		GoldenSession("sess-end", 1, "Dot", "auth-dot", "running", Logic::SessionRecord::CauseField::Value, "idle_timeout"),
+		ctx);
+
 	const std::string accent = first.value.accentColorToken.value_or("");
 	const std::string firstIntent = first.animations.empty() ? "" : first.animations[0].intent;
 	const std::string observerTitle = view.title.value_or("");
@@ -225,6 +262,7 @@ int main() {
 		<< "\"accent\":" << Quote(accent) << ","
 		<< "\"authCode\":" << Quote(denied.ok ? "" : denied.errorCode) << ","
 		<< "\"browserCode\":" << Quote(Logic::AddressByBrowserId("browser-2").code) << ","
+		<< "\"causes\":" << Array(acceptedCauses) << ","
 		<< "\"closeEvents\":" << Array(closeEvents) << ","
 		<< "\"closeIntents\":" << Array(closeIntents) << ","
 		<< "\"contract\":" << Quote(Logic::kContract) << ","
@@ -240,6 +278,7 @@ int main() {
 		<< "\"numberCode\":" << Quote(Logic::AddressByVmNumber(4).code) << ","
 		<< "\"observerKeys\":" << Array(observerKeys) << ","
 		<< "\"observerTitle\":" << Quote(observerTitle) << ","
+		<< "\"runningCause\":" << Quote(runningCause.ok ? "" : runningCause.errorCode) << ","
 		<< "\"secondCamera\":" << (second.state.cameraInCloseup ? "true" : "false") << ","
 		<< "\"secondIntents\":" << Array(secondIntents) << ","
 		<< "\"seventhAdmission\":" << Quote(seventh.value.admission) << ","
@@ -249,7 +288,8 @@ int main() {
 		<< "\"tile1Size\":" << Quote(Fixed6(lone.shown[0].size)) << ","
 		<< "\"tile1X\":" << Quote(Fixed6(lone.shown[0].x)) << ","
 		<< "\"tile1Y\":" << Quote(Fixed6(lone.shown[0].y)) << ","
-		<< "\"title\":" << Quote(title.value_or(""))
+		<< "\"title\":" << Quote(title.value_or("")) << ","
+		<< "\"unknownCause\":" << Quote(unknownCause.ok ? "" : unknownCause.errorCode)
 		<< "}\n";
 	return 0;
 }

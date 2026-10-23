@@ -114,7 +114,14 @@ bool IsLiveSessionState(const std::string& state) {
 }
 
 bool KnownEndCause(const std::string& cause) {
-	return cause == "idle_timeout" || cause == "max_lifetime" || cause == "explicit_stop" || cause == "failure";
+	for (const char* published : kSessionEndCauses) {
+		if (cause == published) return true;
+	}
+	return false;
+}
+
+bool IsTerminalSessionState(const std::string& state) {
+	return state == "ended" || state == "failed";
 }
 
 bool IsShownPhase(const std::string& phase) {
@@ -262,8 +269,9 @@ std::optional<std::string> SessionError(const SessionRecord& session, bool requi
 	}
 	if (HasControlChar(session.terminalDisplayName)) return std::string("invalid_session");
 	if (!KnownSessionState(session.sessionState)) return std::string("invalid_session");
-	if (session.causeField == SessionRecord::CauseField::Value && !KnownEndCause(session.endCause)) {
-		return std::string("invalid_end_cause");
+	if (session.causeField == SessionRecord::CauseField::Value
+		&& (!KnownEndCause(session.endCause) || !IsTerminalSessionState(session.sessionState))) {
+		return std::string("unsupported_contract");
 	}
 	if (requireLiveNumber && !UsableVmNumber(session.vmNumber)) return std::string("vm_number_unusable");
 	return std::nullopt;
@@ -276,7 +284,9 @@ std::optional<std::string> ContextError(const LogContext& ctx) {
 
 std::string SessionMessage(const std::string& code) {
 	if (code == "browser_id_not_an_address") return "vmSessionId must not be a browser or browser-N id.";
-	if (code == "invalid_end_cause") return "endCause is not a known server reason.";
+	if (code == "unsupported_contract") {
+		return "endCause belongs to wonder-web-vm-session.v1 and is set only when the session has ended or failed.";
+	}
 	if (code == "vm_number_unusable") return "vmNumber must be a positive integer supplied by the session record.";
 	return "Session record is unusable.";
 }

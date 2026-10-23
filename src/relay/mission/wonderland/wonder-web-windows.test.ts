@@ -19,6 +19,7 @@ import {
   createWindowManager,
   deserializeWindows,
   formatWindowTitle,
+  SESSION_END_CAUSES,
   observerView,
   openWindow,
   serializeWindows,
@@ -92,6 +93,10 @@ function session(over: Partial<WonderWebVmSessionRecord> & Pick<WonderWebVmSessi
     sessionState: over.sessionState ?? 'running',
     endCause: over.endCause,
   };
+}
+
+function withUnpublishedCause(record: WonderWebVmSessionRecord, endCause: string): WonderWebVmSessionRecord {
+  return { ...record, endCause } as unknown as WonderWebVmSessionRecord;
 }
 
 function must<T>(result: WonderWebWindowResult<T>): Extract<WonderWebWindowResult<T>, { ok: true }> {
@@ -231,6 +236,113 @@ describe('open, focus, chips, and distinct animations', () => {
   });
 });
 
+describe('PILOT camera rule', () => {
+  it('counts chips as held, so a new open beside only chips is spawn_inline', () => {
+    const opened = must(openWindow(manager(), session({ vmSessionId: 'sess-1' }), CTX));
+    const settled = must(settleOpening(opened.state, session({ vmSessionId: 'sess-1' }), CTX));
+    const folded = must(applyUserAction(settled.state, session({ vmSessionId: 'sess-1' }), 'auth-dot', 'minimize', CTX));
+    expect(folded.animations.map((item) => item.intent)).toEqual(['minimize_fold']);
+    expect(folded.state.cameraInCloseup).toBe(true);
+    const next = must(openWindow(folded.state, session({ vmSessionId: 'sess-2', vmNumber: 2 }), CTX));
+    expect(next.animations.map((item) => item.intent)).toEqual(['spawn_inline']);
+    expect(next.animations.some((item) => item.intent === 'cinematic_closeup' || item.intent === 'camera_return')).toBe(false);
+    expect(next.state.cameraInCloseup).toBe(true);
+  });
+
+  it('does not return the camera when the last shown window leaves and a chip remains', () => {
+    const opened = must(openWindow(manager(), session({ vmSessionId: 'sess-1' }), CTX));
+    const settled = must(settleOpening(opened.state, session({ vmSessionId: 'sess-1' }), CTX));
+    const second = must(openWindow(settled.state, session({ vmSessionId: 'sess-chip', vmNumber: 2 }), CTX));
+    const folded = must(applyUserAction(second.state, session({ vmSessionId: 'sess-chip', vmNumber: 2 }), 'auth-dot', 'minimize', CTX));
+    const closed = must(closePanel(folded.state, session({ vmSessionId: 'sess-1' }), 'auth-dot', CTX));
+    expect(closed.animations.map((item) => item.intent)).toEqual(['close_anim']);
+    expect(closed.state.cameraInCloseup).toBe(true);
+    expect(closed.state.windows.find((item) => item.vmSessionId === 'sess-chip')?.phase).toBe('minimized');
+    const ended = must(applySession(
+      folded.state,
+      session({ vmSessionId: 'sess-1', sessionState: 'ended', endCause: 'owner_terminated' }),
+      CTX,
+    ));
+    expect(ended.animations.map((item) => item.intent)).toEqual(['vm_ended_anim']);
+    expect(ended.state.cameraInCloseup).toBe(true);
+  });
+
+  it('returns the camera only when the last held window leaves and the camera was in the close-up', () => {
+    const opened = must(openWindow(manager(), session({ vmSessionId: 'sess-1' }), CTX));
+    const settled = must(settleOpening(opened.state, session({ vmSessionId: 'sess-1' }), CTX));
+    const second = must(openWindow(settled.state, session({ vmSessionId: 'sess-chip', vmNumber: 2 }), CTX));
+    const folded = must(applyUserAction(second.state, session({ vmSessionId: 'sess-chip', vmNumber: 2 }), 'auth-dot', 'minimize', CTX));
+    const shownGone = must(closePanel(folded.state, session({ vmSessionId: 'sess-1' }), 'auth-dot', CTX));
+    const chipGone = must(closePanel(shownGone.state, session({ vmSessionId: 'sess-chip', vmNumber: 2 }), 'auth-dot', CTX));
+    expect(chipGone.animations.map((item) => item.intent)).toEqual(['close_anim', 'camera_return']);
+    expect(chipGone.state.cameraInCloseup).toBe(false);
+
+    const parked = serializeWindows(settled.state).replace('"cameraInCloseup":true', '"cameraInCloseup":false');
+    const loaded = must(deserializeWindows(parked));
+    expect(loaded.state.cameraInCloseup).toBe(false);
+    const quiet = must(closePanel(loaded.state, session({ vmSessionId: 'sess-1' }), 'auth-dot', CTX));
+    expect(quiet.animations.map((item) => item.intent)).toEqual(['close_anim']);
+    expect(quiet.state.cameraInCloseup).toBe(false);
+  });
+});
+
+describe('wonder-web-vm-session.v1 endCause', () => {
+  it('accepts each of the six published causes and no others', () => {
+    expect([...SESSION_END_CAUSES]).toEqual([
+      'owner_terminated',
+      'idle_timeout',
+      'max_lifetime',
+      'provider_failed',
+      'cap_exhausted',
+      'authorization_revoked',
+    ]);
+    for (const cause of SESSION_END_CAUSES) {
+      const opened = must(openWindow(manager(), session({ vmSessionId: `sess-${cause}` }), CTX));
+      const settled = must(settleOpening(opened.state, session({ vmSessionId: `sess-${cause}` }), CTX));
+      const ended = must(applySession(
+        settled.state,
+        session({ vmSessionId: `sess-${cause}`, sessionState: 'ended', endCause: cause }),
+        CTX,
+      ));
+      expect(ended.animations[0]).toMatchObject({ intent: 'vm_ended_anim', endCause: cause });
+      expect(ended.animations.some((item) => item.intent === 'close_anim')).toBe(false);
+    }
+  });
+
+  it('rejects an unknown cause and an endCause on a running session', () => {
+    const opened = must(openWindow(manager(), session({ vmSessionId: 'sess-1' }), CTX));
+    const settled = must(settleOpening(opened.state, session({ vmSessionId: 'sess-1' }), CTX));
+    const unknown = applySession(
+      settled.state,
+      withUnpublishedCause(session({ vmSessionId: 'sess-1', sessionState: 'ended' }), 'explicit_stop'),
+      CTX,
+    );
+    expect(unknown.ok).toBe(false);
+    if (!unknown.ok) expect(unknown.error.code).toBe('unsupported_contract');
+    expect(unknown.state).toBe(settled.state);
+    const running = applySession(
+      settled.state,
+      { ...session({ vmSessionId: 'sess-1', sessionState: 'running' }), endCause: 'idle_timeout' } as WonderWebVmSessionRecord,
+      CTX,
+    );
+    expect(running.ok).toBe(false);
+    if (!running.ok) expect(running.error.code).toBe('unsupported_contract');
+    expect(running.state).toBe(settled.state);
+    expect(settled.value.sessionState).toBe('running');
+  });
+
+  it('a panel close never carries an end cause', () => {
+    const opened = must(openWindow(manager(), session({ vmSessionId: 'sess-1' }), CTX));
+    const settled = must(settleOpening(opened.state, session({ vmSessionId: 'sess-1' }), CTX));
+    const closed = must(closePanel(settled.state, session({ vmSessionId: 'sess-1' }), 'auth-dot', CTX));
+    expect(closed.animations).toEqual([
+      expect.objectContaining({ intent: 'close_anim', endCause: null, vmSessionId: 'sess-1' }),
+      expect.objectContaining({ intent: 'camera_return', endCause: null }),
+    ]);
+    expect(closed.value.sessionState).toBe('running');
+  });
+});
+
 describe('the shown-window cap', () => {
   it('defaults to 6 and queues a seventh session as a chip without stopping it', () => {
     expect(DEFAULT_SHOWN_WINDOW_CAP).toBe(6);
@@ -283,7 +395,7 @@ describe('session end is not a panel close and never keeps the VM alive', () => 
     const folded = must(applyUserAction(other.state, session({ vmSessionId: 'sess-chip', vmNumber: 2 }), 'auth-dot', 'minimize', CTX));
     const ended = must(applySession(
       folded.state,
-      session({ vmSessionId: 'sess-chip', vmNumber: 2, sessionState: 'failed', endCause: 'failure' }),
+      session({ vmSessionId: 'sess-chip', vmNumber: 2, sessionState: 'failed', endCause: 'provider_failed' }),
       CTX,
     ));
     expect(ended.animations.map((item) => item.intent)).toEqual(['vm_ended_anim']);
@@ -297,13 +409,13 @@ describe('identity is vmSessionId', () => {
   it('a reused number and a browser-N id cannot address another window', () => {
     const opened = must(openWindow(manager(), session({ vmSessionId: 'sess-old', vmNumber: 4 }), CTX));
     const settled = must(settleOpening(opened.state, session({ vmSessionId: 'sess-old', vmNumber: 4 }), CTX));
-    const ended = must(applySession(settled.state, session({ vmSessionId: 'sess-old', vmNumber: 4, sessionState: 'ended', endCause: 'explicit_stop' }), CTX));
+    const ended = must(applySession(settled.state, session({ vmSessionId: 'sess-old', vmNumber: 4, sessionState: 'ended', endCause: 'owner_terminated' }), CTX));
     const closed = must(settleClosing(ended.state, 'sess-old'));
     const next = must(openWindow(closed.state, session({ vmSessionId: 'sess-new', vmNumber: 4, agentDisplayName: 'Card', agentId: 'auth-card' }), CTX));
     const settledNext = must(settleOpening(next.state, session({ vmSessionId: 'sess-new', vmNumber: 4, agentDisplayName: 'Card', agentId: 'auth-card' }), CTX));
     const missed = applyUserAction(
       settledNext.state,
-      session({ vmSessionId: 'sess-old', vmNumber: 4, sessionState: 'ended', endCause: 'explicit_stop' }),
+      session({ vmSessionId: 'sess-old', vmNumber: 4, sessionState: 'ended', endCause: 'owner_terminated' }),
       'auth-dot',
       'focus',
       CTX,
@@ -574,8 +686,31 @@ export function goldenReport(): Record<string, unknown> {
     'close',
     CTX,
   );
+  const acceptedCauses: string[] = [];
+  for (const cause of SESSION_END_CAUSES) {
+    const id = `cause-${cause}`;
+    const causeOpen = must(openWindow(manager(), session({ vmSessionId: id }), CTX));
+    const causeSettled = must(settleOpening(causeOpen.state, session({ vmSessionId: id }), CTX));
+    const causeEnded = must(applySession(
+      causeSettled.state,
+      session({ vmSessionId: id, sessionState: 'ended', endCause: cause }),
+      CTX,
+    ));
+    acceptedCauses.push(causeEnded.animations[0]?.endCause ?? '');
+  }
+  const unknownCause = applySession(
+    settled.state,
+    withUnpublishedCause(session({ vmSessionId: 'sess-1', sessionState: 'ended' }), 'explicit_stop'),
+    CTX,
+  );
+  const runningCause = applySession(
+    settled.state,
+    session({ vmSessionId: 'sess-1', sessionState: 'running', endCause: 'idle_timeout' }),
+    CTX,
+  );
   return {
     accent: first.value.accentColorToken,
+    causes: acceptedCauses,
     authCode: denied.ok ? '' : denied.error.code,
     browserCode: addressByBrowserId('browser-2').code,
     closeEvents: closed.events.map((item) => item.event),
@@ -601,6 +736,8 @@ export function goldenReport(): Record<string, unknown> {
     seventhIntents: seventh.animations.map((item) => item.intent),
     seventhPhase: seventh.value.phase,
     seventhSession: seventh.value.sessionState,
+    runningCause: runningCause.ok ? '' : runningCause.error.code,
+    unknownCause: unknownCause.ok ? '' : unknownCause.error.code,
     tile1Size: round6(lone.shown[0]?.size ?? 0).toFixed(6),
     tile1X: round6(lone.shown[0]?.x ?? 0).toFixed(6),
     tile1Y: round6(lone.shown[0]?.y ?? 0).toFixed(6),

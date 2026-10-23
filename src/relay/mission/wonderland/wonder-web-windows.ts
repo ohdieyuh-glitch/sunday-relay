@@ -15,8 +15,10 @@
  *
  * SESSION INPUT. The record below is the shape this module consumes. BRIDGE's
  * published session contract is authoritative; if that contract renames a
- * field, adapt this input type to it. `endCause` is carried so a VM-ended
- * animation can name the server's reason. Omit it rather than inventing one.
+ * field, adapt this input type to it. `endCause` follows BRIDGE contract
+ * `wonder-web-vm-session.v1`: it is set only when `sessionState` is `ended`
+ * or `failed`, and only from that contract's closed set. Omit it rather than
+ * inventing one. Closing a panel never carries an end cause.
  *
  * CLIENT. States, tiling and chips are shaped so they can drive the workspace
  * already on `aa930c26` (`WonderlandUiSubsystem.cpp`). The mapping lives in
@@ -35,8 +37,19 @@ export type VmSessionState = (typeof VM_SESSION_STATES)[number];
 export const LIVE_SESSION_STATES = ['provisioning', 'running', 'paused'] as const;
 export type LiveSessionState = (typeof LIVE_SESSION_STATES)[number];
 
-/** Why the server ended the VM. Not inferred from a missing field. */
-export const SESSION_END_CAUSES = ['idle_timeout', 'max_lifetime', 'explicit_stop', 'failure'] as const;
+/**
+ * Why the server ended the VM. Closed set from `wonder-web-vm-session.v1`.
+ * Set only when `sessionState` is `ended` or `failed`. Not inferred from a
+ * missing field. Closing a window is never one of these.
+ */
+export const SESSION_END_CAUSES = [
+  'owner_terminated',
+  'idle_timeout',
+  'max_lifetime',
+  'provider_failed',
+  'cap_exhausted',
+  'authorization_revoked',
+] as const;
 export type SessionEndCause = (typeof SESSION_END_CAUSES)[number];
 
 /**
@@ -189,8 +202,7 @@ export interface WonderWebWindowError {
     | 'browser_id_not_an_address'
     | 'session_mismatch'
     | 'window_cap_unusable'
-    | 'window_cap_reached'
-    | 'invalid_end_cause';
+    | 'window_cap_reached';
   readonly message: string;
   readonly fallback?: typeof AGENT_DISPLAY_NAME_FALLBACK;
 }
@@ -515,8 +527,14 @@ function validateSession(session: WonderWebVmSessionRecord, requireLiveNumber: b
   if (!(VM_SESSION_STATES as readonly string[]).includes(session.sessionState)) {
     return { code: 'invalid_session', message: 'sessionState is not a known VM state.' };
   }
-  if (session.endCause !== undefined && session.endCause !== null && !(SESSION_END_CAUSES as readonly string[]).includes(session.endCause)) {
-    return { code: 'invalid_end_cause', message: 'endCause is not a known server reason.' };
+  if (session.endCause !== undefined && session.endCause !== null) {
+    const terminal = session.sessionState === 'ended' || session.sessionState === 'failed';
+    if (!terminal || !(SESSION_END_CAUSES as readonly string[]).includes(session.endCause)) {
+      return {
+        code: 'unsupported_contract',
+        message: 'endCause belongs to wonder-web-vm-session.v1 and is set only when the session has ended or failed.',
+      };
+    }
   }
   if (requireLiveNumber && !isUsableVmNumber(session.vmNumber)) {
     return { code: 'vm_number_unusable', message: 'vmNumber must be a positive integer supplied by the session record.' };

@@ -19,7 +19,11 @@
  * document. It does not parse one.
  *
  * Open, focus and pin do not extend a session. Server-side idle and hard TTL
- * own lifetime. A session end uses vm_ended_anim. A panel close uses close_anim.
+ * own lifetime. A session end uses vm_ended_anim. A panel close uses close_anim
+ * and never an end cause.
+ *
+ * endCause follows BRIDGE contract wonder-web-vm-session.v1. It is set only
+ * when sessionState is ended or failed, and only from kSessionEndCauses.
  */
 
 #include <cstdint>
@@ -30,6 +34,17 @@
 namespace WonderlandWonderWebWindowLogic {
 
 inline constexpr char kContract[] = "wonderland-wonder-web-windows.v1";
+
+/** Closed set from wonder-web-vm-session.v1. A panel close is not in this set. */
+inline constexpr const char* kSessionEndCauses[] = {
+	"owner_terminated",
+	"idle_timeout",
+	"max_lifetime",
+	"provider_failed",
+	"cap_exhausted",
+	"authorization_revoked",
+};
+inline constexpr std::size_t kSessionEndCauseCount = sizeof(kSessionEndCauses) / sizeof(kSessionEndCauses[0]);
 inline constexpr int kDefaultShownWindowCap = 6;
 inline constexpr double kDefaultIdleAutoMinimizeMs = 60000.0;
 inline constexpr double kDefaultSurfaceRateLimitMs = 5000.0;
