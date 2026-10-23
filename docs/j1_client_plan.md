@@ -215,27 +215,56 @@ Measured on Kaisin tonight, read-only:
 1. **C2 `INWORLD_ACCEPTANCE_PROTOCOL.md`** (`_independent_review_judev2_20261021\C2\`, sha256 58ba107e…) has now been read, read-only, on 2026-10-23.
    - The 7 conflicts with the J1 addenda, with line citations, are in `docs/C2_J1_CONFLICTS_20261023.md`.
    - The reviewer must reconcile them before the judge is written.
-2. **U1 / run id:** superseded by the run-id section below, which is pending the founder's decision on option (a). The world strip/orb reaction remains open.
+2. **U1 / run id:** see §5a. The format is fixed; option (a) vs (b) still awaits the founder. The world strip/orb reaction remains open.
 3. **U3:** does the bridge `participantId` equal the parsed string exactly? The paired line prints it in clear, so evidence folders must redact it.
 4. **U4:** there is no frozen mission record or contract sha yet.
 5. **U5:** which UE call guarantees the trigger line is on disk before `ProcessRequest()` (e.g. `GLog->Flush()`)? It is unverified.
 6. **U9/U12:** `BuildInfo.txt` generation and `commit=`; the launch flags; whether a packaged non-editor build honours `-wldev`.
 7. **U13:** the 35-min wait cap is an estimate.
 8. **U14:** ownership, the heavy window and the branch name. This is what fdf066 asks.
-9. **Bridge tip:** ECHO_DIGEST cites `judev/inworld-dispatch` tip 2f8c346a. Which tip will run is unconfirmed, and the f00041 equality test (result `artifactSha256` == ledger `artifactJudgedSha256`) was promised for the "next J1 commit".
+9. **Bridge tip:** ECHO_DIGEST cites `judev/inworld-dispatch` tip 2f8c346a. The J1 citations are at 22a0a9cb. `origin/judev/j1-combined-ceiling` is now 1254b0d1 (per `git ls-remote`, 2026-10-23 ~01:5x PT). Which tip will run is unconfirmed. The f00041 equality test (result `artifactSha256` == ledger `artifactJudgedSha256`) already exists: commit 5eb51efb, an ancestor of 22a0a9cb.
 10. **Slow-bridge offset:** echo retries only. Is a clock-sync check on the PC itself also needed?
 11. **Provider names:** the founder ruling allows accurate provider names in artifact text for authorized viewers. The client still never logs them, and the spec 4.6 grep must therefore exclude the artifact rows, not the log.
 
-## 5a. Client run-id under option (a) (pending founder decision)
-Nothing here is decided. It applies only if the founder chooses option (a).
-- **Minting:** the client mints the runId per run. It is unguessable (Skywalker).
-  - Form: `[<fixed prefix>]<random>`. The optional prefix is a build-constant literal (e.g. `wlj_`).
-  - The random part is a UUIDv4 from the OS CSPRNG, or at least 128 CSPRNG bits as hex. A UUIDv4 has 122 random bits; if ">= 128 bits" is meant strictly, use 32 hex characters.
-  - No participant id, player/key hash, mission id, timestamp, counter or machine name in the runId.
-- **Validation:** the runId must match `^[A-Za-z0-9:_-]{1,128}$` before use. On failure: local refusal, nothing sent. The bridge enforces the same regex (sunday-relay `relay-bridge/julius-dispatch.ts:962` at 22a0a9cb).
-- **Logging:** the runId is written to the WLJMISSION log (after `ui_action`, flushed) BEFORE the dispatch POST is built. The `trigger` line and the ledger `run_created.runId` must equal it. The line name is OPEN.
-- **Effect on K1:** under option (a) the run id no longer comes from a mission-create POST response, so the K1 "mission-create POST" step depends on the founder's decision.
-- **Acceptance record:** must state verbatim: "run lookup is a frozen stub; run existence is not evidence of mission creation".
+## 5a. Client run-id (format fixed after Skywalker's review of ae67f50a)
+Option (a), where the client mints the runId, versus option (b) **still awaits the founder's decision**. Only the FORMAT below is fixed. If option (a) is chosen, the client must do the following.
+
+**Fixed prefix**
+- The prefix is the literal `wlj_` (4 characters). It is a build constant, the same for every run and every player.
+- It is optional in the regex. The client always emits it.
+
+**Generation**
+1. Take 16 bytes from `BCryptGenRandom(NULL, buf, 16, BCRYPT_USE_SYSTEM_PREFERRED_RNG)`. Any non-success NTSTATUS is a local refusal: nothing is sent.
+2. Set the version and variant bits by hand:
+   - `buf[6] = (buf[6] & 0x0F) | 0x40` (version nibble 4);
+   - `buf[8] = (buf[8] & 0x3F) | 0x80` (variant 10xx).
+3. Format lowercase 8-4-4-4-12 directly from the raw bytes, in order `buf[0..3]-buf[4..5]-buf[6..7]-buf[8..9]-buf[10..15]`, two hex digits per byte.
+   - Do NOT use `FGuid` or `FGuid::ToString`. Its Windows layout reorders digits, so the version and variant nibbles do not land where RFC 4122 puts them.
+- That gives 122 random bits.
+- The runId contains no participant id, player/key hash, mission id, timestamp, counter or machine name.
+
+**Client validation**
+- The strict regex is `^(wlj_)?[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`. It is checked before logging and before dispatch.
+- Total length is 40 with the prefix and 36 without, so ≤ 128. Any id that passes the strict regex also passes the bridge regex `^[A-Za-z0-9:_-]{1,128}$`.
+- On failure the client refuses locally: nothing is sent.
+- The bridge accepts ANY 1–128-character id matching its regex (sunday-relay `relay-bridge/julius-dispatch.ts:962`, 996, 1012 at 22a0a9cb). **Only the client enforces unguessability.**
+
+**Logging**
+- The runId is written to the WLJMISSION log (after `ui_action`, flushed) BEFORE the dispatch POST is built.
+- The `trigger` line and the ledger `run_created.runId` must equal it.
+- The line name is OPEN.
+
+**Test (offline, in `wl.Qa.JuliusMission`)**
+- **Positive:** generate 10,000 real ids with the production function. All must pass the strict regex and the bridge regex, with ZERO duplicates (set size == 10,000).
+- **Negative, primary:** format `FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphensLower)` and assert that the strict regex REJECTS it.
+  - Because that layout reorders bytes, a random FGuid string matches the strict regex by chance about 1 time in 64 (version and variant positions land on random nibbles).
+  - My reading of the FGuid byte layout was not re-checked against UE 5.8 source in this pass.
+- **Negative, fallback:** if the FGuid string happens to match, the test logs that fact and instead asserts rejection of a fixed known-bad id in that layout: `0b7a1c2e-4f3d-9a6b-1c2d-3e4f5a6b7c8d` (third group starts with `9`, not `4`).
+- **Other negatives:** an uppercase hex id, a wrong prefix (`wlx_…`), and a 129-character id must all be rejected.
+
+**Acceptance record** must state verbatim: "run lookup is a frozen stub; run existence is not evidence of mission creation".
+- Bridge: `createFrozenRunLookup`, `relay-bridge/julius-dispatch-adapters.ts:567-582` at 22a0a9cb.
+- **Effect on K1:** under option (a) the run id does not come from a mission-create POST response. The K1 "mission-create POST" step depends on the founder's decision.
 
 ## 6. Draft acknowledgement (NOT posted; needs the user's approval)
 To: JULIUS_DEV (via `_qa_handoff\session_mailbox`, `python -I mbox.py`), refs M20261022T155831Z-JULIUS_DEV-fdf066 and M20261022T155854Z-JULIUS_DEV-f00041.

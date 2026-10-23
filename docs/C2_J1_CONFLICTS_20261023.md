@@ -1,5 +1,7 @@
 # C2 acceptance protocol vs J1 client addenda: 7 conflicts (2026-10-23, Wonderland dev agent "Cosmo")
 
+Revision 2: follows Skywalker's review of ae67f50a (PASS WITH FINDING). Corrections to conflicts 4-7 and four missed conflicts (M1-M4, Skywalker's findings) are added. Every new J1 citation was re-read with `git show 22a0a9cb:<path>`.
+
 Status: documentation only. Changes nothing, awards nothing, makes no readiness claim (readiness stays 56.25% verified; R16 credit 0 of 18.75). No criterion is weakened here; every resolution is a PROPOSAL for the protocol owner (JUDEV2/C2) and the client owner (WDEV) to accept or reject.
 
 Line numbers are 1-based and were read from the exact bytes whose sha256 is listed below. Quotes are short excerpts.
@@ -13,12 +15,14 @@ Line numbers are 1-based and were read from the exact bytes whose sha256 is list
 | ECHO | `_qa_handoff\julius_readiness\followon_100\inworld_missions_20261022\j1\CLIENT_PACKAGE_SPEC_r1_ADDENDUM_1_ECHO_DIGEST.md` (20 lines) | `docs/sources/_qa_handoff/julius_readiness/followon_100/inworld_missions_20261022/j1/CLIENT_PACKAGE_SPEC_r1_ADDENDUM_1_ECHO_DIGEST.md` | `f03e7f91e7a72a0ebc0dd606fc152d0d6f89ebbc093c2db79dcbc28122a03e11` |
 | PLANADD | `_qa_handoff\julius_readiness\followon_100\inworld_missions_20261022\ADDENDUM_1_to_PLAN_r3_and_SPEC_r1.md` (17 lines) | `docs/sources/_qa_handoff/julius_readiness/followon_100/inworld_missions_20261022/ADDENDUM_1_to_PLAN_r3_and_SPEC_r1.md` | `ce1aff4769174b1046c5632bcd48b5b7190ca90283baabd6052be7d8a7a8e97d` |
 | J1 | sunday-relay `relay-bridge/julius-dispatch.ts` at commit `22a0a9cb2cc93f64929f1dd855aa242936f739e9` (blob `018fb582b427ad4fc884b9965d8bd3d8080ebf5b`, 1050 lines; read with `git show 22a0a9cb:relay-bridge/julius-dispatch.ts`) | not copied: it is already readable at that fixed commit | `0a29be76e58fae6a9938a33704434ff6ffdc8df406007918d0c5a12ee6588fe6` |
+| J1A | sunday-relay `relay-bridge/julius-dispatch-adapters.ts` at 22a0a9cb (617 lines) | not copied (fixed commit) | see `git show` |
+| J1W | sunday-relay `relay-bridge/julius-dispatch-wiring-core.ts` at 22a0a9cb (282 lines) | not copied (fixed commit) | see `git show` |
 
 Notes on the sources:
 - **Path discrepancy.** The protocol is NOT under `...\inworld_missions_20261022\`. That folder holds only `j1\` and the PLAN addendum. The protocol was found at the PROT path above (mtime 2026-10-22 01:05 PT). SPEC line 372 (U10) also records that a filename search under `_qa_handoff` did not find it.
 - The PLAN addendum lives one level above `j1\`, not inside it. Its title calls it an addendum to SPEC r1, so it is cited and copied. The `PREREG_v*_ADDENDUM_*_DRAFT.md` files in `j1\` are pre-registration addenda. None of the 7 conflicts depends on them, so they are neither cited nor copied.
 - Precedence: ECHO line 1 says "Where it differs from spec r1 and from ADDENDUM_1_to_PLAN_r3_and_SPEC_r1.md, THIS wins." So the order is ECHO > PLANADD > SPEC.
-- Commit 22a0a9cb (committer time 2026-10-23 01:09 PT) is contained in the remote-tracking branch `origin/judev/j1-combined-ceiling` (`git branch -a --contains`). That branch's local tip is `126b371301288f86676f577cf58f2b54270b291a`. No fetch was done, so this reflects the local remote-tracking ref only. There is no local branch of that name.
+- Commit 22a0a9cb (committer time 2026-10-23 01:09 PT) is contained in the remote-tracking branch `origin/judev/j1-combined-ceiling` (`git branch -a --contains`). There is no local branch of that name. **The tip in rev 1 is stale.** The local remote-tracking ref shows `126b3713`, but `git ls-remote` (2026-10-23 ~01:5x PT) shows origin `judev/j1-combined-ceiling` = `1254b0d1fee745ea5998898e4d0f111c5cf74558`. That object is not in the local repo (no fetch was done), so whether 1254b0d1 still contains 22a0a9cb is UNCONFIRMED.
 - ECHO line 1 says its bridge contract was read at `judev/inworld-dispatch` tip 2f8c346a. The `run_created` code cited here comes from a different branch/commit (22a0a9cb). Which bridge tip will run is still unconfirmed.
 
 ## Conflict 1: log prefix `WLMISSION` vs `WLJMISSION`
@@ -84,7 +88,7 @@ Notes on the sources:
   - C5 becomes: client `artifact_sha256` == the result JSON `artifactSha256` == the ledger coder row `artifactJudgedSha256` (ECHO:14), with `digest_ok=1` and `digest12` == `artifact_sha256[:12]`.
   - The by-eye check compares on-screen `check <12>` with `artifact_sha256[:12]`.
   - The ledger `final.resultSha256` stays checked bridge-side (whole result bytes) but is not compared with the screen.
-  - The f00041 equality test (ECHO:14, PLAN open item) is still pending in J1.
+  - **Correction (rev 2):** the f00041 equality test already exists. It is commit `5eb51efbaaa47952b848877642ac121ccf05d29b` (2026-10-22 08:59 PT, "the artifact hash the client receives equals the ledger artifactJudgedSha256"), which adds a test to `relay-bridge/julius-dispatch-wiring.test.ts` asserting `result.artifactSha256 == sha(artifactText.trim())` and `== coder.artifactJudgedSha256`. `git merge-base --is-ancestor 5eb51efb 22a0a9cb` is true. Rev 1 wrongly said it was pending.
 
 ## Conflict 5: N9 bridge restart mid-run: J1 can only take the refuse branch
 - **Protocol:** PROT:68 N9 "client shows disconnected; on resume either same run completes from ledger or refuses; no duplicate pre_call for a finished leg".
@@ -94,6 +98,7 @@ Notes on the sources:
   - SPEC:165 maps `julius_dispatch_run_unknown` "also after a bridge restart".
   - ECHO:4: the echoId is "forgotten on bridge restart".
 - **Conflict:** N9 as written accepts "completes from ledger", which J1 cannot do. A J1 run must never be credited as a recovery.
+- **Severity (rev 2, Skywalker):** this is a NARROWING, not a contradiction. PROT:68 already allows "or refuses", so J1 can pass N9 through the refuse branch alone.
 - **Proposal:**
   - For J1, N9 PASS = refuse branch only: ORPHANED row, a `refused` line, and no new pre_call for any leg after restart.
   - Any "completed after restart" outcome on J1 is a FAIL, not a pass.
@@ -111,7 +116,8 @@ Notes on the sources:
   - SPEC:314 F3 "`LogHttp VeryVerbose` active | `kind=local_http_verbose`, nothing sent".
 - **Residual gaps:**
   - PLANADD:13 is stale.
-  - ECHO:16 says `refused` carries "(code only)", while SPEC:74 and PROT:60 use `kind=`. The field name for the refusal reason must be pinned.
+  - ECHO:16 says `refused` carries "(code only)", and ECHO:12 says "refusals are shown from the error `code` only". SPEC:74 and PROT:60 use `kind=`.
+  - **Expanded (rev 2, Skywalker):** the bridge's HTTP error body has no `code` field. It is `{ error: { kind, message } }` (J1:952 `const err = (status, kind, message) => ({ status, body: { error: { kind, message } } })`). A client built literally to ECHO:12/:16 would read a field the bridge does not send. The field name must be pinned to `kind` (as SPEC:155 and :157 say), or the addendum must say that "code" means `error.kind`.
   - SPEC:377 (U15) leaves open whether the header-print risk applies to the Windows HTTP backend. The client gate is required either way.
 - **Proposal:** keep M2/N8 unchanged, and state in the protocol that the expected J1 line is `WLJMISSION refused ... local_http_verbose` with nothing sent and no ledger `pre_call`.
 
@@ -129,16 +135,73 @@ Notes on the sources:
 - **Conflict:**
   - SPEC carries both forms: the screen prefix and the log token.
   - The governing ECHO line set does not list the token. A literal ECHO implementation could drop it, and C0/B4 would then miss a fake run.
+- **Impact narrowed (rev 2, Skywalker):** a fake run is still caught by C0 without the client token. PROT:32 C0 also rejects `mode=fake` anywhere. The J1 ledger writes `mode: ctx.mode` on every `pre_call` (J1:500-501) and on the final `result` row (J1:638). The remaining gap is B4's client-side label check (PROT:19), not fake-run detection.
 - **Proposal:**
   - ECHO §4 `trigger` (and `result`) must carry `rehearsal=fake` whenever mode is fake.
   - The screen prefix "REHEARSAL (fake provider) - " stays as the player-visible label.
   - C0 matches the log token. M1/video review checks the screen prefix.
 
+## Missed conflicts found by Skywalker (rev 2; attributed to Skywalker, citations re-read by Cosmo at 22a0a9cb)
+
+### M1: no run-creating route; the run lookup is a frozen stub
+- J1:846-847 "this route creates the run's dispatch in ONE authenticated flow (there is no separate creator route in this branch)".
+- J1A:567-582 `createFrozenRunLookup`: "J1 creates its own run ... so there is no Julius store row to read. The lookup answers, for the ONE configured project, with the frozen mission record ... in state READY; any other project is "no such run". It proves nothing about the run id" (J1A:568-571). It returns `{ missionId, contractSha256, state: 'READY' }` for any query on the configured project (J1A:578-579).
+- **Conflict:**
+  - PROT:24 ("no pre-created run") and the PLANADD:6 / ECHO:10 sequence ("mission POST ... run id received") assume a mission/run is created and its id is returned.
+  - In J1, run existence comes only from the dispatch itself.
+- **Status:** CONFIRMED. The acceptance record must state: "run lookup is a frozen stub; run existence is not evidence of mission creation". See the run-id section.
+
+### M2: N1 `kind=unauthorized` vs the bridge's actual refusals
+- PROT:60 N1 "refusal row in game, `WLMISSION refused kind=unauthorized`, NO ledger pre_call".
+- The bridge has no `unauthorized` kind:
+  - J1:983 `err(401, 'sign_in_required', ...)` for no session;
+  - J1:707 `refuse(403, 'julius_dispatch_founder_only')`;
+  - J1:709 `refuse(403, 'julius_dispatch_second_pairing')`.
+- SPEC:162-163 map those kinds.
+- **Conflict:** N1 as written can never match literally.
+- **Proposal:** N1 accepts exactly the set {`sign_in_required`, `julius_dispatch_founder_only`, `julius_dispatch_second_pairing`, `julius_dispatch_wrong_project`}, with no ledger `pre_call`.
+- **Status:** CONFIRMED.
+
+### M3: SPEC r1 error table (SPEC:157-175) is missing kinds the bridge emits; recovery is lazy
+- **Missing kinds:** the following `julius_dispatch_*` string literals appear in J1 at 22a0a9cb but not in SPEC:157-175 (found by literal search, Cosmo):
+  - `body_invalid`, `brief_not_frozen_contract`;
+  - `clock_binding_invalid`, `clock_binding_required`, `clock_echo_unknown`, `clock_offset_out_of_range`;
+  - `cursor_invalid`, `final_row_unwritten`, `key_store_required`, `mode_mismatch`, `provider_key_in_env`;
+  - `repeat_above_per_run`, `repeat_already_used`, `repeat_combined_ceiling`, `repeat_receipt_missing`, `repeat_spend_unknown`;
+  - `result_lost_on_restart`, `reviewer_config_mismatch`, `run_creator_mismatch`, `run_order_violation`, `run_orphaned`.
+  - Not every one was individually traced to an HTTP response. Some may be ledger-only or startup-only: UNCONFIRMED per kind.
+  - Several are certainly HTTP refusals: the `repeat_*` kinds (J1:797-814 `refuse(status, code)`) and `run_creator_mismatch` (J1:748).
+- **Lazy recovery:** J1W:256-270. "recover() must finish before the first dispatch (OPEN_ITEMS 21). A failed recovery refuses every dispatch". `ready()` runs `inner.recover()` lazily on the first `dispatch` (J1W:258-264). If recovery fails, every dispatch returns `503 julius_dispatch_ledger_unavailable` (J1W:267).
+  - SPEC:170 does list `julius_dispatch_ledger_unavailable` as "Try again in a moment", which is misleading when recovery has permanently failed for that process.
+- **Status:** CONFIRMED (code), with the per-kind HTTP reachability caveat above.
+
+### M4: ACCEPT needs run 2, but J1 refuses a repeat without run-1 receipts
+- PROT:71/:74 require run 2 to pass C0-C12 for ACCEPT-FOR-ROW-12.
+- J1:782-826 "COMBINED CEILING: a repeat of julius-inworld-data-1 reads run-1's provider receipts. Fail closed." It refuses with:
+  - `julius_dispatch_repeat_receipt_missing` / `_spend_unknown` (J1:798-799), when run-1 spend is unverified;
+  - `julius_dispatch_repeat_already_used` (J1:797);
+  - `_repeat_above_per_run` / `_repeat_combined_ceiling` (J1:810-814).
+- **Conflict:** run 2 is blocked unless run-1 provider receipts reach the ledger. The protocol does not list this precondition, and a refused run 2 means no ACCEPT.
+- **Status:** CONFIRMED.
+- "F1" in Skywalker's note: SPEC:312 F1 is the unrelated `local_off` control. I could not confirm what "F1" refers to here: UNCONFIRMED (label only).
+
+### Low: N5 idempotency semantics (Skywalker)
+- PROT:64 N5 "reuse same key, different mission | 409-style refusal; same key + same mission returns stored result without a new pre_call".
+- J1 keys idempotency on runId + creator:
+  - J1:744-745: same runId with the same caller and key → replay (200, `replayed: true`);
+  - J1:748: same runId with another caller or key → 403 `julius_dispatch_run_creator_mismatch`;
+  - J1:750-751: the same key on ANY other run → 409 `julius_dispatch_key_reused`.
+- With one frozen mission, "same key + same mission" but a new runId is refused 409, not replayed.
+- **Status:** CONFIRMED, low severity.
+
+### Low: stale bridge tip
+- The rev 1 tip `126b3713` is stale. Origin is now `1254b0d1` (see Sources).
+
 ## Also noticed (not one of the 7; not counted)
 - PROT:60 N1 expects `kind=unauthorized`, but ECHO:16 says `refused (code only)`. This is the same field-name question as in conflict 6.
 
 ## Client run-id under option (a) (pending founder decision)
-Nothing below is decided. Option (a) is pending the founder's ruling. This section states what the client must do IF option (a) is chosen.
+Option (a) vs (b) is pending the founder's ruling. **Rev 2:** the run-id FORMAT is now fixed in `docs/j1_client_plan.md` §5a: `wlj_` prefix plus a BCryptGenRandom UUIDv4 formatted from the raw bytes, strict regex, with a 10,000-id test. That section supersedes the format text below where they differ. This section states what the client must do IF option (a) is chosen.
 
 **The client mints the runId:**
 - One per run. It is unguessable (Skywalker).
@@ -166,4 +229,5 @@ Nothing below is decided. Option (a) is pending the founder's ruling. This secti
 - The protocol is not at the user-stated folder (see Sources). It was cited from the actual path.
 - PROT:5 refers to "section 6 of REPORT_C2" for the format spec. It was not read and is not cited.
 - "j1 OPEN_ITEMS 8" (PLANADD:12), "j1 DESIGN 5.5" and `wt_j1` are referenced by the sources but were not opened. They are cited only through the quoting source.
-- Bridge tip actually to be run: unconfirmed (ECHO:1 cites 2f8c346a; J1 citations are at 22a0a9cb).
+- Bridge tip actually to be run: unconfirmed (ECHO:1 cites 2f8c346a; J1 citations are at 22a0a9cb; origin tip is now 1254b0d1, not present locally).
+- Rev 2: whether 1254b0d1 still contains 22a0a9cb is UNCONFIRMED. So is per-kind HTTP reachability in M3, and the meaning of "F1" in M4.
