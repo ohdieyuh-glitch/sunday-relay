@@ -822,7 +822,36 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
     expect(list).toEqual([
       'relay/julius-partial-secret-capture-fix', 'relay/julius-coder-runtime-budget', 'relay/julius-diag-digest-evidence-2', 'relay/julius-report-refused-reason', 'relay/julius-accounting-instruments',
       'relay/julius-maxeffort-gauntlet-1', 'relay/julius-maxeffort-loop-1', 'relay/julius-ask-route',
+      'relay/julius-wonderland-j1-client-recut-20261023',
     ]);
+  });
+
+  it('allows exactly relay/julius-wonderland-j1-client-recut-20261023 and refuses a prefix, a suffix, a case change, a child path, a glob, and the source branch', () => {
+    const exact = 'relay/julius-wonderland-j1-client-recut-20261023';
+    const list = readFileSync(join(LANDING, 'allowed-branches.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    expect(exact).toMatch(/^relay\/julius-[a-z0-9-]+$/u);
+    expect(list.filter((b) => b === exact)).toEqual([exact]);
+    expect(list).not.toContain('wonderland/j1-client-recut-20261023');
+    expect(list.some((b) => /[*?[\]{}]/.test(b))).toBe(false);
+    const gate = readFileSync(join(LANDING, 'land-lib.mjs'), 'utf8');
+    expect(gate).toContain('allowedBranches.includes(pr.head?.ref)');
+    const onBranch = (ref: string) => check({ allowedBranches: list, pr: { ...goodPr(), head: { ...goodPr().head, ref } } });
+    expect(onBranch(exact)).toEqual([]);
+    for (const broader of [
+      'prefix-relay/julius-wonderland-j1-client-recut-20261023',
+      'relay/julius-wonderland-j1-client-recut-2026102',
+      'relay/julius-wonderland-j1-client-recut-20261023-extra',
+      'relay/julius-wonderland-j1-client-recut-202610233',
+      'Relay/julius-wonderland-j1-client-recut-20261023',
+      'relay/julius-Wonderland-j1-client-recut-20261023',
+      'relay/julius-wonderland-j1-client-recut-20261023/child',
+      'relay/julius-wonderland-j1-client-recut-*',
+      'relay/julius-*',
+      '*',
+      'wonderland/j1-client-recut-20261023',
+    ]) {
+      expect(onBranch(broader).join(' '), broader).toContain('not in the founder');
+    }
   });
 
   it('the shipped allowlist refuses the superseded Candidate C branch (evidence-1) and allows evidence-2', () => {

@@ -11,3 +11,5 @@ relay/julius-accounting-instruments
 relay/julius-maxeffort-gauntlet-1
 relay/julius-maxeffort-loop-1
 relay/julius-ask-route
+# Wonderland J1 client re-cut (20261023). The branch the App pushes; the source branch is not listed.
+relay/julius-wonderland-j1-client-recut-20261023
