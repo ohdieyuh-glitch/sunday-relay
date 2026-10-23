@@ -21,58 +21,203 @@ const SELF_CHECK = 'Land a cleared pull request';
 // `Authorization: <x>` also covers a quoted value. v3.5e: the same line-break gap is also accepted INSIDE every %XX escape (between the %, the 25 levels and the two hex digits).
 // Every sentence of the README "Output redaction" paragraph is a probe run on this function; the residuals (plain space inside a foreign shape or inside an escape, a lone CR, ...) are listed there and pinned by tests.
 const b64Middles = (s) => [0, 1, 2].map((pad) => Buffer.from(' '.repeat(pad) + s).toString('base64')).map((e, pad) => e.slice(Math.ceil((pad * 8) / 6), Math.max(0, e.length - 4))).filter((m) => m.length >= 8);
+// A direct scan, not a per-token expression. The expression this replaced was compiled on the first call and cost about half a second for a
+// 40-character token, so every fresh process (one per end-to-end case) missed its deadline. Behaviour is the same: each character is itself or
+// its %XX / %25XX form (at most three levels), a line-break gap may sit inside an escape, and the words after a token survive.
+const WS = /\s/u;
+const hexVal = (c) => {
+  const x = c === undefined ? -1 : c.charCodeAt(0);
+  if (x >= 48 && x <= 57) return x - 48;
+  if (x >= 65 && x <= 70) return x - 55;
+  if (x >= 97 && x <= 102) return x - 87;
+  return -1;
+};
+// (?:\r?\n[ \t]?)? taken greedily. The atom after a gap is never CR, LF, space or tab, so failing to take the gap cannot succeed either.
+const readGap = (s, i) => {
+  let j = i;
+  const a = s.charCodeAt(j);
+  if (a === 13 && s.charCodeAt(j + 1) === 10) j += 2;
+  else if (a === 10) j += 1;
+  else return i;
+  const b = s.charCodeAt(j);
+  if (b === 32 || b === 9) j += 1;
+  return j;
+};
+const skipWs = (s, i) => {
+  let j = i;
+  while (j < s.length) {
+    const cp = s.codePointAt(j);
+    const ch = String.fromCodePoint(cp);
+    if (!WS.test(ch)) break;
+    j += ch.length;
+  }
+  return j;
+};
+// '%' , a gap, ('2' gap '5' gap){0,3} greedy, then two hex digits with a gap between them. accept(byte) chooses the payload.
+const matchPercentByte = (s, i, accept) => {
+  if (s.charCodeAt(i) !== 37) return -1;
+  for (let depth = 3; depth >= 0; depth -= 1) {
+    let j = readGap(s, i + 1);
+    let ok = true;
+    for (let d = 0; d < depth; d += 1) {
+      if (s.charCodeAt(j) !== 50) { ok = false; break; }
+      j = readGap(s, j + 1);
+      if (s.charCodeAt(j) !== 53) { ok = false; break; }
+      j = readGap(s, j + 1);
+    }
+    if (!ok) continue;
+    const h1 = hexVal(s[j]);
+    if (h1 < 0) continue;
+    j = readGap(s, j + 1);
+    const h2 = hexVal(s[j]);
+    if (h2 < 0) continue;
+    if (accept((h1 << 4) | h2)) return j + 1;
+  }
+  return -1;
+};
+/** One character at i: itself, or %XX (either hex case), or that %XX escaped again (%25XX, at most three levels), a line-break gap allowed inside. Only a byte has a %XX form. Returns the index after the match, or -1. */
+const charOrEscape = (s, i, ch) => {
+  if (s.startsWith(ch, i)) return i + ch.length;
+  const code = ch.codePointAt(0);
+  if (code > 0xff) return -1;
+  return matchPercentByte(s, i, (b) => b === code);
+};
+const matchSequence = (s, i, chars, matchOne) => {
+  let j = i;
+  for (let c = 0; c < chars.length; c += 1) {
+    if (c > 0) j = readGap(s, j);
+    const n = matchOne(s, j, chars[c]);
+    if (n < 0) return -1;
+    j = n;
+  }
+  return j;
+};
+// Whitespace between the characters of a job token that does not itself contain whitespace. Greedy, and no backtrack: a token character is not whitespace, so giving a space back cannot help it match.
+const matchJobAt = (s, i, chars) => {
+  let j = i;
+  for (let c = 0; c < chars.length; c += 1) {
+    if (c > 0) j = skipWs(s, j);
+    const n = charOrEscape(s, j, chars[c]);
+    if (n < 0) return -1;
+    j = n;
+  }
+  return j > i ? j : -1;
+};
+const replaceLeftmost = (s, chars, matchAt, canStart) => {
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    if (canStart(s, i, chars)) {
+      const end = matchAt(s, i, chars);
+      if (end > i) { out += '***'; i = end; continue; }
+    }
+    out += s[i];
+    i += 1;
+  }
+  return out;
+};
+const jobCanStart = (s, i, chars) => s.startsWith(chars[0], i) || s.charCodeAt(i) === 37;
+// base64url writes '+' as '-' and '/' as '_', and either may be the first character of a middle.
+const b64CanStart = (s, i, chars) => {
+  if (jobCanStart(s, i, chars)) return true;
+  const ch = chars[0];
+  if (ch === '+' && s.startsWith('-', i)) return true;
+  if (ch === '/' && s.startsWith('_', i)) return true;
+  return false;
+};
+const b64One = (s, i, ch) => {
+  const alts = ch === '+' ? ['+', '-'] : ch === '/' ? ['/', '_'] : [ch];
+  for (const a of alts) {
+    const n = charOrEscape(s, i, a);
+    if (n >= 0) return n;
+  }
+  return -1;
+};
+const isAlnumByte = (b) => (b >= 48 && b <= 57) || (b >= 65 && b <= 90) || (b >= 97 && b <= 122);
+const SHAPE_PREFIXES = ['ghs', 'ghp', 'gho', 'ghu', 'ghr'];
+const matchPrefixedHead = (s, i) => {
+  for (const w of SHAPE_PREFIXES) {
+    const end = matchSequence(s, i, [...`${w}_`], charOrEscape);
+    if (end >= 0) return end;
+  }
+  return -1;
+};
+const matchPatHead = (s, i) => matchSequence(s, i, [...'github_pat_'], charOrEscape);
+const matchShapeHead = (s, i) => {
+  const a = matchPrefixedHead(s, i);
+  if (a >= 0) return a;
+  return matchPatHead(s, i);
+};
+const matchUnit = (s, i, pat) => {
+  const ch = s[i];
+  if (ch !== undefined && (pat ? /[A-Za-z0-9_]/u : /[A-Za-z0-9]/u).test(ch)) return i + 1;
+  return matchPercentByte(s, i, (b) => (pat ? isAlnumByte(b) || b === 0x5f : isAlnumByte(b)));
+};
+const matchShapeAt = (s, i, pat) => {
+  const head = pat ? matchPatHead(s, i) : matchPrefixedHead(s, i);
+  if (head < 0) return -1;
+  let j = head;
+  let units = 0;
+  while (units < 255) {
+    const at = readGap(s, j);
+    if (matchShapeHead(s, at) >= 0) break;
+    const n = matchUnit(s, at, pat);
+    if (n < 0) break;
+    j = n;
+    units += 1;
+  }
+  return units >= 16 ? j : -1;
+};
+const replaceShapes = (s, pat) => {
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    // every shape head starts with 'g', or with a percent escape of 'g'
+    const c = s.charCodeAt(i);
+    if (c === 103 || c === 37) {
+      const end = matchShapeAt(s, i, pat);
+      if (end > i) { out += '***'; i = end; continue; }
+    }
+    out += s[i];
+    i += 1;
+  }
+  return out;
+};
+// Only a job token that itself contains whitespace still needs an expression: `\s*` between its characters has to backtrack through that token's own whitespace. A GitHub token has none.
+const GAP_SRC = '(?:\\r?\\n[ \\t]?)?';
 const reEscape = (c) => c.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-const LINE_BREAK_GAP = '(?:\\r?\\n[ \\t]?)?';
-// v3.5e: a percent escape is '%', up to three '25' levels and the two hex digits, and the line-break gap may sit between EVERY two of those atoms (the gap starts with CR or LF, so it never overlaps a hex digit: linear).
-const percentEscape = (hexPair) => `%${LINE_BREAK_GAP}(?:2${LINE_BREAK_GAP}5${LINE_BREAK_GAP}){0,3}${hexPair}`;
-/** One character as a pattern: itself, or %XX (either hex case), or the %XX escaped again (%25XX, at most three levels), a line-break gap allowed inside. Only single-byte characters have a %XX form here. */
-const charOrEscape = (c) => {
+const percentSrc = (hexPair) => `%${GAP_SRC}(?:2${GAP_SRC}5${GAP_SRC}){0,3}${hexPair}`;
+const charPattern = (c) => {
   const code = c.codePointAt(0);
   if (code > 0xff) return reEscape(c);
   const digits = [...code.toString(16).padStart(2, '0')].map((d) => (/[a-f]/u.test(d) ? `[${d}${d.toUpperCase()}]` : d));
-  return `(?:${reEscape(c)}|${percentEscape(digits.join(LINE_BREAK_GAP))})`;
+  return `(?:${reEscape(c)}|${percentSrc(digits.join(GAP_SRC))})`;
 };
-// the hex pairs of the ASCII letters and digits (30-39, 41-5A, 61-7A), the gap between their two digits
-const ALNUM_ESCAPED_PAIRS = ['3[0-9]', '4[1-9A-Fa-f]', '5[0-9Aa]', '6[1-9A-Fa-f]', '7[0-9Aa]'].map((pair) => `${pair[0]}${LINE_BREAK_GAP}${pair.slice(1)}`);
-const ALNUM_OR_ESCAPED = `(?:[A-Za-z0-9]|${percentEscape(`(?:${ALNUM_ESCAPED_PAIRS.join('|')})`)})`;
-const UNDERSCORE_OR_ESCAPED = charOrEscape('_');
-// v3.5d: the line-break gap sits between EVERY two characters of a shape (v3.5c allowed it only after the underscore): between the prefix letters, before the underscore, and between github / pat / the underscores.
-const word = (w) => [...w].map(charOrEscape).join(LINE_BREAK_GAP);
-const SHAPE_PREFIX_WORDS = ['ghs', 'ghp', 'gho', 'ghu', 'ghr'].map(word).join('|');
-const PAT_HEAD = `${word('github')}${LINE_BREAK_GAP}${UNDERSCORE_OR_ESCAPED}${LINE_BREAK_GAP}${word('pat')}${LINE_BREAK_GAP}${UNDERSCORE_OR_ESCAPED}`;
-const SHAPE_HEAD = `(?:(?:${SHAPE_PREFIX_WORDS})${LINE_BREAK_GAP}${UNDERSCORE_OR_ESCAPED}|${PAT_HEAD})`;
-// v3.5e (fresh adversarial pass): a run NEVER continues into the head of another shape (a token on the next line, or glued to this one, was swallowed and its own body printed), and a shape is recognised wherever
-// it starts (no lookbehind: a token behind letters, digits, an underscore or an escaped newline such as x%0Aghs_... was never matched; the cost is a possible over-redaction of a word that contains ghs_ + 16 letters).
-const shapeRun = (unit) => `(?:${LINE_BREAK_GAP}(?!${SHAPE_HEAD})${unit}){16,255}`;
-const SHAPE_PREFIXED = new RegExp(`(?:${SHAPE_PREFIX_WORDS})${LINE_BREAK_GAP}${UNDERSCORE_OR_ESCAPED}${shapeRun(ALNUM_OR_ESCAPED)}`, 'gu');
-const SHAPE_PAT = new RegExp(`${PAT_HEAD}${shapeRun(`(?:${ALNUM_OR_ESCAPED}|${UNDERSCORE_OR_ESCAPED})`)}`, 'gu');
-// base64 of the job token: each character as itself or its percent escape (= + / are escaped by URL encoders), the base64url alphabet accepted, a line break allowed between any two (base64 / openssl wrap at 76).
-const b64Char = (c) => (c === '+' ? `(?:${charOrEscape('+')}|${charOrEscape('-')})` : c === '/' ? `(?:${charOrEscape('/')}|${charOrEscape('_')})` : charOrEscape(c));
-let jobPatterns = null; // compiled once per job token (the token never changes inside the process)
-const jobTokenPatterns = (token) => {
-  if (jobPatterns !== null && jobPatterns.token === token) return jobPatterns;
-  // the elaborate patterns are built for a token of a realistic length only (a GitHub installation token is 40 characters); a longer one, or one whose pattern the engine refuses, keeps the exact-text match above
-  const build = (parts, glue) => { try { return new RegExp(parts.join(glue), 'gu'); } catch { return null; } };
-  const literal = token.length <= 256 ? build([...token].map(charOrEscape), '\\s*') : null;
-  const base64 = [];
-  if (token.length <= 256) for (const form of [token, `x-access-token:${token}`, `${token}:x-oauth-basic`]) for (const middle of b64Middles(form)) { const pattern = build([...middle].map(b64Char), LINE_BREAK_GAP); if (pattern !== null) base64.push(pattern); }
-  jobPatterns = { token, literal, base64 };
-  return jobPatterns;
+let jobScan = null;
+const jobScanFor = (token) => {
+  if (jobScan !== null && jobScan.token === token) return jobScan;
+  const chars = token.length <= 256 ? [...token] : null;
+  const hasWs = chars !== null && chars.some((c) => WS.test(c));
+  const middles = chars === null ? [] : [token, `x-access-token:${token}`, `${token}:x-oauth-basic`].flatMap((form) => b64Middles(form).map((m) => [...m]));
+  let literal = null;
+  if (hasWs) { try { literal = new RegExp(chars.map(charPattern).join('\\s*'), 'gu'); } catch { literal = null; } }
+  jobScan = { token, chars, hasWs, middles, literal };
+  return jobScan;
 };
 const redact = (text) => {
   let out = String(text);
   if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) {
     out = out.split(env.GH_TOKEN).join('***');
-    // every character of the token as itself or as a percent escape, whitespace allowed between characters (a split by a line break or a space)
-    const patterns = jobTokenPatterns(env.GH_TOKEN);
-    if (patterns.literal !== null) out = out.replace(patterns.literal, '***');
-    for (const pattern of patterns.base64) out = out.replace(pattern, '***');
+    const scan = jobScanFor(env.GH_TOKEN);
+    if (scan.chars !== null) {
+      if (scan.hasWs) { if (scan.literal !== null) out = out.replace(scan.literal, '***'); }
+      else out = replaceLeftmost(out, scan.chars, matchJobAt, jobCanStart);
+      for (const middle of scan.middles) out = replaceLeftmost(out, middle, (s, i, cs) => matchSequence(s, i, cs, b64One), b64CanStart);
+    }
   }
+  out = replaceShapes(out, false);
+  out = replaceShapes(out, true);
   return out
-    // only a LINE BREAK (LF or CRLF, then at most one space or tab) may split the run, never a plain space, so the words after a token survive; at most 255 characters; letters, digits and the
-    // underscore may be percent escapes (v3.5c).
-    .replace(SHAPE_PREFIXED, '***')
-    .replace(SHAPE_PAT, '***')
     // v3.5e: `Bearer` takes a quoted value, or a word, after an optional `:` / `=`. v3.5h: the quotes may be backslash-escaped (JSON inside JSON: \" ... \"; the closing run of backslashes equals the
     // opening run and is not itself preceded by a backslash, so an escaped quote of a deeper level inside the value does not end it); an unterminated escaped quote hides the rest of the line.
     .replace(/\bBearer(?:\s*[:=]\s*|\s+)(?:(\\+)(["'])[^\r\n]*?(?<!\\)\1\2|\\+["'][^\r\n]*|"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|["'][^\r\n]*|[^\s"',;]+)/giu, 'Bearer ***')
