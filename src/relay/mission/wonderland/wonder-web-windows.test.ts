@@ -222,6 +222,36 @@ describe('names, titles, and the parent accent', () => {
     expect(formatWindowTitle(codePointsOver, 1)).toBe('Unnamed agent \u2014 Wonder Web VM 1');
   });
 
+  it('follows the registry trim set and refuses C1 and unpaired surrogates', () => {
+    expect('\u0085'.trim()).toBe('\u0085');
+    expect('\u0080'.trim()).toBe('\u0080');
+    expect('\u009f'.trim()).toBe('\u009f');
+    const padded = '\u3000\uFEFFGrok\uFEFF\u3000';
+    expect(padded.trim()).toBe('Grok');
+    const state = manager();
+    for (const item of [
+      { id: 'sess-0085', name: '\u0085' },
+      { id: 'sess-0080', name: '\u0080' },
+      { id: 'sess-009f', name: '\u009f' },
+      { id: 'sess-high', name: 'Grok\uD800' },
+      { id: 'sess-low', name: '\uDC00Grok' },
+    ]) {
+      const rejected = openWindow(state, session({ vmSessionId: item.id, agentDisplayName: item.name }), CTX);
+      expect(rejected.ok, item.id).toBe(false);
+      if (!rejected.ok) expect(rejected.error.code, item.id).toBe('agent_display_name_rejected');
+    }
+    expect(state.windows).toHaveLength(0);
+    const pair = '\uD800\uDC00';
+    expect(pair.length).toBe(2);
+    expect([...pair].length).toBe(1);
+    const paired = must(openWindow(manager(), session({ vmSessionId: 'sess-pair', vmNumber: 1, agentDisplayName: pair }), CTX));
+    expect(paired.value.agentDisplayName).toBe(pair);
+    const trimmed = must(openWindow(manager(), session({ vmSessionId: 'sess-trim', vmNumber: 1, agentDisplayName: padded }), CTX));
+    expect(trimmed.value.agentDisplayName).toBe('Grok');
+    expect(observerView(trimmed.value, session({ vmSessionId: 'sess-trim', vmNumber: 1, agentDisplayName: 'Grok' })).title)
+      .toBe('Grok \u2014 Wonder Web VM 1');
+  });
+
   it('shows Grok, Claude, and OpenAI exactly, and null as Unnamed agent', () => {
     for (const name of ['Grok', 'Claude', 'OpenAI'] as const) {
       const record = session({ vmSessionId: `sess-${name}`, vmNumber: 8, agentDisplayName: name });
@@ -794,6 +824,12 @@ describe('C++ mirror', () => {
   }, 30_000);
 });
 
+function openedShape(id: string, name: string): string {
+  const result = openWindow(manager(), session({ vmSessionId: id, vmNumber: 1, agentDisplayName: name }), CTX);
+  if (!result.ok) return result.error.code;
+  return result.value.agentDisplayName ?? '';
+}
+
 function round6(value: number): number {
   return Math.round(value * 1e6) / 1e6;
 }
@@ -859,6 +895,8 @@ export function goldenReport(): Record<string, unknown> {
     emptyName: openWindow(manager(), session({ vmSessionId: 'sess-empty', agentDisplayName: '' }), CTX).ok
       ? ''
       : 'agent_display_name_rejected',
+    emoji64: openedShape('sess-emoji', `${'a'.repeat(63)}\u{1F600}`),
+    emoji65: openedShape('sess-emoji-over', `${'a'.repeat(64)}\u{1F600}`),
     endEvents: ended.events.map((item) => item.event),
     endIntents: ended.animations.map((item) => item.intent),
     endPhase: ended.value.phase,
@@ -866,6 +904,9 @@ export function goldenReport(): Record<string, unknown> {
     fallback: AGENT_DISPLAY_NAME_FALLBACK,
     firstIntent: first.animations[0]?.intent ?? '',
     lifetime: lifetimeHits(ended).length,
+    name0080: openedShape('sess-0080', '\u0080'),
+    name0085: openedShape('sess-0085', '\u0085'),
+    name009f: openedShape('sess-009f', '\u009f'),
     missingName: observerView(
       must(openWindow(manager(), omittedDisplayName('sess-missing', 2), CTX)).value,
       omittedDisplayName('sess-missing', 2),
@@ -889,5 +930,6 @@ export function goldenReport(): Record<string, unknown> {
     tile1X: round6(lone.shown[0]?.x ?? 0).toFixed(6),
     tile1Y: round6(lone.shown[0]?.y ?? 0).toFixed(6),
     title: formatWindowTitle('Dot', 3),
+    trimmedName: openedShape('sess-trim', '\u3000\uFEFFGrok\uFEFF\u3000'),
   };
 }

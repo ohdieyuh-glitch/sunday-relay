@@ -45,6 +45,12 @@ bool HasControlChar(const std::string& value) {
 	return false;
 }
 
+/**
+ * ECMAScript String.prototype.trim: WhiteSpace plus LineTerminator.
+ * U+0009, U+000A, U+000B, U+000C, U+000D, U+0020, U+00A0, U+1680,
+ * U+2000–U+200A, U+2028, U+2029, U+202F, U+205F, U+3000, U+FEFF.
+ * U+0085 is Unicode White_Space and is not in this set.
+ */
 bool IsTrimCodePoint(std::uint32_t codePoint) {
 	if (codePoint == 0x09 || codePoint == 0x0A || codePoint == 0x0B || codePoint == 0x0C || codePoint == 0x0D
 		|| codePoint == 0x20 || codePoint == 0xA0 || codePoint == 0x1680 || codePoint == 0x2028
@@ -53,6 +59,56 @@ bool IsTrimCodePoint(std::uint32_t codePoint) {
 		return true;
 	}
 	return codePoint >= 0x2000 && codePoint <= 0x200A;
+}
+
+bool IsUtf8Continuation(unsigned char byte) {
+	return (byte & 0xC0) == 0x80;
+}
+
+/** Well-formed UTF-8 only. Invalid sequences and encoded surrogates are refused, as are C0, DEL, C1, U+2028, and U+2029. */
+bool RejectedNameBytes(const std::string& value) {
+	const auto* bytes = reinterpret_cast<const unsigned char*>(value.data());
+	const std::size_t count = value.size();
+	std::size_t index = 0;
+	while (index < count) {
+		const unsigned char lead = bytes[index];
+		std::uint32_t codePoint = 0;
+		std::size_t length = 1;
+		if (lead <= 0x7F) {
+			codePoint = lead;
+		} else if (lead <= 0xDF) {
+			if (index + 1 >= count || !IsUtf8Continuation(bytes[index + 1])) return true;
+			codePoint = (static_cast<std::uint32_t>(lead & 0x1F) << 6) | (bytes[index + 1] & 0x3F);
+			if (codePoint < 0x80) return true;
+			length = 2;
+		} else if (lead <= 0xEF) {
+			if (index + 2 >= count || !IsUtf8Continuation(bytes[index + 1]) || !IsUtf8Continuation(bytes[index + 2])) return true;
+			codePoint = (static_cast<std::uint32_t>(lead & 0x0F) << 12)
+				| (static_cast<std::uint32_t>(bytes[index + 1] & 0x3F) << 6)
+				| (bytes[index + 2] & 0x3F);
+			if (codePoint < 0x800 || (codePoint >= 0xD800 && codePoint <= 0xDFFF)) return true;
+			length = 3;
+		} else if (lead <= 0xF4) {
+			if (index + 3 >= count || !IsUtf8Continuation(bytes[index + 1]) || !IsUtf8Continuation(bytes[index + 2])
+				|| !IsUtf8Continuation(bytes[index + 3])) {
+				return true;
+			}
+			codePoint = (static_cast<std::uint32_t>(lead & 0x07) << 18)
+				| (static_cast<std::uint32_t>(bytes[index + 1] & 0x3F) << 12)
+				| (static_cast<std::uint32_t>(bytes[index + 2] & 0x3F) << 6)
+				| (bytes[index + 3] & 0x3F);
+			if (codePoint < 0x10000 || codePoint > 0x10FFFF) return true;
+			length = 4;
+		} else {
+			return true;
+		}
+		if (codePoint <= 0x1F || codePoint == 0x7F || (codePoint >= 0x80 && codePoint <= 0x9F)
+			|| codePoint == 0x2028 || codePoint == 0x2029) {
+			return true;
+		}
+		index += length;
+	}
+	return false;
 }
 
 std::uint32_t DecodeAt(const std::string& value, std::size_t index, std::size_t& length) {
@@ -181,7 +237,7 @@ NameResolution ResolveAgentDisplayName(const std::optional<std::string>& raw) {
 		result.ok = true;
 		return result;
 	}
-	if (HasControlChar(*raw)) {
+	if (RejectedNameBytes(*raw)) {
 		result.reason = RejectedNameReason();
 		return result;
 	}

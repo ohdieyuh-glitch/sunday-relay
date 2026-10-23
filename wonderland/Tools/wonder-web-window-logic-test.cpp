@@ -126,6 +126,31 @@ bool IsLifetimeToken(const std::string& value) {
 	return false;
 }
 
+std::string Utf8(std::uint32_t codePoint) {
+	std::string out;
+	if (codePoint <= 0x7F) {
+		out.push_back(static_cast<char>(codePoint));
+	} else if (codePoint <= 0x7FF) {
+		out.push_back(static_cast<char>(0xC0 | (codePoint >> 6)));
+		out.push_back(static_cast<char>(0x80 | (codePoint & 0x3F)));
+	} else if (codePoint <= 0xFFFF) {
+		out.push_back(static_cast<char>(0xE0 | (codePoint >> 12)));
+		out.push_back(static_cast<char>(0x80 | ((codePoint >> 6) & 0x3F)));
+		out.push_back(static_cast<char>(0x80 | (codePoint & 0x3F)));
+	} else {
+		out.push_back(static_cast<char>(0xF0 | (codePoint >> 18)));
+		out.push_back(static_cast<char>(0x80 | ((codePoint >> 12) & 0x3F)));
+		out.push_back(static_cast<char>(0x80 | ((codePoint >> 6) & 0x3F)));
+		out.push_back(static_cast<char>(0x80 | (codePoint & 0x3F)));
+	}
+	return out;
+}
+
+std::string Shape(const Logic::WindowResult& result) {
+	if (!result.ok) return result.errorCode;
+	return result.value.agentDisplayName.value_or("");
+}
+
 int LifetimeHits(const Logic::WindowResult& result) {
 	int hits = 0;
 	auto note = [&](const std::string& value) {
@@ -332,6 +357,40 @@ int main() {
 		}
 	}
 
+	const Logic::WindowResult name0080 = Logic::OpenWindow(created.state, Live("sess-0080", 1, Utf8(0x80)), ctx);
+	const Logic::WindowResult name0085 = Logic::OpenWindow(created.state, Live("sess-0085", 1, Utf8(0x85)), ctx);
+	const Logic::WindowResult name009f = Logic::OpenWindow(created.state, Live("sess-009f", 1, Utf8(0x9F)), ctx);
+	const std::string padded = Utf8(0x3000) + Utf8(0xFEFF) + "Grok" + Utf8(0xFEFF) + Utf8(0x3000);
+	const Logic::WindowResult trimmed = Logic::OpenWindow(created.state, Live("sess-trim", 1, padded), ctx);
+	if (!trimmed.ok || !trimmed.value.agentDisplayName || *trimmed.value.agentDisplayName != "Grok") {
+		std::cerr << "trimmed-name\n";
+		return 1;
+	}
+	const std::string invalidSequences[] = {
+		std::string("\xFF", 1),
+		std::string("\xC2", 1),
+		std::string("\xC1\x81", 2),
+		std::string("\xED\xA0\x80", 3),
+		std::string("\xED\xB0\x80", 3),
+	};
+	const char* invalidLabels[] = {
+		"invalid-utf8",
+		"truncated-utf8",
+		"overlong-utf8",
+		"encoded-high-surrogate",
+		"encoded-low-surrogate",
+	};
+	for (std::size_t index = 0; index < 5; ++index) {
+		const Logic::WindowResult opened = Logic::OpenWindow(
+			created.state,
+			Live(std::string("bad-") + invalidLabels[index], 1, invalidSequences[index]),
+			ctx);
+		if (opened.ok || opened.errorCode != "agent_display_name_rejected") {
+			std::cerr << invalidLabels[index] << "\n";
+			return 1;
+		}
+	}
+
 	const std::string accent = first.value.accentColorToken.value_or("");
 	const std::string firstIntent = first.animations.empty() ? "" : first.animations[0].intent;
 	const std::string observerTitle = view.title.value_or("");
@@ -347,6 +406,8 @@ int main() {
 		<< "\"contract\":" << Quote(Logic::kContract) << ","
 		<< "\"defaultCap\":" << Logic::kDefaultShownWindowCap << ","
 		<< "\"emptyName\":" << Quote(emptyName.ok ? "" : emptyName.errorCode) << ","
+		<< "\"emoji64\":" << Quote(Shape(emojiOpen)) << ","
+		<< "\"emoji65\":" << Quote(Shape(emojiRefuse)) << ","
 		<< "\"endEvents\":" << Array(endEvents) << ","
 		<< "\"endIntents\":" << Array(endIntents) << ","
 		<< "\"endPhase\":" << Quote(ended.value.phase) << ","
@@ -355,6 +416,9 @@ int main() {
 		<< "\"firstIntent\":" << Quote(firstIntent) << ","
 		<< "\"lifetime\":" << LifetimeHits(ended) << ","
 		<< "\"missingName\":" << Quote(*missingView.title) << ","
+		<< "\"name0080\":" << Quote(Shape(name0080)) << ","
+		<< "\"name0085\":" << Quote(Shape(name0085)) << ","
+		<< "\"name009f\":" << Quote(Shape(name009f)) << ","
 		<< "\"nullName\":" << Quote(*nullView.title) << ","
 		<< "\"numberCode\":" << Quote(Logic::AddressByVmNumber(4).code) << ","
 		<< "\"observerKeys\":" << Array(observerKeys) << ","
@@ -370,6 +434,7 @@ int main() {
 		<< "\"tile1X\":" << Quote(Fixed6(lone.shown[0].x)) << ","
 		<< "\"tile1Y\":" << Quote(Fixed6(lone.shown[0].y)) << ","
 		<< "\"title\":" << Quote(title.value_or("")) << ","
+		<< "\"trimmedName\":" << Quote(Shape(trimmed)) << ","
 		<< "\"unknownCause\":" << Quote(unknownCause.ok ? "" : unknownCause.errorCode)
 		<< "}\n";
 	return 0;

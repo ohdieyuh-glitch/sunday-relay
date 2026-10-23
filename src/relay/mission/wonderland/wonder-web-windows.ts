@@ -379,6 +379,23 @@ export function hasControlChar(value: string): boolean {
   return false;
 }
 
+/** A high surrogate must be followed by a low surrogate. A lone unit of either kind is refused. */
+function hasUnpairedSurrogate(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit < 0xd800 || unit > 0xdfff) continue;
+    if (unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        index += 1;
+        continue;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
 function displayNameRejectedReason(): string {
   return `Display name must be a non-empty string of at most ${AGENT_DISPLAY_NAME_MAX_CODE_POINTS} Unicode code points, with no control characters.`;
 }
@@ -388,16 +405,19 @@ function codePointLength(value: string): number {
 }
 
 /**
- * Missing and null open and stay null. A present name must be a non-empty
- * string after trim, at most 64 Unicode code points, with no control
- * characters (C0, DEL, C1, U+2028, U+2029). No provider or terminal word is
- * refused or replaced.
+ * Missing and null open and stay null. A present name is trimmed with
+ * `String.prototype.trim` (ECMAScript WhiteSpace plus LineTerminator, which
+ * includes U+FEFF, U+00A0, U+1680, U+2000–U+200A, U+2028, U+2029, U+202F,
+ * U+205F, and U+3000, and does not include U+0085). After trimming it must
+ * be non-empty and at most 64 Unicode code points. C0, U+007F, C1, U+2028,
+ * U+2029, and an unpaired UTF-16 surrogate are refused on the original
+ * string. No provider or terminal word is refused or replaced.
  */
 export function resolveAgentDisplayName(
   raw: unknown,
 ): { readonly ok: true; readonly name: string | null } | { readonly ok: false; readonly fallback: typeof AGENT_DISPLAY_NAME_FALLBACK; readonly reason: string } {
   if (raw === undefined || raw === null) return { ok: true, name: null };
-  if (typeof raw !== 'string' || hasControlChar(raw)) {
+  if (typeof raw !== 'string' || hasControlChar(raw) || hasUnpairedSurrogate(raw)) {
     return { ok: false, fallback: AGENT_DISPLAY_NAME_FALLBACK, reason: displayNameRejectedReason() };
   }
   const name = raw.trim();

@@ -51,17 +51,23 @@ null (the fallback is not written back as if the founder chose it). The
 composed title and `observerView` title read `Unnamed agent — Wonder Web VM N`.
 `ownerName` stays the stored name, so it is null, not the rendered fallback.
 
-A present name must be a string that is non-empty after trimming, at most
-64 Unicode code points (not UTF-16 units and not bytes), and free of control
-characters. Otherwise open refuses with `agent_display_name_rejected` and
-does not create a window. The refusal says 64 Unicode code points. Control
-characters are C0, DEL, C1, and the Unicode line and paragraph separators
-U+2028 and U+2029. An empty string and whitespace-only text are present
-names and are refused. A non-string is refused. There is no provider-word
-filter and no terminal-label filter: any registry name that passes those
-shape rules is shown exactly as given, including `Grok`, `Claude`, and
-`OpenAI`. The fallback `Unnamed agent` is not itself a provider or terminal
-label.
+A present name is trimmed with JavaScript `String.prototype.trim`: ECMAScript
+WhiteSpace plus LineTerminator. That set is U+0009, U+000A, U+000B, U+000C,
+U+000D, U+0020, U+00A0, U+1680, U+2000–U+200A, U+2028, U+2029, U+202F, U+205F,
+U+3000, and U+FEFF. U+0085 is not in the set. After trimming, the name must
+be non-empty and at most 64 Unicode code points (not UTF-16 units and not
+bytes). Otherwise open refuses with `agent_display_name_rejected` and does
+not create a window. The refusal says 64 Unicode code points.
+
+The same refusal covers C0 (U+0000–U+001F), U+007F, C1 (U+0080–U+009F),
+U+2028, and U+2029, checked on the original string before trim. An unpaired
+UTF-16 surrogate is refused. The C++
+side refuses invalid UTF-8 and UTF-8 that encodes a surrogate. An empty
+string, whitespace-only text, and a non-string are present values and are
+refused. There is no provider-word filter and no terminal-label filter: any
+registry name that passes those shape rules is shown exactly as given,
+including `Grok`, `Claude`, and `OpenAI`. The fallback `Unnamed agent` is
+not itself a provider or terminal label.
 
 Parent identity (`terminalId`, `kind`, `displayName`) is secondary metadata.
 It is not the title and it is not an authorization key.
