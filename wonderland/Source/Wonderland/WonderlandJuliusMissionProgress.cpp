@@ -13,13 +13,14 @@ namespace WonderlandJuliusMissionLogic
 		constexpr std::string_view ProgressServerRunIdPrefix = "run:";
 		constexpr std::size_t ProgressServerRunIdHexLength = 24;
 		constexpr std::size_t ProgressTraceStatusMax = 32;
+		constexpr std::uint64_t ProgressMsPerDay = 86400000;
 
 		bool ProgressIsLowerHexDigit(char Character)
 		{
 			return (Character >= '0' && Character <= '9') || (Character >= 'a' && Character <= 'f');
 		}
 
-		/** A status string is echoed into a trace line only when it is short upper-case snake: never free text. */
+		/** A status string is echoed into a trace line only when it is short letters-and-underscore: never free text. */
 		std::string ProgressTraceStatus(std::string_view Status)
 		{
 			if (Status.empty() || Status.size() > ProgressTraceStatusMax)
@@ -28,12 +29,49 @@ namespace WonderlandJuliusMissionLogic
 			}
 			for (const char Character : Status)
 			{
-				if (!((Character >= 'A' && Character <= 'Z') || Character == '_'))
+				if (!((Character >= 'A' && Character <= 'Z') || (Character >= 'a' && Character <= 'z') || Character == '_'))
 				{
 					return "-";
 				}
 			}
 			return std::string(Status);
+		}
+
+		bool ProgressDigits(std::string_view Text, std::size_t Begin, std::size_t Count, std::uint32_t& Out)
+		{
+			Out = 0;
+			for (std::size_t Index = Begin; Index < Begin + Count; ++Index)
+			{
+				const char Character = Text[Index];
+				if (Character < '0' || Character > '9')
+				{
+					return false;
+				}
+				Out = Out * 10 + static_cast<std::uint32_t>(Character - '0');
+			}
+			return true;
+		}
+
+		bool ProgressIsLeapYear(std::uint32_t Year)
+		{
+			return (Year % 4 == 0 && Year % 100 != 0) || Year % 400 == 0;
+		}
+
+		/** Days from 1970-01-01 to Year-Month-Day (proleptic Gregorian; Year >= 1970, a valid date). */
+		std::uint64_t ProgressDaysSinceEpoch(std::uint32_t Year, std::uint32_t Month, std::uint32_t Day)
+		{
+			static constexpr std::uint32_t DaysBeforeMonth[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
+			std::uint64_t Days = 0;
+			for (std::uint32_t Each = 1970; Each < Year; ++Each)
+			{
+				Days += ProgressIsLeapYear(Each) ? 366 : 365;
+			}
+			Days += DaysBeforeMonth[Month - 1];
+			if (Month > 2 && ProgressIsLeapYear(Year))
+			{
+				Days += 1;
+			}
+			return Days + (Day - 1);
 		}
 
 		bool ProgressIsReadable(const FStatusAnswer& Fields)
@@ -60,6 +98,43 @@ namespace WonderlandJuliusMissionLogic
 		return true;
 	}
 
+	bool ParseBridgeUtcTimestampMs(std::string_view Text, std::uint64_t& OutMs)
+	{
+		// "YYYY-MM-DDTHH:MM:SSZ" (20) or "YYYY-MM-DDTHH:MM:SS.sssZ" (24), nothing else.
+		if (Text.size() != 20 && Text.size() != 24)
+		{
+			return false;
+		}
+		if (Text[4] != '-' || Text[7] != '-' || Text[10] != 'T' || Text[13] != ':' || Text[16] != ':'
+			|| Text[Text.size() - 1] != 'Z')
+		{
+			return false;
+		}
+		std::uint32_t Year = 0, Month = 0, Day = 0, Hour = 0, Minute = 0, Second = 0, Milli = 0;
+		if (!ProgressDigits(Text, 0, 4, Year) || !ProgressDigits(Text, 5, 2, Month) || !ProgressDigits(Text, 8, 2, Day)
+			|| !ProgressDigits(Text, 11, 2, Hour) || !ProgressDigits(Text, 14, 2, Minute) || !ProgressDigits(Text, 17, 2, Second))
+		{
+			return false;
+		}
+		if (Text.size() == 24 && (Text[19] != '.' || !ProgressDigits(Text, 20, 3, Milli)))
+		{
+			return false;
+		}
+		static constexpr std::uint32_t DaysInMonth[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+		if (Year < 1970 || Month < 1 || Month > 12 || Day < 1 || Hour > 23 || Minute > 59 || Second > 59)
+		{
+			return false;
+		}
+		const std::uint32_t MonthDays = DaysInMonth[Month - 1] + ((Month == 2 && ProgressIsLeapYear(Year)) ? 1u : 0u);
+		if (Day > MonthDays)
+		{
+			return false;
+		}
+		OutMs = ProgressDaysSinceEpoch(Year, Month, Day) * ProgressMsPerDay
+			+ ((static_cast<std::uint64_t>(Hour) * 60 + Minute) * 60 + Second) * 1000 + Milli;
+		return true;
+	}
+
 	bool IsTerminalProgress(EMissionProgress State)
 	{
 		switch (State)
@@ -68,12 +143,15 @@ namespace WonderlandJuliusMissionLogic
 		case EMissionProgress::Failed:
 		case EMissionProgress::Refused:
 		case EMissionProgress::DispatchFailed:
+		case EMissionProgress::NotStarted:
 		case EMissionProgress::RunIdMismatch:
 		case EMissionProgress::AnswerInvalid:
 		case EMissionProgress::PollLimitReached:
 			return true;
 		case EMissionProgress::AwaitingDispatchAnswer:
 		case EMissionProgress::AdmittedHeld:
+		case EMissionProgress::OperatorStarted:
+		case EMissionProgress::DispatchUnconfirmed:
 		case EMissionProgress::Dispatched:
 		case EMissionProgress::Running:
 		case EMissionProgress::Paused:
@@ -87,10 +165,15 @@ namespace WonderlandJuliusMissionLogic
 	{
 		if (Vocabulary == EStatusVocabulary::Admission)
 		{
-			// admission-store.ts AdmissionState (#407 dd0153a0), exact bytes.
-			if (Status == "RESERVED" || Status == "ADMISSION_HELD" || Status == "LEDGER_UNWRITTEN")
+			// admission-store.ts AdmissionState (#407 dd0153a0) and BRIDGE's status-route words (P9), exact bytes.
+			if (Status == "RESERVED" || Status == "ADMISSION_HELD" || Status == "LEDGER_UNWRITTEN"
+				|| Status == BridgeAwaitingOperatorState)
 			{
 				return EMissionProgress::AdmittedHeld;
+			}
+			if (Status == BridgeDispatchedState)
+			{
+				return EMissionProgress::OperatorStarted;
 			}
 			if (Status == "INTERRUPTED" || Status == "FAILED")
 			{
@@ -129,7 +212,8 @@ namespace WonderlandJuliusMissionLogic
 
 	FPollDecision NextPoll(std::uint32_t PollsSent, EPollPhase Phase, std::uint64_t PhaseWatchedMs)
 	{
-		const std::uint64_t Budget = Phase == EPollPhase::Run ? PollRunWatchMs : PollAdmissionWatchMs;
+		const std::uint64_t Budget = Phase == EPollPhase::Run ? PollRunWatchMs
+			: Phase == EPollPhase::Dispatch ? PollDispatchWatchMs : PollHoldWatchMs;
 		std::uint64_t Delay = PollBaseDelayMs;
 		if (PhaseWatchedMs >= PollSlowAfterMs)
 		{
@@ -201,7 +285,7 @@ namespace WonderlandJuliusMissionLogic
 				return Move(EProgressEvent::RunIdMismatched, EMissionProgress::RunIdMismatch, &Fields);
 			}
 			ServerRunId = std::string(Fields.ServerRunId);
-			return Move(EProgressEvent::Admitted, ProgressFromStatus(EStatusVocabulary::Admission, Fields.Status), &Fields);
+			return ApplyAdmission(EProgressEvent::Admitted, Fields);
 		}
 		// After Accepted. Only a late answer to an earlier send of the same pair can arrive here; it never re-opens
 		// anything. A readable one is checked against the pinned ids and applied like a poll.
@@ -223,10 +307,30 @@ namespace WonderlandJuliusMissionLogic
 
 	EMissionProgress FMissionProgressTracker::ApplyAdmission(EProgressEvent Event, const FStatusAnswer& Fields)
 	{
-		if (bJuliusStatusSeen)
+		const bool bSaysDispatched = Fields.Status == BridgeDispatchedState;
+		if (bJuliusStatusSeen || (bDispatchReported && (bDispatchConfirmed || !bSaysDispatched)))
 		{
-			// P8: Julius has reported this run; the admission vocabulary can no longer move it, nor end it.
+			// P8: Julius has reported this run; P9: the bridge has reported its dispatch. The admission vocabulary can
+			// no longer move it back, nor end it, and a later dispatchedAt never restarts the window.
 			return Move(EProgressEvent::AdmissionAnswerLogged, State, &Fields);
+		}
+		if (bSaysDispatched)
+		{
+			bDispatchReported = true;
+			std::uint64_t DispatchedAtMs = 0;
+			if (!ParseBridgeUtcTimestampMs(Fields.DispatchedAt, DispatchedAtMs))
+			{
+				// P9: fail closed. Dispatched, but not when: no window starts; the hold window keeps running.
+				return Move(Event, EMissionProgress::DispatchUnconfirmed, &Fields);
+			}
+			bDispatchConfirmed = true;
+			DispatchAgeAtReportMs = Fields.ReceivedUtcMs > DispatchedAtMs ? Fields.ReceivedUtcMs - DispatchedAtMs : 0;
+			return Move(Event, EMissionProgress::OperatorStarted, &Fields);
+		}
+		if (Fields.Cause == BridgeOperatorWindowExpiredCause)
+		{
+			// P9: the operator window expired before any dispatch: not started, never DispatchFailed.
+			return Move(Event, EMissionProgress::NotStarted, &Fields);
 		}
 		return Move(Event, ProgressFromStatus(EStatusVocabulary::Admission, Fields.Status), &Fields);
 	}
@@ -288,10 +392,30 @@ namespace WonderlandJuliusMissionLogic
 			}
 			PhaseWatchedMs = WatchedMs >= RunPhaseStartMs ? WatchedMs - RunPhaseStartMs : 0;
 		}
-		const FPollDecision Decision = NextPoll(PollsSent, PollPhase(), PhaseWatchedMs);
+		else if (bDispatchConfirmed)
+		{
+			if (!bDispatchPhaseStarted)
+			{
+				// P9: the dispatch window starts at BRIDGE's dispatchedAt: now, backdated by the dispatch's age when
+				// the answer arrived, but never before the first Accepted answer (WatchedMs 0).
+				bDispatchPhaseStarted = true;
+				DispatchPhaseStartMs = WatchedMs - (DispatchAgeAtReportMs < WatchedMs ? DispatchAgeAtReportMs : WatchedMs);
+			}
+			PhaseWatchedMs = WatchedMs >= DispatchPhaseStartMs ? WatchedMs - DispatchPhaseStartMs : 0;
+		}
+		const EPollPhase Phase = PollPhase();
+		const FPollDecision Decision = NextPoll(PollsSent, Phase, PhaseWatchedMs);
 		if (Decision.Step == EPollStep::Stop)
 		{
-			Move(EProgressEvent::PollLimitReached, EMissionProgress::PollLimitReached, nullptr);
+			if (Phase == EPollPhase::Hold && State == EMissionProgress::AdmittedHeld)
+			{
+				// P5: the operator never started the run inside the hold window: neutral, never DispatchFailed.
+				Move(EProgressEvent::HoldWindowExpired, EMissionProgress::NotStarted, nullptr);
+			}
+			else
+			{
+				Move(EProgressEvent::PollLimitReached, EMissionProgress::PollLimitReached, nullptr);
+			}
 		}
 		return Decision;
 	}
@@ -301,7 +425,9 @@ namespace WonderlandJuliusMissionLogic
 		switch (State)
 		{
 		case EMissionProgress::AwaitingDispatchAnswer: return "Sent \xE2\x80\x94 waiting for the bridge to answer";
-		case EMissionProgress::AdmittedHeld: return "Admitted \xE2\x80\x94 waiting for the paid run";
+		case EMissionProgress::AdmittedHeld: return "Waiting for the operator to start the run";
+		case EMissionProgress::OperatorStarted: return "The operator started the run \xE2\x80\x94 waiting for Julius to report";
+		case EMissionProgress::DispatchUnconfirmed: return "Can't confirm when the run was started \xE2\x80\x94 still checking with the bridge";
 		case EMissionProgress::Dispatched: return "Handed to Julius \xE2\x80\x94 waiting for it to start";
 		case EMissionProgress::Running: return "Julius is working on the mission";
 		case EMissionProgress::Paused: return "Julius has paused the mission \xE2\x80\x94 waiting";
@@ -310,6 +436,7 @@ namespace WonderlandJuliusMissionLogic
 		case EMissionProgress::Failed: return "Julius reports the mission did not finish";
 		case EMissionProgress::Refused: return "The bridge refused the request \xE2\x80\x94 nothing was started";
 		case EMissionProgress::DispatchFailed: return "The bridge ended this request before Julius reported a run";
+		case EMissionProgress::NotStarted: return "Not started \xE2\x80\x94 no operator start was reported in time; nothing will be resent";
 		case EMissionProgress::RunIdMismatch: return "Stopped \xE2\x80\x94 the bridge named a different run; nothing will be resent";
 		case EMissionProgress::AnswerInvalid: return "Stopped \xE2\x80\x94 the bridge's answer could not be checked; nothing will be resent";
 		case EMissionProgress::PollLimitReached: return "Stopped checking \xE2\x80\x94 the mission may still be going; ask the bridge";
@@ -323,6 +450,8 @@ namespace WonderlandJuliusMissionLogic
 		{
 		case EMissionProgress::AwaitingDispatchAnswer: return "awaiting_dispatch_answer";
 		case EMissionProgress::AdmittedHeld: return "admitted_held";
+		case EMissionProgress::OperatorStarted: return "operator_started";
+		case EMissionProgress::DispatchUnconfirmed: return "dispatch_unconfirmed";
 		case EMissionProgress::Dispatched: return "dispatched";
 		case EMissionProgress::Running: return "running";
 		case EMissionProgress::Paused: return "paused";
@@ -331,6 +460,7 @@ namespace WonderlandJuliusMissionLogic
 		case EMissionProgress::Failed: return "failed";
 		case EMissionProgress::Refused: return "refused";
 		case EMissionProgress::DispatchFailed: return "dispatch_failed";
+		case EMissionProgress::NotStarted: return "not_started";
 		case EMissionProgress::RunIdMismatch: return "run_id_mismatch";
 		case EMissionProgress::AnswerInvalid: return "answer_invalid";
 		case EMissionProgress::PollLimitReached: return "poll_limit_reached";
@@ -355,6 +485,7 @@ namespace WonderlandJuliusMissionLogic
 		case EProgressEvent::AnswerRejected: return "answer_rejected";
 		case EProgressEvent::IgnoredAfterTerminal: return "ignored_after_terminal";
 		case EProgressEvent::PollLimitReached: return "poll_limit_reached";
+		case EProgressEvent::HoldWindowExpired: return "hold_window_expired";
 		}
 		return "unknown";
 	}
