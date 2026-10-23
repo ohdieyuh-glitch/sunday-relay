@@ -62,6 +62,12 @@ export interface AdmissionLedgerRow {
   readonly receivedAt: string;
   readonly ledgerRef: string;
   readonly resultSha256: null;
+  /**
+   * Present on a file row. `LEDGER_UNWRITTEN` is the durable reservation left
+   * when the completion write failed. Absent means the in-memory ledger,
+   * which restores as `ADMISSION_HELD`.
+   */
+  readonly state?: 'ADMISSION_HELD' | 'LEDGER_UNWRITTEN';
 }
 
 export interface AdmissionLedger {
@@ -338,9 +344,9 @@ function runFromRow(row: AdmissionLedgerRow): AdmissionRun {
       submitted: false,
       gatesRemaining: GATES_REMAINING,
     },
-    state: 'ADMISSION_HELD',
+    state: row.state === 'LEDGER_UNWRITTEN' ? 'LEDGER_UNWRITTEN' : 'ADMISSION_HELD',
     ledgerAttempted: true,
-    ledgerWritten: true,
+    ledgerWritten: row.state !== 'LEDGER_UNWRITTEN',
     resultSha256: row.resultSha256,
     resultHashConflicts: 0,
   };

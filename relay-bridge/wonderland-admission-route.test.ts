@@ -123,6 +123,27 @@ describe('POST /wonderland/julius/dispatch', () => {
     }
   });
 
+  it('a second opener gets 503 while the writer lock is held', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wonderland-admission-lock-'));
+    const file = join(dir, 'admission.json');
+    const holder = createFileAdmissionLedger(file);
+    try {
+      const ports = createWonderlandAdmissionService({
+        env: env({ JULIUS_WONDERLAND_ADMISSION_STORE: file }),
+        operatorToken: 'operator-token',
+        verifyNativeSession: () => ({ playerId: 'founder', projectId: 'project-1', sessionId: 'sess-1' }),
+        readWorkflowText: () => null,
+      });
+      const result = await handleWonderlandAdmissionRoute(request(), ports);
+      expect(result?.status).toBe(503);
+      expect(kind(result?.body)).toBe('julius_dispatch_unavailable');
+      ports.close();
+    } finally {
+      holder.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('a corrupt store file is 503 and the bytes stay', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'wonderland-admission-corrupt-'));
     const file = join(dir, 'admission.json');
@@ -167,7 +188,11 @@ describe('POST /wonderland/julius/dispatch', () => {
       expect(second?.status).toBe(200);
       expect((second?.body as { data: { serverRunId: string; state: string } }).data.serverRunId).toBe(`run:${'a'.repeat(24)}`);
       expect((second?.body as { data: { state: string } }).data.state).toBe('LEDGER_UNWRITTEN');
-      expect(readdirSync(dir).includes('admission.json')).toBe(false);
+      const parked = JSON.parse(readFileSync(file, 'utf8')) as { rows: { state: string; serverRunId: string }[] };
+      expect(parked.rows).toEqual([expect.objectContaining({
+        state: 'LEDGER_UNWRITTEN',
+        serverRunId: `run:${'a'.repeat(24)}`,
+      })]);
     } finally {
       ledger.close();
       rmSync(dir, { recursive: true, force: true });

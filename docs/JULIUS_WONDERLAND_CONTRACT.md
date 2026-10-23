@@ -264,10 +264,11 @@ not know, answers 503 and the bytes stay as they are.
 
 A process that shuts down and opens that same file replays the pair. The
 `serverRunId`, the state, and the caps are the ones in the file. The replay
-does not mint a second id and does not append a second row. A ledger write
-that fails leaves the pair reserved in that process with state
-`LEDGER_UNWRITTEN`, does not publish a row, and does not try the write again.
-A resend in that process returns the same `serverRunId`.
+does not mint a second id and does not append a second row. Each row records
+`state`. The reservation is written as `LEDGER_UNWRITTEN` before the
+completion write. If that completion write fails, the file keeps
+`LEDGER_UNWRITTEN` and the same `serverRunId`. A later process replays that
+state and does not mint another id. The completion write is not tried again.
 
 `dispatched` stays false in this change by design. The founder operator claim
 tool is the only writer of the dispatched transition. This admission file

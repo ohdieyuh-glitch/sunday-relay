@@ -1,7 +1,29 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { dirname, join } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
+
+const fsLog = vi.hoisted(() => ({ ops: [] as string[] }));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    openSync(...args: Parameters<typeof actual.openSync>) {
+      const fd = actual.openSync(...args);
+      fsLog.ops.push(`open ${String(args[1])} ${String(args[0])} fd=${fd}`);
+      return fd;
+    },
+    fsyncSync(fd: number) {
+      fsLog.ops.push(`fsync ${fd}`);
+      return actual.fsyncSync(fd);
+    },
+    renameSync(from: Parameters<typeof actual.renameSync>[0], to: Parameters<typeof actual.renameSync>[1]) {
+      fsLog.ops.push(`rename ${String(from)} -> ${String(to)}`);
+      return actual.renameSync(from, to);
+    },
+  };
+});
 
 import {
   ADMISSION_FILE_SCHEMA_VERSION,
@@ -203,7 +225,91 @@ describe('the admission file', () => {
       expect(attempts).toBe(1);
       expect(minted).toBe(1);
       expect(admissions.admissionCount()).toBe(1);
-      expect(readdirSync(dir).includes('admission.json')).toBe(false);
+      const parked = JSON.parse(readFileSync(file, 'utf8')) as { rows: { state: string; serverRunId: string }[] };
+      expect(parked.rows).toEqual([expect.objectContaining({
+        state: 'LEDGER_UNWRITTEN',
+        serverRunId: first.run.serverRunId,
+      })]);
+      ledger.close();
+
+      let remints = 0;
+      const reopened = createFileAdmissionLedger(file);
+      const restarted = createWonderlandAdmissionStore({
+        ledger: reopened,
+        dailyCap: 2,
+        missionCap: 2,
+        mintServerRunId: () => {
+          remints += 1;
+          throw new Error('mint_on_unwritten_restart');
+        },
+      });
+      const replay = await restarted.admit(request());
+      if (!replay.ok) throw new Error('expected the parked pair');
+      expect(replay.httpStatus).toBe(200);
+      expect(replay.run.state).toBe('LEDGER_UNWRITTEN');
+      expect(replay.run.serverRunId).toBe(first.run.serverRunId);
+      expect(replay.run.ledgerWritten).toBe(false);
+      expect(remints).toBe(0);
+      expect(restarted.admissionCount()).toBe(1);
+      const still = JSON.parse(readFileSync(file, 'utf8')) as { rows: { state: string }[] };
+      expect(still.rows).toEqual([expect.objectContaining({ state: 'LEDGER_UNWRITTEN' })]);
+      reopened.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a data write fsyncs a temp file before renaming it onto the store', async () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    const ledger = createFileAdmissionLedger(file);
+    fsLog.ops.length = 0;
+    try {
+      const created = await createWonderlandAdmissionStore({
+        ledger, dailyCap: 2, missionCap: 2, mintServerRunId: () => `run:${'1'.padStart(24, '0')}`,
+      }).admit(request());
+      if (!created.ok) throw new Error('expected an admission');
+      const renames = fsLog.ops
+        .map((op, index) => ({ op, index }))
+        .filter(({ op }) => op.startsWith('rename ') && op.includes(`${file}.`) && op.endsWith(` -> ${file}`));
+      expect(renames.length).toBeGreaterThan(0);
+      for (const { op, index } of renames) {
+        const from = op.slice('rename '.length, op.indexOf(' -> '));
+        const opened = [...fsLog.ops.slice(0, index)].reverse().find((item) => item.startsWith('open wx ') && item.includes(from));
+        expect(opened, op).toBeTruthy();
+        const fd = opened?.match(/fd=(\d+)/)?.[1];
+        const between = fsLog.ops.slice(fsLog.ops.lastIndexOf(opened ?? '', index), index);
+        expect(between, op).toContain(`fsync ${fd}`);
+      }
+    } finally {
+      ledger.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fsyncs the directory after the rename', async () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    const ledger = createFileAdmissionLedger(file);
+    fsLog.ops.length = 0;
+    try {
+      const created = await createWonderlandAdmissionStore({
+        ledger, dailyCap: 2, missionCap: 2, mintServerRunId: () => `run:${'2'.padStart(24, '0')}`,
+      }).admit(request());
+      if (!created.ok) throw new Error('expected an admission');
+      const renames = fsLog.ops
+        .map((op, index) => ({ op, index }))
+        .filter(({ op }) => op.startsWith('rename ') && op.endsWith(` -> ${file}`));
+      expect(renames.length).toBeGreaterThan(0);
+      for (const { index } of renames) {
+        const after = fsLog.ops.slice(index + 1);
+        const nextRename = after.findIndex((item) => item.startsWith('rename '));
+        const window = nextRename === -1 ? after : after.slice(0, nextRename);
+        const opened = window.find((item) => item.startsWith(`open r ${dir} `) || item.startsWith(`open r ${dirname(file)} `));
+        expect(opened, fsLog.ops.slice(index).join('\n')).toBeTruthy();
+        const fd = opened?.match(/fd=(\d+)/)?.[1];
+        expect(window.slice(window.indexOf(opened ?? '')), opened).toContain(`fsync ${fd}`);
+      }
     } finally {
       ledger.close();
       rmSync(dir, { recursive: true, force: true });

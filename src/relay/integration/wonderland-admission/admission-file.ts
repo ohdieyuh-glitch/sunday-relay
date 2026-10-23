@@ -26,7 +26,7 @@ export const ADMISSION_FILE_SCHEMA_VERSION = 1;
 const RECEIVED_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 const ROW_KEYS = [
   'phase', 'runId', 'serverRunId', 'keyHash', 'dispatchId', 'missionId', 'requestId',
-  'clientLogSha256', 'clientUiActionUtc', 'receivedAt', 'ledgerRef', 'resultSha256',
+  'clientLogSha256', 'clientUiActionUtc', 'receivedAt', 'ledgerRef', 'resultSha256', 'state',
 ] as const;
 
 export type AdmissionFileClosedCode = 'lock_held' | 'corrupt' | 'unwritable' | 'unwritten';
@@ -114,14 +114,19 @@ export function createFileAdmissionLedger(
     append(row) {
       const write = pending.then(() => {
         if (closed) throw new AdmissionFileClosedError('lock_held');
-        const next = [...rows, row];
+        // The reservation hits disk before the completion write. A failure of
+        // `persist` leaves this LEDGER_UNWRITTEN row for the next process.
+        const reserved = [...rows, stamped(row, 'LEDGER_UNWRITTEN')];
+        writeAdmissionFileAtomic(resolved, documentText(reserved));
+        rows = reserved;
         try {
-          persist(resolved, documentText(next));
+          const held = [...reserved.slice(0, -1), stamped(row, 'ADMISSION_HELD')];
+          persist(resolved, documentText(held));
+          rows = held;
         } catch (error) {
-          if (isAdmissionFileClosed(error)) throw error;
+          if (isAdmissionFileClosed(error) && error.code !== 'unwritten') throw error;
           throw new AdmissionFileClosedError('unwritten');
         }
-        rows = next;
       });
       pending = write.then(() => undefined, () => undefined);
       return write;
@@ -132,6 +137,10 @@ export function createFileAdmissionLedger(
       releaseLock(lockPath);
     },
   };
+}
+
+function stamped(row: AdmissionLedgerRow, state: 'ADMISSION_HELD' | 'LEDGER_UNWRITTEN'): AdmissionLedgerRow {
+  return { ...row, state };
 }
 
 function documentText(rows: readonly AdmissionLedgerRow[]): string {
@@ -276,6 +285,9 @@ function parseRow(value: unknown): AdmissionLedgerRow {
     throw new AdmissionFileClosedError('corrupt');
   }
   if (row.resultSha256 !== null) throw new AdmissionFileClosedError('corrupt');
+  if (row.state !== 'ADMISSION_HELD' && row.state !== 'LEDGER_UNWRITTEN') {
+    throw new AdmissionFileClosedError('corrupt');
+  }
   return {
     phase: 'run_admission',
     runId: row.runId,
@@ -289,5 +301,6 @@ function parseRow(value: unknown): AdmissionLedgerRow {
     receivedAt: row.receivedAt,
     ledgerRef: row.ledgerRef,
     resultSha256: null,
+    state: row.state,
   };
 }
