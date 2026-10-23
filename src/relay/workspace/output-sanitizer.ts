@@ -16,7 +16,9 @@ const SECRET_OUTPUT_PATTERNS: RegExp[] = [
   /gh[pousr]_[A-Za-z0-9]{20,}/g,
   /xox[baprs]-[A-Za-z0-9-]{10,}/g,
   /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g,
-  /\b(?:api[-_]?key|secret|password|token)\s*[:=]\s*\S{8,}/gi,
+  // No leading word boundary: a word character glued to the key (`xpassword=`) is still an assignment.
+  // The separator keeps ordinary words (`passwordless`, `tokenizer`, `apikey_docs`). The value stays 8 or more non-whitespace characters.
+  /(?:api[-_]?key|secret|password|token)\s*[:=]\s*\S{8,}/gi,
 ];
 
 export const REDACTION_MARK = '[REDACTED:secret-shape]';
