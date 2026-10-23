@@ -1,0 +1,1016 @@
+
+===== M1-per-run-env-can-raise expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 6ms
+   → expected { applicable: true, …(3) } to deeply equal { applicable: true, …(3) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.01 of verified run-1 actual is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 5ms
+   → expected { phase: 'run_start', …(26) } to match object { budgetCapUsd: 30, …(3) }
+(23 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00 2ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain 1ms
+   → expected { ok: false, status: 409, …(1) } to match object { status: 409, …(1) }
+(1 matching property omitted from actual)
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60 1ms
+   → expected { ok: false, status: 409, …(1) } to match object { ok: true }
+(2 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 13 passed (17)
+   Start at  07:17:48
+   Duration  279ms (transform 135ms, setup 0ms, import 162ms, tests 23ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them
+AssertionError: expected { applicable: true, …(3) } to deeply equal { applicable: true, …(3) }
+
+- Expected
++ Received
+
+  {
+    "applicable": true,
+    "combinedUsdMicros": 60000000,
+    "invalidEnv": false,
+-   "perRunUsdMicros": 30000000,
++   "perRunUsdMicros": 100000000,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:50:107
+     48|
+     49|   it('env may lower the frozen ceilings and may not raise them', () =>…
+     50|     expect(resolveMissionCeilings(MISSION, { perRunUsd: 100, combinedU…
+       |                                                                                                           ^
+     51|       applicable: true, invalidEnv: false, perRunUsdMicros: PER_RUN_US…
+     52|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run
+AssertionError: expected { phase: 'run_start', …(26) } to match object { budgetCapUsd: 30, …(3) }
+(23 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "budgetCapUsd": 30,
++   "budgetCapUsd": 100,
+    "combinedCapUsdMicros": 60000000,
+-   "perRunCapUsdMicros": 30000000,
++   "perRunCapUsdMicros": 100000000,
+    "run1ActualUsdMicros": null,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:237:19
+    235|     await h.controller.whenIdle();
+    236|     const start = (await h.ledger.rows()).find((row) => row.phase === …
+    237|     expect(start).toMatchObject({ budgetCapUsd: 30, perRunCapUsdMicros…
+       |                   ^
+    238|   });
+    239|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { status: 409, …(1) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "julius_dispatch_repeat_above_per_run",
++   "code": "julius_dispatch_repeat_combined_ceiling",
+    "status": 409,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:264:58
+    262|     expect(await above.dispatch('run:1', 'key-0000001')).toMatchObject…
+    263|     await above.controller.whenIdle();
+    264|     expect(await above.dispatch('run:2', 'key-0000002')).toMatchObject…
+       |                                                          ^
+    265|     expect(above.calls).toHaveLength(3);
+    266|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { ok: true }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
++   "ok": false,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:300:59
+    298|     expect(await raised.dispatch('run:1', 'key-0000001')).toMatchObjec…
+    299|     await raised.controller.whenIdle();
+    300|     expect(await raised.dispatch('run:2', 'key-0000002')).toMatchObjec…
+       |                                                           ^
+    301|     const start = (await raised.ledger.rows()).filter((row) => row.pha…
+    302|     expect(start).toMatchObject({ combinedCapUsdMicros: COMBINED_USD_M…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+===== M2-combined-env-can-raise expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 2ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 6ms
+   → expected { applicable: true, …(3) } to deeply equal { applicable: true, …(3) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.01 of verified run-1 actual is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain 2ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60 2ms
+   → expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 15 passed (17)
+   Start at  07:17:49
+   Duration  275ms (transform 135ms, setup 0ms, import 162ms, tests 22ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them
+AssertionError: expected { applicable: true, …(3) } to deeply equal { applicable: true, …(3) }
+
+- Expected
++ Received
+
+  {
+    "applicable": true,
+-   "combinedUsdMicros": 60000000,
++   "combinedUsdMicros": 100000000,
+    "invalidEnv": false,
+    "perRunUsdMicros": 30000000,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:50:107
+     48|
+     49|   it('env may lower the frozen ceilings and may not raise them', () =>…
+     50|     expect(resolveMissionCeilings(MISSION, { perRunUsd: 100, combinedU…
+       |                                                                                                           ^
+     51|       applicable: true, invalidEnv: false, perRunUsdMicros: PER_RUN_US…
+     52|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60
+AssertionError: expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "julius_dispatch_repeat_combined_ceiling",
+-   "status": 409,
++   "status": 202,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:292:60
+    290|     expect(await lowered.dispatch('run:1', 'key-0000001')).toMatchObje…
+    291|     await lowered.controller.whenIdle();
+    292|     expect(await lowered.dispatch('run:2', 'key-0000002')).toMatchObje…
+       |                                                            ^
+    293|
+    294|     const raised = routeHarness({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+===== M3-worst-case-is-estimate-envelope expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 5ms
+   → expected 30000 to be 30000000 // Object.is equality
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.01 of verified run-1 actual is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00 4ms
+   → expected { phase: 'run_start', …(26) } to match object { run1ActualUsdMicros: 30000000, …(2) }
+(24 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain 3ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60 2ms
+   → expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 14 passed (17)
+   Start at  07:17:50
+   Duration  283ms (transform 139ms, setup 0ms, import 166ms, tests 23ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it
+AssertionError: expected 30000 to be 30000000 // Object.is equality
+
+- Expected
++ Received
+
+- 30000000
++ 30000
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:64:118
+     62|
+     63|   it('the repeat worst-case bound is the per-run cap; leg estimates ca…
+     64|     expect(repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_RUN_USD_…
+       |                                                                                                                      ^
+     65|     expect(repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_RUN_USD_…
+     66|     expect(repeatWorstCaseUsdMicros({ perRunCapUsdMicros: 10_000_000, …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00
+AssertionError: expected { phase: 'run_start', …(26) } to match object { run1ActualUsdMicros: 30000000, …(2) }
+(24 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "combinedCapUsdMicros": 60000000,
+-   "repeatWorstCaseUsdMicros": 30000000,
++   "repeatWorstCaseUsdMicros": 3000000,
+    "run1ActualUsdMicros": 30000000,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:251:23
+    249|     const starts = (await h.ledger.rows()).filter((row) => row.phase =…
+    250|     expect(starts).toHaveLength(2);
+    251|     expect(starts[1]).toMatchObject({
+       |                       ^
+    252|       run1ActualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicro…
+    253|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60
+AssertionError: expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "julius_dispatch_repeat_combined_ceiling",
+-   "status": 409,
++   "status": 202,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:292:60
+    290|     expect(await lowered.dispatch('run:1', 'key-0000001')).toMatchObje…
+    291|     await lowered.controller.whenIdle();
+    292|     expect(await lowered.dispatch('run:2', 'key-0000002')).toMatchObje…
+       |                                                            ^
+    293|
+    294|     const raised = routeHarness({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+===== M4-exact-per-run-refused expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted 6ms
+   → expected { admit: false, …(1) } to deeply equal { admit: true, …(4) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.01 of verified run-1 actual is refused 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted 1ms
+   → expected { admit: false, …(1) } to deeply equal { admit: true, …(4) }
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused 1ms
+   → expected { admit: false, …(1) } to deeply equal { admit: false, …(1) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 4ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00 2ms
+   → expected { ok: false, status: 409, …(1) } to match object { ok: true, status: 202 }
+(1 matching property omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain 2ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60 1ms
+   → expected { ok: false, status: 409, …(1) } to match object { status: 409, …(1) }
+(1 matching property omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 12 passed (17)
+   Start at  07:17:50
+   Duration  277ms (transform 134ms, setup 0ms, import 161ms, tests 24ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted
+AssertionError: expected { admit: false, …(1) } to deeply equal { admit: true, …(4) }
+
+- Expected
++ Received
+
+  {
+-   "actualUsdMicros": 30000000,
+-   "admit": true,
+-   "combinedCapUsdMicros": 60000000,
+-   "perRunCapUsdMicros": 30000000,
+-   "repeatWorstCaseUsdMicros": 1,
++   "admit": false,
++   "reason": "run1_actual_above_per_run",
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:72:114
+     70|
+     71|   it('$30.00 of verified run-1 actual is admitted', () => {
+     72|     expect(decideCombinedCeiling({ actualUsdMicros: PER_RUN_USD_MICROS…
+       |                                                                                                                  ^
+     73|       admit: true, actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCas…
+     74|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted
+AssertionError: expected { admit: false, …(1) } to deeply equal { admit: true, …(4) }
+
+- Expected
++ Received
+
+  {
+-   "actualUsdMicros": 30000000,
+-   "admit": true,
+-   "combinedCapUsdMicros": 60000000,
+-   "perRunCapUsdMicros": 30000000,
+-   "repeatWorstCaseUsdMicros": 30000000,
++   "admit": false,
++   "reason": "run1_actual_above_per_run",
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:86:9
+     84|     expect(decideCombinedCeiling({
+     85|       actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: P…
+     86|     })).toEqual({
+       |         ^
+     87|       admit: true, actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCas…
+     88|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused
+AssertionError: expected { admit: false, …(1) } to deeply equal { admit: false, …(1) }
+
+- Expected
++ Received
+
+  {
+    "admit": false,
+-   "reason": "combined_ceiling_exceeded",
++   "reason": "run1_actual_above_per_run",
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:94:9
+     92|     expect(decideCombinedCeiling({
+     93|       actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: P…
+     94|     })).toEqual({ admit: false, reason: 'combined_ceiling_exceeded' });
+       |         ^
+     95|   });
+     96|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { ok: true, status: 202 }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
+-   "status": 202,
++   "ok": false,
++   "status": 409,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:247:54
+    245|     expect(await h.dispatch('run:1', 'key-0000001')).toMatchObject({ o…
+    246|     await h.controller.whenIdle();
+    247|     expect(await h.dispatch('run:2', 'key-0000002')).toMatchObject({ o…
+       |                                                      ^
+    248|     await h.controller.whenIdle();
+    249|     const starts = (await h.ledger.rows()).filter((row) => row.phase =…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { status: 409, …(1) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "julius_dispatch_repeat_combined_ceiling",
++   "code": "julius_dispatch_repeat_above_per_run",
+    "status": 409,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:292:60
+    290|     expect(await lowered.dispatch('run:1', 'key-0000001')).toMatchObje…
+    291|     await lowered.controller.whenIdle();
+    292|     expect(await lowered.dispatch('run:2', 'key-0000002')).toMatchObje…
+       |                                                            ^
+    293|
+    294|     const raised = routeHarness({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+===== M5-spend-unknown-count-ignored expect=survived actual=survived exit=0 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.01 of verified run-1 actual is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 4ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  07:17:51
+   Duration  266ms (transform 140ms, setup 0ms, import 168ms, tests 16ms, environment 0ms)
+
+
+===== M6-exact-combined-refused expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.01 of verified run-1 actual is refused 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted 6ms
+   → expected { admit: false, …(1) } to deeply equal { admit: true, …(4) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00 2ms
+   → expected { ok: false, status: 409, …(1) } to match object { ok: true, status: 202 }
+(1 matching property omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain 3ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60 2ms
+   → expected { ok: false, status: 409, …(1) } to match object { ok: true }
+(2 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 14 passed (17)
+   Start at  07:17:52
+   Duration  282ms (transform 138ms, setup 0ms, import 166ms, tests 23ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted
+AssertionError: expected { admit: false, …(1) } to deeply equal { admit: true, …(4) }
+
+- Expected
++ Received
+
+  {
+-   "actualUsdMicros": 30000000,
+-   "admit": true,
+-   "combinedCapUsdMicros": 60000000,
+-   "perRunCapUsdMicros": 30000000,
+-   "repeatWorstCaseUsdMicros": 30000000,
++   "admit": false,
++   "reason": "combined_ceiling_exceeded",
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:86:9
+     84|     expect(decideCombinedCeiling({
+     85|       actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCaseUsdMicros: P…
+     86|     })).toEqual({
+       |         ^
+     87|       admit: true, actualUsdMicros: PER_RUN_USD_MICROS, repeatWorstCas…
+     88|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { ok: true, status: 202 }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
+-   "status": 202,
++   "ok": false,
++   "status": 409,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:247:54
+    245|     expect(await h.dispatch('run:1', 'key-0000001')).toMatchObject({ o…
+    246|     await h.controller.whenIdle();
+    247|     expect(await h.dispatch('run:2', 'key-0000002')).toMatchObject({ o…
+       |                                                      ^
+    248|     await h.controller.whenIdle();
+    249|     const starts = (await h.ledger.rows()).filter((row) => row.phase =…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { ok: true }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
++   "ok": false,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:300:59
+    298|     expect(await raised.dispatch('run:1', 'key-0000001')).toMatchObjec…
+    299|     await raised.controller.whenIdle();
+    300|     expect(await raised.dispatch('run:2', 'key-0000002')).toMatchObjec…
+       |                                                           ^
+    301|     const start = (await raised.ledger.rows()).filter((row) => row.pha…
+    302|     expect(start).toMatchObject({ combinedCapUsdMicros: COMBINED_USD_M…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+===== M7-missing-cost-counts-as-zero expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.01 of verified run-1 actual is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 6ms
+   → expected { verified: true, actualUsdMicros: +0 } to deeply equal { verified: false, …(1) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 4ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00 3ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain 3ms
+   → expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 15 passed (17)
+   Start at  07:17:52
+   Duration  276ms (transform 135ms, setup 0ms, import 161ms, tests 23ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt
+AssertionError: expected { verified: true, actualUsdMicros: +0 } to deeply equal { verified: false, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "reason": "unknown_spend",
+-   "verified": false,
++   "actualUsdMicros": 0,
++   "verified": true,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:106:9
+    104|       sealed: true, orderOk: true, spendUnknownLegs: 0, openedRoles: o…
+    105|       legs: [{ role: 'architect', spend: 'usage_reported', costUsdMicr…
+    106|     })).toEqual({ verified: false, reason: 'unknown_spend' });
+       |         ^
+    107|     expect(verifyRun1Spend({
+    108|       sealed: true, orderOk: true, spendUnknownLegs: 0, openedRoles: o…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain
+AssertionError: expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "julius_dispatch_repeat_spend_unknown",
+-   "status": 409,
++   "status": 202,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:270:60
+    268|     expect(await unknown.dispatch('run:1', 'key-0000001')).toMatchObje…
+    269|     await unknown.controller.whenIdle();
+    270|     expect(await unknown.dispatch('run:2', 'key-0000002')).toMatchObje…
+       |                                                            ^
+    271|     expect(unknown.calls).toHaveLength(3);
+    272|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+===== M8-cost-safe-integer-check-removed expect=survived actual=survived exit=0 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.01 of verified run-1 actual is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  07:17:53
+   Duration  266ms (transform 136ms, setup 0ms, import 163ms, tests 16ms, environment 0ms)
+
+
+===== M9-zero-role-count-still-bounds expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 5ms
+   → expected 30000000 to be null
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.01 of verified run-1 actual is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 16 passed (17)
+   Start at  07:17:54
+   Duration  278ms (transform 137ms, setup 0ms, import 164ms, tests 21ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it
+AssertionError: expected 30000000 to be null
+
+- Expected:
+null
+
++ Received:
+30000000
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:68:115
+     66|     expect(repeatWorstCaseUsdMicros({ perRunCapUsdMicros: 10_000_000, …
+     67|     expect(repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_RUN_USD_…
+     68|     expect(repeatWorstCaseUsdMicros({ perRunCapUsdMicros: PER_RUN_USD_…
+       |                                                                                                                   ^
+     69|   });
+     70|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+===== M10-not-contacted-null-is-unknown expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.01 of verified run-1 actual is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 6ms
+   → expected { verified: false, …(1) } to deeply equal { verified: true, …(1) }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 16 passed (17)
+   Start at  07:17:54
+   Duration  271ms (transform 132ms, setup 0ms, import 159ms, tests 22ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero
+AssertionError: expected { verified: false, …(1) } to deeply equal { verified: true, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "actualUsdMicros": 12000000,
+-   "verified": true,
++   "reason": "unknown_spend",
++   "verified": false,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:139:9
+    137|         { role: 'coder', spend: 'not_contacted', costUsdMicros: null, …
+    138|       ],
+    139|     })).toEqual({ verified: true, actualUsdMicros: 12_000_000 });
+       |         ^
+    140|   });
+    141|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+===== M11-sealed-check-removed expect=survived actual=survived exit=0 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.01 of verified run-1 actual is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  07:17:55
+   Duration  257ms (transform 133ms, setup 0ms, import 161ms, tests 16ms, environment 0ms)
+
+
+===== M12-second-prior-run-allowed expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.01 of verified run-1 actual is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 6ms
+   → expected { kind: 'unverified', …(1) } to deeply equal { kind: 'repeat_already_used' }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 4ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 2ms
+   → expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 1ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 15 passed (17)
+   Start at  07:17:56
+   Duration  272ms (transform 134ms, setup 0ms, import 162ms, tests 23ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run
+AssertionError: expected { kind: 'unverified', …(1) } to deeply equal { kind: 'repeat_already_used' }
+
+- Expected
++ Received
+
+  {
+-   "kind": "repeat_already_used",
++   "kind": "unverified",
++   "reason": "missing_receipt",
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:164:18
+    162|       { phase: 'run_start', missionId: MISSION, runId: 'run-1' },
+    163|       { phase: 'run_start', missionId: MISSION, runId: 'run-2' },
+    164|     ], MISSION)).toEqual({ kind: 'repeat_already_used' });
+       |                  ^
+    165|     expect(priorSpendFromLedger([
+    166|       { phase: 'run_start', missionId: 'mission-j1-frozen', runId: 'ru…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher
+AssertionError: expected { ok: true, status: 202, …(6) } to match object { status: 409, …(1) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "code": "julius_dispatch_repeat_already_used",
+-   "status": 409,
++   "status": 202,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:314:54
+    312|     expect(await h.dispatch('run:2', 'key-0000002')).toMatchObject({ o…
+    313|     await h.controller.whenIdle();
+    314|     expect(await h.dispatch('run:3', 'key-0000003')).toMatchObject({ s…
+       |                                                      ^
+    315|     expect(h.calls).toHaveLength(6);
+    316|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+===== M13-other-mission-uses-frozen-ceiling expect=killed actual=killed exit=1 OK =====
+
+ RUN  v4.1.10 /workspace
+
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > freezes $30 per run, $60 combined, and 3 repair cycles on the mission id 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them 6ms
+   → expected { applicable: true, …(3) } to deeply equal { applicable: false }
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > the repeat worst-case bound is the per-run cap; leg estimates cannot raise or lower it 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.00 of verified run-1 actual is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > $30.01 of verified run-1 actual is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of exactly $60 is admitted 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > run-1 actual plus the repeat worst-case bound of $60.01 is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > unknown spend is refused, including a contacted leg with no dollar receipt 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > a missing receipt is refused 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > sums only integer provider receipts and treats not_contacted as zero 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > reads run-1 from ledger rows and refuses a second prior run 0ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > clamps an env budget above $30 down to the frozen per-run cap on the initial run 4ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > admits the repeat when verified run-1 actual is $30.00 and the worst case keeps the sum at $60.00 3ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses the repeat at $30.01, on unknown spend, and on a missing receipt, with no second chain 2ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a sum above a lowered combined ceiling and ignores an env value that would raise $60 1ms
+ ✓ relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > refuses a third run of this mission even when the env run cap is higher 1ms
+ × relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap 2ms
+   → expected { ok: false, status: 409, …(1) } to match object { ok: true }
+(2 matching properties omitted from actual)
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 15 passed (17)
+   Start at  07:17:56
+   Duration  274ms (transform 135ms, setup 0ms, import 162ms, tests 23ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > combined initial+repeat ceiling for julius-inworld-data-1 > env may lower the frozen ceilings and may not raise them
+AssertionError: expected { applicable: true, …(3) } to deeply equal { applicable: false }
+
+- Expected
++ Received
+
+  {
+-   "applicable": false,
++   "applicable": true,
++   "combinedUsdMicros": 60000000,
++   "invalidEnv": false,
++   "perRunUsdMicros": 30000000,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:59:119
+     57|       applicable: true, invalidEnv: false, perRunUsdMicros: 10_000_000…
+     58|     });
+     59|     expect(resolveMissionCeilings('mission-j1-frozen', { perRunUsd: 10…
+       |                                                                                                                       ^
+     60|     expect(resolveMissionCeilings(MISSION, { perRunUsd: 10, combinedUs…
+     61|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  relay-bridge/julius-dispatch-repeat-ceiling.test.ts > J1 route admits a repeat only under the frozen ceiling > leaves a different mission on the existing per-run cap
+AssertionError: expected { ok: false, status: 409, …(1) } to match object { ok: true }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
++   "ok": false,
+  }
+
+ ❯ relay-bridge/julius-dispatch-repeat-ceiling.test.ts:322:54
+    320|     expect(await h.dispatch('run:1', 'key-0000001')).toMatchObject({ o…
+    321|     await h.controller.whenIdle();
+    322|     expect(await h.dispatch('run:2', 'key-0000002')).toMatchObject({ o…
+       |                                                      ^
+    323|     await h.controller.whenIdle();
+    324|     expect(h.calls).toHaveLength(6);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+MUTANTS 13/13 MATCHED EXPECTATION
+SOURCE sha256 870090be098e32cfb49134be21dcccbf736e2d50c93e8cc14e0f964c0a4dc34f
+EXIT:0
