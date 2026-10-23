@@ -4,11 +4,15 @@ import { createHash } from 'node:crypto';
  * J1 BUNDLE STEP: the final judged message must BE the file the coder wrote, and the coder must have changed nothing else.
  * Pure functions over injected bytes and an injected file-system port: this file opens no file and spawns nothing.
  *
- * WHAT IS HASHED (M3 D1/D2). EVERYTHING under the workspace root: node_modules/ included, symlinks included (a link is recorded by its
- * TARGET, never followed). The only exclusion is a NAMED set that is EMPTY unless the caller passes `{ gitDir: '.git' }` for a repository
- * the bridge itself made; then `.git/` is not in the file list but has its OWN tree hash (`gitTreeSha256`), computed over every file in it
- * except the two names in {@link GIT_DIR_NAMED_EXCLUSIONS} (objects the bridge's own `git write-tree` adds, and the index git refreshes).
- * The exclusions in force are returned (`excluded`) and recorded with the lists. The full lists and their sha256 are returned for the ledger.
+ * WHAT IS HASHED. Every directory (including an empty one), every regular file, every symlink and every special.
+ * A file's value is the sha256 of its exact bytes. A directory's value is `dir:`. A symlink's value is `symlink:<target>` and the
+ * link is never followed. A special's value is `special:`. When the entry carries a POSIX mode, the value gains `#mode:<octal>`.
+ * An entry with no mode (a test double that did not report one) does not invent one.
+ *
+ * `.git` EXCLUSION, EXPLICIT. It applies only when the caller passes `{ gitDir: '.git' }` because the bridge itself made that
+ * repository. Then the path `.git` and every path under `.git/` leave the file list and are hashed as `gitTreeSha256`, except the
+ * names in {@link GIT_DIR_NAMED_EXCLUSIONS} (`.git/objects/` and `.git/index`). When `gitDir` is absent, `.git` is hashed in the
+ * file list like any other path. The exclusions in force are returned (`excluded`). Nothing else is skipped.
  */
 
 /** The one file the coder writes. */
@@ -46,15 +50,16 @@ export function compareJudgedToFile(judgedMessage: string, fileBytes: Uint8Array
   return { ok, judgedSha256, fileSha256, failureClass: ok ? null : J1_ARTIFACT_FILE_MISMATCH };
 }
 
-/** One thing in the workspace. A symlink carries its target and is never followed; `special` is a socket, device or other non-file. */
+/** One thing in the workspace. A symlink carries its target and is never followed; `special` is a socket, device or other non-file. `mode` is the POSIX mode when the walker reported one. */
 export type WorkspaceEntry =
-  | { readonly path: string; readonly kind: 'file' }
-  | { readonly path: string; readonly kind: 'symlink'; readonly linkTarget: string }
-  | { readonly path: string; readonly kind: 'special' };
+  | { readonly path: string; readonly kind: 'file'; readonly mode?: number }
+  | { readonly path: string; readonly kind: 'dir'; readonly mode?: number }
+  | { readonly path: string; readonly kind: 'symlink'; readonly linkTarget: string; readonly mode?: number }
+  | { readonly path: string; readonly kind: 'special'; readonly mode?: number };
 
 /** The workspace as the bundle step sees it. The real one wraps node:fs (injected by the wiring); tests use a map. */
 export interface WorkspaceFs {
-  /** EVERY entry under the workspace root (relative, forward slashes), skipping nothing: .git and node_modules are listed. */
+  /** EVERY entry under the workspace root, including empty directories. .git and node_modules are listed. */
   listEntries(): Promise<readonly WorkspaceEntry[]>;
   readFile(path: string): Promise<Uint8Array>;
 }
@@ -79,7 +84,20 @@ export interface WorkspaceSnapshot {
 
 const listHash = (files: WorkspaceHashList): string => sha256(JSON.stringify(Object.entries(files).sort()));
 
-/** every path -> sha256 of its exact bytes (links by target). Nothing is skipped except the named, recorded git exclusions. */
+/** Body plus `#mode:<octal>` when the walker reported a mode. No mode is not mode 0. */
+export function workspaceEntryValue(entry: WorkspaceEntry, fileBytes: Uint8Array | null): string {
+  const body = entry.kind === 'file' ? sha256(fileBytes ?? new Uint8Array())
+    : entry.kind === 'dir' ? 'dir:'
+      : entry.kind === 'symlink' ? `symlink:${entry.linkTarget}`
+        : 'special:';
+  return entry.mode === undefined ? body : `${body}#mode:${entry.mode.toString(8)}`;
+}
+
+function inGitTree(path: string, gitDir: string): boolean {
+  return path === gitDir || path.startsWith(`${gitDir}/`);
+}
+
+/** every path -> its value. Nothing is skipped except the named, recorded git exclusions. */
 export async function hashWorkspace(fs: WorkspaceFs, options: SnapshotOptions = {}): Promise<WorkspaceSnapshot> {
   const gitDir = options.gitDir ?? null;
   const out: Record<string, string> = {};
@@ -87,12 +105,12 @@ export async function hashWorkspace(fs: WorkspaceFs, options: SnapshotOptions = 
   let sawGit = false;
   const entries = [...(await fs.listEntries())].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   for (const entry of entries) {
-    const inGit = gitDir !== null && entry.path.startsWith(`${gitDir}/`);
+    const inGit = gitDir !== null && inGitTree(entry.path, gitDir);
     if (inGit) {
       sawGit = true;
       if (GIT_DIR_NAMED_EXCLUSIONS.some((ex) => (ex.endsWith('/') ? entry.path.startsWith(ex) : entry.path === ex))) continue;
     }
-    const value = entry.kind === 'file' ? sha256(await fs.readFile(entry.path)) : entry.kind === 'symlink' ? `symlink:${entry.linkTarget}` : 'special:';
+    const value = workspaceEntryValue(entry, entry.kind === 'file' ? await fs.readFile(entry.path) : null);
     if (inGit) gitOut[entry.path] = value; else out[entry.path] = value;
   }
   const files = Object.freeze(out);
@@ -124,7 +142,7 @@ export function onlyArtifactChanged(before: WorkspaceSnapshot, after: WorkspaceS
   const gitMoved = before.gitTreeSha256 !== after.gitTreeSha256;
   const delta: WorkspaceDelta = gitMoved ? { ...base, modified: [...base.modified, GIT_DIR_CHANGED_MARKER].sort(), changed: [...base.changed, GIT_DIR_CHANGED_MARKER].sort() } : base;
   const artifactValue = after.files[artifactPath];
-  const regular = artifactValue !== undefined && !artifactValue.startsWith('symlink:') && !artifactValue.startsWith('special:');
+  const regular = artifactValue !== undefined && !artifactValue.startsWith('symlink:') && !artifactValue.startsWith('special:') && !artifactValue.startsWith('dir:');
   return { ok: regular && delta.changed.length === 1 && delta.changed[0] === artifactPath && delta.removed.length === 0, delta };
 }
 
@@ -162,6 +180,8 @@ export interface LocalFsLike {
   readdirSync(path: string, options: { withFileTypes: true }): readonly { readonly name: string; isDirectory(): boolean; isFile(): boolean; isSymbolicLink(): boolean }[];
   readlinkSync(path: string): string;
   readFileSync(path: string): Uint8Array;
+  /** lstat, not stat: a symlink's mode is the link's, and a directory is recorded even when it is empty. */
+  lstatSync(path: string): { readonly mode: number };
 }
 
 export function createLocalWorkspaceFs(root: string, fs: LocalFsLike): WorkspaceFs {
@@ -169,11 +189,12 @@ export function createLocalWorkspaceFs(root: string, fs: LocalFsLike): Workspace
   const walk = (rel: string, out: WorkspaceEntry[]): void => {
     for (const entry of fs.readdirSync(rel === '' ? root : `${root}/${rel}`, { withFileTypes: true })) {
       const path = join(rel, entry.name);
+      const mode = fs.lstatSync(`${root}/${path}`).mode;
       /* A link is checked FIRST and never followed: a link to a directory is a link, not a directory. */
-      if (entry.isSymbolicLink()) out.push({ path, kind: 'symlink', linkTarget: fs.readlinkSync(`${root}/${path}`) });
-      else if (entry.isDirectory()) walk(path, out);
-      else if (entry.isFile()) out.push({ path, kind: 'file' });
-      else out.push({ path, kind: 'special' });
+      if (entry.isSymbolicLink()) out.push({ path, kind: 'symlink', linkTarget: fs.readlinkSync(`${root}/${path}`), mode });
+      else if (entry.isDirectory()) { out.push({ path, kind: 'dir', mode }); walk(path, out); }
+      else if (entry.isFile()) out.push({ path, kind: 'file', mode });
+      else out.push({ path, kind: 'special', mode });
     }
   };
   return {

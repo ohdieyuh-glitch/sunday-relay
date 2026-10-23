@@ -18,6 +18,23 @@ function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//gu, ' ').split(/\r?\n/u).map((l) => l.replace(/(^|\s)\/\/.*$/u, '$1')).join('\n');
 }
 
+/**
+ * Every way a module can read the process environment that the key-store scan refuses.
+ * Bracket access and a `createRequire` alias are reads, the same as `process.env`.
+ * Comment text is ignored. The returned tokens are the patterns that matched.
+ */
+export function envReadAliases(source: string): readonly string[] {
+  const src = stripComments(source);
+  const hits: string[] = [];
+  if (/\bprocess\s*\.\s*env\b/u.test(src)) hits.push('process.env');
+  if (/\bprocess\s*\[\s*['"]env['"]\s*\]/u.test(src)) hits.push("process['env']");
+  if (/\bcreateRequire\b/u.test(src)) hits.push('createRequire');
+  if (/\brequire\s*\(\s*['"]process['"]\s*\)/u.test(src)) hits.push("require('process')");
+  if (/\bglobalThis\s*(?:\.\s*process|\[\s*['"]process['"]\s*\])/u.test(src)) hits.push('globalThis.process');
+  if (/\bglobal\s*(?:\.\s*process|\[\s*['"]process['"]\s*\])/u.test(src)) hits.push('global.process');
+  return hits;
+}
+
 export function scanSource(source: string): SourceScan {
   const src = stripComments(source);
   const specs = new Set<string>();

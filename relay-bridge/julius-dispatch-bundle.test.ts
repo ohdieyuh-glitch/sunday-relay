@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -75,6 +77,12 @@ const treeFs = (tree: Tree, contents: Record<string, string> = {}) => ({
   readdirSync: (p: string) => (tree[p] ?? []).map((e) => ({ name: e.name, isDirectory: () => e.kind === 'dir', isFile: () => e.kind === 'file', isSymbolicLink: () => e.kind === 'link' })),
   readlinkSync: (p: string) => { const parent = p.slice(0, p.lastIndexOf('/')); const name = p.slice(p.lastIndexOf('/') + 1); const e = (tree[parent] ?? []).find((x) => x.name === name); if (e?.target === undefined) throw new Error('not a link'); return e.target; },
   readFileSync: (p: string): Uint8Array => enc(contents[p] ?? 'x'),
+  lstatSync: (p: string) => {
+    const parent = p.slice(0, p.lastIndexOf('/')); const name = p.slice(p.lastIndexOf('/') + 1);
+    const e = (tree[parent] ?? []).find((x) => x.name === name);
+    const mode = e?.kind === 'dir' ? 0o755 : e?.kind === 'link' ? 0o777 : 0o644;
+    return { mode };
+  },
 });
 
 describe('C4 local workspace fs (injected fs surface, fakes only)', () => {
@@ -87,7 +95,7 @@ describe('C4 local workspace fs (injected fs surface, fakes only)', () => {
     };
     const reads: string[] = [];
     const fs = createLocalWorkspaceFs('/w', { ...treeFs(tree), readFileSync: (p) => { reads.push(p); return enc('x'); } });
-    expect((await fs.listEntries()).map((e) => e.path)).toEqual(['.git/HEAD', 'data/posts.json', 'format.test.mjs', 'node_modules/x.js']);
+    expect((await fs.listEntries()).map((e) => e.path)).toEqual(['.git', '.git/HEAD', 'data', 'data/posts.json', 'format.test.mjs', 'node_modules', 'node_modules/x.js']);
     await fs.readFile('data/posts.json');
     expect(reads).toEqual(['/w/data/posts.json']);
     await expect(fs.readFile('../etc/passwd')).rejects.toThrow('workspace_path_invalid');
@@ -119,21 +127,25 @@ const HOOK = withExtra({ '/w/.git': [{ name: 'hooks', kind: 'dir' }], '/w/.git/h
 /** The GUARD under test as a reusable predicate: every hidden-write route must be reported. Returns the routes that were MISSED. */
 async function missedHiddenWrites(makeFs: (tree: Tree, contents?: Record<string, string>) => WorkspaceFs): Promise<string[]> {
   const missed: string[] = [];
-  const probe = async (name: string, after: Tree): Promise<void> => {
-    const b = await hashWorkspace(makeFs(CLEAN), OPTS);
+  const probe = async (name: string, before: Tree, after: Tree): Promise<void> => {
+    const b = await hashWorkspace(makeFs(before), OPTS);
     const a = await hashWorkspace(makeFs(after, { '/w/out/normalized.json': 'the coder wrote this' }), OPTS);
     if (onlyArtifactChanged(b, a).ok) missed.push(name);
   };
-  await probe('node_modules write', NM);
-  await probe('symlink added', LINK);
-  await probe('dot-git hook planted', HOOK);
+  /* node_modules already exists, so hashing the directory entry alone cannot see a file planted inside it. */
+  const nmPresent: Tree = { ...CLEAN, '/w': [...CLEAN['/w']!, { name: 'node_modules', kind: 'dir' }], '/w/node_modules': [] };
+  await probe('node_modules write', nmPresent, NM);
+  await probe('symlink added', CLEAN, LINK);
+  await probe('dot-git hook planted', CLEAN, HOOK);
   return missed;
 }
 
 describe('D1 the before and after hash lists are persisted and hashed', () => {
   it('the snapshot carries the full list, its sha256 (canonical sorted [path,hash] JSON) and the named exclusions', async () => {
     const snap = await hashWorkspace(createLocalWorkspaceFs('/w', treeFs(CLEAN, { '/w/data/posts.json': 'P' })), OPTS);
-    expect(snap.files['data/posts.json']).toBe(sha('P'));
+    expect(snap.files['data/posts.json']).toBe(`${sha('P')}#mode:644`);
+    expect(snap.files.data).toBe('dir:#mode:755');
+    expect('.git' in snap.files).toBe(false);
     expect(snap.listSha256).toBe(sha(JSON.stringify(Object.entries(snap.files).sort())));
     expect(snap.excluded).toEqual([...GIT_DIR_NAMED_EXCLUSIONS]);
     expect(snap.gitTreeSha256).toMatch(/^[0-9a-f]{64}$/u);
@@ -154,7 +166,7 @@ describe('D2 nothing is skipped silently', () => {
   it('a symlink (added, or standing in for the artifact) fails; the link target is recorded', async () => {
     const added = await run(CLEAN, LINK);
     expect(added.step).toMatchObject({ ok: false, failureClass: 'workspace_scope_violation' });
-    expect(added.a.files['data/key']).toBe('symlink:/etc/secret');
+    expect(added.a.files['data/key']).toBe('symlink:/etc/secret#mode:777');
     const asArtifact: Tree = JSON.parse(JSON.stringify(CLEAN)); asArtifact['/w/out'] = [{ name: 'normalized.json', kind: 'link', target: '/home/u/.keys/xai' }];
     const art = await run(CLEAN, asArtifact);
     expect(art.step).toMatchObject({ ok: false, failureClass: 'workspace_scope_violation' });
@@ -172,6 +184,32 @@ describe('D2 nothing is skipped silently', () => {
     expect(snap.excluded).toEqual([]);
     expect(snap.gitTreeSha256).toBeNull();
     expect(Object.keys(snap.files)).toContain('.git/HEAD');
+    expect(Object.keys(snap.files)).toContain('.git');
+  });
+  it('an empty directory and a mode change are in the hash (neither is invisible)', async () => {
+    const withEmpty: Tree = { ...CLEAN, '/w': [...CLEAN['/w']!, { name: 'empty', kind: 'dir' }], '/w/empty': [] };
+    const bare = await hashWorkspace(createLocalWorkspaceFs('/w', treeFs(CLEAN)), OPTS);
+    const emptied = await hashWorkspace(createLocalWorkspaceFs('/w', treeFs(withEmpty)), OPTS);
+    expect(emptied.files.empty).toBe('dir:#mode:755');
+    expect(emptied.listSha256).not.toBe(bare.listSha256);
+    expect(onlyArtifactChanged(bare, emptied).ok).toBe(false);
+    const modeFs = memFs(BASE);
+    const plain = await hashWorkspace(modeFs);
+    const chmod = await hashWorkspace({
+      ...modeFs,
+      listEntries: async () => (await modeFs.listEntries()).map((e) => ({ ...e, mode: e.path === 'data/posts.json' ? 0o600 : 0o644 })),
+    });
+    expect(chmod.files['data/posts.json']).toBe(`${sha('[]')}#mode:600`);
+    expect(chmod.files['data/posts.json']).not.toBe(plain.files['data/posts.json']);
+    expect(onlyArtifactChanged(plain, chmod).ok).toBe(false);
+  });
+  it('the header states the coverage, including the explicit .git exclusion', () => {
+    const header = readFileSync(join(__dirname, 'julius-dispatch-bundle.ts'), 'utf8').slice(0, 1800);
+    expect(header).toContain('including an empty one');
+    expect(header).toContain('#mode:<octal>');
+    expect(header).toContain("`.git/objects/` and `.git/index`");
+    expect(header).toContain('When `gitDir` is absent, `.git` is hashed in the');
+    expect(GIT_DIR_NAMED_EXCLUSIONS).toEqual(['.git/objects/', '.git/index']);
   });
 });
 
