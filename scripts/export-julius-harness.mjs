@@ -288,6 +288,9 @@ const FILE_RULES = [
   // about what it DID spend, and on whose authority. Same subsystem: both are
   // the budget's own arithmetic, and neither is a worker's to state.
   ['src/relay/mission/julius/julius-cost-accounting.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  // The runtime's own namespace ceilings and the qualifying-pair cap. Same
+  // arithmetic as the cost ledger: a grant, not a worker's claim.
+  ['src/relay/mission/julius/julius-spend-ceiling.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   ['src/relay/mission/julius/julius-recovery.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-continuation.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-lease-protocol.ts', 'LEASES / BUDGETS / PERMISSIONS'],
@@ -447,6 +450,9 @@ const FILE_RULES = [
   // live shell port and the provider-free preflight, so both settle the same command.
   ['relay-bridge/julius/shell-settlement.ts', 'TOOLS'],
   ['relay-bridge/julius/live-composition.ts', 'LIVE PROVIDER COMPOSITION'],
+  // The live entry's read of prior runs of this mission, so the pair cap is a
+  // ledger fact. Path-adjacent to the composition that spends.
+  ['relay-bridge/julius/julius-prior-spend.ts', 'LIVE PROVIDER COMPOSITION'],
   // The one place the sealed mission policy and Live Reach's bounded fetch
   // meet, and the service it wraps. Composition, both of them: the domain has
   // no network and the connector may not import `/mission`.

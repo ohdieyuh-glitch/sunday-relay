@@ -331,6 +331,9 @@ describe('F4: a refused re-run RETURNS 1 from the entrypoint, and reaches nothin
       liveStageDeadlineLine: () => '  stage deadline: faked',
       liveExecutionScopeLine: () => '  execution scope: faked',
       JULIUS_LIVE_RATE_LIMIT_BACKOFF,
+      // Computed before this slice, from the real spend gate. The slice only
+      // reads the ceiling it already authorized.
+      spendAuthorization: { authorized: true, spendCeilingUsdMicros: 30_000_000, maxRepairRounds: 3 },
       driveJuliusRunToTerminal: async (input: Record<string, unknown>) => { calls.drive += 1; driveInput = input; throw new Error(DRIVE_REACHED); },
     };
     const scope = new Proxy(supplied, {
