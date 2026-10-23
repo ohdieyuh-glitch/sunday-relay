@@ -1,0 +1,29 @@
+{
+  "_what": "PROPOSED fill of the B33 v3.1 route pin slot (tools\\b33_v3_1b\\ROUTE_PIN.json, sha256 311fee13c16463424311e38d4cd4391dd28b7a9bcd6a9eb14483d3552bead71f, status PENDING). Written by Cosmo (Wonderland dev agent) on the evidence branch only. It is NOT the live ROUTE_PIN.json and does not edit it. Per that file's status_note and README_b33_v3_1b.md ('Still pending'), the fill goes into a NEW tools folder version plus a new prereg version (never in place), and the reviewer rules it (B-9). DIAGNOSTIC tool, W2DEV, not evidence by itself.",
+  "status": "PROPOSED",
+  "status_note": "PROPOSED, pending Skywalker's ruling. Not PINNED: no consumer accepts it (b33_drive.ps1 and b33_judge.py test status == PINNED only). The lead chose option (b) on a ROUTE SURVEY ONLY (the survey record's ROUTE OK; no composition, jump or M4 result was used; the survey run has no M4 blocks). If the reviewer accepts, the next step is a new tools folder (e.g. tools\\b33_v3_1c) whose ROUTE_PIN.json carries these fields with status PINNED, a re-hashed SHA256SUMS.txt and a new prereg version; the reviewer sets PINNED.",
+  "chosen_option": "b",
+  "route": "routes\\b33_route_v11.json",
+  "route_sha256": "7de04985b6db89989b5ed8063972c2b143f3c45b4be8577d8c3b9917c390405b",
+  "route_drive_copy": "drive_survey_20261023T093723Z\\route.json (byte-equal to routes\\b33_route_v11.json; listed in SHA256SUMS_AT_CLOSE.txt)",
+  "survey_run": "NOT_COUNTED_b33\\REHEARSAL_NOT_PREREG_b33_survey_20261023T093602Z (r16reh18 harness, tools b33_v3_1b, candidate 0.1.0-r16reh18 commit aa930c269c43a52fc31c785f7bdcc231c8af6cf0, relay -RelaySource 3f20fc1ace7b157d4ff2673959c98998564ef43b)",
+  "survey_role": "REHEARSAL_NOT_PREREG (NOT-PREREG, not counted, judge VOID exit 4). The role is carried in this text only, because b33_survey_record.py is role-blind (README_b33_v3_1b.md).",
+  "survey_ruling": "M20261021T222157Z-INDEPENDENT_REVIEW-30877f (reviewer ruling 30877f Q3: the route survey uses -RelaySource with -RelayCommit 3f20fc1a)",
+  "survey_record": "SURVEY_RECORD.md (ROUTE OK; runway, kerb reached twice, walk-off and return verified; 141 frames)",
+  "survey_record_sha256": "f783ad773d17250522fced4d4d890a75af814977d1ad6f0f46e6f12c33a1f185",
+  "survey_record_caveat": "F1: SURVEY_RECORD.md was written at 2026-10-23T09:42:27.5Z, about 6 s after close (SHA256SUMS_AT_CLOSE.txt at 09:42:21.8Z), so it is NOT in the close-time sums; it is covered only by the post-close run-folder sums below.",
+  "close_sums": "SHA256SUMS_AT_CLOSE.txt",
+  "close_sums_sha256": "705502ecf56a949b06edd2b3fc621236c02814fb40b07acf3a8fd28a1b414f20",
+  "close_sums_entries": 12,
+  "runfolder_sums_post_close": "SHA256SUMS_runfolder_WRITTEN_AFTER_CLOSE_20261023T100521Z.txt",
+  "runfolder_sums_post_close_sha256": "aa66b7167f1684d7f66a73995aad8cc098a31c89eaab5f145e6771d6992c48e4",
+  "runfolder_sums_post_close_entries": 174,
+  "evidence_branch": "ohdieyuh-glitch/sunday-relay refs/heads/evidence/wonderland-b33-survey-20261023T093602Z",
+  "evidence_commit": "42aec9698104f2acb0746c464a5899e413dec253",
+  "evidence_tree": "986009c05b0e4e2b7c4c5e6bb54bc80281ca1171",
+  "open_preconditions_for_counted_runs": [
+    "RELAY_PIN.json PENDING -> PINNED (reviewer only, after the O1 post-deploy gate proves O1 wonderland-social runs 3f20fc1a)",
+    "build commit aa930c269c43a52fc31c785f7bdcc231c8af6cf0 exists only on Kaisin (F5)"
+  ],
+  "m4_attempts_pre_stated": 10
+}
