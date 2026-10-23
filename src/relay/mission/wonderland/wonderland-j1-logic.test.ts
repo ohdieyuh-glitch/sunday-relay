@@ -24,7 +24,7 @@ import { describe, expect, it } from 'vitest';
  * The result rows follow the J1 bridge contract at sunday-relay commit 31bfc58b, relay-bridge/julius-dispatch.ts
  * (blob 018fb582): result body {data:{runId,state,mode,resultText,resultSha256}} (:913) with resultSha256 =
  * sha256(resultText) (:628-631); resultText = JSON.stringify of the object at :624-628, whose artifactSha256 is the
- * sha256 of the artifact after scrubKeys, the 8,000-char cut and one JavaScript trim (:55, :333-337, :527-530, :627)
+ * sha256 of the artifact after scrubKeys, the 8,000-UTF-16-unit cut and one JavaScript trim (:55, :333-337, :527-530, :627)
  * and is null without an artifact; error body {error:{kind,message}} (:952) with no frozen list of kinds; a finished
  * run that failed answers 200 with `failure` set (:615-627). That commit is not on main, so it is cited, not read.
  */
@@ -144,6 +144,57 @@ describe('J1 client logic: the 12-hex artifact digest', () => {
       expect(verified ? '1' : '0', `${label} verdict`).toBe(ok);
       expect(digest12, `${label} digest12`).toBe(verified ? (expected ?? '').slice(0, 12) : '');
     }
+  });
+});
+
+describe('J1 client logic: the 8,000-unit cut splitting a surrogate pair (P396-1)', () => {
+  /** The artifact bytes of one KAT-DIGEST-CUT row: PrefixHex x PrefixRepeat, then TailHex. */
+  const cutBytes = (row: string[]): Buffer => fromHex((row[1] ?? '').repeat(Number(row[2])) + (row[3] ?? ''));
+
+  it('every cut row agrees with sha256(JS-trim(text)) from Node', () => {
+    for (const row of table('KAT-DIGEST-CUT')) {
+      const [label, , , , expected, ok, digest12] = row;
+      const text = utf8OrNull(cutBytes(row));
+      const actual = text === null ? null : sha256(Buffer.from(text.trim(), 'utf8'));
+      const verified = actual !== null && LOWER_HEX_64.test(expected ?? '') && actual === expected;
+      expect(verified ? '1' : '0', `${label} verdict`).toBe(ok);
+      expect(digest12, `${label} digest12`).toBe(verified ? (expected ?? '').slice(0, 12) : '');
+    }
+  });
+
+  it('the rows are exactly what the bridge cut, trim and hash give, and only the U+FFFD form verifies', () => {
+    const rows = byLabel(table('KAT-DIGEST-CUT'));
+    const ufffd = rows.get('cut_splits_pair_lone_surrogate_as_ufffd_ok');
+    const wtf8 = rows.get('cut_splits_pair_lone_surrogate_as_wtf8_refused');
+    const fits = rows.get('pair_fits_at_8000_units_ok');
+    expect(ufffd && wtf8 && fits, 'all three cut rows are present').toBeTruthy();
+    // Restated from julius-dispatch.ts at 31bfc58b: scrubKeys cuts with out.slice(0, 8000) (:333-337, no key value in
+    // this text), the coder's text is trimmed once (:530), and sha256 is update(value, 'utf8') (:328, :627).
+    const bridge = (coderText: string): string => coderText.slice(0, 8_000).trim();
+    const split = bridge('x'.repeat(7_999) + '\u{1F600}');
+    expect(split.length).toBe(8_000);
+    expect(split.charCodeAt(7_999), 'the cut leaves a lone high surrogate').toBe(0xd83d);
+    expect(JSON.stringify(split).endsWith('\\ud83d"'), 'JSON.stringify sends it as the escape \\ud83d').toBe(true);
+    expect(Buffer.from(split, 'utf8').equals(cutBytes(ufffd ?? [])), 'Node encodes it as EF BF BD').toBe(true);
+    expect(createHash('sha256').update(split, 'utf8').digest('hex')).toBe(ufffd?.[4]);
+    // The WTF-8 bytes of the same lone surrogate are malformed UTF-8 and carry the same bridge hash: refusing them is
+    // the wrapper's encoding mistake, never a different artifact.
+    expect(utf8OrNull(cutBytes(wtf8 ?? [])), 'ED A0 BD is malformed UTF-8').toBeNull();
+    expect(cutBytes(wtf8 ?? []).subarray(-3).toString('hex')).toBe('eda0bd');
+    expect(wtf8?.[4]).toBe(ufffd?.[4]);
+    expect(wtf8?.[5]).toBe('0');
+    const whole = bridge('x'.repeat(7_998) + '\u{1F600}');
+    expect(whole.length).toBe(8_000);
+    expect(Buffer.from(whole, 'utf8').equals(cutBytes(fits ?? [])), 'a pair that fits is kept whole').toBe(true);
+    expect(createHash('sha256').update(whole, 'utf8').digest('hex')).toBe(fits?.[4]);
+  });
+
+  it('the header tells the wrapper to decode lone surrogates to U+FFFD, that the digest re-trims, and to check missionId', () => {
+    const header = source(LOGIC_H);
+    expect(header).toContain('8,000 UTF-16 code units');
+    expect(header).toContain('decode every lone \\uD800-\\uDFFF escape in artifactText to U+FFFD (EF BF BD)');
+    expect(header).toContain('THE DIGEST CHECK RE-TRIMS');
+    expect(header).toContain('CHECK missionId');
   });
 });
 
@@ -278,7 +329,8 @@ describe('J1 client logic: the C++ itself', () => {
           table('KAT-RUNID-STRICT')].map((rows) => rows.length);
         expect(out).toContain(`J1 LOGIC KAT PASS sha256=${String(counts[0])} trim=${String(counts[1])} digest=${String(counts[2])} `
           + `runid_format=${String(counts[3])} runid_strict=${String(counts[4])} generated=10000 `
-          + `envelope=${String(table('KAT-ENVELOPE').length)} result=${String(table('KAT-RESULT').length)}`);
+          + `envelope=${String(table('KAT-ENVELOPE').length)} result=${String(table('KAT-RESULT').length)} `
+          + `digest_cut=${String(table('KAT-DIGEST-CUT').length)}\n`);
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }

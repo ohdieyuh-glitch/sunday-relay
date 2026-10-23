@@ -11,6 +11,10 @@
 // crypto and String.prototype.trim, and src/relay/mission/wonderland/wonderland-j1-logic.test.ts re-derives each one
 // from Node on every run by parsing the tables below, so a value here cannot be edited without that test failing.
 // Inputs are hex so that the tables need no escapes. The table markers (KAT-...-BEGIN/END) are read by that test.
+// The KAT-DIGEST-CUT rows are the bridge's 8,000-UTF-16-unit cut (:333-337) splitting a surrogate pair: the source
+// 'x'*7999 + U+1F600 is cut to 'x'*7999 + a lone \uD83D, which Node hashes as 'x'*7999 + EF BF BD (U+FFFD). Their
+// expected hashes were derived by importing the real scrubKeys from relay-bridge/julius-dispatch.ts at 31bfc58b
+// (blob 018fb582) and trimming and hashing as J1 does (:530, :328, :627); the test restates that cut on every run.
 //
 // The result rows follow the bridge contract at sunday-relay commit 31bfc58b, relay-bridge/julius-dispatch.ts:
 // result body {data:{runId,state,mode,resultText,resultSha256}} (:913); resultText = JSON.stringify of the object
@@ -100,6 +104,21 @@ namespace
 	{ "short_hex_refused", "782079", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c1", 0, "" },
 	{ "invalid_utf8_refused", "ff", "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", 0, "" },
 	// KAT-DIGEST-END
+	};
+
+	// The artifact bytes are PrefixHex repeated PrefixRepeat times, then TailHex: what the Unreal JSON wrapper hands
+	// over after decoding artifactText. Each row also runs through ClassifyFinishedResult as a COMPLETED fake run.
+	struct FDigestCutRow
+	{
+		const char* Label; const char* PrefixHex; unsigned long PrefixRepeat; const char* TailHex; const char* ExpectedSha256;
+		int bOk; const char* Digest12;
+	};
+	const FDigestCutRow DigestCutRows[] = {
+	// KAT-DIGEST-CUT-BEGIN
+	{ "cut_splits_pair_lone_surrogate_as_ufffd_ok", "78", 7999, "efbfbd", "b4296284858e3171fbd96d387db64fa551a4173aed40e5ea9bf8dc273465d933", 1, "b4296284858e" },
+	{ "cut_splits_pair_lone_surrogate_as_wtf8_refused", "78", 7999, "eda0bd", "b4296284858e3171fbd96d387db64fa551a4173aed40e5ea9bf8dc273465d933", 0, "" },
+	{ "pair_fits_at_8000_units_ok", "78", 7998, "f09f9880", "4222777fbde458ad9b9910df41e08b29f483fe60e0d03f62ec95ed3faf98ae49", 1, "4222777fbde4" },
+	// KAT-DIGEST-CUT-END
 	};
 
 	struct FRunFormatRow { const char* Label; const char* BytesHex; const char* Expected; };
@@ -218,6 +237,36 @@ int main()
 		Expect(Digest12 == Row.Digest12, std::string("digest12 ") + Row.Label + ": got " + Digest12);
 	}
 
+	for (const FDigestCutRow& Row : DigestCutRows)
+	{
+		std::string Artifact;
+		const std::string Unit = FromHex(Row.PrefixHex);
+		for (unsigned long Index = 0; Index < Row.PrefixRepeat; ++Index) { Artifact += Unit; }
+		Artifact += FromHex(Row.TailHex);
+		std::string Digest12 = "not-cleared";
+		const bool bOk = CheckArtifactDigest(Artifact, Row.ExpectedSha256, Digest12);
+		Expect(bOk == (Row.bOk != 0), std::string("digest cut verdict ") + Row.Label);
+		Expect(Digest12 == Row.Digest12, std::string("digest cut digest12 ") + Row.Label + ": got " + Digest12);
+
+		FFinishedResultFields Fields;
+		Fields.ExpectedRunId = ExpectedRunId;
+		Fields.ExpectedMode = "fake";
+		Fields.DataState = "COMPLETED";
+		Fields.DataMode = "fake";
+		Fields.InnerRunId = ExpectedRunId;
+		Fields.Mode = "fake";
+		Fields.State = "COMPLETED";
+		Fields.bArtifactSha256IsNull = false;
+		Fields.ArtifactSha256 = Row.ExpectedSha256;
+		Fields.bArtifactTextIsNull = false;
+		Fields.ArtifactText = Artifact;
+		std::string ResultDigest12 = "not-cleared";
+		const EFinishedResult Got = ClassifyFinishedResult(Fields, ResultDigest12);
+		Expect(Got == (Row.bOk != 0 ? EFinishedResult::Completed : EFinishedResult::Damaged),
+			std::string("digest cut result ") + Row.Label + ": got " + std::to_string(static_cast<int>(Got)));
+		Expect(ResultDigest12 == Row.Digest12, std::string("digest cut result digest12 ") + Row.Label + ": got " + ResultDigest12);
+	}
+
 	for (const FRunFormatRow& Row : RunFormatRows)
 	{
 		const std::string Bytes = FromHex(Row.BytesHex);
@@ -286,8 +335,8 @@ int main()
 		std::printf("J1 LOGIC KAT FAIL failures=%d\n", Failures);
 		return 1;
 	}
-	std::printf("J1 LOGIC KAT PASS sha256=%zu trim=%zu digest=%zu runid_format=%zu runid_strict=%zu generated=%zu envelope=%zu result=%zu\n",
+	std::printf("J1 LOGIC KAT PASS sha256=%zu trim=%zu digest=%zu runid_format=%zu runid_strict=%zu generated=%zu envelope=%zu result=%zu digest_cut=%zu\n",
 		CountOf(ShaRows), CountOf(TrimRows), CountOf(DigestRows), CountOf(RunFormatRows), CountOf(RunStrictRows),
-		Generated.size(), CountOf(EnvelopeRows), CountOf(ResultRows));
+		Generated.size(), CountOf(EnvelopeRows), CountOf(ResultRows), CountOf(DigestCutRows));
 	return 0;
 }

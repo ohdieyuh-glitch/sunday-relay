@@ -14,8 +14,9 @@
 //     sha256 of the resultText string's UTF-8 bytes (:628-631); runId, state and mode outside resultText are NOT
 //     covered by that hash, so the client checks them against the hashed copies inside resultText (:624-626);
 //   - inside resultText, artifactSha256 is the sha256 of artifactText (:627). The bridge produced that text in this
-//     order: scrubKeys removes key values, then cuts to J1_TEXT_MAX_CHARS = 8,000 chars (:55, :333-337), then the
-//     coder's text is JavaScript-trimmed once (:527-530). It is null when the coder produced no artifact;
+//     order: scrubKeys removes key values, then cuts to J1_TEXT_MAX_CHARS = 8,000 UTF-16 code units with
+//     String.prototype.slice (:55, :333-337), which can split a surrogate pair, then the coder's text is
+//     JavaScript-trimmed once (:527-530). It is null when the coder produced no artifact;
 //   - a finished run that did not succeed still answers 200, with a non-null `failure` word (:615-627);
 //   - every refusal is {error:{kind,message}} (:952), and there is no frozen list of kinds.
 // The client therefore compares its digest ONLY with the artifactSha256 carried in resultText, never with any
@@ -23,6 +24,27 @@
 //
 // WHAT IS NOT HERE. No random number generation (the run-id option (a)/(b) is still the founder's decision), no
 // HTTP, no JSON parsing, no logging, no display. The Unreal wrapper that parses the JSON and draws rows is later work.
+//
+// WHAT THE UNREAL JSON WRAPPER MUST DO (later work; these functions take UTF-8 bytes and cannot do it for it):
+//   1. LONE SURROGATES DECODE TO U+FFFD. The 8,000-unit cut can end the artifact on a lone high surrogate (for
+//      example 'x'*7999 + U+1F600 keeps 'x'*7999 + \uD83D), and coder output can carry a lone surrogate anywhere.
+//      Node hashes the string with update(value,'utf8') (:328, :627), which encodes every lone surrogate as the
+//      UTF-8 of U+FFFD, EF BF BD; JSON.stringify (:630) sends it as the six-character escape \ud83d. So the wrapper
+//      must decode every lone \uD800-\uDFFF escape in artifactText to U+FFFD (EF BF BD) before it calls
+//      CheckArtifactDigest or ClassifyFinishedResult: never to the WTF-8/CESU-8 bytes (ED A0 BD), which JsTrimUtf8
+//      refuses as malformed, and never to '?' or nothing. Otherwise a legitimate COMPLETED run shows as "arrived
+//      damaged" (this fails closed; it can never pass a wrong artifact). The KAT-DIGEST-CUT rows in
+//      wonderland/Tools/j1_logic_kat.cpp pin both forms against Node. resultText itself carries the escape as six
+//      ASCII characters, so CheckResultBody over the received resultText string is unaffected.
+//   2. THE DIGEST CHECK RE-TRIMS. CheckArtifactDigest computes sha256(UTF-8(JS-trim(ArtifactText))), not the hash of
+//      the bytes exactly as received: JS whitespace around the text (KAT rows untrimmed_text_ok and
+//      completed_untrimmed_text_ok) still verifies. On real bridge output the re-trim changes nothing, because J1
+//      sends the already-trimmed text (:530) and hashes it as-is (:627), and trim is idempotent. The exact bytes are
+//      bound by resultSha256 over resultText instead, so the wrapper must reach ClassifyFinishedResult only after
+//      ClassifyResultEnvelope returned BodyIntact, and must display the artifactText it parsed from that resultText.
+//   3. CHECK missionId. ClassifyFinishedResult does not see resultText's missionId or dispatchId (:625). The wrapper
+//      must compare missionId with the mission it triggered and treat any other value as a wrong run, never as a
+//      success.
 #pragma once
 
 #include <array>
@@ -51,14 +73,16 @@ namespace WonderlandJuliusMissionLogic
 
 	/**
 	 * JavaScript trim over UTF-8. False (and Out cleared) when the input is not well-formed UTF-8: overlong forms,
-	 * surrogates, code points above U+10FFFF and truncated sequences are all refused rather than guessed at.
+	 * surrogates, code points above U+10FFFF and truncated sequences are all refused rather than guessed at. A lone
+	 * surrogate from the bridge must reach this function as U+FFFD (EF BF BD); see the wrapper note at the top.
 	 */
 	bool JsTrimUtf8(std::string_view Utf8, std::string& Out);
 
 	/**
 	 * THE ARTIFACT DIGEST. sha256 over the UTF-8 bytes of JS-trim(ArtifactText) must equal ExpectedArtifactSha256
 	 * (the artifactSha256 inside resultText). On success OutDigest12 is its first 12 hex characters, the only form
-	 * the game shows; on any failure OutDigest12 is empty and the caller shows "arrived damaged".
+	 * the game shows; on any failure OutDigest12 is empty and the caller shows "arrived damaged". It trims again
+	 * before hashing (wrapper note 2) and needs lone surrogates already decoded to U+FFFD (wrapper note 1).
 	 */
 	bool CheckArtifactDigest(std::string_view ArtifactText, std::string_view ExpectedArtifactSha256, std::string& OutDigest12);
 
@@ -126,7 +150,10 @@ namespace WonderlandJuliusMissionLogic
 		ModeMismatch,
 	};
 
-	/** Call only after ClassifyResultEnvelope returned BodyIntact. OutDigest12 is set only for Completed. */
+	/**
+	 * Call only after ClassifyResultEnvelope returned BodyIntact. OutDigest12 is set only for Completed. missionId and
+	 * dispatchId are not inputs: the wrapper checks missionId itself (wrapper note 3).
+	 */
 	EFinishedResult ClassifyFinishedResult(const FFinishedResultFields& Fields, std::string& OutDigest12);
 
 	/** The fixed run-id prefix: a build constant, the same for every run and every player. */
