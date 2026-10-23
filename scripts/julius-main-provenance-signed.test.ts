@@ -8,8 +8,10 @@ import { delimiter, join, resolve } from 'node:path';
 
 import { NON_ATTESTING_IDENTITIES } from './julius-review-currency.mjs';
 import {
+  AUTHENTICATED_COMMIT_SOURCES,
   LANDING_BEGIN,
   LANDING_END,
+  WORKER_APP_ID,
   evaluateMainProvenance,
   extractLandingBlock,
   parseSignedClearance,
@@ -69,6 +71,10 @@ const message = (blockText = block()) => `Julius: land the cleared tree (#381)\n
 
 /** The passing shape for the SIGNED path. No pull request, no approval record: none is needed and none is read. */
 type ProvenanceInput = Parameters<typeof evaluateMainProvenance>[0];
+/** Authenticated coding-worker opener. Git name and email-derived login are not this object. */
+const workerAuthor = { login: WORKER, source: 'pull-opener', accountType: 'Bot' };
+const clearedHead = (over: Record<string, unknown> = {}) => ({ sha: HEAD, treeSha: TREE, authenticatedAuthor: workerAuthor, ...over });
+
 const signedTip = (over: Record<string, unknown> = {}) => evaluateMainProvenance({
   repo: 'ohdieyuh-glitch/sunday-relay',
   mainSha: MAIN,
@@ -81,7 +87,7 @@ const signedTip = (over: Record<string, unknown> = {}) => evaluateMainProvenance
   tipReviewerKeyPem: REVIEWER_PEM,
   changedPaths: ['src/relay/ordinary.ts', '.github/julius-missions/julius-diag-digest-evidence-2/contract.json'],
   changedPathsComplete: true,
-  headCommit: { sha: HEAD, authorLogin: WORKER, treeSha: TREE },
+  headCommit: clearedHead(),
   ...over,
 } as unknown as ProvenanceInput);
 
@@ -153,14 +159,95 @@ describe('a tip signed for by the Independent Reviewer', () => {
     expectVerdict(signedTip({ mainCommitMessage: message(block({ nonce: 'cd'.repeat(16) })) }), 'unprovenanced', /nonce/u);
   });
 
-  it('9. the cleared head must be read, be the named commit, carry the signed tree and be worker-authored', () => {
+  it('9. the cleared head must be read, be the named commit, carry the signed tree and be authenticated as the worker', () => {
     expectVerdict(signedTip({ headCommit: undefined }), 'indeterminate');
-    expectVerdict(signedTip({ headCommit: { sha: OTHER, authorLogin: WORKER, treeSha: TREE } }), 'indeterminate');
-    expectVerdict(signedTip({ headCommit: { sha: HEAD, authorLogin: WORKER, treeSha: undefined } }), 'indeterminate');
-    expectVerdict(signedTip({ headCommit: { sha: HEAD, authorLogin: WORKER, treeSha: OTHER_TREE } }), 'unprovenanced', /not the signed tree/u);
-    for (const author of ['a-passing-collaborator', 'ohdieyuh-glitch', '', null, undefined, 42]) {
-      expectVerdict(signedTip({ headCommit: { sha: HEAD, authorLogin: author, treeSha: TREE } }), 'unprovenanced', /not the coding worker/u);
+    expectVerdict(signedTip({ headCommit: clearedHead({ sha: OTHER }) }), 'indeterminate');
+    expectVerdict(signedTip({ headCommit: clearedHead({ treeSha: undefined }) }), 'indeterminate');
+    expectVerdict(signedTip({ headCommit: clearedHead({ treeSha: OTHER_TREE }) }), 'unprovenanced', /not the signed tree/u);
+    for (const login of ['a-passing-collaborator', 'ohdieyuh-glitch', '']) {
+      expectVerdict(signedTip({ headCommit: clearedHead({ authenticatedAuthor: { ...workerAuthor, login } }) }), 'unprovenanced', /not the coding worker/u);
     }
+  });
+
+  it('9b. a spoofed git author name, email, or email-derived login is not the coding worker', () => {
+    const spoofedEmail = '41898282+julius-worker[bot]@users.noreply.github.com';
+    const gitOnly = {
+      sha: HEAD,
+      treeSha: TREE,
+      authorLogin: WORKER,
+      gitAuthorName: WORKER,
+      gitAuthorEmail: spoofedEmail,
+      emailDerivedLogin: WORKER,
+    };
+    expectVerdict(signedTip({ headCommit: gitOnly }), 'unprovenanced', /not identity/u);
+    expectVerdict(signedTip({ headCommit: { ...gitOnly, authenticatedAuthor: undefined } }), 'unprovenanced', /not identity/u);
+    expectVerdict(signedTip({
+      headCommit: clearedHead({
+        gitAuthorName: WORKER,
+        gitAuthorEmail: spoofedEmail,
+        emailDerivedLogin: WORKER,
+        authenticatedAuthor: { login: 'a-dev-session', source: 'pull-opener', accountType: 'Bot' },
+      }),
+    }), 'unprovenanced', /not the coding worker/u);
+    expectVerdict(signedTip({
+      headCommit: clearedHead({ emailDerivedLogin: 'a-dev-session', gitAuthorName: WORKER }),
+    }), 'unprovenanced', /email-derived/u);
+    expectVerdict(signedTip({
+      headCommit: clearedHead({ gitAuthorName: 'Spoofed Name', emailDerivedLogin: WORKER }),
+    }), 'unprovenanced', /free-text name/u);
+    expectVerdict(signedTip({
+      headCommit: clearedHead({ authenticatedAuthor: { login: WORKER, source: 'git-email', accountType: 'Bot' } }),
+    }), 'unprovenanced', /not from an authenticated GitHub source/u);
+    expectVerdict(signedTip({
+      headCommit: clearedHead({ authenticatedAuthor: { login: WORKER, source: 'pull-opener', accountType: 'User' } }),
+    }), 'unprovenanced', /not a GitHub App/u);
+    expectVerdict(signedTip({
+      headCommit: clearedHead({ authenticatedAuthor: { login: WORKER, source: 'pull-opener' } }),
+    }), 'unprovenanced', /account type is missing/u);
+    expectVerdict(signedTip({
+      headCommit: clearedHead({ authenticatedAuthor: { ...workerAuthor, appId: 1 } }),
+    }), 'unprovenanced', /installation id/u);
+    expectVerdict(signedTip({
+      headCommit: clearedHead({
+        authenticatedAuthor: { login: WORKER, source: 'app-installation', accountType: 'Bot' },
+      }),
+    }), 'unprovenanced', /installation id is missing/u);
+    expectVerdict(signedTip({
+      headCommit: clearedHead({
+        authenticatedAuthor: { login: WORKER, source: 'app-installation', accountType: 'Bot', appId: WORKER_APP_ID },
+        emailDerivedLogin: WORKER,
+        gitAuthorName: WORKER,
+      }),
+    }), 'provenant');
+    expectVerdict(signedTip({
+      headCommit: clearedHead({
+        authenticatedAuthor: { login: WORKER, source: 'verified-signature', accountType: 'Bot', signatureVerified: true },
+        verification: { verified: true, reason: 'valid', signerLogin: WORKER },
+      }),
+    }), 'provenant');
+    expectVerdict(signedTip({
+      headCommit: clearedHead({
+        authenticatedAuthor: { login: WORKER, source: 'verified-signature', accountType: 'Bot', signatureVerified: false },
+      }),
+    }), 'unprovenanced', /no verified signature/u);
+    expectVerdict(signedTip({
+      headCommit: clearedHead({
+        verification: { verified: true, reason: 'valid', signerLogin: 'a-dev-session' },
+      }),
+    }), 'unprovenanced', /signer/u);
+    expectVerdict(signedTip({
+      headCommit: clearedHead({ verification: { verified: false, reason: 'bad_email' } }),
+    }), 'unprovenanced', /does not verify/u);
+    expectVerdict(signedTip({
+      headCommit: clearedHead({
+        gitAuthorName: WORKER,
+        gitAuthorEmail: spoofedEmail,
+        emailDerivedLogin: null,
+        verification: { verified: false, reason: 'unsigned' },
+      }),
+    }), 'provenant');
+    expect(AUTHENTICATED_COMMIT_SOURCES).toEqual(['pull-opener', 'app-installation', 'verified-signature']);
+    expect(WORKER_APP_ID).toBe(4838349);
   });
 
   it('10. a clearance that does not parse is refused even when it is genuinely signed', () => {
@@ -421,7 +508,12 @@ describe('the CLI on a signed tip', () => {
     [`repos/${REPO}/commits/${MAIN}/pulls`]: [],
     [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${PARENT}`]: keyFile,
     [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${MAIN}`]: keyFile,
-    [`repos/${REPO}/commits/${HEAD}`]: { sha: HEAD, author: { login: WORKER }, commit: { tree: { sha: TREE } } },
+    [`repos/${REPO}/commits/${HEAD}`]: {
+      sha: HEAD,
+      author: { login: WORKER },
+      commit: { tree: { sha: TREE }, author: { name: WORKER, email: 'worker@invalid' }, verification: { verified: false, reason: 'unsigned' } },
+    },
+    [`repos/${REPO}/pulls/381`]: { number: 381, user: { login: WORKER, type: 'Bot' }, head: { sha: HEAD } },
     [`repos/${REPO}/compare/${PARENT}...${MAIN}`]: { ahead_by: 1, behind_by: 0, files: [{ filename: 'src/relay/ordinary.ts' }] },
     ...over,
   });
@@ -497,9 +589,30 @@ describe('the CLI on a signed tip', () => {
     expect(run(noKey).code).toBe(1);
     const noHead = routes(); delete noHead[`repos/${REPO}/commits/${HEAD}`];
     expect(run(noHead).code).toBe(1);
-    const wrongAuthor = run(routes({ [`repos/${REPO}/commits/${HEAD}`]: { sha: HEAD, author: { login: 'a-passing-collaborator' }, commit: { tree: { sha: TREE } } } }));
+    const wrongAuthor = run(routes({
+      [`repos/${REPO}/commits/${HEAD}`]: {
+        sha: HEAD,
+        author: { login: WORKER },
+        commit: { tree: { sha: TREE }, author: { name: WORKER, email: '41898282+julius-worker[bot]@users.noreply.github.com' } },
+      },
+      [`repos/${REPO}/pulls/381`]: { number: 381, user: { login: 'a-passing-collaborator', type: 'User' }, head: { sha: HEAD } },
+    }));
     expect(wrongAuthor.code).toBe(1);
     expect(wrongAuthor.stderr).toContain('not the coding worker');
+    const spoofedEmail = run(routes({
+      [`repos/${REPO}/pulls/381`]: { number: 381, user: { login: 'a-dev-session', type: 'Bot' }, head: { sha: HEAD } },
+    }));
+    expect(spoofedEmail.code).toBe(1);
+    expect(spoofedEmail.stderr).toContain('not the coding worker');
+    const emailDisagrees = run(routes({
+      [`repos/${REPO}/commits/${HEAD}`]: {
+        sha: HEAD,
+        author: { login: 'a-dev-session' },
+        commit: { tree: { sha: TREE }, author: { name: WORKER, email: 'spoofed@invalid' } },
+      },
+    }));
+    expect(emailDisagrees.code).toBe(1);
+    expect(emailDisagrees.stderr).toContain('email-derived');
     const attackerFile = { ...keyFile, content: Buffer.from(pem(attacker.publicKey), 'utf8').toString('base64') };
     const wrongKey = run(routes({
       [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${PARENT}`]: attackerFile,
@@ -540,7 +653,7 @@ describe('the CLI on a signed tip', () => {
     const full = {
       mainSha: MAIN, mainShaAfter: MAIN, mainTreeSha: TREE, mainParents: [PARENT], mainCommitMessage: message(),
       reviewerKeyPem: REVIEWER_PEM, reviewerKeyAtSha: PARENT, tipReviewerKeyPem: REVIEWER_PEM,
-      changedPaths: ['src/a.ts'], changedPathsComplete: true, headCommit: { sha: HEAD, authorLogin: WORKER, treeSha: TREE },
+      changedPaths: ['src/a.ts'], changedPathsComplete: true, headCommit: clearedHead(),
     };
     const runEvidence = (evidence: Record<string, unknown>) => {
       const directory = mkdtempSync(join(tmpdir(), 'julius-provenance-signed-evidence-'));

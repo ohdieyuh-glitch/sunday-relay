@@ -46,9 +46,9 @@ const sig = (text: string) => sign(null, Buffer.from(text, 'utf8'), keys.private
 const goodPr = () => ({
   // HARNESS ADAPTATION (258e6e01): the lander compares the rows read with the PR's changed_files, so the fake PR reports it (1 = the default single file).
   number: 7, state: 'open', merged: false, draft: false, title: 'Julius: test landing', commits: 1, changed_files: 1,
-  head: { sha: H, ref: BRANCH, repo: { full_name: REPO } }, base: { ref: 'main' }, user: { login: APP },
+  head: { sha: H, ref: BRANCH, repo: { full_name: REPO } }, base: { ref: 'main' }, user: { login: APP, type: 'Bot' },
 });
-// round 5 (c2): a head commit carries the top-level author account GitHub resolved; an unresolved (null) author is now refused
+// Git name and email-derived login may agree with the App. They are not what authorizes the commit.
 const goodCommit = () => ({ commit: { tree: { sha: T }, author: { name: APP }, committer: { name: APP } }, author: { login: APP }, parents: [{ sha: B }] });
 const check = (over: Record<string, unknown> = {}) => lib.checkPullRequest({
   fields: lib.parseClearance(clearanceText()).fields, now: NOW, pr: goodPr(), commit: goodCommit(), files: ['.github/julius-missions/x/contract.json'], fileRows: 1, mainSha: B, allowedBranches: [BRANCH], digest: emptyDigest, ...over,
@@ -185,7 +185,26 @@ describe('ATTACK: ways past the gate', () => {
 
   it('ATK-7 the App identity is a commit AUTHOR NAME (free text): a commit whose GitHub-resolved author is someone else passes', () => {
     const spoofed = { ...goodCommit(), author: { login: 'a-dev-session' }, committer: { login: 'a-dev-session' } };
-    expect(check({ commit: spoofed }).length, 'the resolved GitHub login of the commit author/committer must be the App').toBeGreaterThan(0);
+    expect(check({ commit: spoofed }).length, 'an email-derived login other than the authenticated opener must refuse').toBeGreaterThan(0);
+  });
+
+  it('ATK-7b a spoofed git name and email-derived login of the App, with no authenticated App opener, must refuse', () => {
+    const spoofedCommit = {
+      ...goodCommit(),
+      author: { login: APP },
+      commit: {
+        ...goodCommit().commit,
+        author: { name: APP, email: '41898282+julius-worker[bot]@users.noreply.github.com' },
+        committer: { name: APP, email: '41898282+julius-worker[bot]@users.noreply.github.com' },
+      },
+    };
+    for (const user of [undefined, null, {}, { login: APP }, { login: APP, type: 'User' }, { login: 'a-dev-session', type: 'User' }, { login: 'a-dev-session', type: 'Bot' }]) {
+      const problems = check({ commit: spoofedCommit, pr: { ...goodPr(), user } });
+      expect(problems.length, `opener ${JSON.stringify(user)} must refuse`).toBeGreaterThan(0);
+    }
+    expect(check({ commit: spoofedCommit, pr: { ...goodPr(), user: { login: APP, type: 'Bot', appId: 1 } } }).join(' ')).toContain(String(4838349));
+    const agreed = check({ commit: spoofedCommit, pr: { ...goodPr(), user: { login: APP, type: 'Bot' } } });
+    expect(agreed, agreed.join(' ')).toEqual([]);
   });
 
   it('ATK-8 the PR TITLE (editable by anyone with write access) becomes the squash commit title verbatim; it can carry another clearance\'s nonce and any text', () => {

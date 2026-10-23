@@ -4,6 +4,8 @@ import { createHash, createPublicKey, verify } from 'node:crypto';
 
 export const REPO = 'ohdieyuh-glitch/sunday-relay';
 export const APP_LOGIN = 'julius-worker[bot]';
+/** GitHub App id of julius-worker. The bot user id is a different number and is not this. */
+export const WORKER_APP_ID = 4838349;
 export const MAX_CLEARANCE_AGE_MS = 24 * 60 * 60 * 1000;
 const SHA = /^[0-9a-f]{40}$/u;
 
@@ -101,15 +103,37 @@ export function checkPullRequest({ fields, now, pr, commit, files, fileRows, mai
   if (pr.head?.repo?.full_name !== REPO) problems.push('the PR head is not in this repository');
   if (pr.base?.ref !== 'main') problems.push('the PR does not target main');
   if (mainSha !== fields.base) problems.push(`main is ${mainSha}, the clearance names base ${fields.base}`);
-  if (pr.user?.login !== APP_LOGIN) problems.push(`the PR author is ${pr.user?.login}, not ${APP_LOGIN}`);
+  // AUTHENTICATED OPENER. `pr.user` is the GitHub account that created the pull request, which GitHub sets from the
+  // credential it authenticated. Git author name, git author email, and `commit.author.login` (the account GitHub
+  // associated by matching that email) are not identity: anyone can set the name and the email, and the login follows
+  // the email. They cannot satisfy this check. When they are present they must not contradict the authenticated
+  // opener; a contradiction or a missing opener refuses. The top-level `committer` login is not an identity source
+  // either (commits created through the API often carry another committer login) and is not consulted.
+  const openerLogin = typeof pr.user?.login === 'string' ? pr.user.login : null;
+  if (openerLogin !== APP_LOGIN) problems.push(`the authenticated PR opener is ${openerLogin ?? 'missing'}, not ${APP_LOGIN}`);
+  if (pr.user?.type !== 'Bot') problems.push(`the authenticated PR opener account type is ${typeof pr.user?.type === 'string' && pr.user.type !== '' ? pr.user.type : 'missing'}, not a GitHub App`);
+  const appId = pr.appId ?? pr.user?.appId;
+  if (appId !== undefined && appId !== WORKER_APP_ID) problems.push(`the PR App installation is ${String(appId)}, not ${WORKER_APP_ID}`);
   if (pr.commits !== 1) problems.push(`the PR has ${pr.commits} commits, exactly one is required`);
   if (commit?.commit?.tree?.sha !== fields.tree) problems.push(`the head tree is ${commit?.commit?.tree?.sha}, the clearance names ${fields.tree}`);
   if (commit?.parents?.length !== 1 || commit.parents[0]?.sha !== fields.base) problems.push('the head is not one commit directly on the cleared base');
-  if (commit?.commit?.author?.name !== APP_LOGIN || commit?.commit?.committer?.name !== APP_LOGIN) problems.push('the head commit is not authored and committed by the App');
-  // The git author NAME above is free text. The top-level `author` is the account GitHub resolved from the author email, and it MUST be the App: an UNRESOLVED author (null) is
-  // refused too, because the main-provenance gate judges exactly this login and would call the landed tip unprovenanced. The top-level `committer` is not checked: commits created
-  // through the API often carry another committer login.
-  if (commit?.author?.login !== APP_LOGIN) problems.push(`the head commit's GitHub author is ${commit?.author?.login ?? 'unresolved'}, not ${APP_LOGIN}`);
+  const gitAuthorName = commit?.commit?.author?.name;
+  const gitCommitterName = commit?.commit?.committer?.name;
+  if (typeof gitAuthorName === 'string' && gitAuthorName !== '' && gitAuthorName !== APP_LOGIN) problems.push('the git author name does not match the App; a free-text name is not identity and a mismatch fails closed');
+  if (typeof gitCommitterName === 'string' && gitCommitterName !== '' && gitCommitterName !== APP_LOGIN) problems.push('the git committer name does not match the App; a free-text name is not identity and a mismatch fails closed');
+  if (commit?.author != null) {
+    const derived = commit.author.login;
+    if (typeof derived !== 'string' || derived !== APP_LOGIN) problems.push(`the email-derived commit author is ${typeof derived === 'string' ? derived : 'unresolved'} and does not match ${APP_LOGIN}; email-derived login is not identity and a mismatch fails closed`);
+    else if (openerLogin !== null && derived !== openerLogin) problems.push(`the email-derived commit author ${derived} does not match the authenticated PR opener ${openerLogin}`);
+  }
+  const verification = commit?.commit?.verification;
+  if (verification != null && typeof verification === 'object') {
+    if (verification.reason !== undefined && verification.reason !== 'unsigned' && verification.verified !== true) problems.push(`the head commit signature does not verify (${typeof verification.reason === 'string' && verification.reason !== '' ? verification.reason : 'unreadable'})`);
+    if (verification.verified === true) {
+      const signer = typeof verification.signerLogin === 'string' ? verification.signerLogin : verification.signer?.login;
+      if (typeof signer !== 'string' || signer === '' || signer !== APP_LOGIN) problems.push(`the verified signature signer is ${typeof signer === 'string' && signer !== '' ? signer : 'missing'}, not ${APP_LOGIN}`);
+    }
+  }
   if (!allowedBranches.includes(pr.head?.ref)) problems.push(`branch ${pr.head?.ref} is not in the founder's standing landing allowlist`);
   // `files` holds EVERY name GitHub reports for a changed file: `filename` and, for a rename or copy, `previous_filename` too (a workflow renamed out of .github/workflows is still a
   // workflow change). `fileRows` is how many file rows were actually read; it must equal the PR's own changed_files count, or the list was truncated and nothing is trusted.
@@ -188,6 +212,9 @@ export function checkCreatedCommit({ created, sha, base, tree, message }) {
   // sent message minus its ONE final newline; nothing else (no other trailing whitespace, no other byte). The signed block, the nonce and the signature are still compared byte for byte.
   const stored = created?.commit?.message;
   if (typeof message !== 'string' || (stored !== message && !(message.endsWith('\n') && stored === message.slice(0, -1)))) problems.push('the created commit message differs from the one that was sent');
+  // Read-back of the commit THIS job just created, not an authorization of an untrusted author. The name and email
+  // are the bytes the lander sent and GitHub stored on that sha. They are not accepted as identity evidence for a
+  // commit somebody else authored.
   for (const who of ['author', 'committer']) {
     if (created?.commit?.[who]?.name !== LANDER_IDENTITY.name || created?.commit?.[who]?.email !== LANDER_IDENTITY.email) problems.push(`the created commit ${who} is not ${LANDER_IDENTITY.name}`);
   }

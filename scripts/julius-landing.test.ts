@@ -42,9 +42,10 @@ const sig = (text: string, key = keys.privateKey) => sign(null, Buffer.from(text
 
 const goodPr = () => ({
   number: 7, state: 'open', merged: false, draft: false, title: 'Julius: test landing', commits: 1, changed_files: 1,
-  head: { sha: H, ref: BRANCH, repo: { full_name: REPO } }, base: { ref: 'main' }, user: { login: 'julius-worker[bot]' },
+  head: { sha: H, ref: BRANCH, repo: { full_name: REPO } }, base: { ref: 'main' }, user: { login: 'julius-worker[bot]', type: 'Bot' },
 });
-// round 5 (c2): the top-level author account GitHub resolved must be the App; an unresolved (null) author is refused
+// The authenticated opener above is the identity. The git name and the email-derived login below are untrusted
+// corroboration: they may agree, and a disagreement refuses, but neither one can authorize on its own.
 const goodCommit = () => ({ commit: { tree: { sha: T }, author: { name: 'julius-worker[bot]' }, committer: { name: 'julius-worker[bot]' } }, author: { login: 'julius-worker[bot]' }, parents: [{ sha: B }] });
 const allowed = [BRANCH];
 const emptyDigest = createHash('sha256').update('').digest('hex');
@@ -1121,26 +1122,66 @@ describe('round 4: required-checks.txt has exactly one reader, the lander (via p
 
 /* ------------------------------------------------------------------------------------------------------------------ v3 round 5 (from juju2's attack): c2, b6, a10, r5, a9 */
 
-describe('round 5 c2: the head commit\'s resolved GitHub author must be the App; an unresolved author is refused', () => {
-  it('null, missing, another account and a bot look-alike are refused; the App passes', () => {
+describe('head commit identity is the authenticated App opener, never a git name or an email-derived login', () => {
+  const appOpener = { login: 'julius-worker[bot]', type: 'Bot' as const };
+  const spoofed = () => ({
+    ...goodCommit(),
+    author: { login: 'julius-worker[bot]' },
+    commit: {
+      ...goodCommit().commit,
+      author: { name: 'julius-worker[bot]', email: '41898282+julius-worker[bot]@users.noreply.github.com' },
+      committer: { name: 'julius-worker[bot]', email: '41898282+julius-worker[bot]@users.noreply.github.com' },
+    },
+  });
+
+  it('a matching email-derived login does not authorize, and a contradictory or unresolved one refuses', () => {
     const withAuthor = (author: unknown) => ({ ...goodCommit(), author });
     expect(check({ commit: goodCommit() })).toEqual([]);
     expect(check({ commit: withAuthor({ login: 'julius-worker[bot]' }) })).toEqual([]);
-    expect(check({ commit: withAuthor(null) }).join(' ')).toContain('unresolved');
-    expect(check({ commit: withAuthor(undefined) }).join(' ')).toContain('unresolved');
+    // No email association at all is not a contradiction. It is also not evidence, so the opener still has to be the App.
+    expect(check({ commit: withAuthor(null) })).toEqual([]);
+    expect(check({ commit: withAuthor(undefined) })).toEqual([]);
+    const noAuthorKey = goodCommit() as Record<string, unknown>;
+    delete noAuthorKey.author;
+    expect(check({ commit: noAuthorKey })).toEqual([]);
     expect(check({ commit: withAuthor({}) }).join(' ')).toContain('unresolved');
     expect(check({ commit: withAuthor({ login: 'ohdieyuh-glitch' }) }).join(' ')).toContain('ohdieyuh-glitch');
     expect(check({ commit: withAuthor({ login: 'julius-worker' }) }).length).toBeGreaterThan(0);
     expect(check({ commit: withAuthor({ login: 'Julius-Worker[bot]' }) }).length).toBeGreaterThan(0);
-    const noAuthorKey = goodCommit() as Record<string, unknown>;
-    delete noAuthorKey.author;
-    expect(check({ commit: noAuthorKey }).join(' ')).toContain('unresolved');
   });
 
-  it('end to end: a head whose author name is the App but whose account is unresolved never lands and nothing is written', () => {
-    const r = runLand({ scenario: { commit: { ...goodCommit(), author: null } } });
+  it('spoofed author name and email fail closed unless the authenticated opener is the App', () => {
+    const commit = spoofed();
+    expect(check({ commit, pr: { ...goodPr(), user: undefined } }).length).toBeGreaterThan(0);
+    expect(check({ commit, pr: { ...goodPr(), user: { login: 'julius-worker[bot]' } } }).join(' ')).toContain('missing');
+    expect(check({ commit, pr: { ...goodPr(), user: { login: 'julius-worker[bot]', type: 'User' } } }).join(' ')).toContain('User');
+    expect(check({ commit, pr: { ...goodPr(), user: { login: 'a-dev-session', type: 'Bot' } } }).join(' ')).toContain('a-dev-session');
+    expect(check({ commit, pr: { ...goodPr(), user: { ...appOpener, appId: 111 } } }).join(' ')).toContain('4838349');
+    const nameOnly = { ...spoofed(), author: null };
+    expect(check({ commit: nameOnly, pr: { ...goodPr(), user: { login: 'a-dev-session', type: 'User' } } }).length).toBeGreaterThan(0);
+    expect(check({ commit, pr: { ...goodPr(), user: appOpener } })).toEqual([]);
+    expect(check({ commit, pr: { ...goodPr(), user: { ...appOpener, appId: 4838349 } } })).toEqual([]);
+    const badSignature = {
+      ...spoofed(),
+      commit: { ...spoofed().commit, verification: { verified: false, reason: 'invalid' } },
+    };
+    expect(check({ commit: badSignature, pr: { ...goodPr(), user: appOpener } }).join(' ')).toContain('does not verify');
+    const verifiedBySomeoneElse = {
+      ...spoofed(),
+      commit: { ...spoofed().commit, verification: { verified: true, reason: 'valid', signerLogin: 'a-dev-session' } },
+    };
+    expect(check({ commit: verifiedBySomeoneElse, pr: { ...goodPr(), user: appOpener } }).join(' ')).toContain('signer');
+    const unsigned = {
+      ...spoofed(),
+      commit: { ...spoofed().commit, verification: { verified: false, reason: 'unsigned' } },
+    };
+    expect(check({ commit: unsigned, pr: { ...goodPr(), user: appOpener } })).toEqual([]);
+  });
+
+  it('end to end: a head whose git name and email-derived login are the App, opened by someone else, never lands', () => {
+    const r = runLand({ scenario: { pr: { ...goodPr(), user: { login: 'julius-worker[bot]', type: 'User' } }, commit: spoofed() } });
     expect(r.code, r.out).toBe(1);
-    expect(r.out).toContain('unresolved');
+    expect(r.out).toContain('not a GitHub App');
     expect(r.writes).toHaveLength(0);
   });
 });
