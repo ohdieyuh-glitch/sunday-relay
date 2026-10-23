@@ -125,7 +125,7 @@ describe('J1 live wiring (fakes only)', () => {
   });
 
   it('SOURCE SCAN: neither wiring module reads process.env', () => {
-    for (const file of ['julius-dispatch-wiring.ts', 'julius-dispatch-wiring-real.ts']) {
+    for (const file of ['julius-dispatch-wiring.ts', 'julius-dispatch-wiring-core.ts', 'julius-dispatch-wiring-real.ts']) {
       const code = readFileSync(join(__dirname, file), 'utf8').split('\n').filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l));
       expect(code.filter((l) => /process\.env|process\['env'\]|process\[\"env\"\]/.test(l)), file).toEqual([]);
     }
@@ -217,12 +217,19 @@ describe('C1: the test pins cannot reach production code', () => {
   };
   const code = (file: string): string => readFileSync(file, 'utf8').split(/\r?\n/u).filter((l) => !/^\s*(\*|\/\/|\/\*)/u.test(l)).join(' ');
 
-  it('SOURCE SCAN: server.ts and everything it imports never reference the test kit, createJ1LiveForTest or createJ1LiveDispatchWithPins', () => {
+  it('SOURCE SCAN: server.ts does not import the J1 wiring while that file overlaps the admission draft', () => {
     const files = closure([join(root, 'server.ts')]);
     expect(files.length).toBeGreaterThan(5);
-    for (const f of files) expect(code(f), f).not.toMatch(/wiring-testkit|createJ1LiveForTest|TEST_PINS/u);
-    expect(files.some((f) => /julius-dispatch-wiring-testkit/u.test(f))).toBe(false);
+    for (const f of files) expect(code(f), f).not.toMatch(/wiring-testkit|createJ1LiveForTest|TEST_PINS|createJ1LiveDispatchWithPins/u);
+    expect(files.some((f) => /julius-dispatch-wiring/u.test(f))).toBe(false);
+    expect(files.some((f) => /julius-dispatch\.ts$/u.test(f))).toBe(false);
+  });
+
+  it('SOURCE SCAN: the production wiring closure includes the factory and excludes the test kit', () => {
+    const files = closure([join(root, 'julius-dispatch-wiring.ts'), join(root, 'julius-dispatch-wiring-real.ts')]);
     expect(files.some((f) => /julius-dispatch-wiring\.ts$/u.test(f))).toBe(true);
+    expect(files.some((f) => /julius-dispatch-wiring-testkit/u.test(f))).toBe(false);
+    for (const f of files) expect(code(f), f).not.toMatch(/wiring-testkit|createJ1LiveForTest|TEST_PINS/u);
   });
 
   it('SOURCE SCAN: the production factory and the files it imports carry no pin override (no `pinned` field, no pins parameter, no env switch)', () => {
@@ -235,8 +242,9 @@ describe('C1: the test pins cannot reach production code', () => {
     expect(prod).toMatch(/export function createJ1LiveDispatchFromEnv\(env: J1Env \| \(\(\) => J1Env\), deps: J1WiringDeps\)/u);
   });
 
-  it('only the wiring core, the production factory (constants) and the test kit touch the pins-taking function', () => {
-    const files = closure([join(root, 'server.ts')]);
+  it('only the wiring core and the production factory touch the pins-taking function', () => {
+    const files = closure([join(root, 'julius-dispatch-wiring.ts')]);
+    expect(files.some((f) => /julius-dispatch-wiring-core\.ts$/u.test(f))).toBe(true);
     for (const f of files.filter((x) => !/julius-dispatch-wiring(-core)?\.ts$/u.test(x))) expect(code(f), f).not.toMatch(/createJ1LiveDispatchWithPins/u);
   });
 });
