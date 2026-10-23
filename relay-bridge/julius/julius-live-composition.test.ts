@@ -172,16 +172,17 @@ function spawnEmitting(stdout: string, code = 0) {
     let closed = false;
     child.kill = () => { closed = true; child.emit('close', null); return true; };
     setTimeout(() => {
-      if (closed) return;
-      const at = args.indexOf('--usage-file');
-      const usagePath = at >= 0 ? args[at + 1] : undefined;
-      if (typeof usagePath === 'string' && usagePath !== '') {
-        writeFileSync(usagePath, JSON.stringify({ model: 'grok-build-0.1', input_tokens: 24, output_tokens: 8 }));
+      if (!closed) {
+        const at = args.indexOf('--usage-file');
+        const usagePath = at >= 0 ? args[at + 1] : undefined;
+        if (typeof usagePath === 'string' && usagePath !== '') {
+          writeFileSync(usagePath, JSON.stringify({ model: 'grok-build-0.1', input_tokens: 24, output_tokens: 8 }));
+        }
+        if (stdout !== '') child.stdout.push(Buffer.from(stdout, 'utf8'));
+        child.stdout.push(null);
+        child.stderr.push(null);
+        child.emit('close', code);
       }
-      if (stdout !== '') child.stdout.push(Buffer.from(stdout, 'utf8'));
-      child.stdout.push(null);
-      child.stderr.push(null);
-      child.emit('close', code);
     }, 0);
     return child as never;
   };
