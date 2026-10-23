@@ -243,3 +243,42 @@ describe('bounds and cost of a large captured stream', () => {
     console.log(`large-stream secureCapturedStream ${raw.length} chars in ${elapsed} ms`);
   });
 });
+
+describe('a cut withholds its trailing token whether or not the process was killed', () => {
+  it('stores no part of a password value when the byte bound cuts that token and the process was not killed', () => {
+    const raw = `${'x'.repeat(15)}password=${'p'.repeat(12)}`;
+    const stored = secureCapturedStream(raw, 28, false);
+    expect(stored.truncated).toBe(true);
+    expect(stored.text.includes('password=')).toBe(false);
+    expect(stored.text.includes('pppp')).toBe(false);
+  });
+
+  it('withholds the fragment left in the clear when redaction lengthens a clean exit past the bound', async () => {
+    const first = `${SK}${'A'.repeat(8)}`;
+    const second = `${SK}Bppp`;
+    const raw = `${first} ${second}`;
+    expect(Buffer.byteLength(raw, 'utf8')).toBeLessThanOrEqual(28);
+    const direct = secureCapturedStream(raw, 28, false);
+    expect(direct.truncated).toBe(true);
+    expect(direct.text.includes(`${SK}B`)).toBe(false);
+    expect(direct.text.includes('Bppp')).toBe(false);
+
+    const outcome = await run(`process.stdout.write(${JSON.stringify(raw)})`, 28);
+    expect(outcome.exitCode).toBe(0);
+    expect(outcome.outputLimitHit).toBe(false);
+    expect(outcome.signal).toBeNull();
+    expect(outcome.stdout.includes(`${SK}B`)).toBe(false);
+    expect(outcome.stdout.includes('Bppp')).toBe(false);
+  });
+
+  it('keeps the last token of a clean exit that fits the bound', async () => {
+    const text = 'result: ok done';
+    const direct = secureCapturedStream(text, 1_000, false);
+    expect(direct.truncated).toBe(false);
+    expect(direct.text).toBe(text);
+    const outcome = await run(`process.stdout.write(${JSON.stringify('line one\nok')})`, 1_000);
+    expect(outcome.exitCode).toBe(0);
+    expect(outcome.truncated).toBe(false);
+    expect(outcome.stdout).toBe('line one\nok');
+  });
+});
