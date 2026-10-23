@@ -281,4 +281,23 @@ describe('a cut withholds its trailing token whether or not the process was kill
     expect(outcome.truncated).toBe(false);
     expect(outcome.stdout).toBe('line one\nok');
   });
+
+  it('keeps the safe prefix when a stopped stream already ends with the truncation suffix', () => {
+    const raw = `hello${TRUNCATION_MARK}`;
+    const stored = secureCapturedStream(raw, 1_000_000, true);
+    expect(stored.text.startsWith('hello')).toBe(true);
+    expect(stored.text.endsWith(TRUNCATION_MARK)).toBe(true);
+    expect(stored.text.includes(REDACTION_MARK)).toBe(false);
+  });
+
+  it('keeps hello and withholds a secret-shaped token sitting against the truncation suffix', () => {
+    const secret = `password=${SK}ab`;
+    const raw = `hello ${secret}${TRUNCATION_MARK}`;
+    const stored = secureCapturedStream(raw, 1_000_000, true);
+    expect(stored.text.startsWith('hello')).toBe(true);
+    expect(stored.text.includes('password=')).toBe(false);
+    expect(stored.text.includes(`${SK}ab`)).toBe(false);
+    expect(stored.text.includes(REDACTION_MARK)).toBe(true);
+    expect(stored.text.endsWith(TRUNCATION_MARK)).toBe(true);
+  });
 });
