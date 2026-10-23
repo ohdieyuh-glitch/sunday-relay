@@ -861,7 +861,7 @@ export class JuliusRunLoop {
     }
 
     /**
-     * A CODER ANSWERED BY A MODEL IT DID NOT ASK FOR ENDS THE RUN, NOT ONLY ITS
+     * A PEER ANSWERED BY A MODEL IT DID NOT ASK FOR ENDS THE RUN, NOT ONLY ITS
      * TASK (`JULIUS_RUN_HALTING_FAILURE_CLASSES`; founder rule, 2026-09-30).
      *
      * The failed task alone was not a stop:

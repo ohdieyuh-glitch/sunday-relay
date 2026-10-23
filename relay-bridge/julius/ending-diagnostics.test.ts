@@ -124,7 +124,7 @@ const architect = (outcome: GptRunOutcome, artifacts = createInMemoryArtifactExc
   });
 
 const succeeded = (outputText: string): GptRunOutcome => ({
-  ok: true, actualModel: 'gpt-5.6-sol-2026-04', responseId: 'resp_diag_success',
+  ok: true, actualModel: 'gpt-5.6-sol-20260401', responseId: 'resp_diag_success',
   status: 'completed', outputText, usage: USAGE,
 });
 
@@ -162,7 +162,7 @@ describe('A · 1–6 · the architect reports the same provider facts however it
       expect(diagnostics, `a validated plan must report ${fact}`).toHaveProperty(fact);
     }
     expect(diagnostics.outcome).toBe('succeeded');
-    expect(diagnostics.servedModel).toBe('gpt-5.6-sol-2026-04');
+    expect(diagnostics.servedModel).toBe('gpt-5.6-sol-20260401');
     expect(diagnostics.providerStatus).toBe('completed');
   });
 
@@ -240,8 +240,9 @@ describe('B · 7–8 · no site can report a subset', () => {
     // consultation: each one's refusal and success report through the same one
     // constructor. Twelve since PR 12: a PLAN or GUIDANCE body Julius cannot
     // store after the paid call fails through the same constructor too
-    // (`storedAfterCallFailure`), and the loop below holds both to it.
-    expect(calls.length, 'the call sites must still be findable').toBe(12);
+    // (`storedAfterCallFailure`). Thirteen since the served-model halt: that
+    // refusal reports through the same constructor, before any parse.
+    expect(calls.length, 'the call sites must still be findable').toBe(13);
     for (const body of calls) {
       expect(body, `a planDiagnostics call omits providerFacts: ${body.slice(0, 80)}`)
         .toContain('...providerFacts(');

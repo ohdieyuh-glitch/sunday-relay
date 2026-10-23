@@ -81,6 +81,7 @@ import {
   buildJuliusCodingAgentRequest,
   juliusCodingAgentFailureClass,
   juliusCodingAgentFailureDisposition,
+  juliusServedModelVerdict,
   renderJuliusCodingAgentContract,
   type JuliusCodingAgentProvider,
 } from '../../src/relay/mission/julius/julius-coding-agent';
@@ -1136,6 +1137,34 @@ export function createLiveArchitectAdapter(input: {
           default:
             throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Prompt Architect failed: ${outcome.failureClass}.`, outcome.failureClass, failed);
         }
+      }
+      /**
+       * A SUCCESSFUL ANSWER IS THE REQUESTED MODEL, OR THE RUN STOPS.
+       *
+       * Checked before JSON parse and before a correction is bought: a
+       * substitute is not a plan that failed validation, and buying another
+       * call from the same path cannot change what it serves. A provider
+       * failure above keeps its own class. No attested name is unattested,
+       * never a copy of the request.
+       */
+      const architectServed = typeof outcome.actualModel === 'string' && outcome.actualModel.trim() !== ''
+        ? outcome.actualModel : null;
+      const architectVerdict = juliusServedModelVerdict(input.config.model, architectServed);
+      if (architectVerdict !== 'MATCH') {
+        const architectHaltClass = architectVerdict === 'MISMATCH'
+          ? 'architect_served_model_mismatch' : 'architect_served_model_unattested';
+        throw new JuliusDispatchError(
+          'WORKER_EXECUTION_FAILURE', false,
+          architectVerdict === 'MISMATCH'
+            ? 'Prompt Architect was answered by a model other than the one requested.'
+            : 'Prompt Architect finished without attesting which model answered.',
+          architectHaltClass,
+          planDiagnostics({
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+            requestedModel: input.config.model,
+            jsonParseable: null, validationPassed: null, attempts,
+          }),
+        );
       }
       let parsed: unknown;
       let parseFailed = false;
@@ -2338,6 +2367,38 @@ export function createLiveHermesReviewerAdapter(input: {
       }
       if (outcome.kind === 'launch_failed') {
         throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, `Hermes reviewer could not launch: ${safeClaim(outcome.safeMessage, 120)}.`, 'reviewer_launch_failed');
+      }
+      if (outcome.kind === 'reviewed') {
+        /**
+         * A REVIEW THAT ARRIVED IS THE REQUESTED MODEL, OR THE RUN STOPS.
+         *
+         * `review_incomplete` keeps its own shape, including a timeout: that
+         * is not an unattested model. A reviewed answer with no served name
+         * is unattested. The check is before the verdict is accepted.
+         */
+        const reviewerServed = typeof outcome.servedModel === 'string' && outcome.servedModel.trim() !== ''
+          ? outcome.servedModel : null;
+        const reviewerVerdict = juliusServedModelVerdict(input.config.model, reviewerServed);
+        if (reviewerVerdict !== 'MATCH') {
+          const reviewerHaltClass = reviewerVerdict === 'MISMATCH'
+            ? 'reviewer_served_model_mismatch' : 'reviewer_served_model_unattested';
+          const reviewUsage: HermesUsage = outcome.usage !== null && typeof outcome.usage === 'object' ? outcome.usage : UNKNOWN_USAGE;
+          throw new JuliusDispatchError(
+            'WORKER_EXECUTION_FAILURE', false,
+            reviewerVerdict === 'MISMATCH'
+              ? 'Independent Reviewer was answered by a model other than the one requested.'
+              : 'Independent Reviewer finished without attesting which model answered.',
+            reviewerHaltClass,
+            {
+              ...reviewerDiagnostics({
+                diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath, evidenceOmitted: shown.omitted,
+                startedAt: outcome.startedAt, completedAt: outcome.completedAt, usage: reviewUsage,
+              }),
+              requestedModel: input.config.model,
+              servedModel: reviewerServed,
+            },
+          );
+        }
       }
       if (outcome.kind === 'review_incomplete') {
         /**

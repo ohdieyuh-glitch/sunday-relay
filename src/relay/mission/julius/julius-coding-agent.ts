@@ -173,11 +173,14 @@ export const juliusFailureIsContentRefusal = (failureClass: string | null | unde
 /**
  * THE FAILURES THAT END THE RUN, NOT ONLY THEIR TASK.
  *
- * Founder rule (2026-09-30): the coder is the requested model or nothing. No
- * automatic downgrade, and a STOP rather than a substitute. The Claude Code
- * provider ends a session FAILED under one of these classes when the session
- * was answered by another model, or by one it cannot attest
- * (`claude-code-coding-provider.ts`). Ending the TASK was not a stop:
+ * Founder rule (2026-09-30): a peer is the requested model or nothing. No
+ * automatic downgrade, and a STOP rather than a substitute. The Coding Agent
+ * ends a session FAILED under `coder_served_model_*` when the session was
+ * answered by another model, or by one it cannot attest
+ * (`claude-code-coding-provider.ts`). The Prompt Architect and the Independent
+ * Reviewer do the same, on a successful answer, under
+ * `architect_served_model_*` and `reviewer_served_model_*`. A provider failure
+ * keeps its own class. Ending the TASK was not a stop:
  *  - the run's own reason was the generic `TASK_FAILED`;
  *  - a sibling that never depended on the failed task was still claimable,
  *    and would have been sent to the same path.
@@ -199,8 +202,34 @@ export const juliusFailureIsContentRefusal = (failureClass: string | null | unde
 export const JULIUS_RUN_HALTING_FAILURE_CLASSES: readonly string[] = Object.freeze([
   'coder_served_model_mismatch',
   'coder_served_model_unattested',
+  'architect_served_model_mismatch',
+  'architect_served_model_unattested',
+  'reviewer_served_model_mismatch',
+  'reviewer_served_model_unattested',
   'context_integrity_unresolved_clash',
 ]);
+
+/**
+ * WHETHER AN ATTESTED SERVED MODEL IS THE ONE REQUESTED.
+ *
+ * The same rule as the Coding Agent's hosted verdict: the served name, or an
+ * extra attested name (a usage key, a canonical model), must be the requested
+ * id exactly, or its dated build `<requested>-YYYYMMDD`. A dashed snapshot
+ * such as `<requested>-YYYY-MM-DD` is a mismatch. No served name is
+ * unattested — never a match, and never filled in from the request.
+ */
+export const juliusServedModelVerdict = (
+  requested: string | null,
+  served: string | null,
+  attestedNames: readonly (string | null)[] = [],
+): 'MATCH' | 'MISMATCH' | 'UNATTESTED' => {
+  if (served === null || served === '') return 'UNATTESTED';
+  const requestedId = requested ?? '';
+  const names = [served, ...attestedNames].filter((name): name is string => name !== null && name !== '');
+  const datedBuild = (name: string): boolean =>
+    requestedId !== '' && name.startsWith(`${requestedId}-`) && /^\d{8}$/u.test(name.slice(requestedId.length + 1));
+  return requestedId !== '' && names.some((name) => name === requestedId || datedBuild(name)) ? 'MATCH' : 'MISMATCH';
+};
 
 /** The class, when it is one that ends the run; otherwise null. */
 export const juliusRunHaltingFailureClass = (failureClass: unknown): string | null =>
