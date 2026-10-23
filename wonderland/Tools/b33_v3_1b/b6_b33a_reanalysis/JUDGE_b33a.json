@@ -1,0 +1,1201 @@
+{
+ "tool": "b33_judge.py v3.1 (W2DEV)",
+ "run": "C:/dev/iwonder/_qa_handoff/integration/r16reh16w_dev_20261019/r16_repair_loop/b33_runs/run_20261020T071219Z_b33a",
+ "verdict_analyser": "both (registered = the bar; W2 may only add FAIL/INCONCLUSIVE)",
+ "overrides": [
+  "--allow-launch-cmds",
+  "--allow-switches",
+  "--expect-exe",
+  "--historical",
+  "--no-require-frames",
+  "--sender-log",
+  "--timeline",
+  "--viewer-log"
+ ],
+ "frames_required": false,
+ "expected_exe": "f2476b479c2d4b6338e350ae16eb3f38826138605aa39f0d0ef352ac92835983",
+ "candidate": {
+  "file": "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\dev_notes\\REHEARSAL_NOT_PREREG_b33_tools\\CANDIDATE.json",
+  "file_sha256": "927e21dd27b4f0ffa63c256c969278222ad479471faf8d8ba4b62b41d829fed8",
+  "status": "READY",
+  "label": "NOT-PREREG DEV harness rehearsal (wdevcmd2)",
+  "commit": "a82b2a5d40ecdead8c1e2d2dad37106d066b934c",
+  "game_exe_sha256": "70865152e144f6ef939b664cda5af2b85f096c574b87ce843097a2a499e48390",
+  "boot_exe_sha256": "aca06a168f64470e24473b05257ee81d1b546d58282b8e273418a59d9cbb1edd",
+  "expect_exe_override": "F2476B479C2D4B6338E350AE16EB3F38826138605AA39F0D0EF352AC92835983"
+ },
+ "inputs": {
+  "sender_log": "C:/dev/iwonder/_qa_handoff/integration/r16reh16w_dev_20261019/r16_repair_loop/b33_runs/run_20261020T071219Z_b33a/clientA/Saved/Logs/Wonderland.log",
+  "viewer_log": "C:/dev/iwonder/_qa_handoff/integration/r16reh16w_dev_20261019/r16_repair_loop/b33_runs/run_20261020T071219Z_b33a/clientB/Saved/Logs/Wonderland.log",
+  "timelines": [
+   "b6_b33a_reanalysis/b33a_timeline.csv"
+  ],
+  "frames_dir": "C:/dev/iwonder/_qa_handoff/integration/r16reh16w_dev_20261019/r16_repair_loop/b33_runs/run_20261020T071219Z_b33a\\frames",
+  "fig": "usr_wlautoa"
+ },
+ "hashes": {
+  "sender_log": "013be7a738f06afdfa20220c19583cfa1ceeb9eb6362224d35068da4755945b9",
+  "viewer_log": "928319af92cd987df3e15b0ab1368de2dfe9960d90974d7c9dae6619f8b99a9d",
+  "timeline_0": "07db29552436e585610f4190753400b927d51ac3d1e6175efcae7b8210fa2c6c",
+  "b33_analyser/motion_diag.py": "4dee34d04a36ae0f9a8e0e7f5f925fa4eca371ce498927c1cce16b1d27f8ad29",
+  "b33_analyser/motion_diag_w2.py": "176e273ae38e51e6fd58cc428def1a1c18c3ba2e5e306403cc69fad8efd60f1b",
+  "b33_slicer.py": "5997f82c5493f58bc7ce221e1e7a826fa772bf5ae90264dbc7f07fe6d6b59b0a",
+  "b33_judge.py": "6a81512319fa4dfb502bf5d912594ec07d5be3737ebc4be14f6258faf8eebf4e"
+ },
+ "meta": {
+  "label": "AUTOMATED-REAL-DIAGNOSTIC / DEV-LOOPBACK",
+  "exe_sha256": "f2476b479c2d4b6338e350ae16eb3f38826138605aa39f0d0ef352ac92835983"
+ },
+ "registered_analyser_identical": true,
+ "clients": {
+  "sender": null,
+  "observer": null
+ },
+ "slicer": {
+  "counts": {
+   "STANDING": 6,
+   "WALKING": 4,
+   "RUNNING": 0
+  },
+  "unclassified": 4,
+  "jumps": [
+   {
+    "k0": 3789,
+    "k1": 3794,
+    "n_air": 6,
+    "labels": "JJFFFF",
+    "t_takeoff": 1792480963.201,
+    "t_touchdown": 1792480963.989,
+    "stamp_takeoff": 1792480963.213,
+    "line_takeoff": 22868,
+    "kind": "JUMP",
+    "pre_label": "IDLE",
+    "pre_dt": 0.11800003051757812,
+    "z_pre": 22.0,
+    "z_max": 112.0,
+    "z_land": 22.0,
+    "xy_takeoff": [
+     -330.0,
+     -650.0
+    ],
+    "air_hspeed_med": 0.0,
+    "rise": 90.0,
+    "class": "STANDING",
+    "reason": ""
+   },
+   {
+    "k0": 3804,
+    "k1": 3809,
+    "n_air": 6,
+    "labels": "JJJFFF",
+    "t_takeoff": 1792480965.25,
+    "t_touchdown": 1792480966.18,
+    "stamp_takeoff": 1792480965.251,
+    "line_takeoff": 22937,
+    "kind": "JUMP",
+    "pre_label": "IDLE",
+    "pre_dt": 0.11599993705749512,
+    "z_pre": 22.0,
+    "z_max": 111.7,
+    "z_land": 22.0,
+    "xy_takeoff": [
+     -330.0,
+     -650.0
+    ],
+    "air_hspeed_med": 0.0,
+    "rise": 89.7,
+    "class": "STANDING",
+    "reason": ""
+   },
+   {
+    "k0": 3820,
+    "k1": 3825,
+    "n_air": 6,
+    "labels": "JJJFFF",
+    "t_takeoff": 1792480967.4519997,
+    "t_touchdown": 1792480968.2969997,
+    "stamp_takeoff": 1792480967.453,
+    "line_takeoff": 23011,
+    "kind": "JUMP",
+    "pre_label": "IDLE",
+    "pre_dt": 0.11699986457824707,
+    "z_pre": 22.0,
+    "z_max": 111.9,
+    "z_land": 22.0,
+    "xy_takeoff": [
+     -330.0,
+     -650.0
+    ],
+    "air_hspeed_med": 0.0,
+    "rise": 89.9,
+    "class": "STANDING",
+    "reason": ""
+   },
+   {
+    "k0": 3836,
+    "k1": 3841,
+    "n_air": 6,
+    "labels": "JJJFFF",
+    "t_takeoff": 1792480969.7039998,
+    "t_touchdown": 1792480970.5099998,
+    "stamp_takeoff": 1792480969.705,
+    "line_takeoff": 23085,
+    "kind": "JUMP",
+    "pre_label": "IDLE",
+    "pre_dt": 0.16100001335144043,
+    "z_pre": 22.0,
+    "z_max": 110.8,
+    "z_land": 22.0,
+    "xy_takeoff": [
+     -330.0,
+     -650.0
+    ],
+    "air_hspeed_med": 0.0,
+    "rise": 88.8,
+    "class": "STANDING",
+    "reason": ""
+   },
+   {
+    "k0": 3853,
+    "k1": 3858,
+    "n_air": 6,
+    "labels": "JJJJFF",
+    "t_takeoff": 1792480971.9079998,
+    "t_touchdown": 1792480972.7369998,
+    "stamp_takeoff": 1792480971.91,
+    "line_takeoff": 23161,
+    "kind": "JUMP",
+    "pre_label": "IDLE",
+    "pre_dt": 0.11799979209899902,
+    "z_pre": 22.0,
+    "z_max": 112.0,
+    "z_land": 22.0,
+    "xy_takeoff": [
+     -330.0,
+     -650.0
+    ],
+    "air_hspeed_med": 0.0,
+    "rise": 90.0,
+    "class": "STANDING",
+    "reason": ""
+   },
+   {
+    "k0": 3869,
+    "k1": 3875,
+    "n_air": 7,
+    "labels": "JJJJFFF",
+    "t_takeoff": 1792480974.119,
+    "t_touchdown": 1792480975.035,
+    "stamp_takeoff": 1792480974.12,
+    "line_takeoff": 23235,
+    "kind": "JUMP",
+    "pre_label": "IDLE",
+    "pre_dt": 0.11699986457824707,
+    "z_pre": 22.0,
+    "z_max": 112.0,
+    "z_land": 22.0,
+    "xy_takeoff": [
+     -330.0,
+     -650.0
+    ],
+    "air_hspeed_med": 0.0,
+    "rise": 90.0,
+    "class": "STANDING",
+    "reason": ""
+   },
+   {
+    "k0": 3886,
+    "k1": 3891,
+    "n_air": 6,
+    "labels": "JJJFFF",
+    "t_takeoff": 1792480976.3930001,
+    "t_touchdown": 1792480977.2409997,
+    "stamp_takeoff": 1792480976.394,
+    "line_takeoff": 23311,
+    "kind": "JUMP",
+    "pre_label": "IDLE",
+    "pre_dt": 0.15900015830993652,
+    "z_pre": 22.0,
+    "z_max": 108.8,
+    "z_land": 19.6,
+    "xy_takeoff": [
+     -330.0,
+     -650.0
+    ],
+    "air_hspeed_med": 99.65466239299597,
+    "rise": 86.8,
+    "class": "UNCLASSIFIED",
+    "reason": "label IDLE with air speed 100 uu/s fits no class"
+   },
+   {
+    "k0": 3903,
+    "k1": 3908,
+    "n_air": 6,
+    "labels": "JJJFFF",
+    "t_takeoff": 1792480978.7789998,
+    "t_touchdown": 1792480979.7029998,
+    "stamp_takeoff": 1792480978.799,
+    "line_takeoff": 23397,
+    "kind": "JUMP",
+    "pre_label": "WALK",
+    "pre_dt": 0.15999984741210938,
+    "z_pre": 14.2,
+    "z_max": 102.0,
+    "z_land": 14.6,
+    "xy_takeoff": [
+     -76.7,
+     -274.4
+    ],
+    "air_hspeed_med": 231.24606335935346,
+    "rise": 87.8,
+    "class": "WALKING",
+    "reason": ""
+   },
+   {
+    "k0": 3915,
+    "k1": 3920,
+    "n_air": 6,
+    "labels": "JJJFFF",
+    "t_takeoff": 1792480980.495,
+    "t_touchdown": 1792480981.2689998,
+    "stamp_takeoff": 1792480980.516,
+    "line_takeoff": 23453,
+    "kind": "JUMP",
+    "pre_label": "WALK",
+    "pre_dt": 0.11800003051757812,
+    "z_pre": 14.3,
+    "z_max": 103.1,
+    "z_land": 19.5,
+    "xy_takeoff": [
+     143.8,
+     52.4
+    ],
+    "air_hspeed_med": 232.68246950833725,
+    "rise": 88.8,
+    "class": "WALKING",
+    "reason": ""
+   },
+   {
+    "k0": 3928,
+    "k1": 3931,
+    "n_air": 4,
+    "labels": "JJJF",
+    "t_takeoff": 1792480982.185,
+    "t_touchdown": 1792480982.79,
+    "stamp_takeoff": 1792480982.186,
+    "line_takeoff": 23509,
+    "kind": "JUMP",
+    "pre_label": "WALK",
+    "pre_dt": 0.11800003051757812,
+    "z_pre": 19.9,
+    "z_max": 108.5,
+    "z_land": 80.2,
+    "xy_takeoff": [
+     352.4,
+     374.9
+    ],
+    "air_hspeed_med": 225.85937909375176,
+    "rise": 88.6,
+    "class": "WALKING",
+    "reason": ""
+   },
+   {
+    "k0": 3940,
+    "k1": 3944,
+    "n_air": 5,
+    "labels": "JJFFF",
+    "t_takeoff": 1792480983.905,
+    "t_touchdown": 1792480984.596,
+    "stamp_takeoff": 1792480983.927,
+    "line_takeoff": 23567,
+    "kind": "JUMP",
+    "pre_label": "WALK",
+    "pre_dt": 0.17300009727478027,
+    "z_pre": 20.1,
+    "z_max": 110.1,
+    "z_land": 85.0,
+    "xy_takeoff": [
+     524.1,
+     724.9
+    ],
+    "air_hspeed_med": 229.33325751490653,
+    "rise": 90.0,
+    "class": "WALKING",
+    "reason": ""
+   },
+   {
+    "k0": 3951,
+    "k1": 3951,
+    "n_air": 1,
+    "labels": "J",
+    "t_takeoff": 1792480985.491,
+    "t_touchdown": 1792480985.645,
+    "stamp_takeoff": 1792480985.504,
+    "line_takeoff": 23624,
+    "kind": "JUMP",
+    "pre_label": "IDLE",
+    "pre_dt": 0.1660001277923584,
+    "z_pre": 85.2,
+    "z_max": 85.8,
+    "z_land": 83.0,
+    "xy_takeoff": [
+     622.0,
+     860.7
+    ],
+    "air_hspeed_med": 43.59312339345034,
+    "rise": 0.5999999999999943,
+    "class": "UNCLASSIFIED",
+    "reason": "rise 0.6 uu < 30 (a blocked hop, not a jump)"
+   },
+   {
+    "k0": 4045,
+    "k1": 4045,
+    "n_air": 1,
+    "labels": "J",
+    "t_takeoff": 1792480998.9009998,
+    "t_touchdown": 1792480999.0159998,
+    "stamp_takeoff": 1792480998.903,
+    "line_takeoff": 24096,
+    "kind": "JUMP",
+    "pre_label": "IDLE",
+    "pre_dt": 0.12599992752075195,
+    "z_pre": 84.8,
+    "z_max": 85.2,
+    "z_land": 84.9,
+    "xy_takeoff": [
+     729.1,
+     862.3
+    ],
+    "air_hspeed_med": 35.25190068306402,
+    "rise": 0.4000000000000057,
+    "class": "UNCLASSIFIED",
+    "reason": "rise 0.4 uu < 30 (a blocked hop, not a jump)"
+   },
+   {
+    "k0": 4070,
+    "k1": 4070,
+    "n_air": 1,
+    "labels": "J",
+    "t_takeoff": 1792481002.2489998,
+    "t_touchdown": 1792481002.412,
+    "stamp_takeoff": 1792481002.254,
+    "line_takeoff": 24219,
+    "kind": "JUMP",
+    "pre_label": "IDLE",
+    "pre_dt": 0.11799979209899902,
+    "z_pre": 84.9,
+    "z_max": 85.2,
+    "z_land": 85.0,
+    "xy_takeoff": [
+     729.1,
+     862.7
+    ],
+    "air_hspeed_med": 25.418531466605224,
+    "rise": 0.29999999999999716,
+    "class": "UNCLASSIFIED",
+    "reason": "rise 0.3 uu < 30 (a blocked hop, not a jump)"
+   }
+  ]
+ },
+ "blocks": [
+  {
+   "name": "STAND",
+   "begin_utc": "07:22:42.429",
+   "end_utc": "07:22:56.464",
+   "complete": true
+  },
+  {
+   "name": "WALK",
+   "begin_utc": "07:22:56.476",
+   "end_utc": "07:23:08.549",
+   "complete": true
+  },
+  {
+   "name": "RUN",
+   "begin_utc": "07:23:11.595",
+   "end_utc": "07:23:23.678",
+   "complete": true
+  }
+ ],
+ "historical": true,
+ "void_lines_sender": [],
+ "void_lines_observer": [],
+ "teleports": [],
+ "role": "JUDGED",
+ "switches_disclosed": [
+  "-userdir",
+  "-windowed",
+  "-ResX",
+  "-ResY",
+  "-WinX",
+  "-WinY",
+  "-wldev",
+  "-ExecCmds",
+  "-forcelogflush"
+ ],
+ "switches_run_json": [],
+ "launch": [
+  {
+   "client": "sender",
+   "cmdline_found": true,
+   "switches": [
+    "-userdir",
+    "-windowed",
+    "-ResX",
+    "-ResY",
+    "-WinX",
+    "-WinY",
+    "-wldev",
+    "-forcelogflush",
+    "-ExecCmds"
+   ],
+   "bad_switches": [],
+   "commands": [
+    "wl.Social.Dev wlautoA http://127.0.0.1:8796",
+    "scalability 0",
+    "r.ScreenPercentage 50",
+    "wl.Remote.LogPeriod 0.1"
+   ],
+   "control_cvars": [],
+   "render_cvars": [
+    "scalability 0",
+    "r.ScreenPercentage 50"
+   ],
+   "dev_cmds": [
+    "wl.Social.Dev wlautoA http://127.0.0.1:8796"
+   ],
+   "log_period_cmds": [
+    "wl.Remote.LogPeriod 0.1"
+   ],
+   "not_allowed": [],
+   "ini_wl_lines": [],
+   "empty_tokens": 0
+  },
+  {
+   "client": "observer",
+   "cmdline_found": true,
+   "switches": [
+    "-userdir",
+    "-windowed",
+    "-ResX",
+    "-ResY",
+    "-WinX",
+    "-WinY",
+    "-wldev",
+    "-forcelogflush",
+    "-ExecCmds"
+   ],
+   "bad_switches": [],
+   "commands": [
+    "wl.Social.Dev wlautoB http://127.0.0.1:8796",
+    "scalability 0",
+    "r.ScreenPercentage 50",
+    "wl.Remote.LogPeriod 0.1"
+   ],
+   "control_cvars": [],
+   "render_cvars": [
+    "scalability 0",
+    "r.ScreenPercentage 50"
+   ],
+   "dev_cmds": [
+    "wl.Social.Dev wlautoB http://127.0.0.1:8796"
+   ],
+   "log_period_cmds": [
+    "wl.Remote.LogPeriod 0.1"
+   ],
+   "not_allowed": [],
+   "ini_wl_lines": [],
+   "empty_tokens": 0
+  }
+ ],
+ "report_time_samples_check": {
+  "repeated_rep_lines": 0,
+  "sender_longest_idle_s": 514.4299998283386
+ },
+ "echoes": {
+  "sender": [
+   [
+    5527,
+    "wl.Remote.LogPeriod",
+    "0.1"
+   ]
+  ],
+  "observer": [
+   [
+    5534,
+    "wl.Remote.LogPeriod",
+    "0.1"
+   ]
+  ]
+ },
+ "close_check": {
+  "sums_file": null,
+  "note": "no SHA256SUMS_AT_CLOSE.txt (historical re-analysis: not required)"
+ },
+ "exec_cmds_prereg": {
+  "render_cvars": [
+   "scalability 0"
+  ],
+  "log_period": 0.1,
+  "checked": false
+ },
+ "server": null,
+ "launch_inconclusive": [],
+ "scenarios": {
+  "STANDING": {
+   "scenario": "STANDING",
+   "ranges": [
+    [
+     3783,
+     3898
+    ]
+   ],
+   "registered": {
+    "sender_samples": 116,
+    "viewer_samples": 147,
+    "viewer_recv_air_labels": 55,
+    "air_episodes_x3": 7,
+    "n_air": 67,
+    "n_land": 32,
+    "n_ground": 48,
+    "air_p95_abs": 22.502854324814127,
+    "land_p95_abs": 2.8599999999999994,
+    "land_min_gap": -0.40817042854276764,
+    "ground_p50": -0.23999999999999844,
+    "pass_air": false,
+    "pass_land": false,
+    "pass_viewer_reads_motion": true,
+    "PASS": false
+   },
+   "w2": {
+    "sender_samples": 116,
+    "viewer_samples": 147,
+    "viewer_recv_air_labels": 55,
+    "air_episodes_x3": 7,
+    "n_air": 67,
+    "n_land": 33,
+    "n_ground": 47,
+    "air_p95_abs": 18.200469145368647,
+    "land_p95_abs": 2.8599999999999994,
+    "land_min_gap": -0.40272779816778836,
+    "ground_p50": -0.23999999999999844,
+    "settle_n": 41,
+    "settle_min_gap": -0.3443400300497501,
+    "pass_air": false,
+    "pass_land": false,
+    "pass_viewer_reads_motion": true,
+    "pass_no_sink": true,
+    "PASS": false
+   },
+   "registered_settle": {
+    "settle_n": 42,
+    "settle_min_gap": -0.36898717368341494
+   },
+   "timing": {
+    "sender_anchors": 8808,
+    "viewer_anchors": 9066,
+    "sender_lag_ms": {
+     "n": 231,
+     "p5": 0.0002384185791015625,
+     "p50": 1.9998550415039062,
+     "p95": 20.000219345092773,
+     "min": 0.0,
+     "max": 23.999929428100586
+    },
+    "viewer_lag_ms": {
+     "n": 218,
+     "p5": 0.9999275207519531,
+     "p50": 2.000093460083008,
+     "p95": 18.999814987182617,
+     "min": 0.0,
+     "max": 23.000240325927734
+    },
+    "sender_backlog_ms": {
+     "n": 231,
+     "p5": 1.9998550415039062,
+     "p50": 2.9997825622558594,
+     "p95": 3.000020980834961,
+     "min": 1.9998550415039062,
+     "max": 3.000020980834961
+    },
+    "viewer_backlog_ms": {
+     "n": 218,
+     "p5": 4.000186920166016,
+     "p50": 5.000114440917969,
+     "p95": 7.999897003173828,
+     "min": 4.000186920166016,
+     "max": 8.00013542175293
+    },
+    "fig_correction_ms": {
+     "n": 145,
+     "p5": 0.0002384185791015625,
+     "p50": 2.000093460083008,
+     "p95": 9.000062942504883,
+     "min": 0.0,
+     "max": 23.999929428100586
+    },
+    "fig_method": {
+     "age": 137,
+     "lag": 8
+    },
+    "link_latency_ms": {
+     "n": 44,
+     "p5": 24.000167846679688,
+     "p50": 61.00010871887207,
+     "p95": 154.9999713897705,
+     "min": 14.999866485595703,
+     "max": 167.9999828338623
+    },
+    "link_causality_violations_lt_minus10ms": 0
+   },
+   "window_utc": [
+    "07:22:42.443",
+    "07:22:58.032"
+   ],
+   "frames": {
+    "n": 0,
+    "first": null,
+    "last": null
+   },
+   "registered_bar_violations": [
+    "registered: air p95 22.50 > 10.0",
+    "registered: landing p95 2.86 > 2.0"
+   ],
+   "w2_bar_violations": [
+    "w2: air p95 18.20 > 10.0",
+    "w2: landing p95 2.86 > 2.0"
+   ],
+   "verdict": "FAIL",
+   "why": [
+    "registered: air p95 22.50 > 10.0",
+    "registered: landing p95 2.86 > 2.0",
+    "w2: air p95 18.20 > 10.0",
+    "w2: landing p95 2.86 > 2.0"
+   ],
+   "counted_jumps": 6,
+   "other_jumps_in_block": [
+    {
+     "takeoff": "07:22:56.394",
+     "class": "UNCLASSIFIED",
+     "reason": "label IDLE with air speed 100 uu/s fits no class"
+    }
+   ],
+   "blocks": 1
+  },
+  "WALKING": {
+   "scenario": "WALKING",
+   "ranges": [
+    [
+     3887,
+     3983
+    ]
+   ],
+   "registered": {
+    "sender_samples": 97,
+    "viewer_samples": 128,
+    "viewer_recv_air_labels": 39,
+    "air_episodes_x3": 5,
+    "n_air": 52,
+    "n_land": 35,
+    "n_ground": 41,
+    "air_p95_abs": 11.743138997841577,
+    "land_p95_abs": 1.6700000000000017,
+    "land_min_gap": -1.6700000000000017,
+    "ground_p50": -0.269999999999996,
+    "pass_air": false,
+    "pass_land": true,
+    "pass_viewer_reads_motion": true,
+    "PASS": false
+   },
+   "w2": {
+    "sender_samples": 97,
+    "viewer_samples": 128,
+    "viewer_recv_air_labels": 39,
+    "air_episodes_x3": 5,
+    "n_air": 52,
+    "n_land": 35,
+    "n_ground": 41,
+    "air_p95_abs": 11.090840684572242,
+    "land_p95_abs": 1.6700000000000017,
+    "land_min_gap": -1.6700000000000017,
+    "ground_p50": -0.269999999999996,
+    "settle_n": 41,
+    "settle_min_gap": -0.3443400300497501,
+    "pass_air": false,
+    "pass_land": true,
+    "pass_viewer_reads_motion": true,
+    "pass_no_sink": true,
+    "PASS": false
+   },
+   "registered_settle": {
+    "settle_n": 41,
+    "settle_min_gap": -0.36898717368341494
+   },
+   "timing": {
+    "sender_anchors": 8808,
+    "viewer_anchors": 9066,
+    "sender_lag_ms": {
+     "n": 193,
+     "p5": 0.0,
+     "p50": 1.9998550415039062,
+     "p95": 20.000219345092773,
+     "min": 0.0,
+     "max": 23.000001907348633
+    },
+    "viewer_lag_ms": {
+     "n": 188,
+     "p5": 0.0,
+     "p50": 1.9998550415039062,
+     "p95": 19.999980926513672,
+     "min": 0.0,
+     "max": 23.000001907348633
+    },
+    "sender_backlog_ms": {
+     "n": 193,
+     "p5": 0.0,
+     "p50": 0.9999275207519531,
+     "p95": 2.9997825622558594,
+     "min": 0.0,
+     "max": 3.000020980834961
+    },
+    "viewer_backlog_ms": {
+     "n": 188,
+     "p5": 1.9998550415039062,
+     "p50": 4.000186920166016,
+     "p95": 5.000114440917969,
+     "min": 1.9998550415039062,
+     "max": 6.000041961669922
+    },
+    "fig_correction_ms": {
+     "n": 127,
+     "p5": 0.0002384185791015625,
+     "p50": 2.000093460083008,
+     "p95": 18.000125885009766,
+     "min": 0.0,
+     "max": 23.999929428100586
+    },
+    "fig_method": {
+     "age": 127,
+     "lag": 0
+    },
+    "link_latency_ms": {
+     "n": 59,
+     "p5": 20.999908447265625,
+     "p50": 65.99998474121094,
+     "p95": 135.9999179840088,
+     "min": 14.000177383422852,
+     "max": 143.00012588500977
+    },
+    "link_causality_violations_lt_minus10ms": 0
+   },
+   "window_utc": [
+    "07:22:56.505",
+    "07:23:10.077"
+   ],
+   "frames": {
+    "n": 0,
+    "first": null,
+    "last": null
+   },
+   "registered_bar_violations": [
+    "registered: air p95 11.74 > 10.0"
+   ],
+   "w2_bar_violations": [
+    "w2: air p95 11.09 > 10.0"
+   ],
+   "verdict": "FAIL",
+   "why": [
+    "registered: air p95 11.74 > 10.0",
+    "w2: air p95 11.09 > 10.0"
+   ],
+   "counted_jumps": 4,
+   "other_jumps_in_block": [
+    {
+     "takeoff": "07:23:05.504",
+     "class": "UNCLASSIFIED",
+     "reason": "rise 0.6 uu < 30 (a blocked hop, not a jump)"
+    }
+   ],
+   "blocks": 1
+  },
+  "RUNNING": {
+   "scenario": "RUNNING",
+   "ranges": [
+    [
+     3995,
+     4091
+    ]
+   ],
+   "registered": {
+    "sender_samples": 97,
+    "viewer_samples": 128,
+    "viewer_recv_air_labels": 6,
+    "air_episodes_x3": 0,
+    "n_air": 14,
+    "n_land": 24,
+    "n_ground": 90,
+    "air_p95_abs": 1.2903465285485254,
+    "land_p95_abs": 1.7617666558294616,
+    "land_min_gap": -1.9142976811946113,
+    "ground_p50": -0.23999999999999488,
+    "pass_air": true,
+    "pass_land": true,
+    "pass_viewer_reads_motion": true,
+    "PASS": false
+   },
+   "w2": {
+    "sender_samples": 97,
+    "viewer_samples": 128,
+    "viewer_recv_air_labels": 6,
+    "air_episodes_x3": 0,
+    "n_air": 14,
+    "n_land": 24,
+    "n_ground": 90,
+    "air_p95_abs": 0.8351749085378373,
+    "land_p95_abs": 1.2547806843047482,
+    "land_min_gap": -1.9500014449614156,
+    "ground_p50": -0.23999999999999488,
+    "settle_n": 87,
+    "settle_min_gap": -0.4607154261093882,
+    "pass_air": true,
+    "pass_land": true,
+    "pass_viewer_reads_motion": true,
+    "pass_no_sink": true,
+    "PASS": false
+   },
+   "registered_settle": {
+    "settle_n": 87,
+    "settle_min_gap": -0.481982438655578
+   },
+   "timing": {
+    "sender_anchors": 8808,
+    "viewer_anchors": 9066,
+    "sender_lag_ms": {
+     "n": 193,
+     "p5": 0.9999275207519531,
+     "p50": 2.000093460083008,
+     "p95": 19.00005340576172,
+     "min": 0.0,
+     "max": 29.999971389770508
+    },
+    "viewer_lag_ms": {
+     "n": 182,
+     "p5": 0.0002384185791015625,
+     "p50": 2.000093460083008,
+     "p95": 19.999980926513672,
+     "min": 0.0,
+     "max": 24.000167846679688
+    },
+    "sender_backlog_ms": {
+     "n": 193,
+     "p5": 0.0,
+     "p50": 0.9999275207519531,
+     "p95": 4.999876022338867,
+     "min": 0.0,
+     "max": 4.999876022338867
+    },
+    "viewer_backlog_ms": {
+     "n": 182,
+     "p5": 0.9999275207519531,
+     "p50": 0.9999275207519531,
+     "p95": 2.000093460083008,
+     "min": 0.9999275207519531,
+     "max": 2.9997825622558594
+    },
+    "fig_correction_ms": {
+     "n": 127,
+     "p5": 0.9999275207519531,
+     "p50": 2.000093460083008,
+     "p95": 12.333393096923828,
+     "min": 0.0,
+     "max": 23.999929428100586
+    },
+    "fig_method": {
+     "age": 93,
+     "lag": 34
+    },
+    "link_latency_ms": {
+     "n": 18,
+     "p5": 26.999950408935547,
+     "p50": 54.99982833862305,
+     "p95": 125.0,
+     "min": 26.999711990356445,
+     "max": 130.99980354309082
+    },
+    "link_causality_violations_lt_minus10ms": 0
+   },
+   "window_utc": [
+    "07:23:11.744",
+    "07:23:25.254"
+   ],
+   "frames": {
+    "n": 0,
+    "first": null,
+    "last": null
+   },
+   "registered_bar_violations": [],
+   "w2_bar_violations": [],
+   "verdict": "INCONCLUSIVE",
+   "why": [
+    "counted RUNNING jumps 0 < 7",
+    "registered: air_episodes_x3 0 < 3",
+    "w2: air_episodes_x3 0 < 3"
+   ],
+   "counted_jumps": 0,
+   "other_jumps_in_block": [
+    {
+     "takeoff": "07:23:18.903",
+     "class": "UNCLASSIFIED",
+     "reason": "rise 0.4 uu < 30 (a blocked hop, not a jump)"
+    },
+    {
+     "takeoff": "07:23:22.254",
+     "class": "UNCLASSIFIED",
+     "reason": "rise 0.3 uu < 30 (a blocked hop, not a jump)"
+    }
+   ],
+   "blocks": 1
+  },
+  "M4": {
+   "scenario": "M4",
+   "ranges": [],
+   "verdict": "INCONCLUSIVE",
+   "why": [
+    "no drive block of this scenario",
+    "qualifying walked falls 0 < 5"
+   ],
+   "falls_listed": [
+    {
+     "k0": 3938,
+     "k1": 3938,
+     "n_air": 1,
+     "labels": "F",
+     "t_takeoff": 1792480983.563,
+     "t_touchdown": 1792480983.7319999,
+     "stamp_takeoff": 1792480983.565,
+     "line_takeoff": 23555,
+     "kind": "FALL",
+     "pre_label": "WALK",
+     "pre_dt": 0.17499995231628418,
+     "z_pre": 67.1,
+     "z_max": 48.4,
+     "z_land": 20.1,
+     "xy_takeoff": [
+      480.0,
+      659.5
+     ],
+     "air_hspeed_med": 230.00139280911637,
+     "rise": -18.699999999999996,
+     "class": "FALL",
+     "reason": "no JUMP label (a walk-off fall, M4 rules)",
+     "start_z": 67.1,
+     "start_z_median": 67.1,
+     "start_z_last": 67.1,
+     "start_n": 1,
+     "landing_z": 20.1,
+     "drop": 46.99999999999999,
+     "drop_median": 46.99999999999999,
+     "drop_last": 46.99999999999999,
+     "qualifies": false,
+     "note": "drop 47.0 < 100.0 uu: listed, excluded by the 100.0 rule only",
+     "lip_xy": [
+      457.8,
+      626.6
+     ],
+     "land_xy": [
+      502.0,
+      692.2
+     ],
+     "settle_range_uu": 0.0,
+     "fall_s": 0.16899991035461426,
+     "in_m4_block": false
+    },
+    {
+     "k0": 3963,
+     "k1": 3963,
+     "n_air": 1,
+     "labels": "F",
+     "t_takeoff": 1792480987.2359998,
+     "t_touchdown": 1792480987.402,
+     "stamp_takeoff": 1792480987.238,
+     "line_takeoff": 23686,
+     "kind": "FALL",
+     "pre_label": "IDLE",
+     "pre_dt": 0.17799997329711914,
+     "z_pre": 85.3,
+     "z_max": 85.6,
+     "z_land": 82.4,
+     "xy_takeoff": [
+      643.9,
+      855.5
+     ],
+     "air_hspeed_med": 47.121778176242415,
+     "rise": 0.29999999999999716,
+     "class": "FALL",
+     "reason": "no JUMP label (a walk-off fall, M4 rules)",
+     "start_z": 85.3,
+     "start_z_median": 85.3,
+     "start_z_last": 85.3,
+     "start_n": 5,
+     "landing_z": 82.4,
+     "drop": 2.8999999999999915,
+     "drop_median": 2.8999999999999915,
+     "drop_last": 2.8999999999999915,
+     "qualifies": false,
+     "note": "drop 2.9 < 100.0 uu: listed, excluded by the 100.0 rule only",
+     "lip_xy": [
+      643.3,
+      862.9
+     ],
+     "land_xy": [
+      650.5,
+      849.8
+     ],
+     "settle_range_uu": 3.0999999999999943,
+     "fall_s": 0.1660001277923584,
+     "in_m4_block": false
+    },
+    {
+     "k0": 3999,
+     "k1": 3999,
+     "n_air": 1,
+     "labels": "F",
+     "t_takeoff": 1792480992.263,
+     "t_touchdown": 1792480992.381,
+     "stamp_takeoff": 1792480992.265,
+     "line_takeoff": 23857,
+     "kind": "FALL",
+     "pre_label": "IDLE",
+     "pre_dt": 0.16200017929077148,
+     "z_pre": 85.5,
+     "z_max": 85.1,
+     "z_land": 79.8,
+     "xy_takeoff": [
+      667.5,
+      851.5
+     ],
+     "air_hspeed_med": 66.2447479271425,
+     "rise": -0.4000000000000057,
+     "class": "FALL",
+     "reason": "no JUMP label (a walk-off fall, M4 rules)",
+     "start_z": 85.5,
+     "start_z_median": 85.5,
+     "start_z_last": 85.5,
+     "start_n": 5,
+     "landing_z": 79.8,
+     "drop": 5.700000000000003,
+     "drop_median": 5.700000000000003,
+     "drop_last": 5.700000000000003,
+     "qualifies": false,
+     "note": "drop 5.7 < 100.0 uu: listed, excluded by the 100.0 rule only",
+     "lip_xy": [
+      666.2,
+      862.1
+     ],
+     "land_xy": [
+      671.6,
+      844.8
+     ],
+     "settle_range_uu": 5.5,
+     "fall_s": 0.11800003051757812,
+     "in_m4_block": false
+    },
+    {
+     "k0": 4023,
+     "k1": 4023,
+     "n_air": 1,
+     "labels": "F",
+     "t_takeoff": 1792480995.6539998,
+     "t_touchdown": 1792480995.83,
+     "stamp_takeoff": 1792480995.664,
+     "line_takeoff": 23983,
+     "kind": "FALL",
+     "pre_label": "IDLE",
+     "pre_dt": 0.11599993705749512,
+     "z_pre": 85.5,
+     "z_max": 84.4,
+     "z_land": 80.6,
+     "xy_takeoff": [
+      713.5,
+      850.3
+     ],
+     "air_hspeed_med": 76.83590876809996,
+     "rise": -1.0999999999999943,
+     "class": "FALL",
+     "reason": "no JUMP label (a walk-off fall, M4 rules)",
+     "start_z": 85.5,
+     "start_z_median": 85.5,
+     "start_z_last": 85.5,
+     "start_n": 5,
+     "landing_z": 80.6,
+     "drop": 4.900000000000006,
+     "drop_median": 4.900000000000006,
+     "drop_last": 4.900000000000006,
+     "qualifies": false,
+     "note": "drop 4.9 < 100.0 uu: listed, excluded by the 100.0 rule only",
+     "lip_xy": [
+      712.1,
+      862.0
+     ],
+     "land_xy": [
+      721.7,
+      846.2
+     ],
+     "settle_range_uu": 4.300000000000011,
+     "fall_s": 0.17600011825561523,
+     "in_m4_block": false
+    },
+    {
+     "k0": 4034,
+     "k1": 4034,
+     "n_air": 1,
+     "labels": "F",
+     "t_takeoff": 1792480997.2919998,
+     "t_touchdown": 1792480997.408,
+     "stamp_takeoff": 1792480997.294,
+     "line_takeoff": 24040,
+     "kind": "FALL",
+     "pre_label": "IDLE",
+     "pre_dt": 0.1639997959136963,
+     "z_pre": 84.8,
+     "z_max": 83.6,
+     "z_land": 85.2,
+     "xy_takeoff": [
+      729.1,
+      857.8
+     ],
+     "air_hspeed_med": 21.719956180225658,
+     "rise": -1.2000000000000028,
+     "class": "FALL",
+     "reason": "no JUMP label (a walk-off fall, M4 rules)",
+     "start_z": 84.8,
+     "start_z_median": 84.8,
+     "start_z_last": 84.8,
+     "start_n": 5,
+     "landing_z": 85.2,
+     "drop": -0.4000000000000057,
+     "drop_median": -0.4000000000000057,
+     "drop_last": -0.4000000000000057,
+     "qualifies": false,
+     "note": "drop -0.4 < 100.0 uu: listed, excluded by the 100.0 rule only",
+     "lip_xy": [
+      729.1,
+      864.5
+     ],
+     "land_xy": [
+      729.1,
+      857.5
+     ],
+     "settle_range_uu": 0.4000000000000057,
+     "fall_s": 0.11600017547607422,
+     "in_m4_block": false
+    }
+   ],
+   "candidates": 0,
+   "qualifying": 0,
+   "space_presses_in_m4": 0,
+   "timeline_m4_blocks": 0
+  }
+ },
+ "result": "FAIL"
+}

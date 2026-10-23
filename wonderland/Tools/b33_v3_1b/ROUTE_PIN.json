@@ -1,0 +1,27 @@
+{
+  "_what": "B33 v3.1 (tools\\b33_v3_1): THE route pin slot (Q-B33-1 condition 5; Q-M2c-5 (b)/(d) terms; PREREG_B33_PRECONDITION_v3 section 7). b33_drive.ps1 refuses a live -Mode m4 / -Mode all drive unless status is PINNED and the -Route file's sha256 equals route_sha256 (-Mode survey is allowed: a survey is how the pin is chosen). b33_judge.py VOIDs a run with M4 blocks whose drive copy of the route (drive_*\\route.json) does not hash to route_sha256, and every run with M4 blocks while status is not PINNED. DIAGNOSTIC tool, W2DEV, not evidence by itself.",
+  "status": "PENDING",
+  "status_note": "PENDING: chosen by the lead BEFORE any data, on a ROUTE SURVEY ONLY (never on a composition or any jump / M4 result). The two options, both inside the pinned v1 bounds: (a) routes\\b33_route_v10.json with survey 12's record; (b) routes\\b33_route_v11.json with a fresh survey on the r16reh18 harness. The lead fills route, route_sha256 (64 hex), survey_run, survey_record and survey_record_sha256 and sets status PINNED; the reviewer rules it (B-9). N = 10 walk-off attempts per counted run is pre-stated (Q-M2c-5). Filling this slot re-hashes the SUMS and the prereg: a new version, never in place (7a7faf P2-3).",
+  "options": [
+    {
+      "route": "routes\\b33_route_v10.json",
+      "route_sha256": "589c57fcc6ba15d33b8ff4a7d98e28140af8a9999c5e64301eefa2fe79efd731",
+      "survey_run": "dev_notes\\REHEARSAL_NOT_PREREG_b33_runs\\DIAGNOSTIC_NOTPREREG_b33_survey_20261021T082527Z (survey 12, c19 harness, NOT-PREREG)",
+      "survey_record_sha256": "97b11bdd9553764628376d57a1554831038f91cc647e55516441f5cf8238c41f",
+      "note": "the loop closed as one walk, 73.5 s kerb to kerb; ROUTE OK. Acceptable ONLY if the r16reh18 source changes NO world or map content (the reviewer checks this at the T3 source review; ruling 7a7faf P2-3)"
+    },
+    {
+      "route": "routes\\b33_route_v11.json",
+      "route_sha256": "7de04985b6db89989b5ed8063972c2b143f3c45b4be8577d8c3b9917c390405b",
+      "survey_run": "",
+      "survey_record_sha256": "",
+      "note": "v10 with one change (the (0,2908) descent z hint 26.8 -> 20.0, P79); needs its own survey before it can be pinned"
+    }
+  ],
+  "route": "",
+  "route_sha256": "",
+  "survey_run": "",
+  "survey_record": "",
+  "survey_record_sha256": "",
+  "m4_attempts_pre_stated": 10
+}

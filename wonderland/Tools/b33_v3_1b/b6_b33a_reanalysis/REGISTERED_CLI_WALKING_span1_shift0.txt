@@ -1,0 +1,17 @@
+sender_samples: 41
+viewer_samples: 61
+viewer_recv_air_labels: 28
+air_episodes_x3: 3
+n_air: 26
+n_land: 15
+n_ground: 10
+air_p95_abs: 12.9305806942169
+land_p95_abs: 3.5860495498743923
+land_min_gap: -0.4000000000000057
+ground_p50: -0.19709694785942133
+pass_air: False
+pass_land: False
+pass_viewer_reads_motion: True
+PASS: False
+best_shift_ms,air_p95: (-30, 4.621468575141989)
+exit code: 1 (0 = PASS, 1 = not PASS)

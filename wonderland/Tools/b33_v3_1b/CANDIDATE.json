@@ -1,0 +1,23 @@
+{
+  "_what": "B33 v3.1b (tools\\b33_v3_1b; copy of tools\\b33_v3_1a whose only changes are this file and RELAY_PIN.json's commit/tree fill): THE ONE pinned candidate slot (C0.2, R4-13). b33_launch.ps1 refuses to start, before anything is made (-DryChecks too), unless status is exactly READY, every hash is 64 hex, the package's game and boot exes hash to these values, -Package is package_folder and -Commit is commit (or a >= 7-char prefix). b33_judge.py VOIDs every run whose exe is not game_exe_sha256 and, while status is not READY, every run. Nothing else reads a candidate from anywhere else. DIAGNOSTIC tool, W2DEV/WONDERLAND_DEV, not evidence by itself.",
+  "status": "READY",
+  "status_note": "READY (WONDERLAND_DEV development subagent, 2026-10-21, at the reviewer's request 30877f). Filled from the governed r16reh18 build; every value was re-read from disk or from git (read-only) when this file was written: both exes and the zip re-hashed from the package on disk, the 91 package files re-checked against REVIEWER_BASELINE_r16reh18_PACKAGE.sha256 (91/91 match), commit and tree read with git rev-parse. The reviewer checks every field against git and the baseline (exact-field check). READY is the launcher's and the judge's only accepted word; it does not pin the relay (RELAY_PIN.json stays PENDING) or the route (ROUTE_PIN.json stays PENDING).",
+  "label": "0.1.0-r16reh18",
+  "commit": "aa930c269c43a52fc31c785f7bdcc231c8af6cf0",
+  "tree": "ea35bd37142f671817fa9262fbad7981de45b5f5",
+  "game_exe_sha256": "df6b70c832f8983a30d09d814092d7839df467232f760694e2723987669b658d",
+  "boot_exe_sha256": "aca06a168f64470e24473b05257ee81d1b546d58282b8e273418a59d9cbb1edd",
+  "package_folder": "C:\\dev\\iwonder\\_wonderland_beta_release\\Wonderland_PrivateBeta_0.1.0-r16reh18",
+  "zip_sha256": "a5064a814e2344ed90be26d9b8ae96384fcc5890702d71564e609496f4222f50",
+  "zip": "C:\\dev\\iwonder\\_wonderland_beta_release\\Wonderland_PrivateBeta_0.1.0-r16reh18.zip",
+  "branch": "local/r16reh16w (task3 branch of record, fast-forwarded to aa930c26; the governed record names it)",
+  "build_record": "C:\\dev\\iwonder\\_wonderland_beta_release\\RELEASE_MANIFEST_0.1.0-r16reh18.txt",
+  "build_record_sha256": "4559e9ed6dde58f66df8e16539b1eee82e900cfbf00ea8574b4d598859026363",
+  "governed_record": "C:\\dev\\iwonder\\_qa_handoff\\integration\\r16reh16w_submission_20261020\\build_records\\governed_0.1.0-r16reh18.result",
+  "governed_record_sha256": "ba4751aeea0b08cb1c890c96b277f675a781a97c6702e1557d02b7c66f7de57a",
+  "governed_build_record_md_sha256": "cbba643e80db4ab013faadd25d78072deb1ac33101d460d5b15b5875f4478ad0",
+  "reviewer_baseline": "C:\\dev\\iwonder\\_independent_review_20261020\\R16_LOOP_20261020\\REVIEWER_BASELINE_r16reh18_PACKAGE.sha256: 91 files, list sha256 775ce9a504713a6f224a4c3442df0c7c43ba8ab2f7f66d851f2461319b81e762 (775ce9a5); BASELINE_r16reh18_RECORD.md sha256 67a100daf3a74fd9622a99174abe5bd4af70055dc3852cdf0f8f02699093ec46; the package on disk matched 91/91 when this file was written",
+  "reviewer_baseline_list_sha256": "775ce9a504713a6f224a4c3442df0c7c43ba8ab2f7f66d851f2461319b81e762",
+  "reviewer_baseline_file_count": 91,
+  "superseded": "0.1.0-r16reh17 (exe 293ebe04, commit 667cfe5b) and 0.1.0-r16reh16z (exe 18e16ff9, commit a82b2a5d; tools\\b33\\CANDIDATE.json, frozen): never a B33 v3.1 candidate"
+}

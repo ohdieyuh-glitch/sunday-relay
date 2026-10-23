@@ -1,0 +1,723 @@
+{
+  "name": "b33_route_v9",
+  "what": "Waypoints for b33_drive.ps1 (W2DEV) v3.1f, PROPOSED from the DEV rehearsal surveys 1-5 (NOT-PREREG) and the DEV kerb survey v2. DIAGNOSTIC tool input, not evidence; path design for the drive, not a measurement threshold; the official route is fixed only by the B-9 survey addendum on the candidate. A waypoint is [x, y] or [x, y, expected soles z] (sender log frame, measured where given).",
+  "verified": false,
+  "provenance": {
+    "spawn": "b33a sender spawn (-330,-650,22) yaw 56 (run_20261020T071219Z_b33a clientA log)",
+    "runway": "research B33_RESEARCH_REPORT section 4: corridor x~0, y 0..2600 walked at z~10 [RECUSED-HINT origin: ledge_measure hop1/hop2]; the b33a RUN phase was pinned at a terrace wall near (729,864,85): this runway stays at x 0",
+    "m4": "coordinator 2026-10-20 from W2DEV geometry survey v2 (dev_notes/m4_survey, DEV, teleports): the Dog STANDS on the +x north-end kerb top at soles z 113.0 (x +163, y 4450..4505); walking OUTWARD (+x, yaw 0) leaves it: drops 124.9 (y 4450), 111.5 (y 4480), 111.0 (y 4505); walking +y/-y along the kerb did not fall. Approach per research section 5: spawn -> (0,1000) -> (0,2600) -> flight y~2700-3300 -> path x 150..210 north -> kerb. v3: north on the path centre line x 0 from the flight top (0,3300) in legs of ~250 uu to (0,4380), a PRECISE corner east to (100,4380) on the path, then the mount taps NE onto the kerb top to (163,4468). x 0 north of y 3420 has NOT been walked on this build: an obstacle there gives NO-PROGRESS (a safe abort), a drop gives OFF-PATH. v4: the approach continues north on x 0 to (0,4460) (the path's north end, between the kerbs; NOT walked on this build: rehearsal 3 reached (11.5,4409.3) z 95.5), turns east STANDING to (110,4470) and mounts by taps EAST to (148,4476): the actor then already faces ~+x, so the walk-off turn is small and its heading probe converges at once (v3.1c). v5: the centre line north to (0,4375) (walked in rehearsals 3 and 5 to y 4409 / 4427), a standing corner east to (85,4375) (rehearsal 3: (75.7,4368.3) 94.3, (90.5,4376.3) 94.3), then NE onto the strip at its small step to (140,4416) (rehearsal 3's track, above), and the mount taps on the strip top NORTH to mount.to (155,4470): inside the ruled box (x 140..186, y 4450..4505), on the line rehearsal 3 walked (x 153..161 at y 4431..4450) and the DEV kerb survey's x 161, 17 uu west of the walk-off edge guard (x 172). The walk-off turn is ~75-95 deg (the actor faces north after the mount); the v3.1e drive measures the walk-off heading from the Dog's displacement over three 30-ms taps (~7 uu a round), not by turning the actor. NOT walked: x 140..155 at y 4416..4470.",
+    "m4_return": "v6: from the walk-off landing (~307, 4400..4510; z -12 .. 5) SOUTH along the wall to (305,4380,5.0) (rehearsal 3 slid along x 307.4 to (307.4,4382.1) 5.0; west of x ~293 is the 27.5 step), up the ramp to (270,4300,35.6), along the terrace to (270,4220,35.6) and its SE corner (291,4170,29.7), DOWN the stairs to the slab (334,4138,-11.8; a declared descent leg: floor -26.8), then rehearsal 1's slab south (330,3600,-11.8), (350,3400), (350,2600) (NOT walked), and (0,2600,9.4). All points from (300,4380) to (334,4138) were walked by rehearsal 3. v7: after the stairs, SOUTH on the slab to (322,3565,-11.8) (rehearsal 1: (320.1,3557.6) -11.8), UP rehearsal 1's stairs to the terrace (284,3490) and its stairs to the strip (175,3448) (no z on these two: a precise arrival may stop on a stair), then DOWN to the path (83,3432,72.0; a declared descent: the path's lip is 71.6-78 there, 16-22 uu below the strip), and the approach again from (0,3550) (rejoin_index 3). v8: from the slab (321,3600) to the stair foot (320,3558), then up rehearsal 1's line (305,3523), (284,3490) to the terrace (263,3472), the upper flight's foot (237,3463) and up to the strip (175,3448), every point careful and tight (12 uu). v9: after (270,4220) the return stays on the terrace south (265,3900), (265,3600) to (255,3475), then climbs west up the upper flight (230,3462), (205,3456) (careful, tight) to the strip (175,3448) and steps down to the path (83,3432,72; a declared descent).",
+    "v3_basis": "Rehearsal 1 (DIAGNOSTIC_b33_survey_20261020T222129Z) and rehearsal 2 (DIAGNOSTIC_b33_survey_20261020T225230Z, DEV harness wdevcmd2): both reached the flight top on x ~0 (z 72.6 at (6.3,3309.7); 76.3 at (1.7,3379.4) .. (59.4,3420.6)); both then went NE onto the RAISED EAST STRIP (z 88.8 at (142.8,3458.1), 93.4 at (178.5,3467.6), 93.9 at (174.5,3447.1)) and off its east edge at x ~190-215 (rehearsal 1: 88.7 at x 211.7 -> 35.7 -> -11.8 slab; rehearsal 2: 82.2 at x 218.2, 72.2 at 224.9, then a terrace at z ~35 for x 217-230, y 3500-3801). The kerb survey: the +x kerb top x 161-183 is z 106 (y 4005) .. 113 (y 4450-4505), the walk-off +x from x ~183 falls to x ~307. So the strip x ~140-195 is a RAISED EDGE ~15 uu above the path with a drop beyond; the path surface is between the kerbs, centred on x 0 (the DEV survey declaration: 'kerb tops at the north end of the raised garden path at x = +/-163').",
+    "calibration_v3": "rehearsals 1 / 2 calibrated 6.044 / 5.468 counts/deg (one pass each, 10 % apart); v3.1b drive: 2 passes (+/-40), the mean, refuse if > 8 % apart; the post-turn heading is read over the last 700 ms of a 1.4 s walk (was 400 of 900).",
+    "v4_basis": "Rehearsal 3 (DIAGNOSTIC_b33_survey_20261020T232701Z, route v3, drive v3.1b): the approach on the path centre line, the precise corner and the mount WORKED (ON_KERB at (161.5,4449.8,113.1)), but that is the ruled box's south edge (y 4450..4505), and the walk-off went -16 deg: (196.2,4439.7) 108.6 -> FALL (230.5,4429.8) 77.9 -> (255.3,4422.6) 65.5 -> first landing (292.6,4411.8) z 27.5 (a step) = 85.6 uu by the pinned reader (< 100), then (307.4,4402.0) z 5.0. The DEV kerb survey walked straight +x from y 4450 / 4480 / 4505: landings (307.5,4450) -11.8 (drop 124.9), (307.4,4480) 1.5 (111.5), (307.4,4506) 1.7 (111.0). v4 mounts to the middle of the ruled range (mount.to y 4476) and the v3.1c drive probes the walk-off heading to within 5 deg of +x: a straight walk-off from y ~4476 lands on the lawn (1.5) or the slab (-11.8), >= 111 uu below the kerb top.",
+    "v5_basis": "Rehearsal 5 (DIAGNOSTIC_b33_survey_20261021T005708Z, route v4, drive v3.1d): calibration 7.128 counts/deg (spread 1.3 %), runway OK, the centre line again (0,3300) 72.6 .. (-5.3,4427.2) 95.6, the precise corner and the leg toward (110,4470) arrived at (79.9,4456.3) 94.4; the first mount tap east went DOWN: (92.5,4460.6) 88.0, (109.2,4467.2) 66.1, (109.4,4475.5) 50.0, then stuck at x 109.5 (z 51-53) against the strip's west side (~60 uu): MOUNT-FAILED. Between the path's north end (z ~96, x <= ~80) and the strip (z 113) at y ~4450-4480 there is a TROUGH (z ~51), so v4's eastward mount cannot work. Rehearsal 3 (route v3) stepped from the path onto the strip further south with an 18.7 uu step while walking: (103.2,4383.1) 92.2, (112.6,4390.8) 89.9, (128.9,4404.2) 108.6, (131.2,4406.1) 109.7, (139.7,4415.6) 112.3, (153.4,4431.1) 113.1, (159.5,4443.7) 113.1, (161.5,4449.8) 113.1 (all WALK/IDLE, no fall). Rehearsals 1 and 2 stepped onto the strip at y ~3440-3460 the same way (path 71.6-78.0 -> strip 88.8-93.9, ~17-20 uu).",
+    "v6_basis": "Rehearsal 6 (DIAGNOSTIC_NOTPREREG_b33_survey_20261021T020022Z, route v5, drive v3.1e): ON_KERB at (148.6,4457.0,112.9); the walk-off heading by displacement (one round: 6.5 uu at 0.9 deg, error -0.9); the walk-off flew (167.5,4457.2) 112.9 .. (294.4,4458.1) 25.1 and stopped at x 307.4 (z -7.4): 116.7 uu by the survey record. The v4/v5 return's first point (380,4455) is EAST of the landing: 14 taps east moved the Dog 0 uu in x (pinned at 307.4, z -7.2 -> -5.9): PRECISE could not close. Every walk-off so far stopped at x ~307.4 (DEV kerb survey: (307.5,4450), (307.4,4480), (307.4,4506); rehearsal 3: (307.4,4402) then sliding south along x 307.4 to 4382): a wall east of the landing for y >= ~4380. Rehearsal 3 then WALKED out of the landing: (302.8,4372.1) 16.4, (292.9,4351.2) 28.2, (281.7,4327.5) 34.0, (270.6,4303.8) 35.6 (a ramp up), the terrace (261.4,4267.5) / (264.5,4241.5) / (274.4,4203.8) 35.6, its SE corner (290.9,4169.7) 29.7, down (WALK, no fall) to the slab (310.9,4151.8) -11.8, (333.9,4137.9) -11.8: LEFT-THE-PATH aborted it there (a 41.5 uu descent in 0.12 s). v6 returns along that track, every point from the landing to the slab CAREFUL (standing turns, precise arrivals: the terrace is narrow) and the stairs a declared descent leg ([x, y, z, \"careful\", \"down\"], drive v3.1f).",
+    "m4_approach_v6": "v6: the last approach point (140,4416) carries no z: a precise arrival stops within 35 uu, which near the strip's step can be the path's lip (rehearsal 6 arrived at (118.2,4396.4) z 99.5, 2.2 uu above v5's z-hint floor 97.3; the model at (117.6,4395.8) z 91.1 failed it). The mount taps then climb the 18.7 uu step; MOUNT-DOWN still guards against any descent.",
+    "v7_basis": "Rehearsal 8 (DIAGNOSTIC_NOTPREREG_b33_survey_20261021T023934Z, route v6, drive v3.1f): ON_KERB, walk-off, and the v6 return WORKED from the landing up the ramp, along the terrace, down its SE stairs (declared descent) to the slab and south on it to (340.3,3432.9); then the slab is closed to the south: the Dog stood at (358.7..358.2,3281.8) z -10.0 against it (NO-PROGRESS toward (350,2600), never walked by any rehearsal). Rehearsals 1 and 2 came DOWN from the path to the slab, every sample WALK with vz 0 (stairs, not falls): rehearsal 1 (174.5,3447.1) 93.9 [the strip], (211.7,3456.4) 88.7, (237.5,3462.8) 35.7, (263.0,3472.0) 35.7 [the terrace], (284.1,3489.9) 33.2, (305.1,3523.1) 10.9, (320.1,3557.6) -11.8 [the slab]; rehearsal 2 (178.5,3467.6) 93.4, (218.2,3469.4) 82.2, (224.9,3469.5) 72.2, (226.2,3479.6) 58.7, (229.2,3501.9) 35.6. v7 walks that way back UP (NOT walked upward yet: the stairs' risers are assumed <= MaxStepHeight 30 because the descents stayed WALK), then down the 17-20 uu step from the strip to the path (rehearsals 1-2 stepped up there) and rejoins the centre line at (0,3550).",
+    "v8_basis": "Rehearsal 9b (DIAGNOSTIC_NOTPREREG_b33_survey_20261021T025327Z, route v7): ON_KERB, walk-off (drive estimate 120.7), the return out of the landing, over the terrace and down its stairs to the slab again; then the arrival at (322,3565) stopped 33 uu short at (326.0,3597.9) and the leg toward (284,3490) cut the corner: the Dog met the slab's west side at x 306.9 (y 3547 -> 3516, z -11.8), never the stair foot. Rehearsal 1 walked these stairs DOWN along one line: (284.1,3489.9) 33.2 -> (305.1,3523.1) 10.9 -> (320.1,3557.6) -11.8 -> (321.0,3596.3). v8 climbs back along that line point by point, each point TIGHT (a precise arrival within 12 uu) and CAREFUL (a standing turn, the displacement probe), then the upper flight the same way: (263.0,3472.0) 35.7 -> (237.5,3462.8) 35.7 -> (211.7,3456.4) 88.7 -> (174.5,3447.1) 93.9. Climbing either flight is still unverified.",
+    "v9_basis": "DEV exploration 1 (DIAGNOSTIC_NOTPREREG_b33_explore_20261021T033410Z, drop tests; EXPLORATION_RECORD.md): the terrace (z 34-36, x ~230-290) runs continuously from the walk-off landing's south side (y ~4425) to y ~3440; the slab has no way back up (the terrace's east edge ends in a 23 uu face too steep to climb: composition 1 and survey 9b slid along x 306.9); the only link up to the strip seen so far is the upper flight rehearsals 1 and 2 walked DOWN at y ~3445-3500 (36 -> 55-63 -> 75-82 -> 88-93 -> 94). v9 returns along the terrace and climbs that flight on rehearsal 1's line. Climbing it is UNVERIFIED (exploration 2). The walk-off itself is not robust in the ruled box (the edge bevel, EXPLORATION_RECORD goal 2): founder-level."
+  },
+  "counts_per_deg_prior": 4.207,
+  "counts_per_deg_prior_source": "mp_auto_rule_v2.ps1 COUNTS_PER_DEG 700/166.4 (an earlier turn calibration of another build; unverified for this exe and mouse settings; the drive calibrates first)",
+  "calibration": {
+    "walk_s": 1.2,
+    "turn_deg": 40,
+    "after_s": 1.4,
+    "min_deg": 15,
+    "max_deg": 80,
+    "after_window_ms": 700
+  },
+  "jumps": {
+    "approach": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        100
+      ]
+    ],
+    "runway": {
+      "x": 0,
+      "y_lo": 100,
+      "y_hi": 1900
+    },
+    "runway_note": "y 100..1900 keeps the jumps within ~0.8-2.6 k uu of the observer at spawn (camera yaw 56); passes turn 300 uu before each end",
+    "arrive_uu": 80
+  },
+  "m4": {
+    "approach": [
+      [
+        0,
+        1000,
+        11.4
+      ],
+      [
+        0,
+        2600,
+        9.4
+      ],
+      [
+        0,
+        3300,
+        72.6
+      ],
+      [
+        0,
+        3550
+      ],
+      [
+        0,
+        3800
+      ],
+      [
+        0,
+        4050
+      ],
+      [
+        0,
+        4300,
+        93.2
+      ],
+      [
+        0,
+        4375,
+        94.3
+      ],
+      [
+        85,
+        4375,
+        94.3
+      ],
+      [
+        140,
+        4416
+      ]
+    ],
+    "arrive_uu": 50,
+    "mount": {
+      "to": [
+        155,
+        4455
+      ],
+      "max_taps": 14,
+      "tap_ms": 220,
+      "kerb_z": [
+        106.0,
+        121.0
+      ],
+      "box_x": [
+        140.0,
+        186.0
+      ],
+      "box_y": [
+        4445.0,
+        4505.0
+      ]
+    },
+    "walk_off": {
+      "yaw": 0,
+      "hold_ms": 1200
+    },
+    "return": [
+      [
+        305,
+        4380,
+        5.0,
+        "careful"
+      ],
+      [
+        270,
+        4300,
+        35.6,
+        "careful"
+      ],
+      [
+        270,
+        4220,
+        35.6,
+        "careful"
+      ],
+      [
+        265,
+        3900,
+        35.6
+      ],
+      [
+        265,
+        3600,
+        35.6
+      ],
+      [
+        255,
+        3475,
+        35.6,
+        "careful",
+        "tight"
+      ],
+      [
+        230,
+        3462,
+        null,
+        "careful",
+        "tight"
+      ],
+      [
+        205,
+        3456,
+        null,
+        "careful",
+        "tight"
+      ],
+      [
+        175,
+        3448,
+        null,
+        "careful"
+      ],
+      [
+        83,
+        3432,
+        72.0,
+        "careful",
+        "down"
+      ]
+    ],
+    "rejoin_index": 3
+  },
+  "dry_run_terrain": {
+    "what": "A MADE-UP rectangle model used ONLY by -DryRun to exercise the drive's logic offline. NOT the game's geometry; v3 shapes it after rehearsals 1-2 and the kerb survey: the path between raised kerb strips, the strip's east edge at x 195 with a terrace (z 35) and the slab (z -11.8) beyond. v4 adds rehearsal 3's step (z 27.5) and terrace (z 35.6) south-east of the kerb. v5 adds rehearsal 5's trough (z 51) between the path's north end and the strip, the path's lower east lip, and starts the strip at x 118. v6 adds the landing area east of the kerb as rehearsals 3 and 6 found it: the wall at x ~308 north of y 4380, the landing ground, the ramp up to the terrace, the terrace and its SE stairs down to the slab. v7 adds the slab's south side (y ~3282) and the two flights of stairs rehearsal 1 walked down (strip -> terrace -> slab).",
+    "ground_z": 10.0,
+    "rects": [
+      {
+        "x": [
+          195,
+          300
+        ],
+        "y": [
+          2600,
+          3445
+        ],
+        "z": [
+          -11.8,
+          -11.8
+        ],
+        "axis": "",
+        "note": "low ground east of the flight"
+      },
+      {
+        "x": [
+          300,
+          900
+        ],
+        "y": [
+          2600,
+          4470
+        ],
+        "z": [
+          -11.8,
+          -11.8
+        ],
+        "axis": "",
+        "note": "the plaza slab (rehearsal 1: -11.8, x >= 307)"
+      },
+      {
+        "x": [
+          195,
+          300
+        ],
+        "y": [
+          3445,
+          3801
+        ],
+        "z": [
+          35,
+          35
+        ],
+        "axis": "",
+        "note": "the terrace east of the strip (rehearsal 2: z ~35, x 217-230, y 3500-3801)"
+      },
+      {
+        "x": [
+          195,
+          300
+        ],
+        "y": [
+          3801,
+          4441
+        ],
+        "z": [
+          -11.8,
+          -11.8
+        ],
+        "axis": "",
+        "note": "below the strip's east edge further north (model)"
+      },
+      {
+        "x": [
+          -250,
+          195
+        ],
+        "y": [
+          2700,
+          3330
+        ],
+        "z": [
+          10,
+          76
+        ],
+        "axis": "y",
+        "note": "the flight as a ramp (rehearsals: 9.4 at 2607 .. 76.3 at 3379)"
+      },
+      {
+        "x": [
+          -250,
+          195
+        ],
+        "y": [
+          3330,
+          3445
+        ],
+        "z": [
+          76,
+          76
+        ],
+        "axis": "",
+        "note": "the flight top"
+      },
+      {
+        "x": [
+          -130,
+          105
+        ],
+        "y": [
+          3445,
+          4441
+        ],
+        "z": [
+          76,
+          96
+        ],
+        "axis": "y",
+        "note": "the path surface between the kerb strips (model slope)"
+      },
+      {
+        "x": [
+          105,
+          118
+        ],
+        "y": [
+          3445,
+          4441
+        ],
+        "z": [
+          72,
+          92
+        ],
+        "axis": "y",
+        "note": "the path's east lip, ~4 uu lower (rehearsals: 71.6-71.9 at x ~115, y ~3430-3447; 89.9 at (112.6,4390.8))"
+      },
+      {
+        "x": [
+          118,
+          195
+        ],
+        "y": [
+          3445,
+          4441
+        ],
+        "z": [
+          91,
+          113
+        ],
+        "axis": "y",
+        "note": "the raised east strip / kerb (rehearsals 88.8-93.9 at y ~3450; kerb survey 106 at 4005, 113 at 4383+) v5: from x 118 (rehearsal 3 stepped up 18.7 uu between x 112.6 and 128.9 at y ~4391-4404)"
+      },
+      {
+        "x": [
+          -195,
+          -130
+        ],
+        "y": [
+          3445,
+          4441
+        ],
+        "z": [
+          91,
+          113
+        ],
+        "axis": "y",
+        "note": "the west strip (mirror; model)"
+      },
+      {
+        "x": [
+          -130,
+          85
+        ],
+        "y": [
+          4441,
+          4508
+        ],
+        "z": [
+          96,
+          96
+        ],
+        "axis": "",
+        "note": "the path's north end (rehearsal 5: 95.6-96 at x <= 80)"
+      },
+      {
+        "x": [
+          85,
+          118
+        ],
+        "y": [
+          4441,
+          4508
+        ],
+        "z": [
+          51,
+          51
+        ],
+        "axis": "",
+        "note": "the TROUGH between the path's north end and the strip (rehearsal 5: 88.0 at (92.5,4460.6), 66.1 at (109.2,4467.2), 50-53 at (109.4..109.6, 4475.5..4477.8); its east side ~60 uu up to the strip)"
+      },
+      {
+        "x": [
+          118,
+          195
+        ],
+        "y": [
+          4441,
+          4508
+        ],
+        "z": [
+          113,
+          113
+        ],
+        "axis": "",
+        "note": "the +x kerb top (kerb survey: 113)"
+      },
+      {
+        "x": [
+          230,
+          305
+        ],
+        "y": [
+          4150,
+          4380
+        ],
+        "z": [
+          35.6,
+          35.6
+        ],
+        "axis": "",
+        "note": "the terrace SE of the kerb (rehearsal 3: 35.6 at (270.6,4303.8), 29.7 at (290.9,4169.7))"
+      },
+      {
+        "x": [
+          230,
+          330
+        ],
+        "y": [
+          4380,
+          4441
+        ],
+        "z": [
+          27.5,
+          27.5
+        ],
+        "axis": "",
+        "note": "the step SE of the kerb (rehearsal 3's -16 deg walk-off landed here: z 27.5 at (292.6,4411.8))"
+      },
+      {
+        "x": [
+          -195,
+          -130
+        ],
+        "y": [
+          4441,
+          4508
+        ],
+        "z": [
+          113,
+          113
+        ],
+        "axis": "",
+        "note": "the -x kerb top (kerb survey: 113)"
+      },
+      {
+        "x": [
+          195,
+          900
+        ],
+        "y": [
+          4441,
+          4470
+        ],
+        "z": [
+          -11.8,
+          -11.8
+        ],
+        "axis": "",
+        "note": "the slab east of the kerb (walk-off lands -11.8 at y 4450)"
+      },
+      {
+        "x": [
+          195,
+          900
+        ],
+        "y": [
+          4470,
+          4508
+        ],
+        "z": [
+          1.5,
+          1.5
+        ],
+        "axis": "",
+        "note": "the lawn east of the kerb (walk-off lands 1.5 at y 4480+)"
+      },
+      {
+        "x": [
+          -900,
+          900
+        ],
+        "y": [
+          4508,
+          5200
+        ],
+        "z": [
+          1.7,
+          1.7
+        ],
+        "axis": "",
+        "note": "lawn north (in the game: stairs down from the kerb)"
+      },
+      {
+        "x": [
+          308,
+          460
+        ],
+        "y": [
+          4380,
+          4508
+        ],
+        "z": [
+          130,
+          130
+        ],
+        "axis": "",
+        "note": "the WALL east of the walk-off landing (every walk-off stopped at x ~307.4; rehearsal 6: 14 taps east moved 0 uu)"
+      },
+      {
+        "x": [
+          230,
+          308
+        ],
+        "y": [
+          4441,
+          4508
+        ],
+        "z": [
+          -7.0,
+          -7.0
+        ],
+        "axis": "",
+        "note": "the walk-off landing ground (rehearsal 6: -7.2 at (307.4,4458.8); kerb survey -11.8 at y 4450, 1.5 at 4480)"
+      },
+      {
+        "x": [
+          230,
+          295
+        ],
+        "y": [
+          4380,
+          4441
+        ],
+        "z": [
+          27.5,
+          27.5
+        ],
+        "axis": "",
+        "note": "the step (rehearsal 3's -16 deg walk-off landed on it: 27.5 at (292.6,4411.8))"
+      },
+      {
+        "x": [
+          295,
+          308
+        ],
+        "y": [
+          4380,
+          4441
+        ],
+        "z": [
+          5.0,
+          5.0
+        ],
+        "axis": "",
+        "note": "the landing's south part (rehearsal 3: 5.0 at (307.4,4402.0) .. (307.4,4382.1))"
+      },
+      {
+        "x": [
+          250,
+          308
+        ],
+        "y": [
+          4300,
+          4380
+        ],
+        "z": [
+          35.6,
+          5.0
+        ],
+        "axis": "y",
+        "note": "the ramp up to the terrace (rehearsal 3: 16.4 at (302.8,4372.1), 28.2 at (292.9,4351.2), 34.0 at (281.7,4327.5))"
+      },
+      {
+        "x": [
+          230,
+          290
+        ],
+        "y": [
+          4150,
+          4300
+        ],
+        "z": [
+          35.6,
+          35.6
+        ],
+        "axis": "",
+        "note": "the terrace (rehearsal 3: 35.6 at (270.6,4303.8), (261.4,4267.5), (264.5,4241.5), (274.4,4203.8))"
+      },
+      {
+        "x": [
+          290,
+          312
+        ],
+        "y": [
+          4120,
+          4200
+        ],
+        "z": [
+          29.7,
+          -11.8
+        ],
+        "axis": "x",
+        "note": "the terrace's SE stairs down to the slab (rehearsal 3: 29.7 at (290.9,4169.7) -> -11.8 at (310.9,4151.8), WALK)"
+      },
+      {
+        "x": [
+          290,
+          308
+        ],
+        "y": [
+          4200,
+          4300
+        ],
+        "z": [
+          130,
+          130
+        ],
+        "axis": "",
+        "note": "between the terrace and the slab north of the stairs: the wall rehearsal 1 slid along (x pinned at 306.9, y 3697..4264) (model)"
+      },
+      {
+        "x": [
+          300,
+          460
+        ],
+        "y": [
+          3200,
+          3282
+        ],
+        "z": [
+          130,
+          130
+        ],
+        "axis": "",
+        "note": "the slab's south side (rehearsal 8: blocked at y 3281.8 for x ~358)"
+      },
+      {
+        "x": [
+          284,
+          322
+        ],
+        "y": [
+          3480,
+          3570
+        ],
+        "z": [
+          33.2,
+          -11.8
+        ],
+        "axis": "x",
+        "note": "the stairs from the terrace down to the slab (rehearsal 1: 33.2 at (284.1,3489.9), 10.9 at (305.1,3523.1), -11.8 at (320.1,3557.6), WALK)"
+      },
+      {
+        "x": [
+          195,
+          284
+        ],
+        "y": [
+          3445,
+          3520
+        ],
+        "z": [
+          35.7,
+          35.7
+        ],
+        "axis": "",
+        "note": "the terrace's south end (rehearsal 1: 35.7 at (237.5,3462.8), (263.0,3472.0))"
+      },
+      {
+        "x": [
+          178,
+          238
+        ],
+        "y": [
+          3440,
+          3480
+        ],
+        "z": [
+          93.9,
+          35.7
+        ],
+        "axis": "x",
+        "note": "the stairs from the strip down to the terrace (rehearsal 1: 93.9 at (174.5,3447.1), 88.7 at (211.7,3456.4), 35.7 at (237.5,3462.8))"
+      },
+      {
+        "x": [
+          295,
+          307
+        ],
+        "y": [
+          3530,
+          3600
+        ],
+        "z": [
+          130,
+          130
+        ],
+        "axis": "",
+        "note": "the slab's west side north of the stair foot (rehearsal 9b: blocked at x 306.9 for y 3516..3547 when the stairs were met from the side) (model)"
+      },
+      {
+        "x": [
+          238,
+          295
+        ],
+        "y": [
+          3480,
+          4300
+        ],
+        "z": [
+          35.6,
+          35.6
+        ],
+        "axis": "",
+        "note": "the terrace, continuous (DEV exploration 1: 34-36 at x 240-280 for y 3500..4410)"
+      }
+    ]
+  }
+}

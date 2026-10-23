@@ -1,0 +1,40 @@
+{
+  "name": "b33_route_v1",
+  "what": "Waypoints for b33_drive.ps1 (W2DEV). DIAGNOSTIC tool input, not evidence. Coordinates are the SENDER LOG frame: the x,y of the client's own 'WLREMOTE send soles=(x,y,z)' lines; yaw degrees 0 = +x, 90 = +y.",
+  "verified": false,
+  "provenance": {
+    "spawn": "b33a sender spawn (-330,-650,22) yaw 56 (run_20261020T071219Z_b33a clientA log)",
+    "runway": "research B33_RESEARCH_REPORT section 4: corridor x~0, y 0..2600 walked at z~10 [RECUSED-HINT origin: ledge_measure hop1/hop2]; the b33a RUN phase was pinned at a terrace wall near (729,864,85): this runway stays at x 0",
+    "m4": "coordinator 2026-10-20 from W2DEV geometry survey v2 (dev_notes/m4_survey, DEV, teleports): the Dog STANDS on the +x north-end kerb top at soles z 113.0 (x +163, y 4450..4505); walking OUTWARD (+x, yaw 0) leaves it: drops 124.9 (y 4450), 111.5 (y 4480), 111.0 (y 4505); walking +y/-y along the kerb did not fall. Approach per research section 5: spawn -> (0,1000) -> (0,2600) -> flight y~2700-3300 -> path x 150..210 north -> kerb.",
+    "m4_return": "NOT WALKED BY ANYONE. A guess: south on the low ground east of the path (x 350), back to the plaza level, west to the flight. Verify with -Mode survey -SurveyReturn before any M4 data."
+  },
+  "counts_per_deg_prior": 4.207,
+  "counts_per_deg_prior_source": "mp_auto_rule_v2.ps1 COUNTS_PER_DEG 700/166.4 (an earlier turn calibration of another build; unverified for this exe and mouse settings; the drive calibrates first)",
+  "calibration": { "walk_s": 1.2, "turn_deg": 40, "after_s": 0.9, "min_deg": 15, "max_deg": 80 },
+  "jumps": {
+    "approach": [[0, 0], [0, 100]],
+    "runway": { "x": 0, "y_lo": 100, "y_hi": 1900 },
+    "runway_note": "y 100..1900 keeps the jumps within ~0.8-2.6 k uu of the observer at spawn (camera yaw 56); passes turn 300 uu before each end",
+    "arrive_uu": 80
+  },
+  "m4": {
+    "approach": [[0, 1000], [0, 2600], [0, 3300], [180, 3450], [180, 4380]],
+    "arrive_uu": 70,
+    "mount": { "to": [163, 4468], "max_taps": 14, "tap_ms": 220, "kerb_z": [106.0, 121.0], "box_x": [140.0, 186.0], "box_y": [4445.0, 4505.0] },
+    "walk_off": { "yaw": 0, "hold_ms": 1200 },
+    "return": [[320, 4300], [350, 3400], [350, 2600], [0, 2600]],
+    "rejoin_index": 2
+  },
+  "dry_run_terrain": {
+    "what": "A MADE-UP rectangle model used ONLY by -DryRun to exercise the drive's logic offline. It is NOT the game's geometry.",
+    "ground_z": 10.0,
+    "rects": [
+      { "x": [-250, 250], "y": [2700, 3300], "z": [10, 94], "axis": "y", "note": "the flight as a ramp" },
+      { "x": [176, 900], "y": [3300, 5200], "z": [1.7, 1.7], "axis": "", "note": "low ground east of the path" },
+      { "x": [-250, 250], "y": [3300, 4441], "z": [96, 96], "axis": "", "note": "the raised path" },
+      { "x": [-250, 150], "y": [4441, 4508], "z": [96, 96], "axis": "", "note": "the path's north end" },
+      { "x": [150, 176], "y": [4441, 4508], "z": [113, 113], "axis": "", "note": "the +x kerb top" },
+      { "x": [-250, 900], "y": [4508, 5200], "z": [1.7, 1.7], "axis": "", "note": "lawn north" }
+    ]
+  }
+}
