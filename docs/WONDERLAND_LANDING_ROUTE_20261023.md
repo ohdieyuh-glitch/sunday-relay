@@ -1,12 +1,14 @@
 # Wonderland landing route (2026-10-23)
 
 Author: Cosmo (Wonderland dev agent). Status: proposal for Skywalker's exact-head review.
-Revision 5: applies the founder's FINAL rulings of 2026-10-23, 7:27 AM PT ([FR-1]..[FR-5]) and fixes [R4-1]..[R4-3] from
-Skywalker's PASS WITH FINDING of rev 4 `ca9400ac` (see section 8.0).
+Revision 6: fixes [R5-1]..[R5-4] from Skywalker's PASS WITH FINDINGS of rev 5 `19353d85`, records YUJI as the
+App-credential holder and identity-hardening owner, and adds [FR-6] (see section 8.0).
+Revision 5 applied the founder's FINAL rulings of 2026-10-23, 7:27 AM PT ([FR-1]..[FR-5]) and fixed [R4-1]..[R4-3] from
+Skywalker's PASS WITH FINDINGS of rev 4 `ca9400ac` (section 8.1).
 Revision 4 fixed [R3-1]..[R3-4], the re-run answer [RR] and the no-branch-protection note [BP] from Skywalker's PASS WITH
-FINDINGS of rev 3 `cb68c692` (section 8.1).
-Revision 3 fixed [R2-1]..[R2-4] from Skywalker's PASS WITH FINDING of rev 2 `aa7a5188` (section 8.2).
-Revision 2 fixed [RD-1]..[RD-6] from Skywalker's FAIL of rev 1 `f3d6ebc7` (section 8.3). [RD-7] spoofing content stayed
+FINDINGS of rev 3 `cb68c692` (section 8.2).
+Revision 3 fixed [R2-1]..[R2-4] from Skywalker's PASS WITH FINDINGS of rev 2 `aa7a5188` (section 8.3).
+Revision 2 fixed [RD-1]..[RD-6] from Skywalker's FAIL of rev 1 `f3d6ebc7` (section 8.4). [RD-7] spoofing content stayed
 unchanged until rev 5 ([FR-4]).
 Every citation is `file:line` at main `689d2be92c3158ba4a59883ed4f6cc02f700660b` (tree `ecfe4f5c`, parent `3f20fc1a`),
 re-read line by line before writing. Corrections to earlier citations are listed in section 7.
@@ -23,6 +25,9 @@ re-read line by line before writing. Corrections to earlier citations are listed
   - [FR-3] No repeated founder approval. This conflicts with the gate as coded (section 3, step 6; open item i).
   - [FR-4] Git author name and email are not trusted identity evidence; mismatches fail closed (section 2; open item b).
   - [FR-5] Branch protection or rulesets are authorized, provided they do not deadlock the landing system (open item g).
+  - [FR-6] #396: Cosmo may continue all J1 Wonderland client development, repairs, tests and documentation now. After
+    #395 lands, cleared changes go through the Julius landing mechanism. The draft PR #396 is never merged directly into
+    main (1.1 point 3).
   - The rulings on R4-F and run-id (c) belong to the C2/J1 resolutions doc and are not restated here.
   - None of these rulings changes a gate in this doc. Every gate cited here stays as coded at `689d2be9`.
 - The provenance gate (`scripts/julius-main-provenance.mjs`) judges only main's tip commit:
@@ -53,8 +58,8 @@ re-read line by line before writing. Corrections to earlier citations are listed
    - [FR-1] Approved by the founder (7:27 AM PT ruling) to land at exact head `32c5a2be10c60a3a4c7de7741a98bf3ce63c4f5c`,
      tree `bcbefd01`, base `689d2be9`, through the existing Julius installer.
    - Skywalker verifies the exact head, tree, base, CI and settled review evidence, then produces the legitimate signed
-     G6 clearance with the authorized Ed25519 key. The founder does not hold that key, and the authorized signing
-     environment is still to be located (open item h). No agent forges G6, bypasses validation or weakens a landing gate.
+     G6 clearance with the authorized Ed25519 key. The founder does not hold that key. A candidate signing environment
+     is under verification, not yet confirmed (open item h). No agent forges G6, bypasses validation or weakens a landing gate.
    - [R2-2] `32c5a2be` is a merge commit with two parents, `2dbe6430` and `689d2be9`. So `689d2be9` is a parent of the
      head as well as the merge base.
    - Then the existing Julius installer runs.
@@ -108,8 +113,8 @@ re-read line by line before writing. Corrections to earlier citations are listed
 
 **Trust statement:**
 - `RUNBOOK:3-4` has the founder run the runbook on a machine holding the App credential. [FR-2] The 7:27 ruling instead has
-  the authorized agent locate and use the existing App credential through its established secure environment. Which agent
-  that is is still to be confirmed (open item a).
+  the authorized agent locate and use the existing App credential through its established secure environment. That agent
+  is YUJI (open item a).
 - "App-opened" proves an App token was used. It does not prove a worker did the work.
 - The App credential and the required approver account are both under the founder's control. **This is NOT two-party control.**
 - [R2-3] Agents never act as the approver. Cosmo uses the founder's connected account only to dispatch or re-run
@@ -177,6 +182,7 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
      - re-run the failed jobs of a run of that same workflow on that head (the R2-4 rule above).
 
      Through that account Cosmo never opens, reviews, approves or merges a PR, and changes nothing in the repository.
+     [R5-2] Cosmo's scope does not include `julius-accept-main.yml`; YUJI starts that one (step 8).
      - Skywalker agreed that dispatching unmodified checks is operational.
      - The worker App holds only `actions=read` (`RUNBOOK:11-13`). Its dispatch is refused (403), and it cannot re-run
        either, because both need Actions: write [RR].
@@ -210,15 +216,15 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
    - **Option B (decided, 7:27 AM PT ruling):** the `julius-worker` App does the squash automatically once all of these
      hold at the same head: Skywalker's exact-head PASS (step 5), the exact-head approval of step 6, and every required
      gate (the 6 checks of step 4, tree equality, parent containment). The founder does not click Merge.
-     - [R4-2] **Who executes it:** the authorized agent holding the App credential in its established secure environment,
-       with an installation token handled as in step 3. Which agent is still to be confirmed in the room; YUJI owns
-       Julius landings. Cosmo does not hold the App credential and does not merge through the founder's account (R2-3).
+     - [R4-2] **Who executes it:** YUJI, the agent holding the App credential in its established secure environment
+       (open item a), with an installation token handled as in step 3. Cosmo does not hold the App credential and does
+       not merge through the founder's account (R2-3).
      - Technically possible: the installation has `contents=write` (`RUNBOOK:11-13`), which is what a merge needs, and the
        provenance gate never checks who merged: to decide a PR merged it reads only `merged_at` and `merge_commit_sha`
        (`julius-main-provenance.mjs:645-652`, used at `:388-389`), never `merged_by`.
      - **Untested.** No App merge has been tried on this repository. The first App merge must be verified afterwards:
        the squash commit is on main (one parent, tree equal to the reviewed tree, step 8), the provenance gate reports
-       `provenant` on the new tip, and `julius-accept-main.yml` passes on it.
+       `provenant` on the new tip, and `julius-accept-main.yml` passes on it (started by YUJI, step 8 [R5-2]).
    - **Option A (SUPERSEDED by the 7:27 ruling):** the founder clicks the squash in person (`RUNBOOK:145`, `:151-155`).
      Kept for the record only.
    - **Not an option: the lander.** It never uses the merge endpoint (`land.mjs:3`; `julius-land.yml:22-23`), so it cannot
@@ -235,6 +241,18 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
      form of the same rule, for a machine without `gh` (`RUNBOOK:178-193`).
    - For the first App merge [FR-2], also run `julius-accept-main.yml` on the new tip and confirm it passes
      (`RUNBOOK:166-168`: not required for monotonicity, but it records a fresh checkpoint and costs nothing).
+   - [R5-2] **Who starts `julius-accept-main.yml`: YUJI** (YUJI, room, 7:43 AM PT). After each App squash, YUJI starts it
+     by hand over the founder-authorized GitHub connection, then confirms the run finished at the new main tip.
+     - Trigger facts at `689d2be9`: the only trigger is `workflow_dispatch` (`.github/workflows/julius-accept-main.yml:70-71`);
+       there is deliberately no `push` trigger (`:21-24`). It needs two inputs (`:72-80`): `confirm_accept`, which must be
+       exactly `ACCEPT MAIN` (checked at `:116-119`), and `expected_main`, a full 40-hex sha (`:120-123`) that must equal
+       main's tip or the run is refused (`:141-145`). It records nothing unless the provenance gate passes (`:148-155`).
+     - The App cannot start it: its `actions: read` refuses `workflow_dispatch` with HTTP 403 (`julius-accept-main.yml:17-18`;
+       App permissions at `RUNBOOK:11-13`). So only an account with Actions: write can dispatch it, which is why YUJI
+       uses the founder-authorized connection.
+     - Starting a workflow is not an approval. The gate reads reviews, line comments and commit statuses
+       (`julius-main-provenance.mjs:663-665`), not workflow runs, so this does not conflict with "no agent approves
+       through the founder's account" (step 6). The dispatcher passes inputs only and changes nothing in the repository.
 
 ## 4. Not chosen
 
@@ -261,10 +279,9 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
 
 ## 5. Open items
 
-- **(a) Which agent holds the `julius-worker` App credential?** [FR-2] The 7:27 ruling has the authorized agent locate and
-  use the existing credential through its established secure environment. Which agent that is is still to be confirmed in
-  the room; YUJI owns Julius landings. Steps 3 and 7 cannot run until it is. Cosmo will not search for it, read it or mint
-  a token from it.
+- **(a) The `julius-worker` App credential: YUJI holds it.** [FR-2] The 7:27 ruling has the authorized agent locate and
+  use the existing credential through its established secure environment. YUJI, who owns Julius landings, has taken it
+  (room, 2026-10-23, after rev 5). YUJI runs steps 3 and 7. Cosmo will not search for it, read it or mint a token from it.
 - **(b) [FR-4] Author spoofing: DECIDED (founder, 7:27 AM PT).** Git author name and email are not trusted identity
   evidence. Use the authenticated GitHub/App identity, trusted provenance and the required signed clearance; fail closed
   on mismatches.
@@ -276,8 +293,9 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
     - The lander's head-commit checks rest on the same fields: `land-lib.mjs:108` compares the free-text git author and
       committer names, and `:112` relies on GitHub resolving the author email to a login.
     - The squash route never checks the commit author (section 2). Precedent for a free-text author: `3f20fc1a`.
-  - **Follow-up needed:** a hardening change so that no gate takes the git author name or email as identity evidence
-    (Julius lane, separately reviewed). This doc changes no gate.
+  - **Follow-up: owned by YUJI** (room, 7:40 AM PT). A hardening change so that no gate takes the git author name or
+    email as identity evidence, covering `julius-main-provenance.mjs:290-292` and `land-lib.mjs:108`, `:112`. It lands
+    only after #395, through G6 with Skywalker's review. This doc changes no gate.
 - **(c) Vercel "Deployment was blocked" on #394 previews: resolved by the route.**
   - All of #394's commits were authored by `Cosmo <cosmo@iwonder.invalid>`, which GitHub links to no account.
     Vercel blocks private-repo deploys whose head author does not map to a team member
@@ -291,8 +309,8 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
   - So Wonderland re-cuts serialize with Julius landings, and any main move forces a re-cut, a fresh PASS and a re-approval (`RUNBOOK:170-176`).
   - Julius landings take priority near live runs.
 - **(e) [R3-1] [FR-2] DECIDED: option B.** The `julius-worker` App does the step 7 squash automatically after exact-head
-  independent approval and once every required gate passes. Option A is superseded. Executor: the authorized agent holding
-  the App credential (open item a, [R4-2]). Untested; the first App merge is verified as in step 7.
+  independent approval and once every required gate passes. Option A is superseded. Executor: YUJI, holder of the App
+  credential (open item a, [R4-2]). YUJI also starts `julius-accept-main.yml` after each App squash (step 8, [R5-2]). Untested; the first App merge is verified as in step 7.
 - **(f) [R3-2] `RUNBOOK:13-14` is inaccurate.** It says the installation is "deliberately not enough to merge", but it has
   `contents=write`. Option B now contradicts that text. This doc does not edit the runbook; correcting it needs its own
   approved change.
@@ -308,8 +326,11 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
   (tree `bcbefd01`, base `689d2be9`) through the existing installer.
   - Skywalker verifies head, tree, base, CI and settled review evidence, then produces the signed G6 clearance with the
     authorized Ed25519 key.
-  - **Blocker:** the authorized signing environment must be located. The founder does not hold the key, and no file names
-    its holder (section 7). Until a legitimate G6 exists, nothing lands on main (1.1).
+  - **Blocker: G6 still pending.** The founder does not hold the key, and no file names its holder (section 7).
+  - [R5-3] At 07:33 PT, YUJI reported a candidate reviewer key on Kaisin. Skywalker's fingerprint check of its public
+    half against `b0b8e29b` (`.github/julius-landing/reviewer-ed25519.pub`) has not confirmed it yet. It is a candidate
+    under verification, not a located signing environment.
+  - Until a legitimate G6 exists, nothing lands on main (1.1).
   - Then the installer runs, #393 is closed and `relay/julius-landing-system-v35i-pkg2` is deleted (1.1 point 1).
 - **(i) [FR-3] REAL BLOCKER: exact-head approval.** The ruling says "no repeated founder approval", but review currency
   still requires an `ohdieyuh-glitch` approval at the exact head (`julius-review-currency.mjs:270-271`), and no agent
@@ -359,7 +380,32 @@ No readiness change. Wonderland verified readiness stays at 56.25%.
 Every changed citation was re-read at `689d2be9`. Citations point into other files at that fixed main, so the line
 shifts inside this document move none of them.
 
-### 8.0 Revision 5 (fixes to rev 4 `ca9400ac`, after Skywalker's PASS WITH FINDING, plus the founder's 7:27 AM PT rulings)
+### 8.0 Revision 6 (fixes to rev 5 `19353d85`, after Skywalker's PASS WITH FINDINGS)
+
+- **[R5-1] (nit)** The rev 4 and rev 2 verdicts now read "PASS WITH FINDINGS", plural, matching REPORT_rev4.md and
+  REPORT_rev2.md (header and the 8.1 and 8.3 headings).
+- **[R5-2] (low)** Step 8 names who starts `julius-accept-main.yml`: YUJI, by hand over the founder-authorized GitHub
+  connection after each App squash, then confirming the run finished at the new main tip (YUJI, room, 7:43 AM PT). The
+  trigger facts are cited: dispatch-only (`julius-accept-main.yml:70-71`, no `push` by design at `:21-24`), with
+  required inputs at `:72-80` checked at `:116-123` and `:141-145`, and the App's 403 at `:17-18`. Starting a run is not
+  an approval (`julius-main-provenance.mjs:663-665`). Step 4 notes that Cosmo's founder-account scope (R2-3) does not
+  include this workflow. Steps 7 and item e point to step 8.
+- **[R5-3] (info)** Open item h and 1.1 point 1: YUJI's 07:33 PT candidate reviewer key on Kaisin is recorded as a
+  candidate under verification. Skywalker's public-half fingerprint check against `b0b8e29b` has not confirmed it, and
+  G6 is still pending.
+- **[R5-4] (info)** New [FR-6] in section 1 lists the founder's 7:27 #396 ruling.
+- **Item a:** YUJI holds the App credential. Updated in section 2's trust statement, step 7 and items a and e.
+- **Item b:** YUJI owns the identity-hardening follow-up (`julius-main-provenance.mjs:290-292`, `land-lib.mjs:108`,
+  `:112`). It lands only after #395, through G6 with Skywalker's review.
+- **Renumbering.** The fix lists are now 8.0 (rev 6), 8.1 (rev 5), 8.2 (rev 4), 8.3 (rev 3) and 8.4 (rev 2). Cross-
+  references are updated in the header and in 8.3 [R2-2]. Section 8.1's own "Renumbering" bullet describes rev 5's
+  numbering and is kept as history.
+- **Readiness:** unchanged (section 6).
+- **Citations newly used, re-read at `689d2be9`** (blob of `julius-accept-main.yml` `589c79aa`, 213 lines):
+  `julius-accept-main.yml:17-18`, `:21-24`, `:70-71`, `:72-80`, `:116-119`, `:120-123`, `:141-145`, `:148-155`;
+  `julius-main-provenance.mjs:663-665` (already used). None of rev 5's citations shifted.
+
+### 8.1 Revision 5 (fixes to rev 4 `ca9400ac`, after Skywalker's PASS WITH FINDINGS, plus the founder's 7:27 AM PT rulings)
 
 - **[FR-1] #395.** 1.1 point 1, section 1 [FR] and new open item h: approved to land at `32c5a2be` through the existing
   installer once Skywalker produces a legitimate G6 with the authorized Ed25519 key. The signing environment is still to
@@ -389,7 +435,7 @@ shifts inside this document move none of them.
   `julius-review-currency.mjs:66-69`, `:78`; `RUNBOOK:3-4`, `:166-168`; `required-checks.txt:4-9`. None of rev 4's
   citations shifted.
 
-### 8.1 Revision 4 (fixes to rev 3 `cb68c692`, after Skywalker's PASS WITH FINDINGS)
+### 8.2 Revision 4 (fixes to rev 3 `cb68c692`, after Skywalker's PASS WITH FINDINGS)
 
 - **[RR] Re-runs** (Skywalker's answer 1). Section 3, step 4 (re-run bullet and dispatcher bullet) now says:
   - re-running needs Actions: write, and the worker App's installation has only `actions=read` (`RUNBOOK:11-13`);
@@ -424,14 +470,14 @@ shifts inside this document move none of them.
   `julius-main-provenance.mjs:208`, `:388-389`, `:469-476`, `:645-652`, `:663-665`; `julius-land.yml:5-6`, `:22-23`;
   `RUNBOOK:11-14`, `:145-155`. None of rev 3's citations shifted; `RUNBOOK:13` for `actions=read` is widened to `:11-13`.
 
-### 8.2 Revision 3 (fixes to rev 2 `aa7a5188`, after Skywalker's PASS WITH FINDING)
+### 8.3 Revision 3 (fixes to rev 2 `aa7a5188`, after Skywalker's PASS WITH FINDINGS)
 
 - **[R2-1] (MEDIUM)** 1.1 point 3 no longer names #396 as the restoring squash.
   - #396 was opened by `ohdieyuh-glitch` and would fail `julius-main-provenance.mjs:450`.
   - The restoring squash is an App-opened worker re-cut (opened by `julius-worker[bot]`, re-authored per `RUNBOOK:70-88`)
     of #396's Skywalker-cleared tree, whose tree must equal the reviewed tree. #396 is then closed unmerged.
   - Stated for any PR, not just #396; also noted at section 3, step 3.
-- **[R2-2]** #395's head `32c5a2be` is a merge commit with parents `2dbe6430` and `689d2be9` (1.1 point 1, and 8.3 [RD-1]).
+- **[R2-2]** #395's head `32c5a2be` is a merge commit with parents `2dbe6430` and `689d2be9` (1.1 point 1, and 8.4 [RD-1]).
   - Rev 2 wrongly said `2dbe6430` was the direct parent. `689d2be9` is a parent as well as the merge base.
   - Re-verified with `git log` at `32c5a2be`: 4 commits ahead of `689d2be9`, 0 behind.
 - **[R2-3]** Through the founder's connected GitHub account, Cosmo may only dispatch main's unmodified
@@ -450,7 +496,7 @@ shifts inside this document move none of them.
 - **Citations re-checked at `689d2be9`:** `julius-main-provenance.mjs:450`; `RUNBOOK:70-88`, `:145`, `:145-155`, `:151-155`;
   `julius-review-currency.mjs:270-272`; `julius-real-infra.yml:4-5`. None shifted.
 
-### 8.3 Revision 2 (fixes to rev 1 `f3d6ebc7`, after Skywalker's FAIL)
+### 8.4 Revision 2 (fixes to rev 1 `f3d6ebc7`, after Skywalker's FAIL)
 
 Every changed citation was re-read at `689d2be9`.
 
