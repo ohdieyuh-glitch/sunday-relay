@@ -174,6 +174,18 @@ function classify(error: unknown): GptFailureClass {
  * is capped at a single transient attempt; nothing retries indefinitely and
  * nothing falls back to a different model.
  */
+export const OPENAI_PINNED_ORIGIN = 'https://api.openai.com';
+export const OPENAI_PINNED_BASE_URL = 'https://api.openai.com/v1';
+
+/** The architect's fetch. The origin is `https://api.openai.com` only, and a redirect is an error. */
+export function openAiPinnedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const href = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  let url: URL;
+  try { url = new URL(href); } catch { throw new Error('openai_base_url_unpinned'); }
+  if (url.origin !== OPENAI_PINNED_ORIGIN || url.username !== '' || url.password !== '') throw new Error('openai_base_url_unpinned');
+  return fetch(input, { ...init, redirect: 'error' });
+}
+
 export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOutcome> {
   const { config } = request;
   if (config.model === null) {
@@ -182,6 +194,8 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
 
   const client = new OpenAI({
     apiKey: request.apiKey,
+    baseURL: OPENAI_PINNED_BASE_URL,
+    fetch: openAiPinnedFetch,
     // One bounded transient retry — never an indefinite loop.
     maxRetries: 1,
     timeout: config.timeoutMs,
