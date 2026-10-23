@@ -18,6 +18,15 @@ export const CANONICAL_UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0
 /** Client-minted run id: `wlj_` plus a canonical UUIDv4. Also passes `BRIDGE_RUN_ID`. */
 export const WONDERLAND_RUN_ID = /^wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
+/**
+ * Server run id minted by `createLiveJuliusBootstrapPort`: `run:` and 24
+ * lowercase hex characters. The validator is private in
+ * `relay-bridge/julius/mission-contract.ts` (`BOOTSTRAP_RUN_ID`). That file
+ * is Julius-owned, so this is the same pattern, not an import. YUJI: confirm
+ * bootstrap will require this id on an admitted pair.
+ */
+export const JULIUS_BOOTSTRAP_RUN_ID = /^run:[0-9a-f]{24}$/;
+
 /** `x-relay-idempotency-key` at 31bfc58b. A Wonderland key is a canonical UUIDv4, which matches. */
 export const J1_IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,80}$/;
 

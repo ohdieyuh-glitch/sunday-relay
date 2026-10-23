@@ -10,7 +10,7 @@
  * and no provider, GitHub dispatch, or retry is reachable from here.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -239,6 +239,7 @@ export function toHttp(outcome: AdmissionOutcome): { status: number; body: unkno
     body: {
       data: {
         runId: run.runId,
+        serverRunId: run.serverRunId,
         dispatchId: run.dispatchId,
         state: run.state,
         replayed: outcome.replayed,
@@ -286,17 +287,25 @@ export function createWonderlandAdmissionService(input: {
   readonly readWorkflowText?: () => string | null;
   readonly ledger?: AdmissionLedger;
   readonly operatorToken?: string | undefined;
+  /**
+   * CSPRNG for the server `run:` id. The default is 12 `randomBytes`, which
+   * is `run:` plus 24 lowercase hex, the Julius bootstrap run-id shape.
+   * A replay does not call it.
+   */
+  readonly mintServerRunId?: () => string;
 }): WonderlandAdmissionRoutePorts {
   const missionRaw = (input.env.JULIUS_WONDERLAND_MISSION ?? '').trim();
   const missionOk = missionRaw === '' || MISSION_SLUG.test(missionRaw);
   const dailyCap = positiveInt(input.env.JULIUS_J1_DAILY_CAP, 2);
   const missionCap = positiveInt(input.env.JULIUS_J1_MAX_RUNS_PER_MISSION, 2);
   const configured = missionOk && dailyCap !== null && missionCap !== null;
+  const mintServerRunId = input.mintServerRunId ?? (() => `run:${randomBytes(12).toString('hex')}`);
   const store = configured
     ? createWonderlandAdmissionStore({
       ledger: input.ledger ?? memoryLedger(),
       dailyCap: dailyCap ?? 2,
       missionCap: missionCap ?? 2,
+      mintServerRunId,
     })
     : null;
   return {

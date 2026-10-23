@@ -231,6 +231,19 @@ answer says providers are running, the client shows **admitted, waiting for
 the paid run**. `dispatched: false` on that 202 is the fact that no provider
 is running yet.
 
+**Server run id.** That reservation also mints one server run id and keeps it
+with the pair. The shape is the Julius bootstrap run id: `run:` plus 24
+lowercase hex characters (`JULIUS_BOOTSTRAP_RUN_ID`). The validator of that
+shape is private as `BOOTSTRAP_RUN_ID` in `relay-bridge/julius/mission-contract.ts`.
+This copy is the same pattern. YUJI: confirm bootstrap will require this id.
+The mint is a CSPRNG (`node:crypto` `randomBytes(12)`), called inside the
+admission store's reservation, before any ledger write. `randomUUID` does not
+match that 24-hex shape, so it is not the mint. The 202 and the same-pair 200
+both return the id as `serverRunId`. A resend returns the same id. The mapping
+lives only in the admission store. YUJI's paid-dispatch and bootstrap will
+later refuse anything that does not match an admitted pair. That refusal goes
+through G6 after #404 and the migration, and it is not in this change.
+
 ## Deployment topology
 
 Admission is loopback-only. `isLoopbackPeer` requires the peer address to be

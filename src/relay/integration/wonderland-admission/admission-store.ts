@@ -17,6 +17,7 @@ import {
   PAID_SLOT_DISPATCH_KEY,
   PAID_SLOT_SCRIPT,
   PAID_WORKFLOW_FILE,
+  JULIUS_BOOTSTRAP_RUN_ID,
   SHA256_HEX,
   WONDERLAND_RUN_ID,
   type CapRefusalKind,
@@ -29,6 +30,8 @@ export type AdmissionState = 'RESERVED' | 'ADMISSION_HELD' | 'LEDGER_UNWRITTEN' 
 
 export interface AdmissionRun {
   readonly runId: string;
+  /** Julius `run:` id, minted once with the reservation. Stable for this pair. */
+  readonly serverRunId: string;
   readonly keyHash: string;
   readonly dispatchId: string;
   readonly missionId: string | null;
@@ -49,6 +52,7 @@ export interface AdmissionRun {
 export interface AdmissionLedgerRow {
   readonly phase: 'run_admission';
   readonly runId: string;
+  readonly serverRunId: string;
   readonly keyHash: string;
   readonly dispatchId: string;
   readonly missionId: string | null;
@@ -110,20 +114,27 @@ export function createWonderlandAdmissionStore(input: {
   readonly ledger: AdmissionLedger;
   readonly dailyCap: number;
   readonly missionCap: number;
+  /**
+   * CSPRNG for the server `run:` id. Called once, synchronously, inside the
+   * reservation and before `append`. A replay does not call it.
+   */
+  readonly mintServerRunId: () => string;
 }): WonderlandAdmissionStore {
-  return new WonderlandAdmissionStore(input.ledger, input.dailyCap, input.missionCap);
+  return new WonderlandAdmissionStore(input.ledger, input.dailyCap, input.missionCap, input.mintServerRunId);
 }
 
 class WonderlandAdmissionStore {
   private readonly byPair = new Map<string, AdmissionRun>();
   private readonly byRunId = new Map<string, AdmissionRun>();
   private readonly byKeyHash = new Map<string, AdmissionRun>();
+  private readonly byServerRunId = new Map<string, AdmissionRun>();
   private load: Promise<void> | null = null;
 
   constructor(
     private readonly ledger: AdmissionLedger,
     private readonly dailyCap: number,
     private readonly missionCap: number,
+    private readonly mintServerRunId: () => string,
   ) {}
 
   /** How many runs this process has reserved. Cap refusals are not runs. */
@@ -194,7 +205,8 @@ class WonderlandAdmissionStore {
   }
 
   private restore(row: AdmissionLedgerRow): void {
-    if (this.byRunId.has(row.runId) || this.byKeyHash.has(row.keyHash)) return;
+    if (this.byRunId.has(row.runId) || this.byKeyHash.has(row.keyHash) || this.byServerRunId.has(row.serverRunId)) return;
+    if (!JULIUS_BOOTSTRAP_RUN_ID.test(row.serverRunId)) throw new Error('admission_server_run_id_invalid');
     const run = runFromRow(row);
     this.index(run);
   }
@@ -203,6 +215,7 @@ class WonderlandAdmissionStore {
     this.byPair.set(pairKey(run.runId, run.keyHash), run);
     this.byRunId.set(run.runId, run);
     this.byKeyHash.set(run.keyHash, run);
+    this.byServerRunId.set(run.serverRunId, run);
   }
 
   private reserveSync(request: AdmissionRequest):
@@ -237,8 +250,13 @@ class WonderlandAdmissionStore {
     if (admitted.filter((run) => run.missionId === request.missionId).length >= this.missionCap) {
       return { kind: 'answered', outcome: cap('julius_dispatch_mission_cap_reached') };
     }
+    const serverRunId = this.mintServerRunId();
+    if (!JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId) || this.byServerRunId.has(serverRunId)) {
+      throw new Error('admission_server_run_id_invalid');
+    }
     const run: AdmissionRun = {
       runId: request.runId,
+      serverRunId,
       keyHash: request.keyHash,
       dispatchId: request.dispatchId,
       missionId: request.missionId,
@@ -284,6 +302,7 @@ function ledgerRow(run: AdmissionRun): AdmissionLedgerRow {
   return {
     phase: 'run_admission',
     runId: run.runId,
+    serverRunId: run.serverRunId,
     keyHash: run.keyHash,
     dispatchId: run.dispatchId,
     missionId: run.missionId,
@@ -299,6 +318,7 @@ function ledgerRow(run: AdmissionRun): AdmissionLedgerRow {
 function runFromRow(row: AdmissionLedgerRow): AdmissionRun {
   return {
     runId: row.runId,
+    serverRunId: row.serverRunId,
     keyHash: row.keyHash,
     dispatchId: row.dispatchId,
     missionId: row.missionId,

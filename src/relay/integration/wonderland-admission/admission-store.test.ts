@@ -7,6 +7,7 @@ import {
   CAP_REFUSAL_KINDS,
   CLIENT_RESEND_MAX_COUNT,
   CLIENT_RESEND_MAX_TOTAL_WAIT_MS,
+  JULIUS_BOOTSTRAP_RUN_ID,
   classifyDispatchAnswer,
   clientResendDelayMs,
   errorKindOf,
@@ -41,11 +42,24 @@ function request(over: Partial<AdmissionRequest> = {}): AdmissionRequest {
   };
 }
 
-function store(caps: { daily?: number; mission?: number; ledger?: AdmissionLedger } = {}) {
+let minted = 0;
+
+function nextServerRunId(): string {
+  minted += 1;
+  return `run:${minted.toString(16).padStart(24, '0')}`;
+}
+
+function store(caps: {
+  daily?: number;
+  mission?: number;
+  ledger?: AdmissionLedger;
+  mintServerRunId?: () => string;
+} = {}) {
   return createWonderlandAdmissionStore({
     ledger: caps.ledger ?? createMemoryAdmissionLedger(),
     dailyCap: caps.daily ?? 2,
     missionCap: caps.mission ?? 2,
+    mintServerRunId: caps.mintServerRunId ?? nextServerRunId,
   });
 }
 
@@ -252,13 +266,145 @@ describe('one admission per pair', () => {
     const first = store({ ledger });
     const created = await first.admit(request());
     if (!created.ok) throw new Error('expected an admission');
-    const reloaded = store({ ledger });
+    let remints = 0;
+    const reloaded = store({
+      ledger,
+      mintServerRunId: () => {
+        remints += 1;
+        throw new Error('mint_on_reload');
+      },
+    });
     const replay = await reloaded.admit(request({ dispatchId: 'adm_ignored' }));
     expect(reloaded.admissionCount()).toBe(1);
     expect(replay.ok && replay.httpStatus).toBe(200);
     if (!replay.ok) return;
     expect(replay.run.dispatchId).toBe(created.run.dispatchId);
+    expect(replay.run.serverRunId).toBe(created.run.serverRunId);
     expect(replay.run.ledgerWritten).toBe(true);
+    expect(remints).toBe(0);
+    expect(ledger.snapshot()[0]?.serverRunId).toBe(created.run.serverRunId);
+  });
+});
+
+describe('one server run id per admitted pair', () => {
+  it('a resend returns that id and does not mint another', async () => {
+    let mints = 0;
+    const admissions = store({
+      mintServerRunId: () => {
+        mints += 1;
+        return `run:${'a'.repeat(24)}`;
+      },
+    });
+    const first = await admissions.admit(request());
+    const second = await admissions.admit(request());
+    if (!first.ok || !second.ok) throw new Error('expected the reserved run');
+    expect(first.run.serverRunId).toBe('run:' + 'a'.repeat(24));
+    expect(second.run.serverRunId).toBe(first.run.serverRunId);
+    expect(second.httpStatus).toBe(200);
+    expect(mints).toBe(1);
+    expect(JULIUS_BOOTSTRAP_RUN_ID.test(first.run.serverRunId)).toBe(true);
+  });
+
+  it('different pairs, including concurrent reservations, never share a server run id', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let entered = 0;
+    let both: () => void = () => {};
+    const bothEntered = new Promise<void>((resolve) => { both = resolve; });
+    const mintedIds: string[] = [];
+    const ledger: AdmissionLedger = {
+      async rows() { return []; },
+      async append() {
+        entered += 1;
+        if (entered === 2) both();
+        await gate;
+      },
+    };
+    const admissions = store({
+      ledger,
+      mintServerRunId: () => {
+        const id = `run:${(mintedIds.length + 1).toString(16).padStart(24, '0')}`;
+        mintedIds.push(id);
+        return id;
+      },
+    });
+    const first = admissions.admit(request());
+    const second = admissions.admit(request({ runId: RUN_2, keyHash: KEY_2, dispatchId: 'adm_other' }));
+    await bothEntered;
+    expect(mintedIds).toHaveLength(2);
+    expect(new Set(mintedIds).size).toBe(2);
+    expect(admissions.runs().map((run) => run.serverRunId).sort()).toEqual([...mintedIds].sort());
+    release();
+    const [created, other] = await Promise.all([first, second]);
+    if (!created.ok || !other.ok) throw new Error('expected two admissions');
+    expect(created.run.serverRunId).not.toBe(other.run.serverRunId);
+    expect(admissions.admissionCount()).toBe(2);
+  });
+
+  it('a failed reservation stores nothing, so the minted id is not reused', async () => {
+    const ledger = createMemoryAdmissionLedger();
+    const mintedIds: string[] = [];
+    const valid = `run:${'b'.repeat(24)}`;
+    const admissions = store({
+      ledger,
+      mintServerRunId: () => {
+        const id = mintedIds.length === 0 ? 'run:not-a-bootstrap-id' : valid;
+        mintedIds.push(id);
+        return id;
+      },
+    });
+    await expect(admissions.admit(request())).rejects.toThrow('admission_server_run_id_invalid');
+    expect(admissions.admissionCount()).toBe(0);
+    expect(ledger.snapshot()).toHaveLength(0);
+    expect(admissions.runs().some((run) => run.serverRunId === mintedIds[0])).toBe(false);
+    const created = await admissions.admit(request());
+    if (!created.ok) throw new Error('expected the reserved run');
+    expect(created.run.serverRunId).toBe(valid);
+    expect(created.run.serverRunId).not.toBe(mintedIds[0]);
+    expect(ledger.snapshot()).toEqual([expect.objectContaining({ serverRunId: valid })]);
+    const replay = await admissions.admit(request());
+    if (!replay.ok) throw new Error('expected the replay');
+    expect(replay.run.serverRunId).toBe(valid);
+    expect(mintedIds).toEqual(['run:not-a-bootstrap-id', valid]);
+  });
+
+  it('a colliding mint is refused before the pair is reserved', async () => {
+    const taken = `run:${'c'.repeat(24)}`;
+    const fresh = `run:${'d'.repeat(24)}`;
+    const mintedIds: string[] = [];
+    const admissions = store({
+      mintServerRunId: () => {
+        const id = mintedIds.length === 0 ? taken : mintedIds.length === 1 ? taken : fresh;
+        mintedIds.push(id);
+        return id;
+      },
+    });
+    const first = await admissions.admit(request());
+    if (!first.ok) throw new Error('expected the reserved run');
+    await expect(admissions.admit(request({
+      runId: RUN_2, keyHash: KEY_2, dispatchId: 'adm_other',
+    }))).rejects.toThrow('admission_server_run_id_invalid');
+    expect(admissions.admissionCount()).toBe(1);
+    expect(admissions.runs().map((run) => run.serverRunId)).toEqual([taken]);
+    const second = await admissions.admit(request({
+      runId: RUN_2, keyHash: KEY_2, dispatchId: 'adm_other',
+    }));
+    if (!second.ok) throw new Error('expected the second admission');
+    expect(second.run.serverRunId).toBe(fresh);
+    expect(new Set(admissions.runs().map((run) => run.serverRunId)).size).toBe(2);
+  });
+
+  it('a bad clock throws before a server run id is minted', async () => {
+    let mints = 0;
+    const admissions = store({
+      mintServerRunId: () => {
+        mints += 1;
+        return `run:${'e'.repeat(24)}`;
+      },
+    });
+    await expect(admissions.admit(request({ receivedAt: 'not-a-time' }))).rejects.toThrow('admission_clock_invalid');
+    expect(mints).toBe(0);
+    expect(admissions.admissionCount()).toBe(0);
   });
 });
 
@@ -274,5 +420,8 @@ describe('the store does not emit busy or schedule a retry', () => {
     expect(source).not.toContain('setInterval');
     expect(source).not.toContain('workflow_dispatch');
     expect(source).not.toContain('RUN LIVE MISSION');
+    expect(source).not.toContain('node:crypto');
+    expect(source).not.toContain('randomBytes');
+    expect(source).not.toContain('randomUUID');
   });
 });

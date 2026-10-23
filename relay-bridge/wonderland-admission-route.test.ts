@@ -56,7 +56,11 @@ function request(over: Partial<WonderlandAdmissionRouteRequest> = {}): Wonderlan
   };
 }
 
-function service(over: { env?: Record<string, string | undefined>; ledger?: AdmissionLedger } = {}) {
+function service(over: {
+  env?: Record<string, string | undefined>;
+  ledger?: AdmissionLedger;
+  mintServerRunId?: () => string;
+} = {}) {
   return createWonderlandAdmissionService({
     env: over.env ?? env(),
     operatorToken: 'operator-token',
@@ -65,6 +69,7 @@ function service(over: { env?: Record<string, string | undefined>; ledger?: Admi
       : null,
     readWorkflowText: () => null,
     ledger: over.ledger,
+    mintServerRunId: over.mintServerRunId,
   });
 }
 
@@ -99,9 +104,11 @@ describe('POST /wonderland/julius/dispatch', () => {
     expect(secondKind.hasError).toBe(false);
     expect(classifyDispatchAnswer(first?.status ?? 0, firstKind.hasError, firstKind.kind)).toBe('Accepted');
     expect(classifyDispatchAnswer(second?.status ?? 0, secondKind.hasError, secondKind.kind)).toBe('Accepted');
-    const created = (first?.body as { data: { dispatchId: string; dispatched: boolean; confirmLive: string; submittedToPaidWorkflow: boolean; state: string } }).data;
-    const replayed = (second?.body as { data: { dispatchId: string; state: string; replayed: boolean; correlation: { resultSha256: null; requestId: string } } }).data;
+    const created = (first?.body as { data: { dispatchId: string; serverRunId: string; dispatched: boolean; confirmLive: string; submittedToPaidWorkflow: boolean; state: string } }).data;
+    const replayed = (second?.body as { data: { dispatchId: string; serverRunId: string; state: string; replayed: boolean; correlation: { resultSha256: null; requestId: string } } }).data;
     expect(replayed.dispatchId).toBe(created.dispatchId);
+    expect(created.serverRunId).toMatch(/^run:[0-9a-f]{24}$/);
+    expect(replayed.serverRunId).toBe(created.serverRunId);
     expect(replayed.replayed).toBe(true);
     expect(replayed.state).toBe('ADMISSION_HELD');
     expect(created.dispatched).toBe(false);
@@ -140,6 +147,31 @@ describe('POST /wonderland/julius/dispatch', () => {
     expect((created?.body as { data: { dispatchId: string; state: string } }).data.dispatchId).toBe(replayId.dispatchId);
     expect((created?.body as { data: { state: string } }).data.state).toBe('ADMISSION_HELD');
     expect(appends).toBe(1);
+  });
+
+  it('a failed reservation is a bare 500 and does not leak the minted id', async () => {
+    const minted: string[] = [];
+    const valid = `run:${'ab'.repeat(12)}`;
+    const ports = service({
+      mintServerRunId: () => {
+        const id = minted.length === 0 ? 'run:not-a-bootstrap-id' : valid;
+        minted.push(id);
+        return id;
+      },
+    });
+    const failed = await handleWonderlandAdmissionRoute(request(), ports);
+    expect(failed).toEqual({ status: 500, body: {} });
+    expect(classifyDispatchAnswer(500, false, '')).toBe('NoAnswer');
+    const created = await handleWonderlandAdmissionRoute(request(), ports);
+    const replayed = await handleWonderlandAdmissionRoute(request(), ports);
+    expect(created?.status).toBe(202);
+    expect(replayed?.status).toBe(200);
+    const createdId = (created?.body as { data: { serverRunId: string } }).data.serverRunId;
+    const replayedId = (replayed?.body as { data: { serverRunId: string } }).data.serverRunId;
+    expect(createdId).toBe(valid);
+    expect(replayedId).toBe(valid);
+    expect(JSON.stringify(created?.body)).not.toContain('run:not-a-bootstrap-id');
+    expect(minted).toEqual(['run:not-a-bootstrap-id', valid]);
   });
 
   it('the two cap kinds are the only 429 refusals the route returns', async () => {

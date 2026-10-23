@@ -193,7 +193,7 @@ The 429s this adapter returns are the existing J1 count caps: `JULIUS_J1_DAILY_C
 | 3 | `julius-dispatch.ts` at 31bfc58b is a second, in-process role chain and is not on main. It must not be mounted beside the workflow. | **YUJI** | Their tree. |
 | 4 | Unreal wrapper: HTTP, JSON, CSPRNG, missionId check, lone-surrogate decode, display. Pure logic is on a821a467 only. | **Cosmo** | Client tree. Not this PR. |
 | 5 | `ClassifyDispatchAnswer` treats every 2xx without an error as Accepted and spends the pair. Our 202 means "admission reserved", `dispatched: false`, state `ADMISSION_HELD`. The wrapper must not draw that as providers running. Proposed fields are below. | **Cosmo** and **YUJI** to agree | Client change. Server fields are additive. |
-| 6 | Server `run:…` and client `wlj_…` are not linked. The create branch of `julius-mission-routes.ts` is unchanged and still returns `dispatched: false`. Admission returns before that branch and does not bootstrap a `READY` run. | **YUJI** (bootstrap id) and **Cosmo** (which id the game shows) | Create path left as it is. |
+| 6 | The admission store now mints one `run:` id (`serverRunId`) with the `(wlj_, idempotency key)` pair and returns it on the 202 and the same-pair 200. The mapping lives only there. Paid-dispatch and bootstrap do not yet refuse a run that lacks a matching admitted pair. That refusal is later, through G6, after #404 and the migration. The create branch of `julius-mission-routes.ts` is unchanged and still returns `dispatched: false`. | **YUJI** (paid-dispatch and bootstrap refusal, after #404) and **Cosmo** (which id the game shows) | Admission mint is in this change. The later refusal is not. |
 | 7 | Role-slot registry and the `claude-fable-5` fixtures disagree with the workflow pin. | **YUJI** | No. Forbidden files. |
 | 8 | Coder billing is mid-migration (subscription smoke vs API). The model id stays `claude-opus-5-5`. | **YUJI** | No. |
 | 9 | Process crash during the ledger append can drop the row. A later resend would reserve again. The in-process resend cannot. | **BRIDGE** follow-up, durable ledger, still not a second spender | Yes, later. Not this change. |
@@ -208,7 +208,7 @@ Flag `JULIUS_WONDERLAND_ADMISSION=1`. Default off (`503 julius_dispatch_disabled
 `POST /relay-api/wonderland/julius/dispatch` is served by `handleJuliusMissionRoute`, on the existing mission registration in `server.ts`. The exclusion is that exact path. A trailing slash, a different case, a child segment, or a query stays on the Wonderland catch-all and is refused as every other unknown `/wonderland/` path is refused. `isWonderlandRoute` returns false for the exact path, so the catch-all does not answer it. There is no second `if` beside that catch-all (FORGE #406 will mount there). The create branch of the mission handler is not on this path:
 
 1. Loopback, no browser origin, no operator bearer, native session, founder, project. Same kinds as 31bfc58b.
-2. Synchronously reserve one run for `(runId, sha256(idempotency key))` **before** `ledger.append`.
+2. Synchronously reserve one run for `(runId, sha256(idempotency key))` and mint one `serverRunId` (`run:` plus 24 lowercase hex, from `randomBytes(12)`) inside that reservation, **before** `ledger.append`. A resend returns that id and does not mint another.
 3. A resend, including one that arrives while `append` is in flight, gets **200**, no error object, and that run's current state (`RESERVED` until the write finishes, then `ADMISSION_HELD`).
 4. Cap hits return **429** `julius_dispatch_cap_reached` or `julius_dispatch_mission_cap_reached`, with no row and no run.
 5. The route never returns `julius_dispatch_busy`.
@@ -226,6 +226,7 @@ Success body, additive on the 31bfc58b data object:
 {
   "data": {
     "runId": "wlj_<uuidv4>",
+    "serverRunId": "run:<24 lowercase hex>",
     "dispatchId": "adm_<32 hex>",
     "state": "RESERVED | ADMISSION_HELD | LEDGER_UNWRITTEN | INTERRUPTED | FAILED",
     "replayed": false,
