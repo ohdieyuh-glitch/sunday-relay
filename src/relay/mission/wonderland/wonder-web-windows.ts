@@ -471,7 +471,7 @@ export function formatLogLine(event: WonderWebWindowLogEvent): string {
   return canonicalStringify(event);
 }
 
-function refuse<T>(state: WonderWebWindowManagerState, error: WonderWebWindowError): WonderWebWindowRefusal {
+function refuse(state: WonderWebWindowManagerState, error: WonderWebWindowError): WonderWebWindowRefusal {
   return { ok: false, state, error, events: [], animations: [] };
 }
 
