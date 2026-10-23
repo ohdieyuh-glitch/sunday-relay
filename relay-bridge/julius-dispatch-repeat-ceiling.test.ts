@@ -94,6 +94,41 @@ describe('combined initial+repeat ceiling for julius-inworld-data-1', () => {
     })).toEqual({ admit: false, reason: 'combined_ceiling_exceeded' });
   });
 
+  it('spendUnknownLegs above zero refuses even when every leg has a valid integer receipt', () => {
+    expect(verifyRun1Spend({
+      sealed: true, orderOk: true, spendUnknownLegs: 1, openedRoles: ['architect'],
+      legs: [{ role: 'architect', spend: 'usage_reported', costUsdMicros: 1, providerResponseId: 'resp_a' }],
+    })).toEqual({ verified: false, reason: 'unknown_spend' });
+  });
+
+  it('a non-integer, non-finite, negative, or unsafe costUsdMicros is refused and is not treated as zero', () => {
+    // The running sum also rejects a non-safe integer, so deleting only the per-leg
+    // Number.isSafeInteger conjunct does not change these results. Deleting it in both
+    // places would verify 1.5 (and 1.5 + 2.5 as 4). Negative values are refused by the < 0 conjunct.
+    const one = (costUsdMicros: number) => verifyRun1Spend({
+      sealed: true, orderOk: true, spendUnknownLegs: 0, openedRoles: ['architect'],
+      legs: [{ role: 'architect', spend: 'usage_reported', costUsdMicros, providerResponseId: 'resp_a' }],
+    });
+    for (const cost of [1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(one(cost)).toEqual({ verified: false, reason: 'unknown_spend' });
+    }
+    // 1.5 + 2.5 is an integer. Removing the per-leg safe-integer check would verify this as 4.
+    expect(verifyRun1Spend({
+      sealed: true, orderOk: true, spendUnknownLegs: 0, openedRoles: ['architect', 'coder'],
+      legs: [
+        { role: 'architect', spend: 'usage_reported', costUsdMicros: 1.5, providerResponseId: 'resp_a' },
+        { role: 'coder', spend: 'usage_reported', costUsdMicros: 2.5, providerResponseId: 'resp_c' },
+      ],
+    })).toEqual({ verified: false, reason: 'unknown_spend' });
+  });
+
+  it('an unsealed run is refused even when orderOk is true and every receipt is valid', () => {
+    expect(verifyRun1Spend({
+      sealed: false, orderOk: true, spendUnknownLegs: 0, openedRoles: ['architect'],
+      legs: [{ role: 'architect', spend: 'usage_reported', costUsdMicros: 1, providerResponseId: 'resp_a' }],
+    })).toEqual({ verified: false, reason: 'missing_receipt' });
+  });
+
   it('unknown spend is refused, including a contacted leg with no dollar receipt', () => {
     const opened = ['architect'];
     expect(verifyRun1Spend({
