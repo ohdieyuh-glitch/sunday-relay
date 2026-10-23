@@ -112,7 +112,7 @@ export class JuliusWonderWebVmOrchestrator {
     const existing = this.byTask.get(key);
     if (existing?.state === 'TERMINATE_FAILED') return this.replay(existing, 'terminate', 'terminate_left_to_server_ttl');
     if (existing?.state === 'TERMINATED') return this.replay(existing, 'open', 'session_not_open');
-    if (existing) return this.replay(existing, 'open', 'session_open');
+    if (existing?.state === 'OPEN' || existing?.state === 'WINDOW_CLOSED') return this.replay(existing, 'open', 'session_open');
     const inflight = this.opening.get(key);
     if (inflight) return inflight;
     const run = this.openNew(input, key);

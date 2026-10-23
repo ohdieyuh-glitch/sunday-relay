@@ -390,6 +390,60 @@ describe('Julius Wonder Web VM orchestration', () => {
     expect(fake.ops('reserve')).toHaveLength(1);
   });
 
+  it('kills a mutant that accepts a caller-supplied agent id', async () => {
+    const { orch, fake } = harness();
+    const denied = await orch.open({ ...openInput, agentId: 'run:one:plan' } as typeof openInput);
+    expect(denied.ok).toBe(false);
+    expect(denied.reasonCode).toBe('forged_agent_id');
+    expect(denied.trace.spend.state).toBe('NOT_SPENT');
+    expect(fake.ops('register')).toHaveLength(0);
+    expect(fake.ops('reserve')).toHaveLength(0);
+    expect(fake.ops('open')).toHaveLength(0);
+    const opened = await orch.open(openInput);
+    const steered = await orch.navigate({
+      ...openInput, vmSessionId: opened.vmSessionId!, url: 'https://allowed.example/',
+      usdMicros: 1, authorization: AUTHORIZED, agentId: opened.agentId,
+    } as typeof openInput & { vmSessionId: string; url: string });
+    expect(steered.reasonCode).toBe('forged_agent_id');
+    expect(steered.trace.spend.state).toBe('NOT_SPENT');
+    expect(fake.ops('navigate')).toHaveLength(0);
+    expect(fake.ops('reserve')).toHaveLength(1);
+  });
+
+  it('kills a mutant that terminates again after the card has already ended', async () => {
+    const { orch, fake, issued } = harness();
+    const opened = await orch.open(openInput);
+    const reserves = fake.ops('reserve').length;
+    issued.tasks[0]!.state = 'SUCCEEDED';
+    const ended = { runId: 'run:one', projectId: 'project', taskId: 'run:one:plan' };
+    const first = await orch.onTaskEnded(ended);
+    const second = await orch.onTaskEnded(ended);
+    expect(first.reasonCode).toBe('session_terminated');
+    expect(second.reasonCode).toBe('session_terminated');
+    expect(second.trace.spend.state).toBe('NOT_SPENT');
+    expect(fake.ops('terminate')).toEqual([{ vmSessionId: opened.vmSessionId, agentId: opened.agentId }]);
+    expect(fake.ops('reserve')).toHaveLength(reserves);
+  });
+
+  it('kills a mutant that reserves again after terminate fails', async () => {
+    const { orch, fake } = harness();
+    const opened = await orch.open(openInput);
+    const reserves = fake.ops('reserve').length;
+    fake.failTerminate = true;
+    const end = { runId: 'run:one', projectId: 'project', taskId: 'run:one:plan', vmSessionId: opened.vmSessionId! };
+    const first = await orch.requestTerminate(end);
+    const second = await orch.requestTerminate(end);
+    const again = await orch.open(openInput);
+    expect(fake.ops('terminate')).toHaveLength(1);
+    expect(fake.ops('reserve')).toHaveLength(reserves);
+    expect(fake.ops('open')).toHaveLength(1);
+    expect(first.reasonCode).toBe('terminate_left_to_server_ttl');
+    expect(second.reasonCode).toBe('terminate_left_to_server_ttl');
+    expect(again.reasonCode).toBe('terminate_left_to_server_ttl');
+    expect(again.ok).toBe(false);
+    expect(again.trace.spend.state).toBe('NOT_SPENT');
+  });
+
   it('does not assign a window number in the production modules', () => {
     for (const file of [
       'julius-wonder-web-vm-types.ts',
