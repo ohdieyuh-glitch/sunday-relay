@@ -21,3 +21,31 @@ export {
   type JuliusBootstrapProblem,
   type JuliusBootstrapRefusal,
 } from './mission-bootstrap-adapter';
+
+export {
+  JULIUS_TERMINAL_ACCENT_TOKEN,
+  JULIUS_VM_END_CAUSES,
+  JULIUS_VM_TERMINAL_ID,
+  JULIUS_WONDER_WEB_VM_CONTRACT,
+  WONDER_WEB_VM_SESSION_CONTRACT,
+  type JuliusVmActionTrace,
+  type JuliusVmEndCause,
+  type JuliusVmOperation,
+  type JuliusVmOwnedSession,
+  type JuliusVmResult,
+  type JuliusVmSessionState,
+  type JuliusVmSpendRecord,
+} from './julius-wonder-web-vm-types';
+export type {
+  JuliusIssuedTaskSource,
+  JuliusVmRegistryPort,
+  JuliusVmSessionPort,
+  JuliusVmSpendAuthorization,
+  JuliusVmSpendCapPort,
+} from './julius-wonder-web-vm-port';
+export {
+  callerSuppliedIdentityField,
+  sessionOwnedByAgent,
+  workingCardIdProblem,
+} from './julius-wonder-web-vm-authorization';
+export { JuliusWonderWebVmOrchestrator } from './julius-wonder-web-vm-orchestrator';
