@@ -10,7 +10,12 @@ import { emptySocialState, friendIdsOf } from './social-state';
 import { ensureSocialUser } from './social-store';
 import {
   WORLD_AVATAR_STALE_MS,
+  WORLD_HANDOFFS,
+  WORLD_HANDOFF_EVENT_MIN_INTERVAL_MS,
+  WORLD_HANDOFF_EVENT_RETAIN_MS,
+  parseHandoffEvent,
   WORLD_PUBLIC_CAPACITY,
+  coerceWorldHandoff,
   contextOf,
   emptyWorldState,
   joinWorld,
@@ -127,6 +132,292 @@ describe('the shared presence layer', () => {
     expect(reportAvatar(joined.value.world, U.KAI, { ...here, motion: 'IDLE', x: Number.NaN }, T0).ok).toBe(false);
     expect(reportAvatar(joined.value.world, U.KAI, { ...here, motion: 'IDLE', x: 1e12 }, T0).ok).toBe(false);
     expect(reportAvatar(joined.value.world, U.KAI, { ...here, motion: 'TELEPORT' as never }, T0).ok).toBe(false);
+  });
+});
+
+/**
+ * What a viewer is told about a figure's handoff: 'NO FIGURE' when the figure is not shown at all, 'ABSENT' when it is shown WITHOUT a
+ * `handoff` key (NONE is left out of the view, Skywalker's ruling 10-23; clients read absent as NONE), else the exact value.
+ */
+const handoffShown = (a: { readonly handoff?: string } | undefined): string => (a === undefined ? 'NO FIGURE' : 'handoff' in a ? String(a.handoff) : 'ABSENT');
+
+describe('MP-VIS-02: the equipped Mission Handoff is transported to the other players, as a closed enum and nothing more', () => {
+  const joined2 = () => {
+    let s = createSocialFixture();
+    let w = emptyWorldState();
+    ({ state: s, world: w } = run(s, w, U.KAI, 'world.join', { target: 'PUBLIC' }));
+    ({ state: s, world: w } = run(s, w, U.NOVA, 'world.join', { target: 'PUBLIC' }));
+    return { s, w };
+  };
+  const novaFromKai = (w: WorldState, s: SocialState, ms: number) => worldViewFor(w, s, U.NOVA, T0 + ms).avatars.find((a) => a.userId === U.KAI);
+
+  it('the closed list is NONE and TWIN_SWORDS, and the coercion reads everything else as NONE', () => {
+    expect([...WORLD_HANDOFFS]).toEqual(['NONE', 'TWIN_SWORDS']);
+    expect(coerceWorldHandoff('TWIN_SWORDS')).toBe('TWIN_SWORDS');
+    for (const bad of [undefined, null, '', 'twin_swords', 'TWIN_SWORDS ', 'HELD', 7, true, {}, ['TWIN_SWORDS']]) {
+      expect(coerceWorldHandoff(bad), String(bad)).toBe('NONE');
+    }
+  });
+
+  it('a report that omits the field (an older client) reads NONE; activation, movement and deactivation reach the other player; each report is the whole truth', () => {
+    const { s, w: w0 } = joined2();
+    let w = w0;
+    ({ world: w } = run(s, w, U.KAI, 'world.state', here, 200));
+    expect(handoffShown(novaFromKai(w, s, 250)), 'older client: field absent, NONE is left out').toBe('ABSENT');
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'TWIN_SWORDS' }, 400));
+    expect(novaFromKai(w, s, 450)?.handoff).toBe('TWIN_SWORDS');
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, x: 900, motion: 'RUN', speed: 500, handoff: 'TWIN_SWORDS' }, 600));
+    expect([novaFromKai(w, s, 650)?.x, novaFromKai(w, s, 650)?.handoff]).toEqual([900, 'TWIN_SWORDS']);
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'NONE' }, 800));
+    expect(handoffShown(novaFromKai(w, s, 850))).toBe('ABSENT');
+    // nothing sticks from an earlier report: a later report that omits the field clears it
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'TWIN_SWORDS' }, 1000));
+    ({ world: w } = run(s, w, U.KAI, 'world.state', here, 1200));
+    expect(handoffShown(novaFromKai(w, s, 1250))).toBe('ABSENT');
+  });
+
+  it('a malformed or unknown value never fails the report: the position is taken and the handoff reads NONE', () => {
+    const { s, w: w0 } = joined2();
+    let w = w0;
+    let ms = 200;
+    for (const bad of ['twin_swords', 'MYSTERY_FORM', '', 7, null, true, { form: 'TWIN_SWORDS' }, ['TWIN_SWORDS'], 'A'.repeat(5000)]) {
+      ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, x: ms, handoff: bad }, ms));
+      const seen = novaFromKai(w, s, ms + 10);
+      expect([seen?.x, handoffShown(seen)], String(JSON.stringify(bad)).slice(0, 40)).toEqual([ms, 'ABSENT']);
+      ms += 200;
+    }
+  });
+
+  it("a player can only set their OWN handoff: another player's report never changes it, whatever ids the body names", () => {
+    const { s, w: w0 } = joined2();
+    let w = w0;
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'TWIN_SWORDS' }, 200));
+    ({ world: w } = run(s, w, U.NOVA, 'world.state', { ...here, userId: U.KAI, actorId: U.KAI, handoff: 'NONE' }, 300));
+    expect(worldViewFor(w, s, U.NOVA, T0 + 350).avatars.find((a) => a.userId === U.KAI)?.handoff).toBe('TWIN_SWORDS');
+    expect(handoffShown(worldViewFor(w, s, U.KAI, T0 + 350).avatars.find((a) => a.userId === U.NOVA))).toBe('ABSENT');
+    expect(w.avatars[U.NOVA]?.userId).toBe(U.NOVA);
+  });
+
+  it('a late joiner sees the current handoff on their first view; a silent owner drops after the stale window and returns with the flag on the next report', () => {
+    let { s, w } = joined2();
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'TWIN_SWORDS' }, 200));
+    ({ state: s, world: w } = run(s, w, U.ORION, 'world.join', { target: 'PUBLIC' }, 400));
+    expect(worldViewFor(w, s, U.ORION, T0 + 450).avatars.find((a) => a.userId === U.KAI)?.handoff, 'late join').toBe('TWIN_SWORDS');
+    expect(worldViewFor(w, s, U.NOVA, T0 + 200 + WORLD_AVATAR_STALE_MS + 1).avatars.find((a) => a.userId === U.KAI), 'stale: gone').toBeUndefined();
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'TWIN_SWORDS' }, 200 + WORLD_AVATAR_STALE_MS + 500));
+    expect(worldViewFor(w, s, U.NOVA, T0 + 200 + WORLD_AVATAR_STALE_MS + 600).avatars.find((a) => a.userId === U.KAI)?.handoff, 'reconnect').toBe('TWIN_SWORDS');
+  });
+
+  it('leaving the world takes the handoff with the avatar; a rejoin shows nothing until the next report', () => {
+    let { s, w } = joined2();
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'TWIN_SWORDS' }, 200));
+    ({ state: s, world: w } = run(s, w, U.KAI, 'world.leave', {}, 300));
+    expect(w.avatars[U.KAI]).toBeUndefined();
+    ({ state: s, world: w } = run(s, w, U.KAI, 'world.join', { target: 'PUBLIC' }, 400));
+    expect(novaFromKai(w, s, 450)).toBeUndefined();
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'TWIN_SWORDS' }, 600));
+    expect(novaFromKai(w, s, 650)?.handoff).toBe('TWIN_SWORDS');
+  });
+
+  it('a block, either way, hides the figure and so its handoff; reportAvatar keeps the direct contract (default NONE, stored value, coerced forgery)', () => {
+    let { s, w } = joined2();
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'TWIN_SWORDS' }, 200));
+    expect(novaFromKai(w, s, 250)?.handoff).toBe('TWIN_SWORDS');
+    const blocked = blockUser(s, U.NOVA, U.KAI, at(300));
+    if (!blocked.ok) throw new Error('block');
+    s = blocked.value;
+    expect(worldViewFor(w, s, U.NOVA, T0 + 400).avatars).toEqual([]);
+    expect(worldViewFor(w, s, U.KAI, T0 + 400).avatars).toEqual([]);
+    const j = joinWorld(emptyWorldState(), createSocialFixture(), U.KAI, { kind: 'PUBLIC', place: 'golden_arrival', placeName: 'Golden Arrival' }, T0);
+    if (!j.ok) throw new Error('join');
+    const noField = reportAvatar(j.value.world, U.KAI, { ...here, motion: 'IDLE' }, T0 + 200);
+    const withField = reportAvatar(j.value.world, U.KAI, { ...here, motion: 'IDLE', handoff: 'TWIN_SWORDS' }, T0 + 200);
+    const forced = reportAvatar(j.value.world, U.KAI, { ...here, motion: 'IDLE', handoff: 'EVIL' as never }, T0 + 200);
+    expect([noField, withField, forced].map((r) => (r.ok ? r.value.avatars[U.KAI]?.handoff : 'refused'))).toEqual(['NONE', 'TWIN_SWORDS', 'NONE']);
+  });
+
+  it('the view leaves NONE out and gives every other form exactly, in the place it had: a NONE figure is byte for byte a figure from before the handoff existed', () => {
+    const { s, w: w0 } = joined2();
+    let w = w0;
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'NONE' }, 200));
+    const none = novaFromKai(w, s, 250);
+    expect(none, 'the figure itself is shown').toBeDefined();
+    expect(Object.keys(none ?? {}).includes('handoff')).toBe(false);
+    expect(Object.keys(none ?? {})).toEqual(['userId', 'contextId', 'x', 'y', 'z', 'yaw', 'speed', 'motion', 'skinId', 'reportedAtMs', 'displayName', 'ageMs']);
+    // every non-NONE form in the closed list is returned with its exact value, right after skinId (where the stored avatar keeps it)
+    let ms = 400;
+    for (const form of WORLD_HANDOFFS.filter((f) => f !== 'NONE')) {
+      ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: form }, ms));
+      const on = novaFromKai(w, s, ms + 50);
+      expect(handoffShown(on), form).toBe(form);
+      expect(Object.keys(on ?? {}).slice(8, 10), form).toEqual(['skinId', 'handoff']);
+      ms += 200;
+    }
+    // and back to NONE: left out again
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'NONE' }, ms));
+    expect(handoffShown(novaFromKai(w, s, ms + 50))).toBe('ABSENT');
+  });
+
+  it('on input, a missing field and NONE are the same: the same stored avatar, the same view, the same bytes, and the same legality for the next event', () => {
+    const j = joinWorld(emptyWorldState(), createSocialFixture(), U.KAI, { kind: 'PUBLIC', place: 'golden_arrival', placeName: 'Golden Arrival' }, T0);
+    if (!j.ok) throw new Error('join');
+    const missing = reportAvatar(j.value.world, U.KAI, { ...here, motion: 'IDLE' }, T0 + 200);
+    const none = reportAvatar(j.value.world, U.KAI, { ...here, motion: 'IDLE', handoff: 'NONE' }, T0 + 200);
+    if (!missing.ok || !none.ok) throw new Error('report');
+    expect(missing.value.avatars[U.KAI]).toEqual(none.value.avatars[U.KAI]);
+    expect(JSON.stringify(missing.value.avatars[U.KAI])).toBe(JSON.stringify(none.value.avatars[U.KAI]));
+    expect(coerceWorldHandoff(undefined)).toBe(coerceWorldHandoff('NONE'));
+    // through the command layer, for a viewer: identical answers
+    const { s, w: w0 } = joined2();
+    const viaMissing = run(s, w0, U.KAI, 'world.state', here, 200).world;
+    const viaNone = run(s, w0, U.KAI, 'world.state', { ...here, handoff: 'NONE' }, 200).world;
+    expect(JSON.stringify(worldViewFor(viaMissing, s, U.NOVA, T0 + 250))).toBe(JSON.stringify(worldViewFor(viaNone, s, U.NOVA, T0 + 250)));
+    // the stored state an ACTIVATE is checked against is NONE either way, so the same activation is accepted after both
+    const act = { epoch: 7, n: 1, kind: 'ACTIVATE', form: 'TWIN_SWORDS', sinceMs: 0 };
+    const afterMissing = run(s, viaMissing, U.KAI, 'world.state', { ...here, handoff: 'TWIN_SWORDS', handoffEvent: act }, 1200).world;
+    const afterNone = run(s, viaNone, U.KAI, 'world.state', { ...here, handoff: 'TWIN_SWORDS', handoffEvent: act }, 1200).world;
+    expect(worldViewFor(afterMissing, s, U.NOVA, T0 + 1250).avatars.find((a) => a.userId === U.KAI)?.handoffEvent).toMatchObject({ seq: 1, kind: 'ACTIVATE' });
+    expect(JSON.stringify(worldViewFor(afterMissing, s, U.NOVA, T0 + 1250))).toBe(JSON.stringify(worldViewFor(afterNone, s, U.NOVA, T0 + 1250)));
+  });
+});
+
+describe('MP-VIS-02 REV2: the activation event is sequenced by the server, idempotent, bounded, and visible only to those who may see the player', () => {
+  const ev = (n: number, kind: 'ACTIVATE' | 'DEACTIVATE', extra: Record<string, unknown> = {}) => ({ epoch: 7, n, kind, form: 'TWIN_SWORDS', sinceMs: 0, ...extra });
+  const on = { ...here, handoff: 'TWIN_SWORDS' };
+  const joined = () => {
+    let s = createSocialFixture();
+    let w = emptyWorldState();
+    ({ state: s, world: w } = run(s, w, U.KAI, 'world.join', { target: 'PUBLIC' }));
+    ({ state: s, world: w } = run(s, w, U.NOVA, 'world.join', { target: 'PUBLIC' }));
+    return { s, w };
+  };
+  const seen = (w: WorldState, s: SocialState, ms: number, viewer: string = U.NOVA, who: string = U.KAI) => worldViewFor(w, s, viewer, T0 + ms).avatars.find((a) => a.userId === who);
+
+  it('parseHandoffEvent is total: only a whole, closed, in-range event survives; sinceMs is clamped', () => {
+    expect(parseHandoffEvent(ev(1, 'ACTIVATE'))).toEqual({ epoch: 7, n: 1, kind: 'ACTIVATE', form: 'TWIN_SWORDS', sinceMs: 0 });
+    expect(parseHandoffEvent(ev(1, 'ACTIVATE', { sinceMs: 99999 }))?.sinceMs).toBe(1000);
+    expect(parseHandoffEvent(ev(1, 'ACTIVATE', { sinceMs: -5 }))?.sinceMs).toBe(0);
+    expect(parseHandoffEvent({ epoch: 7, n: 1, kind: 'ACTIVATE', form: 'TWIN_SWORDS' })?.sinceMs).toBe(0);
+    for (const bad of [undefined, null, 7, 'ACTIVATE', [], {}, ev(0, 'ACTIVATE'), ev(1.5, 'ACTIVATE'), ev(2 ** 31, 'ACTIVATE'), ev(1, 'activate' as never), ev(1, 'EXPLODE' as never),
+      ev(1, 'ACTIVATE', { form: 'NONE' }), ev(1, 'ACTIVATE', { form: 'SPACESHIP' }), ev(1, 'ACTIVATE', { form: 7 }), ev(1, 'ACTIVATE', { epoch: -1 }), ev(1, 'ACTIVATE', { sinceMs: 'soon' }),
+      ev(1, 'ACTIVATE', { sinceMs: Number.NaN })]) {
+      expect(parseHandoffEvent(bad), JSON.stringify(bad)).toBeUndefined();
+    }
+  });
+
+  it('an ACTIVATE is stored with a server seq and returned with its age and without the client keys; a resend of the same (epoch, n) is idempotent', () => {
+    const { s, w: w0 } = joined();
+    let w = w0;
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(1, 'ACTIVATE') }, 1000));
+    expect(seen(w, s, 1300)?.handoffEvent).toEqual({ seq: 1, kind: 'ACTIVATE', form: 'TWIN_SWORDS', ageMs: 300 });
+    for (const ms of [1200, 1400, 1600]) ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(1, 'ACTIVATE') }, ms));
+    expect(seen(w, s, 1700)?.handoffEvent, 'resends neither re-sequence nor move the start').toEqual({ seq: 1, kind: 'ACTIVATE', form: 'TWIN_SWORDS', ageMs: 700 });
+    expect(JSON.stringify(seen(w, s, 1700))).not.toContain('epoch');
+  });
+
+  it('sinceMs back-dates the start by at most one second; an event older than the retain window is no longer returned (the persistent state still is)', () => {
+    const { s, w: w0 } = joined();
+    let w = w0;
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(1, 'ACTIVATE', { sinceMs: 400 }) }, 2000));
+    expect(seen(w, s, 2000)?.handoffEvent?.ageMs).toBe(400);
+    // the owner keeps reporting (and resending the same event) so the figure stays; the event started at 1600
+    for (const ms of [6000, 11500]) ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(1, 'ACTIVATE', { sinceMs: 400 }) }, ms));
+    expect(seen(w, s, 1600 + WORLD_HANDOFF_EVENT_RETAIN_MS)?.handoffEvent, 'at the limit it is still returned').toBeDefined();
+    expect(seen(w, s, 1600 + WORLD_HANDOFF_EVENT_RETAIN_MS + 1)?.handoffEvent).toBeUndefined();
+    expect(seen(w, s, 1600 + WORLD_HANDOFF_EVENT_RETAIN_MS + 1)?.handoff).toBe('TWIN_SWORDS');
+  });
+
+  it('out-of-order and duplicate events never move the sequence back; a new launch (new epoch) is accepted although its counter restarted', () => {
+    const { s, w: w0 } = joined();
+    let w = w0;
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(5, 'ACTIVATE') }, 1000));
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'NONE', handoffEvent: ev(6, 'DEACTIVATE') }, 5000));
+    expect(seen(w, s, 5100)?.handoffEvent?.kind).toBe('DEACTIVATE');
+    // a delayed copy of the older ACTIVATE (n=5) arrives afterwards: ignored, and the persistent state stays what the newest report said
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'NONE', handoffEvent: ev(5, 'ACTIVATE') }, 5300));
+    expect(seen(w, s, 5400)?.handoffEvent).toMatchObject({ seq: 2, kind: 'DEACTIVATE' });
+    // a new launch: epoch 8, n restarts at 1
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(1, 'ACTIVATE', { epoch: 8 }) }, 9000));
+    expect(seen(w, s, 9100)?.handoffEvent).toMatchObject({ seq: 3, kind: 'ACTIVATE' });
+  });
+
+  it('is bounded: a second NEW event within the minimum interval is dropped, and is not revived later by a resend (its report already stated the new equipped state)', () => {
+    const { s, w: w0 } = joined();
+    let w = w0;
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(1, 'ACTIVATE') }, 1000));
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'NONE', handoffEvent: ev(2, 'DEACTIVATE') }, 1000 + WORLD_HANDOFF_EVENT_MIN_INTERVAL_MS - 200));
+    expect(seen(w, s, 1700)?.handoffEvent?.seq).toBe(1);
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'NONE', handoffEvent: ev(2, 'DEACTIVATE') }, 1000 + WORLD_HANDOFF_EVENT_MIN_INTERVAL_MS + 200));
+    expect(seen(w, s, 2100)?.handoffEvent?.seq, 'the persistent state is NONE now, so a DEACTIVATE is no longer legal').toBe(1);
+    expect(handoffShown(seen(w, s, 2100))).toBe('ABSENT');
+  });
+
+  it('is legal only for what the player has equipped and only consistent with the report that carries it', () => {
+    const { s, w: w0 } = joined();
+    let w = w0;
+    // DEACTIVATE with nothing equipped: ignored (the report is still taken)
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, x: 555, handoff: 'NONE', handoffEvent: ev(1, 'DEACTIVATE') }, 1000));
+    expect([seen(w, s, 1100)?.x, seen(w, s, 1100)?.handoffEvent]).toEqual([555, undefined]);
+    // ACTIVATE while the same report says NONE: inconsistent, ignored
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'NONE', handoffEvent: ev(2, 'ACTIVATE') }, 1200));
+    expect(seen(w, s, 1300)?.handoffEvent).toBeUndefined();
+    // a restored HELD (no event) then a DEACTIVATE: legal, because the previous report said equipped
+    ({ world: w } = run(s, w, U.KAI, 'world.state', on, 1400));
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, handoff: 'NONE', handoffEvent: ev(3, 'DEACTIVATE') }, 1600));
+    expect(seen(w, s, 1700)?.handoffEvent).toMatchObject({ seq: 1, kind: 'DEACTIVATE' });
+    // a proper ACTIVATE afterwards is the second event
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(4, 'ACTIVATE') }, 3000));
+    expect(seen(w, s, 3100)?.handoffEvent).toMatchObject({ seq: 2, kind: 'ACTIVATE' });
+    // ACTIVATE while already equipped: ignored
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(5, 'ACTIVATE') }, 5000));
+    expect(seen(w, s, 5100)?.handoffEvent?.seq, 'a second ACTIVATE while equipped changes nothing').toBe(2);
+  });
+
+  it('a malformed event never costs the report: the position is taken, the event is ignored; an animation name in the body is never read', () => {
+    const { s, w: w0 } = joined();
+    let w = w0;
+    let ms = 1000;
+    for (const bad of ['ACTIVATE', 7, [], { kind: 'ACTIVATE' }, { ...ev(1, 'ACTIVATE'), form: '/Game/Anim/Evil' }, { epoch: 'x' }]) {
+      ({ world: w } = run(s, w, U.KAI, 'world.state', { ...here, x: ms, handoffEvent: bad }, ms));
+      expect([seen(w, s, ms + 10)?.x, seen(w, s, ms + 10)?.handoffEvent], JSON.stringify(bad)).toEqual([ms, undefined]);
+      ms += 200;
+    }
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: { ...ev(1, 'ACTIVATE'), animation: 'Evil', duration: 1e9, x: 1e12 } }, ms));
+    expect(JSON.stringify(seen(w, s, ms + 10)?.handoffEvent)).toBe(JSON.stringify({ seq: 1, kind: 'ACTIVATE', form: 'TWIN_SWORDS', ageMs: 10 }));
+  });
+
+  it('two players activate at the same moment: each has their own sequence, and neither can write the other', () => {
+    const { s, w: w0 } = joined();
+    let w = w0;
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(1, 'ACTIVATE') }, 1000));
+    ({ world: w } = run(s, w, U.NOVA, 'world.state', { ...on, handoffEvent: { ...ev(1, 'ACTIVATE'), epoch: 99 } }, 1000));
+    expect(seen(w, s, 1100, U.NOVA, U.KAI)?.handoffEvent).toMatchObject({ seq: 1, kind: 'ACTIVATE' });
+    expect(seen(w, s, 1100, U.KAI, U.NOVA)?.handoffEvent).toMatchObject({ seq: 1, kind: 'ACTIVATE' });
+    // Nova sends an event while Kai is the only one equipped in her body's claim: Kai's record is untouched by it
+    ({ world: w } = run(s, w, U.NOVA, 'world.state', { ...here, handoff: 'NONE', handoffEvent: ev(2, 'DEACTIVATE', { epoch: 99 }) }, 5000));
+    expect(seen(w, s, 5100, U.NOVA, U.KAI)?.handoffEvent).toMatchObject({ seq: 1, kind: 'ACTIVATE' });
+  });
+
+  it('a late joiner is given the event with its age (to play the remainder or to settle) and the persistent state; the block wall hides both', () => {
+    let { s, w } = joined();
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(1, 'ACTIVATE') }, 1000));
+    ({ state: s, world: w } = run(s, w, U.ORION, 'world.join', { target: 'PUBLIC' }, 2000));
+    expect(seen(w, s, 2500, U.ORION, U.KAI)).toMatchObject({ handoff: 'TWIN_SWORDS', handoffEvent: { seq: 1, kind: 'ACTIVATE', ageMs: 1500 } });
+    const blocked = blockUser(s, U.NOVA, U.KAI, at(2600));
+    if (!blocked.ok) throw new Error('block');
+    s = blocked.value;
+    expect(seen(w, s, 2700, U.NOVA, U.KAI)).toBeUndefined();
+    expect(seen(w, s, 2700, U.ORION, U.KAI)?.handoffEvent?.seq).toBe(1);
+  });
+
+  it('leaving the world drops the event with the avatar: a rejoin starts without one', () => {
+    let { s, w } = joined();
+    ({ world: w } = run(s, w, U.KAI, 'world.state', { ...on, handoffEvent: ev(1, 'ACTIVATE') }, 1000));
+    ({ state: s, world: w } = run(s, w, U.KAI, 'world.leave', {}, 1500));
+    ({ state: s, world: w } = run(s, w, U.KAI, 'world.join', { target: 'PUBLIC' }, 1600));
+    ({ world: w } = run(s, w, U.KAI, 'world.state', on, 1800));
+    expect(seen(w, s, 1900)).toMatchObject({ handoff: 'TWIN_SWORDS' });
+    expect(seen(w, s, 1900)?.handoffEvent).toBeUndefined();
   });
 });
 
