@@ -20,7 +20,8 @@
 //   - a finished run that did not succeed still answers 200, with a non-null `failure` word (:615-627);
 //   - every refusal is {error:{kind,message}} (:952), and there is no frozen list of kinds.
 // The client therefore compares its digest ONLY with the artifactSha256 carried in resultText, never with any
-// ledger value, and treats any error object, known kind or not, as a refusal.
+// ledger value, and treats any error object with a kind, known or not, as a refusal, except a 429 whose kind is not
+// one of J1's two pre-chain caps (RID-6, rule 2a of ClassifyDispatchAnswer).
 //
 // RUN IDS ARE CLIENT-MINTED. Founder ruling (c), 07:27 PT 2026-10-23, DECIDED, recorded verbatim in YUJI's resolutions
 // rev 7 (af3c105f:docs/C2_J1_RESOLUTIONS_20261023.md, blob cf528758, [FR-c]; R4-F likewise as [FR-R4F]): a lowercase,
@@ -75,6 +76,10 @@
 //      session's fresh pair may meet a chain the first one started. While an attempt stays unanswered, no new
 //      attempt is admitted; the wrapper shows that as its own state ("waiting for the bridge; resending the same
 //      request"), never as a refusal. Persisting the open pair across sessions is wrapper work, not done here.
+//      RESEND BACKOFF (RID-6): the wrapper WAITS before each resend of the open pair, with a growing delay and a cap,
+//      never in a tight loop. A 429 julius_dispatch_busy lasts while J1 is still writing the first request's ledger
+//      rows or a chain is running (:760-761, :879), so resending at once only meets it again. Only the identical
+//      pair is ever resent; the wait never ends in a fresh pair.
 //   6. NO TRANSFORM EVIDENCE EXISTS YET (ruling R4-F). At 31bfc58b neither resultText (:624-628) nor the result body
 //      (:913) carries anything that confirms the ORIGINAL artifact or the exact scrub-cut-trim transformation: the
 //      roles summaries hold outputSha256/outputChars of the text AFTER that transformation (:586-590), and the pre-
@@ -263,11 +268,14 @@ namespace WonderlandJuliusMissionLogic
 	};
 
 	/**
-	 * How the bridge answered one dispatch POST. The error kind is never matched against a list.
+	 * How the bridge answered one dispatch POST. An error kind is matched against a list ONLY in rule 2a, and only to
+	 * let a 429 refuse; a kind nobody has listed never refuses on a 429.
 	 *
 	 * THE CLASSIFICATION RULE (bHasError: the body has an error object; ErrorKind: its kind, empty when absent):
 	 *   1. 200-299, no error object and no kind ............................................. Accepted
 	 *   2. 400-599, an error object WITH a non-empty kind ...................................... Refused
+	 *  2a.    except 429: Refused only for kind julius_dispatch_cap_reached or julius_dispatch_mission_cap_reached
+	 *         (exact bytes); any other 429 kind, julius_dispatch_busy included, is ..................... NoAnswer
 	 *   3. everything else ................................................................... NoAnswer
 	 * J1 sends every refusal as {error:{kind,message}} with a 4xx or 5xx status (:952 err, refuse), including its
 	 * own 503s (julius_dispatch_disabled, julius_dispatch_ledger_unavailable, ...), so rule 2 is conclusive. A bare
@@ -276,6 +284,17 @@ namespace WonderlandJuliusMissionLogic
 	 * say whether J1 refused or started the run: it may already have reserved the run, so minting a fresh pair could
 	 * start a second paid chain. Those are NoAnswer: the attempt stays open, only the identical pair may be resent,
 	 * and J1 answers that resend with a replay (200, :743-745) or a conclusive refusal.
+	 * RID-6 (Skywalker on 8c92608a, reproduced on J1's own code). J1 at 31bfc58b sends exactly three 429 kinds:
+	 *   julius_dispatch_busy (:760): taken while ANY request is reserving or a chain is running (inFlight is set at
+	 *     :761 and cleared only when the chain ends, :879, or when nothing started, :882). It can answer the identical
+	 *     pair's resend while J1 is still writing the FIRST send's ledger rows, and that first send then returns 202
+	 *     and starts. Busy never proves this pair started nothing, so it is NoAnswer, on a first send or a resend.
+	 *   julius_dispatch_cap_reached (:780) and julius_dispatch_mission_cap_reached (:781): returned inside the
+	 *     reservation before run_created (:848) and run_start (:854) are written and before records.set and runChain
+	 *     (:873, :877), so the request that drew them started nothing (started stays false, :762, :876); a resend of
+	 *     a pair that did start meets the replay (:742-745) or julius_dispatch_already_dispatched (:776) first. They
+	 *     are conclusive: Refused.
+	 * A 429 kind not named here is NoAnswer: failing closed on a 429 means never minting a fresh pair.
 	 */
 	enum class EDispatchAnswer : std::uint8_t
 	{
@@ -284,7 +303,8 @@ namespace WonderlandJuliusMissionLogic
 		Refused,
 		/** Rule 1: 202 accepted, or 200 replayed. Both values are spent. */
 		Accepted,
-		/** Rule 3, or no HTTP answer at all. The bridge may or may not have the run; resend only the identical pair. */
+		/** Rule 3, rule 2a (429 julius_dispatch_busy, an unlisted 429 kind), or no HTTP answer at all. The bridge may
+		 *  or may not have the run; after a wait, resend only the identical pair. */
 		NoAnswer,
 	};
 

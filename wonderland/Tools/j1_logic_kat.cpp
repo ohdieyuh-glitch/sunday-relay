@@ -282,10 +282,24 @@ namespace
 	{ "already_dispatched_409_run", 409, 1, "julius_dispatch_already_dispatched", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
 	{ "already_dispatched_409_key", 409, 1, "julius_dispatch_already_dispatched", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
 	{ "already_dispatched_409_both", 409, 1, "julius_dispatch_already_dispatched", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
-	{ "busy_429_none", 429, 1, "julius_dispatch_busy", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
-	{ "busy_429_run", 429, 1, "julius_dispatch_busy", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
-	{ "busy_429_key", 429, 1, "julius_dispatch_busy", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
-	{ "busy_429_both", 429, 1, "julius_dispatch_busy", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "busy_429_none", 429, 1, "julius_dispatch_busy", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "busy_429_run", 429, 1, "julius_dispatch_busy", 0, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "busy_429_key", 429, 1, "julius_dispatch_busy", 0, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "busy_429_both", 429, 1, "julius_dispatch_busy", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "busy_429_key_as_run", 429, 1, "julius_dispatch_busy", 0, "key_as_run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "busy_429_run_as_key", 429, 1, "julius_dispatch_busy", 0, "run_as_key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "unknown_kind_on_429_none", 429, 1, "julius_dispatch_kind_nobody_has_named", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "unknown_kind_on_429_both", 429, 1, "julius_dispatch_kind_nobody_has_named", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "cap_kind_case_variant_429_none", 429, 1, "JULIUS_DISPATCH_CAP_REACHED", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "cap_kind_padded_429_none", 429, 1, "julius_dispatch_cap_reached ", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "flag_without_kind_on_429_none", 429, 1, "", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "error_kind_on_302_none", 302, 1, "julius_dispatch_kind_nobody_has_named", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "error_kind_on_302_both", 302, 1, "julius_dispatch_kind_nobody_has_named", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "error_kind_on_300_none", 300, 1, "julius_dispatch_kind_nobody_has_named", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "error_kind_on_399_none", 399, 1, "julius_dispatch_kind_nobody_has_named", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_199_no_error_none", 199, 0, "", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "status_199_no_error_both", 199, 0, "", 0, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "error_kind_on_199_none", 199, 1, "julius_dispatch_kind_nobody_has_named", 0, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
 	{ "key_invalid_400_none", 400, 1, "julius_dispatch_idempotency_key_invalid", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
 	{ "key_invalid_400_run", 400, 1, "julius_dispatch_idempotency_key_invalid", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
 	{ "key_invalid_400_key", 400, 1, "julius_dispatch_idempotency_key_invalid", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
@@ -401,6 +415,8 @@ namespace
 	{ "uppercase_marker_is_not_scrub", "5b52454441435445445d", 1, "", EFinishedResult::Completed, 0, 0, "", "", "e54b74eb9192b48055c48d2062bffdd23469ef7d70f960ff1293a47f86c8eba2", EArtifactQualification::NoTransformSignal, 0, 0, 0, 10 },
 	{ "partial_marker_cut_at_limit", "78", 7995, "5b72656461", EFinishedResult::Completed, 0, 0, "", "", "00a5ecf9595444194fc494970a115b97cc7c2543de88fec0d82343b520de4247", EArtifactQualification::TransformedUnverified, 0, 1, 0, 8000 },
 	{ "marker_with_verified_evidence", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", EArtifactQualification::TransformedVerified, 1, 0, 0, 10 },
+	{ "verified_evidence_whitespace_around_text", "20", 1, "5b72656461637465645d0a", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", EArtifactQualification::TransformedVerified, 1, 0, 0, 12 },
+	{ "verified_evidence_sha_of_untrimmed_text", "20", 1, "5b72656461637465645d0a", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "d5d24215d7a39f0d23dcd5dff65ce859bd3cae80319c329702bcec21230354c6", "d5d24215d7a39f0d23dcd5dff65ce859bd3cae80319c329702bcec21230354c6", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 12 },
 	{ "at_limit_with_verified_evidence", "78", 8000, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "606023a37d97fcdf274ba51ba151162099d397bbe006fcff0868b348c950f51c", "606023a37d97fcdf274ba51ba151162099d397bbe006fcff0868b348c950f51c", EArtifactQualification::TransformedVerified, 0, 1, 0, 8000 },
 	{ "evidence_not_independently_verified", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 0, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
 	{ "evidence_transformed_hash_mismatch", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "017ad73325fcf108a972edac618f9edfc957c5b1de10f8b371b0a8bfa4f59e2d", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
@@ -700,6 +716,45 @@ int main()
 				std::string("malformed attempt ") + Case.RunId + " / " + Case.Key);
 		}
 		Expect(!Tracker.HasOpenAttempt(), "a refused verdict opens nothing");
+	}
+
+	{
+		// RID-6 (Skywalker on 8c92608a): the first send times out; the identical resend meets 429 julius_dispatch_busy
+		// while J1 is still reserving the first send, which then starts. Busy keeps the pair open and never re-mints.
+		FDispatchAttemptTracker Tracker;
+		FScriptedBytes Source;
+		PushSeed(Source, "rid6");
+		PushSeed(Source, "rid6#2");
+		PushSeed(Source, "rid6#3");
+		FDispatchAttempt First;
+		Expect(Tracker.MintAttempt(Source, First) == EMintResult::Minted, "rid6 first mint");
+		Expect(Tracker.BeginAttempt(First) == EAttemptVerdict::Admitted, "rid6 first send");
+		Expect(Tracker.RecordAnswer(EDispatchAnswer::NoAnswer) && Tracker.HasOpenAttempt(), "rid6 timeout keeps it open");
+		Expect(Tracker.BeginAttempt(First) == EAttemptVerdict::Admitted, "rid6 identical resend");
+		const EDispatchAnswer Busy = ClassifyDispatchAnswer(429, true, "julius_dispatch_busy");
+		Expect(Busy == EDispatchAnswer::NoAnswer, "rid6 busy is no answer");
+		Expect(Tracker.RecordAnswer(Busy) && Tracker.HasOpenAttempt(), "rid6 busy keeps the pair open");
+		FDispatchAttempt Fresh;
+		Expect(Tracker.MintAttempt(Source, Fresh) == EMintResult::Minted, "rid6 fresh mint");
+		Expect(Tracker.BeginAttempt(Fresh) == EAttemptVerdict::PreviousAttemptUnanswered, "rid6 no fresh pair while busy");
+		Expect(Tracker.BeginAttempt(First) == EAttemptVerdict::Admitted, "rid6 resend after the wait");
+		const EDispatchAnswer Replay = ClassifyDispatchAnswer(200, false, "");
+		Expect(Replay == EDispatchAnswer::Accepted, "rid6 replay accepted");
+		Expect(Tracker.RecordAnswer(Replay) && !Tracker.HasOpenAttempt(), "rid6 replay closes it");
+		Expect(Tracker.BeginAttempt(First) == EAttemptVerdict::RunIdReused, "rid6 the started pair is never resent");
+
+		// Busy on a FIRST send (another chain running), then the identical resend meets a cap: that refusal is conclusive.
+		Expect(Tracker.BeginAttempt(Fresh) == EAttemptVerdict::Admitted, "rid6 second pair sent");
+		Expect(Tracker.RecordAnswer(ClassifyDispatchAnswer(429, true, "julius_dispatch_busy")) && Tracker.HasOpenAttempt(),
+			"rid6 busy on a first send keeps it open");
+		Expect(Tracker.BeginAttempt(Fresh) == EAttemptVerdict::Admitted, "rid6 second pair resent");
+		const EDispatchAnswer Cap = ClassifyDispatchAnswer(429, true, "julius_dispatch_cap_reached");
+		Expect(Cap == EDispatchAnswer::Refused, "rid6 cap is a refusal");
+		Expect(Tracker.RecordAnswer(Cap) && !Tracker.HasOpenAttempt(), "rid6 cap closes it");
+		Expect(Tracker.BeginAttempt(Fresh) == EAttemptVerdict::RunIdReused, "rid6 the refused pair is never resent");
+		FDispatchAttempt Third;
+		Expect(Tracker.MintAttempt(Source, Third) == EMintResult::Minted && Tracker.BeginAttempt(Third) == EAttemptVerdict::Admitted,
+			"rid6 a fresh pair after the conclusive refusal");
 	}
 
 	// 1,000 refusals in a row, each followed by a fresh mint: every attempt admitted, all 2,000 values distinct.

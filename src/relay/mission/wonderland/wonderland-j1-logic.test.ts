@@ -327,10 +327,14 @@ describe('J1 client logic: a failed random source refuses the attempt (YUJI requ
 
 /**
  * The answer rule (RID-1): 2xx with no error object and no kind is Accepted; 4xx/5xx with an error object that has a
- * kind (J1's own refusal shape, :952) is Refused; anything else, a bare 5xx included, is NoAnswer. Kinds are never listed.
+ * kind (J1's own refusal shape, :952) is Refused; anything else, a bare 5xx included, is NoAnswer. RID-6 (rule 2a): a
+ * 429 refuses only with one of J1's two pre-chain cap kinds (:780-781); julius_dispatch_busy (:760) and any unlisted
+ * 429 kind are NoAnswer. That is the only place a kind is listed.
  */
+const PRE_CHAIN_429_KINDS = ['julius_dispatch_cap_reached', 'julius_dispatch_mission_cap_reached'];
 function referenceAnswer(status: number, hasError: boolean, kind: string, noAnswer: boolean): string {
   if (noAnswer) return 'NoAnswer';
+  if (status === 429 && hasError && kind !== '') return PRE_CHAIN_429_KINDS.includes(kind) ? 'Refused' : 'NoAnswer';
   if (status >= 200 && status <= 299 && !hasError && kind === '') return 'Accepted';
   if (status >= 400 && status <= 599 && hasError && kind !== '') return 'Refused';
   return 'NoAnswer';
@@ -356,7 +360,7 @@ describe('J1 client logic: a fresh run id and key after every refusal (ruling (c
   it('the named refusals, accepted answers and no answer are each tried with every kind of reuse', () => {
     const rows = table('KAT-ATTEMPT');
     const labels = rows.map((row) => row[0]);
-    for (const refusal of ['repeat_already_used_409', 'cap_reached_429', 'mission_cap_reached_429', 'accepted_202', 'replayed_200', 'no_answer']) {
+    for (const refusal of ['repeat_already_used_409', 'cap_reached_429', 'mission_cap_reached_429', 'busy_429', 'accepted_202', 'replayed_200', 'no_answer']) {
       for (const reuse of ['none', 'run', 'key', 'both', 'key_as_run', 'run_as_key']) {
         expect(labels, `${refusal}_${reuse}`).toContain(`${refusal}_${reuse}`);
       }
@@ -368,8 +372,22 @@ describe('J1 client logic: a fresh run id and key after every refusal (ruling (c
     for (const required of ['unknown_kind_on_200_none', 'kind_without_flag_on_202_none', 'flag_without_kind_on_200_none', 'status_500_no_error_none',
       'status_302_no_error_none', 'status_503_no_error_none', 'status_503_no_error_key_as_run', 'status_502_no_error_none',
       'status_404_no_error_none', 'status_0_no_error_none', 'disabled_503_none', 'ledger_unavailable_503_none', 'flag_without_kind_on_503_none',
-      'kind_without_flag_on_409_none', 'error_on_status_600_none']) {
+      'kind_without_flag_on_409_none', 'error_on_status_600_none', 'unknown_kind_on_429_none', 'cap_kind_case_variant_429_none',
+      'cap_kind_padded_429_none', 'flag_without_kind_on_429_none', 'error_kind_on_302_none', 'error_kind_on_302_both', 'error_kind_on_300_none',
+      'error_kind_on_399_none', 'status_199_no_error_none', 'error_kind_on_199_none']) {
       expect(labels, required).toContain(required);
+    }
+    // RID-6: 429 julius_dispatch_busy keeps the pair open on a first send and on a resend; only the two caps refuse.
+    expect(byName.get('busy_429_none')?.slice(1, 4)).toEqual(['429', '1', 'julius_dispatch_busy']);
+    expect(byName.get('busy_429_none')?.slice(6)).toEqual(['NoAnswer', 'PreviousAttemptUnanswered']);
+    expect(byName.get('busy_429_both')?.slice(6)).toEqual(['NoAnswer', 'Admitted']);
+    expect(byName.get('cap_reached_429_none')?.slice(6)).toEqual(['Refused', 'Admitted']);
+    expect(byName.get('mission_cap_reached_429_none')?.slice(6)).toEqual(['Refused', 'Admitted']);
+    for (const row of rows) {
+      if (row[1] === '429' && !PRE_CHAIN_429_KINDS.includes(row[3] ?? '')) {
+        expect(row[6], `${row[0]} never re-mints`).toBe('NoAnswer');
+        if (row[5] === 'none') expect(row[7], `${row[0]} fresh pair`).toBe('PreviousAttemptUnanswered');
+      }
     }
     // RID-1: a bare 5xx never spends the pair, so it never leads to a fresh one; J1's own 503 refusals still do.
     for (const row of rows) {
@@ -396,6 +414,25 @@ describe('J1 client logic: a fresh run id and key after every refusal (ruling (c
     expect(header).toContain('3. everything else');
     expect(header).toContain('only a CONCLUSIVE refusal calls for a fresh pair');
     expect(header).not.toContain('or any non-2xx status (409');
+    expect(header).toContain('2a.    except 429: Refused only for kind julius_dispatch_cap_reached or julius_dispatch_mission_cap_reached');
+    expect(header).toContain('julius_dispatch_busy (:760)');
+    expect(header).toContain('A 429 kind not named here is NoAnswer');
+    expect(header).toContain('RESEND BACKOFF (RID-6): the wrapper WAITS before each resend of the open pair');
+  });
+
+  it('every 429 kind J1 sends is classified by rule 2a, and the KAT tries each one', () => {
+    const rows = table('KAT-ATTEMPT');
+    const known = ['julius_dispatch_busy', 'julius_dispatch_cap_reached', 'julius_dispatch_mission_cap_reached'];
+    if (existsSync(J1_DISPATCH)) {
+      const j1 = readFileSync(J1_DISPATCH, 'utf8');
+      const sent = [...j1.matchAll(/\b(?:refuse|err)\(\s*429\s*,\s*'([^']+)'/gu)].map((match) => match[1] ?? '');
+      expect([...new Set(sent)].sort(), 'J1 still sends exactly these 429 kinds').toEqual(known);
+    }
+    for (const kind of known) {
+      const row = rows.find((candidate) => candidate[1] === '429' && candidate[3] === kind && candidate[5] === 'none');
+      expect(row, kind).toBeDefined();
+      expect(row?.[6], kind).toBe(PRE_CHAIN_429_KINDS.includes(kind) ? 'Refused' : 'NoAnswer');
+    }
   });
 
   it('the header documents the CSPRNG duty, and the logic itself draws no randomness', () => {
@@ -442,6 +479,14 @@ describe('J1 client logic: scrubbed or cut results never qualify without evidenc
       expect(row.slice(11, 15), `${row[0]} signals`).toEqual([reference.scrub ? '1' : '0', reference.atLimit ? '1' : '0',
         reference.over ? '1' : '0', String(reference.units)]);
     }
+  });
+
+  it('the digest is taken over the TRIMMED text: a sha of the untrimmed text is inconsistent', () => {
+    const rows = byLabel(table('KAT-QUALIFICATION'));
+    expect(rows.get('verified_evidence_whitespace_around_text')?.[10]).toBe('TransformedVerified');
+    expect(rows.get('verified_evidence_sha_of_untrimmed_text')?.[10]).toBe('EvidenceInconsistent');
+    expect(rows.get('verified_evidence_sha_of_untrimmed_text')?.[9]).toBe(sha256(Buffer.from(' [redacted]\n', 'utf8')));
+    expect(rows.get('verified_evidence_whitespace_around_text')?.[9]).toBe(sha256(Buffer.from('[redacted]', 'utf8')));
   });
 
   it('a marker or 8,000 units alone never qualifies, and the bridge scrub and cut really produce those texts', () => {

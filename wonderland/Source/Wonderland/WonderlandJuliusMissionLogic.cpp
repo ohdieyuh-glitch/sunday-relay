@@ -344,12 +344,30 @@ namespace WonderlandJuliusMissionLogic
 		return true;
 	}
 
+	namespace
+	{
+		/** Rule 2a: the only 429 kinds J1 sends before any chain can start (julius-dispatch.ts:780-781). Exact bytes. */
+		constexpr std::string_view PreChainTooManyRequestsKinds[] = {
+			"julius_dispatch_cap_reached",
+			"julius_dispatch_mission_cap_reached",
+		};
+	}
+
 	EDispatchAnswer ClassifyDispatchAnswer(int HttpStatus, bool bHasError, std::string_view ErrorKind)
 	{
 		// The rule in the header: only a J1-shaped refusal is conclusive; anything inconclusive keeps the pair open.
 		const bool bNoError = !bHasError && ErrorKind.empty();
 		const bool bErrorWithKind = bHasError && !ErrorKind.empty();
 		if (HttpStatus >= 200 && HttpStatus <= 299 && bNoError) { return EDispatchAnswer::Accepted; }
+		if (HttpStatus == 429 && bErrorWithKind)
+		{
+			// RID-6: julius_dispatch_busy (:760) and any unlisted kind may mean this very pair is still being reserved.
+			for (const std::string_view Kind : PreChainTooManyRequestsKinds)
+			{
+				if (ErrorKind == Kind) { return EDispatchAnswer::Refused; }
+			}
+			return EDispatchAnswer::NoAnswer;
+		}
 		if (HttpStatus >= 400 && HttpStatus <= 599 && bErrorWithKind) { return EDispatchAnswer::Refused; }
 		return EDispatchAnswer::NoAnswer;
 	}
