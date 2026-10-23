@@ -98,8 +98,15 @@ export const DEFAULT_SHOWN_WINDOW_CAP = 6;
 export const DEFAULT_IDLE_AUTO_MINIMIZE_MS = 60_000;
 export const DEFAULT_SURFACE_RATE_LIMIT_MS = 5_000;
 
-/** Used only when a display name is missing or rejected. The same string Cosmo's client shows. Not a provider or terminal name. */
+/**
+ * Rendered when the registry name is missing or null, and when a present
+ * name fails the shape rules. It is not written back as the stored name,
+ * and it is not a provider or terminal label.
+ */
 export const AGENT_DISPLAY_NAME_FALLBACK = 'Unnamed agent';
+
+/** Present names are measured in Unicode code points, not UTF-16 units and not bytes. */
+export const AGENT_DISPLAY_NAME_MAX_CODE_POINTS = 64;
 
 export const TITLE_SEPARATOR = ' \u2014 ';
 
@@ -121,7 +128,12 @@ export interface WonderWebParentTerminal {
 export interface WonderWebVmSessionRecord {
   readonly vmSessionId: string;
   readonly agentId: string;
-  readonly agentDisplayName: string;
+  /**
+   * Registry label. Absent or null means the card has no label; the stored
+   * window name stays null and the title renders `Unnamed agent`. A present
+   * value is still checked by the shape rules.
+   */
+  readonly agentDisplayName?: string | null;
   readonly vmNumber: number;
   readonly terminal: WonderWebParentTerminal;
   readonly accentColorRef: string;
@@ -134,7 +146,8 @@ export interface WonderWebVmSessionRecord {
 export interface WonderWebWindow {
   readonly vmSessionId: string;
   readonly agentId: string;
-  readonly agentDisplayName: string;
+  /** Trimmed registry label, or null when the registry omitted it. Never the rendered fallback. */
+  readonly agentDisplayName: string | null;
   readonly terminalId: string;
   readonly terminalKind: ParentTerminalKind;
   readonly terminalDisplayName: string;
@@ -323,7 +336,8 @@ export interface WorkspaceLayout {
 
 export interface StatusIndicator {
   readonly vmSessionId: string;
-  readonly ownerName: string;
+  /** Stored registry name. Null when the registry omitted the label. */
+  readonly ownerName: string | null;
   readonly outlineColorToken: string | null;
   readonly title: string | null;
   readonly status: 'minimized';
@@ -332,7 +346,8 @@ export interface StatusIndicator {
 
 export interface ObserverView {
   readonly outlineColorToken: string | null;
-  readonly ownerName: string;
+  /** Stored registry name. Null when the registry omitted the label. The title carries the fallback. */
+  readonly ownerName: string | null;
   readonly title: string | null;
   readonly status: WindowPhase;
 }
@@ -364,29 +379,43 @@ export function hasControlChar(value: string): boolean {
   return false;
 }
 
+function displayNameRejectedReason(): string {
+  return `Display name must be a non-empty string of at most ${AGENT_DISPLAY_NAME_MAX_CODE_POINTS} Unicode code points, with no control characters.`;
+}
+
+function codePointLength(value: string): number {
+  return [...value].length;
+}
+
+/**
+ * Missing and null open and stay null. A present name must be a non-empty
+ * string after trim, at most 64 Unicode code points, with no control
+ * characters (C0, DEL, C1, U+2028, U+2029). No provider or terminal word is
+ * refused or replaced.
+ */
 export function resolveAgentDisplayName(
-  raw: string,
-): { readonly ok: true; readonly name: string } | { readonly ok: false; readonly fallback: typeof AGENT_DISPLAY_NAME_FALLBACK; readonly reason: string } {
+  raw: unknown,
+): { readonly ok: true; readonly name: string | null } | { readonly ok: false; readonly fallback: typeof AGENT_DISPLAY_NAME_FALLBACK; readonly reason: string } {
+  if (raw === undefined || raw === null) return { ok: true, name: null };
   if (typeof raw !== 'string' || hasControlChar(raw)) {
-    return { ok: false, fallback: AGENT_DISPLAY_NAME_FALLBACK, reason: 'Display name is empty or contains a control character.' };
+    return { ok: false, fallback: AGENT_DISPLAY_NAME_FALLBACK, reason: displayNameRejectedReason() };
   }
   const name = raw.trim();
-  if (name.length === 0) {
-    return { ok: false, fallback: AGENT_DISPLAY_NAME_FALLBACK, reason: 'Display name is empty or contains a control character.' };
+  if (name.length === 0 || codePointLength(name) > AGENT_DISPLAY_NAME_MAX_CODE_POINTS) {
+    return { ok: false, fallback: AGENT_DISPLAY_NAME_FALLBACK, reason: displayNameRejectedReason() };
   }
   return { ok: true, name };
 }
 
 /**
- * Title is the agent display name and the session's number. A missing or
- * rejected name becomes `Unnamed agent`, never the terminal kind, a provider
- * label, or any title field on the session record. An unusable number yields
- * null rather than a stand-in.
+ * Title is the agent display name and the session's number. A missing, null,
+ * or rejected name renders `Unnamed agent`. The stored name is unchanged by
+ * this formatter. An unusable number yields null rather than a stand-in.
  */
-export function formatWindowTitle(agentDisplayName: string, vmNumber: number): string | null {
+export function formatWindowTitle(agentDisplayName: string | null | undefined, vmNumber: number): string | null {
   if (!isUsableVmNumber(vmNumber)) return null;
   const resolved = resolveAgentDisplayName(agentDisplayName);
-  const name = resolved.ok ? resolved.name : resolved.fallback;
+  const name = resolved.ok && resolved.name !== null ? resolved.name : AGENT_DISPLAY_NAME_FALLBACK;
   return `${name}${TITLE_SEPARATOR}Wonder Web VM ${vmNumber}`;
 }
 
@@ -642,7 +671,7 @@ function admit(
   state: WonderWebWindowManagerState,
   session: WonderWebVmSessionRecord,
   ctx: WonderWebWindowLogContext,
-  agentDisplayName: string,
+  agentDisplayName: string | null,
   previous: WonderWebWindow | null,
 ): WonderWebWindowOk<WonderWebWindow> {
   const others = previous === null
@@ -1278,7 +1307,10 @@ export function deserializeWindows(json: string): WonderWebWindowResult<WonderWe
     if (!VM_SESSION_STATES.includes(row.sessionState as VmSessionState)) {
       return refuse(base, { code: 'unsupported_contract', message: 'Stored session state is unknown.' });
     }
-    if (typeof row.agentId !== 'string' || typeof row.agentDisplayName !== 'string' || typeof row.terminalId !== 'string' || typeof row.terminalDisplayName !== 'string') {
+    if (typeof row.agentId !== 'string' || typeof row.terminalId !== 'string' || typeof row.terminalDisplayName !== 'string') {
+      return refuse(base, { code: 'unsupported_contract', message: 'Window identity fields are incomplete.' });
+    }
+    if (!(row.agentDisplayName === null || typeof row.agentDisplayName === 'string')) {
       return refuse(base, { code: 'unsupported_contract', message: 'Window identity fields are incomplete.' });
     }
     if (typeof row.pinned !== 'boolean' || !isPositiveInt(row.openedOrder) || typeof row.openedAtMs !== 'number') {

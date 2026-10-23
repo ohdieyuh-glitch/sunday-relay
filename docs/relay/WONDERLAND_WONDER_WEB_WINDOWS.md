@@ -44,11 +44,24 @@ store, or address by a number. The only place a number is chosen is BRIDGE's
 session service under `src/relay/integration/wonder-web-vm/` (that directory
 is not created here). The registry record carries no title. A `title`,
 `windowTitle`, or any other title-like field on the session record is ignored.
-An empty or control-character name is rejected for open. When the display
-name is missing or empty, the composed title and `observerView` title use
-`Unnamed agent`, the same string Cosmo's client shows. That fallback is not
-a provider or terminal label. A custom name that happens to be "Grok" is the
-user's name and is kept.
+
+Julius omits `agentDisplayName` when a card has no label, and the registry
+stores that as null. A missing or null name opens. The stored name stays
+null (the fallback is not written back as if the founder chose it). The
+composed title and `observerView` title read `Unnamed agent — Wonder Web VM N`.
+`ownerName` stays the stored name, so it is null, not the rendered fallback.
+
+A present name must be a string that is non-empty after trimming, at most
+64 Unicode code points (not UTF-16 units and not bytes), and free of control
+characters. Otherwise open refuses with `agent_display_name_rejected` and
+does not create a window. The refusal says 64 Unicode code points. Control
+characters are C0, DEL, C1, and the Unicode line and paragraph separators
+U+2028 and U+2029. An empty string and whitespace-only text are present
+names and are refused. A non-string is refused. There is no provider-word
+filter and no terminal-label filter: any registry name that passes those
+shape rules is shown exactly as given, including `Grok`, `Claude`, and
+`OpenAI`. The fallback `Unnamed agent` is not itself a provider or terminal
+label.
 
 Parent identity (`terminalId`, `kind`, `displayName`) is secondary metadata.
 It is not the title and it is not an authorization key.

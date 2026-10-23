@@ -54,6 +54,13 @@ Logic::SessionRecord Live(const std::string& id, int vmNumber, const std::string
 	return GoldenSession(id, vmNumber, name, "auth-dot", "running", Logic::SessionRecord::CauseField::Omitted, "");
 }
 
+/** C++ has one null state for both an omitted label and an explicit null. */
+Logic::SessionRecord Unnamed(const std::string& id, int vmNumber) {
+	Logic::SessionRecord session = Live(id, vmNumber);
+	session.agentDisplayName = std::nullopt;
+	return session;
+}
+
 std::string Escape(const std::string& value) {
 	std::string out;
 	for (unsigned char character : value) {
@@ -128,7 +135,7 @@ int LifetimeHits(const Logic::WindowResult& result) {
 	note(result.value.phase);
 	note(result.value.admission);
 	note(result.value.sessionState);
-	note(result.value.agentDisplayName);
+	if (result.value.agentDisplayName) note(*result.value.agentDisplayName);
 	if (result.value.openAnimation) note(*result.value.openAnimation);
 	if (result.value.closeAnimation) note(*result.value.closeAnimation);
 	for (const Logic::LogEvent& event : result.events) note(event.event);
@@ -199,6 +206,28 @@ int main() {
 	const Logic::ObserverView view = Logic::MakeObserverView(settled.value, &titleSession);
 	const Logic::WindowResult denied = Logic::ApplyUserAction(second.state, Live("sess-2", 4, "Card"), "someone-else", "close", ctx);
 	const Logic::WindowResult emptyName = Logic::OpenWindow(created.state, Live("sess-empty", 1, ""), ctx);
+	const Logic::SessionRecord missingSession = Unnamed("sess-missing", 2);
+	const Logic::WindowResult missingOpen = Logic::OpenWindow(created.state, missingSession, ctx);
+	if (!missingOpen.ok || missingOpen.value.agentDisplayName.has_value()) {
+		std::cerr << "missing-name\n";
+		return 1;
+	}
+	const Logic::ObserverView missingView = Logic::MakeObserverView(missingOpen.value, &missingSession);
+	if (!missingView.title.has_value()) {
+		std::cerr << "missing-title\n";
+		return 1;
+	}
+	const Logic::SessionRecord nullSession = Unnamed("sess-null", 5);
+	const Logic::WindowResult nullOpen = Logic::OpenWindow(created.state, nullSession, ctx);
+	if (!nullOpen.ok || nullOpen.value.agentDisplayName.has_value()) {
+		std::cerr << "null-name\n";
+		return 1;
+	}
+	const Logic::ObserverView nullView = Logic::MakeObserverView(nullOpen.value, &nullSession);
+	if (!nullView.title.has_value()) {
+		std::cerr << "null-title\n";
+		return 1;
+	}
 	const std::optional<std::string> title = Logic::FormatWindowTitle("Dot", 3);
 
 	std::vector<std::string> closeEvents;
@@ -253,6 +282,56 @@ int main() {
 		GoldenSession("sess-end", 1, "Dot", "auth-dot", "running", Logic::SessionRecord::CauseField::Value, "idle_timeout"),
 		ctx);
 
+	const std::string sixtyFour(64, 'a');
+	const std::string sixtyFive(65, 'a');
+	const Logic::WindowResult atLimit = Logic::OpenWindow(created.state, Live("sess-64", 1, sixtyFour), ctx);
+	if (!atLimit.ok || !atLimit.value.agentDisplayName || *atLimit.value.agentDisplayName != sixtyFour) {
+		std::cerr << "code-points-64\n";
+		return 1;
+	}
+	const Logic::WindowResult overLimit = Logic::OpenWindow(created.state, Live("sess-65", 1, sixtyFive), ctx);
+	if (overLimit.ok || overLimit.errorCode != "agent_display_name_rejected") {
+		std::cerr << "code-points-65\n";
+		return 1;
+	}
+	const std::string emoji = "\xF0\x9F\x98\x80";
+	const std::string emojiAtLimit = std::string(63, 'a') + emoji;
+	const std::string emojiOver = std::string(64, 'a') + emoji;
+	const Logic::WindowResult emojiOpen = Logic::OpenWindow(created.state, Live("sess-emoji", 1, emojiAtLimit), ctx);
+	if (!emojiOpen.ok || !emojiOpen.value.agentDisplayName || *emojiOpen.value.agentDisplayName != emojiAtLimit) {
+		std::cerr << "emoji-open\n";
+		return 1;
+	}
+	const Logic::WindowResult emojiRefuse = Logic::OpenWindow(created.state, Live("sess-emoji-over", 1, emojiOver), ctx);
+	if (emojiRefuse.ok || emojiRefuse.errorCode != "agent_display_name_rejected") {
+		std::cerr << "emoji-over\n";
+		return 1;
+	}
+	const Logic::WindowResult lineSep = Logic::OpenWindow(created.state, Live("sess-line", 1, "Dot\xE2\x80\xA8"), ctx);
+	if (lineSep.ok || lineSep.errorCode != "agent_display_name_rejected") {
+		std::cerr << "line-sep\n";
+		return 1;
+	}
+	const Logic::WindowResult paraSep = Logic::OpenWindow(created.state, Live("sess-para", 1, "Dot\xE2\x80\xA9"), ctx);
+	if (paraSep.ok || paraSep.errorCode != "agent_display_name_rejected") {
+		std::cerr << "para-sep\n";
+		return 1;
+	}
+	for (const char* providerName : {"Grok", "Claude", "OpenAI"}) {
+		const Logic::SessionRecord record = Live(std::string("sess-") + providerName, 8, providerName);
+		const Logic::WindowResult opened = Logic::OpenWindow(created.state, record, ctx);
+		if (!opened.ok || !opened.value.agentDisplayName || *opened.value.agentDisplayName != providerName) {
+			std::cerr << "shown-name " << providerName << "\n";
+			return 1;
+		}
+		const Logic::ObserverView namedView = Logic::MakeObserverView(opened.value, &record);
+		const std::string expected = std::string(providerName) + " \u2014 Wonder Web VM 8";
+		if (!namedView.title || *namedView.title != expected || !namedView.ownerName || *namedView.ownerName != providerName) {
+			std::cerr << "shown-title " << providerName << "\n";
+			return 1;
+		}
+	}
+
 	const std::string accent = first.value.accentColorToken.value_or("");
 	const std::string firstIntent = first.animations.empty() ? "" : first.animations[0].intent;
 	const std::string observerTitle = view.title.value_or("");
@@ -275,6 +354,8 @@ int main() {
 		<< "\"fallback\":" << Quote(Logic::kAgentDisplayNameFallback) << ","
 		<< "\"firstIntent\":" << Quote(firstIntent) << ","
 		<< "\"lifetime\":" << LifetimeHits(ended) << ","
+		<< "\"missingName\":" << Quote(*missingView.title) << ","
+		<< "\"nullName\":" << Quote(*nullView.title) << ","
 		<< "\"numberCode\":" << Quote(Logic::AddressByVmNumber(4).code) << ","
 		<< "\"observerKeys\":" << Array(observerKeys) << ","
 		<< "\"observerTitle\":" << Quote(observerTitle) << ","

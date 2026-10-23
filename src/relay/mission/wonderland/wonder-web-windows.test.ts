@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { WONDERLAND_CLIENT_ROLE } from './wonderland-contracts';
 import {
   AGENT_DISPLAY_NAME_FALLBACK,
+  AGENT_DISPLAY_NAME_MAX_CODE_POINTS,
   DEFAULT_SHOWN_WINDOW_CAP,
   WONDER_WEB_WINDOW_CLIENT_ROLE,
   WONDER_WEB_WINDOWS_CONTRACT,
@@ -86,13 +87,21 @@ function session(over: Partial<WonderWebVmSessionRecord> & Pick<WonderWebVmSessi
   return {
     vmSessionId: over.vmSessionId,
     agentId: over.agentId ?? 'auth-dot',
-    agentDisplayName: over.agentDisplayName ?? 'Dot',
+    agentDisplayName: 'agentDisplayName' in over ? over.agentDisplayName : 'Dot',
     vmNumber: over.vmNumber ?? 1,
     terminal: over.terminal ?? { terminalId: 'term-julius', kind: 'julius', displayName: 'Julius' },
     accentColorRef: over.accentColorRef ?? 'accent-julius',
     sessionState: over.sessionState ?? 'running',
     endCause: over.endCause,
   };
+}
+
+/** The property is absent, not null and not undefined-via-nullish. */
+function omittedDisplayName(id: string, vmNumber: number): WonderWebVmSessionRecord {
+  const named = session({ vmSessionId: id, vmNumber });
+  const { agentDisplayName, ...missing } = named;
+  void agentDisplayName;
+  return missing;
 }
 
 function withUnpublishedCause(record: WonderWebVmSessionRecord, endCause: string): WonderWebVmSessionRecord {
@@ -121,14 +130,111 @@ describe('names, titles, and the parent accent', () => {
     }
     expect(state.windows).toHaveLength(0);
     expect(AGENT_DISPLAY_NAME_FALLBACK).toBe('Unnamed agent');
+    expect(rejected.ok ? '' : rejected.error.message).toContain('64 Unicode code points');
     expect(formatWindowTitle('\nDot', 1)).toBe('Unnamed agent \u2014 Wonder Web VM 1');
     expect(formatWindowTitle('   ', 1)).toBe('Unnamed agent \u2014 Wonder Web VM 1');
-    expect(formatWindowTitle(undefined as unknown as string, 4)).toBe('Unnamed agent \u2014 Wonder Web VM 4');
+    expect(formatWindowTitle(undefined, 4)).toBe('Unnamed agent \u2014 Wonder Web VM 4');
+    expect(formatWindowTitle(null, 4)).toBe('Unnamed agent \u2014 Wonder Web VM 4');
     const fallback = AGENT_DISPLAY_NAME_FALLBACK.toLowerCase();
     for (const label of ['grok', 'openai', 'julius', 'chatgpt', 'claude', 'gpt', 'hermes', 'grok_bot_group', 'openai_companion']) {
       expect(fallback).not.toBe(label);
     }
     expect(formatWindowTitle('ドット', 2)).toBe('ドット \u2014 Wonder Web VM 2');
+  });
+
+  it('opens a missing or null registry name as Unnamed agent and stores null', () => {
+    const missingRecord = omittedDisplayName('sess-missing', 2);
+    expect('agentDisplayName' in missingRecord).toBe(false);
+    const missing = must(openWindow(manager(), missingRecord, CTX));
+    expect(missing.value.agentDisplayName).toBeNull();
+    const missingView = observerView(missing.value, missingRecord);
+    expect(missingView.title).toBe('Unnamed agent \u2014 Wonder Web VM 2');
+    expect(missingView.ownerName).toBeNull();
+    expect(JSON.stringify(missing.value)).not.toContain('Unnamed agent');
+
+    const nullRecord = session({ vmSessionId: 'sess-null', vmNumber: 5, agentDisplayName: null });
+    expect(nullRecord.agentDisplayName).toBeNull();
+    const opened = must(openWindow(manager(), nullRecord, CTX));
+    expect(opened.value.agentDisplayName).toBeNull();
+    const nullView = observerView(opened.value, nullRecord);
+    expect(nullView.title).toBe('Unnamed agent \u2014 Wonder Web VM 5');
+    expect(nullView.ownerName).toBeNull();
+
+    const named = must(openWindow(manager(), session({ vmSessionId: 'sess-dot', vmNumber: 3, agentDisplayName: 'Dot' }), CTX));
+    const cleared = must(applySession(named.state, session({ vmSessionId: 'sess-dot', vmNumber: 3, agentDisplayName: null }), CTX));
+    expect(cleared.value.agentDisplayName).toBeNull();
+    const kept = must(applySession(named.state, session({ vmSessionId: 'sess-dot', vmNumber: 3, agentDisplayName: '   ' }), CTX));
+    expect(kept.value.agentDisplayName).toBe('Dot');
+  });
+
+  it('refuses a present name that is empty, whitespace, a non-string, a control character, or longer than 64 code points', () => {
+    expect(AGENT_DISPLAY_NAME_MAX_CODE_POINTS).toBe(64);
+    const state = manager();
+    const cases: Array<{ id: string; name: unknown }> = [
+      { id: 'sess-empty', name: '' },
+      { id: 'sess-space', name: ' \t ' },
+      { id: 'sess-number', name: 3 },
+      { id: 'sess-control', name: 'Dot\n' },
+      { id: 'sess-line', name: 'Dot\u2028' },
+      { id: 'sess-para', name: 'Dot\u2029' },
+      { id: 'sess-long', name: 'a'.repeat(AGENT_DISPLAY_NAME_MAX_CODE_POINTS + 1) },
+    ];
+    for (const item of cases) {
+      const rejected = openWindow(
+        state,
+        { ...session({ vmSessionId: item.id }), agentDisplayName: item.name } as WonderWebVmSessionRecord,
+        CTX,
+      );
+      expect(rejected.ok, item.id).toBe(false);
+      if (!rejected.ok) {
+        expect(rejected.error.code, item.id).toBe('agent_display_name_rejected');
+        expect(rejected.error.fallback, item.id).toBe('Unnamed agent');
+        expect(rejected.error.message, item.id).toContain('64 Unicode code points');
+      }
+    }
+    expect(state.windows).toHaveLength(0);
+    const exact = 'a'.repeat(AGENT_DISPLAY_NAME_MAX_CODE_POINTS);
+    const atLimit = must(openWindow(manager(), session({ vmSessionId: 'sess-64', vmNumber: 1, agentDisplayName: exact }), CTX));
+    expect(atLimit.value.agentDisplayName).toBe(exact);
+    expect(observerView(atLimit.value, session({ vmSessionId: 'sess-64', vmNumber: 1, agentDisplayName: exact })).title)
+      .toBe(`${exact} \u2014 Wonder Web VM 1`);
+
+    const emoji = '\u{1F600}';
+    const codePointsAtLimit = `${'a'.repeat(63)}${emoji}`;
+    const codePointsOver = `${'a'.repeat(64)}${emoji}`;
+    expect([...codePointsAtLimit].length).toBe(64);
+    expect(codePointsAtLimit.length).toBe(65);
+    expect(new TextEncoder().encode(codePointsAtLimit).length).toBe(67);
+    expect([...codePointsOver].length).toBe(65);
+    const emojiOpen = must(openWindow(
+      manager(),
+      session({ vmSessionId: 'sess-emoji', vmNumber: 1, agentDisplayName: codePointsAtLimit }),
+      CTX,
+    ));
+    expect(emojiOpen.value.agentDisplayName).toBe(codePointsAtLimit);
+    const emojiRefuse = openWindow(
+      manager(),
+      session({ vmSessionId: 'sess-emoji-over', vmNumber: 1, agentDisplayName: codePointsOver }),
+      CTX,
+    );
+    expect(emojiRefuse.ok).toBe(false);
+    if (!emojiRefuse.ok) expect(emojiRefuse.error.code).toBe('agent_display_name_rejected');
+    expect(formatWindowTitle(codePointsOver, 1)).toBe('Unnamed agent \u2014 Wonder Web VM 1');
+  });
+
+  it('shows Grok, Claude, and OpenAI exactly, and null as Unnamed agent', () => {
+    for (const name of ['Grok', 'Claude', 'OpenAI'] as const) {
+      const record = session({ vmSessionId: `sess-${name}`, vmNumber: 8, agentDisplayName: name });
+      const opened = must(openWindow(manager(), record, CTX));
+      expect(opened.value.agentDisplayName).toBe(name);
+      const view = observerView(opened.value, record);
+      expect(view.ownerName).toBe(name);
+      expect(view.title).toBe(`${name} \u2014 Wonder Web VM 8`);
+    }
+    const nullRecord = session({ vmSessionId: 'sess-null-title', vmNumber: 9, agentDisplayName: null });
+    const unnamed = must(openWindow(manager(), nullRecord, CTX));
+    expect(observerView(unnamed.value, nullRecord).title).toBe('Unnamed agent \u2014 Wonder Web VM 9');
+    expect(unnamed.value.agentDisplayName).toBeNull();
   });
 
   it('composes the title from agentDisplayName and vmNumber and ignores a title on the record', () => {
@@ -153,6 +259,13 @@ describe('names, titles, and the parent accent', () => {
     const emptyView = observerView(unnamed.state.windows[0]!, bait);
     expect(emptyView.title).toBe('Unnamed agent \u2014 Wonder Web VM 3');
     expect(emptyView.ownerName).toBe('');
+    const nullStored = must(deserializeWindows(
+      serializeWindows(opened.state).replace('"agentDisplayName":"Dot"', '"agentDisplayName":null'),
+    ));
+    const nullStoredView = observerView(nullStored.state.windows[0]!, bait);
+    expect(nullStored.state.windows[0]!.agentDisplayName).toBeNull();
+    expect(nullStoredView.title).toBe('Unnamed agent \u2014 Wonder Web VM 3');
+    expect(nullStoredView.ownerName).toBeNull();
   });
 
   it('does not invent a number when the session record has none', () => {
@@ -753,6 +866,14 @@ export function goldenReport(): Record<string, unknown> {
     fallback: AGENT_DISPLAY_NAME_FALLBACK,
     firstIntent: first.animations[0]?.intent ?? '',
     lifetime: lifetimeHits(ended).length,
+    missingName: observerView(
+      must(openWindow(manager(), omittedDisplayName('sess-missing', 2), CTX)).value,
+      omittedDisplayName('sess-missing', 2),
+    ).title,
+    nullName: observerView(
+      must(openWindow(manager(), session({ vmSessionId: 'sess-null', vmNumber: 5, agentDisplayName: null }), CTX)).value,
+      session({ vmSessionId: 'sess-null', vmNumber: 5, agentDisplayName: null }),
+    ).title,
     numberCode: addressByVmNumber(4).code,
     observerKeys: Object.keys(view).sort(),
     observerTitle: view.title,

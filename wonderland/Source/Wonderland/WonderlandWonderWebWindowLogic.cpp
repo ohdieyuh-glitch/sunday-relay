@@ -136,21 +136,58 @@ bool UsableVmNumber(int vmNumber) {
 	return vmNumber > 0;
 }
 
+std::size_t CodePointCount(const std::string& value) {
+	const auto* bytes = reinterpret_cast<const unsigned char*>(value.data());
+	const std::size_t count = value.size();
+	std::size_t index = 0;
+	std::size_t points = 0;
+	while (index < count) {
+		const unsigned char lead = bytes[index];
+		std::size_t length = 1;
+		if (lead < 0x80) {
+			length = 1;
+		} else if ((lead & 0xE0) == 0xC0 && index + 1 < count) {
+			length = 2;
+		} else if ((lead & 0xF0) == 0xE0 && index + 2 < count) {
+			length = 3;
+		} else if ((lead & 0xF8) == 0xF0 && index + 3 < count) {
+			length = 4;
+		} else {
+			++index;
+			++points;
+			continue;
+		}
+		index += length;
+		++points;
+	}
+	return points;
+}
+
+std::string RejectedNameReason() {
+	return "Display name must be a non-empty string of at most "
+		+ std::to_string(kAgentDisplayNameMaxCodePoints)
+		+ " Unicode code points, with no control characters.";
+}
+
 struct NameResolution {
 	bool ok = false;
-	std::string name;
+	std::optional<std::string> name;
 	std::string reason;
 };
 
-NameResolution ResolveAgentDisplayName(const std::string& raw) {
+NameResolution ResolveAgentDisplayName(const std::optional<std::string>& raw) {
 	NameResolution result;
-	if (HasControlChar(raw)) {
-		result.reason = "Display name is empty or contains a control character.";
+	if (!raw.has_value()) {
+		result.ok = true;
 		return result;
 	}
-	const std::string name = Trim(raw);
-	if (name.empty()) {
-		result.reason = "Display name is empty or contains a control character.";
+	if (HasControlChar(*raw)) {
+		result.reason = RejectedNameReason();
+		return result;
+	}
+	const std::string name = Trim(*raw);
+	if (name.empty() || CodePointCount(name) > kAgentDisplayNameMaxCodePoints) {
+		result.reason = RejectedNameReason();
 		return result;
 	}
 	result.ok = true;
@@ -428,7 +465,7 @@ WindowResult FinishClose(
 	return Succeed(std::move(state), std::move(window), std::move(events), std::move(animations));
 }
 
-WindowResult Admit(Manager state, const SessionRecord& session, const LogContext& ctx, const std::string& agentDisplayName, const Window* previous) {
+WindowResult Admit(Manager state, const SessionRecord& session, const LogContext& ctx, const std::optional<std::string>& agentDisplayName, const Window* previous) {
 	std::vector<Window> others;
 	for (const Window& window : state.windows) {
 		if (previous == nullptr || window.vmSessionId != previous->vmSessionId) others.push_back(window);
@@ -552,10 +589,10 @@ bool IsLegacyBrowserId(const std::string& id) {
 	return true;
 }
 
-std::optional<std::string> FormatWindowTitle(const std::string& agentDisplayName, int vmNumber) {
+std::optional<std::string> FormatWindowTitle(const std::optional<std::string>& agentDisplayName, int vmNumber) {
 	if (!UsableVmNumber(vmNumber)) return std::nullopt;
 	const NameResolution resolved = ResolveAgentDisplayName(agentDisplayName);
-	const std::string& name = resolved.ok ? resolved.name : std::string(kAgentDisplayNameFallback);
+	const std::string name = resolved.ok && resolved.name.has_value() ? *resolved.name : std::string(kAgentDisplayNameFallback);
 	return name + " \u2014 Wonder Web VM " + std::to_string(vmNumber);
 }
 
@@ -966,7 +1003,7 @@ std::string SerializeWindows(const Manager& state) {
 		std::vector<std::pair<std::string, std::string>> fields;
 		AppendField(fields, "accentColorToken", JsonOptionalString(window.accentColorToken));
 		AppendField(fields, "admission", JsonString(window.admission));
-		AppendField(fields, "agentDisplayName", JsonString(window.agentDisplayName));
+		AppendField(fields, "agentDisplayName", JsonOptionalString(window.agentDisplayName));
 		AppendField(fields, "agentId", JsonString(window.agentId));
 		AppendField(fields, "closeAnimation", JsonOptionalString(window.closeAnimation));
 		AppendField(fields, "idleSinceMs", JsonOptionalNumber(window.idleSinceMs));

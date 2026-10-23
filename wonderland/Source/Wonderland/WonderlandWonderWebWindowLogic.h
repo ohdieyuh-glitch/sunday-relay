@@ -49,12 +49,15 @@ inline constexpr int kDefaultShownWindowCap = 6;
 inline constexpr double kDefaultIdleAutoMinimizeMs = 60000.0;
 inline constexpr double kDefaultSurfaceRateLimitMs = 5000.0;
 inline constexpr char kAgentDisplayNameFallback[] = "Unnamed agent";
+/** Present names are measured in Unicode code points, not UTF-16 units and not bytes. */
+inline constexpr std::size_t kAgentDisplayNameMaxCodePoints = 64;
 inline constexpr char kClientRole[] = "presentational";
 
 struct SessionRecord {
 	std::string vmSessionId;
 	std::string agentId;
-	std::string agentDisplayName;
+	/** Engaged only when the registry sent a label. Nullopt is missing and null. */
+	std::optional<std::string> agentDisplayName;
 	int vmNumber = 0;
 	std::string terminalId;
 	std::string terminalKind;
@@ -70,7 +73,8 @@ struct SessionRecord {
 struct Window {
 	std::string vmSessionId;
 	std::string agentId;
-	std::string agentDisplayName;
+	/** Trimmed registry label, or nullopt when the registry omitted it. */
+	std::optional<std::string> agentDisplayName;
 	std::string terminalId;
 	std::string terminalKind;
 	std::string terminalDisplayName;
@@ -181,14 +185,14 @@ struct WorkspaceLayout {
 
 struct ObserverView {
 	std::optional<std::string> outlineColorToken;
-	std::string ownerName;
+	std::optional<std::string> ownerName;
 	std::optional<std::string> title;
 	std::string status;
 };
 
 struct StatusIndicator {
 	std::string vmSessionId;
-	std::string ownerName;
+	std::optional<std::string> ownerName;
 	std::optional<std::string> outlineColorToken;
 	std::optional<std::string> title;
 	std::string status;
@@ -201,7 +205,7 @@ struct AddressError {
 };
 
 bool IsLegacyBrowserId(const std::string& id);
-std::optional<std::string> FormatWindowTitle(const std::string& agentDisplayName, int vmNumber);
+std::optional<std::string> FormatWindowTitle(const std::optional<std::string>& agentDisplayName, int vmNumber);
 std::optional<std::string> AccentTokenFromRef(const std::string& accentColorRef);
 AddressError AddressByVmNumber(int vmNumber);
 AddressError AddressByBrowserId(const std::string& browserId);
