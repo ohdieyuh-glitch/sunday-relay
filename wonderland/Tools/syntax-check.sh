@@ -20,7 +20,7 @@ SRC="$HERE/../Source/Wonderland"
 STUBS="$HERE/SyntaxStubs"
 
 # unit:max-known-stub-errors. 0 means it parses clean today.
-BASELINE="WonderlandDogAnimation.cpp:0 WonderlandModule.cpp:0 WonderlandHubGameMode.cpp:0 WonderlandDogPawn.cpp:5"
+BASELINE="WonderlandDogAnimation.cpp:0 WonderlandModule.cpp:0 WonderlandHubGameMode.cpp:0 WonderlandDogPawn.cpp:5 WonderlandLffFeed.cpp:0"
 
 status=0
 for entry in $BASELINE; do

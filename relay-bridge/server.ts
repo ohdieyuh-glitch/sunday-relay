@@ -89,6 +89,9 @@ import { createPostgresVoiceBindings } from '../src/relay/persistence/voice-bind
 import type { VoiceBindingStore } from '../src/relay/social/voice-binding';
 import { eosFromEnv } from './eos-voice';
 import type { SocialStore } from '../src/relay/social/social-store';
+import { createWonderlandLffFileStore } from '../src/relay/persistence/wonderland-lff-file-store';
+import { WonderlandLffBoard } from '../src/relay/mission/wonderland/wonderland-lff';
+import { handleLffHttp } from './wonderland-lff-routes';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -165,6 +168,185 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   } catch {
     throw new Error('invalid JSON body');
   }
+}
+
+/**
+ * Looking for Feed's body. A parse failure or an over-limit body is a 400,
+ * never a throw. Past the limit this reader stops: it pauses the request so
+ * an authenticated sender cannot keep streaming. The route then answers 400
+ * and destroys the socket once that response has finished.
+ */
+function readLffRawBody(req: IncomingMessage): Promise<string | undefined> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      fn();
+    };
+    const stop = () => {
+      req.pause();
+    };
+    req.on('data', (chunk: Buffer) => {
+      if (settled) return;
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        stop();
+        finish(() => reject(new Error('request body too large')));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      finish(() => resolve(chunks.length === 0 ? undefined : Buffer.concat(chunks).toString('utf8')));
+    });
+    req.on('error', () => finish(() => reject(new Error('request error'))));
+  });
+}
+
+async function readLffBody(req: IncomingMessage): Promise<
+  | { ok: true; body: unknown }
+  | { ok: false; code: 'invalid_body' | 'body_too_large'; message: string }
+> {
+  try {
+    const raw = await readLffRawBody(req);
+    if (raw === undefined) return { ok: true, body: undefined };
+    try {
+      return { ok: true, body: JSON.parse(raw) };
+    } catch {
+      return { ok: false, code: 'invalid_body', message: 'request body is not valid JSON' };
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg === 'request body too large') {
+      return { ok: false, code: 'body_too_large', message: 'request body is too large' };
+    }
+    return { ok: false, code: 'invalid_body', message: 'request body is not valid JSON' };
+  }
+}
+
+/** Feed query for the desktop client. One decode. A plus sign stays a plus sign. */
+function lffSearchQuery(url: string): Record<string, string | undefined> {
+  const lffQuery: Record<string, string | undefined> = {};
+  const lffSearch = url.split('?')[1] ?? '';
+  const allowed = ['limit', 'category', 'projectLabel', 'skill', 'mine', 'hasOpenSlots', 'cursor'];
+  for (const pair of lffSearch.split('&')) {
+    if (pair.length === 0) continue;
+    const at = pair.indexOf('=');
+    const rawKey = at < 0 ? pair : pair.slice(0, at);
+    const rawValue = at < 0 ? '' : pair.slice(at + 1);
+    const decode = (text: string): string | null => {
+      try { return decodeURIComponent(text.replace(/\+/g, '%2B')); }
+      catch { return null; }
+    };
+    const key = decode(rawKey);
+    const value = decode(rawValue);
+    if (key === null || value === null) continue;
+    if (!allowed.includes(key)) continue;
+    if (key.length > 32 || value.length > 200) continue;
+    if (/[\u0000-\u001f\u007f]/.test(key) || /[\u0000-\u001f\u007f]/.test(value)) continue;
+    lffQuery[key] = value;
+  }
+  return lffQuery;
+}
+
+/** Pathname of a request URL. The query, if any, starts at the first `?`. */
+function lffPathname(url: string): string {
+  const pathname = url.split('?')[0];
+  return pathname.replace(/\/+$/, '') || '/';
+}
+
+/**
+ * Looking for Feed's route, from the pathname only. `/relay-api` is removed
+ * when it is the leading prefix, and nowhere else.
+ */
+function lffRouteOf(url: string): string {
+  const pathname = lffPathname(url);
+  if (!pathname.startsWith('/relay-api')) return pathname;
+  const rest = pathname.slice('/relay-api'.length);
+  return rest === '' ? '/' : rest;
+}
+
+function lffIsMountPath(route: string): boolean {
+  return route === '/wonderland/social/lff' || route.startsWith('/wonderland/social/lff/');
+}
+
+export interface MountedLffSession {
+  readonly participantId: string;
+}
+
+/**
+ * The mounted Looking for Feed block. Returns false when the pathname is not
+ * one of its routes, so `/wonderland/social/lffx` (with or without a query)
+ * falls through. A session is required before a POST body is read.
+ */
+export async function serveMountedLff(input: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  method: string;
+  url: string;
+  origin: string | undefined;
+  cors: Record<string, string>;
+  lffEnabled: boolean;
+  socialEnabled: boolean;
+  board: WonderlandLffBoard | null;
+  verifySession: (token: string, now: number) => MountedLffSession | null;
+}): Promise<boolean> {
+  const route = lffRouteOf(input.url);
+  if (!lffIsMountPath(route)) return false;
+  const headers = { ...input.cors, 'cache-control': 'no-store' };
+  if (!input.lffEnabled) {
+    send(input.res, 503, { error: { kind: 'lff_unavailable', message: 'Looking for Feed is not enabled on this server.' } }, headers);
+    return true;
+  }
+  if (input.board === null) {
+    send(input.res, 503, { error: { kind: 'lff_unavailable', message: 'Looking for Feed storage is not configured. Set WONDERLAND_LFF_DIR.' } }, headers);
+    return true;
+  }
+  if (!input.socialEnabled) {
+    send(input.res, 503, { error: { kind: 'social_unavailable', message: 'Social is not available on this server.' } }, headers);
+    return true;
+  }
+  if (input.origin !== undefined && input.origin !== '') {
+    send(input.res, 403, { error: { code: 'desktop_only', message: 'Wonderland social is reached from the Wonderland desktop client.' } }, headers);
+    return true;
+  }
+  const lffHeader = typeof input.req.headers.authorization === 'string' ? input.req.headers.authorization : undefined;
+  const lffToken = lffHeader?.match(/^Relay-Session\s+(.+)$/i)?.[1] ?? null;
+  const lffFacts = lffToken === null ? null : input.verifySession(lffToken, Date.now());
+  if (lffFacts === null) {
+    send(input.res, 401, { error: { code: 'session_required', message: 'Sign in to Wonderland to use social.' } }, headers);
+    return true;
+  }
+  let lffBody: unknown;
+  if (input.method === 'POST') {
+    const read = await readLffBody(input.req);
+    if (!read.ok) {
+      if (read.code === 'body_too_large') {
+        input.req.pause();
+        input.res.on('finish', () => {
+          input.req.destroy();
+        });
+        send(input.res, 400, { ok: false, error: { code: read.code, message: read.message } }, { ...headers, connection: 'close' });
+        return true;
+      }
+      send(input.res, 400, { ok: false, error: { code: read.code, message: read.message } }, headers);
+      return true;
+    }
+    lffBody = read.body;
+  }
+  const lffResult = handleLffHttp(input.board, {
+    method: input.method,
+    path: route,
+    actorId: lffFacts.participantId,
+    body: lffBody,
+    query: lffSearchQuery(input.url),
+    nowIso: new Date().toISOString(),
+  });
+  send(input.res, lffResult.status, lffResult.body, headers);
+  return true;
 }
 
 export function createBridgeServer(
@@ -259,6 +441,22 @@ export function createBridgeServer(
    * browser credential is ever written to the mounted volume.
    */
   const browserSessions = createBrowserSessionStore();
+  /**
+   * LOOKING FOR FEED. One board for this process, built here and not per request.
+   * Off unless WONDERLAND_LFF=1. When that flag is on, WONDERLAND_LFF_DIR must
+   * name the store root: an unset or empty value does not fall back to a
+   * default directory. The board stays null and the routes answer 503.
+   * The session hop is the same one the social routes use.
+   */
+  const lffEnabled = process.env.WONDERLAND_LFF === '1';
+  const lffDir = process.env.WONDERLAND_LFF_DIR?.trim() ?? '';
+  const lffBoard = lffEnabled && lffDir !== ''
+    ? new WonderlandLffBoard(
+      () => `lff_${randomUUID().replace(/-/g, '')}`,
+      createWonderlandLffFileStore({ root: lffDir }),
+    )
+    : null;
+  const lffSession = nativeSocialSessionDeps(browserSessions);
   const wonderland = wonderlandBackend ?? WonderlandBackend.empty();
   /**
    * WONDERLAND SOCIAL (R16): the desktop client's own sign-in (GitHub's device flow) and the social routes. OFF unless the
@@ -739,6 +937,25 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
           if (signInResult !== null) send(res, signInResult.status, signInResult.body, { ...cors, 'cache-control': 'no-store', pragma: 'no-cache', ...(signInResult.headers ?? {}) });
           return;
         }
+
+        /**
+         * LOOKING FOR FEED, in front of the social family. `isSocialRoute` matches every
+         * `/wonderland/social` path, so `/wonderland/social/lff` would never reach a later handler.
+         * The match uses the request URL's pathname (split at the first `?`).
+         * `/wonderland/social/lffx` does not match this block and falls through.
+         */
+        if (await serveMountedLff({
+          req,
+          res,
+          method,
+          url: req.url ?? '/',
+          origin,
+          cors,
+          lffEnabled,
+          socialEnabled,
+          board: lffBoard,
+          verifySession: (token, now) => lffSession.verifySession(token, now),
+        })) return;
 
         /**
          * WONDERLAND SOCIAL (R16), in front of the Wonderland family, which claims every `/wonderland/` path. The path is
