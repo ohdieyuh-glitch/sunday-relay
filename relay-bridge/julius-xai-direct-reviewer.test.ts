@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import type { RoleCallInput } from './julius-dispatch';
-import { createXaiDirectReviewerRoleProvider } from './julius-xai-direct-reviewer';
+import { createXaiDirectReviewerRoleProvider, J1_XAI_REVIEW_INSTRUCTIONS } from './julius-xai-direct-reviewer';
 
 const KEY = ['xai', 'test', 'canary', 'k3y'].join('-');
 const callIn = (over: Partial<RoleCallInput> = {}): RoleCallInput => ({
@@ -18,6 +18,14 @@ const make = (fetchImpl: Parameters<typeof createXaiDirectReviewerRoleProvider>[
   createXaiDirectReviewerRoleProvider({ model: 'grok-requested', keyEnv: 'XAI_API_KEY', brief: 'brief', fetchImpl, ...over });
 
 describe('direct xAI reviewer adapter (fake fetch only)', () => {
+  it('the system prompt says Julius mission and does not contain the word Relay', async () => {
+    expect(J1_XAI_REVIEW_INSTRUCTIONS).toContain('Julius mission');
+    expect(J1_XAI_REVIEW_INSTRUCTIONS).not.toMatch(/\bRelay\b/);
+    let body = '';
+    await make(async (_u, init) => { body = init.body; return ok(good)(); }).call(callIn());
+    const system = (JSON.parse(body) as { input: { role: string; content: string }[] }).input[0];
+    expect(system).toEqual({ role: 'system', content: J1_XAI_REVIEW_INSTRUCTIONS });
+  });
   it('G3-2: pre-contact refusals (no key, no inputs) say the provider was not contacted; a post-200 failure does not', async () => {
     let fetched = 0;
     const f = async () => { fetched += 1; return { ok: true, status: 200, text: async () => '{}' }; };
