@@ -211,6 +211,15 @@ export type JuliusSafeDiagnostics=Readonly<Record<string,string|number|boolean|n
 export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;
  const v=value as Record<string,unknown>;
+ const providerRequestId=safeResponseId(v.providerRequestId);
+ const providerMessageId=safeResponseId(v.providerMessageId);
+ const statedRequestAvailability=safeEnum(v.providerRequestAvailability,['CAPTURED','UNAVAILABLE'] as const);
+ const captured=providerRequestId!==null||providerMessageId!==null;
+ const providerRequestAvailability=statedRequestAvailability==='CAPTURED'&&!captured?'UNAVAILABLE':statedRequestAvailability;
+ const statedRequestReason=safeToken(v.providerRequestUnavailableReason);
+ const credentialShapedRequest=(typeof v.providerRequestId==='string'&&CREDENTIAL_SHAPED.test(v.providerRequestId))
+  ||(providerRequestId===null&&typeof v.providerMessageId==='string'&&CREDENTIAL_SHAPED.test(v.providerMessageId));
+ const providerRequestUnavailableReason=captured?null:statedRequestReason??(credentialShapedRequest?'provider_request_id_credential_shaped':statedRequestAvailability==='CAPTURED'?'provider_request_id_unusable':null);
  return Object.freeze({
   stage:safeEnum(v.stage,['plan','build','repair:plan','repair:build'] as const),
   transport:safeEnum(v.transport,['local','remote','openai','hosted'] as const),
@@ -311,6 +320,20 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   /* --- Prompt Architect (plan stage). Null for the reviewer, and vice versa. */
   requestedModel:safeModel(v.requestedModel),
   responseId:safeResponseId(v.responseId),
+  /**
+   * THE PROVIDER REQUEST OR MESSAGE ID, for the Coding Agent's Anthropic API call.
+   *
+   * `responseId` is that id when one was safe to keep, never the runtime session
+   * id. `providerRequestId` is the API `request_id`. `providerMessageId` is the
+   * Messages API `message.id`, and it is not a substitute for a request id that
+   * was present but refused. `CAPTURED` survives only when one of those ids
+   * survives {@link safeResponseId}. The status word is never written into
+   * `responseId`.
+   */
+  providerRequestId:providerRequestId,
+  providerMessageId:providerMessageId,
+  providerRequestAvailability:providerRequestAvailability,
+  providerRequestUnavailableReason:providerRequestUnavailableReason,
   validationPassed:safeNullableBool(v.validationPassed),
   /** A member of the closed `ArchitectPlanReasonCode` union, never validator prose. */
   validationReasonCode:safeToken(v.validationReasonCode),

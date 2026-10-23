@@ -32,7 +32,7 @@ const probeWith = (present: readonly string[]): ResolveProbe => ({
 
 const SDK = '@anthropic-ai/claude-agent-sdk';
 const READY = [SDK, `${SDK}-linux-x64`];
-const READY_ENV = { ANTHROPIC_API_KEY: 'sk-ant-test', RELAY_HOSTED_CODING_MODEL: 'claude-sonnet-5' };
+const READY_ENV = { ANTHROPIC_API_KEY: 'sk-ant-test', RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5' };
 
 const ready = (over: Partial<Parameters<typeof probeHostedReadiness>[0]> = {}) =>
   probeHostedReadiness({
@@ -68,8 +68,8 @@ describe('the safety envelope', () => {
   it('never invents a model when none was requested', () => {
     expect(compileHostedEnvelope({ workspacePath: WS }).model).toBeNull();
     expect(compileHostedEnvelope({ workspacePath: WS, requestedModel: '  ' }).model).toBeNull();
-    expect(compileHostedEnvelope({ workspacePath: WS, requestedModel: 'claude-sonnet-5' }).model)
-      .toBe('claude-sonnet-5');
+    expect(compileHostedEnvelope({ workspacePath: WS, requestedModel: 'claude-opus-5-5' }).model)
+      .toBe('claude-opus-5-5');
   });
 
   it('bounds turns and runtime', () => {
@@ -220,7 +220,7 @@ describe('readiness is free and offline', () => {
   });
 
   it('is unavailable without a credential, and says so without describing one', () => {
-    const r = ready({ env: { RELAY_HOSTED_CODING_MODEL: 'claude-sonnet-5' } as NodeJS.ProcessEnv });
+    const r = ready({ env: { RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5' } as NodeJS.ProcessEnv });
     expect(r.surface).toBe('unavailable');
     expect(r.credentialPresent).toBe(false);
     expect(r.blockedReason).toContain('ANTHROPIC_API_KEY');
@@ -247,7 +247,7 @@ describe('readiness is free and offline', () => {
     // installed runtime as unavailable — first in one direction, then the
     // other. This asserts against the real node_modules, not a fake.
     const real = probeHostedReadiness({
-      env: { ANTHROPIC_API_KEY: 'sk-ant-test', RELAY_HOSTED_CODING_MODEL: 'claude-sonnet-5' } as NodeJS.ProcessEnv,
+      env: { ANTHROPIC_API_KEY: 'sk-ant-test', RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5' } as NodeJS.ProcessEnv,
       now: NOW,
     });
     expect(real.sdkInstalled, 'SDK entry point must resolve').toBe(true);
@@ -293,7 +293,7 @@ describe('the surface a record reports', () => {
 
 describe('reading a hosted run', () => {
   const init = {
-    type: 'system', subtype: 'init', model: 'claude-sonnet-5-20260114',
+    type: 'system', subtype: 'init', model: 'claude-opus-5-5-20260114',
     claude_code_version: '2.1.220', apiKeySource: 'ANTHROPIC_API_KEY',
     cwd: WS, tools: ['Read', 'Glob', 'Grep', 'Edit'],
   };
@@ -305,9 +305,9 @@ describe('reading a hosted run', () => {
 
   it('takes the model from the runtime, never from the request', () => {
     const o = observeHostedMessages([init, result]);
-    // Requested was `claude-sonnet-5`; the runtime answered with a dated build.
-    expect(o.actualModel).toBe('claude-sonnet-5-20260114');
-    expect(o.actualModel).not.toBe('claude-sonnet-5');
+    // Requested was `claude-opus-5-5`; the runtime answered with a dated build.
+    expect(o.actualModel).toBe('claude-opus-5-5-20260114');
+    expect(o.actualModel).not.toBe('claude-opus-5-5');
   });
 
   it('records runtime version and credential SOURCE, never a credential', () => {

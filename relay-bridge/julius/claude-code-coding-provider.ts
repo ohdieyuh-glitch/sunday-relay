@@ -102,6 +102,53 @@ export function hostedCoderCost(
 }
 
 /**
+ * THE ANTHROPIC API ID FOR THIS DISPATCH, NEVER THE RUNTIME SESSION ID.
+ *
+ * `request_id` wins when it was safe to keep. A request id that was present but
+ * refused does not fall through to `message.id`. With neither, the id is null
+ * and the reason says so. `sessionId` is not consulted.
+ */
+function anthropicProviderIds(observed: HostedObservation | null): {
+  readonly responseId: string | null;
+  readonly providerRequestId: string | null;
+  readonly providerMessageId: string | null;
+  readonly providerRequestAvailability: 'CAPTURED' | 'UNAVAILABLE';
+  readonly providerRequestUnavailableReason: string | null;
+} {
+  const unavailable = (reason: string) => ({
+    responseId: null,
+    providerRequestId: null,
+    providerMessageId: null,
+    providerRequestAvailability: 'UNAVAILABLE' as const,
+    providerRequestUnavailableReason: reason,
+  });
+  if (observed === null) return unavailable('provider_request_id_not_reported');
+  const requestId = observed.anthropicRequestId ?? null;
+  const messageId = observed.anthropicMessageId ?? null;
+  if (requestId !== null) {
+    return {
+      responseId: requestId,
+      providerRequestId: requestId,
+      providerMessageId: messageId,
+      providerRequestAvailability: 'CAPTURED',
+      providerRequestUnavailableReason: null,
+    };
+  }
+  if (observed.anthropicRequestRejection) return unavailable(observed.anthropicRequestRejection);
+  if (messageId !== null) {
+    return {
+      responseId: messageId,
+      providerRequestId: null,
+      providerMessageId: messageId,
+      providerRequestAvailability: 'CAPTURED',
+      providerRequestUnavailableReason: null,
+    };
+  }
+  if (observed.anthropicMessageRejection) return unavailable(observed.anthropicMessageRejection);
+  return unavailable('provider_request_id_not_reported');
+}
+
+/**
  * THE CODER'S STRUCTURAL FACTS, ON BOTH ENDINGS, FROM ONE BUILDER.
  *
  * A success and a failure used to be described by two hand-built objects, and
@@ -201,7 +248,7 @@ export const hostedCoderDiagnostics = (input: {
     resultModelThird: usageEntry(2)?.model ?? null,
     resultModelThirdInputTokens: usageEntry(2)?.inputTokens ?? null,
     resultModelThirdOutputTokens: usageEntry(2)?.outputTokens ?? null,
-    responseId: observed?.sessionId ?? null,
+    ...anthropicProviderIds(observed),
     numTurns: observed?.numTurns ?? null,
     // The effort option the runner handed the SDK (absent when it passed none); the runtime echoes nothing of it, so there is no `effortEchoed` for the coder.
     ...(observed?.effortSent === undefined ? {} : { effortSent: observed.effortSent }),

@@ -67,7 +67,7 @@ const LIVE_ENV: Record<string, string> = {
   OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-5.6-sol',
   RELAY_PROMPT_ARCHITECT_MODE: 'live',
   ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic',
-  RELAY_HOSTED_CODING_MODEL: 'claude-fable-5',
+  RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5',
   RELAY_HERMES_PROVIDER: 'xai',
   RELAY_HERMES_MODEL: 'grok-build-0.1',
 };
@@ -124,7 +124,7 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
     return {
       kind: 'completed',
       observation: {
-        initSeen: true, sessionId: 'sess-test', actualModel: 'claude-fable-5',
+        initSeen: true, sessionId: 'sess-test', actualModel: 'claude-opus-5-5',
         runtimeVersion: 'test', apiKeySource: 'env', reportedCwd: input.workspacePath,
         reportedTools: ['Read', 'Glob', 'Grep', 'Edit'], toolTargets: [], toolsUsed: ['Edit'], toolInvocations: 3,
         permissionDenials: 0, numTurns: 3, durationMs: 10,
@@ -139,8 +139,8 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
         },
         // What served, as a real stream attests it: the turns named one model,
         // and the result's own `modelUsage` credited it with output.
-        turnModels: [{ model: 'claude-fable-5', turns: 3, outputTokens: 190 }],
-        resultModelUsage: [{ model: 'claude-fable-5', canonicalModel: null, inputTokens: 500, outputTokens: 200 }],
+        turnModels: [{ model: 'claude-opus-5-5', turns: 3, outputTokens: 190 }],
+        resultModelUsage: [{ model: 'claude-opus-5-5', canonicalModel: null, inputTokens: 500, outputTokens: 200 }],
         resultSubtype: 'success', isError: false, terminalReason: null, finalText: `done (${SECRET_CANARY})`,
         thinkingBlocksOmitted: 0, unknownMessageCount: 0,
       },
@@ -482,7 +482,7 @@ describe('C.A.R.D. role resolution', () => {
     expect(byRole.get('INDEPENDENT_REVIEWER')?.worker.adapterId).toBe('hermes-local-live');
     expect(byRole.get('INDEPENDENT_REVIEWER')?.worker.providerId).toBe('xai');
     expect(resolution.requested).toEqual({
-      architectModel: 'gpt-5.6-sol', codingModel: 'claude-fable-5',
+      architectModel: 'gpt-5.6-sol', codingModel: 'claude-opus-5-5',
       reviewerProvider: 'xai', reviewerModel: 'grok-build-0.1',
     });
     // Every adapter answers for exactly one worker; none holds another adapter.
@@ -1395,7 +1395,7 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
         taskTypes: ['build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
       },
       contexts, artifacts: createInMemoryArtifactExchange(), projectId: 'prj-live',
-      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-fable-5',
+      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-opus-5-5',
       workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
       shell: fakeShell(log, invocations),
       run: fakeCoder(log, []) as never, queryLoader: async () => fakeQuery,
@@ -3454,7 +3454,7 @@ describe('DEFECT 1 — the live coder adapter is limited to what Julius allocate
         capabilities: ['implement'], taskTypes: ['build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
       },
       contexts: { snapshotFor: () => reviewSnapshot('build-1') }, artifacts, projectId: 'prj-live',
-      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-fable-5',
+      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-opus-5-5',
       workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
       shell: fakeShell(log, []), run: run as never, queryLoader: async () => fakeQuery,
     });
@@ -3542,7 +3542,7 @@ describe('a coder failure records WHY, in a closed vocabulary, and quotes nothin
         capabilities: ['implement'], taskTypes: ['build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
       },
       contexts: { snapshotFor: () => reviewSnapshot('build-1') }, artifacts, projectId: 'prj-live',
-      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-fable-5',
+      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-opus-5-5',
       workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
       shell: fakeShell(log, []), run: run as never, queryLoader: async () => fakeQuery,
     });
@@ -3831,7 +3831,7 @@ describe('a coder’s request crosses the adapter without being cleaned or lost'
         capabilities: ['implement'], taskTypes: ['build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
       },
       contexts: { snapshotFor: () => reviewSnapshot('build-1') }, artifacts, projectId: 'prj-live',
-      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-fable-5',
+      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-opus-5-5',
       workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
       shell: fakeShell(log, []), run: run as never, queryLoader: async () => fakeQuery,
     });

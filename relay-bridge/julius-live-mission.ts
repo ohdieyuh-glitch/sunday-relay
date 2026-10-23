@@ -75,6 +75,7 @@ import { createDurableArtifactExchange, juliusReviewerBillingPath, type JuliusAr
 import { createJuliusDurableArtifacts, juliusWorkArtifactRoot } from './julius/durable-artifacts';
 import { LocalJuliusArtifactStore } from '../src/relay/workspace/julius-tools/local-artifact-store';
 import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/julius-work-artifact-postgres';
+import { ORG_ATTRIBUTION_UNVERIFIED, readAnthropicOrgAttribution } from './julius/anthropic-org-attribution';
 import { liveEvidenceLines } from './julius/live-evidence-lines';
 import {
   liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveLearningFailedLine, liveOneLine, liveResearchLines, liveTickAccountLine,
@@ -918,6 +919,24 @@ async function main(argv: readonly string[]): Promise<number> {
       // Each role's problem, then the outcome: an artifact never says nothing (`liveWorkersBlockedLines`).
       for (const line of liveWorkersBlockedLines(resolution.problems)) out(line);
       return 1;
+    }
+
+    /**
+     * WHICH ANTHROPIC ORGANIZATION THE API KEY BILLS, BEFORE A RUN EXISTS.
+     *
+     * API mode is the paid workflow's coder. The organization id is the one
+     * header on a spend-free models read, compared with
+     * `JULIUS_EXPECTED_ANTHROPIC_ORG_ID`. A missing expected id, a missing
+     * header, or a different id is `ORG_ATTRIBUTION_UNVERIFIED` and submit is
+     * not called. Subscription mode has no API organization to attribute.
+     */
+    if (coderProvenance?.authentication === 'ANTHROPIC_API_KEY') {
+      const attribution = readAnthropicOrgAttribution(env, preflight.requested.codingModel ?? '');
+      out(`  ${attribution.line}`);
+      if (!attribution.verified) {
+        out(`RESULT: BLOCKED — ${ORG_ATTRIBUTION_UNVERIFIED}. Nothing was submitted. The organization check read model metadata only; no completion was requested.`);
+        return 1;
+      }
     }
 
     const request = compileBootstrapRequest(contract, resolution.entries.map((entry) => ({
