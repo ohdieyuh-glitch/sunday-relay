@@ -125,6 +125,9 @@ export const LANDING_BEGIN = '-----BEGIN JULIUS LANDING-----';
 export const LANDING_END = '-----END JULIUS LANDING-----';
 const LANDING_REPO = 'ohdieyuh-glitch/sunday-relay';
 const CLEARANCE_KEYS = ['pr', 'head', 'tree', 'base', 'kind', 'bot-comments-sha256', 'governed-exceptions', 'nonce', 'by', 'issued', 'expires'];
+/** The same bounds `checkPullRequest` uses. A worker-PR clearance that outlives them is not accepted. */
+const CLEARANCE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const CLEARANCE_FUTURE_SKEW_MS = 5 * 60 * 1000;
 const EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
 const CANONICAL_BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u;
 const isCanonicalBase64 = (text) => typeof text === 'string' && CANONICAL_BASE64.test(text)
@@ -401,6 +404,108 @@ export function evaluateSignedLanding(input, tip) {
 }
 
 /**
+ * A SIGNED CLEARANCE AS THE APPROVAL ON A WORKER PULL REQUEST.
+ *
+ * Consulted only after `evaluateReviewCurrency` has returned `stale`, and only
+ * when the pull request was opened by the coding worker. It does not add a
+ * GitHub login to the review authority, it does not override a block or an
+ * unreadable review, and it is not consulted for any other author. The founder
+ * `APPROVED` review remains sufficient on its own.
+ *
+ * The signature is checked with the same rules as the landing verifier: the
+ * clearance text must parse as `JULIUS-CLEARANCE-V1`, and the ed25519 signature
+ * must verify against the reviewer key committed at the squash parent (the
+ * allowlisted key; this file does not carry a second one). The clearance must
+ * name this pull request's exact head sha and tree, the squash parent as its
+ * base, and it must be inside its signed lifetime. `now` is injected. A missing
+ * clock, a missing key, an expired clearance, a mismatched binding, or a
+ * signature that does not verify fails closed.
+ *
+ * @param {unknown} packet `{ offers: [{ text, signatureB64 }], reviewerKeyPem, reviewerKeyAtSha, now }`
+ * @returns {{ verdict: 'current' | 'unprovenanced' | 'indeterminate', reason: string, approvedBy?: string[] }}
+ */
+function judgeWorkerClearance(packet, { pull, parentSha, reviewedTreeSha, repo }) {
+  if (packet === null || typeof packet !== 'object' || Array.isArray(packet)) {
+    return { verdict: 'indeterminate', reason: 'the worker-PR clearance could not be read' };
+  }
+  const offers = packet.offers;
+  if (!Array.isArray(offers) || offers.length === 0) {
+    return { verdict: 'indeterminate', reason: 'the worker-PR clearance was offered without a clearance body' };
+  }
+  const now = typeof packet.now === 'number' ? packet.now : Date.parse(packet.now);
+  if (!Number.isFinite(now)) {
+    return { verdict: 'indeterminate', reason: 'the worker-PR clearance expiry could not be judged because no time was supplied' };
+  }
+  if (!isSha(packet.reviewerKeyAtSha) || packet.reviewerKeyAtSha !== parentSha) {
+    return { verdict: 'indeterminate', reason: 'the reviewer key was not read at the parent of the squash' };
+  }
+  const read = readReviewerKey(packet.reviewerKeyPem);
+  if (read.problem) return { verdict: 'indeterminate', reason: `${read.problem} (the allowlisted reviewer key)` };
+
+  const decisions = offers.map((offer) => judgeOneWorkerClearance(offer, read.key, { pull, parentSha, reviewedTreeSha, now, repo }));
+  const good = decisions.filter((decision) => decision.verdict === 'current');
+  if (good.length > 1) {
+    return { verdict: 'indeterminate', reason: 'more than one signed clearance verifies for this head; which one authorizes it is not knowable' };
+  }
+  if (good.length === 1) return good[0];
+  return decisions.find((decision) => decision.verdict === 'unprovenanced')
+    ?? decisions.find((decision) => decision.verdict === 'indeterminate')
+    ?? { verdict: 'unprovenanced', reason: 'the worker-PR clearance was not accepted' };
+}
+
+/**
+ * @param {unknown} offer
+ * @param {import('node:crypto').KeyLike} key
+ */
+function judgeOneWorkerClearance(offer, key, { pull, parentSha, reviewedTreeSha, now, repo }) {
+  const text = offer?.text;
+  if (typeof text !== 'string' || text === '') {
+    return { verdict: 'indeterminate', reason: 'the worker-PR clearance text could not be read' };
+  }
+  const parsed = parseSignedClearance(text, repo);
+  if (parsed.problems.length > 0) {
+    return { verdict: 'indeterminate', reason: `the worker-PR clearance text is malformed: ${parsed.problems.join('; ')}` };
+  }
+  const fields = parsed.fields;
+  const signature = Buffer.from(typeof offer?.signatureB64 === 'string' ? offer.signatureB64.trim() : '', 'base64');
+  if (signature.length !== 64) return { verdict: 'unprovenanced', reason: 'the worker-PR clearance signature is not 64 bytes' };
+  let signatureOk = false;
+  try {
+    signatureOk = verify(null, Buffer.from(text, 'utf8'), key, signature);
+  } catch {
+    return { verdict: 'indeterminate', reason: 'the worker-PR clearance signature could not be checked' };
+  }
+  if (signatureOk !== true) {
+    return { verdict: 'unprovenanced', reason: 'the worker-PR clearance signature does not verify against the allowlisted reviewer key' };
+  }
+  if (fields.head !== pull.headSha) {
+    return { verdict: 'unprovenanced', reason: `the clearance names head ${fields.head}, not the reviewed head ${pull.headSha}` };
+  }
+  if (fields.tree !== reviewedTreeSha) {
+    return { verdict: 'unprovenanced', reason: `the clearance names tree ${fields.tree}, not the reviewed tree ${reviewedTreeSha}` };
+  }
+  if (String(pull.number) !== fields.pr) {
+    return { verdict: 'unprovenanced', reason: `the clearance is for pull request #${fields.pr}, not #${pull.number}` };
+  }
+  if (fields.base !== parentSha) {
+    return { verdict: 'unprovenanced', reason: `the clearance names base ${fields.base}, not the squash parent ${parentSha}` };
+  }
+  const issued = Date.parse(fields.issued);
+  const expires = Date.parse(fields.expires);
+  if (!Number.isFinite(issued) || !Number.isFinite(expires)) {
+    return { verdict: 'indeterminate', reason: 'the worker-PR clearance lifetime could not be read' };
+  }
+  if (now < issued - CLEARANCE_FUTURE_SKEW_MS) return { verdict: 'unprovenanced', reason: 'the worker-PR clearance is dated in the future' };
+  if (now > expires) return { verdict: 'unprovenanced', reason: 'the worker-PR clearance has expired' };
+  if (expires - issued > CLEARANCE_MAX_AGE_MS) return { verdict: 'unprovenanced', reason: 'the worker-PR clearance lifetime exceeds 24 hours' };
+  return {
+    verdict: 'current',
+    reason: `a signed JULIUS-CLEARANCE-V1 clears head ${fields.head}`,
+    approvedBy: ['INDEPENDENT_REVIEW'],
+  };
+}
+
+/**
  * @param {object} input
  * @param {unknown} input.mainSha        `main`, read before the lookups.
  * @param {unknown} input.mainShaAfter   `main`, read again after. A moving branch is not provable.
@@ -422,6 +527,7 @@ export function evaluateSignedLanding(input, tip) {
  * @param {unknown} [input.changedPaths] Paths the tip changes against its parent (signed landings are refused on governed paths).
  * @param {unknown} [input.changedPathsComplete] Strictly true when that list is complete.
  * @param {unknown} [input.headCommit] The cleared head, including `authenticatedAuthor` (see `evaluateSignedLanding`). Git author name, email and `commit.author.login` are not this.
+ * @param {unknown} [input.workerClearance] A signed `JULIUS-CLEARANCE-V1` offered for a worker-PR squash. Absent leaves the founder-approval path unchanged.
  */
 export function evaluateMainProvenance(input) {
   const branch = typeof input?.branch === 'string' && input.branch !== '' ? input.branch : 'main';
@@ -558,6 +664,13 @@ export function evaluateMainProvenance(input) {
    * with no blocking finding on that head. The author check inside it is what
    * keeps founder self-approval invalid here too, without this file repeating
    * the reasoning.
+   *
+   * THE WORKER-PR ALTERNATIVE. When that rule returns `stale` and the pull
+   * request was opened by the coding worker, a signed JULIUS-CLEARANCE-V1 from
+   * the allowlisted reviewer key may stand in for the GitHub approval. It is
+   * not consulted for a block, for an unreadable review, or for any other
+   * author — the author check above has already refused every pull request the
+   * worker did not open. Who may submit an `APPROVED` review does not change.
    */
   const approval = evaluateReviewCurrency({
     headSha: pull.headSha,
@@ -567,10 +680,27 @@ export function evaluateMainProvenance(input) {
     statuses: input?.statuses,
     pullAuthorLogin: pull.authorLogin,
   });
+  let approvedBy = approval.approvedBy ?? [];
+  let via;
   if (approval.verdict !== 'current') {
-    return verdict(approval.verdict === 'indeterminate' ? 'indeterminate' : 'unprovenanced',
-      `the landed candidate is not approved: ${approval.reason}`,
-      { mainSha, prNumber: pull.number, reviewedHeadSha: pull.headSha, reviewCurrency: approval.verdict });
+    const workerRoute = WORKER_AUTHOR_LOGINS.includes(pull.authorLogin);
+    const offered = input?.workerClearance !== undefined;
+    if (approval.verdict === 'stale' && workerRoute && offered) {
+      const judged = judgeWorkerClearance(input.workerClearance, {
+        pull, parentSha, reviewedTreeSha: input.reviewedTreeSha, repo: input?.repo,
+      });
+      if (judged.verdict !== 'current') {
+        return verdict(judged.verdict === 'indeterminate' ? 'indeterminate' : 'unprovenanced',
+          `the landed candidate is not approved: ${judged.reason}`,
+          { mainSha, prNumber: pull.number, reviewedHeadSha: pull.headSha, reviewCurrency: approval.verdict });
+      }
+      approvedBy = judged.approvedBy ?? [];
+      via = 'worker-clearance';
+    } else {
+      return verdict(approval.verdict === 'indeterminate' ? 'indeterminate' : 'unprovenanced',
+        `the landed candidate is not approved: ${approval.reason}`,
+        { mainSha, prNumber: pull.number, reviewedHeadSha: pull.headSha, reviewCurrency: approval.verdict });
+    }
   }
 
   /**
@@ -609,14 +739,17 @@ export function evaluateMainProvenance(input) {
   }
 
   return verdict('provenant',
-    `main ${mainSha} carries the tree of ${pull.headSha}, approved by ${(approval.approvedBy ?? []).join(', ')} and merged as pull request #${pull.number}`,
+    via === 'worker-clearance'
+      ? `main ${mainSha} carries the tree of ${pull.headSha}, cleared by a signed JULIUS-CLEARANCE-V1 and merged as pull request #${pull.number}`
+      : `main ${mainSha} carries the tree of ${pull.headSha}, approved by ${approvedBy.join(', ')} and merged as pull request #${pull.number}`,
     {
       mainSha,
       mainTreeSha: input.mainTreeSha,
       parentSha,
       prNumber: pull.number,
       reviewedHeadSha: pull.headSha,
-      approvedBy: approval.approvedBy ?? [],
+      approvedBy,
+      ...(via ? { via } : {}),
     });
 }
 
@@ -650,6 +783,44 @@ import { pathToFileURL } from 'node:url';
  * mode cannot do is prove the file describes the repository it names, so the
  * output line says where the evidence came from and never claims otherwise.
  */
+/**
+ * A reviewer-tools signature offer: the two labelled lines that tool prints.
+ * An incomplete pair is still returned, so a truncated offer fails closed
+ * instead of disappearing.
+ * @param {unknown} text
+ * @returns {{ text: string | undefined, signatureB64: string | undefined }[]}
+ */
+export function extractClearanceOffers(text) {
+  if (typeof text !== 'string' || (!text.includes('CLEARANCE_B64=') && !text.includes('SIGNATURE_B64='))) return [];
+  const offers = [];
+  let clearanceB64;
+  let signatureB64;
+  const emit = () => {
+    if (clearanceB64 === undefined && signatureB64 === undefined) return;
+    let decoded;
+    if (typeof clearanceB64 === 'string' && clearanceB64 !== '') {
+      const bytes = Buffer.from(clearanceB64, 'base64');
+      const asText = bytes.toString('utf8');
+      if (Buffer.from(asText, 'utf8').equals(bytes)) decoded = asText;
+    }
+    offers.push({ text: decoded, signatureB64 });
+    clearanceB64 = undefined;
+    signatureB64 = undefined;
+  };
+  for (const line of text.split('\n')) {
+    if (line.startsWith('CLEARANCE_B64=')) {
+      if (clearanceB64 !== undefined || signatureB64 !== undefined) emit();
+      clearanceB64 = line.slice('CLEARANCE_B64='.length).trim();
+    } else if (line.startsWith('SIGNATURE_B64=')) {
+      if (signatureB64 !== undefined) emit();
+      signatureB64 = line.slice('SIGNATURE_B64='.length).trim();
+      if (clearanceB64 !== undefined) emit();
+    }
+  }
+  emit();
+  return offers;
+}
+
 async function fromEvidenceFile(path) {
   const { readFileSync } = await import('node:fs');
   const parsed = JSON.parse(readFileSync(path, 'utf8'));
@@ -770,6 +941,7 @@ async function main(argv) {
       authorLogin: pull?.user?.login,
       headSha: pull?.head?.sha,
       baseRef: pull?.base?.ref,
+      body: typeof pull?.body === 'string' ? pull.body : '',
     }));
     const landed = pullRequests.find((pull) => pull.merged && pull.mergeCommitSha === mainSha);
 
@@ -804,6 +976,27 @@ async function main(argv) {
       reviewedHeadShaAfter = gh(`repos/${repo}/pulls/${landed.number}`)?.head?.sha;
     }
 
+    // A worker-PR squash may be approved by a signed clearance instead of a GitHub review. The offer is the
+    // reviewer-tools pair posted on the pull request. No offer leaves the founder-approval path unchanged.
+    let workerClearance;
+    if (landingBlock.state !== 'ok' && landed && WORKER_AUTHOR_LOGINS.includes(landed.authorLogin) && typeof landed.number === 'number') {
+      const issueComments = ghAll(`repos/${repo}/issues/${landed.number}/comments`);
+      const offers = [landed.body, ...issueComments.map((comment) => comment?.body)].flatMap((body) => extractClearanceOffers(body));
+      if (offers.length > 0) {
+        const parent = mainCommit?.parents?.[0]?.sha;
+        let clearanceKeyPem;
+        let clearanceKeyAtSha;
+        if (typeof parent === 'string') {
+          const keyFile = gh(`repos/${repo}/contents/.github/julius-landing/reviewer-ed25519.pub?ref=${parent}`);
+          if (keyFile?.type === 'file' && keyFile?.encoding === 'base64' && typeof keyFile?.content === 'string') {
+            clearanceKeyPem = Buffer.from(keyFile.content, 'base64').toString('utf8');
+            clearanceKeyAtSha = parent;
+          }
+        }
+        workerClearance = { offers, reviewerKeyPem: clearanceKeyPem, reviewerKeyAtSha: clearanceKeyAtSha, now: Date.now() };
+      }
+    }
+
     result = evaluateMainProvenance({
       branch,
       mainSha,
@@ -826,6 +1019,7 @@ async function main(argv) {
       changedPaths,
       changedPathsComplete,
       headCommit,
+      workerClearance,
     });
   } catch (error) {
     // Unreadable metadata is not a passing gate.
