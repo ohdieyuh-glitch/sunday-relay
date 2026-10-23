@@ -780,8 +780,15 @@ export function projectJuliusSlotViews(
       ?? account.requestedModel;
     account.servedModel = stated(safeModel, entry.facts.diag_servedModel, entry.facts.servedModel)
       ?? account.servedModel;
-    account.providerResponseId = stated(safeResponseId, entry.facts.diag_responseId, entry.facts.responseId)
-      ?? account.providerResponseId;
+    // A response id belongs to the dispatch that stated it. `diag_responseId`
+    // wins over an unprefixed `responseId` on the same row. A `worker.dispatched`
+    // row with no safe id reports null: the previous dispatch's id is not
+    // carried forward. A later row of this dispatch overwrites only when it
+    // states a safe id, so a credential-shaped value is not copied and does
+    // not erase one already stated for this dispatch.
+    const responseId = stated(safeResponseId, entry.facts.diag_responseId, entry.facts.responseId);
+    if (entry.type === 'worker.dispatched') account.providerResponseId = responseId;
+    else if (responseId !== null) account.providerResponseId = responseId;
 
     switch (entry.type) {
       case 'worker.dispatched':

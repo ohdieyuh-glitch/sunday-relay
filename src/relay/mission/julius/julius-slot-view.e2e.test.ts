@@ -350,6 +350,25 @@ describe('the slot projection itself', () => {
     expect(JSON.stringify(coder)).not.toContain(secret);
   });
 
+  it('a dispatch with no id row reports null, and diag_responseId wins over responseId', () => {
+    const at = '2026-09-10T02:00:00.000Z';
+    const views = projectJuliusSlotViews([
+      { eventId: 'e1', sequence: 1, type: 'worker.completed', taskId: 'b', workerId: 'coder', occurredAt: at,
+        facts: { role: 'CODING_AGENT', diag_responseId: 'msg_01PREVIOUS' } },
+      { eventId: 'e2', sequence: 2, type: 'worker.dispatched', taskId: 'b2', workerId: 'coder', occurredAt: at,
+        facts: { role: 'CODING_AGENT' } },
+    ]);
+    const coder = views.find((slot) => slot.role === 'CODING_AGENT')!;
+    expect(coder.providerResponseId).toBeNull();
+    expect(coder.dispatches).toBe(1);
+
+    const both = projectJuliusSlotViews([
+      { eventId: 'e1', sequence: 1, type: 'worker.dispatched', taskId: 'b', workerId: 'coder', occurredAt: at,
+        facts: { role: 'CODING_AGENT', diag_responseId: 'msg_diag', responseId: 'msg_plain' } },
+    ]);
+    expect(both.find((slot) => slot.role === 'CODING_AGENT')!.providerResponseId).toBe('msg_diag');
+  });
+
   /**
    * ONE RESERVATION, ONE COMPONENT ((a2) step 3). The view is a FLOOR of known API spend and a flag for
    * what nobody priced, and it counted every `budget.settled` row. A reservation can carry two rows
