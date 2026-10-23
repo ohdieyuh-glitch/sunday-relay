@@ -6,21 +6,30 @@
 //       wonderland/Source/Wonderland/WonderlandJuliusMissionLogic.cpp
 //       -o j1_wrapper_kat && ./j1_wrapper_kat
 //
+//   cl /std:c++17 /EHsc /W4 /WX /I wonderland\Source\Wonderland
+//       wonderland\Tools\j1_wrapper_kat.cpp
+//       wonderland\Source\Wonderland\WonderlandJuliusMissionClient.cpp
+//       wonderland\Source\Wonderland\WonderlandJuliusMissionLogic.cpp
+//
+// The scratch directory uses std::filesystem, std::chrono and std::thread. Those three cover
+// POSIX and Windows, so this file has no unistd.h, no direct _WIN32 branch, and no mkdir.
+//
 // Each Expect name is the test the presentation spec cites.
 #include "WonderlandJuliusMissionClient.h"
 
 #include <array>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <sstream>
 #include <string>
+#include <system_error>
+#include <thread>
 #include <vector>
-
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 namespace
 {
@@ -156,6 +165,30 @@ namespace
 			Session.SetExpectedResultMode("fake");
 		}
 	};
+
+	std::filesystem::path MakeScratchDirectory()
+	{
+		std::error_code Error;
+		const std::filesystem::path Temp = std::filesystem::temp_directory_path(Error);
+		if (Error) { return {}; }
+		const auto Stamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+			std::chrono::steady_clock::now().time_since_epoch()).count();
+		std::ostringstream ThreadId;
+		ThreadId << std::this_thread::get_id();
+		std::string Token;
+		for (const unsigned char C : ThreadId.str())
+		{
+			if ((C >= '0' && C <= '9') || (C >= 'A' && C <= 'Z') || (C >= 'a' && C <= 'z'))
+			{
+				Token.push_back(static_cast<char>(C));
+			}
+		}
+		if (Token.empty()) { Token = "thread"; }
+		const std::filesystem::path Directory = Temp / ("j1-wrapper-kat-" + std::to_string(Stamp) + "-" + Token);
+		std::filesystem::create_directories(Directory, Error);
+		if (Error) { return {}; }
+		return Directory;
+	}
 
 	std::string Header(const FWireRequest& Request, const char* Name)
 	{
@@ -603,10 +636,9 @@ int main()
 	}
 
 	{
-		char Template[] = "/tmp/j1-wrapper-kat-XXXXXX";
-		char* Dir = mkdtemp(Template);
-		Expect(Dir != nullptr, "temp_dir");
-		if (Dir != nullptr)
+		const std::filesystem::path Scratch = MakeScratchDirectory();
+		Expect(!Scratch.empty(), "temp_dir");
+		if (!Scratch.empty())
 		{
 			class FDirTrace final : public ITraceSink
 			{
@@ -615,13 +647,11 @@ int main()
 				explicit FDirTrace(std::string InRoot) : Root(std::move(InRoot)) {}
 				bool Append(std::string_view RunId, std::string_view Line) override
 				{
-					const std::string Path = PathFor(RunId);
-					const std::string Folder = Path.substr(0, Path.find_last_of('/'));
-					mkdir(Folder.c_str(), 0700);
-					const std::string Parent = Folder.substr(0, Folder.find_last_of('/'));
-					mkdir(Parent.c_str(), 0700);
-					mkdir(Folder.c_str(), 0700);
-					std::ofstream Out(Path, std::ios::app | std::ios::binary);
+					const std::filesystem::path File(PathFor(RunId));
+					std::error_code Error;
+					std::filesystem::create_directories(File.parent_path(), Error);
+					if (Error) { return false; }
+					std::ofstream Out(File, std::ios::app | std::ios::binary);
 					Out << std::string(Line);
 					return static_cast<bool>(Out);
 				}
@@ -642,7 +672,11 @@ int main()
 				explicit FFileStore(std::string InPath) : Path(std::move(InPath)) {}
 				bool Write(std::string_view Text) override
 				{
-					std::ofstream Out(Path, std::ios::binary | std::ios::trunc);
+					const std::filesystem::path File(Path);
+					std::error_code Error;
+					std::filesystem::create_directories(File.parent_path(), Error);
+					if (Error) { return false; }
+					std::ofstream Out(File, std::ios::binary | std::ios::trunc);
 					Out << std::string(Text);
 					return static_cast<bool>(Out);
 				}
@@ -658,8 +692,8 @@ int main()
 			Random.Add(9); Random.Add(99); Random.Add(199);
 			Random.Add(11);
 			FClock Clock;
-			FDirTrace Trace(Dir);
-			FFileStore Store(std::string(Dir) + "/open-pair.v1");
+			FDirTrace Trace(Scratch.string());
+			FFileStore Store((Scratch / "open-pair.v1").string());
 			FJuliusMissionSession Session(Random, Clock, Trace, Store);
 			Session.SetProjectId("proj-1");
 			Session.SetNativeSessionToken("SECRET_TOKEN_VALUE");
@@ -676,7 +710,7 @@ int main()
 			FScriptRandom Random2;
 			Random2.Add(21);
 			FFileStore Store2(Store.Path);
-			FDirTrace Trace2(Dir);
+			FDirTrace Trace2(Scratch.string());
 			FJuliusMissionSession Session2(Random2, Clock, Trace2, Store2);
 			Expect(Session2.Load(), "file_save_round_trip");
 			Expect(Session2.RunId() == Run, "file_save_same_run");
@@ -684,6 +718,8 @@ int main()
 			Expect(Store2.Read(Disk), "file_save_reads");
 			Expect(Contains(Disk, Run), "file_save_has_run");
 			Expect(!Contains(Disk, "SECRET_TOKEN_VALUE"), "file_save_omits_token");
+			std::error_code Removed;
+			std::filesystem::remove_all(Scratch, Removed);
 		}
 	}
 
