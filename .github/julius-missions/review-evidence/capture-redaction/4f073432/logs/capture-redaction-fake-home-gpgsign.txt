@@ -1,0 +1,2127 @@
+
+ RUN  v4.1.10 /tmp/capture-redaction
+
+error: gpg failed to sign the data:
+gpg: directory '/tmp/capture-fake-home/.gnupg' created
+gpg: keybox '/tmp/capture-fake-home/.gnupg/pubring.kbx' created
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+ × src/relay/workspace/workspace.test.ts > repository validation > accepts a repository root and rejects non-repos, subdirectories, and hostile paths 20ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: directory '/tmp/capture-fake-home/.gnupg' created
+gpg: keybox '/tmp/capture-fake-home/.gnupg/pubring.kbx' created
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/workspace.test.ts > worktree lifecycle > creates an isolated worktree pinned to the source revision on a run branch 11ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/workspace.test.ts > worktree lifecycle > is idempotent for the same request and refuses conflicting branch reuse 11ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/workspace.test.ts > worktree lifecycle > rejects branch injection and dirty-source pinning stays commit-based 13ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/workspace.test.ts > worktree lifecycle > detects an unexpected source change and requires revalidation 11ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/workspace.test.ts > inspection and file-claim enforcement > classifies claimed, unclaimed, and protected changes; claims never expand 11ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/workspace.test.ts > inspection and file-claim enforcement > detects a symlink escaping the workspace 12ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/workspace.test.ts > command execution > runs an approved command with live provenance and bounded evidence 10ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/repository-target-observer.test.ts > the repository git surface is an allow-list > refuses every subcommand that could reach a remote or rewrite history 23ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > the repository git surface is an allow-list > refuses a history-rewriting flag on a subcommand that IS allowed 13ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > the repository git surface is an allow-list > permits the reads and the one write it exists for 12ms
+   → git commit -m initial failed: git commit failed.
+ ✓ src/relay/workspace/repository-target-observer.test.ts > numstat parsing > reads a binary file's counts as UNKNOWN rather than zero 1ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > numstat parsing > skips anything that is not exactly three fields, rather than guessing 0ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > numstat parsing > parses what --no-renames actually emits for a git mv 0ms
+ × src/relay/workspace/repository-target-observer.test.ts > a rename cannot hide the deletion of a protected path > reports a git mv of a protected file as a DELETION and refuses it 12ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > a rename cannot hide the deletion of a protected path > counts a `renamed` entry as a deletion even from a fixture observation 12ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > a symlink cannot make a write invisible > refuses a symlink inside the write scope, and never commits it 13ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > a symlink cannot make a write invisible > refuses a path whose ANCESTOR is a symlink, not just the leaf 13ms
+   → git commit -m initial failed: git commit failed.
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+ × src/relay/workspace/workspace.test.ts > command execution > rejects unapproved commands with recorded evidence and no execution 12ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/workspace.test.ts > command execution > validates the working directory and refuses escapes 9ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/workspace.test.ts > command execution > never inherits provider secrets into child processes 10ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/workspace.test.ts > command execution > unknown workspace and unregistered ids fail safely 10ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/workspace.test.ts > cleanup safety > preserves without authorization; removes a clean workspace only when authorized 13ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/workspace.test.ts > cleanup safety > refuses unknown workspaces and preserves flagged ones 11ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/workspace.test.ts > evidence integrity > associates live evidence with run/task/revisions and stays secret-free 15ms
+   → Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/repository-target-observer.test.ts > the git option allow-list is per subcommand, not a list of strings > refuses every bypass an independent review executed 12ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > committing what was accepted, and nothing else > commits the accepted paths and reads the real commit SHA back 11ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > the git option allow-list is per subcommand, not a list of strings > still permits exactly what the observer and the commit need 13ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > committing what was accepted, and nothing else > refuses to commit a diff it did not accept 12ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > the git option allow-list is per subcommand, not a list of strings > does not read a commit message that begins with a dash as an option 13ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > committing what was accepted, and nothing else > commits ONLY the approved paths, leaving an unapproved file visible 12ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > committing what was accepted, and nothing else > refuses to commit without the commit permission 12ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > Relay observes real git changes, not an agent's account of them > observes a modified file, a new file, and their real line counts 11ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > committing what was accepted, and nothing else > detects a base that moved under the Mission, from real git 12ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > Relay observes real git changes, not an agent's account of them > reports an untracked binary file as unknown ADDED and a real zero removed 11ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > Relay observes real git changes, not an agent's account of them > refuses a MODIFIED tracked binary file, whose removed count git cannot report 11ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > BUILD → VERIFY → COMMIT → DEPLOY → LIVE VERIFY → SHIPPED, for real > ships when the running system serves the committed revision 13ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > Relay observes real git changes, not an agent's account of them > refuses a real change to a protected path, from real git output 15ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > BUILD → VERIFY → COMMIT → DEPLOY → LIVE VERIFY → SHIPPED, for real > refuses to ship when the running system serves a STALE revision 11ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > Relay observes real git changes, not an agent's account of them > refuses a real out-of-scope change 10ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > BUILD → VERIFY → COMMIT → DEPLOY → LIVE VERIFY → SHIPPED, for real > refuses to ship when the deployed system is not reachable at all 12ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > Relay observes real git changes, not an agent's account of them > leaves the SOURCE repository untouched while the worktree changes 10ms
+   → git commit -m initial failed: git commit failed.
+ × src/relay/workspace/repository-target-observer.test.ts > BUILD → VERIFY → COMMIT → DEPLOY → LIVE VERIFY → SHIPPED, for real > refuses a production deploy on a staging-only provider and a staging-only grant 11ms
+   → git commit -m initial failed: git commit failed.
+ ✓ src/relay/workspace/repository-target-observer.test.ts > the documented surface matches the code > names every git subcommand the write surface permits, and the right number of them 2ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > the documented surface matches the code > names every subcommand it claims is ABSENT, and each really is 2ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > the documented surface matches the code > names every default-protected path, and its stated counts are the real ones 1ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > the documented surface matches the code > keeps saying what has not actually happened yet 0ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > the remote subcommand cannot mutate where the repository points > refuses git remote set-url and leaves origin alone 9ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > the remote subcommand cannot mutate where the repository points > refuses git remote add and leaves origin alone 8ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > the remote subcommand cannot mutate where the repository points > refuses git remote remove and leaves origin alone 7ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > the remote subcommand cannot mutate where the repository points > refuses git remote rename and leaves origin alone 8ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > the remote subcommand cannot mutate where the repository points > refuses git remote prune and leaves origin alone 8ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > the remote subcommand cannot mutate where the repository points > refuses git remote update and leaves origin alone 9ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > the remote subcommand cannot mutate where the repository points > refuses git remote with no verb at all 6ms
+ × src/relay/workspace/repository-target-observer.test.ts > the remote subcommand cannot mutate where the repository points > permits only get-url 10ms
+   → expected 'https://example.invalid/instead/o/r.g…' to be 'https://github.com/o/r.git' // Object.is equality
+ ✓ src/relay/workspace/repository-target-observer.test.ts > git branch cannot create, rename or delete a ref > refuses a positional branch name, and creates no ref 12ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > git branch cannot create, rename or delete a ref > refuses the mutating flags 9ms
+ ✓ src/relay/workspace/repository-target-observer.test.ts > git branch cannot create, rename or delete a ref > still permits the read it exists for 11ms
+ ✓ src/relay/workspace/julius-tools/docker-executor-script.test.ts > the in-sandbox executor script > seals a BEFORE receipt before the command runs and an AFTER receipt carrying its outcome 83ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > boundOutput counts UTF-8 bytes and never splits a character > returns text that fits the byte budget untouched 2ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > boundOutput counts UTF-8 bytes and never splits a character > keeps the longest prefix whose UTF-8 size fits, no shorter 0ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > boundOutput counts UTF-8 bytes and never splits a character > never leaves a lone surrogate, including when the next character does not fit 2ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > boundOutput counts UTF-8 bytes and never splits a character > marks a truncation exactly once and leaves an exact fit unmarked 0ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > boundOutput counts UTF-8 bytes and never splits a character > does not change what sanitizeOutput already matches 0ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > leaves an ordinary command unchanged 24ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > flushes a trailing incomplete UTF-8 sequence instead of dropping the bytes 23ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > reassembles a multi-byte character split across reads, on stdout and stderr 177ms
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+ ✓ src/relay/workspace/mission-worktree.test.ts > mission branch naming > derives relay/mission/<id> and refuses git-option injection 2ms
+ ✓ src/relay/workspace/mission-worktree.test.ts > mission branch naming > NEVER yields a protected branch, however the id is spelled 1ms
+ ✓ src/relay/workspace/mission-worktree.test.ts > mission branch naming > refuses a branch outside the relay/mission namespace 0ms
+ ✓ src/relay/workspace/mission-worktree.test.ts > path containment > places the worktree under the approved root, per repository and mission 0ms
+ ✓ src/relay/workspace/mission-worktree.test.ts > path containment > rejects traversal in the repository name or mission id 1ms
+ × src/relay/workspace/mission-worktree.test.ts > path containment > refuses the primary checkout in every direction 17ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > worktree creation > creates an isolated worktree at the exact base commit on a mission branch 11ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > worktree creation > never places the worktree inside the repository 11ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > worktree creation > gives two missions separate branches and separate paths 10ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > worktree creation > a repeated open for the same mission REOPENS rather than duplicating 10ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > worktree creation > refuses when another live session owns the mission worktree 10ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > worktree creation > a failed creation is never reported ready 10ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > worktree creation > rejects a path that is not a repository root 11ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+ × src/relay/workspace/mission-worktree.test.ts > restart validation > finds the same worktree after a restart 11ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > restart validation > reports a MISSING worktree and never recreates it 10ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > restart validation > dirty state survives a restart and is reported truthfully 10ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > restart validation > detects a branch that changed while Relay was away 9ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > restart validation > reports an advanced HEAD as progress, not corruption 10ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > restart validation > a stale directory that git does not know requires inspection 11ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > restart validation > refuses a worktree path that became a symlink 11ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ✓ src/relay/workspace/mission-worktree.test.ts > cleanup safety > blocks cleanup on dirty work, unknown process state and a live mission 1ms
+ ✓ src/relay/workspace/mission-worktree.test.ts > cleanup safety > allows removal only when everything is proven safe 0ms
+ × src/relay/workspace/mission-worktree.test.ts > cleanup safety > removes a clean terminal worktree and leaves the repository intact 10ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > cleanup safety > refuses removal when cleanup is blocked 10ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > cleanup safety > refuses to remove another mission’s worktree path 9ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+ × src/relay/workspace/mission-worktree.test.ts > cleanup safety > never removes the primary checkout 10ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > durable worktree records > survives a restart through the Node store 10ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > durable worktree records > writes the durable record only after git validation passed 11ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ × src/relay/workspace/mission-worktree.test.ts > durable worktree records > stores no home directory in the displayed repository name 10ms
+   → Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+stdout | src/relay/workspace/command-runner-partial-secret.test.ts > ADVERSARIAL FUZZ: random mixes of every shape, odd whitespace, random separators, random cuts > no 6-character window of any secret body is stored (seeded, 40,000 streams, cap and kill)
+FUZZ: 40000 streams, 0 leak(s)
+
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > ADVERSARIAL FUZZ: random mixes of every shape, odd whitespace, random separators, random cuts > no 6-character window of any secret body is stored (seeded, 40,000 streams, cap and kill) 1196ms
+stdout | src/relay/workspace/command-runner-partial-secret.test.ts > TWO KEYS glued without a newline: both orders, every separator, every cut > no 6-character window of either body is stored
+TWO KEYS: 9192 cuts, 0 leak(s)
+
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > TWO KEYS glued without a newline: both orders, every separator, every cut > no 6-character window of either body is stored 27ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that ENDS BY ITSELF is not exempt from the unterminated-key rule (REVIEW, finding 2a) > P10: exit 0 after a partial private key (a BEGIN header and body, no footer, e.g. `head -c 500 key.pem`): the body is not stored 28ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that ENDS BY ITSELF is not exempt from the unterminated-key rule (REVIEW, finding 2a) > P11: a NON-ZERO exit with no signal (a crash) after a partial private key: the body is not stored (stderr too) 43ms
+stdout | src/relay/workspace/command-runner-partial-secret.test.ts > PEM SWEEP: several key blocks in one stream, every structure x kind rotation x line end, every cut incl. the uncut stream, cap and kill > no 6-character window of any body line is stored
+PEM SWEEP coverage (193060 cuts in 541 ms):
+incomplete+incomplete                            7632 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+complete+incomplete                              8084 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+incomplete+complete                              8132 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+complete+complete+incomplete                    12288 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+incomplete+complete+incomplete                  11836 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+complete+incomplete+complete                    12308 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+three incomplete                                11336 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+incomplete+incomplete+complete                  11856 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+bare footer between headers                      7924 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+cut footer between headers                       8028 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+bare footer then complete                        8424 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+cut footer then complete                         8528 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+incomplete+bare+incomplete                      11676 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+complete+bare+incomplete                        12128 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+incomplete+cut+complete                         12300 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+single complete                                  2196 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+single incomplete                                1972 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+single bare footer                               2116 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+single cut footer                                2172 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+phrase inside body, incomplete+incomplete        7680 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+phrase inside body, complete+incomplete          8132 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+phrase inside body, incomplete+complete          8180 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+phrase inside body, incomplete (second)          8132 cuts (LF+CRLF, kind rotations, joiners: line end / none / 5 dashes, cap + kill)
+PEM SWEEP LEAKS BY STRUCTURE AND CUT KIND (0): {}
+
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that ENDS BY ITSELF is not exempt from the unterminated-key rule (REVIEW, finding 2a) > S7: a COMPLETE private key in a stream that ended by itself is unchanged: fully redacted, the text after it kept 23ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that ENDS BY ITSELF is not exempt from the unterminated-key rule (REVIEW, finding 2a) > S8: the trailing-partial-token step stays for early-stopped streams only: an 'ok' with no trailing newline in a stream that ended by itself is stored verbatim 23ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > PEM SWEEP: several key blocks in one stream, every structure x kind rotation x line end, every cut incl. the uncut stream, cap and kill > no 6-character window of any body line is stored 541ms
+stdout | src/relay/workspace/command-runner-partial-secret.test.ts > SWEEP: every secret shape, cut at every byte offset, by the byte cap and by a kill > no 6-character window of any secret body is stored, for any shape, any cut kind, any offset
+SWEEP coverage (40064 cuts in 126 ms):
+sk- key          plain         lines      stream  96 chars   cap offsets 0..96 (97)   kill offsets 0..96 (97)
+sk- key          plain         none       stream  69 chars   cap offsets 0..69 (70)   kill offsets 0..69 (70)
+sk- key          plain         space      stream  70 chars   cap offsets 0..70 (71)   kill offsets 0..70 (71)
+sk- key          plain         comma-word stream  79 chars   cap offsets 0..79 (80)   kill offsets 0..79 (80)
+sk- key          multibyte     lines      stream  99 chars   cap offsets 0..99 (100)   kill offsets 0..99 (100)
+sk- key          multibyte     none       stream  72 chars   cap offsets 0..72 (73)   kill offsets 0..72 (73)
+sk- key          multibyte     space      stream  73 chars   cap offsets 0..73 (74)   kill offsets 0..73 (74)
+sk- key          multibyte     comma-word stream  82 chars   cap offsets 0..82 (83)   kill offsets 0..82 (83)
+sk- key          stream-start  lines      stream  70 chars   cap offsets 0..70 (71)   kill offsets 0..70 (71)
+sk- key          stream-start  none       stream  43 chars   cap offsets 0..43 (44)   kill offsets 0..43 (44)
+sk- key          stream-start  space      stream  44 chars   cap offsets 0..44 (45)   kill offsets 0..44 (45)
+sk- key          stream-start  comma-word stream  53 chars   cap offsets 0..53 (54)   kill offsets 0..53 (54)
+sk- key          after-newline lines      stream  77 chars   cap offsets 0..77 (78)   kill offsets 0..77 (78)
+sk- key          after-newline none       stream  50 chars   cap offsets 0..50 (51)   kill offsets 0..50 (51)
+sk- key          after-newline space      stream  51 chars   cap offsets 0..51 (52)   kill offsets 0..51 (52)
+sk- key          after-newline comma-word stream  60 chars   cap offsets 0..60 (61)   kill offsets 0..60 (61)
+AKIA key         plain         lines      stream  73 chars   cap offsets 0..73 (74)   kill offsets 0..73 (74)
+AKIA key         plain         none       stream  46 chars   cap offsets 0..46 (47)   kill offsets 0..46 (47)
+AKIA key         plain         space      stream  47 chars   cap offsets 0..47 (48)   kill offsets 0..47 (48)
+AKIA key         plain         comma-word stream  56 chars   cap offsets 0..56 (57)   kill offsets 0..56 (57)
+AKIA key         multibyte     lines      stream  76 chars   cap offsets 0..76 (77)   kill offsets 0..76 (77)
+AKIA key         multibyte     none       stream  49 chars   cap offsets 0..49 (50)   kill offsets 0..49 (50)
+AKIA key         multibyte     space      stream  50 chars   cap offsets 0..50 (51)   kill offsets 0..50 (51)
+AKIA key         multibyte     comma-word stream  59 chars   cap offsets 0..59 (60)   kill offsets 0..59 (60)
+AKIA key         stream-start  lines      stream  47 chars   cap offsets 0..47 (48)   kill offsets 0..47 (48)
+AKIA key         stream-start  none       stream  20 chars   cap offsets 0..20 (21)   kill offsets 0..20 (21)
+AKIA key         stream-start  space      stream  21 chars   cap offsets 0..21 (22)   kill offsets 0..21 (22)
+AKIA key         stream-start  comma-word stream  30 chars   cap offsets 0..30 (31)   kill offsets 0..30 (31)
+AKIA key         after-newline lines      stream  54 chars   cap offsets 0..54 (55)   kill offsets 0..54 (55)
+AKIA key         after-newline none       stream  27 chars   cap offsets 0..27 (28)   kill offsets 0..27 (28)
+AKIA key         after-newline space      stream  28 chars   cap offsets 0..28 (29)   kill offsets 0..28 (29)
+AKIA key         after-newline comma-word stream  37 chars   cap offsets 0..37 (38)   kill offsets 0..37 (38)
+github token     plain         lines      stream  93 chars   cap offsets 0..93 (94)   kill offsets 0..93 (94)
+github token     plain         none       stream  66 chars   cap offsets 0..66 (67)   kill offsets 0..66 (67)
+github token     plain         space      stream  67 chars   cap offsets 0..67 (68)   kill offsets 0..67 (68)
+github token     plain         comma-word stream  76 chars   cap offsets 0..76 (77)   kill offsets 0..76 (77)
+github token     multibyte     lines      stream  96 chars   cap offsets 0..96 (97)   kill offsets 0..96 (97)
+github token     multibyte     none       stream  69 chars   cap offsets 0..69 (70)   kill offsets 0..69 (70)
+github token     multibyte     space      stream  70 chars   cap offsets 0..70 (71)   kill offsets 0..70 (71)
+github token     multibyte     comma-word stream  79 chars   cap offsets 0..79 (80)   kill offsets 0..79 (80)
+github token     stream-start  lines      stream  67 chars   cap offsets 0..67 (68)   kill offsets 0..67 (68)
+github token     stream-start  none       stream  40 chars   cap offsets 0..40 (41)   kill offsets 0..40 (41)
+github token     stream-start  space      stream  41 chars   cap offsets 0..41 (42)   kill offsets 0..41 (42)
+github token     stream-start  comma-word stream  50 chars   cap offsets 0..50 (51)   kill offsets 0..50 (51)
+github token     after-newline lines      stream  74 chars   cap offsets 0..74 (75)   kill offsets 0..74 (75)
+github token     after-newline none       stream  47 chars   cap offsets 0..47 (48)   kill offsets 0..47 (48)
+github token     after-newline space      stream  48 chars   cap offsets 0..48 (49)   kill offsets 0..48 (49)
+github token     after-newline comma-word stream  57 chars   cap offsets 0..57 (58)   kill offsets 0..57 (58)
+slack token      plain         lines      stream  88 chars   cap offsets 0..88 (89)   kill offsets 0..88 (89)
+slack token      plain         none       stream  61 chars   cap offsets 0..61 (62)   kill offsets 0..61 (62)
+slack token      plain         space      stream  62 chars   cap offsets 0..62 (63)   kill offsets 0..62 (63)
+slack token      plain         comma-word stream  71 chars   cap offsets 0..71 (72)   kill offsets 0..71 (72)
+slack token      multibyte     lines      stream  91 chars   cap offsets 0..91 (92)   kill offsets 0..91 (92)
+slack token      multibyte     none       stream  64 chars   cap offsets 0..64 (65)   kill offsets 0..64 (65)
+slack token      multibyte     space      stream  65 chars   cap offsets 0..65 (66)   kill offsets 0..65 (66)
+slack token      multibyte     comma-word stream  74 chars   cap offsets 0..74 (75)   kill offsets 0..74 (75)
+slack token      stream-start  lines      stream  62 chars   cap offsets 0..62 (63)   kill offsets 0..62 (63)
+slack token      stream-start  none       stream  35 chars   cap offsets 0..35 (36)   kill offsets 0..35 (36)
+slack token      stream-start  space      stream  36 chars   cap offsets 0..36 (37)   kill offsets 0..36 (37)
+slack token      stream-start  comma-word stream  45 chars   cap offsets 0..45 (46)   kill offsets 0..45 (46)
+slack token      after-newline lines      stream  69 chars   cap offsets 0..69 (70)   kill offsets 0..69 (70)
+slack token      after-newline none       stream  42 chars   cap offsets 0..42 (43)   kill offsets 0..42 (43)
+slack token      after-newline space      stream  43 chars   cap offsets 0..43 (44)   kill offsets 0..43 (44)
+slack token      after-newline comma-word stream  52 chars   cap offsets 0..52 (53)   kill offsets 0..52 (53)
+jwt              plain         lines      stream 135 chars   cap offsets 0..135 (136)   kill offsets 0..135 (136)
+jwt              plain         none       stream 108 chars   cap offsets 0..108 (109)   kill offsets 0..108 (109)
+jwt              plain         space      stream 109 chars   cap offsets 0..109 (110)   kill offsets 0..109 (110)
+jwt              plain         comma-word stream 118 chars   cap offsets 0..118 (119)   kill offsets 0..118 (119)
+jwt              multibyte     lines      stream 138 chars   cap offsets 0..138 (139)   kill offsets 0..138 (139)
+jwt              multibyte     none       stream 111 chars   cap offsets 0..111 (112)   kill offsets 0..111 (112)
+jwt              multibyte     space      stream 112 chars   cap offsets 0..112 (113)   kill offsets 0..112 (113)
+jwt              multibyte     comma-word stream 121 chars   cap offsets 0..121 (122)   kill offsets 0..121 (122)
+jwt              stream-start  lines      stream 109 chars   cap offsets 0..109 (110)   kill offsets 0..109 (110)
+jwt              stream-start  none       stream  82 chars   cap offsets 0..82 (83)   kill offsets 0..82 (83)
+jwt              stream-start  space      stream  83 chars   cap offsets 0..83 (84)   kill offsets 0..83 (84)
+jwt              stream-start  comma-word stream  92 chars   cap offsets 0..92 (93)   kill offsets 0..92 (93)
+jwt              after-newline lines      stream 116 chars   cap offsets 0..116 (117)   kill offsets 0..116 (117)
+jwt              after-newline none       stream  89 chars   cap offsets 0..89 (90)   kill offsets 0..89 (90)
+jwt              after-newline space      stream  90 chars   cap offsets 0..90 (91)   kill offsets 0..90 (91)
+jwt              after-newline comma-word stream  99 chars   cap offsets 0..99 (100)   kill offsets 0..99 (100)
+pem private key  plain         lines      stream 301 chars   cap offsets 0..301 (302)   kill offsets 0..301 (302)
+pem private key  plain         none       stream 274 chars   cap offsets 0..274 (275)   kill offsets 0..274 (275)
+pem private key  plain         space      stream 275 chars   cap offsets 0..275 (276)   kill offsets 0..275 (276)
+pem private key  plain         comma-word stream 284 chars   cap offsets 0..284 (285)   kill offsets 0..284 (285)
+pem private key  multibyte     lines      stream 304 chars   cap offsets 0..304 (305)   kill offsets 0..304 (305)
+pem private key  multibyte     none       stream 277 chars   cap offsets 0..277 (278)   kill offsets 0..277 (278)
+pem private key  multibyte     space      stream 278 chars   cap offsets 0..278 (279)   kill offsets 0..278 (279)
+pem private key  multibyte     comma-word stream 287 chars   cap offsets 0..287 (288)   kill offsets 0..287 (288)
+pem private key  stream-start  lines      stream 275 chars   cap offsets 0..275 (276)   kill offsets 0..275 (276)
+pem private key  stream-start  none       stream 248 chars   cap offsets 0..248 (249)   kill offsets 0..248 (249)
+pem private key  stream-start  space      stream 249 chars   cap offsets 0..249 (250)   kill offsets 0..249 (250)
+pem private key  stream-start  comma-word stream 258 chars   cap offsets 0..258 (259)   kill offsets 0..258 (259)
+pem private key  after-newline lines      stream 282 chars   cap offsets 0..282 (283)   kill offsets 0..282 (283)
+pem private key  after-newline none       stream 255 chars   cap offsets 0..255 (256)   kill offsets 0..255 (256)
+pem private key  after-newline space      stream 256 chars   cap offsets 0..256 (257)   kill offsets 0..256 (257)
+pem private key  after-newline comma-word stream 265 chars   cap offsets 0..265 (266)   kill offsets 0..265 (266)
+password=        plain         lines      stream  82 chars   cap offsets 0..82 (83)   kill offsets 0..82 (83)
+password=        plain         none       stream  55 chars   cap offsets 0..55 (56)   kill offsets 0..55 (56)
+password=        plain         space      stream  56 chars   cap offsets 0..56 (57)   kill offsets 0..56 (57)
+password=        plain         comma-word stream  65 chars   cap offsets 0..65 (66)   kill offsets 0..65 (66)
+password=        multibyte     lines      stream  85 chars   cap offsets 0..85 (86)   kill offsets 0..85 (86)
+password=        multibyte     none       stream  58 chars   cap offsets 0..58 (59)   kill offsets 0..58 (59)
+password=        multibyte     space      stream  59 chars   cap offsets 0..59 (60)   kill offsets 0..59 (60)
+password=        multibyte     comma-word stream  68 chars   cap offsets 0..68 (69)   kill offsets 0..68 (69)
+password=        stream-start  lines      stream  56 chars   cap offsets 0..56 (57)   kill offsets 0..56 (57)
+password=        stream-start  none       stream  29 chars   cap offsets 0..29 (30)   kill offsets 0..29 (30)
+password=        stream-start  space      stream  30 chars   cap offsets 0..30 (31)   kill offsets 0..30 (31)
+password=        stream-start  comma-word stream  39 chars   cap offsets 0..39 (40)   kill offsets 0..39 (40)
+password=        after-newline lines      stream  63 chars   cap offsets 0..63 (64)   kill offsets 0..63 (64)
+password=        after-newline none       stream  36 chars   cap offsets 0..36 (37)   kill offsets 0..36 (37)
+password=        after-newline space      stream  37 chars   cap offsets 0..37 (38)   kill offsets 0..37 (38)
+password=        after-newline comma-word stream  46 chars   cap offsets 0..46 (47)   kill offsets 0..46 (47)
+api_key:         plain         lines      stream  86 chars   cap offsets 0..86 (87)   kill offsets 0..86 (87)
+api_key:         plain         none       stream  59 chars   cap offsets 0..59 (60)   kill offsets 0..59 (60)
+api_key:         plain         space      stream  60 chars   cap offsets 0..60 (61)   kill offsets 0..60 (61)
+api_key:         plain         comma-word stream  69 chars   cap offsets 0..69 (70)   kill offsets 0..69 (70)
+api_key:         multibyte     lines      stream  89 chars   cap offsets 0..89 (90)   kill offsets 0..89 (90)
+api_key:         multibyte     none       stream  62 chars   cap offsets 0..62 (63)   kill offsets 0..62 (63)
+api_key:         multibyte     space      stream  63 chars   cap offsets 0..63 (64)   kill offsets 0..63 (64)
+api_key:         multibyte     comma-word stream  72 chars   cap offsets 0..72 (73)   kill offsets 0..72 (73)
+api_key:         stream-start  lines      stream  60 chars   cap offsets 0..60 (61)   kill offsets 0..60 (61)
+api_key:         stream-start  none       stream  33 chars   cap offsets 0..33 (34)   kill offsets 0..33 (34)
+api_key:         stream-start  space      stream  34 chars   cap offsets 0..34 (35)   kill offsets 0..34 (35)
+api_key:         stream-start  comma-word stream  43 chars   cap offsets 0..43 (44)   kill offsets 0..43 (44)
+api_key:         after-newline lines      stream  67 chars   cap offsets 0..67 (68)   kill offsets 0..67 (68)
+api_key:         after-newline none       stream  40 chars   cap offsets 0..40 (41)   kill offsets 0..40 (41)
+api_key:         after-newline space      stream  41 chars   cap offsets 0..41 (42)   kill offsets 0..41 (42)
+api_key:         after-newline comma-word stream  50 chars   cap offsets 0..50 (51)   kill offsets 0..50 (51)
+secret =         plain         lines      stream  84 chars   cap offsets 0..84 (85)   kill offsets 0..84 (85)
+secret =         plain         none       stream  57 chars   cap offsets 0..57 (58)   kill offsets 0..57 (58)
+secret =         plain         space      stream  58 chars   cap offsets 0..58 (59)   kill offsets 0..58 (59)
+secret =         plain         comma-word stream  67 chars   cap offsets 0..67 (68)   kill offsets 0..67 (68)
+secret =         multibyte     lines      stream  87 chars   cap offsets 0..87 (88)   kill offsets 0..87 (88)
+secret =         multibyte     none       stream  60 chars   cap offsets 0..60 (61)   kill offsets 0..60 (61)
+secret =         multibyte     space      stream  61 chars   cap offsets 0..61 (62)   kill offsets 0..61 (62)
+secret =         multibyte     comma-word stream  70 chars   cap offsets 0..70 (71)   kill offsets 0..70 (71)
+secret =         stream-start  lines      stream  58 chars   cap offsets 0..58 (59)   kill offsets 0..58 (59)
+secret =         stream-start  none       stream  31 chars   cap offsets 0..31 (32)   kill offsets 0..31 (32)
+secret =         stream-start  space      stream  32 chars   cap offsets 0..32 (33)   kill offsets 0..32 (33)
+secret =         stream-start  comma-word stream  41 chars   cap offsets 0..41 (42)   kill offsets 0..41 (42)
+secret =         after-newline lines      stream  65 chars   cap offsets 0..65 (66)   kill offsets 0..65 (66)
+secret =         after-newline none       stream  38 chars   cap offsets 0..38 (39)   kill offsets 0..38 (39)
+secret =         after-newline space      stream  39 chars   cap offsets 0..39 (40)   kill offsets 0..39 (40)
+secret =         after-newline comma-word stream  48 chars   cap offsets 0..48 (49)   kill offsets 0..48 (49)
+TOKEN :          plain         lines      stream  87 chars   cap offsets 0..87 (88)   kill offsets 0..87 (88)
+TOKEN :          plain         none       stream  60 chars   cap offsets 0..60 (61)   kill offsets 0..60 (61)
+TOKEN :          plain         space      stream  61 chars   cap offsets 0..61 (62)   kill offsets 0..61 (62)
+TOKEN :          plain         comma-word stream  70 chars   cap offsets 0..70 (71)   kill offsets 0..70 (71)
+TOKEN :          multibyte     lines      stream  90 chars   cap offsets 0..90 (91)   kill offsets 0..90 (91)
+TOKEN :          multibyte     none       stream  63 chars   cap offsets 0..63 (64)   kill offsets 0..63 (64)
+TOKEN :          multibyte     space      stream  64 chars   cap offsets 0..64 (65)   kill offsets 0..64 (65)
+TOKEN :          multibyte     comma-word stream  73 chars   cap offsets 0..73 (74)   kill offsets 0..73 (74)
+TOKEN :          stream-start  lines      stream  61 chars   cap offsets 0..61 (62)   kill offsets 0..61 (62)
+TOKEN :          stream-start  none       stream  34 chars   cap offsets 0..34 (35)   kill offsets 0..34 (35)
+TOKEN :          stream-start  space      stream  35 chars   cap offsets 0..35 (36)   kill offsets 0..35 (36)
+TOKEN :          stream-start  comma-word stream  44 chars   cap offsets 0..44 (45)   kill offsets 0..44 (45)
+TOKEN :          after-newline lines      stream  68 chars   cap offsets 0..68 (69)   kill offsets 0..68 (69)
+TOKEN :          after-newline none       stream  41 chars   cap offsets 0..41 (42)   kill offsets 0..41 (42)
+TOKEN :          after-newline space      stream  42 chars   cap offsets 0..42 (43)   kill offsets 0..42 (43)
+TOKEN :          after-newline comma-word stream  51 chars   cap offsets 0..51 (52)   kill offsets 0..51 (52)
+api-key=         plain         lines      stream  79 chars   cap offsets 0..79 (80)   kill offsets 0..79 (80)
+api-key=         plain         none       stream  52 chars   cap offsets 0..52 (53)   kill offsets 0..52 (53)
+api-key=         plain         space      stream  53 chars   cap offsets 0..53 (54)   kill offsets 0..53 (54)
+api-key=         plain         comma-word stream  62 chars   cap offsets 0..62 (63)   kill offsets 0..62 (63)
+api-key=         multibyte     lines      stream  82 chars   cap offsets 0..82 (83)   kill offsets 0..82 (83)
+api-key=         multibyte     none       stream  55 chars   cap offsets 0..55 (56)   kill offsets 0..55 (56)
+api-key=         multibyte     space      stream  56 chars   cap offsets 0..56 (57)   kill offsets 0..56 (57)
+api-key=         multibyte     comma-word stream  65 chars   cap offsets 0..65 (66)   kill offsets 0..65 (66)
+api-key=         stream-start  lines      stream  53 chars   cap offsets 0..53 (54)   kill offsets 0..53 (54)
+api-key=         stream-start  none       stream  26 chars   cap offsets 0..26 (27)   kill offsets 0..26 (27)
+api-key=         stream-start  space      stream  27 chars   cap offsets 0..27 (28)   kill offsets 0..27 (28)
+api-key=         stream-start  comma-word stream  36 chars   cap offsets 0..36 (37)   kill offsets 0..36 (37)
+api-key=         after-newline lines      stream  60 chars   cap offsets 0..60 (61)   kill offsets 0..60 (61)
+api-key=         after-newline none       stream  33 chars   cap offsets 0..33 (34)   kill offsets 0..33 (34)
+api-key=         after-newline space      stream  34 chars   cap offsets 0..34 (35)   kill offsets 0..34 (35)
+api-key=         after-newline comma-word stream  43 chars   cap offsets 0..43 (44)   kill offsets 0..43 (44)
+sk-proj- key     plain         lines      stream 115 chars   cap offsets 0..115 (116)   kill offsets 0..115 (116)
+sk-proj- key     plain         none       stream  88 chars   cap offsets 0..88 (89)   kill offsets 0..88 (89)
+sk-proj- key     plain         space      stream  89 chars   cap offsets 0..89 (90)   kill offsets 0..89 (90)
+sk-proj- key     plain         comma-word stream  98 chars   cap offsets 0..98 (99)   kill offsets 0..98 (99)
+sk-proj- key     multibyte     lines      stream 118 chars   cap offsets 0..118 (119)   kill offsets 0..118 (119)
+sk-proj- key     multibyte     none       stream  91 chars   cap offsets 0..91 (92)   kill offsets 0..91 (92)
+sk-proj- key     multibyte     space      stream  92 chars   cap offsets 0..92 (93)   kill offsets 0..92 (93)
+sk-proj- key     multibyte     comma-word stream 101 chars   cap offsets 0..101 (102)   kill offsets 0..101 (102)
+sk-proj- key     stream-start  lines      stream  89 chars   cap offsets 0..89 (90)   kill offsets 0..89 (90)
+sk-proj- key     stream-start  none       stream  62 chars   cap offsets 0..62 (63)   kill offsets 0..62 (63)
+sk-proj- key     stream-start  space      stream  63 chars   cap offsets 0..63 (64)   kill offsets 0..63 (64)
+sk-proj- key     stream-start  comma-word stream  72 chars   cap offsets 0..72 (73)   kill offsets 0..72 (73)
+sk-proj- key     after-newline lines      stream  96 chars   cap offsets 0..96 (97)   kill offsets 0..96 (97)
+sk-proj- key     after-newline none       stream  69 chars   cap offsets 0..69 (70)   kill offsets 0..69 (70)
+sk-proj- key     after-newline space      stream  70 chars   cap offsets 0..70 (71)   kill offsets 0..70 (71)
+sk-proj- key     after-newline comma-word stream  79 chars   cap offsets 0..79 (80)   kill offsets 0..79 (80)
+sk-svcacct- key  plain         lines      stream 114 chars   cap offsets 0..114 (115)   kill offsets 0..114 (115)
+sk-svcacct- key  plain         none       stream  87 chars   cap offsets 0..87 (88)   kill offsets 0..87 (88)
+sk-svcacct- key  plain         space      stream  88 chars   cap offsets 0..88 (89)   kill offsets 0..88 (89)
+sk-svcacct- key  plain         comma-word stream  97 chars   cap offsets 0..97 (98)   kill offsets 0..97 (98)
+sk-svcacct- key  multibyte     lines      stream 117 chars   cap offsets 0..117 (118)   kill offsets 0..117 (118)
+sk-svcacct- key  multibyte     none       stream  90 chars   cap offsets 0..90 (91)   kill offsets 0..90 (91)
+sk-svcacct- key  multibyte     space      stream  91 chars   cap offsets 0..91 (92)   kill offsets 0..91 (92)
+sk-svcacct- key  multibyte     comma-word stream 100 chars   cap offsets 0..100 (101)   kill offsets 0..100 (101)
+sk-svcacct- key  stream-start  lines      stream  88 chars   cap offsets 0..88 (89)   kill offsets 0..88 (89)
+sk-svcacct- key  stream-start  none       stream  61 chars   cap offsets 0..61 (62)   kill offsets 0..61 (62)
+sk-svcacct- key  stream-start  space      stream  62 chars   cap offsets 0..62 (63)   kill offsets 0..62 (63)
+sk-svcacct- key  stream-start  comma-word stream  71 chars   cap offsets 0..71 (72)   kill offsets 0..71 (72)
+sk-svcacct- key  after-newline lines      stream  95 chars   cap offsets 0..95 (96)   kill offsets 0..95 (96)
+sk-svcacct- key  after-newline none       stream  68 chars   cap offsets 0..68 (69)   kill offsets 0..68 (69)
+sk-svcacct- key  after-newline space      stream  69 chars   cap offsets 0..69 (70)   kill offsets 0..69 (70)
+sk-svcacct- key  after-newline comma-word stream  78 chars   cap offsets 0..78 (79)   kill offsets 0..78 (79)
+sk-admin- key    plain         lines      stream 106 chars   cap offsets 0..106 (107)   kill offsets 0..106 (107)
+sk-admin- key    plain         none       stream  79 chars   cap offsets 0..79 (80)   kill offsets 0..79 (80)
+sk-admin- key    plain         space      stream  80 chars   cap offsets 0..80 (81)   kill offsets 0..80 (81)
+sk-admin- key    plain         comma-word stream  89 chars   cap offsets 0..89 (90)   kill offsets 0..89 (90)
+sk-admin- key    multibyte     lines      stream 109 chars   cap offsets 0..109 (110)   kill offsets 0..109 (110)
+sk-admin- key    multibyte     none       stream  82 chars   cap offsets 0..82 (83)   kill offsets 0..82 (83)
+sk-admin- key    multibyte     space      stream  83 chars   cap offsets 0..83 (84)   kill offsets 0..83 (84)
+sk-admin- key    multibyte     comma-word stream  92 chars   cap offsets 0..92 (93)   kill offsets 0..92 (93)
+sk-admin- key    stream-start  lines      stream  80 chars   cap offsets 0..80 (81)   kill offsets 0..80 (81)
+sk-admin- key    stream-start  none       stream  53 chars   cap offsets 0..53 (54)   kill offsets 0..53 (54)
+sk-admin- key    stream-start  space      stream  54 chars   cap offsets 0..54 (55)   kill offsets 0..54 (55)
+sk-admin- key    stream-start  comma-word stream  63 chars   cap offsets 0..63 (64)   kill offsets 0..63 (64)
+sk-admin- key    after-newline lines      stream  87 chars   cap offsets 0..87 (88)   kill offsets 0..87 (88)
+sk-admin- key    after-newline none       stream  60 chars   cap offsets 0..60 (61)   kill offsets 0..60 (61)
+sk-admin- key    after-newline space      stream  61 chars   cap offsets 0..61 (62)   kill offsets 0..61 (62)
+sk-admin- key    after-newline comma-word stream  70 chars   cap offsets 0..70 (71)   kill offsets 0..70 (71)
+sk-ant-api03- key plain         lines      stream 118 chars   cap offsets 0..118 (119)   kill offsets 0..118 (119)
+sk-ant-api03- key plain         none       stream  91 chars   cap offsets 0..91 (92)   kill offsets 0..91 (92)
+sk-ant-api03- key plain         space      stream  92 chars   cap offsets 0..92 (93)   kill offsets 0..92 (93)
+sk-ant-api03- key plain         comma-word stream 101 chars   cap offsets 0..101 (102)   kill offsets 0..101 (102)
+sk-ant-api03- key multibyte     lines      stream 121 chars   cap offsets 0..121 (122)   kill offsets 0..121 (122)
+sk-ant-api03- key multibyte     none       stream  94 chars   cap offsets 0..94 (95)   kill offsets 0..94 (95)
+sk-ant-api03- key multibyte     space      stream  95 chars   cap offsets 0..95 (96)   kill offsets 0..95 (96)
+sk-ant-api03- key multibyte     comma-word stream 104 chars   cap offsets 0..104 (105)   kill offsets 0..104 (105)
+sk-ant-api03- key stream-start  lines      stream  92 chars   cap offsets 0..92 (93)   kill offsets 0..92 (93)
+sk-ant-api03- key stream-start  none       stream  65 chars   cap offsets 0..65 (66)   kill offsets 0..65 (66)
+sk-ant-api03- key stream-start  space      stream  66 chars   cap offsets 0..66 (67)   kill offsets 0..66 (67)
+sk-ant-api03- key stream-start  comma-word stream  75 chars   cap offsets 0..75 (76)   kill offsets 0..75 (76)
+sk-ant-api03- key after-newline lines      stream  99 chars   cap offsets 0..99 (100)   kill offsets 0..99 (100)
+sk-ant-api03- key after-newline none       stream  72 chars   cap offsets 0..72 (73)   kill offsets 0..72 (73)
+sk-ant-api03- key after-newline space      stream  73 chars   cap offsets 0..73 (74)   kill offsets 0..73 (74)
+sk-ant-api03- key after-newline comma-word stream  82 chars   cap offsets 0..82 (83)   kill offsets 0..82 (83)
+
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > PEM SWEEP: several key blocks in one stream, every structure x kind rotation x line end, every cut incl. the uncut stream, cap and kill > the PEM sweep can fail: against a runner that withholds only from the LAST header, it finds the multi-header leak (self-test of the control) 3ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > SWEEP: every secret shape, cut at every byte offset, by the byte cap and by a kill > no 6-character window of any secret body is stored, for any shape, any cut kind, any offset 127ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > SWEEP: every secret shape, cut at every byte offset, by the byte cap and by a kill > the sweep can fail: against a runner that stores the stream with no withholding at all, it finds leaks (self-test of the control) 1ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that stopped early never stores the head of a secret it was cut inside > P1: a vendor-prefixed key cut one character below the shape minimum is not stored 22ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that stopped early never stores the head of a secret it was cut inside > P2: a source-host token cut at 19 of its 20-character minimum is not stored 22ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that stopped early never stores the head of a secret it was cut inside > P3: a private key whose END marker is in a DROPPED chunk (past the capture limit) has no body line stored 172ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that stopped early never stores the head of a secret it was cut inside > P4: a private key whose END marker is beyond the byte cap has no body line stored (stdout and stderr) 46ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that stopped early never stores the head of a secret it was cut inside > P7: a BARE end phrase (no dashes) after a private key header does not close the block: no body line is stored when the stream is cut by the byte cap 20ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that stopped early never stores the head of a secret it was cut inside > P8: a dashed footer CUT inside its closing dashes does not close the block either (cap) 22ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > does not store any part of a secret that straddles the byte limit 22ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > keeps stored text within the bound plus the truncation mark when redaction lengthens it 21ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > counts every captured secret once and stores the redaction mark 24ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > chunk boundaries > redacts a token split at every byte offset, on both streams 3618ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that stopped early never stores the head of a secret it was cut inside > P9: a process killed by its timeout after a bare end phrase has the key body withheld too 1505ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that stopped early never stores the head of a secret it was cut inside > S6: a COMPLETE dashed footer still closes the block: a stream that stopped early after a whole key block keeps its redaction and nothing more is withheld than before 1504ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > chunk boundaries > reassembles multibyte characters split at every byte offset, on both streams 2749ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that stopped early never stores the head of a secret it was cut inside > P5: a three-segment bearer token cut before its third segment is not stored 22ms
+stdout | src/relay/workspace/command-runner-capture-redaction.test.ts > bounds and cost of a large captured stream > redacts before bounding a multi-megabyte capture, and stays well under a second and a half
+large-stream secureCapturedStream 2008193 chars in 7 ms
+
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > bounds and cost of a large captured stream > stores at most the bound plus the truncation mark when the process emits far more 21ms
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > bounds and cost of a large captured stream > redacts before bounding a multi-megabyte capture, and stays well under a second and a half 8ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that stopped early never stores the head of a secret it was cut inside > P6: a process killed by its timeout in the middle of a token has that token withheld 607ms
+ ✓ src/relay/workspace/julius-tools/executor-boundary.test.ts > executor trust boundary > constructs the Docker adapter only in the executor control plane entry point 63ms
+ ✓ src/relay/workspace/julius-tools/executor-boundary.test.ts > executor trust boundary > keeps the executor signing key, receipt store and ledger out of every non-executor module 190ms
+ ✓ src/relay/workspace/julius-tools/executor-boundary.test.ts > executor trust boundary > never lets the Julius transport hold a private signing key 0ms
+ ✓ src/relay/workspace/julius-tools/executor-boundary.test.ts > executor trust boundary > exposes exactly one route and refuses an operation it does not know 1ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that ended by itself is stored exactly as before > S1: no cap, no kill: output without a trailing newline is stored verbatim, nothing withheld 24ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that ended by itself is stored exactly as before > S2: a secret wholly inside the cap is redacted as before 21ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that ended by itself is stored exactly as before > S3: the result does not depend on how the bytes are chunked: a secret split across three writes is redacted 223ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that ended by itself is stored exactly as before > S4: multi-byte text around a secret does not stop it being redacted 24ms
+ ✓ src/relay/workspace/command-runner-partial-secret.test.ts > a stream that ended by itself is stored exactly as before > S5: ordinary output cut by the cap keeps its text up to the last whole token, then the standard truncation line 21ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > repairs that previous rounds left untested > refuses a workspace reached through a symlink the tenant planted in its own 3ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > repairs that previous rounds left untested > refuses an empty root outright rather than resolving it to the working directory 0ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > repairs that previous rounds left untested > accepts a child whose name merely begins with two dots 0ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > repairs that previous rounds left untested > digests an envelope that omits every optional field 2ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > repairs that previous rounds left untested > reads a ledger entry written before terminalStatus existed 3ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > repairs that previous rounds left untested > seals a terminal answer twice over without colliding on its own temporary file 8ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > repairs that previous rounds left untested > grants fleet authority only where the caller table says so 1ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > the gates themselves, not the helpers behind them > refuses a workspace outside the tenant root, and one reached by a symlink planted inside it 29ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > repairs a mutation battery showed were undefended > releases only when the gate provably never opened for this execution 7ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > repairs a mutation battery showed were undefended > reads a terminal payload whose encoding predates the stamp, and refuses one it does not know 1ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > the adapter gate that actually produces the mount > refuses a workspace outside its own allowed root, and admits one inside it 23ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > the adapter gate that actually produces the mount > refuses a path the declared roots resolve differently 0ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > the adapter gate that actually produces the mount > refuses to carry a caller-supplied containment root over the wire 9ms
+ ✓ src/relay/workspace/julius-tools/executor-repair-regression.test.ts > the adapter gate that actually produces the mount > refuses a terminal payload encoding it does not implement 1ms
+ ✓ src/relay/workspace/julius-tools/executor-control-plane-service.test.ts > executor control-plane service > keeps the private key server-side and returns verified BEFORE and AFTER attestations 71ms
+ ✓ src/relay/workspace/julius-tools/executor-control-plane-service.test.ts > executor control-plane service > refuses every bypass of the one production execution path 106ms
+ ✓ src/relay/workspace/julius-tools/durable-execution-ledger.test.ts > filesystem execution anti-replay ledger > survives service reconstruction and returns the terminal fact without a new reservation 18ms
+ ✓ src/relay/workspace/julius-tools/durable-execution-ledger.test.ts > filesystem execution anti-replay ledger > hard-fails same identity with a different request digest or a materially different envelope 12ms
+ ✓ src/relay/workspace/julius-tools/durable-execution-ledger.test.ts > filesystem execution anti-replay ledger > enforces monotonic transitions and immutable terminal result 2ms
+ ✓ src/relay/workspace/julius-tools/executor-receipt-store.test.ts > executor-owned durable receipts > survives a new store instance and reports unknown effects fail closed 6ms
+ ✓ src/relay/workspace/julius-tools/executor-receipt-store.test.ts > executor-owned durable receipts > validates complete identity, payloads and terminal normalized result 5ms
+ ✓ src/relay/workspace/julius-tools/executor-receipt-store.test.ts > executor-owned durable receipts > rejects conflicting execution identity and payload tampering 6ms
+stderr | src/relay/workspace/julius-tools/docker-sandbox-adapter.test.ts > Docker Julius sandbox adapter > is fail-closed and requires a content-addressed image
+Promise returned by `expect(actual).rejects.toThrow(expected)` was not awaited. Vitest currently auto-awaits hanging assertions at the end of the test, but this will cause the test to fail in the next Vitest major. Please remember to await the assertion.
+    at /tmp/capture-redaction/src/relay/workspace/julius-tools/docker-sandbox-adapter.test.ts:3:480
+
+ ✓ src/relay/workspace/julius-tools/docker-sandbox-adapter.test.ts > Docker Julius sandbox adapter > is fail-closed and requires a content-addressed image 6ms
+ ✓ src/relay/workspace/julius-tools/docker-sandbox-adapter.test.ts > Docker Julius sandbox adapter > compiles policy and resources into fixed Docker arguments without a host shell 11ms
+ ✓ src/relay/workspace/julius-tools/docker-sandbox-adapter.test.ts > docker failure classes > names the class of a refused docker command as a short code, never the daemon prose 1ms
+ ✓ src/relay/workspace/julius-tools/docker-sandbox-adapter.test.ts > scoped receipt mounts > hands a sandbox only its own sha256-scoped receipt subtree, never the root, the key or the ledger 7ms
+ ✓ src/relay/workspace/output-sanitizer.test.ts > vendor keys with hyphens and underscores in the body are redacted whole > project: sk-proj-<body with - and _> is redacted from its first character to its last, in a sentence, in quotes and after an equals sign 3ms
+ ✓ src/relay/workspace/output-sanitizer.test.ts > vendor keys with hyphens and underscores in the body are redacted whole > service account: sk-svcacct-<body with - and _> is redacted from its first character to its last, in a sentence, in quotes and after an equals sign 2ms
+ ✓ src/relay/workspace/output-sanitizer.test.ts > vendor keys with hyphens and underscores in the body are redacted whole > admin: sk-admin-<body with - and _> is redacted from its first character to its last, in a sentence, in quotes and after an equals sign 2ms
+ ✓ src/relay/workspace/output-sanitizer.test.ts > vendor keys with hyphens and underscores in the body are redacted whole > anthropic: sk-ant-api03-<body with - and _> is redacted from its first character to its last, in a sentence, in quotes and after an equals sign 1ms
+ ✓ src/relay/workspace/output-sanitizer.test.ts > vendor keys with hyphens and underscores in the body are redacted whole > the legacy alphanumeric key is still redacted, and ordinary text is untouched 0ms
+ ✓ src/relay/workspace/julius-tools/workspace-invariants.test.ts > workspace storage ceiling > refuses a ceiling the backing filesystem cannot hold 2ms
+ ✓ src/relay/workspace/julius-tools/workspace-invariants.test.ts > workspace storage ceiling > accepts a ceiling at least as large as the store that enforces it 1ms
+ ✓ src/relay/workspace/julius-tools/workspace-invariants.test.ts > workspace storage ceiling > refuses a store whose inode count is not bounded by the same ceiling 0ms
+ ✓ src/relay/workspace/julius-tools/workspace-invariants.test.ts > workspace storage ceiling > accepts a store whose inodes are bounded alongside its bytes 0ms
+ ✓ src/relay/workspace/julius-tools/workspace-invariants.test.ts > workspace storage ceiling > refuses a store that reports no size at all, rather than reading zero as within the ceiling 0ms
+ ✓ src/relay/workspace/julius-tools/workspace-invariants.test.ts > workspace storage ceiling > leaves a store that reports no inode count to its block ceiling alone 0ms
+ ✓ src/relay/workspace/julius-tools/workspace-invariants.test.ts > workspace storage ceiling > refuses a workspace that does not exist 0ms
+ ✓ src/relay/workspace/julius-tools/workspace-invariants.test.ts > workspace ancestry > accepts a writable workspace whose ancestors are not writable by the sandbox user 2ms
+ ✓ src/relay/workspace/julius-tools/workspace-invariants.test.ts > workspace ancestry > refuses when the parent can be written, because the workspace can then be renamed away 1ms
+ ✓ src/relay/workspace/julius-tools/workspace-invariants.test.ts > workspace ancestry > refuses when a grandparent can be written, since renaming it moves the whole path 1ms
+ ✓ src/relay/workspace/julius-tools/workspace-invariants.test.ts > workspace ancestry > stops climbing at the governing root 1ms
+ ✓ src/relay/workspace/julius-tools/workspace-invariants.test.ts > output block ceiling > grants no more output than the declared ceiling 0ms
+ ✓ src/relay/workspace/julius-tools/local-artifact-store.test.ts > local Julius artifact store > persists content-addressed tenant-scoped artifacts and verifies integrity 7ms
+ ✓ src/relay/workspace/julius-tools/local-artifact-store.test.ts > local Julius artifact store > rejects unsafe scope and oversized blobs 2ms
+ ✓ src/relay/workspace/policy.test.ts > protected paths and file claims > classifies exact, directory, and segment-safe matches 2ms
+ ✓ src/relay/workspace/policy.test.ts > protected paths and file claims > always protects .git via the baseline and never expands claims 0ms
+ ✓ src/relay/workspace/policy.test.ts > protected paths and file claims > rejects hostile path shapes: traversal, absolute, null bytes 0ms
+ ✓ src/relay/workspace/policy.test.ts > protected paths and file claims > rejects invalid policy input instead of silently dropping rules 0ms
+ ✓ src/relay/workspace/policy.test.ts > command policy > approves the minimal verification surface 1ms
+ ✓ src/relay/workspace/policy.test.ts > command policy > rejects shells, destructive tools, and unapproved executables 0ms
+ ✓ src/relay/workspace/policy.test.ts > command policy > rejects destructive and network git despite git being approved 0ms
+ ✓ src/relay/workspace/policy.test.ts > command policy > rejects paths as executables, metacharacters, null bytes, oversized args 0ms
+ ✓ src/relay/workspace/policy.test.ts > command policy > bounds timeouts and output limits to policy maxima 0ms
+ ✓ src/relay/workspace/policy.test.ts > command policy > environment allowlist blocks provider secrets even when requested 1ms
+ ✓ src/relay/workspace/policy.test.ts > output bounding and sanitization > truncates at the byte budget with an explicit mark 2ms
+ ✓ src/relay/workspace/policy.test.ts > output bounding and sanitization > redacts secret-shaped output 0ms
+ ✓ src/relay/workspace/policy.test.ts > branch validation > derives a safe deterministic run branch 0ms
+ ✓ src/relay/workspace/policy.test.ts > branch validation > rejects branch-name injection shapes 0ms
+ ✓ src/relay/workspace/policy.test.ts > cleanup decisions > never removes without explicit authorization 0ms
+ ✓ src/relay/workspace/policy.test.ts > cleanup decisions > preserves failure/checkpoint/dirty states under preserve_on_failure even when authorized 0ms
+ ✓ src/relay/workspace/policy.test.ts > cleanup decisions > preserve_always always preserves; removed refuses 0ms
+ ✓ src/relay/workspace/julius-tools/docker-executor-script.test.ts > the in-sandbox executor script > refuses to start the command until the control plane has signed the BEFORE fact 10218ms
+ ✓ src/relay/workspace/julius-tools/executor-attestation.test.ts > independent executor attestation > accepts an executor signature with a rotated trusted key ring 3ms
+ ✓ src/relay/workspace/julius-tools/executor-attestation.test.ts > independent executor attestation > rejects hostile orchestrator substitution of receiptDigest 1ms
+ ✓ src/relay/workspace/julius-tools/executor-attestation.test.ts > independent executor attestation > rejects hostile orchestrator substitution of invocationId 0ms
+ ✓ src/relay/workspace/julius-tools/executor-attestation.test.ts > independent executor attestation > rejects hostile orchestrator substitution of sandboxId 0ms
+ ✓ src/relay/workspace/julius-tools/executor-attestation.test.ts > independent executor attestation > rejects hostile orchestrator substitution of requestDigest 0ms
+ ✓ src/relay/workspace/julius-tools/executor-attestation.test.ts > independent executor attestation > rejects hostile orchestrator substitution of dispatchGeneration 0ms
+ ✓ src/relay/workspace/julius-tools/executor-attestation.test.ts > independent executor attestation > rejects forged, unknown-key, and extra-field receipts 1ms
+ ✓ src/relay/workspace/julius-tools/execution-envelope.test.ts > executor execution envelope > validates an exact scoped expiring execution request 2ms
+ ✓ src/relay/workspace/julius-tools/execution-envelope.test.ts > executor execution envelope > canonicalizes tool argument field order for replay identity 1ms
+ ✓ src/relay/workspace/julius-tools/execution-envelope.test.ts > executor execution envelope > rejects unknown field 1ms
+ ✓ src/relay/workspace/julius-tools/execution-envelope.test.ts > executor execution envelope > rejects expired 0ms
+ ✓ src/relay/workspace/julius-tools/execution-envelope.test.ts > executor execution envelope > rejects future issued 0ms
+ ✓ src/relay/workspace/julius-tools/execution-envelope.test.ts > executor execution envelope > rejects scope escalation 0ms
+ ✓ src/relay/workspace/julius-tools/execution-envelope.test.ts > executor execution envelope > rejects scope mismatch 0ms
+ ✓ src/relay/workspace/julius-tools/execution-envelope.test.ts > executor execution envelope > rejects path traversal 0ms
+ ✓ src/relay/workspace/julius-tools/execution-envelope.test.ts > executor execution envelope > rejects oversized arguments 0ms
+ ✓ src/relay/workspace/julius-tools/execution-envelope.test.ts > executor execution envelope > rejects a request digest the caller merely asserts 0ms
+ ✓ src/relay/workspace/julius-tools/execution-envelope.test.ts > executor execution envelope > rejects null arguments 0ms
+ ✓ src/relay/workspace/julius-tools/execution-envelope.test.ts > executor execution envelope > refuses an otherwise valid caller outside the operation allowlist 0ms
+ ✓ src/relay/workspace/julius-tools/docker-executor-script.test.ts > the in-sandbox executor script > runs once the gate is published, and seals the AFTER fact 201ms
+ ✓ src/relay/workspace/julius-tools/executor-terminal-receipt.test.ts > executor terminal receipts > strictly parses exact bounded receipt schemas 2ms
+ ✓ src/relay/workspace/julius-tools/executor-terminal-receipt.test.ts > executor terminal receipts > derives normalized terminal truth from the AFTER receipt 1ms
+ ✓ src/relay/workspace/julius-tools/executor-terminal-receipt.test.ts > executor terminal receipts > rejects payload, terminal-state, and result-digest disagreement 1ms
+ ✓ src/relay/workspace/julius-tools/executor-terminal-receipt.test.ts > executor terminal receipts > accepts output that is not valid UTF-8 0ms
+ ✓ src/relay/workspace/julius-tools/executor-terminal-receipt.test.ts > executor terminal receipts > refuses a payload that is not base64 0ms
+ ✓ src/relay/workspace/julius-tools/workspace-provisioning.test.ts > the workspace provisioning contract > derives a mount the gate accepts, at the tightest legal size 2ms
+ ✓ src/relay/workspace/julius-tools/workspace-provisioning.test.ts > the workspace provisioning contract > is the mount the real-infrastructure workflow actually performs 1ms
+ ✓ src/relay/workspace/julius-tools/workspace-provisioning.test.ts > the workspace provisioning contract > reports a ceiling that is true of the store it measures 0ms
+ ✓ src/relay/workspace/julius-tools/workspace-provisioning.test.ts > the workspace provisioning contract > refuses to derive a ceiling from a store that reports no size 0ms
+ ✓ src/relay/workspace/julius-tools/remote-executor-control-plane.test.ts > remote executor production boundary > fails closed when the independent control plane is unavailable 2ms
+ ✓ src/relay/workspace/julius-tools/remote-executor-control-plane.test.ts > remote executor production boundary > refuses the direct Docker adapter in production 0ms
+ ✓ src/relay/workspace/julius-tools/remote-executor-control-plane.test.ts > remote executor production boundary > refuses plaintext credentials outside an explicit loopback test boundary 0ms
+ ✓ src/relay/workspace/julius-tools/docker-workspace-containment.test.ts > workspace containment > the root itself 1ms
+ ✓ src/relay/workspace/julius-tools/docker-workspace-containment.test.ts > workspace containment > a child 0ms
+ ✓ src/relay/workspace/julius-tools/docker-workspace-containment.test.ts > workspace containment > a deep child 0ms
+ ✓ src/relay/workspace/julius-tools/docker-workspace-containment.test.ts > workspace containment > a climb out 0ms
+ ✓ src/relay/workspace/julius-tools/docker-workspace-containment.test.ts > workspace containment > a sibling 0ms
+ ✓ src/relay/workspace/julius-tools/docker-workspace-containment.test.ts > workspace containment > an unrelated absolute path 0ms
+ ✓ src/relay/workspace/julius-tools/docker-workspace-containment.test.ts > workspace containment > a prefix collision 0ms
+ ✓ src/relay/workspace/julius-tools/docker-workspace-containment.test.ts > workspace containment > another drive 0ms
+ ✓ src/relay/workspace/julius-tools/docker-workspace-containment.test.ts > workspace containment > a UNC share 0ms
+ ✓ src/relay/workspace/julius-tools/docker-workspace-containment.test.ts > workspace containment > the same drive, outside 0ms
+ ✓ src/relay/workspace/julius-tools/docker-workspace-containment.test.ts > workspace containment > the same drive, inside 0ms
+ ✓ src/relay/workspace/julius-tools/docker-executor-script.test.ts > the in-sandbox executor script > refuses to report a terminal outcome the control plane has not signed 10316ms
+ ✓ src/relay/workspace/julius-tools/docker-executor-script.test.ts > the in-sandbox executor script > propagates a failing exit code and records it as a failed terminal state 80ms
+ ✓ src/relay/workspace/julius-tools/docker-executor-script.test.ts > the in-sandbox executor script > bounds output at the block ceiling it was given 85ms
+ ✓ src/relay/workspace/julius-tools/docker-executor-script.test.ts > the in-sandbox executor script > refuses to seal over a receipt that already exists 82ms
+ ✓ src/relay/workspace/julius-tools/docker-executor-script.test.ts > the in-sandbox executor script > refuses to seal while a process is still running under the invocation user 282ms
+ ✓ src/relay/workspace/julius-tools/docker-executor-script.test.ts > the in-sandbox executor script > fails closed when a required environment fact is missing 6ms
+ ✓ src/relay/workspace/julius-tools/docker-executor-script.test.ts > the in-sandbox executor script > refuses to run with no command at all 3ms
+ ✓ src/relay/workspace/julius-tools/docker-executor-script.test.ts > the in-sandbox executor script > attests a complete changed-path list as available and a truncated one as not 814ms
+ ✓ src/relay/workspace/julius-tools/docker-executor-script.test.ts > the in-sandbox executor script > attests a post-state digest that differs when the command changed the tree 75ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 63 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > path containment > refuses the primary checkout in every direction
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:147:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68923, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > worktree creation > creates an isolated worktree at the exact base commit on a mission branch
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:157:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68927, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > worktree creation > never places the worktree inside the repository
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:181:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68932, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > worktree creation > gives two missions separate branches and separate paths
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:189:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68936, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > worktree creation > a repeated open for the same mission REOPENS rather than duplicating
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:201:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68941, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > worktree creation > refuses when another live session owns the mission worktree
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:218:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68950, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > worktree creation > a failed creation is never reported ready
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:230:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68955, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > worktree creation > rejects a path that is not a repository root
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:238:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68960, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > restart validation > finds the same worktree after a restart
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:255:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68964, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > restart validation > reports a MISSING worktree and never recreates it
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:271:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68968, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > restart validation > dirty state survives a restart and is reported truthfully
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:285:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68972, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > restart validation > detects a branch that changed while Relay was away
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:297:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68976, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > restart validation > reports an advanced HEAD as progress, not corruption
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:306:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68981, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > restart validation > a stale directory that git does not know requires inspection
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:321:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68985, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > restart validation > refuses a worktree path that became a symlink
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:333:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68989, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > cleanup safety > removes a clean terminal worktree and leaves the repository intact
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:382:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68993, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > cleanup safety > refuses removal when cleanup is blocked
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:400:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68997, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > cleanup safety > refuses to remove another mission’s worktree path
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:413:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 69002, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > cleanup safety > never removes the primary checkout
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:430:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 69006, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > durable worktree records > survives a restart through the Node store
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:445:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 69010, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > durable worktree records > writes the durable record only after git validation passed
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:464:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 69014, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/63]⎯
+
+ FAIL  src/relay/workspace/mission-worktree.test.ts > durable worktree records > stores no home directory in the displayed repository name
+Error: Command failed: git commit -m initial
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@example.com>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/mission-worktree.test.ts:46:3
+     44|
+     45| const git = (args: string[], cwd: string): string =>
+     46|   execFileSync('git', args, {
+       |   ^
+     47|     cwd,
+     48|     encoding: 'utf8',
+ ❯ syntheticRepository src/relay/workspace/mission-worktree.test.ts:69:3
+ ❯ src/relay/workspace/mission-worktree.test.ts:475:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 69019, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@example.com>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@example.com>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > the repository git surface is an allow-list > refuses every subcommand that could reach a remote or rewrite history
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:170:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > the repository git surface is an allow-list > refuses a history-rewriting flag on a subcommand that IS allowed
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:180:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > the repository git surface is an allow-list > permits the reads and the one write it exists for
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:190:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > a rename cannot hide the deletion of a protected path > reports a git mv of a protected file as a DELETION and refuses it
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:254:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > a rename cannot hide the deletion of a protected path > counts a `renamed` entry as a deletion even from a fixture observation
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:296:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > a symlink cannot make a write invisible > refuses a symlink inside the write scope, and never commits it
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:323:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > a symlink cannot make a write invisible > refuses a path whose ANCESTOR is a symlink, not just the leaf
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:351:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > the git option allow-list is per subcommand, not a list of strings > refuses every bypass an independent review executed
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:371:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > the git option allow-list is per subcommand, not a list of strings > still permits exactly what the observer and the commit need
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:401:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > the git option allow-list is per subcommand, not a list of strings > does not read a commit message that begins with a dash as an option
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:415:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > Relay observes real git changes, not an agent's account of them > observes a modified file, a new file, and their real line counts
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:430:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > Relay observes real git changes, not an agent's account of them > reports an untracked binary file as unknown ADDED and a real zero removed
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:462:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > Relay observes real git changes, not an agent's account of them > refuses a MODIFIED tracked binary file, whose removed count git cannot report
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:488:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > Relay observes real git changes, not an agent's account of them > refuses a real change to a protected path, from real git output
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:520:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > Relay observes real git changes, not an agent's account of them > refuses a real out-of-scope change
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:542:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > Relay observes real git changes, not an agent's account of them > leaves the SOURCE repository untouched while the worktree changes
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:558:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > committing what was accepted, and nothing else > commits the accepted paths and reads the real commit SHA back
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ prepared src/relay/workspace/repository-target-observer.test.ts:587:22
+ ❯ src/relay/workspace/repository-target-observer.test.ts:596:44
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > committing what was accepted, and nothing else > refuses to commit a diff it did not accept
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ prepared src/relay/workspace/repository-target-observer.test.ts:587:22
+ ❯ src/relay/workspace/repository-target-observer.test.ts:650:44
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[40/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > committing what was accepted, and nothing else > commits ONLY the approved paths, leaving an unapproved file visible
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ prepared src/relay/workspace/repository-target-observer.test.ts:587:22
+ ❯ src/relay/workspace/repository-target-observer.test.ts:684:44
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[41/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > committing what was accepted, and nothing else > refuses to commit without the commit permission
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ src/relay/workspace/repository-target-observer.test.ts:706:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[42/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > committing what was accepted, and nothing else > detects a base that moved under the Mission, from real git
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ prepared src/relay/workspace/repository-target-observer.test.ts:587:22
+ ❯ src/relay/workspace/repository-target-observer.test.ts:731:50
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[43/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > BUILD → VERIFY → COMMIT → DEPLOY → LIVE VERIFY → SHIPPED, for real > ships when the running system serves the committed revision
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ runToCommit src/relay/workspace/repository-target-observer.test.ts:845:22
+ ❯ src/relay/workspace/repository-target-observer.test.ts:877:45
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[44/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > BUILD → VERIFY → COMMIT → DEPLOY → LIVE VERIFY → SHIPPED, for real > refuses to ship when the running system serves a STALE revision
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ runToCommit src/relay/workspace/repository-target-observer.test.ts:845:22
+ ❯ src/relay/workspace/repository-target-observer.test.ts:916:45
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[45/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > BUILD → VERIFY → COMMIT → DEPLOY → LIVE VERIFY → SHIPPED, for real > refuses to ship when the deployed system is not reachable at all
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ runToCommit src/relay/workspace/repository-target-observer.test.ts:845:22
+ ❯ src/relay/workspace/repository-target-observer.test.ts:947:45
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[46/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > BUILD → VERIFY → COMMIT → DEPLOY → LIVE VERIFY → SHIPPED, for real > refuses a production deploy on a staging-only provider and a staging-only grant
+Error: git commit -m initial failed: git commit failed.
+ ❯ must src/relay/workspace/repository-target-observer.test.ts:84:27
+     82|   const must = (args: string[], extra: Record<string, string> = {}) =>…
+     83|     const result = runGit(args, root, { ...env, ...extra });
+     84|     if (!result.ok) throw new Error(`git ${args.join(' ')} failed: ${r…
+       |                           ^
+     85|     return result.value;
+     86|   };
+ ❯ realRepository src/relay/workspace/repository-target-observer.test.ts:94:3
+ ❯ runToCommit src/relay/workspace/repository-target-observer.test.ts:845:22
+ ❯ src/relay/workspace/repository-target-observer.test.ts:971:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[47/63]⎯
+
+ FAIL  src/relay/workspace/repository-target-observer.test.ts > the remote subcommand cannot mutate where the repository points > permits only get-url
+AssertionError: expected 'https://example.invalid/instead/o/r.g…' to be 'https://github.com/o/r.git' // Object.is equality
+
+Expected: "https://github.com/o/r.git"
+Received: "https://example.invalid/instead/o/r.git"
+
+ ❯ src/relay/workspace/repository-target-observer.test.ts:1151:48
+    1149|     const result = runRepositoryGit(['remote', 'get-url', 'origin'], r…
+    1150|     expect(result.ok).toBe(true);
+    1151|     if (result.ok) expect(result.value.trim()).toBe('https://github.co…
+       |                                                ^
+    1152|   });
+    1153| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[48/63]⎯
+
+ FAIL  src/relay/workspace/workspace.test.ts > repository validation > accepts a repository root and rejects non-repos, subdirectories, and hostile paths
+Error: Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: directory '/tmp/capture-fake-home/.gnupg' created
+gpg: keybox '/tmp/capture-fake-home/.gnupg/pubring.kbx' created
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/workspace.test.ts:25:3
+     23| };
+     24| const git = (args: string[], cwd: string): string =>
+     25|   execFileSync('git', args, {
+       |   ^
+     26|     cwd, encoding: 'utf8', timeout: 15_000,
+     27|     env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '',…
+ ❯ src/relay/workspace/workspace.test.ts:61:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: directory \'/tmp/capture-fake-home/.gnupg\' created\ngpg: keybox \'/tmp/capture-fake-home/.gnupg/pubring.kbx\' created\ngpg: skipped "Relay Test <test@relay.local>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68528, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: directory \'/tmp/capture-fake-home/.gnupg\' created\ngpg: keybox \'/tmp/capture-fake-home/.gnupg/pubring.kbx\' created\ngpg: skipped "Relay Test <test@relay.local>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[49/63]⎯
+
+ FAIL  src/relay/workspace/workspace.test.ts > worktree lifecycle > creates an isolated worktree pinned to the source revision on a run branch
+ FAIL  src/relay/workspace/workspace.test.ts > worktree lifecycle > is idempotent for the same request and refuses conflicting branch reuse
+ FAIL  src/relay/workspace/workspace.test.ts > worktree lifecycle > rejects branch injection and dirty-source pinning stays commit-based
+ FAIL  src/relay/workspace/workspace.test.ts > worktree lifecycle > detects an unexpected source change and requires revalidation
+ FAIL  src/relay/workspace/workspace.test.ts > inspection and file-claim enforcement > classifies claimed, unclaimed, and protected changes; claims never expand
+ FAIL  src/relay/workspace/workspace.test.ts > inspection and file-claim enforcement > detects a symlink escaping the workspace
+ FAIL  src/relay/workspace/workspace.test.ts > command execution > runs an approved command with live provenance and bounded evidence
+ FAIL  src/relay/workspace/workspace.test.ts > command execution > rejects unapproved commands with recorded evidence and no execution
+ FAIL  src/relay/workspace/workspace.test.ts > command execution > validates the working directory and refuses escapes
+ FAIL  src/relay/workspace/workspace.test.ts > command execution > never inherits provider secrets into child processes
+ FAIL  src/relay/workspace/workspace.test.ts > command execution > unknown workspace and unregistered ids fail safely
+ FAIL  src/relay/workspace/workspace.test.ts > cleanup safety > preserves without authorization; removes a clean workspace only when authorized
+ FAIL  src/relay/workspace/workspace.test.ts > cleanup safety > refuses unknown workspaces and preserves flagged ones
+ FAIL  src/relay/workspace/workspace.test.ts > evidence integrity > associates live evidence with run/task/revisions and stays secret-free
+Error: Command failed: git commit -q -m baseline
+error: gpg failed to sign the data:
+gpg: skipped "Relay Test <test@relay.local>": No secret key
+[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>
+[GNUPG:] FAILURE sign 17
+gpg: signing failed: No secret key
+
+fatal: failed to write commit object
+
+ ❯ git src/relay/workspace/workspace.test.ts:25:3
+     23| };
+     24| const git = (args: string[], cwd: string): string =>
+     25|   execFileSync('git', args, {
+       |   ^
+     26|     cwd, encoding: 'utf8', timeout: 15_000,
+     27|     env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '',…
+ ❯ src/relay/workspace/workspace.test.ts:61:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 128, signal: null, output: [ null, '', 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@relay.local>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' ], pid: 68535, stdout: '', stderr: 'error: gpg failed to sign the data:\ngpg: skipped "Relay Test <test@relay.local>": No secret key\n[GNUPG:] INV_SGNR 9 Relay Test <test@relay.local>\n[GNUPG:] FAILURE sign 17\ngpg: signing failed: No secret key\n\nfatal: failed to write commit object\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[50/63]⎯
+
+
+ Test Files  3 failed | 19 passed (22)
+      Tests  63 failed | 184 passed (247)
+   Start at  08:21:57
+   Duration  23.44s (transform 2.09s, setup 0ms, import 3.91s, tests 36.72s, environment 1ms)
+

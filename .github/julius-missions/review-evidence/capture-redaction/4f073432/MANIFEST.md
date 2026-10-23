@@ -23,6 +23,8 @@ Commits on top of `8bdd3eb4`, each authored `Cursor Agent <cursoragent@cursor.co
 
 `src/relay/workspace/output-sanitizer.ts` is unchanged from `8bdd3eb4` (diff empty). `SECRET_OUTPUT_PATTERNS` was not edited.
 
+Transcripts are `.txt` because the repository ignores `*.log`. The bytes match the runs.
+
 ## SHA-256
 
 ```
@@ -30,19 +32,19 @@ Commits on top of `8bdd3eb4`, each authored `Cursor Agent <cursoragent@cursor.co
 07a2b71fe66ef746158154a00372b173d4acb3217bce9da5e14345eb462d87ff  src/relay/workspace/command-runner-capture-redaction.test.ts
 3b01f04f8af345c3b9773148a719ce81d664ee96a0b90505e38ebfac379ab114  src/relay/workspace/git-fixture-env.ts
 c2f8a53a08d13f4cecad9e283fe99c28709cb715f51933d5f18e13c0644f1809  src/relay/workspace/output-sanitizer.ts
-03c56a42780e84fb9871477351009ff94b00a9a83e64ecf5c0ed5468db42b0b3  logs/capture-redaction-clean-home-after-all.log
-2691a94e8055e1ccad3839cb53dc8b54362975bb9d2645f053c2b50b59de91c1  logs/capture-redaction-clean-home-after-helper.log
-52374b0e8f411020e706580a25b86328bbf71088789ebcf710b75deaf7c88c77  logs/capture-redaction-fake-home-after-all.log
-ac2b6a485aa3ee25fe490da90f094d0400d5f1303310ca7e05636144c9c66d37  logs/capture-redaction-fake-home-after-helper.log
-8e039c79df7ad72aacf7eabd512cee86cefaa9fc1bc042b8d9c682ee59436d4c  logs/capture-redaction-fake-home-before-16.log
-662d46927c75697389ce0afb342488d9de8ccfdadc74887ab5d3cf0070a25453  logs/capture-redaction-fake-home-gpgsign.log
-d079a5c671dbf4cdbd78f79d7c5c619d6b21be2d8e4d7b089e2b869eb419874c  logs/capture-redaction-fake-home-iter-fsmonitor-1.5.log
-60661bca00b06e154794cb452ce3b23a4d407ae5de0873922903840e3e91a9f8  logs/capture-redaction-fake-home-iter-jitter18-full.log
-376a74bb25604a9cb27cbacde0d33df90fe5e38f415d25253440856b7a102ee7  logs/capture-redaction-fake-home-iter-sleep0.82-full.log
-9e6431c3a4f24205f58bcdc944fedc1dfadde04650971cdc52844511dc1d6dc0  logs/capture-redaction-finding1-after.log
-b57df7d67cabef21d8400bbe2a1ef48e51ce1d9a9518971afef1480f7faeba87  logs/capture-redaction-finding1-tests-before.log
-811e45ff79ae1712afc3104422dfd299035c95812d2fbce9c808a70618a647ba  logs/capture-redaction-mutants-review.log
-6c748bb0f5ac22f97c0696d5243f81b8230f47c741863d783e59719d6d1169df  logs/capture-redaction-typecheck-review.log
+03c56a42780e84fb9871477351009ff94b00a9a83e64ecf5c0ed5468db42b0b3  logs/capture-redaction-clean-home-after-all.txt
+2691a94e8055e1ccad3839cb53dc8b54362975bb9d2645f053c2b50b59de91c1  logs/capture-redaction-clean-home-after-helper.txt
+52374b0e8f411020e706580a25b86328bbf71088789ebcf710b75deaf7c88c77  logs/capture-redaction-fake-home-after-all.txt
+ac2b6a485aa3ee25fe490da90f094d0400d5f1303310ca7e05636144c9c66d37  logs/capture-redaction-fake-home-after-helper.txt
+8e039c79df7ad72aacf7eabd512cee86cefaa9fc1bc042b8d9c682ee59436d4c  logs/capture-redaction-fake-home-before-16.txt
+662d46927c75697389ce0afb342488d9de8ccfdadc74887ab5d3cf0070a25453  logs/capture-redaction-fake-home-gpgsign.txt
+d079a5c671dbf4cdbd78f79d7c5c619d6b21be2d8e4d7b089e2b869eb419874c  logs/capture-redaction-fake-home-iter-fsmonitor-1.5.txt
+60661bca00b06e154794cb452ce3b23a4d407ae5de0873922903840e3e91a9f8  logs/capture-redaction-fake-home-iter-jitter18-full.txt
+376a74bb25604a9cb27cbacde0d33df90fe5e38f415d25253440856b7a102ee7  logs/capture-redaction-fake-home-iter-sleep0.82-full.txt
+9e6431c3a4f24205f58bcdc944fedc1dfadde04650971cdc52844511dc1d6dc0  logs/capture-redaction-finding1-after.txt
+b57df7d67cabef21d8400bbe2a1ef48e51ce1d9a9518971afef1480f7faeba87  logs/capture-redaction-finding1-tests-before.txt
+811e45ff79ae1712afc3104422dfd299035c95812d2fbce9c808a70618a647ba  logs/capture-redaction-mutants-review.txt
+6c748bb0f5ac22f97c0696d5243f81b8230f47c741863d783e59719d6d1169df  logs/capture-redaction-typecheck-review.txt
 ```
 
 ## Commands
@@ -53,7 +55,7 @@ Finding 2, before any test-helper edit, at `8bdd3eb4`:
 HOME=/tmp/capture-fake-home npx vitest run src/relay/workspace --reporter=verbose
 ```
 
-Result: 16 failed, 231 passed, 247 tests. Log: `logs/capture-redaction-fake-home-before-16.log`.
+Result: 16 failed, 231 passed, 247 tests. Log: `logs/capture-redaction-fake-home-before-16.txt`.
 Which settings produced which failures: `SETTINGS.md`.
 
 Same fake HOME after the helper, still at the 247-test tree (helper uncommitted, new capture tests not yet added):
@@ -101,7 +103,7 @@ Exit 0. `tsc -b --noEmit` plus the bridge, hermes-service, and scripts projects.
 
 Mutants: each patch was applied, the named vitest filter was run, then
 `git checkout --` restored `command-runner.ts` and `output-sanitizer.ts`.
-Every mutant exited 1. The tree was clean afterwards. Log: `logs/capture-redaction-mutants-review.log`.
+Every mutant exited 1. The tree was clean afterwards. Log: `logs/capture-redaction-mutants-review.txt`.
 
 | Mutant | Filter | Caught by |
 |---|---|---|

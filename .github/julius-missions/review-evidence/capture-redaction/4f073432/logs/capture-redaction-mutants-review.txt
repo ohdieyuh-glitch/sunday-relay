@@ -1,0 +1,56 @@
+===== MUTANT tostring =====
+exit:1
+6:⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+25: Test Files  1 failed (1)
+26:      Tests  1 failed | 17 skipped (18)
+8: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > reassembles a multi-byte character split across reads, on stdout and stderr
+9:AssertionError: expected '\ufffd\ufffd' to be '€' // Object.is equality
+restored
+===== MUTANT boundfirst =====
+exit:1
+6:⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+40: Test Files  1 failed (1)
+41:      Tests  2 failed | 16 skipped (18)
+8: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > keeps stored text within the bound plus the truncation mark when redaction lengthens it
+9:AssertionError: expected 120 to be less than or equal to 94
+20: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > withholds the fragment left in the clear when redaction lengthens a clean exit past the bound
+21:AssertionError: expected false to be true // Object.is equality
+restored
+===== MUTANT utf16 =====
+exit:1
+6:⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+25: Test Files  1 failed (1)
+26:      Tests  1 failed | 17 skipped (18)
+8: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > boundOutput counts UTF-8 bytes and never splits a character > never leaves a lone surrogate, including when the next character does not fit
+9:AssertionError: expected '😀�' to be '😀😀' // Object.is equality
+restored
+===== MUTANT noflush =====
+exit:1
+6:⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+27: Test Files  1 failed (1)
+28:      Tests  1 failed | 17 skipped (18)
+8: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > flushes a trailing incomplete UTF-8 sequence instead of dropping the bytes
+9:AssertionError: expected '' to be '\ufffd' // Object.is equality
+restored
+===== MUTANT stoppedonly =====
+exit:1
+6:⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+28: Test Files  1 failed (1)
+29:      Tests  1 failed | 17 skipped (18)
+8: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > stores no part of a password value when the byte bound cuts that token and the process was not killed
+9:AssertionError: expected true to be false // Object.is equality
+restored
+===== MUTANT nowithhold =====
+exit:1
+6:⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+28: Test Files  1 failed (1)
+29:      Tests  1 failed | 17 skipped (18)
+8: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > stores no part of a password value when the byte bound cuts that token and the process was not killed
+9:AssertionError: expected true to be false // Object.is equality
+restored
+===== TREE =====
+## judev/capture-redaction...origin/judev/capture-redaction
+src/relay/workspace/output-sanitizer.ts:41:  for (const ch of text) {
+src/relay/workspace/command-runner.ts:103:  if (bounded.truncated || stoppedEarly) {
+src/relay/workspace/command-runner.ts:146:      stderr += stderrDecoder.end();
+src/relay/workspace/command-runner.ts:218:      if (stdoutBytes <= request.outputLimitBytes * 2) stdout += stdoutDecoder.write(chunk);
