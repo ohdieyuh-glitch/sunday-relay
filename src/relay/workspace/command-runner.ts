@@ -50,7 +50,7 @@ const CONFIRM_WAIT_MS = 5_000;
  * need a secret's WHOLE shape, so the surviving head of a cut secret is stored in clear. This withholds what such a stream cannot prove complete:
  *  1. an UNTERMINATED private key block (a BEGIN header with no END after it): from the header to the end;
  *  2. the TRAILING PARTIAL TOKEN: the last run of non-whitespace characters, when the text ends without whitespace.
- * Step 1 is applied to EVERY stream; step 2 only to a stream that stopped early (a stream that ended by itself with an 'ok' and no newline stores it verbatim). Sanitizer patterns are not changed.
+ * Step 1 is applied to EVERY stream; step 2 applies when the stored text is cut or the stream stopped early (a stream that ended by itself, inside the bound, stores its last token verbatim). Sanitizer patterns are not changed.
  * ORDER MATTERS: step 1 runs BEFORE the sanitizer, step 2 AFTER it. A complete secret at the very end (a whole dashed footer, say) must reach the sanitizer intact; step 2 would otherwise
  * replace its last token and break the shape the sanitizer needs. After the sanitizer a complete secret is already a mark, and step 2 skips text that ends in one.
  */
@@ -82,6 +82,8 @@ function withholdTrailingToken(text: string): { text: string; withheld: number }
   return { text: `${text.slice(0, tail.index)}${REDACTION_MARK}`, withheld: 1 };
 }
 
+const TRUNCATION_SUFFIX = '\n[TRUNCATED: output limit reached]';
+
 export function secureCapturedStream(
   raw: string,
   limitBytes: number,
@@ -90,17 +92,25 @@ export function secureCapturedStream(
   // Redact the captured text, then bound it. Bounding first cuts a secret into a shape no pattern matches and
   // stores the head in the clear; redacting a short secret also lengthens it, so the byte bound has to be last.
   // Step 1 applies to EVERY stream: a private key header with no complete dashed footer after it at the end of the output is a partial key whether or not the runner cut the stream (`head -c 500 key.pem`, a crash).
+  // Step 2 withholds the trailing token whenever that bound cuts the text, or the stream stopped early. A clean
+  // exit that fits the bound keeps its last token. Withholding can lengthen a short token into the mark, so a
+  // result that no longer fits is bounded again.
   let withheld = 0;
   let core = raw;
   ({ text: core, withheld } = withholdOpenBlock(core));
   const clean = sanitizeOutput(core);
-  let stored = clean.text;
-  if (stoppedEarly) {
-    const tail = withholdTrailingToken(stored);
-    stored = tail.text;
+  let bounded = boundOutput(clean.text, limitBytes);
+  if (bounded.truncated || stoppedEarly) {
+    const hadSuffix = bounded.text.endsWith(TRUNCATION_SUFFIX);
+    const body = hadSuffix ? bounded.text.slice(0, -TRUNCATION_SUFFIX.length) : bounded.text;
+    const tail = withholdTrailingToken(body);
     withheld += tail.withheld;
+    if (Buffer.byteLength(tail.text, 'utf8') > limitBytes) {
+      bounded = boundOutput(tail.text, limitBytes);
+    } else {
+      bounded = { text: hadSuffix ? `${tail.text}${TRUNCATION_SUFFIX}` : tail.text, truncated: hadSuffix };
+    }
   }
-  const bounded = boundOutput(stored, limitBytes);
   return { text: bounded.text, truncated: bounded.truncated, redactions: clean.redactions + withheld };
 }
 
