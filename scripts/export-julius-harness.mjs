@@ -291,6 +291,9 @@ const FILE_RULES = [
   // The runtime's own namespace ceilings and the qualifying-pair cap. Same
   // arithmetic as the cost ledger: a grant, not a worker's claim.
   ['src/relay/mission/julius/julius-spend-ceiling.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  // The annotated-tag body the qualifying-pair cap counts. Reached from the
+  // ceiling module, and pinned by the same contract test as the writer.
+  ['src/relay/mission/julius/julius-spent-tag-record.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   ['src/relay/mission/julius/julius-recovery.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-continuation.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-lease-protocol.ts', 'LEASES / BUDGETS / PERMISSIONS'],
