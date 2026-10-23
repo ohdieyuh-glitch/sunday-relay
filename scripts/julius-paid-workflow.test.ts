@@ -524,21 +524,52 @@ describe('a server run id is one spent tag, created before any provider call', (
   const tagJob = job('spend-tag');
   const tagScript = script(step(tagJob, "'Gate: one spent tag for this server run id, before any provider call'"));
 
-  const runTag = (env: Record<string, string>, curl?: { code?: string; body?: string; exitCode?: string }): { status: number; stderr: string; output: string; curlLog: string } => {
+  const runTag = (env: Record<string, string>, curl?: { code?: string; body?: string; exitCode?: string; getCode?: string; getBody?: string; refCode?: string; refBody?: string }): { status: number; stderr: string; output: string; curlLog: string } => {
     const bin = mkdtempSync(join(tmpdir(), 'julius-spent-tag-'));
     const curlLog = join(bin, 'curl.log');
+    const getCode = curl?.getCode ?? (curl?.code === '500' ? '500' : '404');
+    const refCode = curl?.refCode ?? (curl?.code === '422' ? '422' : '201');
+    const refBody = curl?.refBody ?? (curl?.code === '422' ? (curl.body ?? '') : '');
     writeFileSync(join(bin, 'curl'), [
       '#!/usr/bin/env bash',
       'out=""',
+      'method="GET"',
+      'data=""',
+      'url=""',
       'prev=""',
       'for arg in "$@"; do',
       '  printf \'%s\\n\' "$arg" >> "$CURL_LOG"',
       '  if [ "$prev" = "-o" ]; then out=$arg; fi',
+      '  if [ "$prev" = "-X" ]; then method=$arg; fi',
+      '  if [ "$prev" = "--data-binary" ]; then data=$arg; fi',
+      '  case "$arg" in https://*) url=$arg ;; esac',
       '  prev=$arg',
       'done',
-      'if [ -n "$out" ]; then printf \'%s\' "${CURL_RESPONSE:-}" > "$out"; fi',
-      'printf \'%s\' "${CURL_CODE:-201}"',
-      'exit "${CURL_EXIT:-0}"',
+      'printf \'DATA %s\\n\' "$data" >> "$CURL_LOG"',
+      'if [ "${CURL_EXIT:-0}" != 0 ]; then exit "$CURL_EXIT"; fi',
+      'respond() {',
+      '  if [ -n "$out" ]; then printf \'%s\' "$2" > "$out"; fi',
+      '  printf \'%s\' "$1"',
+      '  exit 0',
+      '}',
+      'if [ "$method" = GET ]; then respond "$CURL_GET_CODE" "$CURL_GET_BODY"; fi',
+      'case "$url" in',
+      '  */git/refs)',
+      '    if [ "$CURL_REF_CODE" = 201 ]; then',
+      '      sha=$(printf \'%s\' "$data" | grep -oE \'[0-9a-f]{40}\' | head -1)',
+      '      respond 201 "{\\"ref\\":\\"refs/tags/julius-run-spent\\",\\"object\\":{\\"sha\\":\\"$sha\\",\\"type\\":\\"tag\\"}}"',
+      '    fi',
+      '    respond "$CURL_REF_CODE" "$CURL_REF_BODY"',
+      '    ;;',
+      '  *)',
+      '    count=0',
+      '    if [ -f "$CURL_LOG.count" ]; then count=$(cat "$CURL_LOG.count"); fi',
+      '    count=$((count + 1))',
+      '    printf \'%s\' "$count" > "$CURL_LOG.count"',
+      '    sha=$(printf \'%040x\' "$count")',
+      '    respond 201 "{\\"sha\\":\\"$sha\\"}"',
+      '    ;;',
+      'esac',
       '',
     ].join('\n'), { mode: 0o755 });
     chmodSync(join(bin, 'curl'), 0o755);
@@ -550,9 +581,12 @@ describe('a server run id is one spent tag, created before any provider call', (
           ...process.env,
           PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
           CURL_LOG: curlLog,
-          CURL_CODE: curl?.code ?? '201',
-          CURL_RESPONSE: curl?.body ?? '',
+          CURL_GET_CODE: getCode,
+          CURL_GET_BODY: curl?.getBody ?? (curl?.code === '500' ? (curl.body ?? '') : ''),
+          CURL_REF_CODE: refCode,
+          CURL_REF_BODY: refBody,
           CURL_EXIT: curl?.exitCode ?? '0',
+          GITHUB_RUN_ATTEMPT: '1',
           GITHUB_OUTPUT: output,
           GITHUB_RUN_ID: '4242',
           GITHUB_SHA: 'a'.repeat(40),
@@ -612,6 +646,10 @@ describe('a server run id is one spent tag, created before any provider call', (
     expect(created.output).toContain(`server_run_id=run:${HEX}`);
     expect(created.curlLog).toContain(`refs/tags/julius-run-spent-${HEX}`);
     expect(created.curlLog).toContain('/git/refs');
+    expect(created.curlLog).toContain('workflow_run_id=4242');
+    expect(created.curlLog).toContain('workflow_run_attempt=1');
+    expect(created.curlLog).toContain(`head_sha=${'a'.repeat(40)}`);
+    expect(created.curlLog).toContain(`/git/ref/tags/julius-run-spent-${HEX}`);
     const exists = runTag(
       { SERVER_RUN_ID: `run:${HEX}`, CONFIRM_LIVE: 'RUN LIVE MISSION' },
       { code: '422', body: '{"message":"Reference already exists"}' },
@@ -633,8 +671,30 @@ describe('a server run id is one spent tag, created before any provider call', (
     expect(dropped.stderr).toContain('SPENT_TAG_UNVERIFIED');
   });
 
+  it('a pre-created tag blocks the run and cannot allow it', () => {
+    const precreated = runTag(
+      { SERVER_RUN_ID: `run:${HEX}`, CONFIRM_LIVE: 'RUN LIVE MISSION', GITHUB_RUN_ATTEMPT: '3' },
+      {
+        getCode: '200',
+        getBody: `{"object":{"sha":"${'b'.repeat(40)}"},"message":"workflow_run_id=4242\\nworkflow_run_attempt=3"}`,
+      },
+    );
+    expect(precreated.status).not.toBe(0);
+    expect(precreated.stderr).toContain('RUN_ID_ALREADY_SPENT');
+    expect(precreated.stderr).not.toContain('SPENT_TAG_UNVERIFIED');
+    expect(precreated.curlLog).toContain(`/git/ref/tags/julius-run-spent-${HEX}`);
+    expect(precreated.curlLog).not.toContain('-X POST');
+    expect(precreated.curlLog).not.toContain('/git/blobs');
+  });
+
   it('creates the tag before any provider call, and the id is not interpolated into the script', () => {
     expect(tagScript).not.toContain('${{');
+    expect(tagScript).toContain('workflow_run_id=');
+    expect(tagScript).toContain('workflow_run_attempt=');
+    expect(tagScript).not.toMatch(/-X DELETE|-X PATCH|-X PUT/u);
+    const alreadySpent = tagScript.indexOf("echo 'RUN_ID_ALREADY_SPENT'");
+    expect(alreadySpent).toBeGreaterThan(-1);
+    expect(alreadySpent).toBeLessThan(tagScript.indexOf('/git/blobs'));
     expect(tagJob).not.toMatch(/api\.openai\.com|api\.anthropic\.com|api\.x\.ai|management-api\.x\.ai/u);
     expect(tagJob).toMatch(/\n    permissions:\n      contents: write\n/u);
     const paid = job('first-live-mission');

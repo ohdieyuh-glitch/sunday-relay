@@ -124,19 +124,22 @@ jobs:
   # -------------------------------------------- THE ONE SPENT TAG FOR THIS RUN ID
   #
   # A Wonderland admission mints `run:` plus 24 lowercase hex. Before any job
-  # that can call a provider, this job creates `refs/tags/julius-run-spent-<hex>`
-  # with one POST. GitHub's ref create is the lock: 201 is the only success.
-  # An existing tag is RUN_ID_ALREADY_SPENT. Any other result is
-  # SPENT_TAG_UNVERIFIED. Neither reaches a paid call.
+  # that can call a provider, this job creates `refs/tags/julius-run-spent-<hex>`.
+  # Creation is the only mutation. The ruleset blocks update and delete of
+  # these tags and has no bypass actors: on a personal repo the Actions token
+  # cannot be one. A tag that already exists, whoever created it, halts
+  # RUN_ID_ALREADY_SPENT. Its message is not read, and it never allows a run.
+  # Any other result is SPENT_TAG_UNVERIFIED. Neither reaches a paid call.
+  #
+  # The tag we create is an annotated tag. Its target commit and its message
+  # both bind this workflow run id, this attempt, the server run id, and the
+  # head SHA. The ref is created only after that object exists, and only a 201
+  # whose object sha is the tag we just wrote continues.
   #
   # The id arrives only as an environment variable. A missing id halts
   # `server_run_id_required`. Anything that is not `^run:[0-9a-f]{24}$` halts
   # `server_run_id_malformed`. Only the matched hex is written into the tag
   # name and the concurrency group. A preflight with a valid id creates no tag.
-  #
-  # TODO(single-spend): this tag is the durable record the qualifying-pair
-  # ceiling still does not read. The ledger that hangs off the tag is the
-  # next piece; this job only creates the ref.
   spend-tag:
     name: spend-tag
     runs-on: ubuntu-24.04
@@ -180,28 +183,96 @@ jobs:
             echo 'SPENT_TAG_UNVERIFIED' >&2
             exit 1
           fi
-          ref="refs/tags/julius-run-spent-${hex}"
-          payload=$(printf '{"ref":"%s","sha":"%s"}' "$ref" "$GITHUB_SHA")
-          body=$(mktemp)
-          set +e
-          code=$(curl -sS -o "$body" -w '%{http_code}' \
-            -X POST \
-            -H "Authorization: Bearer ${GH_TOKEN:?}" \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY:?}/git/refs" \
-            --data-binary "$payload")
-          curl_status=$?
-          set -e
-          if [ "$curl_status" -eq 0 ] && [ "$code" = '201' ]; then
-            exit 0
+          repository="${GITHUB_REPOSITORY:?}"
+          if ! printf '%s' "$repository" | grep -Eqx '[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
           fi
-          if [ "$curl_status" -eq 0 ] && [ "$code" = '422' ] && grep -q 'Reference already exists' "$body"; then
+          workflow_run_id="${GITHUB_RUN_ID:?}"
+          workflow_run_attempt="${GITHUB_RUN_ATTEMPT:?}"
+          if ! printf '%s' "$workflow_run_id" | grep -Eqx '[0-9]{1,20}'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          if ! printf '%s' "$workflow_run_attempt" | grep -Eqx '[0-9]{1,10}'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          # Existence can only block. The body is not consulted, so a tag someone
+          # else wrote for this id cannot authorize the run.
+          gh_api() {
+            local method="$1" path="$2" payload="${3-}"
+            api_body=$(mktemp)
+            set +e
+            if [ "$method" = GET ]; then
+              api_code=$(curl -sS -o "$api_body" -w '%{http_code}' -X GET \
+                -H "Authorization: Bearer ${GH_TOKEN:?}" \
+                -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2022-11-28' \
+                "https://api.github.com/repos/${repository}${path}")
+            else
+              api_code=$(curl -sS -o "$api_body" -w '%{http_code}' -X POST \
+                -H "Authorization: Bearer ${GH_TOKEN:?}" \
+                -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2022-11-28' \
+                "https://api.github.com/repos/${repository}${path}" \
+                --data-binary "$payload")
+            fi
+            api_status=$?
+            set -e
+          }
+          created_sha() {
+            if [ "$api_status" -ne 0 ] || [ "$api_code" != 201 ]; then
+              echo 'SPENT_TAG_UNVERIFIED' >&2
+              exit 1
+            fi
+            api_sha=$(grep -oE '"sha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' "$api_body" | head -1 | grep -oE '[0-9a-f]{40}' || true)
+            if [ -z "$api_sha" ]; then
+              echo 'SPENT_TAG_UNVERIFIED' >&2
+              exit 1
+            fi
+          }
+          gh_api GET "/git/ref/tags/julius-run-spent-${hex}"
+          if [ "$api_status" -ne 0 ]; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          if [ "$api_code" = 200 ]; then
             echo 'RUN_ID_ALREADY_SPENT' >&2
             exit 1
           fi
-          echo 'SPENT_TAG_UNVERIFIED' >&2
-          exit 1
+          if [ "$api_code" != 404 ]; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          json_audit="julius-run-spent.v1\nserver_run_id=run:${hex}\nworkflow_run_id=${workflow_run_id}\nworkflow_run_attempt=${workflow_run_attempt}\nhead_sha=${GITHUB_SHA}\n"
+          tagged_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          if ! printf '%s' "$tagged_at" | grep -Eqx '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          gh_api POST /git/blobs "$(printf '{"content":"%s","encoding":"utf-8"}' "$json_audit")"
+          created_sha
+          blob_sha=$api_sha
+          gh_api POST /git/trees "$(printf '{"tree":[{"path":"julius-run-spent-audit.txt","mode":"100644","type":"blob","sha":"%s"}]}' "$blob_sha")"
+          created_sha
+          tree_sha=$api_sha
+          gh_api POST /git/commits "$(printf '{"message":"%s","tree":"%s","parents":["%s"]}' "$json_audit" "$tree_sha" "$GITHUB_SHA")"
+          created_sha
+          commit_sha=$api_sha
+          gh_api POST /git/tags "$(printf '{"tag":"julius-run-spent-%s","message":"%s","object":"%s","type":"commit","tagger":{"name":"github-actions[bot]","email":"41898282+github-actions[bot]@users.noreply.github.com","date":"%s"}}' "$hex" "$json_audit" "$commit_sha" "$tagged_at")"
+          created_sha
+          tag_sha=$api_sha
+          gh_api POST /git/refs "$(printf '{"ref":"refs/tags/julius-run-spent-%s","sha":"%s"}' "$hex" "$tag_sha")"
+          if [ "$api_status" -eq 0 ] && [ "$api_code" = 422 ] && grep -q 'Reference already exists' "$api_body"; then
+            echo 'RUN_ID_ALREADY_SPENT' >&2
+            exit 1
+          fi
+          if [ "$api_status" -ne 0 ] || [ "$api_code" != 201 ] || ! grep -F -q "$tag_sha" "$api_body"; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          exit 0
 
   # ------------------------------------------------------- THE PAID PROVIDER SLOT
   #
