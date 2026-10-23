@@ -415,7 +415,7 @@ try {
     Say "frames capture pid $($fr.Id) (captures only while the drive's CAPTURE flag exists)"
   }
   $runRec = [ordered]@{
-    run_id = (Split-Path $run -Leaf); label = $(if ($serverPrereg) { 'DIAGNOSTIC B33 package precondition (dev loopback, dev identities; never scoring evidence)' } else { 'DIAGNOSTIC B33 NOT-PREREG (server override -ServerTree; dev loopback; never scoring evidence)' })
+    run_id = (Split-Path $run -Leaf); label = $(if ($serverPrereg) { 'DIAGNOSTIC B33 package precondition (dev loopback, dev identities; never scoring evidence)' } elseif ($RelaySource) { 'DIAGNOSTIC B33 NOT-PREREG (server override -RelaySource; dev loopback; never scoring evidence)' } else { 'DIAGNOSTIC B33 NOT-PREREG (server override -ServerTree; dev loopback; never scoring evidence)' })
     prereg_server = $serverPrereg
     role = $runRole; control = [bool]$Control; scenario = $Scenario; counted = (-not $notCounted); in_run_guard_gb = $InRunGuardGb
     package = $Package; exe_sha256 = $gameSha; exe_path = $game; boot_sha256 = $bootSha; commit = $Commit

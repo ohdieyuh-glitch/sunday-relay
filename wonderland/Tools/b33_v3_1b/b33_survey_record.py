@@ -152,6 +152,9 @@ def main(argv):
                         g("start_z_median"), g("start_z_last"), g("landing_z"), g("drop_median"), g("drop_last"), g("drop")))
         else:
             falls_txt.append("- the sender log was not found: the SURVEY_WALKOFF fall is not printed")
+    if not walkoff and (aborts or not runway_done or not on_kerb):   # wording only: the drive ended early; -SurveyReturn is not in the timeline
+        falls_txt = ["- no SURVEY_WALKOFF block: the drive ended before the walk-off (%s); the timeline does not record whether -SurveyReturn was passed" % (
+            "aborted: %s" % aborts[-1].get("detail") if aborts else "the runway / mount did not complete")]
     o += ["", "## SURVEY_WALKOFF (disclosed; never counted)", ""] + (falls_txt or ["- no SURVEY_WALKOFF block (run without -SurveyReturn)"])
     ok = not why
     if not used_is_v1:
