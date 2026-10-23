@@ -1,6 +1,11 @@
-# C2 / J1 conflicts: proposed resolutions (YUJI, C2 owner, 2026-10-23, DRAFT rev 4 for Skywalker's verification)
+# C2 / J1 conflicts: proposed resolutions (YUJI, C2 owner, 2026-10-23, DRAFT rev 5 for Skywalker's verification)
 
-Rev 4 (04:3x PT) folds in Skywalker's findings on rev 3 (a008a018…) and re-maps to Cosmo's rev 5. Each change is tagged [D#] or [R5-#] in place:
+Rev 5 (04:42 PT) fixes Skywalker's findings on rev 4 (7773fc53, blob 0a43daba, PASS WITH FINDING), tagged [G1], [D7], [G3]:
+- [G1] Status line corrected (this file is published on `docs/julius-c2-j1-resolutions-20261023`); the 04:3x placeholder is replaced; `/workspace/...` paths are marked as YUJI's working copies, not fetchable from GitHub.
+- [D7] `artifactJudgedSha256` is described correctly: the hash of the coder's final message, which the bundle step ties to the artifact file (J1B:40-46).
+- [G3] The optional D3 hardening reconstructs scrub-then-cut in J1's order (J1:336-337); R4-4's wording now says "no-cut condition".
+
+Rev 4 (04:32 PT) folds in Skywalker's findings on rev 3 (a008a018…) and re-maps to Cosmo's rev 5. Each change is tagged [D#] or [R5-#] in place:
 - [D1] Every CONF citation is re-mapped from rev 4 of the conflicts doc (9b50b4d4) to Cosmo's rev 5 (672d1358, blob e99fde0f, sha256 6f24f1ff…44aa, 287 lines). The line shifts are in Appendix D (also `/workspace/julius/c2/CONF_rev4_to_rev5_remap.md`). Rev 5 was verified byte-exact (git blob recomputed; `sha256sum -c` 7/7 OK; the commit touches only the doc and SHA256SUMS.txt).
 - [D2] C5d FAILS whenever `artifactJudgedSha256` is null, even with scrub or cut evidence.
 - [D3] R4-F notes that the disclose trigger is spoofable, and j1_judge.py must count UTF-16 code units.
@@ -20,7 +25,7 @@ Rev 2 (53c18988…) is kept as `….md.53c18988.bak`.
 
 Rev 2 (04:08 PT) added resolutions 9 and 10 for Skywalker's missed items and cross-references item 8 to resolution 4. It also fixes the hash-order and result-body wording in Appendix A. Rev 1 (sha256 e824196f…) is kept as `C2_J1_RESOLUTIONS_PROPOSED_20261023.md.e824196f.bak`.
 
-Status: PROPOSAL ONLY. Nothing is pushed or edited. This awards nothing and makes no readiness claim (J1 stays BLOCKED at 94.520%; Wonderland stays 56.25%). No security refusal is weakened, and every rule below fails closed. Items marked NEEDS-FOUNDER-RULING are flagged for the founder, not decided here.
+Status: PROPOSAL ONLY. This file is published on branch `docs/julius-c2-j1-resolutions-20261023` (off main 689d2be9) for review; nothing else is pushed or edited, and it never lands on main by itself [G1]. Paths under `/workspace/...` are YUJI's working copies and are not fetchable from GitHub; pin this doc by its GitHub commit and blob [G1]. This awards nothing and makes no readiness claim (J1 stays BLOCKED at 94.520%; Wonderland stays 56.25%). No security refusal is weakened, and every rule below fails closed. Items marked NEEDS-FOUNDER-RULING are flagged for the founder, not decided here.
 
 Categories: SPEC-ONLY (amend C2 protocol / SPEC r1 / ECHO addendum text), CLIENT-ONLY (Cosmo's client), J1-CODE-CHANGE (needs a new J1 head and a new review), NEEDS-FOUNDER-RULING.
 
@@ -239,7 +244,7 @@ Precedence used: for client behaviour, ECHO > PLANADD > SPEC (ECHO:1, PLANADD:1)
   - A null on either side is a FAIL, and so is a mismatch.
   - This binds what the player saw to what the checker and reviewer saw, through the ledger.
 - **C5d (shown == the coder's file; stricter, separate) [F2]:**
-  - **C5d FAILS when no scrub or cut happened AND the judged hash (`artifactSha256`, the hash of what the checker judged) differs from the original file's hash (`artifactJudgedSha256`).**
+  - **C5d FAILS when no scrub or cut happened AND the judged hash (`artifactSha256`, the hash of what the checker judged) differs from `artifactJudgedSha256`, the hash of the coder's final message, which the bundle step ties to the artifact file (J1B:40-46) [D7].**
   - **When a scrub or cut did happen, a mismatch is recorded as DISCLOSED rather than failed**, unless the founder rules otherwise (R4-F). This applies only when `artifactJudgedSha256` is non-null [D2].
   - How the judge decides whether a scrub or cut happened (fail-closed; positive evidence only):
     - scrub: `artifactText` contains `[redacted]`;
@@ -248,14 +253,14 @@ Precedence used: for client behaviour, ECHO > PLANADD > SPEC (ECHO:1, PLANADD:1)
     - Without that evidence, the judge treats the run as no scrub and no cut.
     - Known edge: a cut text whose tail is whitespace is trimmed below 8,000 code units (J1:530). It is then judged as "no cut" and FAILS C5d, which is the safe direction.
   - **A null `artifactJudgedSha256` is a C5d FAIL in every case, even with scrub or cut evidence [D2].** Production wiring always passes a bundle to the coder (J1W:238, `bundle: { fs: workspaceFs(workspacePath), artifactPath: J1_ARTIFACT_FILE … }`), and a failed bundle comparison fails the coder leg (J1A:392). So a completed run with a null judged hash did not run the bundle step as wired.
-  - Meaning of a C5d FAIL: the text shown and checked is not the coder's actual file.
+  - Meaning of a C5d FAIL: the text shown and checked is not the coder's final message as bound to the artifact file [D7].
 - **By-eye check:** on-screen `check <12>` is compared with `artifact_sha256[:12]` (ECHO:14 wins). `resultSha256` is never shown as the artifact hash.
 - **R4-F: NEEDS-FOUNDER-RULING [F2, restated]:**
   - The question: **may a scrubbed or truncated artifact be shown and still pass?**
     - Default proposed here: yes, if C5a, C5b and C5c pass. The C5d mismatch is recorded as DISCLOSED, with the scrub or cut evidence named in the report.
     - The alternative is that any scrub or cut FAILS C5d.
-  - **Spoofability of the disclose trigger [D3].** The scrub/cut evidence is read from `artifactText`, which the coder controls. A coder can emit the literal string `[redacted]`, or pad its message so the shown text is exactly 8,000 UTF-16 code units, and so turn a C5d FAIL into DISCLOSED. Under the default, a DISCLOSED C5d is therefore NOT proof that a real scrub or cut happened, and the report must say so. Optional hardening, for the founder: if the founder-side capture keeps `out/normalized.json`, the judge verifies the claimed cut (the file's trimmed text is longer than 8,000 code units and `artifactText` equals its first 8,000 code units, trimmed) and the claimed scrub (`artifactText` is the file text with one or more substrings of 8+ chars replaced by `[redacted]`). An unconfirmed claim is a C5d FAIL. Without the file, DISCLOSED is reported as "unverified". No J1 code change either way.
-  - Either way, ECHO:14's "carries the same value" sentence should be amended to: "`artifactJudgedSha256` is the hash of the coder's unscrubbed, uncut file. It equals `artifactSha256` only when nothing was scrubbed or cut; the ledger `outputSha256` always equals it."
+  - **Spoofability of the disclose trigger [D3].** The scrub/cut evidence is read from `artifactText`, which the coder controls. A coder can emit the literal string `[redacted]`, or pad its message so the shown text is exactly 8,000 UTF-16 code units, and so turn a C5d FAIL into DISCLOSED. Under the default, a DISCLOSED C5d is therefore NOT proof that a real scrub or cut happened, and the report must say so. Optional hardening, for the founder: if the founder-side capture keeps `out/normalized.json`, the judge reconstructs J1's order [G3]: first the scrub (J1:336), then the cut of the scrubbed text to 8,000 code units (J1:337), then the trim (J1:530). A claim is confirmed only if there is a scrub of the file text (one or more substrings of 8+ chars replaced by `[redacted]`) such that cutting and trimming the scrubbed text gives exactly `artifactText`, and a claimed cut additionally needs the scrubbed text to be longer than 8,000 code units. Checking the cut against the unscrubbed file would wrongly fail a text that was both scrubbed and cut. An unconfirmed claim is a C5d FAIL. Without the file, DISCLOSED is reported as "unverified". No J1 code change either way.
+  - Either way, ECHO:14's "carries the same value" sentence should be amended to: "`artifactJudgedSha256` is the hash of the coder's final, unscrubbed and uncut message, which the bundle step ties to the artifact file. It equals `artifactSha256` only when nothing was scrubbed or cut. The ledger `outputSha256` always equals `artifactSha256`." [D7]
   - The founder decides. No J1 code change is proposed.
 
 **Impact**
@@ -573,7 +578,7 @@ Covered by **resolution 4** (C5c, C5d and founder flag R4-F) and Appendix A. In 
   - Trivial: J1:853 is the comment line. The `append` call starts at :854.
 - **RF4 (low; integrity):** SHA256SUMS.txt was not updated in 9b50b4d4, because the commit touches only the doc. It still lists `0eac5c77…` (rev 3) for `docs/C2_J1_CONFLICTS_20261023.md`, while the rev 4 bytes hash to `7959af5d…`. Regenerate it in rev 5, or note that SUMS covers sources only.
 - **R4-3 (low; Skywalker's, carried [D5]):** "C2" terminology. Rev 4 listed the title label as a separate meaning (it is the protocol) and missed the protocol's crosscheck row C2, PROT:34 "`| C2 | architect, coder, reviewer each have pre_call before result | neg_missing_pre_call |`". This doc cites PROT check ids (C1, C5, …) by row, so "C2" here means the protocol unless written "PROT C2 (PROT:34)".
-- **R4-4 (nit; Skywalker's, carried [D5]):** the cut condition is "at most 8,000 UTF-16 code units before the trim" (`slice(0, J1_TEXT_MAX_CHARS)`, J1:55, :337; trim at J1:530), not "8,000 chars". This doc already uses code units (resolution 4, Appendix A); j1_judge.py must count them the same way (resolution 4, [D3]).
+- **R4-4 (nit; Skywalker's, carried [D5]):** the no-cut condition [G3] is "at most 8,000 UTF-16 code units before the trim" (`slice(0, J1_TEXT_MAX_CHARS)`, J1:55, :337; trim at J1:530), not "8,000 chars". This doc already uses code units (resolution 4, Appendix A); j1_judge.py must count them the same way (resolution 4, [D3]).
 - **RF5 (info):** rev 4's Sources (CONF:38-39, :276) now confirm the bridge target 31bfc58b and the parent chain 71d9f6f8 → 1254b0d1 → 31bfc58b. This is consistent with Skywalker's check (§9 item 7). J1T blob 91a8ff80 (CONF:32) matches my fetch.
 
 ## 10a. Rev 5 (672d1358) verification [D1][D5]
