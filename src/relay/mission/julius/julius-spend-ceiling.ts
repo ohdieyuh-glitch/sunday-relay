@@ -8,17 +8,16 @@
  * before a provider is contacted. A parity test holds the two copies equal.
  * This file does not import the script: the script runs its check on import.
  *
- * THE QUALIFYING PAIR does not enforce a combined dollar cap on the live
- * workflow. Each job's Postgres is created empty (and a learning-store restore
- * is still that job's database), so a local read cannot say what earlier jobs
- * spent. Absent, unverified, and unreadable prior-spend facts all refuse.
- * Unknown is not zero.
- *
- * TODO(single-spend): the durable record is the `julius-run-spent-<id>` tag
- * and its ledger, from the single-spend workflow. Only a ledger whose
- * `durableRecord` is `PRESENT` may be compared with
- * `JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS` ($60). That comparison is not what
- * the hosted job does today.
+ * THE QUALIFYING PAIR's combined cap is the GitHub tag
+ * `refs/tags/julius-run-spent-<24 lowercase hex>`. A successful listing is
+ * the durable record (`durableRecord: 'PRESENT'`). An empty listing is zero
+ * prior spend. A failed listing is not zero. A tag that does not carry a
+ * positive reserved ceiling for this namespace is an unverified prior run,
+ * also not zero. The ref is created before the provider call and is not
+ * updated afterwards, so the figure on it is the reserved ceiling, not a
+ * provider invoice. This module never claims a provider balance was verified.
+ * Only a ledger whose `durableRecord` is `PRESENT` may be compared with
+ * `JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS` ($60).
  *
  * The pair check applies only to `JULIUS_QUALIFYING_PAIR_NAMESPACES`. It does
  * not apply to `julius-continuous-1` (whose $60 figure is an allocator input),
@@ -247,9 +246,8 @@ export function authorizeJuliusLiveSpend(input: {
       safeMessage: 'Prior-spend facts could not be read. They are not treated as zero, and no provider balance was verified.',
     };
   }
-  // TODO(single-spend): wire `julius-run-spent-<id>` and its ledger, then set
-  // `durableRecord: 'PRESENT'` from that record alone. This job's Postgres is
-  // not that record, so an empty local history is absent, not a verified $0.
+  // PRESENT is a successful julius-run-spent-* listing. This job's Postgres
+  // is not that record, so an empty local history stays absent, not a verified $0.
   if (input.ledger.durableRecord !== 'PRESENT') {
     return {
       authorized: false,
@@ -285,4 +283,124 @@ export function authorizeJuliusLiveSpend(input: {
     };
   }
   return { authorized: true, spendCeilingUsdMicros, maxRepairRounds: input.repairCycles };
+}
+
+/**
+ * ONE SPENT TAG.
+ *
+ * `ref` is `refs/tags/julius-run-spent-<24 lowercase hex>`. `message` is the
+ * annotated tag body, or null when the ref points straight at a commit.
+ * The body, when present, is exactly these four lines:
+ *
+ *   julius-run-spent.v1
+ *   run=run:<24 lowercase hex>
+ *   namespace=<namespace>
+ *   reservedUsdMicros=<positive integer>
+ *
+ * The hex in `run` matches the hex in the ref. `reservedUsdMicros` is the
+ * ceiling reserved before the provider call. It is not a provider invoice.
+ */
+export interface JuliusSpentTag {
+  readonly ref: string;
+  readonly message: string | null;
+}
+
+const SPENT_TAG_REF = /^refs\/tags\/julius-run-spent-([0-9a-f]{24})$/u;
+const SPENT_RUN_ID = /^run:[0-9a-f]{24}$/u;
+
+/**
+ * The four-line body a writer puts on the tag. Null when the inputs are not
+ * the form a reader will accept.
+ */
+export function juliusSpentTagMessage(input: {
+  readonly runId: string;
+  readonly namespace: string;
+  readonly reservedUsdMicros: number;
+}): string | null {
+  const hex = SPENT_RUN_ID.test(input.runId) ? input.runId.slice(4) : null;
+  if (hex === null) return null;
+  if (!/^[a-z0-9-]{1,64}$/u.test(input.namespace)) return null;
+  if (!Number.isSafeInteger(input.reservedUsdMicros) || input.reservedUsdMicros <= 0) return null;
+  return [
+    'julius-run-spent.v1',
+    `run=${input.runId}`,
+    `namespace=${input.namespace}`,
+    `reservedUsdMicros=${String(input.reservedUsdMicros)}`,
+  ].join('\n');
+}
+
+function spentTagHex(ref: string): string | null {
+  return SPENT_TAG_REF.exec(ref)?.[1] ?? null;
+}
+
+/**
+ * Turn a successful tag listing into the ledger the cap compares.
+ *
+ * A ref that is not a spent tag makes the whole listing unreadable: the
+ * caller asked for that prefix only. The run id passed as `excludeRunId`
+ * is this dispatch's own lock, created before the check, and is not prior
+ * spend. A body that names another namespace is that other mission. A body
+ * that is missing or does not match this namespace's form is an unverified
+ * prior run of this mission, because the listing cannot prove it is not.
+ */
+export function interpretJuliusSpentTags(input: {
+  readonly namespace: string;
+  readonly excludeRunId?: string;
+  readonly tags: readonly JuliusSpentTag[];
+}): JuliusSpendLedgerRead {
+  const exclude = input.excludeRunId !== undefined && SPENT_RUN_ID.test(input.excludeRunId)
+    ? input.excludeRunId
+    : null;
+  const priorRuns: JuliusPriorRunSpend[] = [];
+  const seen = new Set<string>();
+  for (const tag of input.tags) {
+    const hex = spentTagHex(tag.ref);
+    if (hex === null) return { readable: false };
+    if (seen.has(hex)) continue;
+    seen.add(hex);
+    const runId = `run:${hex}`;
+    if (runId === exclude) continue;
+    const parsed = parseSpentTagBody(tag.message, runId, input.namespace);
+    if (parsed.kind === 'other') continue;
+    if (parsed.kind === 'verified') {
+      priorRuns.push({
+        runId,
+        knownUsdMicros: parsed.reservedUsdMicros,
+        unknownCostComponents: 0,
+        unverifiableApiSpend: false,
+        spendVerified: true,
+      });
+      continue;
+    }
+    priorRuns.push({
+      runId,
+      knownUsdMicros: 0,
+      unknownCostComponents: 1,
+      unverifiableApiSpend: false,
+      spendVerified: false,
+    });
+  }
+  priorRuns.sort((left, right) => (left.runId < right.runId ? -1 : left.runId > right.runId ? 1 : 0));
+  return { readable: true, priorRuns, durableRecord: 'PRESENT' };
+}
+
+function parseSpentTagBody(
+  message: string | null,
+  runId: string,
+  expectedNamespace: string,
+): { readonly kind: 'verified'; readonly reservedUsdMicros: number } | { readonly kind: 'other' } | { readonly kind: 'unverified' } {
+  if (message === null) return { kind: 'unverified' };
+  const lines = message.trim().split('\n');
+  if (lines.length !== 4 || lines[0] !== 'julius-run-spent.v1' || lines[1] !== `run=${runId}`) {
+    return { kind: 'unverified' };
+  }
+  const namespace = /^namespace=([a-z0-9-]{1,64})$/u.exec(lines[2] ?? '')?.[1];
+  const rawMicros = /^reservedUsdMicros=([0-9]{1,15})$/u.exec(lines[3] ?? '')?.[1];
+  if (namespace === undefined || rawMicros === undefined) return { kind: 'unverified' };
+  const reservedUsdMicros = Number(rawMicros);
+  if (!Number.isSafeInteger(reservedUsdMicros) || reservedUsdMicros <= 0) return { kind: 'unverified' };
+  const canonical = juliusSpentTagMessage({ runId, namespace, reservedUsdMicros });
+  if (canonical === null || canonical !== message.trim()) return { kind: 'unverified' };
+  if (namespace !== expectedNamespace) return { kind: 'other' };
+  return { kind: 'verified', reservedUsdMicros };
 }

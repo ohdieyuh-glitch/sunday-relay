@@ -114,8 +114,8 @@ function tickOverrideOf(value: string | null): { readonly ok: true; readonly ove
   if (!/^[1-9][0-9]{0,5}$/u.test(value)) return { ok: false };
   return { ok: true, override: Number(value) };
 }
-import { authorizeJuliusLiveSpend, noJuliusResearch, type JuliusResearchPolicy } from '../src/relay/mission/julius';
-import { readJuliusPriorRunSpend } from './julius/julius-prior-spend';
+import { authorizeJuliusLiveSpend, JULIUS_QUALIFYING_PAIR_NAMESPACES, noJuliusResearch, type JuliusResearchPolicy } from '../src/relay/mission/julius';
+import { readJuliusPriorRunSpend, readJuliusSpentTagLedger } from './julius/julius-prior-spend';
 import {
   LIVE_REACH_ACTION_CAPABILITIES,
   LIVE_REACH_READ_CAPABILITIES,
@@ -856,18 +856,23 @@ async function main(argv: readonly string[]): Promise<number> {
       return 1;
     }
     /**
-     * THE NAMESPACE CEILING, before a run row exists and before a provider can
-     * be asked. A contract above its namespace grant is refused here even if
-     * the check script was not the thing that launched this process. A
-     * qualifying-pair namespace is also refused when prior-spend facts are
-     * absent, unverified, or unreadable. This job's database is not that
-     * durable record (see the TODO on `readJuliusPriorRunSpend`), so the
-     * refusal is not a combined-cap enforcement and it never claims a provider
-     * balance was verified.
+     * THE $60 COMBINED CAP, before a run row exists and before a provider can
+     * be asked. A qualifying-pair namespace lists `julius-run-spent-*` tags.
+     * A successful empty list is zero prior spend. A failed list, or a tag
+     * with no reserved ceiling, is not zero. This job's Postgres is not that
+     * record. The comparison never claims a provider balance was verified.
      */
-    const spendLedger = await readJuliusPriorRunSpend(pool, {
-      missionId: contract.missionId, projectId: contract.projectId,
-    });
+    const qualifyingPair = (JULIUS_QUALIFYING_PAIR_NAMESPACES as readonly string[]).includes(contract.markerNamespace);
+    const spendLedger = qualifyingPair
+      ? await readJuliusSpentTagLedger({
+          repository: env.GITHUB_REPOSITORY ?? '',
+          token: env.GITHUB_TOKEN ?? env.GH_TOKEN ?? '',
+          namespace: contract.markerNamespace,
+          excludeRunId: env.JULIUS_SERVER_RUN_ID,
+        })
+      : await readJuliusPriorRunSpend(pool, {
+          missionId: contract.missionId, projectId: contract.projectId,
+        });
     const spendAuthorization = authorizeJuliusLiveSpend({
       namespace: contract.markerNamespace,
       spendUsd: contract.limits?.spendUsd ?? null,

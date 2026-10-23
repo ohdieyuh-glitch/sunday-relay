@@ -6,6 +6,8 @@ import {
   JULIUS_NAMESPACE_CEILINGS,
   JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS,
   authorizeJuliusLiveSpend,
+  interpretJuliusSpentTags,
+  juliusSpentTagMessage,
   summarizeJuliusPriorRunSpend,
   type JuliusPriorRunSpend,
   type JuliusSpendLedgerRead,
@@ -178,5 +180,87 @@ describe('the runtime table matches the contract-check script', () => {
       expect(JULIUS_NAMESPACE_CEILINGS[namespace], namespace).toEqual(ceiling);
     }
     expect(JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS).toBe(60_000_000);
+  });
+});
+
+const HEX_A = '0123456789abcdef01234567';
+const HEX_B = 'abcdef0123456789abcdef01';
+const RUN_A = `run:${HEX_A}`;
+const RUN_B = `run:${HEX_B}`;
+
+describe('julius-run-spent tags are the durable $60 record', () => {
+  it('a successful empty listing is zero prior spend, and this run\'s own tag is not prior spend', () => {
+    expect(interpretJuliusSpentTags({
+      namespace: 'julius-live-mission-5', tags: [],
+    })).toEqual({ readable: true, priorRuns: [], durableRecord: 'PRESENT' });
+    const ownLock = interpretJuliusSpentTags({
+      namespace: 'julius-live-mission-5',
+      excludeRunId: RUN_A,
+      tags: [{ ref: `refs/tags/julius-run-spent-${HEX_A}`, message: null }],
+    });
+    expect(ownLock).toEqual({ readable: true, priorRuns: [], durableRecord: 'PRESENT' });
+    const authorized = authorizeJuliusLiveSpend({
+      namespace: 'julius-live-mission-5', spendUsd: 30, repairCycles: 3, ledger: ownLock,
+    });
+    expect(authorized).toEqual({ authorized: true, spendCeilingUsdMicros: 30_000_000, maxRepairRounds: 3 });
+  });
+
+  it('a reserved ceiling is the known prior figure, and a tag with no ceiling refuses', () => {
+    const message = juliusSpentTagMessage({
+      runId: RUN_A, namespace: 'julius-live-mission-5', reservedUsdMicros: 30_000_000,
+    });
+    expect(message).toContain('reservedUsdMicros=30000000');
+    const listed = interpretJuliusSpentTags({
+      namespace: 'julius-live-mission-5',
+      tags: [
+        { ref: `refs/tags/julius-run-spent-${HEX_A}`, message },
+        { ref: `refs/tags/julius-run-spent-${HEX_B}`, message: null },
+      ],
+    });
+    expect(listed.readable).toBe(true);
+    if (!listed.readable) return;
+    expect(listed.durableRecord).toBe('PRESENT');
+    expect(listed.priorRuns.map((run) => run.runId)).toEqual([RUN_B, RUN_A].sort());
+    const unverified = listed.priorRuns.find((run) => run.runId === RUN_B);
+    expect(unverified?.spendVerified).toBe(false);
+    const refused = authorizeJuliusLiveSpend({
+      namespace: 'julius-live-mission-5', spendUsd: 30, repairCycles: 3, ledger: listed,
+    });
+    expect(refused.authorized).toBe(false);
+    if (!refused.authorized) expect(refused.reasonCode).toBe('qualifying_pair_spend_unverified');
+
+    const verifiedOnly = interpretJuliusSpentTags({
+      namespace: 'julius-live-mission-5',
+      tags: [{ ref: `refs/tags/julius-run-spent-${HEX_A}`, message }],
+    });
+    expect(authorizeJuliusLiveSpend({
+      namespace: 'julius-live-mission-5', spendUsd: 30, repairCycles: 3, ledger: verifiedOnly,
+    })).toMatchObject({ authorized: true, spendCeilingUsdMicros: 30_000_000 });
+    const over = juliusSpentTagMessage({
+      runId: RUN_A, namespace: 'julius-live-mission-5', reservedUsdMicros: 30_000_001,
+    });
+    const overLedger = interpretJuliusSpentTags({
+      namespace: 'julius-live-mission-5',
+      tags: [{ ref: `refs/tags/julius-run-spent-${HEX_A}`, message: over }],
+    });
+    const exceeded = authorizeJuliusLiveSpend({
+      namespace: 'julius-live-mission-5', spendUsd: 30, repairCycles: 3, ledger: overLedger,
+    });
+    expect(exceeded.authorized).toBe(false);
+    if (!exceeded.authorized) expect(exceeded.reasonCode).toBe('qualifying_pair_spend_exceeded');
+  });
+
+  it('a tag for another namespace is not this mission, and a foreign ref makes the listing unreadable', () => {
+    const other = juliusSpentTagMessage({
+      runId: RUN_A, namespace: 'julius-diag-output-safety-1', reservedUsdMicros: 50_000_000,
+    });
+    expect(interpretJuliusSpentTags({
+      namespace: 'julius-live-mission-5',
+      tags: [{ ref: `refs/tags/julius-run-spent-${HEX_A}`, message: other }],
+    })).toEqual({ readable: true, priorRuns: [], durableRecord: 'PRESENT' });
+    expect(interpretJuliusSpentTags({
+      namespace: 'julius-live-mission-5',
+      tags: [{ ref: 'refs/tags/not-a-spent-tag', message: null }],
+    })).toEqual({ readable: false });
   });
 });
