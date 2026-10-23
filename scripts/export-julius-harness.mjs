@@ -150,6 +150,14 @@ const MIGRATION_RUNNER = 'src/relay/persistence/wonderland-postgres.ts';
 const MIGRATION_DIR = 'src/relay/persistence/wonderland-migrations/';
 const DECLARED_ASSETS = [
   {
+    path: 'scripts/julius-org-attribution.mjs',
+    reason: 'the spend-free Anthropic models read that keeps only anthropic-organization-id; the live entry and the hosted readiness step invoke it by path and never import it',
+    evidence: [
+      { file: 'relay-bridge/julius/anthropic-org-attribution.ts', mustContain: 'scripts/julius-org-attribution.mjs' },
+      { file: '.github/workflows/julius-first-live-mission.yml', mustContain: 'scripts/julius-org-attribution.mjs' },
+    ],
+  },
+  {
     path: 'scripts/julius-docker-executor.sh',
     reason: 'the in-sandbox executor script that runs every untrusted invocation and seals the signed receipt chain; baked into the sandbox image by .github/workflows/julius-real-infra.yml and named by the Docker sandbox adapter',
     evidence: [
@@ -457,12 +465,19 @@ const FILE_RULES = [
   // session is launched, how its outcomes read, and the structural facts its
   // observation carries. Replaced wholesale when the provider is swapped.
   ['relay-bridge/julius/claude-code-coding-provider.ts', 'CODING AGENT'],
+  // The spend-free organization gate the confirmed-live entrypoint runs
+  // before it submits a Coding Agent call. It accepts only the closed line
+  // from the path-loaded probe.
+  ['relay-bridge/julius/anthropic-org-attribution.ts', 'CODING AGENT'],
   ['relay-bridge/julius/coder-workspace.ts', 'CODING AGENT'],
   ['relay-bridge/julius/coder-self-test.ts', 'CODING AGENT'],
   ['relay-bridge/hosted-coding-agent/', 'CODING AGENT'],
   // The one recogniser of the subscription's usage-limit sentence (audit F5): the hosted classifier and the paid
   // workflow's subscription smoke both import it, so it lives as plain `.mjs` beside the smoke.
   ['scripts/julius-usage-limit.mjs', 'CODING AGENT'],
+  // The spend-free organization probe the hosted readiness step and the
+  // confirmed-live entrypoint invoke by path. It is not imported.
+  ['scripts/julius-org-attribution.mjs', 'CODING AGENT'],
   ['src/relay/connectors/claude-code/result-classification.ts', 'CODING AGENT'],
   ['relay-bridge/hermes-reviewer.ts', 'INDEPENDENT REVIEWER'],
   // The one derivation that decides how long a review may take, read by the
