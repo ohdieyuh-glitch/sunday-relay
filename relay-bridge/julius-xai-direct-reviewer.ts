@@ -26,7 +26,7 @@ import type { RoleCallInput, RoleCallOutput, RoleProvider, RoleUsage } from './j
 export const J1_XAI_REVIEWER_PROVIDER_ID = 'xai';
 
 export const J1_XAI_REVIEW_INSTRUCTIONS = [
-  'You are the independent Reviewer for a Relay mission.',
+  'You are the independent Reviewer for a Julius mission.',
   'You are shown the mission brief, the architect plan and the coder artifact. You did not write any of them.',
   'Judge whether the artifact satisfies the brief. Reply with ONE JSON object and nothing else: {"verdict":"approve"|"reject","summary":"<short reasons>"}.',
 ].join(' ');
