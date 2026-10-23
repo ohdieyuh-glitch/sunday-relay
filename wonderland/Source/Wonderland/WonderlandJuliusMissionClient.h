@@ -211,16 +211,16 @@ namespace WonderlandJuliusMissionClient
 	class FJuliusMissionSession
 	{
 	public:
-		FJuliusMissionSession(WonderlandJuliusMissionLogic::IRandomBytes16& Random, IUtcClock& Clock, ITraceSink& Trace, ITextStore& Store);
+		FJuliusMissionSession(WonderlandJuliusMissionLogic::IRandomBytes16& InRandom, IUtcClock& InClock, ITraceSink& InTrace, ITextStore& InStore);
 
 		/**
 		 * False when Url is not loopback. A rejected URL clears the endpoint: dispatch, resend and status
 		 * send nothing until a loopback URL is accepted. There is no fallback to the previous host.
 		 */
-		bool SetBaseUrl(std::string_view BaseUrl);
-		void SetProjectId(std::string_view ProjectId);
-		void SetPlayerNetId(std::string_view PlayerNetId);
-		void SetBuildIdentity(std::string_view BuildSha, std::string_view PackageId);
+		bool SetBaseUrl(std::string_view InBaseUrl);
+		void SetProjectId(std::string_view InProjectId);
+		void SetPlayerNetId(std::string_view InPlayerNetId);
+		void SetBuildIdentity(std::string_view InBuildSha, std::string_view InPackageId);
 		void SetExpectedResultMode(std::string_view Mode);
 		void SetNativeSessionToken(std::string_view Token);
 		/** `Source` is "ntp" or "system". Pass Known false when no offset exists. */
@@ -229,7 +229,7 @@ namespace WonderlandJuliusMissionClient
 		/** False when the save is missing, empty, or corrupt. A corrupt save leaves the session idle and mints nothing. */
 		bool Load();
 
-		FCommandOutcome Dispatch(std::string_view MissionId, std::string_view PairId);
+		FCommandOutcome Dispatch(std::string_view InMissionId, std::string_view InPairId);
 		/** Resends the open pair only. Never mints. A closed, refused, or StillWaiting pair sends nothing. */
 		FCommandOutcome Resend();
 		FTickOutcome Tick();

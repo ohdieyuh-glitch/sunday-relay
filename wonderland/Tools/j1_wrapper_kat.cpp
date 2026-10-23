@@ -1,13 +1,20 @@
 // WONDERLAND -- J1 client wrapper known-answer tests. No Unreal, no network, no secrets that leave the process.
 //
-//   g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I wonderland/Source/Wonderland -I wonderland/Source
+//   g++ -std=c++17 -Wall -Wextra -Werror -Wshadow -pedantic -I wonderland/Source/Wonderland -I wonderland/Source
 //       wonderland/Tools/j1_wrapper_kat.cpp
 //       wonderland/Source/Wonderland/WonderlandJuliusMissionClient.cpp
 //       wonderland/Source/Wonderland/WonderlandJuliusMissionProgress.cpp
 //       wonderland/Source/Wonderland/WonderlandJuliusMissionLogic.cpp
 //       -o j1_wrapper_kat && ./j1_wrapper_kat
 //
-//   cl /std:c++17 /EHsc /W4 /WX /I wonderland\Source\Wonderland /I wonderland\Source
+//   clang++ -std=c++17 -Wall -Wextra -Werror -Wshadow -pedantic -I wonderland/Source/Wonderland -I wonderland/Source
+//       wonderland/Tools/j1_wrapper_kat.cpp
+//       wonderland/Source/Wonderland/WonderlandJuliusMissionClient.cpp
+//       wonderland/Source/Wonderland/WonderlandJuliusMissionProgress.cpp
+//       wonderland/Source/Wonderland/WonderlandJuliusMissionLogic.cpp
+//       -o j1_wrapper_kat && ./j1_wrapper_kat
+//
+//   cl /std:c++17 /EHsc /W4 /WX /we4458 /we4456 /we4457 /I wonderland\Source\Wonderland /I wonderland\Source
 //       wonderland\Tools\j1_wrapper_kat.cpp
 //       wonderland\Source\Wonderland\WonderlandJuliusMissionClient.cpp
 //       wonderland\Source\Wonderland\WonderlandJuliusMissionProgress.cpp

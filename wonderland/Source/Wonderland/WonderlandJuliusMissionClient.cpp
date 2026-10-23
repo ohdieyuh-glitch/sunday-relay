@@ -1826,13 +1826,13 @@ namespace WonderlandJuliusMissionClient
 		}
 		if (Status.bProgressPctPresent || Status.bProgressStepPresent)
 		{
-			std::string Progress = "\"pct\":";
-			Progress += Status.bProgressPctPresent ? ProgressToken : "null";
-			Progress += ",\"step\":";
-			Progress += Status.bProgressStepPresent ? JsonString(Status.ProgressStep) : "null";
-			Progress += ",";
-			Progress += ProviderExtra(Status);
-			WriteTrace("progress", Progress);
+			std::string ProgressJson = "\"pct\":";
+			ProgressJson += Status.bProgressPctPresent ? ProgressToken : "null";
+			ProgressJson += ",\"step\":";
+			ProgressJson += Status.bProgressStepPresent ? JsonString(Status.ProgressStep) : "null";
+			ProgressJson += ",";
+			ProgressJson += ProviderExtra(Status);
+			WriteTrace("progress", ProgressJson);
 		}
 		if (Status.bHasResult) { ApplyFinishedResult(Status); }
 		Persist();
