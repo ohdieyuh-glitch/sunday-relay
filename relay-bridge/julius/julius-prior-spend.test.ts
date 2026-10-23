@@ -4,7 +4,11 @@ import { describe, expect, it } from 'vitest';
 import { readJuliusPriorRunSpend, type SqlQueryable } from './julius-prior-spend';
 
 function pool(handler: (sql: string, values: readonly unknown[] | undefined) => { rows: Record<string, unknown>[] }): SqlQueryable {
-  return { query: async (sql, values) => handler(sql, values) };
+  return {
+    async query<T extends Record<string, unknown>>(sql: string, values?: readonly unknown[]): Promise<{ rows: T[] }> {
+      return handler(sql, values) as { rows: T[] };
+    },
+  };
 }
 
 describe('prior spend is read from the durable ledger or reported unreadable', () => {
