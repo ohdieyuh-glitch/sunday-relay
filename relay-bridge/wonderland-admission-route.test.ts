@@ -169,8 +169,18 @@ describe('POST /wonderland/julius/dispatch', () => {
   it('an injected write failure keeps the pair and does not publish a row', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'wonderland-admission-unwritten-'));
     const file = join(dir, 'admission.json');
+    let writes = 0;
     const ledger = createFileAdmissionLedger(file, {
-      persist() { throw new Error('disk full'); },
+      persist(_filePath, contents) {
+        writes += 1;
+        const parsed = JSON.parse(contents) as { rows: { state: string }[] };
+        if (writes === 1) {
+          expect(parsed.rows[0]?.state).toBe('LEDGER_UNWRITTEN');
+          writeFileSync(file, contents);
+          return;
+        }
+        throw new Error('disk full');
+      },
     });
     try {
       const ports = createWonderlandAdmissionService({
@@ -189,6 +199,7 @@ describe('POST /wonderland/julius/dispatch', () => {
       expect((second?.body as { data: { serverRunId: string; state: string } }).data.serverRunId).toBe(`run:${'a'.repeat(24)}`);
       expect((second?.body as { data: { state: string } }).data.state).toBe('LEDGER_UNWRITTEN');
       const parked = JSON.parse(readFileSync(file, 'utf8')) as { rows: { state: string; serverRunId: string }[] };
+      expect(writes).toBe(2);
       expect(parked.rows).toEqual([expect.objectContaining({
         state: 'LEDGER_UNWRITTEN',
         serverRunId: `run:${'a'.repeat(24)}`,

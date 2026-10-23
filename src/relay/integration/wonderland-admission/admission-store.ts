@@ -68,6 +68,12 @@ export interface AdmissionLedgerRow {
    * which restores as `ADMISSION_HELD`.
    */
   readonly state?: 'ADMISSION_HELD' | 'LEDGER_UNWRITTEN';
+  /**
+   * Present on a row this process wrote. A restored row without pins keeps
+   * every pin null. Replay returns the stored pins, not a fresh empty set,
+   * when the row recorded them.
+   */
+  readonly modelPins?: ReviewedModelPins;
 }
 
 export interface AdmissionLedger {
@@ -318,6 +324,12 @@ function ledgerRow(run: AdmissionRun): AdmissionLedgerRow {
     receivedAt: run.receivedAt,
     ledgerRef: run.ledgerRef,
     resultSha256: null,
+    modelPins: {
+      architectModel: run.modelPins.architectModel,
+      codingModel: run.modelPins.codingModel,
+      reviewerProvider: run.modelPins.reviewerProvider,
+      reviewerModel: run.modelPins.reviewerModel,
+    },
   };
 }
 
@@ -333,7 +345,12 @@ function runFromRow(row: AdmissionLedgerRow): AdmissionRun {
     clientUiActionUtc: row.clientUiActionUtc,
     receivedAt: row.receivedAt,
     ledgerRef: row.ledgerRef,
-    modelPins: EMPTY_PINS,
+    modelPins: row.modelPins === undefined ? EMPTY_PINS : {
+      architectModel: row.modelPins.architectModel,
+      codingModel: row.modelPins.codingModel,
+      reviewerProvider: row.modelPins.reviewerProvider,
+      reviewerModel: row.modelPins.reviewerModel,
+    },
     paidWorkflow: {
       workflowFile: PAID_WORKFLOW_FILE,
       admissionScript: PAID_SLOT_SCRIPT,

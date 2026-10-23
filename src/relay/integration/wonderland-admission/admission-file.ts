@@ -1,12 +1,15 @@
 /**
  * Durable Wonderland admission file.
  *
- * The operator-claim stack imports this module by this name. Schema version 1
- * is one JSON document: `{ schemaVersion, rows }`. A write is a temp file in
+ * The operator-claim stack imports this module by this name. Schema version 2
+ * is one JSON document: `{ schemaVersion, rows }`. Version 1 is refused: it
+ * has no place to put the required `state` row. A write is a temp file in
  * the same directory, an fsync of that file, a rename onto the store path,
  * and an fsync of the directory. One lock file sits beside the store. A held
- * lock fails closed. Corrupt bytes, or a schema version this process does
- * not know, fail closed and are left on disk.
+ * lock fails closed, including when the recorded pid is another process or
+ * a dead pid. This process never deletes a lock it did not create. Corrupt
+ * bytes fail closed. A different numeric schema version fails closed with
+ * `ledger_schema_unsupported`. Neither is rewritten.
  *
  * The founder operator claim tool is the only writer of the dispatched
  * transition. This file keeps admitted rows, and `dispatched` stays false.
@@ -18,18 +21,28 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 
-import { JULIUS_BOOTSTRAP_RUN_ID, SHA256_HEX, WONDERLAND_RUN_ID } from './admission-contract';
+import {
+  JULIUS_BOOTSTRAP_RUN_ID, SHA256_HEX, WONDERLAND_RUN_ID, type ReviewedModelPins,
+} from './admission-contract';
 import type { AdmissionLedger, AdmissionLedgerRow } from './admission-store';
 
-export const ADMISSION_FILE_SCHEMA_VERSION = 1;
+export const ADMISSION_FILE_SCHEMA_VERSION = 2;
 
 const RECEIVED_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 const ROW_KEYS = [
   'phase', 'runId', 'serverRunId', 'keyHash', 'dispatchId', 'missionId', 'requestId',
   'clientLogSha256', 'clientUiActionUtc', 'receivedAt', 'ledgerRef', 'resultSha256', 'state',
+  'modelPins',
 ] as const;
 
-export type AdmissionFileClosedCode = 'lock_held' | 'corrupt' | 'unwritable' | 'unwritten';
+const PIN_KEYS = ['architectModel', 'codingModel', 'reviewerProvider', 'reviewerModel'] as const;
+
+export type AdmissionFileClosedCode =
+  | 'lock_held'
+  | 'corrupt'
+  | 'unwritable'
+  | 'unwritten'
+  | 'ledger_schema_unsupported';
 
 export class AdmissionFileClosedError extends Error {
   readonly code: AdmissionFileClosedCode;
@@ -80,7 +93,11 @@ export interface FileAdmissionLedger extends AdmissionLedger {
 }
 
 export interface FileAdmissionLedgerOptions {
-  /** Test seam. Replaces the atomic writer. A throw leaves the previous bytes. */
+  /**
+   * Test seam. Replaces the atomic writer for the reservation and the
+   * completion. A throw on the reservation leaves the previous bytes. A
+   * throw on the completion leaves the `LEDGER_UNWRITTEN` reservation.
+   */
   readonly persist?: (filePath: string, contents: string) => void;
 }
 
@@ -114,10 +131,16 @@ export function createFileAdmissionLedger(
     append(row) {
       const write = pending.then(() => {
         if (closed) throw new AdmissionFileClosedError('lock_held');
-        // The reservation hits disk before the completion write. A failure of
-        // `persist` leaves this LEDGER_UNWRITTEN row for the next process.
+        // Both writes go through `persist`. The reservation hits disk before
+        // the completion write. A failure of the completion leaves this
+        // LEDGER_UNWRITTEN row for the next process.
         const reserved = [...rows, stamped(row, 'LEDGER_UNWRITTEN')];
-        writeAdmissionFileAtomic(resolved, documentText(reserved));
+        try {
+          persist(resolved, documentText(reserved));
+        } catch (error) {
+          if (isAdmissionFileClosed(error) && error.code !== 'unwritten') throw error;
+          throw new AdmissionFileClosedError('unwritten');
+        }
         rows = reserved;
         try {
           const held = [...reserved.slice(0, -1), stamped(row, 'ADMISSION_HELD')];
@@ -232,7 +255,10 @@ function readRows(filePath: string): AdmissionLedgerRow[] {
   if (keys.length !== 2 || !Object.hasOwn(doc, 'schemaVersion') || !Object.hasOwn(doc, 'rows')) {
     throw new AdmissionFileClosedError('corrupt');
   }
-  if (doc.schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION) throw new AdmissionFileClosedError('corrupt');
+  if (typeof doc.schemaVersion !== 'number') throw new AdmissionFileClosedError('corrupt');
+  if (doc.schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION) {
+    throw new AdmissionFileClosedError('ledger_schema_unsupported');
+  }
   if (!Array.isArray(doc.rows)) throw new AdmissionFileClosedError('corrupt');
   const seenRun = new Set<string>();
   const seenKey = new Set<string>();
@@ -302,5 +328,25 @@ function parseRow(value: unknown): AdmissionLedgerRow {
     ledgerRef: row.ledgerRef,
     resultSha256: null,
     state: row.state,
+    modelPins: parsePins(row.modelPins),
   };
+}
+
+function parsePins(value: unknown): ReviewedModelPins {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  const pins = value as Record<string, unknown>;
+  if (Object.keys(pins).length !== PIN_KEYS.length || PIN_KEYS.some((key) => !Object.hasOwn(pins, key))) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  const parsed = {} as Record<(typeof PIN_KEYS)[number], string | null>;
+  for (const key of PIN_KEYS) {
+    const item = pins[key];
+    if (!(item === null || (typeof item === 'string' && item.length > 0 && item.length <= 128))) {
+      throw new AdmissionFileClosedError('corrupt');
+    }
+    parsed[key] = item;
+  }
+  return parsed;
 }

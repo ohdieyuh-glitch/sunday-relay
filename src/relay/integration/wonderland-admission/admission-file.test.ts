@@ -87,7 +87,7 @@ describe('resolveAdmissionStorePath', () => {
 });
 
 describe('the admission file', () => {
-  it('writes schema version 1 and reloads the same server run id and cap', async () => {
+  it('writes schema version 2 and reloads the same server run id and cap', async () => {
     const dir = directory();
     const file = join(dir, 'admission.json');
     let opened: { close(): void } | null = null;
@@ -166,27 +166,28 @@ describe('the admission file', () => {
 
   it('corrupt or unknown content fails closed and is never reset', () => {
     const dir = directory();
-    const samples = [
-      'not-json',
-      '',
-      '{"schemaVersion":999,"rows":[]}\n',
-      '{"schemaVersion":"1","rows":[]}\n',
-      '{"schemaVersion":1,"rows":[],"extra":true}\n',
+    const samples: { text: string; code: 'corrupt' | 'ledger_schema_unsupported' }[] = [
+      { text: 'not-json', code: 'corrupt' },
+      { text: '', code: 'corrupt' },
+      { text: '{"schemaVersion":999,"rows":[]}\n', code: 'ledger_schema_unsupported' },
+      { text: '{"schemaVersion":1,"rows":[]}\n', code: 'ledger_schema_unsupported' },
+      { text: '{"schemaVersion":"1","rows":[]}\n', code: 'corrupt' },
+      { text: '{"schemaVersion":1,"rows":[],"extra":true}\n', code: 'corrupt' },
     ];
     try {
       for (const sample of samples) {
         const file = join(dir, `admission-${samples.indexOf(sample)}.json`);
-        writeFileSync(file, sample);
+        writeFileSync(file, sample.text);
         const before = readFileSync(file);
         try {
           createFileAdmissionLedger(file);
-          throw new Error(`opened ${sample}`);
+          throw new Error(`opened ${sample.text}`);
         } catch (error) {
-          expect(isAdmissionFileClosed(error), sample).toBe(true);
-          if (isAdmissionFileClosed(error)) expect(error.code, sample).toBe('corrupt');
+          expect(isAdmissionFileClosed(error), sample.text).toBe(true);
+          if (isAdmissionFileClosed(error)) expect(error.code, sample.text).toBe(sample.code);
         }
-        expect(readFileSync(file), sample).toEqual(before);
-        expect(readdirSync(dir).some((name) => name.endsWith('.tmp')), sample).toBe(false);
+        expect(readFileSync(file), sample.text).toEqual(before);
+        expect(readdirSync(dir).some((name) => name.endsWith('.tmp')), sample.text).toBe(false);
       }
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -198,8 +199,15 @@ describe('the admission file', () => {
     const file = join(dir, 'admission.json');
     let attempts = 0;
     const ledger = createFileAdmissionLedger(file, {
-      persist() {
+      persist(_filePath, contents) {
         attempts += 1;
+        const parsed = JSON.parse(contents) as { rows: { state: string }[] };
+        if (attempts === 1) {
+          expect(parsed.rows[0]?.state).toBe('LEDGER_UNWRITTEN');
+          writeFileSync(file, contents);
+          return;
+        }
+        expect(parsed.rows[0]?.state).toBe('ADMISSION_HELD');
         throw new Error('disk full');
       },
     });
@@ -222,7 +230,7 @@ describe('the admission file', () => {
       expect(second.httpStatus).toBe(200);
       expect(second.run.serverRunId).toBe(first.run.serverRunId);
       expect(second.run.state).toBe('LEDGER_UNWRITTEN');
-      expect(attempts).toBe(1);
+      expect(attempts).toBe(2);
       expect(minted).toBe(1);
       expect(admissions.admissionCount()).toBe(1);
       const parked = JSON.parse(readFileSync(file, 'utf8')) as { rows: { state: string; serverRunId: string }[] };

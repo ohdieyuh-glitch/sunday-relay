@@ -370,6 +370,9 @@ function openAdmissionLedger(input: {
   if (input.ledger !== undefined) {
     return { ledger: input.ledger, ready: true, close() {} };
   }
+  if (input.env[WONDERLAND_ADMISSION_FLAG] !== '1') {
+    return { ledger: null, ready: false, close() {} };
+  }
   const located = resolveAdmissionStorePath(input.env.JULIUS_WONDERLAND_ADMISSION_STORE);
   if (WONDERLAND_ADMISSION_STORE !== 'JULIUS_WONDERLAND_ADMISSION_STORE') {
     return { ledger: null, ready: false, close() {} };

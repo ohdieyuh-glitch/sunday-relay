@@ -222,7 +222,7 @@ describe('admission restarts on the same store file', () => {
       expect(serverRunId).toMatch(/^run:[0-9a-f]{24}$/);
       expect(admitted.body.data?.state).toBe('ADMISSION_HELD');
       const written = JSON.parse(readFileSync(file, 'utf8')) as { schemaVersion: number; rows: { serverRunId: string }[] };
-      expect(written.schemaVersion).toBe(1);
+      expect(written.schemaVersion).toBe(2);
       expect(written.rows.map((row) => row.serverRunId)).toEqual([serverRunId]);
       await stop(first);
       first = null;

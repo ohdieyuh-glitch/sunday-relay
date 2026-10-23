@@ -255,18 +255,35 @@ writable file. Unset, a relative path, or a URL answers **503**
 `julius_dispatch_unavailable` and reserves nothing. Tests construct the
 in-memory ledger. The server does not.
 
-The file is one JSON document, schema version 1, holding the admission rows.
+The file is one JSON document, schema version 2, holding the admission rows.
+Schema version 1 is refused. It predates the required `state` field, and this
+process does not guess that field. A numeric `schemaVersion` other than 2
+fails closed with `ledger_schema_unsupported`. That is not a corrupt file.
+A non-numeric schema version, extra document keys, duplicate rows, an unknown
+row key, or a `state` other than `ADMISSION_HELD` or `LEDGER_UNWRITTEN` is
+corrupt. Either refusal answers 503 and the bytes stay as they are.
+
 A write is a temp file in the same directory, an fsync of that file, a rename
 onto the store path, and an fsync of the directory. A lock file beside the
-store allows one writer. A held lock answers 503 and is left alone. A missing
-file is an empty ledger. Corrupt JSON, or a schema version this process does
-not know, answers 503 and the bytes stay as they are.
+store allows one writer. A held lock answers 503 and is left alone. The
+process never takes the lock when `JULIUS_WONDERLAND_ADMISSION` is not exactly
+`1`. It also never steals a lock. A lock whose recorded pid is another live
+process, or a pid that is no longer running, stays held. Pid reuse and
+containers make an automatic steal unsafe. A missing file is an empty ledger.
+
+A clean shutdown deletes the lock. A `SIGKILL`, or any exit that skips
+`close()`, leaves `<store>.lock` on disk. The next open then answers 503
+`julius_dispatch_unavailable` and does not admit. Recovery is a manual
+operator step, after the operator has confirmed that no admission process is
+still running: delete that lock file, and only that file. Do not delete or
+rewrite the admission document to clear the lock.
 
 A process that shuts down and opens that same file replays the pair. The
-`serverRunId`, the state, and the caps are the ones in the file. The replay
-does not mint a second id and does not append a second row. Each row records
-`state`. The reservation is written as `LEDGER_UNWRITTEN` before the
-completion write. If that completion write fails, the file keeps
+`serverRunId`, the state, the model pins, and the caps are the ones in the
+file. The replay does not mint a second id, does not invent empty pins, and
+does not append a second row. Each row records `state` and `modelPins`. The
+reservation is written as `LEDGER_UNWRITTEN` before the completion write,
+through the same writer. If that completion write fails, the file keeps
 `LEDGER_UNWRITTEN` and the same `serverRunId`. A later process replays that
 state and does not mint another id. The completion write is not tried again.
 
@@ -292,8 +309,10 @@ client calling a `relay-bridge` process on the same machine, at that process's
 configured listen port, with no proxy. That process must have
 `JULIUS_WONDERLAND_ADMISSION=1`, `JULIUS_WONDERLAND_MISSION` set to the
 reviewed slug, and `JULIUS_WONDERLAND_ADMISSION_STORE` set to a local absolute
-writable path. A clean shutdown releases the writer lock. A later process
-that opens the same file replays the admissions already there.
+writable path. A clean shutdown releases the writer lock. A lock left behind
+by `SIGKILL` stays held until an operator deletes that lock file, as described
+above. A later process that opens the same file replays the admissions already
+there.
 
 Admitting from a non-loopback or hosted client is out of scope. It would need
 a separate reviewed auth design.
