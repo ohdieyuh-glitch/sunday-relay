@@ -15,6 +15,10 @@ import type { RoleCallInput, RoleCallOutput, RoleProvider, RoleUsage } from './j
  * UNVERIFIED against the live service: the request and response field names follow the Responses-API shape (`id`, `model`,
  * `output[].content[].text`, `usage.input_tokens`); no request was sent to xAI to confirm them. A mismatch makes the leg REFUSE
  * (`xai_response_unreadable`), it never invents a field.
+ *
+ * DOLLAR RECEIPT. xAI puts the billed amount on `usage.cost_in_usd_ticks` (1 USD = 10_000_000_000 ticks). This adapter copies
+ * that into `costUsdMicros` only when the division by 10_000 is an exact non-negative safe integer. Token counts are not a
+ * price. A missing, fractional, negative, or non-finite tick count is omitted, never stored as 0.
  */
 
 export const J1_XAI_REVIEWER_PROVIDER_ID = 'xai';
@@ -42,6 +46,15 @@ export interface XaiDirectReviewerInput {
 
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+/** 1 USD = 10_000_000_000 xAI ticks, so one micro-USD is 10_000 ticks. Not exact, or not a safe integer: no receipt. */
+function costUsdMicrosFromXaiTicks(ticks: unknown): number | null {
+  if (typeof ticks !== 'number' || !Number.isSafeInteger(ticks) || ticks < 0) return null;
+  if (ticks % 10_000 !== 0) return null;
+  const micros = ticks / 10_000;
+  if (!Number.isSafeInteger(micros)) return null;
+  return micros;
+}
 
 const refuse = (failureClass: string, responseId: string | null = null): RoleCallOutput => ({ ok: false, text: '', responseId, model: null, failureClass });
 const sha256 = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex');
@@ -88,9 +101,10 @@ export function createXaiDirectReviewerRoleProvider(input: XaiDirectReviewerInpu
       }
       /* From here a 200 body HAS ARRIVED: the request was made and may be billed. EVERY failure below returns what the body gave (id,
          served model, usage if present, null where absent: UNKNOWN is never zero), requests: 1 and the shown digest (review F1). */
-      const paid = (failureClass: string, o: { responseId?: string | null; model?: string | null; usage?: RoleUsage } = {}): RoleCallOutput => ({
+      const paid = (failureClass: string, o: { responseId?: string | null; model?: string | null; usage?: RoleUsage; costUsdMicros?: number } = {}): RoleCallOutput => ({
         ok: false, text: '', responseId: o.responseId ?? null, model: o.model ?? null, failureClass, requests: 1, shownSha256,
         usage: o.usage ?? { input: null, output: null, total: null },
+        ...(typeof o.costUsdMicros === 'number' ? { costUsdMicros: o.costUsdMicros } : {}),
       });
       let body: Record<string, unknown>;
       try {
@@ -106,7 +120,8 @@ export function createXaiDirectReviewerRoleProvider(input: XaiDirectReviewerInpu
       const inTok = num(usageRaw.input_tokens);
       const outTok = num(usageRaw.output_tokens);
       const usage: RoleUsage = { input: inTok, output: outTok, total: num(usageRaw.total_tokens) ?? (inTok !== null && outTok !== null ? inTok + outTok : null) };
-      const carried = { responseId, model: servedModel, usage };
+      const costUsdMicros = costUsdMicrosFromXaiTicks(usageRaw.cost_in_usd_ticks);
+      const carried = { responseId, model: servedModel, usage, ...(costUsdMicros === null ? {} : { costUsdMicros }) };
       // Attestation (review F1): the id and the served model come from the response BODY only. No id = unattested = the leg fails.
       if (responseId === null) return paid('xai_response_id_missing', carried);
       if (servedModel === null) return paid('xai_served_model_missing', carried);
@@ -125,7 +140,7 @@ export function createXaiDirectReviewerRoleProvider(input: XaiDirectReviewerInpu
       } catch {
         return paid('xai_verdict_unreadable', carried);
       }
-      return { ok: true, text: summary, responseId, model: servedModel, usage, requests: 1, verdict, shownSha256 };
+      return { ok: true, text: summary, responseId, model: servedModel, usage, requests: 1, verdict, shownSha256, ...(costUsdMicros === null ? {} : { costUsdMicros }) };
     },
   };
 }

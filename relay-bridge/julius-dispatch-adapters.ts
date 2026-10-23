@@ -112,6 +112,7 @@ export function createArchitectRoleProvider(input: ArchitectRoleInput): RoleProv
       return {
         ok: true, text: outcome.outputText, responseId: outcome.responseId,
         // The PROVIDER's echoed model: `actualModel` is the response's own, never the configuration.
+        // OpenAI Responses usage is token counts only. There is no dollar field to copy, so this leg has no costUsdMicros.
         model: outcome.actualModel, usage: gptUsage(outcome.usage), requests: 1,
       };
     },
@@ -403,6 +404,9 @@ export function createCoderRoleProvider(input: CoderRoleInput): RoleProvider {
         // Attested served model, or null (the controller then refuses the leg).
         model: observation.providerModel,
         usage,
+        // The wired coder is CLAUDE_SUBSCRIPTION (julius-dispatch-wiring-real.ts). hostedCoderCost returns
+        // costUsdMicros null in that mode: total_cost_usd is a priced estimate, not a bill. This adapter does
+        // not copy a dollar figure and does not derive one from tokens, so the repeat stays refused.
         changedPaths: deriveCoderChangedPaths(record),
         // The executor mediates the two attempt commands only, not the session's own tools: it cannot say, so null (never 0).
         toolInvocations: null,
@@ -478,6 +482,8 @@ export function createReviewerRoleProvider(input: ReviewerRoleInput): RoleProvid
         responseId: nonEmpty(responseId) ? responseId : null,
         // The engine's own served model; null when it did not say (never the requested one).
         model: outcome.servedModel,
+        // Hermes costMicros / estimated_cost is a harness estimate from its own table, not a provider dollar
+        // receipt. It is not copied onto costUsdMicros. Token counts are not a receipt either.
         usage: hermesUsage(outcome.usage), requests: outcome.usage.apiCalls, shownSha256,
         // Any non-approved verdict is a rejection (the engine's own rule: any changes_required is blocking).
         verdict: outcome.result.verdict === 'approved' ? 'approve' : 'reject',
