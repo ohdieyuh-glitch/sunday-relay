@@ -1185,3 +1185,11 @@ describe('R3 the KeyStore is REQUIRED in live mode (the controller itself refuse
     expect(h.calls.map((c) => c.role)).toEqual(['architect', 'coder', 'reviewer']);
   });
 });
+
+describe('SOURCE SCAN: the controller reads keys only through the store', () => {
+  const source = readFileSync(join(__dirname, 'julius-dispatch.ts'), 'utf8').split(/\r?\n/u).filter((line) => !/^\s*(\*|\/\/|\/\*)/u.test(line)).join('\n');
+  it('has no process.env read, and a composed store is the key source', () => {
+    expect(source).not.toMatch(/process\.env|process\[\s*['"]env['"]\s*\]/u);
+    expect(source).toMatch(/keyStore\.getKey\(/u);
+  });
+});
