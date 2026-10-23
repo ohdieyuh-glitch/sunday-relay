@@ -130,7 +130,7 @@ const dispatchDiagnostics = async (outcome: GptRunOutcome): Promise<Record<strin
   }
 };
 const ok = (effort?: { sent: string | null; echoed: string | null }): GptRunOutcome => ({
-  ok: true, actualModel: 'gpt-5.6-sol', responseId: 'resp_eff', status: 'completed', outputText: JSON.stringify(VALID_PLAN), usage: USAGE,
+  ok: true, actualModel: 'gpt-5.6-sol-2026-04-01', responseId: 'resp_eff', status: 'completed', outputText: JSON.stringify(VALID_PLAN), usage: USAGE,
   ...(effort === undefined ? {} : { effort }),
 });
 

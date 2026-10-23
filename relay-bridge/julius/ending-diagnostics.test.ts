@@ -124,7 +124,9 @@ const architect = (outcome: GptRunOutcome, artifacts = createInMemoryArtifactExc
   });
 
 const succeeded = (outputText: string): GptRunOutcome => ({
-  ok: true, actualModel: 'gpt-5.6-sol-20260401', responseId: 'resp_diag_success',
+  // A dashed OpenAI snapshot of the requested id. `gpt-5.6-sol-2026-04` is a
+  // year-month and is a mismatch, so it cannot be the success fixture.
+  ok: true, actualModel: 'gpt-5.6-sol-2026-04-01', responseId: 'resp_diag_success',
   status: 'completed', outputText, usage: USAGE,
 });
 
@@ -162,7 +164,7 @@ describe('A · 1–6 · the architect reports the same provider facts however it
       expect(diagnostics, `a validated plan must report ${fact}`).toHaveProperty(fact);
     }
     expect(diagnostics.outcome).toBe('succeeded');
-    expect(diagnostics.servedModel).toBe('gpt-5.6-sol-20260401');
+    expect(diagnostics.servedModel).toBe('gpt-5.6-sol-2026-04-01');
     expect(diagnostics.providerStatus).toBe('completed');
   });
 

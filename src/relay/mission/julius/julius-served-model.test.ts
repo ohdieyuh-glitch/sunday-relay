@@ -3,26 +3,41 @@ import { describe, expect, it } from 'vitest';
 import { juliusRunHaltingFailureClass, juliusServedModelVerdict } from './julius-coding-agent';
 
 /**
- * THE SERVED-MODEL RULE, SHARED BY THE THREE PEERS.
+ * THE SERVED-MODEL RULE.
  *
- * Exact requested id, or a dated build `<requested>-YYYYMMDD`. A dashed
- * snapshot is a different string. Silence is unattested, never a copy of
- * the request.
+ * The default is the hosted dated build: exact id, or `<requested>-YYYYMMDD`.
+ * The Prompt Architect also accepts `<requested>-YYYY-MM-DD`. A different
+ * base, a year-month, or silence is not a match. Silence is unattested,
+ * never a copy of the request.
  */
 describe('juliusServedModelVerdict', () => {
   it('matches the requested id and a dated build, including an extra attested name', () => {
     expect(juliusServedModelVerdict('claude-opus-5-5', 'claude-opus-5-5')).toBe('MATCH');
     expect(juliusServedModelVerdict('gpt-5.6-sol', 'gpt-5.6-sol-20260801')).toBe('MATCH');
+    expect(juliusServedModelVerdict('gpt-5.6-sol', 'gpt-5.6-sol-20261345')).toBe('MATCH');
     expect(juliusServedModelVerdict('grok-build-0.1', 'other', ['grok-build-0.1'])).toBe('MATCH');
     expect(juliusServedModelVerdict('grok-build-0.1', 'other', ['grok-build-0.1-20260801'])).toBe('MATCH');
   });
 
-  it('a substitute and a dashed snapshot are mismatches', () => {
+  it('a substitute and a non-snapshot suffix are mismatches', () => {
     expect(juliusServedModelVerdict('gpt-5.6-sol', 'gpt-4o')).toBe('MISMATCH');
     expect(juliusServedModelVerdict('gpt-5.6-sol', 'gpt-5.6-sol-2026-08-01')).toBe('MISMATCH');
     expect(juliusServedModelVerdict('gpt-5.6-sol', 'gpt-5.6-sol-2026-04')).toBe('MISMATCH');
     expect(juliusServedModelVerdict('grok-build-0.1', 'grok-build-0.1-2026-08-01')).toBe('MISMATCH');
     expect(juliusServedModelVerdict(null, 'gpt-5.6-sol')).toBe('MISMATCH');
+  });
+
+  it('the architect accepts both OpenAI snapshot forms of the same base id only', () => {
+    const forms = ['YYYYMMDD', 'YYYY-MM-DD'] as const;
+    expect(juliusServedModelVerdict('gpt-5.6-sol', 'gpt-5.6-sol', [], forms)).toBe('MATCH');
+    expect(juliusServedModelVerdict('gpt-5.6-sol', 'gpt-5.6-sol-2026-08-01', [], forms)).toBe('MATCH');
+    expect(juliusServedModelVerdict('gpt-5.6-sol', 'gpt-5.6-sol-20260801', [], forms)).toBe('MATCH');
+    expect(juliusServedModelVerdict('gpt-5.6-sol', 'gpt-4o-2026-08-01', [], forms)).toBe('MISMATCH');
+    expect(juliusServedModelVerdict('gpt-5.6-sol', 'gpt-5.6-sol-2026-04', [], forms)).toBe('MISMATCH');
+    expect(juliusServedModelVerdict('gpt-5.6-sol', 'gpt-5.6-sol-2026-08-01-extra', [], forms)).toBe('MISMATCH');
+    expect(juliusServedModelVerdict('gpt-5.6-sol', 'gpt-5.6-sol-2026-13-45', [], forms)).toBe('MISMATCH');
+    expect(juliusServedModelVerdict('gpt-5.6-sol', 'gpt-5.6-sol-2026-02-31', [], forms)).toBe('MISMATCH');
+    expect(juliusServedModelVerdict('gpt-5.6-sol', null, [], forms)).toBe('UNATTESTED');
   });
 
   it('no served name is unattested, and a blank request with no name is unattested', () => {

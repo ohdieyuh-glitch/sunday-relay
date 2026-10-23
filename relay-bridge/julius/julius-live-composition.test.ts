@@ -2829,7 +2829,7 @@ describe('a refused plan names the rule it broke', () => {
     change(plan);
     return async (): Promise<GptRunOutcome> => ({
       ok: true, status: 'completed', outputText: JSON.stringify(plan),
-      actualModel: 'gpt-5.6-sol-20260801', responseId: 'resp_paid3',
+      actualModel: 'gpt-5.6-sol-2026-08-01', responseId: 'resp_paid3',
       usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 },
     } as GptRunOutcome);
   };
@@ -2870,7 +2870,7 @@ describe('a refused plan names the rule it broke', () => {
       expect(facts.diag_stage).toBe('plan');
       expect(facts.diag_jsonParseable, 'it parsed; it did not validate').toBe(true);
       expect(facts.diag_validationPassed).toBe(false);
-      expect(facts.diag_servedModel, 'the model the provider said answered').toBe('gpt-5.6-sol-20260801');
+      expect(facts.diag_servedModel, 'the model the provider said answered').toBe('gpt-5.6-sol-2026-08-01');
       expect(facts.diag_outputBytesObserved as number).toBeGreaterThan(0);
       expect(JSON.stringify(facts), 'no fact may be a stringified object').not.toContain('[object Object]');
       // The mission stops, and nothing downstream is invented.
@@ -2925,12 +2925,19 @@ describe('a successful architect answer that is not the requested model halts th
     expect(memory.events().some((event) => event.type === 'run.failed' && event.facts.reasonCode === 'architect_served_model_mismatch')).toBe(true);
   });
 
-  it('a dashed OpenAI snapshot is a mismatch, not a dated build', async () => {
-    const { memory, outcome } = await driveLiveMission(['approved'], undefined, answered('gpt-5.6-sol-2026-08-01'));
+  it('an OpenAI dated snapshot of the same id does not halt, and a year-month or other base does', async () => {
+    for (const actualModel of ['gpt-5.6-sol-2026-08-01', 'gpt-5.6-sol-20260801']) {
+      const { memory } = await driveLiveMission(['approved'], undefined, answered(actualModel));
+      const halted = memory.events().some((event) =>
+        event.facts.failureClass === 'architect_served_model_mismatch'
+        || event.facts.reasonCode === 'architect_served_model_mismatch');
+      expect(halted, actualModel).toBe(false);
+    }
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, answered('gpt-5.6-sol-2026-04'));
     expect(outcome.state).toBe('FAILED');
     const facts = memory.events().filter((event) => event.type === 'task.failed').at(-1)!.facts as Record<string, unknown>;
     expect(facts.failureClass).toBe('architect_served_model_mismatch');
-    expect(facts.diag_servedModel).toBe('gpt-5.6-sol-2026-08-01');
+    expect(facts.diag_servedModel).toBe('gpt-5.6-sol-2026-04');
     expect(facts.diag_requestedModel).toBe('gpt-5.6-sol');
   });
 
@@ -2994,7 +3001,7 @@ describe('a refused plan is corrected once, and the record says it was', () => {
       return {
         ok: true, status: 'completed',
         outputText: typeof body === 'string' ? body : JSON.stringify(body),
-        actualModel: 'gpt-5.6-sol-20260801', responseId: `resp_attempt_${instructions.length}`,
+        actualModel: 'gpt-5.6-sol-2026-08-01', responseId: `resp_attempt_${instructions.length}`,
         usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 },
       } as GptRunOutcome;
     };

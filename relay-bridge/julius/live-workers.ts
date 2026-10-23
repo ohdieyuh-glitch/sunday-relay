@@ -1149,7 +1149,10 @@ export function createLiveArchitectAdapter(input: {
        */
       const architectServed = typeof outcome.actualModel === 'string' && outcome.actualModel.trim() !== ''
         ? outcome.actualModel : null;
-      const architectVerdict = juliusServedModelVerdict(input.config.model, architectServed);
+      // OpenAI snapshots: the id, `<id>-YYYY-MM-DD`, or `<id>-YYYYMMDD`. Same base only.
+      const architectVerdict = juliusServedModelVerdict(
+        input.config.model, architectServed, [], ['YYYYMMDD', 'YYYY-MM-DD'],
+      );
       if (architectVerdict !== 'MATCH') {
         const architectHaltClass = architectVerdict === 'MISMATCH'
           ? 'architect_served_model_mismatch' : 'architect_served_model_unattested';
@@ -2378,7 +2381,8 @@ export function createLiveHermesReviewerAdapter(input: {
          */
         const reviewerServed = typeof outcome.servedModel === 'string' && outcome.servedModel.trim() !== ''
           ? outcome.servedModel : null;
-        // HermesConfig.model is optional. Absent is null, which the verdict treats as unattested.
+        // HermesConfig.model is `string | undefined`. The verdict takes `string | null`.
+        // A missing served name is unattested. A served name with no requested id is a mismatch.
         const reviewerVerdict = juliusServedModelVerdict(input.config.model ?? null, reviewerServed);
         if (reviewerVerdict !== 'MATCH') {
           const reviewerHaltClass = reviewerVerdict === 'MISMATCH'
