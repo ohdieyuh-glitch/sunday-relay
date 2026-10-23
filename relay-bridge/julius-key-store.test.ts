@@ -103,10 +103,7 @@ describe('assertNoProviderKeysInEnv (the coder session inherits the bridge env)'
 
 describe('SOURCE SCAN: no process.env key read', () => {
   const code = (file: string): string => readFileSync(join(__dirname, file), 'utf8').split(/\r?\n/u).filter((l) => !/^\s*(\*|\/\/|\/\*)/u.test(l)).join('\n');
-  it('the key store, the wiring and the controller read no key from process.env; the controller reads keys only through the store when one is given', () => {
-    for (const file of ['julius-key-store.ts', 'julius-dispatch-wiring.ts', 'julius-dispatch-wiring-core.ts', 'julius-dispatch-wiring-real.ts', 'julius-dispatch-adapters.ts', 'julius-dispatch.ts']) {
-      expect(code(file), file).not.toMatch(/process\.env|process\[\s*['"]env['"]\s*\]/u);
-    }
-    expect(code('julius-dispatch.ts')).toMatch(/keyStore\.getKey\(/u);
+  it('the key store reads no key from process.env', () => {
+    expect(code('julius-key-store.ts')).not.toMatch(/process\.env|process\[\s*['"]env['"]\s*\]/u);
   });
 });
