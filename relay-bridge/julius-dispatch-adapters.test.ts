@@ -40,6 +40,8 @@ describe('architect adapter', () => {
     expect(out).toMatchObject({ ok: true, text: '{"plan":1}', responseId: 'resp_abc123456789', model: 'gpt-served', usage: { input: 5, output: 7, total: 12 }, requests: 1 });
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({ apiKey: KEY.openai, input: 'BRIEF' });
+    // OpenAI Responses usage is token counts only. This leg must not invent a dollar receipt.
+    expect(out.costUsdMicros ?? null).toBeNull();
   });
 
   it('a failed call reports a class only, keeps a response id if the provider gave one, and never a message', async () => {
@@ -171,6 +173,42 @@ describe('G3-7 createJ1ProductionComposition (injected env and fetch; not wired 
       expect(code.filter((l) => /process\.env/.test(l))).toEqual([]);
     }
   });
+  it('a real-shaped chain records only the xAI tick receipt, and the repeat stays spend_unknown', async () => {
+    const ticksBody = { ...xaiBody, usage: { ...xaiBody.usage, cost_in_usd_ticks: 100_000_000 } };
+    const fetched: { url: string; auth: string }[] = [];
+    const providers = createJ1ProductionComposition({
+      env, brief: 'BRIEF', fake: true,
+      fetchImpl: async (url, init) => { fetched.push({ url, auth: init.headers.authorization ?? '' }); return { ok: true, status: 200, text: async () => JSON.stringify(ticksBody) }; },
+      architect: { config: gptConfig, keyEnv: 'OPENAI_API_KEY', servedModelAllow: ['gpt-served'], run: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: gptUsage }) as GptRunOutcome },
+      coder: { providerFor: () => fakeCoding(completed()), shell: fakeShell(), projectId: 'proj-1', workerId: 'w', workspacePath: '/w', model: 'claude-requested', servedModelAllow: ['claude-served'], permittedPaths: ['src/'] },
+      reviewer: { model: 'grok-requested', keyEnv: 'XAI_API_KEY' },
+    });
+    const missionId = 'julius-inworld-data-1';
+    const missionFrozen: FrozenMission = { ...frozen, missionId };
+    let clock = Date.parse('2026-10-22T12:00:00Z');
+    const ledger = createMemoryDispatchLedger();
+    const controller = createJuliusDispatch({
+      providers, ledger,
+      env: () => ({
+        JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: 'founder', JULIUS_J1_PROJECT_ID: 'proj-1', JULIUS_J1_REVIEWER_PROVIDER: 'xai',
+        JULIUS_J1_BUDGET_CAP_USD: '30', JULIUS_J1_LEG_ESTIMATE_USD: '1', JULIUS_J1_DAILY_CAP: '10', JULIUS_J1_MAX_RUNS_PER_MISSION: '10', ...env,
+      }),
+      now: () => (clock += 1000), frozen: missionFrozen, checker: { check: async () => ({ pass: true }) },
+      runs: { lookup: async () => ({ missionId, contractSha256: sha, state: 'READY' }) },
+    });
+    const dispatch = (runId: string, key: string) => controller.dispatch({
+      projectId: 'proj-1', runId, callerPlayerId: 'founder', sessionId: 's1', idempotencyKey: key,
+      clientTriggerId: 'trig-00000001', clientLogSha256: 'e'.repeat(64), clientUiActionUtc: '2026-10-22T11:59:30.000Z',
+    });
+    expect(await dispatch('run:1', 'key-0000001')).toMatchObject({ ok: true });
+    await controller.whenIdle();
+    const results = (await ledger.rows()).filter((row) => row.phase === 'result' && row.role !== 'final');
+    expect(results.find((row) => row.role === 'architect')).toMatchObject({ costUsdMicros: null });
+    expect(results.find((row) => row.role === 'coder')).toMatchObject({ costUsdMicros: null });
+    expect(results.find((row) => row.role === 'reviewer')).toMatchObject({ costUsdMicros: 10_000, providerResponseId: 'resp_xai_0011223344' });
+    expect(await dispatch('run:2', 'key-0000002')).toMatchObject({ status: 409, code: 'julius_dispatch_repeat_spend_unknown' });
+    expect(fetched).toHaveLength(1);
+  });
 });
 
 describe('G3-5 the coder envelope: request fields are stated, their enforcement is a documented LIMIT', () => {
@@ -238,6 +276,8 @@ describe('coder adapter: changedPaths come from the executor record', () => {
     const records: CoderExecutorRecord[] = [];
     const out = await coder(provider, shell, { onExecutorRecord: (r) => records.push(r) }).call(call({ role: 'coder', architectText: 'PLAN' }));
     expect(out).toMatchObject({ ok: true, text: '{"artifact":true}', responseId: 'session-0011223344', model: 'claude-served', changedPaths: 2, toolInvocations: null, usage: { input: 100, output: 50, total: 150 } });
+    // Wired coder is CLAUDE_SUBSCRIPTION. hostedCoderCost returns null, and tokens are not a receipt.
+    expect(out.costUsdMicros ?? null).toBeNull();
     expect(records).toHaveLength(1);
     expect(out.evidence).toContain('EXECUTOR-OBSERVED CHANGE SET');
     expect(out.evidence).toContain('a.js');
@@ -315,6 +355,12 @@ describe('reviewer adapter (xAI through Hermes)', () => {
     const packets: ReviewPacket[] = [];
     const out = await reviewer(async ({ packet }) => { packets.push(packet); return reviewed('approved'); }).call(rcall);
     expect(out).toMatchObject({ ok: true, verdict: 'approve', responseId: 'xai-resp-0011223344', model: 'grok-served', usage: { input: 20, output: 30, total: 50 }, requests: 3 });
+    // Hermes costMicros is a harness estimate, not a provider dollar receipt.
+    expect(out.costUsdMicros ?? null).toBeNull();
+    const priced = { ...usage, costMicros: '4200', currency: 'USD' };
+    const estimated = await reviewer(async () => ({ ...reviewed('approved'), usage: priced })).call(rcall);
+    expect(estimated).toMatchObject({ ok: true, usage: { input: 20, output: 30, total: 50 } });
+    expect(estimated.costUsdMicros ?? null).toBeNull();
     expect(packets[0]).toMatchObject({ missionId: 'mission-1', handoffJson: 'PLAN', changedFileContents: '{"artifact":true}', unifiedDiff: '' });
     expect(out.shownSha256).toBe(createHash('sha256').update(JSON.stringify(['BRIEF', 'PLAN', '{"artifact":true}', '']), 'utf8').digest('hex'));
   });

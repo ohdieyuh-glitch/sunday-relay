@@ -120,4 +120,24 @@ describe('direct xAI reviewer adapter (fake fetch only)', () => {
     expect(make(ok(good)).providerId).toBe('xai');
     expect(make(ok(good), { fake: true }).fake).toBe(true);
   });
+  it('a successful leg copies integer costUsdMicros from usage.cost_in_usd_ticks and does not price the token counts', async () => {
+    // 100_000_000 ticks = $0.01 exactly. 1 USD = 10_000_000_000 ticks, so 10_000 ticks = 1 micro-USD.
+    const body = { ...good, usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15, cost_in_usd_ticks: 100_000_000 } };
+    const r = await make(ok(body)).call(callIn());
+    expect(r).toMatchObject({ ok: true, usage: { input: 10, output: 5, total: 15 }, costUsdMicros: 10_000 });
+  });
+  it('keeps an explicit zero tick count and leaves a missing or unusable tick count absent, never zero', async () => {
+    const zero = await make(ok({ ...good, usage: { ...good.usage, cost_in_usd_ticks: 0 } })).call(callIn());
+    expect(zero.costUsdMicros).toBe(0);
+    expect((await make(ok(good)).call(callIn())).costUsdMicros ?? null).toBeNull();
+    // 158_500 ticks is the provider's own example shape and is not a whole number of micros.
+    const fractional = await make(ok({ ...good, usage: { ...good.usage, cost_in_usd_ticks: 158_500 } })).call(callIn());
+    expect(fractional.ok).toBe(true);
+    expect(fractional.costUsdMicros ?? null).toBeNull();
+    for (const ticks of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '100000000']) {
+      const r = await make(ok({ ...good, usage: { ...good.usage, cost_in_usd_ticks: ticks } })).call(callIn());
+      expect(r.ok).toBe(true);
+      expect(r.costUsdMicros ?? null).toBeNull();
+    }
+  });
 });
