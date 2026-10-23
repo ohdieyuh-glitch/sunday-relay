@@ -21,9 +21,9 @@ import {
   JULIUS_VM_CARD_END_STATES,
   JULIUS_VM_WORKING_TASK_STATES,
   callerSuppliedIdentityField,
-  cardLabelProblem,
   hostOnAllowlist,
   navigationTarget,
+  registrationDisplayName,
   sessionOwnedByAgent,
   spendAmountProblem,
   utcDeadlineReached,
@@ -63,7 +63,7 @@ interface OpenInput {
   readonly runId: string;
   readonly projectId: string;
   readonly taskId: string;
-  readonly cardLabel: string;
+  readonly cardLabel?: string | null;
   readonly allowlistHosts: readonly string[];
   readonly usdMicros: number;
   readonly authorization: JuliusVmSpendAuthorization;
@@ -83,6 +83,7 @@ interface PaidInput extends SessionInput {
 
 interface StoredSession extends JuliusVmOwnedSession {
   state: JuliusVmSessionState;
+  endCause: string | null;
 }
 
 const notSpent = (agentId: string | null, vmSessionId: string | null): JuliusVmSpendRecord => ({
@@ -173,6 +174,17 @@ export class JuliusWonderWebVmOrchestrator {
   }
 
   /**
+   * A cause the session port already reported. Does not call terminate and
+   * does not reserve. Known and unknown causes both end the session.
+   */
+  async notePortEnd(input: SessionInput & { readonly endCause: string }): Promise<JuliusVmResult> {
+    const ready = await this.readySession(input, 'terminate', true);
+    if (!ready.ok) return ready.result;
+    if (ready.session.state === 'TERMINATED') return this.replay(ready.session, 'terminate', endedReason(ready.session.endCause));
+    return this.markEnded(ready.session, input.endCause, null);
+  }
+
+  /**
    * Owner terminate for one session. Refuses a session that belongs to
    * another task's agent, even when the labels match.
    */
@@ -220,8 +232,7 @@ export class JuliusWonderWebVmOrchestrator {
     if (!JULIUS_VM_WORKING_TASK_STATES.includes(issued.task.state)) {
       return this.answer(input, 'open', 'card_not_working', null, null, notSpent(null, null));
     }
-    const labelProblem = cardLabelProblem(input.cardLabel);
-    if (labelProblem) return this.answer(input, 'open', labelProblem, null, null, notSpent(null, null));
+    const named = registrationDisplayName(input.cardLabel);
     if (input.authorization.authorized !== true) {
       return this.answer(input, 'open', input.authorization.reasonCode ?? 'spend_cap_denied', null, null, {
         ...notSpent(null, null), state: 'DENIED', denialReason: input.authorization.reasonCode ?? 'spend_cap_denied',
@@ -230,7 +241,7 @@ export class JuliusWonderWebVmOrchestrator {
     const amountProblem = spendAmountProblem(input.usdMicros);
     if (amountProblem) return this.answer(input, 'open', amountProblem, null, null, notSpent(null, null));
 
-    const agentId = await this.agentFor(input);
+    const agentId = await this.agentFor(input, named.agentDisplayName);
     if (agentId === null) return this.answer(input, 'open', 'agent_not_issued', null, null, notSpent(null, null));
     const now = this.deps.clock.now();
     const reservationId = this.deps.ids.next('vm-reservation');
@@ -248,14 +259,14 @@ export class JuliusWonderWebVmOrchestrator {
     const allowlistHosts = [...new Set(input.allowlistHosts.map((host) => host.toLowerCase()))];
     try {
       const opened = await this.deps.sessions.openSession({
-        agentId, cardLabel: input.cardLabel, accentColourToken: JULIUS_TERMINAL_ACCENT_TOKEN,
+        agentId, accentColourToken: JULIUS_TERMINAL_ACCENT_TOKEN,
         allowlistHosts, reservationId,
       });
       if (opened.vmSessionId.trim() === '') throw new Error('vm_session_not_issued');
       const session: StoredSession = {
         vmSessionId: opened.vmSessionId, agentId, taskId: input.taskId, runId: input.runId, projectId: input.projectId,
-        cardLabel: input.cardLabel, accentColourToken: JULIUS_TERMINAL_ACCENT_TOKEN, windowTitle: opened.windowTitle,
-        hardTtlAt: opened.hardTtlAt, idleTtlAt: opened.idleTtlAt, allowlistHosts, state: 'OPEN',
+        agentDisplayName: named.agentDisplayName ?? null, accentColourToken: JULIUS_TERMINAL_ACCENT_TOKEN,
+        endCause: null, hardTtlAt: opened.hardTtlAt, idleTtlAt: opened.idleTtlAt, allowlistHosts, state: 'OPEN',
       };
       this.byTask.set(key, session);
       this.bySession.set(session.vmSessionId, session);
@@ -263,13 +274,13 @@ export class JuliusWonderWebVmOrchestrator {
       return this.answer(input, 'open', 'session_open', agentId, session, {
         mechanism: 'pr-404-julius-spend-ceiling', agentId, reservationId, vmSessionId: session.vmSessionId,
         reservedUsdMicros: input.usdMicros, measuredUsdMicros: null, state: 'COMMITTED', denialReason: null,
-      }, opened.providerResponseId);
+      }, opened.providerResponseId, null, named.note);
     } catch {
       await this.deps.spend.release({ agentId, reservationId, reason: 'session_open_failed', now: this.deps.clock.now() });
       return this.answer(input, 'open', 'session_open_failed', agentId, null, {
         mechanism: 'pr-404-julius-spend-ceiling', agentId, reservationId, vmSessionId: null,
         reservedUsdMicros: input.usdMicros, measuredUsdMicros: null, state: 'RELEASED', denialReason: 'session_open_failed',
-      });
+      }, null, null, named.note);
     }
   }
 
@@ -361,18 +372,30 @@ export class JuliusWonderWebVmOrchestrator {
 
   private async terminateOwned(session: StoredSession, taskId: string): Promise<JuliusVmResult> {
     const input = { runId: session.runId, projectId: session.projectId, taskId };
-    if (session.state === 'TERMINATED') return this.replay(session, 'terminate', 'session_terminated');
+    if (session.state === 'TERMINATED') return this.replay(session, 'terminate', endedReason(session.endCause));
     if (session.state === 'TERMINATE_FAILED') {
       return this.answer(input, 'terminate', 'terminate_left_to_server_ttl', session.agentId, session, notSpent(session.agentId, session.vmSessionId));
     }
     try {
-      const response = await this.deps.sessions.terminate({ vmSessionId: session.vmSessionId, agentId: session.agentId });
-      session.state = 'TERMINATED';
-      return this.answer(input, 'terminate', 'session_terminated', session.agentId, session, notSpent(session.agentId, session.vmSessionId), response.providerResponseId);
+      const response = await this.deps.sessions.terminate({
+        vmSessionId: session.vmSessionId, agentId: session.agentId, endCause: 'owner_terminated',
+      });
+      return this.markEnded(session, response.endCause, response.providerResponseId);
     } catch {
       session.state = 'TERMINATE_FAILED';
       return this.answer(input, 'terminate', 'terminate_left_to_server_ttl', session.agentId, session, notSpent(session.agentId, session.vmSessionId));
     }
+  }
+
+  private markEnded(session: StoredSession, reported: string, providerResponseId: string | null): JuliusVmResult {
+    session.state = 'TERMINATED';
+    session.endCause = reported;
+    const reason = reported === 'owner_terminated' ? 'session_terminated' : 'session_ended';
+    return this.answer(
+      { runId: session.runId, projectId: session.projectId, taskId: session.taskId },
+      'terminate', reason, session.agentId, session, notSpent(session.agentId, session.vmSessionId),
+      providerResponseId,
+    );
   }
 
   private ttlRefusal(session: StoredSession): string | null {
@@ -386,15 +409,15 @@ export class JuliusWonderWebVmOrchestrator {
     return null;
   }
 
-  private async agentFor(input: { readonly runId: string; readonly projectId: string; readonly taskId: string; readonly cardLabel: string }): Promise<string | null> {
+  private async agentFor(input: { readonly runId: string; readonly projectId: string; readonly taskId: string }, agentDisplayName: string | undefined): Promise<string | null> {
     const key = taskKey(input);
     const known = this.agents.get(key);
     if (known) return known;
     const registered = await this.deps.registry.registerWorkingCard({
       terminalId: JULIUS_VM_TERMINAL_ID,
       taskId: input.taskId,
-      cardLabel: input.cardLabel,
       accentColourToken: JULIUS_TERMINAL_ACCENT_TOKEN,
+      ...(agentDisplayName === undefined ? {} : { agentDisplayName }),
     });
     if (registered.agentId.trim() === '') return null;
     this.agents.set(key, registered.agentId);
@@ -428,6 +451,7 @@ export class JuliusWonderWebVmOrchestrator {
     spend: JuliusVmSpendRecord,
     providerResponseId: string | null = null,
     streamRef: string | null = null,
+    note: string | null = null,
   ): JuliusVmResult {
     const trace: JuliusVmActionTrace = {
       traceId: this.deps.ids.next('vm-trace'),
@@ -437,20 +461,25 @@ export class JuliusWonderWebVmOrchestrator {
       agentId,
       occurredAt: this.deps.clock.now(),
       providerResponseId,
+      note,
       spend,
     };
     return {
-      ok: reasonCode === 'session_open' || reasonCode === 'acted' || reasonCode === 'window_closed' || reasonCode === 'session_terminated' || reasonCode === 'nothing_to_terminate' || reasonCode === 'card_still_working' || reasonCode === 'run_still_open',
+      ok: reasonCode === 'session_open' || reasonCode === 'acted' || reasonCode === 'window_closed' || reasonCode === 'session_terminated' || reasonCode === 'session_ended' || reasonCode === 'nothing_to_terminate' || reasonCode === 'card_still_working' || reasonCode === 'run_still_open',
       reasonCode,
       taskId: input.taskId,
       vmSessionId: session?.vmSessionId ?? null,
       agentId,
-      windowTitle: session?.windowTitle ?? null,
+      endCause: session?.endCause ?? null,
       streamRef,
       providerResponseId,
       trace,
     };
   }
+}
+
+function endedReason(endCause: string | null): 'session_terminated' | 'session_ended' {
+  return endCause === 'owner_terminated' ? 'session_terminated' : 'session_ended';
 }
 
 function taskKey(input: { readonly projectId: string; readonly runId: string; readonly taskId: string }): string {

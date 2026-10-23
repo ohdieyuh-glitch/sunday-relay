@@ -4,13 +4,32 @@
  * BRIDGE owns the session model: user, terminal, agent, VM session, window,
  * and the session id its service mints. This file does not declare that model.
  * It declares the facts Julius records after BRIDGE answers, keyed by
- * `vmSessionId`. A window title is an opaque string BRIDGE returns. Julius
- * does not assign a window number.
+ * `vmSessionId`. The client composes the window from the session record.
+ * Julius does not send or store a window title, and it does not assign a
+ * window number.
  *
  * Not a VM, and not a pass for a real browser session.
  */
 
 export const JULIUS_WONDER_WEB_VM_CONTRACT = 'julius-wonder-web-vm.v1' as const;
+
+/** BRIDGE session contract. Julius does not publish a second one. */
+export const WONDER_WEB_VM_SESSION_CONTRACT = 'wonder-web-vm-session.v1' as const;
+
+/**
+ * Why a session ended. Closed set from `wonder-web-vm-session.v1`.
+ * A Julius card-end or run-end terminate sends `owner_terminated`.
+ * Any other string the port reports is still terminal.
+ */
+export const JULIUS_VM_END_CAUSES = [
+  'owner_terminated',
+  'idle_timeout',
+  'max_lifetime',
+  'provider_failed',
+  'cap_exhausted',
+  'authorization_revoked',
+] as const;
+export type JuliusVmEndCause = (typeof JULIUS_VM_END_CAUSES)[number];
 
 /**
  * Accent token for every Julius VM. Display metadata for BRIDGE and the
@@ -59,6 +78,8 @@ export interface JuliusVmActionTrace {
   readonly agentId: string | null;
   readonly occurredAt: string;
   readonly providerResponseId: string | null;
+  /** `label_omitted:<reason>` when the card label was not sent. Null when it was. */
+  readonly note: string | null;
   readonly spend: JuliusVmSpendRecord;
 }
 
@@ -68,7 +89,8 @@ export interface JuliusVmResult {
   readonly taskId: string | null;
   readonly vmSessionId: string | null;
   readonly agentId: string | null;
-  readonly windowTitle: string | null;
+  /** Raw cause the port reported. Null while the session is open. Not a title. */
+  readonly endCause: string | null;
   readonly streamRef: string | null;
   readonly providerResponseId: string | null;
   readonly trace: JuliusVmActionTrace;
@@ -81,12 +103,11 @@ export interface JuliusVmOwnedSession {
   readonly taskId: string;
   readonly runId: string;
   readonly projectId: string;
-  /** Display only. */
-  readonly cardLabel: string;
+  /** Display name sent at registration. Null when the card had no label. */
+  readonly agentDisplayName: string | null;
   /** Display only. The same token for every Julius session. */
   readonly accentColourToken: typeof JULIUS_TERMINAL_ACCENT_TOKEN;
-  /** Opaque title BRIDGE returned. */
-  readonly windowTitle: string;
+  readonly endCause: string | null;
   readonly hardTtlAt: string;
   readonly idleTtlAt: string;
   readonly allowlistHosts: readonly string[];

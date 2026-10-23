@@ -3,9 +3,9 @@
  * service, or a provider behind these interfaces.
  *
  * The real registry issues agent ids with a CSPRNG. The real session service
- * mints `vmSessionId`, the window title (including the window number), and
- * the idle and hard TTLs, and charges those TTLs against PR #404. This file
- * has no such implementation.
+ * mints `vmSessionId` and the idle and hard TTLs, and charges those TTLs
+ * against PR #404. The client composes the window from `agentDisplayName`
+ * and `vmNumber` on that record. This file has no such implementation.
  */
 
 import type { JuliusMissionState, JuliusTaskState } from '../../mission/julius/julius-runtime';
@@ -82,7 +82,8 @@ export interface JuliusVmRegistryPort {
   registerWorkingCard(input: {
     readonly terminalId: typeof JULIUS_VM_TERMINAL_ID;
     readonly taskId: string;
-    readonly cardLabel: string;
+    /** Present only when the card has a label. A missing label omits it. */
+    readonly agentDisplayName?: string;
     readonly accentColourToken: typeof JULIUS_TERMINAL_ACCENT_TOKEN;
   }): Promise<{ readonly agentId: string }>;
 }
@@ -98,13 +99,11 @@ export interface JuliusVmRegistryPort {
 export interface JuliusVmSessionPort {
   openSession(input: {
     readonly agentId: string;
-    readonly cardLabel: string;
     readonly accentColourToken: typeof JULIUS_TERMINAL_ACCENT_TOKEN;
     readonly allowlistHosts: readonly string[];
     readonly reservationId: string;
   }): Promise<{
     readonly vmSessionId: string;
-    readonly windowTitle: string;
     readonly hardTtlAt: string;
     readonly idleTtlAt: string;
     readonly providerResponseId: string;
@@ -130,8 +129,14 @@ export interface JuliusVmSessionPort {
     readonly vmSessionId: string;
     readonly agentId: string;
   }): Promise<{ readonly providerResponseId: string }>;
+  /**
+   * Julius sends `owner_terminated` for a card end or a run end.
+   * `endCause` on the answer is whatever the session service reported.
+   * It may be any string. Julius does not spend on this call.
+   */
   terminate(input: {
     readonly vmSessionId: string;
     readonly agentId: string;
-  }): Promise<{ readonly providerResponseId: string }>;
+    readonly endCause: 'owner_terminated';
+  }): Promise<{ readonly providerResponseId: string; readonly endCause: string }>;
 }

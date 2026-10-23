@@ -39,9 +39,9 @@ That is the server equivalent of the client task GUID. A `pbcard:` loadout id is
 
 ## Slice this PR adds (not a VM pass)
 
-One issued Julius task registers under the Julius terminal through BRIDGE's registry port, opens one session through BRIDGE's session port, and is shown with the window title and Julius accent token those ports return. Julius does not mint agent ids, session ids, or window numbers. The fake in the test file is not a provider.
+One issued Julius task registers under the Julius terminal through BRIDGE's registry port. `agentDisplayName` is the trimmed card label only when that name is non-empty, at most 64 characters, and free of control characters. Otherwise the field is omitted and the open trace notes `label_omitted:<reason>`. A provider label is never sent. A bad label does not block the VM. The client composes the window. Julius does not send or store a window title, and it does not mint agent ids, session ids, or window numbers. The fake in the test file is not a provider.
 
-Spend goes only through a port shaped for PR #404's decision plus `JuliusBudgetPort`. This PR does not copy the ceiling table and does not import the unmerged file. Closing a window does not terminate. Task end (`SUCCEEDED`, `FAILED`, `CANCELLED`) and run end (`JULIUS_TERMINAL_MISSION_STATES` in `julius-runtime.ts:25-26`) call owner terminate once. A failed terminate is not spent again and is not retried; the server TTL remains the session layer's job.
+Spend goes only through a port shaped for PR #404's decision plus `JuliusBudgetPort`. This PR does not copy the ceiling table and does not import the unmerged file. Closing a window does not terminate. Task end (`SUCCEEDED`, `FAILED`, `CANCELLED`) and run end (`JULIUS_TERMINAL_MISSION_STATES` in `julius-runtime.ts:25-26`) call owner terminate once, with end cause `owner_terminated` from `wonder-web-vm-session.v1`. Any other or unknown cause the port reports ends the session with no retry and no new reservation. A failed terminate is not spent again and is not retried; the server TTL remains the session layer's job.
 
 ### Files
 

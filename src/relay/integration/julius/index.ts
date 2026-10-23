@@ -24,9 +24,12 @@ export {
 
 export {
   JULIUS_TERMINAL_ACCENT_TOKEN,
+  JULIUS_VM_END_CAUSES,
   JULIUS_VM_TERMINAL_ID,
   JULIUS_WONDER_WEB_VM_CONTRACT,
+  WONDER_WEB_VM_SESSION_CONTRACT,
   type JuliusVmActionTrace,
+  type JuliusVmEndCause,
   type JuliusVmOperation,
   type JuliusVmOwnedSession,
   type JuliusVmResult,

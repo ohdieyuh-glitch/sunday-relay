@@ -52,12 +52,25 @@ export function workingCardIdProblem(taskId: string): 'task_not_issued' | 'loado
   return null;
 }
 
-export function cardLabelProblem(label: string): 'card_label_invalid' | 'provider_label_is_not_a_card' | null {
-  if (label.trim() === '' || label !== label.trim() || label.length > 80) return 'card_label_invalid';
-  if (/[\u0000-\u001f]/u.test(label)) return 'card_label_invalid';
-  if (/sk-|api[_-]?key|bearer\s/iu.test(label)) return 'card_label_invalid';
-  if (PROVIDER_LABELS.has(label.toLowerCase())) return 'provider_label_is_not_a_card';
-  return null;
+/**
+ * The name Julius may send to BRIDGE's registry.
+ *
+ * The registry accepts a present name only when it is non-empty after trim,
+ * at most 64 characters, and free of control characters. Anything else is
+ * omitted, and the card still gets its VM. The trimmed label is sent as-is.
+ * It is never truncated and never replaced. A provider label is never sent.
+ */
+export function registrationDisplayName(label: string | null | undefined): {
+  readonly agentDisplayName: string | undefined;
+  readonly note: string | null;
+} {
+  if (label == null) return { agentDisplayName: undefined, note: 'label_omitted:missing' };
+  const trimmed = label.trim();
+  if (trimmed === '') return { agentDisplayName: undefined, note: 'label_omitted:blank' };
+  if (/[\u0000-\u001f\u007f]/u.test(trimmed)) return { agentDisplayName: undefined, note: 'label_omitted:control_character' };
+  if (trimmed.length > 64) return { agentDisplayName: undefined, note: 'label_omitted:too_long' };
+  if (PROVIDER_LABELS.has(trimmed.toLowerCase())) return { agentDisplayName: undefined, note: 'label_omitted:provider_label' };
+  return { agentDisplayName: trimmed, note: null };
 }
 
 export function spendAmountProblem(usdMicros: number): 'spend_amount_invalid' | null {

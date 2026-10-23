@@ -19,7 +19,6 @@ import type {
 import { JULIUS_TERMINAL_ACCENT_TOKEN } from './julius-wonder-web-vm-types';
 
 const SECRET = 'sk-test-credential-should-not-leak';
-const TITLE = 'Planner \u2014 Wonder Web VM 1';
 const NOW = '2026-10-23T17:00:00.000Z';
 const HARD = '2026-10-23T18:00:00.000Z';
 const IDLE = '2026-10-23T17:30:00.000Z';
@@ -43,11 +42,12 @@ class Issued implements JuliusIssuedTaskSource {
 class FakePorts implements JuliusVmRegistryPort, JuliusVmSessionPort, JuliusVmSpendCapPort {
   readonly vaultSecret = SECRET;
   readonly calls: { op: string; body: unknown }[] = [];
-  readonly titles = new Map<string, string>();
   readonly agentIds = new Map<string, string>();
   denyReserve = false;
   failOpen = false;
   failTerminate = false;
+  /** What the session service reports back. Julius still sends owner_terminated. */
+  reportedEndCause = 'owner_terminated';
   holdOpen: (() => Promise<void>) | null = null;
   private sessions = 0;
 
@@ -79,10 +79,8 @@ class FakePorts implements JuliusVmRegistryPort, JuliusVmSessionPort, JuliusVmSp
     if (this.holdOpen) await this.holdOpen();
     if (this.failOpen) throw new Error('fake_open_failed');
     this.sessions += 1;
-    const taskId = [...this.agentIds.entries()].find(([, agentId]) => agentId === input.agentId)?.[0] ?? '';
     return {
       vmSessionId: `fake-session-${this.sessions}`,
-      windowTitle: this.titles.get(taskId) ?? 'scripted-window-title',
       hardTtlAt: HARD,
       idleTtlAt: IDLE,
       providerResponseId: `fake-response-open-${this.sessions}`,
@@ -112,7 +110,7 @@ class FakePorts implements JuliusVmRegistryPort, JuliusVmSessionPort, JuliusVmSp
   async terminate(input: Parameters<JuliusVmSessionPort['terminate']>[0]) {
     this.calls.push({ op: 'terminate', body: input });
     if (this.failTerminate) throw new Error('fake_terminate_failed');
-    return { providerResponseId: 'fake-response-terminate' };
+    return { providerResponseId: 'fake-response-terminate', endCause: this.reportedEndCause };
   }
 
   ops(op: string): unknown[] {
@@ -143,23 +141,46 @@ const openInput = {
 };
 
 describe('Julius Wonder Web VM orchestration', () => {
-  it('opens one issued task as one session and keeps the title the port returned', async () => {
+  it('registers the card label as agentDisplayName and stores no title', async () => {
     const { orch, fake } = harness();
-    fake.titles.set('run:one:plan', TITLE);
-    const opened = await orch.open(openInput);
+    const opened = await orch.open({ ...openInput, cardLabel: '  Planner  ' });
     expect(opened.ok).toBe(true);
     expect(opened.vmSessionId).toBe('fake-session-1');
-    expect(opened.windowTitle).toBe(TITLE);
     expect(opened.agentId).toBe('fake-agent-1');
+    expect(opened.endCause).toBeNull();
     expect(opened.trace.providerResponseId).toBe('fake-response-open-1');
     expect(opened.trace.spend.mechanism).toBe('pr-404-julius-spend-ceiling');
     expect(opened.trace.spend.measuredUsdMicros).toBeNull();
     expect(opened.trace.spend.agentId).toBe('fake-agent-1');
-    const registration = fake.ops('register')[0] as { cardLabel: string; accentColourToken: string; taskId: string };
-    expect(registration.cardLabel).toBe('Planner');
+    const registration = fake.ops('register')[0] as { agentDisplayName: string; accentColourToken: string; taskId: string };
+    expect(registration.agentDisplayName).toBe('Planner');
     expect(registration.accentColourToken).toBe(JULIUS_TERMINAL_ACCENT_TOKEN);
     expect(registration.taskId).toBe('run:one:plan');
+    expect(opened.trace.note).toBeNull();
+    expect(recordKeys(opened)).not.toContain('windowTitle');
+    expect(recordKeys(opened)).not.toContain('title');
+    expect(recordKeys(registration)).not.toContain('windowTitle');
+    expect(recordKeys(registration)).not.toContain('title');
     expect(JSON.stringify(opened)).not.toContain(SECRET);
+  });
+
+  it.each([
+    ['whitespace only', ' \t\n ', 'label_omitted:blank'],
+    ['65 characters', 'a'.repeat(65), 'label_omitted:too_long'],
+    ['a control character', 'Plan\u0001ner', 'label_omitted:control_character'],
+    ['a missing label', undefined, 'label_omitted:missing'],
+  ] as const)('omits %s, records the trace note, and still opens the VM', async (_label, cardLabel, note) => {
+    const { orch, fake } = harness();
+    const opened = await orch.open({ ...openInput, cardLabel });
+    expect(opened.ok).toBe(true);
+    expect(opened.vmSessionId).toBe('fake-session-1');
+    expect(opened.trace.note).toBe(note);
+    expect(opened.trace.spend.state).toBe('COMMITTED');
+    const registration = fake.ops('register')[0] as object;
+    expect(registration).not.toHaveProperty('agentDisplayName');
+    expect(JSON.stringify(registration)).not.toContain('a'.repeat(64));
+    expect(JSON.stringify(registration)).not.toContain('Plan');
+    expect(fake.ops('open')).toHaveLength(1);
   });
 
   it('refuses a task the runtime did not issue, and a loadout id', async () => {
@@ -175,7 +196,6 @@ describe('Julius Wonder Web VM orchestration', () => {
 
   it('refuses a caller-supplied agent id and a caller-supplied user id', async () => {
     const { orch, fake } = harness();
-    fake.titles.set('run:one:plan', TITLE);
     const opened = await orch.open(openInput);
     const withAgent = { ...openInput, vmSessionId: opened.vmSessionId!, url: 'https://allowed.example/', agentId: opened.agentId };
     const forgedAgent = await orch.navigate(withAgent as typeof openInput & { vmSessionId: string; url: string });
@@ -238,8 +258,6 @@ describe('Julius Wonder Web VM orchestration', () => {
 
   it('does not let one card steer, close, or terminate another card that shares its label and accent', async () => {
     const { orch, fake } = harness([task('run:one:plan'), task('run:one:build')]);
-    fake.titles.set('run:one:plan', TITLE);
-    fake.titles.set('run:one:build', TITLE);
     fake.agentIds.set('run:one:plan', 'agent-plan');
     fake.agentIds.set('run:one:build', 'agent-build');
     const plan = await orch.open(openInput);
@@ -288,7 +306,7 @@ describe('Julius Wonder Web VM orchestration', () => {
     const ended = await orch.onTaskEnded({ runId: 'run:one', projectId: 'project', taskId: 'run:one:plan' });
     expect(ended.reasonCode).toBe('session_terminated');
     expect(ended.trace.spend.state).toBe('NOT_SPENT');
-    expect(fake.ops('terminate')).toEqual([{ vmSessionId: opened.vmSessionId, agentId: opened.agentId }]);
+    expect(fake.ops('terminate')).toEqual([{ vmSessionId: opened.vmSessionId, agentId: opened.agentId, endCause: 'owner_terminated' }]);
   });
 
   it.each(['FAILED', 'COMPLETED', 'CANCELLED'] as const)('terminates every session when the run ends %s', async (state) => {
@@ -301,8 +319,8 @@ describe('Julius Wonder Web VM orchestration', () => {
     expect(ended.reasonCode).toBe('session_terminated');
     const terminated = fake.ops('terminate') as { vmSessionId: string; agentId: string }[];
     expect(terminated).toEqual([
-      { vmSessionId: plan.vmSessionId, agentId: plan.agentId },
-      { vmSessionId: build.vmSessionId, agentId: build.agentId },
+      { vmSessionId: plan.vmSessionId, agentId: plan.agentId, endCause: 'owner_terminated' },
+      { vmSessionId: build.vmSessionId, agentId: build.agentId, endCause: 'owner_terminated' },
     ]);
     expect(fake.ops('reserve')).toHaveLength(2);
   });
@@ -374,11 +392,15 @@ describe('Julius Wonder Web VM orchestration', () => {
     expect(fake.ops('open')).toHaveLength(2);
   });
 
-  it('refuses a provider product name in place of the card label', async () => {
+  it('does not send a provider label, and still opens the VM', async () => {
     const { orch, fake } = harness();
-    const denied = await orch.open({ ...openInput, cardLabel: 'Browserbase' });
-    expect(denied.reasonCode).toBe('provider_label_is_not_a_card');
-    expect(fake.ops('register')).toHaveLength(0);
+    const opened = await orch.open({ ...openInput, cardLabel: '  Browserbase  ' });
+    expect(opened.ok).toBe(true);
+    expect(opened.vmSessionId).toBe('fake-session-1');
+    expect(opened.trace.note).toBe('label_omitted:provider_label');
+    const registration = fake.ops('register')[0] as object;
+    expect(registration).not.toHaveProperty('agentDisplayName');
+    expect(JSON.stringify(registration).toLowerCase()).not.toContain('browserbase');
   });
 
   it('does not reserve a second time for the same open session', async () => {
@@ -421,7 +443,7 @@ describe('Julius Wonder Web VM orchestration', () => {
     expect(first.reasonCode).toBe('session_terminated');
     expect(second.reasonCode).toBe('session_terminated');
     expect(second.trace.spend.state).toBe('NOT_SPENT');
-    expect(fake.ops('terminate')).toEqual([{ vmSessionId: opened.vmSessionId, agentId: opened.agentId }]);
+    expect(fake.ops('terminate')).toEqual([{ vmSessionId: opened.vmSessionId, agentId: opened.agentId, endCause: 'owner_terminated' }]);
     expect(fake.ops('reserve')).toHaveLength(reserves);
   });
 
@@ -453,6 +475,65 @@ describe('Julius Wonder Web VM orchestration', () => {
     ]) {
       const source = readFileSync(new URL(`./${file}`, import.meta.url), 'utf8');
       expect(source, file).not.toMatch(/\bvmNumber\s*[:=]/);
+      expect(source, file).not.toContain('windowTitle');
     }
   });
+
+  it('treats another or unknown port cause as terminal without retry or reserve', async () => {
+    const { orch, fake, issued } = harness();
+    const opened = await orch.open(openInput);
+    const reserves = fake.ops('reserve').length;
+    fake.reportedEndCause = 'not-a-published-cause';
+    issued.tasks[0]!.state = 'FAILED';
+    const ended = await orch.onTaskEnded({ runId: 'run:one', projectId: 'project', taskId: 'run:one:plan' });
+    expect(ended.reasonCode).toBe('session_ended');
+    expect(ended.endCause).toBe('not-a-published-cause');
+    expect(ended.trace.spend.state).toBe('NOT_SPENT');
+    expect(fake.ops('terminate')).toEqual([{
+      vmSessionId: opened.vmSessionId, agentId: opened.agentId, endCause: 'owner_terminated',
+    }]);
+    const second = await orch.onTaskEnded({ runId: 'run:one', projectId: 'project', taskId: 'run:one:plan' });
+    expect(second.reasonCode).toBe('session_ended');
+    expect(fake.ops('terminate')).toHaveLength(1);
+    expect(fake.ops('reserve')).toHaveLength(reserves);
+    const again = await orch.open(openInput);
+    expect(again.reasonCode).toBe('session_not_open');
+    expect(fake.ops('reserve')).toHaveLength(reserves);
+    expect(fake.ops('open')).toHaveLength(1);
+  });
+
+  it('records a port-reported cause without calling terminate or reserving', async () => {
+    const { orch, fake } = harness();
+    const opened = await orch.open(openInput);
+    const reserves = fake.ops('reserve').length;
+    const noted = await orch.notePortEnd({
+      runId: 'run:one', projectId: 'project', taskId: 'run:one:plan',
+      vmSessionId: opened.vmSessionId!, endCause: 'idle_timeout',
+    });
+    expect(noted.ok).toBe(true);
+    expect(noted.reasonCode).toBe('session_ended');
+    expect(noted.endCause).toBe('idle_timeout');
+    expect(noted.trace.spend.state).toBe('NOT_SPENT');
+    const unknown = await orch.notePortEnd({
+      runId: 'run:one', projectId: 'project', taskId: 'run:one:plan',
+      vmSessionId: opened.vmSessionId!, endCause: 'not-a-published-cause',
+    });
+    expect(unknown.reasonCode).toBe('session_ended');
+    expect(unknown.endCause).toBe('idle_timeout');
+    expect(fake.ops('terminate')).toHaveLength(0);
+    expect(fake.ops('reserve')).toHaveLength(reserves);
+  });
 });
+
+function recordKeys(value: unknown, found: string[] = []): string[] {
+  if (value === null || typeof value !== 'object') return found;
+  if (Array.isArray(value)) {
+    for (const item of value) recordKeys(item, found);
+    return found;
+  }
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    found.push(key);
+    recordKeys(child, found);
+  }
+  return found;
+}
