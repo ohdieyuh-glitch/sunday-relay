@@ -131,10 +131,15 @@ jobs:
   # RUN_ID_ALREADY_SPENT. Its message is not read, and it never allows a run.
   # Any other result is SPENT_TAG_UNVERIFIED. Neither reaches a paid call.
   #
-  # The tag we create is an annotated tag. Its target commit and its message
-  # both bind this workflow run id, this attempt, the server run id, and the
-  # head SHA. The ref is created only after that object exists, and only a 201
-  # whose object sha is the tag we just wrote continues.
+  # The tag we create is an annotated tag. Its message and the blob
+  # `julius-run-spent-audit.txt` are the same text. The first four lines are
+  # the record the $60 cap counts: julius-run-spent.v1, run=run:<hex>,
+  # namespace=<markerNamespace>, reservedUsdMicros=<positive integer>.
+  # reservedUsdMicros is this contract's limits.spendUsd converted to micros,
+  # the run's full reservation, read from the committed contract before any
+  # paid call. The next three lines are the audit: workflow_run_id, attempt,
+  # and head SHA. The ref is created only after that object exists, and only
+  # a 201 whose object sha is the tag we just wrote continues.
   #
   # The id arrives only as an environment variable. A missing id halts
   # `server_run_id_required`. Anything that is not `^run:[0-9a-f]{24}$` halts
@@ -150,11 +155,16 @@ jobs:
       concurrency_group: ${{ steps.tag.outputs.concurrency_group }}
       server_run_id: ${{ steps.tag.outputs.server_run_id }}
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
       - name: 'Gate: one spent tag for this server run id, before any provider call'
         id: tag
         env:
           SERVER_RUN_ID: ${{ inputs.server_run_id }}
           CONFIRM_LIVE: ${{ inputs.confirm_live }}
+          MISSION: ${{ inputs.mission }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -195,6 +205,28 @@ jobs:
             exit 1
           fi
           if ! printf '%s' "$workflow_run_attempt" | grep -Eqx '[0-9]{1,10}'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          # The reservation is the committed contract's, not a dispatch input.
+          # A missing or non-integer limits.spendUsd halts before any tag write.
+          mission="${MISSION:-}"
+          case "$mission" in
+            *[!a-z0-9-]*|'') echo 'SPENT_TAG_UNVERIFIED' >&2; exit 1;;
+          esac
+          contract=".github/julius-missions/${mission}/contract.json"
+          if [ ! -f "$contract" ]; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          reservation=$(node -e 'const fs=require("fs");const c=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const n=c.markerNamespace;const s=c.limits&&c.limits.spendUsd;if(typeof n!=="string"||!/^[a-z0-9-]{1,64}$/.test(n))process.exit(1);if(typeof s!=="number"||!Number.isInteger(s)||s<=0||s>1000000000)process.exit(1);const m=s*1000000;if(!Number.isSafeInteger(m)||String(m).length>15)process.exit(1);process.stdout.write(n+"\n"+String(m));' "$contract") || { echo 'SPENT_TAG_UNVERIFIED' >&2; exit 1; }
+          namespace=${reservation%%$'\n'*}
+          micros=${reservation#*$'\n'}
+          if ! printf '%s' "$namespace" | grep -Eqx '[a-z0-9-]{1,64}'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          if ! printf '%s' "$micros" | grep -Eqx '[1-9][0-9]{0,14}'; then
             echo 'SPENT_TAG_UNVERIFIED' >&2
             exit 1
           fi
@@ -245,7 +277,7 @@ jobs:
             echo 'SPENT_TAG_UNVERIFIED' >&2
             exit 1
           fi
-          json_audit="julius-run-spent.v1\nserver_run_id=run:${hex}\nworkflow_run_id=${workflow_run_id}\nworkflow_run_attempt=${workflow_run_attempt}\nhead_sha=${GITHUB_SHA}\n"
+          json_audit="julius-run-spent.v1\nrun=run:${hex}\nnamespace=${namespace}\nreservedUsdMicros=${micros}\nworkflow_run_id=${workflow_run_id}\nworkflow_run_attempt=${workflow_run_attempt}\nhead_sha=${GITHUB_SHA}\n"
           tagged_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           if ! printf '%s' "$tagged_at" | grep -Eqx '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z'; then
             echo 'SPENT_TAG_UNVERIFIED' >&2

@@ -7,6 +7,7 @@ import { delimiter, join, resolve } from 'node:path';
 
 import { ANTHROPIC_CREDENTIAL_ENV_NAMES } from '../relay-bridge/hosted-coding-agent/hosted-auth';
 import { sdkExecutableCandidates } from '../relay-bridge/hosted-coding-agent/hosted-login-probe';
+import { juliusSpentTagRecord, parseJuliusSpentTagRecord } from '../src/relay/mission/julius/julius-spent-tag-record';
 
 /**
  * ONE SPENDING PATH, ONE SLOT, NO WAY AROUND EITHER.
@@ -577,6 +578,7 @@ describe('a server run id is one spent tag, created before any provider call', (
     writeFileSync(output, '');
     try {
       execFileSync('bash', [...GITHUB_BASH, tagScript], {
+        cwd: ROOT,
         env: {
           ...process.env,
           PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
@@ -649,7 +651,28 @@ describe('a server run id is one spent tag, created before any provider call', (
     expect(created.curlLog).toContain('workflow_run_id=4242');
     expect(created.curlLog).toContain('workflow_run_attempt=1');
     expect(created.curlLog).toContain(`head_sha=${'a'.repeat(40)}`);
+    expect(created.curlLog).toContain('namespace=julius-first-live');
+    expect(created.curlLog).toContain('reservedUsdMicros=5000000');
+    expect(created.curlLog).toContain(`run=run:${HEX}`);
+    expect(created.curlLog).not.toContain('server_run_id=');
     expect(created.curlLog).toContain(`/git/ref/tags/julius-run-spent-${HEX}`);
+    const record = juliusSpentTagRecord({
+      runId: `run:${HEX}`,
+      namespace: 'julius-first-live',
+      reservedUsdMicros: 5_000_000,
+      workflowRunId: '4242',
+      workflowRunAttempt: '1',
+      headSha: 'a'.repeat(40),
+    });
+    expect(record).not.toBeNull();
+    const payloads = created.curlLog.split('\n')
+      .filter((line) => line.startsWith('DATA {'))
+      .map((line) => JSON.parse(line.slice('DATA '.length)) as { content?: string; message?: string });
+    const written = payloads.flatMap((payload) => [payload.content, payload.message]).filter((value): value is string => typeof value === 'string');
+    expect(written).toEqual([record, record, record]);
+    expect(parseJuliusSpentTagRecord(record, `run:${HEX}`, 'julius-first-live')).toEqual({
+      kind: 'verified', reservedUsdMicros: 5_000_000,
+    });
     const exists = runTag(
       { SERVER_RUN_ID: `run:${HEX}`, CONFIRM_LIVE: 'RUN LIVE MISSION' },
       { code: '422', body: '{"message":"Reference already exists"}' },
@@ -669,6 +692,25 @@ describe('a server run id is one spent tag, created before any provider call', (
     );
     expect(dropped.status).not.toBe(0);
     expect(dropped.stderr).toContain('SPENT_TAG_UNVERIFIED');
+  });
+
+  it('a live mission reserves its own contract ceiling, and a missing contract writes nothing', () => {
+    const mission5 = runTag({
+      SERVER_RUN_ID: `run:${HEX}`,
+      CONFIRM_LIVE: 'RUN LIVE MISSION',
+      MISSION: 'julius-live-mission-5',
+    });
+    expect(mission5.status).toBe(0);
+    expect(mission5.curlLog).toContain('namespace=julius-live-mission-5');
+    expect(mission5.curlLog).toContain('reservedUsdMicros=30000000');
+    const missing = runTag({
+      SERVER_RUN_ID: `run:${HEX}`,
+      CONFIRM_LIVE: 'RUN LIVE MISSION',
+      MISSION: 'julius-no-such-mission',
+    });
+    expect(missing.status).not.toBe(0);
+    expect(missing.stderr).toContain('SPENT_TAG_UNVERIFIED');
+    expect(missing.curlLog).not.toContain('-X POST');
   });
 
   it('a pre-created tag blocks the run and cannot allow it', () => {
