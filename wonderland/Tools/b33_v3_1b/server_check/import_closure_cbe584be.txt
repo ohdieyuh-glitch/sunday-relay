@@ -1,0 +1,36 @@
+repo C:/dev/iwonder/sunday-relay commit cbe584be (cbe584becf417c48cc4de8efe8a2fa16f404c0bf) entry relay-bridge/dev-social-server.ts
+archive paths: relay-bridge src package.json
+  in-archive  relay-bridge/browser-session/grants.ts
+  in-archive  relay-bridge/dev-social-server.ts
+  in-archive  relay-bridge/eos-voice.ts
+  in-archive  relay-bridge/wonderland-github-stub-seam.ts
+  in-archive  relay-bridge/wonderland-social-routes.ts
+  in-archive  relay-bridge/wonderland-social-scope.ts
+  in-archive  src/relay/mission/wonderland/wonderland-backend.ts
+  in-archive  src/relay/mission/wonderland/wonderland-execution.ts
+  in-archive  src/relay/mission/wonderland/wonderland-ratings.ts
+  in-archive  src/relay/persistence/julius-test-database.ts
+  in-archive  src/relay/persistence/pg-held-client.ts
+  in-archive  src/relay/persistence/protected-store-writer-guard.ts
+  in-archive  src/relay/persistence/protected-store.ts
+  in-archive  src/relay/persistence/redaction.ts
+  in-archive  src/relay/persistence/social-postgres.ts
+  in-archive  src/relay/persistence/wonderland-postgres.ts
+  in-archive  src/relay/protocol/errors.ts
+  in-archive  src/relay/shared/relay-chakra.ts
+  in-archive  src/relay/social/social-commands.ts
+  in-archive  src/relay/social/social-contracts.ts
+  in-archive  src/relay/social/social-conversations.ts
+  in-archive  src/relay/social/social-fixtures.ts
+  in-archive  src/relay/social/social-friends.ts
+  in-archive  src/relay/social/social-parties.ts
+  in-archive  src/relay/social/social-presence.ts
+  in-archive  src/relay/social/social-preview.ts
+  in-archive  src/relay/social/social-state.ts
+  in-archive  src/relay/social/social-store.ts
+  in-archive  src/relay/social/social-voice.ts
+  in-archive  src/relay/social/voice-binding.ts
+  in-archive  src/relay/social/world-presence.ts
+  package pg                           present (imported by 6 file(s))
+files in closure: 31; bare packages: 1
+RESULT: OK
