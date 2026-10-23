@@ -17,6 +17,7 @@
 #include "CoreMinimal.h"
 #include "Styling/SlateTypes.h"
 #include "Widgets/SCompoundWidget.h"
+#include "WonderlandWonderWebWindowLook.h"
 
 class SBox;
 class SEditableText;
@@ -61,6 +62,10 @@ public:
 	 * controls this build can name, so this is how a proof reaches a search box or a link on it.
 	 */
 	bool GetLivePagePoint(const FVector2D& PagePixel, FVector2D& OutWindowPixel) const;
+
+	/** The VM window's title, parent line and outline (see SWonderlandWonderWebPanel::SetWindowLook). Unset is the legacy look. */
+	void SetWindowLook(const FWonderWebWindowLook& InLook);
+	const FWonderWebWindowLook& GetWindowLook() const { return Look; }
 
 private:
 	void Rebuild();
@@ -133,6 +138,8 @@ private:
 	TArray<TSharedPtr<FSlateBrush>> PageBrushes;
 
 	FSlateBrush WindowBrush;
+	/** The look this window is drawn with; unset is the legacy Wonder Web. */
+	FWonderWebWindowLook Look;
 	FSlateBrush LineBrush;
 	FSlateBrush AddressBrush;
 	FSlateBrush TabBrush;

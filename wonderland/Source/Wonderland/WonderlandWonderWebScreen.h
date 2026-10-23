@@ -23,6 +23,7 @@
 #include "GameFramework/Actor.h"
 #include "Widgets/Layout/SConstraintCanvas.h"
 #include "Widgets/SCompoundWidget.h"
+#include "WonderlandWonderWebWindowLook.h"
 #include "WonderlandWonderWebScreen.generated.h"
 
 class SBox;
@@ -69,6 +70,33 @@ public:
 	/** Fold it away. */
 	void Dismiss();
 	bool IsPresented() const { return bPresented; }
+
+	// ---------------------------------------------------------------- the window manager's visual intents
+	// A VM WINDOW'S LOOK AND MOTION, DRIVEN BY INTENT (WonderlandWonderWebWindowLook.h). Present()/Dismiss() above stay
+	// exactly as they were -- the fold both ways, the yellow outline -- for every caller that passes no intent.
+
+	/**
+	 * Present for a spawn intent (SpawnWithCloseUp or SpawnInline; anything else is read as SpawnInline). A spawn is a
+	 * fresh session: the VM ENDED look is cleared. The camera blend is the caller's: the window only records the intent.
+	 */
+	void PresentWithIntent(const FVector2D& WindowSize, const FVector2D& ChipSize, AWonderlandWonderWebWorkspace* Workspace, WonderlandWonderWebWindowLook::EVisualIntent Intent);
+	/** Minimize folds to the chip; Close leaves with the close animation; VmEnded keeps the window and dims it. A spawn intent re-presents at the current size. */
+	void ApplyIntent(WonderlandWonderWebWindowLook::EVisualIntent Intent);
+	/** The intent the window was last spawned with (SpawnInline until one is given). */
+	WonderlandWonderWebWindowLook::EVisualIntent GetSpawnIntent() const { return SpawnIntent; }
+	/** How the window leaves (or folds) right now: Fold unless a Close intent is under way. */
+	WonderlandWonderWebWindowLook::EExitStyle GetExitStyle() const { return ExitStyle; }
+	/** Leaving the workspace with the close animation (not the fold). */
+	bool IsClosing() const { return !bPresented && ExitStyle == WonderlandWonderWebWindowLook::EExitStyle::Close; }
+
+	/** The window's title, metadata and outline. An unset look (the default) is the Wonder Web as it always was. */
+	void SetWindowLook(const FWonderWebWindowLook& InLook);
+	const FWonderWebWindowLook& GetWindowLook() const { return Look; }
+	/** The window's outline colour: the parent terminal's, or the legacy Wonder Web yellow when none was given. */
+	FLinearColor GetOutlineColour() const;
+	/** Whether the VM ENDED look is on, and how far it has faded in (0..1). */
+	bool IsVmEnded() const { return bVmEnded; }
+	float GetVmEndedShown() const { return VmEndedShown; }
 
 	// ---------------------------------------------------------------- the window's state in the workspace
 	void SetFocused(bool bInFocused);
@@ -146,6 +174,12 @@ private:
 	FName Place = TEXT("center");
 	bool bDragging = false;
 	FVector2D DragGrip = FVector2D::ZeroVector;
+	// PLAIN C++, NOT REFLECTED: a new reflected name shifts the FName table Niagara hashes (WonderlandBeta.h).
+	FWonderWebWindowLook Look;
+	WonderlandWonderWebWindowLook::EVisualIntent SpawnIntent = WonderlandWonderWebWindowLook::EVisualIntent::SpawnInline;
+	WonderlandWonderWebWindowLook::EExitStyle ExitStyle = WonderlandWonderWebWindowLook::EExitStyle::Fold;
+	bool bVmEnded = false;
+	float VmEndedShown = 0.0f;
 };
 
 /**
@@ -207,6 +241,8 @@ private:
 		TSharedPtr<SBox> Frame;
 		TSharedPtr<SDPIScaler> Scaler;
 		TSharedPtr<SRetainerWidget> Retainer;
+		/** The VM ENDED veil over the window's content (collapsed unless its VM ended). */
+		TSharedPtr<SWonderWebVmEndedVeil> Veil;
 		SConstraintCanvas::FSlot* Slot = nullptr;
 		TSharedPtr<SBox> ChipFrame;
 		TSharedPtr<SDPIScaler> ChipScaler;
