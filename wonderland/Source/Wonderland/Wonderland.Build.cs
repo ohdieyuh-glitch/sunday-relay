@@ -24,5 +24,15 @@ public class Wonderland : ModuleRules
 			"Slate",
 			"SlateCore"
 		});
+
+		// J1 dispatch randomness only. The wrapper calls IPlatformCrypto
+		// CreateRandomBytes and treats any other result as failure. It does
+		// not call CreatePseudoRandomBytes and it does not fall back to RAND_bytes.
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"PlatformCrypto",
+			"PlatformCryptoTypes",
+			"PlatformCryptoContext"
+		});
 	}
 }
