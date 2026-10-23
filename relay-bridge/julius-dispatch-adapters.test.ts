@@ -155,7 +155,7 @@ describe('G3-7 createJ1ProductionComposition (injected env and fetch; not wired 
   const sha = 'c'.repeat(64);
   const frozen: FrozenMission = { missionId: 'mission-1', contractSha256: sha, checkerSha256: 'd'.repeat(64), missionAuthor: 'a', checkerAuthor: 'b', seededDefect: false, preregId: 'p' };
   const xaiBody = { id: 'resp_xai_0011223344', model: 'grok-requested', usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 }, output: [{ content: [{ text: '{"verdict":"approve","summary":"fine"}' }] }] };
-  const env = { OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai, PATH: '/bin' };
+  const env = { OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai, ANTHROPIC_API_KEY: canary('anthropic'), PATH: '/bin' };
   const build = (fetched: { url: string; auth: string }[], over: Record<string, unknown> = {}) => createJ1ProductionComposition({
     env, brief: 'BRIEF', fake: true,
     fetchImpl: async (url, init) => { fetched.push({ url, auth: init.headers.authorization ?? '' }); return { ok: true, status: 200, text: async () => JSON.stringify(xaiBody) }; },
@@ -468,7 +468,7 @@ describe('composed through the J1 controller (fakes only)', () => {
       coder: createCoderRoleProvider({ providerFor: () => fakeCoding(completed()), shell: coderShell, projectId: 'proj-1', workerId: 'w', workspacePath: '/w', brief: 'B', model: J1_CODER_MODEL, servedModelAllow: ['claude-served'], keyEnv: J1_CODER_KEY_ENV, permittedPaths: ['src/'], fake: true }),
       reviewer: createXaiDirectReviewerRoleProvider({ model: 'grok-requested', keyEnv: 'XAI_API_KEY', brief: 'B', fake: true, fetchImpl: async () => ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) }),
     });
-    const env = { JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: 'founder', JULIUS_J1_PROJECT_ID: 'proj-1', JULIUS_J1_REVIEWER_PROVIDER: 'xai', JULIUS_J1_BUDGET_CAP_USD: '10', JULIUS_J1_LEG_ESTIMATE_USD: '1', OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai };
+    const env = { JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: 'founder', JULIUS_J1_PROJECT_ID: 'proj-1', JULIUS_J1_REVIEWER_PROVIDER: 'xai', JULIUS_J1_BUDGET_CAP_USD: '10', JULIUS_J1_LEG_ESTIMATE_USD: '1', OPENAI_API_KEY: KEY.openai, XAI_API_KEY: KEY.xai, ANTHROPIC_API_KEY: canary('anthropic') };
     let clock = Date.parse('2026-10-22T12:00:00Z');
     const ledger = createMemoryDispatchLedger();
     const controller = createJuliusDispatch({
