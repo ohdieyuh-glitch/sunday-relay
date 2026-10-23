@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { BrowserSessionStore } from './browser-session/grants';
 import { sessionTokenFrom } from './browser-session/routes';
 import { WonderlandBackend, type WonderlandExecutor } from '../src/relay/mission/wonderland/wonderland-backend';
+import { WONDERLAND_ADMISSION_PATH } from './wonderland-admission-route';
 
 export interface WonderlandRouteRequest {
   readonly method: string; readonly path: string; readonly url: string;
@@ -12,7 +13,15 @@ export interface WonderlandRouteRequest {
 const asRecord = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (body: Record<string, unknown>, key: string): string => { const value = body[key]; if (typeof value !== 'string' || value.trim() === '') throw new Error(`invalid_${key}`); return value; };
 
-export function isWonderlandRoute(path: string): boolean { return path === '/wonderland' || path.startsWith('/wonderland/'); }
+/**
+ * Every `/wonderland/` path except Julius admission. That URL is handled by
+ * `handleJuliusMissionRoute`. This catch-all refuses a native session before
+ * it reads the path, so admission cannot be served from inside it.
+ */
+export function isWonderlandRoute(path: string): boolean {
+  if (path === WONDERLAND_ADMISSION_PATH) return false;
+  return path === '/wonderland' || path.startsWith('/wonderland/');
+}
 
 export async function handleWonderlandRoute(input: WonderlandRouteRequest, deps: {
   backend: WonderlandBackend; sessions: BrowserSessionStore; response: ServerResponse; request: IncomingMessage;

@@ -213,6 +213,14 @@ that holds the credentials and the executor. Making the drive reachable over
 HTTP is the deployment decision after this one — it is where money is spent —
 and it is not taken here.
 
+**Update 2026-10-23 (BRIDGE).** The paid drive is still not reachable. `POST
+/relay-api/wonderland/julius/dispatch` reserves one admission for a client
+`(runId, idempotency key)` pair when `JULIUS_WONDERLAND_ADMISSION` is exactly
+`1`, and reserves nothing otherwise. The answer leaves `confirmLive` empty and
+`submittedToPaidWorkflow` false. It does not call a provider, does not start
+`julius-first-live-mission.yml`, and does not retry. See
+`docs/integration/bridge-audit-2026-10-23.md`.
+
 
 **A browser session cannot read it yet.** The operator credential governs this
 surface because it already governs everything that spends money; which fields a

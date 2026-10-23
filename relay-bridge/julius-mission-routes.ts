@@ -8,6 +8,12 @@ import { CODER_WORKER, architectWorker, reviewerWorker } from './julius/live-com
 import { compileBootstrapRequest, parseLiveMissionContract, type LiveMissionContractFile } from './julius/mission-contract';
 import { createPostgresMissionKnowledgeStore } from './julius/mission-knowledge';
 import { createPostgresMissionSeedStore } from './julius/mission-seed';
+import {
+  handleWonderlandAdmissionRoute,
+  isWonderlandAdmissionRoute,
+  type WonderlandAdmissionRoutePorts,
+  type WonderlandAdmissionRouteRequest,
+} from './wonderland-admission-route';
 
 /**
  * A MISSION, CREATED OVER HTTP — FOR WONDERLAND TO START WHAT IT CAN ALREADY WATCH.
@@ -92,6 +98,16 @@ export interface JuliusMissionRouteRequest {
    * the family answers `400 rerun_key_required`.
    */
   readonly rerunKey?: string | undefined;
+  /** Present when this call may also be the Wonderland admission route. */
+  readonly authorization?: string | undefined;
+  readonly origin?: string | undefined;
+  readonly idempotencyKey?: string | undefined;
+  readonly remoteAddress?: string | undefined;
+  readonly host?: string | undefined;
+  readonly forwarded?: boolean | undefined;
+  readonly url?: string | undefined;
+  readonly nowIso?: string | undefined;
+  readonly nowMs?: number | undefined;
 }
 
 /**
@@ -108,6 +124,11 @@ export interface JuliusMissionRoutePorts {
   readonly missingConfig: readonly string[];
   readonly reviewerProvider: string | null;
   readonly cardRevision: string;
+  /**
+   * Wonderland admission, wired by the bridge. Absent in a creation-only test:
+   * the admission path then answers disabled and does not bootstrap.
+   */
+  readonly wonderlandAdmission?: WonderlandAdmissionRoutePorts;
 }
 
 /** The three worker requests, from the same definitions the live composition dispatches. */
@@ -144,10 +165,43 @@ const REFUSAL_STATUS: Readonly<Record<string, number>> = {
   bootstrap_persistence_failure: 503,
 };
 
+/**
+ * Admission with no bridge wiring. Loopback and the off flag still run, in
+ * that order, inside the admission route. This stub reads no environment.
+ */
+const ADMISSION_UNWIRED: WonderlandAdmissionRoutePorts = {
+  env: {},
+  operatorToken: undefined,
+  verifyNativeSession: () => null,
+  readWorkflowText: () => null,
+  configured: false,
+  admit: () => Promise.reject(new Error('admission_not_configured')),
+};
+
+function admissionRequest(request: JuliusMissionRouteRequest): WonderlandAdmissionRouteRequest {
+  return {
+    method: request.method,
+    path: request.path,
+    url: request.url ?? '',
+    authorization: request.authorization,
+    origin: request.origin,
+    rawBody: request.body,
+    idempotencyKey: request.idempotencyKey,
+    remoteAddress: request.remoteAddress,
+    host: request.host,
+    forwarded: request.forwarded ?? true,
+    nowIso: request.nowIso ?? '',
+    nowMs: request.nowMs ?? Number.NaN,
+  };
+}
+
 export async function handleJuliusMissionRoute(
   request: JuliusMissionRouteRequest,
   ports: JuliusMissionRoutePorts,
 ): Promise<JuliusMissionRouteResult | null> {
+  if (isWonderlandAdmissionRoute(request.path)) {
+    return handleWonderlandAdmissionRoute(admissionRequest(request), ports.wonderlandAdmission ?? ADMISSION_UNWIRED);
+  }
   if (!isJuliusMissionRoute(request.path)) return null;
   if (request.method !== 'POST') return err(405, 'method_not_allowed', 'A mission is created with POST.');
   if (!request.operator) {
