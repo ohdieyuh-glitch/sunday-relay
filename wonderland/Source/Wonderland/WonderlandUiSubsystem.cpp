@@ -78,6 +78,7 @@
 #include "WonderlandSocialHubPanel.h"
 #include "WonderlandSocialProfilePanel.h"
 #include "WonderlandSocialLive.h"
+#include "WonderlandSocialRecentCount.h"
 #include "WonderlandSocialSubsystem.h"
 #include "WonderlandMissionBeat.h"
 #include "WonderlandHandoffDirector.h"
@@ -1043,6 +1044,10 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		{
 			return WeakThis.IsValid() ? WonderlandUiStampDetail::ViewerIdForStamp(WeakThis->GetLocalPlayer<ULocalPlayer>()) : FString(TEXT("-"));
 		});
+		if (const FWonderlandSocialLiveService* LiveNow = SocialLive())
+		{
+			SocialHubPanel->NoteAppliedDigest(LiveNow->GetSnapshotDigest());
+		}
 		Focus = SocialHubPanel;
 		ZOrder = 59;
 	}
@@ -5266,6 +5271,10 @@ void UWonderlandUiSubsystem::HandleSocialChanged()
 	SocialHubPanel->SetSignIn(Social != nullptr ? Social->GetSignInView() : FWonderlandSignInView());
 	SocialHubPanel->SetSnapshot(Snapshot != nullptr ? *Snapshot : FWonderlandSocialSnapshot(), Snapshot != nullptr,
 		Social != nullptr ? Social->GetSourceLine() : FString(), Social != nullptr && Social->GetService() != nullptr && Social->GetService()->IsDevelopmentPreview());
+	if (const FWonderlandSocialLiveService* LiveNow = Social != nullptr ? Social->GetLive() : nullptr)
+	{
+		SocialHubPanel->NoteAppliedDigest(LiveNow->GetSnapshotDigest());
+	}
 	// THE VOICE REDRAWS WITH IT (Second's review: an EOS join that landed later left the panel on CONNECTING): the same SetVoice the
 	// commands use, content only -- the layout is unchanged
 	if (const IWonderlandVoiceService* VoiceNow = Social != nullptr ? Social->GetVoice() : nullptr)
@@ -5571,6 +5580,21 @@ void UWonderlandUiSubsystem::JudgeSocialSurfaceGate()
 		// a service adopted while the hub stays open (a sign-in again after a 401) reads on the open period too (RV-B35-08); a no-op otherwise
 		Live->SetSurfaceOpen(true);
 		const bool bMayDraw = WonderlandSocialFreshness::MayDraw(SocialSurfaceOpenedAt, Live->GetSnapshotIssuedAt(), Now);
+		// B35: OnChanged can land before Open is Social, and a later identical read does not broadcast again. Copy the
+		// live snapshot once when its digest is non-empty and not the one this panel applied, before the gate releases.
+		{
+			const std::string Applied(TCHAR_TO_UTF8(*SocialHubPanel->GetAppliedDigest()));
+			const std::string ServiceDigest(TCHAR_TO_UTF8(*Live->GetSnapshotDigest()));
+			if (WonderlandSocialRecent::HubSnapshotIsStale(Applied, ServiceDigest))
+			{
+				const UGameInstance* Instance = GetLocalPlayer<ULocalPlayer>() != nullptr ? GetLocalPlayer<ULocalPlayer>()->GetGameInstance() : nullptr;
+				const UWonderlandSocialSubsystem* Social = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSocialSubsystem>() : nullptr;
+				const FWonderlandSocialSnapshot* Snapshot = Social != nullptr ? Social->GetSnapshot() : nullptr;
+				SocialHubPanel->SetSnapshot(Snapshot != nullptr ? *Snapshot : FWonderlandSocialSnapshot(), Snapshot != nullptr,
+					Social != nullptr ? Social->GetSourceLine() : FString(), Social != nullptr && Social->GetService() != nullptr && Social->GetService()->IsDevelopmentPreview());
+				SocialHubPanel->NoteAppliedDigest(Live->GetSnapshotDigest());
+			}
+		}
 		SocialHubPanel->SetAwaitingFresh(!bMayDraw, bMayDraw ? FString() : Live->GetReadProblem());
 		return;
 	}

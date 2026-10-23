@@ -133,6 +133,9 @@ public:
 	void SetSignIn(const FWonderlandSignInView& InView);
 	/** The service's view changed (a live update): redraw on the same tab, the same conversation if it is still there. */
 	void SetSnapshot(const FWonderlandSocialSnapshot& InSnapshot, bool bInConnected, const FString& InSourceLine, bool bInPreview);
+	/** B35: the live-service digest last copied into this panel. The gate uses it to avoid painting a construction-time snapshot. */
+	void NoteAppliedDigest(const FString& Digest) { AppliedDigest = Digest; }
+	const FString& GetAppliedDigest() const { return AppliedDigest; }
 	/** B35 (R16 privacy, SC1): while true, NO tab draws another player from the cached snapshot -- FRIENDS, REQUESTS, RECENT PLAYERS,
 	 *  MESSAGES and PARTY say "Updating…" (Line, when given, says why: a read that failed) -- and the rail's counts and "friends on" are
 	 *  not drawn, because a player who hid from this one or blocked them is sent no event and the cache can still list them. The owner
@@ -238,6 +241,8 @@ private:
 	FString SourceLine;
 	bool bDevelopmentPreview = true;
 	bool bAwaitingFresh = false;
+	/** B35: digest of the snapshot this panel last applied. Empty until the opener or a later read notes one. */
+	FString AppliedDigest;
 	FString AwaitingLine;
 	/** B35: the next rebuild says the gate's new state in the log (SetAwaitingFresh), and the last line said (a change is said once). */
 	bool bLogGateOnRebuild = false;

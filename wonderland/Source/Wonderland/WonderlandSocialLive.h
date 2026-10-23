@@ -218,6 +218,8 @@ public:
 	/** B35: when the read behind the current snapshot was ISSUED (FPlatformTime::Seconds); what the server answered is no older than this.
 	 *  A time long past when there is no snapshot. */
 	double GetSnapshotIssuedAt() const { return bHasSnapshot ? SnapshotIssuedAt : -1.0e12; }
+	/** B35: digest of the current snapshot. Empty when no read has landed. An empty digest is not a player count. */
+	const FString& GetSnapshotDigest() const { return SnapshotDigest; }
 	/** B35: every read that lands, whether or not the view changed (OnChanged is broadcast only when it did). */
 	FSimpleMulticastDelegate& OnReadLanded() { return ReadLanded; }
 	/** B35: why the last read did not land, for a withheld surface to say; empty once a read lands. */
