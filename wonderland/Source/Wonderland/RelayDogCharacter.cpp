@@ -34,6 +34,8 @@
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/DateTime.h"
+#include "WonderlandQaFormat.h"
 #include "EngineUtils.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
@@ -2529,9 +2531,56 @@ void ARelayDogCharacter::CatchIfTheGroundIsMissing(float DeltaSeconds)
 		*LastGoodStanding.ToCompactString());
 }
 
+#if !UE_BUILD_SHIPPING
+namespace WonderlandQaDog
+{
+	void Sample(ARelayDogCharacter* Dog)
+	{
+		if (Dog == nullptr || !WonderlandQa::IsEnabled())
+		{
+			return;
+		}
+		const FDateTime Now = FDateTime::UtcNow();
+		const int64 Ts = static_cast<int64>(Now.ToUnixTimestamp()) * 1000 + static_cast<int64>(Now.GetMillisecond());
+		const FVector At = Dog->GetActorLocation();
+		const WonderlandQa::FMotionSample Motion = WonderlandQa::TakeMotion("local", Ts, At.X, At.Y, At.Z);
+		if (!Motion.bEmit)
+		{
+			return;
+		}
+		bool bHit = false;
+		bool bHasDistance = false;
+		double Distance = 0.0;
+		if (UWorld* World = Dog->GetWorld())
+		{
+			FHitResult Hit;
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(WonderlandQaGround), false, Dog);
+			bHit = World->LineTraceSingleByChannel(Hit, At, At - FVector(0.0, 0.0, 20000.0), ECC_Pawn, Params);
+			if (bHit && FMath::IsFinite(Hit.Distance))
+			{
+				bHasDistance = true;
+				Distance = Hit.Distance;
+			}
+		}
+		const std::string Line = WonderlandQa::MovementLine(Ts, "sender", "local", At.X, At.Y, At.Z, Motion.bHasVelocity, Motion.Vx, Motion.Vy, Motion.Vz,
+			bHit, bHasDistance, Distance, Dog->IsHandoffArmed());
+		if (!Line.empty())
+		{
+			UE_LOG(LogTemp, Display, TEXT("%s"), *FString(ANSI_TO_TCHAR(Line.c_str())));
+		}
+	}
+}
+#endif
+
 void ARelayDogCharacter::Tick(float DeltaSeconds)
 {
 	CatchIfTheGroundIsMissing(DeltaSeconds);
+#if !UE_BUILD_SHIPPING
+	if (IsLocallyControlled())
+	{
+		WonderlandQaDog::Sample(this);
+	}
+#endif
 
 	// ---- THE NIGHT LAMP, FOLLOWING THE ONE NIGHT CURVE. See the declaration for why the Dog carries a light.
 	if (NightLamp != nullptr)

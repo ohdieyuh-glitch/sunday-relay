@@ -4,6 +4,7 @@
 #include "Components/TextRenderComponent.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
+#include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -12,6 +13,9 @@
 #include "WonderlandCompanionEmbodiment.h"
 #include "WonderlandGrip.h"
 #include "WonderlandSocialLive.h"   // r16reh18 Q-T1 (A): WonderlandSocialFreshness::EventStamp
+#include "CollisionQueryParams.h"
+#include "Misc/DateTime.h"
+#include "WonderlandQaFormat.h"
 
 // Named, not anonymous: the module is one unity translation unit.
 namespace WonderlandWorldPresenceDetail
@@ -178,6 +182,88 @@ bool WonderlandHandoffWire::IsReplicationOn()
 {
 	return WonderlandWorldPresenceDetail::CVarHandoffReplicate.GetValueOnGameThread() != 0;
 }
+
+#if !UE_BUILD_SHIPPING
+void WonderlandHandoffWire::SetQaReplication(bool bOn)
+{
+	IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Handoff.Replicate"));
+	if (Variable != nullptr)
+	{
+		Variable->Set(bOn ? 1 : 0, ECVF_SetByCode);
+	}
+}
+
+namespace WonderlandQaPresence
+{
+	void EmitLine(const std::string& Line)
+	{
+		if (!Line.empty())
+		{
+			UE_LOG(LogTemp, Display, TEXT("%s"), *FString(ANSI_TO_TCHAR(Line.c_str())));
+		}
+	}
+
+	int64 NowMs()
+	{
+		const FDateTime Now = FDateTime::UtcNow();
+		return static_cast<int64>(Now.ToUnixTimestamp()) * 1000 + static_cast<int64>(Now.GetMillisecond());
+	}
+
+	void LogObserverDrawn(const FString& UserId, int32 PrevDrawn, int32 Drawn, int32 Epoch, int32 N, int32 Seq)
+	{
+		if (!WonderlandQa::IsEnabled() || Drawn == PrevDrawn)
+		{
+			return;
+		}
+		std::string Carried;
+		if (Epoch > 0 && N > 0)
+		{
+			Carried = WonderlandQa::CorrId(Epoch, N);
+		}
+		else if (Seq > 0)
+		{
+			Carried = WonderlandQa::SeqCorr(Seq);
+		}
+		const std::string Net(TCHAR_TO_UTF8(*UserId));
+		const WonderlandQa::FEdge Edge = WonderlandQa::ObserverEdge(Net, PrevDrawn, Drawn, Carried);
+		if (!Edge.bEmit)
+		{
+			return;
+		}
+		EmitLine(WonderlandQa::ActivationLine(NowMs(), "observer", Net, false, std::string(), !Edge.Corr.empty(), Edge.Corr, Edge.Event));
+	}
+
+	void LogMotion(const FString& UserId, const FVector& At, bool bHover, UWorld* World, AActor* Ignore)
+	{
+		if (!WonderlandQa::IsEnabled())
+		{
+			return;
+		}
+		const int64 Ts = NowMs();
+		const std::string Net(TCHAR_TO_UTF8(*UserId));
+		const WonderlandQa::FMotionSample Motion = WonderlandQa::TakeMotion(Net, Ts, At.X, At.Y, At.Z);
+		if (!Motion.bEmit)
+		{
+			return;
+		}
+		bool bHit = false;
+		bool bHasDistance = false;
+		double Distance = 0.0;
+		if (World != nullptr)
+		{
+			FHitResult Hit;
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(WonderlandQaGround), false, Ignore);
+			bHit = World->LineTraceSingleByChannel(Hit, At, At - FVector(0.0, 0.0, 20000.0), ECC_Pawn, Params);
+			if (bHit && FMath::IsFinite(Hit.Distance))
+			{
+				bHasDistance = true;
+				Distance = Hit.Distance;
+			}
+		}
+		EmitLine(WonderlandQa::MovementLine(Ts, "observer", Net, At.X, At.Y, At.Z, Motion.bHasVelocity, Motion.Vx, Motion.Vy, Motion.Vz, bHit, bHasDistance, Distance, bHover));
+	}
+}
+#endif
 
 FWonderlandRemoteAvatars::~FWonderlandRemoteAvatars()
 {
@@ -467,6 +553,12 @@ void FWonderlandRemoteAvatars::Apply(UWorld* World, const FWonderlandWorldView& 
 		// MP-VIS-02 REV2: the persistent form and the latest event decide the figure's handoff (WonderlandHandoffRemote::OnView: new seq only, from its age,
 		// settle when old, the form as the anchor). This view's arrival time is "now"; ageMs is the server's age of the event when it answered.
 		Remote.Handoff = A.Handoff;
+		if (A.HandoffEvent.Seq > 0 || (A.HandoffEvent.Epoch > 0 && A.HandoffEvent.N > 0))
+		{
+			Remote.QaEpoch = A.HandoffEvent.Epoch;
+			Remote.QaN = A.HandoffEvent.N;
+			Remote.QaSeq = A.HandoffEvent.Seq;
+		}
 		{
 			const WonderlandHandoffRemote::EAction Did = WonderlandHandoffRemote::OnView(Remote.Track, A.Handoff, A.HandoffEvent, FPlatformTime::Seconds(), Remote.AdaptDelay);
 			if (Did != WonderlandHandoffRemote::EAction::None || A.HandoffEvent.bValid)
@@ -569,6 +661,12 @@ void FWonderlandRemoteAvatars::UpdateRemoteHandoff(const FString& UserId, FRemot
 		if (R.LoggedPlayState > 0)
 		{
 			UE_LOG(LogTemp, Display, TEXT("WLHANDOFF play fig=%s state=Idle (ended)"), *UserId);
+#if !UE_BUILD_SHIPPING
+			if (bOn)
+			{
+				WonderlandQaPresence::LogObserverDrawn(UserId, (R.LoggedPlayState - 1) & 7, 0, R.QaEpoch, R.QaN, R.QaSeq);
+			}
+#endif
 			R.LoggedPlayState = 0;
 		}
 		return;   // NOTHING IS MADE for a player who never hands off
@@ -665,6 +763,13 @@ void FWonderlandRemoteAvatars::UpdateRemoteHandoff(const FString& UserId, FRemot
 	const int32 PlayState = 1 + static_cast<int32>(In.State) + (bHands ? 8 : 0);
 	if (PlayState != R.LoggedPlayState)
 	{
+#if !UE_BUILD_SHIPPING
+		if (bOn)
+		{
+			const int32 PrevDrawn = R.LoggedPlayState >= 1 ? ((R.LoggedPlayState - 1) & 7) : -1;
+			WonderlandQaPresence::LogObserverDrawn(UserId, PrevDrawn, (PlayState - 1) & 7, R.QaEpoch, R.QaN, R.QaSeq);
+		}
+#endif
 		R.LoggedPlayState = PlayState;
 		UE_LOG(LogTemp, Display, TEXT("WLHANDOFF play fig=%s state=%s phase=%.2f sinceStartMs=%.0f hands=%d swords=%d armed=%.2f"), *UserId, FWonderlandMissionHandoff::StateName(In.State),
 			static_cast<double>(In.PhaseSeconds), (Now - R.Track.StartedAt) * 1000.0, bHands ? 1 : 0, R.Swords->CountVisibleBoxes(), static_cast<double>(R.Track.Armed));
@@ -920,6 +1025,9 @@ void FWonderlandRemoteAvatars::Tick(UWorld* World, float DeltaSeconds)
 		const FRotator Facing = FMath::RInterpTo(Body->GetActorRotation(), FRotator(0.0, R.TargetYaw, 0.0), DeltaSeconds, EaseRate);
 		Body->SetActorLocationAndRotation(Next, Facing);
 		UpdateRemoteHandoff(Pair.Key, R, Body, World, DeltaSeconds);
+#if !UE_BUILD_SHIPPING
+		WonderlandQaPresence::LogMotion(Pair.Key, Body->GetActorLocation(), R.Track.Mode != WonderlandHandoffRemote::EMode::Idle, World, Body);
+#endif
 		// THE OWNER'S DOG ANIMATOR, run for this figure (MP-ANIM-01 cause 2): the same arithmetic, configured the same way, fed the speed the sender
 		// reported for the drawn moment (the gait hint, 0 when standing), the same dt clamp and DistanceUU = speed x dt as ARelayDogCharacter::Tick; its pose
 		// is worn exactly as a skin worn by the Dog wears it. A figure is never airborne, on stairs or under a look target here: the Dog's other inputs stay at their rest values.

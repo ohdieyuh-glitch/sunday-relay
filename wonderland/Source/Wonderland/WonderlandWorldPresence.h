@@ -139,6 +139,10 @@ private:
 		TSharedPtr<WonderlandHandoffTransform::FPresentation> Transform;
 		int32 LoggedHandoffKey = 0;   // WLHANDOFF recv is said on a change of this only
 		int32 LoggedPlayState = -1;   // WLHANDOFF play is said on a change of the state being drawn
+		// Last view that carried a seq or an epoch+n. A later view that omits the event leaves these alone.
+		int32 QaEpoch = 0;
+		int32 QaN = 0;
+		int32 QaSeq = 0;
 		double PlayLoggedFrom = 0.0;
 		// WLREMOTE diagnostics only: never read by the movement code.
 		FString Motion;   // the sender's motion label as last received (log only)

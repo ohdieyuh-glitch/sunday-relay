@@ -293,6 +293,19 @@ namespace WonderlandSocialLiveDetail
 					R.HandoffEvent.Form = WonderlandHandoffWire::FromWire(FormWire);
 					R.HandoffEvent.Seq = SeqNumber >= 1.0 && SeqNumber <= 2147483647.0 ? static_cast<int32>(SeqNumber) : 0;
 					R.HandoffEvent.AgeMs = FMath::Clamp(EventAge, 0.0, 60000.0);
+					// epoch and n are the sender's own identity, already on the outbound event. Absent stays 0 and does not change bValid.
+					double EpochNumber = 0.0;
+					double NNumber = 0.0;
+					if ((*EventObject)->TryGetNumberField(TEXT("epoch"), EpochNumber) && FMath::IsFinite(EpochNumber)
+						&& EpochNumber >= 1.0 && EpochNumber <= 2147483647.0 && EpochNumber == FMath::FloorToDouble(EpochNumber))
+					{
+						R.HandoffEvent.Epoch = static_cast<int32>(EpochNumber);
+					}
+					if ((*EventObject)->TryGetNumberField(TEXT("n"), NNumber) && FMath::IsFinite(NNumber)
+						&& NNumber >= 1.0 && NNumber <= 2147483647.0 && NNumber == FMath::FloorToDouble(NNumber))
+					{
+						R.HandoffEvent.N = static_cast<int32>(NNumber);
+					}
 					R.HandoffEvent.bValid = R.HandoffEvent.Kind != WonderlandHandoffWire::EKind::None && R.HandoffEvent.Form != WonderlandHandoffWire::EForm::None && R.HandoffEvent.Seq > 0;
 				}
 				R.Location = FVector(X, Y, Z);

@@ -65,6 +65,9 @@ namespace WonderlandHandoffWire
 		EKind Kind = EKind::None;
 		EForm Form = EForm::None;
 		double AgeMs = 0.0;
+		/** Optional echo of the sender's own event identity. Absent stays 0 and is not a new wire field from this client. */
+		int32 Epoch = 0;
+		int32 N = 0;
 	};
 
 	/** This client's own event, kept and resent with every world report for ResendSeconds (the server keeps the first copy and ignores the rest). */
@@ -81,4 +84,9 @@ namespace WonderlandHandoffWire
 
 	/** wl.Handoff.Replicate (default 0 since SC2, 2026-10-20: MP-VIS-02 is deferred past the scored run): 0 sends nothing and draws nothing; 1 turns it on. */
 	WONDERLAND_API bool IsReplicationOn();
+
+#if !UE_BUILD_SHIPPING
+	/** QA only. Turns replication on for this process, or back off. Does not change the default. */
+	WONDERLAND_API void SetQaReplication(bool bOn);
+#endif
 }
