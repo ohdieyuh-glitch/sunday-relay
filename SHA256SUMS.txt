@@ -1,0 +1,8 @@
+# sha256 of each file in this commit (paths relative to repo root). docs/sources/* are byte-exact copies of C:\dev\iwonder\<path after docs/sources/> on Kaisin, read 2026-10-23 PT.
+90ed1102478bfca0d726a520268bd7ea95238300134a4efc2a40004d2ded9d9a  docs/C2_J1_CONFLICTS_20261023.md
+3dba0a5f403c1527e32c3b8b6d736289cf3b3db46bad65bbfc4b543f86d13d4b  docs/control_path_recovery.md
+3013c0a4abf2396a53ac9d46577928da228464bd015d1b753f3e8acede512e7d  docs/j1_client_plan.md
+58ba107e0fa1dc4858c075f396c9ae4cef686646bb27005ffcfb026b8d0aa2db  docs/sources/_independent_review_judev2_20261021/C2/INWORLD_ACCEPTANCE_PROTOCOL.md
+ce1aff4769174b1046c5632bcd48b5b7190ca90283baabd6052be7d8a7a8e97d  docs/sources/_qa_handoff/julius_readiness/followon_100/inworld_missions_20261022/ADDENDUM_1_to_PLAN_r3_and_SPEC_r1.md
+43958afa8960e8a3d3d3c82cf7aa0a64cc51d2597127eb2cc191310322aea7d2  docs/sources/_qa_handoff/julius_readiness/followon_100/inworld_missions_20261022/j1/CLIENT_PACKAGE_SPEC_r1.md
+f03e7f91e7a72a0ebc0dd606fc152d0d6f89ebbc093c2db79dcbc28122a03e11  docs/sources/_qa_handoff/julius_readiness/followon_100/inworld_missions_20261022/j1/CLIENT_PACKAGE_SPEC_r1_ADDENDUM_1_ECHO_DIGEST.md
