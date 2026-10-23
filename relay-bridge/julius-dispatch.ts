@@ -109,6 +109,8 @@ export interface RoleCallOutput {
   readonly providerContacted?: false;
   /** Provider- or session-reported cost in USD micros, when it gave one. Never inferred, never a price list. */
   readonly costUsdMicros?: number | null;
+  /** xAI `usage.cost_in_usd_ticks` that `costUsdMicros` was rounded up from. Present only beside that receipt. */
+  readonly costUsdTicksRaw?: number | null;
 }
 
 /** The spend marker on every result row: usage the provider reported, an explicit unknown, or a leg that never reached the provider. */
@@ -547,7 +549,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         providerResponseId: responseId, model: echoedModel, mode: ctx.mode,
         usage: out.usage === undefined ? null : { input: out.usage.input, output: out.usage.output, total: out.usage.total },
         requests: out.requests ?? null,
-        spend, spendUnknown: spend === 'spend_unknown', costUsdMicros: out.costUsdMicros ?? null,
+        spend, spendUnknown: spend === 'spend_unknown', costUsdMicros: out.costUsdMicros ?? null, costUsdTicksRaw: out.costUsdTicksRaw ?? null,
         outputSha256: text === '' ? null : sha256(text), outputChars: text.length,
         changedPaths: role === 'coder' ? (out.changedPaths ?? null) : null,
         toolInvocations: role === 'coder' ? (out.toolInvocations ?? null) : null,
