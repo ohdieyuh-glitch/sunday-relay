@@ -1,0 +1,36 @@
+===== stoppedonly =====
+exit:1
+9:⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+11: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > stores no part of a password value when the byte bound cuts that token and the process was not killed
+30: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > withholds the fragment left in the clear when redaction lengthens a clean exit past the bound
+50: Test Files  1 failed (1)
+51:      Tests  2 failed | 18 passed (20)
+restored
+===== nowithhold =====
+exit:1
+9:⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+11: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > stores no part of a password value when the byte bound cuts that token and the process was not killed
+30: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > withholds the fragment left in the clear when redaction lengthens a clean exit past the bound
+49: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > keeps hello and withholds a secret-shaped token sitting against the truncation suffix
+69: Test Files  1 failed (1)
+70:      Tests  3 failed | 17 passed (20)
+restored
+===== alwayswithhold =====
+exit:1
+9:⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+11: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > keeps the safe prefix when a stopped stream already ends with the truncation suffix
+31: Test Files  1 failed (1)
+32:      Tests  1 failed | 19 passed (20)
+restored
+===== nosecret =====
+exit:1
+9:⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+11: FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > keeps hello and withholds a secret-shaped token sitting against the truncation suffix
+31: Test Files  1 failed (1)
+32:      Tests  1 failed | 19 passed (20)
+restored
+===== TREE =====
+## judev/capture-redaction...origin/judev/capture-redaction [ahead 2]
+114:  if (bounded.truncated || stoppedEarly) {
+121:    const suffixWasAlreadyThere = hadSuffix && !bounded.truncated;
+123:    const withhold = tailToken !== null && (!suffixWasAlreadyThere || trailingTokenLooksSecret(tailToken[0]));

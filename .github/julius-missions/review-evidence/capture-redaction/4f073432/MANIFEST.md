@@ -23,6 +23,8 @@ Commits on top of `8bdd3eb4`, each authored `Cursor Agent <cursoragent@cursor.co
 
 `src/relay/workspace/output-sanitizer.ts` is unchanged from `8bdd3eb4` (diff empty). `SECRET_OUTPUT_PATTERNS` was not edited.
 
+Correction, added with the `8ee1b564` follow-up and without rewriting this commit: `4f073432` is not test-helper-only. That commit changed shipped `src/relay/workspace/verify-harness.ts`, which called `installHermeticGitHome()` and left the process HOME swapped after a real verification run. The commit subject stays as it was written.
+
 Transcripts are `.txt` because the repository ignores `*.log`. The bytes match the runs.
 
 ## SHA-256

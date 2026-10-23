@@ -1,0 +1,269 @@
+
+ RUN  v4.1.10 /tmp/capture-redaction
+
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > boundOutput counts UTF-8 bytes and never splits a character > returns text that fits the byte budget untouched
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > boundOutput counts UTF-8 bytes and never splits a character > keeps the longest prefix whose UTF-8 size fits, no shorter
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > boundOutput counts UTF-8 bytes and never splits a character > never leaves a lone surrogate, including when the next character does not fit
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > boundOutput counts UTF-8 bytes and never splits a character > marks a truncation exactly once and leaves an exact fit unmarked
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > boundOutput counts UTF-8 bytes and never splits a character > does not change what sanitizeOutput already matches
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > leaves an ordinary command unchanged
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > flushes a trailing incomplete UTF-8 sequence instead of dropping the bytes
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > reassembles a multi-byte character split across reads, on stdout and stderr
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > does not store any part of a secret that straddles the byte limit
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > keeps stored text within the bound plus the truncation mark when redaction lengthens it
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > runBoundedCommand decodes, redacts, then bounds > counts every captured secret once and stores the redaction mark
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > chunk boundaries > redacts a token split at every byte offset, on both streams
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > chunk boundaries > reassembles multibyte characters split at every byte offset, on both streams
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > bounds and cost of a large captured stream > stores at most the bound plus the truncation mark when the process emits far more
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > bounds and cost of a large captured stream > redacts before bounding a multi-megabyte capture, and stays well under a second and a half
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > stores no part of a password value when the byte bound cuts that token and the process was not killed
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > withholds the fragment left in the clear when redaction lengthens a clean exit past the bound
+ ↓ src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > keeps the last token of a clean exit that fits the bound
+ × src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > keeps the safe prefix when a stopped stream already ends with the truncation suffix 7ms
+   → expected false to be true // Object.is equality
+ ✓ src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > keeps hello and withholds a secret-shaped token sitting against the truncation suffix 1ms
+ × src/relay/workspace/verify-harness-env.test.ts > workspace verification restores the process git environment > puts HOME and every git env var back after a real run, including vars that were unset 922ms
+   → expected { …(5) } to deeply equal { …(5) }
+ × src/relay/workspace/verify-harness-env.test.ts > workspace verification restores the process git environment > restores the process git environment when verification returns after an internal failure 2ms
+   → expected { …(5) } to deeply equal { …(5) }
+ × src/relay/workspace/verify-harness-env.test.ts > workspace verification restores the process git environment > restores the process git environment and removes the temp HOME when verification rejects 904ms
+   → promise resolved "{ checks: [ { …(3) }, …(21) ], …(1) }" instead of rejecting
+ × src/relay/workspace/verify-harness-env.test.ts > workspace verification restores the process git environment > serializes overlapping runs so they do not keep each other's HOME 971ms
+   → expected '' not to be '' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/relay/workspace/command-runner-capture-redaction.test.ts > a cut withholds its trailing token whether or not the process was killed > keeps the safe prefix when a stopped stream already ends with the truncation suffix
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/relay/workspace/command-runner-capture-redaction.test.ts:288:45
+    286|     const raw = `hello${TRUNCATION_MARK}`;
+    287|     const stored = secureCapturedStream(raw, 1_000_000, true);
+    288|     expect(stored.text.startsWith('hello')).toBe(true);
+       |                                             ^
+    289|     expect(stored.text.endsWith(TRUNCATION_MARK)).toBe(true);
+    290|     expect(stored.text.includes(REDACTION_MARK)).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/relay/workspace/verify-harness-env.test.ts > workspace verification restores the process git environment > puts HOME and every git env var back after a real run, including vars that were unset
+AssertionError: expected { …(5) } to deeply equal { …(5) }
+
+- Expected
++ Received
+
+  {
+-   "GIT_CONFIG_GLOBAL": "/tmp/relay-verify-sentinel-global",
+-   "GIT_CONFIG_NOSYSTEM": undefined,
+-   "GIT_CONFIG_SYSTEM": "/tmp/relay-verify-sentinel-system",
+-   "GIT_TERMINAL_PROMPT": "1",
+-   "HOME": "/tmp/relay-verify-sentinel-home",
++   "GIT_CONFIG_GLOBAL": "/dev/null",
++   "GIT_CONFIG_NOSYSTEM": "1",
++   "GIT_CONFIG_SYSTEM": "/dev/null",
++   "GIT_TERMINAL_PROMPT": "0",
++   "HOME": "/tmp/relay-git-home-Iuhtvc",
+  }
+
+ ❯ src/relay/workspace/verify-harness-env.test.ts:53:26
+     51|     const result = await verify();
+     52|     expect(result.failures).toBe(0);
+     53|     expect(snapGitEnv()).toEqual(before);
+       |                          ^
+     54|   }, 60_000);
+     55|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/relay/workspace/verify-harness-env.test.ts > workspace verification restores the process git environment > restores the process git environment when verification returns after an internal failure
+AssertionError: expected { …(5) } to deeply equal { …(5) }
+
+- Expected
++ Received
+
+  {
+-   "GIT_CONFIG_GLOBAL": undefined,
+-   "GIT_CONFIG_NOSYSTEM": undefined,
+-   "GIT_CONFIG_SYSTEM": undefined,
+-   "GIT_TERMINAL_PROMPT": undefined,
+-   "HOME": "/tmp/relay-verify-sentinel-home",
++   "GIT_CONFIG_GLOBAL": "/dev/null",
++   "GIT_CONFIG_NOSYSTEM": "1",
++   "GIT_CONFIG_SYSTEM": "/dev/null",
++   "GIT_TERMINAL_PROMPT": "0",
++   "HOME": "/tmp/relay-git-home-Iuhtvc",
+  }
+
+ ❯ src/relay/workspace/verify-harness-env.test.ts:68:28
+     66|       const result = await verify();
+     67|       expect(result.failures).toBeGreaterThan(0);
+     68|       expect(snapGitEnv()).toEqual(before);
+       |                            ^
+     69|     } finally {
+     70|       process.env.PATH = savedPath;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  src/relay/workspace/verify-harness-env.test.ts > workspace verification restores the process git environment > restores the process git environment and removes the temp HOME when verification rejects
+AssertionError: promise resolved "{ checks: [ { …(3) }, …(21) ], …(1) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "checks": [
++     {
++       "detail": "",
++       "name": "fixture repository created with baseline commit",
++       "ok": true,
++     },
++     {
++       "detail": "relay/run/wsverify1",
++       "name": "isolated worktree created",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "workspace pinned to the baseline revision",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "workspace path is outside the source repository",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "idempotent re-preparation returns the same workspace",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "source repository unchanged after creation",
++       "ok": true,
++     },
++     {
++       "detail": "v22.23.4",
++       "name": "approved command executed with exit 0",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "git push rejected by policy",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "shell execution rejected by policy",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "claimed modification detected as allowed",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "protected modification detected and flagged",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "workspace stopped at checkpoint after protected change",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "runaway command timed out with confirmed termination",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "running command cancelled on request",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "checkpoint workspace preserved despite authorized cleanup",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "second isolated workspace created",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "authorized cleanup removed the clean workspace",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "already-removed workspace cannot be cleaned twice",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "no outside files changed (source clean at pinned revision)",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "workspace evidence carries live provenance and association",
++       "ok": true,
++     },
++     {
++       "detail": "",
++       "name": "no secret-shaped content in evidence or events",
++       "ok": true,
++     },
++     {
++       "name": "fixture repositories and worktrees removed",
++       "ok": true,
++     },
++   ],
++   "failures": 0,
+  }
+
+ ❯ src/relay/workspace/verify-harness-env.test.ts:87:7
+     85|         throw new Error('verification fault');
+     86|       },
+     87|     })).rejects.toThrow('verification fault');
+       |       ^
+     88|     expect(homeDuring.startsWith('/tmp/relay-verify-sentinel-home')).t…
+     89|     expect(homeDuring.length).toBeGreaterThan(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  src/relay/workspace/verify-harness-env.test.ts > workspace verification restores the process git environment > serializes overlapping runs so they do not keep each other's HOME
+AssertionError: expected '' not to be '' // Object.is equality
+ ❯ src/relay/workspace/verify-harness-env.test.ts:114:23
+    112|     expect(a.failures).toBe(0);
+    113|     expect(b.failures).toBe(0);
+    114|     expect(home1).not.toBe(home2);
+       |                       ^
+    115|     expect(existsSync(home1)).toBe(false);
+    116|     expect(existsSync(home2)).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  5 failed | 1 passed | 18 skipped (24)
+   Start at  09:23:25
+   Duration  3.24s (transform 206ms, setup 0ms, import 251ms, tests 2.81s, environment 0ms)
+
+npm notice
+npm notice New major version of npm available! 11.21.1 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
+EXIT:1

@@ -1,6 +1,6 @@
 # Fake HOME settings and the failures they caused
 
-DEVELOPER-SUPPLIED EVIDENCE. All of these runs are `npx vitest run src/relay/workspace` at `8bdd3eb4`, before any test-helper edit, with `HOME` pointed at a temp directory. The real `~/.gitconfig` was not read.
+DEVELOPER-SUPPLIED EVIDENCE. All of these runs are `npx vitest run src/relay/workspace` at `8bdd3eb4`, before `git-fixture-env.ts` and `verify-harness.ts` changed, with `HOME` pointed at a temp directory. The real `~/.gitconfig` was not read. The commit that followed, `4f073432`, also changed shipped `verify-harness.ts`; it was not limited to test helpers.
 
 The config that reproduced the reviewer's count is the last row. A fixed sleep cannot land on 15: twelve tests finished together at 4977–4990 ms under a 0.82 s hook, so the next fixed step fails all twelve (22 total). A 40 ms extra delay on about 10% of fsmonitor queries splits that cluster.
 
