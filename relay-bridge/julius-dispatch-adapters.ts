@@ -515,7 +515,7 @@ export function createFrozenRunLookup(input: { readonly projectId: string; reado
 }
 
 /* ---------------------------------------------------------------------------------------------------------------- */
-/* Production composition. server.ts reaches it through julius-dispatch-wiring-core.ts.                             */
+/* Production composition. The relay-bridge server does not import this module. The gated workflow is the paid path. */
 
 export interface J1ProductionCompositionInput {
   /** The environment SNAPSHOT the composition derives the coder env and the secret list from. Injected; nothing here reads process.env. */

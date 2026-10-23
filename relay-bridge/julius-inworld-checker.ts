@@ -17,6 +17,10 @@ export const INWORLD_PIN_FILES = ['contract.json', 'checker/check.mjs', 'checker
 export const J1_PINNED_CONTRACT_SHA256 = 'bfa90f50f70916ff52180a94537f243300da8dcc51ee06d3952b0f18876226aa';
 /** Combined pin of {@link INWORLD_PIN_FILES}, including `contract.json`. */
 export const J1_PINNED_CHECKER_SHA256 = '0ca020dbfd2f971a8c112444961aa57ea0d113b0c1d86336f420fcae126eafd3';
+/** sha256 of `checker/check.mjs` alone. The frozen reviewer child checks this, not the combined pin. */
+export const J1_PINNED_CHECKER_FILE_SHA256 = '1a98f1a4d739ebe2da254715d81f56cd5fa08d534a1fbf10ef6214e8b262207e';
+/** sha256 of `checker/oracle.mjs` alone. Staged beside the checker and pin-checked. */
+export const J1_PINNED_ORACLE_SHA256 = '50328c58bd828ce2595c977cb1b1ff973481215425b8192e9d341c3e70357323';
 
 const sha256Hex = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
