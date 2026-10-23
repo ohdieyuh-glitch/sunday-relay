@@ -1,15 +1,24 @@
-# C2 / J1 conflicts: proposed resolutions (YUJI, C2 owner, 2026-10-23, DRAFT rev 6 for Skywalker's verification)
+# C2 / J1 conflicts: proposed resolutions (YUJI, C2 owner, 2026-10-23, DRAFT rev 7 for Skywalker's verification)
 
-Rev 6 (04:4x PT; commit time is recorded by git) fixes Skywalker's findings on rev 5 (15d17c17, PASS WITH FINDING), tagged [H1]-[H3], and adds Appendix E for Cosmo's conflicts rev 6:
+Rev 7 (file prepared 07:36 PT; the commit time is set when it is pushed) folds in the founder's rulings of 07:27 PT 2026-10-23 on R4-F and (c), and Skywalker's nits on rev 6 (4515c548, blob a9d717b6, PASS WITH FINDING), tagged [FR-R4F], [FR-c], [I1], [I2]. It also adds Appendix F for Cosmo's conflicts rev 7:
+- [FR-R4F] R4-F is DECIDED (the ruling is quoted verbatim in resolution 4). C5d is DISCLOSED-PASS only when the judge holds the original, verified against `artifactJudgedSha256` and the bundle's file tie, and reproduces `artifactText` exactly with J1's own scrub, cut and trim. Every other mismatch FAILS. The former optional hardening is now MANDATORY, and "unverified DISCLOSED" is removed. A `[redacted]` marker or an 8,000-code-unit length no longer excuses anything by itself. The judge fixtures add the spoof cases.
+- [FR-c] Question (c) is DECIDED (the ruling is quoted verbatim in conflict 2): run ids are client-minted, cryptographically random UUIDv4s, with a fresh run id and idempotency key after any refusal. **Compatibility checked, no blocker:** a UUIDv4, with or without Cosmo's `wlj_` prefix, passes J1's `RUN_ID` rule (J1:962, applied at :996 and :1012) and PR #396's `IsStrictRunId`/`IsBridgeRunId` at b86efac5. The CSPRNG requirement is added as a client requirement for Cosmo's wrapper.
+- [I1] The rebuild starts from the untrimmed `out.text` (J1:529; rev 6 said :530, which is the trim). The original's binding and the file tie compare trimmed bytes on both sides, exactly as J1 does (BUNDLE:42-45), and the cut is taken before the trim. Leading whitespace therefore cannot shift the cut. A cut can only be verified from the untrimmed message.
+- [I2] Rev 6 was committed at 04:44:53 PT.
+- [AS] Founder ruling on author spoofing: git author name and email are not identity evidence. This doc never relies on them (§0 note).
+- [F] Appendix F maps conflicts rev 6 (8b5d5233) to rev 7 (8b0e71d2). CONF citations stay pinned to rev 5 (672d1358), as before.
+- Rev 6 (4515c548, sha256 af9abf79…) is kept as `….md.af9abf79.bak`. Cosmo's conflicts rev 7 pins RES to rev 6 (4515c548). A new pin to this revision is his call.
+
+Rev 6 (committed 04:44:53 PT [I2]) fixes Skywalker's findings on rev 5 (15d17c17, PASS WITH FINDING), tagged [H1]-[H3], and adds Appendix E for Cosmo's conflicts rev 6:
 - [H1] `outputSha256` equals `artifactSha256` only when `artifactSha256` is non-null; a failed coder leg that still produced text records `outputSha256` while `artifactSha256` is null (J1:553, :596-598, :627). C5c already fails on a null, so no check changes.
 - [H2] Commit times corrected: rev 4 was committed 04:33 PT and rev 5 04:39:44 PT.
-- [H3] The G3 rebuild starts from the coder's untrimmed final message.
+- [H3] The G3 rebuild starts from the coder's untrimmed final message. (Rev 7 [I1] corrects the cite to J1:529 and fixes the comparison.)
 - [E] CONF citations in this doc stay pinned to conflicts rev 5 (672d1358). Appendix E maps them to rev 6 (8b5d5233).
 
 Rev 5 (committed 04:39:44 PT [H2]) fixes Skywalker's findings on rev 4 (7773fc53, blob 0a43daba, PASS WITH FINDING), tagged [G1], [D7], [G3]:
 - [G1] Status line corrected (this file is published on `docs/julius-c2-j1-resolutions-20261023`); the 04:3x placeholder is replaced; `/workspace/...` paths are marked as YUJI's working copies, not fetchable from GitHub.
 - [D7] `artifactJudgedSha256` is described correctly: the hash of the coder's final message, which the bundle step ties to the artifact file (J1B:40-46).
-- [G3] The optional D3 hardening reconstructs scrub-then-cut in J1's order (J1:336-337); R4-4's wording now says "no-cut condition".
+- [G3] The optional D3 hardening reconstructs scrub-then-cut in J1's order (J1:336-337); R4-4's wording now says "no-cut condition". (Rev 7 [FR-R4F]: this reconstruction is now mandatory.)
 
 Rev 4 (committed 04:33 PT [H2]) folds in Skywalker's findings on rev 3 (a008a018…) and re-maps to Cosmo's rev 5. Each change is tagged [D#] or [R5-#] in place:
 - [D1] Every CONF citation is re-mapped from rev 4 of the conflicts doc (9b50b4d4) to Cosmo's rev 5 (672d1358, blob e99fde0f, sha256 6f24f1ff…44aa, 287 lines). The line shifts are in Appendix D (also `/workspace/julius/c2/CONF_rev4_to_rev5_remap.md`). Rev 5 was verified byte-exact (git blob recomputed; `sha256sum -c` 7/7 OK; the commit touches only the doc and SHA256SUMS.txt).
@@ -31,9 +40,9 @@ Rev 2 (53c18988…) is kept as `….md.53c18988.bak`.
 
 Rev 2 (04:08 PT) added resolutions 9 and 10 for Skywalker's missed items and cross-references item 8 to resolution 4. It also fixes the hash-order and result-body wording in Appendix A. Rev 1 (sha256 e824196f…) is kept as `C2_J1_RESOLUTIONS_PROPOSED_20261023.md.e824196f.bak`.
 
-Status: PROPOSAL ONLY. This file is published on branch `docs/julius-c2-j1-resolutions-20261023` (off main 689d2be9) for review; nothing else is pushed or edited, and it never lands on main by itself [G1]. Paths under `/workspace/...` are YUJI's working copies and are not fetchable from GitHub; pin this doc by its GitHub commit and blob [G1]. This awards nothing and makes no readiness claim (J1 stays BLOCKED at 94.520%; Wonderland stays 56.25%). No security refusal is weakened, and every rule below fails closed. Items marked NEEDS-FOUNDER-RULING are flagged for the founder, not decided here.
+Status: PROPOSAL ONLY. This file is published on branch `docs/julius-c2-j1-resolutions-20261023` (off main 689d2be9) for review; nothing else is pushed or edited, and it never lands on main by itself [G1]. Paths under `/workspace/...` are YUJI's working copies and are not fetchable from GitHub; pin this doc by its GitHub commit and blob [G1]. This awards nothing and makes no readiness claim (J1 stays BLOCKED at 94.520%; Wonderland stays 56.25%). No security refusal is weakened, and every rule below fails closed. Items marked NEEDS-FOUNDER-RULING are flagged for the founder, not decided here. Items marked DECIDED carry the founder's ruling verbatim (R4-F and (c), 07:27 PT 2026-10-23) [FR-R4F][FR-c].
 
-Categories: SPEC-ONLY (amend C2 protocol / SPEC r1 / ECHO addendum text), CLIENT-ONLY (Cosmo's client), J1-CODE-CHANGE (needs a new J1 head and a new review), NEEDS-FOUNDER-RULING.
+Categories: SPEC-ONLY (amend C2 protocol / SPEC r1 / ECHO addendum text), CLIENT-ONLY (Cosmo's client), J1-CODE-CHANGE (needs a new J1 head and a new review), NEEDS-FOUNDER-RULING, DECIDED (founder ruling recorded).
 
 **Headline: none of the 7 resolutions needs a J1 code change. The PASSed J1 code at 31bfc58b stays unchanged.** One side finding (R7-F, rehearsal bridge) may need new J1 code or a founder ruling. It is flagged, not decided.
 
@@ -72,6 +81,8 @@ Notes:
 - `2f8c346a`, the tip ECHO:1 says it read, has DIFFERENT blobs: julius-dispatch.ts is 299e5336, and the repeat-ceiling file is absent. ECHO's bridge contract is therefore stale in places, and 31bfc58b is the target (as already told to Cosmo).
 - The C2 protocol is NOT on the J1 branch `judev/j1-combined-ceiling`; no crosscheck.py or protocol file exists in that tree. The C2 source used here is the byte copy on the docs branch (blob 7891ccfd, the same at 8f312b32 and 9b50b4d4). Rev 5 CONF:17 [D1] notes that Skywalker has never certified its content.
 - `crosscheck.py` and `test_crosscheck.py` (PROT:2) were not available to me. Any statement about what crosscheck does today comes from PROT text only.
+- [FR-R4F][FR-c] Rev 7 re-verification (read-only GitHub contents API; local re-hash): J1 `018fb582`, J1A `579f513a` and BUNDLE `3770e76b` at 31bfc58b. PR #396 head b86efac5 has `wonderland/Source/Wonderland/WonderlandJuliusMissionLogic.cpp` `61b0e1a1` and `.h` `4030c22d` (LOGIC / LOGICH below), and `wonderland/Tools/j1_logic_kat.cpp` (KAT). No Julius wrapper or run-id generator exists in `wonderland/Source/Wonderland` at b86efac5 yet.
+- [AS] Identity: every source in this doc is pinned by commit SHA and git blob id (content addresses) and re-hashed locally. No conclusion rests on a git author name or email. Per the founder's ruling, those are not identity evidence, so no change is needed here. Identity for landing (authenticated GitHub/App identity, provenance, signed clearance) is outside this doc.
 
 Precedence used: for client behaviour, ECHO > PLANADD > SPEC (ECHO:1, PLANADD:1). For acceptance, PROT governs until amended, and these proposals ARE the amendments.
 
@@ -119,9 +130,9 @@ Precedence used: for client behaviour, ECHO > PLANADD > SPEC (ECHO:1, PLANADD:1)
   - The only run-creating route is the operator-only `POST /relay-api/julius/missions` (server.ts:1058-1075; julius-mission-routes.ts:62-64, :152-200). It refuses without the operator bearer (401 `operator_required`, :154). It lands a READY run in the PostgreSQL Julius store and returns `runId` with `dispatched:false` (:190, :198).
   - J1 never reads that store. Its run lookup is the frozen stub `createFrozenRunLookup` (J1A:567-582, wired at J1W:242: "J1 creates its own run"), which answers READY for any runId in the configured project.
   - The game can't call the operator route. The operator bearer is a shell credential, and J1 refuses it on its own routes (J1:977-979).
-- So no server issues the run id J1 dispatches. Its source is the pending founder option (a)/(b) (CONF:257-280) [D1].
+- So no server issues the run id J1 dispatches. Its source was the founder option (a)/(b) (CONF:257-280) [D1]. **Decided: (a), client-minted UUIDv4 [FR-c].**
 
-**Proposed resolution (SPEC-ONLY, with one founder-pending sub-item)**
+**Proposed resolution (SPEC-ONLY + CLIENT-ONLY; the run-id sub-item is DECIDED [FR-c])**
 - **C1 (amended):** exactly one `WLJMISSION trigger` line for the run (matched by `run=`). All of these must hold:
   1. Its `utc` < the first ledger `pre_call.at` for the run (as now).
   2. sha256(UTF-8 of the exact trigger message, without the UE prefix) == ledger `run_created.clientLogSha256` == `run_start.clientLogSha256`.
@@ -135,16 +146,28 @@ Precedence used: for client behaviour, ECHO > PLANADD > SPEC (ECHO:1, PLANADD:1)
   3. Log order is `ui_action` < `offset` < `run_id` < `trigger`.
   4. `verifyRunOrdering` semantics hold on the ledger: `run_created` is the first row of the run, and `at` is non-decreasing.
 - Any extra, missing or reordered line is a FAIL. Nothing in C1 is relaxed.
-- **Line B name:** use a neutral `WLJMISSION run_id run=<id> source=<minted|server> utc=…` instead of `run_id_received`. **R2-F: NEEDS-FOUNDER-RULING (already pending):** option (a) client-minted vs (b). **[F6] Provisional default, pending ruling (c):** until the founder rules, the judge accepts only `source=minted`.
+- **Line B name:** use a neutral `WLJMISSION run_id run=<id> source=<minted|server> utc=…` instead of `run_id_received`. **R2-F / (c): DECIDED [FR-c]:** option (a), client-minted. The judge accepts only `source=minted`. The rev 3 provisional default [F6] is now the rule.
   - At 31bfc58b no server issues a run id that J1 dispatch recognises (see the evidence above).
-  - The operator-only `POST /relay-api/julius/missions` does create READY runs, but J1 doesn't read them. If ruling (c) or (b) adopts server-issued ids, this rule is replaced, and J1 would need to consult that store (a J1-CODE-CHANGE).
-- **[F3] Restated founder question (c):** "Should the client-visible run id be minted by the client (a), or issued by a server (b)? The only run-creating route today is operator-only, and J1 does not read what it creates. So (b) needs either a game-reachable creation route or J1 reading the mission store. Both are code changes, outside the PASSed 31bfc58b." The founder decides.
-- **[F4] Fresh run id after any refusal (CLIENT-ONLY + SPEC-ONLY):** after any refusal for a run id, the client must mint a new run id (and a new idempotency key) before the next dispatch. That covers a `run_refused` row (J1:791, :840) and any non-2xx dispatch answer.
+  - The operator-only `POST /relay-api/julius/missions` creates READY runs that J1 doesn't read. Server-issued ids are not adopted [FR-c], so that route stays out of the J1 path, and no J1 code change is needed.
+- **[FR-c] Founder ruling (c), DECIDED 07:27 PT 2026-10-23 (verbatim):** "Use CLIENT-MINTED cryptographically random UUIDv4 run IDs for the current J1 implementation. Generate a fresh run ID and idempotency key after a refusal. Preserve the reviewed client/bridge requirements." This answers the rev 3 question [F3] ((a) or (b)) with (a).
+  - **Format compatibility (checked; NO blocker):**
+    - J1 at 31bfc58b: `const RUN_ID = /^[A-Za-z0-9:_-]{1,128}$/` (J1:962) is the only run-id format rule. It is applied to the events/result query `runId` (J1:996) and to the dispatch body `runId` (J1:1012), and a failure is 400 `julius_dispatch_run_invalid`. A canonical UUIDv4 is 36 characters from `[0-9a-f-]`, and Cosmo's `wlj_` form is 40 characters. Both pass. No other length or format check touches `runId`: the frozen run lookup ignores it (J1A:577-580), and the controller only compares it for equality (J1:773-776).
+    - The idempotency key rule `KEY = /^[A-Za-z0-9_-]{8,80}$/` (J1:964, applied at :1007) also passes for a 36-character UUIDv4 or a 40-character `wlj_` UUIDv4.
+    - PR #396 at b86efac5: `FormatRunIdFromBytes` (LOGIC:265-279) forces the version nibble to 4 (:269) and the variant to `10xx` (:270), then writes `wlj_` (LOGICH:160) plus lowercase 8-4-4-4-12 hex, straight from the bytes in order. `IsStrictRunId` (LOGIC:281-310; regex in LOGICH:168 `^(wlj_)?[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`) requires `-` at indices 8, 13, 18 and 23, `4` at index 14 (:296-299), `[89ab]` at index 19 (:300-303), and lowercase hex elsewhere. `IsBridgeRunId` (LOGIC:312-322) mirrors J1:962 (1-128 characters, :314). The KAT rows (KAT:126-152) show every formatted id passing both checks. An uppercase UUIDv4 passes the bridge check but fails strict (KAT:144), so the client must emit lowercase, which `FormatRunIdFromBytes` does.
+  - **CSPRNG requirement (CLIENT-ONLY; a requirement on Cosmo's Unreal wrapper).** LOGIC deliberately generates nothing (LOGICH:25, :164), so the wrapper supplies the 16 bytes:
+    - The bytes must come from a cryptographically secure generator: `IPlatformCrypto::Get().CreateContext()->CreateRandomBytes(TArrayView<uint8>)` (PlatformCrypto plugin; the result must be `EPlatformCryptoResult::Success`), or OpenSSL `RAND_bytes` through the engine's OpenSSL module (the return value must be 1). If generation fails, the client refuses locally and does not dispatch. There is no fallback.
+    - NOT acceptable: `FGuid::NewGuid()` / `FPlatformMisc::CreateGuid`. The engine API promises uniqueness, not a version-4 layout or a cryptographic source on every platform: Windows forwards to `CoCreateGuid`, other platforms use their own implementations, and FGuid's digit layout differs from RFC 4122 order (LOGICH:164). `FMath::Rand`, `FRandomStream`, time, counters and hashes of these are not acceptable either.
+    - The idempotency key is minted the same way: an independent value from fresh CSPRNG bytes (for example a second UUIDv4), and it must satisfy J1:964.
+    - After any refusal (any non-2xx dispatch answer or a `run_refused` row), the client mints a NEW run id AND a NEW idempotency key before the next dispatch ([F4], below). It never reuses either.
+    - LOGICH:25 still says the run-id option "is still the founder's decision". That comment is stale after [FR-c], and Cosmo can update it in the wrapper PR (no logic change).
+    - Cosmo's PR test: a unit test proving the wrapper calls the CSPRNG and refuses on failure, plus a code-review check that no `FGuid`/`FMath::Rand` path feeds `FormatRunIdFromBytes`.
+  - **Judge:** the credited run id must match LOGICH:168 (strict lowercase v4, optional `wlj_`), and its `run_id` line must say `source=minted`. A non-v4 or uppercase id, or a `source=server` line, is a C1 FAIL. The judge can check the format only. Randomness is a client-code requirement checked in review.
+- **[F4] Fresh run id after any refusal (CLIENT-ONLY + SPEC-ONLY; now also the founder's ruling [FR-c]):** after any refusal for a run id, the client must mint a new run id (and a new idempotency key) before the next dispatch. That covers a `run_refused` row (J1:791, :840) and any non-2xx dispatch answer.
   - Why: J1:773-776 checks only `run_created` and `run_start`. A run id whose earlier attempt left only a `run_refused` row is ADMITTED again.
   - The providers are then called. Only after the chain does `verifyRunOrdering` find `row_before_run_created` (J1:267), because the `run_refused` row precedes the new `run_created`. The run is then HALTED with `run_order_violation` (J1:621-622).
   - That spends money on a run that can't be credited.
   - The judge FAILS any credited run id that also has a `run_refused` row (resolution 3 already does this).
-  - J1 is not changed; this is advisory.
+  - J1 is not changed. This was advisory and is now required by the founder's ruling [FR-c].
 - Note for the record: the trigger line is forgeable corroboration (ECHO:15, PLANADD:5). The binding to the ledger hash is what C1 checks.
 
 **Impact**
@@ -152,6 +175,7 @@ Precedence used: for client behaviour, ECHO > PLANADD > SPEC (ECHO:1, PLANADD:1)
   - Write `ui_action` at the click, before the echo. Then write `offset`, `run_id` and `trigger`, flush, hash the exact trigger message, and POST.
   - Send `clientUiActionUtc` equal to the ui_action line's `utc` string exactly.
   - Format UTC as `YYYY-MM-DDTHH:MM:SS.mmmZ`, which matches J1:327 `UTC_ISO`.
+  - Mint the run id and the idempotency key from CSPRNG bytes as above [FR-c], and mint both again after any refusal.
   - Note: if the client clock is ahead of the bridge by up to the allowed 1000 ms (J1:396) and the UI action → dispatch gap is shorter, the bridge refuses 409 `run_order_violation` (fail-closed). The client must show it as a refusal and not retry.
 - j1_judge.py: implement C1 and C1b exactly as above, and parse the UTC strings with millisecond precision.
 
@@ -162,6 +186,8 @@ Precedence used: for client behaviour, ECHO > PLANADD > SPEC (ECHO:1, PLANADD:1)
   - ui_action utc ≠ run_created.uiActionUtc → FAIL;
   - trigger message hash ≠ clientLogSha256 → FAIL;
   - ui_action after trigger in the log → FAIL;
+  - `run_id` line with `source=server` → FAIL [FR-c];
+  - run id `wlj_0b7a1c2e-4f3d-9a6b-1c2d-3e4f5a6b7c8d` (not v4) or an uppercase v4 → FAIL [FR-c];
   - a valid set → PASS.
 - Rehearsal: a client clock pushed +900 ms with an immediate dispatch must produce 409 `julius_dispatch_run_order_violation` and a `refused` line.
 
@@ -249,48 +275,70 @@ Precedence used: for client behaviour, ECHO > PLANADD > SPEC (ECHO:1, PLANADD:1)
   - This holds whenever the run is honest, because both are sha256 of the same scrubbed, cut and trimmed text that the checker judged (J1:607).
   - A null on either side is a FAIL, and so is a mismatch.
   - This binds what the player saw to what the checker and reviewer saw, through the ledger.
-- **C5d (shown == the coder's file; stricter, separate) [F2]:**
-  - **C5d FAILS when no scrub or cut happened AND the judged hash (`artifactSha256`, the hash of what the checker judged) differs from `artifactJudgedSha256`, the hash of the coder's final message, which the bundle step ties to the artifact file (J1B:40-46) [D7].**
-  - **When a scrub or cut did happen, a mismatch is recorded as DISCLOSED rather than failed**, unless the founder rules otherwise (R4-F). This applies only when `artifactJudgedSha256` is non-null [D2].
-  - How the judge decides whether a scrub or cut happened (fail-closed; positive evidence only):
-    - scrub: `artifactText` contains `[redacted]`;
-    - cut: `artifactText` is exactly 8,000 UTF-16 code units (J1:55). j1_judge.py counts UTF-16 code units (`len(s.encode('utf-16-le')) // 2`), not Python `len()`, which counts code points and under-counts astral characters [D3].
-    - This evidence is spoofable by the coder; see R4-F [D3].
-    - Without that evidence, the judge treats the run as no scrub and no cut.
-    - Known edge: a cut text whose tail is whitespace is trimmed below 8,000 code units (J1:530). It is then judged as "no cut" and FAILS C5d, which is the safe direction.
-  - **A null `artifactJudgedSha256` is a C5d FAIL in every case, even with scrub or cut evidence [D2].** Production wiring always passes a bundle to the coder (J1W:238, `bundle: { fs: workspaceFs(workspacePath), artifactPath: J1_ARTIFACT_FILE … }`), and a failed bundle comparison fails the coder leg (J1A:392). So a completed run with a null judged hash did not run the bundle step as wired.
-  - Meaning of a C5d FAIL: the text shown and checked is not the coder's final message as bound to the artifact file [D7].
+- **C5d (shown == the coder's file; stricter, separate) [F2][FR-R4F]:**
+  - Inputs:
+    - `artifactSha256`, the hash of the shown text, already bound by C5b and C5c;
+    - the shown `artifactText`;
+    - the ledger coder row's `artifactJudgedSha256` and `artifactFileSha256` (J1:556-557);
+    - and, only when a mismatch is to be excused, the captured ORIGINAL `O`: the coder's untrimmed final message `out.text`, which is the session's `finalText` (J1A:402).
+  - Both hashes non-null and equal → C5d PASS.
+  - **A null `artifactJudgedSha256` is a C5d FAIL in every case [D2].** Production wiring always passes a bundle to the coder (J1W:238, `bundle: { fs: workspaceFs(workspacePath), artifactPath: J1_ARTIFACT_FILE … }`), and a failed bundle comparison fails the coder leg (J1A:392). So a completed run with a null judged hash did not run the bundle step as wired.
+  - **A mismatch is a C5d FAIL, unless ALL of items 1-5 hold. Then C5d is DISCLOSED-PASS: it qualifies, and the report names the transform [FR-R4F].**
+    1. **The original is verified.** The judge holds `O` (decoded from the capture as strict UTF-8, or from JSON with lone surrogates kept), and `sha256(UTF-8(JS-trim(O))) == artifactJudgedSha256`. This is exactly how the bundle step hashes the judged message (`trimmedBytes`, BUNDLE:25-29, :42; J1A:386).
+    2. **The bundle tie is verified.** `artifactFileSha256` is non-null and equals `artifactJudgedSha256` (BUNDLE:44-45; J1:557), so the bundle step tied `O` to `out/normalized.json`, with both sides trimmed. If the captured `out/normalized.json` is supplied, `sha256(UTF-8(JS-trim(file)))` must equal `artifactFileSha256`, or C5d FAILS.
+    3. **The exact transform is reproduced.** The judge runs a faithful port of J1's steps, in J1's order, on `O`:
+       - `S = scrubKeys(O, K)` (J1:334-337): for each key `k` in `K` with at least 8 characters, in list order, every occurrence of `k` becomes `[redacted]` (`split/join`). Then `S` is cut to its first 8,000 UTF-16 code units (`slice(0, J1_TEXT_MAX_CHARS)`, J1:55, :337).
+       - `T = JS-trim(S)` (J1:530).
+       - It requires `T == artifactText` exactly, and `sha256(UTF-8(T)) == artifactSha256`.
+       - `K` is the replacement list that the judge derives by aligning `O` with `artifactText`. Each `[redacted]` in the shown text that is not a literal `[redacted]` in `O` stands for one replaced substring. Every derived `k` must be at least 8 characters and have no leading or trailing whitespace (real keys never do; this is fail-closed). The reproduction must then be exact. Because `split/join` replaces every occurrence, a substring replaced once and left visible elsewhere in the uncut region fails.
+       - If no such `K` reproduces `artifactText` → FAIL.
+    4. **The rebuild mirrors J1's tie [I1].** It starts from the untrimmed `O` (`out.text`, J1:529), never from the file text. The cut is taken before the trim, so leading whitespace in `O` counts toward the 8,000 code units exactly as it does in J1. Items 1 and 2 compare trimmed bytes on both sides, as J1 does. Consequences:
+       - `out/normalized.json` equals `O` only after trimming (BUNDLE:42-45), so the file alone can serve as the original ONLY when no cut is needed: the rebuild from `JS-trim(file)` gives `T == artifactText`, and `scrubKeys` of `JS-trim(file)` before the slice is at most 8,000 code units.
+       - A cut needs the untrimmed `O`. Without it, the cut position is unknown, so a cut run FAILS C5d (missing evidence).
+       - The judge works in UTF-16 code units (Python: `s.encode('utf-16-le', 'surrogatepass')`), keeps a lone surrogate produced by the slice, and hashes it as U+FFFD (`EF BF BD`), as Node does. This matches PR #396's KAT-DIGEST-CUT rows.
+       - JS-trim uses ECMAScript's WhiteSpace and LineTerminator set. It strips U+FEFF, U+00A0, U+1680, U+2000-U+200A, U+2028, U+2029, U+202F, U+205F and U+3000, and NOT U+0085 or U+001C-U+001F. Python's `str.strip()` is not acceptable.
+    5. **The report** states DISCLOSED-PASS, the number of replacements, whether a cut happened, which original source was used (`out.text` or the file), and `sha256(UTF-8(JS-trim(O)))`. It never prints `O` or any `k`.
+  - **Removed [FR-R4F]:** the rev 3-6 trigger based on evidence in the shown text (`[redacted]` present, or exactly 8,000 UTF-16 code units) excuses nothing any more, and "unverified DISCLOSED" no longer exists. The coder can spoof those signals (rev 4 [D3]), and the founder ruled that they are not proof. Without a verified original and an exact reproduction, every mismatch FAILS.
+  - **Handling the original:** `O` may contain a real key, since that is what a scrub means. `O` and the captured file are founder-only evidence: never committed, posted or logged. The judge outputs only hashes and counts, and the report is secret-scanned.
+  - Meaning of a C5d FAIL: the text shown and checked is not provably J1's transform of the coder's final message as bound to the artifact file [D7].
 - **By-eye check:** on-screen `check <12>` is compared with `artifact_sha256[:12]` (ECHO:14 wins). `resultSha256` is never shown as the artifact hash.
-- **R4-F: NEEDS-FOUNDER-RULING [F2, restated]:**
-  - The question: **may a scrubbed or truncated artifact be shown and still pass?**
-    - Default proposed here: yes, if C5a, C5b and C5c pass. The C5d mismatch is recorded as DISCLOSED, with the scrub or cut evidence named in the report.
-    - The alternative is that any scrub or cut FAILS C5d.
-  - **Spoofability of the disclose trigger [D3].** The scrub/cut evidence is read from `artifactText`, which the coder controls. A coder can emit the literal string `[redacted]`, or pad its message so the shown text is exactly 8,000 UTF-16 code units, and so turn a C5d FAIL into DISCLOSED. Under the default, a DISCLOSED C5d is therefore NOT proof that a real scrub or cut happened, and the report must say so. Optional hardening, for the founder: if the founder-side capture keeps `out/normalized.json`, the judge reconstructs J1's order [G3], starting from the coder's untrimmed final message (`out.text`, J1:530) [H3]: first the scrub (J1:336), then the cut of the scrubbed text to 8,000 code units (J1:337), then the trim (J1:530). A claim is confirmed only if there is a scrub of the file text (one or more substrings of 8+ chars replaced by `[redacted]`) such that cutting and trimming the scrubbed text gives exactly `artifactText`, and a claimed cut additionally needs the scrubbed text to be longer than 8,000 code units. Checking the cut against the unscrubbed file would wrongly fail a text that was both scrubbed and cut. An unconfirmed claim is a C5d FAIL. Without the file, DISCLOSED is reported as "unverified". No J1 code change either way.
-  - Either way, ECHO:14's "carries the same value" sentence should be amended to: "`artifactJudgedSha256` is the hash of the coder's final, unscrubbed and uncut message, which the bundle step ties to the artifact file. It equals `artifactSha256` only when nothing was scrubbed or cut. Whenever `artifactSha256` is non-null, the ledger `outputSha256` equals it." [D7][H1]
-  - The founder decides. No J1 code change is proposed.
+- **R4-F: DECIDED [FR-R4F]** (founder, 07:27 PT 2026-10-23, verbatim): "Scrubbed or truncated artifacts may qualify ONLY when independent verification confirms the original protected artifact and exact scrub-cut-trim transformation. A displayed [redacted] marker or 8,000-code-unit text alone does not establish proof. Missing, inconsistent or spoofable evidence cannot receive qualifying PASS."
+  - Implemented by C5d above. DISCLOSED-PASS needs a verified original (items 1-2) and an exact reproduction (items 3-4), and C5a, C5b and C5c must also pass. Everything else FAILS. This replaces both rev 6 options (default "yes, DISCLOSED" and the alternative "any scrub or cut FAILS").
+  - **Capture requirement (SPEC-ONLY; founder-side acceptance capture):** for the credited run, the capture keeps the coder's untrimmed final message and `out/normalized.json`, listed by sha256 in the evidence manifest (contents founder-only, as above). J1 at 31bfc58b persists only hashes of these (J1:553, :556-557), so the capture is a harness or founder step, not a J1 change. If the capture is missing, a scrubbed or cut run cannot qualify. A clean run (equal hashes) does not need it.
+  - ECHO:14's "carries the same value" sentence should be amended to: "`artifactJudgedSha256` is the hash of the coder's final, unscrubbed and uncut message, which the bundle step ties to the artifact file. It equals `artifactSha256` only when nothing was scrubbed or cut. Whenever `artifactSha256` is non-null, the ledger `outputSha256` equals it." [D7][H1]
+  - No J1 code change.
 
 **Impact**
 - Client PR:
   - Compute and log both `result_sha256` (C5a) and `artifact_sha256`/`digest12` (C5b), with a JS-compatible trim (Cosmo's PR already covers trim and SHA-256).
   - Display `artifact_sha256[:12]`.
   - Edge: `slice(0, 8000)` can split a UTF-16 surrogate pair. JSON.stringify then emits a lone `\udXXX`, and Node hashes it as U+FFFD. The client must decode the JSON escape into a TCHAR and encode to UTF-8 the same way, or it shows a false "damaged". That is the safe direction (SPEC U8), but add a test.
-- j1_judge.py: implement C5a and C5b (from the log fields), C5c (log `artifact_sha256` vs the ledger coder row's `outputSha256`) and C5d (artifactSha256 vs `artifactJudgedSha256`, with the scrub/cut evidence rule; null judged = FAIL [D2]; UTF-16 counting [D3]). C5c and C5d need the coder `result` row (`role == 'coder'`).
+- j1_judge.py: implement C5a and C5b (from the log fields), C5c (log `artifact_sha256` vs the ledger coder row's `outputSha256`) and C5d [FR-R4F]: equal hashes PASS; null judged = FAIL [D2]; any mismatch FAILS unless items 1-5 hold. That requires an original-verification step (`sha256(UTF-8(JS-trim(O))) == artifactJudgedSha256`, `artifactFileSha256 == artifactJudgedSha256`, and the optional file re-hash), a faithful `scrubKeys` port (split/join per key, then a UTF-16 slice to 8,000), an ECMAScript trim, the alignment that derives `K`, and an exact comparison. It counts UTF-16 code units [D3] and starts from the untrimmed `out.text` [I1]. The `[redacted]`/8,000 trigger is deleted, as is any "unverified" outcome. It takes the original as an optional input path (founder-only) and never echoes it. C5c and C5d need the coder `result` row (`role == 'coder'`).
 
 **Test**
 - Fixtures:
   - result_sha256 ≠ final.resultSha256 → FAIL;
   - artifact_sha256 ≠ coder `outputSha256` → C5c FAIL;
   - coder `outputSha256` null → C5c FAIL;
-  - no `[redacted]`, length < 8,000, and artifactSha256 ≠ artifactJudgedSha256 → C5d FAIL;
+  - no original supplied, and artifactSha256 ≠ artifactJudgedSha256 → C5d FAIL;
   - no scrub or cut, and artifactJudgedSha256 null → C5d FAIL;
-  - `[redacted]` present, or length exactly 8,000, and artifactJudgedSha256 null → C5d FAIL [D2];
-  - a 7,999-code-point artifact containing one astral character (8,000 UTF-16 code units) and a mismatch → treated as a cut (DISCLOSED), proving the judge counts UTF-16 [D3];
-  - `[redacted]` present and a mismatch → C5d DISCLOSED (not FAIL), under the default;
-  - length exactly 8,000 and a mismatch → C5d DISCLOSED;
+  - artifactJudgedSha256 null, with or without an original → C5d FAIL [D2];
+  - **spoof: a literal `[redacted]`** in `artifactText`, a mismatch, and no original → C5d FAIL [FR-R4F];
+  - **spoof: padded to exactly 8,000 UTF-16 code units**, a mismatch, and no original → C5d FAIL. This includes the variant of 7,999 code points with one astral character (8,000 code units) [FR-R4F][D3];
+  - **spoof: a supplied original** whose `sha256(UTF-8(JS-trim(O)))` ≠ artifactJudgedSha256 → C5d FAIL [FR-R4F];
+  - original verified, but `artifactFileSha256` null or ≠ artifactJudgedSha256 → C5d FAIL;
+  - original verified, one key of 8+ chars scrubbed, no cut, exact reproduction → C5d DISCLOSED-PASS;
+  - **original verified, scrubbed AND cut** (the scrubbed text is longer than 8,000 code units), exact reproduction → C5d DISCLOSED-PASS. This proves the scrub runs before the cut;
+  - the same text rebuilt by cutting the unscrubbed original first → no match → the judge must not take that path (order guard);
+  - **original verified, mismatch not explained by the transform** (one character differs, or a substring of 8+ chars replaced at one occurrence but visible at another inside the uncut region) → C5d FAIL;
+  - original with 3 leading spaces, cut case: DISCLOSED-PASS only when the rebuild starts from the untrimmed `out.text`. The same run with only `out/normalized.json` (trimmed) → C5d FAIL [I1];
+  - original verified, a cut that splits a surrogate pair → DISCLOSED-PASS, with the lone surrogate hashed as `EF BF BD` (matches PR #396 KAT-DIGEST-CUT);
+  - an original ending in U+3000 or U+FEFF is trimmed; one ending in U+0085 is not (a guard against Python `strip()`);
+  - a derived replaced substring with leading or trailing whitespace → C5d FAIL;
   - digest12 ≠ prefix → FAIL;
   - all equal → PASS.
 - Bridge-side evidence: WTEST:281-295 already shows equality in the clean case.
-- Add a vitest in Cosmo's client PR comparing client SHA/trim with Node on: an 8,001-char artifact; one whose 8,000th code unit is a high surrogate; and one containing a fake key-shaped string. Expect C5c to PASS on all three. Expect C5d DISCLOSED on the 8,001-char and key-shaped cases. On the surrogate case, expect a client "damaged" or a C5b FAIL, never a silent pass.
+- Add a vitest in Cosmo's client PR comparing client SHA/trim with Node on: an 8,001-char artifact; one whose 8,000th code unit is a high surrogate; and one containing a fake key-shaped string. Expect C5c to PASS on all three. Expect C5d DISCLOSED-PASS on the 8,001-char and key-shaped cases only when the judge fixture supplies the verified untrimmed original; without it, expect C5d FAIL [FR-R4F]. On the surrogate case, expect a client "damaged" or a C5b FAIL, never a silent pass.
 
 ---
 
@@ -405,10 +453,10 @@ Precedence used: for client behaviour, ECHO > PLANADD > SPEC (ECHO:1, PLANADD:1)
 ## 8a. Skywalker's missed items 8-10 (rev 4: item 8 = M5, item 9 = M6, item 10 = SPEC:293 inside M4)
 
 ### Item 8 → M5 (rev 5 CONF:219-234 [D1]): ECHO:14 "the ledger's coder result row carries the same value"
-Covered by **resolution 4** (C5c, C5d and founder flag R4-F) and Appendix A. In short:
+Covered by **resolution 4** (C5c, C5d and the founder's R4-F ruling, DECIDED [FR-R4F]) and Appendix A. In short:
 - The claim holds only if nothing was scrubbed, the artifact was not cut at 8,000 code units, and a bundle step ran.
 - C5c binds the shown text to the ledger `outputSha256` unconditionally.
-- C5d FAILS a mismatch with `artifactJudgedSha256` when there was no scrub or cut, and records it as DISCLOSED otherwise (R4-F). A null `artifactJudgedSha256` is always a FAIL [D2].
+- C5d FAILS any mismatch with `artifactJudgedSha256` unless the original is verified and J1's scrub, cut and trim reproduce the shown text exactly, which makes it DISCLOSED-PASS (R4-F, DECIDED [FR-R4F]). A null `artifactJudgedSha256` is always a FAIL [D2].
 - No separate resolution is needed.
 - Rev 4 M5's citations check out (§10 RF2). M5 proposes no resolution and defers C5 to this doc (CONF:104, :234 [D1]).
 
@@ -771,3 +819,21 @@ Every CONF:n citation in this doc refers to rev 5 (672d1358) unless it says othe
 - :217-287 become :220-290.
 - Section headers: Sources :21 → :23; M4 :200 → :203; M5 :219 → :222; Missing or unverifiable citations :282 → :285.
 - Examples: the frozen-stub quote moves from :278 and :168 to :281 and :171. M4's :207-214 moves to :211-218, and :224 moves to :227.
+
+## Appendix F: CONF line shifts, rev 6 (8b5d5233, blob 9cf820e5, 294 lines) → rev 7 (8b0e71d2, blob 2f4eb6d4, 301 lines) [F]
+
+CONF citations in this doc stay pinned to rev 5 (672d1358). Read them against rev 6 with Appendix E, then against rev 7 with this table. The table is copied from Cosmo's rev 7 L299-301 (Skywalker: PASS, no findings), and I checked it against `diff` of the two blobs:
+- :1-11 stay the same.
+- :12-37 become :14-39. Two lines (a blank and the rev 7 note) are inserted after rev 6 :11. Rev 6 :37 (RES) is changed in place at rev 7 :39 (re-pinned to this doc's rev 6, 4515c548).
+- :38-294 become :41-297. Rev 7 :40 is the new RES-r4 row (the historical 7773fc53 pin).
+- Section headers: Sources :23 → :25; M4 :203 → :206; M5 :222 → :225; Missing or unverifiable citations :285 → :288.
+
+Combined rev 5 → rev 7, for this doc's CONF:n citations:
+- :1-9 stay the same.
+- :10-34 become :14-38.
+- :35-206 become :41-212.
+- :207-215 become :214-222.
+- :216 becomes :213.
+- :217-287 become :223-293.
+- Headers: Sources :21 → :25; M4 :200 → :206; M5 :219 → :225; Missing or unverifiable citations :282 → :288.
+- Example: the frozen-stub quote at rev 5 :278 and :168 is at rev 7 :284 and :174.
