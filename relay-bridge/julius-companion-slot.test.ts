@@ -202,6 +202,6 @@ describe('the companion path imports no provider client', () => {
   it('imports only node:crypto and names no provider client, key, or spend table', () => {
     const imports = [...source.matchAll(/^\s*import\s+[^;]+;/gmu)].map((match) => match[0]);
     expect(imports).toEqual(["import { createHash } from 'node:crypto';"]);
-    expect(source).not.toMatch(/openai|@anthropic|anthropic|xai|hermes-reviewer|julius-xai-direct-reviewer|gpt-runner|openai-architect|live-workers|MISSION_LIMITS|process\.env|node:fs|writeFile/iu);
+    expect(source).not.toMatch(/openai|@anthropic|anthropic|xai|hermes-reviewer|julius-xai-direct-reviewer|gpt-runner|openai-architect|live-workers|MISSION_LIMITS|spendLedger|authorizeJuliusLiveSpend|julius-dispatch-spend|process\.env|node:fs|writeFile/iu);
   });
 });

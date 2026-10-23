@@ -1324,6 +1324,98 @@ describe('companion slot beside the chain', () => {
     const roles = (await rowsOf(h)).filter((row) => row.phase === 'result').map((row) => row.role);
     expect(roles).toEqual(['architect', 'coder', 'reviewer', 'final']);
   });
+
+  it('keeps companion evidence apart from the Julius spend ledger', async () => {
+    const serverRunId = `run:${sha(RUN).slice(0, 24)}`;
+    const bytes = new TextEncoder().encode('companion fixture');
+    const artifactSha = createHash('sha256').update(bytes).digest('hex');
+    const wakeId = 'wake_01ABCDEF';
+    const companionCostUsdMicros = 9_999_999;
+    const planText = JSON.stringify({
+      objectiveSummary: 'Plan the fixture.',
+      companion_task: { subtask: 'Add the companion note.', acceptanceCriteria: ['The note is present.'] },
+    });
+    const spendLedger = createSharedSpendLedger();
+    const h = harness({
+      frozen: { ...FROZEN, markerNamespace: 'julius-inworld-data-1', spendUsd: 30, repairCycles: 3 },
+      spendLedger,
+      behave: {
+        architect: () => ({ ok: true, text: planText, responseId: 'resp_a_0011223344', model: 'm', costUsdMicros: 1_000_000 }),
+        coder: () => ({ ok: true, text: 'art', responseId: 'resp_c_0011223344', model: 'm', changedPaths: 1, costUsdMicros: 2_000_000 }),
+        reviewer: () => ({ ok: true, text: 'fine', responseId: 'resp_r_0011223344', model: 'g', verdict: 'approve', costUsdMicros: 3_000_000 }),
+      },
+      companion: {
+        deadlineMs: 1_000,
+        port: {
+          async wake(request) {
+            expect(Object.keys(request).sort()).toEqual(['acceptanceCriteria', 'bodyDigest', 'deadlineMs', 'serverRunId', 'subtask']);
+            const posted = {
+              wakeId,
+              outcome: 'posted' as const,
+              artifact: { bytes },
+              costUsdMicros: companionCostUsdMicros,
+              spendUsd: 9.999999,
+              provider: 'companion-host',
+              model: 'byoai-companion',
+              role: 'CODING_AGENT',
+            };
+            return posted;
+          },
+        },
+        clock: { after: laterUnref },
+        integrate: { async submit() { return { accepted: true, reason: null }; } },
+        validate: { validate: () => ({ ok: true, reason: null }) },
+        review: { review: async () => ({ verdict: 'approve' }) },
+      },
+    });
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, status: 202 });
+    await h.controller.whenIdle();
+    expect(h.calls.map((call) => call.role)).toEqual(['architect', 'coder', 'reviewer']);
+    expect(h.calls[2]?.coderEvidence).toContain(`untrusted_companion_sha256=${artifactSha}`);
+    const events = h.controller.events({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER, cursor: 0 });
+    const body = events.body as { data: { events: { type: string; wakeId?: string | null; bodyDigest?: string | null; artifactHashes?: string[]; outcome?: string }[] } };
+    const recorded = body.data.events.find((event) => event.type === 'companion.recorded');
+    expect(recorded).toMatchObject({ outcome: 'integrated', wakeId, artifactHashes: [artifactSha] });
+    expect(recorded?.bodyDigest).toMatch(/^[0-9a-f]{64}$/u);
+    const facts = spendLedger.facts.get(serverRunId) ?? [];
+    expect(facts.map((fact) => fact.taskId)).toEqual([
+      `${serverRunId}:architect`,
+      `${serverRunId}:coder`,
+      `${serverRunId}:reviewer`,
+    ]);
+    expect(facts.map((fact) => fact.role)).toEqual(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']);
+    expect(facts.map((fact) => fact.usdMicros)).toEqual([1_000_000, 2_000_000, 3_000_000]);
+    const spendText = JSON.stringify(facts);
+    expect(spendText).not.toContain(wakeId);
+    expect(spendText).not.toContain(artifactSha);
+    expect(spendText).not.toContain(recorded?.bodyDigest ?? 'missing-digest');
+    expect(spendText).not.toContain('Add the companion note');
+    expect(spendText).not.toContain('companion-host');
+    expect(spendText).not.toContain('byoai-companion');
+    expect(spendText).not.toContain(String(companionCostUsdMicros));
+    const rows = await rowsOf(h);
+    const rowText = JSON.stringify(rows);
+    expect(rowText).not.toContain(wakeId);
+    expect(rowText).not.toContain(artifactSha);
+    expect(rowText).not.toContain(recorded?.bodyDigest ?? 'missing-digest');
+    expect(rowText).not.toContain('companion-host');
+    expect(rowText).not.toContain(String(companionCostUsdMicros));
+    expect(rows.filter((row) => row.phase === 'result' && row.role !== 'final').map((row) => row.costUsdMicros)).toEqual([1_000_000, 2_000_000, 3_000_000]);
+    const read = await spendLedger.readPrior({ missionId: 'julius-inworld-data-1', projectId: PROJECT, excludeRunId: 'run:not-this-one' });
+    expect(read).toEqual({
+      readable: true,
+      priorRuns: [{
+        runId: serverRunId,
+        knownUsdMicros: 6_000_000,
+        unknownCostComponents: 0,
+        unverifiableApiSpend: false,
+        spendVerified: true,
+      }],
+    });
+    expect(authorizeJuliusLiveSpend({
+      namespace: 'julius-inworld-data-1', spendUsd: 30, repairCycles: 3, ledger: read,
+    })).toMatchObject({ authorized: true, spendCeilingUsdMicros: 30_000_000 });
+  });
 });
 
 const laterUnref = (): Promise<void> => new Promise((resolve) => { const timer = setTimeout(resolve, 30_000); timer.unref(); });

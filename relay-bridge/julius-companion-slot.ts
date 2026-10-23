@@ -8,6 +8,11 @@ import { createHash } from 'node:crypto';
  * hands it to an injected CompanionPort. This module never calls a provider.
  * BRIDGE's relay is the port that wakes the companion.
  *
+ * BYOAI. The companion is the caller's own model. Julius does not call a
+ * provider for it, does not host it, and does not relabel it as a Julius role.
+ * Companion spend stays out of the run ledger and out of reconciliation.
+ * Companion evidence stays off the spend ledger.
+ *
  * Julius does not block on the wake. The deadline comes from config. A timeout,
  * a failure, or a missing result lets the mission continue. There is no retry.
  *
