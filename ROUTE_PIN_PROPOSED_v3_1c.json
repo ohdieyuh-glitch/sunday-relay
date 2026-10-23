@@ -25,5 +25,19 @@
     "RELAY_PIN.json PENDING -> PINNED (reviewer only, after the O1 post-deploy gate proves O1 wonderland-social runs 3f20fc1a)",
     "build commit aa930c269c43a52fc31c785f7bdcc231c8af6cf0 exists only on Kaisin (F5)"
   ],
-  "m4_attempts_pre_stated": 10
+  "m4_attempts_pre_stated": 10,
+  "m4_attempts_pre_stated_source": {
+    "repo": "ohdieyuh-glitch/sunday-relay",
+    "pr": 394,
+    "pr_head": "73c467910c60bd6b4b2123a8a3fb589696fa69bc",
+    "path": "wonderland/Tools/b33_v3_1b/b33_judge.py",
+    "line": 67,
+    "line_text": "M4_ATTEMPTS = 10          # EXACTLY this many M4 walk-off attempts per counted run (blocks M4_1..M4_10); every one listed; no selection",
+    "line_66_text": "# Q-M2c-5 (ruling M20261021T044135Z-INDEPENDENT_REVIEW-3fab1b, option (b); the lead's choice M20261021T044223Z-WONDERLAND_DEV-848a1d), fixed BEFORE data:",
+    "file_sha256": "4caddf0b34b74c9457b730ccdf2e2d1bab0fecbe51a51637dc34e53b4f80d0ec",
+    "file_git_blob": "651e33e953c059765dd819314a2ed9d6aaca98eb",
+    "file_note": "Byte-identical to Kaisin tools\\b33_v3_1b\\b33_judge.py (same sha256). Unchanged at 73c46791 since the import commit 2efbe8a0f59a1b037d832863262d980773eb7be2.",
+    "ruling": "M20261021T044135Z-INDEPENDENT_REVIEW-3fab1b (RULING Q-M2c-5: (b) ADMISSIBLE with N attempts, N >= 5, chosen and stated before data). Kaisin _qa_handoff\\session_mailbox\\messages\\M20261021T044135Z-INDEPENDENT_REVIEW-3fab1b.md, sha256 6559faa690d5398505b39d45576aef3d1327cd5427159fd9150c192dc9d7cf5e. Not in the repo.",
+    "choice": "M20261021T044223Z-WONDERLAND_DEV-848a1d (the lead's Q-M2c-5 choice: (b) with N = 10 walk-off attempts per counted run, stated in v3.1 before its hash). Kaisin _qa_handoff\\session_mailbox\\messages\\M20261021T044223Z-WONDERLAND_DEV-848a1d.md, sha256 037fb0aab614ad2a1d8bff3a9095abb4c49d1d69b3f68745a5e82814401c4c6e. Not in the repo."
+  }
 }
