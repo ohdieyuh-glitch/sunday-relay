@@ -1,11 +1,11 @@
-// Driver of the autonomous landing gate. Runs inside .github/workflows/julius-land.yml with the workflow's own token (identity: github-actions[bot]).
+// Driver of the autonomous landing gate. Runs inside .github/workflows/julius-land.yml. Git writes use JULIUS_LANDER_TOKEN (julius-lander[bot]). The workflow token only comments and closes the pull request, and reads.
 // It reads GitHub, asks `land-lib.mjs` whether EVERY condition holds, and only then creates the landing commit (the cleared tree on the cleared base, the signed clearance in its
 // message) with the git data API, spends the clearance's nonce as a tag, and advances main with a NON-FORCED ref update (a fast-forward test). It never uses the merge endpoint. Fail closed: any problem, any unexpected API
 // answer and any timeout ends the job without a landing. DRY_RUN=true makes every read and every check and writes nothing.
 import { readFileSync, appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { LANDER_IDENTITY, REPO, botCommentsDigest, buildLandingCommitMessage, checkCi, checkCreatedCommit, checkPullRequest, checkRuntime, ciIsPending, nonceUsed, parseClearance, parseLandingCommitMessage, parseRequiredChecks, verifyClearanceSignature } from './land-lib.mjs';
+import { LANDER_APP_ID, LANDER_IDENTITY, REPO, botCommentsDigest, buildLandingCommitMessage, checkCi, checkCreatedCommit, checkPullRequest, checkRuntime, ciIsPending, nonceUsed, parseClearance, parseLandingCommitMessage, parseRequiredChecks, verifyClearanceSignature } from './land-lib.mjs';
 import { PER_PAGE, readAllPages } from './land-lib.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -204,17 +204,20 @@ const jobScanFor = (token) => {
   jobScan = { token, chars, hasWs, middles, literal };
   return jobScan;
 };
-const redact = (text) => {
-  let out = String(text);
-  if (env.GH_TOKEN && env.GH_TOKEN.length >= 8) {
-    out = out.split(env.GH_TOKEN).join('***');
-    const scan = jobScanFor(env.GH_TOKEN);
-    if (scan.chars !== null) {
-      if (scan.hasWs) { if (scan.literal !== null) out = out.replace(scan.literal, '***'); }
-      else out = replaceLeftmost(out, scan.chars, matchJobAt, jobCanStart);
-      for (const middle of scan.middles) out = replaceLeftmost(out, middle, (s, i, cs) => matchSequence(s, i, cs, b64One), b64CanStart);
-    }
+const redactOne = (text, token) => {
+  if (!token || token.length < 8) return text;
+  let out = text.split(token).join('***');
+  const scan = jobScanFor(token);
+  if (scan.chars !== null) {
+    if (scan.hasWs) { if (scan.literal !== null) out = out.replace(scan.literal, '***'); }
+    else out = replaceLeftmost(out, scan.chars, matchJobAt, jobCanStart);
+    for (const middle of scan.middles) out = replaceLeftmost(out, middle, (s, i, cs) => matchSequence(s, i, cs, b64One), b64CanStart);
   }
+  return out;
+};
+const redact = (text) => {
+  let out = redactOne(String(text), env.GH_TOKEN);
+  out = redactOne(out, env.JULIUS_LANDER_TOKEN);
   out = replaceShapes(out, false);
   out = replaceShapes(out, true);
   return out
@@ -244,8 +247,21 @@ process.on('unhandledRejection', onUnexpected);
 // the job would sit until the workflow timeout with main already moved. An aborted request has no `.status`, so it is AMBIGUOUS like any lost answer. LAND_REQUEST_TIMEOUT_MS exists for
 // the tests only; the workflow never sets it (a test pins that), so production always uses 30 seconds.
 const REQUEST_TIMEOUT_MS = Number(env.LAND_REQUEST_TIMEOUT_MS ?? 30_000);
+/** GitHub's workflow token reads, comments, and closes. The lander App token is the only credential that creates a commit or moves a ref. */
+function tokenFor(method, path) {
+  const verb = method ?? 'GET';
+  const bare = String(path).split('?')[0];
+  if (verb === 'GET' || verb === 'HEAD') return env.GH_TOKEN;
+  if (verb === 'POST' && /\/git\/commits$/.test(bare)) return env.JULIUS_LANDER_TOKEN;
+  if (verb === 'POST' && /\/git\/refs$/.test(bare)) return env.JULIUS_LANDER_TOKEN;
+  if (verb === 'PATCH' && /\/git\/refs\/heads\/main$/.test(bare)) return env.JULIUS_LANDER_TOKEN;
+  if (verb === 'POST' && /\/issues\/\d+\/comments$/.test(bare)) return env.GH_TOKEN;
+  if (verb === 'PATCH' && /\/pulls\/\d+$/.test(bare)) return env.GH_TOKEN;
+  throw new Error(`no token is authorized for ${verb} ${bare}`);
+}
 async function ghRaw(path, init = {}) {
-  return fetch(`${API}${path}`, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(init.headers ?? {}) } });
+  const token = tokenFor(init.method, path);
+  return fetch(`${API}${path}`, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(init.headers ?? {}) } });
 }
 async function gh(path, init = {}) {
   const res = await ghRaw(path, init);
@@ -270,6 +286,10 @@ async function pagedCounted(path, key) {
 const number = env.PR ?? '';
 const head = env.HEAD ?? '';
 if (!/^[1-9][0-9]{0,6}$/u.test(number) || !/^[0-9a-f]{40}$/u.test(head)) fail(['inputs: pr must be an integer and head a full 40-hex sha']);
+if (env.JULIUS_LANDER_APP_ID !== LANDER_APP_ID) {
+  fail([env.JULIUS_LANDER_APP_ID ? `JULIUS_LANDER_APP_ID is ${env.JULIUS_LANDER_APP_ID}, not the pinned lander app ${LANDER_APP_ID}` : 'JULIUS_LANDER_APP_ID is unset']);
+}
+if (typeof env.JULIUS_LANDER_TOKEN !== 'string' || env.JULIUS_LANDER_TOKEN === '') fail(['JULIUS_LANDER_TOKEN is unset']);
 
 // 1. The clearance: parse, verify the signature against the key COMMITTED ON MAIN (this checkout), and bind it to the inputs.
 const clearanceText = Buffer.from(env.CLEARANCE_B64 ?? '', 'base64').toString('utf8');
@@ -355,7 +375,7 @@ if (tipNow !== fields.base) fail([`main moved to ${tipNow} immediately before th
 if (env.DRY_RUN !== 'false') {
   summary('DRY RUN: every gate holds. The live run would do exactly this, and nothing was written:');
   summary(`  1. POST /repos/${REPO}/git/commits ${JSON.stringify({ ...commitBody, message: '(below)' })}`);
-  summary(`  2. read the created commit back and require tree ${fields.tree}, the single parent ${fields.base}, the exact message and the github-actions[bot] identity`);
+  summary(`  2. read the created commit back and require tree ${fields.tree}, the single parent ${fields.base}, the exact message and the ${LANDER_IDENTITY.name} identity`);
   summary(`  3. POST /repos/${REPO}/git/refs ${JSON.stringify({ ref: `refs/tags/${NONCE_TAG}`, sha: '<the created commit sha>' })} (spends the clearance; the tag does not exist now)`);
   summary(`  4. PATCH /repos/${REPO}/git/refs/heads/main ${JSON.stringify(refBody('<the created commit sha>'))} (not forced: a fast-forward test, refused if main moved forward since the tip read)`);
   summary(`  5. comment on PR #${number} naming the landed commit, then close the PR (it will not show as merged; that is expected)`);

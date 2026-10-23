@@ -9,7 +9,7 @@
 #
 #   author   julius-worker[bot]   (the App; its single commit is the only thing that may land)
 #   clearer  the Independent Reviewer, who SIGNS a clearance with an ed25519 key it alone controls; only the PUBLIC key is in this repository
-#   merger   github-actions[bot] (this workflow's own token), acting only if every condition below holds
+#   merger   julius-lander[bot] (App 5444986), whose token creates the commit and moves refs. The workflow token only reads, comments, and closes.
 #
 # THE TRUST ANCHOR IS THE SIGNATURE. A dispatcher, including a developer session, can hand this workflow a clearance but cannot make one: the clearance text names the pull
 # request, the exact head, tree and base, a digest of every bot comment, inline comment and review the reviewer saw, and it expires within 24 hours. Changing any byte
@@ -52,14 +52,12 @@ on:
         required: false
         default: 'true'
 
-# `contents: write` is what the git data API (create the commit, update the ref) needs and `pull-requests: write` the PR comment and close; `checks`, `statuses` and `issues` are the READ side of the gates. `actions` is absent on
-# purpose (this workflow cannot delete a checkpoint) and so is `workflows`: GitHub refuses a GITHUB_TOKEN merge that would change a workflow file.
+# The workflow token does not write git objects. `contents: read` is the checkout and the reads. `pull-requests: write` comments and closes the pull request.
+# Check-run and status reads use this same token and fail closed when it cannot read them. `actions` is absent on purpose (this workflow cannot delete a checkpoint) and so is `workflows`.
+# The lander App is asked only for contents: write. It has no Workflows, Administration, or Pull requests permission, and this file does not request those.
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
-  checks: read
-  statuses: read
-  issues: read
 
 concurrency:
   group: julius-land
@@ -70,7 +68,9 @@ jobs:
     name: Land a cleared pull request
     # A workflow_dispatch runs the workflow file of the SELECTED ref. Only the copy on main is trusted: a dispatch against any other ref (a branch carrying a modified copy of this
     # file) does not even start the job. land.mjs checks the same fact again (GITHUB_REF and GITHUB_SHA against main's tip).
+    # The julius-landing environment accepts deployments from main only. The founder keeps that branch policy. This `if` is the workflow's own enforcement of the same fact.
     if: github.ref == 'refs/heads/main'
+    environment: julius-landing
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -83,9 +83,28 @@ jobs:
         with:
           node-version: 22
 
+      # vars.JULIUS_LANDER_APP_ID only feeds this step. land.mjs fails closed unless it equals the pinned constant 5444986.
+      # The bot login, user id, and author email are constants in land-lib.mjs. No login variable is read.
+      - name: Mint the lander app token
+        id: lander
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.JULIUS_LANDER_APP_ID }}
+          private-key: ${{ secrets.JULIUS_LANDER_PRIVATE_KEY }}
+          repositories: sunday-relay
+          permission-contents: write
+
+      - name: Require the checkpoint verifier
+        env:
+          JULIUS_REVIEWER_KEY_SHA256: ${{ vars.JULIUS_REVIEWER_KEY_SHA256 }}
+        run: node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier
+
       - name: 'Gate and land'
         env:
           GH_TOKEN: ${{ github.token }}
+          JULIUS_LANDER_TOKEN: ${{ steps.lander.outputs.token }}
+          JULIUS_LANDER_APP_ID: ${{ vars.JULIUS_LANDER_APP_ID }}
+          JULIUS_REVIEWER_KEY_SHA256: ${{ vars.JULIUS_REVIEWER_KEY_SHA256 }}
           PR: ${{ inputs.pr }}
           HEAD: ${{ inputs.head }}
           CLEARANCE_B64: ${{ inputs.clearance_b64 }}

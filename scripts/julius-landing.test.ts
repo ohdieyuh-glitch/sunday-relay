@@ -240,7 +240,7 @@ const calls = process.env.FAKE_CALLS;
 globalThis.fetch = async (url, init = {}) => {
   const path = String(url).replace('https://api.github.com', '');
   const method = init.method ?? 'GET';
-  appendFileSync(calls, JSON.stringify({ method, path, body: init.body ?? null }) + '\\n');
+  appendFileSync(calls, JSON.stringify({ method, path, body: init.body ?? null, authorization: (init.headers && init.headers.Authorization) || null }) + '\\n');
   const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   // scenario.failGet: a regexp source; any GET whose path matches answers HTTP 500 (an API failure before anything is written)
   // scenario.echo: the failure text echoes the request's Authorization header and token-shaped strings, as a misbehaving proxy or API might
@@ -324,7 +324,7 @@ globalThis.fetch = async (url, init = {}) => {
 `);
 
 let counter = 0;
-function runLand(over: { scenario?: Record<string, unknown>; text?: string; signature?: string; head?: string; pr?: string; dryRun?: string; ciWaitMs?: string; ref?: string; sha?: string; required?: string; token?: string; requestTimeoutMs?: string } = {}) {
+function runLand(over: { scenario?: Record<string, unknown>; text?: string; signature?: string; head?: string; pr?: string; dryRun?: string; ciWaitMs?: string; ref?: string; sha?: string; required?: string; token?: string; requestTimeoutMs?: string; landerToken?: string; appId?: string; omitLanderToken?: boolean; omitAppId?: boolean } = {}) {
   counter += 1;
   const requiredFile = join(landDir, 'required-checks.txt');
   if (over.required !== undefined) writeFileSync(requiredFile, over.required);
@@ -340,12 +340,12 @@ function runLand(over: { scenario?: Record<string, unknown>; text?: string; sign
   const r = spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, join(landDir, 'land.mjs')], {
     encoding: 'utf8', timeout: 25_000,
     env: {
-      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, GH_TOKEN: over.token ?? 'not-a-token', JULIUS_REVIEWER_KEY_SHA256: harnessPin, ...(over.requestTimeoutMs ? { LAND_REQUEST_TIMEOUT_MS: over.requestTimeoutMs } : {}), PR: over.pr ?? '7', HEAD: over.head ?? H,
+      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, GH_TOKEN: over.token ?? 'not-a-token', JULIUS_REVIEWER_KEY_SHA256: harnessPin, ...(over.omitLanderToken ? {} : { JULIUS_LANDER_TOKEN: over.landerToken ?? 'lander-token-not-a-secret' }), ...(over.omitAppId ? {} : { JULIUS_LANDER_APP_ID: over.appId ?? '5444986' }), ...(over.requestTimeoutMs ? { LAND_REQUEST_TIMEOUT_MS: over.requestTimeoutMs } : {}), PR: over.pr ?? '7', HEAD: over.head ?? H,
       CLEARANCE_B64: Buffer.from(text, 'utf8').toString('base64'), SIGNATURE_B64: over.signature ?? sig(text), DRY_RUN: over.dryRun ?? 'false', LAND_CI_WAIT_MS: over.ciWaitMs ?? '0', GITHUB_REF: over.ref ?? 'refs/heads/main', GITHUB_SHA: over.sha ?? B,
     },
   });
   if (over.required !== undefined) writeFileSync(requiredFile, '# test list\nVerify Relay\n');
-  const calls = readFileSync(callsFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as { method: string; path: string; body: string | null });
+  const calls = readFileSync(callsFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as { method: string; path: string; body: string | null; authorization: string | null });
   // `merges` = every request that moves main (a ref update); `writes` = every request that is not a GET.
   return { code: r.status, out: `${r.stdout}${r.stderr}`, merges: calls.filter((c) => c.method === 'PATCH' && /\/git\/refs\/heads\/main$/.test(c.path)), writes: calls.filter((c) => c.method !== 'GET'), calls };
 }
@@ -369,6 +369,43 @@ describe('land.mjs end to end against a fake GitHub', () => {
     const other = runLand({ text, signature: sig(text), scenario: { files: ['.github/julius-missions/x/contract.json', 'scripts/julius-live-contract-check.mjs', 'relay-bridge/julius/role-effort.test.ts'], pr: { ...goodPr(), changed_files: 3 } } });
     expect(other.merges).toHaveLength(0);
     expect(other.code).toBe(1);
+  });
+
+  it('a dry run still requires the lander token and the pinned app id, and refuses a missing or different app id', () => {
+    const present = runLand({ dryRun: 'true' });
+    expect(present.code, present.out).toBe(0);
+    expect(present.out).toContain('DRY RUN');
+    expect(present.writes).toHaveLength(0);
+    for (const [name, over] of [
+      ['missing token', { omitLanderToken: true, dryRun: 'true' }],
+      ['missing app id', { omitAppId: true, dryRun: 'true' }],
+      ['wrong app id', { appId: '4838349', dryRun: 'true' }],
+    ] as const) {
+      const r = runLand(over);
+      expect(r.code, `${name}: ${r.out}`).toBe(1);
+      expect(r.writes, name).toHaveLength(0);
+      expect(r.out, name).toContain(name === 'missing token' ? 'JULIUS_LANDER_TOKEN is unset' : 'JULIUS_LANDER_APP_ID');
+    }
+  });
+
+  it('git writes use the lander token and pull-request comments and closes use the workflow token', () => {
+    const r = runLand();
+    expect(r.code, r.out).toBe(0);
+    const gitWrites = r.calls.filter((c) => c.method !== 'GET' && /\/git\//.test(c.path));
+    expect(gitWrites.map((c) => `${c.method} ${c.path}`)).toEqual([
+      `POST /repos/${REPO}/git/commits`,
+      `POST /repos/${REPO}/git/refs`,
+      `PATCH /repos/${REPO}/git/refs/heads/main`,
+    ]);
+    for (const call of gitWrites) expect(call.authorization, call.path).toBe('Bearer lander-token-not-a-secret');
+    const housekeeping = r.calls.filter((c) => (c.method === 'POST' && /\/issues\/\d+\/comments$/.test(c.path)) || (c.method === 'PATCH' && /\/pulls\/\d+$/.test(c.path)));
+    expect(housekeeping).toHaveLength(2);
+    for (const call of housekeeping) expect(call.authorization, call.path).toBe('Bearer not-a-token');
+    for (const call of r.calls.filter((c) => c.method === 'GET')) expect(call.authorization, call.path).toBe('Bearer not-a-token');
+    expect(lib.LANDER_APP_ID).toBe('5444986');
+    expect(lib.LANDER_BOT_LOGIN).toBe('julius-lander[bot]');
+    expect(lib.LANDER_BOT_USER_ID).toBe('347026632');
+    expect(lib.LANDER_IDENTITY).toEqual({ name: 'julius-lander[bot]', email: '347026632+julius-lander[bot]@users.noreply.github.com' });
   });
 
   it('a dry run (and anything other than the exact string "false") never merges', () => {
@@ -454,18 +491,25 @@ describe('the workflow file is pinned', () => {
     expect(on).toContain('workflow_dispatch:');
     for (const trigger of ['push:', 'pull_request', 'schedule:', 'workflow_run:', 'repository_dispatch:', 'issue_comment']) expect(on, trigger).not.toContain(trigger);
     const permissions = /\npermissions:\n((?: {2}[a-z-]+: [a-z]+\n)+)/u.exec(WORKFLOW)?.[1] ?? '';
-    expect(permissions.trim().split('\n').map((l) => l.trim())).toEqual(['contents: write', 'pull-requests: write', 'checks: read', 'statuses: read', 'issues: read']);
+    expect(permissions.trim().split('\n').map((l) => l.trim())).toEqual(['contents: read', 'pull-requests: write']);
+    expect(WORKFLOW).toContain('environment: julius-landing');
+    expect(WORKFLOW).toContain('permission-contents: write');
+    expect(WORKFLOW).not.toMatch(/permission-(pull-requests|workflows|administration|actions|metadata):/u);
+    expect(WORKFLOW).not.toContain('JULIUS_LANDER_BOT_LOGIN');
+    expect(WORKFLOW).not.toContain('174560476');
+    expect(WORKFLOW).toContain('actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510');
     expect(WORKFLOW).not.toMatch(/\n\s+(actions|workflows|id-token|packages|deployments):\s/u);
   });
 
-  it('uses no secret, pins every action to a commit, checks out main, and passes inputs only through env (never into the shell text)', () => {
-    expect(WORKFLOW).not.toMatch(/secrets\./u);
+  it('uses only the lander private key, pins every action to a commit, checks out main, and passes inputs only through env (never into the shell text)', () => {
+    expect(WORKFLOW).toContain('secrets.JULIUS_LANDER_PRIVATE_KEY');
+    expect(WORKFLOW).not.toMatch(/secrets\.(?!JULIUS_LANDER_PRIVATE_KEY\b)/u);
     const uses = [...WORKFLOW.matchAll(/\n\s+- uses: (\S+)/gu)].map((m) => m[1]!);
     expect(uses.length).toBeGreaterThan(0);
     for (const u of uses) expect(u, 'an action not pinned by 40-hex sha').toMatch(/@[0-9a-f]{40}$/u);
     expect(WORKFLOW).toMatch(/ref: main\n/u);
     const runLines = [...WORKFLOW.matchAll(/\n\s+run: (.*)/gu)].map((m) => m[1]!);
-    expect(runLines).toEqual(['node .github/julius-landing/land.mjs']);
+    expect(runLines).toEqual(['node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier', 'node .github/julius-landing/land.mjs']);
     for (const line of runLines) expect(line).not.toContain('${{');
     expect(WORKFLOW).not.toContain('LAND_CI_WAIT_MS');
   });
@@ -502,7 +546,7 @@ describe('the workflow file is pinned', () => {
 
 const goodSignature = (text = clearanceText()) => sig(text);
 const buildMessage = (text = clearanceText()) => lib.buildLandingCommitMessage({ clearanceText: text, signatureB64: goodSignature(text) }) as string;
-const IDENTITY = { name: 'github-actions[bot]', email: '41898282+github-actions[bot]@users.noreply.github.com' };
+const IDENTITY = lib.LANDER_IDENTITY as { name: string; email: string };
 
 describe('L1: the landing commit message carries the signed clearance in a fixed, parseable block', () => {
   it('round-trips: the parser returns the exact clearance text, signature and nonce, and every field comes from the signed clearance', () => {
@@ -584,7 +628,7 @@ describe('L1: the landing commit message carries the signed clearance in a fixed
 });
 
 describe('L3: the landing is a created commit plus a non-forced ref update (no merge endpoint)', () => {
-  it('creates exactly the cleared tree with exactly one parent = the cleared base, authored by github-actions[bot], and updates main with force:false', () => {
+  it('creates exactly the cleared tree with exactly one parent = the cleared base, authored by julius-lander[bot], and updates main with force:false', () => {
     const r = runLand();
     expect(r.code, r.out).toBe(0);
     expect(r.writes.map((c) => `${c.method} ${c.path.replace(REPO, 'R')}`)).toEqual(['POST /repos/R/git/commits', 'POST /repos/R/git/refs', 'PATCH /repos/R/git/refs/heads/main', 'POST /repos/R/issues/7/comments', 'PATCH /repos/R/pulls/7']);

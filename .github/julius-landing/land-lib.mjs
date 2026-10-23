@@ -214,10 +214,14 @@ export function checkLanded({ landed, base, tree }) {
   return problems;
 }
 
-export const LANDER_IDENTITY = { name: 'github-actions[bot]', email: '41898282+github-actions[bot]@users.noreply.github.com' };
+/** The lander App, pinned in this governed file. Not a repository variable. Installation id is not consulted, so it is not pinned. */
+export const LANDER_APP_ID = '5444986';
+export const LANDER_BOT_LOGIN = 'julius-lander[bot]';
+export const LANDER_BOT_USER_ID = '347026632';
+export const LANDER_IDENTITY = { name: LANDER_BOT_LOGIN, email: `${LANDER_BOT_USER_ID}+julius-lander[bot]@users.noreply.github.com` };
 
 /** The commit the lander CREATED, read back from GitHub (REST `commits/{sha}`), against exactly what it asked for: the cleared tree, ONE parent = the cleared base, the exact message
- * and the github-actions[bot] identity. Any difference means the ref update must not follow. */
+ * and the julius-lander[bot] identity. Any difference means the ref update must not follow. */
 export function checkCreatedCommit({ created, sha, base, tree, message }) {
   const problems = [];
   if (!SHA.test(String(sha))) problems.push('the created commit has no valid sha');

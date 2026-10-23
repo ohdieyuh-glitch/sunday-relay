@@ -82,7 +82,7 @@ const verdict = (name, reason, extra = {}) => ({ verdict: name, reason, ...extra
 /**
  * A SECOND, INDEPENDENT WAY FOR A MAIN TIP TO BE PROVENANT: the Independent Reviewer signed it.
  *
- * The autonomous lander (github-actions[bot]) lands a commit whose MESSAGE carries the reviewer's ed25519
+ * The autonomous lander (julius-lander[bot]) lands a commit whose MESSAGE carries the reviewer's ed25519
  * clearance and signature. Such a commit is not the merge result of any pull request, so the founder-approval
  * path above cannot see it. This path answers the same question from different facts: is the tree that main carries,
  * on the base it was built on, exactly what the reviewer signed for, and was it authored by the coding worker?

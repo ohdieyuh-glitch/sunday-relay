@@ -97,7 +97,7 @@ globalThis.fetch = async (url, init = {}) => {
   const path = String(url).replace('https://api.github.com', '');
   const bare = path.split('?')[0];
   const method = init.method ?? 'GET';
-  appendFileSync(calls, JSON.stringify({ method, path, body: init.body ?? null }) + '\\n');
+  appendFileSync(calls, JSON.stringify({ method, path, body: init.body ?? null, authorization: (init.headers && init.headers.Authorization) || null }) + '\\n');
   const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   if (method === 'PUT' && /\\/pulls\\/\\d+\\/merge$/.test(bare)) return reply(200, { sha: scenario.mergedSha, merged: true });
   if (method === 'POST' && /\\/git\\/commits$/.test(bare)) { globalThis.__created = JSON.parse(init.body); return reply(201, { sha: scenario.createdSha ?? '8'.repeat(40) }); }
@@ -143,7 +143,7 @@ function runLand(scenario: Record<string, unknown> = {}) {
   const r = spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, join(landDir, 'land.mjs')], {
     encoding: 'utf8', timeout: 25_000,
     env: {
-      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, FAKE_COUNTERS: countersFile, GH_TOKEN: 'not-a-token', JULIUS_REVIEWER_KEY_SHA256: harnessPin, PR: '7', HEAD: H,
+      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, FAKE_COUNTERS: countersFile, GH_TOKEN: 'not-a-token', JULIUS_LANDER_TOKEN: 'lander-token-not-a-secret', JULIUS_LANDER_APP_ID: '5444986', JULIUS_REVIEWER_KEY_SHA256: harnessPin, PR: '7', HEAD: H,
       CLEARANCE_B64: Buffer.from(text, 'utf8').toString('base64'), SIGNATURE_B64: sig(text), DRY_RUN: 'false', LAND_CI_WAIT_MS: '0',
       // HARNESS ADAPTATION (258e6e01): the lander's runtime guard reads GITHUB_REF/GITHUB_SHA. A legitimate run is dispatched from main at its tip at dispatch time.
       GITHUB_REF: 'refs/heads/main', GITHUB_SHA: String((scenario.mainSequence as string[] | undefined)?.[0] ?? scenario.main ?? B),
