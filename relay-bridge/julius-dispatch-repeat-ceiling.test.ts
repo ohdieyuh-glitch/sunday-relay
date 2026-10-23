@@ -112,7 +112,9 @@ describe('combined initial+repeat ceiling for julius-inworld-data-1', () => {
     for (const cost of [1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1, Number.MAX_SAFE_INTEGER + 1]) {
       expect(one(cost)).toEqual({ verified: false, reason: 'unknown_spend' });
     }
-    // 1.5 + 2.5 is an integer. Removing the per-leg safe-integer check would verify this as 4.
+    // 1.5 + 2.5 would be the integer 4. The running-sum check still refuses it after the
+    // first add, so this fixture does not kill a mutant that deletes only the per-leg
+    // conjunct. Deleting both safe-integer checks would verify it as 4.
     expect(verifyRun1Spend({
       sealed: true, orderOk: true, spendUnknownLegs: 0, openedRoles: ['architect', 'coder'],
       legs: [
