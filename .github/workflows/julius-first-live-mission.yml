@@ -74,15 +74,22 @@ on:
         description: 'Idempotency key from scripts/julius-paid-dispatch.mjs ([A-Za-z0-9._@#-], 8-96). A second run carrying the same key refuses itself before it can spend.'
         required: false
         default: ''
+      server_run_id:
+        description: 'Julius run id minted at Wonderland admission: run: + 24 lowercase hex. Create tag julius-run-spent-<24hex> and concurrency group julius-paid-<24hex> before any paid call; re-dispatch halts RUN_ID_ALREADY_SPENT.'
+        required: false
+        default: ''
       learning_without_run:
         description: 'Only for a mission whose contract is arm WITH of a registered learning pair: the workflow run id of its WITHOUT arm (a successful paid run of this workflow at this commit), whose store this run restores before anything migrates or bootstraps. Empty for every other mission.'
         required: false
         default: ''
 
 # READ-ONLY, and every entry is here because a gate needs it. No write scope of
-# any kind, no PAT, and never the coding worker's credential: the trust gates
-# only ever ASK questions, and a token that could answer them differently is a
-# token that could answer them wrongly.
+# any kind on the workflow default, no PAT, and never the coding worker's
+# credential: the trust gates only ever ASK questions, and a token that could
+# answer them differently is a token that could answer them wrongly.
+# The one exception is the `spend-tag` job, which sets `contents: write` for
+# itself alone so it can create `refs/tags/julius-run-spent-<24hex>`. That job
+# has no other permission and does not call a provider.
 #   contents       the branch tip, commit trees and parents, and `compare`
 #   actions        the paid-attempt markers and the accepted-main checkpoints
 #   pull-requests  the merged pull request behind the commit, and its reviews
@@ -114,6 +121,103 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # -------------------------------------------- THE ONE SPENT TAG FOR THIS RUN ID
+  #
+  # A Wonderland admission mints `run:` plus 24 lowercase hex. Before any job
+  # that can call a provider, this job creates `refs/tags/julius-run-spent-<hex>`
+  # with one POST. GitHub's ref create is the lock: 201 is the only success.
+  # An existing tag is RUN_ID_ALREADY_SPENT. Any other result is
+  # SPENT_TAG_UNVERIFIED. Neither reaches a paid call.
+  #
+  # The id arrives only as an environment variable. The script refuses it unless
+  # it matches `^run:[0-9a-f]{24}$`, and only the matched hex is written into
+  # the tag name. `julius-inworld-data-1` with an empty id is refused. Every
+  # other mission with an empty id keeps today's group and creates no tag.
+  #
+  # TODO(single-spend): this tag is the durable record the qualifying-pair
+  # ceiling still does not read. The ledger that hangs off the tag is the
+  # next piece; this job only creates the ref.
+  spend-tag:
+    name: spend-tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      concurrency_group: ${{ steps.tag.outputs.concurrency_group }}
+      server_run_id: ${{ steps.tag.outputs.server_run_id }}
+    steps:
+      - name: 'Gate: one spent tag for this server run id, before any provider call'
+        id: tag
+        env:
+          SERVER_RUN_ID: ${{ inputs.server_run_id }}
+          MISSION: ${{ inputs.mission }}
+          CONFIRM_LIVE: ${{ inputs.confirm_live }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SERVER_RUN_ID="${SERVER_RUN_ID:-}"
+          MISSION="${MISSION:-}"
+          CONFIRM_LIVE="${CONFIRM_LIVE:-}"
+          hex=''
+          if [ -z "$SERVER_RUN_ID" ]; then
+            if [ "$MISSION" = 'julius-inworld-data-1' ]; then
+              echo 'server_run_id_required' >&2
+              exit 1
+            fi
+          elif ! printf '%s' "$SERVER_RUN_ID" | grep -Eqx 'run:[0-9a-f]{24}'; then
+            echo 'server_run_id_malformed' >&2
+            exit 1
+          else
+            hex=${SERVER_RUN_ID#run:}
+          fi
+          if [ -n "$hex" ]; then
+            group="julius-paid-${hex}"
+          elif [ "$CONFIRM_LIVE" = 'RUN LIVE MISSION' ]; then
+            group='julius-paid-provider-slot'
+          else
+            group="julius-preflight-${GITHUB_RUN_ID:?}"
+          fi
+          if [ -n "$hex" ]; then
+            recorded="run:${hex}"
+          else
+            recorded=none
+          fi
+          {
+            echo "concurrency_group=${group}"
+            echo "server_run_id=${recorded}"
+          } >> "${GITHUB_OUTPUT:?}"
+          # A preflight, and a mission with no server run id, creates no tag.
+          if [ "$CONFIRM_LIVE" != 'RUN LIVE MISSION' ] || [ -z "$hex" ]; then
+            exit 0
+          fi
+          if ! printf '%s' "${GITHUB_SHA:?}" | grep -Eqx '[0-9a-f]{40}'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          ref="refs/tags/julius-run-spent-${hex}"
+          payload=$(printf '{"ref":"%s","sha":"%s"}' "$ref" "$GITHUB_SHA")
+          body=$(mktemp)
+          set +e
+          code=$(curl -sS -o "$body" -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN:?}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY:?}/git/refs" \
+            --data-binary "$payload")
+          curl_status=$?
+          set -e
+          if [ "$curl_status" -eq 0 ] && [ "$code" = '201' ]; then
+            exit 0
+          fi
+          if [ "$curl_status" -eq 0 ] && [ "$code" = '422' ] && grep -q 'Reference already exists' "$body"; then
+            echo 'RUN_ID_ALREADY_SPENT' >&2
+            exit 1
+          fi
+          echo 'SPENT_TAG_UNVERIFIED' >&2
+          exit 1
+
   # ------------------------------------------------------- THE PAID PROVIDER SLOT
   #
   # ONE PAID RUN AT A TIME, IN AN ORDER SOMEBODY WROTE DOWN.
@@ -135,6 +239,7 @@ jobs:
   # `paid_slot_wait_exhausted` and has spent nothing.
   paid-slot:
     name: paid-slot
+    needs: spend-tag
     if: inputs.confirm_live == 'RUN LIVE MISSION'
     runs-on: ubuntu-24.04
     timeout-minutes: 350
@@ -213,13 +318,15 @@ jobs:
     # always has; a paid run starts only when admission concluded `success`. A
     # paid run whose admission failed, was cancelled or refused a duplicate never
     # reaches a step that could spend.
-    needs: paid-slot
-    if: ${{ !cancelled() && (needs.paid-slot.result == 'success' || (needs.paid-slot.result == 'skipped' && inputs.confirm_live != 'RUN LIVE MISSION')) }}
+    needs: [spend-tag, paid-slot]
+    if: ${{ !cancelled() && needs.spend-tag.result == 'success' && (needs.paid-slot.result == 'success' || (needs.paid-slot.result == 'skipped' && inputs.confirm_live != 'RUN LIVE MISSION')) }}
     # THE SECOND LINE. With admission correct this group never has a pending
     # member; if admission were ever wrong, two paid jobs still could not run at
-    # once. Dry runs keep a group of their own.
+    # once. A server run id uses julius-paid-<24hex>, minted by spend-tag from
+    # the validated hex only. Without one, a paid run keeps julius-paid-provider-slot
+    # and a dry run keeps a group of its own. Nothing is cancelled.
     concurrency:
-      group: ${{ inputs.confirm_live == 'RUN LIVE MISSION' && 'julius-paid-provider-slot' || format('julius-preflight-{0}', github.run_id) }}
+      group: ${{ needs.spend-tag.outputs.concurrency_group }}
       cancel-in-progress: false
     runs-on: ubuntu-24.04
     # THE JOB BUDGET IS SHARED OUT, not a taste. It is `JOB_BUDGET_MS` in
@@ -259,6 +366,8 @@ jobs:
       run:
         shell: bash
     env:
+      # Validated by spend-tag: `run:` plus 24 lowercase hex, or `none`.
+      SERVER_RUN_ID: ${{ needs.spend-tag.outputs.server_run_id }}
       JULIUS_CALLER_ID: julius-live
       JULIUS_TENANT_ID: tenant
       JULIUS_PROJECT_ID: prj-julius-first-live
@@ -1255,6 +1364,9 @@ jobs:
           RELAY_HERMES_EXECUTABLE: /tmp/julius-hermes-bin/hermes
           MAX_TICKS: ${{ inputs.max_ticks }}
           JULIUS_JOB_STARTED_AT: ${{ steps.inputs_gate.outputs.job_started_at }}
+          # Validated by spend-tag (`run:` + 24 lowercase hex, or the absent sentinel `none`).
+          # Bootstrap reads this name and adopts it as the Julius run id.
+          JULIUS_SERVER_RUN_ID: ${{ needs.spend-tag.outputs.server_run_id }}
         run: |
           set -uo pipefail
           # The bundle was built in an earlier step and is invoked directly,
@@ -1398,6 +1510,16 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p julius-live-evidence
+          # THE WONDERLAND ADMISSION ID, when this paid run carried one. The
+          # spend-tag job already refused anything that was not `run:` plus 24
+          # lowercase hex. A mission without one records `none`. The same line
+          # is in the evidence bundle's manifest, so a game trace and this
+          # summary name one paid run.
+          recorded=none
+          if printf '%s' "${SERVER_RUN_ID:-}" | grep -Eqx 'run:[0-9a-f]{24}'; then
+            recorded=$SERVER_RUN_ID
+          fi
+          printf 'server_run_id=%s\n' "$recorded" | tee julius-live-evidence/server-run-id.txt >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
           # WHICH REVIEWER ACTUALLY RAN, and under which two deadlines. Written
           # by the Hermes bootstrap, which prints the same six lines to the
           # public step log; run 34311556047 had none of them in its bundle.

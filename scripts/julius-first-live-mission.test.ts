@@ -197,8 +197,8 @@ describe('only a human dispatch can start the live mission', () => {
     // paid job itself. Both are asserted here; neither may ever cancel.
     expect(workflow, 'the workflow-level group is per run, so it can hold no pending paid run')
       .toMatch(/^concurrency:\s*\n\s*group:\s*julius-first-live-mission-\$\{\{ github\.run_id \}\}\s*\n\s*cancel-in-progress:\s*false/mu);
-    expect(workflow, 'two concurrent live missions would race for one workspace and one executor')
-      .toMatch(/concurrency:\s*\n\s*group:\s*\$\{\{ inputs\.confirm_live == 'RUN LIVE MISSION' && 'julius-paid-provider-slot' \|\| format\('julius-preflight-\{0\}', github\.run_id\) \}\}\s*\n\s*cancel-in-progress:\s*false/u);
+    expect(workflow, 'the paid job takes the group spend-tag minted, and never cancels')
+      .toMatch(/concurrency:\s*\n\s*group:\s*\$\{\{ needs\.spend-tag\.outputs\.concurrency_group \}\}\s*\n\s*cancel-in-progress:\s*false/u);
     expect(workflow, 'nothing in the paid workflow may ever cancel a run').not.toMatch(/cancel-in-progress:\s*true/u);
   });
 
@@ -1525,7 +1525,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const called = script.indexOf("write_manifest || echo 'JULIUS_EVIDENCE_MANIFEST unavailable'");
     expect(called, 'the manifest is written, and a failure to write it cannot stop the dump').toBeGreaterThan(0);
     expect(called, 'before the first table').toBeLessThan(script.indexOf('dump "SELECT'));
-    for (const key of ['manifest_version=1', 'commit=', 'tree=', 'mode=', 'mode_basis=', 'julius_run_id=', 'workflow_run_id=', 'workflow_run_attempt=', 'workflow_ref=', 'event=']) {
+    for (const key of ['manifest_version=1', 'commit=', 'tree=', 'mode=', 'mode_basis=', 'julius_run_id=', 'workflow_run_id=', 'workflow_run_attempt=', 'workflow_ref=', 'event=', 'server_run_id=']) {
       expect(script, `the manifest records ${key}`).toContain(`echo "${key}`.replace('echo "manifest_version=1', "echo 'manifest_version=1"));
     }
     expect(script, 'the file the gate reads').toContain('"$out/bundle-manifest.txt"');
@@ -2763,8 +2763,9 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
     expect(groups.length, 'one workflow-level group and one on the paid job').toBe(2);
     expect(groups[0], 'the workflow-level group is per run').toContain('github.run_id');
     expect(groups[0], 'the workflow-level group must not be the shared live slot').not.toContain("'live'");
-    expect(groups[1], 'paid jobs serialise on one group').toContain("'julius-paid-provider-slot'");
-    expect(groups[1], 'dry runs stay unlimited and parallel').toContain('github.run_id');
+    expect(groups[1], 'the paid job uses the group spend-tag computed').toContain('needs.spend-tag.outputs.concurrency_group');
+    expect(workflow, 'a mission with no server run id still serialises paid runs on one group').toContain("group='julius-paid-provider-slot'");
+    expect(workflow, 'a dry run with no server run id keeps a group of its own').toContain('julius-preflight-${GITHUB_RUN_ID');
     const cancels = [...workflow.matchAll(/cancel-in-progress:\s*(\S+)/gu)].map((match) => match[1]);
     expect(cancels.length).toBe(2);
     expect(cancels.every((value) => value === 'false'), 'a live run must never be cancelled mid-flight').toBe(true);

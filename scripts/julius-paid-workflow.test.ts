@@ -65,21 +65,22 @@ const READINESS = "'Preflight: each provider accepts its credential and serves t
 describe('the job that can spend cannot start before admission', () => {
   const paidJob = job('first-live-mission');
 
-  it('needs paid-slot, and runs only when admission succeeded or the run is not paid', () => {
-    expect(paidJob).toMatch(/\n    needs: paid-slot\n/u);
-    expect(paidJob).toContain("if: ${{ !cancelled() && (needs.paid-slot.result == 'success' || (needs.paid-slot.result == 'skipped' && inputs.confirm_live != 'RUN LIVE MISSION')) }}");
+  it('needs the spent tag and paid-slot, and runs only when both allow it', () => {
+    expect(paidJob).toMatch(/\n    needs: \[spend-tag, paid-slot\]\n/u);
+    expect(paidJob).toContain("if: ${{ !cancelled() && needs.spend-tag.result == 'success' && (needs.paid-slot.result == 'success' || (needs.paid-slot.result == 'skipped' && inputs.confirm_live != 'RUN LIVE MISSION')) }}");
   });
 
   it('a paid run whose admission was skipped, failed or refused a duplicate cannot reach the job', () => {
     // The condition, evaluated the way Actions evaluates it, for every outcome.
-    const admits = (result: string, confirm: string, cancelled = false): boolean =>
-      !cancelled && (result === 'success' || (result === 'skipped' && confirm !== 'RUN LIVE MISSION'));
+    const admits = (result: string, confirm: string, tag = 'success', cancelled = false): boolean =>
+      !cancelled && tag === 'success' && (result === 'success' || (result === 'skipped' && confirm !== 'RUN LIVE MISSION'));
     expect(admits('success', 'RUN LIVE MISSION')).toBe(true);
     for (const result of ['failure', 'cancelled', 'skipped']) {
       expect(admits(result, 'RUN LIVE MISSION'), `a paid run with admission ${result}`).toBe(false);
     }
     expect(admits('skipped', ''), 'a dry run proceeds as it always has').toBe(true);
-    expect(admits('success', 'RUN LIVE MISSION', true), 'a cancelled workflow starts nothing').toBe(false);
+    expect(admits('success', 'RUN LIVE MISSION', 'failure'), 'a refused spent tag starts nothing').toBe(false);
+    expect(admits('success', 'RUN LIVE MISSION', 'success', true), 'a cancelled workflow starts nothing').toBe(false);
   });
 
   it('keeps the provider environment on the paid job alone', () => {
@@ -493,6 +494,21 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     expect(run.output).not.toContain('FAKETESTNOTREAL');
   }, 60_000);
 
+  it('passes the validated server run id to bootstrap as JULIUS_SERVER_RUN_ID', () => {
+    const live = step(job('first-live-mission'), "'LIVE: run the first real Julius mission'");
+    expect(live).toContain('JULIUS_SERVER_RUN_ID: ${{ needs.spend-tag.outputs.server_run_id }}');
+    expect(live).not.toContain('inputs.server_run_id');
+  });
+
+  it('records the validated server run id in the evidence bundle and the step summary', () => {
+    const paid = job('first-live-mission');
+    expect(paid).toContain('julius-live-evidence/server-run-id.txt');
+    expect(paid).toContain('>> "${GITHUB_STEP_SUMMARY:-/dev/null}"');
+    const dump = readFileSync(resolve(ROOT, '.github/julius-live-evidence-dump.sh'), 'utf8');
+    expect(dump).toContain('echo "server_run_id=$(manifest_token "$server_run_id")"');
+    expect(dump).toContain("grep -Eqx 'run:[0-9a-f]{24}'");
+  });
+
   it('a missing key or token fails before any request is made', () => {
     const blanks: Record<string, string>[] = [{ XAI_API_KEY: '' }, { CLAUDE_CODE_OAUTH_TOKEN: '' }];
     for (const blank of blanks) {
@@ -501,4 +517,133 @@ describe('provider readiness fails before spending, and never exposes a key', ()
       expect(run.output).not.toContain('provider_readiness');
     }
   }, 60_000);
+});
+
+describe('a server run id is one spent tag, created before any provider call', () => {
+  const HEX = '0123456789abcdef01234567';
+  const tagJob = job('spend-tag');
+  const tagScript = script(step(tagJob, "'Gate: one spent tag for this server run id, before any provider call'"));
+
+  const runTag = (env: Record<string, string>, curl?: { code?: string; body?: string; exitCode?: string }): { status: number; stderr: string; output: string; curlLog: string } => {
+    const bin = mkdtempSync(join(tmpdir(), 'julius-spent-tag-'));
+    const curlLog = join(bin, 'curl.log');
+    writeFileSync(join(bin, 'curl'), [
+      '#!/usr/bin/env bash',
+      'out=""',
+      'prev=""',
+      'for arg in "$@"; do',
+      '  printf \'%s\\n\' "$arg" >> "$CURL_LOG"',
+      '  if [ "$prev" = "-o" ]; then out=$arg; fi',
+      '  prev=$arg',
+      'done',
+      'if [ -n "$out" ]; then printf \'%s\' "${CURL_RESPONSE:-}" > "$out"; fi',
+      'printf \'%s\' "${CURL_CODE:-201}"',
+      'exit "${CURL_EXIT:-0}"',
+      '',
+    ].join('\n'), { mode: 0o755 });
+    chmodSync(join(bin, 'curl'), 0o755);
+    const output = join(bin, 'github-output.txt');
+    writeFileSync(output, '');
+    try {
+      execFileSync('bash', [...GITHUB_BASH, tagScript], {
+        env: {
+          ...process.env,
+          PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
+          CURL_LOG: curlLog,
+          CURL_CODE: curl?.code ?? '201',
+          CURL_RESPONSE: curl?.body ?? '',
+          CURL_EXIT: curl?.exitCode ?? '0',
+          GITHUB_OUTPUT: output,
+          GITHUB_RUN_ID: '4242',
+          GITHUB_SHA: 'a'.repeat(40),
+          GITHUB_REPOSITORY: 'ohdieyuh-glitch/sunday-relay',
+          GH_TOKEN: 'ghs_test_not_a_real_token',
+          SERVER_RUN_ID: '',
+          MISSION: 'julius-first-live',
+          CONFIRM_LIVE: '',
+          ...env,
+        },
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return {
+        status: 0, stderr: '', output: readFileSync(output, 'utf8'),
+        curlLog: (() => { try { return readFileSync(curlLog, 'utf8'); } catch { return ''; } })(),
+      };
+    } catch (error) {
+      const failed = error as { status?: number; stderr?: string };
+      return {
+        status: failed.status ?? 1,
+        stderr: failed.stderr ?? '',
+        output: readFileSync(output, 'utf8'),
+        curlLog: (() => { try { return readFileSync(curlLog, 'utf8'); } catch { return ''; } })(),
+      };
+    }
+  };
+
+  it('refuses a bad format and does not create a tag', () => {
+    for (const value of ['run:GG', 'run:ABCDEF0123456789ABCDEF01', `run:${HEX}x`, `run:${HEX.slice(0, 23)}`, `run:${HEX};touch /tmp/pwn`]) {
+      const run = runTag({ SERVER_RUN_ID: value, CONFIRM_LIVE: 'RUN LIVE MISSION' });
+      expect(run.status, value).not.toBe(0);
+      expect(run.stderr, value).toContain('server_run_id_malformed');
+      expect(run.curlLog, value).toBe('');
+    }
+  });
+
+  it('refuses julius-inworld-data-1 with an empty id, and leaves every other empty mission alone', () => {
+    const refused = runTag({ MISSION: 'julius-inworld-data-1', SERVER_RUN_ID: '', CONFIRM_LIVE: 'RUN LIVE MISSION' });
+    expect(refused.status).not.toBe(0);
+    expect(refused.stderr).toContain('server_run_id_required');
+    expect(refused.curlLog).toBe('');
+    const paid = runTag({ MISSION: 'julius-first-live', SERVER_RUN_ID: '', CONFIRM_LIVE: 'RUN LIVE MISSION' });
+    expect(paid.status).toBe(0);
+    expect(paid.output).toContain('concurrency_group=julius-paid-provider-slot');
+    expect(paid.output).toContain('server_run_id=none');
+    expect(paid.curlLog).toBe('');
+    const dry = runTag({ MISSION: 'julius-first-live', SERVER_RUN_ID: '', CONFIRM_LIVE: '' });
+    expect(dry.status).toBe(0);
+    expect(dry.output).toContain('concurrency_group=julius-preflight-4242');
+    expect(dry.curlLog).toBe('');
+  });
+
+  it('an existing tag halts RUN_ID_ALREADY_SPENT and any other API result is unverified', () => {
+    const created = runTag({ SERVER_RUN_ID: `run:${HEX}`, CONFIRM_LIVE: 'RUN LIVE MISSION' });
+    expect(created.status).toBe(0);
+    expect(created.output).toContain(`concurrency_group=julius-paid-${HEX}`);
+    expect(created.output).toContain(`server_run_id=run:${HEX}`);
+    expect(created.curlLog).toContain(`refs/tags/julius-run-spent-${HEX}`);
+    expect(created.curlLog).toContain('/git/refs');
+    const exists = runTag(
+      { SERVER_RUN_ID: `run:${HEX}`, CONFIRM_LIVE: 'RUN LIVE MISSION' },
+      { code: '422', body: '{"message":"Reference already exists"}' },
+    );
+    expect(exists.status).not.toBe(0);
+    expect(exists.stderr).toContain('RUN_ID_ALREADY_SPENT');
+    expect(exists.stderr).not.toContain('SPENT_TAG_UNVERIFIED');
+    const broken = runTag(
+      { SERVER_RUN_ID: `run:${HEX}`, CONFIRM_LIVE: 'RUN LIVE MISSION' },
+      { code: '500', body: 'no' },
+    );
+    expect(broken.status).not.toBe(0);
+    expect(broken.stderr).toContain('SPENT_TAG_UNVERIFIED');
+    const dropped = runTag(
+      { SERVER_RUN_ID: `run:${HEX}`, CONFIRM_LIVE: 'RUN LIVE MISSION' },
+      { exitCode: '1' },
+    );
+    expect(dropped.status).not.toBe(0);
+    expect(dropped.stderr).toContain('SPENT_TAG_UNVERIFIED');
+  });
+
+  it('creates the tag before any provider call, and the id is not interpolated into the script', () => {
+    expect(tagScript).not.toContain('${{');
+    expect(tagJob).not.toMatch(/api\.openai\.com|api\.anthropic\.com|api\.x\.ai|management-api\.x\.ai/u);
+    expect(tagJob).toMatch(/\n    permissions:\n      contents: write\n/u);
+    const paid = job('first-live-mission');
+    expect(paid).toContain('needs: [spend-tag, paid-slot]');
+    expect(workflow.indexOf('\n  spend-tag:\n')).toBeLessThan(workflow.indexOf("- name: 'LIVE: run the first real Julius mission'"));
+    expect(workflow.indexOf('refs/tags/julius-run-spent-')).toBeLessThan(workflow.indexOf("- name: 'Preflight: each provider accepts its credential"));
+    expect(job('paid-slot')).toMatch(/\n    needs: spend-tag\n/u);
+    expect(job('paid-slot')).not.toMatch(/\n    permissions:\n/u);
+    expect(paid).not.toMatch(/\n    permissions:\n/u);
+  });
 });
