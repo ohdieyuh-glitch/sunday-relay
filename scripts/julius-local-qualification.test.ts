@@ -94,6 +94,10 @@ const LOCAL_DIFFERENCES: Record<string, { readonly local: string; readonly why: 
     local: 'julius_qualification',
     why: 'a name of its own, so nothing that reaches the wrong port can find a database called "julius" there',
   },
+  SERVER_RUN_ID: {
+    local: 'none',
+    why: 'a local qualification has no Wonderland admission id; none is the absent sentinel, so bootstrap keeps today\'s run name',
+  },
 };
 
 describe('the local launch mirrors the workflow job, and names every difference', () => {
