@@ -8,6 +8,8 @@ Revision 4: follows Skywalker's review of rev 3 at 8f312b32 (blob f7af3ee9; PASS
 
 Revision 5: follows Skywalker's review of rev 4 at 9b50b4d4 (PASS WITH FINDING; report `REPORT_rev4.md`) and two nits from YUJI. The previous revision is rev 4 (9b50b4d4). Each fix is labelled in place: R4-1 (medium, Skywalker; YUJI first gave the order, as RF1) the third-dispatch refusal paths in M4; R4-2 (low, Skywalker; YUJI's RF4) `SHA256SUMS.txt` now lists this file's sha256; R4-3 (low, Skywalker) the "C2" terminology note; R4-4 (nit, Skywalker) the 8,000 UTF-16 code-unit condition in M5; R4-5 (low, Skywalker) every rev 1-3 Proposal block is marked as superseded by YUJI's resolutions (`/workspace/julius/c2/C2_J1_RESOLUTIONS_PROPOSED_20261023.md`, sha256 `a008a01878f499e00c6552f1cd6df5d51376f9bd07be665dee272f6569734c9e` as read 2026-10-23 04:22 PT), not deleted; RF2 (YUJI) M5's "checker-judged" label; RF3 (YUJI) the `run_start` append starts at J1:854. Every rev 5 J1 citation was re-read with `git show 31bfc58b:<path>`. Rev 5 proposes no resolutions; YUJI owns those.
 
+Revision 6: follows Skywalker's findings on rev 5 at 672d1358 (blob e99fde0f). The previous revision is rev 5 (672d1358). Each fix is labelled in place: R5-2 YUJI's resolutions are now pinned by GitHub location as RES (Sources): `7773fc53:docs/C2_J1_RESOLUTIONS_20261023.md`, blob `0a43daba`, sha256 `2635f73a…a8a8`, 750 lines. Cosmo fetched it read-only and checked that the blob id and sha256 match before citing it. All eight superseded Proposal blocks now point to RES. The rev 5 note's reference to the local working copy (`/workspace/julius/c2/C2_J1_RESOLUTIONS_PROPOSED_20261023.md`, sha256 `a008a018…`) is HISTORICAL and is left as written. RES is YUJI's proposal, not a PASS; the R4-F and (c) rulings are pending with the founder. Nit 1: the bridge error body is `{ error: { kind, message } }` everywhere (J1:952; M3 path 3 and the M4 429 note corrected). Nit 2: M5 now says the cut is to 8,000 UTF-16 code units, not "8,000-char". Nit 3: the M4 Conflict line now follows its J1 citations. Nit 4: J1T:838-850 is added to the M4 test list. R5-1 (YUJI owns the test): a note in M4 that the same-day default-cap gap applies to every mission. Every rev 6 J1 citation was re-read with `git show 31bfc58b:<path>`. Line shifts are listed at the end. Rev 6 proposes no resolutions; YUJI owns those.
+
 Status: documentation only. Changes nothing, awards nothing, makes no readiness claim (readiness stays 56.25% verified; R16 credit 0 of 18.75). No criterion is weakened here; every resolution is a PROPOSAL for the protocol owner (JUDEV2/C2) and the client owner (WDEV) to accept or reject.
 
 Line numbers are 1-based and were read from the exact bytes whose sha256 is listed below. Quotes are short excerpts.
@@ -32,6 +34,7 @@ Line numbers are 1-based and were read from the exact bytes whose sha256 is list
 | J1B | sunday-relay `relay-bridge/julius-dispatch-bundle.ts` at 31bfc58b (blob `3770e76b`, same at 22a0a9cb) | not copied (fixed commit) | see `git show` |
 | J1WT | sunday-relay `relay-bridge/julius-dispatch-wiring.test.ts` at 31bfc58b (blob `a5e2861a`, same at 22a0a9cb) | not copied (fixed commit) | see `git show` |
 | J1T | sunday-relay `relay-bridge/julius-dispatch.test.ts` at 31bfc58b (blob `91a8ff80`, same at 22a0a9cb) | not copied (fixed commit) | see `git show` |
+| RES | YUJI's C2/J1 resolutions, rev 4 (rev 6, R5-2): sunday-relay `docs/C2_J1_RESOLUTIONS_20261023.md` at commit `7773fc53a0286e319c658edf58db9fe5f7b95135` on branch `docs/julius-c2-j1-resolutions-20261023` (parent `689d2be9`, tree `3aefcd3f`; blob `0a43daba228e8c255b35beb88400401a86634358`, 750 lines; read with `git show 7773fc53:docs/C2_J1_RESOLUTIONS_20261023.md` after a read-only fetch, 2026-10-23 PT). A PROPOSAL by YUJI, not PASSed; the R4-F and (c) rulings are pending with the founder | not copied (fixed commit) | `2635f73af5f9857a105d9a52e19f64cf00f748008886c0a1ce6f3489ef8ad8a8` |
 
 Notes on the sources:
 - **Path discrepancy.** The protocol is NOT under `...\inworld_missions_20261022\`. That folder holds only `j1\` and the PLAN addendum. The protocol was found at the PROT path above (mtime 2026-10-22 01:05 PT). SPEC line 372 (U10) also records that a filename search under `_qa_handoff` did not find it.
@@ -50,7 +53,7 @@ Notes on the sources:
   - PLANADD:4 "U2: client lines use the prefix WLJMISSION (not WLMISSION)... EXACT LINE-ANCHORED match".
   - SPEC:240-245 still uses `WLMISSION`. SPEC:364 (U2) records the collision: "`WLMISSION` prefix collides with existing client lines".
 - **Conflict:** `crosscheck.py` built to PROT:6-10 would match no J1 client line, so C1/C4/C5/C9 could not pass for a reason unrelated to the run. ECHO wins on the client side.
-- **Proposal (rev 1-3; Superseded by YUJI's resolutions (`/workspace/julius/c2/C2_J1_RESOLUTIONS_PROPOSED_20261023.md`); kept, not deleted; Skywalker's R4-5):** the protocol and crosscheck adopt `WLJMISSION`, anchored at line start, as PLANADD:4 asks.
+- **Proposal (rev 1-3; Superseded by YUJI's resolutions (rev 6, R5-2: now pinned as RES `7773fc53:docs/C2_J1_RESOLUTIONS_20261023.md`, blob `0a43daba`; see Sources. Rev 5 cited the local working copy, see the rev 5 note); kept, not deleted; Skywalker's R4-5):** the protocol and crosscheck adopt `WLJMISSION`, anchored at line start, as PLANADD:4 asks.
 
 ## Conflict 2: one `trigger` line vs `ui_action` / `run_id_received` / `trigger`
 - **Protocol:**
@@ -67,7 +70,7 @@ Notes on the sources:
 - **Conflict:**
   - C1 does not say which of the J1 lines is "the trigger".
   - The protocol has no `ui_action`-before-`run_created` check.
-- **Proposal (rev 1-3; Superseded by YUJI's resolutions (`/workspace/julius/c2/C2_J1_RESOLUTIONS_PROPOSED_20261023.md`); kept, not deleted; Skywalker's R4-5):**
+- **Proposal (rev 1-3; Superseded by YUJI's resolutions (rev 6, R5-2: now pinned as RES `7773fc53:docs/C2_J1_RESOLUTIONS_20261023.md`, blob `0a43daba`; see Sources. Rev 5 cited the local working copy, see the rev 5 note); kept, not deleted; Skywalker's R4-5):**
   - C1 names the `WLJMISSION trigger` line (it carries run, key_hash, player_hash and build, per ECHO:16), with "exactly one" and "utc < first pre_call" kept unchanged.
   - Add rule C1b: exactly one `ui_action` line for the run; its UTC < ledger `run_created.at`; and ledger `run_created.uiActionUtc` equals that line's UTC.
   - Any reorder or extra line is a FAIL. Nothing in C1 is relaxed.
@@ -81,7 +84,7 @@ Notes on the sources:
   - J1:254-267 refuse when `run_created_missing`, `ui_action_not_before_run_created` or `row_before_run_created`.
   - PLANADD:11 asks for exactly this as "a named field" and marks it "UNVERIFIED, to be checked against wt_j1". At 22a0a9cb the row exists in code. This is code-level only: no run has produced it under the protocol.
 - **Conflict:** crosscheck cannot check creator attribution (creatorPlayerHash/creatorKeyHash vs the client's player_hash/key_hash) or the UI-action ordering, because the protocol does not name the row.
-- **Proposal (rev 1-3; Superseded by YUJI's resolutions (`/workspace/julius/c2/C2_J1_RESOLUTIONS_PROPOSED_20261023.md`); kept, not deleted; Skywalker's R4-5):**
+- **Proposal (rev 1-3; Superseded by YUJI's resolutions (rev 6, R5-2: now pinned as RES `7773fc53:docs/C2_J1_RESOLUTIONS_20261023.md`, blob `0a43daba`; see Sources. Rev 5 cited the local working copy, see the rev 5 note); kept, not deleted; Skywalker's R4-5):**
   - Add `run_created` to PROT section 0 with the J1:849-851 fields.
   - Require exactly one per run, before `run_start`.
   - Require `creatorKeyHash` == client `key_hash` and `creatorPlayerHash` == client `player_hash` == `authorizedPlayerHash`.
@@ -100,8 +103,8 @@ Notes on the sources:
 - **Conflict:**
   - C5 compares a client field that the ECHO result line no longer emits.
   - The by-eye check compares the screen against the wrong hash: the screen shows `artifactSha256[:12]`.
-- **Proposal (rev 1-3; Superseded by YUJI's resolutions (`/workspace/julius/c2/C2_J1_RESOLUTIONS_PROPOSED_20261023.md`); kept, not deleted; Skywalker's R4-5):**
-  - C5 becomes: client `artifact_sha256` == the result JSON `artifactSha256`, with `digest_ok=1` and `digest12` == `artifact_sha256[:12]`. **Rev 4 (M5, Skywalker):** rev 1-3 also required "== the ledger coder row `artifactJudgedSha256` (ECHO:14)". That part is withdrawn: at 31bfc58b the two are equal only under the conditions in M5. How C5 should treat the ledger value is left to YUJI's resolutions.
+- **Proposal (rev 1-3; Superseded by YUJI's resolutions (rev 6, R5-2: now pinned as RES `7773fc53:docs/C2_J1_RESOLUTIONS_20261023.md`, blob `0a43daba`; see Sources. Rev 5 cited the local working copy, see the rev 5 note); kept, not deleted; Skywalker's R4-5):**
+  - C5 becomes: client `artifact_sha256` == the result JSON `artifactSha256`, with `digest_ok=1` and `digest12` == `artifact_sha256[:12]`. **Rev 4 (M5, Skywalker):** rev 1-3 also required "== the ledger coder row `artifactJudgedSha256` (ECHO:14)". That part is withdrawn: at 31bfc58b the two are equal only under the conditions in M5. How C5 should treat the ledger value is left to YUJI's resolutions (RES, a proposal, not PASSed).
   - The by-eye check compares on-screen `check <12>` with `artifact_sha256[:12]`.
   - The ledger `final.resultSha256` stays checked bridge-side (whole result bytes) but is not compared with the screen.
   - **Correction (rev 2):** the f00041 equality test already exists. It is commit `5eb51efbaaa47952b848877642ac121ccf05d29b` (2026-10-22 08:59 PT, "the artifact hash the client receives equals the ledger artifactJudgedSha256"), which adds a test to `relay-bridge/julius-dispatch-wiring.test.ts` asserting `result.artifactSha256 == sha(artifactText.trim())` and `== coder.artifactJudgedSha256`. `git merge-base --is-ancestor 5eb51efb 22a0a9cb` is true. Rev 1 wrongly said it was pending. **Rev 4 (M5, Skywalker):** that test (J1WT:281-292 at 31bfc58b) shows equality only for its fixture, a bundled coder leg whose text has no key and is at most 8,000 UTF-16 code units before the trim (rev 5 wording, Skywalker's R4-4; see M5). It does not show that the two values are equal in general.
@@ -115,7 +118,7 @@ Notes on the sources:
   - ECHO:4: the echoId is "forgotten on bridge restart".
 - **Conflict:** N9 as written accepts "completes from ledger", which J1 cannot do. A J1 run must never be credited as a recovery.
 - **Severity (rev 2, Skywalker):** this is a NARROWING, not a contradiction. PROT:68 already allows "or refuses", so J1 can pass N9 through the refuse branch alone.
-- **Proposal (rev 1-3; Superseded by YUJI's resolutions (`/workspace/julius/c2/C2_J1_RESOLUTIONS_PROPOSED_20261023.md`); kept, not deleted; Skywalker's R4-5):**
+- **Proposal (rev 1-3; Superseded by YUJI's resolutions (rev 6, R5-2: now pinned as RES `7773fc53:docs/C2_J1_RESOLUTIONS_20261023.md`, blob `0a43daba`; see Sources. Rev 5 cited the local working copy, see the rev 5 note); kept, not deleted; Skywalker's R4-5):**
   - For J1, N9 PASS = refuse branch only: ORPHANED row, a `refused` line, and no new pre_call for any leg after restart.
   - Any "completed after restart" outcome on J1 is a FAIL, not a pass.
 
@@ -135,7 +138,7 @@ Notes on the sources:
   - ECHO:16 says `refused` carries "(code only)", and ECHO:12 says "refusals are shown from the error `code` only". SPEC:74 and PROT:60 use `kind=`.
   - **Expanded (rev 2, Skywalker):** the bridge's HTTP error body has no `code` field. It is `{ error: { kind, message } }` (J1:952 `const err = (status, kind, message) => ({ status, body: { error: { kind, message } } })`). A client built literally to ECHO:12/:16 would read a field the bridge does not send. The field name must be pinned to `kind` (as SPEC:155 and :157 say), or the addendum must say that "code" means `error.kind`.
   - SPEC:377 (U15) leaves open whether the header-print risk applies to the Windows HTTP backend. The client gate is required either way.
-- **Proposal (rev 1-3; Superseded by YUJI's resolutions (`/workspace/julius/c2/C2_J1_RESOLUTIONS_PROPOSED_20261023.md`); kept, not deleted; Skywalker's R4-5):** keep M2/N8 unchanged, and state in the protocol that the expected J1 line is `WLJMISSION refused ... local_http_verbose` with nothing sent and no ledger `pre_call`.
+- **Proposal (rev 1-3; Superseded by YUJI's resolutions (rev 6, R5-2: now pinned as RES `7773fc53:docs/C2_J1_RESOLUTIONS_20261023.md`, blob `0a43daba`; see Sources. Rev 5 cited the local working copy, see the rev 5 note); kept, not deleted; Skywalker's R4-5):** keep M2/N8 unchanged, and state in the protocol that the expected J1 line is `WLJMISSION refused ... local_http_verbose` with nothing sent and no ledger `pre_call`.
 
 ## Conflict 7: rehearsal label `rehearsal=fake` vs "REHEARSAL (fake provider)"
 - **Protocol:**
@@ -152,7 +155,7 @@ Notes on the sources:
   - SPEC carries both forms: the screen prefix and the log token.
   - The governing ECHO line set does not list the token. A literal ECHO implementation could drop it, and C0/B4 would then miss a fake run.
 - **Impact narrowed (rev 2, Skywalker):** a fake run is still caught by C0 without the client token. PROT:32 C0 also rejects `mode=fake` anywhere. The J1 ledger writes `mode: ctx.mode` on every `pre_call` (J1:500-501) and on the final `result` row (J1:638). The remaining gap is B4's client-side label check (PROT:19), not fake-run detection.
-- **Proposal (rev 1-3; Superseded by YUJI's resolutions (`/workspace/julius/c2/C2_J1_RESOLUTIONS_PROPOSED_20261023.md`); kept, not deleted; Skywalker's R4-5):**
+- **Proposal (rev 1-3; Superseded by YUJI's resolutions (rev 6, R5-2: now pinned as RES `7773fc53:docs/C2_J1_RESOLUTIONS_20261023.md`, blob `0a43daba`; see Sources. Rev 5 cited the local working copy, see the rev 5 note); kept, not deleted; Skywalker's R4-5):**
   - ECHO §4 `trigger` (and `result`) must carry `rehearsal=fake` whenever mode is fake.
   - The screen prefix "REHEARSAL (fake provider) - " stays as the player-visible label.
   - C0 matches the log token. M1/video review checks the screen prefix.
@@ -175,7 +178,7 @@ Notes on the sources:
   - J1:709 `refuse(403, 'julius_dispatch_second_pairing')`.
 - SPEC:162-163 map those kinds.
 - **Conflict:** N1 as written can never match literally.
-- **Proposal (rev 1-3; Superseded by YUJI's resolutions (`/workspace/julius/c2/C2_J1_RESOLUTIONS_PROPOSED_20261023.md`); kept, not deleted; Skywalker's R4-5):** N1 accepts exactly the set {`sign_in_required`, `julius_dispatch_founder_only`, `julius_dispatch_second_pairing`, `julius_dispatch_wrong_project`}, with no ledger `pre_call`.
+- **Proposal (rev 1-3; Superseded by YUJI's resolutions (rev 6, R5-2: now pinned as RES `7773fc53:docs/C2_J1_RESOLUTIONS_20261023.md`, blob `0a43daba`; see Sources. Rev 5 cited the local working copy, see the rev 5 note); kept, not deleted; Skywalker's R4-5):** N1 accepts exactly the set {`sign_in_required`, `julius_dispatch_founder_only`, `julius_dispatch_second_pairing`, `julius_dispatch_wrong_project`}, with no ledger `pre_call`.
 - **Status:** CONFIRMED.
 
 ### M3: SPEC r1 error table (SPEC:157-175) is missing kinds the bridge emits; recovery is lazy
@@ -191,7 +194,7 @@ Notes on the sources:
     - The clock kinds `clock_binding_required`, `clock_echo_unknown` and `clock_offset_out_of_range` (J1:834-836, returned at J1:844).
     - `repeat_already_used` (J1:797), `repeat_receipt_missing` / `repeat_spend_unknown` (J1:799), and `repeat_above_per_run` / `repeat_combined_ceiling` (J1:811-814).
   - **Path 2: `err()` directly** (J1:952): `body_invalid` (J1:1010), `cursor_invalid` (J1:1002), `clock_binding_invalid` (J1:1020).
-  - **Path 3: direct `{ error: { kind, ... } }` bodies:** `run_orphaned` (J1:902), `final_row_unwritten` (J1:905), `result_lost_on_restart` (J1:908).
+  - **Path 3: direct `{ error: { kind, message } }` bodies** (rev 6, nit 1; J1:905 and :908 also add `detail: { resultSha256 }`): `run_orphaned` (J1:902), `final_row_unwritten` (J1:905), `result_lost_on_restart` (J1:908).
   - None of these has been observed in a real run.
 - **Lazy recovery:** J1W:256-270. "recover() must finish before the first dispatch (OPEN_ITEMS 21). A failed recovery refuses every dispatch". `ready()` runs `inner.recover()` lazily on the first `dispatch` (J1W:258-264). If recovery fails, every dispatch returns `503 julius_dispatch_ledger_unavailable` (J1W:267).
   - SPEC:171 (rev 2 said :170; corrected and re-checked) does list `julius_dispatch_ledger_unavailable` as "Try again in a moment", which is misleading when recovery has permanently failed for that process.
@@ -204,16 +207,16 @@ Notes on the sources:
   - `julius_dispatch_repeat_receipt_missing` / `_spend_unknown` (J1:798-799), when run-1 spend is unverified;
   - `julius_dispatch_repeat_already_used` (J1:797);
   - `_repeat_above_per_run` / `_repeat_combined_ceiling` (J1:810-814).
+- **Conflict:** run 2 is blocked unless run-1 provider receipts reach the ledger. The protocol does not list this precondition, and a refused run 2 means no ACCEPT. (rev 6, nit 3: this line now follows the J1 citations, as in the other entries; rev 5 had it below the analysis.)
 - **Rev 4 (Skywalker's finding): SPEC:293.** "Run 2: repeat 5-10 with a fresh key and a fresh run id; assert the second `key_hash` differs and a third dispatch is refused by the bridge cap (`julius_dispatch_mission_cap_reached` row)." So in SPEC it is the **third** dispatch that the cap refuses, not the second: run 2 is expected to be dispatched. The receipt refusals above are a separate gate that can refuse run 2 itself. (Rev 4 said the third dispatch is refused at J1:781; that is only one case. Rev 5 corrects it below.)
 - **Rev 5 (R4-1, medium; Skywalker's finding; YUJI first gave this order): how a third dispatch is refused at 31bfc58b.** Inside the reservation lock the checks run in this order: J1:774 `run_creator_mismatch` (403), J1:776 `already_dispatched` (409), J1:777 `key_reused` (409), J1:779-780 the daily cap, J1:781 the mission cap, then the combined ceiling (J1:787-826). Both caps default to 2 (`J1_DEFAULT_DAILY_CAP` at J1:52, `J1_DEFAULT_MAX_RUNS_PER_MISSION` at J1:53, read at J1:764-765). For a third dispatch after runs 1 and 2 started, with a fresh key and a fresh run id:
   - **Same UTC day, default caps:** J1:779 counts `run_start` and `run_refused` rows on the bridge's current UTC day. The count is 2, so J1:780 refuses with **429 `julius_dispatch_cap_reached`**, and J1:781 is never reached.
   - **A later UTC day** (or a daily cap raised above the day count): J1:781 refuses with **429 `julius_dispatch_mission_cap_reached`**.
   - **Mission cap raised by env, daily cap not binding, mission `julius-inworld-data-1` only** (the combined ceiling applies only to that mission: J1:719, `julius-dispatch-repeat-ceiling.ts:54`): `priorSpendFromLedger` returns `repeat_already_used` when there is more than one prior `run_start` (repeat-ceiling.ts:214-216), so J1:797 refuses with **409 `julius_dispatch_repeat_already_used`**. This path DOES write a `run_refused` row and a log line (`refuseRepeat`, J1:789-796).
   - **Mission cap raised, any other mission:** none of these three refusals fires.
-- **Neither 429 writes a ledger row.** Both are `return refuse(...)`, and `refuse` (J1:420) only builds an outcome object; J1:1027 maps it to the HTTP `{ error: { kind } }` body. So SPEC:293's "`julius_dispatch_mission_cap_reached` row" cannot exist at 31bfc58b, and a check that requires that row would fail a correct bridge.
-- **Tests at 31bfc58b:** `julius-dispatch.test.ts:439-445` (mission cap on the third dispatch, with `JULIUS_J1_DAILY_CAP` raised to 10 to get past the daily check), :446-449 (daily cap of 1), :752-766 (two `run_refused` rows use up a daily cap of 2, and the third attempt gets `cap_reached`); `julius-dispatch-repeat-ceiling.test.ts:342-401` (combined-ceiling refusals; :390-401 is the third run of julius-inworld-data-1 with both caps at 10, giving `repeat_already_used`). **Not covered:** a same-day third dispatch under the shipped default caps (2/2) for the ceiling mission; a later UTC day; an assertion that a 429 cap refusal writes zero ledger rows.
+- **Neither 429 writes a ledger row.** Both are `return refuse(...)`, and `refuse` (J1:420) only builds an outcome object; J1:1027 maps it to the HTTP `{ error: { kind, message } }` body (via `err`, J1:952; rev 6, nit 1). So SPEC:293's "`julius_dispatch_mission_cap_reached` row" cannot exist at 31bfc58b, and a check that requires that row would fail a correct bridge.
+- **Tests at 31bfc58b:** `julius-dispatch.test.ts:439-445` (mission cap on the third dispatch, with `JULIUS_J1_DAILY_CAP` raised to 10 to get past the daily check), :446-449 (daily cap of 1), :752-766 (two `run_refused` rows use up a daily cap of 2, and the third attempt gets `cap_reached`), :838-850 (rev 6, nit 4; `describe('J1 file ledger')`, mission `mission-j1-frozen`, which has no ceiling: run 1 is dispatched on a file ledger, the ledger is closed and reopened as a restart, the restarted controller (with `JULIUS_J1_DAILY_CAP` raised to 10, J1T:846) refuses run 1's identical input again with 409 `julius_dispatch_already_dispatched` (J1T:847), admits run 2 (J1T:848), and refuses run 3 with `julius_dispatch_mission_cap_reached` (J1T:850; it matches the code only, not the 429 status)); `julius-dispatch-repeat-ceiling.test.ts:342-401` (combined-ceiling refusals; :390-401 is the third run of julius-inworld-data-1 with both caps at 10, giving `repeat_already_used`). **Not covered:** a same-day third dispatch under the shipped default caps (2/2) after two admitted runs, for ANY mission, not only the ceiling mission (rev 6: YUJI's R5-1 widens this gap; YUJI owns that test, RES §11 gap 1); a later UTC day; an assertion that a 429 cap refusal writes zero ledger rows.
 - No resolution is proposed here; YUJI owns resolutions.
-- **Conflict:** run 2 is blocked unless run-1 provider receipts reach the ledger. The protocol does not list this precondition, and a refused run 2 means no ACCEPT.
 - **Status:** CONFIRMED.
 
 ### M5 (medium; Skywalker's finding, rev 4): ECHO:14 says `artifactJudgedSha256` is "the same value" as `artifactSha256`; in J1 code it is not
@@ -221,7 +224,7 @@ Notes on the sources:
 - **Rev 5 (YUJI's RF2): ECHO's label "the checker-judged hash" is also wrong.** The checker judges `coderArtifact`, the scrubbed, cut and trimmed text (J1:607 `deps.checker.check({ runId: rec.runId, artifactText: coderArtifact })`). `artifactJudgedSha256` is the hash of the coder's full, unscrubbed final message (trimmed), which the bundle step compares with the bytes of `out/normalized.json` (J1B:40-46; J1A:386).
 - **`artifactSha256` (client-visible), at 31bfc58b:**
   - J1:529-530: `const scrubbed = scrubKeys(out.text, secrets);` then, for the coder, `scrubbed.trim()`.
-  - `scrubKeys` (J1:333-337) replaces every key value of 8+ chars with `[redacted]`, then cuts the text to `J1_TEXT_MAX_CHARS` (J1:55, `8_000`). So the order is: scrub, then the 8,000-char cut, then trim.
+  - `scrubKeys` (J1:333-337) replaces every key value of 8+ chars with `[redacted]`, then cuts the text to `J1_TEXT_MAX_CHARS` (J1:55, `8_000`). So the order is: scrub, then the cut to the first 8,000 UTF-16 code units (`out.slice(0, J1_TEXT_MAX_CHARS)` at J1:337; rev 6, nit 2), then trim.
   - J1:598 stores that text as `coderArtifact`. J1:627 sets `artifactSha256: coderArtifact === null ? null : sha256(coderArtifact)`, where `sha256` is the UTF-8 hex helper at J1:328.
   - It exists only as a field inside `resultText`. The result route returns `{ data: { runId, state, mode, resultText, resultSha256 } }` (J1:913).
 - **`artifactJudgedSha256` (ledger-only), at 31bfc58b:**
@@ -285,3 +288,7 @@ Option (a) vs (b) is pending the founder's ruling. **Rev 2:** the run-id FORMAT 
 - "j1 OPEN_ITEMS 8" (PLANADD:12), "j1 DESIGN 5.5" and `wt_j1` are referenced by the sources but were not opened. They are cited only through the quoting source.
 - Bridge tip actually to be run: **rev 4: confirmed** as `31bfc58b89de137670e5dbaf752c3328b31163f7` (tree `46744fc1`), per YUJI. Skywalker confirmed the cited J1 files are byte-identical at `31bfc58b` and `22a0a9cb` (`julius-dispatch.ts` blob `018fb582`). `1254b0d1` and `71d9f6f8` only add evidence files. (Rev 1-3 said "unconfirmed": ECHO:1 cites 2f8c346a, the J1 citations were at 22a0a9cb, and the origin tip was 1254b0d1.)
 - Rev 3: CLOSED. Per Skywalker, 1254b0d1 builds on 22a0a9cb (4 ahead, 0 behind, linear; touches only reviewer prompt + evidence). This was not re-verified locally because the object is absent. M3 per-kind reachability is now code-confirmed (not run-confirmed). **Rev 4:** now re-verified locally: `1254b0d1` and `71d9f6f8` are present on Kaisin, and their parent chain is checked in Sources.
+
+## Rev 6 line shifts (rev 5 672d1358, 287 lines → rev 6)
+Rev 5 line → rev 6 line, for anyone citing this doc (e.g. RES §10a). Two lines were added after rev 5 line 9 (blank + rev 6 note) and one Sources row after rev 5 line 34 (RES); M4 was reordered (nit 3). Lines not listed keep their numbers (rev 5 :1-9). Section headers: Sources :21 → :23; M4 :200 → :203; M5 :219 → :222; Missing or unverifiable citations :282 → :285.
+- :10-34 → :12-36; :35-206 → :38-209; :216 → :210; :207-215 → :211-219; :217-287 → :220-290.
