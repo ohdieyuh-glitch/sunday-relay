@@ -1,6 +1,8 @@
 // WONDERLAND -- J1 mission progress logic after Accepted. See WonderlandJuliusMissionProgress.h for the rules.
 #include "WonderlandJuliusMissionProgress.h"
 
+#include <cstdint>
+#include <limits>
 #include <utility>
 
 namespace WonderlandJuliusMissionLogic
@@ -125,22 +127,26 @@ namespace WonderlandJuliusMissionLogic
 		return EMissionProgress::Waiting;
 	}
 
-	FPollDecision NextPoll(std::uint32_t PollsSent, std::uint64_t WatchedMs)
+	FPollDecision NextPoll(std::uint32_t PollsSent, EPollPhase Phase, std::uint64_t PhaseWatchedMs)
 	{
-		if (PollsSent >= PollMaxCount)
-		{
-			return {};
-		}
+		const std::uint64_t Budget = Phase == EPollPhase::Run ? PollRunWatchMs : PollAdmissionWatchMs;
 		std::uint64_t Delay = PollBaseDelayMs;
-		for (std::uint32_t Step = 0; Step < PollsSent && Delay < PollMaxDelayMs; ++Step)
+		if (PhaseWatchedMs >= PollSlowAfterMs)
 		{
-			Delay *= PollGrowthFactor;
+			Delay = PollSlowDelayMs;
 		}
-		if (Delay > PollMaxDelayMs)
+		else
 		{
-			Delay = PollMaxDelayMs;
+			for (std::uint32_t Step = 0; Step < PollsSent && Delay < PollMaxDelayMs; ++Step)
+			{
+				Delay *= PollGrowthFactor;
+			}
+			if (Delay > PollMaxDelayMs)
+			{
+				Delay = PollMaxDelayMs;
+			}
 		}
-		if (WatchedMs > PollMaxTotalWatchMs || Delay > PollMaxTotalWatchMs - WatchedMs)
+		if (PhaseWatchedMs > Budget || Delay > Budget - PhaseWatchedMs)
 		{
 			return {};
 		}
@@ -212,7 +218,17 @@ namespace WonderlandJuliusMissionLogic
 		{
 			return Move(EProgressEvent::LateDispatchAnswerIgnored, State, &Fields);
 		}
-		return Move(EProgressEvent::DispatchReplayed, ProgressFromStatus(EStatusVocabulary::Admission, Fields.Status), &Fields);
+		return ApplyAdmission(EProgressEvent::DispatchReplayed, Fields);
+	}
+
+	EMissionProgress FMissionProgressTracker::ApplyAdmission(EProgressEvent Event, const FStatusAnswer& Fields)
+	{
+		if (bJuliusStatusSeen)
+		{
+			// P8: Julius has reported this run; the admission vocabulary can no longer move it, nor end it.
+			return Move(EProgressEvent::AdmissionAnswerLogged, State, &Fields);
+		}
+		return Move(Event, ProgressFromStatus(EStatusVocabulary::Admission, Fields.Status), &Fields);
 	}
 
 	EMissionProgress FMissionProgressTracker::RecordPollAnswer(const FStatusAnswer& Fields)
@@ -222,7 +238,7 @@ namespace WonderlandJuliusMissionLogic
 			// Nothing to poll before Accepted; not counted, nothing changes.
 			return Move(EProgressEvent::PollFailed, State, &Fields);
 		}
-		if (PollsSent < PollMaxCount)
+		if (PollsSent != std::numeric_limits<std::uint32_t>::max())
 		{
 			++PollsSent;
 		}
@@ -244,6 +260,14 @@ namespace WonderlandJuliusMissionLogic
 			// Cannot tell whose status this is: not ours to apply.
 			return Move(EProgressEvent::PollFailed, State, &Fields);
 		}
+		if (Fields.Vocabulary == EStatusVocabulary::Admission)
+		{
+			return ApplyAdmission(EProgressEvent::StatusApplied, Fields);
+		}
+		if (Fields.Vocabulary == EStatusVocabulary::JuliusRun)
+		{
+			bJuliusStatusSeen = true;
+		}
 		return Move(EProgressEvent::StatusApplied, ProgressFromStatus(Fields.Vocabulary, Fields.Status), &Fields);
 	}
 
@@ -253,7 +277,18 @@ namespace WonderlandJuliusMissionLogic
 		{
 			return {};
 		}
-		const FPollDecision Decision = NextPoll(PollsSent, WatchedMs);
+		std::uint64_t PhaseWatchedMs = WatchedMs;
+		if (bJuliusStatusSeen)
+		{
+			if (!bRunPhaseStarted)
+			{
+				// P5: the fresh Run window starts now, at the first ask after the first JuliusRun status.
+				bRunPhaseStarted = true;
+				RunPhaseStartMs = WatchedMs;
+			}
+			PhaseWatchedMs = WatchedMs >= RunPhaseStartMs ? WatchedMs - RunPhaseStartMs : 0;
+		}
+		const FPollDecision Decision = NextPoll(PollsSent, PollPhase(), PhaseWatchedMs);
 		if (Decision.Step == EPollStep::Stop)
 		{
 			Move(EProgressEvent::PollLimitReached, EMissionProgress::PollLimitReached, nullptr);
@@ -274,7 +309,7 @@ namespace WonderlandJuliusMissionLogic
 		case EMissionProgress::Succeeded: return "Julius reports the mission finished \xE2\x80\x94 checking the result";
 		case EMissionProgress::Failed: return "Julius reports the mission did not finish";
 		case EMissionProgress::Refused: return "The bridge refused the request \xE2\x80\x94 nothing was started";
-		case EMissionProgress::DispatchFailed: return "The bridge ended this request before the paid run";
+		case EMissionProgress::DispatchFailed: return "The bridge ended this request before Julius reported a run";
 		case EMissionProgress::RunIdMismatch: return "Stopped \xE2\x80\x94 the bridge named a different run; nothing will be resent";
 		case EMissionProgress::AnswerInvalid: return "Stopped \xE2\x80\x94 the bridge's answer could not be checked; nothing will be resent";
 		case EMissionProgress::PollLimitReached: return "Stopped checking \xE2\x80\x94 the mission may still be going; ask the bridge";
@@ -314,6 +349,7 @@ namespace WonderlandJuliusMissionLogic
 		case EProgressEvent::DispatchReplayed: return "dispatch_replayed";
 		case EProgressEvent::LateDispatchAnswerIgnored: return "late_dispatch_answer_ignored";
 		case EProgressEvent::StatusApplied: return "status_applied";
+		case EProgressEvent::AdmissionAnswerLogged: return "admission_answer_logged";
 		case EProgressEvent::PollFailed: return "poll_failed";
 		case EProgressEvent::RunIdMismatched: return "run_id_mismatched";
 		case EProgressEvent::AnswerRejected: return "answer_rejected";
