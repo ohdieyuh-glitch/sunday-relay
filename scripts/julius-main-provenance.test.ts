@@ -409,13 +409,15 @@ describe('the CLI, against a stubbed GitHub', () => {
     }
   };
 
-  it('reshapes GitHub\'s JSON into a proof and exits 0', () => {
+  it('reshapes GitHub\'s JSON and still refuses a tip that is not the trusted checkpoint', () => {
     const result = runWithStub(routes());
-    expect(result.code, result.stderr).toBe(0);
-    expect(result.stdout).toContain('provenance=provenant');
-    expect(result.stdout).toContain(`main=${MAIN}`);
-    expect(result.stdout).toContain('pr=226');
-    expect(result.stdout).toContain(`approved_by=${APPROVER}`);
+    expect(result.code, result.stderr).toBe(1);
+    expect(result.stderr).toContain('provenance=unprovenanced');
+    expect(result.stderr).toContain('the trust chain from the trusted checkpoint could not be read');
+    expect(result.stderr).toContain(`main=${MAIN}`);
+    expect(result.stderr).toContain('pr=226');
+    expect(result.stderr).toContain(`approved_by=${APPROVER}`);
+    expect(result.stdout).not.toContain('provenance=provenant');
   }, 30_000);
 
   it('a pull request GitHub never merged is not a merge, however associated', () => {
@@ -513,16 +515,19 @@ describe('the CLI, against a stubbed GitHub', () => {
     ...over,
   });
 
-  it('reaches the same verdict from an evidence file, and says the evidence came from one', () => {
+  it('reaches the same refusal from an evidence file, and says the evidence came from one', () => {
     const result = runWithEvidence(evidence());
-    expect(result.code, result.stderr).toBe(0);
-    expect(result.stdout).toContain('provenance=provenant');
-    expect(result.stdout).toContain('source=file:');
-    expect(result.stdout).toContain(`approved_by=${APPROVER}`);
+    expect(result.code, result.stderr).toBe(1);
+    expect(result.stderr).toContain('provenance=unprovenanced');
+    expect(result.stderr).toContain('the first-parent chain from the trusted checkpoint was not supplied');
+    expect(result.stderr).toContain('source=file:');
+    expect(result.stderr).toContain(`approved_by=${APPROVER}`);
+    expect(result.stdout).not.toContain('provenance=provenant');
   }, 30_000);
 
   it('says so when the verdict came from GitHub instead', () => {
-    expect(runWithStub(routes()).stdout, 'a reader must be able to tell the two apart').toContain('source=github');
+    const result = runWithStub(routes());
+    expect(`${result.stdout}${result.stderr}`, 'a reader must be able to tell the two apart').toContain('source=github');
   }, 30_000);
 
   /**

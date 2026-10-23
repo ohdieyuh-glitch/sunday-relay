@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { createHash, generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, createPublicKey, generateKeyPairSync, sign } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -63,6 +63,17 @@ mkdirSync(landDir, { recursive: true });
 // HARNESS ADAPTATION (258e6e01): the committed required-checks.txt names six checks; the scenarios model a head whose CI is "Verify Relay", so the harness writes its own
 // one-name list (as the landing test does) instead of copying the production file. The production file's content is pinned by scripts/julius-landing.test.ts.
 for (const f of ['land.mjs', 'land-lib.mjs', 'reviewer-tools.mjs']) if (existsSync(join(LANDING, f))) cpSync(join(LANDING, f), join(landDir, f));
+const harnessPin = (() => {
+  const der = Buffer.from(createPublicKey(publicPem).export({ type: 'spki', format: 'der' }));
+  const spki = createHash('sha256').update(der).digest('hex');
+  const raw = der.subarray(der.length - 32).toString('hex');
+  const file = join(landDir, 'land-lib.mjs');
+  if (!existsSync(file)) return spki;
+  writeFileSync(file, readFileSync(file, 'utf8')
+    .replace(/export const PINNED_REVIEWER_SPKI_SHA256 = '[0-9a-f]+';/u, `export const PINNED_REVIEWER_SPKI_SHA256 = '${spki}';`)
+    .replace(/export const PINNED_REVIEWER_RAW_KEY = '[0-9a-f]+';/u, `export const PINNED_REVIEWER_RAW_KEY = '${raw}';`));
+  return spki;
+})();
 writeFileSync(join(landDir, 'reviewer-ed25519.pub'), publicPem);
 writeFileSync(join(landDir, 'allowed-branches.txt'), `# attack allowlist\n${BRANCH}\n`);
 // a required-checks file is part of the hardened design; the committed implementation has none, so the default is created ONLY when the implementation reads one
@@ -132,7 +143,7 @@ function runLand(scenario: Record<string, unknown> = {}) {
   const r = spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, join(landDir, 'land.mjs')], {
     encoding: 'utf8', timeout: 25_000,
     env: {
-      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, FAKE_COUNTERS: countersFile, GH_TOKEN: 'not-a-token', PR: '7', HEAD: H,
+      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, FAKE_COUNTERS: countersFile, GH_TOKEN: 'not-a-token', JULIUS_REVIEWER_KEY_SHA256: harnessPin, PR: '7', HEAD: H,
       CLEARANCE_B64: Buffer.from(text, 'utf8').toString('base64'), SIGNATURE_B64: sig(text), DRY_RUN: 'false', LAND_CI_WAIT_MS: '0',
       // HARNESS ADAPTATION (258e6e01): the lander's runtime guard reads GITHUB_REF/GITHUB_SHA. A legitimate run is dispatched from main at its tip at dispatch time.
       GITHUB_REF: 'refs/heads/main', GITHUB_SHA: String((scenario.mainSequence as string[] | undefined)?.[0] ?? scenario.main ?? B),

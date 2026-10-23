@@ -16,6 +16,7 @@ import {
   SIGNED_LANDING_GOVERNED,
   readReviewerKey,
 } from './julius-main-provenance.mjs';
+import { PINNED_REVIEWER_SPKI_SHA256 } from './julius-main-provenance-trust.mjs';
 
 /**
  * A TIP THE INDEPENDENT REVIEWER SIGNED FOR.
@@ -46,6 +47,8 @@ const attacker = generateKeyPairSync('ed25519');
 const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const pem = (key: { export(options: { type: 'spki'; format: 'pem' }): string | Buffer }) => String(key.export({ type: 'spki', format: 'pem' }));
 const REVIEWER_PEM = pem(reviewer.publicKey);
+const REAL_PEM = readFileSync(resolve(import.meta.dirname, '../.github/julius-landing/reviewer-ed25519.pub'), 'utf8');
+const realKey = { reviewerKeyPem: REAL_PEM, tipReviewerKeyPem: REAL_PEM, externalReviewerKeySha256: PINNED_REVIEWER_SPKI_SHA256 };
 
 const clearanceText = (over: Record<string, string> = {}) => {
   const fields: Record<string, string> = {
@@ -97,18 +100,23 @@ const expectVerdict = (result: { verdict: string; reason: string }, verdict: str
 describe('a tip signed for by the Independent Reviewer', () => {
   it('the passing shape is provenant, names the reviewer, and never needed a pull request', () => {
     const result = signedTip();
-    expectVerdict(result, 'provenant');
+    expectVerdict(result, 'unprovenanced', /not the pinned reviewer key/u);
     expect(result).toMatchObject({ prNumber: 381, reviewedHeadSha: HEAD, approvedBy: ['INDEPENDENT_REVIEW'], parentSha: PARENT, via: 'signed-landing' });
   });
 
   it('kind CLEARED is accepted exactly like CLEARED-TREE', () => {
     const text = clearanceText({ kind: 'CLEARED' });
-    expectVerdict(signedTip({ mainCommitMessage: message(block({ text })) }), 'provenant');
+    expectVerdict(signedTip({ mainCommitMessage: message(block({ text })) }), 'unprovenanced', /not the pinned reviewer key/u);
   });
 
   it('1. a signature made by any other key is refused', () => {
     const forged = block({ signature: signWith(attacker.privateKey, clearanceText()) });
-    expectVerdict(signedTip({ mainCommitMessage: message(forged) }), 'unprovenanced', /does not verify/u);
+    const attackerPem = pem(attacker.publicKey);
+    const pinned = signedTip({ ...realKey, mainCommitMessage: message(forged) });
+    expectVerdict(pinned, 'unprovenanced', /does not verify/u);
+    const unpinned = signedTip({ mainCommitMessage: message(forged), reviewerKeyPem: attackerPem, tipReviewerKeyPem: attackerPem });
+    expectVerdict(unpinned, 'unprovenanced', /not the pinned reviewer key/u);
+    expect(unpinned.reason).not.toMatch(/does not verify/u);
   });
 
   it('2. the key must be the one committed at the PARENT: read anywhere else, it is not a key', () => {
@@ -126,7 +134,7 @@ describe('a tip signed for by the Independent Reviewer', () => {
   it('4. a signature that is edited by one byte, or truncated, does not verify', () => {
     const good = Buffer.from(signWith(reviewer.privateKey, clearanceText()), 'base64');
     const flipped = Buffer.from(good); flipped[0] = (flipped[0]! ^ 1);
-    expectVerdict(signedTip({ mainCommitMessage: message(block({ signature: flipped.toString('base64') })) }), 'unprovenanced', /does not verify/u);
+    expectVerdict(signedTip({ ...realKey, mainCommitMessage: message(block({ signature: flipped.toString('base64') })) }), 'unprovenanced', /does not verify/u);
     expectVerdict(signedTip({ mainCommitMessage: message(block({ signature: good.subarray(0, 63).toString('base64') })) }), 'unprovenanced', /64 bytes/u);
   });
 
@@ -134,7 +142,7 @@ describe('a tip signed for by the Independent Reviewer', () => {
     const signedFor = clearanceText();
     const edited = clearanceText({ issued: '2026-10-19T09:00:01Z' });
     const tampered = block({ text: edited, signature: signWith(reviewer.privateKey, signedFor) });
-    expectVerdict(signedTip({ mainCommitMessage: message(tampered) }), 'unprovenanced', /does not verify/u);
+    expectVerdict(signedTip({ ...realKey, mainCommitMessage: message(tampered) }), 'unprovenanced', /does not verify/u);
   });
 
   it('6. the reviewer signed a DIFFERENT tree: replaying a genuine clearance on another tip', () => {
@@ -181,8 +189,8 @@ describe('a tip signed for by the Independent Reviewer', () => {
   });
 
   it('10b. P2: the clearance repo line must equal the QUERIED repository as well as the landing repository', () => {
-    expectVerdict(signedTip({ repo: 'ohdieyuh-glitch/sunday-relay' }), 'provenant');
-    expectVerdict(signedTip(), 'provenant');
+    expectVerdict(signedTip({ repo: 'ohdieyuh-glitch/sunday-relay' }), 'unprovenanced', /not the pinned reviewer key/u);
+    expectVerdict(signedTip(), 'unprovenanced', /not the pinned reviewer key/u);
     expectVerdict(signedTip({ repo: 'someone/else' }), 'indeterminate', /malformed.*queried repo/u);
     expect(parseSignedClearance(clearanceText(), 'ohdieyuh-glitch/sunday-relay').problems).toEqual([]);
     expect(parseSignedClearance(clearanceText(), 'someone/else').problems.join(';')).toMatch(/queried repo/u);
@@ -218,8 +226,8 @@ describe('a tip signed for by the Independent Reviewer', () => {
       mutate((l) => l.map((line) => (line.startsWith('signature-b64: ') ? `${line}!` : line))),
     ];
     for (const variant of variants) expectVerdict(signedTip({ mainCommitMessage: variant }), 'indeterminate');
-    expectVerdict(signedTip({ mainCommitMessage: `Julius (#381)\n\n${exact.join('\n')}` }), 'provenant');
-    expectVerdict(signedTip({ mainCommitMessage: `${exact.join('\n')}\n` }), 'provenant');
+    expectVerdict(signedTip({ mainCommitMessage: `Julius (#381)\n\n${exact.join('\n')}` }), 'unprovenanced', /not the pinned reviewer key/u);
+    expectVerdict(signedTip({ mainCommitMessage: `${exact.join('\n')}\n` }), 'unprovenanced', /not the pinned reviewer key/u);
   });
 
   it('12b. a carriage return ANYWHERE in the message, a lone marker word, and non-canonical base64 are all refused', () => {
@@ -299,7 +307,7 @@ describe('a tip signed for by the Independent Reviewer', () => {
     // a rename AWAY from a governed path lists the old name too: the caller (the CLI) passes both, and either one refuses
     expectVerdict(signedTip({ changedPaths: ['docs/moved.md', '.github/workflows/old.yml'] }), 'unprovenanced', /founder-governed/u);
     // ordinary work is provenant
-    expectVerdict(signedTip({ changedPaths: ['src/a.ts', 'relay-bridge/julius/x.ts', '.github/julius-missions/julius-diag-digest-evidence-2/dryrun/dryrun.sh', 'JULIUS_HARNESS_MANIFEST.md'] }), 'provenant');
+    expectVerdict(signedTip({ changedPaths: ['src/a.ts', 'relay-bridge/julius/x.ts', '.github/julius-missions/julius-diag-digest-evidence-2/dryrun/dryrun.sh', 'JULIUS_HARNESS_MANIFEST.md'] }), 'unprovenanced', /not the pinned reviewer key/u);
   });
 
   it('12g. d4b: the two exception-eligible files change only when the SIGNED clearance names them exactly', () => {
@@ -307,8 +315,8 @@ describe('a tip signed for by the Independent Reviewer', () => {
     const signedFor = (list: string) => message(block({ text: clearanceText({ 'governed-exceptions': list }) }));
     expectVerdict(signedTip({ changedPaths: files }), 'unprovenanced', /founder-governed/u);
     expectVerdict(signedTip({ changedPaths: [files[0]!], mainCommitMessage: signedFor(files[1]!) }), 'unprovenanced', /founder-governed/u);
-    expectVerdict(signedTip({ changedPaths: files, mainCommitMessage: signedFor(files.slice().sort().join(',')) }), 'provenant');
-    expectVerdict(signedTip({ changedPaths: [files[0]!], mainCommitMessage: signedFor(files[0]!) }), 'provenant');
+    expectVerdict(signedTip({ changedPaths: files, mainCommitMessage: signedFor(files.slice().sort().join(',')) }), 'unprovenanced', /not the pinned reviewer key/u);
+    expectVerdict(signedTip({ changedPaths: [files[0]!], mainCommitMessage: signedFor(files[0]!) }), 'unprovenanced', /not the pinned reviewer key/u);
     // a case variant is a different (never listed) name: refused even when the exact name is signed
     expectVerdict(signedTip({ changedPaths: ['Relay-Bridge/Julius/role-effort.test.ts'], mainCommitMessage: signedFor(files[0]!) }), 'unprovenanced', /founder-governed/u);
   });
@@ -366,7 +374,7 @@ describe('a tip signed for by the Independent Reviewer', () => {
 
   it('16. expiry is deliberately not judged: an old clearance proves the content was cleared over that base', () => {
     const old = clearanceText({ issued: '2020-01-01T00:00:00Z', expires: '2020-01-02T00:00:00Z' });
-    expectVerdict(signedTip({ mainCommitMessage: message(block({ text: old })) }), 'provenant');
+    expectVerdict(signedTip({ mainCommitMessage: message(block({ text: old })) }), 'unprovenanced', /not the pinned reviewer key/u);
   });
 });
 
@@ -436,7 +444,7 @@ describe('the CLI on a signed tip', () => {
   copyFileSync(process.execPath, join(stubDirectory, stubName));
   afterAll(() => { rmSync(stubDirectory, { recursive: true, force: true }); });
 
-  const run = (table: Record<string, unknown>) => {
+  const run = (table: Record<string, unknown>, extraEnv: Record<string, string> = {}) => {
     const directory = mkdtempSync(join(tmpdir(), 'julius-provenance-signed-'));
     try {
       const stub = join(directory, 'stub.cjs');
@@ -457,6 +465,7 @@ describe('the CLI on a signed tip', () => {
       for (const key of Object.keys(env)) if (key.toLowerCase() === 'path') delete env[key];
       env.PATH = `${stubDirectory}${delimiter}${process.env.PATH ?? ''}`;
       env.NODE_OPTIONS = `--require=${stub.replace(/\\/gu, '/')}`;
+      Object.assign(env, extraEnv);
       try {
         const stdout = execFileSync(process.execPath, [resolve(import.meta.dirname, 'julius-main-provenance.mjs'), REPO], {
           encoding: 'utf8', env, stdio: 'pipe',
@@ -471,12 +480,14 @@ describe('the CLI on a signed tip', () => {
     }
   };
 
-  it('proves a signed tip end to end, reading the key at the parent', () => {
+  it('reads the key at the parent and refuses an unpinned key end to end', () => {
     const result = run(routes());
-    expect(result.code, result.stderr).toBe(0);
-    expect(result.stdout).toContain('provenance=provenant');
-    expect(result.stdout).toContain('approved_by=INDEPENDENT_REVIEW');
-    expect(result.stdout).toContain('pr=381');
+    expect(result.code, result.stderr).toBe(1);
+    expect(result.stderr).toContain('provenance=unprovenanced');
+    expect(result.stderr).toContain('not the pinned reviewer key');
+    expect(result.stderr).toContain('approved_by=INDEPENDENT_REVIEW');
+    expect(result.stderr).toContain('pr=381');
+    expect(result.stdout).not.toContain('provenance=provenant');
   }, 30_000);
 
   it('a key that exists only at the tip (never at the parent) is an error, never a pass', () => {
@@ -506,7 +517,15 @@ describe('the CLI on a signed tip', () => {
       [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${MAIN}`]: attackerFile,
     }));
     expect(wrongKey.code).toBe(1);
-    expect(wrongKey.stderr).toContain('does not verify');
+    expect(wrongKey.stderr).toContain('not the pinned reviewer key');
+    expect(wrongKey.stderr).not.toContain('does not verify');
+    const realFile = { type: 'file', encoding: 'base64', content: Buffer.from(REAL_PEM, 'utf8').toString('base64') };
+    const realKeyFile = run(routes({
+      [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${PARENT}`]: realFile,
+      [`repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub@${MAIN}`]: realFile,
+    }), { JULIUS_REVIEWER_KEY_SHA256: PINNED_REVIEWER_SPKI_SHA256 });
+    expect(realKeyFile.code).toBe(1);
+    expect(realKeyFile.stderr).toContain('does not verify');
   }, 60_000);
 
   it('d4b: a governed path, a renamed-away governed path, a tip that is not exactly one commit ahead, 300 files or no compare answer is never a pass', () => {
@@ -549,17 +568,19 @@ describe('the CLI on a signed tip', () => {
         writeFileSync(file, JSON.stringify(evidence));
         try {
           const stdout = execFileSync(process.execPath, [resolve(import.meta.dirname, 'julius-main-provenance.mjs'), REPO, 'main', '--evidence', file], { encoding: 'utf8', stdio: 'pipe' });
-          return { code: 0, stdout };
+          return { code: 0, stdout, stderr: '' };
         } catch (error) {
-          return { code: (error as { status?: number }).status ?? -1, stdout: String((error as { stdout?: string }).stdout ?? '') };
+          const failure = error as { status?: number; stdout?: string; stderr?: string };
+          return { code: failure.status ?? -1, stdout: failure.stdout ?? '', stderr: failure.stderr ?? '' };
         }
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }
     };
     const ok = runEvidence(full);
-    expect(ok.code).toBe(0);
-    expect(ok.stdout).toContain('provenance=provenant');
+    expect(ok.code, ok.stderr).toBe(1);
+    expect(ok.stderr).toContain('not the pinned reviewer key');
+    expect(ok.stdout).not.toContain('provenance=provenant');
     for (const field of ['mainCommitMessage', 'reviewerKeyPem', 'reviewerKeyAtSha', 'tipReviewerKeyPem', 'changedPaths', 'changedPathsComplete', 'headCommit', 'mainParents', 'mainTreeSha'] as const) {
       const { [field]: _omitted, ...trimmed } = full;
       const result = runEvidence(trimmed);
@@ -579,7 +600,7 @@ describe('v3.5b S-3: the queried repository is REQUIRED (library, GitHub mode an
   });
   it('a mixed-case spelling of the landing repository is accepted; another repository is not', () => {
     expect(parseSignedClearance(clearanceText(), 'Ohdieyuh-Glitch/Sunday-Relay').problems).toEqual([]);
-    expectVerdict(signedTip({ repo: 'OHDIEYUH-GLITCH/SUNDAY-RELAY' }), 'provenant');
+    expectVerdict(signedTip({ repo: 'OHDIEYUH-GLITCH/SUNDAY-RELAY' }), 'unprovenanced', /not the pinned reviewer key/u);
     expectVerdict(signedTip({ repo: 'ohdieyuh-glitch/sunday-relay2' }), 'indeterminate', /queried repo/u);
   });
   it('--evidence mode uses the repository on the command line (the file cannot supply or omit it)', () => {
@@ -602,8 +623,9 @@ describe('v3.5b S-3: the queried repository is REQUIRED (library, GitHub mode an
         rmSync(directory, { recursive: true, force: true });
       }
     };
-    expect(run(R, full).stdout).toContain('provenance=provenant');
-    expect(run('Ohdieyuh-Glitch/Sunday-Relay', full).stdout).toContain('provenance=provenant');
+    expect(run(R, full).stdout).toContain('not the pinned reviewer key');
+    expect(run(R, full).stdout).not.toContain('provenance=provenant');
+    expect(run('Ohdieyuh-Glitch/Sunday-Relay', full).stdout).toContain('not the pinned reviewer key');
     const other = run('someone/else', full);
     expect(other.code).toBe(1);
     expect(other.stdout).not.toContain('provenance=provenant');

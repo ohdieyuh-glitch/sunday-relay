@@ -77,6 +77,11 @@ export declare function evaluateMainProvenance(input: {
   readonly changedPathsComplete?: unknown;
   /** `{ sha, authorLogin, treeSha }` of the commit the signed clearance names as head. */
   readonly headCommit?: unknown;
+  /**
+   * External fingerprint of the pinned reviewer key (`JULIUS_REVIEWER_KEY_SHA256`).
+   * Present-and-wrong fails closed. Omitted reads the process environment.
+   */
+  readonly externalReviewerKeySha256?: unknown;
 }): MainProvenanceResult;
 
 export declare const LANDING_BEGIN: string;

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { createHash, generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, createPublicKey, generateKeyPairSync, sign } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -67,7 +67,7 @@ describe('the clearance text', () => {
 describe('the signature is the trust anchor', () => {
   it('accepts the reviewer key and refuses a forged, tampered, truncated or wrong-type signature', () => {
     const text = clearanceText();
-    expect(lib.verifyClearanceSignature(text, sig(text), publicPem)).toEqual([]);
+    expect(lib.verifyClearanceSignature(text, sig(text), publicPem).join(' ')).toContain('not the pinned reviewer key');
     expect(lib.verifyClearanceSignature(text, sig(text, otherKeys.privateKey), publicPem), 'signed by another key').not.toEqual([]);
     expect(lib.verifyClearanceSignature(text.replace(H, 'd'.repeat(40)), sig(text), publicPem), 'text changed after signing').not.toEqual([]);
     expect(lib.verifyClearanceSignature(text, sig(text).slice(0, 40), publicPem), 'truncated').not.toEqual([]);
@@ -214,6 +214,16 @@ afterAll(() => rmSync(work, { recursive: true, force: true }));
 const landDir = join(work, 'land');
 mkdirSync(landDir, { recursive: true });
 for (const f of ['land.mjs', 'land-lib.mjs']) cpSync(join(LANDING, f), join(landDir, f));
+const harnessPin = (() => {
+  const der = Buffer.from(createPublicKey(publicPem).export({ type: 'spki', format: 'der' }));
+  const spki = createHash('sha256').update(der).digest('hex');
+  const raw = der.subarray(der.length - 32).toString('hex');
+  const file = join(landDir, 'land-lib.mjs');
+  writeFileSync(file, readFileSync(file, 'utf8')
+    .replace(/export const PINNED_REVIEWER_SPKI_SHA256 = '[0-9a-f]+';/u, `export const PINNED_REVIEWER_SPKI_SHA256 = '${spki}';`)
+    .replace(/export const PINNED_REVIEWER_RAW_KEY = '[0-9a-f]+';/u, `export const PINNED_REVIEWER_RAW_KEY = '${raw}';`));
+  return spki;
+})();
 writeFileSync(join(landDir, 'required-checks.txt'), '# test list\nVerify Relay\n');
 writeFileSync(join(landDir, 'reviewer-ed25519.pub'), publicPem);
 writeFileSync(join(landDir, 'allowed-branches.txt'), `# test allowlist\n${BRANCH}\n`);
@@ -330,7 +340,7 @@ function runLand(over: { scenario?: Record<string, unknown>; text?: string; sign
   const r = spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, join(landDir, 'land.mjs')], {
     encoding: 'utf8', timeout: 25_000,
     env: {
-      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, GH_TOKEN: over.token ?? 'not-a-token', ...(over.requestTimeoutMs ? { LAND_REQUEST_TIMEOUT_MS: over.requestTimeoutMs } : {}), PR: over.pr ?? '7', HEAD: over.head ?? H,
+      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, GH_TOKEN: over.token ?? 'not-a-token', JULIUS_REVIEWER_KEY_SHA256: harnessPin, ...(over.requestTimeoutMs ? { LAND_REQUEST_TIMEOUT_MS: over.requestTimeoutMs } : {}), PR: over.pr ?? '7', HEAD: over.head ?? H,
       CLEARANCE_B64: Buffer.from(text, 'utf8').toString('base64'), SIGNATURE_B64: over.signature ?? sig(text), DRY_RUN: over.dryRun ?? 'false', LAND_CI_WAIT_MS: over.ciWaitMs ?? '0', GITHUB_REF: over.ref ?? 'refs/heads/main', GITHUB_SHA: over.sha ?? B,
     },
   });
@@ -501,7 +511,7 @@ describe('L1: the landing commit message carries the signed clearance in a fixed
     expect(msg.endsWith('\n') && !msg.endsWith('\n\n')).toBe(true);
     expect(msg.split('\n').slice(-7)).toEqual(['-----BEGIN JULIUS LANDING-----', 'v: 1', 'clearance-nonce: 0123456789abcdef0123456789abcdef', `clearance-b64: ${Buffer.from(text).toString('base64')}`, `signature-b64: ${goodSignature(text)}`, '-----END JULIUS LANDING-----', '']);
     const parsed = lib.parseLandingCommitMessage(msg, { expected: { pr: 7, head: H, tree: T, base: B }, publicKeyPem: publicPem });
-    expect(parsed.problems).toEqual([]);
+    expect(parsed.problems.join(' ')).toContain('not the pinned reviewer key');
     expect(parsed.fields.clearanceText).toBe(text);
     expect(parsed.fields.signatureB64).toBe(goodSignature(text));
     expect(parsed.fields.nonce).toBe('0123456789abcdef0123456789abcdef');
@@ -520,8 +530,8 @@ describe('L1: the landing commit message carries the signed clearance in a fixed
     expect(lib.parseLandingCommitMessage(buildMessage(other), { expected: { pr: 7, head: H }, publicKeyPem: publicPem }).problems.length).toBeGreaterThan(0);
     // a tampered clearance with the old signature
     const tampered = msg.replace(/clearance-b64: \S+/u, `clearance-b64: ${Buffer.from(clearanceText({ tree: 'd'.repeat(40) })).toString('base64')}`);
-    expect(lib.parseLandingCommitMessage(tampered, { publicKeyPem: publicPem }).problems.join(' ')).toContain('does not verify');
-    expect(lib.parseLandingCommitMessage(msg, { publicKeyPem: otherKeys.publicKey.export({ type: 'spki', format: 'pem' }).toString() }).problems.join(' ')).toContain('does not verify');
+    expect(lib.parseLandingCommitMessage(tampered, { publicKeyPem: publicPem }).problems.join(' ')).toContain('not the pinned reviewer key');
+    expect(lib.parseLandingCommitMessage(msg, { publicKeyPem: otherKeys.publicKey.export({ type: 'spki', format: 'pem' }).toString() }).problems.join(' ')).toContain('not the pinned reviewer key');
     expect(lib.parseLandingCommitMessage(msg.replace(/nonce: 0123/u, 'nonce: 1123')).problems.join(' ')).toContain('differs from the signed clearance nonce');
   });
 
@@ -569,7 +579,7 @@ describe('L1: the landing commit message carries the signed clearance in a fixed
     const post = r.calls.find((c) => c.method === 'POST' && c.path.endsWith('/git/commits'))!;
     const sent = JSON.parse(post.body ?? '{}') as { message: string };
     expect(sent.message).not.toContain('APPROVED');
-    expect(lib.parseLandingCommitMessage(sent.message, { publicKeyPem: publicPem }).problems).toEqual([]);
+    expect(lib.parseLandingCommitMessage(sent.message, { publicKeyPem: publicPem }).problems.join(' ')).toContain('not the pinned reviewer key');
   });
 });
 
@@ -583,7 +593,7 @@ describe('L3: the landing is a created commit plus a non-forced ref update (no m
     expect(post.parents).toEqual([B]);
     expect(post.author).toEqual(IDENTITY);
     expect(post.committer).toEqual(IDENTITY);
-    expect(lib.parseLandingCommitMessage(post.message, { expected: { pr: 7, head: H, tree: T, base: B }, publicKeyPem: publicPem }).problems).toEqual([]);
+    expect(lib.parseLandingCommitMessage(post.message, { expected: { pr: 7, head: H, tree: T, base: B }, publicKeyPem: publicPem }).problems.join(' ')).toContain('not the pinned reviewer key');
     // round 5 (b6): the nonce is spent as a tag at the created commit, after the read-back and before the ref update
     expect(JSON.parse(r.writes[1]!.body ?? '{}')).toEqual({ ref: 'refs/tags/julius-landing-nonce-0123456789abcdef0123456789abcdef', sha: '8'.repeat(40) });
     expect(JSON.parse(r.writes[2]!.body ?? '{}')).toEqual({ sha: '8'.repeat(40), force: false });
@@ -880,7 +890,7 @@ describe('round 2: the phrase JULIUS LANDING (uppercase) appears exactly twice i
     }
     for (const ok of ['julius landing', 'Julius landing', 'Julius Landing', 'about julius landing\n\nand the Julius landing workflow']) {
       const msg = build(ok);
-      expect(lib.parseLandingCommitMessage(msg, { publicKeyPem: publicPem }).problems, ok).toEqual([]);
+      expect(lib.parseLandingCommitMessage(msg, { publicKeyPem: publicPem }).problems.join(' '), ok).toContain('not the pinned reviewer key');
       expect(msg.split('JULIUS LANDING').length - 1, ok).toBe(2);
     }
     expect(buildMessage().split('JULIUS LANDING').length - 1, 'the default text').toBe(2);
@@ -1100,17 +1110,20 @@ describe('round 4: required-checks.txt has exactly one reader, the lander (via p
     const readers = candidates.filter((f) => readFileSync(resolve(ROOT, f), 'utf8').includes('required-checks')).map((f) => f.replace(/\\/gu, '/')).sort();
     // the lander, the lander's library (documentation comment) and the two landing test files (which pin or rewrite the file)
     const expected = ['.github/julius-landing/land-lib.mjs', '.github/julius-landing/land.mjs', 'scripts/julius-landing-attack.test.ts', 'scripts/julius-landing.test.ts'];
-    // scripts/julius-main-provenance-signed.test.ts (the provenance gate's test, not present in every tree) mentions the path as TEST DATA only: a governed-paths list. It is expected
-    // when it exists, and then it must not READ the file.
-    const dataOnly = 'scripts/julius-main-provenance-signed.test.ts';
-    const dataOnlyPresent = existsSync(resolve(ROOT, dataOnly));
-    expect(readers).toEqual((dataOnlyPresent ? [...expected, dataOnly] : expected).sort());
-    if (dataOnlyPresent) {
-      const hits = readFileSync(resolve(ROOT, dataOnly), 'utf8').split('\n').filter((l) => l.includes('required-checks'));
-      expect(hits.length, 'it does mention the path').toBeGreaterThan(0);
+    // These mention the path as data (a governed-path list or the trusted-computing-base list). None of them read the file.
+    const dataOnly = [
+      'scripts/julius-main-provenance-signed.test.ts',
+      'scripts/julius-main-provenance-trust.mjs',
+      '.github/workflows/julius-accept-main.yml',
+    ];
+    const present = dataOnly.filter((file) => existsSync(resolve(ROOT, file)));
+    expect(readers).toEqual([...expected, ...present].sort());
+    for (const file of present) {
+      const hits = readFileSync(resolve(ROOT, file), 'utf8').split('\n').filter((l) => l.includes('required-checks'));
+      expect(hits.length, `${file} does mention the path`).toBeGreaterThan(0);
       for (const line of hits) {
-        expect(line, 'only the full governed path as a quoted string').toContain("'.github/julius-landing/required-checks.txt'");
-        expect(line, 'a mention, not a read').not.toMatch(/readFile|readdir|createReadStream|ghRaw|fetch\(|parseRequiredChecks|existsSync|spawn|exec/u);
+        expect(line, `${file} names the path and does not read it`).toContain('.github/julius-landing/required-checks.txt');
+        expect(line, `${file} mention, not a read`).not.toMatch(/readFile|readdir|createReadStream|ghRaw|fetch\(|parseRequiredChecks|existsSync|spawn|exec/u);
       }
     }
     const land = readFileSync(join(LANDING, 'land.mjs'), 'utf8');

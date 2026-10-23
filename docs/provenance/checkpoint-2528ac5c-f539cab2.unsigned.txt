@@ -1,0 +1,19 @@
+JULIUS-CHECKPOINT-V1
+repo: ohdieyuh-glitch/sunday-relay
+prior: 2528ac5c0f0d4303051123a7592ef18e3552ba74
+checkpoint: f539cab2530b7733bd987068be676308440e04a5
+key-spki-sha256: b0b8e29b3efff5936dd51a54617ca8bda1b94e75557339821d7d00a98364d13a
+nonce: 04bec0c413a2333a5929326b5c2fa85c
+issued: 2026-10-23T00:00:00Z
+expires: 2026-10-30T00:00:00Z
+by: INDEPENDENT_REVIEW
+count: 3
+1.sha: 3f20fc1ace7b157d4ff2673959c98998564ef43b
+1.tree: 75a61ea2721429a4c7f0849ecc6fffec9e8f6e7f
+1.basis: the founder's exact-head APPROVED review at 5936fde4, which has the same tree. Kaisin INDEPENDENT_REVIEW records ce9963 (sha256 a1bb4cb47512678c16a9c62ad8b61a909993470b6df3b2bb57411d8b82ce1390; ACCEPTED head 98a674bd, tree 75a61ea2) and 08a19b (sha256 6d0da2a5dd66bbc711c334708d74020793d28eb6608120e82c4a4b86df212149; A1 MERGE VERIFIED). Tree-verified. These are unsigned, self-registered reviewer records, and NOT Skywalker's review.
+2.sha: 689d2be92c3158ba4a59883ed4f6cc02f700660b
+2.tree: ecfe4f5c047cf1727a80cf459bd5a0a319f80adb
+2.basis: Skywalker's exact-head review; Wonderland-only.
+3.sha: f539cab2530b7733bd987068be676308440e04a5
+3.tree: bcbefd01d3b6fea0e12e1fed2f967c2d11bc1af0
+3.basis: Skywalker's exact-head review plus G6.

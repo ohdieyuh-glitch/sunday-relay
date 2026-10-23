@@ -59,14 +59,54 @@ export function parseClearance(text) {
   return { problems, fields };
 }
 
-/** Ed25519 signature check of the exact clearance bytes against the public key committed on main. */
+/**
+ * The reviewer trust root, duplicated from scripts/julius-main-provenance-trust.mjs so this file does not import it.
+ * A test fails if the two copies drift. Full SPKI SHA-256 and the raw 32-byte key. A short prefix is not a match.
+ * The same fingerprint must also be presented as JULIUS_REVIEWER_KEY_SHA256. A missing or different value fails closed.
+ */
+export const PINNED_REVIEWER_SPKI_SHA256 = 'b0b8e29b3efff5936dd51a54617ca8bda1b94e75557339821d7d00a98364d13a';
+export const PINNED_REVIEWER_RAW_KEY = 'ed738f419234d621fbfc3028c934e2a75b6bd62e02bd83a11e74e9bb6ad222b3';
+export const EXTERNAL_ANCHOR_VARIABLE = 'JULIUS_REVIEWER_KEY_SHA256';
+
+function reviewerKeyMaterialProblems(publicKeyPem) {
+  try {
+    const key = createPublicKey(publicKeyPem);
+    if (key.asymmetricKeyType !== 'ed25519') return ['the committed reviewer key is not an ed25519 key'];
+    const der = Buffer.from(key.export({ type: 'spki', format: 'der' }));
+    if (der.length < 32) return ['the reviewer key fingerprint could not be read'];
+    const spkiSha256 = createHash('sha256').update(der).digest('hex');
+    const rawHex = der.subarray(der.length - 32).toString('hex');
+    if (spkiSha256.length !== 64 || spkiSha256 !== PINNED_REVIEWER_SPKI_SHA256 || rawHex !== PINNED_REVIEWER_RAW_KEY) {
+      return [`the reviewer key is not the pinned reviewer key ${PINNED_REVIEWER_SPKI_SHA256}`];
+    }
+    return [];
+  } catch {
+    return ['the reviewer key fingerprint could not be read'];
+  }
+}
+
+function externalAnchorProblems() {
+  const external = process.env[EXTERNAL_ANCHOR_VARIABLE];
+  if (typeof external === 'string' && external.length === 64 && external === PINNED_REVIEWER_SPKI_SHA256) return [];
+  if (external === undefined || external === '') return [`${EXTERNAL_ANCHOR_VARIABLE} is unset`];
+  return [`${EXTERNAL_ANCHOR_VARIABLE} does not match the pinned reviewer key ${PINNED_REVIEWER_SPKI_SHA256}`];
+}
+
+/** Ed25519 signature check of the exact clearance bytes against the public key committed on main. An unpinned key is refused for that reason. */
 export function verifyClearanceSignature(text, signatureB64, publicKeyPem) {
   try {
     const key = createPublicKey(publicKeyPem);
     if (key.asymmetricKeyType !== 'ed25519') return ['the committed reviewer key is not an ed25519 key'];
     const signature = Buffer.from(String(signatureB64).trim(), 'base64');
     if (signature.length !== 64) return ['the signature is not 64 bytes'];
-    return verify(null, Buffer.from(text, 'utf8'), key, signature) ? [] : ['the signature does not verify against the committed reviewer key'];
+    const ok = verify(null, Buffer.from(text, 'utf8'), key, signature) === true;
+    const material = reviewerKeyMaterialProblems(publicKeyPem);
+    if (!ok) {
+      if (material.some((problem) => problem.includes('not the pinned reviewer key'))) return material;
+      return ['the signature does not verify against the committed reviewer key'];
+    }
+    if (material.length > 0) return material;
+    return externalAnchorProblems();
   } catch (error) {
     return [`signature check failed: ${error instanceof Error ? error.message : String(error)}`];
   }

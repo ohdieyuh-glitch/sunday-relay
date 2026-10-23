@@ -41,6 +41,19 @@ import {
   collectPages,
   evaluateReviewCurrency,
 } from './julius-review-currency.mjs';
+import {
+  EXTERNAL_ANCHOR_VARIABLE,
+  TRUSTED_CHECKPOINT_SHA,
+  applyTrustChain,
+  evaluateTrustChain,
+  reviewerKeyPinRefusal,
+} from './julius-main-provenance-trust.mjs';
+
+const externalAnchorOf = (input) => (
+  input && Object.prototype.hasOwnProperty.call(input, 'externalReviewerKeySha256')
+    ? input.externalReviewerKeySha256
+    : process.env[EXTERNAL_ANCHOR_VARIABLE]
+);
 
 export { NON_ATTESTING_IDENTITIES, REVIEW_AUTHORITY_LOGINS };
 
@@ -274,7 +287,12 @@ export function evaluateSignedLanding(input, tip) {
   } catch {
     return signedVerdict('indeterminate', 'the landing signature could not be checked', base);
   }
-  if (signatureOk !== true) return signedVerdict('unprovenanced', 'the landing signature does not verify against the reviewer key committed at the parent', base);
+  if (signatureOk !== true) {
+    // An unpinned key is refused because it is not the trust root, including when the signature was made by that key.
+    const pin = reviewerKeyPinRefusal(input?.reviewerKeyPem, externalAnchorOf(input));
+    if (pin?.verdict === 'unprovenanced') return signedVerdict('unprovenanced', pin.reason, base);
+    return signedVerdict('unprovenanced', 'the landing signature does not verify against the reviewer key committed at the parent', base);
+  }
 
   // WHAT WAS SIGNED must be what main carries, on the base it was built on.
   if (clearance.tree !== mainTreeSha) {
@@ -305,9 +323,47 @@ export function evaluateSignedLanding(input, tip) {
   if (governed.length > 0) {
     return signedVerdict('unprovenanced', `a signed landing may not change founder-governed paths: ${governed.slice(0, 5).join(', ')}`, base);
   }
+  const success = { ...base, prNumber: Number(clearance.pr), reviewedHeadSha: clearance.head, approvedBy: [clearance.by] };
+  const pin = reviewerKeyPinRefusal(input?.reviewerKeyPem, externalAnchorOf(input));
+  if (pin) return signedVerdict(pin.verdict, pin.reason, success);
   return signedVerdict('provenant',
     `main ${mainSha} carries tree ${mainTreeSha} on base ${parentSha}, signed by the Independent Reviewer for pull request #${clearance.pr} (head ${clearance.head})`,
-    { ...base, prNumber: Number(clearance.pr), reviewedHeadSha: clearance.head, approvedBy: [clearance.by] });
+    success);
+}
+
+function withTrustChain(single, source) {
+  if (single?.verdict !== 'provenant') return single;
+  let commits = source?.chainCommits;
+  // Only the tip was verified as a signed landing. Do not infer that flag from an ancestor's message.
+  if (Array.isArray(commits) && commits.length > 0 && single.via === 'signed-landing') {
+    commits = commits.map((commit, index) => (index === commits.length - 1 ? { ...commit, signedLanding: true } : commit));
+  }
+  const chain = evaluateTrustChain({
+    tipSha: single.mainSha,
+    tipTree: single.mainTreeSha,
+    commits,
+    attestationText: source?.attestationText ?? process.env.JULIUS_CHECKPOINT_ATTESTATIONS,
+    signatureB64: source?.attestationSignatureB64 ?? process.env.JULIUS_CHECKPOINT_ATTESTATION_SIGNATURE,
+    reviewerKeyPem: source?.reviewerKeyPem,
+    externalAnchor: source && Object.prototype.hasOwnProperty.call(source, 'externalReviewerKeySha256')
+      ? source.externalReviewerKeySha256
+      : process.env[EXTERNAL_ANCHOR_VARIABLE],
+  });
+  return applyTrustChain(single, chain);
+}
+
+function readFirstParentChain(gh, repo, tipSha) {
+  if (tipSha === TRUSTED_CHECKPOINT_SHA) return [];
+  const reversed = [];
+  let sha = tipSha;
+  for (let i = 0; i < 30 && typeof sha === 'string' && sha !== TRUSTED_CHECKPOINT_SHA; i += 1) {
+    const commit = gh(`repos/${repo}/commits/${sha}`);
+    reversed.push({ sha: commit?.sha, tree: commit?.commit?.tree?.sha });
+    const parent = commit?.parents?.[0]?.sha;
+    if (parent === TRUSTED_CHECKPOINT_SHA) return reversed.reverse();
+    sha = parent;
+  }
+  return null;
 }
 
 /**
@@ -586,7 +642,8 @@ async function main(argv) {
   if (typeof evidencePath === 'string') {
     let evaluated;
     try {
-      evaluated = evaluateMainProvenance({ ...(await fromEvidenceFile(evidencePath)), branch, repo }); // v3.5b S-3: the command line's repository, never the file's
+      const evidence = await fromEvidenceFile(evidencePath);
+      evaluated = withTrustChain(evaluateMainProvenance({ ...evidence, branch, repo }), evidence); // v3.5b S-3: the command line's repository, never the file's
     } catch (error) {
       process.stderr.write(`main_provenance_indeterminate: ${error instanceof Error ? error.message : 'evidence unreadable'}\n`);
       return 1;
@@ -709,6 +766,28 @@ async function main(argv) {
       changedPathsComplete,
       headCommit,
     });
+    let chainCommits;
+    let chainProblem = null;
+    try {
+      chainCommits = readFirstParentChain(gh, repo, mainSha);
+      if (chainCommits === null) chainProblem = 'the first-parent chain does not reach the trusted checkpoint';
+    } catch {
+      chainProblem = 'the trust chain from the trusted checkpoint could not be read';
+    }
+    if (result.verdict === 'provenant' && chainProblem) {
+      result = { ...result, verdict: 'unprovenanced', reason: chainProblem };
+    } else if (!chainProblem) {
+      let chainKeyPem = reviewerKeyPem;
+      try {
+        const keyFile = gh(`repos/${repo}/contents/.github/julius-landing/reviewer-ed25519.pub?ref=${TRUSTED_CHECKPOINT_SHA}`);
+        if (keyFile?.type === 'file' && keyFile?.encoding === 'base64' && typeof keyFile?.content === 'string') {
+          chainKeyPem = Buffer.from(keyFile.content, 'base64').toString('utf8');
+        }
+      } catch {
+        // A missing checkpoint key fails closed inside the chain pin.
+      }
+      result = withTrustChain(result, { chainCommits, reviewerKeyPem: chainKeyPem });
+    }
   } catch (error) {
     // Unreadable metadata is not a passing gate.
     process.stderr.write(`main_provenance_indeterminate: ${error instanceof Error ? error.message : 'metadata unavailable'}\n`);
