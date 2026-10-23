@@ -212,7 +212,7 @@ describe('clearance offers in a pull request body or comment', () => {
 });
 
 describe('the CLI accepts a worker-PR clearance from a comment', () => {
-  const REPO = 'owner/repo';
+  const REPO = 'ohdieyuh-glitch/sunday-relay';
   const issuedAt = new Date(Date.now() - 60_000);
   issuedAt.setMilliseconds(0);
   const expiresAt = new Date(issuedAt.getTime() + 2 * 60 * 60_000);
