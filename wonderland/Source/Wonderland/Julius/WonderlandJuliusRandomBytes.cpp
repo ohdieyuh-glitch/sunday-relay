@@ -1,5 +1,6 @@
 #include "WonderlandJuliusRandomBytes.h"
 
+#include "PlatformCryptoTypes.h"
 #include "IPlatformCrypto.h"
 
 bool FWonderlandJuliusPlatformCryptoRandom::Fill(std::uint8_t (&OutBytes)[16])

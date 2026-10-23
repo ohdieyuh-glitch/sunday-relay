@@ -309,6 +309,120 @@ namespace
 		std::printf("JULIUS INCLUDE CHECK PASS\n");
 		return true;
 	}
+
+	// Drop // and /* */ comments. Newlines stay so a later line scan still matches the source.
+	std::string WithoutComments(const std::string& Source)
+	{
+		std::string Out;
+		Out.reserve(Source.size());
+		bool LineComment = false;
+		bool BlockComment = false;
+		for (std::size_t Index = 0; Index < Source.size(); ++Index)
+		{
+			const char Here = Source[Index];
+			const char Next = Index + 1 < Source.size() ? Source[Index + 1] : '\0';
+			if (LineComment)
+			{
+				if (Here == '\n')
+				{
+					LineComment = false;
+					Out.push_back('\n');
+				}
+				continue;
+			}
+			if (BlockComment)
+			{
+				if (Here == '*' && Next == '/')
+				{
+					BlockComment = false;
+					++Index;
+				}
+				else if (Here == '\n')
+				{
+					Out.push_back('\n');
+				}
+				continue;
+			}
+			if (Here == '/' && Next == '/')
+			{
+				LineComment = true;
+				++Index;
+				continue;
+			}
+			if (Here == '/' && Next == '*')
+			{
+				BlockComment = true;
+				++Index;
+				continue;
+			}
+			Out.push_back(Here);
+		}
+		return Out;
+	}
+
+	// IPlatformCrypto.h only forward-declares EPlatformCryptoResult. Using an enumerator
+	// needs the definition in PlatformCryptoTypes.h, and that include has to come first.
+	bool CheckPlatformCryptoTypesInclude()
+	{
+		namespace fs = std::filesystem;
+		fs::path Root;
+		for (fs::path Dir = fs::current_path();; Dir = Dir.parent_path())
+		{
+			if (fs::is_directory(Dir / "wonderland/Source/Wonderland/Julius"))
+			{
+				Root = Dir;
+				break;
+			}
+			if (!Dir.has_parent_path() || Dir.parent_path() == Dir) { break; }
+		}
+		if (Root.empty())
+		{
+			std::printf("PLATFORM CRYPTO TYPES CHECK FAIL: wonderland/Source/Wonderland/Julius not found from the working directory\n");
+			return false;
+		}
+		const fs::path Julius = Root / "wonderland/Source/Wonderland/Julius";
+		const std::string Enumerator = "EPlatformCryptoResult::";
+		int Bad = 0;
+		for (const fs::directory_entry& Entry : fs::directory_iterator(Julius))
+		{
+			if (!Entry.is_regular_file()) { continue; }
+			const std::string Ext = Entry.path().extension().string();
+			if (Ext != ".h" && Ext != ".cpp") { continue; }
+			std::ifstream In(Entry.path());
+			std::stringstream Buffer;
+			Buffer << In.rdbuf();
+			const std::string Source = WithoutComments(Buffer.str());
+			int IncludeLine = 0;
+			int UseLine = 0;
+			int Number = 0;
+			std::size_t Cursor = 0;
+			while (Cursor <= Source.size())
+			{
+				const std::size_t End = Source.find('\n', Cursor);
+				const std::string Line = Source.substr(Cursor, End == std::string::npos ? std::string::npos : End - Cursor);
+				++Number;
+				std::string Header;
+				if (JuliusBareModuleRootInclude(Line, Header) && Header == "PlatformCryptoTypes.h")
+				{
+					if (IncludeLine == 0) { IncludeLine = Number; }
+				}
+				if (UseLine == 0 && Line.find(Enumerator) != std::string::npos) { UseLine = Number; }
+				if (End == std::string::npos) { break; }
+				Cursor = End + 1;
+			}
+			if (UseLine == 0) { continue; }
+			const fs::path Shown = fs::relative(Entry.path(), Root);
+			if (IncludeLine == 0 || IncludeLine > UseLine)
+			{
+				std::printf("PLATFORM CRYPTO TYPES CHECK FAIL %s:%d uses EPlatformCryptoResult:: without including PlatformCryptoTypes.h first\n",
+					Shown.generic_string().c_str(), UseLine);
+				++Bad;
+			}
+		}
+		if (Bad != 0) { return false; }
+		std::printf("PLATFORM CRYPTO TYPES CHECK PASS\n");
+		return true;
+	}
 }
 
 int main()
@@ -837,6 +951,7 @@ int main()
 	}
 
 	Expect(CheckJuliusModuleRootIncludes(), "julius_no_bare_module_root_include");
+	Expect(CheckPlatformCryptoTypesInclude(), "platform_crypto_result_includes_types");
 
 	if (Failures == 0)
 	{
