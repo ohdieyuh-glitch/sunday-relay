@@ -1,7 +1,8 @@
 # Wonderland landing route (2026-10-23)
 
 Author: Cosmo (Wonderland dev agent). Status: proposal for Skywalker's exact-head review.
-Revision 2: fixes [RD-1]..[RD-6] from Skywalker's FAIL of rev 1 `f3d6ebc7` (see section 8). [RD-7] spoofing content is unchanged.
+Revision 3: fixes [R2-1]..[R2-4] from Skywalker's PASS WITH FINDING of rev 2 `aa7a5188` (see section 8.1).
+Revision 2 fixed [RD-1]..[RD-6] from Skywalker's FAIL of rev 1 `f3d6ebc7` (section 8.2). [RD-7] spoofing content is unchanged.
 Every citation is `file:line` at main `689d2be92c3158ba4a59883ed4f6cc02f700660b` (tree `ecfe4f5c`, parent `3f20fc1a`),
 re-read line by line before writing. Corrections to earlier citations are listed in section 7.
 
@@ -30,19 +31,31 @@ re-read line by line before writing. Corrections to earlier citations are listed
 
 1. **#395 installs FIRST.**
    - The founder issues the G6 token for #395: head `32c5a2be10c60a3a4c7de7741a98bf3ce63c4f5c`, tree `bcbefd01`, base `689d2be9`.
+   - [R2-2] `32c5a2be` is a merge commit with two parents, `2dbe6430` and `689d2be9`. So `689d2be9` is a parent of the
+     head as well as the merge base.
    - Then the installer runs.
    - Then #393 is closed and branch `relay/julius-landing-system-v35i-pkg2` is deleted.
 2. **NOTHING lands on main before the installer runs.** That includes Wonderland squashes, worker PRs and anything else.
    Any landing would make #395's G6 base stale and void Skywalker's clearance.
-3. **Only after that,** the first worker-PR squash restores provenance (`docs/REPOSITORY_GOVERNANCE.md:325-328`).
-   That is Wonderland PR #396 if it has been cleared by then, otherwise YUJI's plain Julius worker PR.
-   Every step of section 3 below runs only after this point.
+3. **Only after that,** the first worker-PR squash restores provenance (`docs/REPOSITORY_GOVERNANCE.md:325-328`). [R2-1]
+   - The restoring squash must be an App-opened worker PR: `julius-worker[bot]` opens it (`julius-main-provenance.mjs:450`),
+     and its commits are re-authored as the App per `RUNBOOK:70-88`.
+   - **#396 can never be that squash.** It was opened by `ohdieyuh-glitch`, so it would fail `julius-main-provenance.mjs:450`.
+     Its route is an App-opened worker re-cut of #396's Skywalker-cleared tree. The re-cut head's tree must equal that
+     reviewed tree. Then #396 is closed unmerged.
+   - **This applies to any PR** not opened by `julius-worker[bot]`, Wonderland or Julius: re-cut it as an App-opened worker
+     PR of its cleared tree and close the original unmerged.
+   - The restoring squash is that Wonderland re-cut if it is cleared by then, otherwise YUJI's plain Julius worker PR
+     (also App-opened).
+4. [R2-4] Steps 1-2 of section 3 (develop, clear) touch neither main nor any PR, so they can go ahead now.
+   Steps 3-8 of section 3 run only after point 3 above.
 
 ## 2. What the route enforces, and what it trusts
 
 **Identity checks the squash route actually enforces:**
 - The PR opener is `julius-worker[bot]` (`julius-main-provenance.mjs:450`, read from `user.login` at `:649`).
-- An `ohdieyuh-glitch` review approves the exact head:
+- An `ohdieyuh-glitch` review approves the exact head. The founder submits it in person; no agent does (section 3,
+  step 6, [R2-3]):
   - `scripts/julius-review-currency.mjs:269-272` (`commit_id === headSha`, authority check);
   - the approver list is at `:59`;
   - the approver may be neither a non-attesting (bot) identity nor the PR author (`:246-252`).
@@ -58,6 +71,8 @@ re-read line by line before writing. Corrections to earlier citations are listed
 - The founder holds the App credential (`RUNBOOK:3-4`) and is also the required approver.
 - "App-opened" proves an App token was used. It does not prove a worker did the work.
 - In practice the opener and the approver are the same person. **This is NOT two-party control.**
+- [R2-3] Agents never act as the approver. Cosmo uses the founder's connected account only to dispatch or re-run
+  main's unmodified `julius-real-infra.yml` (section 3, step 4).
 - The independent links are:
   1. the pre-merge check that the PR head's tree equals the tree Skywalker cleared;
   2. Skywalker's exact-head PASS.
@@ -87,23 +102,33 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
      - the count matches (`:101-103`).
    - **Push and open the PR as the App** (`RUNBOOK:122-131`).
    - **Verify the PR opener is the App** (`RUNBOOK:134-139`). If the opener is `ohdieyuh-glitch`, close the PR and
-     open it again with an App token (`RUNBOOK:141-143`).
+     open it again with an App token (`RUNBOOK:141-143`). [R2-1] This holds for every PR, #396 included.
 4. **Required CI, with no workflow change.** [RD-6]
    - `julius-real-infra.yml` runs on `pull_request` only when the PR touches a path in its filter
      (`.github/workflows/julius-real-infra.yml:3-4`). `wonderland/**` is not in the filter, but `package*.json` is.
      So a Wonderland PR that touches `package.json` or `package-lock.json` starts all 5 real-infra jobs when it opens.
-   - **Rule:** after the worker PR opens, check whether all 5 real-infra jobs ran on that exact head.
-     Dispatch `julius-real-infra.yml` by `workflow_dispatch` (`:5`) only for jobs that did not run automatically, so no
-     check runs twice.
-     - The path filter applies to the whole workflow, and a dispatch runs every job. In practice it is all-or-none:
-       either all 5 ran, so no dispatch, or none ran, so one dispatch.
-     - If only some ran, stop and ask Skywalker, because a dispatch would duplicate check names.
-   - **Dispatcher:** Cosmo, using the founder's connected GitHub account with write access.
+   - **Rule [R2-4]:** after the worker PR opens, check whether the 5 real-infra jobs ran on that exact head:
+     - **all ran and all passed:** no dispatch;
+     - **none ran:** dispatch `julius-real-infra.yml` once by `workflow_dispatch` (`:5`);
+     - **some ran:** stop and ask Skywalker, because a dispatch would duplicate check names;
+     - **ran with a failure:** re-run only the failed job(s) in that same workflow run (`gh run rerun <run-id> --failed`,
+       or "Re-run failed jobs" in the Actions UI). Never a new dispatch.
+     - The path filter applies to the whole workflow, and a dispatch runs every job, so in practice it is all-or-none.
+     - The same re-run rule applies to a run that was itself started by the one dispatch.
+     - Open question for Skywalker: the "exactly once" count below assumes a re-run attempt supersedes the failed attempt
+       for the same check name on that head (check-runs API default `filter=latest`). If Skywalker counts all attempts,
+       a failed real-infra job needs a re-cut instead.
+   - **Dispatcher [R2-3]:** Cosmo, acting through the founder's connected GitHub account (write access). Through that
+     account Cosmo may only:
+     - dispatch main's unmodified `julius-real-infra.yml` by `workflow_dispatch` (`:5`) on the worker branch at the exact
+       PR head; and
+     - re-run the failed jobs of a run of that same workflow on that head (the R2-4 rule above).
+
+     Through that account Cosmo never opens, reviews, approves or merges a PR, and changes nothing in the repository.
      - Skywalker agreed that dispatching unmodified checks is operational.
      - The worker App holds only `actions=read` (`RUNBOOK:13`); its dispatch is refused (403).
-     - The dispatch is on the worker branch at the exact PR head, using main's unmodified workflow file. The PR does
-       not touch `.github/workflows/**`, and the dispatcher confirms that the workflow's blob at the head equals main's
-       blob before dispatching.
+     - The PR does not touch `.github/workflows/**`, and the dispatcher confirms that the workflow's blob at the head
+       equals main's blob before dispatching.
    - All 6 required checks (`.github/julius-landing/required-checks.txt:4-9`) must each appear exactly once,
      produced by app `15368` (GitHub Actions), and conclude `success` on that head. None is relaxed.
      - `Verify Relay`: `.github/workflows/relay-ci.yml:22`. It runs on `pull_request` to main (`:9-10`).
@@ -115,9 +140,15 @@ Source: `docs/JULIUS_WORKER_PR_RUNBOOK.md`
      branch protection (`julius-main-provenance.mjs:208`; `.github/workflows/julius-land.yml:5-6`). This route
      makes the 6 checks a hard precondition of steps 5 and 6.
 5. **Exact-head PASS.** Skywalker verifies `head^{tree}` == the cleared tree, then posts a fresh PASS pinned to that head.
-6. **Founder approval.** `ohdieyuh-glitch` approves on GitHub at that exact head (`RUNBOOK:149-150`).
-   No agent approves on the founder's behalf.
-7. **Squash with a SHA guard.** Run `gh pr merge <n> --squash --match-head-commit <head>` (`RUNBOOK:151-155`).
+6. **Founder approval: the founder in person, not Cosmo.** [R2-3]
+   - The founder personally approves as `ohdieyuh-glitch` on GitHub at that exact head (`RUNBOOK:145-155`). The review's
+     `commit_id` must equal the head that merges (`julius-review-currency.mjs:270-271`).
+   - This is a separate human step, and it is the founder acting, not Cosmo or any other agent.
+   - No agent submits the exact-head approval through the founder's connected account; the founder clicks it in person.
+     Why: otherwise an agent could approve as `ohdieyuh-glitch`, and review-currency `:270-271` would pass with no human
+     involved. That check sees only the review's `commit_id` and login (plus its state at `:272`), not who pressed the button.
+7. **Squash with a SHA guard (the founder, per `RUNBOOK:145` and `:151-155`).** Run
+   `gh pr merge <n> --squash --match-head-commit <head>`. Cosmo does not merge through the founder's account (R2-3).
    If main moved first, re-cut on the new main, re-run CI, and get a fresh PASS and a re-approval (`RUNBOOK:170-176`).
 8. **Verify the landing.**
    - The new main's tree equals the reviewed tree, with exactly one parent (`RUNBOOK:157-164`).
@@ -191,7 +222,7 @@ No readiness change. Wonderland verified readiness stays at 56.25%.
 - **The squash rule "~:491-519"** is two checks:
   - tree equality at `julius-main-provenance.mjs:491-495`;
   - parent containment at `:506-516`.
-  
+
   `:518-527` is the `provenant` return.
 - **Review-currency exact head** is `julius-review-currency.mjs:269-272`; the predicate lines are `:270-271`.
 - **These held as given:**
@@ -203,7 +234,38 @@ No readiness change. Wonderland verified readiness stays at 56.25%.
   - `julius-land.yml:10-12`;
   - `reviewer-tools.mjs:36-50`.
 
-## 8. Revision 2 (fixes to rev 1 `f3d6ebc7`, after Skywalker's FAIL)
+## 8. Fix lists
+
+Every changed citation was re-read at `689d2be9`. Citations point into other files at that fixed main, so the line
+shifts inside this document move none of them.
+
+### 8.1 Revision 3 (fixes to rev 2 `aa7a5188`, after Skywalker's PASS WITH FINDING)
+
+- **[R2-1] (MEDIUM)** 1.1 point 3 no longer names #396 as the restoring squash.
+  - #396 was opened by `ohdieyuh-glitch` and would fail `julius-main-provenance.mjs:450`.
+  - The restoring squash is an App-opened worker re-cut (opened by `julius-worker[bot]`, re-authored per `RUNBOOK:70-88`)
+    of #396's Skywalker-cleared tree, whose tree must equal the reviewed tree. #396 is then closed unmerged.
+  - Stated for any PR, not just #396; also noted at section 3, step 3.
+- **[R2-2]** #395's head `32c5a2be` is a merge commit with parents `2dbe6430` and `689d2be9` (1.1 point 1, and 8.2 [RD-1]).
+  - Rev 2 wrongly said `2dbe6430` was the direct parent. `689d2be9` is a parent as well as the merge base.
+  - Re-verified with `git log` at `32c5a2be`: 4 commits ahead of `689d2be9`, 0 behind.
+- **[R2-3]** Through the founder's connected GitHub account, Cosmo may only dispatch main's unmodified
+  `julius-real-infra.yml` (and re-run its failed jobs, per R2-4). Cosmo never opens, reviews, approves or merges through it.
+  - The founder's exact-head approval (`RUNBOOK:145-155`; `julius-review-currency.mjs:270-271`) stays a separate human
+    step, done by the founder in person (section 3, step 6). The squash is also the founder's (step 7).
+  - Added: "No agent submits the exact-head approval through the founder's connected account; the founder clicks it in
+    person." Otherwise an agent could approve as `ohdieyuh-glitch` and review-currency `:270-271` would pass with no
+    human involved.
+  - Section 2 now says agents never act as the approver.
+- **[R2-4]** Steps 1-2 of section 3 can go ahead now (1.1 point 4). The real-infra rule (section 3, step 4) is now:
+  - all ran and passed: no dispatch;
+  - none ran: dispatch once;
+  - some ran: stop and ask Skywalker;
+  - ran with a failure: re-run the failed job (`gh run rerun <run-id> --failed` or equivalent), never a new dispatch.
+- **Citations re-checked at `689d2be9`:** `julius-main-provenance.mjs:450`; `RUNBOOK:70-88`, `:145`, `:145-155`, `:151-155`;
+  `julius-review-currency.mjs:270-272`; `julius-real-infra.yml:4-5`. None shifted.
+
+### 8.2 Revision 2 (fixes to rev 1 `f3d6ebc7`, after Skywalker's FAIL)
 
 Every changed citation was re-read at `689d2be9`.
 
@@ -213,7 +275,8 @@ Every changed citation was re-read at `689d2be9`.
   - Only then does the first worker-PR squash restore provenance.
   - Verified on GitHub:
     - #395's head is `32c5a2be`, with tree `bcbefd01d3b6fea0e12e1fed2f967c2d11bc1af0`.
-    - The head is 4 commits ahead of and 0 behind `689d2be9`, which is the merge base. Its direct parent is `2dbe6430`.
+    - The head is 4 commits ahead of and 0 behind `689d2be9`, which is the merge base. [R2-2] It is a merge commit with
+      parents `2dbe6430` and `689d2be9` (rev 2 wrongly called `2dbe6430` the direct parent).
     - #393 and the branch to be deleted both point at `23aa7fbd`.
 - **[RD-2] (MEDIUM)** "may be" is now "is": main is unprovenanced (the gate exits 1).
   - Cited consequences: preflight at `:31` and `:193-194`; acceptance at `julius-accept-main.yml:148-155`.
