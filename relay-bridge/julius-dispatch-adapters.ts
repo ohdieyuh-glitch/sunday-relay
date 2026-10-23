@@ -582,7 +582,7 @@ export function createFrozenRunLookup(input: { readonly projectId: string; reado
 }
 
 /* ---------------------------------------------------------------------------------------------------------------- */
-/* Production composition (NOT wired into server.ts)                                                                */
+/* Production composition. server.ts reaches it through julius-dispatch-wiring-core.ts.                             */
 
 export interface J1ProductionCompositionInput {
   /** The environment SNAPSHOT the composition derives the coder env and the secret list from. Injected; nothing here reads process.env. */
@@ -601,8 +601,9 @@ export interface J1ProductionCompositionInput {
 /**
  * THE J1 LIVE COMPOSITION: GPT architect + coder session + DIRECT xAI reviewer (the path that returns a provider response id),
  * composed through `composeRoleProviders`. Everything is injected (env snapshot, fetch, runners, shell); no adapter reads the
- * process environment and this function opens nothing. It is deliberately NOT referenced from server.ts: the bridge still ships
- * `createUncomposedJuliusDispatch` until a reviewed composition replaces it.
+ * process environment and this function opens nothing. server.ts:458-459 calls createJ1LiveDispatchFromEnv when
+ * JULIUS_J1_ENABLED is 1, and that factory reaches this function at julius-dispatch-wiring-core.ts:235. Otherwise server.ts
+ * uses createUncomposedJuliusDispatch.
  */
 export function createJ1ProductionComposition(input: J1ProductionCompositionInput): { readonly architect: RoleProvider; readonly coder: RoleProvider; readonly reviewer: RoleProvider } {
   const fake = input.fake === true;

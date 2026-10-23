@@ -13,8 +13,8 @@ import type { RoleCallInput, RoleCallOutput, RoleProvider, RoleUsage } from './j
  * this file never reads the environment. A failure carries a class token only, never a provider message.
  *
  * UNVERIFIED against the live service: the request and response field names follow the Responses-API shape (`id`, `model`,
- * `output[].content[].text`, `usage.input_tokens`); no request was sent to xAI to confirm them. A mismatch makes the leg REFUSE
- * (`xai_response_unreadable`), it never invents a field.
+ * `output[].content[].text`, `usage.input_tokens`). `usage.cost_in_usd_ticks` is UNVERIFIED on a live call: no real response
+ * was captured. A mismatch makes the leg REFUSE (`xai_response_unreadable`), it never invents a field.
  *
  * DOLLAR RECEIPT. xAI puts the billed amount on `usage.cost_in_usd_ticks` (1 USD = 10_000_000_000 ticks, so one micro-USD
  * is 10_000 ticks). This adapter rounds that UP to an integer `costUsdMicros` with integer quotient and remainder
