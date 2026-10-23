@@ -485,6 +485,9 @@ namespace WonderlandJuliusMissionClient
 		case EJuliusUiState::Completed: return "completed";
 		case EJuliusUiState::Refused: return "refused";
 		case EJuliusUiState::Failed: return "failed";
+		case EJuliusUiState::OperatorStarted: return "operator_started";
+		case EJuliusUiState::DispatchUnconfirmed: return "dispatch_unconfirmed";
+		case EJuliusUiState::NotStarted: return "not_started";
 		}
 		return "failed";
 	}
@@ -596,6 +599,9 @@ namespace WonderlandJuliusMissionClient
 			if (Token == "completed") { return EJuliusUiState::Completed; }
 			if (Token == "refused") { return EJuliusUiState::Refused; }
 			if (Token == "failed") { return EJuliusUiState::Failed; }
+			if (Token == "operator_started") { return EJuliusUiState::OperatorStarted; }
+			if (Token == "dispatch_unconfirmed") { return EJuliusUiState::DispatchUnconfirmed; }
+			if (Token == "not_started") { return EJuliusUiState::NotStarted; }
 			bOk = false;
 			return EJuliusUiState::Failed;
 		}
@@ -871,6 +877,13 @@ namespace WonderlandJuliusMissionClient
 		}
 
 		CurrentRunId = LoadedRun;
+		Progress.reset();
+		AdmittedAtUtcMs = 0;
+		if (!CurrentRunId.empty())
+		{
+			Progress.emplace(CurrentRunId);
+			if (bAdm) { AdmittedAtUtcMs = Clock.NowUtcMs(); }
+		}
 		CurrentKey = bOpen ? LoadedKey : std::string();
 		MissionId = *Find("mission_id");
 		Label = *Find("ui_label");
@@ -1100,6 +1113,9 @@ namespace WonderlandJuliusMissionClient
 
 		const std::string PriorToken(UiStateToken(Ui));
 		CurrentRunId = Minted.RunId;
+		Progress.reset();
+		Progress.emplace(CurrentRunId);
+		AdmittedAtUtcMs = 0;
 		CurrentKey = Minted.IdempotencyKey;
 		MissionId.assign(InMissionId.data(), InMissionId.size());
 		PairId.assign(InPairId.data(), InPairId.size());
@@ -1178,11 +1194,26 @@ namespace WonderlandJuliusMissionClient
 		}
 		if (bAdmitted && !bFinished && !bRefused && NextPollAtUtcMs != 0 && NowMs >= NextPollAtUtcMs)
 		{
+			std::uint32_t DelayMs = StatusPollPeriodMs;
+			if (ProgressOwnsPoll())
+			{
+				const std::size_t Before = Progress->Trace().size();
+				const WonderlandJuliusMissionLogic::FPollDecision Decision = Progress->NextPollStep(NowMs - AdmittedAtUtcMs);
+				PublishProgress(Before);
+				if (Decision.Step != WonderlandJuliusMissionLogic::EPollStep::WaitThenPoll)
+				{
+					NextPollAtUtcMs = 0;
+					ApplyProgressUi();
+					Persist();
+					return Outcome;
+				}
+				DelayMs = Decision.DelayMs == 0 ? static_cast<std::uint32_t>(StatusPollPeriodMs) : Decision.DelayMs;
+			}
 			if (!IsLoopbackBaseUrl(BaseUrl)) { return Outcome; }
 			Outcome.bSend = true;
 			Outcome.Request = MakeStatusRequest();
 			bInFlight = true;
-			NextPollAtUtcMs = NowMs + StatusPollPeriodMs;
+			NextPollAtUtcMs = NowMs + DelayMs;
 			Persist();
 		}
 		return Outcome;
@@ -1209,6 +1240,9 @@ namespace WonderlandJuliusMissionClient
 				Out.bHasData = true;
 				const FJson* State = Data->Find("state");
 				if (State != nullptr && State->Kind == FJson::EKind::String) { Out.DataState = State->StringValue; }
+				bool bIgnored = false;
+				StringField(*Data, "dispatchedAt", Out.DispatchedAt, bIgnored);
+				StringField(*Data, "cause", Out.Cause, bIgnored);
 				const FJson* Dispatched = Data->Find("dispatched");
 				if (Dispatched != nullptr && Dispatched->Kind == FJson::EKind::Bool)
 				{
@@ -1349,8 +1383,21 @@ namespace WonderlandJuliusMissionClient
 			bPairOpen = false;
 			CurrentKey.clear();
 			NextResendAtUtcMs = 0;
-			NextPollAtUtcMs = NowMs + StatusPollPeriodMs;
+			if (AdmittedAtUtcMs == 0) { AdmittedAtUtcMs = NowMs; }
 			SetUi(EJuliusUiState::AdmittedWaiting, LabelAdmitted);
+			NoteDispatchProgress(Http, View, Answer);
+			if (Ui == EJuliusUiState::NotStarted)
+			{
+				NextPollAtUtcMs = 0;
+			}
+			else if (ProgressOwnsPoll())
+			{
+				ArmPoll(NowMs);
+			}
+			else
+			{
+				NextPollAtUtcMs = NowMs + StatusPollPeriodMs;
+			}
 		}
 		else if (Answer == EDispatchAnswer::Refused)
 		{
@@ -1446,6 +1493,12 @@ namespace WonderlandJuliusMissionClient
 			if (Mode != nullptr && Mode->Kind == FJson::EKind::String) { Out.DataMode = Mode->StringValue; }
 			const FJson* Run = Data.Find("runId");
 			if (Run != nullptr && Run->Kind == FJson::EKind::String) { Out.DataRunId = Run->StringValue; }
+			bool bServerPresent = false;
+			if (!StringField(Data, "serverRunId", Out.ServerRunId, bServerPresent)) { Out.ServerRunId.clear(); }
+			bool bDispatchedAtPresent = false;
+			if (!StringField(Data, "dispatchedAt", Out.DispatchedAt, bDispatchedAtPresent)) { Out.DispatchedAt.clear(); }
+			bool bCausePresent = false;
+			if (!StringField(Data, "cause", Out.Cause, bCausePresent)) { Out.Cause.clear(); }
 			const FJson* ResultSha = Data.Find("resultSha256");
 			const FJson* ResultText = Data.Find("resultText");
 			if (ResultText != nullptr && ResultText->Kind == FJson::EKind::String && ResultSha != nullptr && ResultSha->Kind == FJson::EKind::String)
@@ -1573,6 +1626,140 @@ namespace WonderlandJuliusMissionClient
 		else { SetUi(EJuliusUiState::Failed, QualLabel); }
 	}
 
+	void FJuliusMissionSession::EnsureProgress()
+	{
+		if (!Progress.has_value() && !CurrentRunId.empty()) { Progress.emplace(CurrentRunId); }
+	}
+
+	void FJuliusMissionSession::PublishProgress(std::size_t From)
+	{
+		using namespace WonderlandJuliusMissionLogic;
+		if (!Progress.has_value()) { return; }
+		const std::vector<FProgressTrace>& Events = Progress->Trace();
+		for (std::size_t Index = From; Index < Events.size(); ++Index)
+		{
+			const char* Name = ProgressEventName(Events[Index].Event);
+			if (std::strcmp(Name, "hold_window_expired") != 0 && std::strcmp(Name, "poll_limit_reached") != 0) { continue; }
+			WriteTrace(Name, std::string("\"progress_state\":") + JsonString(ProgressStateName(Events[Index].To)));
+		}
+	}
+
+	void FJuliusMissionSession::ApplyProgressUi()
+	{
+		using namespace WonderlandJuliusMissionLogic;
+		if (!Progress.has_value() || Progress->Trace().empty()) { return; }
+		const EMissionProgress State = Progress->Current();
+		const EProgressEvent Event = Progress->Trace().back().Event;
+		if (State == EMissionProgress::NotStarted)
+		{
+			// Neutral. The watch stops. This is not a refusal and not a failure.
+			bRunning = false;
+			NextPollAtUtcMs = 0;
+			SetUi(EJuliusUiState::NotStarted, ProgressDisplayLabel(State));
+			return;
+		}
+		if (State == EMissionProgress::OperatorStarted)
+		{
+			SetUi(EJuliusUiState::OperatorStarted, ProgressDisplayLabel(State));
+			return;
+		}
+		if (State == EMissionProgress::DispatchUnconfirmed)
+		{
+			SetUi(EJuliusUiState::DispatchUnconfirmed, ProgressDisplayLabel(State));
+			return;
+		}
+		if (State == EMissionProgress::AdmittedHeld && Event == EProgressEvent::StatusApplied)
+		{
+			SetUi(EJuliusUiState::AdmittedWaiting, ProgressDisplayLabel(State));
+		}
+	}
+
+	bool FJuliusMissionSession::ProgressOwnsPoll() const
+	{
+		using namespace WonderlandJuliusMissionLogic;
+		if (!Progress.has_value()) { return false; }
+		switch (Progress->Current())
+		{
+		case EMissionProgress::AdmittedHeld:
+		case EMissionProgress::OperatorStarted:
+		case EMissionProgress::DispatchUnconfirmed:
+		case EMissionProgress::Dispatched:
+		case EMissionProgress::Running:
+		case EMissionProgress::Paused:
+		case EMissionProgress::Waiting:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	void FJuliusMissionSession::ArmPoll(std::uint64_t NowMs)
+	{
+		using namespace WonderlandJuliusMissionLogic;
+		if (!ProgressOwnsPoll()) { return; }
+		if (AdmittedAtUtcMs == 0) { AdmittedAtUtcMs = NowMs; }
+		const std::uint64_t WatchedMs = NowMs >= AdmittedAtUtcMs ? NowMs - AdmittedAtUtcMs : 0;
+		const std::size_t Before = Progress->Trace().size();
+		const FPollDecision Decision = Progress->NextPollStep(WatchedMs);
+		PublishProgress(Before);
+		if (Decision.Step != EPollStep::WaitThenPoll)
+		{
+			NextPollAtUtcMs = 0;
+			ApplyProgressUi();
+			return;
+		}
+		NextPollAtUtcMs = NowMs + (Decision.DelayMs == 0 ? StatusPollPeriodMs : Decision.DelayMs);
+	}
+
+	void FJuliusMissionSession::NoteDispatchProgress(const FHttpResult& Http, const FAdmissionView& View, WonderlandJuliusMissionLogic::EDispatchAnswer Answer)
+	{
+		using namespace WonderlandJuliusMissionLogic;
+		EnsureProgress();
+		if (!Progress.has_value()) { return; }
+		FStatusAnswer Fields;
+		Fields.HttpStatus = Http.bTransportError ? 0 : Http.Status;
+		Fields.bHasError = View.bHasError;
+		Fields.ErrorKind = View.ErrorKind;
+		Fields.bHasData = View.bHasData;
+		Fields.Vocabulary = EStatusVocabulary::Admission;
+		Fields.ClientRunId = View.DataRunId;
+		Fields.ServerRunId = View.ServerRunId;
+		Fields.Status = View.DataState;
+		Fields.DispatchedAt = View.DispatchedAt;
+		Fields.Cause = View.Cause;
+		Fields.ReceivedUtcMs = Clock.NowUtcMs();
+		const std::size_t Before = Progress->Trace().size();
+		Progress->RecordDispatchAnswer(Answer, Fields);
+		PublishProgress(Before);
+		ApplyProgressUi();
+	}
+
+	void FJuliusMissionSession::NoteStatusProgress(const FHttpResult& Http, const FStatusView& Status)
+	{
+		using namespace WonderlandJuliusMissionLogic;
+		EnsureProgress();
+		if (!Progress.has_value()) { return; }
+		FStatusAnswer Fields;
+		Fields.HttpStatus = Http.bTransportError ? 0 : Http.Status;
+		Fields.bHasError = Status.bHasError;
+		Fields.ErrorKind = Status.ErrorKind;
+		Fields.bHasData = !Status.DataState.empty() || !Status.ServerRunId.empty() || !Status.DispatchedAt.empty() || !Status.Cause.empty() || !Status.DataRunId.empty();
+		if (Status.DataMode == "julius" || Status.DataMode == "julius_run") { Fields.Vocabulary = EStatusVocabulary::JuliusRun; }
+		else if (Status.DataMode.empty() || Status.DataMode == "admission") { Fields.Vocabulary = EStatusVocabulary::Admission; }
+		else { Fields.Vocabulary = EStatusVocabulary::Unknown; }
+		Fields.ClientRunId = Status.DataRunId;
+		Fields.ServerRunId = Status.ServerRunId;
+		Fields.Status = Status.DataState;
+		Fields.DispatchedAt = Status.DispatchedAt;
+		Fields.Cause = Status.Cause;
+		Fields.ReceivedUtcMs = Clock.NowUtcMs();
+		const std::size_t Before = Progress->Trace().size();
+		Progress->RecordPollAnswer(Fields);
+		PublishProgress(Before);
+		ApplyProgressUi();
+		if (Ui != EJuliusUiState::NotStarted) { ArmPoll(Clock.NowUtcMs()); }
+	}
+
 	void FJuliusMissionSession::OnStatusHttp(const FHttpResult& Http)
 	{
 		bInFlight = false;
@@ -1617,6 +1804,12 @@ namespace WonderlandJuliusMissionClient
 		WriteTrace("poll", Poll);
 
 		if (bFailClosed || bFinished || bRefused || !bAdmitted)
+		{
+			Persist();
+			return;
+		}
+		NoteStatusProgress(Http, Status);
+		if (Ui == EJuliusUiState::NotStarted)
 		{
 			Persist();
 			return;

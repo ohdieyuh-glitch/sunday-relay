@@ -3,12 +3,14 @@
 //   g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I wonderland/Source/Wonderland -I wonderland/Source
 //       wonderland/Tools/j1_wrapper_kat.cpp
 //       wonderland/Source/Wonderland/WonderlandJuliusMissionClient.cpp
+//       wonderland/Source/Wonderland/WonderlandJuliusMissionProgress.cpp
 //       wonderland/Source/Wonderland/WonderlandJuliusMissionLogic.cpp
 //       -o j1_wrapper_kat && ./j1_wrapper_kat
 //
 //   cl /std:c++17 /EHsc /W4 /WX /I wonderland\Source\Wonderland /I wonderland\Source
 //       wonderland\Tools\j1_wrapper_kat.cpp
 //       wonderland\Source\Wonderland\WonderlandJuliusMissionClient.cpp
+//       wonderland\Source\Wonderland\WonderlandJuliusMissionProgress.cpp
 //       wonderland\Source\Wonderland\WonderlandJuliusMissionLogic.cpp
 //
 // -I wonderland/Source is the Unreal include root. Julius/ names a module-root header as
@@ -224,6 +226,31 @@ namespace
 				Body += ServerRun;
 				Body.push_back('"');
 			}
+		}
+		Body += "}}";
+		return Body;
+	}
+
+	std::string BridgeStatusBody(const std::string& RunId, const char* State, const char* ServerRun, const char* DispatchedAt, const char* Cause)
+	{
+		std::string Body = "{\"data\":{\"mode\":\"admission\",\"runId\":\"";
+		Body += RunId;
+		Body += "\",\"serverRunId\":\"";
+		Body += ServerRun;
+		Body += "\",\"state\":\"";
+		Body += State;
+		Body += "\"";
+		if (DispatchedAt != nullptr)
+		{
+			Body += ",\"dispatchedAt\":\"";
+			Body += DispatchedAt;
+			Body += "\"";
+		}
+		if (Cause != nullptr)
+		{
+			Body += ",\"cause\":\"";
+			Body += Cause;
+			Body += "\"";
 		}
 		Body += "}}";
 		return Body;
@@ -948,6 +975,78 @@ int main()
 		const int Fills = Random.Fills;
 		Expect(!Session.Dispatch("other-mission", "").bSent, "trace_write_failure_does_not_mint");
 		Expect(Random.Fills == Fills, "trace_write_failure_fill_count");
+	}
+
+	{
+		const char* const Server = "run:0123456789abcdef01234567";
+		FRig Rig(1);
+		Expect(Rig.Session.Dispatch("demo-mission", "").bSent, "l6_dispatch");
+		const std::string Run = Rig.Session.RunId();
+		Rig.Session.OnDispatchHttp(Http(202, AdmissionBody(Run, "ADMISSION_HELD", Server, false, false), false));
+		Expect(Rig.Session.PlayerLabel() == LabelAdmitted, "l6_admission_keeps_paid_run_label");
+		Expect(Rig.Session.UiState() == EJuliusUiState::AdmittedWaiting, "l6_admission_stays_admitted_waiting");
+
+		Rig.Session.OnStatusHttp(Http(200, BridgeStatusBody(Run, "awaiting_operator", Server, nullptr, nullptr), false));
+		Expect(Rig.Session.UiState() == EJuliusUiState::AdmittedWaiting, "l6_awaiting_operator_token");
+		Expect(Rig.Session.PlayerLabel() == ProgressDisplayLabel(EMissionProgress::AdmittedHeld), "l6_awaiting_operator_uses_logic_label");
+		Expect(Rig.Session.UiState() != EJuliusUiState::Failed, "l6_awaiting_operator_is_not_failed");
+
+		Rig.Session.OnStatusHttp(Http(200, BridgeStatusBody(Run, "dispatched", Server, "not-a-timestamp", nullptr), false));
+		Expect(Rig.Session.UiState() == EJuliusUiState::DispatchUnconfirmed, "l6_bad_dispatched_at_token");
+		Expect(Rig.Session.PlayerLabel() == ProgressDisplayLabel(EMissionProgress::DispatchUnconfirmed), "l6_bad_dispatched_at_uses_logic_label");
+		Expect(Rig.Session.IsFailClosed() == false, "l6_unconfirmed_is_not_fail_closed");
+		Expect(Rig.Session.UiState() != EJuliusUiState::Failed, "l6_unconfirmed_is_not_failed");
+	}
+
+	{
+		const char* const Server = "run:0123456789abcdef01234567";
+		FRig Rig(1);
+		Expect(Rig.Session.Dispatch("demo-mission", "").bSent, "l6_started_dispatch");
+		const std::string Run = Rig.Session.RunId();
+		Rig.Session.OnDispatchHttp(Http(202, AdmissionBody(Run, "ADMISSION_HELD", Server, false, false), false));
+		const std::string When = FormatIso8601UtcMs(Rig.Clock.Now);
+		Rig.Session.OnStatusHttp(Http(200, BridgeStatusBody(Run, "dispatched", Server, When.c_str(), nullptr), false));
+		Expect(Rig.Session.UiState() == EJuliusUiState::OperatorStarted, "l6_dispatched_at_token");
+		Expect(Rig.Session.PlayerLabel() == ProgressDisplayLabel(EMissionProgress::OperatorStarted), "l6_dispatched_at_uses_logic_label");
+		Expect(Rig.Session.UiState() != EJuliusUiState::Running, "l6_operator_started_is_not_running");
+		Expect(Rig.Session.UiState() != EJuliusUiState::Failed, "l6_operator_started_is_not_failed");
+		Rig.Clock.Now += PollDispatchWatchMs + 1;
+		const FTickOutcome Tick = Rig.Session.Tick();
+		Expect(!Tick.bSend, "l6_dispatch_window_does_not_send");
+		Expect(Rig.Trace.CountEvent(Run, "poll_limit_reached") == 1, "l6_dispatch_window_uses_poll_dispatch_budget");
+		Expect(Rig.Session.UiState() == EJuliusUiState::OperatorStarted, "l6_dispatch_window_does_not_become_not_started");
+		Expect(Rig.Trace.CountEvent(Run, "hold_window_expired") == 0, "l6_dispatch_window_is_not_the_hold");
+	}
+
+	{
+		const char* const Server = "run:fedcba9876543210fedcba98";
+		FRig Rig(1);
+		Expect(Rig.Session.Dispatch("demo-mission", "").bSent, "l6_cause_dispatch");
+		const std::string Run = Rig.Session.RunId();
+		Rig.Session.OnDispatchHttp(Http(202, AdmissionBody(Run, "ADMISSION_HELD", Server, false, false), false));
+		Rig.Session.OnStatusHttp(Http(200, BridgeStatusBody(Run, "awaiting_operator", Server, nullptr, "operator_window_expired"), false));
+		Expect(Rig.Session.UiState() == EJuliusUiState::NotStarted, "l6_operator_window_expired_token");
+		Expect(UiStateToken(Rig.Session.UiState()) == std::string("not_started"), "l6_not_started_token_is_neutral");
+		Expect(Rig.Session.PlayerLabel() == ProgressDisplayLabel(EMissionProgress::NotStarted), "l6_not_started_uses_logic_label");
+		Expect(Rig.Session.UiState() != EJuliusUiState::Failed, "l6_not_started_is_not_failed");
+		Expect(Rig.Session.UiState() != EJuliusUiState::Refused, "l6_not_started_is_not_refused");
+		Expect(!Rig.Session.IsFailClosed(), "l6_not_started_is_not_fail_closed");
+	}
+
+	{
+		const char* const Server = "run:00112233445566778899aabb";
+		FRig Rig(1);
+		Expect(Rig.Session.Dispatch("demo-mission", "").bSent, "l6_hold_dispatch");
+		const std::string Run = Rig.Session.RunId();
+		Rig.Session.OnDispatchHttp(Http(202, AdmissionBody(Run, "ADMISSION_HELD", Server, false, false), false));
+		Rig.Clock.Now += PollHoldWatchMs + 1;
+		const FTickOutcome Tick = Rig.Session.Tick();
+		Expect(!Tick.bSend, "l6_hold_window_does_not_send");
+		Expect(Rig.Trace.CountEvent(Run, "hold_window_expired") == 1, "l6_hold_window_expired_event");
+		Expect(Rig.Session.UiState() == EJuliusUiState::NotStarted, "l6_hold_window_token");
+		Expect(Rig.Session.PlayerLabel() == ProgressDisplayLabel(EMissionProgress::NotStarted), "l6_hold_window_uses_logic_label");
+		Expect(Rig.Session.UiState() != EJuliusUiState::Failed, "l6_hold_window_is_not_failed");
+		Expect(!Rig.Session.IsFailClosed(), "l6_hold_window_is_not_fail_closed");
 	}
 
 	Expect(CheckJuliusModuleRootIncludes(), "julius_no_bare_module_root_include");

@@ -44,7 +44,8 @@
 // The run id already begins with wlj_, so the file is wlj_<uuid>.jsonl. Events before a run id exists go to
 // Logs/JuliusTrace/_unminted.jsonl. Secrets, session tokens and idempotency keys are never written.
 // ui_state is the exact player-visible label. ui_state_enum is the token (idle, dispatching, admitted_waiting,
-// still_waiting, queued_busy, running, completed, refused, failed).
+// still_waiting, queued_busy, running, completed, refused, failed, operator_started, dispatch_unconfirmed,
+// not_started). not_started is neutral: the operator did not start the run, and it is not a failure.
 //
 // UI LABELS that are fixed (not proposals):
 //   still waiting for the bridge          NoAnswer and StillWaiting
@@ -62,8 +63,10 @@
 #pragma once
 
 #include "WonderlandJuliusMissionLogic.h"
+#include "WonderlandJuliusMissionProgress.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -102,6 +105,12 @@ namespace WonderlandJuliusMissionClient
 		Completed,
 		Refused,
 		Failed,
+		/** Cosmo's OperatorStarted. Not a running paid mission. */
+		OperatorStarted,
+		/** Cosmo's DispatchUnconfirmed. The hold window is still open. */
+		DispatchUnconfirmed,
+		/** Cosmo's NotStarted. Neutral: the operator did not start the run. Not a failure. */
+		NotStarted,
 	};
 
 	const char* UiStateToken(EJuliusUiState State);
@@ -262,6 +271,8 @@ namespace WonderlandJuliusMissionClient
 			std::string ServerRunId;
 			std::string DataRunId;
 			bool bDataRunIdPresent = false;
+			std::string DispatchedAt;
+			std::string Cause;
 		};
 
 		struct FStatusView
@@ -286,6 +297,11 @@ namespace WonderlandJuliusMissionClient
 			std::string DataState;
 			std::string DataMode;
 			std::string DataRunId;
+			std::string ServerRunId;
+			/** Status route `dispatchedAt`. Empty when the field is absent. */
+			std::string DispatchedAt;
+			/** Status route `cause`. Empty when the field is absent. */
+			std::string Cause;
 			std::string ResultText;
 			std::string ResultSha256;
 			bool bHasResult = false;
@@ -300,6 +316,14 @@ namespace WonderlandJuliusMissionClient
 		void ApplyDispatchClassification(const FHttpResult& Http, const FAdmissionView& View);
 		void ApplyFinishedResult(const FStatusView& Status);
 		void SetUi(EJuliusUiState Next, std::string_view NextLabel);
+		void EnsureProgress();
+		void NoteDispatchProgress(const FHttpResult& Http, const FAdmissionView& View, WonderlandJuliusMissionLogic::EDispatchAnswer Answer);
+		void NoteStatusProgress(const FHttpResult& Http, const FStatusView& Status);
+		void PublishProgress(std::size_t From);
+		void ApplyProgressUi();
+		/** Arms the next status poll from Cosmo's NextPollStep (hold, dispatch, then run budgets). */
+		void ArmPoll(std::uint64_t NowMs);
+		bool ProgressOwnsPoll() const;
 		void TouchActivity(std::uint64_t NowMs);
 		std::uint64_t WaitedMs(std::uint64_t NowMs) const;
 		bool BlocksMint() const;
@@ -315,6 +339,8 @@ namespace WonderlandJuliusMissionClient
 		ITraceSink& Trace;
 		ITextStore& Store;
 		WonderlandJuliusMissionLogic::FDispatchAttemptTracker Tracker;
+		std::optional<WonderlandJuliusMissionLogic::FMissionProgressTracker> Progress;
+		std::uint64_t AdmittedAtUtcMs = 0;
 
 		std::string BaseUrl = DefaultBridgeBaseUrl;
 		std::string ProjectId;
