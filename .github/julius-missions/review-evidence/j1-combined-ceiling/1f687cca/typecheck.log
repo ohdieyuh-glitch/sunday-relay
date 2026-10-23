@@ -1,0 +1,5 @@
+
+> sunday-relay@0.1.0 typecheck
+> tsc -b --noEmit && tsc -p relay-bridge/tsconfig.json --noEmit && tsc -p relay-hermes-service/tsconfig.json --noEmit && tsc -p scripts/tsconfig.json --noEmit
+
+EXIT:0
