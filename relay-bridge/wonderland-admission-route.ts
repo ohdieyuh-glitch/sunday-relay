@@ -4,7 +4,9 @@
  * POST /relay-api/wonderland/julius/dispatch reserves one run for a client
  * (run id, idempotency key) pair. The flag JULIUS_WONDERLAND_ADMISSION must be
  * exactly `1`. Off, the route answers 503 julius_dispatch_disabled and
- * reserves nothing.
+ * reserves nothing. On, the route answers 503 julius_dispatch_unavailable
+ * unless JULIUS_WONDERLAND_ADMISSION_STORE is a local absolute writable path.
+ * Tests pass a ledger. Production does not construct the in-memory ledger.
  *
  * This is not the paid workflow. confirmLive is empty, submitted is false,
  * and no provider, GitHub dispatch, or retry is reachable from here.
@@ -25,14 +27,20 @@ import {
   createWonderlandAdmissionStore,
   parseWorkflowModelPins,
   type AdmissionLedger,
-  type AdmissionLedgerRow,
   type AdmissionOutcome,
   type AdmissionRun,
   type ReviewedModelPins,
 } from '../src/relay/integration/wonderland-admission';
+import {
+  AdmissionFileClosedError,
+  createFileAdmissionLedger,
+  isAdmissionFileClosed,
+  resolveAdmissionStorePath,
+} from '../src/relay/integration/wonderland-admission/admission-file';
 
 export const WONDERLAND_ADMISSION_PATH = '/wonderland/julius/dispatch';
 export const WONDERLAND_ADMISSION_FLAG = 'JULIUS_WONDERLAND_ADMISSION';
+export const WONDERLAND_ADMISSION_STORE = 'JULIUS_WONDERLAND_ADMISSION_STORE';
 
 const EMPTY_PINS: ReviewedModelPins = {
   architectModel: null, codingModel: null, reviewerProvider: null, reviewerModel: null,
@@ -155,6 +163,13 @@ export interface WonderlandAdmissionRoutePorts {
   }) => Promise<AdmissionOutcome>;
   /** False when caps or the mission slug could not be read. No store exists. */
   readonly configured: boolean;
+  /**
+   * False when production has no local absolute writable store path, or the
+   * file is corrupt, locked, or unreadable. Tests that pass a ledger are ready.
+   */
+  readonly admissionStoreReady: boolean;
+  /** Releases the file lock. A memory ledger has nothing to release. */
+  close(): void;
 }
 
 const err = (status: number, kind: string, message: string) => ({ status, body: { error: { kind, message } } });
@@ -169,6 +184,9 @@ export function handleWonderlandAdmissionRoute(
   }
   if (ports.env[WONDERLAND_ADMISSION_FLAG] !== '1') {
     return Promise.resolve(err(503, 'julius_dispatch_disabled', 'Mission dispatch is switched off.'));
+  }
+  if (!ports.admissionStoreReady) {
+    return Promise.resolve(err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.'));
   }
   if (request.origin !== undefined) {
     return Promise.resolve(err(403, 'julius_dispatch_browser_refused', 'Only the paired game client may use this route.'));
@@ -240,7 +258,11 @@ export function handleWonderlandAdmissionRoute(
     clientUiActionUtc,
     receivedAt: request.nowIso,
     modelPins: readPins(ports.readWorkflowText),
-  }).then(toHttp, () => ({ status: 500, body: {} }));
+  }).then(toHttp, (error: unknown) => (
+    isAdmissionFileClosed(error)
+      ? err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.')
+      : { status: 500, body: {} }
+  ));
 }
 
 export function toHttp(outcome: AdmissionOutcome): { status: number; body: unknown } {
@@ -297,6 +319,10 @@ export function createWonderlandAdmissionService(input: {
   readonly env: Record<string, string | undefined>;
   readonly verifyNativeSession: (value: { token: string; now: number }) => WonderlandNativeSession | null;
   readonly readWorkflowText?: () => string | null;
+  /**
+   * Test seam. Production leaves this unset and opens
+   * `JULIUS_WONDERLAND_ADMISSION_STORE`. There is no in-memory fallback.
+   */
   readonly ledger?: AdmissionLedger;
   readonly operatorToken?: string | undefined;
   /**
@@ -312,9 +338,10 @@ export function createWonderlandAdmissionService(input: {
   const missionCap = positiveInt(input.env.JULIUS_J1_MAX_RUNS_PER_MISSION, 2);
   const configured = missionOk && dailyCap !== null && missionCap !== null;
   const mintServerRunId = input.mintServerRunId ?? (() => `run:${randomBytes(12).toString('hex')}`);
-  const store = configured
+  const opened = openAdmissionLedger(input);
+  const store = configured && opened.ledger !== null
     ? createWonderlandAdmissionStore({
-      ledger: input.ledger ?? memoryLedger(),
+      ledger: opened.ledger,
       dailyCap: dailyCap ?? 2,
       missionCap: missionCap ?? 2,
       mintServerRunId,
@@ -326,19 +353,34 @@ export function createWonderlandAdmissionService(input: {
     verifyNativeSession: input.verifyNativeSession,
     readWorkflowText: input.readWorkflowText ?? defaultWorkflowText,
     configured,
+    admissionStoreReady: opened.ready,
+    close: opened.close,
     admit: (request) => {
+      if (!opened.ready) return Promise.reject(new AdmissionFileClosedError('unwritable'));
       if (store === null) return Promise.reject(new Error('admission_not_configured'));
       return store.admit(request);
     },
   };
 }
 
-function memoryLedger(): AdmissionLedger {
-  const held: AdmissionLedgerRow[] = [];
-  return {
-    async rows() { return held.slice(); },
-    async append(row) { held.push(row); },
-  };
+function openAdmissionLedger(input: {
+  readonly env: Record<string, string | undefined>;
+  readonly ledger?: AdmissionLedger;
+}): { readonly ledger: AdmissionLedger | null; readonly ready: boolean; close(): void } {
+  if (input.ledger !== undefined) {
+    return { ledger: input.ledger, ready: true, close() {} };
+  }
+  const located = resolveAdmissionStorePath(input.env.JULIUS_WONDERLAND_ADMISSION_STORE);
+  if (WONDERLAND_ADMISSION_STORE !== 'JULIUS_WONDERLAND_ADMISSION_STORE') {
+    return { ledger: null, ready: false, close() {} };
+  }
+  if (!located.ok) return { ledger: null, ready: false, close() {} };
+  try {
+    const file = createFileAdmissionLedger(located.path);
+    return { ledger: file, ready: true, close: () => file.close() };
+  } catch {
+    return { ledger: null, ready: false, close() {} };
+  }
 }
 
 function defaultWorkflowText(): string | null {

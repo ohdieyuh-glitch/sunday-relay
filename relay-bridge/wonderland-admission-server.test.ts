@@ -1,4 +1,7 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import type { Server } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { NATIVE_WORLD_AUDIENCE, type BrowserSessionStore } from './browser-session/grants';
@@ -63,7 +66,7 @@ async function post(
   path: string,
   token: string,
   over: { runId?: string; key?: string; headers?: Record<string, string> } = {},
-): Promise<{ status: number; body: { data?: { state?: string; dispatched?: boolean }; error?: { kind?: string } | string } }> {
+): Promise<{ status: number; body: { data?: { state?: string; dispatched?: boolean; serverRunId?: string; replayed?: boolean }; error?: { kind?: string } | string } }> {
   const response = await fetch(`${base}/relay-api${path}`, {
     method: 'POST',
     headers: {
@@ -79,7 +82,12 @@ async function post(
       clientUiActionUtc: '2026-10-23T16:15:00.000Z',
     }),
   });
-  return { status: response.status, body: await response.json() as { data?: { state?: string; dispatched?: boolean }; error?: { kind?: string } | string } };
+  return { status: response.status, body: await response.json() as { data?: { state?: string; dispatched?: boolean; serverRunId?: string; replayed?: boolean }; error?: { kind?: string } | string } };
+}
+
+async function stop(running: Server): Promise<void> {
+  running.closeAllConnections?.();
+  await new Promise<void>((resolve) => running.close(() => resolve()));
 }
 
 describe('admission through createBridgeServer', () => {
@@ -87,8 +95,11 @@ describe('admission through createBridgeServer', () => {
   let server: Server | null = null;
   let founderToken = '';
   let otherToken = '';
+  let storeDir = '';
 
   beforeAll(async () => {
+    storeDir = mkdtempSync(join(tmpdir(), 'wonderland-admission-server-'));
+    vi.stubEnv('JULIUS_WONDERLAND_ADMISSION_STORE', join(storeDir, 'admission.json'));
     vi.stubEnv('JULIUS_WONDERLAND_ADMISSION', '1');
     vi.stubEnv('JULIUS_J1_FOUNDER_PLAYER_ID', FOUNDER);
     vi.stubEnv('JULIUS_J1_PROJECT_ID', PROJECT);
@@ -113,9 +124,12 @@ describe('admission through createBridgeServer', () => {
   afterAll(async () => {
     vi.unstubAllEnvs();
     const running = server;
-    if (running === null) throw new Error('admission server was not started');
-    running.closeAllConnections?.();
-    await new Promise<void>((resolve) => running.close(() => resolve()));
+    if (running === null) {
+      if (storeDir !== '') rmSync(storeDir, { recursive: true, force: true });
+      throw new Error('admission server was not started');
+    }
+    await stop(running);
+    if (storeDir !== '') rmSync(storeDir, { recursive: true, force: true });
   });
 
   it('POST /wonderland/julius/dispatch?projectId= admits on the real server', async () => {
@@ -171,6 +185,82 @@ describe('admission through createBridgeServer', () => {
       });
       expect(result.status, path).toBe(403);
       expect(result.body, path).toEqual({ error: 'a native Wonderland session reaches only the Julius world stream' });
+    }
+  });
+});
+
+describe('admission restarts on the same store file', () => {
+  it('replays the same serverRunId and state, and the cap still holds', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wonderland-admission-restart-'));
+    const file = join(dir, 'admission.json');
+    vi.stubEnv('JULIUS_WONDERLAND_ADMISSION_STORE', file);
+    vi.stubEnv('JULIUS_WONDERLAND_ADMISSION', '1');
+    vi.stubEnv('JULIUS_J1_FOUNDER_PLAYER_ID', FOUNDER);
+    vi.stubEnv('JULIUS_J1_PROJECT_ID', PROJECT);
+    vi.stubEnv('JULIUS_WONDERLAND_MISSION', 'julius-inworld-data-1');
+    vi.stubEnv('JULIUS_J1_DAILY_CAP', '1');
+    vi.stubEnv('JULIUS_J1_MAX_RUNS_PER_MISSION', '1');
+    vi.stubEnv('RELAY_BRIDGE_API_TOKEN', 'operator-token-for-tests-only');
+    vi.stubEnv('RELAY_ALLOWED_ORIGINS', 'https://sunday-relay.vercel.app');
+    const registry = {
+      start: () => ({}) as never,
+      get: () => undefined,
+      cancel: () => undefined,
+      retry: () => undefined,
+    } as never;
+    let first: Server | null = null;
+    let second: Server | null = null;
+    try {
+      first = createBridgeServer(loadBridgeConfig(process.env), registry);
+      await new Promise<void>((resolve) => first?.listen(0, '127.0.0.1', () => resolve()));
+      const firstAddress = first.address();
+      const firstPort = typeof firstAddress === 'object' && firstAddress !== null ? firstAddress.port : 0;
+      const firstBase = `http://127.0.0.1:${firstPort}`;
+      const admitted = await post(firstBase, `/wonderland/julius/dispatch?projectId=${PROJECT}`, nativeToken(FOUNDER, PROJECT));
+      expect(admitted.status).toBe(202);
+      const serverRunId = admitted.body.data?.serverRunId;
+      expect(serverRunId).toMatch(/^run:[0-9a-f]{24}$/);
+      expect(admitted.body.data?.state).toBe('ADMISSION_HELD');
+      const written = JSON.parse(readFileSync(file, 'utf8')) as { schemaVersion: number; rows: { serverRunId: string }[] };
+      expect(written.schemaVersion).toBe(1);
+      expect(written.rows.map((row) => row.serverRunId)).toEqual([serverRunId]);
+      await stop(first);
+      first = null;
+
+      second = createBridgeServer(loadBridgeConfig(process.env), registry);
+      await new Promise<void>((resolve) => second?.listen(0, '127.0.0.1', () => resolve()));
+      const secondAddress = second.address();
+      const secondPort = typeof secondAddress === 'object' && secondAddress !== null ? secondAddress.port : 0;
+      const replay = await post(
+        `http://127.0.0.1:${secondPort}`,
+        `/wonderland/julius/dispatch?projectId=${PROJECT}`,
+        nativeToken(FOUNDER, PROJECT),
+      );
+      expect(replay.status).toBe(200);
+      expect(replay.body.data?.serverRunId).toBe(serverRunId);
+      expect(replay.body.data?.state).toBe('ADMISSION_HELD');
+      expect(replay.body.data?.replayed).toBe(true);
+      expect(replay.body.data?.dispatched).toBe(false);
+      const still = JSON.parse(readFileSync(file, 'utf8')) as { rows: unknown[] };
+      expect(still.rows).toHaveLength(1);
+      const capped = await post(
+        `http://127.0.0.1:${secondPort}`,
+        `/wonderland/julius/dispatch?projectId=${PROJECT}`,
+        nativeToken(FOUNDER, PROJECT),
+        {
+          runId: 'wlj_dddddddd-eeee-4fff-8aaa-bbbbbbbbbbbb',
+          key: '55555555-6666-4777-8888-999999999999',
+        },
+      );
+      expect(capped.status).toBe(429);
+      expect(capped.body.error).toMatchObject({ kind: 'julius_dispatch_cap_reached' });
+      const afterCap = JSON.parse(readFileSync(file, 'utf8')) as { rows: unknown[] };
+      expect(afterCap.rows).toHaveLength(1);
+    } finally {
+      if (first !== null) await stop(first);
+      if (second !== null) await stop(second);
+      vi.unstubAllEnvs();
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

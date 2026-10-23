@@ -1,3 +1,9 @@
+/**
+ * Pure admission contract and the in-memory test ledger.
+ * The durable file is `./admission-file`, imported by the bridge directly,
+ * so this barrel stays free of `node:fs`.
+ */
+
 export {
   BRIDGE_RUN_ID,
   BUSY_KIND,

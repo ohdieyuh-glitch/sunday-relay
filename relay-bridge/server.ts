@@ -261,9 +261,10 @@ export function createBridgeServer(
    */
   const browserSessions = createBrowserSessionStore();
   /**
-   * WONDERLAND ADMISSION. Off unless JULIUS_WONDERLAND_ADMISSION=1. One ledger
-   * for this process's session store. The mission handler serves the route;
-   * this does not register a second mount.
+   * WONDERLAND ADMISSION. Off unless JULIUS_WONDERLAND_ADMISSION=1. On only
+   * when JULIUS_WONDERLAND_ADMISSION_STORE is a local absolute writable path.
+   * The ledger is that file. Closing this server releases its writer lock.
+   * The mission handler serves the route; this does not register a second mount.
    */
   const wonderlandAdmission = createWonderlandAdmissionService({
     env: process.env,
@@ -467,7 +468,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
   const health = healthBody(process.env);
   // typed (CORE, 10-07): inferred, the union `{ 'cache-control'?: undefined }` arm is not a Record<string, string> for send() (TS2345)
   const healthHeaders: Record<string, string> = healthIdentityEnabled(process.env) ? { 'cache-control': 'no-store' } : {};
-  return createServer((req, res) => {
+  const server = createServer((req, res) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
     const cors = corsHeaders(config, origin);
     const method = req.method ?? 'GET';
@@ -1531,6 +1532,10 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
       }
     })();
   });
+  server.on('close', () => {
+    wonderlandAdmission.close();
+  });
+  return server;
 }
 
 /** Entry point — `node dist-relay-bridge/server.cjs`. */

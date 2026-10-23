@@ -247,6 +247,32 @@ lives only in the admission store. YUJI's paid-dispatch and bootstrap will
 later refuse anything that does not match an admitted pair. That refusal goes
 through G6 after #404 and the migration, and it is not in this change.
 
+**Durable admission file.** The store is the file named by
+`JULIUS_WONDERLAND_ADMISSION_STORE` (`src/relay/integration/wonderland-admission/admission-file.ts`).
+Admission runs only when that value is a local absolute path, the parent
+directory exists and is writable, and the file, when it already exists, is a
+writable file. Unset, a relative path, or a URL answers **503**
+`julius_dispatch_unavailable` and reserves nothing. Tests construct the
+in-memory ledger. The server does not.
+
+The file is one JSON document, schema version 1, holding the admission rows.
+A write is a temp file in the same directory, an fsync of that file, a rename
+onto the store path, and an fsync of the directory. A lock file beside the
+store allows one writer. A held lock answers 503 and is left alone. A missing
+file is an empty ledger. Corrupt JSON, or a schema version this process does
+not know, answers 503 and the bytes stay as they are.
+
+A process that shuts down and opens that same file replays the pair. The
+`serverRunId`, the state, and the caps are the ones in the file. The replay
+does not mint a second id and does not append a second row. A ledger write
+that fails leaves the pair reserved in that process with state
+`LEDGER_UNWRITTEN`, does not publish a row, and does not try the write again.
+A resend in that process returns the same `serverRunId`.
+
+`dispatched` stays false in this change by design. The founder operator claim
+tool is the only writer of the dispatched transition. This admission file
+does not claim a row.
+
 **Skywalker's ruling.** `julius-first-live-mission.yml` plus
 `scripts/julius-paid-slot.mjs` is the only thing that can spend. Admission
 later hands that pair off to that workflow. The relay holds no provider keys
@@ -263,8 +289,10 @@ proxied relay cannot admit a mission.
 The supported topology for the first founder-only mission is the Wonderland
 client calling a `relay-bridge` process on the same machine, at that process's
 configured listen port, with no proxy. That process must have
-`JULIUS_WONDERLAND_ADMISSION=1` and `JULIUS_WONDERLAND_MISSION` set to the
-reviewed slug.
+`JULIUS_WONDERLAND_ADMISSION=1`, `JULIUS_WONDERLAND_MISSION` set to the
+reviewed slug, and `JULIUS_WONDERLAND_ADMISSION_STORE` set to a local absolute
+writable path. A clean shutdown releases the writer lock. A later process
+that opens the same file replays the admissions already there.
 
 Admitting from a non-loopback or hosted client is out of scope. It would need
 a separate reviewed auth design.

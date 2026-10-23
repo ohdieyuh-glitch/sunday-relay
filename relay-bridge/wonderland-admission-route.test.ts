@@ -1,11 +1,13 @@
 import { createHash } from 'node:crypto';
 import { subscribe as subscribeDiagnostic, unsubscribe as unsubscribeDiagnostic } from 'node:diagnostics_channel';
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { classifyDispatchAnswer, errorKindOf } from '../src/relay/integration/wonderland-admission';
+import { classifyDispatchAnswer, createMemoryAdmissionLedger, errorKindOf } from '../src/relay/integration/wonderland-admission';
 import type { AdmissionLedger, AdmissionLedgerRow } from '../src/relay/integration/wonderland-admission';
+import { createFileAdmissionLedger } from '../src/relay/integration/wonderland-admission/admission-file';
 import { createBrowserSessionStore } from './browser-session/grants';
 import { handleJuliusMissionRoute, isJuliusMissionRoute } from './julius-mission-routes';
 import {
@@ -69,7 +71,7 @@ function service(over: {
       ? { playerId: 'founder', projectId: 'project-1', sessionId: 'sess-1' }
       : null,
     readWorkflowText: () => null,
-    ledger: over.ledger,
+    ledger: over.ledger ?? createMemoryAdmissionLedger(),
     mintServerRunId: over.mintServerRunId,
   });
 }
@@ -91,6 +93,85 @@ describe('POST /wonderland/julius/dispatch', () => {
     expect(kind(result?.body)).toBe('julius_dispatch_disabled');
     expect(classifyDispatchAnswer(503, true, 'julius_dispatch_disabled')).toBe('Refused');
     expect(appends).toBe(0);
+  });
+
+  it('stays disabled when the flag is off and no store path is set', async () => {
+    const ports = createWonderlandAdmissionService({
+      env: env({ JULIUS_WONDERLAND_ADMISSION: undefined }),
+      operatorToken: 'operator-token',
+      verifyNativeSession: () => null,
+      readWorkflowText: () => null,
+    });
+    const result = await handleWonderlandAdmissionRoute(request(), ports);
+    expect(result?.status).toBe(503);
+    expect(kind(result?.body)).toBe('julius_dispatch_disabled');
+  });
+
+  it('a missing, relative, or URL store path is julius_dispatch_unavailable', async () => {
+    const paths = [undefined, 'admission.json', './admission.json', 'https://example.com/admission.json', 'file:///tmp/admission.json'];
+    for (const storePath of paths) {
+      const ports = createWonderlandAdmissionService({
+        env: env({ JULIUS_WONDERLAND_ADMISSION_STORE: storePath }),
+        operatorToken: 'operator-token',
+        verifyNativeSession: () => ({ playerId: 'founder', projectId: 'project-1', sessionId: 'sess-1' }),
+        readWorkflowText: () => null,
+      });
+      const result = await handleWonderlandAdmissionRoute(request(), ports);
+      expect(result?.status, String(storePath)).toBe(503);
+      expect(kind(result?.body), String(storePath)).toBe('julius_dispatch_unavailable');
+      expect(classifyDispatchAnswer(503, true, 'julius_dispatch_unavailable')).toBe('Refused');
+    }
+  });
+
+  it('a corrupt store file is 503 and the bytes stay', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wonderland-admission-corrupt-'));
+    const file = join(dir, 'admission.json');
+    const bytes = Buffer.from('{"schemaVersion":999,"rows":[]}\n');
+    writeFileSync(file, bytes);
+    try {
+      const ports = createWonderlandAdmissionService({
+        env: env({ JULIUS_WONDERLAND_ADMISSION_STORE: file }),
+        operatorToken: 'operator-token',
+        verifyNativeSession: () => ({ playerId: 'founder', projectId: 'project-1', sessionId: 'sess-1' }),
+        readWorkflowText: () => null,
+      });
+      const result = await handleWonderlandAdmissionRoute(request(), ports);
+      expect(result?.status).toBe(503);
+      expect(kind(result?.body)).toBe('julius_dispatch_unavailable');
+      expect(readFileSync(file)).toEqual(bytes);
+      ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('an injected write failure keeps the pair and does not publish a row', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wonderland-admission-unwritten-'));
+    const file = join(dir, 'admission.json');
+    const ledger = createFileAdmissionLedger(file, {
+      persist() { throw new Error('disk full'); },
+    });
+    try {
+      const ports = createWonderlandAdmissionService({
+        env: env(),
+        operatorToken: 'operator-token',
+        verifyNativeSession: () => ({ playerId: 'founder', projectId: 'project-1', sessionId: 'sess-1' }),
+        readWorkflowText: () => null,
+        ledger,
+        mintServerRunId: () => `run:${'a'.repeat(24)}`,
+      });
+      const first = await handleWonderlandAdmissionRoute(request(), ports);
+      const second = await handleWonderlandAdmissionRoute(request(), ports);
+      expect(first?.status).toBe(202);
+      expect((first?.body as { data: { state: string; serverRunId: string } }).data.state).toBe('LEDGER_UNWRITTEN');
+      expect(second?.status).toBe(200);
+      expect((second?.body as { data: { serverRunId: string; state: string } }).data.serverRunId).toBe(`run:${'a'.repeat(24)}`);
+      expect((second?.body as { data: { state: string } }).data.state).toBe('LEDGER_UNWRITTEN');
+      expect(readdirSync(dir).includes('admission.json')).toBe(false);
+    } finally {
+      ledger.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('accepts a pair once and replays it as 200 with no error object', async () => {
@@ -201,6 +282,7 @@ describe('POST /wonderland/julius/dispatch', () => {
         ? { playerId: 'other-player', projectId: 'project-1', sessionId: 'sess-2' }
         : null,
       readWorkflowText: () => null,
+      ledger: createMemoryAdmissionLedger(),
     });
     const result = await handleWonderlandAdmissionRoute(request({
       authorization: 'Relay-Session other-token',
@@ -251,6 +333,7 @@ describe('POST /wonderland/julius/dispatch', () => {
       operatorToken: 'operator-token',
       verifyNativeSession: () => ({ playerId: 'founder', projectId: 'project-1', sessionId: 'sess-1' }),
       readWorkflowText: () => source,
+      ledger: createMemoryAdmissionLedger(),
     });
     const result = await handleWonderlandAdmissionRoute(request(), ports);
     const pins = (result?.body as { data: { modelPins: { architectModel: string; codingModel: string; reviewerProvider: string; reviewerModel: string } } }).data.modelPins;
@@ -557,6 +640,7 @@ const ALLOWED_ENV_READS = new Set([
   'JULIUS_WONDERLAND_MISSION',
   'JULIUS_J1_DAILY_CAP',
   'JULIUS_J1_MAX_RUNS_PER_MISSION',
+  'JULIUS_WONDERLAND_ADMISSION_STORE',
 ]);
 
 const FORBIDDEN_IMPORT = /(?:^|\/)julius(?:\/|$)|julius-dispatch|child_process|(?:^|:)(?:http2?|https|net|tls|dgram)$|undici|node-fetch|(?:^|\/)axios(?:\/|$)|(?:^|\/)openai(?:\/|$)|@anthropic|@ai-sdk|(?:^|\/)xai(?:\/|$)/u;
