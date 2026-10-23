@@ -4,8 +4,13 @@ not evidence by itself. Run: python -I -B tests/test_b33_tooling_fixes.py   (D-4
   D-2 the six b6_b33a_reanalysis slice logs are present and match both SHA256SUMS.txt files that list them.
   D-4 LAUNCH_LOG line 1 names the run's real role ($runRole): never JUDGED for a survey or a -RelaySource / -ServerTree rehearsal.
   D-5 the in-run RAM reading writes one RAM_TRACE.csv row per sample (RamTraceRow) and RAM_LOG.json names the trace and its sha256.
+  Skywalker rulings on 3c040da4 (2026-10-23):
+  R1 b33_stop.ps1 hashes RAM_LOG.json and RAM_TRACE.csv into SHA256SUMS_AT_CLOSE.txt; a missing one is skipped, never a close error.
+  R2 b33_judge.py stays byte-identical (sha256 4caddf0b...).
+  R3 DRIVE_RECORD.txt logs sim_accel (the -SimAccel default stays 0).
+  R4 b6_b33a_reanalysis/SHA256SUMS.txt fails exactly its 2 documented v3.1 entries, which equal the JUDGE_b33a_v3_1.* hashes.
 """
-import hashlib, os, re, subprocess, unittest
+import hashlib, json, os, re, shutil, subprocess, tempfile, unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -137,6 +142,111 @@ class RamTrace(unittest.TestCase):
         self.assertLess(loop.index("Add-Content -Path $ramTrace"), loop.index("RamGuardTrips $fr $InRunGuardGb"))
         self.assertIn("in_run_trace_file = 'RAM_TRACE.csv'; in_run_trace_sha256 = ", loop)
         self.assertIn("'RAM_LOG.json'", loop)
+
+
+def ps_file(script, args):
+    p = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script] + args,
+                       capture_output=True, text=True)
+    return p.returncode, p.stdout + p.stderr
+
+
+class StopHashesRam(unittest.TestCase):
+    """R1: b33_stop.ps1 -FromLauncher on a fixture run folder with no processes and no lease"""
+
+    def close(self, ram_log, ram_trace):
+        run = tempfile.mkdtemp(prefix="b33stop_")
+        self.addCleanup(shutil.rmtree, run, True)
+        with open(os.path.join(run, "RUN.json"), "w", encoding="utf-8") as f:
+            json.dump({"run_id": "stop_ram_fixture", "role": "REHEARSAL_NOT_PREREG", "lease_id": None, "launcher_pid": 999999,
+                       "sender": {"procs": []}, "observer": {"procs": []}, "server": {"procs": []}, "frames": {"procs": []}}, f)
+        if ram_log:
+            with open(os.path.join(run, "RAM_LOG.json"), "w", encoding="utf-8") as f:
+                f.write('{"lease_gb": 5, "in_run_trace_file": "RAM_TRACE.csv"}\n')
+        if ram_trace:
+            with open(os.path.join(run, "RAM_TRACE.csv"), "w", encoding="ascii", newline="") as f:
+                f.write("utc,elapsed_s,free_gb,below_guard\r\n2026-10-23T09:36:05.0000000Z,3.0,2.229,0\r\n")
+        rc, out = ps_file(os.path.join(ROOT, "b33_stop.ps1"), ["-Run", run, "-FromLauncher"])
+        with open(os.path.join(run, "RUN_CLOSE.json"), encoding="utf-8-sig") as f:
+            close = json.load(f)
+        sums = {}
+        with open(os.path.join(run, "SHA256SUMS_AT_CLOSE.txt"), encoding="utf-8-sig") as f:
+            for line in f:
+                parts = line.strip().split(None, 1)
+                if len(parts) == 2:
+                    # b33_stop.ps1 trims a leading '\\' (Windows); on a POSIX test host the path keeps its leading '/'
+                    sums[parts[1].lstrip("\\/")] = parts[0]
+        return run, close, sums, out
+
+    def test_R1_both_present_both_hashed(self):
+        run, close, sums, out = self.close(True, True)
+        self.assertEqual(close["close_errors"] or [], [], out)
+        for n in ("RAM_LOG.json", "RAM_TRACE.csv", "RUN.json"):
+            self.assertEqual(sums.get(n), sha256(os.path.join(run, n)), (n, sums))
+
+    def test_R1_both_missing_skipped_cleanly(self):
+        run, close, sums, out = self.close(False, False)
+        self.assertEqual(close["close_errors"] or [], [], out)
+        self.assertNotIn("RAM_LOG.json", sums)
+        self.assertNotIn("RAM_TRACE.csv", sums)
+        self.assertEqual(sums.get("RUN.json"), sha256(os.path.join(run, "RUN.json")))
+
+    def test_R1_trace_missing_log_still_hashed(self):
+        run, close, sums, out = self.close(True, False)
+        self.assertEqual(close["close_errors"] or [], [], out)
+        self.assertEqual(sums.get("RAM_LOG.json"), sha256(os.path.join(run, "RAM_LOG.json")))
+        self.assertNotIn("RAM_TRACE.csv", sums)
+
+    def test_R1_launcher_comment_no_longer_claims_an_unhashed_record(self):
+        src = launch_src()
+        self.assertNotIn("written before the close so the stop hashes it", src)
+        self.assertIn("b33_stop.ps1\n  # hashes RAM_LOG.json and RAM_TRACE.csv", src)
+
+
+class JudgeUnchanged(unittest.TestCase):
+    def test_R2_judge_is_byte_identical(self):
+        self.assertEqual(sha256(os.path.join(ROOT, "b33_judge.py")), "4caddf0b34b74c9457b730ccdf2e2d1bab0fecbe51a51637dc34e53b4f80d0ec")
+
+
+class DriveRecordSimAccel(unittest.TestCase):
+    """R3: a -DryRun calibrate (sends nothing) records sim_accel in DRIVE_RECORD.txt"""
+
+    def record(self, extra):
+        run = tempfile.mkdtemp(prefix="b33drv_")
+        self.addCleanup(shutil.rmtree, run, True)
+        rc, out = ps_file(os.path.join(ROOT, "b33_drive.ps1"), ["-Run", run, "-Mode", "calibrate", "-DryRun"] + extra)
+        recs = [os.path.join(d, f) for d, _, fs in os.walk(run) for f in fs if f == "DRIVE_RECORD.txt"]
+        self.assertEqual(len(recs), 1, out)
+        with open(recs[0], encoding="utf-8-sig") as f:
+            return f.read().split()
+
+    def test_R3_default_sim_accel_is_logged_as_0(self):
+        self.assertIn("sim_accel=0", self.record([]))
+
+    def test_R3_explicit_sim_accel_is_logged(self):
+        self.assertIn("sim_accel=900", self.record(["-SimAccel", "900"]))
+
+
+class B6ExpectedFailures(unittest.TestCase):
+    def test_R4_exactly_the_two_documented_v31_entries_fail_and_match_the_b6_judge_record(self):
+        b6 = os.path.join(ROOT, "b6_b33a_reanalysis")
+        failed = {}
+        with open(os.path.join(b6, "SHA256SUMS.txt"), encoding="utf-8-sig") as f:
+            for line in f:
+                m = re.match(r"^([0-9a-f]{64}) [ *](.+)$", line.rstrip("\r\n"))
+                if m:
+                    p = os.path.normpath(os.path.join(b6, m.group(2)))
+                    if not os.path.exists(p) or sha256(p) != m.group(1):
+                        failed[m.group(2)] = m.group(1)
+        self.assertEqual(sorted(failed), ["../CANDIDATE.json", "../b33_judge.py"])
+        with open(os.path.join(b6, "JUDGE_b33a_v3_1.json"), encoding="utf-8-sig") as f:
+            rec = f.read()
+        for h in failed.values():
+            self.assertIn(h, rec)
+        with open(os.path.join(b6, "SHA256SUMS_EXPECTED_FAILURES.md"), encoding="utf-8") as f:
+            note = f.read()
+        for k, h in failed.items():
+            self.assertIn(k, note)
+            self.assertIn(h, note)
 
 
 if __name__ == "__main__":

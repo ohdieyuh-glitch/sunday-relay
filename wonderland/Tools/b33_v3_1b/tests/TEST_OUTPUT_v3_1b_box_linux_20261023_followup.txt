@@ -1,0 +1,42 @@
+B33 v3.1b follow-up test runs (Skywalker rulings 1-4 on 3c040da4), 2026-10-23, Cosmo, on a Linux box (NOT Windows)
+Host: Linux box, Python 3.13.5, PowerShell 7.4.6 (pwsh, invoked as `powershell`). Scratch copies of this tree; nothing launched, no client, no build.
+Limits: the same as TEST_OUTPUT_v3_1b_box_linux_20261023.txt. test_b33.py shows 25 path-separator failures on POSIX (judge :339 keys
+  Windows '\' close sums with os.path.normpath). The judge is NOT changed (ruling 2); the "shim" run below applies
+  .replace("\\", os.sep) to a SCRATCH copy only. test_drive_and_stop.ps1 stops at line 413 (Win32 ClipRect) on Linux. A Windows run is still owed (D-8).
+
+Summary
+  tests/test_b33_tooling_fixes.py      19 run, 19 OK   (on the 3c040da4 tools: 6 of the 8 new tests fail; R1 "both missing" and R2 pass there by design;
+                                                         D-1 also fails there only because this test file is new)
+  tests/test_b33_wording.py             5 run,  5 OK
+  tests/test_b33.py (unmodified)       99 run, 72 OK, 25 failed, 2 skipped (the same 25 failures as at 3c040da4)
+  tests/test_b33.py (scratch shim)     99 run, 97 OK, 0 failed, 2 skipped
+  tests/test_drive_and_stop.ps1        30 OK, then stops at :413 (ClipRect); the 30 OK lines equal those at 3c040da4 (scratch paths aside)
+  PowerShell parse errors (all *.ps1)   0
+  sha256sum -c SHA256SUMS.txt          73 OK, 0 FAILED
+  b33_judge.py sha256                  4caddf0b34b74c9457b730ccdf2e2d1bab0fecbe51a51637dc34e53b4f80d0ec (unchanged)
+
+---- tests/test_b33_tooling_fixes.py -v
+test_R4_exactly_the_two_documented_v31_entries_fail_and_match_the_b6_judge_record (__main__.B6ExpectedFailures.test_R4_exactly_the_two_documented_v31_entries_fail_and_match_the_b6_judge_record) ... ok
+test_R3_default_sim_accel_is_logged_as_0 (__main__.DriveRecordSimAccel.test_R3_default_sim_accel_is_logged_as_0) ... ok
+test_R3_explicit_sim_accel_is_logged (__main__.DriveRecordSimAccel.test_R3_explicit_sim_accel_is_logged) ... ok
+test_R2_judge_is_byte_identical (__main__.JudgeUnchanged.test_R2_judge_is_byte_identical) ... ok
+test_D4_control_wording_unchanged (__main__.LaunchRole.test_D4_control_wording_unchanged) ... ok
+test_D4_counted_run_still_logged_as_judged (__main__.LaunchRole.test_D4_counted_run_still_logged_as_judged) ... ok
+test_D4_prereg_survey_is_logged_as_survey (__main__.LaunchRole.test_D4_prereg_survey_is_logged_as_survey) ... ok
+test_D4_relay_source_survey_is_logged_as_rehearsal (__main__.LaunchRole.test_D4_relay_source_survey_is_logged_as_rehearsal) ... ok
+test_D4_server_tree_jumps_is_logged_as_rehearsal (__main__.LaunchRole.test_D4_server_tree_jumps_is_logged_as_rehearsal) ... ok
+test_D1_every_entry_matches_and_every_tool_file_is_listed (__main__.Manifest.test_D1_every_entry_matches_and_every_tool_file_is_listed) ... ok
+test_D2_slice_logs_present_and_match_both_manifests (__main__.Manifest.test_D2_slice_logs_present_and_match_both_manifests) ... ok
+test_D5_failed_read_keeps_its_row (__main__.RamTrace.test_D5_failed_read_keeps_its_row) ... ok
+test_D5_loop_writes_a_row_per_reading_and_ram_log_names_the_trace (__main__.RamTrace.test_D5_loop_writes_a_row_per_reading_and_ram_log_names_the_trace) ... ok
+test_D5_row_above_the_guard (__main__.RamTrace.test_D5_row_above_the_guard) ... ok
+test_D5_row_below_the_guard_is_flagged (__main__.RamTrace.test_D5_row_below_the_guard_is_flagged) ... ok
+test_R1_both_missing_skipped_cleanly (__main__.StopHashesRam.test_R1_both_missing_skipped_cleanly) ... ok
+test_R1_both_present_both_hashed (__main__.StopHashesRam.test_R1_both_present_both_hashed) ... ok
+test_R1_launcher_comment_no_longer_claims_an_unhashed_record (__main__.StopHashesRam.test_R1_launcher_comment_no_longer_claims_an_unhashed_record) ... ok
+test_R1_trace_missing_log_still_hashed (__main__.StopHashesRam.test_R1_trace_missing_log_still_hashed) ... ok
+
+----------------------------------------------------------------------
+Ran 19 tests in 10.756s
+
+OK

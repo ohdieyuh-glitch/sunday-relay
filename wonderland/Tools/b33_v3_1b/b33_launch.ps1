@@ -464,7 +464,8 @@ try {
     if (((Get-Date) - $t0).TotalMinutes -gt $MaxMinutes) { Say "MaxMinutes $MaxMinutes reached"; break }
     if ([B33.Win]::FindVisibleTitle('Windows Security Alert')) { [void](WatchFirewall 1) }
   }
-  # v3.1a: the RAM record, written before the close so the stop hashes it (descriptive: the judge copies it; it decides nothing)
+  # v3.1a: the RAM record, written before the close (descriptive: the judge copies it; it decides nothing). Since 2026-10-23 b33_stop.ps1
+  # hashes RAM_LOG.json and RAM_TRACE.csv into SHA256SUMS_AT_CLOSE.txt when they exist (before that it hashed neither)
   [ordered]@{ lease_gb = $LeaseGb; ram_free_gb_at_start = $freeGb; ram_available_mb_at_start = $availMb; in_run_guard_gb = $InRunGuardGb
     in_run_min_free_gb = $ramMin; in_run_readings = $ramN; in_run_interval_s = 3; guard_tripped = ($null -ne $ramTrip); guard_trip_utc = $ramTrip
     in_run_trace_file = 'RAM_TRACE.csv'; in_run_trace_sha256 = $(try { (Get-FileHash $ramTrace -Algorithm SHA256).Hash.ToLower() } catch { $null }) } |

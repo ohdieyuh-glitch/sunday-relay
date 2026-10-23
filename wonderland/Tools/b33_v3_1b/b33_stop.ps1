@@ -3,7 +3,8 @@
 #   conductor is gone (or with -FromLauncher, when the conductor itself calls it) it does the close itself:
 #   1. kills ONLY the processes recorded in RUN.json (frames capture, both clients, the dev server), each verified by pid AND process start time
 #      (a pid that was reused by another program is never touched); anything else is left alone
-#   2. after they are gone, hashes every log and record of the run (SHA256SUMS_AT_CLOSE.txt; C0.3: logs hashed after the run closes)
+#   2. after they are gone, hashes every log and record of the run (SHA256SUMS_AT_CLOSE.txt; C0.3: logs hashed after the run closes),
+#      including RAM_LOG.json and RAM_TRACE.csv when they exist (2026-10-23)
 #   3. releases the shared lease (heavy-lease.py release --lease <id>) and writes RUN_CLOSE.json
 # Inputs : -Run <run folder>. Outputs: RUN_CLOSE.json, SHA256SUMS_AT_CLOSE.txt (the dev-social.mjs bundle is hashed in RUN.json and removed).
 # Run:  powershell -NoProfile -ExecutionPolicy Bypass -File b33_stop.ps1 -Run <run folder>
@@ -75,7 +76,9 @@ Start-Sleep -Seconds 1
 $sums = @(); $logSha = [ordered]@{}; $nFrames = 0
 try {
 $files = @()
-foreach ($rel in 'RUN.json', 'LAUNCH_LOG.txt', 'srv_out.txt', 'srv_err.txt', 'sender\Saved\Logs\Wonderland.log', 'observer\Saved\Logs\Wonderland.log', 'frames\index.csv', 'frames\frames.log') {
+# 2026-10-23 (Skywalker ruling 1 on 3c040da4, F1): RAM_LOG.json and RAM_TRACE.csv (D-5) are hashed too; like every entry here, a missing
+# file is skipped (Test-Path), never a close error
+foreach ($rel in 'RUN.json', 'LAUNCH_LOG.txt', 'srv_out.txt', 'srv_err.txt', 'sender\Saved\Logs\Wonderland.log', 'observer\Saved\Logs\Wonderland.log', 'frames\index.csv', 'frames\frames.log', 'RAM_LOG.json', 'RAM_TRACE.csv') {
   $f = Join-Path $Run $rel; if (Test-Path $f) { $files += Get-Item $f }
 }
 $files += @(Get-ChildItem -Path $Run -Recurse -File -Include 'timeline.csv', 'drive.log', 'DRIVE_RECORD.txt', 'route.json' -ErrorAction SilentlyContinue)
