@@ -3,7 +3,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { readAdmissionDocument } from '../src/relay/integration/wonderland-admission/admission-file';
+import type { AdmissionState } from '../src/relay/integration/wonderland-admission/admission-store';
+import { readAdmissionDocument, type DispatchError, type OperatorClaimState, type WorkflowHalt } from '../src/relay/integration/wonderland-admission/admission-file';
+import {
+  WONDERLAND_STATUS_CAUSES,
+  WONDERLAND_STATUS_STATES,
+  WONDERLAND_STATUS_TERMINAL_STATES,
+  isWonderlandStatusTerminal,
+  wonderlandStatusStateFromAdmission,
+  type WonderlandStatusCause,
+  type WonderlandStatusState,
+} from '../src/relay/integration/wonderland-admission';
 import {
   createWonderlandAdmissionService,
   handleWonderlandAdmissionRoute,
@@ -167,7 +177,7 @@ describe('wonderland status', () => {
     }
   });
 
-  it('returns a progress state only when the file already holds it', async () => {
+  it('maps an unknown stored progress token to unknown and drops its cause', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
     const storePath = join(dir, 'admission.json');
     try {
@@ -177,15 +187,7 @@ describe('wonderland status', () => {
       const ports = service(storePath, () => { throw new Error('status must not mint'); });
       const held = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
       expect(held?.body).toMatchObject({ state: 'held' });
-      const journalPath = `${storePath}.operator.json`;
-      const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { progress: unknown[] };
-      journal.progress = [{
-        serverRunId: SERVER,
-        state: 'providers_running',
-        cause: null,
-        updatedAt: '2026-10-23T18:00:00.000Z',
-      }];
-      writeFileSync(journalPath, `${JSON.stringify(journal)}\n`);
+      writeProgress(storePath, 'providers_running', 'watch');
       const before = readFileSync(storePath, 'utf8');
       const running = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
       expect(running).toEqual({
@@ -193,14 +195,168 @@ describe('wonderland status', () => {
         body: {
           wljRunId: RUN,
           serverRunId: SERVER,
-          state: 'providers_running',
+          state: 'unknown',
           updatedAt: '2026-10-23T18:00:00.000Z',
         },
       });
+      expect(running?.body).not.toHaveProperty('cause');
+      expect(JSON.stringify(running?.body)).not.toContain('providers_running');
+      expect(JSON.stringify(running?.body)).not.toContain('watch');
       expect(readFileSync(storePath, 'utf8')).toBe(before);
+      expect(isWonderlandStatusTerminal('unknown')).toBe(false);
+      ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('is exhaustive over the closed status state and cause unions', async () => {
+    expect(WONDERLAND_STATUS_STATES.map(coverStatusState)).toEqual([...WONDERLAND_STATUS_STATES]);
+    expect(WONDERLAND_STATUS_CAUSES.map(coverStatusCause)).toEqual([...WONDERLAND_STATUS_CAUSES]);
+
+    const admissionStatus: Record<AdmissionState, WonderlandStatusState> = {
+      RESERVED: 'reserved',
+      ADMISSION_HELD: 'held',
+      LEDGER_UNWRITTEN: 'ledger_unwritten',
+      INTERRUPTED: 'interrupted',
+      FAILED: 'failed',
+    };
+    const claimStatus: Record<OperatorClaimState, WonderlandStatusState> = {
+      dispatched: 'dispatched',
+      dispatch_failed: 'dispatch_failed',
+      already_spent: 'already_spent',
+    };
+    const writerCauses: Record<WorkflowHalt | DispatchError, WonderlandStatusCause> = {
+      RUN_ID_ALREADY_SPENT: 'RUN_ID_ALREADY_SPENT',
+      SPENT_TAG_UNVERIFIED: 'SPENT_TAG_UNVERIFIED',
+      gh_workflow_run_failed: 'gh_workflow_run_failed',
+    };
+    for (const [stored, state] of Object.entries(admissionStatus) as Array<[AdmissionState, WonderlandStatusState]>) {
+      expect(wonderlandStatusStateFromAdmission(stored)).toBe(state);
+    }
+    const writerStates = new Set<WonderlandStatusState>([...Object.values(admissionStatus), ...Object.values(claimStatus)]);
+    expect([...WONDERLAND_STATUS_STATES].filter((state) => state !== 'unknown').sort()).toEqual([...writerStates].sort());
+    expect(Object.values(writerCauses).sort()).toEqual([...WONDERLAND_STATUS_CAUSES].sort());
+    expect(new Set(WONDERLAND_STATUS_STATES.filter(isWonderlandStatusTerminal))).toEqual(new Set(WONDERLAND_STATUS_TERMINAL_STATES));
+    expect(WONDERLAND_STATUS_TERMINAL_STATES).not.toContain('unknown');
+
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
+    const storePath = join(dir, 'admission.json');
+    try {
+      const admitted = service(storePath, () => SERVER);
+      await handleWonderlandAdmissionRoute(admitRequest(), admitted);
+      admitted.close();
+      const ports = service(storePath, () => { throw new Error('status must not mint'); });
+      for (const state of WONDERLAND_STATUS_STATES) {
+        writeProgress(storePath, state, state === 'unknown' ? 'RUN_ID_ALREADY_SPENT' : null);
+        const before = readFileSync(storePath, 'utf8');
+        const status = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
+        expect(status, state).toEqual({
+          status: 200,
+          body: { wljRunId: RUN, serverRunId: SERVER, state, updatedAt: '2026-10-23T18:00:00.000Z' },
+        });
+        expect(status?.body, state).not.toHaveProperty('cause');
+        expect(readFileSync(storePath, 'utf8')).toBe(before);
+      }
+      for (const cause of WONDERLAND_STATUS_CAUSES) {
+        writeProgress(storePath, 'dispatch_failed', cause);
+        const before = readFileSync(storePath, 'utf8');
+        const status = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
+        expect(status, cause).toEqual({
+          status: 200,
+          body: {
+            wljRunId: RUN,
+            serverRunId: SERVER,
+            state: 'dispatch_failed',
+            cause,
+            updatedAt: '2026-10-23T18:00:00.000Z',
+          },
+        });
+        expect(readFileSync(storePath, 'utf8')).toBe(before);
+      }
+      writeProgress(storePath, 'dispatched', 'not_a_cause');
+      const badCause = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
+      expect(badCause?.body).toEqual({
+        wljRunId: RUN,
+        serverRunId: SERVER,
+        state: 'unknown',
+        updatedAt: '2026-10-23T18:00:00.000Z',
+      });
+      expect(badCause?.body).not.toHaveProperty('cause');
+
+      const journalPath = `${storePath}.operator.json`;
+      const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { progress: unknown[]; claims: unknown[] };
+      journal.progress = [];
+      journal.claims = [];
+      const cleared = `${JSON.stringify(journal)}\n`;
+      writeFileSync(journalPath, cleared);
+      const admissionBytes = readFileSync(storePath, 'utf8');
+      expect(JSON.parse(admissionBytes)).toMatchObject({ schemaVersion: 1 });
+      expect(JSON.parse(admissionBytes)).not.toHaveProperty('claims');
+      const fromRow = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
+      expect(fromRow?.body).toMatchObject({ state: 'held', updatedAt: WHEN });
+      expect(fromRow?.body).not.toHaveProperty('cause');
+      expect(readFileSync(storePath, 'utf8')).toBe(admissionBytes);
+      expect(readFileSync(journalPath, 'utf8')).toBe(cleared);
       ports.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 });
+
+/** Compile-time exhaustiveness: a new union member fails this switch. */
+function coverStatusState(state: WonderlandStatusState): WonderlandStatusState {
+  switch (state) {
+    case 'held':
+    case 'reserved':
+    case 'ledger_unwritten':
+    case 'interrupted':
+    case 'failed':
+    case 'dispatched':
+    case 'dispatch_failed':
+    case 'already_spent':
+    case 'unknown':
+      return state;
+    default: {
+      const leftover: never = state;
+      return leftover;
+    }
+  }
+}
+
+/** Compile-time exhaustiveness: a new union member fails this switch. */
+function coverStatusCause(cause: WonderlandStatusCause): WonderlandStatusCause {
+  switch (cause) {
+    case 'RUN_ID_ALREADY_SPENT':
+    case 'SPENT_TAG_UNVERIFIED':
+    case 'gh_workflow_run_failed':
+      return cause;
+    default: {
+      const leftover: never = cause;
+      return leftover;
+    }
+  }
+}
+
+function writeProgress(storePath: string, state: string, cause: string | null): void {
+  const journalPath = `${storePath}.operator.json`;
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as {
+    schemaVersion: number;
+    revision: number;
+    claims: unknown[];
+    owners: Record<string, string>;
+  };
+  writeFileSync(journalPath, `${JSON.stringify({
+    schemaVersion: journal.schemaVersion,
+    revision: journal.revision + 1,
+    claims: journal.claims,
+    owners: journal.owners,
+    progress: [{
+      serverRunId: SERVER,
+      state,
+      cause,
+      updatedAt: '2026-10-23T18:00:00.000Z',
+    }],
+  })}\n`);
+}

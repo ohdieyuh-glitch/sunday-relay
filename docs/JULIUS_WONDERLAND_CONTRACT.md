@@ -285,12 +285,63 @@ or a child path stays on the Wonderland catch-all.
 The guards are the admission guards: loopback peer and Host, no forwarding
 header, a native session, the founder player, and the paired project. The
 route then reads the file and returns `{ wljRunId, serverRunId, state, cause?,
-updatedAt }`. `state` is `held`, `dispatched`, `dispatch_failed`, or
-`already_spent`. A later progress token is returned only when that file
-already holds it. The route does not call the operator tool, does not run
-`gh`, does not read a credential, and does not spawn a process.
+updatedAt }`. `state` and `cause` are closed. The route checks the stored
+value against those unions. A stored state outside the union, or a stored
+cause outside the union, is returned as `state: "unknown"` with no cause.
+The stored token is not copied into the answer. `unknown` is never terminal.
+The route does not call the operator tool, does not run `gh`, does not read
+a credential, and does not spawn a process.
 
-A run is visible to the player who owns the stored row. A different player, a
+`WonderlandStatusState`:
+
+```ts
+export const WONDERLAND_STATUS_STATES = [
+  'held',
+  'reserved',
+  'ledger_unwritten',
+  'interrupted',
+  'failed',
+  'dispatched',
+  'dispatch_failed',
+  'already_spent',
+  'unknown',
+] as const;
+
+export type WonderlandStatusState = (typeof WONDERLAND_STATUS_STATES)[number];
+```
+
+`WonderlandStatusCause`:
+
+```ts
+export const WONDERLAND_STATUS_CAUSES = [
+  'RUN_ID_ALREADY_SPENT',
+  'SPENT_TAG_UNVERIFIED',
+  'gh_workflow_run_failed',
+] as const;
+
+export type WonderlandStatusCause = (typeof WONDERLAND_STATUS_CAUSES)[number];
+```
+
+The admission store's `ADMISSION_HELD` is `held`. `RESERVED` is `reserved`.
+`LEDGER_UNWRITTEN` is `ledger_unwritten`. `INTERRUPTED` is `interrupted`.
+`FAILED` is `failed`. The operator claim writes `dispatched`,
+`dispatch_failed`, and `already_spent`, with a cause of `RUN_ID_ALREADY_SPENT`,
+`SPENT_TAG_UNVERIFIED`, or `gh_workflow_run_failed` when it has one.
+`status --watch` may write only a state from that list other than `unknown`,
+and only a cause from the cause list. It is not implemented in this change.
+
+Terminal states, the ones a record does not leave:
+
+- `ledger_unwritten` — the ledger write is not retried and the pair is not released
+- `interrupted` — admission `INTERRUPTED`
+- `failed` — admission `FAILED`
+- `dispatch_failed` — the claim is not retried and is not returned to admitted
+- `already_spent` — the claim is not retried and is not returned to admitted
+
+`held`, `reserved`, and `dispatched` are not terminal. `unknown` is not terminal.
+
+A run is visible to the player recorded for that server run id in the operator
+journal. When the journal has no owner, the founder id is the owner. A different player, a
 `runId` that is not `run:` plus 24 lowercase hex, and an unknown `runId` each
 receive the same 404 body. The file is not modified by any of these answers.
 
@@ -311,8 +362,11 @@ receive the same 404 body. The file is not modified by any of these answers.
 
 The operator tool's future `status --watch` is the only writer of later
 progress. It would read the run with the founder's own `gh` and append that
-progress onto the admission record. That command is not implemented here. The
-relay only reads the record the tool has already written.
+progress onto the operator journal beside the admission file. A note it appends has to use
+`WonderlandStatusState` (never `unknown`) and, when it has a cause,
+`WonderlandStatusCause`. That command is not implemented here. The relay only
+reads the record the tool has already written, and a token outside those
+unions is answered as `state: "unknown"` with no cause.
 
 **Skywalker's ruling.** `julius-first-live-mission.yml` plus
 `scripts/julius-paid-slot.mjs` is the only thing that can spend. Admission

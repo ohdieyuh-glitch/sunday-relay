@@ -305,7 +305,11 @@ const WORKFLOW_HALTS = ['RUN_ID_ALREADY_SPENT', 'SPENT_TAG_UNVERIFIED'] as const
 const DISPATCH_ERRORS = ['gh_workflow_run_failed', 'SPENT_TAG_UNVERIFIED'] as const;
 const JOURNAL_KEYS = ['schemaVersion', 'revision', 'claims', 'progress', 'owners'] as const;
 const OWNER_ID = /^[A-Za-z0-9_-]{1,128}$/;
-/** A stored progress token. The status route accepts it only when it matches; the journal only bounds the text. */
+/**
+ * A stored progress token. The status route accepts only the closed status
+ * unions and maps any other token to `unknown`. This check only bounds the
+ * text so a later note can be read and refused.
+ */
 const PROGRESS_STATE = /^[a-z][a-z0-9_]{0,63}$/;
 const PROGRESS_CAUSE = /^[\x20-\x7e]{1,200}$/;
 const CLAIM_KEYS = [

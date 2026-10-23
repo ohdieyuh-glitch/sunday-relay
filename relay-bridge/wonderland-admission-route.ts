@@ -32,10 +32,13 @@ import {
   SHA256_HEX,
   createWonderlandAdmissionStore,
   parseWorkflowModelPins,
+  projectWonderlandStatus,
+  wonderlandStatusStateFromAdmission,
   type AdmissionLedger,
   type AdmissionOutcome,
   type AdmissionRun,
   type ReviewedModelPins,
+  type WonderlandStatusProjection,
 } from '../src/relay/integration/wonderland-admission';
 import {
   AdmissionFileClosedError,
@@ -338,7 +341,8 @@ export function handleWonderlandAdmissionRoute(
 /**
  * GET /wonderland/julius/status?runId=<run:24hex>&projectId=
  * Reads the admission file. A missing file is an unknown run. A held row
- * stays held. Progress is returned only when the file already holds it.
+ * stays held. A stored state or cause outside the closed unions is returned
+ * as `state: "unknown"` with no cause. `unknown` is never terminal.
  */
 export function handleWonderlandStatusRoute(
   request: WonderlandAdmissionRouteRequest,
@@ -372,18 +376,37 @@ export function handleWonderlandStatusRoute(
   if (admission === null) return Promise.resolve(STATUS_NOT_FOUND);
   const owner = admission.ownerPlayerId ?? (ports.env.JULIUS_J1_FOUNDER_PLAYER_ID ?? '').trim();
   if (owner === '' || owner !== guarded.native.playerId) return Promise.resolve(STATUS_NOT_FOUND);
-  const view = statusView(admission, document, runId);
-  if (view === null) return Promise.resolve(STATUS_NOT_FOUND);
-  return Promise.resolve({ status: 200, body: view });
+  return Promise.resolve({ status: 200, body: statusView(admission, document, runId) });
 }
 
-function statusView(admission: StoredAdmission, document: OperatorDocument, serverRunId: string): Record<string, string> | null {
+function statusView(admission: StoredAdmission, document: OperatorDocument, serverRunId: string): Record<string, string> {
   const progress = [...(document.progress ?? [])].reverse().find((note) => note.serverRunId === serverRunId) ?? null;
-  if (progress !== null) return statusBody(admission.runId, serverRunId, progress.state, progress.cause, progress.updatedAt);
+  if (progress !== null) {
+    return statusBody(
+      admission.runId,
+      serverRunId,
+      projectWonderlandStatus({ state: progress.state, cause: progress.cause }),
+      progress.updatedAt,
+    );
+  }
   const claim = [...document.claims].reverse().find((event) => event.serverRunId === serverRunId && event.wonderlandRunId === admission.runId) ?? null;
-  if (claim !== null) return statusBody(admission.runId, serverRunId, claim.state, claimCause(claim), claim.at);
-  if (admission.admissionState !== 'ADMISSION_HELD') return null;
-  return statusBody(admission.runId, serverRunId, 'held', null, admission.receivedAt);
+  if (claim !== null) {
+    return statusBody(
+      admission.runId,
+      serverRunId,
+      projectWonderlandStatus({ state: claim.state, cause: claimCause(claim) }),
+      claim.at,
+    );
+  }
+  return statusBody(
+    admission.runId,
+    serverRunId,
+    projectWonderlandStatus({
+      state: wonderlandStatusStateFromAdmission(admission.admissionState),
+      cause: null,
+    }),
+    admission.receivedAt,
+  );
 }
 
 function claimCause(claim: ClaimEvent): string | null {
@@ -394,13 +417,11 @@ function claimCause(claim: ClaimEvent): string | null {
 function statusBody(
   wljRunId: string,
   serverRunId: string,
-  state: string,
-  cause: string | null,
+  projected: WonderlandStatusProjection,
   updatedAt: string,
 ): Record<string, string> {
-  const body: Record<string, string> = { wljRunId, serverRunId, state };
-  if (cause !== null && cause !== '') body.cause = cause;
-  body.updatedAt = updatedAt;
+  const body: Record<string, string> = { wljRunId, serverRunId, state: projected.state, updatedAt };
+  if (projected.cause !== undefined) body.cause = projected.cause;
   return body;
 }
 

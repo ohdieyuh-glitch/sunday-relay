@@ -407,10 +407,12 @@ describe('admission through createBridgeServer', () => {
     expect(running.body).toEqual({
       wljRunId: 'wlj_dddddddd-eeee-4fff-8aaa-bbbbbbbbbbbb',
       serverRunId,
-      state: 'providers_running',
-      cause: 'watch',
+      state: 'unknown',
       updatedAt: '2026-10-23T18:00:00.000Z',
     });
+    expect(running.body).not.toHaveProperty('cause');
+    expect(JSON.stringify(running.body)).not.toContain('providers_running');
+    expect(JSON.stringify(running.body)).not.toContain('watch');
     expect(storeBytes()).toBe(held);
     expect(readFileSync(journalPath, 'utf8')).toBe(progressed);
     expect(JSON.parse(storeBytes())).not.toHaveProperty('claims');

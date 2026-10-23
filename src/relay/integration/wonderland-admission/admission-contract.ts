@@ -199,3 +199,111 @@ export function paidWorkflowTicket(input: { dispatchKey: string; mission: string
     gatesRemaining: GATES_REMAINING,
   };
 }
+
+/**
+ * Closed status `state` values the status route may return.
+ *
+ * Writers:
+ * - the admission store: `RESERVED`, `ADMISSION_HELD`, `LEDGER_UNWRITTEN`,
+ *   `INTERRUPTED`, `FAILED` (projected below)
+ * - the operator claim: `dispatched`, `dispatch_failed`, `already_spent`
+ * - `status --watch`: only a member of this list other than `unknown`
+ *
+ * `unknown` is the route's answer when a stored token is outside this list.
+ * It is never a terminal state.
+ */
+export const WONDERLAND_STATUS_STATES = [
+  'held',
+  'reserved',
+  'ledger_unwritten',
+  'interrupted',
+  'failed',
+  'dispatched',
+  'dispatch_failed',
+  'already_spent',
+  'unknown',
+] as const;
+
+export type WonderlandStatusState = (typeof WONDERLAND_STATUS_STATES)[number];
+
+/**
+ * Closed status `cause` values. The claim tool records
+ * `RUN_ID_ALREADY_SPENT`, `SPENT_TAG_UNVERIFIED`, and
+ * `gh_workflow_run_failed`. `status --watch` may record only one of these.
+ */
+export const WONDERLAND_STATUS_CAUSES = [
+  'RUN_ID_ALREADY_SPENT',
+  'SPENT_TAG_UNVERIFIED',
+  'gh_workflow_run_failed',
+] as const;
+
+export type WonderlandStatusCause = (typeof WONDERLAND_STATUS_CAUSES)[number];
+
+/**
+ * States a record does not leave. `unknown` is absent on purpose: an
+ * unrecognized stored token is not a finished run.
+ */
+export const WONDERLAND_STATUS_TERMINAL_STATES = [
+  'ledger_unwritten',
+  'interrupted',
+  'failed',
+  'dispatch_failed',
+  'already_spent',
+] as const;
+
+export type WonderlandStatusTerminalState = (typeof WONDERLAND_STATUS_TERMINAL_STATES)[number];
+
+const STATUS_STATE_SET: ReadonlySet<string> = new Set(WONDERLAND_STATUS_STATES);
+const STATUS_CAUSE_SET: ReadonlySet<string> = new Set(WONDERLAND_STATUS_CAUSES);
+const TERMINAL_STATE_SET: ReadonlySet<string> = new Set(WONDERLAND_STATUS_TERMINAL_STATES);
+
+export interface WonderlandStatusProjection {
+  readonly state: WonderlandStatusState;
+  readonly cause?: WonderlandStatusCause;
+}
+
+export function isWonderlandStatusState(value: string): value is WonderlandStatusState {
+  return STATUS_STATE_SET.has(value);
+}
+
+export function isWonderlandStatusCause(value: string): value is WonderlandStatusCause {
+  return STATUS_CAUSE_SET.has(value);
+}
+
+/** `unknown` is never terminal. */
+export function isWonderlandStatusTerminal(state: WonderlandStatusState): boolean {
+  return state !== 'unknown' && TERMINAL_STATE_SET.has(state);
+}
+
+/** Admission-store state, as the status route spells it. Anything else is `unknown`. */
+export function wonderlandStatusStateFromAdmission(state: string): WonderlandStatusState {
+  switch (state) {
+    case 'RESERVED':
+      return 'reserved';
+    case 'ADMISSION_HELD':
+      return 'held';
+    case 'LEDGER_UNWRITTEN':
+      return 'ledger_unwritten';
+    case 'INTERRUPTED':
+      return 'interrupted';
+    case 'FAILED':
+      return 'failed';
+    default:
+      return 'unknown';
+  }
+}
+
+/**
+ * Validate a stored state and cause. A state outside the union, or a cause
+ * outside the union, is `state: "unknown"` with no cause. A stored `unknown`
+ * also drops its cause.
+ */
+export function projectWonderlandStatus(input: {
+  readonly state: string;
+  readonly cause: string | null;
+}): WonderlandStatusProjection {
+  if (!isWonderlandStatusState(input.state) || input.state === 'unknown') return { state: 'unknown' };
+  if (input.cause === null || input.cause === '') return { state: input.state };
+  if (!isWonderlandStatusCause(input.cause)) return { state: 'unknown' };
+  return { state: input.state, cause: input.cause };
+}
