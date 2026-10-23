@@ -2024,3 +2024,160 @@ namespace
 			UE_LOG(LogTemp, Display, TEXT("WLTHEME accent reset to Wonderland gold"));
 		}));
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// EACH COMPANION TERMINAL'S OWN OUTLINE COLOUR (see WonderlandMascotStyle::CompanionTerminalAccentFor).
+//
+// Plain C++ and one small text file, like the flame and strip colours: never a reflected property (the FName rule). One
+// line per terminal that has its own colour, "<index> <r> <g> <b>" in 0..1, or the single word NONE. A hand edit or a
+// corrupted file is no choice at all: every terminal then wears the shared companion colour, as before this existed.
+#include "WonderlandWonderWebWindowLook.h"
+
+namespace
+{
+	constexpr int32 GMaxCompanionTerminals = 16;
+	TMap<int32, FLinearColor> GCompanionTerminalAccents;
+	bool GCompanionTerminalAccentsLoaded = false;
+
+	FString CompanionTerminalAccentsPath()
+	{
+		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Wonderland"), TEXT("CompanionTerminalAccents.txt"));
+	}
+
+	/** The whole file, or nothing: one bad line and no terminal's colour is trusted. */
+	bool ReadCompanionTerminalAccentsText(const FString& Text, TMap<int32, FLinearColor>& Out)
+	{
+		Out.Reset();
+		TArray<FString> Lines;
+		Text.ParseIntoArrayLines(Lines, true);
+		for (const FString& RawLine : Lines)
+		{
+			const FString Entry = RawLine.TrimStartAndEnd();
+			if (Entry.IsEmpty() || Entry == TEXT("NONE"))
+			{
+				continue;
+			}
+			FString IndexText;
+			FString ColourText;
+			if (!Entry.Split(TEXT(" "), &IndexText, &ColourText) || IndexText.IsEmpty() || IndexText.Len() > 2)
+			{
+				return false;
+			}
+			for (const TCHAR Character : IndexText)
+			{
+				if (!FChar::IsDigit(Character))
+				{
+					return false;
+				}
+			}
+			const int32 Index = FCString::Atoi(*IndexText);
+			FLinearColor Colour;
+			if (Index < 0 || Index >= GMaxCompanionTerminals || Out.Contains(Index) || !ReadNumberTriple(ColourText, 1.0f, Colour))
+			{
+				return false;
+			}
+			Out.Add(Index, Colour);
+		}
+		return true;
+	}
+
+	void LoadCompanionTerminalAccents()
+	{
+		if (GCompanionTerminalAccentsLoaded)
+		{
+			return;
+		}
+		GCompanionTerminalAccentsLoaded = true;
+		const FString Path = CompanionTerminalAccentsPath();
+		WonderlandBeta::RecoverInterruptedSave(Path);
+		IFileManager& Files = IFileManager::Get();
+		if (!Files.FileExists(*Path))
+		{
+			return;
+		}
+		// A SIZE CAP BEFORE THE READ: sixteen short lines at most.
+		FString Text;
+		TMap<int32, FLinearColor> Read;
+		const int64 Size = Files.FileSize(*Path);
+		if (Size > 0 && Size <= 2048 && FFileHelper::LoadFileToString(Text, *Path) && ReadCompanionTerminalAccentsText(Text, Read))
+		{
+			GCompanionTerminalAccents = MoveTemp(Read);
+			return;
+		}
+		UE_LOG(LogTemp, Warning, TEXT("WLMASCOT the saved companion terminal colours could not be read (%lld bytes); every companion terminal wears the shared colour until one is picked"), Size);
+	}
+
+	void SaveCompanionTerminalAccents()
+	{
+		TArray<int32> Indices;
+		GCompanionTerminalAccents.GetKeys(Indices);
+		Indices.Sort();
+		FString Text;
+		for (const int32 Index : Indices)
+		{
+			const FLinearColor& Colour = GCompanionTerminalAccents[Index];
+			Text += FString::Printf(TEXT("%d %.4f %.4f %.4f\n"), Index, Colour.R, Colour.G, Colour.B);
+		}
+		// SAVED THE MOMENT IT IS PICKED, whole or not at all, like every other colour here.
+		WonderlandBeta::SaveTextAtomically(CompanionTerminalAccentsPath(), Text.IsEmpty() ? FString(TEXT("NONE")) : Text);
+	}
+}
+
+namespace WonderlandMascotStyle
+{
+	int32 MaxCompanionTerminals()
+	{
+		return GMaxCompanionTerminals;
+	}
+
+	bool HasCompanionTerminalAccent(int32 TerminalIndex)
+	{
+		LoadCompanionTerminalAccents();
+		return GCompanionTerminalAccents.Contains(TerminalIndex);
+	}
+
+	FLinearColor CompanionTerminalAccentFor(int32 TerminalIndex)
+	{
+		LoadCompanionTerminalAccents();
+		const FLinearColor* Own = GCompanionTerminalAccents.Find(TerminalIndex);
+		// ITS OWN, ELSE THE SHARED COMPANION COLOUR (which is itself the shared pick, else the theme).
+		switch (WonderlandWonderWebWindowLook::PickCompanionAccentSource(Own != nullptr, UWonderlandMascotStyleSettings::Get().bCompanionTerminalAccentChosen))
+		{
+		case WonderlandWonderWebWindowLook::EAccentSource::PerTerminal:
+			return *Own;
+		case WonderlandWonderWebWindowLook::EAccentSource::SharedCompanion:
+		case WonderlandWonderWebWindowLook::EAccentSource::Theme:
+		default:
+			return WonderlandUi::CompanionAccent();
+		}
+	}
+
+	bool PickCompanionTerminalAccent(int32 TerminalIndex, const FLinearColor& Colour)
+	{
+		if (TerminalIndex < 0 || TerminalIndex >= GMaxCompanionTerminals)
+		{
+			return false;
+		}
+		LoadCompanionTerminalAccents();
+		GCompanionTerminalAccents.Add(TerminalIndex,
+			FLinearColor(FMath::Clamp(Colour.R, 0.0f, 1.0f), FMath::Clamp(Colour.G, 0.0f, 1.0f), FMath::Clamp(Colour.B, 0.0f, 1.0f), 1.0f));
+		SaveCompanionTerminalAccents();
+		SaveAndApply();
+		return true;
+	}
+
+	bool ClearCompanionTerminalAccent(int32 TerminalIndex)
+	{
+		if (TerminalIndex < 0 || TerminalIndex >= GMaxCompanionTerminals)
+		{
+			return false;
+		}
+		LoadCompanionTerminalAccents();
+		if (GCompanionTerminalAccents.Remove(TerminalIndex) > 0)
+		{
+			SaveCompanionTerminalAccents();
+			SaveAndApply();
+		}
+		return true;
+	}
+}

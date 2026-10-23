@@ -17,6 +17,7 @@
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SDPIScaler.h"
+#include "Widgets/SOverlay.h"
 #include "WonderlandWonderWebPanel.h"
 
 namespace WonderWebScreenTuning
@@ -38,6 +39,10 @@ namespace WonderWebScreenTuning
 	TAutoConsoleVariable<float> CVarGlideSeconds(TEXT("wl.WonderWeb.GlideSeconds"), 0.18f, TEXT("Wonder Web window: the timescale of its glide to a new place, seconds (critically damped: swift, no overshoot)."));
 	TAutoConsoleVariable<float> CVarEdgeMargin(TEXT("wl.WonderWeb.EdgeMargin"), 10.0f, TEXT("Wonder Web window: how far inside the view's edge a side or corner place keeps the glass, uu."));
 	TAutoConsoleVariable<float> CVarGrowSeconds(TEXT("wl.WonderWeb.GrowSeconds"), 0.3f, TEXT("Wonder Web window: seconds to open out, fold away, minimize or restore."));
+	// CLOSE IS NOT THE FOLD (founder, 2026-10-23): a closed window shrinks a little and fades, in its own time.
+	TAutoConsoleVariable<float> CVarCloseSeconds(TEXT("wl.WonderWeb.CloseSeconds"), 0.22f, TEXT("Wonder Web window: seconds for the close animation (a short shrink and fade, distinct from the minimize fold)."));
+	TAutoConsoleVariable<float> CVarVmEndedSeconds(TEXT("wl.WonderWeb.VmEndedSeconds"), 0.45f, TEXT("Wonder Web window: seconds for the VM ENDED veil to dim the glass."));
+	TAutoConsoleVariable<float> CVarVmEndedHoldSeconds(TEXT("wl.WonderWeb.VmEndedHoldSeconds"), 1.6f, TEXT("Wonder Web window: seconds the VM ENDED badge is held, fully shown, before the panel leaves."));
 	TAutoConsoleVariable<float> CVarResizeSeconds(TEXT("wl.WonderWeb.ResizeSeconds"), 0.16f, TEXT("Wonder Web window: the timescale of growing or shrinking to a new size, seconds."));
 	// A BACKGROUND WINDOW KEEPS WORKING AND IS DRAWN LESS OFTEN: the focused one every frame, the others once every few.
 	TAutoConsoleVariable<int32> CVarBackgroundRedrawFrames(TEXT("wl.WonderWeb.BackgroundRedrawFrames"), 4,
@@ -119,12 +124,136 @@ void AWonderlandWonderWebScreen::Present(const FVector2D& WindowSize, const FVec
 		AttachToComponent(InWorkspace->GetAnchor(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 	}
 	bPresented = true;
+	// OPENING ALWAYS UNFOLDS; a window that was closed and comes back opens as every window does.
+	ExitStyle = WonderlandWonderWebWindowLook::EExitStyle::Fold;
 }
 
 void AWonderlandWonderWebScreen::Dismiss()
 {
 	bPresented = false;
 	bDragging = false;
+	// THE LEGACY DISMISS IS THE FOLD, as it always was.
+	ExitStyle = WonderlandWonderWebWindowLook::EExitStyle::Fold;
+}
+
+void AWonderlandWonderWebScreen::PresentWithIntent(const FVector2D& WindowSize, const FVector2D& ChipSize, AWonderlandWonderWebWorkspace* InWorkspace,
+	WonderlandWonderWebWindowLook::EVisualIntent Intent)
+{
+	using namespace WonderlandWonderWebWindowLook;
+	SpawnIntent = Intent == EVisualIntent::SpawnWithCloseUp ? EVisualIntent::SpawnWithCloseUp : EVisualIntent::SpawnInline;
+	Present(WindowSize, ChipSize, InWorkspace);
+	if (PlanFor(SpawnIntent).bClearsVmEnded)
+	{
+		bVmEnded = false;
+		VmEndedShown = 0.0f;
+		VmEndedLeaveIn = -1.0f;
+		EndCause = EEndCause::None;
+		Look.bVmEnded = false;
+		Look.EndCause = EEndCause::None;
+	}
+}
+
+void AWonderlandWonderWebScreen::PresentQueuedChip(const FVector2D& WindowSize, const FVector2D& ChipSize, AWonderlandWonderWebWorkspace* InWorkspace)
+{
+	using namespace WonderlandWonderWebWindowLook;
+	// PAST THE CAP: presented straight into the chip. Grow stays where it is (0 for a window that never stood), so
+	// nothing unfolds, nothing folds, and the camera is not asked for.
+	PresentWithIntent(WindowSize, ChipSize, InWorkspace, EVisualIntent::SpawnInline);
+	SetMinimized(PlanForAdmission(EAdmission::QueuedChip).bStartsAsChip);
+}
+
+bool AWonderlandWonderWebScreen::ApplyCue(const WonderlandWonderWebWindowLook::FForgeCue& Cue)
+{
+	const WonderlandWonderWebWindowLook::FCuePlan Read = WonderlandWonderWebWindowLook::PlanForCue(Cue);
+	if (!Read.bKnown)
+	{
+		return false;
+	}
+	ApplyIntent(Read.Intent, Read.EndCause);
+	return true;
+}
+
+void AWonderlandWonderWebScreen::ApplyIntent(WonderlandWonderWebWindowLook::EVisualIntent Intent)
+{
+	ApplyIntent(Intent, WonderlandWonderWebWindowLook::EEndCause::None);
+}
+
+void AWonderlandWonderWebScreen::ApplyIntent(WonderlandWonderWebWindowLook::EVisualIntent Intent, WonderlandWonderWebWindowLook::EEndCause Cause)
+{
+	using namespace WonderlandWonderWebWindowLook;
+	const FIntentPlan Plan = PlanFor(Intent);
+	if (Plan.bCameraReturn)
+	{
+		// THE CAMERA IS THE WINDOW MANAGER'S: nothing for a window to draw.
+		return;
+	}
+	if (Plan.bMarksVmEnded)
+	{
+		// THE VM REALLY ENDED: the veil and the cause's badge go up now; the panel leaves once they have been read (Tick).
+		// A chip has no glass to veil, so it leaves at once.
+		bVmEnded = true;
+		EndCause = Cause;
+		Look.bVmEnded = true;
+		Look.EndCause = Cause;
+		VmEndedLeaveIn = VmEndedLeaveDelay(bMinimized, WonderWebScreenTuning::CVarVmEndedSeconds.GetValueOnGameThread(),
+			WonderWebScreenTuning::CVarVmEndedHoldSeconds.GetValueOnGameThread());
+		bDragging = false;
+		if (VmEndedLeaveIn <= 0.0f)
+		{
+			VmEndedLeaveIn = -1.0f;
+			bPresented = false;
+			ExitStyle = Plan.Exit;
+		}
+		return;
+	}
+	if (Plan.bRestores)
+	{
+		ExitStyle = EExitStyle::Fold;
+		SetMinimized(false);
+		return;
+	}
+	if (Plan.bOpens)
+	{
+		PresentWithIntent(WindowPixels, ChipPixels, Workspace.Get(), Intent);
+		SetMinimized(false);
+		return;
+	}
+	if (Plan.bMinimizes)
+	{
+		ExitStyle = EExitStyle::Fold;
+		SetMinimized(true);
+		return;
+	}
+	if (Plan.bDismisses)
+	{
+		// THE CLOSE ANIMATION, NOT THE FOLD -- and nothing here says the VM ended.
+		bPresented = false;
+		bDragging = false;
+		ExitStyle = Plan.Exit;
+		return;
+	}
+}
+
+void AWonderlandWonderWebScreen::SetWindowLook(const FWonderWebWindowLook& InLook)
+{
+	const bool bWasEnded = bVmEnded;
+	const WonderlandWonderWebWindowLook::EEndCause WasCause = EndCause;
+	Look = InLook;
+	// THE SESSION STATE IN THE LOOK CAN END A VM; ONLY A SPAWN CLEARS IT. A look refresh never un-ends a VM. It only
+	// shows the veil: the panel leaves on FORGE's vm_ended_anim, not on a look.
+	bVmEnded = bWasEnded || InLook.bVmEnded;
+	Look.bVmEnded = bVmEnded;
+	if (bWasEnded && InLook.EndCause == WonderlandWonderWebWindowLook::EEndCause::None)
+	{
+		Look.EndCause = WasCause;
+	}
+	EndCause = bVmEnded ? Look.EndCause : WonderlandWonderWebWindowLook::EEndCause::None;
+	Look.EndCause = EndCause;
+}
+
+FLinearColor AWonderlandWonderWebScreen::GetOutlineColour() const
+{
+	return Look.OutlineOr(WonderWebLook::Line());
 }
 
 void AWonderlandWonderWebScreen::SetFocused(bool bInFocused)
@@ -153,8 +282,24 @@ void AWonderlandWonderWebScreen::Tick(float DeltaSeconds)
 	using namespace WonderWebScreenTuning;
 	Super::Tick(DeltaSeconds);
 	const float Seconds = FMath::Max(CVarGrowSeconds.GetValueOnGameThread(), 0.01f);
-	Grow = FMath::Clamp(Grow + ((bPresented && !bMinimized) ? 1.0f : -1.0f) * DeltaSeconds / Seconds, 0.0f, 1.0f);
+	// A CLOSE RUNS ON ITS OWN CLOCK; every other open, fold, minimize and restore keeps the 0.3 s it always had.
+	const float WindowSeconds = IsClosing()
+		? WonderlandWonderWebWindowLook::LeaveSecondsFor(ExitStyle, Seconds, CVarCloseSeconds.GetValueOnGameThread())
+		: Seconds;
+	Grow = FMath::Clamp(Grow + ((bPresented && !bMinimized) ? 1.0f : -1.0f) * DeltaSeconds / WindowSeconds, 0.0f, 1.0f);
 	ChipGrow = FMath::Clamp(ChipGrow + ((bPresented && bMinimized) ? 1.0f : -1.0f) * DeltaSeconds / Seconds, 0.0f, 1.0f);
+	VmEndedShown = WonderlandWonderWebWindowLook::StepVeil(VmEndedShown, bVmEnded, DeltaSeconds, CVarVmEndedSeconds.GetValueOnGameThread());
+	if (VmEndedLeaveIn >= 0.0f)
+	{
+		// VM ENDED, READ, THEN GONE: after the veil's fade and the hold the panel leaves with the close motion.
+		VmEndedLeaveIn -= DeltaSeconds;
+		if (VmEndedLeaveIn <= 0.0f)
+		{
+			VmEndedLeaveIn = -1.0f;
+			bPresented = false;
+			ExitStyle = WonderlandWonderWebWindowLook::EExitStyle::Close;
+		}
+	}
 
 	// THE SIZE, critically damped toward the target like the glide: an expanded window grows, and settles, without bounce.
 	FMath::CriticallyDampedSmoothing(SizeShown, SizeRate, SizeFactor, 0.0f, FMath::Min(DeltaSeconds, 0.1f), FMath::Max(CVarResizeSeconds.GetValueOnGameThread(), 0.02f));
@@ -469,6 +614,7 @@ void SWonderlandWonderWebInputLayer::Present(AWonderlandWonderWebScreen* Screen,
 	Entry->Screen = Screen;
 	Entry->ContentSize = ContentSize;
 	Entry->ChipSize = ChipSize;
+	const TWeakObjectPtr<AWonderlandWonderWebScreen> WeakScreen(Screen);
 	Canvas->AddSlot()
 		.Anchors(FAnchors(0.0f, 0.0f))
 		.Alignment(FVector2D(0.0, 0.0))
@@ -493,7 +639,20 @@ void SWonderlandWonderWebInputLayer::Present(AWonderlandWonderWebScreen* Screen,
 				[
 					SNew(SBox).WidthOverride(ContentSize.X).HeightOverride(ContentSize.Y)
 					[
-						Content
+						SNew(SOverlay)
+						+ SOverlay::Slot()
+						[
+							Content
+						]
+						// THE VM ENDED VEIL, over the content and under nothing else: collapsed (and costing nothing) unless
+						// the window manager said this window's VM really ended.
+						+ SOverlay::Slot()
+						[
+							SAssignNew(Entry->Veil, SWonderWebVmEndedVeil)
+							.Shown_Lambda([WeakScreen]() { const AWonderlandWonderWebScreen* Owner = WeakScreen.Get(); return Owner != nullptr ? Owner->GetVmEndedShown() : 0.0f; })
+							.Accent_Lambda([WeakScreen]() { const AWonderlandWonderWebScreen* Owner = WeakScreen.Get(); return Owner != nullptr ? Owner->GetOutlineColour() : WonderWebLook::Line(); })
+							.Label_Lambda([WeakScreen]() { const AWonderlandWonderWebScreen* Owner = WeakScreen.Get(); return WonderlandWonderWebWindowLook::VmEndedBadgeText(Owner != nullptr ? Owner->GetEndCause() : WonderlandWonderWebWindowLook::EEndCause::None); })
+						]
 					]
 				]
 			]
@@ -580,7 +739,14 @@ void SWonderlandWonderWebInputLayer::Tick(const FGeometry& AllottedGeometry, con
 			// The focused window is in front of the others.
 			Entry.Slot->SetZOrder(Screen->IsFocused() ? 2.0f : 1.0f);
 			Entry.Scaler->SetDPIScale(Scale);
-			Entry.Frame->SetRenderTransform(Open < 0.999f ? TOptional<FSlateRenderTransform>(FSlateRenderTransform(FScale2D(1.0f, FMath::Max(Open, 0.01f)))) : TOptional<FSlateRenderTransform>());
+			// OPENING UNFOLDS; MINIMIZE AND THE LEGACY DISMISS FOLD (exactly the transform this line always drew); A CLOSE
+			// SHRINKS A LITTLE AND FADES (WonderlandWonderWebWindowLook::ShapeFor).
+			const WonderlandWonderWebWindowLook::FFrameShape Shape = WonderlandWonderWebWindowLook::ShapeFor(Screen->GetExitStyle(), !Screen->IsPresented(), Open);
+			Entry.Frame->SetRenderTransform(Shape.bIdentity ? TOptional<FSlateRenderTransform>() : TOptional<FSlateRenderTransform>(FSlateRenderTransform(FScale2D(Shape.ScaleX, Shape.ScaleY))));
+			if (Entry.Frame->GetRenderOpacity() != Shape.Opacity)
+			{
+				Entry.Frame->SetRenderOpacity(Shape.Opacity);
+			}
 			// Visible the moment it is drawn -- never toggled through hit-test-invisible while it opens, which left the
 			// window's own widgets out of the hit test once it had opened (editor 84: every click reached the window and
 			// no button in it).
