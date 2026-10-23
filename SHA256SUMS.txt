@@ -1,5 +1,5 @@
-# sha256 of each file in this commit (paths relative to repo root). docs/sources/* are byte-exact copies of C:\dev\iwonder\<path after docs/sources/> on Kaisin, read 2026-10-23 PT. Rev 3 (after Skywalker review of ab26e15e).
-0eac5c77e561e21e3b980ead2d9e5839308024eee68abbddab213ef2efbd6bd1  docs/C2_J1_CONFLICTS_20261023.md
+# sha256 of each file in this commit (paths relative to repo root). docs/sources/* are byte-exact copies of C:\dev\iwonder\<path after docs/sources/> on Kaisin, read 2026-10-23 PT. Rev 5 (after Skywalker review of rev 4 at 9b50b4d4).
+6f24f1ff7a85cf6900d121f64e55b2fb571669e9d1dc86eae3a696d982ac44aa  docs/C2_J1_CONFLICTS_20261023.md
 3dba0a5f403c1527e32c3b8b6d736289cf3b3db46bad65bbfc4b543f86d13d4b  docs/control_path_recovery.md
 50b820cfab715e9192748edc48dbdd8081cac720f3d02c3bd3fc5e05254d90ca  docs/j1_client_plan.md
 58ba107e0fa1dc4858c075f396c9ae4cef686646bb27005ffcfb026b8d0aa2db  docs/sources/_independent_review_judev2_20261021/C2/INWORLD_ACCEPTANCE_PROTOCOL.md
