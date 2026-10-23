@@ -33,6 +33,27 @@ const ROOT = resolve(import.meta.dirname, '..');
 const REAL_PEM = readFileSync(join(ROOT, '.github/julius-landing/reviewer-ed25519.pub'), 'utf8');
 const PIN = PINNED_REVIEWER_SPKI_SHA256;
 const git = (args: string[]) => execFileSync('git', args, { encoding: 'utf8', cwd: ROOT });
+
+/**
+ * Relay CI checks out the pull request at depth 1, so the trusted checkpoint
+ * is not in the clone. Fetch that commit (and the other recorded commits)
+ * by full SHA. A full local clone already has them and does not fetch.
+ */
+function ensureCommit(sha: string, depth: number) {
+  try {
+    execFileSync('git', ['cat-file', '-e', `${sha}^{commit}`], { cwd: ROOT, stdio: 'ignore' });
+  } catch {
+    execFileSync('git', ['fetch', `--depth=${depth}`, 'origin', sha], {
+      cwd: ROOT,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    });
+  }
+}
+ensureCommit(TRUSTED_CHECKPOINT_SHA, 2);
+ensureCommit(TRUSTED_CHECKPOINT_BASE, 1);
+ensureCommit('689d2be92c3158ba4a59883ed4f6cc02f700660b', 1);
+ensureCommit('f539cab2530b7733bd987068be676308440e04a5', 1);
 const attacker = generateKeyPairSync('ed25519');
 const attackerPem = attacker.publicKey.export({ type: 'spki', format: 'pem' }).toString();
 
