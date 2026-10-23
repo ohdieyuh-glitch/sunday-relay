@@ -11,6 +11,10 @@
 // metadata only; a provider label never standing in for a name (a missing name is the neutral "Unnamed agent"); the
 // VM number as shown; the outline colour and its fall back to the legacy #FFD400; the per-terminal companion colour's
 // fall back to the shared colour and then the theme; and the visual-intent contract the window manager drives.
+// ALIGNED WITH FORGE (wonderland-wonder-web-windows.v1 at 46383abe) AND BRIDGE (wonder-web-vm-session.v1): KAT-MAP pins
+// every FORGE animation intent to this file's EVisualIntent one to one; KAT-CAUSE pins BRIDGE's six end causes to their
+// badges, with the neutral "VM ended" for none or anything unknown; KAT-ADMIT the over-cap chip; KAT-OBSERVER the
+// observerView card's four fields.
 // Inputs with non-ASCII bytes are written as escapes; "\xE2\x80\x94" is U+2014 EM DASH.
 #include "WonderlandWonderWebWindowLook.h"
 
@@ -119,17 +123,98 @@ namespace
 	{
 		EVisualIntent Intent;
 		const char* Name;
-		bool bCamera, bOpens, bMinimizes, bDismisses, bMarksEnded, bClearsEnded;
+		bool bCamera, bOpens, bMinimizes, bDismisses, bMarksEnded, bClearsEnded, bRestores, bCameraReturn, bLeavesAfterVeil;
 		EExitStyle Exit;
 	};
 
-	// KAT-INTENT: the contract with the window manager.
+	// KAT-INTENT (and KAT-MAP): FORGE's intent name -> this file's intent -> what the window does. One row per FORGE intent
+	// (wonder-web-windows.ts ANIMATION_INTENTS), in FORGE's order.
+	//   FORGE intent         EVisualIntent     camera opens  min    dismiss ended  clears restore camRet afterVeil exit
 	const FIntentRow IntentRows[] = {
-		{ EVisualIntent::SpawnWithCloseUp, "spawn_close_up", true,  true,  false, false, false, true,  EExitStyle::Fold },
-		{ EVisualIntent::SpawnInline,      "spawn_inline",   false, true,  false, false, false, true,  EExitStyle::Fold },
-		{ EVisualIntent::Minimize,         "minimize",       false, false, true,  false, false, false, EExitStyle::Fold },
-		{ EVisualIntent::Close,            "close",          false, false, false, true,  false, false, EExitStyle::Close },
-		{ EVisualIntent::VmEnded,          "vm_ended",       false, false, false, false, true,  false, EExitStyle::Fold },
+		{ EVisualIntent::SpawnWithCloseUp, "cinematic_closeup", true,  true,  false, false, false, true,  false, false, false, EExitStyle::Fold },
+		{ EVisualIntent::SpawnInline,      "spawn_inline",      false, true,  false, false, false, true,  false, false, false, EExitStyle::Fold },
+		{ EVisualIntent::Minimize,         "minimize_fold",     false, false, true,  false, false, false, false, false, false, EExitStyle::Fold },
+		{ EVisualIntent::RestoreUnfold,    "restore_unfold",    false, false, false, false, false, false, true,  false, false, EExitStyle::Fold },
+		{ EVisualIntent::Close,            "close_anim",        false, false, false, true,  false, false, false, false, false, EExitStyle::Close },
+		{ EVisualIntent::CameraReturn,     "camera_return",     false, false, false, false, false, false, false, true,  false, EExitStyle::Fold },
+		{ EVisualIntent::VmEnded,          "vm_ended_anim",     false, false, false, true,  true,  false, false, false, true,  EExitStyle::Close },
+	};
+
+	struct FAliasRow { const char* Name; EVisualIntent Intent; };
+	// This file's first names, still read by ParseIntent (never by PlanForCue).
+	const FAliasRow AliasRows[] = {
+		{ "spawn_close_up", EVisualIntent::SpawnWithCloseUp },
+		{ "minimize",       EVisualIntent::Minimize },
+		{ "close",          EVisualIntent::Close },
+		{ "vm_ended",       EVisualIntent::VmEnded },
+	};
+
+	struct FCauseRow
+	{
+		const char* Label;
+		bool bHasCause;
+		const char* Wire;
+		EEndCause Expected;
+		const char* Badge;
+	};
+
+	// KAT-CAUSE: BRIDGE wonder-web-vm-session.v1 endCause on a vm_ended_anim cue -> the badge. Unknown is never an error.
+	const FCauseRow CauseRows[] = {
+		{ "owner_terminated",      true,  "owner_terminated",      EEndCause::OwnerTerminated,      "VM stopped by owner" },
+		{ "idle_timeout",          true,  "idle_timeout",          EEndCause::IdleTimeout,          "VM idle timeout" },
+		{ "max_lifetime",          true,  "max_lifetime",          EEndCause::MaxLifetime,          "VM time limit reached" },
+		{ "provider_failed",       true,  "provider_failed",       EEndCause::ProviderFailed,       "VM provider failed" },
+		{ "cap_exhausted",         true,  "cap_exhausted",         EEndCause::CapExhausted,         "VM cap exhausted" },
+		{ "authorization_revoked", true,  "authorization_revoked", EEndCause::AuthorizationRevoked, "VM access revoked" },
+		{ "omitted",               false, "",                      EEndCause::None,                 "VM ended" },
+		{ "null/empty",            true,  "",                      EEndCause::None,                 "VM ended" },
+		{ "FORGE explicit_stop",   true,  "explicit_stop",         EEndCause::Unknown,              "VM ended" },
+		{ "FORGE failure",         true,  "failure",               EEndCause::Unknown,              "VM ended" },
+		{ "a close is no cause",   true,  "close_anim",            EEndCause::Unknown,              "VM ended" },
+		{ "user_closed",           true,  "user_closed",           EEndCause::Unknown,              "VM ended" },
+		{ "wrong case",            true,  "Idle_Timeout",          EEndCause::Unknown,              "VM ended" },
+		{ "padded",                true,  " idle_timeout",         EEndCause::Unknown,              "VM ended" },
+		{ "control bytes",         true,  "idle_timeout\n",        EEndCause::Unknown,              "VM ended" },
+		{ "invalid utf-8",         true,  "\xFF\xFE",              EEndCause::Unknown,              "VM ended" },
+	};
+
+	struct FObserverRow
+	{
+		const char* Label;
+		bool bHasToken;
+		const char* Token;
+		const char* Owner;
+		bool bHasTitle;
+		const char* Title;
+		const char* Status;
+		bool bOutlineResolved;
+		const char* ExpectedOwner;
+		bool bTitleShown;
+		const char* ExpectedTitle;
+		const char* ExpectedStatus;
+	};
+
+	// KAT-OBSERVER: FORGE's observerView (outlineColorToken, ownerName, title, status) -> the card. Nothing else exists to draw.
+	const FObserverRow ObserverRows[] = {
+		{ "plain",            true,  "#3FA7FF", "Fable", true,  "Fable \xE2\x80\x94 Wonder Web VM 2", "focused",   true,  "Fable",         true,  "Fable \xE2\x80\x94 Wonder Web VM 2", "Focused" },
+		{ "chip",             true,  "#00ff88", "Dot",   true,  "Dot \xE2\x80\x94 Wonder Web VM 7",   "minimized", true,  "Dot",           true,  "Dot \xE2\x80\x94 Wonder Web VM 7",   "Minimized" },
+		{ "null token",       false, "",        "Agent", true,  "Agent \xE2\x80\x94 Wonder Web VM 1", "live",      false, "Agent",         true,  "Agent \xE2\x80\x94 Wonder Web VM 1", "Live" },
+		{ "named token",      true,  "companion.accent", "Fable", true, "t",                    "opening",   false, "Fable",         true,  "t",                               "Opening" },
+		{ "short hex",        true,  "#FFF",    "Fable", true,  "t",                             "closing",   false, "Fable",         true,  "t",                               "Closing" },
+		{ "bad hex",          true,  "#GG0000", "Fable", true,  "t",                             "closed",    false, "Fable",         true,  "t",                               "Closed" },
+		{ "null title",       true,  "#112233", "Fable", false, "",                              "live",      true,  "Fable",         false, "",                                "Live" },
+		{ "empty owner",      true,  "#112233", "  ",    true,  "t",                             "live",      true,  "Unnamed agent", true,  "t",                               "Live" },
+		{ "unknown status",   true,  "#112233", "Fable", true,  "t",                             "paused",    true,  "Fable",         true,  "t",                               "Unknown" },
+		{ "hostile title",    true,  "#112233", "Fa\xE2\x80\xAE" "ble", true, "a\x1B[2Jb\nc",        "live",      true,  "Fable",         true,  "a [2Jb c",                        "Live" },
+	};
+
+	struct FAdmitRow { const char* Wire; EAdmission Expected; bool bStartsAsChip; };
+	// KAT-ADMIT: FORGE's admission. Past the cap (a 7th window at the default 6) it is `queued_chip`: a chip from the start.
+	const FAdmitRow AdmitRows[] = {
+		{ "shown",       EAdmission::Shown,      false },
+		{ "queued_chip", EAdmission::QueuedChip, true },
+		{ "",            EAdmission::Shown,      false },
+		{ "QUEUED_CHIP", EAdmission::Shown,      false },
 	};
 }
 
@@ -266,9 +351,174 @@ int main()
 		Expect(Plan.bMarksVmEnded == Row.bMarksEnded, Label + " marks ended");
 		Expect(Plan.bClearsVmEnded == Row.bClearsEnded, Label + " clears ended");
 		Expect(Plan.Exit == Row.Exit, Label + " exit style");
+		Expect(Plan.bRestores == Row.bRestores, Label + " restores");
+		Expect(Plan.bCameraReturn == Row.bCameraReturn, Label + " camera return");
+		Expect(Plan.bLeavesAfterVeil == Row.bLeavesAfterVeil, Label + " leaves after veil");
+		Expect(!Plan.bStartsAsChip, Label + " never starts as chip");
 		Expect(std::string(IntentName(Row.Intent)) == Row.Name, Label + " name");
 		EVisualIntent Parsed = EVisualIntent::SpawnInline;
 		Expect(ParseIntent(Row.Name, Parsed) && Parsed == Row.Intent, Label + " parse");
+		// KAT-MAP: FORGE's cue maps to this intent and this plan, with no end cause.
+		FForgeCue Cue;
+		Cue.Intent = Row.Name;
+		Cue.bHasEndCause = true;
+		Cue.EndCause = "idle_timeout";
+		const FCuePlan Read = PlanForCue(Cue);
+		Expect(Read.bKnown && Read.Intent == Row.Intent, Label + " cue maps");
+		Expect(Read.Plan.bCameraCloseUp == Plan.bCameraCloseUp && Read.Plan.bDismisses == Plan.bDismisses && Read.Plan.Exit == Plan.Exit, Label + " cue plan");
+		Expect((Read.EndCause != EEndCause::None) == (Row.Intent == EVisualIntent::VmEnded), Label + " cause only on vm_ended_anim");
+	}
+	Expect(CountOf(IntentRows) == 7, "one row per FORGE intent (7)");
+	for (const FAliasRow& Row : AliasRows)
+	{
+		EVisualIntent Parsed = EVisualIntent::CameraReturn;
+		Expect(ParseIntent(Row.Name, Parsed) && Parsed == Row.Intent, std::string("alias ") + Row.Name);
+		FForgeCue Cue;
+		Cue.Intent = Row.Name;
+		Expect(!PlanForCue(Cue).bKnown, std::string("alias is not a FORGE cue ") + Row.Name);
+	}
+	{
+		// AN UNKNOWN CUE DOES NOTHING AND NEVER CRASHES.
+		const char* Unknown[] = { "", "fold", "CINEMATIC_CLOSEUP", "cinematic_closeup ", "keepalive", "\xFF" };
+		for (const char* Name : Unknown)
+		{
+			FForgeCue Cue;
+			Cue.Intent = Name;
+			const FCuePlan Read = PlanForCue(Cue);
+			Expect(!Read.bKnown && !Read.Plan.bCameraCloseUp && !Read.Plan.bOpens && !Read.Plan.bDismisses && !Read.Plan.bMarksVmEnded
+				&& Read.EndCause == EEndCause::None, std::string("unknown cue is a no-op '") + Name + "'");
+		}
+		// FORGE'S CAMERA RULE (minimized chips keep the workspace held): the look never decides the camera. A window opened
+		// while every other window is a chip arrives as spawn_inline, and spawn_inline never moves the camera; only
+		// cinematic_closeup does. camera_return moves no window and dismisses nothing (the last HELD window, chips
+		// included, already left).
+		FForgeCue Inline;
+		Inline.Intent = "spawn_inline";
+		Expect(!PlanForCue(Inline).Plan.bCameraCloseUp && PlanForCue(Inline).Plan.bOpens, "opened beside only chips: inline, no close-up");
+		FForgeCue Return;
+		Return.Intent = "camera_return";
+		const FIntentPlan ReturnPlan = PlanForCue(Return).Plan;
+		Expect(ReturnPlan.bCameraReturn && !ReturnPlan.bDismisses && !ReturnPlan.bMinimizes && !ReturnPlan.bOpens && !ReturnPlan.bMarksVmEnded,
+			"camera_return touches no window");
+		Expect(!PlanFor(EVisualIntent::Minimize).bCameraReturn && !PlanFor(EVisualIntent::Minimize).bDismisses, "minimize keeps the window held (no camera return)");
+		int CloseUps = 0;
+		for (const FIntentRow& Row : IntentRows)
+		{
+			CloseUps += PlanFor(Row.Intent).bCameraCloseUp ? 1 : 0;
+		}
+		Expect(CloseUps == 1, "only cinematic_closeup moves the camera in");
+	}
+
+	// ------------------------------------------------------------------------------------------ KAT-CAUSE
+	for (const FCauseRow& Row : CauseRows)
+	{
+		const std::string Label = std::string("cause ") + Row.Label;
+		FForgeCue Cue;
+		Cue.Intent = "vm_ended_anim";
+		Cue.bHasEndCause = Row.bHasCause;
+		Cue.EndCause = Row.Wire;
+		const FCuePlan Read = PlanForCue(Cue);
+		Expect(Read.bKnown && Read.Intent == EVisualIntent::VmEnded && Read.Plan.bMarksVmEnded, Label + " is vm_ended_anim");
+		Expect(Read.EndCause == Row.Expected, Label + " parsed");
+		Expect(std::string(EndCauseBadge(Read.EndCause)) == Row.Badge, Label + " badge");
+		Expect(std::string(EndCauseBadge(Read.EndCause)).size() <= 24, Label + " badge is short");
+		if (Row.Expected != EEndCause::None && Row.Expected != EEndCause::Unknown)
+		{
+			Expect(std::string(EndCauseName(Read.EndCause)) == Row.Wire, Label + " round-trips");
+		}
+		// A CLOSE IS NEVER A CAUSE: the same endCause on close_anim is dropped and the close never wears VM ENDED.
+		FForgeCue Close = Cue;
+		Close.Intent = "close_anim";
+		const FCuePlan Closed = PlanForCue(Close);
+		Expect(Closed.EndCause == EEndCause::None && !Closed.Plan.bMarksVmEnded, Label + " ignored on close_anim");
+	}
+	{
+		// A CAUSE COUNTS ONLY FOR AN ENDED OR FAILED SESSION.
+		const ESessionState States[] = { ESessionState::Unknown, ESessionState::Starting, ESessionState::Running, ESessionState::Paused };
+		for (const ESessionState State : States)
+		{
+			Expect(EffectiveEndCause(State, EEndCause::IdleTimeout) == EEndCause::None, "live state has no cause");
+		}
+		Expect(EffectiveEndCause(ESessionState::Ended, EEndCause::CapExhausted) == EEndCause::CapExhausted, "ended keeps cause");
+		Expect(EffectiveEndCause(ESessionState::Failed, EEndCause::ProviderFailed) == EEndCause::ProviderFailed, "failed keeps cause");
+		Expect(std::string(EndCauseBadge(static_cast<EEndCause>(200))) == "VM ended", "out-of-range cause is neutral");
+		struct { const char* Wire; ESessionState State; } StateRows[] = {
+			{ "provisioning", ESessionState::Starting }, { "running", ESessionState::Running }, { "paused", ESessionState::Paused },
+			{ "ended", ESessionState::Ended }, { "failed", ESessionState::Failed }, { "stopped", ESessionState::Unknown }, { "", ESessionState::Unknown } };
+		for (const auto& Row : StateRows)
+		{
+			Expect(ParseSessionState(Row.Wire) == Row.State, std::string("session state '") + Row.Wire + "'");
+		}
+		FIdentityInput Paused;
+		Paused.AgentDisplayName = "Fable";
+		Paused.State = ESessionState::Paused;
+		Expect(!Resolve(Paused).bVmEnded, "paused is not ended");
+		// VM ENDED LEAVES: after the veil's fade plus the hold; a chip at once.
+		Expect(Near(VmEndedLeaveDelay(false, 0.45f, 1.6f), 2.05f), "vm ended leaves after veil + hold");
+		Expect(Near(VmEndedLeaveDelay(true, 0.45f, 1.6f), 0.0f), "vm ended chip leaves at once");
+		Expect(Near(VmEndedLeaveDelay(false, 0.0f, -3.0f), 0.01f), "vm ended delay floored");
+	}
+
+	// ------------------------------------------------------------------------------------------ KAT-ADMIT
+	for (const FAdmitRow& Row : AdmitRows)
+	{
+		const std::string Label = std::string("admission '") + Row.Wire + "'";
+		Expect(ParseAdmission(Row.Wire) == Row.Expected, Label + " parsed");
+		const FIntentPlan Plan = PlanForAdmission(ParseAdmission(Row.Wire));
+		Expect(Plan.bStartsAsChip == Row.bStartsAsChip, Label + " chip");
+		// THE OVER-CAP WINDOW NEVER STOOD: no camera, no unfold, no fold, no dismissal, no VM ENDED.
+		Expect(!Plan.bCameraCloseUp && !Plan.bOpens && !Plan.bMinimizes && !Plan.bDismisses && !Plan.bMarksVmEnded, Label + " plays nothing");
+	}
+
+	// --------------------------------------------------------------------------------------- KAT-OBSERVER
+	for (const FObserverRow& Row : ObserverRows)
+	{
+		const std::string Label = std::string("observer ") + Row.Label;
+		FObserverViewInput View;
+		View.bHasOutlineColorToken = Row.bHasToken;
+		View.OutlineColorToken = Row.Token;
+		View.OwnerName = Row.Owner;
+		View.bHasTitle = Row.bHasTitle;
+		View.Title = Row.Title;
+		View.Status = Row.Status;
+		const FObserverLook Look = ResolveObserver(View);
+		Expect(Look.bOutlineResolved == Row.bOutlineResolved, Label + " outline resolved");
+		if (!Row.bOutlineResolved)
+		{
+			// NEVER THE LEGACY YELLOW FOR AN UNREADABLE TOKEN: the neutral grey.
+			Expect(Near(Look.Outline.R, ObserverNeutralOutline.R) && Near(Look.Outline.G, ObserverNeutralOutline.G) && Near(Look.Outline.B, ObserverNeutralOutline.B),
+				Label + " neutral outline");
+		}
+		Expect(Look.OwnerName == Row.ExpectedOwner, Label + " owner '" + Look.OwnerName + "'");
+		Expect(Look.bTitleShown == Row.bTitleShown, Label + " title shown");
+		Expect(Look.Title == Row.ExpectedTitle, Label + " title '" + Look.Title + "'");
+		Expect(Look.StatusLabel == Row.ExpectedStatus, Label + " status '" + Look.StatusLabel + "'");
+	}
+	{
+		FRgb Colour;
+		Expect(ParseColorToken("#FFFFFF", Colour) && Near(Colour.R, 1.0f) && Near(Colour.G, 1.0f) && Near(Colour.B, 1.0f), "token white");
+		Expect(ParseColorToken("#000000", Colour) && Near(Colour.R, 0.0f), "token black");
+		// sRGB DECODED like FLinearColor(FColor): 0x80 -> 0.2158605.
+		Expect(ParseColorToken("#808080", Colour) && std::fabs(Colour.R - 0.2158605f) < 1e-5f, "token srgb decode");
+		Expect(ParseColorToken("#ffd400", Colour) && Near(Colour.R, 1.0f) && std::fabs(Colour.G - 0.6583748f) < 1e-5f && Near(Colour.B, 0.0f), "token lower case");
+		FRgb Untouched{ 0.25f, 0.5f, 0.75f };
+		Expect(!ParseColorToken("FFD400", Untouched) && Near(Untouched.G, 0.5f), "token without # refused, output untouched");
+		Expect(!ParseColorToken("#FFD4000", Untouched) && !ParseColorToken("", Untouched) && !ParseColorToken("#", Untouched), "token length refused");
+		// THE TITLE IS CAPPED ON A CODE POINT BOUNDARY.
+		FObserverViewInput Long;
+		Long.OwnerName = "Fable";
+		Long.bHasTitle = true;
+		for (int Index = 0; Index < 100; ++Index)
+		{
+			Long.Title += "\xE2\x80\x94";
+		}
+		const FObserverLook Capped = ResolveObserver(Long);
+		Expect(Capped.Title.size() <= MaxObserverTitleBytes && Capped.Title.size() % 3 == 0, "observer title capped on a code point");
+		const char* Phases[] = { "opening", "live", "minimized", "focused", "closing", "closed" };
+		for (const char* Phase : Phases)
+		{
+			Expect(ParsePhase(Phase) != EWindowPhase::Unknown, std::string("phase ") + Phase);
+		}
 	}
 	{
 		EVisualIntent Parsed = EVisualIntent::Minimize;
@@ -276,7 +526,8 @@ int main()
 		// THE TWO RULES THAT MATTER MOST: a close is not the fold, and a close never wears VM ENDED.
 		Expect(PlanFor(EVisualIntent::Close).Exit != PlanFor(EVisualIntent::Minimize).Exit, "close is not the fold");
 		Expect(!PlanFor(EVisualIntent::Close).bMarksVmEnded, "close never marks VM ended");
-		Expect(!PlanFor(EVisualIntent::VmEnded).bDismisses, "VM ended keeps the window");
+		Expect(PlanFor(EVisualIntent::VmEnded).bDismisses && PlanFor(EVisualIntent::VmEnded).bLeavesAfterVeil, "VM ended leaves only after the veil (FORGE: closing)");
+		Expect(!PlanFor(EVisualIntent::Close).bLeavesAfterVeil, "close leaves at once");
 		Expect(!PlanFor(EVisualIntent::SpawnInline).bCameraCloseUp, "inline spawn never moves the camera");
 	}
 
@@ -324,12 +575,37 @@ int main()
 		Expect(VeilDim > 0.0f && VeilDim < 1.0f, "veil dims, never blacks out");
 	}
 
+	// THE MAPPING TABLE, printed so a reviewer reads it from the run, not from this file.
+	std::printf("KAT-MAP %-18s -> %-17s %s\n", "FORGE intent", "EVisualIntent", "window does");
+	for (const FIntentRow& Row : IntentRows)
+	{
+		const FIntentPlan Plan = PlanFor(Row.Intent);
+		std::string Does;
+		Does += Plan.bOpens ? (Plan.bCameraCloseUp ? "unfold + camera close-up" : "unfold in place, camera untouched") : "";
+		Does += Plan.bMinimizes ? "fold to chip (still held)" : "";
+		Does += Plan.bRestores ? "unfold from chip" : "";
+		Does += Plan.bMarksVmEnded ? "veil + cause badge, then close shape" : (Plan.bDismisses ? "close shape (no VM ENDED)" : "");
+		Does += Plan.bCameraReturn ? "nothing (camera is the manager's)" : "";
+		static const char* Enum[] = { "SpawnWithCloseUp", "SpawnInline", "Minimize", "Close", "VmEnded", "RestoreUnfold", "CameraReturn" };
+		std::printf("KAT-MAP %-18s -> %-17s %s\n", Row.Name, Enum[static_cast<int>(Row.Intent)], Does.c_str());
+	}
+	std::printf("KAT-MAP %-18s -> %-17s %s\n", "admission queued_chip", "PresentQueuedChip", "chip from the start, no animation");
+	for (const FCauseRow& Row : CauseRows)
+	{
+		if (Row.Expected != EEndCause::None && Row.Expected != EEndCause::Unknown)
+		{
+			std::printf("KAT-CAUSE %-22s -> \"%s\"\n", Row.Wire, EndCauseBadge(Row.Expected));
+		}
+	}
+	std::printf("KAT-CAUSE %-22s -> \"%s\"\n", "(none / unknown)", EndCauseBadge(EEndCause::Unknown));
+
 	if (Failures != 0)
 	{
 		std::printf("WONDER WEB WINDOW LOOK KAT FAIL failures=%d of checks=%d\n", Failures, Checks);
 		return 1;
 	}
-	std::printf("WONDER WEB WINDOW LOOK KAT PASS checks=%d title=%zu number=%zu accent=%zu intent=%zu\n",
-		Checks, CountOf(TitleRows), CountOf(NumberRows), CountOf(AccentRows), CountOf(IntentRows));
+	std::printf("WONDER WEB WINDOW LOOK KAT PASS checks=%d title=%zu number=%zu accent=%zu intent=%zu alias=%zu cause=%zu admit=%zu observer=%zu\n",
+		Checks, CountOf(TitleRows), CountOf(NumberRows), CountOf(AccentRows), CountOf(IntentRows), CountOf(AliasRows), CountOf(CauseRows),
+		CountOf(AdmitRows), CountOf(ObserverRows));
 	return 0;
 }

@@ -38,23 +38,47 @@ colour. Until nobody picks a per-terminal colour, the two values are identical, 
 - (b) Apply the hunk as written, and add a follow-up where each companion terminal or console is told its index and paints
   `CompanionTerminalAccentFor(Index)` instead of `CompanionGold()`. That is not in this branch.
 
-## 2. The window manager drives the intents (in `WonderlandWonderWebWindows.cpp`, #420)
+## 2. The window manager drives the look with FORGE's cues (in `WonderlandWonderWebWindows.cpp`)
+
+Aligned 1:1 with FORGE's `wonderland-wonder-web-windows.v1` (branch `wonderland/wonder-web-windows-forge-20261023`, head
+`46383abec8173017c58b780dcd14f942437d9dfe`). The look never decides the camera or the admission; it plays the cue FORGE's logic
+emitted. Hand each cue over as it is:
 
 ```cpp
 #include "WonderlandWonderWebWindowLook.h"   // via WonderlandWonderWebScreen.h already
-using WonderlandWonderWebWindowLook::EVisualIntent;
+WonderlandWonderWebWindowLook::FForgeCue Cue;
+Cue.Intent = /* FORGE AnimationCue.intent, e.g. "close_anim" */;
+Cue.bHasEndCause = /* cue.endCause !== undefined && !== null */;
+Cue.EndCause = /* cue.endCause (BRIDGE wonder-web-vm-session.v1), only read for vm_ended_anim */;
+// The pure half reads UTF-8 std::string: from an FString use std::string(TCHAR_TO_UTF8(*Value)).
+Screen->ApplyCue(Cue);   // false (and nothing happens) for an intent this build does not know
 ```
 
-| Event | Today (#420 head) | With this branch |
+| FORGE output | `EVisualIntent` | The window does |
 |---|---|---|
-| Window opens, the overlay was closed (first window) | `PresentWonderWebWindow` :275 `Screen->Present(...)` | `Screen->PresentWithIntent(Window.ContentSize, SWonderWebWindowChip::DesignSize(), WonderWebWorkspace.Get(), EVisualIntent::SpawnWithCloseUp);` The camera blend stays the caller's (`OpenOverlay`). |
-| Window opens beside others | same line | `...PresentWithIntent(..., EVisualIntent::SpawnInline);` No camera move. |
-| Minimize | `MinimizeWonderWebWindow` :523 `Screen->SetMinimized(true)` | Unchanged, or `Screen->ApplyIntent(EVisualIntent::Minimize)`; it is the same 0.3 s fold. Restore stays `SetMinimized(false)`. |
-| User closes one window | `CloseWonderWebWindow` :499 `Screen->Dismiss()` | `Screen->ApplyIntent(EVisualIntent::Close);` This is the distinct close (shrink to 86% with a fade, `wl.WonderWeb.CloseSeconds` 0.22). It never shows VM ENDED. |
-| Whole workspace closes (back to the Dog) | `WonderlandUiSubsystem.cpp` :1106 (#420) `Screen->Dismiss()` | Keep `Dismiss()`: the legacy fold. |
-| VM really ended (session service says Ended/Failed) | none | `Screen->ApplyIntent(EVisualIntent::VmEnded);` The window stays, the glass dims (0.55) and a VM ENDED badge in the outline colour fades in over `wl.WonderWeb.VmEndedSeconds` 0.45. Only a spawn intent clears it. |
+| `openAnimation: cinematic_closeup` (no other window held) | `SpawnWithCloseUp` | `PresentWithIntent(..., SpawnWithCloseUp)`: unfold. The camera blend stays the caller's. |
+| `openAnimation: spawn_inline` (another window held, **chips included**) | `SpawnInline` | `PresentWithIntent(..., SpawnInline)`: unfold in place, camera untouched. |
+| `admission: queued_chip` (`openAnimation: null`; the 7th window at the default cap of 6) | none | `Screen->PresentQueuedChip(Window.ContentSize, SWonderWebWindowChip::DesignSize(), WonderWebWorkspace.Get())`: a chip from the start, no unfold, no camera. |
+| `minimize_fold` | `Minimize` | The 0.3 s fold to the chip. The window stays held. |
+| `restore_unfold` | `RestoreUnfold` | Unfold from the chip (`SetMinimized(false)`). |
+| `close_anim` | `Close` | The distinct close (shrink to 86% with a fade, `wl.WonderWeb.CloseSeconds` 0.22). Never VM ENDED. |
+| `vm_ended_anim` + `endCause` | `VmEnded` | The glass dims (0.55) and the cause badge fades in over `wl.WonderWeb.VmEndedSeconds` 0.45, holds `wl.WonderWeb.VmEndedHoldSeconds` 1.6, then the close shape. A chip leaves at once. |
+| `camera_return` | `CameraReturn` | Nothing on the window. The camera is the manager's: FORGE emits it only when the last **held** window (chips included) leaves. |
 
-`Present()` and `Dismiss()` behave exactly as before for any caller that passes no intent.
+- FORGE's `settleClosing(id)`: call it once `Screen->HasLeft()` is true (after `close_anim` or `vm_ended_anim`).
+- The cause badge, from BRIDGE's six (`ended`/`failed` only): `owner_terminated` "VM STOPPED BY OWNER", `idle_timeout` "VM IDLE
+  TIMEOUT", `max_lifetime` "VM TIME LIMIT REACHED", `provider_failed` "VM PROVIDER FAILED", `cap_exhausted` "VM CAP
+  EXHAUSTED", `authorization_revoked` "VM ACCESS REVOKED". None, null or anything unknown shows the neutral "VM ENDED"; it never
+  crashes. A window close is never a cause: an `endCause` on any other cue is dropped.
+- **Mismatch to settle with BRIDGE:** FORGE's TS `SESSION_END_CAUSES` today is `idle_timeout, max_lifetime, explicit_stop,
+  failure`, so FORGE's `validateSession` would reject `owner_terminated`, `provider_failed`, `cap_exhausted` and
+  `authorization_revoked` as `invalid_end_cause`. The look shows `explicit_stop` and `failure` as the neutral "VM ENDED".
+- Whole workspace closes (back to the Dog), `WonderlandUiSubsystem.cpp` :1106 (#420): keep `Dismiss()`, the legacy fold.
+- Old names still read by `ParseIntent` (never by `ApplyCue`): `spawn_close_up`, `minimize`, `close`, `vm_ended`.
+  `IntentName` now returns FORGE's names.
+- `Present()`, `Dismiss()`, `SetMinimized()` and `ApplyIntent(EVisualIntent)` keep their signatures and behaviour for callers
+  that pass no cue. One behaviour change: `ApplyIntent(VmEnded)` now leaves after the veil (FORGE's `closing`); in the first
+  commit the window stayed.
 
 ## 3. The look (title, parent line, outline)
 
@@ -69,7 +93,8 @@ Identity.ParentTerminalName = /* the parent companion's (or Julius's) custom nam
 Identity.bHasParentAccent = true;
 Identity.ParentAccent = WonderlandWonderWebWindowLook::ParentTerminalOutline(
 	bJuliusCard ? EWonderWebParentKind::Julius : EWonderWebParentKind::CompanionTerminal, CompanionTerminalIndex);
-Identity.State = /* ESessionState from the session service */;
+Identity.State = /* WonderlandWonderWebWindowLook::ParseSessionState(session.state) */;
+Identity.EndCause = /* WonderlandWonderWebWindowLook::ParseEndCause(session.endCause), counted only for ended/failed */;
 Identity.ProviderLabel = /* used only to refuse it as a name; never shown or logged */;
 Identity.VmSessionId = /* stable internal id */;
 const FWonderWebWindowLook Look = WonderlandWonderWebWindowLook::ResolveLook(Identity);
@@ -102,3 +127,34 @@ Both branches append to the same two lines: `BASELINE` and `HEADER_BASELINE`.
   so there is one fatal include error in each.
 - #420 adds `WonderlandWonderWebWindows.cpp:1` and `WonderlandWonderWebWindows.h:0`.
 - Resolution: keep all four entries.
+
+## 6. The observerView card (`SWonderWebObserverCard`)
+
+For FORGE's `ObserverView` (`outlineColorToken`, `ownerName`, `title`, `status`) and nothing else: there is no content slot,
+so no frame, URL or terminal text can reach it.
+
+```cpp
+FWonderWebObserverView View;
+View.OutlineColorToken = /* observerView.outlineColorToken, unset when null */;
+View.OwnerName = /* observerView.ownerName */;
+View.Title = /* observerView.title, unset when null */;
+View.Status = /* observerView.status: opening|live|minimized|focused|closing|closed */;
+SNew(SWonderWebObserverCard).View(View)   // or Card->SetView(View) on a change
+```
+
+- The outline resolves only from `#RRGGBB` (sRGB, as `FColor`). Anything else, or null, draws a neutral grey, never `#FFD400`.
+- An empty owner name shows `Unnamed agent`. FORGE's own fallback is `Agent`, which passes through as given.
+- The title is sanitised and capped at 160 bytes. A null title collapses its line.
+- Open points for FORGE: the token format is unspecified in v1 (this reads `#RRGGBB` only). FORGE keeps a custom name
+  `Grok` as given, while the window title (section 3) refuses a provider label as a name. The card shows whatever FORGE sends.
+
+## 7. API added in this commit (no renames)
+
+`EVisualIntent::RestoreUnfold`, `EVisualIntent::CameraReturn`, `ESessionState::Paused` (all appended), `EEndCause`,
+`EAdmission`, `EWindowPhase`, `FForgeCue`, `FCuePlan`, `FObserverViewInput`, `FObserverLook`, `ParseEndCause`, `EndCauseName`,
+`EndCauseBadge`, `EffectiveEndCause`, `ParseSessionState`, `ParseAdmission`, `ParsePhase`, `PhaseLabel`, `PlanForCue`,
+`PlanForAdmission`, `VmEndedLeaveDelay`, `ParseColorToken`, `ResolveObserver`; Unreal half: `FWonderWebWindowIdentity::EndCause`,
+`FWonderWebWindowLook::EndCause`, `FWonderWebObserverView`, `FWonderWebObserverLook`, `ResolveObserverLook`,
+`VmEndedBadgeText`, `SWonderWebObserverCard`, `SWonderWebVmEndedVeil::Label`, `AWonderlandWonderWebScreen::ApplyCue`,
+`ApplyIntent(EVisualIntent, EEndCause)`, `PresentQueuedChip`, `HasLeft`, `GetEndCause`, cvar `wl.WonderWeb.VmEndedHoldSeconds`.
+Every name listed in sections 1 to 5 of the first commit is unchanged.

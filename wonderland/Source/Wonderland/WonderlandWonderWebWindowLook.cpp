@@ -3,12 +3,14 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 
 namespace WonderlandWonderWebWindowLook
 {
 	const char* const UnnamedAgent = "Unnamed agent";
 	const char* const TitleJoin = " \xE2\x80\x94 Wonder Web VM";
 	const char* const VmEndedBadge = "VM ENDED";
+	const char* const VmEndedNeutral = "VM ended";
 
 	namespace
 	{
@@ -247,8 +249,21 @@ namespace WonderlandWonderWebWindowLook
 			Plan.Exit = EExitStyle::Close;
 			break;
 		case EVisualIntent::VmEnded:
-			// THE WINDOW STAYS: the player sees that it ended, and closes it when they choose.
+			// THE VM REALLY ENDED: the veil and the cause's badge go up, are held long enough to read, and then the panel
+			// leaves with the close motion -- FORGE has put it in `closing`. A plain Close never gets here.
 			Plan.bMarksVmEnded = true;
+			Plan.bDismisses = true;
+			Plan.bLeavesAfterVeil = true;
+			Plan.Exit = EExitStyle::Close;
+			break;
+		case EVisualIntent::RestoreUnfold:
+			// THE CHIP UNFOLDS: the minimize fold, reversed, on its own 0.3 s. No camera.
+			Plan.bRestores = true;
+			Plan.Exit = EExitStyle::Fold;
+			break;
+		case EVisualIntent::CameraReturn:
+			// THE CAMERA'S, NOT THE WINDOW'S: the window manager blends back; nothing here moves.
+			Plan.bCameraReturn = true;
 			break;
 		}
 		return Plan;
@@ -297,18 +312,21 @@ namespace WonderlandWonderWebWindowLook
 	{
 		switch (Intent)
 		{
-		case EVisualIntent::SpawnWithCloseUp: return "spawn_close_up";
+		case EVisualIntent::SpawnWithCloseUp: return "cinematic_closeup";
 		case EVisualIntent::SpawnInline: return "spawn_inline";
-		case EVisualIntent::Minimize: return "minimize";
-		case EVisualIntent::Close: return "close";
-		case EVisualIntent::VmEnded: return "vm_ended";
+		case EVisualIntent::Minimize: return "minimize_fold";
+		case EVisualIntent::Close: return "close_anim";
+		case EVisualIntent::VmEnded: return "vm_ended_anim";
+		case EVisualIntent::RestoreUnfold: return "restore_unfold";
+		case EVisualIntent::CameraReturn: return "camera_return";
 		}
 		return "spawn_inline";
 	}
 
 	bool ParseIntent(const std::string& Name, EVisualIntent& OutIntent)
 	{
-		const EVisualIntent All[] = { EVisualIntent::SpawnWithCloseUp, EVisualIntent::SpawnInline, EVisualIntent::Minimize, EVisualIntent::Close, EVisualIntent::VmEnded };
+		const EVisualIntent All[] = { EVisualIntent::SpawnWithCloseUp, EVisualIntent::SpawnInline, EVisualIntent::Minimize, EVisualIntent::Close,
+			EVisualIntent::VmEnded, EVisualIntent::RestoreUnfold, EVisualIntent::CameraReturn };
 		for (const EVisualIntent Intent : All)
 		{
 			if (Name == IntentName(Intent))
@@ -317,7 +335,231 @@ namespace WonderlandWonderWebWindowLook
 				return true;
 			}
 		}
+		// THIS FILE'S FIRST NAMES, still read.
+		struct FAlias { const char* Name; EVisualIntent Intent; };
+		const FAlias Aliases[] = { { "spawn_close_up", EVisualIntent::SpawnWithCloseUp }, { "minimize", EVisualIntent::Minimize },
+			{ "close", EVisualIntent::Close }, { "vm_ended", EVisualIntent::VmEnded } };
+		for (const FAlias& Alias : Aliases)
+		{
+			if (Name == Alias.Name)
+			{
+				OutIntent = Alias.Intent;
+				return true;
+			}
+		}
 		return false;
+	}
+
+	namespace
+	{
+		struct FCauseRow { EEndCause Cause; const char* Name; const char* Badge; };
+		// BRIDGE, wonder-web-vm-session.v1: the six causes, set only on `ended` or `failed`. A window close is not one.
+		const FCauseRow CauseRows[] = {
+			{ EEndCause::OwnerTerminated, "owner_terminated", "VM stopped by owner" },
+			{ EEndCause::IdleTimeout, "idle_timeout", "VM idle timeout" },
+			{ EEndCause::MaxLifetime, "max_lifetime", "VM time limit reached" },
+			{ EEndCause::ProviderFailed, "provider_failed", "VM provider failed" },
+			{ EEndCause::CapExhausted, "cap_exhausted", "VM cap exhausted" },
+			{ EEndCause::AuthorizationRevoked, "authorization_revoked", "VM access revoked" },
+		};
+
+		int HexDigit(char C)
+		{
+			if (C >= '0' && C <= '9') return C - '0';
+			if (C >= 'a' && C <= 'f') return C - 'a' + 10;
+			if (C >= 'A' && C <= 'F') return C - 'A' + 10;
+			return -1;
+		}
+
+		/** sRGB 0..255 to linear, the formula FLinearColor(FColor) uses. */
+		float SrgbToLinear(int Byte)
+		{
+			const float C = static_cast<float>(Byte) / 255.0f;
+			return C <= 0.04045f ? C / 12.92f : std::pow((C + 0.055f) / 1.055f, 2.4f);
+		}
+	}
+
+	EEndCause ParseEndCause(const std::string& Name)
+	{
+		if (Name.empty())
+		{
+			return EEndCause::None;
+		}
+		for (const FCauseRow& Row : CauseRows)
+		{
+			if (Name == Row.Name)
+			{
+				return Row.Cause;
+			}
+		}
+		return EEndCause::Unknown;
+	}
+
+	const char* EndCauseName(EEndCause Cause)
+	{
+		for (const FCauseRow& Row : CauseRows)
+		{
+			if (Row.Cause == Cause)
+			{
+				return Row.Name;
+			}
+		}
+		return "";
+	}
+
+	const char* EndCauseBadge(EEndCause Cause)
+	{
+		for (const FCauseRow& Row : CauseRows)
+		{
+			if (Row.Cause == Cause)
+			{
+				return Row.Badge;
+			}
+		}
+		return VmEndedNeutral;
+	}
+
+	EEndCause EffectiveEndCause(ESessionState State, EEndCause Cause)
+	{
+		return State == ESessionState::Ended || State == ESessionState::Failed ? Cause : EEndCause::None;
+	}
+
+	ESessionState ParseSessionState(const std::string& Name)
+	{
+		if (Name == "provisioning") return ESessionState::Starting;
+		if (Name == "running") return ESessionState::Running;
+		if (Name == "paused") return ESessionState::Paused;
+		if (Name == "ended") return ESessionState::Ended;
+		if (Name == "failed") return ESessionState::Failed;
+		return ESessionState::Unknown;
+	}
+
+	EAdmission ParseAdmission(const std::string& Name)
+	{
+		return Name == "queued_chip" ? EAdmission::QueuedChip : EAdmission::Shown;
+	}
+
+	EWindowPhase ParsePhase(const std::string& Name)
+	{
+		if (Name == "opening") return EWindowPhase::Opening;
+		if (Name == "live") return EWindowPhase::Live;
+		if (Name == "minimized") return EWindowPhase::Minimized;
+		if (Name == "focused") return EWindowPhase::Focused;
+		if (Name == "closing") return EWindowPhase::Closing;
+		if (Name == "closed") return EWindowPhase::Closed;
+		return EWindowPhase::Unknown;
+	}
+
+	const char* PhaseLabel(EWindowPhase Phase)
+	{
+		switch (Phase)
+		{
+		case EWindowPhase::Opening: return "Opening";
+		case EWindowPhase::Live: return "Live";
+		case EWindowPhase::Minimized: return "Minimized";
+		case EWindowPhase::Focused: return "Focused";
+		case EWindowPhase::Closing: return "Closing";
+		case EWindowPhase::Closed: return "Closed";
+		case EWindowPhase::Unknown: break;
+		}
+		return "Unknown";
+	}
+
+	FCuePlan PlanForCue(const FForgeCue& Cue)
+	{
+		FCuePlan Out;
+		EVisualIntent Intent = EVisualIntent::SpawnInline;
+		// ONLY FORGE'S OWN NAMES: a cue is FORGE's output, so this file's first names are not read here.
+		bool bKnown = false;
+		const EVisualIntent All[] = { EVisualIntent::SpawnWithCloseUp, EVisualIntent::SpawnInline, EVisualIntent::Minimize, EVisualIntent::Close,
+			EVisualIntent::VmEnded, EVisualIntent::RestoreUnfold, EVisualIntent::CameraReturn };
+		for (const EVisualIntent Candidate : All)
+		{
+			if (Cue.Intent == IntentName(Candidate))
+			{
+				Intent = Candidate;
+				bKnown = true;
+				break;
+			}
+		}
+		if (!bKnown)
+		{
+			// AN INTENT THIS BUILD DOES NOT KNOW DOES NOTHING: no camera, no motion, no crash.
+			return Out;
+		}
+		Out.bKnown = true;
+		Out.Intent = Intent;
+		Out.Plan = PlanFor(Intent);
+		// A CLOSE IS NEVER A CAUSE: only vm_ended_anim carries one; on any other cue it is ignored.
+		if (Intent == EVisualIntent::VmEnded && Cue.bHasEndCause)
+		{
+			Out.EndCause = ParseEndCause(Cue.EndCause);
+		}
+		return Out;
+	}
+
+	FIntentPlan PlanForAdmission(EAdmission Admission)
+	{
+		FIntentPlan Plan;
+		// PAST THE CAP THE WINDOW IS A CHIP FROM THE START: it never stood, so it neither unfolds nor folds, and the
+		// camera does not move. A shown window waits for its cue (cinematic_closeup or spawn_inline).
+		Plan.bStartsAsChip = Admission == EAdmission::QueuedChip;
+		return Plan;
+	}
+
+	float VmEndedLeaveDelay(bool bMinimized, float VeilSeconds, float HoldSeconds)
+	{
+		return bMinimized ? 0.0f : std::max(VeilSeconds, 0.01f) + std::max(HoldSeconds, 0.0f);
+	}
+
+	bool ParseColorToken(const std::string& Token, FRgb& OutColour)
+	{
+		if (Token.size() != 7 || Token[0] != '#')
+		{
+			return false;
+		}
+		int Bytes[3] = { 0, 0, 0 };
+		for (int Index = 0; Index < 3; ++Index)
+		{
+			const int High = HexDigit(Token[1 + Index * 2]);
+			const int Low = HexDigit(Token[2 + Index * 2]);
+			if (High < 0 || Low < 0)
+			{
+				return false;
+			}
+			Bytes[Index] = High * 16 + Low;
+		}
+		OutColour = FRgb{ SrgbToLinear(Bytes[0]), SrgbToLinear(Bytes[1]), SrgbToLinear(Bytes[2]) };
+		return true;
+	}
+
+	FObserverLook ResolveObserver(const FObserverViewInput& View)
+	{
+		FObserverLook Look;
+		// FORGE NAMED THE OWNER (its fallback is "Agent"); this side only makes the text safe to draw.
+		Look.OwnerName = SanitizeName(View.OwnerName);
+		if (Look.OwnerName.empty())
+		{
+			Look.OwnerName = UnnamedAgent;
+		}
+		if (View.bHasTitle)
+		{
+			Look.Title = SanitizeName(View.Title, MaxObserverTitleBytes);
+			Look.bTitleShown = !Look.Title.empty();
+		}
+		Look.Status = ParsePhase(View.Status);
+		Look.StatusLabel = PhaseLabel(Look.Status);
+		Look.Outline = ObserverNeutralOutline;
+		if (View.bHasOutlineColorToken)
+		{
+			FRgb Colour;
+			if (ParseColorToken(SanitizeName(View.OutlineColorToken), Colour))
+			{
+				Look.bOutlineResolved = true;
+				Look.Outline = Colour;
+			}
+		}
+		return Look;
 	}
 }
 
@@ -400,6 +642,33 @@ namespace WonderlandWonderWebWindowLook
 		Look.Outline = Look.bHasOutline ? FLinearColor(Resolved.Outline.R, Resolved.Outline.G, Resolved.Outline.B, 1.0f) : FLinearColor::Transparent;
 		Look.bVmEnded = Resolved.bVmEnded;
 		Look.bNameMissing = Resolved.NameIssue != ENameIssue::None;
+		Look.EndCause = EffectiveEndCause(Identity.State, Identity.EndCause);
+		return Look;
+	}
+
+	FText VmEndedBadgeText(EEndCause Cause)
+	{
+		return FText::FromString(FString(UTF8_TO_TCHAR(EndCauseBadge(Cause))).ToUpper());
+	}
+
+	FWonderWebObserverLook ResolveObserverLook(const FWonderWebObserverView& View)
+	{
+		FObserverViewInput Input;
+		Input.bHasOutlineColorToken = View.OutlineColorToken.IsSet();
+		Input.OutlineColorToken = Input.bHasOutlineColorToken ? ToUtf8(View.OutlineColorToken.GetValue()) : std::string();
+		Input.OwnerName = ToUtf8(View.OwnerName);
+		Input.bHasTitle = View.Title.IsSet();
+		Input.Title = Input.bHasTitle ? ToUtf8(View.Title.GetValue()) : std::string();
+		Input.Status = ToUtf8(View.Status);
+		const FObserverLook Resolved = ResolveObserver(Input);
+
+		FWonderWebObserverLook Look;
+		Look.OwnerName = FromUtf8(Resolved.OwnerName);
+		Look.Title = FromUtf8(Resolved.Title);
+		Look.bTitleShown = Resolved.bTitleShown;
+		Look.StatusLabel = FromUtf8(Resolved.StatusLabel);
+		Look.bOutlineResolved = Resolved.bOutlineResolved;
+		Look.Outline = FLinearColor(Resolved.Outline.R, Resolved.Outline.G, Resolved.Outline.B, 1.0f);
 		return Look;
 	}
 
@@ -448,6 +717,7 @@ void SWonderWebVmEndedVeil::Construct(const FArguments& InArgs)
 	using namespace WonderWebLook;
 	Shown = InArgs._Shown;
 	Accent = InArgs._Accent;
+	Label = InArgs._Label;
 	// THE BADGE'S RING IS ITS OWN FILL, TINTED: the outline colour arrives per window, a brush's outline does not.
 	BadgeBrush = FSlateRoundedBoxBrush(FLinearColor::White, 16.0f, FLinearColor::White, 0.0f);
 	BadgeInnerBrush = FSlateRoundedBoxBrush(Ink(0.94f), 13.0f, Ink(0.0f), 0.0f);
@@ -480,12 +750,71 @@ void SWonderWebVmEndedVeil::Construct(const FArguments& InArgs)
 				.Padding(FMargin(34.0f, 14.0f))
 				[
 					SNew(STextBlock)
-					.Text(FText::FromString(UTF8_TO_TCHAR(WonderlandWonderWebWindowLook::VmEndedBadge)))
+					.Text_Lambda([this]() { return Label.Get(); })
 					.Font(Sans(24, true, 200))
 					.ColorAndOpacity_Lambda([this]() { return FSlateColor(Accent.Get()); })
 				]
 			]
 		]
 	];
+}
+
+void SWonderWebObserverCard::Construct(const FArguments& InArgs)
+{
+	using namespace WonderWebLook;
+	Look = WonderlandWonderWebWindowLook::ResolveObserverLook(InArgs._View);
+	// THE OUTLINE IS THE CARD'S OWN FILL, TINTED, like the VM ENDED badge: the colour arrives per card.
+	CardBrush = FSlateRoundedBoxBrush(FLinearColor::White, 10.0f, FLinearColor::White, 0.0f);
+
+	// FOUR FIELDS AND NOTHING ELSE: no content slot, no frame, no URL, no page, no action.
+	ChildSlot
+	[
+		SNew(SBorder)
+		.BorderImage(&CardBrush)
+		.BorderBackgroundColor_Lambda([this]() { return FSlateColor(Look.Outline); })
+		.Padding(2.0f)
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(Ink(0.94f))
+			.Padding(FMargin(14.0f, 8.0f))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				[
+					SNew(STextBlock)
+					.Text_Lambda([this]() { return FText::FromString(Look.OwnerName); })
+					.Font(Sans(16, true, 20))
+					.ColorAndOpacity_Lambda([this]() { return FSlateColor(Look.Outline); })
+					.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+				]
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				[
+					SNew(STextBlock)
+					.Text_Lambda([this]() { return FText::FromString(Look.Title); })
+					.Visibility_Lambda([this]() { return Look.bTitleShown ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+					.Font(Sans(13, false, 20))
+					.ColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 0.82f))
+					.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+				]
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				[
+					SNew(STextBlock)
+					.Text_Lambda([this]() { return FText::FromString(Look.StatusLabel.ToUpper()); })
+					.Font(Sans(11, true, 160))
+					.ColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, 0.6f))
+				]
+			]
+		]
+	];
+}
+
+void SWonderWebObserverCard::SetView(const FWonderWebObserverView& InView)
+{
+	Look = WonderlandWonderWebWindowLook::ResolveObserverLook(InView);
+	Invalidate(EInvalidateWidgetReason::Paint);
 }
 #endif

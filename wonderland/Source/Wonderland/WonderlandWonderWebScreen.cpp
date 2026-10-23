@@ -42,6 +42,7 @@ namespace WonderWebScreenTuning
 	// CLOSE IS NOT THE FOLD (founder, 2026-10-23): a closed window shrinks a little and fades, in its own time.
 	TAutoConsoleVariable<float> CVarCloseSeconds(TEXT("wl.WonderWeb.CloseSeconds"), 0.22f, TEXT("Wonder Web window: seconds for the close animation (a short shrink and fade, distinct from the minimize fold)."));
 	TAutoConsoleVariable<float> CVarVmEndedSeconds(TEXT("wl.WonderWeb.VmEndedSeconds"), 0.45f, TEXT("Wonder Web window: seconds for the VM ENDED veil to dim the glass."));
+	TAutoConsoleVariable<float> CVarVmEndedHoldSeconds(TEXT("wl.WonderWeb.VmEndedHoldSeconds"), 1.6f, TEXT("Wonder Web window: seconds the VM ENDED badge is held, fully shown, before the panel leaves."));
 	TAutoConsoleVariable<float> CVarResizeSeconds(TEXT("wl.WonderWeb.ResizeSeconds"), 0.16f, TEXT("Wonder Web window: the timescale of growing or shrinking to a new size, seconds."));
 	// A BACKGROUND WINDOW KEEPS WORKING AND IS DRAWN LESS OFTEN: the focused one every frame, the others once every few.
 	TAutoConsoleVariable<int32> CVarBackgroundRedrawFrames(TEXT("wl.WonderWeb.BackgroundRedrawFrames"), 4,
@@ -145,14 +146,72 @@ void AWonderlandWonderWebScreen::PresentWithIntent(const FVector2D& WindowSize, 
 	{
 		bVmEnded = false;
 		VmEndedShown = 0.0f;
+		VmEndedLeaveIn = -1.0f;
+		EndCause = EEndCause::None;
 		Look.bVmEnded = false;
+		Look.EndCause = EEndCause::None;
 	}
+}
+
+void AWonderlandWonderWebScreen::PresentQueuedChip(const FVector2D& WindowSize, const FVector2D& ChipSize, AWonderlandWonderWebWorkspace* InWorkspace)
+{
+	using namespace WonderlandWonderWebWindowLook;
+	// PAST THE CAP: presented straight into the chip. Grow stays where it is (0 for a window that never stood), so
+	// nothing unfolds, nothing folds, and the camera is not asked for.
+	PresentWithIntent(WindowSize, ChipSize, InWorkspace, EVisualIntent::SpawnInline);
+	SetMinimized(PlanForAdmission(EAdmission::QueuedChip).bStartsAsChip);
+}
+
+bool AWonderlandWonderWebScreen::ApplyCue(const WonderlandWonderWebWindowLook::FForgeCue& Cue)
+{
+	const WonderlandWonderWebWindowLook::FCuePlan Read = WonderlandWonderWebWindowLook::PlanForCue(Cue);
+	if (!Read.bKnown)
+	{
+		return false;
+	}
+	ApplyIntent(Read.Intent, Read.EndCause);
+	return true;
 }
 
 void AWonderlandWonderWebScreen::ApplyIntent(WonderlandWonderWebWindowLook::EVisualIntent Intent)
 {
+	ApplyIntent(Intent, WonderlandWonderWebWindowLook::EEndCause::None);
+}
+
+void AWonderlandWonderWebScreen::ApplyIntent(WonderlandWonderWebWindowLook::EVisualIntent Intent, WonderlandWonderWebWindowLook::EEndCause Cause)
+{
 	using namespace WonderlandWonderWebWindowLook;
 	const FIntentPlan Plan = PlanFor(Intent);
+	if (Plan.bCameraReturn)
+	{
+		// THE CAMERA IS THE WINDOW MANAGER'S: nothing for a window to draw.
+		return;
+	}
+	if (Plan.bMarksVmEnded)
+	{
+		// THE VM REALLY ENDED: the veil and the cause's badge go up now; the panel leaves once they have been read (Tick).
+		// A chip has no glass to veil, so it leaves at once.
+		bVmEnded = true;
+		EndCause = Cause;
+		Look.bVmEnded = true;
+		Look.EndCause = Cause;
+		VmEndedLeaveIn = VmEndedLeaveDelay(bMinimized, WonderWebScreenTuning::CVarVmEndedSeconds.GetValueOnGameThread(),
+			WonderWebScreenTuning::CVarVmEndedHoldSeconds.GetValueOnGameThread());
+		bDragging = false;
+		if (VmEndedLeaveIn <= 0.0f)
+		{
+			VmEndedLeaveIn = -1.0f;
+			bPresented = false;
+			ExitStyle = Plan.Exit;
+		}
+		return;
+	}
+	if (Plan.bRestores)
+	{
+		ExitStyle = EExitStyle::Fold;
+		SetMinimized(false);
+		return;
+	}
 	if (Plan.bOpens)
 	{
 		PresentWithIntent(WindowPixels, ChipPixels, Workspace.Get(), Intent);
@@ -173,21 +232,23 @@ void AWonderlandWonderWebScreen::ApplyIntent(WonderlandWonderWebWindowLook::EVis
 		ExitStyle = Plan.Exit;
 		return;
 	}
-	if (Plan.bMarksVmEnded)
-	{
-		// THE WINDOW STAYS; its glass dims and the badge shows.
-		bVmEnded = true;
-		Look.bVmEnded = true;
-	}
 }
 
 void AWonderlandWonderWebScreen::SetWindowLook(const FWonderWebWindowLook& InLook)
 {
 	const bool bWasEnded = bVmEnded;
+	const WonderlandWonderWebWindowLook::EEndCause WasCause = EndCause;
 	Look = InLook;
-	// THE SESSION STATE IN THE LOOK CAN END A VM; ONLY A SPAWN CLEARS IT. A look refresh never un-ends a VM.
+	// THE SESSION STATE IN THE LOOK CAN END A VM; ONLY A SPAWN CLEARS IT. A look refresh never un-ends a VM. It only
+	// shows the veil: the panel leaves on FORGE's vm_ended_anim, not on a look.
 	bVmEnded = bWasEnded || InLook.bVmEnded;
 	Look.bVmEnded = bVmEnded;
+	if (bWasEnded && InLook.EndCause == WonderlandWonderWebWindowLook::EEndCause::None)
+	{
+		Look.EndCause = WasCause;
+	}
+	EndCause = bVmEnded ? Look.EndCause : WonderlandWonderWebWindowLook::EEndCause::None;
+	Look.EndCause = EndCause;
 }
 
 FLinearColor AWonderlandWonderWebScreen::GetOutlineColour() const
@@ -228,6 +289,17 @@ void AWonderlandWonderWebScreen::Tick(float DeltaSeconds)
 	Grow = FMath::Clamp(Grow + ((bPresented && !bMinimized) ? 1.0f : -1.0f) * DeltaSeconds / WindowSeconds, 0.0f, 1.0f);
 	ChipGrow = FMath::Clamp(ChipGrow + ((bPresented && bMinimized) ? 1.0f : -1.0f) * DeltaSeconds / Seconds, 0.0f, 1.0f);
 	VmEndedShown = WonderlandWonderWebWindowLook::StepVeil(VmEndedShown, bVmEnded, DeltaSeconds, CVarVmEndedSeconds.GetValueOnGameThread());
+	if (VmEndedLeaveIn >= 0.0f)
+	{
+		// VM ENDED, READ, THEN GONE: after the veil's fade and the hold the panel leaves with the close motion.
+		VmEndedLeaveIn -= DeltaSeconds;
+		if (VmEndedLeaveIn <= 0.0f)
+		{
+			VmEndedLeaveIn = -1.0f;
+			bPresented = false;
+			ExitStyle = WonderlandWonderWebWindowLook::EExitStyle::Close;
+		}
+	}
 
 	// THE SIZE, critically damped toward the target like the glide: an expanded window grows, and settles, without bounce.
 	FMath::CriticallyDampedSmoothing(SizeShown, SizeRate, SizeFactor, 0.0f, FMath::Min(DeltaSeconds, 0.1f), FMath::Max(CVarResizeSeconds.GetValueOnGameThread(), 0.02f));
@@ -579,6 +651,7 @@ void SWonderlandWonderWebInputLayer::Present(AWonderlandWonderWebScreen* Screen,
 							SAssignNew(Entry->Veil, SWonderWebVmEndedVeil)
 							.Shown_Lambda([WeakScreen]() { const AWonderlandWonderWebScreen* Owner = WeakScreen.Get(); return Owner != nullptr ? Owner->GetVmEndedShown() : 0.0f; })
 							.Accent_Lambda([WeakScreen]() { const AWonderlandWonderWebScreen* Owner = WeakScreen.Get(); return Owner != nullptr ? Owner->GetOutlineColour() : WonderWebLook::Line(); })
+							.Label_Lambda([WeakScreen]() { const AWonderlandWonderWebScreen* Owner = WeakScreen.Get(); return WonderlandWonderWebWindowLook::VmEndedBadgeText(Owner != nullptr ? Owner->GetEndCause() : WonderlandWonderWebWindowLook::EEndCause::None); })
 						]
 					]
 				]

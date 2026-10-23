@@ -80,8 +80,22 @@ public:
 	 * fresh session: the VM ENDED look is cleared. The camera blend is the caller's: the window only records the intent.
 	 */
 	void PresentWithIntent(const FVector2D& WindowSize, const FVector2D& ChipSize, AWonderlandWonderWebWorkspace* Workspace, WonderlandWonderWebWindowLook::EVisualIntent Intent);
-	/** Minimize folds to the chip; Close leaves with the close animation; VmEnded keeps the window and dims it. A spawn intent re-presents at the current size. */
+	/**
+	 * Minimize folds to the chip; RestoreUnfold unfolds it; Close leaves with the close animation; VmEnded dims the glass,
+	 * shows the badge and then leaves with the close motion (a chip leaves at once); CameraReturn does nothing to a window.
+	 * A spawn intent re-presents at the current size.
+	 */
 	void ApplyIntent(WonderlandWonderWebWindowLook::EVisualIntent Intent);
+	/** ApplyIntent with the session's end cause, for VmEnded (ignored for every other intent: a close is never a cause). */
+	void ApplyIntent(WonderlandWonderWebWindowLook::EVisualIntent Intent, WonderlandWonderWebWindowLook::EEndCause Cause);
+	/** FORGE's AnimationCue as it arrived. An unknown intent does nothing and returns false. */
+	bool ApplyCue(const WonderlandWonderWebWindowLook::FForgeCue& Cue);
+	/** A cap-queued (7th+) window: present it straight into its chip. It never unfolds, so it never folds; no camera. */
+	void PresentQueuedChip(const FVector2D& WindowSize, const FVector2D& ChipSize, AWonderlandWonderWebWorkspace* Workspace);
+	/** Gone: not presented, and both the window and the chip have finished leaving (FORGE's SettleClosing point). */
+	bool HasLeft() const { return !bPresented && Grow <= 0.0f && ChipGrow <= 0.0f; }
+	/** The VM's end cause while the VM ENDED look is on (None otherwise). */
+	WonderlandWonderWebWindowLook::EEndCause GetEndCause() const { return EndCause; }
 	/** The intent the window was last spawned with (SpawnInline until one is given). */
 	WonderlandWonderWebWindowLook::EVisualIntent GetSpawnIntent() const { return SpawnIntent; }
 	/** How the window leaves (or folds) right now: Fold unless a Close intent is under way. */
@@ -180,6 +194,9 @@ private:
 	WonderlandWonderWebWindowLook::EExitStyle ExitStyle = WonderlandWonderWebWindowLook::EExitStyle::Fold;
 	bool bVmEnded = false;
 	float VmEndedShown = 0.0f;
+	WonderlandWonderWebWindowLook::EEndCause EndCause = WonderlandWonderWebWindowLook::EEndCause::None;
+	/** vm_ended_anim: seconds left before the panel leaves (negative when no leave is pending). */
+	float VmEndedLeaveIn = -1.0f;
 };
 
 /**
