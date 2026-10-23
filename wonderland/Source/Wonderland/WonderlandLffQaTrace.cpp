@@ -1034,13 +1034,41 @@ static void OnQaEnabled(IConsoleVariable* Var) {
 	if (Var != nullptr && Var->GetInt() == 1) ArmHeartbeat();
 }
 
-static FAutoConsoleCommandWithArgs PostCommand(TEXT("wl.Qa.LFF.Post"), TEXT("Post a Looking for Feed listing: wl.Qa.LFF.Post <category> [title...]. Off unless wl.Qa.LFF.Enabled is 1."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Post")); }));
-static FAutoConsoleCommandWithArgs WithdrawCommand(TEXT("wl.Qa.LFF.Withdraw"), TEXT("Withdraw a Looking for Feed listing: wl.Qa.LFF.Withdraw <id>."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Withdraw")); }));
-static FAutoConsoleCommandWithArgs FilterCommand(TEXT("wl.Qa.LFF.Filter"), TEXT("Filter the Looking for Feed: wl.Qa.LFF.Filter <category>, or all, none, or clear."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Filter")); }));
-static FAutoConsoleCommandWithArgs RequestCommand(TEXT("wl.Qa.LFF.Request"), TEXT("Request to join a Looking for Feed listing: wl.Qa.LFF.Request <id> [message...]."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Request")); }));
-static FAutoConsoleCommandWithArgs AcceptCommand(TEXT("wl.Qa.LFF.Accept"), TEXT("Accept a Looking for Feed request: wl.Qa.LFF.Accept <id>."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Accept")); }));
-static FAutoConsoleCommandWithArgs DeclineCommand(TEXT("wl.Qa.LFF.Decline"), TEXT("Decline a Looking for Feed request: wl.Qa.LFF.Decline <id>."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Decline")); }));
-static FAutoConsoleCommandWithArgs DumpCommand(TEXT("wl.Qa.LFF.Dump"), TEXT("Print the current Looking for Feed QA state as one JSON line."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Dump")); }));
+static FAutoConsoleCommand PostCommand(
+	TEXT("wl.Qa.LFF.Post"),
+	TEXT("Post a Looking for Feed listing: wl.Qa.LFF.Post <category> [title...]. Off unless wl.Qa.LFF.Enabled is 1."),
+	FConsoleCommandWithArgsDelegate::CreateStatic(&Dispatch, TEXT("wl.Qa.LFF.Post")),
+	ECVF_Default);
+static FAutoConsoleCommand WithdrawCommand(
+	TEXT("wl.Qa.LFF.Withdraw"),
+	TEXT("Withdraw a Looking for Feed listing: wl.Qa.LFF.Withdraw <id>."),
+	FConsoleCommandWithArgsDelegate::CreateStatic(&Dispatch, TEXT("wl.Qa.LFF.Withdraw")),
+	ECVF_Default);
+static FAutoConsoleCommand FilterCommand(
+	TEXT("wl.Qa.LFF.Filter"),
+	TEXT("Filter the Looking for Feed: wl.Qa.LFF.Filter <category>, or all, none, or clear."),
+	FConsoleCommandWithArgsDelegate::CreateStatic(&Dispatch, TEXT("wl.Qa.LFF.Filter")),
+	ECVF_Default);
+static FAutoConsoleCommand RequestCommand(
+	TEXT("wl.Qa.LFF.Request"),
+	TEXT("Request to join a Looking for Feed listing: wl.Qa.LFF.Request <id> [message...]."),
+	FConsoleCommandWithArgsDelegate::CreateStatic(&Dispatch, TEXT("wl.Qa.LFF.Request")),
+	ECVF_Default);
+static FAutoConsoleCommand AcceptCommand(
+	TEXT("wl.Qa.LFF.Accept"),
+	TEXT("Accept a Looking for Feed request: wl.Qa.LFF.Accept <id>."),
+	FConsoleCommandWithArgsDelegate::CreateStatic(&Dispatch, TEXT("wl.Qa.LFF.Accept")),
+	ECVF_Default);
+static FAutoConsoleCommand DeclineCommand(
+	TEXT("wl.Qa.LFF.Decline"),
+	TEXT("Decline a Looking for Feed request: wl.Qa.LFF.Decline <id>."),
+	FConsoleCommandWithArgsDelegate::CreateStatic(&Dispatch, TEXT("wl.Qa.LFF.Decline")),
+	ECVF_Default);
+static FAutoConsoleCommand DumpCommand(
+	TEXT("wl.Qa.LFF.Dump"),
+	TEXT("Print the current Looking for Feed QA state as one JSON line."),
+	FConsoleCommandWithArgsDelegate::CreateStatic(&Dispatch, TEXT("wl.Qa.LFF.Dump")),
+	ECVF_Default);
 
 static struct FQaHeartbeatHook {
 	FQaHeartbeatHook() {
