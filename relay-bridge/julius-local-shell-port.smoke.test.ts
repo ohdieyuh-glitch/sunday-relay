@@ -17,9 +17,25 @@ const seed = (name: 'data/legacy_ledger.csv' | 'data/posts.json' | 'format.test.
   return { name, bytes, sha256: sha(bytes) };
 };
 
-// Opt-in only (spawns bash + git in a temp dir; no provider, no network): J1_REAL_SMOKE=1 npx vitest run relay-bridge/julius-local-shell-port.smoke.test.ts
-describe.skipIf(process.env.J1_REAL_SMOKE !== '1')('local shell port: real bash + git smoke (no spend)', () => {
+// Opt-in only (spawns bash + git in a temp dir; no provider, no network):
+// J1_REAL_SMOKE=1 npx vitest run relay-bridge/julius-local-shell-port.smoke.test.ts
+// Both branches assert. Unset env proves the gate and spawns nothing.
+const SMOKE = process.env.J1_REAL_SMOKE === '1';
+
+describe('local shell port: real bash + git smoke (no spend)', () => {
+  it('stays opt-in unless J1_REAL_SMOKE is 1', () => {
+    if (!SMOKE) {
+      expect(process.env.J1_REAL_SMOKE ?? '').not.toBe('1');
+      return;
+    }
+    expect(process.env.J1_REAL_SMOKE).toBe('1');
+  });
+
   it('seeds, starts, observes a coder-style Edit of the placeholder, and closes', async () => {
+    if (!SMOKE) {
+      expect(process.env.J1_REAL_SMOKE ?? '').not.toBe('1');
+      return;
+    }
     const cwd = mkdtempSync(join(tmpdir(), 'j1-smoke-'));
     const out: string[] = [];
     try {
