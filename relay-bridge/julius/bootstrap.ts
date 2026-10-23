@@ -86,6 +86,44 @@ const juliusBootstrapIdentity = (request: Pick<JuliusBootstrapRequest, 'idempote
 export const juliusBootstrapRunId = (request: Pick<JuliusBootstrapRequest, 'idempotencyKey' | 'rerunIntent' | 'rerunKey'>): string =>
   `run:${juliusBootstrapIdentity(request)}`;
 
+/**
+ * THE ID THE GAME POLLS. Wonderland admission mints `run:` plus 24 lowercase
+ * hex. Julius otherwise names the run `run:${idempotencyKey}` (above), and a
+ * poll of the admission id then cannot find the run.
+ *
+ * `none` is the workflow's absent sentinel, the same fact as an empty value.
+ */
+export const JULIUS_SERVER_RUN_ID = /^run:[0-9a-f]{24}$/u;
+export const JULIUS_J1_NAMESPACE = 'julius-inworld-data-1';
+const ABSENT_SERVER_RUN_ID = new Set(['', 'none']);
+
+export function adoptJuliusServerRunId(input: {
+  readonly request: Pick<JuliusBootstrapRequest, 'idempotencyKey' | 'rerunIntent' | 'rerunKey' | 'missionId'>;
+  readonly serverRunId: string | undefined;
+  readonly namespace?: string;
+}): { readonly ok: true; readonly runId: string } | { readonly ok: false; readonly reasonCode: 'server_run_id_required' | 'server_run_id_mismatch'; readonly safeMessage: string } {
+  const supplied = (input.serverRunId ?? '').trim();
+  const j1 = input.request.missionId === JULIUS_J1_NAMESPACE || input.namespace === JULIUS_J1_NAMESPACE;
+  if (ABSENT_SERVER_RUN_ID.has(supplied)) {
+    if (j1) {
+      return {
+        ok: false,
+        reasonCode: 'server_run_id_required',
+        safeMessage: 'Wonderland J1 (julius-inworld-data-1) requires JULIUS_SERVER_RUN_ID, run: plus 24 lowercase hex, before any spend.',
+      };
+    }
+    return { ok: true, runId: juliusBootstrapRunId(input.request) };
+  }
+  if (!JULIUS_SERVER_RUN_ID.test(supplied)) {
+    return {
+      ok: false,
+      reasonCode: 'server_run_id_mismatch',
+      safeMessage: 'JULIUS_SERVER_RUN_ID must be run: plus 24 lowercase hex. Naming the run anything else would miss the game poll, so this bootstrap is refused before any spend.',
+    };
+  }
+  return { ok: true, runId: supplied };
+}
+
 const REQUIRED_ROLES = ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'] as const;
 
 export function createLiveJuliusBootstrapPort(deps: {
@@ -116,6 +154,14 @@ export function createLiveJuliusBootstrapPort(deps: {
   readonly tenantId: string;
   readonly executionId: string;
   readonly now?: () => string;
+  /**
+   * `JULIUS_SERVER_RUN_ID` from the process environment, passed in by the live
+   * entrypoint. Absent, or the workflow sentinel `none`, keeps today's run name
+   * except on Wonderland J1, which refuses before any store write.
+   */
+  readonly serverRunId?: string;
+  /** The contract's `markerNamespace`. J1 is `julius-inworld-data-1` on this or on `missionId`. */
+  readonly namespace?: string;
 }): JuliusBootstrapPort {
   const now = deps.now ?? (() => new Date().toISOString());
   const refuse = (reasonCode: string, safeMessage: string, retryable = false): JuliusBootstrapOutcome =>
@@ -164,8 +210,14 @@ export function createLiveJuliusBootstrapPort(deps: {
           'An explicit rerun must carry a key of its own, so that repeating the request cannot buy a second execution. '
           + 'Send one stable token per intended rerun.');
       }
+      const adopted = adoptJuliusServerRunId({
+        request,
+        serverRunId: deps.serverRunId,
+        namespace: deps.namespace,
+      });
+      if (!adopted.ok) return refuse(adopted.reasonCode, adopted.safeMessage);
       const identity = juliusBootstrapIdentity(request);
-      const runId = `run:${identity}`;
+      const runId = adopted.runId;
       const projectBrainRevision = Number.parseInt(request.projectBrain.revision, 10);
       try {
         await deps.seeds.ensureBase({

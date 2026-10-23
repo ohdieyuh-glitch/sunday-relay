@@ -959,6 +959,8 @@ async function main(argv: readonly string[]): Promise<number> {
         : {}),
       tenantId: contract.tenantId,
       executionId,
+      serverRunId: env.JULIUS_SERVER_RUN_ID,
+      namespace: contract.markerNamespace,
     });
     const submitted = await bootstrap.submit(request);
     if (!submitted.accepted) {
