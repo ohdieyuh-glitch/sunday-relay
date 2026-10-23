@@ -1,19 +1,20 @@
 # Wonderland landing route (2026-10-23)
 
 Author: Cosmo (Wonderland dev agent). Status: proposal for Skywalker's exact-head review.
-Revision 8: fixes [R7-1]..[R7-4] from Skywalker's PASS WITH FINDINGS of rev 7 `9a0fa7b0`. It states ONE route for the
+Revision 9: fixes [R8-1]..[R8-4] from Skywalker's PASS WITH FINDINGS of rev 8 `4e4af095` (see section 8.0).
+Revision 8 fixed [R7-1]..[R7-4] from Skywalker's PASS WITH FINDINGS of rev 7 `9a0fa7b0`. It states ONE route for the
 Wonderland worker commit, the lander `julius-land` (section 3), and records who starts it and the room updates
-(see section 8.0).
+(section 8.1).
 Revision 7 fixed [R6-1]..[R6-3] from Skywalker's PASS WITH FINDINGS of rev 6 `c233261e`, and recorded the state after
-#395 landed at main `f539cab2` (new section 1.2; see section 8.1).
+#395 landed at main `f539cab2` (new section 1.2; see section 8.2).
 Revision 6 fixed [R5-1]..[R5-4] from Skywalker's PASS WITH FINDINGS of rev 5 `19353d85`, recorded YUJI as the
-App-credential holder and identity-hardening owner, and added [FR-6] (section 8.2).
+App-credential holder and identity-hardening owner, and added [FR-6] (section 8.3).
 Revision 5 applied the founder's FINAL rulings of 2026-10-23, 7:27 AM PT ([FR-1]..[FR-5]) and fixed [R4-1]..[R4-3] from
-Skywalker's PASS WITH FINDINGS of rev 4 `ca9400ac` (section 8.3).
+Skywalker's PASS WITH FINDINGS of rev 4 `ca9400ac` (section 8.4).
 Revision 4 fixed [R3-1]..[R3-4], the re-run answer [RR] and the no-branch-protection note [BP] from Skywalker's PASS WITH
-FINDINGS of rev 3 `cb68c692` (section 8.4).
-Revision 3 fixed [R2-1]..[R2-4] from Skywalker's PASS WITH FINDINGS of rev 2 `aa7a5188` (section 8.5).
-Revision 2 fixed [RD-1]..[RD-6] from Skywalker's FAIL of rev 1 `f3d6ebc7` (section 8.6). [RD-7] spoofing content stayed
+FINDINGS of rev 3 `cb68c692` (section 8.5).
+Revision 3 fixed [R2-1]..[R2-4] from Skywalker's PASS WITH FINDINGS of rev 2 `aa7a5188` (section 8.6).
+Revision 2 fixed [RD-1]..[RD-6] from Skywalker's FAIL of rev 1 `f3d6ebc7` (section 8.7). [RD-7] spoofing content stayed
 unchanged until rev 5 ([FR-4]).
 Citations up to rev 6 are `file:line` at main `689d2be92c3158ba4a59883ed4f6cc02f700660b` (tree `ecfe4f5c`, parent
 `3f20fc1a`), re-read line by line before writing. Corrections to earlier citations are listed in section 7.
@@ -26,7 +27,10 @@ check `:290-292` is `:293-296` @f539.
 [A59C] Citations marked `@a59c` are at `a59c2d73d644f3ef9fa7655c14ecd7f97489726c`, the head of draft #400, stacked on
 #398 `63a48f64` and #397 `55d05fd3` (compare `f539cab2...a59c2d73`: ahead 5, behind 0). The stack changes
 `allowed-branches.txt`, `land-lib.mjs` and `julius-main-provenance.mjs` (blobs @a59c `4bb6f902`, `83c04970`, `de3e9b2c`),
-not `land.mjs` or `julius-land.yml`. They apply only if the installer lands that stack unchanged.
+not `land.mjs` or `julius-land.yml`. They apply only if the installer lands that stack unchanged. [R8-2] The lander runs
+main's own copy of its code (`julius-land.yml:73`; workflow commit = main's tip, `land-lib.mjs:342` @a59c), and the
+provenance check runs on main too. So on the Wonderland route the @a59c code governs, and the @f539 lines are kept
+only as the record of what main carries today. Skywalker's review of #397, #398 and #400 is still pending.
 Re-pinning every older citation is left to a later revision.
 
 ## 1. Context
@@ -56,6 +60,7 @@ Re-pinning every older citation is left to a later revision.
     [R7-4] The source is the founder's directive in the room. The limits are not in the repository, so they cannot be
     checked against main's tree.
   - [R7-room] BRIDGE took RID-6 server-side, the J1 wrapper and the item-9 trace (scope assignment, room, 9:13 AM PT).
+    [R8-4] Room-sourced; not checked against GitHub.
     That moves the item-9 client trace from Cosmo to BRIDGE. Cosmo keeps the J1 client code and this route.
   - The rulings on R4-F and run-id (c) belong to the C2/J1 resolutions doc and are not restated here.
   - None of these rulings changes a gate in this doc. Every gate cited here stays as coded at `689d2be9`.
@@ -224,7 +229,7 @@ section 3.
 
 This is the ONE route for the Wonderland worker commit. #400's allowlist entry exists for it. The worker-PR squash
 (section 4) is not used for this commit. YUJI agrees with this route through #400's entry, with provenance conditional
-on the signed-landing check (YUJI, room, 9:20 AM PT).
+on the signed-landing check (YUJI, room, 9:20 AM PT; [R8-4] room-sourced, not checked against GitHub).
 
 There is no founder review on this route. The gate is Skywalker's signed clearance. The PR is closed without merging,
 and the lander's own commit lands on main.
@@ -237,8 +242,17 @@ and `evaluateSignedLanding` (`julius-main-provenance.mjs:235-311` @f539, `:330-4
 2. **Clear the source.** Skywalker clears the exact source tree as the App's copy source. Done for r2 `a821a467` (1.2).
    That is not an approval to land.
 3. **Wait for the installer.** Nothing below starts until the one G6 installer carrying #397, #398 and #400 has landed
-   (1.2). Without #400's entry (`allowed-branches.txt:15` @a59c) the lander refuses the branch (`land-lib.mjs:113`
-   @f539, `:137` @a59c).
+   (1.2). [R8-1] Why each is needed:
+   - **#400 is a hard dependency.** Without its entry (`allowed-branches.txt:15` @a59c) the lander refuses the branch
+     (`land-lib.mjs:137` @a59c; `:113` @f539).
+   - **#400 is stacked on #398, which is stacked on #397** (#400's base `63a48f64`, #398's base `55d05fd3`). As
+     packaged, the three land as one unit in that order. Landing #400 without #398 would mean re-cutting #400 and
+     reviewing it again.
+   - **#397 sets the identity rules** the App's PR must meet, at landing (`land-lib.mjs:112-136` @a59c) and in the
+     provenance check afterwards (`clearedHeadIdentityProblem`, `julius-main-provenance.mjs:266-314` @a59c, with
+     `authenticatedAuthor` built from the PR opener at `:915-923`).
+   - **#398 adds no lander or signed-landing requirement.** It adds a signed clearance as the approval on a worker-PR
+     squash only (`julius-main-provenance.mjs:406-426` @a59c). It is needed here only because #400 sits on it.
 4. **The App's worker commit and PR (YUJI, the App-credential holder, open item a).**
    - **Token.** Handled as in `RUNBOOK:108-121` ([RD-5]). It is never printed or put on a command line.
    - **One commit on the new main.** Its parent is main after the installer, and its tree is that main plus exactly the
@@ -247,38 +261,41 @@ and `evaluateSignedLanding` (`julius-main-provenance.mjs:235-311` @f539, `:330-4
    - **Push and open.** The App pushes it to `relay/julius-wonderland-j1-client-recut-20261023` (the branch the App
      pushes; Cosmo's source branch is not listed, `allowed-branches.txt:14` @a59c) and opens a non-draft PR to main.
      The opener must be the App (`RUNBOOK:134-143`).
-   - **What the lander checks on that PR**, at `land-lib.mjs` @f539:
-     - clearance PR number `:97`;
-     - open and not merged `:98`, and not a draft `:99` [R7-3];
-     - head equals the cleared head `:100`, in this repository `:101`, base `main` `:102`;
-     - main equals the cleared base `:103`;
-     - opener `julius-worker[bot]` `:104` (`APP_LOGIN`, `:6`), and exactly one commit `:105`;
-     - head tree equals the cleared tree `:106`, with one parent equal to the cleared base `:107`;
-     - git author and committer names `:108`, and the resolved author login `:112`;
-     - allowlisted branch `:113`;
-     - complete file list `:116-117`, no founder-governed path `:119-120` (`HARD_FORBIDDEN_PATH`, `:21`);
-     - the bot-comment digest is unchanged since the clearance `:126`.
-   - **After #397** (@a59c) the opener must be the authenticated App account `:112-113`, of type `Bot` `:114`, with a
-     matching App id if one is reported `:115-116` (`WORKER_APP_ID`, `:8`). Git names and the email-derived login may
-     only agree with it; any mismatch fails closed (`:120-128`), and so does a verified signature by another signer
-     (`:129-136`).
-   - The 4 Wonderland paths match neither `HARD_FORBIDDEN_PATH` (`land-lib.mjs:21` @f539) nor
-     `SIGNED_LANDING_HARD_FORBIDDEN` (`julius-main-provenance.mjs:218` @f539). This was checked by applying both
-     regexes to the 4 paths for rev 8.
+   - **What the lander checks on that PR** [R8-2], as the installer lands it (`checkPullRequest`,
+     `land-lib.mjs:93-152` @a59c):
+     - clearance lifetime at most 24 hours `:98`, and clearance PR number `:99`;
+     - open and not merged `:100`, and not a draft `:101` [R7-3];
+     - head equals the cleared head `:102`, in this repository `:103`, base `main` `:104`;
+     - main equals the cleared base `:105`;
+     - the authenticated opener is `julius-worker[bot]` `:112-113` (`APP_LOGIN`, `:6`), of type `Bot` `:114`, with a
+       matching App id if one is reported `:115-116` (`WORKER_APP_ID`, `:8`);
+     - exactly one commit `:117`; head tree equals the cleared tree `:118`, with one parent equal to the cleared base `:119`;
+     - git names and the email-derived login may only agree with the opener; any mismatch fails closed (`:120-128`),
+       and so does a verified signature by another signer (`:129-136`);
+     - allowlisted branch `:137`;
+     - complete file list `:140-141`, no founder-governed path `:143-146` (`HARD_FORBIDDEN_PATH`, `:23`);
+     - the bot-comment digest is unchanged since the clearance `:150`.
+   - Record @f539 (main today, before the installer): the same function is `:91-128`, with the opener and one-commit
+     checks at `:104-105`, git names at `:108`, resolved author login at `:112`, allowlist at `:113` and non-draft at `:99`.
+   - The 4 Wonderland paths match neither `HARD_FORBIDDEN_PATH` (`land-lib.mjs:23` @a59c, `:21` @f539) nor
+     `SIGNED_LANDING_HARD_FORBIDDEN` (`julius-main-provenance.mjs:248` @a59c, `:218` @f539). This was checked by
+     applying both regexes to the 4 paths for rev 8; Skywalker repeated it at both SHAs (REPORT_rev8.md).
 5. **Required CI, with no workflow change.** The same dispatch, re-run and counting rules as section 4, step 4 apply.
    All 6 required checks must each appear exactly once and succeed on the PR head. The lander enforces this itself:
-   `checkCi` (`land-lib.mjs:142-164` @f539), called at `land.mjs:327` and `:337` @f539.
+   `checkCi` (`land-lib.mjs:166-188` @a59c; `:142-164` @f539), called at `land.mjs:327` and `:337` (unchanged by the stack).
 6. **Exact-head PASS and signed clearance (Skywalker).**
    - Skywalker verifies `head^{tree}` against the cleared tree and posts a fresh exact-head PASS.
    - Then Skywalker signs a clearance with the reviewer key `b0b8e29b` (open item h). It names this PR, its exact
      head, tree and base (main after the installer), a nonce, and the bot-comment digest. Its lifetime is at most
-     24 hours (`land-lib.mjs:96` @f539), and the signature is verified by `verifyClearanceSignature` at `:62-73`.
-   - The clearance is issued only after the installer that carries #398 has landed, because it must name that main
-     as its base (`land-lib.mjs:103` @f539).
+     24 hours (`land-lib.mjs:98` @a59c; `:96` @f539), and the signature is verified by `verifyClearanceSignature`
+     (`:65-75` @a59c; `:62-73` @f539).
+   - [R8-1] The clearance names main as it is when it is signed (`land-lib.mjs:105` @a59c), so it is signed after
+     main's last move before the landing. That is a timing rule, not a reason for #398 (step 3 gives the reasons).
+     If main moves after signing, see item d.
    - This signature is the gate. There is no founder review on this route, so [FR-3] and item i do not apply to it.
    - Kaisin's clock runs about 99 s slow; allow for it in the clearance window (1.2).
 7. **Land: YUJI starts `julius-land`.** [R7-2]
-   - **Trigger facts @f539.**
+   - **Trigger facts** (`julius-land.yml` is the same @f539 and @a59c).
      - The only trigger is `workflow_dispatch` (`julius-land.yml:31-32`).
      - Inputs: `pr` (`:34-37`), `head` (`:38-41`), `clearance_b64` (`:42-45`), `signature_b64` (`:46-49`), and
        `dry_run` (`:50-53`). `dry_run` is not required and defaults to `'true'` (`:52-53`). Its description is
@@ -286,10 +303,10 @@ and `evaluateSignedLanding` (`julius-main-provenance.mjs:235-311` @f539, `:330-4
      - The input reaches the job as `DRY_RUN` (`:93`), and `land.mjs:355` writes nothing unless it is exactly
        `false`. A default run writes nothing (`julius-land.yml:25`).
      - The job runs only on `refs/heads/main` (`:73`), and the workflow commit must be main's tip
-       (`land-lib.mjs:315` @f539).
+       (`land-lib.mjs:342` @a59c; `:315` @f539).
    - **Who starts it: YUJI** (YUJI, room, 9:20 AM PT). YUJI starts it through the founder-authorized `ohdieyuh-glitch`
-     connection, because the App has only Actions: read (`RUNBOOK:11-13`; the workflow's own permissions at
-     `julius-land.yml:57-62` include no `actions`).
+     connection, because the App has only Actions: read (`RUNBOOK:11-13`). [R8-3]
+     [R8-4] This statement is room-sourced and was not checked against GitHub; the run record below is.
      - Starting a run is not an approval. "A dispatcher, including a developer session, can hand this workflow a
        clearance but cannot make one" (`julius-land.yml:14`).
      - A run goes ahead only after Skywalker's exact-head clearance (step 6).
@@ -298,10 +315,11 @@ and `evaluateSignedLanding` (`julius-main-provenance.mjs:235-311` @f539, `:330-4
    - **Record.** GitHub lists 10 `julius-land.yml` runs (read for rev 8). All are `workflow_dispatch`, and their actor
      and triggering actor are both `ohdieyuh-glitch`. They ran on 2026-10-19 between 09:59:46 and 15:32:22 PT;
      8 succeeded and 2 failed.
-   - **What the lander does @f539.**
+   - **What the lander does** (`land.mjs` is the same @f539 and @a59c).
      - It creates its own commit: the cleared tree, one parent equal to the cleared base, and the signed clearance in its
        message (`land.mjs:342`, `:345`, created at `:366-370`). Author and committer are `github-actions[bot]`
-       (`LANDER_IDENTITY`, `land-lib.mjs:177`).
+       (`LANDER_IDENTITY`, `land-lib.mjs:201` @a59c; `:177` @f539).
+     - Just before landing it re-reads main and refuses if main is not the cleared base (`land.mjs:350-352`).
      - It advances main with a non-forced ref update (`land.mjs:391`) and spends the nonce as a tag (`land.mjs:3`).
      - It comments on the PR naming the landed commit (`land.mjs:422`), then closes the PR (`land.mjs:428`). The PR shows
        as closed, not merged; that is expected (dry-run summary, `land.mjs:361`).
@@ -311,24 +329,23 @@ and `evaluateSignedLanding` (`julius-main-provenance.mjs:235-311` @f539, `:330-4
    - **Provenance is restored only if** `node scripts/julius-main-provenance.mjs ohdieyuh-glitch/sunday-relay main`
      reports `provenant` on the resulting main and exits 0. Until it does, main stays unprovenanced and no paid run
      starts ([FD-0808]).
-   - **Signed-landing check @f539.** `evaluateSignedLanding` runs first (`julius-main-provenance.mjs:370-371`).
-     - A tip without a landing block is `absent` (`:237`), and the founder-approval path decides (`:91`). Any defect in a
-       present block is final and fails closed (`:91-95`).
+   - **Signed-landing check** [R8-2], as the installer lands it (`evaluateSignedLanding`,
+     `julius-main-provenance.mjs:330-404` @a59c). It runs first (`:566-567`).
+     - A tip without a landing block is `absent` (`:332`), and the founder-approval path decides. Any defect in a
+       present block is final and fails closed (`:118-122`).
      - It needs all of these:
-       - the nonce matches (`:251`);
-       - the reviewer key is read at the parent (`:254-258`), and the tip's key is byte-identical (`:262-267`);
-       - the signature verifies (`:269-277`);
-       - the clearance tree equals main's tree (`:280-282`), and its base equals the tip's parent (`:283-285`);
-       - the cleared head is readable (`:286-289`), and its tree matches (`:290-292`);
-       - the cleared head is authored by a worker (`:293-296`);
-       - the changed paths are read completely (`:298-301`), with no founder-governed path (`:302-307`).
-     - Only then does it return `provenant` (`:308-310`).
-   - **If the installer lands the stack unchanged** (@a59c), the function is `:330-404`:
-     - tree and base `:375-380`;
-     - cleared head `:381-387`;
-     - head identity `:388-389`, through `clearedHeadIdentityProblem` (`:266`) instead of `:293-296` @f539;
-     - paths `:390-400`;
-     - `provenant` `:401-403`.
+       - the nonce matches (`:346`);
+       - the reviewer key is read at the parent (`:349-353`), and the tip's key is byte-identical (`:357-362`);
+       - the signature verifies (`:364-372`);
+       - the clearance tree equals main's tree (`:375-377`), and its base equals the tip's parent (`:378-380`);
+       - the cleared head is readable, and its tree matches (`:381-387`);
+       - the cleared head's identity passes `clearedHeadIdentityProblem` (`:388-389`, function `:266-314`), using the
+         authenticated PR opener (`:915-923`);
+       - the changed paths are read completely (`:390-394`), with no founder-governed path (`:395-400`).
+     - Only then does it return `provenant` (`:401-403`).
+   - Record @f539 (main today): the function is `:235-311`, called at `:370-371`; absent `:237`, fail-closed comment
+     `:91-95`, nonce `:251`, keys `:254-267`, signature `:269-277`, tree and base `:280-285`, head `:286-292`, head
+     author a worker `:293-296`, paths `:298-307`, `provenant` `:308-310`.
    - **If it is not `provenant`:** stop and report to Skywalker. No other route is tried for this commit without a new
      review.
    - **Then accept-main.** Once main is `provenant`, YUJI starts `julius-accept-main.yml` on the new tip under the same
@@ -516,6 +533,10 @@ in section 3, steps 3-6.
   - Each squash lands on current main, and the pre-merge parent must be contained in the reviewed head (`julius-main-provenance.mjs:506-516`).
   - So Wonderland re-cuts serialize with Julius landings, and any main move forces a re-cut, a fresh PASS and a re-approval (`RUNBOOK:170-176`).
   - Julius landings take priority near live runs.
+  - [R8-2] **Lander route (section 3).** Any main move between Skywalker's clearance and the landing voids it: the base
+    check (`land-lib.mjs:105` @a59c) fails, and `land.mjs:350-352` re-reads main just before landing. That includes
+    #401, #403, #404 or a BRIDGE landing going first. So either Gatekeeper holds the queue (Gatekeeper sets the order)
+    between the installer and the Wonderland landing, or the App re-cuts on the new main and Skywalker re-signs.
 - **(e) [R3-1] [FR-2] DECIDED: option B** (squash route, section 4; [R7-1] not the Wonderland route). The
   `julius-worker` App does the section 4, step 7 squash automatically after exact-head
   independent approval and once every required gate passes. Option A is superseded. Executor: YUJI, holder of the App
@@ -619,7 +640,33 @@ MERGED PULL REQUESTS:
 Every changed citation was re-read at `689d2be9`. Citations point into other files at that fixed main, so the line
 shifts inside this document move none of them.
 
-### 8.0 Revision 8 (fixes to rev 7 `9a0fa7b0`, after Skywalker's PASS WITH FINDINGS)
+### 8.0 Revision 9 (fixes to rev 8 `4e4af095`, after Skywalker's PASS WITH FINDINGS)
+
+- **[R8-1] (low)** The `:103` reason for #398 is dropped from section 3 step 6 and from 8.1. Section 3 step 3 now
+  gives the real reasons:
+  - #400's entry is required (`allowed-branches.txt:15` → `land-lib.mjs:137` @a59c);
+  - #400 is stacked on #398 and #397, so the three land as one unit in that order, or #400 is re-cut;
+  - #397 sets the identity rules the App's PR must meet;
+  - #398 adds no lander or signed-landing requirement.
+  `land-lib.mjs:105` @a59c only means the clearance is signed after main's last move.
+- **[R8-2] (low)** Section 3 steps 4 and 8 now lead with the code that will run, post-installer main (@a59c). The
+  @f539 lines are kept as a record. Steps 5-7 give both. The [A59C] header says why: `julius-land.yml:73` and
+  `land-lib.mjs:342` @a59c. Item d adds the lander case: a main move after the clearance voids it (`land-lib.mjs:105`
+  @a59c, `land.mjs:350-352`), so Gatekeeper holds the queue or the App re-cuts and Skywalker re-signs.
+- **[R8-3] (nit)** The `julius-land.yml:57-62` clause is dropped from the dispatcher reason. That line range covers
+  the workflow token's permissions, not who may dispatch. The reason is the App's `actions=read` (`RUNBOOK:11-13`).
+- **[R8-4] (info)** YUJI's 9:20 AM PT statement and BRIDGE's 9:13 AM PT scope are marked as room-sourced and not
+  checked against GitHub (section 1, section 3 intro and step 7).
+- The [A59C] header also notes that Skywalker's review of #397, #398 and #400 is pending.
+- **Renumbering.** The fix lists are now 8.0 (rev 9) to 8.7 (rev 2). The header and the cross-reference in 8.6
+  [R2-2] are updated. Fix lists 8.1-8.7 keep their own text.
+- **Citations newly used, re-read @a59c** (blobs `land-lib.mjs` `83c04970`, `julius-main-provenance.mjs` `de3e9b2c`):
+  `land-lib.mjs:23`, `:65-75`, `:98-105`, `:117-119`, `:140-150`, `:166-188`, `:201`, `:342`;
+  `julius-main-provenance.mjs:118-122`, `:248`, `:266-314`, `:332`, `:346-403`, `:566-567`, `:915-923`;
+  `land.mjs:350-352` (blob `cb5aa4cd`, unchanged by the stack).
+- **Readiness:** unchanged, Wonderland 56.25%.
+
+### 8.1 Revision 8 (fixes to rev 7 `9a0fa7b0`, after Skywalker's PASS WITH FINDINGS)
 
 - **[R7-1] (medium)** ONE route for the Wonderland worker commit: the lander `julius-land` on the App-only branch
   `relay/julius-wonderland-j1-client-recut-20261023`, the branch #400's entry names.
@@ -647,8 +694,9 @@ shifts inside this document move none of them.
   the item-9 trace (9:13 AM PT, section 1).
 - **Against the brief.**
   - The lander already verifies signed clearances @f539 (`land-lib.mjs:62-73`). #398 adds a signed clearance as the
-    approval on a worker-PR squash (`julius-main-provenance.mjs:406-426` @a59c), not to the lander. On the lander route
-    #398 is an ordering dependency: the clearance must name the post-installer main as its base (`land-lib.mjs:103`).
+    approval on a worker-PR squash (`julius-main-provenance.mjs:406-426` @a59c), not to the lander. [R8-1] On the
+    lander route #398 is needed only because #400 is stacked on it (see 8.0; the `:103` reason given here in rev 8 was
+    wrong).
   - #397 changes the lander's identity checks and the signed-landing head-identity check. Both are cited @a59c
     (section 3, steps 4 and 8).
 - **Header [A59C].** New citations at #400's head `a59c2d73` are marked `@a59c`.
@@ -663,7 +711,7 @@ shifts inside this document move none of them.
     `julius-main-provenance.mjs:266`, `:330-404`, `:375-403`, `:406-426`.
 - **Readiness:** unchanged, Wonderland 56.25%.
 
-### 8.1 Revision 7 (fixes to rev 6 `c233261e`, after Skywalker's PASS WITH FINDINGS, plus the state at `f539cab2`)
+### 8.2 Revision 7 (fixes to rev 6 `c233261e`, after Skywalker's PASS WITH FINDINGS, plus the state at `f539cab2`)
 
 - **[R6-1] (low)** [FR-1], 1.1 point 1 and item h now name the pkg3 installer `FOUNDER_INSTALL_LANDING_395.sh`
   (sha256 `c281fe30…2c1e`) instead of "the existing installer". [FR-1] keeps the ruling's wording and adds that pkg3 is
@@ -704,7 +752,7 @@ shifts inside this document move none of them.
   - `RUNBOOK:11-13`.
 - **Readiness:** unchanged.
 
-### 8.2 Revision 6 (fixes to rev 5 `19353d85`, after Skywalker's PASS WITH FINDINGS)
+### 8.3 Revision 6 (fixes to rev 5 `19353d85`, after Skywalker's PASS WITH FINDINGS)
 
 - **[R5-1] (nit)** The rev 4 and rev 2 verdicts now read "PASS WITH FINDINGS", plural, matching REPORT_rev4.md and
   REPORT_rev2.md (header and the 8.1 and 8.3 headings).
@@ -731,7 +779,7 @@ shifts inside this document move none of them.
   `julius-accept-main.yml:17-18`, `:21-24`, `:70-71`, `:72-80`, `:116-119`, `:120-123`, `:141-145`, `:148-155`;
   `julius-main-provenance.mjs:663-665` (already used). None of rev 5's citations shifted.
 
-### 8.3 Revision 5 (fixes to rev 4 `ca9400ac`, after Skywalker's PASS WITH FINDINGS, plus the founder's 7:27 AM PT rulings)
+### 8.4 Revision 5 (fixes to rev 4 `ca9400ac`, after Skywalker's PASS WITH FINDINGS, plus the founder's 7:27 AM PT rulings)
 
 - **[FR-1] #395.** 1.1 point 1, section 1 [FR] and new open item h: approved to land at `32c5a2be` through the existing
   installer once Skywalker produces a legitimate G6 with the authorized Ed25519 key. The signing environment is still to
@@ -761,7 +809,7 @@ shifts inside this document move none of them.
   `julius-review-currency.mjs:66-69`, `:78`; `RUNBOOK:3-4`, `:166-168`; `required-checks.txt:4-9`. None of rev 4's
   citations shifted.
 
-### 8.4 Revision 4 (fixes to rev 3 `cb68c692`, after Skywalker's PASS WITH FINDINGS)
+### 8.5 Revision 4 (fixes to rev 3 `cb68c692`, after Skywalker's PASS WITH FINDINGS)
 
 - **[RR] Re-runs** (Skywalker's answer 1). Section 3, step 4 (re-run bullet and dispatcher bullet) now says:
   - re-running needs Actions: write, and the worker App's installation has only `actions=read` (`RUNBOOK:11-13`);
@@ -796,14 +844,14 @@ shifts inside this document move none of them.
   `julius-main-provenance.mjs:208`, `:388-389`, `:469-476`, `:645-652`, `:663-665`; `julius-land.yml:5-6`, `:22-23`;
   `RUNBOOK:11-14`, `:145-155`. None of rev 3's citations shifted; `RUNBOOK:13` for `actions=read` is widened to `:11-13`.
 
-### 8.5 Revision 3 (fixes to rev 2 `aa7a5188`, after Skywalker's PASS WITH FINDINGS)
+### 8.6 Revision 3 (fixes to rev 2 `aa7a5188`, after Skywalker's PASS WITH FINDINGS)
 
 - **[R2-1] (MEDIUM)** 1.1 point 3 no longer names #396 as the restoring squash.
   - #396 was opened by `ohdieyuh-glitch` and would fail `julius-main-provenance.mjs:450`.
   - The restoring squash is an App-opened worker re-cut (opened by `julius-worker[bot]`, re-authored per `RUNBOOK:70-88`)
     of #396's Skywalker-cleared tree, whose tree must equal the reviewed tree. #396 is then closed unmerged.
   - Stated for any PR, not just #396; also noted at section 3, step 3.
-- **[R2-2]** #395's head `32c5a2be` is a merge commit with parents `2dbe6430` and `689d2be9` (1.1 point 1, and 8.6 [RD-1]).
+- **[R2-2]** #395's head `32c5a2be` is a merge commit with parents `2dbe6430` and `689d2be9` (1.1 point 1, and 8.7 [RD-1]).
   - Rev 2 wrongly said `2dbe6430` was the direct parent. `689d2be9` is a parent as well as the merge base.
   - Re-verified with `git log` at `32c5a2be`: 4 commits ahead of `689d2be9`, 0 behind.
 - **[R2-3]** Through the founder's connected GitHub account, Cosmo may only dispatch main's unmodified
@@ -822,7 +870,7 @@ shifts inside this document move none of them.
 - **Citations re-checked at `689d2be9`:** `julius-main-provenance.mjs:450`; `RUNBOOK:70-88`, `:145`, `:145-155`, `:151-155`;
   `julius-review-currency.mjs:270-272`; `julius-real-infra.yml:4-5`. None shifted.
 
-### 8.6 Revision 2 (fixes to rev 1 `f3d6ebc7`, after Skywalker's FAIL)
+### 8.7 Revision 2 (fixes to rev 1 `f3d6ebc7`, after Skywalker's FAIL)
 
 Every changed citation was re-read at `689d2be9`.
 
