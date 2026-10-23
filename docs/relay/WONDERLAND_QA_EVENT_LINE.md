@@ -43,7 +43,11 @@ The first movement sample has `vx`, `vy`, and `vz` `null`. The next sample uses 
 Shipping builds do not register these.
 
 - `wl.Qa.Enabled` — no argument prints `QA instrumentation on` or `off` and changes nothing. `1` turns it on. `0` turns it off. While it is off, the other two commands print `QA instrumentation is off` and do not emit a JSON event.
-- `wl.Qa.Mission.Handoff` — no argument calls `WonderlandHandoffDirector::Equip`. `end` calls `Return`. Same presentation as `wl.Handoff.Equip` / `wl.Handoff.Return`. It does not dispatch a Julius mission.
+- `wl.Qa.Mission.Handoff` — no argument calls `WonderlandHandoffDirector::Equip`. `end` calls `Return`. Same presentation as `wl.Handoff.Equip` / `wl.Handoff.Return`. It does not dispatch a Julius mission. `Equip` and `Return` are the director's existing public functions (`WonderlandHandoffDirector.h`). `WonderlandHandoffDirector.cpp` is not modified.
+
+`wl.Qa.Enabled`, `wl.Qa.Mission.Handoff`, and `wl.Qa.Net.Drop` are registered from `WonderlandQaEventCommands.cpp`.
+
+`wl.Qa.FollowRemote` is a separate developer-session command in `WonderlandFollowQa.cpp`. It is not registered in shipping builds. It logs `WLFOLLOW` text and does not emit this JSON event line. It does not log `WLDEV`. It does not move the observer pawn. There is no `wlfollow=` launch switch. A scored run must not run it.
 - `wl.Qa.Net.Drop [seconds]` — records the four reconnect events above. The gap defaults to 2 seconds and is clamped to 0–30. Zero emits all four immediately. The gap is a ticker delay, not a sleep of the game thread, and not a new session state machine.
 
 Turning QA on also turns handoff replication on for this process. Turning QA off turns that replication back off. The default of the replication switch stays 0.

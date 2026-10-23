@@ -33,7 +33,7 @@ BASELINE="WonderlandDogAnimation.cpp:0 WonderlandUsageGeometry.cpp:0 WonderlandU
 # A header is checked with `-x c++` so g++ treats it as a unit rather than
 # precompiling it. Each carries its own baseline for the same reason a .cpp
 # does: WonderlandHubLevel.h uses UDataAsset, which the stubs do not model.
-HEADER_BASELINE="RelayWorldState.h:0 WonderlandTypes.h:0 WonderlandDogAnimation.h:0 WonderlandDogPawn.h:0 WonderlandHubGameMode.h:0 WonderlandHubLevel.h:2 WonderlandJuliusState.h:0 WonderlandUsageHud.h:0 WonderlandEntry.h:0 WonderlandEnvelope.h:0 WonderlandUsageGeometry.h:0 WonderlandUsageSubsystem.h:0 WonderlandOrdering.h:0 WonderlandJuliusSubsystem.h:0 WonderlandUsageHudWidget.h:0 WonderlandWireDecode.h:0 WonderlandQaFormat.h:0 WonderlandQaLog.h:0"
+HEADER_BASELINE="RelayWorldState.h:0 WonderlandTypes.h:0 WonderlandDogAnimation.h:0 WonderlandDogPawn.h:0 WonderlandHubGameMode.h:0 WonderlandHubLevel.h:2 WonderlandJuliusState.h:0 WonderlandUsageHud.h:0 WonderlandEntry.h:0 WonderlandEnvelope.h:0 WonderlandUsageGeometry.h:0 WonderlandUsageSubsystem.h:0 WonderlandOrdering.h:0 WonderlandJuliusSubsystem.h:0 WonderlandUsageHudWidget.h:0 WonderlandWireDecode.h:0 WonderlandQaFormat.h:0 WonderlandQaLog.h:0 WonderlandFollowMath.h:0"
 
 status=0
 

@@ -1,4 +1,6 @@
-// Offline lock for the QA event line. Does not parse an absent handoff field.
+// Offline lock for the QA event line and the follow-camera math.
+// Does not parse an absent handoff field.
+#include "WonderlandFollowMath.h"
 #include "WonderlandQaFormat.h"
 #include "WonderlandSocialReconnectPolicy.h"
 
@@ -151,6 +153,77 @@ int main()
 	const std::string Restored = DropLine(Unknown, kStateRestored, true);
 	Expect(Restored.find("\"rejoin_404_replan\":null") != std::string::npos, "unread policy is null");
 	Expect(Restored.find("\"leave_retry_would_apply\":null") != std::string::npos, "uncomputed retry is null");
+
+	using namespace WonderlandFollow;
+	FPawnXform Pawn;
+	Pawn.X = 10.0;
+	Pawn.Y = -20.0;
+	Pawn.Z = 30.0;
+	Pawn.Pitch = 1.5;
+	Pawn.Yaw = 2.5;
+	Pawn.Roll = 3.5;
+	FPawnXform Body;
+	Body.X = 100.0;
+	Body.Y = 200.0;
+	Body.Z = 50.0;
+	Body.Yaw = 0.0;
+	FPoint Camera;
+	const FPawnXform After = PawnAfterFollow(Pawn, Body, Camera);
+	Expect(SameXform(After, Pawn), "follow leaves the pawn transform unchanged");
+	Expect(Camera.X == Body.X - kFollowBackUu && Camera.Y == Body.Y && Camera.Z == Body.Z + kFollowUpUu, "yaw 0 camera sits 450 back and 250 up");
+	Body.Yaw = 90.0;
+	Camera = CameraLocation(Body.X, Body.Y, Body.Z, Body.Yaw);
+	Expect(std::fabs(Camera.X - Body.X) < 1e-6, "yaw 90 camera keeps x");
+	Expect(std::fabs(Camera.Y - (Body.Y - kFollowBackUu)) < 1e-6, "yaw 90 camera sits back along +Y");
+	Expect(Camera.Z == Body.Z + kFollowUpUu, "yaw 90 camera z is exact");
+	Body.Yaw = 180.0;
+	Camera = CameraLocation(Body.X, Body.Y, Body.Z, Body.Yaw);
+	const double YawRad = 180.0 * 3.14159265358979323846 / 180.0;
+	const double ForwardX = std::cos(YawRad);
+	const double ForwardY = std::sin(YawRad);
+	const double DeltaX = Camera.X - Body.X;
+	const double DeltaY = Camera.Y - Body.Y;
+	Expect(std::fabs(std::hypot(DeltaX, DeltaY) - kFollowBackUu) < 1e-6, "yaw 180 horizontal distance is 450");
+	Expect(DeltaX * ForwardX + DeltaY * ForwardY < -449.0, "yaw 180 camera is behind the facing");
+	Expect(Camera.Z == Body.Z + kFollowUpUu, "yaw 180 camera z is exact");
+	const FPawnXform Again = PawnAfterFollow(Pawn, Body, Camera);
+	Expect(SameXform(Again, Pawn), "a second follow still does not write the pawn");
+
+	const std::string Following = FollowLogLine("following", "user-1");
+	ExpectEq(Following, "WLFOLLOW following id=user-1", "follow log names the user id");
+	const std::string Waiting = FollowLogLine("waiting", "");
+	ExpectEq(Waiting, "WLFOLLOW waiting id=(none)", "empty user id is (none)");
+	const char* Forbidden[] = {"WLDEV", "wl.dev", "wl.Dev", "Wl.Dev"};
+	for (const char* Word : Forbidden)
+	{
+		Expect(Following.find(Word) == std::string::npos, "follow log has no WLDEV");
+		Expect(Waiting.find(Word) == std::string::npos, "waiting log has no WLDEV");
+	}
+	Expect(Following.find("Astra") == std::string::npos, "follow log has no display name");
+	Expect(Waiting.find("Astra") == std::string::npos, "waiting log has no display name");
+
+	Expect(ClassifyFollowAsk("off") == EFollowAsk::Off, "off");
+	Expect(ClassifyFollowAsk("OFF") == EFollowAsk::Off, "OFF");
+	Expect(ClassifyFollowAsk("first") == EFollowAsk::First, "first");
+	Expect(ClassifyFollowAsk("First") == EFollowAsk::First, "First");
+	Expect(ClassifyFollowAsk("Astra") == EFollowAsk::Named, "named");
+	Expect(ClassifyFollowAsk("") == EFollowAsk::Invalid, "empty ask");
+	Expect(ClassifyFollowAsk(nullptr) == EFollowAsk::Invalid, "missing ask");
+
+	FBodyId Bodies[3];
+	Bodies[0].Display = "Nova";
+	Bodies[0].LogName = "user-a";
+	Bodies[1].Display = "Astra";
+	Bodies[1].LogName = "user-b";
+	Bodies[2].Display = "Other";
+	Bodies[2].LogName = "user-c";
+	Expect(PickBody(Bodies, 3, EFollowAsk::First, "ignored") == 0, "first picks the first body");
+	Expect(PickBody(Bodies, 3, EFollowAsk::Named, "astra") == 1, "display name ignores case");
+	Expect(PickBody(Bodies, 3, EFollowAsk::Named, "user-c") == 2, "log name matches exactly");
+	Expect(PickBody(Bodies, 3, EFollowAsk::Named, "USER-C") == -1, "log name match is case-sensitive");
+	Expect(PickBody(Bodies, 3, EFollowAsk::Off, "Astra") == -1, "off does not pick a body");
+	Bodies[0].Display = "user-c";
+	Expect(PickBody(Bodies, 3, EFollowAsk::Named, "user-c") == 0, "a display match wins over a later log name");
 
 	if (gFails != 0)
 	{
