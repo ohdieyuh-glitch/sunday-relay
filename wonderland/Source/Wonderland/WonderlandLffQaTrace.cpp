@@ -1,5 +1,6 @@
 #include "WonderlandLffQaTrace.h"
 
+#include <cctype>
 #include <cstdio>
 #include <utility>
 
@@ -191,6 +192,83 @@ std::string Trim(const std::string& value) {
 	return value.substr(begin, end - begin);
 }
 
+void SplitHead(const std::string& text, std::string& head, std::string& rest) {
+	const size_t space = text.find(' ');
+	if (space == std::string::npos) {
+		head = text;
+		rest.clear();
+		return;
+	}
+	head = text.substr(0, space);
+	rest = Trim(text.substr(space + 1));
+}
+
+bool IsClearFilter(const std::string& value) {
+	std::string lower;
+	lower.reserve(value.size());
+	for (unsigned char c : value) lower.push_back(static_cast<char>(std::tolower(c)));
+	return lower == "all" || lower == "none" || lower == "clear";
+}
+
+// A quoted title or message, or the raw remainder when the console already
+// stripped the quotes. An unclosed quote is refused. Nothing is invented.
+bool ParseOptionalText(const std::string& rest, std::string& text, std::string& error) {
+	text.clear();
+	if (rest.empty()) return true;
+	if (rest[0] != '"' && rest[0] != '\'') {
+		text = rest;
+		return true;
+	}
+	const char quote = rest[0];
+	for (size_t i = 1; i < rest.size(); ++i) {
+		if (rest[i] == '\\' && i + 1 < rest.size()) {
+			text.push_back(rest[++i]);
+			continue;
+		}
+		if (rest[i] == quote) {
+			if (!Trim(rest.substr(i + 1)).empty()) {
+				error = "invalid_command";
+				return false;
+			}
+			return true;
+		}
+		text.push_back(rest[i]);
+	}
+	error = "invalid_command";
+	return false;
+}
+
+bool EndsWith(const std::string& value, const char* suffix) {
+	const std::string tail(suffix);
+	return value.size() >= tail.size() && value.compare(value.size() - tail.size(), tail.size(), tail) == 0;
+}
+
+std::string ActionRequestId(const std::string& path, const char* action) {
+	const std::string prefix = "/lff/requests/";
+	const std::string suffix = std::string("/") + action;
+	if (path.size() <= prefix.size() + suffix.size()) return std::string();
+	if (path.compare(0, prefix.size(), prefix) != 0 || !EndsWith(path, suffix.c_str())) return std::string();
+	const std::string id = path.substr(prefix.size(), path.size() - prefix.size() - suffix.size());
+	return WonderlandLffQaIsId(id) ? id : std::string();
+}
+
+int FindRequest(const WonderlandLffQaState& state, const std::string& requestId) {
+	for (size_t i = 0; i < state.requests.size(); ++i) if (state.requests[i].requestId == requestId) return static_cast<int>(i);
+	return -1;
+}
+
+bool CarriesNote(const std::string& event) {
+	return event == WONDERLAND_LFF_EVENT_POSTED || event == WONDERLAND_LFF_EVENT_SEEN
+		|| event == WONDERLAND_LFF_EVENT_CONNECT_REQUESTED || event == WONDERLAND_LFF_EVENT_CONNECT_RECEIVED
+		|| event == WONDERLAND_LFF_EVENT_CONNECT_ACCEPTED || event == WONDERLAND_LFF_EVENT_CONNECT_DECLINED
+		|| event == WONDERLAND_LFF_EVENT_CONNECT_ACCEPTED_SEEN || event == WONDERLAND_LFF_EVENT_CONNECT_DECLINED_SEEN;
+}
+
+std::string RowTitle(const WonderlandLffQaState& state, const std::string& listingId) {
+	const int at = FindRow(state, listingId);
+	return at >= 0 ? state.feed[static_cast<size_t>(at)].title : std::string();
+}
+
 }  // namespace WonderlandLffQaTraceDetail
 
 bool WonderlandLffQaIsCategoryToken(const std::string& category) {
@@ -235,11 +313,20 @@ WonderlandLffQaCall WonderlandLffQaBuildCreate(const std::string& baseUrl, const
 		std::string("{\"category\":") + JsonString(token) + ",\"title\":" + JsonString(title)
 		+ ",\"description\":" + JsonString(description) + ",\"projectLabel\":\"\",\"skills\":[],\"openSlots\":1}");
 	call.category = token;
+	call.title = title;
 	return call;
 }
 
 WonderlandLffQaCall WonderlandLffQaBuildFeed(const std::string& baseUrl, const std::string& categoryToken) {
 	using namespace WonderlandLffQaTraceDetail;
+	// all / none / clear ask for the unfiltered feed. The view's empty Category
+	// is that read. The trace line says ALL; the query does not.
+	if (IsClearFilter(categoryToken)) {
+		WonderlandLffQaCall call = Ready("GET", baseUrl, "/lff/posts?limit=50", "");
+		call.path = "/lff/posts";
+		call.category = "ALL";
+		return call;
+	}
 	if (!WonderlandLffQaIsCategoryToken(categoryToken)) return Reject("invalid_category");
 	WonderlandLffQaCall call = Ready("GET", baseUrl, std::string("/lff/posts?limit=50&category=") + categoryToken, "");
 	call.path = "/lff/posts";
@@ -261,6 +348,23 @@ WonderlandLffQaCall WonderlandLffQaBuildRequest(const std::string& baseUrl, cons
 	WonderlandLffQaCall call = Ready("POST", baseUrl, "/lff/posts/" + listingId + "/requests",
 		std::string("{\"message\":") + JsonString(message) + "}");
 	call.listingId = listingId;
+	call.message = message;
+	return call;
+}
+
+WonderlandLffQaCall WonderlandLffQaBuildAccept(const std::string& baseUrl, const std::string& requestId) {
+	using namespace WonderlandLffQaTraceDetail;
+	if (!WonderlandLffQaIsId(requestId)) return Reject("invalid_id");
+	WonderlandLffQaCall call = Ready("POST", baseUrl, "/lff/requests/" + requestId + "/accept", "{}");
+	call.listingId = requestId;
+	return call;
+}
+
+WonderlandLffQaCall WonderlandLffQaBuildDecline(const std::string& baseUrl, const std::string& requestId) {
+	using namespace WonderlandLffQaTraceDetail;
+	if (!WonderlandLffQaIsId(requestId)) return Reject("invalid_id");
+	WonderlandLffQaCall call = Ready("POST", baseUrl, "/lff/requests/" + requestId + "/decline", "{}");
+	call.listingId = requestId;
 	return call;
 }
 
@@ -292,11 +396,21 @@ std::string WonderlandLffQaFormatLine(const WonderlandLffQaEvent& event) {
 	AppendEscaped(out, event.category);
 	out += ",\"seen_by\":";
 	AppendEscaped(out, event.seenBy);
+	if (CarriesNote(event.event)) {
+		out += ",\"title\":";
+		AppendEscaped(out, event.title);
+		out += ",\"message\":";
+		AppendEscaped(out, event.message);
+	}
+	if (event.event == WONDERLAND_LFF_EVENT_HEARTBEAT) {
+		// No LFF server clock is consulted. Both fields stay empty on purpose.
+		out += ",\"server_offset_ms\":\"\",\"rtt_ms\":\"\"";
+	}
 	out += "}";
 	return out;
 }
 
-void WonderlandLffQaEmit(WonderlandLffQaLog& log, const std::string& event, const std::string& listingId, const std::string& category) {
+void WonderlandLffQaEmit(WonderlandLffQaLog& log, const std::string& event, const std::string& listingId, const std::string& category, const std::string& title, const std::string& message) {
 	if (!log.enabled || log.nowUtcMs == nullptr) return;
 	WonderlandLffQaEvent row;
 	row.tsUtcMs = log.nowUtcMs(log.clockUser);
@@ -308,8 +422,47 @@ void WonderlandLffQaEmit(WonderlandLffQaLog& log, const std::string& event, cons
 	row.listingId = listingId;
 	row.category = category;
 	row.seenBy = log.clientRole;
+	row.title = title;
+	row.message = message;
 	log.lines.push_back(WonderlandLffQaFormatLine(row));
 }
+
+namespace WonderlandLffQaTraceDetail {
+
+void ObserveOwn(WonderlandLffQaState& state, WonderlandLffQaLog& log, const std::string& requestId, const std::string& listingId, const std::string& category, const std::string& title, const std::string& message, const std::string& status) {
+	if (!WonderlandLffQaIsId(requestId)) return;
+	const int at = FindRequest(state, requestId);
+	const std::string previous = at >= 0 ? state.requests[static_cast<size_t>(at)].status : std::string();
+	std::string keptListing = listingId;
+	std::string keptCategory = category;
+	std::string keptMessage = message;
+	if (at >= 0) {
+		if (keptListing.empty()) keptListing = state.requests[static_cast<size_t>(at)].listingId;
+		if (keptCategory.empty()) keptCategory = state.requests[static_cast<size_t>(at)].category;
+		if (keptMessage.empty()) keptMessage = state.requests[static_cast<size_t>(at)].message;
+	}
+	std::string keptTitle = title.empty() ? RowTitle(state, keptListing) : title;
+	if (at >= 0) {
+		WonderlandLffQaRequest& slot = state.requests[static_cast<size_t>(at)];
+		if (!keptListing.empty()) slot.listingId = keptListing;
+		if (!keptCategory.empty()) slot.category = keptCategory;
+		if (!message.empty()) slot.message = message;
+		if (!status.empty()) slot.status = status;
+	} else {
+		WonderlandLffQaRequest created;
+		created.requestId = requestId;
+		created.listingId = keptListing;
+		created.category = keptCategory;
+		created.requesterId = state.playerId;
+		created.status = status;
+		created.message = keptMessage;
+		state.requests.push_back(created);
+	}
+	if (status == "ACCEPTED" && previous != "ACCEPTED") WonderlandLffQaEmit(log, WONDERLAND_LFF_EVENT_CONNECT_ACCEPTED_SEEN, keptListing, keptCategory, keptTitle, keptMessage);
+	else if (status == "DECLINED" && previous != "DECLINED") WonderlandLffQaEmit(log, WONDERLAND_LFF_EVENT_CONNECT_DECLINED_SEEN, keptListing, keptCategory, keptTitle, keptMessage);
+}
+
+}  // namespace WonderlandLffQaTraceDetail
 
 bool WonderlandLffQaApply(WonderlandLffQaState& state, WonderlandLffQaLog& log, const WonderlandLffQaCall& call, const std::string& dataJson) {
 	using namespace WonderlandLffQaTraceDetail;
@@ -319,7 +472,8 @@ bool WonderlandLffQaApply(WonderlandLffQaState& state, WonderlandLffQaLog& log, 
 		state.lastError = "invalid_response";
 		return false;
 	}
-	const bool inbox = call.method == "GET" && call.path.find("/requests") != std::string::npos;
+	const bool mine = call.method == "GET" && call.path == "/lff/requests";
+	const bool inbox = call.method == "GET" && !mine && call.path.find("/requests") != std::string::npos;
 	const bool feed = call.method == "GET" && call.path == "/lff/posts";
 	if (feed) {
 		const JVal* posts = Field(root, "posts");
@@ -327,7 +481,9 @@ bool WonderlandLffQaApply(WonderlandLffQaState& state, WonderlandLffQaLog& log, 
 			state.lastError = "invalid_response";
 			return false;
 		}
+		struct Note { std::string requestId, listingId, category, title, status; };
 		std::vector<WonderlandLffQaRow> next;
+		std::vector<Note> notes;
 		for (const JVal& item : posts->arr) {
 			if (item.kind != JVal::Obj) { state.lastError = "invalid_response"; return false; }
 			WonderlandLffQaRow row;
@@ -339,10 +495,15 @@ bool WonderlandLffQaApply(WonderlandLffQaState& state, WonderlandLffQaLog& log, 
 				state.lastError = "invalid_response";
 				return false;
 			}
+			const JVal* viewer = Field(item, "viewerRequest");
+			if (viewer != nullptr && viewer->kind != JVal::Null) {
+				if (viewer->kind != JVal::Obj) { state.lastError = "invalid_response"; return false; }
+				notes.push_back(Note{FieldStr(*viewer, "requestId"), row.listingId, row.category, row.title, FieldStr(*viewer, "status")});
+			}
 			next.push_back(row);
 		}
 		for (const WonderlandLffQaRow& row : next) {
-			if (FindRow(state, row.listingId) < 0) WonderlandLffQaEmit(log, WONDERLAND_LFF_EVENT_SEEN, row.listingId, row.category);
+			if (FindRow(state, row.listingId) < 0) WonderlandLffQaEmit(log, WONDERLAND_LFF_EVENT_SEEN, row.listingId, row.category, row.title, "");
 		}
 		for (const WonderlandLffQaRow& row : state.feed) {
 			bool still = false;
@@ -351,14 +512,16 @@ bool WonderlandLffQaApply(WonderlandLffQaState& state, WonderlandLffQaLog& log, 
 		}
 		state.feed.clear();
 		for (const WonderlandLffQaRow& row : next) if (row.status == "OPEN") state.feed.push_back(row);
+		for (const Note& note : notes) ObserveOwn(state, log, note.requestId, note.listingId, note.category, note.title, "", note.status);
 		state.lastError.clear();
 		return true;
 	}
 	if (call.method == "POST" && call.path == "/lff/posts") {
 		const std::string postId = FieldStr(root, "postId");
 		if (!WonderlandLffQaIsId(postId)) { state.lastError = "invalid_response"; return false; }
-		UpsertOpen(state, postId, call.category, "QA " + call.category, "OPEN");
-		WonderlandLffQaEmit(log, WONDERLAND_LFF_EVENT_POSTED, postId, call.category);
+		const std::string title = call.title.empty() ? std::string("QA ") + call.category : call.title;
+		UpsertOpen(state, postId, call.category, title, "OPEN");
+		WonderlandLffQaEmit(log, WONDERLAND_LFF_EVENT_POSTED, postId, call.category, title, "");
 		state.lastError.clear();
 		return true;
 	}
@@ -378,14 +541,56 @@ bool WonderlandLffQaApply(WonderlandLffQaState& state, WonderlandLffQaLog& log, 
 		std::string category = call.category;
 		const int at = FindRow(state, call.listingId);
 		if (category.empty() && at >= 0) category = state.feed[static_cast<size_t>(at)].category;
+		const std::string title = at >= 0 ? state.feed[static_cast<size_t>(at)].title : std::string();
 		WonderlandLffQaRequest request;
 		request.requestId = requestId;
 		request.listingId = call.listingId;
 		request.category = category;
 		request.requesterId = state.playerId;
 		request.status = "PENDING";
+		request.message = call.message;
 		state.requests.push_back(request);
-		WonderlandLffQaEmit(log, WONDERLAND_LFF_EVENT_CONNECT_REQUESTED, call.listingId, category);
+		WonderlandLffQaEmit(log, WONDERLAND_LFF_EVENT_CONNECT_REQUESTED, call.listingId, category, title, call.message);
+		state.lastError.clear();
+		return true;
+	}
+	const std::string acceptedId = call.method == "POST" ? ActionRequestId(call.path, "accept") : std::string();
+	const std::string declinedId = call.method == "POST" ? ActionRequestId(call.path, "decline") : std::string();
+	const bool responsePath = call.method == "POST" && call.path.compare(0, 14, "/lff/requests/") == 0 && (EndsWith(call.path, "/accept") || EndsWith(call.path, "/decline"));
+	if (responsePath) {
+		const std::string requestId = !acceptedId.empty() ? acceptedId : declinedId;
+		if (requestId.empty()) { state.lastError = "invalid_response"; return false; }
+		const bool accepted = !acceptedId.empty();
+		const int at = FindRequest(state, requestId);
+		const std::string listingId = at >= 0 ? state.requests[static_cast<size_t>(at)].listingId : std::string();
+		const std::string category = at >= 0 ? state.requests[static_cast<size_t>(at)].category : std::string();
+		const std::string message = at >= 0 ? state.requests[static_cast<size_t>(at)].message : std::string();
+		const std::string title = RowTitle(state, listingId);
+		if (at >= 0) state.requests[static_cast<size_t>(at)].status = accepted ? "ACCEPTED" : "DECLINED";
+		else {
+			WonderlandLffQaRequest created;
+			created.requestId = requestId;
+			created.status = accepted ? "ACCEPTED" : "DECLINED";
+			state.requests.push_back(created);
+		}
+		WonderlandLffQaEmit(log, accepted ? WONDERLAND_LFF_EVENT_CONNECT_ACCEPTED : WONDERLAND_LFF_EVENT_CONNECT_DECLINED, listingId, category, title, message);
+		state.lastError.clear();
+		return true;
+	}
+	if (mine) {
+		const JVal* requests = Field(root, "requests");
+		if (requests == nullptr || requests->kind != JVal::Arr) { state.lastError = "invalid_response"; return false; }
+		for (const JVal& item : requests->arr) {
+			if (item.kind != JVal::Obj) { state.lastError = "invalid_response"; return false; }
+			std::string category = FieldStr(item, "category");
+			std::string title = FieldStr(item, "title");
+			const JVal* post = Field(item, "post");
+			if (post != nullptr && post->kind == JVal::Obj) {
+				if (category.empty()) category = FieldStr(*post, "category");
+				if (title.empty()) title = FieldStr(*post, "title");
+			}
+			ObserveOwn(state, log, FieldStr(item, "requestId"), FieldStr(item, "postId"), category, title, FieldStr(item, "message"), FieldStr(item, "status"));
+		}
 		state.lastError.clear();
 		return true;
 	}
@@ -403,10 +608,17 @@ bool WonderlandLffQaApply(WonderlandLffQaState& state, WonderlandLffQaLog& log, 
 				const int at = FindRow(state, listingId);
 				if (at >= 0) category = state.feed[static_cast<size_t>(at)].category;
 			}
+			const std::string message = FieldStr(item, "message");
+			const std::string status = FieldStr(item, "status");
+			const std::string title = RowTitle(state, listingId);
+			if (!requesterId.empty() && requesterId == state.playerId) {
+				ObserveOwn(state, log, requestId, listingId, category, title, message, status);
+				continue;
+			}
 			bool known = false;
 			for (const WonderlandLffQaRequest& prior : state.requests) if (prior.requestId == requestId) known = true;
-			if (!known && !requesterId.empty() && requesterId != state.playerId) {
-				WonderlandLffQaEmit(log, WONDERLAND_LFF_EVENT_CONNECT_RECEIVED, listingId, category);
+			if (!known && !requesterId.empty() && (status.empty() || status == "PENDING")) {
+				WonderlandLffQaEmit(log, WONDERLAND_LFF_EVENT_CONNECT_RECEIVED, listingId, category, title, message);
 			}
 			if (!known) {
 				WonderlandLffQaRequest request;
@@ -414,7 +626,8 @@ bool WonderlandLffQaApply(WonderlandLffQaState& state, WonderlandLffQaLog& log, 
 				request.listingId = listingId;
 				request.category = category;
 				request.requesterId = requesterId;
-				request.status = FieldStr(item, "status");
+				request.status = status;
+				request.message = message;
 				state.requests.push_back(request);
 			}
 		}
@@ -457,63 +670,118 @@ std::string WonderlandLffQaDump(const WonderlandLffQaState& state, const Wonderl
 		AppendEscaped(out, state.requests[i].requesterId);
 		out += ",\"status\":";
 		AppendEscaped(out, state.requests[i].status);
+		out += ",\"message\":";
+		AppendEscaped(out, state.requests[i].message);
 		out += '}';
 	}
 	out += "]}";
 	return out;
 }
 
+enum class WonderlandLffQaCommandKind { Unknown, Dump, Post, Withdraw, Filter, Request, Accept, Decline };
+
+struct WonderlandLffQaParsed {
+	WonderlandLffQaCommandKind kind = WonderlandLffQaCommandKind::Unknown;
+	std::string error;
+	WonderlandLffQaCall call;
+};
+
+WonderlandLffQaParsed WonderlandLffQaParse(const std::string& baseUrl, const std::string& line) {
+	using namespace WonderlandLffQaTraceDetail;
+	WonderlandLffQaParsed parsed;
+	const std::string text = Trim(line);
+	std::string name;
+	std::string arg;
+	SplitHead(text, name, arg);
+	if (name == WONDERLAND_LFF_QA_DUMP) {
+		parsed.kind = WonderlandLffQaCommandKind::Dump;
+		if (!arg.empty()) parsed.error = "invalid_command";
+		return parsed;
+	}
+	if (name == WONDERLAND_LFF_QA_POST) {
+		parsed.kind = WonderlandLffQaCommandKind::Post;
+		std::string category;
+		std::string titleText;
+		std::string title;
+		SplitHead(arg, category, titleText);
+		if (!ParseOptionalText(titleText, title, parsed.error)) return parsed;
+		const std::string token = WonderlandLffQaCategoryToken(category);
+		if (titleText.empty()) title = std::string("QA ") + (token.empty() ? category : token);
+		parsed.call = WonderlandLffQaBuildCreate(baseUrl, category, title, "QA listing");
+	} else if (name == WONDERLAND_LFF_QA_WITHDRAW) {
+		parsed.kind = WonderlandLffQaCommandKind::Withdraw;
+		parsed.call = WonderlandLffQaBuildClose(baseUrl, arg);
+	} else if (name == WONDERLAND_LFF_QA_FILTER) {
+		parsed.kind = WonderlandLffQaCommandKind::Filter;
+		parsed.call = WonderlandLffQaBuildFeed(baseUrl, IsClearFilter(arg) ? arg : WonderlandLffQaCategoryToken(arg));
+	} else if (name == WONDERLAND_LFF_QA_REQUEST) {
+		parsed.kind = WonderlandLffQaCommandKind::Request;
+		std::string id;
+		std::string messageText;
+		std::string message;
+		SplitHead(arg, id, messageText);
+		if (!ParseOptionalText(messageText, message, parsed.error)) return parsed;
+		if (messageText.empty()) message = "QA request";
+		parsed.call = WonderlandLffQaBuildRequest(baseUrl, id, message);
+	} else if (name == WONDERLAND_LFF_QA_ACCEPT) {
+		parsed.kind = WonderlandLffQaCommandKind::Accept;
+		parsed.call = WonderlandLffQaBuildAccept(baseUrl, arg);
+	} else if (name == WONDERLAND_LFF_QA_DECLINE) {
+		parsed.kind = WonderlandLffQaCommandKind::Decline;
+		parsed.call = WonderlandLffQaBuildDecline(baseUrl, arg);
+	} else {
+		return parsed;
+	}
+	if (parsed.error.empty() && !parsed.call.ok) parsed.error = parsed.call.error;
+	return parsed;
+}
+
 WonderlandLffQaCommandResult WonderlandLffQaRun(
 	WonderlandLffQaState& state, WonderlandLffQaLog& log, const std::string& baseUrl, const std::string& line, const WonderlandLffQaExchange* exchange) {
-	using namespace WonderlandLffQaTraceDetail;
 	WonderlandLffQaCommandResult result;
 	if (!log.enabled) {
 		result.error = "qa_disabled";
 		return result;
 	}
-	const std::string text = Trim(line);
-	const size_t space = text.find(' ');
-	const std::string name = space == std::string::npos ? text : text.substr(0, space);
-	const std::string arg = space == std::string::npos ? std::string() : Trim(text.substr(space + 1));
-	if (name == WONDERLAND_LFF_QA_DUMP) {
-		if (!arg.empty()) { result.error = "invalid_command"; return result; }
+	const WonderlandLffQaParsed parsed = WonderlandLffQaParse(baseUrl, line);
+	if (parsed.kind == WonderlandLffQaCommandKind::Unknown) { result.error = "unknown_command"; return result; }
+	if (!parsed.error.empty()) { result.error = parsed.error; return result; }
+	if (parsed.kind == WonderlandLffQaCommandKind::Dump) {
 		result.dump = WonderlandLffQaDump(state, log);
 		result.accepted = true;
 		return result;
 	}
-	WonderlandLffQaCall call;
-	bool filter = false;
-	if (name == WONDERLAND_LFF_QA_POST) {
-		const std::string token = WonderlandLffQaCategoryToken(arg);
-		call = WonderlandLffQaBuildCreate(baseUrl, arg, "QA " + (token.empty() ? arg : token), "QA listing");
-	} else if (name == WONDERLAND_LFF_QA_WITHDRAW) {
-		call = WonderlandLffQaBuildClose(baseUrl, arg);
-	} else if (name == WONDERLAND_LFF_QA_FILTER) {
-		call = WonderlandLffQaBuildFeed(baseUrl, WonderlandLffQaCategoryToken(arg));
-		filter = true;
-	} else if (name == WONDERLAND_LFF_QA_REQUEST) {
-		call = WonderlandLffQaBuildRequest(baseUrl, arg, "QA request");
-	} else {
-		result.error = "unknown_command";
-		return result;
-	}
-	if (!call.ok) { result.error = call.error; return result; }
+	WonderlandLffQaCall call = parsed.call;
+	call.actorId = state.playerId;
+	if (!call.ok) { result.error = call.error.empty() ? std::string("invalid_command") : call.error; return result; }
 	if (exchange == nullptr || exchange->send == nullptr) { result.error = "transport_unavailable"; return result; }
 	const std::string body = exchange->send(call, exchange->user);
 	if (!WonderlandLffQaApply(state, log, call, body)) {
 		result.error = state.lastError.empty() ? "invalid_response" : state.lastError;
 		return result;
 	}
-	if (filter) {
-		state.categoryFilter = call.category;
+	if (parsed.kind == WonderlandLffQaCommandKind::Filter) {
+		state.categoryFilter = call.category == "ALL" ? std::string() : call.category;
 		WonderlandLffQaEmit(log, WONDERLAND_LFF_EVENT_FILTER, "", call.category);
 	}
 	result.accepted = true;
 	return result;
 }
 
+bool WonderlandLffQaHeartbeat(WonderlandLffQaLog& log) {
+	if (!log.enabled || log.nowUtcMs == nullptr) return false;
+	const long long now = log.nowUtcMs(log.clockUser);
+	constexpr long long kPeriodMs = 5000;
+	if (log.heartbeatStarted && (now < log.lastHeartbeatUtcMs || now - log.lastHeartbeatUtcMs < kPeriodMs)) return false;
+	log.heartbeatStarted = true;
+	log.lastHeartbeatUtcMs = now;
+	WonderlandLffQaEmit(log, WONDERLAND_LFF_EVENT_HEARTBEAT, "", "");
+	return !log.lines.empty() && log.lines.back().find(WONDERLAND_LFF_EVENT_HEARTBEAT) != std::string::npos;
+}
+
 #if defined(WITH_ENGINE) && !UE_BUILD_SHIPPING
 #include "CoreMinimal.h"
+#include "Containers/Ticker.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -572,7 +840,7 @@ bool ApplyAnswer(const WonderlandLffQaCall& Call, const std::string& DataJson, b
 		return false;
 	}
 	if (bFilter) {
-		State.categoryFilter = Call.category;
+		State.categoryFilter = Call.category == "ALL" ? std::string() : Call.category;
 		WonderlandLffQaEmit(Log, WONDERLAND_LFF_EVENT_FILTER, "", Call.category);
 	}
 	LogNew(Before);
@@ -593,6 +861,13 @@ std::string FeedData(const FWonderlandLffFeedPage& Page) {
 		Out += JsonString(Narrow(Post.Title));
 		Out += ",\"status\":";
 		Out += JsonString(Narrow(Post.Status));
+		if (Post.bHasViewerRequest) {
+			Out += ",\"viewerRequest\":{\"requestId\":";
+			Out += JsonString(Narrow(Post.ViewerRequestId));
+			Out += ",\"status\":";
+			Out += JsonString(Narrow(Post.ViewerRequestStatus));
+			Out += '}';
+		}
 		Out += '}';
 	}
 	Out += "]}";
@@ -612,55 +887,67 @@ void OnWrite(const WonderlandLffQaCall Call, const FWonderlandLffAnswer& Answer,
 	ApplyAnswer(Call, Data, false);
 }
 
+std::string MineData(const FWonderlandLffMyRequests& Mine) {
+	using WonderlandLffQaTraceDetail::JsonString;
+	std::string Out = "{\"requests\":[";
+	for (int32 Index = 0; Index < Mine.Requests.Num(); ++Index) {
+		if (Index != 0) Out += ',';
+		const FWonderlandLffMyRequest& Row = Mine.Requests[Index];
+		Out += "{\"requestId\":";
+		Out += JsonString(Narrow(Row.RequestId));
+		Out += ",\"postId\":";
+		Out += JsonString(Narrow(Row.PostId));
+		Out += ",\"status\":";
+		Out += JsonString(Narrow(Row.Status));
+		Out += ",\"message\":";
+		Out += JsonString(Narrow(Row.Message));
+		if (Row.bHasPost) {
+			Out += ",\"category\":";
+			Out += JsonString(Narrow(Row.Post.Category));
+			Out += ",\"title\":";
+			Out += JsonString(Narrow(Row.Post.Title));
+		}
+		Out += '}';
+	}
+	Out += "]}";
+	return Out;
+}
+
+void ObserveMine(IWonderlandSocialService* Service) {
+	if (Service == nullptr || Service->IsDevelopmentPreview()) return;
+	Service->ReadLffMyRequests([](const FWonderlandLffAnswer& Answer, const FWonderlandLffMyRequests& Mine) {
+		if (!Answer.IsOk()) return;
+		WonderlandLffQaCall Call;
+		Call.method = "GET";
+		Call.path = "/lff/requests";
+		Call.ok = true;
+		ApplyAnswer(Call, MineData(Mine), false);
+	});
+}
+
 void RunLine(const FString& Line) {
 	UWonderlandSocialSubsystem* Sub = Social();
 	Prepare(Sub);
-	FString Text = Line.TrimStartAndEnd();
-	FString Name;
-	FString Arg;
-	int32 Space = INDEX_NONE;
-	if (Text.FindChar(TEXT(' '), Space)) {
-		Name = Text.Left(Space);
-		Arg = Text.Mid(Space + 1).TrimStartAndEnd();
-	} else {
-		Name = Text;
-	}
-	if (Name == TEXT("wl.Qa.LFF.Dump")) {
-		if (!Arg.IsEmpty()) { Refuse(TEXT("invalid_command")); return; }
+	const WonderlandLffQaParsed Parsed = WonderlandLffQaParse("", Narrow(Line));
+	if (Parsed.kind == WonderlandLffQaCommandKind::Unknown) { Refuse(TEXT("unknown_command")); return; }
+	if (!Parsed.error.empty()) { Refuse(UTF8_TO_TCHAR(Parsed.error.c_str())); return; }
+	if (Parsed.kind == WonderlandLffQaCommandKind::Dump) {
 		const std::string Dump = WonderlandLffQaDump(State, Log);
 		UE_LOG(LogTemp, Display, TEXT("%s"), UTF8_TO_TCHAR(Dump.c_str()));
 		return;
 	}
-	const std::string ArgText = Narrow(Arg);
-	WonderlandLffQaCall Call;
-	bool bFilter = false;
-	if (Name == TEXT("wl.Qa.LFF.Post")) {
-		const std::string Token = WonderlandLffQaCategoryToken(ArgText);
-		Call = WonderlandLffQaBuildCreate("", ArgText, std::string("QA ") + (Token.empty() ? ArgText : Token), "QA listing");
-	} else if (Name == TEXT("wl.Qa.LFF.Withdraw")) {
-		Call = WonderlandLffQaBuildClose("", ArgText);
-	} else if (Name == TEXT("wl.Qa.LFF.Filter")) {
-		Call = WonderlandLffQaBuildFeed("", WonderlandLffQaCategoryToken(ArgText));
-		bFilter = true;
-	} else if (Name == TEXT("wl.Qa.LFF.Request")) {
-		Call = WonderlandLffQaBuildRequest("", ArgText, "QA request");
-	} else {
-		Refuse(TEXT("unknown_command"));
-		return;
-	}
-	if (!Call.ok) {
-		Refuse(UTF8_TO_TCHAR(Call.error.c_str()));
-		return;
-	}
+	WonderlandLffQaCall Call = Parsed.call;
+	Call.actorId = State.playerId;
+	if (!Call.ok) { Refuse(UTF8_TO_TCHAR(Call.error.c_str())); return; }
 	IWonderlandSocialService* Service = Sub != nullptr ? Sub->GetService() : nullptr;
 	if (Service == nullptr || Service->IsDevelopmentPreview()) {
 		Refuse(TEXT("needs a live connection"));
 		return;
 	}
-	if (Name == TEXT("wl.Qa.LFF.Post")) {
+	if (Parsed.kind == WonderlandLffQaCommandKind::Post) {
 		FWonderlandLffPostFields Fields;
 		Fields.Category = UTF8_TO_TCHAR(Call.category.c_str());
-		Fields.Title = FString::Printf(TEXT("QA %s"), *Fields.Category);
+		Fields.Title = UTF8_TO_TCHAR(Call.title.c_str());
 		Fields.Description = TEXT("QA listing");
 		Fields.OpenSlots = 1;
 		Service->CreateLffPost(Fields, [Call](const FWonderlandLffAnswer& Answer, const FString& CreatedId) {
@@ -668,15 +955,22 @@ void RunLine(const FString& Line) {
 		});
 		return;
 	}
-	if (Name == TEXT("wl.Qa.LFF.Withdraw")) {
+	if (Parsed.kind == WonderlandLffQaCommandKind::Withdraw) {
 		Service->ActOnLff(TEXT("lff.post.close"), UTF8_TO_TCHAR(Call.listingId.c_str()), [Call](const FWonderlandLffAnswer& Answer, const FString& CreatedId) {
 			OnWrite(Call, Answer, CreatedId, nullptr);
 		});
 		return;
 	}
-	if (bFilter) {
+	if (Parsed.kind == WonderlandLffQaCommandKind::Accept || Parsed.kind == WonderlandLffQaCommandKind::Decline) {
+		const TCHAR* Operation = Parsed.kind == WonderlandLffQaCommandKind::Accept ? TEXT("lff.request.accept") : TEXT("lff.request.decline");
+		Service->ActOnLff(Operation, UTF8_TO_TCHAR(Call.listingId.c_str()), [Call](const FWonderlandLffAnswer& Answer, const FString& CreatedId) {
+			OnWrite(Call, Answer, CreatedId, nullptr);
+		});
+		return;
+	}
+	if (Parsed.kind == WonderlandLffQaCommandKind::Filter) {
 		FWonderlandLffFeedQuery Query;
-		Query.Category = UTF8_TO_TCHAR(Call.category.c_str());
+		Query.Category = Call.category == "ALL" ? FString() : UTF8_TO_TCHAR(Call.category.c_str());
 		Query.Limit = 50;
 		Service->ReadLffFeed(Query, [Call](const FWonderlandLffAnswer& Answer, const FWonderlandLffFeedPage& Page) {
 			if (!Answer.IsOk()) {
@@ -687,7 +981,7 @@ void RunLine(const FString& Line) {
 		});
 		return;
 	}
-	Service->SendLffRequest(UTF8_TO_TCHAR(Call.listingId.c_str()), TEXT("QA request"), [Call](const FWonderlandLffAnswer& Answer, const FString& CreatedId) {
+	Service->SendLffRequest(UTF8_TO_TCHAR(Call.listingId.c_str()), UTF8_TO_TCHAR(Call.message.c_str()), [Call](const FWonderlandLffAnswer& Answer, const FString& CreatedId) {
 		OnWrite(Call, Answer, CreatedId, "requestId");
 	});
 }
@@ -696,6 +990,8 @@ static TAutoConsoleVariable<int32> EnabledFlag(TEXT("wl.Qa.LFF.Enabled"), 0, TEX
 static TAutoConsoleVariable<FString> RoleFlag(TEXT("wl.Qa.LFF.Role"), TEXT("client"), TEXT("client_role written on each Looking for Feed QA line."));
 static TAutoConsoleVariable<FString> NetFlag(TEXT("wl.Qa.LFF.NetId"), TEXT(""), TEXT("net_id written on each Looking for Feed QA line."));
 static TAutoConsoleVariable<FString> ShaFlag(TEXT("wl.Qa.LFF.BuildSha"), TEXT(""), TEXT("build_sha written on each Looking for Feed QA line."));
+
+static void ArmHeartbeat();
 
 static void Dispatch(const TArray<FString>& Args, const TCHAR* Command) {
 	const IConsoleVariable* Flag = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Qa.LFF.Enabled"));
@@ -706,13 +1002,53 @@ static void Dispatch(const TArray<FString>& Args, const TCHAR* Command) {
 	FString Line = Command;
 	for (const FString& Arg : Args) Line += TEXT(" ") + Arg;
 	RunLine(Line);
+	ArmHeartbeat();
 }
 
-static FAutoConsoleCommandWithArgs PostCommand(TEXT("wl.Qa.LFF.Post"), TEXT("Post a Looking for Feed listing: wl.Qa.LFF.Post <category>. Off unless wl.Qa.LFF.Enabled is 1."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Post")); }));
+static FTSTicker::FDelegateHandle GHeartbeat;
+
+static bool HeartbeatTick(float) {
+	IConsoleVariable* Flag = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Qa.LFF.Enabled"));
+	if (Flag == nullptr || Flag->GetInt() != 1) {
+		GHeartbeat.Reset();
+		return false;
+	}
+	UWonderlandSocialSubsystem* Sub = Social();
+	Prepare(Sub);
+	const size_t Before = Log.lines.size();
+	const bool Beat = WonderlandLffQaHeartbeat(Log);
+	LogNew(Before);
+	if (Beat) {
+		IWonderlandSocialService* Service = Sub != nullptr ? Sub->GetService() : nullptr;
+		ObserveMine(Service);
+	}
+	return true;
+}
+
+static void ArmHeartbeat() {
+	if (GHeartbeat.IsValid()) return;
+	GHeartbeat = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&HeartbeatTick), 1.0f);
+}
+
+static void OnQaEnabled(IConsoleVariable* Var) {
+	if (Var != nullptr && Var->GetInt() == 1) ArmHeartbeat();
+}
+
+static FAutoConsoleCommandWithArgs PostCommand(TEXT("wl.Qa.LFF.Post"), TEXT("Post a Looking for Feed listing: wl.Qa.LFF.Post <category> [title...]. Off unless wl.Qa.LFF.Enabled is 1."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Post")); }));
 static FAutoConsoleCommandWithArgs WithdrawCommand(TEXT("wl.Qa.LFF.Withdraw"), TEXT("Withdraw a Looking for Feed listing: wl.Qa.LFF.Withdraw <id>."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Withdraw")); }));
-static FAutoConsoleCommandWithArgs FilterCommand(TEXT("wl.Qa.LFF.Filter"), TEXT("Filter the Looking for Feed: wl.Qa.LFF.Filter <category>."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Filter")); }));
-static FAutoConsoleCommandWithArgs RequestCommand(TEXT("wl.Qa.LFF.Request"), TEXT("Request to join a Looking for Feed listing: wl.Qa.LFF.Request <id>."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Request")); }));
+static FAutoConsoleCommandWithArgs FilterCommand(TEXT("wl.Qa.LFF.Filter"), TEXT("Filter the Looking for Feed: wl.Qa.LFF.Filter <category>, or all, none, or clear."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Filter")); }));
+static FAutoConsoleCommandWithArgs RequestCommand(TEXT("wl.Qa.LFF.Request"), TEXT("Request to join a Looking for Feed listing: wl.Qa.LFF.Request <id> [message...]."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Request")); }));
+static FAutoConsoleCommandWithArgs AcceptCommand(TEXT("wl.Qa.LFF.Accept"), TEXT("Accept a Looking for Feed request: wl.Qa.LFF.Accept <id>."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Accept")); }));
+static FAutoConsoleCommandWithArgs DeclineCommand(TEXT("wl.Qa.LFF.Decline"), TEXT("Decline a Looking for Feed request: wl.Qa.LFF.Decline <id>."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Decline")); }));
 static FAutoConsoleCommandWithArgs DumpCommand(TEXT("wl.Qa.LFF.Dump"), TEXT("Print the current Looking for Feed QA state as one JSON line."), FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args) { Dispatch(Args, TEXT("wl.Qa.LFF.Dump")); }));
+
+static struct FQaHeartbeatHook {
+	FQaHeartbeatHook() {
+		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Qa.LFF.Enabled"))) {
+			Var->SetOnChangedCallback(FConsoleVariableDelegate::CreateStatic(&OnQaEnabled));
+		}
+	}
+} GQaHeartbeatHook;
 
 }  // namespace WonderlandLffQaTraceConsole
 #endif
