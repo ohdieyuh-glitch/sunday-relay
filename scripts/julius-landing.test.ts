@@ -850,6 +850,9 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
       'relay/julius-wonder-web-vm-tools-20261023',
       'relay/julius-wonder-web-vm-tools-live-20261023',
       'relay/julius-run-id-adoption-20261023',
+      'relay/julius-bridge-grok-companion-20261023',
+      'relay/julius-wonderland-chatgpt-companion-20261023',
+      'relay/julius-companion-task-20261023',
     ]);
   });
 
@@ -910,6 +913,9 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
     'relay/julius-wonder-web-vm-tools-20261023',
     'relay/julius-wonder-web-vm-tools-live-20261023',
     'relay/julius-run-id-adoption-20261023',
+    'relay/julius-bridge-grok-companion-20261023',
+    'relay/julius-wonderland-chatgpt-companion-20261023',
+    'relay/julius-companion-task-20261023',
   ];
   const provisional = [
     'relay/julius-wonderland-mp-reliability-20261023',
@@ -961,6 +967,12 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
     expect(text).toContain('# YUJI.');
     const adoption = raw.findIndex((line) => line.trim() === 'relay/julius-run-id-adoption-20261023');
     expect(raw[adoption - 1]).toBe('# YUJI. Julius bootstrap adopts the admission-minted server_run_id. Retire this entry after it lands.');
+    const grok = raw.findIndex((line) => line.trim() === 'relay/julius-bridge-grok-companion-20261023');
+    expect(raw[grok - 1]).toBe('# BRIDGE. Grok Bot companion contract, wake sender and result route; stacks on #407. Retire this entry after it lands.');
+    const chatgpt = raw.findIndex((line) => line.trim() === 'relay/julius-wonderland-chatgpt-companion-20261023');
+    expect(raw[chatgpt - 1]).toBe('# Cosmo. player-owned ChatGPT side companion, relay part. Retire this entry after it lands.');
+    const task = raw.findIndex((line) => line.trim() === 'relay/julius-companion-task-20261023');
+    expect(raw[task - 1]).toBe('# YUJI. Julius companion_task slot. Retire this entry after it lands.');
   });
 
   it('the shipped allowlist refuses the superseded Candidate C branch (evidence-1) and allows evidence-2', () => {

@@ -63,3 +63,9 @@ relay/julius-wonder-web-vm-tools-20261023
 relay/julius-wonder-web-vm-tools-live-20261023
 # YUJI. Julius bootstrap adopts the admission-minted server_run_id. Retire this entry after it lands.
 relay/julius-run-id-adoption-20261023
+# BRIDGE. Grok Bot companion contract, wake sender and result route; stacks on #407. Retire this entry after it lands.
+relay/julius-bridge-grok-companion-20261023
+# Cosmo. player-owned ChatGPT side companion, relay part. Retire this entry after it lands.
+relay/julius-wonderland-chatgpt-companion-20261023
+# YUJI. Julius companion_task slot. Retire this entry after it lands.
+relay/julius-companion-task-20261023
