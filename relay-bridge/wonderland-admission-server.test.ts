@@ -112,9 +112,10 @@ describe('admission through createBridgeServer', () => {
 
   afterAll(async () => {
     vi.unstubAllEnvs();
-    if (server === null) return;
-    server.closeAllConnections?.();
-    await new Promise<void>((resolve) => server?.close(() => resolve()));
+    const running = server;
+    if (running === null) throw new Error('admission server was not started');
+    running.closeAllConnections?.();
+    await new Promise<void>((resolve) => running.close(() => resolve()));
   });
 
   it('POST /wonderland/julius/dispatch?projectId= admits on the real server', async () => {
