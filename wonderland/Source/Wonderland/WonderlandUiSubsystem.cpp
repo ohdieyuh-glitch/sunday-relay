@@ -543,6 +543,13 @@ FLinearColor UWonderlandUiSubsystem::GetCompanionTerminalAccent(int32 Index) con
 		? CompanionTerminals[Index]->GetPaintedAccent() : FLinearColor::Transparent;
 }
 
+FLinearColor UWonderlandUiSubsystem::GetCompanionTerminalOutline(int32 Index) const
+{
+	// THE TERMINAL'S OWN OUTLINE. The getter above stays the painted readback.
+	return CompanionTerminals.IsValidIndex(Index) && CompanionTerminals[Index].IsValid()
+		? WonderlandMascotStyle::CompanionTerminalAccentFor(Index) : FLinearColor::Transparent;
+}
+
 int32 UWonderlandUiSubsystem::GetCompanionTerminalLineCount(int32 Index) const
 {
 	return CompanionTerminals.IsValidIndex(Index) && CompanionTerminals[Index].IsValid() ? CompanionTerminals[Index]->GetLineCount() : 0;

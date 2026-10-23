@@ -108,6 +108,30 @@ namespace WonderWebWorkspaceTuning
 		TEXT("Julius Connect: bring the Connections window forward when Julius starts waiting on the user (1) or not (0)."));
 }
 
+namespace
+{
+	/**
+	 * FORGE's cue, in FORGE's names. ApplyCue does not read the old names (spawn_close_up, minimize, close, vm_ended).
+	 * An end cause is attached only for vm_ended_anim; every other cue drops it. queued_chip is not an intent:
+	 * PlanForCue does not know it, so a 7th window is admitted with PresentQueuedChip instead.
+	 */
+	bool PlayWonderWebCue(AWonderlandWonderWebScreen* Screen, const char* Intent, const FString* EndCause)
+	{
+		if (Screen == nullptr || Intent == nullptr)
+		{
+			return false;
+		}
+		WonderlandWonderWebWindowLook::FForgeCue Cue;
+		Cue.Intent = Intent;
+		if (EndCause != nullptr && Cue.Intent == "vm_ended_anim")
+		{
+			Cue.bHasEndCause = true;
+			Cue.EndCause = std::string(TCHAR_TO_UTF8(**EndCause));
+		}
+		return Screen->ApplyCue(Cue);
+	}
+}
+
 UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::FindWonderWebWindow(FName Id)
 {
 	return WonderWebWindows.FindByPredicate([Id](const FWonderWebWindow& Window) { return Window.Id == Id; });
@@ -168,6 +192,10 @@ UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::EnsureWonderWe
 				.OnRequestConnections_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenWonderWebWindow(WonderWebWindowIds::Connections); } });
 			Window->Content = WonderWebPanel;
 			Window->ContentSize = SWonderlandWonderWebPanel::DesignSize();
+			// NO VM IS ATTACHED. An unset look keeps the legacy lettering. When a caller does pass an identity,
+			// agentDisplayName is copied exactly as given and a missing or null name stays unset
+			// (bHasAgentDisplayName false) so the look shows Unnamed agent. The identity has no title and no provider label.
+			WonderWebPanel->SetWindowLook(FWonderWebWindowLook());
 			const TWeakObjectPtr<UWonderlandWonderWebSubsystem> WebState(WonderWebState());
 			Window->Chip = SNew(SWonderWebWindowChip)
 				.Title(INVTEXT("PIXEL CANVAS"))
@@ -200,6 +228,8 @@ UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::EnsureWonderWe
 				.OnRequestExpand_Lambda([WeakThis, Id]() { if (WeakThis.IsValid()) { WeakThis->ExpandWonderWebWindow(Id); } });
 			Window->Content = Panel;
 			Window->ContentSize = SWonderlandWonderWebBrowserPanel::DesignSize();
+			// Same as the creation window: no session, so the look stays unset. No title, no provider label.
+			Panel->SetWindowLook(FWonderWebWindowLook());
 			const TWeakObjectPtr<UWonderlandWonderWebBrowseSubsystem> BrowseWeak(BrowseState());
 			Window->Chip = SNew(SWonderWebWindowChip)
 				.Title(INVTEXT("WONDER WEB"))
@@ -261,6 +291,10 @@ UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::EnsureWonderWe
 		Params.ObjectFlags |= RF_Transient;
 		Screen = World->SpawnActor<AWonderlandWonderWebScreen>(AWonderlandWonderWebScreen::StaticClass(), FTransform::Identity, Params);
 		Window->Screen = Screen;
+		if (Screen != nullptr)
+		{
+			Screen->SetWindowLook(FWonderWebWindowLook());
+		}
 	}
 	return Window;
 }
@@ -272,8 +306,30 @@ void UWonderlandUiSubsystem::PresentWonderWebWindow(FWonderWebWindow& Window)
 	{
 		return;
 	}
-	Screen->Present(Window.ContentSize, SWonderWebWindowChip::DesignSize(), WonderWebWorkspace.Get());
-	Screen->SetMinimized(Window.bMinimized);
+	const FVector2D ChipSize = SWonderWebWindowChip::DesignSize();
+	AWonderlandWonderWebWorkspace* Workspace = WonderWebWorkspace.Get();
+	const bool bOtherHeld = WonderWebWindows.ContainsByPredicate([&Window](const FWonderWebWindow& Other)
+	{
+		return Other.bOpen && Other.Id != Window.Id;
+	});
+	if (Window.bMinimized && !Screen->IsPresented() && Screen->GetOpen() <= 0.0f && Screen->GetChipOpen() <= 0.0f)
+	{
+		// A chip that has not stood on this actor. The 7th window (queued_chip) is that admission: ApplyCue does
+		// not know the name, so this is PresentQueuedChip. A chip from the start, no unfold, and no camera.
+		Screen->PresentQueuedChip(Window.ContentSize, ChipSize, Workspace);
+	}
+	else if (Window.bMinimized)
+	{
+		Screen->Present(Window.ContentSize, ChipSize, Workspace);
+		PlayWonderWebCue(Screen, "minimize_fold", nullptr);
+	}
+	else
+	{
+		// Size and the workspace attachment, then the cue. ApplyCue re-presents at what the actor stores.
+		// The camera blend stays the caller's (OpenOverlay); the look does not move it.
+		Screen->Present(Window.ContentSize, ChipSize, Workspace);
+		PlayWonderWebCue(Screen, bOtherHeld ? "spawn_inline" : "cinematic_closeup", nullptr);
+	}
 	// Drawn by the workspace layer over where its glass stands.
 	if (WonderWebLayer.IsValid())
 	{
@@ -287,7 +343,7 @@ TArray<AWonderlandWonderWebScreen*> UWonderlandUiSubsystem::OpenWonderWebScreens
 	for (const FWonderWebWindow& Window : WonderWebWindows)
 	{
 		AWonderlandWonderWebScreen* Screen = Window.Screen.Get();
-		if (Window.bOpen && Screen != nullptr && Screen->IsPresented())
+		if (Window.bOpen && Screen != nullptr && !Screen->HasLeft())
 		{
 			Screens.Add(Screen);
 		}
@@ -376,10 +432,8 @@ int32 UWonderlandUiSubsystem::GetWonderWebWindowLimit() const
 
 FName UWonderlandUiSubsystem::NextWonderWebWindowId() const
 {
-	if (CountOpenWonderWebWindows() >= GetWonderWebWindowLimit())
-	{
-		return NAME_None;
-	}
+	// PAST THE SHOWN CAP the next name is still issued. Open admits that window as a chip.
+	// NAME_None only when every browser name this build answers to is already open.
 	// The first window is called "browser"; the rest are numbered. A closed number is reused, so the names stay small.
 	if (FindWonderWebWindow(WonderWebWindowIds::Browser) == nullptr || !FindWonderWebWindow(WonderWebWindowIds::Browser)->bOpen)
 	{
@@ -417,11 +471,12 @@ bool UWonderlandUiSubsystem::SpawnWonderWebWindow()
 		return false;
 	}
 	const int32 Limit = GetWonderWebWindowLimit();
+	const int32 OpenBefore = CountOpenWonderWebWindows();
 	const FName Id = NextWonderWebWindowId();
 	if (Id == NAME_None)
 	{
-		// AT THE LIMIT: nothing is opened, and the workspace says so where the founder is already looking. Not a modal,
-		// not a beep, and not silence -- a press that does nothing without saying why is the worst of the three.
+		// NO NAME LEFT. The shown cap does not land here: that window opens as a chip. This is every browser
+		// name already in use. Nothing is opened, and the workspace says so where the founder is already looking.
 		const UWonderlandEntitlementSubsystem* Account = Entitlements();
 		const FString Tier = Account != nullptr ? Account->GetTierLabel() : TEXT("FREE");
 		if (WonderWebLayer.IsValid())
@@ -436,8 +491,10 @@ bool UWonderlandUiSubsystem::SpawnWonderWebWindow()
 			Account != nullptr ? *Account->GetTierLabel() : TEXT("FREE"));
 		return false;
 	}
+	const bool bQueuedChip = OpenBefore >= Limit;
 	const bool bOpened = OpenWonderWebWindow(Id);
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI ctrl+w opened %s (%d of %d)"), *Id.ToString(), CountOpenWonderWebWindows(), Limit);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI ctrl+w %s %s (%d of %d)"), bQueuedChip ? TEXT("queued chip") : TEXT("opened"),
+		*Id.ToString(), CountOpenWonderWebWindows(), Limit);
 	return bOpened;
 }
 
@@ -457,12 +514,15 @@ bool UWonderlandUiSubsystem::OpenWonderWebWindow(FName Id)
 		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web: no window called %s"), *Id.ToString());
 		return false;
 	}
-	if (!Window->bOpen)
+	const bool bWasOpen = Window->bOpen;
+	if (!bWasOpen)
 	{
 		Window->bOpen = true;
 		Window->OpenedOrder = ++WonderWebOpenCounter;
 	}
-	Window->bMinimized = false;
+	// A window past the shown cap starts as a chip and does not unfold. Opening one that is already up still restores it.
+	const bool bStartsAsChip = !bWasOpen && IsWonderWebBrowserPastShownCap(*Window);
+	Window->bMinimized = bStartsAsChip;
 	if (Open != EOverlay::WonderWeb)
 	{
 		OpenOverlay(EOverlay::WonderWeb);
@@ -472,7 +532,15 @@ bool UWonderlandUiSubsystem::OpenWonderWebWindow(FName Id)
 		PresentWonderWebWindow(*Window);
 		TileWonderWeb();
 	}
-	FocusWonderWebWindow(Id);
+	if (bStartsAsChip)
+	{
+		const FName Shown = MostRecentWonderWebWindow(Id);
+		FocusWonderWebWindow(Shown.IsNone() ? Id : Shown);
+	}
+	else
+	{
+		FocusWonderWebWindow(Id);
+	}
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web window %s open (%d open)"), *Id.ToString(), OpenWonderWebScreens().Num());
 	return IsWonderWebOpen();
 }
@@ -491,19 +559,113 @@ bool UWonderlandUiSubsystem::CloseWonderWebWindow(FName Id)
 		CloseOverlay();
 		return true;
 	}
+	AWonderlandWonderWebScreen* Screen = Window->Screen.Get();
+	if (Screen == nullptr)
+	{
+		SettleWonderWebWindow(Id);
+		return true;
+	}
+	if (Screen->IsClosing() || Screen->IsVmEnded())
+	{
+		return true;
+	}
+	// close_anim, never an end cause. The window stays held until it has left; then settleClosing.
+	PlayWonderWebCue(Screen, "close_anim", nullptr);
+	ArmWonderWebWindowLeave(Id);
+	return true;
+}
+
+bool UWonderlandUiSubsystem::IsWonderWebBrowserPastShownCap(const FWonderWebWindow& Window) const
+{
+	if (!IsBrowserWindow(Window.Id))
+	{
+		return false;
+	}
+	int32 Earlier = 0;
+	for (const FWonderWebWindow& Other : WonderWebWindows)
+	{
+		if (Other.bOpen && IsBrowserWindow(Other.Id) && Other.OpenedOrder < Window.OpenedOrder)
+		{
+			++Earlier;
+		}
+	}
+	return Earlier >= GetWonderWebWindowLimit();
+}
+
+void UWonderlandUiSubsystem::SettleWonderWebWindow(FName Id)
+{
+	FWonderWebWindow* Window = FindWonderWebWindow(Id);
+	if (Window == nullptr || !Window->bOpen)
+	{
+		return;
+	}
 	Window->bOpen = false;
 	Window->bMinimized = false;
 	Window->bExpanded = false;
-	if (AWonderlandWonderWebScreen* Screen = Window->Screen.Get())
+	const bool bAnyOpen = WonderWebWindows.ContainsByPredicate([](const FWonderWebWindow& Other) { return Other.bOpen; });
+	if (!bAnyOpen && Open == EOverlay::WonderWeb)
 	{
-		Screen->Dismiss();
+		// The last held window has left. The workspace close returns the camera; this cue does not.
+		CloseOverlay();
+		return;
 	}
 	if (FocusedWonderWebWindow == Id)
 	{
 		FocusWonderWebWindow(MostRecentWonderWebWindow(Id));
 	}
 	TileWonderWeb();
-	return true;
+}
+
+void UWonderlandUiSubsystem::ArmWonderWebWindowLeave(FName Id)
+{
+	const TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakThis, Id](float)
+	{
+		UWonderlandUiSubsystem* Self = WeakThis.Get();
+		if (Self == nullptr)
+		{
+			return false;
+		}
+		const FWonderWebWindow* Window = Self->FindWonderWebWindow(Id);
+		if (Window == nullptr || !Window->bOpen)
+		{
+			return false;
+		}
+		AWonderlandWonderWebScreen* Screen = Window->Screen.Get();
+		if (Screen == nullptr || Screen->HasLeft())
+		{
+			Self->SettleWonderWebWindow(Id);
+			return false;
+		}
+		// A spawn after this leave presents again and clears VM ENDED. That leave is no longer the one to settle.
+		if (Screen->IsPresented() && !Screen->IsVmEnded() && !Screen->IsClosing())
+		{
+			return false;
+		}
+		return true;
+	}), 0.0f);
+}
+
+void UWonderlandUiSubsystem::EndWonderWebWindowVm(FName Id, bool bHasEndCause, const FString& EndCause)
+{
+	FWonderWebWindow* Window = FindWonderWebWindow(Id);
+	if (Window == nullptr || !Window->bOpen)
+	{
+		return;
+	}
+	AWonderlandWonderWebScreen* Screen = Window->Screen.Get();
+	if (Screen == nullptr)
+	{
+		SettleWonderWebWindow(Id);
+		return;
+	}
+	if (Screen->IsVmEnded() || Screen->IsClosing())
+	{
+		return;
+	}
+	// endCause is read only here. The screen holds the veil, then 1.6 s, then leaves. A chip leaves at once.
+	PlayWonderWebCue(Screen, "vm_ended_anim", bHasEndCause ? &EndCause : nullptr);
+	ArmWonderWebWindowLeave(Id);
 }
 
 bool UWonderlandUiSubsystem::MinimizeWonderWebWindow(FName Id, bool bMinimize)
@@ -520,7 +682,7 @@ bool UWonderlandUiSubsystem::MinimizeWonderWebWindow(FName Id, bool bMinimize)
 	}
 	if (AWonderlandWonderWebScreen* Screen = Window->Screen.Get())
 	{
-		Screen->SetMinimized(bMinimize);
+		PlayWonderWebCue(Screen, bMinimize ? "minimize_fold" : "restore_unfold", nullptr);
 	}
 	if (bMinimize && FocusedWonderWebWindow == Id)
 	{
@@ -555,7 +717,7 @@ bool UWonderlandUiSubsystem::ExpandWonderWebWindow(FName Id)
 	Target->bMinimized = false;
 	if (AWonderlandWonderWebScreen* Screen = Target->Screen.Get())
 	{
-		Screen->SetMinimized(false);
+		PlayWonderWebCue(Screen, "restore_unfold", nullptr);
 	}
 	FocusWonderWebWindow(Id);
 	TileWonderWeb();

@@ -400,6 +400,13 @@ public:
 	FLinearColor GetCompanionTerminalAccent(int32 Index) const;
 
 	/**
+	 * The terminal's own outline: its per-terminal pick, else the shared companion colour.
+	 * The painted readback stays GetCompanionTerminalAccent. Plain C++, not a UFUNCTION: a new
+	 * reflected name shifts the FName table Niagara hashes (WonderlandBeta.h).
+	 */
+	FLinearColor GetCompanionTerminalOutline(int32 Index) const;
+
+	/**
 	 * WHERE A COMPANION TERMINAL AND ITS i.WONDER MARK ARE ON SCREEN, as fractions of the viewport: centre and size.
 	 *
 	 * The same shape as GetSkinPreviewRect and for the same reason: so a proof can read the PIXELS INSIDE the
@@ -632,6 +639,13 @@ public:
 	/** Close one window; closing the last closes the workspace. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
 	bool CloseWonderWebWindow(FName Window);
+
+	/**
+	 * The VM behind this window ended. Plays vm_ended_anim, the only cue that reads an end cause.
+	 * The panel leaves after the veil plus the 1.6 s hold; the window is settled once it has left.
+	 * No session calls this yet. Plain C++, not reflected (Niagara FName rule).
+	 */
+	void EndWonderWebWindowVm(FName Window, bool bHasEndCause, const FString& EndCause);
 
 	/** Fold a window to its chip along the bottom of the workspace (its work goes on), or restore it. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
@@ -998,6 +1012,12 @@ private:
 	FWonderWebWindow* EnsureWonderWebWindow(FName Id);
 	AWonderlandWonderWebWorkspace* EnsureWonderWebWorkspace(APlayerController* Controller);
 	void PresentWonderWebWindow(FWonderWebWindow& Window);
+	/** A browser past the shown cap: the ones opened before it already fill the account's limit. */
+	bool IsWonderWebBrowserPastShownCap(const FWonderWebWindow& Window) const;
+	/** Bookkeeping for a window that has finished leaving (FORGE's settleClosing). */
+	void SettleWonderWebWindow(FName Id);
+	/** Watch the screen and settle this window once it has left. */
+	void ArmWonderWebWindowLeave(FName Id);
 	TArray<AWonderlandWonderWebScreen*> OpenWonderWebScreens() const;
 	void FocusWonderWebScreen(AWonderlandWonderWebScreen* Screen);
 	/** The most recently opened window that is open and not minimized, other than this one. */
