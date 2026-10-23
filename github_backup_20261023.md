@@ -1,0 +1,233 @@
+# Julius GitHub backup — Phase 1 — 2026-10-23 (YUJI)
+Pushes ran 00:32–00:57 PDT to `https://github.com/ohdieyuh-glitch/sunday-relay.git` as NEW branches only: no PR, merge, force, history rewrite, `--no-verify`; main and all pre-existing remote branches untouched. Nothing on Kaisin was deleted, moved, committed or stashed. C: free stayed ~18.2 GB throughout.
+No `_independent_review_20261013\t0clone` refs were pushed, listed or touched; **no `backup/review-20261013/*` refs exist from this run.**
+"On GitHub" = commit is contained in a GitHub branch (checked via `git fetch origin` in sunday-relay + `for-each-ref --contains refs/remotes/origin`, plus `git ls-remote` of GitHub). Hooks: no active hooks / no core.hooksPath in v6, m2, sunday-relay.
+
+## Counts
+- Pushed + verified (ls-remote SHA == local SHA): **175 / 175** (v6 branches 126, v6 detached worktree HEADs 11, m2 2, sunday-relay Julius worktree HEADs 36)
+- Already on GitHub, skipped: v6 branches 13, v6 worktree HEADs 18, m2 branches 2 (`founder/julius-workflow-subscription-realpg`, `ju-main-5004713`), r87a_clone HEAD 1. (55 branch-attached v6 worktrees are covered by their branch push.)
+- Rejected by push protection / hooks: **0**. Transient GitHub server errors (`remote unpack failed: index-pack failed`, not a policy rejection) hit 4 batches (40 refs) on first pass; all succeeded on plain retry (cand-v1-wide needed a 3rd try).
+- Patches written: **12** (some identical: stack=stack2; wt_crt=wt_g=wt_h; h0=h0r3). Untracked-only (name list only, no patch): 7. **Withheld for secret-like content: 2** (r87a_clone, julius-founder-opus). Contents of withheld diffs were not printed or copied.
+
+## Pushed refs
+| Source | Local ref | SHA | Remote branch | Verified |
+|---|---|---|---|---|
+| v6 clone | `refs/heads/cand-v1-wide` | `075c376f3abcf6bb2c53851b44db90460c01eef6` | `backup/julius-v6/cand-v1-wide` | yes |
+| v6 clone | `refs/heads/chain/L0` | `492b6273f6665d607af56086d6fdbffdb9722b30` | `backup/julius-v6/chain/L0` | yes |
+| v6 clone | `refs/heads/chain/L1` | `b678968e1006dd04985310c4ae3c13e4501da0ca` | `backup/julius-v6/chain/L1` | yes |
+| v6 clone | `refs/heads/chain/L2` | `6c214540c91bf3f3c8021dc145852c8100a68705` | `backup/julius-v6/chain/L2` | yes |
+| v6 clone | `refs/heads/chain/L3` | `3dbe6931db58b36df976e964809b834c2a314e85` | `backup/julius-v6/chain/L3` | yes |
+| v6 clone | `refs/heads/chain/L4` | `f74f81d214459684601bf21e600d51bc35316b74` | `backup/julius-v6/chain/L4` | yes |
+| v6 clone | `refs/heads/chain/L5` | `809b55b92cae7cea71c9a13bb9c31160d1dd2ae6` | `backup/julius-v6/chain/L5` | yes |
+| v6 clone | `refs/heads/chain/N4` | `8b64e80602b71612f5e4fa13647e1f388a125e9c` | `backup/julius-v6/chain/N4` | yes |
+| v6 clone | `refs/heads/chain/N5` | `ace064a15839bb77d5bb14c62c0be3e54af04ca3` | `backup/julius-v6/chain/N5` | yes |
+| v6 clone | `refs/heads/chain35e/L0` | `492b6273f6665d607af56086d6fdbffdb9722b30` | `backup/julius-v6/chain35e/L0` | yes |
+| v6 clone | `refs/heads/chain35e/L1` | `ef94436b3a19c39ee199bd52dd82dae4d7ab70fc` | `backup/julius-v6/chain35e/L1` | yes |
+| v6 clone | `refs/heads/chain35e/L2` | `4efe8f6906aea5eeed010ea1e4c502090927a36e` | `backup/julius-v6/chain35e/L2` | yes |
+| v6 clone | `refs/heads/chain35e/L3` | `ddbcecb15899ab09f22ebd93931f97901e8bb65a` | `backup/julius-v6/chain35e/L3` | yes |
+| v6 clone | `refs/heads/chain35e/L4` | `5e3d41185c571dff64203838d826a7bcb2b66cd9` | `backup/julius-v6/chain35e/L4` | yes |
+| v6 clone | `refs/heads/chain35e/L5` | `0a578b27124294e6a41719a51af549c79ac2eec6` | `backup/julius-v6/chain35e/L5` | yes |
+| v6 clone | `refs/heads/chain35e/N4` | `5b1be5ae5d0ef5f01ac7a70d59d5f4dc1512ad59` | `backup/julius-v6/chain35e/N4` | yes |
+| v6 clone | `refs/heads/chain35e/N5` | `484bf1c975794be443648e269a718dfb88310286` | `backup/julius-v6/chain35e/N5` | yes |
+| v6 clone | `refs/heads/chain35f/L0` | `492b6273f6665d607af56086d6fdbffdb9722b30` | `backup/julius-v6/chain35f/L0` | yes |
+| v6 clone | `refs/heads/chain35f/L1` | `4e74f685ae1269595a1cc063f932ee0348fb7ff8` | `backup/julius-v6/chain35f/L1` | yes |
+| v6 clone | `refs/heads/chain35f/L2` | `16572249aba5ea46a7ef8e8caf7b99bf73f5b9eb` | `backup/julius-v6/chain35f/L2` | yes |
+| v6 clone | `refs/heads/chain35f/L3` | `c14544be7af188839f3009bfdadf833666533e6c` | `backup/julius-v6/chain35f/L3` | yes |
+| v6 clone | `refs/heads/chain35f/L4` | `35e32558f404eb42f18fa0d0a17dd178ffc1f200` | `backup/julius-v6/chain35f/L4` | yes |
+| v6 clone | `refs/heads/chain35f/L5` | `cabe77f76cb07f2883c81246d901500a287a5d0b` | `backup/julius-v6/chain35f/L5` | yes |
+| v6 clone | `refs/heads/chain35f/N4` | `e1cb452557117961b188bb5bfc54e61a0a322851` | `backup/julius-v6/chain35f/N4` | yes |
+| v6 clone | `refs/heads/chain35f/N5` | `3053aa82b19508b806e97400377464d0f43cd87d` | `backup/julius-v6/chain35f/N5` | yes |
+| v6 clone | `refs/heads/chain35g/L0` | `7ceaf8c6825e8333d2f8cc1f203ab58568f5560d` | `backup/julius-v6/chain35g/L0` | yes |
+| v6 clone | `refs/heads/chain35g/L1` | `a8cfc516d9ee2108a2c443f5d75ca20483b75cf4` | `backup/julius-v6/chain35g/L1` | yes |
+| v6 clone | `refs/heads/chain35g/L2` | `4d4cf036d3fcbd2808f2ebd092f8758f2a065a55` | `backup/julius-v6/chain35g/L2` | yes |
+| v6 clone | `refs/heads/chain35g/L3` | `1b4e81e2e5f6bd89a61306bc92ee8942ae28bc71` | `backup/julius-v6/chain35g/L3` | yes |
+| v6 clone | `refs/heads/chain35g/L4` | `0b9e6f212e2aedf1e3553288cb81a462b9601106` | `backup/julius-v6/chain35g/L4` | yes |
+| v6 clone | `refs/heads/chain35g/L5` | `6946325365cca60ff1e3b4da6a3f3191f449ed06` | `backup/julius-v6/chain35g/L5` | yes |
+| v6 clone | `refs/heads/chain35h/L0` | `7ceaf8c6825e8333d2f8cc1f203ab58568f5560d` | `backup/julius-v6/chain35h/L0` | yes |
+| v6 clone | `refs/heads/chain35h/L1` | `ba9fab1b950461745ff73d9ca67babe7eb853deb` | `backup/julius-v6/chain35h/L1` | yes |
+| v6 clone | `refs/heads/chain35h/L2` | `39d1be35f7e2b2a420c99728c5cc5e9f1d14a66f` | `backup/julius-v6/chain35h/L2` | yes |
+| v6 clone | `refs/heads/chain35h/L3` | `2f7d8a863d3f68a72ad3c6c0893968c4be11d1ce` | `backup/julius-v6/chain35h/L3` | yes |
+| v6 clone | `refs/heads/chain35h/L4` | `5fa444b9c06db5d4abb38315e0d7fa91b9acdc0a` | `backup/julius-v6/chain35h/L4` | yes |
+| v6 clone | `refs/heads/chain35h/L5` | `7131c7286e36e35947a628eebbb6bdb352b5fbf9` | `backup/julius-v6/chain35h/L5` | yes |
+| v6 clone | `refs/heads/chain35i/L0` | `7ceaf8c6825e8333d2f8cc1f203ab58568f5560d` | `backup/julius-v6/chain35i/L0` | yes |
+| v6 clone | `refs/heads/chain35i/L1` | `75998f2db3b7ca78fd69f0658d6db2e759640787` | `backup/julius-v6/chain35i/L1` | yes |
+| v6 clone | `refs/heads/chain35i/L2` | `68790b87ebd7daacc60cfe8680464ddd2b2afed5` | `backup/julius-v6/chain35i/L2` | yes |
+| v6 clone | `refs/heads/chain35i/L3` | `6e1942b25ed7a0b7548f8fc536a53fe876c97e2c` | `backup/julius-v6/chain35i/L3` | yes |
+| v6 clone | `refs/heads/chain35i/L4` | `9219d7accb23cf858a468f1855c5aff7d38bd0ba` | `backup/julius-v6/chain35i/L4` | yes |
+| v6 clone | `refs/heads/chain35i/L5` | `cf706b445427af2ed221c9eb962226be76dcc33f` | `backup/julius-v6/chain35i/L5` | yes |
+| v6 clone | `refs/heads/chain35j/L0` | `7ceaf8c6825e8333d2f8cc1f203ab58568f5560d` | `backup/julius-v6/chain35j/L0` | yes |
+| v6 clone | `refs/heads/chain35j/L1` | `ceaa12be210c5808b10446b0d07e4f51110bc8eb` | `backup/julius-v6/chain35j/L1` | yes |
+| v6 clone | `refs/heads/chain35j/L2` | `2163d8fc21f483b5facd2cad8bc1daa34a4f1cc4` | `backup/julius-v6/chain35j/L2` | yes |
+| v6 clone | `refs/heads/chain35j/L3` | `bc17ede7a617ffee007fe0f3c84644f837658988` | `backup/julius-v6/chain35j/L3` | yes |
+| v6 clone | `refs/heads/chain35j/L4` | `d070c11ed5cc22da00cae863f622750f87595314` | `backup/julius-v6/chain35j/L4` | yes |
+| v6 clone | `refs/heads/chain35j/L5` | `006f0f71b0be9499431f39d8c70746eeff1e7546` | `backup/julius-v6/chain35j/L5` | yes |
+| v6 clone | `refs/heads/chain35j/N4` | `9111d967bd7647069b1f9af4041fe161549780c6` | `backup/julius-v6/chain35j/N4` | yes |
+| v6 clone | `refs/heads/chain35j/N5` | `95b93fa724480b824ca69eb8f0c9e7d96672e5b7` | `backup/julius-v6/chain35j/N5` | yes |
+| v6 clone | `refs/heads/chain35k/L0` | `7ceaf8c6825e8333d2f8cc1f203ab58568f5560d` | `backup/julius-v6/chain35k/L0` | yes |
+| v6 clone | `refs/heads/chain35k/L1` | `6ad3513524e0aef9d22ad4c538ce8488e02b1f96` | `backup/julius-v6/chain35k/L1` | yes |
+| v6 clone | `refs/heads/chain35k/L2` | `1cec02e40d1986984a7c0f30985a631061788431` | `backup/julius-v6/chain35k/L2` | yes |
+| v6 clone | `refs/heads/chain35k/L3` | `0b32ccca46595dee41a99ea2c0d2b512ced1b11e` | `backup/julius-v6/chain35k/L3` | yes |
+| v6 clone | `refs/heads/chain35k/L4` | `2f04216c718c38e242c2bbd8eb312911d5746691` | `backup/julius-v6/chain35k/L4` | yes |
+| v6 clone | `refs/heads/chain35k/L5` | `e0671b1892bbf11beb4cea28d5bd0022b2886959` | `backup/julius-v6/chain35k/L5` | yes |
+| v6 clone | `refs/heads/chain35k/N4` | `956e9749a9c5c9faed6fbbeca8d1156d6f57d522` | `backup/julius-v6/chain35k/N4` | yes |
+| v6 clone | `refs/heads/chain35k/N5` | `dfa20ccd870c7f918e082b6d29d378fb681100ff` | `backup/julius-v6/chain35k/N5` | yes |
+| v6 clone | `refs/heads/dev/accounting-instruments` | `403276bc40b90f404dafcbb028971d69bae5ab9d` | `backup/julius-v6/dev/accounting-instruments` | yes |
+| v6 clone | `refs/heads/dev/ask-f4f8` | `68c7644a2a63f3c70b951591efe13b2a8e453a1f` | `backup/julius-v6/dev/ask-f4f8` | yes |
+| v6 clone | `refs/heads/dev/ask-file-store` | `255e27bf14e7da042d7888dc26e59dac142890d0` | `backup/julius-v6/dev/ask-file-store` | yes |
+| v6 clone | `refs/heads/dev/ask-negative-controls` | `37a21e0a63caa0386aff66b0bc906f3c1f6618f1` | `backup/julius-v6/dev/ask-negative-controls` | yes |
+| v6 clone | `refs/heads/dev/ask-negative-controls-2` | `cbc4925aa47f6ef1cd7672ab86ec9a5670ce0ffd` | `backup/julius-v6/dev/ask-negative-controls-2` | yes |
+| v6 clone | `refs/heads/dev/ask-negative-controls-3` | `78a6792f6c2808d82167c6b28c00a2b34267feac` | `backup/julius-v6/dev/ask-negative-controls-3` | yes |
+| v6 clone | `refs/heads/dev/autonomous-landing` | `728398d925ddbaee5df8ffb4c646f4340c2e26b6` | `backup/julius-v6/dev/autonomous-landing` | yes |
+| v6 clone | `refs/heads/dev/autonomous-landing-v3` | `d8b44c4c0e26cc96730e72d8ca26a2318c17a0da` | `backup/julius-v6/dev/autonomous-landing-v3` | yes |
+| v6 clone | `refs/heads/dev/c4-blindness-hardening` | `cf25ff1038f70a69adb1675a897b8e53fb6bc2f0` | `backup/julius-v6/dev/c4-blindness-hardening` | yes |
+| v6 clone | `refs/heads/dev/coder-runtime-budget-draft` | `b231cd753d19068440b66d6537cde7ff9029bd64` | `backup/julius-v6/dev/coder-runtime-budget-draft` | yes |
+| v6 clone | `refs/heads/dev/crt-3b-failclosed` | `48c2110b42256f76b81c105027d800f7e63e2e1d` | `backup/julius-v6/dev/crt-3b-failclosed` | yes |
+| v6 clone | `refs/heads/dev/crt-adversarial-juju2` | `dfbf26e8af9bf4166a4b29c869f1b37494c0f16d` | `backup/julius-v6/dev/crt-adversarial-juju2` | yes |
+| v6 clone | `refs/heads/dev/diag-audit-fixes-1` | `855c7632ded8f416fef8b10684f07250ceb3a2d1` | `backup/julius-v6/dev/diag-audit-fixes-1` | yes |
+| v6 clone | `refs/heads/dev/diag-mission-2` | `9226bb0a9f9f2bb6b9cc4c757e2deb7915ffd4e0` | `backup/julius-v6/dev/diag-mission-2` | yes |
+| v6 clone | `refs/heads/dev/diag4-c-registration` | `731fe6ec04dfd247e24d1460a175e61e67d82679` | `backup/julius-v6/dev/diag4-c-registration` | yes |
+| v6 clone | `refs/heads/dev/diag4-c-typecheck` | `f72d3a4c497aa0b47cf53d0b6e637691f55e5c6f` | `backup/julius-v6/dev/diag4-c-typecheck` | yes |
+| v6 clone | `refs/heads/dev/diag4-shortlist` | `bc8b7c1a44220a4b1a42c8bd1831dbc419683ca8` | `backup/julius-v6/dev/diag4-shortlist` | yes |
+| v6 clone | `refs/heads/dev/joint1-mission-dirs` | `9e632d66bceb99451cc3f779b6c591a1fe5dc817` | `backup/julius-v6/dev/joint1-mission-dirs` | yes |
+| v6 clone | `refs/heads/dev/julius-ask-route` | `167a3581e7f10aee3ab4d5a92d41b4e7ac2cb0ef` | `backup/julius-v6/dev/julius-ask-route` | yes |
+| v6 clone | `refs/heads/dev/lander-v33-candidate` | `ac70f481b447f613bdcfd46992ef55648a7c44a9` | `backup/julius-v6/dev/lander-v33-candidate` | yes |
+| v6 clone | `refs/heads/dev/lander-v33-candidate-b` | `08566ef4890de7895530deb963595860b160b174` | `backup/julius-v6/dev/lander-v33-candidate-b` | yes |
+| v6 clone | `refs/heads/dev/lander-v33b` | `12361c1488a0f99b82c9a87e9f281ce67ca193b9` | `backup/julius-v6/dev/lander-v33b` | yes |
+| v6 clone | `refs/heads/dev/landing-attack` | `80b05ce9ec7e45d2e470e99a6b47e6663863ae7d` | `backup/julius-v6/dev/landing-attack` | yes |
+| v6 clone | `refs/heads/dev/landing-harden` | `46078fccb169d547e774dd5540a1e40b0285bb7e` | `backup/julius-v6/dev/landing-harden` | yes |
+| v6 clone | `refs/heads/dev/landing-harden-2` | `10a599b4172b7791e6ebfd5109bedaa4a13b650d` | `backup/julius-v6/dev/landing-harden-2` | yes |
+| v6 clone | `refs/heads/dev/maxeffort-gauntlet` | `c46fa503064d78e46b2a12b612271cab6ed982a8` | `backup/julius-v6/dev/maxeffort-gauntlet` | yes |
+| v6 clone | `refs/heads/dev/maxeffort-gauntlet-c2` | `391d350f8189034a9c2a39caeb79afa4ff591292` | `backup/julius-v6/dev/maxeffort-gauntlet-c2` | yes |
+| v6 clone | `refs/heads/dev/maxeffort-loop` | `720404f5c27dca8db42e0492cab5b926c53a90c0` | `backup/julius-v6/dev/maxeffort-loop` | yes |
+| v6 clone | `refs/heads/dev/maxeffort-loop-r4` | `daebae4cf721c53f38d775a2f91a73dcdf537468` | `backup/julius-v6/dev/maxeffort-loop-r4` | yes |
+| v6 clone | `refs/heads/dev/maxeffort-loop-r5` | `9c0876e042cc6d085d4c28d6c3ae4114048c383f` | `backup/julius-v6/dev/maxeffort-loop-r5` | yes |
+| v6 clone | `refs/heads/dev/partial-secret-fix-design` | `dc938bd100466c8974c064804f66025d163b3249` | `backup/julius-v6/dev/partial-secret-fix-design` | yes |
+| v6 clone | `refs/heads/dev/partial-secret-fix-pr` | `86ba43887a227b526dbeeaf26f510287cb9097e0` | `backup/julius-v6/dev/partial-secret-fix-pr` | yes |
+| v6 clone | `refs/heads/dev/provenance-signed-landing` | `07ed5b217781d2b4f8c53879741aa0585e4eb69a` | `backup/julius-v6/dev/provenance-signed-landing` | yes |
+| v6 clone | `refs/heads/dev/report-refused-reason-token` | `761cf1562835660dfe1a76b2a094a00d850fa76c` | `backup/julius-v6/dev/report-refused-reason-token` | yes |
+| v6 clone | `refs/heads/dev/s2-footer-fix` | `8b4fa5dff42b88c9a72152134aaaf19f47f6d302` | `backup/julius-v6/dev/s2-footer-fix` | yes |
+| v6 clone | `refs/heads/dev/s2-sanitizer-sk-keys` | `a3b62a9e2703caa10f19e6d47c2be672f8010bba` | `backup/julius-v6/dev/s2-sanitizer-sk-keys` | yes |
+| v6 clone | `refs/heads/dev/self-test-exit-and-effort-evidence` | `fa1ee6a524a6e04c1d524a909aaa1cf521de189f` | `backup/julius-v6/dev/self-test-exit-and-effort-evidence` | yes |
+| v6 clone | `refs/heads/dev/stack-crt-pins` | `9c6735d0c74071e1f29719aa9a734bb8399bb3a4` | `backup/julius-v6/dev/stack-crt-pins` | yes |
+| v6 clone | `refs/heads/dev/stack-crt-pins-c2` | `c2b7555059488a32f4801acc0d8a95fb8fc891e8` | `backup/julius-v6/dev/stack-crt-pins-c2` | yes |
+| v6 clone | `refs/heads/dev/stack-sec-c2` | `01969929c72c485c225c2d688c7109fd4ab816d2` | `backup/julius-v6/dev/stack-sec-c2` | yes |
+| v6 clone | `refs/heads/dev/v34-advisories` | `b3ff19589cc38434723ea56f41789ac20bbb985b` | `backup/julius-v6/dev/v34-advisories` | yes |
+| v6 clone | `refs/heads/dev/v34-pkg1-trailing-newline` | `4ccf08425bc3d48dae477f4d0a58dcb1cfeddf23` | `backup/julius-v6/dev/v34-pkg1-trailing-newline` | yes |
+| v6 clone | `refs/heads/dev/v34-pkg2` | `337ccd03054b837c474797877f86b307ca2cb589` | `backup/julius-v6/dev/v34-pkg2` | yes |
+| v6 clone | `refs/heads/dev/v34-pkg2-advisories` | `ae1d7be53b7b93cd7e9dee101ded31721e51d41e` | `backup/julius-v6/dev/v34-pkg2-advisories` | yes |
+| v6 clone | `refs/heads/dev/v35c-redaction` | `b50bb0408414c426ed691f78cbcb3bc98cf1fd56` | `backup/julius-v6/dev/v35c-redaction` | yes |
+| v6 clone | `refs/heads/dev/v35d-shape-gaps` | `c61affbc865ea845fe10ff7c6cdd68b84f2016d5` | `backup/julius-v6/dev/v35d-shape-gaps` | yes |
+| v6 clone | `refs/heads/dev/v35e-escape-gaps` | `6c559888c5e670cb4b79f9a46dbcbf1c0b716b52` | `backup/julius-v6/dev/v35e-escape-gaps` | yes |
+| v6 clone | `refs/heads/dev/v6-recut-2528ac5c` | `4ea7bbcf06315e205b4adacf55e846665191e31c` | `backup/julius-v6/dev/v6-recut-2528ac5c` | yes |
+| v6 clone | `refs/heads/opt2-effort-on-main-5004713` | `b5bd096b51ed1c370d9a502f65462b1dd996b119` | `backup/julius-v6/opt2-effort-on-main-5004713` | yes |
+| v6 clone | `refs/heads/relay/julius-diag-digest-evidence-1` | `dd357e56709fd5240b76fdb7bc370aec0a7111f4` | `backup/julius-v6/relay/julius-diag-digest-evidence-1` | yes |
+| v6 clone | `refs/heads/relay/julius-option2-lab-mission-1` | `482ea04c7fdf263fa96b8003fed18991bd397694` | `backup/julius-v6/relay/julius-option2-lab-mission-1` | yes |
+| v6 clone | `refs/heads/row12-remerge-5004713` | `17205b57644e43fb5d1ea1dd61a84e3c3cee5391` | `backup/julius-v6/row12-remerge-5004713` | yes |
+| v6 clone | `refs/heads/scratch/c-fix-base` | `bf91f3d92b759c990b68ab42b633006ec9f7fbe0` | `backup/julius-v6/scratch/c-fix-base` | yes |
+| v6 clone | `refs/heads/scratch/pack2` | `c6f021e8436b3abc9bd1ae4b831f4f39b45bd9ae` | `backup/julius-v6/scratch/pack2` | yes |
+| v6 clone | `refs/heads/scratch/pack3` | `1b96bdcddb56aa748743cc4c4232a0f8e48424c5` | `backup/julius-v6/scratch/pack3` | yes |
+| v6 clone | `refs/heads/scratch/pack4` | `00ed50802d4e14e291fad668e9b2e4972c9dca97` | `backup/julius-v6/scratch/pack4` | yes |
+| v6 clone | `refs/heads/scratch/post-g-t4` | `8347b9ac2c1b47caa6d57dcd2ffe72a56a3e4c77` | `backup/julius-v6/scratch/post-g-t4` | yes |
+| v6 clone | `refs/heads/scratch/post-h` | `6dce2a6f553ab006a4b8e805ab34e2b79b60d17b` | `backup/julius-v6/scratch/post-h` | yes |
+| v6 clone | `refs/heads/scratch/t3-2` | `afb5768e3c9b9bba5ce8b525b583a099d8b09d80` | `backup/julius-v6/scratch/t3-2` | yes |
+| v6 clone | `refs/heads/scratch/t3-3` | `72af6e98d4cadb943b1e93553676afffa084b9a9` | `backup/julius-v6/scratch/t3-3` | yes |
+| v6 clone | `refs/heads/scratch/v32-combined` | `b886a86b29aeee8fffa88447f5d4703652858c21` | `backup/julius-v6/scratch/v32-combined` | yes |
+| v6 clone | `refs/heads/tmp/c-on-4693` | `482fee9ef3afb76c72c51c37c7e86739d7fab52e` | `backup/julius-v6/tmp/c-on-4693` | yes |
+| v6 clone | `refs/heads/trial-v6-on-dda2ed37` | `5be5f3d90cd2f34eec9a6cd55b8e61afe591f4ec` | `backup/julius-v6/trial-v6-on-dda2ed37` | yes |
+| v6 clone | `refs/heads/v6` | `6a4a11b5b053360a087555e6559e5c83efe20d22` | `backup/julius-v6/v6` | yes |
+| v6 clone | `refs/heads/v6-governance-mission-6402cb13` | `389112616614666974e656fd413f33c2b58a79ba` | `backup/julius-v6/v6-governance-mission-6402cb13` | yes |
+| v6 clone | `refs/heads/v6-remerge-0219aa4f` | `c5240f04560e83610a57f76ea1acdc2650cffc97` | `backup/julius-v6/v6-remerge-0219aa4f` | yes |
+| v6 clone | `refs/heads/v6-remerge-5004713` | `997f51de9158fdb26d02748e3023603aed3bed4b` | `backup/julius-v6/v6-remerge-5004713` | yes |
+| v6-wt wt_chain | `HEAD@wt_chain` | `e0671b1892bbf11beb4cea28d5bd0022b2886959` | `backup/julius-v6-wt/wt_chain` | yes |
+| v6-wt wt_mut | `HEAD@wt_mut` | `3dbe6931db58b36df976e964809b834c2a314e85` | `backup/julius-v6-wt/wt_mut` | yes |
+| v6-wt asksmoke | `HEAD@asksmoke` | `0ad05422f95620bbff2e4fd10ec34505d17bb0b9` | `backup/julius-v6-wt/asksmoke` | yes |
+| v6-wt c65 | `HEAD@c65` | `65174f0a2ccd8524de0ea858b29dd73ea74d1056` | `backup/julius-v6-wt/c65` | yes |
+| v6-wt land-step1-c-v33b | `HEAD@land-step1-c-v33b` | `65174f0a2ccd8524de0ea858b29dd73ea74d1056` | `backup/julius-v6-wt/land-step1-c-v33b` | yes |
+| v6-wt land-step1-c-v34 | `HEAD@land-step1-c-v34` | `e90eb92aec348b80479580a249f6d29d44325aa4` | `backup/julius-v6-wt/land-step1-c-v34` | yes |
+| v6-wt land-step2-sec-v34c | `HEAD@land-step2-sec-v34c` | `76ae188faf42f5d3a8b503645b9d9a401037556f` | `backup/julius-v6-wt/land-step2-sec-v34c` | yes |
+| v6-wt land-step2-sec-v34e | `HEAD@land-step2-sec-v34e` | `05a507fb9e9cb8582b791307284e9b93a0489247` | `backup/julius-v6-wt/land-step2-sec-v34e` | yes |
+| v6-wt land-step2-sec-v34f | `HEAD@land-step2-sec-v34f` | `f9a0a52d8b24a25a1f8a99f801dd759a32bc8b6a` | `backup/julius-v6-wt/land-step2-sec-v34f` | yes |
+| v6-wt s2head | `HEAD@s2head` | `76ae188faf42f5d3a8b503645b9d9a401037556f` | `backup/julius-v6-wt/s2head` | yes |
+| v6-wt sc0 | `HEAD@sc0` | `e1366ab43922fe06c1bb0e256185bb8d3eeb6027` | `backup/julius-v6-wt/sc0` | yes |
+| m2 clone | `refs/heads/m2-remerge-5004713` | `d6d4c8707872e6e42d468e27f772d3a111e2fddb` | `backup/julius-m2/m2-remerge-5004713` | yes |
+| m2 clone | `refs/heads/relay/julius-unreal-mission-2` | `44e79dbfd12e08515ea558a8d97f51e94e7b34da` | `backup/julius-m2/relay/julius-unreal-mission-2` | yes |
+| sr-wt wt_crt | `HEAD@wt_crt` | `90e15063b7735e680c84c1e463fcc0d2ff0bc937` | `backup/julius-wt/wt_crt` | yes |
+| sr-wt wt_g | `refs/heads/dev/p3-g-stack` | `a7903f51415773d3e29200c4fb5197b16976e8dc` | `backup/julius-wt/wt_g` | yes |
+| sr-wt wt_h | `HEAD@wt_h` | `eeee79efbe11af04013c14a355c1fcbec9ec204a` | `backup/julius-wt/wt_h` | yes |
+| sr-wt julius-13i-031 | `refs/heads/relay/julius-13i-031-candidate` | `42da39e412fb5ed6b62038e0650d1bf5b2e47940` | `backup/julius-wt/julius-13i-031` | yes |
+| sr-wt julius-13i-031r2 | `refs/heads/relay/julius-13i-031-candidate-r2` | `7413cf2203a14fae7da06bc917c4bb871639ca7b` | `backup/julius-wt/julius-13i-031r2` | yes |
+| sr-wt julius-13i-DIAG-VOID-h0 | `refs/heads/diag/julius-13i-h0-footprint-VOID` | `7413cf2203a14fae7da06bc917c4bb871639ca7b` | `backup/julius-wt/julius-13i-DIAG-VOID-h0` | yes |
+| sr-wt julius-13i-DIAG-VOID-h0r3 | `refs/heads/diag/julius-13i-h0r3-footprint-VOID` | `23c0e7fa7f42145b0a5d409a77c2deccdb3c41d6` | `backup/julius-wt/julius-13i-DIAG-VOID-h0r3` | yes |
+| sr-wt julius-13i-r3 | `refs/heads/relay/julius-13i-on313b` | `49fd9c5ae57c6dfe171a517ee73daf66a59b923b` | `backup/julius-wt/julius-13i-r3` | yes |
+| sr-wt julius-alpha-c | `refs/heads/relay/julius-alpha-c-learning-caller` | `0ca4c5084f4f208871c225d34fa35b2970153f3a` | `backup/julius-wt/julius-alpha-c` | yes |
+| sr-wt julius-baseline-43d8 | `refs/heads/lab/m6-stack-on-2110e2c5-v2` | `c58e9488fef5187138af6552577a96696f77b4c4` | `backup/julius-wt/julius-baseline-43d8` | yes |
+| sr-wt julius-beta | `refs/heads/relay/julius-task-generality` | `b618201c1eb19b238bf5c304dae96eebdb735045` | `backup/julius-wt/julius-beta` | yes |
+| sr-wt julius-brain-rebase-sim | `HEAD@julius-brain-rebase-sim` | `76700949ab39b8180d78284636dbd738b299f745` | `backup/julius-wt/julius-brain-rebase-sim` | yes |
+| sr-wt julius-c-r2 | `refs/heads/relay/julius-decision-c-r2` | `0c9f03224fb3881fa3b268d68111cd6b56d86005` | `backup/julius-wt/julius-c-r2` | yes |
+| sr-wt julius-c-r3 | `refs/heads/relay/julius-decision-c-r3` | `2ad22a40d27667d43b73289b528dd333fbf62761` | `backup/julius-wt/julius-c-r3` | yes |
+| sr-wt julius-connect | `refs/heads/local/julius-connect` | `76e96c490cc3f9f4debe69c5fc087278a920e2a4` | `backup/julius-wt/julius-connect` | yes |
+| sr-wt julius-eval-classes | `refs/heads/relay/julius-eval-dispatch-classes` | `01d7192ee52cd0540fd3c424fbbc7dbf5176700f` | `backup/julius-wt/julius-eval-classes` | yes |
+| sr-wt julius-f3-admission | `refs/heads/rehearsal/julius-a2-step3` | `769fc9659890290d932cf06845f2ad712aa1a980` | `backup/julius-wt/julius-f3-admission` | yes |
+| sr-wt julius-followup-a | `refs/heads/rehearsal/julius-followup-a` | `c171b4768c9390568a881846c9a078c6e114969d` | `backup/julius-wt/julius-followup-a` | yes |
+| sr-wt julius-gate-integrity | `refs/heads/relay/julius-gate-integrity` | `b5ce63b5e2fb6895c9b1b1d994f06dab1742144d` | `backup/julius-wt/julius-gate-integrity` | yes |
+| sr-wt julius-lab-fixtures-replay | `refs/heads/lab/fixtures-on-43d8c36e` | `f88514e84725a349cda8ab51fda742941d1963ff` | `backup/julius-wt/julius-lab-fixtures-replay` | yes |
+| sr-wt julius-m2-dryrun | `HEAD@julius-m2-dryrun` | `8793a9c22f0d562c7b54dcc3043b3a03860fcb20` | `backup/julius-wt/julius-m2-dryrun` | yes |
+| sr-wt julius-mcp | `refs/heads/local/julius-mcp-authority` | `fce0246413c441302b4178254dd1905bd9017c09` | `backup/julius-wt/julius-mcp` | yes |
+| sr-wt julius-mission-fixtures | `refs/heads/relay/julius-alpha-mission-fixtures` | `a228fbee95c1c19da564affc398c50f94494bfae` | `backup/julius-wt/julius-mission-fixtures` | yes |
+| sr-wt julius-mvp-capabilities | `refs/heads/relay/julius-mvp-capabilities` | `f714ca02e85b2cd354a91f5e259212dc8eebd4f9` | `backup/julius-wt/julius-mvp-capabilities` | yes |
+| sr-wt julius-p10-confinement-carry | `refs/heads/relay/julius-p10-confinement-carry` | `7d2a934ad7db4084f7652eb9ec8e1c9036637699` | `backup/julius-wt/julius-p10-confinement-carry` | yes |
+| sr-wt julius-parked-dry | `refs/heads/dry/parked-on-88b8b1d0` | `859f99499d1baef13376ca583d5dad0958c01e39` | `backup/julius-wt/julius-parked-dry` | yes |
+| sr-wt julius-parked-m1 | `refs/heads/dry/parked-on-m1` | `2f6cc300209f1e12a2ffc2e3005d1a42c6142067` | `backup/julius-wt/julius-parked-m1` | yes |
+| sr-wt julius-parked-m2sim | `refs/heads/dry/parked-plus-308-m2sim` | `7d4410f9c2531f44363124a1110c5723dfb96d16` | `backup/julius-wt/julius-parked-m2sim` | yes |
+| sr-wt julius-persistence-truth | `refs/heads/relay/julius-persistence-truth` | `2126a030ecc98abe881aeee668e1b483a16bc635` | `backup/julius-wt/julius-persistence-truth` | yes |
+| sr-wt julius-proof-628527d3 | `HEAD@julius-proof-628527d3` | `e9beb86a139f06d6f7b5af00c512f487363891cf` | `backup/julius-wt/julius-proof-628527d3` | yes |
+| sr-wt julius-readiness-eleventh | `refs/heads/relay/julius-readiness-eleventh-pass` | `930bc5bce96be5719e70cb173efcbf4f7d0f5a99` | `backup/julius-wt/julius-readiness-eleventh` | yes |
+| sr-wt julius-stack | `refs/heads/local/julius-stack` | `a3863a02afdb1bae08bbe0f74411b5678c74909c` | `backup/julius-wt/julius-stack` | yes |
+| sr-wt julius-store-error-truth | `refs/heads/relay/julius-store-error-truth` | `861a4f02a567949ad8be1d6bf18965b8add75de2` | `backup/julius-wt/julius-store-error-truth` | yes |
+| sr-wt julius-v2-cite | `refs/heads/relay/julius-accept-cites-review` | `8768da18aee7e6c89cbf92dc2b3c67fe8218827e` | `backup/julius-wt/julius-v2-cite` | yes |
+| sr-wt project-brain | `refs/heads/local/project-brain-foundation` | `8bfa98d612a38a1caf1a02520ad4553332399fdf` | `backup/julius-wt/project-brain` | yes |
+| sr-wt project-brain-python | `refs/heads/local/project-brain-python` | `928bc7596aa4df0fb223054c8b748e26bd017ead` | `backup/julius-wt/project-brain-python` | yes |
+
+## Patches — `C:\dev\iwonder\_julius_recovery_20261023\patches\`
+| Name | Worktree | Tracked files changed | Untracked (names in .untracked.txt) | Status | Patch bytes | SHA-256 |
+|---|---|---|---|---|---|---|
+| v6-combo_v32 | `C:\dev\iwonder\_qa_handoff\julius_readiness\followon_100\work\combo_v32` | 11 | 0 | written | 200785 | CD98A23B2BE12139… |
+| v6-g1m | `C:\dev\iwonder\_qa_handoff\julius_readiness\followon_100\work\g1m` | 1 | 0 | written | 6564 | 9D160719B09925E2… |
+| v6-opt2 | `C:\dev\iwonder\_qa_handoff\julius_readiness\followon_100\work\opt2` | 0 | 4 | no-tracked-changes | 0 |  |
+| v6-pm | `C:\dev\iwonder\_qa_handoff\julius_readiness\followon_100\work\pm` | 0 | 1 | no-tracked-changes | 0 |  |
+| v6-psfix | `C:\dev\iwonder\_qa_handoff\julius_readiness\followon_100\work\psfix` | 0 | 2 | no-tracked-changes | 0 |  |
+| v6-stack | `C:\dev\iwonder\_qa_handoff\julius_readiness\followon_100\work\stack` | 33 | 0 | written | 151651 | CD07B45442767C2B… |
+| v6-stack2 | `C:\dev\iwonder\_qa_handoff\julius_readiness\followon_100\work\stack2` | 33 | 0 | written | 151651 | CD07B45442767C2B… |
+| v6-v33 | `C:\dev\iwonder\_qa_handoff\julius_readiness\followon_100\work\v33` | 3 | 0 | written | 6491 | 85D88802F1444D33… |
+| v6-v6pm | `C:\dev\iwonder\_qa_handoff\julius_readiness\followon_100\work\v6pm` | 0 | 1 | no-tracked-changes | 0 |  |
+| r87a_clone | `C:\dev\iwonder\_qa_handoff\julius_readiness\followon_100\work\r87a_clone` | 4 | 0 | **WITHHELD** (sk-;password= pattern) | 0 |  |
+| sr-wt_crt | `C:\dev\iwonder\_qa_handoff\julius_readiness\followon_100\p3_dev_20261020\wt_crt` | 1 | 0 | written | 1641 | FC975A449391FC2D… |
+| sr-wt_g | `C:\dev\iwonder\_qa_handoff\julius_readiness\followon_100\p3_dev_20261020\wt_g` | 1 | 0 | written | 1641 | FC975A449391FC2D… |
+| sr-wt_h | `C:\dev\iwonder\_qa_handoff\julius_readiness\followon_100\p3_dev_20261020\wt_h` | 1 | 0 | written | 1641 | FC975A449391FC2D… |
+| sr-julius-13i-DIAG-VOID-h0 | `C:\dev\iwonder\julius-13i-DIAG-VOID-h0` | 1 | 0 | written | 4293 | FED9DE2AD2DD5C61… |
+| sr-julius-13i-DIAG-VOID-h0r3 | `C:\dev\iwonder\julius-13i-DIAG-VOID-h0r3` | 1 | 0 | written | 4293 | FED9DE2AD2DD5C61… |
+| sr-julius-a2 | `C:\dev\iwonder\julius-a2` | 3 | 0 | written | 31935 | 8D2279475E855663… |
+| sr-julius-ab-sim | `C:\dev\iwonder\julius-ab-sim` | 0 | 4 | no-tracked-changes | 0 |  |
+| sr-julius-ceremony | `C:\dev\iwonder\julius-ceremony` | 0 | 8 | no-tracked-changes | 0 |  |
+| sr-julius-connect | `C:\dev\iwonder\julius-connect` | 0 | 3 | no-tracked-changes | 0 |  |
+| sr-julius-founder-opus | `C:\dev\iwonder\julius-founder-opus` | 4 | 0 | **WITHHELD** (sk-;password= pattern) | 0 |  |
+| sr-julius-land | `C:\dev\iwonder\julius-land` | 4 | 0 | written | 6435 | BD8BC463AA41DBCA… |
+Every target got a `<name>.untracked.txt` (empty if none). No untracked name matched .env/.pem/.key/id_rsa/credential. Untracked file *contents* are NOT preserved by this phase. (Untracked counts are files from `git ls-files --others --exclude-standard`; `git status` collapses untracked dirs, so it shows fewer for opt2/psfix.)
+
+**Incident, fixed:** a variable-name clash in my script (PowerShell is case-insensitive, `$P` vs `$p`) first wrote the 12 `.patch` + 21 `.untracked.txt` files into each target worktree's root instead of the patches folder (00:44 PDT). At ~00:55 I moved all 33 into `patches\`, re-hashed every patch (all 12 SHA-256 match), and confirmed no leftover files and each worktree's untracked count back to its pre-run value. Nothing was committed or staged.
+
+## Rejections
+None from push protection or hooks. Withheld patches (secret scan): `r87a_clone` (4 files; `sk-` + `password=` patterns), `julius-founder-opus` (4 files; `sk-` + `password=`). May be test fixtures, but not inspected — needs a human/secret-safe review before archiving.
+
+## Not covered by this phase (found during verification)
+- **v6 `refs/juju2/*`: 30 commits not on GitHub and not reachable from any v6 branch** (post-install, post-v3, post-v31, post-v32, post-v33, post-v33b × T0–T4). Not pushed (outside the requested branch/worktree scope). They must be pushed as `backup/julius-v6-juju2/*` or kept in the planned `v6.bundle` before v6 is removed.
+- v6 tags: all reachable from pushed branches. m2/r87a tags: covered.
+- sunday-relay main repo has 1 stash entry (not Julius-scoped; untouched).
+- Git-ignored files (build outputs, local evidence, node_modules) inside worktrees were not assessed.
+
+## Safe to remove? (git-wise: all commits on GitHub + no unsaved uncommitted work)
+- **SAFE:** `work\m2` (4/4 tips on GitHub, clean, no stash, tags covered).
+- **SAFE (v6 worktrees):** every v6 worktree HEAD is now on GitHub; clean ones plus combo_v32, g1m, stack, stack2, v33 (patch written) are safe as worktrees.
+- **NOT SAFE:** `work\v6` clone itself (30 juju2 commits); v6 worktrees opt2 (4 untracked), pm (1), psfix (2), v6pm (1) — untracked contents unsaved; `work\r87a_clone` (patch withheld).
+- **sunday-relay Julius worktrees:** SAFE — the 30 clean pushed ones, plus 13i-DIAG-VOID-h0, -h0r3, wt_crt, wt_g, wt_h (patched; wt_* are ACTIVE p3_dev, keep anyway), julius-a2, julius-land (HEAD on GitHub, patched). NOT SAFE — julius-connect (3 untracked), julius-ab-sim (4 untracked), julius-ceremony (8 untracked), julius-founder-opus (patch withheld).
+- Patches themselves currently live only on C: — copy to OneDrive once sync is fixed before relying on them.
