@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -57,6 +58,44 @@ function request(over: Partial<AdmissionRequest> = {}): AdmissionRequest {
 
 function directory(): string {
   return mkdtempSync(join(tmpdir(), 'wonderland-admission-file-'));
+}
+
+function heldRow(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    phase: 'run_admission',
+    runId: RUN,
+    serverRunId: `run:${'1'.repeat(24)}`,
+    keyHash: KEY,
+    dispatchId: 'adm_fixed',
+    missionId: 'julius-inworld-data-1',
+    requestId: 'trigger_01',
+    clientLogSha256: 'c'.repeat(64),
+    clientUiActionUtc: WHEN,
+    receivedAt: WHEN,
+    ledgerRef: 'julius-wonderland-admission:adm_fixed',
+    resultSha256: null,
+    state: 'ADMISSION_HELD',
+    modelPins: { architectModel: null, codingModel: null, reviewerProvider: null, reviewerModel: null },
+    ...over,
+  };
+}
+
+function document(rows: readonly Record<string, unknown>[]): string {
+  return `${JSON.stringify({ schemaVersion: ADMISSION_FILE_SCHEMA_VERSION, rows })}\n`;
+}
+
+function expectClosed(file: string): void {
+  const before = readFileSync(file);
+  try {
+    createFileAdmissionLedger(file);
+    throw new Error(`opened ${file}`);
+  } catch (error) {
+    expect(isAdmissionFileClosed(error), file).toBe(true);
+    if (!isAdmissionFileClosed(error)) throw error;
+    expect(error.code, file).toBe('corrupt');
+  }
+  expect(readFileSync(file), file).toEqual(before);
+  expect(existsSync(`${file}.lock`), file).toBe(false);
 }
 
 describe('resolveAdmissionStorePath', () => {
@@ -320,6 +359,262 @@ describe('the admission file', () => {
       }
     } finally {
       ledger.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a lock held by a child process is not stolen', async () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    const lock = `${file}.lock`;
+    const child = spawn(process.execPath, ['-e', [
+      "const fs = require('node:fs');",
+      "fs.writeFileSync(process.env.LOCK_PATH, JSON.stringify({ pid: process.pid, purpose: 'wonderland-admission' }), { flag: 'wx', mode: 0o600 });",
+      'setInterval(() => {}, 1000);',
+    ].join('')], {
+      env: { ...process.env, LOCK_PATH: lock },
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    let stderr = '';
+    child.stderr?.on('data', (chunk: Buffer) => { stderr += String(chunk); });
+    try {
+      const started = Date.now();
+      while (!existsSync(lock)) {
+        if (child.exitCode !== null) throw new Error(`child exited ${child.exitCode}: ${stderr}`);
+        if (Date.now() - started > 5_000) throw new Error(`child did not take the lock: ${stderr}`);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      const held = readFileSync(lock, 'utf8');
+      expect(JSON.parse(held).pid).toBe(child.pid);
+      expect(JSON.parse(held).pid).not.toBe(process.pid);
+      try {
+        createFileAdmissionLedger(file);
+        throw new Error('stole the child lock');
+      } catch (error) {
+        expect(isAdmissionFileClosed(error)).toBe(true);
+        if (!isAdmissionFileClosed(error)) throw error;
+        expect(error.code).toBe('lock_held');
+      }
+      expect(readFileSync(lock, 'utf8')).toBe(held);
+      expect(existsSync(file)).toBe(false);
+    } finally {
+      child.kill('SIGKILL');
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('a lock whose recorded pid is dead is not stolen', () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    const lock = `${file}.lock`;
+    const exited = spawnSync(process.execPath, ['-e', 'process.exit(0)'], { stdio: 'ignore' });
+    const pid = exited.pid;
+    expect(typeof pid).toBe('number');
+    expect(pid).toBeGreaterThan(1);
+    let gone = '';
+    try {
+      process.kill(pid as number, 0);
+    } catch (error) {
+      gone = (error as NodeJS.ErrnoException).code ?? '';
+    }
+    expect(gone).toBe('ESRCH');
+    const body = JSON.stringify({ pid, purpose: 'wonderland-admission' });
+    writeFileSync(lock, body, { mode: 0o600 });
+    try {
+      try {
+        createFileAdmissionLedger(file);
+        throw new Error('stole a dead pid lock');
+      } catch (error) {
+        expect(isAdmissionFileClosed(error)).toBe(true);
+        if (!isAdmissionFileClosed(error)) throw error;
+        expect(error.code).toBe('lock_held');
+      }
+      expect(readFileSync(lock, 'utf8')).toBe(body);
+      expect(existsSync(file)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a failed open releases the lock and the next open still sees the bytes', () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    const text = 'not-json';
+    writeFileSync(file, text);
+    const before = readFileSync(file);
+    try {
+      try {
+        createFileAdmissionLedger(file);
+        throw new Error('opened corrupt bytes');
+      } catch (error) {
+        expect(isAdmissionFileClosed(error)).toBe(true);
+        if (!isAdmissionFileClosed(error)) throw error;
+        expect(error.code).toBe('corrupt');
+      }
+      expect(existsSync(`${file}.lock`)).toBe(false);
+      try {
+        createFileAdmissionLedger(file);
+        throw new Error('second open accepted the corrupt file');
+      } catch (error) {
+        expect(isAdmissionFileClosed(error)).toBe(true);
+        if (!isAdmissionFileClosed(error)) throw error;
+        expect(error.code).toBe('corrupt');
+      }
+      expect(readFileSync(file)).toEqual(before);
+      expect(existsSync(`${file}.lock`)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a well-formed row opens', () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    writeFileSync(file, document([heldRow()]));
+    const ledger = createFileAdmissionLedger(file);
+    try {
+      expect(existsSync(`${file}.lock`)).toBe(true);
+    } finally {
+      ledger.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('duplicate run, key, or server rows fail closed', () => {
+    const dir = directory();
+    const other = {
+      runId: RUN_2,
+      keyHash: KEY_2,
+      serverRunId: `run:${'2'.repeat(24)}`,
+      dispatchId: 'adm_other',
+      ledgerRef: 'julius-wonderland-admission:adm_other',
+      requestId: 'trigger_02',
+    };
+    const samples = [
+      [heldRow(), heldRow(other)],
+      [heldRow(), heldRow({ ...other, runId: RUN })],
+      [heldRow(), heldRow({ ...other, keyHash: KEY })],
+      [heldRow(), heldRow({ ...other, serverRunId: `run:${'1'.repeat(24)}` })],
+    ];
+    try {
+      const distinct = join(dir, 'distinct.json');
+      writeFileSync(distinct, document(samples[0] ?? []));
+      const opened = createFileAdmissionLedger(distinct);
+      opened.close();
+      for (const rows of samples.slice(1)) {
+        const file = join(dir, `dup-${samples.indexOf(rows)}.json`);
+        writeFileSync(file, document(rows));
+        expectClosed(file);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('an unknown row key fails closed and the bytes stay', () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    writeFileSync(file, document([heldRow({ note: 'extra' })]));
+    try {
+      expectClosed(file);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a state other than held or unwritten fails closed', () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    writeFileSync(file, document([heldRow({ state: 'GONE' })]));
+    try {
+      expectClosed(file);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a replayed admission still counts toward the cap', async () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    let opened: { close(): void } | null = null;
+    try {
+      const ledger = createFileAdmissionLedger(file);
+      opened = ledger;
+      const created = await createWonderlandAdmissionStore({
+        ledger,
+        dailyCap: 1,
+        missionCap: 2,
+        mintServerRunId: () => `run:${'3'.repeat(24)}`,
+      }).admit(request());
+      if (!created.ok) throw new Error('expected an admission');
+      ledger.close();
+      opened = null;
+      const reloaded = createFileAdmissionLedger(file);
+      opened = reloaded;
+      let remints = 0;
+      const restarted = createWonderlandAdmissionStore({
+        ledger: reloaded,
+        dailyCap: 1,
+        missionCap: 2,
+        mintServerRunId: () => {
+          remints += 1;
+          return `run:${'4'.repeat(24)}`;
+        },
+      });
+      const replay = await restarted.admit(request());
+      expect(replay.ok && replay.httpStatus).toBe(200);
+      expect(restarted.admissionCount()).toBe(1);
+      expect(remints).toBe(0);
+      const capped = await restarted.admit(request({
+        runId: RUN_2, keyHash: KEY_2, dispatchId: 'adm_other', receivedAt: '2026-10-23T18:00:00.000Z',
+      }));
+      expect(capped).toMatchObject({ ok: false, httpStatus: 429, kind: 'julius_dispatch_cap_reached' });
+      const after = JSON.parse(readFileSync(file, 'utf8')) as { rows: unknown[] };
+      expect(after.rows).toHaveLength(1);
+    } finally {
+      opened?.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a replay returns the model pins stored on the row', async () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    const pins = {
+      architectModel: 'gpt-5.6-sol',
+      codingModel: 'claude-opus-5-5',
+      reviewerProvider: 'xai',
+      reviewerModel: 'grok-build-0.1',
+    };
+    let opened: { close(): void } | null = null;
+    try {
+      const ledger = createFileAdmissionLedger(file);
+      opened = ledger;
+      const created = await createWonderlandAdmissionStore({
+        ledger,
+        dailyCap: 2,
+        missionCap: 2,
+        mintServerRunId: () => `run:${'5'.repeat(24)}`,
+      }).admit(request({ modelPins: pins }));
+      if (!created.ok) throw new Error('expected an admission');
+      expect(created.run.modelPins).toEqual(pins);
+      const stored = JSON.parse(readFileSync(file, 'utf8')) as { rows: { modelPins: typeof pins }[] };
+      expect(stored.rows[0]?.modelPins).toEqual(pins);
+      ledger.close();
+      opened = null;
+      const reloaded = createFileAdmissionLedger(file);
+      opened = reloaded;
+      const replay = await createWonderlandAdmissionStore({
+        ledger: reloaded,
+        dailyCap: 2,
+        missionCap: 2,
+        mintServerRunId: () => { throw new Error('mint_on_pin_replay'); },
+      }).admit(request({ modelPins: { architectModel: null, codingModel: null, reviewerProvider: null, reviewerModel: null } }));
+      if (!replay.ok) throw new Error('expected the replay');
+      expect(replay.httpStatus).toBe(200);
+      expect(replay.run.modelPins).toEqual(pins);
+    } finally {
+      opened?.close();
       rmSync(dir, { recursive: true, force: true });
     }
   });

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { subscribe as subscribeDiagnostic, unsubscribe as unsubscribeDiagnostic } from 'node:diagnostics_channel';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -105,6 +105,34 @@ describe('POST /wonderland/julius/dispatch', () => {
     const result = await handleWonderlandAdmissionRoute(request(), ports);
     expect(result?.status).toBe(503);
     expect(kind(result?.body)).toBe('julius_dispatch_disabled');
+  });
+
+  it('does not take the writer lock when the flag is off', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wonderland-admission-flag-'));
+    const file = join(dir, 'admission.json');
+    try {
+      for (const flag of [undefined, '0', 'true'] as const) {
+        const ports = createWonderlandAdmissionService({
+          env: env({
+            JULIUS_WONDERLAND_ADMISSION: flag,
+            JULIUS_WONDERLAND_ADMISSION_STORE: file,
+          }),
+          operatorToken: 'operator-token',
+          verifyNativeSession: () => ({ playerId: 'founder', projectId: 'project-1', sessionId: 'sess-1' }),
+          readWorkflowText: () => null,
+        });
+        expect(ports.admissionStoreReady, String(flag)).toBe(false);
+        expect(existsSync(file), String(flag)).toBe(false);
+        expect(existsSync(`${file}.lock`), String(flag)).toBe(false);
+        const result = await handleWonderlandAdmissionRoute(request(), ports);
+        expect(result?.status, String(flag)).toBe(503);
+        expect(kind(result?.body), String(flag)).toBe('julius_dispatch_disabled');
+        expect(existsSync(`${file}.lock`), String(flag)).toBe(false);
+        ports.close();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('a missing, relative, or URL store path is julius_dispatch_unavailable', async () => {
