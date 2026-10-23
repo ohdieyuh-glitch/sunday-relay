@@ -10,9 +10,11 @@ import { runOperatorClaimCli } from './operator-claim-cli';
 import {
   OPERATOR_DISPATCH_CONFIRMATION,
   SERVER_RUN_ID_INPUT,
+  concurrencyGroupName,
   createOperatorClaimTool,
   formatGhCommand,
   interpretSpentTagResponse,
+  interpretWorkflowHalt,
   spentTagApiArgs,
   spentTagName,
   workflowDeclaresServerRunId,
@@ -53,6 +55,23 @@ on:
         description: 'Julius bootstrap run id'
         required: false
         default: ''
+`;
+
+const WORKFLOW_WITHOUT_INPUT = `
+name: fixture
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_live:
+        description: 'phrase'
+        required: false
+        default: ''
+      mission:
+        description: 'slug'
+      lane:
+        description: 'lane'
+      dispatch_key:
+        description: 'key'
 `;
 
 const ABSENT: GhResult = {
@@ -184,18 +203,59 @@ jobs:
 });
 
 describe('spent tag', () => {
-  it('names the git tag without the run: colon', () => {
+  it('names the git tag and the concurrency group from the 24 hex, and refuses any other value before a command exists', () => {
     expect(spentTagName(SERVER)).toBe(`julius-run-spent-${HEX}`);
+    expect(concurrencyGroupName(SERVER)).toBe(`julius-paid-${HEX}`);
     expect(spentTagApiArgs(REPO, SERVER)).toEqual([
       'api', '--include', `repos/${REPO}/git/ref/tags/julius-run-spent-${HEX}`,
     ]);
     expect(spentTagApiArgs(REPO, SERVER).join(' ')).not.toContain('run:');
+    const command = workflowDispatchArgs({
+      repo: REPO,
+      mission: MISSION,
+      lane: LANE,
+      dispatchKey: KEY,
+      serverRunId: SERVER,
+    });
+    expect(command).toContain(`server_run_id=${SERVER}`);
+    expect(SERVER).toMatch(/^run:[0-9a-f]{24}$/);
+    const refused = [
+      HEX,
+      `RUN:${HEX}`,
+      `run:${'A'.repeat(24)}`,
+      `run:${'a'.repeat(23)}`,
+      `run:${'a'.repeat(25)}`,
+      `run:${'g'.repeat(24)}`,
+    ];
+    for (const serverRunId of refused) {
+      expect(serverRunId === SERVER, serverRunId).toBe(false);
+      expect(() => spentTagName(serverRunId), serverRunId).toThrow('run_id_invalid');
+      expect(() => concurrencyGroupName(serverRunId), serverRunId).toThrow('run_id_invalid');
+      expect(() => spentTagApiArgs(REPO, serverRunId), serverRunId).toThrow('run_id_invalid');
+      expect(() => workflowDispatchArgs({
+        repo: REPO, mission: MISSION, lane: LANE, dispatchKey: KEY, serverRunId,
+      }), serverRunId).toThrow('run_id_invalid');
+    }
   });
 
   it('reads a present ref and a 404, and nothing else', () => {
     expect(interpretSpentTagResponse(PRESENT)).toBe('present');
     expect(interpretSpentTagResponse(ABSENT)).toBe('absent');
     expect(interpretSpentTagResponse({ code: 1, stdout: '', stderr: 'temporary failure' })).toBe('unreadable');
+  });
+
+  it('maps a visible workflow halt, including one printed on a zero exit', () => {
+    expect(interpretWorkflowHalt({ code: 1, stdout: '', stderr: 'RUN_ID_ALREADY_SPENT' })).toBe('RUN_ID_ALREADY_SPENT');
+    expect(interpretWorkflowHalt({ code: 0, stdout: 'halt RUN_ID_ALREADY_SPENT\n', stderr: '' })).toBe('RUN_ID_ALREADY_SPENT');
+    expect(interpretWorkflowHalt({ code: 1, stdout: 'SPENT_TAG_UNVERIFIED', stderr: '' })).toBe('SPENT_TAG_UNVERIFIED');
+    expect(interpretWorkflowHalt({ code: 0, stdout: '', stderr: 'error: SPENT_TAG_UNVERIFIED' })).toBe('SPENT_TAG_UNVERIFIED');
+    expect(interpretWorkflowHalt({
+      code: 1,
+      stdout: 'SPENT_TAG_UNVERIFIED',
+      stderr: 'RUN_ID_ALREADY_SPENT',
+    })).toBe('RUN_ID_ALREADY_SPENT');
+    expect(interpretWorkflowHalt({ code: 1, stdout: 'NOT_RUN_ID_ALREADY_SPENT', stderr: '' })).toBeNull();
+    expect(interpretWorkflowHalt(WORKFLOW_FAIL)).toBeNull();
   });
 });
 
@@ -215,6 +275,8 @@ describe('operator claim', () => {
       expect(first.record.state).toBe('dispatched');
       expect(first.record.serverRunId).toBe(SERVER);
       expect(first.record.spentTagState).toBe('absent');
+      expect(first.record.concurrencyGroup).toBe(`julius-paid-${HEX}`);
+      expect(first.record.halt).toBeNull();
       expect(first.record.dispatchAttempted).toBe(true);
       expect(second.replayed).toBe(true);
       expect(second.claimed).toBe(false);
@@ -340,6 +402,56 @@ describe('operator claim', () => {
       expect(status.ok && status.record.state).toBe('dispatch_failed');
       expect(status.ok && status.record.serverRunId).toBe(SERVER);
       expect(status.ok && status.record.dispatchError).toBe('gh_workflow_run_failed');
+      expect(status.ok && status.record.halt).toBeNull();
+    });
+  });
+
+  it('a visible RUN_ID_ALREADY_SPENT halt is already_spent and is not retried', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const halted = { code: 0, stdout: '::error::RUN_ID_ALREADY_SPENT\n', stderr: '' };
+      const fake = scripted(ABSENT, halted);
+      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const spent = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(spent.ok).toBe(false);
+      if (spent.ok) return;
+      expect(spent.kind).toBe('RUN_ID_ALREADY_SPENT');
+      expect(spent.record?.state).toBe('already_spent');
+      expect(spent.record?.halt).toBe('RUN_ID_ALREADY_SPENT');
+      expect(spent.record?.state).not.toBe('admitted');
+      expect(spent.record?.dispatchAttempted).toBe(true);
+      const again = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(again.ok && again.replayed && again.record.state).toBe('already_spent');
+      expect(fake.calls.map((args) => args[0])).toEqual(['api', 'workflow']);
+      const saved = readAdmissionDocument(path);
+      expect(saved.claims.map((event) => event.state)).toEqual(['dispatched', 'already_spent']);
+      expect(saved.claims.some((event) => (event.state as string) === 'admitted')).toBe(false);
+      expect(JSON.parse(readFileSync(path, 'utf8'))).not.toHaveProperty('claims');
+    });
+  });
+
+  it('a visible SPENT_TAG_UNVERIFIED halt is dispatch_failed and is not retried', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const halted = { code: 1, stdout: '', stderr: 'SPENT_TAG_UNVERIFIED\n' };
+      const fake = scripted(ABSENT, halted);
+      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const failed = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(failed.ok).toBe(false);
+      if (failed.ok) return;
+      expect(failed.kind).toBe('SPENT_TAG_UNVERIFIED');
+      expect(failed.record?.state).toBe('dispatch_failed');
+      expect(failed.record?.halt).toBe('SPENT_TAG_UNVERIFIED');
+      expect(failed.record?.dispatchError).toBe('SPENT_TAG_UNVERIFIED');
+      expect(failed.record?.state).not.toBe('admitted');
+      const again = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(again.ok && again.replayed && again.record.state).toBe('dispatch_failed');
+      expect(fake.calls.map((args) => args[0])).toEqual(['api', 'workflow']);
+      const saved = readAdmissionDocument(path);
+      expect(saved.admissions[0]?.admissionState).toBe('ADMISSION_HELD');
+      expect(saved.claims.at(-1)?.state).toBe('dispatch_failed');
+      expect(saved.claims.some((event) => (event.state as string) === 'admitted')).toBe(false);
+      expect(JSON.parse(readFileSync(path, 'utf8'))).not.toHaveProperty('claims');
     });
   });
 
@@ -356,6 +468,8 @@ describe('operator claim', () => {
       expect(spent.record?.spentTag).toBe(`julius-run-spent-${HEX}`);
       expect(spent.record?.spentTagState).toBe('present');
       expect(spent.record?.dispatchAttempted).toBe(false);
+      expect(spent.record?.halt).toBe('RUN_ID_ALREADY_SPENT');
+      expect(spent.record?.concurrencyGroup).toBe(`julius-paid-${HEX}`);
       expect(fake.calls.map((args) => args[0])).toEqual(['api']);
       const again = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       expect(again.ok && again.replayed && again.record.state).toBe('already_spent');
@@ -394,6 +508,36 @@ describe('operator claim', () => {
     });
   });
 
+  it('fixture YAML with server_run_id dispatches, and fixture YAML without it refuses', async () => {
+    expect(workflowDeclaresServerRunId(WORKFLOW_WITH_INPUT)).toBe(true);
+    expect(workflowDeclaresServerRunId(WORKFLOW_WITHOUT_INPUT)).toBe(false);
+    await withStore(async (path) => {
+      await admit(path);
+      const absent = scripted(ABSENT, WORKFLOW_OK);
+      const claims = createOperatorClaimTool(openAdmissionFile(path), absent.spawn);
+      const refused = await claims.claim(claimInput({
+        workflowSource: WORKFLOW_WITHOUT_INPUT,
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }));
+      expect(refused.ok).toBe(false);
+      if (refused.ok) return;
+      expect(refused.kind).toBe('workflow_server_run_id_undeclared');
+      expect(refused.record?.state).toBe('admitted');
+      expect(absent.calls).toEqual([]);
+      const present = scripted(ABSENT, WORKFLOW_OK);
+      const allowed = await createOperatorClaimTool(openAdmissionFile(path), present.spawn).claim(claimInput({
+        workflowSource: WORKFLOW_WITH_INPUT,
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }));
+      expect(allowed.ok && allowed.dispatchedWorkflow).toBe(true);
+      if (!allowed.ok) return;
+      expect(allowed.record.state).toBe('dispatched');
+      expect(present.calls[1]).toContain(`server_run_id=${SERVER}`);
+    });
+  });
+
   it('refuses --dispatch until the workflow declares server_run_id', async () => {
     await withStore(async (path) => {
       await admit(path);
@@ -409,9 +553,11 @@ describe('operator claim', () => {
       if (refused.ok) return;
       expect(refused.kind).toBe('workflow_server_run_id_undeclared');
       expect(refused.requiredInput).toContain('server_run_id:');
-      expect(refused.requiredInput).toContain('julius-run-spent-<24 hex>');
-      expect(refused.requiredInput).toContain('julius-paid-<24 hex>');
+      expect(refused.requiredInput).toContain('^run:[0-9a-f]{24}$');
+      expect(refused.requiredInput).toContain('julius-run-spent-<24hex>');
+      expect(refused.requiredInput).toContain('julius-paid-<24hex>');
       expect(refused.requiredInput).toContain('RUN_ID_ALREADY_SPENT');
+      expect(refused.requiredInput).toContain('SPENT_TAG_UNVERIFIED');
       expect(refused.record?.state).toBe('admitted');
       expect(fake.calls).toEqual([]);
       const dry = await claims.claim(claimInput({ workflowSource: source }));
@@ -495,6 +641,49 @@ describe('operator claim cli', () => {
     });
   });
 
+  it('dispatch follows fixture YAML: absent refuses, present runs once', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const calls: string[][] = [];
+      const refused = await runOperatorClaimCli([
+        'claim', '--store', path,
+        '--wonderland-run', RUN, '--server-run', SERVER,
+        '--repo', REPO, '--lane', LANE,
+        '--dispatch', '--confirm', OPERATOR_DISPATCH_CONFIRMATION,
+      ], {
+        out: () => {},
+        err: () => {},
+      }, {
+        spawn: { run() { throw new Error('spawned'); } },
+        nowIso: () => WHEN,
+        readWorkflow: () => WORKFLOW_WITHOUT_INPUT,
+      });
+      expect(refused).toBe(1);
+      const code = await runOperatorClaimCli([
+        'claim', '--store', path,
+        '--wonderland-run', RUN, '--server-run', SERVER,
+        '--repo', REPO, '--lane', LANE,
+        '--dispatch', '--confirm', OPERATOR_DISPATCH_CONFIRMATION,
+      ], {
+        out: () => {},
+        err: () => {},
+      }, {
+        spawn: {
+          run(args) {
+            calls.push([...args]);
+            if (args[0] === 'api') return ABSENT;
+            return WORKFLOW_OK;
+          },
+        },
+        nowIso: () => WHEN,
+        readWorkflow: () => WORKFLOW_WITH_INPUT,
+      });
+      expect(code).toBe(0);
+      expect(calls.map((args) => args[0])).toEqual(['api', 'workflow']);
+      expect(calls[1]).toContain(`server_run_id=${SERVER}`);
+    });
+  });
+
   it('status reports the spent-tag state without spawning', async () => {
     await withStore(async (path) => {
       await admit(path);
@@ -516,11 +705,14 @@ describe('operator claim cli', () => {
       });
       expect(code).toBe(0);
       const body = JSON.parse(out[0] ?? '{}') as {
-        state: string; spentTagState: string; serverRunId: string; spentTag: string; retry: boolean;
+        state: string; spentTagState: string; serverRunId: string; spentTag: string;
+        concurrencyGroup: string; halt: string; retry: boolean;
       };
       expect(body.state).toBe('already_spent');
       expect(body.spentTagState).toBe('present');
       expect(body.spentTag).toBe(`julius-run-spent-${HEX}`);
+      expect(body.concurrencyGroup).toBe(`julius-paid-${HEX}`);
+      expect(body.halt).toBe('RUN_ID_ALREADY_SPENT');
       expect(body.serverRunId).toBe(SERVER);
       expect(body.retry).toBe(false);
     });

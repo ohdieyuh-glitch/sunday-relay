@@ -301,13 +301,18 @@ function parseRow(value: unknown): AdmissionLedgerRow {
  */
 const CLAIM_STATES = ['dispatched', 'dispatch_failed', 'already_spent'] as const;
 const SPENT_TAG_STATES = ['unknown', 'present', 'absent'] as const;
+const WORKFLOW_HALTS = ['RUN_ID_ALREADY_SPENT', 'SPENT_TAG_UNVERIFIED'] as const;
+const DISPATCH_ERRORS = ['gh_workflow_run_failed', 'SPENT_TAG_UNVERIFIED'] as const;
 const JOURNAL_KEYS = ['schemaVersion', 'revision', 'claims'] as const;
 const CLAIM_KEYS = [
-  'wonderlandRunId', 'serverRunId', 'state', 'spentTag', 'spentTagState', 'at', 'dispatchAttempted', 'dispatchError',
+  'wonderlandRunId', 'serverRunId', 'state', 'spentTag', 'spentTagState', 'at',
+  'dispatchAttempted', 'dispatchError', 'halt',
 ] as const;
 
 export type OperatorClaimState = (typeof CLAIM_STATES)[number];
 export type SpentTagState = (typeof SPENT_TAG_STATES)[number];
+export type WorkflowHalt = (typeof WORKFLOW_HALTS)[number];
+export type DispatchError = (typeof DISPATCH_ERRORS)[number];
 
 export interface StoredAdmission extends AdmissionLedgerRow {
   readonly admissionState: AdmissionState;
@@ -321,7 +326,9 @@ export interface ClaimEvent {
   readonly spentTagState: SpentTagState;
   readonly at: string;
   readonly dispatchAttempted: boolean;
-  readonly dispatchError: 'gh_workflow_run_failed' | null;
+  readonly dispatchError: DispatchError | null;
+  /** Workflow halt, when one was visible. Terminal. Never returns the record to admitted. */
+  readonly halt: WorkflowHalt | null;
 }
 
 export interface OperatorDocument {
@@ -498,6 +505,7 @@ function parseClaim(value: unknown): ClaimEvent {
   if (typeof claim.state !== 'string' || !CLAIM_STATES.includes(claim.state as OperatorClaimState)) {
     throw new AdmissionFileClosedError('corrupt');
   }
+  const state = claim.state as OperatorClaimState;
   const hex = claim.serverRunId.slice('run:'.length);
   if (claim.spentTag !== `julius-run-spent-${hex}`) throw new AdmissionFileClosedError('corrupt');
   if (typeof claim.spentTagState !== 'string' || !SPENT_TAG_STATES.includes(claim.spentTagState as SpentTagState)) {
@@ -505,17 +513,42 @@ function parseClaim(value: unknown): ClaimEvent {
   }
   if (typeof claim.at !== 'string' || !RECEIVED_AT.test(claim.at)) throw new AdmissionFileClosedError('corrupt');
   if (typeof claim.dispatchAttempted !== 'boolean') throw new AdmissionFileClosedError('corrupt');
-  if (claim.dispatchError !== null && claim.dispatchError !== 'gh_workflow_run_failed') {
+  const error = claim.dispatchError;
+  const halt = claim.halt;
+  if (halt !== null && (typeof halt !== 'string' || !WORKFLOW_HALTS.includes(halt as WorkflowHalt))) {
     throw new AdmissionFileClosedError('corrupt');
   }
+  const recordedHalt = halt === null ? null : halt as WorkflowHalt;
+  if (state === 'dispatch_failed') {
+    if (claim.dispatchAttempted !== true) throw new AdmissionFileClosedError('corrupt');
+    if (recordedHalt === 'SPENT_TAG_UNVERIFIED') {
+      if (error !== 'SPENT_TAG_UNVERIFIED') throw new AdmissionFileClosedError('corrupt');
+    } else if (recordedHalt !== null || error !== 'gh_workflow_run_failed') {
+      throw new AdmissionFileClosedError('corrupt');
+    }
+  } else if (error !== null) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (state === 'already_spent') {
+    if (recordedHalt !== 'RUN_ID_ALREADY_SPENT' || claim.spentTagState !== 'present') {
+      throw new AdmissionFileClosedError('corrupt');
+    }
+  } else if (recordedHalt === 'RUN_ID_ALREADY_SPENT') {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (state === 'dispatched' && recordedHalt !== null) throw new AdmissionFileClosedError('corrupt');
+  const dispatchError: DispatchError | null = state === 'dispatch_failed'
+    ? (recordedHalt === 'SPENT_TAG_UNVERIFIED' ? 'SPENT_TAG_UNVERIFIED' : 'gh_workflow_run_failed')
+    : null;
   return {
     wonderlandRunId: claim.wonderlandRunId,
     serverRunId: claim.serverRunId,
-    state: claim.state as OperatorClaimState,
+    state,
     spentTag: `julius-run-spent-${hex}`,
     spentTagState: claim.spentTagState as SpentTagState,
     at: claim.at,
     dispatchAttempted: claim.dispatchAttempted,
-    dispatchError: claim.dispatchError,
+    dispatchError,
+    halt: state === 'dispatched' ? null : recordedHalt,
   };
 }

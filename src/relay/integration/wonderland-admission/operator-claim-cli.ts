@@ -41,6 +41,8 @@ const USAGE = [
   '',
   'A second claim prints the existing state and does not dispatch again.',
   'dispatch_failed and already_spent stay terminal.',
+  'A visible RUN_ID_ALREADY_SPENT halt is already_spent.',
+  'A visible SPENT_TAG_UNVERIFIED halt is dispatch_failed.',
 ].join('\n');
 
 export interface OperatorClaimCliIo {
@@ -152,7 +154,9 @@ function emitClaim(io: OperatorClaimCliIo, result: ClaimResult): number {
     kind: result.kind,
     message: result.message,
   };
-  if (result.kind === 'dispatch_failed' || result.kind === 'RUN_ID_ALREADY_SPENT') body.retry = false;
+  if (result.kind === 'dispatch_failed' || result.kind === 'RUN_ID_ALREADY_SPENT' || result.kind === 'SPENT_TAG_UNVERIFIED') {
+    body.retry = false;
+  }
   if (result.requiredInput !== null) body.requiredInput = result.requiredInput;
   if (result.record !== null) Object.assign(body, publicRecord(result.record));
   io.out(JSON.stringify(body));
@@ -180,6 +184,8 @@ function publicRecord(record: OperatorView): Record<string, unknown> {
     dispatchKey: record.dispatchKey,
     spentTag: record.spentTag,
     spentTagState: record.spentTagState,
+    concurrencyGroup: record.concurrencyGroup,
+    halt: record.halt,
     dispatchAttempted: record.dispatchAttempted,
     dispatchError: record.dispatchError,
     claimedAt: record.claimedAt,

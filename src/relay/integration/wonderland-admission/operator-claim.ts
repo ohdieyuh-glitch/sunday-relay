@@ -10,13 +10,14 @@
  * `RUN LIVE MISSION` is the only path that spawns `gh`. That path first asks
  * `gh api` whether the spent tag exists. Present -> already_spent, and the
  * workflow is not started. A failed workflow spawn moves the record to
- * dispatch_failed. Neither state is ever written back to admitted, and
- * nothing here retries.
+ * dispatch_failed. A visible workflow halt `RUN_ID_ALREADY_SPENT` is
+ * already_spent, and `SPENT_TAG_UNVERIFIED` is dispatch_failed. Neither
+ * state is ever written back to admitted, and nothing here retries.
  *
- * The paid workflow does not yet declare an input for the server run id.
- * Until it does, a fresh claim is refused and `--dispatch` does not run.
- * YUJI adds that input through the governed installer. This module does not
- * edit the workflow.
+ * `--dispatch` runs only when the checked-out workflow declares
+ * `workflow_dispatch.inputs.server_run_id`. The value passed is the full
+ * `run:` id. YUJI adds that input through the governed installer. This
+ * module does not edit the workflow.
  */
 
 import {
@@ -26,7 +27,15 @@ import {
   PAID_WORKFLOW_FILE,
   WONDERLAND_RUN_ID,
 } from './admission-contract';
-import type { AdmissionFile, AdmissionFileIo, ClaimEvent, OperatorDocument, StoredAdmission } from './admission-file';
+import type {
+  AdmissionFile,
+  AdmissionFileIo,
+  ClaimEvent,
+  DispatchError,
+  OperatorDocument,
+  StoredAdmission,
+  WorkflowHalt,
+} from './admission-file';
 import { openAdmissionFile } from './admission-file';
 
 /** The workflow input the paid run must gain before this tool will dispatch. */
@@ -34,13 +43,16 @@ export const SERVER_RUN_ID_INPUT = 'server_run_id';
 
 /**
  * Paste under `workflow_dispatch.inputs` in julius-first-live-mission.yml.
- * The value this tool passes is the full server run id (`run:` + 24 lowercase
- * hex). The git tag cannot contain `:`, so the tag id is the 24 hex only.
- * Concurrency group `julius-paid-<24 hex>` is the same id. YUJI owns both.
+ * The value this tool passes is the full server run id, matching
+ * `^run:[0-9a-f]{24}$`. The git tag and the concurrency group cannot contain
+ * `:`, so both use the 24 hex only: `julius-run-spent-<24hex>` and
+ * `julius-paid-<24hex>`. YUJI owns the workflow. A re-dispatch halts with
+ * `RUN_ID_ALREADY_SPENT`. A spent tag the workflow cannot verify halts with
+ * `SPENT_TAG_UNVERIFIED`.
  */
 export const SERVER_RUN_ID_INPUT_YAML = [
   '      server_run_id:',
-  '        description: \'Julius bootstrap run id minted at Wonderland admission. Exactly run: plus 24 lowercase hex. Before any paid call, create git tag julius-run-spent-<24 hex> and concurrency group julius-paid-<24 hex>. A re-dispatch halts with RUN_ID_ALREADY_SPENT.\'',
+  '        description: \'Full Julius bootstrap run id matching ^run:[0-9a-f]{24}$. Before any paid call, create git tag julius-run-spent-<24hex> and concurrency group julius-paid-<24hex>. A re-dispatch halts with RUN_ID_ALREADY_SPENT. A spent tag that cannot be verified halts with SPENT_TAG_UNVERIFIED.\'',
   '        required: false',
   '        default: \'\'',
 ].join('\n');
@@ -83,7 +95,9 @@ export interface OperatorView {
   readonly spentTag: string;
   readonly spentTagState: 'unknown' | 'present' | 'absent';
   readonly dispatchAttempted: boolean;
-  readonly dispatchError: 'gh_workflow_run_failed' | null;
+  readonly dispatchError: DispatchError | null;
+  readonly halt: WorkflowHalt | null;
+  readonly concurrencyGroup: string;
   readonly claimedAt: string | null;
 }
 
@@ -121,13 +135,23 @@ export type StatusResult =
   | { readonly ok: true; readonly record: OperatorView }
   | { readonly ok: false; readonly kind: string; readonly message: string };
 
-export function spentTagName(serverRunId: string): string {
+/** 24 lowercase hex from a full `run:` id. Checked before any command is built. */
+export function serverRunHex(serverRunId: string): string {
   if (!JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId)) throw new Error('run_id_invalid');
-  return `julius-run-spent-${serverRunId.slice(4)}`;
+  return serverRunId.slice(4);
+}
+
+export function spentTagName(serverRunId: string): string {
+  return `julius-run-spent-${serverRunHex(serverRunId)}`;
+}
+
+export function concurrencyGroupName(serverRunId: string): string {
+  return `julius-paid-${serverRunHex(serverRunId)}`;
 }
 
 export function spentTagApiArgs(repo: string, serverRunId: string): readonly string[] {
-  return ['api', '--include', `repos/${repo}/git/ref/tags/${spentTagName(serverRunId)}`];
+  const tag = spentTagName(serverRunId);
+  return ['api', '--include', `repos/${repo}/git/ref/tags/${tag}`];
 }
 
 export function workflowDispatchArgs(input: {
@@ -137,6 +161,7 @@ export function workflowDispatchArgs(input: {
   readonly dispatchKey: string;
   readonly serverRunId: string;
 }): readonly string[] {
+  if (!JULIUS_BOOTSTRAP_RUN_ID.test(input.serverRunId)) throw new Error('run_id_invalid');
   return [
     'workflow', 'run', PAID_WORKFLOW_FILE,
     '--repo', input.repo,
@@ -199,6 +224,21 @@ export function workflowDispatchInputNames(source: string): readonly string[] {
 
 export function workflowDeclaresServerRunId(source: string): boolean {
   return workflowDispatchInputNames(source).includes(SERVER_RUN_ID_INPUT);
+}
+
+const HALT_ALREADY_SPENT = /\bRUN_ID_ALREADY_SPENT\b/;
+const HALT_UNVERIFIED = /\bSPENT_TAG_UNVERIFIED\b/;
+
+/**
+ * A workflow halt, wherever it is visible in `gh` output. `RUN_ID_ALREADY_SPENT`
+ * wins when both are present, so a spent id is never recorded as a retryable
+ * failure. Exit code is not required: a zero exit that prints a halt still counts.
+ */
+export function interpretWorkflowHalt(result: GhResult): WorkflowHalt | null {
+  const blob = `${result.stdout}\n${result.stderr}`;
+  if (HALT_ALREADY_SPENT.test(blob)) return 'RUN_ID_ALREADY_SPENT';
+  if (HALT_UNVERIFIED.test(blob)) return 'SPENT_TAG_UNVERIFIED';
+  return null;
 }
 
 /** Read `gh api --include` output. Anything that is not a clear 200 ref or a clear 404 is unreadable. */
@@ -279,6 +319,7 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
       spentTagState: 'unknown',
       dispatchAttempted: false,
       dispatchError: null,
+      halt: null,
     });
     io.write(appendClaim(document, event));
     return {
@@ -312,6 +353,7 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
       spentTagState: 'present',
       dispatchAttempted: false,
       dispatchError: null,
+      halt: 'RUN_ID_ALREADY_SPENT',
     });
     io.write(appendClaim(document, event));
     return fail(
@@ -325,6 +367,7 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
     spentTagState: 'absent',
     dispatchAttempted: false,
     dispatchError: null,
+    halt: null,
   });
   const claimedDoc = appendClaim(document, reserved);
   io.write(claimedDoc);
@@ -335,17 +378,37 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
     dispatchKey: admission.keyHash,
     serverRunId: admission.serverRunId,
   }));
-  if (ran.code !== 0) {
+  const halt = interpretWorkflowHalt(ran);
+  if (halt === 'RUN_ID_ALREADY_SPENT') {
+    const spent = baseEvent(admission, input.nowIso, {
+      state: 'already_spent',
+      spentTagState: 'present',
+      dispatchAttempted: true,
+      dispatchError: null,
+      halt,
+    });
+    io.write(appendClaim(claimedDoc, spent));
+    return fail(
+      'RUN_ID_ALREADY_SPENT',
+      'The workflow halted with RUN_ID_ALREADY_SPENT. The record is already_spent and will not be retried.',
+      toView(admission, spent),
+    );
+  }
+  if (halt === 'SPENT_TAG_UNVERIFIED' || ran.code !== 0) {
+    const unverified = halt === 'SPENT_TAG_UNVERIFIED';
     const failed = baseEvent(admission, input.nowIso, {
       state: 'dispatch_failed',
-      spentTagState: 'absent',
+      spentTagState: unverified ? 'unknown' : 'absent',
       dispatchAttempted: true,
-      dispatchError: 'gh_workflow_run_failed',
+      dispatchError: unverified ? 'SPENT_TAG_UNVERIFIED' : 'gh_workflow_run_failed',
+      halt: unverified ? 'SPENT_TAG_UNVERIFIED' : null,
     });
     io.write(appendClaim(claimedDoc, failed));
     return fail(
-      'dispatch_failed',
-      'The workflow dispatch failed. The record is dispatch_failed and will not be retried.',
+      unverified ? 'SPENT_TAG_UNVERIFIED' : 'dispatch_failed',
+      unverified
+        ? 'The workflow halted with SPENT_TAG_UNVERIFIED. The record is dispatch_failed and will not be retried.'
+        : 'The workflow dispatch failed. The record is dispatch_failed and will not be retried.',
       toView(admission, failed),
     );
   }
@@ -354,6 +417,7 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
     spentTagState: 'absent',
     dispatchAttempted: true,
     dispatchError: null,
+    halt: null,
   });
   io.write(appendClaim(claimedDoc, attempted));
   return {
@@ -446,15 +510,29 @@ function appendClaim(document: OperatorDocument, event: ClaimEvent): OperatorDoc
 
 function legalTransition(prior: ClaimEvent | null, event: ClaimEvent): boolean {
   if (event.state !== 'dispatched' && event.state !== 'dispatch_failed' && event.state !== 'already_spent') return false;
+  if (event.state === 'already_spent') {
+    if (event.halt !== 'RUN_ID_ALREADY_SPENT' || event.dispatchError !== null || event.spentTagState !== 'present') {
+      return false;
+    }
+  } else if (event.halt === 'RUN_ID_ALREADY_SPENT') {
+    return false;
+  }
+  if (event.state === 'dispatched' && (event.halt !== null || event.dispatchError !== null)) return false;
+  if (event.halt === 'SPENT_TAG_UNVERIFIED' && event.state !== 'dispatch_failed') return false;
   if (prior === null) {
     if (event.state === 'dispatch_failed') return false;
     if (event.state === 'dispatched' && event.dispatchAttempted) return false;
-    if (event.state === 'already_spent') return event.spentTagState === 'present' && !event.dispatchAttempted;
+    if (event.state === 'already_spent') return !event.dispatchAttempted;
     return event.state === 'dispatched';
   }
-  if (prior.state !== 'dispatched') return false;
-  if (event.state === 'dispatch_failed') return event.dispatchAttempted && event.dispatchError === 'gh_workflow_run_failed';
-  return event.state === 'dispatched' && event.dispatchAttempted && !prior.dispatchAttempted;
+  if (prior.state !== 'dispatched' || prior.dispatchAttempted) return false;
+  if (event.state === 'already_spent') return event.dispatchAttempted;
+  if (event.state === 'dispatch_failed') {
+    if (!event.dispatchAttempted) return false;
+    if (event.halt === 'SPENT_TAG_UNVERIFIED') return event.dispatchError === 'SPENT_TAG_UNVERIFIED';
+    return event.halt === null && event.dispatchError === 'gh_workflow_run_failed';
+  }
+  return event.state === 'dispatched' && event.dispatchAttempted;
 }
 
 function baseEvent(admission: StoredAdmission, at: string, fields: {
@@ -462,6 +540,7 @@ function baseEvent(admission: StoredAdmission, at: string, fields: {
   readonly spentTagState: ClaimEvent['spentTagState'];
   readonly dispatchAttempted: boolean;
   readonly dispatchError: ClaimEvent['dispatchError'];
+  readonly halt: ClaimEvent['halt'];
 }): ClaimEvent {
   return {
     wonderlandRunId: admission.runId,
@@ -483,6 +562,8 @@ function viewFromClaim(claim: ClaimEvent): OperatorView {
     spentTagState: claim.spentTagState,
     dispatchAttempted: claim.dispatchAttempted,
     dispatchError: claim.dispatchError,
+    halt: claim.halt,
+    concurrencyGroup: concurrencyGroupName(claim.serverRunId),
     claimedAt: claim.at,
   };
 }
@@ -503,6 +584,8 @@ function toView(admission: StoredAdmission, claim: ClaimEvent | null): OperatorV
     spentTagState: claim?.spentTagState ?? 'unknown',
     dispatchAttempted: claim?.dispatchAttempted ?? false,
     dispatchError: claim?.dispatchError ?? null,
+    halt: claim?.halt ?? null,
+    concurrencyGroup: concurrencyGroupName(admission.serverRunId),
     claimedAt: claim?.at ?? null,
   };
 }
