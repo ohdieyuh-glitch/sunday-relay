@@ -1,4 +1,5 @@
-// WONDERLAND -- J1 client pure logic: KNOWN-ANSWER TEST. No Unreal, no network, no secrets, no randomness.
+// WONDERLAND -- J1 client pure logic: KNOWN-ANSWER TEST. No Unreal, no network, no secrets, no randomness: every
+// "random" byte the run-id tracker sees here comes from a fixed script (sha256 of a label), never from an RNG.
 //
 // Build and run from the repository root (any C++17 compiler):
 //   g++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic -I wonderland/Source/Wonderland
@@ -19,6 +20,11 @@
 // The result rows follow the bridge contract at sunday-relay commit 31bfc58b, relay-bridge/julius-dispatch.ts:
 // result body {data:{runId,state,mode,resultText,resultSha256}} (:913); resultText = JSON.stringify of the object
 // at :624-628; error body {error:{kind,message}} (:952); a finished run that failed is a 200 with `failure` set.
+//
+// RULING (c), 2026-10-23: run ids are client-minted UUIDv4s, and after any refusal the next attempt carries a fresh
+// run id AND a fresh idempotency key. KAT-UUID-FORMAT and KAT-KEY pin the formats against the bridge's own rules
+// (RUN_ID :962, KEY :964); KAT-ATTEMPT pins FDispatchAttemptTracker after every kind of answer. RULING R4-F: a
+// scrubbed or cut artifact qualifies only with independent evidence; KAT-QUALIFICATION pins the fail-closed classifier.
 #include "WonderlandJuliusMissionLogic.h"
 
 #include <cstdio>
@@ -204,6 +210,204 @@ namespace
 	// KAT-RESULT-END
 	};
 
+	struct FUuidFormatRow { const char* Label; const char* BytesHex; const char* Expected; };
+	const FUuidFormatRow UuidFormatRows[] = {
+	// KAT-UUID-FORMAT-BEGIN
+	{ "zeros", "00000000000000000000000000000000", "00000000-0000-4000-8000-000000000000" },
+	{ "ones", "ffffffffffffffffffffffffffffffff", "ffffffff-ffff-4fff-bfff-ffffffffffff" },
+	{ "counting", "000102030405060708090a0b0c0d0e0f", "00010203-0405-4607-8809-0a0b0c0d0e0f" },
+	{ "sha_abc_prefix", "ba7816bf8f01cfea414140de5dae2223", "ba7816bf-8f01-4fea-8141-40de5dae2223" },
+	{ "version_variant_clear", "0000000000000f003f00000000000000", "00000000-0000-4f00-bf00-000000000000" },
+	{ "version_variant_set", "ffffffffffff40ffbfffffffffffffff", "ffffffff-ffff-40ff-bfff-ffffffffffff" },
+	// KAT-UUID-FORMAT-END
+	};
+
+	struct FKeyRow { const char* Key; int bCanonicalUuidV4; int bBridgeKey; };
+	const FKeyRow KeyRows[] = {
+	// KAT-KEY-BEGIN
+	{ "00000000-0000-4000-8000-000000000000", 1, 1 },
+	{ "ba7816bf-8f01-4fea-8141-40de5dae2223", 1, 1 },
+	{ "BA7816BF-8F01-4FEA-8141-40DE5DAE2223", 0, 1 },
+	{ "wlj_ba7816bf-8f01-4fea-8141-40de5dae2223", 0, 1 },
+	{ "ba7816bf-8f01-1fea-8141-40de5dae2223", 0, 1 },
+	{ "ba7816bf-8f01-4fea-c141-40de5dae2223", 0, 1 },
+	{ "ba7816bf8f014fea814140de5dae2223", 0, 1 },
+	{ "ba7816bf:8f01-4fea-8141-40de5dae2223", 0, 0 },
+	{ "1234567", 0, 0 },
+	{ "12345678", 0, 1 },
+	{ "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0, 1 },
+	{ "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0, 0 },
+	{ "", 0, 0 },
+	// KAT-KEY-END
+	};
+
+	// One dispatch answered as stated (or not at all), then a second attempt that reuses the first one's values as
+	// Reuse says: none (a fresh mint), run, key, both, key_as_run (wlj_ + the old key) or run_as_key (the old run
+	// id's UUID as the key). Each row runs on a fresh tracker with scripted bytes: sha256 of the label, then of the
+	// label + "#2" for the fresh mint.
+	struct FAttemptRow
+	{
+		const char* Label; int HttpStatus; int bHasError; const char* ErrorKind; int bNoAnswer; const char* Reuse;
+		EDispatchAnswer ExpectedAnswer; EAttemptVerdict ExpectedVerdict;
+	};
+	const FAttemptRow AttemptRows[] = {
+	// KAT-ATTEMPT-BEGIN
+	{ "repeat_already_used_409_none", 409, 1, "julius_dispatch_repeat_already_used", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "repeat_already_used_409_run", 409, 1, "julius_dispatch_repeat_already_used", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "repeat_already_used_409_key", 409, 1, "julius_dispatch_repeat_already_used", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "repeat_already_used_409_both", 409, 1, "julius_dispatch_repeat_already_used", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "repeat_already_used_409_key_as_run", 409, 1, "julius_dispatch_repeat_already_used", 0, "key_as_run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "repeat_already_used_409_run_as_key", 409, 1, "julius_dispatch_repeat_already_used", 0, "run_as_key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "cap_reached_429_none", 429, 1, "julius_dispatch_cap_reached", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "cap_reached_429_run", 429, 1, "julius_dispatch_cap_reached", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "cap_reached_429_key", 429, 1, "julius_dispatch_cap_reached", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "cap_reached_429_both", 429, 1, "julius_dispatch_cap_reached", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "cap_reached_429_key_as_run", 429, 1, "julius_dispatch_cap_reached", 0, "key_as_run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "cap_reached_429_run_as_key", 429, 1, "julius_dispatch_cap_reached", 0, "run_as_key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "mission_cap_reached_429_none", 429, 1, "julius_dispatch_mission_cap_reached", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "mission_cap_reached_429_run", 429, 1, "julius_dispatch_mission_cap_reached", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "mission_cap_reached_429_key", 429, 1, "julius_dispatch_mission_cap_reached", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "mission_cap_reached_429_both", 429, 1, "julius_dispatch_mission_cap_reached", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "mission_cap_reached_429_key_as_run", 429, 1, "julius_dispatch_mission_cap_reached", 0, "key_as_run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "mission_cap_reached_429_run_as_key", 429, 1, "julius_dispatch_mission_cap_reached", 0, "run_as_key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "creator_mismatch_403_none", 403, 1, "julius_dispatch_run_creator_mismatch", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "creator_mismatch_403_run", 403, 1, "julius_dispatch_run_creator_mismatch", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "creator_mismatch_403_key", 403, 1, "julius_dispatch_run_creator_mismatch", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "creator_mismatch_403_both", 403, 1, "julius_dispatch_run_creator_mismatch", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "key_reused_409_none", 409, 1, "julius_dispatch_key_reused", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "key_reused_409_run", 409, 1, "julius_dispatch_key_reused", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "key_reused_409_key", 409, 1, "julius_dispatch_key_reused", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "key_reused_409_both", 409, 1, "julius_dispatch_key_reused", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "already_dispatched_409_none", 409, 1, "julius_dispatch_already_dispatched", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "already_dispatched_409_run", 409, 1, "julius_dispatch_already_dispatched", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "already_dispatched_409_key", 409, 1, "julius_dispatch_already_dispatched", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "already_dispatched_409_both", 409, 1, "julius_dispatch_already_dispatched", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "busy_429_none", 429, 1, "julius_dispatch_busy", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "busy_429_run", 429, 1, "julius_dispatch_busy", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "busy_429_key", 429, 1, "julius_dispatch_busy", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "busy_429_both", 429, 1, "julius_dispatch_busy", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "key_invalid_400_none", 400, 1, "julius_dispatch_idempotency_key_invalid", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "key_invalid_400_run", 400, 1, "julius_dispatch_idempotency_key_invalid", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "key_invalid_400_key", 400, 1, "julius_dispatch_idempotency_key_invalid", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "key_invalid_400_both", 400, 1, "julius_dispatch_idempotency_key_invalid", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "unknown_kind_on_200_none", 200, 1, "julius_dispatch_kind_nobody_has_named", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "unknown_kind_on_200_run", 200, 1, "julius_dispatch_kind_nobody_has_named", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "unknown_kind_on_200_key", 200, 1, "julius_dispatch_kind_nobody_has_named", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "unknown_kind_on_200_both", 200, 1, "julius_dispatch_kind_nobody_has_named", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "flag_without_kind_on_200_none", 200, 1, "", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "flag_without_kind_on_200_run", 200, 1, "", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "flag_without_kind_on_200_key", 200, 1, "", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "flag_without_kind_on_200_both", 200, 1, "", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "kind_without_flag_on_202_none", 202, 0, "julius_dispatch_kind_nobody_has_named", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "kind_without_flag_on_202_run", 202, 0, "julius_dispatch_kind_nobody_has_named", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "kind_without_flag_on_202_key", 202, 0, "julius_dispatch_kind_nobody_has_named", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "kind_without_flag_on_202_both", 202, 0, "julius_dispatch_kind_nobody_has_named", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "status_500_no_error_none", 500, 0, "", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "status_500_no_error_run", 500, 0, "", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "status_500_no_error_key", 500, 0, "", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "status_500_no_error_both", 500, 0, "", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "status_302_no_error_none", 302, 0, "", 0, "none", EDispatchAnswer::Refused, EAttemptVerdict::Admitted },
+	{ "status_302_no_error_run", 302, 0, "", 0, "run", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "status_302_no_error_key", 302, 0, "", 0, "key", EDispatchAnswer::Refused, EAttemptVerdict::KeyReused },
+	{ "status_302_no_error_both", 302, 0, "", 0, "both", EDispatchAnswer::Refused, EAttemptVerdict::RunIdReused },
+	{ "accepted_202_none", 202, 0, "", 0, "none", EDispatchAnswer::Accepted, EAttemptVerdict::Admitted },
+	{ "accepted_202_run", 202, 0, "", 0, "run", EDispatchAnswer::Accepted, EAttemptVerdict::RunIdReused },
+	{ "accepted_202_key", 202, 0, "", 0, "key", EDispatchAnswer::Accepted, EAttemptVerdict::KeyReused },
+	{ "accepted_202_both", 202, 0, "", 0, "both", EDispatchAnswer::Accepted, EAttemptVerdict::RunIdReused },
+	{ "accepted_202_key_as_run", 202, 0, "", 0, "key_as_run", EDispatchAnswer::Accepted, EAttemptVerdict::RunIdReused },
+	{ "accepted_202_run_as_key", 202, 0, "", 0, "run_as_key", EDispatchAnswer::Accepted, EAttemptVerdict::KeyReused },
+	{ "replayed_200_none", 200, 0, "", 0, "none", EDispatchAnswer::Accepted, EAttemptVerdict::Admitted },
+	{ "replayed_200_run", 200, 0, "", 0, "run", EDispatchAnswer::Accepted, EAttemptVerdict::RunIdReused },
+	{ "replayed_200_key", 200, 0, "", 0, "key", EDispatchAnswer::Accepted, EAttemptVerdict::KeyReused },
+	{ "replayed_200_both", 200, 0, "", 0, "both", EDispatchAnswer::Accepted, EAttemptVerdict::RunIdReused },
+	{ "replayed_200_key_as_run", 200, 0, "", 0, "key_as_run", EDispatchAnswer::Accepted, EAttemptVerdict::RunIdReused },
+	{ "replayed_200_run_as_key", 200, 0, "", 0, "run_as_key", EDispatchAnswer::Accepted, EAttemptVerdict::KeyReused },
+	{ "no_answer_none", 0, 0, "", 1, "none", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "no_answer_run", 0, 0, "", 1, "run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "no_answer_key", 0, 0, "", 1, "key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "no_answer_both", 0, 0, "", 1, "both", EDispatchAnswer::NoAnswer, EAttemptVerdict::Admitted },
+	{ "no_answer_key_as_run", 0, 0, "", 1, "key_as_run", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	{ "no_answer_run_as_key", 0, 0, "", 1, "run_as_key", EDispatchAnswer::NoAnswer, EAttemptVerdict::PreviousAttemptUnanswered },
+	// KAT-ATTEMPT-END
+	};
+
+	// The artifact is PrefixHex x PrefixRepeat + TailHex, as the wrapper hands it over. Expected signals follow.
+	struct FQualificationRow
+	{
+		const char* Label; const char* PrefixHex; unsigned long PrefixRepeat; const char* TailHex; EFinishedResult Finished;
+		int bEvidencePresent; int bIndependentlyVerified; const char* OriginalSha256; const char* TransformedSha256;
+		const char* ArtifactSha256; EArtifactQualification Expected; int bScrubMarker; int bAtCutLimit; int bOverCutLimit;
+		unsigned long Utf16Units;
+	};
+	const FQualificationRow QualificationRows[] = {
+	// KAT-QUALIFICATION-BEGIN
+	{ "plain_short", "782079", 1, "", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::NoTransformSignal, 0, 0, 0, 3 },
+	{ "x_7999_under_limit", "78", 7999, "", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::NoTransformSignal, 0, 0, 0, 7999 },
+	{ "x_8000_at_limit", "78", 8000, "", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedUnverified, 0, 1, 0, 8000 },
+	{ "cut_split_pair_ufffd_at_limit", "78", 7999, "efbfbd", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedUnverified, 0, 1, 0, 8000 },
+	{ "pair_fits_at_limit", "78", 7998, "f09f9880", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedUnverified, 0, 1, 0, 8000 },
+	{ "over_limit_never_from_bridge", "78", 7999, "f09f9880", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 0, 0, 1, 8001 },
+	{ "over_limit_even_with_evidence", "78", 8001, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 0, 0, 1, 8001 },
+	{ "redacted_marker_short", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedUnverified, 1, 0, 0, 10 },
+	{ "redacted_marker_spoofed_by_coder", "616e73776572", 1, "5b72656461637465645d", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedUnverified, 1, 0, 0, 16 },
+	{ "uppercase_marker_is_not_scrub", "5b52454441435445445d", 1, "", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::NoTransformSignal, 0, 0, 0, 10 },
+	{ "partial_marker_cut_at_limit", "78", 7995, "5b72656461", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedUnverified, 0, 1, 0, 8000 },
+	{ "marker_with_verified_evidence", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedVerified, 1, 0, 0, 10 },
+	{ "at_limit_with_verified_evidence", "78", 8000, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::TransformedVerified, 0, 1, 0, 8000 },
+	{ "evidence_not_independently_verified", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 0, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
+	{ "evidence_transformed_hash_mismatch", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
+	{ "evidence_missing_original", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
+	{ "evidence_uppercase_original", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "A8100AE6AA1940D0B663BB31CD466142EBBDBD5187131B92D93818987832EB89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
+	{ "evidence_short_transformed", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c1", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c1", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
+	{ "verified_flag_without_present", "5b72656461637465645d", 1, "", EFinishedResult::Completed, 0, 1, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 1, 0, 0, 10 },
+	{ "hashes_without_present", "782079", 1, "", EFinishedResult::Completed, 0, 0, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::EvidenceInconsistent, 0, 0, 0, 3 },
+	{ "not_completed_failure", "5b72656461637465645d", 1, "", EFinishedResult::FailureOutcome, 1, 1, "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::NotCompleted, 1, 0, 0, 10 },
+	{ "not_completed_damaged", "782079", 1, "", EFinishedResult::Damaged, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::NotCompleted, 0, 0, 0, 3 },
+	{ "not_completed_no_artifact", "", 1, "", EFinishedResult::NoArtifact, 0, 0, "", "", "", EArtifactQualification::NotCompleted, 0, 0, 0, 0 },
+	{ "malformed_utf8_unreadable", "78", 7999, "eda0bd", EFinishedResult::Completed, 0, 0, "", "", "887fcea6a80333c6c02ae7e79735f0edad8d811f0b61431495f796f4bf6a7c19", EArtifactQualification::Unreadable, 0, 0, 0, 0 },
+	// KAT-QUALIFICATION-END
+	};
+
+	// The source hands out Available of the two blocks, then reports failure. A failure is a refusal: no id at all.
+	struct FMintRow
+	{
+		const char* Label; int Available; const char* RunBytesHex; const char* KeyBytesHex; EMintResult Expected;
+		const char* RunId; const char* Key;
+	};
+	const FMintRow MintRows[] = {
+	// KAT-MINT-BEGIN
+	{ "source_fails_at_once", 0, "ba7816bf8f01cfea414140de5dae2223", "000102030405060708090a0b0c0d0e0f", EMintResult::RandomUnavailable, "", "" },
+	{ "source_fails_on_key", 1, "ba7816bf8f01cfea414140de5dae2223", "000102030405060708090a0b0c0d0e0f", EMintResult::RandomUnavailable, "", "" },
+	{ "stuck_source", 2, "ba7816bf8f01cfea414140de5dae2223", "ba7816bf8f01cfea414140de5dae2223", EMintResult::RandomRepeated, "", "" },
+	{ "bytes_equal_after_version_bits", 2, "ba7816bf8f010fea014140de5dae2223", "ba7816bf8f01cfea814140de5dae2223", EMintResult::RandomRepeated, "", "" },
+	{ "both_blocks_ok", 2, "ba7816bf8f01cfea414140de5dae2223", "000102030405060708090a0b0c0d0e0f", EMintResult::Minted, "wlj_ba7816bf-8f01-4fea-8141-40de5dae2223", "00010203-0405-4607-8809-0a0b0c0d0e0f" },
+	{ "uppercase_free_from_high_bytes", 2, "ffffffffffffffffffffffffffffffff", "cafebabedeadbeefcafebabedeadbeef", EMintResult::Minted, "wlj_ffffffff-ffff-4fff-bfff-ffffffffffff", "cafebabe-dead-4eef-8afe-babedeadbeef" },
+	// KAT-MINT-END
+	};
+
+	/** A scripted byte source: hands out the given 16-byte blocks in order, then fails. Never an RNG. */
+	class FScriptedBytes final : public IRandomBytes16
+	{
+	public:
+		std::vector<std::string> Blocks;
+		std::size_t Next = 0;
+		bool Fill(std::uint8_t (&OutBytes)[16]) override
+		{
+			if (Next >= Blocks.size()) { return false; }
+			for (unsigned Index = 0; Index < 16; ++Index) { OutBytes[Index] = static_cast<std::uint8_t>(Blocks[Next][Index]); }
+			++Next;
+			return true;
+		}
+	};
+
+	/** Two 16-byte blocks from sha256(Seed): the first half for a run id, the second for a key. */
+	void PushSeed(FScriptedBytes& Source, const std::string& Seed)
+	{
+		const FSha256Digest Digest = Sha256(Seed);
+		Source.Blocks.emplace_back(reinterpret_cast<const char*>(Digest.data()), 16);
+		Source.Blocks.emplace_back(reinterpret_cast<const char*>(Digest.data()) + 16, 16);
+	}
+
 	template <typename T, std::size_t N>
 	constexpr std::size_t CountOf(const T (&)[N]) { return N; }
 }
@@ -330,13 +534,178 @@ int main()
 		Expect(Digest12 == Row.Digest12, std::string("result digest12 ") + Row.Label + ": got " + Digest12);
 	}
 
+	for (const FUuidFormatRow& Row : UuidFormatRows)
+	{
+		const std::string Bytes = FromHex(Row.BytesHex);
+		std::uint8_t Raw[16];
+		for (unsigned Index = 0; Index < 16; ++Index) { Raw[Index] = static_cast<std::uint8_t>(Bytes[Index]); }
+		const std::string Got = FormatUuidV4FromBytes(Raw);
+		Expect(Got == Row.Expected, std::string("uuid format ") + Row.Label + ": got " + Got);
+		Expect(IsCanonicalUuidV4(Got) && IsBridgeRunId(Got) && IsBridgeIdempotencyKey(Got), std::string("uuid rules ") + Row.Label);
+		Expect(FormatRunIdFromBytes(Raw) == std::string(RunIdPrefix) + Got, std::string("run id is the prefix + the uuid ") + Row.Label);
+	}
+
+	for (const FKeyRow& Row : KeyRows)
+	{
+		Expect(IsCanonicalUuidV4(Row.Key) == (Row.bCanonicalUuidV4 != 0), std::string("canonical uuidv4: ") + Row.Key);
+		Expect(IsBridgeIdempotencyKey(Row.Key) == (Row.bBridgeKey != 0), std::string("bridge key: ") + Row.Key);
+	}
+
+	for (const FAttemptRow& Row : AttemptRows)
+	{
+		const std::string Label = Row.Label;
+		FDispatchAttemptTracker Tracker;
+		FScriptedBytes Source;
+		PushSeed(Source, Label);
+		PushSeed(Source, Label + "#2");
+		FDispatchAttempt First;
+		Expect(Tracker.MintAttempt(Source, First) == EMintResult::Minted, "attempt first mint " + Label);
+		Expect(Tracker.BeginAttempt(First) == EAttemptVerdict::Admitted, "attempt first admitted " + Label);
+		const EDispatchAnswer Answer = Row.bNoAnswer != 0 ? EDispatchAnswer::NoAnswer
+			: ClassifyDispatchAnswer(Row.HttpStatus, Row.bHasError != 0, Row.ErrorKind);
+		Expect(Answer == Row.ExpectedAnswer, "attempt answer " + Label + ": got " + std::to_string(static_cast<int>(Answer)));
+		Expect(Tracker.RecordAnswer(Answer), "attempt answer recorded " + Label);
+		FDispatchAttempt Fresh;
+		Expect(Tracker.MintAttempt(Source, Fresh) == EMintResult::Minted, "attempt fresh mint " + Label);
+		FDispatchAttempt Second = Fresh;
+		const std::string Reuse = Row.Reuse;
+		if (Reuse == "run" || Reuse == "both") { Second.RunId = First.RunId; }
+		if (Reuse == "key" || Reuse == "both") { Second.IdempotencyKey = First.IdempotencyKey; }
+		if (Reuse == "key_as_run") { Second.RunId = std::string(RunIdPrefix) + First.IdempotencyKey; }
+		if (Reuse == "run_as_key") { Second.IdempotencyKey = First.RunId.substr(RunIdPrefix.size()); }
+		const EAttemptVerdict Got = Tracker.BeginAttempt(Second);
+		Expect(Got == Row.ExpectedVerdict, "attempt verdict " + Label + ": got " + std::to_string(static_cast<int>(Got)));
+	}
+
+	{
+		// The mint itself: exact known answers from scripted bytes, the bridge's rules, and every failure path.
+		FDispatchAttemptTracker Tracker;
+		FScriptedBytes Source;
+		Source.Blocks = { FromHex("ba7816bf8f01cfea414140de5dae2223"), FromHex("000102030405060708090a0b0c0d0e0f") };
+		FDispatchAttempt Minted;
+		Expect(Tracker.MintAttempt(Source, Minted) == EMintResult::Minted, "mint known answer");
+		Expect(Minted.RunId == "wlj_ba7816bf-8f01-4fea-8141-40de5dae2223", "mint run id known answer: " + Minted.RunId);
+		Expect(Minted.IdempotencyKey == "00010203-0405-4607-8809-0a0b0c0d0e0f", "mint key known answer: " + Minted.IdempotencyKey);
+		Expect(IsStrictRunId(Minted.RunId) && IsBridgeRunId(Minted.RunId), "minted run id passes both run-id rules");
+		Expect(IsCanonicalUuidV4(Minted.IdempotencyKey) && IsBridgeIdempotencyKey(Minted.IdempotencyKey), "minted key passes both key rules");
+		Expect(!Tracker.HasOpenAttempt(), "minting opens nothing");
+		Expect(!Tracker.RecordAnswer(EDispatchAnswer::Refused), "an answer with no open attempt is not recorded");
+
+		FDispatchAttempt Cleared{ "stale", "stale" };
+		Expect(Tracker.MintAttempt(Source, Cleared) == EMintResult::RandomUnavailable, "a failed source mints nothing");
+		Expect(Cleared.RunId.empty() && Cleared.IdempotencyKey.empty(), "a failed mint clears its output");
+		FScriptedBytes HalfSource;
+		HalfSource.Blocks = { FromHex("ba7816bf8f01cfea414140de5dae2223") };
+		Expect(Tracker.MintAttempt(HalfSource, Cleared) == EMintResult::RandomUnavailable, "a source failing on the key mints nothing");
+		Expect(Cleared.RunId.empty(), "a half mint leaves no run id behind");
+
+		FScriptedBytes Stuck;
+		Stuck.Blocks = { FromHex("ba7816bf8f01cfea414140de5dae2223"), FromHex("ba7816bf8f01cfea414140de5dae2223") };
+		Expect(Tracker.MintAttempt(Stuck, Cleared) == EMintResult::RandomRepeated, "a stuck source (run id == key) is refused");
+
+		Expect(Tracker.BeginAttempt(Minted) == EAttemptVerdict::Admitted, "the minted pair is admitted");
+		Expect(Tracker.HasOpenAttempt(), "an admitted attempt is open");
+		FScriptedBytes Replay;
+		Replay.Blocks = { FromHex("000102030405060708090a0b0c0d0e0f"), FromHex("ffffffffffffffffffffffffffffffff") };
+		Expect(Tracker.MintAttempt(Replay, Cleared) == EMintResult::RandomRepeated, "bytes repeating the open key are refused");
+		Expect(Tracker.RecordAnswer(EDispatchAnswer::NoAnswer) && Tracker.HasOpenAttempt(), "no answer keeps the attempt open");
+		Expect(Tracker.BeginAttempt(Minted) == EAttemptVerdict::Admitted, "the identical pair is resent after no answer");
+		Expect(Tracker.RecordAnswer(EDispatchAnswer::Refused) && !Tracker.HasOpenAttempt(), "the refusal closes it");
+		Expect(Tracker.BeginAttempt(Minted) == EAttemptVerdict::RunIdReused, "the refused pair is never resent");
+		FScriptedBytes Repeat;
+		Repeat.Blocks = { FromHex("ba7816bf8f01cfea414140de5dae2223"), FromHex("ffffffffffffffffffffffffffffffff") };
+		Expect(Tracker.MintAttempt(Repeat, Cleared) == EMintResult::RandomRepeated, "bytes repeating a spent run id are refused");
+		FScriptedBytes RepeatKey;
+		RepeatKey.Blocks = { FromHex("ffffffffffffffffffffffffffffffff"), FromHex("000102030405060708090a0b0c0d0e0f") };
+		Expect(Tracker.MintAttempt(RepeatKey, Cleared) == EMintResult::RandomRepeated, "bytes repeating a spent key are refused");
+
+		const struct { const char* RunId; const char* Key; EAttemptVerdict Expected; } Malformed[] = {
+			{ "ba7816bf-8f01-4fea-8141-40de5dae2224", "11111111-1111-4111-8111-111111111111", EAttemptVerdict::MalformedRunId },
+			{ "wlj_BA7816BF-8F01-4FEA-8141-40DE5DAE2224", "11111111-1111-4111-8111-111111111111", EAttemptVerdict::MalformedRunId },
+			{ "wlx_ba7816bf-8f01-4fea-8141-40de5dae2224", "11111111-1111-4111-8111-111111111111", EAttemptVerdict::MalformedRunId },
+			{ "wlj_ba7816bf-8f01-1fea-8141-40de5dae2224", "11111111-1111-4111-8111-111111111111", EAttemptVerdict::MalformedRunId },
+			{ "", "11111111-1111-4111-8111-111111111111", EAttemptVerdict::MalformedRunId },
+			{ "wlj_ba7816bf-8f01-4fea-8141-40de5dae2224", "wlj_11111111-1111-4111-8111-111111111111", EAttemptVerdict::MalformedKey },
+			{ "wlj_ba7816bf-8f01-4fea-8141-40de5dae2224", "11111111111141118111111111111111", EAttemptVerdict::MalformedKey },
+			{ "wlj_ba7816bf-8f01-4fea-8141-40de5dae2224", "", EAttemptVerdict::MalformedKey },
+			{ "wlj_ba7816bf-8f01-4fea-8141-40de5dae2224", "ba7816bf-8f01-4fea-8141-40de5dae2224", EAttemptVerdict::KeyEqualsRunId },
+		};
+		for (const auto& Case : Malformed)
+		{
+			Expect(Tracker.BeginAttempt(FDispatchAttempt{ Case.RunId, Case.Key }) == Case.Expected,
+				std::string("malformed attempt ") + Case.RunId + " / " + Case.Key);
+		}
+		Expect(!Tracker.HasOpenAttempt(), "a refused verdict opens nothing");
+	}
+
+	// 1,000 refusals in a row, each followed by a fresh mint: every attempt admitted, all 2,000 values distinct.
+	std::set<std::string> MintedValues;
+	{
+		FDispatchAttemptTracker Tracker;
+		FScriptedBytes Source;
+		for (int Index = 0; Index < 1000; ++Index) { PushSeed(Source, "j1-attempt-" + std::to_string(Index)); }
+		for (int Index = 0; Index < 1000; ++Index)
+		{
+			FDispatchAttempt Attempt;
+			const bool bOk = Tracker.MintAttempt(Source, Attempt) == EMintResult::Minted
+				&& Tracker.BeginAttempt(Attempt) == EAttemptVerdict::Admitted
+				&& Tracker.RecordAnswer(EDispatchAnswer::Refused);
+			if (!bOk) { Expect(false, "attempt chain " + std::to_string(Index)); }
+			MintedValues.insert(Attempt.RunId.substr(RunIdPrefix.size()));
+			MintedValues.insert(Attempt.IdempotencyKey);
+		}
+	}
+	Expect(MintedValues.size() == 2000, "2,000 minted run-id and key UUIDs are distinct");
+
+	for (const FMintRow& Row : MintRows)
+	{
+		FDispatchAttemptTracker Tracker;
+		FScriptedBytes Source;
+		if (Row.Available >= 1) { Source.Blocks.push_back(FromHex(Row.RunBytesHex)); }
+		if (Row.Available >= 2) { Source.Blocks.push_back(FromHex(Row.KeyBytesHex)); }
+		FDispatchAttempt Out{ "stale", "stale" };
+		const EMintResult Got = Tracker.MintAttempt(Source, Out);
+		Expect(Got == Row.Expected, std::string("mint ") + Row.Label + ": got " + std::to_string(static_cast<int>(Got)));
+		Expect(Out.RunId == Row.RunId && Out.IdempotencyKey == Row.Key, std::string("mint output ") + Row.Label + ": " + Out.RunId);
+		Expect(!Tracker.HasOpenAttempt(), std::string("mint opens nothing ") + Row.Label);
+		if (Got != EMintResult::Minted)
+		{
+			// A refused mint leaves nothing to send: the empty pair is refused too.
+			Expect(Tracker.BeginAttempt(Out) == EAttemptVerdict::MalformedRunId, std::string("refused mint cannot be sent ") + Row.Label);
+		}
+	}
+
+	for (const FQualificationRow& Row : QualificationRows)
+	{
+		std::string Artifact;
+		const std::string Unit = FromHex(Row.PrefixHex);
+		for (unsigned long Index = 0; Index < Row.PrefixRepeat; ++Index) { Artifact += Unit; }
+		Artifact += FromHex(Row.TailHex);
+		FTransformEvidence Evidence;
+		Evidence.bPresent = Row.bEvidencePresent != 0;
+		Evidence.bIndependentlyVerified = Row.bIndependentlyVerified != 0;
+		Evidence.OriginalArtifactSha256 = Row.OriginalSha256;
+		Evidence.TransformedArtifactSha256 = Row.TransformedSha256;
+		const EArtifactQualification Got = ClassifyArtifactQualification(Row.Finished, Artifact, Row.ArtifactSha256, Evidence);
+		Expect(Got == Row.Expected, std::string("qualification ") + Row.Label + ": got " + std::to_string(static_cast<int>(Got)));
+		FTransformSignals Signals;
+		const bool bReadable = DetectTransformSignals(Artifact, Signals);
+		Expect(bReadable == (Row.Expected != EArtifactQualification::Unreadable || Row.Finished != EFinishedResult::Completed),
+			std::string("signals readable ") + Row.Label);
+		Expect(Signals.bScrubMarker == (Row.bScrubMarker != 0) && Signals.bAtCutLimit == (Row.bAtCutLimit != 0)
+			&& Signals.bOverCutLimit == (Row.bOverCutLimit != 0) && Signals.Utf16Units == Row.Utf16Units,
+			std::string("signals ") + Row.Label + ": units " + std::to_string(Signals.Utf16Units));
+	}
+
 	if (Failures != 0)
 	{
 		std::printf("J1 LOGIC KAT FAIL failures=%d\n", Failures);
 		return 1;
 	}
-	std::printf("J1 LOGIC KAT PASS sha256=%zu trim=%zu digest=%zu runid_format=%zu runid_strict=%zu generated=%zu envelope=%zu result=%zu digest_cut=%zu\n",
+	std::printf("J1 LOGIC KAT PASS sha256=%zu trim=%zu digest=%zu runid_format=%zu runid_strict=%zu generated=%zu envelope=%zu result=%zu digest_cut=%zu"
+		" uuid_format=%zu key=%zu attempt=%zu minted=%zu qualification=%zu mint=%zu\n",
 		CountOf(ShaRows), CountOf(TrimRows), CountOf(DigestRows), CountOf(RunFormatRows), CountOf(RunStrictRows),
-		Generated.size(), CountOf(EnvelopeRows), CountOf(ResultRows), CountOf(DigestCutRows));
+		Generated.size(), CountOf(EnvelopeRows), CountOf(ResultRows), CountOf(DigestCutRows),
+		CountOf(UuidFormatRows), CountOf(KeyRows), CountOf(AttemptRows), MintedValues.size(), CountOf(QualificationRows), CountOf(MintRows));
 	return 0;
 }

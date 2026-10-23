@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -27,6 +27,13 @@ import { describe, expect, it } from 'vitest';
  * sha256 of the artifact after scrubKeys, the 8,000-UTF-16-unit cut and one JavaScript trim (:55, :333-337, :527-530, :627)
  * and is null without an artifact; error body {error:{kind,message}} (:952) with no frozen list of kinds; a finished
  * run that failed answers 200 with `failure` set (:615-627). That commit is not on main, so it is cited, not read.
+ *
+ * FOUNDER RULINGS, 2026-10-23. (c): run ids are client-minted, cryptographically random UUIDv4s, and after any refusal
+ * the next attempt carries a fresh run id AND a fresh idempotency key. R4-F: a scrubbed or cut artifact qualifies only
+ * when independent verification confirms the original artifact and the exact scrub-cut-trim transformation; a
+ * [redacted] marker or 8,000 units of text alone proves nothing, and missing, inconsistent or spoofable evidence
+ * never qualifies. The KAT-UUID-FORMAT, KAT-KEY, KAT-ATTEMPT and KAT-QUALIFICATION tables pin both, and the rules
+ * below restate them independently of the C++.
  */
 
 const ROOT = resolve(__dirname, '..', '..', '..', '..');
@@ -34,12 +41,18 @@ const CPP_DIR = join(ROOT, 'wonderland', 'Source', 'Wonderland');
 const LOGIC_CPP = join(CPP_DIR, 'WonderlandJuliusMissionLogic.cpp');
 const LOGIC_H = join(CPP_DIR, 'WonderlandJuliusMissionLogic.h');
 const KAT_CPP = join(ROOT, 'wonderland', 'Tools', 'j1_logic_kat.cpp');
+const J1_DISPATCH = join(ROOT, 'relay-bridge', 'julius-dispatch.ts');
 
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 const fromHex = (hex: string): Buffer => Buffer.from(hex, 'hex');
 const LOWER_HEX_64 = /^[0-9a-f]{64}$/u;
 const STRICT_RUN_ID = /^(wlj_)?[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const BRIDGE_RUN_ID = /^[A-Za-z0-9:_-]{1,128}$/u;
+/** julius-dispatch.ts at 31bfc58b, verbatim: :962 and :964. Compared with the file itself when it is in the tree. */
+const BRIDGE_RUN_ID_SOURCE = 'const RUN_ID = /^[A-Za-z0-9:_-]{1,128}$/;';
+const BRIDGE_KEY_SOURCE = 'const KEY = /^[A-Za-z0-9_-]{8,80}$/;';
+const BRIDGE_KEY = /^[A-Za-z0-9_-]{8,80}$/u;
+const CANONICAL_UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 /** Strict UTF-8 decode, or null: the same refusal the C++ makes. */
 function utf8OrNull(bytes: Buffer): string | null {
@@ -66,7 +79,7 @@ function table(name: string): string[][] {
   const rows = section(source(KAT_CPP), name)
     .split('\n')
     .filter((line) => /^\s*\{.*\},\s*$/u.test(line))
-    .map((line) => [...line.matchAll(/"([^"]*)"|E(?:ResultEnvelope|FinishedResult)::(\w+)|(-?\d+)/gu)]
+    .map((line) => [...line.matchAll(/"([^"]*)"|E(?:ResultEnvelope|FinishedResult|DispatchAnswer|AttemptVerdict|ArtifactQualification|MintResult)::(\w+)|(-?\d+)/gu)]
       .map((m) => m[1] ?? m[2] ?? m[3] ?? ''));
   expect(rows.length, `${name} has rows`).toBeGreaterThan(0);
   return rows;
@@ -223,6 +236,218 @@ describe('J1 client logic: run id', () => {
   });
 });
 
+/** The RFC 4122 v4 layout of 16 bytes, restated from the RFC rather than from the C++. */
+function uuidV4(bytes: Buffer): string {
+  const laid = Buffer.from(bytes);
+  laid[6] = ((laid[6] ?? 0) & 0x0f) | 0x40;
+  laid[8] = ((laid[8] ?? 0) & 0x3f) | 0x80;
+  const h = laid.toString('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+describe('J1 client logic: client-minted run ids and keys (ruling (c))', () => {
+  it('the restated bridge rules are the J1 source lines, verbatim, whenever that file is in the tree', () => {
+    expect(BRIDGE_RUN_ID_SOURCE).toContain(BRIDGE_RUN_ID.source);
+    expect(BRIDGE_KEY_SOURCE).toContain(BRIDGE_KEY.source);
+    if (existsSync(J1_DISPATCH)) {
+      const j1 = source(J1_DISPATCH);
+      expect(j1, 'julius-dispatch.ts still has the run-id rule this file restates').toContain(BRIDGE_RUN_ID_SOURCE);
+      expect(j1, 'julius-dispatch.ts still has the key rule this file restates').toContain(BRIDGE_KEY_SOURCE);
+    }
+  });
+
+  it('every UUID format row is the RFC 4122 v4 layout of its bytes, and passes the bridge run-id and key rules', () => {
+    const rows = table('KAT-UUID-FORMAT');
+    for (const [label, bytesHex, expected] of rows) {
+      const bytes = fromHex(bytesHex ?? '');
+      expect(bytes.length, label).toBe(16);
+      expect(uuidV4(bytes), `${label}`).toBe(expected);
+      expect(CANONICAL_UUID_V4.test(expected ?? ''), `${label} canonical`).toBe(true);
+      expect(BRIDGE_RUN_ID.test(expected ?? '') && BRIDGE_RUN_ID.test(`wlj_${expected ?? ''}`), `${label} bridge run id`).toBe(true);
+      expect(BRIDGE_KEY.test(expected ?? ''), `${label} bridge key`).toBe(true);
+      expect(STRICT_RUN_ID.test(`wlj_${expected ?? ''}`), `${label} strict with prefix`).toBe(true);
+    }
+    // The run-id rows are the same layout with the prefix, so the two tables cannot disagree.
+    const uuidRows = byLabel(rows);
+    for (const [label, bytesHex, expected] of table('KAT-RUNID-FORMAT')) {
+      const twin = uuidRows.get(label ?? '');
+      if (twin !== undefined) expect(expected, label).toBe(`wlj_${twin[2] ?? ''}`);
+      expect(expected, label).toBe(`wlj_${uuidV4(fromHex(bytesHex ?? ''))}`);
+    }
+  });
+
+  it("Node's crypto.randomUUID has exactly the minted shape, and passes every rule the bridge applies", () => {
+    const seen = new Set<string>();
+    for (let index = 0; index < 10_000; index += 1) {
+      const id = randomUUID();
+      expect(CANONICAL_UUID_V4.test(id), id).toBe(true);
+      expect(STRICT_RUN_ID.test(id) && STRICT_RUN_ID.test(`wlj_${id}`), id).toBe(true);
+      expect(BRIDGE_RUN_ID.test(`wlj_${id}`) && BRIDGE_KEY.test(id), id).toBe(true);
+      seen.add(id);
+    }
+    expect(seen.size).toBe(10_000);
+  });
+
+  it('every key row matches the canonical UUIDv4 rule and the bridge key rule', () => {
+    const rows = table('KAT-KEY');
+    for (const [key, canonical, bridge] of rows) {
+      expect(CANONICAL_UUID_V4.test(key ?? '') ? '1' : '0', `canonical: ${key}`).toBe(canonical);
+      expect(BRIDGE_KEY.test(key ?? '') ? '1' : '0', `bridge key: ${key}`).toBe(bridge);
+    }
+    const keys = rows.map((row) => row[0]);
+    for (const required of ['wlj_ba7816bf-8f01-4fea-8141-40de5dae2223', 'BA7816BF-8F01-4FEA-8141-40DE5DAE2223', '1234567', 'a'.repeat(81)]) {
+      expect(keys, `the negative ${required.slice(0, 40)} is tested`).toContain(required);
+    }
+  });
+});
+
+describe('J1 client logic: a failed random source refuses the attempt (YUJI requirement 3)', () => {
+  it('every mint row is a refusal with no id when the source fails, and the lowercase UUIDv4 pair otherwise', () => {
+    const rows = table('KAT-MINT');
+    for (const [label, available, runHex, keyHex, verdict, runId, key] of rows) {
+      const blocks = Number(available);
+      const runUuid = uuidV4(fromHex(runHex ?? ''));
+      const keyUuid = uuidV4(fromHex(keyHex ?? ''));
+      let expected = 'Minted';
+      if (blocks < 2) expected = 'RandomUnavailable';
+      else if (runUuid === keyUuid) expected = 'RandomRepeated';
+      expect(verdict, `${label}`).toBe(expected);
+      expect([runId, key], `${label} output`).toEqual(expected === 'Minted' ? [`wlj_${runUuid}`, keyUuid] : ['', '']);
+      if (expected === 'Minted') {
+        expect(runId, `${label} lowercase`).toBe((runId ?? '').toLowerCase());
+        expect(CANONICAL_UUID_V4.test(key ?? '') && STRICT_RUN_ID.test(runId ?? ''), `${label} canonical`).toBe(true);
+      }
+    }
+    const labels = rows.map((row) => row[0]);
+    for (const required of ['source_fails_at_once', 'source_fails_on_key', 'stuck_source', 'uppercase_free_from_high_bytes']) {
+      expect(labels, required).toContain(required);
+    }
+  });
+});
+
+/** The answer rule: any error object or kind, or any status outside 2xx, is a refusal. Kinds are never listed. */
+function referenceAnswer(status: number, hasError: boolean, kind: string, noAnswer: boolean): string {
+  if (noAnswer) return 'NoAnswer';
+  if (hasError || kind !== '' || status < 200 || status > 299) return 'Refused';
+  return 'Accepted';
+}
+
+/** The fresh-after-refusal rule: an answered pair is spent in either role; an unanswered one may only be resent whole. */
+function referenceVerdict(answer: string, reuse: string): string {
+  if (answer === 'NoAnswer') return reuse === 'both' ? 'Admitted' : 'PreviousAttemptUnanswered';
+  if (reuse === 'run' || reuse === 'both' || reuse === 'key_as_run') return 'RunIdReused';
+  if (reuse === 'key' || reuse === 'run_as_key') return 'KeyReused';
+  return 'Admitted';
+}
+
+describe('J1 client logic: a fresh run id and key after every refusal (ruling (c))', () => {
+  it('every attempt row expects what the stated rules give', () => {
+    for (const [label, status, hasError, kind, noAnswer, reuse, answer, verdict] of table('KAT-ATTEMPT')) {
+      const expectedAnswer = referenceAnswer(Number(status), hasError === '1', kind ?? '', noAnswer === '1');
+      expect(answer, `${label} answer`).toBe(expectedAnswer);
+      expect(verdict, `${label} verdict`).toBe(referenceVerdict(expectedAnswer, reuse ?? ''));
+    }
+  });
+
+  it('the named refusals, accepted answers and no answer are each tried with every kind of reuse', () => {
+    const rows = table('KAT-ATTEMPT');
+    const labels = rows.map((row) => row[0]);
+    for (const refusal of ['repeat_already_used_409', 'cap_reached_429', 'mission_cap_reached_429', 'accepted_202', 'replayed_200', 'no_answer']) {
+      for (const reuse of ['none', 'run', 'key', 'both', 'key_as_run', 'run_as_key']) {
+        expect(labels, `${refusal}_${reuse}`).toContain(`${refusal}_${reuse}`);
+      }
+    }
+    const byName = byLabel(rows);
+    expect(byName.get('repeat_already_used_409_none')?.slice(1, 4)).toEqual(['409', '1', 'julius_dispatch_repeat_already_used']);
+    expect(byName.get('cap_reached_429_none')?.slice(1, 4)).toEqual(['429', '1', 'julius_dispatch_cap_reached']);
+    expect(byName.get('mission_cap_reached_429_none')?.slice(1, 4)).toEqual(['429', '1', 'julius_dispatch_mission_cap_reached']);
+    for (const required of ['unknown_kind_on_200_none', 'kind_without_flag_on_202_none', 'flag_without_kind_on_200_none', 'status_500_no_error_none', 'status_302_no_error_none']) {
+      expect(labels, required).toContain(required);
+    }
+    // After any refusal, reusing either value is never admitted.
+    for (const row of rows) {
+      if (row[6] === 'Refused' && row[5] !== 'none') expect(row[7], `${row[0]}`).not.toBe('Admitted');
+    }
+  });
+
+  it('the header documents the CSPRNG duty, and the logic itself draws no randomness', () => {
+    const header = source(LOGIC_H);
+    expect(header).toContain('RUN IDS ARE CLIENT-MINTED');
+    expect(header).toContain("Unreal's IPlatformCrypto");
+    expect(header).toContain('CreateRandomBytes');
+    expect(header).toContain('OpenSSL\n//      RAND_bytes');
+    expect(header).toContain('NEVER FGuid::NewGuid');
+    expect(header).toContain('there is NO fallback to any other source');
+    expect(header).toContain('af3c105f:docs/C2_J1_RESOLUTIONS_20261023.md, blob cf528758');
+    expect(header).not.toContain('still the founder');
+    expect(header).toContain('class IRandomBytes16');
+    for (const text of [source(LOGIC_CPP), header.replace(/^\s*\/\/.*$/gmu, '')]) {
+      expect(text).not.toMatch(/\b(rand|srand|random_device|mt19937|BCryptGenRandom|getrandom|arc4random|RAND_bytes|CreateRandomBytes|NewGuid|CreateGuid)\s*\(/u);
+    }
+  });
+});
+
+/** R4-F, restated: fail closed. Units are UTF-16 code units of the text the wrapper hands over. */
+function referenceQualification(row: string[]): { verdict: string; scrub: boolean; atLimit: boolean; over: boolean; units: number } {
+  const [, prefixHex, repeat, tailHex, finished, present, verified, original, transformed, artifactSha] = row;
+  const text = utf8OrNull(fromHex((prefixHex ?? '').repeat(Number(repeat)) + (tailHex ?? '')));
+  const units = text === null ? 0 : text.length;
+  const signals = { scrub: text !== null && text.includes('[redacted]'), atLimit: units === 8_000, over: units > 8_000, units };
+  if (finished !== 'Completed') return { verdict: 'NotCompleted', ...signals };
+  if (text === null) return { verdict: 'Unreadable', ...signals };
+  if (signals.over) return { verdict: 'EvidenceInconsistent', ...signals };
+  if (present !== '1') {
+    if (verified === '1' || original !== '' || transformed !== '') return { verdict: 'EvidenceInconsistent', ...signals };
+    return { verdict: signals.scrub || signals.atLimit ? 'TransformedUnverified' : 'NoTransformSignal', ...signals };
+  }
+  const consistent = verified === '1' && LOWER_HEX_64.test(original ?? '') && LOWER_HEX_64.test(artifactSha ?? '')
+    && transformed === artifactSha;
+  return { verdict: consistent ? 'TransformedVerified' : 'EvidenceInconsistent', ...signals };
+}
+
+describe('J1 client logic: scrubbed or cut results never qualify without evidence (ruling R4-F)', () => {
+  it('every qualification row expects what the stated rules give', () => {
+    for (const row of table('KAT-QUALIFICATION')) {
+      const reference = referenceQualification(row);
+      expect(row[10], `${row[0]}`).toBe(reference.verdict);
+      expect(row.slice(11, 15), `${row[0]} signals`).toEqual([reference.scrub ? '1' : '0', reference.atLimit ? '1' : '0',
+        reference.over ? '1' : '0', String(reference.units)]);
+    }
+  });
+
+  it('a marker or 8,000 units alone never qualifies, and the bridge scrub and cut really produce those texts', () => {
+    const rows = byLabel(table('KAT-QUALIFICATION'));
+    for (const label of ['x_8000_at_limit', 'cut_split_pair_ufffd_at_limit', 'pair_fits_at_limit', 'redacted_marker_short',
+      'redacted_marker_spoofed_by_coder', 'partial_marker_cut_at_limit']) {
+      expect(rows.get(label)?.[10], label).toBe('TransformedUnverified');
+    }
+    for (const label of ['evidence_not_independently_verified', 'evidence_transformed_hash_mismatch', 'evidence_missing_original',
+      'evidence_uppercase_original', 'evidence_short_transformed', 'verified_flag_without_present', 'hashes_without_present',
+      'over_limit_never_from_bridge', 'over_limit_even_with_evidence']) {
+      expect(rows.get(label)?.[10], label).toBe('EvidenceInconsistent');
+    }
+    expect(rows.get('marker_with_verified_evidence')?.[10]).toBe('TransformedVerified');
+    // Restated from julius-dispatch.ts at 31bfc58b (:333-337, :530): the scrub writes exactly '[redacted]', then the cut.
+    const scrubKeys = (text: string, keys: readonly string[]): string => {
+      let out = text;
+      for (const key of keys) if (key.length >= 8) out = out.split(key).join('[redacted]');
+      return out.slice(0, 8_000);
+    };
+    expect(scrubKeys('use sk-0123456789 here', ['sk-0123456789']).trim()).toBe('use [redacted] here');
+    expect(scrubKeys('x'.repeat(9_000), []).trim().length).toBe(8_000);
+    expect(scrubKeys(`${'x'.repeat(7_995)}sk-0123456789`, ['sk-0123456789']).trim().endsWith('[reda')).toBe(true);
+    // The limit of what the client can see: a cut that the trim hid leaves fewer than 8,000 units and no marker.
+    expect(scrubKeys(`${' '.repeat(10)}${'x'.repeat(9_000)}`, []).trim().length).toBe(7_990);
+  });
+
+  it('the header records that the bridge carries no transform evidence, so the wrapper passes none', () => {
+    const header = source(LOGIC_H);
+    expect(header).toContain('NO TRANSFORM EVIDENCE EXISTS YET (ruling R4-F)');
+    expect(header).toContain('passes an EMPTY FTransformEvidence');
+    expect(header).toContain('No value here is a PASS');
+  });
+});
+
 /** The rules the C++ must implement, restated independently, so the TABLE's expectations are checked too. */
 function referenceEnvelope(row: string[], expectedRunId: string): string {
   const [, status, hasData, hasError, kind, dataRunId, textHex, resultSha] = row;
@@ -330,7 +555,10 @@ describe('J1 client logic: the C++ itself', () => {
         expect(out).toContain(`J1 LOGIC KAT PASS sha256=${String(counts[0])} trim=${String(counts[1])} digest=${String(counts[2])} `
           + `runid_format=${String(counts[3])} runid_strict=${String(counts[4])} generated=10000 `
           + `envelope=${String(table('KAT-ENVELOPE').length)} result=${String(table('KAT-RESULT').length)} `
-          + `digest_cut=${String(table('KAT-DIGEST-CUT').length)}\n`);
+          + `digest_cut=${String(table('KAT-DIGEST-CUT').length)} `
+          + `uuid_format=${String(table('KAT-UUID-FORMAT').length)} key=${String(table('KAT-KEY').length)} `
+          + `attempt=${String(table('KAT-ATTEMPT').length)} minted=2000 qualification=${String(table('KAT-QUALIFICATION').length)} `
+          + `mint=${String(table('KAT-MINT').length)}\n`);
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }

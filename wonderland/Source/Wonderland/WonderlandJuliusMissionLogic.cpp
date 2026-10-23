@@ -262,13 +262,14 @@ namespace WonderlandJuliusMissionLogic
 		return EFinishedResult::Completed;
 	}
 
-	std::string FormatRunIdFromBytes(const std::uint8_t (&Bytes)[16])
+	std::string FormatUuidV4FromBytes(const std::uint8_t (&Bytes)[16])
 	{
 		std::uint8_t Laid[16];
 		std::memcpy(Laid, Bytes, sizeof(Laid));
 		Laid[6] = static_cast<std::uint8_t>((Laid[6] & 0x0Fu) | 0x40u); // version nibble 4
 		Laid[8] = static_cast<std::uint8_t>((Laid[8] & 0x3Fu) | 0x80u); // variant 10xx
-		std::string Out(RunIdPrefix);
+		std::string Out;
+		Out.reserve(36);
 		for (unsigned Index = 0; Index < 16; ++Index)
 		{
 			if (Index == 4 || Index == 6 || Index == 8 || Index == 10) { Out.push_back('-'); }
@@ -276,6 +277,11 @@ namespace WonderlandJuliusMissionLogic
 			Out.push_back(HexDigits[Laid[Index] & 0x0Fu]);
 		}
 		return Out;
+	}
+
+	std::string FormatRunIdFromBytes(const std::uint8_t (&Bytes)[16])
+	{
+		return std::string(RunIdPrefix) + FormatUuidV4FromBytes(Bytes);
 	}
 
 	bool IsStrictRunId(std::string_view RunId)
@@ -319,5 +325,150 @@ namespace WonderlandJuliusMissionLogic
 			if (!bAllowed) { return false; }
 		}
 		return true;
+	}
+
+	bool IsCanonicalUuidV4(std::string_view Text)
+	{
+		return Text.size() == 36 && IsStrictRunId(Text);
+	}
+
+	bool IsBridgeIdempotencyKey(std::string_view Key)
+	{
+		if (Key.size() < 8 || Key.size() > 80) { return false; }
+		for (const char Character : Key)
+		{
+			const bool bAllowed = (Character >= 'A' && Character <= 'Z') || (Character >= 'a' && Character <= 'z')
+				|| (Character >= '0' && Character <= '9') || Character == '_' || Character == '-';
+			if (!bAllowed) { return false; }
+		}
+		return true;
+	}
+
+	EDispatchAnswer ClassifyDispatchAnswer(int HttpStatus, bool bHasError, std::string_view ErrorKind)
+	{
+		// Any error object, any kind, any status, is a refusal; so is any status outside 2xx, error object or not.
+		if (bHasError || !ErrorKind.empty()) { return EDispatchAnswer::Refused; }
+		if (HttpStatus < 200 || HttpStatus > 299) { return EDispatchAnswer::Refused; }
+		return EDispatchAnswer::Accepted;
+	}
+
+	namespace
+	{
+		/** The UUID of a minted run id (RunIdPrefix + canonical UUIDv4), or empty when it is not one. */
+		std::string_view RunIdUuid(std::string_view RunId)
+		{
+			if (RunId.size() != RunIdPrefix.size() + 36 || RunId.substr(0, RunIdPrefix.size()) != RunIdPrefix) { return {}; }
+			const std::string_view Uuid = RunId.substr(RunIdPrefix.size());
+			return IsCanonicalUuidV4(Uuid) && IsBridgeRunId(RunId) ? Uuid : std::string_view{};
+		}
+
+		/** The UUID of a minted key (a canonical UUIDv4, no prefix), or empty when it is not one. */
+		std::string_view KeyUuid(std::string_view Key)
+		{
+			return IsCanonicalUuidV4(Key) && IsBridgeIdempotencyKey(Key) ? Key : std::string_view{};
+		}
+	}
+
+	bool FDispatchAttemptTracker::IsSpent(std::string_view Uuid) const
+	{
+		for (const std::string& Used : Spent)
+		{
+			if (Used == Uuid) { return true; }
+		}
+		return false;
+	}
+
+	EMintResult FDispatchAttemptTracker::MintAttempt(IRandomBytes16& Random, FDispatchAttempt& Out) const
+	{
+		Out.RunId.clear();
+		Out.IdempotencyKey.clear();
+		std::uint8_t RunBytes[16] = {};
+		std::uint8_t KeyBytes[16] = {};
+		if (!Random.Fill(RunBytes) || !Random.Fill(KeyBytes)) { return EMintResult::RandomUnavailable; }
+		const std::string RunUuid = FormatUuidV4FromBytes(RunBytes);
+		const std::string KeyText = FormatUuidV4FromBytes(KeyBytes);
+		// 122 random bits each: a repeat here means the source is broken, so refuse rather than retry.
+		if (RunUuid == KeyText || IsSpent(RunUuid) || IsSpent(KeyText)) { return EMintResult::RandomRepeated; }
+		if (bOpen && (RunIdUuid(Open.RunId) == RunUuid || RunIdUuid(Open.RunId) == KeyText
+			|| KeyUuid(Open.IdempotencyKey) == RunUuid || KeyUuid(Open.IdempotencyKey) == KeyText))
+		{
+			return EMintResult::RandomRepeated;
+		}
+		Out.RunId = std::string(RunIdPrefix) + RunUuid;
+		Out.IdempotencyKey = KeyText;
+		return EMintResult::Minted;
+	}
+
+	EAttemptVerdict FDispatchAttemptTracker::BeginAttempt(const FDispatchAttempt& Attempt)
+	{
+		const std::string_view RunUuid = RunIdUuid(Attempt.RunId);
+		const std::string_view KeyText = KeyUuid(Attempt.IdempotencyKey);
+		if (RunUuid.empty()) { return EAttemptVerdict::MalformedRunId; }
+		if (KeyText.empty()) { return EAttemptVerdict::MalformedKey; }
+		if (RunUuid == KeyText) { return EAttemptVerdict::KeyEqualsRunId; }
+		// Spent values first: a value that was answered can never be sent again, open attempt or not.
+		if (IsSpent(RunUuid)) { return EAttemptVerdict::RunIdReused; }
+		if (IsSpent(KeyText)) { return EAttemptVerdict::KeyReused; }
+		if (bOpen)
+		{
+			const bool bSamePair = Attempt.RunId == Open.RunId && Attempt.IdempotencyKey == Open.IdempotencyKey;
+			return bSamePair ? EAttemptVerdict::Admitted : EAttemptVerdict::PreviousAttemptUnanswered;
+		}
+		Open = Attempt;
+		bOpen = true;
+		return EAttemptVerdict::Admitted;
+	}
+
+	bool FDispatchAttemptTracker::RecordAnswer(EDispatchAnswer Answer)
+	{
+		if (!bOpen) { return false; }
+		if (Answer == EDispatchAnswer::NoAnswer) { return true; }
+		// Refused or accepted: both values are spent for good, in either role.
+		Spent.emplace_back(RunIdUuid(Open.RunId));
+		Spent.emplace_back(KeyUuid(Open.IdempotencyKey));
+		Open = FDispatchAttempt{};
+		bOpen = false;
+		return true;
+	}
+
+	bool DetectTransformSignals(std::string_view ArtifactText, FTransformSignals& Out)
+	{
+		Out = FTransformSignals{};
+		std::size_t Units = 0;
+		std::size_t Index = 0;
+		while (Index < ArtifactText.size())
+		{
+			char32_t CodePoint = 0;
+			if (!DecodeUtf8(ArtifactText, Index, CodePoint)) { return false; }
+			Units += CodePoint > 0xFFFF ? 2u : 1u;
+		}
+		constexpr std::size_t CutLimitUnits = 8000; // J1_TEXT_MAX_CHARS (:55)
+		Out.Utf16Units = Units;
+		Out.bScrubMarker = ArtifactText.find("[redacted]") != std::string_view::npos;
+		Out.bAtCutLimit = Units == CutLimitUnits;
+		Out.bOverCutLimit = Units > CutLimitUnits;
+		return true;
+	}
+
+	EArtifactQualification ClassifyArtifactQualification(EFinishedResult Finished, std::string_view ArtifactText,
+		std::string_view ArtifactSha256, const FTransformEvidence& Evidence)
+	{
+		if (Finished != EFinishedResult::Completed) { return EArtifactQualification::NotCompleted; }
+		FTransformSignals Signals;
+		if (!DetectTransformSignals(ArtifactText, Signals)) { return EArtifactQualification::Unreadable; }
+		if (Signals.bOverCutLimit) { return EArtifactQualification::EvidenceInconsistent; }
+		if (!Evidence.bPresent)
+		{
+			// Half-filled evidence is not "no evidence": it is inconsistent, and it never qualifies.
+			if (Evidence.bIndependentlyVerified || !Evidence.OriginalArtifactSha256.empty() || !Evidence.TransformedArtifactSha256.empty())
+			{
+				return EArtifactQualification::EvidenceInconsistent;
+			}
+			return Signals.bScrubMarker || Signals.bAtCutLimit ? EArtifactQualification::TransformedUnverified
+				: EArtifactQualification::NoTransformSignal;
+		}
+		const bool bConsistent = Evidence.bIndependentlyVerified && IsLowerHex64(Evidence.OriginalArtifactSha256)
+			&& IsLowerHex64(ArtifactSha256) && Evidence.TransformedArtifactSha256 == ArtifactSha256;
+		return bConsistent ? EArtifactQualification::TransformedVerified : EArtifactQualification::EvidenceInconsistent;
 	}
 }

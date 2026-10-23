@@ -22,8 +22,18 @@
 // The client therefore compares its digest ONLY with the artifactSha256 carried in resultText, never with any
 // ledger value, and treats any error object, known kind or not, as a refusal.
 //
-// WHAT IS NOT HERE. No random number generation (the run-id option (a)/(b) is still the founder's decision), no
-// HTTP, no JSON parsing, no logging, no display. The Unreal wrapper that parses the JSON and draws rows is later work.
+// RUN IDS ARE CLIENT-MINTED. Founder ruling (c), 07:27 PT 2026-10-23, DECIDED, recorded verbatim in YUJI's resolutions
+// rev 7 (af3c105f:docs/C2_J1_RESOLUTIONS_20261023.md, blob cf528758, [FR-c]; R4-F likewise as [FR-R4F]): a lowercase,
+// cryptographically random UUIDv4 per attempt, with a fresh run id AND a fresh idempotency key after any refusal.
+// The bridge at 31bfc58b mints no run id the game can reach: its only run-creating route is operator-only, and J1's
+// run lookup is a frozen stub that answers READY for any runId (C2/J1 resolutions, conflict 2). The bridge checks the
+// run id against ^[A-Za-z0-9:_-]{1,128}$ (:962) and the x-relay-idempotency-key header against ^[A-Za-z0-9_-]{8,80}$
+// (:964, :1007). A run id it has seen only in a run_refused row is ADMITTED again (:773-776), so the
+// fresh-after-refusal rule is the client's to keep: FDispatchAttemptTracker keeps it.
+//
+// WHAT IS NOT HERE. No random number SOURCE: the bytes come in through IRandomBytes16, so the known-answer test is
+// deterministic. No HTTP, no JSON parsing, no logging, no display. The Unreal wrapper that parses the JSON and draws
+// rows is later work.
 //
 // WHAT THE UNREAL JSON WRAPPER MUST DO (later work; these functions take UTF-8 bytes and cannot do it for it):
 //   1. LONE SURROGATES DECODE TO U+FFFD. The 8,000-unit cut can end the artifact on a lone high surrogate (for
@@ -45,6 +55,25 @@
 //   3. CHECK missionId. ClassifyFinishedResult does not see resultText's missionId or dispatchId (:625). The wrapper
 //      must compare missionId with the mission it triggered and treat any other value as a wrong run, never as a
 //      success.
+//   4. A CSPRNG BEHIND IRandomBytes16 (YUJI's client requirement). In production the 16 bytes come ONLY from
+//      Unreal's IPlatformCrypto (the PlatformCrypto plugin's encryption context, CreateRandomBytes) or from OpenSSL
+//      RAND_bytes, and Fill returns true only when that call reported success (EPlatformCryptoResult::Success, or
+//      RAND_bytes returning 1). On any failure Fill returns false and MintAttempt answers RandomUnavailable: the
+//      attempt is REFUSED, no id is produced, and there is NO fallback to any other source. NEVER FGuid::NewGuid or
+//      FPlatformMisc::CreateGuid (not a documented CSPRNG, and FGuid's text layout reorders digits), and never
+//      FMath::Rand, FRandomStream, std::rand, std::mt19937, std::random_device, a timestamp or a counter. This
+//      supersedes the BCryptGenRandom wording of docs/j1_client_plan.md 5a. Run ids and keys carry nothing derived:
+//      no player, session, mission, machine, time or counter.
+//   5. ONE TRACKER PER SESSION, AND ITS VERDICT IS FINAL. Every dispatch POST goes through
+//      FDispatchAttemptTracker::BeginAttempt, and every answer, or the lack of one, goes back through RecordAnswer.
+//      A verdict other than Admitted means nothing is sent; the wrapper logs one refused line and mints again.
+//   6. NO TRANSFORM EVIDENCE EXISTS YET (ruling R4-F). At 31bfc58b neither resultText (:624-628) nor the result body
+//      (:913) carries anything that confirms the ORIGINAL artifact or the exact scrub-cut-trim transformation: the
+//      roles summaries hold outputSha256/outputChars of the text AFTER that transformation (:586-590), and the pre-
+//      transformation evidence (artifactJudgedSha256 and the like, :556) lives in the ledger only. So the wrapper
+//      passes an EMPTY FTransformEvidence until a reviewed contract change carries evidence the client can
+//      authenticate, and a scrubbed or cut artifact is therefore never shown as qualifying. A flag the client cannot
+//      authenticate is spoofable and does not count as evidence.
 #pragma once
 
 #include <array>
@@ -52,6 +81,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace WonderlandJuliusMissionLogic
 {
@@ -170,4 +200,175 @@ namespace WonderlandJuliusMissionLogic
 
 	/** The bridge's own run-id rule, ^[A-Za-z0-9:_-]{1,128}$ (julius-dispatch.ts:962 at 31bfc58b). */
 	bool IsBridgeRunId(std::string_view RunId);
+
+	/* ---------------------------------------------------------------- client-minted run ids, ruling (c) */
+
+	/**
+	 * The canonical lowercase RFC 4122 / RFC 9562 version-4 UUID of these 16 bytes, in byte order: byte 6 gets the
+	 * version nibble 4 and byte 8 the variant bits 10. 36 characters, 122 of the 128 input bits kept. Node's
+	 * crypto.randomUUID() has exactly this shape. FormatRunIdFromBytes is RunIdPrefix + this.
+	 */
+	std::string FormatUuidV4FromBytes(const std::uint8_t (&Bytes)[16]);
+
+	/** ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$: no prefix, lowercase only. */
+	bool IsCanonicalUuidV4(std::string_view Text);
+
+	/** The bridge's idempotency-key rule, ^[A-Za-z0-9_-]{8,80}$ (julius-dispatch.ts:964, checked at :1007). */
+	bool IsBridgeIdempotencyKey(std::string_view Key);
+
+	/**
+	 * The ONLY way randomness reaches this logic. Fill writes 16 bytes and returns true, or returns false when no
+	 * cryptographically secure bytes could be had: then the attempt is refused and nothing is minted, with no
+	 * fallback. Production: IPlatformCrypto CreateRandomBytes or OpenSSL RAND_bytes; see wrapper note 4.
+	 * Tests: a fixed byte script, so every minted id is a known answer.
+	 */
+	class IRandomBytes16
+	{
+	public:
+		virtual ~IRandomBytes16() = default;
+		virtual bool Fill(std::uint8_t (&OutBytes)[16]) = 0;
+	};
+
+	/** One dispatch attempt: the runId in the POST body and the x-relay-idempotency-key header. */
+	struct FDispatchAttempt
+	{
+		std::string RunId;
+		std::string IdempotencyKey;
+	};
+
+	enum class EMintResult : std::uint8_t
+	{
+		/** Out holds a fresh run id (RunIdPrefix + UUIDv4 of the first 16 bytes) and key (UUIDv4 of the next 16). */
+		Minted,
+		/** The random source reported failure: the attempt is REFUSED, Out stays empty, and there is no fallback. */
+		RandomUnavailable,
+		/** The bytes repeat a value already used, or the run id and key came out equal: the source is broken. */
+		RandomRepeated,
+	};
+
+	/** How the bridge answered one dispatch POST. The error kind is never matched against a list. */
+	enum class EDispatchAnswer : std::uint8_t
+	{
+		/** Any error object, whatever its kind and status, or any non-2xx status (409 repeat_already_used, 429
+		 *  cap_reached, 429 mission_cap_reached, 403 run_creator_mismatch, a kind nobody has named yet, ...). */
+		Refused,
+		/** 2xx with no error object: 202 accepted, or 200 replayed. */
+		Accepted,
+		/** No HTTP answer at all (transport failure, timeout). The bridge may or may not have the run. */
+		NoAnswer,
+	};
+
+	EDispatchAnswer ClassifyDispatchAnswer(int HttpStatus, bool bHasError, std::string_view ErrorKind);
+
+	enum class EAttemptVerdict : std::uint8_t
+	{
+		/** Send it. Either a fresh pair, or the identical pair again after NoAnswer (an idempotent resend). */
+		Admitted,
+		/** The run id is not RunIdPrefix + a canonical UUIDv4, or fails the bridge's own rule. */
+		MalformedRunId,
+		/** The key is not a canonical UUIDv4, or fails the bridge's own rule. */
+		MalformedKey,
+		/** The key's UUID equals the run id's UUID. */
+		KeyEqualsRunId,
+		/** This run id (or its UUID as a key) was already answered: refused or accepted. Mint a fresh pair. */
+		RunIdReused,
+		/** This key (or its UUID as a run id) was already answered: refused or accepted. Mint a fresh pair. */
+		KeyReused,
+		/** An earlier attempt is still unanswered; only that identical pair may be sent until it is answered. */
+		PreviousAttemptUnanswered,
+	};
+
+	/**
+	 * THE FRESH-AFTER-REFUSAL RULE (ruling (c); resolutions F4). Once an attempt is answered, refused OR accepted, its
+	 * run id and its key are spent for good: no later attempt may carry either, in either role. Only an attempt that
+	 * got NO answer may be sent again, and then only as the identical pair, which the bridge replays instead of
+	 * starting a second paid chain (:744-745). Holding the pair until it is answered is deliberate: minting a new pair
+	 * while the first may already be running could start a second chain. Values are compared by their UUID, so the
+	 * wlj_ prefix cannot disguise a reuse. The tracker never mints by itself and never matches error kinds.
+	 */
+	class FDispatchAttemptTracker
+	{
+	public:
+		/** Mints a fresh pair from Random: run id from the first 16 bytes, key from the next 16. Out is cleared first. */
+		EMintResult MintAttempt(IRandomBytes16& Random, FDispatchAttempt& Out) const;
+
+		/** Admitted means send this attempt now; anything else means send nothing. */
+		EAttemptVerdict BeginAttempt(const FDispatchAttempt& Attempt);
+
+		/** Records the answer to the attempt last admitted. False (and no change) when no attempt is open. */
+		bool RecordAnswer(EDispatchAnswer Answer);
+
+		bool HasOpenAttempt() const { return bOpen; }
+
+	private:
+		bool IsSpent(std::string_view Uuid) const;
+
+		std::vector<std::string> Spent;
+		FDispatchAttempt Open;
+		bool bOpen = false;
+	};
+
+	/* ---------------------------------------------------------------- result qualification, ruling R4-F */
+
+	/** What the client can see of the bridge's scrub (:336) and cut (:337) in the artifact text it received. */
+	struct FTransformSignals
+	{
+		/** The text contains the scrub marker "[redacted]". Coder output can contain it too, so it proves nothing. */
+		bool bScrubMarker = false;
+		/** Exactly J1_TEXT_MAX_CHARS = 8,000 UTF-16 code units: the cut may have happened. */
+		bool bAtCutLimit = false;
+		/** More than 8,000 UTF-16 code units: no real bridge output can be this long. */
+		bool bOverCutLimit = false;
+		/** Length in UTF-16 code units (a code point above U+FFFF counts 2; U+FFFD from a lone surrogate counts 1). */
+		std::size_t Utf16Units = 0;
+	};
+
+	/**
+	 * False on malformed UTF-8 (then Out is all false/zero). A cut followed by the trim (:530) can leave fewer than
+	 * 8,000 units, for example when the cut text ended in whitespace or began with it, so NO signal is never proof
+	 * that nothing was cut: the client cannot tell, only the independent judge with the ledger can.
+	 */
+	bool DetectTransformSignals(std::string_view ArtifactText, FTransformSignals& Out);
+
+	/**
+	 * Evidence from an INDEPENDENT verifier that it confirmed the original protected artifact and the exact
+	 * scrub-cut-trim transformation to this artifactSha256. The bridge carries none today (wrapper note 6), so
+	 * production passes it empty. Present means every field is set; anything else is inconsistent.
+	 */
+	struct FTransformEvidence
+	{
+		bool bPresent = false;
+		bool bIndependentlyVerified = false;
+		/** sha256 of the original protected artifact, 64 lowercase hex. */
+		std::string_view OriginalArtifactSha256;
+		/** sha256 the verifier got by applying the exact transformation; must equal resultText's artifactSha256. */
+		std::string_view TransformedArtifactSha256;
+	};
+
+	enum class EArtifactQualification : std::uint8_t
+	{
+		/** The finished result was not Completed: never qualifying. */
+		NotCompleted,
+		/** Completed, no scrub or cut signal, no evidence. May be shown as eligible, pending the independent judge
+		 *  (a cut that the trim hid cannot be seen by the client; see DetectTransformSignals). */
+		NoTransformSignal,
+		/** Completed, but the text shows a scrub marker or sits at the cut limit, and no evidence: shown as
+		 *  "unverified", NEVER as qualifying. A [redacted] marker or 8,000 units of text alone proves nothing. */
+		TransformedUnverified,
+		/** Completed, with present, complete and consistent independent evidence. Eligible, pending the judge. */
+		TransformedVerified,
+		/** Evidence fields set without bPresent, present but incomplete or not matching artifactSha256, or text over
+		 *  the cut limit: missing, inconsistent or spoofable evidence never qualifies. */
+		EvidenceInconsistent,
+		/** The artifact text is not well-formed UTF-8. */
+		Unreadable,
+	};
+
+	/**
+	 * R4-F, fail closed. Call with the EFinishedResult ClassifyFinishedResult returned and the same artifact fields.
+	 * Only NoTransformSignal and TransformedVerified may be shown as eligible; every other value is shown as
+	 * unverified and non-qualifying. No value here is a PASS: qualifying is decided by the independent judge.
+	 */
+	EArtifactQualification ClassifyArtifactQualification(EFinishedResult Finished, std::string_view ArtifactText,
+		std::string_view ArtifactSha256, const FTransformEvidence& Evidence);
 }
