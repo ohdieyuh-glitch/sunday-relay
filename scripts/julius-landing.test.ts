@@ -960,7 +960,7 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
     expect(text).toContain('# BRIDGE.');
     expect(text).toContain('# YUJI.');
     const adoption = raw.findIndex((line) => line.trim() === 'relay/julius-run-id-adoption-20261023');
-    expect(raw[adoption - 1]).toBe('# Julius bootstrap adopts the admission-minted server_run_id. Retire this entry after it lands.');
+    expect(raw[adoption - 1]).toBe('# YUJI. Julius bootstrap adopts the admission-minted server_run_id. Retire this entry after it lands.');
   });
 
   it('the shipped allowlist refuses the superseded Candidate C branch (evidence-1) and allows evidence-2', () => {

@@ -61,5 +61,5 @@ relay/julius-wonder-web-stream-20261023
 relay/julius-wonder-web-vm-tools-20261023
 # YUJI. PROVISIONAL. Retire this entry after it lands.
 relay/julius-wonder-web-vm-tools-live-20261023
-# Julius bootstrap adopts the admission-minted server_run_id. Retire this entry after it lands.
+# YUJI. Julius bootstrap adopts the admission-minted server_run_id. Retire this entry after it lands.
 relay/julius-run-id-adoption-20261023
