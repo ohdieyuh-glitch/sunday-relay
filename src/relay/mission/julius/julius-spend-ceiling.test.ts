@@ -210,24 +210,32 @@ describe('julius-run-spent tags are the durable $60 record', () => {
       runId: RUN_A, namespace: 'julius-live-mission-5', reservedUsdMicros: 30_000_000,
     });
     expect(message).toContain('reservedUsdMicros=30000000');
-    const listed = interpretJuliusSpentTags({
+    const bare = interpretJuliusSpentTags({
       namespace: 'julius-live-mission-5',
-      tags: [
-        { ref: `refs/tags/julius-run-spent-${HEX_A}`, message },
-        { ref: `refs/tags/julius-run-spent-${HEX_B}`, message: null },
-      ],
+      tags: [{ ref: `refs/tags/julius-run-spent-${HEX_B}`, message: null }],
     });
-    expect(listed.readable).toBe(true);
-    if (!listed.readable) return;
-    expect(listed.durableRecord).toBe('PRESENT');
-    expect(listed.priorRuns.map((run) => run.runId)).toEqual([RUN_B, RUN_A].sort());
-    const unverified = listed.priorRuns.find((run) => run.runId === RUN_B);
-    expect(unverified?.spendVerified).toBe(false);
+    expect(bare.readable).toBe(true);
+    if (!bare.readable) return;
+    expect(bare.priorRuns).toEqual([{
+      runId: RUN_B, knownUsdMicros: 0, unknownCostComponents: 1, unverifiableApiSpend: false, spendVerified: false,
+    }]);
     const refused = authorizeJuliusLiveSpend({
-      namespace: 'julius-live-mission-5', spendUsd: 30, repairCycles: 3, ledger: listed,
+      namespace: 'julius-live-mission-5', spendUsd: 30, repairCycles: 3, ledger: bare,
     });
     expect(refused.authorized).toBe(false);
     if (!refused.authorized) expect(refused.reasonCode).toBe('qualifying_pair_spend_unverified');
+    const twoPrior = interpretJuliusSpentTags({
+      namespace: 'julius-live-mission-5',
+      tags: [
+        { ref: `refs/tags/julius-run-spent-${HEX_A}`, message },
+        { ref: `refs/tags/julius-run-spent-${HEX_B}`, message },
+      ],
+    });
+    const third = authorizeJuliusLiveSpend({
+      namespace: 'julius-live-mission-5', spendUsd: 1, repairCycles: 0, ledger: twoPrior,
+    });
+    expect(third.authorized).toBe(false);
+    if (!third.authorized) expect(third.reasonCode).toBe('qualifying_pair_third_run_refused');
 
     const verifiedOnly = interpretJuliusSpentTags({
       namespace: 'julius-live-mission-5',
