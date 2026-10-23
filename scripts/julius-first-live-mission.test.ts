@@ -2764,8 +2764,9 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
     expect(groups[0], 'the workflow-level group is per run').toContain('github.run_id');
     expect(groups[0], 'the workflow-level group must not be the shared live slot').not.toContain("'live'");
     expect(groups[1], 'the paid job uses the group spend-tag computed').toContain('needs.spend-tag.outputs.concurrency_group');
-    expect(workflow, 'a mission with no server run id still serialises paid runs on one group').toContain("group='julius-paid-provider-slot'");
-    expect(workflow, 'a dry run with no server run id keeps a group of its own').toContain('julius-preflight-${GITHUB_RUN_ID');
+    expect(workflow, 'a missing server run id halts before a group is chosen').toContain("echo 'server_run_id_required'");
+    expect(workflow, 'a paid run is grouped by the spent-tag hex').toContain('group="julius-paid-${hex}"');
+    expect(workflow, 'an empty id is not given the shared slot').not.toContain("group='julius-paid-provider-slot'");
     const cancels = [...workflow.matchAll(/cancel-in-progress:\s*(\S+)/gu)].map((match) => match[1]);
     expect(cancels.length).toBe(2);
     expect(cancels.every((value) => value === 'false'), 'a live run must never be cancelled mid-flight').toBe(true);

@@ -590,23 +590,22 @@ describe('a server run id is one spent tag, created before any provider call', (
     }
   });
 
-  it('refuses julius-inworld-data-1 with an empty id, and leaves every other empty mission alone', () => {
-    const refused = runTag({ MISSION: 'julius-inworld-data-1', SERVER_RUN_ID: '', CONFIRM_LIVE: 'RUN LIVE MISSION' });
-    expect(refused.status).not.toBe(0);
-    expect(refused.stderr).toContain('server_run_id_required');
-    expect(refused.curlLog).toBe('');
-    const paid = runTag({ MISSION: 'julius-first-live', SERVER_RUN_ID: '', CONFIRM_LIVE: 'RUN LIVE MISSION' });
-    expect(paid.status).toBe(0);
-    expect(paid.output).toContain('concurrency_group=julius-paid-provider-slot');
-    expect(paid.output).toContain('server_run_id=none');
-    expect(paid.curlLog).toBe('');
-    const dry = runTag({ MISSION: 'julius-first-live', SERVER_RUN_ID: '', CONFIRM_LIVE: '' });
-    expect(dry.status).toBe(0);
-    expect(dry.output).toContain('concurrency_group=julius-preflight-4242');
-    expect(dry.curlLog).toBe('');
+  it('refuses a missing id for every mission, paid or preflight, and does not create a tag', () => {
+    for (const mission of ['julius-inworld-data-1', 'julius-first-live', 'julius-live-mission-5']) {
+      for (const confirm of ['RUN LIVE MISSION', '']) {
+        const refused = runTag({ MISSION: mission, SERVER_RUN_ID: '', CONFIRM_LIVE: confirm });
+        expect(refused.status, `${mission} ${confirm}`).not.toBe(0);
+        expect(refused.stderr, `${mission} ${confirm}`).toContain('server_run_id_required');
+        expect(refused.curlLog, `${mission} ${confirm}`).toBe('');
+      }
+    }
   });
 
   it('an existing tag halts RUN_ID_ALREADY_SPENT and any other API result is unverified', () => {
+    const dry = runTag({ SERVER_RUN_ID: `run:${HEX}`, CONFIRM_LIVE: '' });
+    expect(dry.status).toBe(0);
+    expect(dry.output).toContain(`concurrency_group=julius-paid-${HEX}`);
+    expect(dry.curlLog).toBe('');
     const created = runTag({ SERVER_RUN_ID: `run:${HEX}`, CONFIRM_LIVE: 'RUN LIVE MISSION' });
     expect(created.status).toBe(0);
     expect(created.output).toContain(`concurrency_group=julius-paid-${HEX}`);
