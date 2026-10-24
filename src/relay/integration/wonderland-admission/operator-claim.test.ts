@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { PAID_WORKFLOW_FILE } from './admission-contract';
+import { AWAITING_OPERATOR_WINDOW_MS, PAID_WORKFLOW_FILE } from './admission-contract';
 import { openAdmissionFile, readAdmissionDocument, AdmissionFileClosedError, isAdmissionFileClosed } from './admission-file';
 import { createWonderlandAdmissionStore, type AdmissionRequest } from './admission-store';
 import { runOperatorClaimCli } from './operator-claim-cli';
@@ -564,6 +564,49 @@ describe('operator claim', () => {
       expect(dry.ok).toBe(false);
       if (dry.ok) return;
       expect(dry.kind).toBe('workflow_server_run_id_undeclared');
+    });
+  });
+
+  it('an expired held phase cannot be claimed or dispatched', async () => {
+    const openAt = new Date(Date.parse(WHEN) + AWAITING_OPERATOR_WINDOW_MS).toISOString();
+    const expiredAt = new Date(Date.parse(WHEN) + AWAITING_OPERATOR_WINDOW_MS + 1).toISOString();
+
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const open = await claims.claim(claimInput({ nowIso: openAt }));
+      expect(open.ok).toBe(true);
+      if (!open.ok) return;
+      expect(open.claimed).toBe(true);
+      expect(open.dispatchedWorkflow).toBe(false);
+      expect(fake.calls).toEqual([]);
+    });
+
+    await withStore(async (path) => {
+      await admit(path);
+      const before = readFileSync(path, 'utf8');
+      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const dry = await claims.claim(claimInput({ nowIso: expiredAt }));
+      expect(dry.ok).toBe(false);
+      if (dry.ok) return;
+      expect(dry.kind).toBe('AWAITING_OPERATOR_EXPIRED');
+      expect(dry.record?.state).toBe('admitted');
+      const live = await claims.claim(claimInput({
+        nowIso: expiredAt,
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }));
+      expect(live.ok).toBe(false);
+      if (live.ok) return;
+      expect(live.kind).toBe('AWAITING_OPERATOR_EXPIRED');
+      expect(live.record?.state).toBe('admitted');
+      expect(fake.calls).toEqual([]);
+      expect(readAdmissionDocument(path).claims).toEqual([]);
+      expect(readFileSync(path, 'utf8')).toBe(before);
+      const stored = JSON.parse(before) as { rows: { state: string }[] };
+      expect(stored.rows[0]?.state).toBe('ADMISSION_HELD');
     });
   });
 

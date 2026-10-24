@@ -377,7 +377,10 @@ Terminal states, the ones a record does not leave:
 
 `AWAITING_OPERATOR_EXPIRED` is the non-paid terminal cause of the held phase.
 The workflow was not started and nothing was spent. It is not a slot outcome
-and not a spent-tag outcome.
+and not a spent-tag outcome. The operator claim reads this same clock before
+it records a claim or dispatches. Once the window has elapsed, the claim is
+refused, the admission file and the operator journal are left as they are,
+and `gh` is not spawned. The last millisecond of the window is still open.
 
 Once the operator claim has recorded `dispatched`, `applyWonderlandStatusTransition`
 refuses every write of `INTERRUPTED` or `FAILED`, the status spellings

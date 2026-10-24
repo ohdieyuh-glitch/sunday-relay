@@ -154,7 +154,12 @@ function emitClaim(io: OperatorClaimCliIo, result: ClaimResult): number {
     kind: result.kind,
     message: result.message,
   };
-  if (result.kind === 'dispatch_failed' || result.kind === 'RUN_ID_ALREADY_SPENT' || result.kind === 'SPENT_TAG_UNVERIFIED') {
+  if (
+    result.kind === 'dispatch_failed'
+    || result.kind === 'RUN_ID_ALREADY_SPENT'
+    || result.kind === 'SPENT_TAG_UNVERIFIED'
+    || result.kind === 'AWAITING_OPERATOR_EXPIRED'
+  ) {
     body.retry = false;
   }
   if (result.requiredInput !== null) body.requiredInput = result.requiredInput;

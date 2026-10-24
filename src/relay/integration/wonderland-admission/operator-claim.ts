@@ -4,6 +4,8 @@
  * Claims one admitted Wonderland pair (wlj_ run id + server run: id) in the
  * local admission file. admitted -> dispatched is a single exclusive write.
  * A second claim returns that record and does not dispatch again.
+ * A held row whose awaiting-operator window has already elapsed is refused
+ * before any claim is written and before `gh` is spawned.
  *
  * The default is a dry-run: after the claim it prints the exact `gh workflow
  * run` command and spawns nothing. `--dispatch` plus the exact confirmation
@@ -21,6 +23,7 @@
  */
 
 import {
+  evaluateWonderlandAdmissionClock,
   JULIUS_BOOTSTRAP_RUN_ID,
   MISSION_SLUG,
   PAID_SLOT_DISPATCH_KEY,
@@ -291,6 +294,25 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
   if (located.claim !== null) return replay(toView(admission, located.claim));
   if (admission.admissionState !== 'ADMISSION_HELD') {
     return fail('not_admitted', `The record is ${admission.admissionState} and is not admitted.`, toView(admission, null));
+  }
+  const heldPhase = evaluateWonderlandAdmissionClock({
+    acceptedAtMs: Date.parse(admission.receivedAt),
+    nowMs: Date.parse(input.nowIso),
+    dispatchedAtMs: null,
+  });
+  if (heldPhase.kind === 'operator_expired') {
+    return fail(
+      'AWAITING_OPERATOR_EXPIRED',
+      'The held phase expired before the operator claim. The record was not claimed and nothing was dispatched.',
+      toView(admission, null),
+    );
+  }
+  if (heldPhase.kind !== 'awaiting_operator') {
+    return fail(
+      'admission_clock_unreadable',
+      'The held-phase clock could not be read. The record was not claimed and nothing was dispatched.',
+      toView(admission, null),
+    );
   }
   if (admission.missionId === null || !MISSION_SLUG.test(admission.missionId)) {
     return fail('mission_unset', 'The admitted record has no mission slug.', toView(admission, null));
