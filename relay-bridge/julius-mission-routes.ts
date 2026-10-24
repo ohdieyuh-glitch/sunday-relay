@@ -136,6 +136,15 @@ export interface JuliusMissionRoutePorts {
     readonly path: string;
     handle(request: JuliusMissionRouteRequest): Promise<JuliusMissionRouteResult | null>;
   };
+  /**
+   * Wonderland result and progress, injected the same way as status.
+   * This file does not import the evidence reader. With no reader wired by
+   * the caller, those routes cannot report completed.
+   */
+  readonly wonderlandMissionReadBridge?: {
+    matches(path: string): boolean;
+    handle(request: JuliusMissionRouteRequest): Promise<JuliusMissionRouteResult | null>;
+  };
 }
 
 /** The three worker requests, from the same definitions the live composition dispatches. */
@@ -176,6 +185,9 @@ export async function handleJuliusMissionRoute(
   request: JuliusMissionRouteRequest,
   ports: JuliusMissionRoutePorts,
 ): Promise<JuliusMissionRouteResult | null> {
+  if (ports.wonderlandMissionReadBridge !== undefined && ports.wonderlandMissionReadBridge.matches(request.path)) {
+    return ports.wonderlandMissionReadBridge.handle(request);
+  }
   if (ports.wonderlandStatusBridge !== undefined && request.path === ports.wonderlandStatusBridge.path) {
     return ports.wonderlandStatusBridge.handle(request);
   }
