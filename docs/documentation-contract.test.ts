@@ -23,9 +23,20 @@ const readme = read('README.md');
 const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string>; bin?: Record<string, string> };
 
 describe('README advertises only what exists', () => {
-  it('every docs/relay document it names is present', () => {
-    const named = [...readme.matchAll(/`(docs\/relay\/[A-Za-z0-9_.-]+|[A-Z][A-Z0-9_]+\.(?:md|json))`/g)]
-      .map((m) => m[1]);
+  it('every docs document it names is present', () => {
+    /*
+     * WIDENED 2026-09-11 from `docs/relay/…` to `docs/…`.
+     *
+     * The old pattern checked the specification set and nothing else, so the
+     * engineering record — `docs/JULIUS_*.md`, `docs/handoffs/…` — could be
+     * linked from the README and rot unnoticed. That is the same defect this
+     * whole file exists for, surviving one directory up from where anyone
+     * looked. A README naming a document is a promise regardless of which
+     * folder the document sits in.
+     */
+    const named = [...readme.matchAll(
+      /`(docs\/[A-Za-z0-9_./-]+\.(?:md|json)|[A-Z][A-Z0-9_]+\.(?:md|json))`/g,
+    )].map((m) => m[1]);
     expect(named.length).toBeGreaterThan(10);
     // A bare NAME.md may be a docs/relay specification or a root-level
     // historical record (RELAY_STATUS.md, RELAY_INTEGRATION.md) — both are
@@ -54,10 +65,53 @@ describe('README advertises only what exists', () => {
     expect(readme).toContain('src/relay/shared');
   });
 
-  it('still positions Relay as an independent product', () => {
-    expect(readme).toContain('Sunday Relay turns separate AI tools');
-    expect(readme).toContain('Aquala Technologies');
+  /**
+   * SUPERSEDED 2026-09-11, when the public identity became i.Wonder's
+   * Julius 3.3 and Wonderland.
+   *
+   * This test required the literal strings `Sunday Relay turns separate AI
+   * tools` and `Aquala Technologies` — a tagline and a company name that are
+   * no longer the product's. A pin that has become false is not a guard; it is
+   * a claim the suite enforces. This one would have failed the rewrite that
+   * made the README TRUE, which is precisely the change it should have
+   * allowed, and passed forever while the README described a product that had
+   * been renamed out from under it.
+   *
+   * What survives is the half that was always right — a README that names the
+   * contract under which work enters the repository — now stated against the
+   * identity that is current, and paired below with the half the old test had
+   * no way to express: retired branding must not come back.
+   */
+  it("positions the product as i.Wonder's Julius, powering Wonderland", () => {
+    expect(readme).toContain('i.Wonder Laboratories, Inc.');
+    expect(readme).toContain('Julius 3.3');
+    expect(readme).toContain('Compound AI Agent');
+    expect(readme).toContain('Wonderland');
     expect(readme).toContain('docs/REPOSITORY_GOVERNANCE.md');
+  });
+
+  /**
+   * THE GUARD THE OLD PIN COULD NOT BE.
+   *
+   * `relay` is deliberately absent from this list. It is still the source
+   * namespace, the CLI command, the npm scripts, the `relay/*` branch prefix
+   * and the repository's own name, and renaming those is a dedicated
+   * migration rather than a documentation change — so the README explains the
+   * legacy namespace instead of pretending it is gone. What must never return
+   * is the retired PRODUCT branding, which is a different thing from a
+   * directory nobody has renamed yet.
+   */
+  it('carries no retired product branding', () => {
+    for (const retired of ['Aquala', 'Sunday Alcatraz', 'Sunday Relay', 'Y Combinator', 'Ship on Sunday']) {
+      expect(readme, `"${retired}" is retired branding and must not return to the README`)
+        .not.toContain(retired);
+    }
+    // C.A.R.D. replaced PSP as the configuration name. `psp` survives as an
+    // internal wire name on the bridge; it must not reach a reader here.
+    expect(readme, 'PSP is superseded by C.A.R.D. in everything participant-facing')
+      .not.toMatch(/\bPSP\b/u);
+    // The word, not the letters inside another one.
+    expect(readme, 'YC positioning is retired').not.toMatch(/\bYC\b/u);
   });
 });
 
