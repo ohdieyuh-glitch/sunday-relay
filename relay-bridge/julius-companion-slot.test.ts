@@ -305,6 +305,32 @@ describe('a companion is recorded by its declaration', () => {
     expect(recorded).not.toContain('CODING_AGENT');
   });
 
+  it('a missing kind, an unknown kind, or a missing provider id records no agent', async () => {
+    const declarations = [
+      { agentId: 'agent-from-caller', providerId: 'openai', connection: 'connected' },
+      { agentId: 'agent-from-caller', providerId: 'openai', kind: 'fleet', connection: 'connected' },
+      { agentId: 'agent-from-caller', kind: 'single', connection: 'connected' },
+      { agentId: 'agent-from-caller', providerId: '   ', kind: 'single', connection: 'connected' },
+    ];
+    for (const declaration of declarations) {
+      const built = ports({
+        wake: async () => ({
+          wakeId: 'wake_01ABCDEF',
+          outcome: 'posted',
+          artifact: { bytes: new TextEncoder().encode('fixture') },
+          declaration,
+        }),
+      });
+      const result = await run(task(), built);
+      expect(result.missionContinues, JSON.stringify(declaration)).toBe(true);
+      expect(result.evidence.disposition, JSON.stringify(declaration)).toBe('integrated');
+      expect(result.evidence.agent, JSON.stringify(declaration)).toBeNull();
+      const recorded = JSON.stringify(result.evidence);
+      expect(recorded, JSON.stringify(declaration)).not.toContain('"kind":"single"');
+      expect(recorded, JSON.stringify(declaration)).not.toContain('"providerId":""');
+    }
+  });
+
   it('a declaration that only names a model records no agent', async () => {
     const built = ports({
       wake: async () => ({
@@ -333,6 +359,7 @@ describe('a companion is recorded by its declaration', () => {
           agentId: 'agent-from-caller',
           providerId: 'provider.offline.example',
           displayName: secret,
+          kind: 'single',
           declaredCapabilities: ['draft'],
           authorizedCapabilities: [],
           connection: 'connected',

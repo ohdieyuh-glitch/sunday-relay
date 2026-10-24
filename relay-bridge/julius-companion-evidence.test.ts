@@ -167,6 +167,41 @@ describe('companion evidence store', () => {
     expect(viewOf(store, OTHER)?.agents.map((item) => item.providerId)).toEqual(['provider.example.other']);
   });
 
+  it('refuses a descriptor that omits kind or provider id, and an unknown kind', () => {
+    const store = createMemoryCompanionEvidenceStore();
+    const base = {
+      agentId: 'agent-from-caller',
+      providerId: 'openai',
+      displayName: null,
+      adapterVersion: null,
+      declaredCapabilities: [],
+      authorizedCapabilities: [],
+      connection: 'connected' as const,
+    };
+    const refused = [
+      { ...base, kind: undefined },
+      { ...base, kind: 'fleet' },
+      { ...base, providerId: undefined, kind: 'single' as const },
+    ];
+    for (const agent of refused) {
+      expect(store.record(draft({ agent: agent as CompanionEvidenceDraft['agent'] })), JSON.stringify(agent)).toEqual({
+        ok: false,
+        reason: 'companion_evidence_invalid',
+      });
+    }
+    expect(store.read(WLJ)).toEqual({ ok: true, result: null });
+    const present = store.record(draft({
+      agent: { ...base, providerId: 'provider.example.unknown', kind: 'single' },
+    }));
+    expect(present).toEqual({ ok: true });
+    expect(viewOf(store, WLJ)?.agents).toEqual([{
+      ...base,
+      providerId: 'provider.example.unknown',
+      kind: 'single',
+      connection: 'unsupported',
+    }]);
+  });
+
   it('withholds a credential-shaped display name and still stores the provider', () => {
     const secret = `sk-${'LIVEKEYVALUE123456'}`;
     const store = createMemoryCompanionEvidenceStore();

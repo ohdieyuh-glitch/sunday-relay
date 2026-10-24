@@ -301,16 +301,17 @@ function strictCapabilities(value: unknown): readonly string[] | typeof INVALID 
 }
 
 function kindOf(value: unknown): CompanionAgentKind | typeof INVALID {
-  if (value === undefined || value === 'single') return 'single';
-  if (value === 'compound') return 'compound';
+  if (value === 'single' || value === 'compound') return value;
   return INVALID;
 }
 
 /**
  * Copies the descriptor and drops every other field, including `model`.
- * `providerId` is kept as an opaque string. A connected claim becomes
+ * A present `providerId` is kept as an opaque string. A connected claim becomes
  * `unsupported` because this store has no provider adapter. That rewrite
- * still returns ok. A credential-shaped field is withheld.
+ * still returns ok. A missing or unknown `kind`, or a missing `providerId`,
+ * is not a descriptor: the write is refused. A credential-shaped display name
+ * is withheld.
  */
 function normalizeAgent(value: unknown): { readonly ok: true; readonly agent: CompanionAgentDescriptor | null } | { readonly ok: false } {
   if (value === undefined || value === null) return { ok: true, agent: null };
@@ -328,11 +329,12 @@ function normalizeAgent(value: unknown): { readonly ok: true; readonly agent: Co
     || kind === INVALID || declaredCapabilities === INVALID || authorizedCapabilities === INVALID
   ) return { ok: false };
   if (agentId === null) return { ok: true, agent: null };
+  if (providerId === null) return { ok: false };
   return {
     ok: true,
     agent: {
       agentId,
-      providerId: providerId ?? '',
+      providerId,
       displayName,
       kind,
       adapterVersion,

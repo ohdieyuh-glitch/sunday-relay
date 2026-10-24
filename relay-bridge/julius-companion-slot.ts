@@ -213,14 +213,21 @@ const capabilityList = (raw: unknown): readonly string[] => {
   return out;
 };
 
-/** Reads the descriptor fields only. A `model` field is never the agent, the name, or the provider. */
+/**
+ * Reads the descriptor fields only. A `model` field is never the agent, the name, or the provider.
+ * A missing or unknown `kind` is not `single`. A missing `providerId` is not an empty string.
+ * Either one rejects the descriptor. A present provider id is stored as written; this module
+ * has no catalog, so that slot's connection is `unsupported` unless the declaration itself
+ * said `disconnected`, `unsupported`, or `error`.
+ */
 const acceptDeclaration = (raw: unknown, observedDisconnect: boolean): CompanionAgentDescriptor | null => {
   if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const v = raw as Record<string, unknown>;
   const agentId = opaqueToken(v.agentId, IDENTITY_MAX);
-  if (agentId === null) return null;
-  const providerId = opaqueToken(v.providerId, IDENTITY_MAX) ?? '';
-  const kind: CompanionAgentKind = v.kind === 'compound' ? 'compound' : 'single';
+  const providerId = opaqueToken(v.providerId, IDENTITY_MAX);
+  if (agentId === null || typeof providerId !== 'string') return null;
+  if (v.kind !== 'single' && v.kind !== 'compound') return null;
+  const kind: CompanionAgentKind = v.kind;
   return {
     agentId,
     providerId,
