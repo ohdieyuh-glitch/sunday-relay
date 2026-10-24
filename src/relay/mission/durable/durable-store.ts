@@ -109,23 +109,14 @@ export function createDurableMissionStore(
     },
 
     async list(): Promise<readonly string[]> {
-      let keys: readonly string[];
-      try {
-        keys = await backing.listKeys();
-      } catch {
-        return [];
-      }
+      const keys = await backing.listKeys();
       return keys
         .filter((k) => k.startsWith(KEY_PREFIX))
         .map((k) => k.slice(KEY_PREFIX.length));
     },
 
     async remove(missionId: string): Promise<void> {
-      try {
-        await backing.deleteKey(keyFor(missionId));
-      } catch {
-        /* already gone, or storage denied — nothing to undo */
-      }
+      await backing.deleteKey(keyFor(missionId));
     },
   };
 }
