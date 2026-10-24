@@ -1,25 +1,27 @@
+import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';
+
 /**
  * The claim the J1 controller makes against an admission it does not own.
  * The store behind this port is BRIDGE. This file does not import it.
  *
  * `claim` moves `admitted` to `dispatched` once. A second claim of the same
- * pair is a replay. It does not open a new run.
+ * pair is a replay. It does not open a new run. Both ids are recognized only
+ * by `scripts/julius-admission-run-id.mjs`. This file does not mint either one.
  */
 
-export const J1_CLIENT_RUN_ID = /^wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-export const J1_SERVER_RUN_ID = /^run:[0-9a-f]{24}$/;
-
 export function isClientRunId(value: string): boolean {
-  return J1_CLIENT_RUN_ID.test(value);
+  const parsed = parseJuliusAdmissionRunId(value);
+  return parsed.ok && parsed.form === 'wlj';
 }
 
 export function isServerRunId(value: string): boolean {
-  return J1_SERVER_RUN_ID.test(value);
+  const parsed = parseJuliusAdmissionRunId(value);
+  return parsed.ok && parsed.form === 'legacy';
 }
 
 /** Either id of an admitted pair. Anything else is refused. */
 export function isAdmittedRunId(value: string): boolean {
-  return isClientRunId(value) || isServerRunId(value);
+  return parseJuliusAdmissionRunId(value).ok;
 }
 
 export interface AdmittedRecord {
