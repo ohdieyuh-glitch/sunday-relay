@@ -12,7 +12,10 @@
 // confirmed them in the room on 2026-10-23 (awaiting_operator, dispatched + dispatchedAt), re-pinned for contract v0.1 to
 // the #407 candidate acc96ab0 (cause AWAITING_OPERATOR_EXPIRED on state "failed"; AWAITING_OPERATOR_WINDOW_MS = 360 min,
 // so the hold window is 360 min + one slow wait = 21,720,000 ms; "operator_window_expired" was never a wire value) and src/relay/mission/julius/julius-runtime.ts
-// JULIUS_MISSION_STATES. On the #421 line only (not on this client line), src/relay/mission/wonderland/wonderland-j1-progress.test.ts parses every table below
+// JULIUS_MISSION_STATES. The StatusRoute rows (vocab R, P10, P11) are the #407 candidate acc96ab0
+// WONDERLAND_STATUS_STATES / WONDERLAND_STATUS_CAUSES / WONDERLAND_STATUS_TERMINAL_STATES and contract v0.1's
+// Clarifications 1-3 (legacy pin without a legacyRunId key, AWAITING_OPERATOR_EXPIRED only on "failed", workflowRunId
+// opaque). On the #421 line only (not on this client line), src/relay/mission/wonderland/wonderland-j1-progress.test.ts parses every table below
 // (KAT-...-BEGIN/END), restates the rules of WonderlandJuliusMissionProgress.h independently, and checks each expected
 // value, so a value here cannot be edited without that test failing, and the C++ cannot drift without this failing.
 //
@@ -25,12 +28,17 @@
 //                                               the same, with BRIDGE's status-route fields (P9): dispatchedAt as
 //                                               sent ("-" absent), cause ("-" absent), and the wrapper's UTC clock
 //                                               in ms when the answer arrived ("-" unknown, 0)
+//   P,<http>,<err>,R,<client>,<server>,<state>,<dispatchedAt>,<cause>,<receivedUtcMs>,<legacy>,<workflow>
+//                                               a contract v0.1 status-route answer (P10, P11): legacy is the
+//                                               legacyRunId key (absent, null, or a server tag below), workflow the
+//                                               workflowRunId key ("-" absent, null, num, max = 128 bytes, long = 129,
+//                                               space, ctl, empty); legacy or workflow "type" sets bWrongFieldType
 //   P0                                          a poll with no HTTP answer
 //   N,<watchedMs>                               the wrapper asks NextPollStep
 // T0 below is 2026-10-23T18:00:00.000Z = 1792778400000 ms.
 // err: "-" no error object, "~" an error object without a kind, anything else the kind. client: ok (this tracker's
-// wlj_ id), other (another wlj_ id), none (absent), nodata (no data object at all). server: S1, S2 (two well-formed
-// run: ids), bad (S1 with upper-case hex), short, jkey (Julius's own run:<idempotencyKey> name, never the pinned id), none. vocab: A Admission, J JuliusRun, U Unknown. state "-" is empty.
+// wlj_ id), other (another wlj_ id), none (absent), nodata (no data object at all), bad (WljUpper). server: S1, S2 (two well-formed
+// run: ids), bad (S1 with upper-case hex), short, jkey (Julius's own run:<idempotencyKey> name, never the pinned id), none. vocab: A Admission, J JuliusRun, U Unknown, R StatusRoute. state "-" is empty.
 // Expected: the final state, the last trace event, the pinned server run id, and DispatchSendAllowed().
 #include "WonderlandJuliusMissionProgress.h"
 
@@ -133,6 +141,28 @@ namespace
 	{ "unknown_admission_held", EStatusVocabulary::Unknown, "ADMISSION_HELD", EMissionProgress::Waiting },
 	{ "unknown_executing", EStatusVocabulary::Unknown, "EXECUTING", EMissionProgress::Waiting },
 	{ "unknown_empty", EStatusVocabulary::Unknown, "", EMissionProgress::Waiting },
+	{ "route_held", EStatusVocabulary::StatusRoute, "held", EMissionProgress::AdmittedHeld },
+	{ "route_reserved", EStatusVocabulary::StatusRoute, "reserved", EMissionProgress::AdmittedHeld },
+	{ "route_awaiting_operator", EStatusVocabulary::StatusRoute, "awaiting_operator", EMissionProgress::AdmittedHeld },
+	{ "route_ledger_unwritten", EStatusVocabulary::StatusRoute, "ledger_unwritten", EMissionProgress::DispatchFailed },
+	{ "route_interrupted", EStatusVocabulary::StatusRoute, "interrupted", EMissionProgress::DispatchFailed },
+	{ "route_failed", EStatusVocabulary::StatusRoute, "failed", EMissionProgress::DispatchFailed },
+	{ "route_dispatched", EStatusVocabulary::StatusRoute, "dispatched", EMissionProgress::OperatorStarted },
+	{ "route_dispatch_failed", EStatusVocabulary::StatusRoute, "dispatch_failed", EMissionProgress::DispatchFailed },
+	{ "route_already_spent", EStatusVocabulary::StatusRoute, "already_spent", EMissionProgress::AlreadySpent },
+	{ "route_unknown", EStatusVocabulary::StatusRoute, "unknown", EMissionProgress::Waiting },
+	{ "route_running", EStatusVocabulary::StatusRoute, "running", EMissionProgress::Waiting },
+	{ "route_completed", EStatusVocabulary::StatusRoute, "completed", EMissionProgress::Waiting },
+	{ "route_expired", EStatusVocabulary::StatusRoute, "expired", EMissionProgress::Waiting },
+	{ "route_held_upper", EStatusVocabulary::StatusRoute, "HELD", EMissionProgress::Waiting },
+	{ "route_admission_held_upper", EStatusVocabulary::StatusRoute, "ADMISSION_HELD", EMissionProgress::Waiting },
+	{ "route_dispatch_failed_upper", EStatusVocabulary::StatusRoute, "DISPATCH_FAILED", EMissionProgress::Waiting },
+	{ "route_awaiting_operator_expired_upper", EStatusVocabulary::StatusRoute, "AWAITING_OPERATOR_EXPIRED", EMissionProgress::Waiting },
+	{ "route_already_spent_padded", EStatusVocabulary::StatusRoute, "already_spent ", EMissionProgress::Waiting },
+	{ "route_empty", EStatusVocabulary::StatusRoute, "", EMissionProgress::Waiting },
+	{ "admission_already_spent", EStatusVocabulary::Admission, "already_spent", EMissionProgress::Waiting },
+	{ "admission_dispatch_failed", EStatusVocabulary::Admission, "dispatch_failed", EMissionProgress::Waiting },
+	{ "julius_already_spent", EStatusVocabulary::JuliusRun, "already_spent", EMissionProgress::Waiting },
 	// KAT-PROGRESS-STATUS-END
 	};
 
@@ -155,6 +185,7 @@ namespace
 	{ "run_id_mismatch", EMissionProgress::RunIdMismatch, "Stopped \xE2\x80\x94 the bridge named a different run; nothing will be resent", 1, 0 },
 	{ "answer_invalid", EMissionProgress::AnswerInvalid, "Stopped \xE2\x80\x94 the bridge's answer could not be checked; nothing will be resent", 1, 0 },
 	{ "poll_limit_reached", EMissionProgress::PollLimitReached, "Stopped checking \xE2\x80\x94 the mission may still be going; ask the bridge", 1, 0 },
+	{ "already_spent", EMissionProgress::AlreadySpent, "This run id was already used \xE2\x80\x94 nothing new was started; nothing will be resent", 1, 0 },
 	// KAT-PROGRESS-DISPLAY-END
 	};
 
@@ -794,6 +825,117 @@ namespace
 	{ "wlj_own_pin_julius_names_version_3", "D,202,-,ok,own,ADMISSION_HELD P,200,-,J,none,wv3,EXECUTING", EMissionProgress::RunIdMismatch, "run_id_mismatched", "own", 0 },
 	{ "wlj_own_pin_julius_names_too_long", "D,202,-,ok,own,ADMISSION_HELD P,200,-,J,none,wlong,EXECUTING", EMissionProgress::RunIdMismatch, "run_id_mismatched", "own", 0 },
 	{ "wlj_legacy_pin_julius_names_uppercase", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,wupper,EXECUTING", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
+	// P10/P11 (contract v0.1 status route, #407 candidate acc96ab0): every state, today's body (no legacyRunId key, run: serverRunId = the legacy pin).
+	{ "route_held", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,held,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	{ "route_reserved", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,reserved,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	{ "route_awaiting_operator", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,awaiting_operator,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	{ "route_ledger_unwritten", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,ledger_unwritten,-,-,-,absent,-", EMissionProgress::DispatchFailed, "status_applied", "S1", 0 },
+	{ "route_interrupted", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,interrupted,-,-,-,absent,-", EMissionProgress::DispatchFailed, "status_applied", "S1", 0 },
+	{ "route_failed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,failed,-,-,-,absent,-", EMissionProgress::DispatchFailed, "status_applied", "S1", 0 },
+	{ "route_failed_expired", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,failed,-,AWAITING_OPERATOR_EXPIRED,-,absent,-", EMissionProgress::NotStarted, "status_applied", "S1", 0 },
+	{ "route_failed_expired_from_awaiting", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,awaiting_operator,-,-,-,absent,- P,200,-,R,ok,S1,failed,-,AWAITING_OPERATOR_EXPIRED,-,absent,-", EMissionProgress::NotStarted, "status_applied", "S1", 0 },
+	{ "route_dispatched", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,-", EMissionProgress::OperatorStarted, "status_applied", "S1", 0 },
+	{ "route_dispatched_no_dispatched_at", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,-,-,-,absent,-", EMissionProgress::DispatchUnconfirmed, "status_applied", "S1", 0 },
+	{ "route_dispatch_failed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatch_failed,-,-,-,absent,-", EMissionProgress::DispatchFailed, "status_applied", "S1", 0 },
+	{ "route_dispatch_failed_gh", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatch_failed,-,gh_workflow_run_failed,-,absent,-", EMissionProgress::DispatchFailed, "status_applied", "S1", 0 },
+	{ "route_already_spent", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,already_spent,-,RUN_ID_ALREADY_SPENT,-,absent,-", EMissionProgress::AlreadySpent, "status_applied", "S1", 0 },
+	{ "route_already_spent_no_cause", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,already_spent,-,-,-,absent,-", EMissionProgress::AlreadySpent, "status_applied", "S1", 0 },
+	{ "route_unknown", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,unknown,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	{ "route_unknown_keeps_waiting", "D,202,-,ok,S1,QUEUED P,200,-,R,ok,S1,unknown,-,-,-,absent,-", EMissionProgress::Waiting, "status_applied", "S1", 0 },
+	{ "route_unknown_not_terminal", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,unknown,-,-,-,absent,- P,200,-,R,ok,S1,held,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	{ "route_unknown_hold_ends_neutral", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,unknown,-,-,-,absent,- N,21720000", EMissionProgress::NotStarted, "hold_window_expired", "S1", 0 },
+	{ "route_held_after_waiting", "D,202,-,ok,S1,QUEUED P,200,-,R,ok,S1,held,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	// P11: a dispatch failure after dispatched ends DispatchFailed / AlreadySpent, never PollLimitReached or Waiting.
+	{ "route_dispatched_then_dispatch_failed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,dispatch_failed,-,gh_workflow_run_failed,-,absent,-", EMissionProgress::DispatchFailed, "status_applied", "S1", 0 },
+	{ "route_dispatched_then_dispatch_failed_spent_tag", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,dispatch_failed,-,SPENT_TAG_UNVERIFIED,-,absent,-", EMissionProgress::DispatchFailed, "status_applied", "S1", 0 },
+	{ "route_dispatched_then_already_spent", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,already_spent,-,RUN_ID_ALREADY_SPENT,-,absent,-", EMissionProgress::AlreadySpent, "status_applied", "S1", 0 },
+	{ "route_unconfirmed_then_dispatch_failed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,-,-,-,absent,- P,200,-,R,ok,S1,dispatch_failed,-,-,-,absent,-", EMissionProgress::DispatchFailed, "status_applied", "S1", 0 },
+	{ "route_unconfirmed_then_already_spent", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,-,-,-,absent,- P,200,-,R,ok,S1,already_spent,-,-,-,absent,-", EMissionProgress::AlreadySpent, "status_applied", "S1", 0 },
+	{ "route_unconfirmed_then_confirmed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,-,-,-,absent,- P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,-", EMissionProgress::OperatorStarted, "status_applied", "S1", 0 },
+	{ "route_dispatch_failed_then_poll_limit_ask", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,dispatch_failed,-,-,-,absent,- N,99999999999", EMissionProgress::DispatchFailed, "status_applied", "S1", 0 },
+	{ "route_dispatch_failed_sticky", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatch_failed,-,-,-,absent,- P,200,-,R,ok,S1,held,-,-,-,absent,- P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,-", EMissionProgress::DispatchFailed, "ignored_after_terminal", "S1", 0 },
+	{ "route_already_spent_sticky", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,already_spent,-,-,-,absent,- P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,-", EMissionProgress::AlreadySpent, "ignored_after_terminal", "S1", 0 },
+	{ "route_expired_sticky", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,failed,-,AWAITING_OPERATOR_EXPIRED,-,absent,- P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,-", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
+	{ "route_dispatched_then_failed_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,failed,-,-,-,absent,-", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
+	{ "route_dispatched_then_interrupted_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,interrupted,-,-,-,absent,-", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
+	{ "route_dispatched_then_ledger_unwritten_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,ledger_unwritten,-,-,-,absent,-", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
+	{ "route_dispatched_then_expired_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,failed,-,AWAITING_OPERATOR_EXPIRED,-,absent,-", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
+	{ "route_dispatched_then_held_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,held,-,-,-,absent,-", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
+	{ "route_dispatched_then_unknown_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,unknown,-,-,-,absent,-", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
+	{ "route_dispatched_again_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,-", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
+	{ "route_julius_then_dispatch_failed_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,EXECUTING P,200,-,R,ok,S1,dispatch_failed,-,-,-,absent,-", EMissionProgress::Running, "admission_answer_logged", "S1", 0 },
+	{ "route_julius_then_already_spent_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,EXECUTING P,200,-,R,ok,S1,already_spent,-,-,-,absent,-", EMissionProgress::Running, "admission_answer_logged", "S1", 0 },
+	{ "route_dispatched_then_julius", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,J,none,S1,EXECUTING", EMissionProgress::Running, "status_applied", "S1", 0 },
+	// P10: words outside the closed list are faults: counted, nothing applied, the window keeps running.
+	{ "route_rejects_running", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,running,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_completed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,completed,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_expired", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,expired,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_upper_held", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,HELD,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_upper_failed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,FAILED,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_admission_held", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,ADMISSION_HELD,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_mixed_dispatched", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,Dispatched,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_cause_as_state", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,AWAITING_OPERATOR_EXPIRED,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_room_word", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,operator_window_expired,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_julius_executing", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,EXECUTING,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_empty", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,-,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_succeeded", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,succeeded,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_running_after_dispatch", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,running,-,-,-,absent,-", EMissionProgress::OperatorStarted, "status_rejected", "S1", 0 },
+	{ "route_rejects_completed_after_dispatch", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,completed,-,-,-,absent,-", EMissionProgress::OperatorStarted, "status_rejected", "S1", 0 },
+	{ "route_rejects_forever_hold_ends_neutral", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,running,-,-,-,absent,- P,200,-,R,ok,S1,completed,-,-,-,absent,- N,21720000", EMissionProgress::NotStarted, "hold_window_expired", "S1", 0 },
+	{ "route_rejects_forever_in_waiting", "D,202,-,ok,S1,QUEUED P,200,-,R,ok,S1,running,-,-,-,absent,- N,21720000", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
+	// P10, v0.1 Clarification 2: AWAITING_OPERATOR_EXPIRED only with failed; causes are a closed list.
+	{ "route_rejects_expired_on_awaiting", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,awaiting_operator,-,AWAITING_OPERATOR_EXPIRED,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_expired_on_held", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,held,-,AWAITING_OPERATOR_EXPIRED,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_expired_on_reserved", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,reserved,-,AWAITING_OPERATOR_EXPIRED,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_expired_on_ledger_unwritten", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,ledger_unwritten,-,AWAITING_OPERATOR_EXPIRED,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_expired_on_interrupted", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,interrupted,-,AWAITING_OPERATOR_EXPIRED,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_expired_on_dispatch_failed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatch_failed,-,AWAITING_OPERATOR_EXPIRED,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_expired_on_already_spent", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,already_spent,-,AWAITING_OPERATOR_EXPIRED,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_expired_on_unknown", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,unknown,-,AWAITING_OPERATOR_EXPIRED,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_expired_on_dispatched", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,AWAITING_OPERATOR_EXPIRED,1792778460000,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_expired_on_dispatched_after_dispatch", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,AWAITING_OPERATOR_EXPIRED,1792778460000,absent,-", EMissionProgress::OperatorStarted, "status_rejected", "S1", 0 },
+	{ "route_rejects_room_cause", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,failed,-,operator_window_expired,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_lowercase_cause", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,failed,-,awaiting_operator_expired,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_unlisted_cause", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatch_failed,-,GH_TIMEOUT,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_unlisted_cause_after_dispatch", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,dispatch_failed,-,timeout,-,absent,-", EMissionProgress::OperatorStarted, "status_rejected", "S1", 0 },
+	{ "route_failed_spent_tag_cause", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,failed,-,SPENT_TAG_UNVERIFIED,-,absent,-", EMissionProgress::DispatchFailed, "status_applied", "S1", 0 },
+	// P10, Q21: legacyRunId; Clarification 1: a run: serverRunId with no legacyRunId key is the legacy pin.
+	{ "route_v01_new_run_own_pin", "D,202,-,ok,own,ADMISSION_HELD P,200,-,R,ok,own,held,-,-,-,null,-", EMissionProgress::AdmittedHeld, "status_applied", "own", 0 },
+	{ "route_v01_legacy_row", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,held,-,-,-,S1,-", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	{ "route_v01_legacy_row_no_server", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,none,held,-,-,-,S1,-", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	{ "route_v01_null_legacy_no_server_own_pin", "D,202,-,ok,own,ADMISSION_HELD P,200,-,R,ok,none,held,-,-,-,null,-", EMissionProgress::AdmittedHeld, "status_applied", "own", 0 },
+	{ "route_own_server_no_legacy_key_own_pin", "D,202,-,ok,own,ADMISSION_HELD P,200,-,R,ok,own,held,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_applied", "own", 0 },
+	{ "route_own_pin_dispatch_failed", "D,202,-,ok,own,ADMISSION_HELD P,200,-,R,ok,own,dispatch_failed,-,-,-,null,-", EMissionProgress::DispatchFailed, "status_applied", "own", 0 },
+	{ "route_legacy_pin_null_legacy_mismatch", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,own,held,-,-,-,null,-", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
+	{ "route_legacy_pin_no_key_own_server_mismatch", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,own,held,-,-,-,absent,-", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
+	{ "route_legacy_pin_nothing_named_mismatch", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,none,held,-,-,-,absent,-", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
+	{ "route_own_pin_legacy_row_mismatch", "D,202,-,ok,own,ADMISSION_HELD P,200,-,R,ok,none,held,-,-,-,S1,-", EMissionProgress::RunIdMismatch, "run_id_mismatched", "own", 0 },
+	{ "route_own_pin_run_server_mismatch", "D,202,-,ok,own,ADMISSION_HELD P,200,-,R,ok,S1,held,-,-,-,absent,-", EMissionProgress::RunIdMismatch, "run_id_mismatched", "own", 0 },
+	{ "route_other_legacy_mismatch", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,none,held,-,-,-,S2,-", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
+	{ "route_other_server_mismatch", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S2,held,-,-,-,S2,-", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
+	{ "route_other_client_mismatch", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,other,S1,held,-,-,-,absent,-", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
+	{ "route_malformed_server_mismatch", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,bad,held,-,-,-,absent,-", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
+	{ "route_julius_key_server_mismatch", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,jkey,held,-,-,-,absent,-", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
+	{ "route_rejects_legacy_server_disagree", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,own,held,-,-,-,S1,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_null_legacy_run_server", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,held,-,-,-,null,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_malformed_legacy", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,none,held,-,-,-,bad,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_wlj_as_legacy", "D,202,-,ok,own,ADMISSION_HELD P,200,-,R,ok,none,held,-,-,-,own,-", EMissionProgress::AdmittedHeld, "status_rejected", "own", 0 },
+	{ "route_rejects_missing_wlj_run_id", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,none,S1,held,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_malformed_wlj_run_id_nodata", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,nodata,S1,held,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "poll_failed", "S1", 0 },
+	{ "route_rejects_wrong_type", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,held,-,-,-,type,-", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_wrong_type_dispatch_failed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,dispatch_failed,-,-,-,absent,type", EMissionProgress::OperatorStarted, "status_rejected", "S1", 0 },
+	{ "route_unreadable_http_500", "D,202,-,ok,S1,ADMISSION_HELD P,500,-,R,ok,S1,dispatch_failed,-,-,-,absent,-", EMissionProgress::AdmittedHeld, "poll_failed", "S1", 0 },
+	// P10, v0.1 Clarification 3: workflowRunId is an optional opaque string, never displayed; only a malformed one is a fault.
+	{ "route_workflow_numeric", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,held,-,-,-,absent,num", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	{ "route_workflow_null", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,held,-,-,-,absent,null", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	{ "route_workflow_at_cap", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,held,-,-,-,absent,max", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	{ "route_workflow_with_v01_body", "D,202,-,ok,own,ADMISSION_HELD P,200,-,R,ok,own,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,null,num", EMissionProgress::OperatorStarted, "status_applied", "own", 0 },
+	{ "route_workflow_on_dispatch_failed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778460000,absent,- P,200,-,R,ok,S1,dispatch_failed,-,gh_workflow_run_failed,-,S1,num", EMissionProgress::DispatchFailed, "status_applied", "S1", 0 },
+	{ "route_workflow_on_already_spent", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,already_spent,-,RUN_ID_ALREADY_SPENT,-,absent,max", EMissionProgress::AlreadySpent, "status_applied", "S1", 0 },
+	{ "route_rejects_workflow_over_cap", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,held,-,-,-,absent,long", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_workflow_space", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,held,-,-,-,absent,space", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_workflow_control", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,held,-,-,-,absent,ctl", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
+	{ "route_rejects_workflow_empty", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,R,ok,S1,held,-,-,-,absent,empty", EMissionProgress::AdmittedHeld, "status_rejected", "S1", 0 },
 	// KAT-PROGRESS-SCRIPT-END
 	};
 
@@ -813,7 +955,7 @@ namespace
 	/** Owns the strings an FStatusAnswer points at. */
 	struct FAnswerHolder
 	{
-		std::string Kind, Client, Server, Status, DispatchedAt, Cause;
+		std::string Kind, Client, Server, Status, DispatchedAt, Cause, Legacy, Workflow;
 		FStatusAnswer Answer;
 	};
 
@@ -857,14 +999,45 @@ namespace
 		if (Vocab == "A") { Answer.Vocabulary = EStatusVocabulary::Admission; }
 		else if (Vocab == "J") { Answer.Vocabulary = EStatusVocabulary::JuliusRun; }
 		else if (Vocab == "U") { Answer.Vocabulary = EStatusVocabulary::Unknown; }
+		else if (Vocab == "R") { Answer.Vocabulary = EStatusVocabulary::StatusRoute; }
 		else { return false; }
-		Holder.Client = Client == "ok" ? ClientOk : Client == "other" ? ClientOther : "";
+		Holder.Client = Client == "ok" ? ClientOk : Client == "other" ? ClientOther : Client == "bad" ? WljUpper : "";
 		Holder.Server = Answer.bHasData ? ServerFor(Server) : "";
 		Holder.Status = (Status == "-" || !Answer.bHasData) ? "" : Status;
 		Answer.ErrorKind = Holder.Kind;
 		Answer.ClientRunId = Holder.Client;
 		Answer.ServerRunId = Holder.Server;
 		Answer.Status = Holder.Status;
+		return true;
+	}
+
+	/** P10's legacyRunId and workflowRunId keys. False on an unknown tag. */
+	bool FillRoute(FAnswerHolder& Holder, const std::string& Legacy, const std::string& Workflow)
+	{
+		FStatusAnswer& Answer = Holder.Answer;
+		if (Legacy == "type") { Answer.bWrongFieldType = true; }
+		else if (Legacy == "null") { Answer.LegacyRunIdSlot = EJsonSlot::Null; }
+		else if (Legacy != "absent")
+		{
+			Holder.Legacy = ServerFor(Legacy);
+			if (Holder.Legacy.empty()) { return false; }
+			Answer.LegacyRunIdSlot = EJsonSlot::String;
+		}
+		if (Workflow == "type") { Answer.bWrongFieldType = true; }
+		else if (Workflow == "null") { Answer.WorkflowRunIdSlot = EJsonSlot::Null; }
+		else if (Workflow != "-")
+		{
+			if (Workflow == "num") { Holder.Workflow = "18843025517"; }
+			else if (Workflow == "max") { Holder.Workflow = std::string(128, '7'); }
+			else if (Workflow == "long") { Holder.Workflow = std::string(129, '7'); }
+			else if (Workflow == "space") { Holder.Workflow = "1884 3025517"; }
+			else if (Workflow == "ctl") { Holder.Workflow = "18843025517\n"; }
+			else if (Workflow == "empty") { Holder.Workflow = ""; }
+			else { return false; }
+			Answer.WorkflowRunIdSlot = EJsonSlot::String;
+		}
+		Answer.LegacyRunId = Holder.Legacy;
+		Answer.WorkflowRunId = Holder.Workflow;
 		return true;
 	}
 
@@ -892,10 +1065,11 @@ namespace
 				const FStatusAnswer& A = Holder.Answer;
 				Tracker.RecordDispatchAnswer(ClassifyDispatchAnswer(A.HttpStatus, A.bHasError, A.ErrorKind), A);
 			}
-			else if ((F.size() == 7 || F.size() == 10) && F[0] == "P")
+			else if ((F.size() == 7 || F.size() == 10 || (F.size() == 12 && F[3] == "R")) && F[0] == "P")
 			{
 				if (!Fill(Holder, F[1], F[2], F[3], F[4], F[5], F[6])) { return false; }
-				if (F.size() == 10) { FillBridge(Holder, F[7], F[8], F[9]); }
+				if (F.size() >= 10) { FillBridge(Holder, F[7], F[8], F[9]); }
+				if (F.size() == 12 && !FillRoute(Holder, F[10], F[11])) { return false; }
 				Tracker.RecordPollAnswer(Holder.Answer);
 			}
 			else if (F.size() == 2 && F[0] == "N")
@@ -963,7 +1137,8 @@ int main()
 		EMissionProgress::DispatchUnconfirmed, EMissionProgress::Dispatched, EMissionProgress::Running,
 		EMissionProgress::Paused, EMissionProgress::Waiting, EMissionProgress::Succeeded, EMissionProgress::Failed,
 		EMissionProgress::Refused, EMissionProgress::DispatchFailed, EMissionProgress::NotStarted,
-		EMissionProgress::RunIdMismatch, EMissionProgress::AnswerInvalid, EMissionProgress::PollLimitReached};
+		EMissionProgress::RunIdMismatch, EMissionProgress::AnswerInvalid, EMissionProgress::PollLimitReached,
+		EMissionProgress::AlreadySpent};
 
 	// P9: BRIDGE's status-route words, pinned (re-pin when BRIDGE posts its closed sets with SHAs).
 	Expect(BridgeAwaitingOperatorState == "awaiting_operator" && BridgeDispatchedState == "dispatched"
@@ -1314,15 +1489,32 @@ int main()
 			const bool bDispatchBefore = Tracker.DispatchReported();
 			const bool bConfirmedBefore = Tracker.DispatchConfirmed();
 			const std::size_t Before = Tracker.Trace().size();
+			const bool bRouteStep = Step.find(",R,") != std::string::npos;
 			Expect(RunScript(Step, Tracker), std::string("P8 step parses ") + Row.Label);
 			for (std::size_t Index = Before; Index < Tracker.Trace().size(); ++Index)
 			{
 				const FProgressTrace& Event = Tracker.Trace()[Index];
-				if ((Event.To == EMissionProgress::DispatchFailed || Event.To == EMissionProgress::NotStarted) && Event.From != Event.To)
+				const bool bRouteDispatchEnd = bRouteStep && (Event.To == EMissionProgress::DispatchFailed || Event.To == EMissionProgress::AlreadySpent)
+					&& (Event.From == EMissionProgress::OperatorStarted || Event.From == EMissionProgress::DispatchUnconfirmed);
+				if ((Event.To == EMissionProgress::DispatchFailed || Event.To == EMissionProgress::NotStarted
+					|| Event.To == EMissionProgress::AlreadySpent) && Event.From != Event.To && !bRouteDispatchEnd)
 				{
 					Expect(!bJuliusBefore && !bDispatchBefore && (Event.From == EMissionProgress::AwaitingDispatchAnswer
 						|| Event.From == EMissionProgress::AdmittedHeld || Event.From == EMissionProgress::Waiting),
 						std::string("P8/P9 DispatchFailed and NotStarted only before Julius and dispatch ") + Row.Label);
+				}
+				if (bRouteDispatchEnd)
+				{
+					Expect(!bJuliusBefore && bDispatchBefore && Event.Event == EProgressEvent::StatusApplied,
+						std::string("P11 a route dispatch end only after a reported dispatch, before Julius ") + Row.Label);
+				}
+				if (Event.To == EMissionProgress::AlreadySpent && Event.From != Event.To)
+				{
+					Expect(bRouteStep, std::string("P11 AlreadySpent only from the status route ") + Row.Label);
+				}
+				if (Event.Event == EProgressEvent::StatusRejected)
+				{
+					Expect(bRouteStep && Event.To == Event.From, std::string("P10 a rejected answer moves nothing ") + Row.Label);
 				}
 				if (bJuliusBefore || bDispatchBefore)
 				{
@@ -1342,6 +1534,77 @@ int main()
 			Expect(!bJuliusBefore || Tracker.JuliusStatusSeen(), std::string("P8 Julius seen is sticky ") + Row.Label);
 			Expect(!bDispatchBefore || Tracker.DispatchReported(), std::string("P9 dispatch reported is sticky ") + Row.Label);
 			Expect(!bConfirmedBefore || Tracker.DispatchConfirmed(), std::string("P9 dispatch confirmed is sticky ") + Row.Label);
+		}
+	}
+
+	// P10 directly: every check result, the legacy-key switch both ways, and workflowRunId never reaching display.
+	{
+		Expect(!bStatusRouteRequiresLegacyRunId, "P10 the legacy-key switch is off until #407 ships legacyRunId");
+		Expect(StatusRouteWorkflowRunIdMaxBytes == 128, "P10 workflowRunId cap");
+		FStatusAnswer Today;
+		Today.HttpStatus = 200;
+		Today.bHasData = true;
+		Today.Vocabulary = EStatusVocabulary::StatusRoute;
+		Today.ClientRunId = ClientOk;
+		Today.ServerRunId = ServerS1;
+		Today.Status = "held";
+		FStatusRouteView View;
+		Expect(CheckStatusRouteAnswer(Today, View) == EStatusRouteCheck::Ok && View.LegacyRunId == ServerS1 && View.bLegacyFromServerRunIdOnly,
+			"P10 interim: no legacyRunId key, run: serverRunId is the legacy pin");
+		Expect(CheckStatusRouteAnswer(Today, View, true) == EStatusRouteCheck::MissingLegacyRunId, "P10 switch on: a missing legacyRunId key is a fault");
+		FStatusAnswer Shipped = Today;
+		Shipped.LegacyRunIdSlot = EJsonSlot::String;
+		Shipped.LegacyRunId = ServerS1;
+		Expect(CheckStatusRouteAnswer(Shipped, View, true) == EStatusRouteCheck::Ok && View.LegacyRunId == ServerS1 && !View.bLegacyFromServerRunIdOnly,
+			"P10 switch on: legacyRunId == serverRunId");
+		FStatusAnswer NewRun = Today;
+		NewRun.ServerRunId = ClientOk;
+		NewRun.LegacyRunIdSlot = EJsonSlot::Null;
+		Expect(CheckStatusRouteAnswer(NewRun, View, true) == EStatusRouteCheck::Ok && View.LegacyRunId.empty(), "P10 switch on: null legacyRunId, serverRunId == wljRunId");
+		NewRun.LegacyRunIdSlot = EJsonSlot::Absent;
+		Expect(CheckStatusRouteAnswer(NewRun, View) == EStatusRouteCheck::Ok && View.LegacyRunId.empty(), "P10 interim: wlj serverRunId, no key, no legacy pin");
+		Expect(CheckStatusRouteAnswer(NewRun, View, true) == EStatusRouteCheck::MissingLegacyRunId, "P10 switch on: wlj serverRunId, no key");
+		const auto CheckOne = [&](const FStatusAnswer& Answer, EStatusRouteCheck Expected, const char* Label) {
+			FStatusRouteView Out;
+			const EStatusRouteCheck Got = CheckStatusRouteAnswer(Answer, Out);
+			Expect(Got == Expected, std::string("P10 check ") + Label + ": " + StatusRouteCheckName(Got));
+			Expect(Got == EStatusRouteCheck::Ok || (Out.State == EStatusRouteState::Unknown && Out.LegacyRunId.empty()),
+				std::string("P10 a failed check exposes nothing ") + Label);
+		};
+		FStatusAnswer Case = Today;
+		Case.bWrongFieldType = true; CheckOne(Case, EStatusRouteCheck::WrongFieldType, "wrong_type");
+		Case = Today; Case.ClientRunId = ""; CheckOne(Case, EStatusRouteCheck::BadWljRunId, "no_wlj");
+		Case = Today; Case.ClientRunId = WljUpper; CheckOne(Case, EStatusRouteCheck::BadWljRunId, "upper_wlj");
+		Case = Today; Case.ServerRunId = ServerBad; CheckOne(Case, EStatusRouteCheck::BadServerRunId, "bad_server");
+		Case = Today; Case.ServerRunId = ServerJuliusKey; CheckOne(Case, EStatusRouteCheck::BadServerRunId, "julius_key_server");
+		Case = Today; Case.LegacyRunIdSlot = EJsonSlot::String; Case.LegacyRunId = ClientOk; CheckOne(Case, EStatusRouteCheck::BadLegacyRunId, "wlj_legacy");
+		Case = Today; Case.LegacyRunIdSlot = EJsonSlot::String; Case.LegacyRunId = ""; CheckOne(Case, EStatusRouteCheck::BadLegacyRunId, "empty_legacy");
+		Case = Today; Case.LegacyRunIdSlot = EJsonSlot::String; Case.LegacyRunId = ServerS2; CheckOne(Case, EStatusRouteCheck::RunIdsDisagree, "legacy_other");
+		Case = Today; Case.LegacyRunIdSlot = EJsonSlot::Null; CheckOne(Case, EStatusRouteCheck::RunIdsDisagree, "null_legacy_run_server");
+		Case = Today; Case.ServerRunId = ClientOther; CheckOne(Case, EStatusRouteCheck::RunIdsDisagree, "other_wlj_server");
+		Case = Today; Case.Status = "running"; CheckOne(Case, EStatusRouteCheck::BadState, "running");
+		Case = Today; Case.Status = "completed"; CheckOne(Case, EStatusRouteCheck::BadState, "completed");
+		Case = Today; Case.Status = "failed"; Case.Cause = "operator_window_expired"; CheckOne(Case, EStatusRouteCheck::BadCause, "room_cause");
+		Case = Today; Case.Cause = BridgeOperatorWindowExpiredCause; CheckOne(Case, EStatusRouteCheck::CauseStateMismatch, "expired_on_held");
+		Case = Today; Case.Status = "failed"; Case.Cause = BridgeOperatorWindowExpiredCause; CheckOne(Case, EStatusRouteCheck::Ok, "expired_on_failed");
+		Case = Today; Case.WorkflowRunIdSlot = EJsonSlot::String; Case.WorkflowRunId = "x"; CheckOne(Case, EStatusRouteCheck::Ok, "workflow_one_byte");
+		const std::string AtCap(StatusRouteWorkflowRunIdMaxBytes, 'a');
+		const std::string OverCap(StatusRouteWorkflowRunIdMaxBytes + 1, 'a');
+		Case = Today; Case.WorkflowRunIdSlot = EJsonSlot::String; Case.WorkflowRunId = AtCap; CheckOne(Case, EStatusRouteCheck::Ok, "workflow_at_cap");
+		Case = Today; Case.WorkflowRunIdSlot = EJsonSlot::String; Case.WorkflowRunId = OverCap; CheckOne(Case, EStatusRouteCheck::BadWorkflowRunId, "workflow_over_cap");
+		Case = Today; Case.WorkflowRunIdSlot = EJsonSlot::String; Case.WorkflowRunId = "run\x7f"; CheckOne(Case, EStatusRouteCheck::BadWorkflowRunId, "workflow_del");
+		Case = Today; Case.WorkflowRunIdSlot = EJsonSlot::String; Case.WorkflowRunId = "\xC3\xA9"; CheckOne(Case, EStatusRouteCheck::BadWorkflowRunId, "workflow_non_ascii");
+		Case = Today; Case.WorkflowRunIdSlot = EJsonSlot::Null; CheckOne(Case, EStatusRouteCheck::Ok, "workflow_null");
+		// workflowRunId is never traced or displayed.
+		FMissionProgressTracker Tracker = AdmittedTracker();
+		FStatusAnswer WithWorkflow = Today;
+		WithWorkflow.WorkflowRunIdSlot = EJsonSlot::String;
+		WithWorkflow.WorkflowRunId = "18843025517";
+		Tracker.RecordPollAnswer(WithWorkflow);
+		Expect(Tracker.Current() == EMissionProgress::AdmittedHeld, "P10 workflowRunId accepted");
+		for (const FProgressTrace& Event : Tracker.Trace())
+		{
+			Expect(FormatProgressTrace(Event).find("18843025517") == std::string::npos, "P10 workflowRunId never traced");
 		}
 	}
 

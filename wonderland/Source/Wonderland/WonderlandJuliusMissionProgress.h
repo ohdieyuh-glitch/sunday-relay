@@ -43,6 +43,14 @@
 //     a room word that never reached code. AWAITING_OPERATOR_WINDOW_MS = 360 min from Accepted (receivedAt), open
 //     at exactly 360 min, expired 1 ms later. The status body is a top-level object (no data wrapper; only the
 //     dispatch answer is wrapped); the "data." names in this file are the wrapper's FStatusAnswer fields.
+//   STATUS ROUTE (contract v0.1 4.2, #407 candidate acc96ab0 statusBody, checked against its patch): a top-level body
+//     {wljRunId, serverRunId, state, cause?, updatedAt} plus, per BRIDGE's v0.1 Clarifications, legacyRunId,
+//     dispatchedAt and workflowRunId once #407 ships them. state is one of exactly held, reserved, awaiting_operator,
+//     ledger_unwritten, interrupted, failed, dispatched, dispatch_failed, already_spent, unknown
+//     (WONDERLAND_STATUS_STATES); cause is null or one of WONDERLAND_STATUS_CAUSES; terminal are ledger_unwritten, interrupted, failed,
+//     dispatch_failed, already_spent (WONDERLAND_STATUS_TERMINAL_STATES); unknown is not terminal. The wrapper tags
+//     it EStatusVocabulary::StatusRoute; CheckStatusRouteAnswer (P10) refuses anything else, and the tracker maps it
+//     (P11). running / completed / expired are not route states and stay refused.
 //   So the wrapper tags every status answer with the vocabulary it came from (EStatusVocabulary): Admission for an
 //   answer shaped like the dispatch data object, JuliusRun for a JuliusRunView, Unknown for anything else. Every
 //   status string is matched by its exact bytes inside its own vocabulary, never by case-folding, prefix or free
@@ -115,7 +123,29 @@
 //      Admission answer can move the state back to AdmittedHeld, nor to NotStarted or DispatchFailed: it is only
 //      traced (admission_answer_logged), and a later dispatchedAt never restarts the window. data.cause ==
 //      BridgeOperatorWindowExpiredCause (before any dispatch or Julius status) is NotStarted, whatever data.state
-//      says, so the operator window's expiry is never shown as DispatchFailed.
+//      says, so the operator window's expiry is never shown as DispatchFailed. EXCEPTION (P11): a StatusRoute
+//      dispatch_failed or already_spent IS applied after a reported dispatch (the route's only legal successors of
+//      "dispatched"), so a failed dispatch ends DispatchFailed or AlreadySpent, never PollLimitReached.
+//   P10 A STATUS ROUTE ANSWER IS CHECKED WHOLE BEFORE ANYTHING IS APPLIED (CheckStatusRouteAnswer). A failed check is
+//      traced status_rejected, counted as a poll, and changes nothing (fail closed: conclude nothing, keep the
+//      hold / dispatch window running). It fails on: a known field of the wrong JSON type; a wljRunId that is not a
+//      canonical wlj_; a serverRunId that is neither run:<24 hex> nor a canonical wlj_; a legacyRunId that is not
+//      null or run:<24 hex>; Q21 broken (non-null legacyRunId: serverRunId == legacyRunId; null legacyRunId:
+//      serverRunId == wljRunId; serverRunId absent: skipped); a state outside the closed list (exact bytes); a cause
+//      outside RUN_ID_ALREADY_SPENT, SPENT_TAG_UNVERIFIED, gh_workflow_run_failed, AWAITING_OPERATOR_EXPIRED, or
+//      AWAITING_OPERATOR_EXPIRED on any state but "failed" (v0.1 Clarification 2); a workflowRunId that is not null
+//      or 1-StatusRouteWorkflowRunIdMaxBytes of printable ASCII without space (opaque, never displayed). LEGACY PIN
+//      (v0.1 Clarification 1): a run: serverRunId with no legacyRunId key is the legacy pin, exactly as if
+//      legacyRunId == serverRunId; with bStatusRouteRequiresLegacyRunId (false until #407 ships legacyRunId) a
+//      missing key is a fault. Identity first: before the check, any named id that is not this run is RunIdMismatch
+//      (P2); after it, the answer's legacy pin (empty for null) must equal the tracker's pin when that is run:<24
+//      hex>, or be null when the pin is this client's own wlj_ id, else RunIdMismatch.
+//   P11 STATUS ROUTE MAPPING. After any JuliusRun status: only traced (P8). dispatch_failed -> DispatchFailed and
+//      already_spent -> AlreadySpent, also after a reported dispatch. Otherwise after a reported dispatch: dispatched
+//      follows P9, anything else is only traced. Before a reported dispatch: held, reserved, awaiting_operator ->
+//      AdmittedHeld; dispatched -> P9; failed + AWAITING_OPERATOR_EXPIRED -> NotStarted (neutral, never a failure,
+//      never spend); failed, interrupted, ledger_unwritten -> DispatchFailed; unknown changes nothing (never terminal,
+//      never a move back to Waiting).
 //
 // WHAT IS NOT HERE: no HTTP, no JSON parsing, no logging sink, no clock, no Unreal. The wrapper measures WatchedMs,
 // parses the answer into FStatusAnswer and writes the trace lines (FormatProgressTrace) to its own log.
@@ -123,6 +153,7 @@
 
 #include "WonderlandJuliusMissionLogic.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -211,6 +242,8 @@ namespace WonderlandJuliusMissionLogic
 		AnswerInvalid,
 		/** Terminal. NextPoll ran out (P5). The run may still be going; the client has stopped watching it. */
 		PollLimitReached,
+		/** Terminal. StatusRoute already_spent: this run id was already used; nothing new was started (P11). */
+		AlreadySpent,
 	};
 
 	bool IsTerminalProgress(EMissionProgress State);
@@ -224,12 +257,24 @@ namespace WonderlandJuliusMissionLogic
 		JuliusRun,
 		/** Anything else, including a status endpoint nobody has defined yet. Always Waiting. */
 		Unknown,
+		/** Contract v0.1 4.2 status route: top-level body, lowercase "state" (P10, P11). */
+		StatusRoute,
+	};
+
+	/** How an optional JSON key arrived. A wrong JSON type is FStatusAnswer::bWrongFieldType instead. */
+	enum class EJsonSlot : std::uint8_t
+	{
+		Absent,
+		Null,
+		String,
 	};
 
 	/**
 	 * The exact-bytes map from a status string to a progress state. Never returns AwaitingDispatchAnswer, Refused,
 	 * DispatchUnconfirmed, NotStarted, RunIdMismatch, AnswerInvalid or PollLimitReached (those need more than the
-	 * status string); an unrecognised string, a case variant, padding or an empty string is Waiting.
+	 * status string); an unrecognised string, a case variant, padding or an empty string is Waiting. StatusRoute
+	 * words map without their cause (failed + AWAITING_OPERATOR_EXPIRED is NotStarted only in the tracker, P11);
+	 * unrecognised StatusRoute words never reach the tracker's map (P10 refuses them first).
 	 */
 	EMissionProgress ProgressFromStatus(EStatusVocabulary Vocabulary, std::string_view Status);
 
@@ -254,7 +299,56 @@ namespace WonderlandJuliusMissionLogic
 		std::string_view Cause;
 		/** The wrapper's own UTC clock (ms since 1970) when this answer arrived; 0 when unknown (P9). */
 		std::uint64_t ReceivedUtcMs = 0;
+		/** StatusRoute: legacyRunId (P10). LegacyRunId is the string when LegacyRunIdSlot is String. */
+		EJsonSlot LegacyRunIdSlot = EJsonSlot::Absent;
+		std::string_view LegacyRunId;
+		/** StatusRoute: workflowRunId, opaque, never displayed or traced (P10). */
+		EJsonSlot WorkflowRunIdSlot = EJsonSlot::Absent;
+		std::string_view WorkflowRunId;
+		/**
+		 * StatusRoute: a known field (wljRunId, serverRunId, legacyRunId, state, cause, dispatchedAt, workflowRunId) had
+		 * a JSON type other than string (or null where null is allowed). Always a P10 fault.
+		 */
+		bool bWrongFieldType = false;
 	};
+
+	/* ---------------------------------------------------------------- the status route, P10 */
+
+	/**
+	 * v0.1 Clarification 1: false while #407 does not send legacyRunId (a run: serverRunId with no legacyRunId key is
+	 * the legacy pin); set true once it ships, and a missing legacyRunId key becomes a P10 fault. The one switch.
+	 */
+	inline constexpr bool bStatusRouteRequiresLegacyRunId = false;
+	/** workflowRunId is opaque: at most this many bytes of printable ASCII without space (P10). */
+	inline constexpr std::size_t StatusRouteWorkflowRunIdMaxBytes = 128;
+
+	enum class EStatusRouteState : std::uint8_t
+	{
+		Held, Reserved, AwaitingOperator, LedgerUnwritten, Interrupted, Failed, Dispatched, DispatchFailed, AlreadySpent,
+		Unknown,
+	};
+
+	enum class EStatusRouteCheck : std::uint8_t
+	{
+		Ok, WrongFieldType, BadWljRunId, BadServerRunId, BadLegacyRunId, MissingLegacyRunId, RunIdsDisagree, BadState,
+		BadCause, CauseStateMismatch, BadWorkflowRunId,
+	};
+	const char* StatusRouteCheckName(EStatusRouteCheck Check);
+
+	struct FStatusRouteView
+	{
+		EStatusRouteState State = EStatusRouteState::Unknown;
+		/** failed + AWAITING_OPERATOR_EXPIRED. */
+		bool bOperatorWindowExpired = false;
+		/** The answer's legacy pin: run:<24 hex>, or empty for null (a new wlj_ run). */
+		std::string_view LegacyRunId;
+		/** True when it came from serverRunId because the legacyRunId key was absent (Clarification 1). */
+		bool bLegacyFromServerRunIdOnly = false;
+	};
+
+	/** P10. Pure; checks only the answer itself (the tracker compares it with the pin). */
+	EStatusRouteCheck CheckStatusRouteAnswer(const FStatusAnswer& Fields, FStatusRouteView& Out,
+		bool bRequireLegacyRunId = bStatusRouteRequiresLegacyRunId);
 
 	/** What a recorded answer did. Every value is traced; none of them sends anything. */
 	enum class EProgressEvent : std::uint8_t
@@ -287,6 +381,8 @@ namespace WonderlandJuliusMissionLogic
 		PollLimitReached,
 		/** NextPollStep ran out of the hold window while AdmittedHeld: NotStarted (P5). */
 		HoldWindowExpired,
+		/** P10: a StatusRoute answer failed CheckStatusRouteAnswer. Counted; the state does not change. */
+		StatusRejected,
 	};
 
 	struct FProgressTrace
@@ -417,6 +513,8 @@ namespace WonderlandJuliusMissionLogic
 		 * dispatch, logged after (P8, P9); "dispatched" and the operator-window cause are handled here (P9).
 		 */
 		EMissionProgress ApplyAdmission(EProgressEvent Event, const FStatusAnswer& Fields);
+		/** P10, P11: a readable StatusRoute answer whose named ids passed P2. */
+		EMissionProgress ApplyStatusRoute(const FStatusAnswer& Fields);
 		/** P2: an answer's run id names the pinned run: the pin itself, or (when enabled) this client's own wlj_ id. */
 		bool NamesPinnedRun(std::string_view NamedServerRunId) const;
 
