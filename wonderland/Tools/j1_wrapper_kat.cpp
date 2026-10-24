@@ -240,18 +240,36 @@ namespace
 
 	std::string BridgeStatusBody(const std::string& RunId, const char* State, const char* ServerRun, const char* DispatchedAt, const char* Cause)
 	{
-		std::string Body = "{\"data\":{\"mode\":\"admission\",\"runId\":\"";
+		// Contract v0.1 status route: top-level. A run: server id is the legacy pin; a wlj_ server id
+		// (this client's own) carries legacyRunId null.
+		const bool bLegacyServer = std::strncmp(ServerRun, "run:", 4) == 0;
+		std::string Body = "{\"wljRunId\":\"";
 		Body += RunId;
 		Body += "\",\"serverRunId\":\"";
 		Body += ServerRun;
-		Body += "\",\"state\":\"";
+		Body += "\",\"legacyRunId\":";
+		if (bLegacyServer)
+		{
+			Body += "\"";
+			Body += ServerRun;
+			Body += "\"";
+		}
+		else
+		{
+			Body += "null";
+		}
+		Body += ",\"workflowRunId\":null,\"state\":\"";
 		Body += State;
-		Body += "\"";
+		Body += "\",\"dispatchedAt\":";
 		if (DispatchedAt != nullptr)
 		{
-			Body += ",\"dispatchedAt\":\"";
+			Body += "\"";
 			Body += DispatchedAt;
 			Body += "\"";
+		}
+		else
+		{
+			Body += "null";
 		}
 		if (Cause != nullptr)
 		{
@@ -259,7 +277,7 @@ namespace
 			Body += Cause;
 			Body += "\"";
 		}
-		Body += "}}";
+		Body += "}";
 		return Body;
 	}
 
@@ -1031,13 +1049,24 @@ int main()
 		Expect(Rig.Session.Dispatch("demo-mission", "").bSent, "l6_cause_dispatch");
 		const std::string Run = Rig.Session.RunId();
 		Rig.Session.OnDispatchHttp(Http(202, AdmissionBody(Run, "ADMISSION_HELD", Server, false, false), false));
-		Rig.Session.OnStatusHttp(Http(200, BridgeStatusBody(Run, "awaiting_operator", Server, nullptr, "operator_window_expired"), false));
+		Rig.Session.OnStatusHttp(Http(200, BridgeStatusBody(Run, "failed", Server, nullptr, "AWAITING_OPERATOR_EXPIRED"), false));
 		Expect(Rig.Session.UiState() == EJuliusUiState::NotStarted, "l6_operator_window_expired_token");
 		Expect(UiStateToken(Rig.Session.UiState()) == std::string("not_started"), "l6_not_started_token_is_neutral");
 		Expect(Rig.Session.PlayerLabel() == ProgressDisplayLabel(EMissionProgress::NotStarted), "l6_not_started_uses_logic_label");
 		Expect(Rig.Session.UiState() != EJuliusUiState::Failed, "l6_not_started_is_not_failed");
 		Expect(Rig.Session.UiState() != EJuliusUiState::Refused, "l6_not_started_is_not_refused");
 		Expect(!Rig.Session.IsFailClosed(), "l6_not_started_is_not_fail_closed");
+	}
+
+	{
+		FRig Rig(1);
+		Expect(Rig.Session.Dispatch("demo-mission", "").bSent, "l6_wlj_server_dispatch");
+		const std::string Run = Rig.Session.RunId();
+		Rig.Session.OnDispatchHttp(Http(202, AdmissionBody(Run, "ADMISSION_HELD", Run.c_str(), false, false), false));
+		Rig.Session.OnStatusHttp(Http(200, BridgeStatusBody(Run, "awaiting_operator", Run.c_str(), nullptr, nullptr), false));
+		Expect(Rig.Session.UiState() == EJuliusUiState::AdmittedWaiting, "l6_wlj_server_run_id_is_held");
+		Expect(Rig.Session.PlayerLabel() == ProgressDisplayLabel(EMissionProgress::AdmittedHeld), "l6_wlj_server_run_id_uses_logic_label");
+		Expect(PollHoldWatchMs == 21720000ull, "l6_hold_window_is_six_hours_plus_one_slow_wait");
 	}
 
 	{
