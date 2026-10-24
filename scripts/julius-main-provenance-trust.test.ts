@@ -80,10 +80,11 @@ describe('the pinned reviewer key', () => {
     expect(exactFingerprintMatch(PIN.slice(0, 63), PIN)).toBe(false);
   });
 
-  it('matches the committed public key and the same bytes at the checkpoint, its parent, and f539cab2', () => {
-    for (const rev of ['HEAD', TRUSTED_CHECKPOINT_SHA, TRUSTED_CHECKPOINT_BASE, 'f539cab2530b7733bd987068be676308440e04a5', '689d2be92c3158ba4a59883ed4f6cc02f700660b']) {
+  it('matches the public key in the worktree; earlier commits still carry the previous key', () => {
+    expect(reviewerKeyPinRefusal(REAL_PEM, PIN)).toBeNull();
+    for (const rev of [TRUSTED_CHECKPOINT_SHA, TRUSTED_CHECKPOINT_BASE, 'f539cab2530b7733bd987068be676308440e04a5', '689d2be92c3158ba4a59883ed4f6cc02f700660b']) {
       const pem = git(['show', `${rev}:.github/julius-landing/reviewer-ed25519.pub`]);
-      expect(reviewerKeyPinRefusal(pem, PIN), rev).toBeNull();
+      expect(reviewerKeyPinRefusal(pem, PIN)?.reason, rev).toMatch(/not the pinned reviewer key/u);
     }
   });
 
@@ -140,11 +141,13 @@ describe('the recorded range stays non-provenant until a signature covers it', (
 describe('JULIUS-CHECKPOINT-V1', () => {
   const text = canonicalCheckpointAttestation();
 
-  it('the committed unsigned text is exactly the canonical attestation and is not a signature', () => {
-    expect(unsignedText).toBe(text);
+  it('the committed unsigned text is the historical attestation and is not a signature', () => {
     expect(unsignedText.startsWith(`${CHECKPOINT_HEADER}\n`)).toBe(true);
+    expect(unsignedText).toContain('key-spki-sha256: b0b8e29b3efff5936dd51a54617ca8bda1b94e75557339821d7d00a98364d13a');
+    expect(unsignedText).not.toBe(text);
     expect(unsignedText).not.toMatch(/signature/iu);
-    expect(parseCheckpointAttestation(unsignedText).problems).toEqual([]);
+    expect(parseCheckpointAttestation(unsignedText).problems.join('\n')).toMatch(/key-spki-sha256 is not the pinned reviewer key 7eacf984b77022f9c3719760052b9eaeab0c5fcabe8058050bdc999e365a845c/u);
+    expect(parseCheckpointAttestation(text).problems).toEqual([]);
   });
 
   it('refuses a wrong tree, a reorder, an extra commit, a missing commit, the wrong key, another repo, and a short prefix', () => {
@@ -181,7 +184,7 @@ describe('JULIUS-CHECKPOINT-V1', () => {
     });
     expect(chain.accepted).toBe(false);
     expect(chain.tipProvenant).toBe(false);
-    expect(chain.reason).toContain('no signed checkpoint attestation covers this chain');
+    expect(chain.reason).toMatch(/key-spki-sha256 is not the pinned reviewer key/u);
   });
 });
 
@@ -206,10 +209,10 @@ describe('adversarial refusals', () => {
     ...over,
   } as Parameters<typeof evaluateMainProvenance>[0]);
 
-  it('the real key and the real landing at the checkpoint are provenant', () => {
+  it('the checkpoint landing was signed by the previous key, so it is not provenant under this pin', () => {
     const result = historical();
-    expect(result.verdict, result.reason).toBe('provenant');
-    expect(result.via).toBe('signed-landing');
+    expect(result.verdict, result.reason).toBe('unprovenanced');
+    expect(result.reason).toMatch(/does not verify against the reviewer key committed at the parent/u);
     const chain = evaluateTrustChain({
       tipSha: TRUSTED_CHECKPOINT_SHA,
       tipTree: TRUSTED_CHECKPOINT_TREE,
@@ -323,7 +326,7 @@ describe('adversarial refusals', () => {
       externalAnchor: PIN,
     });
     expect(covered.tipProvenant).toBe(false);
-    expect(covered.reason).toContain('does not verify');
+    expect(covered.reason).toMatch(/key-spki-sha256 is not the pinned reviewer key/u);
   });
 });
 
@@ -395,7 +398,7 @@ describe('the checkpoint workflow and the working tree', () => {
     const checkpoint = '10aedd11643a1d717311b5824d54e863aa94d763';
     const livePath = join(ROOT, `.github/julius-landing/checkpoints/${checkpoint}.txt`);
     const live = parseCheckpointAttestation(readFileSync(livePath, 'utf8'));
-    expect(live.problems).toEqual([]);
+    expect(live.problems.join('\n')).toMatch(/key-spki-sha256 is not the pinned reviewer key 7eacf984b77022f9c3719760052b9eaeab0c5fcabe8058050bdc999e365a845c/u);
     expect(live.fields.checkpoint).toBe(checkpoint);
     const attested = live.fields.tcb.map((row) => row.path);
     const added = [
@@ -419,6 +422,7 @@ describe('the checkpoint workflow and the working tree', () => {
       'scripts/julius-main-provenance.mjs',
       'scripts/julius-main-provenance.d.mts',
       '.github/julius-landing/land-lib.mjs',
+      '.github/julius-landing/reviewer-ed25519.pub',
       '.github/workflows/julius-land.yml',
       '.github/workflows/julius-accept-main.yml',
     ]);
