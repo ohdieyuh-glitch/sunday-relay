@@ -714,3 +714,4 @@ function parseClaim(value: unknown): ClaimEvent {
     dispatchError,
     halt: state === 'dispatched' ? null : recordedHalt,
   };
+}
