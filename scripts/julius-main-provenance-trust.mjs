@@ -28,6 +28,31 @@
  * unsigned tree. Do not squash the installer onto an older main: the named
  * checkpoint would not be an ancestor and the gate fails closed.
  *
+ * Installer lineage. The attested checkpoint is the floor. Installer status is
+ * not a path check that any later commit can satisfy. It is the contiguous
+ * run of exact-path commits that starts at the checkpoint and ends at the
+ * commit that introduces the attestation `.sig`. Every path in that run is in
+ * TRUSTED_COMPUTING_BASE, is one checkpoint attestation file, or is one of
+ * CHECKPOINT_INSTALLER_EXACT_PATHS. There is no wildcard. The run counts only
+ * when the attestation signature verifies. A companion-only commit after the
+ * `.sig`, or an exact-path commit with no signature commit in the run, is
+ * unprovenanced. The next commit after that run has to be a signed landing
+ * or a signed G6.
+ *
+ * A signed landing is a JULIUS-CLEARANCE-V1 block. The pinned key must verify
+ * it. Its repo, pull request, head, tree and base are read only from that
+ * text and must bind to the commit being verified: repo is this repository,
+ * tree is the commit's tree, base is its single parent, and the head is the
+ * cleared commit (its tree and parent are checked when that object is in the
+ * checkout). The validity window is enforced at landing time, against the
+ * commit's committer timestamp, not against the clock of a later walk. A new
+ * landing whose committer time is outside that window, or more than five
+ * minutes ahead of the verifier, is refused. Its nonce may be used once on
+ * the first-parent chain, and only after the signature verifies. The walk
+ * does not recompute `bot-comments-sha256`: that digest is inside the signed
+ * clearance, and the pull-request conversation is not available here. The
+ * lander checks the live digest when it creates the landing.
+ *
  * TRUSTED COMPUTING BASE. A change to any of these files changes what the gate
  * trusts. Such a change is unprovenanced unless a signed G6 installer, or a
  * signed checkpoint attestation that names the resulting commit and tree,
@@ -38,6 +63,13 @@ import { createHash, createPublicKey, verify } from 'node:crypto';
 import { readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+let landingLibPromise;
+function landingLib() {
+  // Literal specifier. A computed import is invisible to the repository boundary scan.
+  if (!landingLibPromise) landingLibPromise = import('../.github/julius-landing/land-lib.mjs');
+  return landingLibPromise;
+}
 
 export const TRUSTED_CHECKPOINT_SHA = '2528ac5c0f0d4303051123a7592ef18e3552ba74';
 export const TRUSTED_CHECKPOINT_TREE = '328469e79cd25339e16402f5fac8895c3669b4e1';
@@ -111,6 +143,29 @@ export const HISTORICAL_TCB = Object.freeze([
 ]);
 
 const ATTESTATION_FILE = /^\.github\/julius-landing\/checkpoints\/[0-9a-f]{40}\.(txt|sig)$/iu;
+
+/**
+ * Exact companion files of the founder installer, besides the trusted
+ * computing base and the checkpoint attestation files. One path each.
+ * A glob would let a later commit carry arbitrary code.
+ */
+export const CHECKPOINT_INSTALLER_EXACT_PATHS = Object.freeze([
+  '.github/julius-landing/README.md',
+  'docs/provenance/checkpoint-2528ac5c-f539cab2.unsigned.txt',
+  'scripts/julius-landing.test.ts',
+  'scripts/julius-main-provenance-signed.test.ts',
+  'scripts/julius-main-provenance-trust-liveness.test.ts',
+  'scripts/julius-main-provenance-trust.test.ts',
+]);
+
+const CLEARANCE_FUTURE_SKEW_MS = 5 * 60 * 1000;
+
+/** The first-parent walk refuses rather than trusting a prefix of a longer chain. */
+export const FIRST_PARENT_WALK_CAP = 30;
+
+export function firstParentWalkCapReason(checkpoint) {
+  return `the first-parent walk stopped after ${FIRST_PARENT_WALK_CAP} commits without reaching checkpoint ${checkpoint}. Refusing.`;
+}
 
 const SHA = /^[0-9a-f]{40}$/u;
 
@@ -352,10 +407,34 @@ function signatureVerifies(text, signatureB64, material) {
   }
 }
 
-/** A diff that only touches the trusted computing base or a checkpoint attestation file. The lander still refuses it. */
+/** A diff that only touches the installer allowlist. The lander still refuses it. */
 export function isCheckpointInstallerDiff(paths) {
   if (!Array.isArray(paths) || paths.length === 0) return false;
-  return paths.every((path) => typeof path === 'string' && (TRUSTED_COMPUTING_BASE.includes(path) || ATTESTATION_FILE.test(path)));
+  const allowed = new Set([...TRUSTED_COMPUTING_BASE, ...CHECKPOINT_INSTALLER_EXACT_PATHS]);
+  return paths.every((path) => typeof path === 'string' && path !== '' && !/[*?[\]{}]/u.test(path) && (allowed.has(path) || ATTESTATION_FILE.test(path)));
+}
+
+function introducesAttestationSignature(commit) {
+  return Array.isArray(commit?.paths) && commit.paths.some((path) => typeof path === 'string' && ATTESTATION_FILE.test(path) && path.toLowerCase().endsWith('.sig'));
+}
+
+/**
+ * Installer status is the signed lineage only: a contiguous exact-path prefix
+ * that ends at the commit introducing the attestation signature. Paths alone,
+ * or a later companion commit, do not qualify. An unsigned attestation qualifies nothing.
+ */
+export function markInstallerLineage(commits, attestationSigned) {
+  if (!attestationSigned || !Array.isArray(commits)) return Array.isArray(commits) ? commits : [];
+  let signatureAt = -1;
+  for (let index = 0; index < commits.length; index += 1) {
+    if (!isCheckpointInstallerDiff(commits[index]?.paths)) break;
+    if (introducesAttestationSignature(commits[index])) {
+      signatureAt = index;
+      break;
+    }
+  }
+  if (signatureAt < 0) return commits;
+  return commits.map((commit, index) => (index <= signatureAt ? { ...commit, installerLineage: true } : commit));
 }
 
 /**
@@ -378,14 +457,14 @@ export function classifyCommit(commit) {
       reason: `${known.classification} (#${known.pr}); not provenant until a signed ${CHECKPOINT_HEADER} attestation covers it`,
     };
   }
-  if (isCheckpointInstallerDiff(commit?.paths)) {
+  if (commit?.installerLineage === true) {
     return {
       sha: commit.sha,
       tree: commit.tree,
       classification: 'installer',
       provenant: false,
       touchesVerifier: true,
-      reason: 'installer commit for the checkpoint attestation; not a signed landing',
+      reason: 'installer commit in the signed checkpoint lineage',
     };
   }
   if (commit?.signedLanding === true) {
@@ -429,7 +508,6 @@ export function evaluateTrustChain(input) {
   if (commits.length === 0) {
     return { accepted: false, tipProvenant: false, reason: 'the first-parent chain from the trusted checkpoint was not supplied', classifications: [] };
   }
-  const classifications = commits.map((commit) => classifyCommit(commit));
   const text = input?.attestationText;
   const parsed = typeof text === 'string' ? parseCheckpointAttestation(text) : { problems: ['no JULIUS-CHECKPOINT-V1 attestation was supplied'], fields: {} };
   const material = reviewerKeyMaterial(input?.reviewerKeyPem);
@@ -442,6 +520,7 @@ export function evaluateTrustChain(input) {
   const nonceProblem = signatureOk ? attestationNonceProblems(parsed.fields) : null;
   const windowProblem = signatureOk && typeof input?.now === 'number' ? judgeAttestationWindow(parsed.fields, input.now) : null;
   const signed = signatureOk && nonceProblem === null && windowProblem === null;
+  const classifications = markInstallerLineage(commits, signed).map((commit) => classifyCommit(commit));
   // A signed attestation covers a prefix that starts at the trusted checkpoint.
   // Everything after that prefix has to be a signed landing or a signed G6.
   // Coverage does not make a founder squash provenant.
@@ -507,9 +586,10 @@ async function git(args, options = {}) {
   const { execFileSync } = await import('node:child_process');
   const stdio = ['ignore', 'pipe', 'pipe'];
   const cwd = options.cwd;
+  const env = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
   return options.encoding
-    ? execFileSync('git', args, { encoding: options.encoding, stdio, cwd })
-    : execFileSync('git', args, { stdio, cwd });
+    ? execFileSync('git', args, { encoding: options.encoding, stdio, cwd, env })
+    : execFileSync('git', args, { stdio, cwd, env });
 }
 
 function checkpointFileName(name) {
@@ -551,29 +631,147 @@ export function attestedCheckpointFloor(root = process.cwd(), env = process.env,
   return parsed.fields.checkpoint ?? null;
 }
 
-function clearanceFromLandingMessage(message) {
-  const text = String(message ?? '');
-  const begin = '-----BEGIN JULIUS LANDING-----';
-  const end = '-----END JULIUS LANDING-----';
-  const first = text.indexOf(begin);
-  if (first < 0 || text.indexOf(begin, first + begin.length) !== -1) return null;
-  const last = text.indexOf(end);
-  if (last < first) return null;
-  const block = text.slice(first, last).split('\n');
-  const clearanceLine = block.find((line) => line.startsWith('clearance-b64: '));
-  const signatureLine = block.find((line) => line.startsWith('signature-b64: '));
-  if (!clearanceLine || !signatureLine) return null;
-  const clearanceB64 = clearanceLine.slice('clearance-b64: '.length);
-  const signatureB64 = signatureLine.slice('signature-b64: '.length);
-  let clearance;
-  try { clearance = Buffer.from(clearanceB64, 'base64').toString('utf8'); } catch { return null; }
-  if (Buffer.from(clearance, 'utf8').toString('base64') !== clearanceB64) return null;
-  return { clearance, signatureB64 };
+function withSingleTrailingNewline(message) {
+  return `${String(message ?? '').replace(/\n+$/u, '')}\n`;
 }
 
-async function hardForbidden() {
-  const { HARD_FORBIDDEN_PATH } = await import('../.github/julius-landing/land-lib.mjs');
-  return HARD_FORBIDDEN_PATH;
+/** Clock check for a JULIUS-CLEARANCE-V1. `issued` may be up to five minutes ahead. Lifetime is at most 24 hours. */
+export function judgeClearanceWindow(fields, now, maxAgeMs = 24 * 60 * 60 * 1000) {
+  if (typeof now !== 'number' || !Number.isFinite(now)) return 'the clearance clock is not a finite timestamp';
+  const issued = Date.parse(fields?.issued ?? '');
+  const expires = Date.parse(fields?.expires ?? '');
+  if (Number.isNaN(issued) || Number.isNaN(expires)) return 'the clearance timestamps are not valid';
+  if (expires <= issued) return 'the clearance expires at or before it was issued';
+  if (expires - issued > maxAgeMs) return 'the clearance lifetime exceeds 24 hours';
+  if (now - issued < -CLEARANCE_FUTURE_SKEW_MS) return 'the clearance is not yet valid';
+  if (now > expires) return 'the clearance has expired';
+  return null;
+}
+
+/**
+ * A landing block authorizes this commit only when the signed clearance is
+ * well-formed, the pinned key verifies it, and repo, pull request, head, tree
+ * and base bind to this commit. The validity window is the commit's committer
+ * time. `seenNonces` records a nonce only after that signature verifies. A
+ * missing block is `absent`; anything else is a refusal. The signed
+ * `bot-comments-sha256` is not recomputed here: this walk has no pull-request
+ * conversation to digest.
+ */
+export async function judgeCommitLanding(commit, options = {}) {
+  const message = commit?.message;
+  if (typeof message !== 'string' || !message.includes('BEGIN JULIUS LANDING')) {
+    return { ok: false, absent: true, reason: 'no landing block' };
+  }
+  const { parseLandingCommitMessage, HARD_FORBIDDEN_PATH, EXCEPTION_ELIGIBLE, MAX_CLEARANCE_AGE_MS } = await landingLib();
+  const parsed = parseLandingCommitMessage(withSingleTrailingNewline(message));
+  const clearance = parsed.fields?.clearance;
+  if (parsed.problems.length > 0 || !clearance) {
+    return {
+      ok: false,
+      absent: false,
+      reason: `the landing block is not a JULIUS-CLEARANCE-V1 clearance: ${parsed.problems[0] ?? 'the clearance did not parse'}`,
+    };
+  }
+  const nonce = clearance.nonce;
+  const seen = options.seenNonces;
+  if (seen instanceof Set && seen.has(nonce)) {
+    return { ok: false, absent: false, nonce, reason: `the clearance nonce ${nonce} was already used on this first-parent chain` };
+  }
+  const pin = reviewerKeyPinRefusal(options.pem, options.anchor);
+  if (pin) return { ok: false, absent: false, nonce, reason: pin.reason };
+  const material = reviewerKeyMaterial(options.pem);
+  if (!material.key || !signatureVerifies(parsed.fields.clearanceText, parsed.fields.signatureB64, material)) {
+    return { ok: false, absent: false, nonce, reason: 'the landing signature does not verify against the pinned reviewer key' };
+  }
+  if (seen instanceof Set) seen.add(nonce);
+  const committerTime = typeof commit?.committerTime === 'number' && Number.isFinite(commit.committerTime) ? commit.committerTime : null;
+  if (committerTime === null) return { ok: false, absent: false, nonce, reason: 'the landing time could not be read' };
+  if (typeof options.now === 'number' && Number.isFinite(options.now) && committerTime > options.now + CLEARANCE_FUTURE_SKEW_MS) {
+    return { ok: false, absent: false, nonce, reason: 'the landing time is in the future' };
+  }
+  const windowProblem = judgeClearanceWindow(clearance, committerTime, MAX_CLEARANCE_AGE_MS);
+  if (windowProblem) return { ok: false, absent: false, nonce, reason: windowProblem };
+  if (clearance.tree !== commit?.tree) {
+    return {
+      ok: false,
+      absent: false,
+      nonce,
+      reason: `the reviewer signed tree ${clearance.tree} for pull request #${clearance.pr} (head ${clearance.head}), this commit carries ${commit?.tree ?? 'an unreadable tree'}`,
+    };
+  }
+  if (typeof commit?.parent !== 'string' || clearance.base !== commit.parent) {
+    return {
+      ok: false,
+      absent: false,
+      nonce,
+      reason: `the reviewer signed base ${clearance.base} for pull request #${clearance.pr} (head ${clearance.head}), this commit's parent is ${commit?.parent ?? 'unreadable'}`,
+    };
+  }
+  if (commit?.parentCount !== undefined && commit.parentCount !== 1) {
+    return { ok: false, absent: false, nonce, reason: `a signed landing has exactly one parent, this commit has ${commit.parentCount}` };
+  }
+  if (typeof commit?.headTree === 'string' && commit.headTree !== clearance.tree) {
+    return {
+      ok: false,
+      absent: false,
+      nonce,
+      reason: `the cleared head ${clearance.head} carries tree ${commit.headTree}, not the signed tree ${clearance.tree}`,
+    };
+  }
+  if (commit?.headParentCount !== undefined && commit.headParentCount !== 1) {
+    return { ok: false, absent: false, nonce, reason: `the cleared head ${clearance.head} is not one commit on the signed base` };
+  }
+  if (typeof commit?.headParent === 'string' && commit.headParent !== clearance.base) {
+    return {
+      ok: false,
+      absent: false,
+      nonce,
+      reason: `the cleared head ${clearance.head} sits on ${commit.headParent}, not the signed base ${clearance.base}`,
+    };
+  }
+  const paths = commit?.paths;
+  if (!Array.isArray(paths) || paths.length === 0 || !paths.every((path) => typeof path === 'string' && path !== '')) {
+    return { ok: false, absent: false, nonce, reason: 'the paths this landing changes could not be read completely' };
+  }
+  const exceptions = clearance['governed-exceptions'] === '-' ? [] : String(clearance['governed-exceptions']).split(',');
+  const governed = paths.filter((path) => HARD_FORBIDDEN_PATH.test(path)
+    || (EXCEPTION_ELIGIBLE.some((file) => file.toLowerCase() === path.toLowerCase()) && !exceptions.includes(path)));
+  if (governed.length > 0) {
+    return { ok: false, absent: false, nonce, reason: `a signed landing may not change founder-governed paths: ${governed.slice(0, 5).join(', ')}` };
+  }
+  return {
+    ok: true,
+    absent: false,
+    nonce,
+    pr: clearance.pr,
+    head: clearance.head,
+    reason: `signed landing for pull request #${clearance.pr} (head ${clearance.head}, tree ${clearance.tree}, base ${clearance.base}) in ${LANDING_REPO}`,
+  };
+}
+
+/**
+ * Mark a chain commit as a signed landing only after its own clearance verifies.
+ * A caller-supplied flag on an ancestor is not evidence.
+ */
+export async function annotateChainLandings(commits, options = {}) {
+  if (!Array.isArray(commits)) return commits;
+  const seen = options.seenNonces instanceof Set ? options.seenNonces : new Set();
+  const annotated = [];
+  for (const commit of commits) {
+    const judged = await judgeCommitLanding(commit, { ...options, seenNonces: seen });
+    if (!judged.ok) {
+      if (commit && Object.prototype.hasOwnProperty.call(commit, 'signedLanding')) {
+        const next = { ...commit };
+        delete next.signedLanding;
+        annotated.push(next);
+      } else {
+        annotated.push(commit);
+      }
+    } else {
+      annotated.push({ ...commit, signedLanding: true });
+    }
+  }
+  return annotated;
 }
 
 /** Worktree attestation bytes must be the blobs at HEAD. A dirty swap fails here. */
@@ -602,16 +800,98 @@ export async function attestationWorktreeMatchesHead(root = process.cwd()) {
   return { ok: true, reason: 'the checkpoint attestation files match HEAD' };
 }
 
-async function classifyWalkedCommit(commit, pem, anchor, forbidden) {
-  if (isCheckpointInstallerDiff(commit.paths)) return { ...commit, classification: 'installer' };
-  const block = clearanceFromLandingMessage(commit.message);
-  const material = reviewerKeyMaterial(pem);
-  const forbiddenHit = commit.paths.some((path) => forbidden.test(path));
-  if (block && !forbiddenHit && material.key && reviewerKeyPinRefusal(pem, anchor) === null && signatureVerifies(block.clearance, block.signatureB64, material)) {
-    return { ...commit, classification: 'signed-landing' };
+function commitObject(raw) {
+  const text = String(raw);
+  const split = text.indexOf('\n\n');
+  const header = split >= 0 ? text.slice(0, split) : text;
+  const message = split >= 0 ? text.slice(split + 2) : '';
+  const lines = header.split('\n');
+  const tree = lines.find((line) => line.startsWith('tree '))?.slice('tree '.length) ?? '';
+  const parents = lines.filter((line) => line.startsWith('parent ')).map((line) => line.slice('parent '.length));
+  const committer = lines.find((line) => line.startsWith('committer '));
+  const committerSeconds = /^committer .* (\d+) [+-]\d{4}$/u.exec(committer ?? '');
+  const committerTime = committerSeconds ? Number(committerSeconds[1]) * 1000 : undefined;
+  return { tree, message, parents, committerTime: Number.isFinite(committerTime) ? committerTime : undefined };
+}
+
+function pathsFromNameStatus(text) {
+  const paths = [];
+  for (const line of String(text).split('\n')) {
+    if (line === '') continue;
+    const parts = line.split('\t');
+    if (parts.length < 2) continue;
+    const status = parts[0];
+    if (status.startsWith('R') || status.startsWith('C')) {
+      for (const path of parts.slice(1)) if (path !== '') paths.push(path);
+    } else if (parts[1] !== '') {
+      paths.push(parts[1]);
+    }
   }
+  return paths;
+}
+
+async function objectExists(spec, root) {
+  try {
+    await git(['cat-file', '-e', spec], { cwd: root });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function deepenHistory(root) {
+  try {
+    const shallow = String(await git(['rev-parse', '--is-shallow-repository'], { cwd: root, encoding: 'utf8' })).trim();
+    if (shallow !== 'true') return false;
+  } catch {
+    return false;
+  }
+  try {
+    await git(['fetch', '--deepen=100', 'origin'], { cwd: root, encoding: 'utf8' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const HISTORY_MISSING = (sha) => `history is missing: the parent of ${sha} is not in this checkout. A depth-1 checkout cannot verify the first-parent chain. Fetch that history and rerun.`;
+
+async function attachHeadBinding(commit, root) {
+  if (typeof commit.message !== 'string' || !commit.message.includes('BEGIN JULIUS LANDING')) return commit;
+  const { parseLandingCommitMessage } = await landingLib();
+  const parsed = parseLandingCommitMessage(withSingleTrailingNewline(commit.message));
+  const head = parsed.fields?.clearance?.head;
+  if (typeof head !== 'string' || !SHA.test(head)) return commit;
+  if (!(await objectExists(`${head}^{commit}`, root))) return commit;
+  try {
+    const tree = String(await git(['rev-parse', `${head}^{tree}`], { cwd: root, encoding: 'utf8' })).trim();
+    const raw = String(await git(['cat-file', '-p', head], { cwd: root, encoding: 'utf8' }));
+    const parents = commitObject(raw).parents;
+    return {
+      ...commit,
+      headTree: tree,
+      headParent: parents.length === 1 ? parents[0] : undefined,
+      headParentCount: parents.length,
+    };
+  } catch {
+    return commit;
+  }
+}
+
+async function classifyWalkedCommit(commit, pem, anchor, now, seen) {
+  if (commit.installerLineage === true) {
+    await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen });
+    return { ...commit, classification: 'installer', reason: 'installer commit in the signed checkpoint lineage' };
+  }
+  const judged = await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen });
+  if (judged.ok) return { ...commit, classification: 'signed-landing', reason: judged.reason, nonce: judged.nonce };
+  if (!judged.absent) return { ...commit, classification: 'unprovenanced', reason: judged.reason };
   const recorded = classifyCommit(commit);
-  return { ...commit, classification: recorded.classification === 'installer' ? 'unprovenanced' : recorded.classification };
+  return {
+    ...commit,
+    classification: recorded.classification === 'installer' ? 'unprovenanced' : recorded.classification,
+    reason: recorded.reason,
+  };
 }
 
 /**
@@ -669,31 +949,62 @@ export async function requireTrustedVerifier(env = process.env, options = {}) {
   if (head === '') return { ok: false, reason: 'the trust chain from the trusted checkpoint could not be read' };
   const checkpoint = parsed.fields.checkpoint;
   if (head !== checkpoint) {
-    const forbidden = await hardForbidden();
     const walked = [];
     let sha = head;
-    for (let i = 0; i < 30 && sha !== checkpoint; i += 1) {
-      let tree = '';
-      let message = '';
-      let parent = '';
+    let deepened = false;
+    let steps = 0;
+    for (let i = 0; i < FIRST_PARENT_WALK_CAP && sha !== checkpoint; i += 1) {
+      let raw;
       try {
-        tree = String(await git(['rev-parse', `${sha}^{tree}`], { cwd: root, encoding: 'utf8' })).trim();
-        message = String(await git(['log', '-1', '--format=%B', sha], { cwd: root, encoding: 'utf8' }));
-        const listedPaths = String(await git(['diff-tree', '--no-commit-id', '--name-only', '-r', sha], { cwd: root, encoding: 'utf8' }));
-        parent = String(await git(['rev-parse', `${sha}^`], { cwd: root, encoding: 'utf8' })).trim();
-        const paths = listedPaths.split('\n').filter((path) => path !== '');
-        walked.push(await classifyWalkedCommit({ sha, tree, message, paths }, pem, env[EXTERNAL_ANCHOR_VARIABLE], forbidden));
+        raw = String(await git(['cat-file', '-p', sha], { cwd: root, encoding: 'utf8' }));
       } catch {
+        return { ok: false, reason: `history is missing: commit ${sha} is not in this checkout. Fetch the first-parent history and rerun.` };
+      }
+      steps += 1;
+      const body = commitObject(raw);
+      if (body.parents.length === 0) {
         return { ok: false, reason: `the first-parent chain does not reach the trusted checkpoint ${checkpoint}. ${INSTALLER_RECOVERY}` };
       }
+      const parent = body.parents[0];
+      if (!(await objectExists(`${parent}^{commit}`, root))) {
+        if (!deepened) {
+          deepened = true;
+          await deepenHistory(root);
+        }
+        if (!(await objectExists(`${parent}^{commit}`, root))) return { ok: false, reason: HISTORY_MISSING(sha) };
+      }
+      let listed;
+      try {
+        listed = String(await git(['diff-tree', '--no-commit-id', '--name-status', '--find-renames', '-r', sha], { cwd: root, encoding: 'utf8' }));
+      } catch {
+        return { ok: false, reason: HISTORY_MISSING(sha) };
+      }
+      walked.push({
+        sha,
+        tree: body.tree,
+        message: body.message,
+        paths: pathsFromNameStatus(listed),
+        parent,
+        parentCount: body.parents.length,
+        committerTime: body.committerTime,
+      });
       sha = parent;
     }
     if (sha !== checkpoint) {
+      if (steps >= FIRST_PARENT_WALK_CAP) return { ok: false, reason: firstParentWalkCapReason(checkpoint) };
       return { ok: false, reason: `the first-parent chain does not reach the trusted checkpoint ${checkpoint}. ${INSTALLER_RECOVERY}` };
     }
-    const unjustified = walked.filter((row) => row.classification !== 'installer' && row.classification !== 'signed-landing' && row.classification !== 'signed-g6');
+    const seen = new Set();
+    const classified = [];
+    for (const commit of markInstallerLineage(walked.slice().reverse(), true)) {
+      const bound = await attachHeadBinding(commit, root);
+      classified.push(await classifyWalkedCommit(bound, pem, env[EXTERNAL_ANCHOR_VARIABLE], now, seen));
+    }
+    const unjustified = classified.filter((row) => row.classification !== 'installer' && row.classification !== 'signed-landing' && row.classification !== 'signed-g6');
     if (unjustified.length > 0) {
-      return { ok: false, reason: `unprovenanced: HEAD ${head} is not the attested checkpoint ${checkpoint} and the first-parent chain does not justify it (${unjustified[0].sha} is ${unjustified[0].classification})` };
+      const row = unjustified[0];
+      const detail = row.reason ? `: ${row.reason}` : '';
+      return { ok: false, reason: `unprovenanced: HEAD ${head} is not the attested checkpoint ${checkpoint} and the first-parent chain does not justify it (${row.sha} is ${row.classification}${detail})` };
     }
   }
   return { ok: true, reason: `chain verified from attested checkpoint ${checkpoint}` };
