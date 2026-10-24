@@ -77,7 +77,7 @@ import {
 import type { MissionOwnershipScope } from './mission';
 import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
 import { classifyWonderlandDispatchPath, handleWonderlandRoute } from './wonderland-routes';
-import { createWonderlandAdmissionBridge, createWonderlandAdmissionService, isWonderlandAdmissionRoute, type WonderlandAdmissionRoutePorts } from './wonderland-admission-route';
+import { createWonderlandAdmissionBridge, createWonderlandAdmissionService, createWonderlandStatusBridge, isWonderlandAdmissionRoute, isWonderlandStatusRoute, type WonderlandAdmissionRoutePorts } from './wonderland-admission-route';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
@@ -457,7 +457,11 @@ const juliusMissionPorts = (wonderlandAdmission: WonderlandAdmissionRoutePorts):
       cardRevision: process.env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1',
     };
   }
-  return { ...juliusMissionCache, wonderlandAdmissionBridge: createWonderlandAdmissionBridge(wonderlandAdmission) };
+  return {
+    ...juliusMissionCache,
+    wonderlandAdmissionBridge: createWonderlandAdmissionBridge(wonderlandAdmission),
+    wonderlandStatusBridge: createWonderlandStatusBridge(wonderlandAdmission),
+  };
 };
 
 const headerValue = (value: string | string[] | undefined): string | undefined =>
@@ -1052,7 +1056,9 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
          * bootstrap a run and does not start the paid workflow.
          */
         const missionPath = path.replace('/relay-api', '');
-        if (isJuliusMissionRoute(missionPath) || (wonderlandDispatch.exactAdmission && isWonderlandAdmissionRoute(missionPath))) {
+        if (isJuliusMissionRoute(missionPath)
+          || (wonderlandDispatch.exactAdmission && isWonderlandAdmissionRoute(missionPath))
+          || (wonderlandDispatch.exactStatus && isWonderlandStatusRoute(missionPath))) {
           const missionAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
           const missionResult = await handleJuliusMissionRoute({
             method,

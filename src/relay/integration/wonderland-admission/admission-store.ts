@@ -47,6 +47,7 @@ export interface AdmissionRun {
   ledgerWritten: boolean;
   resultSha256: string | null;
   resultHashConflicts: number;
+  ownerPlayerId?: string;
 }
 
 export interface AdmissionLedgerRow {
@@ -74,6 +75,8 @@ export interface AdmissionLedgerRow {
    * when the row recorded them.
    */
   readonly modelPins?: ReviewedModelPins;
+  /** Player the admission belongs to. Absent on a row written before ownership was stored. */
+  readonly ownerPlayerId?: string;
 }
 
 export interface AdmissionLedger {
@@ -92,6 +95,7 @@ export interface AdmissionRequest {
   readonly clientUiActionUtc: string;
   readonly receivedAt: string;
   readonly modelPins: ReviewedModelPins;
+  readonly ownerPlayerId?: string;
 }
 
 export type AdmissionOutcome =
@@ -284,6 +288,7 @@ class WonderlandAdmissionStore {
       ledgerWritten: false,
       resultSha256: null,
       resultHashConflicts: 0,
+      ...(request.ownerPlayerId === undefined ? {} : { ownerPlayerId: request.ownerPlayerId }),
     };
     this.index(run);
     return { kind: 'created', run };
@@ -366,5 +371,6 @@ function runFromRow(row: AdmissionLedgerRow): AdmissionRun {
     ledgerWritten: row.state !== 'LEDGER_UNWRITTEN',
     resultSha256: row.resultSha256,
     resultHashConflicts: 0,
+    ...(row.ownerPlayerId === undefined ? {} : { ownerPlayerId: row.ownerPlayerId }),
   };
 }

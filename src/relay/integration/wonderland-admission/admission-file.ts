@@ -24,7 +24,7 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import {
   JULIUS_BOOTSTRAP_RUN_ID, SHA256_HEX, WONDERLAND_RUN_ID, type ReviewedModelPins,
 } from './admission-contract';
-import type { AdmissionLedger, AdmissionLedgerRow } from './admission-store';
+import type { AdmissionLedger, AdmissionLedgerRow, AdmissionState } from './admission-store';
 
 export const ADMISSION_FILE_SCHEMA_VERSION = 2;
 
@@ -350,3 +350,367 @@ function parsePins(value: unknown): ReviewedModelPins {
   }
   return parsed;
 }
+
+/**
+ * Operator claims live beside the admission document, not inside it.
+ * The admission file stays `{ schemaVersion, rows }`. `dispatched` is not a
+ * row field. The journal uses the same atomic write, the same lock file, and
+ * the same fail-closed errors. A held lock, a corrupt journal, or an unknown
+ * schema version leaves both files as they are.
+ */
+const CLAIM_STATES = ['dispatched', 'dispatch_failed', 'already_spent'] as const;
+const SPENT_TAG_STATES = ['unknown', 'present', 'absent'] as const;
+const WORKFLOW_HALTS = ['RUN_ID_ALREADY_SPENT', 'SPENT_TAG_UNVERIFIED'] as const;
+const DISPATCH_ERRORS = ['gh_workflow_run_failed', 'SPENT_TAG_UNVERIFIED'] as const;
+const JOURNAL_KEYS = ['schemaVersion', 'revision', 'claims', 'progress', 'owners'] as const;
+const OWNER_ID = /^[A-Za-z0-9_-]{1,128}$/;
+/**
+ * A stored progress token. The status route accepts only the closed status
+ * unions and maps any other token to `unknown`. This check only bounds the
+ * text so a later note can be read and refused.
+ */
+const PROGRESS_STATE = /^[a-z][a-z0-9_]{0,63}$/;
+const PROGRESS_CAUSE = /^[\x20-\x7e]{1,200}$/;
+const CLAIM_KEYS = [
+  'wonderlandRunId', 'serverRunId', 'state', 'spentTag', 'spentTagState', 'at',
+  'dispatchAttempted', 'dispatchError', 'halt',
+] as const;
+
+export type OperatorClaimState = (typeof CLAIM_STATES)[number];
+export type SpentTagState = (typeof SPENT_TAG_STATES)[number];
+export type WorkflowHalt = (typeof WORKFLOW_HALTS)[number];
+export type DispatchError = (typeof DISPATCH_ERRORS)[number];
+
+export interface StoredAdmission extends AdmissionLedgerRow {
+  readonly admissionState: AdmissionState;
+}
+
+export interface ClaimEvent {
+  readonly wonderlandRunId: string;
+  readonly serverRunId: string;
+  readonly state: OperatorClaimState;
+  readonly spentTag: string;
+  readonly spentTagState: SpentTagState;
+  readonly at: string;
+  readonly dispatchAttempted: boolean;
+  readonly dispatchError: DispatchError | null;
+  /** Workflow halt, when one was visible. Terminal. Never returns the record to admitted. */
+  readonly halt: WorkflowHalt | null;
+}
+
+export interface StoredProgress {
+  readonly serverRunId: string;
+  readonly state: string;
+  readonly cause: string | null;
+  readonly updatedAt: string;
+}
+
+export interface OperatorDocument {
+  readonly version: 1;
+  readonly revision: number;
+  readonly admissions: readonly StoredAdmission[];
+  readonly claims: readonly ClaimEvent[];
+  readonly progress: readonly StoredProgress[];
+}
+
+export interface AdmissionFileIo {
+  read(): OperatorDocument;
+  write(document: OperatorDocument): void;
+}
+
+export interface AdmissionFile {
+  readonly path: string;
+  readonly ledger: AdmissionLedger;
+  exclusive<T>(job: (io: AdmissionFileIo) => Promise<T>): Promise<T>;
+}
+
+interface OperatorJournal {
+  readonly schemaVersion: typeof ADMISSION_FILE_SCHEMA_VERSION;
+  readonly revision: number;
+  readonly claims: readonly ClaimEvent[];
+  readonly progress: readonly StoredProgress[];
+  readonly owners: Readonly<Record<string, string>>;
+}
+
+const tails = new Map<string, Promise<void>>();
+
+function enqueue<T>(key: string, job: () => Promise<T>): Promise<T> {
+  const previous = tails.get(key) ?? Promise.resolve();
+  const run = previous.then(job, job);
+  tails.set(key, run.then(() => undefined, () => undefined));
+  return run;
+}
+
+/** Absolute local path whose parent #407's resolver will accept. A URL is not a store. */
+export function isLocalStorePath(storePath: string): boolean {
+  return resolveAdmissionStorePath(storePath).ok;
+}
+
+export function emptyOperatorDocument(): OperatorDocument {
+  return { version: 1, revision: 0, admissions: [], claims: [], progress: [] };
+}
+
+export function operatorJournalPath(storePath: string): string {
+  return `${storePath}.operator.json`;
+}
+
+/** Read rows and the journal. Does not take the lock and does not write. */
+export function readAdmissionDocument(storePath: string): OperatorDocument {
+  const located = resolveAdmissionStorePath(storePath);
+  if (!located.ok) throw new AdmissionFileClosedError('unwritable');
+  return composeDocument(located.path);
+}
+
+export function openAdmissionFile(storePath: string): AdmissionFile {
+  const located = resolveAdmissionStorePath(storePath);
+  if (!located.ok) throw new AdmissionFileClosedError('unwritable');
+  const path = located.path;
+  const lockPath = `${path}.lock`;
+  const exclusive = <T>(job: (io: AdmissionFileIo) => Promise<T>): Promise<T> => enqueue(path, async () => {
+    acquireLock(lockPath);
+    try {
+      let document = composeDocument(path);
+      return await job({
+        read: () => document,
+        write: (next) => {
+          writeJournal(path, next);
+          document = composeDocument(path);
+        },
+      });
+    } finally {
+      releaseLock(lockPath);
+    }
+  });
+  const ledger: AdmissionLedger = {
+    async rows() {
+      return enqueue(path, async () => {
+        acquireLock(lockPath);
+        try {
+          return readRows(path).map((row) => ({ ...row }));
+        } finally {
+          releaseLock(lockPath);
+        }
+      });
+    },
+    async append(row) {
+      await enqueue(path, async () => {
+        acquireLock(lockPath);
+        try {
+          const current = readRows(path);
+          if (current.some((held) => held.runId === row.runId || held.serverRunId === row.serverRunId || held.keyHash === row.keyHash)) {
+            throw new Error('admission_file_duplicate');
+          }
+          // Same two-phase reservation as the bridge writer. A schema v2 row
+          // must carry `state` and `modelPins`. A failed completion leaves
+          // LEDGER_UNWRITTEN and does not look like a held admission.
+          const reserved = [...current, stamped(row, 'LEDGER_UNWRITTEN')];
+          try {
+            writeAdmissionFileAtomic(path, documentText(reserved));
+          } catch (error) {
+            if (isAdmissionFileClosed(error) && error.code !== 'unwritten') throw error;
+            throw new AdmissionFileClosedError('unwritten');
+          }
+          try {
+            const heldRows = [...reserved.slice(0, -1), stamped(row, 'ADMISSION_HELD')];
+            writeAdmissionFileAtomic(path, documentText(heldRows));
+          } catch (error) {
+            if (isAdmissionFileClosed(error) && error.code !== 'unwritten') throw error;
+            throw new AdmissionFileClosedError('unwritten');
+          }
+        } finally {
+          releaseLock(lockPath);
+        }
+      });
+    },
+  };
+  return { path, ledger, exclusive };
+}
+
+function composeDocument(path: string): OperatorDocument {
+  const journal = readJournal(operatorJournalPath(path));
+  return {
+    version: 1,
+    revision: journal.revision,
+    admissions: readRows(path).map((row) => toStoredAdmission(row, journal.owners[row.serverRunId])),
+    claims: journal.claims,
+    progress: journal.progress,
+  };
+}
+
+function toStoredAdmission(row: AdmissionLedgerRow, ownerPlayerId: string | undefined): StoredAdmission {
+  return {
+    ...row,
+    admissionState: row.state === 'LEDGER_UNWRITTEN' ? 'LEDGER_UNWRITTEN' : 'ADMISSION_HELD',
+    ...(ownerPlayerId === undefined ? {} : { ownerPlayerId }),
+  };
+}
+
+/**
+ * Record the player who admitted a row. The admission document itself stays
+ * `{ schemaVersion, rows }`. This does not take the lock: the bridge already
+ * holds it, and a path that is not a local store is ignored.
+ */
+export function recordAdmissionOwner(storePath: string | undefined, serverRunId: string, playerId: string): void {
+  const located = resolveAdmissionStorePath(storePath);
+  if (!located.ok || !JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId) || !OWNER_ID.test(playerId)) return;
+  const current = readJournal(operatorJournalPath(located.path));
+  writeJournalBytes(located.path, {
+    schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
+    revision: current.revision,
+    claims: current.claims,
+    progress: current.progress,
+    owners: { ...current.owners, [serverRunId]: playerId },
+  });
+}
+
+function readJournal(journalPath: string): OperatorJournal {
+  if (!existsSync(journalPath)) {
+    return { schemaVersion: ADMISSION_FILE_SCHEMA_VERSION, revision: 0, claims: [], progress: [], owners: {} };
+  }
+  let text: string;
+  try {
+    text = readFileSync(journalPath, 'utf8');
+  } catch {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (text.trim() === '') throw new AdmissionFileClosedError('corrupt');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new AdmissionFileClosedError('corrupt');
+  const doc = parsed as Record<string, unknown>;
+  const keys = Object.keys(doc);
+  if (keys.length !== JOURNAL_KEYS.length || JOURNAL_KEYS.some((key) => !Object.hasOwn(doc, key))) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (doc.schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION) throw new AdmissionFileClosedError('corrupt');
+  if (typeof doc.revision !== 'number' || !Number.isInteger(doc.revision) || doc.revision < 0) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (!Array.isArray(doc.claims) || !Array.isArray(doc.progress)) throw new AdmissionFileClosedError('corrupt');
+  if (doc.owners === null || typeof doc.owners !== 'object' || Array.isArray(doc.owners)) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  const owners: Record<string, string> = {};
+  for (const [serverRunId, playerId] of Object.entries(doc.owners as Record<string, unknown>)) {
+    if (!JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId) || typeof playerId !== 'string' || !OWNER_ID.test(playerId)) {
+      throw new AdmissionFileClosedError('corrupt');
+    }
+    owners[serverRunId] = playerId;
+  }
+  return {
+    schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
+    revision: doc.revision,
+    claims: doc.claims.map(parseClaim),
+    progress: doc.progress.map(parseProgress),
+    owners,
+  };
+}
+
+function parseProgress(value: unknown): StoredProgress {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new AdmissionFileClosedError('corrupt');
+  const note = value as Record<string, unknown>;
+  const keys = Object.keys(note);
+  if (keys.length !== 4 || !['serverRunId', 'state', 'cause', 'updatedAt'].every((key) => Object.hasOwn(note, key))) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof note.serverRunId !== 'string' || !JULIUS_BOOTSTRAP_RUN_ID.test(note.serverRunId)) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof note.state !== 'string' || !PROGRESS_STATE.test(note.state)) throw new AdmissionFileClosedError('corrupt');
+  if (note.cause !== null && (typeof note.cause !== 'string' || !PROGRESS_CAUSE.test(note.cause))) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof note.updatedAt !== 'string' || !RECEIVED_AT.test(note.updatedAt)) throw new AdmissionFileClosedError('corrupt');
+  return {
+    serverRunId: note.serverRunId,
+    state: note.state,
+    cause: note.cause,
+    updatedAt: note.updatedAt,
+  };
+}
+
+function writeJournal(path: string, document: OperatorDocument): void {
+  const current = readJournal(operatorJournalPath(path));
+  writeJournalBytes(path, {
+    schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
+    revision: document.revision,
+    claims: document.claims.map(parseClaim),
+    progress: (document.progress ?? []).map(parseProgress),
+    owners: current.owners,
+  });
+}
+
+function writeJournalBytes(path: string, body: OperatorJournal): void {
+  try {
+    writeAdmissionFileAtomic(operatorJournalPath(path), `${JSON.stringify(body)}\n`);
+  } catch (error) {
+    if (isAdmissionFileClosed(error)) throw error;
+    throw new AdmissionFileClosedError('unwritten');
+  }
+}
+
+function parseClaim(value: unknown): ClaimEvent {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new AdmissionFileClosedError('corrupt');
+  const claim = value as Record<string, unknown>;
+  if (Object.keys(claim).length !== CLAIM_KEYS.length || CLAIM_KEYS.some((key) => !Object.hasOwn(claim, key))) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof claim.wonderlandRunId !== 'string' || !WONDERLAND_RUN_ID.test(claim.wonderlandRunId)) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof claim.serverRunId !== 'string' || !JULIUS_BOOTSTRAP_RUN_ID.test(claim.serverRunId)) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof claim.state !== 'string' || !CLAIM_STATES.includes(claim.state as OperatorClaimState)) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  const state = claim.state as OperatorClaimState;
+  const hex = claim.serverRunId.slice('run:'.length);
+  if (claim.spentTag !== `julius-run-spent-${hex}`) throw new AdmissionFileClosedError('corrupt');
+  if (typeof claim.spentTagState !== 'string' || !SPENT_TAG_STATES.includes(claim.spentTagState as SpentTagState)) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (typeof claim.at !== 'string' || !RECEIVED_AT.test(claim.at)) throw new AdmissionFileClosedError('corrupt');
+  if (typeof claim.dispatchAttempted !== 'boolean') throw new AdmissionFileClosedError('corrupt');
+  const error = claim.dispatchError;
+  const halt = claim.halt;
+  if (halt !== null && (typeof halt !== 'string' || !WORKFLOW_HALTS.includes(halt as WorkflowHalt))) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  const recordedHalt = halt === null ? null : halt as WorkflowHalt;
+  if (state === 'dispatch_failed') {
+    if (claim.dispatchAttempted !== true) throw new AdmissionFileClosedError('corrupt');
+    if (recordedHalt === 'SPENT_TAG_UNVERIFIED') {
+      if (error !== 'SPENT_TAG_UNVERIFIED') throw new AdmissionFileClosedError('corrupt');
+    } else if (recordedHalt !== null || error !== 'gh_workflow_run_failed') {
+      throw new AdmissionFileClosedError('corrupt');
+    }
+  } else if (error !== null) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (state === 'already_spent') {
+    if (recordedHalt !== 'RUN_ID_ALREADY_SPENT' || claim.spentTagState !== 'present') {
+      throw new AdmissionFileClosedError('corrupt');
+    }
+  } else if (recordedHalt === 'RUN_ID_ALREADY_SPENT') {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  if (state === 'dispatched' && recordedHalt !== null) throw new AdmissionFileClosedError('corrupt');
+  const dispatchError: DispatchError | null = state === 'dispatch_failed'
+    ? (recordedHalt === 'SPENT_TAG_UNVERIFIED' ? 'SPENT_TAG_UNVERIFIED' : 'gh_workflow_run_failed')
+    : null;
+  return {
+    wonderlandRunId: claim.wonderlandRunId,
+    serverRunId: claim.serverRunId,
+    state,
+    spentTag: `julius-run-spent-${hex}`,
+    spentTagState: claim.spentTagState as SpentTagState,
+    at: claim.at,
+    dispatchAttempted: claim.dispatchAttempted,
+    dispatchError,
+    halt: state === 'dispatched' ? null : recordedHalt,
+  };

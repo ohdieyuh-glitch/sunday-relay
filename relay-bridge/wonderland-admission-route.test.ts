@@ -457,7 +457,7 @@ describe('admission path exclusion is exact', () => {
     expect(isWonderlandRoute(WONDERLAND_ADMISSION_PATH)).toBe(false);
     expect(isWonderlandAdmissionRoute(WONDERLAND_ADMISSION_PATH)).toBe(true);
     const exact = classifyWonderlandDispatchPath(WONDERLAND_ADMISSION_PATH, WONDERLAND_ADMISSION_PATH);
-    expect(exact).toEqual({ catchAllPath: null, exactAdmission: true });
+    expect(exact).toEqual({ catchAllPath: null, exactAdmission: true, exactStatus: false });
   });
 
   it('a query on the admission pathname is admission', () => {
@@ -467,6 +467,7 @@ describe('admission path exclusion is exact', () => {
     expect(classifyWonderlandDispatchPath(WONDERLAND_ADMISSION_PATH, queried)).toEqual({
       catchAllPath: null,
       exactAdmission: true,
+      exactStatus: false,
     });
   });
 
@@ -691,9 +692,16 @@ describe('admission holds no provider keys and runs no paid role', () => {
   });
 });
 
+/**
+ * The founder-local claim tool lives beside the admission sources and is the
+ * one place that may name `gh`. The admission route does not import it. Its
+ * own test scans that spawn. This list is the route and the store it writes.
+ */
+const OPERATOR_CLAIM_FILES = new Set(['operator-claim.ts', 'operator-claim-cli.ts']);
+
 const ADMISSION_SOURCES = [
   ...readdirSync(join(__dirname, '../src/relay/integration/wonderland-admission'))
-    .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
+    .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts') && !OPERATOR_CLAIM_FILES.has(name))
     .map((name) => join(__dirname, '../src/relay/integration/wonderland-admission', name)),
   join(__dirname, 'wonderland-admission-route.ts'),
 ];
@@ -743,6 +751,64 @@ describe('admission sources import no provider, process, or secret', () => {
   });
 });
 
+describe('the local admission file', () => {
+  it('a second service on the same file replays the server run id, including a queried pathname', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-adm-'));
+    const storePath = join(dir, 'admission.json');
+    const fixed = `run:${'a'.repeat(24)}`;
+    const queried = `${WONDERLAND_ADMISSION_PATH}?projectId=project-1`;
+    const opened: Array<{ close(): void }> = [];
+    const open = (mintServerRunId: () => string) => {
+      const ports = createWonderlandAdmissionService({
+        env: env({ JULIUS_WONDERLAND_ADMISSION_STORE: storePath }),
+        operatorToken: 'operator-token',
+        verifyNativeSession: ({ token }) => token === 'native-token'
+          ? { playerId: 'founder', projectId: 'project-1', sessionId: 'sess-1' }
+          : null,
+        readWorkflowText: () => null,
+        mintServerRunId,
+      });
+      opened.push(ports);
+      return ports;
+    };
+    try {
+      const created = await handleWonderlandAdmissionRoute(request(), open(() => fixed));
+      expect(created?.status).toBe(202);
+      opened[0]?.close();
+      const replay = await handleWonderlandAdmissionRoute(
+        request({ path: queried, url: queried }),
+        open(() => { throw new Error('replay must not mint'); }),
+      );
+      expect(replay?.status).toBe(200);
+      const body = replay?.body as { data?: { serverRunId?: string } };
+      expect(body.data?.serverRunId).toBe(fixed);
+      const onDisk = JSON.parse(readFileSync(storePath, 'utf8')) as { schemaVersion: number; rows: unknown[] };
+      expect(onDisk.schemaVersion).toBe(2);
+      expect(onDisk.rows).toHaveLength(1);
+      expect(onDisk).not.toHaveProperty('claims');
+    } finally {
+      for (const ports of opened) ports.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a URL is not a store and reserves nothing', async () => {
+    const ports = createWonderlandAdmissionService({
+      env: env({ JULIUS_WONDERLAND_ADMISSION_STORE: 'https://example.test/store' }),
+      operatorToken: 'operator-token',
+      verifyNativeSession: () => null,
+      readWorkflowText: () => null,
+    });
+    try {
+      const result = await handleWonderlandAdmissionRoute(request(), ports);
+      expect(result?.status).toBe(503);
+      expect(kind(result?.body)).toBe('julius_dispatch_unavailable');
+    } finally {
+      ports.close();
+    }
+  });
+});
+
 describe('the route does not gain a spend path', () => {
   it('does not dispatch, retry, or name a provider endpoint', () => {
     const source = readFileSync(join(__dirname, 'wonderland-admission-route.ts'), 'utf8');
@@ -758,5 +824,8 @@ describe('the route does not gain a spend path', () => {
     expect(source).not.toContain('api.x.ai');
     expect(source).not.toContain('julius_dispatch_busy');
     expect(source).not.toContain('--confirm-live');
+    expect(source).not.toContain('child_process');
+    expect(source).not.toContain('operator-claim');
+    expect(source).not.toMatch(/\bgh\b/);
   });
 });

@@ -197,6 +197,13 @@ describe('one admission per pair', () => {
     expect(second.httpStatus).toBe(200);
     expect(second.run.state).toBe('LEDGER_UNWRITTEN');
     expect(second.run.ledgerWritten).toBe(false);
+    expect(second.run.serverRunId).toBe(first.run.serverRunId);
+    expect(second.replayed).toBe(true);
+    const released = await admissions.admit(request({ keyHash: 'd'.repeat(64), dispatchId: 'adm_other' }));
+    expect(released.ok).toBe(false);
+    if (released.ok) return;
+    expect(released.kind).toBe('julius_dispatch_already_dispatched');
+    expect(admissions.admissionCount()).toBe(1);
   });
 
   it('cap refusals reserve nothing and write nothing', async () => {
