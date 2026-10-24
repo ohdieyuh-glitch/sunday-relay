@@ -54,9 +54,10 @@ describe('Wonderland PostgreSQL migration', () => {
     // the protected-store check (protected-store.ts, the founder's 035 guard) only READS the database's identity
     const identityRead = /shobj_description|SELECT current_database\(\) AS db|pg_control_system\(\)/u;
     expect(pool.commands.filter((command) => !command.includes('information_schema.tables') && !identityRead.test(command))).toEqual([...WONDERLAND_MIGRATIONS]);
-    // ... and it reads BEFORE anything runs: its three reads all precede the first migration
+    // ... and it reads BEFORE anything runs: protectedStoreRole's three reads, then the migration pin's three
+    // (migrationPinnedStoreRole, the hosted store O1), all precede the first migration
     const first = pool.commands.indexOf(WONDERLAND_MIGRATIONS[0]);
-    expect(pool.commands.slice(0, first).filter((command) => identityRead.test(command))).toHaveLength(3);
+    expect(pool.commands.slice(0, first).filter((command) => identityRead.test(command))).toHaveLength(6);
   });
 
   /**
