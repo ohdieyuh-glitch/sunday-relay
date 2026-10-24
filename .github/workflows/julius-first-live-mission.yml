@@ -481,10 +481,11 @@ jobs:
       RELAY_PROMPT_ARCHITECT_MODE: live
       OPENAI_PROMPT_ARCHITECT_MODEL: gpt-5.6-sol
       # THE CODING AGENT IS CLAUDE OPUS 5.5 (founder decision, 2026-09-30). The pin
-      # is unchanged. PENDING FOUNDER RULING: this draft authenticates that model
-      # with the user-owned Anthropic API key, not a consumer Claude Max login.
-      # No other model is acceptable, and none is a fallback: the coder's dispatch
-      # must refuse any other SERVED model.
+      # is unchanged. Hosted CI authenticates that model with ANTHROPIC_API_KEY
+      # under JULIUS_CLAUDE_AUTH=ANTHROPIC_API. CLAUDE_CODE_OAUTH_TOKEN is not a
+      # substitute and must be absent from the coder steps. No other model is
+      # acceptable, and none is a fallback: the coder's dispatch must refuse any
+      # other SERVED model.
       RELAY_HOSTED_CODING_MODEL: claude-opus-5-5
       RELAY_HERMES_PROVIDER: xai
       RELAY_HERMES_MODEL: grok-build-0.1
@@ -906,35 +907,33 @@ jobs:
       - name: Install
         run: npm ci
 
-      # PENDING FOUNDER RULING. Anthropic's terms disallow routing a product
-      # through a consumer Claude Max login. This draft authenticates the Coding
-      # Agent with the user-owned ANTHROPIC_API_KEY only. If that secret is
-      # absent, including when only CLAUDE_CODE_OAUTH_TOKEN is configured, the
-      # run stops here. No value is printed, and no provider is called.
+      # SETTLED. Hosted CI bills the Coding Agent to ANTHROPIC_API_KEY under
+      # JULIUS_CLAUDE_AUTH=ANTHROPIC_API. CLAUDE_CODE_OAUTH_TOKEN is not a
+      # substitute: a missing API key stops the job here, including when only
+      # that token is configured. No value is printed, and no provider is called.
       #
-      # The pinned model is still checked before a paid step, by the readiness
-      # probe below: GET /v1/models/<id> with the API key, the same metadata
-      # check the other API providers already use. It generates no tokens.
-      - name: 'Gate: coder uses the user-owned Anthropic API key (pending founder ruling)'
+      # Readiness, below, checks the organization on a spend-free models read
+      # before any paid step. The live entry checks it again before submit.
+      - name: 'Gate: coder uses the Anthropic API key'
         id: coder_auth
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-            echo 'coder_auth_api_key_required: refusing before any provider call. CLAUDE_CODE_OAUTH_TOKEN is not a product credential (pending founder ruling).' >&2
+            echo 'coder_auth_api_key_required: refusing before any provider call. Hosted CI authenticates with ANTHROPIC_API_KEY. CLAUDE_CODE_OAUTH_TOKEN is not a substitute.' >&2
             exit 1
           fi
           echo 'coder_auth=ANTHROPIC_API_KEY'
 
       # A dispatch that asks for the old subscription smoke is refused. It does
       # not run on a paid dispatch, and it does not contact Anthropic.
-      - name: 'Subscription smoke: refused pending founder ruling'
+      - name: 'Subscription smoke: refused'
         id: subscription_smoke
         if: success() && inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE' && inputs.confirm_live != 'RUN LIVE MISSION'
         run: |
           set -euo pipefail
-          echo 'coder_auth_subscription_refused: pending founder ruling. This workflow does not send a consumer Claude Max login request. Nothing was contacted.' >&2
+          echo 'coder_auth_subscription_refused: hosted CI does not substitute a consumer Claude login. Nothing was contacted.' >&2
           exit 1
 
       - name: Build the executor, the preflight probe and the live entrypoint
@@ -1256,8 +1255,9 @@ jobs:
       - name: 'Preflight: all three roles resolve to the expected models, nothing dispatched'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          # PENDING FOUNDER RULING. The Coding Agent uses the user-owned API key
-          # alone. The consumer login token is not passed into this step.
+          # The Coding Agent uses ANTHROPIC_API_KEY alone. The consumer login
+          # token is not passed into this step, and the preflight requires it
+          # MISSING.
           JULIUS_CLAUDE_AUTH: ANTHROPIC_API
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           JULIUS_SCOPED_CREDENTIALS: ${{ steps.identity.outputs.scoped }}
