@@ -304,7 +304,7 @@ export const LANDER_IDENTITY = { name: LANDER_BOT_LOGIN, email: `${LANDER_BOT_US
 
 /** The commit the lander CREATED, read back from GitHub (REST `commits/{sha}`), against exactly what it asked for: the cleared tree, ONE parent = the cleared base, the exact message
  * and the julius-lander[bot] identity. Any difference means the ref update must not follow. */
-export function checkCreatedCommit({ created, sha, base, tree, message }) {
+export function checkCreatedCommit({ created, sha, base, tree, message, identity = LANDER_IDENTITY }) {
   const problems = [];
   if (!SHA.test(String(sha))) problems.push('the created commit has no valid sha');
   if (created?.sha !== undefined && created.sha !== sha) problems.push(`the read-back commit is ${created.sha}, expected ${sha}`);
@@ -315,7 +315,7 @@ export function checkCreatedCommit({ created, sha, base, tree, message }) {
   const stored = created?.commit?.message;
   if (typeof message !== 'string' || (stored !== message && !(message.endsWith('\n') && stored === message.slice(0, -1)))) problems.push('the created commit message differs from the one that was sent');
   for (const who of ['author', 'committer']) {
-    if (created?.commit?.[who]?.name !== LANDER_IDENTITY.name || created?.commit?.[who]?.email !== LANDER_IDENTITY.email) problems.push(`the created commit ${who} is not ${LANDER_IDENTITY.name}`);
+    if (created?.commit?.[who]?.name !== identity.name || created?.commit?.[who]?.email !== identity.email) problems.push(`the created commit ${who} is not ${identity.name}`);
   }
   return problems;
 }

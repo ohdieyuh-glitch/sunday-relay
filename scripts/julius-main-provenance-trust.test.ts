@@ -396,7 +396,16 @@ describe('the checkpoint workflow and the working tree', () => {
     const live = parseCheckpointAttestation(readFileSync(livePath, 'utf8'));
     expect(live.problems).toEqual([]);
     expect(live.fields.checkpoint).toBe(checkpoint);
-    expect(live.fields.tcb.map((row) => row.path)).toEqual([...TRUSTED_COMPUTING_BASE]);
+    const attested = live.fields.tcb.map((row) => row.path);
+    const added = [
+      '.github/julius-landing/governed-land.mjs',
+      '.github/julius-landing/governed-queue.txt',
+      '.github/workflows/julius-governed-land.yml',
+    ];
+    expect(TRUSTED_COMPUTING_BASE.length).toBe(attested.length + added.length);
+    for (const path of attested) expect(TRUSTED_COMPUTING_BASE).toContain(path);
+    for (const path of added) expect(TRUSTED_COMPUTING_BASE).toContain(path);
+    expect(attested).not.toEqual([...TRUSTED_COMPUTING_BASE]);
     // The founder bootstrap regenerates this attestation. This repair does not
     // edit it. Trusted files this repair changes no longer match; every other
     // trusted file still does. The verifier still refuses a hash mismatch.

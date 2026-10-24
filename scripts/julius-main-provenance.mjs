@@ -44,8 +44,11 @@ import {
 import {
   EXTERNAL_ANCHOR_VARIABLE,
   FIRST_PARENT_WALK_CAP,
+  GOVERNED_LANDER_BOT_VARIABLE,
   TRUSTED_CHECKPOINT_SHA,
+  TRUSTED_COMPUTING_BASE,
   annotateChainLandings,
+  landingIdentityProblem,
   firstParentWalkCapReason,
   applyTrustChain,
   attestedCheckpointFloor,
@@ -375,6 +378,17 @@ export function evaluateSignedLanding(input, tip) {
   if (unusedProtected.length > 0) {
     return signedVerdict('unprovenanced', `the signed clearance lists protected paths this landing does not change: ${unusedProtected.slice(0, 5).join(', ')}`, base);
   }
+  const needsLander = changed.some((path) => SIGNED_LANDING_HARD_FORBIDDEN.test(path) || TRUSTED_COMPUTING_BASE.includes(path));
+  if (needsLander) {
+    const identity = landingIdentityProblem({
+      committerId: input?.landingCommitterId,
+      verificationVerified: input?.landingVerificationVerified,
+      verificationReason: input?.landingVerificationReason,
+      verificationReadProblem: input?.verificationReadProblem,
+      botId: input?.governedLanderBotId ?? process.env[GOVERNED_LANDER_BOT_VARIABLE],
+    });
+    if (identity) return signedVerdict('unprovenanced', identity, base);
+  }
   const success = { ...base, prNumber: Number(clearance.pr), reviewedHeadSha: clearance.head, approvedBy: [clearance.by] };
   const pin = reviewerKeyPinRefusal(input?.reviewerKeyPem, externalAnchorOf(input));
   if (pin) return signedVerdict(pin.verdict, pin.reason, success);
@@ -475,6 +489,9 @@ export function readFirstParentChain(gh, repo, tipSha, floorSha = TRUSTED_CHECKP
       parent: commit?.parents?.[0]?.sha,
       parentCount: Array.isArray(commit?.parents) ? commit.parents.length : undefined,
       committerTime: Number.isFinite(committerTime) ? committerTime : undefined,
+      committerId: commit?.committer?.id,
+      verificationVerified: commit?.commit?.verification?.verified === true,
+      verificationReason: typeof commit?.commit?.verification?.reason === 'string' ? commit.commit.verification.reason : '',
     });
     const parent = commit?.parents?.[0]?.sha;
     if (parent === floorSha) return reversed.reverse();
@@ -883,6 +900,10 @@ async function main(argv) {
       changedPaths,
       changedPathsComplete,
       headCommit,
+      landingCommitterId: mainCommit?.committer?.id,
+      landingVerificationVerified: mainCommit?.commit?.verification?.verified === true,
+      landingVerificationReason: mainCommit?.commit?.verification?.reason,
+      governedLanderBotId: process.env[GOVERNED_LANDER_BOT_VARIABLE],
     });
     let chainCommits;
     let chainProblem = null;

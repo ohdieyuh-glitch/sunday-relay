@@ -15,6 +15,7 @@ export declare const REVIEWER_KEY_INTRODUCED_IN: string;
 export declare const LANDING_REPO: string;
 export declare const CHECKPOINT_HEADER: string;
 export declare const EXTERNAL_ANCHOR_VARIABLE: string;
+export declare const GOVERNED_LANDER_BOT_VARIABLE: string;
 export declare const TRUSTED_COMPUTING_BASE: readonly string[];
 export declare const CHECKPOINT_ATTESTATION_DIR: string;
 export declare const INSTALLER_RECOVERY: string;
@@ -68,6 +69,14 @@ export declare function attestationNonceProblems(fields: { readonly nonce?: stri
 export declare function judgeAttestationWindow(fields: { readonly issued?: string; readonly expires?: string } | undefined, now: number): string | null;
 export declare const CHECKPOINT_INSTALLER_EXACT_PATHS: readonly string[];
 export declare function isCheckpointInstallerDiff(paths: unknown): boolean;
+export declare function landingIdentityProblem(input?: {
+  readonly committerId?: unknown;
+  readonly verificationVerified?: unknown;
+  readonly verificationReason?: unknown;
+  readonly botId?: unknown;
+  readonly verificationReadProblem?: unknown;
+}): string | null;
+export declare function governedLandingShapeProblem(files: unknown, method: unknown): string | null;
 export declare function judgeClearanceWindow(fields: { readonly issued?: string; readonly expires?: string } | undefined, now: number): string | null;
 
 export interface LandingJudgement {
@@ -88,11 +97,17 @@ export declare function judgeCommitLanding(commit: {
   readonly headParent?: unknown;
   readonly headParentCount?: unknown;
   readonly paths?: unknown;
+  readonly committerId?: unknown;
+  readonly verificationVerified?: unknown;
+  readonly verificationReason?: unknown;
+  readonly verificationReadProblem?: unknown;
 }, options?: {
   readonly pem?: unknown;
   readonly anchor?: unknown;
   readonly now?: unknown;
   readonly seenNonces?: Set<string>;
+  readonly governedLanderBotId?: unknown;
+  readonly env?: NodeJS.ProcessEnv;
 }): Promise<LandingJudgement>;
 
 export declare function annotateChainLandings<T>(commits: readonly T[], options?: {

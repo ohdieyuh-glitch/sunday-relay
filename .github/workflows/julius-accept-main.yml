@@ -172,11 +172,14 @@ jobs:
           .github/julius-landing/reviewer-ed25519.pub
           .github/julius-landing/land-lib.mjs
           .github/julius-landing/land.mjs
+          .github/julius-landing/governed-land.mjs
+          .github/julius-landing/governed-queue.txt
           .github/julius-landing/reviewer-tools.mjs
           .github/julius-landing/allowed-branches.txt
           .github/julius-landing/required-checks.txt
           .github/workflows/julius-accept-main.yml
           .github/workflows/julius-land.yml
+          .github/workflows/julius-governed-land.yml
           scripts/julius-main-provenance.mjs
           scripts/julius-main-provenance.d.mts
           scripts/julius-main-provenance-trust.mjs
