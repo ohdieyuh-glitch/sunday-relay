@@ -136,6 +136,14 @@ export interface JuliusMissionRoutePorts {
     readonly path: string;
     handle(request: JuliusMissionRouteRequest): Promise<JuliusMissionRouteResult | null>;
   };
+  /**
+   * Wonderland companion read, one path shape, injected the same way.
+   * This file does not import the companion module.
+   */
+  readonly wonderlandCompanionBridge?: {
+    matches(path: string): boolean;
+    handle(request: JuliusMissionRouteRequest): Promise<JuliusMissionRouteResult | null>;
+  };
 }
 
 /** The three worker requests, from the same definitions the live composition dispatches. */
@@ -176,6 +184,9 @@ export async function handleJuliusMissionRoute(
   request: JuliusMissionRouteRequest,
   ports: JuliusMissionRoutePorts,
 ): Promise<JuliusMissionRouteResult | null> {
+  if (ports.wonderlandCompanionBridge !== undefined && ports.wonderlandCompanionBridge.matches(request.path)) {
+    return ports.wonderlandCompanionBridge.handle(request);
+  }
   if (ports.wonderlandStatusBridge !== undefined && request.path === ports.wonderlandStatusBridge.path) {
     return ports.wonderlandStatusBridge.handle(request);
   }

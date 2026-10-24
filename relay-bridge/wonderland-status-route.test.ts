@@ -107,6 +107,7 @@ describe('wonderland status', () => {
       catchAllPath: null,
       exactAdmission: false,
       exactStatus: true,
+      exactCompanion: false,
     });
     for (const raw of [
       `${WONDERLAND_STATUS_PATH}/?projectId=${PROJECT}`,
