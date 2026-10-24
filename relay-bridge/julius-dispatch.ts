@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 
 import { bearerMatches } from './bearer-auth';
 import { sessionTokenFrom } from './browser-session/routes';
-import { isAdmittedRunId, type AdmissionClaimStore, type AdmittedRecord } from './julius-dispatch-admission';
+import { isAdmittedRunId, type AdmissionClaimStore } from './julius-dispatch-admission';
 import { runJuliusCompanionSlot, type JuliusCompanionBinding } from './julius-companion-slot';
 import { preSpendDecision, spendRefusalCode, type JuliusSpendLedgerPort } from './julius-dispatch-spend';
 import { composeRoleProviders } from './julius-role-compose';
@@ -813,9 +813,10 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       const founder = (env.JULIUS_J1_FOUNDER_PLAYER_ID ?? '').trim();
       const project = (env.JULIUS_J1_PROJECT_ID ?? '').trim();
       const reviewerConfigured = (env.JULIUS_J1_REVIEWER_PROVIDER ?? '').trim();
-      let budgetCapUsd = positiveNumber(env.JULIUS_J1_BUDGET_CAP_USD);
+      const configuredBudgetUsd = positiveNumber(env.JULIUS_J1_BUDGET_CAP_USD);
       const legEstimateUsd = positiveNumber(env.JULIUS_J1_LEG_ESTIMATE_USD);
-      if (founder === '' || project === '' || reviewerConfigured === '' || budgetCapUsd === null || legEstimateUsd === null) return refuse(503, 'julius_dispatch_not_configured');
+      if (founder === '' || project === '' || reviewerConfigured === '' || configuredBudgetUsd === null || legEstimateUsd === null) return refuse(503, 'julius_dispatch_not_configured');
+      let budgetCapUsd = configuredBudgetUsd;
       if (input.callerPlayerId !== founder) return refuse(403, 'julius_dispatch_founder_only');
       if (input.projectId !== project) return refuse(403, 'julius_dispatch_wrong_project');
       if (boundSession !== null && boundSession !== input.sessionId) return refuse(403, 'julius_dispatch_second_pairing');
