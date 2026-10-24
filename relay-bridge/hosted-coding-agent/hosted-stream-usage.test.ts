@@ -60,7 +60,7 @@ const result = (over: Record<string, unknown> = {}): unknown => ({
   ...over,
 });
 
-const init = (): unknown => ({ type: 'system', subtype: 'init', model: 'claude-fable-5', session_id: 's' });
+const init = (): unknown => ({ type: 'system', subtype: 'init', model: 'claude-opus-5-5', session_id: 's' });
 
 const observe = (messages: readonly unknown[]): HostedObservation => observeHostedMessages(messages);
 
@@ -292,7 +292,7 @@ describe('D — a timed-out dispatch carries the floor into its durable diagnost
       artifacts,
       projectId: 'project',
       apiKey: 'not-a-real-key',
-      requestedModel: 'claude-fable-5',
+      requestedModel: 'claude-opus-5-5',
       workspacePath: '/tmp/does-not-matter',
       testCommand: 'npm test',
       shell: {

@@ -306,11 +306,11 @@ describe('status says what is true, and no more', () => {
     const yaml = [
       '      # was OPENAI_PROMPT_ARCHITECT_MODEL: gpt-4o once',
       '      OPENAI_PROMPT_ARCHITECT_MODEL: gpt-5.6-sol',
-      '      RELAY_HOSTED_CODING_MODEL: claude-fable-5',
+      '      RELAY_HOSTED_CODING_MODEL: claude-opus-5-5',
       '      RELAY_HERMES_PROVIDER: xai',
       '      RELAY_HERMES_MODEL: grok-build-0.1',
     ].join('\n');
-    expect(pinnedModelsFrom(yaml)).toEqual({ architect: 'gpt-5.6-sol', coder: 'claude-fable-5', reviewerProvider: 'xai', reviewerModel: 'grok-build-0.1' });
+    expect(pinnedModelsFrom(yaml)).toEqual({ architect: 'gpt-5.6-sol', coder: 'claude-opus-5-5', reviewerProvider: 'xai', reviewerModel: 'grok-build-0.1' });
   });
 });
 

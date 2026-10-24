@@ -22,7 +22,7 @@ const read = (relative: string): string => readFileSync(join(ROOT, relative), 'u
 
 const WS = '/data/relay-workspaces/prj/run-1';
 const init = () => ({
-  type: 'system', subtype: 'init', model: 'claude-fable-5', claude_code_version: '2.1.220',
+  type: 'system', subtype: 'init', model: 'claude-opus-5-5', claude_code_version: '2.1.220',
   apiKeySource: 'ANTHROPIC_API_KEY', cwd: WS, tools: ['Read', 'Glob', 'Grep', 'Edit'],
 });
 const result = () => ({
@@ -41,7 +41,7 @@ const optionsHandedToTheSdk = async (limits?: Parameters<typeof runHostedCodingA
   let n = 0;
   await runHostedCodingAgent({
     queryFn: fn, prompt: 'implement it', workspacePath: WS, apiKey: 'k',
-    requestedModel: 'claude-fable-5', now: () => new Date(Date.UTC(2026, 8, 10, 12, 0, n++)).toISOString(),
+    requestedModel: 'claude-opus-5-5', now: () => new Date(Date.UTC(2026, 8, 10, 12, 0, n++)).toISOString(),
     ...(limits ? { limits } : {}),
   });
   return seen[0]!;

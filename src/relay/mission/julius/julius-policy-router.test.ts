@@ -63,7 +63,7 @@ describe('safe review diagnostics', () => {
   it('refuses a credential wearing a model name, and keeps real model ids', () => {
     // `servedModel` is the one loose field — real ids carry dots and dashes —
     // so it is bounded AND refused when it looks like a credential.
-    for (const model of ['grok-build-0.1', 'gpt-4o-2024-08-06', 'claude-fable-5']) {
+    for (const model of ['grok-build-0.1', 'gpt-4o-2024-08-06', 'claude-opus-5-5']) {
       expect(safeReviewDiagnostics({ servedModel: model })!.servedModel, model).toBe(model);
     }
     for (const key of ['sk-live-FAKESECRET123456789', 'xai-FAKESECRET123456789', 'ghp_FAKESECRET123456789', 'a'.repeat(64)]) {
@@ -155,7 +155,7 @@ describe('safe review diagnostics', () => {
     const SECRET = 'Authorization: Bearer FAKESECRET123456789';
     const safe = safeReviewDiagnostics({
       stage: 'build', transport: 'hosted', provider: 'anthropic',
-      requestedModel: 'claude-fable-5', servedModel: 'claude-fable-5-20260114',
+      requestedModel: 'claude-opus-5-5', servedModel: 'claude-opus-5-5-20260114',
       responseId: 'session-abc123', numTurns: 7, toolUseCount: 12, permissionDenials: 2,
       resultSubtype: 'error_max_turns', isError: true, implementationPresent: false,
       outputBytesObserved: 4096,
@@ -174,7 +174,7 @@ describe('safe review diagnostics', () => {
     expect(safe.toolUseCount).toBe(12);
     expect(safe.permissionDenials, 'evidence the envelope held').toBe(2);
     expect(safe.implementationPresent).toBe(false);
-    expect(safe.servedModel).toBe('claude-fable-5-20260114');
+    expect(safe.servedModel).toBe('claude-opus-5-5-20260114');
 
     for (const key of ['finalText', 'prompt', 'transcript', 'workspaceSource']) {
       expect(Object.prototype.hasOwnProperty.call(safe, key), `${key} must not survive`).toBe(false);

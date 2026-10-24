@@ -4,7 +4,6 @@ import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 
-import { ANTHROPIC_CREDENTIAL_ENV_NAMES } from '../relay-bridge/hosted-coding-agent/hosted-auth';
 import { LEGACY_RUN_ID_PATTERN, parseJuliusAdmissionRunId, WLJ_RUN_ID_PATTERN } from './julius-admission-run-id.mjs';
 import { preflightIdentityFor } from './julius-live-preflight-identity';
 
@@ -185,6 +184,7 @@ describe('no second spending path', () => {
 describe('provider readiness fails before spending, and never exposes a key', () => {
   const paidJob = job('first-live-mission');
   const readiness = step(paidJob, READINESS);
+  const VERIFIED = 'org_attribution provider=anthropic model=claude-opus-5-5 http=200 result=VERIFIED organization_id=org_recorded';
 
   it('runs on every dispatch, before the roles check and long before LIVE', () => {
     expect(readiness, 'a condition would let a paid run skip it').not.toMatch(/\n\s+if:/u);
@@ -196,34 +196,51 @@ describe('provider readiness fails before spending, and never exposes a key', ()
   it('the key reaches curl only through --config on stdin, and is never echoed', () => {
     const body = script(readiness);
     for (const line of body.split('\n')) {
-      if (/API_KEY/u.test(line) && !/^\s*\[ -n "\$OPENAI_API_KEY" \] && \[ -n "\$ANTHROPIC_API_KEY" \] && \[ -n "\$XAI_API_KEY" \] \|\| \{/u.test(line)) {
+      if (/API_KEY/u.test(line) && !/^\s*\[ -n "\$OPENAI_API_KEY" \]/u.test(line)) {
         expect(line, 'a key may only be interpolated into the printf that feeds --config').toMatch(/^\s*printf 'header = /u);
       }
       if (/\bcurl\b/u.test(line)) expect(line, 'curl never receives a key as an argument').not.toMatch(/API_KEY/u);
       if (/\becho\b/u.test(line)) expect(line, 'nothing echoes a key').not.toMatch(/API_KEY/u);
     }
     expect(body).toContain('--config -');
-    expect(body).toContain('provider_balance=UNKNOWN');
-    expect(body).toContain('https://api.anthropic.com/v1/models/');
+    expect(body).toContain('node scripts/julius-org-attribution.mjs');
     expect(body, 'the consumer login token is not a readiness credential').not.toContain('CLAUDE_CODE_OAUTH_TOKEN');
+    expect(body).toContain('provider_balance=UNKNOWN');
+    expect(body, 'the Anthropic key is an environment entry for the attribution script, never a curl argument').not.toContain('api.anthropic.com');
   });
+
   /**
-   * Run the step for real: a fake `curl` answers one status per API provider.
-   * Keys travel only on curl's stdin config. Nothing here is a live provider.
+   * Run the step for real. A fake curl answers OpenAI and xAI. A fake node,
+   * earlier on PATH, answers the organization script with a closed line.
+   * Neither is a live provider, and neither is presented as one.
    */
-  const runReadiness = (statuses: { openai: string; anthropic?: string; xai: string }, env: Record<string, string | undefined> = {}) => {
+  const runReadiness = (statuses: { openai: string; xai: string }, env: Record<string, string> = {}, probe?: { line: string; exitCode: number }) => {
     const dir = mkdtempSync(join(tmpdir(), 'julius-readiness-'));
+    const record = dir.replace(/\\/gu, '/');
+    const fakeNode = join(dir, 'node');
+    writeFileSync(fakeNode, [
+      '#!/usr/bin/env bash',
+      'for arg in "$@"; do case "$arg" in *FAKETESTNOTREAL*) echo LEAK >> "$FAKE_DIR/leak";; esac; done',
+      `printf '%s\\n' "$*" >> '${record}/node-argv'`,
+      'case "$*" in',
+      '  *julius-org-attribution.mjs*)',
+      '    if [ -n "${JULIUS_ORG_PROBE_LINE:-}" ]; then printf \'%s\\n\' "$JULIUS_ORG_PROBE_LINE"; exit "${JULIUS_ORG_PROBE_EXIT:-1}"; fi',
+      `    printf '%s\\n' '${VERIFIED}'`,
+      '    exit 0;;',
+      'esac',
+      'echo "unexpected node: $*" >> "$FAKE_DIR/leak"',
+      'exit 1',
+    ].join('\n'));
+    chmodSync(fakeNode, 0o755);
     const fakeCurl = join(dir, 'curl');
     writeFileSync(fakeCurl, [
       '#!/usr/bin/env bash',
       'config=$(cat)',
-      'printf \'%s\\n\' "$config" >> "$FAKE_DIR/headers"',
-      'for arg in "$@"; do case "$arg" in *FAKETESTNOTREAL*|*oauth-placeholder*) echo LEAK >> "$FAKE_DIR/leak";; esac; done',
+      'for arg in "$@"; do case "$arg" in *FAKETESTNOTREAL*) echo LEAK >> "$FAKE_DIR/leak";; esac; done',
       'url="${@: -1}"',
-      'printf \'%s\\n\' "$url" >> "$FAKE_DIR/urls"',
       'case "$url" in',
       `  *api.openai.com*) printf '%s' "${statuses.openai}";;`,
-      `  *api.anthropic.com*) printf '%s' "${statuses.anthropic ?? '200'}";;`,
+      '  *api.anthropic.com*) echo ANTHROPIC_API_CALLED >> "$FAKE_DIR/leak"; printf 200;;',
       `  *api.x.ai*) printf '%s' "${statuses.xai}";;`,
       '  *) printf 000;;',
       'esac',
@@ -232,7 +249,6 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     const fakeSleep = join(dir, 'sleep');
     writeFileSync(fakeSleep, '#!/usr/bin/env bash\nexit 0\n');
     chmodSync(fakeSleep, 0o755);
-    const blankRoutes = Object.fromEntries(ANTHROPIC_CREDENTIAL_ENV_NAMES.map((name) => [name, '']));
     let code = 0;
     let output = '';
     try {
@@ -240,17 +256,18 @@ describe('provider readiness fails before spending, and never exposes a key', ()
         cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
         env: {
           ...process.env,
-          ...blankRoutes,
           PATH: `${dir}${delimiter}${process.env.PATH ?? ''}`,
           FAKE_DIR: dir,
           GITHUB_WORKSPACE: dir,
           OPENAI_API_KEY: 'FAKETESTNOTREAL-openai',
           ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic',
           XAI_API_KEY: 'FAKETESTNOTREAL-xai',
+          JULIUS_EXPECTED_ANTHROPIC_ORG_ID: 'org_recorded',
           OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-5.6-sol',
           RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5',
           RELAY_HERMES_PROVIDER: 'xai',
           RELAY_HERMES_MODEL: 'grok-build-0.1',
+          ...(probe === undefined ? {} : { JULIUS_ORG_PROBE_LINE: probe.line, JULIUS_ORG_PROBE_EXIT: String(probe.exitCode) }),
           ...env,
         },
       });
@@ -259,64 +276,52 @@ describe('provider readiness fails before spending, and never exposes a key', ()
       output = String((error as { stdout?: string }).stdout ?? '');
     }
     const recorded = (name: string): string => { try { return readFileSync(join(dir, name), 'utf8'); } catch { return ''; } };
-    return { code, output, leak: recorded('leak'), headers: recorded('headers'), urls: recorded('urls') };
+    return { code, output, leak: recorded('leak'), nodeArgv: recorded('node-argv').trim() };
   };
 
-  it('all three ready on their API keys, the pinned models, and no key in argv or output', () => {
-    const run = runReadiness({ openai: '200', anthropic: '200', xai: '200' }, { CLAUDE_CODE_OAUTH_TOKEN: loginStandIn });
+  it('both API providers authenticate and the organization line is VERIFIED, with no key in argv or output', () => {
+    const run = runReadiness({ openai: '200', xai: '200' });
     expect(run.code).toBe(0);
-    expect(run.output.match(/result=AUTHENTICATED_MODEL_AVAILABLE/gu)?.length).toBe(3);
-    expect(run.output).toContain('provider_readiness provider=anthropic model=claude-opus-5-5 http=200 result=AUTHENTICATED_MODEL_AVAILABLE');
+    expect(run.output.match(/result=AUTHENTICATED_MODEL_AVAILABLE/gu)?.length).toBe(2);
+    expect(run.output).toContain(VERIFIED);
     expect(run.output).toContain('provider_balance=UNKNOWN');
-    expect(run.leak).toBe('');
+    expect(run.leak, 'no argv leak, and curl never calls Anthropic').toBe('');
     expect(run.output).not.toContain('FAKETESTNOTREAL');
-    expect(run.output).not.toContain('oauth-placeholder');
-    expect(run.headers).toContain('x-api-key:');
-    expect(run.headers).not.toContain('oauth-placeholder');
-    expect(run.urls).toContain('https://api.anthropic.com/v1/models/claude-opus-5-5');
-  }, 60_000);
+    expect(run.nodeArgv).toBe('scripts/julius-org-attribution.mjs');
+  });
 
-  it('a refused Anthropic model probe fails the job after the other probes are recorded', () => {
-    const run = runReadiness({ openai: '200', anthropic: '401', xai: '200' });
+  it('an unverified organization still probes the reviewer and fails closed', () => {
+    const line = 'org_attribution provider=anthropic model=claude-opus-5-5 http=200 result=ORG_ATTRIBUTION_UNVERIFIED reason=mismatch organization_id=org_other expected_organization_id=org_recorded';
+    const run = runReadiness({ openai: '200', xai: '200' }, {}, { line, exitCode: 1 });
     expect(run.code).not.toBe(0);
-    expect(run.output).toContain('provider_readiness provider=anthropic model=claude-opus-5-5 http=401 result=UNAUTHENTICATED');
+    expect(run.output).toContain(line);
+    expect(run.output).toContain('ORG_ATTRIBUTION_UNVERIFIED');
     expect(run.output).toContain('provider_readiness provider=xai model=grok-build-0.1 http=200 result=AUTHENTICATED_MODEL_AVAILABLE');
+    expect(run.output).toContain('provider_balance=UNKNOWN');
     expect(run.output).not.toContain('FAKETESTNOTREAL');
-  }, 60_000);
+  });
 
   it('a refused credential or an unreachable API provider fails the job', () => {
     expect(runReadiness({ openai: '401', xai: '200' }).code).not.toBe(0);
     expect(runReadiness({ openai: '404', xai: '200' }).code).not.toBe(0);
     expect(runReadiness({ openai: '200', xai: '503' }).code).not.toBe(0);
-    expect(runReadiness({ openai: '200', anthropic: '404', xai: '200' }).code).not.toBe(0);
-  }, 120_000);
+  });
 
-  it('a missing API key fails before any request is made', () => {
-    for (const blank of [{ XAI_API_KEY: '' }, { ANTHROPIC_API_KEY: '' }, { OPENAI_API_KEY: '' }]) {
+  it('a missing key or expected organization id fails before any request is made', () => {
+    const blanks: Record<string, string>[] = [
+      { XAI_API_KEY: '' },
+      { ANTHROPIC_API_KEY: '' },
+      { OPENAI_API_KEY: '' },
+      { JULIUS_EXPECTED_ANTHROPIC_ORG_ID: '' },
+    ];
+    for (const blank of blanks) {
       const run = runReadiness({ openai: '200', xai: '200' }, blank);
       expect(run.code, JSON.stringify(blank)).not.toBe(0);
       expect(run.output, JSON.stringify(blank)).not.toContain('provider_readiness');
-      expect(run.urls, JSON.stringify(blank)).toBe('');
+      expect(run.output, JSON.stringify(blank)).not.toContain('org_attribution');
+      expect(run.nodeArgv, JSON.stringify(blank)).toBe('');
+      expect(run.output).not.toContain('FAKETESTNOTREAL');
     }
-  }, 60_000);
-
-  it('an explicit subscription-smoke dispatch refuses before any Claude CLI call', () => {
-    const smoke = step(job('first-live-mission'), "'Subscription smoke: refused pending founder ruling'");
-    const body = script(smoke);
-    expect(body).not.toMatch(/claude|curl|api\.anthropic/u);
-    expect(smoke).toContain("if: success() && inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE' && inputs.confirm_live != 'RUN LIVE MISSION'");
-    expect(smoke).not.toContain('secrets.CLAUDE_CODE_OAUTH_TOKEN');
-    let code = 0;
-    let stderr = '';
-    try {
-      execFileSync('bash', [...GITHUB_BASH, body], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch (error) {
-      const failed = error as { status?: number; stderr?: string };
-      code = failed.status ?? 1;
-      stderr = failed.stderr ?? '';
-    }
-    expect(code).not.toBe(0);
-    expect(stderr).toContain('coder_auth_subscription_refused');
   });
 });
 

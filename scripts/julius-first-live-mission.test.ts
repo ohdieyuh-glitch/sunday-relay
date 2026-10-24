@@ -325,10 +325,13 @@ describe('no credential is committed, and none can leave the runner', () => {
   });
 
   /**
-   * PENDING FOUNDER RULING. The Coding Agent authenticates with the user-owned
-   * Anthropic API key. A consumer Claude Max login is not a product credential.
+  /**
+   * The Coding Agent authenticates with the user-owned Anthropic API key.
+   * A consumer Claude Max login is not a product credential. A missing key
+   * fails closed. The subscription token does not reach the steps that start
+   * the coder.
    */
-  it('the roles preflight and LIVE run the Coding Agent on the user-owned API key, never on the consumer login token', () => {
+  it('the roles preflight and LIVE run the Coding Agent on the user-owned Anthropic API key', () => {
     const stepNamed = (name: string): string => {
       const start = workflow.indexOf(`- name: ${name}`);
       expect(start, name).toBeGreaterThan(-1);
@@ -341,15 +344,23 @@ describe('no credential is committed, and none can leave the runner', () => {
       expect(step, name).toContain('ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}');
       expect(step, `${name} must not map the consumer login token into the step`).not.toContain('secrets.CLAUDE_CODE_OAUTH_TOKEN');
     }
+    const live = stepNamed("'LIVE: run the first real Julius mission'");
+    expect(live).toContain('JULIUS_EXPECTED_ANTHROPIC_ORG_ID: ${{ vars.JULIUS_EXPECTED_ANTHROPIC_ORG_ID }}');
     const roles = stepNamed("'Preflight: all three roles resolve to the expected models, nothing dispatched'");
     expect(roles).toContain("grep -qx '  billing paths: architect=API_BILLED coder=API_BILLED reviewer=API_BILLED' preflight-roles.log");
     expect(roles).toContain("grep -qx '  claude auth source: anthropic_api_key' preflight-roles.log");
     expect(roles).toContain("grep -qx '  CLAUDE_CODE_OAUTH_TOKEN: MISSING' preflight-roles.log");
+    expect(roles).toContain("grep -qx '  CLAUDE AUTH: API KEY provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=n/a api_key_used=true api_cost_applicable=true' preflight-roles.log");
     expect(roles).toMatch(/for name in OPENAI_API_KEY ANTHROPIC_API_KEY /u);
     const readiness = stepNamed("'Preflight: each provider accepts its credential and serves the pinned model, nothing generated'");
-    expect(readiness).toContain('https://api.anthropic.com/v1/models/');
-    expect(readiness, 'the readiness check never generates').not.toMatch(/claude" -p /u);
+    expect(readiness).toContain('\n        id: provider_readiness\n');
+    expect(readiness).toContain('ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}');
+    expect(readiness).toContain('JULIUS_EXPECTED_ANTHROPIC_ORG_ID: ${{ vars.JULIUS_EXPECTED_ANTHROPIC_ORG_ID }}');
+    expect(readiness).toContain('node scripts/julius-org-attribution.mjs');
+    expect(readiness, 'readiness does not generate').not.toMatch(/claude" -p /u);
+    expect(readiness).not.toContain('julius-subscription-check.mjs');
     expect(readiness).not.toContain('CLAUDE_CODE_OAUTH_TOKEN');
+    expect(readiness).not.toContain('https://api.anthropic.com/v1/models/');
   });
 
   it('the product path does not invoke a consumer Claude login, and the coder child still pins its model', () => {
@@ -375,20 +386,25 @@ describe('no credential is committed, and none can leave the runner', () => {
   });
 
   /**
-   * A PAID RUN DOES NOT START UNLESS THE CODER'S API KEY WAS PRESENT.
+   * A PAID RUN DOES NOT START UNLESS THE CODER'S API KEY WAS PRESENT AND THE
+   * ORGANIZATION ATTRIBUTION WAS VERIFIED.
    *
-   * The gate runs before readiness and before LIVE. Every paid step names that
-   * gate's success by id, so a run holding only CLAUDE_CODE_OAUTH_TOKEN cannot
-   * be read as ready. PENDING FOUNDER RULING.
+   * The API-key gate runs before readiness. Readiness is the spend-free models
+   * read plus one organization header. Every paid step names both successes
+   * by id.
    */
-  it('no paid step runs unless the coder API-key gate PASSED in the same job', () => {
+  it('no paid step runs unless the coder API-key gate and provider readiness PASSED in the same job', () => {
     const gate = workflow.indexOf("- name: 'Gate: coder uses the user-owned Anthropic API key (pending founder ruling)'");
+    const readinessAt = workflow.indexOf("- name: 'Preflight: each provider accepts its credential and serves the pinned model, nothing generated'");
     const attempt = workflow.indexOf("- name: 'Record that a paid mission was attempted (before any provider can be reached)'");
     const live = workflow.indexOf("- name: 'LIVE: run the first real Julius mission'");
     expect(attempt, 'the attempt marker step').toBeGreaterThan(-1);
     expect(gate, 'the coder auth gate').toBeGreaterThan(-1);
+    expect(readinessAt, 'provider readiness').toBeGreaterThan(-1);
     expect(gate, 'the gate runs before the attempt is recorded').toBeLessThan(attempt);
+    expect(readinessAt, 'readiness runs before the attempt is recorded').toBeLessThan(attempt);
     expect(gate, 'and before the entrypoint that can spend').toBeLessThan(live);
+    expect(readinessAt, 'and before the entrypoint that can spend').toBeLessThan(live);
     const uploads = workflow.split('- uses: actions/upload-artifact');
     const attemptUpload = uploads.find((block) => block.includes('name: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted')) ?? '';
     const conditionOf = (text: string): string => /\n\s*if: (.+)/u.exec(text)?.[1] ?? '';
@@ -398,16 +414,15 @@ describe('no credential is committed, and none can leave the runner', () => {
       ['LIVE', conditionOf(workflow.slice(live, live + 400))],
     ] as const) {
       expect(condition, `${label} requires the API-key gate's success by id`).toContain("steps.coder_auth.outcome == 'success'");
+      expect(condition, `${label} requires readiness by id`).toContain("steps.provider_readiness.outcome == 'success'");
       expect(condition, `${label} stays on the fail-closed paid path`).toMatch(/^success\(\) && inputs\.confirm_live == 'RUN LIVE MISSION' && /u);
     }
-    // COMPLETED means LIVE succeeded (Second julius's review of A2): LIVE can be skipped while
-    // success() holds, and a skipped LIVE must never be recorded as a completed paid mission.
-    expect(workflow.slice(live, live + 200)).toContain('\n        id: live_mission\n');
+    expect(workflow.slice(live, live + 250)).toContain('\n        id: live_mission\n');
     const completed = workflow.indexOf('- name: Record that a paid mission completed');
     const completedUpload = uploads.find((block) => block.includes('name: ${{ steps.inputs_gate.outputs.marker_namespace }}-completed')) ?? '';
     expect(completed, 'the completion marker step').toBeGreaterThan(live);
     for (const [label, condition] of [
-      ['the completion marker', conditionOf(workflow.slice(completed, completed + 300))],
+      ['the completion marker', conditionOf(workflow.slice(completed, completed + 400))],
       ['the completion marker upload', conditionOf(completedUpload)],
     ] as const) {
       expect(condition, `${label} requires LIVE's success by id`).toBe("success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.live_mission.outcome == 'success'");
@@ -421,34 +436,25 @@ describe('no credential is committed, and none can leave the runner', () => {
     expect(smokeIf).toContain("inputs.confirm_live != 'RUN LIVE MISSION'");
   });
 
-  it('the smoke evidence keeps every closed line the smoke prints, and nothing with a tail', () => {
+  it('the organization-attribution evidence keeps closed lines and drops a tail', () => {
     const collect = stepScript('Collect the redacted validation evidence');
-    const grep = /grep -E '(\^\(subscription_smoke_auth [^']+)' subscription-smoke\.log/u.exec(collect);
-    expect(grep, 'the smoke evidence is kept by one anchored grep').not.toBeNull();
+    const grep = /grep -E '(\^\(.*\)\$)' provider-readiness\.log/u.exec(collect);
+    expect(grep, 'provider readiness is kept by one anchored grep').not.toBeNull();
     const kept = new RegExp(grep?.[1] ?? '$^', 'u');
     for (const line of [
-      'subscription_smoke_auth provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION method=oauth_token plan=absent result=SUBSCRIPTION_LOGIN_PRESENT',
-      'subscription_smoke_auth provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION reason=NOT_LOGGED_IN result=SUBSCRIPTION_NOT_READY',
-      'subscription_smoke_auth_exit=0',
-      'subscription_smoke_cli_exit=1',
-      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=claude-opus-5-5 match=EXACT',
-      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=claude-opus-5-5-20260901,unsafe match=DATED_BUILD',
-      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=none match=NONE',
-      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=MODEL_NOT_ENTITLED_OR_NOT_FOUND http=404 subtype=success',
-      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=SERVED_MODEL_MISMATCH http=none subtype=none',
-      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=CLI_EXIT_NONZERO http=none subtype=success',
-      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=AUTH_EXIT_NONZERO http=none subtype=none',
-      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=EXIT_UNREPORTED http=none subtype=none',
-      'subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=PASS',
-      'subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=ERROR result=FAIL',
+      'provider_readiness provider=openai model=gpt-5.6-sol http=200 result=AUTHENTICATED_MODEL_AVAILABLE',
+      'provider_readiness provider=xai model=grok-build-0.1 http=401 result=UNAUTHENTICATED',
+      'org_attribution provider=anthropic model=claude-opus-5-5 http=200 result=VERIFIED organization_id=org_recorded',
+      'org_attribution provider=anthropic model=claude-opus-5-5 http=200 result=ORG_ATTRIBUTION_UNVERIFIED reason=mismatch organization_id=org_other expected_organization_id=org_recorded',
+      'org_attribution provider=anthropic model=claude-opus-5-5 http=401 result=ORG_ATTRIBUTION_UNVERIFIED reason=unauthenticated',
+      'org_attribution provider=anthropic model=none http=none result=ORG_ATTRIBUTION_UNVERIFIED reason=expected_unset',
+      'provider_balance=UNKNOWN (no provider exposes a spend-free balance query; exhaustion surfaces as PROVIDER_BLOCKED when a provider refuses)',
     ]) expect(kept.test(line), `withheld: ${line}`).toBe(true);
     for (const line of [
-      'subscription_smoke_cli_exit=1 sk-ant-oat01-FAKETESTNOTREAL',
-      'subscription_smoke_cli_exit=1000',
-      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=claude-opus-5-5 match=EXACT trailing',
-      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=Bearer abc match=EXACT',
-      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=Credit balance is too low http=400 subtype=none',
-      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=OTHER http=999 subtype=none',
+      'org_attribution provider=anthropic model=claude-opus-5-5 http=200 result=VERIFIED organization_id=org_recorded sk-ant-FAKETESTNOTREAL',
+      'org_attribution provider=anthropic model=claude-opus-5-5 http=200 result=ORG_ATTRIBUTION_UNVERIFIED reason=the key was printed',
+      'provider_readiness provider=openai model=gpt-5.6-sol http=200 result=AUTHENTICATED_MODEL_AVAILABLE trailing',
+      'subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=PASS',
     ]) expect(kept.test(line), `kept a lookalike: ${line}`).toBe(false);
   });
 
@@ -1238,7 +1244,10 @@ describe('the evidence dump names only tables and columns the migrations create'
       'terminalReason', 'resultClass',
       // The Prompt Architect half. Paid attempt #3 failed here and the artifact
       // could not say which rule refused the plan.
-      'requestedModel', 'responseId', 'validationPassed', 'validationReasonCode', 'validationField',
+      'requestedModel', 'responseId',
+      // The Coding Agent's Anthropic API request id and message id, and the reviewer's usage-file request id on the same columns. The runtime session id is not either of them. A message id does not fill responseId.
+      'providerRequestId', 'providerMessageId', 'providerRequestAvailability', 'providerRequestUnavailableReason',
+      'validationPassed', 'validationReasonCode', 'validationField',
       // Paid runs 34185920678 and 34186711214 recorded `plan_false_work_claim`
       // with an empty field and no phrase, twice. The path says where and this
       // says which of the four phrases fired.
