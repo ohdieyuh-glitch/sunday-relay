@@ -64,7 +64,7 @@ function heldRow(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     phase: 'run_admission',
     runId: RUN,
-    serverRunId: `run:${'1'.repeat(24)}`,
+    serverRunId: RUN,
     keyHash: KEY,
     dispatchId: 'adm_fixed',
     missionId: 'julius-inworld-data-1',
@@ -126,20 +126,15 @@ describe('resolveAdmissionStorePath', () => {
 });
 
 describe('the admission file', () => {
-  it('writes schema version 2 and reloads the same server run id and cap', async () => {
+  it('writes schema version 3 and reloads the same client run id and cap', async () => {
     const dir = directory();
     const file = join(dir, 'admission.json');
     let opened: { close(): void } | null = null;
     try {
-      let minted = 0;
-      const mint = () => {
-        minted += 1;
-        return `run:${minted.toString(16).padStart(24, '0')}`;
-      };
       const ledger = createFileAdmissionLedger(file);
       opened = ledger;
       const first = createWonderlandAdmissionStore({
-        ledger, dailyCap: 1, missionCap: 1, mintServerRunId: mint,
+        ledger, dailyCap: 1, missionCap: 1,
       });
       const created = await first.admit(request());
       if (!created.ok) throw new Error('expected an admission');
@@ -152,24 +147,18 @@ describe('the admission file', () => {
       ledger.close();
       opened = null;
 
-      let remints = 0;
       const reloaded = createFileAdmissionLedger(file);
       opened = reloaded;
       const second = createWonderlandAdmissionStore({
         ledger: reloaded,
         dailyCap: 1,
         missionCap: 1,
-        mintServerRunId: () => {
-          remints += 1;
-          throw new Error('mint_on_reload');
-        },
       });
       const replay = await second.admit(request({ dispatchId: 'adm_ignored' }));
       expect(replay.ok && replay.httpStatus).toBe(200);
       if (!replay.ok) throw new Error('expected the replay');
-      expect(replay.run.serverRunId).toBe(created.run.serverRunId);
+      expect(replay.run.serverRunId).toBe(RUN);
       expect(replay.run.state).toBe('ADMISSION_HELD');
-      expect(remints).toBe(0);
       expect(second.admissionCount()).toBe(1);
       const capped = await second.admit(request({
         runId: RUN_2, keyHash: KEY_2, dispatchId: 'adm_other',
@@ -251,15 +240,10 @@ describe('the admission file', () => {
       },
     });
     try {
-      let minted = 0;
       const admissions = createWonderlandAdmissionStore({
         ledger,
         dailyCap: 2,
         missionCap: 2,
-        mintServerRunId: () => {
-          minted += 1;
-          return `run:${minted.toString(16).padStart(24, 'f')}`;
-        },
       });
       const first = await admissions.admit(request());
       const second = await admissions.admit(request());
@@ -270,7 +254,6 @@ describe('the admission file', () => {
       expect(second.run.serverRunId).toBe(first.run.serverRunId);
       expect(second.run.state).toBe('LEDGER_UNWRITTEN');
       expect(attempts).toBe(2);
-      expect(minted).toBe(1);
       expect(admissions.admissionCount()).toBe(1);
       const parked = JSON.parse(readFileSync(file, 'utf8')) as { rows: { state: string; serverRunId: string }[] };
       expect(parked.rows).toEqual([expect.objectContaining({
@@ -279,24 +262,18 @@ describe('the admission file', () => {
       })]);
       ledger.close();
 
-      let remints = 0;
       const reopened = createFileAdmissionLedger(file);
       const restarted = createWonderlandAdmissionStore({
         ledger: reopened,
         dailyCap: 2,
         missionCap: 2,
-        mintServerRunId: () => {
-          remints += 1;
-          throw new Error('mint_on_unwritten_restart');
-        },
       });
       const replay = await restarted.admit(request());
       if (!replay.ok) throw new Error('expected the parked pair');
       expect(replay.httpStatus).toBe(200);
       expect(replay.run.state).toBe('LEDGER_UNWRITTEN');
-      expect(replay.run.serverRunId).toBe(first.run.serverRunId);
+      expect(replay.run.serverRunId).toBe(RUN);
       expect(replay.run.ledgerWritten).toBe(false);
-      expect(remints).toBe(0);
       expect(restarted.admissionCount()).toBe(1);
       const still = JSON.parse(readFileSync(file, 'utf8')) as { rows: { state: string }[] };
       expect(still.rows).toEqual([expect.objectContaining({ state: 'LEDGER_UNWRITTEN' })]);
@@ -313,7 +290,7 @@ describe('the admission file', () => {
     fsLog.ops.length = 0;
     try {
       const created = await createWonderlandAdmissionStore({
-        ledger, dailyCap: 2, missionCap: 2, mintServerRunId: () => `run:${'1'.padStart(24, '0')}`,
+        ledger, dailyCap: 2, missionCap: 2,
       }).admit(request());
       if (!created.ok) throw new Error('expected an admission');
       const renames = fsLog.ops
@@ -341,7 +318,7 @@ describe('the admission file', () => {
     fsLog.ops.length = 0;
     try {
       const created = await createWonderlandAdmissionStore({
-        ledger, dailyCap: 2, missionCap: 2, mintServerRunId: () => `run:${'2'.padStart(24, '0')}`,
+        ledger, dailyCap: 2, missionCap: 2,
       }).admit(request());
       if (!created.ok) throw new Error('expected an admission');
       const renames = fsLog.ops
@@ -485,7 +462,7 @@ describe('the admission file', () => {
     const other = {
       runId: RUN_2,
       keyHash: KEY_2,
-      serverRunId: `run:${'2'.repeat(24)}`,
+      serverRunId: RUN_2,
       dispatchId: 'adm_other',
       ledgerRef: 'julius-wonderland-admission:adm_other',
       requestId: 'trigger_02',
@@ -494,7 +471,7 @@ describe('the admission file', () => {
       [heldRow(), heldRow(other)],
       [heldRow(), heldRow({ ...other, runId: RUN })],
       [heldRow(), heldRow({ ...other, keyHash: KEY })],
-      [heldRow(), heldRow({ ...other, serverRunId: `run:${'1'.repeat(24)}` })],
+      [heldRow(), heldRow({ ...other, serverRunId: RUN })],
     ];
     try {
       const distinct = join(dir, 'distinct.json');
@@ -544,27 +521,20 @@ describe('the admission file', () => {
         ledger,
         dailyCap: 1,
         missionCap: 2,
-        mintServerRunId: () => `run:${'3'.repeat(24)}`,
       }).admit(request());
       if (!created.ok) throw new Error('expected an admission');
       ledger.close();
       opened = null;
       const reloaded = createFileAdmissionLedger(file);
       opened = reloaded;
-      let remints = 0;
       const restarted = createWonderlandAdmissionStore({
         ledger: reloaded,
         dailyCap: 1,
         missionCap: 2,
-        mintServerRunId: () => {
-          remints += 1;
-          return `run:${'4'.repeat(24)}`;
-        },
       });
       const replay = await restarted.admit(request());
       expect(replay.ok && replay.httpStatus).toBe(200);
       expect(restarted.admissionCount()).toBe(1);
-      expect(remints).toBe(0);
       const capped = await restarted.admit(request({
         runId: RUN_2, keyHash: KEY_2, dispatchId: 'adm_other', receivedAt: '2026-10-23T18:00:00.000Z',
       }));
@@ -594,7 +564,6 @@ describe('the admission file', () => {
         ledger,
         dailyCap: 2,
         missionCap: 2,
-        mintServerRunId: () => `run:${'5'.repeat(24)}`,
       }).admit(request({ modelPins: pins }));
       if (!created.ok) throw new Error('expected an admission');
       expect(created.run.modelPins).toEqual(pins);
@@ -608,7 +577,6 @@ describe('the admission file', () => {
         ledger: reloaded,
         dailyCap: 2,
         missionCap: 2,
-        mintServerRunId: () => { throw new Error('mint_on_pin_replay'); },
       }).admit(request({ modelPins: { architectModel: null, codingModel: null, reviewerProvider: null, reviewerModel: null } }));
       if (!replay.ok) throw new Error('expected the replay');
       expect(replay.httpStatus).toBe(200);

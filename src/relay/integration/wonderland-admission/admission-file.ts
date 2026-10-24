@@ -1,15 +1,17 @@
 /**
  * Durable Wonderland admission file.
  *
- * The operator-claim stack imports this module by this name. Schema version 2
- * is one JSON document: `{ schemaVersion, rows }`. Version 1 is refused: it
- * has no place to put the required `state` row. A write is a temp file in
- * the same directory, an fsync of that file, a rename onto the store path,
- * and an fsync of the directory. One lock file sits beside the store. A held
- * lock fails closed, including when the recorded pid is another process or
- * a dead pid. This process never deletes a lock it did not create. Corrupt
- * bytes fail closed. A different numeric schema version fails closed with
- * `ledger_schema_unsupported`. Neither is rewritten.
+ * The operator-claim stack imports this module by this name. Schema version 3
+ * is one JSON document: `{ schemaVersion, rows }`, keyed on the client's
+ * `wlj_` id. Schema version 2 is the legacy `run:` document. It is read and
+ * is not rewritten. Version 1 is refused: it has no place to put the required
+ * `state` row. A write is a temp file in the same directory, an fsync of that
+ * file, a rename onto the store path, and an fsync of the directory. One lock
+ * file sits beside the store. A held lock fails closed, including when the
+ * recorded pid is another process or a dead pid. This process never deletes a
+ * lock it did not create. Corrupt bytes fail closed. A different numeric
+ * schema version fails closed with `ledger_schema_unsupported`. Neither is
+ * rewritten.
  *
  * The founder operator claim tool is the only writer of the dispatched
  * transition. This file keeps admitted rows, and `dispatched` stays false.
@@ -22,11 +24,15 @@ import {
 import { dirname, isAbsolute, resolve } from 'node:path';
 
 import {
-  JULIUS_BOOTSTRAP_RUN_ID, SHA256_HEX, WONDERLAND_RUN_ID, type ReviewedModelPins,
+  SHA256_HEX, type ReviewedModelPins,
 } from './admission-contract';
+import { identifyAdmissionRun, parseJuliusAdmissionRunId, spentLockName } from './admission-run-id';
 import type { AdmissionLedger, AdmissionLedgerRow, AdmissionState } from './admission-store';
 
-export const ADMISSION_FILE_SCHEMA_VERSION = 2;
+/** New documents. Keyed on the client's `wlj_` id. `serverRunId` is that id. */
+export const ADMISSION_FILE_SCHEMA_VERSION = 3;
+/** Legacy `run:` rows. Readable, never rewritten, and not claimed. */
+export const LEGACY_ADMISSION_SCHEMA_VERSION = 2;
 
 const RECEIVED_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 const ROW_KEYS = [
@@ -42,7 +48,8 @@ export type AdmissionFileClosedCode =
   | 'corrupt'
   | 'unwritable'
   | 'unwritten'
-  | 'ledger_schema_unsupported';
+  | 'ledger_schema_unsupported'
+  | 'legacy_readonly';
 
 export class AdmissionFileClosedError extends Error {
   readonly code: AdmissionFileClosedCode;
@@ -112,13 +119,15 @@ export function createFileAdmissionLedger(
   const resolved = located.path;
   const lockPath = `${resolved}.lock`;
   acquireLock(lockPath);
-  let rows: AdmissionLedgerRow[];
+  let loaded: LoadedAdmission;
   try {
-    rows = readRows(resolved);
+    loaded = readAdmission(resolved);
   } catch (error) {
     releaseLock(lockPath);
     throw error;
   }
+  let rows = loaded.rows;
+  const schemaVersion = loaded.schemaVersion;
   const persist = options?.persist ?? writeAdmissionFileAtomic;
   let closed = false;
   let pending: Promise<void> = Promise.resolve();
@@ -128,9 +137,15 @@ export function createFileAdmissionLedger(
       if (closed) throw new AdmissionFileClosedError('lock_held');
       return rows.map((row) => ({ ...row }));
     },
+    legacyReadonly() {
+      return schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION;
+    },
     append(row) {
       const write = pending.then(() => {
         if (closed) throw new AdmissionFileClosedError('lock_held');
+        if (schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION) {
+          throw new AdmissionFileClosedError('legacy_readonly');
+        }
         // Both writes go through `persist`. The reservation hits disk before
         // the completion write. A failure of the completion leaves this
         // LEDGER_UNWRITTEN row for the next process.
@@ -232,8 +247,17 @@ function releaseLock(lockPath: string): void {
   try { fsyncDirectory(dirname(lockPath)); } catch { /* the lock name is already gone */ }
 }
 
+interface LoadedAdmission {
+  readonly schemaVersion: typeof ADMISSION_FILE_SCHEMA_VERSION | typeof LEGACY_ADMISSION_SCHEMA_VERSION;
+  readonly rows: AdmissionLedgerRow[];
+}
+
 function readRows(filePath: string): AdmissionLedgerRow[] {
-  if (!existsSync(filePath)) return [];
+  return readAdmission(filePath).rows;
+}
+
+function readAdmission(filePath: string): LoadedAdmission {
+  if (!existsSync(filePath)) return { schemaVersion: ADMISSION_FILE_SCHEMA_VERSION, rows: [] };
   let text: string;
   try {
     text = readFileSync(filePath, 'utf8');
@@ -256,16 +280,19 @@ function readRows(filePath: string): AdmissionLedgerRow[] {
     throw new AdmissionFileClosedError('corrupt');
   }
   if (typeof doc.schemaVersion !== 'number') throw new AdmissionFileClosedError('corrupt');
-  if (doc.schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION) {
+  if (doc.schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION && doc.schemaVersion !== LEGACY_ADMISSION_SCHEMA_VERSION) {
     throw new AdmissionFileClosedError('ledger_schema_unsupported');
   }
+  const schemaVersion = doc.schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION
+    ? LEGACY_ADMISSION_SCHEMA_VERSION
+    : ADMISSION_FILE_SCHEMA_VERSION;
   if (!Array.isArray(doc.rows)) throw new AdmissionFileClosedError('corrupt');
   const seenRun = new Set<string>();
   const seenKey = new Set<string>();
   const seenServer = new Set<string>();
   const rows: AdmissionLedgerRow[] = [];
   for (const item of doc.rows) {
-    const row = parseRow(item);
+    const row = parseRow(item, schemaVersion);
     if (seenRun.has(row.runId) || seenKey.has(row.keyHash) || seenServer.has(row.serverRunId)) {
       throw new AdmissionFileClosedError('corrupt');
     }
@@ -274,10 +301,13 @@ function readRows(filePath: string): AdmissionLedgerRow[] {
     seenServer.add(row.serverRunId);
     rows.push(row);
   }
-  return rows;
+  return { schemaVersion, rows };
 }
 
-function parseRow(value: unknown): AdmissionLedgerRow {
+function parseRow(
+  value: unknown,
+  schemaVersion: LoadedAdmission['schemaVersion'],
+): AdmissionLedgerRow {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new AdmissionFileClosedError('corrupt');
   }
@@ -286,10 +316,9 @@ function parseRow(value: unknown): AdmissionLedgerRow {
     throw new AdmissionFileClosedError('corrupt');
   }
   if (row.phase !== 'run_admission') throw new AdmissionFileClosedError('corrupt');
-  if (typeof row.runId !== 'string' || !WONDERLAND_RUN_ID.test(row.runId)) throw new AdmissionFileClosedError('corrupt');
-  if (typeof row.serverRunId !== 'string' || !JULIUS_BOOTSTRAP_RUN_ID.test(row.serverRunId)) {
-    throw new AdmissionFileClosedError('corrupt');
-  }
+  const identity = identifyAdmissionRun(row.runId, row.serverRunId);
+  const form = schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION ? 'legacy' : 'wlj';
+  if (!identity.ok || identity.form !== form) throw new AdmissionFileClosedError('corrupt');
   if (typeof row.keyHash !== 'string' || !SHA256_HEX.test(row.keyHash)) throw new AdmissionFileClosedError('corrupt');
   if (typeof row.dispatchId !== 'string' || row.dispatchId.length < 1 || row.dispatchId.length > 128) {
     throw new AdmissionFileClosedError('corrupt');
@@ -316,8 +345,8 @@ function parseRow(value: unknown): AdmissionLedgerRow {
   }
   return {
     phase: 'run_admission',
-    runId: row.runId,
-    serverRunId: row.serverRunId,
+    runId: identity.wljRunId,
+    serverRunId: identity.serverRunId,
     keyHash: row.keyHash,
     dispatchId: row.dispatchId,
     missionId: row.missionId,
@@ -425,7 +454,7 @@ export interface AdmissionFile {
 }
 
 interface OperatorJournal {
-  readonly schemaVersion: typeof ADMISSION_FILE_SCHEMA_VERSION;
+  readonly schemaVersion: typeof ADMISSION_FILE_SCHEMA_VERSION | typeof LEGACY_ADMISSION_SCHEMA_VERSION;
   readonly revision: number;
   readonly claims: readonly ClaimEvent[];
   readonly progress: readonly StoredProgress[];
@@ -492,15 +521,22 @@ export function openAdmissionFile(storePath: string): AdmissionFile {
         }
       });
     },
+    legacyReadonly() {
+      return readAdmission(path).schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION;
+    },
     async append(row) {
       await enqueue(path, async () => {
         acquireLock(lockPath);
         try {
-          const current = readRows(path);
+          const loaded = readAdmission(path);
+          if (loaded.schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION) {
+            throw new AdmissionFileClosedError('legacy_readonly');
+          }
+          const current = loaded.rows;
           if (current.some((held) => held.runId === row.runId || held.serverRunId === row.serverRunId || held.keyHash === row.keyHash)) {
             throw new Error('admission_file_duplicate');
           }
-          // Same two-phase reservation as the bridge writer. A schema v2 row
+          // Same two-phase reservation as the bridge writer. A current row
           // must carry `state` and `modelPins`. A failed completion leaves
           // LEDGER_UNWRITTEN and does not look like a held admission.
           const reserved = [...current, stamped(row, 'LEDGER_UNWRITTEN')];
@@ -552,8 +588,11 @@ function toStoredAdmission(row: AdmissionLedgerRow, ownerPlayerId: string | unde
  */
 export function recordAdmissionOwner(storePath: string | undefined, serverRunId: string, playerId: string): void {
   const located = resolveAdmissionStorePath(storePath);
-  if (!located.ok || !JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId) || !OWNER_ID.test(playerId)) return;
-  const current = readJournal(operatorJournalPath(located.path));
+  const parsed = parseJuliusAdmissionRunId(serverRunId);
+  if (!located.ok || !parsed.ok || parsed.form !== 'wlj' || !OWNER_ID.test(playerId)) return;
+  const journalPath = operatorJournalPath(located.path);
+  const current = readJournal(journalPath);
+  if (existsSync(journalPath) && current.schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION) return;
   writeJournalBytes(located.path, {
     schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
     revision: current.revision,
@@ -563,9 +602,12 @@ export function recordAdmissionOwner(storePath: string | undefined, serverRunId:
   });
 }
 
-function readJournal(journalPath: string): OperatorJournal {
+function readJournal(
+  journalPath: string,
+  missingSchema: OperatorJournal['schemaVersion'] = ADMISSION_FILE_SCHEMA_VERSION,
+): OperatorJournal {
   if (!existsSync(journalPath)) {
-    return { schemaVersion: ADMISSION_FILE_SCHEMA_VERSION, revision: 0, claims: [], progress: [], owners: {} };
+    return { schemaVersion: missingSchema, revision: 0, claims: [], progress: [], owners: {} };
   }
   let text: string;
   try {
@@ -586,7 +628,12 @@ function readJournal(journalPath: string): OperatorJournal {
   if (keys.length !== JOURNAL_KEYS.length || JOURNAL_KEYS.some((key) => !Object.hasOwn(doc, key))) {
     throw new AdmissionFileClosedError('corrupt');
   }
-  if (doc.schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION) throw new AdmissionFileClosedError('corrupt');
+  if (doc.schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION && doc.schemaVersion !== LEGACY_ADMISSION_SCHEMA_VERSION) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  const schemaVersion = doc.schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION
+    ? LEGACY_ADMISSION_SCHEMA_VERSION
+    : ADMISSION_FILE_SCHEMA_VERSION;
   if (typeof doc.revision !== 'number' || !Number.isInteger(doc.revision) || doc.revision < 0) {
     throw new AdmissionFileClosedError('corrupt');
   }
@@ -596,28 +643,34 @@ function readJournal(journalPath: string): OperatorJournal {
   }
   const owners: Record<string, string> = {};
   for (const [serverRunId, playerId] of Object.entries(doc.owners as Record<string, unknown>)) {
-    if (!JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId) || typeof playerId !== 'string' || !OWNER_ID.test(playerId)) {
+    if (!serverIdMatchesSchema(schemaVersion, serverRunId) || typeof playerId !== 'string' || !OWNER_ID.test(playerId)) {
       throw new AdmissionFileClosedError('corrupt');
     }
     owners[serverRunId] = playerId;
   }
   return {
-    schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
+    schemaVersion,
     revision: doc.revision,
-    claims: doc.claims.map(parseClaim),
-    progress: doc.progress.map(parseProgress),
+    claims: doc.claims.map((claim) => parseClaim(claim, schemaVersion)),
+    progress: doc.progress.map((note) => parseProgress(note, schemaVersion)),
     owners,
   };
 }
 
-function parseProgress(value: unknown): StoredProgress {
+function serverIdMatchesSchema(schemaVersion: OperatorJournal['schemaVersion'], serverRunId: unknown): boolean {
+  const parsed = parseJuliusAdmissionRunId(serverRunId);
+  if (!parsed.ok) return false;
+  return schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION ? parsed.form === 'legacy' : parsed.form === 'wlj';
+}
+
+function parseProgress(value: unknown, schemaVersion: OperatorJournal['schemaVersion']): StoredProgress {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new AdmissionFileClosedError('corrupt');
   const note = value as Record<string, unknown>;
   const keys = Object.keys(note);
   if (keys.length !== 4 || !['serverRunId', 'state', 'cause', 'updatedAt'].every((key) => Object.hasOwn(note, key))) {
     throw new AdmissionFileClosedError('corrupt');
   }
-  if (typeof note.serverRunId !== 'string' || !JULIUS_BOOTSTRAP_RUN_ID.test(note.serverRunId)) {
+  if (typeof note.serverRunId !== 'string' || !serverIdMatchesSchema(schemaVersion, note.serverRunId)) {
     throw new AdmissionFileClosedError('corrupt');
   }
   if (typeof note.state !== 'string' || !PROGRESS_STATE.test(note.state)) throw new AdmissionFileClosedError('corrupt');
@@ -640,18 +693,25 @@ function parseProgress(value: unknown): StoredProgress {
  *
  * This does not take the admission lock. The bridge holds that lock for the
  * process lifetime, and the status route runs in that process. A path that
- * is not a local store, a run id that is not `run:` plus 24 hex, or a
- * timestamp that is not ISO-8601 is ignored. A claim already stored for the
- * server run, or the same expiry note, is left as it is.
+ * is not a local store, a run id the shared module cannot parse, or a
+ * timestamp that is not ISO-8601 is ignored. A legacy `run:` id keeps the
+ * journal at schema v2 and does not rewrite the admission document. A claim
+ * already stored for the server run, or the same expiry note, is left as it is.
  */
 export function noteAwaitingOperatorExpiry(storePath: string, serverRunId: string, updatedAt: string): void {
   const located = resolveAdmissionStorePath(storePath);
-  if (!located.ok || !JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId) || !RECEIVED_AT.test(updatedAt)) return;
-  const current = readJournal(operatorJournalPath(located.path));
+  const parsed = parseJuliusAdmissionRunId(serverRunId);
+  if (!located.ok || !parsed.ok || !RECEIVED_AT.test(updatedAt)) return;
+  const journalPath = operatorJournalPath(located.path);
+  const wanted = parsed.form === 'legacy' ? LEGACY_ADMISSION_SCHEMA_VERSION : ADMISSION_FILE_SCHEMA_VERSION;
+  const current = readJournal(journalPath, wanted);
+  if (existsSync(journalPath) && current.schemaVersion !== wanted) return;
+  if (parsed.form === 'legacy' && readAdmission(located.path).schemaVersion !== LEGACY_ADMISSION_SCHEMA_VERSION) return;
+  const admissionBefore = existsSync(located.path) ? readFileSync(located.path) : null;
   if (current.claims.some((event) => event.serverRunId === serverRunId)) return;
   if (current.progress.some((note) => isOperatorExpiry(note) && note.serverRunId === serverRunId)) return;
   writeJournalBytes(located.path, {
-    schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
+    schemaVersion: wanted,
     revision: current.revision + 1,
     claims: current.claims,
     progress: [...current.progress, {
@@ -662,6 +722,9 @@ export function noteAwaitingOperatorExpiry(storePath: string, serverRunId: strin
     }],
     owners: current.owners,
   });
+  if (admissionBefore !== null && !readFileSync(located.path).equals(admissionBefore)) {
+    throw new AdmissionFileClosedError('legacy_readonly');
+  }
 }
 
 function isOperatorExpiry(note: StoredProgress): boolean {
@@ -669,10 +732,18 @@ function isOperatorExpiry(note: StoredProgress): boolean {
 }
 
 function writeJournal(path: string, document: OperatorDocument): void {
-  const current = readJournal(operatorJournalPath(path));
-  const incomingProgress = (document.progress ?? []).map(parseProgress);
+  const journalPath = operatorJournalPath(path);
+  const current = readJournal(journalPath);
+  if (existsSync(journalPath) && current.schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION) {
+    throw new AdmissionFileClosedError('legacy_readonly');
+  }
+  const incomingProgress = (document.progress ?? []).map((note) => parseProgress(note, ADMISSION_FILE_SCHEMA_VERSION));
   const progress = mergeExpiryProgress(incomingProgress, current.progress);
-  const claims = claimsRespectingExpiry(document.claims.map(parseClaim), current.claims, current.progress);
+  const claims = claimsRespectingExpiry(
+    document.claims.map((claim) => parseClaim(claim, ADMISSION_FILE_SCHEMA_VERSION)),
+    current.claims,
+    current.progress,
+  );
   writeJournalBytes(path, {
     schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
     revision: Math.max(document.revision, current.revision),
@@ -730,24 +801,20 @@ function writeJournalBytes(path: string, body: OperatorJournal): void {
   }
 }
 
-function parseClaim(value: unknown): ClaimEvent {
+function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersion']): ClaimEvent {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new AdmissionFileClosedError('corrupt');
   const claim = value as Record<string, unknown>;
   if (Object.keys(claim).length !== CLAIM_KEYS.length || CLAIM_KEYS.some((key) => !Object.hasOwn(claim, key))) {
     throw new AdmissionFileClosedError('corrupt');
   }
-  if (typeof claim.wonderlandRunId !== 'string' || !WONDERLAND_RUN_ID.test(claim.wonderlandRunId)) {
-    throw new AdmissionFileClosedError('corrupt');
-  }
-  if (typeof claim.serverRunId !== 'string' || !JULIUS_BOOTSTRAP_RUN_ID.test(claim.serverRunId)) {
-    throw new AdmissionFileClosedError('corrupt');
-  }
+  const identity = identifyAdmissionRun(claim.wonderlandRunId, claim.serverRunId);
+  const form = schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION ? 'legacy' : 'wlj';
+  if (!identity.ok || identity.form !== form) throw new AdmissionFileClosedError('corrupt');
   if (typeof claim.state !== 'string' || !CLAIM_STATES.includes(claim.state as OperatorClaimState)) {
     throw new AdmissionFileClosedError('corrupt');
   }
   const state = claim.state as OperatorClaimState;
-  const hex = claim.serverRunId.slice('run:'.length);
-  if (claim.spentTag !== `julius-run-spent-${hex}`) throw new AdmissionFileClosedError('corrupt');
+  if (claim.spentTag !== spentLockName(identity.serverRunId)) throw new AdmissionFileClosedError('corrupt');
   if (typeof claim.spentTagState !== 'string' || !SPENT_TAG_STATES.includes(claim.spentTagState as SpentTagState)) {
     throw new AdmissionFileClosedError('corrupt');
   }
@@ -781,10 +848,10 @@ function parseClaim(value: unknown): ClaimEvent {
     ? (recordedHalt === 'SPENT_TAG_UNVERIFIED' ? 'SPENT_TAG_UNVERIFIED' : 'gh_workflow_run_failed')
     : null;
   return {
-    wonderlandRunId: claim.wonderlandRunId,
-    serverRunId: claim.serverRunId,
+    wonderlandRunId: identity.wljRunId,
+    serverRunId: identity.serverRunId,
     state,
-    spentTag: `julius-run-spent-${hex}`,
+    spentTag: spentLockName(identity.serverRunId),
     spentTagState: claim.spentTagState as SpentTagState,
     at: claim.at,
     dispatchAttempted: claim.dispatchAttempted,

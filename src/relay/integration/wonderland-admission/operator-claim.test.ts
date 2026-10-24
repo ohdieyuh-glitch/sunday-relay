@@ -28,13 +28,15 @@ import {
 const RUN = 'wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d';
 const OTHER = 'wlj_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 const KEY = 'a'.repeat(64);
-const SERVER = `run:${'a'.repeat(24)}`;
-const OTHER_SERVER = `run:${'b'.repeat(24)}`;
+const SERVER = RUN;
+const OTHER_SERVER = OTHER;
 const WHEN = '2026-10-23T17:18:00.000Z';
 const REPO = 'founder/sunday-relay';
 const LANE = 'lab';
 const MISSION = 'julius-inworld-data-1';
-const HEX = 'a'.repeat(24);
+const HEX = '0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d';
+const LEGACY_HEX = 'a'.repeat(24);
+const LEGACY_SERVER = `run:${LEGACY_HEX}`;
 
 const WORKFLOW_WITH_INPUT = `
 name: fixture
@@ -150,12 +152,11 @@ async function withStore(run: (path: string) => Promise<void>): Promise<void> {
   }
 }
 
-async function admit(path: string, server = SERVER): Promise<void> {
+async function admit(path: string): Promise<void> {
   const admitted = await createWonderlandAdmissionStore({
     ledger: openAdmissionFile(path).ledger,
     dailyCap: 2,
     missionCap: 2,
-    mintServerRunId: () => server,
   }).admit(request());
   if (!admitted.ok) throw new Error('expected an admission');
 }
@@ -206,13 +207,16 @@ jobs:
 });
 
 describe('spent tag', () => {
-  it('names the git tag and the concurrency group from the 24 hex, and refuses any other value before a command exists', () => {
+  it('names a 32-hex lock for a wlj id and a 24-hex lock for a legacy id', () => {
+    expect(HEX).toMatch(/^[0-9a-f]{32}$/);
     expect(spentTagName(SERVER)).toBe(`julius-run-spent-${HEX}`);
     expect(concurrencyGroupName(SERVER)).toBe(`julius-paid-${HEX}`);
     expect(spentTagApiArgs(REPO, SERVER)).toEqual([
       'api', '--include', `repos/${REPO}/git/ref/tags/julius-run-spent-${HEX}`,
     ]);
     expect(spentTagApiArgs(REPO, SERVER).join(' ')).not.toContain('run:');
+    expect(spentTagName(LEGACY_SERVER)).toBe(`julius-run-spent-${LEGACY_HEX}`);
+    expect(concurrencyGroupName(LEGACY_SERVER)).toBe(`julius-paid-${LEGACY_HEX}`);
     const command = workflowDispatchArgs({
       repo: REPO,
       mission: MISSION,
@@ -221,17 +225,20 @@ describe('spent tag', () => {
       serverRunId: SERVER,
     });
     expect(command).toContain(`server_run_id=${SERVER}`);
-    expect(SERVER).toMatch(/^run:[0-9a-f]{24}$/);
+    expect(() => workflowDispatchArgs({
+      repo: REPO, mission: MISSION, lane: LANE, dispatchKey: KEY, serverRunId: LEGACY_SERVER,
+    })).toThrow('run_id_invalid');
     const refused = [
       HEX,
-      `RUN:${HEX}`,
+      LEGACY_HEX,
+      `RUN:${LEGACY_HEX}`,
       `run:${'A'.repeat(24)}`,
       `run:${'a'.repeat(23)}`,
       `run:${'a'.repeat(25)}`,
       `run:${'g'.repeat(24)}`,
+      'not-an-id',
     ];
     for (const serverRunId of refused) {
-      expect(serverRunId === SERVER, serverRunId).toBe(false);
       expect(() => spentTagName(serverRunId), serverRunId).toThrow('run_id_invalid');
       expect(() => concurrencyGroupName(serverRunId), serverRunId).toThrow('run_id_invalid');
       expect(() => spentTagApiArgs(REPO, serverRunId), serverRunId).toThrow('run_id_invalid');
@@ -396,7 +403,7 @@ describe('operator claim', () => {
       expect(saved.claims.map((event) => event.state)).toEqual(['dispatched', 'dispatch_failed']);
       expect(saved.claims.some((event) => (event.state as string) === 'admitted')).toBe(false);
       const rows = JSON.parse(readFileSync(path, 'utf8')) as { schemaVersion: number; claims?: unknown };
-      expect(rows.schemaVersion).toBe(2);
+      expect(rows.schemaVersion).toBe(3);
       expect(rows.claims).toBeUndefined();
       const reloaded = claimTool(path, {
         run() { throw new Error('spawned'); },
@@ -556,9 +563,10 @@ describe('operator claim', () => {
       if (refused.ok) return;
       expect(refused.kind).toBe('workflow_server_run_id_undeclared');
       expect(refused.requiredInput).toContain('server_run_id:');
-      expect(refused.requiredInput).toContain('^run:[0-9a-f]{24}$');
+      expect(refused.requiredInput).toContain('^wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$');
+      expect(refused.requiredInput).toContain('julius-run-spent-<32hex>');
+      expect(refused.requiredInput).toContain('julius-paid-<32hex>');
       expect(refused.requiredInput).toContain('julius-run-spent-<24hex>');
-      expect(refused.requiredInput).toContain('julius-paid-<24hex>');
       expect(refused.requiredInput).toContain('RUN_ID_ALREADY_SPENT');
       expect(refused.requiredInput).toContain('SPENT_TAG_UNVERIFIED');
       expect(refused.record?.state).toBe('admitted');
@@ -674,7 +682,6 @@ describe('operator claim', () => {
         ledger: openAdmissionFile(path).ledger,
         dailyCap: 2,
         missionCap: 2,
-        mintServerRunId: () => { throw new Error('reload must not mint'); },
       });
       const replay = await reloaded.admit(request());
       expect(replay.ok && replay.replayed).toBe(true);

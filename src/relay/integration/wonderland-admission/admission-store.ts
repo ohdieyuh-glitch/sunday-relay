@@ -17,21 +17,23 @@ import {
   PAID_SLOT_DISPATCH_KEY,
   PAID_SLOT_SCRIPT,
   PAID_WORKFLOW_FILE,
-  JULIUS_BOOTSTRAP_RUN_ID,
   SHA256_HEX,
-  WONDERLAND_RUN_ID,
   applyWonderlandStatusTransition,
   type CapRefusalKind,
   type PaidWorkflowTicket,
   type ReviewedModelPins,
   paidWorkflowTicket,
 } from './admission-contract';
+import { identifyAdmissionRun, parseJuliusAdmissionRunId } from './admission-run-id';
 
 export type AdmissionState = 'RESERVED' | 'ADMISSION_HELD' | 'LEDGER_UNWRITTEN' | 'INTERRUPTED' | 'FAILED';
 
 export interface AdmissionRun {
   readonly runId: string;
-  /** Julius `run:` id, minted once with the reservation. Stable for this pair. */
+  /**
+   * The id this row is keyed on. A new row stores the client's `wlj_` id.
+   * A legacy schema-v2 row stores its `run:` id. Neither is minted here.
+   */
   readonly serverRunId: string;
   readonly keyHash: string;
   readonly dispatchId: string;
@@ -83,6 +85,11 @@ export interface AdmissionLedgerRow {
 export interface AdmissionLedger {
   rows(): Promise<readonly AdmissionLedgerRow[]>;
   append(row: AdmissionLedgerRow): Promise<void>;
+  /**
+   * True when the durable document is schema v2. Those rows are readable and
+   * still count toward the caps. The document is not rewritten.
+   */
+  legacyReadonly?(): boolean;
 }
 
 export interface AdmissionRequest {
@@ -131,13 +138,8 @@ export function createWonderlandAdmissionStore(input: {
   readonly ledger: AdmissionLedger;
   readonly dailyCap: number;
   readonly missionCap: number;
-  /**
-   * CSPRNG for the server `run:` id. Called once, synchronously, inside the
-   * reservation and before `append`. A replay does not call it.
-   */
-  readonly mintServerRunId: () => string;
 }): WonderlandAdmissionStore {
-  return new WonderlandAdmissionStore(input.ledger, input.dailyCap, input.missionCap, input.mintServerRunId);
+  return new WonderlandAdmissionStore(input.ledger, input.dailyCap, input.missionCap);
 }
 
 class WonderlandAdmissionStore {
@@ -151,7 +153,6 @@ class WonderlandAdmissionStore {
     private readonly ledger: AdmissionLedger,
     private readonly dailyCap: number,
     private readonly missionCap: number,
-    private readonly mintServerRunId: () => string,
   ) {}
 
   /** How many runs this process has reserved. Cap refusals are not runs. */
@@ -177,7 +178,8 @@ class WonderlandAdmissionStore {
       await this.ledger.append(ledgerRow(run));
       run.ledgerWritten = true;
       if (run.state === 'RESERVED') run.state = 'ADMISSION_HELD';
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === 'admission_file_legacy_readonly') throw error;
       // The run stays reserved in memory. A resend reads it. The write is not tried again.
       if (run.state === 'RESERVED') run.state = 'LEDGER_UNWRITTEN';
     }
@@ -194,7 +196,7 @@ class WonderlandAdmissionStore {
     options?: { readonly dispatched?: boolean },
   ): AdmissionRun | null {
     const run = this.byRunId.get(runId);
-    if (run === undefined) return null;
+    if (run === undefined || isLegacyRun(run)) return null;
     const decision = applyWonderlandStatusTransition({
       dispatched: options?.dispatched === true,
       proposedState: state,
@@ -212,7 +214,7 @@ class WonderlandAdmissionStore {
    */
   attachResultHash(runId: string, resultSha256: string): AdmissionRun | null {
     const run = this.byRunId.get(runId);
-    if (run === undefined) return null;
+    if (run === undefined || isLegacyRun(run)) return null;
     if (!SHA256_HEX.test(resultSha256)) return run;
     if (run.resultSha256 === null) {
       run.resultSha256 = resultSha256;
@@ -233,7 +235,8 @@ class WonderlandAdmissionStore {
 
   private restore(row: AdmissionLedgerRow): void {
     if (this.byRunId.has(row.runId) || this.byKeyHash.has(row.keyHash) || this.byServerRunId.has(row.serverRunId)) return;
-    if (!JULIUS_BOOTSTRAP_RUN_ID.test(row.serverRunId)) throw new Error('admission_server_run_id_invalid');
+    const identity = identifyAdmissionRun(row.runId, row.serverRunId);
+    if (!identity.ok) throw new Error('admission_server_run_id_invalid');
     const run = runFromRow(row);
     this.index(run);
   }
@@ -248,8 +251,15 @@ class WonderlandAdmissionStore {
   private reserveSync(request: AdmissionRequest):
     | { kind: 'created'; run: AdmissionRun }
     | { kind: 'answered'; outcome: AdmissionOutcome } {
-    if (!WONDERLAND_RUN_ID.test(request.runId)) {
+    const parsed = parseJuliusAdmissionRunId(request.runId);
+    if (!parsed.ok) {
       return { kind: 'answered', outcome: refuse(400, 'julius_dispatch_run_invalid', 'runId is required.') };
+    }
+    if (parsed.form !== 'wlj') {
+      return { kind: 'answered', outcome: legacyReadonlyRefusal() };
+    }
+    if (this.ledger.legacyReadonly?.() === true) {
+      return { kind: 'answered', outcome: legacyReadonlyRefusal() };
     }
     if (!SHA256_HEX.test(request.keyHash) || !PAID_SLOT_DISPATCH_KEY.test(request.keyHash)) {
       return { kind: 'answered', outcome: refuse(400, 'julius_dispatch_idempotency_key_invalid', 'x-relay-idempotency-key is required.') };
@@ -259,10 +269,12 @@ class WonderlandAdmissionStore {
     }
     const existing = this.byPair.get(pairKey(request.runId, request.keyHash));
     if (existing !== undefined) {
+      if (isLegacyRun(existing)) return { kind: 'answered', outcome: legacyReadonlyRefusal() };
       return { kind: 'answered', outcome: { ok: true, httpStatus: 200, replayed: true, run: existing } };
     }
     const sameRun = this.byRunId.get(request.runId);
     if (sameRun !== undefined) {
+      if (isLegacyRun(sameRun)) return { kind: 'answered', outcome: legacyReadonlyRefusal() };
       return { kind: 'answered', outcome: refuse(409, 'julius_dispatch_already_dispatched', 'That run id already has an admission.') };
     }
     const sameKey = this.byKeyHash.get(request.keyHash);
@@ -277,8 +289,8 @@ class WonderlandAdmissionStore {
     if (admitted.filter((run) => run.missionId === request.missionId).length >= this.missionCap) {
       return { kind: 'answered', outcome: cap('julius_dispatch_mission_cap_reached') };
     }
-    const serverRunId = this.mintServerRunId();
-    if (!JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId) || this.byServerRunId.has(serverRunId)) {
+    const serverRunId = parsed.runId;
+    if (this.byServerRunId.has(serverRunId)) {
       throw new Error('admission_server_run_id_invalid');
     }
     const run: AdmissionRun = {
@@ -312,6 +324,19 @@ function pairKey(runId: string, keyHash: string): string {
 
 function refuse(httpStatus: 400 | 409, kind: string, message: string): AdmissionOutcome {
   return { ok: false, httpStatus, kind, message };
+}
+
+function legacyReadonlyRefusal(): AdmissionOutcome {
+  return refuse(
+    409,
+    'julius_dispatch_legacy_readonly',
+    'A legacy run: admission is read only. Nothing was reserved.',
+  );
+}
+
+function isLegacyRun(run: { readonly runId: string; readonly serverRunId: string }): boolean {
+  const identity = identifyAdmissionRun(run.runId, run.serverRunId);
+  return identity.ok && identity.form === 'legacy';
 }
 
 function cap(kind: CapRefusalKind): AdmissionOutcome {

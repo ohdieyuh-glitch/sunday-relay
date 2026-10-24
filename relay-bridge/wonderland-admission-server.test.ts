@@ -229,10 +229,10 @@ describe('admission through createBridgeServer', () => {
     });
     expect(admitted.status).toBe(202);
     const serverRunId = (admitted.body.data as { serverRunId?: string } | undefined)?.serverRunId ?? '';
-    expect(serverRunId).toMatch(/^run:[0-9a-f]{24}$/);
+    expect(serverRunId).toBe('wlj_dddddddd-eeee-4fff-8aaa-bbbbbbbbbbbb');
     const held = storeBytes();
     const heldDocument = JSON.parse(held) as { schemaVersion?: number };
-    expect(heldDocument.schemaVersion).toBe(2);
+    expect(heldDocument.schemaVersion).toBe(3);
     expect(heldDocument).not.toHaveProperty('claims');
 
     const statusPath = `/relay-api/wonderland/julius/status?projectId=${PROJECT}&runId=${encodeURIComponent(serverRunId)}`;
@@ -244,7 +244,7 @@ describe('admission through createBridgeServer', () => {
     expect(ok.body).toEqual({
       wljRunId: 'wlj_dddddddd-eeee-4fff-8aaa-bbbbbbbbbbbb',
       serverRunId,
-      legacyRunId: serverRunId,
+      legacyRunId: null,
       dispatchedAt: null,
       state: 'awaiting_operator',
       updatedAt: expect.any(String),
@@ -409,7 +409,7 @@ describe('admission through createBridgeServer', () => {
     expect(running.body).toEqual({
       wljRunId: 'wlj_dddddddd-eeee-4fff-8aaa-bbbbbbbbbbbb',
       serverRunId,
-      legacyRunId: serverRunId,
+      legacyRunId: null,
       dispatchedAt: null,
       state: 'unknown',
       updatedAt: '2026-10-23T18:00:00.000Z',
@@ -471,10 +471,10 @@ describe('admission restarts on the same store file', () => {
       const admitted = await post(firstBase, `/wonderland/julius/dispatch?projectId=${PROJECT}`, nativeToken(FOUNDER, PROJECT));
       expect(admitted.status).toBe(202);
       const serverRunId = admitted.body.data?.serverRunId;
-      expect(serverRunId).toMatch(/^run:[0-9a-f]{24}$/);
+      expect(serverRunId).toBe(RUN);
       expect(admitted.body.data?.state).toBe('ADMISSION_HELD');
       const written = JSON.parse(readFileSync(file, 'utf8')) as { schemaVersion: number; rows: { serverRunId: string }[] };
-      expect(written.schemaVersion).toBe(2);
+      expect(written.schemaVersion).toBe(3);
       expect(written.rows.map((row) => row.serverRunId)).toEqual([serverRunId]);
       await stop(first);
       first = null;

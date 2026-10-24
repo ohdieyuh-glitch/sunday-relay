@@ -63,7 +63,6 @@ function request(over: Partial<WonderlandAdmissionRouteRequest> = {}): Wonderlan
 function service(over: {
   env?: Record<string, string | undefined>;
   ledger?: AdmissionLedger;
-  mintServerRunId?: () => string;
 } = {}) {
   return createWonderlandAdmissionService({
     env: over.env ?? env(),
@@ -73,7 +72,6 @@ function service(over: {
       : null,
     readWorkflowText: () => null,
     ledger: over.ledger ?? createMemoryAdmissionLedger(),
-    mintServerRunId: over.mintServerRunId,
   });
 }
 
@@ -218,20 +216,19 @@ describe('POST /wonderland/julius/dispatch', () => {
         verifyNativeSession: () => ({ playerId: 'founder', projectId: 'project-1', sessionId: 'sess-1' }),
         readWorkflowText: () => null,
         ledger,
-        mintServerRunId: () => `run:${'a'.repeat(24)}`,
       });
       const first = await handleWonderlandAdmissionRoute(request(), ports);
       const second = await handleWonderlandAdmissionRoute(request(), ports);
       expect(first?.status).toBe(202);
       expect((first?.body as { data: { state: string; serverRunId: string } }).data.state).toBe('LEDGER_UNWRITTEN');
       expect(second?.status).toBe(200);
-      expect((second?.body as { data: { serverRunId: string; state: string } }).data.serverRunId).toBe(`run:${'a'.repeat(24)}`);
+      expect((second?.body as { data: { serverRunId: string; state: string } }).data.serverRunId).toBe(RUN);
       expect((second?.body as { data: { state: string } }).data.state).toBe('LEDGER_UNWRITTEN');
       const parked = JSON.parse(readFileSync(file, 'utf8')) as { rows: { state: string; serverRunId: string }[] };
       expect(writes).toBe(2);
       expect(parked.rows).toEqual([expect.objectContaining({
         state: 'LEDGER_UNWRITTEN',
-        serverRunId: `run:${'a'.repeat(24)}`,
+        serverRunId: RUN,
       })]);
     } finally {
       ledger.close();
@@ -254,11 +251,11 @@ describe('POST /wonderland/julius/dispatch', () => {
     const created = (first?.body as { data: { dispatchId: string; serverRunId: string; legacyRunId: string | null; dispatchedAt: string | null; dispatched: boolean; confirmLive: string; submittedToPaidWorkflow: boolean; state: string } }).data;
     const replayed = (second?.body as { data: { dispatchId: string; serverRunId: string; legacyRunId: string | null; dispatchedAt: string | null; state: string; replayed: boolean; correlation: { resultSha256: null; requestId: string } } }).data;
     expect(replayed.dispatchId).toBe(created.dispatchId);
-    expect(created.serverRunId).toMatch(/^run:[0-9a-f]{24}$/);
-    expect(created.legacyRunId).toBe(created.serverRunId);
+    expect(created.serverRunId).toBe(RUN);
+    expect(created.legacyRunId).toBeNull();
     expect(created.dispatchedAt).toBeNull();
     expect(replayed.serverRunId).toBe(created.serverRunId);
-    expect(replayed.legacyRunId).toBe(created.serverRunId);
+    expect(replayed.legacyRunId).toBeNull();
     expect(replayed.dispatchedAt).toBeNull();
     expect(replayed.replayed).toBe(true);
     expect(replayed.state).toBe('ADMISSION_HELD');
@@ -271,7 +268,7 @@ describe('POST /wonderland/julius/dispatch', () => {
     expect((first?.body as { data: { correlation: { idempotencyKeyHash: string } } }).data.correlation.idempotencyKeyHash).toBe(expectedHash);
   });
 
-  it('dispatch data keeps serverRunId, copies a legacy run id, and has no dispatch time yet', () => {
+  it('dispatch data reports the wlj id for a new row and the run id for a legacy row', () => {
     const pins = { architectModel: null, codingModel: null, reviewerProvider: null, reviewerModel: null } as const;
     const ticket = {
       workflowFile: PAID_WORKFLOW_FILE,
@@ -309,11 +306,14 @@ describe('POST /wonderland/julius/dispatch', () => {
     expect(data.legacyRunId).toBe(legacy);
     expect(data.dispatchedAt).toBeNull();
     expect(data.dispatched).toBe(false);
-    const other = toHttp({ ok: true, httpStatus: 202, replayed: false, run: row('not-a-legacy-id') });
-    const plain = (other.body as { data: { serverRunId: string; legacyRunId: string | null; dispatchedAt: string | null } }).data;
-    expect(plain.serverRunId).toBe('not-a-legacy-id');
+    const current = toHttp({ ok: true, httpStatus: 202, replayed: false, run: row(RUN) });
+    const plain = (current.body as { data: { serverRunId: string; legacyRunId: string | null; dispatchedAt: string | null } }).data;
+    expect(plain.serverRunId).toBe(RUN);
     expect(plain.legacyRunId).toBeNull();
     expect(plain.dispatchedAt).toBeNull();
+    const broken = toHttp({ ok: true, httpStatus: 202, replayed: false, run: row('not-a-legacy-id') });
+    expect(broken.status).toBe(400);
+    expect((broken.body as { error: { kind: string } }).error.kind).toBe('admission_run_id_malformed');
   });
 
   it('a concurrent resend during the ledger write returns the one run', async () => {
@@ -345,29 +345,33 @@ describe('POST /wonderland/julius/dispatch', () => {
     expect(appends).toBe(1);
   });
 
-  it('a failed reservation is a bare 500 and does not leak the minted id', async () => {
-    const minted: string[] = [];
-    const valid = `run:${'ab'.repeat(12)}`;
-    const ports = service({
-      mintServerRunId: () => {
-        const id = minted.length === 0 ? 'run:not-a-bootstrap-id' : valid;
-        minted.push(id);
-        return id;
-      },
-    });
-    const failed = await handleWonderlandAdmissionRoute(request(), ports);
-    expect(failed).toEqual({ status: 500, body: {} });
-    expect(classifyDispatchAnswer(500, false, '')).toBe('NoAnswer');
+  it('an unparsable or two-form run id reserves nothing', async () => {
+    const ports = service();
+    const malformed = await handleWonderlandAdmissionRoute(request({
+      rawBody: JSON.stringify({
+        runId: 'not-an-id',
+        clientTriggerId: 'trigger_01',
+        clientLogSha256: LOG,
+        clientUiActionUtc: WHEN,
+      }),
+    }), ports);
+    expect(malformed?.status).toBe(400);
+    expect(kind(malformed?.body)).toBe('julius_dispatch_run_invalid');
+    const both = await handleWonderlandAdmissionRoute(request({
+      rawBody: JSON.stringify({
+        runId: RUN,
+        serverRunId: `run:${'ab'.repeat(12)}`,
+        clientTriggerId: 'trigger_01',
+        clientLogSha256: LOG,
+        clientUiActionUtc: WHEN,
+      }),
+    }), ports);
+    expect(both?.status).toBe(400);
+    expect(kind(both?.body)).toBe('admission_run_id_ambiguous');
     const created = await handleWonderlandAdmissionRoute(request(), ports);
-    const replayed = await handleWonderlandAdmissionRoute(request(), ports);
     expect(created?.status).toBe(202);
-    expect(replayed?.status).toBe(200);
-    const createdId = (created?.body as { data: { serverRunId: string } }).data.serverRunId;
-    const replayedId = (replayed?.body as { data: { serverRunId: string } }).data.serverRunId;
-    expect(createdId).toBe(valid);
-    expect(replayedId).toBe(valid);
-    expect(JSON.stringify(created?.body)).not.toContain('run:not-a-bootstrap-id');
-    expect(minted).toEqual(['run:not-a-bootstrap-id', valid]);
+    expect((created?.body as { data: { serverRunId: string; legacyRunId: null } }).data.serverRunId).toBe(RUN);
+    expect((created?.body as { data: { legacyRunId: null } }).data.legacyRunId).toBeNull();
   });
 
   it('the two cap kinds are the only 429 refusals the route returns', async () => {
@@ -805,10 +809,9 @@ describe('the local admission file', () => {
   it('a second service on the same file replays the server run id, including a queried pathname', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'wlj-adm-'));
     const storePath = join(dir, 'admission.json');
-    const fixed = `run:${'a'.repeat(24)}`;
     const queried = `${WONDERLAND_ADMISSION_PATH}?projectId=project-1`;
     const opened: Array<{ close(): void }> = [];
-    const open = (mintServerRunId: () => string) => {
+    const open = () => {
       const ports = createWonderlandAdmissionService({
         env: env({ JULIUS_WONDERLAND_ADMISSION_STORE: storePath }),
         operatorToken: 'operator-token',
@@ -816,24 +819,23 @@ describe('the local admission file', () => {
           ? { playerId: 'founder', projectId: 'project-1', sessionId: 'sess-1' }
           : null,
         readWorkflowText: () => null,
-        mintServerRunId,
       });
       opened.push(ports);
       return ports;
     };
     try {
-      const created = await handleWonderlandAdmissionRoute(request(), open(() => fixed));
+      const created = await handleWonderlandAdmissionRoute(request(), open());
       expect(created?.status).toBe(202);
       opened[0]?.close();
       const replay = await handleWonderlandAdmissionRoute(
         request({ path: queried, url: queried }),
-        open(() => { throw new Error('replay must not mint'); }),
+        open(),
       );
       expect(replay?.status).toBe(200);
       const body = replay?.body as { data?: { serverRunId?: string } };
-      expect(body.data?.serverRunId).toBe(fixed);
+      expect(body.data?.serverRunId).toBe(RUN);
       const onDisk = JSON.parse(readFileSync(storePath, 'utf8')) as { schemaVersion: number; rows: unknown[] };
-      expect(onDisk.schemaVersion).toBe(2);
+      expect(onDisk.schemaVersion).toBe(3);
       expect(onDisk.rows).toHaveLength(1);
       expect(onDisk).not.toHaveProperty('claims');
     } finally {

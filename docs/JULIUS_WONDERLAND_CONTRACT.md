@@ -234,22 +234,17 @@ not resend the pair. Until a status answer says providers are running, the
 client shows **admitted, waiting for the paid run**. `dispatched: false` on
 that 202 is the fact that no provider is running yet.
 
-**Server run id.** That reservation also mints one server run id and keeps it
-with the pair. The shape is the Julius bootstrap run id: `run:` plus 24
-lowercase hex characters (`JULIUS_BOOTSTRAP_RUN_ID`). The validator of that
-shape is private as `BOOTSTRAP_RUN_ID` in `relay-bridge/julius/mission-contract.ts`.
-This copy is the same pattern. YUJI: confirm bootstrap will require this id.
-The mint is a CSPRNG (`node:crypto` `randomBytes(12)`), called inside the
-admission store's reservation, before any ledger write. `randomUUID` does not
-match that 24-hex shape, so it is not the mint. The 202 and the same-pair 200
-both return the id as `serverRunId`. `legacyRunId` is also on `data`, and it is
-that same `run:` id when the row has one, or `null` when it does not.
-`serverRunId` is not renamed and the mint is unchanged. `dispatchedAt` is
-on `data` as well. This response has not dispatched, so it is `null`. A
-resend returns the same id. The mapping
-lives only in the admission store. YUJI's paid-dispatch and bootstrap will
-later refuse anything that does not match an admitted pair. That refusal goes
-through G6 after #404 and the migration, and it is not in this change.
+**Server run id.** The reservation does not mint an id. The client's
+`wlj_` plus lowercase UUIDv4 is the id, validated by
+`scripts/julius-admission-run-id.mjs` (the PR #434 module) and no other
+parser. The 202 and the same-pair 200 both return that id as `serverRunId`.
+`legacyRunId` is `null` on a new row. `dispatchedAt` is on `data` as well.
+This response has not dispatched, so it is `null`. A resend of the same
+`wlj_` and idempotency key returns that same id and does not open a second
+row. A `run:` id is not accepted as a new dispatch. YUJI's paid-dispatch and
+bootstrap will later refuse anything that does not match an admitted pair.
+That refusal goes through G6 after #404 and the migration, and it is not in
+this change.
 
 **Durable admission file.** The store is the file named by
 `JULIUS_WONDERLAND_ADMISSION_STORE` (`src/relay/integration/wonderland-admission/admission-file.ts`).
@@ -259,10 +254,18 @@ writable file. Unset, a relative path, or a URL answers **503**
 `julius_dispatch_unavailable` and reserves nothing. Tests construct the
 in-memory ledger. The server does not.
 
-The file is one JSON document, schema version 2, holding the admission rows.
-Schema version 1 is refused. It predates the required `state` field, and this
-process does not guess that field. A numeric `schemaVersion` other than 2
-fails closed with `ledger_schema_unsupported`. That is not a corrupt file.
+The file is one JSON document, schema version 3, holding the admission rows.
+A new row's `runId` and `serverRunId` are the same `wlj_` id. Schema version
+2 is the legacy document: `runId` is the `wlj_` id and `serverRunId` is
+`run:` plus 24 lowercase hex. Those rows are read through the legacy path and
+are never rewritten. They cannot be dispatched, resumed, claimed, or
+spend-locked. They still count toward the admission caps, and the workflow's
+`MISSION_LIMITS` ceiling (including the $60 grant on `julius-continuous-1`)
+is unchanged. Schema version 1 is refused. It predates the required `state`
+field, and this process does not guess that field. A numeric `schemaVersion`
+other than 3 or legacy 2 fails closed with `ledger_schema_unsupported`. That
+is not a corrupt file. An id the shared module cannot parse, or a pair that
+carries both forms where they do not agree, is corrupt and is not rewritten.
 A non-numeric schema version, extra document keys, duplicate rows, an unknown
 row key, or a `state` other than `ADMISSION_HELD` or `LEDGER_UNWRITTEN` is
 corrupt. Either refusal answers 503 and the bytes stay as they are.
@@ -284,12 +287,13 @@ rewrite the admission document to clear the lock.
 
 A process that shuts down and opens that same file replays the pair. The
 `serverRunId`, the state, the model pins, and the caps are the ones in the
-file. The replay does not mint a second id, does not invent empty pins, and
+file. The replay does not mint an id, does not invent empty pins, and
 does not append a second row. Each row records `state` and `modelPins`. The
 reservation is written as `LEDGER_UNWRITTEN` before the completion write,
 through the same writer. If that completion write fails, the file keeps
-`LEDGER_UNWRITTEN` and the same `serverRunId`. A later process replays that
-state and does not mint another id. The completion write is not tried again.
+`LEDGER_UNWRITTEN` and the same `wlj_` id. A later process replays that
+state and does not create another id. The completion write is not tried again.
+Opening a schema version 2 file does not upgrade it.
 
 `dispatched` stays false on an admission row. The founder operator claim tool
 is the only writer of the dispatched transition. That transition, and later
@@ -299,8 +303,10 @@ and fail-closed rule. The admission document stays `{ schemaVersion, rows }`.
 
 ## Status
 
-`GET /relay-api/wonderland/julius/status?runId=<run:24hex>&projectId=` is a
-read of the local admission file. The pathname match is the same rule as
+`GET /relay-api/wonderland/julius/status?runId=<wlj_ or run: id>&projectId=` is a
+read of the local admission file. The query accepts either form. A new row is
+found by its `wlj_` id. A legacy row is found by that `wlj_` id or by its
+`run:` id. The pathname match is the same rule as
 admission: a query stays on the route, and a trailing slash, a different case,
 or a child path stays on the Wonderland catch-all.
 
@@ -308,8 +314,10 @@ The guards are the admission guards: loopback peer and Host, no forwarding
 header, a native session, the founder player, and the paired project. The
 route then reads the file and returns `{ wljRunId, serverRunId, legacyRunId,
 dispatchedAt, state, cause?, updatedAt }`. `legacyRunId` is always present.
-It is the row's `run:` plus 24 lowercase hex id, or `null` when the row has
-no such id. `serverRunId` is the same field it was. `dispatchedAt` is the
+It is `null` for a new row, and the row's `run:` id for a legacy row.
+`serverRunId` is the `wlj_` id for a new row and the `run:` id for a legacy
+row. The status route and the operator claim key a new row on the `wlj_` id.
+`dispatchedAt` is the
 ISO timestamp of the first recorded operator dispatch, or `null` when that
 dispatch has not been recorded. `state` and `cause` are closed. The route checks the stored
 value against those unions. A stored state outside the union, or a stored
@@ -410,17 +418,18 @@ report: `dispatch_failed` and `already_spent`.
 `unknown` is not terminal.
 
 A run is visible to the player recorded for that server run id in the operator
-journal. When the journal has no owner, the founder id is the owner. A different player, a
-`runId` that is not `run:` plus 24 lowercase hex, and an unknown `runId` each
-receive the same 404 body. Those answers do not rewrite the admission
-document. An elapsed held phase may record the journal note above.
+journal. When the journal has no owner, the founder id is the owner. A different player, an
+id the shared module cannot parse, and an unknown id each receive the same
+404 body. An ambiguous id is refused and does not select a row. Those answers
+do not rewrite the admission document. An elapsed held phase may record the
+journal note above. A legacy document stays schema version 2.
 
 ## Durability
 
 - After a restart, a held record stays held. Opening the admission file does
-  not dispatch and does not mint a new server run id.
-- Replaying the same `wlj_` returns the stored state and the stored
-  `serverRunId`. The replay does not create a fresh pair.
+  not dispatch and does not mint a run id.
+- Replaying the same `wlj_` returns the stored state and that same id.
+  The replay does not create a fresh pair. A legacy `run:` row is not resumed.
 - If the ledger write fails, the answer is fail-closed `LEDGER_UNWRITTEN`.
   The pair stays reserved. A resend returns that same pair, and the run id is
   not freed for a second admission.

@@ -1,8 +1,10 @@
 /**
  * LOCAL OPERATOR CLAIM — founder-run, loopback-only, no credentials.
  *
- * Claims one admitted Wonderland pair (wlj_ run id + server run: id) in the
- * local admission file. admitted -> dispatched is a single exclusive write.
+ * Claims one admitted Wonderland pair. A new row is keyed on the client's
+ * `wlj_` id for both sides. A legacy `run:` row is read only: it cannot be
+ * claimed, dispatched, or spend-locked. admitted -> dispatched is a single
+ * exclusive write.
  * A second claim returns that record and does not dispatch again.
  * A held row whose awaiting-operator window has already elapsed is refused
  * before any claim is written and before `gh` is spawned. The server clock
@@ -20,21 +22,21 @@
  * state is ever written back to admitted, and nothing here retries.
  *
  * `--dispatch` runs only when the checked-out workflow declares
- * `workflow_dispatch.inputs.server_run_id`. The value passed is the full
- * `run:` id. YUJI adds that input through the governed installer. This
- * module does not edit the workflow.
+ * `workflow_dispatch.inputs.server_run_id`. The value passed is the client's
+ * `wlj_` id. The spent lock is `julius-run-spent-` plus 32 hex. A legacy
+ * `run:` row keeps the 24-hex lock and is not claimed. YUJI adds the input
+ * through the governed installer. This module does not edit the workflow.
  */
 
 import {
   applyWonderlandStatusTransition,
-  JULIUS_BOOTSTRAP_RUN_ID,
   MISSION_SLUG,
   PAID_SLOT_DISPATCH_KEY,
   PAID_WORKFLOW_FILE,
   projectUnclaimedHeldPhase,
-  WONDERLAND_RUN_ID,
   type WonderlandStatusProjection,
 } from './admission-contract';
+import { deriveJuliusSpentTag, identifyAdmissionRun, parseJuliusAdmissionRunId, WLJ_RUN_ID_PATTERN } from './admission-run-id';
 import type {
   AdmissionFile,
   AdmissionFileIo,
@@ -52,18 +54,18 @@ export const SERVER_RUN_ID_INPUT = 'server_run_id';
 
 /**
  * Paste under `workflow_dispatch.inputs` in julius-first-live-mission.yml.
- * The value this tool passes is the full server run id, matching
- * `^run:[0-9a-f]{24}$`. The git tag and the concurrency group cannot contain
- * `:`, so both use the 24 hex only: `julius-run-spent-<24hex>` and
- * `julius-paid-<24hex>`. YUJI owns the workflow. A re-dispatch halts with
- * `RUN_ID_ALREADY_SPENT`. A spent tag the workflow cannot verify halts with
- * `SPENT_TAG_UNVERIFIED`.
+ * The value this tool passes is the client's `wlj_` id. The git tag and the
+ * concurrency group use the UUID with the dashes removed: 32 hex,
+ * `julius-run-spent-<32hex>` and `julius-paid-<32hex>`. A legacy `run:` row
+ * keeps `julius-run-spent-<24hex>` and is not claimed from here. YUJI owns
+ * the workflow. A re-dispatch halts with `RUN_ID_ALREADY_SPENT`. A spent tag
+ * the workflow cannot verify halts with `SPENT_TAG_UNVERIFIED`.
  */
 export const SERVER_RUN_ID_INPUT_YAML = [
   '      server_run_id:',
-  '        description: \'Full Julius bootstrap run id matching ^run:[0-9a-f]{24}$. Before any paid call, create git tag julius-run-spent-<24hex> and concurrency group julius-paid-<24hex>. A re-dispatch halts with RUN_ID_ALREADY_SPENT. A spent tag that cannot be verified halts with SPENT_TAG_UNVERIFIED.\'',
+  `        description: 'Wonderland run id matching ${WLJ_RUN_ID_PATTERN}. Before any paid call, create git tag julius-run-spent-<32hex> and concurrency group julius-paid-<32hex>. A legacy run keeps julius-run-spent-<24hex> and is not claimed. A re-dispatch halts with RUN_ID_ALREADY_SPENT. A spent tag that cannot be verified halts with SPENT_TAG_UNVERIFIED.'`,
   '        required: false',
-  '        default: \'\'',
+  "        default: ''",
 ].join('\n');
 
 export const OPERATOR_DISPATCH_CONFIRMATION = 'RUN LIVE MISSION';
@@ -153,10 +155,9 @@ export type StatusResult =
   | { readonly ok: true; readonly record: OperatorView; readonly phase: OperatorStatusPhase | null }
   | { readonly ok: false; readonly kind: string; readonly message: string };
 
-/** 24 lowercase hex from a full `run:` id. Checked before any command is built. */
+/** Hex suffix of a parsed admission id. 32 for `wlj_`, 24 for a legacy `run:` id. */
 export function serverRunHex(serverRunId: string): string {
-  if (!JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId)) throw new Error('run_id_invalid');
-  return serverRunId.slice(4);
+  return derivedRun(serverRunId).suffix;
 }
 
 export function spentTagName(serverRunId: string): string {
@@ -164,7 +165,13 @@ export function spentTagName(serverRunId: string): string {
 }
 
 export function concurrencyGroupName(serverRunId: string): string {
-  return `julius-paid-${serverRunHex(serverRunId)}`;
+  return derivedRun(serverRunId).concurrencyGroup;
+}
+
+function derivedRun(serverRunId: string): { readonly suffix: string; readonly form: 'wlj' | 'legacy'; readonly concurrencyGroup: string } {
+  const derived = deriveJuliusSpentTag(serverRunId);
+  if (!derived.ok) throw new Error('run_id_invalid');
+  return derived;
 }
 
 export function spentTagApiArgs(repo: string, serverRunId: string): readonly string[] {
@@ -179,7 +186,7 @@ export function workflowDispatchArgs(input: {
   readonly dispatchKey: string;
   readonly serverRunId: string;
 }): readonly string[] {
-  if (!JULIUS_BOOTSTRAP_RUN_ID.test(input.serverRunId)) throw new Error('run_id_invalid');
+  if (derivedRun(input.serverRunId).form !== 'wlj') throw new Error('run_id_invalid');
   return [
     'workflow', 'run', PAID_WORKFLOW_FILE,
     '--repo', input.repo,
@@ -320,9 +327,20 @@ function claimInside(
   }
   if (located.admission === null) {
     if (located.claim === null) return fail('admission_not_found', 'No admitted record matches that pair.', null);
+    const claimIdentity = identifyAdmissionRun(located.claim.wonderlandRunId, located.claim.serverRunId);
+    if (claimIdentity.ok && claimIdentity.form === 'legacy') {
+      return fail('legacy_readonly', 'A legacy run: admission cannot be claimed, dispatched, or spend-locked.', null);
+    }
     return replay(viewFromClaim(located.claim));
   }
   const admission = located.admission;
+  if (isLegacyAdmission(admission)) {
+    return fail(
+      'legacy_readonly',
+      'A legacy run: admission cannot be claimed, dispatched, or spend-locked.',
+      toView(admission, located.claim),
+    );
+  }
   if (located.claim !== null) return replay(toView(admission, located.claim));
   if (admission.admissionState !== 'ADMISSION_HELD') {
     return fail('not_admitted', `The record is ${admission.admissionState} and is not admitted.`, toView(admission, null));
@@ -492,9 +510,8 @@ function statusInside(
   serverRunId: string,
   clock: OperatorClaimClock,
 ): StatusResult {
-  if (!WONDERLAND_RUN_ID.test(wonderlandRunId) || !JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId)) {
-    return { ok: false, kind: 'run_id_invalid', message: 'The run id pair is not well formed.' };
-  }
+  const shape = pairShape(wonderlandRunId, serverRunId);
+  if (shape !== null) return { ok: false, kind: shape.kind, message: shape.message };
   const document = io.read();
   const located = locate(document, wonderlandRunId, serverRunId);
   if (located.kind === 'not_found') return { ok: false, kind: 'admission_not_found', message: 'No admitted record matches that pair.' };
@@ -600,10 +617,30 @@ function replay(record: OperatorView): ClaimResult {
   };
 }
 
-function validateShape(input: ClaimInput): ClaimResult | null {
-  if (!WONDERLAND_RUN_ID.test(input.wonderlandRunId) || !JULIUS_BOOTSTRAP_RUN_ID.test(input.serverRunId)) {
-    return fail('run_id_invalid', 'The run id pair is not well formed.', null);
+function isLegacyAdmission(admission: { readonly runId: string; readonly serverRunId: string }): boolean {
+  const identity = identifyAdmissionRun(admission.runId, admission.serverRunId);
+  return identity.ok && identity.form === 'legacy';
+}
+
+function pairShape(wonderlandRunId: string, serverRunId: string): { kind: string; message: string } | null {
+  const wonderland = parseJuliusAdmissionRunId(wonderlandRunId);
+  const server = parseJuliusAdmissionRunId(serverRunId);
+  if (!wonderland.ok || !server.ok) {
+    return { kind: 'run_id_invalid', message: 'The run id pair is not well formed.' };
   }
+  if (wonderland.form !== 'wlj') {
+    return { kind: 'admission_run_id_ambiguous', message: 'The run id pair is ambiguous.' };
+  }
+  if (server.form === 'wlj' && server.runId !== wonderland.runId) {
+    return null;
+  }
+  if (server.form === 'legacy' || server.runId === wonderland.runId) return null;
+  return { kind: 'admission_run_id_ambiguous', message: 'The run id pair is ambiguous.' };
+}
+
+function validateShape(input: ClaimInput): ClaimResult | null {
+  const shape = pairShape(input.wonderlandRunId, input.serverRunId);
+  if (shape !== null) return fail(shape.kind, shape.message, null);
   if (!isRepo(input.repo)) return fail('repo_invalid', 'The GitHub repo must be owner/name.', null);
   if (!OPERATOR_LANES.includes(input.lane as OperatorLane)) {
     return fail('lane_invalid', 'The lane must be qualification, qualification-repair, lab, or regression.', null);

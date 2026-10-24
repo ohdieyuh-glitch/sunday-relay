@@ -30,7 +30,8 @@ const KEY = '11111111-2222-4333-8444-555555555555';
 const WHEN = '2026-10-23T17:18:00.000Z';
 const LOG = 'ab'.repeat(32);
 const PROJECT = 'project-1';
-const SERVER = `run:${'a'.repeat(24)}`;
+const SERVER = RUN;
+const SPENT = 'julius-run-spent-0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d';
 const NOT_FOUND = { status: 404, body: { error: { kind: 'not_found', message: 'Not found.' } } };
 
 function env(storePath: string): Record<string, string | undefined> {
@@ -43,7 +44,7 @@ function env(storePath: string): Record<string, string | undefined> {
   };
 }
 
-function service(storePath: string, mint: () => string) {
+function service(storePath: string) {
   return createWonderlandAdmissionService({
     env: env(storePath),
     operatorToken: 'operator-token',
@@ -53,7 +54,6 @@ function service(storePath: string, mint: () => string) {
       return null;
     },
     readWorkflowText: () => null,
-    mintServerRunId: mint,
   });
 }
 
@@ -122,12 +122,12 @@ describe('wonderland status', () => {
     const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
     const storePath = join(dir, 'admission.json');
     try {
-      const first = service(storePath, () => SERVER);
+      const first = service(storePath);
       const created = await handleWonderlandAdmissionRoute(admitRequest(), first);
       expect(created?.status).toBe(202);
       const held = readFileSync(storePath, 'utf8');
       first.close();
-      const restarted = service(storePath, () => { throw new Error('restart must not mint'); });
+      const restarted = service(storePath);
       const replay = await handleWonderlandAdmissionRoute(admitRequest(), restarted);
       expect(replay?.status).toBe(200);
       const replayBody = replay?.body as { data?: { serverRunId?: string; state?: string; dispatched?: boolean } };
@@ -140,7 +140,7 @@ describe('wonderland status', () => {
         body: {
           wljRunId: RUN,
           serverRunId: SERVER,
-          legacyRunId: SERVER,
+          legacyRunId: null,
           dispatchedAt: null,
           state: 'awaiting_operator',
           updatedAt: WHEN,
@@ -158,10 +158,10 @@ describe('wonderland status', () => {
     const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
     const storePath = join(dir, 'admission.json');
     try {
-      const admitted = service(storePath, () => SERVER);
+      const admitted = service(storePath);
       await handleWonderlandAdmissionRoute(admitRequest(), admitted);
       admitted.close();
-      const ports = service(storePath, () => { throw new Error('status must not mint'); });
+      const ports = service(storePath);
       const acceptedAtMs = Date.parse(WHEN);
       const before = readFileSync(storePath, 'utf8');
       const journalPath = `${storePath}.operator.json`;
@@ -173,7 +173,7 @@ describe('wonderland status', () => {
       expect(open?.body).toEqual({
         wljRunId: RUN,
         serverRunId: SERVER,
-        legacyRunId: SERVER,
+        legacyRunId: null,
         dispatchedAt: null,
         state: 'awaiting_operator',
         updatedAt: WHEN,
@@ -190,7 +190,7 @@ describe('wonderland status', () => {
       const expiredBody = {
         wljRunId: RUN,
         serverRunId: SERVER,
-        legacyRunId: SERVER,
+        legacyRunId: null,
         dispatchedAt: null,
         state: 'failed',
         cause: 'AWAITING_OPERATOR_EXPIRED',
@@ -228,10 +228,10 @@ describe('wonderland status', () => {
     const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
     const storePath = join(dir, 'admission.json');
     try {
-      const admitted = service(storePath, () => SERVER);
+      const admitted = service(storePath);
       await handleWonderlandAdmissionRoute(admitRequest(), admitted);
       admitted.close();
-      const ports = service(storePath, () => { throw new Error('status must not mint'); });
+      const ports = service(storePath);
       const journalPath = `${storePath}.operator.json`;
       const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as {
         schemaVersion: number;
@@ -245,7 +245,7 @@ describe('wonderland status', () => {
         wonderlandRunId: RUN,
         serverRunId: SERVER,
         state: 'dispatched',
-        spentTag: `julius-run-spent-${'a'.repeat(24)}`,
+        spentTag: SPENT,
         spentTagState: 'absent',
         at: WHEN,
         dispatchAttempted: true,
@@ -264,7 +264,7 @@ describe('wonderland status', () => {
         expect(status?.body, state).toMatchObject({
           state: 'dispatched',
           serverRunId: SERVER,
-          legacyRunId: SERVER,
+          legacyRunId: null,
           dispatchedAt: WHEN,
           updatedAt: WHEN,
         });
@@ -281,10 +281,10 @@ describe('wonderland status', () => {
     const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
     const storePath = join(dir, 'admission.json');
     try {
-      const admitted = service(storePath, () => SERVER);
+      const admitted = service(storePath);
       await handleWonderlandAdmissionRoute(admitRequest(), admitted);
       admitted.close();
-      const ports = service(storePath, () => { throw new Error('status must not mint'); });
+      const ports = service(storePath);
       const before = readFileSync(storePath, 'utf8');
       const malformed = await handleWonderlandStatusRoute(statusRequest('not-a-run'), ports);
       const unknown = await handleWonderlandStatusRoute(statusRequest(`run:${'b'.repeat(24)}`), ports);
@@ -312,10 +312,10 @@ describe('wonderland status', () => {
     const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
     const storePath = join(dir, 'admission.json');
     try {
-      const admitted = service(storePath, () => SERVER);
+      const admitted = service(storePath);
       await handleWonderlandAdmissionRoute(admitRequest(), admitted);
       admitted.close();
-      const ports = service(storePath, () => { throw new Error('status must not mint'); });
+      const ports = service(storePath);
       const held = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
       expect(held?.body).toMatchObject({ state: 'awaiting_operator' });
       writeProgress(storePath, 'providers_running', 'watch');
@@ -326,7 +326,7 @@ describe('wonderland status', () => {
         body: {
           wljRunId: RUN,
           serverRunId: SERVER,
-          legacyRunId: SERVER,
+          legacyRunId: null,
           dispatchedAt: null,
           state: 'unknown',
           updatedAt: '2026-10-23T18:00:00.000Z',
@@ -381,10 +381,10 @@ describe('wonderland status', () => {
     const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
     const storePath = join(dir, 'admission.json');
     try {
-      const admitted = service(storePath, () => SERVER);
+      const admitted = service(storePath);
       await handleWonderlandAdmissionRoute(admitRequest(), admitted);
       admitted.close();
-      const ports = service(storePath, () => { throw new Error('status must not mint'); });
+      const ports = service(storePath);
       for (const state of WONDERLAND_STATUS_STATES) {
         writeProgress(storePath, state, state === 'unknown' ? 'RUN_ID_ALREADY_SPENT' : null);
         const before = readFileSync(storePath, 'utf8');
@@ -394,7 +394,7 @@ describe('wonderland status', () => {
           body: {
             wljRunId: RUN,
             serverRunId: SERVER,
-            legacyRunId: SERVER,
+            legacyRunId: null,
             dispatchedAt: null,
             state,
             updatedAt: '2026-10-23T18:00:00.000Z',
@@ -412,7 +412,7 @@ describe('wonderland status', () => {
           body: {
             wljRunId: RUN,
             serverRunId: SERVER,
-            legacyRunId: SERVER,
+            legacyRunId: null,
             dispatchedAt: null,
             state: 'dispatch_failed',
             cause,
@@ -426,7 +426,7 @@ describe('wonderland status', () => {
       expect(badCause?.body).toEqual({
         wljRunId: RUN,
         serverRunId: SERVER,
-        legacyRunId: SERVER,
+        legacyRunId: null,
         dispatchedAt: null,
         state: 'unknown',
         updatedAt: '2026-10-23T18:00:00.000Z',
@@ -440,7 +440,7 @@ describe('wonderland status', () => {
       const cleared = `${JSON.stringify(journal)}\n`;
       writeFileSync(journalPath, cleared);
       const admissionBytes = readFileSync(storePath, 'utf8');
-      expect(JSON.parse(admissionBytes)).toMatchObject({ schemaVersion: 2 });
+      expect(JSON.parse(admissionBytes)).toMatchObject({ schemaVersion: 3 });
       expect(JSON.parse(admissionBytes)).not.toHaveProperty('claims');
       const fromRow = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
       expect(fromRow?.body).toMatchObject({ state: 'awaiting_operator', updatedAt: WHEN });

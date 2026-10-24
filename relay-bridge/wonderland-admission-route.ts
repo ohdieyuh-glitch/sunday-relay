@@ -17,7 +17,7 @@
  * a paid run.
  */
 
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -27,7 +27,6 @@ import {
   CANONICAL_UUID_V4,
   CLIENT_TRIGGER_ID,
   J1_IDEMPOTENCY_KEY,
-  JULIUS_BOOTSTRAP_RUN_ID,
   MISSION_SLUG,
   SHA256_HEX,
   applyWonderlandStatusTransition,
@@ -42,6 +41,7 @@ import {
   type ReviewedModelPins,
   type WonderlandStatusProjection,
 } from '../src/relay/integration/wonderland-admission';
+import { identifyAdmissionRun, parseJuliusAdmissionRunId } from '../src/relay/integration/wonderland-admission/admission-run-id';
 import {
   AdmissionFileClosedError,
   createFileAdmissionLedger,
@@ -221,6 +221,25 @@ export interface WonderlandAdmissionRoutePorts {
 
 const err = (status: number, kind: string, message: string) => ({ status, body: { error: { kind, message } } });
 
+/**
+ * A dispatch body that also carries `serverRunId` or `legacyRunId` must be the
+ * same `wlj_` id. A second form, a different id, or a value the shared module
+ * cannot parse is refused before anything is reserved.
+ */
+function carriedRunId(
+  body: Record<string, unknown>,
+  runId: string,
+): { status: number; body: unknown } | null {
+  if (Object.hasOwn(body, 'legacyRunId') && body.legacyRunId !== null) {
+    return err(400, 'admission_run_id_ambiguous', 'The run id is ambiguous.');
+  }
+  if (!Object.hasOwn(body, 'serverRunId')) return null;
+  const identity = identifyAdmissionRun(runId, body.serverRunId);
+  if (!identity.ok) return err(400, identity.reason, 'The run id cannot be parsed.');
+  if (identity.form !== 'wlj') return err(400, 'admission_run_id_ambiguous', 'The run id is ambiguous.');
+  return null;
+}
+
 const STATUS_NOT_FOUND = {
   status: 404,
   body: { error: { kind: 'not_found', message: 'Not found.' } },
@@ -299,6 +318,8 @@ export function handleWonderlandAdmissionRoute(
   if (body === null) return Promise.resolve(err(400, 'julius_dispatch_body_invalid', 'The body must be JSON.'));
   const runId = body.runId;
   if (typeof runId !== 'string') return Promise.resolve(err(400, 'julius_dispatch_run_invalid', 'runId is required.'));
+  const carried = carriedRunId(body, runId);
+  if (carried !== null) return Promise.resolve(carried);
   const clientTriggerId = body.clientTriggerId;
   const clientLogSha256 = body.clientLogSha256;
   const clientUiActionUtc = body.clientUiActionUtc;
@@ -342,7 +363,7 @@ export function handleWonderlandAdmissionRoute(
 }
 
 /**
- * GET /wonderland/julius/status?runId=<run:24hex>&projectId=
+ * GET /wonderland/julius/status?runId=<wlj_ or legacy run:>&projectId=
  * Reads the admission file. A missing file is an unknown run. A held row
  * stays held. A stored state or cause outside the closed unions is returned
  * as `state: "unknown"` with no cause. `unknown` is never terminal.
@@ -365,7 +386,8 @@ export function handleWonderlandStatusRoute(
   } catch {
     runId = '';
   }
-  if (!JULIUS_BOOTSTRAP_RUN_ID.test(runId)) return Promise.resolve(STATUS_NOT_FOUND);
+  const parsedRun = parseJuliusAdmissionRunId(runId);
+  if (!parsedRun.ok) return Promise.resolve(STATUS_NOT_FOUND);
   let document: OperatorDocument;
   try {
     document = readAdmissionDocument(storePath);
@@ -375,12 +397,18 @@ export function handleWonderlandStatusRoute(
     }
     return Promise.resolve({ status: 500, body: {} });
   }
-  const admission = document.admissions.find((row) => row.serverRunId === runId) ?? null;
-  if (admission === null) return Promise.resolve(STATUS_NOT_FOUND);
+  const hits = document.admissions.filter((row) => row.runId === parsedRun.runId || row.serverRunId === parsedRun.runId);
+  if (hits.length > 1) {
+    return Promise.resolve(err(409, 'admission_run_id_ambiguous', 'The run id is ambiguous.'));
+  }
+  if (hits.length !== 1) return Promise.resolve(STATUS_NOT_FOUND);
+  const admission = hits[0] ?? null;
+  const identity = admission === null ? null : identifyAdmissionRun(admission.runId, admission.serverRunId);
+  if (admission === null || identity === null || !identity.ok) return Promise.resolve(STATUS_NOT_FOUND);
   const owner = admission.ownerPlayerId ?? (ports.env.JULIUS_J1_FOUNDER_PLAYER_ID ?? '').trim();
   if (owner === '' || owner !== guarded.native.playerId) return Promise.resolve(STATUS_NOT_FOUND);
   try {
-    return Promise.resolve({ status: 200, body: statusView(storePath, admission, document, runId, request.nowMs) });
+    return Promise.resolve({ status: 200, body: statusView(storePath, admission, document, identity.serverRunId, request.nowMs) });
   } catch (error) {
     if (isAdmissionFileClosed(error)) {
       return Promise.resolve(err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.'));
@@ -458,10 +486,12 @@ function statusBody(
   updatedAt: string,
   dispatchedAt: string | null,
 ): Record<string, string | null> {
+  const identity = identifyAdmissionRun(wljRunId, serverRunId);
+  if (!identity.ok) return { wljRunId, serverRunId, legacyRunId: null, dispatchedAt, state: 'unknown', updatedAt };
   const body: Record<string, string | null> = {
-    wljRunId,
-    serverRunId,
-    legacyRunId: JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId) ? serverRunId : null,
+    wljRunId: identity.wljRunId,
+    serverRunId: identity.serverRunId,
+    legacyRunId: identity.legacyRunId,
     dispatchedAt,
     state: projected.state,
     updatedAt,
@@ -473,13 +503,15 @@ function statusBody(
 export function toHttp(outcome: AdmissionOutcome): { status: number; body: unknown } {
   if (!outcome.ok) return err(outcome.httpStatus, outcome.kind, outcome.message);
   const run: AdmissionRun = outcome.run;
+  const identity = identifyAdmissionRun(run.runId, run.serverRunId);
+  if (!identity.ok) return err(400, identity.reason, 'The run id cannot be parsed.');
   return {
     status: outcome.httpStatus,
     body: {
       data: {
-        runId: run.runId,
-        serverRunId: run.serverRunId,
-        legacyRunId: JULIUS_BOOTSTRAP_RUN_ID.test(run.serverRunId) ? run.serverRunId : null,
+        runId: identity.wljRunId,
+        serverRunId: identity.serverRunId,
+        legacyRunId: identity.legacyRunId,
         dispatchedAt: null,
         dispatchId: run.dispatchId,
         state: run.state,
@@ -532,26 +564,18 @@ export function createWonderlandAdmissionService(input: {
    */
   readonly ledger?: AdmissionLedger;
   readonly operatorToken?: string | undefined;
-  /**
-   * CSPRNG for the server `run:` id. The default is 12 `randomBytes`, which
-   * is `run:` plus 24 lowercase hex, the Julius bootstrap run-id shape.
-   * A replay does not call it.
-   */
-  readonly mintServerRunId?: () => string;
 }): WonderlandAdmissionRoutePorts {
   const missionRaw = (input.env.JULIUS_WONDERLAND_MISSION ?? '').trim();
   const missionOk = missionRaw === '' || MISSION_SLUG.test(missionRaw);
   const dailyCap = positiveInt(input.env.JULIUS_J1_DAILY_CAP, 2);
   const missionCap = positiveInt(input.env.JULIUS_J1_MAX_RUNS_PER_MISSION, 2);
   const configured = missionOk && dailyCap !== null && missionCap !== null;
-  const mintServerRunId = input.mintServerRunId ?? (() => `run:${randomBytes(12).toString('hex')}`);
   const opened = openAdmissionLedger(input);
   const store = configured && opened.ledger !== null
     ? createWonderlandAdmissionStore({
       ledger: opened.ledger,
       dailyCap: dailyCap ?? 2,
       missionCap: missionCap ?? 2,
-      mintServerRunId,
     })
     : null;
   return {
