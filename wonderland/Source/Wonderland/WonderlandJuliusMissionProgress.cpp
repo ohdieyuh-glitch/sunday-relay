@@ -98,6 +98,21 @@ namespace WonderlandJuliusMissionLogic
 		return true;
 	}
 
+	bool IsClientMintedRunId(std::string_view RunId)
+	{
+		return RunId.size() > RunIdPrefix.size() && RunId.substr(0, RunIdPrefix.size()) == RunIdPrefix
+			&& IsCanonicalUuidV4(RunId.substr(RunIdPrefix.size()));
+	}
+
+	bool IsAcceptedServerRunId(std::string_view ServerRunId, std::string_view ClientRunId)
+	{
+		if (IsServerRunId(ServerRunId))
+		{
+			return true;
+		}
+		return bAcceptOwnRunIdAsServerRunId && IsClientMintedRunId(ServerRunId) && ServerRunId == ClientRunId;
+	}
+
 	bool ParseBridgeUtcTimestampMs(std::string_view Text, std::uint64_t& OutMs)
 	{
 		// "YYYY-MM-DDTHH:MM:SSZ" (20) or "YYYY-MM-DDTHH:MM:SS.sssZ" (24), nothing else.
@@ -147,6 +162,7 @@ namespace WonderlandJuliusMissionLogic
 		case EMissionProgress::RunIdMismatch:
 		case EMissionProgress::AnswerInvalid:
 		case EMissionProgress::PollLimitReached:
+		case EMissionProgress::AlreadySpent:
 			return true;
 		case EMissionProgress::AwaitingDispatchAnswer:
 		case EMissionProgress::AdmittedHeld:
@@ -207,7 +223,174 @@ namespace WonderlandJuliusMissionLogic
 			}
 			return EMissionProgress::Waiting;
 		}
+		if (Vocabulary == EStatusVocabulary::StatusRoute)
+		{
+			// #407 candidate acc96ab0 WONDERLAND_STATUS_STATES, exact bytes, without the cause (P11).
+			if (Status == "held" || Status == "reserved" || Status == BridgeAwaitingOperatorState)
+			{
+				return EMissionProgress::AdmittedHeld;
+			}
+			if (Status == BridgeDispatchedState)
+			{
+				return EMissionProgress::OperatorStarted;
+			}
+			if (Status == "ledger_unwritten" || Status == "interrupted" || Status == "failed" || Status == "dispatch_failed")
+			{
+				return EMissionProgress::DispatchFailed;
+			}
+			if (Status == "already_spent")
+			{
+				return EMissionProgress::AlreadySpent;
+			}
+			return EMissionProgress::Waiting;
+		}
 		return EMissionProgress::Waiting;
+	}
+
+	namespace
+	{
+		bool StatusRouteStateFromWord(std::string_view Word, EStatusRouteState& Out)
+		{
+			struct FWord { const char* Text; EStatusRouteState State; };
+			static const FWord Words[] = {
+				{"held", EStatusRouteState::Held},
+				{"reserved", EStatusRouteState::Reserved},
+				{"awaiting_operator", EStatusRouteState::AwaitingOperator},
+				{"ledger_unwritten", EStatusRouteState::LedgerUnwritten},
+				{"interrupted", EStatusRouteState::Interrupted},
+				{"failed", EStatusRouteState::Failed},
+				{"dispatched", EStatusRouteState::Dispatched},
+				{"dispatch_failed", EStatusRouteState::DispatchFailed},
+				{"already_spent", EStatusRouteState::AlreadySpent},
+				{"unknown", EStatusRouteState::Unknown},
+			};
+			for (const FWord& Entry : Words)
+			{
+				if (Word == Entry.Text)
+				{
+					Out = Entry.State;
+					return true;
+				}
+			}
+			return false;
+		}
+
+		bool IsStatusRouteCause(std::string_view Cause)
+		{
+			return Cause == "RUN_ID_ALREADY_SPENT" || Cause == "SPENT_TAG_UNVERIFIED" || Cause == "gh_workflow_run_failed"
+				|| Cause == BridgeOperatorWindowExpiredCause;
+		}
+
+		bool IsOpaqueWorkflowRunId(std::string_view Text)
+		{
+			if (Text.empty() || Text.size() > StatusRouteWorkflowRunIdMaxBytes)
+			{
+				return false;
+			}
+			for (const char Character : Text)
+			{
+				const unsigned char Byte = static_cast<unsigned char>(Character);
+				if (Byte < 0x21 || Byte > 0x7E)
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+	}
+
+	EStatusRouteCheck CheckStatusRouteAnswer(const FStatusAnswer& Fields, FStatusRouteView& Out, bool bRequireLegacyRunId)
+	{
+		Out = FStatusRouteView{};
+		if (Fields.bWrongFieldType)
+		{
+			return EStatusRouteCheck::WrongFieldType;
+		}
+		if (!IsClientMintedRunId(Fields.ClientRunId))
+		{
+			return EStatusRouteCheck::BadWljRunId;
+		}
+		const std::string_view Server = Fields.ServerRunId;
+		if (!Server.empty() && !IsServerRunId(Server) && !IsClientMintedRunId(Server))
+		{
+			return EStatusRouteCheck::BadServerRunId;
+		}
+		std::string_view Legacy;
+		if (Fields.LegacyRunIdSlot == EJsonSlot::String)
+		{
+			if (!IsServerRunId(Fields.LegacyRunId))
+			{
+				return EStatusRouteCheck::BadLegacyRunId;
+			}
+			Legacy = Fields.LegacyRunId;
+			if (!Server.empty() && Server != Legacy)
+			{
+				return EStatusRouteCheck::RunIdsDisagree;
+			}
+		}
+		else if (Fields.LegacyRunIdSlot == EJsonSlot::Null)
+		{
+			if (!Server.empty() && Server != Fields.ClientRunId)
+			{
+				return EStatusRouteCheck::RunIdsDisagree;
+			}
+		}
+		else if (bRequireLegacyRunId)
+		{
+			return EStatusRouteCheck::MissingLegacyRunId;
+		}
+		else if (IsServerRunId(Server))
+		{
+			// v0.1 Clarification 1: a run: serverRunId with no legacyRunId key is the legacy pin.
+			Legacy = Server;
+			Out.bLegacyFromServerRunIdOnly = true;
+		}
+		else if (!Server.empty() && Server != Fields.ClientRunId)
+		{
+			return EStatusRouteCheck::RunIdsDisagree;
+		}
+		EStatusRouteState RouteState = EStatusRouteState::Unknown;
+		if (!StatusRouteStateFromWord(Fields.Status, RouteState))
+		{
+			return EStatusRouteCheck::BadState;
+		}
+		if (!Fields.Cause.empty() && !IsStatusRouteCause(Fields.Cause))
+		{
+			return EStatusRouteCheck::BadCause;
+		}
+		const bool bExpired = Fields.Cause == BridgeOperatorWindowExpiredCause;
+		if (bExpired && RouteState != EStatusRouteState::Failed)
+		{
+			// v0.1 Clarification 2: AWAITING_OPERATOR_EXPIRED only ever ends the held phase as "failed".
+			return EStatusRouteCheck::CauseStateMismatch;
+		}
+		if (Fields.WorkflowRunIdSlot == EJsonSlot::String && !IsOpaqueWorkflowRunId(Fields.WorkflowRunId))
+		{
+			return EStatusRouteCheck::BadWorkflowRunId;
+		}
+		Out.State = RouteState;
+		Out.bOperatorWindowExpired = bExpired;
+		Out.LegacyRunId = Legacy;
+		return EStatusRouteCheck::Ok;
+	}
+
+	const char* StatusRouteCheckName(EStatusRouteCheck Check)
+	{
+		switch (Check)
+		{
+		case EStatusRouteCheck::Ok: return "ok";
+		case EStatusRouteCheck::WrongFieldType: return "wrong_field_type";
+		case EStatusRouteCheck::BadWljRunId: return "bad_wlj_run_id";
+		case EStatusRouteCheck::BadServerRunId: return "bad_server_run_id";
+		case EStatusRouteCheck::BadLegacyRunId: return "bad_legacy_run_id";
+		case EStatusRouteCheck::MissingLegacyRunId: return "missing_legacy_run_id";
+		case EStatusRouteCheck::RunIdsDisagree: return "run_ids_disagree";
+		case EStatusRouteCheck::BadState: return "bad_state";
+		case EStatusRouteCheck::BadCause: return "bad_cause";
+		case EStatusRouteCheck::CauseStateMismatch: return "cause_state_mismatch";
+		case EStatusRouteCheck::BadWorkflowRunId: return "bad_workflow_run_id";
+		}
+		return "unrecognised";
 	}
 
 	FPollDecision NextPoll(std::uint32_t PollsSent, EPollPhase Phase, std::uint64_t PhaseWatchedMs)
@@ -276,7 +459,13 @@ namespace WonderlandJuliusMissionLogic
 				return Move(EProgressEvent::DispatchRefused, EMissionProgress::Refused, &Fields);
 			}
 			// Accepted: the pair is spent from here on, whatever the body says (P1). Pin or fail closed (P2).
-			if (!Fields.bHasData || !IsServerRunId(Fields.ServerRunId) || Fields.ClientRunId.empty())
+			if (Fields.bHasData && bAcceptOwnRunIdAsServerRunId && IsClientMintedRunId(Fields.ServerRunId)
+				&& Fields.ServerRunId != ClientRunId)
+			{
+				// A well-formed wlj_ id that is not ours: another client's run. Fail closed.
+				return Move(EProgressEvent::RunIdMismatched, EMissionProgress::RunIdMismatch, &Fields);
+			}
+			if (!Fields.bHasData || !IsAcceptedServerRunId(Fields.ServerRunId, ClientRunId) || Fields.ClientRunId.empty())
 			{
 				return Move(EProgressEvent::AnswerRejected, EMissionProgress::AnswerInvalid, &Fields);
 			}
@@ -293,7 +482,7 @@ namespace WonderlandJuliusMissionLogic
 		{
 			return Move(EProgressEvent::LateDispatchAnswerIgnored, State, &Fields);
 		}
-		if ((!Fields.ServerRunId.empty() && Fields.ServerRunId != ServerRunId)
+		if ((!Fields.ServerRunId.empty() && !NamesPinnedRun(Fields.ServerRunId))
 			|| (!Fields.ClientRunId.empty() && Fields.ClientRunId != ClientRunId))
 		{
 			return Move(EProgressEvent::RunIdMismatched, EMissionProgress::RunIdMismatch, &Fields);
@@ -303,6 +492,16 @@ namespace WonderlandJuliusMissionLogic
 			return Move(EProgressEvent::LateDispatchAnswerIgnored, State, &Fields);
 		}
 		return ApplyAdmission(EProgressEvent::DispatchReplayed, Fields);
+	}
+
+	bool FMissionProgressTracker::NamesPinnedRun(std::string_view NamedServerRunId) const
+	{
+		if (NamedServerRunId == ServerRunId)
+		{
+			return true;
+		}
+		return bAcceptOwnRunIdAsServerRunId && !ServerRunId.empty() && IsClientMintedRunId(ClientRunId)
+			&& NamedServerRunId == ClientRunId;
 	}
 
 	EMissionProgress FMissionProgressTracker::ApplyAdmission(EProgressEvent Event, const FStatusAnswer& Fields)
@@ -335,6 +534,49 @@ namespace WonderlandJuliusMissionLogic
 		return Move(Event, ProgressFromStatus(EStatusVocabulary::Admission, Fields.Status), &Fields);
 	}
 
+	EMissionProgress FMissionProgressTracker::ApplyStatusRoute(const FStatusAnswer& Fields)
+	{
+		FStatusRouteView View;
+		if (CheckStatusRouteAnswer(Fields, View) != EStatusRouteCheck::Ok)
+		{
+			// P10: fail closed. Conclude nothing; the window keeps running.
+			return Move(EProgressEvent::StatusRejected, State, &Fields);
+		}
+		const std::string_view ExpectedLegacy = IsServerRunId(ServerRunId) ? std::string_view(ServerRunId) : std::string_view();
+		if (View.LegacyRunId != ExpectedLegacy)
+		{
+			// P10: the answer's legacy pin is not this run's pin.
+			return Move(EProgressEvent::RunIdMismatched, EMissionProgress::RunIdMismatch, &Fields);
+		}
+		if (bJuliusStatusSeen)
+		{
+			return Move(EProgressEvent::AdmissionAnswerLogged, State, &Fields);
+		}
+		if (View.State == EStatusRouteState::DispatchFailed || View.State == EStatusRouteState::AlreadySpent)
+		{
+			// P11: the route's only successors of "dispatched"; applied before or after a reported dispatch.
+			return Move(EProgressEvent::StatusApplied, ProgressFromStatus(EStatusVocabulary::StatusRoute, Fields.Status), &Fields);
+		}
+		if (View.State == EStatusRouteState::Dispatched)
+		{
+			return ApplyAdmission(EProgressEvent::StatusApplied, Fields);
+		}
+		if (bDispatchReported)
+		{
+			return Move(EProgressEvent::AdmissionAnswerLogged, State, &Fields);
+		}
+		if (View.State == EStatusRouteState::Unknown)
+		{
+			// P11: unknown is never terminal and never moves the state.
+			return Move(EProgressEvent::StatusApplied, State, &Fields);
+		}
+		if (View.bOperatorWindowExpired)
+		{
+			return Move(EProgressEvent::StatusApplied, EMissionProgress::NotStarted, &Fields);
+		}
+		return Move(EProgressEvent::StatusApplied, ProgressFromStatus(EStatusVocabulary::StatusRoute, Fields.Status), &Fields);
+	}
+
 	EMissionProgress FMissionProgressTracker::RecordPollAnswer(const FStatusAnswer& Fields)
 	{
 		if (State == EMissionProgress::AwaitingDispatchAnswer)
@@ -354,10 +596,14 @@ namespace WonderlandJuliusMissionLogic
 		{
 			return Move(EProgressEvent::PollFailed, State, &Fields);
 		}
-		if ((!Fields.ServerRunId.empty() && Fields.ServerRunId != ServerRunId)
+		if ((!Fields.ServerRunId.empty() && !NamesPinnedRun(Fields.ServerRunId))
 			|| (!Fields.ClientRunId.empty() && Fields.ClientRunId != ClientRunId))
 		{
 			return Move(EProgressEvent::RunIdMismatched, EMissionProgress::RunIdMismatch, &Fields);
+		}
+		if (Fields.Vocabulary == EStatusVocabulary::StatusRoute)
+		{
+			return ApplyStatusRoute(Fields);
 		}
 		if (Fields.ServerRunId.empty() || (Fields.Vocabulary == EStatusVocabulary::Admission && Fields.ClientRunId.empty()))
 		{
@@ -440,6 +686,7 @@ namespace WonderlandJuliusMissionLogic
 		case EMissionProgress::RunIdMismatch: return "Stopped \xE2\x80\x94 the bridge named a different run; nothing will be resent";
 		case EMissionProgress::AnswerInvalid: return "Stopped \xE2\x80\x94 the bridge's answer could not be checked; nothing will be resent";
 		case EMissionProgress::PollLimitReached: return "Stopped checking \xE2\x80\x94 the mission may still be going; ask the bridge";
+		case EMissionProgress::AlreadySpent: return "This run id was already used \xE2\x80\x94 nothing new was started; nothing will be resent";
 		}
 		return "Waiting for the bridge \xE2\x80\x94 no status it recognises yet";
 	}
@@ -464,6 +711,7 @@ namespace WonderlandJuliusMissionLogic
 		case EMissionProgress::RunIdMismatch: return "run_id_mismatch";
 		case EMissionProgress::AnswerInvalid: return "answer_invalid";
 		case EMissionProgress::PollLimitReached: return "poll_limit_reached";
+		case EMissionProgress::AlreadySpent: return "already_spent";
 		}
 		return "unknown";
 	}
@@ -486,6 +734,7 @@ namespace WonderlandJuliusMissionLogic
 		case EProgressEvent::IgnoredAfterTerminal: return "ignored_after_terminal";
 		case EProgressEvent::PollLimitReached: return "poll_limit_reached";
 		case EProgressEvent::HoldWindowExpired: return "hold_window_expired";
+		case EProgressEvent::StatusRejected: return "status_rejected";
 		}
 		return "unknown";
 	}
