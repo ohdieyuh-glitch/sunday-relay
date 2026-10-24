@@ -54,12 +54,19 @@ interface JsonReport {
   kernelDependants: string[];
 }
 
-/** J1 dispatch files that import the kernel and must stay off both production roots. */
-const J1_OFF_LIVE_GRAPH = [
-  ['relay-bridge/julius-dispatch-adapters.ts', 'gated workflow adapter', 'the J1 role adapters over the architect, coder and direct reviewer. Tests inject fakes; a live dispatch returns before provider.call, and paid execution stays the gated workflow. The live mission root does not import this file'],
-  ['relay-bridge/julius-dispatch-wiring-core.ts', 'gated workflow wiring', 'the J1 live-wiring core. It builds a controller from injected pins and dependencies, or a refuse-only controller, and it is not a live-mission export'],
-  ['relay-bridge/julius-dispatch-wiring-real.ts', 'gated workflow wiring', 'the real file, fetch, key-store and coder-provider builders for the J1 wiring. Constructing them spends nothing, and they are not exportable onto the live mission import graph'],
-  ['relay-bridge/julius-dispatch-wiring-testkit.ts', 'test kit', 'fakes and test pins for the J1 wiring tests. Production code does not import it, and the live mission root must not'],
+/**
+ * J1 dispatch paths named by an earlier exclusion. They are not in this tree,
+ * so they do not import the kernel and cannot be kernel-dependant exclusions.
+ * A later tree that adds one of them back, and in which that file imports the
+ * kernel, still has to reach it, declare it, or exclude it: the generator
+ * refuses both an unclassified kernel dependant and an exclusion whose file
+ * no longer imports the kernel.
+ */
+const J1_DISPATCH_PATHS = [
+  'relay-bridge/julius-dispatch-adapters.ts',
+  'relay-bridge/julius-dispatch-wiring-core.ts',
+  'relay-bridge/julius-dispatch-wiring-real.ts',
+  'relay-bridge/julius-dispatch-wiring-testkit.ts',
 ] as const;
 
 const LIVE_ROOTS = [
@@ -223,21 +230,22 @@ describe('export-julius-harness generates the Julius harness export from the liv
     for (const name of REQUIRED_SUBSYSTEMS) expect(committed).toContain(` ${name}\n`);
   });
 
-  it('excludes the J1 dispatch adapters and wiring and keeps them off the live-mission import graph', () => {
+  it('does not exclude J1 dispatch files that are absent and do not import the kernel', () => {
     const source = readFileSync(GENERATOR, 'utf8');
+    expect(source).toContain('kernel-dependant exclusion no longer imports the kernel — drop or re-justify it');
+    expect(source).toContain('unclassified Julius kernel dependant (reach it from a root, declare it, or exclude it with a reason)');
+    expect(source).toContain('excluded as a kernel dependant but reached by the trace — reclassify');
     const blockStart = source.indexOf('const KERNEL_DEPENDANT_EXCLUSIONS = [');
     const blockEnd = source.indexOf('\n];', blockStart);
     const block = source.slice(blockStart, blockEnd);
-    expect(source).toContain('excluded as a kernel dependant but reached by the trace — reclassify');
     const reached = importClosure(LIVE_ROOTS);
     const included = report.files.map((file) => file.path);
-    for (const [path, category, reason] of J1_OFF_LIVE_GRAPH) {
-      expect(reason.includes('\n'), path).toBe(false);
-      expect(block.split(`path: '${path}'`).length - 1, path).toBe(1);
-      expect(block).toContain(`{ path: '${path}', category: '${category}', reason: '${reason}' }`);
+    for (const path of J1_DISPATCH_PATHS) {
+      expect(existsSync(join(REPO_ROOT, path)), `${path} is not in this tree, so it imports nothing`).toBe(false);
+      expect(block, path).not.toContain(path);
       expect(reached.has(path), path).toBe(false);
-      expect(included).not.toContain(path);
-      if (existsSync(join(REPO_ROOT, path))) expect(report.kernelDependants).toContain(path);
+      expect(included, path).not.toContain(path);
+      expect(report.kernelDependants, path).not.toContain(path);
     }
   });
 });
