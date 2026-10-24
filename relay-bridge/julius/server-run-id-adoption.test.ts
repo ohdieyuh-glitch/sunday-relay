@@ -6,7 +6,8 @@ import { createJuliusMemoryStore, JuliusRuntimeApi } from '../../src/relay/missi
 import type { JuliusBootstrapRequest } from '../../src/relay/integration/julius/julius-port';
 import { handleJuliusStateRoute } from '../julius-state-routes';
 import {
-  adoptJuliusServerRunId, createLiveJuliusBootstrapPort, juliusBootstrapRunId, JULIUS_J1_NAMESPACE,
+  adoptJuliusServerRunId, createLiveJuliusBootstrapPort, isJuliusAdmissionRunId, juliusBootstrapRunId,
+  JULIUS_CLIENT_RUN_ID, JULIUS_J1_NAMESPACE,
   type RunCreationStore,
 } from './bootstrap';
 import { compileBootstrapRequest, parseLiveMissionContract } from './mission-contract';
@@ -24,6 +25,8 @@ import type { MissionSeedStore, SeedBrainEntry } from './mission-seed';
 
 const HEX = '0123456789abcdef01234567';
 const SERVER = `run:${HEX}`;
+/** Ruling (c): the id the game minted and polls. Version nibble 4, variant 8/9/a/b. */
+const ADMISSION = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
 const WORKERS: JuliusBootstrapRequest['workers'] = [
   { role: 'PROMPT_ARCHITECT', integrationId: 'architect', adapterId: 'architect-adapter', independenceGroup: 'openai', requiredCapabilities: ['plan'] },
   { role: 'CODING_AGENT', integrationId: 'coder', adapterId: 'coder-adapter', independenceGroup: 'anthropic', requiredCapabilities: ['implement'] },
@@ -96,7 +99,7 @@ describe('JULIUS_SERVER_RUN_ID becomes the Julius run id', () => {
     if (outcome.accepted) {
     expect(outcome.runId).toBe(SERVER);
     expect(outcome.runId).not.toBe(derived);
-    expect(harness.created).toEqual([{ commandId: `bootstrap:${request.idempotencyKey}`, runId: SERVER }]);
+    expect(harness.created).toEqual([{ commandId: `bootstrap:${SERVER}`, runId: SERVER }]);
     expect(writes[0]).toBe('ensureBase');
     expect(writes).toContain('createRun');
     expect(harness.brain.map((entry) => entry.entryId)).toContain(`${SERVER}:objective`);
@@ -113,7 +116,15 @@ describe('JULIUS_SERVER_RUN_ID becomes the Julius run id', () => {
 
   it('refuses a mismatch before any store write, and does not echo the bad value', async () => {
     const request = requestFor();
-    const bad = [`run:${HEX.slice(0, 23)}`, `run:${HEX}a`, `run:${HEX.toUpperCase()}`, `run:${HEX};touch /tmp/pwn`, 'run:not-an-id'];
+    const bad = [
+      `run:${HEX.slice(0, 23)}`, `run:${HEX}a`, `run:${HEX.toUpperCase()}`, `run:${HEX};touch /tmp/pwn`, 'run:not-an-id',
+      '11111111-1111-4111-8111-111111111111',
+      ADMISSION.toUpperCase(),
+      'wlj_01234567-89ab-1cde-8fab-0123456789ab',
+      'wlj_01234567-89ab-4cde-cfab-0123456789ab',
+      `wlj_${ADMISSION}`,
+      'wlj_01234567-89ab-4cde-8fab-0123456789ab\nextra',
+    ];
     for (const serverRunId of bad) {
       const writes: string[] = [];
       const harness = memoryPort(serverRunId, 'mission-live-1', writes);
@@ -195,10 +206,55 @@ describe('JULIUS_SERVER_RUN_ID becomes the Julius run id', () => {
       method: 'GET', path: `/julius/runs/${derived}/run`, operator: true, projectId: 'prj-live', tenantId: 'tenant-live',
     }, ports);
     expect(wrong?.status).toBe(404);
+    const live = readFileSync(resolve('relay-bridge/julius-live-mission.ts'), 'utf8');
+    expect(live).toContain('Run ${submitted.runId} accepted in state ${submitted.state}; driving the Julius run loop.');
+    const resumedAt = live.indexOf('admission_run_already_bootstrapped');
+    const driveAt = live.indexOf('assembleLiveJuliusRuntime(');
+    expect(resumedAt).toBeGreaterThan(0);
+    expect(driveAt).toBeGreaterThan(resumedAt);
+  });
+
+  it('stores a client-minted UUIDv4 as the Julius run id, and a second submit does not write or spend again', async () => {
+    expect(JULIUS_CLIENT_RUN_ID.test(ADMISSION)).toBe(true);
+    expect(isJuliusAdmissionRunId(ADMISSION)).toBe(true);
+    const request = requestFor({ missionId: JULIUS_J1_NAMESPACE, markerNamespace: JULIUS_J1_NAMESPACE });
+    const derived = juliusBootstrapRunId(request);
+    expect(derived).not.toBe(ADMISSION);
+    const writes: string[] = [];
+    const harness = memoryPort(ADMISSION, JULIUS_J1_NAMESPACE, writes);
+    const outcome = await harness.port.submit(request);
+    expect(outcome.accepted).toBe(true);
     if (outcome.accepted) {
-      const line = `Run ${outcome.runId} accepted in state READY; driving the Julius run loop.`;
-      expect(line).toBe(`Run ${SERVER} accepted in state READY; driving the Julius run loop.`);
+      expect(outcome.runId).toBe(ADMISSION);
+      expect(outcome.resumed).not.toBe(true);
     }
+    expect(harness.created).toEqual([{ commandId: `bootstrap:${ADMISSION}`, runId: ADMISSION }]);
+    expect(writes.filter((write) => write === 'createRun')).toHaveLength(1);
+    const before = writes.length;
+    const replay = await harness.port.submit(request);
+    expect(replay.accepted).toBe(true);
+    if (replay.accepted) {
+      expect(replay.runId).toBe(ADMISSION);
+      expect(replay.resumed).toBe(true);
+      expect(replay.state).toBe('READY');
+    }
+    expect(writes).toHaveLength(before);
+    expect(harness.created).toHaveLength(1);
+    const identity = { tenantId: 'tenant-live', projectId: 'prj-live', actorId: 'operator', scopes: ['run:read'] as const };
+    const found = await harness.api.inspectRun(identity, ADMISSION);
+    expect(found.ok).toBe(true);
+    const missed = await harness.api.inspectRun(identity, derived);
+    expect(missed.ok).toBe(false);
+    const rerun = await harness.port.submit({ ...request, rerunIntent: 'EXPLICIT', rerunKey: 'arm-key-1' });
+    expect(rerun.accepted).toBe(true);
+    if (rerun.accepted) {
+      expect(rerun.runId).toBe(ADMISSION);
+      expect(rerun.resumed).toBe(true);
+    }
+    expect(harness.created).toHaveLength(1);
+    const hexJ1 = await memoryPort(SERVER, JULIUS_J1_NAMESPACE, []).port.submit(request);
+    expect(hexJ1.accepted).toBe(true);
+    if (hexJ1.accepted) expect(hexJ1.runId).toBe(SERVER);
   });
 
   it('the live entrypoint passes JULIUS_SERVER_RUN_ID and the contract namespace, not a different env name', () => {

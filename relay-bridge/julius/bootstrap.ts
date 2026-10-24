@@ -87,15 +87,25 @@ export const juliusBootstrapRunId = (request: Pick<JuliusBootstrapRequest, 'idem
   `run:${juliusBootstrapIdentity(request)}`;
 
 /**
- * THE ID THE GAME POLLS. Wonderland admission mints `run:` plus 24 lowercase
- * hex. Julius otherwise names the run `run:${idempotencyKey}` (above), and a
- * poll of the admission id then cannot find the run.
+ * THE ID THE GAME POLLS. Founder ruling (c), 07:27 PT 2026-10-23: a J1 run id
+ * is a client-minted lowercase UUIDv4. The Wonderland client writes that as
+ * `wlj_` plus the UUID, and that is the id a game poll asks for. Admission
+ * also mints `run:` plus 24 lowercase hex (`JULIUS_SERVER_RUN_ID`) and the
+ * paid workflow passes that string through. Either supplied string is stored
+ * as the Julius run id. The derived name `run:${idempotencyKey}` (above) is a
+ * different string, so a poll of the admission id would miss the run that was
+ * paid for.
  *
  * `none` is the workflow's absent sentinel, the same fact as an empty value.
  */
+export const JULIUS_CLIENT_RUN_ID = /^wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 export const JULIUS_SERVER_RUN_ID = /^run:[0-9a-f]{24}$/u;
 export const JULIUS_J1_NAMESPACE = 'julius-inworld-data-1';
 const ABSENT_SERVER_RUN_ID = new Set(['', 'none']);
+
+export function isJuliusAdmissionRunId(value: string): boolean {
+  return JULIUS_CLIENT_RUN_ID.test(value) || JULIUS_SERVER_RUN_ID.test(value);
+}
 
 export function adoptJuliusServerRunId(input: {
   readonly request: Pick<JuliusBootstrapRequest, 'idempotencyKey' | 'rerunIntent' | 'rerunKey' | 'missionId'>;
@@ -109,16 +119,16 @@ export function adoptJuliusServerRunId(input: {
       return {
         ok: false,
         reasonCode: 'server_run_id_required',
-        safeMessage: 'Wonderland J1 (julius-inworld-data-1) requires JULIUS_SERVER_RUN_ID, run: plus 24 lowercase hex, before any spend.',
+        safeMessage: 'Wonderland J1 (julius-inworld-data-1) requires JULIUS_SERVER_RUN_ID, wlj_ plus a lowercase UUIDv4 or run: plus 24 lowercase hex, before any spend.',
       };
     }
     return { ok: true, runId: juliusBootstrapRunId(input.request) };
   }
-  if (!JULIUS_SERVER_RUN_ID.test(supplied)) {
+  if (!isJuliusAdmissionRunId(supplied)) {
     return {
       ok: false,
       reasonCode: 'server_run_id_mismatch',
-      safeMessage: 'JULIUS_SERVER_RUN_ID must be run: plus 24 lowercase hex. Naming the run anything else would miss the game poll, so this bootstrap is refused before any spend.',
+      safeMessage: 'JULIUS_SERVER_RUN_ID must be the admission run id: wlj_ plus a lowercase UUIDv4, or run: plus 24 lowercase hex. Naming the run anything else would miss the game poll, so this bootstrap is refused before any spend.',
     };
   }
   return { ok: true, runId: supplied };
@@ -218,7 +228,28 @@ export function createLiveJuliusBootstrapPort(deps: {
       if (!adopted.ok) return refuse(adopted.reasonCode, adopted.safeMessage);
       const identity = juliusBootstrapIdentity(request);
       const runId = adopted.runId;
+      const derivedRunId = juliusBootstrapRunId(request);
+      /**
+       * A SECOND SUBMIT OF AN ADMISSION ID THAT ALREADY BOOTSTRAPPED DOES NOT
+       * WRITE AND DOES NOT SPEND. Only an adopted id takes this path: a run
+       * still named `run:${idempotencyKey}` keeps today's call order. CREATED
+       * is still inside this bootstrap (a crash before READY), so that one
+       * may finish. Anything later is the run the first submit made.
+       */
+      if (runId !== derivedRunId) {
+        const already = await deps.runs.loadRun(runId, request.projectId);
+        if (already !== null && already.state !== 'CREATED') {
+          return {
+            accepted: true,
+            runId,
+            acceptedAt: now(),
+            state: already.state as JuliusMissionState,
+            resumed: true,
+          };
+        }
+      }
       const projectBrainRevision = Number.parseInt(request.projectBrain.revision, 10);
+      const createCommandId = runId === derivedRunId ? `bootstrap:${identity}` : `bootstrap:${runId}`;
       try {
         await deps.seeds.ensureBase({
           tenantId: deps.tenantId,
@@ -230,7 +261,7 @@ export function createLiveJuliusBootstrapPort(deps: {
           canonicalHash: request.missionBindingDigest,
         });
         const created = await deps.runs.createRun({
-          commandId: `bootstrap:${identity}`,
+          commandId: createCommandId,
           runId,
           missionId: request.missionId,
           projectId: request.projectId,
@@ -385,6 +416,12 @@ export function createLiveJuliusBootstrapPort(deps: {
         }
         if (message.includes('idempotency_payload_conflict')) {
           return refuse('mission_already_running', 'This idempotency key was already used for a different mission payload.');
+        }
+        if (message.includes('duplicate key') || message.includes('julius_runs_pkey')) {
+          const existing = await deps.runs.loadRun(runId, request.projectId).catch(() => null);
+          if (existing !== null) {
+            return { accepted: true, runId, acceptedAt: now(), state: existing.state as JuliusMissionState, resumed: true };
+          }
         }
         /**
          * THE MISSION IS ALREADY RUNNING SOMETHING ELSE. Named, with the run
