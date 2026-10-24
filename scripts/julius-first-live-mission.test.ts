@@ -1674,7 +1674,7 @@ describe('the preflight is a legitimate participant in the durable schema (dry r
     expect(fixture).toContain("throw new Error('preflight_identity_not_owned')");
     // The one table without a project column is reached only through the nonce's run AND project.
     expect(fixture).toContain('DELETE FROM relay_wonderland.julius_tasks t USING relay_wonderland.julius_runs r WHERE t.run_id=r.run_id AND r.run_id=$1 AND r.project_id=$2');
-    expect(fixture, 'ownership is asserted on every identifier, not the project alone').toMatch(/identity\.runId === `run:julius-preflight-\$\{identity\.nonce\}`/u);
+    expect(fixture, 'ownership is asserted on every identifier, not the project alone').toMatch(/identity\.runId === `preflight:julius-\$\{identity\.nonce\}`/u);
   });
 
   it('the Docker regression job runs the PostgreSQL-backed suite with JULIUS_REAL_POSTGRES=1 (the proof is that step, not this case)', () => {

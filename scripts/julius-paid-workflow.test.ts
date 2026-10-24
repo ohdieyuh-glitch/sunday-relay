@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 
 import { ANTHROPIC_CREDENTIAL_ENV_NAMES } from '../relay-bridge/hosted-coding-agent/hosted-auth';
-import { LEGACY_RUN_ID_PATTERN, WLJ_RUN_ID_PATTERN } from './julius-admission-run-id.mjs';
+import { LEGACY_RUN_ID_PATTERN, parseJuliusAdmissionRunId, WLJ_RUN_ID_PATTERN } from './julius-admission-run-id.mjs';
+import { preflightIdentityFor } from './julius-live-preflight-identity';
 
 /**
  * ONE SPENDING PATH, ONE SLOT, NO WAY AROUND EITHER.
@@ -658,6 +659,7 @@ describe('one spent tag per admission run id, before any provider call', () => {
 describe('the WITHOUT-arm log parser admits one id through the shared module', () => {
   const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
   const LEGACY = 'run:0123456789abcdef01234567';
+  const probe = preflightIdentityFor({ tenantId: 'tenant', nonce: 'abcd1234', policyRevision: 'card:julius-live:1' });
   const accepted = (runId: string): string => `Run ${runId} accepted in state READY; driving the Julius run loop.\n`;
 
   function parseLog(log: string): { readonly status: number; readonly stdout: string; readonly stderr: string } {
@@ -681,6 +683,12 @@ describe('the WITHOUT-arm log parser admits one id through the shared module', (
       rmSync(logPath, { force: true });
     }
   }
+
+  it('the executor probe id is not an admission id', () => {
+    expect(probe.runId).toBe('preflight:julius-abcd1234');
+    expect(probe.runId.startsWith('run:')).toBe(false);
+    expect(parseJuliusAdmissionRunId(probe.runId)).toEqual({ ok: false, reason: 'admission_run_id_malformed' });
+  });
 
   it('calls the shared parser and no longer captures only a legacy run id', () => {
     const block = script(step(job('first-live-mission'), "'Learning pair arm WITHOUT: dump this run''s store, restorable, for its WITH arm'"));
@@ -709,11 +717,20 @@ describe('the WITHOUT-arm log parser admits one id through the shared module', (
       'Run not-an-id accepted in state READY; driving the Julius run loop.\n',
       accepted('wlj_01234567-89AB-4CDE-8FAB-0123456789AB'),
       accepted(`run:${'A'.repeat(24)}`),
+      accepted(probe.runId),
       'RESULT: COMPLETED\n',
     ]) {
       const parsed = parseLog(log);
       expect(parsed.status, log).not.toBe(0);
       expect(parsed.stderr, log).toContain('learning_store_run_unnamed');
     }
+  });
+
+  it('ignores a preflight probe line beside one admitted id', () => {
+    const parsed = parseLog(
+      `  preflight identity seeded in foreign-key order: project=prj-julius-preflight-abcd1234 run=${probe.runId} task=task:julius-preflight-abcd1234\n${accepted(WLJ)}`,
+    );
+    expect(parsed.status, parsed.stderr).toBe(0);
+    expect(parsed.stdout).toBe(`${WLJ}\n`);
   });
 });
