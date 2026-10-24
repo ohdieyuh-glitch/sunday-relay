@@ -11,6 +11,7 @@ import { classifyWonderlandDispatchPath, isWonderlandRoute } from './wonderland-
 import {
   createFileCompanionResultStore,
   handleWonderlandCompanionRoute,
+  isWonderlandCompanionAgentRoute,
   isWonderlandCompanionRoute,
   type CompanionResultRecord,
   type CompanionResultStore,
@@ -272,7 +273,19 @@ describe('wonderland companion read', () => {
       const open = ports(join(dir, 'admission.json'), { read: () => storedRow() });
       expect(isWonderlandCompanionRoute(`/wonderland/julius/missions/${RUN}/companion/grok`)).toBe(false);
       expect(isWonderlandCompanionRoute('/wonderland/companions/agents')).toBe(false);
+      expect(isWonderlandCompanionAgentRoute('/wonderland/companions/agents')).toBe(true);
+      expect(isWonderlandRoute('/wonderland/companions/agents')).toBe(false);
+      expect(classifyWonderlandDispatchPath(
+        '/wonderland/companions/agents',
+        `/wonderland/companions/agents?projectId=${PROJECT}`,
+      )).toEqual({
+        catchAllPath: null,
+        exactAdmission: false,
+        exactStatus: false,
+        exactCompanion: true,
+      });
       expect(isWonderlandCompanionRoute(`/wonderland/companions/agents/${AGENT_A}`)).toBe(false);
+      expect(isWonderlandCompanionAgentRoute(`/wonderland/companions/agents/${AGENT_A}`)).toBe(true);
       const posted = await handleWonderlandCompanionRoute(request(RUN, {
         method: 'POST',
         path: '/wonderland/companions/agents',

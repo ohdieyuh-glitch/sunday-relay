@@ -112,20 +112,42 @@ export interface CompanionAgentSource {
   agentsFor(wljRunId: string): readonly AgentDescriptor[];
 }
 
+/** One stored slot. No credential field belongs here. */
+export interface CompanionAgentRecord {
+  readonly agentId: string;
+  readonly providerId: string;
+  readonly wljRunId: string | null;
+  readonly requestedDisplayName: string | null;
+  readonly disconnected: boolean;
+}
+
+export interface CompanionAgentStore {
+  putAgent(record: CompanionAgentRecord): void;
+  readAgent(agentId: string): CompanionAgentRecord | null;
+  listAgents(): readonly CompanionAgentRecord[];
+}
+
+export function isCompanionAgentId(value: string): boolean {
+  return AGENT_ID.test(value);
+}
+
 export interface CompanionAdapterRegistry extends CompanionAgentSource {
   register(adapter: CompanionAdapter): void;
   list(): readonly CompanionAdapter[];
   /**
    * Bind a provider id to a mission. An unknown id still returns a slot
-   * whose connection is `unsupported`. This does not throw.
+   * whose connection is `unsupported`. This does not throw for that id.
+   * `agentId` is minted when the caller does not already hold a slot id.
    */
-  attach(input: { readonly wljRunId: string; readonly providerId: string; readonly agentId?: string }): AgentDescriptor;
-}
-
-interface AgentSlot {
-  readonly wljRunId: string;
-  readonly agentId: string;
-  readonly providerId: string;
+  attach(input: {
+    readonly wljRunId?: string | null;
+    readonly providerId: string;
+    readonly agentId?: string;
+    readonly displayName?: string | null;
+  }): AgentDescriptor;
+  get(agentId: string): AgentDescriptor | null;
+  /** Mark this slot disconnected. Other slots are left as they are. */
+  disconnect(agentId: string): AgentDescriptor | null;
 }
 
 export function clampAuthorizedCapabilities(
@@ -159,8 +181,10 @@ export function authorizationBoundary(
 
 /**
  * The descriptor the route is willing to publish. Capabilities are clamped.
- * `unsupported` and `error` do not carry an identity or a capability.
- * A `connected` slot with no identity is published as `error` instead.
+ * `unsupported` and `error` do not carry a kind or a capability. A display
+ * name left on the slot is the caller's label, not a verified session, and
+ * it does not make the slot connected. A `connected` slot with no identity
+ * is published as `error` instead.
  */
 export function publishAgentDescriptor(value: AgentDescriptor): AgentDescriptor | null {
   if (typeof value.agentId !== 'string' || !AGENT_ID.test(value.agentId)) return null;
@@ -171,17 +195,17 @@ export function publishAgentDescriptor(value: AgentDescriptor): AgentDescriptor 
   const adapterVersion = typeof value.adapterVersion === 'string' && value.adapterVersion.trim() !== ''
     ? value.adapterVersion
     : null;
-  const hide = connection === 'unsupported' || connection === 'error';
   const connectedWithoutIdentity = connection === 'connected' && (displayName === null || kind === null);
   const publishedConnection = connectedWithoutIdentity ? 'error' : connection;
-  const capabilities = hide || connectedWithoutIdentity
+  const hideCapabilities = publishedConnection === 'unsupported' || publishedConnection === 'error';
+  const capabilities = hideCapabilities
     ? { declaredCapabilities: [], authorizedCapabilities: [] }
     : clampAuthorizedCapabilities(value.declaredCapabilities ?? [], value.authorizedCapabilities ?? []);
   return {
     agentId: value.agentId,
     providerId: value.providerId,
-    displayName: publishedConnection === 'unsupported' || publishedConnection === 'error' ? null : displayName,
-    kind: publishedConnection === 'unsupported' || publishedConnection === 'error' ? null : kind,
+    displayName,
+    kind: hideCapabilities ? null : kind,
     adapterVersion: publishedConnection === 'unsupported' ? null : adapterVersion,
     declaredCapabilities: capabilities.declaredCapabilities,
     authorizedCapabilities: capabilities.authorizedCapabilities,
@@ -189,20 +213,25 @@ export function publishAgentDescriptor(value: AgentDescriptor): AgentDescriptor 
   };
 }
 
-export function createCompanionAdapterRegistry(): CompanionAdapterRegistry {
+export function createCompanionAdapterRegistry(store: CompanionAgentStore = createMemoryAgentStore()): CompanionAdapterRegistry {
   const adapters = new Map<string, CompanionAdapter>();
-  const slots = new Map<string, AgentSlot[]>();
-  const describe = (slot: AgentSlot): AgentDescriptor => {
-    const adapter = adapters.get(slot.providerId);
-    if (adapter === undefined) {
-      return blank(slot, 'unsupported', null);
+  const describe = (record: CompanionAgentRecord): AgentDescriptor => {
+    const adapter = adapters.get(record.providerId);
+    let described: AgentDescriptor;
+    if (adapter === undefined) described = blank(record, 'unsupported', null);
+    else {
+      try {
+        const session = adapter.readSession({ wljRunId: record.wljRunId ?? '', agentId: record.agentId });
+        described = descriptorFromSession(record, adapter, session);
+      } catch {
+        described = blank(record, 'error', adapter.adapterVersion);
+      }
     }
-    try {
-      const session = adapter.readSession({ wljRunId: slot.wljRunId, agentId: slot.agentId });
-      return descriptorFromSession(slot, adapter, session);
-    } catch {
-      return blank(slot, 'error', adapter.adapterVersion);
-    }
+    const labeled = described.displayName === null && record.requestedDisplayName !== null
+      ? { ...described, displayName: record.requestedDisplayName }
+      : described;
+    const overridden = record.disconnected ? { ...labeled, connection: 'disconnected' as const } : labeled;
+    return publishAgentDescriptor(overridden) ?? blank(record, 'error', null);
   };
   return {
     register(adapter) {
@@ -215,25 +244,51 @@ export function createCompanionAdapterRegistry(): CompanionAdapterRegistry {
     attach(input) {
       const providerId = typeof input.providerId === 'string' ? input.providerId : '';
       const requested = typeof input.agentId === 'string' && AGENT_ID.test(input.agentId) ? input.agentId : mintAgentId();
-      const mission = typeof input.wljRunId === 'string' ? input.wljRunId : '';
-      const existing = slots.get(mission) ?? [];
-      const slot: AgentSlot = { wljRunId: mission, agentId: requested, providerId };
-      const index = existing.findIndex((item) => item.agentId === requested);
-      const next = existing.slice();
-      if (index >= 0) next[index] = slot;
-      else next.push(slot);
-      slots.set(mission, next);
-      return describe(slot);
+      const mission = typeof input.wljRunId === 'string' && input.wljRunId !== '' ? input.wljRunId : null;
+      const requestedDisplayName = typeof input.displayName === 'string' && input.displayName.trim() !== ''
+        ? input.displayName
+        : null;
+      const previous = store.readAgent(requested);
+      const record: CompanionAgentRecord = {
+        agentId: requested,
+        providerId,
+        wljRunId: mission,
+        requestedDisplayName,
+        disconnected: previous?.disconnected ?? false,
+      };
+      store.putAgent(record);
+      return describe(record);
+    },
+    get(agentId) {
+      if (!AGENT_ID.test(agentId)) return null;
+      const record = store.readAgent(agentId);
+      if (record === null) return null;
+      try {
+        return describe(record);
+      } catch {
+        return publishAgentDescriptor(blank(record, 'error', null));
+      }
+    },
+    disconnect(agentId) {
+      if (!AGENT_ID.test(agentId)) return null;
+      const record = store.readAgent(agentId);
+      if (record === null) return null;
+      const next: CompanionAgentRecord = { ...record, disconnected: true };
+      store.putAgent(next);
+      try {
+        return describe(next);
+      } catch {
+        return publishAgentDescriptor(blank(next, 'disconnected', null));
+      }
     },
     agentsFor(wljRunId) {
-      const mission = slots.get(wljRunId) ?? [];
       const published: AgentDescriptor[] = [];
-      for (const slot of mission) {
+      for (const record of store.listAgents()) {
+        if (record.wljRunId !== wljRunId) continue;
         try {
-          const descriptor = publishAgentDescriptor(describe(slot));
-          if (descriptor !== null) published.push(descriptor);
+          published.push(describe(record));
         } catch {
-          const fallback = publishAgentDescriptor(blank(slot, 'error', null));
+          const fallback = publishAgentDescriptor(blank(record, 'error', null));
           if (fallback !== null) published.push(fallback);
         }
       }
@@ -242,17 +297,32 @@ export function createCompanionAdapterRegistry(): CompanionAdapterRegistry {
   };
 }
 
+function createMemoryAgentStore(): CompanionAgentStore {
+  const agents = new Map<string, CompanionAgentRecord>();
+  return {
+    putAgent(record) {
+      agents.set(record.agentId, record);
+    },
+    readAgent(agentId) {
+      return agents.get(agentId) ?? null;
+    },
+    listAgents() {
+      return [...agents.values()];
+    },
+  };
+}
+
 function descriptorFromSession(
-  slot: AgentSlot,
+  record: CompanionAgentRecord,
   adapter: CompanionAdapter,
   session: CompanionProviderSession | null,
 ): AgentDescriptor {
-  if (session === null || session.providerId !== adapter.providerId || session.providerId !== slot.providerId) {
-    return blank(slot, session === null ? 'disconnected' : 'error', adapter.adapterVersion);
+  if (session === null || session.providerId !== adapter.providerId || session.providerId !== record.providerId) {
+    return blank(record, session === null ? 'disconnected' : 'error', adapter.adapterVersion);
   }
   const candidate: AgentDescriptor = {
-    agentId: slot.agentId,
-    providerId: slot.providerId,
+    agentId: record.agentId,
+    providerId: record.providerId,
     displayName: session.displayName,
     kind: session.kind,
     adapterVersion: adapter.adapterVersion,
@@ -260,13 +330,17 @@ function descriptorFromSession(
     authorizedCapabilities: session.authorizedCapabilities,
     connection: session.connection,
   };
-  return publishAgentDescriptor(candidate) ?? blank(slot, 'error', adapter.adapterVersion);
+  return publishAgentDescriptor(candidate) ?? blank(record, 'error', adapter.adapterVersion);
 }
 
-function blank(slot: AgentSlot, connection: 'unsupported' | 'disconnected' | 'error', adapterVersion: string | null): AgentDescriptor {
+function blank(
+  record: CompanionAgentRecord,
+  connection: 'unsupported' | 'disconnected' | 'error',
+  adapterVersion: string | null,
+): AgentDescriptor {
   return {
-    agentId: slot.agentId,
-    providerId: slot.providerId,
+    agentId: record.agentId,
+    providerId: record.providerId,
     displayName: null,
     kind: null,
     adapterVersion: connection === 'unsupported' ? null : adapterVersion,

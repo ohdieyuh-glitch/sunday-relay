@@ -8,7 +8,7 @@ at `05870e5311edc416e20c7e64ef92869e24b32f9c`. v0.2 keeps every v0.1 field, with
 
 **What this is.** The one companion interface Wonderland draws. Wonderland is BYOAI. Grok Bot, ChatGPT, Claude, Gemini, and any later agent are integrations. They enter through an adapter. The route, the store, and these types do not name a provider, do not enumerate one, and do not prefer one.
 
-**What this version implements.** The `AgentDescriptor`, the adapter registry, and `agents` on the existing GET. The agent-id routes below are the contract for that surface. No method under them is served yet.
+**What this version implements.** The `AgentDescriptor`, the adapter registry, `agents` on the existing GET, and the agent routes: `POST /relay-api/wonderland/companions/agents`, `GET /relay-api/wonderland/companions/agents/{agentId}`, and `DELETE` on that same agent path. Envelope paths under the agent id are still not served.
 
 The bridge strips `/relay-api` before the handler. The matched path is `/wonderland/...`. Neither form contains a provider id.
 
@@ -40,8 +40,10 @@ These are the only companion paths:
 | Path | This version |
 |---|---|
 | `GET /relay-api/wonderland/julius/missions/{wljRunId}/companion` | Served. v0.1 fields, plus `agents`. |
-| `POST /relay-api/wonderland/companions/agents` | Not served. Documented below. |
-| `/relay-api/wonderland/companions/agents/{agentId}/...` | Not served. Documented below. |
+| `POST /relay-api/wonderland/companions/agents` | Served. Creates one slot. |
+| `GET /relay-api/wonderland/companions/agents/{agentId}` | Served. Returns that slot's `AgentDescriptor`. |
+| `DELETE /relay-api/wonderland/companions/agents/{agentId}` | Served. Marks that slot `disconnected`. |
+| `/relay-api/wonderland/companions/agents/{agentId}/...` | Not served. The envelopes below have no route yet. |
 
 `{wljRunId}` is the mission id. `{agentId}` is the server slot id (`agt_` plus a lowercase UUIDv4). A provider name in either position is not an identifier this contract accepts. A path that puts a provider after `/companion`, or that uses a provider as `{agentId}`, is not the companion route.
 
@@ -62,9 +64,9 @@ interface AgentDescriptor {
 }
 ```
 
-`kind` is `single` for one agent and `compound` for an agent that is itself a group. `null` means the adapter did not supply a kind. The route does not guess `single`.
+`kind` is copied from the adapter's verified provider session: `single` for one agent, `compound` for an agent that is itself a group. It is `null` when the adapter did not supply one, including `unsupported`, `error`, and a `connected` report with no identity. `null` renders as Unknown. The route does not guess `single`.
 
-`displayName` and `kind` are copied from the adapter's verified provider session. They are `null` when the slot is `unsupported` or `error`, and when a `connected` report arrived without an identity. `null` renders as Unknown. It is not a model name.
+`displayName` is the adapter session's name when that session supplied one. Otherwise it is the optional caller label from create, including on an `unsupported` slot. The label is not a verified identity, it is not a model id, and it never changes `connection` to `connected`. A session whose `providerId` does not match the selected adapter is `error`, and that session's display name is discarded.
 
 `adapterVersion` is the adapter's own version string, or `null` when no adapter was selected.
 
@@ -106,25 +108,35 @@ A `wlj_` mission holds zero or more slots. Two slots may name different `provide
 
 The registry may be empty. The GET still returns the v0.1 object and `agents: []`. No adapter is required to start the route, and the server registers none.
 
-## Connecting, later
+## Connecting
 
-`POST /relay-api/wonderland/companions/agents` is the connect route. It is not implemented. When it is, the body carries the binding, and the provider is not in the path:
+`POST /relay-api/wonderland/companions/agents` creates one slot. The body is:
 
 ```json
-{ "wljRunId": "wlj_<uuidv4>", "providerId": "<opaque string>" }
+{ "providerId": "<opaque string>", "wljRunId": "wlj_<uuidv4>", "displayName": "<caller label>" }
 ```
 
-The server selects the adapter by exact `providerId`. The caller does not select an adapter module, and does not send a model name to be used as the agent. The response is the `AgentDescriptor` for the new slot.
+`providerId` is required. `wljRunId` and `displayName` are optional. A present `wljRunId` is read with `scripts/julius-admission-run-id.mjs` and must be form `wlj`; a legacy `run:` id or any other shape is `400` and is not stored. The provider is not in the path.
 
-An unknown `providerId` still creates a slot. Its `connection` is `unsupported`, its identity fields are `null`, and its capability arrays are empty. That is not an error, and it is not a 5xx. A thrown adapter is that slot's `connection: "error"` and does not change the status of the read or of any other slot.
+The server selects the adapter by exact `providerId`. The caller does not name an adapter module. The response is `201` and the body is the `AgentDescriptor`. `agentId` is minted on the server (`agt_` plus a lowercase UUIDv4). An `agentId` in the body is ignored.
 
-The same loopback guard applies. A non-loopback peer is `403 julius_dispatch_not_loopback` and learns nothing about the slots.
+An unknown `providerId` still creates a slot and still answers `201`. Its `connection` is `unsupported` and its capability arrays are empty. That is not an error and it is not a 5xx. A thrown adapter is that slot's `connection: "error"` and does not change the status of this POST or of any other slot.
 
-## Per-agent surface, later
+No credential is accepted in this body. A field named `apiKey`, `token`, or `password`, at the top or nested, is `400` `companion_credentials_rejected`. Nothing is written. Provider auth belongs to the adapter's own flow, which is not implemented. There is no i.Wonder-funded fallback.
 
-`/relay-api/wonderland/companions/agents/{agentId}/...` is the per-agent surface. It is not implemented. `{agentId}` is the slot id minted by the server. A string that is not `agt_` plus a UUIDv4 is not used as an agent id, including a string that names a provider. The server mints an id instead of keeping that string.
+The same loopback guard applies. A non-loopback peer is `403 julius_dispatch_not_loopback` and nothing is stored.
 
-No method under this prefix is mounted in v0.2. A request there is not the mission companion GET.
+When `wljRunId` is a canonical id, the new slot is one of that mission's `agents` on the existing companion GET. `verified` on that GET stays `false`.
+
+Slots are written into the same local companion store as result rows (`JULIUS_WONDERLAND_COMPANION_STORE`, or memory when that path is unset).
+
+## Per-agent surface
+
+`GET /relay-api/wonderland/companions/agents/{agentId}` returns that slot's `AgentDescriptor`. `{agentId}` is the minted slot id. An unknown id, and a string that is not `agt_` plus a UUIDv4, is the uniform 404. A provider name in that position is not found.
+
+`DELETE /relay-api/wonderland/companions/agents/{agentId}` marks that slot `disconnected` and returns the descriptor. The mark sticks even if the adapter would still report `connected`. Other slots on the same mission are unchanged. An unknown id is the same 404.
+
+Paths under `{agentId}/` are not served. The envelopes below still have no route.
 
 ## Envelopes
 
@@ -186,7 +198,7 @@ Each slot has one connection:
 | Value | When |
 |---|---|
 | `connected` | The selected adapter returned a verified session whose `providerId` is that slot's id, with a display name and a kind. |
-| `disconnected` | The adapter was selected and has no verified session, or it reported `disconnected`. |
+| `disconnected` | The adapter was selected and has no verified session, it reported `disconnected`, or DELETE marked the slot disconnected. |
 | `unsupported` | No adapter is registered for that opaque `providerId`. |
 | `error` | The adapter threw, the session's `providerId` did not match the adapter, or a connected report had no identity. |
 
@@ -194,8 +206,8 @@ Describing one slot cannot fail the GET and cannot change another slot. A source
 
 ## Identity
 
-The route never substitutes a generic model and presents it as the user's agent. `displayName`, `kind`, and the capability lists are taken from the adapter's verified provider session, or they are null and empty. A session whose `providerId` differs from the adapter that was selected is `error`, and its display name is discarded. The route has no model table to fall back on.
+The route never substitutes a generic model and presents it as the user's agent. `kind` and the capability lists come from the adapter's verified provider session, or they are null and empty. `displayName` comes from that session when it supplied one, and otherwise from the caller label, which is not a model. A session whose `providerId` differs from the adapter that was selected is `error`, and its display name is discarded. The route has no model table to fall back on. `authorizedCapabilities` stay a subset of `declaredCapabilities` and are empty unless an adapter reported them.
 
 ## What stays loopback
 
-Dispatch, status, and this companion read are loopback-only. The future connect and per-agent routes are loopback-only as well. A browser origin, an operator bearer used as the companion caller, and a non-local store stay refused by the same guard the status route uses. This contract does not open a public provider callback.
+Dispatch, status, the companion read, and the agent routes are loopback-only. A browser origin, an operator bearer used as the companion caller, and a non-local store stay refused by the same guard the status route uses. This contract does not open a public provider callback.

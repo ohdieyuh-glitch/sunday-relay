@@ -78,7 +78,7 @@ import type { MissionOwnershipScope } from './mission';
 import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
 import { classifyWonderlandDispatchPath, handleWonderlandRoute } from './wonderland-routes';
 import { createWonderlandAdmissionBridge, createWonderlandAdmissionService, createWonderlandStatusBridge, isWonderlandAdmissionRoute, isWonderlandStatusRoute, type WonderlandAdmissionRoutePorts } from './wonderland-admission-route';
-import { createCompanionResultStore, createWonderlandCompanionBridge, isWonderlandCompanionRoute } from './wonderland-companion-route';
+import { createCompanionResultStore, createWonderlandCompanionBridge, isWonderlandCompanionAgentRoute, isWonderlandCompanionRoute } from './wonderland-companion-route';
 import { createCompanionAdapterRegistry, type CompanionAdapterRegistry } from './wonderland-companion-registry';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
@@ -280,10 +280,10 @@ export function createBridgeServer(
    */
   const companionResults = createCompanionResultStore(process.env.JULIUS_WONDERLAND_COMPANION_STORE);
   /**
-   * Companion adapters are optional. The registry starts empty: no provider
-   * is built in, and the companion read does not require one.
+   * Companion adapters are optional. The registry starts empty and stores
+   * slots in the same local companion file. No provider is built in.
    */
-  const companionAgents = createCompanionAdapterRegistry();
+  const companionAgents = createCompanionAdapterRegistry(companionResults);
   const wonderland = wonderlandBackend ?? WonderlandBackend.empty();
   /**
    * WONDERLAND SOCIAL (R16): the desktop client's own sign-in (GitHub's device flow) and the social routes. OFF unless the
@@ -1070,17 +1070,18 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
          *
          * The same call also admits POST /wonderland/julius/dispatch, reads
          * GET /wonderland/julius/status, and reads
-         * GET /wonderland/julius/missions/{wljRunId}/companion. The
+         * GET /wonderland/julius/missions/{wljRunId}/companion, and the
+         * companion agent routes under /wonderland/companions/agents. The
          * Wonderland catch-all leaves those paths out, because a native session
          * is refused there before the path is read. Admission does not
          * bootstrap a run and does not start the paid workflow. The companion
-         * read does not ingest a result and does not call out.
+         * routes do not call out.
          */
         const missionPath = path.replace('/relay-api', '');
         if (isJuliusMissionRoute(missionPath)
           || (wonderlandDispatch.exactAdmission && isWonderlandAdmissionRoute(missionPath))
           || (wonderlandDispatch.exactStatus && isWonderlandStatusRoute(missionPath))
-          || (wonderlandDispatch.exactCompanion && isWonderlandCompanionRoute(missionPath))) {
+          || (wonderlandDispatch.exactCompanion && (isWonderlandCompanionRoute(missionPath) || isWonderlandCompanionAgentRoute(missionPath)))) {
           const missionAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
           const missionResult = await handleJuliusMissionRoute({
             method,

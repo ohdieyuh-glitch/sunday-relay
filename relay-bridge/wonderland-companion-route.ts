@@ -13,7 +13,13 @@
  *
  * The same 200 adds `agents`, from the injected registry. An empty registry
  * is the normal case and yields an empty array. The provider id is not part
- * of this path. See docs/companion/universal-companion-contract-v0.2.md.
+ * of this path.
+ *
+ * POST /wonderland/companions/agents creates a slot. GET and DELETE
+ * /wonderland/companions/agents/{agentId} read it and disconnect it. The
+ * same loopback guard covers all three. A credential field in the create
+ * body is refused and not stored. See
+ * docs/companion/universal-companion-contract-v0.2.md.
  *
  * Reconciliation with YUJI's #440 at e01a1df8
  * (relay-bridge/julius-companion-evidence.ts): that module is not imported.
@@ -24,7 +30,8 @@
  * `run:` id.
  */
 
-import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 
 import { parseJuliusAdmissionRunId } from '../src/relay/integration/wonderland-admission/admission-run-id';
 import { isLocalStorePath } from '../src/relay/integration/wonderland-admission/admission-file';
@@ -36,12 +43,21 @@ import {
   type WonderlandAdmissionRouteRequest,
 } from './wonderland-admission-route';
 import {
+  isCompanionAgentId,
   publishAgentDescriptor,
   type AgentDescriptor,
+  type CompanionAdapterRegistry,
+  type CompanionAgentRecord,
   type CompanionAgentSource,
+  type CompanionAgentStore,
 } from './wonderland-companion-registry';
 
 const COMPANION_PATH = /^\/wonderland\/julius\/missions\/([^/]+)\/companion$/;
+const COMPANION_AGENTS_PATH = '/wonderland/companions/agents';
+const COMPANION_AGENT_PATH = /^\/wonderland\/companions\/agents\/([^/]+)$/;
+const CREDENTIAL_KEY = /^(apikey|token|password)$/i;
+const DISPLAY_NAME_MAX = 200;
+const PROVIDER_ID_MAX = 200;
 
 export const COMPANION_RESULT_SCHEMA_VERSION = 1 as const;
 
@@ -124,6 +140,11 @@ export interface WonderlandCompanionRoutePorts extends WonderlandAdmissionRouteP
 
 export function isWonderlandCompanionRoute(path: string): boolean {
   return companionRunId(path) !== null;
+}
+
+export function isWonderlandCompanionAgentRoute(path: string): boolean {
+  const pathname = wonderlandAdmissionPathname(path);
+  return pathname === COMPANION_AGENTS_PATH || COMPANION_AGENT_PATH.test(pathname);
 }
 
 export function companionRunId(path: string): string | null {
@@ -229,6 +250,130 @@ export function companionBody(row: CompanionResultRecord, agents: readonly Agent
   };
 }
 
+export function handleWonderlandCompanionAgentRoute(
+  request: WonderlandAdmissionRouteRequest,
+  ports: WonderlandCompanionRoutePorts,
+): Promise<{ status: number; body: unknown } | null> {
+  if (!isWonderlandCompanionAgentRoute(request.path)) return Promise.resolve(null);
+  const guarded = juliusLoopbackGuard(request, ports);
+  if (!guardPassed(guarded)) return Promise.resolve(guarded);
+  const pathname = wonderlandAdmissionPathname(request.path);
+  if (pathname === COMPANION_AGENTS_PATH) return Promise.resolve(createCompanionAgent(request, ports));
+  const match = COMPANION_AGENT_PATH.exec(pathname);
+  let agentId = '';
+  try {
+    agentId = decodeURIComponent(match?.[1] ?? '');
+  } catch {
+    return Promise.resolve(NOT_FOUND);
+  }
+  if (!isCompanionAgentId(agentId)) return Promise.resolve(NOT_FOUND);
+  if (request.method === 'GET') return Promise.resolve(readCompanionAgent(agentId, ports));
+  if (request.method === 'DELETE') return Promise.resolve(disconnectCompanionAgent(agentId, ports));
+  return Promise.resolve(err(405, 'method_not_allowed', 'An agent slot is read with GET and disconnected with DELETE.'));
+}
+
+function createCompanionAgent(
+  request: WonderlandAdmissionRouteRequest,
+  ports: WonderlandCompanionRoutePorts,
+): { status: number; body: unknown } {
+  if (request.method !== 'POST') {
+    return err(405, 'method_not_allowed', 'An agent slot is created with POST.');
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(request.rawBody ?? '');
+  } catch {
+    return err(400, 'companion_request_invalid', 'Companion agent requests need a JSON object.');
+  }
+  if (containsCredentialField(parsed)) {
+    return err(400, 'companion_credentials_rejected', 'Provider credentials are not accepted on this route.');
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return err(400, 'companion_request_invalid', 'Companion agent requests need a JSON object.');
+  }
+  const body = parsed as Record<string, unknown>;
+  if (typeof body.providerId !== 'string' || body.providerId.trim() === '' || body.providerId.length > PROVIDER_ID_MAX) {
+    return err(400, 'companion_request_invalid', 'Companion agent requests need a providerId string.');
+  }
+  let displayName: string | null = null;
+  if (body.displayName !== undefined && body.displayName !== null) {
+    if (typeof body.displayName !== 'string' || body.displayName.length > DISPLAY_NAME_MAX) {
+      return err(400, 'companion_request_invalid', 'displayName must be a short string.');
+    }
+    displayName = body.displayName.trim() === '' ? null : body.displayName;
+  }
+  let wljRunId: string | null = null;
+  if (body.wljRunId !== undefined && body.wljRunId !== null) {
+    const run = parseJuliusAdmissionRunId(body.wljRunId);
+    if (!run.ok || run.form !== 'wlj') {
+      return err(400, 'julius_dispatch_run_invalid', 'wljRunId must be a wlj_ id.');
+    }
+    wljRunId = run.runId;
+  }
+  const directory = agentDirectory(ports);
+  if (directory === null) {
+    return err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.');
+  }
+  try {
+    const descriptor = directory.attach({ providerId: body.providerId, wljRunId, displayName });
+    return { status: 201, body: descriptor };
+  } catch (error) {
+    return agentStoreFailure(error);
+  }
+}
+
+function readCompanionAgent(agentId: string, ports: WonderlandCompanionRoutePorts): { status: number; body: unknown } {
+  const directory = agentDirectory(ports);
+  if (directory === null) {
+    return err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.');
+  }
+  try {
+    const descriptor = directory.get(agentId);
+    if (descriptor === null) return NOT_FOUND;
+    return { status: 200, body: descriptor };
+  } catch (error) {
+    return agentStoreFailure(error);
+  }
+}
+
+function disconnectCompanionAgent(agentId: string, ports: WonderlandCompanionRoutePorts): { status: number; body: unknown } {
+  const directory = agentDirectory(ports);
+  if (directory === null) {
+    return err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.');
+  }
+  try {
+    const descriptor = directory.disconnect(agentId);
+    if (descriptor === null) return NOT_FOUND;
+    return { status: 200, body: descriptor };
+  } catch (error) {
+    return agentStoreFailure(error);
+  }
+}
+
+function agentDirectory(ports: WonderlandCompanionRoutePorts): CompanionAdapterRegistry | null {
+  const source = ports.companionAgents;
+  if (source === undefined) return null;
+  if (!('attach' in source) || !('get' in source) || !('disconnect' in source)) return null;
+  return source as CompanionAdapterRegistry;
+}
+
+function agentStoreFailure(error: unknown): { status: number; body: unknown } {
+  if (isCompanionResultStoreClosed(error)) {
+    return err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.');
+  }
+  return err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.');
+}
+
+function containsCredentialField(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some((item) => containsCredentialField(item));
+  if (value === null || typeof value !== 'object') return false;
+  for (const [key, child] of Object.entries(value)) {
+    if (CREDENTIAL_KEY.test(key)) return true;
+    if (containsCredentialField(child)) return true;
+  }
+  return false;
+}
+
 export function createWonderlandCompanionBridge(ports: WonderlandCompanionRoutePorts): {
   matches(path: string): boolean;
   handle(request: {
@@ -247,15 +392,24 @@ export function createWonderlandCompanionBridge(ports: WonderlandCompanionRouteP
   }): Promise<{ status: number; body: unknown } | null>;
 } {
   return {
-    matches: (path) => isWonderlandCompanionRoute(path),
-    handle: (request) => handleWonderlandCompanionRoute(wonderlandAdmissionRequestFrom(request), ports),
+    matches: (path) => isWonderlandCompanionRoute(path) || isWonderlandCompanionAgentRoute(path),
+    handle: (request) => {
+      const mapped = wonderlandAdmissionRequestFrom(request);
+      if (isWonderlandCompanionAgentRoute(request.path)) return handleWonderlandCompanionAgentRoute(mapped, ports);
+      return handleWonderlandCompanionRoute(mapped, ports);
+    },
   };
 }
 
-export function createMemoryCompanionResultStore(): CompanionResultStore & {
+export interface CompanionLocalStore extends CompanionResultStore, CompanionAgentStore {
+  record?(row: CompanionResultRecord): boolean;
+}
+
+export function createMemoryCompanionResultStore(): CompanionLocalStore & {
   record(row: CompanionResultRecord): boolean;
 } {
   const rows = new Map<string, CompanionResultRecord>();
+  const agents = new Map<string, CompanionAgentRecord>();
   return {
     record(row) {
       const stored = validateCompanionResult(row);
@@ -266,46 +420,134 @@ export function createMemoryCompanionResultStore(): CompanionResultStore & {
     read(wljRunId) {
       return rows.get(wljRunId) ?? null;
     },
+    putAgent(record) {
+      agents.set(record.agentId, record);
+    },
+    readAgent(agentId) {
+      return agents.get(agentId) ?? null;
+    },
+    listAgents() {
+      return [...agents.values()];
+    },
   };
 }
 
 /**
  * A JSON file on this machine. Missing file: no rows. A URL, a relative
- * path, a bad schema, or unreadable JSON closes the store. The route does
- * not write the file.
+ * path, a bad schema, or unreadable JSON closes the store. Result rows and
+ * agent slots share this document. The route does not call out to write it.
  */
-export function createFileCompanionResultStore(storePath: string): CompanionResultStore {
+export function createFileCompanionResultStore(storePath: string): CompanionLocalStore {
   return {
     read(wljRunId) {
-      if (!isLocalStorePath(storePath)) throw new CompanionResultStoreClosedError();
-      let text: string;
-      try {
-        text = readFileSync(storePath, 'utf8');
-      } catch (error) {
-        const code = error !== null && typeof error === 'object' && 'code' in error ? error.code : '';
-        if (code === 'ENOENT') return null;
-        throw new CompanionResultStoreClosedError();
-      }
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        throw new CompanionResultStoreClosedError();
-      }
-      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new CompanionResultStoreClosedError();
-      const document = parsed as { schemaVersion?: unknown; results?: unknown };
-      if (document.schemaVersion !== COMPANION_RESULT_SCHEMA_VERSION) throw new CompanionResultStoreClosedError();
-      if (document.results === null || typeof document.results !== 'object' || Array.isArray(document.results)) {
-        throw new CompanionResultStoreClosedError();
-      }
-      const raw = (document.results as Record<string, unknown>)[wljRunId];
+      const document = loadCompanionDocument(storePath);
+      if (document === null) return null;
+      const raw = document.results[wljRunId];
       if (raw === undefined) return null;
       return validateCompanionResult(raw);
+    },
+    putAgent(record) {
+      const document = loadCompanionDocument(storePath) ?? emptyCompanionDocument();
+      document.agents[record.agentId] = record;
+      saveCompanionDocument(storePath, document);
+    },
+    readAgent(agentId) {
+      const document = loadCompanionDocument(storePath);
+      if (document === null) return null;
+      return document.agents[agentId] ?? null;
+    },
+    listAgents() {
+      const document = loadCompanionDocument(storePath);
+      if (document === null) return [];
+      return Object.values(document.agents);
     },
   };
 }
 
-export function createCompanionResultStore(storePath: string | undefined): CompanionResultStore {
+interface CompanionDocument {
+  schemaVersion: typeof COMPANION_RESULT_SCHEMA_VERSION;
+  results: Record<string, unknown>;
+  agents: Record<string, CompanionAgentRecord>;
+}
+
+function emptyCompanionDocument(): CompanionDocument {
+  return { schemaVersion: COMPANION_RESULT_SCHEMA_VERSION, results: {}, agents: {} };
+}
+
+function loadCompanionDocument(storePath: string): CompanionDocument | null {
+  if (!isLocalStorePath(storePath)) throw new CompanionResultStoreClosedError();
+  let text: string;
+  try {
+    text = readFileSync(storePath, 'utf8');
+  } catch (error) {
+    const code = error !== null && typeof error === 'object' && 'code' in error ? error.code : '';
+    if (code === 'ENOENT') return null;
+    throw new CompanionResultStoreClosedError();
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new CompanionResultStoreClosedError();
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new CompanionResultStoreClosedError();
+  const document = parsed as { schemaVersion?: unknown; results?: unknown; agents?: unknown };
+  if (document.schemaVersion !== COMPANION_RESULT_SCHEMA_VERSION) throw new CompanionResultStoreClosedError();
+  if (document.results === null || typeof document.results !== 'object' || Array.isArray(document.results)) {
+    throw new CompanionResultStoreClosedError();
+  }
+  if (document.agents !== undefined && (document.agents === null || typeof document.agents !== 'object' || Array.isArray(document.agents))) {
+    throw new CompanionResultStoreClosedError();
+  }
+  const agents: Record<string, CompanionAgentRecord> = {};
+  for (const value of Object.values(document.agents ?? {})) {
+    const record = validateStoredAgent(value);
+    if (record !== null) agents[record.agentId] = record;
+  }
+  return { schemaVersion: COMPANION_RESULT_SCHEMA_VERSION, results: document.results as Record<string, unknown>, agents };
+}
+
+function saveCompanionDocument(storePath: string, document: CompanionDocument): void {
+  if (!isLocalStorePath(storePath)) throw new CompanionResultStoreClosedError();
+  const temporary = `${storePath}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporary, `${JSON.stringify(document)}\n`, 'utf8');
+    renameSync(temporary, storePath);
+  } catch {
+    try {
+      unlinkSync(temporary);
+    } catch {
+      // The temporary file may not exist. The store is still closed.
+    }
+    throw new CompanionResultStoreClosedError();
+  }
+}
+
+function validateStoredAgent(value: unknown): CompanionAgentRecord | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (typeof row.agentId !== 'string' || !isCompanionAgentId(row.agentId)) return null;
+  if (typeof row.providerId !== 'string') return null;
+  let wljRunId: string | null = null;
+  if (row.wljRunId !== null && row.wljRunId !== undefined) {
+    const parsed = parseJuliusAdmissionRunId(row.wljRunId);
+    if (!parsed.ok || parsed.form !== 'wlj') return null;
+    wljRunId = parsed.runId;
+  }
+  if (row.requestedDisplayName !== null && row.requestedDisplayName !== undefined && typeof row.requestedDisplayName !== 'string') {
+    return null;
+  }
+  if (typeof row.disconnected !== 'boolean') return null;
+  return {
+    agentId: row.agentId,
+    providerId: row.providerId,
+    wljRunId,
+    requestedDisplayName: typeof row.requestedDisplayName === 'string' ? row.requestedDisplayName : null,
+    disconnected: row.disconnected,
+  };
+}
+
+export function createCompanionResultStore(storePath: string | undefined): CompanionLocalStore {
   const trimmed = (storePath ?? '').trim();
   if (trimmed === '') return createMemoryCompanionResultStore();
   return createFileCompanionResultStore(trimmed);
