@@ -18,6 +18,7 @@ const SHA = /^[0-9a-f]{40}$/u;
 // .github/julius-learning-registrations/, and scripts/julius-landing (the landing system's own tests, scripts/julius-landing*.test.ts: a PR must not be able to weaken the tests that
 // pin the lander). The mission directories (.github/julius-missions/**), relay-bridge/**, src/** and JULIUS_HARNESS_MANIFEST.md stay allowed.
 // Case-insensitive: a checkout on a case-insensitive filesystem (Windows, macOS) folds `.GITHUB/Julius-Landing/...` onto the governed file.
+// `.github/julius-landing/checkpoints/` is inside the second alternative. A pull request cannot add or replace a checkpoint attestation.
 export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|scripts\/relay-parity-gate|scripts\/wonderland-beta-gate|scripts\/julius-live-preflight-identity|scripts\/julius-derive-scoped-credentials|scripts\/julius-ci-callers|scripts\/ci-test-accounting|scripts\/julius-paid-dispatch|scripts\/julius-paid-run-archive|\.github\/julius-mission-pins\.sh$|\.github\/julius-executor-entrypoint\.sh$|scripts\/julius-docker-executor\.sh$|scripts\/julius-executor-ready\.mjs$|scripts\/julius-reviewer-isolation|scripts\/julius-reviewer-deadline\.mjs$|scripts\/julius-live-preflight\.ts$|scripts\/julius-usage-limit\.mjs$|\.github\/julius-learning-store\.sh$|\.github\/julius-phase\.sh$|\.github\/wait-for-executor\.sh$|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
 // SIGNED-EXCEPTION: the spend ceilings and the effort tripwire live here. A PR may change them only if the reviewer's signed clearance lists the EXACT file in `governed-exceptions`.
 export const EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
@@ -28,6 +29,62 @@ export const FORBIDDEN_PATH = { test: (f) => HARD_FORBIDDEN_PATH.test(f) || isEx
 
 /** The canonical clearance text the reviewer signs. One `key: value` per line, fixed key order, LF line ends. */
 export const CLEARANCE_KEYS = ['pr', 'head', 'tree', 'base', 'kind', 'bot-comments-sha256', 'governed-exceptions', 'nonce', 'by', 'issued', 'expires'];
+/**
+ * Optional lines after `expires`, in this order, each omitted or present once.
+ * A clearance without them is the historical form. `protected-paths` is covered
+ * by the same signature: it is how a governed landing names founder-governed
+ * paths. The historical lander does not honor it.
+ */
+export const CLEARANCE_OPTIONAL_KEYS = Object.freeze(['protected-paths', 'landing-method', 'binds-draft', 'depends']);
+
+export function splitClearanceList(value) {
+  if (value === undefined || value === '-') return [];
+  return String(value).split(',');
+}
+
+/** Hard-forbidden paths not named in the signed `protected-paths`, plus exception-eligible paths not named in `governed-exceptions`. */
+export function unauthorizedGovernedPaths(paths, fields) {
+  const exceptions = splitClearanceList(fields?.['governed-exceptions']);
+  const listed = splitClearanceList(fields?.['protected-paths']);
+  return (Array.isArray(paths) ? paths : []).filter((path) => {
+    if (typeof path !== 'string' || path === '') return true;
+    if (HARD_FORBIDDEN_PATH.test(path)) return !listed.includes(path);
+    if (isExceptionEligible(path) && !exceptions.includes(path)) return true;
+    return false;
+  });
+}
+
+/** Signed protected paths that this diff does not actually change. */
+export function unusedProtectedPaths(paths, fields) {
+  const listed = splitClearanceList(fields?.['protected-paths']);
+  const changed = Array.isArray(paths) ? paths : [];
+  return listed.filter((path) => !changed.includes(path));
+}
+
+function optionalClearanceProblems(fields) {
+  const problems = [];
+  if (fields['protected-paths'] !== undefined) {
+    const value = fields['protected-paths'];
+    const list = value === '-' ? [] : value.split(',');
+    const safe = (path) => path !== '' && !path.includes('..') && !path.startsWith('/') && !/[*?[\]{}\s]/u.test(path) && /^[A-Za-z0-9._@/-]+$/u.test(path);
+    if (value !== '-' && (list.some((path) => !safe(path)) || new Set(list).size !== list.length || [...list].sort().join(',') !== value)) {
+      problems.push('protected-paths must be "-" or a sorted comma-separated path list');
+    }
+  }
+  if (fields['landing-method'] !== undefined && !['squash', 'fast-forward'].includes(fields['landing-method'])) {
+    problems.push('landing-method must be squash or fast-forward');
+  }
+  if (fields['binds-draft'] !== undefined && fields['binds-draft'] !== 'yes') problems.push('binds-draft must be yes');
+  if (fields.depends !== undefined) {
+    const value = fields.depends;
+    const parts = value === '-' ? [] : value.split(',');
+    const ids = parts.map((part) => (/^[1-9][0-9]{0,6}$/u.test(part) ? Number(part) : Number.NaN));
+    if (value !== '-' && (ids.some((id) => !Number.isInteger(id)) || new Set(parts).size !== parts.length || [...ids].sort((a, b) => a - b).join(',') !== value)) {
+      problems.push('depends must be "-" or a numerically sorted comma-separated list of pull request numbers');
+    }
+  }
+  return problems;
+}
 
 export function parseClearance(text) {
   const problems = [];
@@ -41,7 +98,24 @@ export function parseClearance(text) {
     if (!line.startsWith(prefix)) problems.push(`line ${3 + i} must start with "${prefix}"`);
     else fields[key] = line.slice(prefix.length);
   });
-  if (lines.length !== 2 + CLEARANCE_KEYS.length + 1 || lines[lines.length - 1] !== '') problems.push('exactly one trailing newline and no extra lines');
+  let cursor = 0;
+  let index = 2 + CLEARANCE_KEYS.length;
+  while (index < lines.length - 1) {
+    const line = lines[index];
+    let matched = -1;
+    for (let keyIndex = cursor; keyIndex < CLEARANCE_OPTIONAL_KEYS.length; keyIndex += 1) {
+      if (line.startsWith(`${CLEARANCE_OPTIONAL_KEYS[keyIndex]}: `)) {
+        matched = keyIndex;
+        break;
+      }
+    }
+    if (matched < 0) break;
+    const key = CLEARANCE_OPTIONAL_KEYS[matched];
+    fields[key] = line.slice(key.length + 2);
+    cursor = matched + 1;
+    index += 1;
+  }
+  if (lines.length === 0 || lines[lines.length - 1] !== '' || index !== lines.length - 1) problems.push('exactly one trailing newline and no extra lines');
   for (const key of ['head', 'tree', 'base']) if (fields[key] !== undefined && !SHA.test(fields[key])) problems.push(`${key} must be a full 40-hex sha`);
   if (fields.pr !== undefined && !/^[1-9][0-9]{0,6}$/u.test(fields.pr)) problems.push('pr must be a positive integer');
   if (fields.kind !== undefined && !['CLEARED', 'CLEARED-TREE'].includes(fields.kind)) problems.push('kind must be CLEARED or CLEARED-TREE');
@@ -50,6 +124,7 @@ export function parseClearance(text) {
     const list = v === '-' ? [] : v.split(',');
     if (v !== '-' && (list.some((f) => !EXCEPTION_ELIGIBLE.includes(f)) || new Set(list).size !== list.length || [...list].sort().join(',') !== v)) problems.push('governed-exceptions must be "-" or a sorted, comma-separated list of exception-eligible files');
   }
+  problems.push(...optionalClearanceProblems(fields));
   if (fields.nonce !== undefined && !/^[0-9a-f]{32}$/u.test(fields.nonce)) problems.push('nonce must be 32 hex characters');
   if (fields.by !== undefined && fields.by !== 'INDEPENDENT_REVIEW') problems.push('by must be INDEPENDENT_REVIEW');
   if (fields['bot-comments-sha256'] !== undefined && !/^[0-9a-f]{64}$/u.test(fields['bot-comments-sha256'])) problems.push('bot-comments-sha256 must be 64 hex');
@@ -64,11 +139,19 @@ export function parseClearance(text) {
  * A test fails if the two copies drift. Full SPKI SHA-256 and the raw 32-byte key. A short prefix is not a match.
  * The same fingerprint must also be presented as JULIUS_REVIEWER_KEY_SHA256. A missing or different value fails closed.
  */
-export const PINNED_REVIEWER_SPKI_SHA256 = 'b0b8e29b3efff5936dd51a54617ca8bda1b94e75557339821d7d00a98364d13a';
-export const PINNED_REVIEWER_RAW_KEY = 'ed738f419234d621fbfc3028c934e2a75b6bd62e02bd83a11e74e9bb6ad222b3';
+export const PINNED_REVIEWER_SPKI_SHA256 = '7eacf984b77022f9c3719760052b9eaeab0c5fcabe8058050bdc999e365a845c';
+export const PINNED_REVIEWER_RAW_KEY = '5797b5d6532f0859182e1969abbc75cca2a4faf89884416de22bf582eb1fd0f3';
 export const EXTERNAL_ANCHOR_VARIABLE = 'JULIUS_REVIEWER_KEY_SHA256';
 
-function reviewerKeyMaterialProblems(publicKeyPem) {
+/** Full-length equality of the SPKI SHA-256 and the raw 32-byte key. An 8-hex prefix is not a match. */
+export function exactPinnedFingerprint(spkiSha256, rawHex) {
+  return typeof spkiSha256 === 'string' && typeof rawHex === 'string'
+    && spkiSha256.length === 64 && rawHex.length === 64
+    && spkiSha256 === PINNED_REVIEWER_SPKI_SHA256
+    && rawHex === PINNED_REVIEWER_RAW_KEY;
+}
+
+export function reviewerKeyMaterialProblems(publicKeyPem) {
   try {
     const key = createPublicKey(publicKeyPem);
     if (key.asymmetricKeyType !== 'ed25519') return ['the committed reviewer key is not an ed25519 key'];
@@ -76,7 +159,7 @@ function reviewerKeyMaterialProblems(publicKeyPem) {
     if (der.length < 32) return ['the reviewer key fingerprint could not be read'];
     const spkiSha256 = createHash('sha256').update(der).digest('hex');
     const rawHex = der.subarray(der.length - 32).toString('hex');
-    if (spkiSha256.length !== 64 || spkiSha256 !== PINNED_REVIEWER_SPKI_SHA256 || rawHex !== PINNED_REVIEWER_RAW_KEY) {
+    if (!exactPinnedFingerprint(spkiSha256, rawHex)) {
       return [`the reviewer key is not the pinned reviewer key ${PINNED_REVIEWER_SPKI_SHA256}`];
     }
     return [];
@@ -85,10 +168,9 @@ function reviewerKeyMaterialProblems(publicKeyPem) {
   }
 }
 
-function externalAnchorProblems() {
-  const external = process.env[EXTERNAL_ANCHOR_VARIABLE];
+export function externalAnchorProblems(external = process.env[EXTERNAL_ANCHOR_VARIABLE]) {
   if (typeof external === 'string' && external.length === 64 && external === PINNED_REVIEWER_SPKI_SHA256) return [];
-  if (external === undefined || external === '') return [`${EXTERNAL_ANCHOR_VARIABLE} is unset`];
+  if (external === undefined || external === null || external === '') return [`${EXTERNAL_ANCHOR_VARIABLE} is unset`];
   return [`${EXTERNAL_ANCHOR_VARIABLE} does not match the pinned reviewer key ${PINNED_REVIEWER_SPKI_SHA256}`];
 }
 
@@ -106,7 +188,7 @@ export function verifyClearanceSignature(text, signatureB64, publicKeyPem) {
       return ['the signature does not verify against the committed reviewer key'];
     }
     if (material.length > 0) return material;
-    return externalAnchorProblems();
+    return externalAnchorProblems(process.env[EXTERNAL_ANCHOR_VARIABLE]);
   } catch (error) {
     return [`signature check failed: ${error instanceof Error ? error.message : String(error)}`];
   }
@@ -140,6 +222,14 @@ export function checkPullRequest({ fields, now, pr, commit, files, fileRows, mai
   if (pr.head?.sha !== fields.head) problems.push(`the PR head is ${pr.head?.sha}, the clearance names ${fields.head}`);
   if (pr.head?.repo?.full_name !== REPO) problems.push('the PR head is not in this repository');
   if (pr.base?.ref !== 'main') problems.push('the PR does not target main');
+  const auditBranch = (ref) => {
+    if (typeof ref !== 'string' || ref === '') return false;
+    const name = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+    return name === 'julius-governed-audit' || name.startsWith('julius-governed-audit/');
+  };
+  if (auditBranch(pr.head?.ref) || auditBranch(pr.base?.ref)) {
+    problems.push(`${pr.head?.ref && auditBranch(pr.head.ref) ? pr.head.ref : pr.base?.ref} is a governed audit branch and cannot be a pull request head or base`);
+  }
   if (mainSha !== fields.base) problems.push(`main is ${mainSha}, the clearance names base ${fields.base}`);
   if (pr.user?.login !== APP_LOGIN) problems.push(`the PR author is ${pr.user?.login}, not ${APP_LOGIN}`);
   if (pr.commits !== 1) problems.push(`the PR has ${pr.commits} commits, exactly one is required`);
@@ -222,7 +312,7 @@ export const LANDER_IDENTITY = { name: LANDER_BOT_LOGIN, email: `${LANDER_BOT_US
 
 /** The commit the lander CREATED, read back from GitHub (REST `commits/{sha}`), against exactly what it asked for: the cleared tree, ONE parent = the cleared base, the exact message
  * and the julius-lander[bot] identity. Any difference means the ref update must not follow. */
-export function checkCreatedCommit({ created, sha, base, tree, message }) {
+export function checkCreatedCommit({ created, sha, base, tree, message, identity = LANDER_IDENTITY }) {
   const problems = [];
   if (!SHA.test(String(sha))) problems.push('the created commit has no valid sha');
   if (created?.sha !== undefined && created.sha !== sha) problems.push(`the read-back commit is ${created.sha}, expected ${sha}`);
@@ -233,7 +323,7 @@ export function checkCreatedCommit({ created, sha, base, tree, message }) {
   const stored = created?.commit?.message;
   if (typeof message !== 'string' || (stored !== message && !(message.endsWith('\n') && stored === message.slice(0, -1)))) problems.push('the created commit message differs from the one that was sent');
   for (const who of ['author', 'committer']) {
-    if (created?.commit?.[who]?.name !== LANDER_IDENTITY.name || created?.commit?.[who]?.email !== LANDER_IDENTITY.email) problems.push(`the created commit ${who} is not ${LANDER_IDENTITY.name}`);
+    if (created?.commit?.[who]?.name !== identity.name || created?.commit?.[who]?.email !== identity.email) problems.push(`the created commit ${who} is not ${identity.name}`);
   }
   return problems;
 }

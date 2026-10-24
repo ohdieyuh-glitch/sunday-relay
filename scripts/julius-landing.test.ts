@@ -475,6 +475,19 @@ describe('land.mjs end to end against a fake GitHub', () => {
     }
   }, 30_000);
 
+  it('a pull request that touches the checkpoint attestation path is refused by the lander', () => {
+    const txt = `.github/julius-landing/checkpoints/${'a'.repeat(40)}.txt`;
+    const sig = `.github/julius-landing/checkpoints/${'b'.repeat(40)}.sig`;
+    expect(lib.HARD_FORBIDDEN_PATH.test(txt)).toBe(true);
+    expect(lib.HARD_FORBIDDEN_PATH.test(sig)).toBe(true);
+    for (const file of [txt, sig]) {
+      const refused = runLand({ scenario: { files: [file] } });
+      expect(refused.code, refused.out).toBe(1);
+      expect(refused.out).toContain('founder-governed');
+      expect(refused.merges).toHaveLength(0);
+    }
+  });
+
   it('a ref-update error fails the job unlanded, and a main that is not the created commit afterwards raises an alert (exit 2)', () => {
     const rejected = runLand({ scenario: { patchStatus: 405 } });
     expect(rejected.code).not.toBe(0);
@@ -498,6 +511,8 @@ describe('the workflow file is pinned', () => {
     expect(WORKFLOW).not.toContain('JULIUS_LANDER_BOT_LOGIN');
     expect(WORKFLOW).not.toContain('174560476');
     expect(WORKFLOW).toContain('actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510');
+    expect(WORKFLOW.indexOf('actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510')).toBeGreaterThan(WORKFLOW.indexOf('node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier'));
+    expect(WORKFLOW.indexOf('node .github/julius-landing/land.mjs')).toBeGreaterThan(WORKFLOW.indexOf('actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510'));
     expect(WORKFLOW).not.toMatch(/\n\s+(actions|workflows|id-token|packages|deployments):\s/u);
   });
 
@@ -1303,7 +1318,7 @@ describe('round 4: required-checks.txt has exactly one reader, the lander (via p
     const candidates = [...listed('.github/workflows'), ...listed('scripts').filter((f) => /\.(mjs|ts|sh|js|cjs|mts)$/u.test(f)), ...listed('.github/julius-landing').filter((f) => /\.mjs$/u.test(f))];
     const readers = candidates.filter((f) => readFileSync(resolve(ROOT, f), 'utf8').includes('required-checks')).map((f) => f.replace(/\\/gu, '/')).sort();
     // the lander, the lander's library (documentation comment) and the two landing test files (which pin or rewrite the file)
-    const expected = ['.github/julius-landing/land-lib.mjs', '.github/julius-landing/land.mjs', 'scripts/julius-landing-attack.test.ts', 'scripts/julius-landing.test.ts'];
+    const expected = ['.github/julius-landing/governed-land.mjs', '.github/julius-landing/land-lib.mjs', '.github/julius-landing/land.mjs', 'scripts/julius-landing-attack.test.ts', 'scripts/julius-landing.test.ts'];
     // These mention the path as data (a governed-path list or the trusted-computing-base list). None of them read the file.
     const dataOnly = [
       'scripts/julius-main-provenance-signed.test.ts',
@@ -1323,6 +1338,9 @@ describe('round 4: required-checks.txt has exactly one reader, the lander (via p
     const land = readFileSync(join(LANDING, 'land.mjs'), 'utf8');
     expect(land).toMatch(/parseRequiredChecks\(readFileSync\(join\(here, 'required-checks\.txt'\)/u);
     expect(land.match(/required-checks\.txt'/gu), 'land.mjs reads the file exactly once').toHaveLength(1);
+    const governed = readFileSync(join(LANDING, 'governed-land.mjs'), 'utf8');
+    expect(governed).toMatch(/parseRequiredChecks\(readFileSync\(join\(here, 'required-checks\.txt'\)/u);
+    expect(governed.match(/required-checks\.txt'/gu), 'governed-land.mjs reads the file exactly once').toHaveLength(1);
   });
 });
 

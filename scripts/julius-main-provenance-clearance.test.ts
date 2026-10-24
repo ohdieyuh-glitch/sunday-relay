@@ -221,8 +221,8 @@ describe('a worker-PR squash cleared by JULIUS-WORKER-SQUASH-V1', () => {
     expect(readReviewerKey(real).problem).toBeUndefined();
     const der = createPublicKey(real).export({ type: 'spki', format: 'der' });
     expect(createHash('sha256').update(der).digest('hex')).toBe(PINNED_REVIEWER_SPKI_SHA256);
-    expect(PINNED_REVIEWER_SPKI_SHA256.startsWith('b0b8e29b')).toBe(true);
-    expect(PINNED_REVIEWER_SPKI_SHA256).not.toBe('b0b8e29b');
+    expect(PINNED_REVIEWER_SPKI_SHA256.startsWith('7eacf984')).toBe(true);
+    expect(PINNED_REVIEWER_SPKI_SHA256).toBe('7eacf984b77022f9c3719760052b9eaeab0c5fcabe8058050bdc999e365a845c');
     const text = clearanceText();
     const signature = signWith(reviewer.privateKey, text);
     expect(parseSignedClearance(text, 'ohdieyuh-glitch/sunday-relay').problems.join(' ')).toContain('JULIUS-CLEARANCE-V1');
