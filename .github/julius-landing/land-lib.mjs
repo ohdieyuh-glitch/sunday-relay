@@ -222,6 +222,14 @@ export function checkPullRequest({ fields, now, pr, commit, files, fileRows, mai
   if (pr.head?.sha !== fields.head) problems.push(`the PR head is ${pr.head?.sha}, the clearance names ${fields.head}`);
   if (pr.head?.repo?.full_name !== REPO) problems.push('the PR head is not in this repository');
   if (pr.base?.ref !== 'main') problems.push('the PR does not target main');
+  const auditBranch = (ref) => {
+    if (typeof ref !== 'string' || ref === '') return false;
+    const name = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+    return name === 'julius-governed-audit' || name.startsWith('julius-governed-audit/');
+  };
+  if (auditBranch(pr.head?.ref) || auditBranch(pr.base?.ref)) {
+    problems.push(`${pr.head?.ref && auditBranch(pr.head.ref) ? pr.head.ref : pr.base?.ref} is a governed audit branch and cannot be a pull request head or base`);
+  }
   if (mainSha !== fields.base) problems.push(`main is ${mainSha}, the clearance names base ${fields.base}`);
   if (pr.user?.login !== APP_LOGIN) problems.push(`the PR author is ${pr.user?.login}, not ${APP_LOGIN}`);
   if (pr.commits !== 1) problems.push(`the PR has ${pr.commits} commits, exactly one is required`);

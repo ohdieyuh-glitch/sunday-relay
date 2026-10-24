@@ -55,6 +55,7 @@ import {
   evaluateTrustChain,
   readCheckpointAttestation,
   reviewerKeyPinRefusal,
+  governedAuditBranchProblem,
 } from './julius-main-provenance-trust.mjs';
 
 const externalAnchorOf = (input) => (
@@ -608,6 +609,10 @@ export function evaluateMainProvenance(input) {
    * founder approved this diff" a statement about THIS branch. It is a fact on
    * the pull request record, not an inference.
    */
+  const auditRef = governedAuditBranchProblem(pull?.headRef) ?? governedAuditBranchProblem(pull?.baseRef);
+  if (auditRef) {
+    return verdict('unprovenanced', auditRef, { mainSha, mainTreeSha: input.mainTreeSha, parentSha, prNumber: pull?.number });
+  }
   if (pull?.baseRef !== branch) {
     return verdict('unprovenanced',
       `the landed candidate was reviewed against ${typeof pull?.baseRef === 'string' ? pull.baseRef : 'an unreadable branch'}, not ${branch}`,
@@ -843,6 +848,7 @@ async function main(argv) {
       mergeCommitSha: pull?.merge_commit_sha,
       authorLogin: pull?.user?.login,
       headSha: pull?.head?.sha,
+      headRef: pull?.head?.ref,
       baseRef: pull?.base?.ref,
     }));
     const landed = pullRequests.find((pull) => pull.merged && pull.mergeCommitSha === mainSha);

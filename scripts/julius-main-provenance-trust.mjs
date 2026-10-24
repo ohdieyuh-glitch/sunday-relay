@@ -114,6 +114,7 @@ export const TRUSTED_COMPUTING_BASE = Object.freeze([
   'scripts/julius-main-provenance-trust.mjs',
   'scripts/julius-main-provenance-trust.d.mts',
   'scripts/julius-review-currency.mjs',
+  'scripts/julius-governed-bootstrap.mjs',
 ]);
 
 /** Governed directory. HARD_FORBIDDEN_PATH already matches this prefix. No App PR can add or swap a file here. */
@@ -452,6 +453,16 @@ export function isCheckpointInstallerDiff(paths) {
  * signature is verified. A matching name is not that proof. `botId` is the
  * repository variable JULIUS_GOVERNED_LANDER_BOT_ID.
  */
+/** A governed audit branch is not a pull request head or base. `ref` may be `refs/heads/...` or the branch name. */
+export function governedAuditBranchProblem(ref) {
+  if (typeof ref !== 'string' || ref === '') return null;
+  const name = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+  if (name === 'julius-governed-audit' || name.startsWith('julius-governed-audit/')) {
+    return `${ref} is a governed audit branch and cannot be a pull request head or base`;
+  }
+  return null;
+}
+
 export function landingIdentityProblem({ committerId, verificationVerified, verificationReason, botId, verificationReadProblem } = {}) {
   if (typeof verificationReadProblem === 'string' && verificationReadProblem !== '') return verificationReadProblem;
   const id = typeof botId === 'string' ? botId.trim() : '';

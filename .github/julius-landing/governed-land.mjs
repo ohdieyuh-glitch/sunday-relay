@@ -26,6 +26,7 @@ import {
   TRUSTED_COMPUTING_BASE,
   checkpointAttestationProblems,
   checkpointPairingRequired,
+  governedAuditBranchProblem,
   governedLandingShapeProblem,
   judgeClearanceWindow,
   landingIdentityProblem,
@@ -258,8 +259,10 @@ const appBypass = (actor, appId) => actor?.actor_type === 'Integration' && Strin
 
 /**
  * GitHub ruleset ref pattern. `~ALL` and `~DEFAULT_BRANCH` are the whole pattern.
- * `*` and `?` are fnmatch. A character class or an escape cannot be evaluated
- * here and returns null, which the caller treats as a refusal.
+ * `*` and `?` are fnmatch with FNM_PATHNAME: neither matches `/`. A trailing
+ * `**` is two stars, so it acts like `*` and does not cross `/`. A character
+ * class or an escape cannot be evaluated here and returns null, which the
+ * caller treats as a refusal.
  */
 export function refPatternMatches(pattern, ref) {
   if (pattern === '~ALL') return true;
@@ -268,8 +271,8 @@ export function refPatternMatches(pattern, ref) {
   if (/[[\]\\]/u.test(pattern)) return null;
   let source = '^';
   for (const char of pattern) {
-    if (char === '*') source += '.*';
-    else if (char === '?') source += '.';
+    if (char === '*') source += '[^/]*';
+    else if (char === '?') source += '[^/]';
     else if (/[.+^${}()|]/u.test(char)) source += `\\${char}`;
     else source += char;
   }
@@ -298,14 +301,16 @@ export function rulesetCoversRef(conditions, ref = 'refs/heads/main') {
   return { ok: true };
 }
 
-const RULE_TYPES = ['deletion', 'non_fast_forward', 'update'];
+const RULE_TYPES = ['deletion', 'non_fast_forward', 'creation', 'update'];
 
 /**
  * The branch-rules list is what metadata can read. The snapshot is the admin's
  * out-of-band copy of the ruleset, including bypass actors, and it is part of
  * the trusted computing base. Live rules for the pinned ruleset id must match
- * the snapshot's rule types and parameters. Bypass actors are compared to the
- * App id from the environment. They are not on the live response.
+ * the snapshot's rule types and parameters. Any other ruleset that appears on
+ * main fails closed, whatever its source. A disabled ruleset is absent from
+ * this list and is not a refusal. Bypass actors are compared to the App id
+ * from the environment. They are not on the live response.
  */
 export function branchRulesProblems(liveRules, snapshot, appId) {
   const id = String(appId ?? '').trim();
@@ -315,8 +320,8 @@ export function branchRulesProblems(liveRules, snapshot, appId) {
   if (snapshot.enforcement !== 'active') return ['the main ruleset snapshot is not active'];
   const mainCover = rulesetCoversRef(snapshot.conditions, 'refs/heads/main');
   if (!mainCover.ok) return [mainCover.problem];
-  const auditCover = rulesetCoversRef(snapshot.conditions, 'refs/julius-governed-audit/pr/1');
-  if (!auditCover.ok) return ['the main ruleset snapshot does not cover refs/julius-governed-audit/**'];
+  const auditCover = rulesetCoversRef(snapshot.conditions, 'refs/heads/julius-governed-audit/pr/1');
+  if (!auditCover.ok) return ['the main ruleset snapshot does not cover refs/heads/julius-governed-audit/**'];
   const actors = snapshot.bypass_actors;
   if (!Array.isArray(actors) || actors.length !== 1 || !appBypass(actors[0], id)) {
     return ['the main ruleset snapshot does not name only the governed lander app as an always bypass'];
@@ -324,18 +329,58 @@ export function branchRulesProblems(liveRules, snapshot, appId) {
   const snapshotRules = Array.isArray(snapshot.rules) ? snapshot.rules : [];
   const snapshotTypes = snapshotRules.map((rule) => rule?.type);
   if (snapshotTypes.length !== RULE_TYPES.length || RULE_TYPES.some((type) => !snapshotTypes.includes(type))) {
-    return ['the main ruleset snapshot does not block deletion, force pushes, and updates'];
+    return ['the main ruleset snapshot does not block deletion, force pushes, creation, and updates'];
   }
   if (!Array.isArray(liveRules)) return ['the main branch rules could not be read'];
-  const live = liveRules.filter((rule) => rule?.ruleset_id === snapshot.id);
-  if (live.length !== snapshotRules.length) return ['the live main branch rules do not match the pinned ruleset snapshot'];
+  if (liveRules.some((rule) => rule?.ruleset_id !== snapshot.id)) {
+    return ['an active ruleset other than the pinned main ruleset applies to main'];
+  }
+  if (liveRules.length !== snapshotRules.length) return ['the live main branch rules do not match the pinned ruleset snapshot'];
   for (const rule of snapshotRules) {
-    const match = live.find((row) => row?.type === rule.type);
+    const match = liveRules.find((row) => row?.type === rule.type);
     if (!match || JSON.stringify(match.parameters ?? {}) !== JSON.stringify(rule.parameters ?? {})) {
       return ['the live main branch rules do not match the pinned ruleset snapshot'];
     }
   }
   return [];
+}
+
+/**
+ * A nonce tag counts as a spent clearance only when its target commit was
+ * created by the App. Ruleset 25739940 (landing-nonce-tags) is disabled, so
+ * anyone who can push can create `refs/tags/julius-landing-nonce-*`. Existence
+ * alone is not a spend. A tag whose target is not an App-verified commit is a
+ * refusal, and it is not recorded as a used nonce. The lander does not delete
+ * or move the tag, so that pre-created tag blocks this nonce until it is removed.
+ */
+export function nonceTagProblem({ exists, nonce, committerId, verificationVerified, verificationReason, botId, unreadable } = {}) {
+  if (exists !== true) return null;
+  if (unreadable === true) return 'the nonce tag could not be read';
+  const identity = landingIdentityProblem({ committerId, verificationVerified, verificationReason, botId });
+  if (identity === null) return 'this clearance nonce was already used on main';
+  if (identity === 'JULIUS_GOVERNED_LANDER_BOT_ID is unset') return identity;
+  return `the nonce tag refs/tags/julius-landing-nonce-${nonce} already exists and was not created by the governed lander app`;
+}
+
+/**
+ * Create `ref` at `sha`. A second attempt that finds the same sha is success.
+ * A different sha is not rewritten. Callers create this ref only after main
+ * has moved, so a failed move leaves nothing for the next attempt to collide with.
+ */
+export async function ensureAuditRef(ref, sha, io) {
+  try {
+    await io.create(ref, sha);
+    return { ok: true };
+  } catch {
+    let existing = '';
+    try {
+      existing = await io.read(ref);
+    } catch {
+      return { ok: false, problem: 'the audit ref could not be created or read' };
+    }
+    if (existing === sha) return { ok: true, idempotent: true };
+    return { ok: false, problem: `the audit ref ${ref} already points at ${existing || 'an unreadable commit'}, not ${sha}` };
+  }
 }
 
 /** The commits status API. 401 and 403 are the missing statuses:read permission, not an empty list. */
@@ -377,12 +422,26 @@ export function evaluateGovernedLanding(input) {
   if (input?.commit?.commit?.tree?.sha !== fields.tree) problems.push(`the head tree is ${input?.commit?.commit?.tree?.sha}, the clearance names ${fields.tree}`);
   if (input?.mainSha !== fields.base) problems.push(`main is ${input?.mainSha}, the clearance names base ${fields.base}`);
   if (input?.digest !== fields['bot-comments-sha256']) problems.push('the set of bot comments, inline comments or reviews differs from what the reviewer saw');
-  if (nonceUsed(input?.commitMessages ?? [], fields.nonce) || input?.nonceTagExists === true) {
+  if (nonceUsed(input?.commitMessages ?? [], fields.nonce)) {
     problems.push('this clearance nonce was already used on main');
   }
+  const tagProblem = nonceTagProblem({
+    exists: input?.nonceTagExists === true,
+    nonce: fields.nonce,
+    committerId: input?.nonceTagCommitterId,
+    verificationVerified: input?.nonceTagVerificationVerified === true,
+    verificationReason: input?.nonceTagVerificationReason,
+    botId: input?.governedLanderBotId,
+    unreadable: input?.nonceTagUnreadable === true,
+  });
+  if (tagProblem && !problems.includes(tagProblem)) problems.push(tagProblem);
   if (fields['binds-draft'] !== 'yes' && input?.pr?.draft !== false) problems.push('the pull request is a draft');
   if (input?.pr?.state !== 'open' || input?.pr?.merged === true) problems.push('the pull request is not open');
   if (input?.pr?.base?.ref !== 'main') problems.push('the PR does not target main');
+  const auditHead = governedAuditBranchProblem(input?.pr?.head?.ref);
+  const auditBase = governedAuditBranchProblem(input?.pr?.base?.ref);
+  if (auditHead) problems.push(auditHead);
+  if (auditBase) problems.push(auditBase);
   if (input?.pr?.head?.repo?.full_name !== REPO) problems.push('the PR head is not in this repository');
   if (input?.treeDiffComplete !== true) {
     problems.push('the diff of the signed base against the head tree is missing or truncated');
@@ -631,10 +690,10 @@ async function runCli() {
   const readAudit = async (pr) => {
     if (seenAudits.has(pr)) return;
     seenAudits.add(pr);
-    const response = await readRaw(`/repos/${REPO}/git/ref/julius-governed-audit/pr/${pr}`);
+    const response = await readRaw(`/repos/${REPO}/git/ref/heads/julius-governed-audit/pr/${pr}`);
     if (response.status === 404) return;
     if (response.status !== 200 || typeof response.body?.object?.sha !== 'string') {
-      throw new Error(`GET /repos/${REPO}/git/ref/julius-governed-audit/pr/${pr} -> ${response.status}`);
+      throw new Error(`GET /repos/${REPO}/git/ref/heads/julius-governed-audit/pr/${pr} -> ${response.status}`);
     }
     const sha = response.body.object.sha;
     const commit = await api(`/repos/${REPO}/commits/${sha}`);
@@ -723,8 +782,26 @@ async function runCli() {
           headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
           signal: AbortSignal.timeout(30_000),
         });
+        let tagBody = null;
+        if (tag.status === 200) {
+          try { tagBody = await tag.json(); } catch { tagBody = null; }
+        }
+        let nonceTagCommitterId;
+        let nonceTagVerificationVerified = false;
+        let nonceTagVerificationReason = '';
+        let nonceTagUnreadable = tag.status !== 200 && tag.status !== 404;
+        if (tag.status === 200) {
+          const tagSha = tagBody?.object?.sha;
+          if (typeof tagSha !== 'string') nonceTagUnreadable = true;
+          else {
+            const tagged = await api(`/repos/${REPO}/commits/${tagSha}`);
+            nonceTagCommitterId = tagged?.committer?.id;
+            nonceTagVerificationVerified = tagged?.commit?.verification?.verified === true;
+            nonceTagVerificationReason = typeof tagged?.commit?.verification?.reason === 'string' ? tagged.commit.verification.reason : '';
+          }
+        }
         const checksComplete = Array.isArray(checkBody?.check_runs) && checkBody.total_count === checkBody.check_runs.length;
-        const tagReadable = tag.status === 200 || tag.status === 404;
+        const tagReadable = !nonceTagUnreadable;
         if (!checksComplete || !statusPage.ok || !tagReadable) {
           decision = { ok: false, problems: [
             ...(!checksComplete ? ['the check runs could not be read completely'] : []),
@@ -766,6 +843,11 @@ async function runCli() {
           digest: botCommentsDigest({ issueComments, inlineComments, reviews }),
           commitMessages: [],
           nonceTagExists: tag.status === 200,
+          nonceTagCommitterId,
+          nonceTagVerificationVerified,
+          nonceTagVerificationReason,
+          nonceTagUnreadable,
+          governedLanderBotId: botId,
           checkRuns: checkBody.check_runs,
           statuses: statusPage.statuses,
           required: requiredChecks,
@@ -852,17 +934,6 @@ async function runCli() {
               await apiWrite('/repos/ohdieyuh-glitch/sunday-relay/git/refs', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ref: `refs/julius-governed-audit/pr/${decision.record.pr}`, sha: auditSha }),
-              });
-            } catch (error) {
-              decision = { ok: false, problems: [`the audit record could not be created; main was not moved: ${error instanceof Error ? error.message : 'unknown'}`] };
-            }
-          }
-          if (decision.ok) {
-            try {
-              await apiWrite('/repos/ohdieyuh-glitch/sunday-relay/git/refs', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ref: `refs/tags/julius-landing-nonce-${decision.fields.nonce}`, sha }),
               });
             } catch (error) {
@@ -887,7 +958,24 @@ async function runCli() {
               decision = { ok: false, problems: [`main is ${after} after the update, not ${sha}`] };
             } else {
               moved = true;
+              const auditRef = `refs/heads/julius-governed-audit/pr/${decision.record.pr}`;
+              const placed = await ensureAuditRef(auditRef, auditSha, {
+                create: (ref, commitSha) => apiWrite('/repos/ohdieyuh-glitch/sunday-relay/git/refs', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ref, sha: commitSha }),
+                }),
+                read: async (ref) => {
+                  const name = ref.startsWith('refs/') ? ref.slice('refs/'.length) : ref;
+                  const body = await api(`/repos/${REPO}/git/ref/${name}`);
+                  return typeof body?.object?.sha === 'string' ? body.object.sha : '';
+                },
+              });
               decision = { ...decision, record: { ...decision.record, status: 'final', resultingMainSha: sha }, refUpdate: { sha, force: false } };
+              if (!placed.ok) {
+                note('landed, audit finalize failed');
+                finalizeFailed = true;
+              }
               try {
                 const body = formatLandingRecord(decision.record);
                 await apiWrite(`/repos/${REPO}/issues/${number}/comments`, {

@@ -190,3 +190,5 @@ export declare function requireTrustedVerifier(env?: NodeJS.ProcessEnv, options?
     readonly verificationReason?: unknown;
   }>>;
 }): Promise<{ readonly ok: boolean; readonly reason: string }>;
+
+export declare function governedAuditBranchProblem(ref: unknown): string | null;
